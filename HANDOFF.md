@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-07, chests, mimics and coins)
 
-**Branch:** `feature/chests` (committed, not merged or pushed; ask the user first).
+**Branch:** `feature/chests` is merged into `main` (fast-forward) and pushed.
 
 **Why:** the user found the dungeons empty apart from enemies and asked what else the pack offers. Answer given: chests (full/empty/mimic opening animations) and coins, plus spikes, buttons/levers, columns, wall fountains, goo, crates, flasks, bombs, ladder/stairs; only a single `hole` tile and `edge_down` (no real chasms, no bridges), and no water or lava floor tiles. The user chose chests + mimics + coins.
 
