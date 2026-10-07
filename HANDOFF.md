@@ -21,10 +21,8 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Checked:** 45 server tests, client typecheck and tests, `docker compose up --build` + health, two-player smoke test (no browser errors), gallery screenshots of the force field, and rendered test maps of the wall rules.
 
-**Live boss test (by the user, after the merge):** all three bosses (demon, lich, dragon) played in the browser; the force field appeared when the party entered the hall; no problems found. Balancing was deliberately not judged: the user wants one combined balancing pass later (progression, classes, boss fights).
+**Live boss test (by the user, after the merge):** all three bosses (demon, lich, dragon) played in the browser; the force field appeared when the party entered the hall; no T-shaped wall junctions seen any more (confirms the stub fix); no problems found. Balancing was deliberately not judged: the user wants one combined balancing pass later (progression, classes, boss fights).
 
-**Not yet checked:**
-- **The stub fix in the game** (covered by the generator test; the user hasn't looked at a rebuilt dungeon yet).
 
 ## Session before (2026-10-07)
 
