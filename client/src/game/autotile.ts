@@ -56,9 +56,9 @@ function faceFrame(m: TileMap, x: number, y: number, h: number): string {
   return 'wall_mid';
 }
 
-/** A wall cell that draws a rim along its bottom edge (cap above a brick face). */
+/** A cell that draws a rim along its bottom edge (cap above a brick face). Often Void, not Wall. */
 function rimContinues(m: TileMap, x: number, y: number): boolean {
-  return isWall(m, x, y) && !isFrontWall(m, x, y) && isFrontWall(m, x, y + 1);
+  return !fl(m, x, y) && !isFrontWall(m, x, y) && isFrontWall(m, x, y + 1);
 }
 
 /** Rim drawn on the cell directly above a brick face. */

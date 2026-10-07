@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-07, wall corners)
 
-- **Fixed:** corridor walls meeting a room's top rim drew a T junction instead of a corner (`capFrame` in `client/src/game/autotile.ts`). Checked by rendering test maps from the pack sheet; tests and typecheck pass.
+- **Fixed:** corridor walls meeting a room's top rim drew a T junction instead of a corner (`capFrame` in `client/src/game/autotile.ts`). Note: the cells behind a room's top rim are usually `Void`, not `Wall` (the server walls only cells next to floor), so neighbour checks there must not require `isWall`. Checked by rendering test maps (with void cells) from the pack sheet; tests and typecheck pass.
 
 ## Session before (2026-10-07)
 
