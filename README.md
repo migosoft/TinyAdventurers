@@ -64,6 +64,7 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
   - Add `&state=melee&slow=10` to loop one animation in slow motion.
 - `?mimic`: the chasing mimic, a treasure chest opening and the mimic reveal, side by side (no server needed)
 - `?daemons`: the demon dungeon's imps, chorts and summoner fighting a knight, plus a pack of them (no server needed)
+- `?water`, `?chasm`, `?lava`: the planned terrain with scripted figures: wading, drowning, falling, burning, the dash jumping a gap (no server needed; add `&slow=3` for slow motion)
 - `?debug`: debug mode for the whole run
   - Your hero is immortal. Hits still show damage numbers, but your health doesn't drop.
   - A dashed line shows the shortest walkable path to the boss, updated every 0.5 s.

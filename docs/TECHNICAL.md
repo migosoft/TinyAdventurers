@@ -56,6 +56,9 @@ client/                              Vite + TypeScript + Phaser 3.90
   src/game/GalleryScene.ts           dev page ?gallery
   src/game/MimicDemoScene.ts         dev page ?mimic (chaser mimic, chest, reveal; no server)
   src/game/DaemonDemoScene.ts        dev page ?daemons (imp, chort, summoner vs a knight; no server)
+  src/game/TerrainDemoScene.ts       dev pages ?water, ?chasm, ?lava (scripted figures; no server)
+  src/game/terrain.ts                terrain layer: autotiled water/lava/chasm cells, animation, lava glow
+  src/game/terrain-codes.ts          terrain frame layout and edge codes shared with the atlas build
   src/ui/                            DOM lobby, HUD, texts, atlas previews
 tools/e2e/                           browser smoke tests (playwright-core + installed Edge/Chrome)
 docs/                                this file, player guide, TODO
@@ -242,7 +245,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
 ## 9. Rendering (client)
 
 **Art source.**
-- Art comes from the 0x72 pack; other CC0 tilesets that fit its style may be added (the user allowed this for terrain and enemies). `build-atlas.ts` turns `tile_list_v1.7` into a Phaser JSON-hash atlas, so frame names are the pack's own (`knight_m_run_anim_f2`, `weapon_axe`, `floor_1`, …).
+- Art comes from the 0x72 pack; other CC0 tilesets that fit its style may be added (the user allowed this for terrain and enemies). Terrain tiles (water, lava, chasm) are generated at atlas build time by `client/scripts/terrain-tiles.ts` from pack colours and the pack's `floor_1`, because no CC0 set fit (the user allowed self-made art for terrain tiles only): seamless animated base textures (`terrain_<set>_f<frame>_q<piece>`) plus edge overlays (`terrain_<edge>_e<code>`, a 4-digit quarter code from the 8 neighbours, see `terrain-codes.ts`). `build-atlas.ts` turns `tile_list_v1.7` into a Phaser JSON-hash atlas, so frame names are the pack's own (`knight_m_run_anim_f2`, `weapon_axe`, `floor_1`, …).
 - **Recolors:** `RECOLORS` in `build-atlas.ts` swaps whole pack colors for other pack colors and writes the result as new frames in a strip below the sheet (32 px per entry). Today: `summoner_anim_f0-3`, the necromancer with its purple robe (`5f2d56`, trim `9f294e`) turned maroon and red (`62232f`, `da4e38`, the imp's and chort's reds). `scripts/png.ts` is a small PNG codec (8-bit RGB/RGBA, no interlace), so no image library is needed.
 - No self-drawn sprites. This is a user requirement; see HANDOFF.md.
 - Runtime-generated textures are limited to simple effect shapes (`dot`, `spark`, `glow`) and the ground shadow ellipses under figures.
@@ -310,6 +313,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
 | `?debug&boss=demon\|lich\|dragon` | Host only. Preselects that boss in the lobby's boss picker (`SelectBoss`); used by `smoke.mjs`. Works even with `ALLOW_DEBUG=0` (the boss choice is a normal feature). The server logs `run N started: … boss X (chosen)`. Runs where debug was turned on bank no XP. |
 | `?gallery[&state=melee&slow=10]` | Every figure cycling its animation states, no server needed. |
 | `?mimic[&slow=3]` | The chasing mimic after a walking knight, a treasure chest opening with its coin burst, and the mimic reveal. No server needed. |
+| `?water`, `?chasm`, `?lava` `[&slow=3]` | Terrain demos with scripted figures: wading and drowning, falling into a chasm, burning in lava, demons walking through lava, the dash jumping a gap. Speeds and damage imitate the planned rules (not yet on the server). No server needed. |
 | `?daemons[&slow=3]` | Imp, chort and a pack of both fighting a walking knight, and a summoner summoning imps. Uses the real figure definitions; the attack logic is a local imitation of the server AI. No server needed. |
 | `?lag=150&jitter=40&loss=2` | Network simulator. |
 

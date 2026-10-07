@@ -14,6 +14,18 @@ export interface ViewState {
   animT: number;
   aim: number;
   flags: number;
+  /** Pixels the figure stands below a surface (wading in water or lava). */
+  sink?: number;
+  /** Falling into a chasm, 0..1: the figure shrinks a little and vanishes into the dark. */
+  fall?: number;
+  /** Sinking in deep water, 0..1: the figure goes down below the surface. */
+  drown?: number;
+}
+
+/** Multiplies a tint colour channel-wise by `k` and blends it towards `to`. */
+function shade(k: number, to: number, mix: number): number {
+  const ch = (s: number) => Math.round(255 * k * (1 - mix) + ((to >> s) & 255) * mix) << s;
+  return ch(16) | ch(8) | ch(0);
 }
 
 const MELEE_T = 0.18;
@@ -128,6 +140,20 @@ export class EntityView {
     else if (moving) frame = `${d.run}${Math.floor(this.runClock * 10) % 4}`;
     else frame = `${d.idle}${Math.floor(this.clock * 6) % 4}`;
     this.body.setFrame(frame).setPosition(0, 1).setScale(1, 1).setAngle(0);
+    // Wading: the feet go below the surface (the body is cut off there).
+    // Drowning: the figure sinks until it is fully below the surface.
+    const fall = s.fall ?? 0;
+    const drown = s.drown ?? 0;
+    const sink = Math.min(this.body.frame.height, Math.round((s.sink ?? 0) + drown * (this.body.frame.height + 2)));
+    if (sink > 0) this.body.setCrop(0, 0, this.body.frame.width, this.body.frame.height - sink);
+    else this.body.setCrop();
+    this.weapon?.setVisible(drown < 0.4);
+    this.shadow.setVisible(sink === 0 && fall === 0);
+    this.figure
+      .setPosition(0, sink + Math.round(fall * 6))
+      .setScale((d.scale ?? 1) * (1 - fall * 0.2))
+      .setAlpha(fall > 0.7 ? 1 - (fall - 0.7) / 0.3 : 1);
+    this.label?.setVisible(fall === 0 && drown === 0);
 
     if (hurt && !d.hit && Math.floor(this.clock * 30) % 2 === 0) this.body.setTintFill(0xffffff);
     else if (s.anim === ANIM.Windup) {
@@ -137,6 +163,12 @@ export class EntityView {
     } else if (s.flags & FLAG.ENRAGED) this.body.setTint(Math.floor(this.clock * 4) % 2 ? 0xff6060 : 0xff9090);
     else if (d.tint) this.body.setTint(d.tint);
     else this.body.clearTint();
+    // Into the dark (chasm) or the deep (water): the figure darkens as it goes.
+    if (fall > 0) this.body.setTint(shade(1 - fall * 0.95, 0, 0));
+    else if (drown > 0) this.body.setTint(shade(1, 0x243f4c, Math.min(1, drown * 1.5)));
+    if (fall > 0) this.weapon?.setTint(shade(1 - fall * 0.95, 0, 0));
+    else if (d.weaponTint) this.weapon?.setTint(d.weaponTint);
+    else this.weapon?.clearTint();
 
     // Hidden assassin: faint shimmer (enemies do not see it at all).
     this.root.setAlpha(s.flags & FLAG.HIDDEN ? 0.3 + Math.sin(this.clock * 8) * 0.08 : 1);

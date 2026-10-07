@@ -1,11 +1,13 @@
 // Publishes the 0x72 "16x16 DungeonTileset II" sheet (CC0) as a Phaser atlas:
 // public/assets/atlas.png + atlas.json with the pack's own frame names
 // (e.g. `knight_m_run_anim_f2`, `weapon_axe`, `floor_3`), plus a few pack
-// frames recolored with pack colors (see RECOLORS, e.g. the summoner).
+// frames recolored with pack colors (see RECOLORS, e.g. the summoner), plus
+// the generated terrain tiles (water, lava, chasm; see terrain-tiles.ts).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodePng, encodePng, type Image } from './png';
+import { buildTerrain } from './terrain-tiles';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packDir = path.join(root, 'assets-src', '0x72');
@@ -42,7 +44,14 @@ const RECOLORS: { from: string; to: string; colors: Record<string, string> }[] =
 ];
 const src = decodePng(fs.readFileSync(sheet));
 const STRIP = 32;
-const out: Image = { w: src.w, h: src.h + STRIP * RECOLORS.length, data: new Uint8Array(src.w * (src.h + STRIP * RECOLORS.length) * 4) };
+const f1 = (frames['floor_1'] as { frame: { x: number; y: number } }).frame;
+const floor1 = new Uint8Array(16 * 16 * 4);
+for (let y = 0; y < 16; y++) floor1.set(src.data.subarray(((f1.y + y) * src.w + f1.x) * 4, ((f1.y + y) * src.w + f1.x + 16) * 4), y * 64);
+const terrain = buildTerrain(floor1);
+if (terrain.img.w > src.w) throw new Error('atlas: terrain sheet wider than the pack sheet');
+const terrainY = src.h + STRIP * RECOLORS.length;
+const outH = terrainY + terrain.img.h;
+const out: Image = { w: src.w, h: outH, data: new Uint8Array(src.w * outH * 4) };
 out.data.set(src.data);
 RECOLORS.forEach((r, row) => {
   let dx = 0;
@@ -62,7 +71,13 @@ RECOLORS.forEach((r, row) => {
   }
 });
 
+// Generated terrain tiles below the recolor strips.
+for (let y = 0; y < terrain.img.h; y++)
+  out.data.set(terrain.img.data.subarray(y * terrain.img.w * 4, (y + 1) * terrain.img.w * 4), ((terrainY + y) * out.w) * 4);
+for (const [name, f] of Object.entries(terrain.frames))
+  frames[name] = { frame: { x: f.x, y: terrainY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
+
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'atlas.png'), encodePng(out));
 fs.writeFileSync(path.join(outDir, 'atlas.json'), JSON.stringify({ frames, meta: { image: 'atlas.png', scale: 1 } }));
-console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored) -> public/assets/atlas.{png,json}`);
+console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain) -> public/assets/atlas.{png,json}`);
