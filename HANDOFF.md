@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-07, wall corners)
 
-- **Fixed:** wall junctions drew T pieces instead of corners. Side-wall strips moved from the outer edge to the floor side, and south walls draw their rim at the top of the cell (`TileDraw.dy`), so all walls hug the floor (`client/src/game/autotile.ts`). Checked by rendering a test map (with void cells) from the pack sheet; tests and typecheck pass. Not yet confirmed by the user in the game.
+- **Fixed:** wall junctions drew T pieces instead of corners. Side-wall strips moved from the outer edge to the floor side, and south walls draw their rim at the top of the cell (`TileDraw.dy`), so all walls hug the floor (`client/src/game/autotile.ts`). Checked by rendering a test map (with void cells) from the pack sheet; tests and typecheck pass. Confirmed by the user in the game.
 
 ## Session before (2026-10-07)
 
