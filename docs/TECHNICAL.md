@@ -182,6 +182,7 @@ The generator is seeded (ChaCha8) and deterministic:
 2. **Connections:**
    - a minimum spanning tree plus up to 6 extra loop edges, carved as 3-wide L corridors
    - the boss hall gets a single corridor with a 3-tile entrance (DoorOpen tiles, sealed later)
+   - one-tile wall stubs left by overlapping carves (a cell with floor on three sides and around both corners between them) are filled with floor; they would draw as T junctions, and filling them opens no new path
    - walls are placed on every void cell next to floor
 3. **Validation, retried on failure:** every room is reachable (BFS), and the boss hall is the farthest area by path distance, with a margin of 4 tiles.
 4. **Population:** enemies scale with path depth. Necromancers appear only in halls.

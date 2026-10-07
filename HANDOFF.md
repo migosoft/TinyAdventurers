@@ -13,6 +13,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 - **Fixed:** wall junctions drew T pieces instead of corners. Side-wall strips moved from the outer edge to the floor side, and south walls draw their rim at the top of the cell (`TileDraw.dy`), so all walls hug the floor (`client/src/game/autotile.ts`). Checked by rendering a test map (with void cells) from the pack sheet; tests and typecheck pass. Confirmed by the user in the game.
 - **Boss hall entrance:** no door any more; the corridor leads straight in. When the party is inside, a shimmering blue force field (runtime effect, `client/src/game/forcefield.ts`) seals it. Server logic is unchanged (DoorClosed tiles still block). Checked in the gallery (`?gallery`, both orientations); **not yet seen in a live run**. Branch `feature/force-field` is based on `fix/wall-corners`; neither is merged or pushed.
+- **Wall stubs removed in the generator:** overlapping corridor/room carves left one-tile wall stubs that drew as T junctions (no tile choice can fix those). `remove_stubs` in `server/src/dungeon/generate.rs` fills them; the 200-seed test now asserts none remain (it failed on seed 0 without the fix). Needs a Docker rebuild to see.
 - **Also fixed:** the `spark` particle texture was black (`Graphics.clear()` resets the fill), so hit sparks were black crosses; they now take their tint.
 
 ## Session before (2026-10-07)

@@ -131,6 +131,7 @@ fn try_generate(rng: &mut ChaCha8Rng) -> Option<Dungeon> {
     rooms.push(Room { rect: boss, kind: RoomKind::Boss });
     let boss_idx = rooms.len() - 1;
 
+    remove_stubs(&mut map);
     add_walls(&mut map);
 
     // Guarantees: everything reachable, boss hall farthest by path distance.
@@ -217,6 +218,37 @@ fn carve_l(map: &mut Map, a: (i32, i32), b: (i32, i32), horizontal_first: bool) 
     } else {
         carve_v(map, a.1, b.1, a.0);
         carve_h(map, a.0, b.0, b.1);
+    }
+}
+
+/// A cell wrapped in floor on three sides (and around both corners between them).
+/// Overlapping carves leave these as one-tile wall stubs that draw as a T junction.
+fn is_stub(map: &Map, x: i32, y: i32) -> bool {
+    let fl = |dx: i32, dy: i32| map.get(x + dx, y + dy) == Tile::Floor as u8;
+    // For each open side pair: both sides and the corner between them.
+    let wraps = |(ax, ay): (i32, i32), (bx, by): (i32, i32)| fl(ax, ay) && fl(bx, by) && fl(ax + bx, ay + by);
+    let (n, e, s, w) = ((0, -1), (1, 0), (0, 1), (-1, 0));
+    [(n, e, s), (e, s, w), (s, w, n), (w, n, e)].iter().any(|&(a, b, c)| wraps(a, b) && wraps(b, c))
+}
+
+/// Fills one-tile wall stubs with floor. The floor already wraps around each
+/// stub, so this opens no new path (the boss hall stays sealed but for its door).
+fn remove_stubs(map: &mut Map) {
+    loop {
+        let mut stubs = Vec::new();
+        for y in 1..map.h - 1 {
+            for x in 1..map.w - 1 {
+                if map.get(x, y) == Tile::Void as u8 && is_stub(map, x, y) {
+                    stubs.push((x, y));
+                }
+            }
+        }
+        if stubs.is_empty() {
+            return;
+        }
+        for (x, y) in stubs {
+            map.set(x, y, Tile::Floor);
+        }
     }
 }
 
@@ -349,6 +381,12 @@ mod tests {
             }
             for p in &d.player_spawns {
                 assert!(!d.map.solid_at(*p), "seed {seed}: player spawn in wall");
+            }
+            // No one-tile wall stubs (they would draw as T junctions).
+            for y in 1..d.map.h - 1 {
+                for x in 1..d.map.w - 1 {
+                    assert!(!(d.map.solid(x, y) && is_stub(&d.map, x, y)), "seed {seed}: wall stub at {x},{y}");
+                }
             }
             // The only way into the boss hall is through the door.
             for &(x, y) in &d.door {
