@@ -1,0 +1,16 @@
+services:
+  game:
+    build: .
+    image: tiny-adventurers
+    ports:
+      - "8080:8080"
+    environment:
+      # Debug mode (?debug: immortal + path to the boss). Set to 0 to disable.
+      ALLOW_DEBUG: "1"
+    volumes:
+      # Persistent player profiles (XP and upgrades).
+      - ta-data:/data
+    restart: unless-stopped
+
+volumes:
+  ta-data:

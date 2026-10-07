@@ -1,0 +1,138 @@
+import Phaser from 'phaser';
+import { GalleryScene } from './game/GalleryScene';
+import { GameScene, type GameInit } from './game/GameScene';
+import type { RunStartInfo } from './generated/RunStartInfo';
+import { Net } from './net';
+import { loadAtlas } from './ui/atlas';
+import { Hud } from './ui/hud';
+import { Lobby } from './ui/lobby';
+import './style.css';
+
+class BootScene extends Phaser.Scene {
+  constructor() {
+    super('boot');
+  }
+  preload(): void {
+    this.load.atlas('atlas', 'assets/atlas.png', 'assets/atlas.json');
+  }
+  create(): void {
+    // Tiny runtime textures for particles and magic glows (the pack has no effect sprites).
+    const g = this.make.graphics({}, false);
+    g.fillStyle(0xffffff, 1).fillRect(0, 0, 2, 2);
+    g.generateTexture('dot', 2, 2);
+    g.clear().fillRect(1, 0, 1, 3).fillRect(0, 1, 3, 1);
+    g.generateTexture('spark', 3, 3);
+    g.clear();
+    for (let r = 6; r >= 1; r--) g.fillStyle(0xffffff, 0.12 + (6 - r) * 0.16).fillCircle(7, 7, r);
+    g.generateTexture('glow', 14, 14);
+    g.destroy();
+    this.game.events.emit('assets-ready');
+  }
+}
+
+/** Integer zoom so pixels stay crisp; figures stay tiny on large screens. */
+function viewSize(): { w: number; h: number; zoom: number } {
+  const zoom = Math.max(1, Math.round(Math.min(window.innerWidth / 600, window.innerHeight / 340)));
+  return { w: Math.ceil(window.innerWidth / zoom), h: Math.ceil(window.innerHeight / zoom), zoom };
+}
+
+/** Dev sprite gallery (?gallery): no server needed. */
+function gallery(): void {
+  const v = viewSize();
+  const game = new Phaser.Game({
+    type: Phaser.WEBGL,
+    parent: 'game',
+    pixelArt: true,
+    scale: { mode: Phaser.Scale.NONE, width: v.w, height: v.h, zoom: v.zoom },
+    scene: [BootScene, GalleryScene],
+  });
+  game.events.once('assets-ready', () => game.scene.start('gallery'));
+  document.getElementById('game')!.classList.add('active');
+}
+
+async function main(): Promise<void> {
+  if (new URLSearchParams(location.search).has('gallery')) return gallery();
+  const ui = document.getElementById('ui')!;
+  const net = new Net();
+  try {
+    await net.connect();
+  } catch {
+    ui.innerHTML = '<div class="lobby"><h1>Tiny Adventurers</h1><div class="panel">Cannot reach the game server. Is it running?</div></div>';
+    return;
+  }
+  const atlas = await loadAtlas();
+  const lobby = new Lobby(ui, net, atlas);
+
+  const v = viewSize();
+  const game = new Phaser.Game({
+    type: Phaser.WEBGL,
+    parent: 'game',
+    pixelArt: true,
+    antialias: false,
+    backgroundColor: '#000000',
+    scale: { mode: Phaser.Scale.NONE, width: v.w, height: v.h, zoom: v.zoom },
+    scene: [BootScene, GameScene],
+    fps: { smoothStep: false },
+  });
+  window.addEventListener('resize', () => {
+    const s = viewSize();
+    game.scale.resize(s.w, s.h);
+    game.scale.setZoom(s.zoom);
+  });
+  const ready = new Promise<void>((r) => game.events.once('assets-ready', r));
+  const gameEl = document.getElementById('game')!;
+
+  const backToLobby = () => {
+    game.scene.stop('game');
+    hud.hide();
+    gameEl.classList.remove('active');
+    lobby.leftRoom();
+    lobby.show();
+  };
+  const hud = new Hud(
+    ui,
+    () => {
+      net.send({ t: 'LeaveRun' });
+      backToLobby();
+    },
+    backToLobby,
+  );
+
+  net.onClose = () => {
+    hud.message('Connection lost. Reload the page to reconnect.');
+    lobby.error('Connection lost. Reload the page to reconnect.');
+  };
+
+  net.on(async (m) => {
+    switch (m.t) {
+      case 'Welcome':
+        lobby.myId = m.id;
+        break;
+      case 'Lobby':
+        lobby.setRuns(m.runs);
+        break;
+      case 'Room':
+        lobby.setRoom(m);
+        break;
+      case 'Profile':
+        lobby.setProfile(m);
+        break;
+      case 'Error':
+        lobby.error(m.msg);
+        break;
+      case 'RunStarted': {
+        await ready;
+        const info = m as RunStartInfo;
+        const me = info.players.find((p) => p.ent === info.you)!;
+        lobby.hide();
+        gameEl.classList.add('active');
+        const data: GameInit = { info, net, hud, myClass: me.class };
+        game.scene.stop('game');
+        game.scene.start('game', data);
+        break;
+      }
+    }
+  });
+}
+
+main();

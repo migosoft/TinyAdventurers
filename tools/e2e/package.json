@@ -1,0 +1,9 @@
+{
+  "name": "tiny-adventurers-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Browser smoke tests driving an installed Edge/Chrome via playwright-core.",
+  "dependencies": {
+    "playwright-core": "^1.50.0"
+  }
+}

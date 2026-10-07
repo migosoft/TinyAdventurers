@@ -1,0 +1,25 @@
+# TODO
+
+## Progression follow-ups
+
+Progression is live (profiles by token, XP banked at run end, lobby upgrade shop). See TECHNICAL.md §11a.
+- **Tune** `upgrade_cost` and the per-level bonuses in `defs/progression.rs` after real play. A typical cleared run gives a few hundred XP plus 300 for the boss; maxing one stat costs 4,375 XP.
+- **Identity is a browser token.** If players want their profile on several devices, add accounts or a "show/enter my token" field in the lobby.
+- The same token can be in one run twice (two tabs), which banks its XP twice. Reject a second join with the same token if that becomes a problem.
+
+## Other follow-ups
+- **Live boss test:** no full boss fight has been played in the browser yet; bosses are covered by server tests and the gallery. Host with `?debug&boss=demon|lich|dragon`, follow the path line, and tune the numbers in `server/src/run/bosses/*.rs` and `defs/bosses.rs`.
+- **Boss door on vertical entrances:** the pack's door sprite is only shown for horizontal entrances. A closed vertical entrance looks like a plain wall.
+- **Loadouts:** choose primary/secondary per class. Each class has only its one pair today, so new abilities (server executor, client prediction, pack-sprite visuals) are needed first. The picker and a field on `Member` are the easy part.
+- **More classes and bosses:** add to `defs/classes.rs` / `defs/bosses.rs` plus a `BossBehaviour` file, and add the visual entry in `client/src/game/anim/defs.ts`.
+- **Art gaps in the 0x72 pack:**
+  - The red dragon is the pack lizard, scaled and hue-shifted.
+  - The lich is a scaled, tinted necromancer.
+  - The demon has no bat wings.
+  - There are no attack animation frames.
+  - Dedicated sprite sheets can be added to `client/assets-src/` and referenced in `anim/defs.ts`.
+- **4-direction sprites:** the animation code keeps a `Dir` value. Up/down frames can be added there once sheets exist.
+- **Sound effects.**
+- **Network:**
+  - delta-compressed snapshots (currently full FOV-filtered snapshots, about 250 B each)
+  - optional WebTransport transport for lossy connections
