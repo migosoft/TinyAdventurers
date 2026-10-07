@@ -11,10 +11,21 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-07, wall corners and boss force field)
 
-- **Fixed:** wall junctions drew T pieces instead of corners. Side-wall strips moved from the outer edge to the floor side, and south walls draw their rim at the top of the cell (`TileDraw.dy`), so all walls hug the floor (`client/src/game/autotile.ts`). Checked by rendering a test map (with void cells) from the pack sheet; tests and typecheck pass. Confirmed by the user in the game.
-- **Boss hall entrance:** no door any more; the corridor leads straight in. When the party is inside, a shimmering blue force field (runtime effect, `client/src/game/forcefield.ts`) seals it. Server logic is unchanged (DoorClosed tiles still block). Checked in the gallery (`?gallery`, both orientations); **not yet seen in a live run**. Branch `feature/force-field` is based on `fix/wall-corners`; neither is merged or pushed.
-- **Wall stubs removed in the generator:** overlapping corridor/room carves left one-tile wall stubs that drew as T junctions (no tile choice can fix those). `remove_stubs` in `server/src/dungeon/generate.rs` fills them; the 200-seed test now asserts none remain (it failed on seed 0 without the fix). Needs a Docker rebuild to see.
-- **Also fixed:** the `spark` particle texture was black (`Graphics.clear()` resets the fill), so hit sparks were black crosses; they now take their tint.
+**Branches (nothing merged or pushed yet; ask the user before doing either):**
+- `fix/wall-corners` (from `main`): the wall-corner rework. Confirmed by the user in the game.
+- `feature/force-field` (from `fix/wall-corners`): the boss hall force field and the generator stub fix. Merging this one into `main` brings in both.
+
+**Done:**
+- **Walls hug the floor, junctions are corners.** Side-wall strips moved from the outer edge to the floor side, and south walls draw their rim at the top of the cell (`TileDraw.dy`) (`client/src/game/autotile.ts`). The cells behind walls are usually `Void`, not `Wall`; neighbour checks must not require `isWall` there.
+- **One-tile wall stubs filled in the generator.** Overlapping carves left wall cells with floor on three sides; they always draw as a T, whatever the tiles. `remove_stubs` in `server/src/dungeon/generate.rs` fills them (only where floor already wraps around, so no new path opens). The 200-seed test asserts none remain; it failed on seed 0 without the fix. Same seeds now give slightly different maps.
+- **Boss hall entrance:** no door any more; the entrance tiles draw as floor, so the corridor leads straight in. When the party is inside, a shimmering blue force field seals it (`client/src/game/forcefield.ts`, a runtime effect: the pack has no such sprite). It works on horizontal and vertical entrances and for late joiners/spectators. Server logic is unchanged (DoorClosed tiles still block movement and sight). Both orientations are in the gallery.
+- **Spark texture fixed:** `spark` was generated black (`Graphics.clear()` resets the fill), so hit sparks were black crosses; they now take their tint.
+
+**Checked:** 45 server tests, client typecheck and tests, `docker compose up --build` + health, two-player smoke test (no browser errors), gallery screenshots of the force field, and rendered test maps of the wall rules.
+
+**Not yet checked:**
+- **The force field in a live run** (only seen in the gallery). Do it together with the live boss test: `?debug&boss=demon`, follow the path line, enter the hall.
+- **The stub fix in the game** (covered by the generator test; the user hasn't looked at a rebuilt dungeon yet).
 
 ## Session before (2026-10-07)
 
@@ -58,7 +69,8 @@ For: the next agent or developer continuing this project. Read this first, then 
   - Runtime effect shapes (particles, glows, swooshes, rings) are fine.
 - **Weapons** are drawn small (0.6×).
 - **Melee reach is unchanged on the server:** a swoosh at the real damage reach replaces the visible full swing, and the weapon fades out and back in.
-- **Walls** follow the pack's 3/4 autotiling with its corner and rim pieces (`client/src/game/autotile.ts`). Strips and rims sit on the floor side so junctions are corners: the user rejected T-shaped junctions.
+- **Walls** follow the pack's 3/4 autotiling with its corner and rim pieces (`client/src/game/autotile.ts`). Strips and rims sit on the floor side so junctions are corners: the user rejected T-shaped junctions (four rounds of feedback). Check wall changes against corridor junctions, room corners and corridor mouths before calling them done.
+- **Boss hall entrance:** no door; a shimmering, semi-transparent blue force field appears when the party is inside (the user's request).
 - **Debug mode is URL-only:** `?debug`, optionally `&boss=demon|lich|dragon` on the host's page (preselects the lobby's boss picker). Debug runs bank no XP. The F4 toggle was removed at the user's request; don't add an in-game toggle back.
 - **Facing is left/right only:** the pack has no up/down frames. The user originally wanted 4 directions and accepted left/right for the pack. The code keeps a `Dir` hook.
 - **Stack:**
@@ -96,6 +108,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Gotchas
 
+- **Checking wall tiles without playing:** a throwaway `client/src/__dump.ts` that builds a `TileMap` from an ASCII map (`#` wall, `.` floor, space void) and prints `tileDraws` per cell, plus a PowerShell `System.Drawing` script that composes the frames from the pack PNG using `tile_list_v1.7`, gives exact renders. Use void cells behind walls like the real generator, and delete the dump script afterwards.
+- **Phaser `Graphics.clear()`** resets fill and line styles; set `fillStyle` again after it (see the `spark` texture in `main.ts`).
+
 - **Generated client files:** never edit `client/src/generated/*` by hand. Change Rust and run `cargo test`.
 - **Message tag:** MessagePack enums are tagged with the field `t`, so no variant may have a field named `t`. That is why `Ping`/`Pong` use `time`.
 - **Prediction parity:** client prediction relies on `client/src/sim/collision.ts` matching `server/src/collision.rs` exactly, and on the order *move, then abilities* in `Run::apply_input`. If you change movement, change both and keep `sim.test.ts` green.
@@ -110,7 +125,8 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Suggested next steps
 
-1. Play each boss live with `?debug&boss=…` and tune boss numbers in `server/src/run/bosses/*.rs` and `defs/bosses.rs`.
-2. Tune upgrade costs and bonuses (`defs/progression.rs`) after a few real runs.
-3. Loadouts: design new abilities, then add the lobby picker.
-4. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.
+1. Ask the user whether to merge `feature/force-field` (contains `fix/wall-corners`) into `main` and push.
+2. Play each boss live with `?debug&boss=…` and tune boss numbers in `server/src/run/bosses/*.rs` and `defs/bosses.rs`; check the force field on the way in.
+3. Tune upgrade costs and bonuses (`defs/progression.rs`) after a few real runs.
+4. Loadouts: design new abilities, then add the lobby picker.
+5. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.
