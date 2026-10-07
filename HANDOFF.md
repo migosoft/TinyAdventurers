@@ -11,9 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-07, wall corners and boss force field)
 
-**Branches (nothing merged or pushed yet; ask the user before doing either):**
-- `fix/wall-corners` (from `main`): the wall-corner rework. Confirmed by the user in the game.
-- `feature/force-field` (from `fix/wall-corners`): the boss hall force field and the generator stub fix. Merging this one into `main` brings in both.
+**Branches:** `fix/wall-corners` and `feature/force-field` are merged into `main` (fast-forward) and pushed.
 
 **Done:**
 - **Walls hug the floor, junctions are corners.** Side-wall strips moved from the outer edge to the floor side, and south walls draw their rim at the top of the cell (`TileDraw.dy`) (`client/src/game/autotile.ts`). The cells behind walls are usually `Void`, not `Wall`; neighbour checks must not require `isWall` there.
@@ -125,8 +123,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Suggested next steps
 
-1. Ask the user whether to merge `feature/force-field` (contains `fix/wall-corners`) into `main` and push.
-2. Play each boss live with `?debug&boss=…` and tune boss numbers in `server/src/run/bosses/*.rs` and `defs/bosses.rs`; check the force field on the way in.
-3. Tune upgrade costs and bonuses (`defs/progression.rs`) after a few real runs.
-4. Loadouts: design new abilities, then add the lobby picker.
-5. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.
+1. Play each boss live with `?debug&boss=…` and tune boss numbers in `server/src/run/bosses/*.rs` and `defs/bosses.rs`; check the force field on the way in.
+2. Tune upgrade costs and bonuses (`defs/progression.rs`) after a few real runs.
+3. Loadouts: design new abilities, then add the lobby picker.
+4. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.
