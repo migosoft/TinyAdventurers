@@ -2,15 +2,17 @@
 // 3/4 top-down style:
 // - Walls with floor to the south show their brick face (`wall_mid`); the
 //   cell above gets the wall-top rim (`wall_top_mid`).
-// - Every other wall shows only its top: a light rim on its OUTER side
-//   (away from the floor), so walls read as thick blocks.
-// - Corners and junctions use the pack's dedicated pieces
-//   (`wall_edge_left/right`, `wall_edge_top_*`, `wall_edge_bottom_*`, `wall_outer_top_*`).
+// - Side walls show a light strip on the side facing the floor
+//   (`wall_edge_mid_left/right`), so it meets the end of a brick face as a
+//   clean corner. South walls show the rim along their bottom.
+// - Corners use the pack's pieces (`wall_edge_bottom_*`, `wall_outer_top_*`).
 import { TILE_ID } from '../generated/defs';
 import type { TileMap } from '../sim/map';
 
 export interface TileDraw {
   frame: string;
+  /** Vertical pixel offset; only ever moves transparent sprite rows out of the cell. */
+  dy?: number;
 }
 
 function floorLike(t: number): boolean {
@@ -32,17 +34,12 @@ function isFace(m: TileMap, x: number, y: number): boolean {
   return isWall(m, x, y) && fl(m, x, y + 1);
 }
 
-/** Room corner continuing a brick face: 'left' = top-left corner of a room, 'right' = top-right. */
+/** Wall beside the end of a brick face: 'left' = top-left corner of a room, 'right' = top-right. */
 function cornerFace(m: TileMap, x: number, y: number): 'left' | 'right' | null {
   if (!isWall(m, x, y) || fl(m, x, y + 1) || fl(m, x - 1, y) || fl(m, x + 1, y)) return null;
   if (fl(m, x + 1, y + 1) && isFace(m, x + 1, y)) return 'left';
   if (fl(m, x - 1, y + 1) && isFace(m, x - 1, y)) return 'right';
   return null;
-}
-
-/** Any wall that shows bricks (straight face or room corner). */
-export function isFrontWall(m: TileMap, x: number, y: number): boolean {
-  return isFace(m, x, y) || cornerFace(m, x, y) !== null;
 }
 
 function faceFrame(m: TileMap, x: number, y: number, h: number): string {
@@ -56,49 +53,42 @@ function faceFrame(m: TileMap, x: number, y: number, h: number): string {
   return 'wall_mid';
 }
 
-/** A cell that draws a rim along its bottom edge (cap above a brick face). Often Void, not Wall. */
-function rimContinues(m: TileMap, x: number, y: number): boolean {
-  return !fl(m, x, y) && !isFrontWall(m, x, y) && isFrontWall(m, x, y + 1);
+/** Rim drawn on the cell directly above a brick face. */
+function capFrames(m: TileMap, x: number, y: number): string[] {
+  // A side wall going up meets the rim: its strip turns into the rim (a corner at the face's end).
+  if (isWall(m, x, y) && (fl(m, x + 1, y) || fl(m, x - 1, y))) {
+    const out: string[] = [];
+    if (fl(m, x + 1, y)) out.push('wall_edge_bottom_right');
+    if (fl(m, x - 1, y)) out.push('wall_edge_bottom_left');
+    return out;
+  }
+  return ['wall_top_mid'];
 }
 
-/** Rim drawn on the cell directly above a brick face. */
-function capFrame(m: TileMap, x: number, y: number): string {
-  const below = cornerFace(m, x, y + 1);
-  // Corridor wall going up meets the rim. If the rim already runs on along the
-  // wall's outer side, its strip just drops into it (a corner); otherwise the
-  // strip turns along the rim itself.
-  if (isWall(m, x, y) && fl(m, x + 1, y)) {
-    return rimContinues(m, x - 1, y) ? 'wall_edge_mid_left' : 'wall_edge_bottom_left';
-  }
-  if (isWall(m, x, y) && fl(m, x - 1, y)) {
-    return rimContinues(m, x + 1, y) ? 'wall_edge_mid_right' : 'wall_edge_bottom_right';
-  }
-  if (below === 'left') return 'wall_edge_top_left';
-  if (below === 'right') return 'wall_edge_top_right';
-  return 'wall_top_mid';
-}
+/** The rim and stub sprites keep their art in the bottom 4 rows; this lifts it to the top of the cell. */
+const TOP = -12;
 
 /** Top view of a wall that shows no bricks. */
-function topFrames(m: TileMap, x: number, y: number): string[] {
+function topDraws(m: TileMap, x: number, y: number): TileDraw[] {
+  // Room's top corners: the side strip runs up beside the face and a stub meets the rim.
+  const corner = cornerFace(m, x, y);
+  if (corner === 'left') return [{ frame: 'wall_edge_mid_right' }];
+  if (corner === 'right') return [{ frame: 'wall_edge_mid_left' }];
+  const cornerBelow = cornerFace(m, x, y + 1);
+  if (cornerBelow === 'left') return [{ frame: 'wall_outer_top_left' }];
+  if (cornerBelow === 'right') return [{ frame: 'wall_outer_top_right' }];
+
   const n = fl(m, x, y - 1);
   const e = fl(m, x + 1, y);
   const w = fl(m, x - 1, y);
-  if (n) {
-    // South wall of an area: rim along the bottom; stubs where a corridor leaves sideways.
-    if (w && !e) return ['wall_outer_top_left'];
-    if (e && !w) return ['wall_outer_top_right'];
-    if (e && w) return [];
-    return ['wall_top_mid'];
-  }
-  if (e || w) {
-    const out: string[] = [];
-    if (e) out.push('wall_edge_mid_left');
-    if (w) out.push('wall_edge_mid_right');
-    return out;
-  }
-  // Only diagonal floor: bottom corners of rooms.
-  if (fl(m, x + 1, y - 1)) return ['wall_edge_bottom_left'];
-  if (fl(m, x - 1, y - 1)) return ['wall_edge_bottom_right'];
+  const out: TileDraw[] = [];
+  if (n) out.push({ frame: 'wall_top_mid', dy: TOP }); // south wall: rim along the floor's edge
+  if (e) out.push({ frame: 'wall_edge_mid_right' });
+  if (w) out.push({ frame: 'wall_edge_mid_left' });
+  if (out.length) return out;
+  // Only diagonal floor: bottom corners of rooms, where the strip ends in the rim.
+  if (fl(m, x + 1, y - 1)) return [{ frame: 'wall_outer_top_left', dy: TOP }];
+  if (fl(m, x - 1, y - 1)) return [{ frame: 'wall_outer_top_right', dy: TOP }];
   return [];
 }
 
@@ -111,14 +101,10 @@ export function tileDraws(m: TileMap, x: number, y: number): TileDraw[] {
     out.push({ frame: h < 930 ? 'floor_1' : `floor_${2 + (h % 7)}` });
   } else if (isFace(m, x, y)) {
     out.push({ frame: faceFrame(m, x, y, h) });
-  } else if (cornerFace(m, x, y) === 'left') {
-    out.push({ frame: 'wall_edge_left' });
-  } else if (cornerFace(m, x, y) === 'right') {
-    out.push({ frame: 'wall_edge_right' });
-  } else if (isFrontWall(m, x, y + 1)) {
-    out.push({ frame: capFrame(m, x, y) });
-  } else if (isWall(m, x, y)) {
-    for (const f of topFrames(m, x, y)) out.push({ frame: f });
+  } else if (isFace(m, x, y + 1)) {
+    for (const f of capFrames(m, x, y)) out.push({ frame: f });
+  } else if (isWall(m, x, y) || cornerFace(m, x, y + 1)) {
+    out.push(...topDraws(m, x, y));
   }
   return out;
 }

@@ -156,8 +156,9 @@ export class GameScene extends Phaser.Scene {
   private drawTile(x: number, y: number, batch: boolean): void {
     for (const d of tileDraws(this.map, x, y)) {
       const tint = d.frame.startsWith('floor') ? this.tileTint(x, y) : 0xffffff;
-      if (batch) this.mapRt.batchDrawFrame('atlas', d.frame, x * TILE, y * TILE, 1, tint);
-      else this.mapRt.drawFrame('atlas', d.frame, x * TILE, y * TILE, 1, tint);
+      const py = y * TILE + (d.dy ?? 0);
+      if (batch) this.mapRt.batchDrawFrame('atlas', d.frame, x * TILE, py, 1, tint);
+      else this.mapRt.drawFrame('atlas', d.frame, x * TILE, py, 1, tint);
     }
   }
 

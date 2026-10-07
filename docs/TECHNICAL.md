@@ -237,9 +237,10 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds.
 - The tiles are baked once into a RenderTexture, with a slight per-tile brightness variation and faint grid lines (board-game look). A wooden table frame surrounds the map.
 - Autotiling follows the pack's 3/4 style:
   - walls with floor to the south show bricks (`wall_mid`, occasional holes and banners), with a rim (`wall_top_mid`) on the cell above
-  - other walls show a rim on their outer side (`wall_edge_mid_left/right`, bottom rim)
-  - corners and junctions use `wall_edge_left/right`, `wall_edge_top_*`, `wall_edge_bottom_*` and `wall_outer_top_*`
-  - where a corridor wall meets a room's top rim that runs on past it, its strip drops straight into the rim (a corner, `wall_edge_mid_*`), not a T (`wall_edge_bottom_*`)
+  - side walls show a light strip on the edge facing the floor (`wall_edge_mid_left/right`); south walls show the rim (`wall_top_mid`) at the top of their cell, next to the floor. Both hug the floor, so every junction reads as a corner, never a T
+  - corners: a side wall meeting a brick face's rim uses `wall_edge_bottom_*`; a room's top corners use a stub (`wall_outer_top_*`) above the strip; bottom corners use the stub lifted to the top of the cell
+  - `TileDraw.dy` lifts rim and stub sprites (their art sits in the bottom 4 rows) to the top of a cell; it only moves transparent rows outside the cell, so redrawing single cells stays correct
+  - the cells behind a wall are usually `Void`, not `Wall` (the server only walls cells next to floor), so neighbour checks must not require `isWall` there
 - When the door closes, the 3×3 neighbourhood is cleared and redrawn. The door itself is the pack's `doors_leaf_open/closed` sprite (horizontal doors only).
 
 **Figures (`anim/defs.ts` → `EntityView`).**

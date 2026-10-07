@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-07, wall corners)
 
-- **Fixed:** corridor walls meeting a room's top rim drew a T junction instead of a corner (`capFrame` in `client/src/game/autotile.ts`). Note: the cells behind a room's top rim are usually `Void`, not `Wall` (the server walls only cells next to floor), so neighbour checks there must not require `isWall`. Checked by rendering test maps (with void cells) from the pack sheet; tests and typecheck pass.
+- **Fixed:** wall junctions drew T pieces instead of corners. Side-wall strips moved from the outer edge to the floor side, and south walls draw their rim at the top of the cell (`TileDraw.dy`), so all walls hug the floor (`client/src/game/autotile.ts`). Checked by rendering a test map (with void cells) from the pack sheet; tests and typecheck pass. Not yet confirmed by the user in the game.
 
 ## Session before (2026-10-07)
 
@@ -55,7 +55,7 @@ For: the next agent or developer continuing this project. Read this first, then 
   - Runtime effect shapes (particles, glows, swooshes, rings) are fine.
 - **Weapons** are drawn small (0.6×).
 - **Melee reach is unchanged on the server:** a swoosh at the real damage reach replaces the visible full swing, and the weapon fades out and back in.
-- **Walls** follow the pack's 3/4 autotiling with its corner, junction and rim pieces (`client/src/game/autotile.ts`).
+- **Walls** follow the pack's 3/4 autotiling with its corner and rim pieces (`client/src/game/autotile.ts`). Strips and rims sit on the floor side so junctions are corners: the user rejected T-shaped junctions.
 - **Debug mode is URL-only:** `?debug`, optionally `&boss=demon|lich|dragon` on the host's page (preselects the lobby's boss picker). Debug runs bank no XP. The F4 toggle was removed at the user's request; don't add an in-game toggle back.
 - **Facing is left/right only:** the pack has no up/down frames. The user originally wanted 4 directions and accepted left/right for the pack. The code keeps a `Dir` hook.
 - **Stack:**
