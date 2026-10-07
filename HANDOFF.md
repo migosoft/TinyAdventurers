@@ -7,7 +7,13 @@ For: the next agent or developer continuing this project. Read this first, then 
 1. [README.md](README.md): what the game is, how to run it, dev helpers.
 2. [docs/TECHNICAL.md](docs/TECHNICAL.md): architecture, protocol, simulation, netcode, rendering, how to extend, tests, known limitations.
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
-4. [docs/TODO.md](docs/TODO.md): open work, with the progression system first.
+4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (progression tuning, live boss test, loadouts, art gaps).
+
+## Last session (2026-10-07)
+
+- **Done:** lobby boss selection, and permanent progression (profiles, XP banking, upgrade shop). Details: TECHNICAL.md §4 and §11a, PLAYER_GUIDE.md "XP and upgrades".
+- **Workflow set up:** the first commits are on `main` and pushed. The user wants one feature per session with a handoff, doc updates and a commit at the end (see "Git and session workflow").
+- **Not done in that session:** the live boss test and loadouts (loadouts need new abilities first; the user chose to defer them).
 
 ## Current state
 
@@ -28,6 +34,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Not yet verified:**
 - **A full live boss fight in the browser.** Bosses are covered only by server unit tests and the gallery. Doing this is the most valuable next check: host with `?debug&boss=lich` (and `demon`, `dragon`) and follow the path line.
 - Behaviour with real (non-headless) players over a real network.
+- **Earning XP in a real run.** Banking at run end is covered by server tests only; the shop was browser-tested with a seeded profile. To check: play a normal run (no `?debug`, which banks nothing), then look at the Upgrades panel.
 
 **Git and session workflow (the user's standing instructions):**
 - One feature per session. When a feature is done: update this file and the docs, run the verification checklist below, then commit.
@@ -90,6 +97,10 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **Pack frame names** are used verbatim (`knight_m_run_anim_f2`). `necromancer` only has `necromancer_anim_f0-3`, used for both idle and run.
 - **Dragon breath points** (`mouth` / `nostrils` in `anim/defs.ts`) were measured per lizard frame. If the dragon sprite changes, re-measure them.
 - **The boss door sprite** is shown only for horizontal doors; vertical door openings appear as a wall when closed.
+- **Profiles:** the client must send `Hello` on every connect (the lobby constructor does), or the connection has no token: no XP is banked and no upgrades are applied.
+- **Seeding a test profile:** write `{"<32 hex token>":{"xp":1000,"total_xp":1000,"upgrades":{"damage":0,"attack_speed":0,"move_speed":0,"life":0,"armor":0}}}` to a file, `docker cp` it to `<container>:/data/profiles.json`, then `docker compose restart game`; put the token in the browser's `localStorage` key `ta-token`. In Git Bash use `MSYS_NO_PATHCONV=1` for `docker compose exec` with `/data/...` paths. Remove the test profile afterwards.
+- **Lobby screenshots:** the lobby scrolls inside `.lobby`, so Playwright `fullPage` shots are cut off. Screenshot elements instead (`page.locator('.bosses').screenshot()`).
+- **Boss previews in the lobby** (`BOSS_FIG` in `ui/lobby.ts`) use CSS filters to imitate the in-game tint/hue from `anim/defs.ts`. If a boss figure changes, update both.
 
 ## Suggested next steps
 
