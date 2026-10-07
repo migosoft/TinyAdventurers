@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-07, terrain step 1: tiles and demos)
 
-**Branch:** `feature/terrain` (committed, **not merged, not pushed**). The terrain feature continues on this branch next session.
+**Branch:** `feature/terrain` is merged into `main` (fast-forward) and pushed. Continue the remaining terrain steps on a new `feature/terrain-rules` branch from `main`.
 
 **Plan:** [docs/terrain-plan.md](docs/terrain-plan.md) has the full step plan and all of the user's terrain decisions. Step 1 is done; start with Step 2 (tile rules on server and client).
 
@@ -111,7 +111,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 - lobby, 4 classes, host-chosen or random end boss, random dungeon, field of vision
 - persistent profiles: XP banked after each run, permanent upgrades bought in the lobby (`ta-data` volume)
 - 10 enemy types (including the mimic; imps, chorts and summoners only in the demon's dungeon), 3 bosses
-- terrain tiles and demos (`?water`, `?chasm`, `?lava`) on `feature/terrain`; not in the game yet
+- terrain tiles and demos (`?water`, `?chasm`, `?lava`); not in the game yet
 - treasure chests and mimics; coins banked as a second currency
 - permadeath with spectating, victory/defeat screens
 - client prediction and interpolation, F3 stats
@@ -208,7 +208,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Suggested next steps
 
-1. **Terrain, steps 2–6 (start here next session):** check out `feature/terrain` and follow [docs/terrain-plan.md](docs/terrain-plan.md). Step 2: split `solid` into walk and sight rules on server and client (prediction parity), with the new `Tile` values. Then gameplay (fall, drown, lava burn, demon immunity, AI), the generator (own rng stream 8, themed per boss), in-game rendering with `TerrainLayer`, and docs. Ask the user about knockback early. Ask before merging into `main` or pushing.
+1. **Terrain, steps 2–6 (start here next session):** start a `feature/terrain-rules` branch from `main` and follow [docs/terrain-plan.md](docs/terrain-plan.md). Step 2: split `solid` into walk and sight rules on server and client (prediction parity), with the new `Tile` values. Then gameplay (fall, drown, lava burn, demon immunity, AI), the generator (own rng stream 8, themed per boss), in-game rendering with `TerrainLayer`, and docs. Ask the user about knockback early. Ask before merging into `main` or pushing.
 2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
 4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
