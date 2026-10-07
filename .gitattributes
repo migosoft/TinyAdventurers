@@ -1,0 +1,3 @@
+# Keep LF everywhere (files are used inside Linux containers).
+* text=auto eol=lf
+*.png binary

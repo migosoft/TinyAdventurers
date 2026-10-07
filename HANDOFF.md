@@ -29,9 +29,11 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **A full live boss fight in the browser.** Bosses are covered only by server unit tests and the gallery. Doing this is the most valuable next check: host with `?debug&boss=lich` (and `demon`, `dragon`) and follow the path line.
 - Behaviour with real (non-headless) players over a real network.
 
-**Git:**
-- The repository was initialised. **Nothing has been committed yet:** all files are untracked on the default branch.
-- Commit only when the user asks, and branch first.
+**Git and session workflow (the user's standing instructions):**
+- One feature per session. When a feature is done: update this file and the docs, run the verification checklist below, then commit.
+- Branches: `main` holds the finished work. Start each feature on a `feature/<name>` branch from `main` and commit there. Ask before merging into `main` or pushing.
+- Remote: `origin` = https://github.com/migosoft/TinyAdventurers.git. Nothing has been pushed yet.
+- The repo-local author is `Goll Michael <m.goll@schig.com>`. `.gitattributes` keeps LF line endings.
 
 ## The user's decisions and preferences (keep them)
 
