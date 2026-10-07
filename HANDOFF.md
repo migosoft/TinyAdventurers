@@ -9,9 +9,11 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (progression tuning, live boss test, loadouts, art gaps).
 
-## Last session (2026-10-07, wall corners)
+## Last session (2026-10-07, wall corners and boss force field)
 
 - **Fixed:** wall junctions drew T pieces instead of corners. Side-wall strips moved from the outer edge to the floor side, and south walls draw their rim at the top of the cell (`TileDraw.dy`), so all walls hug the floor (`client/src/game/autotile.ts`). Checked by rendering a test map (with void cells) from the pack sheet; tests and typecheck pass. Confirmed by the user in the game.
+- **Boss hall entrance:** no door any more; the corridor leads straight in. When the party is inside, a shimmering blue force field (runtime effect, `client/src/game/forcefield.ts`) seals it. Server logic is unchanged (DoorClosed tiles still block). Checked in the gallery (`?gallery`, both orientations); **not yet seen in a live run**. Branch `feature/force-field` is based on `fix/wall-corners`; neither is merged or pushed.
+- **Also fixed:** the `spark` particle texture was black (`Graphics.clear()` resets the fill), so hit sparks were black crosses; they now take their tint.
 
 ## Session before (2026-10-07)
 
@@ -100,7 +102,6 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **Boss behaviours** are taken out of `Run.boss` during their tick (`Option::take`), so `hurt_monster`'s immunity check cannot see the boss during its own tick. That is harmless today; keep it in mind.
 - **Pack frame names** are used verbatim (`knight_m_run_anim_f2`). `necromancer` only has `necromancer_anim_f0-3`, used for both idle and run.
 - **Dragon breath points** (`mouth` / `nostrils` in `anim/defs.ts`) were measured per lizard frame. If the dragon sprite changes, re-measure them.
-- **The boss door sprite** is shown only for horizontal doors; vertical door openings appear as a wall when closed.
 - **Profiles:** the client must send `Hello` on every connect (the lobby constructor does), or the connection has no token: no XP is banked and no upgrades are applied.
 - **Seeding a test profile:** write `{"<32 hex token>":{"xp":1000,"total_xp":1000,"upgrades":{"damage":0,"attack_speed":0,"move_speed":0,"life":0,"armor":0}}}` to a file, `docker cp` it to `<container>:/data/profiles.json`, then `docker compose restart game`; put the token in the browser's `localStorage` key `ta-token`. In Git Bash use `MSYS_NO_PATHCONV=1` for `docker compose exec` with `/data/...` paths. Remove the test profile afterwards.
 - **Lobby screenshots:** the lobby scrolls inside `.lobby`, so Playwright `fullPage` shots are cut off. Screenshot elements instead (`page.locator('.bosses').screenshot()`).

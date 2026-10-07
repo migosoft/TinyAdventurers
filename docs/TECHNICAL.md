@@ -117,7 +117,7 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 **Events (`Ev`)** are collected during the ticks between snapshots. Positional events are FOV-filtered per player:
 - `Dmg`, `Heal`, `Boom{k}`
 - `Died`, `Raise`, `Immune`
-- `Tile`: boss door
+- `Tile`: boss hall entrance sealed (force field)
 - `Msg`
 
 ## 5. Server simulation (`run/`)
@@ -142,7 +142,7 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 5. **Projectiles and hazards.**
 6. **Position history:** each monster's position goes into a 32-entry ring buffer, used for lag compensation.
 7. **Cleanup:** dead objects are removed.
-8. **Boss hall and end of run:** the boss wakes when any player enters the hall; the door closes when all living players are inside. Then check for victory or defeat.
+8. **Boss hall and end of run:** the boss wakes when any player enters the hall; the entrance is sealed (DoorClosed tiles) when all living players are inside. Then check for victory or defeat.
 
 **Combat.**
 - `hurt_monster`:
@@ -181,7 +181,7 @@ The generator is seeded (ChaCha8) and deterministic:
 1. **Placement:** built in a canonical orientation. The start room (8×8) is at the bottom center and the boss hall (26×20) at the top center. Rooms (6–10) and halls (12–18 × 11–15) are rejection-sampled below a band that keeps them away from the hall.
 2. **Connections:**
    - a minimum spanning tree plus up to 6 extra loop edges, carved as 3-wide L corridors
-   - the boss hall gets a single corridor with a 3-tile door
+   - the boss hall gets a single corridor with a 3-tile entrance (DoorOpen tiles, sealed later)
    - walls are placed on every void cell next to floor
 3. **Validation, retried on failure:** every room is reachable (BFS), and the boss hall is the farthest area by path distance, with a margin of 4 tiles.
 4. **Population:** enemies scale with path depth. Necromancers appear only in halls.
@@ -241,7 +241,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds.
   - corners: a side wall meeting a brick face's rim uses `wall_edge_bottom_*`; a room's top corners use a stub (`wall_outer_top_*`) above the strip; bottom corners use the stub lifted to the top of the cell
   - `TileDraw.dy` lifts rim and stub sprites (their art sits in the bottom 4 rows) to the top of a cell; it only moves transparent rows outside the cell, so redrawing single cells stays correct
   - the cells behind a wall are usually `Void`, not `Wall` (the server only walls cells next to floor), so neighbour checks must not require `isWall` there
-- When the door closes, the 3×3 neighbourhood is cleared and redrawn. The door itself is the pack's `doors_leaf_open/closed` sprite (horizontal doors only).
+- The boss hall entrance has no door: open and sealed entrance tiles both draw as floor. When it is sealed, `forcefield.ts` draws a shimmering blue force field over it (a runtime effect; the pack has no such sprite): a pulsing translucent wall with drifting light bands and glitter sparks, a curtain on horizontal entrances and an edge-on band on vertical ones. `GameScene.syncForceField` builds it from the map, so players who join or spectate later see it too. Both orientations are in the gallery (`?gallery`).
 
 **Figures (`anim/defs.ts` → `EntityView`).**
 - `FigureDef` describes:

@@ -15,8 +15,9 @@ export interface TileDraw {
   dy?: number;
 }
 
+/** The boss hall entrance looks like floor even when sealed (a force field is drawn over it). */
 function floorLike(t: number): boolean {
-  return t === TILE_ID.Floor || t === TILE_ID.DoorOpen;
+  return t === TILE_ID.Floor || t === TILE_ID.DoorOpen || t === TILE_ID.DoorClosed;
 }
 
 function hash(x: number, y: number): number {
@@ -25,7 +26,7 @@ function hash(x: number, y: number): number {
 
 const isWall = (m: TileMap, x: number, y: number) => {
   const t = m.get(x, y);
-  return t === TILE_ID.Wall || t === TILE_ID.DoorClosed;
+  return t === TILE_ID.Wall;
 };
 const fl = (m: TileMap, x: number, y: number) => floorLike(m.get(x, y));
 
@@ -43,7 +44,6 @@ function cornerFace(m: TileMap, x: number, y: number): 'left' | 'right' | null {
 }
 
 function faceFrame(m: TileMap, x: number, y: number, h: number): string {
-  if (m.get(x, y) === TILE_ID.DoorClosed) return 'wall_mid';
   // Occasional decoration on long straight faces.
   if (isFace(m, x - 1, y) && isFace(m, x + 1, y)) {
     if (h < 25) return 'wall_hole_1';
@@ -96,7 +96,7 @@ export function tileDraws(m: TileMap, x: number, y: number): TileDraw[] {
   const t = m.get(x, y);
   const out: TileDraw[] = [];
   const h = hash(x, y);
-  if (t === TILE_ID.Floor || t === TILE_ID.DoorOpen) {
+  if (floorLike(t)) {
     // Mostly plain flagstones with occasional cracked variants.
     out.push({ frame: h < 930 ? 'floor_1' : `floor_${2 + (h % 7)}` });
   } else if (isFace(m, x, y)) {

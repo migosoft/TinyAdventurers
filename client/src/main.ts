@@ -20,7 +20,7 @@ class BootScene extends Phaser.Scene {
     const g = this.make.graphics({}, false);
     g.fillStyle(0xffffff, 1).fillRect(0, 0, 2, 2);
     g.generateTexture('dot', 2, 2);
-    g.clear().fillRect(1, 0, 1, 3).fillRect(0, 1, 3, 1);
+    g.clear().fillStyle(0xffffff, 1).fillRect(1, 0, 1, 3).fillRect(0, 1, 3, 1); // clear() resets the fill to black
     g.generateTexture('spark', 3, 3);
     g.clear();
     for (let r = 6; r >= 1; r--) g.fillStyle(0xffffff, 0.12 + (6 - r) * 0.16).fillCircle(7, 7, r);

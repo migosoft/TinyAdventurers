@@ -14,6 +14,7 @@ import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
 import { DEPTH, Effects } from './effects';
+import { ForceField } from './forcefield';
 import { Interpolator, Predictor, type EntState } from './world';
 
 export interface GameInit {
@@ -73,7 +74,7 @@ export class GameScene extends Phaser.Scene {
   private unsub?: () => void;
   private frameMs = 0;
   private myKind = 0;
-  private doorImg?: Phaser.GameObjects.Image;
+  private forceField?: ForceField;
   // Debug mode (?debug): immortal + path to the boss, drawn above the fog.
   private debugOn = false;
   private debugPath: [number, number][] = [];
@@ -176,13 +177,14 @@ export class GameScene extends Phaser.Scene {
     this.mapRt.beginDraw();
     for (let y = 0; y < this.map.h; y++) for (let x = 0; x < this.map.w; x++) this.drawTile(x, y, true);
     this.mapRt.endDraw();
-    this.placeDoor();
+    this.syncForceField(false);
     // Faint printed grid lines on the floor, like a game board.
     const grid = this.add.graphics().setDepth(DEPTH.map);
     grid.lineStyle(1, 0x000000, 0.12);
     for (let y = 0; y < this.map.h; y++)
       for (let x = 0; x < this.map.w; x++) {
-        if (this.map.get(x, y) !== TILE_ID.Floor) continue;
+        const t = this.map.get(x, y);
+        if (t === TILE_ID.Wall || t === TILE_ID.Void) continue; // the entrance tiles are floor too
         grid.strokeRect(x * TILE + 0.5, y * TILE + 0.5, TILE, TILE);
       }
   }
@@ -196,16 +198,15 @@ export class GameScene extends Phaser.Scene {
       }
   }
 
-  /** The pack's door leaf sprite over the boss hall entrance. */
-  private placeDoor(): void {
-    const doors: [number, number][] = [];
-    for (let y = 0; y < this.map.h; y++) for (let x = 0; x < this.map.w; x++) if (this.map.get(x, y) === TILE_ID.DoorOpen) doors.push([x, y]);
-    if (doors.length === 0) return;
-    const horizontal = doors.every(([, y]) => y === doors[0][1]);
-    if (!horizontal) return; // side doors: shown as a wall when closed
-    const cx = (doors.reduce((s, [x]) => s + x, 0) / doors.length + 0.5) * TILE;
-    const by = (doors[0][1] + 1) * TILE;
-    this.doorImg = this.add.image(cx, by, 'atlas', 'doors_leaf_open').setOrigin(0.5, 1).setDepth(DEPTH.entityBase + by - 8);
+  /** The force field over the sealed boss hall entrance (also for players who join or spectate later). */
+  private syncForceField(appear: boolean): void {
+    const sealed: [number, number][] = [];
+    for (let y = 0; y < this.map.h; y++)
+      for (let x = 0; x < this.map.w; x++) if (this.map.get(x, y) === TILE_ID.DoorClosed) sealed.push([x, y]);
+    const prev = this.forceField;
+    prev?.destroy();
+    this.forceField = sealed.length ? new ForceField(this, this.fx, sealed, appear && !prev) : undefined;
+    if (prev && this.forceField) this.forceField.age = prev.age;
   }
 
   // ------------------------------------------------------------ fog of war
@@ -310,8 +311,9 @@ export class GameScene extends Phaser.Scene {
         this.redrawTile(ev.x, ev.y);
         this.fogOrigin = [-1, -1];
         if (ev.v === TILE_ID.DoorClosed) {
-          this.doorImg?.setFrame('doors_leaf_closed');
-          this.hud.message('The doors slam shut behind you!');
+          // The entrance tiles arrive one event each; only announce the first.
+          if (!this.forceField) this.hud.message('A force field seals the hall behind you!');
+          this.syncForceField(true);
         }
         break;
       case 'Msg':
@@ -525,6 +527,7 @@ export class GameScene extends Phaser.Scene {
     this.updateCosmetics(dt, myShots);
     this.drawBarsAndBeams(now);
     this.drawDebugPath(px, py, now);
+    this.forceField?.update(dt);
     this.fx.update(dt);
 
     this.frameMs = this.frameMs * 0.9 + (performance.now() - t0) * 0.1;

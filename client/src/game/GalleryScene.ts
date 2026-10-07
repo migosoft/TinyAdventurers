@@ -1,10 +1,13 @@
 // Dev page (?gallery): every figure cycling through all animation states,
-// plus projectiles, to check sprites without playing to each enemy.
+// plus projectiles and the boss hall force field, to check sprites without
+// playing to each enemy.
 import Phaser from 'phaser';
 import { ANIM, FLAG } from '../generated/defs';
 import { FIGURES, PROJECTILES } from './anim/defs';
 import { EntityView } from './anim/EntityView';
 import { Effects } from './effects';
+import { ForceField } from './forcefield';
+import { TILE } from '../sim/map';
 
 const STATES: [string, number][] = [
   ['idle', ANIM.Idle],
@@ -23,6 +26,7 @@ export class GalleryScene extends Phaser.Scene {
   private fx!: Effects;
   private t = 0;
   private label!: Phaser.GameObjects.Text;
+  private fields: ForceField[] = [];
 
   constructor() {
     super('gallery');
@@ -41,6 +45,10 @@ export class GalleryScene extends Phaser.Scene {
       const img = pd.frame ? this.add.image(0, 0, 'atlas', pd.frame).setRotation(Math.PI / 2) : this.add.image(0, 0, 'glow').setTint(pd.glow!).setBlendMode(Phaser.BlendModes.ADD);
       img.setScale(pd.scale).setPosition(40 + i * 30, 320);
     });
+    // Force fields on a patch of floor: a horizontal and a vertical entrance (tile coordinates).
+    for (let y = 2; y <= 10; y++) for (let x = 35; x <= 39; x++) this.add.image(x * TILE, y * TILE, 'atlas', 'floor_1').setOrigin(0);
+    this.fields.push(new ForceField(this, this.fx, [[35, 3], [36, 3], [37, 3]], true));
+    this.fields.push(new ForceField(this, this.fx, [[38, 6], [38, 7], [38, 8]], true));
     this.label = this.add.text(8, 6, '', { fontFamily: 'monospace', fontSize: '10px', color: '#fff' });
   }
 
@@ -61,6 +69,7 @@ export class GalleryScene extends Phaser.Scene {
       const flags = Math.floor(this.t * 2) % 6 === 0 ? FLAG.HURT : 0;
       v.update({ x: anim === ANIM.Move ? x + Math.sin(this.t * 3) * 6 : x, y, anim, animT: animT % 0.5, aim, flags }, dt);
     }
+    for (const f of this.fields) f.update(dt);
     this.fx.update(dt);
   }
 }

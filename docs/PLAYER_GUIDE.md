@@ -70,7 +70,7 @@ Enemies **flash red and shake** just before they strike. That is your moment to 
 
 ## Final bosses
 
-The boss sleeps in a large hall at the far end of the dungeon. Each run has one of three bosses: the one the host picked in the lobby, or a random one. It wakes as soon as someone enters the hall. **When the whole party is inside, the doors slam shut**: from then on, it's you or the boss. Bosses have a lot of health, more with a bigger party. Their health bar appears at the top of the screen.
+The boss sleeps in a large hall at the far end of the dungeon. Each run has one of three bosses: the one the host picked in the lobby, or a random one. It wakes as soon as someone enters the hall. **When the whole party is inside, a shimmering blue force field seals the entrance**: from then on, it's you or the boss. Bosses have a lot of health, more with a bigger party. Their health bar appears at the top of the screen.
 
 ### The Red Demon
 - **Cleave:** a wide claw sweep in front of it.
