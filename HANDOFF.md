@@ -24,6 +24,8 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Checked:** 48 server tests (3 new: chest opening pays the party once; mimic sleep/wake/hold and boss-wake exception; mimic moves only while airborne; plus chest guarantees over 200 seeds), client typecheck and tests, `docker compose up --build` + health, two-player smoke test (no browser errors; HUD coin counter and lobby coins visible), `?mimic` screenshots (hop, bite, chest coin burst, reveal).
 
+**User feedback:** the user likes the mimics a lot. Coin amounts, chest rate, mimic share and mimic stats are left for the combined balancing pass later (listed in TODO.md); don't tune them piecemeal.
+
 **Not yet verified:** meeting a chest and a mimic in a real run (the headless smoke test never walks to one), and seeing the coins banked after a real run. The user should play one normal run (no `?debug`).
 
 ## Session before (2026-10-07, wall corners and boss force field)
