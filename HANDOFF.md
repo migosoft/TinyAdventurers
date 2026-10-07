@@ -32,7 +32,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Git and session workflow (the user's standing instructions):**
 - One feature per session. When a feature is done: update this file and the docs, run the verification checklist below, then commit.
 - Branches: `main` holds the finished work. Start each feature on a `feature/<name>` branch from `main` and commit there. Ask before merging into `main` or pushing.
-- Remote: `origin` = https://github.com/migosoft/TinyAdventurers.git. Nothing has been pushed yet.
+- Remote: `origin` = https://github.com/migosoft/TinyAdventurers.git. `main` tracks `origin/main`.
 - The repo-local author is `Goll Michael <m.goll@schig.com>`. `.gitattributes` keeps LF line endings.
 
 ## The user's decisions and preferences (keep them)
