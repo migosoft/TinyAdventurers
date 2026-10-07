@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-07, demon dungeon: imps, chorts, summoners)
 
-**Branch:** `feature/demon-minions` (not merged yet; ask before merging into `main` or pushing).
+**Branch:** `feature/demon-minions` is merged into `main` (fast-forward) and pushed.
 
 **Why:** the user wanted more variety and asked about chasms and water. The 0x72 pack has none (only `hole`, `edge_down`, wall fountains and goo), so **the user allowed other CC0 tilesets that fit well, for terrain and for enemies**. The user also pointed out the pack's small demons and asked for them in place of skeletons when the demon is the boss, with melee and fire bolts. Terrain (water, chasms) is the next sub-project; nothing has been done for it yet.
 
