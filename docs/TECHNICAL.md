@@ -344,5 +344,5 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds.
 - Pack art gaps: no dragon or lich sprites, no demon wings, no attack frames, no up/down facing.
 - No sound.
 - Snapshots are not delta-compressed. They are small anyway.
-- Boss fights have only been checked by unit tests and the gallery. As of this writing nobody has played through a full live boss fight.
+- Boss fights are covered by unit tests and were played live once against all three bosses; their numbers are not balanced yet.
 - The client keeps the player name and the profile token in `localStorage`. Losing the token means losing the profile; there is no account recovery.

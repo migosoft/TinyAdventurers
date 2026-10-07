@@ -7,7 +7,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 1. [README.md](README.md): what the game is, how to run it, dev helpers.
 2. [docs/TECHNICAL.md](docs/TECHNICAL.md): architecture, protocol, simulation, netcode, rendering, how to extend, tests, known limitations.
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
-4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (progression tuning, live boss test, loadouts, art gaps).
+4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
 ## Last session (2026-10-07, wall corners and boss force field)
 
@@ -21,8 +21,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Checked:** 45 server tests, client typecheck and tests, `docker compose up --build` + health, two-player smoke test (no browser errors), gallery screenshots of the force field, and rendered test maps of the wall rules.
 
+**Live boss test (by the user, after the merge):** all three bosses (demon, lich, dragon) played in the browser; the force field appeared when the party entered the hall; no problems found. Balancing was deliberately not judged: the user wants one combined balancing pass later (progression, classes, boss fights).
+
 **Not yet checked:**
-- **The force field in a live run** (only seen in the gallery). Do it together with the live boss test: `?debug&boss=demon`, follow the path line, enter the hall.
 - **The stub fix in the game** (covered by the generator test; the user hasn't looked at a rebuilt dungeon yet).
 
 ## Session before (2026-10-07)
@@ -45,10 +46,10 @@ For: the next agent or developer continuing this project. Read this first, then 
 - 45 server tests and the client port tests pass.
 - Browser check of the profile flow: buying, persistence over page reload and `docker compose down`/`up`, new token for a new browser, read-only boss picker for guests.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
+- Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
 - The gallery was checked visually: animations, melee swooshes, dragon breath from the mouth and nostrils.
 
 **Not yet verified:**
-- **A full live boss fight in the browser.** Bosses are covered only by server unit tests and the gallery. Doing this is the most valuable next check: host with `?debug&boss=lich` (and `demon`, `dragon`) and follow the path line.
 - Behaviour with real (non-headless) players over a real network.
 - **Earning XP in a real run.** Banking at run end is covered by server tests only; the shop was browser-tested with a seeded profile. To check: play a normal run (no `?debug`, which banks nothing), then look at the Upgrades panel.
 
@@ -79,6 +80,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **Planned features** (structure exists, details in TODO.md):
   - selectable primary/secondary loadouts (needs new abilities first)
   - more classes and bosses
+- **Balancing is one combined pass later** (progression, classes, boss fights, ...), not piecemeal tuning; the user decided this after the live boss test.
 - **Progression is permanent** (meta-progression across runs, not per run), confirmed by the user. Identity is an anonymous browser token; profiles live in a JSON file on the `ta-data` volume.
 
 ## Environment notes (this machine)
@@ -123,7 +125,6 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Suggested next steps
 
-1. Play each boss live with `?debug&boss=…` and tune boss numbers in `server/src/run/bosses/*.rs` and `defs/bosses.rs`; check the force field on the way in.
-2. Tune upgrade costs and bonuses (`defs/progression.rs`) after a few real runs.
-3. Loadouts: design new abilities, then add the lobby picker.
-4. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.
+1. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
+2. Loadouts: design new abilities, then add the lobby picker.
+3. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.
