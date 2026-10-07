@@ -56,11 +56,23 @@ function faceFrame(m: TileMap, x: number, y: number, h: number): string {
   return 'wall_mid';
 }
 
+/** A wall cell that draws a rim along its bottom edge (cap above a brick face). */
+function rimContinues(m: TileMap, x: number, y: number): boolean {
+  return isWall(m, x, y) && !isFrontWall(m, x, y) && isFrontWall(m, x, y + 1);
+}
+
 /** Rim drawn on the cell directly above a brick face. */
 function capFrame(m: TileMap, x: number, y: number): string {
   const below = cornerFace(m, x, y + 1);
-  if (isWall(m, x, y) && fl(m, x + 1, y)) return 'wall_edge_bottom_left'; // corridor wall going up meets the rim
-  if (isWall(m, x, y) && fl(m, x - 1, y)) return 'wall_edge_bottom_right';
+  // Corridor wall going up meets the rim. If the rim already runs on along the
+  // wall's outer side, its strip just drops into it (a corner); otherwise the
+  // strip turns along the rim itself.
+  if (isWall(m, x, y) && fl(m, x + 1, y)) {
+    return rimContinues(m, x - 1, y) ? 'wall_edge_mid_left' : 'wall_edge_bottom_left';
+  }
+  if (isWall(m, x, y) && fl(m, x - 1, y)) {
+    return rimContinues(m, x + 1, y) ? 'wall_edge_mid_right' : 'wall_edge_bottom_right';
+  }
   if (below === 'left') return 'wall_edge_top_left';
   if (below === 'right') return 'wall_edge_top_right';
   return 'wall_top_mid';

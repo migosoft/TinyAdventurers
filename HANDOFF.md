@@ -9,7 +9,11 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (progression tuning, live boss test, loadouts, art gaps).
 
-## Last session (2026-10-07)
+## Last session (2026-10-07, wall corners)
+
+- **Fixed:** corridor walls meeting a room's top rim drew a T junction instead of a corner (`capFrame` in `client/src/game/autotile.ts`). Checked by rendering test maps from the pack sheet; tests and typecheck pass.
+
+## Session before (2026-10-07)
 
 - **Done:** lobby boss selection, and permanent progression (profiles, XP banking, upgrade shop). Details: TECHNICAL.md §4 and §11a, PLAYER_GUIDE.md "XP and upgrades".
 - **Workflow set up:** the first commits are on `main` and pushed. The user wants one feature per session with a handoff, doc updates and a commit at the end (see "Git and session workflow").

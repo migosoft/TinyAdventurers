@@ -239,6 +239,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds.
   - walls with floor to the south show bricks (`wall_mid`, occasional holes and banners), with a rim (`wall_top_mid`) on the cell above
   - other walls show a rim on their outer side (`wall_edge_mid_left/right`, bottom rim)
   - corners and junctions use `wall_edge_left/right`, `wall_edge_top_*`, `wall_edge_bottom_*` and `wall_outer_top_*`
+  - where a corridor wall meets a room's top rim that runs on past it, its strip drops straight into the rim (a corner, `wall_edge_mid_*`), not a T (`wall_edge_bottom_*`)
 - When the door closes, the 3×3 neighbourhood is cleared and redrawn. The door itself is the pack's `doors_leaf_open/closed` sprite (horizontal doors only).
 
 **Figures (`anim/defs.ts` → `EntityView`).**
