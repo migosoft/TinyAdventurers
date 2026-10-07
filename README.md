@@ -62,6 +62,7 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 - `?gallery`: every figure cycling through all its animations (no server needed)
   - Add `&state=melee&slow=10` to loop one animation in slow motion.
+- `?mimic`: the chasing mimic, a treasure chest opening and the mimic reveal, side by side (no server needed)
 - `?debug`: debug mode for the whole run
   - Your hero is immortal. Hits still show damage numbers, but your health doesn't drop.
   - A dashed line shows the shortest walkable path to the boss, updated every 0.5 s.

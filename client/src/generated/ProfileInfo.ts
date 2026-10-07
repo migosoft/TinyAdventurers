@@ -10,7 +10,11 @@ token: string,
 /**
  * Unspent XP.
  */
-xp: number, upgrades: StatUpgrades, mods: Modifiers, 
+xp: number, 
+/**
+ * Unspent coins (nothing to buy with them yet).
+ */
+coins: number, upgrades: StatUpgrades, mods: Modifiers, 
 /**
  * `costs[level]` = XP for the next level; `costs.len()` = max level.
  */

@@ -4,7 +4,7 @@
 //! centered at the top), then rotated by a random quarter turn so the start
 //! can be on any side and the boss hall is centered on the opposite side.
 
-use super::{Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile};
+use super::{ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile};
 use crate::defs::enemies::EnemyType;
 use crate::math::Vec2;
 use rand::seq::SliceRandom;
@@ -159,6 +159,10 @@ fn try_generate(rng: &mut ChaCha8Rng) -> Option<Dungeon> {
         let depth = room_dist(&room.rect) as f64 / max_d as f64;
         populate(rng, room, depth, i, &mut spawns);
     }
+    // Chests use their own stream so they do not change the maps of existing seeds.
+    let mut chest_rng = rng.clone();
+    chest_rng.set_stream(7);
+    let chests = place_chests(&mut chest_rng, &map, &rooms);
 
     let mut dungeon = Dungeon {
         map,
@@ -167,6 +171,7 @@ fn try_generate(rng: &mut ChaCha8Rng) -> Option<Dungeon> {
         boss: boss_idx,
         door,
         spawns,
+        chests,
         player_spawns: Vec::new(),
     };
 
@@ -315,6 +320,30 @@ fn populate(rng: &mut ChaCha8Rng, room: &Room, depth: f64, _idx: usize, out: &mu
     }
 }
 
+/// About one ordinary room or hall in three gets a chest, against its top wall
+/// (enemies never spawn in that row) with floor on both sides so it never
+/// blocks a corridor mouth. A quarter of them are mimics.
+fn place_chests(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<ChestSpawn> {
+    let mut out = Vec::new();
+    for room in rooms {
+        if !matches!(room.kind, RoomKind::Room | RoomKind::Hall) || !rng.gen_bool(0.35) {
+            continue;
+        }
+        let r = &room.rect;
+        let mimic = rng.gen_bool(0.25);
+        for _ in 0..8 {
+            let x = rng.gen_range(r.x + 1..r.x + r.w - 1);
+            let y = r.y;
+            let fits = map.walkable(x, y) && map.solid(x, y - 1) && map.walkable(x - 1, y) && map.walkable(x + 1, y) && map.walkable(x, y + 1);
+            if fits {
+                out.push(ChestSpawn { pos: Map::center_of(x, y), mimic });
+                break;
+            }
+        }
+    }
+    out
+}
+
 /// Rotate the whole dungeon 90 degrees clockwise (map is square).
 fn rotate(d: &mut Dungeon) {
     let n = d.map.w;
@@ -336,6 +365,9 @@ fn rotate(d: &mut Dungeon) {
     for s in &mut d.spawns {
         s.pos = rot_px(s.pos);
     }
+    for c in &mut d.chests {
+        c.pos = rot_px(c.pos);
+    }
 }
 
 #[cfg(test)]
@@ -348,12 +380,16 @@ mod tests {
         let b = generate(42);
         assert_eq!(a.map.tiles, b.map.tiles);
         assert_eq!(a.spawns.len(), b.spawns.len());
+        assert_eq!(a.chests.len(), b.chests.len());
     }
 
     #[test]
     fn guarantees_hold_over_many_seeds() {
+        let (mut chests, mut mimics) = (0, 0);
         for seed in 0..200u64 {
             let d = generate(seed);
+            chests += d.chests.len();
+            mimics += d.chests.iter().filter(|c| c.mimic).count();
             let (sx, sy) = d.rooms[d.start].rect.center();
             assert!(d.map.walkable(sx, sy), "seed {seed}: start not walkable");
             let dist = bfs(&d.map, sx, sy);
@@ -379,6 +415,15 @@ mod tests {
                 assert!(!d.map.solid_at(sp.pos), "seed {seed}: spawn in wall");
                 assert!(!d.rooms[d.start].rect.contains(sp.pos), "seed {seed}: enemy in start room");
             }
+            // Chests: on floor against a wall, outside the start room and boss hall, apart from enemies.
+            for c in &d.chests {
+                let (x, y) = Map::tile_of(c.pos);
+                assert!(d.map.walkable(x, y), "seed {seed}: chest in wall");
+                assert!([(0, 1), (0, -1), (1, 0), (-1, 0)].iter().any(|(dx, dy)| d.map.solid(x + dx, y + dy)), "seed {seed}: chest not against a wall");
+                assert!(!d.rooms[d.start].rect.contains(c.pos), "seed {seed}: chest in start room");
+                assert!(!d.boss_hall().contains(c.pos), "seed {seed}: chest in boss hall");
+                assert!(d.spawns.iter().all(|s| Map::tile_of(s.pos) != (x, y)), "seed {seed}: enemy on a chest");
+            }
             for p in &d.player_spawns {
                 assert!(!d.map.solid_at(*p), "seed {seed}: player spawn in wall");
             }
@@ -393,5 +438,8 @@ mod tests {
                 assert_eq!(d.map.get(x, y), Tile::DoorOpen as u8);
             }
         }
+        // Every dungeon has a few chests on average, some of them mimics.
+        assert!(chests >= 200 * 3, "only {chests} chests in 200 dungeons");
+        assert!(mimics > 0 && mimics < chests / 2, "{mimics} mimics among {chests} chests");
     }
 }

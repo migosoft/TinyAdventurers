@@ -86,6 +86,10 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
     if run.monsters[mi].asleep {
         return;
     }
+    if run.monsters[mi].ai.hold > 0.0 {
+        run.monsters[mi].ai.hold -= dt;
+        return;
+    }
     let def = enemies::def(etype);
     let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight);
     {
@@ -160,7 +164,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
             if def.speed <= 0.0 {
                 return;
             }
-            let speed = def.speed;
+            let speed = gait(run, mi, def.speed);
             if preferred > 0.0 && d < preferred - 25.0 {
                 // Ranged enemies back off to their preferred distance.
                 let away = pos + (pos - ppos).norm() * 16.0;
@@ -179,7 +183,8 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                 return;
             }
             let goal = run.monsters[mi].ai.last_known;
-            let arrived = path_toward(run, mi, goal, def.speed, dt);
+            let speed = gait(run, mi, def.speed);
+            let arrived = path_toward(run, mi, goal, speed, dt);
             if arrived {
                 set_anim(run, mi, Anim::Idle);
                 let ai = &mut run.monsters[mi].ai;
@@ -194,7 +199,8 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
         }
         AiState::Return => {
             let home = run.monsters[mi].ai.home;
-            if path_toward(run, mi, home, def.speed * 0.7, dt) {
+            let speed = gait(run, mi, def.speed * 0.7);
+            if path_toward(run, mi, home, speed, dt) {
                 run.monsters[mi].ai.state = AiState::Idle;
                 set_anim(run, mi, Anim::Idle);
             } else {
@@ -202,7 +208,8 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
             }
         }
         AiState::Idle => {
-            if def.speed <= 0.0 || etype == EnemyType::Disciple {
+            // Disciples stand still; an awake mimic waits where it was found.
+            if def.speed <= 0.0 || etype == EnemyType::Disciple || etype == EnemyType::Mimic {
                 return;
             }
             let home = run.monsters[mi].ai.home;
@@ -225,6 +232,27 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                 }
             }
         }
+    }
+}
+
+/// Movement speed for this tick. Mimics hop: no movement on the ground
+/// (crouch, landing, rest), and the average speed packed into the airborne
+/// part of each cycle. The hop clock is the Move animation clock, so the
+/// client can draw the same phases.
+fn gait(run: &Run, mi: usize, speed: f64) -> f64 {
+    let m = &run.monsters[mi];
+    if m.etype != Some(EnemyType::Mimic) {
+        return speed;
+    }
+    if m.anim != Anim::Move {
+        return 0.0; // the hop starts next tick, with a fresh clock
+    }
+    let phase = ((run.time - m.anim_start) / enemies::MIMIC_HOP_CYCLE).fract();
+    let (a, b) = enemies::MIMIC_HOP_AIR;
+    if phase >= a && phase < b {
+        speed / (b - a)
+    } else {
+        0.0
     }
 }
 
@@ -276,7 +304,7 @@ fn raise_skeleton(run: &mut Run, mi: usize) {
 pub fn separate_monsters(run: &mut Run) {
     let n = run.monsters.len();
     for i in 0..n {
-        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 {
+        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].asleep {
             continue;
         }
         for j in 0..n {

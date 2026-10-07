@@ -7,6 +7,12 @@ Progression is live (profiles by token, XP banked at run end, lobby upgrade shop
 - **Identity is a browser token.** If players want their profile on several devices, add accounts or a "show/enter my token" field in the lobby.
 - The same token can be in one run twice (two tabs), which banks its XP twice. Reject a second join with the same token if that becomes a problem.
 
+## Chests, mimics and coins follow-ups
+- **Spend coins:** they are banked but buy nothing yet. Intended for loadouts (see below); a coin column in the lobby shop would also work.
+- **Tune** `CHEST_COINS`, `coins_for_kill`, the chest rate (35 % of rooms) and the mimic share (25 %) in the balancing pass. Mimic stats are in `defs/enemies.rs`.
+- **More loot:** the pack also has flasks (8 colours/sizes), bombs and coins that could drop as pickups; crates (`crate`) could be breakable.
+- **More room dressing from the pack (unused so far):** floor spikes (animated), buttons and levers, columns, wall fountains (red/blue, animated), wall goo, floor ladder/stairs.
+
 ## Other follow-ups
 - **Balancing pass (later, all at once):** progression, classes, enemies and boss fights together. All three bosses were played live without problems; their numbers are in `server/src/run/bosses/*.rs` and `defs/bosses.rs`.
 - **Loadouts:** choose primary/secondary per class. Each class has only its one pair today, so new abilities (server executor, client prediction, pack-sprite visuals) are needed first. The picker and a field on `Member` are the easy part.

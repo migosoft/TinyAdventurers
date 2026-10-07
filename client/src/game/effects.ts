@@ -235,6 +235,20 @@ export class Effects {
     this.text(x, y - 18, 'IMMUNE', '#9ae0ff');
   }
 
+  /** Pack coins popping out of a chest or a fallen enemy. */
+  coins(x: number, y: number, n: number): void {
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
+      const s = 50 + Math.random() * 40;
+      this.particle(x, y - 6, Math.cos(a) * s, Math.sin(a) * s, 0.7 + Math.random() * 0.3, 0xffffff, {
+        frame: `coin_anim_f${i % 4}`,
+        grav: 220,
+        fade: true,
+        depth: DEPTH.fx,
+      });
+    }
+  }
+
   hitSpark(x: number, y: number, color = 0xffffff): void {
     for (let i = 0; i < 5; i++) {
       const a = Math.random() * Math.PI * 2;

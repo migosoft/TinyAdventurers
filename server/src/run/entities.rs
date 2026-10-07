@@ -46,6 +46,8 @@ pub struct Player {
     /// Debug mode: takes no damage and receives the path to the boss.
     pub debug: bool,
     pub xp: u32,
+    /// Coins earned this run (banked to the profile like XP).
+    pub coins: u32,
     /// Profile the earned XP is banked to when the run ends.
     pub token: Option<String>,
     /// Progression stat multipliers from the profile's upgrades.
@@ -90,6 +92,8 @@ pub struct Ai {
     pub raise_cd: f64,
     pub wander_t: f64,
     pub wander_to: Option<Vec2>,
+    /// Seconds the monster does nothing (mimic reveal).
+    pub hold: f64,
 }
 
 impl Ai {
@@ -107,6 +111,7 @@ impl Ai {
             raise_cd: 2.0,
             wander_t: 2.0,
             wander_to: None,
+            hold: 0.0,
         }
     }
 }
@@ -164,6 +169,14 @@ pub struct Projectile {
     /// Explode when reaching this point (fireball at cursor).
     pub target: Option<Vec2>,
     pub dead: bool,
+}
+
+/// A treasure chest. Opened once, by the first player to touch it.
+pub struct Chest {
+    pub id: u32,
+    pub pos: Vec2,
+    /// Run time when it was opened.
+    pub opened: Option<f64>,
 }
 
 pub struct Hazard {

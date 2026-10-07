@@ -27,8 +27,9 @@ export interface FigureDef {
   /** Hand height above the feet (px, unscaled). */
   handY: number;
   attack: AttackStyle;
-  /** Color ring of the miniature base. */
+  /** Accent color of the figure (spell particles, dash afterimages). */
   base: number;
+  /** Footprint radius: ground shadow size, dagger reach checks. */
   baseR: number;
   /** Whole-figure scale and tint (bosses built from pack sprites). */
   scale?: number;

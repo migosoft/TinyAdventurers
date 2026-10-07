@@ -299,6 +299,33 @@ kbd {
 .upgrades .xp {
   color: var(--gold);
 }
+.upgrades .coins {
+  margin-left: 12px;
+}
+/* The pack's coin (atlas 289,385, 6x7) at 3x. */
+.coin-icon {
+  display: inline-block;
+  width: 18px;
+  height: 21px;
+  margin-right: 6px;
+  vertical-align: -4px;
+  background: url(/assets/atlas.png) -867px -1155px / 1536px 1536px no-repeat;
+  image-rendering: pixelated;
+}
+.hud .coins {
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  height: 18px;
+}
+.hud .coins.gain {
+  animation: coin-pop 0.35s ease-out;
+}
+@keyframes coin-pop {
+  from {
+    transform: scale(1.4);
+  }
+}
 .stats {
   list-style: none;
   margin: 0 0 8px;

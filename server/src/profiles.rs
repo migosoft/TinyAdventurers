@@ -1,4 +1,4 @@
-//! Persistent player profiles: banked XP and bought upgrades, keyed by an
+//! Persistent player profiles: banked XP and coins and bought upgrades, keyed by an
 //! anonymous token the client keeps in localStorage. Stored as one JSON file
 //! (`PROFILE_PATH`) that is rewritten atomically (tmp + rename) on changes.
 
@@ -17,6 +17,9 @@ pub struct Profile {
     pub total_xp: u32,
     #[serde(default)]
     pub upgrades: StatUpgrades,
+    /// Unspent coins.
+    #[serde(default)]
+    pub coins: u32,
 }
 
 impl Profile {
@@ -80,7 +83,7 @@ impl ProfileStore {
 
     pub fn info(&self, token: &str) -> ProfileInfo {
         let p = self.profiles.get(token).cloned().unwrap_or_default();
-        ProfileInfo { token: token.to_string(), xp: p.xp, upgrades: p.upgrades, mods: p.upgrades.modifiers(), costs: cost_table() }
+        ProfileInfo { token: token.to_string(), xp: p.xp, coins: p.coins, upgrades: p.upgrades, mods: p.upgrades.modifiers(), costs: cost_table() }
     }
 
     /// Banks XP earned in a run (call `save` afterwards).
@@ -91,6 +94,15 @@ impl ProfileStore {
         let p = self.profiles.entry(token.to_string()).or_default();
         p.xp = p.xp.saturating_add(xp);
         p.total_xp = p.total_xp.saturating_add(xp);
+    }
+
+    /// Banks coins earned in a run (call `save` afterwards).
+    pub fn add_coins(&mut self, token: &str, coins: u32) {
+        if coins == 0 {
+            return;
+        }
+        let p = self.profiles.entry(token.to_string()).or_default();
+        p.coins = p.coins.saturating_add(coins);
     }
 
     /// Buys the next level of a stat and saves.

@@ -2,7 +2,7 @@
 //! hazards and positional events inside their own field of vision.
 
 use super::Run;
-use crate::defs::kinds::flags;
+use crate::defs::kinds::{flags, EntityKind};
 use crate::dungeon::Map;
 use crate::fov::{Fov, PLAYER_FOV_RADIUS};
 use crate::math::Vec2;
@@ -105,6 +105,14 @@ pub fn send_snapshots(run: &mut Run) {
             }
             let extra = (pr.owner << 16) | pr.shot as u32;
             ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra));
+        }
+        // Chests: anim 1 once opened, with the time since.
+        for c in &run.chests {
+            if !visible(&fov, c.pos, 0.0) {
+                continue;
+            }
+            let (anim, since) = c.opened.map_or((0, 0), |t| (1, ms_since(run, t)));
+            ents.push(EntSnap(c.id, EntityKind::Chest as u8, c.pos.x as f32, c.pos.y as f32, 255, anim, 0.0, since, 0, 0));
         }
         for h in &run.hazards {
             if !visible(&fov, h.pos, h.radius) {

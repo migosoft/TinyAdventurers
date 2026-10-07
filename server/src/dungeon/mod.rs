@@ -108,6 +108,13 @@ pub struct Spawn {
     pub pos: Vec2,
 }
 
+/// A treasure chest, or a mimic disguised as one.
+#[derive(Debug, Clone)]
+pub struct ChestSpawn {
+    pub pos: Vec2,
+    pub mimic: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct Dungeon {
     pub map: Map,
@@ -117,6 +124,7 @@ pub struct Dungeon {
     /// Door tiles between the boss hall and its corridor.
     pub door: Vec<(i32, i32)>,
     pub spawns: Vec<Spawn>,
+    pub chests: Vec<ChestSpawn>,
     pub player_spawns: Vec<Vec2>,
 }
 

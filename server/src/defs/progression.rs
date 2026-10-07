@@ -96,7 +96,20 @@ pub fn xp_for_kill(enemy: Option<EnemyType>) -> u32 {
         Some(OrcWarrior) | Some(OrcArcher) => 12,
         Some(Necromancer) => 25,
         Some(Disciple) => 20,
+        Some(Mimic) => 15,
         None => 300, // boss
+    }
+}
+
+/// Coins every living party member gets for opening a chest.
+pub const CHEST_COINS: std::ops::RangeInclusive<u32> = 8..=15;
+
+/// Coins every living party member gets for a kill (most enemies carry none).
+pub fn coins_for_kill(enemy: Option<EnemyType>) -> u32 {
+    match enemy {
+        Some(EnemyType::Mimic) => 25,
+        None => 50, // boss
+        _ => 0,
     }
 }
 

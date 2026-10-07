@@ -8,6 +8,7 @@
 use crate::collision::{step_move, MoveState};
 use crate::defs::abilities::{self as ab};
 use crate::defs::classes::{self, PLAYER_RADIUS};
+use crate::defs::enemies;
 use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::dungeon::{Map, Tile, TILE};
 use crate::fov::{Fov, PLAYER_FOV_RADIUS};
@@ -46,6 +47,10 @@ fn export_defs() {
         "DAGGER_RANGE": ab::DAGGER_RANGE,
         "DAGGER_COOLDOWN": ab::DAGGER_COOLDOWN,
         "HIDDEN_CRIT_MULT": ab::HIDDEN_CRIT_MULT,
+        "MIMIC_HOP_CYCLE": enemies::MIMIC_HOP_CYCLE,
+        "MIMIC_HOP_AIR_START": enemies::MIMIC_HOP_AIR.0,
+        "MIMIC_HOP_AIR_END": enemies::MIMIC_HOP_AIR.1,
+        "MIMIC_WAKE_T": enemies::MIMIC_WAKE_T,
     });
     let fl = json!({
         "HIDDEN": flags::HIDDEN, "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,

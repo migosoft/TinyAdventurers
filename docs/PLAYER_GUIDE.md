@@ -25,24 +25,24 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 
 ## The heroes
 
-Each hero has a coloured ring on their base so you can tell the party apart.
+Your teammates' names float above their heroes, and the party list (top left) shows everyone's health.
 
-### Wizard (blue ring), 70 HP
+### Wizard, 70 HP
 Fragile, but deadly from range.
 - **Left – Magic Missile:** fast arcane bolts in quick succession.
 - **Right – Fireball (6 s cooldown):** a slow ball of fire that explodes where your mouse pointer is, or earlier if it hits something. It damages every enemy in the blast. It can't hurt your friends.
 
-### Paladin (gold ring), 120 HP
+### Paladin, 120 HP
 An armoured holy warrior who keeps the party alive.
 - **Left – Sword:** a sweeping strike in front of you.
 - **Right – Holy Light (10 s cooldown):** heals you and every ally close to you.
 
-### Barbarian (red ring), 140 HP
+### Barbarian, 140 HP
 The toughest hero.
 - **Left – Great Axe:** a wide, heavy cleave. Slower than the sword, but it hits harder and wider.
 - **Right – Charge (5 s cooldown):** dash toward the mouse pointer, hitting every enemy you run through.
 
-### Assassin (green ring), 90 HP
+### Assassin, 90 HP
 The fastest hero. Strikes from the shadows.
 - **Left – Crossbow / Dagger:** shoots crossbow bolts. When an enemy is right next to you, you stab with your dagger automatically instead, which is quicker.
 - **Right – Hide (8 s cooldown):** vanish for up to 6 seconds. Enemies forget about you. Your **next attack from hiding deals ×4 critical damage** and reveals you. Your teammates still see you as a faint shimmer.
@@ -66,7 +66,15 @@ The two boxes at the bottom of the screen show your abilities. They darken while
 | Orc archer | Tough archer. |
 | Necromancer | Casts green shadow bolts and **raises skeletons**. Kill the necromancer and all of its skeletons crumble. |
 
+| Mimic | Looks exactly like a treasure chest. Walk up to it (or hit it) and its lid flies open: it **hops after you** and bites. It stops chasing when you get out of sight and waits where it was found. Worth 25 coins. |
+
 Enemies **flash red and shake** just before they strike. That is your moment to step away. Enemies get tougher the deeper you go, and halls hold the biggest groups.
+
+## Treasure chests
+
+Some rooms have a **treasure chest** against a wall. Walk into it to open it: **every living hero in the party** gets 8 to 15 coins.
+
+About one chest in four is a **mimic**. A mimic stays a closed chest until someone comes close or hits it. Then it jumps open and attacks. A careful hero can test a chest from a distance with a spell or arrow: a real chest does not stop a shot, a mimic wakes up. A chest that rattles when you come near is a bad sign.
 
 ## Final bosses
 
@@ -98,9 +106,11 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 
 - If you fall, you are **out for this run**: there are no revives. You watch your teammates (Q / E to switch) until the run ends.
 - If the whole party falls, the run is lost.
-- **Slay the boss** to win. The end screen shows each hero's kills, damage, healing and **XP**.
+- **Slay the boss** to win. The end screen shows each hero's kills, damage, healing, **XP** and **coins**.
 
-## XP and upgrades
+## XP, coins and upgrades
+
+- **Coins** come from treasure chests, mimics (25) and the boss (50). Like XP, they go to every living hero and are added to your profile when the run ends. The lobby shows your coins next to your XP. There is nothing to buy with them yet: they are saved for loadouts.
 
 - Every kill gives **XP to every living member of the party**: 2 for a raised skeleton, 5 for a goblin, 8 for a skeleton, 12 for an orc, 20 for a disciple, 25 for a necromancer and **300 for the boss**. Once you have fallen, you stop earning.
 - When the run ends, won or lost, your XP is added to your **profile**. If you leave early, you keep what you earned so far.
@@ -116,7 +126,7 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 
 - Upgrades are **permanent** and apply to **every class** you play.
 - Your profile is stored by the server and remembered by your browser. A different browser or device, or clearing the site data, starts a new profile.
-- Runs where someone used debug mode give no XP.
+- Runs where someone used debug mode give no XP and no coins.
 
 ## Tips
 

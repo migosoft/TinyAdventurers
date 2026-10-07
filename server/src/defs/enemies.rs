@@ -10,6 +10,8 @@ pub enum EnemyType {
     Necromancer,
     RaisedSkeleton,
     Disciple,
+    /// Hides as a treasure chest until a player comes close or hits it.
+    Mimic,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -105,8 +107,27 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 windup: 0.5,
             },
         },
+        Mimic => EnemyDef {
+            kind: EntityKind::Mimic,
+            hp: 90.0,
+            // Average speed: it only moves while airborne (see MIMIC_HOP_*).
+            speed: 50.0,
+            radius: 6.0,
+            sight: 140.0,
+            attack: Melee { range: 12.0, damage: 13.0, cooldown: 1.0, windup: 0.25 },
+        },
     }
 }
+
+/// Mimic gait: one hop per cycle; it moves only between these fractions of
+/// the cycle (crouch before, landing and rest after). The client draws the
+/// same phases from the Move animation clock.
+pub const MIMIC_HOP_CYCLE: f64 = 0.6;
+pub const MIMIC_HOP_AIR: (f64, f64) = (0.2, 0.7);
+/// After the reveal the mimic does nothing for this long (the lid flies open).
+pub const MIMIC_WAKE_T: f64 = 0.6;
+/// A player this close (center distance, px) opens a chest or wakes a mimic.
+pub const CHEST_TOUCH: f64 = 12.0;
 
 /// Necromancers raise skeletons on this cooldown, up to this many alive.
 pub const NECRO_RAISE_COOLDOWN: f64 = 7.0;

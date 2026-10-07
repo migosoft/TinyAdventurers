@@ -132,8 +132,8 @@ export class Lobby {
           : `<button data-buy="${s}"${p.xp < cost ? ' disabled' : ''}>Buy ${cost} XP</button>`;
       return `<li><span class="sname">${STAT_TEXT[s].name}</span><span class="lvl">${level}/${max}</span><span class="bonus">${STAT_TEXT[s].bonus(p.mods)}</span>${buy}</li>`;
     }).join('');
-    return `<div class="panel upgrades"><h2>Upgrades <span class="xp">${p.xp} XP</span></h2><ul class="stats">${rows}</ul>
-      <small class="hint">Earn XP in the dungeon. Upgrades are permanent and apply to every hero you play.</small></div>`;
+    return `<div class="panel upgrades"><h2>Upgrades <span class="xp">${p.xp} XP <span class="coins"><i class="coin-icon"></i>${p.coins}</span></span></h2><ul class="stats">${rows}</ul>
+      <small class="hint">Earn XP in the dungeon. Upgrades are permanent and apply to every hero you play. Coins come from chests and mimics; they will buy loadouts later.</small></div>`;
   }
 
   private bindUpgrades(): void {

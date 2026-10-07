@@ -3,7 +3,7 @@
 
 use crate::profiles::ProfileStore;
 use crate::protocol::{encode, BossId, ClassId, ClientMsg, RoomPlayer, RunSummary, ServerMsg};
-use crate::run::{run_task, Member, Run, RunCmd};
+use crate::run::{run_task, Award, Member, Run, RunCmd};
 use axum::extract::ws::Message;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
@@ -206,15 +206,16 @@ impl Lobby {
         self.broadcast_lobby();
     }
 
-    /// Called by a run task when the dungeon is over: the earned XP is banked
-    /// and everyone returns to the lobby.
-    pub fn run_finished(&mut self, rid: u32, awards: Vec<(String, u32)>) {
-        for (token, xp) in &awards {
-            self.profiles.add_xp(token, *xp);
+    /// Called by a run task when the dungeon is over: the earned XP and coins
+    /// are banked and everyone returns to the lobby.
+    pub fn run_finished(&mut self, rid: u32, awards: Vec<Award>) {
+        for a in &awards {
+            self.profiles.add_xp(&a.token, a.xp);
+            self.profiles.add_coins(&a.token, a.coins);
         }
         if !awards.is_empty() {
             self.profiles.save();
-            let ids: Vec<u32> = self.conns.iter().filter(|(_, c)| c.token.as_ref().map_or(false, |t| awards.iter().any(|(a, _)| a == t))).map(|(id, _)| *id).collect();
+            let ids: Vec<u32> = self.conns.iter().filter(|(_, c)| c.token.as_ref().map_or(false, |t| awards.iter().any(|a| &a.token == t))).map(|(id, _)| *id).collect();
             for id in ids {
                 self.send_profile(id);
             }
@@ -362,8 +363,9 @@ mod tests {
         l.handle(id, ClientMsg::BuyUpgrade { stat: UpgradeStat::Damage });
         assert_eq!(l.profiles.upgrades(&token).damage, 0, "no shopping during a run");
 
-        l.run_finished(rid, vec![(token.clone(), 50)]);
+        l.run_finished(rid, vec![Award { token: token.clone(), xp: 50, coins: 30 }]);
         assert_eq!(l.profiles.info(&token).xp, 1050);
+        assert_eq!(l.profiles.info(&token).coins, 30);
         l.handle(id, ClientMsg::BuyUpgrade { stat: UpgradeStat::Damage });
         assert_eq!(l.profiles.upgrades(&token).damage, 1);
         assert_eq!(l.profiles.info(&token).xp, 1050 - upgrade_cost(0));

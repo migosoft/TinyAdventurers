@@ -13,8 +13,10 @@ import type { Hud } from '../ui/hud';
 import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
+import { ChestView } from './chest';
 import { DEPTH, Effects } from './effects';
 import { ForceField } from './forcefield';
+import { MimicView } from './mimic';
 import { Interpolator, Predictor, type EntState } from './world';
 
 export interface GameInit {
@@ -57,6 +59,8 @@ export class GameScene extends Phaser.Scene {
   private views = new Map<number, EntityView>();
   private projViews = new Map<number, Phaser.GameObjects.Image>();
   private hazardViews = new Map<number, Phaser.GameObjects.Image>();
+  private mimicViews = new Map<number, MimicView>();
+  private chestViews = new Map<number, ChestView>();
   private cosmetics: Cosmetic[] = [];
   private fx!: Effects;
   private bars!: Phaser.GameObjects.Graphics;
@@ -91,6 +95,8 @@ export class GameScene extends Phaser.Scene {
     this.views = new Map();
     this.projViews = new Map();
     this.hazardViews = new Map();
+    this.mimicViews = new Map();
+    this.chestViews = new Map();
     this.cosmetics = [];
     this.interp = new Interpolator();
     this.ents = new Map();
@@ -143,6 +149,10 @@ export class GameScene extends Phaser.Scene {
     this.unsub?.();
     for (const v of this.views.values()) v.destroy();
     this.views.clear();
+    for (const v of this.mimicViews.values()) v.destroy();
+    this.mimicViews.clear();
+    for (const v of this.chestViews.values()) v.destroy();
+    this.chestViews.clear();
   }
 
   // ------------------------------------------------------------ board
@@ -319,6 +329,11 @@ export class GameScene extends Phaser.Scene {
       case 'Msg':
         this.hud.message(ev.text);
         break;
+      case 'Coins':
+        this.fx.coins(ev.x, ev.y, Math.min(10, 3 + Math.floor(ev.v / 4)));
+        this.fx.text(ev.x, ev.y - 14, `+${ev.v} coins`, '#ffd040');
+        if (this.alive) this.hud.addCoins(ev.v);
+        break;
     }
   }
 
@@ -408,7 +423,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'CrossbowDagger': {
         const close = [...this.ents.values()].some(
-          (e) => !isPlayerKind(e.kind) && FIGURES[e.kind] && Math.hypot(e.x - x, e.y - y) - FIGURES[e.kind].baseR <= CONST.DAGGER_RANGE,
+          (e) => !isPlayerKind(e.kind) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= CONST.DAGGER_RANGE,
         );
         if (close) {
           anim = ANIM.Melee;
@@ -512,6 +527,8 @@ export class GameScene extends Phaser.Scene {
     for (const e of this.ents.values()) {
       seen.add(e.id);
       if (e.kind === KIND.FirePatch) this.drawHazard(e);
+      else if (e.kind === KIND.Chest) this.drawChest(e);
+      else if (e.kind === KIND.Mimic) this.drawMimic(e, dt, px, py);
       else if (isProjectileKind(e.kind)) this.drawProjectile(e);
       else this.drawFigure(e, dt, px, py, now);
     }
@@ -523,6 +540,8 @@ export class GameScene extends Phaser.Scene {
     for (const [id, v] of this.views) if (!seen.has(id)) (v.destroy(), this.views.delete(id));
     for (const [id, v] of this.projViews) if (!seen.has(id)) (v.destroy(), this.projViews.delete(id));
     for (const [id, v] of this.hazardViews) if (!seen.has(id)) (v.destroy(), this.hazardViews.delete(id));
+    for (const [id, v] of this.mimicViews) if (!seen.has(id)) (v.destroy(), this.mimicViews.delete(id));
+    for (const [id, v] of this.chestViews) if (!seen.has(id)) (v.destroy(), this.chestViews.delete(id));
 
     this.updateCosmetics(dt, myShots);
     this.drawBarsAndBeams(now);
@@ -573,6 +592,24 @@ export class GameScene extends Phaser.Scene {
     view.update(s, dt);
     // Dragon breath: a cone of fire particles from the mouth.
     void py;
+  }
+
+  private drawMimic(e: EntState, dt: number, px: number, py: number): void {
+    let view = this.mimicViews.get(e.id);
+    if (!view) {
+      view = new MimicView(this, this.fx);
+      this.mimicViews.set(e.id, view);
+    }
+    view.sync({ x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags }, dt, this.alive ? Math.hypot(e.x - px, e.y - py) : Infinity);
+  }
+
+  private drawChest(e: EntState): void {
+    let view = this.chestViews.get(e.id);
+    if (!view) {
+      view = new ChestView(this);
+      this.chestViews.set(e.id, view);
+    }
+    view.update(e.x, e.y, e.anim === 1 ? e.animMs / 1000 : -1);
   }
 
   private drawProjectile(e: EntState): void {
@@ -654,8 +691,8 @@ export class GameScene extends Phaser.Scene {
     const g = this.bars;
     g.clear();
     for (const e of this.ents.values()) {
-      if (isProjectileKind(e.kind) || e.kind === KIND.FirePatch || isBossKind(e.kind) || e.hp >= 1 || e.flags & FLAG.DEAD) continue;
-      const v = this.views.get(e.id);
+      if (isProjectileKind(e.kind) || e.kind === KIND.FirePatch || e.kind === KIND.Chest || isBossKind(e.kind) || e.hp >= 1 || e.flags & FLAG.DEAD) continue;
+      const v = this.views.get(e.id) ?? this.mimicViews.get(e.id);
       if (!v) continue;
       const w = 12;
       const x = Math.round(e.x - w / 2);

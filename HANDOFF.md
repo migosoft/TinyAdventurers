@@ -9,7 +9,24 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-07, wall corners and boss force field)
+## Last session (2026-10-07, chests, mimics and coins)
+
+**Branch:** `feature/chests` (committed, not merged or pushed; ask the user first).
+
+**Why:** the user found the dungeons empty apart from enemies and asked what else the pack offers. Answer given: chests (full/empty/mimic opening animations) and coins, plus spikes, buttons/levers, columns, wall fountains, goo, crates, flasks, bombs, ladder/stairs; only a single `hole` tile and `edge_down` (no real chasms, no bridges), and no water or lava floor tiles. The user chose chests + mimics + coins.
+
+**Done:**
+- **Mimic demo first, as the user asked:** `?mimic` (`MimicDemoScene.ts`). The user picked the **hopping chaser** over a stationary biter and liked the reveal. The demo now shows the chaser, a treasure chest and the reveal.
+- **Figure bases removed (user's request):** every figure stands on a soft ground shadow instead of a coloured miniature base. `FigureDef.base` stays as the accent colour for particles; `baseR` sizes the shadow. The player guide no longer names heroes by ring colour.
+- **Chests:** `place_chests` (generator, own rng stream so old seeds keep their maps): ~1 in 3 rooms/halls, on the top row against the wall, 25 % mimics. Touching opens a chest; 8–15 coins to every living party member (`Ev::Coins`, party-wide).
+- **Mimic** (`EnemyType::Mimic`, `KIND.Mimic`): a sleeping monster drawn as a closed chest. Wakes when touched or hit, holds 0.6 s for the reveal, then chases with a hop gait (`ai::gait`: moves only in the airborne part of the hop cycle; the timings are exported in `CONST` so the client draws the same phases). Bites in melee. Rattles now and then when a hero is close. The boss waking does not wake mimics. Worth 15 XP and 25 coins.
+- **Coins** are a second currency: `Player.coins`, `Profile.coins` (serde default), banked with XP at run end (`Run::awards` → `Award{token, xp, coins}`), shown in the HUD (pack coin icon), the end table and the lobby. Nothing to buy yet: meant for loadouts. Boss kill gives 50.
+
+**Checked:** 48 server tests (3 new: chest opening pays the party once; mimic sleep/wake/hold and boss-wake exception; mimic moves only while airborne; plus chest guarantees over 200 seeds), client typecheck and tests, `docker compose up --build` + health, two-player smoke test (no browser errors; HUD coin counter and lobby coins visible), `?mimic` screenshots (hop, bite, chest coin burst, reveal).
+
+**Not yet verified:** meeting a chest and a mimic in a real run (the headless smoke test never walks to one), and seeing the coins banked after a real run. The user should play one normal run (no `?debug`).
+
+## Session before (2026-10-07, wall corners and boss force field)
 
 **Branches:** `fix/wall-corners` and `feature/force-field` are merged into `main` (fast-forward) and pushed.
 
@@ -24,7 +41,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Live boss test (by the user, after the merge):** all three bosses (demon, lich, dragon) played in the browser; the force field appeared when the party entered the hall; no T-shaped wall junctions seen any more (confirms the stub fix); no problems found. Balancing was deliberately not judged: the user wants one combined balancing pass later (progression, classes, boss fights).
 
 
-## Session before (2026-10-07)
+## Earlier session (2026-10-07)
 
 - **Done:** lobby boss selection, and permanent progression (profiles, XP banking, upgrade shop). Details: TECHNICAL.md §4 and §11a, PLAYER_GUIDE.md "XP and upgrades".
 - **Workflow set up:** the first commits are on `main` and pushed. The user wants one feature per session with a handoff, doc updates and a commit at the end (see "Git and session workflow").
@@ -35,7 +52,8 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Working end to end in Docker (`docker compose up --build`, port 8080):**
 - lobby, 4 classes, host-chosen or random end boss, random dungeon, field of vision
 - persistent profiles: XP banked after each run, permanent upgrades bought in the lobby (`ta-data` volume)
-- 6 enemy types, 3 bosses
+- 7 enemy types (including the mimic), 3 bosses
+- treasure chests and mimics; coins banked as a second currency
 - permadeath with spectating, victory/defeat screens
 - client prediction and interpolation, F3 stats
 - debug mode, sprite gallery
@@ -64,6 +82,9 @@ For: the next agent or developer continuing this project. Read this first, then 
   - Missing figures are pack sprites scaled, tinted or hue-shifted (lich, dragon).
   - Attacks are approximated by animating pack weapon sprites.
   - Runtime effect shapes (particles, glows, swooshes, rings) are fine.
+- **No miniature bases under figures** (the user asked to remove them); figures stand on a soft ground shadow.
+- **Mimics hop after the players** (chosen from a demo over a stationary biter), and their reveal animation stays.
+- **Coins are a second currency** meant for buying loadouts later.
 - **Weapons** are drawn small (0.6×).
 - **Melee reach is unchanged on the server:** a swoosh at the real damage reach replaces the visible full swing, and the weapon fades out and back in.
 - **Walls** follow the pack's 3/4 autotiling with its corner and rim pieces (`client/src/game/autotile.ts`). Strips and rims sit on the floor side so junctions are corners: the user rejected T-shaped junctions (four rounds of feedback). Check wall changes against corridor junctions, room corners and corridor mouths before calling them done.
@@ -101,7 +122,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 2. Client changes: `cd client && npx tsc --noEmit && npm test`.
 3. `docker compose up --build -d`, then `curl localhost:8080/health` should print `OK`.
 4. `cd tools/e2e && node smoke.mjs http://localhost:8080/ "" shots Wizard,Paladin`. It should print "no browser errors"; look at the screenshots in `shots/`.
-5. Visual changes to figures or effects: `node gallery-shots.mjs http://localhost:8080/ shots melee,breath`, or open `?gallery&state=<state>&slow=10` in a browser.
+5. Visual changes to figures or effects: `node gallery-shots.mjs http://localhost:8080/ shots melee,breath`, or open `?gallery&state=<state>&slow=10` in a browser. Chests and mimics: `?mimic&slow=3`.
 6. Gameplay changes: update [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md). Architecture changes: update [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Gotchas
@@ -124,5 +145,6 @@ For: the next agent or developer continuing this project. Read this first, then 
 ## Suggested next steps
 
 1. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
-2. Loadouts: design new abilities, then add the lobby picker.
-3. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.
+2. Loadouts: design new abilities, then add the lobby picker, paid with coins.
+3. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
+4. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.

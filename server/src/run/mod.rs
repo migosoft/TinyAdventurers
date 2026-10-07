@@ -34,6 +34,14 @@ pub const SNAPSHOT_EVERY: u32 = 2;
 const ACTIVE_RANGE: f64 = 420.0;
 const END_DELAY: f64 = 3.0;
 
+/// What one profile banks at the end of a run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Award {
+    pub token: String,
+    pub xp: u32,
+    pub coins: u32,
+}
+
 pub struct Member {
     pub conn: u32,
     pub name: String,
@@ -58,6 +66,7 @@ pub struct Run {
     pub monsters: Vec<Monster>,
     pub projectiles: Vec<Projectile>,
     pub hazards: Vec<Hazard>,
+    pub chests: Vec<Chest>,
     /// Events since the last snapshot, with an optional position for FOV filtering.
     pub events: Vec<(Ev, Option<Vec2>)>,
     pub next_id: u32,
@@ -87,6 +96,7 @@ impl Run {
             monsters: Vec::new(),
             projectiles: Vec::new(),
             hazards: Vec::new(),
+            chests: Vec::new(),
             events: Vec::new(),
             next_id: 1,
             rng,
@@ -118,6 +128,7 @@ impl Run {
                 max_hp,
                 mods,
                 xp: 0,
+                coins: 0,
                 token: m.token,
                 alive: true,
                 aim: 0.0,
@@ -146,6 +157,17 @@ impl Run {
         let spawns = run.dungeon.spawns.clone();
         for s in spawns {
             run.spawn_enemy(s.enemy, s.pos, None, n);
+        }
+        // Mimics are monsters from the start, asleep and drawn as a closed chest.
+        for c in run.dungeon.chests.clone() {
+            if c.mimic {
+                let id = run.spawn_enemy(EnemyType::Mimic, c.pos, None, n);
+                let mi = run.monster_idx(id).unwrap();
+                run.monsters[mi].asleep = true;
+            } else {
+                let id = run.alloc_id();
+                run.chests.push(Chest { id, pos: c.pos, opened: None });
+            }
         }
         run.spawn_boss(n);
         run
@@ -301,6 +323,7 @@ impl Run {
         for pi in 0..self.players.len() {
             self.step_player(pi);
         }
+        self.touch_chests();
 
         let player_pos: Vec<Vec2> = self.players.iter().filter(|p| p.alive).map(|p| p.pos()).collect();
         for mi in 0..self.monsters.len() {
@@ -410,6 +433,49 @@ impl Run {
         }
     }
 
+    /// A living player close to a chest opens it (coins for the whole party);
+    /// close to a sleeping mimic, the mimic wakes up.
+    fn touch_chests(&mut self) {
+        let alive: Vec<Vec2> = self.players.iter().filter(|p| p.alive).map(|p| p.pos()).collect();
+        let near = |pos: Vec2| alive.iter().any(|p| p.dist(pos) < enemies::CHEST_TOUCH);
+        for ci in 0..self.chests.len() {
+            let c = &self.chests[ci];
+            if c.opened.is_some() || !near(c.pos) {
+                continue;
+            }
+            let pos = c.pos;
+            self.chests[ci].opened = Some(self.time);
+            let coins = self.rng.gen_range(progression::CHEST_COINS);
+            self.give_coins(pos, coins);
+        }
+        for mi in 0..self.monsters.len() {
+            let m = &self.monsters[mi];
+            if m.alive && m.asleep && m.etype == Some(EnemyType::Mimic) && near(m.pos) {
+                self.wake_mimic(mi);
+            }
+        }
+    }
+
+    /// The mimic drops its disguise: a short pause while the lid flies open, then it hunts.
+    pub fn wake_mimic(&mut self, mi: usize) {
+        let m = &mut self.monsters[mi];
+        m.asleep = false;
+        m.ai.hold = enemies::MIMIC_WAKE_T;
+        m.ai.cd = m.ai.cd.max(enemies::MIMIC_WAKE_T);
+    }
+
+    /// Coins go to every living party member, like XP.
+    fn give_coins(&mut self, pos: Vec2, coins: u32) {
+        if coins == 0 {
+            return;
+        }
+        for p in self.players.iter_mut().filter(|p| p.alive) {
+            p.coins += coins;
+        }
+        // Sent to everyone: the whole party counts the coins, even out of sight.
+        self.event(Ev::Coins { x: pos.x as f32, y: pos.y as f32, v: coins }, None);
+    }
+
     fn tick_hazards(&mut self, dt: f64) {
         for hi in 0..self.hazards.len() {
             let h = &mut self.hazards[hi];
@@ -503,7 +569,10 @@ impl Run {
                 m.ai.path.clear();
                 m.ai.search_t = 3.0;
             }
-            m.asleep = false;
+            if m.asleep && m.etype == Some(EnemyType::Mimic) {
+                self.wake_mimic(mi);
+            }
+            self.monsters[mi].asleep = false;
         }
         if self.monsters[mi].hp <= 0.0 {
             if let Some(pi) = src_player {
@@ -523,11 +592,13 @@ impl Run {
         m.hp = 0.0;
         let (id, pos, kind) = (m.id, m.pos, m.kind as u8);
         let xp = progression::xp_for_kill(m.etype);
+        let coins = progression::coins_for_kill(m.etype);
         self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, Some(pos));
         // XP goes to every living party member (spent later via progression).
         for p in self.players.iter_mut().filter(|p| p.alive) {
             p.xp += xp;
         }
+        self.give_coins(pos, coins);
         // Raised and bound minions die with their master.
         let minions: Vec<usize> = self.monsters.iter().enumerate().filter(|(_, o)| o.alive && o.owner == Some(id)).map(|(i, _)| i).collect();
         for i in minions {
@@ -544,7 +615,8 @@ impl Run {
         let alive: Vec<Vec2> = self.players.iter().filter(|p| p.alive).map(|p| p.pos()).collect();
         if !self.boss_awake && alive.iter().any(|p| hall.contains(*p)) {
             self.boss_awake = true;
-            for m in &mut self.monsters {
+            // Mimics elsewhere keep their disguise.
+            for m in self.monsters.iter_mut().filter(|m| m.etype != Some(EnemyType::Mimic)) {
                 m.asleep = false;
             }
             let text = match self.boss_id {
@@ -592,19 +664,24 @@ impl Run {
                     damage: p.damage as f32,
                     healing: p.healing as f32,
                     xp: p.xp,
+                    coins: p.coins,
                     alive: p.alive,
                 })
                 .collect(),
         }
     }
 
-    /// XP to bank per profile token. Players who left early keep what they
-    /// earned; a run where debug mode was used awards nothing.
-    pub fn xp_awards(&self) -> Vec<(String, u32)> {
+    /// XP and coins to bank per profile token. Players who left early keep
+    /// what they earned; a run where debug mode was used awards nothing.
+    pub fn awards(&self) -> Vec<Award> {
         if self.debug_used {
             return Vec::new();
         }
-        self.players.iter().filter_map(|p| Some((p.token.clone()?, p.xp))).filter(|(_, xp)| *xp > 0).collect()
+        self.players
+            .iter()
+            .filter_map(|p| Some(Award { token: p.token.clone()?, xp: p.xp, coins: p.coins }))
+            .filter(|a| a.xp > 0 || a.coins > 0)
+            .collect()
     }
 }
 
@@ -644,7 +721,7 @@ pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: Sh
             break;
         }
     }
-    lobby.lock().unwrap().run_finished(run.id, run.xp_awards());
+    lobby.lock().unwrap().run_finished(run.id, run.awards());
 }
 
 #[cfg(test)]
@@ -666,15 +743,101 @@ pub mod tests {
     }
 
     #[test]
-    fn xp_awards_go_to_profiles_unless_debug_was_used() {
+    fn awards_go_to_profiles_unless_debug_was_used() {
         let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
         run.players[0].token = Some("a".into());
         run.players[0].xp = 40;
+        run.players[0].coins = 12;
         run.players[1].xp = 10; // no profile
-        assert_eq!(run.xp_awards(), vec![("a".to_string(), 40)]);
+        assert_eq!(run.awards(), vec![Award { token: "a".into(), xp: 40, coins: 12 }]);
         run.set_debug(1, true);
-        assert!(run.xp_awards().is_empty());
+        assert!(run.awards().is_empty());
         assert!(matches!(run.end_msg(true), ServerMsg::RunEnded { banked: false, .. }));
+    }
+
+    /// Moves player 0 onto `pos` and steps once.
+    fn stand_at(run: &mut Run, pos: Vec2) {
+        run.players[0].mv.x = pos.x;
+        run.players[0].mv.y = pos.y;
+        run.step();
+    }
+
+    #[test]
+    fn touching_a_chest_opens_it_once_and_pays_the_party() {
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+        run.monsters.clear(); // keep the test about the chest
+        let id = run.alloc_id();
+        let pos = run.dungeon.player_spawns[0] + Vec2::new(40.0, 0.0);
+        run.chests.push(Chest { id, pos, opened: None });
+        stand_at(&mut run, pos);
+        let c = run.chests.iter().find(|c| c.id == id).unwrap();
+        assert!(c.opened.is_some());
+        let coins = run.players[0].coins;
+        assert!(progression::CHEST_COINS.contains(&coins));
+        assert_eq!(run.players[1].coins, coins, "the whole party gets the coins");
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Coins { .. })));
+        stand_at(&mut run, pos);
+        assert_eq!(run.players[0].coins, coins, "a chest pays only once");
+    }
+
+    #[test]
+    fn mimic_sleeps_until_touched_then_waits_before_hunting() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let pos = run.dungeon.player_spawns[0] + Vec2::new(60.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::Mimic, pos, None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].asleep = true;
+        // A player in plain sight does not wake it; only touching does.
+        stand_at(&mut run, pos - Vec2::new(30.0, 0.0));
+        let mi = run.monster_idx(id).unwrap();
+        assert!(run.monsters[mi].asleep);
+        assert_eq!(run.monsters[mi].pos, pos);
+        stand_at(&mut run, pos - Vec2::new(8.0, 0.0));
+        let mi = run.monster_idx(id).unwrap();
+        assert!(!run.monsters[mi].asleep);
+        assert!(run.monsters[mi].ai.hold > 0.0);
+        // The boss waking does not wake other mimics.
+        let id2 = run.spawn_enemy(EnemyType::Mimic, pos + Vec2::new(0.0, 32.0), None, 1);
+        let m2 = run.monster_idx(id2).unwrap();
+        run.monsters[m2].asleep = true;
+        let hall = run.dungeon.boss_hall().center_px();
+        stand_at(&mut run, hall);
+        let m2 = run.monster_idx(id2).unwrap();
+        assert!(run.boss_awake);
+        assert!(run.monsters[m2].asleep);
+    }
+
+    #[test]
+    fn mimic_moves_only_while_airborne() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let start = run.dungeon.player_spawns[0];
+        let id = run.spawn_enemy(EnemyType::Mimic, start + Vec2::new(50.0, 0.0), None, 1);
+        assert!(!run.dungeon.map.solid_at(start + Vec2::new(50.0, 0.0)));
+        run.players[0].debug = true; // keep the target standing
+        let mut moved_on_ground = false;
+        let mut moved_in_air = false;
+        for _ in 0..120 {
+            let Some(mi) = run.monster_idx(id) else { break };
+            let (before, anim_before) = (run.monsters[mi].pos, run.monsters[mi].anim);
+            run.players[0].mv.x = start.x;
+            run.players[0].mv.y = start.y;
+            run.step();
+            let mi = run.monster_idx(id).unwrap();
+            if run.monsters[mi].pos.dist(before) > 0.01 {
+                // The step advanced the clock before the AI ran, so this is the phase it used.
+                let phase = ((run.time - run.monsters[mi].anim_start) / enemies::MIMIC_HOP_CYCLE).fract();
+                let (a, b) = enemies::MIMIC_HOP_AIR;
+                if anim_before == Anim::Move && phase >= a && phase < b {
+                    moved_in_air = true;
+                } else if phase >= 0.0 {
+                    moved_on_ground = true;
+                }
+            }
+        }
+        assert!(moved_in_air, "the mimic never hopped");
+        assert!(!moved_on_ground, "the mimic slid along the ground");
     }
 
     #[test]

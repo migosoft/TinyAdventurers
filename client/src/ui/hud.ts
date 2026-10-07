@@ -32,6 +32,8 @@ export class Hud {
   private hp = el('div', 'hp-bar');
   private hpFill = el('div', 'fill');
   private hpText = el('span');
+  private coins = el('div', 'coins');
+  private coinCount = 0;
   private slots: HTMLElement[] = [];
   private party = el('div', 'party');
   private boss = el('div', 'boss hidden');
@@ -60,7 +62,7 @@ export class Hud {
       this.slots.push(s);
       abil.append(s);
     }
-    bottom.append(this.hp, abil);
+    bottom.append(this.hp, this.coins, abil);
     this.menu.append(el('div', 'title', 'Paused menu'), el('p', '', 'The dungeon keeps going while this is open.'));
     const leave = el('button', '', 'Leave dungeon');
     leave.onclick = () => {
@@ -82,6 +84,8 @@ export class Hud {
     this.boss.classList.add('hidden');
     this.banner.classList.add('hidden');
     this.msgs.innerHTML = '';
+    this.coinCount = 0;
+    this.showCoins();
     const me = info.players.find((p) => p.ent === info.you)!;
     const c = CLASSES[me.class];
     const names = [c.primary, c.secondary] as (keyof typeof ABILITIES)[];
@@ -97,6 +101,19 @@ export class Hud {
       row.querySelector('.mini')!.append(el('div', 'fill'));
       this.party.append(row);
     }
+  }
+
+  /** Coins found this run (the whole party gets each find). */
+  addCoins(v: number): void {
+    this.coinCount += v;
+    this.showCoins();
+    this.coins.classList.remove('gain');
+    void this.coins.offsetWidth; // restart the pop animation
+    this.coins.classList.add('gain');
+  }
+
+  private showCoins(): void {
+    this.coins.innerHTML = `<i class="coin-icon"></i>${this.coinCount}`;
   }
 
   hide(): void {
@@ -179,14 +196,14 @@ export class Hud {
     const rows = m.stats
       .map(
         (s) =>
-          `<tr class="${s.alive ? '' : 'dead'}"><td>${esc(s.name)}</td><td>${s.class}</td><td>${s.kills}</td><td>${Math.round(s.damage)}</td><td>${Math.round(s.healing)}</td><td>${s.xp}</td></tr>`,
+          `<tr class="${s.alive ? '' : 'dead'}"><td>${esc(s.name)}</td><td>${s.class}</td><td>${s.kills}</td><td>${Math.round(s.damage)}</td><td>${Math.round(s.healing)}</td><td>${s.xp}</td><td>${s.coins}</td></tr>`,
       )
       .join('');
     this.end.innerHTML = `
       <div class="title ${m.victory ? 'win' : 'lose'}">${m.victory ? 'VICTORY' : 'DEFEAT'}</div>
       <p>${m.victory ? `${BOSS_TEXT[m.boss].name} has been slain.` : 'The dungeon claims another party.'} Time ${mins}:${secs}</p>
-      <table><tr><th>Hero</th><th>Class</th><th>Kills</th><th>Damage</th><th>Healing</th><th>XP</th></tr>${rows}</table>
-      <p class="note">${m.banked ? 'Your XP was added to your profile. Spend it on upgrades in the lobby.' : 'Debug mode was used: no XP was added to the profiles.'}</p>`;
+      <table><tr><th>Hero</th><th>Class</th><th>Kills</th><th>Damage</th><th>Healing</th><th>XP</th><th>Coins</th></tr>${rows}</table>
+      <p class="note">${m.banked ? 'Your XP and coins were added to your profile. Spend XP on upgrades in the lobby.' : 'Debug mode was used: no XP or coins were added to the profiles.'}</p>`;
     const back = el('button', '', 'Back to lobby');
     back.onclick = () => this.onBack();
     this.end.append(back);

@@ -175,6 +175,8 @@ pub enum Ev {
     Immune { x: f32, y: f32 },
     Tile { x: u16, y: u16, v: u8 },
     Msg { text: String },
+    /// Coins found at a spot (chest or kill); every living party member gets `v`.
+    Coins { x: f32, y: f32, v: u32 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -200,6 +202,7 @@ pub struct PlayerStats {
     pub damage: f32,
     pub healing: f32,
     pub xp: u32,
+    pub coins: u32,
     pub alive: bool,
 }
 
@@ -230,6 +233,8 @@ pub struct ProfileInfo {
     pub token: String,
     /// Unspent XP.
     pub xp: u32,
+    /// Unspent coins (nothing to buy with them yet).
+    pub coins: u32,
     pub upgrades: StatUpgrades,
     pub mods: Modifiers,
     /// `costs[level]` = XP for the next level; `costs.len()` = max level.

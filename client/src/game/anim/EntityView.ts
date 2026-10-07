@@ -1,4 +1,4 @@
-// One figure on the board: miniature base + pack body animation + pack weapon.
+// One figure on the board: ground shadow + pack body animation + pack weapon.
 // The pack has idle/run (4 frames) and hit frames; attacks are approximated
 // by animating the weapon sprite (swing, recoil, raise) plus small body moves.
 import Phaser from 'phaser';
@@ -21,19 +21,18 @@ const MELEE_T = 0.18;
 const WEAPON_SCALE = 0.6;
 const HALF_PI = Math.PI / 2;
 
-function ensureBaseTexture(scene: Phaser.Scene, r: number): string {
-  const key = `base_${r}`;
+/** Soft ground shadow under a figure (pack sprites have none). */
+export function ensureShadowTexture(scene: Phaser.Scene, r: number): string {
+  const key = `shadow_${r}`;
   if (scene.textures.exists(key)) return key;
   const rx = r;
-  const ry = Math.max(2, Math.round(r * 0.55));
+  const ry = Math.max(2, Math.round(r * 0.45));
   const g = scene.make.graphics({}, false);
-  g.fillStyle(0x000000, 0.35);
-  g.fillEllipse(rx + 2, ry + 3, rx * 2 + 2, ry * 2 + 2);
-  g.fillStyle(0xffffff, 1);
-  g.fillEllipse(rx + 1, ry + 1, rx * 2, ry * 2);
-  g.fillStyle(0x2a2430, 1);
-  g.fillEllipse(rx + 1, ry + 1, rx * 2 - 2, ry * 2 - 2);
-  g.generateTexture(key, rx * 2 + 4, ry * 2 + 5);
+  g.fillStyle(0x000000, 0.2);
+  g.fillEllipse(rx + 1, ry + 1, rx * 2 + 2, ry * 2 + 2);
+  g.fillStyle(0x000000, 0.25);
+  g.fillEllipse(rx + 1, ry + 1, rx * 2 - 2, ry * 2 - 1);
+  g.generateTexture(key, rx * 2 + 2, ry * 2 + 2);
   g.destroy();
   return key;
 }
@@ -42,7 +41,7 @@ export class EntityView {
   readonly def: FigureDef;
   readonly root: Phaser.GameObjects.Container;
   private figure: Phaser.GameObjects.Container;
-  private base: Phaser.GameObjects.Image;
+  private shadow: Phaser.GameObjects.Image;
   private body: Phaser.GameObjects.Sprite;
   private weapon?: Phaser.GameObjects.Image;
   private label?: Phaser.GameObjects.Text;
@@ -69,10 +68,10 @@ export class EntityView {
     const scale = d.scale ?? 1;
     this.root = scene.add.container(0, 0);
     this.figure = scene.add.container(0, 0).setScale(scale);
-    this.base = scene.add.image(0, 0, ensureBaseTexture(scene, d.baseR)).setTint(d.base).setOrigin(0.5, 0.45);
+    this.shadow = scene.add.image(0, 0, ensureShadowTexture(scene, d.baseR)).setOrigin(0.5, 0.5);
     this.body = scene.add.sprite(0, 1, 'atlas', `${d.idle}0`).setOrigin(0.5, 1);
     if (d.hue) this.body.preFX?.addColorMatrix().hue(d.hue);
-    this.figure.add([this.base, this.body]);
+    this.figure.add([this.shadow, this.body]);
     if (d.weapon) {
       this.weapon = scene.add.image(0, -d.handY, 'atlas', d.weapon).setScale(WEAPON_SCALE * (d.weaponScale ?? 1));
       if (d.weaponTint) this.weapon.setTint(d.weaponTint);
