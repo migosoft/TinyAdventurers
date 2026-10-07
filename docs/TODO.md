@@ -15,7 +15,6 @@ Progression is live (profiles by token, XP banked at run end, lobby upgrade shop
 
 ## Demon dungeon follow-ups
 - **Tune** imp, chort and summoner stats (`defs/enemies.rs`) in the balancing pass. They start close to the skeletons they replace.
-- **Not yet seen in a real run:** imps, chorts and summoners were checked in server tests and the `?daemons` demo only. Play a demon run to check them in the game.
 - **Other bosses could get their own minions** the same way (`enemies::for_boss`), e.g. ice or undead variants for the lich and lizards for the dragon.
 - **Terrain (next sub-project):** water, lava and chasms. The 0x72 pack only has a single `hole` tile, `edge_down` and wall fountains; the user allowed fitting CC0 tilesets for this.
 

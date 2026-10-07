@@ -25,7 +25,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Checked:** 53 server tests (5 new: demon swap with same spawns, imp and chort attack choice by distance, the alt attack's own cooldown and fire bolt, summoned imps), client typecheck and tests, `docker compose up --build` + health, smoke tests (normal and `?debug&boss=demon`, no browser errors), `?daemons` screenshots (all four lanes, red-robed summoner, untinted summoned imps).
 
-**Not yet verified:** fighting imps, chorts and summoners in a real demon run (the headless test never reaches them). The user should play a demon run.
+**Live test (by the user, after the merge):** the user played a demon run; imps, chorts and summoners "work well". No problems found. Balancing still waits for the combined pass.
 
 ## Session before (2026-10-07, chests, mimics and coins)
 
@@ -83,6 +83,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 - Browser check of the profile flow: buying, persistence over page reload and `docker compose down`/`up`, new token for a new browser, read-only boss picker for guests.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
+- Demon dungeon enemies (imps, chorts, summoners) in a real run (played by the user, "work well").
 - The gallery was checked visually: animations, melee swooshes, dragon breath from the mouth and nostrils.
 
 **Not yet verified:**
@@ -167,7 +168,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Suggested next steps
 
-1. **Terrain sub-project (the user's request):** water and chasms. Find a CC0 16x16 tileset that fits the 0x72 style (check the license is really CC0), show the user a demo first like `?mimic` and `?daemons`, then design the server side (walkability, projectiles over water/chasms, generator placement, FOV).
+1. **Terrain sub-project (the user's request):** **start here next session** (the user asked to continue with it in a new session; nothing is done yet, no branch exists). Water and chasms. Find a CC0 16x16 tileset that fits the 0x72 style (check the license is really CC0), show the user a demo first like `?mimic` and `?daemons`, then design the server side (walkability, projectiles over water/chasms, generator placement, FOV).
 2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
 4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
