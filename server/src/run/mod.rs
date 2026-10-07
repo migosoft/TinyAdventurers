@@ -156,7 +156,8 @@ impl Run {
         let n = run.players.len();
         let spawns = run.dungeon.spawns.clone();
         for s in spawns {
-            run.spawn_enemy(s.enemy, s.pos, None, n);
+            let t = enemies::for_boss(s.enemy, run.boss_id);
+            run.spawn_enemy(t, s.pos, None, n);
         }
         // Mimics are monsters from the start, asleep and drawn as a closed chest.
         for c in run.dungeon.chests.clone() {

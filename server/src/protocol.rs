@@ -171,7 +171,8 @@ pub enum Ev {
     /// Explosion / area effect. k: 0 fireball, 1 heal ring, 2 fire ring, 3 dark burst, 4 dragon fireball
     Boom { x: f32, y: f32, r: f32, k: u8 },
     Died { id: u32, x: f32, y: f32, kind: u8 },
-    Raise { x: f32, y: f32 },
+    /// A minion appears: raised skeleton (green) or summoned imp (`fire`, red).
+    Raise { x: f32, y: f32, fire: bool },
     Immune { x: f32, y: f32 },
     Tile { x: u16, y: u16, v: u8 },
     Msg { text: String },

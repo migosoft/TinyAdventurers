@@ -7,6 +7,8 @@ import { ABILITIES, KIND } from "../../generated/defs";
 const SWORD = { reach: ABILITIES.Sword.range + 5, arc: ABILITIES.Sword.arc };
 const AXE = { reach: ABILITIES.Axe.range + 5, arc: ABILITIES.Axe.arc, color: 0xffe0d0 };
 const MOB_SWING = { reach: 22, arc: 1.6, color: 0xffd0d0 };
+// Demons fight with bare claws: a swoosh at the damage reach, no weapon sprite.
+const CLAW = { reach: 20, arc: 1.6, color: 0xffb080 };
 
 export type AttackStyle = 'melee' | 'ranged' | 'caster' | 'none';
 /** How a weapon sprite is held: blades/staffs point up in the pack, bows are vertical. */
@@ -67,6 +69,8 @@ const lizardPoints = (dy: number): FramePoints =>
 const hero = (n: string) => ({ idle: `${n}_idle_anim_f`, run: `${n}_run_anim_f`, hit: `${n}_hit_anim_f0` });
 const mob = (n: string) => ({ idle: `${n}_idle_anim_f`, run: `${n}_run_anim_f` });
 const necro = { idle: 'necromancer_anim_f', run: 'necromancer_anim_f' };
+// Necromancer with a red robe, recolored at atlas build time (scripts/build-atlas.ts).
+const summoner = { idle: 'summoner_anim_f', run: 'summoner_anim_f' };
 
 export const FIGURES: Record<number, FigureDef> = {
   [KIND.Wizard]: { ...hero('wizzard_m'), weapon: 'weapon_red_magic_staff', mount: 'staff', handY: 10, attack: 'caster', base: 0x4a7aff, baseR: 6, label: 'Wizard' },
@@ -79,8 +83,11 @@ export const FIGURES: Record<number, FigureDef> = {
   [KIND.OrcWarrior]: { ...mob('orc_warrior'), swing: { ...MOB_SWING, reach: 26 }, weapon: 'weapon_cleaver', mount: 'blade', handY: 8, attack: 'melee', base: 0x4a3a2a, baseR: 6 },
   [KIND.OrcArcher]: { ...mob('masked_orc'), weapon: 'weapon_bow', mount: 'bow', weaponScale: 0.8, handY: 8, attack: 'ranged', base: 0x4a3a2a, baseR: 6 },
   [KIND.Necromancer]: { ...necro, weapon: 'weapon_green_magic_staff', mount: 'staff', handY: 8, attack: 'caster', base: 0x2a6a3a, baseR: 5 },
-  [KIND.RaisedSkeleton]: { ...mob('skelet'), swing: MOB_SWING, weapon: 'weapon_rusty_sword', mount: 'blade', weaponScale: 0.8, handY: 6, attack: 'melee', base: 0x2a6a3a, baseR: 5, tint: 0x90ff90 },
+  [KIND.RaisedSkeleton]: { ...mob('skelet'), swing: MOB_SWING, weapon: 'weapon_rusty_sword', mount: 'blade', weaponScale: 0.8, handY: 6, attack: 'melee', base: 0x2a6a3a, baseR: 5 },
   [KIND.Disciple]: { ...necro, handY: 8, attack: 'caster', base: 0x7a1020, baseR: 5, tint: 0xff7070 },
+  [KIND.Imp]: { ...mob('imp'), swing: CLAW, handY: 7, attack: 'caster', base: 0xff7020, baseR: 5 },
+  [KIND.Chort]: { ...mob('chort'), swing: { ...CLAW, reach: 22 }, handY: 10, attack: 'caster', base: 0xff7020, baseR: 5 },
+  [KIND.Summoner]: { ...summoner, weapon: 'weapon_red_magic_staff', mount: 'staff', weaponTint: 0xffb080, handY: 8, attack: 'caster', base: 0x9a2020, baseR: 5 },
   [KIND.Demon]: { ...mob('big_demon'), swing: { reach: 40, arc: 2.1, color: 0xffa080 }, handY: 18, attack: 'melee', base: 0x7a1010, baseR: 13 },
   [KIND.Lich]: { ...necro, weapon: 'weapon_green_magic_staff', mount: 'staff', handY: 8, attack: 'caster', base: 0x3a2a5a, baseR: 6, scale: 1.75, tint: 0xb8c8ff },
   [KIND.Dragon]: { ...hero('lizard_m'), mouth: lizardPoints(5.5), nostrils: lizardPoints(2.5), swing: { reach: 46, arc: 2.4, behind: true, color: 0xffc0a0 }, handY: 10, attack: 'melee', base: 0x7a1010, baseR: 8, scale: 2.25, hue: 250 },
@@ -95,6 +102,7 @@ export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?:
   [KIND.ShadowBolt]: { glow: 0x40e060, scale: 1, trail: 0x205a20 },
   [KIND.FrostBolt]: { glow: 0x9ae0ff, scale: 1, trail: 0xe0f8ff },
   [KIND.FireOrb]: { glow: 0xff8030, scale: 0.9, trail: 0xff8030 },
+  [KIND.FireBolt]: { glow: 0xff7020, scale: 0.7, trail: 0xffb040 },
   [KIND.DragonFireball]: { glow: 0xff5010, scale: 2, trail: 0xffb040 },
 };
 

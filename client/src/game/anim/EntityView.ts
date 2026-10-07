@@ -59,11 +59,11 @@ export class EntityView {
 
   constructor(
     scene: Phaser.Scene,
-    kind: number,
+    kind: number | FigureDef,
     private fx: Effects,
     name?: string,
   ) {
-    this.def = FIGURES[kind] ?? FIGURES[0];
+    this.def = typeof kind === 'number' ? (FIGURES[kind] ?? FIGURES[0]) : kind;
     const d = this.def;
     const scale = d.scale ?? 1;
     this.root = scene.add.container(0, 0);
@@ -167,6 +167,14 @@ export class EntityView {
           this.fxT = this.clock;
           const c = d.weaponTint ?? (s.anim === ANIM.Channel ? 0xff3040 : d.base);
           this.fx.particle(s.x + (Math.random() * 10 - 5) * scale, s.y - (Math.random() * 10 + 6) * scale, 0, -20, 0.5, c);
+        }
+        break;
+      case ANIM.Shoot:
+        // Unarmed shooters (imps, chorts): the bolt leaves the hand with a burst.
+        if (!d.weapon && !this.shotFx) {
+          this.shotFx = true;
+          this.body.y -= 1;
+          this.fx.hitSpark(s.x + ax * 6, s.y - d.handY * scale, d.base);
         }
         break;
       case ANIM.Breath:

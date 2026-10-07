@@ -9,7 +9,25 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-07, chests, mimics and coins)
+## Last session (2026-10-07, demon dungeon: imps, chorts, summoners)
+
+**Branch:** `feature/demon-minions` (not merged yet; ask before merging into `main` or pushing).
+
+**Why:** the user wanted more variety and asked about chasms and water. The 0x72 pack has none (only `hole`, `edge_down`, wall fountains and goo), so **the user allowed other CC0 tilesets that fit well, for terrain and for enemies**. The user also pointed out the pack's small demons and asked for them in place of skeletons when the demon is the boss, with melee and fire bolts. Terrain (water, chasms) is the next sub-project; nothing has been done for it yet.
+
+**Done:**
+- **Demo first:** `?daemons` (`DaemonDemoScene.ts`). The user picked **imps (ranged) + chorts (melee)** from it.
+- **Imp** (`EnemyType::Imp`): fire bolts from range and keeps its distance; claws when a hero gets close. **Chort**: closes in and claws; throws a fire bolt now and then from at least 40 px. Both use the new optional second attack (`EnemyDef.alt`, own cooldown `Ai.alt_cd`, `Windup.alt`). New projectile `FireBolt`.
+- **Summoner** (the user's name for it): the necromancer's demon-dungeon counterpart. It shoots fire bolts and summons imps (`SummonedImp`, a fiery summon ring). Its sprite is the pack necromancer with a **red robe**, recolored with pack colors at atlas build time (`RECOLORS` in `client/scripts/build-atlas.ts`, codec in `scripts/png.ts`). The user asked for this asset change.
+- **Swap at run start** (`enemies::for_boss`): with the demon as boss, skeleton archers → imps, skeleton warriors → chorts, necromancers → summoners. Maps and spawn spots stay the same for every seed.
+- **Minions are no longer tinted** (user's request): raised skeletons lost their green tint; summoned imps look like normal imps.
+- Stats start close to the skeletons they replace, with the same XP (summoner 25, summoned imp 2). Tuning waits for the balancing pass.
+
+**Checked:** 53 server tests (5 new: demon swap with same spawns, imp and chort attack choice by distance, the alt attack's own cooldown and fire bolt, summoned imps), client typecheck and tests, `docker compose up --build` + health, smoke tests (normal and `?debug&boss=demon`, no browser errors), `?daemons` screenshots (all four lanes, red-robed summoner, untinted summoned imps).
+
+**Not yet verified:** fighting imps, chorts and summoners in a real demon run (the headless test never reaches them). The user should play a demon run.
+
+## Session before (2026-10-07, chests, mimics and coins)
 
 **Branch:** `feature/chests` is merged into `main` (fast-forward) and pushed.
 
@@ -28,7 +46,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Not yet verified:** meeting a chest and a mimic in a real run (the headless smoke test never walks to one), and seeing the coins banked after a real run. The user should play one normal run (no `?debug`).
 
-## Session before (2026-10-07, wall corners and boss force field)
+## Earlier session (2026-10-07, wall corners and boss force field)
 
 **Branches:** `fix/wall-corners` and `feature/force-field` are merged into `main` (fast-forward) and pushed.
 
@@ -43,7 +61,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Live boss test (by the user, after the merge):** all three bosses (demon, lich, dragon) played in the browser; the force field appeared when the party entered the hall; no T-shaped wall junctions seen any more (confirms the stub fix); no problems found. Balancing was deliberately not judged: the user wants one combined balancing pass later (progression, classes, boss fights).
 
 
-## Earlier session (2026-10-07)
+## Earliest session (2026-10-07, boss selection and progression)
 
 - **Done:** lobby boss selection, and permanent progression (profiles, XP banking, upgrade shop). Details: TECHNICAL.md §4 and §11a, PLAYER_GUIDE.md "XP and upgrades".
 - **Workflow set up:** the first commits are on `main` and pushed. The user wants one feature per session with a handoff, doc updates and a commit at the end (see "Git and session workflow").
@@ -54,14 +72,14 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Working end to end in Docker (`docker compose up --build`, port 8080):**
 - lobby, 4 classes, host-chosen or random end boss, random dungeon, field of vision
 - persistent profiles: XP banked after each run, permanent upgrades bought in the lobby (`ta-data` volume)
-- 7 enemy types (including the mimic), 3 bosses
+- 10 enemy types (including the mimic; imps, chorts and summoners only in the demon's dungeon), 3 bosses
 - treasure chests and mimics; coins banked as a second currency
 - permadeath with spectating, victory/defeat screens
 - client prediction and interpolation, F3 stats
 - debug mode, sprite gallery
 
 **Verified:**
-- 45 server tests and the client port tests pass.
+- 53 server tests and the client port tests pass.
 - Browser check of the profile flow: buying, persistence over page reload and `docker compose down`/`up`, new token for a new browser, read-only boss picker for guests.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
@@ -79,11 +97,14 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## The user's decisions and preferences (keep them)
 
-- **Art:** use only sprites from the 0x72 "16x16 DungeonTileset II" pack.
+- **Art:** sprites from the 0x72 "16x16 DungeonTileset II" pack, plus other CC0 tilesets that fit its style (allowed 2026-10-07 for terrain and enemies; keep their license file next to them).
   - The user rejected self-drawn or procedural sprite art.
+  - Small recolors of pack frames with pack colors are fine when the user asks (the summoner's red robe).
   - Missing figures are pack sprites scaled, tinted or hue-shifted (lich, dragon).
   - Attacks are approximated by animating pack weapon sprites.
   - Runtime effect shapes (particles, glows, swooshes, rings) are fine.
+- **Minions are never tinted:** raised skeletons and summoned imps look like the ordinary ones.
+- **Demon dungeon:** imps (ranged, claw up close) and chorts (melee, a bolt from afar) replace skeletons, summoners (red robe, summon imps) replace necromancers. The user chose this from the `?daemons` demo and named the summoner.
 - **No miniature bases under figures** (the user asked to remove them); figures stand on a soft ground shadow.
 - **Mimics hop after the players** (chosen from a demo over a stationary biter), and their reveal animation stays.
 - **Coins are a second currency** meant for buying loadouts later.
@@ -124,7 +145,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 2. Client changes: `cd client && npx tsc --noEmit && npm test`.
 3. `docker compose up --build -d`, then `curl localhost:8080/health` should print `OK`.
 4. `cd tools/e2e && node smoke.mjs http://localhost:8080/ "" shots Wizard,Paladin`. It should print "no browser errors"; look at the screenshots in `shots/`.
-5. Visual changes to figures or effects: `node gallery-shots.mjs http://localhost:8080/ shots melee,breath`, or open `?gallery&state=<state>&slow=10` in a browser. Chests and mimics: `?mimic&slow=3`.
+5. Visual changes to figures or effects: `node gallery-shots.mjs http://localhost:8080/ shots melee,breath`, or open `?gallery&state=<state>&slow=10` in a browser. Chests and mimics: `?mimic&slow=3`. Demons: `?daemons&slow=3`.
 6. Gameplay changes: update [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md). Architecture changes: update [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Gotchas
@@ -146,7 +167,8 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Suggested next steps
 
-1. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
-2. Loadouts: design new abilities, then add the lobby picker, paid with coins.
-3. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
-4. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.
+1. **Terrain sub-project (the user's request):** water and chasms. Find a CC0 16x16 tileset that fits the 0x72 style (check the license is really CC0), show the user a demo first like `?mimic` and `?daemons`, then design the server side (walkability, projectiles over water/chasms, generator placement, FOV).
+2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
+3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
+4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
+5. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.

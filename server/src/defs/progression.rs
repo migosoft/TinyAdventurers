@@ -97,6 +97,9 @@ pub fn xp_for_kill(enemy: Option<EnemyType>) -> u32 {
         Some(Necromancer) => 25,
         Some(Disciple) => 20,
         Some(Mimic) => 15,
+        Some(Imp) | Some(Chort) => 8,
+        Some(SummonedImp) => 2,
+        Some(Summoner) => 25,
         None => 300, // boss
     }
 }

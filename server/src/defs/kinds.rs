@@ -18,6 +18,9 @@ pub enum EntityKind {
     RaisedSkeleton = 16,
     Disciple = 17,
     Mimic = 18,
+    Imp = 19,
+    Chort = 20,
+    Summoner = 21,
     // Bosses
     Demon = 30,
     Lich = 31,
@@ -32,6 +35,7 @@ pub enum EntityKind {
     FireBreath = 56,
     FireOrb = 57,
     DragonFireball = 58,
+    FireBolt = 59,
     // Hazards
     FirePatch = 70,
     // Props
@@ -39,7 +43,7 @@ pub enum EntityKind {
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 27] = [
+    pub const ALL: [EntityKind; 31] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -53,6 +57,9 @@ impl EntityKind {
         EntityKind::RaisedSkeleton,
         EntityKind::Disciple,
         EntityKind::Mimic,
+        EntityKind::Imp,
+        EntityKind::Chort,
+        EntityKind::Summoner,
         EntityKind::Demon,
         EntityKind::Lich,
         EntityKind::Dragon,
@@ -65,6 +72,7 @@ impl EntityKind {
         EntityKind::FireBreath,
         EntityKind::FireOrb,
         EntityKind::DragonFireball,
+        EntityKind::FireBolt,
         EntityKind::FirePatch,
         EntityKind::Chest,
     ];

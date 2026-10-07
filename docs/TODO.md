@@ -13,6 +13,12 @@ Progression is live (profiles by token, XP banked at run end, lobby upgrade shop
 - **More loot:** the pack also has flasks (8 colours/sizes), bombs and coins that could drop as pickups; crates (`crate`) could be breakable.
 - **More room dressing from the pack (unused so far):** floor spikes (animated), buttons and levers, columns, wall fountains (red/blue, animated), wall goo, floor ladder/stairs.
 
+## Demon dungeon follow-ups
+- **Tune** imp, chort and summoner stats (`defs/enemies.rs`) in the balancing pass. They start close to the skeletons they replace.
+- **Not yet seen in a real run:** imps, chorts and summoners were checked in server tests and the `?daemons` demo only. Play a demon run to check them in the game.
+- **Other bosses could get their own minions** the same way (`enemies::for_boss`), e.g. ice or undead variants for the lich and lizards for the dragon.
+- **Terrain (next sub-project):** water, lava and chasms. The 0x72 pack only has a single `hole` tile, `edge_down` and wall fountains; the user allowed fitting CC0 tilesets for this.
+
 ## Other follow-ups
 - **Balancing pass (later, all at once):** progression, classes, enemies and boss fights together. All three bosses were played live without problems; their numbers are in `server/src/run/bosses/*.rs` and `defs/bosses.rs`.
 - **Loadouts:** choose primary/secondary per class. Each class has only its one pair today, so new abilities (server executor, client prediction, pack-sprite visuals) are needed first. The picker and a field on `Member` are the easy part.
@@ -20,6 +26,7 @@ Progression is live (profiles by token, XP banked at run end, lobby upgrade shop
 - **Art gaps in the 0x72 pack:**
   - The red dragon is the pack lizard, scaled and hue-shifted.
   - The lich is a scaled, tinted necromancer.
+  - The summoner is the necromancer with a recolored (red) robe, made at atlas build time (`RECOLORS` in `build-atlas.ts`).
   - The demon has no bat wings.
   - There are no attack animation frames.
   - Dedicated sprite sheets can be added to `client/assets-src/` and referenced in `anim/defs.ts`.

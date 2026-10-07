@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { GalleryScene } from './game/GalleryScene';
 import { MimicDemoScene } from './game/MimicDemoScene';
+import { DaemonDemoScene } from './game/DaemonDemoScene';
 import { GameScene, type GameInit } from './game/GameScene';
 import type { RunStartInfo } from './generated/RunStartInfo';
 import { Net } from './net';
@@ -37,24 +38,25 @@ function viewSize(): { w: number; h: number; zoom: number } {
   return { w: Math.ceil(window.innerWidth / zoom), h: Math.ceil(window.innerHeight / zoom), zoom };
 }
 
-/** Dev sprite gallery (?gallery) or mimic demo (?mimic): no server needed. */
+/** Dev sprite gallery (?gallery), mimic demo (?mimic) or daemon demo (?daemons): no server needed. */
 function gallery(): void {
-  const mimic = new URLSearchParams(location.search).has('mimic');
+  const q = new URLSearchParams(location.search);
+  const start = q.has('mimic') ? 'mimic-demo' : q.has('daemons') ? 'daemon-demo' : 'gallery';
   const v = viewSize();
   const game = new Phaser.Game({
     type: Phaser.WEBGL,
     parent: 'game',
     pixelArt: true,
     scale: { mode: Phaser.Scale.NONE, width: v.w, height: v.h, zoom: v.zoom },
-    scene: [BootScene, GalleryScene, MimicDemoScene],
+    scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene],
   });
-  game.events.once('assets-ready', () => game.scene.start(mimic ? 'mimic-demo' : 'gallery'));
+  game.events.once('assets-ready', () => game.scene.start(start));
   document.getElementById('game')!.classList.add('active');
 }
 
 async function main(): Promise<void> {
   const q = new URLSearchParams(location.search);
-  if (q.has('gallery') || q.has('mimic')) return gallery();
+  if (q.has('gallery') || q.has('mimic') || q.has('daemons')) return gallery();
   const ui = document.getElementById('ui')!;
   const net = new Net();
   try {

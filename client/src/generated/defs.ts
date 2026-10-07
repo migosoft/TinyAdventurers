@@ -6,16 +6,19 @@ export const KIND = {
   "Barbarian": 2,
   "Bolt": 52,
   "Chest": 80,
+  "Chort": 20,
   "Demon": 30,
   "Disciple": 17,
   "Dragon": 32,
   "DragonFireball": 58,
+  "FireBolt": 59,
   "FireBreath": 56,
   "FireOrb": 57,
   "FirePatch": 70,
   "Fireball": 51,
   "FrostBolt": 55,
   "GoblinArcher": 10,
+  "Imp": 19,
   "Lich": 31,
   "Mimic": 18,
   "Missile": 50,
@@ -27,6 +30,7 @@ export const KIND = {
   "ShadowBolt": 54,
   "SkeletonArcher": 12,
   "SkeletonWarrior": 11,
+  "Summoner": 21,
   "Wizard": 0
 } as const;
 

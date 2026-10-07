@@ -95,7 +95,7 @@ impl BossBehaviour for Lich {
                         let spot = pos + Vec2::from_angle(run.time + k as f64 * 3.0) * 20.0;
                         let spot = if run.dungeon.map.solid_at(spot) { pos } else { spot };
                         run.spawn_enemy(EnemyType::RaisedSkeleton, spot, Some(id), party);
-                        run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32 }, Some(spot));
+                        run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, fire: false }, Some(spot));
                     }
                 }
             }

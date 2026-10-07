@@ -76,6 +76,8 @@ pub enum AiState {
 pub struct Windup {
     pub t: f64,
     pub aim: f64,
+    /// The wind-up leads to the second attack (`EnemyDef::alt`).
+    pub alt: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +87,8 @@ pub struct Ai {
     pub last_known: Vec2,
     pub home: Vec2,
     pub cd: f64,
+    /// Cooldown of the second attack.
+    pub alt_cd: f64,
     pub windup: Option<Windup>,
     pub path: Vec<Vec2>,
     pub repath_t: f64,
@@ -104,6 +108,7 @@ impl Ai {
             last_known: home,
             home,
             cd: 0.5,
+            alt_cd: 1.0,
             windup: None,
             path: Vec::new(),
             repath_t: 0.0,

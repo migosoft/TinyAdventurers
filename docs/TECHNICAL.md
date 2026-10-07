@@ -40,6 +40,7 @@ server/                              Rust crate `tiny-adventurers-server`
   src/export.rs                      (test-only) writes client/src/generated/defs.ts + fixtures.json
 client/                              Vite + TypeScript + Phaser 3.90
   scripts/build-atlas.ts             pack sheet + tile list -> public/assets/atlas.{png,json}
+  scripts/png.ts                     minimal PNG decode/encode (zlib only) for the atlas recolors
   assets-src/0x72/                   0x72 DungeonTileset II v1.7 (CC0): sheet, tile_list, README, LICENSE
   src/main.ts                        boot, Phaser game, wiring of Net/Lobby/Hud/GameScene, ?gallery, ?mimic
   src/net.ts                         WebSocket + msgpack, ping/RTT, network simulator (?lag=)
@@ -54,6 +55,7 @@ client/                              Vite + TypeScript + Phaser 3.90
   src/game/effects.ts                pooled particles, rings, swooshes, floating numbers
   src/game/GalleryScene.ts           dev page ?gallery
   src/game/MimicDemoScene.ts         dev page ?mimic (chaser mimic, chest, reveal; no server)
+  src/game/DaemonDemoScene.ts        dev page ?daemons (imp, chort, summoner vs a knight; no server)
   src/ui/                            DOM lobby, HUD, texts, atlas previews
 tools/e2e/                           browser smoke tests (playwright-core + installed Edge/Chrome)
 docs/                                this file, player guide, TODO
@@ -154,7 +156,7 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
   - wakes the boss
   - makes an unaware monster search toward its attacker
   - credits damage and kills
-- `kill_monster` recursively kills the monster's minions (`owner`): necromancer skeletons, the lich's disciples and summons. It also awards XP and coins to living players (`Player.xp`, `Player.coins`) and sets victory if the boss died.
+- `kill_monster` recursively kills the monster's minions (`owner`): necromancer skeletons, summoner imps, the lich's disciples and summons. It also awards XP and coins to living players (`Player.xp`, `Player.coins`) and sets victory if the boss died.
 - **Chests and mimics.** `Run::new` turns `Dungeon.chests` into `Run.chests` (real ones) and sleeping `EnemyType::Mimic` monsters. `touch_chests` (every step) opens a chest when a living player is within `CHEST_TOUCH` (12 px): `CHEST_COINS` (8–15) to every living player through `give_coins`. The same distance wakes a mimic (`wake_mimic`), as does any player hit (`hurt_monster`). A woken mimic holds still for `MIMIC_WAKE_T` (`Ai.hold`, the lid flying open), then uses the normal AI. `check_boss_hall` wakes every sleeping monster except mimics. Sleeping monsters are not pushed by `separate_monsters`.
 - **Mimic gait.** `ai::gait` makes the mimic hop: it moves only while its Move animation clock is in `MIMIC_HOP_AIR` (0.2–0.7 of a 0.6 s `MIMIC_HOP_CYCLE`), at its average speed divided by that fraction. The constants go to the client through `CONST`, so `mimic.ts` draws crouch, flight and landing from the same clock (`anim_ms`). An awake mimic does not wander.
 - `hurt_player` applies armor and skips HP loss in debug mode. Death switches the player to spectating.
@@ -167,7 +169,10 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 - Perception: the nearest living, non-hidden player within `sight` and with line of sight. Enemies never target players they cannot currently see.
 - States: `Idle` (wander near home) → `Chase` (melee approach, ranged keep a preferred distance) → wind-up → attack. Losing sight leads to `Search` (A* to last known position) and then `Return` (A* home).
 - Wind-ups telegraph attacks: the client flashes the body red and shakes it. The hit lands only if the target is still seen.
-- Necromancers raise up to 3 skeletons (cooldown 7 s). Hiding drops the aggro of all monsters targeting the hider.
+- Necromancers raise up to 3 skeletons (cooldown 7 s); summoners summon imps (`SummonedImp`, drawn as a normal imp) the same way. `Ev::Raise.fire` tells the client which effect to draw.
+- **Second attack:** `EnemyDef.alt` is an optional second `AttackStyle` with its own cooldown (`Ai.alt_cd`). A melee alt is used when the target is in claw reach (imp), a ranged alt only from at least `ALT_BOLT_MIN_DIST` (40 px) and beyond the main attack's reach (chort). `Windup.alt` remembers which attack the wind-up leads to; each attack keeps the other back for `ATTACK_GAP` (0.4 s). Movement follows the main attack.
+- **Demon dungeon:** `enemies::for_boss` swaps types when `Run::new` spawns the dungeon's enemies: with the demon as boss, skeleton archers become imps, skeleton warriors chorts and necromancers summoners. The generator is untouched, so a seed gives the same map and spawn spots for every boss.
+- Minions are never tinted: raised skeletons and summoned imps look like the ordinary ones (the user's request). Hiding drops the aggro of all monsters targeting the hider.
 
 **Bosses (`bosses/`).**
 - Interface: `trait BossBehaviour { spawn_extras, can_be_damaged, enraged, tick }`, created by `bosses::create(BossId)`. During its tick the behaviour is taken out of `Run.boss`, so it can borrow `Run` mutably.
@@ -237,7 +242,8 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
 ## 9. Rendering (client)
 
 **Art source.**
-- Only the 0x72 pack. `build-atlas.ts` copies the sheet and turns `tile_list_v1.7` into a Phaser JSON-hash atlas, so frame names are the pack's own (`knight_m_run_anim_f2`, `weapon_axe`, `floor_1`, …).
+- Art comes from the 0x72 pack; other CC0 tilesets that fit its style may be added (the user allowed this for terrain and enemies). `build-atlas.ts` turns `tile_list_v1.7` into a Phaser JSON-hash atlas, so frame names are the pack's own (`knight_m_run_anim_f2`, `weapon_axe`, `floor_1`, …).
+- **Recolors:** `RECOLORS` in `build-atlas.ts` swaps whole pack colors for other pack colors and writes the result as new frames in a strip below the sheet (32 px per entry). Today: `summoner_anim_f0-3`, the necromancer with its purple robe (`5f2d56`, trim `9f294e`) turned maroon and red (`62232f`, `da4e38`, the imp's and chort's reds). `scripts/png.ts` is a small PNG codec (8-bit RGB/RGBA, no interlace), so no image library is needed.
 - No self-drawn sprites. This is a user requirement; see HANDOFF.md.
 - Runtime-generated textures are limited to simple effect shapes (`dot`, `spark`, `glow`) and the ground shadow ellipses under figures.
 
@@ -262,6 +268,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
 - Pack stand-ins:
   - the demon is the pack's `big_demon`
   - the lich is the pack necromancer ×1.75 with a pale tint
+  - the summoner is the pack necromancer with a red robe (an atlas recolor, see above)
   - the dragon is the pack lizard ×2.25 with a 250° hue rotation (`preFX` colour matrix)
 - Weapons are drawn at 0.6× (`WEAPON_SCALE`).
 - The pack has no attack frames, so attacks are approximated:
@@ -303,6 +310,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
 | `?debug&boss=demon\|lich\|dragon` | Host only. Preselects that boss in the lobby's boss picker (`SelectBoss`); used by `smoke.mjs`. Works even with `ALLOW_DEBUG=0` (the boss choice is a normal feature). The server logs `run N started: … boss X (chosen)`. Runs where debug was turned on bank no XP. |
 | `?gallery[&state=melee&slow=10]` | Every figure cycling its animation states, no server needed. |
 | `?mimic[&slow=3]` | The chasing mimic after a walking knight, a treasure chest opening with its coin burst, and the mimic reveal. No server needed. |
+| `?daemons[&slow=3]` | Imp, chort and a pack of both fighting a walking knight, and a summoner summoning imps. Uses the real figure definitions; the attack logic is a local imitation of the server AI. No server needed. |
 | `?lag=150&jitter=40&loss=2` | Network simulator. |
 
 ## 11. Extending
@@ -338,6 +346,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
 - cooldown enforcement
 - enemy ignores players without line of sight or while hidden; never attacks unseen players
 - necromancer death kills its minions
+- demon dungeon swap (same spawns, imps/chorts/summoners instead of skeletons/necromancers, none elsewhere); imp and chort attack choice by distance; the alt attack's own cooldown and fire bolt; summoned imps look like imps and die with the summoner
 - A* routes around a wall
 - lich immunity and draining
 - FOV-filtered snapshots

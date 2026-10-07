@@ -225,9 +225,11 @@ export class Effects {
     }
   }
 
-  raise(x: number, y: number): void {
-    this.ring(x, y, 10, 0x3ad04a, 0.5, true);
-    for (let i = 0; i < 14; i++) this.particle(x + (Math.random() * 12 - 6), y, 0, -15 - Math.random() * 25, 0.7, 0x3ad04a);
+  /** A minion appears: green for raised skeletons, fiery for summoned imps. */
+  raise(x: number, y: number, fire = false): void {
+    const c = fire ? 0xff7020 : 0x3ad04a;
+    this.ring(x, y, 10, c, 0.5, true);
+    for (let i = 0; i < 14; i++) this.particle(x + (Math.random() * 12 - 6), y, 0, -15 - Math.random() * 25, 0.7, fire && i % 2 ? 0xffd040 : c);
   }
 
   immune(x: number, y: number): void {

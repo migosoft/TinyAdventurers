@@ -95,6 +95,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
     {
         let ai = &mut run.monsters[mi].ai;
         ai.cd -= dt;
+        ai.alt_cd -= dt;
         ai.raise_cd -= dt;
     }
 
@@ -124,21 +125,22 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
     if let Some(w) = run.monsters[mi].ai.windup {
         let t = w.t - dt;
         if t > 0.0 {
-            run.monsters[mi].ai.windup = Some(Windup { t, aim: w.aim });
+            run.monsters[mi].ai.windup = Some(Windup { t, aim: w.aim, alt: w.alt });
             return;
         }
         run.monsters[mi].ai.windup = None;
         if let Some(pi) = seen {
-            perform_attack(run, mi, pi, def.attack);
+            let attack = if w.alt { def.alt.unwrap_or(def.attack) } else { def.attack };
+            perform_attack(run, mi, pi, attack, w.alt);
         }
         return;
     }
 
-    if etype == EnemyType::Necromancer {
+    if matches!(etype, EnemyType::Necromancer | EnemyType::Summoner) {
         if let Some(_pi) = seen {
             let minions = run.monsters.iter().filter(|o| o.alive && o.owner == Some(run.monsters[mi].id)).count();
             if run.monsters[mi].ai.raise_cd <= 0.0 && minions < enemies::NECRO_MAX_MINIONS {
-                raise_skeleton(run, mi);
+                raise_minions(run, mi, etype == EnemyType::Summoner);
                 return;
             }
         }
@@ -151,13 +153,28 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
             let d = pos.dist(ppos);
             let aim = pos.angle_to(ppos);
             run.monsters[mi].aim = aim;
-            let (range, preferred, windup, cooldown) = match def.attack {
-                AttackStyle::Melee { range, windup, cooldown, .. } => (range + PLAYER_RADIUS + def.radius, 0.0, windup, cooldown),
-                AttackStyle::Ranged { range, preferred, windup, cooldown, .. } => (range, preferred, windup, cooldown),
+            // Reach and wind-up of an attack; movement follows the main attack.
+            let reach = |a: AttackStyle| match a {
+                AttackStyle::Melee { range, windup, .. } => (range + PLAYER_RADIUS + def.radius, 0.0, windup),
+                AttackStyle::Ranged { range, preferred, windup, .. } => (range, preferred, windup),
             };
-            let _ = cooldown;
+            let (range, preferred, _) = reach(def.attack);
+            if let Some(alt) = def.alt {
+                // Second attack: a claw when the target is in reach, a bolt only from afar.
+                let (alt_range, _, windup) = reach(alt);
+                let usable = match alt {
+                    AttackStyle::Melee { .. } => d <= alt_range,
+                    AttackStyle::Ranged { .. } => d <= alt_range && d >= enemies::ALT_BOLT_MIN_DIST && d > range,
+                };
+                if usable && run.monsters[mi].ai.alt_cd <= 0.0 {
+                    run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: true });
+                    set_anim(run, mi, Anim::Windup);
+                    return;
+                }
+            }
             if d <= range && run.monsters[mi].ai.cd <= 0.0 {
-                run.monsters[mi].ai.windup = Some(Windup { t: windup, aim });
+                let (_, _, windup) = reach(def.attack);
+                run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: false });
                 set_anim(run, mi, Anim::Windup);
                 return;
             }
@@ -256,14 +273,29 @@ fn gait(run: &Run, mi: usize, speed: f64) -> f64 {
     }
 }
 
-fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle) {
+/// Minimum pause (s) between a monster's two different attacks.
+const ATTACK_GAP: f64 = 0.4;
+
+/// `alt`: the second attack, which has its own cooldown. Either attack also
+/// keeps the other one back for a moment, so they never land at once.
+fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt: bool) {
     let pos = run.monsters[mi].pos;
     let ppos = run.players[pi].pos();
     let aim = pos.angle_to(ppos);
     run.monsters[mi].aim = aim;
+    let set_cd = |run: &mut Run, cd: f64| {
+        let ai = &mut run.monsters[mi].ai;
+        if alt {
+            ai.alt_cd = cd;
+            ai.cd = ai.cd.max(ATTACK_GAP);
+        } else {
+            ai.cd = cd;
+            ai.alt_cd = ai.alt_cd.max(ATTACK_GAP);
+        }
+    };
     match attack {
         AttackStyle::Melee { range, damage, cooldown, .. } => {
-            run.monsters[mi].ai.cd = cooldown;
+            set_cd(run, cooldown);
             set_anim(run, mi, Anim::Melee);
             let reach = range + PLAYER_RADIUS + run.monsters[mi].radius + 4.0;
             if pos.dist(ppos) <= reach {
@@ -271,7 +303,8 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle) {
             }
         }
         AttackStyle::Ranged { projectile, speed, damage, cooldown, range, .. } => {
-            run.monsters[mi].ai.cd = cooldown * run.rng.gen_range(0.85..1.15);
+            let cd = cooldown * run.rng.gen_range(0.85..1.15);
+            set_cd(run, cd);
             set_anim(run, mi, Anim::Shoot);
             let id = run.monsters[mi].id;
             let dir = Vec2::from_angle(aim);
@@ -280,7 +313,8 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle) {
     }
 }
 
-fn raise_skeleton(run: &mut Run, mi: usize) {
+/// Necromancers raise skeletons; summoners (`fire`) summon imps.
+fn raise_minions(run: &mut Run, mi: usize, fire: bool) {
     let (pos, id) = (run.monsters[mi].pos, run.monsters[mi].id);
     run.monsters[mi].ai.raise_cd = enemies::NECRO_RAISE_COOLDOWN;
     set_anim(run, mi, Anim::Cast);
@@ -295,8 +329,9 @@ fn raise_skeleton(run: &mut Run, mi: usize) {
         if minions >= enemies::NECRO_MAX_MINIONS || k > 0 && run.rng.gen_bool(0.5) {
             break;
         }
-        run.spawn_enemy(EnemyType::RaisedSkeleton, spot, Some(id), party);
-        run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32 }, Some(spot));
+        let t = if fire { EnemyType::SummonedImp } else { EnemyType::RaisedSkeleton };
+        run.spawn_enemy(t, spot, Some(id), party);
+        run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, fire }, Some(spot));
     }
 }
 
@@ -378,6 +413,7 @@ pub fn astar(map: &Map, from: Vec2, to: Vec2, max_nodes: usize) -> Option<Vec<Ve
 mod tests {
     use super::super::tests::test_run;
     use super::*;
+    use crate::defs::kinds::EntityKind;
     use crate::dungeon::Tile;
     use crate::protocol::{BossId, ClassId};
 
@@ -427,14 +463,110 @@ mod tests {
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let necro = run.spawn_enemy(EnemyType::Necromancer, ppos + Vec2::new(60.0, 0.0), None, 1);
         let ni = run.monster_idx(necro).unwrap();
-        raise_skeleton(&mut run, ni);
+        raise_minions(&mut run, ni, false);
         run.monsters[ni].ai.raise_cd = 0.0;
-        raise_skeleton(&mut run, ni);
+        raise_minions(&mut run, ni, false);
         let minions = run.monsters.iter().filter(|m| m.owner == Some(necro) && m.alive).count();
         assert!(minions >= 1);
         run.kill_monster(ni);
         let minions = run.monsters.iter().filter(|m| m.owner == Some(necro) && m.alive).count();
         assert_eq!(minions, 0);
+    }
+
+    #[test]
+    fn demon_dungeon_has_demons_instead_of_skeletons() {
+        let count = |run: &Run, t: EnemyType| run.monsters.iter().filter(|m| m.etype == Some(t)).count();
+        let lich = test_run(&[ClassId::Wizard], BossId::Lich);
+        let demon = test_run(&[ClassId::Wizard], BossId::Demon);
+        // Same seed, same map and spawn spots: only the enemy types differ.
+        assert_eq!(lich.dungeon.spawns.len(), demon.dungeon.spawns.len());
+        assert!(count(&lich, EnemyType::SkeletonArcher) + count(&lich, EnemyType::SkeletonWarrior) > 0, "seed has skeletons");
+        assert_eq!(count(&demon, EnemyType::Imp), count(&lich, EnemyType::SkeletonArcher));
+        assert_eq!(count(&demon, EnemyType::Chort), count(&lich, EnemyType::SkeletonWarrior));
+        assert_eq!(count(&demon, EnemyType::Summoner), count(&lich, EnemyType::Necromancer));
+        for t in [EnemyType::SkeletonArcher, EnemyType::SkeletonWarrior, EnemyType::Necromancer] {
+            assert_eq!(count(&demon, t), 0, "{t:?} in the demon's dungeon");
+        }
+        for t in [EnemyType::Imp, EnemyType::Chort, EnemyType::Summoner] {
+            assert_eq!(count(&lich, t), 0, "{t:?} outside the demon's dungeon");
+        }
+    }
+
+    /// Open floor around player 0, so test monsters always see it.
+    fn open_floor(run: &mut Run) {
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for y in ty - 3..=ty + 3 {
+            for x in tx - 8..=tx + 8 {
+                run.dungeon.map.set(x, y, Tile::Floor);
+            }
+        }
+    }
+
+    /// A lone monster of type `t` at `off` from player 0, attacks ready.
+    /// Returns which attack its first wind-up leads to (`Some(alt)`).
+    fn first_windup(t: EnemyType, off: Vec2) -> Option<bool> {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        let ppos = run.players[0].pos();
+        run.monsters.retain(|m| m.is_boss);
+        let id = run.spawn_enemy(t, ppos + off, None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].ai.cd = 0.0;
+        run.monsters[mi].ai.alt_cd = 0.0;
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        run.monsters[mi].ai.windup.map(|w| w.alt)
+    }
+
+    #[test]
+    fn imp_claws_up_close_and_shoots_from_afar() {
+        assert_eq!(first_windup(EnemyType::Imp, Vec2::new(12.0, 0.0)), Some(true), "claw");
+        assert_eq!(first_windup(EnemyType::Imp, Vec2::new(80.0, 0.0)), Some(false), "fire bolt");
+    }
+
+    #[test]
+    fn chort_claws_up_close_and_throws_bolts_from_afar() {
+        assert_eq!(first_windup(EnemyType::Chort, Vec2::new(12.0, 0.0)), Some(false), "claw");
+        assert_eq!(first_windup(EnemyType::Chort, Vec2::new(30.0, 0.0)), None, "too close for a bolt, too far for a claw");
+        assert_eq!(first_windup(EnemyType::Chort, Vec2::new(80.0, 0.0)), Some(true), "fire bolt");
+    }
+
+    #[test]
+    fn alt_attack_uses_its_own_cooldown_and_projectile() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        let ppos = run.players[0].pos();
+        run.monsters.retain(|m| m.is_boss);
+        let id = run.spawn_enemy(EnemyType::Chort, ppos + Vec2::new(80.0, 0.0), None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].ai.alt_cd = 0.0;
+        for _ in 0..60 {
+            tick_monster(&mut run, mi, 1.0 / 60.0);
+            if !run.projectiles.is_empty() {
+                break;
+            }
+        }
+        assert_eq!(run.projectiles.len(), 1);
+        assert_eq!(run.projectiles[0].kind, EntityKind::FireBolt);
+        let ai = &run.monsters[mi].ai;
+        assert!(ai.alt_cd > 2.0, "bolt cooldown started");
+        assert!(ai.cd < 1.0, "claw cooldown untouched (only the short gap)");
+    }
+
+    #[test]
+    fn summoner_summons_imps_that_die_with_it() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let ppos = run.players[0].pos();
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let s = run.spawn_enemy(EnemyType::Summoner, ppos + Vec2::new(60.0, 0.0), None, 1);
+        let si = run.monster_idx(s).unwrap();
+        run.events.clear();
+        raise_minions(&mut run, si, true);
+        let imps: Vec<_> = run.monsters.iter().filter(|m| m.owner == Some(s) && m.alive).collect();
+        assert!(!imps.is_empty());
+        assert!(imps.iter().all(|m| m.etype == Some(EnemyType::SummonedImp) && m.kind == EntityKind::Imp), "summoned imps look like imps");
+        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Raise { fire: true, .. })));
+        run.kill_monster(si);
+        assert_eq!(run.monsters.iter().filter(|m| m.owner == Some(s) && m.alive).count(), 0);
     }
 
     #[test]

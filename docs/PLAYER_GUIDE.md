@@ -1,6 +1,6 @@
 # Tiny Adventurers — Player Guide
 
-Gather a party of up to four heroes and crawl through a dungeon full of goblins, skeletons, orcs and necromancers. At the far end of the dungeon a final boss is waiting.
+Gather a party of up to four heroes and crawl through a dungeon full of goblins, skeletons, orcs and necromancers (or demons, if the demon is the end boss). At the far end of the dungeon a final boss is waiting.
 
 ## Getting started
 
@@ -65,8 +65,15 @@ The two boxes at the bottom of the screen show your abilities. They darken while
 | Orc warrior | Tough melee fighter, hits hard. |
 | Orc archer | Tough archer. |
 | Necromancer | Casts green shadow bolts and **raises skeletons**. Kill the necromancer and all of its skeletons crumble. |
-
 | Mimic | Looks exactly like a treasure chest. Walk up to it (or hit it) and its lid flies open: it **hops after you** and bites. It stops chasing when you get out of sight and waits where it was found. Worth 25 coins. |
+
+**The demon's dungeon** (when the demon is the end boss) has demons instead of skeletons:
+
+| Enemy | What to expect |
+|---|---|
+| Imp | Small demon in place of the skeleton archer. Keeps its distance and shoots **fire bolts**, but claws you if you get close. |
+| Chort | Horned demon in place of the skeleton warrior. Closes in and claws, and throws a fire bolt now and then while you are out of reach. |
+| Summoner | Red-robed caster in place of the necromancer. Shoots fire bolts and **summons imps**. Kill the summoner and its imps vanish. |
 
 Enemies **flash red and shake** just before they strike. That is your moment to step away. Enemies get tougher the deeper you go, and halls hold the biggest groups.
 
@@ -112,7 +119,7 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 
 - **Coins** come from treasure chests, mimics (25) and the boss (50). Like XP, they go to every living hero and are added to your profile when the run ends. The lobby shows your coins next to your XP. There is nothing to buy with them yet: they are saved for loadouts.
 
-- Every kill gives **XP to every living member of the party**: 2 for a raised skeleton, 5 for a goblin, 8 for a skeleton, 12 for an orc, 20 for a disciple, 25 for a necromancer and **300 for the boss**. Once you have fallen, you stop earning.
+- Every kill gives **XP to every living member of the party**: 2 for a raised skeleton or summoned imp, 5 for a goblin, 8 for a skeleton, imp or chort, 12 for an orc, 20 for a disciple, 25 for a necromancer or summoner and **300 for the boss**. Once you have fallen, you stop earning.
 - When the run ends, won or lost, your XP is added to your **profile**. If you leave early, you keep what you earned so far.
 - Spend XP in the **Upgrades** panel in the lobby. Each stat has 10 levels; the first level costs 100 XP and each further level 75 XP more.
 

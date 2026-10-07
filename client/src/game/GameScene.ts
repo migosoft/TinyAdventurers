@@ -311,7 +311,7 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'Raise':
-        this.fx.raise(ev.x, ev.y);
+        this.fx.raise(ev.x, ev.y, ev.fire);
         break;
       case 'Immune':
         this.fx.immune(ev.x, ev.y);
