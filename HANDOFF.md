@@ -9,7 +9,13 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-08, compact snapshots and inputs)
+## Last session (2026-10-08, bugfix: coin icon)
+
+**Bug:** the coin icon before the coin count (lobby and HUD) showed as a blank blue box. The CSS sprite in `client/src/style.css` (`.coin-icon`) scaled the atlas to 1536x1536 px, but the atlas is 512x736, so the icon sampled the wrong region. **Fix:** `background-size: 1536px auto` keeps the aspect ratio. Committed directly on `main` (small bugfix).
+
+**Confirmed by the user:** the coin icon looks right, and a run after the compact snapshots change plays as before.
+
+## Session before (2026-10-08, compact snapshots and inputs)
 
 **Branch:** `feature/compact-snapshots` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
 
@@ -214,6 +220,7 @@ Steps 2–6 followed in the next session.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
 - Demon dungeon enemies (imps, chorts, summoners) in a real run (played by the user, "work well").
+- Compact snapshots: a real run plays as before; the coin icon in lobby and HUD (confirmed by the user, 2026-10-08).
 - Terrain in a normal water run (chasm fall, drowning), chests and mimics, and XP and coins banked after a real run (confirmed by the user, 2026-10-08).
 - The gallery was checked visually: animations, melee swooshes, dragon breath from the mouth and nostrils.
 
@@ -301,9 +308,8 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Compact snapshots:** have the user play one run to confirm nothing changed in feel.
-2. **Knockback** (its own feature, the user's decision): demo first, as usual. Decide which attacks push and how far; then enemies can fall and drown too (they need a monster version of `Sink`/`kill_player`). See TODO.md.
-3. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
-4. Loadouts: design new abilities, then add the lobby picker, paid with coins.
-5. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
-6. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), the prediction corrections in busy runs under lag (TODO.md, Network).
+1. **Knockback** (its own feature, the user's decision): demo first, as usual. Decide which attacks push and how far; then enemies can fall and drown too (they need a monster version of `Sink`/`kill_player`). See TODO.md.
+2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
+3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
+4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
+5. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), the prediction corrections in busy runs under lag (TODO.md, Network).
