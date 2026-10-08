@@ -36,6 +36,7 @@ async fn main() {
         .route("/ws", get(ws_handler))
         .route("/health", get(|| async { "OK" }))
         .fallback_service(files)
+        .layer(axum::middleware::from_fn(cache_headers))
         .with_state(lobby);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.expect("bind");
@@ -45,6 +46,21 @@ async fn main() {
     });
     tracing::info!("Tiny Adventurers server on :{port}, serving {static_dir}");
     axum::serve(listener, app).await.expect("server");
+}
+
+/// Vite's hashed bundles never change, so they may be cached for good. Everything
+/// else (index.html, the atlas) must be revalidated, or a browser keeps running an
+/// old client against a new server (wrong tile rules, prediction fighting the server).
+async fn cache_headers(req: axum::extract::Request, next: axum::middleware::Next) -> axum::response::Response {
+    let path = req.uri().path().to_owned();
+    let mut res = next.run(req).await;
+    if path == "/ws" || path == "/health" {
+        return res;
+    }
+    let hashed = path.starts_with("/assets/index-") && res.status().is_success();
+    let value = if hashed { "public, max-age=31536000, immutable" } else { "no-cache" };
+    res.headers_mut().insert(axum::http::header::CACHE_CONTROL, axum::http::HeaderValue::from_static(value));
+    res
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(lobby): State<SharedLobby>) -> impl IntoResponse {

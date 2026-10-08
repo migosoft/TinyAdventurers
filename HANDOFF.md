@@ -237,6 +237,7 @@ Steps 2–6 followed in the next session.
 - **Checking wall tiles without playing:** a throwaway `client/src/__dump.ts` that builds a `TileMap` from an ASCII map (`#` wall, `.` floor, space void) and prints `tileDraws` per cell, plus a PowerShell `System.Drawing` script that composes the frames from the pack PNG using `tile_list_v1.7`, gives exact renders. Use void cells behind walls like the real generator, and delete the dump script afterwards.
 - **Phaser `Graphics.clear()`** resets fill and line styles; set `fillStyle` again after it (see the `spark` texture in `main.ts`).
 
+- **Stale client after a rebuild:** before 2026-10-08 the server sent no `Cache-Control`, so browsers could keep the old `index.html` and bundle for `/` while `/?debug…` (a different URL) loaded fresh. The user saw lava only in debug mode: the old client drew terrain as dark cells and its prediction fought the server. `cache_headers` in `main.rs` fixes it. If a client ever looks older than the server, hard-reload (Ctrl+F5) first.
 - **Generated client files:** never edit `client/src/generated/*` by hand. Change Rust and run `cargo test`.
 - **Message tag:** MessagePack enums are tagged with the field `t`, so no variant may have a field named `t`. That is why `Ping`/`Pong` use `time`.
 - **Prediction parity:** client prediction relies on `client/src/sim/collision.ts` matching `server/src/collision.rs` exactly, and on the order *move, then abilities* in `Run::apply_input`. If you change movement, change both and keep `sim.test.ts` green.

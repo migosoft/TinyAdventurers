@@ -231,6 +231,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 **Input (`GameScene.fixedStep`).**
 - Inputs are sent at a fixed 60 Hz. Each step carries movement, the aim, and a shot id when an ability fires; the client fires when the button is held or was clicked and its local cooldown is ready.
 - WebSocket `TCP_NODELAY` is enabled on the server listener.
+- **Cache headers** (`cache_headers` in `main.rs`): hashed Vite bundles (`/assets/index-*`) are `immutable`; everything else (`index.html`, the atlas) is `no-cache`. Without this, a browser could keep running an old client against a new server, and the tile rules and prediction would disagree.
 
 **Prediction (`world.ts` `Predictor`).**
 - Local movement uses the TS collision port. It is bit-identical to Rust, which `sim.test.ts` checks against the Rust-written fixtures.
