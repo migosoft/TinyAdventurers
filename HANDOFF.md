@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-08, terrain steps 2–6: terrain in real runs)
 
-**Branch:** `feature/terrain-rules` (from `main`), committed, **not merged or pushed yet**. Ask the user before merging into `main` or pushing.
+**Branch:** `feature/terrain-rules` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
 
 **User decisions this session:**
 - **Knockback is its own feature, later.** It is not part of terrain. So in real runs drowning only happens when a dash ends in deep water, and enemies never end up in terrain.
@@ -256,7 +256,7 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Finish terrain:** ask the user to merge `feature/terrain-rules` into `main` and push, and to play one normal run per theme. Adjust the look or the amount of terrain from their feedback (`place_terrain` rates and sizes).
+1. **Finish terrain:** ask the user to play a normal water run (lich or dragon). Adjust the look or the amount of terrain from their feedback (`place_terrain` rates and sizes).
 2. **Knockback** (its own feature, the user's decision): demo first, as usual. Decide which attacks push and how far; then enemies can fall and drown too (they need a monster version of `Sink`/`kill_player`). See TODO.md.
 3. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 4. Loadouts: design new abilities, then add the lobby picker, paid with coins.
