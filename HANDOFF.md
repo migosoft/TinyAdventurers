@@ -40,9 +40,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Found on the way:** the reachability test first failed because a wide boss was sent to tile centres it cannot reach (next to walls). That is fixed by skipping such waypoints and making clearance a cost.
 
-**Open, for the user:**
-- **A live check:** pushes in a real run and in boss fights.
-- **Chained pushes:** the bot, mobbed by several orc warriors, was pushed again and again. That may feel unfair, and a short push immunity would fix it (TODO.md).
+**Confirmed live by the user:** "Everything works as intended": pushes in real runs and boss fights, and the boss-hall chasms. No push immunity for now. Chained pushes by orc mobs stay a TODO item in case they become a problem.
 
 ## Session before (2026-10-08, bugfix: coin icon)
 
@@ -348,7 +346,7 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Finish knockback:** the user's live check of `feature/knockback`, then ask to merge and push. Decide about a push immunity if chained pushes feel unfair.
+1. **Merge knockback:** the user confirmed `feature/knockback` live; ask before merging into `main` and pushing (if not done yet).
 2. **Ogre mini-boss** (next feature, the user's decision): start by showing an enlarged preview of the pack `ogre` sprite with `weapon_baton_with_spikes`, then demo first. One per run, roaming, its club pushes. See TODO.md (New enemies).
 3. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 4. Loadouts: design new abilities, then add the lobby picker, paid with coins.
