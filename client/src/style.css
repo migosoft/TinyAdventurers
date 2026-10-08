@@ -302,14 +302,15 @@ kbd {
 .upgrades .coins {
   margin-left: 12px;
 }
-/* The pack's coin (atlas 289,385, 6x7) at 3x. */
+/* The pack's coin (atlas 289,385, 6x7) at 3x. Height `auto` keeps the atlas's
+   aspect ratio (it is not square). */
 .coin-icon {
   display: inline-block;
   width: 18px;
   height: 21px;
   margin-right: 6px;
   vertical-align: -4px;
-  background: url(/assets/atlas.png) -867px -1155px / 1536px 1536px no-repeat;
+  background: url(/assets/atlas.png) -867px -1155px / 1536px auto no-repeat;
   image-rendering: pixelated;
 }
 .hud .coins {
