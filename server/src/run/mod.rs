@@ -841,6 +841,10 @@ pub mod tests {
     use tokio::sync::mpsc::unbounded_channel;
 
     pub fn test_run(classes: &[ClassId], boss: BossId) -> Run {
+        test_run_seed(classes, boss, 7)
+    }
+
+    pub fn test_run_seed(classes: &[ClassId], boss: BossId, seed: u64) -> Run {
         let members = classes
             .iter()
             .enumerate()
@@ -850,7 +854,7 @@ pub mod tests {
                 Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, token: None, upgrades: StatUpgrades::default() }
             })
             .collect();
-        Run::new(1, members, 7, Some(boss))
+        Run::new(1, members, seed, Some(boss))
     }
 
     #[test]

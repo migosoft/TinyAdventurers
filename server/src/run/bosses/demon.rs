@@ -4,7 +4,7 @@ use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::math::Vec2;
 use crate::run::abilities::spawn_monster_projectile;
-use crate::run::ai::move_toward;
+use crate::run::ai::{move_toward, path_toward};
 use crate::run::Run;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -125,7 +125,7 @@ impl BossBehaviour for Demon {
             self.action = Some((Action::Cleave, 0.45));
             set_anim(run, bi, Anim::Windup);
         } else if dist > CLEAVE_RANGE * 0.8 {
-            move_toward(run, bi, ppos, speed, dt);
+            path_toward(run, bi, ppos, speed, dt);
             set_anim(run, bi, Anim::Move);
         } else {
             set_anim(run, bi, Anim::Idle);

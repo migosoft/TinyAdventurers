@@ -121,6 +121,12 @@ pub fn walk_line(map: &Map, a: Vec2, b: Vec2, mover: Mover) -> bool {
     clear_line(a, b, |p| map.blocks_at(p, mover))
 }
 
+/// True if a straight line crosses no terrain this mover avoids (walls aside:
+/// figures slide along them).
+pub fn terrain_line(map: &Map, a: Vec2, b: Vec2, mover: Mover) -> bool {
+    clear_line(a, b, |p| map.blocks_at(p, mover) && !map.opaque_at(p))
+}
+
 fn clear_line(a: Vec2, b: Vec2, blocked: impl Fn(Vec2) -> bool) -> bool {
     let d = b - a;
     let len = d.len();

@@ -186,6 +186,10 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     let mut terrain_rng = rng.clone();
     terrain_rng.set_stream(8);
     place_terrain(&mut terrain_rng, &mut map, &rooms, theme, &mut spawns, &chests);
+    // Chasms in the boss hall (stream 9), so knockback matters in the boss fight.
+    let mut hall_rng = rng.clone();
+    hall_rng.set_stream(9);
+    place_boss_chasms(&mut hall_rng, &mut map, &boss);
 
     let mut dungeon = Dungeon {
         map,
@@ -423,6 +427,75 @@ fn place_terrain(rng: &mut ChaCha8Rng, map: &mut Map, rooms: &[Room], theme: The
     }
 }
 
+/// Chasms in the boss hall: one or two strips along the walls and one or two
+/// pits. They keep clear of the entrance and the boss's start, leave gaps of
+/// at least three tiles around pits (the dragon is wider than two tiles), and
+/// are undone if they cut any of the hall's floor off from the entrance.
+fn place_boss_chasms(rng: &mut ChaCha8Rng, map: &mut Map, r: &Rect) {
+    let (cx, cy) = r.center();
+    let keep_clear = |x: i32, y: i32| (x - cx).abs() <= 3 && (y - cy).abs() <= 3 || (x - cx).abs() <= 4 && y >= r.y + r.h - 5;
+    let connected = |map: &Map| {
+        let d = bfs(map, cx, r.y + r.h - 1);
+        (r.y..r.y + r.h).all(|y| (r.x..r.x + r.w).all(|x| !map.safe(x, y) || d[(y * map.w + x) as usize] >= 0))
+    };
+    let strips = rng.gen_range(1..=2);
+    let pits = rng.gen_range(1..=2);
+    for k in 0..strips + pits {
+        let pit = k >= strips;
+        let gap = if pit { 3 } else { 2 };
+        for _ in 0..12 {
+            let cells = if pit { hall_pit(rng, r) } else { wall_strip(rng, r) };
+            let fits = cells.iter().all(|&(x, y)| {
+                map.get(x, y) == Tile::Floor as u8 && !keep_clear(x, y) && (-gap..=gap).all(|dy| (-gap..=gap).all(|dx| map.get(x + dx, y + dy) != Tile::Chasm as u8))
+            });
+            if !fits {
+                continue;
+            }
+            for &(x, y) in &cells {
+                map.set(x, y, Tile::Chasm);
+            }
+            if connected(map) {
+                break;
+            }
+            for &(x, y) in &cells {
+                map.set(x, y, Tile::Floor);
+            }
+        }
+    }
+}
+
+/// A pit of 2x2 to 3x2 tiles (either way round), three tiles from the walls.
+fn hall_pit(rng: &mut ChaCha8Rng, r: &Rect) -> Vec<(i32, i32)> {
+    let (mut w, mut h) = (rng.gen_range(2..=3), 2);
+    if rng.gen_bool(0.5) {
+        std::mem::swap(&mut w, &mut h);
+    }
+    let x0 = rng.gen_range(r.x + 3..=r.x + r.w - 3 - w);
+    let y0 = rng.gen_range(r.y + 3..=r.y + r.h - 3 - h);
+    (y0..y0 + h).flat_map(|y| (x0..x0 + w).map(move |x| (x, y))).collect()
+}
+
+/// A drop-off along one wall: 4 to 7 tiles long, 1 or 2 deep.
+fn wall_strip(rng: &mut ChaCha8Rng, r: &Rect) -> Vec<(i32, i32)> {
+    let depth = rng.gen_range(1..=2);
+    let len = rng.gen_range(4..=7);
+    let side = rng.gen_range(0..4);
+    let along = if side < 2 { r.w } else { r.h };
+    let s0 = rng.gen_range(0..=along - len);
+    let mut cells = Vec::new();
+    for i in s0..s0 + len {
+        for j in 0..depth {
+            cells.push(match side {
+                0 => (r.x + i, r.y + j),
+                1 => (r.x + i, r.y + r.h - 1 - j),
+                2 => (r.x + j, r.y + i),
+                _ => (r.x + r.w - 1 - j, r.y + i),
+            });
+        }
+    }
+    cells
+}
+
 /// Moves spawns that terrain now covers to the nearest free floor tile in the
 /// room. False (nothing moved) if one finds no place.
 fn move_spawns_off(map: &Map, r: &Rect, spawns: &mut [Spawn], chests: &[(i32, i32)]) -> bool {
@@ -594,8 +667,23 @@ mod tests {
                 if i != d.boss && d.map.safe(r.center().0, r.center().1) {
                     assert!(at(r) < boss_d, "seed {seed}: room {i} farther than boss hall");
                 }
-                if matches!(room.kind, RoomKind::Start | RoomKind::Boss) {
+                if room.kind == RoomKind::Start {
                     assert!((r.y..r.y + r.h).all(|y| (r.x..r.x + r.w).all(|x| !is_terrain(d.map.get(x, y)))), "seed {seed}: terrain in room {i}");
+                }
+                if room.kind == RoomKind::Boss {
+                    // Only chasms, some of them, never at the boss's start or the entrance.
+                    let tiles: Vec<u8> = (r.y..r.y + r.h).flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y))).map(|(x, y)| d.map.get(x, y)).collect();
+                    assert!(tiles.iter().all(|&t| !is_terrain(t) || t == Tile::Chasm as u8), "seed {seed}: other terrain in the boss hall");
+                    assert!(tiles.contains(&(Tile::Chasm as u8)), "seed {seed}: no chasm in the boss hall");
+                    let (cx, cy) = r.center();
+                    for (x, y) in (-2..=2).flat_map(|dy| (-2..=2).map(move |dx| (cx + dx, cy + dy))) {
+                        assert!(d.map.safe(x, y), "seed {seed}: chasm at the boss's start");
+                    }
+                    for &(x, y) in &d.door {
+                        for (x, y) in (-3..=3).flat_map(|dy| (-3..=3).map(move |dx| (x + dx, y + dy))) {
+                            assert!(!r.contains_tile(x, y) || d.map.safe(x, y), "seed {seed}: chasm at the entrance");
+                        }
+                    }
                 }
             }
             for &t in &d.map.tiles {

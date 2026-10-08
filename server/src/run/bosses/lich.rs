@@ -9,7 +9,7 @@ use crate::dungeon::Mover;
 use crate::math::Vec2;
 use crate::protocol::Ev;
 use crate::run::abilities::spawn_monster_projectile;
-use crate::run::ai::move_toward;
+use crate::run::ai::{move_toward, path_toward};
 use crate::run::Run;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -120,7 +120,10 @@ impl BossBehaviour for Lich {
             let speed = run.monsters[bi].speed;
             // Keep a casting distance.
             let to = if dist < 90.0 { pos + (pos - ppos).norm() * 16.0 } else if dist > 140.0 { ppos } else { pos };
-            if to != pos {
+            if to == ppos {
+                path_toward(run, bi, to, speed, dt);
+                set_anim(run, bi, Anim::Move);
+            } else if to != pos {
                 move_toward(run, bi, to, speed, dt);
                 set_anim(run, bi, Anim::Move);
             } else {

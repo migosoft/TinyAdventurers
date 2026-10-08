@@ -33,6 +33,10 @@ impl Vec2 {
             Vec2 { x: self.x / l, y: self.y / l }
         }
     }
+    /// Turned a quarter turn (same length).
+    pub fn perp(self) -> Vec2 {
+        Vec2 { x: -self.y, y: self.x }
+    }
     pub fn angle(self) -> f64 {
         self.y.atan2(self.x)
     }

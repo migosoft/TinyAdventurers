@@ -6,7 +6,7 @@ use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::math::{angle_diff, Vec2};
 use crate::run::abilities::spawn_monster_projectile;
-use crate::run::ai::move_toward;
+use crate::run::ai::path_toward;
 use crate::run::Run;
 use rand::Rng;
 
@@ -151,7 +151,7 @@ impl BossBehaviour for Dragon {
             set_anim(run, bi, Anim::Windup);
         } else if dist > 60.0 {
             let speed = run.monsters[bi].speed;
-            move_toward(run, bi, ppos, speed, dt);
+            path_toward(run, bi, ppos, speed, dt);
             set_anim(run, bi, Anim::Move);
         } else {
             set_anim(run, bi, Anim::Idle);

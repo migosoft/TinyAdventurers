@@ -4,11 +4,11 @@
 use super::abilities::spawn_monster_projectile;
 use super::entities::{AiState, Windup};
 use super::Run;
-use crate::collision::{line_of_sight, move_box, walk_line};
+use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::enemies::{self, AttackStyle, EnemyType};
 use crate::defs::kinds::Anim;
-use crate::dungeon::{Map, Mover};
+use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
 use crate::protocol::Ev;
 use rand::Rng;
@@ -51,8 +51,12 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     false
 }
 
-/// Follow an A* path to `goal`, recomputing it periodically.
-fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) -> bool {
+/// Follow an A* path to `goal`, recomputing it periodically. Figures wider
+/// than a tile (the demon, the dragon) prefer paths a tile clear of walls and
+/// terrain, so they rarely wedge into a pit corner, and skip a waypoint they
+/// cannot get any closer to. A boss that finds no path walks straight at the
+/// goal instead of giving up.
+pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) -> bool {
     let (pos, need_repath) = {
         let m = &mut run.monsters[mi];
         m.ai.repath_t -= dt;
@@ -61,22 +65,31 @@ fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) -> boo
     if pos.dist(goal) < 4.0 {
         return true;
     }
-    let mover = run.monsters[mi].mover;
-    if walk_line(&run.dungeon.map, pos, goal, mover) {
+    let (mover, radius, is_boss) = (run.monsters[mi].mover, run.monsters[mi].radius, run.monsters[mi].is_boss);
+    let wide = radius > TILE / 2.0;
+    let side = (goal - pos).norm().perp() * radius;
+    let map = &run.dungeon.map;
+    if walk_line(map, pos, goal, mover) && (!wide || terrain_line(map, pos + side, goal + side, mover) && terrain_line(map, pos - side, goal - side, mover)) {
         run.monsters[mi].ai.path.clear();
         return move_toward(run, mi, goal, speed, dt);
     }
     if need_repath {
-        let path = astar(&run.dungeon.map, pos, goal, 2500, mover).unwrap_or_default();
+        let path = astar_clear(&run.dungeon.map, pos, goal, 2500, mover, wide).unwrap_or_default();
         let m = &mut run.monsters[mi];
         m.ai.path = path;
         m.ai.repath_t = 0.6;
         if m.ai.path.is_empty() {
+            if is_boss {
+                return move_toward(run, mi, goal, speed, dt);
+            }
             return true; // unreachable: give up
         }
     }
     let Some(&next) = run.monsters[mi].ai.path.first() else { return true };
-    if move_toward(run, mi, next, speed, dt) {
+    let before = run.monsters[mi].pos;
+    let arrived = move_toward(run, mi, next, speed, dt);
+    let stuck = wide && run.monsters[mi].pos.dist(before) < speed * dt * 0.25;
+    if arrived || stuck {
         run.monsters[mi].ai.path.remove(0);
     }
     false
@@ -365,6 +378,13 @@ pub fn separate_monsters(run: &mut Run) {
 /// 4-directional A* on the tiles this mover can walk. Returns waypoints
 /// (tile centers), excluding the start tile.
 pub fn astar(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover) -> Option<Vec<Vec2>> {
+    astar_clear(map, from, to, max_nodes, mover, false)
+}
+
+/// A* as above; with `clear`, tiles next to anything this mover cannot enter
+/// cost extra, so figures wider than a tile keep their distance where they can.
+fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, clear: bool) -> Option<Vec<Vec2>> {
+    let near_blocked = |x: i32, y: i32| (-1..=1).any(|dy| (-1..=1).any(|dx| map.blocks(x + dx, y + dy, mover)));
     let start = Map::tile_of(from);
     let goal = Map::tile_of(to);
     if map.blocks(goal.0, goal.1, mover) {
@@ -401,7 +421,7 @@ pub fn astar(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover) ->
             if map.blocks(nb.0, nb.1, mover) {
                 continue;
             }
-            let ng = cg + 1;
+            let ng = cg + if clear && nb != goal && near_blocked(nb.0, nb.1) { 5 } else { 1 };
             if g.get(&nb).map_or(true, |&old| ng < old) {
                 g.insert(nb, ng);
                 came.insert(nb, cur);
@@ -414,11 +434,42 @@ pub fn astar(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover) ->
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::test_run;
+    use super::super::tests::{test_run, test_run_seed};
     use super::*;
     use crate::defs::kinds::EntityKind;
     use crate::dungeon::Tile;
     use crate::protocol::{BossId, ClassId};
+
+    #[test]
+    fn wide_bosses_reach_every_spot_of_their_hall_around_the_chasms() {
+        for seed in 0..24u64 {
+            for boss in [BossId::Demon, BossId::Dragon] {
+                let mut run = test_run_seed(&[ClassId::Paladin], boss, seed);
+                let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+                let r = *run.dungeon.boss_hall();
+                let home = r.center_px();
+                let speed = run.monsters[bi].speed;
+                for (x, y) in (r.y..r.y + r.h).flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y))).filter(|(x, y)| (x + y) % 3 == 0) {
+                    if !run.dungeon.map.safe(x, y) {
+                        continue;
+                    }
+                    let goal = Map::center_of(x, y);
+                    run.monsters[bi].pos = home;
+                    run.monsters[bi].ai.path.clear();
+                    for _ in 0..(15.0 / super::super::DT) as usize {
+                        if run.monsters[bi].pos.dist(goal) < 24.0 {
+                            break;
+                        }
+                        path_toward(&mut run, bi, goal, speed, super::super::DT);
+                    }
+                    // Close enough to fight: a pocket by a wall-side chasm may keep a wide boss a little off.
+                    let at = run.monsters[bi].pos;
+                    let near = run.monsters[bi].radius + 2.0 * TILE;
+                    assert!(at.dist(goal) < near, "seed {seed} {boss:?}: stuck at {at:?} on the way to {goal:?}");
+                }
+            }
+        }
+    }
 
     #[test]
     fn only_strong_melee_pushes() {
