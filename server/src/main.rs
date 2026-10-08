@@ -9,6 +9,7 @@ mod math;
 mod profiles;
 mod protocol;
 mod run;
+mod wire;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
