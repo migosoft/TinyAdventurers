@@ -82,6 +82,7 @@ export const CONST = {
   "MIMIC_HOP_CYCLE": 0.6,
   "MIMIC_WAKE_T": 0.6,
   "PLAYER_RADIUS": 5.0,
+  "POS_SCALE": 16.0,
   "SHALLOW_SPEED": 0.7,
   "SNAPSHOT_HZ": 30.0,
   "TICK_HZ": 60.0,
@@ -200,4 +201,17 @@ export const ABILITIES = {
     "range": 22.0,
     "speed": 0.0
   }
+} as const;
+
+export const EV = {
+  "Boom": 2,
+  "Coins": 8,
+  "Died": 3,
+  "Dmg": 0,
+  "Heal": 1,
+  "Immune": 5,
+  "Msg": 7,
+  "Raise": 4,
+  "Sink": 9,
+  "Tile": 6
 } as const;
