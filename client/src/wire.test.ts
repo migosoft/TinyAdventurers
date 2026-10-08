@@ -4,6 +4,7 @@
 import { decode } from '@msgpack/msgpack';
 import { describe, expect, it } from 'vitest';
 import { CONST } from './generated/defs';
+import type { SelfW } from './generated/SelfW';
 import type { SnapW } from './generated/SnapW';
 import fixtures from './generated/wire-fixtures.json';
 import { packInput, unpackSnap } from './wire';
@@ -43,12 +44,19 @@ describe('wire', () => {
     }
   });
 
-  it('returns aims in [-pi, pi)', () => {
+  // Case 0 holds all sample entities, including aims near both sides of ±π.
+  it('returns aims in (-pi, pi] like atan2 on the server', () => {
     const snap = unpackSnap(decode(Uint8Array.from(fixtures.cases[0].bytes)) as SnapW);
     for (const e of snap.ents) {
-      expect(e[6]).toBeGreaterThanOrEqual(-Math.PI);
-      expect(e[6]).toBeLessThan(Math.PI);
+      expect(e[6]).toBeGreaterThan(-Math.PI);
+      expect(e[6]).toBeLessThanOrEqual(Math.PI);
     }
+  });
+
+  it('keeps an exactly-left aim at +pi (the staff swing uses the raw angle)', () => {
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, null];
+    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0]], me, null, [], 0]);
+    expect(snap.ents[0][6]).toBe(Math.PI);
   });
 
   it('packs inputs in field order with null for no shot', () => {

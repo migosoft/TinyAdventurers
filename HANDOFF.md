@@ -44,7 +44,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 Each entity costs about 19 B instead of about 27 B.
 
 **Checked:**
-- 73 server tests (12 new: 5 wire tests, the wire fixture export and 6 ts-rs export tests for the new types), and the client typecheck and tests (3 new). The client test catches a broken aim range and a wrong position scale; both were tried on purpose.
+- 73 server tests (12 new: 5 wire tests, the wire fixture export and 6 ts-rs export tests for the new types), and the client typecheck and tests (4 new). The client test catches a broken aim range and a wrong position scale; both were tried on purpose.
 - `docker compose up --build` + health, and the smoke test with no browser errors, also under `?lag=150&jitter=40&loss=2` (correction 0.00 px).
 - The busy bot run under lag with no browser errors. Screenshots look as before: enemies face correctly, projectiles point the right way, events show up where they happen.
 

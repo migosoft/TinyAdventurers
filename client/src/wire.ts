@@ -11,8 +11,8 @@ import type { SnapW } from './generated/SnapW';
 import type { Snapshot } from './generated/Snapshot';
 
 const pos = (v: number): number => v / CONST.POS_SCALE;
-/** 0-255 → [-π, π), the range the server's angles have. */
-const angle = (a: number): number => ((a >= 128 ? a - 256 : a) / 256) * (2 * Math.PI);
+/** 0-255 → (-π, π], the range of atan2 on the server (128 = exactly left = +π). */
+const angle = (a: number): number => ((a > 128 ? a - 256 : a) / 256) * (2 * Math.PI);
 
 type DmgW = [number, number, number, number, boolean, boolean];
 type HealW = [number, number, number, number];

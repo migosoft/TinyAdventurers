@@ -31,7 +31,7 @@ The server looks at the first byte: a MessagePack array marker (`0x90–0x9f`, `
 | Value | Wire |
 |---|---|
 | Entity and event positions | `u32`, in 1/`POS_SCALE` px, `POS_SCALE = 16`, rounded |
-| Entity `aim` | `u8`, 1/256 of a full turn (`round(aim / 2π · 256)` wrapped to 0–255); the client reads 128–255 as negative and gets the angle back in [−π, π), the same range as today (`EntityView`'s staff swing uses the raw angle) |
+| Entity `aim` | `u8`, 1/256 of a full turn (`round(aim / 2π · 256)` wrapped to 0–255); the client reads 129–255 as negative and 128 as +π, so it gets the angle back in (−π, π], the range of `atan2` on the server (`EntityView`'s staff swing uses the raw angle, so exactly-left must stay +π) |
 | `me` position and dash, cooldowns, hide time | exact, unchanged types |
 | Input `aim`, `aim_dist` | exact `f32` |
 | hp, damage/heal values, boss bar numbers, `Boom.r`, `srv_ms` | unchanged types |
@@ -42,7 +42,7 @@ Event codes follow the order of the `Ev` variants: `Dmg 0, Heal 1, Boom 2, Died 
 
 ## Code
 
-**Server (`protocol.rs`):**
+**Server (`protocol.rs`, `wire.rs`):**
 - `Snapshot`, `EntSnap`, `SelfState`, `BossBar` and `Ev` stay as the readable form and keep their ts-rs export, so the client's types do not change.
 - New wire types with `#[ts(export)]`: `SnapW`, `EntW`, `SelfW`, `BossW`, `EvW` (`#[serde(untagged)]` enum of tuple variants, each starting with its `u8` code) and `InputW` (`Deserialize`).
 - `encode_snap(&Snapshot) -> Vec<u8>` converts and packs with `rmp_serde::to_vec`. `visibility.rs` calls it.
@@ -55,7 +55,7 @@ Event codes follow the order of the `Ev` variants: `Dmg 0, Heal 1, Boom 2, Died 
 ## Tests
 
 - Rust: an input array decodes to the same `InputMsg`; a map `ClientMsg` still decodes; an encoded sample snapshot is smaller than the old encoding (sizes printed).
-- Parity fixture: `cargo test` writes `client/src/generated/wire-fixtures.json` with sample snapshots as bytes (hex or number array) and their expected unpacked form (positions after rounding). The samples cover every event type, a living and a dead spectating player, with and without a boss bar, and projectile `extra`. A client test unpacks the bytes and must match exactly.
+- Parity fixture: `cargo test` writes `client/src/generated/wire-fixtures.json` with sample snapshots as bytes (number array) and their readable form before rounding. The samples cover every event type, a living and a dead spectating player, with and without a boss bar, and projectile `extra`. A client test unpacks the bytes and must match: positions within 1/32 px, aim within half a step, everything else exactly.
 - Live: smoke test without browser errors; snapshot bytes in F3 before and after; prediction correction 0.00 px under `?lag=150&jitter=40&loss=2`.
 
 ## Docs

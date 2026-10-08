@@ -122,7 +122,7 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 **Compact snapshots** (`wire.rs`, `wire.ts`, spec in [compact-snapshots.md](compact-snapshots.md)):
 - A snapshot is sent as a bare array `SnapW = [tick, ack, ents, me, boss, ev, srv_ms]`, not as a `t`-tagged map. The client sees an array, unpacks it with `unpackSnap` into the readable `Snapshot` and dispatches it as `{t: 'Snap', ...}`, so the game code only knows `Snapshot`.
 - Entity and event positions are whole numbers in 1/16 px (`CONST.POS_SCALE`). MessagePack stores them in 3 bytes up to 4096 px and in 5 bytes beyond, so bigger maps need no change.
-- Entity `aim` is one byte, 1/256 of a full turn; the client turns 128–255 back into negative angles, so it gets [−π, π) as before.
+- Entity `aim` is one byte, 1/256 of a full turn; the client turns 129–255 back into negative angles and 128 into +π, so it gets (−π, π] like `atan2` on the server (the staff swing in `EntityView` uses the raw angle).
 - Events are arrays starting with a number code (`EV` in `defs.ts`, order of the `Ev` variants). `Tile` keeps tile coordinates.
 - `me` (position, dash, cooldowns, hide time) and all hp/damage numbers keep their exact values; prediction needs them.
 - Adding a field to `Snapshot`, `SelfState`, `EntSnap`, `BossBar`, `Ev` or `InputMsg` means adding it to the wire type, `encode_snap`/`ev_w`, `unpackSnap`/`packInput` and `sample_snapshots`.
