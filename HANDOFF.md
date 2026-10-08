@@ -9,9 +9,54 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-08, terrain steps 2–6: terrain in real runs)
+## Last session (2026-10-08, compact snapshots and inputs)
 
-**Branch:** `feature/terrain-rules` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
+**Branch:** `feature/compact-snapshots`, not merged yet. Ask the user before merging into `main` and pushing.
+
+**Live confirmations by the user (start of this session):**
+- **Terrain:** a normal water run, falling into a chasm and drowning work.
+- **Chests and mimics** work in a real run.
+- **Rewards:** XP and coins are banked after a real run and visible in the lobby.
+
+**Why:** the user wanted smaller network messages as a tidy-up and asked whether binary compressed messages are a good way. Answer given: the messages were already binary (MessagePack). General compression (deflate) gains little on 250-byte messages and costs CPU per player. The user chose the simple option: compact encoding, no delta snapshots.
+
+**Plan and spec:** [docs/compact-snapshots.md](docs/compact-snapshots.md) (spec) and [docs/compact-snapshots-plan.md](docs/compact-snapshots-plan.md) (the executed plan).
+
+**Done:**
+- **Snapshots are a bare MessagePack array** (`SnapW`, `server/src/wire.rs`):
+  - no field names
+  - entity and event positions in 1/16 px as whole numbers (`POS_SCALE`; fine for maps far beyond today's 2,240 px)
+  - entity aim as one byte
+  - events with number codes (`EV`)
+  - `me` and all hp/damage values stay exact, so prediction is unchanged
+- **The client unpacks** it into the old `Snapshot` (`client/src/wire.ts`, called in `net.ts`). Nothing after `net.ts` changed.
+- **Inputs are a bare array** (`InputW`). The server recognizes the array marker.
+- **Fixture test:** `cargo test` writes `wire-fixtures.json`, and `wire.test.ts` checks that the client unpacks what Rust packed.
+
+**Measured** (F3 and a throwaway bot script that walks the debug path to the demon):
+
+| Scene | Before | After |
+|---|---|---|
+| 2 players | 248 B | 126 B |
+| fight, 14 entities in view | about 570 B | about 350 B |
+| average in the busy run | 255–298 B | 174–183 B |
+
+Each entity costs about 19 B instead of about 27 B.
+
+**Checked:**
+- 73 server tests (12 new: 5 wire tests, the wire fixture export and 6 ts-rs export tests for the new types), and the client typecheck and tests (3 new). The client test catches a broken aim range and a wrong position scale; both were tried on purpose.
+- `docker compose up --build` + health, and the smoke test with no browser errors, also under `?lag=150&jitter=40&loss=2` (correction 0.00 px).
+- The busy bot run under lag with no browser errors. Screenshots look as before: enemies face correctly, projectiles point the right way, events show up where they happen.
+
+**Finding, not caused by this change:**
+- In the busy bot run under lag, F3 showed prediction corrections of up to about 10–23 px in about a third of the samples.
+- The **old** format showed the same (18 of 83 samples, max 9.6 px).
+- The predictor reads only `me`, `ack` and its own inputs, which are identical in both formats.
+- Listed in TODO.md (Network) for a later look.
+
+## Session before (2026-10-08, terrain steps 2–6: terrain in real runs)
+
+**Branch:** `feature/terrain-rules` is merged into `main` (fast-forward) and pushed.
 
 **User decisions this session:**
 - **Knockback is its own feature, later.** It is not part of terrain. So in real runs drowning only happens when a dash ends in deep water, and enemies never end up in terrain.
@@ -54,11 +99,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 - First report: in normal mode lava showed as dark cells, hurt, and made the hero glitch. The cause was a stale cached client for `/`, not the terrain code: the server sent no `Cache-Control`. Fixed by `cache_headers` in `main.rs` (see Gotchas).
 - After a hard reload, the user confirmed that it works in normal mode.
 
-**Not verified yet:**
-- A real (non-debug) death by chasm, and drowning after a Barbarian dash, in the browser. Both are covered by server tests only.
-- A full normal run of the water theme (lich or dragon), and the user's verdict on the look and the amount of terrain.
+**Later confirmed by the user (2026-10-08):** a normal water run, a chasm fall and drowning work in the browser.
 
-## Session before (2026-10-07, terrain step 1: tiles and demos)
+## Earlier session (2026-10-07, terrain step 1: tiles and demos)
 
 **Branch:** `feature/terrain` is merged into `main` (fast-forward) and pushed.
 
@@ -129,7 +172,7 @@ Steps 2–6 followed in the next session.
 
 **User feedback:** the user likes the mimics a lot. Coin amounts, chest rate, mimic share and mimic stats are left for the combined balancing pass later (listed in TODO.md); don't tune them piecemeal.
 
-**Not yet verified:** meeting a chest and a mimic in a real run (the headless smoke test never walks to one), and seeing the coins banked after a real run. The user should play one normal run (no `?debug`).
+**Later confirmed by the user (2026-10-08):** chests, mimics and banked coins work in a real run.
 
 ## Earlier session (2026-10-07, wall corners and boss force field)
 
@@ -162,19 +205,20 @@ Steps 2–6 followed in the next session.
 - treasure chests and mimics; coins banked as a second currency
 - permadeath with spectating, victory/defeat screens
 - client prediction and interpolation, F3 stats
+- compact snapshots and inputs (MessagePack arrays, `wire.rs`/`wire.ts`): about 125 B per snapshot with 2 players
 - debug mode, sprite gallery
 
 **Verified:**
-- 61 server tests and the client port tests (terrain included) pass.
+- 73 server tests and the client tests (collision/FOV ports with terrain, wire unpacking) pass.
 - Browser check of the profile flow: buying, persistence over page reload and `docker compose down`/`up`, new token for a new browser, read-only boss picker for guests.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
 - Demon dungeon enemies (imps, chorts, summoners) in a real run (played by the user, "work well").
+- Terrain in a normal water run (chasm fall, drowning), chests and mimics, and XP and coins banked after a real run (confirmed by the user, 2026-10-08).
 - The gallery was checked visually: animations, melee swooshes, dragon breath from the mouth and nostrils.
 
 **Not yet verified:**
 - Behaviour with real (non-headless) players over a real network.
-- **Earning XP in a real run.** Banking at run end is covered by server tests only; the shop was browser-tested with a seeded profile. To check: play a normal run (no `?debug`, which banks nothing), then look at the Upgrades panel.
 
 **Git and session workflow (the user's standing instructions):**
 - One feature per session. When a feature is done: update this file and the docs, run the verification checklist below, then commit.
@@ -243,6 +287,7 @@ Steps 2–6 followed in the next session.
 
 - **Stale client after a rebuild:** before 2026-10-08 the server sent no `Cache-Control`, so browsers could keep the old `index.html` and bundle for `/` while `/?debug…` (a different URL) loaded fresh. The user saw lava only in debug mode: the old client drew terrain as dark cells and its prediction fought the server. `cache_headers` in `main.rs` fixes it. If a client ever looks older than the server, hard-reload (Ctrl+F5) first.
 - **Generated client files:** never edit `client/src/generated/*` by hand. Change Rust and run `cargo test`.
+- **Snapshots and inputs are arrays on the wire** (`wire.rs`, `wire.ts`). When you add a field to `Snapshot`, `SelfState`, `EntSnap`, `BossBar`, `Ev` or `InputMsg`, add it to the wire type, both converters and `sample_snapshots`; the fixture test fails otherwise. Raw snapshot bytes are no longer `{t: 'Snap'}` maps, so test scripts that read the WebSocket must decode arrays (`m[3][3]` is the own x).
 - **Message tag:** MessagePack enums are tagged with the field `t`, so no variant may have a field named `t`. That is why `Ping`/`Pong` use `time`.
 - **Prediction parity:** client prediction relies on `client/src/sim/collision.ts` matching `server/src/collision.rs` exactly, and on the order *move, then abilities* in `Run::apply_input`. If you change movement, change both and keep `sim.test.ts` green.
 - **Cooldowns** tick per processed input on both sides. Don't switch the server to wall-clock cooldowns without updating `Predictor`.
@@ -256,9 +301,9 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Finish terrain:** ask the user to play a normal water run (lich or dragon). Adjust the look or the amount of terrain from their feedback (`place_terrain` rates and sizes).
+1. **Merge `feature/compact-snapshots`** after the user agrees, and have them play one run to confirm nothing changed in feel.
 2. **Knockback** (its own feature, the user's decision): demo first, as usual. Decide which attacks push and how far; then enemies can fall and drown too (they need a monster version of `Sink`/`kill_player`). See TODO.md.
 3. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 4. Loadouts: design new abilities, then add the lobby picker, paid with coins.
 5. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
-6. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.
+6. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), the prediction corrections in busy runs under lag (TODO.md, Network).

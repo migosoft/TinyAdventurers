@@ -21,7 +21,7 @@ Progression is live (profiles by token, XP banked at run end, lobby upgrade shop
 Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **Knockback (its own feature, the user's decision):** nothing pushes figures yet, so drowning only happens when a dash ends in deep water, and enemies never end up in terrain. Decide which attacks push and how far (the demos show a prototype); then enemies can drown and fall too, and the `Sink` event and `kill_player` need a monster counterpart.
 - **Tune** in the balancing pass: `SHALLOW_SPEED` 0.7, `LAVA_SPEED` 0.4, `LAVA_DAMAGE`/`LAVA_TICK` (20/s; the user wants at least 15/s), `FALL_TIME` 0.7 s, `DROWN_TIME` 0.9 s (all in `dungeon/mod.rs`), and the feature rates and sizes in `place_terrain` (about 4 % of the floor).
-- **Not verified live:** a real (non-debug) death by chasm, drowning after a Barbarian dash, and lava damage with armour upgrades. The user should play one run of each theme.
+- **Confirmed live by the user (2026-10-08):** a normal water run, chasm falls and drowning. Lava damage with armour upgrades has not been looked at specifically.
 - **Ideas:** bridges drawn as planks over chasms, lava in the dragon's dungeon too, enemies that avoid shallow water when a dry path exists.
 
 ## Other follow-ups
@@ -38,5 +38,6 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **4-direction sprites:** the animation code keeps a `Dir` value. Up/down frames can be added there once sheets exist.
 - **Sound effects.**
 - **Network:**
-  - delta-compressed snapshots (currently full FOV-filtered snapshots, about 250 B each)
+  - delta snapshots if bandwidth ever matters (snapshots are compact arrays now, about 125 B with 2 players, about 350 B with 14 entities in view)
+  - prediction corrections under `?lag=150&jitter=40&loss=2` in busy debug runs: a scripted bot walking the debug path to the demon saw corrections of up to 10–23 px in about a third of the F3 samples, with the old and the new snapshot form alike (the calm smoke test stays at 0.00 px). Cause not investigated yet; suspects are debug climb-outs after chasm falls on cut corners and server-side effects the predictor does not know.
   - optional WebTransport transport for lossy connections

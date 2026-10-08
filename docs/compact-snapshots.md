@@ -1,6 +1,6 @@
 # Compact snapshots and inputs
 
-Status: approved 2026-10-08, approach A. Branch `feature/compact-snapshots`.
+Status: done 2026-10-08 (approach A). Branch `feature/compact-snapshots`.
 
 ## Goal
 
