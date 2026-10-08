@@ -1,7 +1,7 @@
 // Data: how each entity kind looks and animates, using only 0x72 pack frames.
 // Bodies: `<prefix><0..3>` for idle/run (4-frame pack animations).
 // The pack has no attack animations; attacks animate the pack weapon sprites.
-import { ABILITIES, KIND } from "../../generated/defs";
+import { ABILITIES, CONST, KIND } from "../../generated/defs";
 
 // Player swings reach as far as the server hits: ability range + a typical monster radius.
 const SWORD = { reach: ABILITIES.Sword.range + 5, arc: ABILITIES.Sword.arc };
@@ -28,6 +28,8 @@ export interface FigureDef {
   weaponScale?: number;
   /** Hand height above the feet (px, unscaled). */
   handY: number;
+  /** Hand offset towards the facing side (px, unscaled; default 3). The ogre holds its club out at its side. */
+  handX?: number;
   attack: AttackStyle;
   /** Accent color of the figure (spell particles, dash afterimages). */
   base: number;
@@ -40,6 +42,8 @@ export interface FigureDef {
   hue?: number;
   /** Melee swoosh: drawn at the damage reach (px from the figure), over the damage arc (rad). */
   swing?: { reach: number; arc: number; color?: number };
+  /** Ground slam radius (px, hero centres): the telegraph ring drawn during the Slam wind-up (the ogre). */
+  slam?: number;
   /** Tail swipe behind the figure (the dragon), shown for the Tail animation. */
   tail?: { reach: number; arc: number; color?: number };
   /** Where breath attacks come out (dragon mouth / nostrils), per body frame. */
@@ -90,6 +94,7 @@ export const FIGURES: Record<number, FigureDef> = {
   [KIND.Imp]: { ...mob('imp'), swing: CLAW, handY: 7, attack: 'caster', base: 0xff7020, baseR: 5 },
   [KIND.Chort]: { ...mob('chort'), swing: { ...CLAW, reach: 22 }, handY: 10, attack: 'caster', base: 0xff7020, baseR: 5 },
   [KIND.Summoner]: { ...summoner, weapon: 'weapon_red_magic_staff', mount: 'staff', weaponTint: 0xffb080, handY: 8, attack: 'caster', base: 0x9a2020, baseR: 5 },
+  [KIND.Ogre]: { ...mob('ogre'), swing: { reach: 34, arc: 2.0, color: 0xffe0b0 }, weapon: 'weapon_baton_with_spikes', mount: 'blade', weaponScale: 1.4, handX: 12, handY: 14, attack: 'melee', base: 0x3a6a3a, baseR: 12, slam: CONST.OGRE_SLAM_RADIUS },
   [KIND.Demon]: { ...mob('big_demon'), swing: { reach: 40, arc: 2.1, color: 0xffa080 }, handY: 18, attack: 'melee', base: 0x7a1010, baseR: 13 },
   [KIND.Lich]: { ...necro, weapon: 'weapon_green_magic_staff', mount: 'staff', handY: 8, attack: 'caster', base: 0x3a2a5a, baseR: 6, scale: 1.75, tint: 0xb8c8ff },
   [KIND.Dragon]: { ...hero('lizard_m'), mouth: lizardPoints(5.5), nostrils: lizardPoints(2.5), swing: { ...CLAW, reach: 40, color: 0xffc0a0 }, tail: { reach: 46, arc: 2.4, color: 0xffc0a0 }, handY: 10, attack: 'melee', base: 0x7a1010, baseR: 8, scale: 2.25, hue: 250 },

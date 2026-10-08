@@ -172,7 +172,8 @@ pub enum Ev {
     /// Damage number. `p` = the victim is a player.
     Dmg { x: f32, y: f32, v: f32, crit: bool, p: bool },
     Heal { x: f32, y: f32, v: f32 },
-    /// Explosion / area effect. k: 0 fireball, 1 heal ring, 2 fire ring, 3 dark burst, 4 dragon fireball
+    /// Explosion / area effect. k: 0 fireball, 1 heal ring, 2 fire ring, 3 dark burst, 4 dragon fireball,
+    /// 5 ogre ground slam (shockwave)
     Boom { x: f32, y: f32, r: f32, k: u8 },
     Died { id: u32, x: f32, y: f32, kind: u8 },
     /// A minion appears: raised skeleton (green) or summoned imp (`fire`, red).
@@ -231,7 +232,8 @@ pub enum ServerMsg {
     Pong { time: f64 },
     Error { msg: String },
     /// Debug mode: shortest walkable path from the player to the boss (pixel waypoints).
-    DebugPath { on: bool, points: Vec<(f32, f32)> },
+    /// `ogre`: the path to the ogre mini-boss while it lives (else empty).
+    DebugPath { on: bool, points: Vec<(f32, f32)>, ogre: Vec<(f32, f32)> },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

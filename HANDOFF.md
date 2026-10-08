@@ -9,7 +9,48 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-08, knockback and boss-hall chasms)
+## Last session (2026-10-08, ogre mini-boss)
+
+**Branch:** `feature/ogre` (committed, not merged or pushed yet). Ask the user before merging into `main` and pushing.
+
+**User decisions this session:**
+- **Look:** the user approved an enlarged sprite preview (pack `ogre_*` with `weapon_baton_with_spikes`). The club is held **out at its side and lower** (`handX: 12`, `handY: 14`) and is **1.4x** the usual weapon size, because at the demon's hand height it covered the face.
+- **Attacks:** a **club** that pushes (28 px, the strongest normal-enemy push) plus a **ground slam** with a **telegraph ring on the floor** that hits and pushes every hero inside it.
+- **HP display:** a **wide bar over its head**, always visible (no boss bar, no protocol change).
+- **Every dungeon** gets one ogre, the demon's included.
+- **Debug mode:** the user asked for a **blue path to the ogre** next to the yellow boss path.
+- Numbers are placeholders for the combined balancing pass (TODO.md, New enemies).
+
+**Done:**
+- **Server:**
+  - `EnemyType::Ogre` (`KIND.Ogre` 22): 260 HP, speed 40, radius 10, club `Melee{knock: 28}`.
+  - New `AttackStyle::Slam` as its alt: radius `OGRE_SLAM_RADIUS` 34 px (hero centres), 0.9 s wind-up, 24 px push, 5 s cooldown. It is used when two heroes are near, or one while the club recovers.
+  - New `Anim::Slam` (10) for the slam wind-up. `Ev::Boom{k: 5}` marks the impact.
+  - 60 XP and 30 coins.
+  - A wide enemy (radius > 8) chases with `path_toward` (A* with clearance) instead of a straight line.
+- **Spawn:** `place_ogre` runs on **rng stream 10**, after the terrain. It picks a deeper room or hall and a tile with safe ground all around and no chest. Existing seeds keep their maps, spawns and chests.
+- **Client:**
+  - `FIGURES[KIND.Ogre]` with the new `FigureDef.handX` (default 3; the swoosh uses it too) and `slam` (radius).
+  - `EntityView.slamFx` draws the floor ring: it fills from the centre over the wind-up and blinks at the end. The club rises over the head.
+  - `Effects.shockwave` is the dust ring, debris and screen shake for `Boom k=5`.
+  - The wide HP bar is in `GameScene.drawBarsAndBeams`.
+- **Demo `?ogre`** (`OgreDemoScene.ts`): the orc's 20 px push next to the club's 28 px (only the club knocks the hero into the chasm), and the slam with four heroes (three pushed, one into a chasm, one spared outside the ring). The terrain demo base got a `slam` step and an optional `windup` on `hit`. The user approved it.
+- **Debug path to the ogre:** `DebugPath` has a new field `ogre` (the path to the living ogre, empty once it is dead), drawn in blue. The badge and the message name both colours.
+
+**Checked:**
+- 80 server tests. 2 are new: the ogre's attack choice, and the slam hitting and pushing everyone in its radius while sparing those outside. Extended: club and slam push; exactly one ogre per seed on safe ground, outside the boss hall, in the 200-seed test; the debug path leads to the ogre and disappears when it dies.
+- Client typecheck and tests.
+- `docker compose up --build` + health, smoke test under `?lag=150&jitter=40&loss=2` (no browser errors, correction 0.00 px), and `?debug` smoke.
+- `?ogre` screenshot series.
+- A throwaway bot (deleted) walked the blue path to the ogre in a real run. Screenshots show the ogre, its wide bar and the blue marker on it, with no browser errors.
+
+**Found on the way:** the user first couldn't find the ogre because the container on 8080 was still the old build. Rebuild the container (`docker compose up --build -d`) before the user tests a server change.
+
+**Confirmed live by the user:** the ogre works, and so does the blue debug path.
+
+**Not added:** a test that the other spawns and chests stay the same with the ogre. That holds by construction: stream 10 is a clone and never advances the main rng.
+
+## Session before (2026-10-08, knockback and boss-hall chasms)
 
 **Branch:** `feature/knockback` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
 
@@ -239,20 +280,21 @@ Steps 2–6 followed in the next session.
 **Working end to end in Docker (`docker compose up --build`, port 8080):**
 - lobby, 4 classes, host-chosen or random end boss, random dungeon, field of vision
 - persistent profiles: XP banked after each run, permanent upgrades bought in the lobby (`ta-data` volume)
-- 10 enemy types (including the mimic; imps, chorts and summoners only in the demon's dungeon), 3 bosses
+- 11 enemy types (including the mimic and the ogre mini-boss, one per run; imps, chorts and summoners only in the demon's dungeon), 3 bosses
 - terrain in every dungeon: chasms everywhere, water pools (lich, dragon) or lava pools (demon); falling, drowning, lava burns, demons immune to lava; demos `?water`, `?chasm`, `?lava`
 - treasure chests and mimics; coins banked as a second currency
 - permadeath with spectating, victory/defeat screens
 - client prediction and interpolation, F3 stats
 - compact snapshots and inputs (MessagePack arrays, `wire.rs`/`wire.ts`): about 125 B per snapshot with 2 players
-- debug mode, sprite gallery
+- debug mode (paths to the boss and the ogre), sprite gallery
 
 **Verified:**
-- 73 server tests and the client tests (collision/FOV ports with terrain, wire unpacking) pass.
+- 80 server tests and the client tests (collision/FOV ports with terrain, wire unpacking) pass.
 - Browser check of the profile flow: buying, persistence over page reload and `docker compose down`/`up`, new token for a new browser, read-only boss picker for guests.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
 - Demon dungeon enemies (imps, chorts, summoners) in a real run (played by the user, "work well").
+- The ogre and the blue debug path to it (confirmed by the user, 2026-10-08).
 - Compact snapshots: a real run plays as before; the coin icon in lobby and HUD (confirmed by the user, 2026-10-08).
 - Terrain in a normal water run (chasm fall, drowning), chests and mimics, and XP and coins banked after a real run (confirmed by the user, 2026-10-08).
 - The gallery was checked visually: animations, melee swooshes, dragon breath from the mouth and nostrils.
@@ -284,6 +326,7 @@ Steps 2–6 followed in the next session.
   - imps, skeletons, mimics and all ranged attacks never push
   - no control during the slide, and a dash can't escape it
 - **Boss halls have chasms** (all three bosses; wall strips plus pits).
+- **Ogre mini-boss** (2026-10-08): one per run in every dungeon, roaming a deeper room; club held out at its side (1.4x size), club push 28 px, ground slam with a floor ring at the real radius; a wide HP bar instead of a boss bar; a blue debug path to it.
 - **Coins are a second currency** meant for buying loadouts later.
 - **Weapons** are drawn small (0.6×).
 - **Melee reach is unchanged on the server:** a swoosh at the real damage reach replaces the visible full swing, and the weapon fades out and back in.
@@ -322,7 +365,7 @@ Steps 2–6 followed in the next session.
 2. Client changes: `cd client && npx tsc --noEmit && npm test`.
 3. `docker compose up --build -d`, then `curl localhost:8080/health` should print `OK`.
 4. `cd tools/e2e && node smoke.mjs http://localhost:8080/ "" shots Wizard,Paladin`. It should print "no browser errors"; look at the screenshots in `shots/`.
-5. Visual changes to figures or effects: `node gallery-shots.mjs http://localhost:8080/ shots melee,breath`, or open `?gallery&state=<state>&slow=10` in a browser. Chests and mimics: `?mimic&slow=3`. Demons: `?daemons&slow=3`. Terrain: `?water`, `?chasm`, `?lava` (`&slow=3`). Terrain tile changes: edit `client/scripts/terrain-tiles.ts`, then `npm run atlas`.
+5. Visual changes to figures or effects: `node gallery-shots.mjs http://localhost:8080/ shots melee,breath`, or open `?gallery&state=<state>&slow=10` in a browser. Chests and mimics: `?mimic&slow=3`. Ogre: `?ogre&slow=3`. Demons: `?daemons&slow=3`. Terrain: `?water`, `?chasm`, `?lava` (`&slow=3`). Terrain tile changes: edit `client/scripts/terrain-tiles.ts`, then `npm run atlas`.
 6. Gameplay changes: update [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md). Architecture changes: update [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Gotchas
@@ -346,7 +389,7 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Ogre mini-boss** (next feature, the user's decision): start by showing an enlarged preview of the pack `ogre` sprite with `weapon_baton_with_spikes`, then demo first. One per run, roaming, its club pushes. See TODO.md (New enemies).
+1. **Merge `feature/ogre`** into `main` and push, after asking the user.
 2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
 4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.

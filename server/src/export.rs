@@ -55,6 +55,8 @@ fn export_defs() {
         "MIMIC_HOP_AIR_START": enemies::MIMIC_HOP_AIR.0,
         "MIMIC_HOP_AIR_END": enemies::MIMIC_HOP_AIR.1,
         "MIMIC_WAKE_T": enemies::MIMIC_WAKE_T,
+        "OGRE_SLAM_RADIUS": enemies::OGRE_SLAM_RADIUS,
+        "OGRE_SLAM_WINDUP": enemies::OGRE_SLAM_WINDUP,
         "SHALLOW_SPEED": crate::dungeon::SHALLOW_SPEED,
         "LAVA_SPEED": crate::dungeon::LAVA_SPEED,
         "FALL_TIME": crate::dungeon::FALL_TIME,

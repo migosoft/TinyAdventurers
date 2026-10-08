@@ -60,6 +60,7 @@ client/                              Vite + TypeScript + Phaser 3.90
   src/game/DaemonDemoScene.ts        dev page ?daemons (imp, chort, summoner vs a knight; no server)
   src/game/TerrainDemoScene.ts       dev pages ?water, ?chasm, ?lava (scripted figures; no server)
   src/game/KnockbackDemoScene.ts     dev page ?knockback (every push in the game, on the terrain demo base)
+  src/game/OgreDemoScene.ts          dev page ?ogre (club vs orc push, ground slam, on the terrain demo base)
   src/game/terrain.ts                terrain layer: autotiled water/lava/chasm cells, animation, lava glow
   src/game/terrain-codes.ts          terrain frame layout and edge codes shared with the atlas build
   src/ui/                            DOM lobby, HUD, texts, atlas previews
@@ -118,7 +119,7 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 - `RunStarted(RunStartInfo)`: full tile grid as bytes, player list, own entity id, spawn, progression `mods`
 - `Snap(Snapshot)`: 30 Hz. Contains `tick`, `ack`, entities, `me` (`SelfState`: authoritative position/dash/cooldowns), optional boss bar, events, `srv_ms`. See "Compact snapshots" below for the wire form.
 - `RunEnded{victory, boss, time, stats, banked}`: `banked` is false when debug mode was used (no XP or coins are added). `stats` include each player's `xp` and `coins`.
-- `Pong{time}`, `Error{msg}`, `DebugPath{on, points}`
+- `Pong{time}`, `Error{msg}`, `DebugPath{on, points, ogre}`
 
 **Compact snapshots** (`wire.rs`, `wire.ts`, spec in [compact-snapshots.md](compact-snapshots.md)):
 - A snapshot is sent as a bare array `SnapW = [tick, ack, ents, me, boss, ev, srv_ms]`, not as a `t`-tagged map. The client sees an array, unpacks it with `unpackSnap` into the readable `Snapshot` and dispatches it as `{t: 'Snap', ...}`, so the game code only knows `Snapshot`.
@@ -177,7 +178,7 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 - **Chests and mimics.** `Run::new` turns `Dungeon.chests` into `Run.chests` (real ones) and sleeping `EnemyType::Mimic` monsters. `touch_chests` (every step) opens a chest when a living player is within `CHEST_TOUCH` (12 px): `CHEST_COINS` (8–15) to every living player through `give_coins`. The same distance wakes a mimic (`wake_mimic`), as does any player hit (`hurt_monster`). A woken mimic holds still for `MIMIC_WAKE_T` (`Ai.hold`, the lid flying open), then uses the normal AI. `check_boss_hall` wakes every sleeping monster except mimics. Sleeping monsters are not pushed by `separate_monsters`.
 - **Mimic gait.** `ai::gait` makes the mimic hop: it moves only while its Move animation clock is in `MIMIC_HOP_AIR` (0.2–0.7 of a 0.6 s `MIMIC_HOP_CYCLE`), at its average speed divided by that fraction. The constants go to the client through `CONST`, so `mimic.ts` draws crouch, flight and landing from the same clock (`anim_ms`). An awake mimic does not wander.
 - `hurt_player` applies armor and skips HP loss in debug mode. Death switches the player to spectating.
-- **Who pushes:** `AttackStyle::Melee` has a `knock` (px): orc warrior 20, chort claw 14, everything else 0. `ai::perform_attack` calls `knock_player` after a melee hit. `Ranged` has no knock field, so ranged attacks can never push. Bosses push in their behaviours: the demon's cleave (36) and swoop (44), the dragon's front claw (32, new: a 0.4 s wind-up, 20 damage, `Anim::Melee`) and tail swipe (44, now `Anim::Tail` so the client draws it behind the dragon). Heroes never push enemies.
+- **Who pushes:** `AttackStyle::Melee` has a `knock` (px): ogre club 28, orc warrior 20, chort claw 14, everything else 0. `AttackStyle::Slam` (the ogre's ground slam) pushes every hero within its radius 24 px straight away. `ai::perform_attack` calls `knock_player` after a melee hit. `Ranged` has no knock field, so ranged attacks can never push. Bosses push in their behaviours: the demon's cleave (36) and swoop (44), the dragon's front claw (32, new: a 0.4 s wind-up, 20 damage, `Anim::Melee`) and tail swipe (44, now `Anim::Tail` so the client draws it behind the dragon). Heroes never push enemies.
 
 **Lag compensation.**
 - Melee arcs, the dagger and dash contact test monster positions rewound by the client's `view_lag` (RTT/2 + its interpolation delay), up to 31 ticks.
@@ -190,6 +191,7 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 - States: `Idle` (wander near home) → `Chase` (melee approach, ranged keep a preferred distance) → wind-up → attack. Losing sight leads to `Search` (A* to last known position) and then `Return` (A* home).
 - Wind-ups telegraph attacks: the client flashes the body red and shakes it. The hit lands only if the target is still seen.
 - Necromancers raise up to 3 skeletons (cooldown 7 s); summoners summon imps (`SummonedImp`, drawn as a normal imp) the same way. `Ev::Raise.fire` tells the client which effect to draw.
+- **Ogre (mini-boss):** `EnemyType::Ogre` (`KIND.Ogre` 22), radius 10 (wide, so its chase uses `path_toward` with clearance like the bosses instead of `move_toward`), 260 HP, slow. Main attack: club (`Melee`, knock 28). Alt: `AttackStyle::Slam{radius, damage, cooldown, windup, knock}`, chosen when two living heroes' centres are within `OGRE_SLAM_RADIUS` (34 px), or one while the club is on cooldown. Its wind-up uses `Anim::Slam` (10); the client draws the telegraph ring from `animT` and `CONST.OGRE_SLAM_RADIUS`/`OGRE_SLAM_WINDUP`. At impact the server sends `Ev::Boom{k: 5}` (dust shockwave) and hits and knocks every living hero in the radius. It is not a boss (`is_boss` false): no boss bar, no force field; the client draws a wide HP bar over it, always visible.
 - **Second attack:** `EnemyDef.alt` is an optional second `AttackStyle` with its own cooldown (`Ai.alt_cd`). A melee alt is used when the target is in claw reach (imp), a ranged alt only from at least `ALT_BOLT_MIN_DIST` (40 px) and beyond the main attack's reach (chort). `Windup.alt` remembers which attack the wind-up leads to; each attack keeps the other back for `ATTACK_GAP` (0.4 s). Movement follows the main attack.
 - **Demon dungeon:** `enemies::for_boss` swaps types when `Run::new` spawns the dungeon's enemies: with the demon as boss, skeleton archers become imps, skeleton warriors chorts and necromancers summoners. The swap itself leaves the map alone; only the terrain theme differs per boss (lava or water, see §6), which can move a few spawns off the liquid.
 - Minions are never tinted: raised skeletons and summoned imps look like the ordinary ones (the user's request). Hiding drops the aggro of all monsters targeting the hider.
@@ -231,6 +233,7 @@ The generator is seeded (ChaCha8) and deterministic:
    A feature only covers floor, keeps two tiles from corridor mouths (open ground outside the room) and never covers a chest. It is undone if it cuts any safe ground off from the start or makes a room as far as the boss hall. Enemy spawns it covers move to the nearest free floor tile in the room. The start room stays clear. About 4 % of the floor becomes terrain.
 
    **Boss hall chasms** (`place_boss_chasms`, stream 9, every theme), so knockback matters in boss fights: one or two **wall strips** (4–7 tiles long, 1–2 deep, along any wall) and one or two **pits** (2x2 to 3x2, three tiles from the walls). Nothing goes within 3 tiles of the boss's start or near the entrance (the bottom centre, 4 tiles to each side, 5 deep). Pits keep 3 tiles from other chasms (the dragon is over two tiles wide), strips 2. A feature that cuts any hall floor off from the entrance is undone.
+   **The ogre** (`place_ogre`, stream 10, after the terrain): one per dungeon, in a random ordinary room or hall at depth ≥ 0.35 (any ordinary room if none fits), on a tile with safe ground in all 8 neighbours and no chest. It is pushed to `spawns`, so it rotates with them. Stream 10 is a clone, so maps, spawns and chests of existing seeds are unchanged.
 6. **Rotation:** a random quarter turn, so the start can be on any side and the boss hall is on the opposite side.
 
 The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), including chest placement (on floor against a wall, outside the start room and boss hall, not on an enemy), that chests and mimics actually appear, and the terrain guarantees: no safe tile cut off, spawns and chests on floor, no terrain in the start room, only chasms (and some) in the boss hall with its centre and entrance clear, only the theme's liquid, every terrain kind present, and a terrain share of 2–15 %.
@@ -335,7 +338,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - Projectiles: `weapon_arrow` for arrows and bolts, additive glows for magic.
 - Deaths: a `skull` decal.
 - Lich drain: animated red beams from channelling disciples to the lich.
-- Debug path: a marching dashed line above the fog.
+- Debug paths: marching dashed lines above the fog, yellow to the boss, blue to the ogre.
 
 **UI.** DOM overlay (`ui/`):
 - Lobby with run list and class cards (animated pack previews).
@@ -346,12 +349,13 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 
 | URL | Effect |
 |---|---|
-| `?debug` | `Debug{on:true}` is sent when the run scene starts. Server: the player takes no HP loss. Every 0.5 s it sends `DebugPath` (A* to the boss, string-pulled with line of sight). Client: dashed line plus badge. There is no in-game toggle (removed on request). |
+| `?debug` | `Debug{on:true}` is sent when the run scene starts. Server: the player takes no HP loss. Every 0.5 s it sends `DebugPath` (A* to the boss, string-pulled with line of sight, plus `ogre`: the same to the living ogre, empty once it is dead). Client: yellow (boss) and blue (ogre) dashed lines plus badge. There is no in-game toggle (removed on request). |
 | `?debug&boss=demon\|lich\|dragon` | Host only. Preselects that boss in the lobby's boss picker (`SelectBoss`); used by `smoke.mjs`. Works even with `ALLOW_DEBUG=0` (the boss choice is a normal feature). The server logs `run N started: … boss X (chosen)`. Runs where debug was turned on bank no XP. |
 | `?gallery[&state=melee&slow=10]` | Every figure cycling its animation states, no server needed. |
 | `?mimic[&slow=3]` | The chasing mimic after a walking knight, a treasure chest opening with its coin burst, and the mimic reveal. No server needed. |
 | `?water`, `?chasm`, `?lava` `[&slow=3]` | Terrain demos with scripted figures: wading and drowning, falling into a chasm, burning in lava, demons walking through lava, the dash jumping a gap, and being knocked in. Speeds and times come from `CONST`, like the server. No server needed. |
 | `?knockback` `[&slow=3]` | Every push in the game, side by side next to chasms and deep water, with the game's distances and decay: orc warrior, chort, imp (no push), a barbarian who cannot dash out, the demon's cleave and swoop, the dragon's tail and front claw. The user approved the distances here. |
+| `?ogre` `[&slow=3]` | The ogre's club next to the orc warrior's push (only the club's knocks a hero into the chasm), and the ground slam: the telegraph ring at the real radius, the shockwave, three heroes pushed away (one into a chasm) and one spared just outside. The user approved it. |
 | `?daemons[&slow=3]` | Imp, chort and a pack of both fighting a walking knight, and a summoner summoning imps. Uses the real figure definitions; the attack logic is a local imitation of the server AI. No server needed. |
 | `?lag=150&jitter=40&loss=2` | Network simulator. |
 
@@ -379,12 +383,13 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 
 ## 12. Tests
 
-**Server (`cargo test`, 78 tests):**
+**Server (`cargo test`, 80 tests):**
 - protocol round trip
 - wire: positions round to 1/16 px (also beyond 4096 px), aim wraps into a byte, event codes follow `EV_CODES`, a compact input decodes to `InputMsg`, sample snapshots are bare arrays and at least 30 % smaller than the old form
 - dungeon determinism and guarantees over 200 seeds
 - collision cannot tunnel through walls; line of sight
 - knockback: a push slides its distance, ignores the input, crosses deep water and stops at walls; a push into a chasm is a fall, with no attacks meanwhile, and dashing heroes are not pushed; a short push stops and control returns; only orc warriors' and chorts' melee pushes (not imps, skeletons, archers or bolts)
+- ogre: slams a crowd (or one hero while the club recovers) and clubs a lone hero; the slam hits and pushes every hero in its radius straight away and spares those outside; club and slam both push; exactly one ogre per seed on safe ground with room around it, outside the boss hall; the debug path also leads to the ogre and disappears when it dies
 - wide bosses (demon, dragon) reach every spot of their hall around the chasms (24 seeds)
 - terrain: the rule matrix per mover; slowing in shallow water; a dash over a chasm and deep water; a chasm kills after the fall (not mid-dash) and debug heroes climb back out; a dash ending in deep water drowns; lava burns over time; only demons are lava walkers; A* keeps enemies out of lava and chasms and lets demons through lava
 - terrain keeps the layout and chests of a seed for both themes

@@ -42,7 +42,7 @@ export class Hud {
   private banner = el('div', 'banner hidden');
   private menu = el('div', 'menu hidden');
   private end = el("div", "end hidden");
-  private debugBadge = el("div", "debug-badge hidden", "DEBUG · immortal · path to boss");
+  private debugBadge = el("div", "debug-badge hidden", "DEBUG · immortal · paths to boss (yellow) and ogre (blue)");
   private cdMax = [1, 1];
   private lastCd = [0, 0];
   private debugT = 0;
@@ -178,7 +178,7 @@ export class Hud {
 
   setDebug(on: boolean): void {
     this.debugBadge.classList.toggle("hidden", !on);
-    this.message(on ? "Debug mode on: immortal, path to the boss shown." : "Debug mode off.");
+    this.message(on ? "Debug mode on: immortal, paths to the boss (yellow) and the ogre (blue) shown." : "Debug mode off.");
   }
 
   toggleDebug(): void {

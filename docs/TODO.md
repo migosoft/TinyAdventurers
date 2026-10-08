@@ -29,7 +29,7 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **Ideas:** bridges drawn as planks over chasms, lava in the dragon's dungeon too, enemies that avoid shallow water when a dry path exists.
 
 ## New enemies
-- **Ogre mini-boss (next, the user's decision):** one per run, roaming the dungeon like other enemies (no room of its own), pack sprite `ogre_idle_anim_f*` / `ogre_run_anim_f*` (32x36, the middle of the three big-figure rows bottom left in the pack PNG), carrying `weapon_baton_with_spikes` as a spiked club. **Show the user an enlarged preview of the sprite with the club first.** A club hit should push (it is the strongest melee).
+- **Ogre (done 2026-10-08):** tune its numbers in the balancing pass (`EnemyType::Ogre` in `defs/enemies.rs`: 260 HP, club 18 dmg / 28 px push, slam radius 34 px, 14 dmg, 24 px push, 5 s cooldown, 0.9 s wind-up; 60 XP, 30 coins). Ideas: a hit frame (the pack has none), more than one ogre in big dungeons.
 - **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Check its license and keep the license file next to it.
 
 ## Other follow-ups

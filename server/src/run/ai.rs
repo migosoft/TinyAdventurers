@@ -171,6 +171,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
             let reach = |a: AttackStyle| match a {
                 AttackStyle::Melee { range, windup, .. } => (range + PLAYER_RADIUS + def.radius, 0.0, windup),
                 AttackStyle::Ranged { range, preferred, windup, .. } => (range, preferred, windup),
+                AttackStyle::Slam { radius, windup, .. } => (radius, 0.0, windup),
             };
             let (range, preferred, _) = reach(def.attack);
             if let Some(alt) = def.alt {
@@ -179,10 +180,15 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                 let usable = match alt {
                     AttackStyle::Melee { .. } => d <= alt_range,
                     AttackStyle::Ranged { .. } => d <= alt_range && d >= enemies::ALT_BOLT_MIN_DIST && d > range,
+                    // A slam is worth it for two heroes in reach, or one while the club recovers.
+                    AttackStyle::Slam { radius, .. } => {
+                        let near = run.players.iter().filter(|p| p.alive && p.pos().dist(pos) <= radius).count();
+                        near >= 2 || near == 1 && run.monsters[mi].ai.cd > 0.0
+                    }
                 };
                 if usable && run.monsters[mi].ai.alt_cd <= 0.0 {
                     run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: true });
-                    set_anim(run, mi, Anim::Windup);
+                    set_anim(run, mi, if matches!(alt, AttackStyle::Slam { .. }) { Anim::Slam } else { Anim::Windup });
                     return;
                 }
             }
@@ -202,7 +208,12 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                 move_toward(run, mi, away, speed * 0.8, dt);
                 set_anim(run, mi, Anim::Move);
             } else if d > range * 0.85 || preferred == 0.0 && d > range * 0.7 {
-                move_toward(run, mi, ppos, speed, dt);
+                // Wide figures (the ogre) path around corners and terrain edges.
+                if def.radius > TILE / 2.0 {
+                    path_toward(run, mi, ppos, speed, dt);
+                } else {
+                    move_toward(run, mi, ppos, speed, dt);
+                }
                 set_anim(run, mi, Anim::Move);
             } else {
                 set_anim(run, mi, Anim::Idle);
@@ -324,6 +335,19 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt:
             let id = run.monsters[mi].id;
             let dir = Vec2::from_angle(aim);
             spawn_monster_projectile(run, id, projectile, pos + dir * 5.0, dir, speed, damage, range * 1.3 / speed, 0.0, 0);
+        }
+        AttackStyle::Slam { radius, damage, cooldown, knock, .. } => {
+            set_cd(run, cooldown);
+            set_anim(run, mi, Anim::Idle);
+            run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: radius as f32, k: 5 }, Some(pos));
+            for qi in 0..run.players.len() {
+                let q = &run.players[qi];
+                if q.alive && q.pos().dist(pos) <= radius {
+                    let away = pos.angle_to(q.pos());
+                    run.hurt_player(qi, damage);
+                    run.knock_player(qi, pos, away, knock);
+                }
+            }
         }
     }
 }
@@ -484,6 +508,8 @@ mod tests {
             run.players[0].mv.knocked()
         };
         assert!(pushes(EnemyType::OrcWarrior, false));
+        assert!(pushes(EnemyType::Ogre, false), "ogre club");
+        assert!(pushes(EnemyType::Ogre, true), "ogre slam");
         assert!(pushes(EnemyType::Chort, false), "chort claw");
         assert!(!pushes(EnemyType::Chort, true), "chort fire bolt");
         assert!(!pushes(EnemyType::Imp, true), "imp claw");
@@ -602,6 +628,57 @@ mod tests {
         assert_eq!(first_windup(EnemyType::Chort, Vec2::new(12.0, 0.0)), Some(false), "claw");
         assert_eq!(first_windup(EnemyType::Chort, Vec2::new(30.0, 0.0)), None, "too close for a bolt, too far for a claw");
         assert_eq!(first_windup(EnemyType::Chort, Vec2::new(80.0, 0.0)), Some(true), "fire bolt");
+    }
+
+    /// Players 0.. stand at `offs` from a lone ogre on open floor, attacks ready.
+    fn ogre_among(offs: &[Vec2]) -> (Run, usize) {
+        let classes = vec![ClassId::Paladin; offs.len()];
+        let mut run = test_run(&classes, BossId::Lich);
+        open_floor(&mut run);
+        let at = run.players[0].pos();
+        run.monsters.retain(|m| m.is_boss);
+        let id = run.spawn_enemy(EnemyType::Ogre, at, None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        for (p, off) in run.players.iter_mut().zip(offs) {
+            p.mv.x = at.x + off.x;
+            p.mv.y = at.y + off.y;
+        }
+        run.monsters[mi].ai.cd = 0.0;
+        run.monsters[mi].ai.alt_cd = 0.0;
+        (run, mi)
+    }
+
+    #[test]
+    fn ogre_slams_a_crowd_and_clubs_a_lone_hero() {
+        let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0), Vec2::new(-16.0, 8.0)]);
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.windup.map(|w| w.alt), Some(true), "two heroes near: slam");
+        assert_eq!(run.monsters[mi].anim, Anim::Slam, "the slam has its own telegraph");
+
+        let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0)]);
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.windup.map(|w| w.alt), Some(false), "one hero, club ready: club");
+
+        let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0)]);
+        run.monsters[mi].ai.cd = 1.0;
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.windup.map(|w| w.alt), Some(true), "one hero while the club recovers: slam");
+    }
+
+    #[test]
+    fn ogre_slam_hits_and_pushes_every_hero_in_reach_away_from_it() {
+        let r = enemies::OGRE_SLAM_RADIUS;
+        let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0), Vec2::new(0.0, -(r - 2.0)), Vec2::new(-(r + 6.0), 0.0)]);
+        let hp: Vec<f64> = run.players.iter().map(|p| p.hp).collect();
+        let slam = enemies::def(EnemyType::Ogre).alt.unwrap();
+        run.events.clear();
+        perform_attack(&mut run, mi, 0, slam, true);
+        let p = &run.players;
+        assert!(p[0].hp < hp[0] && p[0].mv.knock_vx > 0.0 && p[0].mv.knock_vy.abs() < 1e-9, "east hero pushed east");
+        assert!(p[1].hp < hp[1] && p[1].mv.knock_vy < 0.0 && p[1].mv.knock_vx.abs() < 1e-9, "north hero pushed north");
+        assert!(p[2].hp == hp[2] && !p[2].mv.knocked(), "hero outside the radius is spared");
+        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Boom { k: 5, .. })), "shockwave event");
+        assert!(run.monsters[mi].ai.alt_cd > 1.0, "slam cooldown started");
     }
 
     #[test]

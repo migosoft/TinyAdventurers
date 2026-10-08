@@ -22,6 +22,9 @@ pub enum EnemyType {
     Summoner,
     /// Imp summoned by a summoner (weaker, dies with it).
     SummonedImp,
+    /// Mini-boss, one per run: a spiked club that pushes hard and a ground
+    /// slam that hits and pushes every hero around it.
+    Ogre,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -29,6 +32,9 @@ pub enum AttackStyle {
     /// `knock`: knockback (px) on a hit; only strong melee pushes, ranged attacks never do.
     Melee { range: f64, damage: f64, cooldown: f64, windup: f64, knock: f64 },
     Ranged { projectile: EntityKind, speed: f64, damage: f64, cooldown: f64, range: f64, preferred: f64, windup: f64 },
+    /// Ground slam: hits and pushes every hero whose centre is within `radius`
+    /// (px from the attacker's centre) when the wind-up ends.
+    Slam { radius: f64, damage: f64, cooldown: f64, windup: f64, knock: f64 },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -156,6 +162,16 @@ pub fn def(t: EnemyType) -> EnemyDef {
             attack: Melee { range: 14.0, damage: 9.0, cooldown: 1.0, windup: 0.3, knock: 14.0 },
             alt: Some(Ranged { projectile: EntityKind::FireBolt, speed: 130.0, damage: 6.0, cooldown: 3.2, range: 130.0, preferred: 0.0, windup: 0.35 }),
         },
+        Ogre => EnemyDef {
+            kind: EntityKind::Ogre,
+            hp: 260.0,
+            speed: 40.0,
+            // Wide: paths with clearance (see `ai::path_toward`); fits 3-tile corridors.
+            radius: 10.0,
+            sight: 150.0,
+            attack: Melee { range: 18.0, damage: 18.0, cooldown: 1.6, windup: 0.5, knock: 28.0 },
+            alt: Some(Slam { radius: OGRE_SLAM_RADIUS, damage: 14.0, cooldown: 5.0, windup: OGRE_SLAM_WINDUP, knock: 24.0 }),
+        },
     }
 }
 
@@ -176,6 +192,11 @@ pub fn for_boss(t: EnemyType, boss: BossId) -> EnemyType {
 pub fn is_demon(t: EnemyType) -> bool {
     matches!(t, EnemyType::Imp | EnemyType::Chort | EnemyType::Summoner | EnemyType::SummonedImp)
 }
+
+/// The ogre's ground slam: radius (px, hero centres) and wind-up (s). The
+/// client draws the telegraph ring from these.
+pub const OGRE_SLAM_RADIUS: f64 = 34.0;
+pub const OGRE_SLAM_WINDUP: f64 = 0.9;
 
 /// A second (alt) ranged attack is only used from at least this far away
 /// (center distance, px): chorts throw fire bolts at heroes out of reach.

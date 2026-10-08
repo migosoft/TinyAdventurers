@@ -21,6 +21,7 @@ pub enum EntityKind {
     Imp = 19,
     Chort = 20,
     Summoner = 21,
+    Ogre = 22,
     // Bosses
     Demon = 30,
     Lich = 31,
@@ -43,7 +44,7 @@ pub enum EntityKind {
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 31] = [
+    pub const ALL: [EntityKind; 32] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -60,6 +61,7 @@ impl EntityKind {
         EntityKind::Imp,
         EntityKind::Chort,
         EntityKind::Summoner,
+        EntityKind::Ogre,
         EntityKind::Demon,
         EntityKind::Lich,
         EntityKind::Dragon,
@@ -93,11 +95,24 @@ pub enum Anim {
     Breath = 8,
     /// Dragon tail swipe: a melee hit behind the figure.
     Tail = 9,
+    /// Ogre ground slam wind-up (the telegraph ring grows over it).
+    Slam = 10,
 }
 
 impl Anim {
-    pub const ALL: [Anim; 10] =
-        [Anim::Idle, Anim::Move, Anim::Melee, Anim::Shoot, Anim::Cast, Anim::Dash, Anim::Windup, Anim::Channel, Anim::Breath, Anim::Tail];
+    pub const ALL: [Anim; 11] = [
+        Anim::Idle,
+        Anim::Move,
+        Anim::Melee,
+        Anim::Shoot,
+        Anim::Cast,
+        Anim::Dash,
+        Anim::Windup,
+        Anim::Channel,
+        Anim::Breath,
+        Anim::Tail,
+        Anim::Slam,
+    ];
 }
 
 pub mod flags {

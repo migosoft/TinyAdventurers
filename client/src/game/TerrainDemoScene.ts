@@ -37,12 +37,15 @@ const OY = 3;
  * stands within `reach` px. A strike knocks it away along `push` (tiles), or
  * `dist` px straight away from the striker (0: no push); `tail` swipes behind.
  * `swoop` winds up, then charges to `to` and knocks the target away on
- * contact. A pushed figure has no control until the slide ends.
+ * contact. `slam` winds up (the ground telegraph), then hits every figure
+ * within `r` px and knocks it `dist` px straight away. A pushed figure has
+ * no control until the slide ends.
  */
 type Step =
   | { to: [number, number]; dash?: boolean }
   | { wait: number; face?: number }
-  | { hit: string; push?: [number, number]; dist?: number; reach?: number; tail?: boolean }
+  | { hit: string; push?: [number, number]; dist?: number; reach?: number; tail?: boolean; windup?: number }
+  | { slam: number; dist: number; windup: number }
   | { swoop: string; to: [number, number]; dist: number };
 
 interface Actor {
@@ -166,13 +169,23 @@ export abstract class TerrainDemo extends Phaser.Scene {
         a.t += dt;
         anim = ANIM.Windup;
         a.aim = Math.atan2(target.y - a.y, target.x - a.x) + (s.tail ? Math.PI : 0);
-        if (a.t >= 0.35) {
+        if (a.t >= (s.windup ?? 0.35)) {
           a.anim = s.tail ? ANIM.Tail : ANIM.Melee;
           a.animT = 0;
           anim = a.anim;
           this.strike(a, target, s.push ? Math.hypot(...s.push) * TILE : (s.dist ?? 0), s.push);
           this.next(a);
         }
+      }
+    } else if ('slam' in s) {
+      a.t += dt;
+      anim = ANIM.Slam;
+      if (a.t >= s.windup) {
+        this.fx.shockwave(a.x, a.y, s.slam);
+        for (const o of this.actors)
+          if (o !== a && !o.doom && !o.push && Math.hypot(o.x - a.x, o.y - a.y) <= s.slam) this.strike(a, o, s.dist);
+        anim = ANIM.Idle;
+        this.next(a);
       }
     } else if ('swoop' in s) {
       a.t += dt;
@@ -236,7 +249,7 @@ export abstract class TerrainDemo extends Phaser.Scene {
     } else a.burnT = 0;
 
     a.v.update(
-      { x: a.x, y: a.y, anim, animT: anim === ANIM.Melee || anim === ANIM.Tail ? a.animT : 0, aim: a.aim, flags: a.hurtT > 0 ? FLAG.HURT : 0, sink: a.dashing ? 0 : sinkDepth(tile) },
+      { x: a.x, y: a.y, anim, animT: anim === ANIM.Melee || anim === ANIM.Tail ? a.animT : anim === ANIM.Slam ? a.t : 0, aim: a.aim, flags: a.hurtT > 0 ? FLAG.HURT : 0, sink: a.dashing ? 0 : sinkDepth(tile) },
       dt,
     );
   }

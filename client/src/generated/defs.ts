@@ -23,6 +23,7 @@ export const KIND = {
   "Mimic": 18,
   "Missile": 50,
   "Necromancer": 15,
+  "Ogre": 22,
   "OrcArcher": 14,
   "OrcWarrior": 13,
   "Paladin": 1,
@@ -43,6 +44,7 @@ export const ANIM = {
   "Melee": 2,
   "Move": 1,
   "Shoot": 3,
+  "Slam": 10,
   "Tail": 9,
   "Windup": 6
 } as const;
@@ -84,6 +86,8 @@ export const CONST = {
   "MIMIC_HOP_AIR_START": 0.2,
   "MIMIC_HOP_CYCLE": 0.6,
   "MIMIC_WAKE_T": 0.6,
+  "OGRE_SLAM_RADIUS": 34.0,
+  "OGRE_SLAM_WINDUP": 0.9,
   "PLAYER_RADIUS": 5.0,
   "POS_SCALE": 16.0,
   "SHALLOW_SPEED": 0.7,

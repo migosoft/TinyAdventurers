@@ -2,7 +2,7 @@
 // The pack has idle/run (4 frames) and hit frames; attacks are approximated
 // by animating the weapon sprite (swing, recoil, raise) plus small body moves.
 import Phaser from 'phaser';
-import { ANIM, FLAG } from '../../generated/defs';
+import { ANIM, CONST, FLAG } from '../../generated/defs';
 import { DEPTH, Effects } from '../effects';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
 
@@ -56,6 +56,8 @@ export class EntityView {
   private shadow: Phaser.GameObjects.Image;
   private body: Phaser.GameObjects.Sprite;
   private weapon?: Phaser.GameObjects.Image;
+  /** Ground slam telegraph (the ogre), drawn on the floor. */
+  private tele?: Phaser.GameObjects.Graphics;
   private label?: Phaser.GameObjects.Text;
   private clock = 0;
   private runClock = 0;
@@ -156,7 +158,7 @@ export class EntityView {
     this.label?.setVisible(fall === 0 && drown === 0);
 
     if (hurt && !d.hit && Math.floor(this.clock * 30) % 2 === 0) this.body.setTintFill(0xffffff);
-    else if (s.anim === ANIM.Windup) {
+    else if (s.anim === ANIM.Windup || s.anim === ANIM.Slam) {
       // Telegraph: flashing red and a shiver before the blow lands.
       this.body.setTint(Math.floor(this.clock * 16) % 2 ? 0xff8080 : (d.tint ?? 0xffffff));
       this.body.x = Math.floor(this.clock * 40) % 2 ? 1 : -1;
@@ -231,13 +233,14 @@ export class EntityView {
     }
 
     if (d.mouth) this.breathFx(s);
+    if (d.slam) this.slamFx(s, d.slam);
 
     // ---- weapon ----
     const w = this.weapon;
     if (!w) return;
     const isMelee = s.anim === ANIM.Melee;
     w.setFrame(isMelee && d.meleeWeapon ? d.meleeWeapon : d.weapon!);
-    const hx = 3 * sgn;
+    const hx = (d.handX ?? 3) * sgn;
     let alpha = 1;
     let rot = 0;
     let ox = 0;
@@ -264,6 +267,13 @@ export class EntityView {
             alpha = Math.min(1, Math.max(0, (k - 0.7) / 0.3));
           }
         } else if (s.anim === ANIM.Windup) rot -= sgn * 1.6;
+        else if (s.anim === ANIM.Slam) {
+          // Ground slam: the club goes up over the head, then comes down at the impact.
+          const k = Math.min(t / 0.3, 1);
+          rot = -sgn * 0.5 * k;
+          oy = -6 * k;
+          ox = -hx * 0.6 * k;
+        }
         break;
       }
       case 'bow': {
@@ -364,12 +374,31 @@ export class EntityView {
   /** Swing arc from one side of the aim to the other (in swing direction) at the damage reach. */
   private swoosh(s: ViewState, aim: number, sgn: number, reach: number, arc: number, color = this.def.swing?.color): void {
     const scale = this.def.scale ?? 1;
-    const cx = s.x + 3 * sgn * scale;
+    const cx = s.x + (this.def.handX ?? 3) * sgn * scale;
     const cy = s.y - this.def.handY * scale;
     this.fx.swoosh(cx, cy, reach, aim - sgn * (arc / 2), aim + sgn * (arc / 2), color ?? 0xffffff);
   }
 
+  /**
+   * Ground slam telegraph: the danger zone is outlined on the ground at the
+   * real hit radius, and fills up from the centre until the club lands.
+   */
+  private slamFx(s: ViewState, r: number): void {
+    if (s.anim !== ANIM.Slam) {
+      this.tele?.setVisible(false);
+      return;
+    }
+    const g = (this.tele ??= this.root.scene.add.graphics().setDepth(DEPTH.hazard));
+    const k = Math.min(s.animT / CONST.OGRE_SLAM_WINDUP, 1);
+    const blink = Math.floor(this.clock * 12) % 2 === 0;
+    g.clear().setVisible(true).setPosition(Math.round(s.x), Math.round(s.y));
+    g.fillStyle(0xff3020, 0.12).fillCircle(0, 0, r);
+    g.fillStyle(0xff3020, 0.3).fillCircle(0, 0, r * k);
+    g.lineStyle(1, 0xff5040, k > 0.7 && blink ? 1 : 0.7).strokeCircle(0, 0, r);
+  }
+
   destroy(): void {
+    this.tele?.destroy();
     this.root.destroy(true);
   }
 }

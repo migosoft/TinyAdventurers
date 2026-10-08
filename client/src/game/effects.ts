@@ -216,6 +216,18 @@ export class Effects {
     this.scene.cameras.main.shake(120, 0.004);
   }
 
+  /** Ground slam: a dust shockwave out to the hit radius, debris and a jolt. */
+  shockwave(x: number, y: number, r: number): void {
+    this.ring(x, y, r, 0xd8c090, 0.4, true);
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
+      const s = r * (2.2 + Math.random() * 1.2);
+      this.particle(x + Math.cos(a) * 4, y + Math.sin(a) * 4, Math.cos(a) * s, Math.sin(a) * s * 0.8, 0.35 + Math.random() * 0.2, i % 3 ? 0x8a7a68 : 0x5a4a3a, { scale: 1.5 });
+    }
+    this.burst(x, y - 2, 10, 0x6a5a48, 40, 0.5, 160);
+    this.scene.cameras.main.shake(140, 0.005);
+  }
+
   healRing(x: number, y: number, r: number): void {
     this.ring(x, y, r, 0xffe070, 0.6, true);
     for (let i = 0; i < 18; i++) {

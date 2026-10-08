@@ -100,6 +100,7 @@ pub fn xp_for_kill(enemy: Option<EnemyType>) -> u32 {
         Some(Imp) | Some(Chort) => 8,
         Some(SummonedImp) => 2,
         Some(Summoner) => 25,
+        Some(Ogre) => 60,
         None => 300, // boss
     }
 }
@@ -111,6 +112,7 @@ pub const CHEST_COINS: std::ops::RangeInclusive<u32> = 8..=15;
 pub fn coins_for_kill(enemy: Option<EnemyType>) -> u32 {
     match enemy {
         Some(EnemyType::Mimic) => 25,
+        Some(EnemyType::Ogre) => 30,
         None => 50, // boss
         _ => 0,
     }

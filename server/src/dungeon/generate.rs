@@ -190,6 +190,13 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     let mut hall_rng = rng.clone();
     hall_rng.set_stream(9);
     place_boss_chasms(&mut hall_rng, &mut map, &boss);
+    // One ogre per run (stream 10), after the terrain so it stands on safe ground.
+    let mut ogre_rng = rng.clone();
+    ogre_rng.set_stream(10);
+    let depths: Vec<f64> = rooms.iter().map(|r| room_dist(&r.rect) as f64 / max_d as f64).collect();
+    if let Some(pos) = place_ogre(&mut ogre_rng, &map, &rooms, &depths, &chests) {
+        spawns.push(Spawn { enemy: EnemyType::Ogre, pos });
+    }
 
     let mut dungeon = Dungeon {
         map,
@@ -346,6 +353,38 @@ fn populate(rng: &mut ChaCha8Rng, room: &Room, depth: f64, _idx: usize, out: &mu
         let y = rng.gen_range(r.y + 1..r.y + r.h - 1);
         out.push(Spawn { enemy: t, pos: Map::center_of(x, y) });
     }
+}
+
+/// The ogre roams a room or hall in the deeper part of the dungeon (`depths`
+/// per room, 0 at the start, 1 the deepest), on a tile with safe ground all
+/// around it (it is wide) and never on a chest. Falls back to any ordinary
+/// room when the deeper ones have no such tile.
+fn place_ogre(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], depths: &[f64], chests: &[ChestSpawn]) -> Option<Vec2> {
+    let chest_tiles: Vec<(i32, i32)> = chests.iter().map(|c| Map::tile_of(c.pos)).collect();
+    let spots = |min_depth: f64| -> Vec<Vec<(i32, i32)>> {
+        rooms
+            .iter()
+            .zip(depths)
+            .filter(|(r, d)| matches!(r.kind, RoomKind::Room | RoomKind::Hall) && **d >= min_depth)
+            .map(|(r, _)| {
+                let r = &r.rect;
+                (r.y + 1..r.y + r.h - 1)
+                    .flat_map(|y| (r.x + 1..r.x + r.w - 1).map(move |x| (x, y)))
+                    .filter(|&(x, y)| {
+                        (-1..=1).all(|dy| (-1..=1).all(|dx| map.safe(x + dx, y + dy) && !chest_tiles.contains(&(x + dx, y + dy))))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .filter(|s| !s.is_empty())
+            .collect()
+    };
+    let mut rooms_ok = spots(0.35);
+    if rooms_ok.is_empty() {
+        rooms_ok = spots(0.0);
+    }
+    let room = rooms_ok.choose(rng)?;
+    let &(x, y) = room.choose(rng)?;
+    Some(Map::center_of(x, y))
 }
 
 /// About one ordinary room or hall in three gets a chest, against its top wall
@@ -706,6 +745,13 @@ mod tests {
                 assert_eq!(d.map.tile_at(sp.pos), Tile::Floor as u8, "seed {seed}: spawn not on floor");
                 assert!(!d.rooms[d.start].rect.contains(sp.pos), "seed {seed}: enemy in start room");
             }
+            // Exactly one ogre, with safe ground all around it, outside the start room and boss hall.
+            let ogres: Vec<_> = d.spawns.iter().filter(|s| s.enemy == EnemyType::Ogre).collect();
+            assert_eq!(ogres.len(), 1, "seed {seed}: ogres");
+            let (ox, oy) = Map::tile_of(ogres[0].pos);
+            assert!((-1..=1).all(|dy| (-1..=1).all(|dx| d.map.safe(ox + dx, oy + dy))), "seed {seed}: ogre without room around it");
+            assert!(reached(ox, oy), "seed {seed}: ogre cut off");
+            assert!(!d.boss_hall().contains(ogres[0].pos), "seed {seed}: ogre in the boss hall");
             // Chests: on floor against a wall, outside the start room and boss hall, apart from enemies.
             for c in &d.chests {
                 let (x, y) = Map::tile_of(c.pos);

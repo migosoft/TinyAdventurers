@@ -88,6 +88,7 @@ export class GameScene extends Phaser.Scene {
   // Debug mode (?debug): immortal + path to the boss, drawn above the fog.
   private debugOn = false;
   private debugPath: [number, number][] = [];
+  private debugOgre: [number, number][] = [];
   private debugGfx!: Phaser.GameObjects.Graphics;
 
   constructor() {
@@ -131,6 +132,7 @@ export class GameScene extends Phaser.Scene {
     this.debugGfx = this.add.graphics().setDepth(DEPTH.fog + 1);
     this.debugOn = false;
     this.debugPath = [];
+    this.debugOgre = [];
 
     const kb = this.input.keyboard!;
     this.keys = kb.addKeys('W,A,S,D,Q,E') as GameScene['keys'];
@@ -274,6 +276,7 @@ export class GameScene extends Phaser.Scene {
       if (m.on !== this.debugOn) this.hud.setDebug(m.on);
       this.debugOn = m.on;
       this.debugPath = m.points;
+      this.debugOgre = m.ogre;
     }
     else if (m.t === 'RunEnded') this.hud.showEnd(m);
   }
@@ -309,6 +312,7 @@ export class GameScene extends Phaser.Scene {
           this.fx.ring(ev.x, ev.y, ev.r * 2, 0xff6020, 0.5, true);
           this.fx.burst(ev.x, ev.y, 20, 0xff8030, 80);
         } else if (ev.k === 3) this.fx.ring(ev.x, ev.y, ev.r, 0x6a2a8a, 0.4, true);
+        else if (ev.k === 5) this.fx.shockwave(ev.x, ev.y, ev.r);
         else this.fx.explosion(ev.x, ev.y, ev.r);
         break;
       case 'Died': {
@@ -673,18 +677,24 @@ export class GameScene extends Phaser.Scene {
     if (!mine && pd.trail && Math.random() < 0.5) this.fx.particle(e.x, e.y - 8, 0, 0, 0.25, pd.trail, { depth: DEPTH.projectile - 1 });
   }
 
-  /** Debug: marching dashed line along the server's shortest path to the boss. */
+  /** Debug: marching dashed lines along the server's shortest paths to the boss (yellow) and the ogre (blue). */
   private drawDebugPath(px: number, py: number, now: number): void {
     const g = this.debugGfx.clear();
-    if (!this.debugOn || this.debugPath.length < 2 || !this.alive) return;
+    if (!this.debugOn || !this.alive) return;
+    this.drawPathLine(g, px, py, now, this.debugOgre, 0x40a0ff, 0x4060ff);
+    this.drawPathLine(g, px, py, now, this.debugPath, 0xffe040, 0xff4040);
+  }
+
+  private drawPathLine(g: Phaser.GameObjects.Graphics, px: number, py: number, now: number, path: [number, number][], color: number, end: number): void {
+    if (path.length < 2) return;
     // Start at the predicted position (the server's first point is slightly old).
-    const pts: [number, number][] = [[px, py], ...this.debugPath.slice(1)];
+    const pts: [number, number][] = [[px, py], ...path.slice(1)];
     const DASH = 6;
     const GAP = 4;
     let phase = (now * 40) % (DASH + GAP);
     g.lineStyle(2, 0x000000, 0.5);
     g.strokePoints(pts.map(([x, y]) => ({ x, y: y + 1 })), false);
-    g.lineStyle(2, 0xffe040, 0.95);
+    g.lineStyle(2, color, 0.95);
     for (let i = 0; i + 1 < pts.length; i++) {
       const [x0, y0] = pts[i];
       const [x1, y1] = pts[i + 1];
@@ -701,8 +711,8 @@ export class GameScene extends Phaser.Scene {
       phase = (phase + len) % (DASH + GAP);
     }
     const [ex, ey] = pts[pts.length - 1];
-    g.fillStyle(0xff4040, 0.6 + 0.4 * Math.sin(now * 8)).fillCircle(ex, ey, 4);
-    g.lineStyle(1, 0xffe040, 1).strokeCircle(ex, ey, 7);
+    g.fillStyle(end, 0.6 + 0.4 * Math.sin(now * 8)).fillCircle(ex, ey, 4);
+    g.lineStyle(1, color, 1).strokeCircle(ex, ey, 7);
   }
 
   /** Pack sprite (arrows) or a runtime glow for magic projectiles. */
@@ -735,10 +745,13 @@ export class GameScene extends Phaser.Scene {
     const g = this.bars;
     g.clear();
     for (const e of this.ents.values()) {
-      if (isProjectileKind(e.kind) || e.kind === KIND.FirePatch || e.kind === KIND.Chest || isBossKind(e.kind) || e.hp >= 1 || e.flags & FLAG.DEAD) continue;
+      if (isProjectileKind(e.kind) || e.kind === KIND.FirePatch || e.kind === KIND.Chest || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
+      // The ogre (mini-boss) always shows a wide bar; others only once hurt.
+      const ogre = e.kind === KIND.Ogre;
+      if (e.hp >= 1 && !ogre) continue;
       const v = this.views.get(e.id) ?? this.mimicViews.get(e.id);
       if (!v) continue;
-      const w = 12;
+      const w = ogre ? 28 : 12;
       const x = Math.round(e.x - w / 2);
       const y = Math.round(e.y - v.height - 3);
       g.fillStyle(0x140c1a, 1).fillRect(x - 1, y - 1, w + 2, 4);
