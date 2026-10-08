@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-08, knockback and boss-hall chasms)
 
-**Branch:** `feature/knockback` (not merged yet; ask the user before merging into `main` or pushing).
+**Branch:** `feature/knockback` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
 
 **User decisions this session:**
 - **Only strong melee pushes:** orc warriors (20 px) and chorts (14 px; imps do not). The demon's **cleave (36 px) and swoop (44 px)**. The dragon's **tail swipe (44 px)** and a **new front claw (32 px)**, both asked for by the user. **No ranged attack pushes.**
@@ -346,9 +346,8 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Merge knockback:** the user confirmed `feature/knockback` live; ask before merging into `main` and pushing (if not done yet).
-2. **Ogre mini-boss** (next feature, the user's decision): start by showing an enlarged preview of the pack `ogre` sprite with `weapon_baton_with_spikes`, then demo first. One per run, roaming, its club pushes. See TODO.md (New enemies).
-3. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
-4. Loadouts: design new abilities, then add the lobby picker, paid with coins.
-5. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
-6. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), the prediction corrections in busy runs under lag (TODO.md, Network).
+1. **Ogre mini-boss** (next feature, the user's decision): start by showing an enlarged preview of the pack `ogre` sprite with `weapon_baton_with_spikes`, then demo first. One per run, roaming, its club pushes. See TODO.md (New enemies).
+2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
+3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
+4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
+5. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), the prediction corrections in busy runs under lag (TODO.md, Network).
