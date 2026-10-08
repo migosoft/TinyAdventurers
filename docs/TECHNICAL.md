@@ -59,6 +59,7 @@ client/                              Vite + TypeScript + Phaser 3.90
   src/game/MimicDemoScene.ts         dev page ?mimic (chaser mimic, chest, reveal; no server)
   src/game/DaemonDemoScene.ts        dev page ?daemons (imp, chort, summoner vs a knight; no server)
   src/game/TerrainDemoScene.ts       dev pages ?water, ?chasm, ?lava (scripted figures; no server)
+  src/game/KnockbackDemoScene.ts     dev page ?knockback (every push in the game, on the terrain demo base)
   src/game/terrain.ts                terrain layer: autotiled water/lava/chasm cells, animation, lava glow
   src/game/terrain-codes.ts          terrain frame layout and edge codes shared with the atlas build
   src/ui/                            DOM lobby, HUD, texts, atlas previews
@@ -155,8 +156,9 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 **Tick (`Run::step`), in order:**
 1. **Players:** one queued input per tick, two if the queue holds more than 3. No input means no movement, so the server stays deterministic with respect to the client.
    - `apply_input` moves first (`collision::step_move`), then applies dash contact damage, then abilities.
+   - **Knockback:** `MoveState` carries `knock_vx/knock_vy` (px/s). While they are non-zero (and the hero is not dashing), `step_move` ignores the input, moves along the knock with `Mover::Dash` (only walls stop it), then multiplies it by `KNOCK_DECAY` (e^-0.25 per 1/60 s step) and zeroes it below `KNOCK_MIN_SPEED` (8 px/s). `apply_input` skips abilities for an input that started knocked, so a pushed hero has no control at all, dash included. `Run::knock_player(pi, from, fallback_angle, dist)` sets the start speed `collision::knock_speed(dist)` so the geometric slide covers `dist` px, straight away from `from`. It does nothing for dead, sinking or dashing heroes; a new push replaces an old one. Sinking and death clear it.
    - Cooldowns tick per processed input. The client does the same.
-   - `terrain_player` then checks the tile under the hero's centre (not while dashing). A chasm or deep water starts `Player.sinking` (`FALL_TIME` 0.7 s / `DROWN_TIME` 0.9 s, `Ev::Sink`); then `kill_player` kills the hero (armour does not help) with "X fell into the abyss" / "X drowned". A sinking hero's inputs are acked but neither move nor attack. Lava calls `hurt_player(LAVA_DAMAGE)` every `LAVA_TICK` (10 per 0.5 s, the first at once), so armour and debug apply. In debug mode `kill_player` puts the hero back on `Player.last_safe` (centre of the last safe tile) instead.
+   - `terrain_player` then checks the tile under the hero's centre (not while dashing; a pushed hero slides on the ground, so a push over a chasm or deep water sinks them). A chasm or deep water starts `Player.sinking` (`FALL_TIME` 0.7 s / `DROWN_TIME` 0.9 s, `Ev::Sink`); then `kill_player` kills the hero (armour does not help) with "X fell into the abyss" / "X drowned". A sinking hero's inputs are acked but neither move nor attack. Lava calls `hurt_player(LAVA_DAMAGE)` every `LAVA_TICK` (10 per 0.5 s, the first at once), so armour and debug apply. In debug mode `kill_player` puts the hero back on `Player.last_safe` (centre of the last safe tile) instead.
 2. **Monsters:** only those within 420 px of a living player run `ai::tick_monster`.
 3. **Boss behaviour:** runs once the boss is awake.
 4. **Separation:** overlapping monsters are pushed apart.
@@ -175,12 +177,14 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 - **Chests and mimics.** `Run::new` turns `Dungeon.chests` into `Run.chests` (real ones) and sleeping `EnemyType::Mimic` monsters. `touch_chests` (every step) opens a chest when a living player is within `CHEST_TOUCH` (12 px): `CHEST_COINS` (8–15) to every living player through `give_coins`. The same distance wakes a mimic (`wake_mimic`), as does any player hit (`hurt_monster`). A woken mimic holds still for `MIMIC_WAKE_T` (`Ai.hold`, the lid flying open), then uses the normal AI. `check_boss_hall` wakes every sleeping monster except mimics. Sleeping monsters are not pushed by `separate_monsters`.
 - **Mimic gait.** `ai::gait` makes the mimic hop: it moves only while its Move animation clock is in `MIMIC_HOP_AIR` (0.2–0.7 of a 0.6 s `MIMIC_HOP_CYCLE`), at its average speed divided by that fraction. The constants go to the client through `CONST`, so `mimic.ts` draws crouch, flight and landing from the same clock (`anim_ms`). An awake mimic does not wander.
 - `hurt_player` applies armor and skips HP loss in debug mode. Death switches the player to spectating.
+- **Who pushes:** `AttackStyle::Melee` has a `knock` (px): orc warrior 20, chort claw 14, everything else 0. `ai::perform_attack` calls `knock_player` after a melee hit. `Ranged` has no knock field, so ranged attacks can never push. Bosses push in their behaviours: the demon's cleave (36) and swoop (44), the dragon's front claw (32, new: a 0.4 s wind-up, 20 damage, `Anim::Melee`) and tail swipe (44, now `Anim::Tail` so the client draws it behind the dragon). Heroes never push enemies.
 
 **Lag compensation.**
 - Melee arcs, the dagger and dash contact test monster positions rewound by the client's `view_lag` (RTT/2 + its interpolation delay), up to 31 ticks.
 - Player projectiles spawn fast-forwarded by RTT/2, at most 150 ms.
 
 **AI (`ai.rs`).**
+- **Wide figures:** `path_toward` (also used by the bosses' chase since boss halls have chasms) treats figures wider than a tile (the demon, the dragon) specially: the straight-line shortcut also checks lines offset by their radius against terrain (`collision::terrain_line`; walls are fine, figures slide along them), A* (`astar_clear`) charges extra for tiles next to anything they cannot enter, a waypoint they make no progress toward is skipped, and a boss with no path walks straight at the hero. The swoop still charges in a straight line and stops at a chasm edge.
 - **Movers:** each monster has a `mover`: `Mover::Demon` for imps, chorts, summoners, summoned imps and the demon boss, `Mover::Enemy` otherwise. `move_toward`, `separate_monsters`, `astar` and summon spots use the walking rule for it, and `path_toward` only walks straight when `walk_line` (not just line of sight) is clear. So enemies never enter chasms or deep water, and only demons cross lava. The debug path to the boss is planned as `Mover::Enemy`, around all terrain.
 - Perception: the nearest living, non-hidden player within `sight` and with line of sight. Enemies never target players they cannot currently see.
 - States: `Idle` (wander near home) → `Chase` (melee approach, ranged keep a preferred distance) → wind-up → attack. Losing sight leads to `Search` (A* to last known position) and then `Return` (A* home).
@@ -224,10 +228,12 @@ The generator is seeded (ChaCha8) and deterministic:
    - **pools:** ovals a tile away from the walls. Water pools are deep wherever all 8 neighbours are pool, so a shallow rim always surrounds the deep centre; lava pools are all lava
    - **chasm strips:** wall to wall across the room, 1 to `MAX_CHASM` (3) tiles wide so the Barbarian's dash clears them, with a 2–3 tile floor bridge
 
-   A feature only covers floor, keeps two tiles from corridor mouths (open ground outside the room) and never covers a chest. It is undone if it cuts any safe ground off from the start or makes a room as far as the boss hall. Enemy spawns it covers move to the nearest free floor tile in the room. The start room and boss hall stay clear. About 4 % of the floor becomes terrain.
+   A feature only covers floor, keeps two tiles from corridor mouths (open ground outside the room) and never covers a chest. It is undone if it cuts any safe ground off from the start or makes a room as far as the boss hall. Enemy spawns it covers move to the nearest free floor tile in the room. The start room stays clear. About 4 % of the floor becomes terrain.
+
+   **Boss hall chasms** (`place_boss_chasms`, stream 9, every theme), so knockback matters in boss fights: one or two **wall strips** (4–7 tiles long, 1–2 deep, along any wall) and one or two **pits** (2x2 to 3x2, three tiles from the walls). Nothing goes within 3 tiles of the boss's start or near the entrance (the bottom centre, 4 tiles to each side, 5 deep). Pits keep 3 tiles from other chasms (the dragon is over two tiles wide), strips 2. A feature that cuts any hall floor off from the entrance is undone.
 6. **Rotation:** a random quarter turn, so the start can be on any side and the boss hall is on the opposite side.
 
-The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), including chest placement (on floor against a wall, outside the start room and boss hall, not on an enemy), that chests and mimics actually appear, and the terrain guarantees: no safe tile cut off, spawns and chests on floor, no terrain in the start room or boss hall, only the theme's liquid, every terrain kind present, and a terrain share of 2–15 %.
+The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), including chest placement (on floor against a wall, outside the start room and boss hall, not on an enemy), that chests and mimics actually appear, and the terrain guarantees: no safe tile cut off, spawns and chests on floor, no terrain in the start room, only chasms (and some) in the boss hall with its centre and entrance clear, only the theme's liquid, every terrain kind present, and a terrain share of 2–15 %.
 
 ## 7. Field of vision
 
@@ -247,7 +253,8 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - Local movement uses the TS collision port. It is bit-identical to Rust, which `sim.test.ts` checks against the Rust-written fixtures.
 - On each snapshot the client replays unacknowledged inputs from the server state.
 - Errors under 24 px are blended out over about 100 ms; larger errors snap.
-- Terrain is part of the port: the speed factor and the walking rules. The predictor also applies the server's sinking rule (`sinking()` in `sim/collision.ts`): a hero not dashing whose centre is over a chasm or deep water stops moving and attacking, in prediction and in the replay, so a fall needs no round trip and causes no correction.
+- Terrain is part of the port: the speed factor and the walking rules.
+- **Knockback is part of the port** (`stepMove`, `knocked()`). `me` carries `knock_vx/knock_vy`, and the replay starts from them, so after the snapshot that reports a push the prediction slides exactly like the server. The push itself is the enemy's action, so the client learns of it about RTT/2 late (a correction, blended or snapped as usual). While predicted knocked, `fixedStep` fires nothing, and the replay drops dashes sent during a push the client learned of late, like the server. The predictor also applies the server's sinking rule (`sinking()` in `sim/collision.ts`): a hero not dashing whose centre is over a chasm or deep water stops moving and attacking, in prediction and in the replay, so a fall needs no round trip and causes no correction.
 - Local cooldowns and hide time are corrected when they differ from the server by more than 0.15 s / 0.3 s.
 
 **Own attacks.**
@@ -265,7 +272,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 
 **Typical numbers (local):**
 - server tick about 0.12–0.14 ms
-- snapshot about 125 B with 2 players (248 B before the compact form); a fight with 14 entities in view about 350 B (about 570 B before). Each extra entity costs about 19 B.
+- snapshot about 127 B with 2 players (the knock is `[vx, vy]` only while pushed, nil otherwise) (248 B before the compact form); a fight with 14 entities in view about 350 B (about 570 B before). Each extra entity costs about 19 B.
 - correction 0.00 px
 
 ## 9. Rendering (client)
@@ -343,7 +350,8 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 | `?debug&boss=demon\|lich\|dragon` | Host only. Preselects that boss in the lobby's boss picker (`SelectBoss`); used by `smoke.mjs`. Works even with `ALLOW_DEBUG=0` (the boss choice is a normal feature). The server logs `run N started: … boss X (chosen)`. Runs where debug was turned on bank no XP. |
 | `?gallery[&state=melee&slow=10]` | Every figure cycling its animation states, no server needed. |
 | `?mimic[&slow=3]` | The chasing mimic after a walking knight, a treasure chest opening with its coin burst, and the mimic reveal. No server needed. |
-| `?water`, `?chasm`, `?lava` `[&slow=3]` | Terrain demos with scripted figures: wading and drowning, falling into a chasm, burning in lava, demons walking through lava, the dash jumping a gap, and knockback (which the game does not have yet). Speeds and times come from `CONST`, like the server. No server needed. |
+| `?water`, `?chasm`, `?lava` `[&slow=3]` | Terrain demos with scripted figures: wading and drowning, falling into a chasm, burning in lava, demons walking through lava, the dash jumping a gap, and being knocked in. Speeds and times come from `CONST`, like the server. No server needed. |
+| `?knockback` `[&slow=3]` | Every push in the game, side by side next to chasms and deep water, with the game's distances and decay: orc warrior, chort, imp (no push), a barbarian who cannot dash out, the demon's cleave and swoop, the dragon's tail and front claw. The user approved the distances here. |
 | `?daemons[&slow=3]` | Imp, chort and a pack of both fighting a walking knight, and a summoner summoning imps. Uses the real figure definitions; the attack logic is a local imitation of the server AI. No server needed. |
 | `?lag=150&jitter=40&loss=2` | Network simulator. |
 
@@ -371,11 +379,13 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 
 ## 12. Tests
 
-**Server (`cargo test`, 73 tests):**
+**Server (`cargo test`, 78 tests):**
 - protocol round trip
 - wire: positions round to 1/16 px (also beyond 4096 px), aim wraps into a byte, event codes follow `EV_CODES`, a compact input decodes to `InputMsg`, sample snapshots are bare arrays and at least 30 % smaller than the old form
 - dungeon determinism and guarantees over 200 seeds
 - collision cannot tunnel through walls; line of sight
+- knockback: a push slides its distance, ignores the input, crosses deep water and stops at walls; a push into a chasm is a fall, with no attacks meanwhile, and dashing heroes are not pushed; a short push stops and control returns; only orc warriors' and chorts' melee pushes (not imps, skeletons, archers or bolts)
+- wide bosses (demon, dragon) reach every spot of their hall around the chasms (24 seeds)
 - terrain: the rule matrix per mover; slowing in shallow water; a dash over a chasm and deep water; a chasm kills after the fall (not mid-dash) and debug heroes climb back out; a dash ending in deep water drowns; lava burns over time; only demons are lava walkers; A* keeps enemies out of lava and chasms and lets demons through lava
 - terrain keeps the layout and chests of a seed for both themes
 - FOV blocked by walls
@@ -398,7 +408,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - ts-rs export tests
 
 **Client (`npm test`):**
-- The collision and FOV ports must equal the Rust fixtures exactly. The fixture map holds every kind of terrain, and 10 random walks with dashes cross it.
+- The collision and FOV ports must equal the Rust fixtures exactly. The fixture map holds every kind of terrain, and 10 random walks with dashes and pushes (14–44 px, any direction) cross it.
 - `wire.test.ts` unpacks the sample snapshots from `wire-fixtures.json` (every event type, a spectator, with and without boss bar) and compares them with their readable form: positions within 1/32 px, aim within half a step, everything else exact. It also checks the aim range and `packInput`.
 
 **Browser smoke test (`tools/e2e/smoke.mjs`):**

@@ -9,7 +9,42 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-08, bugfix: coin icon)
+## Last session (2026-10-08, knockback and boss-hall chasms)
+
+**Branch:** `feature/knockback` (not merged yet; ask the user before merging into `main` or pushing).
+
+**User decisions this session:**
+- **Only strong melee pushes:** orc warriors (20 px) and chorts (14 px; imps do not). The demon's **cleave (36 px) and swoop (44 px)**. The dragon's **tail swipe (44 px)** and a **new front claw (32 px)**, both asked for by the user. **No ranged attack pushes.**
+- Distances approved in the `?knockback` demo. **A pushed hero has no control for the whole slide**, and **a dash cannot escape a push**.
+- **Every boss hall gets chasms** (all three bosses), mixed: wall-side drop-offs plus pits. The user's reasoning: knockback only matters in boss fights if there is something to be knocked into.
+- **The ogre waits for the next session.** It will be one per run, roaming like other enemies, with a spiked club (`weapon_baton_with_spikes`). The user wants to **see the sprite first** (pack `ogre_*`, 32x36).
+- **New art source:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) for future monsters.
+
+**Done (commits on the branch):**
+- **Demo `?knockback`** (`KnockbackDemoScene.ts` on the terrain demo base, which now has decaying pushes, tail swipes and a swoop step).
+- **Knockback in the game:**
+  - `MoveState` gets `knock_vx/vy`. `step_move` (Rust and TS) slides along it with `Mover::Dash`: only walls stop it. It decays by `KNOCK_DECAY` per step, and input is ignored.
+  - `apply_input` skips abilities while knocked. `Run::knock_player` starts a push, but not for dead, sinking or dashing heroes.
+  - `me` carries the knock (nil on the wire when not pushed; snapshot 127 B). The predictor replays it, and the parity fixtures inject pushes.
+  - Pushes into a chasm or deep water use the existing fall/drown deaths.
+- **Attacks:** `AttackStyle::Melee { knock }`, the demon's cleave and swoop, and the dragon's tail swipe. The dragon's new front claw (0.4 s wind-up, 20 damage) uses `Anim::Melee`; the tail swipe now has its own `Anim::Tail`, and `FigureDef.tail` draws its swoosh behind the dragon.
+- **Boss halls:** `place_boss_chasms` (rng stream 9, so the rest of each seed's map is unchanged) places 1–2 wall strips and 1–2 pits. It keeps the entrance and the boss's start clear, leaves wide gaps, and never cuts off floor.
+- **Boss pathing:** bosses chase via `path_toward` (A*). Wide figures (demon, dragon) prefer paths clear of edges, skip waypoints they cannot get closer to, and walk straight when no path exists.
+
+**Checked:**
+- 78 server tests (5 new: push movement, push into a chasm with no control, short push, only strong melee pushes, wide bosses reach every spot of their hall over 24 seeds, plus boss-hall checks in the 200-seed test).
+- Client typecheck and tests.
+- `docker compose up --build` + health, smoke test normal and under `?lag=150&jitter=40&loss=2` (no browser errors, correction 0.00 px).
+- `?knockback` screenshots.
+- A throwaway bot (deleted) walked the debug path to the dragon. Screenshots show the hall with a wall strip and a pit, the force field and the fight with pushes, and there were no browser errors.
+
+**Found on the way:** the reachability test first failed because a wide boss was sent to tile centres it cannot reach (next to walls). That is fixed by skipping such waypoints and making clearance a cost.
+
+**Open, for the user:**
+- **A live check:** pushes in a real run and in boss fights.
+- **Chained pushes:** the bot, mobbed by several orc warriors, was pushed again and again. That may feel unfair, and a short push immunity would fix it (TODO.md).
+
+## Session before (2026-10-08, bugfix: coin icon)
 
 **Bug:** the coin icon before the coin count (lobby and HUD) showed as a blank blue box. The CSS sprite in `client/src/style.css` (`.coin-icon`) scaled the atlas to 1536x1536 px, but the atlas is 512x736, so the icon sampled the wrong region. **Fix:** `background-size: 1536px auto` keeps the aspect ratio. Committed directly on `main` (small bugfix).
 
@@ -246,6 +281,11 @@ Steps 2–6 followed in the next session.
 - **Demon dungeon:** imps (ranged, claw up close) and chorts (melee, a bolt from afar) replace skeletons, summoners (red robe, summon imps) replace necromancers. The user chose this from the `?daemons` demo and named the summoner.
 - **No miniature bases under figures** (the user asked to remove them); figures stand on a soft ground shadow.
 - **Mimics hop after the players** (chosen from a demo over a stationary biter), and their reveal animation stays.
+- **Knockback** (2026-10-08, from the `?knockback` demo):
+  - only strong melee pushes: orc warrior 20 px, chort claw 14 px, demon cleave 36 / swoop 44, dragon front claw 32 / tail 44
+  - imps, skeletons, mimics and all ranged attacks never push
+  - no control during the slide, and a dash can't escape it
+- **Boss halls have chasms** (all three bosses; wall strips plus pits).
 - **Coins are a second currency** meant for buying loadouts later.
 - **Weapons** are drawn small (0.6×).
 - **Melee reach is unchanged on the server:** a swoosh at the real damage reach replaces the visible full swing, and the weapon fades out and back in.
@@ -308,8 +348,9 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Knockback** (its own feature, the user's decision): demo first, as usual. Decide which attacks push and how far; then enemies can fall and drown too (they need a monster version of `Sink`/`kill_player`). See TODO.md.
-2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
-3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
-4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
-5. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), the prediction corrections in busy runs under lag (TODO.md, Network).
+1. **Finish knockback:** the user's live check of `feature/knockback`, then ask to merge and push. Decide about a push immunity if chained pushes feel unfair.
+2. **Ogre mini-boss** (next feature, the user's decision): start by showing an enlarged preview of the pack `ogre` sprite with `weapon_baton_with_spikes`, then demo first. One per run, roaming, its club pushes. See TODO.md (New enemies).
+3. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
+4. Loadouts: design new abilities, then add the lobby picker, paid with coins.
+5. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
+6. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), the prediction corrections in busy runs under lag (TODO.md, Network).

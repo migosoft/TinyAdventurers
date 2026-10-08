@@ -62,7 +62,7 @@ The two boxes at the bottom of the screen show your abilities. They darken while
 | Goblin archer | Weak and fast. Shoots arrows from a distance, usually in groups. |
 | Skeleton warrior | Slow melee fighter. |
 | Skeleton archer | Shoots arrows and keeps its distance. |
-| Orc warrior | Tough melee fighter, hits hard. |
+| Orc warrior | Tough melee fighter, hits hard and **knocks you back**. |
 | Orc archer | Tough archer. |
 | Necromancer | Casts green shadow bolts and **raises skeletons**. Kill the necromancer and all of its skeletons crumble. |
 | Mimic | Looks exactly like a treasure chest. Walk up to it (or hit it) and its lid flies open: it **hops after you** and bites. It stops chasing when you get out of sight and waits where it was found. Worth 25 coins. |
@@ -72,10 +72,27 @@ The two boxes at the bottom of the screen show your abilities. They darken while
 | Enemy | What to expect |
 |---|---|
 | Imp | Small demon in place of the skeleton archer. Keeps its distance and shoots **fire bolts**, but claws you if you get close. |
-| Chort | Horned demon in place of the skeleton warrior. Closes in and claws, and throws a fire bolt now and then while you are out of reach. |
+| Chort | Horned demon in place of the skeleton warrior. Closes in and claws (a **small knockback**), and throws a fire bolt now and then while you are out of reach. |
 | Summoner | Red-robed caster in place of the necromancer. Shoots fire bolts and **summons imps**. Kill the summoner and its imps vanish. |
 
 Enemies **flash red and shake** just before they strike. That is your moment to step away. Enemies get tougher the deeper you go, and halls hold the biggest groups.
+
+### Knockback
+
+Strong melee hits **push you away** from the attacker:
+
+| Attacker | Push |
+|---|---|
+| Orc warrior | about a tile (20 px) |
+| Chort (its claw) | a little less (14 px) |
+| Red Demon: cleave / swoop | about 2 / almost 3 tiles (36 / 44 px) |
+| Red Dragon: front claw / tail swipe | 2 / almost 3 tiles (32 / 44 px) |
+
+- The push slides you for a moment. **You have no control until it ends**: no walking, no attacks, and a dash can't break out of it.
+- Walls stop the slide, but **chasms and deep water do not**: a push over the edge is a fall or a drowning. Lava just burns.
+- **Ranged attacks never push**, and neither do imps, skeletons or mimics.
+- A Barbarian in the middle of a dash is in the air and can't be pushed.
+- Tip: don't fight orcs or bosses with your back to a chasm or deep water.
 
 ## Treasure chests
 
@@ -90,8 +107,8 @@ Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water**
 | Terrain | What happens |
 |---|---|
 | Shallow water (the light rim of a pool) | Slows everyone down, heroes and enemies alike. |
-| Deep water (the dark centre) | You can't walk into it. A hero whose **dash ends** in deep water **drowns**. |
-| Chasm | Step in and you **fall to your death** ("X fell into the abyss"). Every chasm leaves a bridge of floor. |
+| Deep water (the dark centre) | You can't walk into it. A hero whose **dash ends** in deep water, or who is **knocked** into it, **drowns**. |
+| Chasm | Step in, or get **knocked** in, and you **fall to your death** ("X fell into the abyss"). Every chasm across a room leaves a bridge of floor. |
 | Lava | You can walk in, but it slows you a lot and **burns for 20 damage a second**. |
 
 - The Barbarian's **dash jumps** deep water, chasms and lava. Only where the dash ends counts: land on solid ground.
@@ -104,13 +121,16 @@ Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water**
 
 The boss sleeps in a large hall at the far end of the dungeon. Each run has one of three bosses: the one the host picked in the lobby, or a random one. It wakes as soon as someone enters the hall. **When the whole party is inside, a shimmering blue force field seals the entrance**: from then on, it's you or the boss. Bosses have a lot of health, more with a bigger party. Their health bar appears at the top of the screen.
 
+**Every boss hall has chasms:** one or two drop-offs along the walls and one or two pits in the floor. The entrance and the middle of the hall stay clear. The demon and the dragon can **knock you in** (see Knockback), and against the lich the edges limit where you can dodge.
+
 ### The Red Demon
 - **Cleave:** a wide claw sweep in front of it.
 - **Swoop:** charges across the hall at a hero.
+- Both the cleave and the swoop **push you back** (36 and 44 px).
 - **Ring of fire:** fireballs fly out in every direction.
 - **Enraged below 40 % health:** faster and more aggressive. The health bar shows **ENRAGED**.
 
-Tip: stay mobile, and don't stand in a line between the demon and a wall.
+Tip: stay mobile, and don't stand between the demon and a chasm.
 
 ### The Lich
 - **Cannot be harmed** while its **disciples** live. The bar shows **IMMUNE**. There are at least five red-robed disciples around the hall.
@@ -121,10 +141,11 @@ Tip: kill the disciples first. Once the last one falls, the lich's protection br
 
 ### The Red Dragon
 - **Fire breath:** smoke rises from its nostrils, then it breathes a cone of fire that **leaves burning ground** behind.
-- **Tail swipe:** hits anyone standing behind it.
+- **Front claw:** swipes at heroes right in front of its face and pushes them back (32 px).
+- **Tail swipe:** hits anyone standing behind it and flings them away (44 px).
 - **Fireball volley:** explosive fireballs.
 
-Tip: when you see the smoke, get out of the area in front of its mouth. Don't stand directly behind it either.
+Tip: when you see the smoke, get out of the area in front of its mouth. Don't stand directly behind it either, least of all with a chasm at your back.
 
 ## Death, victory and defeat
 
