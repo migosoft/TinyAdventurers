@@ -6,7 +6,8 @@ use crate::defs::kinds::{flags, EntityKind};
 use crate::dungeon::Map;
 use crate::fov::{Fov, PLAYER_FOV_RADIUS};
 use crate::math::Vec2;
-use crate::protocol::{encode, BossBar, EntSnap, Ev, SelfState, ServerMsg, Snapshot};
+use crate::protocol::{BossBar, EntSnap, Ev, SelfState, Snapshot};
+use crate::wire::encode_snap;
 
 fn visible(fov: &Fov, p: Vec2, radius: f64) -> bool {
     let (x, y) = Map::tile_of(p);
@@ -146,10 +147,9 @@ pub fn send_snapshots(run: &mut Run) {
             ev,
             srv_ms: run.srv_ms,
         };
-        let msg = ServerMsg::Snap(snap);
         run.players[pi].fov = fov;
         if let Some(tx) = &run.players[pi].tx {
-            let _ = tx.send(axum::extract::ws::Message::Binary(encode(&msg).into()));
+            let _ = tx.send(axum::extract::ws::Message::Binary(encode_snap(&snap).into()));
         }
     }
 }

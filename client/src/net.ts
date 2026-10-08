@@ -1,8 +1,10 @@
-// WebSocket connection with MessagePack encoding, RTT measurement and a
+// WebSocket connection with MessagePack encoding (compact snapshots and inputs, see wire.ts), RTT measurement and a
 // dev network-condition simulator (?lag=120&jitter=30&loss=2).
 import { decode, encode } from '@msgpack/msgpack';
 import type { ClientMsg } from './generated/ClientMsg';
 import type { ServerMsg } from './generated/ServerMsg';
+import type { SnapW } from './generated/SnapW';
+import { packInput, unpackSnap } from './wire';
 
 interface LagSim {
   lag: number;
@@ -59,7 +61,9 @@ export class Net {
     this.ws.onmessage = (e) => {
       const bytes = new Uint8Array(e.data as ArrayBuffer);
       this.bytesIn += bytes.length;
-      const msg = decode(bytes) as ServerMsg;
+      const raw = decode(bytes);
+      // Snapshots arrive as a bare array (wire.ts), everything else as a tagged map.
+      const msg: ServerMsg = Array.isArray(raw) ? { t: 'Snap', ...unpackSnap(raw as SnapW) } : (raw as ServerMsg);
       if (msg.t === 'Snap') this.lastSnapshotBytes = bytes.length;
       if (this.inLine) this.inLine.push(msg);
       else this.dispatch(msg);
@@ -101,7 +105,8 @@ export class Net {
 
   send(msg: ClientMsg): void {
     if (this.ws?.readyState !== WebSocket.OPEN) return;
-    const bytes = encode(msg, { ignoreUndefined: true });
+    // Inputs go out as a bare array; the server reads aim as f32 anyway.
+    const bytes = msg.t === 'Input' ? encode(packInput(msg), { forceFloat32: true }) : encode(msg, { ignoreUndefined: true });
     if (this.outLine) this.outLine.push(bytes);
     else this.ws.send(bytes);
   }
