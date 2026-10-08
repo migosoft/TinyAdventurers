@@ -31,7 +31,7 @@ The server looks at the first byte: a MessagePack array marker (`0x90–0x9f`, `
 | Value | Wire |
 |---|---|
 | Entity and event positions | `u32`, in 1/`POS_SCALE` px, `POS_SCALE = 16`, rounded |
-| Entity `aim` | `u8`, 1/256 of a full turn (`round(aim / 2π · 256)` wrapped to 0–255); the client gets it back in [0, 2π), so client code must only use it through sin/cos or rotation, not compare raw angles |
+| Entity `aim` | `u8`, 1/256 of a full turn (`round(aim / 2π · 256)` wrapped to 0–255); the client reads 128–255 as negative and gets the angle back in [−π, π), the same range as today (`EntityView`'s staff swing uses the raw angle) |
 | `me` position and dash, cooldowns, hide time | exact, unchanged types |
 | Input `aim`, `aim_dist` | exact `f32` |
 | hp, damage/heal values, boss bar numbers, `Boom.r`, `srv_ms` | unchanged types |
