@@ -32,6 +32,9 @@ impl Default for Demon {
 }
 
 const CLEAVE_RANGE: f64 = 34.0;
+/// Knockback (px): heroes hit by the cleave or the swoop slide away from the demon.
+const CLEAVE_KNOCK: f64 = 36.0;
+const SWOOP_KNOCK: f64 = 44.0;
 
 impl BossBehaviour for Demon {
     fn enraged(&self) -> bool {
@@ -63,6 +66,7 @@ impl BossBehaviour for Demon {
                         if !self.swoop_hit.contains(&id) {
                             self.swoop_hit.push(id);
                             run.hurt_player(pi, 30.0);
+                            run.knock_player(pi, pos, self.swoop_dir.angle(), SWOOP_KNOCK);
                         }
                     }
                 }
@@ -79,6 +83,7 @@ impl BossBehaviour for Demon {
                     set_anim(run, bi, Anim::Melee);
                     for pi in players_in(run, pos, CLEAVE_RANGE + 6.0, Some((aim, 1.05))) {
                         run.hurt_player(pi, 25.0);
+                        run.knock_player(pi, pos, aim, CLEAVE_KNOCK);
                     }
                 }
                 Action::SwoopWindup => {

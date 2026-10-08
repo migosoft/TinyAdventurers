@@ -37,6 +37,11 @@ pub const DAGGER_DAMAGE: f64 = 18.0;
 pub const DAGGER_COOLDOWN: f64 = 0.35;
 pub const HIDDEN_CRIT_MULT: f64 = 4.0;
 pub const DASH_SPEED: f64 = 300.0;
+/// Knockback: the push speed is multiplied by this every 1/60 s step
+/// (e^-0.25, so a push is mostly over after about 0.2 s), and stops below
+/// `KNOCK_MIN_SPEED` px/s. See `collision::knock_speed`.
+pub const KNOCK_DECAY: f64 = 0.7788007830714049;
+pub const KNOCK_MIN_SPEED: f64 = 8.0;
 
 const fn d(id: AbilityId, cooldown: f64, damage: f64, range: f64, arc: f64, speed: f64, radius: f64, duration: f64) -> AbilityDef {
     AbilityDef { id, cooldown, damage, range, arc, speed, radius, duration }

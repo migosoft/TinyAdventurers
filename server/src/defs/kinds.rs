@@ -91,11 +91,13 @@ pub enum Anim {
     Windup = 6,
     Channel = 7,
     Breath = 8,
+    /// Dragon tail swipe: a melee hit behind the figure.
+    Tail = 9,
 }
 
 impl Anim {
-    pub const ALL: [Anim; 9] =
-        [Anim::Idle, Anim::Move, Anim::Melee, Anim::Shoot, Anim::Cast, Anim::Dash, Anim::Windup, Anim::Channel, Anim::Breath];
+    pub const ALL: [Anim; 10] =
+        [Anim::Idle, Anim::Move, Anim::Melee, Anim::Shoot, Anim::Cast, Anim::Dash, Anim::Windup, Anim::Channel, Anim::Breath, Anim::Tail];
 }
 
 pub mod flags {

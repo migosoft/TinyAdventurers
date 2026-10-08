@@ -43,6 +43,7 @@ export const ANIM = {
   "Melee": 2,
   "Move": 1,
   "Shoot": 3,
+  "Tail": 9,
   "Windup": 6
 } as const;
 
@@ -76,6 +77,8 @@ export const CONST = {
   "FALL_TIME": 0.7,
   "FOV_RADIUS": 9,
   "HIDDEN_CRIT_MULT": 4.0,
+  "KNOCK_DECAY": 0.7788007830714049,
+  "KNOCK_MIN_SPEED": 8.0,
   "LAVA_SPEED": 0.4,
   "MIMIC_HOP_AIR_END": 0.7,
   "MIMIC_HOP_AIR_START": 0.2,

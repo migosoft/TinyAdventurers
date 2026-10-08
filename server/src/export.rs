@@ -46,6 +46,8 @@ fn export_defs() {
         "PLAYER_RADIUS": PLAYER_RADIUS,
         "FOV_RADIUS": PLAYER_FOV_RADIUS,
         "DASH_SPEED": ab::DASH_SPEED,
+        "KNOCK_DECAY": ab::KNOCK_DECAY,
+        "KNOCK_MIN_SPEED": ab::KNOCK_MIN_SPEED,
         "DAGGER_RANGE": ab::DAGGER_RANGE,
         "DAGGER_COOLDOWN": ab::DAGGER_COOLDOWN,
         "HIDDEN_CRIT_MULT": ab::HIDDEN_CRIT_MULT,
@@ -140,7 +142,7 @@ fn export_fixtures() {
     let mut moves = Vec::new();
     for case in 0..10 {
         let (tx, ty) = if case < 6 { (3, 3 + case * 2) } else { (12, 3 + (case - 6) * 4) };
-        let mut s = MoveState { x: tx as f64 * TILE + 8.0, y: ty as f64 * TILE + 8.0, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0 };
+        let mut s = MoveState::at(tx as f64 * TILE + 8.0, ty as f64 * TILE + 8.0);
         let start = s;
         let speed = 60.0 + case as f64 * 5.0;
         let mut inputs = Vec::new();
@@ -158,8 +160,21 @@ fn export_fixtures() {
                 s.dash_dx = a.cos();
                 s.dash_dy = a.sin();
             }
+            // A push (14-44 px, any direction) now and then, carried into terrain and walls.
+            let knock = step % 97 == 20;
+            if knock {
+                let a: f64 = rng.gen_range(0.0..std::f64::consts::TAU);
+                let v = crate::collision::knock_speed(rng.gen_range(14.0..44.0), DT);
+                s.knock_vx = a.cos() * v;
+                s.knock_vy = a.sin() * v;
+            }
+            let pushed = [s.knock_vx, s.knock_vy];
             s = step_move(&map, &s, mx, my, speed, ab::DASH_SPEED, PLAYER_RADIUS, DT);
-            inputs.push(json!({ "mx": mx, "my": my, "dash": if dash { json!([s.dash_dx, s.dash_dy]) } else { json!(null) } }));
+            inputs.push(json!({
+                "mx": mx, "my": my,
+                "dash": if dash { json!([s.dash_dx, s.dash_dy]) } else { json!(null) },
+                "knock": if knock { json!(pushed) } else { json!(null) },
+            }));
             out.push(json!([s.x, s.y]));
         }
         moves.push(json!({ "start": [start.x, start.y], "speed": speed, "inputs": inputs, "out": out }));

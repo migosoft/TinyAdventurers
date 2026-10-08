@@ -11,11 +11,12 @@ const map = new TileMap(fixtures.w, fixtures.h, Uint8Array.from(fixtures.tiles))
 describe('collision port', () => {
   it('matches the server step for step', () => {
     for (const c of fixtures.moves) {
-      let s: MoveState = { x: c.start[0], y: c.start[1], dashT: 0, dashDx: 0, dashDy: 0 };
+      let s: MoveState = { x: c.start[0], y: c.start[1], dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0 };
       c.inputs.forEach((inp, i) => {
         if (inp.dash) {
           s = { ...s, dashT: 0.18, dashDx: inp.dash[0], dashDy: inp.dash[1] };
         }
+        if (inp.knock) s = { ...s, knockVx: inp.knock[0], knockVy: inp.knock[1] };
         s = stepMove(map, s, inp.mx, inp.my, c.speed, fixtures.dashSpeed, fixtures.radius, fixtures.dt);
         expect([s.x, s.y]).toEqual(c.out[i]);
       });

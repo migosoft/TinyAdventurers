@@ -123,7 +123,7 @@ impl Run {
                 name: m.name,
                 class: m.class,
                 def,
-                mv: MoveState { x: p.x, y: p.y, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0 },
+                mv: MoveState::at(p.x, p.y),
                 hp: max_hp,
                 max_hp,
                 mods,
@@ -423,6 +423,8 @@ impl Run {
             return; // falling or drowning: no more moves or attacks (the client predicts this too)
         }
         let dashing = p.mv.dash_t > 0.0;
+        // Pushed: the slide carries the hero; moves and abilities are ignored until it ends.
+        let knocked = !dashing && p.mv.knocked();
         p.mv = crate::collision::step_move(
             map,
             &p.mv,
@@ -433,9 +435,12 @@ impl Run {
             classes::PLAYER_RADIUS,
             DT,
         );
-        p.moving = input.mx != 0 || input.my != 0;
+        p.moving = !knocked && (input.mx != 0 || input.my != 0);
         if dashing {
             abilities::dash_contact(self, pi);
+        }
+        if knocked {
+            return;
         }
         if let Some(shot) = input.primary {
             let id = self.players[pi].def.primary;
@@ -476,6 +481,7 @@ impl Run {
         };
         if let Some((t, how)) = how {
             p.sinking = Some((t, how));
+            p.mv = MoveState::at(p.mv.x, p.mv.y);
             p.anim = Anim::Idle;
             p.anim_start = self.time;
             let id = p.id;
@@ -505,14 +511,14 @@ impl Run {
             return;
         }
         if p.debug {
-            p.mv = MoveState { x: p.last_safe.x, y: p.last_safe.y, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0 };
+            p.mv = MoveState::at(p.last_safe.x, p.last_safe.y);
             let (id, at) = (p.id, p.last_safe);
             self.event(Ev::Sink { id, x: at.x as f32, y: at.y as f32, how: 2 }, None);
             return;
         }
         p.hp = 0.0;
         p.alive = false;
-        p.mv.dash_t = 0.0;
+        p.mv = MoveState::at(p.mv.x, p.mv.y);
         let (id, pos, kind, name) = (p.id, p.pos(), p.kind() as u8, p.name.clone());
         self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
         let text = match how {
@@ -606,11 +612,27 @@ impl Run {
         if p.hp <= 0.0 {
             p.hp = 0.0;
             p.alive = false;
-            p.mv.dash_t = 0.0;
+            p.mv = MoveState::at(p.mv.x, p.mv.y);
             let (id, kind, name) = (p.id, p.kind() as u8, p.name.clone());
             self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
             self.event(Ev::Msg { text: format!("{name} has fallen") }, None);
         }
+    }
+
+    /// Knockback from a strong melee hit: the hero slides `dist` px straight
+    /// away from `from` (along `fallback` if they stand on the same spot).
+    /// Mid-dash heroes are in the air and not pushed; a new push replaces an
+    /// old one. Only walls stop the slide, so it can end in a chasm or deep water.
+    pub fn knock_player(&mut self, pi: usize, from: Vec2, fallback: f64, dist: f64) {
+        let p = &mut self.players[pi];
+        if !p.alive || p.sinking.is_some() || p.mv.dash_t > 0.0 || dist <= 0.0 {
+            return;
+        }
+        let d = p.pos() - from;
+        let dir = if d.len() > 0.01 { d.norm() } else { Vec2::from_angle(fallback) };
+        let v = crate::collision::knock_speed(dist, DT);
+        p.mv.knock_vx = dir.x * v;
+        p.mv.knock_vy = dir.y * v;
     }
 
     pub fn heal_player(&mut self, pi: usize, amount: f64) -> f64 {
@@ -960,6 +982,56 @@ pub mod tests {
         }
         assert!(!run.players[0].alive);
         assert!(said(&run, "drowned"));
+    }
+
+    /// One input per step, as a connected client sends them.
+    fn walk(run: &mut Run, mx: i8, primary: Option<u16>) {
+        let seq = run.players[0].ack + 1;
+        run.players[0].inputs.push_back(InputMsg { seq, mx, primary, ..Default::default() });
+        run.step();
+    }
+
+    #[test]
+    fn a_push_into_a_chasm_is_a_fall_and_the_hero_has_no_control_meanwhile() {
+        let (mut run, at) = terrain_run(Tile::Chasm);
+        stand_at(&mut run, at - Vec2::new(32.0, 0.0)); // a tile centre, 24 px from the chasm
+        let start = run.players[0].pos();
+        // Mid-dash heroes are in the air: no push.
+        run.players[0].mv.dash_t = 0.1;
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0);
+        assert!(!run.players[0].mv.knocked());
+        run.players[0].mv.dash_t = 0.0;
+        // 36 px away from a hit on the left, while walking left and attacking: slides right into the chasm.
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0);
+        assert!(run.players[0].mv.knocked());
+        walk(&mut run, -1, Some(1));
+        assert_eq!(run.players[0].cd1, 0.0, "no attack while pushed");
+        assert!(run.players[0].pos().x > start.x, "the input is ignored");
+        for _ in 0..30 {
+            if run.players[0].sinking.is_some() {
+                break;
+            }
+            walk(&mut run, -1, None);
+        }
+        assert!(matches!(run.players[0].sinking, Some((_, Sink::Fall))), "pushed into the chasm at {at:?}");
+        assert!(!run.players[0].mv.knocked(), "the fall ends the slide");
+    }
+
+    #[test]
+    fn a_short_push_stops_and_control_returns() {
+        let (mut run, at) = terrain_run(Tile::Chasm);
+        stand_at(&mut run, at - Vec2::new(32.0, 0.0));
+        let start = run.players[0].pos();
+        // 14 px (a chort): stops short of the chasm 24 px away.
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 14.0);
+        for _ in 0..30 {
+            walk(&mut run, 0, None);
+        }
+        assert!(!run.players[0].mv.knocked());
+        assert!(run.players[0].sinking.is_none());
+        assert!((run.players[0].pos().x - (start.x + 14.0)).abs() < 1.0, "x {}", run.players[0].pos().x);
+        walk(&mut run, 0, Some(1));
+        assert!(run.players[0].cd1 > 0.0, "attacks again");
     }
 
     #[test]

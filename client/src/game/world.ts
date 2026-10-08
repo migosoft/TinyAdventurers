@@ -5,7 +5,7 @@ import type { ClassId } from '../generated/ClassId';
 import type { EntSnap } from '../generated/EntSnap';
 import type { Modifiers } from '../generated/Modifiers';
 import type { Snapshot } from '../generated/Snapshot';
-import { sinking, stepMove, type MoveState } from '../sim/collision';
+import { knocked, sinking, stepMove, type MoveState } from '../sim/collision';
 import type { TileMap } from '../sim/map';
 
 export interface EntState {
@@ -145,7 +145,12 @@ export class Predictor {
     this.speed = c.speed * mods.move_speed;
     this.primary = c.primary as AbilityName;
     this.secondary = c.secondary as AbilityName;
-    this.state = { x, y, dashT: 0, dashDx: 0, dashDy: 0 };
+    this.state = { x, y, dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0 };
+  }
+
+  /** Pushed by a strong hit: no moves or abilities until the slide ends (the server ignores them). */
+  get knocked(): boolean {
+    return this.state.dashT <= 0 && knocked(this.state);
   }
 
   /** Lost to a chasm or deep water (no more moves or attacks). */
@@ -165,8 +170,12 @@ export class Predictor {
     this.cd2 = Math.max(this.cd2 - CONST.DT, 0);
     this.hidden = Math.max(this.hidden - CONST.DT, 0);
     // Falling or drowning: the server ignores moves and attacks from now on.
+    // Pushed: it ignores them until the slide ends.
     if (this.sinking) [mx, my, dash] = [0, 0, null];
-    else this.state = stepMove(this.map, this.state, mx, my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT);
+    else {
+      if (this.knocked) dash = null;
+      this.state = stepMove(this.map, this.state, mx, my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT);
+    }
     if (dash) this.state = { ...this.state, dashT: ABILITIES.Dash.duration, dashDx: dash[0], dashDy: dash[1] };
     this.pending.push({ seq: this.seq, mx, my, dash });
     if (this.pending.length > 240) this.pending.shift();
@@ -177,11 +186,13 @@ export class Predictor {
   reconcile(snap: Snapshot): void {
     const me = snap.me;
     this.pending = this.pending.filter((p) => p.seq > snap.ack);
-    let s: MoveState = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy };
+    let s: MoveState = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy };
     for (const p of this.pending) {
       if (sinking(this.map, s)) break;
+      // A push the client learned of late still voids the dashes sent during it, as on the server.
+      const wasKnocked = s.dashT <= 0 && knocked(s);
       s = stepMove(this.map, s, p.mx, p.my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT);
-      if (p.dash) s = { ...s, dashT: ABILITIES.Dash.duration, dashDx: p.dash[0], dashDy: p.dash[1] };
+      if (p.dash && !wasKnocked) s = { ...s, dashT: ABILITIES.Dash.duration, dashDx: p.dash[0], dashDy: p.dash[1] };
     }
     const ex = this.state.x - s.x;
     const ey = this.state.y - s.y;

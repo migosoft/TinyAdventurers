@@ -18,7 +18,10 @@ import { TILE, TileMap } from '../sim/map';
 /** Tile ids for the ASCII maps: `.` floor, `s` shallow, `D` deep water, `C` chasm, `L` lava. */
 const CHARS: Record<string, number> = { '.': 1, s: TERRAIN.Shallow, D: TERRAIN.Deep, C: TERRAIN.Chasm, L: TERRAIN.Lava };
 const DASH_SPEED = 300;
-const PUSH_SPEED = 160;
+/** Knockback slide: the speed decays by e^(-PUSH_DECAY*t), so a push of d px starts at d*PUSH_DECAY px/s. */
+const PUSH_DECAY = 15;
+const PUSH_MIN_SPEED = 8;
+const SWOOP_SPEED = 260;
 const FALL_T = CONST.FALL_TIME;
 const DROWN_T = CONST.DROWN_TIME;
 /** Seconds from the start of a fall or drowning until the figure starts over. */
@@ -30,9 +33,17 @@ const OY = 3;
 
 /**
  * A script step, in tile units (fractions allowed): walk or dash to a point,
- * wait, or strike the named figure (once it stands close) and knock it away.
+ * wait (optionally turning to `face`), or strike the named figure once it
+ * stands within `reach` px. A strike knocks it away along `push` (tiles), or
+ * `dist` px straight away from the striker (0: no push); `tail` swipes behind.
+ * `swoop` winds up, then charges to `to` and knocks the target away on
+ * contact. A pushed figure has no control until the slide ends.
  */
-type Step = { to: [number, number]; dash?: boolean } | { wait: number } | { hit: string; push: [number, number] };
+type Step =
+  | { to: [number, number]; dash?: boolean }
+  | { wait: number; face?: number }
+  | { hit: string; push?: [number, number]; dist?: number; reach?: number; tail?: boolean }
+  | { swoop: string; to: [number, number]; dist: number };
 
 interface Actor {
   v: EntityView;
@@ -48,8 +59,8 @@ interface Actor {
   anim: number;
   animT: number;
   dashing: boolean;
-  /** Knockback still to travel, in px. */
-  push: { vx: number; vy: number; left: number } | null;
+  /** Knockback: direction and current speed (decaying). */
+  push: { dx: number; dy: number; v: number } | null;
   doom: { kind: 'fall' | 'drown'; t: number } | null;
   hurtT: number;
   burnT: number;
@@ -57,7 +68,7 @@ interface Actor {
   wade: WadeFx;
 }
 
-abstract class TerrainDemo extends Phaser.Scene {
+export abstract class TerrainDemo extends Phaser.Scene {
   protected fx!: Effects;
   private layer!: TerrainLayer;
   private map!: TileMap;
@@ -120,7 +131,7 @@ abstract class TerrainDemo extends Phaser.Scene {
     a.dashing = false;
   }
 
-  private px([tx, ty]: [number, number]): [number, number] {
+  protected px([tx, ty]: [number, number]): [number, number] {
     return [(tx + OX) * TILE, (ty + OY) * TILE];
   }
 
@@ -137,33 +148,54 @@ abstract class TerrainDemo extends Phaser.Scene {
     if (a.doom) return this.doomed(a, dt);
 
     const tile = this.map.get(Math.floor(a.x / TILE), Math.floor((a.y - 3) / TILE));
-    let anim: number = a.anim === ANIM.Melee && a.animT < 0.3 ? ANIM.Melee : ANIM.Idle;
+    let anim: number = (a.anim === ANIM.Melee || a.anim === ANIM.Tail) && a.animT < 0.3 ? a.anim : ANIM.Idle;
     const s = a.steps[a.i];
     if (a.push) {
-      // Knocked back: slides away, whatever lies there.
-      const d = Math.min(a.push.left, PUSH_SPEED * dt);
-      a.x += a.push.vx * d;
-      a.y += a.push.vy * d;
-      a.push.left -= d;
-      if (a.push.left <= 0) a.push = null;
+      // Knocked back: slides away, whatever lies there, slowing down.
+      a.x += a.push.dx * a.push.v * dt;
+      a.y += a.push.dy * a.push.v * dt;
+      a.push.v *= Math.exp(-PUSH_DECAY * dt);
+      if (a.push.v < PUSH_MIN_SPEED) a.push = null;
     } else if ('wait' in s) {
+      if (s.face !== undefined) a.aim = s.face;
       a.t += dt;
       if (a.t >= s.wait) this.next(a);
     } else if ('hit' in s) {
       const target = this.actors.find((o) => o.name === s.hit);
-      if (target && !target.doom && !target.push && Math.hypot(target.x - a.x, target.y - a.y) < 26) {
+      if (target && !target.doom && !target.push && Math.hypot(target.x - a.x, target.y - a.y) < (s.reach ?? 26)) {
         a.t += dt;
         anim = ANIM.Windup;
-        a.aim = Math.atan2(target.y - a.y, target.x - a.x);
+        a.aim = Math.atan2(target.y - a.y, target.x - a.x) + (s.tail ? Math.PI : 0);
         if (a.t >= 0.35) {
-          a.anim = ANIM.Melee;
+          a.anim = s.tail ? ANIM.Tail : ANIM.Melee;
           a.animT = 0;
-          anim = ANIM.Melee;
-          this.fx.hitSpark(target.x, target.y - 8, 0xffd0a0);
-          target.hurtT = 0.2;
-          const [px, py] = s.push;
-          const len = Math.hypot(px, py);
-          target.push = { vx: px / len, vy: py / len, left: len * TILE };
+          anim = a.anim;
+          this.strike(a, target, s.push ? Math.hypot(...s.push) * TILE : (s.dist ?? 0), s.push);
+          this.next(a);
+        }
+      }
+    } else if ('swoop' in s) {
+      a.t += dt;
+      const target = this.actors.find((o) => o.name === s.swoop);
+      const [tx, ty] = this.px(s.to);
+      if (a.t < 0.6) {
+        anim = ANIM.Windup;
+        a.aim = Math.atan2(ty - a.y, tx - a.x);
+      } else {
+        anim = ANIM.Dash;
+        const dx = tx - a.x;
+        const d = Math.hypot(dx, ty - a.y);
+        const step = Math.min(d, SWOOP_SPEED * dt);
+        if (d > 0) {
+          a.x += (dx / d) * step;
+          a.y += ((ty - a.y) / d) * step;
+        }
+        if (target && !target.doom && !target.push && a.anim !== ANIM.Dash && Math.hypot(target.x - a.x, target.y - a.y) < 22) {
+          a.anim = ANIM.Dash; // marks this charge as having hit
+          this.strike(a, target, s.dist);
+        }
+        if (d <= step) {
+          a.anim = ANIM.Idle;
           this.next(a);
         }
       }
@@ -204,7 +236,7 @@ abstract class TerrainDemo extends Phaser.Scene {
     } else a.burnT = 0;
 
     a.v.update(
-      { x: a.x, y: a.y, anim, animT: anim === ANIM.Melee ? a.animT : 0, aim: a.aim, flags: a.hurtT > 0 ? FLAG.HURT : 0, sink: a.dashing ? 0 : sinkDepth(tile) },
+      { x: a.x, y: a.y, anim, animT: anim === ANIM.Melee || anim === ANIM.Tail ? a.animT : 0, aim: a.aim, flags: a.hurtT > 0 ? FLAG.HURT : 0, sink: a.dashing ? 0 : sinkDepth(tile) },
       dt,
     );
   }
@@ -228,6 +260,23 @@ abstract class TerrainDemo extends Phaser.Scene {
     if (d.t > RESPAWN_T) this.restart(a);
     const k = Math.min(1, d.t / dur);
     a.v.update({ x: a.x, y: a.y, anim: ANIM.Idle, animT: 0, aim: a.aim, flags: k >= 1 ? FLAG.DEAD : 0, fall: d.kind === 'fall' ? k : 0, drown: d.kind === 'drown' ? k : 0 }, dt);
+  }
+
+  /** A hit: spark, hurt flash, and a push of `dist` px along `dir` (tiles) or straight away from the striker. */
+  private strike(a: Actor, target: Actor, dist: number, dir?: [number, number]): void {
+    this.fx.hitSpark(target.x, target.y - 8, 0xffd0a0);
+    target.hurtT = 0.2;
+    this.fx.text(target.x, target.y - 20, dist > 0 ? `push ${Math.round(dist)} px` : 'no push', '#ffe080');
+    if (dist <= 0) return;
+    const [dx, dy] = dir ?? [target.x - a.x, target.y - a.y];
+    const len = Math.hypot(dx, dy) || 1;
+    target.push = { dx: dx / len, dy: dy / len, v: dist * PUSH_DECAY };
+  }
+
+  /** A caption in tile units (board coordinates). */
+  protected label(tx: number, ty: number, text: string): void {
+    const [x, y] = this.px([tx, ty]);
+    this.add.text(x, y, text, { fontFamily: 'monospace', fontSize: '8px', color: '#ffe080' }).setResolution(4).setDepth(1e6);
   }
 
   private next(a: Actor): void {

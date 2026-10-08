@@ -295,12 +295,13 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt:
         }
     };
     match attack {
-        AttackStyle::Melee { range, damage, cooldown, .. } => {
+        AttackStyle::Melee { range, damage, cooldown, knock, .. } => {
             set_cd(run, cooldown);
             set_anim(run, mi, Anim::Melee);
             let reach = range + PLAYER_RADIUS + run.monsters[mi].radius + 4.0;
             if pos.dist(ppos) <= reach {
                 run.hurt_player(pi, damage);
+                run.knock_player(pi, pos, aim, knock);
             }
         }
         AttackStyle::Ranged { projectile, speed, damage, cooldown, range, .. } => {
@@ -418,6 +419,26 @@ mod tests {
     use crate::defs::kinds::EntityKind;
     use crate::dungeon::Tile;
     use crate::protocol::{BossId, ClassId};
+
+    #[test]
+    fn only_strong_melee_pushes() {
+        let pushes = |t: EnemyType, alt: bool| {
+            let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+            let ppos = run.players[0].pos();
+            let id = run.spawn_enemy(t, ppos - Vec2::new(12.0, 0.0), None, 1);
+            let mi = run.monster_idx(id).unwrap();
+            let d = enemies::def(t);
+            let attack = if alt { d.alt.unwrap() } else { d.attack };
+            perform_attack(&mut run, mi, 0, attack, alt);
+            run.players[0].mv.knocked()
+        };
+        assert!(pushes(EnemyType::OrcWarrior, false));
+        assert!(pushes(EnemyType::Chort, false), "chort claw");
+        assert!(!pushes(EnemyType::Chort, true), "chort fire bolt");
+        assert!(!pushes(EnemyType::Imp, true), "imp claw");
+        assert!(!pushes(EnemyType::SkeletonWarrior, false));
+        assert!(!pushes(EnemyType::OrcArcher, false));
+    }
 
     #[test]
     fn enemy_ignores_player_without_line_of_sight_or_hidden() {

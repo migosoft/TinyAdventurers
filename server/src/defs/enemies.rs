@@ -26,7 +26,8 @@ pub enum EnemyType {
 
 #[derive(Debug, Clone, Copy)]
 pub enum AttackStyle {
-    Melee { range: f64, damage: f64, cooldown: f64, windup: f64 },
+    /// `knock`: knockback (px) on a hit; only strong melee pushes, ranged attacks never do.
+    Melee { range: f64, damage: f64, cooldown: f64, windup: f64, knock: f64 },
     Ranged { projectile: EntityKind, speed: f64, damage: f64, cooldown: f64, range: f64, preferred: f64, windup: f64 },
 }
 
@@ -63,7 +64,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             speed: 46.0,
             radius: 5.0,
             sight: 120.0,
-            attack: Melee { range: 14.0, damage: 9.0, cooldown: 1.0, windup: 0.3 },
+            attack: Melee { range: 14.0, damage: 9.0, cooldown: 1.0, windup: 0.3, knock: 0.0 },
             alt: None,
         },
         SkeletonArcher => EnemyDef {
@@ -81,7 +82,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             speed: 52.0,
             radius: 6.0,
             sight: 125.0,
-            attack: Melee { range: 16.0, damage: 14.0, cooldown: 1.2, windup: 0.35 },
+            attack: Melee { range: 16.0, damage: 14.0, cooldown: 1.2, windup: 0.35, knock: 20.0 },
             alt: None,
         },
         OrcArcher => EnemyDef {
@@ -134,7 +135,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             speed: 50.0,
             radius: 6.0,
             sight: 140.0,
-            attack: Melee { range: 12.0, damage: 13.0, cooldown: 1.0, windup: 0.25 },
+            attack: Melee { range: 12.0, damage: 13.0, cooldown: 1.0, windup: 0.25, knock: 0.0 },
             alt: None,
         },
         Imp | SummonedImp => EnemyDef {
@@ -144,7 +145,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             radius: 5.0,
             sight: 140.0,
             attack: Ranged { projectile: EntityKind::FireBolt, speed: 130.0, damage: 7.0, cooldown: 1.6, range: 150.0, preferred: 90.0, windup: 0.3 },
-            alt: Some(Melee { range: 12.0, damage: 6.0, cooldown: 0.9, windup: 0.25 }),
+            alt: Some(Melee { range: 12.0, damage: 6.0, cooldown: 0.9, windup: 0.25, knock: 0.0 }),
         },
         Chort => EnemyDef {
             kind: EntityKind::Chort,
@@ -152,7 +153,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             speed: 46.0,
             radius: 5.0,
             sight: 120.0,
-            attack: Melee { range: 14.0, damage: 9.0, cooldown: 1.0, windup: 0.3 },
+            attack: Melee { range: 14.0, damage: 9.0, cooldown: 1.0, windup: 0.3, knock: 14.0 },
             alt: Some(Ranged { projectile: EntityKind::FireBolt, speed: 130.0, damage: 6.0, cooldown: 3.2, range: 130.0, preferred: 0.0, windup: 0.35 }),
         },
     }

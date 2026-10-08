@@ -39,7 +39,9 @@ export interface FigureDef {
   /** Hue rotation in degrees (WebGL color matrix), e.g. the green lizard turned into a red dragon. */
   hue?: number;
   /** Melee swoosh: drawn at the damage reach (px from the figure), over the damage arc (rad). */
-  swing?: { reach: number; arc: number; behind?: boolean; color?: number };
+  swing?: { reach: number; arc: number; color?: number };
+  /** Tail swipe behind the figure (the dragon), shown for the Tail animation. */
+  tail?: { reach: number; arc: number; color?: number };
   /** Where breath attacks come out (dragon mouth / nostrils), per body frame. */
   mouth?: FramePoints;
   nostrils?: FramePoints;
@@ -90,7 +92,7 @@ export const FIGURES: Record<number, FigureDef> = {
   [KIND.Summoner]: { ...summoner, weapon: 'weapon_red_magic_staff', mount: 'staff', weaponTint: 0xffb080, handY: 8, attack: 'caster', base: 0x9a2020, baseR: 5 },
   [KIND.Demon]: { ...mob('big_demon'), swing: { reach: 40, arc: 2.1, color: 0xffa080 }, handY: 18, attack: 'melee', base: 0x7a1010, baseR: 13 },
   [KIND.Lich]: { ...necro, weapon: 'weapon_green_magic_staff', mount: 'staff', handY: 8, attack: 'caster', base: 0x3a2a5a, baseR: 6, scale: 1.75, tint: 0xb8c8ff },
-  [KIND.Dragon]: { ...hero('lizard_m'), mouth: lizardPoints(5.5), nostrils: lizardPoints(2.5), swing: { reach: 46, arc: 2.4, behind: true, color: 0xffc0a0 }, handY: 10, attack: 'melee', base: 0x7a1010, baseR: 8, scale: 2.25, hue: 250 },
+  [KIND.Dragon]: { ...hero('lizard_m'), mouth: lizardPoints(5.5), nostrils: lizardPoints(2.5), swing: { ...CLAW, reach: 40, color: 0xffc0a0 }, tail: { reach: 46, arc: 2.4, color: 0xffc0a0 }, handY: 10, attack: 'melee', base: 0x7a1010, baseR: 8, scale: 2.25, hue: 250 },
 };
 
 /** Projectiles: a pack sprite (arrows) or a runtime glow of the given color. */

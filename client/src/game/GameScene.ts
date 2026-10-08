@@ -373,8 +373,8 @@ export class GameScene extends Phaser.Scene {
     const my = (k.S.isDown ? 1 : 0) - (k.W.isDown ? 1 : 0);
     const { aim, dist } = this.aimInfo();
     const ptr = this.input.activePointer;
-    // Falling or drowning heroes can no longer attack (the server ignores it).
-    const free = !this.hud.menuOpen && !this.pred.sinking;
+    // Falling, drowning or pushed heroes cannot attack (the server ignores it).
+    const free = !this.hud.menuOpen && !this.pred.sinking && !this.pred.knocked;
     const wantPrimary = (ptr.leftButtonDown() || this.primaryClicked) && free;
     const wantSecondary = (ptr.rightButtonDown() || this.secondaryClicked) && free;
     this.primaryClicked = this.secondaryClicked = false;

@@ -54,7 +54,7 @@ describe('wire', () => {
   });
 
   it('keeps an exactly-left aim at +pi (the staff swing uses the raw angle)', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, null];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0];
     const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0]], me, null, [], 0]);
     expect(snap.ents[0][6]).toBe(Math.PI);
   });

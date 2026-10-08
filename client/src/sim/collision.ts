@@ -1,6 +1,6 @@
 // Port of server/src/collision.rs. Must stay operation-for-operation identical
 // so client prediction matches the server (verified by collision.test.ts).
-import { TILE_ID } from '../generated/defs';
+import { CONST, TILE_ID } from '../generated/defs';
 import { TILE, TileMap, type Mover } from './map';
 
 const EPS = 0.001;
@@ -60,9 +60,20 @@ export interface MoveState {
   dashT: number;
   dashDx: number;
   dashDy: number;
+  /** Knockback velocity (px/s), decaying each step; zero when not pushed. */
+  knockVx: number;
+  knockVy: number;
 }
 
-/** A hero walks (slowed by the terrain under their centre at the start of the step) or dashes (jumping deep water, chasms and lava). */
+/** Being pushed: no control over movement or abilities until the slide ends. */
+export function knocked(s: MoveState): boolean {
+  return s.knockVx !== 0 || s.knockVy !== 0;
+}
+
+/**
+ * A hero walks (slowed by the terrain under their centre at the start of the step) or dashes (jumping deep water, chasms and lava).
+ * A pushed hero slides along the knockback, ignoring the input, and only walls stop it.
+ */
 export function stepMove(
   map: TileMap,
   s: MoveState,
@@ -74,7 +85,8 @@ export function stepMove(
   dt: number,
 ): MoveState {
   const n = { ...s };
-  const mover: Mover = n.dashT > 0 ? 'dash' : 'hero';
+  const isKnocked = n.dashT <= 0 && knocked(n);
+  const mover: Mover = n.dashT > 0 || isKnocked ? 'dash' : 'hero';
   speed = speed * map.speedFactor(n.x, n.y, mover);
   let vx: number;
   let vy: number;
@@ -82,6 +94,15 @@ export function stepMove(
     n.dashT = Math.max(n.dashT - dt, 0);
     vx = n.dashDx * dashSpeed;
     vy = n.dashDy * dashSpeed;
+  } else if (isKnocked) {
+    vx = n.knockVx;
+    vy = n.knockVy;
+    n.knockVx *= CONST.KNOCK_DECAY;
+    n.knockVy *= CONST.KNOCK_DECAY;
+    if (Math.sqrt(n.knockVx * n.knockVx + n.knockVy * n.knockVy) < CONST.KNOCK_MIN_SPEED) {
+      n.knockVx = 0;
+      n.knockVy = 0;
+    }
   } else {
     const l = Math.sqrt(mx * mx + my * my);
     if (l > 0) {

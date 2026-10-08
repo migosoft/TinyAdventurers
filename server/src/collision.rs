@@ -2,6 +2,7 @@
 //! `client/src/sim/collision.ts` (checked with shared test fixtures), so the
 //! client can predict its own movement.
 
+use crate::defs::abilities::{KNOCK_DECAY, KNOCK_MIN_SPEED};
 use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
 
@@ -54,17 +55,47 @@ pub struct MoveState {
     pub dash_t: f64,
     pub dash_dx: f64,
     pub dash_dy: f64,
+    /// Knockback velocity (px/s), decaying each step; zero when not pushed.
+    pub knock_vx: f64,
+    pub knock_vy: f64,
+}
+
+impl MoveState {
+    pub fn at(x: f64, y: f64) -> MoveState {
+        MoveState { x, y, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0, knock_vx: 0.0, knock_vy: 0.0 }
+    }
+    /// Being pushed: no control over movement or abilities until the slide ends.
+    pub fn knocked(&self) -> bool {
+        self.knock_vx != 0.0 || self.knock_vy != 0.0
+    }
+}
+
+/// Start speed (px/s) of a push that slides `dist` px in steps of `dt` while
+/// its speed decays by `KNOCK_DECAY` per step (a geometric series).
+pub fn knock_speed(dist: f64, dt: f64) -> f64 {
+    dist * (1.0 - KNOCK_DECAY) / dt
 }
 
 /// A hero walks (slowed by the terrain under their centre at the start of the
-/// step) or dashes (jumping over deep water, chasms and lava).
+/// step) or dashes (jumping over deep water, chasms and lava). A pushed hero
+/// slides along the knockback, ignoring the input, and only walls stop it.
 pub fn step_move(map: &Map, s: &MoveState, mx: i8, my: i8, speed: f64, dash_speed: f64, r: f64, dt: f64) -> MoveState {
     let mut n = *s;
-    let mover = if n.dash_t > 0.0 { Mover::Dash } else { Mover::Hero };
+    let knocked = n.dash_t <= 0.0 && n.knocked();
+    let mover = if n.dash_t > 0.0 || knocked { Mover::Dash } else { Mover::Hero };
     let speed = speed * map.speed_factor(Vec2::new(n.x, n.y), mover);
     let (vx, vy) = if n.dash_t > 0.0 {
         n.dash_t = (n.dash_t - dt).max(0.0);
         (n.dash_dx * dash_speed, n.dash_dy * dash_speed)
+    } else if knocked {
+        let v = (n.knock_vx, n.knock_vy);
+        n.knock_vx *= KNOCK_DECAY;
+        n.knock_vy *= KNOCK_DECAY;
+        if (n.knock_vx * n.knock_vx + n.knock_vy * n.knock_vy).sqrt() < KNOCK_MIN_SPEED {
+            n.knock_vx = 0.0;
+            n.knock_vy = 0.0;
+        }
+        v
     } else {
         let (fx, fy) = (mx as f64, my as f64);
         let l = (fx * fx + fy * fy).sqrt();
@@ -121,7 +152,7 @@ mod tests {
     #[test]
     fn cannot_tunnel_into_walls() {
         let m = room();
-        let mut s = MoveState { x: 40.0, y: 40.0, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0 };
+        let mut s = MoveState::at(40.0, 40.0);
         for _ in 0..600 {
             s = step_move(&m, &s, 1, 1, 70.0, 300.0, 5.0, 1.0 / 60.0);
         }
@@ -130,7 +161,7 @@ mod tests {
         assert!((s.y - (9.0 * TILE - 5.0)).abs() < 1e-9);
         assert!(!m.opaque_at(Vec2::new(s.x + 4.9, s.y + 4.9)));
         // Dash into a wall also stops.
-        let mut d = MoveState { x: 40.0, y: 40.0, dash_t: 2.0, dash_dx: -1.0, dash_dy: 0.0 };
+        let mut d = MoveState { dash_t: 2.0, dash_dx: -1.0, dash_dy: 0.0, ..MoveState::at(40.0, 40.0) };
         for _ in 0..120 {
             d = step_move(&m, &d, 0, 0, 70.0, 300.0, 5.0, 1.0 / 60.0);
         }
@@ -166,7 +197,7 @@ mod tests {
                 m.set(x, y, Tile::ShallowWater);
             }
         }
-        let mut s = MoveState { x: 24.0, y: 24.0, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0 };
+        let mut s = MoveState::at(24.0, 24.0);
         for _ in 0..30 {
             s = step_move(&m, &s, 1, 0, 60.0, 300.0, 5.0, 1.0 / 60.0);
         }
@@ -178,17 +209,42 @@ mod tests {
             m.set(5, y, Tile::DeepWater);
         }
         // Walking: into the chasm, stopped by deep water.
-        let mut s = MoveState { x: 40.0, y: 40.0, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0 };
+        let mut s = MoveState::at(40.0, 40.0);
         for _ in 0..120 {
             s = step_move(&m, &s, 1, 0, 60.0, 300.0, 5.0, 1.0 / 60.0);
         }
         assert!((s.x - (5.0 * TILE - 5.0)).abs() < 1e-9, "x {}", s.x);
         // Dashing: over both.
-        let mut d = MoveState { x: 40.0, y: 40.0, dash_t: 0.3, dash_dx: 1.0, dash_dy: 0.0 };
+        let mut d = MoveState { dash_t: 0.3, dash_dx: 1.0, dash_dy: 0.0, ..MoveState::at(40.0, 40.0) };
         for _ in 0..18 {
             d = step_move(&m, &d, 0, 0, 60.0, 300.0, 5.0, 1.0 / 60.0);
         }
         assert!(d.x > 6.0 * TILE, "x {}", d.x);
+    }
+
+    #[test]
+    fn a_push_slides_its_distance_ignores_input_and_crosses_deep_water() {
+        let dt = 1.0 / 60.0;
+        let mut m = room();
+        for y in 1..9 {
+            m.set(5, y, Tile::DeepWater);
+        }
+        // 36 px to the right while "left" is held: ends about 36 px further right.
+        let mut s = MoveState { knock_vx: knock_speed(36.0, dt), ..MoveState::at(56.0, 40.0) };
+        let mut steps = 0;
+        while s.knocked() {
+            s = step_move(&m, &s, -1, 0, 60.0, 300.0, 5.0, dt);
+            steps += 1;
+        }
+        assert!((s.x - 92.0).abs() < 1.0, "x {}", s.x);
+        assert!(steps < 25, "the slide is short: {steps} steps");
+        assert_eq!(m.tile_at(Vec2::new(s.x, s.y)), Tile::DeepWater as u8, "pushed into deep water");
+        // Walls still stop a push.
+        let mut s = MoveState { knock_vx: -knock_speed(60.0, dt), ..MoveState::at(24.0, 40.0) };
+        while s.knocked() {
+            s = step_move(&m, &s, 0, 0, 60.0, 300.0, 5.0, dt);
+        }
+        assert!((s.x - (16.0 + 5.0)).abs() < 1e-9, "x {}", s.x);
     }
 
     #[test]

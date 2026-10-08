@@ -180,15 +180,18 @@ export class EntityView {
 
     // ---- body moves for attacks (the pack has no attack frames) ----
     switch (s.anim) {
-      case ANIM.Melee: {
+      case ANIM.Melee:
+      case ANIM.Tail: {
+        const tail = s.anim === ANIM.Tail;
         const k = Math.min(t / MELEE_T, 1);
-        this.body.x += ax * 3 * (1 - k);
+        this.body.x += ax * (tail ? -3 : 3) * (1 - k);
         this.body.y += ay * 1.5 * (1 - k);
         this.body.setAngle(sgn * 8 * Math.sin(k * Math.PI));
-        if (!d.weapon && !this.shotFx && d.swing) {
-          // Unarmed bosses: claw swoosh (demon) or tail swoosh behind (dragon).
+        const swing = tail ? d.tail : d.swing;
+        if (!d.weapon && !this.shotFx && swing) {
+          // Unarmed: claw swoosh in front (demons, dragon) or tail swoosh behind (dragon).
           this.shotFx = true;
-          this.swoosh(s, d.swing.behind ? s.aim + Math.PI : s.aim, sgn, d.swing.reach, d.swing.arc);
+          this.swoosh(s, tail ? s.aim + Math.PI : s.aim, sgn, swing.reach, swing.arc, swing.color);
         }
         break;
       }
@@ -359,11 +362,11 @@ export class EntityView {
   }
 
   /** Swing arc from one side of the aim to the other (in swing direction) at the damage reach. */
-  private swoosh(s: ViewState, aim: number, sgn: number, reach: number, arc: number): void {
+  private swoosh(s: ViewState, aim: number, sgn: number, reach: number, arc: number, color = this.def.swing?.color): void {
     const scale = this.def.scale ?? 1;
     const cx = s.x + 3 * sgn * scale;
     const cy = s.y - this.def.handY * scale;
-    this.fx.swoosh(cx, cy, reach, aim - sgn * (arc / 2), aim + sgn * (arc / 2), this.def.swing?.color ?? 0xffffff);
+    this.fx.swoosh(cx, cy, reach, aim - sgn * (arc / 2), aim + sgn * (arc / 2), color ?? 0xffffff);
   }
 
   destroy(): void {

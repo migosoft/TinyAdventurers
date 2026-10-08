@@ -19,6 +19,7 @@ const STATES: [string, number][] = [
   ['dash', ANIM.Dash],
   ['channel', ANIM.Channel],
   ['breath', ANIM.Breath],
+  ['tail', ANIM.Tail],
 ];
 
 export class GalleryScene extends Phaser.Scene {

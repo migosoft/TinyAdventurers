@@ -6,6 +6,10 @@ export type SelfState = { alive: boolean, hp: number, max_hp: number,
  */
 x: number, y: number, dash_t: number, dash_dx: number, dash_dy: number, 
 /**
+ * Knockback velocity (px/s), zero when not pushed.
+ */
+knock_vx: number, knock_vy: number, 
+/**
  * Remaining cooldowns (s).
  */
 cd1: number, cd2: number, 

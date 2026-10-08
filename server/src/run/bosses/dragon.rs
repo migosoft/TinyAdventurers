@@ -1,5 +1,6 @@
-//! Red dragon: fire breath cone (leaves burning patches), tail swipe against
-//! players behind it, and fireball volleys.
+//! Red dragon: fire breath cone (leaves burning patches), a claw swipe against
+//! heroes at its face, a tail swipe against heroes behind it (both push), and
+//! fireball volleys.
 
 use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
 use crate::defs::kinds::{Anim, EntityKind};
@@ -14,12 +15,14 @@ enum Action {
     BreathWindup,
     Breath,
     Tail,
+    Claw,
     Volley,
 }
 
 pub struct Dragon {
     breath_cd: f64,
     tail_cd: f64,
+    claw_cd: f64,
     volley_cd: f64,
     action: Option<(Action, f64)>,
     pulse: f64,
@@ -27,18 +30,25 @@ pub struct Dragon {
 
 impl Default for Dragon {
     fn default() -> Self {
-        Dragon { breath_cd: 3.0, tail_cd: 2.0, volley_cd: 6.0, action: None, pulse: 0.0 }
+        Dragon { breath_cd: 3.0, tail_cd: 2.0, claw_cd: 1.5, volley_cd: 6.0, action: None, pulse: 0.0 }
     }
 }
 
 const BREATH_RANGE: f64 = 115.0;
 const BREATH_HALF_ANGLE: f64 = 0.38;
+/// Front claw: hits heroes within this centre distance in front of it.
+const CLAW_RANGE: f64 = 40.0;
+const CLAW_HALF_ANGLE: f64 = 0.8;
+/// Knockback (px) of the claw and the tail swipe.
+const CLAW_KNOCK: f64 = 32.0;
+const TAIL_KNOCK: f64 = 44.0;
 
 impl BossBehaviour for Dragon {
     fn tick(&mut self, run: &mut Run, dt: f64) {
         let Some(bi) = boss_idx(run) else { return };
         self.breath_cd -= dt;
         self.tail_cd -= dt;
+        self.claw_cd -= dt;
         self.volley_cd -= dt;
         let pos = run.monsters[bi].pos;
         let aim = run.monsters[bi].aim;
@@ -78,10 +88,18 @@ impl BossBehaviour for Dragon {
                 }
                 Action::Breath => set_anim(run, bi, Anim::Idle),
                 Action::Tail => {
-                    set_anim(run, bi, Anim::Melee);
+                    set_anim(run, bi, Anim::Tail);
                     let behind = aim + std::f64::consts::PI;
                     for pi in players_in(run, pos, 46.0, Some((behind, 1.2))) {
                         run.hurt_player(pi, 25.0);
+                        run.knock_player(pi, pos, behind, TAIL_KNOCK);
+                    }
+                }
+                Action::Claw => {
+                    set_anim(run, bi, Anim::Melee);
+                    for pi in players_in(run, pos, CLAW_RANGE, Some((aim, CLAW_HALF_ANGLE))) {
+                        run.hurt_player(pi, 20.0);
+                        run.knock_player(pi, pos, aim, CLAW_KNOCK);
                     }
                 }
                 Action::Volley => {
@@ -122,6 +140,10 @@ impl BossBehaviour for Dragon {
         if self.breath_cd <= 0.0 && dist < BREATH_RANGE {
             self.breath_cd = 6.5;
             self.action = Some((Action::BreathWindup, 0.8));
+            set_anim(run, bi, Anim::Windup);
+        } else if self.claw_cd <= 0.0 && dist <= CLAW_RANGE - 4.0 {
+            self.claw_cd = 2.5;
+            self.action = Some((Action::Claw, 0.4));
             set_anim(run, bi, Anim::Windup);
         } else if self.volley_cd <= 0.0 {
             self.volley_cd = 7.0;

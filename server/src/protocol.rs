@@ -143,6 +143,9 @@ pub struct SelfState {
     pub dash_t: f64,
     pub dash_dx: f64,
     pub dash_dy: f64,
+    /// Knockback velocity (px/s), zero when not pushed.
+    pub knock_vx: f64,
+    pub knock_vy: f64,
     /// Remaining cooldowns (s).
     pub cd1: f32,
     pub cd2: f32,

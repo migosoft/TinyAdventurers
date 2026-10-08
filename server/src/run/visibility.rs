@@ -138,6 +138,8 @@ pub fn send_snapshots(run: &mut Run) {
                 dash_t: me.mv.dash_t,
                 dash_dx: me.mv.dash_dx,
                 dash_dy: me.mv.dash_dy,
+                knock_vx: me.mv.knock_vx,
+                knock_vy: me.mv.knock_vy,
                 cd1: me.cd1 as f32,
                 cd2: me.cd2 as f32,
                 hidden: me.hidden as f32,
