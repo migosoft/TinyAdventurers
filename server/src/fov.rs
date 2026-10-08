@@ -67,7 +67,7 @@ impl Fov {
                 if dx * dx + dy * dy <= r2 {
                     self.mark(x, y);
                 }
-                let opaque = map.solid(x, y);
+                let opaque = map.opaque(x, y);
                 if blocked {
                     if opaque {
                         new_start = r_slope;

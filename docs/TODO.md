@@ -16,9 +16,13 @@ Progression is live (profiles by token, XP banked at run end, lobby upgrade shop
 ## Demon dungeon follow-ups
 - **Tune** imp, chort and summoner stats (`defs/enemies.rs`) in the balancing pass. They start close to the skeletons they replace.
 - **Other bosses could get their own minions** the same way (`enemies::for_boss`), e.g. ice or undead variants for the lich and lizards for the dragon.
-- **Terrain (in progress):** tiles and the `?water`/`?chasm`/`?lava` demos are done; the server rules, the generator and in-game rendering are next (HANDOFF.md, plan steps 2-6).
-  - **Knockback:** nothing pushes figures yet, so drowning in deep water and pushed falls only happen in the demos. Decide which attacks push and how far.
-  - **Tune** in the balancing pass: shallow water speed (0.7), lava speed (0.4), lava damage (at least 15/s; demo 20/s).
+
+## Terrain follow-ups
+Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
+- **Knockback (its own feature, the user's decision):** nothing pushes figures yet, so drowning only happens when a dash ends in deep water, and enemies never end up in terrain. Decide which attacks push and how far (the demos show a prototype); then enemies can drown and fall too, and the `Sink` event and `kill_player` need a monster counterpart.
+- **Tune** in the balancing pass: `SHALLOW_SPEED` 0.7, `LAVA_SPEED` 0.4, `LAVA_DAMAGE`/`LAVA_TICK` (20/s; the user wants at least 15/s), `FALL_TIME` 0.7 s, `DROWN_TIME` 0.9 s (all in `dungeon/mod.rs`), and the feature rates and sizes in `place_terrain` (about 4 % of the floor).
+- **Not verified live:** a real (non-debug) death by chasm, drowning after a Barbarian dash, and lava damage with armour upgrades. The user should play one run of each theme.
+- **Ideas:** bridges drawn as planks over chasms, lava in the dragon's dungeon too, enemies that avoid shallow water when a dry path exists.
 
 ## Other follow-ups
 - **Balancing pass (later, all at once):** progression, classes, enemies and boss fights together. All three bosses were played live without problems; their numbers are in `server/src/run/bosses/*.rs` and `defs/bosses.rs`.

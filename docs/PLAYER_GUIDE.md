@@ -83,6 +83,23 @@ Some rooms have a **treasure chest** against a wall. Walk into it to open it: **
 
 About one chest in four is a **mimic**. A mimic stays a closed chest until someone comes close or hits it. Then it jumps open and attacks. A careful hero can test a chest from a distance with a spell or arrow: a real chest does not stop a shot, a mimic wakes up. A chest that rattles when you come near is a bad sign.
 
+## Water, lava and chasms
+
+Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water** appears in the lich's and the dragon's dungeons, **lava** in the demon's.
+
+| Terrain | What happens |
+|---|---|
+| Shallow water (the light rim of a pool) | Slows everyone down, heroes and enemies alike. |
+| Deep water (the dark centre) | You can't walk into it. A hero whose **dash ends** in deep water **drowns**. |
+| Chasm | Step in and you **fall to your death** ("X fell into the abyss"). Every chasm leaves a bridge of floor. |
+| Lava | You can walk in, but it slows you a lot and **burns for 20 damage a second**. |
+
+- The Barbarian's **dash jumps** deep water, chasms and lava. Only where the dash ends counts: land on solid ground.
+- No chasm is wider than 3 tiles, so a dash can always clear it.
+- **Demons** (imps, chorts, summoners and the Red Demon) walk through lava unharmed and at full speed. Other enemies go around lava, and no enemy follows you into a chasm or deep water.
+- Shots and sight pass over all terrain.
+- In debug mode a hero who falls or drowns climbs back out onto the last safe tile.
+
 ## Final bosses
 
 The boss sleeps in a large hall at the far end of the dungeon. Each run has one of three bosses: the one the host picked in the lobby, or a random one. It wakes as soon as someone enters the hall. **When the whole party is inside, a shimmering blue force field seals the entrance**: from then on, it's you or the boss. Bosses have a lot of health, more with a bigger party. Their health bar appears at the top of the screen.
@@ -141,3 +158,4 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 - The Paladin's heal only reaches allies close by, so stick together.
 - Archers keep their distance. Close in, or use the Wizard and Assassin to pick them off.
 - Use corners: enemies can't attack what they can't see.
+- Put a chasm or a pool between you and melee enemies: they have to walk around it. In the demon's dungeon, lava doesn't stop the demons.

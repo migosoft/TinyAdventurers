@@ -51,6 +51,10 @@ fn export_defs() {
         "MIMIC_HOP_AIR_START": enemies::MIMIC_HOP_AIR.0,
         "MIMIC_HOP_AIR_END": enemies::MIMIC_HOP_AIR.1,
         "MIMIC_WAKE_T": enemies::MIMIC_WAKE_T,
+        "SHALLOW_SPEED": crate::dungeon::SHALLOW_SPEED,
+        "LAVA_SPEED": crate::dungeon::LAVA_SPEED,
+        "FALL_TIME": crate::dungeon::FALL_TIME,
+        "DROWN_TIME": crate::dungeon::DROWN_TIME,
     });
     let fl = json!({
         "HIDDEN": flags::HIDDEN, "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,
@@ -59,6 +63,8 @@ fn export_defs() {
     let tiles = json!({
         "Void": Tile::Void as u8, "Floor": Tile::Floor as u8, "Wall": Tile::Wall as u8,
         "DoorOpen": Tile::DoorOpen as u8, "DoorClosed": Tile::DoorClosed as u8,
+        "ShallowWater": Tile::ShallowWater as u8, "DeepWater": Tile::DeepWater as u8,
+        "Chasm": Tile::Chasm as u8, "Lava": Tile::Lava as u8,
     });
     let p = |v: &serde_json::Value| serde_json::to_string_pretty(v).unwrap();
     let ts = format!(
@@ -82,7 +88,8 @@ fn export_defs() {
     std::fs::write(out_dir().join("defs.ts"), ts).unwrap();
 }
 
-/// A small room with pillars and a corridor for the shared test vectors.
+/// A small room with pillars, a corridor and every kind of terrain for the
+/// shared test vectors.
 fn fixture_map() -> Map {
     let mut m = Map::new(24, 20);
     for y in 1..19 {
@@ -96,6 +103,26 @@ fn fixture_map() -> Map {
     for y in 1..12 {
         m.set(10, y, Tile::Wall);
     }
+    for x in 11..23 {
+        m.set(x, 1, Tile::ShallowWater);
+        m.set(x, 2, Tile::ShallowWater);
+    }
+    for x in 1..10 {
+        m.set(x, 17, Tile::ShallowWater);
+        m.set(x, 18, Tile::ShallowWater);
+    }
+    for (x, y) in [(15, 6), (16, 6), (15, 7), (16, 7)] {
+        m.set(x, y, Tile::DeepWater);
+    }
+    for y in 5..9 {
+        m.set(20, y, Tile::Chasm);
+        m.set(21, y, Tile::Chasm);
+    }
+    for y in 13..16 {
+        for x in 14..18 {
+            m.set(x, y, Tile::Lava);
+        }
+    }
     m
 }
 
@@ -104,8 +131,9 @@ fn export_fixtures() {
     let map = fixture_map();
     let mut rng = ChaCha8Rng::seed_from_u64(99);
     let mut moves = Vec::new();
-    for case in 0..6 {
-        let mut s = MoveState { x: 3.5 * TILE, y: (3 + case * 2) as f64 * TILE + 8.0, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0 };
+    for case in 0..10 {
+        let (tx, ty) = if case < 6 { (3, 3 + case * 2) } else { (12, 3 + (case - 6) * 4) };
+        let mut s = MoveState { x: tx as f64 * TILE + 8.0, y: ty as f64 * TILE + 8.0, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0 };
         let start = s;
         let speed = 60.0 + case as f64 * 5.0;
         let mut inputs = Vec::new();

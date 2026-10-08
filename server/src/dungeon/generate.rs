@@ -4,9 +4,10 @@
 //! centered at the top), then rotated by a random quarter turn so the start
 //! can be on any side and the boss hall is centered on the opposite side.
 
-use super::{ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile};
+use super::{is_terrain, ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile};
 use crate::defs::enemies::EnemyType;
 use crate::math::Vec2;
+use crate::protocol::BossId;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -18,18 +19,36 @@ const BOSS_H: i32 = 20;
 const START_SIZE: i32 = 8;
 const TARGET_ROOMS: usize = 24;
 
-pub fn generate(seed: u64) -> Dungeon {
+/// Which liquid the dungeon's terrain uses. Chasms appear in every theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Theme {
+    Water,
+    Lava,
+}
+
+impl Theme {
+    /// Lava in the demon's dungeon, water everywhere else.
+    pub fn for_boss(boss: BossId) -> Theme {
+        if boss == BossId::Demon {
+            Theme::Lava
+        } else {
+            Theme::Water
+        }
+    }
+}
+
+pub fn generate(seed: u64, theme: Theme) -> Dungeon {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     // Retry until all guarantees hold (deterministic: same rng stream).
     for _ in 0..50 {
-        if let Some(d) = try_generate(&mut rng) {
+        if let Some(d) = try_generate(&mut rng, theme) {
             return d;
         }
     }
     panic!("dungeon generation failed for seed {seed}");
 }
 
-fn try_generate(rng: &mut ChaCha8Rng) -> Option<Dungeon> {
+fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     let mut map = Map::new(SIZE, SIZE);
     let mut rooms: Vec<Room> = Vec::new();
 
@@ -163,6 +182,10 @@ fn try_generate(rng: &mut ChaCha8Rng) -> Option<Dungeon> {
     let mut chest_rng = rng.clone();
     chest_rng.set_stream(7);
     let chests = place_chests(&mut chest_rng, &map, &rooms);
+    // Terrain too (stream 8): layouts, spawns and chests stay the same per seed.
+    let mut terrain_rng = rng.clone();
+    terrain_rng.set_stream(8);
+    place_terrain(&mut terrain_rng, &mut map, &rooms, theme, &mut spawns, &chests);
 
     let mut dungeon = Dungeon {
         map,
@@ -264,7 +287,7 @@ fn add_walls(map: &mut Map) {
             if map.get(x, y) != Tile::Void as u8 {
                 continue;
             }
-            let near_floor = (-1..=1).any(|dy| (-1..=1).any(|dx| map.walkable(x + dx, y + dy)));
+            let near_floor = (-1..=1).any(|dy| (-1..=1).any(|dx| !map.opaque(x + dx, y + dy)));
             if near_floor {
                 walls.push((x, y));
             }
@@ -275,7 +298,8 @@ fn add_walls(map: &mut Map) {
     }
 }
 
-/// Tile path distances from (sx, sy); -1 = unreachable.
+/// Tile path distances from (sx, sy) over safe ground (no deep water, chasm
+/// or lava); -1 = unreachable.
 pub fn bfs(map: &Map, sx: i32, sy: i32) -> Vec<i32> {
     let mut d = vec![-1; (map.w * map.h) as usize];
     let mut q = VecDeque::new();
@@ -285,7 +309,7 @@ pub fn bfs(map: &Map, sx: i32, sy: i32) -> Vec<i32> {
         let cd = d[(y * map.w + x) as usize];
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let (nx, ny) = (x + dx, y + dy);
-            if map.walkable(nx, ny) && d[(ny * map.w + nx) as usize] < 0 {
+            if map.safe(nx, ny) && d[(ny * map.w + nx) as usize] < 0 {
                 d[(ny * map.w + nx) as usize] = cd + 1;
                 q.push_back((nx, ny));
             }
@@ -334,7 +358,7 @@ fn place_chests(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<ChestSpa
         for _ in 0..8 {
             let x = rng.gen_range(r.x + 1..r.x + r.w - 1);
             let y = r.y;
-            let fits = map.walkable(x, y) && map.solid(x, y - 1) && map.walkable(x - 1, y) && map.walkable(x + 1, y) && map.walkable(x, y + 1);
+            let fits = map.safe(x, y) && map.opaque(x, y - 1) && map.safe(x - 1, y) && map.safe(x + 1, y) && map.safe(x, y + 1);
             if fits {
                 out.push(ChestSpawn { pos: Map::center_of(x, y), mimic });
                 break;
@@ -342,6 +366,154 @@ fn place_chests(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<ChestSpa
         }
     }
     out
+}
+
+/// Widest chasm a feature may have: the Barbarian's dash (54 px) must clear it.
+pub const MAX_CHASM: i32 = 3;
+
+/// Pools (water or lava, by theme) and chasm strips in ordinary rooms and
+/// halls, never in the start room or boss hall. A feature keeps clear of
+/// walls, room entrances and chests, and is undone if it would cut any safe
+/// ground off from the start or bring a room as far as the boss hall.
+/// Enemies whose spawn it covers move to the nearest free floor in the room.
+fn place_terrain(rng: &mut ChaCha8Rng, map: &mut Map, rooms: &[Room], theme: Theme, spawns: &mut [Spawn], chests: &[ChestSpawn]) {
+    let (sx, sy) = rooms[0].rect.center();
+    let boss = rooms.iter().find(|r| r.kind == RoomKind::Boss).map(|r| r.rect.center()).unwrap();
+    let unreached = |map: &Map| {
+        let d = bfs(map, sx, sy);
+        let at = |(x, y): (i32, i32)| d[(y * map.w + x) as usize];
+        let boss_d = at(boss);
+        let too_far = rooms.iter().filter(|r| r.kind != RoomKind::Boss).any(|r| at(r.rect.center()) >= boss_d);
+        (0..map.w * map.h).filter(|&i| d[i as usize] < 0 && map.safe(i % map.w, i / map.w)).count() + too_far as usize * map.tiles.len()
+    };
+    let cut_off = unreached(map);
+    let chest_tiles: Vec<(i32, i32)> = chests.iter().map(|c| Map::tile_of(c.pos)).collect();
+    for room in rooms {
+        let tries = match room.kind {
+            RoomKind::Room => 1,
+            RoomKind::Hall => 2,
+            _ => continue,
+        };
+        for _ in 0..tries {
+            if !rng.gen_bool(if room.kind == RoomKind::Hall { 0.6 } else { 0.4 }) {
+                continue;
+            }
+            let chasm = rng.gen_bool(0.4);
+            for _ in 0..8 {
+                let cells = if chasm { chasm_strip(rng, &room.rect) } else { pool(rng, &room.rect, theme) };
+                let Some(cells) = cells else { break };
+                let fits = cells.iter().all(|&(x, y, _)| {
+                    map.get(x, y) == Tile::Floor as u8 && !chest_tiles.contains(&(x, y)) && !near_entrance(map, &room.rect, x, y)
+                });
+                if !fits {
+                    continue;
+                }
+                let before: Vec<u8> = cells.iter().map(|&(x, y, _)| map.get(x, y)).collect();
+                for &(x, y, t) in &cells {
+                    map.set(x, y, t);
+                }
+                if unreached(map) == cut_off && move_spawns_off(map, &room.rect, spawns, &chest_tiles) {
+                    break;
+                }
+                for (&(x, y, _), &t) in cells.iter().zip(&before) {
+                    map.tiles[(y * map.w + x) as usize] = t;
+                }
+            }
+        }
+    }
+}
+
+/// Moves spawns that terrain now covers to the nearest free floor tile in the
+/// room. False (nothing moved) if one finds no place.
+fn move_spawns_off(map: &Map, r: &Rect, spawns: &mut [Spawn], chests: &[(i32, i32)]) -> bool {
+    let mut moved: Vec<(usize, Vec2)> = Vec::new();
+    for i in 0..spawns.len() {
+        let (sx, sy) = Map::tile_of(spawns[i].pos);
+        if map.get(sx, sy) == Tile::Floor as u8 {
+            continue;
+        }
+        let free = |x: i32, y: i32| {
+            let p = Map::center_of(x, y);
+            r.contains_tile(x, y)
+                && map.get(x, y) == Tile::Floor as u8
+                && !chests.contains(&(x, y))
+                && !spawns.iter().any(|s| s.pos == p)
+                && !moved.iter().any(|m| m.1 == p)
+        };
+        let spot = (1..r.w.max(r.h)).find_map(|d| {
+            (-d..=d).flat_map(|dy| (-d..=d).map(move |dx| (dx, dy))).filter(|(dx, dy)| dx.abs().max(dy.abs()) == d).map(|(dx, dy)| (sx + dx, sy + dy)).find(|&(x, y)| free(x, y))
+        });
+        let Some((x, y)) = spot else { return false };
+        moved.push((i, Map::center_of(x, y)));
+    }
+    for (i, p) in moved {
+        spawns[i].pos = p;
+    }
+    true
+}
+
+/// An oval pool, a tile away from the room's walls. Water pools are deep
+/// wherever the whole neighbourhood is pool, so a shallow rim always surrounds
+/// the deep centre; lava pools are all lava.
+fn pool(rng: &mut ChaCha8Rng, r: &Rect, theme: Theme) -> Option<Vec<(i32, i32, Tile)>> {
+    let (max_w, max_h) = (r.w - 2, r.h - 2);
+    let (min, cap) = if theme == Theme::Water { (5, (9, 7)) } else { (4, (7, 6)) };
+    if max_w < min || max_h < min {
+        return None;
+    }
+    let w = rng.gen_range(min..=max_w.min(cap.0));
+    let h = rng.gen_range(min..=max_h.min(cap.1));
+    let x0 = rng.gen_range(r.x + 1..=r.x + r.w - 1 - w);
+    let y0 = rng.gen_range(r.y + 1..=r.y + r.h - 1 - h);
+    let (cx, cy) = (x0 as f64 + (w - 1) as f64 / 2.0, y0 as f64 + (h - 1) as f64 / 2.0);
+    let (rx, ry) = (w as f64 / 2.0, h as f64 / 2.0);
+    let inside = |x: i32, y: i32| ((x as f64 - cx) / rx).powi(2) + ((y as f64 - cy) / ry).powi(2) <= 1.0;
+    let mut cells = Vec::new();
+    for y in y0..y0 + h {
+        for x in x0..x0 + w {
+            if !inside(x, y) {
+                continue;
+            }
+            let deep = (-1..=1).all(|dy| (-1..=1).all(|dx| inside(x + dx, y + dy)));
+            let t = match theme {
+                Theme::Lava => Tile::Lava,
+                Theme::Water if deep => Tile::DeepWater,
+                Theme::Water => Tile::ShallowWater,
+            };
+            cells.push((x, y, t));
+        }
+    }
+    Some(cells)
+}
+
+/// A chasm from wall to wall across the room (at most `MAX_CHASM` tiles wide),
+/// with a floor bridge two or three tiles wide.
+fn chasm_strip(rng: &mut ChaCha8Rng, r: &Rect) -> Option<Vec<(i32, i32, Tile)>> {
+    let width = rng.gen_range(1..=MAX_CHASM);
+    let bridge = rng.gen_range(2..=3);
+    let across = rng.gen_bool(0.5); // runs left to right
+    let (len, depth) = if across { (r.w, r.h) } else { (r.h, r.w) };
+    if depth < width + 4 || len < bridge + 4 {
+        return None;
+    }
+    let at = rng.gen_range(2..=depth - 2 - width);
+    let b0 = rng.gen_range(1..=len - 1 - bridge);
+    let mut cells = Vec::new();
+    for i in 0..len {
+        if (b0..b0 + bridge).contains(&i) {
+            continue;
+        }
+        for j in at..at + width {
+            cells.push(if across { (r.x + i, r.y + j, Tile::Chasm) } else { (r.x + j, r.y + i, Tile::Chasm) });
+        }
+    }
+    Some(cells)
+}
+
+/// Within two tiles of a room entrance: open ground outside the room (a
+/// corridor mouth), so corridors never lead straight into terrain.
+fn near_entrance(map: &Map, r: &Rect, x: i32, y: i32) -> bool {
+    (-2..=2).any(|dy| (-2..=2).any(|dx| !r.contains_tile(x + dx, y + dy) && !map.opaque(x + dx, y + dy)))
 }
 
 /// Rotate the whole dungeon 90 degrees clockwise (map is square).
@@ -376,35 +548,66 @@ mod tests {
 
     #[test]
     fn deterministic_per_seed() {
-        let a = generate(42);
-        let b = generate(42);
+        let a = generate(42, Theme::Water);
+        let b = generate(42, Theme::Water);
         assert_eq!(a.map.tiles, b.map.tiles);
         assert_eq!(a.spawns.len(), b.spawns.len());
         assert_eq!(a.chests.len(), b.chests.len());
     }
 
     #[test]
+    fn terrain_keeps_layout_and_chests() {
+        let (w, l) = (generate(7, Theme::Water), generate(7, Theme::Lava));
+        let base = |t: u8| if is_terrain(t) { Tile::Floor as u8 } else { t };
+        assert_eq!(w.map.tiles.iter().map(|&t| base(t)).collect::<Vec<_>>(), l.map.tiles.iter().map(|&t| base(t)).collect::<Vec<_>>());
+        assert_eq!(w.chests.iter().map(|c| c.pos).collect::<Vec<_>>(), l.chests.iter().map(|c| c.pos).collect::<Vec<_>>());
+    }
+
+    #[test]
     fn guarantees_hold_over_many_seeds() {
         let (mut chests, mut mimics) = (0, 0);
+        let (mut terrain, mut open) = (0usize, 0usize);
+        let mut seen = [0usize; 9];
         for seed in 0..200u64 {
-            let d = generate(seed);
+            let theme = if seed % 2 == 0 { Theme::Water } else { Theme::Lava };
+            let d = generate(seed, theme);
             chests += d.chests.len();
             mimics += d.chests.iter().filter(|c| c.mimic).count();
             let (sx, sy) = d.rooms[d.start].rect.center();
-            assert!(d.map.walkable(sx, sy), "seed {seed}: start not walkable");
+            assert!(d.map.safe(sx, sy), "seed {seed}: start not walkable");
             let dist = bfs(&d.map, sx, sy);
             let at = |r: &Rect| {
                 let (cx, cy) = r.center();
                 dist[(cy * d.map.w + cx) as usize]
             };
             let boss_d = at(d.boss_hall());
+            let reached = |x: i32, y: i32| dist[(y * d.map.w + x) as usize] >= 0;
+            assert!(boss_d >= 0, "seed {seed}: boss hall unreachable");
             for (i, room) in d.rooms.iter().enumerate() {
-                let rd = at(&room.rect);
-                assert!(rd >= 0, "seed {seed}: room {i} unreachable");
-                if i != d.boss {
-                    assert!(rd < boss_d, "seed {seed}: room {i} farther than boss hall");
+                let r = &room.rect;
+                // Terrain may cover a room's centre, but never cuts off safe ground.
+                for y in r.y..r.y + r.h {
+                    for x in r.x..r.x + r.w {
+                        assert!(!d.map.safe(x, y) || reached(x, y), "seed {seed}: room {i} cut off at {x},{y}");
+                    }
+                }
+                if i != d.boss && d.map.safe(r.center().0, r.center().1) {
+                    assert!(at(r) < boss_d, "seed {seed}: room {i} farther than boss hall");
+                }
+                if matches!(room.kind, RoomKind::Start | RoomKind::Boss) {
+                    assert!((r.y..r.y + r.h).all(|y| (r.x..r.x + r.w).all(|x| !is_terrain(d.map.get(x, y)))), "seed {seed}: terrain in room {i}");
                 }
             }
+            for &t in &d.map.tiles {
+                seen[t as usize] += 1;
+                if is_terrain(t) {
+                    terrain += 1;
+                } else if t == Tile::Floor as u8 {
+                    open += 1;
+                }
+            }
+            let wrong = if theme == Theme::Water { Tile::Lava } else { Tile::ShallowWater };
+            assert!(!d.map.tiles.contains(&(wrong as u8)), "seed {seed}: wrong liquid for {theme:?}");
             // Boss hall is on the side opposite the start.
             let s = d.rooms[d.start].rect.center_px();
             let b = d.boss_hall().center_px();
@@ -412,25 +615,26 @@ mod tests {
             assert!((s.x - mid) * (b.x - mid) <= 0.0 || (s.y - mid) * (b.y - mid) <= 0.0, "seed {seed}: boss not opposite");
             // All spawns are on floor tiles, none in the start room.
             for sp in &d.spawns {
-                assert!(!d.map.solid_at(sp.pos), "seed {seed}: spawn in wall");
+                assert_eq!(d.map.tile_at(sp.pos), Tile::Floor as u8, "seed {seed}: spawn not on floor");
                 assert!(!d.rooms[d.start].rect.contains(sp.pos), "seed {seed}: enemy in start room");
             }
             // Chests: on floor against a wall, outside the start room and boss hall, apart from enemies.
             for c in &d.chests {
                 let (x, y) = Map::tile_of(c.pos);
-                assert!(d.map.walkable(x, y), "seed {seed}: chest in wall");
-                assert!([(0, 1), (0, -1), (1, 0), (-1, 0)].iter().any(|(dx, dy)| d.map.solid(x + dx, y + dy)), "seed {seed}: chest not against a wall");
+                assert_eq!(d.map.get(x, y), Tile::Floor as u8, "seed {seed}: chest not on floor");
+                assert!(reached(x, y), "seed {seed}: chest cut off");
+                assert!([(0, 1), (0, -1), (1, 0), (-1, 0)].iter().any(|(dx, dy)| d.map.opaque(x + dx, y + dy)), "seed {seed}: chest not against a wall");
                 assert!(!d.rooms[d.start].rect.contains(c.pos), "seed {seed}: chest in start room");
                 assert!(!d.boss_hall().contains(c.pos), "seed {seed}: chest in boss hall");
                 assert!(d.spawns.iter().all(|s| Map::tile_of(s.pos) != (x, y)), "seed {seed}: enemy on a chest");
             }
             for p in &d.player_spawns {
-                assert!(!d.map.solid_at(*p), "seed {seed}: player spawn in wall");
+                assert_eq!(d.map.tile_at(*p), Tile::Floor as u8, "seed {seed}: player spawn not on floor");
             }
             // No one-tile wall stubs (they would draw as T junctions).
             for y in 1..d.map.h - 1 {
                 for x in 1..d.map.w - 1 {
-                    assert!(!(d.map.solid(x, y) && is_stub(&d.map, x, y)), "seed {seed}: wall stub at {x},{y}");
+                    assert!(!(d.map.opaque(x, y) && is_stub(&d.map, x, y)), "seed {seed}: wall stub at {x},{y}");
                 }
             }
             // The only way into the boss hall is through the door.
@@ -441,5 +645,11 @@ mod tests {
         // Every dungeon has a few chests on average, some of them mimics.
         assert!(chests >= 200 * 3, "only {chests} chests in 200 dungeons");
         assert!(mimics > 0 && mimics < chests / 2, "{mimics} mimics among {chests} chests");
+        // Every kind of terrain shows up, and it covers a modest share of the floor.
+        for t in [Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava] {
+            assert!(seen[t as usize] > 0, "no {t:?} in 200 dungeons");
+        }
+        let share = terrain as f64 / (terrain + open) as f64;
+        assert!((0.02..0.15).contains(&share), "terrain covers {:.1} % of the floor", share * 100.0);
     }
 }

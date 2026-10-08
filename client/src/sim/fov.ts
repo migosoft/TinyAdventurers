@@ -64,7 +64,7 @@ export class Fov {
         if (start < rSlope) continue;
         else if (end > lSlope) break;
         if (dx * dx + dy * dy <= r2) this.mark(x, y);
-        const opaque = map.solid(x, y);
+        const opaque = map.opaque(x, y);
         if (blocked) {
           if (opaque) {
             newStart = rSlope;

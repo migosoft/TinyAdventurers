@@ -8,7 +8,7 @@ import type { Snapshot } from '../generated/Snapshot';
 import type { Net } from '../net';
 import { lineOfSight } from '../sim/collision';
 import { Fov } from '../sim/fov';
-import { TILE, TileMap } from '../sim/map';
+import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Hud } from '../ui/hud';
 import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
@@ -17,6 +17,7 @@ import { ChestView } from './chest';
 import { DEPTH, Effects } from './effects';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
+import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
 import { Interpolator, Predictor, type EntState } from './world';
 
 export interface GameInit {
@@ -79,6 +80,11 @@ export class GameScene extends Phaser.Scene {
   private frameMs = 0;
   private myKind = 0;
   private forceField?: ForceField;
+  private terrain?: TerrainLayer;
+  /** Splash and ripple state per figure. */
+  private wade = new Map<number, WadeFx>();
+  /** Heroes falling into a chasm or drowning (from `Ev::Sink`, or predicted for the own hero). */
+  private sinks = new Map<number, { x: number; y: number; drown: boolean; t: number }>();
   // Debug mode (?debug): immortal + path to the boss, drawn above the fog.
   private debugOn = false;
   private debugPath: [number, number][] = [];
@@ -93,6 +99,8 @@ export class GameScene extends Phaser.Scene {
     this.hud = data.hud;
     this.info = data.info;
     this.views = new Map();
+    this.wade = new Map();
+    this.sinks = new Map();
     this.projViews = new Map();
     this.hazardViews = new Map();
     this.mimicViews = new Map();
@@ -188,13 +196,15 @@ export class GameScene extends Phaser.Scene {
     for (let y = 0; y < this.map.h; y++) for (let x = 0; x < this.map.w; x++) this.drawTile(x, y, true);
     this.mapRt.endDraw();
     this.syncForceField(false);
+    // Water, lava and chasms: animated surfaces over the floor.
+    this.terrain = new TerrainLayer(this, this.map, this.fx);
     // Faint printed grid lines on the floor, like a game board.
     const grid = this.add.graphics().setDepth(DEPTH.map);
     grid.lineStyle(1, 0x000000, 0.12);
     for (let y = 0; y < this.map.h; y++)
       for (let x = 0; x < this.map.w; x++) {
         const t = this.map.get(x, y);
-        if (t === TILE_ID.Wall || t === TILE_ID.Void) continue; // the entrance tiles are floor too
+        if (t === TILE_ID.Wall || t === TILE_ID.Void || isTerrain(t)) continue; // the entrance tiles are floor too
         grid.strokeRect(x * TILE + 0.5, y * TILE + 0.5, TILE, TILE);
       }
   }
@@ -302,6 +312,8 @@ export class GameScene extends Phaser.Scene {
         else this.fx.explosion(ev.x, ev.y, ev.r);
         break;
       case 'Died': {
+        // Lost to a chasm or deep water: nothing is left behind.
+        if (this.sinks.delete(ev.id)) break;
                 if (!isProjectileKind(ev.kind)) {
           // A skull token marks where a figure fell.
           this.add.image(ev.x, ev.y - 2, "atlas", "skull").setDepth(DEPTH.decal).setAlpha(0.85).setFlipX(Math.random() < 0.5);
@@ -310,6 +322,10 @@ export class GameScene extends Phaser.Scene {
         }
         break;
       }
+      case 'Sink':
+        if (ev.how === 2) this.sinks.delete(ev.id); // debug: back on safe ground
+        else if (!this.sinks.has(ev.id)) this.startSink(ev.id, ev.x, ev.y, ev.how === 1);
+        break;
       case 'Raise':
         this.fx.raise(ev.x, ev.y, ev.fire);
         break;
@@ -357,8 +373,10 @@ export class GameScene extends Phaser.Scene {
     const my = (k.S.isDown ? 1 : 0) - (k.W.isDown ? 1 : 0);
     const { aim, dist } = this.aimInfo();
     const ptr = this.input.activePointer;
-    const wantPrimary = (ptr.leftButtonDown() || this.primaryClicked) && !this.hud.menuOpen;
-    const wantSecondary = (ptr.rightButtonDown() || this.secondaryClicked) && !this.hud.menuOpen;
+    // Falling or drowning heroes can no longer attack (the server ignores it).
+    const free = !this.hud.menuOpen && !this.pred.sinking;
+    const wantPrimary = (ptr.leftButtonDown() || this.primaryClicked) && free;
+    const wantSecondary = (ptr.rightButtonDown() || this.secondaryClicked) && free;
     this.primaryClicked = this.secondaryClicked = false;
 
     let primary: number | null = null;
@@ -468,7 +486,7 @@ export class GameScene extends Phaser.Scene {
       const nx = c.x + c.vx * dt;
       const ny = c.y + c.vy * dt;
       const reachedTarget = c.target && (c.target[0] - nx) * c.vx + (c.target[1] - ny) * c.vy <= 0;
-      const hitWall = !lineOfSight(this.map, c.x, c.y, nx, ny) || this.map.solidAt(nx, ny);
+      const hitWall = !lineOfSight(this.map, c.x, c.y, nx, ny) || this.map.opaqueAt(nx, ny);
       // The server projectile hit something: ours ends too.
       const goneOnServer = c.seenOnServer && !onServer;
       if (c.life <= 0 || hitWall || goneOnServer || reachedTarget) {
@@ -537,7 +555,7 @@ export class GameScene extends Phaser.Scene {
       seen.add(this.info.you);
       this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0 }, dt, px, py, now);
     }
-    for (const [id, v] of this.views) if (!seen.has(id)) (v.destroy(), this.views.delete(id));
+    for (const [id, v] of this.views) if (!seen.has(id)) (v.destroy(), this.views.delete(id), this.wade.delete(id));
     for (const [id, v] of this.projViews) if (!seen.has(id)) (v.destroy(), this.projViews.delete(id));
     for (const [id, v] of this.hazardViews) if (!seen.has(id)) (v.destroy(), this.hazardViews.delete(id));
     for (const [id, v] of this.mimicViews) if (!seen.has(id)) (v.destroy(), this.mimicViews.delete(id));
@@ -547,6 +565,7 @@ export class GameScene extends Phaser.Scene {
     this.drawBarsAndBeams(now);
     this.drawDebugPath(px, py, now);
     this.forceField?.update(dt);
+    this.terrain?.update(dt);
     this.fx.update(dt);
 
     this.frameMs = this.frameMs * 0.9 + (performance.now() - t0) * 0.1;
@@ -589,9 +608,34 @@ export class GameScene extends Phaser.Scene {
     } else {
       s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags };
     }
+    this.terrainState(e, s, me && this.alive, dt);
     view.update(s, dt);
     // Dragon breath: a cone of fire particles from the mouth.
     void py;
+  }
+
+  /** Wading, splashes and embers, or the fall / drowning of a hero lost to the terrain. */
+  private terrainState(e: EntState, s: ViewState, predicted: boolean, dt: number): void {
+    const tile = this.map.tileAt(s.x, s.y);
+    if (predicted && this.pred.sinking && !this.sinks.has(e.id)) this.startSink(e.id, s.x, s.y, tile === TILE_ID.DeepWater);
+    const sk = this.sinks.get(e.id);
+    if (sk) {
+      const k = Math.min(1, (performance.now() / 1000 - sk.t) / (sk.drown ? CONST.DROWN_TIME : CONST.FALL_TIME));
+      Object.assign(s, { x: sk.x, y: sk.y, anim: ANIM.Idle, animT: 0, fall: sk.drown ? 0 : k, drown: sk.drown ? k : 0 });
+      if (sk.drown) bubbleFx(this.fx, sk.x, sk.y, dt);
+      return;
+    }
+    const dashing = predicted ? this.pred.state.dashT > 0 : e.anim === ANIM.Dash;
+    s.sink = dashing ? 0 : sinkDepth(tile);
+    let wade = this.wade.get(e.id);
+    if (!wade) this.wade.set(e.id, (wade = new WadeFx()));
+    // Only heroes burn: demons walk lava unharmed, other enemies never enter it.
+    wade.update(this.fx, s.x, s.y, tile, dashing, s.anim === ANIM.Move, isPlayerKind(e.kind), dt);
+  }
+
+  private startSink(id: number, x: number, y: number, drown: boolean): void {
+    this.sinks.set(id, { x, y, drown, t: performance.now() / 1000 });
+    sinkStartFx(this.fx, x, y, drown);
   }
 
   private drawMimic(e: EntState, dt: number, px: number, py: number): void {

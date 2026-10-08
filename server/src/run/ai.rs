@@ -4,11 +4,11 @@
 use super::abilities::spawn_monster_projectile;
 use super::entities::{AiState, Windup};
 use super::Run;
-use crate::collision::{line_of_sight, move_box};
+use crate::collision::{line_of_sight, move_box, walk_line};
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::enemies::{self, AttackStyle, EnemyType};
 use crate::defs::kinds::Anim;
-use crate::dungeon::Map;
+use crate::dungeon::{Map, Mover};
 use crate::math::Vec2;
 use crate::protocol::Ev;
 use rand::Rng;
@@ -45,7 +45,7 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     }
     let step = (speed * dt).min(dist);
     let v = d.norm() * step;
-    let (x, y) = move_box(&run.dungeon.map, m.pos.x, m.pos.y, v.x, v.y, m.radius);
+    let (x, y) = move_box(&run.dungeon.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, m.mover);
     let m = &mut run.monsters[mi];
     m.pos = Vec2::new(x, y);
     false
@@ -61,12 +61,13 @@ fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) -> boo
     if pos.dist(goal) < 4.0 {
         return true;
     }
-    if line_of_sight(&run.dungeon.map, pos, goal) {
+    let mover = run.monsters[mi].mover;
+    if walk_line(&run.dungeon.map, pos, goal, mover) {
         run.monsters[mi].ai.path.clear();
         return move_toward(run, mi, goal, speed, dt);
     }
     if need_repath {
-        let path = astar(&run.dungeon.map, pos, goal, 2500).unwrap_or_default();
+        let path = astar(&run.dungeon.map, pos, goal, 2500, mover).unwrap_or_default();
         let m = &mut run.monsters[mi];
         m.ai.path = path;
         m.ai.repath_t = 0.6;
@@ -322,7 +323,7 @@ fn raise_minions(run: &mut Run, mi: usize, fire: bool) {
     for k in 0..2 {
         let a = run.rng.gen_range(0.0..std::f64::consts::TAU);
         let mut spot = pos + Vec2::from_angle(a) * 14.0;
-        if run.dungeon.map.solid_at(spot) {
+        if run.dungeon.map.blocks_at(spot, run.monsters[mi].mover) {
             spot = pos;
         }
         let minions = run.monsters.iter().filter(|o| o.alive && o.owner == Some(id)).count();
@@ -352,19 +353,20 @@ pub fn separate_monsters(run: &mut Run) {
             if d2 < min * min && d2 > 1e-6 {
                 let d = d2.sqrt();
                 let push = (a - b) * ((min - d) / d * 0.5);
-                let r = run.monsters[i].radius;
-                let (x, y) = move_box(&run.dungeon.map, a.x, a.y, push.x.clamp(-2.0, 2.0), push.y.clamp(-2.0, 2.0), r);
+                let (r, mover) = (run.monsters[i].radius, run.monsters[i].mover);
+                let (x, y) = move_box(&run.dungeon.map, a.x, a.y, push.x.clamp(-2.0, 2.0), push.y.clamp(-2.0, 2.0), r, mover);
                 run.monsters[i].pos = Vec2::new(x, y);
             }
         }
     }
 }
 
-/// 4-directional A* on tiles. Returns waypoints (tile centers), excluding the start tile.
-pub fn astar(map: &Map, from: Vec2, to: Vec2, max_nodes: usize) -> Option<Vec<Vec2>> {
+/// 4-directional A* on the tiles this mover can walk. Returns waypoints
+/// (tile centers), excluding the start tile.
+pub fn astar(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover) -> Option<Vec<Vec2>> {
     let start = Map::tile_of(from);
     let goal = Map::tile_of(to);
-    if map.solid(goal.0, goal.1) {
+    if map.blocks(goal.0, goal.1, mover) {
         return None;
     }
     let h = |p: (i32, i32)| (p.0 - goal.0).abs() + (p.1 - goal.1).abs();
@@ -395,7 +397,7 @@ pub fn astar(map: &Map, from: Vec2, to: Vec2, max_nodes: usize) -> Option<Vec<Ve
         let cg = g[&cur];
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let nb = (cur.0 + dx, cur.1 + dy);
-            if map.solid(nb.0, nb.1) {
+            if map.blocks(nb.0, nb.1, mover) {
                 continue;
             }
             let ng = cg + 1;
@@ -570,6 +572,26 @@ mod tests {
     }
 
     #[test]
+    fn astar_keeps_enemies_out_of_terrain() {
+        let mut m = Map::new(12, 12);
+        for y in 1..11 {
+            for x in 1..11 {
+                m.set(x, y, Tile::Floor);
+            }
+        }
+        for y in 1..10 {
+            m.set(5, y, Tile::Lava);
+            m.set(7, y, Tile::Chasm);
+        }
+        let (from, to) = (Map::center_of(2, 2), Map::center_of(6, 2));
+        let around = |p: &Vec<Vec2>| p.iter().any(|w| Map::tile_of(*w).1 >= 10);
+        assert!(around(&astar(&m, from, to, 1000, Mover::Enemy).unwrap()), "enemies go around lava");
+        assert!(!around(&astar(&m, from, to, 1000, Mover::Demon).unwrap()), "demons walk through lava");
+        let past = Map::center_of(9, 2);
+        assert!(around(&astar(&m, from, past, 1000, Mover::Demon).unwrap()), "demons go around chasms");
+    }
+
+    #[test]
     fn astar_finds_path_around_wall() {
         let mut m = Map::new(12, 12);
         for y in 1..11 {
@@ -580,7 +602,7 @@ mod tests {
         for y in 1..9 {
             m.set(5, y, Tile::Wall);
         }
-        let p = astar(&m, Map::center_of(2, 2), Map::center_of(8, 2), 1000).unwrap();
+        let p = astar(&m, Map::center_of(2, 2), Map::center_of(8, 2), 1000, Mover::Enemy).unwrap();
         assert!(p.iter().any(|w| Map::tile_of(*w).1 >= 9));
     }
 }

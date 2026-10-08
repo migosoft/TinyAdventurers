@@ -9,11 +9,56 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-07, terrain step 1: tiles and demos)
+## Last session (2026-10-08, terrain steps 2–6: terrain in real runs)
 
-**Branch:** `feature/terrain` is merged into `main` (fast-forward) and pushed. Continue the remaining terrain steps on a new `feature/terrain-rules` branch from `main`.
+**Branch:** `feature/terrain-rules` (from `main`), committed, **not merged or pushed yet**. Ask the user before merging into `main` or pushing.
 
-**Plan:** [docs/terrain-plan.md](docs/terrain-plan.md) has the full step plan and all of the user's terrain decisions. Step 1 is done; start with Step 2 (tile rules on server and client).
+**User decisions this session:**
+- **Knockback is its own feature, later.** It is not part of terrain. So in real runs drowning only happens when a dash ends in deep water, and enemies never end up in terrain.
+- All remaining terrain steps (2–6) on one branch.
+
+**Done:**
+- **Tile rules (server and client, prediction parity):**
+  - New tiles `ShallowWater=5`, `DeepWater=6`, `Chasm=7`, `Lava=8`.
+  - `Map::solid` is gone. It is replaced by `opaque` (sight and projectiles; terrain never blocks them), `blocks(x, y, mover)` with `Mover::{Hero, Enemy, Demon, Dash}`, `speed_factor` and `safe`.
+  - The client ports are `sim/map.ts` and `sim/collision.ts`. The parity fixtures include every terrain kind (10 walks with dashes).
+- **Gameplay** (`Run::terrain_player`, `kill_player`):
+  - A chasm or the end of a dash over deep water starts a fall (0.7 s) or a drowning (0.9 s), sent as `Ev::Sink`, then death ("X fell into the abyss" / "X drowned").
+  - Lava burns 10 every 0.5 s through `hurt_player`.
+  - Debug heroes climb back out onto the centre of their last safe tile.
+  - The predictor applies the same sinking rule, so a fall needs no round trip.
+- **AI:** each monster has a `mover`. Demon types (imps, chorts, summoners, summoned imps, the demon boss) cross lava at full speed; other enemies avoid lava. No enemy enters a chasm or deep water. The straight-line shortcut uses `walk_line`, and the debug path avoids all terrain.
+- **Generator:** `generate(seed, Theme)`, with the boss picked first in `Run::new`. `place_terrain` runs on rng stream 8:
+  - It places oval pools (water: deep centre inside a shallow rim; lava: all lava) and wall-to-wall chasm strips at most 3 tiles wide, each with a floor bridge.
+  - It keeps away from corridor mouths and chests, and undoes a feature that cuts off safe ground or brings a room as far as the boss hall.
+  - Covered enemy spawns move to the nearest free floor tile.
+  - About 4 % of the floor becomes terrain; the start room and boss hall stay clear.
+- **Rendering:**
+  - `TerrainLayer` runs in `GameScene`, and walls treat terrain as floor-like.
+  - Figures wade, splash, ripple and get embers in lava; heroes fall or drown with the demo animations and leave no skull.
+  - The shared helpers (`WadeFx`, `sinkStartFx`, `bubbleFx`) are used by the demos too. The temporary `TERRAIN` constants now come from `TILE_ID`.
+- **Docs:** PLAYER_GUIDE (new terrain section and a tip), TECHNICAL (§4–§9, tests), TODO (terrain follow-ups and tuning values), README, terrain-plan status.
+
+**Checked:**
+- 61 server tests (13 new: the rule matrix, slowing, dash over terrain, chasm fall with the debug rescue, drowning, lava burn, demon movers, A* per mover, terrain-safe generation over 200 seeds for both themes).
+- Client typecheck and parity tests.
+- `docker compose up --build` + health, and two smoke runs (normal, and `?debug&boss=demon`) without browser errors.
+- The three demos still load.
+- **Real runs, screenshots** (throwaway scripts, deleted afterwards):
+  - lava pools, water pools and chasm strips render with correct walls
+  - a hero walked into lava: slowed, burning numbers, embers
+  - a hero walked into a chasm in debug mode: predicted fall, then back on safe ground
+  - correction stayed at 0.00 px under `?lag=150&jitter=40&loss=2`
+
+**Not verified yet:**
+- A real (non-debug) death by chasm, and drowning after a Barbarian dash, in the browser. Both are covered by server tests only.
+- **The user should play one normal run of each theme** (demon for lava, lich or dragon for water) and judge the look and the amount of terrain.
+
+## Session before (2026-10-07, terrain step 1: tiles and demos)
+
+**Branch:** `feature/terrain` is merged into `main` (fast-forward) and pushed.
+
+**Plan:** [docs/terrain-plan.md](docs/terrain-plan.md) has the full step plan and all of the user's terrain decisions. All of its steps are done now.
 
 **Why:** this is the terrain sub-project the user asked for (water, chasms, lava).
 - **Art:** no CC0 set fit the 0x72 style. Rejected: Puny Dungeon (grey stone), Ogrebane (plain textures, no edges), Dawngeon (other perspective), cave_ by Kevin's Mom's House (flat cartoon look), and Niji's Extended pack (no water or lava). 0x72's own Sewers set costs money, and the user doesn't like it anyway.
@@ -35,9 +80,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 - Lava is walkable for heroes, **slows a lot** and burns for **at least 15 damage/s** (the demo uses 20/s). Demon-type enemies are immune and walk straight through. Other enemies avoid lava.
 - The theme follows the boss: lava mainly in the demon's dungeon, water elsewhere, chasms everywhere.
 
-**Open questions for the user:**
-- **Knockback:** nothing in the game pushes figures yet, so drownings and pushed falls only happen in the demos. Ask which attacks push and how far, either as part of terrain or as its own feature.
-- Only the **Barbarian** has a dash (54 px, about 3 tiles). So the generator must keep any gap meant to be jumped at most 3 tiles wide.
+**Later answered:** knockback became its own feature (2026-10-08). Only the **Barbarian** has a dash (54 px, about 3 tiles), so chasms are at most 3 tiles wide.
 
 **Checked:**
 - Client typecheck.
@@ -45,9 +88,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 - Slow-motion screenshot series of wading, the dash over the stream, the drowning, the chasm fall (walking in and being knocked in) and the burning.
 - The user reviewed and approved the demos after two rounds of changes: the fall animation, a stronger lava glow and more lava damage, drowning, and enemies wading.
 
-**Not done yet:** steps 2–6 of the plan: server tile rules and prediction parity, the gameplay (fall, drown, lava), the generator, in-game rendering and the docs.
+Steps 2–6 followed in the next session.
 
-## Session before (2026-10-07, demon dungeon: imps, chorts, summoners)
+## Earlier session (2026-10-07, demon dungeon: imps, chorts, summoners)
 
 **Branch:** `feature/demon-minions` is merged into `main` (fast-forward) and pushed.
 
@@ -111,14 +154,14 @@ For: the next agent or developer continuing this project. Read this first, then 
 - lobby, 4 classes, host-chosen or random end boss, random dungeon, field of vision
 - persistent profiles: XP banked after each run, permanent upgrades bought in the lobby (`ta-data` volume)
 - 10 enemy types (including the mimic; imps, chorts and summoners only in the demon's dungeon), 3 bosses
-- terrain tiles and demos (`?water`, `?chasm`, `?lava`); not in the game yet
+- terrain in every dungeon: chasms everywhere, water pools (lich, dragon) or lava pools (demon); falling, drowning, lava burns, demons immune to lava; demos `?water`, `?chasm`, `?lava`
 - treasure chests and mimics; coins banked as a second currency
 - permadeath with spectating, victory/defeat screens
 - client prediction and interpolation, F3 stats
 - debug mode, sprite gallery
 
 **Verified:**
-- 53 server tests and the client port tests pass.
+- 61 server tests and the client port tests (terrain included) pass.
 - Browser check of the profile flow: buying, persistence over page reload and `docker compose down`/`up`, new token for a new browser, read-only boss picker for guests.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
@@ -208,8 +251,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Suggested next steps
 
-1. **Terrain, steps 2–6 (start here next session):** start a `feature/terrain-rules` branch from `main` and follow [docs/terrain-plan.md](docs/terrain-plan.md). Step 2: split `solid` into walk and sight rules on server and client (prediction parity), with the new `Tile` values. Then gameplay (fall, drown, lava burn, demon immunity, AI), the generator (own rng stream 8, themed per boss), in-game rendering with `TerrainLayer`, and docs. Ask the user about knockback early. Ask before merging into `main` or pushing.
-2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
-3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
-4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
-5. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.
+1. **Finish terrain:** ask the user to merge `feature/terrain-rules` into `main` and push, and to play one normal run per theme. Adjust the look or the amount of terrain from their feedback (`place_terrain` rates and sizes).
+2. **Knockback** (its own feature, the user's decision): demo first, as usual. Decide which attacks push and how far; then enemies can fall and drown too (they need a monster version of `Sink`/`kill_player`). See TODO.md.
+3. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
+4. Loadouts: design new abilities, then add the lobby picker, paid with coins.
+5. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
+6. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), delta-compressed snapshots.

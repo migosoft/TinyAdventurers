@@ -128,6 +128,7 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 - `Tile`: boss hall entrance sealed (force field)
 - `Msg`
 - `Coins{x, y, v}`: coins found (chest or kill). Sent to every player, not FOV-filtered, because the whole party gets them; the client adds `v` to the HUD counter while alive.
+- `Sink{id, x, y, how}`: a hero is lost to the terrain: `how` 0 falls into a chasm, 1 drowns, 2 climbs back out (debug mode). Not FOV-filtered. The client plays the fall or drown animation and leaves no skull when the following `Died` arrives.
 
 ## 5. Server simulation (`run/`)
 
@@ -145,6 +146,7 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 1. **Players:** one queued input per tick, two if the queue holds more than 3. No input means no movement, so the server stays deterministic with respect to the client.
    - `apply_input` moves first (`collision::step_move`), then applies dash contact damage, then abilities.
    - Cooldowns tick per processed input. The client does the same.
+   - `terrain_player` then checks the tile under the hero's centre (not while dashing). A chasm or deep water starts `Player.sinking` (`FALL_TIME` 0.7 s / `DROWN_TIME` 0.9 s, `Ev::Sink`); then `kill_player` kills the hero (armour does not help) with "X fell into the abyss" / "X drowned". A sinking hero's inputs are acked but neither move nor attack. Lava calls `hurt_player(LAVA_DAMAGE)` every `LAVA_TICK` (10 per 0.5 s, the first at once), so armour and debug apply. In debug mode `kill_player` puts the hero back on `Player.last_safe` (centre of the last safe tile) instead.
 2. **Monsters:** only those within 420 px of a living player run `ai::tick_monster`.
 3. **Boss behaviour:** runs once the boss is awake.
 4. **Separation:** overlapping monsters are pushed apart.
@@ -169,12 +171,13 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 - Player projectiles spawn fast-forwarded by RTT/2, at most 150 ms.
 
 **AI (`ai.rs`).**
+- **Movers:** each monster has a `mover`: `Mover::Demon` for imps, chorts, summoners, summoned imps and the demon boss, `Mover::Enemy` otherwise. `move_toward`, `separate_monsters`, `astar` and summon spots use the walking rule for it, and `path_toward` only walks straight when `walk_line` (not just line of sight) is clear. So enemies never enter chasms or deep water, and only demons cross lava. The debug path to the boss is planned as `Mover::Enemy`, around all terrain.
 - Perception: the nearest living, non-hidden player within `sight` and with line of sight. Enemies never target players they cannot currently see.
 - States: `Idle` (wander near home) → `Chase` (melee approach, ranged keep a preferred distance) → wind-up → attack. Losing sight leads to `Search` (A* to last known position) and then `Return` (A* home).
 - Wind-ups telegraph attacks: the client flashes the body red and shakes it. The hit lands only if the target is still seen.
 - Necromancers raise up to 3 skeletons (cooldown 7 s); summoners summon imps (`SummonedImp`, drawn as a normal imp) the same way. `Ev::Raise.fire` tells the client which effect to draw.
 - **Second attack:** `EnemyDef.alt` is an optional second `AttackStyle` with its own cooldown (`Ai.alt_cd`). A melee alt is used when the target is in claw reach (imp), a ranged alt only from at least `ALT_BOLT_MIN_DIST` (40 px) and beyond the main attack's reach (chort). `Windup.alt` remembers which attack the wind-up leads to; each attack keeps the other back for `ATTACK_GAP` (0.4 s). Movement follows the main attack.
-- **Demon dungeon:** `enemies::for_boss` swaps types when `Run::new` spawns the dungeon's enemies: with the demon as boss, skeleton archers become imps, skeleton warriors chorts and necromancers summoners. The generator is untouched, so a seed gives the same map and spawn spots for every boss.
+- **Demon dungeon:** `enemies::for_boss` swaps types when `Run::new` spawns the dungeon's enemies: with the demon as boss, skeleton archers become imps, skeleton warriors chorts and necromancers summoners. The swap itself leaves the map alone; only the terrain theme differs per boss (lava or water, see §6), which can move a few spawns off the liquid.
 - Minions are never tinted: raised skeletons and summoned imps look like the ordinary ones (the user's request). Hiding drops the aggro of all monsters targeting the hider.
 
 **Bosses (`bosses/`).**
@@ -189,7 +192,13 @@ Environment variables (server): `PORT` (8080), `STATIC_DIR` (`../client/dist`; `
 
 ## 6. Dungeon generation (`dungeon/generate.rs`)
 
-The map is 140×140 tiles of 16 px. Tile ids: Void 0, Floor 1, Wall 2, DoorOpen 3, DoorClosed 4.
+The map is 140×140 tiles of 16 px. Tile ids: Void 0, Floor 1, Wall 2, DoorOpen 3, DoorClosed 4, ShallowWater 5, DeepWater 6, Chasm 7, Lava 8.
+
+**Tile rules (`dungeon/mod.rs`, mirrored in `client/src/sim/map.ts`).** There is no single "solid" rule any more:
+- `opaque`: Void, Wall and DoorClosed. Blocks sight (FOV, `line_of_sight`) and projectiles. Terrain is never opaque.
+- `blocks(x, y, mover)`: opaque tiles block everyone. Deep water blocks every mover but `Dash`; chasms block `Enemy` and `Demon` (heroes may step in, and fall); lava blocks only `Enemy`.
+- `speed_factor(pos, mover)`: `SHALLOW_SPEED` 0.7, `LAVA_SPEED` 0.4 (1 for demons), 1 for a dash. `step_move` takes it from the tile under the hero's centre at the start of the step.
+- `safe`: Floor, DoorOpen and ShallowWater, the ground a hero can stand on unharmed. Generator reachability (`bfs`) and `last_safe` use it.
 
 The generator is seeded (ChaCha8) and deterministic:
 1. **Placement:** built in a canonical orientation. The start room (8×8) is at the bottom center and the boss hall (26×20) at the top center. Rooms (6–10) and halls (12–18 × 11–15) are rejection-sampled below a band that keeps them away from the hall.
@@ -201,13 +210,18 @@ The generator is seeded (ChaCha8) and deterministic:
 3. **Validation, retried on failure:** every room is reachable (BFS), and the boss hall is the farthest area by path distance, with a margin of 4 tiles.
 4. **Population:** enemies scale with path depth. Necromancers appear only in halls.
    **Chests:** `place_chests` gives about one in three rooms and halls a chest on its top row (enemies never spawn there), against the wall, with floor on both sides and below so it never blocks a corridor mouth. A quarter are mimics. Chests use their own random stream (a clone of the generator rng on stream 7), so adding them did not change the maps of existing seeds.
-5. **Rotation:** a random quarter turn, so the start can be on any side and the boss hall is on the opposite side.
+5. **Terrain:** `place_terrain` runs on its own stream (8), like the chests. The theme (`Theme::for_boss`: lava for the demon, water otherwise) is passed into `generate(seed, theme)`; `Run::new` picks the boss before generating. In ordinary rooms (40 %) and halls (two tries at 60 %) it places:
+   - **pools:** ovals a tile away from the walls. Water pools are deep wherever all 8 neighbours are pool, so a shallow rim always surrounds the deep centre; lava pools are all lava
+   - **chasm strips:** wall to wall across the room, 1 to `MAX_CHASM` (3) tiles wide so the Barbarian's dash clears them, with a 2–3 tile floor bridge
 
-The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest placement (on floor against a wall, outside the start room and boss hall, not on an enemy) and that chests and mimics actually appear.
+   A feature only covers floor, keeps two tiles from corridor mouths (open ground outside the room) and never covers a chest. It is undone if it cuts any safe ground off from the start or makes a room as far as the boss hall. Enemy spawns it covers move to the nearest free floor tile in the room. The start room and boss hall stay clear. About 4 % of the floor becomes terrain.
+6. **Rotation:** a random quarter turn, so the start can be on any side and the boss hall is on the opposite side.
+
+The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), including chest placement (on floor against a wall, outside the start room and boss hall, not on an enemy), that chests and mimics actually appear, and the terrain guarantees: no safe tile cut off, spawns and chests on floor, no terrain in the start room or boss hall, only the theme's liquid, every terrain kind present, and a terrain share of 2–15 %.
 
 ## 7. Field of vision
 
-`fov.rs` is recursive shadowcasting with radius 9 tiles; walls block sight but are themselves visible. It is used in three places:
+`fov.rs` is recursive shadowcasting with radius 9 tiles; walls (`Map::opaque`) block sight but are themselves visible. Terrain does not block sight. It is used in three places:
 - **Server snapshots:** monsters, projectiles, hazards and positional events are only sent if they lie on a visible tile. Large figures count as visible if any of their corners is. Teammates are always sent.
 - **Client fog:** a 140×140 canvas texture, 1 px per tile, scaled ×16 with linear filtering. Visible tiles are clear with a soft edge; everything else is darkened, so the board stays faintly visible. It is recomputed only when the viewer's tile changes.
 - **Enemy perception:** this uses `collision::line_of_sight` (4 px sampling) plus each enemy's own `sight` radius.
@@ -222,6 +236,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
 - Local movement uses the TS collision port. It is bit-identical to Rust, which `sim.test.ts` checks against the Rust-written fixtures.
 - On each snapshot the client replays unacknowledged inputs from the server state.
 - Errors under 24 px are blended out over about 100 ms; larger errors snap.
+- Terrain is part of the port: the speed factor and the walking rules. The predictor also applies the server's sinking rule (`sinking()` in `sim/collision.ts`): a hero not dashing whose centre is over a chasm or deep water stops moving and attacking, in prediction and in the replay, so a fall needs no round trip and causes no correction.
 - Local cooldowns and hide time are corrected when they differ from the server by more than 0.15 s / 0.3 s.
 
 **Own attacks.**
@@ -259,6 +274,10 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
   - `TileDraw.dy` lifts rim and stub sprites (their art sits in the bottom 4 rows) to the top of a cell; it only moves transparent rows outside the cell, so redrawing single cells stays correct
   - the cells behind a wall are usually `Void`, not `Wall` (the server only walls cells next to floor), so neighbour checks must not require `isWall` there
 - The boss hall entrance has no door: open and sealed entrance tiles both draw as floor. When it is sealed, `forcefield.ts` draws a shimmering blue force field over it (a runtime effect; the pack has no such sprite): a pulsing translucent wall with drifting light bands and glitter sparks, a curtain on horizontal entrances and an edge-on band on vertical ones. `GameScene.syncForceField` builds it from the map, so players who join or spectate later see it too. Both orientations are in the gallery (`?gallery`).
+
+**Terrain (`terrain.ts`).**
+- `TerrainLayer` draws every terrain cell of the map once (the floor under it comes from the board): animated base textures plus edge overlays, a red glow over lava and rising embers. `autotile.ts` treats terrain as floor-like, so walls next to it get their faces and rims; the grid lines skip terrain.
+- `GameScene.terrainState` handles each figure: `sink` (wading: feet cut off in shallow water and lava, not while dashing), `WadeFx` (splashes on entering, ripples while wading, embers on a hero in lava), and the fall / drown animation (`fall`, `drown`, `bubbleFx`) from `Ev::Sink`, or at once for the own hero when the predictor sees it sinking. The demos use the same helpers.
 
 **Figures (`anim/defs.ts` → `EntityView`).**
 - `FigureDef` describes:
@@ -313,7 +332,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
 | `?debug&boss=demon\|lich\|dragon` | Host only. Preselects that boss in the lobby's boss picker (`SelectBoss`); used by `smoke.mjs`. Works even with `ALLOW_DEBUG=0` (the boss choice is a normal feature). The server logs `run N started: … boss X (chosen)`. Runs where debug was turned on bank no XP. |
 | `?gallery[&state=melee&slow=10]` | Every figure cycling its animation states, no server needed. |
 | `?mimic[&slow=3]` | The chasing mimic after a walking knight, a treasure chest opening with its coin burst, and the mimic reveal. No server needed. |
-| `?water`, `?chasm`, `?lava` `[&slow=3]` | Terrain demos with scripted figures: wading and drowning, falling into a chasm, burning in lava, demons walking through lava, the dash jumping a gap. Speeds and damage imitate the planned rules (not yet on the server). No server needed. |
+| `?water`, `?chasm`, `?lava` `[&slow=3]` | Terrain demos with scripted figures: wading and drowning, falling into a chasm, burning in lava, demons walking through lava, the dash jumping a gap, and knockback (which the game does not have yet). Speeds and times come from `CONST`, like the server. No server needed. |
 | `?daemons[&slow=3]` | Imp, chort and a pack of both fighting a walking knight, and a summoner summoning imps. Uses the real figure definitions; the attack logic is a local imitation of the server AI. No server needed. |
 | `?lag=150&jitter=40&loss=2` | Network simulator. |
 
@@ -341,10 +360,12 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
 
 ## 12. Tests
 
-**Server (`cargo test`, 48 tests):**
+**Server (`cargo test`, 61 tests):**
 - protocol round trip
 - dungeon determinism and guarantees over 200 seeds
 - collision cannot tunnel through walls; line of sight
+- terrain: the rule matrix per mover; slowing in shallow water; a dash over a chasm and deep water; a chasm kills after the fall (not mid-dash) and debug heroes climb back out; a dash ending in deep water drowns; lava burns over time; only demons are lava walkers; A* keeps enemies out of lava and chasms and lets demons through lava
+- terrain keeps the layout and chests of a seed for both themes
 - FOV blocked by walls
 - assassin dagger vs crossbow; hidden ×4 crit
 - cooldown enforcement
@@ -364,7 +385,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds, including chest pla
 - mimics: asleep until touched, then hold before hunting; the boss waking leaves them asleep; they move only while airborne
 - ts-rs export tests
 
-**Client (`npm test`):** the collision and FOV ports must equal the Rust fixtures exactly.
+**Client (`npm test`):** the collision and FOV ports must equal the Rust fixtures exactly. The fixture map holds every kind of terrain, and 10 random walks with dashes cross it.
 
 **Browser smoke test (`tools/e2e/smoke.mjs`):**
 - two headless browser contexts create and join a run, pick classes, start, move and attack

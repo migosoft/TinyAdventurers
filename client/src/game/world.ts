@@ -5,7 +5,7 @@ import type { ClassId } from '../generated/ClassId';
 import type { EntSnap } from '../generated/EntSnap';
 import type { Modifiers } from '../generated/Modifiers';
 import type { Snapshot } from '../generated/Snapshot';
-import { stepMove, type MoveState } from '../sim/collision';
+import { sinking, stepMove, type MoveState } from '../sim/collision';
 import type { TileMap } from '../sim/map';
 
 export interface EntState {
@@ -148,6 +148,11 @@ export class Predictor {
     this.state = { x, y, dashT: 0, dashDx: 0, dashDy: 0 };
   }
 
+  /** Lost to a chasm or deep water (no more moves or attacks). */
+  get sinking(): boolean {
+    return sinking(this.map, this.state);
+  }
+
   cooldownOf(name: AbilityName, daggerUsed = false): number {
     const base = daggerUsed ? CONST.DAGGER_COOLDOWN : ABILITIES[name].cooldown;
     return base / this.mods.attack_speed;
@@ -159,7 +164,9 @@ export class Predictor {
     this.cd1 = Math.max(this.cd1 - CONST.DT, 0);
     this.cd2 = Math.max(this.cd2 - CONST.DT, 0);
     this.hidden = Math.max(this.hidden - CONST.DT, 0);
-    this.state = stepMove(this.map, this.state, mx, my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT);
+    // Falling or drowning: the server ignores moves and attacks from now on.
+    if (this.sinking) [mx, my, dash] = [0, 0, null];
+    else this.state = stepMove(this.map, this.state, mx, my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT);
     if (dash) this.state = { ...this.state, dashT: ABILITIES.Dash.duration, dashDx: dash[0], dashDy: dash[1] };
     this.pending.push({ seq: this.seq, mx, my, dash });
     if (this.pending.length > 240) this.pending.shift();
@@ -172,6 +179,7 @@ export class Predictor {
     this.pending = this.pending.filter((p) => p.seq > snap.ack);
     let s: MoveState = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy };
     for (const p of this.pending) {
+      if (sinking(this.map, s)) break;
       s = stepMove(this.map, s, p.mx, p.my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT);
       if (p.dash) s = { ...s, dashT: ABILITIES.Dash.duration, dashDx: p.dash[0], dashDy: p.dash[1] };
     }

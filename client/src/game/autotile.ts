@@ -7,7 +7,7 @@
 //   clean corner. South walls show the rim along their bottom.
 // - Corners use the pack's pieces (`wall_edge_bottom_*`, `wall_outer_top_*`).
 import { TILE_ID } from '../generated/defs';
-import type { TileMap } from '../sim/map';
+import { isTerrain, type TileMap } from '../sim/map';
 
 export interface TileDraw {
   frame: string;
@@ -15,9 +15,13 @@ export interface TileDraw {
   dy?: number;
 }
 
-/** The boss hall entrance looks like floor even when sealed (a force field is drawn over it). */
+/**
+ * The boss hall entrance looks like floor even when sealed (a force field is
+ * drawn over it). Terrain lies on floor (its layer is drawn on top), so walls
+ * next to water, lava or a chasm get their faces and rims as usual.
+ */
 function floorLike(t: number): boolean {
-  return t === TILE_ID.Floor || t === TILE_ID.DoorOpen || t === TILE_ID.DoorClosed;
+  return t === TILE_ID.Floor || t === TILE_ID.DoorOpen || t === TILE_ID.DoorClosed || isTerrain(t);
 }
 
 function hash(x: number, y: number): number {

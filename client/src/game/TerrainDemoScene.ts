@@ -9,18 +9,18 @@
 // - ?lava: heroes are slowed a lot and burn; imps and chorts walk straight
 //   through unharmed; a skeleton walks around.
 import Phaser from 'phaser';
-import { ANIM, CLASSES, FLAG, KIND } from '../generated/defs';
+import { ANIM, CLASSES, CONST, FLAG, KIND } from '../generated/defs';
 import { EntityView } from './anim/EntityView';
 import { Effects } from './effects';
-import { sinkDepth, speedFactor, TERRAIN, TerrainLayer } from './terrain';
+import { bubbleFx, sinkDepth, sinkStartFx, speedFactor, TERRAIN, TerrainLayer, WadeFx } from './terrain';
 import { TILE, TileMap } from '../sim/map';
 
 /** Tile ids for the ASCII maps: `.` floor, `s` shallow, `D` deep water, `C` chasm, `L` lava. */
 const CHARS: Record<string, number> = { '.': 1, s: TERRAIN.Shallow, D: TERRAIN.Deep, C: TERRAIN.Chasm, L: TERRAIN.Lava };
 const DASH_SPEED = 300;
 const PUSH_SPEED = 160;
-const FALL_T = 0.7;
-const DROWN_T = 0.9;
+const FALL_T = CONST.FALL_TIME;
+const DROWN_T = CONST.DROWN_TIME;
 /** Seconds from the start of a fall or drowning until the figure starts over. */
 const RESPAWN_T = 2.6;
 const LAVA_TICK = 0.5;
@@ -54,7 +54,7 @@ interface Actor {
   hurtT: number;
   burnT: number;
   rippleT: number;
-  lastTile: number;
+  wade: WadeFx;
 }
 
 abstract class TerrainDemo extends Phaser.Scene {
@@ -105,7 +105,7 @@ abstract class TerrainDemo extends Phaser.Scene {
       hurtT: 0,
       burnT: 0,
       rippleT: 0,
-      lastTile: 1,
+      wade: new WadeFx(),
     };
     this.restart(a);
     this.actors.push(a);
@@ -187,28 +187,15 @@ abstract class TerrainDemo extends Phaser.Scene {
     }
 
     // Over a chasm or deep water without a dash to carry you: the end.
-    if (!a.dashing && tile === TERRAIN.Chasm) {
-      a.doom = { kind: 'fall', t: 0 };
-      this.fx.burst(a.x, a.y - 4, 6, 0x775c55, 25, 0.4);
-    } else if (!a.dashing && tile === TERRAIN.Deep) {
-      a.doom = { kind: 'drown', t: 0 };
-      this.fx.burst(a.x, a.y - 3, 14, 0xcae6f5, 45, 0.45);
-      this.fx.ring(a.x, a.y - 1, 9, 0x72d6ce, 0.6);
+    if (!a.dashing && (tile === TERRAIN.Chasm || tile === TERRAIN.Deep)) {
+      const drown = tile === TERRAIN.Deep;
+      a.doom = { kind: drown ? 'drown' : 'fall', t: 0 };
+      sinkStartFx(this.fx, a.x, a.y, drown);
     }
-    // Splashes on entering water or lava, ripples while wading.
-    const wet = tile === TERRAIN.Shallow || tile === TERRAIN.Deep;
-    if (!a.dashing && tile !== a.lastTile && (wet || tile === TERRAIN.Lava)) this.fx.burst(a.x, a.y - 2, 6, wet ? 0x72d6ce : 0xee8e2e, 30, 0.35);
-    if (a.dashing && (wet || tile === TERRAIN.Lava) && Math.random() < 0.5) this.fx.particle(a.x, a.y - 2, (Math.random() - 0.5) * 30, -20, 0.3, wet ? 0xcae6f5 : 0xfacb3e);
-    a.lastTile = tile;
-    a.rippleT -= dt;
-    if (!a.dashing && wet && anim === ANIM.Move && a.rippleT <= 0) {
-      a.rippleT = 0.35;
-      this.fx.ring(a.x, a.y - 1, 5, 0x72d6ce, 0.5);
-    }
+    a.wade.update(this.fx, a.x, a.y, tile, a.dashing, anim === ANIM.Move, !a.demon, dt);
     // Burning in lava (demons are immune).
     if (!a.dashing && tile === TERRAIN.Lava && !a.demon) {
       a.burnT -= dt;
-      if (Math.random() < dt * 14) this.fx.particle(a.x + (Math.random() - 0.5) * 8, a.y - Math.random() * 10, 0, -18 - Math.random() * 10, 0.4, Math.random() < 0.5 ? 0xffcc68 : 0xee8e2e);
       if (a.burnT <= 0) {
         a.burnT = LAVA_TICK;
         a.hurtT = 0.12;
@@ -231,7 +218,7 @@ abstract class TerrainDemo extends Phaser.Scene {
       this.fx.text(a.x, a.y - 20, d.kind === 'fall' ? `${a.name} fell into the abyss` : `${a.name} drowned`, '#ff6060', true);
     if (d.kind === 'drown' && d.t < dur + 0.4) {
       // Bubbles rising where the figure went down.
-      if (Math.random() < dt * 12) this.fx.particle(a.x + (Math.random() - 0.5) * 8, a.y - 2 - Math.random() * 4, 0, -10, 0.35, 0xcae6f5);
+      bubbleFx(this.fx, a.x, a.y, dt);
       a.rippleT -= dt;
       if (a.rippleT <= 0) {
         a.rippleT = 0.3;

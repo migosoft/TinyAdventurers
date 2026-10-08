@@ -56,9 +56,13 @@ export const FLAG = {
 } as const;
 
 export const TILE_ID = {
+  "Chasm": 7,
+  "DeepWater": 6,
   "DoorClosed": 4,
   "DoorOpen": 3,
   "Floor": 1,
+  "Lava": 8,
+  "ShallowWater": 5,
   "Void": 0,
   "Wall": 2
 } as const;
@@ -67,14 +71,18 @@ export const CONST = {
   "DAGGER_COOLDOWN": 0.35,
   "DAGGER_RANGE": 22.0,
   "DASH_SPEED": 300.0,
+  "DROWN_TIME": 0.9,
   "DT": 0.016666666666666666,
+  "FALL_TIME": 0.7,
   "FOV_RADIUS": 9,
   "HIDDEN_CRIT_MULT": 4.0,
+  "LAVA_SPEED": 0.4,
   "MIMIC_HOP_AIR_END": 0.7,
   "MIMIC_HOP_AIR_START": 0.2,
   "MIMIC_HOP_CYCLE": 0.6,
   "MIMIC_WAKE_T": 0.6,
   "PLAYER_RADIUS": 5.0,
+  "SHALLOW_SPEED": 0.7,
   "SNAPSHOT_HZ": 30.0,
   "TICK_HZ": 60.0,
   "TILE": 16.0

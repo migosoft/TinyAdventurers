@@ -178,6 +178,9 @@ pub enum Ev {
     Msg { text: String },
     /// Coins found at a spot (chest or kill); every living party member gets `v`.
     Coins { x: f32, y: f32, v: u32 },
+    /// A hero is lost to the terrain. how: 0 falls into a chasm, 1 drowns,
+    /// 2 climbs back out onto safe ground (debug mode only).
+    Sink { id: u32, x: f32, y: f32, how: u8 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

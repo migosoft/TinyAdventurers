@@ -3,7 +3,8 @@
 
 use super::ai::astar;
 use super::Run;
-use crate::collision::line_of_sight;
+use crate::collision::walk_line;
+use crate::dungeon::Mover;
 use crate::math::Vec2;
 use crate::protocol::{Ev, ServerMsg};
 
@@ -39,7 +40,8 @@ pub fn boss_path(run: &Run, pi: usize) -> Vec<(f32, f32)> {
     let from = run.players[pi].pos();
     let to = boss_target(run);
     let map = &run.dungeon.map;
-    let Some(tiles) = astar(map, from, to, (map.w * map.h) as usize) else { return Vec::new() };
+    // Plan the path like a cautious enemy: around deep water, chasms and lava.
+    let Some(tiles) = astar(map, from, to, (map.w * map.h) as usize, Mover::Enemy) else { return Vec::new() };
     let mut pts = vec![from];
     pts.extend(tiles);
     // String pulling: skip waypoints that can be seen past.
@@ -47,7 +49,7 @@ pub fn boss_path(run: &Run, pi: usize) -> Vec<(f32, f32)> {
     let mut i = 0;
     while i < pts.len() - 1 {
         let mut j = pts.len() - 1;
-        while j > i + 1 && !line_of_sight(map, pts[i], pts[j]) {
+        while j > i + 1 && !walk_line(map, pts[i], pts[j], Mover::Enemy) {
             j -= 1;
         }
         out.push(pts[j]);
@@ -87,7 +89,7 @@ mod tests {
         assert!((end.0 as f64 - boss.x).abs() < 1.0 && (end.1 as f64 - boss.y).abs() < 1.0, "ends at the boss");
         // Every segment is walkable in a straight line.
         for w in path.windows(2) {
-            assert!(line_of_sight(&run.dungeon.map, Vec2::new(w[0].0 as f64, w[0].1 as f64), Vec2::new(w[1].0 as f64, w[1].1 as f64)));
+            assert!(walk_line(&run.dungeon.map, Vec2::new(w[0].0 as f64, w[0].1 as f64), Vec2::new(w[1].0 as f64, w[1].1 as f64), Mover::Enemy));
         }
 
         run.set_debug(0, false);

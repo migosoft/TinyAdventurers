@@ -12,7 +12,7 @@ use crate::defs::progression::{self, StatUpgrades};
 use crate::defs::{bosses as boss_defs, classes, enemies};
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{Anim, EntityKind};
-use crate::dungeon::{generate::generate, Dungeon, Tile};
+use crate::dungeon::{self, generate::{generate, Theme}, Dungeon, Mover, Tile};
 use crate::fov::Fov;
 use crate::lobby::SharedLobby;
 use crate::math::Vec2;
@@ -84,9 +84,9 @@ pub struct Run {
 
 impl Run {
     pub fn new(id: u32, members: Vec<Member>, seed: u64, boss: Option<BossId>) -> Run {
-        let dungeon = generate(seed);
         let mut rng = ChaCha8Rng::seed_from_u64(seed ^ 0x5eed);
         let boss_id = boss.unwrap_or_else(|| BossId::ALL[rng.gen_range(0..BossId::ALL.len())]);
+        let dungeon = generate(seed, Theme::for_boss(boss_id));
         let (w, h) = (dungeon.map.w, dungeon.map.h);
         let mut run = Run {
             id,
@@ -151,6 +151,9 @@ impl Run {
                 damage: 0.0,
                 healing: 0.0,
                 debug: false,
+                sinking: None,
+                last_safe: dungeon::Map::center_of(dungeon::Map::tile_of(p).0, dungeon::Map::tile_of(p).1),
+                burn_t: dungeon::LAVA_TICK,
             });
         }
         let n = run.players.len();
@@ -204,6 +207,7 @@ impl Run {
             history: VecDeque::with_capacity(HISTORY_LEN),
             is_boss: false,
             asleep: false,
+            mover: if enemies::is_demon(t) { Mover::Demon } else { Mover::Enemy },
         });
         id
     }
@@ -233,6 +237,7 @@ impl Run {
             history: VecDeque::with_capacity(HISTORY_LEN),
             is_boss: true,
             asleep: true,
+            mover: if self.boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
         });
         self.boss_ent = id;
         let mut behaviour = bosses::create(self.boss_id);
@@ -381,6 +386,10 @@ impl Run {
             let Some(input) = self.players[pi].inputs.pop_front() else { break };
             self.apply_input(pi, input);
         }
+        self.terrain_player(pi);
+        if !self.players[pi].alive {
+            return;
+        }
         let p = &mut self.players[pi];
         // Non-looping action animations fall back to idle/move.
         let action_done = matches!(p.anim, Anim::Melee | Anim::Shoot | Anim::Cast) && self.time - p.anim_start > 0.25
@@ -409,6 +418,10 @@ impl Run {
         if was_hidden && p.hidden <= 0.0 {
             p.hidden = 0.0;
         }
+        if p.sinking.is_some() {
+            p.moving = false;
+            return; // falling or drowning: no more moves or attacks (the client predicts this too)
+        }
         let dashing = p.mv.dash_t > 0.0;
         p.mv = crate::collision::step_move(
             map,
@@ -432,6 +445,81 @@ impl Run {
             let id = self.players[pi].def.secondary;
             abilities::try_use(self, pi, id, shot, false);
         }
+    }
+
+    /// The ground under a hero's centre: a chasm or (where a dash ended) deep
+    /// water takes them, lava burns them. Mid-dash heroes are in the air.
+    fn terrain_player(&mut self, pi: usize) {
+        let p = &mut self.players[pi];
+        if let Some((t, how)) = p.sinking {
+            let t = t - DT;
+            if t > 0.0 {
+                p.sinking = Some((t, how));
+            } else {
+                p.sinking = None;
+                self.kill_player(pi, how);
+            }
+            return;
+        }
+        if p.mv.dash_t > 0.0 {
+            return;
+        }
+        let pos = p.pos();
+        let (tx, ty) = dungeon::Map::tile_of(pos);
+        let tile = self.dungeon.map.get(tx, ty);
+        let how = if tile == Tile::Chasm as u8 {
+            Some((dungeon::FALL_TIME, Sink::Fall))
+        } else if tile == Tile::DeepWater as u8 {
+            Some((dungeon::DROWN_TIME, Sink::Drown))
+        } else {
+            None
+        };
+        if let Some((t, how)) = how {
+            p.sinking = Some((t, how));
+            p.anim = Anim::Idle;
+            p.anim_start = self.time;
+            let id = p.id;
+            self.event(Ev::Sink { id, x: pos.x as f32, y: pos.y as f32, how: how as u8 }, None);
+            return;
+        }
+        if self.dungeon.map.safe(tx, ty) {
+            // The tile centre: a hero always fits there, clear of its neighbours.
+            p.last_safe = dungeon::Map::center_of(tx, ty);
+        }
+        if tile == Tile::Lava as u8 {
+            p.burn_t += DT;
+            if p.burn_t >= dungeon::LAVA_TICK {
+                p.burn_t -= dungeon::LAVA_TICK;
+                self.hurt_player(pi, dungeon::LAVA_DAMAGE);
+            }
+        } else {
+            p.burn_t = dungeon::LAVA_TICK; // the first touch of lava burns at once
+        }
+    }
+
+    /// Death by terrain: armour does not help. In debug mode the hero climbs
+    /// back out onto the last safe ground instead.
+    pub fn kill_player(&mut self, pi: usize, how: Sink) {
+        let p = &mut self.players[pi];
+        if !p.alive {
+            return;
+        }
+        if p.debug {
+            p.mv = MoveState { x: p.last_safe.x, y: p.last_safe.y, dash_t: 0.0, dash_dx: 0.0, dash_dy: 0.0 };
+            let (id, at) = (p.id, p.last_safe);
+            self.event(Ev::Sink { id, x: at.x as f32, y: at.y as f32, how: 2 }, None);
+            return;
+        }
+        p.hp = 0.0;
+        p.alive = false;
+        p.mv.dash_t = 0.0;
+        let (id, pos, kind, name) = (p.id, p.pos(), p.kind() as u8, p.name.clone());
+        self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
+        let text = match how {
+            Sink::Fall => format!("{name} fell into the abyss"),
+            Sink::Drown => format!("{name} drowned"),
+        };
+        self.event(Ev::Msg { text }, None);
     }
 
     /// A living player close to a chest opens it (coins for the whole party);
@@ -809,13 +897,102 @@ pub mod tests {
         assert!(run.monsters[m2].asleep);
     }
 
+    /// Player 0 alone with the (sleeping) boss, next to a fresh terrain tile.
+    fn terrain_run(t: Tile) -> (Run, Vec2) {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let (tx, ty) = dungeon::Map::tile_of(run.dungeon.player_spawns[0]);
+        run.dungeon.map.set(tx + 2, ty, t);
+        (run, dungeon::Map::center_of(tx + 2, ty))
+    }
+
+    fn said(run: &Run, what: &str) -> bool {
+        run.events.iter().any(|e| matches!(&e.0, Ev::Msg { text } if text.contains(what)))
+    }
+
+    #[test]
+    fn chasm_kills_after_the_fall_and_debug_climbs_back_out() {
+        let (mut run, at) = terrain_run(Tile::Chasm);
+        let spawn = run.players[0].pos();
+        // Mid-dash heroes jump it.
+        run.players[0].mv.dash_t = 0.5;
+        stand_at(&mut run, at);
+        assert!(run.players[0].sinking.is_none());
+        run.players[0].mv.dash_t = 0.0;
+        stand_at(&mut run, at);
+        assert!(matches!(run.players[0].sinking, Some((_, Sink::Fall))));
+        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Sink { how: 0, .. })));
+        assert!(run.players[0].alive, "still falling");
+        for _ in 0..=(dungeon::FALL_TIME / DT) as usize {
+            run.step();
+        }
+        assert!(!run.players[0].alive);
+        assert!(said(&run, "fell into the abyss"));
+
+        let (mut run, at) = terrain_run(Tile::Chasm);
+        run.set_debug(0, true);
+        stand_at(&mut run, at);
+        for _ in 0..=(dungeon::FALL_TIME / DT) as usize {
+            run.step();
+        }
+        assert!(run.players[0].alive, "debug heroes survive");
+        assert_eq!(run.players[0].pos(), dungeon::Map::center_of(dungeon::Map::tile_of(spawn).0, dungeon::Map::tile_of(spawn).1), "back on safe ground");
+        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Sink { how: 2, .. })));
+    }
+
+    #[test]
+    fn a_dash_ending_in_deep_water_drowns() {
+        let (mut run, at) = terrain_run(Tile::DeepWater);
+        // Deep water stops walking...
+        let before = run.players[0].pos();
+        for _ in 0..60 {
+            let seq = run.players[0].ack + 1;
+            run.players[0].inputs.push_back(InputMsg { seq, mx: 1, ..Default::default() });
+            run.step();
+        }
+        assert!(run.players[0].pos().x < at.x - 8.0, "walked into deep water from {before:?}");
+        assert!(run.players[0].sinking.is_none());
+        // ...but not a dash, and where the dash ends counts.
+        stand_at(&mut run, at);
+        assert!(matches!(run.players[0].sinking, Some((_, Sink::Drown))));
+        for _ in 0..=(dungeon::DROWN_TIME / DT) as usize {
+            run.step();
+        }
+        assert!(!run.players[0].alive);
+        assert!(said(&run, "drowned"));
+    }
+
+    #[test]
+    fn lava_burns_heroes_over_time() {
+        let (mut run, at) = terrain_run(Tile::Lava);
+        let hp = run.players[0].hp;
+        stand_at(&mut run, at);
+        assert_eq!(run.players[0].hp, hp - dungeon::LAVA_DAMAGE, "burns at once");
+        for _ in 0..69 {
+            run.step();
+        }
+        // About a second in lava: the first touch plus two ticks.
+        assert!((run.players[0].hp - (hp - 3.0 * dungeon::LAVA_DAMAGE)).abs() < 1e-9, "hp {}", run.players[0].hp);
+        assert!(run.players[0].alive);
+    }
+
+    #[test]
+    fn only_demons_are_lava_walkers() {
+        let demon = test_run(&[ClassId::Paladin], BossId::Demon);
+        let boss = demon.monsters.iter().find(|m| m.is_boss).unwrap();
+        assert_eq!(boss.mover, Mover::Demon);
+        assert!(demon.monsters.iter().filter(|m| m.etype == Some(EnemyType::Imp)).all(|m| m.mover == Mover::Demon));
+        let lich = test_run(&[ClassId::Paladin], BossId::Lich);
+        assert!(lich.monsters.iter().all(|m| m.mover == Mover::Enemy));
+    }
+
     #[test]
     fn mimic_moves_only_while_airborne() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.monsters.retain(|m| m.is_boss);
         let start = run.dungeon.player_spawns[0];
         let id = run.spawn_enemy(EnemyType::Mimic, start + Vec2::new(50.0, 0.0), None, 1);
-        assert!(!run.dungeon.map.solid_at(start + Vec2::new(50.0, 0.0)));
+        assert!(!run.dungeon.map.blocks_at(start + Vec2::new(50.0, 0.0), Mover::Enemy));
         run.players[0].debug = true; // keep the target standing
         let mut moved_on_ground = false;
         let mut moved_in_air = false;

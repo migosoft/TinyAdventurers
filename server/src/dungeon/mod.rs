@@ -4,6 +4,20 @@ use crate::defs::enemies::EnemyType;
 use crate::math::Vec2;
 
 pub const TILE: f64 = 16.0;
+/// Speed multipliers on terrain (tuned in the balancing pass).
+pub const SHALLOW_SPEED: f64 = 0.7;
+pub const LAVA_SPEED: f64 = 0.4;
+/// Lava burns heroes for this much every `LAVA_TICK` seconds (20/s).
+pub const LAVA_DAMAGE: f64 = 10.0;
+pub const LAVA_TICK: f64 = 0.5;
+/// Seconds from stepping into a chasm (or ending a dash over deep water) to death.
+pub const FALL_TIME: f64 = 0.7;
+pub const DROWN_TIME: f64 = 0.9;
+
+/// Water, chasm or lava.
+pub fn is_terrain(t: u8) -> bool {
+    (Tile::ShallowWater as u8..=Tile::Lava as u8).contains(&t)
+}
 
 /// Tile values sent to the client (one byte each).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,6 +28,25 @@ pub enum Tile {
     Wall = 2,
     DoorOpen = 3,
     DoorClosed = 4,
+    /// Slows everyone; enemies wade too.
+    ShallowWater = 5,
+    /// Blocks walking; a hero whose dash ends here drowns.
+    DeepWater = 6,
+    /// Heroes who step in fall to their death; enemies avoid it.
+    Chasm = 7,
+    /// Slows and burns heroes; only demon types walk it unharmed.
+    Lava = 8,
+}
+
+/// Who is moving. The walking rules (`Map::blocks`) differ per mover.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mover {
+    Hero,
+    Enemy,
+    /// Imps, chorts, summoners and the demon boss: lava does not stop them.
+    Demon,
+    /// A hero mid-dash: jumps deep water, chasms and lava.
+    Dash,
 }
 
 #[derive(Debug, Clone)]
@@ -42,16 +75,53 @@ impl Map {
             self.tiles[(y * self.w + x) as usize] = t as u8;
         }
     }
-    /// Blocks movement and sight.
-    pub fn solid(&self, x: i32, y: i32) -> bool {
+    /// Blocks sight and projectiles. Terrain does not.
+    pub fn opaque(&self, x: i32, y: i32) -> bool {
         let t = self.get(x, y);
-        !(t == Tile::Floor as u8 || t == Tile::DoorOpen as u8)
+        !(t == Tile::Floor as u8 || t == Tile::DoorOpen as u8 || is_terrain(t))
     }
-    pub fn walkable(&self, x: i32, y: i32) -> bool {
-        !self.solid(x, y)
+    pub fn opaque_at(&self, p: Vec2) -> bool {
+        let (x, y) = Map::tile_of(p);
+        self.opaque(x, y)
     }
-    pub fn solid_at(&self, p: Vec2) -> bool {
-        self.solid((p.x / TILE).floor() as i32, (p.y / TILE).floor() as i32)
+    /// Blocks walking for this mover. Mirrored in `client/src/sim/map.ts`.
+    pub fn blocks(&self, x: i32, y: i32, mover: Mover) -> bool {
+        if self.opaque(x, y) {
+            return true;
+        }
+        let t = self.get(x, y);
+        match mover {
+            Mover::Dash => false,
+            Mover::Hero => t == Tile::DeepWater as u8,
+            Mover::Demon => t == Tile::DeepWater as u8 || t == Tile::Chasm as u8,
+            Mover::Enemy => t == Tile::DeepWater as u8 || t == Tile::Chasm as u8 || t == Tile::Lava as u8,
+        }
+    }
+    pub fn blocks_at(&self, p: Vec2, mover: Mover) -> bool {
+        let (x, y) = Map::tile_of(p);
+        self.blocks(x, y, mover)
+    }
+    /// Ground a hero can stand on without harm: floor, open doors and shallow water.
+    pub fn safe(&self, x: i32, y: i32) -> bool {
+        let t = self.get(x, y);
+        t == Tile::Floor as u8 || t == Tile::DoorOpen as u8 || t == Tile::ShallowWater as u8
+    }
+    pub fn tile_at(&self, p: Vec2) -> u8 {
+        let (x, y) = Map::tile_of(p);
+        self.get(x, y)
+    }
+    /// Walking speed multiplier on this tile (a dash ignores terrain).
+    pub fn speed_factor(&self, p: Vec2, mover: Mover) -> f64 {
+        let t = self.tile_at(p);
+        if mover == Mover::Dash {
+            1.0
+        } else if t == Tile::ShallowWater as u8 {
+            SHALLOW_SPEED
+        } else if t == Tile::Lava as u8 && mover != Mover::Demon {
+            LAVA_SPEED
+        } else {
+            1.0
+        }
     }
     pub fn tile_of(p: Vec2) -> (i32, i32) {
         ((p.x / TILE).floor() as i32, (p.y / TILE).floor() as i32)

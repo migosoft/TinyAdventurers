@@ -1,6 +1,6 @@
 # Plan: Terrain sub-project (water, chasms, lava)
 
-**Status (2026-10-07):** Step 1 is done and the user approved it. No CC0 set fit, so the tiles are self-made by `client/scripts/terrain-tiles.ts`. The demos are `?water`, `?chasm` and `?lava`. Next is Step 2. Where this plan and the "Changes after the demos" list disagree, the list wins.
+**Status (2026-10-08):** All steps are done (steps 2-6 on `feature/terrain-rules`). Knockback was split off as its own feature (user, 2026-10-08). The final design is in TECHNICAL.md; deviations from this plan: fall 0.7 s and drown 0.9 s (the demo times), oval pools, covered enemy spawns move instead of blocking a feature, and the debug path avoids all terrain. Where this plan and the "Changes after the demos" list disagree, the list wins.
 
 ## Context
 HANDOFF.md names terrain as the next feature. The user wants more variety in the dungeons, and the 0x72 pack has no water, lava or chasm tiles, so other CC0 tilesets are allowed. The user's decisions from this session:

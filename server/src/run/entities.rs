@@ -3,6 +3,7 @@ use crate::defs::classes::ClassDef;
 use crate::defs::progression::Modifiers;
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{Anim, EntityKind};
+use crate::dungeon::Mover;
 use crate::fov::Fov;
 use crate::math::Vec2;
 use crate::protocol::{ClassId, InputMsg};
@@ -53,6 +54,19 @@ pub struct Player {
     /// Progression stat multipliers from the profile's upgrades.
     pub mods: Modifiers,
     pub max_hp: f64,
+    /// Falling into a chasm or drowning: seconds left until death, and how.
+    pub sinking: Option<(f64, Sink)>,
+    /// Centre of the last safe tile stood on (debug mode puts a fallen hero back here).
+    pub last_safe: Vec2,
+    /// Time since the last lava burn.
+    pub burn_t: f64,
+}
+
+/// How a hero is lost to the terrain (sent as `Ev::Sink { how }`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sink {
+    Fall = 0,
+    Drown = 1,
 }
 
 impl Player {
@@ -143,6 +157,8 @@ pub struct Monster {
     pub history: VecDeque<Vec2>,
     pub is_boss: bool,
     pub asleep: bool,
+    /// Walking rules: demons cross lava, other enemies avoid it.
+    pub mover: Mover,
 }
 
 impl Monster {

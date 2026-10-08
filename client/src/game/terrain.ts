@@ -5,15 +5,16 @@
 import Phaser from 'phaser';
 import { edgeCode, TERRAIN_FRAMES, TERRAIN_PERIOD, type TerrainEdge, type TerrainSet } from './terrain-codes';
 import { DEPTH, type Effects } from './effects';
+import { CONST, TILE_ID } from '../generated/defs';
 import { TILE, type TileMap } from '../sim/map';
 
-/** Terrain tile ids. TODO(terrain): take these from TILE_ID once the server has them. */
-export const TERRAIN = { Shallow: 5, Deep: 6, Chasm: 7, Lava: 8 } as const;
+/** Terrain tile ids (from the server's `Tile`). */
+export const TERRAIN = { Shallow: TILE_ID.ShallowWater, Deep: TILE_ID.DeepWater, Chasm: TILE_ID.Chasm, Lava: TILE_ID.Lava } as const;
 
-/** Movement speed factor on a terrain tile (demons are not slowed by lava). */
+/** Movement speed factor on a terrain tile (demons are not slowed by lava). Same values as `TileMap.speedFactor`. */
 export function speedFactor(t: number, demon = false): number {
-  if (t === TERRAIN.Shallow) return 0.7;
-  if (t === TERRAIN.Lava) return demon ? 1 : 0.4;
+  if (t === TERRAIN.Shallow) return CONST.SHALLOW_SPEED;
+  if (t === TERRAIN.Lava) return demon ? 1 : CONST.LAVA_SPEED;
   return 1;
 }
 
@@ -23,6 +24,41 @@ export function sinkDepth(t: number): number {
 }
 
 const isWater = (t: number) => t === TERRAIN.Shallow || t === TERRAIN.Deep;
+
+/** Splashes on entering water or lava, ripples while wading, embers on a burning hero. One per figure. */
+export class WadeFx {
+  private lastTile = 0;
+  private rippleT = 0;
+
+  update(fx: Effects, x: number, y: number, tile: number, dashing: boolean, moving: boolean, burns: boolean, dt: number): void {
+    const wet = isWater(tile);
+    const lava = tile === TERRAIN.Lava;
+    if (!dashing && tile !== this.lastTile && (wet || lava)) fx.burst(x, y - 2, 6, wet ? 0x72d6ce : 0xee8e2e, 30, 0.35);
+    if (dashing && (wet || lava) && Math.random() < 0.5) fx.particle(x, y - 2, (Math.random() - 0.5) * 30, -20, 0.3, wet ? 0xcae6f5 : 0xfacb3e);
+    this.lastTile = tile;
+    this.rippleT -= dt;
+    if (!dashing && wet && moving && this.rippleT <= 0) {
+      this.rippleT = 0.35;
+      fx.ring(x, y - 1, 5, 0x72d6ce, 0.5);
+    }
+    if (!dashing && lava && burns && Math.random() < dt * 14)
+      fx.particle(x + (Math.random() - 0.5) * 8, y - Math.random() * 10, 0, -18 - Math.random() * 10, 0.4, Math.random() < 0.5 ? 0xffcc68 : 0xee8e2e);
+  }
+}
+
+/** The moment a figure goes over the edge of a chasm, or under in deep water. */
+export function sinkStartFx(fx: Effects, x: number, y: number, drown: boolean): void {
+  if (!drown) fx.burst(x, y - 4, 6, 0x775c55, 25, 0.4);
+  else {
+    fx.burst(x, y - 3, 14, 0xcae6f5, 45, 0.45);
+    fx.ring(x, y - 1, 9, 0x72d6ce, 0.6);
+  }
+}
+
+/** Bubbles rising where a figure went down in deep water. */
+export function bubbleFx(fx: Effects, x: number, y: number, dt: number): void {
+  if (Math.random() < dt * 12) fx.particle(x + (Math.random() - 0.5) * 8, y - 2 - Math.random() * 4, 0, -10, 0.35, 0xcae6f5);
+}
 const FPS: Record<TerrainSet, number> = { water: 4, deep: 4, lava: 5, chasm: 1 };
 const D8: [number, number][] = [
   [0, -1],

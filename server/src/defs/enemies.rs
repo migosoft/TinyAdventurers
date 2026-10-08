@@ -171,6 +171,11 @@ pub fn for_boss(t: EnemyType, boss: BossId) -> EnemyType {
     }
 }
 
+/// Demon types walk through lava unharmed (the demon boss too, see `Run::spawn_boss`).
+pub fn is_demon(t: EnemyType) -> bool {
+    matches!(t, EnemyType::Imp | EnemyType::Chort | EnemyType::Summoner | EnemyType::SummonedImp)
+}
+
 /// A second (alt) ranged attack is only used from at least this far away
 /// (center distance, px): chorts throw fire bolts at heroes out of reach.
 pub const ALT_BOLT_MIN_DIST: f64 = 40.0;

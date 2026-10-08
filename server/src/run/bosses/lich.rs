@@ -5,6 +5,7 @@ use super::{boss_idx, set_anim, target, BossBehaviour};
 use crate::defs::bosses::{LICH_DISCIPLES, LICH_DRAIN_PER_DISCIPLE};
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{Anim, EntityKind};
+use crate::dungeon::Mover;
 use crate::math::Vec2;
 use crate::protocol::Ev;
 use crate::run::abilities::spawn_monster_projectile;
@@ -41,7 +42,7 @@ impl BossBehaviour for Lich {
             let a = k as f64 * std::f64::consts::TAU / LICH_DISCIPLES as f64;
             let mut r = 88.0;
             let mut pos = boss_pos + Vec2::from_angle(a) * r;
-            while run.dungeon.map.solid_at(pos) && r > 20.0 {
+            while run.dungeon.map.blocks_at(pos, Mover::Enemy) && r > 20.0 {
                 r -= 8.0;
                 pos = boss_pos + Vec2::from_angle(a) * r;
             }
@@ -93,7 +94,7 @@ impl BossBehaviour for Lich {
                     let alive = run.monsters.iter().filter(|m| m.alive && m.owner == Some(id) && m.etype == Some(EnemyType::RaisedSkeleton)).count();
                     for k in 0..2usize.min(4usize.saturating_sub(alive)) {
                         let spot = pos + Vec2::from_angle(run.time + k as f64 * 3.0) * 20.0;
-                        let spot = if run.dungeon.map.solid_at(spot) { pos } else { spot };
+                        let spot = if run.dungeon.map.blocks_at(spot, Mover::Enemy) { pos } else { spot };
                         run.spawn_enemy(EnemyType::RaisedSkeleton, spot, Some(id), party);
                         run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, fire: false }, Some(spot));
                     }

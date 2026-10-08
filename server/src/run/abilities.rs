@@ -260,7 +260,7 @@ pub fn tick_projectiles(run: &mut Run, dt: f64) {
                     break;
                 }
             }
-            if run.dungeon.map.solid_at(pos) {
+            if run.dungeon.map.opaque_at(pos) {
                 impact(run, i, prev, None);
                 break;
             }

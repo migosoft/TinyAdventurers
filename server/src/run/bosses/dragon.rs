@@ -59,7 +59,7 @@ impl BossBehaviour for Dragon {
                         let a = aim + run.rng.gen_range(-BREATH_HALF_ANGLE..BREATH_HALF_ANGLE);
                         let d = run.rng.gen_range(30.0..BREATH_RANGE);
                         let at = pos + Vec2::from_angle(a) * d;
-                        if !run.dungeon.map.solid_at(at) {
+                        if !run.dungeon.map.opaque_at(at) {
                             run.spawn_hazard(EntityKind::FirePatch, at, 10.0, 3.0, 8.0);
                         }
                     }
