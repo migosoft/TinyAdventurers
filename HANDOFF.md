@@ -50,9 +50,13 @@ For: the next agent or developer continuing this project. Read this first, then 
   - a hero walked into a chasm in debug mode: predicted fall, then back on safe ground
   - correction stayed at 0.00 px under `?lag=150&jitter=40&loss=2`
 
+**Live test by the user (after the session's fixes):**
+- First report: in normal mode lava showed as dark cells, hurt, and made the hero glitch. The cause was a stale cached client for `/`, not the terrain code: the server sent no `Cache-Control`. Fixed by `cache_headers` in `main.rs` (see Gotchas).
+- After a hard reload, the user confirmed that it works in normal mode.
+
 **Not verified yet:**
 - A real (non-debug) death by chasm, and drowning after a Barbarian dash, in the browser. Both are covered by server tests only.
-- **The user should play one normal run of each theme** (demon for lava, lich or dragon for water) and judge the look and the amount of terrain.
+- A full normal run of the water theme (lich or dragon), and the user's verdict on the look and the amount of terrain.
 
 ## Session before (2026-10-07, terrain step 1: tiles and demos)
 
