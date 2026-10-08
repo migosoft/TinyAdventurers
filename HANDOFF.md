@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-08, compact snapshots and inputs)
 
-**Branch:** `feature/compact-snapshots`, not merged yet. Ask the user before merging into `main` and pushing.
+**Branch:** `feature/compact-snapshots` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
 
 **Live confirmations by the user (start of this session):**
 - **Terrain:** a normal water run, falling into a chasm and drowning work.
@@ -301,7 +301,7 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Merge `feature/compact-snapshots`** after the user agrees, and have them play one run to confirm nothing changed in feel.
+1. **Compact snapshots:** have the user play one run to confirm nothing changed in feel.
 2. **Knockback** (its own feature, the user's decision): demo first, as usual. Decide which attacks push and how far; then enemies can fall and drown too (they need a monster version of `Sink`/`kill_player`). See TODO.md.
 3. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 4. Loadouts: design new abilities, then add the lobby picker, paid with coins.
