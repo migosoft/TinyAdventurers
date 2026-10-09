@@ -436,6 +436,7 @@ Steps 2–6 followed in the next session.
 ## Gotchas
 
 - **Checking wall tiles without playing:** a throwaway `client/src/__dump.ts` that builds a `TileMap` from an ASCII map (`#` wall, `.` floor, space void) and prints `tileDraws` per cell, plus a PowerShell `System.Drawing` script that composes the frames from the pack PNG using `tile_list_v1.7`, gives exact renders. Use void cells behind walls like the real generator, and delete the dump script afterwards.
+- **Phaser key capture:** `addKeys`/`addKey` capture by default, which calls `preventDefault` page-wide and outlives the scene, so DOM inputs lose those letters after a run (the user found it in the delete-account password box). Always pass `false` (`GameScene` does); the smoke test types a password with w/a/s/d/e after a run.
 - **Phaser `Graphics.clear()`** resets fill and line styles; set `fillStyle` again after it (see the `spark` texture in `main.ts`).
 
 - **Stale client after a rebuild:** before 2026-10-08 the server sent no `Cache-Control`, so browsers could keep the old `index.html` and bundle for `/` while `/?debug…` (a different URL) loaded fresh. The user saw lava only in debug mode: the old client drew terrain as dark cells and its prediction fought the server. `cache_headers` in `main.rs` fixes it. If a client ever looks older than the server, hard-reload (Ctrl+F5) first.

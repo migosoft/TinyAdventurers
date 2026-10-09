@@ -106,10 +106,26 @@ await p3.waitForSelector('#runname');
 await p1.waitForFunction(() => /another window/.test(document.body.textContent ?? ''), null, { timeout: 10000 });
 console.log('second login closed the first window');
 
-// Clean up: delete both throwaway accounts.
+// Bob leaves the run and deletes his account by typing the password (it contains
+// w, a, s, d, e: game keys must not be swallowed outside the game).
+await p2.keyboard.press('Escape');
+await p2.click('text=Leave dungeon');
+await p2.click('#change-char');
+await p2.click('#delete-account');
+await p2.click('#delete-password');
+await p2.keyboard.type(PASSWORD);
+const typed = await p2.inputValue('#delete-password');
+if (typed !== PASSWORD) errors.push(`typing in the password box after a run gave "${typed}"`);
+await p2.click('#delete-confirm');
+await p2.waitForSelector('#auth-name', { timeout: 5000 }).then(
+  () => console.log('typed the password after a run and deleted the account'),
+  () => errors.push('account deletion by typing the password failed'),
+);
+
+// Clean up: delete the remaining throwaway account (and Bob's, if the form failed).
 for (const [page, account] of [
   [p3, a1.account],
-  [p2, a2.account],
+  ...(typed === PASSWORD ? [] : [[p2, a2.account]]),
 ]) {
   const status = await page.evaluate(
     (password) => fetch('/api/account', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }).then((r) => r.status),

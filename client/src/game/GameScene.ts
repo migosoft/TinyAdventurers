@@ -135,7 +135,9 @@ export class GameScene extends Phaser.Scene {
     this.debugOgre = [];
 
     const kb = this.input.keyboard!;
-    this.keys = kb.addKeys('W,A,S,D,Q,E') as GameScene['keys'];
+    // No key capture: Phaser's capture calls preventDefault page-wide and outlives the
+    // scene, so these letters could no longer be typed into the lobby's inputs.
+    this.keys = kb.addKeys('W,A,S,D,Q,E', false) as GameScene['keys'];
     kb.on('keydown-Q', () => this.net.send({ t: 'Spectate', dir: -1 }));
     kb.on('keydown-E', () => this.net.send({ t: 'Spectate', dir: 1 }));
     kb.on('keydown-F3', (e: KeyboardEvent) => {
