@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-09, accounts, characters and PostgreSQL)
 
-**Branch:** `feature/accounts`, committed and **not merged or pushed yet**. Ask the user before merging into `main` or pushing.
+**Branch:** `feature/accounts` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
 
 **User decisions this session:**
 - **Characters:** progress is tracked per character, not per player. An account has up to **8 characters** of any class, two Wizards included. Each character has a name, a class that never changes, and its own XP, coins and upgrades. Character names are unique across all accounts.
@@ -67,7 +67,6 @@ For: the next agent or developer continuing this project. Read this first, then 
 - A real run that ends was not banked through the browser. It is covered by `lobby::tests::a_finished_run_banks_on_the_played_character_only`.
 
 **Open questions for the user:**
-- **Merging:** merge `feature/accounts` into `main` and push? Not asked yet; wait for the user's live test.
 - **Asset pack:** the user asked whether "the new asset pack" was registered. Nothing new was added. The only approved but unused pack is superdark's "Enchanted Forest Characters" (TODO.md). When it is used: check its license, put it in `client/assets-src/superdark/` with the license file, and add it to the README credits and TECHNICAL.md.
 - **`images/`:** an untracked `images/` folder (`logo.png`, `dragon.jpg`) is the user's. It is not committed and was not touched. Ask whether it belongs in the repo.
 
