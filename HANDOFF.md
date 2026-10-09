@@ -56,7 +56,20 @@ For: the next agent or developer continuing this project. Read this first, then 
   - the limiter gives 429 after 5 failed logins.
 - The smoke test passed with no browser errors. Screenshots of login, characters and lobby were checked.
 
-**Not yet verified:** the user has not tried it live yet. A real run that ends was not banked through the browser; it is covered by `lobby::tests::a_finished_run_banks_on_the_played_character_only`.
+**Bug found by the user and fixed (commit `663ccbd`):**
+- **Symptom:** after a run, W, A, S, D, Q and E could not be typed into DOM inputs, such as the delete-account password box and the run name.
+- **Cause:** Phaser's `addKeys` captures keys by default, which calls `preventDefault` page-wide and outlives the scene.
+- **Fix:** `GameScene` passes `false` for the capture.
+- **Regression check:** the smoke test now leaves a run, types the password (it contains w/a/s/d/e) and deletes Bob's account through the form. It failed on the old build (`mok-tt-por`) and passes now.
+
+**Not yet verified:**
+- The user has only tried account deletion live; the rest of the flow they have not tried yet.
+- A real run that ends was not banked through the browser. It is covered by `lobby::tests::a_finished_run_banks_on_the_played_character_only`.
+
+**Open questions for the user:**
+- **Merging:** merge `feature/accounts` into `main` and push? Not asked yet; wait for the user's live test.
+- **Asset pack:** the user asked whether "the new asset pack" was registered. Nothing new was added. The only approved but unused pack is superdark's "Enchanted Forest Characters" (TODO.md). When it is used: check its license, put it in `client/assets-src/superdark/` with the license file, and add it to the README credits and TECHNICAL.md.
+- **`images/`:** an untracked `images/` folder (`logo.png`, `dragon.jpg`) is the user's. It is not committed and was not touched. Ask whether it belongs in the repo.
 
 ## Session before (2026-10-08, ogre mini-boss)
 
