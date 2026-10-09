@@ -9,7 +9,74 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-09, accounts, characters and PostgreSQL)
+## Last session (2026-10-09, admin area, statistics, OpenTelemetry)
+
+**Branch:** `feature/admin` (from `main`), committed, **not merged or pushed yet**. Ask the user before merging.
+
+**User decisions this session:**
+- **Admin login:** a username and password from environment variables (`ADMIN_USER`, `ADMIN_PASSWORD`), not a game account.
+- **Metrics:** all four groups (player activity, runs, characters, trend charts), on a **separate `/admin` page**.
+- **Actions:** delete players, change passwords and delete characters, all recorded in an **audit log**.
+- **Monitoring:** the user first asked for ClickStack in separate containers, then changed it: **keep everything in the admin area**, but make the server **ready to send OTEL metrics, logs and traces** for a later collector such as ClickStack. No monitoring containers were added.
+  - Note for later: ClickStack's multi-container setup stores HyperDX's metadata in **MongoDB (SSPL)**, which the user's OSI-only rule excludes. Raise this before setting it up (alternatives: HyperDX local mode, FerretDB, or an exception).
+
+**Done:**
+- **Server, new modules:**
+  - `admin.rs`: admin routes, `AdminState` with in-memory sessions, and the `AdminSession` extractor.
+  - `stats.rs`: read-only statistics, player and audit queries, with their ts-rs types.
+  - `telemetry.rs`: console log, OTLP export and the `Metrics` instruments.
+- **Migrations:**
+  - `0002_admin_stats.sql`: `activity_days`, `runs`, `run_players`, `admin_actions`, with no foreign keys so history outlives deleted accounts anonymously.
+  - `0003_run_players_left.sql`: `left_run`.
+- **Run recording:** `Run::record(outcome)`, then `lobby::finish_run(…, record)`, then `db::record_run`. Activity is noted at login, registration and WebSocket connect.
+- **New player and member fields:** `Player.account`/`Member.account`, and `Player.left`, because leaving a dungeon sets `alive = false` in the game but must not count as a death in the statistics.
+- **Auth:** `auth::AdminLogin` (constant-time digests, password at least 12 characters), the `ta_admin` cookie scoped to `/api/admin`, and `cookie_value`.
+- **`main.rs`:**
+  - `/admin` serves `admin.html`.
+  - `TraceLayer` adds one span per request, named by route.
+  - Ctrl-C or SIGTERM stops the server and flushes telemetry.
+  - All Vite hashed bundles (not only `index-*`) are cached immutable.
+- **New dependencies** (all Apache-2.0 or MIT):
+  - `opentelemetry`, `opentelemetry_sdk` and `opentelemetry-otlp` 0.33 (HTTP/protobuf, no TLS);
+  - `opentelemetry-appender-tracing` 0.33 and `tracing-opentelemetry` 0.34;
+  - the `tower-http` `trace` feature and the `tracing-subscriber` `env-filter` feature.
+- **Client:**
+  - `admin.html` plus `src/admin/` (main, api, charts, dom, admin.css), a second Vite entry.
+  - Views: dashboard (live tiles, who is online, today/7/30-day table, totals, bosses, classes, upgrades histogram, top 10, three 30-day SVG charts), players (search, sort, paging), player detail (characters with Delete, recent runs, change password, delete player with name confirmation) and the audit log.
+  - Light and dark mode. Chart palette slots 1–2 were validated with the dataviz validator.
+- **Config:**
+  - `.env.example` and `docker-compose.yml` gained `ADMIN_USER`, `ADMIN_PASSWORD` and the `OTEL_*` variables.
+  - **The user's `.env` was not changed:** they need to add `ADMIN_USER` and `ADMIN_PASSWORD` themselves.
+- **Smoke test:** an admin pass runs when `ADMIN_USER` and `ADMIN_PASSWORD` are set (TECHNICAL.md §12).
+- **Docs:** TECHNICAL.md (§2, §3, §11a banking, new §11b admin and §11c OpenTelemetry, §12, §13), README and TODO.
+
+**Checked:**
+- 130 server tests against Postgres. They cover statistics windows, anonymous history, search and paging, admin writes, admin auth, the run record and telemetry with the in-memory exporter.
+- Client typecheck, 11 tests and the build (it outputs `admin.html`).
+- `docker compose up --build`: migrations 0002 and 0003 applied to the existing local database.
+- curl checks:
+  - 401 without a cookie and with a player cookie;
+  - 401 for a wrong login, 429 on the 6th;
+  - 415 without JSON;
+  - a password change revokes the old session, and the old password fails while the new one works;
+  - deleting twice gives 404;
+  - the audit rows are written;
+  - logout works;
+  - with no admin variables every `/api/admin/*` route gives 404.
+- Smoke test with the admin pass, no browser errors. Screenshots of the dashboard (light and dark), player page and audit log were checked.
+- OTLP against a throwaway `otel/opentelemetry-collector` (debug exporter): traces, logs and all metrics arrived with `service.name=tiny-adventurers-server`, and no player names or passwords appeared in the exported data.
+
+**Found on the way:**
+- **Leavers counted as deaths:** the first dashboard showed hero deaths for runs that were only left. That led to `Player.left` and migration 0003.
+- **Migration fixed in a new file:** 0002 had already been applied to the local database by the test run, so the fix is a new migration (0003). Dropping the tables to edit 0002 was refused by the permission check.
+- **Old test rows remain:** the local database still holds a few test runs from before the fix, whose leavers count as deaths. They are test data only.
+- **Throttle test locks out the IP:** the admin throttle check locks out the test IP for 5 minutes. Restart the game container before the smoke test if you run both.
+
+**Not yet verified:**
+- The user has not tried the admin area yet.
+- A won or lost run through the browser was not recorded live. Only abandoned runs were; won and lost runs are covered by tests.
+
+## Session before (2026-10-09, accounts, characters and PostgreSQL)
 
 **Branch:** `feature/accounts` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
 

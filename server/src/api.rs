@@ -5,6 +5,7 @@ use crate::auth::{self, Auth};
 use crate::db::{self, Db, DbError};
 use crate::lobby::SharedLobby;
 use crate::protocol::{CharacterInfo, ClassId};
+use crate::telemetry;
 use axum::extract::{ConnectInfo, FromRequestParts, OptionalFromRequestParts, Path, State};
 use axum::http::request::Parts;
 use axum::http::{header, Method, StatusCode};
@@ -22,6 +23,7 @@ pub struct AppState {
     pub lobby: SharedLobby,
     pub db: Db,
     pub auth: Arc<Auth>,
+    pub admin: Arc<crate::admin::AdminState>,
 }
 
 #[derive(Deserialize, TS)]
@@ -67,11 +69,11 @@ impl IntoResponse for Fail {
     }
 }
 
-fn fail(code: StatusCode, msg: impl Into<String>) -> Fail {
+pub(crate) fn fail(code: StatusCode, msg: impl Into<String>) -> Fail {
     Fail(code, msg.into())
 }
 
-fn server_error(e: impl std::fmt::Display) -> Fail {
+pub(crate) fn server_error(e: impl std::fmt::Display) -> Fail {
     tracing::error!("api: {e}");
     fail(StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong on the server. Please try again.")
 }
@@ -82,7 +84,7 @@ impl From<sqlx::Error> for Fail {
     }
 }
 
-type ApiResult<T> = Result<T, Fail>;
+pub(crate) type ApiResult<T> = Result<T, Fail>;
 
 /// A valid session from the cookie (signature, expiry and database checked).
 pub struct Session {
@@ -129,7 +131,7 @@ pub fn routes() -> Router<AppState> {
 
 /// State-changing requests must be JSON. Together with the SameSite=Strict
 /// cookie this keeps other sites from submitting forms against the API.
-async fn require_json(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+pub(crate) async fn require_json(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
     let json = req.headers().get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).map_or(false, |v| v.starts_with("application/json"));
     if req.method() != Method::GET && !json {
         return fail(StatusCode::UNSUPPORTED_MEDIA_TYPE, "Expected JSON.").into_response();
@@ -144,7 +146,7 @@ const LOGIN_IP_WINDOW: Duration = Duration::from_secs(300);
 const REGISTRATIONS_PER_IP: u32 = 10;
 const REGISTER_WINDOW: Duration = Duration::from_secs(3600);
 
-async fn hash(password: String) -> ApiResult<String> {
+pub(crate) async fn hash(password: String) -> ApiResult<String> {
     tokio::task::spawn_blocking(move || auth::hash_password(&password)).await.map_err(server_error)
 }
 
@@ -156,6 +158,9 @@ async fn verify(password: String, hash: Option<String>) -> ApiResult<bool> {
 async fn logged_in(state: &AppState, account: i32, name: String) -> ApiResult<Response> {
     let s = state.auth.new_session();
     db::create_session(&state.db, account, &s.id_hash).await?;
+    if let Err(e) = db::touch_activity(&state.db, account).await {
+        tracing::error!("activity: {e}");
+    }
     let me = me_of(state, account, name).await?;
     Ok(([(header::SET_COOKIE, state.auth.set_cookie(&s.token))], Json(me)).into_response())
 }
@@ -180,6 +185,7 @@ async fn register(State(state): State<AppState>, ConnectInfo(addr): ConnectInfo<
         Err(e) => return Err(server_error(format!("{e:?}"))),
     };
     state.auth.limiter.lock().unwrap().hit(&ip_key, REGISTER_WINDOW);
+    telemetry::metrics().registration();
     tracing::info!("account {account} registered");
     logged_in(&state, account, name).await
 }
@@ -210,9 +216,13 @@ async fn check_login(state: &AppState, ip: &str, name: &str, password: String) -
 
 async fn login(State(state): State<AppState>, ConnectInfo(addr): ConnectInfo<SocketAddr>, Json(c): Json<Credentials>) -> ApiResult<Response> {
     let name = c.name.trim();
-    let Some(account) = check_login(&state, &addr.ip().to_string(), name, c.password).await? else {
+    let checked = check_login(&state, &addr.ip().to_string(), name, c.password).await;
+    let m = telemetry::metrics();
+    let Some(account) = checked.inspect_err(|e| if e.0 == StatusCode::TOO_MANY_REQUESTS { m.login("throttled") })? else {
+        m.login("fail");
         return Err(fail(StatusCode::UNAUTHORIZED, "Wrong name or password."));
     };
+    m.login("ok");
     logged_in(&state, account.id, account.name).await
 }
 

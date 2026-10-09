@@ -1,0 +1,226 @@
+//! The admin area's JSON API (`/api/admin/*`, page at `/admin`). The admin
+//! logs in with `ADMIN_USER` / `ADMIN_PASSWORD` from the environment, not
+//! with a game account. Without both (or with a short password) the whole
+//! area answers 404.
+//!
+//! Admin sessions are signed tokens like the players' (`auth.rs`), in their
+//! own cookie scoped to `/api/admin`, and kept in memory only: a restart
+//! logs the admin out. Every change to a player is written to the audit log.
+
+use crate::api::{self, fail, server_error, ApiResult, AppState, Credentials, PasswordConfirm};
+use crate::auth::{self, AdminLogin};
+use crate::db;
+use crate::stats::{self, AdminAction, AdminStats, PlayerDetail, PlayerPage};
+use crate::telemetry;
+use axum::extract::{ConnectInfo, FromRequestParts, Path, Query, State};
+use axum::http::request::Parts;
+use axum::http::{header, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{delete, get, post};
+use axum::{Json, Router};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+use ts_rs::TS;
+
+const LOGIN_FAILS_PER_IP: u32 = 5;
+const LOGIN_FAILS_TOTAL: u32 = 20;
+const LOGIN_WINDOW: Duration = Duration::from_secs(300);
+
+pub struct AdminState {
+    /// `None`: the admin area is disabled.
+    login: Option<AdminLogin>,
+    /// Session id hash -> expiry.
+    sessions: Mutex<HashMap<Vec<u8>, Instant>>,
+}
+
+impl AdminState {
+    pub fn new(login: Option<AdminLogin>) -> AdminState {
+        AdminState { login, sessions: Mutex::new(HashMap::new()) }
+    }
+
+    /// From `ADMIN_USER` / `ADMIN_PASSWORD`; logs why if it stays disabled.
+    pub fn from_env() -> AdminState {
+        match AdminLogin::from_env() {
+            Ok(l) => {
+                tracing::info!("admin area enabled at /admin");
+                AdminState::new(Some(l))
+            }
+            Err(e) => {
+                tracing::warn!("admin area disabled: {e}");
+                AdminState::new(None)
+            }
+        }
+    }
+
+    fn name(&self) -> Option<&str> {
+        self.login.as_ref().map(|l| l.name.as_str())
+    }
+}
+
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct AdminMe {
+    pub name: String,
+}
+
+#[derive(Deserialize)]
+pub struct PlayersQuery {
+    q: Option<String>,
+    sort: Option<String>,
+    page: Option<u32>,
+}
+
+fn not_found() -> api::Fail {
+    fail(StatusCode::NOT_FOUND, "Not found.")
+}
+
+/// A logged-in admin (cookie signature, expiry and the in-memory session checked).
+pub struct AdminSession {
+    pub name: String,
+}
+
+impl FromRequestParts<AppState> for AdminSession {
+    type Rejection = api::Fail;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let name = state.admin.name().ok_or_else(not_found)?;
+        let unauthorized = || fail(StatusCode::UNAUTHORIZED, "Please log in.");
+        let cookies = parts.headers.get_all(header::COOKIE).iter().filter_map(|v| v.to_str().ok());
+        let token = cookies.filter_map(|c| auth::cookie_value(c, auth::ADMIN_COOKIE)).next().ok_or_else(unauthorized)?;
+        let id_hash = state.auth.verify(token).ok_or_else(unauthorized)?;
+        let mut sessions = state.admin.sessions.lock().unwrap();
+        let now = Instant::now();
+        sessions.retain(|_, exp| *exp > now);
+        if !sessions.contains_key(&id_hash) {
+            return Err(unauthorized());
+        }
+        Ok(AdminSession { name: name.to_string() })
+    }
+}
+
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/admin/login", post(login))
+        .route("/api/admin/logout", post(logout))
+        .route("/api/admin/me", get(me))
+        .route("/api/admin/stats", get(overview))
+        .route("/api/admin/players", get(players))
+        .route("/api/admin/players/{id}", get(player).delete(delete_player))
+        .route("/api/admin/players/{id}/password", post(set_password))
+        .route("/api/admin/characters/{id}", delete(delete_character))
+        .route("/api/admin/actions", get(actions))
+        .layer(axum::middleware::from_fn(api::require_json))
+}
+
+async fn login(State(state): State<AppState>, ConnectInfo(addr): ConnectInfo<SocketAddr>, Json(c): Json<Credentials>) -> ApiResult<Response> {
+    let Some(admin) = state.admin.login.as_ref() else { return Err(not_found()) };
+    let ip_key = format!("admin-login:{}", addr.ip());
+    {
+        let mut l = state.auth.limiter.lock().unwrap();
+        if l.blocked(&ip_key, LOGIN_FAILS_PER_IP, LOGIN_WINDOW) || l.blocked("admin-login", LOGIN_FAILS_TOTAL, LOGIN_WINDOW) {
+            return Err(fail(StatusCode::TOO_MANY_REQUESTS, "Too many attempts. Wait a few minutes and try again."));
+        }
+    }
+    if !admin.check(&c.name, &c.password) {
+        let mut l = state.auth.limiter.lock().unwrap();
+        l.hit(&ip_key, LOGIN_WINDOW);
+        l.hit("admin-login", LOGIN_WINDOW);
+        tracing::warn!("admin login failed");
+        return Err(fail(StatusCode::UNAUTHORIZED, "Wrong name or password."));
+    }
+    state.auth.limiter.lock().unwrap().clear(&ip_key);
+    let s = state.auth.new_admin_session();
+    state.admin.sessions.lock().unwrap().insert(s.id_hash, Instant::now() + Duration::from_secs(auth::ADMIN_SESSION_SECS));
+    tracing::info!("admin logged in");
+    Ok(([(header::SET_COOKIE, state.auth.set_admin_cookie(&s.token))], Json(AdminMe { name: admin.name.clone() })).into_response())
+}
+
+async fn logout(State(state): State<AppState>, parts: axum::http::HeaderMap) -> ApiResult<Response> {
+    if state.admin.login.is_none() {
+        return Err(not_found());
+    }
+    let cookies = parts.get_all(header::COOKIE).iter().filter_map(|v| v.to_str().ok());
+    if let Some(id_hash) = cookies.filter_map(|c| auth::cookie_value(c, auth::ADMIN_COOKIE)).next().and_then(|t| state.auth.verify(t)) {
+        state.admin.sessions.lock().unwrap().remove(&id_hash);
+    }
+    Ok(([(header::SET_COOKIE, state.auth.clear_admin_cookie())], StatusCode::NO_CONTENT).into_response())
+}
+
+async fn me(admin: AdminSession) -> Json<AdminMe> {
+    Json(AdminMe { name: admin.name })
+}
+
+async fn overview(State(state): State<AppState>, _admin: AdminSession) -> ApiResult<Json<AdminStats>> {
+    let live = state.lobby.lock().unwrap().live();
+    Ok(Json(stats::overview(&state.db, live).await?))
+}
+
+async fn players(State(state): State<AppState>, _admin: AdminSession, Query(q): Query<PlayersQuery>) -> ApiResult<Json<PlayerPage>> {
+    let (online, _) = state.lobby.lock().unwrap().online_ids();
+    let page = stats::players(&state.db, q.q.as_deref().unwrap_or(""), q.sort.as_deref().unwrap_or("name"), q.page.unwrap_or(0), &|id| online.contains(&id)).await?;
+    Ok(Json(page))
+}
+
+async fn player(State(state): State<AppState>, _admin: AdminSession, Path(id): Path<i32>) -> ApiResult<Json<PlayerDetail>> {
+    let (online, playing) = state.lobby.lock().unwrap().online_ids();
+    let detail = stats::player(&state.db, id, &|a| online.contains(&a), &|c| playing.contains(&c)).await?;
+    detail.map(Json).ok_or_else(|| fail(StatusCode::NOT_FOUND, "No such player."))
+}
+
+/// Writes the audit row. The change itself is done by then, so a failure
+/// here is logged rather than reported as a failed action.
+async fn audit(state: &AppState, admin: &AdminSession, action: &str, target: &str, detail: Option<&str>) {
+    telemetry::metrics().admin_action(action);
+    tracing::info!(action, "admin action");
+    if let Err(e) = stats::log_action(&state.db, &admin.name, action, target, detail).await {
+        tracing::error!("audit log: {e}");
+    }
+}
+
+async fn set_password(State(state): State<AppState>, admin: AdminSession, Path(id): Path<i32>, Json(c): Json<PasswordConfirm>) -> ApiResult<StatusCode> {
+    auth::check_password(&c.password).map_err(|e| fail(StatusCode::BAD_REQUEST, e))?;
+    let account = db::account(&state.db, id).await?.ok_or_else(|| fail(StatusCode::NOT_FOUND, "No such player."))?;
+    let hash = api::hash(c.password).await?;
+    if !db::set_password(&state.db, id, &hash).await? {
+        return Err(fail(StatusCode::NOT_FOUND, "No such player."));
+    }
+    state.lobby.lock().unwrap().kick_account(id, "Your password was changed by an admin. Please log in again.");
+    audit(&state, &admin, "set_password", &account.name, None).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_player(State(state): State<AppState>, admin: AdminSession, Path(id): Path<i32>) -> ApiResult<StatusCode> {
+    let account = db::account(&state.db, id).await?.ok_or_else(|| fail(StatusCode::NOT_FOUND, "No such player."))?;
+    let characters = db::list_characters(&state.db, id).await?;
+    state.lobby.lock().unwrap().kick_account(id, "This account was deleted by an admin.");
+    db::delete_account(&state.db, id).await?;
+    let detail = format!("{} character(s)", characters.len());
+    audit(&state, &admin, "delete_account", &account.name, Some(&detail)).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_character(State(state): State<AppState>, admin: AdminSession, Path(id): Path<i32>) -> ApiResult<StatusCode> {
+    // Whoever plays it right now is sent back to the login first, so no
+    // dungeon banks onto a character that is gone.
+    {
+        let mut l = state.lobby.lock().unwrap();
+        if let Some(owner) = l.character_owner(id) {
+            l.kick_account(owner, "Your character was deleted by an admin.");
+        }
+    }
+    let Some((owner, name)) = db::delete_character_any(&state.db, id).await? else {
+        return Err(fail(StatusCode::NOT_FOUND, "No such character."));
+    };
+    state.lobby.lock().unwrap().forget_character(id);
+    let account = db::account(&state.db, owner).await.map_err(server_error)?.map(|a| a.name).unwrap_or_default();
+    let detail = format!("of account {account}");
+    audit(&state, &admin, "delete_character", &name, Some(&detail)).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn actions(State(state): State<AppState>, _admin: AdminSession) -> ApiResult<Json<Vec<AdminAction>>> {
+    Ok(Json(stats::recent_actions(&state.db, 100).await?))
+}

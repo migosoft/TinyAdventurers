@@ -42,6 +42,8 @@ pub struct Player {
     pub dash_hit: Vec<u32>,
     pub fov: Fov,
     pub kills: u32,
+    /// Left the dungeon early (the game then treats the hero as dead).
+    pub left: bool,
     pub damage: f64,
     pub healing: f64,
     /// Debug mode: takes no damage and receives the path to the boss.
@@ -49,7 +51,8 @@ pub struct Player {
     pub xp: u32,
     /// Coins earned this run (banked to the character like XP).
     pub coins: u32,
-    /// Character the earned XP is banked to when the run ends.
+    /// Account and character the earned XP is banked to when the run ends.
+    pub account: Option<i32>,
     pub character: Option<i32>,
     /// Progression stat multipliers from the character's upgrades.
     pub mods: Modifiers,

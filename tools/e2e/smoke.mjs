@@ -122,9 +122,69 @@ await p2.waitForSelector('#auth-name', { timeout: 5000 }).then(
   () => errors.push('account deletion by typing the password failed'),
 );
 
+// Admin area (only with ADMIN_USER / ADMIN_PASSWORD set, as on the server): live
+// data, then delete Alice's character, change her password and delete her.
+const adminDone = process.env.ADMIN_USER && process.env.ADMIN_PASSWORD ? await adminPass() : false;
+
+async function adminPass() {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  page.on('pageerror', (e) => errors.push(`admin pageerror: ${e.message}`));
+  page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(`admin console: ${m.text()}`));
+  page.on('dialog', (d) => d.accept());
+  await page.goto(new URL('admin', base).href);
+  await page.fill('input[name=name]', process.env.ADMIN_USER);
+  await page.fill('input[name=password]', process.env.ADMIN_PASSWORD);
+  await page.click('button[type=submit]');
+  await page.waitForSelector('.tile.hero');
+  await page.waitForSelector(`text=${a1.account}`);
+  console.log(`admin: dashboard shows ${await page.textContent('.tile.hero .tile-value')} online, ${a1.account} among them`);
+  await page.screenshot({ path: `${out}/6-admin-dashboard.png`, fullPage: true });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: `${out}/6-admin-dashboard-dark.png`, fullPage: true });
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  await page.click('nav >> text=Players');
+  await page.fill('input[type=search]', a1.account);
+  await page.click(`a:text-is("${a1.account}")`);
+  await page.waitForSelector('text=Change password');
+  await page.screenshot({ path: `${out}/7-admin-player.png`, fullPage: true });
+  await page.click('button:text-is("Delete")'); // her only character (confirm dialog accepted)
+  await page.waitForSelector('.flash >> text=deleted');
+  await p3.waitForFunction(() => /deleted by an admin/.test(document.body.textContent ?? ''), null, { timeout: 10000 });
+  console.log('admin: deleting the character logged its player out');
+
+  const NEW = 'admin-set-password';
+  await page.fill('input[autocomplete=new-password] >> nth=0', NEW);
+  await page.fill('input[autocomplete=new-password] >> nth=1', NEW);
+  await page.click('button:text-is("Change password")');
+  await page.waitForSelector('.flash >> text=Password of');
+  const logins = await page.evaluate(
+    async ([name, oldPw, newPw]) => {
+      const tryLogin = (password) => fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, password }) }).then((r) => r.status);
+      return [await tryLogin(oldPw), await tryLogin(newPw)];
+    },
+    [a1.account, PASSWORD, NEW],
+  );
+  if (logins.join() !== '401,200') errors.push(`after the admin changed the password: old/new login gave ${logins}`);
+  else console.log('admin: old password refused, new one works');
+
+  await page.fill(`input[aria-label="Type ${a1.account} to confirm"]`, a1.account);
+  await page.click('button:text-is("Delete player")');
+  await page.waitForSelector('.flash >> text=deleted');
+  await page.click('nav >> text=Audit log');
+  await page.waitForSelector(`td:text-is("${a1.account}")`);
+  const actions = await page.$$eval('tbody tr', (rows) => rows.slice(0, 3).map((r) => r.children[2].textContent));
+  if (actions.join() !== 'Deleted player,Changed password,Deleted character') errors.push(`audit log shows ${actions}`);
+  else console.log('admin: audit log lists all three actions');
+  await page.screenshot({ path: `${out}/8-admin-audit.png` });
+  await ctx.close();
+  return true;
+}
+
 // Clean up: delete the remaining throwaway account (and Bob's, if the form failed).
 for (const [page, account] of [
-  [p3, a1.account],
+  ...(adminDone ? [] : [[p3, a1.account]]),
   ...(typed === PASSWORD ? [] : [[p2, a2.account]]),
 ]) {
   const status = await page.evaluate(

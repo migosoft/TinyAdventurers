@@ -1,3 +1,4 @@
+mod admin;
 mod api;
 mod auth;
 mod collision;
@@ -12,11 +13,13 @@ mod math;
 mod progress;
 mod protocol;
 mod run;
+mod stats;
+mod telemetry;
 mod wire;
 
 use api::{AppState, Session};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::State;
+use axum::extract::{MatchedPath, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -29,10 +32,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc::unbounded_channel;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::trace::TraceLayer;
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    let telemetry = telemetry::init();
     let static_dir = std::env::var("STATIC_DIR").unwrap_or_else(|_| "../client/dist".into());
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".into());
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set (see .env.example)");
@@ -40,15 +44,24 @@ async fn main() {
     let secure_cookie = std::env::var("COOKIE_SECURE").map_or(false, |v| matches!(v.as_str(), "1" | "true" | "yes"));
 
     let db = db::connect(&database_url).await;
-    let state = AppState { lobby: lobby::new_shared(Some(db.clone())), db, auth: Arc::new(auth::Auth::new(secret.as_bytes(), secure_cookie)) };
+    let state = AppState {
+        lobby: lobby::new_shared(Some(db.clone())),
+        db,
+        auth: Arc::new(auth::Auth::new(secret.as_bytes(), secure_cookie)),
+        admin: Arc::new(admin::AdminState::from_env()),
+    };
+    telemetry::observe_lobby(state.lobby.clone());
 
     let files = ServeDir::new(&static_dir).not_found_service(ServeFile::new(format!("{static_dir}/index.html")));
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(|| async { "OK" }))
+        .route_service("/admin", ServeFile::new(format!("{static_dir}/admin.html")))
         .merge(api::routes())
+        .merge(admin::routes())
         .fallback_service(files)
         .layer(axum::middleware::from_fn(cache_headers))
+        .layer(TraceLayer::new_for_http().make_span_with(http_span).on_response(record_status))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await.expect("bind");
@@ -57,7 +70,39 @@ async fn main() {
         let _ = tcp.set_nodelay(true);
     });
     tracing::info!("Tiny Adventurers server on :{port}, serving {static_dir}");
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await.expect("server");
+    let server = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>());
+    // On Ctrl-C or SIGTERM (docker stop) the server stops right away (open game
+    // sockets would hold up a graceful shutdown) and buffered telemetry is flushed.
+    tokio::select! {
+        r = server => r.expect("server"),
+        _ = shutdown_signal() => tracing::info!("shutting down"),
+    }
+    telemetry.shutdown();
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = tokio::signal::ctrl_c();
+    #[cfg(unix)]
+    {
+        let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).expect("signal handler");
+        tokio::select! {
+            _ = ctrl_c => {},
+            _ = term.recv() => {},
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = ctrl_c.await;
+}
+
+/// One span per HTTP request, named by the matched route (not the raw path,
+/// which can hold ids), so traces group well. Cookies and bodies are not recorded.
+fn http_span(req: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+    let route = req.extensions().get::<MatchedPath>().map_or("unmatched", |p| p.as_str());
+    tracing::info_span!("http", method = %req.method(), route, status = tracing::field::Empty)
+}
+
+fn record_status(res: &Response, _latency: std::time::Duration, span: &tracing::Span) {
+    span.record("status", res.status().as_u16());
 }
 
 /// Vite's hashed bundles never change, so they may be cached for good. Everything
@@ -69,10 +114,18 @@ async fn cache_headers(req: axum::extract::Request, next: axum::middleware::Next
     if path == "/ws" || path == "/health" {
         return res;
     }
-    let hashed = path.starts_with("/assets/index-") && res.status().is_success();
+    let hashed = is_hashed_bundle(&path) && res.status().is_success();
     let value = if hashed { "public, max-age=31536000, immutable" } else if path.starts_with("/api/") { "no-store" } else { "no-cache" };
     res.headers_mut().insert(axum::http::header::CACHE_CONTROL, axum::http::HeaderValue::from_static(value));
     res
+}
+
+/// Vite's bundles: `/assets/<name>-<8 char hash>.js|css` (game and admin page).
+/// The atlas in `/assets/` has no hash and is not matched.
+fn is_hashed_bundle(path: &str) -> bool {
+    let Some(file) = path.strip_prefix("/assets/") else { return false };
+    let Some(stem) = file.strip_suffix(".js").or_else(|| file.strip_suffix(".css")) else { return false };
+    stem.rsplit_once('-').map_or(false, |(name, hash)| !name.is_empty() && hash.len() == 8 && hash.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
 }
 
 /// Browsers send cookies with cross-site WebSocket requests too, so the page
@@ -87,10 +140,15 @@ async fn ws_handler(ws: WebSocketUpgrade, headers: HeaderMap, State(state): Stat
     if !same_origin(&headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
+    if let Err(e) = db::touch_activity(&state.db, session.account).await {
+        tracing::error!("activity: {e}");
+    }
     ws.on_upgrade(move |socket| handle_socket(socket, state, session.account))
 }
 
+#[tracing::instrument(name = "ws", skip(socket, state))]
 async fn handle_socket(socket: WebSocket, state: AppState, account: i32) {
+    telemetry::metrics().ws_connected(true);
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = unbounded_channel::<Message>();
     let lobby = state.lobby.clone();
@@ -150,6 +208,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32) {
 
     lobby.lock().unwrap().disconnect(id);
     writer.abort();
+    telemetry::metrics().ws_connected(false);
 }
 
 async fn select_character(state: &AppState, conn: u32, character: i32) {
@@ -173,6 +232,16 @@ async fn select_character(state: &AppState, conn: u32, character: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_hashed_bundles_are_cached_for_good() {
+        assert!(is_hashed_bundle("/assets/index-BxY3_a9Q.js"));
+        assert!(is_hashed_bundle("/assets/admin-Ab12Cd34.css"));
+        assert!(!is_hashed_bundle("/assets/atlas.png"));
+        assert!(!is_hashed_bundle("/assets/atlas.json"));
+        assert!(!is_hashed_bundle("/admin"));
+        assert!(!is_hashed_bundle("/assets/-12345678.js"));
+    }
 
     #[test]
     fn websocket_origin_must_match_the_host() {

@@ -16,6 +16,7 @@ use crate::dungeon::{self, generate::{generate, Theme}, Dungeon, Mover, Tile};
 use crate::fov::Fov;
 use crate::lobby::SharedLobby;
 use crate::math::Vec2;
+use crate::telemetry;
 use crate::protocol::{encode, BossId, ClassId, ClientMsg, Ev, InputMsg, PlayerInfo, PlayerStats, RunStartInfo, ServerMsg};
 use axum::extract::ws::Message;
 use bosses::BossBehaviour;
@@ -47,9 +48,61 @@ pub struct Member {
     pub name: String,
     pub class: ClassId,
     pub tx: UnboundedSender<Message>,
-    /// Character the XP is banked to, and its bought upgrades.
+    /// Account and character the XP is banked to, and its bought upgrades.
+    pub account: Option<i32>,
     pub character: Option<i32>,
     pub upgrades: StatUpgrades,
+}
+
+/// How a run ended, for the statistics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outcome {
+    Victory,
+    Defeat,
+    /// Everyone left before the end.
+    Abandoned,
+}
+
+impl Outcome {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Outcome::Victory => "victory",
+            Outcome::Defeat => "defeat",
+            Outcome::Abandoned => "abandoned",
+        }
+    }
+}
+
+/// A finished run as the statistics store it (`db::record_run`).
+#[derive(Debug, Clone)]
+pub struct RunRecord {
+    pub boss: BossId,
+    pub outcome: Outcome,
+    pub duration_s: f64,
+    pub debug: bool,
+    pub players: Vec<RunPlayerRecord>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RunPlayerRecord {
+    pub account: Option<i32>,
+    pub character: Option<i32>,
+    pub class: ClassId,
+    pub kills: u32,
+    pub damage: f64,
+    pub healing: f64,
+    pub xp: u32,
+    pub coins: u32,
+    /// Alive at the end.
+    pub survived: bool,
+    /// Left before the end: neither survived nor died.
+    pub left: bool,
+}
+
+impl RunPlayerRecord {
+    pub fn died(&self) -> bool {
+        !self.survived && !self.left
+    }
 }
 
 pub enum RunCmd {
@@ -129,6 +182,7 @@ impl Run {
                 mods,
                 xp: 0,
                 coins: 0,
+                account: m.account,
                 character: m.character,
                 alive: true,
                 aim: 0.0,
@@ -148,6 +202,7 @@ impl Run {
                 dash_hit: Vec::new(),
                 fov: Fov::new(w, h),
                 kills: 0,
+                left: false,
                 damage: 0.0,
                 healing: 0.0,
                 debug: false,
@@ -298,6 +353,7 @@ impl Run {
                     p.tx = None;
                     if p.alive {
                         p.alive = false;
+                        p.left = true;
                         let (id, pos, kind) = (p.id, p.pos(), p.kind() as u8);
                         self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
                         let name = self.players[pi].name.clone();
@@ -782,6 +838,36 @@ impl Run {
         }
     }
 
+    /// The run for the statistics; `victory` is `None` when everyone left.
+    pub fn record(&self, victory: Option<bool>) -> RunRecord {
+        RunRecord {
+            boss: self.boss_id,
+            outcome: match victory {
+                Some(true) => Outcome::Victory,
+                Some(false) => Outcome::Defeat,
+                None => Outcome::Abandoned,
+            },
+            duration_s: self.time,
+            debug: self.debug_used,
+            players: self
+                .players
+                .iter()
+                .map(|p| RunPlayerRecord {
+                    account: p.account,
+                    character: p.character,
+                    class: p.class,
+                    kills: p.kills,
+                    damage: p.damage,
+                    healing: p.healing,
+                    xp: p.xp,
+                    coins: p.coins,
+                    survived: p.alive,
+                    left: p.left,
+                })
+                .collect(),
+        }
+    }
+
     /// XP and coins to bank per character. Players who left early keep
     /// what they earned; a run where debug mode was used awards nothing.
     pub fn awards(&self) -> Vec<Award> {
@@ -797,7 +883,9 @@ impl Run {
 }
 
 /// Runs a dungeon until it ends or everyone has left, then tells the lobby.
+#[tracing::instrument(name = "run", skip_all, fields(run = run.id, boss = ?run.boss_id, players = run.players.len(), outcome = tracing::field::Empty))]
 pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: SharedLobby) {
+    let mut outcome = None;
     for p in &run.players {
         run.send(p, &run.start_info(p));
     }
@@ -820,19 +908,23 @@ pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: Sh
         let ms = t0.elapsed().as_secs_f32() * 1000.0;
         avg_ms = avg_ms * 0.95 + ms * 0.05;
         run.srv_ms = avg_ms;
+        telemetry::metrics().tick_ms(ms as f64);
 
         if let Some(victory) = run.finished() {
             let msg = run.end_msg(victory);
             for p in &run.players {
                 run.send(p, &msg);
             }
+            outcome = Some(victory);
             break;
         }
         if run.players.iter().all(|p| p.tx.is_none()) {
             break;
         }
     }
-    crate::lobby::finish_run(&lobby, run.id, run.awards()).await;
+    let record = run.record(outcome);
+    tracing::Span::current().record("outcome", record.outcome.as_str());
+    crate::lobby::finish_run(&lobby, run.id, run.awards(), record).await;
 }
 
 #[cfg(test)]
@@ -851,7 +943,7 @@ pub mod tests {
             .map(|(i, c)| {
                 let (tx, _rx) = unbounded_channel();
                 std::mem::forget(_rx);
-                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, character: None, upgrades: StatUpgrades::default() }
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, upgrades: StatUpgrades::default() }
             })
             .collect();
         Run::new(1, members, seed, Some(boss))
@@ -868,6 +960,30 @@ pub mod tests {
         run.set_debug(1, true);
         assert!(run.awards().is_empty());
         assert!(matches!(run.end_msg(true), ServerMsg::RunEnded { banked: false, .. }));
+    }
+
+    #[test]
+    fn the_record_has_the_outcome_and_every_player() {
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Lich);
+        run.players[0].account = Some(3);
+        run.players[0].character = Some(5);
+        run.players[0].kills = 9;
+        run.players[1].alive = false;
+        run.time = 75.5;
+        assert!(run.record(Some(false)).players[1].died());
+        run.handle(RunCmd::Leave { conn: 1 });
+        assert!(run.record(None).players[0].left && !run.record(None).players[0].died(), "leaving is not dying");
+        run.players[0].alive = true;
+        run.players[0].left = false;
+        let r = run.record(Some(false));
+        assert_eq!((r.boss, r.outcome, r.duration_s, r.debug), (BossId::Lich, Outcome::Defeat, 75.5, false));
+        assert_eq!(r.players.len(), 2);
+        assert_eq!((r.players[0].account, r.players[0].character, r.players[0].kills), (Some(3), Some(5), 9));
+        assert!(r.players[0].survived && !r.players[1].survived);
+        assert_eq!(run.record(Some(true)).outcome, Outcome::Victory);
+        assert_eq!(run.record(None).outcome, Outcome::Abandoned, "everyone left");
+        run.set_debug(1, true);
+        assert!(run.record(Some(true)).debug);
     }
 
     /// Moves player 0 onto `pos` and steps once.

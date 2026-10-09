@@ -5,10 +5,11 @@
 
 use crate::db::{self, Character, Db};
 use crate::progress::Progress;
-use crate::protocol::{encode, BossId, ClientMsg, RoomPlayer, RunSummary, ServerMsg};
-use crate::run::{run_task, Award, Member, Run, RunCmd};
+use crate::protocol::{encode, BossId, ClassId, ClientMsg, RoomPlayer, RunSummary, ServerMsg};
+use crate::run::{run_task, Award, Member, Run, RunCmd, RunRecord};
+use crate::telemetry;
 use axum::extract::ws::Message;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
@@ -23,6 +24,12 @@ pub struct Conn {
     pub ready: bool,
     /// The character this connection plays (a cached copy of its database row).
     pub character: Option<Character>,
+    /// When it connected (Unix ms), for the admin's online list.
+    pub since: f64,
+}
+
+fn unix_ms() -> f64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_millis() as f64)
 }
 
 pub struct Room {
@@ -56,23 +63,49 @@ fn send(tx: &UnboundedSender<Message>, msg: &ServerMsg) {
 }
 
 /// Called by a run task when the dungeon is over: everyone returns to the
-/// lobby, then the earned XP and coins are banked on the characters.
-pub async fn finish_run(lobby: &SharedLobby, rid: u32, awards: Vec<Award>) {
+/// lobby, then the earned XP and coins are banked on the characters and the
+/// run is recorded for the statistics.
+pub async fn finish_run(lobby: &SharedLobby, rid: u32, awards: Vec<Award>, record: RunRecord) {
+    telemetry::metrics().run_finished(&record);
     let db = {
         let mut l = lobby.lock().unwrap();
         l.run_finished(rid);
         l.db.clone()
     };
-    let Some(db) = db.filter(|_| !awards.is_empty()) else { return };
-    match db::bank_awards(&db, &awards).await {
-        Ok(banked) => {
-            let mut l = lobby.lock().unwrap();
-            for (id, p) in banked {
-                l.apply_progress(id, p);
+    let Some(db) = db else { return };
+    if !awards.is_empty() {
+        match db::bank_awards(&db, &awards).await {
+            Ok(banked) => {
+                let mut l = lobby.lock().unwrap();
+                for (id, p) in banked {
+                    l.apply_progress(id, p);
+                }
             }
+            Err(e) => tracing::error!("run {rid}: cannot bank awards {awards:?}: {e}"),
         }
-        Err(e) => tracing::error!("run {rid}: cannot bank awards {awards:?}: {e}"),
     }
+    // Statistics only: a failure is logged and never affects the players.
+    if let Err(e) = db::record_run(&db, &record).await {
+        tracing::error!("run {rid}: cannot record the run: {e}");
+    }
+}
+
+/// What the lobby holds right now, for the admin dashboard and the gauges.
+#[derive(Debug, Clone, Default)]
+pub struct Live {
+    pub online: u32,
+    pub in_run: u32,
+    pub rooms_open: u32,
+    pub runs_active: u32,
+    pub players: Vec<LivePlayer>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LivePlayer {
+    pub account: i32,
+    pub character: Option<(String, ClassId)>,
+    pub in_run: bool,
+    pub since: f64,
 }
 
 impl Lobby {
@@ -83,7 +116,7 @@ impl Lobby {
         let id = self.next_conn;
         self.next_conn += 1;
         send(&tx, &ServerMsg::Welcome { id });
-        self.conns.insert(id, Conn { account, tx, room: None, ready: false, character: None });
+        self.conns.insert(id, Conn { account, tx, room: None, ready: false, character: None, since: unix_ms() });
         self.send_lobby_to(id);
         id
     }
@@ -104,6 +137,40 @@ impl Lobby {
             }
             self.disconnect(id);
         }
+    }
+
+    pub fn live(&self) -> Live {
+        let mut players: Vec<LivePlayer> = self
+            .conns
+            .iter()
+            .map(|(id, c)| LivePlayer {
+                account: c.account,
+                character: c.character.as_ref().map(|ch| (ch.name.clone(), ch.class)),
+                in_run: self.in_running_run(*id),
+                since: c.since,
+            })
+            .collect();
+        players.sort_by(|a, b| a.since.total_cmp(&b.since));
+        let runs_active = self.rooms.values().filter(|r| r.run_tx.is_some()).count() as u32;
+        Live {
+            online: players.len() as u32,
+            in_run: players.iter().filter(|p| p.in_run).count() as u32,
+            rooms_open: self.rooms.len() as u32 - runs_active,
+            runs_active,
+            players,
+        }
+    }
+
+    /// Accounts online and the characters they play right now.
+    pub fn online_ids(&self) -> (HashSet<i32>, HashSet<i32>) {
+        let accounts = self.conns.values().map(|c| c.account).collect();
+        let characters = self.conns.values().filter_map(|c| c.character.as_ref().map(|ch| ch.id)).collect();
+        (accounts, characters)
+    }
+
+    /// The account playing this character right now, if any.
+    pub fn character_owner(&self, character: i32) -> Option<i32> {
+        self.conns.values().find(|c| c.character.as_ref().map_or(false, |ch| ch.id == character)).map(|c| c.account)
     }
 
     pub fn account_of(&self, id: u32) -> Option<i32> {
@@ -267,7 +334,7 @@ impl Lobby {
             .filter_map(|m| {
                 let c = self.conns.get(m)?;
                 let ch = c.character.as_ref()?;
-                Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), character: Some(ch.id), upgrades: ch.progress.upgrades })
+                Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), account: Some(c.account), character: Some(ch.id), upgrades: ch.progress.upgrades })
             })
             .collect();
         let seed: u64 = rand::random();
@@ -385,6 +452,43 @@ mod tests {
         Character { id, account_id: account, name: format!("hero{id}"), class, progress: Progress::new() }
     }
 
+    fn test_record(account: i32, character: i32) -> RunRecord {
+        use crate::run::{Outcome, RunPlayerRecord};
+        RunRecord {
+            boss: BossId::Dragon,
+            outcome: Outcome::Victory,
+            duration_s: 300.0,
+            debug: false,
+            players: vec![RunPlayerRecord { account: Some(account), character: Some(character), class: ClassId::Wizard, kills: 12, damage: 900.0, healing: 0.0, xp: 120, coins: 7, survived: true, left: false }],
+        }
+    }
+
+    #[tokio::test]
+    async fn live_counts_players_rooms_and_runs() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let a = join(&mut l, 1, ClassId::Wizard);
+        let b = join(&mut l, 2, ClassId::Paladin);
+        let (tx, rx) = unbounded_channel();
+        std::mem::forget(rx);
+        l.connect(3, tx); // no character yet
+        l.handle(a, ClientMsg::CreateRun { name: "running".into() });
+        l.handle(a, ClientMsg::StartRun);
+        l.handle(b, ClientMsg::CreateRun { name: "waiting".into() });
+
+        let live = l.live();
+        assert_eq!((live.online, live.in_run, live.rooms_open, live.runs_active), (3, 1, 1, 1));
+        let pa = live.players.iter().find(|p| p.account == 1).unwrap();
+        assert!(pa.in_run);
+        assert_eq!(pa.character, Some(("hero10".to_string(), ClassId::Wizard)));
+        assert!(live.players.iter().find(|p| p.account == 3).unwrap().character.is_none());
+        let (accounts, characters) = l.online_ids();
+        assert_eq!(accounts.len(), 3);
+        assert!(characters.contains(&10) && characters.contains(&20));
+        assert_eq!(l.character_owner(20), Some(2));
+        assert_eq!(l.character_owner(99), None);
+    }
+
     /// Connects `account` and selects a character for it; returns the connection id.
     fn join(l: &mut Lobby, account: i32, class: ClassId) -> u32 {
         let (tx, rx) = unbounded_channel();
@@ -482,7 +586,7 @@ mod tests {
             l.handle(id, ClientMsg::CreateRun { name: "r".into() });
             (l.conns[&id].room.unwrap(), id)
         };
-        finish_run(&shared, rid, vec![Award { character: played.id, xp: 120, coins: 7 }]).await;
+        finish_run(&shared, rid, vec![Award { character: played.id, xp: 120, coins: 7 }], test_record(a, played.id)).await;
         {
             let l = shared.lock().unwrap();
             assert!(l.conns[&id].room.is_none(), "back in the lobby");
@@ -492,6 +596,12 @@ mod tests {
         let stored = db::load_character(&db, a, played.id).await.unwrap().unwrap().progress;
         assert_eq!((stored.xp, stored.total_xp, stored.coins), (120, 120, 7));
         assert_eq!(db::load_character(&db, a, idle.id).await.unwrap().unwrap().progress, Progress::new());
+        let recorded: (String, String, i32) = sqlx::query_as("SELECT r.boss, r.outcome, p.kills FROM runs r JOIN run_players p ON p.run_id = r.id WHERE p.character_id = $1")
+            .bind(played.id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+        assert_eq!(recorded, ("Dragon".to_string(), "victory".to_string(), 12), "the run is recorded for the statistics");
     }
 
     #[tokio::test]

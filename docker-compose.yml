@@ -28,6 +28,13 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       # 1 when players reach the game over HTTPS (behind a TLS proxy).
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
+      # Admin area at /admin; disabled unless both are set (password >= 12 characters).
+      ADMIN_USER: ${ADMIN_USER:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # OpenTelemetry export (traces, logs, metrics over OTLP/HTTP); off when empty.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-tiny-adventurers-server}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
     depends_on:
       db:
         condition: service_healthy

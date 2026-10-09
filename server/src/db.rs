@@ -1,10 +1,11 @@
-//! PostgreSQL access. Every query of the server lives here, so the storage
-//! can change (or gain a cache) without touching the lobby or the API.
+//! PostgreSQL access. Every query of the game lives here, so the storage
+//! can change (or gain a cache) without touching the lobby or the API. The
+//! read-only statistics queries of the admin area are in `stats.rs`.
 //! Queries are checked at runtime (`sqlx::query`), so building needs no database.
 
 use crate::progress::{Progress, CURRENT_VERSION};
 use crate::protocol::{CharacterInfo, ClassId};
-use crate::run::Award;
+use crate::run::{Award, RunRecord};
 use sqlx::postgres::{PgConnection, PgPoolOptions};
 use sqlx::{PgPool, Row};
 use std::time::Duration;
@@ -55,11 +56,12 @@ fn class_name(c: ClassId) -> String {
     format!("{c:?}")
 }
 
-fn class_from(s: &str) -> ClassId {
+pub(crate) fn class_from(s: &str) -> ClassId {
     ClassId::ALL.into_iter().find(|c| class_name(*c) == s).unwrap_or(ClassId::Wizard)
 }
 
 /// Connects (retrying while the database starts up) and applies migrations.
+#[tracing::instrument(skip_all)]
 pub async fn connect(url: &str) -> Db {
     let mut tries = 0;
     let db = loop {
@@ -80,29 +82,52 @@ pub async fn connect(url: &str) -> Db {
 
 // ------------------------------------------------------------------ accounts
 
+#[tracing::instrument(skip_all)]
 pub async fn create_account(db: &Db, name: &str, password_hash: &str) -> Result<i32, DbError> {
     let row = sqlx::query("INSERT INTO accounts (name, password_hash) VALUES ($1, $2) RETURNING id").bind(name).bind(password_hash).fetch_one(db).await?;
     Ok(row.get(0))
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn find_account(db: &Db, name: &str) -> Result<Option<Account>, sqlx::Error> {
     let row = sqlx::query("SELECT id, name, password_hash FROM accounts WHERE lower(name) = lower($1)").bind(name).fetch_optional(db).await?;
     Ok(row.map(|r| Account { id: r.get(0), name: r.get(1), password_hash: r.get(2) }))
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn account(db: &Db, id: i32) -> Result<Option<Account>, sqlx::Error> {
     let row = sqlx::query("SELECT id, name, password_hash FROM accounts WHERE id = $1").bind(id).fetch_optional(db).await?;
     Ok(row.map(|r| Account { id: r.get(0), name: r.get(1), password_hash: r.get(2) }))
 }
 
 /// Deletes the account with its sessions and characters (ON DELETE CASCADE).
+#[tracing::instrument(skip_all)]
 pub async fn delete_account(db: &Db, id: i32) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM accounts WHERE id = $1").bind(id).execute(db).await?;
     Ok(())
 }
 
+/// Sets a new password hash and ends all sessions of the account, in one
+/// transaction. False if the account does not exist.
+#[tracing::instrument(skip_all)]
+pub async fn set_password(db: &Db, id: i32, password_hash: &str) -> Result<bool, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let r = sqlx::query("UPDATE accounts SET password_hash = $2 WHERE id = $1").bind(id).bind(password_hash).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM sessions WHERE account_id = $1").bind(id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(r.rows_affected() > 0)
+}
+
+/// Notes that the account was active today (UTC), for the statistics.
+#[tracing::instrument(skip_all)]
+pub async fn touch_activity(db: &Db, account_id: i32) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO activity_days (account_id, day) VALUES ($1, (now() AT TIME ZONE 'UTC')::date) ON CONFLICT DO NOTHING").bind(account_id).execute(db).await?;
+    Ok(())
+}
+
 // ------------------------------------------------------------------ sessions
 
+#[tracing::instrument(skip_all)]
 pub async fn create_session(db: &Db, account_id: i32, id_hash: &[u8]) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sessions WHERE account_id = $1 AND expires_at < now()").bind(account_id).execute(db).await?;
     sqlx::query("INSERT INTO sessions (id_hash, account_id, expires_at) VALUES ($1, $2, now() + make_interval(days => $3))")
@@ -115,11 +140,13 @@ pub async fn create_session(db: &Db, account_id: i32, id_hash: &[u8]) -> Result<
 }
 
 /// The account of a live session.
+#[tracing::instrument(skip_all)]
 pub async fn session_account(db: &Db, id_hash: &[u8]) -> Result<Option<i32>, sqlx::Error> {
     let row = sqlx::query("SELECT account_id FROM sessions WHERE id_hash = $1 AND expires_at > now()").bind(id_hash).fetch_optional(db).await?;
     Ok(row.map(|r| r.get(0)))
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn delete_session(db: &Db, id_hash: &[u8]) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sessions WHERE id_hash = $1").bind(id_hash).execute(db).await?;
     Ok(())
@@ -137,17 +164,20 @@ fn character_from(r: &sqlx::postgres::PgRow) -> Character {
     }
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn list_characters(db: &Db, account_id: i32) -> Result<Vec<Character>, sqlx::Error> {
     let rows = sqlx::query("SELECT id, account_id, name, class, progress FROM characters WHERE account_id = $1 ORDER BY id").bind(account_id).fetch_all(db).await?;
     Ok(rows.iter().map(character_from).collect())
 }
 
 /// One of the account's characters (`None` if it belongs to someone else).
+#[tracing::instrument(skip_all)]
 pub async fn load_character(db: &Db, account_id: i32, id: i32) -> Result<Option<Character>, sqlx::Error> {
     let row = sqlx::query("SELECT id, account_id, name, class, progress FROM characters WHERE id = $1 AND account_id = $2").bind(id).bind(account_id).fetch_optional(db).await?;
     Ok(row.as_ref().map(character_from))
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn create_character(db: &Db, account_id: i32, name: &str, class: ClassId) -> Result<Character, DbError> {
     let mut tx = db.begin().await?;
     // Lock the account row so two parallel creates cannot both pass the cap.
@@ -169,9 +199,17 @@ pub async fn create_character(db: &Db, account_id: i32, name: &str, class: Class
 }
 
 /// True if the character existed and belonged to the account.
+#[tracing::instrument(skip_all)]
 pub async fn delete_character(db: &Db, account_id: i32, id: i32) -> Result<bool, sqlx::Error> {
     let r = sqlx::query("DELETE FROM characters WHERE id = $1 AND account_id = $2").bind(id).bind(account_id).execute(db).await?;
     Ok(r.rows_affected() > 0)
+}
+
+/// Admin: deletes any character. Returns its owner and name if it existed.
+#[tracing::instrument(skip_all)]
+pub async fn delete_character_any(db: &Db, id: i32) -> Result<Option<(i32, String)>, sqlx::Error> {
+    let row = sqlx::query("DELETE FROM characters WHERE id = $1 RETURNING account_id, name").bind(id).fetch_optional(db).await?;
+    Ok(row.map(|r| (r.get(0), r.get(1))))
 }
 
 // ------------------------------------------------------------------ progress
@@ -194,6 +232,7 @@ async fn modify<E>(conn: &mut PgConnection, id: i32, f: impl FnOnce(&mut Progres
     Ok(Some(Ok(p)))
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn update_progress<E>(db: &Db, id: i32, f: impl FnOnce(&mut Progress) -> Result<(), E>) -> Result<Option<Result<Progress, E>>, sqlx::Error> {
     let mut tx = db.begin().await?;
     let out = modify(&mut tx, id, f).await?;
@@ -205,6 +244,7 @@ pub async fn update_progress<E>(db: &Db, id: i32, f: impl FnOnce(&mut Progress) 
 
 /// Banks a finished run for all its characters in one transaction. Returns
 /// the new progress of each character that still exists.
+#[tracing::instrument(skip_all)]
 pub async fn bank_awards(db: &Db, awards: &[Award]) -> Result<Vec<(i32, Progress)>, sqlx::Error> {
     let mut tx = db.begin().await?;
     let mut out = Vec::new();
@@ -223,6 +263,47 @@ pub async fn bank_awards(db: &Db, awards: &[Award]) -> Result<Vec<(i32, Progress
     }
     tx.commit().await?;
     Ok(out)
+}
+
+// --------------------------------------------------------------- statistics
+
+/// Stores a finished run and its players (see `stats.rs` for the reading side).
+#[tracing::instrument(skip_all)]
+pub async fn record_run(db: &Db, r: &RunRecord) -> Result<(), sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let id: i64 = sqlx::query(
+        "INSERT INTO runs (started_at, boss, outcome, duration_s, players, debug) \
+         VALUES (now() - make_interval(secs => $1), $2, $3, $4, $5, $6) RETURNING id",
+    )
+    .bind(r.duration_s)
+    .bind(format!("{:?}", r.boss))
+    .bind(r.outcome.as_str())
+    .bind(r.duration_s as f32)
+    .bind(r.players.len() as i16)
+    .bind(r.debug)
+    .fetch_one(&mut *tx)
+    .await?
+    .get(0);
+    for p in &r.players {
+        sqlx::query(
+            "INSERT INTO run_players (run_id, account_id, character_id, class, kills, damage, healing, xp, coins, survived, left_run) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+        )
+        .bind(id)
+        .bind(p.account)
+        .bind(p.character)
+        .bind(class_name(p.class))
+        .bind(p.kills as i32)
+        .bind(p.damage as f32)
+        .bind(p.healing as f32)
+        .bind(p.xp as i32)
+        .bind(p.coins as i32)
+        .bind(p.survived)
+        .bind(p.left)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await
 }
 
 #[cfg(test)]

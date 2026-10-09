@@ -33,6 +33,13 @@ Then open http://localhost:8080. Every player opens the same address; other mach
 
 Accounts and characters are stored in PostgreSQL on the `ta-db` Docker volume, so they survive `docker compose down`. `docker compose down -v` deletes them.
 
+**Admin area:** set `ADMIN_USER` and `ADMIN_PASSWORD` (at least 12 characters) in `.env`, then open http://localhost:8080/admin.
+- It shows who is online and active players today, this week and this month, plus statistics on runs, bosses, classes and characters, with 30-day charts.
+- It lets you change a player's password, delete characters and delete players. Every change goes into an audit log.
+- Without both variables the admin area is switched off.
+
+**Monitoring:** the server can send OpenTelemetry traces, logs and metrics to a collector such as ClickStack. Set `OTEL_EXPORTER_OTLP_ENDPOINT` in `.env` (see `.env.example` and [docs/TECHNICAL.md](docs/TECHNICAL.md) §11c). Without it nothing is sent.
+
 **Public servers:**
 - Run the game behind an HTTPS reverse proxy and set `COOKIE_SECURE=1` in `.env`, because passwords are sent at login.
 - Keep `.env` secret. Changing `SESSION_SECRET` logs everyone out.

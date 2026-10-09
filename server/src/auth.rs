@@ -102,7 +102,74 @@ impl Auth {
 
 /// The session token from a `Cookie` header.
 pub fn cookie_token(header: &str) -> Option<&str> {
-    header.split(';').map(str::trim).find_map(|kv| kv.strip_prefix(COOKIE)?.strip_prefix('='))
+    cookie_value(header, COOKIE)
+}
+
+/// The value of cookie `name` from a `Cookie` header.
+pub fn cookie_value<'a>(header: &'a str, name: &str) -> Option<&'a str> {
+    header.split(';').map(str::trim).find_map(|kv| kv.strip_prefix(name)?.strip_prefix('='))
+}
+
+// --------------------------------------------------------------- admin login
+
+/// The admin area's cookie: separate from the player's, only sent to the
+/// admin API, and short-lived.
+pub const ADMIN_COOKIE: &str = "ta_admin";
+pub const ADMIN_SESSION_SECS: u64 = 12 * 3600;
+pub const ADMIN_PASSWORD_MIN: usize = 12;
+
+impl Auth {
+    /// An admin session: the same signed token format, with a shorter expiry.
+    pub fn new_admin_session(&self) -> NewSession {
+        let mut sid = [0u8; 32];
+        rand::rngs::OsRng.fill_bytes(&mut sid);
+        self.sign(&sid, now_secs() + ADMIN_SESSION_SECS)
+    }
+
+    pub fn set_admin_cookie(&self, token: &str) -> String {
+        format!("{ADMIN_COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age={ADMIN_SESSION_SECS}{}", if self.secure_cookie { "; Secure" } else { "" })
+    }
+
+    pub fn clear_admin_cookie(&self) -> String {
+        format!("{ADMIN_COOKIE}=; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=0{}", if self.secure_cookie { "; Secure" } else { "" })
+    }
+}
+
+/// The admin's name and password from the environment (`ADMIN_USER`,
+/// `ADMIN_PASSWORD`). Only digests are kept, so the check takes the same time
+/// whatever is typed.
+pub struct AdminLogin {
+    pub name: String,
+    name_hash: Vec<u8>,
+    password_hash: Vec<u8>,
+}
+
+impl AdminLogin {
+    /// `Err` explains why the admin area stays disabled.
+    pub fn new(name: Option<String>, password: Option<String>) -> Result<AdminLogin, String> {
+        let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty()).ok_or("ADMIN_USER is not set")?;
+        let password = password.filter(|p| !p.is_empty()).ok_or("ADMIN_PASSWORD is not set")?;
+        if password.chars().count() < ADMIN_PASSWORD_MIN {
+            return Err(format!("ADMIN_PASSWORD needs at least {ADMIN_PASSWORD_MIN} characters"));
+        }
+        Ok(AdminLogin { name_hash: sha256(name.as_bytes()), password_hash: sha256(password.as_bytes()), name })
+    }
+
+    pub fn from_env() -> Result<AdminLogin, String> {
+        AdminLogin::new(std::env::var("ADMIN_USER").ok(), std::env::var("ADMIN_PASSWORD").ok())
+    }
+
+    /// Constant-time comparison of both name and password.
+    pub fn check(&self, name: &str, password: &str) -> bool {
+        let name_ok = ct_eq(&sha256(name.trim().as_bytes()), &self.name_hash);
+        let password_ok = ct_eq(&sha256(password.as_bytes()), &self.password_hash);
+        name_ok & password_ok
+    }
+}
+
+/// Equal-length byte comparison that does not stop at the first difference.
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 // ------------------------------------------------------------------ passwords
@@ -234,6 +301,33 @@ mod tests {
         assert_eq!(cookie_token("ta_session_old=1"), None);
         assert_eq!(cookie_token("other=1"), None);
         assert!(auth().set_cookie("t").contains("HttpOnly"));
+    }
+
+    #[test]
+    fn admin_cookie_is_separate_and_scoped() {
+        let a = auth();
+        assert_eq!(cookie_value("ta_session=p.q; ta_admin=x.y", ADMIN_COOKIE), Some("x.y"));
+        assert_eq!(cookie_value("ta_session=p.q", ADMIN_COOKIE), None, "a player cookie is not an admin cookie");
+        assert_eq!(cookie_value("ta_admin_old=1", ADMIN_COOKIE), None);
+        assert_eq!(cookie_token("ta_admin=x.y"), None);
+        let c = a.set_admin_cookie("t");
+        assert!(c.contains("Path=/api/admin") && c.contains("HttpOnly") && c.contains("SameSite=Strict"));
+        let s = a.new_admin_session();
+        assert_eq!(a.verify(&s.token), Some(s.id_hash));
+    }
+
+    #[test]
+    fn admin_login_needs_config_and_checks_both_fields() {
+        assert!(AdminLogin::new(None, Some("long-enough-password".into())).is_err());
+        assert!(AdminLogin::new(Some("root".into()), None).is_err());
+        assert!(AdminLogin::new(Some("  ".into()), Some("long-enough-password".into())).is_err());
+        assert!(AdminLogin::new(Some("root".into()), Some("short".into())).is_err());
+        let l = AdminLogin::new(Some("root".into()), Some("long-enough-password".into())).unwrap();
+        assert!(l.check("root", "long-enough-password"));
+        assert!(l.check(" root ", "long-enough-password"), "the name is trimmed like player names");
+        assert!(!l.check("root", "long-enough-passwore"));
+        assert!(!l.check("Root", "long-enough-password"));
+        assert!(!l.check("", ""));
     }
 
     #[test]

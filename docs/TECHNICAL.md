@@ -29,10 +29,13 @@ docker-compose.test.yml              server tests against a throwaway PostgreSQL
 .env.example                         secrets for docker compose (copy to the gitignored .env)
 server/                              Rust crate `tiny-adventurers-server`
   migrations/                        SQL migrations, embedded at compile time and applied at start-up
-  src/main.rs                        axum router: /ws (session + origin checked), /api, /health, static files (STATIC_DIR)
+  src/main.rs                        axum router: /ws (session + origin checked), /api, /api/admin, /admin, /health, static files (STATIC_DIR)
   src/api.rs                         JSON API: register, login, logout, delete account, me, create/delete character
-  src/auth.rs                        signed session tokens, Argon2id passwords, name/password rules, login rate limiter
-  src/db.rs                          every database query (sqlx, PostgreSQL)
+  src/admin.rs                       admin API: env-configured login, stats, players, password, deletions, audit log
+  src/auth.rs                        signed session tokens, Argon2id passwords, name/password rules, login rate limiter, admin login
+  src/db.rs                          every query of the game (sqlx, PostgreSQL), incl. recording runs and activity
+  src/stats.rs                       read-only admin queries: statistics, player list and details, audit log
+  src/telemetry.rs                   console log + optional OpenTelemetry export (traces, logs, metrics)
   src/progress.rs                    a character's progression document (JSONB, versioned)
   src/protocol.rs                    ClientMsg / ServerMsg + all payload types (ts-rs exported)
   src/wire.rs                        compact array forms of snapshots and inputs (SnapW, InputW, ...)
@@ -75,6 +78,8 @@ client/                              Vite + TypeScript + Phaser 3.90
   src/game/terrain-codes.ts          terrain frame layout and edge codes shared with the atlas build
   src/ui/                            DOM screens: auth (login/register), characters (select/create/delete, account),
                                      lobby, HUD, classes (figures + class card), texts, atlas previews
+  admin.html, src/admin/             the separate admin page (/admin): main.ts (views), api.ts, charts.ts (SVG
+                                     column charts), dom.ts (DOM builder, formatting), admin.css; no Phaser
 tools/e2e/                           browser smoke tests (playwright-core + installed Edge/Chrome)
 docs/                                this file, player guide, TODO
 HANDOFF.md                           state + instructions for the next agent
@@ -100,7 +105,7 @@ docker compose -f docker-compose.test.yml down
 ```
 
 **Database tests:**
-- The database tests (`db::tests`, and `lobby::tests::a_finished_run_banks_…`) run only when `DATABASE_URL` is set. Without it they pass without checking anything.
+- The database tests (`db::tests`, `stats::tests`, and `lobby::tests::a_finished_run_banks_…`) run only when `DATABASE_URL` is set. Without it they pass without checking anything.
 - Each test creates its own database `ta_test_<random>` on that server, so they run in parallel.
 
 **Generated files.** `cargo test` (re)writes the following, which must be committed:
@@ -120,7 +125,9 @@ Environment variables (server):
 | `PORT` | Default 8080. |
 | `STATIC_DIR` | `../client/dist`; `/app/public` in Docker. |
 | `ALLOW_DEBUG` | On unless `0`/`false`/`no`. |
-| `RUST_LOG` | Log filter. |
+| `RUST_LOG` | Console log filter (default `info`). |
+| `ADMIN_USER`, `ADMIN_PASSWORD` | The admin area's login (§11b). Without both, or with a password under 12 characters, the area answers 404. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Turns on OpenTelemetry export (§11c), e.g. `http://otel-collector:4318`. The other standard `OTEL_*` variables work too. |
 
 The data lives on the `ta-db` volume. `docker compose down -v` deletes all accounts.
 
@@ -456,10 +463,11 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - The row lock serialises concurrent changes, so a purchase cannot race with banking.
   - Every save bumps `rev`; `Lobby::apply_progress` ignores results older than its cached copy.
 - **Earning:** `kill_monster` adds `xp_for_kill` and `coins_for_kill` (mimic 25, boss 50) to each living player; chests add `CHEST_COINS`.
-- **Banking:** when the run task ends (victory, defeat or everyone left) it calls `lobby::finish_run(rid, run.awards())`.
+- **Banking:** when the run task ends (victory, defeat or everyone left) it calls `lobby::finish_run(rid, run.awards(), run.record(outcome))`.
   1. The room closes and the players return to the lobby.
   2. Then `db::bank_awards` banks every `Award{character, xp, coins}` in one transaction, in id order.
   3. Then `apply_progress` sends `Character` to the players.
+  4. Last, `db::record_run` stores the run for the statistics (§11b). A failure there is only logged.
 
   `Run.debug_used` (set by `set_debug`) makes `awards` empty.
 - **Spending:** `BuyUpgrade` is handled in `main.rs` before the lobby: `can_shop`, then `db::update_progress(…, |p| p.buy(stat))`, then `apply_progress`. The lobby lock is never held during a query.
@@ -478,9 +486,96 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - Only then is an in-memory store such as Valkey (BSD-3) worth adding. It would hold presence (one connection per account across servers), the shared run list and pub/sub between servers. It should not be a write-behind cache for progress, which would risk losing data and create two sources of truth.
 - All queries are in `db.rs`, so such a change stays local.
 
+## 11b. Admin area and statistics
+
+**Page.** `/admin` serves `client/admin.html`, a second Vite entry with its own code in `client/src/admin/` (plain DOM, no Phaser). Views are picked by the URL hash: `#/` dashboard, `#/players`, `#/players/<id>`, `#/audit`. Every player-chosen string is inserted as a text node (`dom.ts` `h()`), never as HTML.
+
+**Login (`admin.rs`, `auth::AdminLogin`).**
+- The admin is not a game account. The name and password come from `ADMIN_USER` and `ADMIN_PASSWORD`; only their SHA-256 digests are kept, and both are compared in constant time.
+- Without both variables, or with a password under 12 characters (`ADMIN_PASSWORD_MIN`), every `/api/admin/*` route answers 404 and the server logs why at start-up.
+- Throttling: 5 failed admin logins per IP and 20 in total per 5 minutes give a 429. A failed login is logged without the IP.
+- **Sessions:**
+  - The token format is the same signed one as the players' (`Auth::new_admin_session`), with a 12-hour expiry.
+  - The cookie is `ta_admin` (HttpOnly, SameSite=Strict, `Path=/api/admin`, `Secure` with `COOKIE_SECURE`).
+  - Admin sessions live in memory (`AdminState.sessions`), so a restart logs the admin out.
+  - A player's `ta_session` cookie never grants admin access.
+- State changes must be JSON (`api::require_json`), like the player API.
+
+**Admin API (`/api/admin`, ts-rs types in `stats.rs` and `admin.rs`).**
+
+| Request | Effect |
+|---|---|
+| `POST /login {name, password}` | Sets `ta_admin`. Answers `AdminMe{name}`. The same 401 for a wrong name and a wrong password. |
+| `POST /logout {}` | Ends the admin session and clears the cookie. |
+| `GET /me` | `AdminMe`, or 401 (404 when the area is disabled). |
+| `GET /stats` | `AdminStats` (below). |
+| `GET /players?q=&sort=name\|created\|active&page=` | `PlayerPage`: 50 per page, `q` matches anywhere in the name (`_` and `%` literally). |
+| `GET /players/{id}` | `PlayerDetail`: account, characters (with "playing now"), activity, the last 10 runs. |
+| `POST /players/{id}/password {password}` | Player password rules. Sets the hash, deletes all sessions of the account in the same transaction, closes its WebSocket. |
+| `DELETE /players/{id}` | Closes its WebSocket, deletes the account (cascade: sessions, characters). |
+| `DELETE /characters/{id}` | Any account's character. Whoever plays it is logged out first, then it is deleted and forgotten by the lobby. |
+| `GET /actions` | The last 100 audit rows. |
+
+Every change writes a row to `admin_actions` (admin, action, target name at that time, detail) and counts `ta.admin.actions`.
+
+**Tracking (migrations `0002_admin_stats.sql`, `0003_run_players_left.sql`).**
+- `activity_days(account_id, day)`: one row per account and UTC day, written at login, registration and WebSocket connect (`db::touch_activity`, `ON CONFLICT DO NOTHING`). "Active players" means accounts that logged in or connected.
+- `runs` + `run_players`: every ended run (`victory`, `defeat` or `abandoned` = everyone left) with boss, length, party size and per player the class, kills, damage, healing, XP, coins, `survived` and `left_run`.
+  - Leaving a dungeon counts as dying inside the game (`Player.alive = false`). `Player.left` keeps it apart, so the statistics count deaths as `NOT survived AND NOT left_run`.
+  - Debug runs are stored with `debug = true` and left out of every statistic.
+- These tables have **no foreign keys** to accounts or characters. When an account is deleted its name goes with it and only an anonymous id stays, so past counts do not change.
+- History starts empty when this is first deployed; the dashboard says so.
+
+**Statistics (`stats::overview`).**
+- Calendar days in UTC: "today" starts at 00:00 UTC, "7 days" is today and the six days before.
+- **Live:** from `Lobby::live()` (online, in a dungeon, in the lobby, rooms waiting, dungeons running, and who is online with which character), plus account names from the database.
+- **Totals:** accounts, characters, XP ever earned, unspent coins, runs.
+- **Today / 7 / 30 days:** active players, new accounts, runs (won, lost, left), win rate over finished runs, average length and party size, kills, deaths.
+- **Per boss and per class** (30 days), characters by number of upgrades bought, the top 10 characters by XP earned, and 30 daily points of active players, new accounts and runs (won vs. the rest).
+- Charts are hand-written SVG (`charts.ts`), drawn at the container's pixel width. Each has a hover and keyboard tooltip and a "Show as table" view.
+
+## 11c. OpenTelemetry
+
+`telemetry::init()` (first thing in `main`) always sets up the console log (`RUST_LOG`, default `info`). It also exports over **OTLP/HTTP (protobuf)**, but only when `OTEL_EXPORTER_OTLP_ENDPOINT` (or a per-signal endpoint) is set.
+
+- **Endpoint:** the exporter appends `/v1/traces`, `/v1/logs` and `/v1/metrics` and honours the standard `OTEL_*` variables (`OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, …). `OTEL_SERVICE_NAME` defaults to `tiny-adventurers-server`.
+- **No TLS:** no TLS client is compiled in, so the endpoint must be plain `http://`, typically a collector on the same Docker network. For HTTPS, enable the `reqwest-rustls` feature of `opentelemetry-otlp`.
+- **ClickStack:** point the endpoint at its OTel collector, e.g. `http://otel-collector:4318`. Add the game to that network or publish the collector's 4318 port, and pass `OTEL_EXPORTER_OTLP_HEADERS=authorization=<ingestion key>` if the collector requires one.
+- **Shutdown:** on Ctrl-C or SIGTERM the server stops and flushes what is still buffered (`Guard::shutdown`).
+
+**Traces** (`tracing` spans bridged by `tracing-opentelemetry`):
+- `http`: one span per request, named by the matched route and recording the status. Cookies and bodies are not recorded.
+- `ws`: one span per WebSocket session, with the account id.
+- `run`: one span per dungeon, with the run id, boss, player count and outcome.
+- One span per `db.rs` function (`#[tracing::instrument(skip_all)]`) and per admin query in `stats.rs`.
+
+**Logs:** every `tracing` event at `info` and above becomes an OTLP log record, correlated with its span. The exporter's own HTTP client crates are filtered out (`OTEL_FILTER`) to avoid a feedback loop.
+
+**Metrics** (every 15 s; attributes carry ids, classes, bosses and outcomes, never player names):
+
+| Instrument | Type | Attributes |
+|---|---|---|
+| `ta.players.online` | gauge, read from the lobby | `state` = lobby / in_run |
+| `ta.runs.active` | gauge | `state` = running / waiting |
+| `ta.logins` | counter | `result` = ok / fail / throttled |
+| `ta.registrations` | counter | – |
+| `ta.runs.finished` | counter | `boss`, `outcome`, `debug` |
+| `ta.run.duration` (s), `ta.run.players` | histograms | `boss`, `outcome` / – |
+| `ta.player.deaths`, `ta.enemies.killed`, `ta.xp.banked`, `ta.coins.banked` | counters | `class` |
+| `ta.tick.duration` (ms) | histogram, every server tick | – |
+| `ta.ws.connections` | up-down counter | – |
+| `ta.admin.actions` | counter | `action` |
+
+Debug runs only count in `ta.runs.finished{debug=true}`.
+
+**Trying it locally:**
+1. Run a throwaway collector that prints what it receives (`otel/opentelemetry-collector` with an `otlp` HTTP receiver on 4318 and the `debug` exporter) on the compose network (`--network tinyadventurers_default --name otel-check`).
+2. Start the game with `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-check:4318`.
+3. Play, then read `docker logs otel-check`.
+
 ## 12. Tests
 
-**Server (`cargo test`, 101 tests):**
+**Server (`cargo test`, 130 tests):**
 - protocol round trip
 - wire: positions round to 1/16 px (also beyond 4096 px), aim wraps into a byte, event codes follow `EV_CODES`, a compact input decodes to `InputMsg`, sample snapshots are bare arrays and at least 30 % smaller than the old form
 - dungeon determinism and guarantees over 200 seeds
@@ -504,7 +599,16 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - progression modifiers
 - progress document: buying limits, saturating banking, `{}`, partial, unknown-field and broken documents, JSON round trip
 - auth: token round trip, tampered, expired and wrong-secret tokens rejected; cookie parsing; Argon2id hash and verify; name and password rules; the limiter window
-- WebSocket origin check
+- admin login: disabled without both variables or with a short password; name and password both checked; the `ta_admin` cookie is scoped to `/api/admin` and separate from `ta_session` (a player cookie is no admin cookie)
+- WebSocket origin check; only Vite's hashed bundles are cached for good
+- telemetry: without an endpoint nothing is exported; a finished run is counted with boss, outcome and debug, and debug runs stay out of the gameplay counters (in-memory exporter)
+- run record: outcome (won, lost, everyone left), every player, debug flag; leaving is not dying
+- statistics (needs `DATABASE_URL`):
+  - activity counts once per day and outlives the deleted account
+  - today/7/30-day windows count backdated rows correctly and skip debug runs; bosses, classes, upgrades histogram, top characters and the 30-day trend
+  - online players get their account names
+  - player search (`_` literal), sorting, paging and details
+  - admin password change revokes sessions; any character can be deleted; the audit log is newest first
 - database (needs `DATABASE_URL`):
   - names unique ignoring case
   - the 8-character cap and ownership
@@ -516,7 +620,8 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - rooms need a character, and characters switch only outside rooms
   - no shopping during a run, and the newest progress wins
   - a second login closes the first connection
-  - a finished run banks on the played character only (needs `DATABASE_URL`)
+  - `live()` counts online players, rooms and runs; who plays which character
+  - a finished run banks on the played character only and is recorded (needs `DATABASE_URL`)
 - XP and coin awards skip debug runs
 - chests: touching opens once and pays the whole party
 - mimics: asleep until touched, then hold before hunting; the boss waking leaves them asleep; they move only while airborne
@@ -530,7 +635,17 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - two headless browser contexts register throwaway accounts (`e2e_<hex>`) and create a character each of the given classes, then create and join a run, start, move and attack
 - a third context logs into the first account, which must close the first window ("another window")
 - both accounts are deleted at the end
+- with `ADMIN_USER` and `ADMIN_PASSWORD` set (the same as the server's), an admin pass follows:
+  1. log in at `/admin` and find the online account on the dashboard;
+  2. delete its character, which logs the player out;
+  3. change its password, after which the old one fails and the new one works;
+  4. delete the player through the confirmation form;
+  5. check the audit log.
+
+  It takes screenshots of the dashboard (light and dark), the player page and the audit log.
 - screenshots (login, characters, lobby, room, game) go to the output folder; prints the F3 stats and any browser errors (the expected 401 of the first `/api/me` is ignored)
+
+**Client admin tests (`src/admin/charts.test.ts`):** nice axis maximum and ticks, the rounded-top column path, number, duration and share formatting.
 
 ## 13. Known limitations
 
@@ -542,3 +657,6 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - Passwords travel in the login request. In production the game must run behind a TLS reverse proxy (with `COOKIE_SECURE=1`).
 - Behind a reverse proxy every request comes from the proxy's IP, so the per-IP limits apply to everyone together. `X-Forwarded-For` is not read yet.
 - The login limiter and the one-connection-per-account rule live in the memory of one server process.
+- Admin sessions also live in memory: a restart logs the admin out. There is one admin login, shared by whoever knows it; the audit log names it, not a person.
+- Statistics count UTC days. Their history starts with the first deployment of the admin area.
+- OpenTelemetry export is plain HTTP only (no TLS client built in).
