@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-08, ogre mini-boss)
 
-**Branch:** `feature/ogre` (committed, not merged or pushed yet). Ask the user before merging into `main` and pushing.
+**Branch:** `feature/ogre` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
 
 **User decisions this session:**
 - **Look:** the user approved an enlarged sprite preview (pack `ogre_*` with `weapon_baton_with_spikes`). The club is held **out at its side and lower** (`handX: 12`, `handY: 14`) and is **1.4x** the usual weapon size, because at the demon's hand height it covered the face.
@@ -389,8 +389,7 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Merge `feature/ogre`** into `main` and push, after asking the user.
-2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
-3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
-4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
-5. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), the prediction corrections in busy runs under lag (TODO.md, Network).
+1. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
+2. Loadouts: design new abilities, then add the lobby picker, paid with coins.
+3. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
+4. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), the prediction corrections in busy runs under lag (TODO.md, Network).
