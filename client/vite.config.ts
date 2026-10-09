@@ -6,6 +6,7 @@ export default defineConfig({
     proxy: {
       // The Rust game server (docker compose up, or cargo run) listens on 8080.
       '/ws': { target: 'ws://localhost:8080', ws: true },
+      '/api': 'http://localhost:8080',
     },
   },
   build: {

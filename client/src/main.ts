@@ -7,8 +7,12 @@ import { KnockbackDemoScene } from './game/KnockbackDemoScene';
 import { OgreDemoScene } from './game/OgreDemoScene';
 import { GameScene, type GameInit } from './game/GameScene';
 import type { RunStartInfo } from './generated/RunStartInfo';
+import { api, ApiFail } from './api';
+import type { CharacterInfo } from './generated/CharacterInfo';
 import { Net } from './net';
-import { loadAtlas } from './ui/atlas';
+import { loadAtlas, type Atlas } from './ui/atlas';
+import { showAuth } from './ui/auth';
+import { Characters } from './ui/characters';
 import { Hud } from './ui/hud';
 import { Lobby } from './ui/lobby';
 import './style.css';
@@ -59,19 +63,50 @@ function gallery(): void {
   document.getElementById('game')!.classList.add('active');
 }
 
+function fatal(ui: HTMLElement, msg: string): void {
+  ui.innerHTML = `<div class="lobby"><h1>Tiny Adventurers</h1><div class="panel">${msg}</div></div>`;
+}
+
+/** Login, then the character screen; "Play" connects to the game. */
 async function main(): Promise<void> {
   const q = new URLSearchParams(location.search);
   if (q.has('gallery') || Object.keys(DEMOS).some((k) => q.has(k))) return gallery();
   const ui = document.getElementById('ui')!;
-  const net = new Net();
+  let me;
   try {
-    await net.connect();
-  } catch {
-    ui.innerHTML = '<div class="lobby"><h1>Tiny Adventurers</h1><div class="panel">Cannot reach the game server. Is it running?</div></div>';
-    return;
+    me = await api.me();
+  } catch (e) {
+    return fatal(ui, e instanceof ApiFail ? e.message : 'Cannot reach the game server. Is it running?');
   }
   const atlas = await loadAtlas();
-  const lobby = new Lobby(ui, net, atlas);
+  if (!me) me = await showAuth(ui);
+
+  let session: { net: Net; lobby: Lobby } | null = null;
+  const characters = new Characters(ui, atlas, async (c: CharacterInfo) => {
+    if (session && !session.net.connected) return location.reload();
+    if (!session) {
+      const net = new Net();
+      try {
+        await net.connect();
+      } catch {
+        return fatal(ui, 'Cannot reach the game server. Is it running?');
+      }
+      const lobby = startGame(ui, net, atlas, () => {
+        lobby.hide();
+        characters.show();
+      });
+      session = { net, lobby };
+    }
+    session.net.send({ t: 'SelectCharacter', id: c.id });
+    characters.hide();
+    session.lobby.show();
+  });
+  characters.show(me);
+}
+
+/** Connected: the lobby and the Phaser game. Returns the lobby. */
+function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onChangeCharacter: () => void): Lobby {
+  const lobby = new Lobby(ui, net, atlas, onChangeCharacter);
 
   const v = viewSize();
   const game = new Phaser.Game({
@@ -108,9 +143,14 @@ async function main(): Promise<void> {
     backToLobby,
   );
 
+  // The server explains why it closes a connection (logged in elsewhere, logged out)
+  // in an Error right before closing.
+  let lastError = { msg: '', at: 0 };
   net.onClose = () => {
-    hud.message('Connection lost. Reload the page to reconnect.');
-    lobby.error('Connection lost. Reload the page to reconnect.');
+    const why = performance.now() - lastError.at < 2000 ? lastError.msg : 'Connection lost.';
+    const msg = `${why} Reload the page to reconnect.`;
+    hud.message(msg);
+    lobby.error(msg);
   };
 
   net.on(async (m) => {
@@ -124,10 +164,11 @@ async function main(): Promise<void> {
       case 'Room':
         lobby.setRoom(m);
         break;
-      case 'Profile':
-        lobby.setProfile(m);
+      case 'Character':
+        lobby.setCharacter(m);
         break;
       case 'Error':
+        lastError = { msg: m.msg, at: performance.now() };
         lobby.error(m.msg);
         break;
       case 'RunStarted': {
@@ -143,6 +184,7 @@ async function main(): Promise<void> {
       }
     }
   });
+  return lobby;
 }
 
 main();

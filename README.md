@@ -2,7 +2,8 @@
 
 A browser-based multiplayer dungeon crawler with tiny pixel figures on a board-game dungeon.
 
-- Up to 4 players open or join a dungeon run and pick a class: Wizard, Paladin, Barbarian or Assassin.
+- Players log in with an account (just a name and a password, no e-mail) and create up to 8 characters. Each character has a fixed class (Wizard, Paladin, Barbarian or Assassin) and its own progress.
+- Up to 4 players open or join a dungeon run.
 - Each run is one randomly generated dungeon of corridors, rooms and halls. A field of vision hides what your hero can't see.
 - The party fights through it to a random final boss: a demon, a lich or a dragon.
 
@@ -20,12 +21,21 @@ A browser-based multiplayer dungeon crawler with tiny pixel figures on a board-g
 Requires Docker.
 
 ```sh
+cp .env.example .env    # then put long random values in it, e.g. from: openssl rand -hex 32
 docker compose up --build
 ```
 
+Two containers start:
+- `game` serves the game on port 8080.
+- `db` is PostgreSQL. It is not reachable from outside.
+
 Then open http://localhost:8080. Every player opens the same address; other machines use the host's IP address, e.g. `http://192.168.1.20:8080`.
 
-Player profiles (XP and upgrades) are stored in the `ta-data` Docker volume, so they survive `docker compose down`. `docker compose down -v` deletes them.
+Accounts and characters are stored in PostgreSQL on the `ta-db` Docker volume, so they survive `docker compose down`. `docker compose down -v` deletes them.
+
+**Public servers:**
+- Run the game behind an HTTPS reverse proxy and set `COOKIE_SECURE=1` in `.env`, because passwords are sent at login.
+- Keep `.env` secret. Changing `SESSION_SECRET` logs everyone out.
 
 ## Controls
 

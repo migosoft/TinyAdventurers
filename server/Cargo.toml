@@ -17,6 +17,12 @@ ts-rs = "10"
 futures-util = "0.3"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+# Accounts: PostgreSQL, password hashing, signed session tokens.
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "json", "migrate", "macros"] }
+argon2 = "0.5"
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
 
 [profile.release]
 opt-level = 3

@@ -34,10 +34,10 @@ pub const SNAPSHOT_EVERY: u32 = 2;
 const ACTIVE_RANGE: f64 = 420.0;
 const END_DELAY: f64 = 3.0;
 
-/// What one profile banks at the end of a run.
+/// What one character banks at the end of a run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Award {
-    pub token: String,
+    pub character: i32,
     pub xp: u32,
     pub coins: u32,
 }
@@ -47,8 +47,8 @@ pub struct Member {
     pub name: String,
     pub class: ClassId,
     pub tx: UnboundedSender<Message>,
-    /// Profile token (XP is banked there) and its bought upgrades.
-    pub token: Option<String>,
+    /// Character the XP is banked to, and its bought upgrades.
+    pub character: Option<i32>,
     pub upgrades: StatUpgrades,
 }
 
@@ -129,7 +129,7 @@ impl Run {
                 mods,
                 xp: 0,
                 coins: 0,
-                token: m.token,
+                character: m.character,
                 alive: true,
                 aim: 0.0,
                 aim_dist: 0.0,
@@ -782,7 +782,7 @@ impl Run {
         }
     }
 
-    /// XP and coins to bank per profile token. Players who left early keep
+    /// XP and coins to bank per character. Players who left early keep
     /// what they earned; a run where debug mode was used awards nothing.
     pub fn awards(&self) -> Vec<Award> {
         if self.debug_used {
@@ -790,7 +790,7 @@ impl Run {
         }
         self.players
             .iter()
-            .filter_map(|p| Some(Award { token: p.token.clone()?, xp: p.xp, coins: p.coins }))
+            .filter_map(|p| Some(Award { character: p.character?, xp: p.xp, coins: p.coins }))
             .filter(|a| a.xp > 0 || a.coins > 0)
             .collect()
     }
@@ -832,7 +832,7 @@ pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: Sh
             break;
         }
     }
-    lobby.lock().unwrap().run_finished(run.id, run.awards());
+    crate::lobby::finish_run(&lobby, run.id, run.awards()).await;
 }
 
 #[cfg(test)]
@@ -851,20 +851,20 @@ pub mod tests {
             .map(|(i, c)| {
                 let (tx, _rx) = unbounded_channel();
                 std::mem::forget(_rx);
-                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, token: None, upgrades: StatUpgrades::default() }
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, character: None, upgrades: StatUpgrades::default() }
             })
             .collect();
         Run::new(1, members, seed, Some(boss))
     }
 
     #[test]
-    fn awards_go_to_profiles_unless_debug_was_used() {
+    fn awards_go_to_characters_unless_debug_was_used() {
         let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
-        run.players[0].token = Some("a".into());
+        run.players[0].character = Some(5);
         run.players[0].xp = 40;
         run.players[0].coins = 12;
-        run.players[1].xp = 10; // no profile
-        assert_eq!(run.awards(), vec![Award { token: "a".into(), xp: 40, coins: 12 }]);
+        run.players[1].xp = 10; // no character
+        assert_eq!(run.awards(), vec![Award { character: 5, xp: 40, coins: 12 }]);
         run.set_debug(1, true);
         assert!(run.awards().is_empty());
         assert!(matches!(run.end_msg(true), ServerMsg::RunEnded { banked: false, .. }));

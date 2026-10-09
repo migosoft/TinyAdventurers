@@ -9,9 +9,58 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-08, ogre mini-boss)
+## Last session (2026-10-09, accounts, characters and PostgreSQL)
 
-**Branch:** `feature/ogre` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
+**Branch:** `feature/accounts`, committed and **not merged or pushed yet**. Ask the user before merging into `main` or pushing.
+
+**User decisions this session:**
+- **Characters:** progress is tracked per character, not per player. An account has up to **8 characters** of any class, two Wizards included. Each character has a name, a class that never changes, and its own XP, coins and upgrades. Character names are unique across all accounts.
+- **Accounts:** register, login, logout and delete only. **No e-mail and no personal data** (GDPR), so there is no password recovery. **Login is required** to play. Old `profiles.json` data was discarded (test data only).
+- **Database:**
+  - The user requires an **OSI open-source license**. MongoDB was rejected (SSPL).
+  - The user questioned document databases, then chose **PostgreSQL 17** (PostgreSQL License, MIT-like) in its own container, with a **hybrid model**: relational accounts/sessions/characters, and all progression in **one versioned JSONB document** per character, so progression can change later without SQL migrations.
+- **Tamper protection:** the server is authoritative. The client only displays progress and never sends any. Sessions are **HMAC-SHA256-signed** cookies backed by the database, so they can be revoked.
+- **No Valkey/memcached cache** (asked about for heavy use): the database is only touched at login, connect, select, purchase and run end. An in-memory store only makes sense later for several game servers (presence, run list); see TECHNICAL.md §11a "Scaling later".
+
+**Done:**
+- **Server, new modules:** `auth.rs`, `db.rs`, `api.rs`, `progress.rs`, plus `migrations/0001_accounts.sql`. `profiles.rs` is deleted.
+  - New dependencies: `sqlx` (runtime queries, so the build needs no database), `argon2`, `hmac`, `sha2`, `base64`.
+- **Protocol:**
+  - `Hello`, `SelectClass`, `Profile` and `ProfileInfo` are gone.
+  - New: `SelectCharacter{id}`, `Character(CharacterInfo)`, and the JSON API `/api/*` (TECHNICAL.md §4).
+- **Lobby:**
+  - Keyed by account, one connection per account (a second login closes the first).
+  - Caches the selected character. Never queries the database itself: `main.rs` does the query and then applies the result.
+  - `Award` and `Member` carry `character` instead of the token. `finish_run` banks in one transaction.
+- **Client:**
+  - `api.ts`, `ui/auth.ts` (login/register), `ui/characters.ts` (list, create with the class cards, delete, logout, delete account) and `ui/classes.ts` (shared figures and class card).
+  - The lobby shows the played character with "Change character". The room has no class picker any more.
+  - `localStorage` is no longer used.
+- **Docker:**
+  - A `db` service (`postgres:17-alpine`, `ta-db` volume, healthcheck, not published). Secrets live in `.env` (gitignored; `.env.example` committed).
+  - `docker-compose.test.yml` runs `cargo test` against a throwaway Postgres.
+  - The old `ta-data` volume is unused; the user may remove it (`docker volume rm tinyadventurers_ta-data`).
+- **Smoke test:** registers two throwaway accounts, creates characters, plays, checks that a second login closes the first window, and deletes the accounts.
+
+**Checked:**
+- 101 server tests, run against Postgres. They cover the parallel bank/buy race, the 8-character cap, case-insensitive names, session revocation, cascades, old JSON documents, tampered and expired tokens, and lobby banking end to end.
+- Client typecheck and tests.
+- `docker compose up --build`, health, and migrations at start-up.
+- curl checks:
+  - duplicate name 409, short password 400;
+  - identical 401 for a wrong password and an unknown name;
+  - 415 without JSON;
+  - the 9th character gets 409;
+  - a tampered cookie gets 401;
+  - `/ws` gives 401 without a cookie and 403 from a foreign origin;
+  - the limiter gives 429 after 5 failed logins.
+- The smoke test passed with no browser errors. Screenshots of login, characters and lobby were checked.
+
+**Not yet verified:** the user has not tried it live yet. A real run that ends was not banked through the browser; it is covered by `lobby::tests::a_finished_run_banks_on_the_played_character_only`.
+
+## Session before (2026-10-08, ogre mini-boss)
+
+**Branch:** `feature/ogre` is merged into `main` (fast-forward) and pushed.
 
 **User decisions this session:**
 - **Look:** the user approved an enlarged sprite preview (pack `ogre_*` with `weapon_baton_with_spikes`). The club is held **out at its side and lower** (`handX: 12`, `handY: 14`) and is **1.4x** the usual weapon size, because at the demon's hand height it covered the face.
@@ -278,8 +327,9 @@ Steps 2–6 followed in the next session.
 ## Current state
 
 **Working end to end in Docker (`docker compose up --build`, port 8080):**
-- lobby, 4 classes, host-chosen or random end boss, random dungeon, field of vision
-- persistent profiles: XP banked after each run, permanent upgrades bought in the lobby (`ta-data` volume)
+- accounts (name + password, no e-mail) with up to 8 characters each, in PostgreSQL (`db` service, `ta-db` volume); signed HttpOnly session cookies
+- lobby, 4 classes (fixed per character), host-chosen or random end boss, random dungeon, field of vision
+- per-character progression: XP and coins banked after each run, permanent upgrades bought in the lobby
 - 11 enemy types (including the mimic and the ogre mini-boss, one per run; imps, chorts and summoners only in the demon's dungeon), 3 bosses
 - terrain in every dungeon: chasms everywhere, water pools (lich, dragon) or lava pools (demon); falling, drowning, lava burns, demons immune to lava; demos `?water`, `?chasm`, `?lava`
 - treasure chests and mimics; coins banked as a second currency
@@ -289,8 +339,8 @@ Steps 2–6 followed in the next session.
 - debug mode (paths to the boss and the ogre), sprite gallery
 
 **Verified:**
-- 80 server tests and the client tests (collision/FOV ports with terrain, wire unpacking) pass.
-- Browser check of the profile flow: buying, persistence over page reload and `docker compose down`/`up`, new token for a new browser, read-only boss picker for guests.
+- 101 server tests (against PostgreSQL) and the client tests (collision/FOV ports with terrain, wire unpacking) pass.
+- Accounts and characters: API checks with curl and the browser smoke test (2026-10-09); not yet tried live by the user.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
 - Demon dungeon enemies (imps, chorts, summoners) in a real run (played by the user, "work well").
@@ -343,16 +393,31 @@ Steps 2–6 followed in the next session.
   - selectable primary/secondary loadouts (needs new abilities first)
   - more classes and bosses
 - **Balancing is one combined pass later** (progression, classes, boss fights, ...), not piecemeal tuning; the user decided this after the live boss test.
-- **Progression is permanent** (meta-progression across runs, not per run), confirmed by the user. Identity is an anonymous browser token; profiles live in a JSON file on the `ta-data` volume.
+- **Progression is permanent** (meta-progression across runs, not per run), confirmed by the user, and **per character** (2026-10-09).
+- **Accounts** (2026-10-09):
+  - No e-mail or other personal data, so there is no password recovery. Login is required.
+  - Up to 8 characters of any class per account; character names are globally unique.
+  - Delete account and delete character exist and are final.
+- **Licenses:** the user wants OSI open-source licenses for infrastructure (MongoDB's SSPL was rejected).
+- **Database:**
+  - PostgreSQL in its own container.
+  - Relational identity, progression as one versioned JSONB document per character: change the `Progress` struct, not the schema.
+  - No cache layer (Valkey etc.) until there are several game servers.
+- **Security:**
+  - The server is authoritative; never accept progress values from the client.
+  - Sessions are HMAC-signed cookies backed by the database.
 
 ## Environment notes (this machine)
 
 - **Shells:** Windows 11 with Git Bash and PowerShell. Python is **not** installed; use Node scripts or perl/sed for text edits.
-- **No local Rust toolchain.** Build and test the server in Docker, as in TECHNICAL.md §3:
+- **No local Rust toolchain.** Build and test the server in Docker, as in TECHNICAL.md §3. This includes a throwaway Postgres for the database tests:
   ```sh
-  MSYS_NO_PATHCONV=1 docker run --rm -v "C:\\Users\\Goll\\Desktop\\TinyAdventurers":/work -v ta-cargo:/usr/local/cargo/registry -v ta-target:/work/server/target -w /work/server rust:1-slim-bookworm cargo test --release
+  MSYS_NO_PATHCONV=1 docker compose -f docker-compose.test.yml run --rm test
+  docker compose -f docker-compose.test.yml down
   ```
-  The `ta-cargo` and `ta-target` volumes cache builds.
+  The `ta-cargo` and `ta-target` volumes (external) cache builds.
+- **`.env`** (gitignored) holds `POSTGRES_PASSWORD` and `SESSION_SECRET` for the local stack. It was generated with `openssl rand -hex`. Without it, `docker compose up` refuses to start.
+- **Database shell:** `docker compose exec db psql -U tiny -d tiny`.
 - **Docker Desktop** must be running. Start it with `Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"` if `docker info` fails.
 - **Browser tests** use the installed Edge (`C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe`) through `playwright-core`; no browser download is needed. Set `BROWSER` to use another executable.
   - Headless rendering is software (SwiftShader), so FPS in tests (~28) does not reflect real performance.
@@ -361,7 +426,7 @@ Steps 2–6 followed in the next session.
 
 ## Verification checklist after a change
 
-1. Server changes: run `cargo test`, in Docker as above. It also regenerates `client/src/generated/`.
+1. Server changes: run `cargo test`, in Docker as above (with the test Postgres). It also regenerates `client/src/generated/`.
 2. Client changes: `cd client && npx tsc --noEmit && npm test`.
 3. `docker compose up --build -d`, then `curl localhost:8080/health` should print `OK`.
 4. `cd tools/e2e && node smoke.mjs http://localhost:8080/ "" shots Wizard,Paladin`. It should print "no browser errors"; look at the screenshots in `shots/`.
@@ -382,8 +447,10 @@ Steps 2–6 followed in the next session.
 - **Boss behaviours** are taken out of `Run.boss` during their tick (`Option::take`), so `hurt_monster`'s immunity check cannot see the boss during its own tick. That is harmless today; keep it in mind.
 - **Pack frame names** are used verbatim (`knight_m_run_anim_f2`). `necromancer` only has `necromancer_anim_f0-3`, used for both idle and run.
 - **Dragon breath points** (`mouth` / `nostrils` in `anim/defs.ts`) were measured per lizard frame. If the dragon sprite changes, re-measure them.
-- **Profiles:** the client must send `Hello` on every connect (the lobby constructor does), or the connection has no token: no XP is banked and no upgrades are applied.
-- **Seeding a test profile:** write `{"<32 hex token>":{"xp":1000,"total_xp":1000,"upgrades":{"damage":0,"attack_speed":0,"move_speed":0,"life":0,"armor":0}}}` to a file, `docker cp` it to `<container>:/data/profiles.json`, then `docker compose restart game`; put the token in the browser's `localStorage` key `ta-token`. In Git Bash use `MSYS_NO_PATHCONV=1` for `docker compose exec` with `/data/...` paths. Remove the test profile afterwards.
+- **Characters:** the client must send `SelectCharacter` after connecting (the character screen's Play does). Without it, rooms are refused, nothing is banked and no upgrades apply.
+- **Seeding test XP:** `docker compose exec db psql -U tiny -d tiny -c "update characters set progress = jsonb_set(progress, '{xp}', '1000') where name = 'Hero'"`. The lobby caches the character, so press "Change character" and Play again to reload it.
+- **The lobby lock is a std `Mutex`:** never hold it across an `.await`. Do database work first (`main.rs` `select_character`, `BuyUpgrade`, `lobby::finish_run`), then lock and apply.
+- **Test accounts:** the smoke test deletes its `e2e_*` accounts. If it crashes midway, remove leftovers with `delete from accounts where name like 'e2e\_%'`.
 - **Lobby screenshots:** the lobby scrolls inside `.lobby`, so Playwright `fullPage` shots are cut off. Screenshot elements instead (`page.locator('.bosses').screenshot()`).
 - **Boss previews in the lobby** (`BOSS_FIG` in `ui/lobby.ts`) use CSS filters to imitate the in-game tint/hue from `anim/defs.ts`. If a boss figure changes, update both.
 

@@ -1,21 +1,14 @@
 import type { BossId } from '../generated/BossId';
-import type { ClassId } from '../generated/ClassId';
-import type { ProfileInfo } from '../generated/ProfileInfo';
+import type { CharacterInfo } from '../generated/CharacterInfo';
 import type { RoomPlayer } from '../generated/RoomPlayer';
 import type { RunSummary } from '../generated/RunSummary';
 import type { UpgradeStat } from '../generated/UpgradeStat';
 import type { Net } from '../net';
 import { spritePreview, type Atlas } from './atlas';
 import { esc } from './hud';
-import { BOSS_TEXT, CLASS_TEXT, STAT_TEXT } from './text';
+import { classFigure } from './classes';
+import { BOSS_TEXT, STAT_TEXT } from './text';
 
-const CLASSES: ClassId[] = ['Wizard', 'Paladin', 'Barbarian', 'Assassin'];
-const FIG: Record<ClassId, [string, string]> = {
-  Wizard: ['wizzard_m', 'weapon_red_magic_staff'],
-  Paladin: ['knight_m', 'weapon_knight_sword'],
-  Barbarian: ['dwarf_m', 'weapon_double_axe'],
-  Assassin: ['elf_m', 'weapon_bow'],
-};
 const BOSSES: BossId[] = ['Demon', 'Lich', 'Dragon'];
 /** Pack figure, CSS filter approximating the in-game tint/hue (anim/defs.ts) and preview scale. */
 const BOSS_FIG: Record<BossId, [string, string, number]> = {
@@ -26,15 +19,6 @@ const BOSS_FIG: Record<BossId, [string, string, number]> = {
 const STATS: UpgradeStat[] = ['Damage', 'AttackSpeed', 'MoveSpeed', 'Life', 'Armor'];
 
 type Room = { run_id: number; name: string; host: number; players: RoomPlayer[]; boss: BossId | null };
-
-function store(key: string, value?: string): string | null {
-  try {
-    if (value !== undefined) localStorage.setItem(key, value);
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
 
 /** Debug mode only: `?debug&boss=demon|lich|dragon` preselects the end boss on the host's page. */
 function debugBoss(): BossId | null {
@@ -48,7 +32,7 @@ export class Lobby {
   private root = document.createElement('div');
   private runs: RunSummary[] = [];
   private room: Room | null = null;
-  private profile: ProfileInfo | null = null;
+  private character: CharacterInfo | null = null;
   /** Room the debug boss was already preselected in. */
   private preselected = 0;
   myId = 0;
@@ -57,16 +41,11 @@ export class Lobby {
     host: HTMLElement,
     private net: Net,
     private atlas: Atlas,
+    /** Back to the character screen (only outside of rooms). */
+    private onChangeCharacter: () => void,
   ) {
-    this.root.className = 'lobby';
+    this.root.className = 'lobby hidden';
     host.append(this.root);
-    // Always say hello: the server answers with our profile (and a token on first visit).
-    this.hello(store('ta-name') ?? '');
-    this.render();
-  }
-
-  private hello(name: string): void {
-    this.net.send({ t: 'Hello', name, token: store('ta-token') });
   }
 
   show(): void {
@@ -96,9 +75,8 @@ export class Lobby {
     this.render();
   }
 
-  setProfile(p: ProfileInfo): void {
-    this.profile = p;
-    store('ta-token', p.token);
+  setCharacter(c: CharacterInfo): void {
+    this.character = c;
     this.render();
   }
 
@@ -119,7 +97,7 @@ export class Lobby {
   }
 
   private upgradesPanel(): string {
-    const p = this.profile;
+    const p = this.character;
     if (!p) return '';
     const max = p.costs.length;
     const rows = STATS.map((s) => {
@@ -133,7 +111,7 @@ export class Lobby {
       return `<li><span class="sname">${STAT_TEXT[s].name}</span><span class="lvl">${level}/${max}</span><span class="bonus">${STAT_TEXT[s].bonus(p.mods)}</span>${buy}</li>`;
     }).join('');
     return `<div class="panel upgrades"><h2>Upgrades <span class="xp">${p.xp} XP <span class="coins"><i class="coin-icon"></i>${p.coins}</span></span></h2><ul class="stats">${rows}</ul>
-      <small class="hint">Earn XP in the dungeon. Upgrades are permanent and apply to every hero you play. Coins come from chests and mimics; they will buy loadouts later.</small></div>`;
+      <small class="hint">Earn XP in the dungeon. Upgrades are permanent and belong to this character. Coins come from chests and mimics; they will buy loadouts later.</small></div>`;
   }
 
   private bindUpgrades(): void {
@@ -143,7 +121,6 @@ export class Lobby {
   }
 
   private renderHome(): void {
-    const name = store('ta-name') ?? '';
     const list = this.runs.length
       ? this.runs
           .map(
@@ -154,9 +131,7 @@ export class Lobby {
       : '<li class="empty">No open dungeons. Create one!</li>';
     this.root.innerHTML = `
       <h1>Tiny Adventurers</h1>
-      <div class="panel">
-        <label>Your name <input id="name" maxlength="16" value="${esc(name)}" placeholder="Adventurer"></label>
-      </div>
+      <div class="panel hero"></div>
       <div class="panel">
         <h2>Dungeon runs</h2>
         <ul class="runs">${list}</ul>
@@ -164,20 +139,26 @@ export class Lobby {
         <div class="error"></div>
       </div>
       ${this.upgradesPanel()}`;
-    const nameInput = this.root.querySelector<HTMLInputElement>('#name')!;
-    nameInput.onchange = () => {
-      store('ta-name', nameInput.value.trim());
-      this.hello(nameInput.value.trim());
-    };
+    const hero = this.root.querySelector('.hero')!;
+    const c = this.character;
+    if (c) {
+      hero.classList.add(`c-${c.class.toLowerCase()}`);
+      hero.append(classFigure(this.atlas, c.class, 3));
+      const info = document.createElement('div');
+      info.className = 'cinfo';
+      info.innerHTML = `<small>Playing as</small><b>${esc(c.name)}</b><small>${c.class}</small>`;
+      hero.append(info);
+    }
+    const change = document.createElement('button');
+    change.id = 'change-char';
+    change.textContent = 'Change character';
+    change.onclick = () => this.onChangeCharacter();
+    hero.append(change);
     this.root.querySelector<HTMLButtonElement>('#create')!.onclick = () => {
-      nameInput.onchange?.(new Event('change'));
       this.net.send({ t: 'CreateRun', name: this.root.querySelector<HTMLInputElement>('#runname')!.value });
     };
     this.root.querySelectorAll<HTMLButtonElement>('[data-join]').forEach((b) => {
-      b.onclick = () => {
-        nameInput.onchange?.(new Event('change'));
-        this.net.send({ t: 'JoinRun', run_id: +b.dataset.join! });
-      };
+      b.onclick = () => this.net.send({ t: 'JoinRun', run_id: +b.dataset.join! });
     });
   }
 
@@ -194,7 +175,6 @@ export class Lobby {
     this.root.innerHTML = `
       <h1>${esc(room.name)}</h1>
       <div class="panel"><h2>Party (${room.players.length}/4)</h2><ul class="players">${players}</ul></div>
-      <div class="panel"><h2>Choose your class</h2><div class="classes"></div></div>
       <div class="panel"><h2>End boss${isHost ? '' : ' (chosen by the host)'}</h2><div class="bosses"></div></div>
       ${this.upgradesPanel()}
       <div class="row actions">
@@ -202,20 +182,6 @@ export class Lobby {
         ${isHost ? `<button id="start" class="primary">Enter the dungeon</button>` : `<button id="ready" class="primary">${me?.ready ? 'Not ready' : 'Ready!'}</button>`}
       </div>
       <div class="error"></div>`;
-    const classes = this.root.querySelector('.classes')!;
-    for (const c of CLASSES) {
-      const t = CLASS_TEXT[c];
-      const card = document.createElement('button');
-      card.className = `class-card c-${c.toLowerCase()}${me?.class === c ? ' selected' : ''}`;
-      card.append(spritePreview(this.atlas, FIG[c][0], 4, FIG[c][1]));
-      const info = document.createElement('div');
-      info.innerHTML = `<b>${t.title}</b><small>${t.blurb}</small>
-        <p><kbd>LMB</kbd> ${t.abilities[0].name}<br><span>${t.abilities[0].text}</span></p>
-        <p><kbd>RMB</kbd> ${t.abilities[1].name}<br><span>${t.abilities[1].text}</span></p>`;
-      card.append(info);
-      card.onclick = () => this.net.send({ t: 'SelectClass', class: c });
-      classes.append(card);
-    }
     const bosses = this.root.querySelector('.bosses')!;
     for (const b of [null, ...BOSSES]) {
       const card = document.createElement('button');

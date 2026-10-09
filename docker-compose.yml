@@ -1,4 +1,21 @@
+# Secrets come from .env (copy .env.example and fill it in).
 services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: tiny
+      POSTGRES_DB: tiny
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      # Accounts, sessions and characters.
+      - ta-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tiny -d tiny"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
   game:
     build: .
     image: tiny-adventurers
@@ -7,10 +24,14 @@ services:
     environment:
       # Debug mode (?debug: immortal + path to the boss). Set to 0 to disable.
       ALLOW_DEBUG: "1"
-    volumes:
-      # Persistent player profiles (XP and upgrades).
-      - ta-data:/data
+      DATABASE_URL: postgres://tiny:${POSTGRES_PASSWORD}@db:5432/tiny
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      # 1 when players reach the game over HTTPS (behind a TLS proxy).
+      COOKIE_SECURE: ${COOKIE_SECURE:-0}
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
-  ta-data:
+  ta-db:

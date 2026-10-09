@@ -1,0 +1,38 @@
+# Server tests against a throwaway PostgreSQL (no local Rust needed):
+#   docker compose -f docker-compose.test.yml run --rm test
+#   docker compose -f docker-compose.test.yml down
+# Also regenerates client/src/generated/* (ts-rs and fixtures).
+name: tinyadventurers-test
+services:
+  testdb:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  test:
+    image: rust:1-slim-bookworm
+    working_dir: /work/server
+    command: cargo test --release
+    environment:
+      DATABASE_URL: postgres://test:test@testdb:5432/test
+    volumes:
+      - .:/work
+      - ta-cargo:/usr/local/cargo/registry
+      - ta-target:/work/server/target
+    depends_on:
+      testdb:
+        condition: service_healthy
+
+volumes:
+  ta-cargo:
+    external: true
+  ta-target:
+    external: true

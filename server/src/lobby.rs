@@ -1,8 +1,11 @@
-//! Lobby: connected clients, open runs (rooms), class and boss selection,
-//! ready, start, and the profile (XP + upgrade shop) of each connection.
+//! Lobby: connected accounts, their selected character, open runs (rooms),
+//! boss selection, ready and start. The lobby never waits for the database:
+//! the socket handler does the queries first and then hands the result in
+//! (`set_character`, `apply_progress`), so the lock is only held briefly.
 
-use crate::profiles::ProfileStore;
-use crate::protocol::{encode, BossId, ClassId, ClientMsg, RoomPlayer, RunSummary, ServerMsg};
+use crate::db::{self, Character, Db};
+use crate::progress::Progress;
+use crate::protocol::{encode, BossId, ClientMsg, RoomPlayer, RunSummary, ServerMsg};
 use crate::run::{run_task, Award, Member, Run, RunCmd};
 use axum::extract::ws::Message;
 use std::collections::{BTreeMap, HashMap};
@@ -14,13 +17,12 @@ pub const MAX_PLAYERS: usize = 4;
 pub type SharedLobby = Arc<Mutex<Lobby>>;
 
 pub struct Conn {
-    pub name: String,
+    pub account: i32,
     pub tx: UnboundedSender<Message>,
     pub room: Option<u32>,
-    pub class: ClassId,
     pub ready: bool,
-    /// Profile token, set by `Hello`.
-    pub token: Option<String>,
+    /// The character this connection plays (a cached copy of its database row).
+    pub character: Option<Character>,
 }
 
 pub struct Room {
@@ -37,13 +39,14 @@ pub struct Lobby {
     rooms: BTreeMap<u32, Room>,
     next_conn: u32,
     next_room: u32,
-    profiles: ProfileStore,
+    /// `None` in tests: runs then bank nothing.
+    db: Option<Db>,
     /// Handle to ourselves, passed to run tasks so they can report back.
     me: Option<SharedLobby>,
 }
 
-pub fn new_shared(profiles: ProfileStore) -> SharedLobby {
-    let lobby = Arc::new(Mutex::new(Lobby { conns: HashMap::new(), rooms: BTreeMap::new(), next_conn: 1, next_room: 1, profiles, me: None }));
+pub fn new_shared(db: Option<Db>) -> SharedLobby {
+    let lobby = Arc::new(Mutex::new(Lobby { conns: HashMap::new(), rooms: BTreeMap::new(), next_conn: 1, next_room: 1, db, me: None }));
     lobby.lock().unwrap().me = Some(lobby.clone());
     lobby
 }
@@ -52,12 +55,35 @@ fn send(tx: &UnboundedSender<Message>, msg: &ServerMsg) {
     let _ = tx.send(Message::Binary(encode(msg).into()));
 }
 
+/// Called by a run task when the dungeon is over: everyone returns to the
+/// lobby, then the earned XP and coins are banked on the characters.
+pub async fn finish_run(lobby: &SharedLobby, rid: u32, awards: Vec<Award>) {
+    let db = {
+        let mut l = lobby.lock().unwrap();
+        l.run_finished(rid);
+        l.db.clone()
+    };
+    let Some(db) = db.filter(|_| !awards.is_empty()) else { return };
+    match db::bank_awards(&db, &awards).await {
+        Ok(banked) => {
+            let mut l = lobby.lock().unwrap();
+            for (id, p) in banked {
+                l.apply_progress(id, p);
+            }
+        }
+        Err(e) => tracing::error!("run {rid}: cannot bank awards {awards:?}: {e}"),
+    }
+}
+
 impl Lobby {
-    pub fn connect(&mut self, tx: UnboundedSender<Message>) -> u32 {
+    /// A new connection of a logged-in account. An older connection of the
+    /// same account is closed: one account plays in one place only.
+    pub fn connect(&mut self, account: i32, tx: UnboundedSender<Message>) -> u32 {
+        self.kick_account(account, "You logged in from another window.");
         let id = self.next_conn;
         self.next_conn += 1;
         send(&tx, &ServerMsg::Welcome { id });
-        self.conns.insert(id, Conn { name: format!("Adventurer{id}"), tx, room: None, class: ClassId::Wizard, ready: false, token: None });
+        self.conns.insert(id, Conn { account, tx, room: None, ready: false, character: None });
         self.send_lobby_to(id);
         id
     }
@@ -67,26 +93,96 @@ impl Lobby {
         self.conns.remove(&id);
     }
 
+    /// Closes every connection of an account (new login elsewhere, logout,
+    /// account deleted).
+    pub fn kick_account(&mut self, account: i32, why: &str) {
+        let ids: Vec<u32> = self.conns.iter().filter(|(_, c)| c.account == account).map(|(id, _)| *id).collect();
+        for id in ids {
+            if let Some(c) = self.conns.get(&id) {
+                send(&c.tx, &ServerMsg::Error { msg: why.into() });
+                let _ = c.tx.send(Message::Close(None));
+            }
+            self.disconnect(id);
+        }
+    }
+
+    pub fn account_of(&self, id: u32) -> Option<i32> {
+        self.conns.get(&id).map(|c| c.account)
+    }
+
     /// The running dungeon this connection is in, for routing gameplay input.
     pub fn run_of(&self, id: u32) -> Option<UnboundedSender<RunCmd>> {
         let room = self.conns.get(&id)?.room?;
         self.rooms.get(&room)?.run_tx.clone()
     }
 
-    pub fn handle(&mut self, id: u32, msg: ClientMsg) {
-        match msg {
-            ClientMsg::Hello { name, token } => {
-                let name: String = name.trim().chars().filter(|c| !c.is_control()).take(16).collect();
-                let token = self.profiles.resolve(token.as_deref());
-                if let Some(c) = self.conns.get_mut(&id) {
-                    if !name.is_empty() {
-                        c.name = name;
-                    }
-                    c.token = Some(token);
-                }
-                self.send_profile(id);
+    fn in_running_run(&self, id: u32) -> bool {
+        self.conns.get(&id).and_then(|c| c.room).and_then(|r| self.rooms.get(&r)).map_or(false, |r| r.run_tx.is_some())
+    }
+
+    /// Characters can only be switched outside of rooms.
+    pub fn can_select(&self, id: u32) -> Result<i32, &'static str> {
+        let c = self.conns.get(&id).ok_or("Not connected.")?;
+        if c.room.is_some() {
+            return Err("Leave the dungeon first.");
+        }
+        Ok(c.account)
+    }
+
+    pub fn set_character(&mut self, id: u32, character: Character) {
+        if let Err(e) = self.can_select(id) {
+            return self.error(id, e);
+        }
+        let Some(c) = self.conns.get_mut(&id) else { return };
+        if c.account != character.account_id {
+            return;
+        }
+        let info = character.info();
+        c.character = Some(character);
+        send(&c.tx, &ServerMsg::Character(info));
+    }
+
+    /// The character to buy upgrades for: never during a run.
+    pub fn can_shop(&self, id: u32) -> Result<i32, &'static str> {
+        if self.in_running_run(id) {
+            return Err("Upgrades can only be bought between runs.");
+        }
+        self.conns.get(&id).and_then(|c| c.character.as_ref()).map(|ch| ch.id).ok_or("Choose a character first.")
+    }
+
+    /// New progress of a character, fresh from the database. Older results
+    /// arriving late (`rev`) are ignored.
+    pub fn apply_progress(&mut self, character: i32, p: Progress) {
+        for c in self.conns.values_mut() {
+            if let Some(ch) = c.character.as_mut().filter(|ch| ch.id == character && p.rev > ch.progress.rev) {
+                ch.progress = p.clone();
+                send(&c.tx, &ServerMsg::Character(ch.info()));
             }
+        }
+    }
+
+    /// Is this character in a room right now (then it must not be deleted)?
+    pub fn character_busy(&self, character: i32) -> bool {
+        self.conns.values().any(|c| c.room.is_some() && c.character.as_ref().map_or(false, |ch| ch.id == character))
+    }
+
+    pub fn forget_character(&mut self, character: i32) {
+        for c in self.conns.values_mut() {
+            if c.character.as_ref().map_or(false, |ch| ch.id == character) {
+                c.character = None;
+            }
+        }
+    }
+
+    pub fn handle(&mut self, id: u32, msg: ClientMsg) {
+        if !self.conns.contains_key(&id) {
+            return; // closed (logged in elsewhere) but the socket has not ended yet
+        }
+        match msg {
             ClientMsg::CreateRun { name } => {
+                if !self.has_character(id) {
+                    return;
+                }
                 self.leave_room(id);
                 let rid = self.next_room;
                 self.next_room += 1;
@@ -101,6 +197,9 @@ impl Lobby {
                 self.broadcast_lobby();
             }
             ClientMsg::JoinRun { run_id } => {
+                if !self.has_character(id) {
+                    return;
+                }
                 let ok = self.rooms.get(&run_id).map_or(false, |r| r.run_tx.is_none() && r.members.len() < MAX_PLAYERS);
                 if !ok {
                     self.error(id, "That dungeon is full or has already started.");
@@ -119,14 +218,6 @@ impl Lobby {
                 self.leave_room(id);
                 self.send_lobby_to(id);
             }
-            ClientMsg::SelectClass { class } => {
-                if let Some(c) = self.conns.get_mut(&id) {
-                    if self.rooms.get(&c.room.unwrap_or(0)).map_or(true, |r| r.run_tx.is_none()) {
-                        c.class = class;
-                    }
-                }
-                self.send_room_of(id);
-            }
             ClientMsg::SetReady { ready } => {
                 if let Some(c) = self.conns.get_mut(&id) {
                     c.ready = ready;
@@ -141,30 +232,19 @@ impl Lobby {
                 }
             }
             ClientMsg::StartRun => self.start(id),
-            ClientMsg::BuyUpgrade { stat } => {
-                let Some(c) = self.conns.get(&id) else { return };
-                if c.room.and_then(|r| self.rooms.get(&r)).map_or(false, |r| r.run_tx.is_some()) {
-                    return self.error(id, "Upgrades can only be bought between runs.");
-                }
-                let Some(token) = c.token.clone() else { return };
-                match self.profiles.buy(&token, stat) {
-                    Ok(()) => self.send_profile(id),
-                    Err(e) => self.error(id, e),
-                }
-            }
             _ => {}
         }
     }
 
-    fn send_profile(&self, id: u32) {
-        if let Some(c) = self.conns.get(&id) {
-            if let Some(token) = &c.token {
-                send(&c.tx, &ServerMsg::Profile(self.profiles.info(token)));
-            }
+    fn has_character(&self, id: u32) -> bool {
+        let ok = self.conns.get(&id).map_or(false, |c| c.character.is_some());
+        if !ok {
+            self.error(id, "Choose a character first.");
         }
+        ok
     }
 
-    fn error(&self, id: u32, msg: &str) {
+    pub fn error(&self, id: u32, msg: &str) {
         if let Some(c) = self.conns.get(&id) {
             send(&c.tx, &ServerMsg::Error { msg: msg.into() });
         }
@@ -185,14 +265,9 @@ impl Lobby {
             .members
             .iter()
             .filter_map(|m| {
-                self.conns.get(m).map(|c| Member {
-                    conn: *m,
-                    name: c.name.clone(),
-                    class: c.class,
-                    tx: c.tx.clone(),
-                    token: c.token.clone(),
-                    upgrades: c.token.as_deref().map(|t| self.profiles.upgrades(t)).unwrap_or_default(),
-                })
+                let c = self.conns.get(m)?;
+                let ch = c.character.as_ref()?;
+                Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), character: Some(ch.id), upgrades: ch.progress.upgrades })
             })
             .collect();
         let seed: u64 = rand::random();
@@ -206,20 +281,8 @@ impl Lobby {
         self.broadcast_lobby();
     }
 
-    /// Called by a run task when the dungeon is over: the earned XP and coins
-    /// are banked and everyone returns to the lobby.
-    pub fn run_finished(&mut self, rid: u32, awards: Vec<Award>) {
-        for a in &awards {
-            self.profiles.add_xp(&a.token, a.xp);
-            self.profiles.add_coins(&a.token, a.coins);
-        }
-        if !awards.is_empty() {
-            self.profiles.save();
-            let ids: Vec<u32> = self.conns.iter().filter(|(_, c)| c.token.as_ref().map_or(false, |t| awards.iter().any(|a| &a.token == t))).map(|(id, _)| *id).collect();
-            for id in ids {
-                self.send_profile(id);
-            }
-        }
+    /// The run is over: its room closes and the members return to the lobby.
+    fn run_finished(&mut self, rid: u32) {
         if let Some(room) = self.rooms.remove(&rid) {
             for m in room.members {
                 if let Some(c) = self.conns.get_mut(&m) {
@@ -297,7 +360,11 @@ impl Lobby {
         let players: Vec<RoomPlayer> = room
             .members
             .iter()
-            .filter_map(|m| self.conns.get(m).map(|c| RoomPlayer { id: *m, name: c.name.clone(), class: c.class, ready: c.ready }))
+            .filter_map(|m| {
+                let c = self.conns.get(m)?;
+                let ch = c.character.as_ref()?;
+                Some(RoomPlayer { id: *m, name: ch.name.clone(), class: ch.class, ready: c.ready })
+            })
             .collect();
         let msg = ServerMsg::Room { run_id: rid, name: room.name.clone(), host: room.host, players, boss: room.boss };
         for m in &room.members {
@@ -311,28 +378,28 @@ impl Lobby {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defs::progression::{upgrade_cost, UpgradeStat};
+    use crate::defs::progression::UpgradeStat;
+    use crate::protocol::ClassId;
 
-    fn lobby() -> SharedLobby {
-        new_shared(ProfileStore::in_memory())
+    fn character(account: i32, id: i32, class: ClassId) -> Character {
+        Character { id, account_id: account, name: format!("hero{id}"), class, progress: Progress::new() }
     }
 
-    /// Connects a client that has said `Hello`; returns its id and token.
-    fn join(l: &mut Lobby) -> (u32, String) {
+    /// Connects `account` and selects a character for it; returns the connection id.
+    fn join(l: &mut Lobby, account: i32, class: ClassId) -> u32 {
         let (tx, rx) = unbounded_channel();
         std::mem::forget(rx);
-        let id = l.connect(tx);
-        l.handle(id, ClientMsg::Hello { name: format!("p{id}"), token: None });
-        let token = l.conns[&id].token.clone().expect("token issued");
-        (id, token)
+        let id = l.connect(account, tx);
+        l.set_character(id, character(account, account * 10, class));
+        id
     }
 
     #[tokio::test]
     async fn only_the_host_chooses_the_boss_before_the_run() {
-        let shared = lobby();
+        let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
-        let (host, _) = join(&mut l);
-        let (guest, _) = join(&mut l);
+        let host = join(&mut l, 1, ClassId::Wizard);
+        let guest = join(&mut l, 2, ClassId::Paladin);
         l.handle(host, ClientMsg::CreateRun { name: "r".into() });
         let rid = l.conns[&host].room.unwrap();
         l.handle(guest, ClientMsg::JoinRun { run_id: rid });
@@ -348,33 +415,98 @@ mod tests {
         assert!(l.rooms[&rid].run_tx.is_some(), "run started");
         l.handle(host, ClientMsg::SelectBoss { boss: Some(BossId::Demon) });
         assert_eq!(l.rooms[&rid].boss, Some(BossId::Lich), "fixed once started");
+        assert!(l.character_busy(10) && l.character_busy(20));
     }
 
     #[tokio::test]
-    async fn xp_is_banked_and_spent_between_runs_only() {
-        let shared = lobby();
+    async fn rooms_need_a_character_and_characters_switch_outside_rooms_only() {
+        let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
-        let (id, token) = join(&mut l);
-        l.handle(id, ClientMsg::CreateRun { name: "r".into() });
-        let rid = l.conns[&id].room.unwrap();
-        l.handle(id, ClientMsg::StartRun);
-
-        l.profiles.add_xp(&token, 1000);
-        l.handle(id, ClientMsg::BuyUpgrade { stat: UpgradeStat::Damage });
-        assert_eq!(l.profiles.upgrades(&token).damage, 0, "no shopping during a run");
-
-        l.run_finished(rid, vec![Award { token: token.clone(), xp: 50, coins: 30 }]);
-        assert_eq!(l.profiles.info(&token).xp, 1050);
-        assert_eq!(l.profiles.info(&token).coins, 30);
-        l.handle(id, ClientMsg::BuyUpgrade { stat: UpgradeStat::Damage });
-        assert_eq!(l.profiles.upgrades(&token).damage, 1);
-        assert_eq!(l.profiles.info(&token).xp, 1050 - upgrade_cost(0));
-
-        // A reconnect with the same token finds the same profile.
         let (tx, rx) = unbounded_channel();
         std::mem::forget(rx);
-        let id2 = l.connect(tx);
-        l.handle(id2, ClientMsg::Hello { name: String::new(), token: Some(token.clone()) });
-        assert_eq!(l.conns[&id2].token.as_deref(), Some(token.as_str()));
+        let id = l.connect(1, tx);
+        l.handle(id, ClientMsg::CreateRun { name: "r".into() });
+        assert!(l.rooms.is_empty(), "no character, no room");
+
+        l.set_character(id, character(2, 99, ClassId::Wizard));
+        assert!(l.conns[&id].character.is_none(), "someone else's character");
+        l.set_character(id, character(1, 10, ClassId::Barbarian));
+        l.handle(id, ClientMsg::CreateRun { name: "r".into() });
+        assert!(l.can_select(id).is_err(), "in a room");
+        l.set_character(id, character(1, 11, ClassId::Assassin));
+        assert_eq!(l.conns[&id].character.as_ref().unwrap().id, 10);
+        l.handle(id, ClientMsg::LeaveRun);
+        assert!(l.can_select(id).is_ok());
+    }
+
+    #[tokio::test]
+    async fn shopping_between_runs_only_and_newest_progress_wins() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let id = join(&mut l, 1, ClassId::Wizard);
+        assert_eq!(l.can_shop(id), Ok(10));
+        l.handle(id, ClientMsg::CreateRun { name: "r".into() });
+        assert_eq!(l.can_shop(id), Ok(10), "waiting room is fine");
+        l.handle(id, ClientMsg::StartRun);
+        assert!(l.can_shop(id).is_err(), "no shopping during a run");
+        let rid = l.conns[&id].room.unwrap();
+        l.run_finished(rid);
+        assert_eq!(l.can_shop(id), Ok(10));
+
+        let mut newer = Progress::new();
+        newer.bank(500, 0);
+        newer.buy(UpgradeStat::Life).unwrap();
+        newer.rev = 3;
+        let mut older = Progress::new();
+        older.rev = 2;
+        l.apply_progress(10, newer.clone());
+        l.apply_progress(10, older);
+        l.apply_progress(77, Progress { rev: 9, xp: 1, ..Progress::new() });
+        assert_eq!(l.conns[&id].character.as_ref().unwrap().progress, newer);
+    }
+
+    /// Needs PostgreSQL (`DATABASE_URL`), see `db::tests`.
+    #[tokio::test]
+    async fn a_finished_run_banks_on_the_played_character_only() {
+        let Some(db) = db::tests::test_db().await else { return };
+        let a = db::create_account(&db, "Banker", "h").await.unwrap();
+        let played = db::create_character(&db, a, "Played", ClassId::Wizard).await.unwrap();
+        let idle = db::create_character(&db, a, "Idle", ClassId::Paladin).await.unwrap();
+        let shared = new_shared(Some(db.clone()));
+        let (rid, id) = {
+            let mut l = shared.lock().unwrap();
+            let (tx, rx) = unbounded_channel();
+            std::mem::forget(rx);
+            let id = l.connect(a, tx);
+            l.set_character(id, played.clone());
+            l.handle(id, ClientMsg::CreateRun { name: "r".into() });
+            (l.conns[&id].room.unwrap(), id)
+        };
+        finish_run(&shared, rid, vec![Award { character: played.id, xp: 120, coins: 7 }]).await;
+        {
+            let l = shared.lock().unwrap();
+            assert!(l.conns[&id].room.is_none(), "back in the lobby");
+            let cached = &l.conns[&id].character.as_ref().unwrap().progress;
+            assert_eq!((cached.xp, cached.coins), (120, 7), "cached copy refreshed");
+        }
+        let stored = db::load_character(&db, a, played.id).await.unwrap().unwrap().progress;
+        assert_eq!((stored.xp, stored.total_xp, stored.coins), (120, 120, 7));
+        assert_eq!(db::load_character(&db, a, idle.id).await.unwrap().unwrap().progress, Progress::new());
+    }
+
+    #[tokio::test]
+    async fn a_second_login_closes_the_first_connection() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let first = join(&mut l, 1, ClassId::Wizard);
+        l.handle(first, ClientMsg::CreateRun { name: "r".into() });
+        let second = join(&mut l, 1, ClassId::Wizard);
+        assert!(!l.conns.contains_key(&first));
+        assert!(l.rooms.is_empty(), "its room closed with it");
+        l.handle(first, ClientMsg::CreateRun { name: "late".into() });
+        assert!(l.rooms.is_empty(), "messages of the closed connection are ignored");
+        assert_eq!(l.account_of(second), Some(1));
+        l.kick_account(1, "bye");
+        assert!(l.conns.is_empty());
     }
 }

@@ -1,13 +1,14 @@
-//! Progression: players earn XP during runs; it is banked in their profile
-//! (`crate::profiles`) when the run ends and spent on permanent stat upgrades
+//! Progression: players earn XP during runs; it is banked on their character
+//! (`crate::progress`) when the run ends and spent on permanent stat upgrades
 //! in the lobby. The simulation reads every upgraded stat through `Modifiers`.
 
 use super::enemies::EnemyType;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// Upgrade levels a player has bought (persisted in the profile).
+/// Upgrade levels a character has bought (persisted in its progress document).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(default)]
 #[ts(export)]
 pub struct StatUpgrades {
     pub damage: u8,

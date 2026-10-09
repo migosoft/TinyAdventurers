@@ -57,18 +57,18 @@ pub struct InputMsg {
 #[serde(tag = "t")]
 #[ts(export)]
 pub enum ClientMsg {
-    /// `token` identifies the persistent profile (issued by the server in `Profile`).
-    Hello { name: String, token: Option<String> },
+    /// Play as one of the account's characters (not while in a room). The
+    /// server answers with `Character`.
+    SelectCharacter { id: i32 },
     CreateRun { name: String },
     JoinRun { run_id: u32 },
     LeaveRun,
-    SelectClass { class: ClassId },
     SetReady { ready: bool },
     /// Host only, before the run starts. `None` = random end boss.
     SelectBoss { boss: Option<BossId> },
     /// Host only. Uses the room's chosen boss.
     StartRun,
-    /// Spend profile XP on the next level of a stat (not during a run).
+    /// Spend the character's XP on the next level of a stat (not during a run).
     BuyUpgrade { stat: UpgradeStat },
     Input(InputMsg),
     Ping { time: f64 },
@@ -223,11 +223,11 @@ pub enum ServerMsg {
     Lobby { runs: Vec<RunSummary> },
     /// `boss`: the host's choice of end boss, `None` = random.
     Room { run_id: u32, name: String, host: u32, players: Vec<RoomPlayer>, boss: Option<BossId> },
-    /// The receiving player's persistent profile.
-    Profile(ProfileInfo),
+    /// The receiving player's selected character and its progress.
+    Character(CharacterInfo),
     RunStarted(RunStartInfo),
     Snap(Snapshot),
-    /// `banked`: the XP was added to the profiles (false after a debug run).
+    /// `banked`: the XP was added to the characters (false after a debug run).
     RunEnded { victory: bool, boss: BossId, time: f32, stats: Vec<PlayerStats>, banked: bool },
     Pong { time: f64 },
     Error { msg: String },
@@ -236,13 +236,18 @@ pub enum ServerMsg {
     DebugPath { on: bool, points: Vec<(f32, f32)>, ogre: Vec<(f32, f32)> },
 }
 
+/// A character and its progress, as the client sees it (read only: the server
+/// never accepts progress values from the client).
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct ProfileInfo {
-    /// Store this and send it in `Hello` to keep the profile.
-    pub token: String,
+pub struct CharacterInfo {
+    pub id: i32,
+    pub name: String,
+    pub class: ClassId,
     /// Unspent XP.
     pub xp: u32,
+    /// All XP ever earned.
+    pub total_xp: u32,
     /// Unspent coins (nothing to buy with them yet).
     pub coins: u32,
     pub upgrades: StatUpgrades,
@@ -278,7 +283,7 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
-        let hello = rmp_serde::to_vec_named(&ClientMsg::Hello { name: "a".into(), token: None }).unwrap();
-        assert!(matches!(decode(&hello), Some(ClientMsg::Hello { .. })));
+        let select = rmp_serde::to_vec_named(&ClientMsg::SelectCharacter { id: 3 }).unwrap();
+        assert!(matches!(decode(&select), Some(ClientMsg::SelectCharacter { id: 3 })));
     }
 }

@@ -47,11 +47,11 @@ pub struct Player {
     /// Debug mode: takes no damage and receives the path to the boss.
     pub debug: bool,
     pub xp: u32,
-    /// Coins earned this run (banked to the profile like XP).
+    /// Coins earned this run (banked to the character like XP).
     pub coins: u32,
-    /// Profile the earned XP is banked to when the run ends.
-    pub token: Option<String>,
-    /// Progression stat multipliers from the profile's upgrades.
+    /// Character the earned XP is banked to when the run ends.
+    pub character: Option<i32>,
+    /// Progression stat multipliers from the character's upgrades.
     pub mods: Modifiers,
     pub max_hp: f64,
     /// Falling into a chasm or drowning: seconds left until death, and how.

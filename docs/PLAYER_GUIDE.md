@@ -5,11 +5,12 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 ## Getting started
 
 1. Open the game in your browser. Your host will give you the address, for example `http://192.168.1.20:8080`.
-2. Enter your **name** at the top.
-3. **Open a new run**, or **Join** an open run in the list. Runs already in progress can't be joined.
-4. **Choose your class.** Several players may pick the same class.
-5. The host **chooses the end boss**, or leaves it on **Random**. Everyone sees the choice.
-6. Everyone except the host clicks **Ready!**. When the whole party is ready, the host clicks **Enter the dungeon**.
+2. **Create an account**: a name and a password, nothing else. No e-mail is stored, so **a forgotten password cannot be recovered**. Write it down or use a password manager. Next time, just log in.
+3. **Create a character**: give it a name and choose its class. The class can't be changed later. You can have up to 8 characters, also several of the same class. Each one collects its own XP, coins and upgrades.
+4. Click **Play** on a character. "Change character" in the lobby brings you back to the list.
+5. **Open a new run**, or **Join** an open run in the list. Runs already in progress can't be joined. Several players may play the same class.
+6. The host **chooses the end boss**, or leaves it on **Random**. Everyone sees the choice.
+7. Everyone except the host clicks **Ready!**. When the whole party is ready, the host clicks **Enter the dungeon**.
 
 ## Controls
 
@@ -164,10 +165,10 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 
 ## XP, coins and upgrades
 
-- **Coins** come from treasure chests, mimics (25) and the boss (50). Like XP, they go to every living hero and are added to your profile when the run ends. The lobby shows your coins next to your XP. There is nothing to buy with them yet: they are saved for loadouts.
+- **Coins** come from treasure chests, mimics (25) and the boss (50). Like XP, they go to every living hero and are added to your character when the run ends. The lobby shows your coins next to your XP. There is nothing to buy with them yet: they are saved for loadouts.
 
 - Every kill gives **XP to every living member of the party**: 2 for a raised skeleton or summoned imp, 5 for a goblin, 8 for a skeleton, imp or chort, 12 for an orc, 20 for a disciple, 25 for a necromancer or summoner and **300 for the boss**. Once you have fallen, you stop earning.
-- When the run ends, won or lost, your XP is added to your **profile**. If you leave early, you keep what you earned so far.
+- When the run ends, won or lost, your XP is added to the **character** you played. If you leave early, you keep what you earned so far.
 - Spend XP in the **Upgrades** panel in the lobby. Each stat has 10 levels; the first level costs 100 XP and each further level 75 XP more.
 
 | Stat | Per level | At level 10 |
@@ -178,8 +179,9 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 | Life | +10 % max life | +100 % |
 | Armor | blocks 4 % of incoming damage | 40 % |
 
-- Upgrades are **permanent** and apply to **every class** you play.
-- Your profile is stored by the server and remembered by your browser. A different browser or device, or clearing the site data, starts a new profile.
+- Upgrades are **permanent** and belong to the **character** that bought them. Your other characters have their own.
+- Your characters are stored on the server, so you can log in from any browser or device. If you log in somewhere else, the game in the first window closes.
+- **Deleting a character or your account is final.** Deleting the account removes all of its characters. Both are on the character screen.
 - Runs where someone used debug mode give no XP and no coins.
 
 ## Tips

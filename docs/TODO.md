@@ -2,10 +2,11 @@
 
 ## Progression follow-ups
 
-Progression is live (profiles by token, XP banked at run end, lobby upgrade shop). See TECHNICAL.md §11a.
+Progression is live: accounts with up to 8 characters, per-character progress in PostgreSQL, XP banked at run end, lobby upgrade shop. See TECHNICAL.md §11a.
 - **Tune** `upgrade_cost` and the per-level bonuses in `defs/progression.rs` as part of the balancing pass. A typical cleared run gives a few hundred XP plus 300 for the boss; maxing one stat costs 4,375 XP.
-- **Identity is a browser token.** If players want their profile on several devices, add accounts or a "show/enter my token" field in the lobby.
-- The same token can be in one run twice (two tabs), which banks its XP twice. Reject a second join with the same token if that becomes a problem.
+- **Password change** (old + new password) is not built yet; only deleting the account is.
+- **Behind a reverse proxy**, read `X-Forwarded-For` (only from a trusted proxy) so the per-IP login limits apply per player again.
+- **Several game servers** would need shared presence (one connection per account) and a shared login limiter, e.g. in Valkey. See "Scaling later" in TECHNICAL.md §11a.
 
 ## Chests, mimics and coins follow-ups
 - **Spend coins:** they are banked but buy nothing yet. Intended for loadouts (see below); a coin column in the lobby shop would also work.
