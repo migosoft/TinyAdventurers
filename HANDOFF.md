@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-09, admin area, statistics, OpenTelemetry)
 
-**Branch:** `feature/admin` (from `main`), committed, **not merged or pushed yet**. Ask the user before merging.
+**Branch:** `feature/admin` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
 
 **User decisions this session:**
 - **Admin login:** a username and password from environment variables (`ADMIN_USER`, `ADMIN_PASSWORD`), not a game account.
@@ -74,8 +74,17 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **Old test rows remain:** the local database still holds a few test runs from before the fix, whose leavers count as deaths. They are test data only.
 - **Throttle test locks out the IP:** the admin throttle check locks out the test IP for 5 minutes. Restart the game container before the smoke test if you run both.
 
+**Local setup left behind:**
+- The user's `.env` now has **test** admin values (`ADMIN_USER=admin`, `ADMIN_PASSWORD=tiny-admin-test-2026`), added at their request. They must be changed before the game is public.
+- `ADMIN_SESSION_MINUTES` and `PLAYER_SESSION_MINUTES` are not in `.env`, so the defaults apply (10 minutes and 7 days).
+
+**Next steps (suggestions):**
+- A monitoring stack for the OTLP export (see the MongoDB note above for ClickStack).
+- Read `X-Forwarded-For` behind a proxy (TODO.md).
+- The balancing pass and loadouts stay open (TODO.md).
+
 **Not yet verified:**
-- The user has not tried the admin area yet.
+- The user declared the feature done after logging in with the test admin credentials. They did not report trying every action live.
 - A won or lost run through the browser was not recorded live. Only abandoned runs were; won and lost runs are covered by tests.
 
 ## Session before (2026-10-09, accounts, characters and PostgreSQL)
