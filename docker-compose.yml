@@ -31,6 +31,8 @@ services:
       # Admin area at /admin; disabled unless both are set (password >= 12 characters).
       ADMIN_USER: ${ADMIN_USER:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Admin sessions end after this many minutes without an admin action.
+      ADMIN_SESSION_MINUTES: ${ADMIN_SESSION_MINUTES:-10}
       # OpenTelemetry export (traces, logs, metrics over OTLP/HTTP); off when empty.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-tiny-adventurers-server}

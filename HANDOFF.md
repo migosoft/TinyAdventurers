@@ -15,6 +15,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **User decisions this session:**
 - **Admin login:** a username and password from environment variables (`ADMIN_USER`, `ADMIN_PASSWORD`), not a game account.
+- **Admin session:** ends after **10 minutes without an admin action**, configurable with `ADMIN_SESSION_MINUTES`. Every admin action restarts the clock; the dashboard auto-refresh does not. (Player sessions stay at 30 days.)
 - **Metrics:** all four groups (player activity, runs, characters, trend charts), on a **separate `/admin` page**.
 - **Actions:** delete players, change passwords and delete characters, all recorded in an **audit log**.
 - **Monitoring:** the user first asked for ClickStack in separate containers, then changed it: **keep everything in the admin area**, but make the server **ready to send OTEL metrics, logs and traces** for a later collector such as ClickStack. No monitoring containers were added.

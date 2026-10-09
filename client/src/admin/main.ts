@@ -246,10 +246,10 @@ function renderDashboard(s: AdminStats, main: HTMLElement, updated: Date): void 
   );
 }
 
-async function loadDashboard(main: HTMLElement): Promise<void> {
+async function loadDashboard(main: HTMLElement, background = false): Promise<void> {
   main.classList.add('loading'); // keep the previous render while fetching
   try {
-    renderDashboard(await adminApi.stats(), main, new Date());
+    renderDashboard(await adminApi.stats(background), main, new Date());
   } catch (e) {
     failed(e);
   } finally {
@@ -261,7 +261,7 @@ function dashboard(): void {
   const main = shell('dashboard', h('p', { class: 'muted' }, 'Loading…'));
   void loadDashboard(main);
   refreshTimer = window.setInterval(() => {
-    if (document.visibilityState === 'visible') void loadDashboard(main);
+    if (document.visibilityState === 'visible') void loadDashboard(main, true); // not an admin action
   }, REFRESH_MS);
 }
 

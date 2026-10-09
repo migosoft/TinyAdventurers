@@ -113,9 +113,11 @@ pub fn cookie_value<'a>(header: &'a str, name: &str) -> Option<&'a str> {
 // --------------------------------------------------------------- admin login
 
 /// The admin area's cookie: separate from the player's, only sent to the
-/// admin API, and short-lived.
+/// admin API, and gone when the browser closes.
 pub const ADMIN_COOKIE: &str = "ta_admin";
-pub const ADMIN_SESSION_SECS: u64 = 12 * 3600;
+/// Hard limit of an admin session however active it is. The usual end is the
+/// idle timeout (`ADMIN_SESSION_MINUTES`, see `admin.rs`).
+pub const ADMIN_TOKEN_MAX_SECS: u64 = 12 * 3600;
 pub const ADMIN_PASSWORD_MIN: usize = 12;
 
 impl Auth {
@@ -123,11 +125,12 @@ impl Auth {
     pub fn new_admin_session(&self) -> NewSession {
         let mut sid = [0u8; 32];
         rand::rngs::OsRng.fill_bytes(&mut sid);
-        self.sign(&sid, now_secs() + ADMIN_SESSION_SECS)
+        self.sign(&sid, now_secs() + ADMIN_TOKEN_MAX_SECS)
     }
 
+    /// No Max-Age: a browser-session cookie. The server ends idle sessions.
     pub fn set_admin_cookie(&self, token: &str) -> String {
-        format!("{ADMIN_COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age={ADMIN_SESSION_SECS}{}", if self.secure_cookie { "; Secure" } else { "" })
+        format!("{ADMIN_COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/api/admin{}", if self.secure_cookie { "; Secure" } else { "" })
     }
 
     pub fn clear_admin_cookie(&self) -> String {
@@ -312,6 +315,7 @@ mod tests {
         assert_eq!(cookie_token("ta_admin=x.y"), None);
         let c = a.set_admin_cookie("t");
         assert!(c.contains("Path=/api/admin") && c.contains("HttpOnly") && c.contains("SameSite=Strict"));
+        assert!(!c.contains("Max-Age"), "a browser-session cookie; the server ends idle sessions");
         let s = a.new_admin_session();
         assert_eq!(a.verify(&s.token), Some(s.id_hash));
     }

@@ -10,13 +10,14 @@ import type { PlayerPage } from '../generated/PlayerPage';
 
 export { ApiFail };
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** `background`: a request the page makes by itself; it does not keep the session alive. */
+async function call<T>(method: string, path: string, body?: unknown, background = false): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`/api/admin/${path}`, {
       method,
       credentials: 'same-origin',
-      headers: method === 'GET' ? {} : { 'Content-Type': 'application/json' },
+      headers: { ...(method === 'GET' ? {} : { 'Content-Type': 'application/json' }), ...(background ? { 'X-Admin-Background': '1' } : {}) },
       body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
     });
   } catch {
@@ -44,7 +45,7 @@ export const adminApi = {
   },
   login: (name: string, password: string) => call<AdminMe>('POST', 'login', { name, password }),
   logout: () => call<void>('POST', 'logout'),
-  stats: () => call<AdminStats>('GET', 'stats'),
+  stats: (background = false) => call<AdminStats>('GET', 'stats', undefined, background),
   players: (q: string, sort: PlayerSort, page: number) => call<PlayerPage>('GET', `players?${new URLSearchParams({ q, sort, page: String(page) })}`),
   player: (id: number) => call<PlayerDetail>('GET', `players/${id}`),
   setPassword: (id: number, password: string) => call<void>('POST', `players/${id}/password`, { password }),

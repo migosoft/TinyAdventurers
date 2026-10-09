@@ -127,6 +127,7 @@ Environment variables (server):
 | `ALLOW_DEBUG` | On unless `0`/`false`/`no`. |
 | `RUST_LOG` | Console log filter (default `info`). |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | The admin area's login (§11b). Without both, or with a password under 12 characters, the area answers 404. |
+| `ADMIN_SESSION_MINUTES` | Admin idle timeout in minutes (default 10, 1–1440). Each admin action restarts it. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Turns on OpenTelemetry export (§11c), e.g. `http://otel-collector:4318`. The other standard `OTEL_*` variables work too. |
 
 The data lives on the `ta-db` volume. `docker compose down -v` deletes all accounts.
@@ -495,8 +496,10 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - Without both variables, or with a password under 12 characters (`ADMIN_PASSWORD_MIN`), every `/api/admin/*` route answers 404 and the server logs why at start-up.
 - Throttling: 5 failed admin logins per IP and 20 in total per 5 minutes give a 429. A failed login is logged without the IP.
 - **Sessions:**
-  - The token format is the same signed one as the players' (`Auth::new_admin_session`), with a 12-hour expiry.
-  - The cookie is `ta_admin` (HttpOnly, SameSite=Strict, `Path=/api/admin`, `Secure` with `COOKIE_SECURE`).
+  - The token format is the same signed one as the players' (`Auth::new_admin_session`), with a 12-hour hard limit (`ADMIN_TOKEN_MAX_SECS`).
+  - **Idle timeout:** a session ends after `ADMIN_SESSION_MINUTES` (default 10, 1–1440) without an admin action. Every admin request restarts the clock (`AdminState::touch`) except the dashboard's automatic refresh, which sends `X-Admin-Background: 1` and only checks the session, so an open tab still times out. The page then asks for the login again.
+  - Player sessions, for comparison, last 30 days from login (`SESSION_DAYS`).
+  - The cookie is `ta_admin` (HttpOnly, SameSite=Strict, `Path=/api/admin`, `Secure` with `COOKIE_SECURE`). It has no Max-Age, so it is gone when the browser closes.
   - Admin sessions live in memory (`AdminState.sessions`), so a restart logs the admin out.
   - A player's `ta_session` cookie never grants admin access.
 - State changes must be JSON (`api::require_json`), like the player API.
@@ -599,7 +602,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - progression modifiers
 - progress document: buying limits, saturating banking, `{}`, partial, unknown-field and broken documents, JSON round trip
 - auth: token round trip, tampered, expired and wrong-secret tokens rejected; cookie parsing; Argon2id hash and verify; name and password rules; the limiter window
-- admin login: disabled without both variables or with a short password; name and password both checked; the `ta_admin` cookie is scoped to `/api/admin` and separate from `ta_session` (a player cookie is no admin cookie)
+- admin login: disabled without both variables or with a short password; name and password both checked; the `ta_admin` cookie is scoped to `/api/admin`, has no Max-Age and is separate from `ta_session` (a player cookie is no admin cookie); the idle timeout restarts with each action but not with background refreshes; `ADMIN_SESSION_MINUTES` parsing
 - WebSocket origin check; only Vite's hashed bundles are cached for good
 - telemetry: without an endpoint nothing is exported; a finished run is counted with boss, outcome and debug, and debug runs stay out of the gameplay counters (in-memory exporter)
 - run record: outcome (won, lost, everyone left), every player, debug flag; leaving is not dying
@@ -657,6 +660,6 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - Passwords travel in the login request. In production the game must run behind a TLS reverse proxy (with `COOKIE_SECURE=1`).
 - Behind a reverse proxy every request comes from the proxy's IP, so the per-IP limits apply to everyone together. `X-Forwarded-For` is not read yet.
 - The login limiter and the one-connection-per-account rule live in the memory of one server process.
-- Admin sessions also live in memory: a restart logs the admin out. There is one admin login, shared by whoever knows it; the audit log names it, not a person.
+- Admin sessions also live in memory: a restart logs the admin out. They end after `ADMIN_SESSION_MINUTES` without an admin action. There is one admin login, shared by whoever knows it; the audit log names it, not a person.
 - Statistics count UTC days. Their history starts with the first deployment of the admin area.
 - OpenTelemetry export is plain HTTP only (no TLS client built in).

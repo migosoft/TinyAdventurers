@@ -29,34 +29,83 @@ const LOGIN_FAILS_PER_IP: u32 = 5;
 const LOGIN_FAILS_TOTAL: u32 = 20;
 const LOGIN_WINDOW: Duration = Duration::from_secs(300);
 
+/// Default idle timeout of an admin session (`ADMIN_SESSION_MINUTES`).
+pub const DEFAULT_IDLE_MINUTES: u64 = 10;
+
+/// Requests the page makes by itself (the dashboard's auto-refresh) send this
+/// header; they do not count as activity, so an open tab still times out.
+pub const BACKGROUND_HEADER: &str = "x-admin-background";
+
 pub struct AdminState {
     /// `None`: the admin area is disabled.
     login: Option<AdminLogin>,
-    /// Session id hash -> expiry.
+    /// A session ends after this long without an admin action.
+    idle: Duration,
+    /// Session id hash -> end of the session unless the admin acts again.
     sessions: Mutex<HashMap<Vec<u8>, Instant>>,
 }
 
 impl AdminState {
-    pub fn new(login: Option<AdminLogin>) -> AdminState {
-        AdminState { login, sessions: Mutex::new(HashMap::new()) }
+    pub fn new(login: Option<AdminLogin>, idle: Duration) -> AdminState {
+        AdminState { login, idle, sessions: Mutex::new(HashMap::new()) }
     }
 
-    /// From `ADMIN_USER` / `ADMIN_PASSWORD`; logs why if it stays disabled.
+    /// From `ADMIN_USER`, `ADMIN_PASSWORD` and `ADMIN_SESSION_MINUTES`; logs
+    /// why if it stays disabled.
     pub fn from_env() -> AdminState {
+        let idle = idle_timeout(std::env::var("ADMIN_SESSION_MINUTES").ok()).unwrap_or_else(|e| {
+            tracing::warn!("{e}; using {DEFAULT_IDLE_MINUTES} minutes");
+            Duration::from_secs(DEFAULT_IDLE_MINUTES * 60)
+        });
         match AdminLogin::from_env() {
             Ok(l) => {
-                tracing::info!("admin area enabled at /admin");
-                AdminState::new(Some(l))
+                tracing::info!("admin area enabled at /admin (sessions end after {} min without activity)", idle.as_secs() / 60);
+                AdminState::new(Some(l), idle)
             }
             Err(e) => {
                 tracing::warn!("admin area disabled: {e}");
-                AdminState::new(None)
+                AdminState::new(None, idle)
             }
         }
     }
 
     fn name(&self) -> Option<&str> {
         self.login.as_ref().map(|l| l.name.as_str())
+    }
+
+    fn start(&self, id_hash: Vec<u8>, now: Instant) {
+        self.sessions.lock().unwrap().insert(id_hash, now + self.idle);
+    }
+
+    /// True if the session is alive. An admin action (`active`) restarts its
+    /// idle clock; a background request only checks it.
+    fn touch(&self, id_hash: &[u8], now: Instant, active: bool) -> bool {
+        let mut sessions = self.sessions.lock().unwrap();
+        sessions.retain(|_, end| *end > now);
+        match sessions.get_mut(id_hash) {
+            Some(end) => {
+                if active {
+                    *end = now + self.idle;
+                }
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn end(&self, id_hash: &[u8]) {
+        self.sessions.lock().unwrap().remove(id_hash);
+    }
+}
+
+/// `ADMIN_SESSION_MINUTES`: whole minutes, 1 to 1440; unset = the default.
+fn idle_timeout(value: Option<String>) -> Result<Duration, String> {
+    let Some(v) = value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty()) else {
+        return Ok(Duration::from_secs(DEFAULT_IDLE_MINUTES * 60));
+    };
+    match v.parse::<u64>() {
+        Ok(m) if (1..=1440).contains(&m) => Ok(Duration::from_secs(m * 60)),
+        _ => Err(format!("ADMIN_SESSION_MINUTES must be a whole number of minutes from 1 to 1440, not {v:?}")),
     }
 }
 
@@ -77,7 +126,9 @@ fn not_found() -> api::Fail {
     fail(StatusCode::NOT_FOUND, "Not found.")
 }
 
-/// A logged-in admin (cookie signature, expiry and the in-memory session checked).
+/// A logged-in admin (cookie signature, expiry and the in-memory session
+/// checked). Extracting it counts as activity unless the request carries
+/// `BACKGROUND_HEADER`.
 pub struct AdminSession {
     pub name: String,
 }
@@ -91,11 +142,9 @@ impl FromRequestParts<AppState> for AdminSession {
         let cookies = parts.headers.get_all(header::COOKIE).iter().filter_map(|v| v.to_str().ok());
         let token = cookies.filter_map(|c| auth::cookie_value(c, auth::ADMIN_COOKIE)).next().ok_or_else(unauthorized)?;
         let id_hash = state.auth.verify(token).ok_or_else(unauthorized)?;
-        let mut sessions = state.admin.sessions.lock().unwrap();
-        let now = Instant::now();
-        sessions.retain(|_, exp| *exp > now);
-        if !sessions.contains_key(&id_hash) {
-            return Err(unauthorized());
+        let active = !parts.headers.contains_key(BACKGROUND_HEADER);
+        if !state.admin.touch(&id_hash, Instant::now(), active) {
+            return Err(fail(StatusCode::UNAUTHORIZED, "Your admin session ended. Please log in again."));
         }
         Ok(AdminSession { name: name.to_string() })
     }
@@ -133,7 +182,7 @@ async fn login(State(state): State<AppState>, ConnectInfo(addr): ConnectInfo<Soc
     }
     state.auth.limiter.lock().unwrap().clear(&ip_key);
     let s = state.auth.new_admin_session();
-    state.admin.sessions.lock().unwrap().insert(s.id_hash, Instant::now() + Duration::from_secs(auth::ADMIN_SESSION_SECS));
+    state.admin.start(s.id_hash, Instant::now());
     tracing::info!("admin logged in");
     Ok(([(header::SET_COOKIE, state.auth.set_admin_cookie(&s.token))], Json(AdminMe { name: admin.name.clone() })).into_response())
 }
@@ -144,7 +193,7 @@ async fn logout(State(state): State<AppState>, parts: axum::http::HeaderMap) -> 
     }
     let cookies = parts.get_all(header::COOKIE).iter().filter_map(|v| v.to_str().ok());
     if let Some(id_hash) = cookies.filter_map(|c| auth::cookie_value(c, auth::ADMIN_COOKIE)).next().and_then(|t| state.auth.verify(t)) {
-        state.admin.sessions.lock().unwrap().remove(&id_hash);
+        state.admin.end(&id_hash);
     }
     Ok(([(header::SET_COOKIE, state.auth.clear_admin_cookie())], StatusCode::NO_CONTENT).into_response())
 }
@@ -223,4 +272,41 @@ async fn delete_character(State(state): State<AppState>, admin: AdminSession, Pa
 
 async fn actions(State(state): State<AppState>, _admin: AdminSession) -> ApiResult<Json<Vec<AdminAction>>> {
     Ok(Json(stats::recent_actions(&state.db, 100).await?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sessions_end_after_the_idle_time_and_actions_restart_it() {
+        let admin = AdminState::new(None, Duration::from_secs(600));
+        let t0 = Instant::now();
+        let min = |m: u64| t0 + Duration::from_secs(m * 60);
+        admin.start(b"s".to_vec(), t0);
+
+        assert!(admin.touch(b"s", min(9), true), "an action at minute 9");
+        assert!(admin.touch(b"s", min(18), true), "alive: the clock restarted at minute 9");
+        assert!(admin.touch(b"s", min(27), false), "a background refresh only checks");
+        assert!(!admin.touch(b"s", min(29), false), "10 minutes after the last action it is over");
+        assert!(!admin.touch(b"s", min(29), true), "and an action cannot revive it");
+
+        admin.start(b"t".to_vec(), t0);
+        admin.end(b"t");
+        assert!(!admin.touch(b"t", t0, true), "logged out");
+        assert!(!admin.touch(b"unknown", t0, true));
+    }
+
+    #[test]
+    fn the_idle_timeout_comes_from_the_environment() {
+        let mins = |v: Option<&str>| idle_timeout(v.map(String::from)).map(|d| d.as_secs() / 60);
+        assert_eq!(mins(None), Ok(DEFAULT_IDLE_MINUTES));
+        assert_eq!(mins(Some("")), Ok(DEFAULT_IDLE_MINUTES));
+        assert_eq!(mins(Some(" 30 ")), Ok(30));
+        assert_eq!(mins(Some("1")), Ok(1));
+        assert_eq!(mins(Some("1440")), Ok(1440));
+        for bad in ["0", "1441", "-5", "ten", "2.5"] {
+            assert!(mins(Some(bad)).is_err(), "{bad}");
+        }
+    }
 }
