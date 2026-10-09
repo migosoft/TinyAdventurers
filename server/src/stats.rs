@@ -483,7 +483,7 @@ pub async fn recent_actions(db: &Db, limit: i64) -> Result<Vec<AdminAction>, sql
 mod tests {
     //! Need PostgreSQL (`DATABASE_URL`), see `db::tests`.
     use super::*;
-    use crate::db::tests::test_db;
+    use crate::db::tests::{test_db, WEEK};
     use crate::lobby::LivePlayer;
     use crate::protocol::BossId;
     use crate::run::{Award, Outcome, RunPlayerRecord, RunRecord};
@@ -606,9 +606,9 @@ mod tests {
         let Some(db) = test_db().await else { return };
         let a = db::create_account(&db, "Victim", "old-hash").await.unwrap();
         let c = db::create_character(&db, a, "Doomed", ClassId::Paladin).await.unwrap();
-        db::create_session(&db, a, b"s1").await.unwrap();
+        db::create_session(&db, a, b"s1", WEEK).await.unwrap();
         assert!(db::set_password(&db, a, "new-hash").await.unwrap());
-        assert_eq!(db::session_account(&db, b"s1").await.unwrap(), None, "sessions revoked");
+        assert_eq!(db::touch_session(&db, b"s1", WEEK).await.unwrap(), None, "sessions revoked");
         assert_eq!(db::account(&db, a).await.unwrap().unwrap().password_hash, "new-hash");
         assert!(!db::set_password(&db, 424242, "x").await.unwrap());
 

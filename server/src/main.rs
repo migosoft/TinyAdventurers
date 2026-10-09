@@ -47,7 +47,7 @@ async fn main() {
     let state = AppState {
         lobby: lobby::new_shared(Some(db.clone())),
         db,
-        auth: Arc::new(auth::Auth::new(secret.as_bytes(), secure_cookie)),
+        auth: Arc::new(auth::Auth::new(secret.as_bytes(), secure_cookie).with_session_idle(auth::session_idle_from_env())),
         admin: Arc::new(admin::AdminState::from_env()),
     };
     telemetry::observe_lobby(state.lobby.clone());
@@ -143,11 +143,11 @@ async fn ws_handler(ws: WebSocketUpgrade, headers: HeaderMap, State(state): Stat
     if let Err(e) = db::touch_activity(&state.db, session.account).await {
         tracing::error!("activity: {e}");
     }
-    ws.on_upgrade(move |socket| handle_socket(socket, state, session.account))
+    ws.on_upgrade(move |socket| handle_socket(socket, state, session.account, session.id_hash))
 }
 
-#[tracing::instrument(name = "ws", skip(socket, state))]
-async fn handle_socket(socket: WebSocket, state: AppState, account: i32) {
+#[tracing::instrument(name = "ws", skip(socket, state, id_hash))]
+async fn handle_socket(socket: WebSocket, state: AppState, account: i32, id_hash: Vec<u8>) {
     telemetry::metrics().ws_connected(true);
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = unbounded_channel::<Message>();
@@ -209,6 +209,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32) {
     lobby.lock().unwrap().disconnect(id);
     writer.abort();
     telemetry::metrics().ws_connected(false);
+    // Playing is activity: the idle clock of the session restarts when the game connection ends.
+    if let Err(e) = db::extend_session(&state.db, &id_hash, state.auth.session_idle).await {
+        tracing::error!("session: {e}");
+    }
 }
 
 async fn select_character(state: &AppState, conn: u32, character: i32) {

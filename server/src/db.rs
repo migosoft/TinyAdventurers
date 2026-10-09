@@ -127,23 +127,37 @@ pub async fn touch_activity(db: &Db, account_id: i32) -> Result<(), sqlx::Error>
 
 // ------------------------------------------------------------------ sessions
 
+/// A session lives until `idle` passes without activity (`expires_at`).
 #[tracing::instrument(skip_all)]
-pub async fn create_session(db: &Db, account_id: i32, id_hash: &[u8]) -> Result<(), sqlx::Error> {
+pub async fn create_session(db: &Db, account_id: i32, id_hash: &[u8], idle: Duration) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sessions WHERE account_id = $1 AND expires_at < now()").bind(account_id).execute(db).await?;
-    sqlx::query("INSERT INTO sessions (id_hash, account_id, expires_at) VALUES ($1, $2, now() + make_interval(days => $3))")
+    sqlx::query("INSERT INTO sessions (id_hash, account_id, expires_at) VALUES ($1, $2, now() + make_interval(secs => $3))")
         .bind(id_hash)
         .bind(account_id)
-        .bind(crate::auth::SESSION_DAYS as i32)
+        .bind(idle.as_secs_f64())
         .execute(db)
         .await?;
     Ok(())
 }
 
-/// The account of a live session.
+/// The account of a live session, whose idle clock restarts with this check.
 #[tracing::instrument(skip_all)]
-pub async fn session_account(db: &Db, id_hash: &[u8]) -> Result<Option<i32>, sqlx::Error> {
-    let row = sqlx::query("SELECT account_id FROM sessions WHERE id_hash = $1 AND expires_at > now()").bind(id_hash).fetch_optional(db).await?;
+pub async fn touch_session(db: &Db, id_hash: &[u8], idle: Duration) -> Result<Option<i32>, sqlx::Error> {
+    let row = sqlx::query("UPDATE sessions SET expires_at = now() + make_interval(secs => $2) WHERE id_hash = $1 AND expires_at > now() RETURNING account_id")
+        .bind(id_hash)
+        .bind(idle.as_secs_f64())
+        .fetch_optional(db)
+        .await?;
     Ok(row.map(|r| r.get(0)))
+}
+
+/// Restarts the idle clock when a game connection ends: the player was active
+/// all along, even if the connection outlasted the idle time. A session that
+/// was deleted meanwhile (logout, new password) stays deleted.
+#[tracing::instrument(skip_all)]
+pub async fn extend_session(db: &Db, id_hash: &[u8], idle: Duration) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE sessions SET expires_at = now() + make_interval(secs => $2) WHERE id_hash = $1").bind(id_hash).bind(idle.as_secs_f64()).execute(db).await?;
+    Ok(())
 }
 
 #[tracing::instrument(skip_all)]
@@ -314,6 +328,8 @@ pub mod tests {
     use crate::defs::progression::{upgrade_cost, UpgradeStat};
     use sqlx::Executor;
 
+    pub const WEEK: Duration = Duration::from_secs(7 * 24 * 3600);
+
     pub async fn test_db() -> Option<Db> {
         let url = std::env::var("DATABASE_URL").ok()?;
         let admin = PgPoolOptions::new().max_connections(1).connect(&url).await.expect("test database server");
@@ -408,17 +424,43 @@ pub mod tests {
         let Some(db) = test_db().await else { return };
         let a = create_account(&db, "Leaver", "h").await.unwrap();
         create_character(&db, a, "Ghost", ClassId::Wizard).await.unwrap();
-        create_session(&db, a, b"one").await.unwrap();
-        create_session(&db, a, b"two").await.unwrap();
-        assert_eq!(session_account(&db, b"one").await.unwrap(), Some(a));
+        create_session(&db, a, b"one", WEEK).await.unwrap();
+        create_session(&db, a, b"two", WEEK).await.unwrap();
+        assert_eq!(touch_session(&db, b"one", WEEK).await.unwrap(), Some(a));
         delete_session(&db, b"one").await.unwrap();
-        assert_eq!(session_account(&db, b"one").await.unwrap(), None);
-        assert_eq!(session_account(&db, b"two").await.unwrap(), Some(a));
+        assert_eq!(touch_session(&db, b"one", WEEK).await.unwrap(), None);
+        assert_eq!(touch_session(&db, b"two", WEEK).await.unwrap(), Some(a));
 
         delete_account(&db, a).await.unwrap();
-        assert_eq!(session_account(&db, b"two").await.unwrap(), None);
+        assert_eq!(touch_session(&db, b"two", WEEK).await.unwrap(), None);
         let left: i64 = sqlx::query("SELECT count(*) FROM characters").fetch_one(&db).await.unwrap().get(0);
         assert_eq!(left, 0, "characters deleted with the account");
         assert!(find_account(&db, "Leaver").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn sessions_end_when_idle_and_activity_restarts_the_clock() {
+        let Some(db) = test_db().await else { return };
+        let a = create_account(&db, "Idler", "h").await.unwrap();
+        let left = |id: &'static [u8]| {
+            let db = db.clone();
+            async move { sqlx::query("SELECT extract(epoch FROM expires_at - now())::float8 FROM sessions WHERE id_hash = $1").bind(id).fetch_one(&db).await.unwrap().get::<f64, _>(0) }
+        };
+        create_session(&db, a, b"s", Duration::from_secs(60)).await.unwrap();
+        assert!((left(b"s").await - 60.0).abs() < 5.0);
+        // Activity moves the end forward by the idle time from now.
+        assert_eq!(touch_session(&db, b"s", WEEK).await.unwrap(), Some(a));
+        assert!((left(b"s").await - WEEK.as_secs_f64()).abs() < 5.0);
+
+        // Idle too long: over, and checking it does not revive it.
+        sqlx::query("UPDATE sessions SET expires_at = now() - interval '1 second'").execute(&db).await.unwrap();
+        assert_eq!(touch_session(&db, b"s", WEEK).await.unwrap(), None);
+        // The end of a game connection does: the player was active all along.
+        extend_session(&db, b"s", WEEK).await.unwrap();
+        assert_eq!(touch_session(&db, b"s", WEEK).await.unwrap(), Some(a));
+        // But not a deleted session (logout, new password).
+        delete_session(&db, b"s").await.unwrap();
+        extend_session(&db, b"s", WEEK).await.unwrap();
+        assert_eq!(touch_session(&db, b"s", WEEK).await.unwrap(), None);
     }
 }

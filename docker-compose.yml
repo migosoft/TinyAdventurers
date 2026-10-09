@@ -26,6 +26,8 @@ services:
       ALLOW_DEBUG: "1"
       DATABASE_URL: postgres://tiny:${POSTGRES_PASSWORD}@db:5432/tiny
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      # Player sessions end after this many minutes without activity (10080 = 7 days).
+      PLAYER_SESSION_MINUTES: ${PLAYER_SESSION_MINUTES:-10080}
       # 1 when players reach the game over HTTPS (behind a TLS proxy).
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
       # Admin area at /admin; disabled unless both are set (password >= 12 characters).

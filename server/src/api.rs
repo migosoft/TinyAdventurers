@@ -100,7 +100,7 @@ impl FromRequestParts<AppState> for Session {
         let cookies = parts.headers.get_all(header::COOKIE).iter().filter_map(|v| v.to_str().ok());
         let token = cookies.filter_map(auth::cookie_token).next().ok_or_else(unauthorized)?;
         let id_hash = state.auth.verify(token).ok_or_else(unauthorized)?;
-        let account = db::session_account(&state.db, &id_hash).await?.ok_or_else(unauthorized)?;
+        let account = db::touch_session(&state.db, &id_hash, state.auth.session_idle).await?.ok_or_else(unauthorized)?;
         Ok(Session { account, id_hash })
     }
 }
@@ -157,7 +157,7 @@ async fn verify(password: String, hash: Option<String>) -> ApiResult<bool> {
 /// Starts a session for the account and answers with its data and the cookie.
 async fn logged_in(state: &AppState, account: i32, name: String) -> ApiResult<Response> {
     let s = state.auth.new_session();
-    db::create_session(&state.db, account, &s.id_hash).await?;
+    db::create_session(&state.db, account, &s.id_hash, state.auth.session_idle).await?;
     if let Err(e) = db::touch_activity(&state.db, account).await {
         tracing::error!("activity: {e}");
     }

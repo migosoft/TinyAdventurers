@@ -100,13 +100,7 @@ impl AdminState {
 
 /// `ADMIN_SESSION_MINUTES`: whole minutes, 1 to 1440; unset = the default.
 fn idle_timeout(value: Option<String>) -> Result<Duration, String> {
-    let Some(v) = value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty()) else {
-        return Ok(Duration::from_secs(DEFAULT_IDLE_MINUTES * 60));
-    };
-    match v.parse::<u64>() {
-        Ok(m) if (1..=1440).contains(&m) => Ok(Duration::from_secs(m * 60)),
-        _ => Err(format!("ADMIN_SESSION_MINUTES must be a whole number of minutes from 1 to 1440, not {v:?}")),
-    }
+    auth::minutes_setting("ADMIN_SESSION_MINUTES", value, DEFAULT_IDLE_MINUTES, 1440)
 }
 
 #[derive(Serialize, TS)]

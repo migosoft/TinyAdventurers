@@ -128,6 +128,7 @@ Environment variables (server):
 | `RUST_LOG` | Console log filter (default `info`). |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | The admin area's login (§11b). Without both, or with a password under 12 characters, the area answers 404. |
 | `ADMIN_SESSION_MINUTES` | Admin idle timeout in minutes (default 10, 1–1440). Each admin action restarts it. |
+| `PLAYER_SESSION_MINUTES` | Player idle timeout in minutes (default 10080 = 7 days, at most a year). Any activity restarts it (§11a). |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Turns on OpenTelemetry export (§11c), e.g. `http://otel-collector:4318`. The other standard `OTEL_*` variables work too. |
 
 The data lives on the `ta-db` volume. `docker compose down -v` deletes all accounts.
@@ -440,11 +441,15 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - Deleting an account rechecks the password through the same limiter.
 
 **Sessions.**
-- Login creates a random 32-byte session id. The browser gets the cookie `ta_session` (HttpOnly, SameSite=Strict, Path=/, 30 days, plus `Secure` if `COOKIE_SECURE`) holding `base64url(id ‖ expiry) . base64url(HMAC-SHA256(SESSION_SECRET, id ‖ expiry))`.
+- Login creates a random 32-byte session id. The browser gets the cookie `ta_session` (HttpOnly, SameSite=Strict, Path=/, plus `Secure` if `COOKIE_SECURE`) holding `base64url(id ‖ expiry) . base64url(HMAC-SHA256(SESSION_SECRET, id ‖ expiry))`.
 - The table `sessions` stores only `sha256(id)`.
+- **Idle timeout:** a session ends after `PLAYER_SESSION_MINUTES` without activity (default 10080 = 7 days). `sessions.expires_at` is the end unless the player is active again, and activity moves it forward:
+  - every API request with the session, the WebSocket connect included (`db::touch_session`, one `UPDATE … RETURNING`);
+  - the end of a game connection (`db::extend_session`), because a player who was connected was active all along, even through a run longer than the idle time. A session deleted meanwhile (logout, new password) stays deleted.
+- **Hard limit:** the token's own expiry and the cookie's Max-Age are 1 year (`SESSION_MAX_SECS`). Even an always-active player logs in again after a year.
 - **Checks on every request** (the `Session` extractor):
   1. signature (constant-time) and expiry, without the database, so forged tokens cost nothing;
-  2. the session row, so logout and account deletion end it at once.
+  2. the session row (alive, and then extended), so logout, account deletion and idling end it.
 - JavaScript never sees the token.
 - CSRF is covered by SameSite=Strict, JSON-only state changes and the WebSocket origin check.
 
@@ -498,7 +503,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - **Sessions:**
   - The token format is the same signed one as the players' (`Auth::new_admin_session`), with a 12-hour hard limit (`ADMIN_TOKEN_MAX_SECS`).
   - **Idle timeout:** a session ends after `ADMIN_SESSION_MINUTES` (default 10, 1–1440) without an admin action. Every admin request restarts the clock (`AdminState::touch`) except the dashboard's automatic refresh, which sends `X-Admin-Background: 1` and only checks the session, so an open tab still times out. The page then asks for the login again.
-  - Player sessions, for comparison, last 30 days from login (`SESSION_DAYS`).
+  - Player sessions work the same way, with a 7-day default (`PLAYER_SESSION_MINUTES`, §11a).
   - The cookie is `ta_admin` (HttpOnly, SameSite=Strict, `Path=/api/admin`, `Secure` with `COOKIE_SECURE`). It has no Max-Age, so it is gone when the browser closes.
   - Admin sessions live in memory (`AdminState.sessions`), so a restart logs the admin out.
   - A player's `ta_session` cookie never grants admin access.
@@ -578,7 +583,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 ## 12. Tests
 
-**Server (`cargo test`, 130 tests):**
+**Server (`cargo test`, 134 tests):**
 - protocol round trip
 - wire: positions round to 1/16 px (also beyond 4096 px), aim wraps into a byte, event codes follow `EV_CODES`, a compact input decodes to `InputMsg`, sample snapshots are bare arrays and at least 30 % smaller than the old form
 - dungeon determinism and guarantees over 200 seeds
@@ -618,6 +623,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
   - 20 bankings and 10 purchases in parallel lose nothing
   - old progress documents are read and saved as the current version
   - sessions end with logout and account deletion, which also removes the characters
+  - sessions end when idle; activity restarts the clock; the end of a game connection extends a session but never revives a deleted one
 - lobby:
   - only the host picks the boss, fixed after the start
   - rooms need a character, and characters switch only outside rooms

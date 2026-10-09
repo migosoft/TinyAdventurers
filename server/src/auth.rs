@@ -3,6 +3,8 @@
 //! token (an HttpOnly cookie). The signature lets forged or garbled tokens be
 //! rejected without a database query; the database (`sessions`, which only
 //! stores a SHA-256 of the id) makes logout and account deletion immediate.
+//! A session ends after `PLAYER_SESSION_MINUTES` without activity: every
+//! request that checks it moves its `expires_at` forward.
 
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
@@ -17,8 +19,11 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 pub const COOKIE: &str = "ta_session";
-pub const SESSION_DAYS: u64 = 30;
-pub const SESSION_SECS: u64 = SESSION_DAYS * 24 * 3600;
+/// Hard limit of a player's token and cookie, however active the player is.
+/// The usual end is the idle timeout.
+pub const SESSION_MAX_SECS: u64 = 365 * 24 * 3600;
+/// Default idle timeout of a player session: 7 days (`PLAYER_SESSION_MINUTES`).
+pub const DEFAULT_SESSION_IDLE_MINUTES: u64 = 7 * 24 * 60;
 
 pub const NAME_MIN: usize = 3;
 pub const NAME_MAX: usize = 16;
@@ -32,6 +37,28 @@ pub struct Auth {
     /// Adds `Secure` to the cookie (set when served over HTTPS).
     pub secure_cookie: bool,
     pub limiter: Mutex<Limiter>,
+    /// A player session ends after this long without activity.
+    pub session_idle: Duration,
+}
+
+/// A duration setting in whole minutes from 1 to `max`; unset or empty = `default`.
+pub fn minutes_setting(name: &str, value: Option<String>, default: u64, max: u64) -> Result<Duration, String> {
+    let Some(v) = value.map(|v| v.trim().to_string()).filter(|v| !v.is_empty()) else {
+        return Ok(Duration::from_secs(default * 60));
+    };
+    match v.parse::<u64>() {
+        Ok(m) if (1..=max).contains(&m) => Ok(Duration::from_secs(m * 60)),
+        _ => Err(format!("{name} must be a whole number of minutes from 1 to {max}, not {v:?}")),
+    }
+}
+
+/// `PLAYER_SESSION_MINUTES`; an invalid value is logged and the default used.
+pub fn session_idle_from_env() -> Duration {
+    let max = SESSION_MAX_SECS / 60;
+    minutes_setting("PLAYER_SESSION_MINUTES", std::env::var("PLAYER_SESSION_MINUTES").ok(), DEFAULT_SESSION_IDLE_MINUTES, max).unwrap_or_else(|e| {
+        tracing::warn!("{e}; using {DEFAULT_SESSION_IDLE_MINUTES} minutes");
+        Duration::from_secs(DEFAULT_SESSION_IDLE_MINUTES * 60)
+    })
 }
 
 /// A freshly issued session: the cookie value for the browser and the hash
@@ -53,7 +80,12 @@ impl Auth {
     /// `secret` must be long and random (see `.env.example`).
     pub fn new(secret: &[u8], secure_cookie: bool) -> Auth {
         assert!(secret.len() >= 32, "SESSION_SECRET must be at least 32 characters");
-        Auth { secret: secret.to_vec(), secure_cookie, limiter: Mutex::new(Limiter::default()) }
+        Auth { secret: secret.to_vec(), secure_cookie, limiter: Mutex::new(Limiter::default()), session_idle: Duration::from_secs(DEFAULT_SESSION_IDLE_MINUTES * 60) }
+    }
+
+    pub fn with_session_idle(mut self, idle: Duration) -> Auth {
+        self.session_idle = idle;
+        self
     }
 
     fn mac(&self, payload: &[u8]) -> HmacSha256 {
@@ -65,7 +97,7 @@ impl Auth {
     pub fn new_session(&self) -> NewSession {
         let mut sid = [0u8; 32];
         rand::rngs::OsRng.fill_bytes(&mut sid);
-        self.sign(&sid, now_secs() + SESSION_SECS)
+        self.sign(&sid, now_secs() + SESSION_MAX_SECS)
     }
 
     fn sign(&self, sid: &[u8; 32], exp: u64) -> NewSession {
@@ -92,7 +124,7 @@ impl Auth {
     }
 
     pub fn set_cookie(&self, token: &str) -> String {
-        format!("{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={SESSION_SECS}{}", if self.secure_cookie { "; Secure" } else { "" })
+        format!("{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={SESSION_MAX_SECS}{}", if self.secure_cookie { "; Secure" } else { "" })
     }
 
     pub fn clear_cookie(&self) -> String {
@@ -332,6 +364,19 @@ mod tests {
         assert!(!l.check("root", "long-enough-passwore"));
         assert!(!l.check("Root", "long-enough-password"));
         assert!(!l.check("", ""));
+    }
+
+    #[test]
+    fn player_sessions_idle_for_a_week_by_default_within_a_year() {
+        assert_eq!(auth().session_idle, Duration::from_secs(7 * 24 * 3600));
+        let max = SESSION_MAX_SECS / 60;
+        let mins = |v: &str| minutes_setting("PLAYER_SESSION_MINUTES", Some(v.into()), DEFAULT_SESSION_IDLE_MINUTES, max).map(|d| d.as_secs() / 60);
+        assert_eq!(mins(""), Ok(DEFAULT_SESSION_IDLE_MINUTES));
+        assert_eq!(mins("60"), Ok(60));
+        assert_eq!(mins(&max.to_string()), Ok(max));
+        assert!(mins(&(max + 1).to_string()).is_err(), "not beyond the token's hard limit");
+        assert!(mins("0").is_err() && mins("week").is_err());
+        assert!(auth().set_cookie("t").contains(&format!("Max-Age={SESSION_MAX_SECS}")));
     }
 
     #[test]
