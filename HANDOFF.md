@@ -14,7 +14,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Branch:** `feature/dragon-rework` is merged into `main` (fast-forward) and pushed, at the user's request. Start the next feature on a new branch from `main`.
 
 **User decisions this session:**
-- **Dragon art:** the user supplied an AI-generated dragon (`images/dragon.jpg`) and then AI-generated animation strips (walk, claw, bite, tail whip, flight) made from it, on a magenta background. They replace the hue-shifted pack lizard. Credit: "AI-generated for this game" only; **do not credit the user as the artist**.
+- **Dragon art:** the user supplied an AI-generated dragon and then AI-generated animation strips (walk, claw, bite, tail whip, flight) made from it, on a magenta background. The source JPGs were deleted afterwards at the user's request; the imported PNGs in `client/assets-src/dragon/` are now the only sources. They replace the hue-shifted pack lizard. Credit: "AI-generated for this game" only; **do not credit the user as the artist**.
   - The frames the strips don't cover (idle, breath with the mouth opening, take-off, landing) are generated from the base sprite at atlas build time; the user asked for them and approved them in `?dragon`.
   - The user asked for a `?dragon` demo before every gameplay step and approved it ("Ok") before the server work.
 - **Flight phases on a timer:** every 10–12 s it takes off (0.5 s, standing still), hovers after the party for 3.5 s and lands (0.6 s). Pathing stays on the ground (visual flight). While airborne: **melee can't hit it** (sword/axe arc, dagger, dash), projectiles and spells still do, and its **only attack is the breath**.
@@ -36,7 +36,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Not yet verified:** the user playing the dragon fight live.
 
 **Open:**
-- `images/` (the user's source JPGs, `logo.png`) is still untracked and was not committed; the PNGs in `assets-src/dragon/` are the sources the build uses.
+- `images/` now only holds `logo.png` (untracked, not used by the game, no other copy in the repo). The user said the folder is no longer needed; the logo was kept because it is the only copy. Ask whether to delete it, commit it or move it.
 - In flight the dragon looks a little bigger than standing (the flight strip is drawn ~10% larger).
 - The bite's numbers are first guesses; balancing is the planned combined pass.
 
@@ -179,7 +179,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Open questions for the user:**
 - **Asset pack:** the user asked whether "the new asset pack" was registered. Nothing new was added. The only approved but unused pack is superdark's "Enchanted Forest Characters" (TODO.md). When it is used: check its license, put it in `client/assets-src/superdark/` with the license file, and add it to the README credits and TECHNICAL.md.
-- **`images/`:** an untracked `images/` folder (`logo.png`, `dragon.jpg`) is the user's. It is not committed and was not touched. Ask whether it belongs in the repo.
+- **`images/`:** see the last session (only `logo.png` is left, untracked).
 
 ## Session before (2026-10-08, ogre mini-boss)
 
@@ -490,7 +490,7 @@ Steps 2–6 followed in the next session.
   - The user rejected self-drawn or procedural sprite art.
   - Small recolors of pack frames with pack colors are fine when the user asks (the summoner's red robe).
   - Missing figures are pack sprites scaled or tinted (lich).
-  - **Exception, the red dragon** (2026-10-09 to 10-12): the user supplied AI-generated art and asked for animation frames built from it. Credit it as AI-generated, not as the user's work. New dragon frames: ask the user for a strip (they generate them with an image AI from `images/dragon.jpg`; a prompt pattern that worked: same dragon, same pixel scale and palette, N frames in a row, flat #ff00ff background, no effects).
+  - **Exception, the red dragon** (2026-10-09 to 10-12): the user supplied AI-generated art and asked for animation frames built from it. Credit it as AI-generated, not as the user's work. New dragon frames: ask the user for a strip (they generate them with an image AI from the dragon picture; `client/assets-src/dragon/dragon_base.png` scaled up 16× with nearest neighbour can serve as the reference; a prompt pattern that worked: same dragon, same pixel scale and palette, N frames in a row, flat #ff00ff background, no effects).
   - Attacks are approximated by animating pack weapon sprites.
   - Runtime effect shapes (particles, glows, swooshes, rings) are fine.
 - **Minions are never tinted:** raised skeletons and summoned imps look like the ordinary ones.
