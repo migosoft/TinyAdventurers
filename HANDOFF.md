@@ -31,7 +31,6 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Open:**
 - `images/logo.png` is still there (untracked); it is now copied to `client/assets-src/logo/`. Deleting it was blocked for me; the user can delete `images/`.
 - Not yet seen by the user in their browser.
-- On phones the character card in the character list is cramped (name cut to "S…", XP text wraps); this was not changed by the logo work.
 
 ## Session before (2026-10-09 to 10-12, dragon rework: own art, flight, bite)
 
@@ -516,6 +515,7 @@ Steps 2–6 followed in the next session.
   - **Exception, the red dragon** (2026-10-09 to 10-12): the user supplied AI-generated art and asked for animation frames built from it. Credit it as AI-generated, not as the user's work. New dragon frames: ask the user for a strip (they generate them with an image AI from the dragon picture; `client/assets-src/dragon/dragon_base.png` scaled up 16× with nearest neighbour can serve as the reference; a prompt pattern that worked: same dragon, same pixel scale and palette, N frames in a row, flat #ff00ff background, no effects).
   - Attacks are approximated by animating pack weapon sprites.
   - Runtime effect shapes (particles, glows, swooshes, rings) are fine.
+- **Desktop only** (2026-10-12): keyboard and mouse in a desktop browser. Phones and tablets are not a concern; don't spend effort on phone layouts or touch controls (also stated in README.md).
 - **Minions are never tinted:** raised skeletons and summoned imps look like the ordinary ones.
 - **Demon dungeon:** imps (ranged, claw up close) and chorts (melee, a bolt from afar) replace skeletons, summoners (red robe, summon imps) replace necromancers. The user chose this from the `?daemons` demo and named the summoner.
 - **No miniature bases under figures** (the user asked to remove them); figures stand on a soft ground shadow.

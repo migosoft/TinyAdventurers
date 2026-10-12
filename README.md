@@ -6,6 +6,7 @@ A browser-based multiplayer dungeon crawler with tiny pixel figures on a board-g
 - Up to 4 players open or join a dungeon run.
 - Each run is one randomly generated dungeon of corridors, rooms and halls. A field of vision hides what your hero can't see.
 - The party fights through it to a random final boss: a demon, a lich or a dragon.
+- It is a desktop game, played with keyboard and mouse. Phones and tablets are not supported.
 
 ## Documentation
 
