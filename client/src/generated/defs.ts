@@ -36,20 +36,24 @@ export const KIND = {
 } as const;
 
 export const ANIM = {
+  "Bite": 13,
   "Breath": 8,
   "Cast": 4,
   "Channel": 7,
   "Dash": 5,
   "Idle": 0,
+  "Land": 12,
   "Melee": 2,
   "Move": 1,
   "Shoot": 3,
   "Slam": 10,
   "Tail": 9,
+  "TakeOff": 11,
   "Windup": 6
 } as const;
 
 export const FLAG = {
+  "AIRBORNE": 64,
   "ASLEEP": 8,
   "DEAD": 32,
   "ENRAGED": 4,
@@ -74,6 +78,20 @@ export const CONST = {
   "DAGGER_COOLDOWN": 0.35,
   "DAGGER_RANGE": 22.0,
   "DASH_SPEED": 300.0,
+  "DRAGON_BITE_KNOCK": 24.0,
+  "DRAGON_BITE_RANGE": 46.0,
+  "DRAGON_BITE_WINDUP": 0.45,
+  "DRAGON_BREATH_TIME": 1.4,
+  "DRAGON_BREATH_WINDUP": 0.8,
+  "DRAGON_CLAW_KNOCK": 32.0,
+  "DRAGON_CLAW_WINDUP": 0.4,
+  "DRAGON_FIREBALL_KNOCK": 20.0,
+  "DRAGON_LAND": 0.6,
+  "DRAGON_SMASH_KNOCK": 36.0,
+  "DRAGON_SMASH_RADIUS": 40.0,
+  "DRAGON_TAIL_KNOCK": 44.0,
+  "DRAGON_TAIL_WINDUP": 0.4,
+  "DRAGON_TAKEOFF": 0.5,
   "DROWN_TIME": 0.9,
   "DT": 0.016666666666666666,
   "FALL_TIME": 0.7,

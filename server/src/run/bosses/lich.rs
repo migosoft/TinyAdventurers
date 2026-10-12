@@ -85,7 +85,7 @@ impl BossBehaviour for Lich {
                     let aim = run.monsters[bi].aim;
                     for k in -2..=2 {
                         let dir = Vec2::from_angle(aim + k as f64 * 0.2);
-                        spawn_monster_projectile(run, id, EntityKind::FrostBolt, pos + dir * 8.0, dir, 140.0, 10.0, 2.0, 0.0, 0);
+                        spawn_monster_projectile(run, id, EntityKind::FrostBolt, pos + dir * 8.0, dir, 140.0, 10.0, 2.0, 0.0, 0, 0.0);
                     }
                 }
                 Action::Summon => {

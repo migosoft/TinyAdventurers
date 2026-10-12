@@ -1,10 +1,12 @@
 // One figure on the board: ground shadow + pack body animation + pack weapon.
 // The pack has idle/run (4 frames) and hit frames; attacks are approximated
 // by animating the weapon sprite (swing, recoil, raise) plus small body moves.
+// Figures with their own action frames (the dragon) pick them in pickFrame.ts.
 import Phaser from 'phaser';
-import { ANIM, CONST, FLAG } from '../../generated/defs';
+import { ANIM, FLAG } from '../../generated/defs';
 import { DEPTH, Effects } from '../effects';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
+import { pickFrame } from './pickFrame';
 
 export interface ViewState {
   x: number;
@@ -83,8 +85,8 @@ export class EntityView {
     this.root = scene.add.container(0, 0);
     this.figure = scene.add.container(0, 0).setScale(scale);
     this.shadow = scene.add.image(0, 0, ensureShadowTexture(scene, d.baseR)).setOrigin(0.5, 0.5);
-    this.body = scene.add.sprite(0, 1, 'atlas', `${d.idle}0`).setOrigin(0.5, 1);
-    if (d.hue) this.body.preFX?.addColorMatrix().hue(d.hue);
+    this.body = scene.add.sprite(0, 1, 'atlas', `${d.idle}0`);
+    this.body.setOrigin(0.5, (d.footY ?? this.body.height) / this.body.height);
     this.figure.add([this.shadow, this.body]);
     if (d.weapon) {
       this.weapon = scene.add.image(0, -d.handY, 'atlas', d.weapon).setScale(WEAPON_SCALE * (d.weaponScale ?? 1));
@@ -94,7 +96,7 @@ export class EntityView {
     this.root.add(this.figure);
     if (name) {
       this.label = scene.add
-        .text(0, -this.body.height * scale - 3, name, { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4, color: '#ffffff' })
+        .text(0, -(d.footY ?? this.body.height) * scale - 3, name, { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4, color: '#ffffff' })
         .setFontSize(5)
         .setOrigin(0.5, 1)
         .setStroke('#140c1a', 2);
@@ -137,20 +139,25 @@ export class EntityView {
     const hurt = (s.flags & FLAG.HURT) !== 0;
     const moving = s.anim === ANIM.Move || s.anim === ANIM.Dash || this.speed > 8;
     if (moving) this.runClock += dt * Math.min(Math.max(this.speed / 40, 0.7), 2);
+    const own = d.frames ? pickFrame(d, s, this.clock, this.runClock, moving) : null;
     let frame: string;
-    if (hurt && d.hit) frame = d.hit;
+    if (own) frame = own.frame;
+    else if (hurt && d.hit) frame = d.hit;
     else if (moving) frame = `${d.run}${Math.floor(this.runClock * 10) % 4}`;
     else frame = `${d.idle}${Math.floor(this.clock * 6) % 4}`;
-    this.body.setFrame(frame).setPosition(0, 1).setScale(1, 1).setAngle(0);
+    // Flying: the body rises above its shadow, which shrinks a little.
+    const lift = own?.lift ?? 0;
+    this.body.setFrame(frame).setPosition(0, 1 - Math.round(lift * (d.lift ?? 0))).setScale(1, 1).setAngle(0);
     // Wading: the feet go below the surface (the body is cut off there).
     // Drowning: the figure sinks until it is fully below the surface.
     const fall = s.fall ?? 0;
     const drown = s.drown ?? 0;
-    const sink = Math.min(this.body.frame.height, Math.round((s.sink ?? 0) + drown * (this.body.frame.height + 2)));
-    if (sink > 0) this.body.setCrop(0, 0, this.body.frame.width, this.body.frame.height - sink);
+    const foot = d.footY ?? this.body.frame.height;
+    const sink = Math.min(foot, Math.round((s.sink ?? 0) + drown * (foot + 2)));
+    if (sink > 0) this.body.setCrop(0, 0, this.body.frame.width, foot - sink);
     else this.body.setCrop();
     this.weapon?.setVisible(drown < 0.4);
-    this.shadow.setVisible(sink === 0 && fall === 0);
+    this.shadow.setVisible(sink === 0 && fall === 0).setScale(1 - 0.3 * lift);
     this.figure
       .setPosition(0, sink + Math.round(fall * 6))
       .setScale((d.scale ?? 1) * (1 - fall * 0.2))
@@ -158,10 +165,11 @@ export class EntityView {
     this.label?.setVisible(fall === 0 && drown === 0);
 
     if (hurt && !d.hit && Math.floor(this.clock * 30) % 2 === 0) this.body.setTintFill(0xffffff);
-    else if (s.anim === ANIM.Windup || s.anim === ANIM.Slam) {
+    else if (s.anim === ANIM.Windup || s.anim === ANIM.Slam || own?.windup) {
       // Telegraph: flashing red and a shiver before the blow lands.
       this.body.setTint(Math.floor(this.clock * 16) % 2 ? 0xff8080 : (d.tint ?? 0xffffff));
       this.body.x = Math.floor(this.clock * 40) % 2 ? 1 : -1;
+      if (own) this.body.y += Math.floor(this.clock * 40) % 2;
     } else if (s.flags & FLAG.ENRAGED) this.body.setTint(Math.floor(this.clock * 4) % 2 ? 0xff6060 : 0xff9090);
     else if (d.tint) this.body.setTint(d.tint);
     else this.body.clearTint();
@@ -185,10 +193,15 @@ export class EntityView {
       case ANIM.Melee:
       case ANIM.Tail: {
         const tail = s.anim === ANIM.Tail;
-        const k = Math.min(t / MELEE_T, 1);
-        this.body.x += ax * (tail ? -3 : 3) * (1 - k);
-        this.body.y += ay * 1.5 * (1 - k);
-        this.body.setAngle(sgn * 8 * Math.sin(k * Math.PI));
+        // Own frames: the strike comes after the wind-up, drawn by the frames.
+        const w = d.windups?.[s.anim] ?? 0;
+        if (t < w) break;
+        if (!own) {
+          const k = Math.min(t / MELEE_T, 1);
+          this.body.x += ax * (tail ? -3 : 3) * (1 - k);
+          this.body.y += ay * 1.5 * (1 - k);
+          this.body.setAngle(sgn * 8 * Math.sin(k * Math.PI));
+        }
         const swing = tail ? d.tail : d.swing;
         if (!d.weapon && !this.shotFx && swing) {
           // Unarmed: claw swoosh in front (demons, dragon) or tail swoosh behind (dragon).
@@ -197,6 +210,16 @@ export class EntityView {
         }
         break;
       }
+      case ANIM.Bite:
+        // The jaws snap shut at the bite reach, straight ahead.
+        if (d.bite && t >= (d.windups?.[ANIM.Bite] ?? 0) && !this.shotFx) {
+          this.shotFx = true;
+          const bx = s.x + ax * d.bite.reach;
+          const by = s.y + ay * d.bite.reach - d.handY * scale;
+          this.fx.hitSpark(bx, by, d.bite.color);
+          this.fx.burst(bx, by, 6, d.bite.color, 40, 0.2);
+        }
+        break;
       case ANIM.Cast:
       case ANIM.Channel:
         this.body.y -= Math.sin(this.clock * 12) > 0 ? 1 : 0;
@@ -215,7 +238,7 @@ export class EntityView {
         }
         break;
       case ANIM.Breath:
-        this.body.setAngle(sgn * -6);
+        if (!own) this.body.setAngle(sgn * -6);
         break;
       case ANIM.Dash:
         this.body.setScale(1.25, 0.9);
@@ -233,7 +256,7 @@ export class EntityView {
     }
 
     if (d.mouth) this.breathFx(s);
-    if (d.slam) this.slamFx(s, d.slam);
+    if (d.slam) this.slamFx(s, d.slam.r, d.slam.anim, d.slam.t);
 
     // ---- weapon ----
     const w = this.weapon;
@@ -326,11 +349,13 @@ export class EntityView {
   /**
    * Dragon breath: fire pours from the mouth down into the damage cone on the
    * ground (the server's cone starts at the dragon's feet along the aim).
-   * Wind-up: smoke from the nostrils and embers at the mouth.
+   * Wind-up (the Windup anim, or the start of Breath for figures with breath
+   * wind-up frames): smoke from the nostrils and embers at the mouth.
    */
   private breathFx(s: ViewState): void {
     const depth = DEPTH.entityBase + s.y + 1;
-    if (s.anim === ANIM.Breath) {
+    const windup = this.def.windups?.[ANIM.Breath] ?? 0;
+    if (s.anim === ANIM.Breath && s.animT >= windup) {
       const m = this.framePoint(this.def.mouth);
       if (!m) return;
       for (let i = 0; i < 6; i++) {
@@ -344,7 +369,7 @@ export class EntityView {
           depth,
         });
       }
-    } else if (s.anim === ANIM.Windup) {
+    } else if (s.anim === ANIM.Windup || s.anim === ANIM.Breath) {
       const n = this.framePoint(this.def.nostrils);
       const m = this.framePoint(this.def.mouth);
       if (n && Math.random() < 0.35) this.fx.particle(n.x, n.y, (Math.random() - 0.5) * 10, -18, 0.9, 0x706060, { scale: 1.5, depth });
@@ -361,9 +386,9 @@ export class EntityView {
     if (!p) return null;
     const w = this.body.width;
     const h = this.body.height;
-    // Relative to the body origin (bottom center).
+    // Relative to the body origin (bottom center, or the feet row).
     const lx = (this.body.flipX ? w - p[0] : p[0]) - w / 2;
-    const ly = p[1] - h;
+    const ly = p[1] - (this.def.footY ?? h);
     const a = this.body.rotation;
     const rx = lx * Math.cos(a) - ly * Math.sin(a) + this.body.x;
     const ry = lx * Math.sin(a) + ly * Math.cos(a) + this.body.y;
@@ -381,15 +406,16 @@ export class EntityView {
 
   /**
    * Ground slam telegraph: the danger zone is outlined on the ground at the
-   * real hit radius, and fills up from the centre until the club lands.
+   * real hit radius, and fills up from the centre over the `dur` s of `anim`
+   * until the blow lands (the ogre's club, the dragon's landing).
    */
-  private slamFx(s: ViewState, r: number): void {
-    if (s.anim !== ANIM.Slam) {
+  private slamFx(s: ViewState, r: number, anim: number, dur: number): void {
+    if (s.anim !== anim) {
       this.tele?.setVisible(false);
       return;
     }
     const g = (this.tele ??= this.root.scene.add.graphics().setDepth(DEPTH.hazard));
-    const k = Math.min(s.animT / CONST.OGRE_SLAM_WINDUP, 1);
+    const k = Math.min(s.animT / dur, 1);
     const blink = Math.floor(this.clock * 12) % 2 === 0;
     g.clear().setVisible(true).setPosition(Math.round(s.x), Math.round(s.y));
     g.fillStyle(0xff3020, 0.12).fillCircle(0, 0, r);

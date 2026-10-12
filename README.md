@@ -83,6 +83,7 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 - `?daemons`: the demon dungeon's imps, chorts and summoner fighting a knight, plus a pack of them (no server needed)
 - `?water`, `?chasm`, `?lava`: the terrain with scripted figures: wading, drowning, falling, burning, the dash jumping a gap, and being knocked in (no server needed; add `&slow=3` for slow motion)
 - `?knockback`: every push in the game (orc warrior, chort, the demon's cleave and swoop, the dragon's claw and tail) next to chasms and deep water (no server needed; `&slow=3` works too)
+- `?dragon`: the red dragon looping through every action, flight and landing smash included (no server needed; Space pauses, S slow motion, 1-8 jump to an action)
 - `?ogre`: the ogre mini-boss's club push next to the orc warrior's, and its ground slam with the telegraph ring (no server needed; `&slow=3` works too)
 - `?debug`: debug mode for the whole run
   - Your hero is immortal. Hits still show damage numbers, but your health doesn't drop.
@@ -94,4 +95,4 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Art
 
-The sprites come from **16x16 DungeonTileset II** by 0x72 (CC0): https://0x72.itch.io/dungeontileset-ii. The pack files are in `client/assets-src/0x72/`. The game uses only pack sprites; effects such as sparks, glows and swooshes are simple shapes generated at runtime.
+The sprites come from **16x16 DungeonTileset II** by 0x72 (CC0): https://0x72.itch.io/dungeontileset-ii. The pack files are in `client/assets-src/0x72/`. All figures are pack sprites except the red dragon: its sprite and animation strips are AI-generated art made for this game (`client/assets-src/dragon/`), and some of its frames are built from them at atlas build time. Terrain tiles are generated from pack colours; effects such as sparks, glows and swooshes are simple shapes generated at runtime.

@@ -97,10 +97,16 @@ pub enum Anim {
     Tail = 9,
     /// Ogre ground slam wind-up (the telegraph ring grows over it).
     Slam = 10,
+    /// Dragon lifting off (it stands still meanwhile).
+    TakeOff = 11,
+    /// Dragon coming down; the landing smash hits at the end.
+    Land = 12,
+    /// Dragon bite: the wind-up starts it, the jaws snap at the end.
+    Bite = 13,
 }
 
 impl Anim {
-    pub const ALL: [Anim; 11] = [
+    pub const ALL: [Anim; 14] = [
         Anim::Idle,
         Anim::Move,
         Anim::Melee,
@@ -112,6 +118,9 @@ impl Anim {
         Anim::Breath,
         Anim::Tail,
         Anim::Slam,
+        Anim::TakeOff,
+        Anim::Land,
+        Anim::Bite,
     ];
 }
 
@@ -122,4 +131,6 @@ pub mod flags {
     pub const ASLEEP: u8 = 8;
     pub const HURT: u8 = 16;
     pub const DEAD: u8 = 32;
+    /// Flying (the dragon): melee cannot reach it.
+    pub const AIRBORNE: u8 = 64;
 }

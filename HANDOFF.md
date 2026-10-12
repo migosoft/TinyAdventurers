@@ -9,9 +9,40 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-09, admin area, statistics, OpenTelemetry)
+## Last session (2026-10-09 to 10-12, dragon rework: own art, flight, bite)
 
-**Branch:** `feature/admin` is merged into `main` (fast-forward) and pushed. Start the next feature on a new branch from `main`.
+**Branch:** `feature/dragon-rework` (from `main`), committed, **not merged or pushed** yet. Ask the user before merging.
+
+**User decisions this session:**
+- **Dragon art:** the user supplied an AI-generated dragon (`images/dragon.jpg`) and then AI-generated animation strips (walk, claw, bite, tail whip, flight) made from it, on a magenta background. They replace the hue-shifted pack lizard. Credit: "AI-generated for this game" only; **do not credit the user as the artist**.
+  - The frames the strips don't cover (idle, breath with the mouth opening, take-off, landing) are generated from the base sprite at atlas build time; the user asked for them and approved them in `?dragon`.
+  - The user asked for a `?dragon` demo before every gameplay step and approved it ("Ok") before the server work.
+- **Flight phases on a timer:** every 10–12 s it takes off (0.5 s, standing still), hovers after the party for 3.5 s and lands (0.6 s). Pathing stays on the ground (visual flight). While airborne: **melee can't hit it** (sword/axe arc, dagger, dash), projectiles and spells still do, and its **only attack is the breath**.
+- **Landing = ground smash** with a shockwave and a ring telegraph.
+- **Every dragon attack but the breath pushes:** claw 32, bite 24, tail 44, smash 36, fireball explosion 20 (this overrides "ranged never pushes" for the dragon's fireballs only).
+- **Bite as an extra front attack** ("bite straight ahead"): narrow arc (±0.35 rad), 46 px reach, 28 damage, own 3 s cooldown; used before the claw when ready; the claw (wide arc, 40 px, 20 damage) stays.
+
+**Done:**
+- **Art pipeline:** `client/assets-src/dragon/` holds `dragon_base.png` and the aligned strips; `client/scripts/dragon-frames.ts` builds the 45 dragon frames into the atlas; poses, strip layouts and the breath points are in `client/src/game/anim/dragonRig.ts` (shared). See TECHNICAL.md §8 "Dragon frames" for how the strips were imported (one-off scripts; redo the same for new strips).
+- **Client:** `anim/pickFrame.ts` (frame choice for figures with own frames, with tests); `FigureDef` gained `frames`, `windups`, `lift`, `footY`, `bite`, and `slam` became `{r, anim, t}`; the hue option is gone. `EntityView`: body lift over the shadow, the wind-up flash for attack anims that include their wind-up, the landing ring, the bite effect, anchoring on `footY`. `?dragon` demo (`DragonDemoScene.ts`). Gallery states `bite`, `takeoff`, `land`. The knockback demo plays the dragon's wind-up frames. Lobby preview uses the dragon frames (`walk` when a figure has no `run`). The client's dagger prediction ignores an airborne dragon.
+- **Server:** `Anim::TakeOff/Land/Bite` (11–13), `flags::AIRBORNE` (64), `Monster.airborne`, `Projectile.knock` (+ a `knock` parameter on `spawn_monster_projectile` and `explode`), `DRAGON_*` consts in `defs/bosses.rs` (exported). `run/bosses/dragon.rs` rewritten: flight state machine, attack anims start at the wind-up, a short recovery after each strike, bite/claw choice, landing smash.
+- **Tests:** 140 server tests (6 new: bite before claw, bite arc, flight cycle with smash, smash radius, melee/dagger/dash vs airborne, explosion push); 17 client tests (pickFrame with bite).
+
+**Verified:**
+- `cargo test` (Docker), client `tsc` + `vitest`, `npm run atlas`.
+- `?dragon` screenshots of every action, no browser errors.
+- `docker compose up --build -d` + health, then a throwaway bot (debug paladin, deleted) walked the debug path to the dragon and fought it for 60 s on the live server: the snapshots showed Bite, claw, Tail, Breath, volley, TakeOff, Land and the AIRBORNE flag; screenshots of take-off, hovering, the landing ring and the attacks; no browser errors.
+
+**Not yet verified:** the user playing the dragon fight live.
+
+**Open:**
+- `images/` (the user's source JPGs, `logo.png`) is still untracked and was not committed; the PNGs in `assets-src/dragon/` are the sources the build uses.
+- In flight the dragon looks a little bigger than standing (the flight strip is drawn ~10% larger).
+- The bite's numbers are first guesses; balancing is the planned combined pass.
+
+## Session before (2026-10-09, admin area, statistics, OpenTelemetry)
+
+**Branch:** `feature/admin` is merged into `main` (fast-forward) and pushed.
 
 **User decisions this session:**
 - **Admin login:** a username and password from environment variables (`ADMIN_USER`, `ADMIN_PASSWORD`), not a game account.
@@ -429,9 +460,10 @@ Steps 2–6 followed in the next session.
 - client prediction and interpolation, F3 stats
 - compact snapshots and inputs (MessagePack arrays, `wire.rs`/`wire.ts`): about 125 B per snapshot with 2 players
 - debug mode (paths to the boss and the ogre), sprite gallery
+- the red dragon with its own AI-generated frames, flight phases (melee-immune in the air), bite, landing smash; demo `?dragon`
 
 **Verified:**
-- 101 server tests (against PostgreSQL) and the client tests (collision/FOV ports with terrain, wire unpacking) pass.
+- 140 server tests (against PostgreSQL) and 17 client tests (collision/FOV ports with terrain, wire unpacking, dragon frame choice) pass.
 - Accounts and characters: API checks with curl and the browser smoke test (2026-10-09); not yet tried live by the user.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
@@ -440,6 +472,7 @@ Steps 2–6 followed in the next session.
 - Compact snapshots: a real run plays as before; the coin icon in lobby and HUD (confirmed by the user, 2026-10-08).
 - Terrain in a normal water run (chasm fall, drowning), chests and mimics, and XP and coins banked after a real run (confirmed by the user, 2026-10-08).
 - The gallery was checked visually: animations, melee swooshes, dragon breath from the mouth and nostrils.
+- The dragon's frames in `?dragon` (approved by the user, 2026-10-12); the live fight only by a bot so far.
 
 **Not yet verified:**
 - Behaviour with real (non-headless) players over a real network.
@@ -456,7 +489,8 @@ Steps 2–6 followed in the next session.
   - **Terrain tiles only** (water, lava, chasm) may be self-made: generated by `client/scripts/terrain-tiles.ts` from pack colours, because no CC0 set fit. The user allowed this after the search; figures stay pack sprites.
   - The user rejected self-drawn or procedural sprite art.
   - Small recolors of pack frames with pack colors are fine when the user asks (the summoner's red robe).
-  - Missing figures are pack sprites scaled, tinted or hue-shifted (lich, dragon).
+  - Missing figures are pack sprites scaled or tinted (lich).
+  - **Exception, the red dragon** (2026-10-09 to 10-12): the user supplied AI-generated art and asked for animation frames built from it. Credit it as AI-generated, not as the user's work. New dragon frames: ask the user for a strip (they generate them with an image AI from `images/dragon.jpg`; a prompt pattern that worked: same dragon, same pixel scale and palette, N frames in a row, flat #ff00ff background, no effects).
   - Attacks are approximated by animating pack weapon sprites.
   - Runtime effect shapes (particles, glows, swooshes, rings) are fine.
 - **Minions are never tinted:** raised skeletons and summoned imps look like the ordinary ones.
@@ -464,8 +498,8 @@ Steps 2–6 followed in the next session.
 - **No miniature bases under figures** (the user asked to remove them); figures stand on a soft ground shadow.
 - **Mimics hop after the players** (chosen from a demo over a stationary biter), and their reveal animation stays.
 - **Knockback** (2026-10-08, from the `?knockback` demo):
-  - only strong melee pushes: orc warrior 20 px, chort claw 14 px, demon cleave 36 / swoop 44, dragon front claw 32 / tail 44
-  - imps, skeletons, mimics and all ranged attacks never push
+  - only strong melee pushes: orc warrior 20 px, chort claw 14 px, demon cleave 36 / swoop 44, dragon front claw 32 / bite 24 / tail 44 / landing smash 36
+  - imps, skeletons, mimics and ranged attacks never push, except the dragon's fireball explosions (20 px, the user's request 2026-10-09)
   - no control during the slide, and a dash can't escape it
 - **Boss halls have chasms** (all three bosses; wall strips plus pits).
 - **Ogre mini-boss** (2026-10-08): one per run in every dungeon, roaming a deeper room; club held out at its side (1.4x size), club push 28 px, ground slam with a floor ring at the real radius; a wide HP bar instead of a boss bar; a blue debug path to it.
@@ -539,17 +573,20 @@ Steps 2–6 followed in the next session.
 - **Cooldowns** tick per processed input on both sides. Don't switch the server to wall-clock cooldowns without updating `Predictor`.
 - **Boss behaviours** are taken out of `Run.boss` during their tick (`Option::take`), so `hurt_monster`'s immunity check cannot see the boss during its own tick. That is harmless today; keep it in mind.
 - **Pack frame names** are used verbatim (`knight_m_run_anim_f2`). `necromancer` only has `necromancer_anim_f0-3`, used for both idle and run.
-- **Dragon breath points** (`mouth` / `nostrils` in `anim/defs.ts`) were measured per lizard frame. If the dragon sprite changes, re-measure them.
+- **Dragon breath points** come from `dragonPoints()` in `anim/dragonRig.ts` (base mouth/nostril plus each frame's pose or strip head offset). If a strip is re-imported, update its `head` offsets in `DRAGON_SHEETS`. The jaw only opens on frames whose head sits where the base head is (generated frames, hover).
+- **Dragon attack anims include the wind-up:** the server sets `Melee`/`Bite`/`Tail`/`Breath` when the wind-up starts and the client shows the wind-up frame for `DRAGON_*_WINDUP` s. Other monsters still use `Anim::Windup` then the attack anim.
+- **Shell quoting:** Git Bash mangles backticks in `node -e "..."` and some heredocs; for text edits with backticks write a script file (or use the editor) instead.
 - **Characters:** the client must send `SelectCharacter` after connecting (the character screen's Play does). Without it, rooms are refused, nothing is banked and no upgrades apply.
 - **Seeding test XP:** `docker compose exec db psql -U tiny -d tiny -c "update characters set progress = jsonb_set(progress, '{xp}', '1000') where name = 'Hero'"`. The lobby caches the character, so press "Change character" and Play again to reload it.
 - **The lobby lock is a std `Mutex`:** never hold it across an `.await`. Do database work first (`main.rs` `select_character`, `BuyUpgrade`, `lobby::finish_run`), then lock and apply.
 - **Test accounts:** the smoke test deletes its `e2e_*` accounts. If it crashes midway, remove leftovers with `delete from accounts where name like 'e2e\_%'`.
 - **Lobby screenshots:** the lobby scrolls inside `.lobby`, so Playwright `fullPage` shots are cut off. Screenshot elements instead (`page.locator('.bosses').screenshot()`).
-- **Boss previews in the lobby** (`BOSS_FIG` in `ui/lobby.ts`) use CSS filters to imitate the in-game tint/hue from `anim/defs.ts`. If a boss figure changes, update both.
+- **Boss previews in the lobby** (`BOSS_FIG` in `ui/lobby.ts`) use the atlas frames and CSS filters to imitate the in-game tint from `anim/defs.ts`. If a boss figure changes, update both.
 
 ## Suggested next steps
 
 1. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 2. Loadouts: design new abilities, then add the lobby picker, paid with coins.
 3. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
-4. Optional polish: sound, better boss sprites if the user approves a source (they must be pack-like and not self-drawn), the prediction corrections in busy runs under lag (TODO.md, Network).
+4. Optional polish: sound, better boss sprites if the user approves a source (the dragon now has AI-generated art the user supplied), the prediction corrections in busy runs under lag (TODO.md, Network).
+5. Let the user play the dragon fight live and collect feedback (flight timing, bite, smash).

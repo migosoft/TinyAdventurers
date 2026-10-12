@@ -10,11 +10,11 @@ import { classFigure } from './classes';
 import { BOSS_TEXT, STAT_TEXT } from './text';
 
 const BOSSES: BossId[] = ['Demon', 'Lich', 'Dragon'];
-/** Pack figure, CSS filter approximating the in-game tint/hue (anim/defs.ts) and preview scale. */
+/** Figure (atlas frame prefix), CSS filter approximating the in-game tint (anim/defs.ts) and preview scale. */
 const BOSS_FIG: Record<BossId, [string, string, number]> = {
   Demon: ['big_demon', '', 2],
   Lich: ['necromancer', '', 4],
-  Dragon: ['lizard_m', 'hue-rotate(250deg)', 3],
+  Dragon: ['dragon', '', 2],
 };
 const STATS: UpgradeStat[] = ['Damage', 'AttackSpeed', 'MoveSpeed', 'Life', 'Armor'];
 

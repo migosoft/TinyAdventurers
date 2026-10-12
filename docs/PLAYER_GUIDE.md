@@ -96,11 +96,12 @@ Strong melee hits **push you away** from the attacker:
 | Ogre: club / ground slam | almost 2 tiles (28 px) / 1.5 tiles (24 px), everyone in the circle |
 | Chort (its claw) | a little less (14 px) |
 | Red Demon: cleave / swoop | about 2 / almost 3 tiles (36 / 44 px) |
-| Red Dragon: front claw / tail swipe | 2 / almost 3 tiles (32 / 44 px) |
+| Red Dragon: front claw / bite / tail whip | 2 / 1.5 / almost 3 tiles (32 / 24 / 44 px) |
+| Red Dragon: landing smash / exploding fireball | over 2 tiles (36 px), everyone in the circle / about a tile (20 px) |
 
 - The push slides you for a moment. **You have no control until it ends**: no walking, no attacks, and a dash can't break out of it.
 - Walls stop the slide, but **chasms and deep water do not**: a push over the edge is a fall or a drowning. Lava just burns.
-- **Ranged attacks never push**, and neither do imps, skeletons or mimics.
+- **Ranged attacks never push**, except the dragon's exploding fireballs. Imps, skeletons and mimics don't push either.
 - A Barbarian in the middle of a dash is in the air and can't be pushed.
 - Tip: don't fight orcs or bosses with your back to a chasm or deep water.
 
@@ -150,12 +151,16 @@ Tip: stay mobile, and don't stand between the demon and a chasm.
 Tip: kill the disciples first. Once the last one falls, the lich's protection breaks.
 
 ### The Red Dragon
-- **Fire breath:** smoke rises from its nostrils, then it breathes a cone of fire that **leaves burning ground** behind.
-- **Front claw:** swipes at heroes right in front of its face and pushes them back (32 px).
-- **Tail swipe:** hits anyone standing behind it and flings them away (44 px).
-- **Fireball volley:** explosive fireballs.
+Every attack shows its pose first, while the dragon flashes red: that is your moment to step away.
+- **Fire breath:** it rears its head back while smoke rises from its nostrils, then it breathes a cone of fire that **leaves burning ground** behind. The breath does not push.
+- **Bite:** it pulls its head back, then lunges straight ahead with its neck, a little further than its claw reaches. Hard-hitting, pushes you back (24 px). Only the hero right in front of its mouth is bitten.
+- **Front claw:** raises a paw and swipes at heroes in front of its face, pushing them back (32 px).
+- **Tail whip:** curls its tail, then whips anyone standing behind it and flings them away (44 px).
+- **Fireball volley:** exploding fireballs that push you a little (20 px).
+- **Flight:** every 10 to 12 seconds it takes off and hovers after the party for a few seconds. **Swords, axes, the dagger and the dash can't reach it in the air**; bolts, missiles and spells still hit. In the air its only attack is the fire breath, also from above.
+- **Landing smash:** a red circle on the ground shows where it comes down. The landing hits everyone inside the circle and pushes them away (36 px).
 
-Tip: when you see the smoke, get out of the area in front of its mouth. Don't stand directly behind it either, least of all with a chasm at your back.
+Tip: when you see the smoke, get out of the area in front of its mouth. Don't stand directly behind it either, least of all with a chasm at your back. When it takes off, ranged heroes do the work; get out of the red circle before it lands.
 
 ## Death, victory and defeat
 

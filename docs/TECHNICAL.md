@@ -187,7 +187,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - Adding a field to `Snapshot`, `SelfState`, `EntSnap`, `BossBar`, `Ev` or `InputMsg` means adding it to the wire type, `encode_snap`/`ev_w`, `unpackSnap`/`packInput` and `sample_snapshots`.
 
 **`EntSnap`** (the readable form) is a compact array: `[id, kind, x, y, hp 0-255, anim, aim, anim_ms, flags, extra]`.
-- `kind`, `anim` and `flags` come from `defs/kinds.rs`. They are exported to `defs.ts` as `KIND`, `ANIM` and `FLAG`.
+- `kind`, `anim` and `flags` come from `defs/kinds.rs`. They are exported to `defs.ts` as `KIND`, `ANIM` and `FLAG`. `FLAG.AIRBORNE` marks the flying dragon; `ANIM.TakeOff`, `Land` and `Bite` are the dragon's.
 - `extra` for projectiles is `(owner_id << 16) | shot_id`, for monsters the owner id, for fire patches the remaining life in ms.
 - Chests (`KIND.Chest`) send `anim` 1 once opened, with `anim_ms` since the opening. A sleeping mimic is a normal monster with the `ASLEEP` flag; the client draws it as a closed chest.
 
@@ -235,7 +235,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - **Chests and mimics.** `Run::new` turns `Dungeon.chests` into `Run.chests` (real ones) and sleeping `EnemyType::Mimic` monsters. `touch_chests` (every step) opens a chest when a living player is within `CHEST_TOUCH` (12 px): `CHEST_COINS` (8–15) to every living player through `give_coins`. The same distance wakes a mimic (`wake_mimic`), as does any player hit (`hurt_monster`). A woken mimic holds still for `MIMIC_WAKE_T` (`Ai.hold`, the lid flying open), then uses the normal AI. `check_boss_hall` wakes every sleeping monster except mimics. Sleeping monsters are not pushed by `separate_monsters`.
 - **Mimic gait.** `ai::gait` makes the mimic hop: it moves only while its Move animation clock is in `MIMIC_HOP_AIR` (0.2–0.7 of a 0.6 s `MIMIC_HOP_CYCLE`), at its average speed divided by that fraction. The constants go to the client through `CONST`, so `mimic.ts` draws crouch, flight and landing from the same clock (`anim_ms`). An awake mimic does not wander.
 - `hurt_player` applies armor and skips HP loss in debug mode. Death switches the player to spectating.
-- **Who pushes:** `AttackStyle::Melee` has a `knock` (px): ogre club 28, orc warrior 20, chort claw 14, everything else 0. `AttackStyle::Slam` (the ogre's ground slam) pushes every hero within its radius 24 px straight away. `ai::perform_attack` calls `knock_player` after a melee hit. `Ranged` has no knock field, so ranged attacks can never push. Bosses push in their behaviours: the demon's cleave (36) and swoop (44), the dragon's front claw (32, new: a 0.4 s wind-up, 20 damage, `Anim::Melee`) and tail swipe (44, now `Anim::Tail` so the client draws it behind the dragon). Heroes never push enemies.
+- **Who pushes:** `AttackStyle::Melee` has a `knock` (px): ogre club 28, orc warrior 20, chort claw 14, everything else 0. `AttackStyle::Slam` (the ogre's ground slam) pushes every hero within its radius 24 px straight away. `ai::perform_attack` calls `knock_player` after a melee hit. `Ranged` has no knock field, so enemy ranged attacks never push. Bosses push in their behaviours: the demon's cleave (36) and swoop (44); the dragon's front claw (32), bite (24), tail whip (44), landing smash (36, everyone in `DRAGON_SMASH_RADIUS`) and fireball explosions (20: `Projectile.knock`, applied by `abilities::explode` to the heroes it hits). The dragon's numbers are in `defs/bosses.rs` (`DRAGON_*`). Heroes never push enemies.
 
 **Lag compensation.**
 - Melee arcs, the dagger and dash contact test monster positions rewound by the client's `view_lag` (RTT/2 + its interpolation delay), up to 31 ticks.
@@ -261,7 +261,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 |---|---|---|
 | Demon | 1300 | Cleave 120°/34 px (wind-up 0.45 s), swoop charge 260 px/s, ring of 16 fire orbs. Enraged below 40 % HP: faster and quicker cooldowns. |
 | Lich | 900 | Spawns `LICH_DISCIPLES` (6) disciples in a ring. Immune and healing 6 HP/s per living disciple. Frost-bolt volley of 5, summons raised skeletons. |
-| Dragon | 2000 | Breath: 0.8 s wind-up, then 1.4 s damage pulses in a 115 px, ±0.38 rad cone, leaving burning patches. Tail swipe vs players behind it. Volley of 3 exploding fireballs. |
+| Dragon | 2000 | Breath: 0.8 s wind-up, then 1.4 s damage pulses in a 115 px, ±0.38 rad cone, leaving burning patches. Bite (narrow arc straight ahead, 46 px, own cooldown; chosen before the claw when ready), front claw (wide arc, 40 px), tail whip vs players behind it, volley of 3 exploding fireballs (push 20). After each strike a short recovery (the strike frames play out). Flight every 10–12 s (`DRAGON_FLIGHT_EVERY`): `Anim::TakeOff` 0.5 s standing still, then 3.5 s airborne (`Monster.airborne`, `FLAG.AIRBORNE`; `melee_arc`, `dash_contact` and `dagger_target` skip it; only the breath; chases with `path_toward`), then `Anim::Land` 0.6 s and the smash (`Ev::Boom{k: 5}`, damage and push within 40 px). Attack anims (`Melee`, `Bite`, `Tail`, `Breath`) start with the wind-up; the client shows the wind-up frame for `DRAGON_*_WINDUP` s. |
 
 ## 6. Dungeon generation (`dungeon/generate.rs`)
 
@@ -339,6 +339,12 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 
 **Art source.**
 - Art comes from the 0x72 pack; other CC0 tilesets that fit its style may be added (the user allowed this for terrain and enemies). Terrain tiles (water, lava, chasm) are generated at atlas build time by `client/scripts/terrain-tiles.ts` from pack colours and the pack's `floor_1`, because no CC0 set fit (the user allowed self-made art for terrain tiles only): seamless animated base textures (`terrain_<set>_f<frame>_q<piece>`) plus edge overlays (`terrain_<edge>_e<code>`, a 4-digit quarter code from the 8 neighbours, see `terrain-codes.ts`). `build-atlas.ts` turns `tile_list_v1.7` into a Phaser JSON-hash atlas, so frame names are the pack's own (`knight_m_run_anim_f2`, `weapon_axe`, `floor_1`, …).
+- **Dragon frames** (`scripts/dragon-frames.ts`, poses and layout in `src/game/anim/dragonRig.ts`, shared with the client): AI-generated art made for this game at the user's request (2026-10-09 to 10-12), in `client/assets-src/dragon/`.
+  - Sources: `dragon_base.png` (the standing dragon, 49×43, 9 colours) and one aligned strip per action (`dragon_walk`, `dragon_claw`, `dragon_bite`, `dragon_tail`, `dragon_hover`.png). `DRAGON_SHEETS` gives each strip's cell size, `shift` into base coordinates and the per-frame head offset.
+  - Walk, claw, bite, tail whip and hover frames are copied from the strips. Idle, breath, take-off and landing are generated from the base: it is cut into parts (head, jaw, wings, tail, body; polygon masks), the parts are moved per pose, the outline is redrawn and joint cracks filled. On the hover frames only the jaw opens (fire from the air); that works because their head sits where the base head is.
+  - The mouth and nostril points for the breath come from the same poses (`dragonPoints()`), so they follow the art.
+  - All frames are 86×54 with the base at (19, 7); the feet are on row 50 (`footY`, the figure origin); legs hanging in flight reach below.
+  - How the strips were imported (one-off scripts, not in the repo): the user's JPGs on a magenta background were converted with PowerShell `System.Drawing`; a rectangular pixel grid was fitted per strip (they were stretched unevenly), cell centres sampled (median) and snapped to the base palette; frames separated as connected shapes (specks dropped) and stray light-red pixels on the silhouette removed; then each frame placed in base coordinates, on the base head (walk, claw, hover) or on the planted hind claws (bite, tail), with the head offset found by matching the base head. The walk strip was drawn ~15% smaller and was resampled to base size. Redo the same for new strips.
 - **Recolors:** `RECOLORS` in `build-atlas.ts` swaps whole pack colors for other pack colors and writes the result as new frames in a strip below the sheet (32 px per entry). Today: `summoner_anim_f0-3`, the necromancer with its purple robe (`5f2d56`, trim `9f294e`) turned maroon and red (`62232f`, `da4e38`, the imp's and chort's reds). `scripts/png.ts` is a small PNG codec (8-bit RGB/RGBA, no interlace), so no image library is needed.
 - No self-drawn sprites. This is a user requirement; see HANDOFF.md.
 - Runtime-generated textures are limited to simple effect shapes (`dot`, `spark`, `glow`) and the ground shadow ellipses under figures.
@@ -362,14 +368,15 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - idle/run/hit frame prefixes (4-frame pack animations)
   - the weapon frame and how it is held (`blade` / `bow` / `staff`)
   - the hand height, an accent colour (`base`, used by spell particles and dash afterimages) and a footprint radius (`baseR`, the ground shadow size)
-  - an optional scale, tint or hue
+  - an optional scale or tint
   - an optional `swing` (reach and arc of the melee swoosh, matching the server's damage reach)
   - optional `mouth` / `nostrils` frame points
+  - for figures with their own action frames (the dragon): `frames` (prefix, count, fps per action), `windups` (attack anim → wind-up seconds), `lift` (hover height), `footY` (the feet row when the frames leave room below), `bite`; `pickFrame.ts` chooses their frame
 - Pack stand-ins:
   - the demon is the pack's `big_demon`
   - the lich is the pack necromancer ×1.75 with a pale tint
   - the summoner is the pack necromancer with a red robe (an atlas recolor, see above)
-  - the dragon is the pack lizard ×2.25 with a 250° hue rotation (`preFX` colour matrix)
+  - the dragon is not a pack figure: it has its own AI-generated frames (see Dragon frames above), drawn at ×1.2
 - Weapons are drawn at 0.6× (`WEAPON_SCALE`).
 - The pack has no attack frames, so attacks are approximated:
 
@@ -380,7 +387,8 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 | Staff / cast | Staff thrust and sparkles. |
 | Wind-up | Body flashes red, shakes, weapon drawn back. |
 | Dash | Stretched body and afterimages. |
-| Dragon breath | Particles from the mouth (per-frame measured point, follows bob, flip, tilt and scale) into the ground cone. During the wind-up, smoke comes from the nostrils. |
+| Dragon breath | Particles from the mouth (per-frame point from `dragonPoints()`, follows bob, flip, lift and scale) into the ground cone. During the wind-up, smoke comes from the nostrils. |
+| Dragon flight | The body rises by `lift` over its ground shadow (which shrinks); the landing draws the slam ring at `DRAGON_SMASH_RADIUS` over `DRAGON_LAND`. |
 
 - Facing is left/right only. The `Dir` type and a `TODO(4-dir)` mark where 4-direction sheets would plug in.
 
@@ -412,6 +420,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 | `?mimic[&slow=3]` | The chasing mimic after a walking knight, a treasure chest opening with its coin burst, and the mimic reveal. No server needed. |
 | `?water`, `?chasm`, `?lava` `[&slow=3]` | Terrain demos with scripted figures: wading and drowning, falling into a chasm, burning in lava, demons walking through lava, the dash jumping a gap, and being knocked in. Speeds and times come from `CONST`, like the server. No server needed. |
 | `?knockback` `[&slow=3]` | Every push in the game, side by side next to chasms and deep water, with the game's distances and decay: orc warrior, chort, imp (no push), a barbarian who cannot dash out, the demon's cleave and swoop, the dragon's tail and front claw. The user approved the distances here. |
+| `?dragon` `[&slow=3]` | The dragon looping through every action: idle, walk, claw, bite, tail whip, breath, fireball volley, and a flight (take-off, hover, breath from the air, landing smash). Dummy heroes are pushed with the game's distances. Keys: Space pause, S slow motion, 1–8 jump to an action. The user approved the frames here. |
 | `?ogre` `[&slow=3]` | The ogre's club next to the orc warrior's push (only the club's knocks a hero into the chasm), and the ground slam: the telegraph ring at the real radius, the shockwave, three heroes pushed away (one into a chasm) and one spared just outside. The user approved it. |
 | `?daemons[&slow=3]` | Imp, chort and a pack of both fighting a walking knight, and a summoner summoning imps. Uses the real figure definitions; the attack logic is a local imitation of the server AI. No server needed. |
 | `?lag=150&jitter=40&loss=2` | Network simulator. |
@@ -658,7 +667,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 ## 13. Known limitations
 
-- Pack art gaps: no dragon or lich sprites, no demon wings, no attack frames, no up/down facing.
+- Pack art gaps: no lich sprite, no demon wings, no attack frames, no up/down facing. (The dragon has its own frames.)
 - No sound.
 - Snapshots are compact but not delta-compressed (every snapshot is complete). They are small anyway.
 - Boss fights are covered by unit tests and were played live once against all three bosses; their numbers are not balanced yet.

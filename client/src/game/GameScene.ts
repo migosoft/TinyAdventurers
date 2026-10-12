@@ -447,7 +447,8 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'CrossbowDagger': {
         const close = [...this.ents.values()].some(
-          (e) => !isPlayerKind(e.kind) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= CONST.DAGGER_RANGE,
+          // A flying dragon is out of the dagger's reach (the server shoots the crossbow then).
+          (e) => !isPlayerKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= CONST.DAGGER_RANGE,
         );
         if (close) {
           anim = ANIM.Melee;

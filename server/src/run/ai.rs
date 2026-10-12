@@ -334,7 +334,7 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt:
             set_anim(run, mi, Anim::Shoot);
             let id = run.monsters[mi].id;
             let dir = Vec2::from_angle(aim);
-            spawn_monster_projectile(run, id, projectile, pos + dir * 5.0, dir, speed, damage, range * 1.3 / speed, 0.0, 0);
+            spawn_monster_projectile(run, id, projectile, pos + dir * 5.0, dir, speed, damage, range * 1.3 / speed, 0.0, 0, 0.0);
         }
         AttackStyle::Slam { radius, damage, cooldown, knock, .. } => {
             set_cd(run, cooldown);

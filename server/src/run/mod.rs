@@ -263,6 +263,7 @@ impl Run {
             is_boss: false,
             asleep: false,
             mover: if enemies::is_demon(t) { Mover::Demon } else { Mover::Enemy },
+            airborne: false,
         });
         id
     }
@@ -293,6 +294,7 @@ impl Run {
             is_boss: true,
             asleep: true,
             mover: if self.boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
+            airborne: false,
         });
         self.boss_ent = id;
         let mut behaviour = bosses::create(self.boss_id);

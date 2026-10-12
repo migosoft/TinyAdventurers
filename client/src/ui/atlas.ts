@@ -17,11 +17,13 @@ export async function loadAtlas(): Promise<Atlas> {
 }
 
 /** A small pixel-scaled canvas cycling through the pack's `<fig>_idle/run_anim_f0..3`
- * (or `<fig>_anim_f0..3` for figures without idle/run, e.g. the necromancer). */
+ * (`walk` instead of `run` for the dragon; `<fig>_anim_f0..3` for figures without
+ * idle/run, e.g. the necromancer). */
 export function spritePreview(atlas: Atlas, fig: string, scale = 4, extra?: string): HTMLCanvasElement {
   const c = document.createElement('canvas');
   const plain = !atlas.frames[`${fig}_idle_anim_f0`];
-  const name = (i: number) => (plain ? `${fig}_anim_f${i % 4}` : `${fig}_${i % 8 < 4 ? 'idle' : 'run'}_anim_f${i % 4}`);
+  const run = atlas.frames[`${fig}_run_anim_f0`] ? 'run' : 'walk';
+  const name = (i: number) => (plain ? `${fig}_anim_f${i % 4}` : `${fig}_${i % 8 < 4 ? 'idle' : run}_anim_f${i % 4}`);
   const f0 = atlas.frames[name(0)].frame;
   const ex = extra ? atlas.frames[extra]?.frame : undefined;
   const w = Math.max(f0.w, 16) + (ex ? 10 : 0);

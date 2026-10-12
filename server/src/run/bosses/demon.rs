@@ -96,7 +96,7 @@ impl BossBehaviour for Demon {
                     let id = run.monsters[bi].id;
                     for k in 0..16 {
                         let dir = Vec2::from_angle(k as f64 * std::f64::consts::TAU / 16.0 + run.time);
-                        spawn_monster_projectile(run, id, EntityKind::FireOrb, pos + dir * 10.0, dir, 105.0, 12.0, 2.2, 0.0, 0);
+                        spawn_monster_projectile(run, id, EntityKind::FireOrb, pos + dir * 10.0, dir, 105.0, 12.0, 2.2, 0.0, 0, 0.0);
                     }
                     run.event(crate::protocol::Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: 30.0, k: 2 }, Some(pos));
                 }

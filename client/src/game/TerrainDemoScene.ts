@@ -151,7 +151,9 @@ export abstract class TerrainDemo extends Phaser.Scene {
     if (a.doom) return this.doomed(a, dt);
 
     const tile = this.map.get(Math.floor(a.x / TILE), Math.floor((a.y - 3) / TILE));
-    let anim: number = (a.anim === ANIM.Melee || a.anim === ANIM.Tail) && a.animT < 0.3 ? a.anim : ANIM.Idle;
+    // A strike keeps its anim while its frames play (after the wind-up, for figures whose anim includes it).
+    const strikeEnd = (a.v.def.windups?.[a.anim] ?? 0) + (a.v.def.frames ? 0.5 : 0.3);
+    let anim: number = (a.anim === ANIM.Melee || a.anim === ANIM.Tail) && a.animT < strikeEnd ? a.anim : ANIM.Idle;
     const s = a.steps[a.i];
     if (a.push) {
       // Knocked back: slides away, whatever lies there, slowing down.
@@ -167,11 +169,15 @@ export abstract class TerrainDemo extends Phaser.Scene {
       const target = this.actors.find((o) => o.name === s.hit);
       if (target && !target.doom && !target.push && Math.hypot(target.x - a.x, target.y - a.y) < (s.reach ?? 26)) {
         a.t += dt;
-        anim = ANIM.Windup;
+        // Figures whose attack anim includes the wind-up (the dragon) play it from the start.
+        const strike = s.tail ? ANIM.Tail : ANIM.Melee;
+        const own = a.v.def.windups?.[strike];
+        anim = own ? strike : ANIM.Windup;
+        a.animT = a.t;
         a.aim = Math.atan2(target.y - a.y, target.x - a.x) + (s.tail ? Math.PI : 0);
-        if (a.t >= (s.windup ?? 0.35)) {
-          a.anim = s.tail ? ANIM.Tail : ANIM.Melee;
-          a.animT = 0;
+        if (a.t >= (s.windup ?? own ?? 0.35)) {
+          a.anim = strike;
+          a.animT = own ?? 0;
           anim = a.anim;
           this.strike(a, target, s.push ? Math.hypot(...s.push) * TILE : (s.dist ?? 0), s.push);
           this.next(a);

@@ -1,7 +1,9 @@
-// Data: how each entity kind looks and animates, using only 0x72 pack frames.
+// Data: how each entity kind looks and animates, using 0x72 pack frames.
 // Bodies: `<prefix><0..3>` for idle/run (4-frame pack animations).
 // The pack has no attack animations; attacks animate the pack weapon sprites.
-import { ABILITIES, CONST, KIND } from "../../generated/defs";
+// The dragon is the exception: its own frames (see dragonRig.ts) for every action.
+import { ABILITIES, ANIM, CONST, KIND } from "../../generated/defs";
+import { DRAGON_ANIMS, DRAGON_FRAME, dragonFrameName, dragonPoints, type DragonAnim } from "./dragonRig";
 
 // Player swings reach as far as the server hits: ability range + a typical monster radius.
 const SWORD = { reach: ABILITIES.Sword.range + 5, arc: ABILITIES.Sword.arc };
@@ -38,12 +40,20 @@ export interface FigureDef {
   /** Whole-figure scale and tint (bosses built from pack sprites). */
   scale?: number;
   tint?: number;
-  /** Hue rotation in degrees (WebGL color matrix), e.g. the green lizard turned into a red dragon. */
-  hue?: number;
   /** Melee swoosh: drawn at the damage reach (px from the figure), over the damage arc (rad). */
   swing?: { reach: number; arc: number; color?: number };
-  /** Ground slam radius (px, hero centres): the telegraph ring drawn during the Slam wind-up (the ogre). */
-  slam?: number;
+  /** Ground slam telegraph: a ring of radius `r` (px, hero centres) filling up while `anim` runs for `t` s (ogre slam, dragon landing). */
+  slam?: { r: number; anim: number; t: number };
+  /** Own action frames (the dragon): `<prefix><i>`, frame count, frames per second. */
+  frames?: Partial<Record<FigureAnim, { prefix: string; n: number; fps: number }>>;
+  /** Attack anims that start with their wind-up (s): the wind-up frame shows first, then the strike frames. */
+  windups?: Partial<Record<number, number>>;
+  /** Hover height while airborne (px, unscaled). */
+  lift?: number;
+  /** Row of the feet in the body frames (the origin), when space is left below them (the dragon's hanging legs in flight). */
+  footY?: number;
+  /** Bite (the dragon): sparks where the jaws snap, `reach` px straight ahead. */
+  bite?: { reach: number; color: number };
   /** Tail swipe behind the figure (the dragon), shown for the Tail animation. */
   tail?: { reach: number; arc: number; color?: number };
   /** Where breath attacks come out (dragon mouth / nostrils), per body frame. */
@@ -54,23 +64,14 @@ export interface FigureDef {
 
 /** Pixel points inside a frame (x, y from the frame's top-left), e.g. the dragon's mouth. */
 export type FramePoints = Record<string, [number, number]>;
+/** Actions with their own frames (only the dragon has them). */
+export type FigureAnim = DragonAnim;
 
-// Pack lizard (used as the dragon): the snout tip is column 15 and the top of
-// the snout row moves with the bob. Measured per frame from the sprite sheet;
-// the mouth line is 6 rows below the snout top, the nostril 2 rows below.
-const LIZARD_SNOUT_TOP: Record<string, number> = {
-  lizard_m_idle_anim_f0: 13,
-  lizard_m_idle_anim_f1: 14,
-  lizard_m_idle_anim_f2: 16,
-  lizard_m_idle_anim_f3: 14,
-  lizard_m_run_anim_f0: 13,
-  lizard_m_run_anim_f1: 11,
-  lizard_m_run_anim_f2: 13,
-  lizard_m_run_anim_f3: 15,
-  lizard_m_hit_anim_f0: 11,
-};
-const lizardPoints = (dy: number): FramePoints =>
-  Object.fromEntries(Object.entries(LIZARD_SNOUT_TOP).map(([f, top]) => [f, [15.5, top + dy]]));
+// The dragon's frames are built at atlas time from its rig; the breath points come from the same poses.
+const DRAGON_POINTS = dragonPoints();
+const dragonFrames = Object.fromEntries(
+  (Object.keys(DRAGON_ANIMS) as DragonAnim[]).map((a) => [a, { prefix: dragonFrameName(a, 0).slice(0, -1), n: DRAGON_ANIMS[a].length, fps: a === 'idle' ? 4 : a === 'walk' ? 8 : a === 'hover' || a === 'hoverbreath' ? 12 : 10 }]),
+) as Record<DragonAnim, { prefix: string; n: number; fps: number }>;
 
 const hero = (n: string) => ({ idle: `${n}_idle_anim_f`, run: `${n}_run_anim_f`, hit: `${n}_hit_anim_f0` });
 const mob = (n: string) => ({ idle: `${n}_idle_anim_f`, run: `${n}_run_anim_f` });
@@ -94,10 +95,29 @@ export const FIGURES: Record<number, FigureDef> = {
   [KIND.Imp]: { ...mob('imp'), swing: CLAW, handY: 7, attack: 'caster', base: 0xff7020, baseR: 5 },
   [KIND.Chort]: { ...mob('chort'), swing: { ...CLAW, reach: 22 }, handY: 10, attack: 'caster', base: 0xff7020, baseR: 5 },
   [KIND.Summoner]: { ...summoner, weapon: 'weapon_red_magic_staff', mount: 'staff', weaponTint: 0xffb080, handY: 8, attack: 'caster', base: 0x9a2020, baseR: 5 },
-  [KIND.Ogre]: { ...mob('ogre'), swing: { reach: 34, arc: 2.0, color: 0xffe0b0 }, weapon: 'weapon_baton_with_spikes', mount: 'blade', weaponScale: 1.4, handX: 12, handY: 14, attack: 'melee', base: 0x3a6a3a, baseR: 12, slam: CONST.OGRE_SLAM_RADIUS },
+  [KIND.Ogre]: { ...mob('ogre'), swing: { reach: 34, arc: 2.0, color: 0xffe0b0 }, weapon: 'weapon_baton_with_spikes', mount: 'blade', weaponScale: 1.4, handX: 12, handY: 14, attack: 'melee', base: 0x3a6a3a, baseR: 12, slam: { r: CONST.OGRE_SLAM_RADIUS, anim: ANIM.Slam, t: CONST.OGRE_SLAM_WINDUP } },
   [KIND.Demon]: { ...mob('big_demon'), swing: { reach: 40, arc: 2.1, color: 0xffa080 }, handY: 18, attack: 'melee', base: 0x7a1010, baseR: 13 },
   [KIND.Lich]: { ...necro, weapon: 'weapon_green_magic_staff', mount: 'staff', handY: 8, attack: 'caster', base: 0x3a2a5a, baseR: 6, scale: 1.75, tint: 0xb8c8ff },
-  [KIND.Dragon]: { ...hero('lizard_m'), mouth: lizardPoints(5.5), nostrils: lizardPoints(2.5), swing: { ...CLAW, reach: 40, color: 0xffc0a0 }, tail: { reach: 46, arc: 2.4, color: 0xffc0a0 }, handY: 10, attack: 'melee', base: 0x7a1010, baseR: 8, scale: 2.25, hue: 250 },
+  [KIND.Dragon]: {
+    idle: dragonFrames.idle.prefix,
+    run: dragonFrames.walk.prefix,
+    frames: dragonFrames,
+    windups: { [ANIM.Melee]: CONST.DRAGON_CLAW_WINDUP, [ANIM.Bite]: CONST.DRAGON_BITE_WINDUP, [ANIM.Tail]: CONST.DRAGON_TAIL_WINDUP, [ANIM.Breath]: CONST.DRAGON_BREATH_WINDUP },
+    slam: { r: CONST.DRAGON_SMASH_RADIUS, anim: ANIM.Land, t: CONST.DRAGON_LAND },
+    lift: 14,
+    footY: DRAGON_FRAME.footY,
+    mouth: DRAGON_POINTS.mouth,
+    nostrils: DRAGON_POINTS.nostrils,
+    swing: { ...CLAW, reach: 40, color: 0xffc0a0 },
+    tail: { reach: 46, arc: 2.4, color: 0xffc0a0 },
+    bite: { reach: CONST.DRAGON_BITE_RANGE, color: 0xfff0d0 },
+    handX: 8,
+    handY: 16,
+    attack: 'melee',
+    base: 0x7a1010,
+    baseR: 16,
+    scale: 1.2,
+  },
 };
 
 /** Projectiles: a pack sprite (arrows) or a runtime glow of the given color. */

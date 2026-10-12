@@ -25,7 +25,7 @@ pub fn dagger_target(run: &Run, pi: usize) -> Option<usize> {
     run.monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive)
+        .filter(|(_, m)| m.alive && !m.airborne)
         .map(|(i, m)| (i, m.pos_ago(rw).dist(pos) - m.radius))
         .filter(|&(_, d)| d <= ab::DAGGER_RANGE)
         .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -129,7 +129,8 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
         .iter()
         .enumerate()
         .filter(|(_, m)| {
-            if !m.alive {
+            // Flying monsters are out of reach of melee.
+            if !m.alive || m.airborne {
                 return false;
             }
             let mp = m.pos_ago(rw);
@@ -156,7 +157,7 @@ pub fn dash_contact(run: &mut Run, pi: usize) {
         .monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + 4.0)
+        .filter(|(_, m)| m.alive && !m.airborne && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + 4.0)
         .map(|(i, m)| (i, m.id))
         .collect();
     for (mi, id) in hits {
@@ -203,6 +204,7 @@ fn spawn_player_projectile(
         crit,
         explode_r,
         explode_k: 0,
+        knock: 0.0,
         target,
         dead: false,
     });
@@ -220,6 +222,7 @@ pub fn spawn_monster_projectile(
     life: f64,
     explode_r: f64,
     explode_k: u8,
+    knock: f64,
 ) {
     let id = run.alloc_id();
     run.projectiles.push(Projectile {
@@ -236,6 +239,7 @@ pub fn spawn_monster_projectile(
         crit: false,
         explode_r,
         explode_k,
+        knock,
         target: None,
         dead: false,
     });
@@ -294,10 +298,10 @@ pub fn tick_projectiles(run: &mut Run, dt: f64) {
 fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<usize>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
-    let (from_player, owner, damage, crit, explode_r, k) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k);
+    let (from_player, owner, damage, crit, explode_r, k, knock) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.knock);
     let src = if from_player { run.player_idx(owner) } else { None };
     if explode_r > 0.0 {
-        explode(run, pos, explode_r, damage, from_player, src, k, crit);
+        explode(run, pos, explode_r, damage, from_player, src, k, crit, knock);
         return;
     }
     if let Some(t) = target {
@@ -310,7 +314,8 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<usize>) {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: f64, from_player: bool, src: Option<usize>, k: u8, crit: bool) {
+/// An explosion; `knock` pushes the heroes it hits straight away from it (px, enemy explosions only).
+pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: f64, from_player: bool, src: Option<usize>, k: u8, crit: bool, knock: f64) {
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, Some(pos));
     if from_player {
         let hits: Vec<usize> = run
@@ -333,6 +338,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: f64, from_player: bool,
             .collect();
         for qi in hits {
             run.hurt_player(qi, damage);
+            run.knock_player(qi, pos, 0.0, knock);
         }
     }
 }
@@ -382,6 +388,46 @@ mod tests {
         run.players[0].cd1 = 0.0;
         try_use(&mut run, 0, AbilityId::CrossbowDagger, 3, true);
         assert_eq!(run.monsters[mi].hp, 1000.0 - ab::DAGGER_DAMAGE * (ab::HIDDEN_CRIT_MULT + 1.0));
+    }
+
+    #[test]
+    fn melee_cannot_reach_a_flying_monster() {
+        // Sword arc.
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let mi = put_monster_near(&mut run, 0, 12.0);
+        run.monsters[mi].airborne = true;
+        let hp = run.monsters[mi].hp;
+        try_use(&mut run, 0, AbilityId::Sword, 1, true);
+        assert_eq!(run.monsters[mi].hp, hp, "the sword misses it in the air");
+        run.monsters[mi].airborne = false;
+        run.players[0].cd1 = 0.0;
+        try_use(&mut run, 0, AbilityId::Sword, 2, true);
+        assert!(run.monsters[mi].hp < hp, "and hits it on the ground");
+
+        // Dagger: the assassin shoots the crossbow instead.
+        let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
+        let mi = put_monster_near(&mut run, 0, 10.0);
+        run.monsters[mi].airborne = true;
+        assert_eq!(dagger_target(&run, 0), None);
+
+        // Barbarian dash.
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mi = put_monster_near(&mut run, 0, 6.0);
+        run.monsters[mi].airborne = true;
+        let hp = run.monsters[mi].hp;
+        dash_contact(&mut run, 0);
+        assert_eq!(run.monsters[mi].hp, hp, "the dash passes under it");
+    }
+
+    #[test]
+    fn an_enemy_explosion_with_knock_pushes_heroes_away() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
+        let at = run.players[0].pos() - Vec2::new(10.0, 0.0);
+        explode(&mut run, at, 30.0, 5.0, false, None, 4, false, 20.0);
+        assert!(run.players[0].mv.knock_vx > 0.0, "pushed east, away from the blast");
+        let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
+        explode(&mut run, at, 30.0, 5.0, false, None, 4, false, 0.0);
+        assert!(!run.players[0].mv.knocked(), "no knock: no push");
     }
 
     #[test]

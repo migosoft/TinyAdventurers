@@ -10,7 +10,7 @@
 use crate::collision::{step_move, MoveState};
 use crate::defs::abilities::{self as ab};
 use crate::defs::classes::{self, PLAYER_RADIUS};
-use crate::defs::enemies;
+use crate::defs::{bosses, enemies};
 use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::dungeon::{Map, Tile, TILE};
 use crate::fov::{Fov, PLAYER_FOV_RADIUS};
@@ -57,6 +57,20 @@ fn export_defs() {
         "MIMIC_WAKE_T": enemies::MIMIC_WAKE_T,
         "OGRE_SLAM_RADIUS": enemies::OGRE_SLAM_RADIUS,
         "OGRE_SLAM_WINDUP": enemies::OGRE_SLAM_WINDUP,
+        "DRAGON_CLAW_WINDUP": bosses::DRAGON_CLAW_WINDUP,
+        "DRAGON_BITE_WINDUP": bosses::DRAGON_BITE_WINDUP,
+        "DRAGON_BITE_RANGE": bosses::DRAGON_BITE_RANGE,
+        "DRAGON_BITE_KNOCK": bosses::DRAGON_BITE_KNOCK,
+        "DRAGON_TAIL_WINDUP": bosses::DRAGON_TAIL_WINDUP,
+        "DRAGON_BREATH_WINDUP": bosses::DRAGON_BREATH_WINDUP,
+        "DRAGON_BREATH_TIME": bosses::DRAGON_BREATH_TIME,
+        "DRAGON_TAKEOFF": bosses::DRAGON_TAKEOFF,
+        "DRAGON_LAND": bosses::DRAGON_LAND,
+        "DRAGON_SMASH_RADIUS": bosses::DRAGON_SMASH_RADIUS,
+        "DRAGON_SMASH_KNOCK": bosses::DRAGON_SMASH_KNOCK,
+        "DRAGON_CLAW_KNOCK": bosses::DRAGON_CLAW_KNOCK,
+        "DRAGON_TAIL_KNOCK": bosses::DRAGON_TAIL_KNOCK,
+        "DRAGON_FIREBALL_KNOCK": bosses::DRAGON_FIREBALL_KNOCK,
         "SHALLOW_SPEED": crate::dungeon::SHALLOW_SPEED,
         "LAVA_SPEED": crate::dungeon::LAVA_SPEED,
         "FALL_TIME": crate::dungeon::FALL_TIME,
@@ -65,7 +79,7 @@ fn export_defs() {
     });
     let fl = json!({
         "HIDDEN": flags::HIDDEN, "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,
-        "ASLEEP": flags::ASLEEP, "HURT": flags::HURT, "DEAD": flags::DEAD,
+        "ASLEEP": flags::ASLEEP, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE,
     });
     let tiles = json!({
         "Void": Tile::Void as u8, "Floor": Tile::Floor as u8, "Wall": Tile::Wall as u8,

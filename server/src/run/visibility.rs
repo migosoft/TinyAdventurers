@@ -91,6 +91,9 @@ pub fn send_snapshots(run: &mut Run) {
             if m.asleep {
                 f |= flags::ASLEEP;
             }
+            if m.airborne {
+                f |= flags::AIRBORNE;
+            }
             if m.is_boss && boss_immune {
                 f |= flags::IMMUNE;
             }

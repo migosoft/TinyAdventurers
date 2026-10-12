@@ -162,6 +162,8 @@ pub struct Monster {
     pub asleep: bool,
     /// Walking rules: demons cross lava, other enemies avoid it.
     pub mover: Mover,
+    /// Flying (the dragon): melee cannot reach it, projectiles and spells still do.
+    pub airborne: bool,
 }
 
 impl Monster {
@@ -190,6 +192,8 @@ pub struct Projectile {
     /// Explosion radius on impact (0 = none) and its effect kind.
     pub explode_r: f64,
     pub explode_k: u8,
+    /// Knockback (px) of the explosion on the heroes it hits (dragon fireballs).
+    pub knock: f64,
     /// Explode when reaching this point (fireball at cursor).
     pub target: Option<Vec2>,
     pub dead: bool,
