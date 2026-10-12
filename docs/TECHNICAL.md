@@ -53,8 +53,10 @@ server/                              Rust crate `tiny-adventurers-server`
   src/export.rs                      (test-only) writes client/src/generated/defs.ts, fixtures.json, wire-fixtures.json
 client/                              Vite + TypeScript + Phaser 3.90
   scripts/build-atlas.ts             pack sheet + tile list -> public/assets/atlas.{png,json}
+  scripts/build-logo.ts              title logo -> public/assets/{logo,logo-emblem,favicon}.png
   scripts/png.ts                     minimal PNG decode/encode (zlib only) for the atlas recolors
   assets-src/0x72/                   0x72 DungeonTileset II v1.7 (CC0): sheet, tile_list, README, LICENSE
+  assets-src/logo/logo.png           title logo, made with Google's image generation AI
   src/main.ts                        boot: login -> character screen -> WebSocket, Phaser game, Lobby/Hud/GameScene; demo pages
   src/api.ts                         fetch wrapper for /api/* (the session cookie is HttpOnly; JS never sees it)
   src/net.ts                         WebSocket + msgpack, ping/RTT, network simulator (?lag=)
@@ -345,6 +347,11 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - The mouth and nostril points for the breath come from the same poses (`dragonPoints()`), so they follow the art.
   - All frames are 86×54 with the base at (19, 7); the feet are on row 50 (`footY`, the figure origin); legs hanging in flight reach below.
   - How the strips were imported (one-off scripts, not in the repo): the user's JPGs on a magenta background were converted with PowerShell `System.Drawing`; a rectangular pixel grid was fitted per strip (they were stretched unevenly), cell centres sampled (median) and snapped to the base palette; frames separated as connected shapes (specks dropped) and stray light-red pixels on the silhouette removed; then each frame placed in base coordinates, on the base head (walk, claw, hover) or on the planted hind claws (bite, tail), with the head offset found by matching the base head. The walk strip was drawn ~15% smaller and was resampled to base size. Redo the same for new strips.
+- **Title logo** (`scripts/build-logo.ts`, run by `npm run atlas`): made for this game with Google's image generation AI (2026-10-12), in `client/assets-src/logo/logo.png` (1408×768; the generator's watermark in the bottom-right corner was painted over once with wall from its left). The script writes three files into `public/assets/`:
+  - `logo.png`: the whole image. The login screen shows it large (`.lobby.title`, `h1.logo.splash` from `ui/logo.ts`); every other `.lobby` screen uses it as a darkened background, darkest in the middle so the emblem behind the panels disappears and only the walls show (on portrait screens the left wall).
+  - `logo-emblem.png`: the shield with the title (crop x 370, y 78, 680×626), the small header of the character select, lobby and error page.
+  - `favicon.png`: the treasure chest on top, area-averaged to 64×64. The admin page has no favicon.
+  - The `<h1>` around the images keeps the name for screen readers (`alt`); the edges fade out with `mask-image`.
 - **Recolors:** `RECOLORS` in `build-atlas.ts` swaps whole pack colors for other pack colors and writes the result as new frames in a strip below the sheet (32 px per entry). Today: `summoner_anim_f0-3`, the necromancer with its purple robe (`5f2d56`, trim `9f294e`) turned maroon and red (`62232f`, `da4e38`, the imp's and chort's reds). `scripts/png.ts` is a small PNG codec (8-bit RGB/RGBA, no interlace), so no image library is needed.
 - No self-drawn sprites. This is a user requirement; see HANDOFF.md.
 - Runtime-generated textures are limited to simple effect shapes (`dot`, `spark`, `glow`) and the ground shadow ellipses under figures.

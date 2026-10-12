@@ -106,13 +106,46 @@ input {
   inset: 0;
   overflow-y: auto;
   padding: 24px 16px 48px;
+  /* The logo's mossy wall, darkest in the middle so the emblem behind the
+     panels fades out and only the walls at the sides read. */
   background:
-    radial-gradient(ellipse at 50% 0%, #3a2030 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 45%, #0a0608 0%, #0a0608 30%, rgba(10, 6, 8, 0.85) 55%, rgba(10, 6, 8, 0.6) 100%),
+    url(/assets/logo.png) center / cover no-repeat,
     var(--bg);
+  image-rendering: pixelated;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
+}
+/* Portrait screens would show only the middle of the image: use the left wall. */
+@media (max-aspect-ratio: 1/1) {
+  .lobby {
+    background-position: center, left center;
+  }
+}
+/* Login: the full logo on the near-black of its own edges. */
+.lobby.title {
+  background: #0b0a0d;
+}
+.lobby h1.logo {
+  margin: 0;
+  line-height: 0;
+}
+.lobby h1.logo img {
+  display: block;
+  height: clamp(80px, 18vh, 160px);
+  image-rendering: pixelated;
+  mask-image: radial-gradient(ellipse at 50% 50%, #000 55%, transparent 72%);
+}
+.lobby h1.logo.splash {
+  width: min(900px, 100%);
+  margin-bottom: -4%;
+}
+.lobby h1.logo.splash img {
+  width: 100%;
+  height: auto;
+  mask-image: radial-gradient(ellipse at 50% 50%, #000 45%, transparent 70%);
 }
 .lobby h1 {
   font-size: clamp(18px, 4vw, 32px);

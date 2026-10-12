@@ -16,6 +16,7 @@ import { showAuth } from './ui/auth';
 import { Characters } from './ui/characters';
 import { Hud } from './ui/hud';
 import { Lobby } from './ui/lobby';
+import { logoHeader } from './ui/logo';
 import './style.css';
 
 class BootScene extends Phaser.Scene {
@@ -65,7 +66,7 @@ function gallery(): void {
 }
 
 function fatal(ui: HTMLElement, msg: string): void {
-  ui.innerHTML = `<div class="lobby"><h1>Tiny Adventurers</h1><div class="panel">${msg}</div></div>`;
+  ui.innerHTML = `<div class="lobby">${logoHeader}<div class="panel">${msg}</div></div>`;
 }
 
 /** Login, then the character screen; "Play" connects to the game. */

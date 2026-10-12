@@ -6,6 +6,7 @@ import type { UpgradeStat } from '../generated/UpgradeStat';
 import type { Net } from '../net';
 import { spritePreview, type Atlas } from './atlas';
 import { esc } from './hud';
+import { logoHeader } from './logo';
 import { classFigure } from './classes';
 import { BOSS_TEXT, STAT_TEXT } from './text';
 
@@ -130,7 +131,7 @@ export class Lobby {
           .join('')
       : '<li class="empty">No open dungeons. Create one!</li>';
     this.root.innerHTML = `
-      <h1>Tiny Adventurers</h1>
+      ${logoHeader}
       <div class="panel hero"></div>
       <div class="panel">
         <h2>Dungeon runs</h2>

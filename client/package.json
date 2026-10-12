@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "atlas": "tsx scripts/build-atlas.ts",
+    "atlas": "tsx scripts/build-atlas.ts && tsx scripts/build-logo.ts",
     "dev": "npm run atlas && vite",
     "build": "npm run atlas && tsc --noEmit && vite build",
     "test": "vitest run",

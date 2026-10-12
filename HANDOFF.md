@@ -9,7 +9,30 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-09 to 10-12, dragon rework: own art, flight, bite)
+## Last session (2026-10-12, title logo)
+
+**Branch:** `feature/title-logo` (not merged yet).
+
+**User decisions this session:**
+- **Logo:** `images/logo.png` becomes the game's title art. It was **made with Google's image generation AI**; credit it that way ("made for this game with Google's image generation AI"), **not as the user's art**.
+- **Where:** large on the login screen; a small emblem header and the darkened wall as background on character select and lobby; a favicon. The admin page stays as it is.
+
+**Done:**
+- `client/assets-src/logo/logo.png`: the source, with the generator's ✦ watermark (bottom right) painted over once with wall from its left (one-off script, not kept).
+- `client/scripts/build-logo.ts` (part of `npm run atlas`) writes `logo.png`, `logo-emblem.png` and `favicon.png` into the generated `public/assets/`. Details in TECHNICAL.md §9 "Title logo".
+- `client/src/ui/logo.ts` (`logoHero`, `logoHeader`) replaces the gold text `<h1>` in `auth.ts`, `characters.ts`, `lobby.ts` and `fatal()` in `main.ts`; the room view keeps its text heading. CSS in the lobby section of `style.css`. Note: `.hero` was already taken (the lobby's character panel), so the large logo is `h1.logo.splash`.
+- Credits in README.md (Art) and TECHNICAL.md.
+
+**Verified:**
+- client `npm run build` (atlas + logo, tsc, vite) and `npm test` (17 tests).
+- Screenshots (throwaway Playwright script against the dev server, test account deleted) of login, character select and lobby at 1280×720 and 390×844: no horizontal scroll, favicon served, no browser errors.
+
+**Open:**
+- `images/logo.png` is still there (untracked); it is now copied to `client/assets-src/logo/`. Deleting it was blocked for me; the user can delete `images/`.
+- Not yet seen by the user in their browser.
+- On phones the character card in the character list is cramped (name cut to "S…", XP text wraps); this was not changed by the logo work.
+
+## Session before (2026-10-09 to 10-12, dragon rework: own art, flight, bite)
 
 **Branch:** `feature/dragon-rework` is merged into `main` (fast-forward) and pushed, at the user's request. Start the next feature on a new branch from `main`.
 
@@ -36,7 +59,6 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Not yet verified:** the user playing the dragon fight live.
 
 **Open:**
-- `images/` now only holds `logo.png` (untracked, not used by the game, no other copy in the repo). The user said the folder is no longer needed; the logo was kept because it is the only copy. Ask whether to delete it, commit it or move it.
 - In flight the dragon looks a little bigger than standing (the flight strip is drawn ~10% larger).
 - The bite's numbers are first guesses; balancing is the planned combined pass.
 

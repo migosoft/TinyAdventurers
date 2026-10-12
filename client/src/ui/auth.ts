@@ -2,18 +2,19 @@
 // so a forgotten password cannot be recovered (the form says so).
 import { api, ApiFail } from '../api';
 import type { Me } from '../generated/Me';
+import { logoHero } from './logo';
 
 /** Shows the form until the player is logged in. */
 export function showAuth(host: HTMLElement): Promise<Me> {
   const root = document.createElement('div');
-  root.className = 'lobby';
+  root.className = 'lobby title';
   host.append(root);
   let register = false;
 
   return new Promise((resolve) => {
     const render = () => {
       root.innerHTML = `
-        <h1>Tiny Adventurers</h1>
+        ${logoHero}
         <form class="panel auth" autocomplete="on">
           <h2>${register ? 'Create an account' : 'Log in'}</h2>
           <label>Name <input id="auth-name" name="username" maxlength="16" autocomplete="username" required></label>

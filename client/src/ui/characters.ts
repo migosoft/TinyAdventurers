@@ -7,6 +7,7 @@ import type { Me } from '../generated/Me';
 import type { Atlas } from './atlas';
 import { classCard, classFigure, CLASSES } from './classes';
 import { esc } from './hud';
+import { logoHeader } from './logo';
 
 export class Characters {
   private root = document.createElement('div');
@@ -30,7 +31,7 @@ export class Characters {
       this.me = me ?? (await api.me());
     } catch (e) {
       this.me = null;
-      this.root.innerHTML = `<h1>Tiny Adventurers</h1><div class="panel">${esc(String(e instanceof ApiFail ? e.message : e))}</div>`;
+      this.root.innerHTML = `${logoHeader}<div class="panel">${esc(String(e instanceof ApiFail ? e.message : e))}</div>`;
       return;
     }
     if (!this.me) return location.reload(); // session ended: back to the login form
@@ -49,7 +50,7 @@ export class Characters {
     const me = this.me!;
     const full = me.characters.length >= me.max_characters;
     this.root.innerHTML = `
-      <h1>Tiny Adventurers</h1>
+      ${logoHeader}
       <div class="panel account">
         <span>Logged in as <b>${esc(me.name)}</b></span>
         <span class="row"><button id="logout">Log out</button><button id="delete-account" class="danger">Delete account</button></span>
