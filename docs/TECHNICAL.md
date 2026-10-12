@@ -351,7 +351,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - `logo.png`: the whole image. The login screen shows it large (`.lobby.title`, `h1.logo.splash` from `ui/logo.ts`); every other `.lobby` screen uses it as a darkened background, darkest in the middle so the emblem behind the panels disappears and only the walls show (on portrait screens the left wall).
   - `logo-emblem.png`: the shield with the title (crop x 370, y 78, 680×626), the small header of the character select, lobby and error page.
   - `favicon.png`: the treasure chest on top, area-averaged to 64×64. The admin page has no favicon.
-  - The `<h1>` around the images keeps the name for screen readers (`alt`); the edges fade out with `mask-image`.
+  - The `<h1>` around the images keeps the name for screen readers (`alt`); the edges fade out with `mask-image` (header from 70% to 85% of the radius, so the full width of ADVENTURERS stays opaque).
 - **Recolors:** `RECOLORS` in `build-atlas.ts` swaps whole pack colors for other pack colors and writes the result as new frames in a strip below the sheet (32 px per entry). Today: `summoner_anim_f0-3`, the necromancer with its purple robe (`5f2d56`, trim `9f294e`) turned maroon and red (`62232f`, `da4e38`, the imp's and chort's reds). `scripts/png.ts` is a small PNG codec (8-bit RGB/RGBA, no interlace), so no image library is needed.
 - No self-drawn sprites. This is a user requirement; see HANDOFF.md.
 - Runtime-generated textures are limited to simple effect shapes (`dot`, `spark`, `glow`) and the ground shadow ellipses under figures.

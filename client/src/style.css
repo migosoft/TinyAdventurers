@@ -136,7 +136,7 @@ input {
   display: block;
   height: clamp(80px, 18vh, 160px);
   image-rendering: pixelated;
-  mask-image: radial-gradient(ellipse at 50% 50%, #000 55%, transparent 72%);
+  mask-image: radial-gradient(ellipse at 50% 50%, #000 70%, transparent 85%);
 }
 .lobby h1.logo.splash {
   width: min(900px, 100%);

@@ -22,6 +22,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 - `client/scripts/build-logo.ts` (part of `npm run atlas`) writes `logo.png`, `logo-emblem.png` and `favicon.png` into the generated `public/assets/`. Details in TECHNICAL.md §9 "Title logo".
 - `client/src/ui/logo.ts` (`logoHero`, `logoHeader`) replaces the gold text `<h1>` in `auth.ts`, `characters.ts`, `lobby.ts` and `fatal()` in `main.ts`; the room view keeps its text heading. CSS in the lobby section of `style.css`. Note: `.hero` was already taken (the lobby's character panel), so the large logo is `h1.logo.splash`.
 - Credits in README.md (Art) and TECHNICAL.md.
+- Review fix: the header emblem's edge fade was so tight that it faded the "A" and "S" of ADVENTURERS; it now starts at 70% (`#000 70%, transparent 85%`), checked with a headless Chrome screenshot.
 
 **Verified:**
 - client `npm run build` (atlas + logo, tsc, vite) and `npm test` (17 tests).
