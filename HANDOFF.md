@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-09 to 10-12, dragon rework: own art, flight, bite)
 
-**Branch:** `feature/dragon-rework` (from `main`), committed, **not merged or pushed** yet. Ask the user before merging.
+**Branch:** `feature/dragon-rework` is merged into `main` (fast-forward) and pushed, at the user's request. Start the next feature on a new branch from `main`.
 
 **User decisions this session:**
 - **Dragon art:** the user supplied an AI-generated dragon (`images/dragon.jpg`) and then AI-generated animation strips (walk, claw, bite, tail whip, flight) made from it, on a magenta background. They replace the hue-shifted pack lizard. Credit: "AI-generated for this game" only; **do not credit the user as the artist**.
