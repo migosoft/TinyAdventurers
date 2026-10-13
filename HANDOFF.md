@@ -38,8 +38,12 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **Lava pool in the demon's boss hall** (it had only chasms): `place_boss_lava` in `dungeon/generate.rs`, lava theme only. The demon already crossed lava unharmed and at full speed (`Mover::Demon`, lava burns only heroes); unchanged. Heroes knocked in burn and slow down.
 - Verified: `cargo test` 149 (the generation test now requires the pool in every lava-theme hall over 100 seeds and allows no lava elsewhere), client build and 22 tests; containers rebuilt and a bot fight on the live server, no browser errors. A few halls were printed as text from the generator to check where the pool lands.
 
+- **Walk looked like limping** (user): the AI sheet is no clean cycle (frames 1 and 3 are the same wide stance, only frame 4 lifts a foot). `demon_walk.png` now holds the sheet's frames in the order 1, 4, 3, 4. If that is not enough, a new walk sheet from the image AI (6 frames, legs clearly alternating) is the better fix.
+
 **Open:**
 - **User check** of the new pushes and the lava pool in a fight.
+- **User check** of the walk in `?demon` (step 2).
+
 - The added recoveries make the demon slightly slower between attacks; part of the balancing pass.
 - `docs/TODO.md` still has the user's uncommitted notes (woodland escort level, lighting, riddle rooms); only the art-gap line was committed.
 
