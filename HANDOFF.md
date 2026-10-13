@@ -41,9 +41,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **Walk looked like limping** (user): the first AI walk sheet was no clean cycle (frames 1 and 3 the same wide stance, only frame 4 lifts a foot). Reordering to 1, 4, 3, 4 did not help ("it still limps"). Claude wrote a precise prompt for an 8-frame cycle (contact, down, passing, up per leg, near leg brighter, far leg darker); the user supplied `images/demon_walk_improved.png`, now imported as the 8-frame `demon_walk` (12 fps, the same stride time as before). All demon cells grew from 78 to 82 px wide (hips at x 33) for its longer tail. The user still saw no proper walk: the legs should **cross** when seen from the side. They had the AI make `images/demon_walk_improved_cross_walk.png` (8 frames, same layout), now the `demon_walk` strip, imported the same way. Then the user chose the order: sheet images 1, 2, 3, 8, then back (the strip is 1, 2, 3, 8, 3, 2 at 9 fps; the ends are not repeated, so it does not pause). The user approved it in `?demon`: "now it is much better" (2026-10-13). The sheet's images 4 to 7 are unused.
 
 **Open:**
-- **User check** of the new pushes and the lava pool in a fight.
+- Done: the user played the demon fight (new pushes, lava pool): "It works as intended" (2026-10-13).
 - The added recoveries make the demon slightly slower between attacks; part of the balancing pass.
-- Redoing a demon sheet: the import scripts were throwaway (session scratchpad); TECHNICAL §9 "Demon frames" describes every step (grid or fixed pitch, palette snap, cleanup, hip/eye anchor, 82×63 cells). Strips must stay 82×63 per cell; `build-atlas.ts` checks the size.
+- Redoing a demon sheet: the import scripts were throwaway (session scratchpad); the source sheets in `images/` were deleted at the user's request (2026-10-13; the whole inbox was emptied, the lich references too), so a redo needs a new sheet from the image AI; TECHNICAL §9 "Demon frames" describes every step (grid or fixed pitch, palette snap, cleanup, hip/eye anchor, 82×63 cells). Strips must stay 82×63 per cell; `build-atlas.ts` checks the size.
 - Containers rebuilt after the merge (`docker compose up --build -d`, 2026-10-13); they serve the 6-frame walk and are left running.
 
 ## Session before (2026-10-13, new lich art, then the lich fight rework)
@@ -226,7 +226,6 @@ For: the next agent or developer continuing this project. Read this first, then 
 - The balancing pass and loadouts stay open (TODO.md).
 
 **Not yet verified:**
-- The demon fight with its new pushes (56 / 64 px) and the lava pool in its hall, by the user (only a bot so far). The demon's look and walk were approved in `?demon`.
 - The user did not report trying every admin action (deletions, password change) live; the smoke test covers them.
 - A won or lost run through the browser was not recorded live. Only abandoned runs were; won and lost runs are covered by tests.
 
@@ -584,10 +583,10 @@ Steps 2–6 followed in the next session.
 - Terrain in a normal water run (chasm fall, drowning), chests and mimics, and XP and coins banked after a real run (confirmed by the user, 2026-10-08).
 - The gallery was checked visually: animations, melee swooshes, dragon breath from the mouth and nostrils.
 - The dragon's frames in `?dragon` (approved by the user, 2026-10-12); the live fight only by a bot so far.
+- The demon: its new frames and walk in `?demon`, then the fight with the harder pushes (56 / 64 px) and the lava pool in its hall, played by the user: "It works as intended" (2026-10-13).
 
 **Not yet verified:**
 - Behaviour with real (non-headless) players over a real network.
-- The demon's new frames by the user (`?demon` and a fight); the live fight only by a bot so far.
 
 **Git and session workflow (the user's standing instructions):**
 - One feature per session. When a feature is done: update this file and the docs, run the verification checklist below, then commit.
