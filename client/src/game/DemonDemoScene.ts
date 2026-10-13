@@ -17,9 +17,9 @@ const H = 13;
 const HOME: [number, number] = [9 * TILE, 8 * TILE];
 const PUSH_DECAY = 15;
 const PUSH_MIN_SPEED = 8;
-/** Server numbers (demon.rs): pushes, swoop speed, ring of fire orbs. */
-const CLEAVE_KNOCK = 36;
-const SWOOP_KNOCK = 44;
+/** Server numbers: pushes (defs/bosses.rs), swoop speed and ring of fire orbs (demon.rs). */
+const CLEAVE_KNOCK = CONST.DEMON_CLEAVE_KNOCK;
+const SWOOP_KNOCK = CONST.DEMON_SWOOP_KNOCK;
 const SWOOP_SPEED = 260;
 const ORB_SPEED = 105;
 const ORB_LIFE = 2.2;

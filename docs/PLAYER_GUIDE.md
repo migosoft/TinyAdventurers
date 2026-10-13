@@ -95,7 +95,7 @@ Strong melee hits **push you away** from the attacker:
 | Orc warrior | about a tile (20 px) |
 | Ogre: club / ground slam | almost 2 tiles (28 px) / 1.5 tiles (24 px), everyone in the circle |
 | Chort (its claw) | a little less (14 px) |
-| Red Demon: cleave / swoop | about 2 / almost 3 tiles (36 / 44 px) |
+| Red Demon: cleave / swoop | 3.5 / 4 tiles (56 / 64 px) |
 | Red Dragon: front claw / bite / tail whip | 2 / 1.5 / almost 3 tiles (32 / 24 / 44 px) |
 | Red Dragon: landing smash / exploding fireball | over 2 tiles (36 px), everyone in the circle / about a tile (20 px) |
 | Lich: nova | **4 tiles (64 px)**, everyone in the circle: the strongest push in the game |
@@ -135,10 +135,12 @@ The boss sleeps in a large hall at the far end of the dungeon. Each run has one 
 
 **Every boss hall has chasms:** one or two drop-offs along the walls and one or two pits in the floor. The entrance and the middle of the hall stay clear. The demon, the dragon and the lich can **knock you in** (see Knockback).
 
+**The demon's hall also has a pool of lava.** The demon walks through it unharmed and at full speed; you burn and slow down in it, and its cleave and swoop can knock you in.
+
 ### The Red Demon
 - **Cleave:** a wide claw sweep in front of it.
 - **Swoop:** lowers its horns and charges across the hall at a hero.
-- Both the cleave and the swoop **push you back** (36 and 44 px).
+- Both the cleave and the swoop **hurl you back** a long way (56 and 64 px, 3.5 and 4 tiles).
 - **Ring of fire:** fireballs fly out in every direction.
 - **Enraged below 40 % health:** faster and more aggressive. The health bar shows **ENRAGED**.
 

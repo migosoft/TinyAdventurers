@@ -22,7 +22,7 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **Knockback is live** (TECHNICAL.md §5, §8). Follow-ups:
   - **Chained pushes:** several orc warriors can push a hero again and again, and a pushed hero has no control. A scripted bot mobbed by orcs in a corridor was pushed in about 10 % of its snapshots. If it feels unfair in play, add a short push immunity after a push (server rule plus predictor).
-  - **Tune** the push distances (`knock` in `defs/enemies.rs`, `CLEAVE_KNOCK`/`SWOOP_KNOCK` in `run/bosses/demon.rs`, the dragon's `DRAGON_*_KNOCK` in `defs/bosses.rs`) and `KNOCK_DECAY` in the balancing pass. The user approved the current ones in `?knockback`.
+  - **Tune** the push distances (`knock` in `defs/enemies.rs`, the demon's `DEMON_*_KNOCK` and the dragon's `DRAGON_*_KNOCK` in `defs/bosses.rs`) and `KNOCK_DECAY` in the balancing pass. The user approved the current ones in `?knockback`; the demon's were raised afterwards at the user's request (cleave 36 → 56, swoop 44 → 64).
   - **Enemies in terrain:** heroes never push enemies, so enemies still never fall or drown. If a hero ability ever pushes, enemies need a monster version of `Sink`/`kill_player`.
   - **Boss-hall chasms:** tune their count and size (`place_boss_chasms`), and check live that pushes into them feel fair.
 - **Tune** in the balancing pass: `SHALLOW_SPEED` 0.7, `LAVA_SPEED` 0.4, `LAVA_DAMAGE`/`LAVA_TICK` (20/s; the user wants at least 15/s), `FALL_TIME` 0.7 s, `DROWN_TIME` 0.9 s (all in `dungeon/mod.rs`), and the feature rates and sizes in `place_terrain` (about 4 % of the floor).

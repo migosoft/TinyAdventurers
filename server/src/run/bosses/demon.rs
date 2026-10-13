@@ -3,7 +3,7 @@
 //! recovery, so the client plays wind-up, strike and recovery frames.
 
 use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
-use crate::defs::bosses::{DEMON_CLEAVE_RECOVER, DEMON_CLEAVE_WINDUP, DEMON_ENRAGED_PACE, DEMON_RING_RECOVER, DEMON_RING_WINDUP, DEMON_SWOOP_RECOVER, DEMON_SWOOP_TIME, DEMON_SWOOP_WINDUP};
+use crate::defs::bosses::{DEMON_CLEAVE_KNOCK, DEMON_CLEAVE_RECOVER, DEMON_CLEAVE_WINDUP, DEMON_ENRAGED_PACE, DEMON_RING_RECOVER, DEMON_RING_WINDUP, DEMON_SWOOP_KNOCK, DEMON_SWOOP_RECOVER, DEMON_SWOOP_TIME, DEMON_SWOOP_WINDUP};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::math::Vec2;
 use crate::run::abilities::spawn_monster_projectile;
@@ -37,9 +37,6 @@ impl Default for Demon {
 }
 
 const CLEAVE_RANGE: f64 = 34.0;
-/// Knockback (px): heroes hit by the cleave or the swoop slide away from the demon.
-const CLEAVE_KNOCK: f64 = 36.0;
-const SWOOP_KNOCK: f64 = 44.0;
 
 impl BossBehaviour for Demon {
     fn enraged(&self) -> bool {
@@ -71,7 +68,7 @@ impl BossBehaviour for Demon {
                         if !self.swoop_hit.contains(&id) {
                             self.swoop_hit.push(id);
                             run.hurt_player(pi, 30.0);
-                            run.knock_player(pi, pos, self.swoop_dir.angle(), SWOOP_KNOCK);
+                            run.knock_player(pi, pos, self.swoop_dir.angle(), DEMON_SWOOP_KNOCK);
                         }
                     }
                 }
@@ -87,7 +84,7 @@ impl BossBehaviour for Demon {
                 Action::Cleave => {
                     for pi in players_in(run, pos, CLEAVE_RANGE + 6.0, Some((aim, 1.05))) {
                         run.hurt_player(pi, 25.0);
-                        run.knock_player(pi, pos, aim, CLEAVE_KNOCK);
+                        run.knock_player(pi, pos, aim, DEMON_CLEAVE_KNOCK);
                     }
                     self.action = Some((Action::Recover, DEMON_CLEAVE_RECOVER));
                 }
@@ -172,6 +169,7 @@ mod tests {
         assert_eq!(run.monsters[bi].anim, Anim::Melee, "the cleave animation starts with its wind-up");
         ticks(&mut run, &mut d, DEMON_CLEAVE_WINDUP + DT);
         assert!(run.players[0].hp < hp, "hit at the end of the wind-up");
+        assert!(run.players[0].mv.knock_vx > 0.0, "pushed away");
         assert_eq!(run.monsters[bi].anim, Anim::Melee, "the strike frames play out");
         ticks(&mut run, &mut d, DEMON_CLEAVE_RECOVER + 3.0 * DT);
         assert_ne!(run.monsters[bi].anim, Anim::Melee, "back to idle or walking after the recovery");

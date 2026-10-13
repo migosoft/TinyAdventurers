@@ -190,6 +190,10 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     let mut hall_rng = rng.clone();
     hall_rng.set_stream(9);
     place_boss_chasms(&mut hall_rng, &mut map, &boss);
+    // The demon's hall also gets a lava pool (it walks through lava unharmed and at full speed).
+    if theme == Theme::Lava {
+        place_boss_lava(&mut hall_rng, &mut map, &boss);
+    }
     // One ogre per run (stream 10), after the terrain so it stands on safe ground.
     let mut ogre_rng = rng.clone();
     ogre_rng.set_stream(10);
@@ -471,12 +475,8 @@ fn place_terrain(rng: &mut ChaCha8Rng, map: &mut Map, rooms: &[Room], theme: The
 /// at least three tiles around pits (the dragon is wider than two tiles), and
 /// are undone if they cut any of the hall's floor off from the entrance.
 fn place_boss_chasms(rng: &mut ChaCha8Rng, map: &mut Map, r: &Rect) {
-    let (cx, cy) = r.center();
-    let keep_clear = |x: i32, y: i32| (x - cx).abs() <= 3 && (y - cy).abs() <= 3 || (x - cx).abs() <= 4 && y >= r.y + r.h - 5;
-    let connected = |map: &Map| {
-        let d = bfs(map, cx, r.y + r.h - 1);
-        (r.y..r.y + r.h).all(|y| (r.x..r.x + r.w).all(|x| !map.safe(x, y) || d[(y * map.w + x) as usize] >= 0))
-    };
+    let keep_clear = |x: i32, y: i32| hall_keep_clear(r, x, y);
+    let connected = |map: &Map| hall_connected(map, r);
     let strips = rng.gen_range(1..=2);
     let pits = rng.gen_range(1..=2);
     for k in 0..strips + pits {
@@ -499,6 +499,43 @@ fn place_boss_chasms(rng: &mut ChaCha8Rng, map: &mut Map, r: &Rect) {
             for &(x, y) in &cells {
                 map.set(x, y, Tile::Floor);
             }
+        }
+    }
+}
+
+/// Boss hall tiles terrain stays off: the boss's start and the entrance
+/// (canonical orientation: the entrance is at the bottom).
+fn hall_keep_clear(r: &Rect, x: i32, y: i32) -> bool {
+    let (cx, cy) = r.center();
+    (x - cx).abs() <= 3 && (y - cy).abs() <= 3 || (x - cx).abs() <= 4 && y >= r.y + r.h - 5
+}
+
+/// Every safe tile of the hall can still be reached from the entrance.
+fn hall_connected(map: &Map, r: &Rect) -> bool {
+    let d = bfs(map, r.center().0, r.y + r.h - 1);
+    (r.y..r.y + r.h).all(|y| (r.x..r.x + r.w).all(|x| !map.safe(x, y) || d[(y * map.w + x) as usize] >= 0))
+}
+
+/// A lava pool in the demon's hall (an oval like the rooms' pools), clear of
+/// the boss's start, the entrance and the chasms (a tile of floor between), and
+/// undone if it cuts any of the hall's floor off from the entrance.
+fn place_boss_lava(rng: &mut ChaCha8Rng, map: &mut Map, r: &Rect) {
+    for _ in 0..100 {
+        let Some(cells) = pool(rng, r, Theme::Lava) else { return };
+        let fits = cells.iter().all(|&(x, y, _)| {
+            map.get(x, y) == Tile::Floor as u8 && !hall_keep_clear(r, x, y) && (-1..=1).all(|dy| (-1..=1).all(|dx| map.get(x + dx, y + dy) != Tile::Chasm as u8))
+        });
+        if !fits {
+            continue;
+        }
+        for &(x, y, t) in &cells {
+            map.set(x, y, t);
+        }
+        if hall_connected(map, r) {
+            return;
+        }
+        for &(x, y, _) in &cells {
+            map.set(x, y, Tile::Floor);
         }
     }
 }
@@ -710,10 +747,12 @@ mod tests {
                     assert!((r.y..r.y + r.h).all(|y| (r.x..r.x + r.w).all(|x| !is_terrain(d.map.get(x, y)))), "seed {seed}: terrain in room {i}");
                 }
                 if room.kind == RoomKind::Boss {
-                    // Only chasms, some of them, never at the boss's start or the entrance.
+                    // Chasms, and a lava pool in the demon's (lava) hall; never at the boss's start or the entrance.
                     let tiles: Vec<u8> = (r.y..r.y + r.h).flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y))).map(|(x, y)| d.map.get(x, y)).collect();
-                    assert!(tiles.iter().all(|&t| !is_terrain(t) || t == Tile::Chasm as u8), "seed {seed}: other terrain in the boss hall");
+                    let lava = theme == Theme::Lava;
+                    assert!(tiles.iter().all(|&t| !is_terrain(t) || t == Tile::Chasm as u8 || lava && t == Tile::Lava as u8), "seed {seed}: other terrain in the boss hall");
                     assert!(tiles.contains(&(Tile::Chasm as u8)), "seed {seed}: no chasm in the boss hall");
+                    assert_eq!(tiles.contains(&(Tile::Lava as u8)), lava, "seed {seed}: lava pool in the demon's hall only");
                     let (cx, cy) = r.center();
                     for (x, y) in (-2..=2).flat_map(|dy| (-2..=2).map(move |dx| (cx + dx, cy + dy))) {
                         assert!(d.map.safe(x, y), "seed {seed}: chasm at the boss's start");

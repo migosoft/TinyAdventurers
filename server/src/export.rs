@@ -90,6 +90,8 @@ fn export_defs() {
         "DEMON_SWOOP_RECOVER": bosses::DEMON_SWOOP_RECOVER,
         "DEMON_RING_RECOVER": bosses::DEMON_RING_RECOVER,
         "DEMON_ENRAGED_PACE": bosses::DEMON_ENRAGED_PACE,
+        "DEMON_CLEAVE_KNOCK": bosses::DEMON_CLEAVE_KNOCK,
+        "DEMON_SWOOP_KNOCK": bosses::DEMON_SWOOP_KNOCK,
     });
     consts.as_object_mut().unwrap().extend(demon.as_object().unwrap().clone());
     let fl = json!({

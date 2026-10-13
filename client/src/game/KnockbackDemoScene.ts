@@ -2,10 +2,10 @@
 // server. Every hero stands near a chasm or deep water. The push slides and
 // slows down (proposed game values; tune them here first):
 // - orc warrior 20 px, chort 14 px; imps (and all ranged attacks) do not push
-// - the demon's cleave 36 px and swoop 44 px
+// - the demon's cleave 56 px and swoop 64 px (DEMON_*_KNOCK)
 // - the dragon's tail swipe 44 px and front claw 32 px
 // - a dash cannot escape a push: the hero has no control until the slide ends.
-import { CLASSES, KIND } from '../generated/defs';
+import { CLASSES, CONST, KIND } from '../generated/defs';
 import { TerrainDemo } from './TerrainDemoScene';
 
 const W = 36;
@@ -62,13 +62,13 @@ export class KnockbackDemoScene extends TerrainDemo {
     mob(KIND.OrcWarrior, 'Orc 2', 'Barbarian', [1, 13.7], [5.6, 13.7], 20);
 
     // The demon: the hero stands 24 px (cleave) or 36 px (swoop) from the edge.
-    this.label(13.2, 6.3, 'demon cleave: 36 px');
+    this.label(13.2, 6.3, `demon cleave: ${CONST.DEMON_CLEAVE_KNOCK} px`);
     hero(KIND.Paladin, 'Paladin 2', CLASSES.Paladin.speed, [18.5, 4]);
-    this.actor(KIND.Demon, 'Demon', 50, [{ to: [14, 4] }, { wait: 0.8 }, { to: [16.2, 4] }, { hit: 'Paladin 2', dist: 36, reach: 40 }, { wait: 1.2 }, { to: [14, 4] }], true);
+    this.actor(KIND.Demon, 'Demon', 50, [{ to: [14, 4] }, { wait: 0.8 }, { to: [16.2, 4] }, { hit: 'Paladin 2', dist: CONST.DEMON_CLEAVE_KNOCK, reach: 40 }, { wait: 1.2 }, { to: [14, 4] }], true);
 
-    this.label(13.2, 14.3, 'demon swoop: 44 px');
+    this.label(13.2, 14.3, `demon swoop: ${CONST.DEMON_SWOOP_KNOCK} px`);
     hero(KIND.Wizard, 'Wizard 2', CLASSES.Wizard.speed, [17.75, 12]);
-    this.actor(KIND.Demon, 'Demon 2', 50, [{ to: [14, 12] }, { wait: 1.5 }, { swoop: 'Wizard 2', to: [19.3, 12], dist: 44 }, { wait: 1 }, { to: [14, 12] }], true);
+    this.actor(KIND.Demon, 'Demon 2', 50, [{ to: [14, 12] }, { wait: 1.5 }, { swoop: 'Wizard 2', to: [19.3, 12], dist: CONST.DEMON_SWOOP_KNOCK }, { wait: 1 }, { to: [14, 12] }], true);
 
     // The dragon: the hero stands 16 px from the edge, 40 px from the dragon.
     this.label(25.2, 6.3, 'dragon tail (behind it): 44 px');

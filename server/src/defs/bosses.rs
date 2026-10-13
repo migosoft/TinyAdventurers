@@ -37,6 +37,10 @@ pub const DEMON_CLEAVE_RECOVER: f64 = 0.3;
 pub const DEMON_SWOOP_RECOVER: f64 = 0.25;
 pub const DEMON_RING_RECOVER: f64 = 0.35;
 pub const DEMON_ENRAGED_PACE: f64 = 0.6;
+/// Knockback (px): heroes hit by the cleave or the swoop slide this far away from the
+/// demon. Its melee hits push hard (the user asked for "significant knockback").
+pub const DEMON_CLEAVE_KNOCK: f64 = 56.0;
+pub const DEMON_SWOOP_KNOCK: f64 = 64.0;
 
 pub const LICH_DISCIPLES: usize = 6;
 /// HP per second the lich drains from each living disciple.

@@ -30,8 +30,14 @@ For: the next agent or developer continuing this project. Read this first, then 
 - `?demon` screenshots (idle, walk both ways, cleave both ways, charge, ring of fire, enraged cleave), no browser errors.
 - `docker compose up --build -d` (2026-10-13), then a throwaway bot (debug wizard, account deleted afterwards) walked the debug path to the demon on the live server and fought it for 45 s: cleave, charge, ring of fire, the lobby boss card. No browser errors. The containers are left running.
 
+**Follow-up (same session), user decisions:**
+- **Size: keep the original** (×1, about 62 px tall): "It looks by far the best". Claude had shown 85 / 75 / 65 % versions next to the heroes. They were resampled from the source sheets, because a non-integer `scale` in the game breaks pixel art (the game renders at 1 game pixel, then zooms by an integer).
+- **Demon melee pushes hard** ("significant knockback"): cleave 36 → **56 px**, swoop 44 → **64 px** (as far as the lich's nova). Now `DEMON_CLEAVE_KNOCK` / `DEMON_SWOOP_KNOCK` in `defs/bosses.rs`, exported; `?knockback` and `?demon` use them.
+- **Lava pool in the demon's boss hall** (it had only chasms): `place_boss_lava` in `dungeon/generate.rs`, lava theme only. The demon already crossed lava unharmed and at full speed (`Mover::Demon`, lava burns only heroes); unchanged. Heroes knocked in burn and slow down.
+- Verified: `cargo test` 149 (the generation test now requires the pool in every lava-theme hall over 100 seeds and allows no lava elsewhere), client build and 22 tests; containers rebuilt and a bot fight on the live server, no browser errors. A few halls were printed as text from the generator to check where the pool lands.
+
 **Open:**
-- **User check** of the look and size in `?demon` and in a fight. The demon is drawn at ×1, about 62 px tall (the old pack demon was 36, the dragon is about 52). A `scale` in its `FigureDef` would shrink it if the user wants.
+- **User check** of the new pushes and the lava pool in a fight.
 - The added recoveries make the demon slightly slower between attacks; part of the balancing pass.
 - `docs/TODO.md` still has the user's uncommitted notes (woodland escort level, lighting, riddle rooms); only the art-gap line was committed.
 
