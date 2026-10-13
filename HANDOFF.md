@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-13, demon rework: own AI-generated art)
 
-**Branch:** `feature/demon-art` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-13). Start the next feature on a new branch from `main`.
+**Branch:** `feature/demon-art` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-13). Start the next feature on a new branch from `main`. **Afterwards:** the walk fix (below) is on `feature/demon-walk` (from `main`), committed, not merged or pushed yet.
 
 **Also this session:** `docs/TODO.md` got a tiered **priority order** at the top (by technical complexity and dependencies; quick wins don't count, the user's rule) and the user's new ideas (ghost and shadow, woodland escort level, lighting, riddle rooms). Lighting is planned as a general light-source system (static and moving sources), not only torches, at the user's request.
 
@@ -44,7 +44,6 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **User check** of the new pushes and the lava pool in a fight.
 - **User check** of the walk in `?demon` (step 2).
 - The added recoveries make the demon slightly slower between attacks; part of the balancing pass.
-- `docs/TODO.md` still has the user's uncommitted notes (woodland escort level, lighting, riddle rooms); only the art-gap line was committed.
 
 ## Session before (2026-10-13, new lich art, then the lich fight rework)
 
