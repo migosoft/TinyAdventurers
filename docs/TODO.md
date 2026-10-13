@@ -1,5 +1,40 @@
 # TODO
 
+## Priority order
+Ordered by technical complexity and by technical dependencies (what makes later items easier), not by quick wins. Items in the same tier can be done in either order unless noted.
+
+**Tier 1: foundations**
+1. **Prediction corrections and push immunity** (see "Network" and "Chained pushes"). Both touch the predictor. Every later feature adds server-side effects the predictor does not know, so find the cause of the corrections while there is less code involved.
+2. **Separate the run from "dungeon + boss".** `Run` assumes one map type: the generator always makes a 140×140 square, and a run is always won by killing the boss (`boss_id`, `boss_ent`, `door_closed`). The escort level needs another map shape, another way to win and lose, and a level choice in the lobby and in `RunStartInfo`. This is the largest refactor in the list; do it before more boss-specific code builds up.
+3. **Enemies that target objects, and world objects heroes can use.** `Ai.target` can only hold a player id; the carriage and the torch-extinguishing enemy need targets that are objects or places. The same work adds server-side objects with state and a client message for using them (click or stand nearby). That one system covers the carriage, torches and other light sources, the riddle creature, levers and buttons, and breakable crates.
+4. **Light-source system** (see "Lighting"). It comes before every feature that adds something that glows (abilities, enemies, the escort level, room dressing), so none of them has to be retrofitted.
+5. **Art and licences:** Enchanted Forest licence, torch art, gnolls. Little code, but the shadow, ghost, gnolls, sphinx and torches all wait on it; it can run alongside 1–4.
+
+**Tier 2: larger features on top of tier 1**
+
+6. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light from the start. If an ability pushes enemies, enemies need their own version of `Sink`/`kill_player` (see "Enemies in terrain").
+7. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the objects from 3, a dialog panel. Answer the open design questions first.
+8. **Woodland escort level:** needs 2 and 3, plus a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
+
+**Tier 3: content**
+
+9. **Ghost and shadow.** The shadow needs lighting; it and the torch-extinguishing enemy act on any light source that can be switched off. The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
+10. **Minions for the other bosses; more classes and bosses** (classes are easier after 6).
+11. **More loot and room dressing:** item drops need a pickup system; levers and crates use 3; floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
+12. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
+13. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled.
+
+**Tier 4: infrastructure (independent of gameplay work)**
+
+14. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
+15. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
+16. **Several game servers** (shared presence and login limiter in Valkey). After 14; only when one server is not enough.
+
+**Tier 5: last**
+
+17. **Balancing pass:** every "Tune" item, including light radii and darkness. Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone.
+18. **Delta snapshots, WebTransport:** only if measurements show they are needed.
+
 ## Progression follow-ups
 
 Progression is live: accounts with up to 8 characters, per-character progress in PostgreSQL, XP banked at run end, lobby upgrade shop. See TECHNICAL.md §11a.
@@ -31,7 +66,50 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 
 ## New enemies
 - **Ogre (done 2026-10-08):** tune its numbers in the balancing pass (`EnemyType::Ogre` in `defs/enemies.rs`: 260 HP, club 18 dmg / 28 px push, slam radius 34 px, 14 dmg, 24 px push, 5 s cooldown, 0.9 s wind-up; 60 XP, 30 coins). Ideas: a hit frame (the pack has none), more than one ogre in big dungeons.
+- **Ghost and shadow (new):** two new enemy types. The 0x72 pack has neither, so the art has to come from another pack or a CC0 set.
+  - Ideas for the ghost: drifts through walls, or turns half transparent and can't be hit for a moment.
+  - Ideas for the shadow: hard to see in the dark. It could be the enemy that puts out torches (see "Lighting").
 - **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Check its license and keep the license file next to it.
+
+## Woodland escort level
+An outdoor level where the heroes escort a carriage carrying the elven princess.
+- **Map:** a long forest road with trees on both sides. Open question: should the road run left to right or bottom to top? Left to right suits a wide desktop screen, because the camera shows more road ahead.
+- **Win:** the carriage reaches the far end of the map with HP left. The run then gives a lot of XP. If the carriage is destroyed, the run is lost.
+- **Carriage:** moves slowly along the road. A player clicks it to:
+  1. stop it,
+  2. start it again if it is stopped,
+  3. repair it slowly while it is stopped.
+- **Enemies:** attack the carriage in waves. An enemy that a hero hits turns on the heroes, so the heroes can draw attacks away from the carriage.
+- **Enemy types:** orcs, goblins, and a new type from the woodland asset pack: gnolls, in a ranged and a melee version.
+
+## Lighting
+Darkness limits what the heroes can see. Dungeon walls have torches at regular intervals that light the area around them. Some enemies can put torches out, which leaves that part of the dungeon dark. Lava pools glow red.
+Torches are only the first kind of light source. More will follow: lava, braziers, glowing mushrooms or goo, hero spells and projectiles (a fireball lighting the corridor it flies through), light-emitting enemies, a carriage lantern. So build a general light-source system, not a torch feature (priority 4).
+- **Feasible:** yes, at tile resolution. The fog of war already works this way (TECHNICAL.md §7).
+- **Light sources:** each has a position, radius, colour, intensity and an on/off state. Two kinds:
+  - **static** (torches, braziers, lava): fixed on the map, can be switched off and on.
+  - **moving** (projectiles, glowing enemies, the carriage lantern): follow an entity.
+- **Server (needed, so dark tiles don't leak monsters):** two layers.
+  - A static light map per tile: each lit static source lights the tiles its shadowcast (`fov.rs`) reaches within its radius; lava lights its neighbouring tiles. It only needs recomputing when a static source goes out or is relit.
+  - Moving sources are checked during visibility filtering, each as a radius test around the source. A shadowcast per moving source each tick would be too expensive.
+  - A tile counts as visible if it is in the hero's line of sight *and* is lit by either layer or within a small radius around the hero (their own light). Snapshot filtering in `run/visibility.rs` then uses the combined result.
+- **Client:** extend the fog canvas into a light canvas: darkness everywhere, with a radial gradient cut out for each source and hero, coloured per source kind from a table (e.g. red around lava). It stays one cheap canvas texture with linear filtering, plus a slight flicker. Phaser's Light2D pipeline is not needed. It wants normal maps and has a low light limit.
+- **Protocol:** static sources and their state (lit or out) go in the map data at run start, plus an event when one changes. Moving sources need no new data: the client attaches lights to entities by their kind (e.g. `KIND.Fireball` glows).
+- **Enemies:** an extinguishing enemy (it walks to a lit source that can be switched off and puts it out). Should the heroes be able to relight sources, e.g. by standing next to one?
+- **Art:** the 0x72 pack has no wall torches. Find a CC0 animated torch or wall sconce.
+- **Tune:** torch spacing, the light radius of each source kind, the heroes' own light radius, and how dark unlit areas are.
+
+## Riddle rooms
+Special rooms with a creature that asks the heroes a riddle. If they solve it, they get a reward. If they fail, they fight the creature, or enemies spawn.
+- **Creature art:** the 0x72 pack has unused figures that fit: `doc` (a plague doctor in a mask, which suits a mysterious riddle-giver), `angel`, `wogol` and `pumpkin_dude`. A classic sphinx is not in the pack; one might be in "Enchanted Forest Characters" (see "New enemies") or in a CC0 set.
+- **Questions to settle:**
+  - How do players answer? Multiple choice (each player clicks an answer, the majority wins or the first answer counts) or typed text? Multiple choice is easier to check and works without exact spelling.
+  - Riddles in German, English, or both? This sets how the riddle list is stored.
+  - Reward for a correct answer: XP, coins, a buff for the rest of the run?
+  - On failure: the creature fights itself (it needs stats and an attack), or it spawns a wave of enemies and disappears?
+  - Is there a time limit? Can the heroes refuse the riddle and simply walk past?
+- **Server:** pick the riddle and check the answer on the server, so the client never sees the correct answer. Lock the room's doors while the riddle is open, like the boss force field.
+- **Client:** a dialog panel with the riddle and its answer buttons, shown to every player in the room.
 
 ## Admin and monitoring follow-ups
 - **Time zone of the statistics:** days are UTC. A `STATS_TZ` setting could count local days if UTC boundaries are confusing.
