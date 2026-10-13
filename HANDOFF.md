@@ -9,13 +9,14 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-12, title logo)
+## Last session (2026-10-12 to 10-13, title logo, desktop only)
 
-**Branch:** `feature/title-logo` (not merged yet).
+**Branch:** `feature/title-logo` is merged into `main` (fast-forward) and pushed, at the user's request. Start the next feature on a new branch from `main`.
 
 **User decisions this session:**
 - **Logo:** `images/logo.png` becomes the game's title art. It was **made with Google's image generation AI**; credit it that way ("made for this game with Google's image generation AI"), **not as the user's art**.
 - **Where:** large on the login screen; a small emblem header and the darkened wall as background on character select and lobby; a favicon. The admin page stays as it is.
+- **Desktop only:** phones are not a concern of this game (README.md intro and "The user's decisions" below).
 
 **Done:**
 - `client/assets-src/logo/logo.png`: the source, with the generator's ✦ watermark (bottom right) painted over once with wall from its left (one-off script, not kept).
@@ -26,6 +27,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Verified:**
 - client `npm run build` (atlas + logo, tsc, vite) and `npm test` (17 tests).
+- Docker: `docker compose up --build -d` (2026-10-13); `/`, `/assets/logo.png`, `/assets/logo-emblem.png` and `/assets/favicon.png` answer 200 on port 8080. The containers are left running.
 - Screenshots (throwaway Playwright script against the dev server, test account deleted) of login, character select and lobby at 1280×720 and 390×844: no horizontal scroll, favicon served, no browser errors.
 
 **Open:**
