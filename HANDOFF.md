@@ -11,7 +11,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-13, demon rework: own AI-generated art)
 
-**Branch:** `feature/demon-art` (from `main`), committed, **not merged or pushed yet**. Ask the user before merging and pushing.
+**Branch:** `feature/demon-art` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-13). Start the next feature on a new branch from `main`.
+
+**Also this session:** `docs/TODO.md` got a tiered **priority order** at the top (by technical complexity and dependencies; quick wins don't count, the user's rule) and the user's new ideas (ghost and shadow, woodland escort level, lighting, riddle rooms). Lighting is planned as a general light-source system (static and moving sources), not only torches, at the user's request.
 
 **User decisions:**
 - **New demon look:** the user supplied `images/demon.jpg`, a front-view pixel demon (horns, yellow eyes, loincloth, tail). The game draws figures from the side, so the user had an image generation AI (prompts written by Claude) draw a side view and then one sheet per action: idle, walk, cleave, charge, cast (`images/demon_*.jpg`).
