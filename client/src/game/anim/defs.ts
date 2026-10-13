@@ -1,11 +1,13 @@
 // Data: how each entity kind looks and animates, using 0x72 pack frames.
 // Bodies: `<prefix><0..3>` for idle/run (4-frame pack animations).
 // The pack has no attack animations; attacks animate the pack weapon sprites.
-// The dragon is the exception: its own frames (see dragonRig.ts) for every action.
+// The dragon and the demon are the exceptions: their own frames for every action
+// (dragonRig.ts, demonFrames.ts).
 // The lich has its own idle/run frames in the pack style (scripts/lich-frames.ts).
 import { ABILITIES, ANIM, CONST, KIND } from "../../generated/defs";
 import { GLOOM } from "../effects";
 import { DRAGON_ANIMS, DRAGON_FRAME, dragonFrameName, dragonPoints, type DragonAnim } from "./dragonRig";
+import { DEMON_ANIMS, DEMON_FRAME, demonFrameName, type DemonAnim } from "./demonFrames";
 
 // Player swings reach as far as the server hits: ability range + a typical monster radius.
 const SWORD = { reach: ABILITIES.Sword.range + 5, arc: ABILITIES.Sword.arc };
@@ -46,14 +48,18 @@ export interface FigureDef {
   swing?: { reach: number; arc: number; color?: number };
   /** Ground slam telegraph: a ring of radius `r` (px, hero centres) filling up while `anim` runs for `t` s (ogre slam, dragon landing, lich nova); red unless `color`; `gloom` draws dark sparks into the ring. */
   slam?: { r: number; anim: number; t: number; color?: number; gloom?: boolean };
-  /** Own action frames (the dragon): `<prefix><i>`, frame count, frames per second. */
+  /** Own action frames (the dragon, the demon): `<prefix><i>`, frame count, frames per second. */
   frames?: Partial<Record<FigureAnim, { prefix: string; n: number; fps: number }>>;
   /** Attack anims that start with their wind-up (s): the wind-up frame shows first, then the strike frames. */
   windups?: Partial<Record<number, number>>;
+  /** Enraged, the figure's action timers run this much faster (wind-ups last `pace` times as long; the demon). */
+  pace?: number;
   /** Hover height while airborne (px, unscaled). */
   lift?: number;
   /** Row of the feet in the body frames (the origin), when space is left below them (the dragon's hanging legs in flight). */
   footY?: number;
+  /** Column of the hips in the body frames, when the figure is not centred in them (the demon's tail and reach). */
+  hipX?: number;
   /** Bite (the dragon): sparks where the jaws snap, `reach` px straight ahead. */
   bite?: { reach: number; color: number };
   /** Tail swipe behind the figure (the dragon), shown for the Tail animation. */
@@ -66,14 +72,18 @@ export interface FigureDef {
 
 /** Pixel points inside a frame (x, y from the frame's top-left), e.g. the dragon's mouth. */
 export type FramePoints = Record<string, [number, number]>;
-/** Actions with their own frames (only the dragon has them). */
-export type FigureAnim = DragonAnim;
+/** Actions with their own frames (the dragon and the demon have them). */
+export type FigureAnim = DragonAnim | DemonAnim;
 
 // The dragon's frames are built at atlas time from its rig; the breath points come from the same poses.
 const DRAGON_POINTS = dragonPoints();
 const dragonFrames = Object.fromEntries(
   (Object.keys(DRAGON_ANIMS) as DragonAnim[]).map((a) => [a, { prefix: dragonFrameName(a, 0).slice(0, -1), n: DRAGON_ANIMS[a].length, fps: a === 'idle' ? 4 : a === 'walk' ? 8 : a === 'hover' || a === 'hoverbreath' ? 12 : 10 }]),
 ) as Record<DragonAnim, { prefix: string; n: number; fps: number }>;
+
+const demonFrames = Object.fromEntries(
+  (Object.keys(DEMON_ANIMS) as DemonAnim[]).map((a) => [a, { prefix: demonFrameName(a, 0).slice(0, -1), n: DEMON_ANIMS[a], fps: a === 'idle' ? 4 : a === 'walk' ? 6 : 10 }]),
+) as Record<DemonAnim, { prefix: string; n: number; fps: number }>;
 
 const hero = (n: string) => ({ idle: `${n}_idle_anim_f`, run: `${n}_run_anim_f`, hit: `${n}_hit_anim_f0` });
 const mob = (n: string) => ({ idle: `${n}_idle_anim_f`, run: `${n}_run_anim_f` });
@@ -98,7 +108,20 @@ export const FIGURES: Record<number, FigureDef> = {
   [KIND.Chort]: { ...mob('chort'), swing: { ...CLAW, reach: 22 }, handY: 10, attack: 'caster', base: 0xff7020, baseR: 5 },
   [KIND.Summoner]: { ...summoner, weapon: 'weapon_red_magic_staff', mount: 'staff', weaponTint: 0xffb080, handY: 8, attack: 'caster', base: 0x9a2020, baseR: 5 },
   [KIND.Ogre]: { ...mob('ogre'), swing: { reach: 34, arc: 2.0, color: 0xffe0b0 }, weapon: 'weapon_baton_with_spikes', mount: 'blade', weaponScale: 1.4, handX: 12, handY: 14, attack: 'melee', base: 0x3a6a3a, baseR: 12, slam: { r: CONST.OGRE_SLAM_RADIUS, anim: ANIM.Slam, t: CONST.OGRE_SLAM_WINDUP } },
-  [KIND.Demon]: { ...mob('big_demon'), swing: { reach: 40, arc: 2.1, color: 0xffa080 }, handY: 18, attack: 'melee', base: 0x7a1010, baseR: 13 },
+  [KIND.Demon]: {
+    idle: demonFrames.idle.prefix,
+    run: demonFrames.walk.prefix,
+    frames: demonFrames,
+    windups: { [ANIM.Melee]: CONST.DEMON_CLEAVE_WINDUP, [ANIM.Dash]: CONST.DEMON_SWOOP_WINDUP, [ANIM.Cast]: CONST.DEMON_RING_WINDUP },
+    pace: CONST.DEMON_ENRAGED_PACE,
+    footY: DEMON_FRAME.footY,
+    hipX: DEMON_FRAME.hipX,
+    swing: { reach: 40, arc: 2.1, color: 0xffa080 },
+    handY: 30,
+    attack: 'melee',
+    base: 0x7a1010,
+    baseR: 13,
+  },
   [KIND.Lich]: { ...mob('lich'), weapon: 'weapon_lich_staff', mount: 'staff', weaponScale: 1.3, handX: 7, handY: 11, attack: 'caster', base: GLOOM.light, baseR: 7, slam: { r: CONST.LICH_NOVA_RADIUS, anim: ANIM.Slam, t: CONST.LICH_NOVA_WINDUP, color: GLOOM.light, gloom: true } },
   [KIND.Dragon]: {
     idle: dragonFrames.idle.prefix,

@@ -13,7 +13,7 @@ import { BOSS_TEXT, STAT_TEXT } from './text';
 const BOSSES: BossId[] = ['Demon', 'Lich', 'Dragon'];
 /** Figure (atlas frame prefix), CSS filter approximating the in-game tint (anim/defs.ts) and preview scale. */
 const BOSS_FIG: Record<BossId, [string, string, number]> = {
-  Demon: ['big_demon', '', 2],
+  Demon: ['demon', '', 2],
   Lich: ['lich', '', 3],
   Dragon: ['dragon', '', 2],
 };

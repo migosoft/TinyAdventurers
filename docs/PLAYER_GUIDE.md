@@ -137,7 +137,7 @@ The boss sleeps in a large hall at the far end of the dungeon. Each run has one 
 
 ### The Red Demon
 - **Cleave:** a wide claw sweep in front of it.
-- **Swoop:** charges across the hall at a hero.
+- **Swoop:** lowers its horns and charges across the hall at a hero.
 - Both the cleave and the swoop **push you back** (36 and 44 px).
 - **Ring of fire:** fireballs fly out in every direction.
 - **Enraged below 40 % health:** faster and more aggressive. The health bar shows **ENRAGED**.

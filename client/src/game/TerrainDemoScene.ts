@@ -198,8 +198,11 @@ export abstract class TerrainDemo extends Phaser.Scene {
       a.t += dt;
       const target = this.actors.find((o) => o.name === s.swoop);
       const [tx, ty] = this.px(s.to);
-      if (a.t < 0.6) {
-        anim = ANIM.Windup;
+      // Figures whose Dash anim includes the wind-up (the demon) play it from the start; the charge frames loop until it arrives.
+      const own = a.v.def.windups?.[ANIM.Dash];
+      if (own) a.animT = Math.min(a.t, own + CONST.DEMON_SWOOP_TIME - 0.01);
+      if (a.t < (own ?? 0.6)) {
+        anim = own ? ANIM.Dash : ANIM.Windup;
         a.aim = Math.atan2(ty - a.y, tx - a.x);
       } else {
         anim = ANIM.Dash;

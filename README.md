@@ -87,6 +87,7 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 - `?dragon`: the red dragon looping through every action, flight and landing smash included (no server needed; Space pauses, S slow motion, 1-8 jump to an action)
 - `?ogre`: the ogre mini-boss's club push next to the orc warrior's, and its ground slam with the telegraph ring (no server needed; `&slow=3` works too)
 - `?lich`: the lich's dark purple magic: gloom bolt volley, the summon of 5 skeletons + 5 archers, and the nova pushing heroes 64 px (no server needed; `&slow=3` works too)
+- `?demon`: the red demon looping through every action: walking, cleave, the swoop charge, the ring of fire and an enraged cleave (no server needed; Space pauses, S slow motion, 1-7 jump to an action)
 - `?debug`: debug mode for the whole run
   - Your hero is immortal. Hits still show damage numbers, but your health doesn't drop.
   - Dashed lines show the shortest walkable path to the boss (yellow) and to the ogre mini-boss (blue, while it lives), updated every 0.5 s.
@@ -97,4 +98,4 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Art
 
-The sprites come from **16x16 DungeonTileset II** by 0x72 (CC0): https://0x72.itch.io/dungeontileset-ii. The pack files are in `client/assets-src/0x72/`. All figures are pack sprites except two bosses. The red dragon's sprite and animation strips are AI-generated art made for this game (`client/assets-src/dragon/`), and some of its frames are built from them at atlas build time. The lich is pixel art drawn for this game with Claude Code in the pack's style and colours (`client/scripts/lich-frames.ts`). The title logo was made for this game with Google's image generation AI (`client/assets-src/logo/`). Terrain tiles are generated from pack colours; effects such as sparks, glows and swooshes are simple shapes generated at runtime.
+The sprites come from **16x16 DungeonTileset II** by 0x72 (CC0): https://0x72.itch.io/dungeontileset-ii. The pack files are in `client/assets-src/0x72/`. All figures are pack sprites except three bosses. The red dragon's sprite and animation strips are AI-generated art made for this game (`client/assets-src/dragon/`), and some of its frames are built from them at atlas build time. The red demon's animation strips are AI-generated art made for this game as well (`client/assets-src/demon/`), from a reference image the user supplied. The lich is pixel art drawn for this game with Claude Code in the pack's style and colours (`client/scripts/lich-frames.ts`). The title logo was made for this game with Google's image generation AI (`client/assets-src/logo/`). Terrain tiles are generated from pack colours; effects such as sparks, glows and swooshes are simple shapes generated at runtime.

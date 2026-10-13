@@ -1,3 +1,4 @@
+| `?demon` `[&slow=3]` | The demon looping through every action: idle, walk (both directions), cleave (and facing left), the swoop charge, the ring of fire with its 16 orbs, and an enraged cleave with the shorter wind-up. Dummy heroes are pushed with the game's distances. Keys: Space pause, S slow motion, 1–7 jump to an action. |
 # Tiny Adventurers — Technical Documentation
 
 Audience: developers and coding agents working on the code. For gameplay see [PLAYER_GUIDE.md](PLAYER_GUIDE.md); for open work see [TODO.md](TODO.md).
@@ -263,7 +264,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 
 | Boss | Base HP | Behaviour |
 |---|---|---|
-| Demon | 1300 | Cleave 120°/34 px (wind-up 0.45 s), swoop charge 260 px/s, ring of 16 fire orbs. Enraged below 40 % HP: faster and quicker cooldowns. |
+| Demon | 1300 | Cleave 120°/34 px (wind-up 0.45 s), swoop (a charge on foot) 260 px/s after a 0.6 s wind-up, ring of 16 fire orbs after a 0.5 s wind-up. Each attack's animation (`Melee`, `Dash`, `Cast`) starts with its wind-up and runs on through a short recovery (0.3 / 0.25 / 0.35 s: the strike frames play out); the timings are `DEMON_*` in `defs/bosses.rs`, shared with the client. Enraged below 40 % HP: faster and quicker cooldowns; every timer runs 1 / `DEMON_ENRAGED_PACE` (0.6) as fast, wind-ups and recoveries included, and the client shortens the wind-up frames to match. |
 | Lich | 900 | Spawns `LICH_DISCIPLES` (6) disciples in a ring. Immune and healing 6 HP/s per living disciple. Volley of 5 gloom bolts (`KIND.GloomBolt` 60). Summon every 12 s tops its raised minions up to `LICH_SKELETONS` (5) `RaisedSkeleton` and `LICH_ARCHERS` (5) `RaisedArcher` (drawn as a skeleton archer, 20 HP, 2 XP) in a ring (`Ev::Raise{k: 2}`). Nova every 10–12 s (`LICH_NOVA_EVERY`, regardless of distance): `Anim::Slam` for `LICH_NOVA_WINDUP` (1.2 s) standing still (purple telegraph ring), then `Ev::Boom{k: 6}`, 24 damage and a 64 px push (`LICH_NOVA_KNOCK`, the strongest normal-enemy push is the ogre club's 28) for every hero within `LICH_NOVA_RADIUS` (56 px). Order of choice: summon, nova, volley. |
 | Dragon | 2000 | Breath: 0.8 s wind-up, then 1.4 s damage pulses in a 115 px, ±0.38 rad cone, leaving burning patches. Bite (narrow arc straight ahead, 46 px, own cooldown; chosen before the claw when ready), front claw (wide arc, 40 px), tail whip vs players behind it, volley of 3 exploding fireballs (push 20). After each strike a short recovery (the strike frames play out). Flight every 10–12 s (`DRAGON_FLIGHT_EVERY`): `Anim::TakeOff` 0.5 s standing still, then 3.5 s airborne (`Monster.airborne`, `FLAG.AIRBORNE`; `melee_arc`, `dash_contact` and `dagger_target` skip it; only the breath; chases with `path_toward`), then `Anim::Land` 0.6 s and the smash (`Ev::Boom{k: 5}`, damage and push within 40 px). Attack anims (`Melee`, `Bite`, `Tail`, `Breath`) start with the wind-up; the client shows the wind-up frame for `DRAGON_*_WINDUP` s. |
 
@@ -349,6 +350,11 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - The mouth and nostril points for the breath come from the same poses (`dragonPoints()`), so they follow the art.
   - All frames are 86×54 with the base at (19, 7); the feet are on row 50 (`footY`, the figure origin); legs hanging in flight reach below.
   - How the strips were imported (one-off scripts, not in the repo): the user's JPGs on a magenta background were converted with PowerShell `System.Drawing`; a rectangular pixel grid was fitted per strip (they were stretched unevenly), cell centres sampled (median) and snapped to the base palette; frames separated as connected shapes (specks dropped) and stray light-red pixels on the silhouette removed; then each frame placed in base coordinates, on the base head (walk, claw, hover) or on the planted hind claws (bite, tail), with the head offset found by matching the base head. The walk strip was drawn ~15% smaller and was resampled to base size. Redo the same for new strips.
+- **Demon frames** (`scripts/demon-frames.ts`, layout in `src/game/anim/demonFrames.ts`, shared with the client): AI-generated art made for this game at the user's request (2026-10-13), in `client/assets-src/demon/`.
+  - The user supplied a front-view pixel demon (`images/demon.jpg`); an image generation AI first turned it to a side view facing right, then drew one sheet per action from that (prompts: one strip per action, flat magenta background, same size as the reference).
+  - Strips: `demon_idle` (4), `demon_walk` (4), `demon_cleave` (5: wind-up, swing, impact, follow-through, recovery; the user's sheet had 7, the two upright resting poses were dropped), `demon_charge` (4: bull crouch, two charging frames, the stop) and `demon_cast` (4: gathering power, rising, the burst, recovery). Every cell is 78×63 with the hips at x 29 (`hipX`, the body's horizontal origin, mirrored when facing left) and the feet on row 62 (`footY`). Drawn at ×1 (about 62 px tall with the horns).
+  - How the sheets were imported (one-off scripts, not in the repo; redo the same for new sheets): the JPGs converted to PNG with PowerShell `System.Drawing`; figures found as connected shapes on the magenta; a pixel grid fitted per figure (pitch and phase from the colour edges; 8.6 px for idle, walk and cast, 5.7 px for the charge); the cleave sheet had been resampled by the AI and has no clean grid, so it was sampled at a fixed 5.45 px that matches the others' size; cell centres sampled (median of the middle half, empty where mostly magenta); colours snapped to one 16-colour palette (k-means over all frames, magenta fringe excluded and dropped on the silhouette); only the figure and pieces touching it kept; each frame placed with the loincloth's centre on `hipX` and its lowest pixel on `footY`.
+  - `build-atlas.ts` checks each strip's size and copies the frames below the lich's.
 - **Lich frames** (`scripts/lich-frames.ts`): pixel art drawn for this game with Claude Code at the user's request (2026-10-13), after two reference images the user supplied (a high-resolution crowned lich, a pixel-art lich). The user approved the look in `?gallery`.
   - Pixel grids (one character per pixel) in pack colours: a gold spiked crown, a skull with glowing eyes in a crimson hood, gold crescent pauldrons, a crimson mantle with a jewel clasp, a lean robe with a gold trim strip, and a ragged hem it floats on (no feet).
   - `lich_idle_anim_f0-3` (float bob, hem sway, one eye flicker) and `lich_run_anim_f0-3` (the hem trails behind), 16×28 like the heroes, so it draws at ×1; plus `weapon_lich_staff` (8×30, a bone staff with a purple orb), held 7 px out (`handX`) so it does not cover the right pauldron.
@@ -384,9 +390,9 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - an optional scale or tint
   - an optional `swing` (reach and arc of the melee swoosh, matching the server's damage reach)
   - optional `mouth` / `nostrils` frame points
-  - for figures with their own action frames (the dragon): `frames` (prefix, count, fps per action), `windups` (attack anim → wind-up seconds), `lift` (hover height), `footY` (the feet row when the frames leave room below), `bite`; `pickFrame.ts` chooses their frame
+  - for figures with their own action frames (the dragon, the demon): `frames` (prefix, count, fps per action), `windups` (attack anim → wind-up seconds), `pace` (enraged, the wind-ups last this factor as long; the demon), `lift` (hover height), `footY` (the feet row when the frames leave room below), `hipX` (the hips' column when the figure is not centred in its frames), `bite`; `pickFrame.ts` chooses their frame
 - Pack stand-ins:
-  - the demon is the pack's `big_demon`
+  - the demon is not a pack figure: it has its own AI-generated frames (see Demon frames above), drawn at ×1
   - the lich is not a pack figure: it has its own frames (see Lich frames above), drawn at ×1
   - the summoner is the pack necromancer with a red robe (an atlas recolor, see above)
   - the dragon is not a pack figure: it has its own AI-generated frames (see Dragon frames above), drawn at ×1.2
@@ -607,7 +613,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 ## 12. Tests
 
-**Server (`cargo test`, 134 tests):**
+**Server (`cargo test`, 149 tests):**
 - protocol round trip
 - wire: positions round to 1/16 px (also beyond 4096 px), aim wraps into a byte, event codes follow `EV_CODES`, a compact input decodes to `InputMsg`, sample snapshots are bare arrays and at least 30 % smaller than the old form
 - dungeon determinism and guarantees over 200 seeds
@@ -625,6 +631,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - demon dungeon swap (same spawns, imps/chorts/summoners instead of skeletons/necromancers, none elsewhere); imp and chort attack choice by distance; the alt attack's own cooldown and fire bolt; summoned imps look like imps and die with the summoner
 - A* routes around a wall
 - lich immunity and draining; the nova (wind-up, damage, 64 px push, nothing outside the radius); the summon (5 skeletons + 5 archers, topped up, no stacking); the gloom bolt volley; drain beams sent to a player who sees neither end
+- the demon: each attack's animation starts with its wind-up (cleave `Melee`, swoop `Dash`, ring `Cast`) and runs through the recovery; the swoop keeps one `Dash` animation from the wind-up to the stop; the ring bursts at the end of its wind-up; enraged wind-ups are shorter
 - FOV-filtered snapshots
 - 600-tick simulation of each boss without panics
 - debug immortality and the boss path
@@ -661,6 +668,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - ts-rs export tests
 
 **Client (`npm test`):**
+- `pickFrame.test.ts`: the dragon's and the demon's frame choice (wind-up frame with the telegraph, strike frames after it, the demon's charge loop and ring burst, enraged wind-ups shortened by `pace`).
 - The collision and FOV ports must equal the Rust fixtures exactly. The fixture map holds every kind of terrain, and 10 random walks with dashes and pushes (14–44 px, any direction) cross it.
 - `wire.test.ts` unpacks the sample snapshots from `wire-fixtures.json` (every event type, a spectator, with and without boss bar) and compares them with their readable form: positions within 1/32 px, aim within half a step, everything else exact. It also checks the aim range and `packInput`.
 
@@ -682,7 +690,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 ## 13. Known limitations
 
-- Pack art gaps: no demon wings, no attack frames, no up/down facing. (The dragon and the lich have their own frames.)
+- Pack art gaps: no attack frames, no up/down facing. (The dragon, the demon and the lich have their own frames.)
 - No sound.
 - Snapshots are compact but not delta-compressed (every snapshot is complete). They are small anyway.
 - Boss fights are covered by unit tests and were played live once against all three bosses; their numbers are not balanced yet.

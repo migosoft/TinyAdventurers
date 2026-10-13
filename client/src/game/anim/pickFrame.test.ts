@@ -57,3 +57,43 @@ describe('dragon frames', () => {
     expect(mouth['dragon_breath_anim_f1'][1]).toBeGreaterThan(mouth['dragon_idle_anim_f0'][1]);
   });
 });
+
+describe('demon frames', () => {
+  const M = FIGURES[KIND.Demon];
+  const at = (anim: number, animT: number, flags = 0, moving = false) => pickFrame(M, { anim, animT, flags }, 0, 0, moving);
+
+  it('idles and walks', () => {
+    expect(at(ANIM.Idle, 0).frame).toBe('demon_idle_anim_f0');
+    expect(at(ANIM.Move, 0, 0, true).frame).toBe('demon_walk_anim_f0');
+  });
+
+  it('cleaves: wind-up with the telegraph, the swing just before the hit, impact after it', () => {
+    const w = CONST.DEMON_CLEAVE_WINDUP;
+    expect(at(ANIM.Melee, w / 2)).toEqual({ frame: 'demon_cleave_anim_f0', lift: 0, windup: true });
+    expect(at(ANIM.Melee, w - 0.02)).toEqual({ frame: 'demon_cleave_anim_f1', lift: 0, windup: false });
+    expect(at(ANIM.Melee, w + 0.01).frame).toBe('demon_cleave_anim_f2');
+    expect(at(ANIM.Melee, w + CONST.DEMON_CLEAVE_RECOVER).frame).toBe('demon_cleave_anim_f4');
+  });
+
+  it('enraged, the wind-up is shorter', () => {
+    const w = CONST.DEMON_CLEAVE_WINDUP * CONST.DEMON_ENRAGED_PACE;
+    expect(at(ANIM.Melee, w + 0.01, FLAG.ENRAGED).frame).toBe('demon_cleave_anim_f2');
+    expect(at(ANIM.Melee, w + 0.01).frame).toBe('demon_cleave_anim_f0');
+  });
+
+  it('charges: crouch, two looping frames, the stop', () => {
+    const w = CONST.DEMON_SWOOP_WINDUP;
+    expect(at(ANIM.Dash, 0.1)).toEqual({ frame: 'demon_charge_anim_f0', lift: 0, windup: true });
+    const charging = new Set([0.02, 0.12, 0.22, 0.32].map((k) => at(ANIM.Dash, w + k).frame));
+    expect(charging).toEqual(new Set(['demon_charge_anim_f1', 'demon_charge_anim_f2']));
+    expect(at(ANIM.Dash, w + CONST.DEMON_SWOOP_TIME + 0.05).frame).toBe('demon_charge_anim_f3');
+  });
+
+  it('bursts with the ring of fire at the end of the cast wind-up', () => {
+    const w = CONST.DEMON_RING_WINDUP;
+    expect(at(ANIM.Cast, 0.05).frame).toBe('demon_cast_anim_f0');
+    expect(at(ANIM.Cast, w - 0.05).frame).toBe('demon_cast_anim_f1');
+    expect(at(ANIM.Cast, w + 0.05)).toEqual({ frame: 'demon_cast_anim_f2', lift: 0, windup: false });
+    expect(at(ANIM.Cast, w + CONST.DEMON_RING_RECOVER).frame).toBe('demon_cast_anim_f3');
+  });
+});

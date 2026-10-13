@@ -25,6 +25,19 @@ pub fn hp_scale(players: usize) -> f64 {
     0.5 + 0.5 * players.max(1) as f64
 }
 
+/// Demon timings (s), shared with the client: each attack's animation starts
+/// with its wind-up (the hit lands at the end of it), then the strike frames
+/// play out in a short recovery. Enraged, every timer runs at
+/// 1 / DEMON_ENRAGED_PACE speed, so these last DEMON_ENRAGED_PACE times as long.
+pub const DEMON_CLEAVE_WINDUP: f64 = 0.45;
+pub const DEMON_SWOOP_WINDUP: f64 = 0.6;
+pub const DEMON_SWOOP_TIME: f64 = 0.55;
+pub const DEMON_RING_WINDUP: f64 = 0.5;
+pub const DEMON_CLEAVE_RECOVER: f64 = 0.3;
+pub const DEMON_SWOOP_RECOVER: f64 = 0.25;
+pub const DEMON_RING_RECOVER: f64 = 0.35;
+pub const DEMON_ENRAGED_PACE: f64 = 0.6;
+
 pub const LICH_DISCIPLES: usize = 6;
 /// HP per second the lich drains from each living disciple.
 pub const LICH_DRAIN_PER_DISCIPLE: f64 = 6.0;

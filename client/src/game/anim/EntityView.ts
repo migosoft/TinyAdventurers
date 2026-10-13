@@ -6,7 +6,7 @@ import Phaser from 'phaser';
 import { ANIM, FLAG } from '../../generated/defs';
 import { DEPTH, Effects, GLOOM } from '../effects';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
-import { pickFrame } from './pickFrame';
+import { pickFrame, windupOf } from './pickFrame';
 
 export interface ViewState {
   x: number;
@@ -30,6 +30,11 @@ function shade(k: number, to: number, mix: number): number {
   return ch(16) | ch(8) | ch(0);
 }
 
+/** Horizontal origin of the body: the hips for figures not centred in their frames (`hipX`, mirrored when facing left). */
+function originX(d: FigureDef, w: number, left: boolean): number {
+  if (d.hipX === undefined) return 0.5;
+  return (left ? w - d.hipX - 0.5 : d.hipX + 0.5) / w;
+}
 const MELEE_T = 0.18;
 /** Pack weapons are large next to the tiny figures; draw them smaller. */
 const WEAPON_SCALE = 0.6;
@@ -86,7 +91,7 @@ export class EntityView {
     this.figure = scene.add.container(0, 0).setScale(scale);
     this.shadow = scene.add.image(0, 0, ensureShadowTexture(scene, d.baseR)).setOrigin(0.5, 0.5);
     this.body = scene.add.sprite(0, 1, 'atlas', `${d.idle}0`);
-    this.body.setOrigin(0.5, (d.footY ?? this.body.height) / this.body.height);
+    this.body.setOrigin(originX(d, this.body.width, false), (d.footY ?? this.body.height) / this.body.height);
     this.figure.add([this.shadow, this.body]);
     if (d.weapon) {
       this.weapon = scene.add.image(0, -d.handY, 'atlas', d.weapon).setScale(WEAPON_SCALE * (d.weaponScale ?? 1));
@@ -134,6 +139,7 @@ export class EntityView {
     const left = this.dir === 'left';
     const sgn = left ? -1 : 1;
     this.body.setFlipX(left);
+    if (d.hipX !== undefined) this.body.setOrigin(originX(d, this.body.width, left), this.body.originY);
 
     // ---- body: pack idle/run/hit frames ----
     const hurt = (s.flags & FLAG.HURT) !== 0;
@@ -194,7 +200,7 @@ export class EntityView {
       case ANIM.Tail: {
         const tail = s.anim === ANIM.Tail;
         // Own frames: the strike comes after the wind-up, drawn by the frames.
-        const w = d.windups?.[s.anim] ?? 0;
+        const w = windupOf(d, s.anim, s.flags);
         if (t < w) break;
         if (!own) {
           const k = Math.min(t / MELEE_T, 1);
@@ -222,7 +228,7 @@ export class EntityView {
         break;
       case ANIM.Cast:
       case ANIM.Channel:
-        this.body.y -= Math.sin(this.clock * 12) > 0 ? 1 : 0;
+        if (!own) this.body.y -= Math.sin(this.clock * 12) > 0 ? 1 : 0;
         if (this.clock - this.fxT > 0.06) {
           this.fxT = this.clock;
           const c = d.weaponTint ?? (s.anim === ANIM.Channel ? 0xff3040 : d.base);
@@ -241,9 +247,10 @@ export class EntityView {
         if (!own) this.body.setAngle(sgn * -6);
         break;
       case ANIM.Dash:
-        this.body.setScale(1.25, 0.9);
+        // Own frames draw the charge (and its wind-up); pack figures stretch.
+        if (!own) this.body.setScale(1.25, 0.9);
         this.ghostT -= dt;
-        if (this.ghostT <= 0) {
+        if (this.ghostT <= 0 && !own?.windup) {
           this.ghostT = 0.03;
           this.fx.particle(s.x, s.y + 1 - this.height / 2, 0, 0, 0.25, d.base, {
             frame,

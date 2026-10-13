@@ -45,7 +45,6 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **More classes and bosses:** add to `defs/classes.rs` / `defs/bosses.rs` plus a `BossBehaviour` file, and add the visual entry in `client/src/game/anim/defs.ts`.
 - **Art gaps in the 0x72 pack:**
   - The summoner is the necromancer with a recolored (red) robe, made at atlas build time (`RECOLORS` in `build-atlas.ts`).
-  - The demon has no bat wings.
   - There are no attack animation frames.
   - Dedicated sprite sheets can be added to `client/assets-src/` and referenced in `anim/defs.ts`.
 - **4-direction sprites:** the animation code keeps a `Dir` value. Up/down frames can be added there once sheets exist.

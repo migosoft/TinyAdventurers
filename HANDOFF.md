@@ -9,7 +9,33 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-13, new lich art, then the lich fight rework)
+## Last session (2026-10-13, demon rework: own AI-generated art)
+
+**Branch:** `feature/demon-art` (from `main`), committed, **not merged or pushed yet**. Ask the user before merging and pushing.
+
+**User decisions:**
+- **New demon look:** the user supplied `images/demon.jpg`, a front-view pixel demon (horns, yellow eyes, loincloth, tail). The game draws figures from the side, so the user had an image generation AI (prompts written by Claude) draw a side view and then one sheet per action: idle, walk, cleave, charge, cast (`images/demon_*.jpg`).
+- **Cleave frames:** the AI's cleave sheet had 7 poses; Claude picked 5 (wind-up, swing, impact, follow-through, recovery) and dropped the two upright resting poses. The user agreed ("perfect").
+- **No wings:** the swoop is now a charge on foot with the horns first. Its gameplay is unchanged.
+- Credit: AI-generated art made for this game from the user's reference image (README Art, TECHNICAL §9 "Demon frames").
+
+**Done:**
+- Import (one-off scripts in the session scratchpad, not kept; the method is in TECHNICAL §9 "Demon frames"): pixel grid fitted per figure, colours snapped to one 16-colour palette, frames aligned on the hips (loincloth) and feet. Result: `client/assets-src/demon/demon_{idle,walk,cleave,charge,cast}.png`, cells 78×63, hips at x 29, feet on row 62.
+- Client: `anim/demonFrames.ts` (layout), `scripts/demon-frames.ts` (atlas strip below the lich's); `FigureDef` gained `hipX` (the body's horizontal origin, mirrored when facing left) and `pace` (enraged wind-ups shortened, from `FLAG.ENRAGED`); `pickFrame.ts` picks the demon's frames (cleave: wind-up with telegraph, the swing frame 0.08 s before the hit, impact, follow-through, recovery; charge: crouch, two looping frames, the stop; cast: gathering, rising, burst at the ring of fire, recovery); `EntityView` skips the pack-figure squash/bob for own frames; the lobby boss card shows the new demon; the blurb says "charges". New `?demon` dev page (`DemonDemoScene.ts`); the terrain demos' swoop plays the charge frames.
+- Server: `demon.rs` now starts `Melee`/`Dash`/`Cast` at the wind-up (was `Windup` first) and adds a short recovery after each attack (0.3 / 0.25 / 0.35 s) so the strike frames play out, like the dragon. Timings are `DEMON_*` in `defs/bosses.rs`, exported to the client (a second `json!` object in `export.rs`: one big one hits the macro recursion limit).
+- Docs: README (Art, `?demon`), TECHNICAL (§9 Demon frames, FigureDef, boss table, dev pages, tests, known limitations), PLAYER_GUIDE (swoop wording), TODO (art gaps).
+
+**Verified:**
+- `cargo test` (Docker): 149 tests (4 new demon tests). Client `npm run build` (atlas, tsc, vite) and `npm test` (22, 5 new demon frame tests).
+- `?demon` screenshots (idle, walk both ways, cleave both ways, charge, ring of fire, enraged cleave), no browser errors.
+- `docker compose up --build -d` (2026-10-13), then a throwaway bot (debug wizard, account deleted afterwards) walked the debug path to the demon on the live server and fought it for 45 s: cleave, charge, ring of fire, the lobby boss card. No browser errors. The containers are left running.
+
+**Open:**
+- **User check** of the look and size in `?demon` and in a fight. The demon is drawn at ×1, about 62 px tall (the old pack demon was 36, the dragon is about 52). A `scale` in its `FigureDef` would shrink it if the user wants.
+- The added recoveries make the demon slightly slower between attacks; part of the balancing pass.
+- `docs/TODO.md` still has the user's uncommitted notes (woodland escort level, lighting, riddle rooms); only the art-gap line was committed.
+
+## Session before (2026-10-13, new lich art, then the lich fight rework)
 
 **Branch:** `feature/lich-art` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-13). Start the next feature on a new branch from `main`. Two commits: the art, then the fight changes below.
 
@@ -189,6 +215,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 - The balancing pass and loadouts stay open (TODO.md).
 
 **Not yet verified:**
+- The demon's new frames by the user (`?demon` and a fight); the live fight only by a bot so far.
 - The user did not report trying every admin action (deletions, password change) live; the smoke test covers them.
 - A won or lost run through the browser was not recorded live. Only abandoned runs were; won and lost runs are covered by tests.
 
@@ -533,9 +560,10 @@ Steps 2–6 followed in the next session.
 - compact snapshots and inputs (MessagePack arrays, `wire.rs`/`wire.ts`): about 125 B per snapshot with 2 players
 - debug mode (paths to the boss and the ogre), sprite gallery
 - the red dragon with its own AI-generated frames, flight phases (melee-immune in the air), bite, landing smash; demo `?dragon`
+- the red demon with its own AI-generated frames (walk, cleave, charge, ring of fire); demo `?demon`
 
 **Verified:**
-- 140 server tests (against PostgreSQL) and 17 client tests (collision/FOV ports with terrain, wire unpacking, dragon frame choice) pass.
+- 149 server tests (against PostgreSQL) and 22 client tests (collision/FOV ports with terrain, wire unpacking, dragon and demon frame choice) pass.
 - Accounts and characters: API checks with curl and the browser smoke test (2026-10-09); not yet tried live by the user.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
@@ -548,6 +576,7 @@ Steps 2–6 followed in the next session.
 
 **Not yet verified:**
 - Behaviour with real (non-headless) players over a real network.
+- The demon's new frames by the user (`?demon` and a fight); the live fight only by a bot so far.
 
 **Git and session workflow (the user's standing instructions):**
 - One feature per session. When a feature is done: update this file and the docs, run the verification checklist below, then commit.

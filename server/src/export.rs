@@ -38,7 +38,7 @@ fn export_defs() {
         .collect();
     let abilities: serde_json::Map<String, serde_json::Value> =
         ab::ALL.iter().map(|a| (format!("{a:?}"), serde_json::to_value(ab::def(*a)).unwrap())).collect();
-    let consts = json!({
+    let mut consts = json!({
         "TILE": TILE,
         "TICK_HZ": TICK_HZ,
         "DT": DT,
@@ -80,6 +80,18 @@ fn export_defs() {
         "DROWN_TIME": crate::dungeon::DROWN_TIME,
         "POS_SCALE": crate::wire::POS_SCALE,
     });
+    // A second object: one json! with all of them hits the macro recursion limit.
+    let demon = json!({
+        "DEMON_CLEAVE_WINDUP": bosses::DEMON_CLEAVE_WINDUP,
+        "DEMON_SWOOP_WINDUP": bosses::DEMON_SWOOP_WINDUP,
+        "DEMON_SWOOP_TIME": bosses::DEMON_SWOOP_TIME,
+        "DEMON_RING_WINDUP": bosses::DEMON_RING_WINDUP,
+        "DEMON_CLEAVE_RECOVER": bosses::DEMON_CLEAVE_RECOVER,
+        "DEMON_SWOOP_RECOVER": bosses::DEMON_SWOOP_RECOVER,
+        "DEMON_RING_RECOVER": bosses::DEMON_RING_RECOVER,
+        "DEMON_ENRAGED_PACE": bosses::DEMON_ENRAGED_PACE,
+    });
+    consts.as_object_mut().unwrap().extend(demon.as_object().unwrap().clone());
     let fl = json!({
         "HIDDEN": flags::HIDDEN, "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,
         "ASLEEP": flags::ASLEEP, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE,
