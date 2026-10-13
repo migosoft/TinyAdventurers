@@ -44,6 +44,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **User check** of the new pushes and the lava pool in a fight.
 - The added recoveries make the demon slightly slower between attacks; part of the balancing pass.
 - Redoing a demon sheet: the import scripts were throwaway (session scratchpad); TECHNICAL §9 "Demon frames" describes every step (grid or fixed pitch, palette snap, cleanup, hip/eye anchor, 82×63 cells). Strips must stay 82×63 per cell; `build-atlas.ts` checks the size.
+- Containers rebuilt after the merge (`docker compose up --build -d`, 2026-10-13); they serve the 6-frame walk and are left running.
 
 ## Session before (2026-10-13, new lich art, then the lich fight rework)
 
