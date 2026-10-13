@@ -5,6 +5,7 @@ import { DaemonDemoScene } from './game/DaemonDemoScene';
 import { ChasmDemoScene, LavaDemoScene, WaterDemoScene } from './game/TerrainDemoScene';
 import { KnockbackDemoScene } from './game/KnockbackDemoScene';
 import { OgreDemoScene } from './game/OgreDemoScene';
+import { LichDemoScene } from './game/LichDemoScene';
 import { DragonDemoScene } from './game/DragonDemoScene';
 import { GameScene, type GameInit } from './game/GameScene';
 import type { RunStartInfo } from './generated/RunStartInfo';
@@ -47,8 +48,8 @@ function viewSize(): { w: number; h: number; zoom: number } {
   return { w: Math.ceil(window.innerWidth / zoom), h: Math.ceil(window.innerHeight / zoom), zoom };
 }
 
-/** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon). */
-const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-demo', water: 'water-demo', chasm: 'chasm-demo', lava: 'lava-demo', knockback: 'knockback-demo', ogre: 'ogre-demo', dragon: 'dragon-demo' };
+/** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich). */
+const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-demo', water: 'water-demo', chasm: 'chasm-demo', lava: 'lava-demo', knockback: 'knockback-demo', ogre: 'ogre-demo', dragon: 'dragon-demo', lich: 'lich-demo' };
 
 function gallery(): void {
   const q = new URLSearchParams(location.search);
@@ -59,7 +60,7 @@ function gallery(): void {
     parent: 'game',
     pixelArt: true,
     scale: { mode: Phaser.Scale.NONE, width: v.w, height: v.h, zoom: v.zoom },
-    scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene, WaterDemoScene, ChasmDemoScene, LavaDemoScene, KnockbackDemoScene, OgreDemoScene, DragonDemoScene],
+    scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene, WaterDemoScene, ChasmDemoScene, LavaDemoScene, KnockbackDemoScene, OgreDemoScene, DragonDemoScene, LichDemoScene],
   });
   game.events.once('assets-ready', () => game.scene.start(start));
   document.getElementById('game')!.classList.add('active');

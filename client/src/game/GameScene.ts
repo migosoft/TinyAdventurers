@@ -315,6 +315,7 @@ export class GameScene extends Phaser.Scene {
           this.fx.burst(ev.x, ev.y, 20, 0xff8030, 80);
         } else if (ev.k === 3) this.fx.ring(ev.x, ev.y, ev.r, 0x6a2a8a, 0.4, true);
         else if (ev.k === 5) this.fx.shockwave(ev.x, ev.y, ev.r);
+        else if (ev.k === 6) this.fx.nova(ev.x, ev.y, ev.r);
         else this.fx.explosion(ev.x, ev.y, ev.r);
         break;
       case 'Died': {
@@ -333,7 +334,7 @@ export class GameScene extends Phaser.Scene {
         else if (!this.sinks.has(ev.id)) this.startSink(ev.id, ev.x, ev.y, ev.how === 1);
         break;
       case 'Raise':
-        this.fx.raise(ev.x, ev.y, ev.fire);
+        this.fx.raise(ev.x, ev.y, ev.k);
         break;
       case 'Immune':
         this.fx.immune(ev.x, ev.y);
@@ -677,7 +678,8 @@ export class GameScene extends Phaser.Scene {
     }
     img.setVisible(!mine).setPosition(Math.round(e.x), Math.round(e.y - 8));
     this.orientProjectile(img, pd, e.aim);
-    if (!mine && pd.trail && Math.random() < 0.5) this.fx.particle(e.x, e.y - 8, 0, 0, 0.25, pd.trail, { depth: DEPTH.projectile - 1 });
+    if (!mine && pd.gloom) this.fx.gloomWisp(e.x, e.y - 8);
+    else if (!mine && pd.trail && Math.random() < 0.5) this.fx.particle(e.x, e.y - 8, 0, 0, 0.25, pd.trail, { depth: DEPTH.projectile - 1 });
   }
 
   /** Debug: marching dashed lines along the server's shortest paths to the boss (yellow) and the ogre (blue). */
@@ -727,6 +729,8 @@ export class GameScene extends Phaser.Scene {
   private orientProjectile(img: Phaser.GameObjects.Image, pd: (typeof PROJECTILES)[number], aim: number): void {
     // Pack arrows point up; glows are round but pulse a little.
     if (pd.frame) img.setRotation(aim + Math.PI / 2);
+    // Gloom shimmers: an unsteady flicker instead of a smooth pulse.
+    else if (pd.gloom) img.setScale(pd.scale * (0.8 + Math.random() * 0.35)).setAlpha(0.7 + Math.random() * 0.3);
     else img.setScale(pd.scale * (0.9 + 0.15 * Math.sin(performance.now() / 50)));
   }
 
@@ -761,14 +765,19 @@ export class GameScene extends Phaser.Scene {
       g.fillStyle(isPlayerKind(e.kind) ? 0x40d060 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);
     }
     // Lich draining its disciples: red shimmering energy flowing to the lich.
+    // The server sends both ends even when they are out of view (`drain`), and
+    // the beams are drawn above the fog; a lich in view uses its smooth position.
     const b = this.beams;
     b.clear();
+    const drain = this.lastSnap?.drain;
+    if (!drain) return;
     let lich: EntState | undefined;
     for (const e of this.ents.values()) if (e.kind === KIND.Lich) lich = e;
-    if (!lich) return;
-    for (const e of this.ents.values()) {
-      if (e.kind !== KIND.Disciple || e.anim !== ANIM.Channel) continue;
-      const sx = e.x, sy = e.y - 10, tx = lich.x, ty = lich.y - 16;
+    const [lx, ly] = lich ? [lich.x, lich.y] : drain[0];
+    for (let d = 1; d < drain.length; d++) {
+      const [dx, dy] = drain[d];
+      const e = { id: d * 7919 };
+      const sx = dx, sy = dy - 10, tx = lx, ty = ly - 12;
       const nx = -(ty - sy), ny = tx - sx;
       const nl = Math.hypot(nx, ny) || 1;
       b.lineStyle(1, 0xff2030, 0.25 + 0.15 * Math.sin(now * 20 + e.id));

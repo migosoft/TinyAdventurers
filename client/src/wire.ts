@@ -18,7 +18,7 @@ type DmgW = [number, number, number, number, boolean, boolean];
 type HealW = [number, number, number, number];
 type BoomW = [number, number, number, number, number];
 type DiedW = [number, number, number, number, number];
-type RaiseW = [number, number, number, boolean];
+type RaiseW = [number, number, number, number];
 type ImmuneW = [number, number, number];
 type TileW = [number, number, number, number];
 type MsgW = [number, string];
@@ -44,8 +44,8 @@ function unpackEv(e: EvW): Ev {
       return { t: 'Died', id, x: pos(x), y: pos(y), kind };
     }
     case EV.Raise: {
-      const [, x, y, fire] = e as RaiseW;
-      return { t: 'Raise', x: pos(x), y: pos(y), fire };
+      const [, x, y, k] = e as RaiseW;
+      return { t: 'Raise', x: pos(x), y: pos(y), k };
     }
     case EV.Immune: {
       const [, x, y] = e as ImmuneW;
@@ -73,7 +73,7 @@ function unpackEv(e: EvW): Ev {
 }
 
 export function unpackSnap(w: SnapW): Snapshot {
-  const [tick, ack, ents, me, boss, ev, srv_ms] = w;
+  const [tick, ack, ents, me, boss, ev, srv_ms, drain] = w;
   return {
     tick,
     ack,
@@ -96,6 +96,7 @@ export function unpackSnap(w: SnapW): Snapshot {
     },
     boss: boss && { kind: boss[0], hp: boss[1], max_hp: boss[2], immune: boss[3], enraged: boss[4] },
     ev: ev.map(unpackEv),
+    drain: drain && Array.from({ length: drain.length / 2 }, (_, i): [number, number] => [pos(drain[2 * i]), pos(drain[2 * i + 1])]),
     srv_ms,
   };
 }

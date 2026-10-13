@@ -93,7 +93,7 @@ pub fn xp_for_kill(enemy: Option<EnemyType>) -> u32 {
     match enemy {
         Some(GoblinArcher) => 5,
         Some(SkeletonWarrior) | Some(SkeletonArcher) => 8,
-        Some(RaisedSkeleton) => 2,
+        Some(RaisedSkeleton) | Some(RaisedArcher) => 2,
         Some(OrcWarrior) | Some(OrcArcher) => 12,
         Some(Necromancer) => 25,
         Some(Disciple) => 20,

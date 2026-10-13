@@ -2,7 +2,8 @@
 //! hazards and positional events inside their own field of vision.
 
 use super::Run;
-use crate::defs::kinds::{flags, EntityKind};
+use crate::defs::enemies::EnemyType;
+use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::dungeon::Map;
 use crate::fov::{Fov, PLAYER_FOV_RADIUS};
 use crate::math::Vec2;
@@ -27,6 +28,19 @@ fn visible(fov: &Fov, p: Vec2, radius: f64) -> bool {
     false
 }
 
+/// Lich drain beams: the lich first, then its channelling disciples (see `Snapshot::drain`).
+fn drain_points(run: &Run) -> Vec<Vec2> {
+    let Some(lich) = run.monsters.iter().find(|m| m.alive && m.kind == EntityKind::Lich) else { return Vec::new() };
+    let from = run.monsters.iter().filter(|m| m.alive && m.etype == Some(EnemyType::Disciple) && m.anim == Anim::Channel);
+    std::iter::once(lich.pos).chain(from.map(|m| m.pos)).collect()
+}
+
+/// The drain beams for one player: during the boss fight, or while the lich or
+/// any channelling disciple is in view, all of them, even the ends out of sight.
+fn drain_for(fov: &Fov, boss_awake: bool, pts: &[Vec2]) -> Option<Vec<(f32, f32)>> {
+    (pts.len() > 1 && (boss_awake || pts.iter().any(|&p| visible(fov, p, 0.0)))).then(|| pts.iter().map(|p| (p.x as f32, p.y as f32)).collect())
+}
+
 fn ms_since(run: &Run, t: f64) -> u16 {
     ((run.time - t) * 1000.0).clamp(0.0, 65535.0) as u16
 }
@@ -45,6 +59,8 @@ pub fn send_snapshots(run: &mut Run) {
     } else {
         None
     };
+
+    let drain = drain_points(run);
 
     // Players are always visible to their party.
     let player_snaps: Vec<EntSnap> = run
@@ -126,6 +142,7 @@ pub fn send_snapshots(run: &mut Run) {
             ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, 0.0, 0, 0, extra));
         }
         let ev: Vec<Ev> = events.iter().filter(|(_, at)| at.map_or(true, |p| visible(&fov, p, 0.0))).map(|(e, _)| e.clone()).collect();
+        let drain = drain_for(&fov, run.boss_awake, &drain);
 
         let me = &run.players[pi];
         let snap = Snapshot {
@@ -150,6 +167,7 @@ pub fn send_snapshots(run: &mut Run) {
             },
             boss: boss_bar.clone(),
             ev,
+            drain,
             srv_ms: run.srv_ms,
         };
         run.players[pi].fov = fov;
@@ -180,5 +198,27 @@ mod tests {
         let far_m = run.monsters.iter().find(|m| m.id == far).unwrap();
         assert!(visible(fov, near_m.pos, near_m.radius));
         assert!(!visible(fov, far_m.pos, far_m.radius));
+    }
+
+    #[test]
+    fn drain_beams_are_sent_even_when_lich_and_disciples_are_out_of_view() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        let pts = drain_points(&run);
+        assert!(pts.len() >= 6, "the lich and its channelling disciples");
+        assert_eq!(pts[0], run.monsters.iter().find(|m| m.is_boss).unwrap().pos, "the lich comes first");
+        // The heroes start far from the boss hall: nothing of the drain is in view.
+        let ppos = run.players[0].pos();
+        let (tx, ty) = Map::tile_of(ppos);
+        run.players[0].fov.compute(&run.dungeon.map, tx, ty, PLAYER_FOV_RADIUS);
+        let fov = &run.players[0].fov;
+        assert!(pts.iter().all(|&p| !visible(fov, p, 0.0)));
+        assert_eq!(drain_for(fov, false, &pts), None, "not before the fight");
+        let sent = drain_for(fov, true, &pts).expect("sent during the fight although out of view");
+        assert_eq!(sent.len(), pts.len());
+        // Before the fight it is sent as soon as one end is in view.
+        let mut fov2 = Fov::new(run.dungeon.map.w, run.dungeon.map.h);
+        let (tx, ty) = Map::tile_of(pts[1]);
+        fov2.compute(&run.dungeon.map, tx, ty, 1);
+        assert!(drain_for(&fov2, false, &pts).is_some());
     }
 }

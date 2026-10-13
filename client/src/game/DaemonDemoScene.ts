@@ -195,7 +195,7 @@ export class DaemonDemoScene extends Phaser.Scene {
           imp.x = m.x + side * 6;
           imp.y = m.y + side * 12;
           imp.life = 6;
-          this.fx.raise(imp.x, imp.y, true);
+          this.fx.raise(imp.x, imp.y, 1);
         }
       } else       if (dist < CLAW_RANGE && m.clawCd <= 0) {
         this.start(m, 'claw');

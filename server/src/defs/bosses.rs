@@ -28,6 +28,17 @@ pub fn hp_scale(players: usize) -> f64 {
 pub const LICH_DISCIPLES: usize = 6;
 /// HP per second the lich drains from each living disciple.
 pub const LICH_DRAIN_PER_DISCIPLE: f64 = 6.0;
+/// Lich nova: every LICH_NOVA_EVERY s (random in the range) it stands still for
+/// LICH_NOVA_WINDUP s (a ring telegraph fills up), then a dark burst hits every
+/// hero within LICH_NOVA_RADIUS (px, hero centres) and pushes them straight away.
+pub const LICH_NOVA_EVERY: (f64, f64) = (10.0, 12.0);
+pub const LICH_NOVA_WINDUP: f64 = 1.2;
+pub const LICH_NOVA_RADIUS: f64 = 56.0;
+pub const LICH_NOVA_DAMAGE: f64 = 24.0;
+pub const LICH_NOVA_KNOCK: f64 = 64.0;
+/// Each summon tops the lich's raised skeletons up to this many of each kind.
+pub const LICH_SKELETONS: usize = 5;
+pub const LICH_ARCHERS: usize = 5;
 
 /// Dragon timings (s), shared with the client: the wind-up of each attack
 /// starts its animation, the hit lands at the end of it.

@@ -98,10 +98,11 @@ Strong melee hits **push you away** from the attacker:
 | Red Demon: cleave / swoop | about 2 / almost 3 tiles (36 / 44 px) |
 | Red Dragon: front claw / bite / tail whip | 2 / 1.5 / almost 3 tiles (32 / 24 / 44 px) |
 | Red Dragon: landing smash / exploding fireball | over 2 tiles (36 px), everyone in the circle / about a tile (20 px) |
+| Lich: nova | **4 tiles (64 px)**, everyone in the circle: the strongest push in the game |
 
 - The push slides you for a moment. **You have no control until it ends**: no walking, no attacks, and a dash can't break out of it.
 - Walls stop the slide, but **chasms and deep water do not**: a push over the edge is a fall or a drowning. Lava just burns.
-- **Ranged attacks never push**, except the dragon's exploding fireballs. Imps, skeletons and mimics don't push either.
+- **Ranged attacks never push**, except the dragon's exploding fireballs (the lich's nova is a blast around it, not a projectile). Imps, skeletons and mimics don't push either.
 - A Barbarian in the middle of a dash is in the air and can't be pushed.
 - Tip: don't fight orcs or bosses with your back to a chasm or deep water.
 
@@ -132,7 +133,7 @@ Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water**
 
 The boss sleeps in a large hall at the far end of the dungeon. Each run has one of three bosses: the one the host picked in the lobby, or a random one. It wakes as soon as someone enters the hall. **When the whole party is inside, a shimmering blue force field seals the entrance**: from then on, it's you or the boss. Bosses have a lot of health, more with a bigger party. Their health bar appears at the top of the screen.
 
-**Every boss hall has chasms:** one or two drop-offs along the walls and one or two pits in the floor. The entrance and the middle of the hall stay clear. The demon and the dragon can **knock you in** (see Knockback), and against the lich the edges limit where you can dodge.
+**Every boss hall has chasms:** one or two drop-offs along the walls and one or two pits in the floor. The entrance and the middle of the hall stay clear. The demon, the dragon and the lich can **knock you in** (see Knockback).
 
 ### The Red Demon
 - **Cleave:** a wide claw sweep in front of it.
@@ -146,7 +147,11 @@ Tip: stay mobile, and don't stand between the demon and a chasm.
 ### The Lich
 - **Cannot be harmed** while its **disciples** live. The bar shows **IMMUNE**. There are at least five red-robed disciples around the hall.
 - **Heals** from the disciples' life force: the red shimmering streams flowing to it.
-- Casts **frost bolt volleys** and **summons skeletons**.
+- All its magic is **dark purple gloom**.
+- Casts **volleys of five gloom bolts**.
+- **Summons skeletons:** every 12 seconds it raises its army back up to **five skeletons and five skeleton archers** around it.
+- **Nova:** about every 10 seconds it stops, raises its staff and a **purple circle** fills up on the floor around it. When it is full, a dark blast hurts **everyone inside** and throws them **4 tiles away**, far enough to send you into a chasm. Step out of the circle in time, and don't stand between the lich and an edge.
+- Its drain beams show even when the lich or a disciple is out of your sight, so they point the way to both.
 
 Tip: kill the disciples first. Once the last one falls, the lich's protection breaks.
 

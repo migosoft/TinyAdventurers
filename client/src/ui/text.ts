@@ -40,7 +40,7 @@ export const CLASS_TEXT: Record<ClassId, { title: string; blurb: string; abiliti
 
 export const BOSS_TEXT: Record<BossId, { name: string; short: string; blurb: string }> = {
   Demon: { name: 'Azgaroth, the Red Demon', short: 'Red Demon', blurb: 'Cleaves, swoops across the hall and throws rings of fire.' },
-  Lich: { name: 'Vael, the Undying Lich', short: 'Lich', blurb: 'Immune while its disciples live. Frost bolts and skeletons.' },
+  Lich: { name: 'Vael, the Undying Lich', short: 'Lich', blurb: 'Immune while its disciples live. Gloom bolts, skeleton hordes and a nova that hurls heroes away.' },
   Dragon: { name: 'Ignathrax, the Red Dragon', short: 'Red Dragon', blurb: 'Fire breath that burns the ground, bites, claws, tail whips and fireballs. Takes to the air, where blades cannot reach it, and lands with a ground smash.' },
 };
 

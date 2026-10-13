@@ -370,7 +370,7 @@ fn raise_minions(run: &mut Run, mi: usize, fire: bool) {
         }
         let t = if fire { EnemyType::SummonedImp } else { EnemyType::RaisedSkeleton };
         run.spawn_enemy(t, spot, Some(id), party);
-        run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, fire }, Some(spot));
+        run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, k: fire as u8 }, Some(spot));
     }
 }
 
@@ -715,7 +715,7 @@ mod tests {
         let imps: Vec<_> = run.monsters.iter().filter(|m| m.owner == Some(s) && m.alive).collect();
         assert!(!imps.is_empty());
         assert!(imps.iter().all(|m| m.etype == Some(EnemyType::SummonedImp) && m.kind == EntityKind::Imp), "summoned imps look like imps");
-        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Raise { fire: true, .. })));
+        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Raise { k: 1, .. })));
         run.kill_monster(si);
         assert_eq!(run.monsters.iter().filter(|m| m.owner == Some(s) && m.alive).count(), 0);
     }

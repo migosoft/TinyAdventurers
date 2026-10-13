@@ -4,6 +4,7 @@
 // The dragon is the exception: its own frames (see dragonRig.ts) for every action.
 // The lich has its own idle/run frames in the pack style (scripts/lich-frames.ts).
 import { ABILITIES, ANIM, CONST, KIND } from "../../generated/defs";
+import { GLOOM } from "../effects";
 import { DRAGON_ANIMS, DRAGON_FRAME, dragonFrameName, dragonPoints, type DragonAnim } from "./dragonRig";
 
 // Player swings reach as far as the server hits: ability range + a typical monster radius.
@@ -43,8 +44,8 @@ export interface FigureDef {
   tint?: number;
   /** Melee swoosh: drawn at the damage reach (px from the figure), over the damage arc (rad). */
   swing?: { reach: number; arc: number; color?: number };
-  /** Ground slam telegraph: a ring of radius `r` (px, hero centres) filling up while `anim` runs for `t` s (ogre slam, dragon landing). */
-  slam?: { r: number; anim: number; t: number };
+  /** Ground slam telegraph: a ring of radius `r` (px, hero centres) filling up while `anim` runs for `t` s (ogre slam, dragon landing, lich nova); red unless `color`; `gloom` draws dark sparks into the ring. */
+  slam?: { r: number; anim: number; t: number; color?: number; gloom?: boolean };
   /** Own action frames (the dragon): `<prefix><i>`, frame count, frames per second. */
   frames?: Partial<Record<FigureAnim, { prefix: string; n: number; fps: number }>>;
   /** Attack anims that start with their wind-up (s): the wind-up frame shows first, then the strike frames. */
@@ -98,7 +99,7 @@ export const FIGURES: Record<number, FigureDef> = {
   [KIND.Summoner]: { ...summoner, weapon: 'weapon_red_magic_staff', mount: 'staff', weaponTint: 0xffb080, handY: 8, attack: 'caster', base: 0x9a2020, baseR: 5 },
   [KIND.Ogre]: { ...mob('ogre'), swing: { reach: 34, arc: 2.0, color: 0xffe0b0 }, weapon: 'weapon_baton_with_spikes', mount: 'blade', weaponScale: 1.4, handX: 12, handY: 14, attack: 'melee', base: 0x3a6a3a, baseR: 12, slam: { r: CONST.OGRE_SLAM_RADIUS, anim: ANIM.Slam, t: CONST.OGRE_SLAM_WINDUP } },
   [KIND.Demon]: { ...mob('big_demon'), swing: { reach: 40, arc: 2.1, color: 0xffa080 }, handY: 18, attack: 'melee', base: 0x7a1010, baseR: 13 },
-  [KIND.Lich]: { ...mob('lich'), weapon: 'weapon_lich_staff', mount: 'staff', weaponScale: 1.3, handX: 7, handY: 11, attack: 'caster', base: 0x3a2a5a, baseR: 7 },
+  [KIND.Lich]: { ...mob('lich'), weapon: 'weapon_lich_staff', mount: 'staff', weaponScale: 1.3, handX: 7, handY: 11, attack: 'caster', base: GLOOM.light, baseR: 7, slam: { r: CONST.LICH_NOVA_RADIUS, anim: ANIM.Slam, t: CONST.LICH_NOVA_WINDUP, color: GLOOM.light, gloom: true } },
   [KIND.Dragon]: {
     idle: dragonFrames.idle.prefix,
     run: dragonFrames.walk.prefix,
@@ -122,13 +123,15 @@ export const FIGURES: Record<number, FigureDef> = {
 };
 
 /** Projectiles: a pack sprite (arrows) or a runtime glow of the given color. */
-export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?: number; trail?: number }> = {
+/** `gloom`: the lich's dark purple shimmer (a flickering glow trailing dark smoke and sparks, see `Effects.gloomWisp`). */
+export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?: number; trail?: number; gloom?: boolean }> = {
   [KIND.Missile]: { glow: 0xa080ff, scale: 0.8, trail: 0x9a7aff },
   [KIND.Fireball]: { glow: 0xff7020, scale: 1.4, trail: 0xffb040 },
   [KIND.Bolt]: { frame: 'weapon_arrow', scale: 0.6 },
   [KIND.Arrow]: { frame: 'weapon_arrow', scale: 0.6 },
   [KIND.ShadowBolt]: { glow: 0x40e060, scale: 1, trail: 0x205a20 },
   [KIND.FrostBolt]: { glow: 0x9ae0ff, scale: 1, trail: 0xe0f8ff },
+  [KIND.GloomBolt]: { glow: 0x9a50f0, scale: 1.1, trail: 0x5a1a8a, gloom: true },
   [KIND.FireOrb]: { glow: 0xff8030, scale: 0.9, trail: 0xff8030 },
   [KIND.FireBolt]: { glow: 0xff7020, scale: 0.7, trail: 0xffb040 },
   [KIND.DragonFireball]: { glow: 0xff5010, scale: 2, trail: 0xffb040 },

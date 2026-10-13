@@ -86,6 +86,7 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 - `?knockback`: every push in the game (orc warrior, chort, the demon's cleave and swoop, the dragon's claw and tail) next to chasms and deep water (no server needed; `&slow=3` works too)
 - `?dragon`: the red dragon looping through every action, flight and landing smash included (no server needed; Space pauses, S slow motion, 1-8 jump to an action)
 - `?ogre`: the ogre mini-boss's club push next to the orc warrior's, and its ground slam with the telegraph ring (no server needed; `&slow=3` works too)
+- `?lich`: the lich's dark purple magic: gloom bolt volley, the summon of 5 skeletons + 5 archers, and the nova pushing heroes 64 px (no server needed; `&slow=3` works too)
 - `?debug`: debug mode for the whole run
   - Your hero is immortal. Hits still show damage numbers, but your health doesn't drop.
   - Dashed lines show the shortest walkable path to the boss (yellow) and to the ogre mini-boss (blue, while it lives), updated every 0.5 s.

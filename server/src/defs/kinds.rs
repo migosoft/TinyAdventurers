@@ -37,6 +37,8 @@ pub enum EntityKind {
     FireOrb = 57,
     DragonFireball = 58,
     FireBolt = 59,
+    /// The lich's dark purple bolt.
+    GloomBolt = 60,
     // Hazards
     FirePatch = 70,
     // Props
@@ -44,7 +46,7 @@ pub enum EntityKind {
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 32] = [
+    pub const ALL: [EntityKind; 33] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -75,6 +77,7 @@ impl EntityKind {
         EntityKind::FireOrb,
         EntityKind::DragonFireball,
         EntityKind::FireBolt,
+        EntityKind::GloomBolt,
         EntityKind::FirePatch,
         EntityKind::Chest,
     ];

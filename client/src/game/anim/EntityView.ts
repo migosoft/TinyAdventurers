@@ -4,7 +4,7 @@
 // Figures with their own action frames (the dragon) pick them in pickFrame.ts.
 import Phaser from 'phaser';
 import { ANIM, FLAG } from '../../generated/defs';
-import { DEPTH, Effects } from '../effects';
+import { DEPTH, Effects, GLOOM } from '../effects';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
 import { pickFrame } from './pickFrame';
 
@@ -166,8 +166,8 @@ export class EntityView {
 
     if (hurt && !d.hit && Math.floor(this.clock * 30) % 2 === 0) this.body.setTintFill(0xffffff);
     else if (s.anim === ANIM.Windup || s.anim === ANIM.Slam || own?.windup) {
-      // Telegraph: flashing red and a shiver before the blow lands.
-      this.body.setTint(Math.floor(this.clock * 16) % 2 ? 0xff8080 : (d.tint ?? 0xffffff));
+      // Telegraph: flashing red (the lich: pale purple gloom) and a shiver before the blow lands.
+      this.body.setTint(Math.floor(this.clock * 16) % 2 ? (d.slam?.gloom ? 0xc890ff : 0xff8080) : (d.tint ?? 0xffffff));
       this.body.x = Math.floor(this.clock * 40) % 2 ? 1 : -1;
       if (own) this.body.y += Math.floor(this.clock * 40) % 2;
     } else if (s.flags & FLAG.ENRAGED) this.body.setTint(Math.floor(this.clock * 4) % 2 ? 0xff6060 : 0xff9090);
@@ -256,7 +256,7 @@ export class EntityView {
     }
 
     if (d.mouth) this.breathFx(s);
-    if (d.slam) this.slamFx(s, d.slam.r, d.slam.anim, d.slam.t);
+    if (d.slam) this.slamFx(s, d.slam);
 
     // ---- weapon ----
     const w = this.weapon;
@@ -337,6 +337,12 @@ export class EntityView {
             this.fx.hitSpark(s.x + ax * 10, s.y - d.handY - 10, d.weaponTint ?? 0xc0a0ff);
           }
         }
+        else if (s.anim === ANIM.Slam) {
+          // Nova wind-up: the staff held high, the orb gathering gloom.
+          rot = 0;
+          oy = -4;
+          if (Math.random() < 0.5) this.fx.particle(s.x + hx, s.y - d.handY - 18, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20, 0.3, Math.random() < 0.5 ? GLOOM.dark : GLOOM.spark, { frame: 'spark' });
+        }
         break;
       }
     }
@@ -409,7 +415,8 @@ export class EntityView {
    * real hit radius, and fills up from the centre over the `dur` s of `anim`
    * until the blow lands (the ogre's club, the dragon's landing).
    */
-  private slamFx(s: ViewState, r: number, anim: number, dur: number): void {
+  private slamFx(s: ViewState, slam: NonNullable<FigureDef['slam']>): void {
+    const { r, anim, t: dur } = slam;
     if (s.anim !== anim) {
       this.tele?.setVisible(false);
       return;
@@ -417,10 +424,19 @@ export class EntityView {
     const g = (this.tele ??= this.root.scene.add.graphics().setDepth(DEPTH.hazard));
     const k = Math.min(s.animT / dur, 1);
     const blink = Math.floor(this.clock * 12) % 2 === 0;
+    const fill = slam.gloom ? GLOOM.mid : (slam.color ?? 0xff3020);
+    const edge = slam.color ?? 0xff5040;
     g.clear().setVisible(true).setPosition(Math.round(s.x), Math.round(s.y));
-    g.fillStyle(0xff3020, 0.12).fillCircle(0, 0, r);
-    g.fillStyle(0xff3020, 0.3).fillCircle(0, 0, r * k);
-    g.lineStyle(1, 0xff5040, k > 0.7 && blink ? 1 : 0.7).strokeCircle(0, 0, r);
+    g.fillStyle(fill, 0.12).fillCircle(0, 0, r);
+    g.fillStyle(fill, 0.3).fillCircle(0, 0, r * k);
+    g.lineStyle(1, edge, k > 0.7 && blink ? 1 : 0.7).strokeCircle(0, 0, r);
+    // Gloom: dark wisps and pale sparks drawn in from the edge while it charges.
+    if (slam.gloom && Math.random() < 0.6) {
+      const a = Math.random() * Math.PI * 2;
+      const ex = s.x + Math.cos(a) * r, ey = s.y + Math.sin(a) * r;
+      const dark = Math.random() < 0.6;
+      this.fx.particle(ex, ey, (s.x - ex) * 2, (s.y - 10 - ey) * 2, 0.45, dark ? GLOOM.dark : GLOOM.spark, { frame: dark ? 'dot' : 'spark', scale: dark ? 1.6 : 1, depth: DEPTH.hazard + 1 });
+    }
   }
 
   destroy(): void {

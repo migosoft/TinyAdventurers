@@ -173,11 +173,11 @@ pub enum Ev {
     Dmg { x: f32, y: f32, v: f32, crit: bool, p: bool },
     Heal { x: f32, y: f32, v: f32 },
     /// Explosion / area effect. k: 0 fireball, 1 heal ring, 2 fire ring, 3 dark burst, 4 dragon fireball,
-    /// 5 ogre ground slam (shockwave)
+    /// 5 ogre ground slam (shockwave), 6 lich nova (dark purple burst)
     Boom { x: f32, y: f32, r: f32, k: u8 },
     Died { id: u32, x: f32, y: f32, kind: u8 },
-    /// A minion appears: raised skeleton (green) or summoned imp (`fire`, red).
-    Raise { x: f32, y: f32, fire: bool },
+    /// A minion appears. k: 0 raised skeleton (green), 1 summoned imp (fire), 2 raised by the lich (dark purple).
+    Raise { x: f32, y: f32, k: u8 },
     Immune { x: f32, y: f32 },
     Tile { x: u16, y: u16, v: u8 },
     Msg { text: String },
@@ -198,6 +198,10 @@ pub struct Snapshot {
     pub me: SelfState,
     pub boss: Option<BossBar>,
     pub ev: Vec<Ev>,
+    /// Lich drain beams: the lich first, then every channelling disciple. Sent
+    /// while the boss fight is on or any of them is in view, so the beams show
+    /// even when an end is out of sight. `None` otherwise.
+    pub drain: Option<Vec<(f32, f32)>>,
     /// Server simulation time spent per tick (ms, averaged).
     pub srv_ms: f32,
 }

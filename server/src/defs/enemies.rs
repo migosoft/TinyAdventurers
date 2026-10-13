@@ -10,6 +10,8 @@ pub enum EnemyType {
     OrcArcher,
     Necromancer,
     RaisedSkeleton,
+    /// Skeleton archer raised by the lich (weaker, dies with it; looks like a skeleton archer).
+    RaisedArcher,
     Disciple,
     /// Hides as a treasure chest until a player comes close or hits it.
     Mimic,
@@ -73,9 +75,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
             attack: Melee { range: 14.0, damage: 9.0, cooldown: 1.0, windup: 0.3, knock: 0.0 },
             alt: None,
         },
-        SkeletonArcher => EnemyDef {
+        SkeletonArcher | RaisedArcher => EnemyDef {
             kind: EntityKind::SkeletonArcher,
-            hp: 30.0,
+            hp: if t == RaisedArcher { 20.0 } else { 30.0 },
             speed: 44.0,
             radius: 5.0,
             sight: 140.0,

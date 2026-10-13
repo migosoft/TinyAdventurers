@@ -77,6 +77,7 @@ client/                              Vite + TypeScript + Phaser 3.90
   src/game/TerrainDemoScene.ts       dev pages ?water, ?chasm, ?lava (scripted figures; no server)
   src/game/KnockbackDemoScene.ts     dev page ?knockback (every push in the game, on the terrain demo base)
   src/game/OgreDemoScene.ts          dev page ?ogre (club vs orc push, ground slam, on the terrain demo base)
+  src/game/LichDemoScene.ts          dev page ?lich (gloom volley, summon 5 + 5, nova push, on the terrain demo base)
   src/game/terrain.ts                terrain layer: autotiled water/lava/chasm cells, animation, lava glow
   src/game/terrain-codes.ts          terrain frame layout and edge codes shared with the atlas build
   src/ui/                            DOM screens: auth (login/register), characters (select/create/delete, account),
@@ -250,7 +251,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - Perception: the nearest living, non-hidden player within `sight` and with line of sight. Enemies never target players they cannot currently see.
 - States: `Idle` (wander near home) → `Chase` (melee approach, ranged keep a preferred distance) → wind-up → attack. Losing sight leads to `Search` (A* to last known position) and then `Return` (A* home).
 - Wind-ups telegraph attacks: the client flashes the body red and shakes it. The hit lands only if the target is still seen.
-- Necromancers raise up to 3 skeletons (cooldown 7 s); summoners summon imps (`SummonedImp`, drawn as a normal imp) the same way. `Ev::Raise.fire` tells the client which effect to draw.
+- Necromancers raise up to 3 skeletons (cooldown 7 s); summoners summon imps (`SummonedImp`, drawn as a normal imp) the same way. `Ev::Raise.k` tells the client which effect to draw (0 green, 1 fire, 2 the lich's dark purple).
 - **Ogre (mini-boss):** `EnemyType::Ogre` (`KIND.Ogre` 22), radius 10 (wide, so its chase uses `path_toward` with clearance like the bosses instead of `move_toward`), 260 HP, slow. Main attack: club (`Melee`, knock 28). Alt: `AttackStyle::Slam{radius, damage, cooldown, windup, knock}`, chosen when two living heroes' centres are within `OGRE_SLAM_RADIUS` (34 px), or one while the club is on cooldown. Its wind-up uses `Anim::Slam` (10); the client draws the telegraph ring from `animT` and `CONST.OGRE_SLAM_RADIUS`/`OGRE_SLAM_WINDUP`. At impact the server sends `Ev::Boom{k: 5}` (dust shockwave) and hits and knocks every living hero in the radius. It is not a boss (`is_boss` false): no boss bar, no force field; the client draws a wide HP bar over it, always visible.
 - **Second attack:** `EnemyDef.alt` is an optional second `AttackStyle` with its own cooldown (`Ai.alt_cd`). A melee alt is used when the target is in claw reach (imp), a ranged alt only from at least `ALT_BOLT_MIN_DIST` (40 px) and beyond the main attack's reach (chort). `Windup.alt` remembers which attack the wind-up leads to; each attack keeps the other back for `ATTACK_GAP` (0.4 s). Movement follows the main attack.
 - **Demon dungeon:** `enemies::for_boss` swaps types when `Run::new` spawns the dungeon's enemies: with the demon as boss, skeleton archers become imps, skeleton warriors chorts and necromancers summoners. The swap itself leaves the map alone; only the terrain theme differs per boss (lava or water, see §6), which can move a few spawns off the liquid.
@@ -263,7 +264,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 | Boss | Base HP | Behaviour |
 |---|---|---|
 | Demon | 1300 | Cleave 120°/34 px (wind-up 0.45 s), swoop charge 260 px/s, ring of 16 fire orbs. Enraged below 40 % HP: faster and quicker cooldowns. |
-| Lich | 900 | Spawns `LICH_DISCIPLES` (6) disciples in a ring. Immune and healing 6 HP/s per living disciple. Frost-bolt volley of 5, summons raised skeletons. |
+| Lich | 900 | Spawns `LICH_DISCIPLES` (6) disciples in a ring. Immune and healing 6 HP/s per living disciple. Volley of 5 gloom bolts (`KIND.GloomBolt` 60). Summon every 12 s tops its raised minions up to `LICH_SKELETONS` (5) `RaisedSkeleton` and `LICH_ARCHERS` (5) `RaisedArcher` (drawn as a skeleton archer, 20 HP, 2 XP) in a ring (`Ev::Raise{k: 2}`). Nova every 10–12 s (`LICH_NOVA_EVERY`, regardless of distance): `Anim::Slam` for `LICH_NOVA_WINDUP` (1.2 s) standing still (purple telegraph ring), then `Ev::Boom{k: 6}`, 24 damage and a 64 px push (`LICH_NOVA_KNOCK`, the strongest normal-enemy push is the ogre club's 28) for every hero within `LICH_NOVA_RADIUS` (56 px). Order of choice: summon, nova, volley. |
 | Dragon | 2000 | Breath: 0.8 s wind-up, then 1.4 s damage pulses in a 115 px, ±0.38 rad cone, leaving burning patches. Bite (narrow arc straight ahead, 46 px, own cooldown; chosen before the claw when ready), front claw (wide arc, 40 px), tail whip vs players behind it, volley of 3 exploding fireballs (push 20). After each strike a short recovery (the strike frames play out). Flight every 10–12 s (`DRAGON_FLIGHT_EVERY`): `Anim::TakeOff` 0.5 s standing still, then 3.5 s airborne (`Monster.airborne`, `FLAG.AIRBORNE`; `melee_arc`, `dash_contact` and `dagger_target` skip it; only the breath; chases with `path_toward`), then `Anim::Land` 0.6 s and the smash (`Ev::Boom{k: 5}`, damage and push within 40 px). Attack anims (`Melee`, `Bite`, `Tail`, `Breath`) start with the wind-up; the client shows the wind-up frame for `DRAGON_*_WINDUP` s. |
 
 ## 6. Dungeon generation (`dungeon/generate.rs`)
@@ -414,7 +415,8 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 **Other visuals.**
 - Projectiles: `weapon_arrow` for arrows and bolts, additive glows for magic.
 - Deaths: a `skull` decal.
-- Lich drain: animated red beams from channelling disciples to the lich.
+- Lich drain: animated red beams from channelling disciples to the lich. Drawn from `Snapshot.drain` (the lich first, then each channelling disciple; on the wire a flat scaled array, the 8th `SnapW` field), which the server sends during the boss fight, or while the lich or a disciple is in view, regardless of the field of view; the beams are drawn above the fog (`DEPTH.beam`), so they show even when an end is out of sight.
+- The lich's magic is dark purple gloom (`GLOOM` in `effects.ts`): gloom bolts flicker and trail dark smoke and pale sparks (`PROJECTILES[...].gloom`, `Effects.gloomWisp`); the nova telegraph is a purple ring with wisps drawn in (`FigureDef.slam.gloom`), the lich flashes pale purple and holds its staff high during the wind-up, and the burst is `Effects.nova`; its raised skeletons appear in a dark purple puff.
 - Debug paths: marching dashed lines above the fog, yellow to the boss, blue to the ogre.
 
 **UI.** DOM overlay (`ui/`):
@@ -433,6 +435,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 | `?water`, `?chasm`, `?lava` `[&slow=3]` | Terrain demos with scripted figures: wading and drowning, falling into a chasm, burning in lava, demons walking through lava, the dash jumping a gap, and being knocked in. Speeds and times come from `CONST`, like the server. No server needed. |
 | `?knockback` `[&slow=3]` | Every push in the game, side by side next to chasms and deep water, with the game's distances and decay: orc warrior, chort, imp (no push), a barbarian who cannot dash out, the demon's cleave and swoop, the dragon's tail and front claw. The user approved the distances here. |
 | `?dragon` `[&slow=3]` | The dragon looping through every action: idle, walk, claw, bite, tail whip, breath, fireball volley, and a flight (take-off, hover, breath from the air, landing smash). Dummy heroes are pushed with the game's distances. Keys: Space pause, S slow motion, 1–8 jump to an action. The user approved the frames here. |
+| `?lich` `[&slow=3]` | The lich's magic: the gloom bolt volley and the summon of 5 skeletons + 5 archers (left), and the nova: the purple telegraph ring at the real radius, the burst, three heroes pushed 64 px (one into the chasm) and one spared just outside. |
 | `?ogre` `[&slow=3]` | The ogre's club next to the orc warrior's push (only the club's knocks a hero into the chasm), and the ground slam: the telegraph ring at the real radius, the shockwave, three heroes pushed away (one into a chasm) and one spared just outside. The user approved it. |
 | `?daemons[&slow=3]` | Imp, chort and a pack of both fighting a walking knight, and a summoner summoning imps. Uses the real figure definitions; the attack logic is a local imitation of the server AI. No server needed. |
 | `?lag=150&jitter=40&loss=2` | Network simulator. |
@@ -621,7 +624,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - necromancer death kills its minions
 - demon dungeon swap (same spawns, imps/chorts/summoners instead of skeletons/necromancers, none elsewhere); imp and chort attack choice by distance; the alt attack's own cooldown and fire bolt; summoned imps look like imps and die with the summoner
 - A* routes around a wall
-- lich immunity and draining
+- lich immunity and draining; the nova (wind-up, damage, 64 px push, nothing outside the radius); the summon (5 skeletons + 5 archers, topped up, no stacking); the gloom bolt volley; drain beams sent to a player who sees neither end
 - FOV-filtered snapshots
 - 600-tick simulation of each boss without panics
 - debug immortality and the boss path

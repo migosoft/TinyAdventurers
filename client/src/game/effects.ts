@@ -8,11 +8,15 @@ export const DEPTH = {
   hazard: 2,
   entityBase: 10,
   projectile: 5000,
-  beam: 5500,
   fx: 6000,
   fog: 7000,
+  /** Lich drain beams: above the fog, they show even where the hero cannot see. */
+  beam: 7001,
   numbers: 8000,
 };
+
+/** The lich's magic: dark purple, gloomy, shimmering. */
+export const GLOOM = { dark: 0x2a0a3a, mid: 0x5a1a8a, light: 0xa060f0, spark: 0xe0c0ff };
 
 interface Particle {
   img: Phaser.GameObjects.Image;
@@ -237,11 +241,46 @@ export class Effects {
     }
   }
 
-  /** A minion appears: green for raised skeletons, fiery for summoned imps. */
-  raise(x: number, y: number, fire = false): void {
+  /** A minion appears. k: 0 green (raised skeleton), 1 fiery (summoned imp), 2 dark purple (raised by the lich). */
+  raise(x: number, y: number, k = 0): void {
+    if (k === 2) {
+      this.ring(x, y, 11, GLOOM.mid, 0.6, true);
+      for (let i = 0; i < 16; i++) {
+        const dark = i % 3 !== 0;
+        this.particle(x + (Math.random() * 14 - 7), y, 0, -12 - Math.random() * 22, 0.8, dark ? GLOOM.dark : GLOOM.spark, { frame: dark ? 'dot' : 'spark', scale: dark ? 1.6 : 1 });
+      }
+      return;
+    }
+    const fire = k === 1;
     const c = fire ? 0xff7020 : 0x3ad04a;
     this.ring(x, y, 10, c, 0.5, true);
     for (let i = 0; i < 14; i++) this.particle(x + (Math.random() * 12 - 6), y, 0, -15 - Math.random() * 25, 0.7, fire && i % 2 ? 0xffd040 : c);
+  }
+
+  /** Gloom trail: dark smoke with a few pale sparks (the lich's bolts). */
+  gloomWisp(x: number, y: number, depth = DEPTH.projectile - 1): void {
+    const a = Math.random() * Math.PI * 2;
+    this.particle(x, y, Math.cos(a) * 6, Math.sin(a) * 6 - 4, 0.35, Math.random() < 0.5 ? GLOOM.dark : GLOOM.mid, { scale: 1.6, depth });
+    if (Math.random() < 0.35) this.particle(x, y, Math.cos(a) * 18, Math.sin(a) * 18, 0.25, GLOOM.spark, { frame: 'spark', depth });
+  }
+
+  /** The lich's nova: a dark purple burst out to the hit radius, gloomy smoke and pale sparks, a strong jolt. */
+  nova(x: number, y: number, r: number): void {
+    this.ring(x, y, r, GLOOM.dark, 0.55, true);
+    this.ring(x, y, r, GLOOM.light, 0.35);
+    this.particle(x, y - 6, 0, 0, 0.35, GLOOM.light, { frame: 'glow', scale: 3 });
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * Math.PI * 2 + Math.random() * 0.15;
+      const sp = r * (2 + Math.random() * 1.4);
+      const dark = i % 3 !== 0;
+      this.particle(x + Math.cos(a) * 4, y + Math.sin(a) * 4, Math.cos(a) * sp, Math.sin(a) * sp * 0.8, 0.4 + Math.random() * 0.25, dark ? GLOOM.dark : GLOOM.mid, { scale: dark ? 2 : 1.5 });
+    }
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = r * (1.5 + Math.random() * 2);
+      this.particle(x, y - 4, Math.cos(a) * sp, Math.sin(a) * sp * 0.8, 0.45, GLOOM.spark, { frame: 'spark' });
+    }
+    this.scene.cameras.main.shake(200, 0.007);
   }
 
   immune(x: number, y: number): void {

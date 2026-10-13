@@ -19,7 +19,7 @@ function close(got: unknown, want: unknown, path: string): void {
     if (/^ents\.\d+\.6$/.test(path)) {
       d = Math.min(d, 2 * Math.PI - d);
       expect(d, path).toBeLessThanOrEqual(AIM_TOL);
-    } else if (/^(ents\.\d+\.[23]|ev\.\d+\.[xy])$/.test(path)) {
+    } else if (/^(ents\.\d+\.[23]|ev\.\d+\.[xy]|drain\.\d+\.[01])$/.test(path)) {
       expect(d, path).toBeLessThanOrEqual(POS_TOL);
     } else {
       expect(d, path).toBeLessThanOrEqual(1e-6 * Math.max(1, Math.abs(want)));
@@ -55,7 +55,7 @@ describe('wire', () => {
 
   it('keeps an exactly-left aim at +pi (the staff swing uses the raw angle)', () => {
     const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, null, null];
-    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0]], me, null, [], 0]);
+    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0]], me, null, [], 0, null]);
     expect(snap.ents[0][6]).toBe(Math.PI);
   });
 

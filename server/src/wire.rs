@@ -50,7 +50,7 @@ pub enum EvW {
     Heal(u8, u32, u32, f32),
     Boom(u8, u32, u32, f32, u8),
     Died(u8, u32, u32, u32, u8),
-    Raise(u8, u32, u32, bool),
+    Raise(u8, u32, u32, u8),
     Immune(u8, u32, u32),
     Tile(u8, u16, u16, u8),
     Msg(u8, String),
@@ -58,10 +58,10 @@ pub enum EvW {
     Sink(u8, u32, u32, u32, u8),
 }
 
-/// `[tick, ack, ents, me, boss, ev, srv_ms]`
+/// `[tick, ack, ents, me, boss, ev, srv_ms, drain]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32);
+pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>);
 
 /// `[seq, mx, my, aim, aim_dist, primary, secondary, view_lag, rtt]`, see `InputMsg`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -82,7 +82,7 @@ fn ev_w(e: &Ev) -> EvW {
         Ev::Heal { x, y, v } => EvW::Heal(1, q(*x), q(*y), *v),
         Ev::Boom { x, y, r, k } => EvW::Boom(2, q(*x), q(*y), *r, *k),
         Ev::Died { id, x, y, kind } => EvW::Died(3, *id, q(*x), q(*y), *kind),
-        Ev::Raise { x, y, fire } => EvW::Raise(4, q(*x), q(*y), *fire),
+        Ev::Raise { x, y, k } => EvW::Raise(4, q(*x), q(*y), *k),
         Ev::Immune { x, y } => EvW::Immune(5, q(*x), q(*y)),
         Ev::Tile { x, y, v } => EvW::Tile(6, *x, *y, *v),
         Ev::Msg { text } => EvW::Msg(7, text.clone()),
@@ -96,7 +96,8 @@ pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
     let m = &s.me;
     let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.hidden, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)));
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune, b.enraged));
-    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms);
+    let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
+    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain);
     rmp_serde::to_vec(&w).expect("encode snapshot")
 }
 
@@ -137,13 +138,14 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             Ev::Heal { x: 11.0, y: 21.0, v: 4.25 },
             Ev::Boom { x: 300.06, y: 400.94, r: 24.0, k: 2 },
             Ev::Died { id: 300, x: 2000.5, y: 1800.27, kind: 5 },
-            Ev::Raise { x: 55.5, y: 66.6, fire: true },
+            Ev::Raise { x: 55.5, y: 66.6, k: 2 },
             Ev::Immune { x: 1.0, y: 2.0 },
             Ev::Tile { x: 70, y: 12, v: 4 },
             Ev::Msg { text: "Zoë fell into the abyss".into() },
             Ev::Coins { x: 99.9, y: 88.8, v: 15 },
             Ev::Sink { id: 2, x: 130.0, y: 460.5, how: 1 },
         ],
+        drain: Some(vec![(400.25, 300.5), (480.0, 300.0), (330.06, 260.7)]),
         srv_ms: 0.125,
     };
     let spectator = Snapshot {
@@ -168,6 +170,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         },
         boss: None,
         ev: vec![],
+        drain: None,
         srv_ms: 0.0,
     };
     vec![busy, spectator]
@@ -224,7 +227,7 @@ mod tests {
         for s in sample_snapshots() {
             let new = encode_snap(&s);
             let old = rmp_serde::to_vec_named(&ServerMsg::Snap(s)).unwrap();
-            assert_eq!(new[0], 0x97, "fixarray of 7 fields");
+            assert_eq!(new[0], 0x98, "fixarray of 8 fields");
             println!("snapshot: old {} B, new {} B", old.len(), new.len());
             assert!(new.len() * 10 <= old.len() * 7, "old {} B, new {} B", old.len(), new.len());
         }

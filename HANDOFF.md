@@ -9,9 +9,31 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-13, new lich art)
+## Last session (2026-10-13, new lich art, then the lich fight rework)
 
-**Branch:** `feature/lich-art` (not merged, not pushed). Ask before merging into `main` or pushing.
+**Branch:** `feature/lich-art` (not merged, not pushed). Ask before merging into `main` or pushing. Two commits: the art, then the fight changes below.
+
+### Part 2: lich fight rework
+
+**User decisions:**
+- **Drain beams** must show even when the lich or a disciple is outside the player's field of view.
+- **Nova:** "regularly … a devastating area effect (explosion-like)" that pushes heroes "a longer distance than from melee attacks of normal enemies". Agreed numbers (first guesses, for the balancing pass): every 10–12 s regardless of distance, 1.2 s wind-up with a telegraph ring, 56 px radius, 24 damage, 64 px push (ogre club 28, dragon tail 44). It can push heroes into chasms (offered as an option to drop; the user went ahead with it).
+- **All the lich's magic looks like dark purple, gloomy, shimmering energy:** the volley, the nova, its telegraph and the summon. The red drain beams stay red (the disciples' life force, not an attack; the user did not object).
+- **Summon:** 5 melee + 5 ranged skeletons at once (top-up, cooldown 12 s unchanged).
+
+**Done:**
+- Server: `lich.rs` rewritten (nova, top-up summon, `GloomBolt` volley); `LICH_NOVA_*`, `LICH_SKELETONS`, `LICH_ARCHERS` in `defs/bosses.rs` (nova consts exported); `EnemyType::RaisedArcher` (kind `SkeletonArcher`, 20 HP, 2 XP); `EntityKind::GloomBolt` (60); `Ev::Raise.fire` → `Ev::Raise.k` (0 green, 1 fire, 2 gloom); `Ev::Boom{k: 6}` nova; `Snapshot.drain` (+ 8th `SnapW` field, `visibility.rs` `drain_points`/`drain_for`).
+- Client: `wire.ts` unpacks `drain`; beams drawn from it above the fog (`DEPTH.beam` 7001); `GLOOM` colours, `Effects.nova`, `gloomWisp`, `raise(k)`; `PROJECTILES` `gloom` flag (flicker + smoke trail); `FigureDef.slam` gained `color`/`gloom` (purple ring with wisps drawn in, pale purple wind-up flash, staff held high). New `?lich` demo (`LichDemoScene.ts`; the terrain demo's `slam` step gained `nova`). Lobby blurb updated.
+- Docs: PLAYER_GUIDE (lich, knockback table, boss halls), TECHNICAL (boss table, rendering, dev pages, tests), compact-snapshots.md, README dev pages.
+
+**Verified:**
+- `cargo test` (Docker): 145 tests (5 new: nova wind-up/damage/push, nova radius, summon 5 + 5 with top-up, gloom volley, drain sent out of view). Client `tsc` + `vitest` (17, the wire fixture now carries `drain`).
+- `?lich` screenshots: volley, summon ring, nova telegraph, burst, pushes (one into the chasm), no browser errors.
+- `docker compose up --build -d`, then the throwaway lich bot (debug wizard, account deleted) fought the lich on the live server: purple telegraph ring, gloom bolts, ten skeletons, drain beams to disciples in unseen parts of the hall; no browser errors.
+
+**Not yet verified:** the user looking at `?lich` and playing the fight.
+
+### Part 1: new lich art
 
 **User decisions this session:**
 - **New lich look:** the user put two reference images in `images/` (`lich_high_res.webp`, a crowned lich in a crimson robe with an orb staff and a book; `lich_pixel_art.jpg`, a horned pixel lich in a teal robe with green flames) and asked for assets "that match the art style of the game", about **hero size**.

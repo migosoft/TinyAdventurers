@@ -13,7 +13,7 @@ Both stay MessagePack in binary WebSocket frames.
 **Snapshot (server → client): a bare top-level array** instead of `{t: "Snap", ...}`:
 
 ```
-SnapW = [tick, ack, ents: EntW[], me: SelfW, boss: BossW | nil, ev: EvW[], srv_ms]
+SnapW = [tick, ack, ents: EntW[], me: SelfW, boss: BossW | nil, ev: EvW[], srv_ms, drain: u32[] | nil]
 EntW  = [id, kind, x, y, hp, anim, aim, anim_ms, flags, extra]
 SelfW = [alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, hidden, spectating | nil]
 BossW = [kind, hp, max_hp, immune, enraged]
@@ -38,7 +38,7 @@ The server looks at the first byte: a MessagePack array marker (`0x90–0x9f`, `
 
 MessagePack writes the smallest integer form that fits, so positions take 3 bytes up to 4,096 px (256 tiles; maps are 140 tiles today) and 5 bytes beyond. Bigger maps need no change. `POS_SCALE` is exported to the client in `defs.ts` (`CONST`).
 
-Event codes follow the order of the `Ev` variants: `Dmg 0, Heal 1, Boom 2, Died 3, Raise 4, Immune 5, Tile 6, Msg 7, Coins 8, Sink 9`. Event positions (`x`, `y` in `Dmg`, `Heal`, `Boom`, `Died`, `Raise`, `Immune`, `Coins`, `Sink`) are scaled like entity positions; `Tile` keeps its tile coordinates.
+Event codes follow the order of the `Ev` variants: `Dmg 0, Heal 1, Boom 2, Died 3, Raise 4, Immune 5, Tile 6, Msg 7, Coins 8, Sink 9`. Event positions (`x`, `y` in `Dmg`, `Heal`, `Boom`, `Died`, `Raise`, `Immune`, `Coins`, `Sink`) are scaled like entity positions; `Tile` keeps its tile coordinates. `drain` (the lich drain beams, added 2026-10-13) is a flat `[x0, y0, x1, y1, ...]` of positions scaled the same way.
 
 ## Code
 

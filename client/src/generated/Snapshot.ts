@@ -10,6 +10,12 @@ export type Snapshot = { tick: number,
  */
 ack: number, ents: Array<EntSnap>, me: SelfState, boss: BossBar | null, ev: Array<Ev>, 
 /**
+ * Lich drain beams: the lich first, then every channelling disciple. Sent
+ * while the boss fight is on or any of them is in view, so the beams show
+ * even when an end is out of sight. `None` otherwise.
+ */
+drain: Array<[number, number]> | null, 
+/**
  * Server simulation time spent per tick (ms, averaged).
  */
 srv_ms: number, };

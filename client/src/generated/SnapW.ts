@@ -5,6 +5,6 @@ import type { EvW } from "./EvW";
 import type { SelfW } from "./SelfW";
 
 /**
- * `[tick, ack, ents, me, boss, ev, srv_ms]`
+ * `[tick, ack, ents, me, boss, ev, srv_ms, drain]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none.
  */
-export type SnapW = [number, number, Array<EntW>, SelfW, BossW | null, Array<EvW>, number];
+export type SnapW = [number, number, Array<EntW>, SelfW, BossW | null, Array<EvW>, number, Array<number> | null];
