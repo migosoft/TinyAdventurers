@@ -2,6 +2,7 @@
 // Bodies: `<prefix><0..3>` for idle/run (4-frame pack animations).
 // The pack has no attack animations; attacks animate the pack weapon sprites.
 // The dragon is the exception: its own frames (see dragonRig.ts) for every action.
+// The lich has its own idle/run frames in the pack style (scripts/lich-frames.ts).
 import { ABILITIES, ANIM, CONST, KIND } from "../../generated/defs";
 import { DRAGON_ANIMS, DRAGON_FRAME, dragonFrameName, dragonPoints, type DragonAnim } from "./dragonRig";
 
@@ -97,7 +98,7 @@ export const FIGURES: Record<number, FigureDef> = {
   [KIND.Summoner]: { ...summoner, weapon: 'weapon_red_magic_staff', mount: 'staff', weaponTint: 0xffb080, handY: 8, attack: 'caster', base: 0x9a2020, baseR: 5 },
   [KIND.Ogre]: { ...mob('ogre'), swing: { reach: 34, arc: 2.0, color: 0xffe0b0 }, weapon: 'weapon_baton_with_spikes', mount: 'blade', weaponScale: 1.4, handX: 12, handY: 14, attack: 'melee', base: 0x3a6a3a, baseR: 12, slam: { r: CONST.OGRE_SLAM_RADIUS, anim: ANIM.Slam, t: CONST.OGRE_SLAM_WINDUP } },
   [KIND.Demon]: { ...mob('big_demon'), swing: { reach: 40, arc: 2.1, color: 0xffa080 }, handY: 18, attack: 'melee', base: 0x7a1010, baseR: 13 },
-  [KIND.Lich]: { ...necro, weapon: 'weapon_green_magic_staff', mount: 'staff', handY: 8, attack: 'caster', base: 0x3a2a5a, baseR: 6, scale: 1.75, tint: 0xb8c8ff },
+  [KIND.Lich]: { ...mob('lich'), weapon: 'weapon_lich_staff', mount: 'staff', weaponScale: 1.3, handX: 7, handY: 11, attack: 'caster', base: 0x3a2a5a, baseR: 7 },
   [KIND.Dragon]: {
     idle: dragonFrames.idle.prefix,
     run: dragonFrames.walk.prefix,

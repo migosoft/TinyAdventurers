@@ -3,13 +3,15 @@
 // (e.g. `knight_m_run_anim_f2`, `weapon_axe`, `floor_3`), plus a few pack
 // frames recolored with pack colors (see RECOLORS, e.g. the summoner), plus
 // the generated terrain tiles (water, lava, chasm; see terrain-tiles.ts), plus
-// the dragon frames built from its base sprite (see dragon-frames.ts).
+// the dragon frames built from its base sprite (see dragon-frames.ts), plus
+// the lich's own frames (see lich-frames.ts).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodePng, encodePng, type Image } from './png';
 import { buildTerrain } from './terrain-tiles';
 import { buildDragon } from './dragon-frames';
+import { buildLich } from './lich-frames';
 import { DRAGON_SHEETS, type DragonSheet } from '../src/game/anim/dragonRig';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -57,7 +59,9 @@ const dragonPng = (f: string) => decodePng(fs.readFileSync(path.join(root, 'asse
 const dragonSheets = Object.fromEntries(Object.keys(DRAGON_SHEETS).map((n) => [n, dragonPng(`dragon_${n}.png`)])) as Record<DragonSheet, Image>;
 const dragon = buildDragon(dragonPng('dragon_base.png'), dragonSheets, src.w);
 const dragonY = terrainY + terrain.img.h;
-const outH = dragonY + dragon.img.h;
+const lich = buildLich(src.w);
+const lichY = dragonY + dragon.img.h;
+const outH = lichY + lich.img.h;
 const out: Image = { w: src.w, h: outH, data: new Uint8Array(src.w * outH * 4) };
 out.data.set(src.data);
 RECOLORS.forEach((r, row) => {
@@ -90,7 +94,13 @@ for (let y = 0; y < dragon.img.h; y++)
 for (const [name, f] of Object.entries(dragon.frames))
   frames[name] = { frame: { x: f.x, y: dragonY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
 
+// Lich frames below the dragon.
+for (let y = 0; y < lich.img.h; y++)
+  out.data.set(lich.img.data.subarray(y * lich.img.w * 4, (y + 1) * lich.img.w * 4), ((lichY + y) * out.w) * 4);
+for (const [name, f] of Object.entries(lich.frames))
+  frames[name] = { frame: { x: f.x, y: lichY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
+
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'atlas.png'), encodePng(out));
 fs.writeFileSync(path.join(outDir, 'atlas.json'), JSON.stringify({ frames, meta: { image: 'atlas.png', scale: 1 } }));
-console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon) -> public/assets/atlas.{png,json}`);
+console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon, ${Object.keys(lich.frames).length} lich) -> public/assets/atlas.{png,json}`);

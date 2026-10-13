@@ -53,6 +53,7 @@ server/                              Rust crate `tiny-adventurers-server`
   src/export.rs                      (test-only) writes client/src/generated/defs.ts, fixtures.json, wire-fixtures.json
 client/                              Vite + TypeScript + Phaser 3.90
   scripts/build-atlas.ts             pack sheet + tile list -> public/assets/atlas.{png,json}
+  scripts/lich-frames.ts             the lich's own pixel frames + staff (pixel grids in pack colours)
   scripts/build-logo.ts              title logo -> public/assets/{logo,logo-emblem,favicon}.png
   scripts/png.ts                     minimal PNG decode/encode (zlib only) for the atlas recolors
   assets-src/0x72/                   0x72 DungeonTileset II v1.7 (CC0): sheet, tile_list, README, LICENSE
@@ -347,13 +348,17 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - The mouth and nostril points for the breath come from the same poses (`dragonPoints()`), so they follow the art.
   - All frames are 86×54 with the base at (19, 7); the feet are on row 50 (`footY`, the figure origin); legs hanging in flight reach below.
   - How the strips were imported (one-off scripts, not in the repo): the user's JPGs on a magenta background were converted with PowerShell `System.Drawing`; a rectangular pixel grid was fitted per strip (they were stretched unevenly), cell centres sampled (median) and snapped to the base palette; frames separated as connected shapes (specks dropped) and stray light-red pixels on the silhouette removed; then each frame placed in base coordinates, on the base head (walk, claw, hover) or on the planted hind claws (bite, tail), with the head offset found by matching the base head. The walk strip was drawn ~15% smaller and was resampled to base size. Redo the same for new strips.
+- **Lich frames** (`scripts/lich-frames.ts`): pixel art drawn for this game with Claude Code at the user's request (2026-10-13), after two reference images the user supplied (a high-resolution crowned lich, a pixel-art lich). The user approved the look in `?gallery`.
+  - Pixel grids (one character per pixel) in pack colours: a gold spiked crown, a skull with glowing eyes in a crimson hood, gold crescent pauldrons, a crimson mantle with a jewel clasp, a lean robe with a gold trim strip, and a ragged hem it floats on (no feet).
+  - `lich_idle_anim_f0-3` (float bob, hem sway, one eye flicker) and `lich_run_anim_f0-3` (the hem trails behind), 16×28 like the heroes, so it draws at ×1; plus `weapon_lich_staff` (8×30, a bone staff with a purple orb), held 7 px out (`handX`) so it does not cover the right pauldron.
+  - The build checks every grid's size and colours; to change the art, edit the grids and run `npm run atlas`.
 - **Title logo** (`scripts/build-logo.ts`, run by `npm run atlas`): made for this game with Google's image generation AI (2026-10-12), in `client/assets-src/logo/logo.png` (1408×768; the generator's watermark in the bottom-right corner was painted over once with wall from its left). The script writes three files into `public/assets/`:
   - `logo.png`: the whole image. The login screen shows it large (`.lobby.title`, `h1.logo.splash` from `ui/logo.ts`); every other `.lobby` screen uses it as a darkened background, darkest in the middle so the emblem behind the panels disappears and only the walls show (on portrait screens the left wall).
   - `logo-emblem.png`: the shield with the title (crop x 370, y 78, 680×626), the small header of the character select, lobby and error page.
   - `favicon.png`: the treasure chest on top, area-averaged to 64×64. The admin page has no favicon.
   - The `<h1>` around the images keeps the name for screen readers (`alt`); the edges fade out with `mask-image` (header from 70% to 85% of the radius, so the full width of ADVENTURERS stays opaque).
 - **Recolors:** `RECOLORS` in `build-atlas.ts` swaps whole pack colors for other pack colors and writes the result as new frames in a strip below the sheet (32 px per entry). Today: `summoner_anim_f0-3`, the necromancer with its purple robe (`5f2d56`, trim `9f294e`) turned maroon and red (`62232f`, `da4e38`, the imp's and chort's reds). `scripts/png.ts` is a small PNG codec (8-bit RGB/RGBA, no interlace), so no image library is needed.
-- No self-drawn sprites. This is a user requirement; see HANDOFF.md.
+- No other self-drawn sprites: only the terrain tiles and the lich, both at the user's request. See HANDOFF.md.
 - Runtime-generated textures are limited to simple effect shapes (`dot`, `spark`, `glow`) and the ground shadow ellipses under figures.
 
 **Board (`GameScene.drawBoard` + `autotile.ts`).**
@@ -381,7 +386,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - for figures with their own action frames (the dragon): `frames` (prefix, count, fps per action), `windups` (attack anim → wind-up seconds), `lift` (hover height), `footY` (the feet row when the frames leave room below), `bite`; `pickFrame.ts` chooses their frame
 - Pack stand-ins:
   - the demon is the pack's `big_demon`
-  - the lich is the pack necromancer ×1.75 with a pale tint
+  - the lich is not a pack figure: it has its own frames (see Lich frames above), drawn at ×1
   - the summoner is the pack necromancer with a red robe (an atlas recolor, see above)
   - the dragon is not a pack figure: it has its own AI-generated frames (see Dragon frames above), drawn at ×1.2
 - Weapons are drawn at 0.6× (`WEAPON_SCALE`).
@@ -674,7 +679,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 ## 13. Known limitations
 
-- Pack art gaps: no lich sprite, no demon wings, no attack frames, no up/down facing. (The dragon has its own frames.)
+- Pack art gaps: no demon wings, no attack frames, no up/down facing. (The dragon and the lich have their own frames.)
 - No sound.
 - Snapshots are compact but not delta-compressed (every snapshot is complete). They are small anyway.
 - Boss fights are covered by unit tests and were played live once against all three bosses; their numbers are not balanced yet.

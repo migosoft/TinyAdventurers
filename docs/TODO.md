@@ -44,7 +44,6 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **Loadouts:** choose primary/secondary per class. Each class has only its one pair today, so new abilities (server executor, client prediction, pack-sprite visuals) are needed first. The picker and a field on `Member` are the easy part.
 - **More classes and bosses:** add to `defs/classes.rs` / `defs/bosses.rs` plus a `BossBehaviour` file, and add the visual entry in `client/src/game/anim/defs.ts`.
 - **Art gaps in the 0x72 pack:**
-  - The lich is a scaled, tinted necromancer.
   - The summoner is the necromancer with a recolored (red) robe, made at atlas build time (`RECOLORS` in `build-atlas.ts`).
   - The demon has no bat wings.
   - There are no attack animation frames.
