@@ -19,19 +19,35 @@ function readLagSim(): LagSim | null {
 }
 
 /** Delays messages one way (half the simulated RTT), keeping order like TCP does. */
-class DelayLine<T> {
+export class DelayLine<T> {
   private last = 0;
+  private queue: { at: number; v: T }[] = [];
+  private timer: ReturnType<typeof setTimeout> | null = null;
   constructor(
     private sim: LagSim,
     private deliver: (v: T) => void,
+    private now: () => number = () => performance.now(),
   ) {}
   push(v: T): void {
     let d = this.sim.lag / 2 + (Math.random() * 2 - 1) * this.sim.jitter;
     // A "lost" packet over TCP arrives late after retransmission.
     if (Math.random() * 100 < this.sim.loss) d += 200;
-    const at = Math.max(performance.now() + Math.max(d, 0), this.last);
+    const at = Math.max(this.now() + Math.max(d, 0), this.last);
     this.last = at;
-    setTimeout(() => this.deliver(v), at - performance.now());
+    this.queue.push({ at, v });
+    if (this.timer === null) this.schedule();
+  }
+  /** One timer for the head of the queue: browsers round timer delays to whole
+   *  milliseconds, so one timer per message could fire them out of order
+   *  (rounding up here means the head is always due when the timer fires). */
+  private schedule(): void {
+    this.timer = setTimeout(() => this.flush(), Math.max(Math.ceil(this.queue[0].at - this.now()), 0));
+  }
+  flush(): void {
+    this.timer = null;
+    const now = this.now();
+    while (this.queue.length > 0 && this.queue[0].at <= now) this.deliver(this.queue.shift()!.v);
+    if (this.queue.length > 0) this.schedule();
   }
 }
 

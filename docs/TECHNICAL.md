@@ -320,7 +320,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - On each snapshot the client replays unacknowledged inputs from the server state.
 - Errors under 24 px are blended out over about 100 ms; larger errors snap.
 - Terrain is part of the port: the speed factor and the walking rules.
-- **Knockback is part of the port** (`stepMove`, `knocked()`). `me` carries `knock_vx/knock_vy`, and the replay starts from them, so after the snapshot that reports a push the prediction slides exactly like the server. The push itself is the enemy's action, so the client learns of it about RTT/2 late (a correction, blended or snapped as usual). While predicted knocked, `fixedStep` fires nothing, and the replay drops dashes sent during a push the client learned of late, like the server. The predictor also applies the server's sinking rule (`sinking()` in `sim/collision.ts`): a hero not dashing whose centre is over a chasm or deep water stops moving and attacking, in prediction and in the replay, so a fall needs no round trip and causes no correction.
+- **Knockback is part of the port** (`stepMove`, `knocked()`). `me` carries `knock_vx/knock_vy`, and the replay starts from them, so after the snapshot that reports a push the prediction slides exactly like the server. The push itself is the enemy's action, so the client learns of it about RTT/2 late (a correction, blended or snapped as usual). While predicted knocked, `fixedStep` fires nothing, and the replay drops dashes sent during a push the client learned of late, like the server. The predictor also applies the server's sinking rule (`sinking()` in `sim/collision.ts`): a hero not dashing whose centre is over a chasm or deep water stops moving and attacking, in prediction and in the replay, so a fall needs no round trip and causes no correction. The pending list keeps each input as it was sent, not as predicted: if the server sees no fall (or a debug climb-out already happened there), it applies the move, and the replay must too.
 - Local cooldowns and hide time are corrected when they differ from the server by more than 0.15 s / 0.3 s.
 
 **Own attacks.**
@@ -334,7 +334,8 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 
 **Measuring.**
 - F3 overlay: FPS, frame time, ping, jitter, interpolation delay, snapshot bytes, prediction correction, server ms per tick.
-- `?lag=&jitter=&loss=` simulates conditions in both directions, keeping TCP ordering.
+- `?lag=&jitter=&loss=` simulates conditions in both directions, keeping TCP ordering (`DelayLine`: one FIFO queue and one timer, because browsers round timer delays down to whole milliseconds; a timer per message delivered inputs out of order, which the server then applied out of order, and that caused most of the corrections once seen in busy runs under lag).
+- In a busy debug run under `?lag=150&jitter=40&loss=2` (bot walking to the demon and fighting it for 90 s), about 36 of 2,760 snapshots still correct the prediction: almost all are pushes, which the client learns of about RTT/2 late, plus the force field closing during a dash.
 
 **Typical numbers (local):**
 - server tick about 0.12–0.14 ms
@@ -672,6 +673,8 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - `pickFrame.test.ts`: the dragon's and the demon's frame choice (wind-up frame with the telegraph, strike frames after it, the demon's charge loop and ring burst, enraged wind-ups shortened by `pace`).
 - The collision and FOV ports must equal the Rust fixtures exactly. The fixture map holds every kind of terrain, and 10 random walks with dashes and pushes (14–44 px, any direction) cross it.
 - `wire.test.ts` unpacks the sample snapshots from `wire-fixtures.json` (every event type, a spectator, with and without boss bar) and compares them with their readable form: positions within 1/32 px, aim within half a step, everything else exact. It also checks the aim range and `packInput`.
+- `net.test.ts`: the `?lag` simulator delivers 2,000 messages in order under a timer that rounds delays down like a browser (the old one-timer-per-message line failed it).
+- `game/world.test.ts`: the predictor replays the moves it sent while it predicted a fall, so a debug climb-out the server already did is followed exactly.
 
 **Browser smoke test (`tools/e2e/smoke.mjs`):**
 - two headless browser contexts register throwaway accounts (`e2e_<hex>`) and create a character each of the given classes, then create and join a run, start, move and attack

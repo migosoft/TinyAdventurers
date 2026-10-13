@@ -4,11 +4,11 @@
 Ordered by technical complexity and by technical dependencies (what makes later items easier), not by quick wins. Items in the same tier can be done in either order unless noted.
 
 **Tier 1: foundations**
-1. **Prediction corrections and push immunity** (see "Network" and "Chained pushes"). Both touch the predictor. Every later feature adds server-side effects the predictor does not know, so find the cause of the corrections while there is less code involved.
+1. **Push immunity** (see "Chained pushes"). The prediction corrections part is done (2026-10-13, TECHNICAL.md §8): they came from the `?lag` simulator delivering out of order, plus moves the predictor dropped while it predicted a fall. The user decided against push immunity on 2026-10-08 ("no push immunity for now"), so ask before building it.
 2. **Separate the run from "dungeon + boss".** `Run` assumes one map type: the generator always makes a 140×140 square, and a run is always won by killing the boss (`boss_id`, `boss_ent`, `door_closed`). The escort level needs another map shape, another way to win and lose, and a level choice in the lobby and in `RunStartInfo`. This is the largest refactor in the list; do it before more boss-specific code builds up.
 3. **Enemies that target objects, and world objects heroes can use.** `Ai.target` can only hold a player id; the carriage and the torch-extinguishing enemy need targets that are objects or places. The same work adds server-side objects with state and a client message for using them (click or stand nearby). That one system covers the carriage, torches and other light sources, the riddle creature, levers and buttons, and breakable crates.
 4. **Light-source system** (see "Lighting"). It comes before every feature that adds something that glows (abilities, enemies, the escort level, room dressing), so none of them has to be retrofitted.
-5. **Art and licences:** Enchanted Forest licence, torch art, gnolls. Little code, but the shadow, ghost, gnolls, sphinx and torches all wait on it; it can run alongside 1–4.
+5. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), torch art, gnolls. Little code, but the shadow, ghost, gnolls, sphinx and torches all wait on it; it can run alongside 1–4.
 
 **Tier 2: larger features on top of tier 1**
 
@@ -69,7 +69,7 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **Ghost and shadow (new):** two new enemy types. The 0x72 pack has neither, so the art has to come from another pack or a CC0 set.
   - Ideas for the ghost: drifts through walls, or turns half transparent and can't be hit for a moment.
   - Ideas for the shadow: hard to see in the dark. It could be the enemy that puts out torches (see "Lighting").
-- **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Check its license and keep the license file next to it.
+- **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Also approved (2026-10-13): "Forest creatures" by lyaseek (https://lyaseek.itch.io/miniffanimals). For both, check the license and keep the license file next to the imported art.
 
 ## Woodland escort level
 An outdoor level where the heroes escort a carriage carrying the elven princess.
@@ -129,5 +129,5 @@ Special rooms with a creature that asks the heroes a riddle. If they solve it, t
 - **Sound effects.**
 - **Network:**
   - delta snapshots if bandwidth ever matters (snapshots are compact arrays now, about 125 B with 2 players, about 350 B with 14 entities in view)
-  - prediction corrections under `?lag=150&jitter=40&loss=2` in busy debug runs: a scripted bot walking the debug path to the demon saw corrections of up to 10–23 px in about a third of the F3 samples, with the old and the new snapshot form alike (the calm smoke test stays at 0.00 px). Cause not investigated yet; suspects are debug climb-outs after chasm falls on cut corners and server-side effects the predictor does not know.
+  - pushes still snap the hero under lag: the client learns of a push about RTT/2 late, and most push corrections are over the 24 px blend limit (median about 55 px in a demon fight under `?lag=150&jitter=40&loss=2`). Blending corrections that start a push over about 100 ms, whatever their size, would show them as a fast slide instead of a jump.
   - optional WebTransport transport for lossy connections

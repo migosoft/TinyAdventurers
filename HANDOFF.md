@@ -9,7 +9,25 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-13, demon rework: own AI-generated art, harder pushes, lava in its hall, new walk)
+## Last session (2026-10-13, prediction corrections under lag)
+
+**Branch:** `feature/prediction-corrections` (from `main`), not merged yet. Priority item 1 of `docs/TODO.md`, the corrections part.
+
+**Cause found (with a throwaway bot that walked the debug path to the demon under `?lag=150&jitter=40&loss=2` and logged every correction with the server state, deleted afterwards):**
+- **Main cause, the dev simulator:** `DelayLine` in `client/src/net.ts` used one `setTimeout` per message. Browsers round timer delays down to whole milliseconds, so messages a fraction of a millisecond apart fired out of order. The server then applied inputs out of order (its `ack` went backwards 218 times in one minute), and the predictor saw positions that did not match their `ack`. Real WebSocket traffic (TCP) never reorders, so real players never had this.
+- **Small real bug:** while the predictor thought the hero was falling, `Predictor.step` stored the input as (0, 0) in its replay list but the real keys were sent. After a debug climb-out the server applied them and the replay did not.
+
+**Fixed:**
+- `DelayLine` is one FIFO queue with one timer (delay rounded up), so it delivers in order.
+- `Predictor.step` keeps each input as sent; the replay applies the sinking rule itself, as before.
+
+**Measured (same bot, 90 s):** corrections over 0.5 px dropped from 375 (one run) and 894 (another) to 36 of 2,760 snapshots. What is left is expected: pushes (the client learns of them about RTT/2 late) and once the force field closing during a dash. Push corrections are mostly over the 24 px blend limit, so they snap; an idea to blend them is in TODO.md (Network).
+
+**Checked:** `net.test.ts` and `game/world.test.ts` (new; both fail on the old code), client typecheck and 24 tests, `docker compose up --build -d` + health, smoke test normal and under `?lag=150&jitter=40&loss=2` (no browser errors, correction 0.00 px). No server change, so `cargo test` was not run.
+
+**Open:** push immunity (the other half of item 1). The user said "no push immunity for now" on 2026-10-08; it waits for their decision.
+
+## Session before (2026-10-13, demon rework: own AI-generated art, harder pushes, lava in its hall, new walk)
 
 **Branch:** `feature/demon-art` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-13). Start the next feature on a new branch from `main`. **Afterwards:** the walk fix (below) was made on `feature/demon-walk` (from `main`) and is merged into `main` (fast-forward) and pushed as well, at the user's request (2026-10-13).
 
@@ -702,5 +720,5 @@ Steps 2–6 followed in the next session.
 1. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 2. Loadouts: design new abilities, then add the lobby picker, paid with coins.
 3. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
-4. Optional polish: sound, better boss sprites if the user approves a source (the dragon now has AI-generated art the user supplied), the prediction corrections in busy runs under lag (TODO.md, Network).
+4. Optional polish: sound, better boss sprites if the user approves a source (the dragon now has AI-generated art the user supplied), blending push corrections under lag (TODO.md, Network).
 5. Let the user play the dragon fight live and collect feedback (flight timing, bite, smash).

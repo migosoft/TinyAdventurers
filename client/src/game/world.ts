@@ -171,13 +171,15 @@ export class Predictor {
     this.hidden = Math.max(this.hidden - CONST.DT, 0);
     // Falling or drowning: the server ignores moves and attacks from now on.
     // Pushed: it ignores them until the slide ends.
-    if (this.sinking) [mx, my, dash] = [0, 0, null];
+    // The move is kept as sent, not as predicted: if the server sees no sinking
+    // (or a debug climb-out already happened there), it applies it.
+    this.pending.push({ seq: this.seq, mx, my, dash });
+    if (this.sinking) dash = null;
     else {
       if (this.knocked) dash = null;
       this.state = stepMove(this.map, this.state, mx, my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT);
     }
     if (dash) this.state = { ...this.state, dashT: ABILITIES.Dash.duration, dashDx: dash[0], dashDy: dash[1] };
-    this.pending.push({ seq: this.seq, mx, my, dash });
     if (this.pending.length > 240) this.pending.shift();
     return this.seq;
   }
