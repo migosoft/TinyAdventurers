@@ -9,9 +9,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Last session (2026-10-13, demon rework: own AI-generated art)
+## Last session (2026-10-13, demon rework: own AI-generated art, harder pushes, lava in its hall, new walk)
 
-**Branch:** `feature/demon-art` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-13). Start the next feature on a new branch from `main`. **Afterwards:** the walk fix (below) is on `feature/demon-walk` (from `main`), committed, not merged or pushed yet.
+**Branch:** `feature/demon-art` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-13). Start the next feature on a new branch from `main`. **Afterwards:** the walk fix (below) was made on `feature/demon-walk` (from `main`) and is merged into `main` (fast-forward) and pushed as well, at the user's request (2026-10-13).
 
 **Also this session:** `docs/TODO.md` got a tiered **priority order** at the top (by technical complexity and dependencies; quick wins don't count, the user's rule) and the user's new ideas (ghost and shadow, woodland escort level, lighting, riddle rooms). Lighting is planned as a general light-source system (static and moving sources), not only torches, at the user's request.
 
@@ -38,12 +38,12 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **Lava pool in the demon's boss hall** (it had only chasms): `place_boss_lava` in `dungeon/generate.rs`, lava theme only. The demon already crossed lava unharmed and at full speed (`Mover::Demon`, lava burns only heroes); unchanged. Heroes knocked in burn and slow down.
 - Verified: `cargo test` 149 (the generation test now requires the pool in every lava-theme hall over 100 seeds and allows no lava elsewhere), client build and 22 tests; containers rebuilt and a bot fight on the live server, no browser errors. A few halls were printed as text from the generator to check where the pool lands.
 
-- **Walk looked like limping** (user): the first AI walk sheet was no clean cycle (frames 1 and 3 the same wide stance, only frame 4 lifts a foot). Reordering to 1, 4, 3, 4 did not help ("it still limps"). Claude wrote a precise prompt for an 8-frame cycle (contact, down, passing, up per leg, near leg brighter, far leg darker); the user supplied `images/demon_walk_improved.png`, now imported as the 8-frame `demon_walk` (12 fps, the same stride time as before). All demon cells grew from 78 to 82 px wide (hips at x 33) for its longer tail. The user still saw no proper walk: the legs should **cross** when seen from the side. They had the AI make `images/demon_walk_improved_cross_walk.png` (8 frames, same layout), now the `demon_walk` strip, imported the same way. Then the user chose the order: sheet images 1, 2, 3, 8, then back (the strip is 1, 2, 3, 8, 3, 2 at 9 fps; the ends are not repeated, so it does not pause). Checked in `?demon`; the user has not seen it yet.
+- **Walk looked like limping** (user): the first AI walk sheet was no clean cycle (frames 1 and 3 the same wide stance, only frame 4 lifts a foot). Reordering to 1, 4, 3, 4 did not help ("it still limps"). Claude wrote a precise prompt for an 8-frame cycle (contact, down, passing, up per leg, near leg brighter, far leg darker); the user supplied `images/demon_walk_improved.png`, now imported as the 8-frame `demon_walk` (12 fps, the same stride time as before). All demon cells grew from 78 to 82 px wide (hips at x 33) for its longer tail. The user still saw no proper walk: the legs should **cross** when seen from the side. They had the AI make `images/demon_walk_improved_cross_walk.png` (8 frames, same layout), now the `demon_walk` strip, imported the same way. Then the user chose the order: sheet images 1, 2, 3, 8, then back (the strip is 1, 2, 3, 8, 3, 2 at 9 fps; the ends are not repeated, so it does not pause). The user approved it in `?demon`: "now it is much better" (2026-10-13). The sheet's images 4 to 7 are unused.
 
 **Open:**
 - **User check** of the new pushes and the lava pool in a fight.
-- **User check** of the walk in `?demon` (step 2).
 - The added recoveries make the demon slightly slower between attacks; part of the balancing pass.
+- Redoing a demon sheet: the import scripts were throwaway (session scratchpad); TECHNICAL §9 "Demon frames" describes every step (grid or fixed pitch, palette snap, cleanup, hip/eye anchor, 82×63 cells). Strips must stay 82×63 per cell; `build-atlas.ts` checks the size.
 
 ## Session before (2026-10-13, new lich art, then the lich fight rework)
 
@@ -225,7 +225,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 - The balancing pass and loadouts stay open (TODO.md).
 
 **Not yet verified:**
-- The demon's new frames by the user (`?demon` and a fight); the live fight only by a bot so far.
+- The demon fight with its new pushes (56 / 64 px) and the lava pool in its hall, by the user (only a bot so far). The demon's look and walk were approved in `?demon`.
 - The user did not report trying every admin action (deletions, password change) live; the smoke test covers them.
 - A won or lost run through the browser was not recorded live. Only abandoned runs were; won and lost runs are covered by tests.
 
@@ -563,7 +563,7 @@ Steps 2–6 followed in the next session.
 - lobby, 4 classes (fixed per character), host-chosen or random end boss, random dungeon, field of vision
 - per-character progression: XP and coins banked after each run, permanent upgrades bought in the lobby
 - 11 enemy types (including the mimic and the ogre mini-boss, one per run; imps, chorts and summoners only in the demon's dungeon), 3 bosses
-- terrain in every dungeon: chasms everywhere, water pools (lich, dragon) or lava pools (demon); falling, drowning, lava burns, demons immune to lava; demos `?water`, `?chasm`, `?lava`
+- terrain in every dungeon: chasms everywhere, water pools (lich, dragon) or lava pools (demon), plus a lava pool in the demon's boss hall; falling, drowning, lava burns, demons immune to lava; demos `?water`, `?chasm`, `?lava`
 - treasure chests and mimics; coins banked as a second currency
 - permadeath with spectating, victory/defeat screens
 - client prediction and interpolation, F3 stats
@@ -612,7 +612,7 @@ Steps 2–6 followed in the next session.
 - **No miniature bases under figures** (the user asked to remove them); figures stand on a soft ground shadow.
 - **Mimics hop after the players** (chosen from a demo over a stationary biter), and their reveal animation stays.
 - **Knockback** (2026-10-08, from the `?knockback` demo):
-  - only strong melee pushes: orc warrior 20 px, chort claw 14 px, demon cleave 36 / swoop 44, dragon front claw 32 / bite 24 / tail 44 / landing smash 36
+  - only strong melee pushes: orc warrior 20 px, chort claw 14 px, demon cleave 56 / swoop 64 (raised at the user's request, 2026-10-13), dragon front claw 32 / bite 24 / tail 44 / landing smash 36
   - imps, skeletons, mimics and ranged attacks never push, except the dragon's fireball explosions (20 px, the user's request 2026-10-09)
   - no control during the slide, and a dash can't escape it
 - **Boss halls have chasms** (all three bosses; wall strips plus pits).
