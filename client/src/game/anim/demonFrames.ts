@@ -4,12 +4,13 @@
 // demon_<action>.png, facing right): every cell has the hips at x `hipX` and
 // the feet on row `footY`.
 
-export const DEMON_FRAME = { w: 78, h: 63, hipX: 29, footY: 62 } as const;
+export const DEMON_FRAME = { w: 82, h: 63, hipX: 33, footY: 62 } as const;
 
 /** Frames per strip, in strip order. */
 export const DEMON_ANIMS = {
   idle: 4,
-  walk: 4,
+  /** One stride each way: contact, down, passing, up with the near leg, then with the far leg. */
+  walk: 8,
   /** Wind-up, strike, impact, follow-through, recovery. */
   cleave: 5,
   /** Wind-up (bull crouch), two charging frames (looped), the stop. */
