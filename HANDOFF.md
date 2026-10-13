@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-13, prediction corrections under lag)
 
-**Branch:** `feature/prediction-corrections` (from `main`), not merged yet. Priority item 1 of `docs/TODO.md`, the corrections part.
+**Branch:** `feature/prediction-corrections` (from `main`), not merged yet. It was priority item 1 of `docs/TODO.md` (now removed; the list is renumbered).
 
 **Cause found (with a throwaway bot that walked the debug path to the demon under `?lag=150&jitter=40&loss=2` and logged every correction with the server state, deleted afterwards):**
 - **Main cause, the dev simulator:** `DelayLine` in `client/src/net.ts` used one `setTimeout` per message. Browsers round timer delays down to whole milliseconds, so messages a fraction of a millisecond apart fired out of order. The server then applied inputs out of order (its `ack` went backwards 218 times in one minute), and the predictor saw positions that did not match their `ack`. Real WebSocket traffic (TCP) never reorders, so real players never had this.
@@ -25,7 +25,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Checked:** `net.test.ts` and `game/world.test.ts` (new; both fail on the old code), client typecheck and 24 tests, `docker compose up --build -d` + health, smoke test normal and under `?lag=150&jitter=40&loss=2` (no browser errors, correction 0.00 px). No server change, so `cargo test` was not run.
 
-**Open:** push immunity (the other half of item 1). The user said "no push immunity for now" on 2026-10-08; it waits for their decision.
+**Push immunity removed from TODO.md** at the user's request (2026-10-13): the priority item and the "Chained pushes" note are gone, the list is renumbered. The user will add it again if chained pushes become a problem.
 
 ## Session before (2026-10-13, demon rework: own AI-generated art, harder pushes, lava in its hall, new walk)
 

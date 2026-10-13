@@ -4,36 +4,35 @@
 Ordered by technical complexity and by technical dependencies (what makes later items easier), not by quick wins. Items in the same tier can be done in either order unless noted.
 
 **Tier 1: foundations**
-1. **Push immunity** (see "Chained pushes"). The prediction corrections part is done (2026-10-13, TECHNICAL.md §8): they came from the `?lag` simulator delivering out of order, plus moves the predictor dropped while it predicted a fall. The user decided against push immunity on 2026-10-08 ("no push immunity for now"), so ask before building it.
-2. **Separate the run from "dungeon + boss".** `Run` assumes one map type: the generator always makes a 140×140 square, and a run is always won by killing the boss (`boss_id`, `boss_ent`, `door_closed`). The escort level needs another map shape, another way to win and lose, and a level choice in the lobby and in `RunStartInfo`. This is the largest refactor in the list; do it before more boss-specific code builds up.
-3. **Enemies that target objects, and world objects heroes can use.** `Ai.target` can only hold a player id; the carriage and the torch-extinguishing enemy need targets that are objects or places. The same work adds server-side objects with state and a client message for using them (click or stand nearby). That one system covers the carriage, torches and other light sources, the riddle creature, levers and buttons, and breakable crates.
-4. **Light-source system** (see "Lighting"). It comes before every feature that adds something that glows (abilities, enemies, the escort level, room dressing), so none of them has to be retrofitted.
-5. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), torch art, gnolls. Little code, but the shadow, ghost, gnolls, sphinx and torches all wait on it; it can run alongside 1–4.
+1. **Separate the run from "dungeon + boss".** `Run` assumes one map type: the generator always makes a 140×140 square, and a run is always won by killing the boss (`boss_id`, `boss_ent`, `door_closed`). The escort level needs another map shape, another way to win and lose, and a level choice in the lobby and in `RunStartInfo`. This is the largest refactor in the list; do it before more boss-specific code builds up.
+2. **Enemies that target objects, and world objects heroes can use.** `Ai.target` can only hold a player id; the carriage and the torch-extinguishing enemy need targets that are objects or places. The same work adds server-side objects with state and a client message for using them (click or stand nearby). That one system covers the carriage, torches and other light sources, the riddle creature, levers and buttons, and breakable crates.
+3. **Light-source system** (see "Lighting"). It comes before every feature that adds something that glows (abilities, enemies, the escort level, room dressing), so none of them has to be retrofitted.
+4. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), torch art, gnolls. Little code, but the shadow, ghost, gnolls, sphinx and torches all wait on it; it can run alongside 1–3.
 
 **Tier 2: larger features on top of tier 1**
 
-6. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light from the start. If an ability pushes enemies, enemies need their own version of `Sink`/`kill_player` (see "Enemies in terrain").
-7. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the objects from 3, a dialog panel. Answer the open design questions first.
-8. **Woodland escort level:** needs 2 and 3, plus a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
+5. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light from the start. If an ability pushes enemies, enemies need their own version of `Sink`/`kill_player` (see "Enemies in terrain").
+6. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the objects from 2, a dialog panel. Answer the open design questions first.
+7. **Woodland escort level:** needs 1 and 2, plus a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
 
 **Tier 3: content**
 
-9. **Ghost and shadow.** The shadow needs lighting; it and the torch-extinguishing enemy act on any light source that can be switched off. The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
-10. **Minions for the other bosses; more classes and bosses** (classes are easier after 6).
-11. **More loot and room dressing:** item drops need a pickup system; levers and crates use 3; floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
-12. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
-13. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled.
+8. **Ghost and shadow.** The shadow needs lighting; it and the torch-extinguishing enemy act on any light source that can be switched off. The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
+9. **Minions for the other bosses; more classes and bosses** (classes are easier after 5).
+10. **More loot and room dressing:** item drops need a pickup system; levers and crates use 2; floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
+11. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
+12. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled.
 
 **Tier 4: infrastructure (independent of gameplay work)**
 
-14. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
-15. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
-16. **Several game servers** (shared presence and login limiter in Valkey). After 14; only when one server is not enough.
+13. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
+14. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
+15. **Several game servers** (shared presence and login limiter in Valkey). After 13; only when one server is not enough.
 
 **Tier 5: last**
 
-17. **Balancing pass:** every "Tune" item, including light radii and darkness. Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone.
-18. **Delta snapshots, WebTransport:** only if measurements show they are needed.
+16. **Balancing pass:** every "Tune" item, including light radii and darkness. Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone.
+17. **Delta snapshots, WebTransport:** only if measurements show they are needed.
 
 ## Progression follow-ups
 
@@ -56,7 +55,6 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 ## Terrain follow-ups
 Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **Knockback is live** (TECHNICAL.md §5, §8). Follow-ups:
-  - **Chained pushes:** several orc warriors can push a hero again and again, and a pushed hero has no control. A scripted bot mobbed by orcs in a corridor was pushed in about 10 % of its snapshots. If it feels unfair in play, add a short push immunity after a push (server rule plus predictor).
   - **Tune** the push distances (`knock` in `defs/enemies.rs`, the demon's `DEMON_*_KNOCK` and the dragon's `DRAGON_*_KNOCK` in `defs/bosses.rs`) and `KNOCK_DECAY` in the balancing pass. The user approved the current ones in `?knockback`; the demon's were raised afterwards at the user's request (cleave 36 → 56, swoop 44 → 64).
   - **Enemies in terrain:** heroes never push enemies, so enemies still never fall or drown. If a hero ability ever pushes, enemies need a monster version of `Sink`/`kill_player`.
   - **Boss-hall chasms:** tune their count and size (`place_boss_chasms`), and check live that pushes into them feel fair.
@@ -84,7 +82,7 @@ An outdoor level where the heroes escort a carriage carrying the elven princess.
 
 ## Lighting
 Darkness limits what the heroes can see. Dungeon walls have torches at regular intervals that light the area around them. Some enemies can put torches out, which leaves that part of the dungeon dark. Lava pools glow red.
-Torches are only the first kind of light source. More will follow: lava, braziers, glowing mushrooms or goo, hero spells and projectiles (a fireball lighting the corridor it flies through), light-emitting enemies, a carriage lantern. So build a general light-source system, not a torch feature (priority 4).
+Torches are only the first kind of light source. More will follow: lava, braziers, glowing mushrooms or goo, hero spells and projectiles (a fireball lighting the corridor it flies through), light-emitting enemies, a carriage lantern. So build a general light-source system, not a torch feature (priority 3).
 - **Feasible:** yes, at tile resolution. The fog of war already works this way (TECHNICAL.md §7).
 - **Light sources:** each has a position, radius, colour, intensity and an on/off state. Two kinds:
   - **static** (torches, braziers, lava): fixed on the map, can be switched off and on.
