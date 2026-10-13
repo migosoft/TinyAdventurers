@@ -82,7 +82,7 @@ const dragonFrames = Object.fromEntries(
 ) as Record<DragonAnim, { prefix: string; n: number; fps: number }>;
 
 const demonFrames = Object.fromEntries(
-  (Object.keys(DEMON_ANIMS) as DemonAnim[]).map((a) => [a, { prefix: demonFrameName(a, 0).slice(0, -1), n: DEMON_ANIMS[a], fps: a === 'idle' ? 4 : a === 'walk' ? 12 : 10 }]),
+  (Object.keys(DEMON_ANIMS) as DemonAnim[]).map((a) => [a, { prefix: demonFrameName(a, 0).slice(0, -1), n: DEMON_ANIMS[a], fps: a === 'idle' ? 4 : a === 'walk' ? 9 : 10 }]),
 ) as Record<DemonAnim, { prefix: string; n: number; fps: number }>;
 
 const hero = (n: string) => ({ idle: `${n}_idle_anim_f`, run: `${n}_run_anim_f`, hit: `${n}_hit_anim_f0` });

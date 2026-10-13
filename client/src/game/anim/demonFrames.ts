@@ -9,8 +9,8 @@ export const DEMON_FRAME = { w: 82, h: 63, hipX: 33, footY: 62 } as const;
 /** Frames per strip, in strip order. */
 export const DEMON_ANIMS = {
   idle: 4,
-  /** One stride each way: contact, down, passing, up with the near leg, then with the far leg. */
-  walk: 8,
+  /** Sheet images 1, 2, 3, 8 (legs apart, crossing, apart the other way), then 3, 2 back: the user's order. */
+  walk: 6,
   /** Wind-up, strike, impact, follow-through, recovery. */
   cleave: 5,
   /** Wind-up (bull crouch), two charging frames (looped), the stop. */
