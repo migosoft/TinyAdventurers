@@ -43,7 +43,6 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Open:**
 - **User check** of the new pushes and the lava pool in a fight.
 - **User check** of the walk in `?demon` (step 2).
-
 - The added recoveries make the demon slightly slower between attacks; part of the balancing pass.
 - `docs/TODO.md` still has the user's uncommitted notes (woodland escort level, lighting, riddle rooms); only the art-gap line was committed.
 
