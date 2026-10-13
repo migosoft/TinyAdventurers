@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Last session (2026-10-13, new lich art, then the lich fight rework)
 
-**Branch:** `feature/lich-art` (not merged, not pushed). Ask before merging into `main` or pushing. Two commits: the art, then the fight changes below.
+**Branch:** `feature/lich-art` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-13). Start the next feature on a new branch from `main`. Two commits: the art, then the fight changes below.
 
 ### Part 2: lich fight rework
 
@@ -31,7 +31,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 - `?lich` screenshots: volley, summon ring, nova telegraph, burst, pushes (one into the chasm), no browser errors.
 - `docker compose up --build -d`, then the throwaway lich bot (debug wizard, account deleted) fought the lich on the live server: purple telegraph ring, gloom bolts, ten skeletons, drain beams to disciples in unseen parts of the hall; no browser errors.
 
-**Not yet verified:** the user looking at `?lich` and playing the fight.
+**User check:** "It works" (2026-10-13), after the `?lich` demo and the fight.
+
+**Open:** the nova, summon and volley numbers are first guesses for the balancing pass. `docs/TODO.md` has uncommitted notes that are not from this session (woodland escort level, lighting, riddle rooms); they were left as they are.
 
 ### Part 1: new lich art
 
@@ -52,7 +54,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 - `?gallery` screenshots (idle, move, cast), no browser errors.
 - `docker compose up --build -d` (2026-10-13), then a throwaway bot (debug wizard, account deleted afterwards) walked the debug path to the lich on the live server and fought it for 40 s: the new sprite in the hall, the drain beams, frost bolt volleys and raised skeletons; the lobby boss card. No browser errors. The containers are left running.
 
-**Not yet verified:** the user playing the lich fight live.
+**User check:** covered by the fight check in part 2.
 
 **Open:** nothing for the lich art.
 
