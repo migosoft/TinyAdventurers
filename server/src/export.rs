@@ -118,6 +118,7 @@ fn export_defs() {
     for (kind, r) in monsters.chain(boss_defs) {
         hitbox.insert((kind as u8).to_string(), json!({ "r": r, "h": kind.body_height() }));
     }
+    hitbox.insert((EntityKind::Barrel as u8).to_string(), json!({ "r": crate::defs::objects::BARREL_RADIUS, "h": 0.0 }));
     let ev: serde_json::Map<String, serde_json::Value> =
         crate::wire::EV_CODES.iter().enumerate().map(|(i, n)| (n.to_string(), json!(i))).collect();
     let dmg_types: serde_json::Map<_, _> = crate::defs::damage::DamageType::ALL.iter().map(|t| (t.name().to_string(), json!(*t as u8))).collect();

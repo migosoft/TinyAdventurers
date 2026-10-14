@@ -14,7 +14,7 @@ use crate::math::Vec2;
 use crate::protocol::Ev;
 use rand::Rng;
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 /// Nearest living, non-hidden player the monster can see right now.
 pub fn find_visible_player(run: &Run, from: Vec2, sight: f64) -> Option<usize> {
@@ -101,7 +101,8 @@ pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) ->
         return move_toward(run, mi, goal, speed, dt);
     }
     if need_repath {
-        let path = astar_clear(&run.layout.map, pos, goal, 2500, mover, wide).unwrap_or_default();
+        let blocked = run.object_tiles();
+        let path = astar_clear(&run.layout.map, pos, goal, 2500, mover, wide, &blocked).unwrap_or_default();
         let m = &mut run.monsters[mi];
         m.ai.path = path;
         m.ai.repath_t = 0.6;
@@ -432,12 +433,12 @@ pub fn separate_monsters(run: &mut Run) {
 /// 4-directional A* on the tiles this mover can walk. Returns waypoints
 /// (tile centers), excluding the start tile.
 pub fn astar(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover) -> Option<Vec<Vec2>> {
-    astar_clear(map, from, to, max_nodes, mover, false)
+    astar_clear(map, from, to, max_nodes, mover, false, &HashSet::new())
 }
 
 /// A* as above; with `clear`, tiles next to anything this mover cannot enter
 /// cost extra, so figures wider than a tile keep their distance where they can.
-fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, clear: bool) -> Option<Vec<Vec2>> {
+fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, clear: bool, blocked: &HashSet<(i32, i32)>) -> Option<Vec<Vec2>> {
     let near_blocked = |x: i32, y: i32| (-1..=1).any(|dy| (-1..=1).any(|dx| map.blocks(x + dx, y + dy, mover)));
     let start = Map::tile_of(from);
     let goal = Map::tile_of(to);
@@ -472,7 +473,7 @@ fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, 
         let cg = g[&cur];
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let nb = (cur.0 + dx, cur.1 + dy);
-            if map.blocks(nb.0, nb.1, mover) {
+            if map.blocks(nb.0, nb.1, mover) || blocked.contains(&nb) && nb != goal {
                 continue;
             }
             let ng = cg + if clear && nb != goal && near_blocked(nb.0, nb.1) { 5 } else { 1 };
@@ -813,5 +814,18 @@ mod tests {
         assert_eq!(run.monsters[mi].ai.target, Some(crate::run::entities::Target::Player(run.players[0].id)));
         crate::run::abilities::try_use(&mut run, 0, crate::defs::abilities::AbilityId::Hide, 1, false);
         assert_eq!(run.monsters[mi].ai.target, None);
+    }
+
+    #[test]
+    fn astar_goes_around_tiles_under_barrels() {
+        let mut m = Map::new(12, 12);
+        for y in 1..11 {
+            for x in 1..11 {
+                m.set(x, y, Tile::Floor);
+            }
+        }
+        let blocked: std::collections::HashSet<(i32, i32)> = (1..10).map(|y| (5, y)).collect();
+        let p = astar_clear(&m, Map::center_of(2, 2), Map::center_of(8, 2), 1000, Mover::Enemy, false, &blocked).unwrap();
+        assert!(p.iter().any(|w| Map::tile_of(*w).1 >= 10));
     }
 }

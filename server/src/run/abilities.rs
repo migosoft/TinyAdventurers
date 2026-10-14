@@ -148,6 +148,21 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
     for mi in hits {
         run.hurt_monster(mi, dmg, crit, Some(pi));
     }
+    let objs: Vec<usize> = (0..run.objects.len())
+        .filter(|&i| {
+            let o = &run.objects[i];
+            let d = o.pos.dist(pos);
+            if o.gone || d > range + o.radius {
+                return false;
+            }
+            let in_arc = angle_diff(pos.angle_to(o.pos), aim).abs() <= arc / 2.0 || d < o.radius + PLAYER_RADIUS;
+            in_arc && line_of_sight(&run.layout.map, pos, o.pos)
+        })
+        .collect();
+    let by = run.players[pi].id;
+    for oi in objs {
+        crate::run::objects::hurt_object(run, oi, dmg, Some(by));
+    }
 }
 
 /// Barbarian dash: damage each monster touched once per dash.
@@ -165,6 +180,18 @@ pub fn dash_contact(run: &mut Run, pi: usize) {
     for (mi, id) in hits {
         run.players[pi].dash_hit.push(id);
         run.hurt_monster(mi, dmg, false, Some(pi));
+    }
+    let objs: Vec<(usize, u32)> = run
+        .objects
+        .iter()
+        .enumerate()
+        .filter(|(_, o)| !o.gone && !run.players[pi].dash_hit.contains(&o.id) && o.pos.dist(pos) < PLAYER_RADIUS + o.radius + 4.0)
+        .map(|(i, o)| (i, o.id))
+        .collect();
+    let by = run.players[pi].id;
+    for (oi, id) in objs {
+        run.players[pi].dash_hit.push(id);
+        crate::run::objects::hurt_object(run, oi, dmg, Some(by));
     }
 }
 
@@ -289,6 +316,11 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             impact(run, i, prev, None);
             break;
         }
+        let r = run.projectiles[i].radius;
+        if let Some(oi) = run.objects.iter().position(|o| o.solid && !o.gone && o.pos.dist(pos) < o.radius + r) {
+            impact_object(run, i, pos, oi);
+            break;
+        }
         let pr = &run.projectiles[i];
         if pr.from_player {
             let hit = run.monsters.iter().position(|m| m.alive && m.shot_dist(pos) < m.radius + pr.radius);
@@ -325,6 +357,19 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<usize>) {
     }
 }
 
+/// Projectile `i` hits a solid object: an explosion goes off there, a plain shot hurts the object.
+fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
+    let pr = &mut run.projectiles[i];
+    pr.dead = true;
+    let (from_player, owner, damage, crit, explode_r, k, knock) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.knock);
+    if explode_r > 0.0 {
+        let src = if from_player { run.player_idx(owner) } else { None };
+        explode(run, pos, explode_r, damage, from_player, src, k, crit, knock);
+    } else {
+        crate::run::objects::hurt_object(run, oi, damage, from_player.then_some(owner));
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 /// An explosion; `knock` pushes the heroes it hits straight away from it (px, enemy explosions only).
 pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, from_player: bool, src: Option<usize>, k: u8, crit: bool, knock: f64) {
@@ -353,6 +398,16 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, from_player: bo
             run.hurt_player(qi, damage);
             run.knock_player(qi, pos, 0.0, knock);
         }
+    }
+    let by = src.map(|pi| run.players[pi].id);
+    let objs: Vec<usize> = (0..run.objects.len())
+        .filter(|&i| {
+            let o = &run.objects[i];
+            !o.gone && o.pos.dist(pos) < r + o.radius && line_of_sight(&run.layout.map, pos, o.pos)
+        })
+        .collect();
+    for oi in objs {
+        crate::run::objects::hurt_object(run, oi, damage, by);
     }
 }
 
@@ -559,5 +614,45 @@ mod tests {
         try_use(&mut run, 0, AbilityId::MagicMissile, 1, true);
         try_use(&mut run, 0, AbilityId::MagicMissile, 2, true);
         assert_eq!(run.projectiles.len(), 1);
+    }
+
+    #[test]
+    fn shots_stop_at_a_barrel_and_light_it() {
+        for from_player in [true, false] {
+            let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+            run.monsters.retain(|m| m.is_boss);
+            let p = run.players[0].pos();
+            let id = run.spawn_object(EntityKind::Barrel, p + Vec2::new(30.0, 0.0), crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
+            run.spawn_enemy(EnemyType::OrcWarrior, p + Vec2::new(50.0, 0.0), None, 1);
+            let hp = run.monsters.last().unwrap().hp;
+            if from_player {
+                run.players[0].aim = 0.0;
+                try_use(&mut run, 0, AbilityId::MagicMissile, 1, true);
+            } else {
+                spawn_monster_projectile(&mut run, 999, EntityKind::Arrow, p + Vec2::new(10.0, 0.0), Vec2::new(1.0, 0.0), 180.0, 5.0, 2.0, 0.0, 0, 0.0);
+            }
+            for _ in 0..30 {
+                tick_projectiles(&mut run, 1.0 / TICK_HZ);
+            }
+            let o = run.objects.iter().find(|o| o.id == id).unwrap();
+            assert!(matches!(&o.state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_some()), "lit (player shot: {from_player})");
+            assert_eq!(run.monsters.last().unwrap().hp, hp, "the orc behind it is spared");
+        }
+    }
+
+    #[test]
+    fn a_sword_swing_and_a_fireball_light_barrels() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        let p = run.players[0].pos();
+        let id = run.spawn_object(EntityKind::Barrel, p + Vec2::new(14.0, 0.0), crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
+        run.players[0].aim = 0.0;
+        try_use(&mut run, 0, AbilityId::Sword, 1, true);
+        let lit = |run: &Run| matches!(&run.objects.iter().find(|o| o.id == id).unwrap().state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_some());
+        assert!(lit(&run));
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let id2 = run.spawn_object(EntityKind::Barrel, at, crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
+        explode(&mut run, at + Vec2::new(10.0, 0.0), 20.0, Damage::physical(5.0), true, Some(0), 0, false, 0.0);
+        assert!(matches!(&run.objects.iter().find(|o| o.id == id2).unwrap().state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_some()));
     }
 }

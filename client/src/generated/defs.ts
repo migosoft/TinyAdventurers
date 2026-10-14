@@ -313,6 +313,10 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   "32": {
     "h": 51.0,
     "r": 17.0
+  },
+  "81": {
+    "h": 0.0,
+    "r": 6.0
   }
 };
 

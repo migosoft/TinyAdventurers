@@ -270,6 +270,23 @@ pub fn snap(o: &WorldObject, time: f64) -> EntSnap {
     EntSnap(o.id, o.kind as u8, o.pos.x as f32, o.pos.y as f32, 255, anim, 0.0, since, 0, 0)
 }
 
+impl Run {
+    /// Tiles under resting solid objects: pathfinding goes around them.
+    pub fn object_tiles(&self) -> std::collections::HashSet<(i32, i32)> {
+        let mut out = std::collections::HashSet::new();
+        for o in self.objects.iter().filter(|o| o.solid && !o.gone) {
+            let (x0, y0) = crate::dungeon::Map::tile_of(o.pos - Vec2::new(o.radius, o.radius));
+            let (x1, y1) = crate::dungeon::Map::tile_of(o.pos + Vec2::new(o.radius - 0.001, o.radius - 0.001));
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    out.insert((x, y));
+                }
+            }
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
