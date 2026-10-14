@@ -128,4 +128,5 @@ Special rooms with a creature that asks the heroes a riddle. If they solve it, t
 - **Network:**
   - delta snapshots if bandwidth ever matters (snapshots are compact arrays now, about 125 B with 2 players, about 350 B with 14 entities in view)
   - pushes still snap the hero under lag: the client learns of a push about RTT/2 late, and most push corrections are over the 24 px blend limit (median about 55 px in a demon fight under `?lag=150&jitter=40&loss=2`). Blending corrections that start a push over about 100 ms, whatever their size, would show them as a fast slide instead of a jump.
+  - the hide time after Hide can briefly drop on the client until the server has seen the input (`Predictor.reconcile` corrects it with a plain "minus unacked"); replaying the pending inputs, as for the cooldowns (`Pending.used`), would fix it. Visual only.
   - optional WebTransport transport for lossy connections
