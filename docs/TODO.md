@@ -78,15 +78,17 @@ Idea from the user (2026-10-14). Every hit has a damage type, and heroes, enemie
   - **acid:** could lower the target's resistances for a while.
 - **Attacks** always have at least one damage type. The default is physical, so today's attacks become physical unless they are given another type.
   - **Several types (decided):** the attack's damage is split into parts per type (e.g. a fireball: 70 % heat, 30 % physical). Each part is reduced by its own resistance, and the parts are added up. So a target immune to heat still takes the physical part.
-- **Resistances:** heroes, enemies and objects have no, one or several resistances, each a percentage per type taken off that type's damage: `part × (1 − resistance)`. A type without an entry means 0 %, so full damage. 100 % means immune to that type. Store them as a small list of (type, percent) pairs, e.g. in the `EnemyType` and class defs, plus whatever the object system (priority 1) gives objects.
+- **Resistances:** heroes, enemies and objects have no, one or several resistances, each a percentage per type taken off that type's damage: `part × (1 − resistance)`. A type without an entry means 0 %, so full damage. 100 % means immune to that type. Above 100 % the hit heals instead: at 150 %, a 10-point part heals 5 HP (decided). Store them as a small list of (type, percent) pairs, e.g. in the `EnemyType` and class defs, plus whatever the object system (priority 1) gives objects.
 - **Where it goes:** all damage already passes through `hurt_player` and `hurt_monster` (`run/mod.rs`, about 25 call sites in `abilities.rs`, `ai.rs`, the boss files and lava). Both would take the attack's type parts instead of one number (just physical by default), and every call site would name them. Lava is heat; falling and drowning stay instant deaths, not damage.
+- **Damage over time (decided):** it also has one of the damage types, and resistances apply to every tick. Nothing deals damage over time yet, so this is only a rule for later effects such as poison or burning.
+- **Armour and items (decided):** armour stops being a stat raised with XP. Items give armour, and so resistances. An armour piece gives at least physical resistance, and any item can give resistances to other types.
+  - Remove `Armor` from the lobby upgrade shop (`UpgradeStat`, `StatUpgrades.armor`, `Modifiers.armor` in `defs/progression.rs`) and the `mods.armor` reduction in `hurt_player`.
+  - Items need an equipment system: item slots per character, stored with the character's progress in PostgreSQL, and a way to get items (drops, the lobby, or coins; see "Spend coins").
 - **Questions to settle:**
-  - Does the armour upgrade (`mods.armor`, up to 60 %) stay a reduction on everything, or does it become physical resistance only? Is it applied before or after the type resistance?
+  - Characters that already bought armour levels: refund the XP they spent, or keep the levels as a fixed physical resistance? `progress.rs` needs a version bump either way.
+  - Removing armour before items exist leaves heroes with no damage reduction. Should both ship together?
   - Negative resistance as a weakness (e.g. −50 % = 1.5× damage), for example skeletons weak to holy or fire enemies weak to cold?
-  - Can resistances rise above 100 % (the hit heals), or is 100 % the cap?
-  - Do damage-over-time effects such as poison or burning come with this, or later?
-  - Can heroes raise resistances: lobby upgrades, loadouts or item drops?
-- **Client:** colour the damage numbers by type and show "immune" instead of 0. The `Dmg` event then needs the type, or the main type for a multi-type hit (one more byte).
+- **Client:** colour the damage numbers by type, show "immune" instead of 0, and show a heal number when resistance above 100 % turns the hit into healing. The `Dmg` event then needs the type, or the main type for a multi-type hit (one more byte).
 - **Tune** every resistance in the balancing pass.
 
 ## Woodland escort level
