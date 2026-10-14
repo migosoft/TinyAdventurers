@@ -17,7 +17,7 @@ It builds on this feature: torches and other light sources that can be switched 
 
 ## Last feature (2026-10-14): damage types, world objects and exploding barrels
 
-**Branch:** `feature/barrels` (from `main`), **not merged**. Merge only when the user asks. 20 commits: `git log --oneline main..HEAD`. Spec: [docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md](docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md); plan (18 tasks, run with superpowers:subagent-driven-development, three stages A, B, C): [docs/superpowers/plans/2026-10-14-damage-types-and-objects.md](docs/superpowers/plans/2026-10-14-damage-types-and-objects.md). It was TODO priorities 1 and 2, planned and built together (both removed from the list; it is renumbered).
+**Branch:** `feature/barrels` (from `main`), **not merged**. Merge only when the user asks. Commits: `git log --oneline main..HEAD`. Spec: [docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md](docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md); plan (18 tasks, run with superpowers:subagent-driven-development, three stages A, B, C): [docs/superpowers/plans/2026-10-14-damage-types-and-objects.md](docs/superpowers/plans/2026-10-14-damage-types-and-objects.md). It was TODO priorities 1 and 2, planned and built together (both removed from the list; it is renumbered).
 
 **What was built:**
 - **Damage model** (stage A; TECHNICAL §5 "Damage model"): `defs/damage.rs` (`DamageType` Physical/Cold/Heat/Magical/Poison, `DamageSplit`, `Damage`, `Resistances`, `resolve`, `kind_split`) and `defs/entity_types.rs` (Human, Undead, Monster, Demon, Dragon, Object, plus per-entity `Adjust`: lich, dragon, demon boss). The profile is computed at spawn and stored on every hero, monster and object. All damage calls take a `Damage`; `resolve` is the only formula, floored at -100 % (double damage at most); above 100 % a hit heals. The `Dmg` event carries `ty` and `imm`; the client colours the numbers (`game/damage.ts`) and shows "immune". The XP armour upgrade is **still there**, applied after `resolve`; removing it waits for items (open question in TODO).
@@ -38,7 +38,7 @@ It builds on this feature: torches and other light sources that can be switched 
 **Open (not done yet):**
 - **Live check with the user.** Nobody has played the barrels. Check: a chain reaction; an E push into a chasm, into water and into lava; an enemy blown into a chasm (dies, XP once); an archer shooting a barrel next to a hero; barrels in the boss hall (big bosses must not get stuck); coloured damage numbers and "immune"; no prediction snaps when walking along barrels.
 - **Final whole-branch review** is still to be done before merging.
-- **Barrel art:** the pack's `crate` is the stand-in (`client/src/game/barrel.ts`). CC0 candidates are being researched and the user picks; then import into `client/assets-src/<set>/` with the licence file and add the README credit. Art comes only from the 0x72 pack or CC0 sets.
+- **Barrel art:** the pack's `crate` is the stand-in (`client/src/game/barrel.ts`). The CC0 search is done and the user picks from the candidates (nothing is imported yet): Pine Druid "Barrel Sprite" (CC0, with a no-redistribution note), zwonky "Various Containers" (CC0, OpenGameArt), BitingChaos "16x16 Explosion" (CC0, OpenGameArt); the 0x72 pack v1.7 has no barrel. Then import into `client/assets-src/<set>/` with the licence file and add the README credit. Art comes only from the 0x72 pack or CC0 sets.
 - **Merging:** only when the user asks.
 - **Deferred minor review findings** (small): listed in [docs/TODO.md](docs/TODO.md) under "Barrels and world objects follow-ups". The ones worth fixing in the final wave: a sinking barrel should not block shots or count in pathing (one shared "blocks" predicate); the squeeze cost should apply only to wide monsters; a departed igniter should not be credited.
 - All numbers (resistances, splits, barrel values) are first guesses for the balancing pass.
@@ -75,7 +75,7 @@ Branch `fix/hitboxes-and-dark-shots`, merged into `main` (fast-forward) and push
 
 **Still open:**
 - **Lobby level picker and `SelectLevel`:** not built (one level only). `Room.level` is always `LevelId::Dungeon`; `lobby.rs` `start` maps it to the `LevelChoice`.
-- **The escort level's XP rule** (kills and boss bonus, or a fixed reward for arriving): to decide with the escort item (TODO priority 7).
+- **The escort level's XP rule** (kills and boss bonus, or a fixed reward for arriving): to decide with the escort item (TODO priority 5).
 - **Docker healthcheck (found this session, older than the branch):** the `HEALTHCHECK` in the `Dockerfile` uses bash's `/dev/tcp` under `/bin/sh` (dash), so `docker compose ps` shows the game container as "unhealthy" although `/health` answers OK. Nothing depends on it; fix it with a tool that exists in the runtime image.
 
 ## Session before (2026-10-13, prediction corrections under lag)

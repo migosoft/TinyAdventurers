@@ -20,7 +20,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 | **Mouse** | Aim |
 | **Left mouse button** | Primary attack, toward the mouse pointer. Hold it to keep attacking. |
 | **Right mouse button** | Secondary ability |
-| **E** | Push the barrel right next to you (see Explosive barrels) |
+| **E** (while alive) | Push the barrel right next to you (see Explosive barrels) |
 | **Q / E** | After you die, switch which teammate you watch |
 | **Esc** | Menu (leave the dungeon) |
 | **F3** | Show ping, frame rate and network stats |
@@ -150,7 +150,7 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 | Skeletons, raised skeletons, the Lich | physical 10 % (the Lich: physical about half, magical 40 %) | heat 10 % more |
 | Imps, chorts, summoners, the Red Demon | **heat completely**, magical 20 % (the Red Demon 40 %) | cold |
 | Red Dragon | **heat completely**, magical half, physical 10 % | |
-| Barrels and chests | physical half, poison completely | |
+| Barrels (chests take no damage) | physical half, poison completely | |
 
 - Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
 - The Red Demon's claws and the Red Dragon's claws are partly fire.
