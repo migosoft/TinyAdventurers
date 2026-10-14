@@ -11,11 +11,11 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Next item: enemies that target objects, and world objects heroes can use (TODO.md priority 1)
 
-Not designed yet. Start with **superpowers:brainstorming**; the item and what depends on it are in [docs/TODO.md](docs/TODO.md) ("Priority order", tier 1). The level split it builds on is done (below), but not merged yet.
+Not designed yet. Start with **superpowers:brainstorming**; the item and what depends on it are in [docs/TODO.md](docs/TODO.md) ("Priority order", tier 1). The level split it builds on is done and merged (below). Start the next feature on a new branch from `main`.
 
 ## Last session (2026-10-14, level split)
 
-**Branch:** `feature/level-split` (from `main`), **not merged and not pushed**: the user decides about merging and pushing. It was priority item 1 of `docs/TODO.md` (now removed; the list is renumbered). Spec: [docs/superpowers/specs/2026-10-13-level-split-design.md](docs/superpowers/specs/2026-10-13-level-split-design.md); plan (5 tasks, run with superpowers:subagent-driven-development): [docs/superpowers/plans/2026-10-13-level-split.md](docs/superpowers/plans/2026-10-13-level-split.md).
+**Branch:** `feature/level-split` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-14); the branch is deleted. It was priority item 1 of `docs/TODO.md` (now removed; the list is renumbered). Spec: [docs/superpowers/specs/2026-10-13-level-split-design.md](docs/superpowers/specs/2026-10-13-level-split-design.md); plan (5 tasks, run with superpowers:subagent-driven-development): [docs/superpowers/plans/2026-10-13-level-split.md](docs/superpowers/plans/2026-10-13-level-split.md).
 
 **What changed (a pure refactor: same map, spawns, entity ids, boss and behaviour per seed; the wire fixtures are byte-identical):**
 - **Server core:** a run no longer assumes "dungeon + boss". `Run { layout, level }` replaces `Run.dungeon` and the five boss fields. `Layout` (`dungeon/mod.rs`: map, spawns, chests, player spawns) is what every level fills; `Dungeon::split` cuts the generator's result into the layout and the dungeon's own parts. `run/levels/`: `mod.rs` holds the `LevelRules` trait (hooks with default bodies: `populate`, `tick`, `post_tick`, `on_killed`, `on_boss_hurt`, `failed`, `debug_target`, `boss_bar`) and `enum Level` with the `dispatch!` macro; `boss.rs` holds `BossEncounter`, the boss fight any level can include; `dungeon.rs` holds `DungeonLevel`. `Run::new(id, members, seed, LevelChoice)`.
