@@ -226,6 +226,10 @@ impl Run {
             }
         }
         Level::populate(&mut run, n);
+        // Barrels last, so every other entity keeps its id.
+        for b in run.layout.barrels.clone() {
+            run.spawn_object(EntityKind::Barrel, b, objects::ObjState::Barrel(objects::Barrel::new()));
+        }
         run
     }
 
@@ -1089,7 +1093,8 @@ pub mod tests {
     #[test]
     fn level_setup_is_unchanged() {
         let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
-        assert_eq!(got, vec![15034865796308420847, 11583993820610399499, 14176587140014399478, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
+        // Updated with barrels (2026-10-14).
+        assert_eq!(got, vec![8884078175838146802, 5665780351574593991, 5083927154665991109, 2829562376747273859, 3783119891065861966, 14094621444582867723]);
         assert_ne!(got[0], got[1]);
     }
 
@@ -1108,7 +1113,8 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![5430847933968611557, 17753828129125510062, 7060935872596498876]);
+        // Updated with barrels (2026-10-14).
+        assert_eq!(got, vec![13382284384379377896, 18097079343443391371, 397014047239913983]);
     }
 
     #[test]

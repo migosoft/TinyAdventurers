@@ -96,7 +96,7 @@ pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) ->
     let wide = radius > TILE / 2.0;
     let side = (goal - pos).norm().perp() * radius;
     let map = &run.layout.map;
-    if walk_line(map, pos, goal, mover) && (!wide || terrain_line(map, pos + side, goal + side, mover) && terrain_line(map, pos - side, goal - side, mover)) {
+    if walk_line(map, pos, goal, mover) && object_free_line(run, pos, goal, radius) && (!wide || terrain_line(map, pos + side, goal + side, mover) && terrain_line(map, pos - side, goal - side, mover)) {
         run.monsters[mi].ai.path.clear();
         return move_toward(run, mi, goal, speed, dt);
     }
@@ -121,6 +121,16 @@ pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) ->
         run.monsters[mi].ai.path.remove(0);
     }
     false
+}
+
+/// No solid object (a barrel) within a body's reach of the straight line.
+fn object_free_line(run: &Run, a: Vec2, b: Vec2, radius: f64) -> bool {
+    let d = b - a;
+    let l2 = d.dist2(Vec2::new(0.0, 0.0)).max(1e-9);
+    run.objects.iter().filter(|o| o.solid && !o.gone).all(|o| {
+        let t = (((o.pos.x - a.x) * d.x + (o.pos.y - a.y) * d.y) / l2).clamp(0.0, 1.0);
+        (a + d * t).dist(o.pos) >= radius + o.radius + 6.0
+    })
 }
 
 pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
@@ -510,7 +520,9 @@ fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, 
             if map.blocks(nb.0, nb.1, mover) || blocked.contains(&nb) && nb != goal {
                 continue;
             }
-            let ng = cg + if clear && nb != goal && near_blocked(nb.0, nb.1) { 5 } else { 1 };
+            // Tiles beside a barrel are a tight squeeze for a body: go around when there is room.
+            let squeeze = nb != goal && (-1..=1).any(|dy| (-1..=1).any(|dx| blocked.contains(&(nb.0 + dx, nb.1 + dy))));
+            let ng = cg + if squeeze { 8 } else if clear && nb != goal && near_blocked(nb.0, nb.1) { 5 } else { 1 };
             if g.get(&nb).map_or(true, |&old| ng < old) {
                 g.insert(nb, ng);
                 came.insert(nb, cur);

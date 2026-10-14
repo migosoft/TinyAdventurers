@@ -414,6 +414,7 @@ mod tests {
     fn a_lit_barrel_explodes_after_the_fuse_and_hurts_and_pushes_heroes() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         run.monsters.retain(|m| m.is_boss);
+        run.objects.retain(|o| o.kind != EntityKind::Barrel); // the dungeon's own
         let (_, oi) = barrel_at(&mut run, Vec2::new(20.0, 0.0));
         let hp = run.players[0].hp;
         hurt_object(&mut run, oi, Damage::physical(1.0), None);
@@ -431,6 +432,7 @@ mod tests {
     fn a_chain_of_ten_barrels_explodes_each_exactly_once() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         run.monsters.retain(|m| m.is_boss);
+        run.objects.retain(|o| o.kind != EntityKind::Barrel); // the dungeon's own
         run.players[0].debug = true; // the hero stands in the middle of it
         let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
         for x in tx - 1..=tx + 12 {

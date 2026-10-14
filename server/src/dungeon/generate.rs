@@ -201,6 +201,10 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     if let Some(pos) = place_ogre(&mut ogre_rng, &map, &rooms, &depths, &chests) {
         spawns.push(Spawn { enemy: EnemyType::Ogre, pos });
     }
+    // Barrels (stream 11), last, so they avoid every spawn, chest and the terrain.
+    let mut barrel_rng = rng.clone();
+    barrel_rng.set_stream(11);
+    let barrels = place_barrels(&mut barrel_rng, &map, &rooms, &spawns, &chests);
 
     let mut dungeon = Dungeon {
         map,
@@ -210,6 +214,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
         door,
         spawns,
         chests,
+        barrels,
         player_spawns: Vec::new(),
     };
 
@@ -689,6 +694,83 @@ fn rotate(d: &mut Dungeon) {
     for c in &mut d.chests {
         c.pos = rot_px(c.pos);
     }
+    for b in &mut d.barrels {
+        *b = rot_px(*b);
+    }
+}
+
+/// Explosive barrels: about one ordinary room or hall in four gets a group of
+/// two to four on dry floor, away from the walls (so never in a doorway),
+/// chests and enemy spawns; the boss hall gets three to five single ones
+/// away from its entrance, the boss's start and its chasms and lava. A group
+/// that would cut any floor off from the start is not placed.
+fn place_barrels(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], spawns: &[Spawn], chests: &[ChestSpawn]) -> Vec<Vec2> {
+    let start = rooms[0].rect.center();
+    let taken: Vec<(i32, i32)> = spawns.iter().map(|s| Map::tile_of(s.pos)).chain(chests.iter().map(|c| Map::tile_of(c.pos))).collect();
+    let near = |list: &[(i32, i32)], x: i32, y: i32| list.iter().any(|&(tx, ty)| (tx - x).abs() <= 1 && (ty - y).abs() <= 1);
+    // Plain floor all around (no wall, door, water, chasm or lava next to it).
+    let dry = |x: i32, y: i32| (-1..=1).all(|dy| (-1..=1).all(|dx| map.get(x + dx, y + dy) == Tile::Floor as u8));
+    let mut walled = map.clone();
+    let mut out: Vec<(i32, i32)> = Vec::new();
+    let unreached = |m: &Map| {
+        let d = bfs(m, start.0, start.1);
+        (0..m.w * m.h).filter(|&i| d[i as usize] < 0 && m.safe(i % m.w, i / m.w)).count()
+    };
+    let base = unreached(&walled);
+    let try_place = |cells: &[(i32, i32)], walled: &mut Map, out: &mut Vec<(i32, i32)>| -> bool {
+        // Groups keep a tile of floor to other groups, chests and spawns.
+        if cells.iter().any(|&(x, y)| !dry(x, y) || near(&taken, x, y) || near(out, x, y)) {
+            return false;
+        }
+        for &(x, y) in cells {
+            walled.set(x, y, Tile::Wall);
+        }
+        if unreached(walled) > base {
+            for &(x, y) in cells {
+                walled.set(x, y, Tile::Floor);
+            }
+            return false;
+        }
+        out.extend_from_slice(cells);
+        true
+    };
+    for room in rooms {
+        let r = &room.rect;
+        match room.kind {
+            RoomKind::Room | RoomKind::Hall if rng.gen_bool(0.25) && r.w >= 6 && r.h >= 6 => {
+                let n = rng.gen_range(2..=4);
+                for _ in 0..12 {
+                    let x = rng.gen_range(r.x + 2..r.x + r.w - 3);
+                    let y = rng.gen_range(r.y + 2..r.y + r.h - 3);
+                    let cells: Vec<(i32, i32)> = [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)].into_iter().take(n).collect();
+                    if try_place(&cells, &mut walled, &mut out) {
+                        break;
+                    }
+                }
+            }
+            RoomKind::Boss => {
+                let n = rng.gen_range(3..=5);
+                let mut placed = 0;
+                for _ in 0..200 {
+                    if placed == n {
+                        break;
+                    }
+                    let x = rng.gen_range(r.x + 2..r.x + r.w - 2);
+                    let y = rng.gen_range(r.y + 2..r.y + r.h - 2);
+                    // Three tiles of plain floor all round, so a wide boss can always walk past.
+                    let open = (-3..=3).all(|dy| (-3..=3).all(|dx| map.get(x + dx, y + dy) == Tile::Floor as u8));
+                    if !open || hall_keep_clear(r, x, y) || out.iter().any(|&(bx, by)| (bx - x).abs() <= 3 && (by - y).abs() <= 3) {
+                        continue;
+                    }
+                    if try_place(&[(x, y)], &mut walled, &mut out) {
+                        placed += 1;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out.into_iter().map(|(x, y)| Map::center_of(x, y)).collect()
 }
 
 #[cfg(test)]
@@ -700,12 +782,46 @@ mod tests {
         for seed in 0..20u64 {
             let d = generate(seed, if seed % 2 == 0 { Theme::Water } else { Theme::Lava });
             let (hall, door, tiles) = (*d.boss_hall(), d.door.clone(), d.map.tiles.clone());
-            let (n_sp, n_ch, ps) = (d.spawns.len(), d.chests.len(), d.player_spawns.clone());
+            let (n_sp, n_ch, ps, n_b) = (d.spawns.len(), d.chests.len(), d.player_spawns.clone(), d.barrels.len());
             let (layout, parts) = d.split();
             assert_eq!(layout.map.tiles, tiles);
             assert_eq!((layout.spawns.len(), layout.chests.len(), layout.player_spawns.clone()), (n_sp, n_ch, ps));
+            assert_eq!(layout.barrels.len(), n_b);
             assert_eq!((*parts.boss_hall(), parts.door.clone()), (hall, door));
         }
+    }
+
+    #[test]
+    fn barrels_stand_on_dry_floor_and_never_cut_anything_off() {
+        let mut total = 0;
+        for seed in 0..40u64 {
+            let d = generate(seed, if seed % 2 == 0 { Theme::Water } else { Theme::Lava });
+            let tiles: Vec<(i32, i32)> = d.barrels.iter().map(|&p| Map::tile_of(p)).collect();
+            total += tiles.len();
+            let chests: Vec<(i32, i32)> = d.chests.iter().map(|c| Map::tile_of(c.pos)).collect();
+            let start = d.rooms[d.start].rect;
+            for &(x, y) in &tiles {
+                assert_eq!(d.map.get(x, y), Tile::Floor as u8, "seed {seed}: barrel on {x},{y}");
+                assert!(!chests.contains(&(x, y)) && !start.contains_tile(x, y));
+            }
+            assert!(d.spawns.iter().all(|s| !tiles.contains(&Map::tile_of(s.pos))), "seed {seed}: barrel on a spawn");
+            let hall = *d.boss_hall();
+            let in_hall = tiles.iter().filter(|&&(x, y)| hall.contains_tile(x, y)).count();
+            assert!((3..=5).contains(&in_hall), "seed {seed}: {in_hall} barrels in the boss hall");
+            // Barrels as walls: every safe tile still reachable from the start.
+            let mut walled = d.map.clone();
+            for &(x, y) in &tiles {
+                walled.set(x, y, Tile::Wall);
+            }
+            let (sx, sy) = start.center();
+            let dist = bfs(&walled, sx, sy);
+            for y in 0..walled.h {
+                for x in 0..walled.w {
+                    assert!(!walled.safe(x, y) || dist[(y * walled.w + x) as usize] >= 0, "seed {seed}: {x},{y} cut off");
+                }
+            }
+        }
+        assert!(total > 40 * 4, "barrels in normal rooms too ({total})");
     }
 
     #[test]
