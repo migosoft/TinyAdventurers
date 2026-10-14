@@ -43,10 +43,14 @@ server/                              Rust crate `tiny-adventurers-server`
   src/math.rs, collision.rs, fov.rs  Vec2, tile collision + line of sight, recursive shadowcasting
   src/dungeon/{mod,generate}.rs      Tile/Map/Rect types, `Layout` (what every level fills), seeded generator, `Dungeon::split`
   src/defs/                          data: classes, abilities, enemies, bosses, kinds (ids), progression
+  src/defs/damage.rs                 damage types, `Damage`, `Resistances`, `resolve`, `kind_split`
+  src/defs/entity_types.rs           entity types with resistances and melee splits, `Adjust`, `profile`
+  src/defs/objects.rs                world object defs and the barrel numbers
   src/run/mod.rs                     Run struct (`layout` + `level`), tick loop task, damage/heal/kill, end of run
   src/run/levels/                    level types: mod.rs (`LevelRules` hooks, `enum Level`), boss.rs (`BossEncounter`),
                                      dungeon.rs (`DungeonLevel`, the boss dungeon)
   src/run/entities.rs                Player, Monster, Ai, Projectile, Hazard
+  src/run/objects.rs                 world objects (chests, barrels): state, `hurt_object`, `use_object`, explosions, snapshots
   src/run/abilities.rs               player ability executors, projectiles, explosions
   src/run/ai.rs                      enemy perception/state machine, A*, necromancer raising
   src/run/bosses/                    BossBehaviour trait + demon.rs, lich.rs, dragon.rs
@@ -72,6 +76,7 @@ client/                              Vite + TypeScript + Phaser 3.90
   src/game/anim/defs.ts              DATA: how each entity kind looks (pack frames, weapon, swing, ...)
   src/game/anim/EntityView.ts        one figure: ground shadow + body + weapon; attack animation logic
   src/game/mimic.ts, chest.ts        mimic (hop, bite, reveal) and treasure chest views
+  src/game/barrel.ts, damage.ts      barrel view (fuse flash, fall, sink); damage number colours per type
   src/game/effects.ts                pooled particles, rings, swooshes, floating numbers
   src/game/GalleryScene.ts           dev page ?gallery
   src/game/MimicDemoScene.ts         dev page ?mimic (chaser mimic, chest, reveal; no server)
@@ -171,7 +176,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - `SelectBoss{boss}`: host only, before the start. `null` = random.
 - `StartRun`: host only. Turns the room's level and boss choice into a `LevelChoice` (`{level: "Dungeon", boss}`, tag `level`). There is no level picker yet: every room plays `LevelId::Dungeon`.
 - `BuyUpgrade{stat}`: buys the next level of an `UpgradeStat` with the selected character's XP. Refused during a run.
-- `Input(InputMsg)`: one per 1/60 s step: `seq, mx, my, aim, aim_dist, primary/secondary: Option<shot_id>, view_lag, rtt`. On the wire it is a bare array `InputW` in that field order (`wire.ts` `packInput`, aim as f32); the server recognizes the MessagePack array marker in the first byte. A `t`-tagged `Input` map is still accepted.
+- `Input(InputMsg)`: one per 1/60 s step: `seq, mx, my, aim, aim_dist, primary/secondary: Option<shot_id>, view_lag, rtt, act`. `act` is true for the one input after an E press: the hero uses the nearest object in reach (see "World objects" in §5). On the wire it is a bare array `InputW` in that field order (`wire.ts` `packInput`, aim as f32); the server recognizes the MessagePack array marker in the first byte. A `t`-tagged `Input` map is still accepted.
 - `Ping{time}`, `Spectate{dir}`, `Debug{on}`
 
 **Server → client (`ServerMsg`)**
@@ -195,15 +200,17 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 **`EntSnap`** (the readable form) is a compact array: `[id, kind, x, y, hp 0-255, anim, aim, anim_ms, flags, extra]`.
 - `kind`, `anim` and `flags` come from `defs/kinds.rs`. They are exported to `defs.ts` as `KIND`, `ANIM` and `FLAG`. `FLAG.AIRBORNE` marks the flying dragon; `ANIM.TakeOff`, `Land` and `Bite` are the dragon's.
 - `extra` for projectiles is `(owner_id << 16) | shot_id`, for monsters the owner id, for fire patches the remaining life in ms.
+- Barrels (`KIND.Barrel` 81) send `anim` 0 at rest, 1 while the fuse burns, 2 while falling into a chasm and 3 while sinking in deep water, with `anim_ms` since it started. They are filtered by line of sight like chests.
 - Chests (`KIND.Chest`) send `anim` 1 once opened, with `anim_ms` since the opening. A sleeping mimic is a normal monster with the `ASLEEP` flag; the client draws it as a closed chest.
 
 **Events (`Ev`)** are collected during the ticks between snapshots. Positional events are FOV-filtered per player (except hits and explosions by heroes, see §7):
-- `Dmg`, `Heal`, `Boom{k}`
+- `Dmg{x, y, v, crit, p, ty, imm}`: `ty` is the `DamageType` with the largest share of the hit (the client picks the number's colour from it, `game/damage.ts`); `imm` is set when the resistances reduced a non-zero hit to 0 (the client shows "immune"). On the wire: `[code, x, y, v, crit, p, ty, imm]`.
+- `Heal`, `Boom{k}`: `k` 7 is a barrel explosion (6 is the lich's nova, 5 a dust shockwave).
 - `Died`, `Raise`, `Immune`
 - `Tile`: boss hall entrance sealed (force field)
 - `Msg`
 - `Coins{x, y, v}`: coins found (chest or kill). Sent to every player, not FOV-filtered, because the whole party gets them; the client adds `v` to the HUD counter while alive.
-- `Sink{id, x, y, how}`: a hero is lost to the terrain: `how` 0 falls into a chasm, 1 drowns, 2 climbs back out (debug mode). Not FOV-filtered. The client plays the fall or drown animation and leaves no skull when the following `Died` arrives.
+- `Sink{id, x, y, how}`: a hero or a monster is lost to the terrain: `how` 0 falls into a chasm, 1 drowns, 2 climbs back out (debug mode). Not FOV-filtered. The client plays the fall or drown animation and leaves no skull when the following `Died` arrives. Monsters sink the same way (`how` 0 or 1 only); a monster's `Sink` is not followed by `Died`, the monster just disappears when the sinking ends.
 
 ## 5. Server simulation (`run/`)
 
@@ -257,10 +264,49 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
   - makes an unaware monster search toward its attacker
   - credits damage and kills
 - `kill_monster` recursively kills the monster's minions (`owner`): necromancer skeletons, summoner imps, the lich's disciples and summons. It also awards XP and coins to living players (`Player.xp`, `Player.coins`) and calls the level's `on_killed`, which sets victory if the boss died.
-- **Chests and mimics.** `Run::new` turns `Layout.chests` into `Run.chests` (real ones) and sleeping `EnemyType::Mimic` monsters. `touch_chests` (every step) opens a chest when a living player is within `CHEST_TOUCH` (12 px): `CHEST_COINS` (8–15) to every living player through `give_coins`. The same distance wakes a mimic (`wake_mimic`), as does any player hit (`hurt_monster`). A woken mimic holds still for `MIMIC_WAKE_T` (`Ai.hold`, the lid flying open), then uses the normal AI. `boss::check_arena` wakes every sleeping monster except mimics. Sleeping monsters are not pushed by `separate_monsters`.
+- **Chests and mimics.** `Run::new` turns `Layout.chests` into world objects (`ObjState::Chest`, real ones; see "World objects") and sleeping `EnemyType::Mimic` monsters. `touch_chests` (every step) opens a chest when a living player is within `CHEST_TOUCH` (12 px): `CHEST_COINS` (8–15) to every living player through `give_coins`. The same distance wakes a mimic (`wake_mimic`), as does any player hit (`hurt_monster`). A woken mimic holds still for `MIMIC_WAKE_T` (`Ai.hold`, the lid flying open), then uses the normal AI. `boss::check_arena` wakes every sleeping monster except mimics. Sleeping monsters are not pushed by `separate_monsters`.
 - **Mimic gait.** `ai::gait` makes the mimic hop: it moves only while its Move animation clock is in `MIMIC_HOP_AIR` (0.2–0.7 of a 0.6 s `MIMIC_HOP_CYCLE`), at its average speed divided by that fraction. The constants go to the client through `CONST`, so `mimic.ts` draws crouch, flight and landing from the same clock (`anim_ms`). An awake mimic does not wander.
-- `hurt_player` applies armor and skips HP loss in debug mode. Death switches the player to spectating.
-- **Who pushes:** `AttackStyle::Melee` has a `knock` (px): ogre club 28, orc warrior 20, chort claw 14, everything else 0. `AttackStyle::Slam` (the ogre's ground slam) pushes every hero within its radius 24 px straight away. `ai::perform_attack` calls `knock_player` after a melee hit. `Ranged` has no knock field, so enemy ranged attacks never push. Bosses push in their behaviours: the demon's cleave (56) and swoop (64, the user asked for "significant knockback"); the dragon's front claw (32), bite (24), tail whip (44), landing smash (36, everyone in `DRAGON_SMASH_RADIUS`) and fireball explosions (20: `Projectile.knock`, applied by `abilities::explode` to the heroes it hits). The demon's and the dragon's numbers are in `defs/bosses.rs` (`DEMON_*_KNOCK`, `DRAGON_*`). Heroes never push enemies.
+- `hurt_player` takes a `Damage`, calls `resolve`, then applies the XP armour upgrade (`mods.armor`) to what is left, and skips HP loss in debug mode. Death switches the player to spectating. A negative `resolve` result heals instead (see "Damage model").
+- **Who pushes:** `AttackStyle::Melee` has a `knock` (px): ogre club 28, orc warrior 20, chort claw 14, everything else 0. `AttackStyle::Slam` (the ogre's ground slam) pushes every hero within its radius 24 px straight away. `ai::perform_attack` calls `knock_player` after a melee hit. `Ranged` has no knock field, so enemy ranged attacks never push. Bosses push in their behaviours: the demon's cleave (56) and swoop (64, the user asked for "significant knockback"); the dragon's front claw (32), bite (24), tail whip (44), landing smash (36, everyone in `DRAGON_SMASH_RADIUS`) and fireball explosions (20: `Projectile.knock`, applied by `abilities::explode` to the heroes it hits). The demon's and the dragon's numbers are in `defs/bosses.rs` (`DEMON_*_KNOCK`, `DRAGON_*`). Heroes never push enemies with their own attacks; barrel blasts push them (see "Monster knockback and terrain deaths").
+
+**Damage model (`defs/damage.rs`, `defs/entity_types.rs`).** Every hit is a `Damage { amount, split }`; there is one formula.
+- **Types:** `DamageType` is `Physical 0, Cold 1, Heat 2, Magical 3, Poison 4`. The server exports the ids as `DMG_TYPE` (`generated/defs.ts`); the colours live in the client (`game/damage.ts`).
+- **`DamageSplit`** gives each type a share, always summing to 1. Constructors: `physical()`, `pure(t)` and `split(&[(t, share)])`; the rest of a partial list is filled up with physical (debug builds assert that the shares stay within 1). `main_type()` is the largest share and goes into `Dmg.ty`.
+- **`Resistances`** is one fraction per type (`NONE`, `of(&[...])`, `plus`). 0.5 takes half off, 1.0 is immune, above 1.0 the hit heals, below 0 is a weakness.
+- **`resolve(&Damage, &Resistances) -> f64`** is the sum over the types of amount × share × (1 − resistance), with each resistance floored at −100 % (`MIN_RESISTANCE`), so a weakness at most doubles a part. A negative result means healing. Nothing else computes damage.
+- **Attack splits:** melee uses the attacker's `Profile.melee`. Projectiles and effects use `kind_split(EntityKind)`: arrows and bolts physical; magic missile, shadow and gloom bolts magical; fireball 70 % heat, 20 % magical, 10 % physical; fire bolt and fire orb 70 % heat, 30 % magical; frost bolt cold; dragon fireball, breath and fire patches heat. The `Projectile` carries its `Damage`, and `abilities::explode` takes one. Lava is heat, per tick. The barrel blast is 50 % heat, 50 % physical. Falling and drowning are not damage.
+- **Entity types** (`EntityType`, table in `type_def`; first guesses for the balancing pass):
+
+| Type | Resistances | Melee split |
+|---|---|---|
+| Human | none | physical |
+| Undead | physical 10 %, heat −10 %, poison 100 % | physical |
+| Monster | none | physical |
+| Demon | magical 20 %, heat 100 %, cold −50 % | 80 % physical, 20 % heat |
+| Dragon | magical 50 %, physical 10 % | physical |
+| Object | physical 50 %, poison 100 % | physical |
+
+- **Profiles:** `entity_types::profile(&[EntityType], Adjust)` adds the resistances of all listed types and the adjustment, and takes the adjustment's melee split, else the first type's. The result (`Profile { res, melee }`) is computed once at spawn and stored on every `Player`, `Monster` and `WorldObject`. Each def has a `profile()`: `classes::profile`, `enemies::profile`, `bosses::profile`, `objects::profile`. Adjustments: lich physical +40 % and magical +40 %; dragon heat +100 % and melee 20 % heat; demon boss magical +20 %.
+- **Who is what:** the four classes plus necromancer, summoner and disciple are human; skeletons, raised skeletons and archers and the lich are undead; goblin and orc archers, orc warrior, mimic and ogre are monsters; imp, chort, summoned imp and the demon boss are demons; the dragon boss is a dragon; chests and barrels are objects.
+- **Healing above 100 %:** `hurt_player` calls `heal_player` for a negative result (capped at max HP, a `Heal` event only when something was healed); `hurt_monster` heals the monster directly (it sends `Heal` even at full HP, with v 0). The XP armour upgrade stays and is applied after `resolve`; removing it waits for items (TODO, "Damage-type system").
+
+**World objects (`run/objects.rs`, `defs/objects.rs`).** `Run.objects: Vec<WorldObject>` holds everything on the map that is neither hero nor monster. A `WorldObject` has `id`, `kind` (an `EntityKind`; there is no separate object kind enum), `pos`, `radius`, `solid`, `res`, `gone` (removed at the end of the step) and a per-kind `ObjState`.
+- **`ObjState::Chest { opened }`:** as before the move (coins on touch, mimics wake nearby). Chests are not solid and take no damage, and `touch_chests` loops over the chest objects.
+- **`ObjState::Barrel(Barrel)`:** `fuse: Option<f64>`, `lit_at`, `igniter` (entity id of the hero who lit the chain), `vel` (slide after a push) and `sinking: Option<(time left, Sink, start)>`.
+- **`hurt_object(run, oi, Damage, by)`:** calls `resolve`; chests ignore damage. A barrel whose result is above 0 and that is neither lit nor sinking gets a fuse of `BARREL_FUSE` (0.3 s) and remembers `by`. Every attack reaches objects: shots (`advance_projectile`), `melee_arc`, `dash_contact`, `dagger_target` and `explode`. Objects resist poison fully through the `Object` type.
+- **`tick_objects`** (every step): sinking barrels count down and disappear without a blast; the others slide, check the ground (`barrel_terrain`) and burn their fuse. A barrel lit during this step by an earlier blast starts burning its fuse on the next step, so a chain advances one link per 0.3 s. No barrel explodes twice: `gone` is set first, and a lit or sinking barrel is not lit again.
+- **`explode_barrel`:** sends `Boom k 7` (`BOOM_BARREL`), then hurts every hero, monster (bosses included) and barrel within `BARREL_BLAST_R` (40 px, plus the target's radius) that has line of sight to the blast, with `barrel_blast()` (30 damage, 50 % heat, 50 % physical). Heroes are pushed with `knock_player`, non-boss monsters with `knock_monster` (`BARREL_BLAST_KNOCK`, 40 px). Damage and kill credit go to the igniter. A chain lit by an enemy shot, or by a hero who has left, still explodes and gives no credit.
+- **`use_object(run, pi)`** is the one use entry point: a living, not sinking hero uses the nearest barrel whose gap to the hero is at most `USE_REACH` (6 px). `apply_input` calls it for `act`, but not for an input that started knocked. For a barrel it is `push_barrel`: slide `BARREL_PUSH` (48 px) straight away from the hero. Chests do nothing. Levers, torches and the like will use the same entry.
+- **Sliding barrels** move with `Mover::Dash` and the knockback decay (`KNOCK_DECAY`, `KNOCK_MIN_SPEED`). Walls, other solid objects, heroes and monsters stop them (heroes and monsters are not shoved). `barrel_terrain`: over a chasm it falls (`Sink::Fall`, `FALL_TIME`), in deep water it sinks (`DROWN_TIME`) with no blast, in lava the fuse is set to 0 and it explodes.
+- **Snapshots:** `objects::snap` encodes one `EntSnap` per object (anims in §4). `visibility.rs` filters objects by line of sight, like chests before.
+- **Numbers** (`defs/objects.rs`, all first guesses): radius 6 (a 12 px square), fuse 0.3 s, blast radius 40 px, blast damage 30, blast push 40 px, push 48 px, use reach 6 px.
+
+**Solid objects in movement (`collision.rs`).** `move_box` and `step_move` take `solids: &[Solid]` (`Solid { x, y, half }`, squares). Solids are checked axis by axis like tiles; a figure that already overlaps one may still move away from it in any direction, so nobody gets trapped. `Run::solids(except)` lists the solid, resting objects (not gone, not sinking). They apply to heroes (`apply_input`), monsters (`ai::move_toward`, `separate_monsters`, `slide_monster`) and sliding barrels. The TypeScript port (`sim/collision.ts`) has the same parameter, and the predictor (`world.ts`, `Predictor.solids`) takes the barrel positions from the latest snapshot (`GameScene` keeps those with `anim < 2`). The shared fixtures include runs with barrels, so `sim.test.ts` pins Rust and TypeScript to the same result. Barrels do not block sight.
+
+**Monster knockback and terrain deaths (`run/mod.rs`).**
+- `Monster` has `knock` (px/s), `sinking`, `burn_t` and `last_hit_by`. `knock_monster(mi, from, dist)` pushes a monster straight away; bosses, airborne and sinking monsters are never pushed. A pushed monster slides (`slide_monster`: `Mover::Dash`, so only walls and solids stop it) and its own movement is skipped meanwhile.
+- `terrain_monster` runs after the AI step, like `terrain_player`. A monster over a chasm or deep water starts sinking (`FALL_TIME` / `DROWN_TIME`, `Ev::Sink` with the monster's id, wind-up cleared); when the time is up, `kill_monster` runs once, with the kill credited to `last_hit_by`. Bosses are skipped. Lava burns monsters that are not lava walkers (`Mover::Demon`) with heat damage `LAVA_DAMAGE` every `LAVA_TICK`; a lava death gives no kill credit. A monster standing on ground it cannot walk (lava) walks out first (`ai::escape_terrain`, ignoring heroes). The client reuses the hero fall and drown animations for monster figures.
+- Known gaps (deferred): `escape_terrain` has no fallback when no walkable tile lies within 3 tiles, so such a monster stays put; a wind-up is not cleared by `knock_monster` (only by sinking), so an attack may resume after the slide.
 
 **Lag compensation.**
 - Melee arcs, the dagger and dash contact test monster positions rewound by the client's `view_lag` (RTT/2 + its interpolation delay), up to 31 ticks.
@@ -270,6 +316,9 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 **AI (`ai.rs`).**
 - **Wide figures:** `path_toward` (also used by the bosses' chase since boss halls have chasms) treats figures wider than a tile (the demon, the dragon) specially: the straight-line shortcut also checks lines offset by their radius against terrain (`collision::terrain_line`; walls are fine, figures slide along them), A* (`astar_clear`) charges extra for tiles next to anything they cannot enter, a waypoint they make no progress toward is skipped, and a boss with no path walks straight at the hero. The swoop still charges in a straight line and stops at a chasm edge.
 - **Movers:** each monster has a `mover`: `Mover::Demon` for imps, chorts, summoners, summoned imps and the demon boss, `Mover::Enemy` otherwise. `move_toward`, `separate_monsters`, `astar` and summon spots use the walking rule for it, and `path_toward` only walks straight when `walk_line` (not just line of sight) is clear. So enemies never enter chasms or deep water, and only demons cross lava. The debug path to the boss is planned as `Mover::Enemy`, around all terrain.
+- **Targets:** `Ai.target` is `Option<Target>`, `Target::Player(id) | Object(id) | Place(Vec2)`. Perception sets `Player` every tick. The barrel an enemy aims at lives in its `Windup` (`Windup.at: Option<Target>`), because perception would overwrite `ai.target`. `Place` has no user yet.
+- **Enemies shoot barrels:** before a ranged attack of a non-boss enemy (`ai::barrel_near`), it looks for an unlit, resting barrel that it can see, within its range, within the blast radius of its target hero, and far enough from itself that the blast spares it (blast radius + its own radius + 8 px). It picks the one closest to the hero and winds up toward it. When the wind-up ends, it shoots the barrel if it is still there and unlit, else the hero. Bosses and melee enemies never do. Enemy shots stop at a barrel and hurt it.
+- **Pathing around barrels (beyond the plan, added because big bosses got stuck):** `path_toward` walks straight only when `object_free_line` is clear, i.e. no solid object within the body's radius plus 6 px of the line. Otherwise it runs A* (`astar_clear`) with the tiles under resting barrels blocked (`Run::object_tiles`) and an extra cost of 8 for tiles next to a barrel (the "squeeze" cost; it applies to all monsters). So a chaser switches to A*, refreshed every 0.6 s, whenever a hero stands next to a barrel; that costs a little CPU and can make chasers slightly late there. Sinking barrels still count as solid here (deferred).
 - Perception: the nearest living, non-hidden player within `sight` and with line of sight. Enemies never target players they cannot currently see.
 - States: `Idle` (wander near home) → `Chase` (melee approach, ranged keep a preferred distance) → wind-up → attack. Losing sight leads to `Search` (A* to last known position) and then `Return` (A* home).
 - Wind-ups telegraph attacks: the client flashes the body red and shakes it. The hit lands only if the target is still seen.
@@ -318,6 +367,7 @@ The generator is seeded (ChaCha8) and deterministic:
    **Boss hall chasms** (`place_boss_chasms`, stream 9, every theme), so knockback matters in boss fights: one or two **wall strips** (4–7 tiles long, 1–2 deep, along any wall) and one or two **pits** (2x2 to 3x2, three tiles from the walls). Nothing goes within 3 tiles of the boss's start or near the entrance (the bottom centre, 4 tiles to each side, 5 deep). Pits keep 3 tiles from other chasms (the dragon is over two tiles wide), strips 2. A feature that cuts any hall floor off from the entrance is undone.
    **Lava pool in the demon's hall** (`place_boss_lava`, after the chasms on the same stream, lava theme only, asked for by the user): one oval lava pool (as in the rooms, 4×4 to 7×6), kept off the boss's start and the entrance like the chasms, with a tile of floor between it and any chasm, and undone if it cuts hall floor off from the entrance (up to 100 tries). The demon crosses it unharmed and at full speed (`Mover::Demon`); heroes knocked in are slowed and burn.
    **The ogre** (`place_ogre`, stream 10, after the terrain): one per dungeon, in a random ordinary room or hall at depth ≥ 0.35 (any ordinary room if none fits), on a tile with safe ground in all 8 neighbours and no chest. It is pushed to `spawns`, so it rotates with them. Stream 10 is a clone, so maps, spawns and chests of existing seeds are unchanged.
+   **Barrels** (`place_barrels`, stream 11, last, a clone of the generator rng, so the maps, spawns, chests, terrain and ogre of existing seeds are unchanged): about one in four ordinary rooms and halls (at least 6×6) gets a group of 2–4 barrels in a 2×2 block, away from the walls, on tiles with plain floor all around (no wall, door, water, chasm or lava next to them), and not within a tile of an enemy spawn, a chest or another group. The boss hall gets 3–5 single barrels, each with a 7×7 area of plain floor around it (so a wide boss can always pass), outside `hall_keep_clear` (the boss's start and the entrance) and at least 4 tiles from the next barrel. A barrel or group is only placed if, with its tiles counted as walls, no safe tile is cut off from the start that was reachable before. With few valid spots a hall can get fewer than three barrels (best effort). They end up in `Layout.barrels`, and `Run::new` spawns them as objects.
 6. **Rotation:** a random quarter turn, so the start can be on any side and the boss hall is on the opposite side.
 
 The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), including chest placement (on floor against a wall, outside the start room and boss hall, not on an enemy), that chests and mimics actually appear, and the terrain guarantees: no safe tile cut off, spawns and chests on floor, no terrain in the start room, only chasms (and some) in the boss hall plus a lava pool in every lava-theme hall (none elsewhere), with its centre and entrance clear, only the theme's liquid, every terrain kind present, and a terrain share of 2–15 %.
@@ -341,6 +391,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - On each snapshot the client replays unacknowledged inputs from the server state.
 - Errors under 24 px are blended out over about 100 ms; larger errors snap.
 - Terrain is part of the port: the speed factor and the walking rules.
+- **Solid objects are part of the port** (`Predictor.solids`): the squares of resting barrels from the latest snapshot go to `stepMove`, like the server's `Run::solids`. A barrel moves only after a push or sinks, so prediction next to barrels should need no correction; that is part of the open live check.
 - **Knockback is part of the port** (`stepMove`, `knocked()`). `me` carries `knock_vx/knock_vy`, and the replay starts from them, so after the snapshot that reports a push the prediction slides exactly like the server. The push itself is the enemy's action, so the client learns of it about RTT/2 late (a correction, blended or snapped as usual). While predicted knocked, `fixedStep` fires nothing, and the replay drops dashes sent during a push the client learned of late, like the server. The predictor also applies the server's sinking rule (`sinking()` in `sim/collision.ts`): a hero not dashing whose centre is over a chasm or deep water stops moving and attacking, in prediction and in the replay, so a fall needs no round trip and causes no correction. The pending list keeps each input as it was sent, not as predicted: if the server sees no fall (or a debug climb-out already happened there), it applies the move, and the replay must too.
 - Local cooldowns and hide time are corrected when they differ from the server by more than 0.15 s / 0.3 s. For both, the server value is first carried through the inputs it has not acknowledged yet, including the abilities they use (`Pending.used` for cooldowns, `Pending.hide` for Hide and the attacks that end it, set through `Predictor.useHide`; like the movement replay). Without that, a snapshot from before the server saw a shot showed cooldown 0, the client reset its own, and a held button fired a second, client-only shot (seen as two arrows when dragging the mouse while clicking). Likewise a fresh Hide flickered off for about RTT until the server had seen it.
 
@@ -648,7 +699,14 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 ## 12. Tests
 
-**Server (`cargo test`, 159 tests):**
+**Server (`cargo test`, 201 tests):**
+- damage model: `resolve` for single and several types, a missing entry, immunity, healing above 100 %, a weakness and its −100 % floor, partial splits filled with physical; attacks by kind have their types; entity type resistances add up with adjustments (lich physical 50 %, dragon heat 100 %), every enemy and class has its entity type; typed paths (a demon takes no heat from the fireball, a skeleton takes more, the demon's claw burns, lava, the lich nova and the dragon's breath are typed)
+- world objects: chests open once and pay the party, mimics still wake, objects resist poison fully
+- solids: a square blocks axis by axis, a figure inside one can walk out in every direction; 36 fixture steps touch a solid
+- barrels: lit by any hit, explode after 0.3 s, one explosion per barrel in a chain (ten in a row give ten `Boom k 7`), blast damage and push for a hero, a monster and a boss (damaged, not pushed), line of sight, credit to the igniter, a chain lit by a shot or by a departed hero; the E push, its reach, stops at a wall; falls into a chasm, sinks in water, explodes in lava; every attack kind hits objects, shots stop at barrels
+- monsters: blown into a chasm (one death, XP once), into water, into lava (burns, walks out); bosses are never pushed
+- ranged AI: shoots a barrel next to the hero, does not shoot one that would catch it, ignores a far one; A* goes around barrels; a wide boss reaches every spot of its hall with barrels in it
+- barrel generation over many seeds: no tile cut off, hall barrels keep their plain-floor area and gap
 - protocol round trip
 - wire: positions round to 1/16 px (also beyond 4096 px), aim wraps into a byte, event codes follow `EV_CODES`, a compact input decodes to `InputMsg`, sample snapshots are bare arrays and at least 30 % smaller than the old form
 - dungeon determinism and guarantees over 200 seeds
@@ -704,10 +762,11 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - mimics: asleep until touched, then hold before hunting; the boss waking leaves them asleep; they move only while airborne
 - ts-rs export tests
 
-**Client (`npm test`, 27 tests):**
+**Client (`npm test`, 34 tests):**
+- `game/damage.test.ts`: the number colour per damage type (physical white on enemies, red on heroes).
 - `pickFrame.test.ts`: the dragon's and the demon's frame choice (wind-up frame with the telegraph, strike frames after it, the demon's charge loop and ring burst, enraged wind-ups shortened by `pace`).
 - The collision and FOV ports must equal the Rust fixtures exactly. The fixture map holds every kind of terrain, and 10 random walks with dashes and pushes (14–44 px, any direction) cross it.
-- `wire.test.ts` unpacks the sample snapshots from `wire-fixtures.json` (every event type, a spectator, with and without boss bar) and compares them with their readable form: positions within 1/32 px, aim within half a step, everything else exact. It also checks the aim range and `packInput`.
+- `wire.test.ts` (it also covers the `act` input field and `Dmg` with `ty` and `imm`) unpacks the sample snapshots from `wire-fixtures.json` (every event type, a spectator, with and without boss bar) and compares them with their readable form: positions within 1/32 px, aim within half a step, everything else exact. It also checks the aim range and `packInput`.
 - `net.test.ts`: the `?lag` simulator delivers 2,000 messages in order under a timer that rounds delays down like a browser (the old one-timer-per-message line failed it).
 - `ui/endText.test.ts`: the end screen's first line (the slain boss on a dungeon win, the level's defeat line, the level's victory line when there is no boss).
 - `game/world.test.ts`: the predictor replays the moves it sent while it predicted a fall, so a debug climb-out the server already did is followed exactly.
@@ -732,6 +791,8 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 - Pack art gaps: no attack frames, no up/down facing. (The dragon, the demon and the lich have their own frames.)
 - No sound.
+- Barrels are drawn with the pack's `crate` until barrel art is chosen.
+- Damage types, resistances and the barrel numbers are first guesses for the balancing pass, and the user has not played the barrels yet (see HANDOFF, open points).
 - Snapshots are compact but not delta-compressed (every snapshot is complete). They are small anyway.
 - Boss fights are covered by unit tests and were played live once against all three bosses; their numbers are not balanced yet.
 - No password recovery, by design: there is no e-mail address to send anything to.

@@ -20,6 +20,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 | **Mouse** | Aim |
 | **Left mouse button** | Primary attack, toward the mouse pointer. Hold it to keep attacking. |
 | **Right mouse button** | Secondary ability |
+| **E** | Push the barrel right next to you (see Explosive barrels) |
 | **Q / E** | After you die, switch which teammate you watch |
 | **Esc** | Menu (leave the dungeon) |
 | **F3** | Show ping, frame rate and network stats |
@@ -115,6 +116,46 @@ Some rooms have a **treasure chest** against a wall. Walk into it to open it: **
 
 About one chest in four is a **mimic**. A mimic stays a closed chest until someone comes close or hits it. Then it jumps open and attacks. A careful hero can test a chest from a distance with a spell or arrow: a real chest does not stop a shot, a mimic wakes up. A chest that rattles when you come near is a bad sign.
 
+## Explosive barrels
+
+Wooden **barrels** stand in some rooms, usually two to four together, and a few in every boss hall. They are solid: neither you nor the enemies can walk through them, and shots stop at them.
+
+- **What lights them:** any hit. A sword swing, an arrow, a spell, an enemy's arrow or fire bolt, another explosion. The barrel flashes for about a third of a second, then **explodes**.
+- **The blast** reaches about two and a half tiles (40 px). It does 30 damage, half fire and half physical, to **everyone it reaches with a clear line**, heroes and enemies alike, your own party included. It **pushes** heroes and enemies away from the barrel (about 2.5 tiles). A boss takes the damage but is never pushed.
+- **Chain reaction:** a blast lights every barrel in its reach, so a group goes off one after the other, a third of a second apart.
+- **Pushing:** stand right next to a barrel (touching it) and press **E**. It slides about three tiles straight away from you, until a wall, another barrel, a hero or an enemy stops it. A small **E** appears over the barrel you would push.
+- **Terrain:** a barrel pushed over a **chasm** falls, one pushed into **deep water** sinks, and neither explodes. One pushed into **lava** explodes at once.
+- **Enemies in the blast:** an enemy that is pushed over a chasm or into deep water **falls or drowns** and counts as a kill for you, as if you had made it. In lava it burns.
+- **Archers use them too:** an enemy with a ranged attack that sees a barrel next to you may shoot the **barrel** instead of you. It will not do that if the blast would catch it as well. Don't stand next to barrels when archers are about.
+- **Kills and damage** from a chain count for the hero who lit the first barrel. If an enemy lit it, nobody gets credit.
+
+Tip: light a group from far away while the enemies stand around it, or push a barrel into a crowd and shoot it. Never fight with a barrel at your back.
+
+## Damage types and resistances
+
+Every attack has one or more **damage types**: physical (blades, arrows, claws), heat (fire), magical (spells), cold and poison. The colour of a damage number shows the main type of the hit:
+
+| Colour | Type |
+|---|---|
+| White (on enemies), red (on heroes) | Physical |
+| Orange | Heat |
+| Purple | Magical |
+| Light blue | Cold |
+| Green | Poison |
+
+Heroes, enemies and barrels can **resist** a type: that part of the hit is reduced. An attack with several types (the fireball is mostly heat, partly magical and physical) is reduced part by part, so an enemy immune to fire still takes the rest. When a hit does nothing at all, the number says **immune**. Some resist so strongly that the hit **heals** them, and a **weakness** adds damage, at most double.
+
+| Enemy | Resists | Weak to |
+|---|---|---|
+| Skeletons, raised skeletons, the Lich | physical 10 % (the Lich: physical about half, magical 40 %) | heat 10 % more |
+| Imps, chorts, summoners, the Red Demon | **heat completely**, magical 20 % (the Red Demon 40 %) | cold |
+| Red Dragon | **heat completely**, magical half, physical 10 % | |
+| Barrels and chests | physical half, poison completely | |
+
+- Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
+- The Red Demon's claws and the Red Dragon's claws are partly fire.
+- Your own **armour** upgrade still works on top of all this.
+
 ## Water, lava and chasms
 
 Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water** appears in the lich's and the dragon's dungeons, **lava** in the demon's.
@@ -130,6 +171,7 @@ Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water**
 - No chasm is wider than 3 tiles, so a dash can always clear it.
 - **Demons** (imps, chorts, summoners and the Red Demon) walk through lava unharmed and at full speed. Other enemies go around lava, and no enemy follows you into a chasm or deep water.
 - Shots and sight pass over all terrain.
+- Enemies can fall, drown and burn too, if a **barrel blast** pushes them in (see Explosive barrels).
 - In debug mode a hero who falls or drowns climbs back out onto the last safe tile.
 
 ## Final bosses
@@ -205,4 +247,5 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 - The Paladin's heal only reaches allies close by, so stick together.
 - Archers keep their distance. Close in, or use the Wizard and Assassin to pick them off.
 - Use corners: enemies can't attack what they can't see.
+- Barrels are a weapon and a danger: light them from a distance, and keep your back free. Archers shoot barrels next to you.
 - Put a chasm or a pool between you and melee enemies: they have to walk around it. In the demon's dungeon, lava doesn't stop the demons.

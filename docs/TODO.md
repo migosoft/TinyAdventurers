@@ -4,35 +4,33 @@
 Ordered by technical complexity and by technical dependencies (what makes later items easier), not by quick wins. Items in the same tier can be done in either order unless noted.
 
 **Tier 1: foundations**
-1. **Enemies that target objects, and world objects heroes can use.** `Ai.target` can only hold a player id; the carriage and the torch-extinguishing enemy need targets that are objects or places. The same work adds server-side objects with state and a client message for using them (click or stand nearby). That one system covers the carriage, torches and other light sources, the riddle creature, levers and buttons, and breakable crates.
-2. **Damage-type system** (see "Damage-type system"): a damage type on every attack, resistances on heroes, enemies and objects. It is fundamental to how combat will work, so it comes before every new ability, enemy and item, and none of them has to be retrofitted. Objects that can be damaged (from 1) use the same damage path and resistances, so plan and build the two together.
-3. **Light-source system** (see "Lighting"). It comes before every feature that adds something that glows (abilities, enemies, the escort level, room dressing), so none of them has to be retrofitted.
-4. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), torch art, gnolls. Little code, but the shadow, ghost, gnolls, sphinx and torches all wait on it; it can run alongside 1–3.
+1. **Light-source system** (see "Lighting"). It comes before every feature that adds something that glows (abilities, enemies, the escort level, room dressing), so none of them has to be retrofitted.
+2. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), torch art, gnolls. Little code, but the shadow, ghost, gnolls, sphinx and torches all wait on it; it can run alongside 1.
 
 **Tier 2: larger features on top of tier 1**
 
-5. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. If an ability pushes enemies, enemies need their own version of `Sink`/`kill_player` (see "Enemies in terrain").
-6. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the objects from 1, a dialog panel. Answer the open design questions first.
-7. **Woodland escort level:** needs 1, plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
+3. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
+4. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
+5. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
 
 **Tier 3: content**
 
-8. **Ghost and shadow.** The shadow needs lighting; it and the torch-extinguishing enemy act on any light source that can be switched off. The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
-9. **Minions for the other bosses; more classes and bosses** (classes are easier after 5).
-10. **More loot and room dressing:** item drops need a pickup system; levers and crates use 1; floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
-11. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
-12. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled.
+6. **Ghost and shadow.** The shadow needs lighting; it and the torch-extinguishing enemy act on any light source that can be switched off. The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
+7. **Minions for the other bosses; more classes and bosses** (classes are easier after 3).
+8. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
+9. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
+10. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled.
 
 **Tier 4: infrastructure (independent of gameplay work)**
 
-13. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
-14. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
-15. **Several game servers** (shared presence and login limiter in Valkey). After 13; only when one server is not enough.
+11. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
+12. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
+13. **Several game servers** (shared presence and login limiter in Valkey). After 11; only when one server is not enough.
 
 **Tier 5: last**
 
-16. **Balancing pass:** every "Tune" item, including resistances, light radii and darkness. Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone.
-17. **Delta snapshots, WebTransport:** only if measurements show they are needed.
+14. **Balancing pass:** every "Tune" item, including resistances, light radii and darkness. Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers.
+15. **Delta snapshots, WebTransport:** only if measurements show they are needed.
 
 ## Progression follow-ups
 
@@ -46,7 +44,7 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 ## Chests, mimics and coins follow-ups
 - **Spend coins:** they are banked but buy nothing yet. Intended for loadouts (see below); a coin column in the lobby shop would also work.
 - **Tune** `CHEST_COINS`, `coins_for_kill`, the chest rate (35 % of rooms) and the mimic share (25 %) in the balancing pass. Mimic stats are in `defs/enemies.rs`.
-- **More loot:** the pack also has flasks (8 colours/sizes), bombs and coins that could drop as pickups; crates (`crate`) could be breakable.
+- **More loot:** the pack also has flasks (8 colours/sizes), bombs and coins that could drop as pickups; crates (`crate`) could be breakable objects (see "Barrels and world objects follow-ups").
 - **More room dressing from the pack (unused so far):** floor spikes (animated), buttons and levers, columns, wall fountains (red/blue, animated), wall goo, floor ladder/stairs.
 
 ## Demon dungeon follow-ups
@@ -57,7 +55,7 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **Knockback is live** (TECHNICAL.md §5, §8). Follow-ups:
   - **Tune** the push distances (`knock` in `defs/enemies.rs`, the demon's `DEMON_*_KNOCK` and the dragon's `DRAGON_*_KNOCK` in `defs/bosses.rs`) and `KNOCK_DECAY` in the balancing pass. The user approved the current ones in `?knockback`; the demon's were raised afterwards at the user's request (cleave 36 → 56, swoop 44 → 64).
-  - **Enemies in terrain:** heroes never push enemies, so enemies still never fall or drown. If a hero ability ever pushes, enemies need a monster version of `Sink`/`kill_player`.
+  - **Enemies in terrain (done for blasts, 2026-10-14):** a barrel blast pushes non-boss monsters (`knock_monster`), and monsters fall, drown and burn like heroes (`terrain_monster`, TECHNICAL §5). Still open: heroes' own attacks never push, bosses are never pushed, and a lava death gives no kill credit.
   - **Boss-hall chasms:** tune their count and size (`place_boss_chasms`), and check live that pushes into them feel fair.
 - **Tune** in the balancing pass: `SHALLOW_SPEED` 0.7, `LAVA_SPEED` 0.4, `LAVA_DAMAGE`/`LAVA_TICK` (20/s; the user wants at least 15/s), `FALL_TIME` 0.7 s, `DROWN_TIME` 0.9 s (all in `dungeon/mod.rs`), and the feature rates and sizes in `place_terrain` (about 4 % of the floor).
 - **Confirmed live by the user (2026-10-08):** a normal water run, chasm falls and drowning. Lava damage with armour upgrades has not been looked at specifically.
@@ -71,26 +69,38 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Also approved (2026-10-13): "Forest creatures" by lyaseek (https://lyaseek.itch.io/miniffanimals). For both, check the license and keep the license file next to the imported art.
 
 ## Damage-type system
-Idea from the user (2026-10-14); priority 2. Every hit has damage types, and heroes, enemies and objects can resist types. Damageable map objects (priority 1, the object system) take damage through this system too.
-- **Types:** cold, heat (fire), physical, magical, poison. Ideas for more (pick only what abilities and enemies will actually use):
+Built 2026-10-14 (TECHNICAL §5, "Damage model"): five types (physical, cold, heat, magical, poison), a split per attack, resistances from entity types plus per-entity adjustments, one formula (`resolve`), coloured damage numbers and "immune". What is left:
+- **More types** (pick only what abilities and enemies will actually use):
   - **lightning:** could jump to a nearby second target, or stun for a moment;
   - **holy:** strong against the undead (lich, skeletons) and demons;
   - **necrotic/shadow:** the lich and a future shadow enemy; undead resist it;
   - **acid:** could lower the target's resistances for a while.
-- **Attacks** always have at least one damage type. The default is physical, so today's attacks become physical unless they are given another type.
-  - **Several types (decided):** the attack's damage is split into parts per type (e.g. a fireball: 70 % heat, 30 % physical). Each part is reduced by its own resistance, and the parts are added up. So a target immune to heat still takes the physical part.
-- **Resistances:** heroes, enemies and objects have no, one or several resistances, each a percentage per type taken off that type's damage: `part × (1 − resistance)`. A type without an entry means 0 %, so full damage. 100 % means immune to that type. Above 100 % the hit heals instead: at 150 %, a 10-point part heals 5 HP (decided). Store them as a small list of (type, percent) pairs, e.g. in the `EnemyType` and class defs, plus whatever the object system (priority 1) gives objects.
-- **Where it goes:** all damage already passes through `hurt_player` and `hurt_monster` (`run/mod.rs`, about 25 call sites in `abilities.rs`, `ai.rs`, the boss files and lava). Both would take the attack's type parts instead of one number (just physical by default), and every call site would name them. Lava is heat; falling and drowning stay instant deaths, not damage.
-- **Damage over time (decided):** it also has one of the damage types, and resistances apply to every tick. Nothing deals damage over time yet, so this is only a rule for later effects such as poison or burning.
+- **Damage over time (decided):** it has one of the damage types, and resistances apply to every tick. Nothing but lava deals damage over time yet; poison or burning would build one `Damage` per tick.
 - **Armour and items (decided):** armour stops being a stat raised with XP. Items give armour, and so resistances. An armour piece gives at least physical resistance, and any item can give resistances to other types.
+  - **The XP armour upgrade still exists** (`Modifiers.armor`): `hurt_player` applies it after `resolve`. Removing it waits for items.
   - Remove `Armor` from the lobby upgrade shop (`UpgradeStat`, `StatUpgrades.armor`, `Modifiers.armor` in `defs/progression.rs`) and the `mods.armor` reduction in `hurt_player`.
   - Items need an equipment system: item slots per character, stored with the character's progress in PostgreSQL, and a way to get items (drops, the lobby, or coins; see "Spend coins").
-- **Questions to settle:**
+- **Open questions (armour):**
   - Characters that already bought armour levels: refund the XP they spent, or keep the levels as a fixed physical resistance? `progress.rs` needs a version bump either way.
   - Removing armour before items exist leaves heroes with no damage reduction. Should both ship together?
-  - Negative resistance as a weakness (e.g. −50 % = 1.5× damage), for example skeletons weak to holy or fire enemies weak to cold?
-- **Client:** colour the damage numbers by type, show "immune" instead of 0, and show a heal number when resistance above 100 % turns the hit into healing. The `Dmg` event then needs the type, or the main type for a multi-type hit (one more byte).
-- **Tune** every resistance in the balancing pass.
+- **Tune** every resistance, split and the −100 % floor in the balancing pass (`defs/entity_types.rs`, `defs/damage.rs`).
+
+## Barrels and world objects follow-ups
+Built 2026-10-14 on branch `feature/barrels` (TECHNICAL §5, "World objects"): chests moved into `run/objects.rs`, exploding barrels as the first new kind, enemies that can target objects or places (`Target`).
+- **Thrown or pushed objects dealing damage:** today a pushed barrel only slides and a blocked slide stops it. A barrel (or crate) that hits a hero or enemy could hurt and push them.
+- **More object kinds** on `hurt_object` and `use_object`: crates (breakable, may hold coins), levers and buttons, torches (switched off and on), the carriage, the riddle creature. `use_object` already dispatches on the kind; E is the use key.
+- **Tune** in the balancing pass: barrel blast radius 40, damage 30 (50 % heat, 50 % physical), push 40 px, fuse 0.3 s, hand push 48 px, how many rooms get barrels (25 %), 3–5 in a boss hall (`defs/objects.rs`, `place_barrels`).
+- **Barrel art:** the pack's `crate` is a stand-in (`client/src/game/barrel.ts`). CC0 candidates are being researched and the user picks; then import with the licence file and add it to the README credits. An explosion sheet would help too.
+- **Deferred review findings** (small, none blocks anything):
+  - a sinking barrel still stops shots and counts in `object_tiles` and `object_free_line`; share one "blocks" predicate (solid, not gone, not sinking);
+  - the A* squeeze cost applies to every monster, not only wide ones; a chaser repaths every 0.6 s while a hero stands next to a barrel;
+  - an igniter who has left still gets credited with damage and kills; a lava death gives no credit;
+  - `knock_monster` does not clear a wind-up; `escape_terrain` has no fallback when no walkable tile is within 3 tiles;
+  - an enemy's fire-time check for its barrel does not test "sinking"; no tests for boss exclusion or a stale barrel;
+  - a monster heal at full HP sends `Heal` with v 0 ("+0");
+  - the camera shakes on every visible barrel blast; the E hint uses the interpolated position; E key repeat may resend `act`;
+  - `DamageSplit::split` only debug-asserts shares over 100 %; `Damage::scaled` is unused (a dead-code warning);
+  - a boss hall can get fewer than 3 barrels on a seed with no valid spot.
 
 ## Woodland escort level
 An outdoor level where the heroes escort a carriage carrying the elven princess.
@@ -105,7 +115,7 @@ An outdoor level where the heroes escort a carriage carrying the elven princess.
 
 ## Lighting
 Darkness limits what the heroes can see. Dungeon walls have torches at regular intervals that light the area around them. Some enemies can put torches out, which leaves that part of the dungeon dark. Lava pools glow red.
-Torches are only the first kind of light source. More will follow: lava, braziers, glowing mushrooms or goo, hero spells and projectiles (a fireball lighting the corridor it flies through), light-emitting enemies, a carriage lantern. So build a general light-source system, not a torch feature (priority 3).
+Torches are only the first kind of light source. More will follow: lava, braziers, glowing mushrooms or goo, hero spells and projectiles (a fireball lighting the corridor it flies through), light-emitting enemies, a carriage lantern. So build a general light-source system, not a torch feature (priority 1).
 - **Feasible:** yes, at tile resolution. The fog of war already works this way (TECHNICAL.md §7).
 - **Light sources:** each has a position, radius, colour, intensity and an on/off state. Two kinds:
   - **static** (torches, braziers, lava): fixed on the map, can be switched off and on.

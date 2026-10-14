@@ -9,11 +9,39 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Next item: enemies that target objects, and world objects heroes can use (TODO.md priority 1)
+## Next item: the light-source system (TODO.md priority 1)
 
-Not designed yet. Start with **superpowers:brainstorming**; the item and what depends on it are in [docs/TODO.md](docs/TODO.md) ("Priority order", tier 1). The level split it builds on is done and merged (below). Start the next feature on a new branch from `main`.
+Not designed yet. Start with **superpowers:brainstorming**; the item, its design notes and what depends on it are in [docs/TODO.md](docs/TODO.md) ("Priority order", tier 1, and the section "Lighting"). Start it on a new branch from `main` once `feature/barrels` is merged (or from that branch if the user wants to build on it first).
 
-Objects that can be damaged must use the **damage-type system** (TODO.md priority 2, section "Damage-type system", added 2026-10-14): typed damage parts, per-type resistances on heroes, enemies and objects. Plan the two together, so objects get resistances from the start.
+It builds on this feature: torches and other light sources that can be switched off and on are **world objects** (`run/objects.rs`: add an `ObjState` kind, use `use_object` and `hurt_object`), and the torch-extinguishing enemy can aim at one with `Target::Object` or `Target::Place` (both exist). New damaging things take a `Damage` with a split (below).
+
+## Last feature (2026-10-14): damage types, world objects and exploding barrels
+
+**Branch:** `feature/barrels` (from `main`), **not merged**. Merge only when the user asks. 20 commits: `git log --oneline main..HEAD`. Spec: [docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md](docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md); plan (18 tasks, run with superpowers:subagent-driven-development, three stages A, B, C): [docs/superpowers/plans/2026-10-14-damage-types-and-objects.md](docs/superpowers/plans/2026-10-14-damage-types-and-objects.md). It was TODO priorities 1 and 2, planned and built together (both removed from the list; it is renumbered).
+
+**What was built:**
+- **Damage model** (stage A; TECHNICAL §5 "Damage model"): `defs/damage.rs` (`DamageType` Physical/Cold/Heat/Magical/Poison, `DamageSplit`, `Damage`, `Resistances`, `resolve`, `kind_split`) and `defs/entity_types.rs` (Human, Undead, Monster, Demon, Dragon, Object, plus per-entity `Adjust`: lich, dragon, demon boss). The profile is computed at spawn and stored on every hero, monster and object. All damage calls take a `Damage`; `resolve` is the only formula, floored at -100 % (double damage at most); above 100 % a hit heals. The `Dmg` event carries `ty` and `imm`; the client colours the numbers (`game/damage.ts`) and shows "immune". The XP armour upgrade is **still there**, applied after `resolve`; removing it waits for items (open question in TODO).
+- **World objects** (stage B; "World objects"): `run/objects.rs` with `WorldObject`, `ObjState::{Chest, Barrel}`, `hurt_object`, `use_object`, snapshot anims. Chests moved into it with unchanged behaviour. `Ai.target` is now `Option<Target>` (`Player`, `Object`, `Place`). New input field `act` (E). Solid objects are squares in `collision::move_box`, mirrored in `client/src/sim/collision.ts` and the predictor and pinned by the shared fixtures.
+- **Barrels** (stage C): lit by any hit, 0.3 s fuse, blast radius 40 px, 30 damage (50 % heat, 50 % physical), 40 px push, chain reactions (each barrel explodes once), E pushes a barrel 48 px, barrels fall into chasms, sink in deep water and explode in lava. Blasts hurt and push heroes and non-boss monsters; bosses take damage but are not pushed. Monsters are now pushable and **fall, drown and burn** (`knock_monster`, `terrain_monster`, `Ev::Sink` for monsters). Ranged non-boss enemies shoot a barrel next to a hero (`Windup.at`). `place_barrels` (stream 11): groups of 2 to 4 in about a quarter of the rooms, 3 to 5 in the boss hall. Client: `game/barrel.ts`, the `Boom k 7` effect with a camera shake, the E hint, solids in prediction.
+- **Docs:** TECHNICAL (layout, §4 protocol, §5 damage model, world objects, solids, monster knockback, AI, §6 barrels, §8 prediction, §12 tests, §13), PLAYER_GUIDE (E, "Explosive barrels", "Damage types and resistances"), TODO (items 1 and 2 removed, new follow-up sections).
+
+**Deviations from the spec** (also listed in the plan's Global Constraints):
+- The barrel explosion is `Boom` **k 7**, because k 6 is already the lich nova.
+- The damage-number colours live in the client (`game/damage.ts`); the server exports only the type ids (`DMG_TYPE`).
+- The barrel an enemy aims at is stored in its `Windup` (`Some(Target::Object(id))`), because perception overwrites `ai.target` every tick.
+- The dagger stays monsters-only; the crossbow bolt hits barrels.
+- No separate `run/damage.rs`: `resolve` is in `defs/damage.rs`. An object's kind is its `EntityKind` (no `ObjKind`). Chests stay non-solid.
+- **Pathing went beyond the plan:** big bosses got stuck on barrels, so monster pathing got `object_free_line` (no straight walk past a barrel), an A* "squeeze" cost next to barrels, and boss-hall barrels need a 7x7 plain-floor area and keep 3 tiles apart. A chaser therefore switches to A* (refreshed every 0.6 s) whenever a hero stands next to a barrel; that is a little CPU and can make chasers slightly late there. Without barrels the change does nothing.
+
+**Verified (2026-10-14):** `cargo test` 201 pass (159 before the branch), client `npm run build` and 34 tests (27 before), the Rust and TypeScript collision fixtures agree with barrels in them, the fingerprint tests (`level_setup_is_unchanged`, `simulation_is_unchanged_after_waking_the_boss`) are unchanged, each task passed its review. One warning remains: `Damage::scaled` is unused.
+
+**Open (not done yet):**
+- **Live check with the user.** Nobody has played the barrels. Check: a chain reaction; an E push into a chasm, into water and into lava; an enemy blown into a chasm (dies, XP once); an archer shooting a barrel next to a hero; barrels in the boss hall (big bosses must not get stuck); coloured damage numbers and "immune"; no prediction snaps when walking along barrels.
+- **Final whole-branch review** is still to be done before merging.
+- **Barrel art:** the pack's `crate` is the stand-in (`client/src/game/barrel.ts`). CC0 candidates are being researched and the user picks; then import into `client/assets-src/<set>/` with the licence file and add the README credit. Art comes only from the 0x72 pack or CC0 sets.
+- **Merging:** only when the user asks.
+- **Deferred minor review findings** (small): listed in [docs/TODO.md](docs/TODO.md) under "Barrels and world objects follow-ups". The ones worth fixing in the final wave: a sinking barrel should not block shots or count in pathing (one shared "blocks" predicate); the squeeze cost should apply only to wide monsters; a departed igniter should not be credited.
+- All numbers (resistances, splits, barrel values) are first guesses for the balancing pass.
 
 ## Bug fixes (2026-10-14, after the level split)
 
@@ -25,7 +53,7 @@ Branch `fix/hitboxes-and-dark-shots`, merged into `main` (fast-forward) and push
 - Docs: TECHNICAL §5 (shot hitboxes, fast-forward), §7, §8 (cosmetic shots, cooldown replay), events and tests; PLAYER_GUIDE "The heroes" and "Seeing in the dark"; TODO (piercing shots).
 - Verified: `cargo test` 163 pass (3 new tests, each failing on the old code first; the fingerprint tests unchanged), client `tsc` and 32 tests (4 new hitbox tests, 1 new predictor test), `docker compose up --build -d`, `/health` OK, smoke test normal and with `?lag=150&jitter=40&loss=2`: no browser errors. **The user tested all four fixes in the game successfully (2026-10-14).**
 
-## Last session (2026-10-14, level split)
+## Session before (2026-10-14, level split)
 
 **Branch:** `feature/level-split` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-14); the branch is deleted. It was priority item 1 of `docs/TODO.md` (now removed; the list is renumbered). Spec: [docs/superpowers/specs/2026-10-13-level-split-design.md](docs/superpowers/specs/2026-10-13-level-split-design.md); plan (5 tasks, run with superpowers:subagent-driven-development): [docs/superpowers/plans/2026-10-13-level-split.md](docs/superpowers/plans/2026-10-13-level-split.md).
 
