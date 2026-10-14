@@ -14,6 +14,7 @@ import type { Hud } from '../ui/hud';
 import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
+import { BarrelView } from './barrel';
 import { ChestView } from './chest';
 import { dmgColor } from './damage';
 import { DEPTH, Effects } from './effects';
@@ -66,6 +67,8 @@ export class GameScene extends Phaser.Scene {
   private hazardViews = new Map<number, Phaser.GameObjects.Image>();
   private mimicViews = new Map<number, MimicView>();
   private chestViews = new Map<number, ChestView>();
+  private barrelViews = new Map<number, BarrelView>();
+  private useHint!: Phaser.GameObjects.Text;
   private cosmetics: Cosmetic[] = [];
   /** Own shots whose cosmetic copy has ended (shot id -> time, s): their server copy stays hidden. */
   private endedShots = new Map<number, number>();
@@ -113,6 +116,7 @@ export class GameScene extends Phaser.Scene {
     this.hazardViews = new Map();
     this.mimicViews = new Map();
     this.chestViews = new Map();
+    this.barrelViews = new Map();
     this.cosmetics = [];
     this.endedShots.clear();
     this.interp = new Interpolator();
@@ -135,6 +139,7 @@ export class GameScene extends Phaser.Scene {
     this.fx = new Effects(this);
     this.drawBoard();
     this.setupFog();
+    this.useHint = this.add.text(0, 0, 'E', { fontFamily: 'monospace', fontSize: '8px', color: '#ffffff', stroke: '#000000', strokeThickness: 2 }).setOrigin(0.5, 1).setVisible(false).setDepth(DEPTH.numbers);
     this.bars = this.add.graphics().setDepth(DEPTH.numbers - 1);
     this.beams = this.add.graphics().setDepth(DEPTH.beam);
     this.debugGfx = this.add.graphics().setDepth(DEPTH.fog + 1);
@@ -176,6 +181,8 @@ export class GameScene extends Phaser.Scene {
     this.mimicViews.clear();
     for (const v of this.chestViews.values()) v.destroy();
     this.chestViews.clear();
+    for (const v of this.barrelViews.values()) v.destroy();
+    this.barrelViews.clear();
   }
 
   // ------------------------------------------------------------ board
@@ -298,6 +305,7 @@ export class GameScene extends Phaser.Scene {
     const now = performance.now() / 1000;
     this.interp.push(s, now);
     this.lastSnap = s;
+    this.pred.solids = s.ents.filter((e) => e[1] === KIND.Barrel && e[5] < 2).map((e) => ({ x: e[2], y: e[3], half: CONST.BARREL_RADIUS }));
     if (s.me.alive) this.pred.reconcile(s);
     if (this.alive && !s.me.alive) this.hud.message('You have fallen. Q / E to watch your party.');
     this.alive = s.me.alive;
@@ -328,7 +336,11 @@ export class GameScene extends Phaser.Scene {
         } else if (ev.k === 3) this.fx.ring(ev.x, ev.y, ev.r, 0x6a2a8a, 0.4, true);
         else if (ev.k === 5) this.fx.shockwave(ev.x, ev.y, ev.r);
         else if (ev.k === 6) this.fx.nova(ev.x, ev.y, ev.r);
-        else this.fx.explosion(ev.x, ev.y, ev.r);
+        else if (ev.k === 7) {
+          this.fx.explosion(ev.x, ev.y, ev.r, 0xffa030);
+          this.fx.burst(ev.x, ev.y, 18, 0x8a5a2a, 70);
+          this.cameras.main.shake(120, 0.004);
+        } else this.fx.explosion(ev.x, ev.y, ev.r);
         break;
       case 'Died': {
         // Lost to a chasm or deep water: nothing is left behind.
@@ -587,6 +599,7 @@ export class GameScene extends Phaser.Scene {
       seen.add(e.id);
       if (e.kind === KIND.FirePatch) this.drawHazard(e);
       else if (e.kind === KIND.Chest) this.drawChest(e);
+      else if (e.kind === KIND.Barrel) this.drawBarrel(e);
       else if (e.kind === KIND.Mimic) this.drawMimic(e, dt, px, py);
       else if (isProjectileKind(e.kind)) this.drawProjectile(e);
       else this.drawFigure(e, dt, px, py, now);
@@ -601,6 +614,19 @@ export class GameScene extends Phaser.Scene {
     for (const [id, v] of this.hazardViews) if (!seen.has(id)) (v.destroy(), this.hazardViews.delete(id));
     for (const [id, v] of this.mimicViews) if (!seen.has(id)) (v.destroy(), this.mimicViews.delete(id));
     for (const [id, v] of this.chestViews) if (!seen.has(id)) (v.destroy(), this.chestViews.delete(id));
+    for (const [id, v] of this.barrelViews) if (!seen.has(id)) (v.destroy(), this.barrelViews.delete(id));
+
+    let hint: EntState | null = null;
+    if (this.alive) {
+      let best = Infinity;
+      for (const e of this.ents.values()) {
+        if (e.kind !== KIND.Barrel || e.anim >= 2) continue;
+        const gap = Math.hypot(e.x - px, e.y - py) - CONST.BARREL_RADIUS - CONST.PLAYER_RADIUS;
+        if (gap <= CONST.USE_REACH && gap < best) (best = gap), (hint = e);
+      }
+    }
+    this.useHint.setVisible(hint !== null);
+    if (hint) this.useHint.setPosition(Math.round(hint.x), Math.round(hint.y - 26));
 
     this.updateCosmetics(dt, myShots, now);
     this.drawBarsAndBeams(now);
@@ -697,6 +723,15 @@ export class GameScene extends Phaser.Scene {
     view.update(e.x, e.y, e.anim === 1 ? e.animMs / 1000 : -1);
   }
 
+  private drawBarrel(e: EntState): void {
+    let view = this.barrelViews.get(e.id);
+    if (!view) {
+      view = new BarrelView(this);
+      this.barrelViews.set(e.id, view);
+    }
+    view.update(e.x, e.y, e.anim, e.animMs);
+  }
+
   private drawProjectile(e: EntState): void {
     const owner = e.extra >>> 16;
     const shot = e.extra & 0xffff;
@@ -785,7 +820,7 @@ export class GameScene extends Phaser.Scene {
     const g = this.bars;
     g.clear();
     for (const e of this.ents.values()) {
-      if (isProjectileKind(e.kind) || e.kind === KIND.FirePatch || e.kind === KIND.Chest || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
+      if (isProjectileKind(e.kind) || e.kind === KIND.FirePatch || e.kind === KIND.Chest || e.kind === KIND.Barrel || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
       // The ogre (mini-boss) always shows a wide bar; others only once hurt.
       const ogre = e.kind === KIND.Ogre;
       if (e.hp >= 1 && !ogre) continue;
