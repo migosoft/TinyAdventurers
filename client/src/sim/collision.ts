@@ -5,8 +5,15 @@ import { TILE, TileMap, type Mover } from './map';
 
 const EPS = 0.001;
 
+/** A solid object's footprint: a square (centre, half size) that blocks movement like a wall tile. Mirrors `Solid` in collision.rs. */
+export interface Solid {
+  x: number;
+  y: number;
+  half: number;
+}
+
 /** Moves a figure by (dx, dy), axis by axis, sliding along whatever blocks this mover. */
-export function moveBox(map: TileMap, x: number, y: number, dx: number, dy: number, r: number, mover: Mover): [number, number] {
+export function moveBox(map: TileMap, x: number, y: number, dx: number, dy: number, r: number, mover: Mover, solids: readonly Solid[] = []): [number, number] {
   let nx = x + dx;
   if (dx !== 0) {
     const top = Math.floor((y - r) / TILE);
@@ -25,6 +32,22 @@ export function moveBox(map: TileMap, x: number, y: number, dx: number, dy: numb
         if (map.blocks(tx, ty, mover)) {
           nx = (tx + 1) * TILE + r;
           break;
+        }
+      }
+    }
+    for (const s of solids) {
+      if (y + r <= s.y - s.half || y - r >= s.y + s.half) {
+        continue;
+      }
+      if (dx > 0) {
+        const edge = s.x - s.half;
+        if (x + r <= edge + EPS && nx + r > edge) {
+          nx = edge - r;
+        }
+      } else {
+        const edge = s.x + s.half;
+        if (x - r >= edge - EPS && nx - r < edge) {
+          nx = edge + r;
         }
       }
     }
@@ -47,6 +70,22 @@ export function moveBox(map: TileMap, x: number, y: number, dx: number, dy: numb
         if (map.blocks(tx, ty, mover)) {
           ny = (ty + 1) * TILE + r;
           break;
+        }
+      }
+    }
+    for (const s of solids) {
+      if (nx + r <= s.x - s.half || nx - r >= s.x + s.half) {
+        continue;
+      }
+      if (dy > 0) {
+        const edge = s.y - s.half;
+        if (y + r <= edge + EPS && ny + r > edge) {
+          ny = edge - r;
+        }
+      } else {
+        const edge = s.y + s.half;
+        if (y - r >= edge - EPS && ny - r < edge) {
+          ny = edge + r;
         }
       }
     }
@@ -83,6 +122,7 @@ export function stepMove(
   dashSpeed: number,
   r: number,
   dt: number,
+  solids: readonly Solid[] = [],
 ): MoveState {
   const n = { ...s };
   const isKnocked = n.dashT <= 0 && knocked(n);
@@ -113,7 +153,7 @@ export function stepMove(
       vy = 0;
     }
   }
-  const [x, y] = moveBox(map, n.x, n.y, vx * dt, vy * dt, r, mover);
+  const [x, y] = moveBox(map, n.x, n.y, vx * dt, vy * dt, r, mover, solids);
   n.x = x;
   n.y = y;
   return n;

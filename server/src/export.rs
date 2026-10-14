@@ -7,7 +7,7 @@
 //!   bytes and readable form for the client's unpack test.
 //! The protocol types themselves are exported by ts-rs (`#[ts(export)]`).
 
-use crate::collision::{step_move, MoveState};
+use crate::collision::{step_move, MoveState, Solid};
 use crate::defs::abilities::{self as ab};
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::{bosses, enemies};
@@ -182,9 +182,15 @@ fn fixture_map() -> Map {
     m
 }
 
+/// Barrels in the fixture room (floor tiles), so the port is checked against solids too.
+fn fixture_solids() -> Vec<Solid> {
+    vec![Solid { x: 4.5 * TILE, y: 8.5 * TILE, half: 6.0 }, Solid { x: 8.5 * TILE, y: 12.5 * TILE, half: 6.0 }, Solid { x: 13.5 * TILE, y: 4.5 * TILE, half: 6.0 }]
+}
+
 #[test]
 fn export_fixtures() {
     let map = fixture_map();
+    let solids = fixture_solids();
     let mut rng = ChaCha8Rng::seed_from_u64(99);
     let mut moves = Vec::new();
     for case in 0..10 {
@@ -216,7 +222,7 @@ fn export_fixtures() {
                 s.knock_vy = a.sin() * v;
             }
             let pushed = [s.knock_vx, s.knock_vy];
-            s = step_move(&map, &s, mx, my, speed, ab::DASH_SPEED, PLAYER_RADIUS, DT);
+            s = step_move(&map, &s, mx, my, speed, ab::DASH_SPEED, PLAYER_RADIUS, DT, &solids);
             inputs.push(json!({
                 "mx": mx, "my": my,
                 "dash": if dash { json!([s.dash_dx, s.dash_dy]) } else { json!(null) },
@@ -243,6 +249,7 @@ fn export_fixtures() {
     let doc = json!({
         "w": map.w, "h": map.h, "tiles": map.tiles,
         "radius": PLAYER_RADIUS, "dt": DT, "dashSpeed": ab::DASH_SPEED, "fovRadius": PLAYER_FOV_RADIUS,
+        "solids": solids.iter().map(|s| json!([s.x, s.y, s.half])).collect::<Vec<_>>(),
         "moves": moves, "fov": fovs,
     });
     std::fs::create_dir_all(out_dir()).unwrap();

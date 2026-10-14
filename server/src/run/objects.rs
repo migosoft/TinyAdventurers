@@ -32,6 +32,15 @@ impl Run {
         self.objects.push(WorldObject { id, kind, pos, radius: d.radius, solid: d.solid, res, state, gone: false });
         id
     }
+
+    /// Footprints of the solid objects, except `except` (an object's own id).
+    pub fn solids(&self, except: Option<u32>) -> Vec<crate::collision::Solid> {
+        self.objects
+            .iter()
+            .filter(|o| o.solid && !o.gone && Some(o.id) != except)
+            .map(|o| crate::collision::Solid { x: o.pos.x, y: o.pos.y, half: o.radius })
+            .collect()
+    }
 }
 
 /// A hit on an object; `by` is the hero's entity id. What it does depends on the kind.

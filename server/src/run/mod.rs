@@ -425,6 +425,7 @@ impl Run {
     }
 
     fn apply_input(&mut self, pi: usize, input: InputMsg) {
+        let solids = self.solids(None);
         let map = &self.layout.map;
         let p = &mut self.players[pi];
         p.ack = input.seq;
@@ -455,6 +456,7 @@ impl Run {
             crate::defs::abilities::DASH_SPEED,
             classes::PLAYER_RADIUS,
             DT,
+            &solids,
         );
         p.moving = !knocked && (input.mx != 0 || input.my != 0);
         if dashing {

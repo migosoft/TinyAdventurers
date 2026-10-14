@@ -46,7 +46,8 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     }
     let step = (speed * dt).min(dist);
     let v = d.norm() * step;
-    let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, m.mover);
+    let solids = run.solids(None);
+    let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, m.mover, &solids);
     let m = &mut run.monsters[mi];
     m.pos = Vec2::new(x, y);
     false
@@ -380,6 +381,7 @@ fn raise_minions(run: &mut Run, mi: usize, fire: bool) {
 /// Push overlapping monsters apart so groups don't stack on one spot.
 pub fn separate_monsters(run: &mut Run) {
     let n = run.monsters.len();
+    let solids = run.solids(None);
     for i in 0..n {
         if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].asleep {
             continue;
@@ -395,7 +397,7 @@ pub fn separate_monsters(run: &mut Run) {
                 let d = d2.sqrt();
                 let push = (a - b) * ((min - d) / d * 0.5);
                 let (r, mover) = (run.monsters[i].radius, run.monsters[i].mover);
-                let (x, y) = move_box(&run.layout.map, a.x, a.y, push.x.clamp(-2.0, 2.0), push.y.clamp(-2.0, 2.0), r, mover);
+                let (x, y) = move_box(&run.layout.map, a.x, a.y, push.x.clamp(-2.0, 2.0), push.y.clamp(-2.0, 2.0), r, mover, &solids);
                 run.monsters[i].pos = Vec2::new(x, y);
             }
         }

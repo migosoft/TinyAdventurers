@@ -8,10 +8,20 @@ use crate::math::Vec2;
 
 const EPS: f64 = 0.001;
 
+/// A solid object's footprint: a square (centre, half size) that blocks
+/// movement like a wall tile. A figure already overlapping one is never held
+/// by it, so it can always walk out. Mirrored in `client/src/sim/collision.ts`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Solid {
+    pub x: f64,
+    pub y: f64,
+    pub half: f64,
+}
+
 /// Move a figure (treated as a square of half-size `r` against tiles) by
 /// (dx, dy), axis by axis, sliding along whatever blocks this mover.
 /// `dx`/`dy` must be < 1 tile.
-pub fn move_box(map: &Map, x: f64, y: f64, dx: f64, dy: f64, r: f64, mover: Mover) -> (f64, f64) {
+pub fn move_box(map: &Map, x: f64, y: f64, dx: f64, dy: f64, r: f64, mover: Mover, solids: &[Solid]) -> (f64, f64) {
     let mut nx = x + dx;
     if dx != 0.0 {
         let top = ((y - r) / TILE).floor() as i32;
@@ -25,6 +35,22 @@ pub fn move_box(map: &Map, x: f64, y: f64, dx: f64, dy: f64, r: f64, mover: Move
             let tx = ((nx - r) / TILE).floor() as i32;
             if (top..=bot).any(|ty| map.blocks(tx, ty, mover)) {
                 nx = (tx + 1) as f64 * TILE + r;
+            }
+        }
+        for s in solids {
+            if y + r <= s.y - s.half || y - r >= s.y + s.half {
+                continue;
+            }
+            if dx > 0.0 {
+                let edge = s.x - s.half;
+                if x + r <= edge + EPS && nx + r > edge {
+                    nx = edge - r;
+                }
+            } else {
+                let edge = s.x + s.half;
+                if x - r >= edge - EPS && nx - r < edge {
+                    nx = edge + r;
+                }
             }
         }
     }
@@ -41,6 +67,22 @@ pub fn move_box(map: &Map, x: f64, y: f64, dx: f64, dy: f64, r: f64, mover: Move
             let ty = ((ny - r) / TILE).floor() as i32;
             if (left..=right).any(|tx| map.blocks(tx, ty, mover)) {
                 ny = (ty + 1) as f64 * TILE + r;
+            }
+        }
+        for s in solids {
+            if nx + r <= s.x - s.half || nx - r >= s.x + s.half {
+                continue;
+            }
+            if dy > 0.0 {
+                let edge = s.y - s.half;
+                if y + r <= edge + EPS && ny + r > edge {
+                    ny = edge - r;
+                }
+            } else {
+                let edge = s.y + s.half;
+                if y - r >= edge - EPS && ny - r < edge {
+                    ny = edge + r;
+                }
             }
         }
     }
@@ -79,7 +121,7 @@ pub fn knock_speed(dist: f64, dt: f64) -> f64 {
 /// A hero walks (slowed by the terrain under their centre at the start of the
 /// step) or dashes (jumping over deep water, chasms and lava). A pushed hero
 /// slides along the knockback, ignoring the input, and only walls stop it.
-pub fn step_move(map: &Map, s: &MoveState, mx: i8, my: i8, speed: f64, dash_speed: f64, r: f64, dt: f64) -> MoveState {
+pub fn step_move(map: &Map, s: &MoveState, mx: i8, my: i8, speed: f64, dash_speed: f64, r: f64, dt: f64, solids: &[Solid]) -> MoveState {
     let mut n = *s;
     let knocked = n.dash_t <= 0.0 && n.knocked();
     let mover = if n.dash_t > 0.0 || knocked { Mover::Dash } else { Mover::Hero };
@@ -105,7 +147,7 @@ pub fn step_move(map: &Map, s: &MoveState, mx: i8, my: i8, speed: f64, dash_spee
             (0.0, 0.0)
         }
     };
-    let (x, y) = move_box(map, n.x, n.y, vx * dt, vy * dt, r, mover);
+    let (x, y) = move_box(map, n.x, n.y, vx * dt, vy * dt, r, mover, solids);
     n.x = x;
     n.y = y;
     n
@@ -155,12 +197,47 @@ mod tests {
         m
     }
 
+    fn open_map() -> Map {
+        let mut m = Map::new(12, 8);
+        for y in 1..7 {
+            for x in 1..11 {
+                m.set(x, y, Tile::Floor);
+            }
+        }
+        m
+    }
+
+    #[test]
+    fn a_solid_stops_a_figure_like_a_wall() {
+        let map = open_map();
+        let s = [Solid { x: 80.0, y: 40.0, half: 6.0 }];
+        // Walking east into it: stops with the box touching its west edge.
+        let (x, _) = move_box(&map, 60.0, 40.0, 10.0, 0.0, 5.0, Mover::Hero, &s);
+        assert!((x - (80.0 - 6.0 - 5.0)).abs() < 1e-9);
+        // Passing above it: no contact.
+        let (x, _) = move_box(&map, 60.0, 24.0, 10.0, 0.0, 5.0, Mover::Hero, &s);
+        assert_eq!(x, 70.0);
+        // Moving south into it from above.
+        let (_, y) = move_box(&map, 80.0, 20.0, 0.0, 12.0, 5.0, Mover::Hero, &s);
+        assert!((y - (40.0 - 6.0 - 5.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_figure_overlapping_a_solid_can_walk_out_any_way() {
+        let map = open_map();
+        let s = [Solid { x: 80.0, y: 40.0, half: 6.0 }];
+        for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+            let (x, y) = move_box(&map, 78.0, 41.0, dx, dy, 5.0, Mover::Hero, &s);
+            assert_eq!((x, y), (78.0 + dx, 41.0 + dy), "stuck moving {dx},{dy}");
+        }
+    }
+
     #[test]
     fn cannot_tunnel_into_walls() {
         let m = room();
         let mut s = MoveState::at(40.0, 40.0);
         for _ in 0..600 {
-            s = step_move(&m, &s, 1, 1, 70.0, 300.0, 5.0, 1.0 / 60.0);
+            s = step_move(&m, &s, 1, 1, 70.0, 300.0, 5.0, 1.0 / 60.0, &[]);
         }
         // Ends flush against the bottom-right corner walls.
         assert!((s.x - (9.0 * TILE - 5.0)).abs() < 1e-9);
@@ -169,7 +246,7 @@ mod tests {
         // Dash into a wall also stops.
         let mut d = MoveState { dash_t: 2.0, dash_dx: -1.0, dash_dy: 0.0, ..MoveState::at(40.0, 40.0) };
         for _ in 0..120 {
-            d = step_move(&m, &d, 0, 0, 70.0, 300.0, 5.0, 1.0 / 60.0);
+            d = step_move(&m, &d, 0, 0, 70.0, 300.0, 5.0, 1.0 / 60.0, &[]);
         }
         assert!((d.x - (16.0 + 5.0)).abs() < 1e-9);
     }
@@ -205,7 +282,7 @@ mod tests {
         }
         let mut s = MoveState::at(24.0, 24.0);
         for _ in 0..30 {
-            s = step_move(&m, &s, 1, 0, 60.0, 300.0, 5.0, 1.0 / 60.0);
+            s = step_move(&m, &s, 1, 0, 60.0, 300.0, 5.0, 1.0 / 60.0, &[]);
         }
         assert!((s.x - (24.0 + 30.0 * 0.7)).abs() < 1e-9, "x {}", s.x);
 
@@ -217,13 +294,13 @@ mod tests {
         // Walking: into the chasm, stopped by deep water.
         let mut s = MoveState::at(40.0, 40.0);
         for _ in 0..120 {
-            s = step_move(&m, &s, 1, 0, 60.0, 300.0, 5.0, 1.0 / 60.0);
+            s = step_move(&m, &s, 1, 0, 60.0, 300.0, 5.0, 1.0 / 60.0, &[]);
         }
         assert!((s.x - (5.0 * TILE - 5.0)).abs() < 1e-9, "x {}", s.x);
         // Dashing: over both.
         let mut d = MoveState { dash_t: 0.3, dash_dx: 1.0, dash_dy: 0.0, ..MoveState::at(40.0, 40.0) };
         for _ in 0..18 {
-            d = step_move(&m, &d, 0, 0, 60.0, 300.0, 5.0, 1.0 / 60.0);
+            d = step_move(&m, &d, 0, 0, 60.0, 300.0, 5.0, 1.0 / 60.0, &[]);
         }
         assert!(d.x > 6.0 * TILE, "x {}", d.x);
     }
@@ -239,7 +316,7 @@ mod tests {
         let mut s = MoveState { knock_vx: knock_speed(36.0, dt), ..MoveState::at(56.0, 40.0) };
         let mut steps = 0;
         while s.knocked() {
-            s = step_move(&m, &s, -1, 0, 60.0, 300.0, 5.0, dt);
+            s = step_move(&m, &s, -1, 0, 60.0, 300.0, 5.0, dt, &[]);
             steps += 1;
         }
         assert!((s.x - 92.0).abs() < 1.0, "x {}", s.x);
@@ -248,7 +325,7 @@ mod tests {
         // Walls still stop a push.
         let mut s = MoveState { knock_vx: -knock_speed(60.0, dt), ..MoveState::at(24.0, 40.0) };
         while s.knocked() {
-            s = step_move(&m, &s, 0, 0, 60.0, 300.0, 5.0, dt);
+            s = step_move(&m, &s, 0, 0, 60.0, 300.0, 5.0, dt, &[]);
         }
         assert!((s.x - (16.0 + 5.0)).abs() < 1e-9, "x {}", s.x);
     }

@@ -5,7 +5,7 @@ import type { ClassId } from '../generated/ClassId';
 import type { EntSnap } from '../generated/EntSnap';
 import type { Modifiers } from '../generated/Modifiers';
 import type { Snapshot } from '../generated/Snapshot';
-import { knocked, sinking, stepMove, type MoveState } from '../sim/collision';
+import { knocked, sinking, stepMove, type MoveState, type Solid } from '../sim/collision';
 import type { TileMap } from '../sim/map';
 
 export interface EntState {
@@ -131,6 +131,8 @@ export class Predictor {
   offX = 0;
   offY = 0;
   lastCorrection = 0;
+  /** Footprints of the solid objects (the world keeps this current from the snapshot). */
+  solids: Solid[] = [];
   cd1 = 0;
   cd2 = 0;
   hidden = 0;
@@ -197,7 +199,7 @@ export class Predictor {
     if (this.sinking) dash = null;
     else {
       if (this.knocked) dash = null;
-      this.state = stepMove(this.map, this.state, mx, my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT);
+      this.state = stepMove(this.map, this.state, mx, my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);
     }
     if (dash) this.state = { ...this.state, dashT: ABILITIES.Dash.duration, dashDx: dash[0], dashDy: dash[1] };
     if (this.pending.length > 240) this.pending.shift();
@@ -213,7 +215,7 @@ export class Predictor {
       if (sinking(this.map, s)) break;
       // A push the client learned of late still voids the dashes sent during it, as on the server.
       const wasKnocked = s.dashT <= 0 && knocked(s);
-      s = stepMove(this.map, s, p.mx, p.my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT);
+      s = stepMove(this.map, s, p.mx, p.my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);
       if (p.dash && !wasKnocked) s = { ...s, dashT: ABILITIES.Dash.duration, dashDx: p.dash[0], dashDy: p.dash[1] };
     }
     const ex = this.state.x - s.x;
