@@ -171,9 +171,18 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
             return;
         }
         run.monsters[mi].ai.windup = None;
+        // A barrel aimed at that is still there and unlit; otherwise the seen hero.
+        let barrel = match w.at {
+            Some(Target::Object(id)) => run
+                .objects
+                .iter()
+                .find(|o| o.id == id && !o.gone && matches!(&o.state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_none()))
+                .map(|o| o.pos),
+            _ => None,
+        };
         if let Some(pi) = seen {
             let attack = if w.alt { def.alt.unwrap_or(def.attack) } else { def.attack };
-            perform_attack(run, mi, pi, attack, w.alt);
+            perform_attack(run, mi, pi, attack, w.alt, barrel);
         }
         return;
     }
@@ -222,7 +231,15 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
             }
             if d <= range && run.monsters[mi].ai.cd <= 0.0 {
                 let (_, _, windup) = reach(def.attack);
-                run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: false, at: None });
+                let at = match def.attack {
+                    AttackStyle::Ranged { range, .. } if !run.monsters[mi].is_boss => barrel_near(run, mi, ppos, range).map(Target::Object),
+                    _ => None,
+                };
+                let aim = match at {
+                    Some(Target::Object(id)) => run.objects.iter().find(|o| o.id == id).map_or(aim, |o| pos.angle_to(o.pos)),
+                    _ => aim,
+                };
+                run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: false, at });
                 set_anim(run, mi, Anim::Windup);
                 return;
             }
@@ -326,15 +343,32 @@ fn gait(run: &Run, mi: usize, speed: f64) -> f64 {
     }
 }
 
+/// A barrel worth shooting instead of the hero: unlit, solid, in range and
+/// sight of the shooter, close enough to the hero for the blast to catch
+/// them, and far enough that the blast spares the shooter. The one closest
+/// to the hero.
+fn barrel_near(run: &Run, mi: usize, hero: Vec2, range: f64) -> Option<u32> {
+    use crate::defs::objects::BARREL_BLAST_R;
+    let m = &run.monsters[mi];
+    run.objects
+        .iter()
+        .filter(|o| !o.gone && matches!(&o.state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_none() && b.sinking.is_none()))
+        .filter(|o| o.pos.dist(hero) < BARREL_BLAST_R + PLAYER_RADIUS)
+        .filter(|o| o.pos.dist(m.pos) > BARREL_BLAST_R + m.radius + 8.0 && o.pos.dist(m.pos) <= range)
+        .filter(|o| line_of_sight(&run.layout.map, m.pos, o.pos))
+        .min_by(|a, b| a.pos.dist(hero).total_cmp(&b.pos.dist(hero)))
+        .map(|o| o.id)
+}
+
 /// Minimum pause (s) between a monster's two different attacks.
 const ATTACK_GAP: f64 = 0.4;
 
 /// `alt`: the second attack, which has its own cooldown. Either attack also
 /// keeps the other one back for a moment, so they never land at once.
-fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt: bool) {
+fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt: bool, at: Option<Vec2>) {
     let pos = run.monsters[mi].pos;
     let ppos = run.players[pi].pos();
-    let aim = pos.angle_to(ppos);
+    let aim = pos.angle_to(at.unwrap_or(ppos));
     run.monsters[mi].aim = aim;
     let set_cd = |run: &mut Run, cd: f64| {
         let ai = &mut run.monsters[mi].ai;
@@ -536,7 +570,7 @@ mod tests {
             let ppos = run.players[0].pos();
             let id = run.spawn_enemy(EnemyType::Chort, ppos - Vec2::new(12.0, 0.0), None, 1);
             let mi = run.monster_idx(id).unwrap();
-            perform_attack(&mut run, mi, 0, enemies::def(EnemyType::Chort).attack, false);
+            perform_attack(&mut run, mi, 0, enemies::def(EnemyType::Chort).attack, false, None);
             hp - run.players[0].hp
         };
         assert!((hit(Resistances::NONE) - 9.0).abs() < 1e-9);
@@ -552,7 +586,7 @@ mod tests {
             let mi = run.monster_idx(id).unwrap();
             let d = enemies::def(t);
             let attack = if alt { d.alt.unwrap() } else { d.attack };
-            perform_attack(&mut run, mi, 0, attack, alt);
+            perform_attack(&mut run, mi, 0, attack, alt, None);
             run.players[0].mv.knocked()
         };
         assert!(pushes(EnemyType::OrcWarrior, false));
@@ -720,7 +754,7 @@ mod tests {
         let hp: Vec<f64> = run.players.iter().map(|p| p.hp).collect();
         let slam = enemies::def(EnemyType::Ogre).alt.unwrap();
         run.events.clear();
-        perform_attack(&mut run, mi, 0, slam, true);
+        perform_attack(&mut run, mi, 0, slam, true, None);
         let p = &run.players;
         assert!(p[0].hp < hp[0] && p[0].mv.knock_vx > 0.0 && p[0].mv.knock_vy.abs() < 1e-9, "east hero pushed east");
         assert!(p[1].hp < hp[1] && p[1].mv.knock_vy < 0.0 && p[1].mv.knock_vx.abs() < 1e-9, "north hero pushed north");
@@ -827,5 +861,49 @@ mod tests {
         let blocked: std::collections::HashSet<(i32, i32)> = (1..10).map(|y| (5, y)).collect();
         let p = astar_clear(&m, Map::center_of(2, 2), Map::center_of(8, 2), 1000, Mover::Enemy, false, &blocked).unwrap();
         assert!(p.iter().any(|w| Map::tile_of(*w).1 >= 10));
+    }
+
+    /// An orc archer 100 px west of the hero, a barrel `barrel_off` from the hero.
+    fn archer_and_barrel(barrel_off: Vec2) -> (Run, usize, u32) {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let p = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::OrcArcher, p - Vec2::new(100.0, 0.0), None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].ai.cd = 0.0;
+        let b = run.spawn_object(EntityKind::Barrel, p + barrel_off, crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
+        (run, mi, b)
+    }
+
+    #[test]
+    fn an_archer_shoots_a_barrel_next_to_the_hero() {
+        let (mut run, mi, b) = archer_and_barrel(Vec2::new(-16.0, 12.0));
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.windup.and_then(|w| w.at), Some(crate::run::entities::Target::Object(b)));
+        for _ in 0..90 {
+            tick_monster(&mut run, mi, 1.0 / 60.0);
+            crate::run::abilities::tick_projectiles(&mut run, 1.0 / 60.0);
+        }
+        let o = run.objects.iter().find(|o| o.id == b).unwrap();
+        assert!(matches!(&o.state, crate::run::objects::ObjState::Barrel(x) if x.fuse.is_some()), "the barrel was shot");
+    }
+
+    #[test]
+    fn an_archer_does_not_shoot_a_barrel_that_would_catch_it() {
+        // Barrel 60 px east of the archer... then the hero steps 20 px west:
+        // the barrel is 40 px from both, so the blast would catch the archer too.
+        let (mut run, mi, _) = archer_and_barrel(Vec2::new(-60.0, 0.0));
+        run.players[0].mv.x -= 20.0;
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert!(run.monsters[mi].ai.windup.is_some(), "it still attacks");
+        assert_eq!(run.monsters[mi].ai.windup.and_then(|w| w.at), None, "but shoots the hero");
+    }
+
+    #[test]
+    fn a_far_barrel_is_ignored() {
+        let (mut run, mi, _) = archer_and_barrel(Vec2::new(0.0, 60.0));
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.windup.and_then(|w| w.at), None);
     }
 }
