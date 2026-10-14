@@ -10,7 +10,7 @@ use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 
 pub struct DungeonLevel {
-    // Not read yet (like `Dungeon::start`); kept as part of the level's interface.
+    // Not read yet; kept as part of the level's interface (debug tools and future rules).
     #[allow(dead_code)]
     pub rooms: Vec<Room>,
     #[allow(dead_code)]

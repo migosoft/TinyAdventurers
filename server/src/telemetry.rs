@@ -278,4 +278,23 @@ mod tests {
         assert_eq!(sum_of("ta.enemies.killed", &[]), 10);
         assert_eq!(sum_of("ta.xp.banked", &[("class", "Paladin")]), 30);
     }
+
+    #[test]
+    fn a_run_without_a_boss_has_a_level_but_no_boss_attribute() {
+        let exporter = InMemoryMetricExporter::default();
+        let provider = SdkMeterProvider::builder().with_reader(PeriodicReader::builder(exporter.clone()).build()).build();
+        let m = Metrics::new(&provider.meter("test"));
+        m.run_finished(&RunRecord { boss: None, ..record(false) });
+        provider.force_flush().unwrap();
+
+        let metrics = exporter.get_finished_metrics().unwrap();
+        let all: Vec<_> = metrics.iter().flat_map(|rm| rm.scope_metrics()).flat_map(|sm| sm.metrics()).collect();
+        let metric = all.iter().find(|m| m.name() == "ta.runs.finished").expect("ta.runs.finished missing");
+        let AggregatedMetrics::U64(MetricData::Sum(sum)) = metric.data() else { panic!("not a u64 sum") };
+        let points: Vec<_> = sum.data_points().collect();
+        assert_eq!(points.len(), 1);
+        let keys: Vec<_> = points[0].attributes().map(|a| a.key.as_str().to_string()).collect();
+        assert!(keys.iter().any(|k| k == "level"), "level attribute missing: {keys:?}");
+        assert!(!keys.iter().any(|k| k == "boss"), "boss attribute present: {keys:?}");
+    }
 }

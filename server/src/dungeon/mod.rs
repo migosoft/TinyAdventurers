@@ -199,6 +199,7 @@ pub struct Dungeon {
 }
 
 impl Dungeon {
+    #[cfg(test)]
     pub fn boss_hall(&self) -> &Rect {
         &self.rooms[self.boss].rect
     }

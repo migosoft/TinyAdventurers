@@ -22,6 +22,7 @@ Not designed yet. Start with **superpowers:brainstorming**; the item and what de
 - **Protocol:** `LevelId { Dungeon }`, `LevelChoice { Dungeon { boss } }` (tag `level`), `RunStartInfo.level`, `RunEnded { level, boss: Option }`, `ServerMsg::Room.level`. The lobby room is always the dungeon; `SelectBoss` is unchanged.
 - **Client:** `LEVEL_TEXT` in `ui/text.ts`, `ui/endText.ts` (`endText()`, the end screen's first line; the HUD uses it).
 - **Database and statistics:** migration `0004_runs_level.sql` (`runs.level` text, default `'Dungeon'`; `boss` nullable); `RunRecord { level, boss: Option }`; `AdminStats.level_runs` (`LevelRunStats`; the old `AdminStats.levels` stays the upgrades histogram); `PlayerRun.level`/`boss`. Telemetry: a `level` attribute, `boss` only when the level has one.
+- **Migration 0004 is forward-only:** a server binary from before this branch refuses to start against a migrated DB (`sqlx::migrate!` sees the unknown migration 4), so a rollback needs the migration reverted by hand.
 - **Admin page:** the "Levels (last 30 days)" table with rows like "Dungeon – Demon", and a "Level" column in a player's runs.
 - **Docs:** TECHNICAL §5 "Levels", §11 "How to add a level type", protocol, statistics, telemetry and tests; TODO renumbered. PLAYER_GUIDE is unchanged (nothing changed for players).
 
