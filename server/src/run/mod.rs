@@ -6,6 +6,7 @@ pub mod bosses;
 pub mod debug;
 pub mod entities;
 pub mod levels;
+pub mod objects;
 pub mod visibility;
 
 use crate::collision::MoveState;
@@ -123,7 +124,7 @@ pub struct Run {
     pub monsters: Vec<Monster>,
     pub projectiles: Vec<Projectile>,
     pub hazards: Vec<Hazard>,
-    pub chests: Vec<Chest>,
+    pub objects: Vec<objects::WorldObject>,
     /// Events since the last snapshot, with an optional position for FOV filtering.
     pub events: Vec<(Ev, Option<Vec2>)>,
     pub next_id: u32,
@@ -147,7 +148,7 @@ impl Run {
             monsters: Vec::new(),
             projectiles: Vec::new(),
             hazards: Vec::new(),
-            chests: Vec::new(),
+            objects: Vec::new(),
             events: Vec::new(),
             next_id: 1,
             rng,
@@ -221,8 +222,7 @@ impl Run {
                 let mi = run.monster_idx(id).unwrap();
                 run.monsters[mi].asleep = true;
             } else {
-                let id = run.alloc_id();
-                run.chests.push(Chest { id, pos: c.pos, opened: None });
+                run.spawn_object(EntityKind::Chest, c.pos, objects::ObjState::Chest { opened: None });
             }
         }
         Level::populate(&mut run, n);
@@ -383,6 +383,7 @@ impl Run {
         self.monsters.retain(|m| m.alive);
         self.projectiles.retain(|p| !p.dead);
         self.hazards.retain(|h| h.life > 0.0);
+        self.objects.retain(|o| !o.gone);
 
         Level::post_tick(self);
         self.check_end();
@@ -553,13 +554,14 @@ impl Run {
     fn touch_chests(&mut self) {
         let alive: Vec<Vec2> = self.players.iter().filter(|p| p.alive).map(|p| p.pos()).collect();
         let near = |pos: Vec2| alive.iter().any(|p| p.dist(pos) < enemies::CHEST_TOUCH);
-        for ci in 0..self.chests.len() {
-            let c = &self.chests[ci];
-            if c.opened.is_some() || !near(c.pos) {
+        for oi in 0..self.objects.len() {
+            let o = &self.objects[oi];
+            let objects::ObjState::Chest { opened: None } = o.state else { continue };
+            if !near(o.pos) {
                 continue;
             }
-            let pos = c.pos;
-            self.chests[ci].opened = Some(self.time);
+            let pos = o.pos;
+            self.objects[oi].state = objects::ObjState::Chest { opened: Some(self.time) };
             let coins = self.rng.gen_range(progression::CHEST_COINS);
             self.give_coins(pos, coins);
         }
@@ -952,9 +954,9 @@ pub mod tests {
             eat(m.is_boss as u64);
             eat(m.asleep as u64);
         }
-        for c in &run.chests {
-            eat(c.id as u64);
-            eat(c.pos.x.to_bits() as u64);
+        for o in &run.objects {
+            eat(o.id as u64);
+            eat(o.pos.x.to_bits() as u64);
         }
         for p in &run.players {
             eat(p.id as u64);
@@ -1055,18 +1057,24 @@ pub mod tests {
     fn touching_a_chest_opens_it_once_and_pays_the_party() {
         let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
         run.monsters.clear(); // keep the test about the chest
-        let id = run.alloc_id();
         let pos = run.layout.player_spawns[0] + Vec2::new(40.0, 0.0);
-        run.chests.push(Chest { id, pos, opened: None });
+        let id = run.spawn_object(EntityKind::Chest, pos, objects::ObjState::Chest { opened: None });
         stand_at(&mut run, pos);
-        let c = run.chests.iter().find(|c| c.id == id).unwrap();
-        assert!(c.opened.is_some());
+        let o = run.objects.iter().find(|o| o.id == id).unwrap();
+        assert!(matches!(o.state, objects::ObjState::Chest { opened: Some(_) }));
         let coins = run.players[0].coins;
         assert!(progression::CHEST_COINS.contains(&coins));
         assert_eq!(run.players[1].coins, coins, "the whole party gets the coins");
         assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Coins { .. })));
         stand_at(&mut run, pos);
         assert_eq!(run.players[0].coins, coins, "a chest pays only once");
+    }
+
+    #[test]
+    fn every_object_resists_poison_fully() {
+        let p = crate::defs::objects::profile(EntityKind::Chest);
+        assert_eq!(p.res.get(DamageType::Poison), 1.0);
+        assert_eq!(p.res.get(DamageType::Physical), 0.5);
     }
 
     #[test]

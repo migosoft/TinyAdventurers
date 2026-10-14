@@ -5,4 +5,5 @@ pub mod damage;
 pub mod enemies;
 pub mod entity_types;
 pub mod kinds;
+pub mod objects;
 pub mod progression;

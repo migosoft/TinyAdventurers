@@ -223,14 +223,6 @@ pub struct Projectile {
     pub dead: bool,
 }
 
-/// A treasure chest. Opened once, by the first player to touch it.
-pub struct Chest {
-    pub id: u32,
-    pub pos: Vec2,
-    /// Run time when it was opened.
-    pub opened: Option<f64>,
-}
-
 pub struct Hazard {
     pub id: u32,
     pub kind: EntityKind,
