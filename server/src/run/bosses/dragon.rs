@@ -10,6 +10,7 @@
 
 use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
 use crate::defs::bosses::*;
+use crate::defs::damage::Damage;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
@@ -86,11 +87,11 @@ impl Dragon {
         set_anim(run, bi, anim);
     }
 
-    fn land_smash(run: &mut Run, pos: Vec2, aim: f64) {
+    fn land_smash(run: &mut Run, bi: usize, pos: Vec2, aim: f64) {
         let r = DRAGON_SMASH_RADIUS;
         run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: 5 }, Some(pos));
         for pi in players_in(run, pos, r, None) {
-            run.hurt_player(pi, DRAGON_SMASH_DAMAGE);
+            run.hurt_player(pi, Damage::new(DRAGON_SMASH_DAMAGE, run.monsters[bi].melee));
             run.knock_player(pi, pos, aim, DRAGON_SMASH_KNOCK);
         }
     }
@@ -130,7 +131,7 @@ impl Dragon {
             Flight::Land => {
                 if self.flight_t <= 0.0 {
                     let (pos, aim) = (run.monsters[bi].pos, run.monsters[bi].aim);
-                    Self::land_smash(run, pos, aim);
+                    Self::land_smash(run, bi, pos, aim);
                     run.monsters[bi].airborne = false;
                     self.flight = Flight::Ground;
                     self.flight_t = run.rng.gen_range(DRAGON_FLIGHT_EVERY.0..DRAGON_FLIGHT_EVERY.1);
@@ -166,7 +167,7 @@ impl BossBehaviour for Dragon {
                     self.pulse = 0.2;
                     for pi in players_in(run, pos, BREATH_RANGE, Some((aim, BREATH_HALF_ANGLE))) {
                         if crate::collision::line_of_sight(&run.layout.map, pos, run.players[pi].pos()) {
-                            run.hurt_player(pi, 6.0);
+                            run.hurt_player(pi, Damage::physical(6.0));
                         }
                     }
                     if run.rng.gen_bool(0.5) {
@@ -194,21 +195,21 @@ impl BossBehaviour for Dragon {
                 Action::Tail => {
                     let behind = aim + std::f64::consts::PI;
                     for pi in players_in(run, pos, 46.0, Some((behind, 1.2))) {
-                        run.hurt_player(pi, 25.0);
+                        run.hurt_player(pi, Damage::new(25.0, run.monsters[bi].melee));
                         run.knock_player(pi, pos, behind, DRAGON_TAIL_KNOCK);
                     }
                     self.action = Some((Action::Recover, RECOVER_TAIL));
                 }
                 Action::Claw => {
                     for pi in players_in(run, pos, CLAW_RANGE, Some((aim, CLAW_HALF_ANGLE))) {
-                        run.hurt_player(pi, 20.0);
+                        run.hurt_player(pi, Damage::new(20.0, run.monsters[bi].melee));
                         run.knock_player(pi, pos, aim, DRAGON_CLAW_KNOCK);
                     }
                     self.action = Some((Action::Recover, RECOVER_CLAW));
                 }
                 Action::Bite => {
                     for pi in players_in(run, pos, DRAGON_BITE_RANGE, Some((aim, DRAGON_BITE_HALF_ANGLE))) {
-                        run.hurt_player(pi, DRAGON_BITE_DAMAGE);
+                        run.hurt_player(pi, Damage::new(DRAGON_BITE_DAMAGE, run.monsters[bi].melee));
                         run.knock_player(pi, pos, aim, DRAGON_BITE_KNOCK);
                     }
                     self.action = Some((Action::Recover, RECOVER_CLAW));
@@ -364,7 +365,7 @@ mod tests {
         let (mut run, _, bi) = dragon_with(&[Vec2::new(DRAGON_SMASH_RADIUS + 8.0, 0.0)]);
         let hp = run.players[0].hp;
         let pos = run.monsters[bi].pos;
-        Dragon::land_smash(&mut run, pos, 0.0);
+        Dragon::land_smash(&mut run, bi, pos, 0.0);
         assert_eq!(run.players[0].hp, hp);
         assert!(!run.players[0].mv.knocked());
     }

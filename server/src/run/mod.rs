@@ -9,6 +9,7 @@ pub mod levels;
 pub mod visibility;
 
 use crate::collision::MoveState;
+use crate::defs::damage::{resolve, Damage, DamageSplit, Resistances};
 use crate::defs::progression::{self, StatUpgrades};
 use crate::defs::{classes, enemies};
 use crate::defs::enemies::EnemyType;
@@ -164,6 +165,8 @@ impl Run {
             let id = run.alloc_id();
             run.players.push(Player {
                 id,
+                res: Resistances::NONE,
+                melee: DamageSplit::physical(),
                 conn: m.conn,
                 tx: Some(m.tx),
                 name: m.name,
@@ -237,6 +240,8 @@ impl Run {
         let hp = d.hp * (0.75 + 0.25 * party.max(1) as f64);
         self.monsters.push(Monster {
             id,
+            res: Resistances::NONE,
+            melee: DamageSplit::physical(),
             etype: Some(t),
             kind: d.kind,
             pos,
@@ -509,7 +514,7 @@ impl Run {
             p.burn_t += DT;
             if p.burn_t >= dungeon::LAVA_TICK {
                 p.burn_t -= dungeon::LAVA_TICK;
-                self.hurt_player(pi, dungeon::LAVA_DAMAGE);
+                self.hurt_player(pi, Damage::physical(dungeon::LAVA_DAMAGE));
             }
         } else {
             p.burn_t = dungeon::LAVA_TICK; // the first touch of lava burns at once
@@ -605,15 +610,15 @@ impl Run {
 
     pub fn spawn_hazard(&mut self, kind: EntityKind, pos: Vec2, radius: f64, life: f64, damage: f64) {
         let id = self.alloc_id();
-        self.hazards.push(Hazard { id, kind, pos, radius, life, pulse_t: 0.25, damage });
+        self.hazards.push(Hazard { id, kind, pos, radius, life, pulse_t: 0.25, damage: Damage::physical(damage) });
     }
 
-    pub fn hurt_player(&mut self, pi: usize, dmg: f64) {
+    pub fn hurt_player(&mut self, pi: usize, dmg: Damage) {
         let p = &mut self.players[pi];
         if !p.alive {
             return;
         }
-        let dmg = dmg * (1.0 - p.mods.armor);
+        let dmg = resolve(&dmg, &p.res) * (1.0 - p.mods.armor);
         // Debug mode: hits still show, but nothing is subtracted.
         if !p.debug {
             p.hp -= dmg;
@@ -663,7 +668,7 @@ impl Run {
     }
 
     /// Returns true if the monster took damage.
-    pub fn hurt_monster(&mut self, mi: usize, dmg: f64, crit: bool, src_player: Option<usize>) -> bool {
+    pub fn hurt_monster(&mut self, mi: usize, dmg: Damage, crit: bool, src_player: Option<usize>) -> bool {
         if !self.monsters[mi].alive {
             return false;
         }
@@ -671,6 +676,7 @@ impl Run {
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             return false;
         }
+        let dmg = resolve(&dmg, &self.monsters[mi].res);
         let m = &mut self.monsters[mi];
         m.hp -= dmg;
         m.hurt_t = 0.15;

@@ -1,5 +1,6 @@
 use crate::collision::MoveState;
 use crate::defs::classes::ClassDef;
+use crate::defs::damage::{Damage, DamageSplit, Resistances};
 use crate::defs::progression::Modifiers;
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{Anim, EntityKind};
@@ -17,6 +18,9 @@ pub const HISTORY_LEN: usize = 32;
 pub struct Player {
     pub id: u32,
     pub conn: u32,
+    /// Resistances (entity types plus adjustments) and the split of its melee hits.
+    pub res: Resistances,
+    pub melee: DamageSplit,
     pub tx: Option<UnboundedSender<Message>>,
     pub name: String,
     pub class: ClassId,
@@ -140,6 +144,9 @@ impl Ai {
 
 pub struct Monster {
     pub id: u32,
+    /// Resistances (entity types plus adjustments) and the split of its melee hits.
+    pub res: Resistances,
+    pub melee: DamageSplit,
     /// None for bosses (driven by their BossBehaviour).
     pub etype: Option<EnemyType>,
     pub kind: EntityKind,
@@ -202,7 +209,7 @@ pub struct Projectile {
     pub shot: u16,
     pub pos: Vec2,
     pub vel: Vec2,
-    pub damage: f64,
+    pub damage: Damage,
     pub radius: f64,
     pub life: f64,
     pub crit: bool,
@@ -231,5 +238,5 @@ pub struct Hazard {
     pub radius: f64,
     pub life: f64,
     pub pulse_t: f64,
-    pub damage: f64,
+    pub damage: Damage,
 }

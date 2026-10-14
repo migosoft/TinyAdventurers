@@ -5,6 +5,7 @@ use super::ai::astar;
 use super::levels::Level;
 use super::Run;
 use crate::collision::walk_line;
+use crate::defs::damage::Damage;
 use crate::defs::enemies::EnemyType;
 use crate::dungeon::Mover;
 use crate::math::Vec2;
@@ -88,7 +89,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Dragon);
         run.set_debug(0, true);
         let hp = run.players[0].hp;
-        run.hurt_player(0, 10_000.0);
+        run.hurt_player(0, Damage::physical(10_000.0));
         assert!(run.players[0].alive);
         assert_eq!(run.players[0].hp, hp);
 
@@ -111,7 +112,7 @@ mod tests {
         assert!(ogre_path(&run, 0).is_empty(), "no ogre path once it is dead");
 
         run.set_debug(0, false);
-        run.hurt_player(0, 10_000.0);
+        run.hurt_player(0, Damage::physical(10_000.0));
         assert!(!run.players[0].alive, "mortal again");
     }
 }

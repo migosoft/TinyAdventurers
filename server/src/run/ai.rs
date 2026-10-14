@@ -6,6 +6,7 @@ use super::entities::{AiState, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
 use crate::defs::classes::PLAYER_RADIUS;
+use crate::defs::damage::Damage;
 use crate::defs::enemies::{self, AttackStyle, EnemyType};
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Map, Mover, TILE};
@@ -324,7 +325,8 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt:
             set_anim(run, mi, Anim::Melee);
             let reach = range + PLAYER_RADIUS + run.monsters[mi].radius + 4.0;
             if pos.dist(ppos) <= reach {
-                run.hurt_player(pi, damage);
+                let dmg = Damage::new(damage, run.monsters[mi].melee);
+                run.hurt_player(pi, dmg);
                 run.knock_player(pi, pos, aim, knock);
             }
         }
@@ -340,11 +342,12 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt:
             set_cd(run, cooldown);
             set_anim(run, mi, Anim::Idle);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: radius as f32, k: 5 }, Some(pos));
+            let dmg = Damage::new(damage, run.monsters[mi].melee);
             for qi in 0..run.players.len() {
                 let q = &run.players[qi];
                 if q.alive && q.pos().dist(pos) <= radius {
                     let away = pos.angle_to(q.pos());
-                    run.hurt_player(qi, damage);
+                    run.hurt_player(qi, dmg);
                     run.knock_player(qi, pos, away, knock);
                 }
             }

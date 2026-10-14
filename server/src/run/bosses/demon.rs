@@ -4,6 +4,7 @@
 
 use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
 use crate::defs::bosses::{DEMON_CLEAVE_KNOCK, DEMON_CLEAVE_RECOVER, DEMON_CLEAVE_WINDUP, DEMON_ENRAGED_PACE, DEMON_RING_RECOVER, DEMON_RING_WINDUP, DEMON_SWOOP_KNOCK, DEMON_SWOOP_RECOVER, DEMON_SWOOP_TIME, DEMON_SWOOP_WINDUP};
+use crate::defs::damage::Damage;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::math::Vec2;
 use crate::run::abilities::spawn_monster_projectile;
@@ -67,7 +68,7 @@ impl BossBehaviour for Demon {
                         let id = run.players[pi].id;
                         if !self.swoop_hit.contains(&id) {
                             self.swoop_hit.push(id);
-                            run.hurt_player(pi, 30.0);
+                            run.hurt_player(pi, Damage::new(30.0, run.monsters[bi].melee));
                             run.knock_player(pi, pos, self.swoop_dir.angle(), DEMON_SWOOP_KNOCK);
                         }
                     }
@@ -83,7 +84,7 @@ impl BossBehaviour for Demon {
             match action {
                 Action::Cleave => {
                     for pi in players_in(run, pos, CLEAVE_RANGE + 6.0, Some((aim, 1.05))) {
-                        run.hurt_player(pi, 25.0);
+                        run.hurt_player(pi, Damage::new(25.0, run.monsters[bi].melee));
                         run.knock_player(pi, pos, aim, DEMON_CLEAVE_KNOCK);
                     }
                     self.action = Some((Action::Recover, DEMON_CLEAVE_RECOVER));

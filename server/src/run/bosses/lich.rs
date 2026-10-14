@@ -7,6 +7,7 @@ use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
 use crate::defs::bosses::{
     LICH_ARCHERS, LICH_DISCIPLES, LICH_DRAIN_PER_DISCIPLE, LICH_NOVA_DAMAGE, LICH_NOVA_EVERY, LICH_NOVA_KNOCK, LICH_NOVA_RADIUS, LICH_NOVA_WINDUP, LICH_SKELETONS,
 };
+use crate::defs::damage::Damage;
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
@@ -49,7 +50,7 @@ impl Lich {
         run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: 6 }, Some(pos));
         for pi in players_in(run, pos, r, None) {
             let away = pos.angle_to(run.players[pi].pos());
-            run.hurt_player(pi, LICH_NOVA_DAMAGE);
+            run.hurt_player(pi, Damage::physical(LICH_NOVA_DAMAGE));
             run.knock_player(pi, pos, away, LICH_NOVA_KNOCK);
         }
     }
@@ -189,7 +190,7 @@ mod tests {
         assert!(living_disciples(&run) >= 5);
         let bi = boss_idx(&run).unwrap();
         let hp = run.monsters[bi].hp;
-        assert!(!run.hurt_monster(bi, 100.0, false, Some(0)));
+        assert!(!run.hurt_monster(bi, Damage::physical(100.0), false, Some(0)));
         assert_eq!(run.monsters[bi].hp, hp, "immune while disciples live");
 
         // Damaged lich heals from its disciples.
@@ -208,7 +209,7 @@ mod tests {
         }
         let bi = boss_idx(&run).unwrap();
         let before = run.monsters[bi].hp;
-        assert!(run.hurt_monster(bi, 100.0, false, Some(0)));
+        assert!(run.hurt_monster(bi, Damage::physical(100.0), false, Some(0)));
         assert_eq!(run.monsters[bi].hp, before - 100.0);
     }
 

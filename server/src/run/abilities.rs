@@ -5,6 +5,7 @@ use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::{self as ab, AbilityId};
 use crate::defs::classes::PLAYER_RADIUS;
+use crate::defs::damage::Damage;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
@@ -85,7 +86,7 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
         AbilityId::CrossbowDagger => {
             if let Some(mi) = dagger_target(run, pi) {
                 cooldown = ab::DAGGER_COOLDOWN;
-                run.hurt_monster(mi, ab::DAGGER_DAMAGE * mult, crit, Some(pi));
+                run.hurt_monster(mi, Damage::new(ab::DAGGER_DAMAGE * mult, run.players[pi].melee), crit, Some(pi));
                 Anim::Melee
             } else {
                 spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage * mult, def.radius, def.range / def.speed, 0.0, None, crit);
@@ -124,6 +125,7 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
 fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: bool) {
     let rw = rewind_ticks(run, pi);
     let (pos, aim) = (run.players[pi].pos(), run.players[pi].aim);
+    let dmg = Damage::new(damage, run.players[pi].melee);
     let hits: Vec<usize> = run
         .monsters
         .iter()
@@ -144,7 +146,7 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
         .map(|(i, _)| i)
         .collect();
     for mi in hits {
-        run.hurt_monster(mi, damage, crit, Some(pi));
+        run.hurt_monster(mi, dmg, crit, Some(pi));
     }
 }
 
@@ -152,7 +154,7 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
 pub fn dash_contact(run: &mut Run, pi: usize) {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
-    let dmg = ab::def(AbilityId::Dash).damage * run.players[pi].mods.damage;
+    let dmg = Damage::new(ab::def(AbilityId::Dash).damage * run.players[pi].mods.damage, run.players[pi].melee);
     let hits: Vec<(usize, u32)> = run
         .monsters
         .iter()
@@ -196,7 +198,7 @@ fn spawn_player_projectile(
         shot,
         pos,
         vel,
-        damage,
+        damage: Damage::physical(damage),
         radius,
         life: (life - ff).max(0.05),
         crit,
@@ -234,7 +236,7 @@ pub fn spawn_monster_projectile(
         shot: 0,
         pos,
         vel: dir * speed,
-        damage,
+        damage: Damage::physical(damage),
         radius: 3.0,
         life,
         crit: false,
@@ -325,7 +327,7 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<usize>) {
 
 #[allow(clippy::too_many_arguments)]
 /// An explosion; `knock` pushes the heroes it hits straight away from it (px, enemy explosions only).
-pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: f64, from_player: bool, src: Option<usize>, k: u8, crit: bool, knock: f64) {
+pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, from_player: bool, src: Option<usize>, k: u8, crit: bool, knock: f64) {
     // The heroes see their own explosions even out of view.
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, (!from_player).then_some(pos));
     if from_player {
@@ -434,10 +436,10 @@ mod tests {
     fn an_enemy_explosion_with_knock_pushes_heroes_away() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
         let at = run.players[0].pos() - Vec2::new(10.0, 0.0);
-        explode(&mut run, at, 30.0, 5.0, false, None, 4, false, 20.0);
+        explode(&mut run, at, 30.0, Damage::physical(5.0), false, None, 4, false, 20.0);
         assert!(run.players[0].mv.knock_vx > 0.0, "pushed east, away from the blast");
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
-        explode(&mut run, at, 30.0, 5.0, false, None, 4, false, 0.0);
+        explode(&mut run, at, 30.0, Damage::physical(5.0), false, None, 4, false, 0.0);
         assert!(!run.players[0].mv.knocked(), "no knock: no push");
     }
 
@@ -485,14 +487,14 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 40.0);
         run.events.clear();
-        run.hurt_monster(mi, 5.0, false, Some(0));
+        run.hurt_monster(mi, Damage::physical(5.0), false, Some(0));
         assert!(matches!(run.events[..], [(Ev::Dmg { .. }, None)]), "damage number sent to the whole party");
         run.events.clear();
         let at = run.monsters[mi].pos;
-        explode(&mut run, at, 20.0, 5.0, true, Some(0), 0, false, 0.0);
+        explode(&mut run, at, 20.0, Damage::physical(5.0), true, Some(0), 0, false, 0.0);
         assert!(matches!(run.events[0], (Ev::Boom { .. }, None)), "the hero's explosion too");
         run.events.clear();
-        run.hurt_monster(mi, 5.0, false, None);
+        run.hurt_monster(mi, Damage::physical(5.0), false, None);
         assert!(matches!(run.events[..], [(Ev::Dmg { .. }, Some(_))]), "other damage only where seen");
     }
 
