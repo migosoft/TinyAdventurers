@@ -177,7 +177,8 @@ impl Monster {
     }
 
     /// Distance from a flying shot at ground point `p` to this monster's body,
-    /// to compare with `radius` plus the shot's radius. Shots are drawn
+    /// to compare with `radius` plus the shot's radius (mirrored in
+    /// `client/src/sim/hitbox.ts` for the shot the client draws). Shots are drawn
     /// `SHOT_HEIGHT` px above their ground point and figures stand up from their
     /// feet, so a tall figure is a capsule reaching north from `pos`, not a circle.
     pub fn shot_dist(&self, p: Vec2) -> f64 {
@@ -191,7 +192,7 @@ impl Monster {
 /// How far above their ground point projectiles are drawn (px; `GameScene`).
 pub const SHOT_HEIGHT: f64 = 8.0;
 /// How far a flying monster is drawn above the ground (px; the dragon's `lift` at 1.2x scale).
-const DRAGON_LIFT: f64 = 17.0;
+pub const DRAGON_LIFT: f64 = 17.0;
 
 pub struct Projectile {
     pub id: u32,

@@ -182,12 +182,10 @@ fn spawn_player_projectile(
     crit: bool,
 ) {
     let p = &run.players[pi];
-    let start = p.pos() + dir * 6.0;
+    let pos = p.pos() + dir * 6.0;
     // Fast-forward by half the round trip: the client already shows it moving.
     let ff = (p.rtt / 2.0).min(0.15);
     let vel = dir * speed;
-    let ahead = start + vel * ff;
-    let pos = if line_of_sight(&run.layout.map, p.pos(), ahead) { ahead } else { start };
     let owner = p.id;
     let id = run.alloc_id();
     run.projectiles.push(Projectile {
@@ -208,6 +206,9 @@ fn spawn_player_projectile(
         target,
         dead: false,
     });
+    // Through the same hit checks as every tick, so it cannot skip an enemy on the way.
+    let i = run.projectiles.len() - 1;
+    advance_projectile(run, i, ff);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -250,45 +251,54 @@ pub fn tick_projectiles(run: &mut Run, dt: f64) {
         if run.projectiles[i].dead {
             continue;
         }
-        let speed = run.projectiles[i].vel.len();
-        let substeps = ((speed * dt) / 4.0).ceil().max(1.0) as i32;
-        let sdt = dt / substeps as f64;
-        for _ in 0..substeps {
-            let pr = &mut run.projectiles[i];
-            let prev = pr.pos;
-            pr.pos = pr.pos + pr.vel * sdt;
-            let pos = pr.pos;
-            if let Some(t) = pr.target {
-                if (t - pos).x * pr.vel.x + (t - pos).y * pr.vel.y <= 0.0 {
-                    impact(run, i, pos, None);
-                    break;
-                }
-            }
-            if run.layout.map.opaque_at(pos) {
-                impact(run, i, prev, None);
-                break;
-            }
-            let pr = &run.projectiles[i];
-            if pr.from_player {
-                let hit = run.monsters.iter().position(|m| m.alive && m.shot_dist(pos) < m.radius + pr.radius);
-                if let Some(mi) = hit {
-                    impact(run, i, pos, Some(mi));
-                    break;
-                }
-            } else {
-                let hit = run.players.iter().position(|p| p.alive && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius);
-                if let Some(qi) = hit {
-                    impact(run, i, pos, Some(qi));
-                    break;
-                }
-            }
-        }
+        advance_projectile(run, i, dt);
         let pr = &mut run.projectiles[i];
         if !pr.dead {
             pr.life -= dt;
             if pr.life <= 0.0 {
                 let pos = pr.pos;
                 impact(run, i, pos, None);
+            }
+        }
+    }
+}
+
+/// Moves projectile `i` for `dt` in steps of at most 4 px. It ends at the
+/// first wall, target point or figure it meets: shots never pass through.
+fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
+    if dt <= 0.0 {
+        return;
+    }
+    let speed = run.projectiles[i].vel.len();
+    let substeps = ((speed * dt) / 4.0).ceil().max(1.0) as i32;
+    let sdt = dt / substeps as f64;
+    for _ in 0..substeps {
+        let pr = &mut run.projectiles[i];
+        let prev = pr.pos;
+        pr.pos = pr.pos + pr.vel * sdt;
+        let pos = pr.pos;
+        if let Some(t) = pr.target {
+            if (t - pos).x * pr.vel.x + (t - pos).y * pr.vel.y <= 0.0 {
+                impact(run, i, pos, None);
+                break;
+            }
+        }
+        if run.layout.map.opaque_at(pos) {
+            impact(run, i, prev, None);
+            break;
+        }
+        let pr = &run.projectiles[i];
+        if pr.from_player {
+            let hit = run.monsters.iter().position(|m| m.alive && m.shot_dist(pos) < m.radius + pr.radius);
+            if let Some(mi) = hit {
+                impact(run, i, pos, Some(mi));
+                break;
+            }
+        } else {
+            let hit = run.players.iter().position(|p| p.alive && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius);
+            if let Some(qi) = hit {
+                impact(run, i, pos, Some(qi));
+                break;
             }
         }
     }
@@ -484,6 +494,34 @@ mod tests {
         run.events.clear();
         run.hurt_monster(mi, 5.0, false, None);
         assert!(matches!(run.events[..], [(Ev::Dmg { .. }, Some(_))]), "other damage only where seen");
+    }
+
+    #[test]
+    fn a_shot_stops_at_the_first_enemy_even_when_fast_forwarded() {
+        for (class, ability) in [(ClassId::Wizard, AbilityId::MagicMissile), (ClassId::Assassin, AbilityId::CrossbowDagger)] {
+            // Up to 150 ms fast-forward: the shot starts ~40 px out, past the first orc.
+            for rtt in [0.0, 0.1, 0.3] {
+                let mut run = test_run(&[class], BossId::Demon);
+                run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+                let p = run.players[0].pos();
+                let line: Vec<usize> = [30.0, 40.0, 50.0]
+                    .iter()
+                    .map(|&d| {
+                        run.spawn_enemy(EnemyType::OrcWarrior, p + Vec2::new(d, 0.0), None, 1);
+                        run.monsters.len() - 1
+                    })
+                    .collect();
+                run.players[0].aim = 0.0;
+                run.players[0].rtt = rtt;
+                let hp: Vec<f64> = line.iter().map(|&mi| run.monsters[mi].hp).collect();
+                try_use(&mut run, 0, ability, 1, true);
+                for _ in 0..30 {
+                    tick_projectiles(&mut run, 1.0 / TICK_HZ);
+                }
+                let hit: Vec<bool> = line.iter().zip(&hp).map(|(&mi, &h)| run.monsters[mi].hp < h).collect();
+                assert_eq!(hit, [true, false, false], "{class:?} at rtt {rtt}: only the first orc");
+            }
+        }
     }
 
     #[test]

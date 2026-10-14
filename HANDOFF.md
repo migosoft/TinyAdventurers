@@ -15,11 +15,12 @@ Not designed yet. Start with **superpowers:brainstorming**; the item and what de
 
 ## Bug fixes (2026-10-14, after the level split)
 
-Branch `fix/hitboxes-and-dark-shots`. Two bugs the user reported:
+Branch `fix/hitboxes-and-dark-shots`. Three bugs the user reported:
 - **Tall enemies were only hit on their lower half** (e.g. the demon). Cause: the server tested player shots against a circle around the monster's *feet*, while the sprite stands up to 58 px above them and shots are drawn 8 px above their ground point. Fix: `Monster::shot_dist` (capsule up to `EntityKind::body_height`, heights measured from the atlas), used in `tick_projectiles`. Movement, melee and explosions are unchanged. Enemy shots against heroes still use the round footprint (heroes are small; not reported).
 - **Enemies out of view seemed not to take damage.** The server did damage them (checked with a probe test: an orc 180 px away, out of view, lost 12 HP), but it stopped sending the shot once it left the view, so the client's own cosmetic copy ended at the edge as if it had hit something, and the `Dmg` number was filtered out. Fix: the party's projectiles are always sent, and `Dmg` from heroes' hits and `Boom` from their explosions are sent without a position (to the whole party).
-- Docs: TECHNICAL §5 (shot hitboxes), §7, events and tests; PLAYER_GUIDE "Seeing in the dark".
-- Verified: `cargo test` 162 pass (2 new tests, both failing on the old code first; the fingerprint tests unchanged), `docker compose up --build -d`, `/health` OK, smoke test: no browser errors. Not yet checked by hand in a real fight (the demon's hitbox and shots into the dark).
+- **Shots seemed to pass through several enemies.** The server always damaged only the first enemy, but: (a) a shot that hit within the first ticks died before any snapshot carried it, so the client's cosmetic copy (which only ended when the server copy disappeared) flew on through everyone behind; (b) the RTT/2 fast-forward jumped the shot ahead without hit checks, so with high ping it skipped the nearest enemy and hit the next. Fix: `advance_projectile` (the per-tick 4 px stepping, also used for the fast-forward), and on the client `sim/hitbox.ts` (port of `shot_dist`, exported `HITBOX`, `SHOT_HEIGHT`, `DRAGON_LIFT`) ends the cosmetic copy at the first enemy it touches; `endedShots` keeps the server copy hidden afterwards. The user plans piercing shots as a later upgrade (2, 3, 4 enemies): noted in TODO "Progression follow-ups".
+- Docs: TECHNICAL §5 (shot hitboxes, fast-forward), §7, §8 (cosmetic shots), events and tests; PLAYER_GUIDE "The heroes" and "Seeing in the dark"; TODO (piercing shots).
+- Verified: `cargo test` 163 pass (3 new tests, each failing on the old code first; the fingerprint tests unchanged), client `tsc` and 31 tests (4 new hitbox tests), `docker compose up --build -d`, `/health` OK, smoke test normal and with `?lag=150&jitter=40&loss=2`: no browser errors. Not yet checked by hand in a real fight (the demon's hitbox, shots into the dark, a shot into a line of enemies).
 
 ## Last session (2026-10-14, level split)
 

@@ -7,6 +7,7 @@ import type { ServerMsg } from '../generated/ServerMsg';
 import type { Snapshot } from '../generated/Snapshot';
 import type { Net } from '../net';
 import { lineOfSight } from '../sim/collision';
+import { shotHits } from '../sim/hitbox';
 import { Fov } from '../sim/fov';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Hud } from '../ui/hud';
@@ -36,6 +37,8 @@ interface Cosmetic {
   vx: number;
   vy: number;
   life: number;
+  /** Hit radius (as on the server). */
+  r: number;
   target?: [number, number];
   seenOnServer: boolean;
 }
@@ -63,6 +66,8 @@ export class GameScene extends Phaser.Scene {
   private mimicViews = new Map<number, MimicView>();
   private chestViews = new Map<number, ChestView>();
   private cosmetics: Cosmetic[] = [];
+  /** Own shots whose cosmetic copy has ended (shot id -> time, s): their server copy stays hidden. */
+  private endedShots = new Map<number, number>();
   private fx!: Effects;
   private bars!: Phaser.GameObjects.Graphics;
   private beams!: Phaser.GameObjects.Graphics;
@@ -107,6 +112,7 @@ export class GameScene extends Phaser.Scene {
     this.mimicViews = new Map();
     this.chestViews = new Map();
     this.cosmetics = [];
+    this.endedShots.clear();
     this.interp = new Interpolator();
     this.ents = new Map();
     this.alive = true;
@@ -423,12 +429,13 @@ export class GameScene extends Phaser.Scene {
     let cooldown = this.pred.cooldownOf(name);
     switch (name) {
       case 'MagicMissile':
-        this.spawnCosmetic(KIND.Missile, shot, aim, a.speed, a.range / a.speed);
+        this.spawnCosmetic(KIND.Missile, shot, aim, a.speed, a.radius, a.range / a.speed);
         anim = ANIM.Shoot;
         break;
       case 'Fireball': {
         const d = Math.min(Math.max(dist, 24), a.range);
-        this.spawnCosmetic(KIND.Fireball, shot, aim, a.speed, a.range / a.speed + 0.1, [x + Math.cos(aim) * d, y + Math.sin(aim) * d]);
+        // It flies with radius 4 (server abilities.rs); `a.radius` is its blast.
+        this.spawnCosmetic(KIND.Fireball, shot, aim, a.speed, 4, a.range / a.speed + 0.1, [x + Math.cos(aim) * d, y + Math.sin(aim) * d]);
         anim = ANIM.Cast;
         break;
       }
@@ -455,7 +462,7 @@ export class GameScene extends Phaser.Scene {
           anim = ANIM.Melee;
           cooldown = this.pred.cooldownOf(name, true);
         } else {
-          this.spawnCosmetic(KIND.Bolt, shot, aim, a.speed, a.range / a.speed);
+          this.spawnCosmetic(KIND.Bolt, shot, aim, a.speed, a.radius, a.range / a.speed);
           anim = ANIM.Shoot;
         }
         break;
@@ -466,7 +473,7 @@ export class GameScene extends Phaser.Scene {
     return cooldown;
   }
 
-  private spawnCosmetic(kind: number, shot: number, aim: number, speed: number, life: number, target?: [number, number]): void {
+  private spawnCosmetic(kind: number, shot: number, aim: number, speed: number, r: number, life: number, target?: [number, number]): void {
     const pd = PROJECTILES[kind];
     const { x, y } = this.pred.state;
     const img = this.projectileImage(pd);
@@ -480,12 +487,26 @@ export class GameScene extends Phaser.Scene {
       vx: Math.cos(aim) * speed,
       vy: Math.sin(aim) * speed,
       life,
+      r,
       target,
       seenOnServer: false,
     });
   }
 
-  private updateCosmetics(dt: number, serverShots: Set<number>): void {
+  private shotTouchesEnemy(c: Cosmetic, nx: number, ny: number): boolean {
+    const steps = Math.max(1, Math.ceil(Math.hypot(nx - c.x, ny - c.y) / 4));
+    for (const e of this.ents.values()) {
+      if (e.flags & FLAG.DEAD) continue;
+      const air = (e.flags & FLAG.AIRBORNE) !== 0;
+      for (let k = 1; k <= steps; k++) {
+        if (shotHits(e.kind, e.x, e.y, air, c.x + ((nx - c.x) * k) / steps, c.y + ((ny - c.y) * k) / steps, c.r)) return true;
+      }
+    }
+    return false;
+  }
+
+  private updateCosmetics(dt: number, serverShots: Set<number>, now: number): void {
+    for (const [shot, t] of this.endedShots) if (now - t > 2) this.endedShots.delete(shot);
     for (let i = this.cosmetics.length - 1; i >= 0; i--) {
       const c = this.cosmetics[i];
       const onServer = serverShots.has(c.shot);
@@ -497,10 +518,13 @@ export class GameScene extends Phaser.Scene {
       const hitWall = !lineOfSight(this.map, c.x, c.y, nx, ny) || this.map.opaqueAt(nx, ny);
       // The server projectile hit something: ours ends too.
       const goneOnServer = c.seenOnServer && !onServer;
-      if (c.life <= 0 || hitWall || goneOnServer || reachedTarget) {
+      // Shots stop at the first enemy they touch (the server decides the damage), checked every 4 px like there.
+      const hitEnemy = !hitWall && this.shotTouchesEnemy(c, nx, ny);
+      if (c.life <= 0 || hitWall || goneOnServer || reachedTarget || hitEnemy) {
         if (hitWall) this.fx.hitSpark(c.x, c.y, PROJECTILES[c.kind].trail ?? 0xffffff);
         c.img.destroy();
         this.cosmetics.splice(i, 1);
+        this.endedShots.set(c.shot, now);
         continue;
       }
       c.x = nx;
@@ -569,7 +593,7 @@ export class GameScene extends Phaser.Scene {
     for (const [id, v] of this.mimicViews) if (!seen.has(id)) (v.destroy(), this.mimicViews.delete(id));
     for (const [id, v] of this.chestViews) if (!seen.has(id)) (v.destroy(), this.chestViews.delete(id));
 
-    this.updateCosmetics(dt, myShots);
+    this.updateCosmetics(dt, myShots, now);
     this.drawBarsAndBeams(now);
     this.drawDebugPath(px, py, now);
     this.forceField?.update(dt);
@@ -667,8 +691,8 @@ export class GameScene extends Phaser.Scene {
   private drawProjectile(e: EntState): void {
     const owner = e.extra >>> 16;
     const shot = e.extra & 0xffff;
-    // Our own projectiles are shown by the local cosmetic copy.
-    const mine = owner === this.info.you && this.cosmetics.some((c) => c.shot === shot);
+    // Our own projectiles are shown by the local cosmetic copy, also once it has ended.
+    const mine = owner === this.info.you && (this.endedShots.has(shot) || this.cosmetics.some((c) => c.shot === shot));
     const pd = PROJECTILES[e.kind];
     if (!pd) return;
     let img = this.projViews.get(e.id);

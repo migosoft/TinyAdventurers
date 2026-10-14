@@ -264,7 +264,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 
 **Lag compensation.**
 - Melee arcs, the dagger and dash contact test monster positions rewound by the client's `view_lag` (RTT/2 + its interpolation delay), up to 31 ticks.
-- Player projectiles spawn fast-forwarded by RTT/2, at most 150 ms.
+- Player projectiles spawn fast-forwarded by RTT/2, at most 150 ms, through the same 4 px hit-checked steps as every tick (`advance_projectile`), so the fast-forward cannot skip an enemy. Every shot ends at the first wall or figure it meets: hero shots never pass through enemies (an explosion still hits everyone in its radius).
 - **Shot hitboxes:** player projectiles hit a monster when `Monster::shot_dist` is below its radius plus the shot's. Shots are drawn `SHOT_HEIGHT` (8) px above their ground point and figures stand up from their feet, so the hitbox is a capsule from the feet north to `EntityKind::body_height` (sprite height above the feet, measured from the atlas) minus `SHOT_HEIGHT` and the radius, plus the dragon's lift while airborne. Small figures stay (nearly) round; the demon is hit up to its horns. Movement, melee and explosions still use the round footprint.
 
 **AI (`ai.rs`).**
@@ -346,7 +346,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 
 **Own attacks.**
 - `predictAbility` starts the animation, cooldown, hide or dash locally and spawns cosmetic projectiles.
-- The matching server projectile (same `shot_id`) is hidden. The cosmetic one ends when the server one disappears or hits a wall.
+- The matching server projectile (same `shot_id`) is hidden, also for 2 s after the cosmetic one has ended (`endedShots`). The cosmetic one ends when the server one disappears, at a wall, or at the first enemy it touches (`sim/hitbox.ts`, the port of `Monster::shot_dist` with the exported `HITBOX` table; sampled every 4 px). Without the enemy check a shot that hit within the first ticks never appeared in a snapshot, and its cosmetic copy flew on through every enemy behind.
 
 **Remote entities (`Interpolator`).**
 - Snapshots are placed on a server-tick timeline using an estimated clock offset (a low envelope of arrival offsets).

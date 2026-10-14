@@ -40,6 +40,7 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 - **Password change** (old + new password) is not built yet; only deleting the account is.
 - **Behind a reverse proxy**, read `X-Forwarded-For` (only from a trusted proxy) so the per-IP login limits apply per player again.
 - **Several game servers** would need shared presence (one connection per account) and a shared login limiter, e.g. in Valkey. See "Scaling later" in TECHNICAL.md §11a.
+- **Piercing shots (idea from the user, 2026-10-14):** an unlockable upgrade for ranged attacks so a shot passes through a limited number of enemies (first 2, later 3, maybe 4). Today every hero shot ends at the first enemy (`advance_projectile` in `run/abilities.rs`; the client's cosmetic copy stops there too, `GameScene.shotTouchesEnemy`). A pierce count would go on `Projectile` (plus the ids already hit), with the cosmetic copy taking the same count.
 
 ## Chests, mimics and coins follow-ups
 - **Spend coins:** they are banked but buy nothing yet. Intended for loadouts (see below); a coin column in the lobby shop would also work.

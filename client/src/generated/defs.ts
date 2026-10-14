@@ -98,6 +98,7 @@ export const CONST = {
   "DRAGON_CLAW_WINDUP": 0.4,
   "DRAGON_FIREBALL_KNOCK": 20.0,
   "DRAGON_LAND": 0.6,
+  "DRAGON_LIFT": 17.0,
   "DRAGON_SMASH_KNOCK": 36.0,
   "DRAGON_SMASH_RADIUS": 40.0,
   "DRAGON_TAIL_KNOCK": 44.0,
@@ -123,6 +124,7 @@ export const CONST = {
   "PLAYER_RADIUS": 5.0,
   "POS_SCALE": 16.0,
   "SHALLOW_SPEED": 0.7,
+  "SHOT_HEIGHT": 8.0,
   "SNAPSHOT_HZ": 30.0,
   "TICK_HZ": 60.0,
   "TILE": 16.0
@@ -241,6 +243,73 @@ export const ABILITIES = {
     "speed": 0.0
   }
 } as const;
+
+export const HITBOX: Record<number, { r: number; h: number }> = {
+  "10": {
+    "h": 10.0,
+    "r": 4.0
+  },
+  "11": {
+    "h": 13.0,
+    "r": 5.0
+  },
+  "12": {
+    "h": 13.0,
+    "r": 5.0
+  },
+  "13": {
+    "h": 16.0,
+    "r": 6.0
+  },
+  "14": {
+    "h": 16.0,
+    "r": 6.0
+  },
+  "15": {
+    "h": 16.0,
+    "r": 5.0
+  },
+  "16": {
+    "h": 13.0,
+    "r": 5.0
+  },
+  "17": {
+    "h": 16.0,
+    "r": 5.0
+  },
+  "18": {
+    "h": 0.0,
+    "r": 6.0
+  },
+  "19": {
+    "h": 11.0,
+    "r": 5.0
+  },
+  "20": {
+    "h": 18.0,
+    "r": 5.0
+  },
+  "21": {
+    "h": 16.0,
+    "r": 5.0
+  },
+  "22": {
+    "h": 26.0,
+    "r": 10.0
+  },
+  "30": {
+    "h": 58.0,
+    "r": 11.0
+  },
+  "31": {
+    "h": 28.0,
+    "r": 8.0
+  },
+  "32": {
+    "h": 51.0,
+    "r": 17.0
+  }
+};
 
 export const EV = {
   "Boom": 2,

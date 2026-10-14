@@ -29,6 +29,26 @@ pub enum EnemyType {
     Ogre,
 }
 
+impl EnemyType {
+    pub const ALL: [EnemyType; 15] = [
+        EnemyType::GoblinArcher,
+        EnemyType::SkeletonWarrior,
+        EnemyType::SkeletonArcher,
+        EnemyType::OrcWarrior,
+        EnemyType::OrcArcher,
+        EnemyType::Necromancer,
+        EnemyType::RaisedSkeleton,
+        EnemyType::RaisedArcher,
+        EnemyType::Disciple,
+        EnemyType::Mimic,
+        EnemyType::Imp,
+        EnemyType::Chort,
+        EnemyType::Summoner,
+        EnemyType::SummonedImp,
+        EnemyType::Ogre,
+    ];
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum AttackStyle {
     /// `knock`: knockback (px) on a hit; only strong melee pushes, ranged attacks never do.

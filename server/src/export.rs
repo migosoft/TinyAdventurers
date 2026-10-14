@@ -94,6 +94,8 @@ fn export_defs() {
         "DEMON_SWOOP_KNOCK": bosses::DEMON_SWOOP_KNOCK,
     });
     consts.as_object_mut().unwrap().extend(demon.as_object().unwrap().clone());
+    let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
+    consts.as_object_mut().unwrap().extend(shots.as_object().unwrap().clone());
     let fl = json!({
         "HIDDEN": flags::HIDDEN, "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,
         "ASLEEP": flags::ASLEEP, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE,
@@ -104,6 +106,13 @@ fn export_defs() {
         "ShallowWater": Tile::ShallowWater as u8, "DeepWater": Tile::DeepWater as u8,
         "Chasm": Tile::Chasm as u8, "Lava": Tile::Lava as u8,
     });
+    // Shot hitboxes per monster kind (`Monster::shot_dist`): footprint radius and drawn height.
+    let mut hitbox = serde_json::Map::new();
+    let monsters = enemies::EnemyType::ALL.iter().map(|&t| (enemies::def(t).kind, enemies::def(t).radius));
+    let boss_defs = crate::protocol::BossId::ALL.iter().map(|&b| (bosses::def(b).kind, bosses::def(b).radius));
+    for (kind, r) in monsters.chain(boss_defs) {
+        hitbox.insert((kind as u8).to_string(), json!({ "r": r, "h": kind.body_height() }));
+    }
     let ev: serde_json::Map<String, serde_json::Value> =
         crate::wire::EV_CODES.iter().enumerate().map(|(i, n)| (n.to_string(), json!(i))).collect();
     let p = |v: &serde_json::Value| serde_json::to_string_pretty(v).unwrap();
@@ -116,6 +125,7 @@ fn export_defs() {
          export const CONST = {} as const;\n\n\
          export const CLASSES = {} as const;\n\n\
          export const ABILITIES = {} as const;\n\n\
+         export const HITBOX: Record<number, {{ r: number; h: number }}> = {};\n\n\
          export const EV = {} as const;\n",
         p(&json!(kinds)),
         p(&json!(anims)),
@@ -124,6 +134,7 @@ fn export_defs() {
         p(&consts),
         p(&json!(class_defs)),
         p(&json!(abilities)),
+        p(&json!(hitbox)),
         p(&json!(ev)),
     );
     std::fs::create_dir_all(out_dir()).unwrap();

@@ -28,6 +28,8 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 
 Your teammates' names float above their heroes, and the party list (top left) shows everyone's health.
 
+Bolts and spells stop at the first enemy they hit; they don't pass through a line of enemies. A fireball still explodes there and hurts everyone around it.
+
 ### Wizard, 70 HP
 Fragile, but deadly from range.
 - **Left – Magic Missile:** fast arcane bolts in quick succession.
