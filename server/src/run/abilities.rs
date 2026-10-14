@@ -1,6 +1,6 @@
 //! Player abilities (one executor per AbilityId) and projectile simulation.
 
-use super::entities::{AiState, Projectile};
+use super::entities::{AiState, Projectile, Target};
 use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::{self as ab, AbilityId};
@@ -97,7 +97,7 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
             let pid = run.players[pi].id;
             run.players[pi].hidden = def.duration;
             for m in &mut run.monsters {
-                if m.ai.target == Some(pid) {
+                if m.ai.target == Some(Target::Player(pid)) {
                     m.ai.target = None;
                     m.ai.windup = None;
                     m.ai.state = AiState::Search;

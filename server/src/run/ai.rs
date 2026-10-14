@@ -2,7 +2,7 @@
 //! search last known position, return home, and A* pathfinding.
 
 use super::abilities::spawn_monster_projectile;
-use super::entities::{AiState, Windup};
+use super::entities::{AiState, Target, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
 use crate::defs::classes::PLAYER_RADIUS;
@@ -119,7 +119,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
     if let Some(pi) = seen {
         let (pid, ppos) = (run.players[pi].id, run.players[pi].pos());
         let ai = &mut run.monsters[mi].ai;
-        ai.target = Some(pid);
+        ai.target = Some(Target::Player(pid));
         ai.last_known = ppos;
         ai.state = AiState::Chase;
         ai.path.clear();
@@ -140,7 +140,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
     if let Some(w) = run.monsters[mi].ai.windup {
         let t = w.t - dt;
         if t > 0.0 {
-            run.monsters[mi].ai.windup = Some(Windup { t, aim: w.aim, alt: w.alt });
+            run.monsters[mi].ai.windup = Some(Windup { t, aim: w.aim, alt: w.alt, at: w.at });
             return;
         }
         run.monsters[mi].ai.windup = None;
@@ -188,14 +188,14 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                     }
                 };
                 if usable && run.monsters[mi].ai.alt_cd <= 0.0 {
-                    run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: true });
+                    run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: true, at: None });
                     set_anim(run, mi, if matches!(alt, AttackStyle::Slam { .. }) { Anim::Slam } else { Anim::Windup });
                     return;
                 }
             }
             if d <= range && run.monsters[mi].ai.cd <= 0.0 {
                 let (_, _, windup) = reach(def.attack);
-                run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: false });
+                run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: false, at: None });
                 set_anim(run, mi, Anim::Windup);
                 return;
             }
@@ -773,5 +773,18 @@ mod tests {
         }
         let p = astar(&m, Map::center_of(2, 2), Map::center_of(8, 2), 1000, Mover::Enemy).unwrap();
         assert!(p.iter().any(|w| Map::tile_of(*w).1 >= 9));
+    }
+
+    #[test]
+    fn a_seen_hero_becomes_the_target_and_hiding_drops_it() {
+        let mut run = test_run(&[ClassId::Assassin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, run.players[0].pos() + Vec2::new(60.0, 0.0), None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.target, Some(crate::run::entities::Target::Player(run.players[0].id)));
+        crate::run::abilities::try_use(&mut run, 0, crate::defs::abilities::AbilityId::Hide, 1, false);
+        assert_eq!(run.monsters[mi].ai.target, None);
     }
 }

@@ -99,12 +99,25 @@ pub struct Windup {
     pub aim: f64,
     /// The wind-up leads to the second attack (`EnemyDef::alt`).
     pub alt: bool,
+    /// What the attack aims at when that is not the seen hero.
+    pub at: Option<Target>,
+}
+
+/// What a monster is after: a hero, an object (a barrel to shoot; later a
+/// torch or the carriage) or a place.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Target {
+    Player(u32),
+    #[allow(dead_code)] // for barrels (Stage C)
+    Object(u32),
+    #[allow(dead_code)] // for torches and the carriage
+    Place(Vec2),
 }
 
 #[derive(Debug, Clone)]
 pub struct Ai {
     pub state: AiState,
-    pub target: Option<u32>,
+    pub target: Option<Target>,
     pub last_known: Vec2,
     pub home: Vec2,
     pub cd: f64,
