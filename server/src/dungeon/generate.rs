@@ -696,6 +696,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn split_keeps_every_part() {
+        for seed in 0..20u64 {
+            let d = generate(seed, if seed % 2 == 0 { Theme::Water } else { Theme::Lava });
+            let (hall, door, tiles) = (*d.boss_hall(), d.door.clone(), d.map.tiles.clone());
+            let (n_sp, n_ch, ps) = (d.spawns.len(), d.chests.len(), d.player_spawns.clone());
+            let (layout, parts) = d.split();
+            assert_eq!(layout.map.tiles, tiles);
+            assert_eq!((layout.spawns.len(), layout.chests.len(), layout.player_spawns.clone()), (n_sp, n_ch, ps));
+            assert_eq!((*parts.boss_hall(), parts.door.clone()), (hall, door));
+        }
+    }
+
+    #[test]
     fn deterministic_per_seed() {
         let a = generate(42, Theme::Water);
         let b = generate(42, Theme::Water);

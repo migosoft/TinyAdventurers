@@ -203,3 +203,35 @@ impl Dungeon {
         &self.rooms[self.boss].rect
     }
 }
+
+/// The map data every level type shares; `Run` only knows this.
+#[derive(Debug, Clone)]
+pub struct Layout {
+    pub map: Map,
+    pub spawns: Vec<Spawn>,
+    pub chests: Vec<ChestSpawn>,
+    pub player_spawns: Vec<Vec2>,
+}
+
+/// What only the room-and-corridor dungeon has.
+#[derive(Debug, Clone)]
+pub struct DungeonParts {
+    pub rooms: Vec<Room>,
+    pub start: usize,
+    pub boss: usize,
+    /// Door tiles between the boss hall and its corridor.
+    pub door: Vec<(i32, i32)>,
+}
+
+impl DungeonParts {
+    pub fn boss_hall(&self) -> &Rect {
+        &self.rooms[self.boss].rect
+    }
+}
+
+impl Dungeon {
+    pub fn split(self) -> (Layout, DungeonParts) {
+        let Dungeon { map, rooms, start, boss, door, spawns, chests, player_spawns } = self;
+        (Layout { map, spawns, chests, player_spawns }, DungeonParts { rooms, start, boss, door })
+    }
+}

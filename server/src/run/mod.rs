@@ -951,6 +951,74 @@ pub mod tests {
         Run::new(1, members, seed, Some(boss))
     }
 
+    /// FNV-1a over everything a level setup decides, so the level refactor
+    /// can prove it changed nothing.
+    fn fingerprint(run: &Run) -> u64 {
+        let mut h: u64 = 0xcbf29ce484222325;
+        let mut eat = |v: u64| {
+            for b in v.to_le_bytes() {
+                h ^= b as u64;
+                h = h.wrapping_mul(0x100000001b3);
+            }
+        };
+        for &t in &run.dungeon.map.tiles {
+            eat(t as u64);
+        }
+        for m in &run.monsters {
+            eat(m.id as u64);
+            eat(m.kind as u64);
+            eat(m.pos.x.to_bits() as u64);
+            eat(m.pos.y.to_bits() as u64);
+            eat(m.hp.to_bits() as u64);
+            eat(m.is_boss as u64);
+            eat(m.asleep as u64);
+        }
+        for c in &run.chests {
+            eat(c.id as u64);
+            eat(c.pos.x.to_bits() as u64);
+        }
+        for p in &run.players {
+            eat(p.id as u64);
+            eat(p.mv.x.to_bits() as u64);
+            eat(p.mv.y.to_bits() as u64);
+            eat(p.hp.to_bits() as u64);
+        }
+        eat(run.next_id as u64);
+        h
+    }
+
+    fn random_boss_run(seed: u64) -> Run {
+        let (tx, _rx) = unbounded_channel();
+        std::mem::forget(_rx);
+        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, upgrades: StatUpgrades::default() }];
+        Run::new(1, members, seed, None)
+    }
+
+    #[test]
+    fn level_setup_is_unchanged() {
+        let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
+        assert_eq!(got, vec![15034865796308420847, 11583993820610399499, 14176587140014399478, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
+        assert_ne!(got[0], got[1]);
+    }
+
+    #[test]
+    fn simulation_is_unchanged_after_waking_the_boss() {
+        let mut got = Vec::new();
+        for boss in BossId::ALL {
+            let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], boss);
+            let hall = run.dungeon.boss_hall().center_px();
+            for p in &mut run.players {
+                p.mv.x = hall.x;
+                p.mv.y = hall.y + 40.0;
+            }
+            for _ in 0..300 {
+                run.step();
+            }
+            got.push(fingerprint(&run));
+        }
+        assert_eq!(got, vec![5430847933968611557, 17753828129125510062, 7060935872596498876]);
+    }
+
     #[test]
     fn awards_go_to_characters_unless_debug_was_used() {
         let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
