@@ -13,6 +13,8 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 Not designed yet. Start with **superpowers:brainstorming**; the item and what depends on it are in [docs/TODO.md](docs/TODO.md) ("Priority order", tier 1). The level split it builds on is done and merged (below). Start the next feature on a new branch from `main`.
 
+Objects that can be damaged must use the **damage-type system** (TODO.md priority 2, section "Damage-type system", added 2026-10-14): typed damage parts, per-type resistances on heroes, enemies and objects. Plan the two together, so objects get resistances from the start.
+
 ## Bug fixes (2026-10-14, after the level split)
 
 Branch `fix/hitboxes-and-dark-shots`, merged into `main` (fast-forward) and pushed at the user's request (2026-10-14); the branch is deleted. Four bugs the user reported:
@@ -45,7 +47,7 @@ Branch `fix/hitboxes-and-dark-shots`, merged into `main` (fast-forward) and push
 
 **Still open:**
 - **Lobby level picker and `SelectLevel`:** not built (one level only). `Room.level` is always `LevelId::Dungeon`; `lobby.rs` `start` maps it to the `LevelChoice`.
-- **The escort level's XP rule** (kills and boss bonus, or a fixed reward for arriving): to decide with the escort item (TODO priority 6).
+- **The escort level's XP rule** (kills and boss bonus, or a fixed reward for arriving): to decide with the escort item (TODO priority 7).
 - **Docker healthcheck (found this session, older than the branch):** the `HEALTHCHECK` in the `Dockerfile` uses bash's `/dev/tcp` under `/bin/sh` (dash), so `docker compose ps` shows the game container as "unhealthy" although `/health` answers OK. Nothing depends on it; fix it with a tool that exists in the runtime image.
 
 ## Session before (2026-10-13, prediction corrections under lag)
