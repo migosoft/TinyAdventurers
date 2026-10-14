@@ -123,7 +123,7 @@ impl Level {
 mod tests {
     use super::*;
     use crate::dungeon::generate::{generate, Theme};
-    use crate::protocol::{BossId, ClassId};
+    use crate::protocol::{BossId, ClassId, ServerMsg};
     use crate::run::tests::test_run;
     use rand::{Rng, SeedableRng};
 
@@ -170,7 +170,7 @@ mod tests {
         }
         run.step();
         assert_eq!(run.ended.map(|e| e.0), Some(false), "everyone dead = defeat");
-        // `RunEnded.boss` becomes an `Option` in the next step of the split.
-        assert!(run.level.boss_id().is_none());
+        let ServerMsg::RunEnded { boss, level, .. } = run.end_msg(false) else { panic!() };
+        assert_eq!((boss, level), (None, LevelId::Dungeon));
     }
 }

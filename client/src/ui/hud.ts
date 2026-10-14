@@ -1,9 +1,11 @@
 import { ABILITIES, CLASSES, FLAG } from '../generated/defs';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
+import type { LevelId } from '../generated/LevelId';
 import type { PlayerStats } from '../generated/PlayerStats';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
+import { endText } from './endText';
 import { BOSS_TEXT, CLASS_TEXT } from './text';
 
 export interface FrameStats {
@@ -190,7 +192,7 @@ export class Hud {
     this.menu.classList.toggle('hidden', !this.menuOpen);
   }
 
-  showEnd(m: { victory: boolean; boss: BossId; time: number; stats: PlayerStats[]; banked: boolean }): void {
+  showEnd(m: { victory: boolean; level: LevelId; boss: BossId | null; time: number; stats: PlayerStats[]; banked: boolean }): void {
     const mins = Math.floor(m.time / 60);
     const secs = Math.floor(m.time % 60).toString().padStart(2, '0');
     const rows = m.stats
@@ -201,7 +203,7 @@ export class Hud {
       .join('');
     this.end.innerHTML = `
       <div class="title ${m.victory ? 'win' : 'lose'}">${m.victory ? 'VICTORY' : 'DEFEAT'}</div>
-      <p>${m.victory ? `${BOSS_TEXT[m.boss].name} has been slain.` : 'The dungeon claims another party.'} Time ${mins}:${secs}</p>
+      <p>${endText(m.victory, m.level, m.boss)} Time ${mins}:${secs}</p>
       <table><tr><th>Hero</th><th>Class</th><th>Kills</th><th>Damage</th><th>Healing</th><th>XP</th><th>Coins</th></tr>${rows}</table>
       <p class="note">${m.banked ? 'Your XP and coins were added to your profile. Spend XP on upgrades in the lobby.' : 'Debug mode was used: no XP or coins were added to the profiles.'}</p>`;
     const back = el('button', '', 'Back to lobby');

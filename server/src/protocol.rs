@@ -124,6 +124,8 @@ pub struct PlayerInfo {
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct RunStartInfo {
+    /// The level type (decides how the client reads the map later).
+    pub level: LevelId,
     pub width: u16,
     pub height: u16,
     /// One byte per tile, row-major. See `Tile` in dungeon/mod.rs.
@@ -241,14 +243,14 @@ pub struct PlayerStats {
 pub enum ServerMsg {
     Welcome { id: u32 },
     Lobby { runs: Vec<RunSummary> },
-    /// `boss`: the host's choice of end boss, `None` = random.
-    Room { run_id: u32, name: String, host: u32, players: Vec<RoomPlayer>, boss: Option<BossId> },
+    /// `level`: the level the run will play; `boss`: the host's choice of end boss for the dungeon, `None` = random.
+    Room { run_id: u32, name: String, host: u32, players: Vec<RoomPlayer>, level: LevelId, boss: Option<BossId> },
     /// The receiving player's selected character and its progress.
     Character(CharacterInfo),
     RunStarted(RunStartInfo),
     Snap(Snapshot),
-    /// `banked`: the XP was added to the characters (false after a debug run).
-    RunEnded { victory: bool, boss: BossId, time: f32, stats: Vec<PlayerStats>, banked: bool },
+    /// `boss`: the level's end boss, if it has one. `banked`: the XP was added to the characters (false after a debug run).
+    RunEnded { victory: bool, level: LevelId, boss: Option<BossId>, time: f32, stats: Vec<PlayerStats>, banked: bool },
     Pong { time: f64 },
     Error { msg: String },
     /// Debug mode: shortest walkable path from the player to the boss (pixel waypoints).

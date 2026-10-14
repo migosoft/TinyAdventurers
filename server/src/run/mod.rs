@@ -18,7 +18,7 @@ use crate::fov::Fov;
 use crate::lobby::SharedLobby;
 use crate::math::Vec2;
 use crate::telemetry;
-use crate::protocol::{encode, BossId, ClassId, ClientMsg, Ev, InputMsg, LevelChoice, PlayerInfo, PlayerStats, RunStartInfo, ServerMsg};
+use crate::protocol::{encode, BossId, ClassId, ClientMsg, Ev, InputMsg, LevelChoice, LevelId, PlayerInfo, PlayerStats, RunStartInfo, ServerMsg};
 use axum::extract::ws::Message;
 use levels::Level;
 use entities::*;
@@ -262,6 +262,7 @@ impl Run {
 
     pub fn start_info(&self, p: &Player) -> ServerMsg {
         ServerMsg::RunStarted(RunStartInfo {
+            level: self.level.id(),
             width: self.layout.map.w as u16,
             height: self.layout.map.h as u16,
             tiles: self.layout.map.tiles.clone(),
@@ -739,7 +740,8 @@ impl Run {
     pub fn end_msg(&self, victory: bool) -> ServerMsg {
         ServerMsg::RunEnded {
             victory,
-            boss: self.level.boss_id().expect("dungeon runs have a boss"),
+            level: self.level.id(),
+            boss: self.level.boss_id(),
             time: self.time as f32,
             banked: !self.debug_used,
             stats: self
@@ -911,6 +913,15 @@ pub mod tests {
         std::mem::forget(_rx);
         let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, upgrades: StatUpgrades::default() }];
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: None })
+    }
+
+    #[test]
+    fn start_and_end_messages_name_the_level_and_boss() {
+        let run = test_run(&[ClassId::Wizard], BossId::Lich);
+        let ServerMsg::RunStarted(info) = run.start_info(&run.players[0]) else { panic!() };
+        assert_eq!(info.level, LevelId::Dungeon);
+        let ServerMsg::RunEnded { level, boss, .. } = run.end_msg(true) else { panic!() };
+        assert_eq!((level, boss), (LevelId::Dungeon, Some(BossId::Lich)));
     }
 
     #[test]

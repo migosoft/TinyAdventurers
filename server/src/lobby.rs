@@ -5,7 +5,7 @@
 
 use crate::db::{self, Character, Db};
 use crate::progress::Progress;
-use crate::protocol::{encode, BossId, ClassId, ClientMsg, LevelChoice, RoomPlayer, RunSummary, ServerMsg};
+use crate::protocol::{encode, BossId, ClassId, ClientMsg, LevelChoice, LevelId, RoomPlayer, RunSummary, ServerMsg};
 use crate::run::{run_task, Award, Member, Run, RunCmd, RunRecord};
 use crate::telemetry;
 use axum::extract::ws::Message;
@@ -38,6 +38,8 @@ pub struct Room {
     pub members: Vec<u32>,
     /// End boss chosen by the host, `None` = random.
     pub boss: Option<BossId>,
+    /// Always the dungeon until there is a level picker.
+    pub level: LevelId,
     pub run_tx: Option<UnboundedSender<RunCmd>>,
 }
 
@@ -255,7 +257,7 @@ impl Lobby {
                 self.next_room += 1;
                 let name: String = name.trim().chars().filter(|c| !c.is_control()).take(24).collect();
                 let name = if name.is_empty() { format!("Dungeon #{rid}") } else { name };
-                self.rooms.insert(rid, Room { name, host: id, members: vec![id], boss: None, run_tx: None });
+                self.rooms.insert(rid, Room { name, host: id, members: vec![id], boss: None, level: LevelId::Dungeon, run_tx: None });
                 if let Some(c) = self.conns.get_mut(&id) {
                     c.room = Some(rid);
                     c.ready = false;
@@ -338,8 +340,11 @@ impl Lobby {
             })
             .collect();
         let seed: u64 = rand::random();
+        let choice = match room.level {
+            LevelId::Dungeon => LevelChoice::Dungeon { boss: room.boss },
+        };
         let boss = room.boss;
-        let run = Run::new(rid, members, seed, LevelChoice::Dungeon { boss });
+        let run = Run::new(rid, members, seed, choice);
         tracing::info!("run {rid} started: {} player(s), {:?} boss {:?}{}", run.players.len(), run.level.id(), run.level.boss_id(), if boss.is_some() { " (chosen)" } else { "" });
         let (tx, rx) = unbounded_channel();
         self.rooms.get_mut(&rid).unwrap().run_tx = Some(tx);
@@ -433,7 +438,7 @@ impl Lobby {
                 Some(RoomPlayer { id: *m, name: ch.name.clone(), class: ch.class, ready: c.ready })
             })
             .collect();
-        let msg = ServerMsg::Room { run_id: rid, name: room.name.clone(), host: room.host, players, boss: room.boss };
+        let msg = ServerMsg::Room { run_id: rid, name: room.name.clone(), host: room.host, players, level: room.level, boss: room.boss };
         for m in &room.members {
             if let Some(c) = self.conns.get(m) {
                 send(&c.tx, &msg);

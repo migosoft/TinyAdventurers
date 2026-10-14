@@ -1,5 +1,6 @@
 import type { BossId } from '../generated/BossId';
 import type { CharacterInfo } from '../generated/CharacterInfo';
+import type { LevelId } from '../generated/LevelId';
 import type { RoomPlayer } from '../generated/RoomPlayer';
 import type { RunSummary } from '../generated/RunSummary';
 import type { UpgradeStat } from '../generated/UpgradeStat';
@@ -19,7 +20,7 @@ const BOSS_FIG: Record<BossId, [string, string, number]> = {
 };
 const STATS: UpgradeStat[] = ['Damage', 'AttackSpeed', 'MoveSpeed', 'Life', 'Armor'];
 
-type Room = { run_id: number; name: string; host: number; players: RoomPlayer[]; boss: BossId | null };
+type Room = { run_id: number; name: string; host: number; players: RoomPlayer[]; level: LevelId; boss: BossId | null };
 
 /** Debug mode only: `?debug&boss=demon|lich|dragon` preselects the end boss on the host's page. */
 function debugBoss(): BossId | null {
