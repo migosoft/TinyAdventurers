@@ -76,16 +76,14 @@ Idea from the user (2026-10-14). Every hit has a damage type, and heroes, enemie
   - **holy:** strong against the undead (lich, skeletons) and demons;
   - **necrotic/shadow:** the lich and a future shadow enemy; undead resist it;
   - **acid:** could lower the target's resistances for a while.
-- **Attacks** have no, one or several damage types.
-  - **No type:** plain damage that no resistance reduces.
-  - **Several types:** the attack's damage is split into parts per type (e.g. a fireball: 70 % heat, 30 % physical). Each part is reduced by its own resistance, and the parts are added up. So a target immune to heat still takes the physical part.
+- **Attacks** always have at least one damage type. The default is physical, so today's attacks become physical unless they are given another type.
+  - **Several types (decided):** the attack's damage is split into parts per type (e.g. a fireball: 70 % heat, 30 % physical). Each part is reduced by its own resistance, and the parts are added up. So a target immune to heat still takes the physical part.
 - **Resistances:** heroes, enemies and objects have no, one or several resistances, each a percentage per type taken off that type's damage: `part × (1 − resistance)`. A type without an entry means 0 %, so full damage. 100 % means immune to that type. Store them as a small list of (type, percent) pairs, e.g. in the `EnemyType` and class defs, plus whatever the object system (priority 1) gives objects.
-- **Where it goes:** all damage already passes through `hurt_player` and `hurt_monster` (`run/mod.rs`, about 25 call sites in `abilities.rs`, `ai.rs`, the boss files and lava). Both would take the attack's type parts instead of one number (none for untyped damage), and every call site would name them. Lava is heat; falling and drowning stay instant deaths, not damage.
+- **Where it goes:** all damage already passes through `hurt_player` and `hurt_monster` (`run/mod.rs`, about 25 call sites in `abilities.rs`, `ai.rs`, the boss files and lava). Both would take the attack's type parts instead of one number (just physical by default), and every call site would name them. Lava is heat; falling and drowning stay instant deaths, not damage.
 - **Questions to settle:**
   - Does the armour upgrade (`mods.armor`, up to 60 %) stay a reduction on everything, or does it become physical resistance only? Is it applied before or after the type resistance?
   - Negative resistance as a weakness (e.g. −50 % = 1.5× damage), for example skeletons weak to holy or fire enemies weak to cold?
   - Can resistances rise above 100 % (the hit heals), or is 100 % the cap?
-  - Multi-type attacks: is the split per type above right? The alternative is that the attack counts fully as each type, with only the best (or worst) resistance applying.
   - Do damage-over-time effects such as poison or burning come with this, or later?
   - Can heroes raise resistances: lobby upgrades, loadouts or item drops?
 - **Client:** colour the damage numbers by type and show "immune" instead of 0. The `Dmg` event then needs the type, or the main type for a multi-type hit (one more byte).
