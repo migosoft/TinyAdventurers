@@ -10,7 +10,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 **Tier 2: larger features on top of tier 1**
 
-4. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light from the start. If an ability pushes enemies, enemies need their own version of `Sink`/`kill_player` (see "Enemies in terrain").
+4. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light from the start. Damage types and resistances (see "Damage types and resistances") should come before new abilities and enemies, so each one gets its type from the start instead of being changed later. If an ability pushes enemies, enemies need their own version of `Sink`/`kill_player` (see "Enemies in terrain").
 5. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the objects from 1, a dialog panel. Answer the open design questions first.
 6. **Woodland escort level:** needs 1, plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
 
@@ -68,6 +68,24 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
   - Ideas for the ghost: drifts through walls, or turns half transparent and can't be hit for a moment.
   - Ideas for the shadow: hard to see in the dark. It could be the enemy that puts out torches (see "Lighting").
 - **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Also approved (2026-10-13): "Forest creatures" by lyaseek (https://lyaseek.itch.io/miniffanimals). For both, check the license and keep the license file next to the imported art.
+
+## Damage types and resistances
+Idea from the user (2026-10-14). Every hit has a damage type, and heroes, enemies and objects can resist types.
+- **Types:** cold, heat (fire), physical, magical, poison. Ideas for more (pick only what abilities and enemies will actually use):
+  - **lightning:** could jump to a nearby second target, or stun for a moment;
+  - **holy:** strong against the undead (lich, skeletons) and demons;
+  - **necrotic/shadow:** the lich and a future shadow enemy; undead resist it;
+  - **acid:** could lower the target's resistances for a while.
+- **Resistances:** a percentage per type, taken off the base damage: `damage × (1 − resistance)`. No entry means 0 %, so full damage. 100 % means immune. Store them as a small table per type, e.g. in the `EnemyType` and class defs, plus whatever the object system (priority 1) gives objects.
+- **Where it goes:** all damage already passes through `hurt_player` and `hurt_monster` (`run/mod.rs`, about 25 call sites in `abilities.rs`, `ai.rs`, the boss files and lava). Both would take a damage type, and every call site would name one. Lava is heat; falling and drowning stay instant deaths, not damage.
+- **Questions to settle:**
+  - Does the armour upgrade (`mods.armor`, up to 60 %) stay a reduction on everything, or does it become physical resistance only? Is it applied before or after the type resistance?
+  - Negative resistance as a weakness (e.g. −50 % = 1.5× damage), for example skeletons weak to holy or fire enemies weak to cold?
+  - Can resistances rise above 100 % (the hit heals), or is 100 % the cap?
+  - Do damage-over-time effects such as poison or burning come with this, or later?
+  - Can heroes raise resistances: lobby upgrades, loadouts or item drops?
+- **Client:** colour the damage numbers by type and show "immune" instead of 0. The `Dmg` event then needs the type (one more byte).
+- **Tune** every resistance in the balancing pass.
 
 ## Woodland escort level
 An outdoor level where the heroes escort a carriage carrying the elven princess.
