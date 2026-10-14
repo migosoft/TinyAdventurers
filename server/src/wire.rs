@@ -46,7 +46,7 @@ pub struct BossW(pub BossId, pub f32, pub f32, pub bool, pub bool);
 #[serde(untagged)]
 #[ts(export)]
 pub enum EvW {
-    Dmg(u8, u32, u32, f32, bool, bool),
+    Dmg(u8, u32, u32, f32, bool, bool, u8, bool),
     Heal(u8, u32, u32, f32),
     Boom(u8, u32, u32, f32, u8),
     Died(u8, u32, u32, u32, u8),
@@ -78,7 +78,7 @@ impl From<InputW> for InputMsg {
 fn ev_w(e: &Ev) -> EvW {
     let q = |v: f32| q_pos(v as f64);
     match e {
-        Ev::Dmg { x, y, v, crit, p } => EvW::Dmg(0, q(*x), q(*y), *v, *crit, *p),
+        Ev::Dmg { x, y, v, crit, p, ty, imm } => EvW::Dmg(0, q(*x), q(*y), *v, *crit, *p, *ty, *imm),
         Ev::Heal { x, y, v } => EvW::Heal(1, q(*x), q(*y), *v),
         Ev::Boom { x, y, r, k } => EvW::Boom(2, q(*x), q(*y), *r, *k),
         Ev::Died { id, x, y, kind } => EvW::Died(3, *id, q(*x), q(*y), *kind),
@@ -134,7 +134,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         },
         boss: Some(BossBar { kind: BossId::Demon, hp: 1234.5, max_hp: 2000.0, immune: true, enraged: false }),
         ev: vec![
-            Ev::Dmg { x: 10.3, y: 20.7, v: 12.5, crit: true, p: false },
+            Ev::Dmg { x: 10.3, y: 20.7, v: 12.5, crit: true, p: false, ty: 2, imm: false },
             Ev::Heal { x: 11.0, y: 21.0, v: 4.25 },
             Ev::Boom { x: 300.06, y: 400.94, r: 24.0, k: 2 },
             Ev::Died { id: 300, x: 2000.5, y: 1800.27, kind: 5 },

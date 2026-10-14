@@ -616,18 +616,27 @@ impl Run {
     }
 
     pub fn hurt_player(&mut self, pi: usize, dmg: Damage) {
-        let p = &mut self.players[pi];
-        if !p.alive {
+        if !self.players[pi].alive {
             return;
         }
-        let dmg = resolve(&dmg, &p.res) * (1.0 - p.mods.armor);
+        let raw = resolve(&dmg, &self.players[pi].res);
+        if raw < 0.0 {
+            self.heal_player(pi, -raw);
+            return;
+        }
+        let p = &mut self.players[pi];
+        let v = raw * (1.0 - p.mods.armor);
+        let imm = raw == 0.0 && dmg.amount > 0.0;
         // Debug mode: hits still show, but nothing is subtracted.
         if !p.debug {
-            p.hp -= dmg;
+            p.hp -= v;
         }
-        p.hurt_t = 0.15;
+        if !imm {
+            p.hurt_t = 0.15;
+        }
         let pos = p.pos();
-        self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: dmg as f32, crit: false, p: true }, Some(pos));
+        let ty = dmg.split.main_type() as u8;
+        self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: v as f32, crit: false, p: true, ty, imm }, Some(pos));
         let p = &mut self.players[pi];
         if p.hp <= 0.0 {
             p.hp = 0.0;
@@ -678,13 +687,25 @@ impl Run {
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             return false;
         }
-        let dmg = resolve(&dmg, &self.monsters[mi].res);
-        let m = &mut self.monsters[mi];
-        m.hp -= dmg;
-        m.hurt_t = 0.15;
-        let applied = dmg.min(m.hp + dmg);
+        let raw = resolve(&dmg, &self.monsters[mi].res);
+        let ty = dmg.split.main_type() as u8;
         // Hits by heroes go to the whole party, even out of view: the shot was seen leaving.
-        self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: dmg as f32, crit, p: false }, src_player.is_none().then_some(pos));
+        let seen_by = src_player.is_none().then_some(pos);
+        if raw < 0.0 {
+            let m = &mut self.monsters[mi];
+            let healed = (-raw).min(m.max_hp - m.hp);
+            m.hp += healed;
+            self.event(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32 }, seen_by);
+            return true;
+        }
+        let imm = raw == 0.0 && dmg.amount > 0.0;
+        let m = &mut self.monsters[mi];
+        m.hp -= raw;
+        if !imm {
+            m.hurt_t = 0.15;
+        }
+        let applied = raw.min(m.hp + raw);
+        self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: false, ty, imm }, seen_by);
         if let Some(pi) = src_player {
             self.players[pi].damage += applied;
             // Getting hit makes a monster investigate where the attack came from.
@@ -881,6 +902,32 @@ pub mod tests {
             })
             .collect();
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: Some(boss) })
+    }
+
+    #[test]
+    fn a_resisted_hit_is_shown_as_immune_and_over_100_percent_heals() {
+        use crate::defs::damage::Resistances;
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos() + Vec2::new(30.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        let hp = run.monsters[mi].hp;
+        run.events.clear();
+        run.hurt_monster(mi, Damage::new(10.0, DamageSplit::pure(DamageType::Poison)), false, Some(0));
+        assert_eq!(run.monsters[mi].hp, hp, "undead resist poison fully");
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { imm: true, .. })));
+        // Above 100 %: the hit heals.
+        run.monsters[mi].hp = hp - 20.0;
+        run.monsters[mi].res = Resistances::of(&[(DamageType::Poison, 1.5)]);
+        run.events.clear();
+        run.hurt_monster(mi, Damage::new(10.0, DamageSplit::pure(DamageType::Poison)), false, Some(0));
+        assert!((run.monsters[mi].hp - (hp - 15.0)).abs() < 1e-9);
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Heal { .. })));
+        // The number carries the main type.
+        run.events.clear();
+        run.hurt_monster(mi, Damage::new(10.0, DamageSplit::split(&[(DamageType::Heat, 0.7)])), false, Some(0));
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { ty, imm: false, .. } if *ty == DamageType::Heat as u8)));
     }
 
     /// FNV-1a over everything a level setup decides, so the level refactor

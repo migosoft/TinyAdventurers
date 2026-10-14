@@ -15,6 +15,7 @@ import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
 import { ChestView } from './chest';
+import { dmgColor } from './damage';
 import { DEPTH, Effects } from './effects';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
@@ -306,10 +307,11 @@ export class GameScene extends Phaser.Scene {
   private onEvent(ev: Ev): void {
     switch (ev.t) {
       case 'Dmg':
-        if (ev.crit) this.fx.text(ev.x, ev.y, `CRIT ${Math.round(ev.v)}`, '#ffe040', true);
-        else this.fx.text(ev.x, ev.y, `${Math.round(ev.v)}`, ev.p ? '#ff5050' : '#ffffff');
-        this.fx.hitSpark(ev.x, ev.y + 4, ev.p ? 0xff4040 : 0xffffff);
-        if (ev.p && Math.hypot(ev.x - this.pred.state.x, ev.y + 10 - this.pred.state.y) < 4) this.cameras.main.shake(90, 0.003);
+        if (ev.imm) this.fx.text(ev.x, ev.y, 'immune', '#a0a0a0');
+        else if (ev.crit) this.fx.text(ev.x, ev.y, `CRIT ${Math.round(ev.v)}`, '#ffe040', true);
+        else this.fx.text(ev.x, ev.y, `${Math.round(ev.v)}`, dmgColor(ev.ty, ev.p));
+        if (!ev.imm) this.fx.hitSpark(ev.x, ev.y + 4, ev.p ? 0xff4040 : 0xffffff);
+        if (ev.p && !ev.imm && Math.hypot(ev.x - this.pred.state.x, ev.y + 10 - this.pred.state.y) < 4) this.cameras.main.shake(90, 0.003);
         break;
       case 'Heal':
         this.fx.text(ev.x, ev.y, `+${Math.round(ev.v)}`, '#60ff80');

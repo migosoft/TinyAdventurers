@@ -60,7 +60,6 @@ pub fn profile(types: &[EntityType], adj: Adjust) -> Profile {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defs::damage::DamageType::*;
     use crate::defs::enemies::{self, EnemyType};
     use crate::defs::{bosses, classes};
     use crate::protocol::{BossId, ClassId};

@@ -323,3 +323,11 @@ export const EV = {
   "Sink": 9,
   "Tile": 6
 } as const;
+
+export const DMG_TYPE = {
+  "Cold": 1,
+  "Heat": 2,
+  "Magical": 3,
+  "Physical": 0,
+  "Poison": 4
+} as const;

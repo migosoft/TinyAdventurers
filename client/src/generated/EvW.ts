@@ -3,4 +3,4 @@
 /**
  * `[code, ...fields of the Ev variant]`, positions scaled (not `Tile`).
  */
-export type EvW = [number, number, number, number, boolean, boolean] | [number, number, number, number] | [number, number, number, number, number] | [number, number, number, number, number] | [number, number, number, number] | [number, number, number] | [number, number, number, number] | [number, string] | [number, number, number, number] | [number, number, number, number, number];
+export type EvW = [number, number, number, number, boolean, boolean, number, boolean] | [number, number, number, number] | [number, number, number, number, number] | [number, number, number, number, number] | [number, number, number, number] | [number, number, number] | [number, number, number, number] | [number, string] | [number, number, number, number] | [number, number, number, number, number];

@@ -14,7 +14,7 @@ const pos = (v: number): number => v / CONST.POS_SCALE;
 /** 0-255 → (-π, π], the range of atan2 on the server (128 = exactly left = +π). */
 const angle = (a: number): number => ((a > 128 ? a - 256 : a) / 256) * (2 * Math.PI);
 
-type DmgW = [number, number, number, number, boolean, boolean];
+type DmgW = [number, number, number, number, boolean, boolean, number, boolean];
 type HealW = [number, number, number, number];
 type BoomW = [number, number, number, number, number];
 type DiedW = [number, number, number, number, number];
@@ -28,8 +28,8 @@ type SinkW = [number, number, number, number, number];
 function unpackEv(e: EvW): Ev {
   switch (e[0]) {
     case EV.Dmg: {
-      const [, x, y, v, crit, p] = e as DmgW;
-      return { t: 'Dmg', x: pos(x), y: pos(y), v, crit, p };
+      const [, x, y, v, crit, p, ty, imm] = e as DmgW;
+      return { t: 'Dmg', x: pos(x), y: pos(y), v, crit, p, ty, imm };
     }
     case EV.Heal: {
       const [, x, y, v] = e as HealW;
