@@ -43,10 +43,11 @@ pub enum EntityKind {
     FirePatch = 70,
     // Props
     Chest = 80,
+    Barrel = 81,
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 33] = [
+    pub const ALL: [EntityKind; 34] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -80,6 +81,7 @@ impl EntityKind {
         EntityKind::GloomBolt,
         EntityKind::FirePatch,
         EntityKind::Chest,
+        EntityKind::Barrel,
     ];
 
     /// How tall the figure is drawn above its feet (px, from the sprites; 0 for

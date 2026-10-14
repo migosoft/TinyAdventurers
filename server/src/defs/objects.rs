@@ -1,5 +1,6 @@
 //! World object definitions (see `run/objects.rs`).
 
+use super::damage::{Damage, DamageSplit, DamageType};
 use super::entity_types::{self, Adjust, EntityType, Profile};
 use super::kinds::EntityKind;
 
@@ -14,8 +15,25 @@ pub struct ObjDef {
 pub fn def(kind: EntityKind) -> ObjDef {
     match kind {
         EntityKind::Chest => ObjDef { radius: 6.0, solid: false },
+        EntityKind::Barrel => ObjDef { radius: BARREL_RADIUS, solid: true },
         _ => panic!("{kind:?} is not an object"),
     }
+}
+
+/// Barrels (first guesses for the balancing pass).
+pub const BARREL_RADIUS: f64 = 6.0;
+/// Seconds from the first hit to the explosion; also the delay per link of a chain.
+pub const BARREL_FUSE: f64 = 0.3;
+pub const BARREL_BLAST_R: f64 = 40.0;
+pub const BARREL_BLAST_DAMAGE: f64 = 30.0;
+pub const BARREL_BLAST_KNOCK: f64 = 40.0;
+/// How far a push with E slides a barrel (px).
+pub const BARREL_PUSH: f64 = 48.0;
+/// Hand reach for using an object: gap (px) between the hero's and the object's footprints.
+pub const USE_REACH: f64 = 6.0;
+
+pub fn barrel_blast() -> Damage {
+    Damage::new(BARREL_BLAST_DAMAGE, DamageSplit::split(&[(DamageType::Heat, 0.5)]))
 }
 
 /// Every object is of entity type `Object` (so it resists poison fully).

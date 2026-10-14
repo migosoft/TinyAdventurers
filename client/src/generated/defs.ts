@@ -4,6 +4,7 @@ export const KIND = {
   "Arrow": 53,
   "Assassin": 3,
   "Barbarian": 2,
+  "Barrel": 81,
   "Bolt": 52,
   "Chest": 80,
   "Chort": 20,
@@ -76,6 +77,9 @@ export const TILE_ID = {
 } as const;
 
 export const CONST = {
+  "BARREL_BLAST_R": 40.0,
+  "BARREL_FUSE": 0.3,
+  "BARREL_RADIUS": 6.0,
   "DAGGER_COOLDOWN": 0.35,
   "DAGGER_RANGE": 22.0,
   "DASH_SPEED": 300.0,
@@ -127,7 +131,8 @@ export const CONST = {
   "SHOT_HEIGHT": 8.0,
   "SNAPSHOT_HZ": 30.0,
   "TICK_HZ": 60.0,
-  "TILE": 16.0
+  "TILE": 16.0,
+  "USE_REACH": 6.0
 } as const;
 
 export const CLASSES = {

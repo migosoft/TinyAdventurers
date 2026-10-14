@@ -96,6 +96,11 @@ fn export_defs() {
     consts.as_object_mut().unwrap().extend(demon.as_object().unwrap().clone());
     let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
     consts.as_object_mut().unwrap().extend(shots.as_object().unwrap().clone());
+    let objs = json!({
+        "BARREL_RADIUS": crate::defs::objects::BARREL_RADIUS, "BARREL_FUSE": crate::defs::objects::BARREL_FUSE,
+        "BARREL_BLAST_R": crate::defs::objects::BARREL_BLAST_R, "USE_REACH": crate::defs::objects::USE_REACH,
+    });
+    consts.as_object_mut().unwrap().extend(objs.as_object().unwrap().clone());
     let fl = json!({
         "HIDDEN": flags::HIDDEN, "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,
         "ASLEEP": flags::ASLEEP, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE,
