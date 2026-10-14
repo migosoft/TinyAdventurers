@@ -1,3 +1,4 @@
+use super::entity_types::{self, Adjust, EntityType, Profile};
 use super::kinds::EntityKind;
 use crate::protocol::BossId;
 
@@ -84,3 +85,14 @@ pub const DRAGON_BITE_KNOCK: f64 = 24.0;
 pub const DRAGON_BITE_COOLDOWN: f64 = 3.0;
 pub const DRAGON_TAIL_KNOCK: f64 = 44.0;
 pub const DRAGON_FIREBALL_KNOCK: f64 = 20.0;
+
+/// Entity type plus each boss's own adjustments.
+pub fn profile(id: BossId) -> Profile {
+    use super::damage::{DamageSplit, DamageType::*, Resistances};
+    let (ty, adj) = match id {
+        BossId::Demon => (EntityType::Demon, Adjust { res: Resistances::of(&[(Magical, 0.2)]), melee: None }),
+        BossId::Lich => (EntityType::Undead, Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), melee: None }),
+        BossId::Dragon => (EntityType::Dragon, Adjust { res: Resistances::of(&[(Heat, 1.0)]), melee: Some(DamageSplit::split(&[(Heat, 0.2)])) }),
+    };
+    entity_types::profile(&[ty], adj)
+}

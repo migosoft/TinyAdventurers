@@ -1,4 +1,5 @@
 use super::abilities::AbilityId;
+use super::entity_types::{self, Adjust, EntityType, Profile};
 use super::kinds::EntityKind;
 use crate::protocol::ClassId;
 use serde::Serialize;
@@ -26,4 +27,9 @@ pub fn def(class: ClassId) -> ClassDef {
             ClassDef { class, kind: EntityKind::Assassin, hp: 90.0, speed: 80.0, primary: CrossbowDagger, secondary: Hide }
         }
     }
+}
+
+/// Every hero is human; armour items will add resistances later.
+pub fn profile(_class: ClassId) -> Profile {
+    entity_types::profile(&[EntityType::Human], Adjust::NONE)
 }

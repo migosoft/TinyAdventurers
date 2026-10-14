@@ -1,3 +1,4 @@
+use super::entity_types::{self, Adjust, EntityType, Profile};
 use super::kinds::EntityKind;
 use crate::protocol::BossId;
 
@@ -237,3 +238,15 @@ pub const CHEST_TOUCH: f64 = 12.0;
 /// Necromancers raise skeletons (summoners summon imps) on this cooldown, up to this many alive.
 pub const NECRO_RAISE_COOLDOWN: f64 = 7.0;
 pub const NECRO_MAX_MINIONS: usize = 3;
+
+/// Entity type of each enemy (see `entity_types`).
+pub fn profile(t: EnemyType) -> Profile {
+    use EnemyType::*;
+    let ty = match t {
+        Necromancer | Summoner | Disciple => EntityType::Human,
+        SkeletonWarrior | SkeletonArcher | RaisedSkeleton | RaisedArcher => EntityType::Undead,
+        GoblinArcher | OrcWarrior | OrcArcher | Mimic | Ogre => EntityType::Monster,
+        Imp | Chort | SummonedImp => EntityType::Demon,
+    };
+    entity_types::profile(&[ty], Adjust::NONE)
+}
