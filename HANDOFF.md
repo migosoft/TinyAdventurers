@@ -9,42 +9,35 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Next item: separate the run from "dungeon + boss" (TODO.md priority 1): designed and planned, not implemented
+## Next item: enemies that target objects, and world objects heroes can use (TODO.md priority 1)
 
-**State (2026-10-14):** branch `feature/level-split` (from `main`) has three commits and no code changes:
-- the spec: [docs/superpowers/specs/2026-10-13-level-split-design.md](docs/superpowers/specs/2026-10-13-level-split-design.md), approved by the user;
-- the implementation plan, 5 tasks: [docs/superpowers/plans/2026-10-13-level-split.md](docs/superpowers/plans/2026-10-13-level-split.md);
-- this handoff.
+Not designed yet. Start with **superpowers:brainstorming**; the item and what depends on it are in [docs/TODO.md](docs/TODO.md) ("Priority order", tier 1). The level split it builds on is done (below), but not merged yet.
 
-**How to continue:** check out `feature/level-split` and execute the plan with **superpowers:subagent-driven-development**. The user chose this method; it was interrupted before Task 1 so it can run in a fresh session. The SDD workspace `.superpowers/sdd/2026-10-13-level-split/` (git-ignored) holds only `plan-path`: there is no ledger yet, so start at Task 1 (pre-flight scan, then the Task 1 dispatch). Don't pause between tasks; ask the user only before merging or pushing.
+## Last session (2026-10-14, level split)
 
-**User decisions (2026-10-13), all in the spec:**
-- **Pure refactor:** same map, spawns, entity ids and boss per seed; the wire fixtures stay byte-identical; no new level yet.
-- **Scope:** server core plus plumbing: `level` in the protocol (`RunStartInfo`, `RunEnded`, lobby `Room`), DB migration 0004 (`runs.level`, `boss` nullable), stats, telemetry and the admin page. **No lobby level picker** and no `SelectLevel` yet (one level only).
-- **Admin statistics:** grouped per level with the boss inside ("Dungeon – Demon").
-- **Shape:** `enum Level` dispatching to a `LevelRules` trait whose hooks have default no-op bodies; a reusable `BossEncounter` that any level can include; each level owns its generator and fills a shared `Layout` (map, spawns, chests, player spawns); `LevelChoice` carries each level's options.
-- **Future level types (user):** the design must suit level types beyond the escort level.
-- **Still open, for the escort item:** the escort level's XP rule (kills and boss bonus, or a fixed reward for arriving).
+**Branch:** `feature/level-split` (from `main`), **not merged and not pushed**: the user decides about merging and pushing. It was priority item 1 of `docs/TODO.md` (now removed; the list is renumbered). Spec: [docs/superpowers/specs/2026-10-13-level-split-design.md](docs/superpowers/specs/2026-10-13-level-split-design.md); plan (5 tasks, run with superpowers:subagent-driven-development): [docs/superpowers/plans/2026-10-13-level-split.md](docs/superpowers/plans/2026-10-13-level-split.md).
 
-**Plan notes found while planning:**
-- `AdminStats.levels` already exists (the upgrade histogram), so the per-level run table is `level_runs: Vec<LevelRunStats>`.
-- The boss acts at one point of the step and the "heroes entered the hall" check runs at another, so there are two hooks (`tick`, `post_tick`), to keep the order identical.
-- Task 1 first records fingerprint tests on the **old** code (setup per seed, and 300 steps of boss fight); the refactor must keep them passing.
+**What changed (a pure refactor: same map, spawns, entity ids, boss and behaviour per seed; the wire fixtures are byte-identical):**
+- **Server core:** a run no longer assumes "dungeon + boss". `Run { layout, level }` replaces `Run.dungeon` and the five boss fields. `Layout` (`dungeon/mod.rs`: map, spawns, chests, player spawns) is what every level fills; `Dungeon::split` cuts the generator's result into the layout and the dungeon's own parts. `run/levels/`: `mod.rs` holds the `LevelRules` trait (hooks with default bodies: `populate`, `tick`, `post_tick`, `on_killed`, `on_boss_hurt`, `failed`, `debug_target`, `boss_bar`) and `enum Level` with the `dispatch!` macro; `boss.rs` holds `BossEncounter`, the boss fight any level can include; `dungeon.rs` holds `DungeonLevel`. `Run::new(id, members, seed, LevelChoice)`.
+- **Protocol:** `LevelId { Dungeon }`, `LevelChoice { Dungeon { boss } }` (tag `level`), `RunStartInfo.level`, `RunEnded { level, boss: Option }`, `ServerMsg::Room.level`. The lobby room is always the dungeon; `SelectBoss` is unchanged.
+- **Client:** `LEVEL_TEXT` in `ui/text.ts`, `ui/endText.ts` (`endText()`, the end screen's first line; the HUD uses it).
+- **Database and statistics:** migration `0004_runs_level.sql` (`runs.level` text, default `'Dungeon'`; `boss` nullable); `RunRecord { level, boss: Option }`; `AdminStats.level_runs` (`LevelRunStats`; the old `AdminStats.levels` stays the upgrades histogram); `PlayerRun.level`/`boss`. Telemetry: a `level` attribute, `boss` only when the level has one.
+- **Admin page:** the "Levels (last 30 days)" table with rows like "Dungeon – Demon", and a "Level" column in a player's runs.
+- **Docs:** TECHNICAL §5 "Levels", §11 "How to add a level type", protocol, statistics, telemetry and tests; TODO renumbered. PLAYER_GUIDE is unchanged (nothing changed for players).
 
-The findings below are from before the design (2026-10-13). The spec and plan supersede the proposed shape and answer the questions.
+**Verified (2026-10-14):**
+- `cargo test`: 159 tests pass (149 before the branch), among them the fingerprint tests `level_setup_is_unchanged` and `simulation_is_unchanged_after_waking_the_boss`, recorded on the old code first. Client build and 27 tests pass.
+- `docker compose up --build -d`, `/health` OK, migration 0004 applied (`_sqlx_migrations` row 4 "runs level"; `runs.level` NOT NULL DEFAULT 'Dungeon', `boss` nullable).
+- Smoke test normal and under `?lag=150&jitter=40&loss=2` (with the admin pass): no browser errors, correction 0.00 px.
+- A throwaway bot (session scratchpad, not kept; one debug wizard per boss, accounts deleted afterwards) walked the debug path with `?debug&boss=<b>` and killed each boss: the wake message, the sealed force field, the boss bar (IMMUNE for the lich until its disciples died), `RunEnded {victory, level: "Dungeon", boss}` and the end screen line "<boss name> has been slain."; the player's runs in the admin page show "Dungeon – <Boss>". The "Levels (last 30 days)" table lists "Dungeon – Demon/Dragon/Lich" rows (debug runs are left out of the statistics by design, so the rows come from the non-debug runs). No browser errors. The runs were stored as `level = Dungeon`, `boss = Demon/Dragon/Lich`, `debug = true`. (A first lich bot did not aim at the disciples and gave up after 10 min, an abandoned debug run; the registration limit, 10 per IP and hour, then needed a `docker compose restart game` for the second try.)
+- The containers are left running.
 
-**Where the code assumes one level type (found 2026-10-13):**
-- **`Run` (`server/src/run/mod.rs`):** the fields `boss_id`, `boss_ent`, `boss` (`BossBehaviour`), `boss_awake` and `door_closed`. `Run::new` always calls `generate(seed, Theme::for_boss(boss_id))`. `check_boss_hall` wakes the boss and seals the hall; `check_end` only knows "everyone dead = defeat". Victory is set in `kill_monster` when `id == boss_ent`. `end_msg` sends `boss`. About 33 references in this file.
-- **Generator (`server/src/dungeon/`):** `generate` always builds the 140×140 room-and-corridor map. `Dungeon` has `boss` (the hall's room index) and `door`. Boss-hall chasms (`place_boss_chasms`) and the lava pool are boss-hall specific. Rng streams are numbered per feature: keep every seed's map identical, because the 200-seed generation test and the parity fixtures depend on it.
-- **Other server files:** `run/visibility.rs` (boss bar, drain beams), `run/debug.rs` (the path leads to the boss or its hall), `run/ai.rs`, `run/bosses/*`.
-- **Lobby (`server/src/lobby.rs`):** `Room.boss: Option<BossId>` and `ClientMsg::SelectBoss`. `Run::new(rid, members, seed, boss)`.
-- **Protocol:** `RunStartInfo` has no level field yet. `RunEnded.boss`, `Room.boss`.
-- **Database and admin:** `runs.boss` (text, `db.rs`). `stats.rs` groups runs by boss, and the admin page shows them (`client/src/admin/main.ts`).
-- **Client:** the lobby's boss picker and boss cards (`ui/lobby.ts`, `BOSS_FIG`), the HUD boss bar and end screen (`ui/hud.ts`), and `?debug&boss=` preselection.
+**Still open:**
+- **Lobby level picker and `SelectLevel`:** not built (one level only). `Room.level` is always `LevelId::Dungeon`; `lobby.rs` `start` maps it to the `LevelChoice`.
+- **The escort level's XP rule** (kills and boss bonus, or a fixed reward for arriving): to decide with the escort item (TODO priority 6).
+- **Docker healthcheck (found this session, older than the branch):** the `HEALTHCHECK` in the `Dockerfile` uses bash's `/dev/tcp` under `/bin/sh` (dash), so `docker compose ps` shows the game container as "unhealthy" although `/health` answers OK. Nothing depends on it; fix it with a tool that exists in the runtime image.
 
-**Verification (plan Task 5):** `cargo test` (149 tests plus the new ones, among them the 200-seed generation test, the wire fixtures and 600-tick boss simulations), client build and tests, `docker compose up --build -d`, the smoke test (normal and `?lag`), a throwaway bot debug run per boss, and the admin "Levels" table: everything must behave exactly as before.
-
-## Last session (2026-10-13, prediction corrections under lag)
+## Session before (2026-10-13, prediction corrections under lag)
 
 **Branch:** `feature/prediction-corrections` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-13). Start the next feature on a new branch from `main`. It was priority item 1 of `docs/TODO.md` (now removed; the list is renumbered).
 
@@ -614,6 +607,7 @@ Steps 2–6 followed in the next session.
 **Working end to end in Docker (`docker compose up --build`, port 8080):**
 - accounts (name + password, no e-mail) with up to 8 characters each, in PostgreSQL (`db` service, `ta-db` volume); signed HttpOnly session cookies
 - lobby, 4 classes (fixed per character), host-chosen or random end boss, random dungeon, field of vision
+- level types behind `LevelRules` (`run/levels/`); the boss dungeon is the only one so far, there is no level picker yet
 - per-character progression: XP and coins banked after each run, permanent upgrades bought in the lobby
 - 11 enemy types (including the mimic and the ogre mini-boss, one per run; imps, chorts and summoners only in the demon's dungeon), 3 bosses
 - terrain in every dungeon: chasms everywhere, water pools (lich, dragon) or lava pools (demon), plus a lava pool in the demon's boss hall; falling, drowning, lava burns, demons immune to lava; demos `?water`, `?chasm`, `?lava`
@@ -626,7 +620,7 @@ Steps 2–6 followed in the next session.
 - the red demon with its own AI-generated frames (walk, cleave, charge, ring of fire); demo `?demon`
 
 **Verified:**
-- 149 server tests (against PostgreSQL) and 22 client tests (collision/FOV ports with terrain, wire unpacking, dragon and demon frame choice) pass.
+- 159 server tests (against PostgreSQL) and 27 client tests (collision/FOV ports with terrain, wire unpacking, dragon and demon frame choice, the end screen line, the predictor) pass.
 - Accounts and characters: API checks with curl and the browser smoke test (2026-10-09); not yet tried live by the user.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
@@ -738,7 +732,7 @@ Steps 2–6 followed in the next session.
 - **Message tag:** MessagePack enums are tagged with the field `t`, so no variant may have a field named `t`. That is why `Ping`/`Pong` use `time`.
 - **Prediction parity:** client prediction relies on `client/src/sim/collision.ts` matching `server/src/collision.rs` exactly, and on the order *move, then abilities* in `Run::apply_input`. If you change movement, change both and keep `sim.test.ts` green.
 - **Cooldowns** tick per processed input on both sides. Don't switch the server to wall-clock cooldowns without updating `Predictor`.
-- **Boss behaviours** are taken out of `Run.boss` during their tick (`Option::take`), so `hurt_monster`'s immunity check cannot see the boss during its own tick. That is harmless today; keep it in mind.
+- **Boss behaviours** are taken out of the level's `BossEncounter.behaviour` during their tick (`Option::take`), so `hurt_monster`'s immunity check cannot see the boss during its own tick. That is harmless today; keep it in mind.
 - **Pack frame names** are used verbatim (`knight_m_run_anim_f2`). `necromancer` only has `necromancer_anim_f0-3`, used for both idle and run.
 - **Dragon breath points** come from `dragonPoints()` in `anim/dragonRig.ts` (base mouth/nostril plus each frame's pose or strip head offset). If a strip is re-imported, update its `head` offsets in `DRAGON_SHEETS`. The jaw only opens on frames whose head sits where the base head is (generated frames, hover).
 - **Dragon attack anims include the wind-up:** the server sets `Melee`/`Bite`/`Tail`/`Breath` when the wind-up starts and the client shows the wind-up frame for `DRAGON_*_WINDUP` s. Other monsters still use `Anim::Windup` then the attack anim.

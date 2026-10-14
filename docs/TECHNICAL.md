@@ -1,4 +1,3 @@
-| `?demon` `[&slow=3]` | The demon looping through every action: idle, walk (both directions), cleave (and facing left), the swoop charge, the ring of fire with its 16 orbs, and an enraged cleave with the shorter wind-up. Dummy heroes are pushed with the game's distances. Keys: Space pause, S slow motion, 1–7 jump to an action. |
 # Tiny Adventurers — Technical Documentation
 
 Audience: developers and coding agents working on the code. For gameplay see [PLAYER_GUIDE.md](PLAYER_GUIDE.md); for open work see [TODO.md](TODO.md).
@@ -40,17 +39,19 @@ server/                              Rust crate `tiny-adventurers-server`
   src/progress.rs                    a character's progression document (JSONB, versioned)
   src/protocol.rs                    ClientMsg / ServerMsg + all payload types (ts-rs exported)
   src/wire.rs                        compact array forms of snapshots and inputs (SnapW, InputW, ...)
-  src/lobby.rs                       connections (one per account), selected character, rooms, boss pick, ready, start
+  src/lobby.rs                       connections (one per account), selected character, rooms, level + boss pick, ready, start
   src/math.rs, collision.rs, fov.rs  Vec2, tile collision + line of sight, recursive shadowcasting
-  src/dungeon/{mod,generate}.rs      Tile/Map/Rect types, seeded generator
+  src/dungeon/{mod,generate}.rs      Tile/Map/Rect types, `Layout` (what every level fills), seeded generator, `Dungeon::split`
   src/defs/                          data: classes, abilities, enemies, bosses, kinds (ids), progression
-  src/run/mod.rs                     Run struct, tick loop task, damage/heal/kill, boss hall, end of run
+  src/run/mod.rs                     Run struct (`layout` + `level`), tick loop task, damage/heal/kill, end of run
+  src/run/levels/                    level types: mod.rs (`LevelRules` hooks, `enum Level`), boss.rs (`BossEncounter`),
+                                     dungeon.rs (`DungeonLevel`, the boss dungeon)
   src/run/entities.rs                Player, Monster, Ai, Projectile, Hazard
   src/run/abilities.rs               player ability executors, projectiles, explosions
   src/run/ai.rs                      enemy perception/state machine, A*, necromancer raising
   src/run/bosses/                    BossBehaviour trait + demon.rs, lich.rs, dragon.rs
   src/run/visibility.rs              per-player FOV-filtered snapshots
-  src/run/debug.rs                   debug mode (immortal + path to boss)
+  src/run/debug.rs                   debug mode (immortal + path to the level's target, the boss)
   src/export.rs                      (test-only) writes client/src/generated/defs.ts, fixtures.json, wire-fixtures.json
 client/                              Vite + TypeScript + Phaser 3.90
   scripts/build-atlas.ts             pack sheet + tile list -> public/assets/atlas.{png,json}
@@ -168,19 +169,19 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - `CreateRun{name}`, `JoinRun{run_id}`: need a selected character ("Choose a character first").
 - `LeaveRun`, `SetReady{ready}`
 - `SelectBoss{boss}`: host only, before the start. `null` = random.
-- `StartRun`: host only. Uses the room's boss choice.
+- `StartRun`: host only. Turns the room's level and boss choice into a `LevelChoice` (`{level: "Dungeon", boss}`, tag `level`). There is no level picker yet: every room plays `LevelId::Dungeon`.
 - `BuyUpgrade{stat}`: buys the next level of an `UpgradeStat` with the selected character's XP. Refused during a run.
 - `Input(InputMsg)`: one per 1/60 s step: `seq, mx, my, aim, aim_dist, primary/secondary: Option<shot_id>, view_lag, rtt`. On the wire it is a bare array `InputW` in that field order (`wire.ts` `packInput`, aim as f32); the server recognizes the MessagePack array marker in the first byte. A `t`-tagged `Input` map is still accepted.
 - `Ping{time}`, `Spectate{dir}`, `Debug{on}`
 
 **Server → client (`ServerMsg`)**
-- `Welcome{id}`, `Lobby{runs}`, `Room{run_id, name, host, players, boss}`
+- `Welcome{id}`, `Lobby{runs}`, `Room{run_id, name, host, players, level, boss}`
 - `Character(CharacterInfo)`: the selected character, sent after `SelectCharacter`, a purchase and banking. Fields: `id, name, class`, unspent `xp`, `total_xp`, `coins`, `upgrades`, resulting `mods`, and `costs[level]` (its length is the max level). The same type is used in `Me`.
 - `Room.players` take name and class from each member's character.
 - `Error{msg}` right before the server closes a socket explains why (logged in from another window, logged out, account deleted).
-- `RunStarted(RunStartInfo)`: full tile grid as bytes, player list, own entity id, spawn, progression `mods`
+- `RunStarted(RunStartInfo)`: the `level` (`LevelId`), full tile grid as bytes, player list, own entity id, spawn, progression `mods`
 - `Snap(Snapshot)`: 30 Hz. Contains `tick`, `ack`, entities, `me` (`SelfState`: authoritative position/dash/cooldowns), optional boss bar, events, `srv_ms`. See "Compact snapshots" below for the wire form.
-- `RunEnded{victory, boss, time, stats, banked}`: `banked` is false when debug mode was used (no XP or coins are added). `stats` include each player's `xp` and `coins`.
+- `RunEnded{victory, level, boss, time, stats, banked}`: `boss` is the level's end boss, `null` for a level without one (the end screen then shows `LEVEL_TEXT[level]`, `ui/endText.ts`). `banked` is false when debug mode was used (no XP or coins are added). `stats` include each player's `xp` and `coins`.
 - `Pong{time}`, `Error{msg}`, `DebugPath{on, points, ogre}`
 
 **Compact snapshots** (`wire.rs`, `wire.ts`, spec in [compact-snapshots.md](compact-snapshots.md)):
@@ -216,6 +217,26 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
   4. send snapshots every 2 ticks
   5. end on victory/defeat (after a 3 s delay) or when everyone has left, then call `lobby.run_finished`.
 
+**Levels (`run/levels/`).** A run plays one level type. `Run { layout, level, … }`:
+- `layout: Layout` (`dungeon/mod.rs`) is what every level fills: `map`, enemy `spawns`, `chests` and `player_spawns`. `Run::new(id, members, seed, LevelChoice)` calls `Level::build`, which returns the layout and the level's own state; then it places the heroes, the shared enemies (each through `Level::enemy_type`, the demon dungeon's swap) and the chests, and last calls the level's `populate`.
+- `level: Level` is an enum, one variant per level type: `Dungeon(DungeonLevel)` today (plus `Test`, only in tests, with nothing but default hooks). It answers `id()` (`LevelId`), `boss()`/`boss_mut()` (its `BossEncounter`, if any) and `boss_id()`, and forwards the hooks through the `dispatch!` macro.
+- **`LevelRules`** (`levels/mod.rs`) is the trait each level type implements. Its hooks are associated functions taking the whole `&mut Run` (so the level's state stays in `run.level` while they run), and each has a default body, so a level overrides only what it needs:
+
+| Hook | Called | Default |
+|---|---|---|
+| `populate(run, party)` | at the end of `Run::new` | nothing |
+| `tick(run, dt)` | in `step`, after the monsters, before separation | nothing |
+| `post_tick(run)` | in `step`, after the clean-up, before the end check | nothing |
+| `on_killed(run, id)` | in `kill_monster`; may end the run (`run.ended`) | nothing |
+| `on_boss_hurt(run, mi)` | in `hurt_monster` for a boss monster; false = immune | true |
+| `failed(run)` | in `check_end` | every hero dead |
+| `debug_target(run)` | for the debug path | none (no path) |
+| `boss_bar(run)` | for the snapshots | none |
+
+- **`BossEncounter`** (`levels/boss.rs`) is the boss fight any level can include: the boss id and entity, its `BossBehaviour`, `awake`, the `arena` (hall) and its `door`. Its functions are the hook bodies: `spawn` (the boss and its extras, in the arena), `tick` (runs the behaviour once awake), `check_arena` (wake on entry, seal the door once every living hero is inside), `on_hurt` (immunity and wake-on-hit), `on_killed` (the boss's death wins the run), `debug_target` (the boss, else the arena centre) and `bar`.
+- **`DungeonLevel`** (`levels/dungeon.rs`) is the room-and-corridor dungeon with an end boss. `build` picks the boss (random from the run's rng when the host chose none), generates the map with the boss's theme, and splits the `Dungeon` (`Dungeon::split`) into the shared `Layout` and its own parts (rooms, start, boss hall, door). Its hooks are the `BossEncounter` functions.
+- **Pure refactor (2026-10-14):** the split changed no behaviour. The fingerprint tests `level_setup_is_unchanged` and `simulation_is_unchanged_after_waking_the_boss` pin the map, spawns, entity ids and boss per seed and 300 steps of a boss fight, recorded on the code before the split.
+
 **Tick (`Run::step`), in order:**
 1. **Players:** one queued input per tick, two if the queue holds more than 3. No input means no movement, so the server stays deterministic with respect to the client.
    - `apply_input` moves first (`collision::step_move`), then applies dash contact damage, then abilities.
@@ -223,21 +244,20 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
    - Cooldowns tick per processed input. The client does the same.
    - `terrain_player` then checks the tile under the hero's centre (not while dashing; a pushed hero slides on the ground, so a push over a chasm or deep water sinks them). A chasm or deep water starts `Player.sinking` (`FALL_TIME` 0.7 s / `DROWN_TIME` 0.9 s, `Ev::Sink`); then `kill_player` kills the hero (armour does not help) with "X fell into the abyss" / "X drowned". A sinking hero's inputs are acked but neither move nor attack. Lava calls `hurt_player(LAVA_DAMAGE)` every `LAVA_TICK` (10 per 0.5 s, the first at once), so armour and debug apply. In debug mode `kill_player` puts the hero back on `Player.last_safe` (centre of the last safe tile) instead.
 2. **Monsters:** only those within 420 px of a living player run `ai::tick_monster`.
-3. **Boss behaviour:** runs once the boss is awake.
+3. **Level tick** (`LevelRules::tick`): in the dungeon the boss behaviour, once the boss is awake.
 4. **Separation:** overlapping monsters are pushed apart.
 5. **Projectiles and hazards.**
 6. **Position history:** each monster's position goes into a 32-entry ring buffer, used for lag compensation.
 7. **Cleanup:** dead objects are removed.
-8. **Boss hall and end of run:** the boss wakes when any player enters the hall; the entrance is sealed (DoorClosed tiles) when all living players are inside. Then check for victory or defeat.
+8. **Level post-tick and end of run** (`LevelRules::post_tick`, `check_end`): in the dungeon the boss wakes when any player enters the hall, and the entrance is sealed (DoorClosed tiles) when all living players are inside. Then the run is lost if the level's `failed` says so (default: every hero dead). Victory is set earlier, by `on_killed`.
 
 **Combat.**
 - `hurt_monster`:
-  - honours `BossBehaviour::can_be_damaged`; the lich is immune while disciples live
-  - wakes the boss
+  - asks the level (`on_boss_hurt`) for boss monsters: the `BossEncounter` honours `BossBehaviour::can_be_damaged` (the lich is immune while disciples live) and wakes the boss
   - makes an unaware monster search toward its attacker
   - credits damage and kills
-- `kill_monster` recursively kills the monster's minions (`owner`): necromancer skeletons, summoner imps, the lich's disciples and summons. It also awards XP and coins to living players (`Player.xp`, `Player.coins`) and sets victory if the boss died.
-- **Chests and mimics.** `Run::new` turns `Dungeon.chests` into `Run.chests` (real ones) and sleeping `EnemyType::Mimic` monsters. `touch_chests` (every step) opens a chest when a living player is within `CHEST_TOUCH` (12 px): `CHEST_COINS` (8–15) to every living player through `give_coins`. The same distance wakes a mimic (`wake_mimic`), as does any player hit (`hurt_monster`). A woken mimic holds still for `MIMIC_WAKE_T` (`Ai.hold`, the lid flying open), then uses the normal AI. `check_boss_hall` wakes every sleeping monster except mimics. Sleeping monsters are not pushed by `separate_monsters`.
+- `kill_monster` recursively kills the monster's minions (`owner`): necromancer skeletons, summoner imps, the lich's disciples and summons. It also awards XP and coins to living players (`Player.xp`, `Player.coins`) and calls the level's `on_killed`, which sets victory if the boss died.
+- **Chests and mimics.** `Run::new` turns `Layout.chests` into `Run.chests` (real ones) and sleeping `EnemyType::Mimic` monsters. `touch_chests` (every step) opens a chest when a living player is within `CHEST_TOUCH` (12 px): `CHEST_COINS` (8–15) to every living player through `give_coins`. The same distance wakes a mimic (`wake_mimic`), as does any player hit (`hurt_monster`). A woken mimic holds still for `MIMIC_WAKE_T` (`Ai.hold`, the lid flying open), then uses the normal AI. `boss::check_arena` wakes every sleeping monster except mimics. Sleeping monsters are not pushed by `separate_monsters`.
 - **Mimic gait.** `ai::gait` makes the mimic hop: it moves only while its Move animation clock is in `MIMIC_HOP_AIR` (0.2–0.7 of a 0.6 s `MIMIC_HOP_CYCLE`), at its average speed divided by that fraction. The constants go to the client through `CONST`, so `mimic.ts` draws crouch, flight and landing from the same clock (`anim_ms`). An awake mimic does not wander.
 - `hurt_player` applies armor and skips HP loss in debug mode. Death switches the player to spectating.
 - **Who pushes:** `AttackStyle::Melee` has a `knock` (px): ogre club 28, orc warrior 20, chort claw 14, everything else 0. `AttackStyle::Slam` (the ogre's ground slam) pushes every hero within its radius 24 px straight away. `ai::perform_attack` calls `knock_player` after a melee hit. `Ranged` has no knock field, so enemy ranged attacks never push. Bosses push in their behaviours: the demon's cleave (56) and swoop (64, the user asked for "significant knockback"); the dragon's front claw (32), bite (24), tail whip (44), landing smash (36, everyone in `DRAGON_SMASH_RADIUS`) and fireball explosions (20: `Projectile.knock`, applied by `abilities::explode` to the heroes it hits). The demon's and the dragon's numbers are in `defs/bosses.rs` (`DEMON_*_KNOCK`, `DRAGON_*`). Heroes never push enemies.
@@ -255,11 +275,11 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - Necromancers raise up to 3 skeletons (cooldown 7 s); summoners summon imps (`SummonedImp`, drawn as a normal imp) the same way. `Ev::Raise.k` tells the client which effect to draw (0 green, 1 fire, 2 the lich's dark purple).
 - **Ogre (mini-boss):** `EnemyType::Ogre` (`KIND.Ogre` 22), radius 10 (wide, so its chase uses `path_toward` with clearance like the bosses instead of `move_toward`), 260 HP, slow. Main attack: club (`Melee`, knock 28). Alt: `AttackStyle::Slam{radius, damage, cooldown, windup, knock}`, chosen when two living heroes' centres are within `OGRE_SLAM_RADIUS` (34 px), or one while the club is on cooldown. Its wind-up uses `Anim::Slam` (10); the client draws the telegraph ring from `animT` and `CONST.OGRE_SLAM_RADIUS`/`OGRE_SLAM_WINDUP`. At impact the server sends `Ev::Boom{k: 5}` (dust shockwave) and hits and knocks every living hero in the radius. It is not a boss (`is_boss` false): no boss bar, no force field; the client draws a wide HP bar over it, always visible.
 - **Second attack:** `EnemyDef.alt` is an optional second `AttackStyle` with its own cooldown (`Ai.alt_cd`). A melee alt is used when the target is in claw reach (imp), a ranged alt only from at least `ALT_BOLT_MIN_DIST` (40 px) and beyond the main attack's reach (chort). `Windup.alt` remembers which attack the wind-up leads to; each attack keeps the other back for `ATTACK_GAP` (0.4 s). Movement follows the main attack.
-- **Demon dungeon:** `enemies::for_boss` swaps types when `Run::new` spawns the dungeon's enemies: with the demon as boss, skeleton archers become imps, skeleton warriors chorts and necromancers summoners. The swap itself leaves the map alone; only the terrain theme differs per boss (lava or water, see §6), which can move a few spawns off the liquid.
+- **Demon dungeon:** `enemies::for_boss` (through `Level::enemy_type`) swaps types when `Run::new` spawns the dungeon's enemies: with the demon as boss, skeleton archers become imps, skeleton warriors chorts and necromancers summoners. The swap itself leaves the map alone; only the terrain theme differs per boss (lava or water, see §6), which can move a few spawns off the liquid.
 - Minions are never tinted: raised skeletons and summoned imps look like the ordinary ones (the user's request). Hiding drops the aggro of all monsters targeting the hider.
 
 **Bosses (`bosses/`).**
-- Interface: `trait BossBehaviour { spawn_extras, can_be_damaged, enraged, tick }`, created by `bosses::create(BossId)`. During its tick the behaviour is taken out of `Run.boss`, so it can borrow `Run` mutably.
+- Interface: `trait BossBehaviour { spawn_extras, can_be_damaged, enraged, tick }`, created by `bosses::create(BossId)` and held by the level's `BossEncounter`. During its tick the behaviour is taken out of the encounter (`behaviour: Option<…>`), so it can borrow `Run` mutably.
 - Boss HP is `base × (0.5 + 0.5 × players)`.
 
 | Boss | Base HP | Behaviour |
@@ -288,7 +308,7 @@ The generator is seeded (ChaCha8) and deterministic:
 3. **Validation, retried on failure:** every room is reachable (BFS), and the boss hall is the farthest area by path distance, with a margin of 4 tiles.
 4. **Population:** enemies scale with path depth. Necromancers appear only in halls.
    **Chests:** `place_chests` gives about one in three rooms and halls a chest on its top row (enemies never spawn there), against the wall, with floor on both sides and below so it never blocks a corridor mouth. A quarter are mimics. Chests use their own random stream (a clone of the generator rng on stream 7), so adding them did not change the maps of existing seeds.
-5. **Terrain:** `place_terrain` runs on its own stream (8), like the chests. The theme (`Theme::for_boss`: lava for the demon, water otherwise) is passed into `generate(seed, theme)`; `Run::new` picks the boss before generating. In ordinary rooms (40 %) and halls (two tries at 60 %) it places:
+5. **Terrain:** `place_terrain` runs on its own stream (8), like the chests. The theme (`Theme::for_boss`: lava for the demon, water otherwise) is passed into `generate(seed, theme)`; `DungeonLevel::build` picks the boss before generating. In ordinary rooms (40 %) and halls (two tries at 60 %) it places:
    - **pools:** ovals a tile away from the walls. Water pools are deep wherever all 8 neighbours are pool, so a shallow rim always surrounds the deep centre; lava pools are all lava
    - **chasm strips:** wall to wall across the room, 1 to `MAX_CHASM` (3) tiles wide so the Barbarian's dash clears them, with a 2–3 tile floor bridge
 
@@ -443,6 +463,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 | `?water`, `?chasm`, `?lava` `[&slow=3]` | Terrain demos with scripted figures: wading and drowning, falling into a chasm, burning in lava, demons walking through lava, the dash jumping a gap, and being knocked in. Speeds and times come from `CONST`, like the server. No server needed. |
 | `?knockback` `[&slow=3]` | Every push in the game, side by side next to chasms and deep water, with the game's distances and decay: orc warrior, chort, imp (no push), a barbarian who cannot dash out, the demon's cleave and swoop, the dragon's tail and front claw. The user approved the distances here. |
 | `?dragon` `[&slow=3]` | The dragon looping through every action: idle, walk, claw, bite, tail whip, breath, fireball volley, and a flight (take-off, hover, breath from the air, landing smash). Dummy heroes are pushed with the game's distances. Keys: Space pause, S slow motion, 1–8 jump to an action. The user approved the frames here. |
+| `?demon` `[&slow=3]` | The demon looping through every action: idle, walk (both directions), cleave (and facing left), the swoop charge, the ring of fire with its 16 orbs, and an enraged cleave with the shorter wind-up. Dummy heroes are pushed with the game's distances. Keys: Space pause, S slow motion, 1–7 jump to an action. |
 | `?lich` `[&slow=3]` | The lich's magic: the gloom bolt volley and the summon of 5 skeletons + 5 archers (left), and the nova: the purple telegraph ring at the real radius, the burst, three heroes pushed 64 px (one into the chasm) and one spared just outside. |
 | `?ogre` `[&slow=3]` | The ogre's club next to the orc warrior's push (only the club's knocks a hero into the chasm), and the ground slam: the telegraph ring at the real radius, the shockwave, three heroes pushed away (one into a chasm) and one spared just outside. The user approved it. |
 | `?daemons[&slow=3]` | Imp, chort and a pack of both fighting a walking knight, and a summoner summoning imps. Uses the real figure definitions; the attack logic is a local imitation of the server AI. No server needed. |
@@ -460,6 +481,16 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - **New boss:**
   - server: add a `BossId` variant, a `defs/bosses.rs` entry and a new `run/bosses/<name>.rs` implementing `BossBehaviour`, plus a `create()` arm
   - client: add the `EntityKind` and a `FIGURES` entry, `BOSS_TEXT` in `ui/text.ts`, and `BOSSES`/`BOSS_FIG` in `ui/lobby.ts`
+
+**How to add a level type** (see "Levels" in §5; the dungeon is the example):
+1. **Protocol** (`protocol.rs`): a `LevelId` variant and a `LevelChoice` variant with the level's options (e.g. `Escort {}`; the tag is `level`). Run `cargo test` to regenerate the TS types.
+2. **The level** (`run/levels/<name>.rs`): a struct with the level's state, a `build(seed, …options, rng) -> (Layout, Self)` that makes its map (its own generator) and fills the shared `Layout` (map, enemy spawns, chests, player spawns; empty lists are fine), and `impl LevelRules` overriding only the hooks it needs: e.g. `populate` for its own monsters or objects, `tick` for a moving goal, `on_killed` or `post_tick` to set `run.ended = Some((true, run.time + END_DELAY))` on a win, `failed` for its own way to lose, `debug_target` for the debug path.
+3. **`Level`** (`run/levels/mod.rs`): a variant holding the struct, and one arm in `build` (from its `LevelChoice`), `id`, `boss`, `boss_mut` and the `dispatch!` macro. `pub mod <name>;` next to the others.
+4. **A boss, if it has one:** a `BossEncounter` field (`BossEncounter::new(boss_id, arena, door)`), returned by `boss`/`boss_mut`, and the `boss::` functions as the hook bodies, as `DungeonLevel` does. Without one, `boss()` is `None`: no boss bar, `RunEnded.boss` is `null` and the statistics show the level alone.
+5. **Client:** a `LEVEL_TEXT` entry in `ui/text.ts` (name, victory and defeat line of the end screen). The map arrives as tiles like the dungeon's; new tile kinds need their own art and rules.
+6. **Lobby** (`lobby.rs`): map the room's choice to the new `LevelChoice` in `start`. Today every room is `LevelId::Dungeon`; offering a second level needs a level picker and a `SelectLevel` message (not built yet).
+
+The database, statistics, telemetry and the admin page take the level as text (`format!("{:?}")`), so they need no change.
 
 ## 11a. Accounts, characters and progression
 
@@ -558,9 +589,9 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 
 Every change writes a row to `admin_actions` (admin, action, target name at that time, detail) and counts `ta.admin.actions`.
 
-**Tracking (migrations `0002_admin_stats.sql`, `0003_run_players_left.sql`).**
+**Tracking (migrations `0002_admin_stats.sql`, `0003_run_players_left.sql`, `0004_runs_level.sql`).**
 - `activity_days(account_id, day)`: one row per account and UTC day, written at login, registration and WebSocket connect (`db::touch_activity`, `ON CONFLICT DO NOTHING`). "Active players" means accounts that logged in or connected.
-- `runs` + `run_players`: every ended run (`victory`, `defeat` or `abandoned` = everyone left) with boss, length, party size and per player the class, kills, damage, healing, XP, coins, `survived` and `left_run`.
+- `runs` + `run_players`: every ended run (`victory`, `defeat` or `abandoned` = everyone left) with level, boss (`NULL` for a level without one; 0004 made it nullable and added `level`, default `'Dungeon'` for older rows), length, party size and per player the class, kills, damage, healing, XP, coins, `survived` and `left_run`.
   - Leaving a dungeon counts as dying inside the game (`Player.alive = false`). `Player.left` keeps it apart, so the statistics count deaths as `NOT survived AND NOT left_run`.
   - Debug runs are stored with `debug = true` and left out of every statistic.
 - These tables have **no foreign keys** to accounts or characters. When an account is deleted its name goes with it and only an anonymous id stays, so past counts do not change.
@@ -571,7 +602,7 @@ Every change writes a row to `admin_actions` (admin, action, target name at that
 - **Live:** from `Lobby::live()` (online, in a dungeon, in the lobby, rooms waiting, dungeons running, and who is online with which character), plus account names from the database.
 - **Totals:** accounts, characters, XP ever earned, unspent coins, runs.
 - **Today / 7 / 30 days:** active players, new accounts, runs (won, lost, left), win rate over finished runs, average length and party size, kills, deaths.
-- **Per boss and per class** (30 days), characters by number of upgrades bought, the top 10 characters by XP earned, and 30 daily points of active players, new accounts and runs (won vs. the rest).
+- **Per level and per class** (30 days; "Levels" lists each level with its boss, e.g. "Dungeon – Demon", from `AdminStats.level_runs`; `AdminStats.levels` is the upgrades histogram), characters by number of upgrades bought, the top 10 characters by XP earned, and 30 daily points of active players, new accounts and runs (won vs. the rest).
 - Charts are hand-written SVG (`charts.ts`), drawn at the container's pixel width. Each has a hover and keyboard tooltip and a "Show as table" view.
 
 ## 11c. OpenTelemetry
@@ -586,12 +617,12 @@ Every change writes a row to `admin_actions` (admin, action, target name at that
 **Traces** (`tracing` spans bridged by `tracing-opentelemetry`):
 - `http`: one span per request, named by the matched route and recording the status. Cookies and bodies are not recorded.
 - `ws`: one span per WebSocket session, with the account id.
-- `run`: one span per dungeon, with the run id, boss, player count and outcome.
+- `run`: one span per run, with the run id, level, boss, player count and outcome.
 - One span per `db.rs` function (`#[tracing::instrument(skip_all)]`) and per admin query in `stats.rs`.
 
 **Logs:** every `tracing` event at `info` and above becomes an OTLP log record, correlated with its span. The exporter's own HTTP client crates are filtered out (`OTEL_FILTER`) to avoid a feedback loop.
 
-**Metrics** (every 15 s; attributes carry ids, classes, bosses and outcomes, never player names):
+**Metrics** (every 15 s; attributes carry ids, classes, levels, bosses and outcomes, never player names):
 
 | Instrument | Type | Attributes |
 |---|---|---|
@@ -599,8 +630,8 @@ Every change writes a row to `admin_actions` (admin, action, target name at that
 | `ta.runs.active` | gauge | `state` = running / waiting |
 | `ta.logins` | counter | `result` = ok / fail / throttled |
 | `ta.registrations` | counter | – |
-| `ta.runs.finished` | counter | `boss`, `outcome`, `debug` |
-| `ta.run.duration` (s), `ta.run.players` | histograms | `boss`, `outcome` / – |
+| `ta.runs.finished` | counter | `level`, `boss` (only when the level has one), `outcome`, `debug` |
+| `ta.run.duration` (s), `ta.run.players` | histograms | `level`, `boss`, `outcome` / – |
 | `ta.player.deaths`, `ta.enemies.killed`, `ta.xp.banked`, `ta.coins.banked` | counters | `class` |
 | `ta.tick.duration` (ms) | histogram, every server tick | – |
 | `ta.ws.connections` | up-down counter | – |
@@ -615,10 +646,11 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 ## 12. Tests
 
-**Server (`cargo test`, 149 tests):**
+**Server (`cargo test`, 159 tests):**
 - protocol round trip
 - wire: positions round to 1/16 px (also beyond 4096 px), aim wraps into a byte, event codes follow `EV_CODES`, a compact input decodes to `InputMsg`, sample snapshots are bare arrays and at least 30 % smaller than the old form
 - dungeon determinism and guarantees over 200 seeds
+- level split: the fingerprints `level_setup_is_unchanged` (map, spawns, entity ids and boss per seed) and `simulation_is_unchanged_after_waking_the_boss` (300 steps of a boss fight), recorded before the split; `Dungeon::split` keeps every part; `Level::build` matches the generator and draws a random boss from the run's rng as before; a level with only default hooks has no boss bar or debug path and is lost when everyone dies; start and end messages name the level and boss
 - collision cannot tunnel through walls; line of sight
 - knockback: a push slides its distance, ignores the input, crosses deep water and stops at walls; a push into a chasm is a fall, with no attacks meanwhile, and dashing heroes are not pushed; a short push stops and control returns; only orc warriors' and chorts' melee pushes (not imps, skeletons, archers or bolts)
 - ogre: slams a crowd (or one hero while the club recovers) and clubs a lone hero; the slam hits and pushes every hero in its radius straight away and spares those outside; club and slam both push; exactly one ogre per seed on safe ground with room around it, outside the boss hall; the debug path also leads to the ogre and disappears when it dies
@@ -642,11 +674,11 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - auth: token round trip, tampered, expired and wrong-secret tokens rejected; cookie parsing; Argon2id hash and verify; name and password rules; the limiter window
 - admin login: disabled without both variables or with a short password; name and password both checked; the `ta_admin` cookie is scoped to `/api/admin`, has no Max-Age and is separate from `ta_session` (a player cookie is no admin cookie); the idle timeout restarts with each action but not with background refreshes; `ADMIN_SESSION_MINUTES` parsing
 - WebSocket origin check; only Vite's hashed bundles are cached for good
-- telemetry: without an endpoint nothing is exported; a finished run is counted with boss, outcome and debug, and debug runs stay out of the gameplay counters (in-memory exporter)
+- telemetry: without an endpoint nothing is exported; a finished run is counted with level, boss, outcome and debug, and debug runs stay out of the gameplay counters (in-memory exporter)
 - run record: outcome (won, lost, everyone left), every player, debug flag; leaving is not dying
 - statistics (needs `DATABASE_URL`):
   - activity counts once per day and outlives the deleted account
-  - today/7/30-day windows count backdated rows correctly and skip debug runs; bosses, classes, upgrades histogram, top characters and the 30-day trend
+  - today/7/30-day windows count backdated rows correctly and skip debug runs; levels with their bosses (also a run without a boss, and rows from before 0004), classes, upgrades histogram, top characters and the 30-day trend
   - online players get their account names
   - player search (`_` literal), sorting, paging and details
   - admin password change revokes sessions; any character can be deleted; the audit log is newest first
@@ -669,11 +701,12 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - mimics: asleep until touched, then hold before hunting; the boss waking leaves them asleep; they move only while airborne
 - ts-rs export tests
 
-**Client (`npm test`):**
+**Client (`npm test`, 27 tests):**
 - `pickFrame.test.ts`: the dragon's and the demon's frame choice (wind-up frame with the telegraph, strike frames after it, the demon's charge loop and ring burst, enraged wind-ups shortened by `pace`).
 - The collision and FOV ports must equal the Rust fixtures exactly. The fixture map holds every kind of terrain, and 10 random walks with dashes and pushes (14–44 px, any direction) cross it.
 - `wire.test.ts` unpacks the sample snapshots from `wire-fixtures.json` (every event type, a spectator, with and without boss bar) and compares them with their readable form: positions within 1/32 px, aim within half a step, everything else exact. It also checks the aim range and `packInput`.
 - `net.test.ts`: the `?lag` simulator delivers 2,000 messages in order under a timer that rounds delays down like a browser (the old one-timer-per-message line failed it).
+- `ui/endText.test.ts`: the end screen's first line (the slain boss on a dungeon win, the level's defeat line, the level's victory line when there is no boss).
 - `game/world.test.ts`: the predictor replays the moves it sent while it predicted a fall, so a debug climb-out the server already did is followed exactly.
 
 **Browser smoke test (`tools/e2e/smoke.mjs`):**
