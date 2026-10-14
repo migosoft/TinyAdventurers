@@ -9,7 +9,7 @@ pub mod levels;
 pub mod visibility;
 
 use crate::collision::MoveState;
-use crate::defs::damage::{resolve, Damage, DamageSplit, Resistances};
+use crate::defs::damage::{kind_split, resolve, Damage, DamageSplit, DamageType};
 use crate::defs::progression::{self, StatUpgrades};
 use crate::defs::{classes, enemies};
 use crate::defs::enemies::EnemyType;
@@ -158,6 +158,7 @@ impl Run {
             level,
         };
         for (i, m) in members.into_iter().enumerate() {
+            let prof = classes::profile(m.class);
             let def = classes::def(m.class);
             let mods = m.upgrades.modifiers();
             let max_hp = def.hp * mods.life;
@@ -165,8 +166,8 @@ impl Run {
             let id = run.alloc_id();
             run.players.push(Player {
                 id,
-                res: Resistances::NONE,
-                melee: DamageSplit::physical(),
+                res: prof.res,
+                melee: prof.melee,
                 conn: m.conn,
                 tx: Some(m.tx),
                 name: m.name,
@@ -236,12 +237,13 @@ impl Run {
 
     pub fn spawn_enemy(&mut self, t: EnemyType, pos: Vec2, owner: Option<u32>, party: usize) -> u32 {
         let d = enemies::def(t);
+        let prof = enemies::profile(t);
         let id = self.alloc_id();
         let hp = d.hp * (0.75 + 0.25 * party.max(1) as f64);
         self.monsters.push(Monster {
             id,
-            res: Resistances::NONE,
-            melee: DamageSplit::physical(),
+            res: prof.res,
+            melee: prof.melee,
             etype: Some(t),
             kind: d.kind,
             pos,
@@ -514,7 +516,7 @@ impl Run {
             p.burn_t += DT;
             if p.burn_t >= dungeon::LAVA_TICK {
                 p.burn_t -= dungeon::LAVA_TICK;
-                self.hurt_player(pi, Damage::physical(dungeon::LAVA_DAMAGE));
+                self.hurt_player(pi, Damage::new(dungeon::LAVA_DAMAGE, DamageSplit::pure(DamageType::Heat)));
             }
         } else {
             p.burn_t = dungeon::LAVA_TICK; // the first touch of lava burns at once
@@ -610,7 +612,7 @@ impl Run {
 
     pub fn spawn_hazard(&mut self, kind: EntityKind, pos: Vec2, radius: f64, life: f64, damage: f64) {
         let id = self.alloc_id();
-        self.hazards.push(Hazard { id, kind, pos, radius, life, pulse_t: 0.25, damage: Damage::physical(damage) });
+        self.hazards.push(Hazard { id, kind, pos, radius, life, pulse_t: 0.25, damage: Damage::new(damage, kind_split(kind)) });
     }
 
     pub fn hurt_player(&mut self, pi: usize, dmg: Damage) {

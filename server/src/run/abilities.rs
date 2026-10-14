@@ -5,7 +5,7 @@ use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::{self as ab, AbilityId};
 use crate::defs::classes::PLAYER_RADIUS;
-use crate::defs::damage::Damage;
+use crate::defs::damage::{kind_split, Damage};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
@@ -198,7 +198,7 @@ fn spawn_player_projectile(
         shot,
         pos,
         vel,
-        damage: Damage::physical(damage),
+        damage: Damage::new(damage, kind_split(kind)),
         radius,
         life: (life - ff).max(0.05),
         crit,
@@ -236,7 +236,7 @@ pub fn spawn_monster_projectile(
         shot: 0,
         pos,
         vel: dir * speed,
-        damage: Damage::physical(damage),
+        damage: Damage::new(damage, kind_split(kind)),
         radius: 3.0,
         life,
         crit: false,
@@ -480,6 +480,33 @@ mod tests {
         let hp = run.monsters[mi].hp;
         missile_past(&mut run, mi, 16.0);
         assert_eq!(run.monsters[mi].hp, hp, "over the orc's head");
+    }
+
+    #[test]
+    fn a_fireball_only_singes_a_demon_and_burns_a_skeleton() {
+        use crate::defs::damage::kind_split;
+        let blast = |t: EnemyType| {
+            let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+            run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+            let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+            let id = run.spawn_enemy(t, at, None, 1);
+            let mi = run.monster_idx(id).unwrap();
+            run.monsters[mi].hp = 1000.0;
+            explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), true, Some(0), 0, false, 0.0);
+            1000.0 - run.monsters[run.monster_idx(id).unwrap()].hp
+        };
+        // 70 % heat (demons: immune), 20 % magical (demons: 20 %), 10 % physical.
+        assert!((blast(EnemyType::Imp) - (2.0 * 0.8 + 1.0)).abs() < 1e-9);
+        // Skeletons: heat -10 %, physical 10 %.
+        assert!((blast(EnemyType::SkeletonWarrior) - (7.0 * 1.1 + 2.0 + 1.0 * 0.9)).abs() < 1e-9);
+        assert!((blast(EnemyType::OrcWarrior) - 10.0).abs() < 1e-9, "no resistances");
+    }
+
+    #[test]
+    fn shots_carry_the_type_of_their_kind() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        try_use(&mut run, 0, AbilityId::MagicMissile, 1, true);
+        assert_eq!(run.projectiles[0].damage.split, crate::defs::damage::DamageSplit::pure(crate::defs::damage::DamageType::Magical));
     }
 
     #[test]

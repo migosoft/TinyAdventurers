@@ -10,7 +10,7 @@
 
 use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
 use crate::defs::bosses::*;
-use crate::defs::damage::Damage;
+use crate::defs::damage::{Damage, DamageSplit, DamageType};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
@@ -167,7 +167,7 @@ impl BossBehaviour for Dragon {
                     self.pulse = 0.2;
                     for pi in players_in(run, pos, BREATH_RANGE, Some((aim, BREATH_HALF_ANGLE))) {
                         if crate::collision::line_of_sight(&run.layout.map, pos, run.players[pi].pos()) {
-                            run.hurt_player(pi, Damage::physical(6.0));
+                            run.hurt_player(pi, Damage::new(6.0, DamageSplit::pure(DamageType::Heat)));
                         }
                     }
                     if run.rng.gen_bool(0.5) {

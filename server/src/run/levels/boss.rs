@@ -1,7 +1,6 @@
 //! A boss fight in a sealable arena. Any level can include one.
 
 use crate::defs::bosses as boss_defs;
-use crate::defs::damage::{DamageSplit, Resistances};
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Mover, Rect, Tile};
@@ -42,13 +41,14 @@ fn enc_mut(run: &mut Run) -> &mut BossEncounter {
 pub fn spawn(run: &mut Run, party: usize) {
     let boss_id = enc(run).boss_id;
     let d = boss_defs::def(boss_id);
+    let prof = boss_defs::profile(boss_id);
     let pos = enc(run).arena.center_px();
     let id = run.alloc_id();
     let hp = d.hp * boss_defs::hp_scale(party);
     run.monsters.push(Monster {
         id,
-        res: Resistances::NONE,
-        melee: DamageSplit::physical(),
+        res: prof.res,
+        melee: prof.melee,
         etype: None,
         kind: d.kind,
         pos,
