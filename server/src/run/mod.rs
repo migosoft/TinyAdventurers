@@ -372,6 +372,7 @@ impl Run {
 
         abilities::tick_projectiles(self, DT);
         self.tick_hazards(DT);
+        objects::tick_objects(self, DT);
 
         for m in &mut self.monsters {
             if m.history.len() >= HISTORY_LEN {
