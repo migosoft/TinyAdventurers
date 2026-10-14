@@ -499,6 +499,23 @@ mod tests {
     }
 
     #[test]
+    fn a_demons_claw_burns_a_fifth_of_its_damage() {
+        use crate::defs::damage::{DamageType, Resistances};
+        let hit = |res: Resistances| {
+            let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+            run.players[0].res = res;
+            let hp = run.players[0].hp;
+            let ppos = run.players[0].pos();
+            let id = run.spawn_enemy(EnemyType::Chort, ppos - Vec2::new(12.0, 0.0), None, 1);
+            let mi = run.monster_idx(id).unwrap();
+            perform_attack(&mut run, mi, 0, enemies::def(EnemyType::Chort).attack, false);
+            hp - run.players[0].hp
+        };
+        assert!((hit(Resistances::NONE) - 9.0).abs() < 1e-9);
+        assert!((hit(Resistances::of(&[(DamageType::Heat, 1.0)])) - 9.0 * 0.8).abs() < 1e-9, "the heat fifth is shrugged off");
+    }
+
+    #[test]
     fn only_strong_melee_pushes() {
         let pushes = |t: EnemyType, alt: bool| {
             let mut run = test_run(&[ClassId::Paladin], BossId::Demon);

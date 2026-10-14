@@ -1166,6 +1166,23 @@ pub mod tests {
     }
 
     #[test]
+    fn lava_burns_as_heat() {
+        use crate::defs::damage::{DamageType, Resistances};
+        let (mut run, at) = terrain_run(Tile::Lava);
+        run.players[0].res = Resistances::of(&[(DamageType::Heat, 1.0)]);
+        let hp = run.players[0].hp;
+        stand_at(&mut run, at);
+        for _ in 0..69 {
+            run.step();
+        }
+        assert_eq!(run.players[0].hp, hp, "immune to heat: the lava does nothing");
+        let (mut run, at) = terrain_run(Tile::Lava);
+        let hp = run.players[0].hp;
+        stand_at(&mut run, at);
+        assert_eq!(run.players[0].hp, hp - dungeon::LAVA_DAMAGE, "unprotected heroes still burn");
+    }
+
+    #[test]
     fn lava_burns_heroes_over_time() {
         let (mut run, at) = terrain_run(Tile::Lava);
         let hp = run.players[0].hp;

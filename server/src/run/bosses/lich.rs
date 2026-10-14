@@ -234,6 +234,20 @@ mod tests {
     }
 
     #[test]
+    fn the_nova_is_magical() {
+        use crate::defs::damage::Resistances;
+        let (mut run, bi) = lich_with(&[Vec2::new(30.0, 0.0)]);
+        run.players[0].res = Resistances::of(&[(DamageType::Magical, 1.0)]);
+        let hp = run.players[0].hp;
+        let pos = run.monsters[bi].pos;
+        Lich::nova(&mut run, pos);
+        assert_eq!(run.players[0].hp, hp, "magic resistance blocks the nova");
+        run.players[0].res = Resistances::of(&[(DamageType::Heat, 1.0), (DamageType::Physical, 1.0)]);
+        Lich::nova(&mut run, pos);
+        assert_eq!(run.players[0].hp, hp - LICH_NOVA_DAMAGE, "heat and physical resistance do not");
+    }
+
+    #[test]
     fn the_nova_winds_up_then_hurts_and_pushes_heroes_far() {
         let (mut run, bi) = lich_with(&[Vec2::new(30.0, 0.0)]);
         let mut l = Lich { volley_cd: 99.0, summon_cd: 99.0, nova_cd: 0.0, ..Lich::default() };

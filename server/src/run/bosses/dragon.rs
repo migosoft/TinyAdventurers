@@ -361,6 +361,22 @@ mod tests {
     }
 
     #[test]
+    fn the_breath_is_heat() {
+        use crate::defs::damage::Resistances;
+        let breathe = |res: Resistances| {
+            let (mut run, mut d, _) = dragon_with(&[Vec2::new(30.0, 0.0)]);
+            run.players[0].res = res;
+            let hp = run.players[0].hp;
+            d.action = Some((Action::Breath, 1.0));
+            d.pulse = 0.0;
+            d.tick(&mut run, DT);
+            hp - run.players[0].hp
+        };
+        assert!((breathe(Resistances::NONE) - 6.0).abs() < 1e-9, "a pulse hurts");
+        assert_eq!(breathe(Resistances::of(&[(DamageType::Heat, 1.0)])), 0.0, "heat resistance stops it");
+    }
+
+    #[test]
     fn the_smash_spares_heroes_outside_its_radius() {
         let (mut run, _, bi) = dragon_with(&[Vec2::new(DRAGON_SMASH_RADIUS + 8.0, 0.0)]);
         let hp = run.players[0].hp;
