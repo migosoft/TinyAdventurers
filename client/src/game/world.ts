@@ -115,7 +115,11 @@ interface Pending {
   my: number;
   /** Dash started by this input (set after the move step, like the server). */
   dash: [number, number] | null;
+  /** Cooldowns started by this input's primary / secondary ability (null: not used). */
+  used: Used;
 }
+
+type Used = [number | null, number | null];
 
 type AbilityName = keyof typeof ABILITIES;
 
@@ -163,17 +167,21 @@ export class Predictor {
     return base / this.mods.attack_speed;
   }
 
-  /** Advance one fixed step. Returns the sequence number for the input message. */
-  step(mx: number, my: number, dash: [number, number] | null): number {
+  /**
+   * Advance one fixed step; `used` holds the cooldowns of the abilities this input
+   * uses. Returns the sequence number for the input message.
+   */
+  step(mx: number, my: number, dash: [number, number] | null, used: Used = [null, null]): number {
     this.seq++;
-    this.cd1 = Math.max(this.cd1 - CONST.DT, 0);
-    this.cd2 = Math.max(this.cd2 - CONST.DT, 0);
+    // Like the server: cooldowns tick, then the abilities of this input start theirs.
+    this.cd1 = used[0] ?? Math.max(this.cd1 - CONST.DT, 0);
+    this.cd2 = used[1] ?? Math.max(this.cd2 - CONST.DT, 0);
     this.hidden = Math.max(this.hidden - CONST.DT, 0);
     // Falling or drowning: the server ignores moves and attacks from now on.
     // Pushed: it ignores them until the slide ends.
     // The move is kept as sent, not as predicted: if the server sees no sinking
     // (or a debug climb-out already happened there), it applies it.
-    this.pending.push({ seq: this.seq, mx, my, dash });
+    this.pending.push({ seq: this.seq, mx, my, dash, used });
     if (this.sinking) dash = null;
     else {
       if (this.knocked) dash = null;
@@ -211,10 +219,15 @@ export class Predictor {
       }
     }
     this.state = s;
-    // Cooldowns: trust the server when we disagree noticeably.
+    // Cooldowns: trust the server when we disagree noticeably, after replaying
+    // the abilities it has not seen yet (else a held button fires again).
+    let s1 = me.cd1;
+    let s2 = me.cd2;
+    for (const p of this.pending) {
+      s1 = p.used[0] ?? Math.max(s1 - CONST.DT, 0);
+      s2 = p.used[1] ?? Math.max(s2 - CONST.DT, 0);
+    }
     const unacked = this.pending.length * CONST.DT;
-    const s1 = Math.max(me.cd1 - unacked, 0);
-    const s2 = Math.max(me.cd2 - unacked, 0);
     if (Math.abs(s1 - this.cd1) > 0.15) this.cd1 = s1;
     if (Math.abs(s2 - this.cd2) > 0.15) this.cd2 = s2;
     const sh = Math.max(me.hidden - unacked, 0);

@@ -395,16 +395,17 @@ export class GameScene extends Phaser.Scene {
     let primary: number | null = null;
     let secondary: number | null = null;
     let dash: [number, number] | null = null;
+    const used: [number | null, number | null] = [null, null];
     if (wantPrimary && this.pred.cd1 <= 0) {
       primary = this.shotId = (this.shotId + 1) & 0xffff;
-      this.pred.cd1 = this.predictAbility(this.pred.primary, primary, aim, dist);
+      used[0] = this.predictAbility(this.pred.primary, primary, aim, dist);
     }
     if (wantSecondary && this.pred.cd2 <= 0) {
       secondary = this.shotId = (this.shotId + 1) & 0xffff;
-      this.pred.cd2 = this.predictAbility(this.pred.secondary, secondary, aim, dist);
+      used[1] = this.predictAbility(this.pred.secondary, secondary, aim, dist);
       if (this.pred.secondary === 'Dash') dash = [Math.cos(aim), Math.sin(aim)];
     }
-    const seq = this.pred.step(mx, my, dash);
+    const seq = this.pred.step(mx, my, dash, used);
     const viewLag = this.net.rtt / 2 + this.interp.delay * 1000;
     this.net.send({
       t: 'Input',

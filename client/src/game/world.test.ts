@@ -37,4 +37,22 @@ describe('Predictor', () => {
     expect(pred.state.x).toBeCloseTo(safe[0] - 6 * pred.speed * CONST.DT, 6);
     expect(pred.state.y).toBe(safe[1]);
   });
+
+  it('keeps the cooldown of a shot the server has not seen yet', () => {
+    // Holding the button refired as soon as a snapshot from before the shot reset the cooldown to 0.
+    const pred = new Predictor(chasmMap(), 'Assassin', MODS, 3 * TILE + 8, 2 * TILE + 8);
+    for (let i = 0; i < 2; i++) pred.step(0, 0, null);
+    const cd = pred.cooldownOf('CrossbowDagger');
+    pred.step(0, 0, null, [cd, null]);
+    for (let i = 0; i < 4; i++) pred.step(0, 0, null);
+    expect(pred.cd1).toBeCloseTo(cd - 4 * CONST.DT, 6);
+    // The server has seen inputs 1 and 2 only: its cooldown is still 0.
+    pred.reconcile(snap(2, pred.state.x, pred.state.y));
+    expect(pred.cd1).toBeCloseTo(cd - 4 * CONST.DT, 6);
+    // Once it has seen the shot, its own cooldown counts.
+    const s = snap(5, pred.state.x, pred.state.y);
+    s.me.cd1 = cd - 2 * CONST.DT;
+    pred.reconcile(s);
+    expect(pred.cd1).toBeCloseTo(cd - 4 * CONST.DT, 6);
+  });
 });
