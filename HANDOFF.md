@@ -11,13 +11,13 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Next item: the light-source system (TODO.md priority 1)
 
-Not designed yet. Start with **superpowers:brainstorming**; the item, its design notes and what depends on it are in [docs/TODO.md](docs/TODO.md) ("Priority order", tier 1, and the section "Lighting"). Start it on a new branch from `main` once `feature/barrels` is merged (or from that branch if the user wants to build on it first).
+Not designed yet. Start with **superpowers:brainstorming**; the item, its design notes and what depends on it are in [docs/TODO.md](docs/TODO.md) ("Priority order", tier 1, and the section "Lighting"). Start it on a new branch from `main` once `feature/barrels` is merged (or from that branch if the user wants to build on it first; ask).
 
 It builds on this feature: torches and other light sources that can be switched off and on are **world objects** (`run/objects.rs`: add an `ObjState` kind, use `use_object` and `hurt_object`), and the torch-extinguishing enemy can aim at one with `Target::Object` or `Target::Place` (both exist). New damaging things take a `Damage` with a split (below).
 
 ## Last feature (2026-10-14): damage types, world objects and exploding barrels
 
-**Branch:** `feature/barrels` (from `main`), **not merged**. Merge only when the user asks. Commits: `git log --oneline main..HEAD`. Spec: [docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md](docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md); plan (18 tasks, run with superpowers:subagent-driven-development, three stages A, B, C): [docs/superpowers/plans/2026-10-14-damage-types-and-objects.md](docs/superpowers/plans/2026-10-14-damage-types-and-objects.md). It was TODO priorities 1 and 2, planned and built together (both removed from the list; it is renumbered).
+**Branch:** `feature/barrels` (from `main`), pushed to `origin` at the user's request (2026-10-14), **not merged** into `main`. Merge only when the user asks. Commits: `git log --oneline main..HEAD`. Spec: [docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md](docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md); plan (18 tasks, run with superpowers:subagent-driven-development, three stages A, B, C): [docs/superpowers/plans/2026-10-14-damage-types-and-objects.md](docs/superpowers/plans/2026-10-14-damage-types-and-objects.md). It was TODO priorities 1 and 2, planned and built together (both removed from the list; it is renumbered).
 
 **What was built:**
 - **Damage model** (stage A; TECHNICAL §5 "Damage model"): `defs/damage.rs` (`DamageType` Physical/Cold/Heat/Magical/Poison, `DamageSplit`, `Damage`, `Resistances`, `resolve`, `kind_split`) and `defs/entity_types.rs` (Human, Undead, Monster, Demon, Dragon, Object, plus per-entity `Adjust`: lich, dragon, demon boss). The profile is computed at spawn and stored on every hero, monster and object. All damage calls take a `Damage`; `resolve` is the only formula, floored at -100 % (double damage at most); above 100 % a hit heals. The `Dmg` event carries `ty` and `imm`; the client colours the numbers (`game/damage.ts`) and shows "immune". The XP armour upgrade is **still there**, applied after `resolve`; removing it waits for items (open question in TODO).
@@ -37,12 +37,14 @@ It builds on this feature: torches and other light sources that can be switched 
 
 **Final review fixes (2026-10-14):** pushed barrels rest on the 1/16 px wire grid (prediction parity); enemy and boss area attacks (ogre slam, dragon breath/smash/tail/claw/bite, demon cleave/swoop, lich nova, fire patches) light barrels; one `WorldObject::blocks()` predicate for solids, shot stops, A* tiles and straight lines (sinking barrels block nothing); square body test for sliding barrels; no empty monster `Heal` event; E ignores key repeat; `Damage::scaled` removed (no warnings). `cargo test` 214 pass, client build and 34 tests pass.
 
+**Confirmed live by the user (2026-10-14):** "so far it works as intended".
+
 **Open (not done yet):**
-- **Live check with the user.** Nobody has played the barrels. Check: a chain reaction; an E push into a chasm, into water and into lava; an enemy blown into a chasm (dies, XP once); an archer shooting a barrel next to a hero; barrels in the boss hall (big bosses must not get stuck); coloured damage numbers and "immune"; no prediction snaps when walking along barrels.
-- **Final whole-branch review** done; its findings are fixed (see above). Merge after the live check.
+- **Further live checks** worth doing while playing: a chain reaction; an E push into a chasm, into water and into lava; an enemy blown into a chasm (dies, XP once); an archer shooting a barrel next to a hero; barrels in the boss hall (big bosses must not get stuck); coloured damage numbers and "immune"; no prediction snaps when walking along barrels.
+- **Final whole-branch review** done; its findings are fixed (see above).
 - **Barrel art:** the pack's `crate` is the stand-in (`client/src/game/barrel.ts`). The CC0 search is done and the user picks from the candidates (nothing is imported yet): Pine Druid "Barrel Sprite" (CC0, with a no-redistribution note), zwonky "Various Containers" (CC0, OpenGameArt), BitingChaos "16x16 Explosion" (CC0, OpenGameArt); the 0x72 pack v1.7 has no barrel. Then import into `client/assets-src/<set>/` with the licence file and add the README credit. Art comes only from the 0x72 pack or CC0 sets.
 - **Merging:** only when the user asks.
-- **Deferred minor review findings** (small): listed in [docs/TODO.md](docs/TODO.md) under "Barrels and world objects follow-ups". The ones worth fixing in the final wave: a sinking barrel should not block shots or count in pathing (one shared "blocks" predicate); the squeeze cost should apply only to wide monsters; a departed igniter should not be credited.
+- **Deferred minor review findings** (small): listed in [docs/TODO.md](docs/TODO.md) under "Barrels and world objects follow-ups". Fixed in the final wave: the shared `blocks()` predicate, the empty monster `Heal`, E key repeat, `Damage::scaled`. Still worth doing: the squeeze cost only for wide monsters; no credit for a departed igniter.
 - All numbers (resistances, splits, barrel values) are first guesses for the balancing pass.
 
 ## Bug fixes (2026-10-14, after the level split)

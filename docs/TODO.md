@@ -92,14 +92,12 @@ Built 2026-10-14 on branch `feature/barrels` (TECHNICAL §5, "World objects"): c
 - **Tune** in the balancing pass: barrel blast radius 40, damage 30 (50 % heat, 50 % physical), push 40 px, fuse 0.3 s, hand push 48 px, how many rooms get barrels (25 %), 3–5 in a boss hall (`defs/objects.rs`, `place_barrels`).
 - **Barrel art:** the pack's `crate` is a stand-in (`client/src/game/barrel.ts`). The CC0 search is done and the user picks from the candidates (nothing is imported yet): Pine Druid "Barrel Sprite" (CC0, with a no-redistribution note), zwonky "Various Containers" (CC0, OpenGameArt), BitingChaos "16x16 Explosion" (CC0, OpenGameArt); the 0x72 pack v1.7 has no barrel. Then import with the licence file and add it to the README credits. An explosion sheet would help too.
 - **Deferred review findings** (small, none blocks anything):
-  - a sinking barrel still stops shots and counts in `object_tiles` and `object_free_line`; share one "blocks" predicate (solid, not gone, not sinking);
   - the A* squeeze cost applies to every monster, not only wide ones; a chaser repaths every 0.6 s while a hero stands next to a barrel;
   - an igniter who has left still gets credited with damage and kills; a lava death gives no credit;
   - `knock_monster` does not clear a wind-up; `escape_terrain` has no fallback when no walkable tile is within 3 tiles;
   - an enemy's fire-time check for its barrel does not test "sinking"; no tests for boss exclusion or a stale barrel;
-  - a monster heal at full HP sends `Heal` with v 0 ("+0");
-  - the camera shakes on every visible barrel blast; the E hint uses the interpolated position; E key repeat may resend `act`;
-  - `DamageSplit::split` only debug-asserts shares over 100 %; `Damage::scaled` is unused (a dead-code warning);
+  - the camera shakes on every visible barrel blast; the E hint uses the interpolated position;
+  - `DamageSplit::split` only debug-asserts shares over 100 %;
   - a boss hall can get fewer than 3 barrels on a seed with no valid spot.
 
 ## Woodland escort level
