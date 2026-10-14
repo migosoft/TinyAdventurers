@@ -117,6 +117,8 @@ interface Pending {
   dash: [number, number] | null;
   /** Cooldowns started by this input's primary / secondary ability (null: not used). */
   used: Used;
+  /** Hide time this input sets: Hide's duration, 0 for an attack (null: unchanged). */
+  hide: number | null;
 }
 
 type Used = [number | null, number | null];
@@ -132,6 +134,8 @@ export class Predictor {
   cd1 = 0;
   cd2 = 0;
   hidden = 0;
+  /** Set by `useHide` for the next step's input. */
+  private hideNext: number | null = null;
   private pending: Pending[] = [];
   private seq = 0;
   readonly speed: number;
@@ -167,6 +171,12 @@ export class Predictor {
     return base / this.mods.attack_speed;
   }
 
+  /** The next input hides the hero for `t` s (Hide) or ends it (0, an attack); shown right away. */
+  useHide(t: number): void {
+    this.hideNext = t;
+    this.hidden = t;
+  }
+
   /**
    * Advance one fixed step; `used` holds the cooldowns of the abilities this input
    * uses. Returns the sequence number for the input message.
@@ -176,12 +186,14 @@ export class Predictor {
     // Like the server: cooldowns tick, then the abilities of this input start theirs.
     this.cd1 = used[0] ?? Math.max(this.cd1 - CONST.DT, 0);
     this.cd2 = used[1] ?? Math.max(this.cd2 - CONST.DT, 0);
-    this.hidden = Math.max(this.hidden - CONST.DT, 0);
+    const hide = this.hideNext;
+    this.hideNext = null;
+    this.hidden = hide ?? Math.max(this.hidden - CONST.DT, 0);
     // Falling or drowning: the server ignores moves and attacks from now on.
     // Pushed: it ignores them until the slide ends.
     // The move is kept as sent, not as predicted: if the server sees no sinking
     // (or a debug climb-out already happened there), it applies it.
-    this.pending.push({ seq: this.seq, mx, my, dash, used });
+    this.pending.push({ seq: this.seq, mx, my, dash, used, hide });
     if (this.sinking) dash = null;
     else {
       if (this.knocked) dash = null;
@@ -219,18 +231,19 @@ export class Predictor {
       }
     }
     this.state = s;
-    // Cooldowns: trust the server when we disagree noticeably, after replaying
-    // the abilities it has not seen yet (else a held button fires again).
+    // Cooldowns and hide time: trust the server when we disagree noticeably,
+    // after replaying the abilities it has not seen yet (else a held button
+    // fires again, and a fresh Hide flickers off).
     let s1 = me.cd1;
     let s2 = me.cd2;
+    let sh = me.hidden;
     for (const p of this.pending) {
       s1 = p.used[0] ?? Math.max(s1 - CONST.DT, 0);
       s2 = p.used[1] ?? Math.max(s2 - CONST.DT, 0);
+      sh = p.hide ?? Math.max(sh - CONST.DT, 0);
     }
-    const unacked = this.pending.length * CONST.DT;
     if (Math.abs(s1 - this.cd1) > 0.15) this.cd1 = s1;
     if (Math.abs(s2 - this.cd2) > 0.15) this.cd2 = s2;
-    const sh = Math.max(me.hidden - unacked, 0);
     if (Math.abs(sh - this.hidden) > 0.3) this.hidden = sh;
   }
 

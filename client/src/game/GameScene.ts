@@ -448,7 +448,7 @@ export class GameScene extends Phaser.Scene {
         anim = ANIM.Dash;
         break;
       case 'Hide':
-        this.pred.hidden = a.duration;
+        this.pred.useHide(a.duration);
         anim = ANIM.Cast;
         break;
       case 'Heal':
@@ -469,7 +469,7 @@ export class GameScene extends Phaser.Scene {
         break;
       }
     }
-    if (ATTACKS.includes(name)) this.pred.hidden = 0;
+    if (ATTACKS.includes(name)) this.pred.useHide(0);
     this.localAnim = { anim, start: now };
     return cooldown;
   }

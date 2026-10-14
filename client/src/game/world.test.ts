@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONST, TILE_ID } from '../generated/defs';
+import { ABILITIES, CONST, TILE_ID } from '../generated/defs';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import { Predictor } from './world';
@@ -54,5 +54,25 @@ describe('Predictor', () => {
     s.me.cd1 = cd - 2 * CONST.DT;
     pred.reconcile(s);
     expect(pred.cd1).toBeCloseTo(cd - 4 * CONST.DT, 6);
+  });
+
+  it('keeps the hide time of a Hide the server has not seen yet', () => {
+    const pred = new Predictor(chasmMap(), 'Assassin', MODS, 3 * TILE + 8, 2 * TILE + 8);
+    const t = ABILITIES.Hide.duration;
+    pred.step(0, 0, null);
+    pred.useHide(t);
+    pred.step(0, 0, null, [null, pred.cooldownOf('Hide')]);
+    for (let i = 0; i < 4; i++) pred.step(0, 0, null);
+    expect(pred.hidden).toBeCloseTo(t - 4 * CONST.DT, 6);
+    // A snapshot from before the server saw the Hide: not hidden there yet.
+    pred.reconcile(snap(1, pred.state.x, pred.state.y));
+    expect(pred.hidden).toBeCloseTo(t - 4 * CONST.DT, 6);
+    // An attack the server has not seen yet ends it, here too.
+    pred.useHide(0);
+    pred.step(0, 0, null);
+    const s = snap(4, pred.state.x, pred.state.y);
+    s.me.hidden = t - 2 * CONST.DT;
+    pred.reconcile(s);
+    expect(pred.hidden).toBe(0);
   });
 });
