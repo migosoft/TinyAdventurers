@@ -460,7 +460,8 @@ mod tests {
     fn test_record(account: i32, character: i32) -> RunRecord {
         use crate::run::{Outcome, RunPlayerRecord};
         RunRecord {
-            boss: BossId::Dragon,
+            level: LevelId::Dungeon,
+            boss: Some(BossId::Dragon),
             outcome: Outcome::Victory,
             duration_s: 300.0,
             debug: false,
@@ -601,12 +602,12 @@ mod tests {
         let stored = db::load_character(&db, a, played.id).await.unwrap().unwrap().progress;
         assert_eq!((stored.xp, stored.total_xp, stored.coins), (120, 120, 7));
         assert_eq!(db::load_character(&db, a, idle.id).await.unwrap().unwrap().progress, Progress::new());
-        let recorded: (String, String, i32) = sqlx::query_as("SELECT r.boss, r.outcome, p.kills FROM runs r JOIN run_players p ON p.run_id = r.id WHERE p.character_id = $1")
+        let recorded: (String, Option<String>, String, i32) = sqlx::query_as("SELECT r.level, r.boss, r.outcome, p.kills FROM runs r JOIN run_players p ON p.run_id = r.id WHERE p.character_id = $1")
             .bind(played.id)
             .fetch_one(&db)
             .await
             .unwrap();
-        assert_eq!(recorded, ("Dragon".to_string(), "victory".to_string(), 12), "the run is recorded for the statistics");
+        assert_eq!(recorded, ("Dungeon".to_string(), Some("Dragon".to_string()), "victory".to_string(), 12), "the run is recorded for the statistics");
     }
 
     #[tokio::test]

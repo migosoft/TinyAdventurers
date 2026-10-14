@@ -77,7 +77,8 @@ impl Outcome {
 /// A finished run as the statistics store it (`db::record_run`).
 #[derive(Debug, Clone)]
 pub struct RunRecord {
-    pub boss: BossId,
+    pub level: LevelId,
+    pub boss: Option<BossId>,
     pub outcome: Outcome,
     pub duration_s: f64,
     pub debug: bool,
@@ -764,7 +765,8 @@ impl Run {
     /// The run for the statistics; `victory` is `None` when everyone left.
     pub fn record(&self, victory: Option<bool>) -> RunRecord {
         RunRecord {
-            boss: self.level.boss_id().expect("dungeon runs have a boss"),
+            level: self.level.id(),
+            boss: self.level.boss_id(),
             outcome: match victory {
                 Some(true) => Outcome::Victory,
                 Some(false) => Outcome::Defeat,
@@ -976,7 +978,7 @@ pub mod tests {
         run.players[0].alive = true;
         run.players[0].left = false;
         let r = run.record(Some(false));
-        assert_eq!((r.boss, r.outcome, r.duration_s, r.debug), (BossId::Lich, Outcome::Defeat, 75.5, false));
+        assert_eq!((r.level, r.boss, r.outcome, r.duration_s, r.debug), (LevelId::Dungeon, Some(BossId::Lich), Outcome::Defeat, 75.5, false));
         assert_eq!(r.players.len(), 2);
         assert_eq!((r.players[0].account, r.players[0].character, r.players[0].kills), (Some(3), Some(5), 9));
         assert!(r.players[0].survived && !r.players[1].survived);

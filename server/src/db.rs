@@ -286,11 +286,12 @@ pub async fn bank_awards(db: &Db, awards: &[Award]) -> Result<Vec<(i32, Progress
 pub async fn record_run(db: &Db, r: &RunRecord) -> Result<(), sqlx::Error> {
     let mut tx = db.begin().await?;
     let id: i64 = sqlx::query(
-        "INSERT INTO runs (started_at, boss, outcome, duration_s, players, debug) \
-         VALUES (now() - make_interval(secs => $1), $2, $3, $4, $5, $6) RETURNING id",
+        "INSERT INTO runs (started_at, level, boss, outcome, duration_s, players, debug) \
+         VALUES (now() - make_interval(secs => $1), $2, $3, $4, $5, $6, $7) RETURNING id",
     )
     .bind(r.duration_s)
-    .bind(format!("{:?}", r.boss))
+    .bind(format!("{:?}", r.level))
+    .bind(r.boss.map(|b| format!("{b:?}")))
     .bind(r.outcome.as_str())
     .bind(r.duration_s as f32)
     .bind(r.players.len() as i16)

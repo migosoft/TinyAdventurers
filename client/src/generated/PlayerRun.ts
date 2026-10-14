@@ -5,7 +5,7 @@ export type PlayerRun = { id: number,
 /**
  * Unix ms.
  */
-started: number, boss: string, outcome: string, duration_s: number, players: number, 
+started: number, level: string, boss: string | null, outcome: string, duration_s: number, players: number, 
 /**
  * The character's current name (`None` if it was deleted).
  */

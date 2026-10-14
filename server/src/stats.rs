@@ -23,8 +23,8 @@ pub struct AdminStats {
     pub totals: Totals,
     /// Today, the last 7 days and the last 30 days.
     pub windows: Vec<WindowStats>,
-    /// Last 30 days.
-    pub bosses: Vec<BossStats>,
+    /// Last 30 days, per level and boss.
+    pub level_runs: Vec<LevelRunStats>,
     pub classes: Vec<ClassStats>,
     /// Characters by the number of upgrades bought.
     pub levels: Vec<LevelBucket>,
@@ -90,8 +90,10 @@ pub struct WindowStats {
 
 #[derive(Serialize, TS)]
 #[ts(export)]
-pub struct BossStats {
-    pub boss: String,
+/// Runs per level and end boss (`None`: the level has no boss).
+pub struct LevelRunStats {
+    pub level: String,
+    pub boss: Option<String>,
     pub runs: u32,
     pub victories: u32,
     pub defeats: u32,
@@ -188,7 +190,8 @@ pub struct PlayerRun {
     pub id: i64,
     /// Unix ms.
     pub started: f64,
-    pub boss: String,
+    pub level: String,
+    pub boss: Option<String>,
     pub outcome: String,
     pub duration_s: f64,
     pub players: u32,
@@ -232,7 +235,7 @@ pub async fn overview(db: &Db, live: Live) -> Result<AdminStats, sqlx::Error> {
         live: live_stats(db, live).await?,
         totals: totals(db).await?,
         windows,
-        bosses: bosses(db).await?,
+        level_runs: level_runs(db).await?,
         classes: classes(db).await?,
         levels: levels(db).await?,
         top: top(db).await?,
@@ -309,15 +312,15 @@ async fn window(db: &Db, days: u32) -> Result<WindowStats, sqlx::Error> {
     })
 }
 
-async fn bosses(db: &Db) -> Result<Vec<BossStats>, sqlx::Error> {
+async fn level_runs(db: &Db) -> Result<Vec<LevelRunStats>, sqlx::Error> {
     let rows = sqlx::query(&format!(
-        "{WINDOW} SELECT boss, count(*), count(*) FILTER (WHERE outcome = 'victory'), count(*) FILTER (WHERE outcome = 'defeat'), \
-         coalesce(avg(duration_s) FILTER (WHERE outcome <> 'abandoned'), 0)::float8 FROM r GROUP BY boss ORDER BY boss"
+        "{WINDOW} SELECT level, boss, count(*), count(*) FILTER (WHERE outcome = 'victory'), count(*) FILTER (WHERE outcome = 'defeat'), \
+         coalesce(avg(duration_s) FILTER (WHERE outcome <> 'abandoned'), 0)::float8 FROM r GROUP BY level, boss ORDER BY level, boss NULLS FIRST"
     ))
     .bind(29)
     .fetch_all(db)
     .await?;
-    Ok(rows.iter().map(|r| BossStats { boss: r.get(0), runs: n(r, 1), victories: n(r, 2), defeats: n(r, 3), avg_duration_s: r.get(4) }).collect())
+    Ok(rows.iter().map(|r| LevelRunStats { level: r.get(0), boss: r.get(1), runs: n(r, 2), victories: n(r, 3), defeats: n(r, 4), avg_duration_s: r.get(5) }).collect())
 }
 
 async fn classes(db: &Db) -> Result<Vec<ClassStats>, sqlx::Error> {
@@ -431,7 +434,7 @@ pub async fn player(db: &Db, id: i32, online: &(dyn Fn(i32) -> bool + Sync), in_
     .fetch_one(db)
     .await?;
     let runs = sqlx::query(
-        "SELECT r.id, (extract(epoch FROM r.started_at) * 1000)::float8, r.boss, r.outcome, r.duration_s::float8, r.players::int, \
+        "SELECT r.id, (extract(epoch FROM r.started_at) * 1000)::float8, r.level, r.boss, r.outcome, r.duration_s::float8, r.players::int, \
          c.name, p.class, p.kills, p.xp, p.coins, p.survived \
          FROM run_players p JOIN runs r ON r.id = p.run_id LEFT JOIN characters c ON c.id = p.character_id \
          WHERE p.account_id = $1 ORDER BY r.started_at DESC LIMIT 10",
@@ -449,16 +452,17 @@ pub async fn player(db: &Db, id: i32, online: &(dyn Fn(i32) -> bool + Sync), in_
             .map(|r| PlayerRun {
                 id: r.get(0),
                 started: r.get(1),
-                boss: r.get(2),
-                outcome: r.get(3),
-                duration_s: r.get(4),
-                players: r.get::<i32, _>(5).max(0) as u32,
-                character: r.get(6),
-                class: db::class_from(r.get(7)),
-                kills: r.get::<i32, _>(8).max(0) as u32,
-                xp: r.get::<i32, _>(9).max(0) as u32,
-                coins: r.get::<i32, _>(10).max(0) as u32,
-                survived: r.get(11),
+                level: r.get(2),
+                boss: r.get(3),
+                outcome: r.get(4),
+                duration_s: r.get(5),
+                players: r.get::<i32, _>(6).max(0) as u32,
+                character: r.get(7),
+                class: db::class_from(r.get(8)),
+                kills: r.get::<i32, _>(9).max(0) as u32,
+                xp: r.get::<i32, _>(10).max(0) as u32,
+                coins: r.get::<i32, _>(11).max(0) as u32,
+                survived: r.get(12),
             })
             .collect(),
     }))
@@ -485,12 +489,13 @@ mod tests {
     use super::*;
     use crate::db::tests::{test_db, WEEK};
     use crate::lobby::LivePlayer;
-    use crate::protocol::BossId;
+    use crate::protocol::{BossId, LevelId};
     use crate::run::{Award, Outcome, RunPlayerRecord, RunRecord};
 
     fn record(account: i32, character: i32, outcome: Outcome, debug: bool) -> RunRecord {
         RunRecord {
-            boss: BossId::Demon,
+            level: LevelId::Dungeon,
+            boss: Some(BossId::Demon),
             outcome,
             duration_s: 120.0,
             debug,
@@ -541,7 +546,7 @@ mod tests {
         assert_eq!((d7.runs, d7.defeats), (3, 1));
         assert_eq!((d7.kills, d7.deaths), (12, 1), "leaving the abandoned run is not a death");
         assert_eq!(s.totals.runs, 3);
-        let demon = s.bosses.iter().find(|b| b.boss == "Demon").unwrap();
+        let demon = s.level_runs.iter().find(|b| b.level == "Dungeon" && b.boss.as_deref() == Some("Demon")).unwrap();
         assert_eq!((demon.runs, demon.victories, demon.defeats), (3, 1, 1));
         let barb = s.classes.iter().find(|c| c.class == ClassId::Barbarian).unwrap();
         assert_eq!((barb.characters, barb.played), (1, 3));
@@ -550,6 +555,24 @@ mod tests {
         assert_eq!(s.levels.iter().map(|l| (l.upgrades, l.characters)).collect::<Vec<_>>(), vec![(0, 1)]);
         let today = s.trend.last().unwrap();
         assert_eq!((today.runs, today.victories, today.registrations), (2, 1, 1));
+    }
+
+    #[tokio::test]
+    async fn runs_are_grouped_by_level_and_boss_and_may_have_no_boss() {
+        let Some(db) = test_db().await else { return };
+        let a = db::create_account(&db, "Leveler", "h").await.unwrap();
+        let c = db::create_character(&db, a, "Lev", ClassId::Wizard).await.unwrap();
+        db::record_run(&db, &record(a, c.id, Outcome::Victory, false)).await.unwrap();
+        let mut no_boss = record(a, c.id, Outcome::Defeat, false);
+        no_boss.boss = None;
+        db::record_run(&db, &no_boss).await.unwrap();
+        // A row from before migration 0004 has no level given: it defaults to the dungeon.
+        sqlx::query("INSERT INTO runs (started_at, boss, outcome, duration_s, players, debug) VALUES (now(), 'Lich', 'victory', 60, 1, false)").execute(&db).await.unwrap();
+        let s = overview(&db, Live::default()).await.unwrap();
+        let find = |boss: Option<&str>| s.level_runs.iter().find(|r| r.level == "Dungeon" && r.boss.as_deref() == boss).map(|r| r.runs);
+        assert_eq!((find(Some("Demon")), find(None), find(Some("Lich"))), (Some(1), Some(1), Some(1)));
+        let d = player(&db, a, &|_| false, &|_| false).await.unwrap().unwrap();
+        assert!(d.recent_runs.iter().any(|r| r.level == "Dungeon" && r.boss.is_none()));
     }
 
     #[tokio::test]

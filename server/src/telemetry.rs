@@ -161,13 +161,18 @@ impl Metrics {
     }
 
     pub fn run_finished(&self, r: &RunRecord) {
-        let boss = KeyValue::new("boss", format!("{:?}", r.boss));
-        let outcome = KeyValue::new("outcome", r.outcome.as_str());
-        self.runs_finished.add(1, &[boss.clone(), outcome.clone(), KeyValue::new("debug", r.debug)]);
+        let mut attrs = vec![KeyValue::new("level", format!("{:?}", r.level))];
+        if let Some(b) = r.boss {
+            attrs.push(KeyValue::new("boss", format!("{b:?}")));
+        }
+        attrs.push(KeyValue::new("outcome", r.outcome.as_str()));
+        let mut counted = attrs.clone();
+        counted.push(KeyValue::new("debug", r.debug));
+        self.runs_finished.add(1, &counted);
         if r.debug {
             return; // kept out of the gameplay numbers, like in the admin stats
         }
-        self.run_duration.record(r.duration_s, &[boss, outcome]);
+        self.run_duration.record(r.duration_s, &attrs);
         self.run_players.record(r.players.len() as u64, &[]);
         for p in &r.players {
             let class = [KeyValue::new("class", format!("{:?}", p.class))];
@@ -223,7 +228,7 @@ pub fn observe_lobby(lobby: SharedLobby) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{BossId, ClassId};
+    use crate::protocol::{BossId, ClassId, LevelId};
     use crate::run::{Outcome, RunPlayerRecord};
     use opentelemetry::metrics::MeterProvider as _;
     use opentelemetry_sdk::metrics::data::{AggregatedMetrics, MetricData};
@@ -231,7 +236,7 @@ mod tests {
 
     fn record(debug: bool) -> RunRecord {
         let p = |class, survived| RunPlayerRecord { account: Some(1), character: Some(2), class, kills: 5, damage: 1.0, healing: 0.0, xp: 30, coins: 4, survived, left: false };
-        RunRecord { boss: BossId::Lich, outcome: Outcome::Defeat, duration_s: 90.0, debug, players: vec![p(ClassId::Wizard, false), p(ClassId::Paladin, true)] }
+        RunRecord { level: LevelId::Dungeon, boss: Some(BossId::Lich), outcome: Outcome::Defeat, duration_s: 90.0, debug, players: vec![p(ClassId::Wizard, false), p(ClassId::Paladin, true)] }
     }
 
     #[test]
@@ -266,7 +271,7 @@ mod tests {
                 .map(|dp| dp.value())
                 .sum()
         };
-        assert_eq!(sum_of("ta.runs.finished", &[("boss", "Lich"), ("outcome", "defeat"), ("debug", "false")]), 1);
+        assert_eq!(sum_of("ta.runs.finished", &[("level", "Dungeon"), ("boss", "Lich"), ("outcome", "defeat"), ("debug", "false")]), 1);
         assert_eq!(sum_of("ta.runs.finished", &[("debug", "true")]), 1);
         assert_eq!(sum_of("ta.player.deaths", &[("class", "Wizard")]), 1, "the debug run is not counted");
         assert_eq!(sum_of("ta.player.deaths", &[("class", "Paladin")]), 0);

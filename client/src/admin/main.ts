@@ -112,6 +112,11 @@ function table(head: (string | [string, 'num'])[], rows: (HTMLElement | string |
   );
 }
 
+/** "Dungeon – Demon", or only the level when it has no boss. */
+function levelLabel(level: string, boss: string | null): string {
+  return boss ? `${level} – ${boss}` : level;
+}
+
 function playerLink(id: number, name: string): HTMLElement {
   return h('a', { href: `#/players/${id}` }, name);
 }
@@ -198,11 +203,11 @@ function renderDashboard(s: AdminStats, main: HTMLElement, updated: Date): void 
     ),
   );
 
-  const bosses = section(
-    'Bosses (last 30 days)',
+  const levelRuns = section(
+    'Levels (last 30 days)',
     table(
-      ['Boss', ['Runs', 'num'], ['Won', 'num'], ['Lost', 'num'], ['Win rate', 'num'], ['Average length', 'num']],
-      s.bosses.map((b) => [b.boss, compact(b.runs), compact(b.victories), compact(b.defeats), percent(b.victories, b.victories + b.defeats), b.victories + b.defeats ? duration(b.avg_duration_s) : '–']),
+      ['Level', ['Runs', 'num'], ['Won', 'num'], ['Lost', 'num'], ['Win rate', 'num'], ['Average length', 'num']],
+      s.level_runs.map((b) => [levelLabel(b.level, b.boss), compact(b.runs), compact(b.victories), compact(b.defeats), percent(b.victories, b.victories + b.defeats), b.victories + b.defeats ? duration(b.avg_duration_s) : '–']),
       'No runs in the last 30 days.',
     ),
   );
@@ -239,7 +244,7 @@ function renderDashboard(s: AdminStats, main: HTMLElement, updated: Date): void 
   main.replaceChildren(
     h('div', { class: 'page-head' }, h('h1', null, 'Dashboard'), h('span', { class: 'muted small' }, `Updated ${updated.toLocaleTimeString()} · every 30 s · `, refresh)),
     live,
-    h('div', { class: 'grid-2' }, activity, h('div', { class: 'stack' }, totals, bosses)),
+    h('div', { class: 'grid-2' }, activity, h('div', { class: 'stack' }, totals, levelRuns)),
     trends,
     h('div', { class: 'grid-2' }, classes, section('Progress', levels)),
     top,
@@ -434,11 +439,11 @@ async function player(id: number): Promise<void> {
   );
 
   const runs = table(
-    ['Started', 'Character', 'Boss', 'Result', ['Length', 'num'], ['Party', 'num'], ['Kills', 'num'], ['XP', 'num'], ['Coins', 'num']],
+    ['Started', 'Character', 'Level', 'Result', ['Length', 'num'], ['Party', 'num'], ['Kills', 'num'], ['XP', 'num'], ['Coins', 'num']],
     d.recent_runs.map((r) => [
       dateTime(r.started),
       `${r.character ?? '(deleted)'} (${r.class})`,
-      r.boss,
+      levelLabel(r.level, r.boss),
       r.outcome === 'victory' ? 'Won' : r.outcome === 'defeat' ? 'Lost' : 'Left',
       duration(r.duration_s),
       String(r.players),
