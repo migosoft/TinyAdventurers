@@ -67,6 +67,9 @@ pub struct InputMsg {
     pub view_lag: u16,
     /// Measured round trip time, ms (used to fast-forward the player's projectiles).
     pub rtt: u16,
+    /// Use the nearest object in hand reach (E): push a barrel.
+    #[serde(default)]
+    pub act: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, TS)]

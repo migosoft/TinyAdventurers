@@ -77,6 +77,7 @@ export class GameScene extends Phaser.Scene {
   private shotId = 0;
   private primaryClicked = false;
   private secondaryClicked = false;
+  private actPressed = false;
   private localAnim = { anim: ANIM.Idle as number, start: 0 };
   private alive = true;
   private myFlags = 0;
@@ -146,7 +147,10 @@ export class GameScene extends Phaser.Scene {
     // scene, so these letters could no longer be typed into the lobby's inputs.
     this.keys = kb.addKeys('W,A,S,D,Q,E', false) as GameScene['keys'];
     kb.on('keydown-Q', () => this.net.send({ t: 'Spectate', dir: -1 }));
-    kb.on('keydown-E', () => this.net.send({ t: 'Spectate', dir: 1 }));
+    kb.on('keydown-E', () => {
+      if (this.alive) this.actPressed = true;
+      else this.net.send({ t: 'Spectate', dir: 1 });
+    });
     kb.on('keydown-F3', (e: KeyboardEvent) => {
       e.preventDefault();
       this.hud.toggleDebug();
@@ -380,7 +384,7 @@ export class GameScene extends Phaser.Scene {
 
   private fixedStep(): void {
     if (!this.alive) {
-      this.primaryClicked = this.secondaryClicked = false;
+      this.primaryClicked = this.secondaryClicked = this.actPressed = false;
       return;
     }
     const k = this.keys;
@@ -392,7 +396,8 @@ export class GameScene extends Phaser.Scene {
     const free = !this.hud.menuOpen && !this.pred.sinking && !this.pred.knocked;
     const wantPrimary = (ptr.leftButtonDown() || this.primaryClicked) && free;
     const wantSecondary = (ptr.rightButtonDown() || this.secondaryClicked) && free;
-    this.primaryClicked = this.secondaryClicked = false;
+    const act = this.actPressed && free;
+    this.primaryClicked = this.secondaryClicked = this.actPressed = false;
 
     let primary: number | null = null;
     let secondary: number | null = null;
@@ -420,6 +425,7 @@ export class GameScene extends Phaser.Scene {
       secondary,
       view_lag: Math.min(Math.round(viewLag), 65535),
       rtt: Math.min(Math.round(this.net.rtt), 65535),
+      act,
     });
   }
 

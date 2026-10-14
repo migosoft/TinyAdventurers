@@ -483,6 +483,9 @@ impl Run {
         if knocked {
             return;
         }
+        if input.act {
+            objects::use_object(self, pi);
+        }
         if let Some(shot) = input.primary {
             let id = self.players[pi].def.primary;
             abilities::try_use(self, pi, id, shot, true);

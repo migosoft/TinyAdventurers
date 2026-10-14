@@ -23,4 +23,8 @@ view_lag: number,
 /**
  * Measured round trip time, ms (used to fast-forward the player's projectiles).
  */
-rtt: number, };
+rtt: number, 
+/**
+ * Use the nearest object in hand reach (E): push a barrel.
+ */
+act: boolean, };

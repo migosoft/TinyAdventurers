@@ -7,6 +7,7 @@ use crate::defs::damage::{resolve, Damage, Resistances};
 use crate::defs::kinds::EntityKind;
 use crate::collision::line_of_sight;
 use crate::defs::classes::PLAYER_RADIUS;
+use crate::defs::abilities::{KNOCK_DECAY, KNOCK_MIN_SPEED};
 use crate::defs::objects::*;
 use crate::run::entities::Sink;
 use crate::math::Vec2;
@@ -60,7 +61,7 @@ impl Run {
     pub fn solids(&self, except: Option<u32>) -> Vec<crate::collision::Solid> {
         self.objects
             .iter()
-            .filter(|o| o.solid && !o.gone && Some(o.id) != except)
+            .filter(|o| o.solid && !o.gone && Some(o.id) != except && !matches!(&o.state, ObjState::Barrel(b) if b.sinking.is_some()))
             .map(|o| crate::collision::Solid { x: o.pos.x, y: o.pos.y, half: o.radius })
             .collect()
     }
@@ -96,6 +97,19 @@ pub fn tick_objects(run: &mut Run, dt: f64) {
         if run.objects[oi].gone {
             continue;
         }
+        // Sinking: gone when it is under; no explosion.
+        if let ObjState::Barrel(b) = &mut run.objects[oi].state {
+            if let Some((t, how, t0)) = b.sinking {
+                if t - dt > 0.0 {
+                    b.sinking = Some((t - dt, how, t0));
+                } else {
+                    run.objects[oi].gone = true;
+                }
+                continue;
+            }
+        }
+        slide_barrel(run, oi, dt);
+        barrel_terrain(run, oi);
         let time = run.time;
         let ObjState::Barrel(b) = &mut run.objects[oi].state else { continue };
         let Some(f) = b.fuse else { continue };
@@ -106,6 +120,88 @@ pub fn tick_objects(run: &mut Run, dt: f64) {
             explode_barrel(run, oi);
         }
     }
+}
+
+/// E: the hero uses the nearest object within hand reach (touching distance
+/// plus `USE_REACH`). Dead, pushed or sinking heroes can't (the caller
+/// checks the push; this checks the rest).
+pub fn use_object(run: &mut Run, pi: usize) {
+    let p = &run.players[pi];
+    if !p.alive || p.sinking.is_some() {
+        return;
+    }
+    let at = p.pos();
+    let near = run
+        .objects
+        .iter()
+        .enumerate()
+        .filter(|(_, o)| !o.gone && matches!(&o.state, ObjState::Barrel(b) if b.sinking.is_none()))
+        .map(|(i, o)| (i, o.pos.dist(at) - o.radius - PLAYER_RADIUS))
+        .filter(|&(_, gap)| gap <= USE_REACH)
+        .min_by(|a, b| a.1.total_cmp(&b.1));
+    if let Some((oi, _)) = near {
+        match run.objects[oi].state {
+            ObjState::Barrel(_) => push_barrel(run, oi, at),
+            ObjState::Chest { .. } => {}
+        }
+    }
+}
+
+/// Slides a barrel `BARREL_PUSH` px straight away from `from`.
+pub fn push_barrel(run: &mut Run, oi: usize, from: Vec2) {
+    let o = &mut run.objects[oi];
+    let d = o.pos - from;
+    let dir = if d.len() > 0.01 { d.norm() } else { Vec2::new(1.0, 0.0) };
+    if let ObjState::Barrel(b) = &mut o.state {
+        b.vel = dir * crate::collision::knock_speed(BARREL_PUSH, crate::run::DT);
+    }
+}
+
+fn slide_barrel(run: &mut Run, oi: usize, dt: f64) {
+    let ObjState::Barrel(b) = &run.objects[oi].state else { return };
+    let v = b.vel;
+    if v == Vec2::ZERO {
+        return;
+    }
+    let (id, pos, r) = (run.objects[oi].id, run.objects[oi].pos, run.objects[oi].radius);
+    let solids = run.solids(Some(id));
+    let (x, y) = crate::collision::move_box(&run.layout.map, pos.x, pos.y, v.x * dt, v.y * dt, r, crate::dungeon::Mover::Dash, &solids);
+    let to = Vec2::new(x, y);
+    // A hero or monster in the way stops it (they are not shoved).
+    let blocked = run.players.iter().any(|p| p.alive && p.pos().dist(to) < PLAYER_RADIUS + r && p.pos().dist(to) < p.pos().dist(pos))
+        || run.monsters.iter().any(|m| m.alive && m.pos.dist(to) < m.radius + r && m.pos.dist(to) < m.pos.dist(pos));
+    let ObjState::Barrel(b) = &mut run.objects[oi].state else { return };
+    if blocked {
+        b.vel = Vec2::ZERO;
+        return;
+    }
+    run.objects[oi].pos = to;
+    let ObjState::Barrel(b) = &mut run.objects[oi].state else { return };
+    b.vel = if to == pos { Vec2::ZERO } else { v * KNOCK_DECAY };
+    if b.vel.len() < KNOCK_MIN_SPEED {
+        b.vel = Vec2::ZERO;
+    }
+}
+
+/// A barrel over a chasm falls, in deep water it sinks (no explosion), in lava it goes off.
+fn barrel_terrain(run: &mut Run, oi: usize) {
+    use crate::dungeon::{Tile, DROWN_TIME, FALL_TIME};
+    let (pos, time) = (run.objects[oi].pos, run.time);
+    let tile = run.layout.map.tile_at(pos);
+    let ObjState::Barrel(b) = &mut run.objects[oi].state else { return };
+    if tile == Tile::Chasm as u8 {
+        b.sinking = Some((FALL_TIME, Sink::Fall, time));
+    } else if tile == Tile::DeepWater as u8 {
+        b.sinking = Some((DROWN_TIME, Sink::Drown, time));
+    } else if tile == Tile::Lava as u8 {
+        b.fuse = Some(0.0);
+        b.lit_at = time - 1.0;
+        return;
+    } else {
+        return;
+    }
+    b.vel = Vec2::ZERO;
+    b.fuse = None;
 }
 
 /// The blast: hurts heroes, monsters and bosses with line of sight to it,
@@ -213,6 +309,88 @@ mod tests {
         for _ in 0..(secs / crate::run::DT).round() as usize {
             run.step();
         }
+    }
+
+    fn push(run: &mut Run) {
+        let seq = run.players[0].ack + 1;
+        run.players[0].inputs.push_back(crate::protocol::InputMsg { seq, act: true, ..Default::default() });
+        run.step();
+    }
+
+    #[test]
+    fn e_pushes_a_barrel_in_hand_reach_away_from_the_hero() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        for x in tx - 1..=tx + 8 {
+            run.layout.map.set(x, ty, crate::dungeon::Tile::Floor);
+        }
+        let start = run.players[0].pos();
+        let (id, _) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + 4.0, 0.0));
+        push(&mut run);
+        for _ in 0..60 {
+            run.step();
+        }
+        let o = run.objects.iter().find(|o| o.id == id).unwrap();
+        let moved = o.pos.x - (start.x + PLAYER_RADIUS + BARREL_RADIUS + 4.0);
+        assert!((moved - BARREL_PUSH).abs() < 2.0, "slid {moved} px east");
+    }
+
+    #[test]
+    fn a_barrel_out_of_reach_does_not_move() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        let (id, _) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + USE_REACH + 2.0, 0.0));
+        let before = run.objects.iter().find(|o| o.id == id).unwrap().pos;
+        push(&mut run);
+        assert_eq!(run.objects.iter().find(|o| o.id == id).unwrap().pos, before);
+    }
+
+    #[test]
+    fn a_pushed_barrel_stops_at_a_wall_and_at_another_barrel() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        for x in tx - 1..=tx + 2 {
+            run.layout.map.set(x, ty, crate::dungeon::Tile::Floor);
+        }
+        run.layout.map.set(tx + 3, ty, crate::dungeon::Tile::Wall);
+        let (id, oi) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + 2.0, 0.0));
+        let from = run.players[0].pos();
+        push_barrel(&mut run, oi, from);
+        for _ in 0..60 {
+            run.step();
+        }
+        let o = run.objects.iter().find(|o| o.id == id).unwrap();
+        assert!(o.pos.x + BARREL_RADIUS <= (tx + 3) as f64 * crate::dungeon::TILE + 1e-6, "stopped at the wall");
+    }
+
+    /// A barrel pushed east into fresh terrain `t` two tiles from the hero.
+    fn pushed_into(t: crate::dungeon::Tile) -> (Run, u32) {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        run.players[0].debug = true;
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        run.layout.map.set(tx + 1, ty, crate::dungeon::Tile::Floor);
+        run.layout.map.set(tx + 2, ty, crate::dungeon::Tile::Floor);
+        run.layout.map.set(tx + 3, ty, t);
+        let (id, oi) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + 2.0, 0.0));
+        let from = run.players[0].pos();
+        push_barrel(&mut run, oi, from);
+        run.events.clear();
+        (run, id)
+    }
+
+    #[test]
+    fn barrels_fall_into_chasms_sink_in_water_and_explode_in_lava() {
+        use crate::dungeon::Tile;
+        let (mut run, id) = pushed_into(Tile::Chasm);
+        step_for(&mut run, 1.0 + crate::dungeon::FALL_TIME);
+        assert!(run.objects.iter().all(|o| o.id != id) && booms(&run) == 0, "fell without a bang");
+        let (mut run, id) = pushed_into(Tile::DeepWater);
+        step_for(&mut run, 1.0 + crate::dungeon::DROWN_TIME);
+        assert!(run.objects.iter().all(|o| o.id != id) && booms(&run) == 0, "sank without a bang");
+        let (mut run, _) = pushed_into(Tile::Lava);
+        step_for(&mut run, 1.0);
+        assert_eq!(booms(&run), 1, "lava sets it off");
     }
 
     #[test]

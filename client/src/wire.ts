@@ -102,5 +102,5 @@ export function unpackSnap(w: SnapW): Snapshot {
 }
 
 export function packInput(i: InputMsg): InputW {
-  return [i.seq, i.mx, i.my, i.aim, i.aim_dist, i.primary ?? null, i.secondary ?? null, i.view_lag, i.rtt];
+  return [i.seq, i.mx, i.my, i.aim, i.aim_dist, i.primary ?? null, i.secondary ?? null, i.view_lag, i.rtt, i.act ?? false];
 }

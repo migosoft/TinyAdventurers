@@ -63,15 +63,15 @@ pub enum EvW {
 #[ts(export)]
 pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>);
 
-/// `[seq, mx, my, aim, aim_dist, primary, secondary, view_lag, rtt]`, see `InputMsg`.
+/// `[seq, mx, my, aim, aim_dist, primary, secondary, view_lag, rtt, act]`, see `InputMsg`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
-pub struct InputW(pub u32, pub i8, pub i8, pub f32, pub f32, pub Option<u16>, pub Option<u16>, pub u16, pub u16);
+pub struct InputW(pub u32, pub i8, pub i8, pub f32, pub f32, pub Option<u16>, pub Option<u16>, pub u16, pub u16, #[serde(default)] pub bool);
 
 impl From<InputW> for InputMsg {
     fn from(w: InputW) -> Self {
-        let InputW(seq, mx, my, aim, aim_dist, primary, secondary, view_lag, rtt) = w;
-        InputMsg { seq, mx, my, aim, aim_dist, primary, secondary, view_lag, rtt }
+        let InputW(seq, mx, my, aim, aim_dist, primary, secondary, view_lag, rtt, act) = w;
+        InputMsg { seq, mx, my, aim, aim_dist, primary, secondary, view_lag, rtt, act }
     }
 }
 
@@ -212,11 +212,12 @@ mod tests {
 
     #[test]
     fn input_array_decodes_to_input_msg() {
-        let bytes = rmp_serde::to_vec(&InputW(7, 1, -1, 0.5, 30.0, Some(3), None, 80, 40)).unwrap();
+        let bytes = rmp_serde::to_vec(&InputW(7, 1, -1, 0.5, 30.0, Some(3), None, 80, 40, true)).unwrap();
         match decode(&bytes) {
             Some(ClientMsg::Input(i)) => {
                 assert_eq!((i.seq, i.mx, i.my, i.aim, i.aim_dist), (7, 1, -1, 0.5, 30.0));
                 assert_eq!((i.primary, i.secondary, i.view_lag, i.rtt), (Some(3), None, 80, 40));
+                assert!(i.act);
             }
             other => panic!("unexpected {other:?}"),
         }
