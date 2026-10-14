@@ -69,6 +69,10 @@ pub fn spawn(run: &mut Run, party: usize) {
         asleep: true,
         mover: if boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
         airborne: false,
+        knock: Vec2::ZERO,
+        sinking: None,
+        burn_t: crate::dungeon::LAVA_TICK,
+        last_hit_by: None,
     });
     enc_mut(run).boss_ent = id;
     let mut behaviour = bosses::create(boss_id);

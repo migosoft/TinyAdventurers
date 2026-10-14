@@ -150,6 +150,7 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
     }
     for mi in monsters {
         run.hurt_monster(mi, dmg, false, src);
+        run.knock_monster(mi, pos, knock);
     }
     for qi in barrels {
         hurt_object(run, qi, dmg, by);

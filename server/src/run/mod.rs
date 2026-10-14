@@ -264,6 +264,10 @@ impl Run {
             asleep: false,
             mover: if enemies::is_demon(t) { Mover::Demon } else { Mover::Enemy },
             airborne: false,
+            knock: Vec2::ZERO,
+            sinking: None,
+            burn_t: dungeon::LAVA_TICK,
+            last_hit_by: None,
         });
         id
     }
@@ -362,6 +366,13 @@ impl Run {
             if !m.alive || m.is_boss {
                 continue;
             }
+            if m.sinking.is_some() || m.knock != Vec2::ZERO {
+                continue; // slid and sunk below
+            }
+            if self.layout.map.blocks_at(m.pos, m.mover) {
+                ai::escape_terrain(self, mi, DT);
+                continue;
+            }
             let active = player_pos.iter().any(|pp| pp.dist2(m.pos) < ACTIVE_RANGE * ACTIVE_RANGE);
             if active {
                 ai::tick_monster(self, mi, DT);
@@ -369,6 +380,12 @@ impl Run {
         }
         Level::tick(self, DT);
         ai::separate_monsters(self);
+        for mi in 0..self.monsters.len() {
+            if self.monsters[mi].alive && !self.monsters[mi].is_boss {
+                self.slide_monster(mi);
+                self.terrain_monster(mi);
+            }
+        }
 
         abilities::tick_projectiles(self, DT);
         self.tick_hazards(DT);
@@ -473,6 +490,84 @@ impl Run {
         if let Some(shot) = input.secondary {
             let id = self.players[pi].def.secondary;
             abilities::try_use(self, pi, id, shot, false);
+        }
+    }
+
+    /// A blast pushes a monster `dist` px straight away from `from`. Bosses
+    /// and flying monsters are never pushed; only walls and solids stop the
+    /// slide, so it can end in a chasm, deep water or lava.
+    pub fn knock_monster(&mut self, mi: usize, from: Vec2, dist: f64) {
+        let m = &mut self.monsters[mi];
+        if !m.alive || m.is_boss || m.airborne || m.sinking.is_some() || dist <= 0.0 {
+            return;
+        }
+        let d = m.pos - from;
+        let dir = if d.len() > 0.01 { d.norm() } else { Vec2::new(1.0, 0.0) };
+        m.knock = dir * crate::collision::knock_speed(dist, DT);
+    }
+
+    fn slide_monster(&mut self, mi: usize) {
+        let v = self.monsters[mi].knock;
+        if v == Vec2::ZERO {
+            return;
+        }
+        let solids = self.solids(None);
+        let m = &mut self.monsters[mi];
+        let (x, y) = crate::collision::move_box(&self.layout.map, m.pos.x, m.pos.y, v.x * DT, v.y * DT, m.radius, Mover::Dash, &solids);
+        m.pos = Vec2::new(x, y);
+        m.knock = v * crate::defs::abilities::KNOCK_DECAY;
+        if m.knock.len() < crate::defs::abilities::KNOCK_MIN_SPEED {
+            m.knock = Vec2::ZERO;
+        }
+    }
+
+    /// The ground under a monster's centre, like `terrain_player`: chasms and
+    /// deep water take it (kill credit to the last hero who hurt it), lava
+    /// burns monsters that are not lava walkers.
+    fn terrain_monster(&mut self, mi: usize) {
+        let m = &mut self.monsters[mi];
+        if !m.alive || m.is_boss || m.airborne {
+            return;
+        }
+        if let Some((t, how)) = m.sinking {
+            if t - DT > 0.0 {
+                m.sinking = Some((t - DT, how));
+            } else {
+                m.sinking = None;
+                if let Some(pi) = m.last_hit_by {
+                    self.players[pi].kills += 1;
+                }
+                self.kill_monster(mi);
+            }
+            return;
+        }
+        let pos = m.pos;
+        let tile = self.layout.map.tile_at(pos);
+        let how = if tile == Tile::Chasm as u8 {
+            Some((dungeon::FALL_TIME, Sink::Fall))
+        } else if tile == Tile::DeepWater as u8 {
+            Some((dungeon::DROWN_TIME, Sink::Drown))
+        } else {
+            None
+        };
+        if let Some((t, how)) = how {
+            m.sinking = Some((t, how));
+            m.knock = Vec2::ZERO;
+            m.ai.windup = None;
+            m.anim = Anim::Idle;
+            m.anim_start = self.time;
+            let id = m.id;
+            self.event(Ev::Sink { id, x: pos.x as f32, y: pos.y as f32, how: how as u8 }, Some(pos));
+            return;
+        }
+        if tile == Tile::Lava as u8 && m.mover != Mover::Demon {
+            m.burn_t += DT;
+            if m.burn_t >= dungeon::LAVA_TICK {
+                m.burn_t -= dungeon::LAVA_TICK;
+                self.hurt_monster(mi, Damage::new(dungeon::LAVA_DAMAGE, DamageSplit::pure(DamageType::Heat)), false, None);
+            }
+        } else {
+            m.burn_t = dungeon::LAVA_TICK;
         }
     }
 
@@ -712,6 +807,7 @@ impl Run {
         let applied = raw.min(m.hp + raw);
         self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: false, ty, imm }, seen_by);
         if let Some(pi) = src_player {
+            self.monsters[mi].last_hit_by = Some(pi);
             self.players[pi].damage += applied;
             // Getting hit makes a monster investigate where the attack came from.
             let src = self.players[pi].pos();
@@ -1115,6 +1211,73 @@ pub mod tests {
         let (tx, ty) = dungeon::Map::tile_of(run.layout.player_spawns[0]);
         run.layout.map.set(tx + 2, ty, t);
         (run, dungeon::Map::center_of(tx + 2, ty))
+    }
+
+    /// A lone orc east of player 0 next to fresh terrain `t` two tiles further east.
+    fn orc_by(t: Tile) -> (Run, u32, Vec2) {
+        let (mut run, at) = terrain_run(t);
+        let orc = at - Vec2::new(16.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, orc, None, 1);
+        run.players[0].debug = true;
+        (run, id, at)
+    }
+
+    #[test]
+    fn an_enemy_blown_into_a_chasm_falls_and_gives_xp_once() {
+        let (mut run, id, _) = orc_by(Tile::Chasm);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].last_hit_by = Some(0);
+        let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
+        run.knock_monster(mi, from, 40.0);
+        for _ in 0..30 {
+            run.step();
+        }
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Sink { id: i, how: 0, .. } if *i == id)));
+        for _ in 0..=(dungeon::FALL_TIME / DT) as usize {
+            run.step();
+        }
+        assert!(run.monster_idx(id).is_none(), "fell");
+        let xp = run.players[0].xp;
+        assert!(xp > 0 && run.players[0].kills == 1);
+        for _ in 0..30 {
+            run.step();
+        }
+        assert_eq!(run.players[0].xp, xp, "XP only once");
+    }
+
+    #[test]
+    fn an_enemy_blown_into_deep_water_drowns() {
+        let (mut run, id, _) = orc_by(Tile::DeepWater);
+        let mi = run.monster_idx(id).unwrap();
+        let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
+        run.knock_monster(mi, from, 40.0);
+        for _ in 0..30 + (dungeon::DROWN_TIME / DT) as usize {
+            run.step();
+        }
+        assert!(run.monster_idx(id).is_none());
+    }
+
+    #[test]
+    fn an_enemy_in_lava_burns_and_walks_out() {
+        let (mut run, id, at) = orc_by(Tile::Lava);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].pos = at;
+        let hp = run.monsters[mi].hp;
+        for _ in 0..90 {
+            run.step();
+        }
+        let mi = run.monster_idx(id).unwrap();
+        assert!(run.monsters[mi].hp < hp, "burned");
+        assert!(!run.layout.map.blocks_at(run.monsters[mi].pos, Mover::Enemy), "out of the lava");
+    }
+
+    #[test]
+    fn bosses_are_never_pushed() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+        let from = run.monsters[bi].pos - Vec2::new(10.0, 0.0);
+        run.knock_monster(bi, from, 40.0);
+        assert_eq!(run.monsters[bi].knock, Vec2::ZERO);
     }
 
     fn said(run: &Run, what: &str) -> bool {

@@ -184,6 +184,14 @@ pub struct Monster {
     pub mover: Mover,
     /// Flying (the dragon): melee cannot reach it, projectiles and spells still do.
     pub airborne: bool,
+    /// Knockback velocity (px/s) from a blast; the AI does not move it meanwhile.
+    pub knock: Vec2,
+    /// Falling into a chasm or drowning: seconds left, and how.
+    pub sinking: Option<(f64, Sink)>,
+    /// Time since the last lava burn.
+    pub burn_t: f64,
+    /// Last hero who hurt it: credited for a death by terrain.
+    pub last_hit_by: Option<usize>,
 }
 
 impl Monster {

@@ -36,6 +36,31 @@ fn set_anim(run: &mut Run, mi: usize, a: Anim) {
     }
 }
 
+/// A monster on ground it cannot walk (blown into lava): it walks straight
+/// to the nearest tile it can, ignoring heroes until it is out.
+pub fn escape_terrain(run: &mut Run, mi: usize, dt: f64) {
+    let (pos, mover, speed) = (run.monsters[mi].pos, run.monsters[mi].mover, run.monsters[mi].speed);
+    let (tx, ty) = Map::tile_of(pos);
+    let mut best: Option<(f64, Vec2)> = None;
+    for dy in -3..=3 {
+        for dx in -3..=3 {
+            let c = Map::center_of(tx + dx, ty + dy);
+            if !run.layout.map.blocks(tx + dx, ty + dy, mover) && best.map_or(true, |(d, _)| c.dist(pos) < d) {
+                best = Some((c.dist(pos), c));
+            }
+        }
+    }
+    if let Some((_, to)) = best {
+        let solids = run.solids(None);
+        let m = &run.monsters[mi];
+        let v = (to - pos).norm() * (speed.max(20.0) * dt).min(to.dist(pos));
+        // Out of the lava: the Dash mover lets it cross the blocked tiles it stands on.
+        let (x, y) = move_box(&run.layout.map, pos.x, pos.y, v.x, v.y, m.radius, Mover::Dash, &solids);
+        run.monsters[mi].pos = Vec2::new(x, y);
+        set_anim(run, mi, Anim::Move);
+    }
+}
+
 /// Move a monster toward `to` with wall sliding. Returns true when arrived.
 pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> bool {
     let m = &run.monsters[mi];
