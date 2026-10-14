@@ -9,9 +9,29 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Next item: separate the run from "dungeon + boss" (TODO.md priority 1)
+## Next item: separate the run from "dungeon + boss" (TODO.md priority 1): designed and planned, not implemented
 
-Not started. The largest refactor in the list: the woodland escort level (priority 7) needs it. Make it a pure refactor first, with behaviour unchanged and no new level yet, so the existing tests prove nothing broke. Use the brainstorming and plan skills before touching code. The user decides the design questions below.
+**State (2026-10-14):** branch `feature/level-split` (from `main`) has three commits and no code changes:
+- the spec: [docs/superpowers/specs/2026-10-13-level-split-design.md](docs/superpowers/specs/2026-10-13-level-split-design.md), approved by the user;
+- the implementation plan, 5 tasks: [docs/superpowers/plans/2026-10-13-level-split.md](docs/superpowers/plans/2026-10-13-level-split.md);
+- this handoff.
+
+**How to continue:** check out `feature/level-split` and execute the plan with **superpowers:subagent-driven-development**. The user chose this method; it was interrupted before Task 1 so it can run in a fresh session. The SDD workspace `.superpowers/sdd/2026-10-13-level-split/` (git-ignored) holds only `plan-path`: there is no ledger yet, so start at Task 1 (pre-flight scan, then the Task 1 dispatch). Don't pause between tasks; ask the user only before merging or pushing.
+
+**User decisions (2026-10-13), all in the spec:**
+- **Pure refactor:** same map, spawns, entity ids and boss per seed; the wire fixtures stay byte-identical; no new level yet.
+- **Scope:** server core plus plumbing: `level` in the protocol (`RunStartInfo`, `RunEnded`, lobby `Room`), DB migration 0004 (`runs.level`, `boss` nullable), stats, telemetry and the admin page. **No lobby level picker** and no `SelectLevel` yet (one level only).
+- **Admin statistics:** grouped per level with the boss inside ("Dungeon – Demon").
+- **Shape:** `enum Level` dispatching to a `LevelRules` trait whose hooks have default no-op bodies; a reusable `BossEncounter` that any level can include; each level owns its generator and fills a shared `Layout` (map, spawns, chests, player spawns); `LevelChoice` carries each level's options.
+- **Future level types (user):** the design must suit level types beyond the escort level.
+- **Still open, for the escort item:** the escort level's XP rule (kills and boss bonus, or a fixed reward for arriving).
+
+**Plan notes found while planning:**
+- `AdminStats.levels` already exists (the upgrade histogram), so the per-level run table is `level_runs: Vec<LevelRunStats>`.
+- The boss acts at one point of the step and the "heroes entered the hall" check runs at another, so there are two hooks (`tick`, `post_tick`), to keep the order identical.
+- Task 1 first records fingerprint tests on the **old** code (setup per seed, and 300 steps of boss fight); the refactor must keep them passing.
+
+The findings below are from before the design (2026-10-13). The spec and plan supersede the proposed shape and answer the questions.
 
 **Where the code assumes one level type (found 2026-10-13):**
 - **`Run` (`server/src/run/mod.rs`):** the fields `boss_id`, `boss_ent`, `boss` (`BossBehaviour`), `boss_awake` and `door_closed`. `Run::new` always calls `generate(seed, Theme::for_boss(boss_id))`. `check_boss_hall` wakes the boss and seals the hall; `check_end` only knows "everyone dead = defeat". Victory is set in `kill_monster` when `id == boss_ent`. `end_msg` sends `boss`. About 33 references in this file.
@@ -22,14 +42,7 @@ Not started. The largest refactor in the list: the woodland escort level (priori
 - **Database and admin:** `runs.boss` (text, `db.rs`). `stats.rs` groups runs by boss, and the admin page shows them (`client/src/admin/main.ts`).
 - **Client:** the lobby's boss picker and boss cards (`ui/lobby.ts`, `BOSS_FIG`), the HUD boss bar and end screen (`ui/hud.ts`), and `?debug&boss=` preselection.
 
-**A shape to propose (not agreed):** a `Level` (or `Objective`) enum or trait next to `BossBehaviour`: `DungeonBoss { boss_id, boss_ent, boss, awake, door_closed }` now, `Escort { ... }` later. It owns map generation, the win and loss check, the debug path target and the start message. `Run` keeps what every level shares (players, monsters, projectiles, hazards, chests, events).
-
-**Questions for the user before building:**
-- How does the host choose the level in the lobby? A level picker next to the boss picker (the boss only applies to dungeons)?
-- Does the database get a `level` column, with `boss` nullable for escort runs? Should the admin statistics group runs by level and boss?
-- Does the escort level keep the current XP rules (kills + boss bonus), or get a fixed reward for arriving (the TODO says "a lot of XP")? This can wait for the escort level itself.
-
-**Verification:** `cargo test` (149 tests, among them the 200-seed generation test, the wire fixtures and 600-tick boss simulations), client typecheck and tests, the smoke test, and one debug run per boss: everything must behave exactly as before.
+**Verification (plan Task 5):** `cargo test` (149 tests plus the new ones, among them the 200-seed generation test, the wire fixtures and 600-tick boss simulations), client build and tests, `docker compose up --build -d`, the smoke test (normal and `?lag`), a throwaway bot debug run per boss, and the admin "Levels" table: everything must behave exactly as before.
 
 ## Last session (2026-10-13, prediction corrections under lag)
 
