@@ -5,21 +5,22 @@ pub mod ai;
 pub mod bosses;
 pub mod debug;
 pub mod entities;
+pub mod levels;
 pub mod visibility;
 
 use crate::collision::MoveState;
 use crate::defs::progression::{self, StatUpgrades};
-use crate::defs::{bosses as boss_defs, classes, enemies};
+use crate::defs::{classes, enemies};
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{Anim, EntityKind};
-use crate::dungeon::{self, generate::{generate, Theme}, Dungeon, Mover, Tile};
+use crate::dungeon::{self, Layout, Mover, Tile};
 use crate::fov::Fov;
 use crate::lobby::SharedLobby;
 use crate::math::Vec2;
 use crate::telemetry;
-use crate::protocol::{encode, BossId, ClassId, ClientMsg, Ev, InputMsg, PlayerInfo, PlayerStats, RunStartInfo, ServerMsg};
+use crate::protocol::{encode, BossId, ClassId, ClientMsg, Ev, InputMsg, LevelChoice, PlayerInfo, PlayerStats, RunStartInfo, ServerMsg};
 use axum::extract::ws::Message;
-use bosses::BossBehaviour;
+use levels::Level;
 use entities::*;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -33,7 +34,7 @@ pub const DT: f64 = 1.0 / TICK_HZ;
 pub const SNAPSHOT_EVERY: u32 = 2;
 /// Monsters farther than this from every player do not think.
 const ACTIVE_RANGE: f64 = 420.0;
-const END_DELAY: f64 = 3.0;
+pub(crate) const END_DELAY: f64 = 3.0;
 
 /// What one character banks at the end of a run.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,7 +115,8 @@ pub struct Run {
     pub id: u32,
     pub tick: u32,
     pub time: f64,
-    pub dungeon: Dungeon,
+    pub layout: Layout,
+    pub level: Level,
     pub players: Vec<Player>,
     pub monsters: Vec<Monster>,
     pub projectiles: Vec<Projectile>,
@@ -124,11 +126,6 @@ pub struct Run {
     pub events: Vec<(Ev, Option<Vec2>)>,
     pub next_id: u32,
     pub rng: ChaCha8Rng,
-    pub boss_id: BossId,
-    pub boss_ent: u32,
-    pub boss: Option<Box<dyn BossBehaviour>>,
-    pub boss_awake: bool,
-    pub door_closed: bool,
     pub ended: Option<(bool, f64)>,
     /// Someone used debug mode (immortal): no XP is banked for this run.
     pub debug_used: bool,
@@ -136,11 +133,10 @@ pub struct Run {
 }
 
 impl Run {
-    pub fn new(id: u32, members: Vec<Member>, seed: u64, boss: Option<BossId>) -> Run {
+    pub fn new(id: u32, members: Vec<Member>, seed: u64, choice: LevelChoice) -> Run {
         let mut rng = ChaCha8Rng::seed_from_u64(seed ^ 0x5eed);
-        let boss_id = boss.unwrap_or_else(|| BossId::ALL[rng.gen_range(0..BossId::ALL.len())]);
-        let dungeon = generate(seed, Theme::for_boss(boss_id));
-        let (w, h) = (dungeon.map.w, dungeon.map.h);
+        let (layout, level) = Level::build(seed, &choice, &mut rng);
+        let (w, h) = (layout.map.w, layout.map.h);
         let mut run = Run {
             id,
             tick: 0,
@@ -153,21 +149,17 @@ impl Run {
             events: Vec::new(),
             next_id: 1,
             rng,
-            boss_id,
-            boss_ent: 0,
-            boss: None,
-            boss_awake: false,
-            door_closed: false,
             ended: None,
             debug_used: false,
             srv_ms: 0.0,
-            dungeon,
+            layout,
+            level,
         };
         for (i, m) in members.into_iter().enumerate() {
             let def = classes::def(m.class);
             let mods = m.upgrades.modifiers();
             let max_hp = def.hp * mods.life;
-            let p = run.dungeon.player_spawns[i % run.dungeon.player_spawns.len()];
+            let p = run.layout.player_spawns[i % run.layout.player_spawns.len()];
             let id = run.alloc_id();
             run.players.push(Player {
                 id,
@@ -212,13 +204,13 @@ impl Run {
             });
         }
         let n = run.players.len();
-        let spawns = run.dungeon.spawns.clone();
+        let spawns = run.layout.spawns.clone();
         for s in spawns {
-            let t = enemies::for_boss(s.enemy, run.boss_id);
+            let t = run.level.enemy_type(s.enemy);
             run.spawn_enemy(t, s.pos, None, n);
         }
         // Mimics are monsters from the start, asleep and drawn as a closed chest.
-        for c in run.dungeon.chests.clone() {
+        for c in run.layout.chests.clone() {
             if c.mimic {
                 let id = run.spawn_enemy(EnemyType::Mimic, c.pos, None, n);
                 let mi = run.monster_idx(id).unwrap();
@@ -228,7 +220,7 @@ impl Run {
                 run.chests.push(Chest { id, pos: c.pos, opened: None });
             }
         }
-        run.spawn_boss(n);
+        Level::populate(&mut run, n);
         run
     }
 
@@ -268,45 +260,11 @@ impl Run {
         id
     }
 
-    fn spawn_boss(&mut self, party: usize) {
-        let d = boss_defs::def(self.boss_id);
-        let pos = self.dungeon.boss_hall().center_px();
-        let id = self.alloc_id();
-        let hp = d.hp * boss_defs::hp_scale(party);
-        self.monsters.push(Monster {
-            id,
-            etype: None,
-            kind: d.kind,
-            pos,
-            hp,
-            max_hp: hp,
-            speed: d.speed,
-            radius: d.radius,
-            sight: 400.0,
-            alive: true,
-            aim: std::f64::consts::FRAC_PI_2,
-            anim: Anim::Idle,
-            anim_start: 0.0,
-            hurt_t: 0.0,
-            ai: Ai::new(pos),
-            owner: None,
-            history: VecDeque::with_capacity(HISTORY_LEN),
-            is_boss: true,
-            asleep: true,
-            mover: if self.boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
-            airborne: false,
-        });
-        self.boss_ent = id;
-        let mut behaviour = bosses::create(self.boss_id);
-        behaviour.spawn_extras(self, pos, party);
-        self.boss = Some(behaviour);
-    }
-
     pub fn start_info(&self, p: &Player) -> ServerMsg {
         ServerMsg::RunStarted(RunStartInfo {
-            width: self.dungeon.map.w as u16,
-            height: self.dungeon.map.h as u16,
-            tiles: self.dungeon.map.tiles.clone(),
+            width: self.layout.map.w as u16,
+            height: self.layout.map.h as u16,
+            tiles: self.layout.map.tiles.clone(),
             tile_size: crate::dungeon::TILE as u16,
             you: p.id,
             players: self.players.iter().map(|q| PlayerInfo { ent: q.id, name: q.name.clone(), class: q.class }).collect(),
@@ -400,12 +358,7 @@ impl Run {
                 ai::tick_monster(self, mi, DT);
             }
         }
-        if self.boss_awake {
-            if let Some(mut b) = self.boss.take() {
-                b.tick(self, DT);
-                self.boss = Some(b);
-            }
-        }
+        Level::tick(self, DT);
         ai::separate_monsters(self);
 
         abilities::tick_projectiles(self, DT);
@@ -422,7 +375,7 @@ impl Run {
         self.projectiles.retain(|p| !p.dead);
         self.hazards.retain(|h| h.life > 0.0);
 
-        self.check_boss_hall();
+        Level::post_tick(self);
         self.check_end();
     }
 
@@ -462,7 +415,7 @@ impl Run {
     }
 
     fn apply_input(&mut self, pi: usize, input: InputMsg) {
-        let map = &self.dungeon.map;
+        let map = &self.layout.map;
         let p = &mut self.players[pi];
         p.ack = input.seq;
         p.aim = input.aim as f64;
@@ -529,7 +482,7 @@ impl Run {
         }
         let pos = p.pos();
         let (tx, ty) = dungeon::Map::tile_of(pos);
-        let tile = self.dungeon.map.get(tx, ty);
+        let tile = self.layout.map.get(tx, ty);
         let how = if tile == Tile::Chasm as u8 {
             Some((dungeon::FALL_TIME, Sink::Fall))
         } else if tile == Tile::DeepWater as u8 {
@@ -546,7 +499,7 @@ impl Run {
             self.event(Ev::Sink { id, x: pos.x as f32, y: pos.y as f32, how: how as u8 }, None);
             return;
         }
-        if self.dungeon.map.safe(tx, ty) {
+        if self.layout.map.safe(tx, ty) {
             // The tile centre: a hero always fits there, clear of its neighbours.
             p.last_safe = dungeon::Map::center_of(tx, ty);
         }
@@ -713,14 +666,8 @@ impl Run {
             return false;
         }
         let pos = self.monsters[mi].pos;
-        if self.monsters[mi].is_boss {
-            let immune = self.boss.as_ref().map_or(false, |b| !b.can_be_damaged(self));
-            if immune {
-                self.event(Ev::Immune { x: pos.x as f32, y: pos.y as f32 }, Some(pos));
-                return false;
-            }
-            self.boss_awake = true;
-            self.monsters[mi].asleep = false;
+        if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
+            return false;
         }
         let m = &mut self.monsters[mi];
         m.hp -= dmg;
@@ -773,39 +720,11 @@ impl Run {
         for i in minions {
             self.kill_monster(i);
         }
-        if id == self.boss_ent && self.ended.is_none() {
-            self.ended = Some((true, self.time + END_DELAY));
-            self.event(Ev::Msg { text: "The boss is defeated!".into() }, None);
-        }
-    }
-
-    fn check_boss_hall(&mut self) {
-        let hall = *self.dungeon.boss_hall();
-        let alive: Vec<Vec2> = self.players.iter().filter(|p| p.alive).map(|p| p.pos()).collect();
-        if !self.boss_awake && alive.iter().any(|p| hall.contains(*p)) {
-            self.boss_awake = true;
-            // Mimics elsewhere keep their disguise.
-            for m in self.monsters.iter_mut().filter(|m| m.etype != Some(EnemyType::Mimic)) {
-                m.asleep = false;
-            }
-            let text = match self.boss_id {
-                BossId::Demon => "A demon awakens!",
-                BossId::Lich => "The lich rises - slay its disciples!",
-                BossId::Dragon => "The dragon awakens!",
-            };
-            self.event(Ev::Msg { text: text.into() }, None);
-        }
-        if self.boss_awake && !self.door_closed && !alive.is_empty() && alive.iter().all(|p| hall.contains(*p)) {
-            self.door_closed = true;
-            for &(x, y) in &self.dungeon.door.clone() {
-                self.dungeon.map.set(x, y, Tile::DoorClosed);
-                self.event(Ev::Tile { x: x as u16, y: y as u16, v: Tile::DoorClosed as u8 }, None);
-            }
-        }
+        Level::on_killed(self, id);
     }
 
     fn check_end(&mut self) {
-        if self.ended.is_none() && !self.players.iter().any(|p| p.alive) {
+        if self.ended.is_none() && Level::failed(self) {
             self.ended = Some((false, self.time + END_DELAY));
         }
     }
@@ -820,7 +739,7 @@ impl Run {
     pub fn end_msg(&self, victory: bool) -> ServerMsg {
         ServerMsg::RunEnded {
             victory,
-            boss: self.boss_id,
+            boss: self.level.boss_id().expect("dungeon runs have a boss"),
             time: self.time as f32,
             banked: !self.debug_used,
             stats: self
@@ -843,7 +762,7 @@ impl Run {
     /// The run for the statistics; `victory` is `None` when everyone left.
     pub fn record(&self, victory: Option<bool>) -> RunRecord {
         RunRecord {
-            boss: self.boss_id,
+            boss: self.level.boss_id().expect("dungeon runs have a boss"),
             outcome: match victory {
                 Some(true) => Outcome::Victory,
                 Some(false) => Outcome::Defeat,
@@ -885,7 +804,7 @@ impl Run {
 }
 
 /// Runs a dungeon until it ends or everyone has left, then tells the lobby.
-#[tracing::instrument(name = "run", skip_all, fields(run = run.id, boss = ?run.boss_id, players = run.players.len(), outcome = tracing::field::Empty))]
+#[tracing::instrument(name = "run", skip_all, fields(run = run.id, level = ?run.level.id(), boss = ?run.level.boss_id(), players = run.players.len(), outcome = tracing::field::Empty))]
 pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: SharedLobby) {
     let mut outcome = None;
     for p in &run.players {
@@ -948,7 +867,7 @@ pub mod tests {
                 Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, upgrades: StatUpgrades::default() }
             })
             .collect();
-        Run::new(1, members, seed, Some(boss))
+        Run::new(1, members, seed, LevelChoice::Dungeon { boss: Some(boss) })
     }
 
     /// FNV-1a over everything a level setup decides, so the level refactor
@@ -961,7 +880,7 @@ pub mod tests {
                 h = h.wrapping_mul(0x100000001b3);
             }
         };
-        for &t in &run.dungeon.map.tiles {
+        for &t in &run.layout.map.tiles {
             eat(t as u64);
         }
         for m in &run.monsters {
@@ -991,7 +910,7 @@ pub mod tests {
         let (tx, _rx) = unbounded_channel();
         std::mem::forget(_rx);
         let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, upgrades: StatUpgrades::default() }];
-        Run::new(1, members, seed, None)
+        Run::new(1, members, seed, LevelChoice::Dungeon { boss: None })
     }
 
     #[test]
@@ -1006,7 +925,7 @@ pub mod tests {
         let mut got = Vec::new();
         for boss in BossId::ALL {
             let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], boss);
-            let hall = run.dungeon.boss_hall().center_px();
+            let hall = run.level.boss().unwrap().arena.center_px();
             for p in &mut run.players {
                 p.mv.x = hall.x;
                 p.mv.y = hall.y + 40.0;
@@ -1068,7 +987,7 @@ pub mod tests {
         let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
         run.monsters.clear(); // keep the test about the chest
         let id = run.alloc_id();
-        let pos = run.dungeon.player_spawns[0] + Vec2::new(40.0, 0.0);
+        let pos = run.layout.player_spawns[0] + Vec2::new(40.0, 0.0);
         run.chests.push(Chest { id, pos, opened: None });
         stand_at(&mut run, pos);
         let c = run.chests.iter().find(|c| c.id == id).unwrap();
@@ -1085,7 +1004,7 @@ pub mod tests {
     fn mimic_sleeps_until_touched_then_waits_before_hunting() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.monsters.retain(|m| m.is_boss);
-        let pos = run.dungeon.player_spawns[0] + Vec2::new(60.0, 0.0);
+        let pos = run.layout.player_spawns[0] + Vec2::new(60.0, 0.0);
         let id = run.spawn_enemy(EnemyType::Mimic, pos, None, 1);
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].asleep = true;
@@ -1102,10 +1021,10 @@ pub mod tests {
         let id2 = run.spawn_enemy(EnemyType::Mimic, pos + Vec2::new(0.0, 32.0), None, 1);
         let m2 = run.monster_idx(id2).unwrap();
         run.monsters[m2].asleep = true;
-        let hall = run.dungeon.boss_hall().center_px();
+        let hall = run.level.boss().unwrap().arena.center_px();
         stand_at(&mut run, hall);
         let m2 = run.monster_idx(id2).unwrap();
-        assert!(run.boss_awake);
+        assert!(run.level.boss().unwrap().awake);
         assert!(run.monsters[m2].asleep);
     }
 
@@ -1113,8 +1032,8 @@ pub mod tests {
     fn terrain_run(t: Tile) -> (Run, Vec2) {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         run.monsters.retain(|m| m.is_boss);
-        let (tx, ty) = dungeon::Map::tile_of(run.dungeon.player_spawns[0]);
-        run.dungeon.map.set(tx + 2, ty, t);
+        let (tx, ty) = dungeon::Map::tile_of(run.layout.player_spawns[0]);
+        run.layout.map.set(tx + 2, ty, t);
         (run, dungeon::Map::center_of(tx + 2, ty))
     }
 
@@ -1252,9 +1171,9 @@ pub mod tests {
     fn mimic_moves_only_while_airborne() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.monsters.retain(|m| m.is_boss);
-        let start = run.dungeon.player_spawns[0];
+        let start = run.layout.player_spawns[0];
         let id = run.spawn_enemy(EnemyType::Mimic, start + Vec2::new(50.0, 0.0), None, 1);
-        assert!(!run.dungeon.map.blocks_at(start + Vec2::new(50.0, 0.0), Mover::Enemy));
+        assert!(!run.layout.map.blocks_at(start + Vec2::new(50.0, 0.0), Mover::Enemy));
         run.players[0].debug = true; // keep the target standing
         let mut moved_on_ground = false;
         let mut moved_in_air = false;

@@ -34,7 +34,8 @@ pub fn create(id: BossId) -> Box<dyn BossBehaviour> {
 
 /// Index of the boss monster, if alive.
 pub(crate) fn boss_idx(run: &Run) -> Option<usize> {
-    run.monsters.iter().position(|m| m.id == run.boss_ent && m.alive)
+    let ent = run.level.boss().map_or(0, |b| b.boss_ent);
+    run.monsters.iter().position(|m| m.id == ent && m.alive)
 }
 
 pub(crate) fn set_anim(run: &mut Run, bi: usize, a: Anim) {

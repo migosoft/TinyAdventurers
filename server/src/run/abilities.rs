@@ -139,7 +139,7 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
                 return false;
             }
             let in_arc = angle_diff(pos.angle_to(mp), aim).abs() <= arc / 2.0 || d < m.radius + PLAYER_RADIUS;
-            in_arc && line_of_sight(&run.dungeon.map, pos, mp)
+            in_arc && line_of_sight(&run.layout.map, pos, mp)
         })
         .map(|(i, _)| i)
         .collect();
@@ -187,7 +187,7 @@ fn spawn_player_projectile(
     let ff = (p.rtt / 2.0).min(0.15);
     let vel = dir * speed;
     let ahead = start + vel * ff;
-    let pos = if line_of_sight(&run.dungeon.map, p.pos(), ahead) { ahead } else { start };
+    let pos = if line_of_sight(&run.layout.map, p.pos(), ahead) { ahead } else { start };
     let owner = p.id;
     let id = run.alloc_id();
     run.projectiles.push(Projectile {
@@ -264,7 +264,7 @@ pub fn tick_projectiles(run: &mut Run, dt: f64) {
                     break;
                 }
             }
-            if run.dungeon.map.opaque_at(pos) {
+            if run.layout.map.opaque_at(pos) {
                 impact(run, i, prev, None);
                 break;
             }
@@ -322,7 +322,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: f64, from_player: bool,
             .monsters
             .iter()
             .enumerate()
-            .filter(|(_, m)| m.alive && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.dungeon.map, pos, m.pos))
+            .filter(|(_, m)| m.alive && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos))
             .map(|(i, _)| i)
             .collect();
         for mi in hits {
@@ -333,7 +333,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: f64, from_player: bool,
             .players
             .iter()
             .enumerate()
-            .filter(|(_, p)| p.alive && p.pos().dist(pos) < r + PLAYER_RADIUS && line_of_sight(&run.dungeon.map, pos, p.pos()))
+            .filter(|(_, p)| p.alive && p.pos().dist(pos) < r + PLAYER_RADIUS && line_of_sight(&run.layout.map, pos, p.pos()))
             .map(|(i, _)| i)
             .collect();
         for qi in hits {

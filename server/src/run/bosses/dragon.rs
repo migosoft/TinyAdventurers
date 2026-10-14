@@ -165,7 +165,7 @@ impl BossBehaviour for Dragon {
                 if self.pulse <= 0.0 {
                     self.pulse = 0.2;
                     for pi in players_in(run, pos, BREATH_RANGE, Some((aim, BREATH_HALF_ANGLE))) {
-                        if crate::collision::line_of_sight(&run.dungeon.map, pos, run.players[pi].pos()) {
+                        if crate::collision::line_of_sight(&run.layout.map, pos, run.players[pi].pos()) {
                             run.hurt_player(pi, 6.0);
                         }
                     }
@@ -173,7 +173,7 @@ impl BossBehaviour for Dragon {
                         let a = aim + run.rng.gen_range(-BREATH_HALF_ANGLE..BREATH_HALF_ANGLE);
                         let d = run.rng.gen_range(30.0..BREATH_RANGE);
                         let at = pos + Vec2::from_angle(a) * d;
-                        if !run.dungeon.map.opaque_at(at) {
+                        if !run.layout.map.opaque_at(at) {
                             run.spawn_hazard(EntityKind::FirePatch, at, 10.0, 3.0, 8.0);
                         }
                     }

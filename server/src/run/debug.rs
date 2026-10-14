@@ -2,6 +2,7 @@
 //! path to the boss (and to the ogre mini-boss while it lives). Can be disabled on a server with `ALLOW_DEBUG=0`.
 
 use super::ai::astar;
+use super::levels::Level;
 use super::Run;
 use crate::collision::walk_line;
 use crate::defs::enemies::EnemyType;
@@ -30,18 +31,13 @@ impl Run {
     }
 }
 
-/// Where the path leads: the boss itself while it lives, else the boss hall.
-fn boss_target(run: &Run) -> Vec2 {
-    run.monsters.iter().find(|m| m.id == run.boss_ent && m.alive).map_or_else(|| run.dungeon.boss_hall().center_px(), |m| m.pos)
-}
-
 /// The living ogre mini-boss, if any.
 fn ogre_target(run: &Run) -> Option<Vec2> {
     run.monsters.iter().find(|m| m.alive && m.etype == Some(EnemyType::Ogre)).map(|m| m.pos)
 }
 
 pub fn boss_path(run: &Run, pi: usize) -> Vec<(f32, f32)> {
-    shortest_path(run, pi, boss_target(run))
+    Level::debug_target(run).map_or_else(Vec::new, |to| shortest_path(run, pi, to))
 }
 
 /// Empty once the ogre is dead.
@@ -53,7 +49,7 @@ pub fn ogre_path(run: &Run, pi: usize) -> Vec<(f32, f32)> {
 /// segments wherever there is a clear line.
 fn shortest_path(run: &Run, pi: usize, to: Vec2) -> Vec<(f32, f32)> {
     let from = run.players[pi].pos();
-    let map = &run.dungeon.map;
+    let map = &run.layout.map;
     // Plan the path like a cautious enemy: around deep water, chasms and lava.
     let Some(tiles) = astar(map, from, to, (map.w * map.h) as usize, Mover::Enemy) else { return Vec::new() };
     let mut pts = vec![from];
@@ -99,11 +95,11 @@ mod tests {
         let path = boss_path(&run, 0);
         assert!(path.len() >= 2, "path found");
         let end = path.last().unwrap();
-        let boss = boss_target(&run);
+        let boss = Level::debug_target(&run).unwrap();
         assert!((end.0 as f64 - boss.x).abs() < 1.0 && (end.1 as f64 - boss.y).abs() < 1.0, "ends at the boss");
         // Every segment is walkable in a straight line.
         for w in path.windows(2) {
-            assert!(walk_line(&run.dungeon.map, Vec2::new(w[0].0 as f64, w[0].1 as f64), Vec2::new(w[1].0 as f64, w[1].1 as f64), Mover::Enemy));
+            assert!(walk_line(&run.layout.map, Vec2::new(w[0].0 as f64, w[0].1 as f64), Vec2::new(w[1].0 as f64, w[1].1 as f64), Mover::Enemy));
         }
 
         let ogre = ogre_path(&run, 0);

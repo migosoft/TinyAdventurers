@@ -68,7 +68,7 @@ impl Lich {
             // Alternate melee and archers around the ring.
             let slot = if k % 2 == 0 { k / 2 } else { n - 1 - k / 2 };
             let spot = pos + Vec2::from_angle(a0 + slot as f64 * std::f64::consts::TAU / n as f64) * 22.0;
-            let spot = if run.dungeon.map.blocks_at(spot, Mover::Enemy) { pos } else { spot };
+            let spot = if run.layout.map.blocks_at(spot, Mover::Enemy) { pos } else { spot };
             run.spawn_enemy(t, spot, Some(id), party);
             run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, k: 2 }, Some(spot));
         }
@@ -77,12 +77,12 @@ impl Lich {
 
 impl BossBehaviour for Lich {
     fn spawn_extras(&mut self, run: &mut Run, boss_pos: Vec2, party: usize) {
-        let owner = run.boss_ent;
+        let owner = run.level.boss().unwrap().boss_ent;
         for k in 0..LICH_DISCIPLES {
             let a = k as f64 * std::f64::consts::TAU / LICH_DISCIPLES as f64;
             let mut r = 88.0;
             let mut pos = boss_pos + Vec2::from_angle(a) * r;
-            while run.dungeon.map.blocks_at(pos, Mover::Enemy) && r > 20.0 {
+            while run.layout.map.blocks_at(pos, Mover::Enemy) && r > 20.0 {
                 r -= 8.0;
                 pos = boss_pos + Vec2::from_angle(a) * r;
             }
@@ -194,7 +194,7 @@ mod tests {
 
         // Damaged lich heals from its disciples.
         run.monsters[bi].hp = hp - 200.0;
-        run.boss_awake = true;
+        run.level.boss_mut().unwrap().awake = true;
         for _ in 0..60 {
             run.step();
         }

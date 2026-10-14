@@ -1,13 +1,14 @@
 //! Per-player snapshots. Each player only receives monsters, projectiles,
 //! hazards and positional events inside their own field of vision.
 
+use super::levels::Level;
 use super::Run;
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::dungeon::Map;
 use crate::fov::{Fov, PLAYER_FOV_RADIUS};
 use crate::math::Vec2;
-use crate::protocol::{BossBar, EntSnap, Ev, SelfState, Snapshot};
+use crate::protocol::{EntSnap, Ev, SelfState, Snapshot};
 use crate::wire::encode_snap;
 
 fn visible(fov: &Fov, p: Vec2, radius: f64) -> bool {
@@ -51,14 +52,10 @@ fn hp_byte(hp: f64, max: f64) -> u8 {
 
 pub fn send_snapshots(run: &mut Run) {
     let events = std::mem::take(&mut run.events);
-    let boss_immune = run.boss.as_ref().map_or(false, |b| !b.can_be_damaged(run));
-    let boss_enraged = run.boss.as_ref().map_or(false, |b| b.enraged());
-    let boss_bar = if run.boss_awake {
-        let (hp, max) = run.monsters.iter().find(|m| m.id == run.boss_ent).map_or((0.0, 1.0), |m| (m.hp, m.max_hp));
-        Some(BossBar { kind: run.boss_id, hp: hp as f32, max_hp: max as f32, immune: boss_immune, enraged: boss_enraged })
-    } else {
-        None
-    };
+    let behaviour = run.level.boss().and_then(|b| b.behaviour.as_ref());
+    let boss_immune = behaviour.map_or(false, |b| !b.can_be_damaged(run));
+    let boss_enraged = behaviour.map_or(false, |b| b.enraged());
+    let boss_bar = Level::boss_bar(run);
 
     let drain = drain_points(run);
 
@@ -93,7 +90,7 @@ pub fn send_snapshots(run: &mut Run) {
         };
         let mut fov = std::mem::replace(&mut run.players[pi].fov, Fov::new(0, 0));
         let (tx, ty) = Map::tile_of(view_pos);
-        fov.compute(&run.dungeon.map, tx, ty, PLAYER_FOV_RADIUS);
+        fov.compute(&run.layout.map, tx, ty, PLAYER_FOV_RADIUS);
 
         let mut ents = player_snaps.clone();
         for m in &run.monsters {
@@ -142,7 +139,7 @@ pub fn send_snapshots(run: &mut Run) {
             ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, 0.0, 0, 0, extra));
         }
         let ev: Vec<Ev> = events.iter().filter(|(_, at)| at.map_or(true, |p| visible(&fov, p, 0.0))).map(|(e, _)| e.clone()).collect();
-        let drain = drain_for(&fov, run.boss_awake, &drain);
+        let drain = drain_for(&fov, run.level.boss().map_or(false, |b| b.awake), &drain);
 
         let me = &run.players[pi];
         let snap = Snapshot {
@@ -192,7 +189,7 @@ mod tests {
         let near = run.spawn_enemy(EnemyType::GoblinArcher, ppos + Vec2::new(20.0, 0.0), None, 1);
         let far = run.spawn_enemy(EnemyType::GoblinArcher, ppos + Vec2::new(16.0 * 30.0, 0.0), None, 1);
         let (tx, ty) = Map::tile_of(ppos);
-        run.players[0].fov.compute(&run.dungeon.map, tx, ty, PLAYER_FOV_RADIUS);
+        run.players[0].fov.compute(&run.layout.map, tx, ty, PLAYER_FOV_RADIUS);
         let fov = &run.players[0].fov;
         let near_m = run.monsters.iter().find(|m| m.id == near).unwrap();
         let far_m = run.monsters.iter().find(|m| m.id == far).unwrap();
@@ -209,16 +206,16 @@ mod tests {
         // The heroes start far from the boss hall: nothing of the drain is in view.
         let ppos = run.players[0].pos();
         let (tx, ty) = Map::tile_of(ppos);
-        run.players[0].fov.compute(&run.dungeon.map, tx, ty, PLAYER_FOV_RADIUS);
+        run.players[0].fov.compute(&run.layout.map, tx, ty, PLAYER_FOV_RADIUS);
         let fov = &run.players[0].fov;
         assert!(pts.iter().all(|&p| !visible(fov, p, 0.0)));
         assert_eq!(drain_for(fov, false, &pts), None, "not before the fight");
         let sent = drain_for(fov, true, &pts).expect("sent during the fight although out of view");
         assert_eq!(sent.len(), pts.len());
         // Before the fight it is sent as soon as one end is in view.
-        let mut fov2 = Fov::new(run.dungeon.map.w, run.dungeon.map.h);
+        let mut fov2 = Fov::new(run.layout.map.w, run.layout.map.h);
         let (tx, ty) = Map::tile_of(pts[1]);
-        fov2.compute(&run.dungeon.map, tx, ty, 1);
+        fov2.compute(&run.layout.map, tx, ty, 1);
         assert!(drain_for(&fov2, false, &pts).is_some());
     }
 }

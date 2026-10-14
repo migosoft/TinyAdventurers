@@ -5,7 +5,7 @@
 
 use crate::db::{self, Character, Db};
 use crate::progress::Progress;
-use crate::protocol::{encode, BossId, ClassId, ClientMsg, RoomPlayer, RunSummary, ServerMsg};
+use crate::protocol::{encode, BossId, ClassId, ClientMsg, LevelChoice, RoomPlayer, RunSummary, ServerMsg};
 use crate::run::{run_task, Award, Member, Run, RunCmd, RunRecord};
 use crate::telemetry;
 use axum::extract::ws::Message;
@@ -339,8 +339,8 @@ impl Lobby {
             .collect();
         let seed: u64 = rand::random();
         let boss = room.boss;
-        let run = Run::new(rid, members, seed, boss);
-        tracing::info!("run {rid} started: {} player(s), boss {:?}{}", run.players.len(), run.boss_id, if boss.is_some() { " (chosen)" } else { "" });
+        let run = Run::new(rid, members, seed, LevelChoice::Dungeon { boss });
+        tracing::info!("run {rid} started: {} player(s), {:?} boss {:?}{}", run.players.len(), run.level.id(), run.level.boss_id(), if boss.is_some() { " (chosen)" } else { "" });
         let (tx, rx) = unbounded_channel();
         self.rooms.get_mut(&rid).unwrap().run_tx = Some(tx);
         let lobby = self.me.clone().expect("lobby handle");

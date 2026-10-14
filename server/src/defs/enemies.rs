@@ -190,7 +190,7 @@ pub fn for_boss(t: EnemyType, boss: BossId) -> EnemyType {
     }
 }
 
-/// Demon types walk through lava unharmed (the demon boss too, see `Run::spawn_boss`).
+/// Demon types walk through lava unharmed (the demon boss too, see `levels::boss::spawn`).
 pub fn is_demon(t: EnemyType) -> bool {
     matches!(t, EnemyType::Imp | EnemyType::Chort | EnemyType::Summoner | EnemyType::SummonedImp)
 }

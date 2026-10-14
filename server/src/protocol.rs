@@ -33,6 +33,22 @@ impl BossId {
     pub const ALL: [BossId; 3] = [BossId::Demon, BossId::Lich, BossId::Dragon];
 }
 
+/// Which kind of level a run plays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum LevelId {
+    Dungeon,
+}
+
+/// A level and its options, as the lobby starts it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "level")]
+#[ts(export)]
+pub enum LevelChoice {
+    /// `boss: None` = random end boss.
+    Dungeon { boss: Option<BossId> },
+}
+
 /// One fixed simulation step (1/60 s) of player input.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
 #[ts(export)]

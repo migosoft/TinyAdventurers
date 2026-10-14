@@ -22,7 +22,7 @@ pub fn find_visible_player(run: &Run, from: Vec2, sight: f64) -> Option<usize> {
         .enumerate()
         .filter(|(_, p)| p.alive && p.hidden <= 0.0)
         .map(|(i, p)| (i, p.pos().dist(from)))
-        .filter(|&(i, d)| d <= sight && line_of_sight(&run.dungeon.map, from, run.players[i].pos()))
+        .filter(|&(i, d)| d <= sight && line_of_sight(&run.layout.map, from, run.players[i].pos()))
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(i, _)| i)
 }
@@ -45,7 +45,7 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     }
     let step = (speed * dt).min(dist);
     let v = d.norm() * step;
-    let (x, y) = move_box(&run.dungeon.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, m.mover);
+    let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, m.mover);
     let m = &mut run.monsters[mi];
     m.pos = Vec2::new(x, y);
     false
@@ -68,13 +68,13 @@ pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) ->
     let (mover, radius, is_boss) = (run.monsters[mi].mover, run.monsters[mi].radius, run.monsters[mi].is_boss);
     let wide = radius > TILE / 2.0;
     let side = (goal - pos).norm().perp() * radius;
-    let map = &run.dungeon.map;
+    let map = &run.layout.map;
     if walk_line(map, pos, goal, mover) && (!wide || terrain_line(map, pos + side, goal + side, mover) && terrain_line(map, pos - side, goal - side, mover)) {
         run.monsters[mi].ai.path.clear();
         return move_toward(run, mi, goal, speed, dt);
     }
     if need_repath {
-        let path = astar_clear(&run.dungeon.map, pos, goal, 2500, mover, wide).unwrap_or_default();
+        let path = astar_clear(&run.layout.map, pos, goal, 2500, mover, wide).unwrap_or_default();
         let m = &mut run.monsters[mi];
         m.ai.path = path;
         m.ai.repath_t = 0.6;
@@ -361,7 +361,7 @@ fn raise_minions(run: &mut Run, mi: usize, fire: bool) {
     for k in 0..2 {
         let a = run.rng.gen_range(0.0..std::f64::consts::TAU);
         let mut spot = pos + Vec2::from_angle(a) * 14.0;
-        if run.dungeon.map.blocks_at(spot, run.monsters[mi].mover) {
+        if run.layout.map.blocks_at(spot, run.monsters[mi].mover) {
             spot = pos;
         }
         let minions = run.monsters.iter().filter(|o| o.alive && o.owner == Some(id)).count();
@@ -392,7 +392,7 @@ pub fn separate_monsters(run: &mut Run) {
                 let d = d2.sqrt();
                 let push = (a - b) * ((min - d) / d * 0.5);
                 let (r, mover) = (run.monsters[i].radius, run.monsters[i].mover);
-                let (x, y) = move_box(&run.dungeon.map, a.x, a.y, push.x.clamp(-2.0, 2.0), push.y.clamp(-2.0, 2.0), r, mover);
+                let (x, y) = move_box(&run.layout.map, a.x, a.y, push.x.clamp(-2.0, 2.0), push.y.clamp(-2.0, 2.0), r, mover);
                 run.monsters[i].pos = Vec2::new(x, y);
             }
         }
@@ -470,11 +470,11 @@ mod tests {
             for boss in [BossId::Demon, BossId::Dragon] {
                 let mut run = test_run_seed(&[ClassId::Paladin], boss, seed);
                 let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
-                let r = *run.dungeon.boss_hall();
+                let r = run.level.boss().unwrap().arena;
                 let home = r.center_px();
                 let speed = run.monsters[bi].speed;
                 for (x, y) in (r.y..r.y + r.h).flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y))).filter(|(x, y)| (x + y) % 3 == 0) {
-                    if !run.dungeon.map.safe(x, y) {
+                    if !run.layout.map.safe(x, y) {
                         continue;
                     }
                     let goal = Map::center_of(x, y);
@@ -530,7 +530,7 @@ mod tests {
         // Wall in between: not seen.
         let (tx, ty) = Map::tile_of(ppos);
         for dy in -3..=3 {
-            run.dungeon.map.set(tx + 1, ty + dy, Tile::Wall);
+            run.layout.map.set(tx + 1, ty + dy, Tile::Wall);
         }
         assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), 120.0).is_none());
         // Out of sight radius: not seen.
@@ -546,7 +546,7 @@ mod tests {
         run.spawn_enemy(EnemyType::GoblinArcher, mi_pos, None, 1);
         let (tx, ty) = Map::tile_of(ppos);
         for dy in -4..=4 {
-            run.dungeon.map.set(tx + 1, ty + dy, Tile::Wall);
+            run.layout.map.set(tx + 1, ty + dy, Tile::Wall);
         }
         let hp = run.players[0].hp;
         for _ in 0..300 {
@@ -579,7 +579,7 @@ mod tests {
         let lich = test_run(&[ClassId::Wizard], BossId::Lich);
         let demon = test_run(&[ClassId::Wizard], BossId::Demon);
         // Same seed, same map and spawn spots: only the enemy types differ.
-        assert_eq!(lich.dungeon.spawns.len(), demon.dungeon.spawns.len());
+        assert_eq!(lich.layout.spawns.len(), demon.layout.spawns.len());
         assert!(count(&lich, EnemyType::SkeletonArcher) + count(&lich, EnemyType::SkeletonWarrior) > 0, "seed has skeletons");
         assert_eq!(count(&demon, EnemyType::Imp), count(&lich, EnemyType::SkeletonArcher));
         assert_eq!(count(&demon, EnemyType::Chort), count(&lich, EnemyType::SkeletonWarrior));
@@ -597,7 +597,7 @@ mod tests {
         let (tx, ty) = Map::tile_of(run.players[0].pos());
         for y in ty - 3..=ty + 3 {
             for x in tx - 8..=tx + 8 {
-                run.dungeon.map.set(x, y, Tile::Floor);
+                run.layout.map.set(x, y, Tile::Floor);
             }
         }
     }
