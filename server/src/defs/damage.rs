@@ -110,9 +110,6 @@ impl Damage {
     pub fn physical(amount: f64) -> Self {
         Damage::new(amount, DamageSplit::physical())
     }
-    pub fn scaled(self, k: f64) -> Self {
-        Damage { amount: self.amount * k, ..self }
-    }
 }
 
 /// Σ part × (1 − resistance) over the types. Negative = the hit heals.

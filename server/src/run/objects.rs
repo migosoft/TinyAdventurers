@@ -42,6 +42,13 @@ pub struct Barrel {
     pub sinking: Option<(f64, Sink, f64)>,
 }
 
+impl WorldObject {
+    /// Blocks movement, shots and paths: solid, still there and not a sinking barrel.
+    pub fn blocks(&self) -> bool {
+        self.solid && !self.gone && !matches!(&self.state, ObjState::Barrel(b) if b.sinking.is_some())
+    }
+}
+
 impl Barrel {
     pub fn new() -> Self {
         Barrel { fuse: None, lit_at: 0.0, igniter: None, vel: Vec2::ZERO, sinking: None }
@@ -61,7 +68,7 @@ impl Run {
     pub fn solids(&self, except: Option<u32>) -> Vec<crate::collision::Solid> {
         self.objects
             .iter()
-            .filter(|o| o.solid && !o.gone && Some(o.id) != except && !matches!(&o.state, ObjState::Barrel(b) if b.sinking.is_some()))
+            .filter(|o| o.blocks() && Some(o.id) != except)
             .map(|o| crate::collision::Solid { x: o.pos.x, y: o.pos.y, half: o.radius })
             .collect()
     }
@@ -85,6 +92,32 @@ pub fn hurt_object(run: &mut Run, oi: usize, dmg: Damage, by: Option<u32>) {
                 }
             }
         }
+    }
+}
+
+/// Objects whose footprint an area attack at `at` with reach `r` touches,
+/// optionally within a cone `(direction, half angle)`; like `bosses::players_in`.
+pub fn objects_in(run: &Run, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<usize> {
+    run.objects
+        .iter()
+        .enumerate()
+        .filter(|(_, o)| {
+            if o.gone || o.pos.dist(at) > r + o.radius {
+                return false;
+            }
+            match cone {
+                Some((dir, half)) => crate::math::angle_diff(at.angle_to(o.pos), dir).abs() <= half,
+                None => true,
+            }
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// An enemy's or boss's area attack hits the objects in it (no igniter).
+pub fn hurt_objects_in(run: &mut Run, at: Vec2, r: f64, cone: Option<(f64, f64)>, dmg: Damage) {
+    for oi in objects_in(run, at, r, cone) {
+        hurt_object(run, oi, dmg, None);
     }
 }
 
@@ -167,20 +200,31 @@ fn slide_barrel(run: &mut Run, oi: usize, dt: f64) {
     let solids = run.solids(Some(id));
     let (x, y) = crate::collision::move_box(&run.layout.map, pos.x, pos.y, v.x * dt, v.y * dt, r, crate::dungeon::Mover::Dash, &solids);
     let to = Vec2::new(x, y);
-    // A hero or monster in the way stops it (they are not shoved).
-    let blocked = run.players.iter().any(|p| p.alive && p.pos().dist(to) < PLAYER_RADIUS + r && p.pos().dist(to) < p.pos().dist(pos))
-        || run.monsters.iter().any(|m| m.alive && m.pos.dist(to) < m.radius + r && m.pos.dist(to) < m.pos.dist(pos));
+    // A hero or monster in the way stops it (they are not shoved). Square
+    // test, like the barrel's footprint, so it never ends inside a body's box.
+    let overlaps = |c: Vec2, reach: f64| (c.x - to.x).abs() < reach && (c.y - to.y).abs() < reach;
+    let blocked = run.players.iter().any(|p| p.alive && overlaps(p.pos(), PLAYER_RADIUS + r) && p.pos().dist(to) < p.pos().dist(pos))
+        || run.monsters.iter().any(|m| m.alive && overlaps(m.pos, m.radius + r) && m.pos.dist(to) < m.pos.dist(pos));
     let ObjState::Barrel(b) = &mut run.objects[oi].state else { return };
     if blocked {
         b.vel = Vec2::ZERO;
         return;
     }
+    // On the wire grid (1/POS_SCALE px): snapshots carry exactly this
+    // position, so the client's predicted solids match the server's.
+    let to = on_wire_grid(to);
     run.objects[oi].pos = to;
     let ObjState::Barrel(b) = &mut run.objects[oi].state else { return };
     b.vel = if to == pos { Vec2::ZERO } else { v * KNOCK_DECAY };
     if b.vel.len() < KNOCK_MIN_SPEED {
         b.vel = Vec2::ZERO;
     }
+}
+
+/// Rounds a position to the snapshot grid (multiples of 1/POS_SCALE px).
+fn on_wire_grid(p: Vec2) -> Vec2 {
+    let k = crate::wire::POS_SCALE;
+    Vec2::new((p.x * k).round() / k, (p.y * k).round() / k)
 }
 
 /// A barrel over a chasm falls, in deep water it sinks (no explosion), in lava it goes off.
@@ -274,7 +318,7 @@ impl Run {
     /// Tiles under resting solid objects: pathfinding goes around them.
     pub fn object_tiles(&self) -> std::collections::HashSet<(i32, i32)> {
         let mut out = std::collections::HashSet::new();
-        for o in self.objects.iter().filter(|o| o.solid && !o.gone) {
+        for o in self.objects.iter().filter(|o| o.blocks()) {
             let (x0, y0) = crate::dungeon::Map::tile_of(o.pos - Vec2::new(o.radius, o.radius));
             let (x1, y1) = crate::dungeon::Map::tile_of(o.pos + Vec2::new(o.radius - 0.001, o.radius - 0.001));
             for y in y0..=y1 {
@@ -378,6 +422,156 @@ mod tests {
         }
         let o = run.objects.iter().find(|o| o.id == id).unwrap();
         assert!(o.pos.x + BARREL_RADIUS <= (tx + 3) as f64 * crate::dungeon::TILE + 1e-6, "stopped at the wall");
+
+        // Another barrel in the way stops it too (and is not moved).
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        run.objects.retain(|o| o.kind != EntityKind::Barrel); // the dungeon's own
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        for x in tx - 1..=tx + 6 {
+            run.layout.map.set(x, ty, crate::dungeon::Tile::Floor);
+        }
+        let (id, oi) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + 2.0, 0.0));
+        let (other, _) = barrel_at(&mut run, Vec2::new(3.0 * crate::dungeon::TILE, 0.0));
+        let start = run.objects[oi].pos;
+        let b0 = run.objects.iter().find(|o| o.id == other).unwrap().pos;
+        let from = run.players[0].pos();
+        push_barrel(&mut run, oi, from);
+        step_for(&mut run, 1.0);
+        let a = run.objects.iter().find(|o| o.id == id).unwrap().pos;
+        let b = run.objects.iter().find(|o| o.id == other).unwrap().pos;
+        assert_eq!(b, b0, "the barrel it ran into stays put");
+        assert!(a.x > start.x + 1.0, "it slid");
+        assert!(a.x + BARREL_RADIUS <= b.x - BARREL_RADIUS + 1e-6, "stopped at the other barrel ({} vs {})", a.x, b.x);
+    }
+
+    #[test]
+    fn a_pushed_barrel_rests_on_the_wire_grid() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        run.objects.retain(|o| o.kind != EntityKind::Barrel);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        for x in tx - 1..=tx + 8 {
+            run.layout.map.set(x, ty, crate::dungeon::Tile::Floor);
+        }
+        // Off the grid to begin with (and pushed at a slight angle).
+        let (id, oi) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + 2.013, 0.37));
+        let from = run.players[0].pos() - Vec2::new(0.0, 0.4);
+        push_barrel(&mut run, oi, from);
+        let start = run.objects[oi].pos;
+        let mut seen_moving = false;
+        for _ in 0..60 {
+            run.step();
+            let p = run.objects.iter().find(|o| o.id == id).unwrap().pos;
+            if p != start {
+                seen_moving = true;
+                for v in [p.x, p.y] {
+                    let k = v * crate::wire::POS_SCALE;
+                    assert_eq!(k, k.round(), "{v} is on the 1/16 px grid");
+                    assert_eq!(crate::wire::q_pos(v) as f64 / crate::wire::POS_SCALE, v, "the wire carries {v} exactly");
+                }
+            }
+        }
+        assert!(seen_moving);
+    }
+
+    /// Open floor around the hero, no monsters but the boss, no dungeon barrels.
+    fn clear_run(boss: BossId) -> Run {
+        let mut run = test_run(&[ClassId::Paladin], boss);
+        run.monsters.retain(|m| m.is_boss);
+        run.objects.retain(|o| o.kind != EntityKind::Barrel);
+        run.players[0].debug = true;
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        for y in ty - 3..=ty + 3 {
+            for x in tx - 6..=tx + 6 {
+                run.layout.map.set(x, y, crate::dungeon::Tile::Floor);
+            }
+        }
+        run
+    }
+
+    fn monster_at(run: &mut Run, off: Vec2) -> usize {
+        let at = run.players[0].pos() + off;
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at, None, 1);
+        run.monster_idx(id).unwrap()
+    }
+
+    #[test]
+    fn the_blast_hurts_and_pushes_a_nearby_monster() {
+        let mut run = clear_run(BossId::Lich);
+        let (_, oi) = barrel_at(&mut run, Vec2::new(16.0, 0.0));
+        let mi = monster_at(&mut run, Vec2::new(40.0, 0.0));
+        let hp = run.monsters[mi].hp;
+        explode_barrel(&mut run, oi);
+        assert!(run.monsters[mi].hp < hp, "hurt");
+        assert!(run.monsters[mi].knock.x > 0.0, "pushed away (east)");
+    }
+
+    #[test]
+    fn the_blast_hurts_a_boss_but_does_not_push_it() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.objects.retain(|o| o.kind != EntityKind::Barrel);
+        let bi = crate::run::bosses::boss_idx(&run).unwrap();
+        let at = run.monsters[bi].pos;
+        let hp = run.monsters[bi].hp;
+        run.spawn_object(EntityKind::Barrel, at + Vec2::new(20.0, 0.0), ObjState::Barrel(Barrel::new()));
+        let oi = run.objects.len() - 1;
+        explode_barrel(&mut run, oi);
+        assert!(run.monsters[bi].hp < hp, "hurt");
+        assert_eq!(run.monsters[bi].knock, Vec2::ZERO, "bosses are never pushed");
+    }
+
+    #[test]
+    fn the_blast_does_not_go_through_walls() {
+        let mut run = clear_run(BossId::Lich);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        for y in ty - 1..=ty + 1 {
+            run.layout.map.set(tx + 2, y, crate::dungeon::Tile::Wall);
+        }
+        let t = crate::dungeon::TILE;
+        let (_, oi) = barrel_at(&mut run, Vec2::new(t, 0.0));
+        let behind = monster_at(&mut run, Vec2::new(3.0 * t, 0.0));
+        let open = monster_at(&mut run, Vec2::new(-t, 0.0));
+        let (hb, ho) = (run.monsters[behind].hp, run.monsters[open].hp);
+        explode_barrel(&mut run, oi);
+        assert_eq!(run.monsters[behind].hp, hb, "the wall shields it");
+        assert!(run.monsters[open].hp < ho, "the same distance in the open hurts");
+    }
+
+    #[test]
+    fn kills_and_damage_of_the_blast_go_to_the_igniter() {
+        let mut run = clear_run(BossId::Lich);
+        let (_, oi) = barrel_at(&mut run, Vec2::new(16.0, 0.0));
+        let mi = monster_at(&mut run, Vec2::new(40.0, 0.0));
+        run.monsters[mi].hp = 1.0;
+        let pid = run.players[0].id;
+        let (kills, dmg) = (run.players[0].kills, run.players[0].damage);
+        hurt_object(&mut run, oi, Damage::physical(1.0), Some(pid));
+        explode_barrel(&mut run, oi);
+        assert!(!run.monsters[mi].alive, "killed");
+        assert_eq!(run.players[0].kills, kills + 1, "the kill is the igniter's");
+        assert!(run.players[0].damage > dmg, "and so is the damage");
+    }
+
+    #[test]
+    fn fire_patches_light_barrels() {
+        let mut run = clear_run(BossId::Lich);
+        let (_, oi) = barrel_at(&mut run, Vec2::new(40.0, 0.0));
+        let at = run.objects[oi].pos + Vec2::new(12.0, 0.0);
+        run.spawn_hazard(EntityKind::FirePatch, at, 10.0, 3.0, 8.0);
+        run.tick_hazards(0.3);
+        assert!(lit(&run, oi));
+    }
+
+    #[test]
+    fn objects_in_finds_footprints_in_reach_and_in_the_cone() {
+        let mut run = clear_run(BossId::Lich);
+        let (_, east) = barrel_at(&mut run, Vec2::new(30.0, 0.0));
+        let (_, west) = barrel_at(&mut run, Vec2::new(-30.0, 0.0));
+        let at = run.players[0].pos();
+        assert_eq!(objects_in(&run, at, 30.0 - BARREL_RADIUS, None), vec![east, west], "touching the footprint counts");
+        assert!(objects_in(&run, at, 20.0, None).is_empty());
+        assert_eq!(objects_in(&run, at, 40.0, Some((0.0, 0.5))), vec![east], "only the one in the cone");
     }
 
     /// A barrel pushed east into fresh terrain `t` two tiles from the hero.

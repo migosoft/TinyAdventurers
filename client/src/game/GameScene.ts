@@ -152,8 +152,11 @@ export class GameScene extends Phaser.Scene {
     // scene, so these letters could no longer be typed into the lobby's inputs.
     this.keys = kb.addKeys('W,A,S,D,Q,E', false) as GameScene['keys'];
     kb.on('keydown-Q', () => this.net.send({ t: 'Spectate', dir: -1 }));
-    kb.on('keydown-E', () => {
-      if (this.alive) this.actPressed = true;
+    kb.on('keydown-E', (e: KeyboardEvent) => {
+      // One push per press: holding E must not push again on OS key repeat.
+      if (this.alive) {
+        if (!e.repeat) this.actPressed = true;
+      }
       else this.net.send({ t: 'Spectate', dir: 1 });
     });
     kb.on('keydown-F3', (e: KeyboardEvent) => {

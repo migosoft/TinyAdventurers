@@ -8,6 +8,7 @@
 //! An attack's animation starts with its wind-up (the client shows the
 //! wind-up pose, then the strike); the hit lands at the end of the wind-up.
 
+use crate::run::objects::{hurt_object, hurt_objects_in, objects_in};
 use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
 use crate::defs::bosses::*;
 use crate::defs::damage::{Damage, DamageSplit, DamageType};
@@ -90,6 +91,7 @@ impl Dragon {
     fn land_smash(run: &mut Run, bi: usize, pos: Vec2, aim: f64) {
         let r = DRAGON_SMASH_RADIUS;
         run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: 5 }, Some(pos));
+        hurt_objects_in(run, pos, r, None, Damage::new(DRAGON_SMASH_DAMAGE, run.monsters[bi].melee));
         for pi in players_in(run, pos, r, None) {
             run.hurt_player(pi, Damage::new(DRAGON_SMASH_DAMAGE, run.monsters[bi].melee));
             run.knock_player(pi, pos, aim, DRAGON_SMASH_KNOCK);
@@ -165,9 +167,15 @@ impl BossBehaviour for Dragon {
                 self.pulse -= dt;
                 if self.pulse <= 0.0 {
                     self.pulse = 0.2;
+                    let breath = Damage::new(6.0, DamageSplit::pure(DamageType::Heat));
                     for pi in players_in(run, pos, BREATH_RANGE, Some((aim, BREATH_HALF_ANGLE))) {
                         if crate::collision::line_of_sight(&run.layout.map, pos, run.players[pi].pos()) {
-                            run.hurt_player(pi, Damage::new(6.0, DamageSplit::pure(DamageType::Heat)));
+                            run.hurt_player(pi, breath);
+                        }
+                    }
+                    for oi in objects_in(run, pos, BREATH_RANGE, Some((aim, BREATH_HALF_ANGLE))) {
+                        if crate::collision::line_of_sight(&run.layout.map, pos, run.objects[oi].pos) {
+                            hurt_object(run, oi, breath, None);
                         }
                     }
                     if run.rng.gen_bool(0.5) {
@@ -194,6 +202,7 @@ impl BossBehaviour for Dragon {
                 Action::Breath | Action::Recover => set_anim(run, bi, Anim::Idle),
                 Action::Tail => {
                     let behind = aim + std::f64::consts::PI;
+                    hurt_objects_in(run, pos, 46.0, Some((behind, 1.2)), Damage::new(25.0, run.monsters[bi].melee));
                     for pi in players_in(run, pos, 46.0, Some((behind, 1.2))) {
                         run.hurt_player(pi, Damage::new(25.0, run.monsters[bi].melee));
                         run.knock_player(pi, pos, behind, DRAGON_TAIL_KNOCK);
@@ -201,6 +210,7 @@ impl BossBehaviour for Dragon {
                     self.action = Some((Action::Recover, RECOVER_TAIL));
                 }
                 Action::Claw => {
+                    hurt_objects_in(run, pos, CLAW_RANGE, Some((aim, CLAW_HALF_ANGLE)), Damage::new(20.0, run.monsters[bi].melee));
                     for pi in players_in(run, pos, CLAW_RANGE, Some((aim, CLAW_HALF_ANGLE))) {
                         run.hurt_player(pi, Damage::new(20.0, run.monsters[bi].melee));
                         run.knock_player(pi, pos, aim, DRAGON_CLAW_KNOCK);
@@ -208,6 +218,7 @@ impl BossBehaviour for Dragon {
                     self.action = Some((Action::Recover, RECOVER_CLAW));
                 }
                 Action::Bite => {
+                    hurt_objects_in(run, pos, DRAGON_BITE_RANGE, Some((aim, DRAGON_BITE_HALF_ANGLE)), Damage::new(DRAGON_BITE_DAMAGE, run.monsters[bi].melee));
                     for pi in players_in(run, pos, DRAGON_BITE_RANGE, Some((aim, DRAGON_BITE_HALF_ANGLE))) {
                         run.hurt_player(pi, Damage::new(DRAGON_BITE_DAMAGE, run.monsters[bi].melee));
                         run.knock_player(pi, pos, aim, DRAGON_BITE_KNOCK);
@@ -374,6 +385,54 @@ mod tests {
         };
         assert!((breathe(Resistances::NONE) - 6.0).abs() < 1e-9, "a pulse hurts");
         assert_eq!(breathe(Resistances::of(&[(DamageType::Heat, 1.0)])), 0.0, "heat resistance stops it");
+    }
+
+    fn barrel_lit(run: &Run, oi: usize) -> bool {
+        matches!(&run.objects[oi].state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_some())
+    }
+
+    /// A barrel at `off` from the dragon (the dungeon's own removed); its index.
+    fn barrel_near(run: &mut Run, bi: usize, off: Vec2) -> usize {
+        use crate::run::objects::{Barrel, ObjState};
+        run.objects.retain(|o| o.kind != EntityKind::Barrel);
+        let at = run.monsters[bi].pos + off;
+        run.spawn_object(EntityKind::Barrel, at, ObjState::Barrel(Barrel::new()));
+        run.objects.len() - 1
+    }
+
+    #[test]
+    fn the_breath_lights_a_barrel_in_its_cone() {
+        let (mut run, mut d, bi) = dragon_with(&[Vec2::new(0.0, 60.0)]);
+        let oi = barrel_near(&mut run, bi, Vec2::new(40.0, 0.0));
+        d.action = Some((Action::Breath, 1.0));
+        d.pulse = 0.0;
+        d.tick(&mut run, DT);
+        assert!(barrel_lit(&run, oi));
+    }
+
+    #[test]
+    fn the_breath_spares_a_barrel_outside_its_cone() {
+        let (mut run, mut d, bi) = dragon_with(&[Vec2::new(0.0, 60.0)]);
+        let oi = barrel_near(&mut run, bi, Vec2::new(0.0, -40.0));
+        d.action = Some((Action::Breath, 1.0));
+        d.pulse = 0.0;
+        d.tick(&mut run, DT);
+        assert!(!barrel_lit(&run, oi));
+    }
+
+    #[test]
+    fn the_smash_and_the_claw_light_barrels() {
+        let (mut run, _, bi) = dragon_with(&[Vec2::new(0.0, 60.0)]);
+        let oi = barrel_near(&mut run, bi, Vec2::new(-20.0, 0.0));
+        let pos = run.monsters[bi].pos;
+        Dragon::land_smash(&mut run, bi, pos, 0.0);
+        assert!(barrel_lit(&run, oi), "the smash");
+
+        let (mut run, mut d, bi) = dragon_with(&[Vec2::new(0.0, 60.0)]);
+        let oi = barrel_near(&mut run, bi, Vec2::new(30.0, 0.0));
+        d.action = Some((Action::Claw, DT / 2.0));
+        d.tick(&mut run, DT);
+        assert!(barrel_lit(&run, oi), "the claw");
     }
 
     #[test]

@@ -714,6 +714,7 @@ impl Run {
                     self.hurt_player(pi, dmg);
                 }
             }
+            objects::hurt_objects_in(self, pos, r, None, dmg);
         }
     }
 
@@ -802,7 +803,9 @@ impl Run {
             let m = &mut self.monsters[mi];
             let healed = (-raw).min(m.max_hp - m.hp);
             m.hp += healed;
-            self.event(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32 }, seen_by);
+            if healed > 0.0 {
+                self.event(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32 }, seen_by);
+            }
             return true;
         }
         let imm = raw == 0.0 && dmg.amount > 0.0;
@@ -1060,7 +1063,10 @@ pub mod tests {
             eat(m.is_boss as u64);
             eat(m.asleep as u64);
         }
-        for o in &run.objects {
+        // Chests only: barrels are spawned last (after every other id) and
+        // left out, so the rest of the setup is compared with the old values.
+        let barrels = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).count() as u32;
+        for o in run.objects.iter().filter(|o| o.kind != EntityKind::Barrel) {
             eat(o.id as u64);
             eat(o.pos.x.to_bits() as u64);
         }
@@ -1070,7 +1076,7 @@ pub mod tests {
             eat(p.mv.y.to_bits() as u64);
             eat(p.hp.to_bits() as u64);
         }
-        eat(run.next_id as u64);
+        eat((run.next_id - barrels) as u64);
         h
     }
 
@@ -1093,8 +1099,9 @@ pub mod tests {
     #[test]
     fn level_setup_is_unchanged() {
         let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
-        // Updated with barrels (2026-10-14).
-        assert_eq!(got, vec![8884078175838146802, 5665780351574593991, 5083927154665991109, 2829562376747273859, 3783119891065861966, 14094621444582867723]);
+        // The original values: barrels are left out of the fingerprint, so
+        // this proves the rest of the setup is unchanged by them.
+        assert_eq!(got, vec![15034865796308420847, 11583993820610399499, 14176587140014399478, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
         assert_ne!(got[0], got[1]);
     }
 
@@ -1113,8 +1120,9 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        // Updated with barrels (2026-10-14).
-        assert_eq!(got, vec![13382284384379377896, 18097079343443391371, 397014047239913983]);
+        // Re-recorded with barrels (2026-10-14): the boss halls now hold barrels,
+        // which block movement, shots and paths and can be lit, so the fight differs.
+        assert_eq!(got, vec![5430847933968611557, 7745330330819138330, 7060935872596498876]);
     }
 
     #[test]

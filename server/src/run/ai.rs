@@ -127,7 +127,7 @@ pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) ->
 fn object_free_line(run: &Run, a: Vec2, b: Vec2, radius: f64) -> bool {
     let d = b - a;
     let l2 = d.dist2(Vec2::new(0.0, 0.0)).max(1e-9);
-    run.objects.iter().filter(|o| o.solid && !o.gone).all(|o| {
+    run.objects.iter().filter(|o| o.blocks()).all(|o| {
         let t = (((o.pos.x - a.x) * d.x + (o.pos.y - a.y) * d.y) / l2).clamp(0.0, 1.0);
         (a + d * t).dist(o.pos) >= radius + o.radius + 6.0
     })
@@ -414,6 +414,7 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt:
             set_anim(run, mi, Anim::Idle);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: radius as f32, k: 5 }, Some(pos));
             let dmg = Damage::new(damage, run.monsters[mi].melee);
+            crate::run::objects::hurt_objects_in(run, pos, radius, None, dmg);
             for qi in 0..run.players.len() {
                 let q = &run.players[qi];
                 if q.alive && q.pos().dist(pos) <= radius {
@@ -517,7 +518,7 @@ fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, 
         let cg = g[&cur];
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let nb = (cur.0 + dx, cur.1 + dy);
-            if map.blocks(nb.0, nb.1, mover) || blocked.contains(&nb) && nb != goal {
+            if map.blocks(nb.0, nb.1, mover) || (blocked.contains(&nb) && nb != goal) {
                 continue;
             }
             // Tiles beside a barrel are a tight squeeze for a body: go around when there is room.
@@ -773,6 +774,21 @@ mod tests {
         assert!(p[2].hp == hp[2] && !p[2].mv.knocked(), "hero outside the radius is spared");
         assert!(run.events.iter().any(|e| matches!(e.0, Ev::Boom { k: 5, .. })), "shockwave event");
         assert!(run.monsters[mi].ai.alt_cd > 1.0, "slam cooldown started");
+    }
+
+    #[test]
+    fn ogre_slam_lights_barrels_in_its_radius() {
+        use crate::run::objects::{Barrel, ObjState};
+        let r = enemies::OGRE_SLAM_RADIUS;
+        let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0)]);
+        run.objects.retain(|o| o.kind != EntityKind::Barrel);
+        let at = run.monsters[mi].pos;
+        run.spawn_object(EntityKind::Barrel, at + Vec2::new(0.0, r), ObjState::Barrel(Barrel::new()));
+        run.spawn_object(EntityKind::Barrel, at + Vec2::new(0.0, -(r + 10.0)), ObjState::Barrel(Barrel::new()));
+        let slam = enemies::def(EnemyType::Ogre).alt.unwrap();
+        perform_attack(&mut run, mi, 0, slam, true, None);
+        let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
+        assert_eq!(lit, vec![true, false], "the one in reach is lit, the one outside is not");
     }
 
     #[test]

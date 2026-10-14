@@ -317,7 +317,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             break;
         }
         let r = run.projectiles[i].radius;
-        if let Some(oi) = run.objects.iter().position(|o| o.solid && !o.gone && o.pos.dist(pos) < o.radius + r) {
+        if let Some(oi) = run.objects.iter().position(|o| o.blocks() && o.pos.dist(pos) < o.radius + r) {
             impact_object(run, i, pos, oi);
             break;
         }

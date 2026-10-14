@@ -48,9 +48,11 @@ impl Lich {
     fn nova(run: &mut Run, pos: Vec2) {
         let r = LICH_NOVA_RADIUS;
         run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: 6 }, Some(pos));
+        let dmg = Damage::new(LICH_NOVA_DAMAGE, DamageSplit::pure(DamageType::Magical));
+        crate::run::objects::hurt_objects_in(run, pos, r, None, dmg);
         for pi in players_in(run, pos, r, None) {
             let away = pos.angle_to(run.players[pi].pos());
-            run.hurt_player(pi, Damage::new(LICH_NOVA_DAMAGE, DamageSplit::pure(DamageType::Magical)));
+            run.hurt_player(pi, dmg);
             run.knock_player(pi, pos, away, LICH_NOVA_KNOCK);
         }
     }
@@ -231,6 +233,19 @@ mod tests {
         for _ in 0..(secs / DT).round() as usize {
             l.tick(run, DT);
         }
+    }
+
+    #[test]
+    fn the_nova_lights_barrels_in_range() {
+        use crate::run::objects::{Barrel, ObjState};
+        let (mut run, bi) = lich_with(&[Vec2::new(0.0, 30.0)]);
+        run.objects.retain(|o| o.kind != EntityKind::Barrel);
+        let pos = run.monsters[bi].pos;
+        run.spawn_object(EntityKind::Barrel, pos + Vec2::new(LICH_NOVA_RADIUS, 0.0), ObjState::Barrel(Barrel::new()));
+        run.spawn_object(EntityKind::Barrel, pos + Vec2::new(-(LICH_NOVA_RADIUS + 10.0), 0.0), ObjState::Barrel(Barrel::new()));
+        Lich::nova(&mut run, pos);
+        let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
+        assert_eq!(lit, vec![true, false]);
     }
 
     #[test]

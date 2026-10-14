@@ -2,6 +2,7 @@
 //! Each attack's animation starts with its wind-up and runs on through a short
 //! recovery, so the client plays wind-up, strike and recovery frames.
 
+use crate::run::objects::hurt_objects_in;
 use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
 use crate::defs::bosses::{DEMON_CLEAVE_KNOCK, DEMON_CLEAVE_RECOVER, DEMON_CLEAVE_WINDUP, DEMON_ENRAGED_PACE, DEMON_RING_RECOVER, DEMON_RING_WINDUP, DEMON_SWOOP_KNOCK, DEMON_SWOOP_RECOVER, DEMON_SWOOP_TIME, DEMON_SWOOP_WINDUP};
 use crate::defs::damage::Damage;
@@ -64,7 +65,9 @@ impl BossBehaviour for Demon {
                     let to = pos + self.swoop_dir * 40.0;
                     move_toward(run, bi, to, 260.0, dt);
                     let pos = run.monsters[bi].pos;
-                    for pi in players_in(run, pos, run.monsters[bi].radius + 8.0, None) {
+                    let reach = run.monsters[bi].radius + 8.0;
+                    hurt_objects_in(run, pos, reach, None, Damage::new(30.0, run.monsters[bi].melee));
+                    for pi in players_in(run, pos, reach, None) {
                         let id = run.players[pi].id;
                         if !self.swoop_hit.contains(&id) {
                             self.swoop_hit.push(id);
@@ -83,6 +86,7 @@ impl BossBehaviour for Demon {
             let aim = run.monsters[bi].aim;
             match action {
                 Action::Cleave => {
+                    hurt_objects_in(run, pos, CLEAVE_RANGE + 6.0, Some((aim, 1.05)), Damage::new(25.0, run.monsters[bi].melee));
                     for pi in players_in(run, pos, CLEAVE_RANGE + 6.0, Some((aim, 1.05))) {
                         run.hurt_player(pi, Damage::new(25.0, run.monsters[bi].melee));
                         run.knock_player(pi, pos, aim, DEMON_CLEAVE_KNOCK);
@@ -161,6 +165,22 @@ mod tests {
     }
 
     const NONE_READY: Demon = Demon { cleave_cd: 99.0, swoop_cd: 99.0, ring_cd: 99.0, action: None, swoop_dir: Vec2::ZERO, swoop_hit: Vec::new(), enraged: false };
+
+    #[test]
+    fn the_cleave_lights_a_barrel_in_front() {
+        use crate::run::objects::{Barrel, ObjState};
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.objects.retain(|o| o.kind != EntityKind::Barrel);
+        let bi = boss_idx(&run).unwrap();
+        run.monsters[bi].aim = 0.0;
+        let pos = run.monsters[bi].pos;
+        run.spawn_object(EntityKind::Barrel, pos + Vec2::new(CLEAVE_RANGE, 0.0), ObjState::Barrel(Barrel::new()));
+        run.spawn_object(EntityKind::Barrel, pos + Vec2::new(-CLEAVE_RANGE, 0.0), ObjState::Barrel(Barrel::new()));
+        let mut d = Demon { action: Some((Action::Cleave, DT / 2.0)), ..Demon::default() };
+        d.tick(&mut run, DT);
+        let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
+        assert_eq!(lit, vec![true, false], "in front, not behind");
+    }
 
     #[test]
     fn the_cleave_animation_runs_from_the_wind_up_through_the_recovery() {
