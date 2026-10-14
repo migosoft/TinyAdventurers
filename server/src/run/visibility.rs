@@ -1,5 +1,6 @@
-//! Per-player snapshots. Each player only receives monsters, projectiles,
-//! hazards and positional events inside their own field of vision.
+//! Per-player snapshots. Each player only receives monsters, enemy projectiles,
+//! hazards and positional events inside their own field of vision (the party's
+//! own shots, their hits and explosions are always sent).
 
 use super::levels::Level;
 use super::Run;
@@ -117,7 +118,8 @@ pub fn send_snapshots(run: &mut Run) {
             ents.push(EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra));
         }
         for pr in &run.projectiles {
-            if pr.dead || !visible(&fov, pr.pos, 0.0) {
+            // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
+            if pr.dead || !(pr.from_player || visible(&fov, pr.pos, 0.0)) {
                 continue;
             }
             let extra = (pr.owner << 16) | pr.shot as u32;

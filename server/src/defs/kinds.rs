@@ -81,6 +81,26 @@ impl EntityKind {
         EntityKind::FirePatch,
         EntityKind::Chest,
     ];
+
+    /// How tall the figure is drawn above its feet (px, from the sprites; 0 for
+    /// everything that is not a monster). Player shots use it for a hitbox that
+    /// covers the whole body (`Monster::shot_dist`).
+    pub fn body_height(self) -> f64 {
+        use EntityKind::*;
+        match self {
+            GoblinArcher => 10.0,
+            Imp => 11.0,
+            SkeletonWarrior | SkeletonArcher | RaisedSkeleton => 13.0,
+            OrcWarrior | OrcArcher | Necromancer | Disciple | Summoner => 16.0,
+            Chort => 18.0,
+            Ogre => 26.0,
+            Lich => 28.0,
+            // 43 px frames drawn at 1.2x.
+            Dragon => 51.0,
+            Demon => 58.0,
+            _ => 0.0,
+        }
+    }
 }
 
 /// Animation state of an entity.

@@ -54,6 +54,7 @@ The two boxes at the bottom of the screen show your abilities. They darken while
 
 - You can only see what is in your **field of vision**: about nine tiles around you, and never through walls.
 - The rest of the dungeon stays dimly visible, like a board in shadow, but **enemies outside your vision are hidden**.
+- Your shots fly on into the dark, and you still see their damage numbers when they hit something there.
 - Enemies have the same limits. They only notice you when they can actually see you, so you can sneak around corners.
 
 ## Enemies

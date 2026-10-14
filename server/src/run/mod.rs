@@ -675,7 +675,8 @@ impl Run {
         m.hp -= dmg;
         m.hurt_t = 0.15;
         let applied = dmg.min(m.hp + dmg);
-        self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: dmg as f32, crit, p: false }, Some(pos));
+        // Hits by heroes go to the whole party, even out of view: the shot was seen leaving.
+        self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: dmg as f32, crit, p: false }, src_player.is_none().then_some(pos));
         if let Some(pi) = src_player {
             self.players[pi].damage += applied;
             // Getting hit makes a monster investigate where the attack came from.

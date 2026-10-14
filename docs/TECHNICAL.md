@@ -197,7 +197,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - `extra` for projectiles is `(owner_id << 16) | shot_id`, for monsters the owner id, for fire patches the remaining life in ms.
 - Chests (`KIND.Chest`) send `anim` 1 once opened, with `anim_ms` since the opening. A sleeping mimic is a normal monster with the `ASLEEP` flag; the client draws it as a closed chest.
 
-**Events (`Ev`)** are collected during the ticks between snapshots. Positional events are FOV-filtered per player:
+**Events (`Ev`)** are collected during the ticks between snapshots. Positional events are FOV-filtered per player (except hits and explosions by heroes, see §7):
 - `Dmg`, `Heal`, `Boom{k}`
 - `Died`, `Raise`, `Immune`
 - `Tile`: boss hall entrance sealed (force field)
@@ -265,6 +265,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 **Lag compensation.**
 - Melee arcs, the dagger and dash contact test monster positions rewound by the client's `view_lag` (RTT/2 + its interpolation delay), up to 31 ticks.
 - Player projectiles spawn fast-forwarded by RTT/2, at most 150 ms.
+- **Shot hitboxes:** player projectiles hit a monster when `Monster::shot_dist` is below its radius plus the shot's. Shots are drawn `SHOT_HEIGHT` (8) px above their ground point and figures stand up from their feet, so the hitbox is a capsule from the feet north to `EntityKind::body_height` (sprite height above the feet, measured from the atlas) minus `SHOT_HEIGHT` and the radius, plus the dragon's lift while airborne. Small figures stay (nearly) round; the demon is hit up to its horns. Movement, melee and explosions still use the round footprint.
 
 **AI (`ai.rs`).**
 - **Wide figures:** `path_toward` (also used by the bosses' chase since boss halls have chasms) treats figures wider than a tile (the demon, the dragon) specially: the straight-line shortcut also checks lines offset by their radius against terrain (`collision::terrain_line`; walls are fine, figures slide along them), A* (`astar_clear`) charges extra for tiles next to anything they cannot enter, a waypoint they make no progress toward is skipped, and a boss with no path walks straight at the hero. The swoop still charges in a straight line and stops at a chasm edge.
@@ -324,7 +325,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 ## 7. Field of vision
 
 `fov.rs` is recursive shadowcasting with radius 9 tiles; walls (`Map::opaque`) block sight but are themselves visible. Terrain does not block sight. It is used in three places:
-- **Server snapshots:** monsters, projectiles, hazards and positional events are only sent if they lie on a visible tile. Large figures count as visible if any of their corners is. Teammates are always sent.
+- **Server snapshots:** monsters, enemy projectiles, hazards and positional events are only sent if they lie on a visible tile. Large figures count as visible if any of their corners is. Teammates are always sent, and so are the party's own projectiles, the `Dmg` of their hits and the `Boom` of their explosions (sent without a position), so a shot into the dark flies on and shows its hit instead of vanishing at the edge of the view.
 - **Client fog:** a 140×140 canvas texture, 1 px per tile, scaled ×16 with linear filtering. Visible tiles are clear with a soft edge; everything else is darkened, so the board stays faintly visible. It is recomputed only when the viewer's tile changes.
 - **Enemy perception:** this uses `collision::line_of_sight` (4 px sampling) plus each enemy's own `sight` radius.
 
@@ -667,7 +668,8 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - A* routes around a wall
 - lich immunity and draining; the nova (wind-up, damage, 64 px push, nothing outside the radius); the summon (5 skeletons + 5 archers, topped up, no stacking); the gloom bolt volley; drain beams sent to a player who sees neither end
 - the demon: each attack's animation starts with its wind-up (cleave `Melee`, swoop `Dash`, ring `Cast`) and runs through the recovery; the swoop keeps one `Dash` animation from the wind-up to the stop; the ring bursts at the end of its wind-up; enraged wind-ups are shorter
-- FOV-filtered snapshots
+- FOV-filtered snapshots; heroes' hits and explosions are sent without a position (shown out of view)
+- shot hitboxes: a missile hits the ogre's chest but not over its head, the demon up to its horns, and passes over an orc's head
 - 600-tick simulation of each boss without panics
 - debug immortality and the boss path
 - progression modifiers

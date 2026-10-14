@@ -270,7 +270,7 @@ pub fn tick_projectiles(run: &mut Run, dt: f64) {
             }
             let pr = &run.projectiles[i];
             if pr.from_player {
-                let hit = run.monsters.iter().position(|m| m.alive && m.pos.dist(pos) < m.radius + pr.radius);
+                let hit = run.monsters.iter().position(|m| m.alive && m.shot_dist(pos) < m.radius + pr.radius);
                 if let Some(mi) = hit {
                     impact(run, i, pos, Some(mi));
                     break;
@@ -316,7 +316,8 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<usize>) {
 #[allow(clippy::too_many_arguments)]
 /// An explosion; `knock` pushes the heroes it hits straight away from it (px, enemy explosions only).
 pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: f64, from_player: bool, src: Option<usize>, k: u8, crit: bool, knock: f64) {
-    run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, Some(pos));
+    // The heroes see their own explosions even out of view.
+    run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, (!from_player).then_some(pos));
     if from_player {
         let hits: Vec<usize> = run
             .monsters
@@ -428,6 +429,61 @@ mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
         explode(&mut run, at, 30.0, 5.0, false, None, 4, false, 0.0);
         assert!(!run.players[0].mv.knocked(), "no knock: no push");
+    }
+
+    /// A player missile placed `dy` px north of the monster's feet, flying east past it.
+    fn missile_past(run: &mut Run, mi: usize, dy: f64) {
+        let at = run.monsters[mi].pos + Vec2::new(-6.0, -dy);
+        assert!(!run.layout.map.opaque_at(at) && !run.layout.map.opaque_at(at + Vec2::new(12.0, 0.0)), "open floor for the test shot");
+        spawn_player_projectile(run, 0, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), 230.0, 5.0, 3.0, 1.0, 0.0, None, false);
+        run.projectiles[0].pos = at;
+        for _ in 0..3 {
+            tick_projectiles(run, 1.0 / TICK_HZ);
+        }
+        run.projectiles.retain(|p| !p.dead);
+    }
+
+    #[test]
+    fn shots_hit_the_upper_body_of_tall_figures() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let pos = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        run.spawn_enemy(EnemyType::Ogre, pos, None, 1);
+        let mi = run.monsters.len() - 1;
+        let hp = run.monsters[mi].hp;
+        // The ogre is drawn 26 px tall; a shot at its chest (drawn 8 px above its ground point) hits.
+        missile_past(&mut run, mi, 18.0);
+        assert!(run.monsters[mi].hp < hp, "chest hit");
+        // Above its head: a miss.
+        let hp = run.monsters[mi].hp;
+        missile_past(&mut run, mi, 32.0);
+        assert_eq!(run.monsters[mi].hp, hp, "over its head");
+        // The demon (58 px) is hit up to its horns.
+        let demon = run.monsters.iter().find(|m| m.kind == EntityKind::Demon).unwrap();
+        assert!(demon.shot_dist(demon.pos - Vec2::new(0.0, 45.0)) < demon.radius);
+        assert!(demon.shot_dist(demon.pos - Vec2::new(0.0, 70.0)) > demon.radius + 3.0);
+        // Small figures keep their round hitbox.
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = put_monster_near(&mut run, 0, 40.0);
+        let hp = run.monsters[mi].hp;
+        missile_past(&mut run, mi, 16.0);
+        assert_eq!(run.monsters[mi].hp, hp, "over the orc's head");
+    }
+
+    #[test]
+    fn hits_by_heroes_are_shown_even_out_of_view() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = put_monster_near(&mut run, 0, 40.0);
+        run.events.clear();
+        run.hurt_monster(mi, 5.0, false, Some(0));
+        assert!(matches!(run.events[..], [(Ev::Dmg { .. }, None)]), "damage number sent to the whole party");
+        run.events.clear();
+        let at = run.monsters[mi].pos;
+        explode(&mut run, at, 20.0, 5.0, true, Some(0), 0, false, 0.0);
+        assert!(matches!(run.events[0], (Ev::Boom { .. }, None)), "the hero's explosion too");
+        run.events.clear();
+        run.hurt_monster(mi, 5.0, false, None);
+        assert!(matches!(run.events[..], [(Ev::Dmg { .. }, Some(_))]), "other damage only where seen");
     }
 
     #[test]

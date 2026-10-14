@@ -13,6 +13,14 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 Not designed yet. Start with **superpowers:brainstorming**; the item and what depends on it are in [docs/TODO.md](docs/TODO.md) ("Priority order", tier 1). The level split it builds on is done and merged (below). Start the next feature on a new branch from `main`.
 
+## Bug fixes (2026-10-14, after the level split)
+
+Branch `fix/hitboxes-and-dark-shots`. Two bugs the user reported:
+- **Tall enemies were only hit on their lower half** (e.g. the demon). Cause: the server tested player shots against a circle around the monster's *feet*, while the sprite stands up to 58 px above them and shots are drawn 8 px above their ground point. Fix: `Monster::shot_dist` (capsule up to `EntityKind::body_height`, heights measured from the atlas), used in `tick_projectiles`. Movement, melee and explosions are unchanged. Enemy shots against heroes still use the round footprint (heroes are small; not reported).
+- **Enemies out of view seemed not to take damage.** The server did damage them (checked with a probe test: an orc 180 px away, out of view, lost 12 HP), but it stopped sending the shot once it left the view, so the client's own cosmetic copy ended at the edge as if it had hit something, and the `Dmg` number was filtered out. Fix: the party's projectiles are always sent, and `Dmg` from heroes' hits and `Boom` from their explosions are sent without a position (to the whole party).
+- Docs: TECHNICAL §5 (shot hitboxes), §7, events and tests; PLAYER_GUIDE "Seeing in the dark".
+- Verified: `cargo test` 162 pass (2 new tests, both failing on the old code first; the fingerprint tests unchanged), `docker compose up --build -d`, `/health` OK, smoke test: no browser errors. Not yet checked by hand in a real fight (the demon's hitbox and shots into the dark).
+
 ## Last session (2026-10-14, level split)
 
 **Branch:** `feature/level-split` is merged into `main` (fast-forward) and pushed, at the user's request (2026-10-14); the branch is deleted. It was priority item 1 of `docs/TODO.md` (now removed; the list is renumbered). Spec: [docs/superpowers/specs/2026-10-13-level-split-design.md](docs/superpowers/specs/2026-10-13-level-split-design.md); plan (5 tasks, run with superpowers:subagent-driven-development): [docs/superpowers/plans/2026-10-13-level-split.md](docs/superpowers/plans/2026-10-13-level-split.md).

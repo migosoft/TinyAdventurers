@@ -175,7 +175,23 @@ impl Monster {
         let i = self.history.len().saturating_sub(ticks.min(self.history.len()));
         self.history[i]
     }
+
+    /// Distance from a flying shot at ground point `p` to this monster's body,
+    /// to compare with `radius` plus the shot's radius. Shots are drawn
+    /// `SHOT_HEIGHT` px above their ground point and figures stand up from their
+    /// feet, so a tall figure is a capsule reaching north from `pos`, not a circle.
+    pub fn shot_dist(&self, p: Vec2) -> f64 {
+        let lift = if self.airborne { DRAGON_LIFT } else { 0.0 };
+        let reach = (self.kind.body_height() + lift - SHOT_HEIGHT - self.radius).max(0.0);
+        let y = p.y.clamp(self.pos.y - reach, self.pos.y);
+        p.dist(Vec2::new(self.pos.x, y))
+    }
 }
+
+/// How far above their ground point projectiles are drawn (px; `GameScene`).
+pub const SHOT_HEIGHT: f64 = 8.0;
+/// How far a flying monster is drawn above the ground (px; the dragon's `lift` at 1.2x scale).
+const DRAGON_LIFT: f64 = 17.0;
 
 pub struct Projectile {
     pub id: u32,
