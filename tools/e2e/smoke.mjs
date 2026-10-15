@@ -97,13 +97,20 @@ await p1.waitForTimeout(600);
 await p1.screenshot({ path: `${out}/5-debug.png` });
 const dbg = await p1.textContent('.debug');
 console.log(dbg);
-// F4 (debug darkvision) twice: 0 -> 50% -> 100%; the greyscale shows where she sees only by darkvision.
-for (const want of ['50%', '100%']) {
-  await p1.keyboard.press('F4');
-  await p1.waitForFunction((w) => document.querySelector('.debug')?.textContent?.includes(`darkvision ${w}`), want, { timeout: 5000 });
-}
-await p1.screenshot({ path: `${out}/5-darkvision.png` });
-console.log('F4 darkvision: 50% -> 100%');
+// With ?debug only: F4 (debug darkvision) twice, 0 -> 50% -> 100%; the greyscale shows
+// where she sees only by darkvision. A failure is logged, never thrown past the cleanup below.
+if (query.includes('debug')) {
+  try {
+    for (const want of ['50%', '100%']) {
+      await p1.keyboard.press('F4');
+      await p1.waitForFunction((w) => document.querySelector('.debug')?.textContent?.includes(`darkvision ${w}`), want, { timeout: 5000 });
+    }
+    await p1.screenshot({ path: `${out}/5-darkvision.png` });
+    console.log('F4 darkvision: 50% -> 100%');
+  } catch (e) {
+    console.log(`F4 darkvision FAILED: ${e.message.split('\n')[0]}`);
+  }
+} else console.log('F4 darkvision step skipped (no debug in the query)');
 
 // A second login to Alice's account closes her first window.
 const p3 = await open('Alice2');

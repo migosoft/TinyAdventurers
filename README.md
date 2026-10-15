@@ -55,7 +55,7 @@ Accounts and characters are stored in PostgreSQL on the `ta-db` Docker volume, s
 | Q / E | Switch which teammate you watch after dying |
 | Esc | Menu (leave the dungeon) |
 | F3 | Network and performance stats |
-| F4 | Debug: cycle your darkvision 0 / 50% / 100% (only where debug is allowed) |
+| F4 | Debug mode only (`?debug`): cycle your own hero's darkvision 0 / 50% / 100% |
 
 ## Development
 

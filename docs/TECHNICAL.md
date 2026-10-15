@@ -464,7 +464,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 
 **Measuring.**
 - F3 overlay: FPS, frame time, ping, jitter, interpolation delay, snapshot bytes, prediction correction, server ms per tick, darkvision.
-- F4 (debug): cycles the viewed hero's darkvision 0 -> 50% -> 100% -> 0 via `DebugDarkvision` (the server honours it only when debug is allowed and marks the run as debug). While darkvision > 0 the main camera carries the `DarkvisionFX` post pipeline (`client/src/game/darkvisionfx.ts`), which greys the scene where LightView's `dvmask` is set; it is removed at 0.
+- F4 (debug mode only, `?debug`): cycles your own hero's darkvision 0 -> 50% -> 100% -> 0 via `DebugDarkvision` (the server honours it only when debug is allowed and marks the run as debug). The client ignores F4 unless your debug mode is on and your hero is alive, so a stray press never turns a normal run into a debug run. While darkvision > 0 the main camera carries the `DarkvisionFX` post pipeline (`client/src/game/darkvisionfx.ts`), which greys the scene where LightView's `dvmask` is set; it is removed at 0.
 - `?lag=&jitter=&loss=` simulates conditions in both directions, keeping TCP ordering (`DelayLine`: one FIFO queue and one timer, because browsers round timer delays down to whole milliseconds; a timer per message delivered inputs out of order, which the server then applied out of order, and that caused most of the corrections once seen in busy runs under lag).
 - In a busy debug run under `?lag=150&jitter=40&loss=2` (bot walking to the demon and fighting it for 90 s), about 36 of 2,760 snapshots still correct the prediction: almost all are pushes, which the client learns of about RTT/2 late, plus the force field closing during a dash.
 
@@ -860,7 +860,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
   5. check the audit log.
 
   It takes screenshots of the dashboard (light and dark), the player page and the audit log.
-- presses F4 twice and waits for the F3 panel to show `darkvision 50%`, then `100%` (screenshot `5-darkvision.png`)
+- only when the query contains `debug`: presses F4 twice and waits for the F3 panel to show `darkvision 50%`, then `100%` (screenshot `5-darkvision.png`); a failure there is logged, not thrown, so the accounts are still deleted
 - screenshots (login, characters, lobby, room, game) go to the output folder; prints the F3 stats and any browser errors (the expected 401 of the first `/api/me` is ignored)
 
 **Client admin tests (`src/admin/charts.test.ts`):** nice axis maximum and ticks, the rounded-top column path, number, duration and share formatting.

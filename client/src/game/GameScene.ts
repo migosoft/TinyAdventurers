@@ -171,10 +171,12 @@ export class GameScene extends Phaser.Scene {
       e.preventDefault();
       this.hud.toggleDebug();
     });
-    // Debug: cycle the viewed hero's darkvision 0 -> 50% -> 100% (the server honours it only when debug is allowed).
+    // Debug mode only (?debug): cycle your own hero's darkvision 0 -> 50% -> 100% -> 0.
+    // Ignored otherwise, so a stray F4 never turns a normal run into a debug run, and
+    // while dead (spectating, the snapshot's darkvision is the teammate's).
     kb.on('keydown-F4', (e: KeyboardEvent) => {
       e.preventDefault();
-      if (e.repeat) return;
+      if (e.repeat || !this.debugOn || !this.alive) return;
       // The server announces the change to the party.
       this.net.send({ t: 'DebugDarkvision', ratio: nextDarkvision((this.lastSnap?.me.darkvision ?? 0) / 100) });
     });
