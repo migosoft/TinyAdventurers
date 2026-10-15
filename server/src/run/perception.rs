@@ -65,9 +65,9 @@ mod tests {
     #[test]
     fn undead_see_a_dark_hero_at_full_vision() {
         let (run, tx, ty) = dark_run();
-        let undead = Sight { vision: 8.0, darkvision: 1.0 };
-        assert!(sees(&run, undead, at(tx - 7, ty), at(tx, ty)));
-        assert!(!sees(&run, undead, at(tx - 9, ty), at(tx, ty)), "beyond vision");
+        let undead = Sight { vision: 6.0, darkvision: 1.0 };
+        assert!(sees(&run, undead, at(tx - 5, ty), at(tx, ty)));
+        assert!(!sees(&run, undead, at(tx - 7, ty), at(tx, ty)), "beyond vision, on carved floor");
     }
 
     #[test]

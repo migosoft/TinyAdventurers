@@ -981,6 +981,7 @@ mod tests {
         run.step();
         assert_eq!(run.monsters[mi].ai.target, None, "dark: not seen");
         // A fire shot (moving light) beside the hero lights them within this very step.
+        // Owner 999 is no real entity: only the kind's light matters here.
         super::super::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, ppos + Vec2::new(TILE, 0.0), Vec2::new(0.0, 1.0), 1.0, 1.0, 3.0, 0.0, 0, 0.0);
         run.step();
         assert_eq!(run.monsters[mi].ai.target, Some(Target::Player(run.players[0].id)));
