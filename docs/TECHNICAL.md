@@ -858,6 +858,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - The light canvas has 1 px per tile, so light bleeds about half a tile past walls (the same texel is shared by a wall and the floor next to it).
 - The moving-light list uses a distance test without line of sight, so the glow of a shot or enemy behind a wall within range is sent and drawn (its carrier is not).
 - Hero melee, dashes and arrows next to a torch put it out (any non-heat hit does); this is the agreed rule, but it may prove annoying in play.
+- Torches are sent only when in the viewer's FOV, so a torch sprite can pop in at the edge of the FOV (under the darkness, so it is rarely noticeable). The lights themselves come from the start info and events and never pop.
 - Weapon effects (swooshes, rings, particles) are drawn under the darkness, so they are black where it is dark. Only heroes, teammates and the party's own shots are above it.
 - Snapshots are compact but not delta-compressed (every snapshot is complete). They are small anyway.
 - Boss fights are covered by unit tests and were played live once against all three bosses; their numbers are not balanced yet.
