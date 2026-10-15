@@ -8,7 +8,6 @@ import type { Snapshot } from '../generated/Snapshot';
 import type { Net } from '../net';
 import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
-import { Fov } from '../sim/fov';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Hud } from '../ui/hud';
 import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
@@ -18,6 +17,8 @@ import { BarrelView } from './barrel';
 import { ChestView } from './chest';
 import { dmgColor } from './damage';
 import { DEPTH, Effects } from './effects';
+import { LightField } from './light';
+import { LightView } from './lightview';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
@@ -56,9 +57,6 @@ export class GameScene extends Phaser.Scene {
   private info!: RunStartInfo;
   private map!: TileMap;
   private mapRt!: Phaser.GameObjects.RenderTexture;
-  private fov!: Fov;
-  private fogTex!: Phaser.Textures.CanvasTexture;
-  private fogOrigin = [-1, -1];
   private pred!: Predictor;
   private interp = new Interpolator();
   private ents = new Map<number, EntState>();
@@ -86,6 +84,8 @@ export class GameScene extends Phaser.Scene {
   private myFlags = 0;
   private spectating: number | null = null;
   private lastSnap?: Snapshot;
+  private light!: LightField;
+  private lightView!: LightView;
   private unsub?: () => void;
   private frameMs = 0;
   private myKind = 0;
@@ -123,7 +123,6 @@ export class GameScene extends Phaser.Scene {
     this.ents = new Map();
     this.alive = true;
     this.spectating = null;
-    this.fogOrigin = [-1, -1];
     this.acc = 0;
     this.myFlags = 0;
     this.lastSnap = undefined;
@@ -131,6 +130,8 @@ export class GameScene extends Phaser.Scene {
     this.map = new TileMap(this.info.width, this.info.height, new Uint8Array(tiles));
     this.myKind = CLASSES[data.myClass].kind;
     this.pred = new Predictor(this.map, data.myClass, this.info.mods, this.info.spawn_x, this.info.spawn_y);
+    this.light = new LightField(this.map);
+    this.light.load(this.info.lights);
   }
 
   create(): void {
@@ -138,7 +139,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setRoundPixels(true);
     this.fx = new Effects(this);
     this.drawBoard();
-    this.setupFog();
+    this.lightView = new LightView(this, this.map, this.light);
     this.useHint = this.add.text(0, 0, 'E', { fontFamily: 'monospace', fontSize: '8px', color: '#ffffff', stroke: '#000000', strokeThickness: 2 }).setOrigin(0.5, 1).setVisible(false).setDepth(DEPTH.numbers);
     this.bars = this.add.graphics().setDepth(DEPTH.numbers - 1);
     this.beams = this.add.graphics().setDepth(DEPTH.beam);
@@ -254,43 +255,6 @@ export class GameScene extends Phaser.Scene {
     if (prev && this.forceField) this.forceField.age = prev.age;
   }
 
-  // ------------------------------------------------------------ fog of war
-
-  private setupFog(): void {
-    this.fov = new Fov(this.map.w, this.map.h);
-    if (this.textures.exists('fog')) this.textures.remove('fog');
-    this.fogTex = this.textures.createCanvas('fog', this.map.w, this.map.h)!;
-    this.fogTex.setFilter(Phaser.Textures.FilterMode.LINEAR);
-    this.add.image(0, 0, "fog").setOrigin(0, 0).setScale(TILE).setDepth(DEPTH.fog);
-  }
-
-  private updateFog(px: number, py: number): void {
-    const tx = Math.floor(px / TILE);
-    const ty = Math.floor(py / TILE);
-    if (tx === this.fogOrigin[0] && ty === this.fogOrigin[1]) return;
-    this.fogOrigin = [tx, ty];
-    const R = CONST.FOV_RADIUS;
-    this.fov.compute(this.map, tx, ty, R);
-    const ctx = this.fogTex.getContext();
-    const img = ctx.createImageData(this.map.w, this.map.h);
-    const d = img.data;
-    for (let y = 0; y < this.map.h; y++)
-      for (let x = 0; x < this.map.w; x++) {
-        const i = (y * this.map.w + x) * 4;
-        d[i] = 10;
-        d[i + 1] = 6;
-        d[i + 2] = 18;
-        let a = 0.68;
-        if (this.fov.isVisible(x, y)) {
-          const dist = Math.hypot(x - tx, y - ty) / R;
-          a = dist < 0.55 ? 0 : ((dist - 0.55) / 0.45) * 0.4;
-        }
-        d[i + 3] = Math.round(a * 255);
-      }
-    ctx.putImageData(img, 0, 0);
-    this.fogTex.refresh();
-  }
-
   // ------------------------------------------------------------ network
 
   private onMessage(m: ServerMsg): void {
@@ -369,12 +333,22 @@ export class GameScene extends Phaser.Scene {
       case 'Tile':
         this.map.set(ev.x, ev.y, ev.v);
         this.redrawTile(ev.x, ev.y);
-        this.fogOrigin = [-1, -1];
+        this.light.mapChanged();
+        this.lightView.mapChanged();
         if (ev.v === TILE_ID.DoorClosed) {
           // The entrance tiles arrive one event each; only announce the first.
           if (!this.forceField) this.hud.message('A force field seals the hall behind you!');
           this.syncForceField(true);
         }
+        break;
+      case 'Light':
+        this.light.set(ev.id, ev.on, ev.colour);
+        break;
+      case 'LightAdd':
+        this.light.add({ id: ev.id, kind: ev.kind, colour: ev.colour, x: ev.x, y: ev.y, on: ev.on });
+        break;
+      case 'LightRemove':
+        this.light.remove(ev.id);
         break;
       case 'Msg':
         this.hud.message(ev.text);
@@ -500,7 +474,7 @@ export class GameScene extends Phaser.Scene {
   private spawnCosmetic(kind: number, shot: number, aim: number, speed: number, r: number, life: number, target?: [number, number]): void {
     const pd = PROJECTILES[kind];
     const { x, y } = this.pred.state;
-    const img = this.projectileImage(pd);
+    const img = this.projectileImage(pd).setDepth(DEPTH.heroes);
     this.orientProjectile(img, pd, aim);
     this.cosmetics.push({
       shot,
@@ -588,7 +562,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.cameras.main.centerOn(Math.round(camX), Math.round(camY - 8));
-    this.updateFog(camX, camY);
+    this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now);
 
     const seen = new Set<number>();
     const myShots = new Set<number>();
@@ -660,6 +634,7 @@ export class GameScene extends Phaser.Scene {
     if (!view) {
       const name = isPlayerKind(e.kind) ? this.info.players.find((p) => p.ent === e.id)?.name : undefined;
       view = new EntityView(this, e.kind, this.fx, me ? undefined : name);
+      if (isPlayerKind(e.kind)) view.aboveDark = true;
       this.views.set(e.id, view);
     }
     let s: ViewState;
@@ -748,6 +723,7 @@ export class GameScene extends Phaser.Scene {
       this.projViews.set(e.id, img);
     }
     img.setVisible(!mine).setPosition(Math.round(e.x), Math.round(e.y - 8));
+    if (this.info.players.some((p) => p.ent === owner)) img.setDepth(DEPTH.heroes);
     this.orientProjectile(img, pd, e.aim);
     if (!mine && pd.gloom) this.fx.gloomWisp(e.x, e.y - 8);
     else if (!mine && pd.trail && Math.random() < 0.5) this.fx.particle(e.x, e.y - 8, 0, 0, 0.25, pd.trail, { depth: DEPTH.projectile - 1 });

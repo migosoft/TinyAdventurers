@@ -1,6 +1,6 @@
 // Pooled visual effects: particles, damage numbers, rings, decals.
 // Everything is pooled so combat does not allocate per frame.
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 
 export const DEPTH = {
   map: 0,
@@ -9,7 +9,12 @@ export const DEPTH = {
   entityBase: 10,
   projectile: 5000,
   fx: 6000,
+  /** Tint of the lights (ADD blend), just below the darkness. */
+  tint: 6999,
+  /** The darkness (light canvas). */
   fog: 7000,
+  /** Heroes and the party's own shots: drawn above the darkness. */
+  heroes: 7000.5,
   /** Lich drain beams: above the fog, they show even where the hero cannot see. */
   beam: 7001,
   numbers: 8000,
