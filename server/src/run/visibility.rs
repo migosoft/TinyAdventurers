@@ -177,7 +177,7 @@ pub fn send_snapshots(run: &mut Run) {
             ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra));
         }
         for o in &run.objects {
-            if o.gone || !seen(&fov, lights, &moving, map, o.pos, 0.0) {
+            if o.gone || !(o.owns_light() || seen(&fov, lights, &moving, map, o.pos, 0.0)) {
                 continue;
             }
             ents.push(super::objects::snap(o, run.time));
@@ -344,5 +344,13 @@ mod tests {
         let (tx, ty) = Map::tile_of(pts[1]);
         fov2.compute(&run.layout.map, tx, ty, 1);
         assert!(drain_for(&fov2, false, &pts).is_some());
+    }
+
+    #[test]
+    fn torches_own_a_light_so_they_are_always_sent() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.spawn_torch(&crate::dungeon::TorchSpawn { wall: (1, 1), side: crate::dungeon::TorchSide::Face });
+        let o = run.objects.last().unwrap();
+        assert!(o.owns_light());
     }
 }

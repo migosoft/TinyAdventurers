@@ -185,6 +185,46 @@ pub struct ChestSpawn {
     pub mimic: bool,
 }
 
+/// Where a torch hangs, seen from the floor it lights.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum TorchSide {
+    /// On a brick face: the floor is below the wall cell.
+    Face = 0,
+    /// On a wall west of the floor (the floor is at x + 1).
+    West = 1,
+    /// On a wall east of the floor (the floor is at x - 1).
+    East = 2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TorchSpawn {
+    /// The wall cell it hangs on.
+    pub wall: (i32, i32),
+    pub side: TorchSide,
+}
+
+impl TorchSpawn {
+    /// The floor tile in front of it: its light starts there.
+    pub fn front(&self) -> (i32, i32) {
+        let (x, y) = self.wall;
+        match self.side {
+            TorchSide::Face => (x, y + 1),
+            TorchSide::West => (x + 1, y),
+            TorchSide::East => (x - 1, y),
+        }
+    }
+    /// Its position (px): on the wall's edge, just inside the floor tile.
+    pub fn pos(&self) -> Vec2 {
+        let (x, y) = (self.wall.0 as f64, self.wall.1 as f64);
+        match self.side {
+            TorchSide::Face => Vec2::new((x + 0.5) * TILE, (y + 1.0) * TILE + 0.5),
+            TorchSide::West => Vec2::new((x + 1.0) * TILE + 0.5, (y + 0.5) * TILE),
+            TorchSide::East => Vec2::new(x * TILE - 0.5, (y + 0.5) * TILE),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Dungeon {
     pub map: Map,

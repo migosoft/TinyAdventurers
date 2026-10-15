@@ -44,10 +44,12 @@ pub enum EntityKind {
     // Props
     Chest = 80,
     Barrel = 81,
+    /// A wall torch (a world object with a static light).
+    Torch = 82,
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 34] = [
+    pub const ALL: [EntityKind; 35] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -82,6 +84,7 @@ impl EntityKind {
         EntityKind::FirePatch,
         EntityKind::Chest,
         EntityKind::Barrel,
+        EntityKind::Torch,
     ];
 
     /// How tall the figure is drawn above its feet (px, from the sprites; 0 for

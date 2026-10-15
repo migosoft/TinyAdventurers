@@ -28,6 +28,7 @@ pub struct WorldObject {
 pub enum ObjState {
     Chest { opened: Option<f64> },
     Barrel(Barrel),
+    Torch { wall: (i32, i32), side: crate::dungeon::TorchSide, light: u32, lit: bool },
 }
 
 pub struct Barrel {
@@ -49,6 +50,13 @@ impl WorldObject {
     }
 }
 
+impl WorldObject {
+    /// Owns a static light: always sent, so its light can be drawn from afar.
+    pub fn owns_light(&self) -> bool {
+        matches!(self.state, ObjState::Torch { .. })
+    }
+}
+
 impl Barrel {
     pub fn new() -> Self {
         Barrel { fuse: None, lit_at: 0.0, igniter: None, vel: Vec2::ZERO, sinking: None }
@@ -64,6 +72,13 @@ impl Run {
         id
     }
 
+    /// A wall torch with its static light (lit).
+    pub fn spawn_torch(&mut self, t: &crate::dungeon::TorchSpawn) -> u32 {
+        let (fx, fy) = t.front();
+        let light = self.add_light(crate::defs::lights::LightKind::Torch, crate::run::light::Anchor::Tile(fx, fy), None);
+        self.spawn_object(EntityKind::Torch, t.pos(), ObjState::Torch { wall: t.wall, side: t.side, light, lit: true })
+    }
+
     /// Footprints of the solid objects, except `except` (an object's own id).
     pub fn solids(&self, except: Option<u32>) -> Vec<crate::collision::Solid> {
         self.objects
@@ -74,6 +89,14 @@ impl Run {
     }
 }
 
+/// Lights or puts out a torch (and its light).
+pub fn set_torch(run: &mut Run, oi: usize, on: bool) {
+    let ObjState::Torch { light, lit, .. } = &mut run.objects[oi].state else { return };
+    *lit = on;
+    let id = *light;
+    run.set_light(id, on);
+}
+
 /// A hit on an object; `by` is the hero's entity id. What it does depends on the kind.
 pub fn hurt_object(run: &mut Run, oi: usize, dmg: Damage, by: Option<u32>) {
     let o = &run.objects[oi];
@@ -82,6 +105,10 @@ pub fn hurt_object(run: &mut Run, oi: usize, dmg: Damage, by: Option<u32>) {
     }
     match &o.state {
         ObjState::Chest { .. } => {}
+        ObjState::Torch { .. } => {
+            let heat = dmg.split.share(crate::defs::damage::DamageType::Heat) > 0.0;
+            set_torch(run, oi, heat);
+        }
         ObjState::Barrel(_) => {
             let time = run.time;
             if let ObjState::Barrel(b) = &mut run.objects[oi].state {
@@ -168,13 +195,14 @@ pub fn use_object(run: &mut Run, pi: usize) {
         .objects
         .iter()
         .enumerate()
-        .filter(|(_, o)| !o.gone && matches!(&o.state, ObjState::Barrel(b) if b.sinking.is_none()))
+        .filter(|(_, o)| !o.gone && matches!(&o.state, ObjState::Barrel(b) if b.sinking.is_none()) || matches!(o.state, ObjState::Torch { .. }))
         .map(|(i, o)| (i, o.pos.dist(at) - o.radius - PLAYER_RADIUS))
         .filter(|&(_, gap)| gap <= USE_REACH)
         .min_by(|a, b| a.1.total_cmp(&b.1));
     if let Some((oi, _)) = near {
         match run.objects[oi].state {
             ObjState::Barrel(_) => push_barrel(run, oi, at),
+            ObjState::Torch { lit, .. } => set_torch(run, oi, !lit),
             ObjState::Chest { .. } => {}
         }
     }
@@ -310,8 +338,13 @@ pub fn snap(o: &WorldObject, time: f64) -> EntSnap {
             (None, Some(_)) => (1, ms_since(time, b.lit_at)),
             _ => (0, 0),
         },
+        ObjState::Torch { lit, .. } => (*lit as u8, 0),
     };
-    EntSnap(o.id, o.kind as u8, o.pos.x as f32, o.pos.y as f32, 255, anim, 0.0, since, 0, 0)
+    let extra = match &o.state {
+        ObjState::Torch { side, .. } => *side as u32,
+        _ => 0,
+    };
+    EntSnap(o.id, o.kind as u8, o.pos.x as f32, o.pos.y as f32, 255, anim, 0.0, since, 0, extra)
 }
 
 impl Run {
@@ -655,5 +688,81 @@ mod tests {
         run.events.clear();
         step_for(&mut run, BARREL_FUSE + 0.1);
         assert_eq!(booms(&run), 1);
+    }
+
+    use crate::dungeon::{Map, Tile, TorchSide, TorchSpawn};
+
+    /// A torch on the brick face just north of the hero, on open floor.
+    fn torch_run() -> (Run, usize) {
+        let mut run = clear_run(BossId::Lich);
+        run.lights = crate::run::light::Lights::new(run.layout.map.w, run.layout.map.h);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for x in tx - 6..=tx + 6 {
+            run.layout.map.set(x, ty - 2, Tile::Wall);
+        }
+        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face });
+        let oi = run.objects.len() - 1;
+        (run, oi)
+    }
+
+    fn torch_lit(run: &Run, oi: usize) -> bool {
+        matches!(run.objects[oi].state, ObjState::Torch { lit: true, .. })
+    }
+
+    #[test]
+    fn a_torch_lights_the_floor_in_front_of_it() {
+        let (mut run, oi) = torch_run();
+        assert!(torch_lit(&run, oi));
+        let p = run.players[0].pos();
+        assert!(run.is_lit(p));
+        assert_eq!(snap(&run.objects[oi], run.time).5, 1);
+        assert_eq!(snap(&run.objects[oi], run.time).9, TorchSide::Face as u32);
+        assert!(run.objects[oi].owns_light() && !run.objects[oi].solid);
+    }
+
+    #[test]
+    fn e_toggles_a_torch_in_reach() {
+        let (mut run, oi) = torch_run();
+        let wall_y = (Map::tile_of(run.players[0].pos()).1 - 1) as f64 * crate::dungeon::TILE;
+        run.players[0].mv.y = wall_y + crate::defs::classes::PLAYER_RADIUS + 0.5; // against the wall
+        run.players[0].mv.x = run.objects[oi].pos.x; // right under the torch
+        push(&mut run);
+        assert!(!torch_lit(&run, oi), "out");
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Light { on: false, .. })));
+        push(&mut run);
+        assert!(torch_lit(&run, oi), "and lit again");
+    }
+
+    #[test]
+    fn heat_lights_a_torch_other_damage_puts_it_out() {
+        let (mut run, oi) = torch_run();
+        hurt_object(&mut run, oi, Damage::new(5.0, DamageSplit::pure(DamageType::Cold)), None);
+        assert!(!torch_lit(&run, oi), "cold puts it out");
+        hurt_object(&mut run, oi, Damage::new(5.0, DamageSplit::split(&[(DamageType::Heat, 0.3)])), None);
+        assert!(torch_lit(&run, oi), "any heat lights it");
+        hurt_object(&mut run, oi, Damage::physical(5.0), None);
+        assert!(!torch_lit(&run, oi), "a sword puts it out");
+        hurt_object(&mut run, oi, Damage::new(5.0, DamageSplit::pure(DamageType::Poison)), None);
+        assert!(!torch_lit(&run, oi), "poison does nothing (objects resist it)");
+        assert!(!run.objects[oi].gone, "torches never break");
+    }
+
+    #[test]
+    fn a_barrel_blast_lights_a_torch() {
+        let (mut run, oi) = torch_run();
+        set_torch(&mut run, oi, false);
+        let (_, bi) = barrel_at(&mut run, Vec2::new(0.0, -6.0));
+        explode_barrel(&mut run, bi);
+        assert!(torch_lit(&run, oi));
+    }
+
+    #[test]
+    fn a_shot_into_the_torch_wall_hits_the_torch() {
+        let (mut run, oi) = torch_run();
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        let from = Map::center_of(tx, ty - 1); // between the hero and the wall, flying away from the hero
+        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::Arrow, from, Vec2::new(0.0, -1.0), 200.0, 5.0, 2.0, 0.0, 0, 0.0);
+        step_for(&mut run, 0.3);
+        assert!(!torch_lit(&run, oi), "an arrow puts it out");
     }
 }

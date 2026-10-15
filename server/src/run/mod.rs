@@ -1081,10 +1081,11 @@ pub mod tests {
             eat(m.is_boss as u64);
             eat(m.asleep as u64);
         }
-        // Chests only: barrels are spawned last (after every other id) and
-        // left out, so the rest of the setup is compared with the old values.
-        let barrels = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).count() as u32;
-        for o in run.objects.iter().filter(|o| o.kind != EntityKind::Barrel) {
+        // Chests only: barrels and torches are spawned last (after every other
+        // id) and left out, so the rest of the setup is compared with the old values.
+        let is_late = |o: &objects::WorldObject| matches!(o.kind, EntityKind::Barrel | EntityKind::Torch);
+        let barrels = run.objects.iter().filter(|o| is_late(o)).count() as u32;
+        for o in run.objects.iter().filter(|o| !is_late(o)) {
             eat(o.id as u64);
             eat(o.pos.x.to_bits() as u64);
         }

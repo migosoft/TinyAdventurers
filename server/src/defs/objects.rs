@@ -16,12 +16,15 @@ pub fn def(kind: EntityKind) -> ObjDef {
     match kind {
         EntityKind::Chest => ObjDef { radius: 6.0, solid: false },
         EntityKind::Barrel => ObjDef { radius: BARREL_RADIUS, solid: true },
+        EntityKind::Torch => ObjDef { radius: TORCH_RADIUS, solid: false },
         _ => panic!("{kind:?} is not an object"),
     }
 }
 
 /// Barrels (first guesses for the balancing pass).
 pub const BARREL_RADIUS: f64 = 6.0;
+/// Torch footprint (hits and hand reach); it hangs on the wall, nothing collides with it.
+pub const TORCH_RADIUS: f64 = 4.0;
 /// Seconds from the first hit to the explosion; also the delay per link of a chain.
 pub const BARREL_FUSE: f64 = 0.3;
 pub const BARREL_BLAST_R: f64 = 40.0;

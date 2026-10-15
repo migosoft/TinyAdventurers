@@ -574,6 +574,7 @@ export class GameScene extends Phaser.Scene {
     }
     for (const e of this.ents.values()) {
       seen.add(e.id);
+      if (e.kind === KIND.Torch) continue; // no view until TorchView; never fall through to a hero figure
       if (e.kind === KIND.FirePatch) this.drawHazard(e);
       else if (e.kind === KIND.Chest) this.drawChest(e);
       else if (e.kind === KIND.Barrel) this.drawBarrel(e);

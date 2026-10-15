@@ -34,6 +34,7 @@ export const KIND = {
   "SkeletonArcher": 12,
   "SkeletonWarrior": 11,
   "Summoner": 21,
+  "Torch": 82,
   "Wizard": 0
 } as const;
 

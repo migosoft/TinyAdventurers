@@ -315,6 +315,14 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             }
         }
         if run.layout.map.opaque_at(pos) {
+            // A plain shot into a torch's wall hits the torch (an explosion reaches it anyway).
+            let tile = crate::dungeon::Map::tile_of(pos);
+            if run.projectiles[i].explode_r == 0.0 {
+                if let Some(oi) = run.objects.iter().position(|o| matches!(o.state, crate::run::objects::ObjState::Torch { wall, .. } if wall == tile)) {
+                    let (dmg, by) = (run.projectiles[i].damage, run.projectiles[i].from_player.then_some(run.projectiles[i].owner));
+                    crate::run::objects::hurt_object(run, oi, dmg, by);
+                }
+            }
             impact(run, i, prev, None);
             break;
         }
