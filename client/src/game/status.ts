@@ -1,4 +1,5 @@
-// Status effects on a figure (blind, asleep, petrified, slowed, accelerated):
+// Status effects on a figure (blind, asleep, petrified, slowed, accelerated,
+// burning, frozen, poisoned):
 // pure pose helpers plus the small marks drawn around the figure. The body
 // itself (lying down, grey stone, tints) is changed in EntityView.
 import Phaser from 'phaser';
@@ -85,6 +86,39 @@ export function drawGazeBeam(g: Phaser.GameObjects.Graphics, lx: number, ly: num
   g.lineBetween(Math.round(lx), Math.round(ly - 14), Math.round(tx), Math.round(ty - 8));
 }
 
+/**
+ * Opacity of a snowflake `age` s into its `life`: fades in over the first
+ * quarter, holds, fades out over the last quarter (0 outside the life).
+ */
+export function snowflakeAlpha(age: number, life: number): number {
+  if (life <= 0 || age <= 0 || age >= life) return 0;
+  const k = age / life;
+  return Math.min(1, k / 0.25, (1 - k) / 0.25);
+}
+
+/** Deterministic 0..1 from a seed and an index (a small integer hash). */
+function hash01(seed: number, i: number): number {
+  let h = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(i + 1, 0xc2b2ae35);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  h ^= h >>> 13;
+  return (h >>> 0) / 0x100000000;
+}
+
+/**
+ * `n` points on a body `bodyW` x `bodyH` px (feet at y 0, upwards negative,
+ * x centred), mostly on its lower two thirds: where the flames of a burning
+ * figure sit. Deterministic for a `seed`.
+ */
+export function flameSpots(bodyW: number, bodyH: number, n: number, seed: number): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (let i = 0; i < n; i++) {
+    const u = hash01(seed, i * 2);
+    const v = hash01(seed, i * 2 + 1);
+    out.push([(u - 0.5) * bodyW * 0.8, -bodyH * (0.1 + 0.75 * v * v)]);
+  }
+  return out;
+}
+
 const Z_EVERY = 0.6;
 const Z_LIFE = 1.2;
 const Z_RISE = 10;
@@ -92,6 +126,59 @@ const GHOST_EVERY = 0.08;
 const GHOST_LIFE = 0.2;
 const GHOST_TINT = 0xffe680;
 const PUFF_N = 3;
+const FLAME_N = 3;
+const FLAME_TEX = 'fx_flame';
+const HAZE_TEX = 'fx_haze';
+const HAZE_W = 24;
+const HAZE_H = 32;
+const HAZE_COLOR = 0x50b0ff;
+const SNOW_N = 6;
+const SNOW_REACH = 6;
+const BUBBLE_EVERY = 0.35;
+const BUBBLE_LIFE = 0.8;
+const BUBBLE_RISE = 8;
+const BUBBLE_COLOR = 0x7fd650;
+
+/** A burning figure's flame: its spot on the body, re-seeded now and then. */
+interface Flame {
+  img: Phaser.GameObjects.Image;
+  x: number;
+  y: number;
+  /** Seconds until it moves to a new spot. */
+  move: number;
+  phase: number;
+}
+
+/** A frozen figure's snowflake: shimmers in and out, then appears elsewhere. */
+interface Flake {
+  img: Phaser.GameObjects.Image;
+  age: number;
+  life: number;
+  x: number;
+  y: number;
+}
+
+/** The 3 x 5 px flame: an orange teardrop with a yellow core (made once). */
+function ensureFlameTexture(scene: Phaser.Scene): string {
+  if (scene.textures.exists(FLAME_TEX)) return FLAME_TEX;
+  const g = scene.make.graphics({}, false);
+  g.fillStyle(0xff5a10, 1).fillRect(1, 0, 1, 1).fillRect(0, 2, 3, 2).fillRect(1, 4, 1, 1);
+  g.fillStyle(0xff9a20, 1).fillRect(1, 1, 1, 1);
+  g.fillStyle(0xffe060, 1).fillRect(1, 2, 1, 2);
+  g.generateTexture(FLAME_TEX, 3, 5);
+  g.destroy();
+  return FLAME_TEX;
+}
+
+/** The frost haze: a soft blue ellipse, densest in the middle (made once). */
+function ensureHazeTexture(scene: Phaser.Scene): string {
+  if (scene.textures.exists(HAZE_TEX)) return HAZE_TEX;
+  const g = scene.make.graphics({}, false);
+  for (let i = 0; i < 5; i++) g.fillStyle(HAZE_COLOR, 0.35).fillEllipse(HAZE_W / 2, HAZE_H / 2, HAZE_W - i * 3, HAZE_H - i * 4);
+  g.generateTexture(HAZE_TEX, HAZE_W, HAZE_H);
+  g.destroy();
+  return HAZE_TEX;
+}
 
 /** Where the marks go, read from the owning figure each frame. */
 export interface StatusAnchor {
@@ -100,6 +187,10 @@ export interface StatusAnchor {
   y: number;
   /** Top of the head above the feet (px, positive). */
   head: number;
+  /** Width of the opaque body (px, world scale). */
+  w: number;
+  /** Middle of the opaque body from the feet (px, world scale; the origin may sit off centre). */
+  cx: number;
   /** The body sprite, copied for afterimages. */
   body: Phaser.GameObjects.Sprite;
   /** World scale of the body. */
@@ -123,6 +214,11 @@ export class StatusView {
   private zs: Z[] = [];
   private freeZ: Phaser.GameObjects.Text[] = [];
   private puff: Phaser.GameObjects.Image[] = [];
+  private flames: Flame[] = [];
+  private haze?: Phaser.GameObjects.Image;
+  private flakes: Flake[] = [];
+  private bubbleT = 0;
+  private seeds = 0;
 
   constructor(
     private scene: Phaser.Scene,
@@ -135,6 +231,9 @@ export class StatusView {
     const a = this.anchor();
     this.blind(has(bits, EFFECT.Blind), a);
     this.sleep(has(bits, EFFECT.Sleep), a, dt);
+    this.burning(has(bits, EFFECT.Burning), a, dt);
+    this.frozen(has(bits, EFFECT.Frozen), a, dt);
+    this.poisoned(has(bits, EFFECT.Poisoned), a, dt);
     if (has(bits, EFFECT.Accelerated)) {
       this.ghostT -= dt;
       if (this.ghostT <= 0) {
@@ -205,7 +304,92 @@ export class StatusView {
     }
   }
 
+  /** Burning: three small flames on the body, flickering, hopping to new spots now and then. */
+  private burning(on: boolean, a: StatusAnchor, dt: number): void {
+    if (!on) {
+      for (const f of this.flames) f.img.setVisible(false);
+      return;
+    }
+    if (this.flames.length === 0) {
+      const tex = ensureFlameTexture(this.scene);
+      for (let i = 0; i < FLAME_N; i++)
+        this.flames.push({ img: this.scene.add.image(0, 0, tex).setOrigin(0.5, 1), x: 0, y: 0, move: 0, phase: i * 2.1 });
+    }
+    const d = DEPTH.entityBase + a.y + 1;
+    this.flames.forEach((f, i) => {
+      f.move -= dt;
+      if (f.move <= 0) {
+        f.move = 0.4 + Math.random() * 0.6;
+        [f.x, f.y] = flameSpots(a.w, a.head, FLAME_N, ++this.seeds)[i];
+      }
+      // About 10 Hz, each flame on its own phase.
+      f.img
+        .setVisible(true)
+        .setPosition(Math.round(a.x + a.cx + f.x), Math.round(a.y + f.y))
+        .setScale(1 + 0.2 * Math.sin(this.clock * 63 + f.phase))
+        .setAlpha(0.85 + 0.15 * Math.sin(this.clock * 59 + f.phase * 1.7))
+        .setDepth(d);
+    });
+  }
+
+  /** Frozen: a soft blue haze around the body and tiny snowflakes shimmering in and out. */
+  private frozen(on: boolean, a: StatusAnchor, dt: number): void {
+    if (!on) {
+      this.haze?.setVisible(false);
+      for (const f of this.flakes) f.img.setVisible(false);
+      return;
+    }
+    // Added light: a blue glow, not a grey film over the floor ('ADD' by name: a runtime Phaser import breaks the node tests).
+    this.haze ??= this.scene.add.image(0, 0, ensureHazeTexture(this.scene)).setBlendMode('ADD');
+    this.haze
+      .setVisible(true)
+      .setPosition(Math.round(a.x + a.cx), Math.round(a.y - a.head / 2))
+      .setScale((a.w + 10) / HAZE_W, (a.head + 10) / HAZE_H)
+      .setAlpha(0.45 + 0.1 * Math.sin(this.clock * 3))
+      .setDepth(DEPTH.entityBase + a.y - 0.5);
+    // Staggered start: a new flake waits (negative age) before it first appears.
+    while (this.flakes.length < SNOW_N)
+      this.flakes.push({ img: this.scene.add.image(0, 0, 'spark'), age: -Math.random() * 0.8, life: 0, x: 0, y: 0 });
+    for (const f of this.flakes) {
+      f.age += dt;
+      if (f.life === 0 || f.age >= f.life) {
+        if (f.life !== 0) f.age = 0;
+        f.life = 0.6 + Math.random() * 0.4;
+        f.x = (Math.random() - 0.5) * (a.w + SNOW_REACH * 2);
+        f.y = 2 - Math.random() * (a.head + SNOW_REACH);
+        f.img.setTint(Math.random() < 0.5 ? 0xffffff : 0xd8f0ff);
+      }
+      f.img
+        .setVisible(true)
+        .setPosition(Math.round(a.x + a.cx + f.x), Math.round(a.y + f.y))
+        .setAlpha(snowflakeAlpha(f.age, f.life))
+        .setDepth(DEPTH.entityBase + a.y + 1);
+    }
+  }
+
+  /** Poisoned: small green bubbles rise off the body (the green tint pulse is on the body, in EntityView). */
+  private poisoned(on: boolean, a: StatusAnchor, dt: number): void {
+    if (!on) {
+      this.bubbleT = 0;
+      return;
+    }
+    this.bubbleT -= dt;
+    if (this.bubbleT > 0) return;
+    this.bubbleT = BUBBLE_EVERY;
+    const x = a.x + a.cx + (Math.random() - 0.5) * a.w * 0.8;
+    const y = a.y - a.head * (0.3 + Math.random() * 0.6);
+    this.fx.particle(Math.round(x), Math.round(y), 0, -BUBBLE_RISE / BUBBLE_LIFE, BUBBLE_LIFE, BUBBLE_COLOR, {
+      depth: DEPTH.entityBase + a.y + 1,
+    });
+  }
+
   destroy(): void {
+    for (const f of this.flames) f.img.destroy();
+    for (const f of this.flakes) f.img.destroy();
+    this.haze?.destroy();
+    this.flames = [];
+    this.flakes = [];
+    this.haze = undefined;
     for (const z of this.zs) z.t.destroy();
     for (const t of this.freeZ) t.destroy();
     for (const p of this.puff) p.destroy();

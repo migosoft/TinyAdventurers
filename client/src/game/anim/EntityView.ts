@@ -79,14 +79,16 @@ export class EntityView {
   private shotFx = false;
   private lastAnimT = 0;
   private dir: Dir = 'right';
-  /** Marks of the status effects (blind puff, sleep z's, haste afterimages). */
+  /** Marks of the status effects (blind puff, sleep z's, haste afterimages, flames, frost, poison bubbles). */
   private status: StatusView;
-  /** Petrified: the body frame it was turned to stone in. */
-  private frozen: string | null = null;
+  /** Petrified or frozen: the body frame it was turned to stone (or ice) in. */
+  private heldFrame: string | null = null;
   /** Petrified: greyscale filters (WebGL only), created on first use. */
   private stone?: Phaser.FX.ColorMatrix;
   private weaponStone?: Phaser.FX.ColorMatrix;
   private lying = false;
+  /** Frozen: the weapon pose is set once, then held. */
+  private weaponHeld = false;
   /** Set after the first update (a figure that appears asleep or as stone still takes its facing once). */
   private faced = false;
   speed = 0;
@@ -123,11 +125,16 @@ export class EntityView {
     this.status = new StatusView(scene, fx, () => {
       const sc = d.scale ?? 1;
       const b = frameBounds(this.body.frame);
+      const fw = this.body.frame.width;
+      // Opaque columns in display space (mirrored when flipped), from the origin.
+      const mid = this.body.flipX ? fw - 1 - (b.l + b.r) / 2 : (b.l + b.r) / 2;
       return {
         x: this.root.x,
         y: this.root.y,
         // Top of the opaque figure: its height standing, its thickness lying down.
         head: this.lying ? (b.r - b.l + 1) * sc : ((d.footY ?? this.body.height) - b.t) * sc,
+        w: this.lying ? ((d.footY ?? this.body.height) - b.t) * sc : (b.r - b.l + 1) * sc,
+        cx: this.lying ? 0 : (mid + 0.5 - this.body.originX * fw) * sc,
         body: this.body,
         scale: sc,
       };
@@ -158,6 +165,9 @@ export class EntityView {
     const asleep = has(fxBits, EFFECT.Sleep);
     const stone = has(fxBits, EFFECT.Petrified);
     const slowed = has(fxBits, EFFECT.Slowed);
+    const iced = has(fxBits, EFFECT.Frozen);
+    const poisoned = has(fxBits, EFFECT.Poisoned);
+    if (!iced) this.weaponHeld = false;
     // A new action starts when the anim changes or its timer restarts (repeated swings).
     if (s.anim !== this.lastAnim || s.animT < this.lastAnimT - 0.02) {
       this.lastAnim = s.anim;
@@ -167,8 +177,8 @@ export class EntityView {
 
     // Facing follows the aim. TODO(4-dir): pick up/down sheets here once they exist.
     const cos = Math.cos(s.aim);
-    // Lying asleep or turned to stone, the figure keeps the side it faces (the own hero's aim still follows the mouse).
-    if (Math.abs(cos) > 0.15 && (!(asleep || stone) || !this.faced)) this.dir = cos < 0 ? 'left' : 'right';
+    // Lying asleep, turned to stone or frozen, the figure keeps the side it faces (the own hero's aim still follows the mouse).
+    if (Math.abs(cos) > 0.15 && (!(asleep || stone || iced) || !this.faced)) this.dir = cos < 0 ? 'left' : 'right';
     this.faced = true;
     const left = this.dir === 'left';
     const sgn = left ? -1 : 1;
@@ -187,9 +197,9 @@ export class EntityView {
     else if (hurt && d.hit) frame = d.hit;
     else if (moving) frame = `${d.run}${Math.floor(this.runClock * 10) % 4}`;
     else frame = `${d.idle}${Math.floor(this.clock * 6) % 4}`;
-    // Petrified: the figure keeps the frame it was turned to stone in.
-    if (stone) frame = this.frozen ??= frame;
-    else this.frozen = null;
+    // Petrified or frozen: the figure keeps the frame it was turned to stone (or ice) in.
+    if (stone || iced) frame = this.heldFrame ??= frame;
+    else this.heldFrame = null;
     // Flying: the body rises above its shadow, which shrinks a little.
     const lift = own?.lift ?? 0;
     this.body.setFrame(frame).setPosition(0, 1 - Math.round(lift * (d.lift ?? 0))).setScale(1, 1).setAngle(0);
@@ -210,12 +220,13 @@ export class EntityView {
     this.label?.setVisible(fall === 0 && drown === 0);
 
     if (hurt && !d.hit && Math.floor(this.clock * 30) % 2 === 0) this.body.setTintFill(0xffffff);
-    else if (!stone && (s.anim === ANIM.Windup || s.anim === ANIM.Slam || own?.windup)) {
+    else if (!stone && !iced && (s.anim === ANIM.Windup || s.anim === ANIM.Slam || own?.windup)) {
       // Telegraph: flashing red (the lich: pale purple gloom) and a shiver before the blow lands.
       this.body.setTint(Math.floor(this.clock * 16) % 2 ? (d.slam?.gloom ? 0xc890ff : 0xff8080) : (d.tint ?? 0xffffff));
       this.body.x = Math.floor(this.clock * 40) % 2 ? 1 : -1;
       if (own) this.body.y += Math.floor(this.clock * 40) % 2;
-    } else if (slowed) this.body.setTint(0xa0c8ff);
+    } else if (poisoned) this.body.setTint(shade(1, 0x9be37a, 0.5 + 0.5 * Math.sin(this.clock * Math.PI * 3)));
+    else if (slowed) this.body.setTint(0xa0c8ff);
     else if (s.flags & FLAG.ENRAGED) this.body.setTint(Math.floor(this.clock * 4) % 2 ? 0xff6060 : 0xff9090);
     else if (d.tint) this.body.setTint(d.tint);
     else this.body.clearTint();
@@ -266,8 +277,8 @@ export class EntityView {
     const t = s.animT;
     const scale = d.scale ?? 1;
 
-    // ---- body moves for attacks (the pack has no attack frames); none asleep or turned to stone ----
-    const still = asleep || stone;
+    // ---- body moves for attacks (the pack has no attack frames); none asleep, turned to stone or frozen ----
+    const still = asleep || stone || iced;
     if (!still) switch (s.anim) {
       case ANIM.Melee:
       case ANIM.Tail: {
@@ -340,7 +351,9 @@ export class EntityView {
 
     // ---- weapon ----
     const w = this.weapon;
-    if (!w || asleep) return;
+    // Frozen: the weapon stays as it was when the ice took hold (posed once, then held).
+    if (!w || asleep || (iced && this.weaponHeld)) return;
+    this.weaponHeld = iced;
     const isMelee = s.anim === ANIM.Melee;
     w.setFrame(isMelee && d.meleeWeapon ? d.meleeWeapon : d.weapon!);
     const hx = (d.handX ?? 3) * sgn;

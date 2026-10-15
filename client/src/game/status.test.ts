@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EFFECT } from '../generated/defs';
-import { has, lieLayout, lyingPose } from './status';
+import { flameSpots, has, lieLayout, lyingPose, snowflakeAlpha } from './status';
 
 describe('status', () => {
   it('reads effect bits', () => {
@@ -25,5 +25,24 @@ describe('status', () => {
     expect(lieLayout(b, 16, 28, 8, false, 1, 0.92)).toEqual({ cropX: 0, cropW: 12, x: -10, y: -3 });
     // Falling left (flipped): the mirrored left edge (column 3) loses 1 px.
     expect(lieLayout(b, 16, 28, 8, true, 1, 0.92)).toEqual({ cropX: 4, cropW: 12, x: 10, y: -3 });
+  });
+});
+
+describe('elemental visuals', () => {
+  it('snowflakes shimmer in, hold, and out', () => {
+    expect(snowflakeAlpha(0, 1)).toBe(0);
+    expect(snowflakeAlpha(0.5, 1)).toBe(1);
+    expect(snowflakeAlpha(1, 1)).toBe(0);
+    expect(snowflakeAlpha(0.1, 1)).toBeGreaterThan(0);
+    expect(snowflakeAlpha(0.1, 1)).toBeLessThan(1);
+  });
+
+  it('flames sit on the body', () => {
+    for (const [x, y] of flameSpots(12, 20, 3, 7)) {
+      expect(Math.abs(x)).toBeLessThanOrEqual(6);
+      expect(y).toBeLessThanOrEqual(0);
+      expect(y).toBeGreaterThanOrEqual(-20);
+    }
+    expect(flameSpots(12, 20, 3, 7)).toHaveLength(3);
   });
 });
