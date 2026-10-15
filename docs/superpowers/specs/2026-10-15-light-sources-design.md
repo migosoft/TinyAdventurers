@@ -66,6 +66,7 @@ Every number below is a first guess for the balancing pass (TODO "Tune").
 - **API**, the only way features touch light:
   - `add_light(kind, anchor, colour: Option<Colour>) -> id`: `None` uses the kind's colour;
   - `set_light(id, on)`;
+  - `set_light_colour(id, colour)`: changes a light's colour at any time, e.g. a cursed torch turning blue or a spell shifting colour;
   - `remove_light(id)`;
   - `light(id)` to read one source back;
   - `is_lit(pos) -> bool`.
@@ -100,7 +101,7 @@ Every number below is a first guess for the balancing pass (TODO "Tune").
 ### Protocol (`protocol.rs`, `wire.rs`, `client/src/wire.ts`)
 - **`RunStartInfo.lights: Vec<LightInfo>`**, with `LightInfo { id, kind, colour, x, y, on }`. It covers every static light at run start (torches and lava).
 - **New events**, all sent with `at = None` (to everyone):
-  - `Ev::Light { id, on }`: a static light switched;
+  - `Ev::Light { id, on, colour }`: a static light switched or recoloured (it carries the current state);
   - `Ev::LightAdd { id, kind, colour, x, y, on }` and `Ev::LightRemove { id }`: a static light created or removed mid-run (e.g. lava appearing through `Ev::Tile`, a brazier placed later).
 - **`Snapshot.lights: Vec<MovingLight>`**, with `MovingLight(x, y, kind, colour?)`.
   - The colour is left out when it equals the kind's default, which keeps the list small.
@@ -204,7 +205,8 @@ Every number below is a first guess for the balancing pass (TODO "Tune").
   - add, switch and remove a static light, and the dirty rebuild;
   - light stops at walls but lights the wall;
   - a moving light follows its entity, is blocked by walls, and disappears when the entity is gone (the sweep);
-  - the colour override and the default colour.
+  - the colour override and the default colour;
+  - `set_light_colour` on a static light emits `Ev::Light` with the new colour, and on a moving light it changes its entry in the moving-light list.
 - **Visibility:**
   - a monster in a dark room inside the hero's FOV is not sent;
   - a lit torch makes it visible, and putting the torch out hides it again;
