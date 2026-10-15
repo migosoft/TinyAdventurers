@@ -4,7 +4,7 @@
 Ordered by technical complexity and by technical dependencies (what makes later items easier), not by quick wins. Items in the same tier can be done in either order unless noted.
 
 **Tier 1: foundations**
-1. **Effect system** (done, built 2026-10-15 on `feature/effects`; follow-ups in "Effect system follow-ups"). Blind, sleep, petrified, slowed, accelerated; extensible, every creature, effects modify any stat. Spec: [docs/superpowers/specs/2026-10-15-effects-design.md](superpowers/specs/2026-10-15-effects-design.md); TECHNICAL §5 "Status effects", §11 "How to add an effect". The lich casts three effect spells.
+1. **Effect system** (done, built 2026-10-15 on `feature/effects`; follow-ups in "Effect system follow-ups"). Blind, sleep, petrified, slowed, accelerated and the elemental burning, frozen, poisoned; extensible, every creature, effects modify any stat. Spec: [docs/superpowers/specs/2026-10-15-effects-design.md](superpowers/specs/2026-10-15-effects-design.md); TECHNICAL §5 "Status effects", §11 "How to add an effect". The lich casts three effect spells.
 2. **Straight, softly fading vision edges** (next item; the user wants it soon; see "Vision and darkvision follow-ups", "Vision edges"). Client only.
 3. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), gnolls. Little code, but the shadow, ghost, gnolls and sphinx wait on it.
 
@@ -155,16 +155,18 @@ Built 2026-10-15 on branch `feature/vision` (TECHNICAL §5 "Sight", §7, §11 "H
   - Check the look in `?lights` and with darkvision (F4).
 
 ## Effect system follow-ups
-Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §11 "How to add an effect"): five effects, resistances and responses, hit effects, the lich's three spells, wake-up with E, HUD icons, F8 debug.
+Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §11 "How to add an effect"): eight effects (five plus the elemental burning, frozen and poisoned), resistances and responses, hit effects, the lich's three spells, wake-up with E, HUD icons, F8 debug.
 - **Play-test (user):** the lich's blinding curse, sleep mist and stone gaze in a real fight (orb speed, how readable the wind-ups are, whether the gaze beam is easy to break), the HUD icons, the lying pose and the stone look.
-- **Tune** in the balancing pass: the durations in `defs/effects.rs` (blind 3 s, sleep 4 s, petrified 3 s, slowed and accelerated 3 s), `EFFECT_REDUCED` (0.5), the `LICH_*` numbers in `defs/bosses.rs` (windups, cooldowns 10, 14 and 18 s, first casts at 4, 7 and 9 s, the blind orb's damage), and the petrified resistances.
+- **Tune** in the balancing pass: the durations in `defs/effects.rs` (blind 3 s, sleep 4 s, petrified 3 s, slowed and accelerated 3 s, burning 3 s, frozen 2 s, poisoned 4 s), the damage over time (burning heat 6 per second, frozen cold 4, poisoned poison 4), `DOT_TICK` (0.5 s), `ELEMENT_SHARE` (0.5), `EFFECT_REDUCED` (0.5), the `LICH_*` numbers in `defs/bosses.rs` (windups, cooldowns 10, 14 and 18 s, first casts at 4, 7 and 9 s, the blind orb's damage), and the petrified resistances.
+- **Sources for Frozen and Poisoned:** nothing cold or poisonous hits yet (heat hits burn: fire, barrels, lava, the dragon). Cold and poison attacks (a frost spell, a spider or snake, a poison arrow) come with new enemies or hero abilities; the element table applies the effect by itself once the hit is at least half cold or poison.
 - **Sources for Slowed and Accelerated:** nothing applies them yet (only F8). Hero abilities, tier 2 (priority 4), e.g. a slowing shot or a haste spell; `Damage::with_effect` or `apply_effect` is all they need.
 - **The rogue's hide as `Invisible`:** `Player.hidden` is still its own timer. Folding it in as an effect would let items and enemies share it.
 - **Monster sleep with `wakes_on_damage`:** the flag exists and `damage_wakes` is called, but no effect uses it. A sleep for monsters (a hero ability) needs it on a new kind or on `Sleep` with a per-target rule, and the AI already skips a monster with `no_act`.
 - **The elf's sleep immunity via `EffectResponses`:** per entity type or `Adjust` (today only bosses have a response table, `defs/bosses.rs`); give `Adjust` a `responses` field when the Elf type arrives.
 - **Effect sounds:** `Ev::Effect` is sent on every start and end and the client ignores it; it is the hook.
-- **Damage over time (poison, burning):** a tick rule on `EffectDef` (damage type and amount per second) run in `tick_effects`; fire patches and the dragon's breath could apply burning, poison hits could apply poison.
-- **HUD glyphs are letters (B, Z, P, S, A):** the pixel font has no symbols. Drawn icons (small sprites, so art or the user's go-ahead) would read better.
+- **Petrified and Burning:** a petrified creature has heat resistance 0.5 from the stone, so one with half heat resistance already (no creature today) becomes immune to Burning (resistance 1.0 refuses the effect). Decide whether stone should protect from fire that way.
+- **Status marks of the elemental effects ignore two fades:** burning flames, frozen haze and poison bubbles do not follow the hidden rogue's alpha or the fall and drown fades. Fix before the effects branch is merged.
+- **HUD glyphs are letters (B, Z, P, S, A, F, I, X):** the pixel font has no symbols. Drawn icons (small sprites, so art or the user's go-ahead) would read better.
 - **A frozen boss's running action is paused, not cancelled:** `levels/boss.rs` skips the behaviour tick, while the spec says a running wind-up is cancelled. Decide, or add a `cancel()` hook on `BossBehaviour`, before a hero ability gives bosses effects.
 - **Sleeping or petrified monsters can still be pushed** by `separate_monsters`.
 - **`Ev::Effect` drives no client burst yet** (start and end of an effect could play a puff).
