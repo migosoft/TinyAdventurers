@@ -87,6 +87,9 @@ impl Resistances {
     pub fn get(&self, t: DamageType) -> f64 {
         self.0[t as usize]
     }
+    pub fn set(&mut self, t: DamageType, v: f64) {
+        self.0[t as usize] = v;
+    }
     pub fn plus(self, o: Resistances) -> Self {
         let mut r = self.0;
         for (a, b) in r.iter_mut().zip(o.0) {
