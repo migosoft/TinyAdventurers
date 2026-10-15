@@ -340,3 +340,37 @@ export const DMG_TYPE = {
   "Physical": 0,
   "Poison": 4
 } as const;
+
+export const LIGHT_KIND = {
+  "Fire": 2,
+  "Lava": 1,
+  "Magic": 3,
+  "Torch": 0
+} as const;
+
+export const LIGHT: Record<number, { radius: number; colour: number; intensity: number; flicker: number }> = {
+  "0": {
+    "colour": 16755290,
+    "flicker": 0.15,
+    "intensity": 1.0,
+    "radius": 5
+  },
+  "1": {
+    "colour": 16729630,
+    "flicker": 0.05,
+    "intensity": 0.8,
+    "radius": 1
+  },
+  "2": {
+    "colour": 16747580,
+    "flicker": 0.2,
+    "intensity": 0.9,
+    "radius": 3
+  },
+  "3": {
+    "colour": 9861375,
+    "flicker": 0.1,
+    "intensity": 0.7,
+    "radius": 2
+  }
+};
