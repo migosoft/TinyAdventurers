@@ -150,6 +150,6 @@ export class LightsDemoScene extends Phaser.Scene {
       [cx, cy, LIGHT_KIND.Magic, FROST_COLOUR],
     ];
     if (sinceBoom >= 0 && sinceBoom < FLASH) moving.push([boomX, fy, LIGHT_KIND.Blast, null]);
-    this.view.update(this.cameras.main.worldView, (VIEWER[0] + 0.5) * TILE, (VIEWER[1] + 0.5) * TILE, moving, this.t);
+    this.view.update(this.cameras.main.worldView, (VIEWER[0] + 0.5) * TILE, (VIEWER[1] + 0.5) * TILE, moving, this.t, 0);
   }
 }

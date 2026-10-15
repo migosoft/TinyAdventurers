@@ -33,6 +33,19 @@ export function darknessAlpha(visible: boolean, lit: boolean, r: number, g: numb
   return 1 - Math.max(bright, MIN_LIT);
 }
 
+/** Darkness over a tile seen only by darkvision: dim, not black. */
+export const DV_DARK = 0.45;
+
+/** Mirror of the server's dark_reach: is the tile at (dx, dy) tiles from the viewer within darkvision `range` (tiles)? */
+export function darkReach(dx: number, dy: number, range: number): boolean {
+  return range > 0 && dx * dx + dy * dy <= range * range;
+}
+
+/** Darkness over one tile with darkvision: a seen, unlit tile in reach is dimmed to DV_DARK, else as `darknessAlpha`. */
+export function tileDark(visible: boolean, lit: boolean, inReach: boolean, r: number, g: number, b: number): number {
+  return visible && !lit && inReach ? DV_DARK : darknessAlpha(visible, lit, r, g, b);
+}
+
 /** A light's brightness factor at time `t` (s): a slight, per-light wobble by its kind. */
 export function flicker(kind: number, id: number, t: number): number {
   const f = LIGHT[kind].flicker;
@@ -114,23 +127,30 @@ export class LightView {
   private origin = [-1, -1];
   private dark: Phaser.Textures.CanvasTexture;
   private tint: Phaser.Textures.CanvasTexture;
+  /** Per-tile darkvision mask (R = 255 where darkvision shows the tile, A = 255), for the greyscale shader. Not added to the scene. */
+  readonly mask: Phaser.Textures.CanvasTexture;
   private darkImg: ImageData;
   private tintImg: ImageData;
+  private maskImg: ImageData;
   private rgb: Float32Array;
   private movingLit: Uint8Array;
   /** Per tile: darkness alpha (0..255), and the tint as r, g, b, a (0..255). */
   private darkTile: Float32Array;
   private tintTile: Float32Array;
+  private maskTile: Float32Array;
   private tmp: Float32Array;
 
   constructor(scene: Phaser.Scene, private map: TileMap, private field: LightField) {
     const { w, h } = map;
     this.fov = new Fov(w, h);
-    for (const k of ['dark', 'tint']) if (scene.textures.exists(k)) scene.textures.remove(k);
+    for (const k of ['dark', 'tint', 'dvmask']) if (scene.textures.exists(k)) scene.textures.remove(k);
     this.dark = scene.textures.createCanvas('dark', w * SUB, h * SUB)!;
     this.tint = scene.textures.createCanvas('tint', w * SUB, h * SUB)!;
+    this.mask = scene.textures.createCanvas('dvmask', w * SUB, h * SUB)!;
     this.darkImg = this.dark.getContext().createImageData(w * SUB, h * SUB);
     this.tintImg = this.tint.getContext().createImageData(w * SUB, h * SUB);
+    this.maskImg = this.mask.getContext().createImageData(w * SUB, h * SUB);
+    for (let i = 0; i < w * SUB * h * SUB; i++) this.maskImg.data[i * 4 + 3] = 255;
     // Black, fully opaque until drawn.
     for (let i = 0; i < w * SUB * h * SUB; i++) this.darkImg.data.set([0, 0, 0, 255], i * 4);
     this.dark.getContext().putImageData(this.darkImg, 0, 0);
@@ -139,14 +159,15 @@ export class LightView {
     this.movingLit = new Uint8Array(w * h);
     this.darkTile = new Float32Array(w * h).fill(255);
     this.tintTile = new Float32Array(w * h * 4);
+    this.maskTile = new Float32Array(w * h);
     this.tmp = new Float32Array(w * SUB * h * 4);
     scene.add.image(0, 0, 'tint').setOrigin(0, 0).setScale(TILE / SUB).setDepth(DEPTH.tint).setBlendMode(ADD);
     scene.add.image(0, 0, 'dark').setOrigin(0, 0).setScale(TILE / SUB).setDepth(DEPTH.fog);
   }
 
-  /** Uploads both canvases. refresh() resets the filter to NEAREST (pixelArt), so LINEAR is set again after it. */
+  /** Uploads the canvases. refresh() resets the filter to NEAREST (pixelArt), so LINEAR is set again after it. */
   private upload(): void {
-    for (const tex of [this.dark, this.tint]) {
+    for (const tex of [this.dark, this.tint, this.mask]) {
       tex.refresh();
       tex.setFilter(LINEAR);
     }
@@ -157,7 +178,7 @@ export class LightView {
     this.origin = [-1, -1];
   }
 
-  update(view: Phaser.Geom.Rectangle, vx: number, vy: number, moving: MovingLight[], t: number): void {
+  update(view: Phaser.Geom.Rectangle, vx: number, vy: number, moving: MovingLight[], t: number, darkvision: number): void {
     const { w, h } = this.map;
     const tx = Math.floor(vx / TILE);
     const ty = Math.floor(vy / TILE);
@@ -178,13 +199,17 @@ export class LightView {
       this.field.addMoving(this.rgb, this.movingLit, mx, my, kind, colour ?? LIGHT[kind].colour, flicker(kind, 1000 + n, t), TILE));
     const dt = this.darkTile;
     const tt = this.tintTile;
+    const mt = this.maskTile;
+    const range = CONST.FOV_RADIUS * darkvision;
     for (let y = y0; y < y1; y++)
       for (let x = x0; x < x1; x++) {
         const i = y * w + x;
         const [r, g, b] = [this.rgb[i * 3], this.rgb[i * 3 + 1], this.rgb[i * 3 + 2]];
         const visible = this.fov.isVisible(x, y);
         const lit = this.field.isLit(x, y) || this.movingLit[i] === 1;
-        dt[i] = darknessAlpha(visible, lit, r, g, b) * 255;
+        const reach = visible && !lit && darkReach(x - tx, y - ty, range);
+        dt[i] = tileDark(visible, lit, reach, r, g, b) * 255;
+        mt[i] = reach ? 255 : 0;
         tt[i * 4] = Math.min(255, r);
         tt[i * 4 + 1] = Math.min(255, g);
         tt[i * 4 + 2] = Math.min(255, b);
@@ -192,10 +217,12 @@ export class LightView {
       }
     upsample(dt, 1, w, h, x0, y0, x1, y1, this.tmp, this.darkImg.data, 3);
     upsample(tt, 4, w, h, x0, y0, x1, y1, this.tmp, this.tintImg.data, 0);
+    upsample(mt, 1, w, h, x0, y0, x1, y1, this.tmp, this.maskImg.data, 0);
     blackenDarkTiles(dt, w, x0, y0, x1, y1, this.darkImg.data, this.tintImg.data);
     const [px, py, pw, ph] = [x0 * SUB, y0 * SUB, (x1 - x0) * SUB, (y1 - y0) * SUB];
     this.dark.getContext().putImageData(this.darkImg, 0, 0, px, py, pw, ph);
     this.tint.getContext().putImageData(this.tintImg, 0, 0, px, py, pw, ph);
+    this.mask.getContext().putImageData(this.maskImg, 0, 0, px, py, pw, ph);
     this.upload();
   }
 }

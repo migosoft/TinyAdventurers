@@ -573,7 +573,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.cameras.main.centerOn(Math.round(camX), Math.round(camY - 8));
-    this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now);
+    this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now, (this.lastSnap?.me.darkvision ?? 0) / 100);
 
     const seen = new Set<number>();
     const myShots = new Set<number>();

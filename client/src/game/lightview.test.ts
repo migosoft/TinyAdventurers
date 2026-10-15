@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND } from '../generated/defs';
-import { blackenDarkTiles, catmullRom, darknessAlpha, flicker, SUB, upsample } from './lightview';
+import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, flicker, SUB, tileDark, upsample } from './lightview';
 
 describe('darkness', () => {
   it('is black where not seen or not lit', () => {
@@ -68,5 +68,20 @@ describe('upsampling the per-tile light', () => {
         expect(tint[p + 3]).toBe(0);
       }
     expect(dark[(SUB - 1) * 4 + 3]).toBeLessThan(255); // the lit side keeps its fade
+  });
+});
+
+describe('darkvision', () => {
+  it('reaches tiles within the range, never at range 0', () => {
+    expect(darkReach(0, 0, 0)).toBe(false);
+    expect(darkReach(0, 0, 4.5)).toBe(true);
+    expect(darkReach(4, 2, 4.5)).toBe(true); // 16 + 4 = 20 <= 20.25
+    expect(darkReach(5, 0, 4.5)).toBe(false);
+  });
+  it('dims a seen unlit tile in reach, else leaves darknessAlpha', () => {
+    expect(tileDark(true, false, true, 0, 0, 0)).toBe(DV_DARK);
+    expect(tileDark(true, false, false, 0, 0, 0)).toBe(1);
+    expect(tileDark(false, false, true, 0, 0, 0)).toBe(1);
+    expect(tileDark(true, true, true, 10, 5, 0)).toBe(darknessAlpha(true, true, 10, 5, 0));
   });
 });
