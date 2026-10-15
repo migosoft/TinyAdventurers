@@ -14,11 +14,14 @@ pub enum EffectKind {
     Petrified = 2,
     Slowed = 3,
     Accelerated = 4,
+    Burning = 5,
+    Frozen = 6,
+    Poisoned = 7,
 }
 
 impl EffectKind {
-    pub const COUNT: usize = 5;
-    pub const ALL: [EffectKind; EffectKind::COUNT] = [EffectKind::Blind, EffectKind::Sleep, EffectKind::Petrified, EffectKind::Slowed, EffectKind::Accelerated];
+    pub const COUNT: usize = 8;
+    pub const ALL: [EffectKind; EffectKind::COUNT] = [EffectKind::Blind, EffectKind::Sleep, EffectKind::Petrified, EffectKind::Slowed, EffectKind::Accelerated, EffectKind::Burning, EffectKind::Frozen, EffectKind::Poisoned];
     pub fn bit(self) -> u16 {
         1 << self as u8
     }
@@ -74,9 +77,19 @@ pub struct EffectDef {
     pub wakes_on_damage: bool,
     /// A teammate's E next to the creature ends it.
     pub wakes_on_use: bool,
+    /// Damage over time: its type and damage per second, dealt every `DOT_TICK`
+    /// as effect damage. A creature fully resistant to the type never takes the effect.
+    #[allow(dead_code)] // used by run/effects.rs (Task 2)
+    pub dot: Option<(DamageType, f64)>,
+    /// Applying this effect ends these instead (fire thaws ice, ice puts out fire).
+    #[allow(dead_code)] // used by run/effects.rs (Task 2)
+    pub cancels: &'static [EffectKind],
+    /// Standing in shallow or deep water ends it.
+    #[allow(dead_code)] // used by run/effects.rs (Task 2)
+    pub ends_in_water: bool,
 }
 
-const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false };
+const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, cancels: &[], ends_in_water: false };
 
 use DamageType::*;
 use Op::*;
@@ -94,6 +107,8 @@ const PETRIFIED_MODS: &[StatMod] = &[
 ];
 const SLOWED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 0.5)];
 const ACCELERATED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 1.5)];
+const FROZEN_CANCELS: &[EffectKind] = &[EffectKind::Frozen];
+const BURNING_CANCELS: &[EffectKind] = &[EffectKind::Burning];
 
 pub fn def(k: EffectKind) -> EffectDef {
     match k {
@@ -102,7 +117,26 @@ pub fn def(k: EffectKind) -> EffectDef {
         EffectKind::Petrified => EffectDef { mods: PETRIFIED_MODS, no_move: true, no_act: true, no_turn: true, ..NONE },
         EffectKind::Slowed => EffectDef { mods: SLOWED_MODS, ..NONE },
         EffectKind::Accelerated => EffectDef { positive: true, mods: ACCELERATED_MODS, ..NONE },
+        EffectKind::Burning => EffectDef { dot: Some((Heat, 6.0)), cancels: FROZEN_CANCELS, ends_in_water: true, ..NONE },
+        EffectKind::Frozen => EffectDef { duration: 2.0, dot: Some((Cold, 4.0)), cancels: BURNING_CANCELS, no_move: true, no_act: true, no_turn: true, ..NONE },
+        EffectKind::Poisoned => EffectDef { duration: 4.0, dot: Some((Poison, 4.0)), ..NONE },
     }
+}
+
+/// Damage over time ticks this often (s).
+#[allow(dead_code)] // used by run/effects.rs (Task 2)
+pub const DOT_TICK: f64 = 0.5;
+/// A hit whose share of an element is at least this applies the element's effect.
+#[allow(dead_code)] // used by run/effects.rs (Task 2)
+pub const ELEMENT_SHARE: f64 = 0.5;
+/// Element → the effect its hits apply. A new elemental effect is one line here.
+#[allow(dead_code)] // used by run/effects.rs (Task 2)
+pub const ELEMENTS: [(DamageType, EffectKind); 3] = [(Heat, EffectKind::Burning), (Cold, EffectKind::Frozen), (Poison, EffectKind::Poisoned)];
+
+/// The effects a hit with this split applies (in `ELEMENTS` order).
+#[allow(dead_code)] // used by run/effects.rs (Task 2)
+pub fn element_effects(split: &super::damage::DamageSplit) -> Vec<EffectKind> {
+    ELEMENTS.iter().filter(|(t, _)| split.share(*t) >= ELEMENT_SHARE - 1e-9).map(|&(_, k)| k).collect()
 }
 
 /// Duration factor for a `Reduced` response.
@@ -204,5 +238,38 @@ mod tests {
         assert_eq!(r.get(EffectKind::Sleep), EffectResponse::Immune);
         assert_eq!(r.get(EffectKind::Blind), EffectResponse::Full);
         assert_eq!(EffectResponses::FULL.get(EffectKind::Petrified), EffectResponse::Full);
+    }
+
+    #[test]
+    fn elemental_effects_match_the_spec() {
+        let b = def(EffectKind::Burning);
+        assert_eq!((b.dot, b.duration, b.ends_in_water), (Some((Heat, 6.0)), 3.0, true));
+        assert_eq!(b.cancels, &[EffectKind::Frozen]);
+        assert!(!b.no_move && !b.positive);
+        let f = def(EffectKind::Frozen);
+        assert_eq!((f.dot, f.duration, f.ends_in_water), (Some((Cold, 4.0)), 2.0, false));
+        assert_eq!(f.cancels, &[EffectKind::Burning]);
+        assert!(f.no_move && f.no_act && f.no_turn && !f.prone);
+        let p = def(EffectKind::Poisoned);
+        assert_eq!((p.dot, p.duration), (Some((Poison, 4.0)), 4.0));
+        assert!(p.cancels.is_empty() && !p.ends_in_water && !p.no_move);
+        for k in [EffectKind::Blind, EffectKind::Sleep, EffectKind::Petrified, EffectKind::Slowed, EffectKind::Accelerated] {
+            assert!(def(k).dot.is_none() && def(k).cancels.is_empty() && !def(k).ends_in_water, "{k:?}");
+        }
+        assert_eq!((EffectKind::Burning as u8, EffectKind::Frozen as u8, EffectKind::Poisoned as u8), (5, 6, 7));
+        assert_eq!(EffectKind::COUNT, 8);
+    }
+
+    #[test]
+    fn a_hit_applies_the_effect_of_each_element_making_up_half_of_it() {
+        use crate::defs::damage::DamageSplit;
+        assert_eq!(element_effects(&DamageSplit::pure(Heat)), vec![EffectKind::Burning]);
+        assert_eq!(element_effects(&DamageSplit::split(&[(Heat, 0.7), (Magical, 0.2)])), vec![EffectKind::Burning], "fireball");
+        assert_eq!(element_effects(&DamageSplit::split(&[(Heat, 0.5)])), vec![EffectKind::Burning], "barrel blast: exactly half");
+        assert!(element_effects(&DamageSplit::split(&[(Heat, 0.2)])).is_empty(), "claws");
+        assert_eq!(element_effects(&DamageSplit::pure(Cold)), vec![EffectKind::Frozen]);
+        assert_eq!(element_effects(&DamageSplit::pure(Poison)), vec![EffectKind::Poisoned]);
+        assert!(element_effects(&DamageSplit::physical()).is_empty());
+        assert_eq!(element_effects(&DamageSplit::split(&[(Heat, 0.5), (Cold, 0.5)])), vec![EffectKind::Burning, EffectKind::Frozen]);
     }
 }
