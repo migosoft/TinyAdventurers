@@ -1,7 +1,9 @@
 // Dev page ?lights (no server): the light sources on a small board. Four torches
 // in four colours, a lava pool with a warm torch beside it (colour mixing), a
-// fireball flying down a corridor into a dark room and back, a frost bolt
-// circling in the first room, and a blue torch that switches every 3 s.
+// fireball flying down a corridor into a dark room and back, an explosion
+// (a short Blast flash) in the dark room's doorway while the fireball is at
+// its far end, a frost bolt circling in the first room, and a blue torch that
+// switches every 3 s.
 // `&slow=N` slows time.
 import Phaser from 'phaser';
 import { LIGHT_KIND, TILE_ID } from '../generated/defs';
@@ -18,6 +20,8 @@ const W = 30;
 const H = 20;
 const LOOP = 4;
 const SWITCH = 3;
+/** How long the explosion at the fireball's turnaround flashes (the server's `BLAST_FLASH`). */
+const FLASH = 0.4;
 /** The viewer stands in the middle of room 1. */
 const VIEWER: [number, number] = [7, 9];
 const CORRIDOR_Y = 9;
@@ -97,7 +101,7 @@ export class LightsDemoScene extends Phaser.Scene {
     this.frost = glow(0x9ae0ff, 1);
 
     this.add
-      .text(8, 6, 'lights demo: torches in four colours, lava, torch+lava mix, fireball into a dark room, frost bolt; blue torch toggles every 3 s', {
+      .text(8, 6, 'lights demo: torches in four colours, lava, torch+lava mix, fireball into a dark room, explosion flash in its doorway, frost bolt; blue torch toggles every 3 s', {
         fontFamily: 'monospace',
         fontSize: '8px',
         color: '#fff',
@@ -130,6 +134,10 @@ export class LightsDemoScene extends Phaser.Scene {
     const tri = p < 0.5 ? p * 2 : 2 - p * 2;
     const fx = ((VIEWER[0] + 1 + tri * 13) + 0.5) * TILE;
     const fy = (CORRIDOR_Y + 0.5) * TILE;
+    // An explosion in the dark room's doorway (in the viewer's sight) while the fireball is at its far end, out of sight.
+    const sinceBoom = (this.t % LOOP) - LOOP / 2;
+    const boomX = 15.5 * TILE;
+    if (sinceBoom >= 0 && prev % LOOP < LOOP / 2) this.fx.explosion(boomX, fy, 20);
     // Frost bolt: a circle of 2.5 tiles in the north of room 1.
     const a = p * Math.PI * 2;
     const cx = (6.5 + 2.5 * Math.cos(a)) * TILE;
@@ -141,6 +149,7 @@ export class LightsDemoScene extends Phaser.Scene {
       [fx, fy, LIGHT_KIND.Fire, FIRE_COLOUR],
       [cx, cy, LIGHT_KIND.Magic, FROST_COLOUR],
     ];
+    if (sinceBoom >= 0 && sinceBoom < FLASH) moving.push([boomX, fy, LIGHT_KIND.Blast, null]);
     this.view.update(this.cameras.main.worldView, (VIEWER[0] + 0.5) * TILE, (VIEWER[1] + 0.5) * TILE, moving, this.t);
   }
 }
