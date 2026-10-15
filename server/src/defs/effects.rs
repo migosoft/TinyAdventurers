@@ -123,14 +123,11 @@ pub fn def(k: EffectKind) -> EffectDef {
 /// Damage over time ticks this often (s).
 pub const DOT_TICK: f64 = 0.5;
 /// A hit whose share of an element is at least this applies the element's effect.
-#[allow(dead_code)] // used by run/effects.rs (Task 2)
 pub const ELEMENT_SHARE: f64 = 0.5;
 /// Element → the effect its hits apply. A new elemental effect is one line here.
-#[allow(dead_code)] // used by run/effects.rs (Task 2)
 pub const ELEMENTS: [(DamageType, EffectKind); 3] = [(Heat, EffectKind::Burning), (Cold, EffectKind::Frozen), (Poison, EffectKind::Poisoned)];
 
 /// The effects a hit with this split applies (in `ELEMENTS` order).
-#[allow(dead_code)] // used by run/effects.rs (Task 2)
 pub fn element_effects(split: &super::damage::DamageSplit) -> Vec<EffectKind> {
     ELEMENTS.iter().filter(|(t, _)| split.share(*t) >= ELEMENT_SHARE - 1e-9).map(|&(_, k)| k).collect()
 }

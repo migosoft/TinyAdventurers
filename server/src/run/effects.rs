@@ -196,6 +196,16 @@ impl Run {
         }
     }
 
+    /// After a normal hit: each element making up at least half of it applies its effect.
+    pub fn element_hit(&mut self, c: Creature, dmg: &crate::defs::damage::Damage) {
+        if dmg.from_effect {
+            return;
+        }
+        for k in crate::defs::effects::element_effects(&dmg.split) {
+            self.apply_effect(c, k, None);
+        }
+    }
+
     /// A hit's effect: rolled on the run's rng unless certain (chance >= 1 draws nothing).
     pub fn hit_effect(&mut self, c: Creature, h: OnHit) {
         let lands = h.chance >= 1.0 || (h.chance > 0.0 && rand::Rng::gen::<f64>(&mut self.rng) < h.chance);
@@ -645,5 +655,51 @@ mod tests {
         }
         assert!(!run.monsters[mi].alive);
         assert_eq!(run.players[0].kills, 1);
+    }
+
+    #[test]
+    fn mostly_heat_hits_and_lava_set_heroes_on_fire() {
+        use crate::defs::damage::kind_split;
+        use crate::defs::kinds::EntityKind;
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        open(&mut run);
+        run.hurt_player(0, Damage::new(4.0, DamageSplit::split(&[(DamageType::Heat, 0.2)])));
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Burning), "a claw with a fifth of heat does not burn");
+        run.hurt_player(0, Damage::new(4.0, kind_split(EntityKind::Fireball)));
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Burning));
+        run.remove_effect(Creature::Player(0), EffectKind::Burning);
+        // Lava: one tick burns.
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        run.set_tile(tx, ty, crate::dungeon::Tile::Lava);
+        run.step();
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Burning));
+    }
+
+    #[test]
+    fn heat_immune_creatures_are_never_set_on_fire() {
+        use crate::defs::enemies::EnemyType;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::Imp, at, None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        let hp = run.monsters[mi].hp;
+        run.hurt_monster(mi, Damage::new(10.0, DamageSplit::pure(DamageType::Heat)), false, None);
+        assert_eq!(run.monsters[mi].hp, hp);
+        assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Burning));
+        let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None, 1);
+        let si = run.monster_idx(id).unwrap();
+        run.hurt_monster(si, Damage::new(10.0, DamageSplit::pure(DamageType::Poison)), false, None);
+        assert!(!run.has_effect(Creature::Monster(si), EffectKind::Poisoned), "undead are never poisoned");
+    }
+
+    #[test]
+    fn an_immune_lich_is_not_set_on_fire() {
+        use crate::defs::damage::kind_split;
+        use crate::defs::kinds::EntityKind;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        let bi = boss(&run);
+        assert!(!run.hurt_monster(bi, Damage::new(10.0, kind_split(EntityKind::Fireball)), false, Some(0)), "disciples alive: refused");
+        assert!(!run.has_effect(Creature::Monster(bi), EffectKind::Burning));
     }
 }
