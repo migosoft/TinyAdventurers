@@ -231,6 +231,8 @@ pub enum Ev {
     /// A static light created mid-run (tile coordinates).
     LightAdd { id: u32, kind: u8, colour: u32, x: u16, y: u16, on: bool },
     LightRemove { id: u32 },
+    /// A status effect started (on) or ended on entity id; kind = EffectKind id.
+    Effect { id: u32, kind: u8, on: bool },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

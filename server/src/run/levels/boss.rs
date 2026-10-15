@@ -73,6 +73,8 @@ pub fn spawn(run: &mut Run, party: usize) {
         sinking: None,
         burn_t: crate::dungeon::LAVA_TICK,
         last_hit_by: None,
+        effects: Default::default(),
+        responses: boss_defs::responses(boss_id),
     });
     enc_mut(run).boss_ent = id;
     let mut behaviour = bosses::create(boss_id);

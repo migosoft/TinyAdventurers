@@ -371,6 +371,8 @@ export class GameScene extends Phaser.Scene {
       case 'LightRemove':
         this.light.remove(ev.id);
         break;
+      case 'Effect':
+        break; // drawn from the snapshot bitmask (status.ts)
       case 'Msg':
         this.hud.message(ev.text);
         break;

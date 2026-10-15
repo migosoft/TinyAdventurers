@@ -327,6 +327,7 @@ export const EV = {
   "Coins": 8,
   "Died": 3,
   "Dmg": 0,
+  "Effect": 13,
   "Heal": 1,
   "Immune": 5,
   "Light": 10,

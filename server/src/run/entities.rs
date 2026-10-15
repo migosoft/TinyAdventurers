@@ -71,6 +71,8 @@ pub struct Player {
     /// What the hero sees (from the class profile) and an override of its darkvision fraction.
     pub sight: Sight,
     pub darkvision: Option<f64>,
+    /// Status effects (run/effects.rs).
+    pub effects: crate::run::effects::Effects,
 }
 
 /// How a hero is lost to the terrain (sent as `Ev::Sink { how }`).
@@ -201,6 +203,9 @@ pub struct Monster {
     pub burn_t: f64,
     /// Last hero who hurt it: credited for a death by terrain.
     pub last_hit_by: Option<usize>,
+    pub effects: crate::run::effects::Effects,
+    /// How it takes each effect (bosses: defs/bosses.rs responses).
+    pub responses: crate::defs::effects::EffectResponses,
 }
 
 impl Monster {

@@ -96,3 +96,13 @@ pub fn profile(id: BossId) -> Profile {
     };
     entity_types::profile(&[ty], adj)
 }
+
+/// How each boss takes effects (user, 2026-10-15). Everyone else takes them in full.
+pub fn responses(id: BossId) -> crate::defs::effects::EffectResponses {
+    use crate::defs::effects::{EffectKind::*, EffectResponse::*, EffectResponses};
+    match id {
+        BossId::Lich => EffectResponses::of(&[(Sleep, Immune), (Blind, Immune), (Petrified, Reduced)]),
+        BossId::Dragon => EffectResponses::of(&[(Sleep, Immune), (Blind, Reduced), (Petrified, Reduced), (Slowed, Reduced), (Accelerated, Reduced)]),
+        BossId::Demon => EffectResponses::of(&[(Sleep, Immune)]),
+    }
+}

@@ -28,6 +28,7 @@ type SinkW = [number, number, number, number, number];
 type LightEvW = [number, number, boolean, number];
 type LightAddW = [number, number, number, number, number, number, boolean];
 type LightRemoveW = [number, number];
+type EffectW = [number, number, number, boolean];
 
 function unpackEv(e: EvW): Ev {
   switch (e[0]) {
@@ -82,6 +83,10 @@ function unpackEv(e: EvW): Ev {
     case EV.LightRemove: {
       const [, id] = e as LightRemoveW;
       return { t: 'LightRemove', id };
+    }
+    case EV.Effect: {
+      const [, id, kind, on] = e as EffectW;
+      return { t: 'Effect', id, kind, on };
     }
     default:
       throw new Error(`unknown event code ${e[0]}`);

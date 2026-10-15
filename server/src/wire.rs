@@ -14,7 +14,7 @@ use crate::protocol::{BossId, Ev, InputMsg, Snapshot};
 pub const POS_SCALE: f64 = 16.0;
 
 /// Event codes on the wire, by index. Exported to the client as `EV`.
-pub const EV_CODES: [&str; 13] = ["Dmg", "Heal", "Boom", "Died", "Raise", "Immune", "Tile", "Msg", "Coins", "Sink", "Light", "LightAdd", "LightRemove"];
+pub const EV_CODES: [&str; 14] = ["Dmg", "Heal", "Boom", "Died", "Raise", "Immune", "Tile", "Msg", "Coins", "Sink", "Light", "LightAdd", "LightRemove", "Effect"];
 
 pub fn q_pos(v: f64) -> u32 {
     (v * POS_SCALE).round().max(0.0) as u32
@@ -59,6 +59,7 @@ pub enum EvW {
     Light(u8, u32, bool, u32),
     LightAdd(u8, u32, u8, u32, u16, u16, bool),
     LightRemove(u8, u32),
+    Effect(u8, u32, u8, bool),
 }
 
 /// `[x, y, kind, colour]`, positions scaled, see `MovingLight`.
@@ -99,6 +100,7 @@ fn ev_w(e: &Ev) -> EvW {
         Ev::Light { id, on, colour } => EvW::Light(10, *id, *on, *colour),
         Ev::LightAdd { id, kind, colour, x, y, on } => EvW::LightAdd(11, *id, *kind, *colour, *x, *y, *on),
         Ev::LightRemove { id } => EvW::LightRemove(12, *id),
+        Ev::Effect { id, kind, on } => EvW::Effect(13, *id, *kind, *on),
     }
 }
 
@@ -160,6 +162,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             Ev::Light { id: 3, on: false, colour: 0xffaa5a },
             Ev::LightAdd { id: 400, kind: 1, colour: 0xff461e, x: 33, y: 71, on: true },
             Ev::LightRemove { id: 12 },
+            Ev::Effect { id: 2, kind: 1, on: true },
         ],
         drain: Some(vec![(400.25, 300.5), (480.0, 300.0), (330.06, 260.7)]),
         lights: vec![MovingLight(100.3, 200.7, 2, None), MovingLight(55.0, 66.06, 3, Some(0x78c8ff))],

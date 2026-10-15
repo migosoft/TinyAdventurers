@@ -4,6 +4,7 @@ pub mod abilities;
 pub mod ai;
 pub mod bosses;
 pub mod debug;
+pub mod effects;
 pub mod entities;
 pub mod levels;
 pub mod light;
@@ -216,6 +217,7 @@ impl Run {
                 burn_t: dungeon::LAVA_TICK,
                 sight: prof.sight,
                 darkvision: None,
+                effects: effects::Effects::default(),
             });
         }
         let n = run.players.len();
@@ -287,6 +289,8 @@ impl Run {
             sinking: None,
             burn_t: dungeon::LAVA_TICK,
             last_hit_by: None,
+            effects: effects::Effects::default(),
+            responses: crate::defs::effects::EffectResponses::FULL,
         });
         id
     }
@@ -382,6 +386,7 @@ impl Run {
     pub fn step(&mut self) {
         self.tick += 1;
         self.time += DT;
+        self.tick_effects();
 
         for pi in 0..self.players.len() {
             self.step_player(pi);
