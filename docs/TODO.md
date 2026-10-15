@@ -19,7 +19,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 7. **Minions for the other bosses; more classes and bosses** (classes are easier after 3).
 8. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
 9. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
-10. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled. The explosion sheets for barrel blasts and the wizard's Fireball (see "Barrels and world objects follow-ups") is low priority and fits here.
+10. **4-direction sprites, attack frames, sound effects, better spell effects.** Independent; best done once events and animations have settled. Better spell effects means the paladin's healing circle (see "Other follow-ups"). The explosion sheets for barrel blasts and the wizard's Fireball (see "Barrels and world objects follow-ups") is low priority and fits here.
 
 **Tier 4: infrastructure (independent of gameplay work)**
 
@@ -153,6 +153,7 @@ Special rooms with a creature that asks the heroes a riddle. If they solve it, t
   - Dedicated sprite sheets can be added to `client/assets-src/` and referenced in `anim/defs.ts`.
 - **4-direction sprites:** the animation code keeps a `Dir` value. Up/down frames can be added there once sheets exist.
 - **Sound effects.**
+- **Better healing circle (user request, 2026-10-15):** the paladin's healing wave looks too plain. Today `Effects.healRing` (`client/src/game/effects.ts`, played for `Boom` k 1) draws one gold ring and 18 sparks rising inside it. The user wants many more sparkles, and maybe runes on the edge of the circle that move outward as it spreads. The runes need art: from the 0x72 pack, a CC0 set, or user-supplied AI art (ask first; small pixel glyphs drawn for this game also need the user's go-ahead). It is client only; the gold `Holy` light flash already exists.
 - **Network:**
   - delta snapshots if bandwidth ever matters (snapshots are compact arrays, about 125 B with 2 players and nothing else in view, 160 to 200 B at the start of a run with the lighting)
   - pushes still snap the hero under lag: the client learns of a push about RTT/2 late, and most push corrections are over the 24 px blend limit (median about 55 px in a demon fight under `?lag=150&jitter=40&loss=2`). Blending corrections that start a push over about 100 ms, whatever their size, would show them as a fast slide instead of a jump.
