@@ -610,7 +610,7 @@ export class GameScene extends Phaser.Scene {
     // Own figure is always drawn from prediction.
     if (!seen.has(this.info.you) && this.alive) {
       seen.add(this.info.you);
-      this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0 }, dt, px, py, now);
+      this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0 }, dt, px, py, now);
     }
     for (const [id, v] of this.views) if (!seen.has(id)) (v.destroy(), this.views.delete(id), this.wade.delete(id));
     for (const [id, v] of this.projViews) if (!seen.has(id)) (v.destroy(), this.projViews.delete(id));

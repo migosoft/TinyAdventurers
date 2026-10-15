@@ -400,3 +400,44 @@ export const LIGHT: Record<number, { radius: number; colour: number; intensity: 
     "radius": 4
   }
 };
+
+export const EFFECT = {
+  "Accelerated": 4,
+  "Blind": 0,
+  "Petrified": 2,
+  "Sleep": 1,
+  "Slowed": 3
+} as const;
+
+export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_turn: boolean; duration: number }> = {
+  "0": {
+    "duration": 3.0,
+    "no_turn": false,
+    "positive": false,
+    "prone": false
+  },
+  "1": {
+    "duration": 4.0,
+    "no_turn": false,
+    "positive": false,
+    "prone": true
+  },
+  "2": {
+    "duration": 3.0,
+    "no_turn": true,
+    "positive": false,
+    "prone": false
+  },
+  "3": {
+    "duration": 3.0,
+    "no_turn": false,
+    "positive": false,
+    "prone": false
+  },
+  "4": {
+    "duration": 3.0,
+    "no_turn": false,
+    "positive": true,
+    "prone": false
+  }
+};

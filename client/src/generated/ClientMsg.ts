@@ -3,4 +3,4 @@ import type { BossId } from "./BossId";
 import type { InputMsg } from "./InputMsg";
 import type { UpgradeStat } from "./UpgradeStat";
 
-export type ClientMsg = { "t": "SelectCharacter", id: number, } | { "t": "CreateRun", name: string, } | { "t": "JoinRun", run_id: number, } | { "t": "LeaveRun" } | { "t": "SetReady", ready: boolean, } | { "t": "SelectBoss", boss: BossId | null, } | { "t": "StartRun" } | { "t": "BuyUpgrade", stat: UpgradeStat, } | { "t": "Input" } & InputMsg | { "t": "Ping", time: number, } | { "t": "Spectate", dir: number, } | { "t": "Debug", on: boolean, } | { "t": "DebugDarkvision", ratio: number, };
+export type ClientMsg = { "t": "SelectCharacter", id: number, } | { "t": "CreateRun", name: string, } | { "t": "JoinRun", run_id: number, } | { "t": "LeaveRun" } | { "t": "SetReady", ready: boolean, } | { "t": "SelectBoss", boss: BossId | null, } | { "t": "StartRun" } | { "t": "BuyUpgrade", stat: UpgradeStat, } | { "t": "Input" } & InputMsg | { "t": "Ping", time: number, } | { "t": "Spectate", dir: number, } | { "t": "Debug", on: boolean, } | { "t": "DebugDarkvision", ratio: number, } | { "t": "DebugEffect", kind: number, };

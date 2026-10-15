@@ -24,4 +24,20 @@ spectating: number | null,
 /**
  * The viewed hero's darkvision as a percentage of its vision, 0-100.
  */
-darkvision: number, };
+darkvision: number, 
+/**
+ * The viewed hero's vision (tiles) through its effects (blind 0, asleep dimmed).
+ */
+vision: number, 
+/**
+ * The own hero's effects: (`EffectKind` id, seconds left).
+ */
+effects: Array<[number, number]>, 
+/**
+ * Factor on the own hero's move speed (0 while it cannot move); prediction uses it.
+ */
+speed_mul: number, 
+/**
+ * The own hero cannot act (asleep, stone): no predicted abilities.
+ */
+no_act: boolean, };

@@ -38,6 +38,22 @@ impl Run {
         self.event(Ev::Msg { text: format!("{name} darkvision {}%", (r * 100.0).round()) }, None);
     }
 
+    /// Debug cheat: put an effect (an `EffectKind` id) on your hero.
+    pub fn debug_effect(&mut self, pi: usize, kind: u8) {
+        self.debug_effect_if(allowed(), pi, kind);
+    }
+
+    fn debug_effect_if(&mut self, allowed: bool, pi: usize, kind: u8) {
+        let Some(k) = crate::defs::effects::EffectKind::from_u8(kind) else { return };
+        if !allowed {
+            return;
+        }
+        self.debug_used = true;
+        self.apply_effect(crate::run::effects::Creature::Player(pi), k, None);
+        let name = self.players[pi].name.clone();
+        self.event(Ev::Msg { text: format!("{name}: {k:?}") }, None);
+    }
+
     pub fn set_debug(&mut self, pi: usize, on: bool) {
         let on = on && allowed();
         self.players[pi].debug = on;
@@ -175,5 +191,18 @@ mod tests {
         run.set_darkvision_if(true, 0, 0.5);
         run.set_debug(0, false);
         assert_eq!(run.players[0].darkvision, None);
+    }
+
+    #[test]
+    fn debug_effect_applies_to_the_own_hero_only_when_allowed() {
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.debug_effect_if(false, 0, EffectKind::Sleep as u8);
+        assert!(run.players[0].effects.list().is_empty());
+        run.debug_effect_if(true, 0, EffectKind::Sleep as u8);
+        assert!(run.players[0].effects.has(EffectKind::Sleep));
+        assert!(run.debug_used);
+        run.debug_effect_if(true, 0, 200);
+        assert_eq!(run.players[0].effects.list().len(), 1, "an unknown id is ignored");
     }
 }

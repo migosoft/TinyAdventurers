@@ -25,16 +25,16 @@ pub fn q_aim(a: f64) -> u8 {
     ((a / TAU * 256.0).round() as i64).rem_euclid(256) as u8
 }
 
-/// `[id, kind, x, y, hp, anim, aim, anim_ms, flags, extra]`, see `EntSnap`.
+/// `[id, kind, x, y, hp, anim, aim, anim_ms, flags, extra, effects]`, see `EntSnap`.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u16, pub u8, pub u32);
+pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u16, pub u8, pub u32, pub u16);
 
-/// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, hidden, spectating, knock, darkvision]`, exact values;
+/// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, hidden, spectating, knock, darkvision, vision, effects, speed_mul, no_act]`, exact values;
 /// `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8);
+pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32)>, pub f32, pub bool);
 
 /// `[kind, hp, max_hp, immune, enraged]`
 #[derive(Debug, Clone, Serialize, TS)]
@@ -105,9 +105,9 @@ fn ev_w(e: &Ev) -> EvW {
 }
 
 pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
-    let ents = s.ents.iter().map(|e| EntW(e.0, e.1, q_pos(e.2 as f64), q_pos(e.3 as f64), e.4, e.5, q_aim(e.6 as f64), e.7, e.8, e.9)).collect();
+    let ents = s.ents.iter().map(|e| EntW(e.0, e.1, q_pos(e.2 as f64), q_pos(e.3 as f64), e.4, e.5, q_aim(e.6 as f64), e.7, e.8, e.9, e.10)).collect();
     let m = &s.me;
-    let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.hidden, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision);
+    let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.hidden, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act);
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune, b.enraged));
     let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
     let lights = s.lights.iter().map(|l| LightW(q_pos(l.0 as f64), q_pos(l.1 as f64), l.2, l.3)).collect();
@@ -124,11 +124,11 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         tick: 1234,
         ack: 567,
         ents: vec![
-            EntSnap(1, 0, 123.47, 456.03, 200, 2, -1.2, 350, 0, 0),
-            EntSnap(2, 1, 130.0, 460.5, 255, 0, 3.1, 0, 0, 0),
-            EntSnap(300, 5, 2000.5, 1800.27, 128, 1, -3.1406, 1200, 8, 1),
-            EntSnap(70000, 12, 50.1, 60.9, 255, 0, 0.7854, 0, 0, (1 << 16) | 42),
-            EntSnap(70001, 12, 5000.25, 4100.0, 255, 0, 3.1416, 0, 0, 0),
+            EntSnap(1, 0, 123.47, 456.03, 200, 2, -1.2, 350, 0, 0, 0),
+            EntSnap(2, 1, 130.0, 460.5, 255, 0, 3.1, 0, 0, 0, 0b101),
+            EntSnap(300, 5, 2000.5, 1800.27, 128, 1, -3.1406, 1200, 8, 1, 0),
+            EntSnap(70000, 12, 50.1, 60.9, 255, 0, 0.7854, 0, 0, (1 << 16) | 42, 0),
+            EntSnap(70001, 12, 5000.25, 4100.0, 255, 0, 3.1416, 0, 0, 0, 0),
         ],
         me: SelfState {
             alive: true,
@@ -146,6 +146,10 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             hidden: 0.0,
             spectating: None,
             darkvision: 0,
+            vision: 9.0,
+            effects: vec![(1, 2.5), (3, 0.75)],
+            speed_mul: 0.0,
+            no_act: true,
         },
         boss: Some(BossBar { kind: BossId::Demon, hp: 1234.5, max_hp: 2000.0, immune: true, enraged: false }),
         ev: vec![
@@ -188,6 +192,10 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             hidden: 0.0,
             spectating: Some(2),
             darkvision: 35,
+            vision: 9.0,
+            effects: vec![],
+            speed_mul: 1.0,
+            no_act: false,
         },
         boss: None,
         ev: vec![],

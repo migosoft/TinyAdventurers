@@ -152,7 +152,7 @@ pub fn send_snapshots(run: &mut Run) {
             if !p.alive {
                 f |= flags::DEAD;
             }
-            EntSnap(p.id, p.kind() as u8, p.mv.x as f32, p.mv.y as f32, hp_byte(p.hp, p.max_hp), p.anim as u8, p.aim as f32, ms_since(run, p.anim_start), f, 0)
+            EntSnap(p.id, p.kind() as u8, p.mv.x as f32, p.mv.y as f32, hp_byte(p.hp, p.max_hp), p.anim as u8, p.aim as f32, ms_since(run, p.anim_start), f, 0, p.effects.bits())
         })
         .collect();
 
@@ -192,7 +192,7 @@ pub fn send_snapshots(run: &mut Run) {
                 f |= flags::ENRAGED;
             }
             let extra = if m.anim == Anim::Gaze { gaze } else { m.owner.unwrap_or(0) };
-            ents.push(EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra));
+            ents.push(EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits()));
         }
         for pr in &run.projectiles {
             // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
@@ -200,7 +200,7 @@ pub fn send_snapshots(run: &mut Run) {
                 continue;
             }
             let extra = (pr.owner << 16) | pr.shot as u32;
-            ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra));
+            ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra, 0));
         }
         for o in &run.objects {
             if !object_sent(&fov, lights, &dark, o) {
@@ -213,7 +213,7 @@ pub fn send_snapshots(run: &mut Run) {
                 continue;
             }
             let extra = (h.life * 1000.0) as u32;
-            ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, 0.0, 0, 0, extra));
+            ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, 0.0, 0, 0, extra, 0));
         }
         let ev: Vec<Ev> = events
             .iter()
@@ -244,6 +244,10 @@ pub fn send_snapshots(run: &mut Run) {
                 hidden: me.hidden as f32,
                 spectating: if me.alive { None } else { me.spectating },
                 darkvision: darkvision_pct(&sight),
+                vision: sight.vision as f32,
+                effects: me.effects.list().iter().map(|a| (a.kind as u8, a.left as f32)).collect(),
+                speed_mul: me.effects.speed_mul() as f32,
+                no_act: me.effects.no_act(),
             },
             boss: boss_bar.clone(),
             ev,
@@ -516,5 +520,49 @@ mod tests {
         for c in ClassId::ALL {
             assert_eq!(crate::defs::classes::profile(c).sight.vision.round() as i32, PLAYER_FOV_RADIUS);
         }
+    }
+
+    #[test]
+    fn snapshots_carry_effects_and_the_own_timers() {
+        use crate::defs::effects::EffectKind;
+        use crate::run::effects::Creature;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(tx);
+        run.apply_effect(Creature::Player(0), EffectKind::Slowed, Some(2.0));
+        run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(1.0));
+        send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = rx.try_recv().unwrap() else { panic!() };
+        let s: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        let me_ent = s[2].as_array().unwrap().iter().find(|e| e[0] == run.players[0].id).unwrap();
+        assert_eq!(me_ent[10], (EffectKind::Slowed.bit() | EffectKind::Blind.bit()) as u64);
+        assert_eq!(s[3][14], 0.0, "blind: vision 0");
+        assert_eq!(s[3][15].as_array().unwrap().len(), 2);
+        assert_eq!(s[3][16], 0.5);
+        assert_eq!(s[3][17], false);
+    }
+
+    #[test]
+    fn a_blind_hero_is_sent_no_enemies() {
+        use crate::defs::effects::EffectKind;
+        use crate::run::effects::Creature;
+        let seen = |blind: bool| {
+            let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            run.players[0].tx = Some(tx);
+            run.players[0].darkvision = Some(1.0);
+            run.monsters.clear();
+            let pos = Vec2::new(run.players[0].mv.x + 20.0, run.players[0].mv.y);
+            let id = run.spawn_enemy(EnemyType::OrcWarrior, pos, None, 1);
+            if blind {
+                run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(5.0));
+            }
+            send_snapshots(&mut run);
+            let axum::extract::ws::Message::Binary(bytes) = rx.try_recv().unwrap() else { panic!() };
+            let s: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+            s[2].as_array().unwrap().iter().any(|e| e[0] == id as u64)
+        };
+        assert!(seen(false), "a sighted hero sees the orc next to it");
+        assert!(!seen(true), "a blind hero is sent no enemies");
     }
 }

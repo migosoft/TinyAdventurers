@@ -16,6 +16,8 @@ export interface ViewState {
   animT: number;
   aim: number;
   flags: number;
+  /** Bitmask of `EffectKind` ids on the creature. */
+  effects?: number;
   /** Pixels the figure stands below a surface (wading in water or lava). */
   sink?: number;
   /** Falling into a chasm, 0..1: the figure shrinks a little and vanishes into the dark. */

@@ -349,6 +349,7 @@ impl Run {
                     ClientMsg::Spectate { dir } => self.cycle_spectate(pi, dir),
                     ClientMsg::Debug { on } => self.set_debug(pi, on),
                     ClientMsg::DebugDarkvision { ratio } => self.set_darkvision(pi, ratio),
+                    ClientMsg::DebugEffect { kind } => self.debug_effect(pi, kind),
                     _ => {}
                 }
             }

@@ -96,6 +96,8 @@ pub enum ClientMsg {
     Debug { on: bool },
     /// Debug: set your hero's darkvision (0..=1 of its vision), if the server allows debug.
     DebugDarkvision { ratio: f32 },
+    /// Debug: put an effect (EffectKind id) on your hero, if the server allows debug.
+    DebugEffect { kind: u8 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -161,11 +163,12 @@ pub struct LightInfo(pub u32, pub u8, pub u32, pub u16, pub u16, pub bool);
 pub struct MovingLight(pub f32, pub f32, pub u8, pub Option<u32>);
 
 /// Compact entity state, serialized as an array:
-/// `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra]`.
+/// `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra, effects]`.
 /// `extra` for projectiles is `(owner_id << 16) | shot_id`.
+/// `effects`: bitmask of `EffectKind` ids (creatures only).
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct EntSnap(pub u32, pub u8, pub f32, pub f32, pub u8, pub u8, pub f32, pub u16, pub u8, pub u32);
+pub struct EntSnap(pub u32, pub u8, pub f32, pub f32, pub u8, pub u8, pub f32, pub u16, pub u8, pub u32, pub u16);
 
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
@@ -191,6 +194,14 @@ pub struct SelfState {
     pub spectating: Option<u32>,
     /// The viewed hero's darkvision as a percentage of its vision, 0-100.
     pub darkvision: u8,
+    /// The viewed hero's vision (tiles) through its effects (blind 0, asleep dimmed).
+    pub vision: f32,
+    /// The own hero's effects: (`EffectKind` id, seconds left).
+    pub effects: Vec<(u8, f32)>,
+    /// Factor on the own hero's move speed (0 while it cannot move); prediction uses it.
+    pub speed_mul: f32,
+    /// The own hero cannot act (asleep, stone): no predicted abilities.
+    pub no_act: bool,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

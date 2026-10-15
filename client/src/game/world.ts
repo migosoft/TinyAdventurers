@@ -19,6 +19,7 @@ export interface EntState {
   animMs: number;
   flags: number;
   extra: number;
+  effects: number;
 }
 
 interface TimedSnap {
@@ -104,7 +105,7 @@ export class Interpolator {
 }
 
 function toState(e: EntSnap, x: number, y: number, aim: number): EntState {
-  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9] };
+  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9], effects: e[10] };
 }
 
 // ------------------------------------------------------------ local prediction

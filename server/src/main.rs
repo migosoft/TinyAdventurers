@@ -174,7 +174,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, id_hash
             ClientMsg::Ping { time } => {
                 let _ = tx.send(Message::Binary(encode(&ServerMsg::Pong { time }).into()));
             }
-            ClientMsg::Input(_) | ClientMsg::Spectate { .. } | ClientMsg::Debug { .. } | ClientMsg::DebugDarkvision { .. } => {
+            ClientMsg::Input(_) | ClientMsg::Spectate { .. } | ClientMsg::Debug { .. } | ClientMsg::DebugDarkvision { .. } | ClientMsg::DebugEffect { .. } => {
                 let run_tx = lobby.lock().unwrap().run_of(id);
                 if let Some(run_tx) = run_tx {
                     let _ = run_tx.send(RunCmd::Msg { conn: id, msg: cm });

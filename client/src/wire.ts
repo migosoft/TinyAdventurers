@@ -98,7 +98,7 @@ export function unpackSnap(w: SnapW): Snapshot {
   return {
     tick,
     ack,
-    ents: ents.map((e): EntSnap => [e[0], e[1], pos(e[2]), pos(e[3]), e[4], e[5], angle(e[6]), e[7], e[8], e[9]]),
+    ents: ents.map((e): EntSnap => [e[0], e[1], pos(e[2]), pos(e[3]), e[4], e[5], angle(e[6]), e[7], e[8], e[9], e[10]]),
     me: {
       alive: me[0],
       hp: me[1],
@@ -115,6 +115,10 @@ export function unpackSnap(w: SnapW): Snapshot {
       knock_vx: me[12]?.[0] ?? 0,
       knock_vy: me[12]?.[1] ?? 0,
       darkvision: me[13],
+      vision: me[14],
+      effects: me[15],
+      speed_mul: me[16],
+      no_act: me[17],
     },
     boss: boss && { kind: boss[0], hp: boss[1], max_hp: boss[2], immune: boss[3], enraged: boss[4] },
     ev: ev.map(unpackEv),
