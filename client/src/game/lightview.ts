@@ -49,18 +49,24 @@ export class LightView {
     for (const k of ['dark', 'tint']) if (scene.textures.exists(k)) scene.textures.remove(k);
     this.dark = scene.textures.createCanvas('dark', map.w, map.h)!;
     this.tint = scene.textures.createCanvas('tint', map.w, map.h)!;
-    this.dark.setFilter(LINEAR);
-    this.tint.setFilter(LINEAR);
     this.darkImg = this.dark.getContext().createImageData(map.w, map.h);
     this.tintImg = this.tint.getContext().createImageData(map.w, map.h);
     // Black, fully opaque until drawn.
     for (let i = 0; i < map.w * map.h; i++) this.darkImg.data.set([0, 0, 0, 255], i * 4);
     this.dark.getContext().putImageData(this.darkImg, 0, 0);
-    this.dark.refresh();
+    this.upload();
     this.rgb = new Float32Array(map.w * map.h * 3);
     this.movingLit = new Uint8Array(map.w * map.h);
     scene.add.image(0, 0, 'tint').setOrigin(0, 0).setScale(TILE).setDepth(DEPTH.tint).setBlendMode(ADD);
     scene.add.image(0, 0, 'dark').setOrigin(0, 0).setScale(TILE).setDepth(DEPTH.fog);
+  }
+
+  /** Uploads both canvases. refresh() resets the filter to NEAREST (pixelArt), so LINEAR is set again after it. */
+  private upload(): void {
+    for (const tex of [this.dark, this.tint]) {
+      tex.refresh();
+      tex.setFilter(LINEAR);
+    }
   }
 
   /** A tile changed: the viewer's sight is recomputed on the next update. */
@@ -103,7 +109,6 @@ export class LightView {
       }
     this.dark.getContext().putImageData(this.darkImg, 0, 0, x0, y0, x1 - x0, y1 - y0);
     this.tint.getContext().putImageData(this.tintImg, 0, 0, x0, y0, x1 - x0, y1 - y0);
-    this.dark.refresh();
-    this.tint.refresh();
+    this.upload();
   }
 }
