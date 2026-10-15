@@ -170,7 +170,7 @@ Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §
 - **A frozen boss's running action is paused, not cancelled:** `levels/boss.rs` skips the behaviour tick, while the spec says a running wind-up is cancelled. Decide, or add a `cancel()` hook on `BossBehaviour`, before a hero ability gives bosses effects.
 - **Sleeping or petrified monsters can still be pushed** by `separate_monsters`.
 - **`Ev::Effect` drives no client burst yet** (start and end of an effect could play a puff).
-- **Final whole-branch review:** done for the first five effects, its fixes are in the branch; pending for the elemental part (burning, frozen, poisoned).
+- **Final whole-branch review:** done for both parts (first five effects, then burning, frozen and poisoned); the fixes are in. Merged into `main` 2026-10-15.
 
 ## Riddle rooms
 Special rooms with a creature that asks the heroes a riddle. If they solve it, they get a reward. If they fail, they fight the creature, or enemies spawn.
