@@ -1,7 +1,6 @@
 //! Status effects at run time: the timers on each creature and the only
 //! API other code uses to touch them. Data: `defs/effects.rs`.
 
-
 use crate::defs::damage::{DamageType, Resistances};
 use crate::defs::effects::{def, resolve_stat, EffectKind, EffectResponse, Stat, EFFECT_REDUCED};
 use crate::defs::entity_types::Sight;

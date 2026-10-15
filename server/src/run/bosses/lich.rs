@@ -221,14 +221,13 @@ impl BossBehaviour for Lich {
                 }
                 Action::Spell(s) => {
                     set_anim(run, bi, Anim::Cast);
-                    let id = run.monsters[bi].id;
                     match s {
                         Spell::Gaze => {
                             let target = self.gaze.take().and_then(|t| run.player_idx(t));
                             if let Some(pi) = target {
                                 let sight = run.monsters[bi].sight_now();
                                 let p = &run.players[pi];
-                                if p.alive && crate::run::perception::sees(run, sight, pos, p.pos()) {
+                                if p.alive && p.hidden <= 0.0 && crate::run::perception::sees(run, sight, pos, p.pos()) {
                                     let h = OnHit { kind: EffectKind::Petrified, secs: LICH_GAZE_SECS, chance: 1.0 };
                                     run.hurt_player(pi, Damage::physical(0.0).with_effect(h));
                                 }
@@ -268,6 +267,7 @@ impl BossBehaviour for Lich {
             set_anim(run, bi, Anim::Slam);
         } else if let Some((k, pi)) = self.ready_spell(run, bi) {
             let s = SPELLS[k];
+            run.monsters[bi].aim = pos.angle_to(run.players[pi].pos());
             self.spell_cd[k] = s.cooldown();
             self.action = Some((Action::Spell(s), s.windup()));
             if s == Spell::Gaze {
@@ -516,5 +516,31 @@ mod tests {
         ticks(&mut run, &mut l, 0.1);
         let bi = boss_idx(&run).unwrap();
         assert_ne!(run.monsters[bi].anim, Anim::Windup, "no target without the effect: no cast");
+    }
+
+    #[test]
+    fn a_hero_who_hides_during_the_gaze_windup_is_not_petrified() {
+        let (mut run, mut l) = only(Spell::Gaze, Vec2::new(60.0, 0.0));
+        ticks(&mut run, &mut l, 0.1);
+        assert_eq!(l.gaze_target(), Some(run.players[0].id));
+        run.players[0].hidden = 3.0;
+        ticks(&mut run, &mut l, LICH_GAZE_WINDUP);
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Petrified));
+    }
+
+    #[test]
+    fn the_orb_windup_faces_the_spells_target() {
+        // Hero 0 is nearest but already blind, so the orb goes to hero 1 (above the lich).
+        let (mut run, bi) = lich_with(&[Vec2::new(40.0, 0.0), Vec2::new(0.0, -80.0)]);
+        kill_disciples(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let bi = boss_idx(&run).unwrap_or(bi);
+        run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(10.0));
+        let mut l = Lich { volley_cd: 99.0, summon_cd: 99.0, nova_cd: 99.0, spell_cd: [99.0; SPELLS.len()], ..Lich::default() };
+        l.spell_cd[SPELLS.iter().position(|&s| s == Spell::Blind).unwrap()] = 0.0;
+        l.tick(&mut run, DT);
+        assert_eq!(run.monsters[bi].anim, Anim::Windup);
+        let (pos, to) = (run.monsters[bi].pos, run.players[1].pos());
+        assert!((run.monsters[bi].aim - pos.angle_to(to)).abs() < 1e-9, "faces the hero the orb is aimed at");
     }
 }

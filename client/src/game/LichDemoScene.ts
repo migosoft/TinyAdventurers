@@ -23,7 +23,7 @@ const KNOCK = CONST.LICH_NOVA_KNOCK;
 const LOOP = 7;
 const BOLT_SPEED = 140;
 /** The server's orb speed (LICH_ORB_SPEED, px/s). */
-const ORB_SPEED = 90;
+const ORB_SPEED = CONST.LICH_ORB_SPEED;
 /** Effect spells loop (s): curse at 0, sleep at 4, gaze at 8. */
 const SPELL_LOOP = 12.5;
 const SPELLS: { at: number; kind: number; windup: number; effect: number; orb?: number; name: string }[] = [

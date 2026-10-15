@@ -11,3 +11,13 @@ describe('effectGlyph', () => {
     expect(new Set(g).size).toBe(g.length);
   });
 });
+
+describe('effectGlyph names', () => {
+  it('ties each effect to its letter', () => {
+    expect(effectGlyph(EFFECT.Blind)).toBe('B');
+    expect(effectGlyph(EFFECT.Sleep)).toBe('Z');
+    expect(effectGlyph(EFFECT.Petrified)).toBe('P');
+    expect(effectGlyph(EFFECT.Slowed)).toBe('S');
+    expect(effectGlyph(EFFECT.Accelerated)).toBe('A');
+  });
+});

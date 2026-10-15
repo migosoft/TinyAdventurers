@@ -96,6 +96,7 @@ fn export_defs() {
     });
     consts.as_object_mut().unwrap().extend(demon.as_object().unwrap().clone());
     let lich = json!({
+        "LICH_ORB_SPEED": bosses::LICH_ORB_SPEED,
         "LICH_GAZE_WINDUP": bosses::LICH_GAZE_WINDUP,
         "LICH_BLIND_WINDUP": bosses::LICH_BLIND_WINDUP,
         "LICH_SLEEP_WINDUP": bosses::LICH_SLEEP_WINDUP,

@@ -203,7 +203,7 @@ Tip: stay mobile, and don't stand between the demon and a chasm.
 - Casts **volleys of five gloom bolts**.
 - **Summons skeletons:** every 12 seconds it raises its army back up to **five skeletons and five skeleton archers** around it.
 - **Nova:** about every 10 seconds it stops, raises its staff and a **purple circle** fills up on the floor around it. When it is full, a dark blast hurts **everyone inside** and throws them **4 tiles away**, far enough to send you into a chasm. Step out of the circle in time, and don't stand between the lich and an edge.
-- **Three curses**, each aimed at one hero it can see (it sees only what you would see: it cannot curse you from behind a wall, and a hero who already suffers a curse is passed over):
+- **Three curses**, each aimed at one hero it can see (it sees only what you would see: it cannot curse you from behind a wall. A hero who already suffers *that* curse is passed over, and the lich picks the nearest hero it sees):
   - **Blinding curse:** about every 10 seconds the lich flings a **dark orb**. It is slow, so **step aside**. A hit does a little damage and **blinds** you for 3 seconds: you see almost nothing, not even with darkvision.
   - **Sleep mist:** about every 14 seconds, a **purple orb**. A hit puts you to **sleep** for 4 seconds: you lie on the floor and cannot move, attack or use abilities, and you see only a little around you. **Step aside** from the orb, and **wake a sleeping teammate** by standing next to them and pressing **E**.
   - **Stone gaze:** about every 18 seconds the lich stares at one hero and a **thin grey beam** links them for a second. When it ends, that hero **turns to stone** for 3 seconds: you cannot move, attack or turn, but you take much less damage and are hard to push. **Break the line of sight** (duck behind a pillar or a wall) before the beam ends and nothing happens.
@@ -233,7 +233,7 @@ Some attacks do more than damage. Your own effects show as small icons with the 
 | **Z** | Asleep | You lie down: no moving, attacking or abilities, and a very short view. A teammate's **E** wakes you at once |
 | **P** | Petrified | Stone: no moving, attacking or turning, but you take far less damage and are hard to push |
 | **S** | Slowed | You walk at half speed |
-| **H** | Hasted | You walk half as fast again (only the debug key gives this so far) |
+| **A** | Accelerated | You walk half as fast again (only the debug key gives this so far) |
 
 A sleeping or petrified hero cannot dodge, and a blind one cannot see what is coming, so the party's job is to keep the enemies off them. The final bosses resist some effects: all of them are immune to sleep. The effects end by themselves after a few seconds.
 

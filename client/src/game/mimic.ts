@@ -15,7 +15,7 @@ export const HOP_CYCLE = CONST.MIMIC_HOP_CYCLE;
 export const HOP = { crouch: CONST.MIMIC_HOP_AIR_START, air: CONST.MIMIC_HOP_AIR_END, land: CONST.MIMIC_HOP_AIR_END + 0.15 };
 export const BITE_T = 0.35;
 export const WAKE_T = CONST.MIMIC_WAKE_T;
-/** A sleeping mimic rattles now and then when a hero is this close (px). */
+/** A dormant mimic rattles now and then when a hero is this close (px). */
 const RATTLE_NEAR = 40;
 
 export interface MimicState {

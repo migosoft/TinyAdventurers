@@ -111,6 +111,8 @@ interface Z {
   age: number;
   x: number;
   y: number;
+  /** Depth: just in front of the sleeper, under the darkness. */
+  d: number;
 }
 
 /** The marks of the effects on one figure, owned by its `EntityView`. */
@@ -183,7 +185,7 @@ export class StatusView {
             .setOrigin(0.5, 1)
             .setStroke('#140c1a', 2)
             .setPadding(1);
-        this.zs.push({ t: t.setVisible(true), age: 0, x: a.x + 3, y: a.y - a.head });
+        this.zs.push({ t: t.setVisible(true), age: 0, x: a.x + 3, y: a.y - a.head, d: DEPTH.entityBase + a.y + 1 });
       }
     } else this.zT = 0;
     for (let i = this.zs.length - 1; i >= 0; i--) {
@@ -199,7 +201,7 @@ export class StatusView {
       z.t
         .setPosition(Math.round(z.x + Math.sin(z.age * 5) * 1.5), Math.round(z.y - k * Z_RISE))
         .setAlpha(1 - k)
-        .setDepth(DEPTH.numbers - 1);
+        .setDepth(z.d);
     }
   }
 

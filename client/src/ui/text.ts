@@ -1,3 +1,4 @@
+import { EFFECT } from '../generated/defs';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
@@ -63,7 +64,13 @@ function pct(v: number): string {
 }
 
 /** One ASCII letter per status effect (the HUD's pixel font has no symbol glyphs). */
-const EFFECT_GLYPH: Record<number, string> = { 0: 'B', 1: 'Z', 2: 'P', 3: 'S', 4: 'H' };
+const EFFECT_GLYPH: Record<number, string> = {
+  [EFFECT.Blind]: 'B',
+  [EFFECT.Sleep]: 'Z',
+  [EFFECT.Petrified]: 'P',
+  [EFFECT.Slowed]: 'S',
+  [EFFECT.Accelerated]: 'A',
+};
 
 export function effectGlyph(id: number): string {
   return EFFECT_GLYPH[id] ?? '?';

@@ -638,7 +638,7 @@ export class GameScene extends Phaser.Scene {
 
     let hint: EntState | null = null;
     let wake = false;
-    if (this.alive) {
+    if (this.alive && !this.pred.noAct && !this.pred.sinking) {
       let best = Infinity;
       // A sleeping teammate in reach is woken first (like the server), the nearest one.
       for (const e of this.ents.values()) {
@@ -692,12 +692,13 @@ export class GameScene extends Phaser.Scene {
     }
     let s: ViewState;
     if (me && this.alive) {
-      const { aim } = this.aimInfo();
+      // Petrified or asleep: the weapon keeps the facing from before the effect.
+      const aim = this.pred.noTurn ? this.lastAim : this.aimInfo().aim;
       const tLocal = now - this.localAnim.start;
       let anim = this.localAnim.anim;
       const actionOver = anim === ANIM.Dash ? this.pred.state.dashT <= 0 : tLocal > 0.25;
       if (actionOver) {
-        const moving = this.keys.W.isDown || this.keys.A.isDown || this.keys.S.isDown || this.keys.D.isDown;
+        const moving = this.pred.speedMul > 0 && (this.keys.W.isDown || this.keys.A.isDown || this.keys.S.isDown || this.keys.D.isDown);
         anim = moving ? ANIM.Move : ANIM.Idle;
       }
       let flags = this.myFlags & ~FLAG.HIDDEN;

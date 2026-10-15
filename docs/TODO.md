@@ -164,8 +164,11 @@ Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §
 - **The elf's sleep immunity via `EffectResponses`:** per entity type or `Adjust` (today only bosses have a response table, `defs/bosses.rs`); give `Adjust` a `responses` field when the Elf type arrives.
 - **Effect sounds:** `Ev::Effect` is sent on every start and end and the client ignores it; it is the hook.
 - **Damage over time (poison, burning):** a tick rule on `EffectDef` (damage type and amount per second) run in `tick_effects`; fire patches and the dragon's breath could apply burning, poison hits could apply poison.
-- **HUD glyphs are letters (B, Z, P, S, H):** the pixel font has no symbols. Drawn icons (small sprites, so art or the user's go-ahead) would read better.
-- **Final whole-branch review:** pending at the time of writing; see HANDOFF.
+- **HUD glyphs are letters (B, Z, P, S, A):** the pixel font has no symbols. Drawn icons (small sprites, so art or the user's go-ahead) would read better.
+- **A frozen boss's running action is paused, not cancelled:** `levels/boss.rs` skips the behaviour tick, while the spec says a running wind-up is cancelled. Decide, or add a `cancel()` hook on `BossBehaviour`, before a hero ability gives bosses effects.
+- **Sleeping or petrified monsters can still be pushed** by `separate_monsters`.
+- **`Ev::Effect` drives no client burst yet** (start and end of an effect could play a puff).
+- **Final whole-branch review:** done; its fixes are in the branch.
 
 ## Riddle rooms
 Special rooms with a creature that asks the heroes a riddle. If they solve it, they get a reward. If they fail, they fight the creature, or enemies spawn.
