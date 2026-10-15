@@ -71,7 +71,7 @@ fn object_sent(fov: &Fov, lights: &Lights, dark: &Dark, o: &super::objects::Worl
 }
 
 /// Events: party-wide ones always; events on a hero where the hero is in
-/// sight; the rest where they are seen (in sight and lit).
+/// sight; the rest where they are seen (in sight and lit, or within darkvision).
 fn ev_seen(fov: &Fov, lights: &Lights, dark: &Dark, at: Option<Vec2>, on_hero: bool) -> bool {
     match at {
         None => true,
@@ -231,6 +231,7 @@ pub fn send_snapshots(run: &mut Run) {
                 cd2: me.cd2 as f32,
                 hidden: me.hidden as f32,
                 spectating: if me.alive { None } else { me.spectating },
+                darkvision: (sight.darkvision * 100.0).round() as u8,
             },
             boss: boss_bar.clone(),
             ev,
@@ -346,6 +347,28 @@ mod tests {
         let ids: Vec<u64> = snap[2].as_array().unwrap().iter().map(|e| e[0].as_u64().unwrap()).collect();
         assert!(ids.contains(&(inside as u64)), "lit by the patch");
         assert!(!ids.contains(&(outside as u64)), "dark: the client draws it black");
+    }
+
+    #[test]
+    fn a_spectator_gets_the_viewed_heros_darkvision() {
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 0.0);
+        let (px, py) = (run.players[0].mv.x, run.players[0].mv.y);
+        run.players[1].mv.x = px;
+        run.players[1].mv.y = py;
+        run.players[1].darkvision = Some(1.0);
+        let target = run.players[1].id;
+        run.players[0].alive = false;
+        run.players[0].spectating = Some(target);
+        let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(stx);
+        let near = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None, 1);
+        send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
+        let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(snap[3][13], 100);
+        let ids: Vec<u64> = snap[2].as_array().unwrap().iter().map(|e| e[0].as_u64().unwrap()).collect();
+        assert!(ids.contains(&(near as u64)), "seen in the dark through the viewed hero's darkvision");
     }
 
     #[test]

@@ -19,6 +19,22 @@ pub fn allowed() -> bool {
 }
 
 impl Run {
+    /// Debug cheat: your hero's darkvision as a share (0..=1) of its vision.
+    pub fn set_darkvision(&mut self, pi: usize, ratio: f32) {
+        self.set_darkvision_if(allowed(), pi, ratio);
+    }
+
+    fn set_darkvision_if(&mut self, allowed: bool, pi: usize, ratio: f32) {
+        if !allowed {
+            return;
+        }
+        let r = f64::from(ratio.clamp(0.0, 1.0));
+        self.players[pi].darkvision = Some(r);
+        self.debug_used = true;
+        let name = self.players[pi].name.clone();
+        self.event(Ev::Msg { text: format!("{name} darkvision {}%", (r * 100.0).round()) }, None);
+    }
+
     pub fn set_debug(&mut self, pi: usize, on: bool) {
         let on = on && allowed();
         self.players[pi].debug = on;
@@ -114,5 +130,28 @@ mod tests {
         run.set_debug(0, false);
         run.hurt_player(0, Damage::physical(10_000.0));
         assert!(!run.players[0].alive, "mortal again");
+    }
+
+    #[test]
+    fn the_debug_toggle_sets_darkvision_and_the_snapshot_carries_it() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(stx);
+        run.set_darkvision_if(true, 0, 0.5);
+        assert_eq!(run.players[0].darkvision, Some(0.5));
+        assert!(run.debug_used);
+        crate::run::visibility::send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
+        let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(snap[3][13], 50);
+    }
+
+    #[test]
+    fn the_debug_toggle_is_ignored_when_debug_is_not_allowed() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let before = run.players[0].darkvision;
+        run.set_darkvision_if(false, 0, 1.0);
+        assert_eq!(run.players[0].darkvision, before);
+        assert!(!run.debug_used);
     }
 }

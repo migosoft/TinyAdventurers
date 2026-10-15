@@ -94,6 +94,8 @@ pub enum ClientMsg {
     Spectate { dir: i8 },
     /// Debug mode: immortal + shortest path to the boss (if the server allows debug).
     Debug { on: bool },
+    /// Debug: set your hero's darkvision (0..=1 of its vision), if the server allows debug.
+    DebugDarkvision { ratio: f32 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -187,6 +189,8 @@ pub struct SelfState {
     pub hidden: f32,
     /// Entity id being spectated when dead.
     pub spectating: Option<u32>,
+    /// The viewed hero's darkvision as a percentage of its vision, 0-100.
+    pub darkvision: u8,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

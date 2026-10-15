@@ -20,4 +20,8 @@ hidden: number,
 /**
  * Entity id being spectated when dead.
  */
-spectating: number | null, };
+spectating: number | null, 
+/**
+ * The viewed hero's darkvision as a percentage of its vision, 0-100.
+ */
+darkvision: number, };

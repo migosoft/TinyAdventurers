@@ -109,6 +109,7 @@ export function unpackSnap(w: SnapW): Snapshot {
       spectating: me[11],
       knock_vx: me[12]?.[0] ?? 0,
       knock_vy: me[12]?.[1] ?? 0,
+      darkvision: me[13],
     },
     boss: boss && { kind: boss[0], hp: boss[1], max_hp: boss[2], immune: boss[3], enraged: boss[4] },
     ev: ev.map(unpackEv),
