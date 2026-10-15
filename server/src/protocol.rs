@@ -206,7 +206,8 @@ pub enum Ev {
     /// Damage number. `p` = the victim is a player. `ty`: the hit's main
     /// `DamageType` (colour); `imm`: fully resisted (shown as "immune").
     Dmg { x: f32, y: f32, v: f32, crit: bool, p: bool, ty: u8, imm: bool },
-    Heal { x: f32, y: f32, v: f32 },
+    /// `p`: on a hero (drawn under the darkness with the hero).
+    Heal { x: f32, y: f32, v: f32, p: bool },
     /// Explosion / area effect. k: 0 fireball, 1 heal ring, 2 fire ring, 3 dark burst, 4 dragon fireball,
     /// 5 ogre ground slam (shockwave), 6 lich nova (dark purple burst), 7 barrel explosion
     Boom { x: f32, y: f32, r: f32, k: u8 },

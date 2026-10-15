@@ -311,7 +311,9 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         let pos = pr.pos;
         if let Some(t) = pr.target {
             if (t - pos).x * pr.vel.x + (t - pos).y * pr.vel.y <= 0.0 {
-                impact(run, i, pos, None);
+                // An aim point inside a wall: it goes off in front of the wall, so its flash lights only that side.
+                let at = if run.layout.map.opaque_at(pos) { prev } else { pos };
+                impact(run, i, at, None);
                 break;
             }
         }
@@ -666,5 +668,31 @@ mod tests {
         let id2 = run.spawn_object(EntityKind::Barrel, at, crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
         explode(&mut run, at + Vec2::new(10.0, 0.0), 20.0, Damage::physical(5.0), true, Some(0), 0, false, 0.0);
         assert!(matches!(&run.objects.iter().find(|o| o.id == id2).unwrap().state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_some()));
+    }
+
+    #[test]
+    fn a_targeted_blast_just_inside_a_wall_goes_off_and_flashes_in_front_of_it() {
+        use crate::dungeon::{Map, Tile, TILE};
+        use crate::run::light::Anchor;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for x in tx..=tx + 2 {
+            run.layout.map.set(x, ty, Tile::Floor);
+        }
+        run.layout.map.set(tx + 3, ty, Tile::Wall);
+        // The aim point lies a hair inside the wall: the shot passes it on the step that enters the wall.
+        let at = run.players[0].pos();
+        let target = Vec2::new((tx + 3) as f64 * TILE + 0.01, at.y);
+        spawn_player_projectile(&mut run, 0, EntityKind::Fireball, 1, Vec2::new(1.0, 0.0), 300.0, 1.0, 4.0, 2.0, 20.0, Some(target), false);
+        for _ in 0..30 {
+            if run.projectiles.is_empty() {
+                break;
+            }
+            run.step();
+        }
+        let flash = run.lights.sources.iter().find(|s| s.kind == LightKind::Blast).expect("a flash");
+        let Anchor::Point(p) = flash.anchor else { panic!("a point light") };
+        assert!(!run.layout.map.opaque_at(p), "the blast goes off in front of the wall, not inside it");
     }
 }

@@ -1,8 +1,8 @@
 // The light canvas: darkness everywhere except tiles in the viewer's sight
 // that a light reaches, plus an additive colour tint per tile from every light
 // (static ones from LightField, moving ones from the snapshot). The light is
-// worked out per tile, then upsampled to SUB pixels per tile (`upsample`) and
-// drawn with LINEAR filtering, scaled up by TILE / SUB. Redrawn every frame
+// worked out per tile, then upsampled to SUB pixels per tile (`upsample`; dark
+// tiles are set back to black, `blackenDarkTiles`) and drawn with LINEAR filtering, scaled up by TILE / SUB. Redrawn every frame
 // inside the camera window (cheap: about 60 x 34 tiles).
 import type Phaser from 'phaser';
 import { CONST, LIGHT } from '../generated/defs';
@@ -61,31 +61,50 @@ const TAPS = Array.from({ length: SUB }, (_, k) => {
  */
 export function upsample(src: Float32Array, ch: number, w: number, h: number, x0: number, y0: number, x1: number, y1: number, tmp: Float32Array, dst: Uint8ClampedArray, at: number): void {
   const pw = w * SUB;
-  const cx = (x: number) => (x < 0 ? 0 : x >= w ? w - 1 : x);
-  const cy = (y: number) => (y < 0 ? 0 : y >= h ? h - 1 : y);
   // Across: every row the second pass reads.
   for (let y = Math.max(0, y0 - 2); y <= Math.min(h - 1, y1 + 1); y++)
     for (let x = x0; x < x1; x++)
       for (let k = 0; k < SUB; k++) {
         const { first, w: wt } = TAPS[k];
         const o = (y * pw + x * SUB + k) * ch;
-        for (let c = 0; c < ch; c++) {
-          let v = 0;
-          for (let j = 0; j < 4; j++) v += wt[j] * src[(y * w + cx(x + first + j)) * ch + c];
-          tmp[o + c] = v;
-        }
+        // The four tap tiles, clamped to the map.
+        const t0 = (y * w + Math.min(w - 1, Math.max(0, x + first))) * ch;
+        const t1 = (y * w + Math.min(w - 1, Math.max(0, x + first + 1))) * ch;
+        const t2 = (y * w + Math.min(w - 1, Math.max(0, x + first + 2))) * ch;
+        const t3 = (y * w + Math.min(w - 1, Math.max(0, x + first + 3))) * ch;
+        for (let c = 0; c < ch; c++) tmp[o + c] = wt[0] * src[t0 + c] + wt[1] * src[t1 + c] + wt[2] * src[t2 + c] + wt[3] * src[t3 + c];
       }
   // Down.
   for (let y = y0; y < y1; y++)
     for (let k = 0; k < SUB; k++) {
       const { first, w: wt } = TAPS[k];
-      const rows = [0, 1, 2, 3].map((j) => cy(y + first + j) * pw);
+      const r0 = Math.min(h - 1, Math.max(0, y + first)) * pw;
+      const r1 = Math.min(h - 1, Math.max(0, y + first + 1)) * pw;
+      const r2 = Math.min(h - 1, Math.max(0, y + first + 2)) * pw;
+      const r3 = Math.min(h - 1, Math.max(0, y + first + 3)) * pw;
       const py = y * SUB + k;
       for (let px = x0 * SUB; px < x1 * SUB; px++)
-        for (let c = 0; c < ch; c++) {
-          let v = 0;
-          for (let j = 0; j < 4; j++) v += wt[j] * tmp[(rows[j] + px) * ch + c];
-          dst[(py * pw + px) * 4 + at + c] = v;
+        for (let c = 0; c < ch; c++)
+          dst[(py * pw + px) * 4 + at + c] = wt[0] * tmp[(r0 + px) * ch + c] + wt[1] * tmp[(r1 + px) * ch + c] + wt[2] * tmp[(r2 + px) * ch + c] + wt[3] * tmp[(r3 + px) * ch + c];
+    }
+}
+
+/**
+ * Keeps every dark tile (darkness 255: out of sight or unlit) black inside:
+ * its SUB×SUB darkness pixels back to 255 and its tint pixels to 0, so the
+ * upsampled fade stays on the lit side of the boundary and a dark tile never
+ * looks lit (no monster is sent there).
+ */
+export function blackenDarkTiles(darkTile: Float32Array, w: number, x0: number, y0: number, x1: number, y1: number, dark: Uint8ClampedArray, tint: Uint8ClampedArray): void {
+  const pw = w * SUB;
+  for (let y = y0; y < y1; y++)
+    for (let x = x0; x < x1; x++) {
+      if (darkTile[y * w + x] < 255) continue;
+      for (let ky = 0; ky < SUB; ky++)
+        for (let kx = 0; kx < SUB; kx++) {
+          const p = ((y * SUB + ky) * pw + x * SUB + kx) * 4;
+          dark[p + 3] = 255;
+          tint[p] = tint[p + 1] = tint[p + 2] = tint[p + 3] = 0;
         }
     }
 }
@@ -173,6 +192,7 @@ export class LightView {
       }
     upsample(dt, 1, w, h, x0, y0, x1, y1, this.tmp, this.darkImg.data, 3);
     upsample(tt, 4, w, h, x0, y0, x1, y1, this.tmp, this.tintImg.data, 0);
+    blackenDarkTiles(dt, w, x0, y0, x1, y1, this.darkImg.data, this.tintImg.data);
     const [px, py, pw, ph] = [x0 * SUB, y0 * SUB, (x1 - x0) * SUB, (y1 - y0) * SUB];
     this.dark.getContext().putImageData(this.darkImg, 0, 0, px, py, pw, ph);
     this.tint.getContext().putImageData(this.tintImg, 0, 0, px, py, pw, ph);

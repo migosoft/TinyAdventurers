@@ -803,7 +803,7 @@ impl Run {
         p.hp += healed;
         let pos = p.pos();
         if healed > 0.0 {
-            self.event_on_hero(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32 }, pos);
+            self.event_on_hero(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: true }, pos);
         }
         healed
     }
@@ -826,7 +826,7 @@ impl Run {
             let healed = (-raw).min(m.max_hp - m.hp);
             m.hp += healed;
             if healed > 0.0 {
-                self.event(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32 }, seen_by);
+                self.event(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: false }, seen_by);
             }
             return true;
         }

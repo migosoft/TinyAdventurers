@@ -11,6 +11,8 @@ export const DEPTH = {
   fx: 6000,
   /** The heroes' HP bars: over figures and effects, under the darkness (heroes vanish in the dark). */
   heroBars: 6500,
+  /** Damage and heal numbers on heroes: under the darkness with their hero. */
+  heroNumbers: 6501,
   /** Tint of the lights (ADD blend), just below the darkness. */
   tint: 6999,
   /** The darkness (light canvas). Every figure and shot is under it, heroes too. */
@@ -109,10 +111,11 @@ export class Effects {
     this.rings.push({ g, x, y, r, color, life, max: life, fill });
   }
 
-  text(x: number, y: number, s: string, color: string, big = false): void {
+  /** A floating number or word; `depth`: `DEPTH.heroNumbers` for one on a hero. */
+  text(x: number, y: number, s: string, color: string, big = false, depth = DEPTH.numbers): void {
     const t = this.freeTexts.pop() ?? this.scene.add.text(0, 0, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4 });
     t.setText(s).setColor(color).setFontSize(big ? 10 : 6).setStroke('#140c1a', big ? 3 : 2).setOrigin(0.5, 1);
-    t.setPosition(Math.round(x + (Math.random() * 6 - 3)), Math.round(y)).setAlpha(1).setVisible(true).setDepth(DEPTH.numbers).setScale(1);
+    t.setPosition(Math.round(x + (Math.random() * 6 - 3)), Math.round(y)).setAlpha(1).setVisible(true).setDepth(depth).setScale(1);
     this.texts.push({ t, vy: big ? -34 : -26, life: big ? 0.9 : 0.7, max: big ? 0.9 : 0.7 });
   }
 

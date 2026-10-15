@@ -293,15 +293,18 @@ export class GameScene extends Phaser.Scene {
 
   private onEvent(ev: Ev): void {
     switch (ev.t) {
-      case 'Dmg':
-        if (ev.imm) this.fx.text(ev.x, ev.y, 'immune', '#a0a0a0');
-        else if (ev.crit) this.fx.text(ev.x, ev.y, `CRIT ${Math.round(ev.v)}`, '#ffe040', true);
-        else this.fx.text(ev.x, ev.y, `${Math.round(ev.v)}`, dmgColor(ev.ty, ev.p));
+      case 'Dmg': {
+        // Numbers on heroes vanish in the dark with them; numbers on monsters stay above the darkness.
+        const depth = ev.p ? DEPTH.heroNumbers : DEPTH.numbers;
+        if (ev.imm) this.fx.text(ev.x, ev.y, 'immune', '#a0a0a0', false, depth);
+        else if (ev.crit) this.fx.text(ev.x, ev.y, `CRIT ${Math.round(ev.v)}`, '#ffe040', true, depth);
+        else this.fx.text(ev.x, ev.y, `${Math.round(ev.v)}`, dmgColor(ev.ty, ev.p), false, depth);
         if (!ev.imm) this.fx.hitSpark(ev.x, ev.y + 4, ev.p ? 0xff4040 : 0xffffff);
         if (ev.p && !ev.imm && Math.hypot(ev.x - this.pred.state.x, ev.y + 10 - this.pred.state.y) < 4) this.cameras.main.shake(90, 0.003);
         break;
+      }
       case 'Heal':
-        this.fx.text(ev.x, ev.y, `+${Math.round(ev.v)}`, '#60ff80');
+        this.fx.text(ev.x, ev.y, `+${Math.round(ev.v)}`, '#60ff80', false, ev.p ? DEPTH.heroNumbers : DEPTH.numbers);
         break;
       case 'Boom':
         if (ev.k === 1) this.fx.healRing(ev.x, ev.y, ev.r);

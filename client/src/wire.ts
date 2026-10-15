@@ -16,7 +16,7 @@ const pos = (v: number): number => v / CONST.POS_SCALE;
 const angle = (a: number): number => ((a > 128 ? a - 256 : a) / 256) * (2 * Math.PI);
 
 type DmgW = [number, number, number, number, boolean, boolean, number, boolean];
-type HealW = [number, number, number, number];
+type HealW = [number, number, number, number, boolean];
 type BoomW = [number, number, number, number, number];
 type DiedW = [number, number, number, number, number];
 type RaiseW = [number, number, number, number];
@@ -36,8 +36,8 @@ function unpackEv(e: EvW): Ev {
       return { t: 'Dmg', x: pos(x), y: pos(y), v, crit, p, ty, imm };
     }
     case EV.Heal: {
-      const [, x, y, v] = e as HealW;
-      return { t: 'Heal', x: pos(x), y: pos(y), v };
+      const [, x, y, v, p] = e as HealW;
+      return { t: 'Heal', x: pos(x), y: pos(y), v, p };
     }
     case EV.Boom: {
       const [, x, y, r, k] = e as BoomW;

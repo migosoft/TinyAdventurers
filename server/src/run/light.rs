@@ -35,7 +35,7 @@ pub struct LightSource {
     pub colour: Colour,
     pub anchor: Anchor,
     pub on: bool,
-    /// Run time at which the sweep removes it (flashes).
+    /// Run time at which the sweep removes it. Only flashes (`Anchor::Point`, set by `Run::add_flash`) expire.
     pub expires: Option<f64>,
 }
 
@@ -309,7 +309,8 @@ impl Run {
             .iter()
             .filter(|s| match s.anchor {
                 Anchor::Entity(e) => self.entity_pos(e).is_none(),
-                _ => s.expires.is_some_and(|t| self.time >= t),
+                Anchor::Point(_) => s.expires.is_some_and(|t| self.time >= t),
+                Anchor::Tile(..) => false,
             })
             .map(|s| s.id)
             .collect();
