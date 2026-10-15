@@ -133,6 +133,7 @@ export const CONST = {
   "SNAPSHOT_HZ": 30.0,
   "TICK_HZ": 60.0,
   "TILE": 16.0,
+  "TORCH_RADIUS": 4.0,
   "USE_REACH": 6.0
 } as const;
 

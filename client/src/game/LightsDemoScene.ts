@@ -12,6 +12,7 @@ import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
 import { LightView } from './lightview';
 import { TERRAIN, TerrainLayer } from './terrain';
+import { TorchView } from './torch';
 
 const W = 30;
 const H = 20;
@@ -46,6 +47,8 @@ export class LightsDemoScene extends Phaser.Scene {
   private fireball!: Phaser.GameObjects.Image;
   private frost!: Phaser.GameObjects.Image;
   private blue = { id: 0, on: true };
+  /** Torch sprites: the pixel position the server would send, the side, and whether it is the blue one that toggles. */
+  private torches: { view: TorchView; x: number; y: number; side: number; blue: boolean }[] = [];
 
   constructor() {
     super('lights-demo');
@@ -76,6 +79,13 @@ export class LightsDemoScene extends Phaser.Scene {
     torch(8, 3, 0x50ff70);
     torch(10, 3, 0xc040ff);
     torch(7, 12, 0xffaa5a); // beside the lava pool
+    // Torch sprites on the four face torches (the wall's bottom edge, as the server positions them)...
+    for (const tx of [3, 5, 8, 10]) this.torches.push({ view: new TorchView(this), x: (tx + 0.5) * TILE, y: 3 * TILE + 0.5, side: 0, blue: tx === 5 });
+    // ...and one on each side wall of room 1, each with its own light.
+    torch(2, 6, 0xffaa5a);
+    torch(11, 6, 0xffaa5a);
+    this.torches.push({ view: new TorchView(this), x: 2 * TILE + 0.5, y: 6.5 * TILE, side: 1, blue: false });
+    this.torches.push({ view: new TorchView(this), x: 12 * TILE - 0.5, y: 6.5 * TILE, side: 2, blue: false });
     for (let y = 0; y < H; y++)
       for (let x = 0; x < W; x++)
         if (map.get(x, y) === TERRAIN.Lava) this.field.add({ id: id++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x, y, on: true });
@@ -113,6 +123,7 @@ export class LightsDemoScene extends Phaser.Scene {
       this.blue.on = !this.blue.on;
       this.field.set(this.blue.id, this.blue.on, BLUE);
     }
+    for (const tr of this.torches) tr.view.update(tr.x, tr.y, !tr.blue || this.blue.on, tr.side, this.t);
 
     // Fireball: out along the corridor to the far end of room 2 and back.
     const p = (this.t % LOOP) / LOOP;

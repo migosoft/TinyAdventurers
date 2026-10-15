@@ -14,6 +14,7 @@ import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
 import { BarrelView } from './barrel';
+import { TorchView } from './torch';
 import { ChestView } from './chest';
 import { dmgColor } from './damage';
 import { DEPTH, Effects } from './effects';
@@ -66,6 +67,7 @@ export class GameScene extends Phaser.Scene {
   private mimicViews = new Map<number, MimicView>();
   private chestViews = new Map<number, ChestView>();
   private barrelViews = new Map<number, BarrelView>();
+  private torchViews = new Map<number, TorchView>();
   private useHint!: Phaser.GameObjects.Text;
   private cosmetics: Cosmetic[] = [];
   /** Own shots whose cosmetic copy has ended (shot id -> time, s): their server copy stays hidden. */
@@ -117,6 +119,7 @@ export class GameScene extends Phaser.Scene {
     this.mimicViews = new Map();
     this.chestViews = new Map();
     this.barrelViews = new Map();
+    this.torchViews = new Map();
     this.cosmetics = [];
     this.endedShots.clear();
     this.interp = new Interpolator();
@@ -187,6 +190,8 @@ export class GameScene extends Phaser.Scene {
     this.chestViews.clear();
     for (const v of this.barrelViews.values()) v.destroy();
     this.barrelViews.clear();
+    for (const v of this.torchViews.values()) v.destroy();
+    this.torchViews.clear();
   }
 
   // ------------------------------------------------------------ board
@@ -574,8 +579,8 @@ export class GameScene extends Phaser.Scene {
     }
     for (const e of this.ents.values()) {
       seen.add(e.id);
-      if (e.kind === KIND.Torch) continue; // no view until TorchView; never fall through to a hero figure
-      if (e.kind === KIND.FirePatch) this.drawHazard(e);
+      if (e.kind === KIND.Torch) this.drawTorch(e, now);
+      else if (e.kind === KIND.FirePatch) this.drawHazard(e);
       else if (e.kind === KIND.Chest) this.drawChest(e);
       else if (e.kind === KIND.Barrel) this.drawBarrel(e);
       else if (e.kind === KIND.Mimic) this.drawMimic(e, dt, px, py);
@@ -593,13 +598,14 @@ export class GameScene extends Phaser.Scene {
     for (const [id, v] of this.mimicViews) if (!seen.has(id)) (v.destroy(), this.mimicViews.delete(id));
     for (const [id, v] of this.chestViews) if (!seen.has(id)) (v.destroy(), this.chestViews.delete(id));
     for (const [id, v] of this.barrelViews) if (!seen.has(id)) (v.destroy(), this.barrelViews.delete(id));
+    for (const [id, v] of this.torchViews) if (!seen.has(id)) (v.destroy(), this.torchViews.delete(id));
 
     let hint: EntState | null = null;
     if (this.alive) {
       let best = Infinity;
       for (const e of this.ents.values()) {
-        if (e.kind !== KIND.Barrel || e.anim >= 2) continue;
-        const gap = Math.hypot(e.x - px, e.y - py) - CONST.BARREL_RADIUS - CONST.PLAYER_RADIUS;
+        if (!((e.kind === KIND.Barrel && e.anim < 2) || e.kind === KIND.Torch)) continue;
+        const gap = Math.hypot(e.x - px, e.y - py) - (e.kind === KIND.Torch ? CONST.TORCH_RADIUS : CONST.BARREL_RADIUS) - CONST.PLAYER_RADIUS;
         if (gap <= CONST.USE_REACH && gap < best) (best = gap), (hint = e);
       }
     }
@@ -709,6 +715,15 @@ export class GameScene extends Phaser.Scene {
       this.barrelViews.set(e.id, view);
     }
     view.update(e.x, e.y, e.anim, e.animMs);
+  }
+
+  private drawTorch(e: EntState, now: number): void {
+    let view = this.torchViews.get(e.id);
+    if (!view) {
+      view = new TorchView(this);
+      this.torchViews.set(e.id, view);
+    }
+    view.update(e.x, e.y, e.anim === 1, e.extra, now);
   }
 
   private drawProjectile(e: EntState): void {
