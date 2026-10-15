@@ -617,6 +617,19 @@ kbd {
   padding: 8px 12px;
 }
 
+.status-hint {
+  position: absolute;
+  top: 58%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: #d8c8ff;
+  background: rgba(10, 6, 12, 0.7);
+  padding: 6px 10px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .bottom {
   position: absolute;
   bottom: 14px;

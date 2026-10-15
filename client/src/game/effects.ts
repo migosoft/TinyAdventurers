@@ -33,6 +33,8 @@ interface Particle {
   max: number;
   grav: number;
   fade: boolean;
+  /** Starting alpha; fading goes from it down to 0. */
+  alpha: number;
   shrink: boolean;
 }
 
@@ -94,7 +96,7 @@ export class Effects {
     else img.setTexture('atlas', f);
     img.setPosition(x, y).setTint(color).setAlpha(opts.alpha ?? 1).setScale(opts.scale ?? 1);
     img.setFlipX(opts.flipX ?? false).setVisible(true).setDepth(opts.depth ?? DEPTH.fx);
-    this.particles.push({ img, vx, vy, life, max: life, grav: opts.grav ?? 0, fade: opts.fade ?? true, shrink: opts.shrink ?? false });
+    this.particles.push({ img, vx, vy, life, max: life, grav: opts.grav ?? 0, fade: opts.fade ?? true, shrink: opts.shrink ?? false, alpha: opts.alpha ?? 1 });
   }
 
   burst(x: number, y: number, n: number, color: number, speed: number, life = 0.4, grav = 0): void {
@@ -134,7 +136,7 @@ export class Effects {
       p.img.x += p.vx * dt;
       p.img.y += p.vy * dt;
       const k = p.life / p.max;
-      if (p.fade) p.img.setAlpha(k);
+      if (p.fade) p.img.setAlpha(p.alpha * k);
       if (p.shrink) p.img.setScale(k);
     }
     for (let i = this.rings.length - 1; i >= 0; i--) {

@@ -44,6 +44,9 @@ export class Hud {
   private msgs = el('div', 'messages');
   private debug = el('pre', 'debug hidden');
   private banner = el('div', 'banner hidden');
+  /** A line about the own hero's state (asleep), centred under the figure. */
+  private statusHint = el('div', 'status-hint hidden');
+  private statusText: string | null = null;
   private menu = el('div', 'menu hidden');
   private end = el("div", "end hidden");
   private debugBadge = el("div", "debug-badge hidden", "DEBUG · immortal · paths to boss (yellow) and ogre (blue)");
@@ -76,7 +79,7 @@ export class Hud {
     const resume = el('button', '', 'Resume');
     resume.onclick = () => this.toggleMenu();
     this.menu.append(resume, leave);
-    this.root.append(this.party, this.boss, this.msgs, this.banner, bottom, this.debug, this.debugBadge, this.menu, this.end);
+    this.root.append(this.party, this.boss, this.msgs, this.banner, this.statusHint, bottom, this.debug, this.debugBadge, this.menu, this.end);
     this.root.append(el('div', 'help', 'WASD move · LMB/RMB attack · Esc menu · F3 stats'));
     host.append(this.root);
   }
@@ -87,6 +90,7 @@ export class Hud {
     this.debugBadge.classList.add("hidden");
     this.boss.classList.add('hidden');
     this.banner.classList.add('hidden');
+    this.setStatusHint(null);
     this.msgs.innerHTML = '';
     this.coinCount = 0;
     this.showCoins();
@@ -171,6 +175,14 @@ export class Hud {
         `entities   ${f.ents}\n` +
         `darkvision ${Math.round(f.darkvision * 100)}%`;
     }
+  }
+
+  /** Shows (or hides, `null`) the line about the own hero's state, e.g. asleep. */
+  setStatusHint(text: string | null): void {
+    if (text === this.statusText) return;
+    this.statusText = text;
+    this.statusHint.textContent = text ?? '';
+    this.statusHint.classList.toggle('hidden', text === null);
   }
 
   message(text: string): void {

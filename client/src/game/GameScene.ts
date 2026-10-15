@@ -18,6 +18,7 @@ import { TorchView } from './torch';
 import { ChestView } from './chest';
 import { dmgColor } from './damage';
 import { DEPTH, Effects } from './effects';
+import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
 import { LightView, nextDarkvision } from './lightview';
 import { syncDarkvisionFX } from './darkvisionfx';
@@ -78,6 +79,8 @@ export class GameScene extends Phaser.Scene {
   /** HP bars over heroes: under the darkness, so they vanish with their hero. */
   private heroBars!: Phaser.GameObjects.Graphics;
   private beams!: Phaser.GameObjects.Graphics;
+  /** The lich's stone gaze: a grey line from its eyes to the target hero. */
+  private gaze!: Phaser.GameObjects.Graphics;
   private keys!: Record<'W' | 'A' | 'S' | 'D' | 'Q' | 'E', Phaser.Input.Keyboard.Key>;
   private acc = 0;
   private shotId = 0;
@@ -152,6 +155,7 @@ export class GameScene extends Phaser.Scene {
     this.bars = this.add.graphics().setDepth(DEPTH.numbers - 1);
     this.heroBars = this.add.graphics().setDepth(DEPTH.heroBars);
     this.beams = this.add.graphics().setDepth(DEPTH.beam);
+    this.gaze = this.add.graphics().setDepth(DEPTH.fx);
     this.debugGfx = this.add.graphics().setDepth(DEPTH.fog + 1);
     this.debugOn = false;
     this.debugPath = [];
@@ -622,7 +626,7 @@ export class GameScene extends Phaser.Scene {
     // Own figure is always drawn from prediction.
     if (!seen.has(this.info.you) && this.alive) {
       seen.add(this.info.you);
-      this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0 }, dt, px, py, now);
+      this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: this.myEffects() }, dt, px, py, now);
     }
     for (const [id, v] of this.views) if (!seen.has(id)) (v.destroy(), this.views.delete(id), this.wade.delete(id));
     for (const [id, v] of this.projViews) if (!seen.has(id)) (v.destroy(), this.projViews.delete(id));
@@ -633,19 +637,29 @@ export class GameScene extends Phaser.Scene {
     for (const [id, v] of this.torchViews) if (!seen.has(id)) (v.destroy(), this.torchViews.delete(id));
 
     let hint: EntState | null = null;
+    let wake = false;
     if (this.alive) {
       let best = Infinity;
+      // A sleeping teammate in reach is woken first (like the server), the nearest one.
       for (const e of this.ents.values()) {
+        if (e.id === this.info.you || !isPlayerKind(e.kind) || e.flags & FLAG.DEAD || !has(e.effects, EFFECT.Sleep)) continue;
+        const gap = Math.hypot(e.x - px, e.y - py) - 2 * CONST.PLAYER_RADIUS;
+        if (gap <= CONST.USE_REACH && gap < best) (best = gap), (hint = e), (wake = true);
+      }
+      for (const e of this.ents.values()) {
+        if (wake) break;
         if (!((e.kind === KIND.Barrel && e.anim < 2) || e.kind === KIND.Torch)) continue;
         const gap = Math.hypot(e.x - px, e.y - py) - (e.kind === KIND.Torch ? CONST.TORCH_RADIUS : CONST.BARREL_RADIUS) - CONST.PLAYER_RADIUS;
         if (gap <= CONST.USE_REACH && gap < best) (best = gap), (hint = e);
       }
     }
-    this.useHint.setVisible(hint !== null);
+    this.useHint.setVisible(hint !== null).setText(wake ? 'E Wake' : 'E');
+    this.hud.setStatusHint(this.alive && has(this.myEffects(), EFFECT.Sleep) ? 'Asleep. A teammate can wake you (E).' : null);
     if (hint) this.useHint.setPosition(Math.round(hint.x), Math.round(hint.y - 26));
 
     this.updateCosmetics(dt, myShots, now);
     this.drawBarsAndBeams(now);
+    this.drawGaze(px, py, now);
     this.drawDebugPath(px, py, now);
     this.forceField?.update(dt);
     this.terrain?.update(dt);
@@ -688,9 +702,10 @@ export class GameScene extends Phaser.Scene {
       }
       let flags = this.myFlags & ~FLAG.HIDDEN;
       if (this.pred.hidden > 0) flags |= FLAG.HIDDEN;
-      s = { x: px, y: py, anim, animT: tLocal, aim, flags };
+      // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
+      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects() };
     } else {
-      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags };
+      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects };
     }
     this.terrainState(e, s, me && this.alive, dt);
     view.update(s, dt);
@@ -840,6 +855,30 @@ export class GameScene extends Phaser.Scene {
       this.fx.particle(e.x + (Math.random() * 16 - 8), e.y, 0, -25 - Math.random() * 20, 0.5, Math.random() < 0.5 ? 0xff7020 : 0xffd040, {
         depth: DEPTH.entityBase + e.y,
       });
+  }
+
+  /** The own hero's effects as a bitmask, from the own snapshot. */
+  private myEffects(): number {
+    let bits = 0;
+    for (const [k] of this.lastSnap?.me.effects ?? []) bits |= 1 << k;
+    return bits;
+  }
+
+  /**
+   * The lich's stone gaze: while it stares (`ANIM.Gaze`), a thin grey line
+   * from its eyes to the hero it petrifies (entity id in `extra`), when in view.
+   */
+  private drawGaze(px: number, py: number, now: number): void {
+    const g = this.gaze.clear();
+    for (const e of this.ents.values()) {
+      if (e.anim !== ANIM.Gaze || e.flags & FLAG.DEAD) continue;
+      const me = e.extra === this.info.you && this.alive;
+      const t = me ? null : this.ents.get(e.extra);
+      if (!me && !t) continue;
+      const tx = me ? px : t!.x;
+      const ty = me ? py : t!.y;
+      drawGazeBeam(g, e.x, e.y, tx, ty, now);
+    }
   }
 
   private drawBarsAndBeams(now: number): void {

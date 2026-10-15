@@ -68,6 +68,8 @@ export interface FigureDef {
   mouth?: FramePoints;
   nostrils?: FramePoints;
   label?: string;
+  /** Asleep (lying): pixels cut off the side that ends up on the floor, when the default (`lyingPose`) does not fit the frame. */
+  lieCrop?: number;
 }
 
 /** Pixel points inside a frame (x, y from the frame's top-left), e.g. the dragon's mouth. */
@@ -158,6 +160,8 @@ export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?:
   [KIND.FireOrb]: { glow: 0xff8030, scale: 0.9, trail: 0xff8030 },
   [KIND.FireBolt]: { glow: 0xff7020, scale: 0.7, trail: 0xffb040 },
   [KIND.DragonFireball]: { glow: 0xff5010, scale: 2, trail: 0xffb040 },
+  [KIND.BlindOrb]: { glow: 0x3a1a5a, scale: 1.4, trail: 0x1a0a2a, gloom: true },
+  [KIND.SleepOrb]: { glow: 0xc080ff, scale: 1.3, trail: 0x8040c0, gloom: true },
 };
 
 export function isPlayerKind(k: number): boolean {

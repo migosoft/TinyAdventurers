@@ -1,8 +1,9 @@
 // Dev page (?gallery): every figure cycling through all animation states,
 // plus projectiles, barrels and the boss hall force field, to check sprites without
-// playing to each enemy.
+// playing to each enemy. Below them (scroll down with the mouse wheel, or
+// ?gallery&y=360): one row per status effect on heroes and a few enemies.
 import Phaser from 'phaser';
-import { ANIM, CONST, FLAG } from '../generated/defs';
+import { ANIM, CONST, EFFECT, FLAG, KIND } from '../generated/defs';
 import { FIGURES, PROJECTILES } from './anim/defs';
 import { EntityView } from './anim/EntityView';
 import { Effects } from './effects';
@@ -26,6 +27,11 @@ const STATES: [string, number][] = [
   ['land', ANIM.Land],
 ];
 
+/** Figures shown with each status effect. */
+const EFFECT_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.Assassin, KIND.SkeletonWarrior, KIND.OrcWarrior, KIND.Ogre, KIND.Lich];
+const EFFECT_TOP = 400;
+const EFFECT_ROW = 56;
+
 export class GalleryScene extends Phaser.Scene {
   private views: { v: EntityView; x: number; y: number }[] = [];
   private fx!: Effects;
@@ -33,6 +39,7 @@ export class GalleryScene extends Phaser.Scene {
   private label!: Phaser.GameObjects.Text;
   private fields: ForceField[] = [];
   private barrels: { v: BarrelView; x: number; y: number; explosive: boolean }[] = [];
+  private effectViews: { v: EntityView; x: number; y: number; bits: number; id: number; i: number }[] = [];
 
   constructor() {
     super('gallery');
@@ -59,7 +66,16 @@ export class GalleryScene extends Phaser.Scene {
     // through fuse, falling and sinking.
     [['barrel', 0], ['barrel_explosive', 0], ['barrel_explosive', 1]].forEach(([frame, cycle], i) =>
       this.barrels.push({ v: new BarrelView(this, frame as string), x: 400 + i * 30, y: 340, explosive: cycle === 1 }));
-    this.label = this.add.text(8, 6, '', { fontFamily: 'monospace', fontSize: '10px', color: '#fff' });
+    // Status effects: a row per effect, labelled with its name.
+    Object.entries(EFFECT).sort(([, a], [, b]) => a - b).forEach(([name, id], row) => {
+      const y = EFFECT_TOP + row * EFFECT_ROW;
+      this.add.text(8, y - 24, name, { fontFamily: 'monospace', fontSize: '10px', color: '#fff' });
+      EFFECT_KINDS.forEach((k, i) => this.effectViews.push({ v: new EntityView(this, k, this.fx), x: 100 + i * 64, y, bits: 1 << id, id, i }));
+    });
+    const cam = this.cameras.main;
+    cam.scrollY = Number(this.q.get('y') ?? 0) || 0;
+    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => (cam.scrollY = Math.max(0, cam.scrollY + dy * 0.5)));
+    this.label = this.add.text(8, 6, '', { fontFamily: 'monospace', fontSize: '10px', color: '#fff' }).setScrollFactor(0);
   }
 
   // ?gallery&state=melee&slow=8 loops one state in slow motion for inspection.
@@ -78,6 +94,16 @@ export class GalleryScene extends Phaser.Scene {
       const aim = Math.sin(this.t * 0.7) * 0.6 + (Math.floor(this.t / 4) % 2 ? Math.PI : 0);
       const flags = Math.floor(this.t * 2) % 6 === 0 ? FLAG.HURT : 0;
       v.update({ x: anim === ANIM.Move ? x + Math.sin(this.t * 3) * 6 : x, y, anim, animT: animT % 0.5, aim, flags }, dt);
+    }
+    // Effect rows: idle, except slowed and accelerated, which run back and forth.
+    // Every other figure faces left, and the facings swap every 4 s (asleep and
+    // stone figures keep the facing they had when the effect began).
+    const swap = Math.floor(this.t / 4) % 2;
+    for (const { v, x, y, bits, id, i } of this.effectViews) {
+      const run = id === EFFECT.Slowed || id === EFFECT.Accelerated;
+      const dx = run ? Math.sin(this.t * 3) * 18 : 0;
+      const aim = run ? (Math.cos(this.t * 3) > 0 ? 0 : Math.PI) : (i + swap) % 2 ? Math.PI : 0;
+      v.update({ x: x + dx, y, anim: run ? ANIM.Move : ANIM.Idle, animT: this.t % 1, aim, flags: 0, effects: bits }, dt);
     }
     for (const f of this.fields) f.update(dt);
     // Cycle: rest 1 s, fuse, fall, rest, sink.
