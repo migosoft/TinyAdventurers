@@ -6,6 +6,7 @@ pub mod bosses;
 pub mod debug;
 pub mod entities;
 pub mod levels;
+pub mod light;
 pub mod objects;
 pub mod visibility;
 
@@ -125,6 +126,7 @@ pub struct Run {
     pub projectiles: Vec<Projectile>,
     pub hazards: Vec<Hazard>,
     pub objects: Vec<objects::WorldObject>,
+    pub lights: light::Lights,
     /// Events since the last snapshot, with an optional position for FOV filtering.
     pub events: Vec<(Ev, Option<Vec2>)>,
     pub next_id: u32,
@@ -149,6 +151,7 @@ impl Run {
             projectiles: Vec::new(),
             hazards: Vec::new(),
             objects: Vec::new(),
+            lights: light::Lights::new(w, h),
             events: Vec::new(),
             next_id: 1,
             rng,
@@ -407,6 +410,7 @@ impl Run {
         self.projectiles.retain(|p| !p.dead);
         self.hazards.retain(|h| h.life > 0.0);
         self.objects.retain(|o| !o.gone);
+        self.sweep_lights();
 
         Level::post_tick(self);
         self.check_end();
