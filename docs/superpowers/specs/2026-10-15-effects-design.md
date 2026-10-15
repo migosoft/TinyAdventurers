@@ -150,4 +150,89 @@ Done first, in its own commit, behaviour unchanged: `Monster::asleep` → `dorma
 TECHNICAL.md: an effects section and "How to add an effect". HANDOFF.md. TODO.md: item 1 done; follow-ups (tune the durations and the lich cooldowns, sources for Slowed and Accelerated, the rogue's hide as `Invisible`, monster sleep with `wakes_on_damage`). PLAYER_GUIDE.md: the lich's spells, waking a teammate.
 
 ## Out of scope
-Damage over time (poison, burning), items and potions, hero abilities that apply effects (the `on_hit` field is ready for them), effect sounds, resistance-based immunity beyond the per-creature table.
+Items and potions, hero abilities that apply effects (the `on_hit` field is ready for them), effect sounds. (Damage over time and resistance-based immunity were added later: see "Addendum: elemental effects".)
+
+## Addendum: elemental effects (Burning, Frozen, Poisoned)
+**Status:** settled with the user on 2026-10-15, after the first five effects were built on `feature/effects`. It extends the system above. Where this addendum and the sections above disagree, the addendum wins.
+
+### Decisions (from the user)
+1. **Three new effects with damage over time:**
+   - **Burning:** heat damage over time.
+   - **Frozen:** cannot move, act or turn, plus cold damage over time.
+   - **Poisoned:** poison damage over time.
+   - The over-time damage lasts as long as the effect is on.
+2. **Hits apply them by element:** a hit that is **at least 50 %** heat applies Burning, at least 50 % cold applies Frozen, and at least 50 % poison applies Poisoned.
+   - Burning: fireball, fire bolts and orbs, dragon fire, fire patches, the barrel blast and lava. Claws with a 20 % heat part do not burn.
+   - **Lava** applies Burning on every tick, so standing in lava keeps it refreshed. It runs on after the creature leaves the lava.
+3. **Only an initial hit applies effects.** Damage dealt by an effect never applies an effect: not its own (no endless refresh) and not any other.
+4. **Immunity from resistance:** a creature whose current resistance to an effect's damage type is 100 % or more does not take that effect. Examples:
+   - demons and the dragon are never burned, and walk through lava unharmed;
+   - undead and objects are never poisoned;
+   - a petrified creature whose heat resistance reaches 100 % is not burned while petrified.
+   The per-creature response table (immune, reduced, full) still applies on top.
+5. **Fire and ice cancel each other:**
+   - Burning applied to a frozen creature ends Frozen and does not burn it (it thaws).
+   - Frozen applied to a burning creature ends Burning and does not freeze it.
+   - The hit's own damage applies either way.
+6. **Water puts out fire:** standing on shallow or deep water ends Burning.
+7. **Sources:** only fire has sources today. Nothing deals cold or poison damage yet, so Frozen and Poisoned are built, tested and reachable with F8, and any future cold or poison hit applies them automatically.
+
+### Data
+- **New `EffectKind`s:** `Burning = 5`, `Frozen = 6`, `Poisoned = 7`.
+- **Starting values** (tuned in the balancing pass):
+
+  | Effect | Damage over time | Flags | Duration | Ends early |
+  |---|---|---|---|---|
+  | Burning | 6 heat/s | — | 3 s | in water; when Frozen is applied |
+  | Frozen | 4 cold/s | `no_move`, `no_act`, `no_turn` | 2 s | when Burning is applied |
+  | Poisoned | 4 poison/s | — | 4 s | — |
+
+- **Ticks:** over-time damage ticks every `DOT_TICK = 0.5` s, for `dps × DOT_TICK` per tick. Burning deals 3 per tick, 18 over its full 3 s.
+- **`EffectDef` gains:**
+  - `dot: Option<(DamageType, f64)>` (type and damage per second), which also drives the immunity rule;
+  - `cancels: &'static [EffectKind]`;
+  - `ends_in_water: bool`.
+- **The element table** (`defs/effects.rs`): `ELEMENT_SHARE = 0.5` and `ELEMENTS: [(DamageType, EffectKind)] = [(Heat, Burning), (Cold, Frozen), (Poison, Poisoned)]`. A new elemental effect is one line here.
+
+### Runtime
+- **`Damage` gains `from_effect: bool`** (false from `Damage::new`). When it is true, `hurt_player` and `hurt_monster` skip every effect step: the element rule, `on_hit` and wake-on-damage. Resistances, armour, damage numbers, death and the boss immunity check work as usual.
+- **Element rule:** after a normal hit's damage, if the target lives, every element whose share of the hit is at least `ELEMENT_SHARE` applies its effect (default duration).
+- **`apply_effect`** checks the resistance immunity (the creature's current resistances, effects included) and the cancels, so they hold for every source (element rule, `on_hit`, F8).
+- **Ticking:** each `ActiveEffect` with a `dot` carries a tick timer. Every `DOT_TICK` it deals its damage as effect damage.
+- **Water:** a creature whose centre is on shallow or deep water loses its `ends_in_water` effects.
+- **Kill credit:** a monster killed by effect damage credits `last_hit_by` with the kill, like a lava death.
+- **Frozen's flags** reuse the existing enforcement (movement, actions, aim; client prediction through `speed_mul`, `no_act` and `EFFECTS[id].no_turn`).
+
+### Protocol
+No format change. The new ids fit the `u16` bitmask and the own hero's effect list. The generated `EFFECT` and `EFFECTS` include them, and F8 cycles through all eight effects.
+
+### Client
+- **Burning:** a few small flames on the figure itself, spread over its body and flickering. No tint.
+- **Frozen:** a soft, translucent blue haze around the figure, and tiny snowflakes that shimmer into and out of existence around it (each fades in at a random nearby spot, holds briefly and fades out). The animation freezes on its current frame. No tint fill.
+- **Poisoned:** a green tint pulse and small green bubbles rising.
+- **HUD letters:** F (Burning), I (Frozen), X (Poisoned), all in red frames.
+- **Gallery:** a row for each new effect.
+
+### Tests
+- Burning deals 3 heat every 0.5 s for 3 s (18 in total) and ends. Partial heat resistance reduces each tick.
+- No loop: a burning hero is not re-burned by their own ticks and burns out after exactly 3 s.
+- Trigger: a 70 % heat hit burns, a 20 % heat claw does not, and a lava tick burns.
+- Immunity:
+  - a demon in lava takes no damage and gets no Burning;
+  - undead are never poisoned;
+  - a petrified creature whose heat resistance reaches 100 % is not burned.
+- Cancel: Burning on a frozen creature thaws it and does not burn it, and the reverse.
+- Water ends Burning.
+- Frozen blocks moving, acting and turning, and ticks cold damage.
+- Effect damage that kills a monster credits `last_hit_by`.
+- Client: glyphs for the new ids.
+- Visual: gallery screenshots and a live F8 run.
+- **Fingerprints:**
+  - `level_setup_is_unchanged` must not change.
+  - In `simulation_is_unchanged_after_waking_the_boss`, the demon and dragon hall values may change (their fire hits now burn heroes). Re-record them with a dated comment naming the cause.
+  - The lich value must not change, since the lich has no fire.
+
+### Docs
+- TECHNICAL: damage over time, the element table, the rule that effect damage applies no effects, and how to add an elemental effect.
+- PLAYER_GUIDE: burning, freezing, poison, water puts out fire.
+- TODO: sources for Frozen and Poisoned, tuning the new values.
