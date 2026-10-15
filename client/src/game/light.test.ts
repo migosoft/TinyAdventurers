@@ -67,12 +67,24 @@ describe('light field', () => {
     const i = 3; // reached by both
     expect(rgb[i * 3]).toBeGreaterThan(rgb[i * 3 + 1]);
     expect(rgb[i * 3 + 1]).toBeGreaterThan(rgb[i * 3 + 2]);
-    expect(rgb[i * 3]).toBeGreaterThan(rgb[1 * 3]); // more red than the torch alone near it
+    f.remove(2);
+    const torch = new Float32Array(5 * 3);
+    f.accumulate(torch, 0, 0, 5, 1, () => 1);
+    expect(rgb[i * 3]).toBeGreaterThan(torch[i * 3]); // more red than the torch alone gives it
   });
 
-  it('falls off from 1 at the centre to 0.45 at the edge', () => {
-    expect(falloff(0, 5)).toBe(1);
-    expect(falloff(5, 5)).toBeCloseTo(0.45);
-    expect(falloff(9, 5)).toBeCloseTo(0.45);
+  it('falls off smoothly from 1 at the centre to near black at the edge', () => {
+    expect(falloff(0, 7)).toBe(1);
+    expect(falloff(7, 7)).toBeCloseTo(0.1);
+    expect(falloff(9, 7)).toBeCloseTo(0.1);
+    expect(falloff(3.5, 7)).toBeCloseTo(0.55); // half way out: half way down
+    for (const r of [2, 3, 4, 7]) {
+      let prev = Infinity;
+      for (let d = 0; d <= r + 1; d += 0.05) {
+        const f = falloff(d, r);
+        expect(f).toBeLessThanOrEqual(prev); // never brighter further out
+        prev = f;
+      }
+    }
   });
 });

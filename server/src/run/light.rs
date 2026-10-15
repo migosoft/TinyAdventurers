@@ -7,7 +7,8 @@
 //! lights (anchored to an entity) are cast from the entity's tile into a
 //! second layer, once per snapshot. The client casts both the same way for
 //! drawing (`client/src/game/light.ts`, shared fixtures), so a tile the
-//! server counts as lit is never drawn dark.
+//! server counts as lit is never drawn fully black (its light fades out
+//! inside the lit tiles, never beyond them).
 
 use super::Run;
 use crate::defs::lights::{self, Colour, LightKind};
@@ -344,8 +345,8 @@ mod tests {
         }
         run.add_light(LightKind::Torch, Anchor::Tile(tx, ty), None);
         assert!(run.is_lit(at(tx, ty)));
-        assert!(run.is_lit(at(tx - 5, ty)), "the edge of radius 5");
-        assert!(!run.is_lit(at(tx - 6, ty)), "beyond it");
+        assert!(run.is_lit(at(tx - 7, ty)), "the edge of radius 7");
+        assert!(!run.is_lit(at(tx - 8, ty)), "beyond it");
         assert!(run.is_lit(at(tx + 3, ty)), "the wall itself is lit");
         assert!(!run.is_lit(at(tx + 4, ty)), "behind the wall is dark");
     }
@@ -412,9 +413,9 @@ mod tests {
     fn a_moving_light_lights_the_shadowcast_from_its_tile() {
         let (mut run, tx, ty) = dark_run();
         run.spawn_hazard(EntityKind::FirePatch, at(tx, ty), 10.0, 3.0, 8.0);
-        assert!(run.is_lit(at(tx + 3, ty)), "radius 3");
-        assert!(!run.is_lit(at(tx + 3, ty + 1)), "outside the radius-3 shadowcast, though near its centre");
-        let corner = Vec2::new((tx + 3) as f64 * TILE + 15.9, ty as f64 * TILE + 15.9);
+        assert!(run.is_lit(at(tx + 4, ty)), "radius 4");
+        assert!(!run.is_lit(at(tx + 4, ty + 1)), "outside the radius-4 shadowcast, though near its centre");
+        let corner = Vec2::new((tx + 4) as f64 * TILE + 15.9, ty as f64 * TILE + 15.9);
         assert!(run.is_lit(corner), "anywhere on a lit tile");
     }
 
@@ -468,12 +469,12 @@ mod tests {
     }
 
     #[test]
-    fn lava_lights_its_neighbours_and_is_in_the_start_info() {
+    fn lava_lights_its_surroundings_and_is_in_the_start_info() {
         let (mut run, tx, ty) = dark_run();
         run.layout.map.set(tx, ty, Tile::Lava);
         run.add_lava_lights();
-        assert!(run.is_lit(at(tx, ty)) && run.is_lit(at(tx + 1, ty)));
-        assert!(!run.is_lit(at(tx + 2, ty)));
+        assert!(run.is_lit(at(tx, ty)) && run.is_lit(at(tx + 2, ty)));
+        assert!(!run.is_lit(at(tx + 3, ty)));
         let infos = run.light_infos();
         assert!(infos.iter().any(|l| (l.1, l.3, l.4) == (LightKind::Lava as u8, tx as u16, ty as u16)));
     }

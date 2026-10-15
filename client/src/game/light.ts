@@ -1,6 +1,7 @@
 // Light sources for drawing. Static and moving lights use the same shadowcast as
 // server/src/run/light.rs (checked by fixtures), so a tile the server counts
-// as lit is never drawn dark. Colours mix additively. Knows nothing about
+// as lit is never drawn fully black (the light fades out inside its lit
+// tiles, never beyond them). Colours mix additively. Knows nothing about
 // torches or lava: only light kinds, colours and tiles.
 import { LIGHT } from '../generated/defs';
 import type { LightInfo } from '../generated/LightInfo';
@@ -22,10 +23,13 @@ interface Cells {
   fall: Float32Array;
 }
 
-/** Brightness at distance `d` (tiles) from a light of radius `r`: 1 at the centre, 0.45 at the edge. */
+/** Brightness at the edge of a light's radius: near black, so the light fades out inside its lit tiles. */
+export const EDGE = 0.1;
+
+/** Brightness at distance `d` (tiles) from a light of radius `r`: 1 at the centre, a smoothstep down to `EDGE` at the edge. */
 export function falloff(d: number, r: number): number {
   const k = Math.min(1, d / r);
-  return 1 - 0.55 * k * k;
+  return 1 - (1 - EDGE) * k * k * (3 - 2 * k);
 }
 
 /** Adds `colour` (0xRRGGBB) times `k` to tile `i` of an rgb buffer (no cap: the drawer caps at 255). */

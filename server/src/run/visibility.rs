@@ -319,9 +319,9 @@ mod tests {
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
         run.spawn_hazard(EntityKind::FirePatch, Map::center_of(tx + 3, ty), 10.0, 3.0, 8.0);
-        let inside = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 6, ty), None, 1);
-        // 3.2 tiles from the patch: outside its radius-3 shadowcast.
-        let outside = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 6, ty + 1), None, 1);
+        let inside = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 7, ty), None, 1);
+        // 4.1 tiles from the patch: outside its radius-4 shadowcast.
+        let outside = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 7, ty + 1), None, 1);
         send_snapshots(&mut run);
         let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
         let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();

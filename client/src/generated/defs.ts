@@ -358,24 +358,24 @@ export const LIGHT: Record<number, { radius: number; colour: number; intensity: 
     "colour": 16755290,
     "flicker": 0.15,
     "intensity": 1.0,
-    "radius": 5
+    "radius": 7
   },
   "1": {
     "colour": 16729630,
     "flicker": 0.05,
     "intensity": 0.8,
-    "radius": 1
+    "radius": 2
   },
   "2": {
     "colour": 16747580,
     "flicker": 0.2,
     "intensity": 0.9,
-    "radius": 3
+    "radius": 4
   },
   "3": {
     "colour": 9861375,
     "flicker": 0.1,
     "intensity": 0.7,
-    "radius": 2
+    "radius": 3
   }
 };

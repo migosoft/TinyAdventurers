@@ -36,10 +36,10 @@ pub struct LightDef {
 
 pub fn def(k: LightKind) -> LightDef {
     match k {
-        LightKind::Torch => LightDef { radius: 5, colour: 0xffaa5a, intensity: 1.0, flicker: 0.15 },
-        LightKind::Lava => LightDef { radius: 1, colour: 0xff461e, intensity: 0.8, flicker: 0.05 },
-        LightKind::Fire => LightDef { radius: 3, colour: 0xff8c3c, intensity: 0.9, flicker: 0.2 },
-        LightKind::Magic => LightDef { radius: 2, colour: 0x9678ff, intensity: 0.7, flicker: 0.1 },
+        LightKind::Torch => LightDef { radius: 7, colour: 0xffaa5a, intensity: 1.0, flicker: 0.15 },
+        LightKind::Lava => LightDef { radius: 2, colour: 0xff461e, intensity: 0.8, flicker: 0.05 },
+        LightKind::Fire => LightDef { radius: 4, colour: 0xff8c3c, intensity: 0.9, flicker: 0.2 },
+        LightKind::Magic => LightDef { radius: 3, colour: 0x9678ff, intensity: 0.7, flicker: 0.1 },
     }
 }
 
