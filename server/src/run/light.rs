@@ -566,4 +566,22 @@ mod tests {
         assert!(!run.is_lit(near), "dark again");
         assert!(run.lights.sources.is_empty(), "the flash is swept");
     }
+
+    #[test]
+    fn a_healing_wave_flashes_light_for_a_moment() {
+        let (mut run, tx, ty) = dark_run();
+        let near = at(tx + 3, ty);
+        assert!(!run.is_lit(near));
+        crate::run::abilities::try_use(&mut run, 0, crate::defs::abilities::AbilityId::Heal, 1, false);
+        assert!(run.is_lit(near), "the wave lights it up");
+        assert_eq!(run.moving_lights().iter().filter(|l| l.kind == LightKind::Holy).count(), 1);
+        let wave = run.time;
+        while run.time + crate::run::DT < wave + lights::HOLY_FLASH - 1e-6 {
+            run.step();
+            assert!(run.is_lit(near), "lit while the ring lasts");
+        }
+        run.step();
+        run.step();
+        assert!(!run.is_lit(near), "dark again");
+    }
 }

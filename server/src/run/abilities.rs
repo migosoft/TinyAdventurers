@@ -66,6 +66,7 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
         }
         AbilityId::Heal => {
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: def.radius as f32, k: 1 }, Some(pos));
+            run.add_flash(LightKind::Holy, pos, lights::HOLY_FLASH);
             let mut total = 0.0;
             for qi in 0..run.players.len() {
                 let q = &run.players[qi];
