@@ -4,7 +4,8 @@
 // (a short Blast flash) in the dark room's doorway while the fireball is at
 // its far end, a frost bolt circling in the first room, and a blue torch that
 // switches every 3 s.
-// `&slow=N` slows time.
+// `&slow=N` slows time. Key V cycles the viewer's darkvision 0 / 50% / 100% (greyscale
+// where it sees only by darkvision); `&dv=0.5` starts with it.
 import Phaser from 'phaser';
 import { LIGHT_KIND, TILE_ID } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
@@ -12,7 +13,8 @@ import { TILE, TileMap } from '../sim/map';
 import { tileDraws } from './autotile';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
-import { LightView } from './lightview';
+import { syncDarkvisionFX } from './darkvisionfx';
+import { LightView, nextDarkvision } from './lightview';
 import { TERRAIN, TerrainLayer } from './terrain';
 import { TorchView } from './torch';
 
@@ -43,6 +45,9 @@ function buildMap(): TileMap {
 
 export class LightsDemoScene extends Phaser.Scene {
   private slow = Number(new URLSearchParams(location.search).get('slow') ?? 1) || 1;
+  /** The viewer's darkvision, 0..1 (V cycles it). */
+  private darkvision = Math.min(1, Math.max(0, Number(new URLSearchParams(location.search).get('dv') ?? 0) || 0));
+  private caption!: Phaser.GameObjects.Text;
   private t = 0;
   private fx!: Effects;
   private layer!: TerrainLayer;
@@ -100,8 +105,8 @@ export class LightsDemoScene extends Phaser.Scene {
     this.fireball = glow(FIRE_COLOUR, 1.4);
     this.frost = glow(0x9ae0ff, 1);
 
-    this.add
-      .text(8, 6, 'lights demo: torches in four colours, lava, torch+lava mix, fireball into a dark room, explosion flash in its doorway, frost bolt; blue torch toggles every 3 s', {
+    this.caption = this.add
+      .text(8, 6, '', {
         fontFamily: 'monospace',
         fontSize: '8px',
         color: '#fff',
@@ -111,10 +116,22 @@ export class LightsDemoScene extends Phaser.Scene {
       })
       .setResolution(4)
       .setDepth(DEPTH.numbers);
+    this.showCaption();
+    this.input.keyboard!.on('keydown-V', () => {
+      this.darkvision = nextDarkvision(this.darkvision);
+      this.showCaption();
+    });
 
     const cam = this.cameras.main;
     cam.setZoom(Math.min(cam.width / (W * TILE), cam.height / (H * TILE)));
     cam.centerOn((W * TILE) / 2, (H * TILE) / 2);
+  }
+
+  private showCaption(): void {
+    this.caption.setText(
+      'lights demo: torches in four colours, lava, torch+lava mix, fireball into a dark room, explosion flash in its doorway, frost bolt; blue torch toggles every 3 s' +
+        `\ndarkvision ${Math.round(this.darkvision * 100)}% (V)`,
+    );
   }
 
   update(_t: number, dms: number): void {
@@ -150,6 +167,7 @@ export class LightsDemoScene extends Phaser.Scene {
       [cx, cy, LIGHT_KIND.Magic, FROST_COLOUR],
     ];
     if (sinceBoom >= 0 && sinceBoom < FLASH) moving.push([boomX, fy, LIGHT_KIND.Blast, null]);
-    this.view.update(this.cameras.main.worldView, (VIEWER[0] + 0.5) * TILE, (VIEWER[1] + 0.5) * TILE, moving, this.t, 0);
+    this.view.update(this.cameras.main.worldView, (VIEWER[0] + 0.5) * TILE, (VIEWER[1] + 0.5) * TILE, moving, this.t, this.darkvision);
+    syncDarkvisionFX(this.cameras.main, this.darkvision, this.view.mask, [W * TILE, H * TILE]);
   }
 }

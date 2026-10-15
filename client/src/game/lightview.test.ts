@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND } from '../generated/defs';
-import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, flicker, SUB, tileDark, upsample } from './lightview';
+import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, flicker, nextDarkvision, SUB, tileDark, upsample } from './lightview';
 
 describe('darkness', () => {
   it('is black where not seen or not lit', () => {
@@ -83,5 +83,13 @@ describe('darkvision', () => {
     expect(tileDark(true, false, false, 0, 0, 0)).toBe(1);
     expect(tileDark(false, false, true, 0, 0, 0)).toBe(1);
     expect(tileDark(true, true, true, 10, 5, 0)).toBe(darknessAlpha(true, true, 10, 5, 0));
+  });
+  it('debug cycle: 0 -> 0.5 -> 1 -> 0, from any value', () => {
+    expect(nextDarkvision(0)).toBe(0.5);
+    expect(nextDarkvision(0.5)).toBe(1);
+    expect(nextDarkvision(1)).toBe(0);
+    expect(nextDarkvision(0.3)).toBe(0.5);
+    expect(nextDarkvision(0.6)).toBe(1);
+    expect(nextDarkvision(50 / 100)).toBe(1); // the snapshot's percent
   });
 });

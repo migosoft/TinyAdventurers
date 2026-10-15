@@ -20,6 +20,8 @@ export interface FrameStats {
   cd1: number;
   cd2: number;
   ents: number;
+  /** The viewed hero's darkvision, 0..1. */
+  darkvision: number;
 }
 
 const el = (tag: string, cls?: string, html?: string) => {
@@ -166,7 +168,8 @@ export class Hud {
         `snapshot   ${f.snapBytes} B\n` +
         `correction ${f.correction.toFixed(2)} px\n` +
         `server     ${f.srvMs.toFixed(2)} ms/tick\n` +
-        `entities   ${f.ents}`;
+        `entities   ${f.ents}\n` +
+        `darkvision ${Math.round(f.darkvision * 100)}%`;
     }
   }
 

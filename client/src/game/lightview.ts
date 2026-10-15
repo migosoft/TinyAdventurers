@@ -46,6 +46,11 @@ export function tileDark(visible: boolean, lit: boolean, inReach: boolean, r: nu
   return visible && !lit && inReach ? DV_DARK : darknessAlpha(visible, lit, r, g, b);
 }
 
+/** The debug darkvision steps (F4, and V in ?lights): the next one above `current`, after 1 back to 0. */
+export function nextDarkvision(current: number): number {
+  return current < 0.5 - 1e-6 ? 0.5 : current < 1 - 1e-6 ? 1 : 0;
+}
+
 /** A light's brightness factor at time `t` (s): a slight, per-light wobble by its kind. */
 export function flicker(kind: number, id: number, t: number): number {
   const f = LIGHT[kind].flicker;

@@ -19,7 +19,8 @@ import { ChestView } from './chest';
 import { dmgColor } from './damage';
 import { DEPTH, Effects } from './effects';
 import { LightField } from './light';
-import { LightView } from './lightview';
+import { LightView, nextDarkvision } from './lightview';
+import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
@@ -169,6 +170,13 @@ export class GameScene extends Phaser.Scene {
     kb.on('keydown-F3', (e: KeyboardEvent) => {
       e.preventDefault();
       this.hud.toggleDebug();
+    });
+    // Debug: cycle the viewed hero's darkvision 0 -> 50% -> 100% (the server honours it only when debug is allowed).
+    kb.on('keydown-F4', (e: KeyboardEvent) => {
+      e.preventDefault();
+      if (e.repeat) return;
+      // The server announces the change to the party.
+      this.net.send({ t: 'DebugDarkvision', ratio: nextDarkvision((this.lastSnap?.me.darkvision ?? 0) / 100) });
     });
     kb.on('keydown-ESC', () => this.hud.toggleMenu());
     this.input.mouse?.disableContextMenu();
@@ -573,7 +581,9 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.cameras.main.centerOn(Math.round(camX), Math.round(camY - 8));
-    this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now, (this.lastSnap?.me.darkvision ?? 0) / 100);
+    const darkvision = (this.lastSnap?.me.darkvision ?? 0) / 100;
+    this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now, darkvision);
+    syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 
     const seen = new Set<number>();
     const myShots = new Set<number>();
@@ -638,6 +648,7 @@ export class GameScene extends Phaser.Scene {
       cd1: this.pred.cd1,
       cd2: this.pred.cd2,
       ents: this.ents.size,
+      darkvision,
     });
   }
 

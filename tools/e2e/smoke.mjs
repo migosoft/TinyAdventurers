@@ -97,6 +97,13 @@ await p1.waitForTimeout(600);
 await p1.screenshot({ path: `${out}/5-debug.png` });
 const dbg = await p1.textContent('.debug');
 console.log(dbg);
+// F4 (debug darkvision) twice: 0 -> 50% -> 100%; the greyscale shows where she sees only by darkvision.
+for (const want of ['50%', '100%']) {
+  await p1.keyboard.press('F4');
+  await p1.waitForFunction((w) => document.querySelector('.debug')?.textContent?.includes(`darkvision ${w}`), want, { timeout: 5000 });
+}
+await p1.screenshot({ path: `${out}/5-darkvision.png` });
+console.log('F4 darkvision: 50% -> 100%');
 
 // A second login to Alice's account closes her first window.
 const p3 = await open('Alice2');

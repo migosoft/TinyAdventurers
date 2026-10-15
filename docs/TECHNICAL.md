@@ -463,7 +463,8 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 - Brief extrapolation of at most 100 ms covers a missing snapshot.
 
 **Measuring.**
-- F3 overlay: FPS, frame time, ping, jitter, interpolation delay, snapshot bytes, prediction correction, server ms per tick.
+- F3 overlay: FPS, frame time, ping, jitter, interpolation delay, snapshot bytes, prediction correction, server ms per tick, darkvision.
+- F4 (debug): cycles the viewed hero's darkvision 0 -> 50% -> 100% -> 0 via `DebugDarkvision` (the server honours it only when debug is allowed and marks the run as debug). While darkvision > 0 the main camera carries the `DarkvisionFX` post pipeline (`client/src/game/darkvisionfx.ts`), which greys the scene where LightView's `dvmask` is set; it is removed at 0.
 - `?lag=&jitter=&loss=` simulates conditions in both directions, keeping TCP ordering (`DelayLine`: one FIFO queue and one timer, because browsers round timer delays down to whole milliseconds; a timer per message delivered inputs out of order, which the server then applied out of order, and that caused most of the corrections once seen in busy runs under lag).
 - In a busy debug run under `?lag=150&jitter=40&loss=2` (bot walking to the demon and fighting it for 90 s), about 36 of 2,760 snapshots still correct the prediction: almost all are pushes, which the client learns of about RTT/2 late, plus the force field closing during a dash.
 
@@ -579,7 +580,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 | `?lich` `[&slow=3]` | The lich's magic: the gloom bolt volley and the summon of 5 skeletons + 5 archers (left), and the nova: the purple telegraph ring at the real radius, the burst, three heroes pushed 64 px (one into the chasm) and one spared just outside. |
 | `?ogre` `[&slow=3]` | The ogre's club next to the orc warrior's push (only the club's knocks a hero into the chasm), and the ground slam: the telegraph ring at the real radius, the shockwave, three heroes pushed away (one into a chasm) and one spared just outside. The user approved it. |
 | `?daemons[&slow=3]` | Imp, chort and a pack of both fighting a walking knight, and a summoner summoning imps. Uses the real figure definitions; the attack logic is a local imitation of the server AI. No server needed. |
-| `?lights` | The light system on a scripted room, no server needed: four torches in four colours, a lava pool with a warm torch beside it (mixing), a fireball flying down a corridor into a dark room and back, an explosion with a `Blast` flash in the dark room's doorway while the fireball is at its far end, a frost bolt circling in the first room, and a blue torch that switches every 3 s (so a burnt-out torch shows). It loops every 4 s, `&slow=N` slows time; `tools/e2e/lights-shot.mjs` takes a screenshot every 0.5 s. The user approved the look on 2026-10-15 and asked for the changes in HANDOFF "Look check". |
+| `?lights` | The light system on a scripted room, no server needed: four torches in four colours, a lava pool with a warm torch beside it (mixing), a fireball flying down a corridor into a dark room and back, an explosion with a `Blast` flash in the dark room's doorway while the fireball is at its far end, a frost bolt circling in the first room, and a blue torch that switches every 3 s (so a burnt-out torch shows). It loops every 4 s, `&slow=N` slows time; `tools/e2e/lights-shot.mjs` takes a screenshot every 0.5 s (a third argument, e.g. `0.5`, sets `&dv=`). V cycles the viewer's darkvision 0 / 50% / 100% and `&dv=0.5` starts with it: the doorway tiles of the dark room it sees only by darkvision turn dim grey (at 50% nothing unlit is in reach, so it looks as at 0). The user approved the look on 2026-10-15 and asked for the changes in HANDOFF "Look check". |
 | `?lag=150&jitter=40&loss=2` | Network simulator. |
 
 ## 11. Extending
@@ -859,6 +860,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
   5. check the audit log.
 
   It takes screenshots of the dashboard (light and dark), the player page and the audit log.
+- presses F4 twice and waits for the F3 panel to show `darkvision 50%`, then `100%` (screenshot `5-darkvision.png`)
 - screenshots (login, characters, lobby, room, game) go to the output folder; prints the F3 stats and any browser errors (the expected 401 of the first `/api/me` is ignored)
 
 **Client admin tests (`src/admin/charts.test.ts`):** nice axis maximum and ticks, the rounded-top column path, number, duration and share formatting.

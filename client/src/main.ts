@@ -9,6 +9,7 @@ import { LichDemoScene } from './game/LichDemoScene';
 import { DragonDemoScene } from './game/DragonDemoScene';
 import { DemonDemoScene } from './game/DemonDemoScene';
 import { LightsDemoScene } from './game/LightsDemoScene';
+import { DARKVISION_FX, DarkvisionFX } from './game/darkvisionfx';
 import { GameScene, type GameInit } from './game/GameScene';
 import type { RunStartInfo } from './generated/RunStartInfo';
 import { api, ApiFail } from './api';
@@ -40,6 +41,9 @@ class BootScene extends Phaser.Scene {
     for (let r = 6; r >= 1; r--) g.fillStyle(0xffffff, 0.12 + (6 - r) * 0.16).fillCircle(7, 7, r);
     g.generateTexture('glow', 14, 14);
     g.destroy();
+    // The darkvision greyscale, a camera post pipeline set by name. (The game config's
+    // `pipeline` option would do the same, but its typings expect a config constructor.)
+    (this.renderer as Phaser.Renderer.WebGL.WebGLRenderer).pipelines.addPostPipeline(DARKVISION_FX, DarkvisionFX);
     this.game.events.emit('assets-ready');
   }
 }
