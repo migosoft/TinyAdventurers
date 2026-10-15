@@ -675,7 +675,6 @@ fn near_entrance(map: &Map, r: &Rect, x: i32, y: i32) -> bool {
     (-2..=2).any(|dy| (-2..=2).any(|dx| !r.contains_tile(x + dx, y + dy) && !map.opaque(x + dx, y + dy)))
 }
 
-/// Rotate the whole dungeon 90 degrees clockwise (map is square).
 pub const TORCH_SPACING: i32 = 6;
 /// Share of rooms and corridor stretches left without torches (dark pockets).
 pub const DARK_SHARE: f64 = 0.2;
@@ -734,7 +733,7 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
             if !wall(x, y) {
                 continue;
             }
-            let t = if floor(x, y + 1) {
+            let t = if floor(x, y + 1) && !floor(x - 1, y) && !floor(x + 1, y) {
                 TorchSpawn { wall: (x, y), side: TorchSide::Face }
             } else if wall(x, y - 1) && wall(x, y + 1) && floor(x + 1, y) && !floor(x - 1, y) {
                 TorchSpawn { wall: (x, y), side: TorchSide::West }
@@ -766,7 +765,7 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
             }
         }
         for run in runs.into_iter().filter(|r| r.len() >= 3) {
-            let offset = rng.gen_range(0..TORCH_SPACING).min(run.len() as i32 - 1) as usize;
+            let offset = rng.gen_range(0..TORCH_SPACING.min(run.len() as i32)) as usize;
             for &a in run.iter().skip(offset).step_by(TORCH_SPACING as usize) {
                 let wall = if side == TorchSide::Face { (a, line) } else { (line, a) };
                 if out.iter().all(|o| (o.wall.0 - wall.0).abs() > 1 || (o.wall.1 - wall.1).abs() > 1) {
@@ -818,6 +817,7 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
     out
 }
 
+/// Rotate the whole dungeon 90 degrees clockwise (map is square).
 fn rotate(d: &mut Dungeon) {
     let n = d.map.w;
     let old = d.map.clone();
@@ -950,6 +950,22 @@ mod tests {
                 .filter(|r| !d.torches.iter().any(|t| { let (fx, fy) = t.front(); r.rect.contains_tile(fx, fy) })).count();
         }
         assert!(dark_regions > 50, "dark pockets over 200 seeds: {dark_regions}");
+    }
+
+    #[test]
+    fn torches_never_hang_on_doorway_jambs() {
+        // A wall row y=1 with a doorway gap at x=4 (floor), floor row y=2 below.
+        let mut map = Map::new(9, 4);
+        for x in 0..9 {
+            map.set(x, 1, if x == 4 { Tile::Floor } else { Tile::Wall });
+            map.set(x, 2, Tile::Floor);
+        }
+        for s in 0..50u64 {
+            let mut rng = ChaCha8Rng::seed_from_u64(s);
+            for t in place_torches(&mut rng, &map, &[]) {
+                assert!(![3, 5].contains(&t.wall.0) || t.wall.1 != 1, "seed {s}: torch on a jamb at {:?}", t.wall);
+            }
+        }
     }
 
     #[test]
