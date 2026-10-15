@@ -4,7 +4,7 @@
 Ordered by technical complexity and by technical dependencies (what makes later items easier), not by quick wins. Items in the same tier can be done in either order unless noted.
 
 **Tier 1: foundations**
-1. **Effect system** (next item; vision and darkvision are done, built 2026-10-15 on `feature/vision`). Blind, sleep, petrified; extensible, every creature, effects modify any stat. It is a draft with eight open questions to settle with the user first: [docs/superpowers/specs/2026-10-15-effects-design-draft.md](superpowers/specs/2026-10-15-effects-design-draft.md). Blindness changes vision, so it builds on `Sight` and `perception::sees` (see "Vision and darkvision follow-ups").
+1. **Effect system** (next item; vision and darkvision are done, built 2026-10-15 on `feature/vision`). Blind, sleep, petrified; extensible, every creature, effects modify any stat. Spec settled with the user (awaiting their review, then a plan): [docs/superpowers/specs/2026-10-15-effects-design.md](superpowers/specs/2026-10-15-effects-design.md). Blindness changes vision, so it builds on `Sight` and `perception::sees` (see "Vision and darkvision follow-ups").
 2. **Straight, softly fading vision edges** (user wants it soon; see "Vision and darkvision follow-ups", "Vision edges"). Client only, independent of the effect system, so it can go first while the effect draft's questions are open.
 3. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), gnolls. Little code, but the shadow, ghost, gnolls and sphinx wait on it.
 

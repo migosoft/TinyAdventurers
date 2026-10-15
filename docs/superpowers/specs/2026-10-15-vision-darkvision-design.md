@@ -24,7 +24,7 @@ User decisions (2026-10-15):
 
 **Status:** designed in chat, written spec reviewed and approved by the user (2026-10-15). Plan: [../plans/2026-10-15-vision-darkvision.md](../plans/2026-10-15-vision-darkvision.md).
 
-**Relation to the effect system** ([2026-10-15-effects-design-draft.md](2026-10-15-effects-design-draft.md)): vision and darkvision are stats that effects can change (blindness sets vision to 0). Build this first; the effect system then wraps the resolved `Sight` like any other stat.
+**Relation to the effect system** ([2026-10-15-effects-design.md](2026-10-15-effects-design.md)): vision and darkvision are stats that effects can change (blindness sets vision to 0). Build this first; the effect system then wraps the resolved `Sight` like any other stat.
 
 ## Context
 The light system (`feature/lighting`) makes darkness hide things from heroes, but enemies still see heroes perfectly in the dark. Each enemy has a `sight` radius in px (`defs/enemies.rs`, 120–200 px, i.e. 7.5–12.5 tiles; bosses 400 px = 25 tiles). An enemy notices a hero inside that radius with line of sight (`ai::find_visible_player`). Heroes see 9 tiles (`fov::PLAYER_FOV_RADIUS`, a tile shadowcast) and only what is lit (`run/visibility.rs`).

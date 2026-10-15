@@ -15,7 +15,7 @@ Vision and darkvision are built (2026-10-15), approved by the user in the game, 
 
 0. **Straight, softly fading vision edges** (TODO priority 2, "Vision edges"): the user wants it soon. Client only and independent of the effect system, so it can go first while the effect draft's questions are open. Ask the user which one to start with.
 
-1. **Effect system** (blind, sleep, petrified; extensible; every creature; effects modify any stat). It is only a **draft**: [docs/superpowers/specs/2026-10-15-effects-design-draft.md](docs/superpowers/specs/2026-10-15-effects-design-draft.md).
+1. **Effect system** (blind, sleep, petrified; extensible; every creature; effects modify any stat). Spec settled (awaiting review, then a plan): [docs/superpowers/specs/2026-10-15-effects-design.md](docs/superpowers/specs/2026-10-15-effects-design.md).
    - It has a proposed design: a data table of effects with stat modifiers (add, then multiply, then set), flags (no move, no act, no turn, prone) and break conditions; per-creature active effects; resolved `Stats`; a snapshot bitmask; client visuals (sleep lying with "zzz", petrified greyscale).
    - It has eight **open questions** to settle with the user one at a time before it becomes a spec: sources, bosses, stacking, sleep rules, petrified rules, the blind hero's view, the HUD, folding in the mimic's `asleep` and the rogue's `hidden`.
    - It builds on vision: blindness changes `Sight` (`defs/entity_types.rs`) and `perception::sees`, and the greyscale `DarkvisionFX` is a model for the petrified look.
