@@ -152,7 +152,7 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 
 | Enemy | Resists | Weak to |
 |---|---|---|
-| Skeletons, raised skeletons, the Lich | physical 10 % (the Lich: physical about half, magical 40 %) | heat 10 % more |
+| Skeletons, raised skeletons, the Lich | physical 10 %, **poison completely** (the Lich: physical about half, magical 40 %) | heat 10 % more |
 | Imps, chorts, summoners, the Red Demon | **heat completely**, magical 20 % (the Red Demon 40 %) | cold |
 | Red Dragon | **heat completely**, magical half, physical 10 % | |
 | Barrels (chests take no damage) | physical half, poison completely | |

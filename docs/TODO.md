@@ -91,7 +91,7 @@ Built 2026-10-14 (TECHNICAL §5, "Damage model"): five types (physical, cold, he
   - **holy:** strong against the undead (lich, skeletons) and demons;
   - **necrotic/shadow:** the lich and a future shadow enemy; undead resist it;
   - **acid:** could lower the target's resistances for a while.
-- **Damage over time (decided):** it has one of the damage types, and resistances apply to every tick. Nothing but lava deals damage over time yet; poison or burning would build one `Damage` per tick.
+- **Damage over time (decided, built):** it has one of the damage types, and resistances apply to every tick. Burning, frozen and poisoned deal it (TECHNICAL §5): each tick is one `Damage::effect_tick` with its type. Lava still hurts through its own tick (`LAVA_TICK`) and now also sets creatures burning.
 - **Armour and items (decided):** armour stops being a stat raised with XP. Items give armour, and so resistances. An armour piece gives at least physical resistance, and any item can give resistances to other types.
   - **The XP armour upgrade still exists** (`Modifiers.armor`): `hurt_player` applies it after `resolve`. Removing it waits for items.
   - Remove `Armor` from the lobby upgrade shop (`UpgradeStat`, `StatUpgrades.armor`, `Modifiers.armor` in `defs/progression.rs`) and the `mods.armor` reduction in `hurt_player`.
@@ -170,7 +170,7 @@ Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §
 - **A frozen boss's running action is paused, not cancelled:** `levels/boss.rs` skips the behaviour tick, while the spec says a running wind-up is cancelled. Decide, or add a `cancel()` hook on `BossBehaviour`, before a hero ability gives bosses effects.
 - **Sleeping or petrified monsters can still be pushed** by `separate_monsters`.
 - **`Ev::Effect` drives no client burst yet** (start and end of an effect could play a puff).
-- **Final whole-branch review:** done; its fixes are in the branch.
+- **Final whole-branch review:** done for the first five effects, its fixes are in the branch; pending for the elemental part (burning, frozen, poisoned).
 
 ## Riddle rooms
 Special rooms with a creature that asks the heroes a riddle. If they solve it, they get a reward. If they fail, they fight the creature, or enemies spawn.
