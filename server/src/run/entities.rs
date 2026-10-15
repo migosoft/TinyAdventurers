@@ -68,6 +68,9 @@ pub struct Player {
     pub last_safe: Vec2,
     /// Time since the last lava burn.
     pub burn_t: f64,
+    /// What the hero sees (from the class profile) and an override of its darkvision fraction.
+    pub sight: Sight,
+    pub darkvision: Option<f64>,
 }
 
 /// How a hero is lost to the terrain (sent as `Ev::Sink { how }`).
@@ -80,6 +83,9 @@ pub enum Sink {
 impl Player {
     pub fn pos(&self) -> Vec2 {
         Vec2::new(self.mv.x, self.mv.y)
+    }
+    pub fn sight_now(&self) -> Sight {
+        Sight { darkvision: self.darkvision.unwrap_or(self.sight.darkvision), ..self.sight }
     }
     pub fn kind(&self) -> EntityKind {
         self.def.kind

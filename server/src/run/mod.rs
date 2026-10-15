@@ -214,6 +214,8 @@ impl Run {
                 sinking: None,
                 last_safe: dungeon::Map::center_of(dungeon::Map::tile_of(p).0, dungeon::Map::tile_of(p).1),
                 burn_t: dungeon::LAVA_TICK,
+                sight: prof.sight,
+                darkvision: None,
             });
         }
         let n = run.players.len();

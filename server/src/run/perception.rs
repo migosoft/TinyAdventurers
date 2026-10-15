@@ -5,6 +5,12 @@ use crate::defs::entity_types::Sight;
 use crate::dungeon::Map;
 use crate::math::Vec2;
 
+/// Whether `tile` is within darkvision `range` (tiles) of the viewer's tile. Range 0 is no darkvision at all.
+pub fn dark_reach(viewer: (i32, i32), tile: (i32, i32), range: f64) -> bool {
+    let (dx, dy) = ((tile.0 - viewer.0) as f64, (tile.1 - viewer.1) as f64);
+    range > 0.0 && dx * dx + dy * dy <= range * range
+}
+
 /// Needs `Run::refresh_lights` this tick (`Run::step` does it before the AI).
 pub fn sees(run: &Run, sight: Sight, from: Vec2, to: Vec2) -> bool {
     let d = from.dist(to);

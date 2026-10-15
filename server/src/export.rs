@@ -293,9 +293,16 @@ fn export_fixtures() {
             json!({ "x": x, "y": y, "kind": kind as u8, "lit": lit })
         })
         .collect();
+    // Darkvision: what a hero sees (FOV, and the static light or within range) from a few tiles.
+    let mut dark_cases = Vec::new();
+    for (cx, cy, range) in [(3, 3, 9.0), (8, 8, 4.5), (15, 12, 3.0), (20, 17, 0.0)] {
+        fov.compute(&map, cx, cy, PLAYER_FOV_RADIUS);
+        let seen: Vec<i32> = (0..map.w * map.h).filter(|i| crate::run::visibility::hero_tile_seen(&fov, &lights, (cx, cy), range, i % map.w, i / map.w)).collect();
+        dark_cases.push(json!({ "x": cx, "y": cy, "range": range, "seen": seen }));
+    }
     let light_case = json!({ "sources": srcs, "lit": lit, "moving": moving });
     let doc = json!({
-        "lights": light_case,
+        "lights": light_case, "darkvision": dark_cases,
         "w": map.w, "h": map.h, "tiles": map.tiles,
         "radius": PLAYER_RADIUS, "dt": DT, "dashSpeed": ab::DASH_SPEED, "fovRadius": PLAYER_FOV_RADIUS,
         "solids": solids.iter().map(|s| json!([s.x, s.y, s.half])).collect::<Vec<_>>(),
