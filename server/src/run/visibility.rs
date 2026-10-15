@@ -132,6 +132,7 @@ pub fn send_snapshots(run: &mut Run) {
     let behaviour = run.level.boss().and_then(|b| b.behaviour.as_ref());
     let boss_immune = behaviour.map_or(false, |b| !b.can_be_damaged(run));
     let boss_enraged = behaviour.map_or(false, |b| b.enraged());
+    let gaze = behaviour.and_then(|b| b.gaze_target()).unwrap_or(0);
     let boss_bar = Level::boss_bar(run);
 
     let drain = drain_points(run);
@@ -190,7 +191,7 @@ pub fn send_snapshots(run: &mut Run) {
             if m.is_boss && boss_enraged {
                 f |= flags::ENRAGED;
             }
-            let extra = m.owner.unwrap_or(0);
+            let extra = if m.anim == Anim::Gaze { gaze } else { m.owner.unwrap_or(0) };
             ents.push(EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra));
         }
         for pr in &run.projectiles {

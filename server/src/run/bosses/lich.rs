@@ -1,13 +1,18 @@
 //! Lich: guarded by disciples. Immune and drawing life from them until every
 //! disciple is dead. Casts gloom bolt volleys, raises skeletons (melee and
 //! archers) and now and then unleashes a nova that hurts and pushes every hero
-//! around it.
+//! around it. Three effect spells (see `SPELLS`): a blinding curse (dark orb),
+//! a sleep mist (purple orb) and a stone gaze (a beam that petrifies a hero the
+//! lich still sees when the wind-up ends).
 
 use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
 use crate::defs::bosses::{
-    LICH_ARCHERS, LICH_DISCIPLES, LICH_DRAIN_PER_DISCIPLE, LICH_NOVA_DAMAGE, LICH_NOVA_EVERY, LICH_NOVA_KNOCK, LICH_NOVA_RADIUS, LICH_NOVA_WINDUP, LICH_SKELETONS,
+    LICH_ARCHERS, LICH_BLIND_COOLDOWN, LICH_BLIND_DAMAGE, LICH_BLIND_FIRST, LICH_BLIND_SECS, LICH_BLIND_WINDUP, LICH_DISCIPLES, LICH_DRAIN_PER_DISCIPLE, LICH_GAZE_COOLDOWN,
+    LICH_GAZE_FIRST, LICH_GAZE_SECS, LICH_GAZE_WINDUP, LICH_NOVA_DAMAGE, LICH_NOVA_EVERY, LICH_NOVA_KNOCK, LICH_NOVA_RADIUS, LICH_NOVA_WINDUP, LICH_ORB_SPEED,
+    LICH_SKELETONS, LICH_SLEEP_COOLDOWN, LICH_SLEEP_FIRST, LICH_SLEEP_SECS, LICH_SLEEP_WINDUP,
 };
 use crate::defs::damage::{Damage, DamageSplit, DamageType};
+use crate::defs::effects::EffectKind;
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
@@ -15,6 +20,7 @@ use crate::math::Vec2;
 use crate::protocol::Ev;
 use crate::run::abilities::spawn_monster_projectile;
 use crate::run::ai::{move_toward, path_toward};
+use crate::run::effects::{Creature, OnHit};
 use crate::run::Run;
 use rand::Rng;
 
@@ -23,19 +29,67 @@ enum Action {
     Volley,
     Summon,
     Nova,
+    Spell(Spell),
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(crate) enum Spell {
+    Blind,
+    Sleep,
+    Gaze,
+}
+
+/// The lich's effect spells, tried in this order when their cooldown is up.
+/// Take one out for balancing by deleting its entry.
+pub(crate) const SPELLS: [Spell; 3] = [Spell::Gaze, Spell::Sleep, Spell::Blind];
+
+impl Spell {
+    fn effect(self) -> EffectKind {
+        match self {
+            Spell::Blind => EffectKind::Blind,
+            Spell::Sleep => EffectKind::Sleep,
+            Spell::Gaze => EffectKind::Petrified,
+        }
+    }
+    fn windup(self) -> f64 {
+        match self {
+            Spell::Blind => LICH_BLIND_WINDUP,
+            Spell::Sleep => LICH_SLEEP_WINDUP,
+            Spell::Gaze => LICH_GAZE_WINDUP,
+        }
+    }
+    fn cooldown(self) -> f64 {
+        match self {
+            Spell::Blind => LICH_BLIND_COOLDOWN,
+            Spell::Sleep => LICH_SLEEP_COOLDOWN,
+            Spell::Gaze => LICH_GAZE_COOLDOWN,
+        }
+    }
+    fn first(self) -> f64 {
+        match self {
+            Spell::Blind => LICH_BLIND_FIRST,
+            Spell::Sleep => LICH_SLEEP_FIRST,
+            Spell::Gaze => LICH_GAZE_FIRST,
+        }
+    }
 }
 
 pub struct Lich {
     volley_cd: f64,
     summon_cd: f64,
     nova_cd: f64,
+    spell_cd: [f64; SPELLS.len()],
     action: Option<(Action, f64)>,
     announced: bool,
+    /// The hero the gaze is locked on while it winds up.
+    gaze: Option<u32>,
+    /// The hero a blind or sleep orb is aimed at while it winds up.
+    aim_at: Option<u32>,
 }
 
 impl Default for Lich {
     fn default() -> Self {
-        Lich { volley_cd: 2.0, summon_cd: 8.0, nova_cd: 6.0, action: None, announced: false }
+        Lich { volley_cd: 2.0, summon_cd: 8.0, nova_cd: 6.0, spell_cd: SPELLS.map(|s| s.first()), action: None, announced: false, gaze: None, aim_at: None }
     }
 }
 
@@ -44,6 +98,24 @@ pub fn living_disciples(run: &Run) -> usize {
 }
 
 impl Lich {
+    /// The first spell (in `SPELLS` order) that is off cooldown and has a target: the nearest living,
+    /// visible hero the lich sees and who does not already suffer its effect. Returns (spell, hero index).
+    fn ready_spell(&self, run: &Run, bi: usize) -> Option<(usize, usize)> {
+        let m = &run.monsters[bi];
+        let (sight, at) = (m.sight_now(), m.pos);
+        SPELLS.iter().enumerate().find_map(|(k, s)| {
+            if self.spell_cd[k] > 0.0 {
+                return None;
+            }
+            run.players
+                .iter()
+                .enumerate()
+                .filter(|(pi, p)| p.alive && p.hidden <= 0.0 && !run.has_effect(Creature::Player(*pi), s.effect()) && crate::run::perception::sees(run, sight, at, p.pos()))
+                .min_by(|a, b| at.dist(a.1.pos()).total_cmp(&at.dist(b.1.pos())))
+                .map(|(pi, _)| (k, pi))
+        })
+    }
+
     /// The nova: a dark burst that hurts every hero within the radius and pushes them straight away.
     fn nova(run: &mut Run, pos: Vec2) {
         let r = LICH_NOVA_RADIUS;
@@ -79,6 +151,10 @@ impl Lich {
 }
 
 impl BossBehaviour for Lich {
+    fn gaze_target(&self) -> Option<u32> {
+        self.gaze
+    }
+
     fn spawn_extras(&mut self, run: &mut Run, boss_pos: Vec2, party: usize) {
         let owner = run.level.boss().unwrap().boss_ent;
         for k in 0..LICH_DISCIPLES {
@@ -113,6 +189,9 @@ impl BossBehaviour for Lich {
         self.volley_cd -= dt;
         self.summon_cd -= dt;
         self.nova_cd -= dt;
+        for c in &mut self.spell_cd {
+            *c -= dt;
+        }
         let pos = run.monsters[bi].pos;
 
         if let Some((action, t)) = self.action {
@@ -140,6 +219,35 @@ impl BossBehaviour for Lich {
                     set_anim(run, bi, Anim::Cast);
                     Self::nova(run, pos);
                 }
+                Action::Spell(s) => {
+                    set_anim(run, bi, Anim::Cast);
+                    let id = run.monsters[bi].id;
+                    match s {
+                        Spell::Gaze => {
+                            let target = self.gaze.take().and_then(|t| run.player_idx(t));
+                            if let Some(pi) = target {
+                                let sight = run.monsters[bi].sight_now();
+                                let p = &run.players[pi];
+                                if p.alive && crate::run::perception::sees(run, sight, pos, p.pos()) {
+                                    let h = OnHit { kind: EffectKind::Petrified, secs: LICH_GAZE_SECS, chance: 1.0 };
+                                    run.hurt_player(pi, Damage::physical(0.0).with_effect(h));
+                                }
+                            }
+                        }
+                        Spell::Blind | Spell::Sleep => {
+                            let Some(pi) = self.aim_at.take().and_then(|t| run.player_idx(t)) else { return };
+                            let dir = (run.players[pi].pos() - pos).norm();
+                            let (kind, dmg, secs) = if s == Spell::Blind {
+                                (EntityKind::BlindOrb, LICH_BLIND_DAMAGE, LICH_BLIND_SECS)
+                            } else {
+                                (EntityKind::SleepOrb, 0.0, LICH_SLEEP_SECS)
+                            };
+                            spawn_monster_projectile(run, id, kind, pos + dir * 8.0, dir, LICH_ORB_SPEED, dmg, 3.0, 0.0, 0, 0.0);
+                            // The orb just spawned carries the effect.
+                            run.projectiles.last_mut().unwrap().damage.on_hit = Some(OnHit { kind: s.effect(), secs, chance: 1.0 });
+                        }
+                    }
+                }
             }
             return;
         }
@@ -158,6 +266,18 @@ impl BossBehaviour for Lich {
             self.nova_cd = run.rng.gen_range(LICH_NOVA_EVERY.0..LICH_NOVA_EVERY.1);
             self.action = Some((Action::Nova, LICH_NOVA_WINDUP));
             set_anim(run, bi, Anim::Slam);
+        } else if let Some((k, pi)) = self.ready_spell(run, bi) {
+            let s = SPELLS[k];
+            self.spell_cd[k] = s.cooldown();
+            self.action = Some((Action::Spell(s), s.windup()));
+            if s == Spell::Gaze {
+                self.gaze = Some(run.players[pi].id);
+                set_anim(run, bi, Anim::Gaze);
+            } else {
+                self.gaze = None;
+                self.aim_at = Some(run.players[pi].id);
+                set_anim(run, bi, Anim::Windup);
+            }
         } else if self.volley_cd <= 0.0 {
             self.volley_cd = 2.5;
             self.action = Some((Action::Volley, 0.5));
@@ -315,5 +435,86 @@ mod tests {
         let bolts: Vec<_> = run.projectiles.iter().filter(|p| !p.dead).collect();
         assert_eq!(bolts.len(), 5);
         assert!(bolts.iter().all(|p| p.kind == EntityKind::GloomBolt));
+    }
+
+    use crate::defs::effects::EffectKind;
+    use crate::run::effects::Creature;
+
+    fn kill_disciples(run: &mut Run) {
+        let ids: Vec<u32> = run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Disciple)).map(|m| m.id).collect();
+        for id in ids {
+            let i = run.monster_idx(id).unwrap();
+            run.kill_monster(i);
+        }
+    }
+
+    /// A lich whose only ready action is `spell` (everything else on cooldown).
+    fn only(spell: Spell, off: Vec2) -> (Run, Lich) {
+        let (mut run, _) = lich_with(&[off]);
+        kill_disciples(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let mut l = Lich { volley_cd: 99.0, summon_cd: 99.0, nova_cd: 99.0, spell_cd: [99.0; SPELLS.len()], ..Lich::default() };
+        l.spell_cd[SPELLS.iter().position(|&s| s == spell).unwrap()] = 0.0;
+        (run, l)
+    }
+
+    fn fly(run: &mut Run, l: &mut Lich, secs: f64) {
+        for _ in 0..(secs / DT).round() as usize {
+            l.tick(run, DT);
+            crate::run::abilities::tick_projectiles(run, DT);
+            run.projectiles.retain(|p| !p.dead);
+        }
+    }
+
+    #[test]
+    fn the_blinding_curse_blinds_and_hurts() {
+        let (mut run, mut l) = only(Spell::Blind, Vec2::new(60.0, 0.0));
+        let hp = run.players[0].hp;
+        fly(&mut run, &mut l, LICH_BLIND_WINDUP + 1.0);
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Blind));
+        assert!(run.players[0].hp < hp);
+    }
+
+    #[test]
+    fn the_sleep_mist_puts_a_hero_to_sleep_without_damage() {
+        let (mut run, mut l) = only(Spell::Sleep, Vec2::new(60.0, 0.0));
+        let hp = run.players[0].hp;
+        fly(&mut run, &mut l, LICH_SLEEP_WINDUP + 1.0);
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep));
+        assert_eq!(run.players[0].hp, hp);
+    }
+
+    #[test]
+    fn the_stone_gaze_petrifies_a_seen_hero_and_marks_its_target() {
+        let (mut run, mut l) = only(Spell::Gaze, Vec2::new(60.0, 0.0));
+        ticks(&mut run, &mut l, 0.1);
+        let bi = boss_idx(&run).unwrap();
+        assert_eq!(run.monsters[bi].anim, Anim::Gaze);
+        assert_eq!(l.gaze_target(), Some(run.players[0].id));
+        ticks(&mut run, &mut l, LICH_GAZE_WINDUP);
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Petrified));
+    }
+
+    #[test]
+    fn a_hero_behind_a_wall_escapes_the_gaze() {
+        let (mut run, mut l) = only(Spell::Gaze, Vec2::new(60.0, 0.0));
+        ticks(&mut run, &mut l, 0.1);
+        // Break line of sight: put the hero far outside the hall.
+        run.players[0].mv.x = 4.0;
+        run.players[0].mv.y = 4.0;
+        let bi = boss_idx(&run).unwrap();
+        let (sight, at) = (run.monsters[bi].sight_now(), run.monsters[bi].pos);
+        assert!(!crate::run::perception::sees(&run, sight, at, run.players[0].pos()), "precondition: out of sight");
+        ticks(&mut run, &mut l, LICH_GAZE_WINDUP);
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Petrified));
+    }
+
+    #[test]
+    fn blind_and_sleep_skip_a_hero_who_already_has_it() {
+        let (mut run, mut l) = only(Spell::Blind, Vec2::new(60.0, 0.0));
+        run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(10.0));
+        ticks(&mut run, &mut l, 0.1);
+        let bi = boss_idx(&run).unwrap();
+        assert_ne!(run.monsters[bi].anim, Anim::Windup, "no target without the effect: no cast");
     }
 }

@@ -21,6 +21,10 @@ pub trait BossBehaviour: Send {
     fn enraged(&self) -> bool {
         false
     }
+    /// The hero the boss currently locks its gaze on (lich), sent as the boss's `EntSnap.extra`.
+    fn gaze_target(&self) -> Option<u32> {
+        None
+    }
     fn tick(&mut self, run: &mut Run, dt: f64);
 }
 

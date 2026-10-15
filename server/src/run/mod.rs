@@ -1200,7 +1200,9 @@ pub mod tests {
         // 2026-10-15, vision: the second boss hall (disciples are Human, no darkvision) lies partly
         // in the dark: its six disciples no longer see the heroes there (they stay Idle instead of
         // Chase) and one orc warrior loses them too, so it wanders elsewhere. Only that hall changed.
-        assert_eq!(got, vec![5430847933968611557, 2077949316875812891, 7060935872596498876]);
+        // 2026-10-15, effects: the lich casts its blinding curse after 4 s (an orb id and a blind hero), so its hall
+        // differs; demon and dragon unchanged.
+        assert_eq!(got, vec![5430847933968611557, 4898485541812238644, 7060935872596498876]);
     }
 
     #[test]

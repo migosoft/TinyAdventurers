@@ -62,6 +62,8 @@ pub fn kind_light(k: EntityKind) -> Option<(LightKind, Option<Colour>)> {
         K::Missile => Some((LightKind::Magic, None)),
         K::FrostBolt => Some((LightKind::Magic, Some(0x78c8ff))),
         K::ShadowBolt | K::GloomBolt => Some((LightKind::Magic, Some(0xaa3cdc))),
+        K::BlindOrb => Some((LightKind::Magic, Some(0x6a3c8c))),
+        K::SleepOrb => Some((LightKind::Magic, Some(0xc080ff))),
         _ => None,
     }
 }
@@ -88,6 +90,7 @@ mod tests {
         assert_eq!(kind_light(K::Missile), Some((LightKind::Magic, None)));
         assert_eq!(kind_light(K::FrostBolt), Some((LightKind::Magic, Some(0x78c8ff))));
         assert_eq!(kind_light(K::GloomBolt), Some((LightKind::Magic, Some(0xaa3cdc))));
+        assert!(kind_light(K::SleepOrb).is_some());
         assert_eq!(kind_light(K::ShadowBolt), Some((LightKind::Magic, Some(0xaa3cdc))));
         for k in [K::Arrow, K::Bolt, K::Wizard, K::Barrel, K::Chest, K::Ogre] {
             assert_eq!(kind_light(k), None, "{k:?}");

@@ -132,7 +132,7 @@ pub fn kind_split(kind: EntityKind) -> DamageSplit {
     use DamageType::*;
     use EntityKind as K;
     match kind {
-        K::Missile | K::ShadowBolt | K::GloomBolt => DamageSplit::pure(Magical),
+        K::Missile | K::ShadowBolt | K::GloomBolt | K::BlindOrb | K::SleepOrb => DamageSplit::pure(Magical),
         K::Fireball => DamageSplit::split(&[(Heat, 0.7), (Magical, 0.2)]),
         K::FireBolt | K::FireOrb => DamageSplit::split(&[(Heat, 0.7), (Magical, 0.3)]),
         K::FrostBolt => DamageSplit::pure(Cold),

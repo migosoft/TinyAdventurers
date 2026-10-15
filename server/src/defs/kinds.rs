@@ -39,6 +39,9 @@ pub enum EntityKind {
     FireBolt = 59,
     /// The lich's dark purple bolt.
     GloomBolt = 60,
+    /// The lich's blinding curse (dark orb) and sleep mist (purple cloud).
+    BlindOrb = 61,
+    SleepOrb = 62,
     // Hazards
     FirePatch = 70,
     // Props
@@ -49,7 +52,7 @@ pub enum EntityKind {
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 35] = [
+    pub const ALL: [EntityKind; 37] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -81,6 +84,8 @@ impl EntityKind {
         EntityKind::DragonFireball,
         EntityKind::FireBolt,
         EntityKind::GloomBolt,
+        EntityKind::BlindOrb,
+        EntityKind::SleepOrb,
         EntityKind::FirePatch,
         EntityKind::Chest,
         EntityKind::Barrel,
@@ -131,10 +136,12 @@ pub enum Anim {
     Land = 12,
     /// Dragon bite: the wind-up starts it, the jaws snap at the end.
     Bite = 13,
+    /// The lich's stone gaze: a beam locked on a hero (EntSnap.extra = its id).
+    Gaze = 14,
 }
 
 impl Anim {
-    pub const ALL: [Anim; 14] = [
+    pub const ALL: [Anim; 15] = [
         Anim::Idle,
         Anim::Move,
         Anim::Melee,
@@ -149,6 +156,7 @@ impl Anim {
         Anim::TakeOff,
         Anim::Land,
         Anim::Bite,
+        Anim::Gaze,
     ];
 }
 

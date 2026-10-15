@@ -94,6 +94,12 @@ fn export_defs() {
         "DEMON_SWOOP_KNOCK": bosses::DEMON_SWOOP_KNOCK,
     });
     consts.as_object_mut().unwrap().extend(demon.as_object().unwrap().clone());
+    let lich = json!({
+        "LICH_GAZE_WINDUP": bosses::LICH_GAZE_WINDUP,
+        "LICH_BLIND_WINDUP": bosses::LICH_BLIND_WINDUP,
+        "LICH_SLEEP_WINDUP": bosses::LICH_SLEEP_WINDUP,
+    });
+    consts.as_object_mut().unwrap().extend(lich.as_object().unwrap().clone());
     let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
     consts.as_object_mut().unwrap().extend(shots.as_object().unwrap().clone());
     let objs = json!({

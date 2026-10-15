@@ -106,3 +106,21 @@ pub fn responses(id: BossId) -> crate::defs::effects::EffectResponses {
         BossId::Demon => EffectResponses::of(&[(Sleep, Immune)]),
     }
 }
+
+/// Lich effect spells (user, 2026-10-15; tune in the balancing pass). Wind-up,
+/// cooldown and when the first one may come after the fight starts (s, staggered).
+pub const LICH_BLIND_WINDUP: f64 = 0.6;
+pub const LICH_BLIND_COOLDOWN: f64 = 10.0;
+pub const LICH_BLIND_FIRST: f64 = 4.0;
+pub const LICH_BLIND_DAMAGE: f64 = 6.0;
+pub const LICH_BLIND_SECS: f64 = 3.0;
+pub const LICH_SLEEP_WINDUP: f64 = 0.8;
+pub const LICH_SLEEP_COOLDOWN: f64 = 14.0;
+pub const LICH_SLEEP_FIRST: f64 = 7.0;
+pub const LICH_SLEEP_SECS: f64 = 4.0;
+pub const LICH_GAZE_WINDUP: f64 = 1.0;
+pub const LICH_GAZE_COOLDOWN: f64 = 18.0;
+pub const LICH_GAZE_FIRST: f64 = 9.0;
+pub const LICH_GAZE_SECS: f64 = 3.0;
+/// Speed of the blinding and sleep orbs (px/s): slow enough to dodge.
+pub const LICH_ORB_SPEED: f64 = 90.0;
