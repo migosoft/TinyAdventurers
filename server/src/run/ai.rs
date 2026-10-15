@@ -23,8 +23,8 @@ pub fn find_visible_player(run: &Run, from: Vec2, sight: Sight) -> Option<usize>
         .iter()
         .enumerate()
         .filter(|(_, p)| p.alive && p.hidden <= 0.0)
+        .filter(|(_, p)| super::perception::sees(run, sight, from, p.pos()))
         .map(|(i, p)| (i, p.pos().dist(from)))
-        .filter(|&(i, d)| d <= sight.vision_px() && line_of_sight(&run.layout.map, from, run.players[i].pos()))
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(i, _)| i)
 }
@@ -691,6 +691,7 @@ mod tests {
 
     /// Open floor around player 0, so test monsters always see it.
     fn open_floor(run: &mut Run) {
+        run.lights.fill(); // these tests are not about darkness
         let (tx, ty) = Map::tile_of(run.players[0].pos());
         for y in ty - 3..=ty + 3 {
             for x in tx - 8..=tx + 8 {
@@ -935,5 +936,53 @@ mod tests {
         let (mut run, mi, _) = archer_and_barrel(Vec2::new(0.0, 60.0));
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert_eq!(run.monsters[mi].ai.windup.and_then(|w| w.at), None);
+    }
+
+    /// Open floor around hero 0 with no lights at all, only the boss left.
+    fn dark_floor(run: &mut Run) {
+        open_floor(run);
+        run.monsters.retain(|m| m.is_boss);
+        run.lights = super::super::light::Lights::new(run.layout.map.w, run.layout.map.h);
+        run.refresh_lights();
+    }
+
+    #[test]
+    fn a_hidden_hero_is_never_seen_even_by_darkvision() {
+        let mut run = test_run(&[ClassId::Assassin], BossId::Lich);
+        dark_floor(&mut run);
+        let undead = Sight { vision: 8.0, darkvision: 1.0 };
+        let from = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        assert!(find_visible_player(&run, from, undead).is_some(), "in the dark but within darkvision");
+        run.players[0].hidden = 3.0;
+        assert!(find_visible_player(&run, from, undead).is_none());
+    }
+
+    #[test]
+    fn a_hit_sends_a_human_enemy_searching_in_the_dark() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        dark_floor(&mut run);
+        let ppos = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::Necromancer, ppos + Vec2::new(5.0 * TILE, 0.0), None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.target, None, "blind in the dark");
+        run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
+        assert_eq!(run.monsters[mi].ai.state, AiState::Search);
+        assert_eq!(run.monsters[mi].ai.last_known, ppos);
+    }
+
+    #[test]
+    fn a_fire_shot_lights_a_dark_hero_for_the_ai_this_tick() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        dark_floor(&mut run);
+        let ppos = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, ppos + Vec2::new(5.0 * TILE, 0.0), None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        run.step();
+        assert_eq!(run.monsters[mi].ai.target, None, "dark: not seen");
+        // A fire shot (moving light) beside the hero lights them within this very step.
+        super::super::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, ppos + Vec2::new(TILE, 0.0), Vec2::new(0.0, 1.0), 1.0, 1.0, 3.0, 0.0, 0, 0.0);
+        run.step();
+        assert_eq!(run.monsters[mi].ai.target, Some(Target::Player(run.players[0].id)));
     }
 }

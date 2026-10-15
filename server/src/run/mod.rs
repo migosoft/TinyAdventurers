@@ -8,6 +8,7 @@ pub mod entities;
 pub mod levels;
 pub mod light;
 pub mod objects;
+pub mod perception;
 pub mod visibility;
 
 use crate::collision::MoveState;
@@ -383,6 +384,7 @@ impl Run {
             self.step_player(pi);
         }
         self.touch_chests();
+        self.refresh_lights(); // the AI perceives by the lights of this tick
 
         let player_pos: Vec<Vec2> = self.players.iter().filter(|p| p.alive).map(|p| p.pos()).collect();
         for mi in 0..self.monsters.len() {
@@ -1145,7 +1147,10 @@ pub mod tests {
         }
         // Re-recorded with barrels (2026-10-14): the boss halls now hold barrels,
         // which block movement, shots and paths and can be lit, so the fight differs.
-        assert_eq!(got, vec![5430847933968611557, 7745330330819138330, 7060935872596498876]);
+        // 2026-10-15, vision: the second boss hall (disciples are Human, no darkvision) lies partly
+        // in the dark: its six disciples no longer see the heroes there (they stay Idle instead of
+        // Chase) and one orc warrior loses them too, so it wanders elsewhere. Only that hall changed.
+        assert_eq!(got, vec![5430847933968611557, 2077949316875812891, 7060935872596498876]);
     }
 
     #[test]

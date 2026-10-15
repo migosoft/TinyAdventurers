@@ -103,9 +103,8 @@ fn hp_byte(hp: f64, max: f64) -> u8 {
 pub fn send_snapshots(run: &mut Run) {
     let events = std::mem::take(&mut run.events);
     let on_hero = std::mem::take(&mut run.on_hero);
-    run.lights.refresh(&run.layout.map);
+    run.refresh_lights(); // shots moved after the AI: the snapshot must match what the client casts
     let moving = run.moving_lights();
-    run.lights.cast_moving(&run.layout.map, &moving);
     let behaviour = run.level.boss().and_then(|b| b.behaviour.as_ref());
     let boss_immune = behaviour.map_or(false, |b| !b.can_be_damaged(run));
     let boss_enraged = behaviour.map_or(false, |b| b.enraged());

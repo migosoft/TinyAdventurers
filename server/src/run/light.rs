@@ -174,6 +174,13 @@ impl Lights {
         }
     }
 
+    /// Tests: every tile counts as lit until a static light changes (enemy tests that are not about darkness).
+    #[cfg(test)]
+    pub fn fill(&mut self) {
+        self.lit.iter_mut().for_each(|l| *l = true);
+        self.dirty = false;
+    }
+
     fn inside(&self, x: i32, y: i32) -> bool {
         x >= 0 && y >= 0 && x < self.w && y < self.h
     }
@@ -258,11 +265,16 @@ impl Run {
             .collect()
     }
 
-    /// Is this spot lit by any light? (Its tile is in the static or the moving layer.)
-    pub fn is_lit(&mut self, p: Vec2) -> bool {
+    /// Brings both light layers up to date: the static one if it changed, the moving one from where the lights are now.
+    pub fn refresh_lights(&mut self) {
         self.lights.refresh(&self.layout.map);
         let moving = self.moving_lights();
         self.lights.cast_moving(&self.layout.map, &moving);
+    }
+
+    /// Is this spot lit by any light? (Its tile is in the static or the moving layer.)
+    pub fn is_lit(&mut self, p: Vec2) -> bool {
+        self.refresh_lights();
         let (x, y) = Map::tile_of(p);
         self.lights.lit(x, y)
     }
