@@ -14,7 +14,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Branch:** `feature/lighting`, from `main`. `feature/barrels` was merged into `main` (fast-forward) and pushed first, at the user's request (2026-10-15).
 
 **State:** brainstormed with the user (2026-10-15). The spec is written: [docs/superpowers/specs/2026-10-15-light-sources-design.md](docs/superpowers/specs/2026-10-15-light-sources-design.md).
-- **Next:** the user reviews the spec, then **superpowers:writing-plans** writes the plan, then it is built in stages A (server core), B (client core) and C (torches, lava, projectile lights).
+- **Spec approved by the user (2026-10-15).**
+- **Plan written:** [docs/superpowers/plans/2026-10-15-light-sources.md](docs/superpowers/plans/2026-10-15-light-sources.md), with 12 tasks in three stages: A (server core, tasks 1–5), B (client core, tasks 6–8) and C (torches, generator, art, docs, tasks 9–12).
+- **Next:** the user reviews the plan and picks how it is carried out, then it is built.
 - **Key decisions:**
   - It is a **general** system: a light-kind table, a registry with tile or entity anchors, `is_lit`, a generic protocol, a renderer with coloured, additive light.
   - Heroes have no own light. Darkness is fully black.
