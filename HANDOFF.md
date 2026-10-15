@@ -9,15 +9,24 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Next item: the light-source system (TODO.md priority 1)
+## Current item: the light-source system (TODO.md priority 1)
 
-Not designed yet. Start with **superpowers:brainstorming**; the item, its design notes and what depends on it are in [docs/TODO.md](docs/TODO.md) ("Priority order", tier 1, and the section "Lighting"). Start it on a new branch from `main` once `feature/barrels` is merged (or from that branch if the user wants to build on it first; ask).
+**Branch:** `feature/lighting`, from `main`. `feature/barrels` was merged into `main` (fast-forward) and pushed first, at the user's request (2026-10-15).
 
-It builds on this feature: torches and other light sources that can be switched off and on are **world objects** (`run/objects.rs`: add an `ObjState` kind, use `use_object` and `hurt_object`), and the torch-extinguishing enemy can aim at one with `Target::Object` or `Target::Place` (both exist). New damaging things take a `Damage` with a split (below).
+**State:** brainstormed with the user (2026-10-15). The spec is written: [docs/superpowers/specs/2026-10-15-light-sources-design.md](docs/superpowers/specs/2026-10-15-light-sources-design.md).
+- **Next:** the user reviews the spec, then **superpowers:writing-plans** writes the plan, then it is built in stages A (server core), B (client core) and C (torches, lava, projectile lights).
+- **Key decisions:**
+  - It is a **general** system: a light-kind table, a registry with tile or entity anchors, `is_lit`, a generic protocol, a renderer with coloured, additive light.
+  - Heroes have no own light. Darkness is fully black.
+  - Torches hang along all walls, including side sconces, with dark pockets.
+  - E toggles a torch. Heat lights it; other damage puts it out.
+  - Torch art: CC0 "Simple Torch Animation 16x16" by Natural_Privateer.
+
+It builds on the barrels feature: torches and other light sources that can be switched off and on are **world objects** (`run/objects.rs`: add an `ObjState` kind, use `use_object` and `hurt_object`), and the torch-extinguishing enemy can aim at one with `Target::Object` or `Target::Place` (both exist). New damaging things take a `Damage` with a split (below).
 
 ## Last feature (2026-10-14): damage types, world objects and exploding barrels
 
-**Branch:** `feature/barrels` (from `main`), pushed to `origin` at the user's request (2026-10-14; again 2026-10-15 with the barrel art), **not merged** into `main`. Merge only when the user asks. Commits: `git log --oneline main..HEAD`. Spec: [docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md](docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md); plan (18 tasks, run with superpowers:subagent-driven-development, three stages A, B, C): [docs/superpowers/plans/2026-10-14-damage-types-and-objects.md](docs/superpowers/plans/2026-10-14-damage-types-and-objects.md). It was TODO priorities 1 and 2, planned and built together (both removed from the list; it is renumbered).
+**Branch:** `feature/barrels` (from `main`), pushed to `origin` at the user's request (2026-10-14; again 2026-10-15 with the barrel art). **Merged into `main` (fast-forward) and pushed** at the user's request (2026-10-15). Commits: `git log --oneline main..HEAD`. Spec: [docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md](docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md); plan (18 tasks, run with superpowers:subagent-driven-development, three stages A, B, C): [docs/superpowers/plans/2026-10-14-damage-types-and-objects.md](docs/superpowers/plans/2026-10-14-damage-types-and-objects.md). It was TODO priorities 1 and 2, planned and built together (both removed from the list; it is renumbered).
 
 **What was built:**
 - **Damage model** (stage A; TECHNICAL §5 "Damage model"): `defs/damage.rs` (`DamageType` Physical/Cold/Heat/Magical/Poison, `DamageSplit`, `Damage`, `Resistances`, `resolve`, `kind_split`) and `defs/entity_types.rs` (Human, Undead, Monster, Demon, Dragon, Object, plus per-entity `Adjust`: lich, dragon, demon boss). The profile is computed at spawn and stored on every hero, monster and object. All damage calls take a `Damage`; `resolve` is the only formula, floored at -100 % (double damage at most); above 100 % a hit heals. The `Dmg` event carries `ty` and `imm`; the client colours the numbers (`game/damage.ts`) and shows "immune". The XP armour upgrade is **still there**, applied after `resolve`; removing it waits for items (open question in TODO).
@@ -43,7 +52,7 @@ It builds on this feature: torches and other light sources that can be switched 
 - **Further live checks** worth doing while playing: a chain reaction; an E push into a chasm, into water and into lava; an enemy blown into a chasm (dies, XP once); an archer shooting a barrel next to a hero; barrels in the boss hall (big bosses must not get stuck); coloured damage numbers and "immune"; no prediction snaps when walking along barrels.
 - **Final whole-branch review** done; its findings are fixed (see above).
 - **Barrel art:** done 2026-10-15 (see "Barrel art" below).
-- **Merging:** only when the user asks.
+- **Merging:** done (2026-10-15).
 - **Deferred minor review findings** (small): listed in [docs/TODO.md](docs/TODO.md) under "Barrels and world objects follow-ups". Fixed in the final wave: the shared `blocks()` predicate, the empty monster `Heal`, E key repeat, `Damage::scaled`. Still worth doing: the squeeze cost only for wide monsters; no credit for a departed igniter.
 - All numbers (resistances, splits, barrel values) are first guesses for the balancing pass.
 
