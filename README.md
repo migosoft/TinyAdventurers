@@ -4,7 +4,7 @@ A browser-based multiplayer dungeon crawler with tiny pixel figures on a board-g
 
 - Players log in with an account (just a name and a password, no e-mail) and create up to 8 characters. Each character has a fixed class (Wizard, Paladin, Barbarian or Assassin) and its own progress.
 - Up to 4 players open or join a dungeon run.
-- Each run is one randomly generated dungeon of corridors, rooms and halls. A field of vision hides what your hero can't see.
+- Each run is one randomly generated dungeon of corridors, rooms and halls. Darkness hides what your hero can't see: wall torches, lava and glowing shots light the dungeon, and a torch can be put out or lit again.
 - The party fights through it to a random final boss: a demon, a lich or a dragon.
 - It is a desktop game, played with keyboard and mouse. Phones and tablets are not supported.
 
@@ -88,6 +88,7 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 - `?ogre`: the ogre mini-boss's club push next to the orc warrior's, and its ground slam with the telegraph ring (no server needed; `&slow=3` works too)
 - `?lich`: the lich's dark purple magic: gloom bolt volley, the summon of 5 skeletons + 5 archers, and the nova pushing heroes 64 px (no server needed; `&slow=3` works too)
 - `?demon`: the red demon looping through every action: walking, cleave, the swoop charge, the ring of fire and an enraged cleave (no server needed; Space pauses, S slow motion, 1-7 jump to an action)
+- `?lights`: the light system on a small board: torches in several colours, lava with a torch beside it, a fireball and a frost bolt lighting a corridor, a torch that switches (no server needed; `&slow=3` works too)
 - `?debug`: debug mode for the whole run
   - Your hero is immortal. Hits still show damage numbers, but your health doesn't drop.
   - Dashed lines show the shortest walkable path to the boss (yellow) and to the ogre mini-boss (blue, while it lives), updated every 0.5 s.
@@ -98,4 +99,4 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Art
 
-The sprites come from **16x16 DungeonTileset II** by 0x72 (CC0): https://0x72.itch.io/dungeontileset-ii. The pack files are in `client/assets-src/0x72/`. All figures are pack sprites except three bosses. The red dragon's sprite and animation strips are AI-generated art made for this game (`client/assets-src/dragon/`), and some of its frames are built from them at atlas build time. The red demon's animation strips are AI-generated art made for this game as well (`client/assets-src/demon/`), from a reference image the user supplied. The lich is pixel art drawn for this game with Claude Code in the pack's style and colours (`client/scripts/lich-frames.ts`). The barrel is AI-generated art made for this game with ChatGPT, redrawn at game size in pack colours (`client/assets-src/barrel/`, `client/scripts/barrel-frames.ts`). The title logo was made for this game with Google's image generation AI (`client/assets-src/logo/`). Terrain tiles are generated from pack colours; effects such as sparks, glows and swooshes are simple shapes generated at runtime.
+The sprites come from **16x16 DungeonTileset II** by 0x72 (CC0): https://0x72.itch.io/dungeontileset-ii. The pack files are in `client/assets-src/0x72/`. All figures are pack sprites except three bosses. The red dragon's sprite and animation strips are AI-generated art made for this game (`client/assets-src/dragon/`), and some of its frames are built from them at atlas build time. The red demon's animation strips are AI-generated art made for this game as well (`client/assets-src/demon/`), from a reference image the user supplied. The lich is pixel art drawn for this game with Claude Code in the pack's style and colours (`client/scripts/lich-frames.ts`). The barrel is AI-generated art made for this game with ChatGPT, redrawn at game size in pack colours (`client/assets-src/barrel/`, `client/scripts/barrel-frames.ts`). The torches are **"Simple Torch Animation 16x16"** by Natural_Privateer (CC0): https://opengameart.org/content/simple-torch-animation-16x16, in `client/assets-src/torch/` with its licence note; the burnt-out frame is the same art without its flame (`client/scripts/torch-frames.ts`). The title logo was made for this game with Google's image generation AI (`client/assets-src/logo/`). Terrain tiles are generated from pack colours; effects such as sparks, glows and swooshes are simple shapes generated at runtime.

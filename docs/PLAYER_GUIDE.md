@@ -20,7 +20,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 | **Mouse** | Aim |
 | **Left mouse button** | Primary attack, toward the mouse pointer. Hold it to keep attacking. |
 | **Right mouse button** | Secondary ability |
-| **E** (while alive) | Push the barrel right next to you (see Explosive barrels) |
+| **E** (while alive) | Push the barrel right next to you (see Explosive barrels), or light or put out the torch next to you (see Seeing in the dark) |
 | **Q / E** | After you die, switch which teammate you watch |
 | **Esc** | Menu (leave the dungeon) |
 | **F3** | Show ping, frame rate and network stats |
@@ -55,10 +55,13 @@ The two boxes at the bottom of the screen show your abilities. They darken while
 
 ## Seeing in the dark
 
-- You can only see what is in your **field of vision**: about nine tiles around you, and never through walls.
-- The rest of the dungeon stays dimly visible, like a board in shadow, but **enemies outside your vision are hidden**.
+- The dungeon is **dark**. You carry no light, so you can only see what is lit **and** within your **field of vision** (about nine tiles around you, never through walls). Everything else is black, and **enemies in the dark are hidden**, even right next to you. Your own hero is always visible.
+- **Torches** hang on the walls of rooms and corridors, about every six tiles, and light the area around them in orange. Some rooms and stretches of corridor have none, so expect **dark pockets**. The starting room and the boss hall always have torches.
+- **Torches can go out.** Press **E** next to a torch to light it or put it out (a small **E** appears over it). **Fire lights a torch**: a fireball, a fire bolt, a fire patch or an exploding barrel. **Any other hit puts it out**: a sword swing, an arrow, a dash, a frost bolt. So a swing at an enemy next to a torch can leave you in the dark.
+- **Glowing shots light the way:** fireballs and fire bolts light the corridor they fly through, and magic bolts glow violet, blue or purple. A shot fired into a dark corridor shows what is in it for a moment.
+- **Lava glows red** and lights the floor next to it. Light of different colours mixes: a torch next to lava gives a deeper orange.
 - Your shots fly on into the dark, and you still see their damage numbers when they hit something there.
-- Enemies have the same limits. They only notice you when they can actually see you, so you can sneak around corners.
+- Enemies see in the dark. They only notice you when they can actually see you, so you can sneak around corners.
 
 ## Enemies
 
@@ -247,5 +250,6 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 - The Paladin's heal only reaches allies close by, so stick together.
 - Archers keep their distance. Close in, or use the Wizard and Assassin to pick them off.
 - Use corners: enemies can't attack what they can't see.
+- Keep a torch at your back when you fight: enemies you cannot see in the dark can still see you. Light a torch again with **E** or with fire.
 - Barrels are a weapon and a danger: light them from a distance, and keep your back free. Archers shoot barrels next to you.
 - Put a chasm or a pool between you and melee enemies: they have to walk around it. In the demon's dungeon, lava doesn't stop the demons.

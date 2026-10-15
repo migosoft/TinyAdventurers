@@ -9,32 +9,51 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Current item: the light-source system (TODO.md priority 1)
+## Last feature (2026-10-15): light sources
 
-**Branch:** `feature/lighting`, from `main`. `feature/barrels` was merged into `main` (fast-forward) and pushed first, at the user's request (2026-10-15).
+**Branch:** `feature/lighting` (from `main`, after `feature/barrels` was merged and pushed). **Not pushed and not merged**; push or merge only when the user asks. Commits: `git log --oneline 171793a..HEAD` (16 commits, tasks 1 to 12). Spec: [docs/superpowers/specs/2026-10-15-light-sources-design.md](docs/superpowers/specs/2026-10-15-light-sources-design.md); plan (12 tasks, run with superpowers:subagent-driven-development, three stages A server core, B client core, C torches and docs): [docs/superpowers/plans/2026-10-15-light-sources.md](docs/superpowers/plans/2026-10-15-light-sources.md). It was TODO priority 1 (removed; the list is renumbered; new section "Lighting follow-ups").
 
-**State:** brainstormed with the user (2026-10-15). The spec is written: [docs/superpowers/specs/2026-10-15-light-sources-design.md](docs/superpowers/specs/2026-10-15-light-sources-design.md).
-- **Spec approved by the user (2026-10-15).**
-- **Plan written:** [docs/superpowers/plans/2026-10-15-light-sources.md](docs/superpowers/plans/2026-10-15-light-sources.md), with 12 tasks in three stages: A (server core, tasks 1–5), B (client core, tasks 6–8) and C (torches, generator, art, docs, tasks 9–12).
-- **In progress (2026-10-15):** being carried out subagent-driven (the user's choice), one implementer and one reviewer per task.
-  - **Stage A done** (server core, tasks 1–5, commits `3f24459..61db8d7`): light kinds, protocol, registry and static light map, shot/hazard/lava lights, `set_tile`, visibility "in sight and lit" with hero events on sight only. 236 server tests pass, fingerprints unchanged.
-  - **Stage B done** (client core, tasks 6–8, up to `59c926e`): client light field matching the server map (shared fixture), light canvas (darkness + additive tint) replacing the fog, heroes above the darkness, `?lights` demo page. Phaser resets a canvas texture to NEAREST on every `refresh()` under `pixelArt`, so `LightView` re-applies LINEAR after each upload. The look (falloff, tint strength, flicker, 1 px per tile) still needs the user's OK.
-  - **Next:** Stage C (tasks 9–12: torches, placement, art, docs).
-  - **User checkpoints are part of the plan:**
-    - Task 8: the user looks at `?lights` (how the light fades, the colour strength, the flicker);
-    - Task 11: the side-sconce look and a live test.
-  - **To watch in the live test:** under the agreed rule, a sword swing or a dash next to a wall puts torches out. Check that this doesn't get annoying.
-  - The branch is not pushed yet; push only when the user asks.
-- **Key decisions:**
-  - It is a **general** system: a light-kind table, a registry with tile or entity anchors, `is_lit`, a generic protocol, a renderer with coloured, additive light.
-  - Heroes have no own light. Darkness is fully black.
-  - Torches hang along all walls, including side sconces, with dark pockets.
-  - E toggles a torch. Heat lights it; other damage puts it out.
-  - Torch art: CC0 "Simple Torch Animation 16x16" by Natural_Privateer.
+**What was built:**
+- **Server core** (stage A; TECHNICAL §5 "Light sources", §7): `defs/lights.rs` (`LightKind` Torch/Lava/Fire/Magic as data: radius, colour, intensity, flicker; `kind_light` says which entity kinds glow); `run/light.rs` (registry `Lights`, `Anchor::Tile` static or `Anchor::Entity` moving, the static light map rebuilt lazily by shadowcasting, `is_lit`, the API `add_light`/`set_light`/`set_light_colour`/`remove_light`, `attach_kind_light`, the per-step sweep, `add_lava_lights`, `Run::set_tile` that keeps lava lights and the map in step). **Visibility is now "in sight and lit"** (`seen`); hurt and heal numbers on a hero need sight only (`on_hero`); torches are always sent; `Snapshot.lights` lists the moving lights near the viewer. Protocol: `RunStartInfo.lights`, `Ev::Light`/`LightAdd`/`LightRemove` (wire codes 10 to 12), `Snapshot.lights` as `SnapW` field 9.
+- **Client core** (stage B): `game/light.ts` (`LightField`: the same static map as the server, pinned by a shared fixture, additive colour mixing), `game/lightview.ts` (darkness and additive tint canvases replacing the fog: `MIN_LIT` 0.35, `TINT_ALPHA` 0.35, flicker, redrawn every frame inside the camera window), heroes, teammates and the party's shots drawn above the darkness (`DEPTH.heroes` 7000.5), the `?lights` demo page (`LightsDemoScene`, `tools/e2e/lights-shot.mjs`).
+- **Torches** (stage C): world objects (`ObjState::Torch`, `TorchSide` Face/West/East, `spawn_torch`, `set_torch`): E toggles, a heat share lights, any other hit puts out, a plain shot into the torch's wall tile hits it, area attacks and blasts reach it by distance. `place_torches` (stream 12, after the rotation, `TORCH_SPACING` 6, `DARK_SHARE` 0.2, runs under 3 get none). Art: CC0 "Simple Torch Animation 16x16" by Natural_Privateer (`assets-src/torch/`, `scripts/torch-frames.ts`, `game/torch.ts`), the burnt-out frame is the first frame without its flame; the E hint also shows over torches.
+- **Lava and shots:** every lava tile carries a `Lava` light; fire shots and fire patches glow orange, `Missile` violet, `FrostBolt` ice blue, `ShadowBolt`/`GloomBolt` purple; arrows and bolts carry none.
+- **Docs:** TECHNICAL (§2 layout, §4 protocol, §5 "Light sources" and torches under "World objects", §6 torches, §7 rewritten as "Field of vision and light", §9 torch frames, §10 `?lights`, §11 "How to add a light source", §12 tests, §13 limitations), PLAYER_GUIDE ("Seeing in the dark", controls, tips), README (art credit, `?lights`), TODO (priority 1 and "Lighting" removed, "Lighting follow-ups" added, list renumbered).
 
-It builds on the barrels feature: torches and other light sources that can be switched off and on are **world objects** (`run/objects.rs`: add an `ObjState` kind, use `use_object` and `hurt_object`), and the torch-extinguishing enemy can aim at one with `Target::Object` or `Target::Place` (both exist). New damaging things take a `Damage` with a split (below).
+**Deviations** (also the plan's Global Constraints and the controller's rulings during the build):
+- The light demo is its own dev page `?lights`, not part of `?gallery`.
+- The light canvas is redrawn every frame inside the camera window instead of only on changes (simpler, cheap, and the flicker needs it anyway).
+- Events on a hero need sight only (the spec's "hits on you still show"), through `Run.on_hero`.
+- **R1:** `TorchSide` is `Face`/`West`/`East` (the plan's names), not the spec's `Face`/`Left`/`Right`; same meaning.
+- **R3:** the moving-light list uses a distance test (FOV radius + 1 tile + the light's reach) instead of the spec's "reaches a tile in FOV": cheaper, slightly over-sends (glows from behind walls; TECHNICAL §13).
+- The start room and the boss hall always get a torch (the spec's "never dark"): where the normal rules give them none, a fallback puts one in the middle of their longest candidate run, of any length. (The implementer's loosened test, up to two unlit start rooms over the seeds, was rejected.)
+- **Doorway jambs:** a `Face` candidate must also have no floor to its left or right, so a torch never hangs on a jamb beside a door (the spec forbids corners); this overrides the plan's code and gives a few fewer torches at room-top doorways.
+- **Unbiased run offset:** the first torch of a run starts at `gen_range(0..TORCH_SPACING.min(len))`, not the plan's `gen_range(0..6).min(len-1)` (which was biased towards the end of short runs). It changes only torch positions (own rng stream).
+- **LINEAR filter re-applied after every refresh:** Phaser resets a canvas texture to NEAREST on every `refresh()` under `pixelArt`, so the plan's one-time LINEAR setting did nothing; `LightView` sets it again after each upload (found in review of task 8; commit `59c926e`).
 
-## Last feature (2026-10-14): damage types, world objects and exploding barrels
+**Verified (2026-10-15):**
+- `docker compose -f docker-compose.test.yml run --rm test`: **245 server tests pass** (214 on `main`; 236 after stage A), no warnings. The fingerprints `level_setup_is_unchanged` and `simulation_is_unchanged_after_waking_the_boss` are unchanged (torches and their ids are left out of the first; torches come after every other id).
+- Client: `npm test` **43 tests pass** (34 on `main`), `npm run build` and `tsc` pass. The Rust and TypeScript static light maps agree on the shared fixture.
+- Every task passed its review (tasks 8 and 10 after one fix round each). `?lights` screenshots and a smoke test with two players: no browser errors.
+- **Measured against `main`** with `tools/e2e/smoke.mjs` (default query, two players, the F3 numbers after moving and attacking at the start; three runs each, the stack on `main` came from a temporary worktree and was removed afterwards):
+
+  | | `main` | `feature/lighting` |
+  |---|---|---|
+  | server tick (F3 `server`) | 0.12, 0.15, 0.14 ms | 0.16, 0.17, 0.18 ms |
+  | snapshot (F3 `snapshot`) | 128 B, 128 B, 128 B | 2505 B, 2007 B, 2098 B |
+  | entities in the snapshot | 2, 2, 2 | 142, 113, 118 |
+
+  The tick time rises by about 0.03 ms (from about 0.14 to 0.17 ms of a 16.7 ms tick), within the spread of the runs. **The snapshot size did not grow only by the moving-light list as the spec expected:** about 110 of the entities are the **always-sent torches** (the spec's own rule, so the client can draw lights outside the FOV); at 30 Hz that is about 60 KB/s per player at the start of a run, where `main` sent about 4 KB/s. Not a problem on a LAN and not changed, but listed in TODO "Lighting follow-ups" (send torches once and then on change). The numbers are from the headless smoke test at the start room, not from a long run with fights.
+
+**Open (the user has not seen or approved these yet):**
+- **The look is not approved.** Look at `?lights` (and a real run) and decide: the falloff of the light, the **tint strength** (blue and purple read weak, and mixed areas wash to grey), the flicker, the **1 px per tile canvas** (light bleeds about half a tile past walls; 2 or 4 px per tile would be sharper), the **burnt-out torch frame** (a bare stick), and the **side-sconce look**. Every knob is a constant: `defs/lights.rs` (radius, colour, intensity, flicker), `light.ts` (falloff), `lightview.ts` (`MIN_LIT`, `TINT_ALPHA`), `torch.ts` (offsets), `TORCH_SPACING` and `DARK_SHARE` in `dungeon/generate.rs`.
+- **The live test has not been done by the user:** E on a torch (toggle and the E hint), a fireball lighting a dark corridor, lava glow, the boss hall (torches, door sealing), and a **sword swing, dash or arrow next to a torch putting it out: watch whether that is annoying.** If it is, the rule can change (for example only a hit on the torch itself, or physical damage only on a direct hit).
+- Observation from the review (not checked): a brown band at the top of the start screenshot (`2-start.png`) looks like the out-of-map camera area; compare with `main` if it bothers the user.
+- The branch is not pushed.
+- Deferred minor review findings (small): `LightKind::ALL` is hand-maintained (a new kind could miss the export); no test for `set_light_colour` on a moving light; a dead hero's light is dropped for good (matters for future hero lights with revives); all torches flicker in phase; E picks the nearest barrel or torch, so standing next to both may toggle the torch instead of pushing the barrel; `place_torches` splits runs and decodes sides twice (a helper would be cleaner). The build ledger is local (`.superpowers/sdd/2026-10-15-light-sources/progress.md`).
+- All numbers (radii, intensities, spacing, dark share, tint) are first guesses for the balancing pass.
+
+## Session before (2026-10-14, damage types, world objects and exploding barrels)
 
 **Branch:** `feature/barrels` (from `main`), pushed to `origin` at the user's request (2026-10-14; again 2026-10-15 with the barrel art). **Merged into `main` (fast-forward) and pushed** at the user's request (2026-10-15). Commits: `git log --oneline main..HEAD`. Spec: [docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md](docs/superpowers/specs/2026-10-14-damage-types-and-objects-design.md); plan (18 tasks, run with superpowers:subagent-driven-development, three stages A, B, C): [docs/superpowers/plans/2026-10-14-damage-types-and-objects.md](docs/superpowers/plans/2026-10-14-damage-types-and-objects.md). It was TODO priorities 1 and 2, planned and built together (both removed from the list; it is renumbered).
 
@@ -107,7 +126,7 @@ Branch `fix/hitboxes-and-dark-shots`, merged into `main` (fast-forward) and push
 
 **Still open:**
 - **Lobby level picker and `SelectLevel`:** not built (one level only). `Room.level` is always `LevelId::Dungeon`; `lobby.rs` `start` maps it to the `LevelChoice`.
-- **The escort level's XP rule** (kills and boss bonus, or a fixed reward for arriving): to decide with the escort item (TODO priority 5).
+- **The escort level's XP rule** (kills and boss bonus, or a fixed reward for arriving): to decide with the escort item (TODO priority 4).
 - **Docker healthcheck (found this session, older than the branch):** the `HEALTHCHECK` in the `Dockerfile` uses bash's `/dev/tcp` under `/bin/sh` (dash), so `docker compose ps` shows the game container as "unhealthy" although `/health` answers OK. Nothing depends on it; fix it with a tool that exists in the runtime image.
 
 ## Session before (2026-10-13, prediction corrections under lag)
@@ -679,7 +698,7 @@ Steps 2–6 followed in the next session.
 
 **Working end to end in Docker (`docker compose up --build`, port 8080):**
 - accounts (name + password, no e-mail) with up to 8 characters each, in PostgreSQL (`db` service, `ta-db` volume); signed HttpOnly session cookies
-- lobby, 4 classes (fixed per character), host-chosen or random end boss, random dungeon, field of vision
+- lobby, 4 classes (fixed per character), host-chosen or random end boss, random dungeon, light and darkness (torches, lava, glowing shots; heroes carry no light)
 - level types behind `LevelRules` (`run/levels/`); the boss dungeon is the only one so far, there is no level picker yet
 - per-character progression: XP and coins banked after each run, permanent upgrades bought in the lobby
 - 11 enemy types (including the mimic and the ogre mini-boss, one per run; imps, chorts and summoners only in the demon's dungeon), 3 bosses
@@ -687,13 +706,14 @@ Steps 2–6 followed in the next session.
 - treasure chests and mimics; coins banked as a second currency
 - permadeath with spectating, victory/defeat screens
 - client prediction and interpolation, F3 stats
-- compact snapshots and inputs (MessagePack arrays, `wire.rs`/`wire.ts`): about 125 B per snapshot with 2 players
+- compact snapshots and inputs (MessagePack arrays, `wire.rs`/`wire.ts`): about 125 B per snapshot with 2 players and nothing else in view; with the always-sent torches 2 to 2.5 KB at the start of a run (measured, see "Last feature")
+- light sources (`run/light.rs`, `game/lightview.ts`): wall torches (E toggles, heat lights, other hits put out), lava and glowing shots; the look is not approved yet; demo `?lights`
 - debug mode (paths to the boss and the ogre), sprite gallery
 - the red dragon with its own AI-generated frames, flight phases (melee-immune in the air), bite, landing smash; demo `?dragon`
 - the red demon with its own AI-generated frames (walk, cleave, charge, ring of fire); demo `?demon`
 
 **Verified:**
-- 159 server tests (against PostgreSQL) and 27 client tests (collision/FOV ports with terrain, wire unpacking, dragon and demon frame choice, the end screen line, the predictor) pass.
+- 245 server tests (against PostgreSQL) and 43 client tests (collision/FOV ports with terrain, the light map, wire unpacking, dragon and demon frame choice, the end screen line, the predictor) pass (2026-10-15).
 - Accounts and characters: API checks with curl and the browser smoke test (2026-10-09); not yet tried live by the user.
 - Two-player browser smoke tests (`tools/e2e/smoke.mjs`) run without browser errors.
 - Live boss fights against all three bosses, including the force field at the hall entrance (played by the user, no problems).
@@ -706,6 +726,7 @@ Steps 2–6 followed in the next session.
 - The demon: its new frames and walk in `?demon`, then the fight with the harder pushes (56 / 64 px) and the lava pool in its hall, played by the user: "It works as intended" (2026-10-13).
 
 **Not yet verified:**
+- The light system by the user: the look and the live test (see "Last feature, Open").
 - Behaviour with real (non-headless) players over a real network.
 
 **Git and session workflow (the user's standing instructions):**
@@ -790,7 +811,7 @@ Steps 2–6 followed in the next session.
 2. Client changes: `cd client && npx tsc --noEmit && npm test`.
 3. `docker compose up --build -d`, then `curl localhost:8080/health` should print `OK`.
 4. `cd tools/e2e && node smoke.mjs http://localhost:8080/ "" shots Wizard,Paladin`. It should print "no browser errors"; look at the screenshots in `shots/`.
-5. Visual changes to figures or effects: `node gallery-shots.mjs http://localhost:8080/ shots melee,breath`, or open `?gallery&state=<state>&slow=10` in a browser. Chests and mimics: `?mimic&slow=3`. Ogre: `?ogre&slow=3`. Demons: `?daemons&slow=3`. Terrain: `?water`, `?chasm`, `?lava` (`&slow=3`). Terrain tile changes: edit `client/scripts/terrain-tiles.ts`, then `npm run atlas`.
+5. Visual changes to figures or effects: `node gallery-shots.mjs http://localhost:8080/ shots melee,breath`, or open `?gallery&state=<state>&slow=10` in a browser. Chests and mimics: `?mimic&slow=3`. Ogre: `?ogre&slow=3`. Demons: `?daemons&slow=3`. Lights: `?lights` (`node lights-shot.mjs`). Terrain: `?water`, `?chasm`, `?lava` (`&slow=3`). Terrain tile changes: edit `client/scripts/terrain-tiles.ts`, then `npm run atlas`.
 6. Gameplay changes: update [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md). Architecture changes: update [docs/TECHNICAL.md](docs/TECHNICAL.md).
 
 ## Gotchas
@@ -800,6 +821,7 @@ Steps 2–6 followed in the next session.
 - **Phaser `Graphics.clear()`** resets fill and line styles; set `fillStyle` again after it (see the `spark` texture in `main.ts`).
 
 - **Stale client after a rebuild:** before 2026-10-08 the server sent no `Cache-Control`, so browsers could keep the old `index.html` and bundle for `/` while `/?debug…` (a different URL) loaded fresh. The user saw lava only in debug mode: the old client drew terrain as dark cells and its prediction fought the server. `cache_headers` in `main.rs` fixes it. If a client ever looks older than the server, hard-reload (Ctrl+F5) first.
+- **Canvas textures under `pixelArt`:** Phaser resets a canvas texture to NEAREST filtering on every `refresh()`, so set LINEAR again after each upload (`LightView.upload`), or the light looks blocky.
 - **Generated client files:** never edit `client/src/generated/*` by hand. Change Rust and run `cargo test`.
 - **Snapshots and inputs are arrays on the wire** (`wire.rs`, `wire.ts`). When you add a field to `Snapshot`, `SelfState`, `EntSnap`, `BossBar`, `Ev` or `InputMsg`, add it to the wire type, both converters and `sample_snapshots`; the fixture test fails otherwise. Raw snapshot bytes are no longer `{t: 'Snap'}` maps, so test scripts that read the WebSocket must decode arrays (`m[3][3]` is the own x).
 - **Message tag:** MessagePack enums are tagged with the field `t`, so no variant may have a field named `t`. That is why `Ping`/`Pong` use `time`.
@@ -819,8 +841,9 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
-2. Loadouts: design new abilities, then add the lobby picker, paid with coins.
-3. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
-4. Optional polish: sound, better boss sprites if the user approves a source (the dragon now has AI-generated art the user supplied), blending push corrections under lag (TODO.md, Network).
-5. Let the user play the dragon fight live and collect feedback (flight timing, bite, smash).
+1. **Show the user the light look and let them play the live test** (see "Last feature, Open"), tune the constants, then merge or push when they say so.
+2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
+3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
+4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
+5. Optional polish: sound, better boss sprites if the user approves a source (the dragon now has AI-generated art the user supplied), blending push corrections under lag (TODO.md, Network).
+6. Let the user play the dragon fight live and collect feedback (flight timing, bite, smash).

@@ -4,33 +4,32 @@
 Ordered by technical complexity and by technical dependencies (what makes later items easier), not by quick wins. Items in the same tier can be done in either order unless noted.
 
 **Tier 1: foundations**
-1. **Light-source system** (see "Lighting"). It comes before every feature that adds something that glows (abilities, enemies, the escort level, room dressing), so none of them has to be retrofitted.
-2. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), torch art, gnolls. Little code, but the shadow, ghost, gnolls, sphinx and torches all wait on it; it can run alongside 1.
+1. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), gnolls. Little code, but the shadow, ghost, gnolls and sphinx wait on it.
 
 **Tier 2: larger features on top of tier 1**
 
-3. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
-4. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
-5. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
+2. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
+3. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
+4. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
 
 **Tier 3: content**
 
-6. **Ghost and shadow.** The shadow needs lighting; it and the torch-extinguishing enemy act on any light source that can be switched off. The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
-7. **Minions for the other bosses; more classes and bosses** (classes are easier after 3).
-8. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
-9. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
-10. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled.
+5. **Ghost and shadow.** The shadow and the torch-extinguishing enemy use the light system (`is_lit`, `set_light`; see "Lighting follow-ups"). The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
+6. **Minions for the other bosses; more classes and bosses** (classes are easier after 2).
+7. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
+8. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
+9. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled.
 
 **Tier 4: infrastructure (independent of gameplay work)**
 
-11. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
-12. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
-13. **Several game servers** (shared presence and login limiter in Valkey). After 11; only when one server is not enough.
+10. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
+11. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
+12. **Several game servers** (shared presence and login limiter in Valkey). After 10; only when one server is not enough.
 
 **Tier 5: last**
 
-14. **Balancing pass:** every "Tune" item, including resistances, light radii and darkness. Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers.
-15. **Delta snapshots, WebTransport:** only if measurements show they are needed.
+13. **Balancing pass:** every "Tune" item, including resistances, light radii and darkness. Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers.
+14. **Delta snapshots, WebTransport:** only if measurements show they are needed.
 
 ## Progression follow-ups
 
@@ -65,7 +64,7 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **Ogre (done 2026-10-08):** tune its numbers in the balancing pass (`EnemyType::Ogre` in `defs/enemies.rs`: 260 HP, club 18 dmg / 28 px push, slam radius 34 px, 14 dmg, 24 px push, 5 s cooldown, 0.9 s wind-up; 60 XP, 30 coins). Ideas: a hit frame (the pack has none), more than one ogre in big dungeons.
 - **Ghost and shadow (new):** two new enemy types. The 0x72 pack has neither, so the art has to come from another pack or a CC0 set.
   - Ideas for the ghost: drifts through walls, or turns half transparent and can't be hit for a moment.
-  - Ideas for the shadow: hard to see in the dark. It could be the enemy that puts out torches (see "Lighting").
+  - Ideas for the shadow: hard to see in the dark. It could be the enemy that puts out torches (see "Lighting follow-ups").
 - **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Also approved (2026-10-13): "Forest creatures" by lyaseek (https://lyaseek.itch.io/miniffanimals). For both, check the license and keep the license file next to the imported art.
 
 ## Damage-type system
@@ -88,7 +87,7 @@ Built 2026-10-14 (TECHNICAL §5, "Damage model"): five types (physical, cold, he
 ## Barrels and world objects follow-ups
 Built 2026-10-14 on branch `feature/barrels` (TECHNICAL §5, "World objects"): chests moved into `run/objects.rs`, exploding barrels as the first new kind, enemies that can target objects or places (`Target`).
 - **Thrown or pushed objects dealing damage:** today a pushed barrel only slides and a blocked slide stops it. A barrel (or crate) that hits a hero or enemy could hurt and push them.
-- **More object kinds** on `hurt_object` and `use_object`: crates (breakable, may hold coins), levers and buttons, torches (switched off and on), the carriage, the riddle creature. `use_object` already dispatches on the kind; E is the use key.
+- **More object kinds** on `hurt_object` and `use_object`: crates (breakable, may hold coins), levers and buttons, the carriage, the riddle creature. `use_object` already dispatches on the kind; E is the use key.
 - **Tune** in the balancing pass: barrel blast radius 40, damage 30 (50 % heat, 50 % physical), push 40 px, fuse 0.3 s, hand push 48 px, how many rooms get barrels (25 %), 3–5 in a boss hall (`defs/objects.rs`, `place_barrels`).
 - **Plain barrels as obstacles:** the user wants barrels that do not explode and only block. The art exists (atlas frame `barrel`, see TECHNICAL §9 "Barrel frames"); the object kind (or a flag on `ObjState::Barrel`), its placement and the client view (`BarrelView` takes the frame) do not.
 - **Explosion art:** the blast is a runtime effect (`Boom k 7`); an explosion sheet would help (candidate: BitingChaos "16x16 Explosion", CC0, OpenGameArt).
@@ -112,22 +111,18 @@ An outdoor level where the heroes escort a carriage carrying the elven princess.
 - **Enemies:** attack the carriage in waves. An enemy that a hero hits turns on the heroes, so the heroes can draw attacks away from the carriage.
 - **Enemy types:** orcs, goblins, and a new type from the woodland asset pack: gnolls, in a ranged and a melee version.
 
-## Lighting
-Darkness limits what the heroes can see. Dungeon walls have torches at regular intervals that light the area around them. Some enemies can put torches out, which leaves that part of the dungeon dark. Lava pools glow red.
-Torches are only the first kind of light source. More will follow: lava, braziers, glowing mushrooms or goo, hero spells and projectiles (a fireball lighting the corridor it flies through), light-emitting enemies, a carriage lantern. So build a general light-source system, not a torch feature (priority 1).
-- **Feasible:** yes, at tile resolution. The fog of war already works this way (TECHNICAL.md §7).
-- **Light sources:** each has a position, radius, colour, intensity and an on/off state. Two kinds:
-  - **static** (torches, braziers, lava): fixed on the map, can be switched off and on.
-  - **moving** (projectiles, glowing enemies, the carriage lantern): follow an entity.
-- **Server (needed, so dark tiles don't leak monsters):** two layers.
-  - A static light map per tile: each lit static source lights the tiles its shadowcast (`fov.rs`) reaches within its radius; lava lights its neighbouring tiles. It only needs recomputing when a static source goes out or is relit.
-  - Moving sources are checked during visibility filtering, each as a radius test around the source. A shadowcast per moving source each tick would be too expensive.
-  - A tile counts as visible if it is in the hero's line of sight *and* is lit by either layer or within a small radius around the hero (their own light). Snapshot filtering in `run/visibility.rs` then uses the combined result.
-- **Client:** extend the fog canvas into a light canvas: darkness everywhere, with a radial gradient cut out for each source and hero, coloured per source kind from a table (e.g. red around lava). It stays one cheap canvas texture with linear filtering, plus a slight flicker. Phaser's Light2D pipeline is not needed. It wants normal maps and has a low light limit.
-- **Protocol:** static sources and their state (lit or out) go in the map data at run start, plus an event when one changes. Moving sources need no new data: the client attaches lights to entities by their kind (e.g. `KIND.Fireball` glows).
-- **Enemies:** an extinguishing enemy (it walks to a lit source that can be switched off and puts it out). Should the heroes be able to relight sources, e.g. by standing next to one?
-- **Art:** the 0x72 pack has no wall torches. Find a CC0 animated torch or wall sconce.
-- **Tune:** torch spacing, the light radius of each source kind, the heroes' own light radius, and how dark unlit areas are.
+## Lighting follow-ups
+Built 2026-10-15 on branch `feature/lighting` (TECHNICAL §5 "Light sources", §7, §11 "How to add a light source"): a light-kind table, a registry with tile or entity anchors, `is_lit`, visibility by sight and light, a coloured light canvas, wall torches (world objects), lava and glowing shots. Heroes have no light of their own.
+- **Own hero light:** through abilities or equipment: `add_light(kind, Anchor::Entity(hero), colour)`. The registry and the renderer already handle it.
+- **More sources:** braziers, glowing mushrooms, goo, fountains, the carriage lantern. Each is a new `LightKind` row plus an `add_light` call, with no core change.
+- **Remembered (explored) tiles:** darkness is fully black today; a dimmed memory of where the hero has been would need a per-hero explored map.
+- **Enemies affected by darkness:** they see in the dark today; their perception could use `is_lit` for the target.
+- **The extinguishing enemy and the shadow:** they act on lights through `is_lit` and `set_light` (a torch is switched with `objects::set_torch`). Should heroes relight torches by standing next to them? Today they press E or use fire.
+- **Torches in snapshots:** torches are always sent, which makes snapshots 2 to 2.5 KB at the start of a run (about 110 torches). Sending them once at the start and then only on change (the events already carry it) would bring them back to about 130 B.
+- **Moving-light list through walls:** it uses a distance test, so the glow of a shot behind a wall within range is sent (TECHNICAL §13). A line-of-sight test per light would fix it.
+- **Weapon effects under the darkness:** swooshes, rings and particles are drawn below it. They could be drawn above it, or only the effects of the party.
+- **Look, pending the user:** falloff, tint strength (blue and purple read weak, mixed areas wash to grey), flicker, the 1 px per tile canvas (light bleeds about half a tile past walls; 2 or 4 px per tile would be sharper), the burnt-out torch frame and the side-sconce look. See HANDOFF.
+- **Tune** in the balancing pass: the radius and intensity per kind (`defs/lights.rs`), `TORCH_SPACING` (6) and `DARK_SHARE` (0.2, `dungeon/generate.rs`), the falloff curve (`client/src/game/light.ts`), `MIN_LIT` (0.35), `TINT_ALPHA` (0.35) and the flicker (`client/src/game/lightview.ts`).
 
 ## Riddle rooms
 Special rooms with a creature that asks the heroes a riddle. If they solve it, they get a reward. If they fail, they fight the creature, or enemies spawn.
@@ -158,6 +153,6 @@ Special rooms with a creature that asks the heroes a riddle. If they solve it, t
 - **4-direction sprites:** the animation code keeps a `Dir` value. Up/down frames can be added there once sheets exist.
 - **Sound effects.**
 - **Network:**
-  - delta snapshots if bandwidth ever matters (snapshots are compact arrays now, about 125 B with 2 players, about 350 B with 14 entities in view)
+  - delta snapshots if bandwidth ever matters (snapshots are compact arrays, about 125 B with 2 players and nothing else in view; since the lighting, the always-sent torches make them 2 to 2.5 KB at the start of a run, see "Lighting follow-ups")
   - pushes still snap the hero under lag: the client learns of a push about RTT/2 late, and most push corrections are over the 24 px blend limit (median about 55 px in a demon fight under `?lag=150&jitter=40&loss=2`). Blending corrections that start a push over about 100 ms, whatever their size, would show them as a fast slide instead of a jump.
   - optional WebTransport transport for lossy connections
