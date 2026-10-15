@@ -9,29 +9,56 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Next session: vision, darkvision, then the effect system (TODO priority 1)
+## Next session: the effect system (TODO priority 1)
 
-The user switched sessions here (2026-10-15). Lighting is finished on `feature/lighting` (pushed, **not merged**: ask the user whether to merge it into `main` first, and start the next feature from the result).
+Vision and darkvision are built (2026-10-15) on `feature/vision`, which is **not pushed and not merged** (it branches from `feature/lighting`, itself pushed and not merged): ask the user whether to push and merge, and in which order, before starting the next feature.
 
-1. **Vision and darkvision.** Designed in chat with the user and approved. The written spec is [docs/superpowers/specs/2026-10-15-vision-darkvision-design.md](docs/superpowers/specs/2026-10-15-vision-darkvision-design.md).
-   - **Next:** the user reviews the written spec (superpowers:brainstorming's review gate), then a plan with superpowers:writing-plans, then the user picks the execution method.
-   - **Decisions:**
-     - Entity types get **vision** (in tiles; type default plus a per-enemy override, like resistances) and **darkvision** (a share of vision): Demon, Undead, Dragon 1.0; Monster 1/3; Human 0; Object no vision.
-     - One shared perception rule for enemies and heroes: within vision, in line of sight, and lit or within vision × darkvision.
-     - Today's enemy ranges are kept (converted to tiles), so only darkness changes.
-     - Heroes are Human (9 tiles, 0) as now. The client also draws hero darkvision as **greyscale** (a post-effect shader with a per-tile mask), and a dev toggle in the server-gated debug mode sets the own hero's darkvision (0, 0.5 or 1.0).
-2. **Effect system** (blind, sleep, petrified; extensible; every creature; effects modify any stat). It is only a **draft**: [docs/superpowers/specs/2026-10-15-effects-design-draft.md](docs/superpowers/specs/2026-10-15-effects-design-draft.md).
+1. **Effect system** (blind, sleep, petrified; extensible; every creature; effects modify any stat). It is only a **draft**: [docs/superpowers/specs/2026-10-15-effects-design-draft.md](docs/superpowers/specs/2026-10-15-effects-design-draft.md).
    - It has a proposed design: a data table of effects with stat modifiers (add, then multiply, then set), flags (no move, no act, no turn, prone) and break conditions; per-creature active effects; resolved `Stats`; a snapshot bitmask; client visuals (sleep lying with "zzz", petrified greyscale).
    - It has eight **open questions** to settle with the user one at a time before it becomes a spec: sources, bosses, stacking, sleep rules, petrified rules, the blind hero's view, the HUD, folding in the mimic's `asleep` and the rogue's `hidden`.
-   - Build it after vision, because blindness changes vision.
+   - It builds on vision: blindness changes `Sight` (`defs/entity_types.rs`) and `perception::sees`, and the greyscale `DarkvisionFX` is a model for the petrified look.
 
 **Explosion art (2026-10-15):** the user supplied two ChatGPT explosion sheets, stored in `client/assets-src/explosion/`: `explosion_source.png` (barrel blast) and `fireball_source.png` (the wizard's Fireball, violet). Every file the user dropped in `images/` (these two and the barrel source) has an identical committed copy in `client/assets-src/`, so the user may delete `images/` (they asked, 2026-10-15). Neither sheet is built in; both are on the TODO list with low priority ("Barrels and world objects follow-ups"). Credit them as "AI-generated with ChatGPT for this game".
 
-**Healing circle (2026-10-15):** the user wants a better healing-wave effect: many more sparkles, maybe runes on the circle's edge that spread with it. On the TODO list ("Other follow-ups", tier 3 item 10). The runes need art; ask the user where it comes from.
+**Healing circle (2026-10-15):** the user wants a better healing-wave effect: many more sparkles, maybe runes on the circle's edge that spread with it. On the TODO list ("Other follow-ups", tier 3 item 12). The runes need art; ask the user where it comes from.
 
 **Ideas the user liked** (not yet in TODO; ask before adding): ways to bring light. Early on, carry a wall torch, light braziers, find glow items (mushrooms, flares). Later, class gear and spells: the paladin's glowing shield, the wizard's light orb, a wisp companion, the ranger's flare arrows, and the rogue who prefers the dark. Before any hero light: a dead hero's light must switch off and come back on a revive (the registry drops it today).
 
-## Last feature (2026-10-15): light sources
+## Last feature (2026-10-15): vision and darkvision
+
+**Branch:** `feature/vision` (from `feature/lighting`). **Not pushed, not merged**: ask the user. Commits: `git log --oneline 752c7c5..HEAD` (tasks 1 to 7). Spec: [docs/superpowers/specs/2026-10-15-vision-darkvision-design.md](docs/superpowers/specs/2026-10-15-vision-darkvision-design.md); plan (7 tasks, run with superpowers:subagent-driven-development): [docs/superpowers/plans/2026-10-15-vision-darkvision.md](docs/superpowers/plans/2026-10-15-vision-darkvision.md). It was TODO priority 1 (now only the effect system remains there; new section "Vision and darkvision follow-ups").
+
+**What was built:**
+- **Sight on entity types** (TECHNICAL §5 "Sight"): `Sight { vision (tiles), darkvision (share of vision) }` on `TypeDef`, `Adjust` and `Profile` (`defs/entity_types.rs`): Human 9 / 0, Monster 9 / 1/3, Undead, Demon, Dragon 9 / 1.0, Object none. Enemy `vision` is in tiles in `defs/enemies.rs` (old pixel range / 16; every enemy overrides it, so only the darkness rule changed behaviour); bosses see 25 tiles.
+- **One perception rule** (`run/perception.rs`, `sees`): within vision, in line of sight, and lit or within vision × darkvision. `ai::find_visible_player` and `bosses::target` use it. `Run::refresh_lights` runs once per tick before the AI and again in `send_snapshots`; test helper `Lights::fill`.
+- **Heroes** run on the same numbers: `Player.sight`, `Player.darkvision: Option<f64>` (debug override), `sight_now()`. The snapshot filter is "in FOV and (lit or `dark_reach`)" with the viewed hero's sight (a spectator gets the teammate's); `on_hero` events need the FOV only. The shared fixture `fixtures.json` has a `darkvision` key, so the TypeScript side is pinned to the Rust one.
+- **Protocol:** `SelfW` element 13 = darkvision as a u8 percentage (the viewed hero); `ClientMsg::DebugDarkvision { ratio }`, honoured only when debug is allowed, and it marks the run as debug (no XP).
+- **Client:** `LightView` builds a darkvision mask (`dvmask`) and draws darkvision tiles at `DV_DARK` 0.45 darkness with no tint; `DarkvisionFX` (`game/darkvisionfx.ts`), a post pipeline that greys the masked area, attached to the main camera only while darkvision > 0 and registered in `BootScene`. F4 (debug mode only, alive only) cycles the own darkvision 0 / 50 / 100 %; F3 shows `darkvision NN%`; `?lights` has the V key and `&dv=`; `tools/e2e/lights-shot.mjs` takes a dv argument; `tools/e2e/smoke.mjs` presses F4 only with a debug query.
+- **Docs:** TECHNICAL (§4 protocol, §5 "Sight", perception and light refresh, §7 filter, §10 F3/F4/`?lights`, §11 "How to give a creature darkvision or longer sight", §12 tests, §13 limitations), PLAYER_GUIDE ("Seeing in the dark", tips), README (F4, `?lights`), TODO (priority 1 now the effect system, "Enemies affected by darkness" removed, "Vision and darkvision follow-ups" added).
+
+**Behaviour change (to play-test):** Human enemies (necromancer, summoner, lich disciples) do not see heroes in the dark. Monster types (goblin archer, orcs, mimic, ogre) see only within a third of their vision (about 2.5 to 3 tiles). Undead, demons and bosses see fully in the dark. `simulation_is_unchanged_after_waking_the_boss` was re-recorded: in the lich hall the disciples stay idle in the dark and one orc loses the hero. `level_setup_is_unchanged` is unchanged.
+
+**Deviations and rulings:**
+- Lights are refreshed both per tick (before the AI) and per snapshot: perception needs this tick's lights, the snapshot filter needs the final positions.
+- The debug darkvision toggle marks the run as debug (no XP), like `Debug`.
+- F4 works only in debug mode and only while alive, so a stray press cannot turn a normal run into a debug run; the smoke F4 step runs only with `?debug`.
+- The greyscale is camera-wide, so inside the darkvision range it also greys world-space damage numbers, HP bars and the E hint (TECHNICAL §13).
+- Phaser 3.90 differs from the plan's API: the pipeline reads its camera through `this.gameObject` (no `camera` property); the mask texture is `mask.source[0].glTexture` (a `CanvasTexture` has no `glTexture`); the pipeline is registered with `addPostPipeline` in `BootScene` (the game config's `pipeline` option fails `tsc`) and attached by its registered name, because the minified class name differs.
+
+**Verified (2026-10-15):**
+- Server: **271 tests pass** (253 on `feature/lighting`), no warnings. Fingerprint `level_setup_is_unchanged` unchanged; the other was re-recorded as above.
+- Client: `npm test` **52 tests pass** (48 on `feature/lighting`), `npm run build` passes.
+- `?lights` screenshots at dv 0, 0.5 and 1: 0 and 1 show the effect; 0.5 shows no difference in the demo (no unlit tile within 4.5 tiles of its viewer).
+- Smoke test with two players, default query (F4 step skipped) and `?debug` (F4: 0 -> 50 -> 100 %): no browser errors.
+
+**Open (for the user):**
+- **Live check:** sneak past humans in an unlit corridor, see skeletons and demons notice you in the dark, orcs only up close; F4 greyscale in `?debug`.
+- **Is the easier lich fight OK?** The disciples stay idle in the dark.
+- All vision and darkvision numbers are first guesses for the balancing pass.
+- Deferred minor review findings: a NaN ratio is not guarded in `set_darkvision`; the darkvision fixture cases have viewers on torch tiles (weak); the `dvmask` is not primed at construction; each attach of `DarkvisionFX` compiles a new pipeline; `BOSS_VISION` is a const. (TODO "Vision and darkvision follow-ups".)
+- Next: the effect system draft's eight open questions (TODO priority 1).
+
+## Session before (2026-10-15, light sources)
 
 **Branch:** `feature/lighting` (from `main`, after `feature/barrels` was merged and pushed). **Pushed to `origin` at the user's request (2026-10-15), not merged**; merge only when the user asks. Commits: `git log --oneline 171793a..HEAD` (tasks 1 to 12). Spec: [docs/superpowers/specs/2026-10-15-light-sources-design.md](docs/superpowers/specs/2026-10-15-light-sources-design.md); plan (12 tasks, run with superpowers:subagent-driven-development, three stages A server core, B client core, C torches and docs): [docs/superpowers/plans/2026-10-15-light-sources.md](docs/superpowers/plans/2026-10-15-light-sources.md). It was TODO priority 1 (removed; the list is renumbered; new section "Lighting follow-ups").
 
@@ -728,7 +755,7 @@ Steps 2–6 followed in the next session.
 
 **Working end to end in Docker (`docker compose up --build`, port 8080):**
 - accounts (name + password, no e-mail) with up to 8 characters each, in PostgreSQL (`db` service, `ta-db` volume); signed HttpOnly session cookies
-- lobby, 4 classes (fixed per character), host-chosen or random end boss, random dungeon, light and darkness (torches, lava, glowing shots; heroes carry no light)
+- lobby, 4 classes (fixed per character), host-chosen or random end boss, random dungeon, light and darkness (torches, lava, glowing shots; heroes carry no light), vision and darkvision by entity type (humans do not see heroes in the dark, monsters only close)
 - level types behind `LevelRules` (`run/levels/`); the boss dungeon is the only one so far, there is no level picker yet
 - per-character progression: XP and coins banked after each run, permanent upgrades bought in the lobby
 - 11 enemy types (including the mimic and the ogre mini-boss, one per run; imps, chorts and summoners only in the demon's dungeon), 3 bosses
@@ -871,7 +898,7 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Show the user the light look and let them play the live test** (see "Last feature, Open"), tune the constants, then merge or push when they say so.
+1. **Let the user play-test the light look and the new vision rules** (see "Last feature" and "Session before, light sources", Open), tune the constants, then push or merge `feature/lighting` and `feature/vision` when they say so. Then the effect system (TODO priority 1).
 2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
 4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.

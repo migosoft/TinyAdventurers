@@ -62,7 +62,8 @@ The two boxes at the bottom of the screen show your abilities. They darken while
 - **Explosions light up** their surroundings for a moment: a fireball, a dragon's fireball or an exploding barrel shows what stands around it. The paladin's healing wave lights up its surroundings in pale gold, too.
 - **Lava glows red** and lights the floor around it. Light of different colours mixes: a torch next to lava gives a deeper orange.
 - Your shots fly on into the dark, and you still see their damage numbers when they hit something there.
-- Enemies see in the dark. They only notice you when they can actually see you, so you can sneak around corners.
+- **Enemies see in the dark only if they are built for it.** An enemy notices you when you are in its line of sight and either lit or very close. **Humans** (the necromancer, the summoner, the lich's disciples) do not see you in the dark at all, however close. **Monsters** (goblin and orc archers, orc warriors, mimics, the ogre) see you in the dark only from about three tiles away. **Undead** (skeletons, the lich), **demons** (imps, chorts, the Red Demon) and the **Red Dragon** see you in the dark as well as in the light.
+- **Hide in the dark.** Put out a torch, or stay out of the light, to slip past humans and monsters. Anything you light up (a fireball, a torch you relight, an exploding barrel) can be seen too, so fire is loud. Skeletons and demons are not fooled by darkness.
 
 ## Enemies
 
@@ -251,6 +252,6 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 - The Paladin's heal only reaches allies close by, so stick together.
 - Archers keep their distance. Close in, or use the Wizard and Assassin to pick them off.
 - Use corners: enemies can't attack what they can't see.
-- Keep a torch at your back when you fight: enemies you cannot see in the dark can still see you. Light a torch again with **E** or with fire.
+- Skeletons, demons and the dragon see you in the dark, so a lit torch behind you helps you see them. Humans and most monsters lose you in the dark: put out a torch (any non-fire hit does it) to slip past them, and light it again with **E** or with fire when you fight.
 - Barrels are a weapon and a danger: light them from a distance, and keep your back free. Archers shoot barrels next to you.
 - Put a chasm or a pool between you and melee enemies: they have to walk around it. In the demon's dungeon, lava doesn't stop the demons.

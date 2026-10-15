@@ -187,7 +187,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - `StartRun`: host only. Turns the room's level and boss choice into a `LevelChoice` (`{level: "Dungeon", boss}`, tag `level`). There is no level picker yet: every room plays `LevelId::Dungeon`.
 - `BuyUpgrade{stat}`: buys the next level of an `UpgradeStat` with the selected character's XP. Refused during a run.
 - `Input(InputMsg)`: one per 1/60 s step: `seq, mx, my, aim, aim_dist, primary/secondary: Option<shot_id>, view_lag, rtt, act`. `act` is true for the one input after an E press: the hero uses the nearest object in reach (see "World objects" in §5). On the wire it is a bare array `InputW` in that field order (`wire.ts` `packInput`, aim as f32); the server recognizes the MessagePack array marker in the first byte. A `t`-tagged `Input` map is still accepted.
-- `Ping{time}`, `Spectate{dir}`, `Debug{on}`
+- `Ping{time}`, `Spectate{dir}`, `Debug{on}`, `DebugDarkvision{ratio}`: sets the sender's own hero darkvision (a share of its vision, 0 to 1). The server honours it only when debug is allowed, and it marks the run as debug (no XP, like `Debug`). The client sends it from F4 (§10).
 
 **Server → client (`ServerMsg`)**
 - `Welcome{id}`, `Lobby{runs}`, `Room{run_id, name, host, players, level, boss}`
@@ -205,6 +205,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - Entity `aim` is one byte, 1/256 of a full turn; the client turns 129–255 back into negative angles and 128 into +π, so it gets (−π, π] like `atan2` on the server (the staff swing in `EntityView` uses the raw angle).
 - Events are arrays starting with a number code (`EV` in `defs.ts`, order of the `Ev` variants). `Tile` keeps tile coordinates.
 - `me` (position, dash, cooldowns, hide time) and all hp/damage numbers keep their exact values; prediction needs them.
+- `SelfW` (`me`) element 13 is the viewed hero's darkvision as a percentage in a u8 (`SelfState.darkvision`; a spectator gets the teammate's). The client uses it for the greyscale mask and the F3 line.
 - Adding a field to `Snapshot`, `SelfState`, `EntSnap`, `BossBar`, `Ev` or `InputMsg` means adding it to the wire type, `encode_snap`/`ev_w`, `unpackSnap`/`packInput` and `sample_snapshots`.
 
 **`EntSnap`** (the readable form) is a compact array: `[id, kind, x, y, hp 0-255, anim, aim, anim_ms, flags, extra]`.
@@ -289,16 +290,19 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 - **Attack splits:** melee uses the attacker's `Profile.melee`. Projectiles and effects use `kind_split(EntityKind)`: arrows and bolts physical; magic missile, shadow and gloom bolts magical; fireball 70 % heat, 20 % magical, 10 % physical; fire bolt and fire orb 70 % heat, 30 % magical; frost bolt cold; dragon fireball, breath and fire patches heat. The `Projectile` carries its `Damage`, and `abilities::explode` takes one. Lava is heat, per tick. The barrel blast is 50 % heat, 50 % physical. Falling and drowning are not damage.
 - **Entity types** (`EntityType`, table in `type_def`; first guesses for the balancing pass):
 
-| Type | Resistances | Melee split |
-|---|---|---|
-| Human | none | physical |
-| Undead | physical 10 %, heat −10 %, poison 100 % | physical |
-| Monster | none | physical |
-| Demon | magical 20 %, heat 100 %, cold −50 % | 80 % physical, 20 % heat |
-| Dragon | magical 50 %, physical 10 % | physical |
-| Object | physical 50 %, poison 100 % | physical |
+| Type | Resistances | Melee split | Vision (tiles) | Darkvision (share) |
+|---|---|---|---|---|
+| Human | none | physical | 9 | 0 |
+| Undead | physical 10 %, heat −10 %, poison 100 % | physical | 9 | 1.0 |
+| Monster | none | physical | 9 | 1/3 |
+| Demon | magical 20 %, heat 100 %, cold −50 % | 80 % physical, 20 % heat | 9 | 1.0 |
+| Dragon | magical 50 %, physical 10 % | physical | 9 | 1.0 |
+| Object | physical 50 %, poison 100 % | physical | 0 | 0 |
 
 - **Profiles:** `entity_types::profile(&[EntityType], Adjust)` adds the resistances of all listed types and the adjustment, and takes the adjustment's melee split, else the first type's. The result (`Profile { res, melee }`) is computed once at spawn and stored on every `Player`, `Monster` and `WorldObject`. Each def has a `profile()`: `classes::profile`, `enemies::profile`, `bosses::profile`, `objects::profile`. Adjustments: lich physical +40 % and magical +40 %; dragon heat +100 % and melee 20 % heat; demon boss magical +20 %.
+- **Sight (vision and darkvision, `defs/entity_types.rs`):** `Sight { vision, darkvision }` sits on `TypeDef`, `Adjust` and `Profile`. `vision` is a range in **tiles**; `darkvision` is a **share of vision** (0 to 1): the range at which the creature sees an unlit target. An `Adjust` can override either; the profile takes the override, else the first listed type's value. Enemies set `vision` in `defs/enemies.rs` in tiles (the old pixel range / 16; every enemy overrides it, so only the darkness rule changed behaviour); bosses see 25 tiles. Heroes: `Player.sight` (from the class profile), `Player.darkvision: Option<f64>` (the debug override, `None` = the profile's) and `sight_now()` (the vision and darkvision in force now).
+- **The perception rule (`run/perception.rs`):** `sees` is true when the target is within `vision`, in line of sight (`collision::line_of_sight`), and either on a lit tile (`is_lit`) or within `vision × darkvision`. `ai::find_visible_player` (every enemy) and `bosses::target` use it, and the hero's snapshot filter uses the same numbers (§7). To give a creature darkvision, see §11.
+- **Light refresh:** `Run::refresh_lights` rebuilds the static layer if it is dirty and casts the moving lights. It runs once per tick before the AI (so perception reads this tick's lights) and again in `send_snapshots` (positions have moved since). The test helper `Lights::fill` lights a whole map for tests that are not about darkness.
 - **Who is what:** the four classes plus necromancer, summoner and disciple are human; skeletons, raised skeletons and archers and the lich are undead; goblin and orc archers, orc warrior, mimic and ogre are monsters; imp, chort, summoned imp and the demon boss are demons; the dragon boss is a dragon; chests and barrels are objects.
 - **Healing above 100 %:** `hurt_player` calls `heal_player` for a negative result (capped at max HP, a `Heal` event only when something was healed); `hurt_monster` heals the monster directly (a `Heal` event only when something was healed). The XP armour upgrade stays and is applied after `resolve`; removing it waits for items (TODO, "Damage-type system").
 
@@ -418,13 +422,13 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 
 ## 7. Field of vision and light
 
-`fov.rs` is recursive shadowcasting with radius 9 tiles; walls (`Map::opaque`) block sight but are themselves visible. Terrain does not block sight. Sight alone shows nothing any more: **lighting replaced the fog**. Heroes have no light of their own, so a tile is only seen when it is in sight **and lit** (see "Light sources", §5). Unlit tiles are fully black. Sight and light are used in three places:
-- **Server snapshots (`visibility.rs`):** `seen(pos)` means on a tile of the viewer's FOV **and** on a lit tile (static or moving layer, `Lights::lit`, the same rule as `is_lit`); large figures count as seen if any of their corners is. Monsters, enemy projectiles, hazards, world objects and positional events are only sent when seen. Teammates are always sent, and so are the party's own projectiles, the `Dmg` of their hits and the `Boom` of their explosions (sent without a position), so a shot into the dark flies on and shows its hit instead of vanishing at the edge of the view. The lich drain beams keep their "boss fight on" rule.
+`fov.rs` is recursive shadowcasting with the viewer's vision in tiles (9 for every hero today); walls (`Map::opaque`) block sight but are themselves visible. Terrain does not block sight. Sight alone shows nothing any more: **lighting replaced the fog**. Heroes have no light of their own, so a tile is only seen when it is in sight **and lit** (see "Light sources", §5). Unlit tiles are fully black. Sight and light are used in three places:
+- **Server snapshots (`visibility.rs`):** `seen(pos)` means on a tile of the viewer's FOV **and** (on a lit tile (static or moving layer, `Lights::lit`, the same rule as `is_lit`) **or** within `dark_reach`, the viewer's vision × darkvision, measured from the viewer). It uses the viewed hero's sight, so a spectator gets the teammate's FOV and darkvision; large figures count as seen if any of their corners is. Monsters, enemy projectiles, hazards, world objects and positional events are only sent when seen. Teammates are always sent, and so are the party's own projectiles, the `Dmg` of their hits and the `Boom` of their explosions (sent without a position), so a shot into the dark flies on and shows its hit instead of vanishing at the edge of the view. The lich drain beams keep their "boss fight on" rule.
   - **Torches** (world objects that own a light, `owns_light`) need sight only (`object_sent`): a torch in the viewer's FOV is sent even if it is out or its tile is dark, one outside the FOV is not. The client's light state does not depend on the torch entities (it comes from `RunStartInfo.lights` and the light events), and a torch sprite outside the FOV sits under full black anyway.
   - **Hero events (`on_hero`):** `Run::event_on_hero` marks an event (hurt and heal numbers on a hero) by its index in the tick's event list. Those are sent where the hero is in sight, lit or not; every other positional event needs sight and light. The client draws numbers on heroes (`Dmg.p`, `Heal.p`) under the darkness (`DEPTH.heroNumbers`), so on a hero in the dark they vanish with the hero.
   - **The moving-light list (`Snapshot.lights`):** every lit moving light within the viewer's FOV radius plus one tile plus its own reach (`lights_for`: a distance test with no line-of-sight check), as `MovingLight(x, y, kind, colour?)`. It can include glows from behind walls (§13). The monster that carries a glow is only sent when it stands in seen space.
 - **Client light canvas (`LightField`, `LightView`):** replaces the fog canvas, see below.
-- **Enemy perception:** this uses `collision::line_of_sight` (4 px sampling) plus each enemy's own `sight` radius. Enemies see in the dark; darkness does not affect them.
+- **Enemy perception:** `perception::sees` (above). **Behaviour change (2026-10-15):** humans (necromancer, summoner, lich disciples) do not see heroes in the dark; monsters (goblin and orc archers, orc warriors, mimic, ogre) only within a third of their vision (about 2.5 to 3 tiles); undead, demons and bosses see fully in the dark. A hero in light is seen as before. `simulation_is_unchanged_after_waking_the_boss` was re-recorded for this: in the lich hall the disciples stay idle in the dark and one orc loses the hero.
 
 **The light canvas (`game/light.ts`, `game/lightview.ts`).**
 - **`LightField`** holds the static lights (from `RunStartInfo.lights` and the light events; `GameScene.onEvent` calls `set`, `add`, `remove` and, on `Ev::Tile`, `mapChanged`) and builds the same static light map as the server with the `sim/fov.ts` port. The shared fixture (`export.rs` → `fixtures.json`, checked by `light.test.ts`) pins the TypeScript map to the Rust one, so a tile the server counts as lit is never drawn fully black, and no light is drawn on a tile the server counts as dark. Colours mix additively: each source adds `colour × intensity × falloff(distance / radius)` per tile and channel, capped at 255 (torch plus lava gives orange, blue plus red purple). The falloff is a smoothstep from 1 at the centre down to `EDGE` (0.1) at the radius edge, never brighter further out, so a light fades out **inside** the tiles it lights. Moving lights from the snapshot are added each frame with the same falloff (`addMoving`): a radius-r shadowcast from the tile of the sent position (`Math.floor(px / TILE)`, the server's `light_tile`), the same tiles the server's moving layer marks; the shared fixture also pins these (moving lights in the open, beside a corner, against a wall and exactly on a tile corner).
@@ -604,6 +608,12 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 4. **Colour override:** the `colour` argument of `add_light` (`None` = the kind's colour), or `set_light_colour(id, colour)` at any time (a cursed torch turning blue); a static light sends `Ev::Light` with the new colour, a moving one changes its `MovingLight` entry.
 5. **Asking:** `run.is_lit(pos)` for game rules (the shadow, the torch-extinguishing enemy; those also use `set_light`).
 
+**How to give a creature darkvision or longer sight** (see "Sight" in §5). No client change is needed.
+1. **A whole kind:** change the entity type's `Sight` in `type_def` (`defs/entity_types.rs`): `vision` in tiles, `darkvision` as a share of vision (1.0 = it sees an unlit target as far as a lit one).
+2. **One enemy or hero class:** set `vision` and/or `darkvision` in its `Adjust` (`defs/enemies.rs`, `defs/classes.rs`); the profile takes it. An enemy's `vision` is in tiles.
+3. **A boss:** `defs/bosses.rs` (25 tiles today); `bosses::target` already uses the same rule.
+4. Add or adjust a test for the new numbers (`perception.rs` has the pattern: a dark map, a target at several distances). The hero filter and the greyscale follow `Player.sight` and the `SelfW` value by themselves.
+
 **How to add a level type** (see "Levels" in §5; the dungeon is the example):
 1. **Protocol** (`protocol.rs`): a `LevelId` variant and a `LevelChoice` variant with the level's options (e.g. `Escort {}`; the tag is `level`). Run `cargo test` to regenerate the TS types.
 2. **The level** (`run/levels/<name>.rs`): a struct with the level's state, a `build(seed, …options, rng) -> (Layout, Self)` that makes its map (its own generator) and fills the shared `Layout` (map, enemy spawns, chests, player spawns; empty lists are fine), and `impl LevelRules` overriding only the hooks it needs: e.g. `populate` for its own monsters or objects, `tick` for a moving goal, `on_killed` or `post_tick` to set `run.ended = Some((true, run.time + END_DELAY))` on a win, `failed` for its own way to lose, `debug_target` for the debug path.
@@ -769,7 +779,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 ## 12. Tests
 
-**Server (`cargo test`, 253 tests):**
+**Server (`cargo test`, 271 tests):**
 - damage model: `resolve` for single and several types, a missing entry, immunity, healing above 100 %, a weakness and its −100 % floor, partial splits filled with physical; attacks by kind have their types; entity type resistances add up with adjustments (lich physical 50 %, dragon heat 100 %), every enemy and class has its entity type; typed paths (a demon takes no heat from the fireball, a skeleton takes more, the demon's claw burns, lava, the lich nova and the dragon's breath are typed)
 - world objects: chests open once and pay the party, mimics still wake, objects resist poison fully
 - solids: a square blocks axis by axis, a figure inside one can walk out in every direction; 36 fixture steps touch a solid
@@ -779,6 +789,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - barrel generation over many seeds: no tile cut off, hall barrels keep their plain-floor area and gap
 - light kinds: every kind has a sane def; fire and magic shots glow, arrows and monsters do not
 - light registry: a static light lights its radius and stops at walls (lighting the wall itself); switching, recolouring (`Ev::Light` with the colour) and removing a static light; lights added at the start send no event; a moving light follows its entity, is blocked by walls and is swept when its entity is gone; it lights exactly its radius-r shadowcast from its tile (not a tile diagonally past it, but every point of a lit tile); it is cast from the tile of its sent position (47.99 px goes out as 48); kind colour unless overridden; fire bolts carry a light, arrows do not, a shot that dies at once leaves none; fire patches glow; lava lights its neighbours, is in the start info (also in a dungeon) and `set_tile` keeps the lava lights in step; a closed door blocks light; an explosive shot hitting a wall in the dark lights a spot three tiles from it for the flash's 0.4 s, not after, and the flash is swept; a paladin's healing wave lights a spot three tiles away for 0.6 s; a fireball aimed a hair inside a wall goes off in front of it (its flash is not inside the wall)
+- vision and darkvision: `sees` (within vision, line of sight, lit or within vision × darkvision; humans never see an unlit hero, monsters only within a third, undead and demons fully), enemy AI in the dark by type, the hero snapshot filter with `dark_reach` (also a spectator with the teammate's sight), `SelfW` darkvision, `DebugDarkvision` (honoured only when debug is allowed, marks the run as debug, spectators get the teammate's value), the shared `darkvision` fixture
 - visibility: a monster in the dark is hidden until lit; end to end through `send_snapshots`, a dark viewer gets a monster lit only by a fire patch but not one just outside the patch's shadowcast; recolouring a moving light changes its snapshot entry and sends no event; hero events (hurt, heal) are sent in the dark, monster events are not; the moving-light list holds lights near the viewer, with the colour only when custom; a torch in sight is sent lit or dark and one out of sight is not
 - torches: a torch lights the floor in front of it; E toggles one in reach; heat lights and other damage puts out; a barrel blast lights a torch; a shot into the torch's wall tile hits it; a barrel blast adds a `Blast` flash on its spot (a moving light)
 - torch generation over 200 seeds: on walls with floor in front, spaced, never adjacent, never on doorway jambs, start room and boss hall always lit, dark pockets exist; spacing along the start room wall; the fingerprints are unchanged
@@ -837,13 +848,13 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - mimics: asleep until touched, then hold before hunting; the boss waking leaves them asleep; they move only while airborne
 - ts-rs export tests
 
-**Client (`npm test`, 48 tests):**
+**Client (`npm test`, 52 tests):**
 - `game/damage.test.ts`: the number colour per damage type (physical white on enemies, red on heroes).
 - `pickFrame.test.ts`: the dragon's and the demon's frame choice (wind-up frame with the telegraph, strike frames after it, the demon's charge loop and ring burst, enraged wind-ups shortened by `pace`).
 - The collision and FOV ports must equal the Rust fixtures exactly. The fixture map holds every kind of terrain, and 10 random walks with dashes and pushes (14–44 px, any direction) cross it.
 - `wire.test.ts` (it also covers the `act` input field and `Dmg` with `ty` and `imm`) unpacks the sample snapshots from `wire-fixtures.json` (every event type, a spectator, with and without boss bar) and compares them with their readable form: positions within 1/32 px, aim within half a step, everything else exact. It also checks the aim range and `packInput`.
 - `game/light.test.ts`: the static light map equals the server's on the shared fixture (`fixtures.json`, every lit tile identical); `addMoving` marks exactly the server's tiles for five moving lights on the fixture map (open floor, beside a corner, against a wall, on a tile corner, a magic light); switching, recolouring, removing and map changes; colours add per channel and cap at 255; a torch and lava mix to orange, with more red than the torch alone; the falloff (1 at the centre, 0.1 at the edge, half way down at half the radius, never brighter further out).
-- `game/lightview.test.ts`: black where not seen or not lit, a lit tile is never fully black (`MIN_LIT` 0.08) and a dim one stays dim, flicker stays around 1 by kind; the upsampling: the Catmull-Rom weights sum to 1, a flat field stays flat and a ramp straight, overshoot at a hard edge is clamped, not wrapped; a dark tile next to a bright one is black in every sub-pixel after `blackenDarkTiles`, while the lit side keeps its fade.
+- `game/lightview.test.ts` (also: the darkvision tile rule `tileDark`, `darkReach`, `nextDarkvision` 0 -> 0.5 -> 1 -> 0): black where not seen or not lit, a lit tile is never fully black (`MIN_LIT` 0.08) and a dim one stays dim, flicker stays around 1 by kind; the upsampling: the Catmull-Rom weights sum to 1, a flat field stays flat and a ramp straight, overshoot at a hard edge is clamped, not wrapped; a dark tile next to a bright one is black in every sub-pixel after `blackenDarkTiles`, while the lit side keeps its fade.
 - `net.test.ts`: the `?lag` simulator delivers 2,000 messages in order under a timer that rounds delays down like a browser (the old one-timer-per-message line failed it).
 - `ui/endText.test.ts`: the end screen's first line (the slain boss on a dungeon win, the level's defeat line, the level's victory line when there is no boss).
 - `game/world.test.ts`: the predictor replays the moves it sent while it predicted a fall, so a debug climb-out the server already did is followed exactly.
@@ -874,6 +885,10 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - The light canvas is upsampled from per-tile values and dark tiles are set back to black, so the light-to-dark step sits on the tile boundary: the LINEAR filter softens it by half a canvas pixel (a quarter tile) on each side, and the lit tile next to a dark one darkens towards it.
 - The moving-light list uses a distance test without line of sight, so the glow of a shot or enemy behind a wall within range is sent and drawn (its carrier is not).
 - An explosion's (and a healing wave's) flash is flat for its 0.4 s (0.6 s) and then gone (no fade-out). A shot without an explosion lights nothing at its impact once its own light is gone.
+- Vision and darkvision: every number (vision per enemy in tiles, the boss 25 tiles, darkvision shares 0 / 1/3 / 1, the greyscale `DV_DARK` 0.45) is a first guess for the balancing pass. The humans' blindness in the dark makes the lich fight easier (disciples idle in the dark).
+- The greyscale (`DarkvisionFX`) is a camera-wide post effect, so inside the darkvision range it also greys world-space damage numbers, HP bars and the E hint, not only the floor and figures. Per-object exclusion would need a second camera or layer.
+- Light is refreshed twice per tick (before the AI and in `send_snapshots`); this costs one extra moving-light cast and keeps perception and the snapshot filter on the same positions.
+- Each attach of `DarkvisionFX` compiles a new pipeline instance (F4 and the `?lights` V key cycle it, so this only happens in debug use); the mask texture is not primed at `LightView` construction.
 - Hero melee, dashes and arrows next to a torch put it out (any non-heat hit does); this is the agreed rule, but it may prove annoying in play.
 - Torches are sent only when in the viewer's FOV, so a torch sprite can pop in at the edge of the FOV (under the darkness, so it is rarely noticeable). The lights themselves come from the start info and events and never pop.
 - Weapon effects (swooshes, rings, particles) are drawn under the darkness, so they are black where it is dark, like the heroes and the numbers on them (an explosion lights its own spot). The server still sends hurt and heal on a hero in the dark (`on_hero`); the client hides them under the darkness. Numbers on monsters are drawn above it.
