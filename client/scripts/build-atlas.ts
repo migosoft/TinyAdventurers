@@ -5,7 +5,7 @@
 // the generated terrain tiles (water, lava, chasm; see terrain-tiles.ts), plus
 // the dragon frames built from its base sprite (see dragon-frames.ts), plus
 // the lich's own frames (see lich-frames.ts), plus the demon's frames
-// (see demon-frames.ts).
+// (see demon-frames.ts), plus the barrels (see barrel-frames.ts).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +14,7 @@ import { buildTerrain } from './terrain-tiles';
 import { buildDragon } from './dragon-frames';
 import { buildLich } from './lich-frames';
 import { buildDemon } from './demon-frames';
+import { buildBarrels } from './barrel-frames';
 import { DRAGON_SHEETS, type DragonSheet } from '../src/game/anim/dragonRig';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -65,7 +66,9 @@ const lich = buildLich(src.w);
 const lichY = dragonY + dragon.img.h;
 const demon = buildDemon(path.join(root, 'assets-src', 'demon'), src.w);
 const demonY = lichY + lich.img.h;
-const outH = demonY + demon.img.h;
+const barrels = buildBarrels(src.w);
+const barrelY = demonY + demon.img.h;
+const outH = barrelY + barrels.img.h;
 const out: Image = { w: src.w, h: outH, data: new Uint8Array(src.w * outH * 4) };
 out.data.set(src.data);
 RECOLORS.forEach((r, row) => {
@@ -110,7 +113,13 @@ for (let y = 0; y < demon.img.h; y++)
 for (const [name, f] of Object.entries(demon.frames))
   frames[name] = { frame: { x: f.x, y: demonY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
 
+// Barrel frames below the demon.
+for (let y = 0; y < barrels.img.h; y++)
+  out.data.set(barrels.img.data.subarray(y * barrels.img.w * 4, (y + 1) * barrels.img.w * 4), ((barrelY + y) * out.w) * 4);
+for (const [name, f] of Object.entries(barrels.frames))
+  frames[name] = { frame: { x: f.x, y: barrelY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
+
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'atlas.png'), encodePng(out));
 fs.writeFileSync(path.join(outDir, 'atlas.json'), JSON.stringify({ frames, meta: { image: 'atlas.png', scale: 1 } }));
-console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon, ${Object.keys(lich.frames).length} lich, ${Object.keys(demon.frames).length} demon) -> public/assets/atlas.{png,json}`);
+console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon, ${Object.keys(lich.frames).length} lich, ${Object.keys(demon.frames).length} demon, ${Object.keys(barrels.frames).length} barrel) -> public/assets/atlas.{png,json}`);

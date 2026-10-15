@@ -90,7 +90,8 @@ Built 2026-10-14 on branch `feature/barrels` (TECHNICAL §5, "World objects"): c
 - **Thrown or pushed objects dealing damage:** today a pushed barrel only slides and a blocked slide stops it. A barrel (or crate) that hits a hero or enemy could hurt and push them.
 - **More object kinds** on `hurt_object` and `use_object`: crates (breakable, may hold coins), levers and buttons, torches (switched off and on), the carriage, the riddle creature. `use_object` already dispatches on the kind; E is the use key.
 - **Tune** in the balancing pass: barrel blast radius 40, damage 30 (50 % heat, 50 % physical), push 40 px, fuse 0.3 s, hand push 48 px, how many rooms get barrels (25 %), 3–5 in a boss hall (`defs/objects.rs`, `place_barrels`).
-- **Barrel art:** the pack's `crate` is a stand-in (`client/src/game/barrel.ts`). The CC0 search is done and the user picks from the candidates (nothing is imported yet): Pine Druid "Barrel Sprite" (CC0, with a no-redistribution note), zwonky "Various Containers" (CC0, OpenGameArt), BitingChaos "16x16 Explosion" (CC0, OpenGameArt); the 0x72 pack v1.7 has no barrel. Then import with the licence file and add it to the README credits. An explosion sheet would help too.
+- **Plain barrels as obstacles:** the user wants barrels that do not explode and only block. The art exists (atlas frame `barrel`, see TECHNICAL §9 "Barrel frames"); the object kind (or a flag on `ObjState::Barrel`), its placement and the client view (`BarrelView` takes the frame) do not.
+- **Explosion art:** the blast is a runtime effect (`Boom k 7`); an explosion sheet would help (candidate: BitingChaos "16x16 Explosion", CC0, OpenGameArt).
 - **Deferred review findings** (small, none blocks anything):
   - the A* squeeze cost applies to every monster, not only wide ones; a chaser repaths every 0.6 s while a hero stands next to a barrel;
   - an igniter who has left still gets credited with damage and kills; a lava death gives no credit;

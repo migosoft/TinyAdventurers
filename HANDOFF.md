@@ -42,10 +42,19 @@ It builds on this feature: torches and other light sources that can be switched 
 **Open (not done yet):**
 - **Further live checks** worth doing while playing: a chain reaction; an E push into a chasm, into water and into lava; an enemy blown into a chasm (dies, XP once); an archer shooting a barrel next to a hero; barrels in the boss hall (big bosses must not get stuck); coloured damage numbers and "immune"; no prediction snaps when walking along barrels.
 - **Final whole-branch review** done; its findings are fixed (see above).
-- **Barrel art:** the pack's `crate` is the stand-in (`client/src/game/barrel.ts`). The CC0 search is done and the user picks from the candidates (nothing is imported yet): Pine Druid "Barrel Sprite" (CC0, with a no-redistribution note), zwonky "Various Containers" (CC0, OpenGameArt), BitingChaos "16x16 Explosion" (CC0, OpenGameArt); the 0x72 pack v1.7 has no barrel. Then import into `client/assets-src/<set>/` with the licence file and add the README credit. Art comes only from the 0x72 pack or CC0 sets.
+- **Barrel art:** done 2026-10-15 (see "Barrel art" below).
 - **Merging:** only when the user asks.
 - **Deferred minor review findings** (small): listed in [docs/TODO.md](docs/TODO.md) under "Barrels and world objects follow-ups". Fixed in the final wave: the shared `blocks()` predicate, the empty monster `Heal`, E key repeat, `Damage::scaled`. Still worth doing: the squeeze cost only for wide monsters; no credit for a departed igniter.
 - All numbers (resistances, splits, barrel values) are first guesses for the balancing pass.
+
+## Barrel art (2026-10-15, on `feature/barrels`)
+
+The user disliked the crate stand-in. A first reference image they posted was under a strict licence, so it was **not used** (do not copy it). They then supplied a barrel made with ChatGPT (`images/Pixel Art Wooden Barrel Icon.png`, copied to `client/assets-src/barrel/barrel_source.png`).
+- Its 20×27 pixel grid was read and snapped to pack colours. At that size it is taller than a hero, so it was redrawn by hand at **16×22** (the user's choice from a preview sheet) in `client/scripts/barrel-frames.ts`, built into the atlas as `barrel` (plain wood) and `barrel_explosive` (red wood lid plus a red band; the user picked this "C" variant over a red lid alone and a red centre stave).
+- `game/barrel.ts` draws `barrel_explosive` (`BarrelView` takes the frame as an optional argument). `?gallery` shows the plain one, the explosive one, and one cycling through fuse, fall and sink.
+- **Plain barrels** (blocking, not exploding) are wanted by the user but not built; the art is ready (TODO, "Barrels and world objects follow-ups").
+- Credit: "AI-generated with ChatGPT for this game" (README Art, TECHNICAL §9 "Barrel frames"), not the user's own art.
+- Verified: atlas build (2 barrel frames), client `tsc` and 34 tests, `?gallery` screenshot with no browser errors. Not yet seen by the user in a real run.
 
 ## Bug fixes (2026-10-14, after the level split)
 

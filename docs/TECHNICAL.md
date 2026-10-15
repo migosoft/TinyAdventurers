@@ -60,10 +60,12 @@ server/                              Rust crate `tiny-adventurers-server`
 client/                              Vite + TypeScript + Phaser 3.90
   scripts/build-atlas.ts             pack sheet + tile list -> public/assets/atlas.{png,json}
   scripts/lich-frames.ts             the lich's own pixel frames + staff (pixel grids in pack colours)
+  scripts/barrel-frames.ts           plain and explosive barrel (pixel grids in pack colours, from AI art)
   scripts/build-logo.ts              title logo -> public/assets/{logo,logo-emblem,favicon}.png
   scripts/png.ts                     minimal PNG decode/encode (zlib only) for the atlas recolors
   assets-src/0x72/                   0x72 DungeonTileset II v1.7 (CC0): sheet, tile_list, README, LICENSE
   assets-src/logo/logo.png           title logo, made with Google's image generation AI
+  assets-src/barrel/                 the barrel's AI-generated source image (ChatGPT)
   src/main.ts                        boot: login -> character screen -> WebSocket, Phaser game, Lobby/Hud/GameScene; demo pages
   src/api.ts                         fetch wrapper for /api/* (the session cookie is HttpOnly; JS never sees it)
   src/net.ts                         WebSocket + msgpack, ping/RTT, network simulator (?lag=)
@@ -424,6 +426,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - The mouth and nostril points for the breath come from the same poses (`dragonPoints()`), so they follow the art.
   - All frames are 86×54 with the base at (19, 7); the feet are on row 50 (`footY`, the figure origin); legs hanging in flight reach below.
   - How the strips were imported (one-off scripts, not in the repo): the user's JPGs on a magenta background were converted with PowerShell `System.Drawing`; a rectangular pixel grid was fitted per strip (they were stretched unevenly), cell centres sampled (median) and snapped to the base palette; frames separated as connected shapes (specks dropped) and stray light-red pixels on the silhouette removed; then each frame placed in base coordinates, on the base head (walk, claw, hover) or on the planted hind claws (bite, tail), with the head offset found by matching the base head. The walk strip was drawn ~15% smaller and was resampled to base size. Redo the same for new strips.
+- **Barrel frames** (`scripts/barrel-frames.ts`): AI-generated art made for this game with ChatGPT at the user's request (2026-10-15), source in `client/assets-src/barrel/barrel_source.png` (a 20×27 pixel grid at about 25 screen px per pixel). That grid was read once (cell medians, colours snapped to pack colours), then redrawn by hand at 16×22, about the crate's size, because 20×27 stands taller than a hero. The script holds the grid: `barrel` (plain wood, for blocking barrels that do not explode; not used yet) and `barrel_explosive` (the same with a red wood lid and a red band, the user's choice from three variants). `game/barrel.ts` draws `barrel_explosive`; `?gallery` shows both plus the fuse, fall and sink animations.
 - **Demon frames** (`scripts/demon-frames.ts`, layout in `src/game/anim/demonFrames.ts`, shared with the client): AI-generated art made for this game at the user's request (2026-10-13), in `client/assets-src/demon/`.
   - The user supplied a front-view pixel demon (`images/demon.jpg`); an image generation AI first turned it to a side view facing right, then drew one sheet per action from that (prompts: one strip per action, flat magenta background, same size as the reference). The source images were deleted from the untracked `images/` inbox after the import (the user's request, 2026-10-13); redoing a strip needs a new sheet.
   - Strips: `demon_idle` (4), `demon_walk` (6: the sheet's images 1, 2, 3, 8 and back through 3, 2, the order the user chose, played at 9 fps; the legs cross in the middle of each stride, seen from the side; the strip holds them in play order; from the user's third walk sheet, `images/demon_walk_improved_cross_walk.png`: the first one, 4 frames, was no clean cycle and looked like a limp, and the second, 8 frames, kept the legs apart), `demon_cleave` (5: wind-up, swing, impact, follow-through, recovery; the user's sheet had 7, the two upright resting poses were dropped), `demon_charge` (4: bull crouch, two charging frames, the stop) and `demon_cast` (4: gathering power, rising, the burst, recovery). Every cell is 82×63 with the hips at x 33 (`hipX`, the body's horizontal origin, mirrored when facing left) and the feet on row 62 (`footY`). Drawn at ×1 (about 62 px tall with the horns).
@@ -791,7 +794,6 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 - Pack art gaps: no attack frames, no up/down facing. (The dragon, the demon and the lich have their own frames.)
 - No sound.
-- Barrels are drawn with the pack's `crate` until barrel art is chosen.
 - Damage types, resistances and the barrel numbers are first guesses for the balancing pass, and the user has not played the barrels yet (see HANDOFF, open points).
 - Snapshots are compact but not delta-compressed (every snapshot is complete). They are small anyway.
 - Boss fights are covered by unit tests and were played live once against all three bosses; their numbers are not balanced yet.

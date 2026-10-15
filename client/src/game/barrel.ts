@@ -1,20 +1,19 @@
-// An explosive barrel. Until CC0 barrel art is chosen, the pack's crate stands in.
+// An explosive barrel (atlas frame `barrel_explosive`, red lid and band; see
+// scripts/barrel-frames.ts; the plain `barrel` frame is for non-exploding ones).
 // Server anim: 0 resting, 1 fuse burning (anim_ms since lit), 2 falling into a
 // chasm, 3 sinking in deep water (anim_ms since it started).
 import Phaser from 'phaser';
 import { CONST } from '../generated/defs';
 import { DEPTH } from './effects';
 
-const FRAME = 'crate';
-
 export class BarrelView {
   readonly root: Phaser.GameObjects.Container;
   private body: Phaser.GameObjects.Sprite;
   private shadow: Phaser.GameObjects.Ellipse;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, frame = 'barrel_explosive') {
     this.shadow = scene.add.ellipse(0, 0, 13, 5, 0x000000, 0.4);
-    this.body = scene.add.sprite(0, 1, 'atlas', FRAME).setOrigin(0.5, 1);
+    this.body = scene.add.sprite(0, 1, 'atlas', frame).setOrigin(0.5, 1);
     this.root = scene.add.container(0, 0, [this.shadow, this.body]);
   }
 
