@@ -303,7 +303,7 @@ mod tests {
         let classes = vec![ClassId::Paladin; offs.len()];
         let mut run = test_run(&classes, BossId::Dragon);
         let bi = boss_idx(&run).unwrap();
-        run.monsters[bi].asleep = false;
+        run.monsters[bi].dormant = false;
         run.monsters[bi].aim = 0.0;
         let at = run.monsters[bi].pos;
         for (p, off) in run.players.iter_mut().zip(offs) {

@@ -178,8 +178,8 @@ pub fn send_snapshots(run: &mut Run) {
             if m.hurt_t > 0.0 {
                 f |= flags::HURT;
             }
-            if m.asleep {
-                f |= flags::ASLEEP;
+            if m.dormant {
+                f |= flags::DORMANT;
             }
             if m.airborne {
                 f |= flags::AIRBORNE;

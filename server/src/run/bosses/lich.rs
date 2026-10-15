@@ -91,7 +91,7 @@ impl BossBehaviour for Lich {
             }
             let id = run.spawn_enemy(EnemyType::Disciple, pos, Some(owner), party);
             let mi = run.monster_idx(id).unwrap();
-            run.monsters[mi].asleep = true;
+            run.monsters[mi].dormant = true;
             run.monsters[mi].anim = Anim::Channel;
         }
     }
@@ -220,7 +220,7 @@ mod tests {
         let classes = vec![ClassId::Paladin; offs.len()];
         let mut run = test_run(&classes, BossId::Lich);
         let bi = boss_idx(&run).unwrap();
-        run.monsters[bi].asleep = false;
+        run.monsters[bi].dormant = false;
         let at = run.monsters[bi].pos;
         for (p, off) in run.players.iter_mut().zip(offs) {
             p.mv.x = at.x + off.x;

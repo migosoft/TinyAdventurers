@@ -66,7 +66,7 @@ pub fn spawn(run: &mut Run, party: usize) {
         owner: None,
         history: VecDeque::with_capacity(HISTORY_LEN),
         is_boss: true,
-        asleep: true,
+        dormant: true,
         mover: if boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
         airborne: false,
         knock: Vec2::ZERO,
@@ -97,7 +97,7 @@ pub fn check_arena(run: &mut Run) {
         enc_mut(run).awake = true;
         // Mimics elsewhere keep their disguise.
         for m in run.monsters.iter_mut().filter(|m| m.etype != Some(EnemyType::Mimic)) {
-            m.asleep = false;
+            m.dormant = false;
         }
         let text = match enc(run).boss_id {
             BossId::Demon => "A demon awakens!",
@@ -123,7 +123,7 @@ pub fn on_hurt(run: &mut Run, mi: usize) -> bool {
         return false;
     }
     enc_mut(run).awake = true;
-    run.monsters[mi].asleep = false;
+    run.monsters[mi].dormant = false;
     true
 }
 

@@ -156,7 +156,7 @@ pub mod flags {
     pub const HIDDEN: u8 = 1;
     pub const IMMUNE: u8 = 2;
     pub const ENRAGED: u8 = 4;
-    pub const ASLEEP: u8 = 8;
+    pub const DORMANT: u8 = 8;
     pub const HURT: u8 = 16;
     pub const DEAD: u8 = 32;
     /// Flying (the dragon): melee cannot reach it.

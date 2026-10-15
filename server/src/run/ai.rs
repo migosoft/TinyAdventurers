@@ -136,7 +136,7 @@ fn object_free_line(run: &Run, a: Vec2, b: Vec2, radius: f64) -> bool {
 
 pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
     let Some(etype) = run.monsters[mi].etype else { return };
-    if run.monsters[mi].asleep {
+    if run.monsters[mi].dormant {
         return;
     }
     if run.monsters[mi].ai.hold > 0.0 {
@@ -455,7 +455,7 @@ pub fn separate_monsters(run: &mut Run) {
     let n = run.monsters.len();
     let solids = run.solids(None);
     for i in 0..n {
-        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].asleep {
+        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].dormant {
             continue;
         }
         for j in 0..n {

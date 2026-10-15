@@ -72,7 +72,7 @@ export class MimicDemoScene extends Phaser.Scene {
         c.y += (dy / dist) * HOP_SPEED * dt;
       }
     }
-    c.v.update({ x: c.x, y: c.y, asleep: false, hop: c.biteT >= 0 ? -1 : c.hop, biteT: c.biteT, aim: Math.atan2(dy, dx) }, dt);
+    c.v.update({ x: c.x, y: c.y, dormant: false, hop: c.biteT >= 0 ? -1 : c.hop, biteT: c.biteT, aim: Math.atan2(dy, dx) }, dt);
 
     // 2: 4 s loop: closed, opens with a coin burst, resets.
     const ch = this.chest;
@@ -87,9 +87,9 @@ export class MimicDemoScene extends Phaser.Scene {
     // 3: 5 s loop: closed, rattles harder, pops open, chomps, resets.
     const r = this.reveal;
     const lt = this.t % 5;
-    const asleep = lt < 2.2;
+    const dormant = lt < 2.2;
     const rattle = lt < 1 ? 0 : lt < 1.6 ? 0.3 : 1;
-    r.v.update({ x: r.x, y: r.y, asleep, rattle, wakeT: asleep ? -1 : lt - 2.2, aim: 0 }, dt);
+    r.v.update({ x: r.x, y: r.y, dormant, rattle, wakeT: dormant ? -1 : lt - 2.2, aim: 0 }, dt);
 
     this.fx.update(dt);
   }

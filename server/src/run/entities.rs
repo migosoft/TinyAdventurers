@@ -185,7 +185,10 @@ pub struct Monster {
     pub owner: Option<u32>,
     pub history: VecDeque<Vec2>,
     pub is_boss: bool,
-    pub asleep: bool,
+    /// Waiting until triggered: bosses until the party enters the hall, the lich's
+    /// disciples (idle channelling), mimics until touched. Not an effect (no source,
+    /// no timer); the Sleep effect is `effects` (run/effects.rs).
+    pub dormant: bool,
     /// Walking rules: demons cross lava, other enemies avoid it.
     pub mover: Mover,
     /// Flying (the dragon): melee cannot reach it, projectiles and spells still do.

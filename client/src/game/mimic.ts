@@ -22,7 +22,7 @@ export interface MimicState {
   x: number;
   y: number;
   /** Still a chest: closed lid, occasional rattle when `rattle` > 0 (0..1 intensity). */
-  asleep: boolean;
+  dormant: boolean;
   rattle?: number;
   /** Seconds since waking (the reveal pop), or -1. */
   wakeT?: number;
@@ -65,7 +65,7 @@ export class MimicView {
     this.root.add([this.shadow, this.piece]);
   }
 
-  private wasAsleep: boolean | undefined;
+  private wasDormant: boolean | undefined;
   private wakeClock = -1;
   private rattleAt = 1 + Math.random() * 3;
 
@@ -76,14 +76,14 @@ export class MimicView {
     const dead = (e.flags & FLAG.DEAD) !== 0;
     this.root.setVisible(!dead);
     if (dead) return;
-    const asleep = (e.flags & FLAG.ASLEEP) !== 0;
-    // The reveal plays only when we saw it asleep; a late joiner just sees the mimic.
-    if (this.wasAsleep && !asleep) this.wakeClock = 0;
+    const dormant = (e.flags & FLAG.DORMANT) !== 0;
+    // The reveal plays only when we saw it dormant; a late joiner just sees the mimic.
+    if (this.wasDormant && !dormant) this.wakeClock = 0;
     else if (this.wakeClock >= 0) this.wakeClock += dt;
-    this.wasAsleep = asleep;
+    this.wasDormant = dormant;
     // A disguised mimic gives itself away now and then when a hero comes close.
     let rattle = 0;
-    if (asleep && heroDist < RATTLE_NEAR) {
+    if (dormant && heroDist < RATTLE_NEAR) {
       this.rattleAt -= dt;
       if (this.rattleAt < 0) rattle = 0.5;
       if (this.rattleAt < -0.35) this.rattleAt = 1.5 + Math.random() * 2.5;
@@ -92,7 +92,7 @@ export class MimicView {
       {
         x: e.x,
         y: e.y,
-        asleep,
+        dormant,
         rattle,
         wakeT: this.wakeClock,
         hop: e.anim === ANIM.Move ? (e.animT / HOP_CYCLE) % 1 : e.anim === ANIM.Windup ? HOP.crouch * 0.8 : -1,
@@ -118,7 +118,7 @@ export class MimicView {
     let by = 0;
     let angle = 0;
 
-    if (s.asleep) {
+    if (s.dormant) {
       // Just a chest. A rattle is a quick shiver with the lid lifting a crack.
       const r = s.rattle ?? 0;
       if (r > 0 && Math.floor(this.clock * 24) % 2 === 0) {

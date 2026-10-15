@@ -57,8 +57,8 @@ export const ANIM = {
 
 export const FLAG = {
   "AIRBORNE": 64,
-  "ASLEEP": 8,
   "DEAD": 32,
+  "DORMANT": 8,
   "ENRAGED": 4,
   "HIDDEN": 1,
   "HURT": 16,

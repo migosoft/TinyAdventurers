@@ -224,12 +224,12 @@ impl Run {
             let t = run.level.enemy_type(s.enemy);
             run.spawn_enemy(t, s.pos, None, n);
         }
-        // Mimics are monsters from the start, asleep and drawn as a closed chest.
+        // Mimics are monsters from the start, dormant and drawn as a closed chest.
         for c in run.layout.chests.clone() {
             if c.mimic {
                 let id = run.spawn_enemy(EnemyType::Mimic, c.pos, None, n);
                 let mi = run.monster_idx(id).unwrap();
-                run.monsters[mi].asleep = true;
+                run.monsters[mi].dormant = true;
             } else {
                 run.spawn_object(EntityKind::Chest, c.pos, objects::ObjState::Chest { opened: None });
             }
@@ -280,7 +280,7 @@ impl Run {
             owner,
             history: VecDeque::with_capacity(HISTORY_LEN),
             is_boss: false,
-            asleep: false,
+            dormant: false,
             mover: if enemies::is_demon(t) { Mover::Demon } else { Mover::Enemy },
             airborne: false,
             knock: Vec2::ZERO,
@@ -698,7 +698,7 @@ impl Run {
         }
         for mi in 0..self.monsters.len() {
             let m = &self.monsters[mi];
-            if m.alive && m.asleep && m.etype == Some(EnemyType::Mimic) && near(m.pos) {
+            if m.alive && m.dormant && m.etype == Some(EnemyType::Mimic) && near(m.pos) {
                 self.wake_mimic(mi);
             }
         }
@@ -707,7 +707,7 @@ impl Run {
     /// The mimic drops its disguise: a short pause while the lid flies open, then it hunts.
     pub fn wake_mimic(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
-        m.asleep = false;
+        m.dormant = false;
         m.ai.hold = enemies::MIMIC_WAKE_T;
         m.ai.cd = m.ai.cd.max(enemies::MIMIC_WAKE_T);
     }
@@ -855,10 +855,10 @@ impl Run {
                 m.ai.path.clear();
                 m.ai.search_t = 3.0;
             }
-            if m.asleep && m.etype == Some(EnemyType::Mimic) {
+            if m.dormant && m.etype == Some(EnemyType::Mimic) {
                 self.wake_mimic(mi);
             }
-            self.monsters[mi].asleep = false;
+            self.monsters[mi].dormant = false;
         }
         if self.monsters[mi].hp <= 0.0 {
             if let Some(pi) = src_player {
@@ -1088,7 +1088,7 @@ pub mod tests {
             eat(m.pos.y.to_bits() as u64);
             eat(m.hp.to_bits() as u64);
             eat(m.is_boss as u64);
-            eat(m.asleep as u64);
+            eat(m.dormant as u64);
         }
         // Chests only: barrels and torches are spawned last (after every other
         // id) and left out, so the rest of the setup is compared with the old values.
@@ -1231,25 +1231,25 @@ pub mod tests {
         let pos = run.layout.player_spawns[0] + Vec2::new(60.0, 0.0);
         let id = run.spawn_enemy(EnemyType::Mimic, pos, None, 1);
         let mi = run.monster_idx(id).unwrap();
-        run.monsters[mi].asleep = true;
+        run.monsters[mi].dormant = true;
         // A player in plain sight does not wake it; only touching does.
         stand_at(&mut run, pos - Vec2::new(30.0, 0.0));
         let mi = run.monster_idx(id).unwrap();
-        assert!(run.monsters[mi].asleep);
+        assert!(run.monsters[mi].dormant);
         assert_eq!(run.monsters[mi].pos, pos);
         stand_at(&mut run, pos - Vec2::new(8.0, 0.0));
         let mi = run.monster_idx(id).unwrap();
-        assert!(!run.monsters[mi].asleep);
+        assert!(!run.monsters[mi].dormant);
         assert!(run.monsters[mi].ai.hold > 0.0);
         // The boss waking does not wake other mimics.
         let id2 = run.spawn_enemy(EnemyType::Mimic, pos + Vec2::new(0.0, 32.0), None, 1);
         let m2 = run.monster_idx(id2).unwrap();
-        run.monsters[m2].asleep = true;
+        run.monsters[m2].dormant = true;
         let hall = run.level.boss().unwrap().arena.center_px();
         stand_at(&mut run, hall);
         let m2 = run.monster_idx(id2).unwrap();
         assert!(run.level.boss().unwrap().awake);
-        assert!(run.monsters[m2].asleep);
+        assert!(run.monsters[m2].dormant);
     }
 
     /// Player 0 alone with the (sleeping) boss, next to a fresh terrain tile.

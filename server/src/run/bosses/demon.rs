@@ -151,7 +151,7 @@ mod tests {
     fn demon_with(off: Vec2, d: Demon) -> (Run, Demon, usize) {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         let bi = boss_idx(&run).unwrap();
-        run.monsters[bi].asleep = false;
+        run.monsters[bi].dormant = false;
         let at = run.monsters[bi].pos;
         run.players[0].mv.x = at.x + off.x;
         run.players[0].mv.y = at.y + off.y;
