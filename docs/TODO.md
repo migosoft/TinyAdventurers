@@ -165,7 +165,7 @@ Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §
 - **The elf's sleep immunity via `EffectResponses`:** per entity type or `Adjust` (today only bosses have a response table, `defs/bosses.rs`); give `Adjust` a `responses` field when the Elf type arrives.
 - **Effect sounds:** `Ev::Effect` is sent on every start and end and the client ignores it; it is the hook.
 - **Petrified and Burning:** a petrified creature has heat resistance 0.5 from the stone, so one with half heat resistance already (no creature today) becomes immune to Burning (resistance 1.0 refuses the effect). Decide whether stone should protect from fire that way.
-- **Status marks of the elemental effects ignore two fades:** burning flames, frozen haze and poison bubbles do not follow the hidden rogue's alpha or the fall and drown fades. Fix before the effects branch is merged.
+- **Poisoned tint overrides the enraged and variant tints:** the green pulse in `EntityView.ts` (~228) wins over them. Revisit when a poison source arrives.
 - **HUD glyphs are letters (B, Z, P, S, A, F, I, X):** the pixel font has no symbols. Drawn icons (small sprites, so art or the user's go-ahead) would read better.
 - **A frozen boss's running action is paused, not cancelled:** `levels/boss.rs` skips the behaviour tick, while the spec says a running wind-up is cancelled. Decide, or add a `cancel()` hook on `BossBehaviour`, before a hero ability gives bosses effects.
 - **Sleeping or petrified monsters can still be pushed** by `separate_monsters`.

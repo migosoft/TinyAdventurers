@@ -137,6 +137,7 @@ export class EntityView {
         cx: this.lying ? 0 : (mid + 0.5 - this.body.originX * fw) * sc,
         body: this.body,
         scale: sc,
+        alpha: this.root.alpha,
       };
     });
   }

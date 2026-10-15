@@ -153,9 +153,12 @@ impl Run {
             EffectResponse::Reduced => secs *= EFFECT_REDUCED,
             EffectResponse::Full => {}
         }
-        let Some((_, _, _, ok)) = self.creature(c) else { return false };
+        let Some((_, _, pos, ok)) = self.creature(c) else { return false };
         if !ok || secs <= 0.0 {
             return false;
+        }
+        if def(kind).ends_in_water && self.in_water(pos) {
+            return false; // no flicker on and off in water
         }
         if let Some((t, _)) = def(kind).dot {
             let res = match c {
@@ -178,6 +181,11 @@ impl Run {
             self.effect_event(c, id, pos, kind, true);
         }
         true
+    }
+
+    fn in_water(&self, pos: crate::math::Vec2) -> bool {
+        let tile = self.layout.map.tile_at(pos);
+        tile == Tile::ShallowWater as u8 || tile == Tile::DeepWater as u8
     }
 
     pub fn remove_effect(&mut self, c: Creature, kind: EffectKind) -> bool {
@@ -242,8 +250,7 @@ impl Run {
             }
             let kinds = fx.kinds();
             // Water puts out fire.
-            let tile = self.layout.map.tile_at(pos);
-            if tile == Tile::ShallowWater as u8 || tile == Tile::DeepWater as u8 {
+            if self.in_water(pos) {
                 for k in kinds.into_iter().filter(|&k| def(k).ends_in_water) {
                     self.remove_effect(c, k);
                 }
@@ -627,6 +634,41 @@ mod tests {
         run.tick_effects();
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Burning));
         assert!(run.has_effect(Creature::Player(0), EffectKind::Poisoned), "water only puts out fire");
+    }
+
+    #[test]
+    fn burn_ticks_count_in_the_heros_damage_total() {
+        use crate::defs::enemies::EnemyType;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
+        let before = run.players[0].damage;
+        run.apply_effect(Creature::Monster(mi), EffectKind::Burning, None);
+        let hp = run.monsters[mi].hp;
+        for _ in 0..(1.0 / DT).round() as usize {
+            run.tick_effects();
+        }
+        let lost = hp - run.monsters[mi].hp;
+        assert!(lost > 0.0);
+        assert!((run.players[0].damage - before - lost).abs() < 1e-9, "the burn counts: {} vs {lost}", run.players[0].damage - before);
+    }
+
+    #[test]
+    fn water_refuses_burning_without_a_flicker() {
+        use crate::dungeon::Tile;
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        open(&mut run);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        run.set_tile(tx, ty, Tile::ShallowWater);
+        run.events.clear();
+        assert!(!run.apply_effect(Creature::Player(0), EffectKind::Burning, None));
+        run.hurt_player(0, Damage::new(4.0, crate::defs::damage::kind_split(crate::defs::kinds::EntityKind::Fireball)));
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Burning));
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Effect { .. })), "no Effect event at all");
+        assert!(run.apply_effect(Creature::Player(0), EffectKind::Poisoned, None), "only fire is refused");
     }
 
     #[test]

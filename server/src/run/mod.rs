@@ -884,6 +884,11 @@ impl Run {
         }
         let applied = raw.min(m.hp + raw);
         self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: false, ty, imm }, seen_by);
+        if src_player.is_none() && dmg.from_effect {
+            if let Some(pi) = self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) {
+                self.players[pi].damage += applied;
+            }
+        }
         if let Some(pi) = src_player {
             self.monsters[mi].last_hit_by = Some(pi);
             self.players[pi].damage += applied;
@@ -1210,7 +1215,7 @@ pub mod tests {
         // 2026-10-15, effects: the lich casts its blinding curse after 4 s (an orb id and a blind hero), so its hall
         // differs; demon and dragon unchanged.
         // 2026-10-15, elemental effects: a barrel blast (half heat) now sets a monster on fire in the lich hall; the
-        // burn damage changes its hp. Dragon: its heat hits set heroes on fire; the burn damage changes their hp. Demon unchanged.
+        // burn damage changes its hp. (Lich cause confirmed from an event trace: a barrel blast of 30, half heat, set a monster on fire at about 3.7 s.) Dragon: its heat hits set heroes on fire; the burn damage changes their hp. Demon unchanged.
         assert_eq!(got, vec![5430847933968611557, 15325243260565646054, 17290353229492298409]);
     }
 
@@ -1519,7 +1524,7 @@ pub mod tests {
             run.step();
         }
         // About a second in lava: the first touch plus two ticks, and the lava sets the hero on fire
-        // (2026-10-15, effects): one burn tick of 6 on top.
+        // (2026-10-15, effects): two burn ticks of 3 (at 0.5 s and 1.0 s) on top.
         assert!((run.players[0].hp - (hp - 3.0 * dungeon::LAVA_DAMAGE - 6.0)).abs() < 1e-9, "hp {}", run.players[0].hp);
         assert!(run.players[0].alive);
     }

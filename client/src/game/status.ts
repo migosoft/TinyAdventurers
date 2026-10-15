@@ -195,6 +195,8 @@ export interface StatusAnchor {
   body: Phaser.GameObjects.Sprite;
   /** World scale of the body. */
   scale: number;
+  /** The figure's own alpha (about 0.3 while a rogue is hidden); every mark multiplies it in. */
+  alpha: number;
 }
 
 interface Z {
@@ -243,7 +245,7 @@ export class StatusView {
         const h = b.frame.height * a.scale;
         this.fx.particle(a.x + b.x * a.scale, a.y + (b.y - b.originY * b.frame.height) * a.scale + h / 2, 0, 0, GHOST_LIFE, GHOST_TINT, {
           frame: b.frame.name,
-          alpha: 0.35,
+          alpha: 0.35 * a.alpha,
           flipX: b.flipX,
           scale: a.scale,
           depth: DEPTH.entityBase + a.y - 1,
@@ -265,7 +267,7 @@ export class StatusView {
       const front = Math.sin(ang) > 0;
       p.setVisible(true)
         .setPosition(Math.round(a.x + Math.cos(ang) * 4), Math.round(cy + Math.sin(ang) * 1.5))
-        .setAlpha(0.85)
+        .setAlpha(0.85 * a.alpha)
         .setDepth(DEPTH.entityBase + a.y + (front ? 1 : -1));
     });
   }
@@ -299,7 +301,7 @@ export class StatusView {
       const k = z.age / Z_LIFE;
       z.t
         .setPosition(Math.round(z.x + Math.sin(z.age * 5) * 1.5), Math.round(z.y - k * Z_RISE))
-        .setAlpha(1 - k)
+        .setAlpha((1 - k) * a.alpha)
         .setDepth(z.d);
     }
   }
@@ -327,7 +329,7 @@ export class StatusView {
         .setVisible(true)
         .setPosition(Math.round(a.x + a.cx + f.x), Math.round(a.y + f.y))
         .setScale(1 + 0.2 * Math.sin(this.clock * 63 + f.phase))
-        .setAlpha(0.85 + 0.15 * Math.sin(this.clock * 59 + f.phase * 1.7))
+        .setAlpha((0.85 + 0.15 * Math.sin(this.clock * 59 + f.phase * 1.7)) * a.alpha)
         .setDepth(d);
     });
   }
@@ -345,7 +347,7 @@ export class StatusView {
       .setVisible(true)
       .setPosition(Math.round(a.x + a.cx), Math.round(a.y - a.head / 2))
       .setScale((a.w + 10) / HAZE_W, (a.head + 10) / HAZE_H)
-      .setAlpha(0.45 + 0.1 * Math.sin(this.clock * 3))
+      .setAlpha((0.45 + 0.1 * Math.sin(this.clock * 3)) * a.alpha)
       .setDepth(DEPTH.entityBase + a.y - 0.5);
     // Staggered start: a new flake waits (negative age) before it first appears.
     while (this.flakes.length < SNOW_N)
@@ -362,7 +364,7 @@ export class StatusView {
       f.img
         .setVisible(true)
         .setPosition(Math.round(a.x + a.cx + f.x), Math.round(a.y + f.y))
-        .setAlpha(snowflakeAlpha(f.age, f.life))
+        .setAlpha(snowflakeAlpha(f.age, f.life) * a.alpha)
         .setDepth(DEPTH.entityBase + a.y + 1);
     }
   }
@@ -380,6 +382,7 @@ export class StatusView {
     const y = a.y - a.head * (0.3 + Math.random() * 0.6);
     this.fx.particle(Math.round(x), Math.round(y), 0, -BUBBLE_RISE / BUBBLE_LIFE, BUBBLE_LIFE, BUBBLE_COLOR, {
       depth: DEPTH.entityBase + a.y + 1,
+      alpha: a.alpha,
     });
   }
 
