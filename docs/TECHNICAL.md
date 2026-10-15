@@ -754,7 +754,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 
 ## 12. Tests
 
-**Server (`cargo test`, 245 tests):**
+**Server (`cargo test`, 249 tests):**
 - damage model: `resolve` for single and several types, a missing entry, immunity, healing above 100 %, a weakness and its −100 % floor, partial splits filled with physical; attacks by kind have their types; entity type resistances add up with adjustments (lich physical 50 %, dragon heat 100 %), every enemy and class has its entity type; typed paths (a demon takes no heat from the fireball, a skeleton takes more, the demon's claw burns, lava, the lich nova and the dragon's breath are typed)
 - world objects: chests open once and pay the party, mimics still wake, objects resist poison fully
 - solids: a square blocks axis by axis, a figure inside one can walk out in every direction; 36 fixture steps touch a solid
@@ -822,7 +822,7 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 - mimics: asleep until touched, then hold before hunting; the boss waking leaves them asleep; they move only while airborne
 - ts-rs export tests
 
-**Client (`npm test`, 43 tests):**
+**Client (`npm test`, 44 tests):**
 - `game/damage.test.ts`: the number colour per damage type (physical white on enemies, red on heroes).
 - `pickFrame.test.ts`: the dragon's and the demon's frame choice (wind-up frame with the telegraph, strike frames after it, the demon's charge loop and ring burst, enraged wind-ups shortened by `pace`).
 - The collision and FOV ports must equal the Rust fixtures exactly. The fixture map holds every kind of terrain, and 10 random walks with dashes and pushes (14–44 px, any direction) cross it.
