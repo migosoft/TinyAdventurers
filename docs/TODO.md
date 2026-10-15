@@ -119,10 +119,9 @@ Built 2026-10-15 on branch `feature/lighting` (TECHNICAL §5 "Light sources", §
 - **Enemies affected by darkness:** they see in the dark today; their perception could use `is_lit` for the target.
 - **The extinguishing enemy and the shadow:** they act on lights through `is_lit` and `set_light` (a torch is switched with `objects::set_torch`). Should heroes relight torches by standing next to them? Today they press E or use fire.
 - **Moving-light list through walls:** it uses a distance test, so the glow of a shot behind a wall within range is sent (TECHNICAL §13). A line-of-sight test per light would fix it.
-- **Light at a shot's impact** (if the user wants it after the live test): a fire shot's light ends with the shot, so its explosion in the dark is not seen. A short-lived point light at the impact needs a time-limited anchor in the registry.
 - **Weapon effects under the darkness:** swooshes, rings and particles are drawn below it. They could be drawn above it, or only the effects of the party.
-- **Look, pending the user:** falloff, tint strength (blue and purple read weak, mixed areas wash to grey), flicker, the 1 px per tile canvas (light bleeds about half a tile past walls; 2 or 4 px per tile would be sharper), the burnt-out torch frame and the side-sconce look. See HANDOFF.
-- **Tune** in the balancing pass: the radius and intensity per kind (`defs/lights.rs`), `TORCH_SPACING` (6) and `DARK_SHARE` (0.2, `dungeon/generate.rs`), the falloff curve (`client/src/game/light.ts`), `MIN_LIT` (0.35), `TINT_ALPHA` (0.35) and the flicker (`client/src/game/lightview.ts`).
+- **Look details** (the user approved the overall look on 2026-10-15): tint strength (blue and purple read weak, mixed areas wash to grey), the burnt-out torch frame and the side-sconce look, if they bother anyone in play. A flash could fade out over its life (needs a scale in `MovingLight`).
+- **Tune** in the balancing pass: the radius and intensity per kind (`defs/lights.rs`: torch 7, fire 4, magic 3, lava 2), the `Blast` flash (radius 4, 0xffb060, intensity 1.0, flicker 0.3) and its time `BLAST_FLASH` (0.4 s, `defs/lights.rs`), `TORCH_SPACING` (6) and `DARK_SHARE` (0.2, `dungeon/generate.rs`), the falloff curve and its `EDGE` (0.1, `client/src/game/light.ts`), `MIN_LIT` (0.08), `TINT_ALPHA` (0.35), `SUB` (2 px per tile) and the flicker (`client/src/game/lightview.ts`).
 
 ## Riddle rooms
 Special rooms with a creature that asks the heroes a riddle. If they solve it, they get a reward. If they fail, they fight the creature, or enemies spawn.

@@ -55,11 +55,12 @@ The two boxes at the bottom of the screen show your abilities. They darken while
 
 ## Seeing in the dark
 
-- The dungeon is **dark**. You carry no light, so you can only see what is lit **and** within your **field of vision** (about nine tiles around you, never through walls). Everything else is black, and **enemies in the dark are hidden**, even right next to you. Your own hero is always visible.
+- The dungeon is **dark**. You carry no light, so you can only see what is lit **and** within your **field of vision** (about nine tiles around you, never through walls). Everything else is black, and **enemies in the dark are hidden**, even right next to you. **You vanish in the dark too:** your hero, your teammates and your shots only show where light falls (glowing shots carry their own light). Your health bar and abilities at the bottom of the screen always show, and so do damage numbers.
 - **Torches** hang on the walls of rooms and corridors, about every six tiles, and light the area around them in orange. Some rooms and stretches of corridor have none, so expect **dark pockets**. The starting room and the boss hall always have torches.
 - **Torches can go out.** Press **E** next to a torch to light it or put it out (a small **E** appears over it). **Fire lights a torch**: a fireball, a fire bolt, a fire patch or an exploding barrel. **Any other hit puts it out**: a sword swing, an arrow, a dash, a frost bolt. So a swing at an enemy next to a torch can leave you in the dark.
 - **Glowing shots light the way:** fireballs and fire bolts light the corridor they fly through, and magic bolts glow violet, blue or purple. A shot fired into a dark corridor shows what is in it for a moment.
-- **Lava glows red** and lights the floor next to it. Light of different colours mixes: a torch next to lava gives a deeper orange.
+- **Explosions light up** their surroundings for a moment: a fireball, a dragon's fireball or an exploding barrel shows what stands around it.
+- **Lava glows red** and lights the floor around it. Light of different colours mixes: a torch next to lava gives a deeper orange.
 - Your shots fly on into the dark, and you still see their damage numbers when they hit something there.
 - Enemies see in the dark. They only notice you when they can actually see you, so you can sneak around corners.
 
