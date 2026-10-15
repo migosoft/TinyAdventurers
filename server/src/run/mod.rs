@@ -129,6 +129,8 @@ pub struct Run {
     pub lights: light::Lights,
     /// Events since the last snapshot, with an optional position for FOV filtering.
     pub events: Vec<(Ev, Option<Vec2>)>,
+    /// Indices into `events` of events on a hero: sent wherever the hero is in sight, lit or not.
+    pub on_hero: Vec<usize>,
     pub next_id: u32,
     pub rng: ChaCha8Rng,
     pub ended: Option<(bool, f64)>,
@@ -153,6 +155,7 @@ impl Run {
             objects: Vec::new(),
             lights: light::Lights::new(w, h),
             events: Vec::new(),
+            on_hero: Vec::new(),
             next_id: 1,
             rng,
             ended: None,
@@ -305,6 +308,13 @@ impl Run {
 
     pub fn event(&mut self, ev: Ev, at: Option<Vec2>) {
         self.events.push((ev, at));
+    }
+
+    /// An event on a hero (their damage or healing): seen wherever the hero is
+    /// in sight, even in the dark (heroes are always drawn).
+    pub fn event_on_hero(&mut self, ev: Ev, pos: Vec2) {
+        self.on_hero.push(self.events.len());
+        self.event(ev, Some(pos));
     }
 
     pub fn player_idx(&self, id: u32) -> Option<usize> {
@@ -752,7 +762,7 @@ impl Run {
         }
         let pos = p.pos();
         let ty = dmg.split.main_type() as u8;
-        self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: v as f32, crit: false, p: true, ty, imm }, Some(pos));
+        self.event_on_hero(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: v as f32, crit: false, p: true, ty, imm }, pos);
         let p = &mut self.players[pi];
         if p.hp <= 0.0 {
             p.hp = 0.0;
@@ -789,7 +799,7 @@ impl Run {
         p.hp += healed;
         let pos = p.pos();
         if healed > 0.0 {
-            self.event(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32 }, Some(pos));
+            self.event_on_hero(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32 }, pos);
         }
         healed
     }
