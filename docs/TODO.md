@@ -5,34 +5,35 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 **Tier 1: foundations**
 1. **Effect system** (next item; vision and darkvision are done, built 2026-10-15 on `feature/vision`). Blind, sleep, petrified; extensible, every creature, effects modify any stat. It is a draft with eight open questions to settle with the user first: [docs/superpowers/specs/2026-10-15-effects-design-draft.md](superpowers/specs/2026-10-15-effects-design-draft.md). Blindness changes vision, so it builds on `Sight` and `perception::sees` (see "Vision and darkvision follow-ups").
-2. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), gnolls. Little code, but the shadow, ghost, gnolls and sphinx wait on it.
+2. **Straight, softly fading vision edges** (user wants it soon; see "Vision and darkvision follow-ups", "Vision edges"). Client only, independent of the effect system, so it can go first while the effect draft's questions are open.
+3. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), gnolls. Little code, but the shadow, ghost, gnolls and sphinx wait on it.
 
 **Tier 2: larger features on top of tier 1**
 
-3. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
-4. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
-5. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
+4. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
+5. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
+6. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
 
 **Tier 3: content**
 
-6. **Ghost and shadow.** The shadow and the torch-extinguishing enemy use the light system (`is_lit`, `set_light`; see "Lighting follow-ups"). The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
-7. **Elves and bandits** (see "Elves and bandits"): the Elf entity type and the elven archer (a new playable hero class), then the dark elf. The elf needs the effect system (1, immunity to sleep) and the Enchanted Forest licence (2). The bandit (Human) needs only the licence; the dark elf also waits for its art.
-8. **Assassin restyle and thrown knives** (see "Assassin restyle"): dark clothes and hair (maybe a hood), knives instead of arrows with a shorter range. Independent of the items above; vision is built, so the range can be set now.
-9. **Minions for the other bosses; more classes and bosses** (classes are easier after 3).
-10. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
-11. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
-12. **4-direction sprites, attack frames, sound effects, better spell effects.** Independent; best done once events and animations have settled. Better spell effects means the paladin's healing circle (see "Other follow-ups"). The explosion sheets for barrel blasts and the wizard's Fireball (see "Barrels and world objects follow-ups") is low priority and fits here.
+7. **Ghost and shadow.** The shadow and the torch-extinguishing enemy use the light system (`is_lit`, `set_light`; see "Lighting follow-ups"). The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
+8. **Elves and bandits** (see "Elves and bandits"): the Elf entity type and the elven archer (a new playable hero class), then the dark elf. The elf needs the effect system (1, immunity to sleep) and the Enchanted Forest licence (3). The bandit (Human) needs only the licence; the dark elf also waits for its art.
+9. **Assassin restyle and thrown knives** (see "Assassin restyle"): dark clothes and hair (maybe a hood), knives instead of arrows with a shorter range. Independent of the items above; vision is built, so the range can be set now.
+10. **Minions for the other bosses; more classes and bosses** (classes are easier after 4).
+11. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
+12. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
+13. **4-direction sprites, attack frames, sound effects, better spell effects.** Independent; best done once events and animations have settled. Better spell effects means the paladin's healing circle (see "Other follow-ups"). The explosion sheets for barrel blasts and the wizard's Fireball (see "Barrels and world objects follow-ups") is low priority and fits here.
 
 **Tier 4: infrastructure (independent of gameplay work)**
 
-13. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
-14. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
-15. **Several game servers** (shared presence and login limiter in Valkey). After 13; only when one server is not enough.
+14. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
+15. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
+16. **Several game servers** (shared presence and login limiter in Valkey). After 14; only when one server is not enough.
 
 **Tier 5: last**
 
-16. **Balancing pass:** every "Tune" item, including resistances, light radii, darkness and the vision and darkness values (see "Vision and darkvision follow-ups"). Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers.
-17. **Delta snapshots, WebTransport:** only if measurements show they are needed.
+17. **Balancing pass:** every "Tune" item, including resistances, light radii, darkness and the vision and darkness values (see "Vision and darkvision follow-ups"). Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers.
+18. **Delta snapshots, WebTransport:** only if measurements show they are needed.
 
 ## Progression follow-ups
 
@@ -71,16 +72,16 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Also approved (2026-10-13): "Forest creatures" by lyaseek (https://lyaseek.itch.io/miniffanimals). For both, check the license and keep the license file next to the imported art.
 
 ## Elves and bandits
-New entity type and figures, from the user (2026-10-15). Priority item 7. The vision fields are the ones from the vision and darkvision work (vision in tiles, darkvision as a share of vision; Human is 9 tiles, 0).
+New entity type and figures, from the user (2026-10-15). Priority item 8. The vision fields are the ones from the vision and darkvision work (vision in tiles, darkvision as a share of vision; Human is 9 tiles, 0).
 - **Elf (new entity type):** damage resistance poison 10 %; vision 200 % of Human (18 tiles); darkvision 1/3; **immune to the sleep effect**, so it waits for the effect system (priority 1).
-- **Elven archer (new hero class, playable):** an Elf with the default attack damage type. As a class it needs a `defs/classes.rs` entry (HP, speed, primary and secondary ability), a visual entry in `client/src/game/anim/defs.ts` and a lobby entry; the heroes are Human today, so the class must carry its entity type (Elf) into the hero's resistances and vision. Its abilities are still to design (a bow primary fits; see "New abilities", priority 3). Art: the male wood elf from "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters; licence check first, priority 2).
+- **Elven archer (new hero class, playable):** an Elf with the default attack damage type. As a class it needs a `defs/classes.rs` entry (HP, speed, primary and secondary ability), a visual entry in `client/src/game/anim/defs.ts` and a lobby entry; the heroes are Human today, so the class must carry its entity type (Elf) into the hero's resistances and vision. Its abilities are still to design (a bow primary fits; see "New abilities", priority 4). Art: the male wood elf from "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters; licence check first, priority 3).
 - **Bandit (new enemy):** entity type Human, no adjustments. Art from the same pack. Needs only the licence, not the effect system.
 - **Dark elf (new enemy):** entity type Elf, with a per-entity adjustment: darkvision 100 % of its vision range. The user will provide the art later.
 
 ## Assassin restyle
-From the user (2026-10-15). Priority item 8. Today the Assassin is the pack's `elf_m` with a bow (`anim/defs.ts`, `ui/classes.ts`) and the `CrossbowDagger` primary (`defs/abilities.rs`: 260 px range, 290 px/s, with an automatic dagger stab in melee).
+From the user (2026-10-15). Priority item 9. Today the Assassin is the pack's `elf_m` with a bow (`anim/defs.ts`, `ui/classes.ts`) and the `CrossbowDagger` primary (`defs/abilities.rs`: 260 px range, 290 px/s, with an automatic dagger stab in melee).
 - **Look:** dark clothes (black, grey or purple) and dark hair. A palette recolour at atlas build time works like the summoner's (`RECOLORS` in `client/scripts/build-atlas.ts`). A **hood** needs pixel edits to the frames, so ask the user first (art rule: self-made art only on request), or find a hooded figure in the pack, a CC0 set or Enchanted Forest.
-- **Elf look:** the elven archer (priority 7) will be the real elf, so the Assassin moving away from the `elf_m` look also keeps the two classes apart.
+- **Elf look:** the elven archer (priority 8) will be the real elf, so the Assassin moving away from the `elf_m` look also keeps the two classes apart.
 - **Thrown knives instead of arrows:** the projectile is drawn as a spinning knife (`weapon_knife` is already the melee weapon), with no bow in hand. The range drops to between half and 2/3 of the Assassin's vision: with Human vision (9 tiles, 144 px) that is 72 to 96 px, against 260 px today. Change the ability's range on the server; the client's prediction and the cosmetic shot follow it. A shorter range is a big nerf, so look at damage and cooldown in the balancing pass.
 
 ## Damage-type system
@@ -146,6 +147,12 @@ Built 2026-10-15 on branch `feature/vision` (TECHNICAL §5 "Sight", §7, §11 "H
 - **Deferred minor review findings:** the `dvmask` is not primed at `LightView` construction; each attach of `DarkvisionFX` compiles a new pipeline; boss vision is `vision: Some(25.0)` repeated in each boss's `Adjust` in `defs/bosses.rs` and could become one shared constant.
 - **Per-tick light cost:** `moving_lights()` now runs every tick (60 Hz) and again on snapshot ticks, scanning the entity lists once per entity-anchored light. Watch `srv_ms` in projectile-heavy boss fights and cache the per-tick list for `send_snapshots` if it shows up.
 - **Heroes with darkvision for real:** a class or item with darkvision (the Elf type, see "Elves and bandits") needs only its `Sight` entry; the debug F4 toggle already shows the result.
+- **Vision edges (user request, 2026-10-15; priority item 2):** the edge of the visible area follows the tile grid and looks boxy, because `LightView` sets every tile outside the FOV back to black (`blackenDarkTiles`, `client/src/game/lightview.ts`). The user wants straight shadow lines that fade softly into the darkness, not a hard break.
+  - **Shape:** a visibility polygon from the hero's pixel position: rays to the wall corners within the FOV radius, against wall edges (merge runs of wall tiles into long edges). The outer limit of sight becomes a soft circle in the same step.
+  - **Soft edge:** draw the polygon on the GPU into its own mask texture (about 4 to 8 px per tile), blur it a little (fade about half a tile to one tile) and multiply the darkness by it, like the `DarkvisionFX` mask (`client/src/game/darkvisionfx.ts`). Shrink the polygon by a few px before the blur, so the fade lies inside the visible area and nothing behind a corner glows through.
+  - **Keep cheap:** the light colours, the darkvision mask and the tint stay on the 2 px per tile canvases. Do not raise their resolution for crisp edges (CPU upsampling and upload would grow about 64 times).
+  - **Unchanged:** the server's per-tile visibility, the snapshot filter and targeting. An enemy on a visible tile can stand half in the drawn shadow; accept it or make the polygon a little generous for entities.
+  - Check the look in `?lights` and with darkvision (F4).
 
 ## Riddle rooms
 Special rooms with a creature that asks the heroes a riddle. If they solve it, they get a reward. If they fail, they fight the creature, or enemies spawn.

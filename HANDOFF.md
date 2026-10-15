@@ -9,9 +9,11 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Next session: the effect system (TODO priority 1)
+## Next session: vision edges or the effect system (TODO priorities 1 and 2)
 
-Vision and darkvision are built (2026-10-15) on `feature/vision`, which is **not pushed and not merged** (it branches from `feature/lighting`, itself pushed and not merged): ask the user whether to push and merge, and in which order, before starting the next feature.
+Vision and darkvision are built (2026-10-15), approved by the user in the game, **merged into `main` (fast-forward) and pushed** at the user's request; `feature/lighting` was merged before it. Start the next feature on a new branch from `main`.
+
+0. **Straight, softly fading vision edges** (TODO priority 2, "Vision edges"): the user wants it soon. Client only and independent of the effect system, so it can go first while the effect draft's questions are open. Ask the user which one to start with.
 
 1. **Effect system** (blind, sleep, petrified; extensible; every creature; effects modify any stat). It is only a **draft**: [docs/superpowers/specs/2026-10-15-effects-design-draft.md](docs/superpowers/specs/2026-10-15-effects-design-draft.md).
    - It has a proposed design: a data table of effects with stat modifiers (add, then multiply, then set), flags (no move, no act, no turn, prone) and break conditions; per-creature active effects; resolved `Stats`; a snapshot bitmask; client visuals (sleep lying with "zzz", petrified greyscale).
@@ -20,20 +22,20 @@ Vision and darkvision are built (2026-10-15) on `feature/vision`, which is **not
 
 **Explosion art (2026-10-15):** the user supplied two ChatGPT explosion sheets, stored in `client/assets-src/explosion/`: `explosion_source.png` (barrel blast) and `fireball_source.png` (the wizard's Fireball, violet). Every file the user dropped in `images/` (these two and the barrel source) has an identical committed copy in `client/assets-src/`, so the user may delete `images/` (they asked, 2026-10-15). Neither sheet is built in; both are on the TODO list with low priority ("Barrels and world objects follow-ups"). Credit them as "AI-generated with ChatGPT for this game".
 
-**Healing circle (2026-10-15):** the user wants a better healing-wave effect: many more sparkles, maybe runes on the circle's edge that spread with it. On the TODO list ("Other follow-ups", tier 3 item 12). The runes need art; ask the user where it comes from.
+**Healing circle (2026-10-15):** the user wants a better healing-wave effect: many more sparkles, maybe runes on the circle's edge that spread with it. On the TODO list ("Other follow-ups", tier 3 item 13). The runes need art; ask the user where it comes from.
 
 **Ideas the user liked** (not yet in TODO; ask before adding): ways to bring light. Early on, carry a wall torch, light braziers, find glow items (mushrooms, flares). Later, class gear and spells: the paladin's glowing shield, the wizard's light orb, a wisp companion, the ranger's flare arrows, and the rogue who prefers the dark. Before any hero light: a dead hero's light must switch off and come back on a revive (the registry drops it today).
 
 ## Last feature (2026-10-15): vision and darkvision
 
-**Branch:** `feature/vision` (from `feature/lighting`). **Not pushed, not merged**: ask the user. Commits: `git log --oneline 752c7c5..HEAD` (tasks 1 to 7). Spec: [docs/superpowers/specs/2026-10-15-vision-darkvision-design.md](docs/superpowers/specs/2026-10-15-vision-darkvision-design.md); plan (7 tasks, run with superpowers:subagent-driven-development): [docs/superpowers/plans/2026-10-15-vision-darkvision.md](docs/superpowers/plans/2026-10-15-vision-darkvision.md). It was TODO priority 1 (now only the effect system remains there; new section "Vision and darkvision follow-ups").
+**Branch:** `feature/vision` (from `main` after `feature/lighting` was merged). **Merged into `main` (fast-forward) and pushed** at the user's request (2026-10-15). Commits: `git log --oneline 752c7c5..ba4790a` and the docs commit after it (tasks 1 to 7, the final-review fixes, the light-rim fix). Spec: [docs/superpowers/specs/2026-10-15-vision-darkvision-design.md](docs/superpowers/specs/2026-10-15-vision-darkvision-design.md); plan (7 tasks, run with superpowers:subagent-driven-development): [docs/superpowers/plans/2026-10-15-vision-darkvision.md](docs/superpowers/plans/2026-10-15-vision-darkvision.md). It was TODO priority 1 (now only the effect system remains there; new section "Vision and darkvision follow-ups").
 
 **What was built:**
 - **Sight on entity types** (TECHNICAL §5 "Sight"): `Sight { vision (tiles), darkvision (share of vision) }` on `TypeDef`, `Adjust` and `Profile` (`defs/entity_types.rs`): Human 9 / 0, Monster 8 / 1/3, Undead 8 / 1.0, Demon 9 / 1.0, Dragon 25 / 1.0, Object none. Enemy `vision` is in tiles in `defs/enemies.rs` (old pixel range / 16; every enemy overrides it, so only the darkness rule changed behaviour); bosses see 25 tiles.
 - **One perception rule** (`run/perception.rs`, `sees`): within vision, in line of sight, and lit or within vision × darkvision. `ai::find_visible_player` and `bosses::target` use it. `Run::refresh_lights` runs once per tick before the AI and again in `send_snapshots`; test helper `Lights::fill`.
 - **Heroes** run on the same numbers: `Player.sight`, `Player.darkvision: Option<f64>` (debug override), `sight_now()`. The snapshot filter is "in FOV and (lit or `dark_reach`)" with the viewed hero's sight (a spectator gets the teammate's); `on_hero` events need the FOV only. The shared fixture `fixtures.json` has a `darkvision` key, so the TypeScript side is pinned to the Rust one.
 - **Protocol:** `SelfW` element 13 = darkvision as a u8 percentage (the viewed hero); `ClientMsg::DebugDarkvision { ratio }`, honoured only when debug is allowed, and it marks the run as debug (no XP).
-- **Client:** `LightView` builds a darkvision mask (`dvmask`) and draws darkvision tiles at `DV_DARK` 0.45 darkness with no tint; `DarkvisionFX` (`game/darkvisionfx.ts`), a post pipeline that greys the masked area, attached to the main camera only while darkvision > 0 and registered in `BootScene`. F4 (debug mode only, alive only) cycles the own darkvision 0 / 50 / 100 %; F3 shows `darkvision NN%`; `?lights` has the V key and `&dv=`; `tools/e2e/lights-shot.mjs` takes a dv argument; `tools/e2e/smoke.mjs` presses F4 only with a debug query.
+- **Client:** `LightView` builds a darkvision mask (`dvmask`) and draws every tile in darkvision reach at most `DV_DARK` 0.45 dark (lit or not; no tint on unlit ones), and the mask fades out as a light gets brighter than darkvision (`dvMask`); `DarkvisionFX` (`game/darkvisionfx.ts`), a post pipeline that greys the masked area, attached to the main camera only while darkvision > 0 and registered in `BootScene`. F4 (debug mode only, alive only) cycles the own darkvision 0 / 50 / 100 %; F3 shows `darkvision NN%`; `?lights` has the V key and `&dv=`; `tools/e2e/lights-shot.mjs` takes a dv argument; `tools/e2e/smoke.mjs` presses F4 only with a debug query.
 - **Docs:** TECHNICAL (§4 protocol, §5 "Sight", perception and light refresh, §7 filter, §10 F3/F4/`?lights`, §11 "How to give a creature darkvision or longer sight", §12 tests, §13 limitations), PLAYER_GUIDE ("Seeing in the dark", tips), README (F4, `?lights`), TODO (priority 1 now the effect system, "Enemies affected by darkness" removed, "Vision and darkvision follow-ups" added).
 
 **Behaviour change (to play-test):** Human enemies (necromancer, summoner, lich disciples) do not see heroes in the dark. Monster types (goblin archer, orcs, mimic, ogre) see only within a third of their vision (about 2.5 to 3 tiles). Undead, demons and bosses see fully in the dark. `simulation_is_unchanged_after_waking_the_boss` was re-recorded: in the lich hall the disciples stay idle in the dark and one orc loses the hero. `level_setup_is_unchanged` is unchanged.
@@ -47,14 +49,16 @@ Vision and darkvision are built (2026-10-15) on `feature/vision`, which is **not
 
 **Verified (2026-10-15):**
 - Server: **274 tests pass** (253 on `feature/lighting`), no warnings. Fingerprint `level_setup_is_unchanged` unchanged; the other was re-recorded as above.
-- Client: `npm test` **52 tests pass** (48 on `feature/lighting`), `npm run build` passes.
+- Client: `npm test` **54 tests pass** (48 on `feature/lighting`; 52 before the light-rim fix), `npm run build` passes.
 - `?lights` screenshots at dv 0, 0.5 and 1: 0 and 1 show the effect; 0.5 shows no difference in the demo (no unlit tile within 4.5 tiles of its viewer).
 - Smoke test with two players, default query (F4 step skipped) and `?debug` (F4: 0 -> 50 -> 100 %): no browser errors.
 
 **Final whole-branch review (2026-10-15), all fixed:** the shared darkvision fixture was nearly vacuous (viewers on torch tiles); it now has viewers (12,5) r3, (18,4) r4.5, (3,14) r3, (11,7) r4.5 on unlit floor, plus a full-range (20,3) and a range-0 (20,17) case, and `export.rs` asserts every partial case has an unlit tile seen only by darkvision and an unlit FOV tile outside the range (the client test adds the exact boundary `darkReach(3, 4, 5)` true, `4.99` false). The server filter range now uses the same quantised percentage as `SelfW` (`dark_range`/`darkvision_pct` in `visibility.rs`); `set_darkvision_if` ignores a NaN ratio; `set_debug(pi, false)` resets the darkvision override. TECHNICAL wording fixed (`Lights::lit`, light refresh once per tick plus once per snapshot); TODO has the per-tick light cost note. Tests now: server **274**, client **52** (assertions added to existing tests).
 
+**Light-rim fix (user report, 2026-10-15):** inside darkvision, every light had a dark ring: its fading rim (about 90 % dark) was darker than the unlit darkvision tiles around it (`DV_DARK` 45 %). Now a tile in darkvision reach is never darker than `DV_DARK`, lit or not (`tileDark`), and the greyscale mask fades from 1 to 0 as the light gets brighter than darkvision (`dvMask`), so the rim blends from grey to colour. Commit `ba4790a`. **Confirmed by the user in the game:** "it works so good".
+
 **Open (for the user):**
-- **Live check:** sneak past humans in an unlit corridor, see skeletons and demons notice you in the dark, orcs only up close; F4 greyscale in `?debug`.
+- **Live check of the AI:** sneak past humans in an unlit corridor, see skeletons and demons notice you in the dark, orcs only up close. (The F4 greyscale look is approved.)
 - **Is the easier lich fight OK?** The disciples stay idle in the dark.
 - All vision and darkvision numbers are first guesses for the balancing pass.
 - Deferred minor review findings: the `dvmask` is not primed at construction; each attach of `DarkvisionFX` compiles a new pipeline; boss vision is `vision: Some(25.0)` repeated in each boss's `Adjust` in `defs/bosses.rs` (it could become one shared constant). (TODO "Vision and darkvision follow-ups".)
@@ -900,7 +904,7 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Let the user play-test the light look and the new vision rules** (see "Last feature" and "Session before, light sources", Open), tune the constants, then push or merge `feature/lighting` and `feature/vision` when they say so. Then the effect system (TODO priority 1).
+1. **Vision edges (TODO priority 2) or the effect system (TODO priority 1)**: ask the user which first. The light look and the vision rules are approved; their numbers wait for the balancing pass.
 2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
 4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.
