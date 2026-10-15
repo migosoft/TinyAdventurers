@@ -202,6 +202,26 @@ impl Run {
             }
         }
     }
+
+    /// E next to a teammate with a `wakes_on_use` effect (asleep) ends those
+    /// effects. True when someone was woken; waking beats using an object.
+    pub fn wake_teammate(&mut self, pi: usize) -> bool {
+        use crate::defs::{classes::PLAYER_RADIUS, objects::USE_REACH};
+        let at = self.players[pi].pos();
+        let near = self
+            .players
+            .iter()
+            .enumerate()
+            .filter(|&(qi, q)| qi != pi && q.alive && q.effects.list().iter().any(|a| def(a.kind).wakes_on_use))
+            .map(|(qi, q)| (qi, q.pos().dist(at) - 2.0 * PLAYER_RADIUS))
+            .filter(|&(_, gap)| gap <= USE_REACH)
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        let Some((qi, _)) = near else { return false };
+        for k in self.players[qi].effects.kinds().into_iter().filter(|&k| def(k).wakes_on_use) {
+            self.remove_effect(Creature::Player(qi), k);
+        }
+        true
+    }
 }
 
 #[cfg(test)]
@@ -432,5 +452,48 @@ mod tests {
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep), "damage does not wake");
         run.hurt_player(0, Damage::physical(10_000.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, chance: 1.0 }));
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Blind));
+    }
+
+    fn pair(gap: f64) -> crate::run::Run {
+        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let at = run.players[0].pos();
+        run.players[1].mv.x = at.x + 10.0 + gap; // two 5 px radii plus the gap
+        run.players[1].mv.y = at.y;
+        run.apply_effect(Creature::Player(1), EffectKind::Sleep, None);
+        run
+    }
+
+    fn press_e(run: &mut crate::run::Run, pi: usize) {
+        crate::run::objects::use_object(run, pi);
+    }
+
+    #[test]
+    fn a_teammate_in_reach_wakes_the_sleeper_before_any_object() {
+        use crate::run::objects::{Barrel, ObjState};
+        let mut run = pair(4.0);
+        let at = run.players[0].pos() - Vec2::new(10.0, 0.0);
+        run.spawn_object(crate::defs::kinds::EntityKind::Barrel, at, ObjState::Barrel(Barrel::new()));
+        press_e(&mut run, 0);
+        assert!(!run.has_effect(Creature::Player(1), EffectKind::Sleep));
+        let b = run.objects.iter().find(|o| o.kind == crate::defs::kinds::EntityKind::Barrel).unwrap();
+        assert!(matches!(&b.state, ObjState::Barrel(b) if b.vel == Vec2::ZERO), "the barrel is not pushed");
+    }
+
+    #[test]
+    fn out_of_reach_does_nothing() {
+        let mut run = pair(crate::defs::objects::USE_REACH + 2.0);
+        press_e(&mut run, 0);
+        assert!(run.has_effect(Creature::Player(1), EffectKind::Sleep));
+    }
+
+    #[test]
+    fn a_sleeping_hero_cannot_wake_a_sleeping_neighbour() {
+        let mut run = pair(4.0);
+        run.apply_effect(Creature::Player(0), EffectKind::Sleep, None);
+        let seq = run.players[0].ack + 1;
+        run.players[0].inputs.push_back(crate::protocol::InputMsg { seq, mx: 0, my: 0, aim: 0.0, aim_dist: 0.0, primary: None, secondary: None, view_lag: 0, rtt: 0, act: true });
+        run.step();
+        assert!(run.has_effect(Creature::Player(1), EffectKind::Sleep));
     }
 }

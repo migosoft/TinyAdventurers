@@ -187,15 +187,18 @@ pub fn tick_objects(run: &mut Run, dt: f64) {
     }
 }
 
-/// E: the hero uses the nearest object within hand reach (touching distance
-/// plus `USE_REACH`). Dead, pushed or sinking heroes can't (the caller
-/// checks the push; this checks the rest).
+/// E: wakes a sleeping teammate in reach, else uses the nearest object within
+/// hand reach (touching distance plus `USE_REACH`). Dead, pushed or sinking
+/// heroes can't (the caller checks the push; this checks the rest).
 pub fn use_object(run: &mut Run, pi: usize) {
     let p = &run.players[pi];
     if !p.alive || p.sinking.is_some() {
         return;
     }
-    let at = p.pos();
+    if run.wake_teammate(pi) {
+        return;
+    }
+    let at = run.players[pi].pos();
     let near = run
         .objects
         .iter()
