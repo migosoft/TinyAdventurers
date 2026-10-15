@@ -235,6 +235,7 @@ fn spawn_player_projectile(
         target,
         dead: false,
     });
+    run.attach_kind_light(id, kind);
     // Through the same hit checks as every tick, so it cannot skip an enemy on the way.
     let i = run.projectiles.len() - 1;
     advance_projectile(run, i, ff);
@@ -273,6 +274,7 @@ pub fn spawn_monster_projectile(
         target: None,
         dead: false,
     });
+    run.attach_kind_light(id, kind);
 }
 
 pub fn tick_projectiles(run: &mut Run, dt: f64) {

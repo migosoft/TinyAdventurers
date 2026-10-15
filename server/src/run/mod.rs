@@ -233,6 +233,8 @@ impl Run {
         for b in run.layout.barrels.clone() {
             run.spawn_object(EntityKind::Barrel, b, objects::ObjState::Barrel(objects::Barrel::new()));
         }
+        // Lava glows from the start (light ids are separate from entity ids).
+        run.add_lava_lights();
         run
     }
 
@@ -291,7 +293,7 @@ impl Run {
             spawn_x: p.mv.x,
             spawn_y: p.mv.y,
             mods: p.mods,
-            lights: Vec::new(),
+            lights: self.light_infos(),
         })
     }
 
@@ -726,6 +728,7 @@ impl Run {
     pub fn spawn_hazard(&mut self, kind: EntityKind, pos: Vec2, radius: f64, life: f64, damage: f64) {
         let id = self.alloc_id();
         self.hazards.push(Hazard { id, kind, pos, radius, life, pulse_t: 0.25, damage: Damage::new(damage, kind_split(kind)) });
+        self.attach_kind_light(id, kind);
     }
 
     pub fn hurt_player(&mut self, pi: usize, dmg: Damage) {

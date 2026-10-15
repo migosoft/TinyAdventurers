@@ -109,8 +109,7 @@ pub fn check_arena(run: &mut Run) {
     if enc(run).awake && !enc(run).door_closed && !alive.is_empty() && alive.iter().all(|p| hall.contains(*p)) {
         enc_mut(run).door_closed = true;
         for (x, y) in enc(run).door.clone() {
-            run.layout.map.set(x, y, Tile::DoorClosed);
-            run.event(Ev::Tile { x: x as u16, y: y as u16, v: Tile::DoorClosed as u8 }, None);
+            run.set_tile(x, y, Tile::DoorClosed);
         }
     }
 }

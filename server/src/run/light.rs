@@ -183,6 +183,40 @@ impl Run {
         self.lights.static_lit(x, y) || self.moving_lights().iter().any(|l| reaches(&self.layout.map, l, p))
     }
 
+    /// The light an entity of this kind carries (`defs::lights::kind_light`).
+    pub fn attach_kind_light(&mut self, id: u32, kind: crate::defs::kinds::EntityKind) {
+        if let Some((k, colour)) = lights::kind_light(kind) {
+            self.add_light(k, Anchor::Entity(id), colour);
+        }
+    }
+
+    /// A static `Lava` light on every lava tile (run start).
+    pub fn add_lava_lights(&mut self) {
+        let m = &self.layout.map;
+        let lava: Vec<(i32, i32)> = (0..m.h).flat_map(|y| (0..m.w).map(move |x| (x, y))).filter(|&(x, y)| m.get(x, y) == crate::dungeon::Tile::Lava as u8).collect();
+        for (x, y) in lava {
+            self.add_light(LightKind::Lava, Anchor::Tile(x, y), None);
+        }
+    }
+
+    /// Changes a tile during the run: sends `Ev::Tile`, keeps lava lights in step
+    /// and rebuilds the light map (a door or wall changes what light reaches).
+    pub fn set_tile(&mut self, x: i32, y: i32, t: crate::dungeon::Tile) {
+        use crate::dungeon::Tile;
+        let was_lava = self.layout.map.get(x, y) == Tile::Lava as u8;
+        self.layout.map.set(x, y, t);
+        self.event(Ev::Tile { x: x as u16, y: y as u16, v: t as u8 }, None);
+        let lava_light = self.lights.sources.iter().find(|s| s.kind == LightKind::Lava && s.anchor == Anchor::Tile(x, y)).map(|s| s.id);
+        match (was_lava, t == Tile::Lava, lava_light) {
+            (true, false, Some(id)) => self.remove_light(id),
+            (false, true, None) => {
+                self.add_light(LightKind::Lava, Anchor::Tile(x, y), None);
+            }
+            _ => {}
+        }
+        self.lights.mark_dirty();
+    }
+
     /// Drops moving lights whose entity is gone (after the step's clean-up).
     pub fn sweep_lights(&mut self) {
         let gone: Vec<u32> = self
@@ -213,6 +247,7 @@ impl Run {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::defs::kinds::EntityKind;
     use crate::defs::lights::LightKind;
     use crate::dungeon::{Map, Tile, TILE};
     use crate::protocol::{BossId, ClassId};
@@ -319,5 +354,83 @@ mod tests {
         let b = run.add_light(LightKind::Torch, Anchor::Tile(tx, ty), Some(0x50ff70));
         assert_eq!(run.lights.get(a).unwrap().colour, 0xff461e);
         assert_eq!(run.lights.get(b).unwrap().colour, 0x50ff70);
+    }
+
+    #[test]
+    fn a_fire_bolt_carries_a_light_and_an_arrow_does_not() {
+        let (mut run, tx, ty) = dark_run();
+        let from = at(tx - 6, ty);
+        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, from, Vec2::new(1.0, 0.0), 60.0, 5.0, 3.0, 0.0, 0, 0.0);
+        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::Arrow, from, Vec2::new(1.0, 0.0), 60.0, 5.0, 3.0, 0.0, 0, 0.0);
+        assert_eq!(run.moving_lights().len(), 1);
+        assert_eq!(run.moving_lights()[0].kind, LightKind::Fire);
+        assert!(run.is_lit(from));
+    }
+
+    #[test]
+    fn a_shot_that_dies_at_once_leaves_no_light() {
+        let (mut run, tx, ty) = dark_run();
+        run.layout.map.set(tx + 1, ty, Tile::Wall);
+        let from = at(tx, ty);
+        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, from, Vec2::new(1.0, 0.0), 600.0, 5.0, 3.0, 0.0, 0, 0.0);
+        run.step();
+        run.step();
+        assert!(run.lights.sources.iter().all(|s| !matches!(s.anchor, Anchor::Entity(_))));
+    }
+
+    #[test]
+    fn fire_patches_glow() {
+        let (mut run, tx, ty) = dark_run();
+        run.spawn_hazard(EntityKind::FirePatch, at(tx, ty), 10.0, 3.0, 8.0);
+        assert!(run.is_lit(at(tx + 2, ty)));
+    }
+
+    #[test]
+    fn lava_lights_its_neighbours_and_is_in_the_start_info() {
+        let (mut run, tx, ty) = dark_run();
+        run.layout.map.set(tx, ty, Tile::Lava);
+        run.add_lava_lights();
+        assert!(run.is_lit(at(tx, ty)) && run.is_lit(at(tx + 1, ty)));
+        assert!(!run.is_lit(at(tx + 2, ty)));
+        let infos = run.light_infos();
+        assert!(infos.iter().any(|l| (l.1, l.3, l.4) == (LightKind::Lava as u8, tx as u16, ty as u16)));
+    }
+
+    #[test]
+    fn dungeon_lava_is_lit_from_the_start() {
+        let run = crate::run::tests::test_run(&[ClassId::Paladin], BossId::Demon); // lava theme
+        let lava = run.layout.map.tiles.iter().filter(|&&t| t == Tile::Lava as u8).count();
+        assert!(lava > 0);
+        let lights = run.lights.sources.iter().filter(|s| s.kind == LightKind::Lava).count();
+        assert_eq!(lights, lava);
+        assert!(matches!(run.start_info(&run.players[0]), crate::protocol::ServerMsg::RunStarted(i) if i.lights.len() >= lava));
+    }
+
+    #[test]
+    fn set_tile_keeps_lava_lights_in_step() {
+        let (mut run, tx, ty) = dark_run();
+        run.step();
+        run.events.clear();
+        run.set_tile(tx, ty, Tile::Lava);
+        assert!(run.is_lit(at(tx, ty)));
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Tile { .. })));
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::LightAdd { .. })));
+        run.set_tile(tx, ty, Tile::Floor);
+        assert!(!run.is_lit(at(tx, ty)));
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::LightRemove { .. })));
+    }
+
+    #[test]
+    fn a_closed_door_blocks_static_light() {
+        let (mut run, tx, ty) = dark_run();
+        for y in ty - 4..=ty + 4 {
+            if y != ty {
+                run.layout.map.set(tx + 1, y, Tile::Wall);
+            }
+        }
+        run.add_light(LightKind::Torch, Anchor::Tile(tx, ty), None);
+        assert!(run.is_lit(at(tx + 3, ty)), "through the gap");
+        run.set_tile(tx + 1, ty, Tile::DoorClosed);
+        assert!(!run.is_lit(at(tx + 3, ty)), "the door shuts the light in");
     }
 }
