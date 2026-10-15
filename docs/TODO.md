@@ -4,32 +4,33 @@
 Ordered by technical complexity and by technical dependencies (what makes later items easier), not by quick wins. Items in the same tier can be done in either order unless noted.
 
 **Tier 1: foundations**
-1. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), gnolls. Little code, but the shadow, ghost, gnolls and sphinx wait on it.
+1. **Vision, darkvision, then the effect system** (next item). Vision and darkvision are designed and approved in chat; the written spec needs the user's review, then a plan: [docs/superpowers/specs/2026-10-15-vision-darkvision-design.md](superpowers/specs/2026-10-15-vision-darkvision-design.md). Entity types get vision (tiles) and darkvision (a share of vision); enemies lose heroes in the dark by type; heroes run on the same rule, with greyscale darkvision drawing and a dev toggle. Then the **effect system** (blind, sleep, petrified; extensible, every creature, effects modify any stat): a draft with open questions to settle first, [docs/superpowers/specs/2026-10-15-effects-design-draft.md](superpowers/specs/2026-10-15-effects-design-draft.md).
+2. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), gnolls. Little code, but the shadow, ghost, gnolls and sphinx wait on it.
 
 **Tier 2: larger features on top of tier 1**
 
-2. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
-3. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
-4. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
+3. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
+4. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
+5. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
 
 **Tier 3: content**
 
-5. **Ghost and shadow.** The shadow and the torch-extinguishing enemy use the light system (`is_lit`, `set_light`; see "Lighting follow-ups"). The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
-6. **Minions for the other bosses; more classes and bosses** (classes are easier after 2).
-7. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
-8. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
-9. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled.
+6. **Ghost and shadow.** The shadow and the torch-extinguishing enemy use the light system (`is_lit`, `set_light`; see "Lighting follow-ups"). The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
+7. **Minions for the other bosses; more classes and bosses** (classes are easier after 3).
+8. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
+9. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
+10. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled.
 
 **Tier 4: infrastructure (independent of gameplay work)**
 
-10. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
-11. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
-12. **Several game servers** (shared presence and login limiter in Valkey). After 10; only when one server is not enough.
+11. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
+12. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
+13. **Several game servers** (shared presence and login limiter in Valkey). After 11; only when one server is not enough.
 
 **Tier 5: last**
 
-13. **Balancing pass:** every "Tune" item, including resistances, light radii and darkness. Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers.
-14. **Delta snapshots, WebTransport:** only if measurements show they are needed.
+14. **Balancing pass:** every "Tune" item, including resistances, light radii and darkness. Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers.
+15. **Delta snapshots, WebTransport:** only if measurements show they are needed.
 
 ## Progression follow-ups
 

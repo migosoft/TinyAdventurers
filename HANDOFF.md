@@ -9,9 +9,27 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
+## Next session: vision, darkvision, then the effect system (TODO priority 1)
+
+The user switched sessions here (2026-10-15). Lighting is finished on `feature/lighting` (pushed, **not merged**: ask the user whether to merge it into `main` first, and start the next feature from the result).
+
+1. **Vision and darkvision.** Designed in chat with the user and approved. The written spec is [docs/superpowers/specs/2026-10-15-vision-darkvision-design.md](docs/superpowers/specs/2026-10-15-vision-darkvision-design.md).
+   - **Next:** the user reviews the written spec (superpowers:brainstorming's review gate), then a plan with superpowers:writing-plans, then the user picks the execution method.
+   - **Decisions:**
+     - Entity types get **vision** (in tiles; type default plus a per-enemy override, like resistances) and **darkvision** (a share of vision): Demon, Undead, Dragon 1.0; Monster 1/3; Human 0; Object no vision.
+     - One shared perception rule for enemies and heroes: within vision, in line of sight, and lit or within vision × darkvision.
+     - Today's enemy ranges are kept (converted to tiles), so only darkness changes.
+     - Heroes are Human (9 tiles, 0) as now. The client also draws hero darkvision as **greyscale** (a post-effect shader with a per-tile mask), and a dev toggle in the server-gated debug mode sets the own hero's darkvision (0, 0.5 or 1.0).
+2. **Effect system** (blind, sleep, petrified; extensible; every creature; effects modify any stat). It is only a **draft**: [docs/superpowers/specs/2026-10-15-effects-design-draft.md](docs/superpowers/specs/2026-10-15-effects-design-draft.md).
+   - It has a proposed design: a data table of effects with stat modifiers (add, then multiply, then set), flags (no move, no act, no turn, prone) and break conditions; per-creature active effects; resolved `Stats`; a snapshot bitmask; client visuals (sleep lying with "zzz", petrified greyscale).
+   - It has eight **open questions** to settle with the user one at a time before it becomes a spec: sources, bosses, stacking, sleep rules, petrified rules, the blind hero's view, the HUD, folding in the mimic's `asleep` and the rogue's `hidden`.
+   - Build it after vision, because blindness changes vision.
+
+**Ideas the user liked** (not yet in TODO; ask before adding): ways to bring light. Early on, carry a wall torch, light braziers, find glow items (mushrooms, flares). Later, class gear and spells: the paladin's glowing shield, the wizard's light orb, a wisp companion, the ranger's flare arrows, and the rogue who prefers the dark. Before any hero light: a dead hero's light must switch off and come back on a revive (the registry drops it today).
+
 ## Last feature (2026-10-15): light sources
 
-**Branch:** `feature/lighting` (from `main`, after `feature/barrels` was merged and pushed). **Not pushed and not merged**; push or merge only when the user asks. Commits: `git log --oneline 171793a..HEAD` (tasks 1 to 12). Spec: [docs/superpowers/specs/2026-10-15-light-sources-design.md](docs/superpowers/specs/2026-10-15-light-sources-design.md); plan (12 tasks, run with superpowers:subagent-driven-development, three stages A server core, B client core, C torches and docs): [docs/superpowers/plans/2026-10-15-light-sources.md](docs/superpowers/plans/2026-10-15-light-sources.md). It was TODO priority 1 (removed; the list is renumbered; new section "Lighting follow-ups").
+**Branch:** `feature/lighting` (from `main`, after `feature/barrels` was merged and pushed). **Pushed to `origin` at the user's request (2026-10-15), not merged**; merge only when the user asks. Commits: `git log --oneline 171793a..HEAD` (tasks 1 to 12). Spec: [docs/superpowers/specs/2026-10-15-light-sources-design.md](docs/superpowers/specs/2026-10-15-light-sources-design.md); plan (12 tasks, run with superpowers:subagent-driven-development, three stages A server core, B client core, C torches and docs): [docs/superpowers/plans/2026-10-15-light-sources.md](docs/superpowers/plans/2026-10-15-light-sources.md). It was TODO priority 1 (removed; the list is renumbered; new section "Lighting follow-ups").
 
 **What was built:**
 - **Server core** (stage A; TECHNICAL §5 "Light sources", §7): `defs/lights.rs` (`LightKind` Torch/Lava/Fire/Magic as data: radius, colour, intensity, flicker; `kind_light` says which entity kinds glow); `run/light.rs` (registry `Lights`, `Anchor::Tile` static or `Anchor::Entity` moving, the static light map rebuilt lazily by shadowcasting, `is_lit`, the API `add_light`/`set_light`/`set_light_colour`/`remove_light`, `attach_kind_light`, the per-step sweep, `add_lava_lights`, `Run::set_tile` that keeps lava lights and the map in step). **Visibility is now "in sight and lit"** (`seen`); hurt and heal numbers on a hero need sight only (`on_hero`); torches are sent when in sight (lit or not); `Snapshot.lights` lists the moving lights near the viewer. Protocol: `RunStartInfo.lights`, `Ev::Light`/`LightAdd`/`LightRemove` (wire codes 10 to 12), `Snapshot.lights` as `SnapW` field 9.
@@ -58,8 +76,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **Look details** (the overall look is approved): the **tint strength** (blue and purple read weak, and mixed areas wash to grey), the **burnt-out torch frame** (a bare stick) and the **side-sconce look**; and whether the new numbers (radii, fade, flash) feel right in a real run. Every knob is a constant: `defs/lights.rs` (radius, colour, intensity, flicker, `BLAST_FLASH`, `HOLY_FLASH`), `light.ts` (`falloff`, `EDGE`), `lightview.ts` (`MIN_LIT`, `TINT_ALPHA`, `SUB`), `torch.ts` (offsets), `TORCH_SPACING` and `DARK_SHARE` in `dungeon/generate.rs`.
 - **The live test has not been done by the user:** E on a torch (toggle and the E hint), a fireball lighting a dark corridor, lava glow, the boss hall (torches, door sealing), and a **sword swing, dash or arrow next to a torch putting it out: watch whether that is annoying.** If it is, the rule can change (for example only a hit on the torch itself, or physical damage only on a direct hit).
 - **A look decision:** the brown band at the top of the screen near the map edge is the table frame plus the camera background `#2b1a10` (`GameScene`, the camera is not bounded to the map); both are older than this branch but stand out more against the black. Options: a black camera background, or camera bounds.
-- The branch is not pushed.
-- Deferred minor review findings (small): `LightKind::ALL` is hand-maintained (a new kind could miss the export); a dead hero's light is dropped for good (matters for future hero lights with revives); all torches flicker in phase; E picks the nearest barrel or torch, so standing next to both may toggle the torch instead of pushing the barrel; `place_torches` splits runs and decodes sides twice (a helper would be cleaner). The build ledger is local (`.superpowers/sdd/2026-10-15-light-sources/progress.md`).
+- Deferred minor review findings (small): `LightKind::ALL` is hand-maintained (a new kind could miss the export); a dead hero's light is dropped for good (matters for future hero lights with revives); all torches flicker in phase; E picks the nearest barrel or torch, so standing next to both may toggle the torch instead of pushing the barrel; `place_torches` splits runs and decodes sides twice (a helper would be cleaner). The build ledger was deleted after the final review, as the process says; every ruling is listed under Deviations above.
 - All numbers (radii, intensities, spacing, dark share, tint) are first guesses for the balancing pass.
 
 ## Session before (2026-10-14, damage types, world objects and exploding barrels)
@@ -135,7 +152,7 @@ Branch `fix/hitboxes-and-dark-shots`, merged into `main` (fast-forward) and push
 
 **Still open:**
 - **Lobby level picker and `SelectLevel`:** not built (one level only). `Room.level` is always `LevelId::Dungeon`; `lobby.rs` `start` maps it to the `LevelChoice`.
-- **The escort level's XP rule** (kills and boss bonus, or a fixed reward for arriving): to decide with the escort item (TODO priority 4).
+- **The escort level's XP rule** (kills and boss bonus, or a fixed reward for arriving): to decide with the escort item (TODO priority 5).
 - **Docker healthcheck (found this session, older than the branch):** the `HEALTHCHECK` in the `Dockerfile` uses bash's `/dev/tcp` under `/bin/sh` (dash), so `docker compose ps` shows the game container as "unhealthy" although `/health` answers OK. Nothing depends on it; fix it with a tool that exists in the runtime image.
 
 ## Session before (2026-10-13, prediction corrections under lag)
