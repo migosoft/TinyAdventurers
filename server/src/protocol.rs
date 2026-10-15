@@ -143,7 +143,20 @@ pub struct RunStartInfo {
     pub spawn_y: f64,
     /// Progression multipliers of the receiving player (prediction must use them).
     pub mods: crate::defs::progression::Modifiers,
+    /// Every static light (torches, lava) and its state.
+    pub lights: Vec<LightInfo>,
 }
+
+/// A static light at run start, as an array: `[id, kind, colour, x, y, on]`
+/// (tile coordinates; colour 0xRRGGBB; kind = `LightKind` id).
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct LightInfo(pub u32, pub u8, pub u32, pub u16, pub u16, pub bool);
+
+/// A moving light near the viewer: `[x, y, kind, colour]` (px; colour `None` = the kind's default).
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct MovingLight(pub f32, pub f32, pub u8, pub Option<u32>);
 
 /// Compact entity state, serialized as an array:
 /// `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra]`.
@@ -208,6 +221,11 @@ pub enum Ev {
     /// A hero is lost to the terrain. how: 0 falls into a chasm, 1 drowns,
     /// 2 climbs back out onto safe ground (debug mode only).
     Sink { id: u32, x: f32, y: f32, how: u8 },
+    /// A static light switched or recoloured; carries its current state.
+    Light { id: u32, on: bool, colour: u32 },
+    /// A static light created mid-run (tile coordinates).
+    LightAdd { id: u32, kind: u8, colour: u32, x: u16, y: u16, on: bool },
+    LightRemove { id: u32 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -224,6 +242,8 @@ pub struct Snapshot {
     /// while the boss fight is on or any of them is in view, so the beams show
     /// even when an end is out of sight. `None` otherwise.
     pub drain: Option<Vec<(f32, f32)>>,
+    /// Moving lights whose light can reach the viewer's sight.
+    pub lights: Vec<MovingLight>,
     /// Server simulation time spent per tick (ms, averaged).
     pub srv_ms: f32,
 }

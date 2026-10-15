@@ -2,6 +2,7 @@
 import type { BossBar } from "./BossBar";
 import type { EntSnap } from "./EntSnap";
 import type { Ev } from "./Ev";
+import type { MovingLight } from "./MovingLight";
 import type { SelfState } from "./SelfState";
 
 export type Snapshot = { tick: number, 
@@ -15,6 +16,10 @@ ack: number, ents: Array<EntSnap>, me: SelfState, boss: BossBar | null, ev: Arra
  * even when an end is out of sight. `None` otherwise.
  */
 drain: Array<[number, number]> | null, 
+/**
+ * Moving lights whose light can reach the viewer's sight.
+ */
+lights: Array<MovingLight>, 
 /**
  * Server simulation time spent per tick (ms, averaged).
  */

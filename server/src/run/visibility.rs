@@ -165,6 +165,7 @@ pub fn send_snapshots(run: &mut Run) {
             boss: boss_bar.clone(),
             ev,
             drain,
+            lights: Vec::new(),
             srv_ms: run.srv_ms,
         };
         run.players[pi].fov = fov;

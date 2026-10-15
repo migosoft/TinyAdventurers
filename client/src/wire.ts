@@ -7,6 +7,7 @@ import type { Ev } from './generated/Ev';
 import type { EvW } from './generated/EvW';
 import type { InputMsg } from './generated/InputMsg';
 import type { InputW } from './generated/InputW';
+import type { MovingLight } from './generated/MovingLight';
 import type { SnapW } from './generated/SnapW';
 import type { Snapshot } from './generated/Snapshot';
 
@@ -24,6 +25,9 @@ type TileW = [number, number, number, number];
 type MsgW = [number, string];
 type CoinsW = [number, number, number, number];
 type SinkW = [number, number, number, number, number];
+type LightEvW = [number, number, boolean, number];
+type LightAddW = [number, number, number, number, number, number, boolean];
+type LightRemoveW = [number, number];
 
 function unpackEv(e: EvW): Ev {
   switch (e[0]) {
@@ -67,13 +71,25 @@ function unpackEv(e: EvW): Ev {
       const [, id, x, y, how] = e as SinkW;
       return { t: 'Sink', id, x: pos(x), y: pos(y), how };
     }
+    case EV.Light: {
+      const [, id, on, colour] = e as LightEvW;
+      return { t: 'Light', id, on, colour };
+    }
+    case EV.LightAdd: {
+      const [, id, kind, colour, x, y, on] = e as LightAddW;
+      return { t: 'LightAdd', id, kind, colour, x, y, on };
+    }
+    case EV.LightRemove: {
+      const [, id] = e as LightRemoveW;
+      return { t: 'LightRemove', id };
+    }
     default:
       throw new Error(`unknown event code ${e[0]}`);
   }
 }
 
 export function unpackSnap(w: SnapW): Snapshot {
-  const [tick, ack, ents, me, boss, ev, srv_ms, drain] = w;
+  const [tick, ack, ents, me, boss, ev, srv_ms, drain, lights] = w;
   return {
     tick,
     ack,
@@ -97,6 +113,7 @@ export function unpackSnap(w: SnapW): Snapshot {
     boss: boss && { kind: boss[0], hp: boss[1], max_hp: boss[2], immune: boss[3], enraged: boss[4] },
     ev: ev.map(unpackEv),
     drain: drain && Array.from({ length: drain.length / 2 }, (_, i): [number, number] => [pos(drain[2 * i]), pos(drain[2 * i + 1])]),
+    lights: lights.map((l): MovingLight => [pos(l[0]), pos(l[1]), l[2], l[3]]),
     srv_ms,
   };
 }

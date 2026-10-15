@@ -14,7 +14,7 @@ use crate::protocol::{BossId, Ev, InputMsg, Snapshot};
 pub const POS_SCALE: f64 = 16.0;
 
 /// Event codes on the wire, by index. Exported to the client as `EV`.
-pub const EV_CODES: [&str; 10] = ["Dmg", "Heal", "Boom", "Died", "Raise", "Immune", "Tile", "Msg", "Coins", "Sink"];
+pub const EV_CODES: [&str; 13] = ["Dmg", "Heal", "Boom", "Died", "Raise", "Immune", "Tile", "Msg", "Coins", "Sink", "Light", "LightAdd", "LightRemove"];
 
 pub fn q_pos(v: f64) -> u32 {
     (v * POS_SCALE).round().max(0.0) as u32
@@ -56,12 +56,20 @@ pub enum EvW {
     Msg(u8, String),
     Coins(u8, u32, u32, u32),
     Sink(u8, u32, u32, u32, u8),
+    Light(u8, u32, bool, u32),
+    LightAdd(u8, u32, u8, u32, u16, u16, bool),
+    LightRemove(u8, u32),
 }
 
-/// `[tick, ack, ents, me, boss, ev, srv_ms, drain]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none.
+/// `[x, y, kind, colour]`, positions scaled, see `MovingLight`.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>);
+pub struct LightW(pub u32, pub u32, pub u8, pub Option<u32>);
+
+/// `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>, pub Vec<LightW>);
 
 /// `[seq, mx, my, aim, aim_dist, primary, secondary, view_lag, rtt, act]`, see `InputMsg`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -88,6 +96,9 @@ fn ev_w(e: &Ev) -> EvW {
         Ev::Msg { text } => EvW::Msg(7, text.clone()),
         Ev::Coins { x, y, v } => EvW::Coins(8, q(*x), q(*y), *v),
         Ev::Sink { id, x, y, how } => EvW::Sink(9, *id, q(*x), q(*y), *how),
+        Ev::Light { id, on, colour } => EvW::Light(10, *id, *on, *colour),
+        Ev::LightAdd { id, kind, colour, x, y, on } => EvW::LightAdd(11, *id, *kind, *colour, *x, *y, *on),
+        Ev::LightRemove { id } => EvW::LightRemove(12, *id),
     }
 }
 
@@ -97,7 +108,8 @@ pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
     let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.hidden, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)));
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune, b.enraged));
     let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
-    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain);
+    let lights = s.lights.iter().map(|l| LightW(q_pos(l.0 as f64), q_pos(l.1 as f64), l.2, l.3)).collect();
+    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain, lights);
     rmp_serde::to_vec(&w).expect("encode snapshot")
 }
 
@@ -105,7 +117,7 @@ pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
 /// off the 1/16 px grid on purpose, so the client test sees rounding.
 #[cfg(test)]
 pub fn sample_snapshots() -> Vec<Snapshot> {
-    use crate::protocol::{BossBar, EntSnap, SelfState};
+    use crate::protocol::{BossBar, EntSnap, MovingLight, SelfState};
     let busy = Snapshot {
         tick: 1234,
         ack: 567,
@@ -144,8 +156,12 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             Ev::Msg { text: "Zoë fell into the abyss".into() },
             Ev::Coins { x: 99.9, y: 88.8, v: 15 },
             Ev::Sink { id: 2, x: 130.0, y: 460.5, how: 1 },
+            Ev::Light { id: 3, on: false, colour: 0xffaa5a },
+            Ev::LightAdd { id: 400, kind: 1, colour: 0xff461e, x: 33, y: 71, on: true },
+            Ev::LightRemove { id: 12 },
         ],
         drain: Some(vec![(400.25, 300.5), (480.0, 300.0), (330.06, 260.7)]),
+        lights: vec![MovingLight(100.3, 200.7, 2, None), MovingLight(55.0, 66.06, 3, Some(0x78c8ff))],
         srv_ms: 0.125,
     };
     let spectator = Snapshot {
@@ -171,6 +187,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         boss: None,
         ev: vec![],
         drain: None,
+        lights: vec![],
         srv_ms: 0.0,
     };
     vec![busy, spectator]
@@ -228,7 +245,7 @@ mod tests {
         for s in sample_snapshots() {
             let new = encode_snap(&s);
             let old = rmp_serde::to_vec_named(&ServerMsg::Snap(s)).unwrap();
-            assert_eq!(new[0], 0x98, "fixarray of 8 fields");
+            assert_eq!(new[0], 0x99, "fixarray of 9 fields");
             println!("snapshot: old {} B, new {} B", old.len(), new.len());
             assert!(new.len() * 10 <= old.len() * 7, "old {} B, new {} B", old.len(), new.len());
         }

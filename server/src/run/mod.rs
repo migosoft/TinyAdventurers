@@ -288,6 +288,7 @@ impl Run {
             spawn_x: p.mv.x,
             spawn_y: p.mv.y,
             mods: p.mods,
+            lights: Vec::new(),
         })
     }
 
