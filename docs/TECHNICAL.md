@@ -69,7 +69,7 @@ client/                              Vite + TypeScript + Phaser 3.90
   assets-src/0x72/                   0x72 DungeonTileset II v1.7 (CC0): sheet, tile_list, README, LICENSE
   assets-src/logo/logo.png           title logo, made with Google's image generation AI
   assets-src/barrel/                 the barrel's AI-generated source image (ChatGPT)
-  assets-src/explosion/              an AI-generated explosion sheet (ChatGPT), not built in yet (TODO)
+  assets-src/explosion/              AI-generated explosion sheets (ChatGPT): barrel blast, Fireball; not built in yet (TODO)
   assets-src/torch/                  "Simple Torch Animation 16x16" (CC0) with its licence note
   src/main.ts                        boot: login -> character screen -> WebSocket, Phaser game, Lobby/Hud/GameScene; demo pages
   src/api.ts                         fetch wrapper for /api/* (the session cookie is HttpOnly; JS never sees it)

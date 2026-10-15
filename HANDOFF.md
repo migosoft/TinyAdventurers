@@ -25,7 +25,7 @@ The user switched sessions here (2026-10-15). Lighting is finished on `feature/l
    - It has eight **open questions** to settle with the user one at a time before it becomes a spec: sources, bosses, stacking, sleep rules, petrified rules, the blind hero's view, the HUD, folding in the mimic's `asleep` and the rogue's `hidden`.
    - Build it after vision, because blindness changes vision.
 
-**Explosion art (2026-10-15):** the user supplied a ChatGPT explosion sheet, stored in `client/assets-src/explosion/explosion_source.png` (original still in `images/`). It is not built in; it is on the TODO list with low priority ("Barrels and world objects follow-ups"). Credit it as "AI-generated with ChatGPT for this game".
+**Explosion art (2026-10-15):** the user supplied two ChatGPT explosion sheets, stored in `client/assets-src/explosion/`: `explosion_source.png` (barrel blast) and `fireball_source.png` (the wizard's Fireball, violet). Originals are still in `images/`. Neither is built in; it is on the TODO list with low priority ("Barrels and world objects follow-ups"). Credit it as "AI-generated with ChatGPT for this game".
 
 **Ideas the user liked** (not yet in TODO; ask before adding): ways to bring light. Early on, carry a wall torch, light braziers, find glow items (mushrooms, flares). Later, class gear and spells: the paladin's glowing shield, the wizard's light orb, a wisp companion, the ranger's flare arrows, and the rogue who prefers the dark. Before any hero light: a dead hero's light must switch off and come back on a revive (the registry drops it today).
 

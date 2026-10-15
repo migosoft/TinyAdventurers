@@ -19,7 +19,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 7. **Minions for the other bosses; more classes and bosses** (classes are easier after 3).
 8. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
 9. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
-10. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled. The explosion sheet for barrel blasts (see "Barrels and world objects follow-ups") is low priority and fits here.
+10. **4-direction sprites, attack frames, sound effects.** Independent; best done once events and animations have settled. The explosion sheets for barrel blasts and the wizard's Fireball (see "Barrels and world objects follow-ups") is low priority and fits here.
 
 **Tier 4: infrastructure (independent of gameplay work)**
 
@@ -92,6 +92,7 @@ Built 2026-10-14 on branch `feature/barrels` (TECHNICAL §5, "World objects"): c
 - **Tune** in the balancing pass: barrel blast radius 40, damage 30 (50 % heat, 50 % physical), push 40 px, fuse 0.3 s, hand push 48 px, how many rooms get barrels (25 %), 3–5 in a boss hall (`defs/objects.rs`, `place_barrels`).
 - **Plain barrels as obstacles:** the user wants barrels that do not explode and only block. The art exists (atlas frame `barrel`, see TECHNICAL §9 "Barrel frames"); the object kind (or a flag on `ObjState::Barrel`), its placement and the client view (`BarrelView` takes the frame) do not.
 - **Explosion art (low priority):** the blast is a runtime effect (`Boom k 7`). The user supplied an explosion sheet made with ChatGPT (2026-10-15), stored in `client/assets-src/explosion/explosion_source.png`, not built in yet. It has six labelled stages (initial flash, fireball grows, peak, cooling, smoke expands, dissipates) at about 1536×1024 on a dark glowing background, so the frames must be read as pixel grids (like the barrel), snapped to pack colours and redrawn at game size (peak about the blast radius, 40 px). Show a preview before wiring it in. Credit: "AI-generated with ChatGPT for this game".
+- **Fireball explosion art (low priority):** a second ChatGPT sheet (2026-10-15) for the wizard's Fireball impact (today the runtime `Boom` effect, k 0; blast radius 38 px in `defs/abilities.rs`), stored in `client/assets-src/explosion/fireball_source.png`, not built in yet. The same six labelled stages as the barrel sheet, in magical orange and violet with violet smoke, at about 1536×1024 on a painted checkerboard (not real transparency). Import it the same way as the barrel explosion; both can share one importer script. Same credit.
 - **Deferred review findings** (small, none blocks anything):
   - the A* squeeze cost applies to every monster, not only wide ones; a chaser repaths every 0.6 s while a hero stands next to a barrel;
   - an igniter who has left still gets credited with damage and kills; a lava death gives no credit;
