@@ -1,7 +1,9 @@
 //! Per-player snapshots. Each player only receives monsters, enemy projectiles,
 //! objects, hazards and positional events that are inside their own field of
 //! vision **and lit** (`run/light.rs`). Always sent: the party, their own shots,
-//! party-wide events; events on a hero need sight only.
+//! party-wide events; events on a hero need sight only. A torch (it owns a
+//! light) needs sight only: the client keeps light state from the start info
+//! and the light events, so a torch out of sight is not worth sending.
 
 use super::levels::Level;
 use super::Run;
@@ -53,6 +55,11 @@ fn seen(fov: &Fov, lights: &Lights, moving: &[Lit], map: &Map, p: Vec2, radius: 
         return [(-r, -r), (r, -r), (-r, r), (r, r)].into_iter().any(|(dx, dy)| at(p + Vec2::new(dx, dy)));
     }
     false
+}
+
+/// A world object is sent when seen; a torch (it owns a light) when in sight, lit or not.
+fn object_sent(fov: &Fov, lights: &Lights, moving: &[Lit], map: &Map, o: &super::objects::WorldObject) -> bool {
+    !o.gone && if o.owns_light() { visible(fov, o.pos, 0.0) } else { seen(fov, lights, moving, map, o.pos, 0.0) }
 }
 
 /// Events: party-wide ones always; events on a hero where the hero is in
@@ -177,7 +184,7 @@ pub fn send_snapshots(run: &mut Run) {
             ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra));
         }
         for o in &run.objects {
-            if o.gone || !(o.owns_light() || seen(&fov, lights, &moving, map, o.pos, 0.0)) {
+            if !object_sent(&fov, lights, &moving, map, o) {
                 continue;
             }
             ents.push(super::objects::snap(o, run.time));
@@ -347,10 +354,27 @@ mod tests {
     }
 
     #[test]
-    fn torches_own_a_light_so_they_are_always_sent() {
+    fn torches_are_sent_in_sight_lit_or_not_and_not_out_of_sight() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-        run.spawn_torch(&crate::dungeon::TorchSpawn { wall: (1, 1), side: crate::dungeon::TorchSide::Face });
-        let o = run.objects.last().unwrap();
-        assert!(o.owns_light());
+        let (tx, ty) = dark_view(&mut run);
+        let near = crate::dungeon::TorchSpawn { wall: (tx + 3, ty), side: crate::dungeon::TorchSide::Face };
+        let far = crate::dungeon::TorchSpawn { wall: (tx + 12, ty), side: crate::dungeon::TorchSide::Face };
+        run.spawn_torch(&near);
+        run.spawn_torch(&far);
+        let (i_near, i_far) = (run.objects.len() - 2, run.objects.len() - 1);
+        // Put both lights out: the torch in sight is still sent, the one out of sight is not.
+        for oi in [i_near, i_far] {
+            crate::run::objects::set_torch(&mut run, oi, false);
+        }
+        run.lights.refresh(&run.layout.map);
+        let moving = run.moving_lights();
+        let sent_dark = |run: &Run, oi: usize| object_sent(&run.players[0].fov, &run.lights, &moving, &run.layout.map, &run.objects[oi]);
+        assert!(sent_dark(&run, i_near), "in sight, out and dark");
+        assert!(!sent_dark(&run, i_far), "out of sight");
+        crate::run::objects::set_torch(&mut run, i_near, true);
+        run.lights.refresh(&run.layout.map);
+        let moving = run.moving_lights();
+        assert!(object_sent(&run.players[0].fov, &run.lights, &moving, &run.layout.map, &run.objects[i_near]), "in sight, lit");
+        assert!(run.objects[i_near].owns_light());
     }
 }

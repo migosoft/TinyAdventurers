@@ -118,7 +118,6 @@ Built 2026-10-15 on branch `feature/lighting` (TECHNICAL §5 "Light sources", §
 - **Remembered (explored) tiles:** darkness is fully black today; a dimmed memory of where the hero has been would need a per-hero explored map.
 - **Enemies affected by darkness:** they see in the dark today; their perception could use `is_lit` for the target.
 - **The extinguishing enemy and the shadow:** they act on lights through `is_lit` and `set_light` (a torch is switched with `objects::set_torch`). Should heroes relight torches by standing next to them? Today they press E or use fire.
-- **Torches in snapshots:** torches are always sent, which makes snapshots 2 to 2.5 KB at the start of a run (about 110 torches). Sending them once at the start and then only on change (the events already carry it) would bring them back to about 130 B.
 - **Moving-light list through walls:** it uses a distance test, so the glow of a shot behind a wall within range is sent (TECHNICAL §13). A line-of-sight test per light would fix it.
 - **Weapon effects under the darkness:** swooshes, rings and particles are drawn below it. They could be drawn above it, or only the effects of the party.
 - **Look, pending the user:** falloff, tint strength (blue and purple read weak, mixed areas wash to grey), flicker, the 1 px per tile canvas (light bleeds about half a tile past walls; 2 or 4 px per tile would be sharper), the burnt-out torch frame and the side-sconce look. See HANDOFF.
@@ -153,6 +152,6 @@ Special rooms with a creature that asks the heroes a riddle. If they solve it, t
 - **4-direction sprites:** the animation code keeps a `Dir` value. Up/down frames can be added there once sheets exist.
 - **Sound effects.**
 - **Network:**
-  - delta snapshots if bandwidth ever matters (snapshots are compact arrays, about 125 B with 2 players and nothing else in view; since the lighting, the always-sent torches make them 2 to 2.5 KB at the start of a run, see "Lighting follow-ups")
+  - delta snapshots if bandwidth ever matters (snapshots are compact arrays, about 125 B with 2 players and nothing else in view, 160 to 200 B at the start of a run with the lighting)
   - pushes still snap the hero under lag: the client learns of a push about RTT/2 late, and most push corrections are over the 24 px blend limit (median about 55 px in a demon fight under `?lag=150&jitter=40&loss=2`). Blending corrections that start a push over about 100 ms, whatever their size, would show them as a fast slide instead of a jump.
   - optional WebTransport transport for lossy connections
