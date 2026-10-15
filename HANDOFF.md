@@ -16,7 +16,13 @@ For: the next agent or developer continuing this project. Read this first, then 
 **State:** brainstormed with the user (2026-10-15). The spec is written: [docs/superpowers/specs/2026-10-15-light-sources-design.md](docs/superpowers/specs/2026-10-15-light-sources-design.md).
 - **Spec approved by the user (2026-10-15).**
 - **Plan written:** [docs/superpowers/plans/2026-10-15-light-sources.md](docs/superpowers/plans/2026-10-15-light-sources.md), with 12 tasks in three stages: A (server core, tasks 1–5), B (client core, tasks 6–8) and C (torches, generator, art, docs, tasks 9–12).
-- **Next:** the user reviews the plan and picks how it is carried out, then it is built.
+- **Next:** another session carries out the plan, starting at Task 1 (the user's decision, 2026-10-15).
+  - **Execution method:** not chosen yet; ask the user. Subagent-driven was recommended, because the tasks depend on each other's interfaces and the server and client light maps must match exactly.
+  - **User checkpoints are part of the plan:**
+    - Task 8: the user looks at `?lights` (how the light fades, the colour strength, the flicker);
+    - Task 11: the side-sconce look and a live test.
+  - **To watch in the live test:** under the agreed rule, a sword swing or a dash next to a wall puts torches out. Check that this doesn't get annoying.
+  - The branch is not pushed yet; push only when the user asks.
 - **Key decisions:**
   - It is a **general** system: a light-kind table, a registry with tile or entity anchors, `is_lit`, a generic protocol, a renderer with coloured, additive light.
   - Heroes have no own light. Darkness is fully black.
