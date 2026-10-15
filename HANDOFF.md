@@ -54,7 +54,7 @@ The user disliked the crate stand-in. A first reference image they posted was un
 - `game/barrel.ts` draws `barrel_explosive` (`BarrelView` takes the frame as an optional argument). `?gallery` shows the plain one, the explosive one, and one cycling through fuse, fall and sink.
 - **Plain barrels** (blocking, not exploding) are wanted by the user but not built; the art is ready (TODO, "Barrels and world objects follow-ups").
 - Credit: "AI-generated with ChatGPT for this game" (README Art, TECHNICAL §9 "Barrel frames"), not the user's own art.
-- Verified: atlas build (2 barrel frames), client `tsc` and 34 tests, `?gallery` screenshot with no browser errors. Not yet seen by the user in a real run.
+- Verified: atlas build (2 barrel frames), client `tsc` and 34 tests, `?gallery` screenshot with no browser errors. **Confirmed in the game by the user (2026-10-15):** "It works and looks good now".
 
 ## Bug fixes (2026-10-14, after the level split)
 
