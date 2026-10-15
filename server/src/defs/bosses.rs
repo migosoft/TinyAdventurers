@@ -90,9 +90,9 @@ pub const DRAGON_FIREBALL_KNOCK: f64 = 20.0;
 pub fn profile(id: BossId) -> Profile {
     use super::damage::{DamageSplit, DamageType::*, Resistances};
     let (ty, adj) = match id {
-        BossId::Demon => (EntityType::Demon, Adjust { res: Resistances::of(&[(Magical, 0.2)]), melee: None }),
-        BossId::Lich => (EntityType::Undead, Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), melee: None }),
-        BossId::Dragon => (EntityType::Dragon, Adjust { res: Resistances::of(&[(Heat, 1.0)]), melee: Some(DamageSplit::split(&[(Heat, 0.2)])) }),
+        BossId::Demon => (EntityType::Demon, Adjust { res: Resistances::of(&[(Magical, 0.2)]), melee: None, vision: Some(25.0), darkvision: None }),
+        BossId::Lich => (EntityType::Undead, Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), melee: None, vision: Some(25.0), darkvision: None }),
+        BossId::Dragon => (EntityType::Dragon, Adjust { res: Resistances::of(&[(Heat, 1.0)]), melee: Some(DamageSplit::split(&[(Heat, 0.2)])), vision: Some(25.0), darkvision: None }),
     };
     entity_types::profile(&[ty], adj)
 }

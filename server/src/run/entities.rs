@@ -3,6 +3,7 @@ use crate::defs::classes::ClassDef;
 use crate::defs::damage::{Damage, DamageSplit, Resistances};
 use crate::defs::progression::Modifiers;
 use crate::defs::enemies::EnemyType;
+use crate::defs::entity_types::Sight;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
 use crate::fov::Fov;
@@ -167,7 +168,7 @@ pub struct Monster {
     pub max_hp: f64,
     pub speed: f64,
     pub radius: f64,
-    pub sight: f64,
+    pub sight: Sight,
     pub alive: bool,
     pub aim: f64,
     pub anim: Anim,

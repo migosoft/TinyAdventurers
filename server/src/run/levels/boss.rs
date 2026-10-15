@@ -56,7 +56,7 @@ pub fn spawn(run: &mut Run, party: usize) {
         max_hp: hp,
         speed: d.speed,
         radius: d.radius,
-        sight: 400.0,
+        sight: prof.sight,
         alive: true,
         aim: std::f64::consts::FRAC_PI_2,
         anim: Anim::Idle,

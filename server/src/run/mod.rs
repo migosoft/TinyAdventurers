@@ -267,7 +267,7 @@ impl Run {
             max_hp: hp,
             speed: d.speed,
             radius: d.radius,
-            sight: d.sight,
+            sight: prof.sight,
             alive: true,
             aim: 0.0,
             anim: Anim::Idle,

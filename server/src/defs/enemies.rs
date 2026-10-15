@@ -66,8 +66,8 @@ pub struct EnemyDef {
     pub hp: f64,
     pub speed: f64,
     pub radius: f64,
-    /// Sight radius (px). Enemies only notice players inside it with line of sight.
-    pub sight: f64,
+    /// Vision (tiles); overrides the entity type's. Enemies only notice players inside it with line of sight.
+    pub vision: f64,
     pub attack: AttackStyle,
     /// Second attack with its own cooldown. Melee is used when the target is
     /// in claw range, ranged otherwise (imps claw, chorts throw fire bolts).
@@ -83,7 +83,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             hp: 24.0,
             speed: 58.0,
             radius: 4.0,
-            sight: 130.0,
+            vision: 8.125,
             attack: Ranged { projectile: EntityKind::Arrow, speed: 170.0, damage: 6.0, cooldown: 1.4, range: 140.0, preferred: 90.0, windup: 0.3 },
             alt: None,
         },
@@ -92,7 +92,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             hp: if t == RaisedSkeleton { 26.0 } else { 40.0 },
             speed: 46.0,
             radius: 5.0,
-            sight: 120.0,
+            vision: 7.5,
             attack: Melee { range: 14.0, damage: 9.0, cooldown: 1.0, windup: 0.3, knock: 0.0 },
             alt: None,
         },
@@ -101,7 +101,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             hp: if t == RaisedArcher { 20.0 } else { 30.0 },
             speed: 44.0,
             radius: 5.0,
-            sight: 140.0,
+            vision: 8.75,
             attack: Ranged { projectile: EntityKind::Arrow, speed: 180.0, damage: 7.0, cooldown: 1.6, range: 150.0, preferred: 100.0, windup: 0.35 },
             alt: None,
         },
@@ -110,7 +110,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             hp: 70.0,
             speed: 52.0,
             radius: 6.0,
-            sight: 125.0,
+            vision: 7.8125,
             attack: Melee { range: 16.0, damage: 14.0, cooldown: 1.2, windup: 0.35, knock: 20.0 },
             alt: None,
         },
@@ -119,7 +119,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             hp: 50.0,
             speed: 48.0,
             radius: 6.0,
-            sight: 140.0,
+            vision: 8.75,
             attack: Ranged { projectile: EntityKind::Arrow, speed: 190.0, damage: 10.0, cooldown: 1.7, range: 150.0, preferred: 100.0, windup: 0.35 },
             alt: None,
         },
@@ -128,7 +128,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             hp: 60.0,
             speed: 40.0,
             radius: 5.0,
-            sight: 150.0,
+            vision: 9.375,
             attack: Ranged {
                 projectile: if t == Summoner { EntityKind::FireBolt } else { EntityKind::ShadowBolt },
                 speed: 130.0,
@@ -145,7 +145,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             hp: 45.0,
             speed: 0.0,
             radius: 5.0,
-            sight: 200.0,
+            vision: 12.5,
             attack: Ranged {
                 projectile: EntityKind::ShadowBolt,
                 speed: 120.0,
@@ -163,7 +163,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             // Average speed: it only moves while airborne (see MIMIC_HOP_*).
             speed: 50.0,
             radius: 6.0,
-            sight: 140.0,
+            vision: 8.75,
             attack: Melee { range: 12.0, damage: 13.0, cooldown: 1.0, windup: 0.25, knock: 0.0 },
             alt: None,
         },
@@ -172,7 +172,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             hp: if t == SummonedImp { 20.0 } else { 30.0 },
             speed: 44.0,
             radius: 5.0,
-            sight: 140.0,
+            vision: 8.75,
             attack: Ranged { projectile: EntityKind::FireBolt, speed: 130.0, damage: 7.0, cooldown: 1.6, range: 150.0, preferred: 90.0, windup: 0.3 },
             alt: Some(Melee { range: 12.0, damage: 6.0, cooldown: 0.9, windup: 0.25, knock: 0.0 }),
         },
@@ -181,7 +181,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             hp: 40.0,
             speed: 46.0,
             radius: 5.0,
-            sight: 120.0,
+            vision: 7.5,
             attack: Melee { range: 14.0, damage: 9.0, cooldown: 1.0, windup: 0.3, knock: 14.0 },
             alt: Some(Ranged { projectile: EntityKind::FireBolt, speed: 130.0, damage: 6.0, cooldown: 3.2, range: 130.0, preferred: 0.0, windup: 0.35 }),
         },
@@ -191,7 +191,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             speed: 40.0,
             // Wide: paths with clearance (see `ai::path_toward`); fits 3-tile corridors.
             radius: 10.0,
-            sight: 150.0,
+            vision: 9.375,
             attack: Melee { range: 18.0, damage: 18.0, cooldown: 1.6, windup: 0.5, knock: 28.0 },
             alt: Some(Slam { radius: OGRE_SLAM_RADIUS, damage: 14.0, cooldown: 5.0, windup: OGRE_SLAM_WINDUP, knock: 24.0 }),
         },
@@ -248,5 +248,5 @@ pub fn profile(t: EnemyType) -> Profile {
         GoblinArcher | OrcWarrior | OrcArcher | Mimic | Ogre => EntityType::Monster,
         Imp | Chort | SummonedImp => EntityType::Demon,
     };
-    entity_types::profile(&[ty], Adjust::NONE)
+    entity_types::profile(&[ty], Adjust { vision: Some(def(t).vision), ..Adjust::NONE })
 }

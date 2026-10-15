@@ -12,18 +12,19 @@ use crate::defs::kinds::Anim;
 use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
 use crate::protocol::Ev;
+use crate::defs::entity_types::Sight;
 use rand::Rng;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
 /// Nearest living, non-hidden player the monster can see right now.
-pub fn find_visible_player(run: &Run, from: Vec2, sight: f64) -> Option<usize> {
+pub fn find_visible_player(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
     run.players
         .iter()
         .enumerate()
         .filter(|(_, p)| p.alive && p.hidden <= 0.0)
         .map(|(i, p)| (i, p.pos().dist(from)))
-        .filter(|&(i, d)| d <= sight && line_of_sight(&run.layout.map, from, run.players[i].pos()))
+        .filter(|&(i, d)| d <= sight.vision_px() && line_of_sight(&run.layout.map, from, run.players[i].pos()))
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(i, _)| i)
 }
@@ -614,22 +615,23 @@ mod tests {
 
     #[test]
     fn enemy_ignores_player_without_line_of_sight_or_hidden() {
+        const SIGHT: Sight = Sight { vision: 7.5, darkvision: 1.0 };
         let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
         let ppos = run.players[0].pos();
         // Open line of sight: seen.
-        assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), 120.0).is_some());
+        assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_some());
         // Hidden: not seen.
         run.players[0].hidden = 3.0;
-        assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), 120.0).is_none());
+        assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_none());
         run.players[0].hidden = 0.0;
         // Wall in between: not seen.
         let (tx, ty) = Map::tile_of(ppos);
         for dy in -3..=3 {
             run.layout.map.set(tx + 1, ty + dy, Tile::Wall);
         }
-        assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), 120.0).is_none());
+        assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_none());
         // Out of sight radius: not seen.
-        assert!(find_visible_player(&run, ppos + Vec2::new(0.0, -0.0) + Vec2::new(-200.0, 0.0), 120.0).is_none());
+        assert!(find_visible_player(&run, ppos + Vec2::new(0.0, -0.0) + Vec2::new(-200.0, 0.0), SIGHT).is_none());
     }
 
     #[test]
