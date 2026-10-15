@@ -1,18 +1,21 @@
 //! Light sources: one registry per run. Features add, switch, recolour and
 //! remove lights only through `Run::add_light` and friends; `Run::is_lit`
 //! answers "is this spot lit?" for visibility and, later, gameplay (the
-//! shadow, the torch-extinguishing enemy). Static lights (anchored to a tile)
-//! are baked into a per-tile map, rebuilt only after a change; moving lights
-//! (anchored to an entity) are tested per query. The client mirrors the
-//! static map for drawing (`client/src/game/light.ts`, shared fixtures).
+//! shadow, the torch-extinguishing enemy). Every light lights the tiles a
+//! shadowcast of its radius from its tile reaches. Static lights (anchored to
+//! a tile) are baked into a per-tile map, rebuilt only after a change; moving
+//! lights (anchored to an entity) are cast from the entity's tile into a
+//! second layer, once per snapshot. The client casts both the same way for
+//! drawing (`client/src/game/light.ts`, shared fixtures), so a tile the
+//! server counts as lit is never drawn dark.
 
 use super::Run;
-use crate::collision::line_of_sight;
 use crate::defs::lights::{self, Colour, LightKind};
 use crate::dungeon::{Map, TILE};
 use crate::fov::Fov;
 use crate::math::Vec2;
 use crate::protocol::{Ev, LightInfo};
+use crate::wire::{q_pos, POS_SCALE};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Anchor {
@@ -35,10 +38,30 @@ pub struct LightSource {
 #[derive(Debug, Clone, Copy)]
 pub struct Lit {
     pub pos: Vec2,
-    /// Reach in px.
-    pub reach: f64,
+    /// The tile it is cast from (`light_tile`).
+    pub tile: (i32, i32),
     pub kind: LightKind,
     pub colour: Colour,
+}
+
+impl Lit {
+    pub fn new(pos: Vec2, kind: LightKind, colour: Colour) -> Self {
+        Lit { pos, tile: light_tile(pos), kind, colour }
+    }
+
+    /// How far from its position its light can fall, in px: the lit tiles
+    /// lie within its radius of its tile, whose centre is under a tile away.
+    pub fn reach(&self) -> f64 {
+        (lights::def(self.kind).radius as f64 + 1.0) * TILE
+    }
+}
+
+/// The tile a moving light is cast from: the tile of its position as the
+/// snapshot sends it (f32, then 1/POS_SCALE px), so the client, which only
+/// knows that position, casts from the same tile.
+pub fn light_tile(pos: Vec2) -> (i32, i32) {
+    let sent = |v: f64| q_pos(v as f32 as f64) as f64 / POS_SCALE;
+    Map::tile_of(Vec2::new(sent(pos.x), sent(pos.y)))
 }
 
 pub struct Lights {
@@ -49,12 +72,17 @@ pub struct Lights {
     /// Static layer: tiles lit by at least one static light.
     lit: Vec<bool>,
     dirty: bool,
+    /// Moving layer: tiles lit by a moving light (`cast_moving`), and which
+    /// ones are set, to clear them cheaply.
+    moving: Vec<bool>,
+    touched: Vec<usize>,
     fov: Fov,
 }
 
 impl Lights {
     pub fn new(w: i32, h: i32) -> Self {
-        Lights { sources: Vec::new(), next_id: 1, w, h, lit: vec![false; (w * h) as usize], dirty: false, fov: Fov::new(w, h) }
+        let n = (w * h) as usize;
+        Lights { sources: Vec::new(), next_id: 1, w, h, lit: vec![false; n], dirty: false, moving: vec![false; n], touched: Vec::new(), fov: Fov::new(w, h) }
     }
 
     /// Registers a light (on); light ids are separate from entity ids.
@@ -85,29 +113,65 @@ impl Lights {
         }
         self.dirty = false;
         self.lit.iter_mut().for_each(|v| *v = false);
-        for s in self.sources.iter().filter(|s| s.on) {
-            let Anchor::Tile(x, y) = s.anchor else { continue };
-            let r = lights::def(s.kind).radius;
-            self.fov.compute(map, x, y, r);
-            for ty in (y - r).max(0)..=(y + r).min(self.h - 1) {
-                for tx in (x - r).max(0)..=(x + r).min(self.w - 1) {
-                    if self.fov.is_visible(tx, ty) {
-                        self.lit[(ty * self.w + tx) as usize] = true;
-                    }
+        let statics: Vec<(i32, i32, LightKind)> = self
+            .sources
+            .iter()
+            .filter(|s| s.on)
+            .filter_map(|s| match s.anchor {
+                Anchor::Tile(x, y) => Some((x, y, s.kind)),
+                Anchor::Entity(_) => None,
+            })
+            .collect();
+        for (x, y, kind) in statics {
+            self.cast(map, x, y, kind, |lights, i| lights.lit[i] = true);
+        }
+    }
+
+    /// Marks every tile a light of this kind on tile (x, y) lights: a
+    /// shadowcast of its radius, in the square window around it.
+    fn cast(&mut self, map: &Map, x: i32, y: i32, kind: LightKind, mut mark: impl FnMut(&mut Self, usize)) {
+        let r = lights::def(kind).radius;
+        self.fov.compute(map, x, y, r);
+        for ty in (y - r).max(0)..=(y + r).min(self.h - 1) {
+            for tx in (x - r).max(0)..=(x + r).min(self.w - 1) {
+                if self.fov.is_visible(tx, ty) {
+                    mark(self, (ty * self.w + tx) as usize);
                 }
             }
         }
     }
 
+    /// Rebuilds the moving layer for these lights (once per snapshot or query).
+    pub fn cast_moving(&mut self, map: &Map, moving: &[Lit]) {
+        for i in std::mem::take(&mut self.touched) {
+            self.moving[i] = false;
+        }
+        for l in moving {
+            self.cast(map, l.tile.0, l.tile.1, l.kind, |lights, i| {
+                if !lights.moving[i] {
+                    lights.moving[i] = true;
+                    lights.touched.push(i);
+                }
+            });
+        }
+    }
+
     /// The static layer (call `refresh` first).
     pub fn static_lit(&self, x: i32, y: i32) -> bool {
-        x >= 0 && y >= 0 && x < self.w && y < self.h && self.lit[(y * self.w + x) as usize]
+        self.inside(x, y) && self.lit[(y * self.w + x) as usize]
     }
-}
 
-/// Does a moving light reach `p`: in range and in line of sight?
-pub fn reaches(map: &Map, l: &Lit, p: Vec2) -> bool {
-    l.pos.dist(p) <= l.reach && line_of_sight(map, l.pos, p)
+    /// Lit by a static or a moving light (call `refresh` and `cast_moving` first).
+    pub fn lit(&self, x: i32, y: i32) -> bool {
+        self.inside(x, y) && {
+            let i = (y * self.w + x) as usize;
+            self.lit[i] || self.moving[i]
+        }
+    }
+
+    fn inside(&self, x: i32, y: i32) -> bool {
+        x >= 0 && y >= 0 && x < self.w && y < self.h
+    }
 }
 
 impl Run {
@@ -169,18 +233,18 @@ impl Run {
             .filter(|s| s.on)
             .filter_map(|s| {
                 let Anchor::Entity(e) = s.anchor else { return None };
-                let pos = self.entity_pos(e)?;
-                let reach = (lights::def(s.kind).radius as f64 + 0.5) * TILE;
-                Some(Lit { pos, reach, kind: s.kind, colour: s.colour })
+                Some(Lit::new(self.entity_pos(e)?, s.kind, s.colour))
             })
             .collect()
     }
 
-    /// Is this spot lit by any light? (Static layer or a moving light in reach.)
+    /// Is this spot lit by any light? (Its tile is in the static or the moving layer.)
     pub fn is_lit(&mut self, p: Vec2) -> bool {
         self.lights.refresh(&self.layout.map);
+        let moving = self.moving_lights();
+        self.lights.cast_moving(&self.layout.map, &moving);
         let (x, y) = Map::tile_of(p);
-        self.lights.static_lit(x, y) || self.moving_lights().iter().any(|l| reaches(&self.layout.map, l, p))
+        self.lights.lit(x, y)
     }
 
     /// The light an entity of this kind carries (`defs::lights::kind_light`).
@@ -333,7 +397,25 @@ mod tests {
         }
         assert!(!run.is_lit(at(tx + 4, ty)), "not through the wall");
         assert_eq!(run.moving_lights().len(), 1);
-        assert!((run.moving_lights()[0].reach - 3.5 * TILE).abs() < 1e-9);
+        assert_eq!(run.moving_lights()[0].tile, (tx + 1, ty), "cast from its tile");
+    }
+
+    #[test]
+    fn a_moving_light_is_cast_from_the_tile_of_its_sent_position() {
+        // 47.99 px goes out as 48 (1/16 px on the wire): tile 3, as the client sees it.
+        assert_eq!(light_tile(Vec2::new(47.99, 20.0)), (3, 1));
+        assert_eq!(light_tile(Vec2::new(47.9, 20.0)), (2, 1));
+        assert_eq!(light_tile(Vec2::new(48.0, 31.99)), (3, 2));
+    }
+
+    #[test]
+    fn a_moving_light_lights_the_shadowcast_from_its_tile() {
+        let (mut run, tx, ty) = dark_run();
+        run.spawn_hazard(EntityKind::FirePatch, at(tx, ty), 10.0, 3.0, 8.0);
+        assert!(run.is_lit(at(tx + 3, ty)), "radius 3");
+        assert!(!run.is_lit(at(tx + 3, ty + 1)), "outside the radius-3 shadowcast, though near its centre");
+        let corner = Vec2::new((tx + 3) as f64 * TILE + 15.9, ty as f64 * TILE + 15.9);
+        assert!(run.is_lit(corner), "anywhere on a lit tile");
     }
 
     #[test]

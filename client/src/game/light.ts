@@ -1,4 +1,4 @@
-// Light sources for drawing. The static light map uses the same shadowcast as
+// Light sources for drawing. Static and moving lights use the same shadowcast as
 // server/src/run/light.rs (checked by fixtures), so a tile the server counts
 // as lit is never drawn dark. Colours mix additively. Knows nothing about
 // torches or lava: only light kinds, colours and tiles.
@@ -123,7 +123,7 @@ export class LightField {
     }
   }
 
-  /** A moving light at pixel position (px, py): shadowcast from its tile, colour into `rgb`, lit tiles marked in `lit`. */
+  /** A moving light at pixel position (px, py) as sent: shadowcast from its tile (the server's `light_tile`), colour into `rgb`, lit tiles marked in `lit`. */
   addMoving(rgb: Float32Array, lit: Uint8Array, px: number, py: number, kind: number, colour: number, k: number, tile: number): void {
     const r = LIGHT[kind].radius;
     const cx = Math.floor(px / tile);

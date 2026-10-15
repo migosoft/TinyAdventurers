@@ -264,7 +264,7 @@ fn export_fixtures() {
         fovs.push(json!({ "x": cx, "y": cy, "visible": vis }));
     }
     use crate::defs::lights::LightKind;
-    use crate::run::light::{Anchor, Lights};
+    use crate::run::light::{Anchor, Lights, Lit};
     let mut lights = Lights::new(map.w, map.h);
     for (x, y) in [(3, 3), (8, 8), (15, 12)] {
         lights.push(LightKind::Torch, Anchor::Tile(x, y), None);
@@ -282,7 +282,18 @@ fn export_fixtures() {
         Anchor::Tile(x, y) => json!([s.id, s.kind as u8, s.colour, x, y, true]),
         Anchor::Entity(_) => unreachable!(),
     }).collect();
-    let light_case = json!({ "sources": srcs, "lit": lit });
+    // Moving lights (px, on the wire's 1/16 px grid): open floor, beside the
+    // pillar's corner, against the long wall, exactly on a tile corner.
+    let mut alone = Lights::new(map.w, map.h);
+    let moving: Vec<serde_json::Value> = [(136.0, 216.0, LightKind::Fire), (95.0, 97.0, LightKind::Fire), (159.5, 72.0, LightKind::Fire), (176.0, 176.0, LightKind::Fire), (40.25, 250.0, LightKind::Magic)]
+        .iter()
+        .map(|&(x, y, kind)| {
+            alone.cast_moving(&map, &[Lit::new(crate::math::Vec2::new(x, y), kind, crate::defs::lights::def(kind).colour)]);
+            let lit: Vec<i32> = (0..map.w * map.h).filter(|i| alone.lit(i % map.w, i / map.w)).collect();
+            json!({ "x": x, "y": y, "kind": kind as u8, "lit": lit })
+        })
+        .collect();
+    let light_case = json!({ "sources": srcs, "lit": lit, "moving": moving });
     let doc = json!({
         "lights": light_case,
         "w": map.w, "h": map.h, "tiles": map.tiles,

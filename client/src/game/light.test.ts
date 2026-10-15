@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fixtures from '../generated/fixtures.json';
-import { LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
+import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { TileMap } from '../sim/map';
 import { addColour, falloff, LightField } from './light';
 import type { LightInfo } from '../generated/LightInfo';
@@ -14,6 +14,18 @@ describe('light field', () => {
     const lit: number[] = [];
     for (let y = 0; y < fixtures.h; y++) for (let x = 0; x < fixtures.w; x++) if (f.isLit(x, y)) lit.push(y * fixtures.w + x);
     expect(lit).toEqual(fixtures.lights.lit);
+  });
+
+  it('lights exactly the tiles the server lights around a moving light', () => {
+    const m = fmap();
+    const f = new LightField(m);
+    for (const c of fixtures.lights.moving) {
+      const lit = new Uint8Array(m.w * m.h);
+      f.addMoving(new Float32Array(m.w * m.h * 3), lit, c.x, c.y, c.kind, LIGHT[c.kind].colour, 1, CONST.TILE);
+      const tiles: number[] = [];
+      lit.forEach((v, i) => v && tiles.push(i));
+      expect(tiles, `light at ${c.x},${c.y}`).toEqual(c.lit);
+    }
   });
 
   it('switches, recolours, removes and follows map changes', () => {
