@@ -236,6 +236,10 @@ impl Run {
         for b in run.layout.barrels.clone() {
             run.spawn_object(EntityKind::Barrel, b, objects::ObjState::Barrel(objects::Barrel::new()));
         }
+        // Torches after the barrels, so every other entity keeps its id.
+        for t in run.layout.torches.clone() {
+            run.spawn_torch(&t);
+        }
         // Lava glows from the start (light ids are separate from entity ids).
         run.add_lava_lights();
         run

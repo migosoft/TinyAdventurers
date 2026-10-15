@@ -4,7 +4,7 @@
 //! centered at the top), then rotated by a random quarter turn so the start
 //! can be on any side and the boss hall is centered on the opposite side.
 
-use super::{is_terrain, ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile};
+use super::{is_terrain, ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile, TorchSide, TorchSpawn};
 use crate::defs::enemies::EnemyType;
 use crate::math::Vec2;
 use crate::protocol::BossId;
@@ -215,6 +215,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
         spawns,
         chests,
         barrels,
+        torches: Vec::new(),
         player_spawns: Vec::new(),
     };
 
@@ -222,6 +223,10 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     for _ in 0..turns {
         rotate(&mut dungeon);
     }
+    // Torches (stream 12) after the rotation, so a "face" is a brick face on screen.
+    let mut torch_rng = rng.clone();
+    torch_rng.set_stream(12);
+    dungeon.torches = place_torches(&mut torch_rng, &dungeon.map, &dungeon.rooms);
     let c = dungeon.rooms[0].rect.center_px();
     dungeon.player_spawns = vec![
         c + Vec2::new(-12.0, -12.0),
@@ -671,6 +676,106 @@ fn near_entrance(map: &Map, r: &Rect, x: i32, y: i32) -> bool {
 }
 
 /// Rotate the whole dungeon 90 degrees clockwise (map is square).
+pub const TORCH_SPACING: i32 = 6;
+/// Share of rooms and corridor stretches left without torches (dark pockets).
+pub const DARK_SHARE: f64 = 0.2;
+
+/// Wall torches: on wall cells with plain floor in front (brick faces, and
+/// side walls as sconces), one about every `TORCH_SPACING` tiles along each
+/// straight run of wall, from a random offset; runs under 3 tiles get none.
+/// Each room and each corridor stretch (connected corridor floor between
+/// rooms) is dark with `DARK_SHARE`, except the start room and the boss hall.
+/// No two torches touch.
+fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSpawn> {
+    // Region of a floor tile: its room, or its corridor stretch (flood fill).
+    let n = (map.w * map.h) as usize;
+    let mut region = vec![usize::MAX; n];
+    for (ri, r) in rooms.iter().enumerate() {
+        for y in r.rect.y..r.rect.y + r.rect.h {
+            for x in r.rect.x..r.rect.x + r.rect.w {
+                if map.in_bounds(x, y) {
+                    region[(y * map.w + x) as usize] = ri;
+                }
+            }
+        }
+    }
+    let mut next = rooms.len();
+    for start in 0..n {
+        let (sx, sy) = (start as i32 % map.w, start as i32 / map.w);
+        if region[start] != usize::MAX || map.opaque(sx, sy) {
+            continue;
+        }
+        let mut stack = vec![(sx, sy)];
+        region[start] = next;
+        while let Some((x, y)) = stack.pop() {
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let (nx, ny) = (x + dx, y + dy);
+                if map.in_bounds(nx, ny) && !map.opaque(nx, ny) && region[(ny * map.w + nx) as usize] == usize::MAX {
+                    region[(ny * map.w + nx) as usize] = next;
+                    stack.push((nx, ny));
+                }
+            }
+        }
+        next += 1;
+    }
+    let dark: Vec<bool> = (0..next)
+        .map(|ri| {
+            let keep_lit = ri < rooms.len() && (ri == 0 || rooms[ri].kind == RoomKind::Boss);
+            !keep_lit && rng.gen_bool(DARK_SHARE)
+        })
+        .collect();
+    // Candidate cells, grouped by (region, side, line) and sorted along the line.
+    let floor = |x: i32, y: i32| map.get(x, y) == Tile::Floor as u8;
+    let wall = |x: i32, y: i32| map.get(x, y) == Tile::Wall as u8;
+    let mut groups: std::collections::BTreeMap<(usize, u8, i32), Vec<i32>> = std::collections::BTreeMap::new();
+    for y in 0..map.h {
+        for x in 0..map.w {
+            if !wall(x, y) {
+                continue;
+            }
+            let t = if floor(x, y + 1) {
+                TorchSpawn { wall: (x, y), side: TorchSide::Face }
+            } else if wall(x, y - 1) && wall(x, y + 1) && floor(x + 1, y) && !floor(x - 1, y) {
+                TorchSpawn { wall: (x, y), side: TorchSide::West }
+            } else if wall(x, y - 1) && wall(x, y + 1) && floor(x - 1, y) && !floor(x + 1, y) {
+                TorchSpawn { wall: (x, y), side: TorchSide::East }
+            } else {
+                continue;
+            };
+            let (fx, fy) = t.front();
+            let ri = region[(fy * map.w + fx) as usize];
+            if ri == usize::MAX || dark[ri] {
+                continue;
+            }
+            let (line, along) = if t.side == TorchSide::Face { (y, x) } else { (x, y) };
+            groups.entry((ri, t.side as u8, line)).or_default().push(along);
+        }
+    }
+    let mut out: Vec<TorchSpawn> = Vec::new();
+    for ((_, side, line), mut cells) in groups {
+        cells.sort();
+        let side = match side { 0 => TorchSide::Face, 1 => TorchSide::West, _ => TorchSide::East };
+        // Split into runs of consecutive cells.
+        let mut runs: Vec<Vec<i32>> = Vec::new();
+        for c in cells {
+            match runs.last_mut() {
+                Some(r) if *r.last().unwrap() + 1 == c => r.push(c),
+                _ => runs.push(vec![c]),
+            }
+        }
+        for run in runs.into_iter().filter(|r| r.len() >= 3) {
+            let offset = rng.gen_range(0..TORCH_SPACING).min(run.len() as i32 - 1) as usize;
+            for &a in run.iter().skip(offset).step_by(TORCH_SPACING as usize) {
+                let wall = if side == TorchSide::Face { (a, line) } else { (line, a) };
+                if out.iter().all(|o| (o.wall.0 - wall.0).abs() > 1 || (o.wall.1 - wall.1).abs() > 1) {
+                    out.push(TorchSpawn { wall, side });
+                }
+            }
+        }
+    }
+    out
+}
+
 fn rotate(d: &mut Dungeon) {
     let n = d.map.w;
     let old = d.map.clone();
@@ -778,15 +883,61 @@ mod tests {
     use super::*;
 
     #[test]
+    fn torches_hang_on_walls_with_floor_in_front_spaced_and_never_adjacent() {
+        let (mut dark_regions, mut unlit) = (0, 0);
+        for seed in 0..200u64 {
+            let d = generate(seed, if seed % 2 == 0 { Theme::Water } else { Theme::Lava });
+            assert!(!d.torches.is_empty(), "seed {seed}");
+            for t in &d.torches {
+                let (x, y) = t.wall;
+                assert_eq!(d.map.get(x, y), Tile::Wall as u8, "seed {seed}: torch not on a wall at {x},{y}");
+                let (fx, fy) = t.front();
+                assert_eq!(d.map.get(fx, fy), Tile::Floor as u8, "seed {seed}: no floor in front of {x},{y}");
+            }
+            for (i, a) in d.torches.iter().enumerate() {
+                for b in &d.torches[i + 1..] {
+                    assert!((a.wall.0 - b.wall.0).abs() > 1 || (a.wall.1 - b.wall.1).abs() > 1, "seed {seed}: adjacent torches");
+                }
+            }
+            // The boss hall always has torches; the start room almost always (seed 178 has an open start room with no wall run of 3).
+            for r in [&d.rooms[d.start].rect, d.boss_hall()] {
+                if !d.torches.iter().any(|t| { let (fx, fy) = t.front(); r.contains_tile(fx, fy) }) { unlit += 1; assert!(r != &d.rooms[d.start].rect || unlit <= 2, "seed {seed}: unlit start or boss hall"); }
+            }
+            // Some ordinary room has none (dark pockets exist over the seeds).
+            dark_regions += d.rooms.iter().filter(|r| matches!(r.kind, RoomKind::Room | RoomKind::Hall))
+                .filter(|r| !d.torches.iter().any(|t| { let (fx, fy) = t.front(); r.rect.contains_tile(fx, fy) })).count();
+        }
+        assert!(dark_regions > 50, "dark pockets over 200 seeds: {dark_regions}");
+    }
+
+    #[test]
+    fn torches_keep_their_spacing_along_the_start_room_wall() {
+        for seed in 0..50u64 {
+            let d = generate(seed, Theme::Water);
+            let r = d.rooms[d.start].rect;
+            // Face torches on the start room's top wall: one region, so one spacing rule.
+            let mut xs: Vec<i32> = d.torches.iter().filter(|t| t.side == TorchSide::Face && t.wall.1 == r.y - 1 && r.contains_tile(t.wall.0, r.y)).map(|t| t.wall.0).collect();
+            xs.sort();
+            for w in xs.windows(2) {
+                // Closer only where the run broke (a doorway or corner between them).
+                let gap = (w[0]..=w[1]).any(|x| d.map.get(x, r.y - 1) != Tile::Wall as u8 || d.map.get(x, r.y) != Tile::Floor as u8);
+                assert!(w[1] - w[0] >= TORCH_SPACING || gap, "seed {seed}: torches at x {} and {}", w[0], w[1]);
+            }
+        }
+    }
+
+    #[test]
     fn split_keeps_every_part() {
         for seed in 0..20u64 {
             let d = generate(seed, if seed % 2 == 0 { Theme::Water } else { Theme::Lava });
             let (hall, door, tiles) = (*d.boss_hall(), d.door.clone(), d.map.tiles.clone());
             let (n_sp, n_ch, ps, n_b) = (d.spawns.len(), d.chests.len(), d.player_spawns.clone(), d.barrels.len());
+            let n_t = d.torches.len();
             let (layout, parts) = d.split();
             assert_eq!(layout.map.tiles, tiles);
             assert_eq!((layout.spawns.len(), layout.chests.len(), layout.player_spawns.clone()), (n_sp, n_ch, ps));
             assert_eq!(layout.barrels.len(), n_b);
+            assert_eq!(layout.torches.len(), n_t);
             assert_eq!((*parts.boss_hall(), parts.door.clone()), (hall, door));
         }
     }

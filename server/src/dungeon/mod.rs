@@ -237,6 +237,8 @@ pub struct Dungeon {
     pub chests: Vec<ChestSpawn>,
     /// Explosive barrels (tile centres).
     pub barrels: Vec<Vec2>,
+    /// Wall torches (placed after rotation).
+    pub torches: Vec<TorchSpawn>,
     pub player_spawns: Vec<Vec2>,
 }
 
@@ -255,6 +257,8 @@ pub struct Layout {
     pub chests: Vec<ChestSpawn>,
     /// Explosive barrels (tile centres).
     pub barrels: Vec<Vec2>,
+    /// Wall torches (placed after rotation).
+    pub torches: Vec<TorchSpawn>,
     pub player_spawns: Vec<Vec2>,
 }
 
@@ -276,7 +280,7 @@ impl DungeonParts {
 
 impl Dungeon {
     pub fn split(self) -> (Layout, DungeonParts) {
-        let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, player_spawns } = self;
-        (Layout { map, spawns, chests, barrels, player_spawns }, DungeonParts { rooms, start, boss, door })
+        let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, player_spawns } = self;
+        (Layout { map, spawns, chests, barrels, torches, player_spawns }, DungeonParts { rooms, start, boss, door })
     }
 }
