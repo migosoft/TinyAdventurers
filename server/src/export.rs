@@ -262,7 +262,28 @@ fn export_fixtures() {
         }
         fovs.push(json!({ "x": cx, "y": cy, "visible": vis }));
     }
+    use crate::defs::lights::LightKind;
+    use crate::run::light::{Anchor, Lights};
+    let mut lights = Lights::new(map.w, map.h);
+    for (x, y) in [(3, 3), (8, 8), (15, 12)] {
+        lights.push(LightKind::Torch, Anchor::Tile(x, y), None);
+    }
+    for y in 0..map.h {
+        for x in 0..map.w {
+            if map.get(x, y) == Tile::Lava as u8 {
+                lights.push(LightKind::Lava, Anchor::Tile(x, y), None);
+            }
+        }
+    }
+    lights.refresh(&map);
+    let lit: Vec<i32> = (0..map.w * map.h).filter(|i| lights.static_lit(i % map.w, i / map.w)).collect();
+    let srcs: Vec<serde_json::Value> = lights.sources.iter().map(|s| match s.anchor {
+        Anchor::Tile(x, y) => json!([s.id, s.kind as u8, s.colour, x, y, true]),
+        Anchor::Entity(_) => unreachable!(),
+    }).collect();
+    let light_case = json!({ "sources": srcs, "lit": lit });
     let doc = json!({
+        "lights": light_case,
         "w": map.w, "h": map.h, "tiles": map.tiles,
         "radius": PLAYER_RADIUS, "dt": DT, "dashSpeed": ab::DASH_SPEED, "fovRadius": PLAYER_FOV_RADIUS,
         "solids": solids.iter().map(|s| json!([s.x, s.y, s.half])).collect::<Vec<_>>(),
