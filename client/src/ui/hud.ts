@@ -1,4 +1,4 @@
-import { ABILITIES, CLASSES, FLAG } from '../generated/defs';
+import { ABILITIES, CLASSES, EFFECTS, FLAG } from '../generated/defs';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
@@ -6,7 +6,7 @@ import type { PlayerStats } from '../generated/PlayerStats';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
 import { endText } from './endText';
-import { BOSS_TEXT, CLASS_TEXT } from './text';
+import { BOSS_TEXT, CLASS_TEXT, effectGlyph } from './text';
 
 export interface FrameStats {
   fps: number;
@@ -36,6 +36,8 @@ export class Hud {
   private hp = el('div', 'hp-bar');
   private hpFill = el('div', 'fill');
   private hpText = el('span');
+  private fx = el('div', 'effects');
+  private fxKey = '';
   private coins = el('div', 'coins');
   private coinCount = 0;
   private slots: HTMLElement[] = [];
@@ -69,7 +71,9 @@ export class Hud {
       this.slots.push(s);
       abil.append(s);
     }
-    bottom.append(this.hp, this.coins, abil);
+    const hpCol = el('div', 'hp-col');
+    hpCol.append(this.hp, this.fx);
+    bottom.append(hpCol, this.coins, abil);
     this.menu.append(el('div', 'title', 'Paused menu'), el('p', '', 'The dungeon keeps going while this is open.'));
     const leave = el('button', '', 'Leave dungeon');
     leave.onclick = () => {
@@ -92,6 +96,8 @@ export class Hud {
     this.banner.classList.add('hidden');
     this.setStatusHint(null);
     this.msgs.innerHTML = '';
+    this.fx.innerHTML = '';
+    this.fxKey = '';
     this.coinCount = 0;
     this.showCoins();
     const me = info.players.find((p) => p.ent === info.you)!;
@@ -105,7 +111,7 @@ export class Hud {
     for (const p of info.players) {
       const row = el('div', `member c-${p.class.toLowerCase()}`);
       row.dataset.ent = String(p.ent);
-      row.append(el('span', 'pname', `${p.name}${p.ent === info.you ? ' (you)' : ''}`), el('div', 'mini'));
+      row.append(el('span', 'pname', `${p.name}${p.ent === info.you ? ' (you)' : ''}`), el('div', 'mini'), el('div', 'pfx'));
       row.querySelector('.mini')!.append(el('div', 'fill'));
       this.party.append(row);
     }
@@ -133,12 +139,22 @@ export class Hud {
     this.hpFill.style.width = `${pct * 100}%`;
     this.hpText.textContent = `${Math.ceil(s.me.hp)} / ${Math.round(s.me.max_hp)}`;
     this.hp.classList.toggle('low', pct < 0.3);
+    this.showEffects(s.me.effects);
     for (const e of s.ents) {
       const row = this.party.querySelector<HTMLElement>(`[data-ent="${e[0]}"]`);
       if (!row) continue;
       const dead = (e[8] & FLAG.DEAD) !== 0;
       row.classList.toggle('dead', dead);
       (row.querySelector('.mini .fill') as HTMLElement).style.width = `${dead ? 0 : (e[4] / 255) * 100}%`;
+      const pfx = row.querySelector<HTMLElement>('.pfx')!;
+      if (pfx.dataset.bits !== String(e[10])) {
+        pfx.dataset.bits = String(e[10]);
+        pfx.innerHTML = Object.keys(EFFECTS)
+          .map(Number)
+          .filter((id) => (e[10] & (1 << id)) !== 0)
+          .map((id) => `<span class="fx ${EFFECTS[id].positive ? 'pos' : 'neg'}">${effectGlyph(id)}</span>`)
+          .join('');
+      }
     }
     if (s.boss) {
       this.boss.classList.remove('hidden');
@@ -150,6 +166,17 @@ export class Hud {
       this.banner.classList.remove('hidden');
       this.banner.textContent = watched ? `You are dead — watching ${watched} (Q / E)` : 'You are dead';
     }
+  }
+
+  /** Own effect icons with the whole seconds left; rebuilt only when kinds or seconds change. */
+  private showEffects(list: [number, number][]): void {
+    const rows = list.map(([k, left]) => [k, Math.ceil(left)] as const);
+    const key = rows.map((r) => r.join(':')).join(',');
+    if (key === this.fxKey) return;
+    this.fxKey = key;
+    this.fx.innerHTML = rows
+      .map(([k, t]) => `<span class="fx ${EFFECTS[k]?.positive ? 'pos' : 'neg'}">${effectGlyph(k)}<i>${t}</i></span>`)
+      .join('');
   }
 
   frame(f: FrameStats): void {

@@ -61,3 +61,10 @@ export const STAT_TEXT: Record<UpgradeStat, { name: string; bonus: (m: Modifiers
 function pct(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
+
+/** One ASCII letter per status effect (the HUD's pixel font has no symbol glyphs). */
+const EFFECT_GLYPH: Record<number, string> = { 0: 'B', 1: 'Z', 2: 'P', 3: 'S', 4: 'H' };
+
+export function effectGlyph(id: number): string {
+  return EFFECT_GLYPH[id] ?? '?';
+}

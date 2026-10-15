@@ -666,6 +666,51 @@ kbd {
     box-shadow: 0 0 0 2px #ff4040;
   }
 }
+.hp-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.effects {
+  display: flex;
+  gap: 4px;
+  min-height: 14px;
+}
+.fx {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 1px solid #c04040;
+  background: #140c12;
+  color: #c04040;
+  font-size: 8px;
+  line-height: 12px;
+  text-align: center;
+  text-shadow: none;
+}
+.fx.pos {
+  border-color: #40c060;
+  color: #40c060;
+}
+.fx i {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-style: normal;
+  font-size: 5px;
+  line-height: 5px;
+  color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}
+.pfx {
+  display: flex;
+  gap: 2px;
+  margin-top: 3px;
+}
+.pfx:empty {
+  display: none;
+}
 .abilities {
   display: flex;
   gap: 8px;
