@@ -685,7 +685,8 @@ pub const DARK_SHARE: f64 = 0.2;
 /// straight run of wall, from a random offset; runs under 3 tiles get none.
 /// Each room and each corridor stretch (connected corridor floor between
 /// rooms) is dark with `DARK_SHARE`, except the start room and the boss hall.
-/// No two torches touch.
+/// No two torches touch. The start room and the boss hall always get at least
+/// one torch (fallback: the middle of their longest candidate run).
 fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSpawn> {
     // Region of a floor tile: its room, or its corridor stretch (flood fill).
     let n = (map.w * map.h) as usize;
@@ -752,7 +753,8 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
         }
     }
     let mut out: Vec<TorchSpawn> = Vec::new();
-    for ((_, side, line), mut cells) in groups {
+    for (&(_, side, line), cells) in &groups {
+        let mut cells = cells.clone();
         cells.sort();
         let side = match side { 0 => TorchSide::Face, 1 => TorchSide::West, _ => TorchSide::East };
         // Split into runs of consecutive cells.
@@ -770,6 +772,46 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
                 if out.iter().all(|o| (o.wall.0 - wall.0).abs() > 1 || (o.wall.1 - wall.1).abs() > 1) {
                     out.push(TorchSpawn { wall, side });
                 }
+            }
+        }
+    }
+    // The start room and the boss hall are never left without a torch: if the
+    // runs were all too short (or lost to the spacing rule), take the middle of
+    // the longest candidate run, whatever its length.
+    for ri in (0..rooms.len()).filter(|&ri| ri == 0 || rooms[ri].kind == RoomKind::Boss) {
+        let lit = |out: &[TorchSpawn]| out.iter().any(|t| { let (fx, fy) = t.front(); rooms[ri].rect.contains_tile(fx, fy) });
+        if lit(&out) {
+            continue;
+        }
+        let mut runs: Vec<(u8, i32, Vec<i32>)> = Vec::new();
+        for (&(r, side, line), cells) in &groups {
+            if r != ri {
+                continue;
+            }
+            let mut cells = cells.clone();
+            cells.sort();
+            let mut cur: Vec<i32> = Vec::new();
+            for c in cells {
+                if cur.last().map_or(false, |&l| l + 1 != c) {
+                    runs.push((side, line, std::mem::take(&mut cur)));
+                }
+                cur.push(c);
+            }
+            if !cur.is_empty() {
+                runs.push((side, line, cur));
+            }
+        }
+        runs.sort_by_key(|(_, _, c)| std::cmp::Reverse(c.len()));
+        for (side, line, cells) in runs {
+            let a = cells[cells.len() / 2];
+            let (wall, side) = match side {
+                0 => ((a, line), TorchSide::Face),
+                1 => ((line, a), TorchSide::West),
+                _ => ((line, a), TorchSide::East),
+            };
+            if out.iter().all(|o| (o.wall.0 - wall.0).abs() > 1 || (o.wall.1 - wall.1).abs() > 1) {
+                out.push(TorchSpawn { wall, side });
+                break;
             }
         }
     }
@@ -884,7 +926,7 @@ mod tests {
 
     #[test]
     fn torches_hang_on_walls_with_floor_in_front_spaced_and_never_adjacent() {
-        let (mut dark_regions, mut unlit) = (0, 0);
+        let mut dark_regions = 0;
         for seed in 0..200u64 {
             let d = generate(seed, if seed % 2 == 0 { Theme::Water } else { Theme::Lava });
             assert!(!d.torches.is_empty(), "seed {seed}");
@@ -899,9 +941,9 @@ mod tests {
                     assert!((a.wall.0 - b.wall.0).abs() > 1 || (a.wall.1 - b.wall.1).abs() > 1, "seed {seed}: adjacent torches");
                 }
             }
-            // The boss hall always has torches; the start room almost always (seed 178 has an open start room with no wall run of 3).
+            // The start room and the boss hall have torches.
             for r in [&d.rooms[d.start].rect, d.boss_hall()] {
-                if !d.torches.iter().any(|t| { let (fx, fy) = t.front(); r.contains_tile(fx, fy) }) { unlit += 1; assert!(r != &d.rooms[d.start].rect || unlit <= 2, "seed {seed}: unlit start or boss hall"); }
+                assert!(d.torches.iter().any(|t| { let (fx, fy) = t.front(); r.contains_tile(fx, fy) }), "seed {seed}: unlit start or boss hall");
             }
             // Some ordinary room has none (dark pockets exist over the seeds).
             dark_regions += d.rooms.iter().filter(|r| matches!(r.kind, RoomKind::Room | RoomKind::Hall))
