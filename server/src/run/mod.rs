@@ -777,7 +777,7 @@ impl Run {
         if !self.players[pi].alive {
             return;
         }
-        if let (0.0, Some(h)) = (dmg.amount, dmg.on_hit) {
+        if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit, dmg.from_effect) {
             self.hit_effect(effects::Creature::Player(pi), h); // a pure effect hit: no number, no flash
             return;
         }
@@ -808,7 +808,7 @@ impl Run {
             self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
             self.event(Ev::Msg { text: format!("{name} has fallen") }, None);
         }
-        if self.players[pi].alive {
+        if self.players[pi].alive && !dmg.from_effect {
             if v > 0.0 {
                 self.damage_wakes(effects::Creature::Player(pi));
             }
@@ -858,7 +858,7 @@ impl Run {
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             return false;
         }
-        if let (0.0, Some(h)) = (dmg.amount, dmg.on_hit) {
+        if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit, dmg.from_effect) {
             self.hit_effect(effects::Creature::Monster(mi), h);
             return true;
         }
@@ -903,10 +903,14 @@ impl Run {
         if self.monsters[mi].hp <= 0.0 {
             if let Some(pi) = src_player {
                 self.players[pi].kills += 1;
+            } else if dmg.from_effect {
+                if let Some(pi) = self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) {
+                    self.players[pi].kills += 1;
+                }
             }
             self.kill_monster(mi);
         }
-        if self.monsters[mi].alive {
+        if self.monsters[mi].alive && !dmg.from_effect {
             if raw > 0.0 {
                 self.damage_wakes(effects::Creature::Monster(mi));
             }

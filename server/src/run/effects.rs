@@ -1,8 +1,9 @@
 //! Status effects at run time: the timers on each creature and the only
 //! API other code uses to touch them. Data: `defs/effects.rs`.
 
-use crate::defs::damage::{DamageType, Resistances};
-use crate::defs::effects::{def, resolve_stat, EffectKind, EffectResponse, Stat, EFFECT_REDUCED};
+use crate::defs::damage::{Damage, DamageType, Resistances};
+use crate::dungeon::Tile;
+use crate::defs::effects::{def, resolve_stat, EffectKind, EffectResponse, Stat, DOT_TICK, EFFECT_REDUCED};
 use crate::defs::entity_types::Sight;
 use crate::protocol::Ev;
 use crate::run::{Run, DT};
@@ -14,6 +15,8 @@ pub struct ActiveEffect {
     pub kind: EffectKind,
     /// Seconds left.
     pub left: f64,
+    /// Time since the last damage-over-time tick.
+    pub dot_t: f64,
 }
 
 /// The effects on one creature (a handful at most) and its stats through them.
@@ -39,7 +42,7 @@ impl Effects {
             a.left = a.left.max(secs);
             return false;
         }
-        self.0.push(ActiveEffect { kind: k, left: secs });
+        self.0.push(ActiveEffect { kind: k, left: secs, dot_t: 0.0 });
         true
     }
     pub fn remove(&mut self, k: EffectKind) -> bool {
@@ -47,14 +50,23 @@ impl Effects {
         self.0.retain(|a| a.kind != k);
         self.0.len() != n
     }
-    /// Counts down; returns the kinds that ran out (removed).
-    fn tick(&mut self, dt: f64) -> Vec<EffectKind> {
+    /// Counts down; returns the kinds that ran out (removed) and the
+    /// damage-over-time ticks due this step.
+    fn tick(&mut self, dt: f64) -> (Vec<EffectKind>, Vec<(DamageType, f64)>) {
+        let mut hits = Vec::new();
         for a in &mut self.0 {
+            if let Some((t, dps)) = def(a.kind).dot {
+                a.dot_t += dt;
+                if a.dot_t >= DOT_TICK - 1e-9 {
+                    a.dot_t -= DOT_TICK;
+                    hits.push((t, dps * DOT_TICK));
+                }
+            }
             a.left -= dt;
         }
-        let gone: Vec<EffectKind> = self.0.iter().filter(|a| a.left <= 0.0).map(|a| a.kind).collect();
-        self.0.retain(|a| a.left > 0.0);
-        gone
+        let gone: Vec<EffectKind> = self.0.iter().filter(|a| a.left <= 1e-9).map(|a| a.kind).collect();
+        self.0.retain(|a| a.left > 1e-9);
+        (gone, hits)
     }
     fn take_all(&mut self) -> Vec<EffectKind> {
         std::mem::take(&mut self.0).into_iter().map(|a| a.kind).collect()
@@ -141,10 +153,27 @@ impl Run {
             EffectResponse::Reduced => secs *= EFFECT_REDUCED,
             EffectResponse::Full => {}
         }
-        let Some((fx, id, pos, ok)) = self.creature(c) else { return false };
+        let Some((_, _, _, ok)) = self.creature(c) else { return false };
         if !ok || secs <= 0.0 {
             return false;
         }
+        if let Some((t, _)) = def(kind).dot {
+            let res = match c {
+                Creature::Player(i) => self.players.get(i).map(|p| p.effects.res(p.res).get(t)),
+                Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.res(m.res).get(t)),
+            };
+            if res.is_some_and(|r| r >= 1.0) {
+                return false; // immune to its damage: no effect at all
+            }
+        }
+        let cancelled: Vec<EffectKind> = def(kind).cancels.iter().copied().filter(|&k| self.has_effect(c, k)).collect();
+        if !cancelled.is_empty() {
+            for k in cancelled {
+                self.remove_effect(c, k);
+            }
+            return false; // fire thaws ice / ice puts out fire
+        }
+        let Some((fx, id, pos, _)) = self.creature(c) else { return false };
         if fx.add(kind, secs) {
             self.effect_event(c, id, pos, kind, true);
         }
@@ -195,9 +224,32 @@ impl Run {
             if fx.list().is_empty() {
                 continue;
             }
-            let gone = if ok { fx.tick(DT) } else { fx.take_all() };
+            if !ok {
+                for k in fx.take_all() {
+                    self.effect_event(c, id, pos, k, false);
+                }
+                continue;
+            }
+            let kinds = fx.kinds();
+            // Water puts out fire.
+            let tile = self.layout.map.tile_at(pos);
+            if tile == Tile::ShallowWater as u8 || tile == Tile::DeepWater as u8 {
+                for k in kinds.into_iter().filter(|&k| def(k).ends_in_water) {
+                    self.remove_effect(c, k);
+                }
+            }
+            let Some((fx, ..)) = self.creature(c) else { continue };
+            let (gone, hits) = fx.tick(DT);
             for k in gone {
                 self.effect_event(c, id, pos, k, false);
+            }
+            for (t, amount) in hits {
+                match c {
+                    Creature::Player(i) => self.hurt_player(i, Damage::effect_tick(amount, t)),
+                    Creature::Monster(i) => {
+                        self.hurt_monster(i, Damage::effect_tick(amount, t), false, None);
+                    }
+                }
             }
         }
     }
@@ -227,7 +279,7 @@ impl Run {
 mod tests {
     use super::*;
     use crate::protocol::{BossId, ClassId, Ev};
-    use crate::defs::damage::{Damage, DamageSplit};
+    use crate::defs::damage::DamageSplit;
     use crate::run::tests::test_run;
     use crate::run::DT;
 
@@ -276,6 +328,7 @@ mod tests {
         let mi = run.monster_idx(id).unwrap();
         for k in EffectKind::ALL {
             assert!(run.apply_effect(Creature::Monster(mi), k, Some(3.0)), "the ogre takes {k:?} in full");
+            run.remove_effect(Creature::Monster(mi), k); // fire and ice cancel each other
         }
     }
 
@@ -494,5 +547,103 @@ mod tests {
         run.players[0].inputs.push_back(crate::protocol::InputMsg { seq, mx: 0, my: 0, aim: 0.0, aim_dist: 0.0, primary: None, secondary: None, view_lag: 0, rtt: 0, act: true });
         run.step();
         assert!(run.has_effect(Creature::Player(1), EffectKind::Sleep));
+    }
+
+    use crate::defs::damage::Resistances;
+
+    fn hp_loss_over(run: &mut crate::run::Run, steps: usize) -> f64 {
+        let hp = run.players[0].hp;
+        for _ in 0..steps {
+            run.tick_effects();
+        }
+        hp - run.players[0].hp
+    }
+
+    #[test]
+    fn burning_runs_out_after_its_duration_without_refreshing_itself() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        open(&mut run);
+        run.apply_effect(Creature::Player(0), EffectKind::Burning, None);
+        let steps = (3.0 / DT).round() as usize;
+        assert!((hp_loss_over(&mut run, steps) - 18.0).abs() < 1e-6, "3 heat every 0.5 s for 3 s");
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Burning), "its own ticks never refresh it");
+        assert_eq!(hp_loss_over(&mut run, 60), 0.0);
+    }
+
+    #[test]
+    fn partial_resistance_reduces_each_tick_and_full_resistance_refuses_the_effect() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        open(&mut run);
+        run.players[0].res = Resistances::of(&[(DamageType::Heat, 0.5)]);
+        run.apply_effect(Creature::Player(0), EffectKind::Burning, None);
+        assert!((hp_loss_over(&mut run, 30) - 1.5).abs() < 1e-6);
+        run.remove_effect(Creature::Player(0), EffectKind::Burning);
+        run.apply_effect(Creature::Player(0), EffectKind::Petrified, None);
+        assert!(!run.apply_effect(Creature::Player(0), EffectKind::Burning, None), "petrified: heat 0.5 + 0.5 = immune");
+        run.players[0].res = Resistances::of(&[(DamageType::Poison, 1.0)]);
+        assert!(!run.apply_effect(Creature::Player(0), EffectKind::Poisoned, None));
+    }
+
+    #[test]
+    fn effect_damage_applies_no_effects() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat));
+        assert!(run.players[0].effects.list().is_empty());
+        run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(OnHit { kind: EffectKind::Slowed, secs: 1.0, chance: 1.0 }));
+        assert!(run.players[0].effects.list().is_empty(), "not even an on_hit");
+    }
+
+    #[test]
+    fn fire_thaws_ice_and_ice_puts_out_fire() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let me = Creature::Player(0);
+        run.apply_effect(me, EffectKind::Frozen, None);
+        assert!(!run.apply_effect(me, EffectKind::Burning, None));
+        assert!(!run.has_effect(me, EffectKind::Frozen) && !run.has_effect(me, EffectKind::Burning), "thawed, not burning");
+        run.apply_effect(me, EffectKind::Burning, None);
+        assert!(!run.apply_effect(me, EffectKind::Frozen, None));
+        assert!(!run.has_effect(me, EffectKind::Frozen) && !run.has_effect(me, EffectKind::Burning), "put out, not frozen");
+    }
+
+    #[test]
+    fn shallow_water_puts_out_fire() {
+        use crate::dungeon::Tile;
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        open(&mut run);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        run.set_tile(tx, ty, Tile::ShallowWater);
+        run.apply_effect(Creature::Player(0), EffectKind::Burning, None);
+        run.apply_effect(Creature::Player(0), EffectKind::Poisoned, None);
+        run.tick_effects();
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Burning));
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Poisoned), "water only puts out fire");
+    }
+
+    #[test]
+    fn frozen_roots_and_ticks_cold() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        open(&mut run);
+        run.apply_effect(Creature::Player(0), EffectKind::Frozen, None);
+        let fx = &run.players[0].effects;
+        assert!(fx.no_move() && fx.no_act() && fx.no_turn());
+        assert!((hp_loss_over(&mut run, (2.0 / DT).round() as usize) - 8.0).abs() < 1e-6, "2 cold every 0.5 s for 2 s");
+    }
+
+    #[test]
+    fn a_burn_kill_credits_the_last_hero_who_hit() {
+        use crate::defs::enemies::EnemyType;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
+        run.monsters[mi].hp = 2.0;
+        run.apply_effect(Creature::Monster(mi), EffectKind::Burning, None);
+        for _ in 0..40 {
+            run.tick_effects();
+        }
+        assert!(!run.monsters[mi].alive);
+        assert_eq!(run.players[0].kills, 1);
     }
 }

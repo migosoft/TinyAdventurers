@@ -79,13 +79,10 @@ pub struct EffectDef {
     pub wakes_on_use: bool,
     /// Damage over time: its type and damage per second, dealt every `DOT_TICK`
     /// as effect damage. A creature fully resistant to the type never takes the effect.
-    #[allow(dead_code)] // used by run/effects.rs (Task 2)
     pub dot: Option<(DamageType, f64)>,
     /// Applying this effect ends these instead (fire thaws ice, ice puts out fire).
-    #[allow(dead_code)] // used by run/effects.rs (Task 2)
     pub cancels: &'static [EffectKind],
     /// Standing in shallow or deep water ends it.
-    #[allow(dead_code)] // used by run/effects.rs (Task 2)
     pub ends_in_water: bool,
 }
 
@@ -124,7 +121,6 @@ pub fn def(k: EffectKind) -> EffectDef {
 }
 
 /// Damage over time ticks this often (s).
-#[allow(dead_code)] // used by run/effects.rs (Task 2)
 pub const DOT_TICK: f64 = 0.5;
 /// A hit whose share of an element is at least this applies the element's effect.
 #[allow(dead_code)] // used by run/effects.rs (Task 2)

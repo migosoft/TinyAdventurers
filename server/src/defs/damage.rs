@@ -106,15 +106,20 @@ pub struct Damage {
     pub split: DamageSplit,
     /// An effect the hit applies after its damage, if the target lives (sleep poison arrow).
     pub on_hit: Option<super::effects::OnHit>,
+    /// Dealt by an effect over time: applies no effects (no loops).
+    pub from_effect: bool,
 }
 
 impl Damage {
     pub fn new(amount: f64, split: DamageSplit) -> Self {
-        Damage { amount, split, on_hit: None }
+        Damage { amount, split, on_hit: None, from_effect: false }
     }
     pub fn with_effect(mut self, h: super::effects::OnHit) -> Self {
         self.on_hit = Some(h);
         self
+    }
+    pub fn effect_tick(amount: f64, t: DamageType) -> Self {
+        Damage { from_effect: true, ..Damage::new(amount, DamageSplit::pure(t)) }
     }
     pub fn physical(amount: f64) -> Self {
         Damage::new(amount, DamageSplit::physical())
