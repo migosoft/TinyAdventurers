@@ -49,7 +49,7 @@ pub(crate) fn set_anim(run: &mut Run, bi: usize, a: Anim) {
 /// Nearest player the boss can see.
 pub(crate) fn target(run: &Run, bi: usize) -> Option<(usize, Vec2, f64)> {
     let m = &run.monsters[bi];
-    find_visible_player(run, m.pos, m.sight).map(|pi| {
+    find_visible_player(run, m.pos, m.sight_now()).map(|pi| {
         let p = run.players[pi].pos();
         (pi, p, p.dist(m.pos))
     })

@@ -1,7 +1,6 @@
 //! Status effects at run time: the timers on each creature and the only
 //! API other code uses to touch them. Data: `defs/effects.rs`.
 
-#![allow(dead_code)] // temporary: the API is consumed by later effect tasks
 
 use crate::defs::damage::{DamageType, Resistances};
 use crate::defs::effects::{def, resolve_stat, EffectKind, EffectResponse, Stat, EFFECT_REDUCED};
@@ -269,5 +268,113 @@ mod tests {
         e.add(EffectKind::Blind, 1.0);
         let s = e.sight(crate::defs::entity_types::Sight { vision: 9.0, darkvision: 0.5 });
         assert_eq!((s.vision, s.darkvision), (0.0, 0.0));
+    }
+
+    use crate::math::Vec2;
+    use crate::run::entities::AiState;
+
+    fn walk(run: &mut crate::run::Run, mx: i8) {
+        let seq = run.players[0].ack + 1;
+        run.players[0].inputs.push_back(crate::protocol::InputMsg { seq, mx, my: 0, aim: 1.0, aim_dist: 30.0, primary: None, secondary: None, view_lag: 0, rtt: 0, act: false });
+        run.step();
+    }
+
+    fn open(run: &mut crate::run::Run) {
+        run.monsters.clear();
+        run.objects.clear();
+    }
+
+    #[test]
+    fn slowed_and_accelerated_heroes_walk_at_their_speed() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let x0 = run.players[0].mv.x;
+        walk(&mut run, 1);
+        let base = run.players[0].mv.x - x0;
+        run.apply_effect(Creature::Player(0), EffectKind::Slowed, Some(5.0));
+        let x1 = run.players[0].mv.x;
+        walk(&mut run, 1);
+        assert!(((run.players[0].mv.x - x1) - base * 0.5).abs() < 1e-6);
+        run.apply_effect(Creature::Player(0), EffectKind::Sleep, Some(5.0));
+        let x2 = run.players[0].mv.x;
+        walk(&mut run, 1);
+        assert_eq!(run.players[0].mv.x, x2, "asleep: no moves");
+    }
+
+    #[test]
+    fn a_petrified_hero_slides_shorter_and_cannot_dash_attack_or_turn() {
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        open(&mut run);
+        let from = run.players[0].pos() - Vec2::new(10.0, 0.0);
+        let mut free = test_run(&[ClassId::Barbarian], BossId::Demon);
+        open(&mut free);
+        free.knock_player(0, from, 0.0, 40.0);
+        run.apply_effect(Creature::Player(0), EffectKind::Petrified, Some(5.0));
+        run.knock_player(0, from, 0.0, 40.0);
+        let (a, b) = (free.players[0].mv.knock_vx, run.players[0].mv.knock_vx);
+        assert!(b > 0.0 && b < a, "still pushed, but less: {b} < {a}");
+        // Let the slide end, then try to act and turn.
+        for _ in 0..120 {
+            walk(&mut run, 0);
+        }
+        let aim = run.players[0].aim;
+        let seq = run.players[0].ack + 1;
+        run.players[0].inputs.push_back(crate::protocol::InputMsg { seq, mx: 1, my: 0, aim: aim as f32 + 1.0, aim_dist: 30.0, primary: Some(1), secondary: Some(2), view_lag: 0, rtt: 0, act: true });
+        run.step();
+        let p = &run.players[0];
+        assert_eq!((p.cd1, p.cd2, p.mv.dash_t), (0.0, 0.0, 0.0), "no abilities");
+        assert_eq!(p.aim, aim, "no turning");
+    }
+
+    #[test]
+    fn petrified_heroes_take_a_quarter_of_physical_and_half_of_magic() {
+        use crate::defs::damage::{Damage, DamageSplit, DamageType};
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.apply_effect(Creature::Player(0), EffectKind::Petrified, Some(5.0));
+        let hp = run.players[0].hp;
+        run.hurt_player(0, Damage::physical(20.0));
+        assert!((hp - run.players[0].hp - 5.0).abs() < 1e-9);
+        let hp = run.players[0].hp;
+        run.hurt_player(0, Damage::new(20.0, DamageSplit::pure(DamageType::Magical)));
+        assert!((hp - run.players[0].hp - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_blind_monster_sees_no_one_and_an_asleep_one_does_nothing() {
+        use crate::defs::enemies::EnemyType;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::SkeletonArcher, at, None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        run.apply_effect(Creature::Monster(mi), EffectKind::Blind, Some(5.0));
+        crate::run::ai::tick_monster(&mut run, mi, DT);
+        assert_ne!(run.monsters[mi].ai.state, AiState::Chase, "blind: the hero 40 px away is not seen");
+        run.remove_effect(Creature::Monster(mi), EffectKind::Blind);
+        crate::run::ai::tick_monster(&mut run, mi, DT);
+        assert_eq!(run.monsters[mi].ai.state, AiState::Chase);
+        run.monsters[mi].ai.windup = Some(crate::run::entities::Windup { t: 0.2, aim: 0.0, alt: false, at: None });
+        run.apply_effect(Creature::Monster(mi), EffectKind::Sleep, Some(5.0));
+        let pos = run.monsters[mi].pos;
+        for _ in 0..30 {
+            run.step();
+        }
+        let mi = run.monster_idx(id).unwrap();
+        assert!(run.monsters[mi].ai.windup.is_none(), "the wind-up is cancelled");
+        assert_eq!(run.monsters[mi].pos, pos, "it does not move");
+        assert!(run.projectiles.iter().all(|p| p.owner != id), "and does not shoot");
+    }
+
+    #[test]
+    fn a_blind_hero_is_sent_no_enemies() {
+        use crate::defs::enemies::EnemyType;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let at = run.players[0].pos() + Vec2::new(20.0, 0.0);
+        run.spawn_enemy(EnemyType::OrcWarrior, at, None, 1);
+        run.players[0].darkvision = Some(1.0);
+        run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(5.0));
+        let s = run.players[0].sight_now();
+        assert_eq!((s.vision, s.darkvision), (0.0, 0.0), "darkvision does not help");
     }
 }

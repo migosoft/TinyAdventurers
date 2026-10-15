@@ -403,6 +403,16 @@ impl Run {
             if m.sinking.is_some() || m.knock != Vec2::ZERO {
                 continue; // slid and sunk below
             }
+            if m.effects.no_act() {
+                // Asleep or stone: no thinking, attacks or wind-ups.
+                let m = &mut self.monsters[mi];
+                m.ai.windup = None;
+                if m.anim != Anim::Idle {
+                    m.anim = Anim::Idle;
+                    m.anim_start = self.time;
+                }
+                continue;
+            }
             if self.layout.map.blocks_at(m.pos, m.mover) {
                 ai::escape_terrain(self, mi, DT);
                 continue;
@@ -482,8 +492,11 @@ impl Run {
         let map = &self.layout.map;
         let p = &mut self.players[pi];
         p.ack = input.seq;
-        p.aim = input.aim as f64;
-        p.aim_dist = input.aim_dist as f64;
+        let fx = (p.effects.speed_mul(), p.effects.no_act(), p.effects.no_turn());
+        if !fx.2 {
+            p.aim = input.aim as f64;
+            p.aim_dist = input.aim_dist as f64;
+        }
         p.view_lag = (input.view_lag as f64 / 1000.0).clamp(0.0, 0.45);
         p.rtt = (input.rtt as f64 / 1000.0).clamp(0.0, 0.5);
         p.cd1 = (p.cd1 - DT).max(0.0);
@@ -503,19 +516,22 @@ impl Run {
         p.mv = crate::collision::step_move(
             map,
             &p.mv,
-            input.mx,
-            input.my,
-            p.def.speed * p.mods.move_speed,
+            if fx.0 == 0.0 { 0 } else { input.mx },
+            if fx.0 == 0.0 { 0 } else { input.my },
+            p.def.speed * p.mods.move_speed * fx.0,
             crate::defs::abilities::DASH_SPEED,
             classes::PLAYER_RADIUS,
             DT,
             &solids,
         );
-        p.moving = !knocked && (input.mx != 0 || input.my != 0);
+        p.moving = !knocked && fx.0 > 0.0 && (input.mx != 0 || input.my != 0);
         if dashing {
             abilities::dash_contact(self, pi);
         }
         if knocked {
+            return;
+        }
+        if fx.1 {
             return;
         }
         if input.act {
@@ -539,6 +555,7 @@ impl Run {
         if !m.alive || m.is_boss || m.airborne || m.sinking.is_some() || dist <= 0.0 {
             return;
         }
+        let dist = dist * m.effects.knock_taken();
         let d = m.pos - from;
         let dir = if d.len() > 0.01 { d.norm() } else { Vec2::new(1.0, 0.0) };
         m.knock = dir * crate::collision::knock_speed(dist, DT);
@@ -759,7 +776,7 @@ impl Run {
         if !self.players[pi].alive {
             return;
         }
-        let raw = resolve(&dmg, &self.players[pi].res);
+        let raw = resolve(&dmg, &self.players[pi].effects.res(self.players[pi].res));
         if raw < 0.0 {
             self.heal_player(pi, -raw);
             return;
@@ -797,6 +814,7 @@ impl Run {
         if !p.alive || p.sinking.is_some() || p.mv.dash_t > 0.0 || dist <= 0.0 {
             return;
         }
+        let dist = dist * p.effects.knock_taken();
         let d = p.pos() - from;
         let dir = if d.len() > 0.01 { d.norm() } else { Vec2::from_angle(fallback) };
         let v = crate::collision::knock_speed(dist, DT);
@@ -827,7 +845,7 @@ impl Run {
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             return false;
         }
-        let raw = resolve(&dmg, &self.monsters[mi].res);
+        let raw = resolve(&dmg, &self.monsters[mi].effects.res(self.monsters[mi].res));
         let ty = dmg.split.main_type() as u8;
         // Hits by heroes go to the whole party, even out of view: the shot was seen leaving.
         let seen_by = src_player.is_none().then_some(pos);

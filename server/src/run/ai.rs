@@ -40,7 +40,10 @@ fn set_anim(run: &mut Run, mi: usize, a: Anim) {
 /// A monster on ground it cannot walk (blown into lava): it walks straight
 /// to the nearest tile it can, ignoring heroes until it is out.
 pub fn escape_terrain(run: &mut Run, mi: usize, dt: f64) {
-    let (pos, mover, speed) = (run.monsters[mi].pos, run.monsters[mi].mover, run.monsters[mi].speed);
+    let (pos, mover, speed) = (run.monsters[mi].pos, run.monsters[mi].mover, run.monsters[mi].speed * run.monsters[mi].effects.speed_mul());
+    if speed <= 0.0 {
+        return;
+    }
     let (tx, ty) = Map::tile_of(pos);
     let mut best: Option<(f64, Vec2)> = None;
     for dy in -3..=3 {
@@ -69,6 +72,10 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     let dist = d.len();
     if dist < 2.0 {
         return true;
+    }
+    let speed = speed * m.effects.speed_mul();
+    if speed <= 0.0 {
+        return false;
     }
     let step = (speed * dt).min(dist);
     let v = d.norm() * step;
@@ -144,7 +151,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
     let def = enemies::def(etype);
-    let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight);
+    let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
     {
         let ai = &mut run.monsters[mi].ai;
         ai.cd -= dt;

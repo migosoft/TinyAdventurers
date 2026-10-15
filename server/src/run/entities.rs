@@ -87,7 +87,8 @@ impl Player {
         Vec2::new(self.mv.x, self.mv.y)
     }
     pub fn sight_now(&self) -> Sight {
-        Sight { darkvision: self.darkvision.unwrap_or(self.sight.darkvision), ..self.sight }
+        let base = Sight { darkvision: self.darkvision.unwrap_or(self.sight.darkvision), ..self.sight };
+        self.effects.sight(base)
     }
     pub fn kind(&self) -> EntityKind {
         self.def.kind
@@ -203,12 +204,17 @@ pub struct Monster {
     pub burn_t: f64,
     /// Last hero who hurt it: credited for a death by terrain.
     pub last_hit_by: Option<usize>,
+    /// Status effects (run/effects.rs).
     pub effects: crate::run::effects::Effects,
     /// How it takes each effect (bosses: defs/bosses.rs responses).
     pub responses: crate::defs::effects::EffectResponses,
 }
 
 impl Monster {
+    /// What it sees now: its sight through its effects (blindness).
+    pub fn sight_now(&self) -> Sight {
+        self.effects.sight(self.sight)
+    }
     /// Position `ticks` simulation steps ago (lag compensation).
     pub fn pos_ago(&self, ticks: usize) -> Vec2 {
         if ticks == 0 || self.history.is_empty() {
