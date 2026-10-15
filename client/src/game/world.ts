@@ -1,6 +1,6 @@
 // Client view of the world: snapshot buffer with an adaptive interpolation
 // delay for remote entities, and prediction/reconciliation for the local player.
-import { ABILITIES, CLASSES, CONST } from '../generated/defs';
+import { ABILITIES, CLASSES, CONST, EFFECTS } from '../generated/defs';
 import type { ClassId } from '../generated/ClassId';
 import type { EntSnap } from '../generated/EntSnap';
 import type { Modifiers } from '../generated/Modifiers';
@@ -136,6 +136,10 @@ export class Predictor {
   solids: Solid[] = [];
   cd1 = 0;
   cd2 = 0;
+  /** From the snapshot: movement factor (0 while it cannot move), no casting, no turning. */
+  speedMul = 1;
+  noAct = false;
+  noTurn = false;
   hidden = 0;
   /** Set by `useHide` for the next step's input. */
   private hideNext: number | null = null;
@@ -200,7 +204,7 @@ export class Predictor {
     if (this.sinking) dash = null;
     else {
       if (this.knocked) dash = null;
-      this.state = stepMove(this.map, this.state, mx, my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);
+      this.state = stepMove(this.map, this.state, mx, my, this.speed * this.speedMul, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);
     }
     if (dash) this.state = { ...this.state, dashT: ABILITIES.Dash.duration, dashDx: dash[0], dashDy: dash[1] };
     if (this.pending.length > 240) this.pending.shift();
@@ -210,13 +214,16 @@ export class Predictor {
   /** Server says: after input `ack` I was here. Replay what it has not seen yet. */
   reconcile(snap: Snapshot): void {
     const me = snap.me;
+    this.speedMul = me.speed_mul;
+    this.noAct = me.no_act;
+    this.noTurn = me.effects.some(([k]) => EFFECTS[k]?.no_turn);
     this.pending = this.pending.filter((p) => p.seq > snap.ack);
     let s: MoveState = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy };
     for (const p of this.pending) {
       if (sinking(this.map, s)) break;
       // A push the client learned of late still voids the dashes sent during it, as on the server.
       const wasKnocked = s.dashT <= 0 && knocked(s);
-      s = stepMove(this.map, s, p.mx, p.my, this.speed, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);
+      s = stepMove(this.map, s, p.mx, p.my, this.speed * this.speedMul, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);
       if (p.dash && !wasKnocked) s = { ...s, dashT: ABILITIES.Dash.duration, dashDx: p.dash[0], dashDy: p.dash[1] };
     }
     const ex = this.state.x - s.x;

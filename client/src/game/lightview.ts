@@ -5,7 +5,7 @@
 // tiles are set back to black, `blackenDarkTiles`) and drawn with LINEAR filtering, scaled up by TILE / SUB. Redrawn every frame
 // inside the camera window (cheap: about 60 x 34 tiles).
 import type Phaser from 'phaser';
-import { CONST, LIGHT } from '../generated/defs';
+import { LIGHT } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
 import { Fov } from '../sim/fov';
 import { TILE, type TileMap } from '../sim/map';
@@ -138,6 +138,7 @@ export function blackenDarkTiles(darkTile: Float32Array, w: number, x0: number, 
 export class LightView {
   private fov: Fov;
   private origin = [-1, -1];
+  private vision = -1;
   private dark: Phaser.Textures.CanvasTexture;
   private tint: Phaser.Textures.CanvasTexture;
   /** Per-tile darkvision mask (R = 255 where darkvision shows the tile, A = 255), for the greyscale shader. Not added to the scene. */
@@ -191,13 +192,15 @@ export class LightView {
     this.origin = [-1, -1];
   }
 
-  update(view: Phaser.Geom.Rectangle, vx: number, vy: number, moving: MovingLight[], t: number, darkvision: number): void {
+  update(view: Phaser.Geom.Rectangle, vx: number, vy: number, moving: MovingLight[], t: number, darkvision: number, vision: number): void {
     const { w, h } = this.map;
     const tx = Math.floor(vx / TILE);
     const ty = Math.floor(vy / TILE);
-    if (tx !== this.origin[0] || ty !== this.origin[1]) {
+    const sight = Math.round(vision);
+    if (tx !== this.origin[0] || ty !== this.origin[1] || sight !== this.vision) {
       this.origin = [tx, ty];
-      this.fov.compute(this.map, tx, ty, CONST.FOV_RADIUS);
+      this.vision = sight;
+      this.fov.compute(this.map, tx, ty, sight);
     }
     const x0 = Math.max(0, Math.floor(view.x / TILE) - MARGIN);
     const y0 = Math.max(0, Math.floor(view.y / TILE) - MARGIN);
@@ -213,7 +216,7 @@ export class LightView {
     const dt = this.darkTile;
     const tt = this.tintTile;
     const mt = this.maskTile;
-    const range = CONST.FOV_RADIUS * darkvision;
+    const range = sight * darkvision;
     for (let y = y0; y < y1; y++)
       for (let x = x0; x < x1; x++) {
         const i = y * w + x;

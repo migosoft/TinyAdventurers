@@ -22,6 +22,34 @@ function snap(ack: number, x: number, y: number): Snapshot {
 }
 
 describe('Predictor', () => {
+  it('moves at the speed factor the server sends', () => {
+    const map = chasmMap();
+    const x0 = 3 * TILE + 8, y0 = 2 * TILE + 8;
+    for (const mul of [0, 0.5, 1.5]) {
+      const pred = new Predictor(map, 'Wizard', MODS, x0, y0);
+      pred.reconcile({ ...snap(0, x0, y0), me: { ...snap(0, x0, y0).me, speed_mul: mul } });
+      pred.step(1, 0, null);
+      expect(pred.state.x - x0).toBeCloseTo(pred.speed * mul * CONST.DT, 6);
+    }
+  });
+
+  it('reconcile_uses_the_servers_speed_factor', () => {
+    const map = chasmMap();
+    const x0 = 3 * TILE + 8, y0 = 2 * TILE + 8;
+    const pred = new Predictor(map, 'Wizard', MODS, x0, y0);
+    for (let i = 0; i < 4; i++) pred.step(1, 0, null);
+    pred.reconcile({ ...snap(1, x0, y0), me: { ...snap(1, x0, y0).me, speed_mul: 0.5 } });
+    expect(pred.state.x - x0).toBeCloseTo(3 * pred.speed * 0.5 * CONST.DT, 6);
+  });
+
+  it('cannot act or turn while the server says so', () => {
+    const pred = new Predictor(chasmMap(), 'Wizard', MODS, 3 * TILE + 8, 2 * TILE + 8);
+    const s = snap(0, pred.state.x, pred.state.y);
+    pred.reconcile({ ...s, me: { ...s.me, no_act: true, effects: [[2, 1.0]] } });
+    expect(pred.noAct).toBe(true);
+    expect(pred.noTurn).toBe(true);
+  });
+
   it('replays the moves it sent while it thought it was sinking (debug climb-out)', () => {
     const map = chasmMap();
     const chasm = [8 * TILE + 8, 2 * TILE + 8];

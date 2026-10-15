@@ -7,7 +7,7 @@
 // `&slow=N` slows time. Key V cycles the viewer's darkvision 0 / 50% / 100% (greyscale
 // where it sees only by darkvision); `&dv=0.5` starts with it.
 import Phaser from 'phaser';
-import { LIGHT_KIND, TILE_ID } from '../generated/defs';
+import { CONST, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
 import { TILE, TileMap } from '../sim/map';
 import { tileDraws } from './autotile';
@@ -167,7 +167,7 @@ export class LightsDemoScene extends Phaser.Scene {
       [cx, cy, LIGHT_KIND.Magic, FROST_COLOUR],
     ];
     if (sinceBoom >= 0 && sinceBoom < FLASH) moving.push([boomX, fy, LIGHT_KIND.Blast, null]);
-    this.view.update(this.cameras.main.worldView, (VIEWER[0] + 0.5) * TILE, (VIEWER[1] + 0.5) * TILE, moving, this.t, this.darkvision);
+    this.view.update(this.cameras.main.worldView, (VIEWER[0] + 0.5) * TILE, (VIEWER[1] + 0.5) * TILE, moving, this.t, this.darkvision, CONST.FOV_RADIUS);
     syncDarkvisionFX(this.cameras.main, this.darkvision, this.view.mask, [W * TILE, H * TILE]);
   }
 }

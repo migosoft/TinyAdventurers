@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ABILITIES, ANIM, CLASSES, CONST, FLAG, KIND, TILE_ID } from '../generated/defs';
+import { ABILITIES, ANIM, CLASSES, CONST, EFFECT, FLAG, KIND, TILE_ID } from '../generated/defs';
 import type { ClassId } from '../generated/ClassId';
 import type { Ev } from '../generated/Ev';
 import type { RunStartInfo } from '../generated/RunStartInfo';
@@ -102,6 +102,8 @@ export class GameScene extends Phaser.Scene {
   private sinks = new Map<number, { x: number; y: number; drown: boolean; t: number }>();
   // Debug mode (?debug): immortal + path to the boss, drawn above the fog.
   private debugOn = false;
+  private debugEffect = -1;
+  private lastAim = 0;
   private debugPath: [number, number][] = [];
   private debugOgre: [number, number][] = [];
   private debugGfx!: Phaser.GameObjects.Graphics;
@@ -179,6 +181,13 @@ export class GameScene extends Phaser.Scene {
       if (e.repeat || !this.debugOn || !this.alive) return;
       // The server announces the change to the party.
       this.net.send({ t: 'DebugDarkvision', ratio: nextDarkvision((this.lastSnap?.me.darkvision ?? 0) / 100) });
+    });
+    // Debug mode only (?debug): put the next effect on your own hero (Blind, Sleep, Petrified, Slowed, Accelerated).
+    kb.on('keydown-F8', (e: KeyboardEvent) => {
+      e.preventDefault();
+      if (e.repeat || !this.debugOn || !this.alive) return;
+      this.debugEffect = (this.debugEffect + 1) % Object.keys(EFFECT).length;
+      this.net.send({ t: 'DebugEffect', kind: this.debugEffect });
     });
     kb.on('keydown-ESC', () => this.hud.toggleMenu());
     this.input.mouse?.disableContextMenu();
@@ -402,10 +411,13 @@ export class GameScene extends Phaser.Scene {
     const k = this.keys;
     const mx = (k.D.isDown ? 1 : 0) - (k.A.isDown ? 1 : 0);
     const my = (k.S.isDown ? 1 : 0) - (k.W.isDown ? 1 : 0);
-    const { aim, dist } = this.aimInfo();
+    const { aim: pointerAim, dist } = this.aimInfo();
+    // Petrified or asleep: the server keeps the old facing, so the client sends it too.
+    const aim = this.pred.noTurn ? this.lastAim : pointerAim;
+    this.lastAim = aim;
     const ptr = this.input.activePointer;
     // Falling, drowning or pushed heroes cannot attack (the server ignores it).
-    const free = !this.hud.menuOpen && !this.pred.sinking && !this.pred.knocked;
+    const free = !this.hud.menuOpen && !this.pred.sinking && !this.pred.knocked && !this.pred.noAct;
     const wantPrimary = (ptr.leftButtonDown() || this.primaryClicked) && free;
     const wantSecondary = (ptr.rightButtonDown() || this.secondaryClicked) && free;
     const act = this.actPressed && free;
@@ -586,7 +598,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.cameras.main.centerOn(Math.round(camX), Math.round(camY - 8));
     const darkvision = (this.lastSnap?.me.darkvision ?? 0) / 100;
-    this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now, darkvision);
+    this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now, darkvision, this.lastSnap?.me.vision ?? CONST.FOV_RADIUS);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 
     const seen = new Set<number>();
