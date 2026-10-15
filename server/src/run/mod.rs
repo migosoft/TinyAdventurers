@@ -776,6 +776,10 @@ impl Run {
         if !self.players[pi].alive {
             return;
         }
+        if let (0.0, Some(h)) = (dmg.amount, dmg.on_hit) {
+            self.hit_effect(effects::Creature::Player(pi), h); // a pure effect hit: no number, no flash
+            return;
+        }
         let raw = resolve(&dmg, &self.players[pi].effects.res(self.players[pi].res));
         if raw < 0.0 {
             self.heal_player(pi, -raw);
@@ -802,6 +806,14 @@ impl Run {
             let (id, kind, name) = (p.id, p.kind() as u8, p.name.clone());
             self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
             self.event(Ev::Msg { text: format!("{name} has fallen") }, None);
+        }
+        if self.players[pi].alive {
+            if v > 0.0 {
+                self.damage_wakes(effects::Creature::Player(pi));
+            }
+            if let Some(h) = dmg.on_hit {
+                self.hit_effect(effects::Creature::Player(pi), h);
+            }
         }
     }
 
@@ -844,6 +856,10 @@ impl Run {
         let pos = self.monsters[mi].pos;
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             return false;
+        }
+        if let (0.0, Some(h)) = (dmg.amount, dmg.on_hit) {
+            self.hit_effect(effects::Creature::Monster(mi), h);
+            return true;
         }
         let raw = resolve(&dmg, &self.monsters[mi].effects.res(self.monsters[mi].res));
         let ty = dmg.split.main_type() as u8;
@@ -888,6 +904,14 @@ impl Run {
                 self.players[pi].kills += 1;
             }
             self.kill_monster(mi);
+        }
+        if self.monsters[mi].alive {
+            if raw > 0.0 {
+                self.damage_wakes(effects::Creature::Monster(mi));
+            }
+            if let Some(h) = dmg.on_hit {
+                self.hit_effect(effects::Creature::Monster(mi), h);
+            }
         }
         true
     }

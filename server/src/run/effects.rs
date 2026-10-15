@@ -8,7 +8,6 @@ use crate::defs::entity_types::Sight;
 use crate::protocol::Ev;
 use crate::run::{Run, DT};
 
-#[allow(unused_imports)] // used by the hit-effect tasks
 pub use crate::defs::effects::OnHit;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -169,6 +168,25 @@ impl Run {
         }
     }
 
+    /// A hit's effect: rolled on the run's rng unless certain (chance >= 1 draws nothing).
+    pub fn hit_effect(&mut self, c: Creature, h: OnHit) {
+        let lands = h.chance >= 1.0 || (h.chance > 0.0 && rand::Rng::gen::<f64>(&mut self.rng) < h.chance);
+        if lands {
+            self.apply_effect(c, h.kind, Some(h.secs));
+        }
+    }
+
+    /// Damage ends effects that break on it (none yet).
+    pub fn damage_wakes(&mut self, c: Creature) {
+        let kinds = match c {
+            Creature::Player(i) => self.players[i].effects.kinds(),
+            Creature::Monster(i) => self.monsters[i].effects.kinds(),
+        };
+        for k in kinds.into_iter().filter(|&k| def(k).wakes_on_damage) {
+            self.remove_effect(c, k);
+        }
+    }
+
     /// Once per step: timers count down; the dead and sinking lose everything.
     pub fn tick_effects(&mut self) {
         let n = (self.players.len(), self.monsters.len());
@@ -190,6 +208,7 @@ impl Run {
 mod tests {
     use super::*;
     use crate::protocol::{BossId, ClassId, Ev};
+    use crate::defs::damage::{Damage, DamageSplit};
     use crate::run::tests::test_run;
     use crate::run::DT;
 
@@ -328,7 +347,6 @@ mod tests {
 
     #[test]
     fn petrified_heroes_take_a_quarter_of_physical_and_half_of_magic() {
-        use crate::defs::damage::{Damage, DamageSplit, DamageType};
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.apply_effect(Creature::Player(0), EffectKind::Petrified, Some(5.0));
         let hp = run.players[0].hp;
@@ -376,5 +394,43 @@ mod tests {
         run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(5.0));
         let s = run.players[0].sight_now();
         assert_eq!((s.vision, s.darkvision), (0.0, 0.0), "darkvision does not help");
+    }
+
+    fn sleepy(chance: f64) -> OnHit {
+        OnHit { kind: EffectKind::Sleep, secs: 2.0, chance }
+    }
+
+    #[test]
+    fn a_hit_applies_its_effect_by_chance() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy(0.0)));
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Sleep), "chance 0 never");
+        run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy(1.0)));
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep), "chance 1 always");
+    }
+
+    #[test]
+    fn damage_immunity_does_not_block_the_effect_and_zero_damage_shows_no_number() {
+        use crate::defs::damage::Resistances;
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.players[0].res = Resistances::of(&[(DamageType::Magical, 1.0)]);
+        run.hurt_player(0, Damage::new(10.0, DamageSplit::pure(DamageType::Magical)).with_effect(sleepy(1.0)));
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep));
+        run.events.clear();
+        let hp = run.players[0].hp;
+        run.hurt_player(0, Damage::physical(0.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, chance: 1.0 }));
+        assert_eq!(run.players[0].hp, hp);
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Blind));
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "a pure effect hit shows no number");
+    }
+
+    #[test]
+    fn a_killing_hit_applies_no_effect_and_sleep_survives_damage() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy(1.0)));
+        run.hurt_player(0, Damage::physical(5.0));
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep), "damage does not wake");
+        run.hurt_player(0, Damage::physical(10_000.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, chance: 1.0 }));
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Blind));
     }
 }

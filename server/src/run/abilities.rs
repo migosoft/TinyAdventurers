@@ -6,6 +6,7 @@ use crate::collision::line_of_sight;
 use crate::defs::abilities::{self as ab, AbilityId};
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::damage::{kind_split, Damage};
+use crate::defs::effects::OnHit;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::defs::lights::{self, LightKind};
 use crate::math::{angle_diff, Vec2};
@@ -48,20 +49,21 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
     let attack = !matches!(id, AbilityId::Heal | AbilityId::Hide);
     let crit = hidden && attack;
     let mult = (if crit { ab::HIDDEN_CRIT_MULT } else { 1.0 }) * run.players[pi].mods.damage;
+    let on_hit = ab::on_hit(id);
     let mut cooldown = def.cooldown;
     let anim = match id {
         AbilityId::MagicMissile => {
-            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage * mult, def.radius, def.range / def.speed, 0.0, None, crit);
+            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage * mult, def.radius, def.range / def.speed, 0.0, None, crit, on_hit);
             Anim::Shoot
         }
         AbilityId::Fireball => {
             let target = pos + dir * aim_dist.clamp(24.0, def.range);
             let life = def.range / def.speed + 0.1;
-            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage * mult, 4.0, life, def.radius, Some(target), crit);
+            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage * mult, 4.0, life, def.radius, Some(target), crit, on_hit);
             Anim::Cast
         }
         AbilityId::Sword | AbilityId::Axe => {
-            melee_arc(run, pi, def.range, def.arc, def.damage * mult, crit);
+            melee_arc(run, pi, def.range, def.arc, def.damage * mult, crit, on_hit);
             Anim::Melee
         }
         AbilityId::Heal => {
@@ -88,10 +90,10 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
         AbilityId::CrossbowDagger => {
             if let Some(mi) = dagger_target(run, pi) {
                 cooldown = ab::DAGGER_COOLDOWN;
-                run.hurt_monster(mi, Damage::new(ab::DAGGER_DAMAGE * mult, run.players[pi].melee), crit, Some(pi));
+                run.hurt_monster(mi, Damage { on_hit, ..Damage::new(ab::DAGGER_DAMAGE * mult, run.players[pi].melee) }, crit, Some(pi));
                 Anim::Melee
             } else {
-                spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage * mult, def.radius, def.range / def.speed, 0.0, None, crit);
+                spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage * mult, def.radius, def.range / def.speed, 0.0, None, crit, on_hit);
                 Anim::Shoot
             }
         }
@@ -124,10 +126,10 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
     p.anim_start = run.time;
 }
 
-fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: bool) {
+fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: bool, on_hit: Option<OnHit>) {
     let rw = rewind_ticks(run, pi);
     let (pos, aim) = (run.players[pi].pos(), run.players[pi].aim);
-    let dmg = Damage::new(damage, run.players[pi].melee);
+    let dmg = Damage { on_hit, ..Damage::new(damage, run.players[pi].melee) };
     let hits: Vec<usize> = run
         .monsters
         .iter()
@@ -171,7 +173,7 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
 pub fn dash_contact(run: &mut Run, pi: usize) {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
-    let dmg = Damage::new(ab::def(AbilityId::Dash).damage * run.players[pi].mods.damage, run.players[pi].melee);
+    let dmg = Damage { on_hit: ab::on_hit(AbilityId::Dash), ..Damage::new(ab::def(AbilityId::Dash).damage * run.players[pi].mods.damage, run.players[pi].melee) };
     let hits: Vec<(usize, u32)> = run
         .monsters
         .iter()
@@ -211,6 +213,7 @@ fn spawn_player_projectile(
     explode_r: f64,
     target: Option<Vec2>,
     crit: bool,
+    on_hit: Option<OnHit>,
 ) {
     let p = &run.players[pi];
     let pos = p.pos() + dir * 6.0;
@@ -227,7 +230,7 @@ fn spawn_player_projectile(
         shot,
         pos,
         vel,
-        damage: Damage::new(damage, kind_split(kind)),
+        damage: Damage { on_hit, ..Damage::new(damage, kind_split(kind)) },
         radius,
         life: (life - ff).max(0.05),
         crit,
@@ -517,7 +520,7 @@ mod tests {
     fn missile_past(run: &mut Run, mi: usize, dy: f64) {
         let at = run.monsters[mi].pos + Vec2::new(-6.0, -dy);
         assert!(!run.layout.map.opaque_at(at) && !run.layout.map.opaque_at(at + Vec2::new(12.0, 0.0)), "open floor for the test shot");
-        spawn_player_projectile(run, 0, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), 230.0, 5.0, 3.0, 1.0, 0.0, None, false);
+        spawn_player_projectile(run, 0, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), 230.0, 5.0, 3.0, 1.0, 0.0, None, false, None);
         run.projectiles[0].pos = at;
         for _ in 0..3 {
             tick_projectiles(run, 1.0 / TICK_HZ);
@@ -685,7 +688,7 @@ mod tests {
         // The aim point lies a hair inside the wall: the shot passes it on the step that enters the wall.
         let at = run.players[0].pos();
         let target = Vec2::new((tx + 3) as f64 * TILE + 0.01, at.y);
-        spawn_player_projectile(&mut run, 0, EntityKind::Fireball, 1, Vec2::new(1.0, 0.0), 300.0, 1.0, 4.0, 2.0, 20.0, Some(target), false);
+        spawn_player_projectile(&mut run, 0, EntityKind::Fireball, 1, Vec2::new(1.0, 0.0), 300.0, 1.0, 4.0, 2.0, 20.0, Some(target), false, None);
         for _ in 0..30 {
             if run.projectiles.is_empty() {
                 break;

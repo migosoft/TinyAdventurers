@@ -47,6 +47,12 @@ const fn d(id: AbilityId, cooldown: f64, damage: f64, range: f64, arc: f64, spee
     AbilityDef { id, cooldown, damage, range, arc, speed, radius, duration }
 }
 
+/// An effect a hero ability applies on a hit (loadouts and items will set these). None yet.
+pub fn on_hit(id: AbilityId) -> Option<super::effects::OnHit> {
+    let _ = id;
+    None
+}
+
 pub fn def(id: AbilityId) -> AbilityDef {
     use AbilityId::*;
     match id {

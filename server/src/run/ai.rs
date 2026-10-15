@@ -398,13 +398,18 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt:
             ai.alt_cd = ai.alt_cd.max(ATTACK_GAP);
         }
     };
+    let on_hit = run.monsters[mi].etype.and_then(|t| enemies::on_hit(t, alt));
+    let with = |d: Damage| match on_hit {
+        Some(h) => d.with_effect(h),
+        None => d,
+    };
     match attack {
         AttackStyle::Melee { range, damage, cooldown, knock, .. } => {
             set_cd(run, cooldown);
             set_anim(run, mi, Anim::Melee);
             let reach = range + PLAYER_RADIUS + run.monsters[mi].radius + 4.0;
             if pos.dist(ppos) <= reach {
-                let dmg = Damage::new(damage, run.monsters[mi].melee);
+                let dmg = with(Damage::new(damage, run.monsters[mi].melee));
                 run.hurt_player(pi, dmg);
                 run.knock_player(pi, pos, aim, knock);
             }
@@ -416,12 +421,15 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt:
             let id = run.monsters[mi].id;
             let dir = Vec2::from_angle(aim);
             spawn_monster_projectile(run, id, projectile, pos + dir * 5.0, dir, speed, damage, range * 1.3 / speed, 0.0, 0, 0.0);
+            if let Some(h) = on_hit {
+                run.projectiles.last_mut().unwrap().damage.on_hit = Some(h); // the shot just spawned
+            }
         }
         AttackStyle::Slam { radius, damage, cooldown, knock, .. } => {
             set_cd(run, cooldown);
             set_anim(run, mi, Anim::Idle);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: radius as f32, k: 5 }, Some(pos));
-            let dmg = Damage::new(damage, run.monsters[mi].melee);
+            let dmg = with(Damage::new(damage, run.monsters[mi].melee));
             crate::run::objects::hurt_objects_in(run, pos, radius, None, dmg);
             for qi in 0..run.players.len() {
                 let q = &run.players[qi];

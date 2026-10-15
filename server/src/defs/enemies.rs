@@ -250,3 +250,10 @@ pub fn profile(t: EnemyType) -> Profile {
     };
     entity_types::profile(&[ty], Adjust { vision: Some(def(t).vision), ..Adjust::NONE })
 }
+
+/// An effect an enemy's attack (`alt`: its second attack) applies on a hit. None yet:
+/// e.g. `(EnemyType::GoblinArcher, false) => Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, chance: 0.3 })`.
+pub fn on_hit(t: EnemyType, alt: bool) -> Option<super::effects::OnHit> {
+    let _ = (t, alt);
+    None
+}

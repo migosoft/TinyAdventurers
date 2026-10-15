@@ -1,7 +1,6 @@
 //! Status effects: data only (like `defs/lights.rs`). The timers live in
 //! `run/effects.rs`. Adding an effect: a new `EffectKind` (next id), its
 //! `def`, a client visual in `client/src/game/status.ts` and a HUD glyph.
-#![allow(dead_code)] // used by run/effects.rs (next tasks)
 
 use super::damage::DamageType;
 use serde::Serialize;

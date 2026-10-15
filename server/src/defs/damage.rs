@@ -104,11 +104,17 @@ impl Resistances {
 pub struct Damage {
     pub amount: f64,
     pub split: DamageSplit,
+    /// An effect the hit applies after its damage, if the target lives (sleep poison arrow).
+    pub on_hit: Option<super::effects::OnHit>,
 }
 
 impl Damage {
     pub fn new(amount: f64, split: DamageSplit) -> Self {
-        Damage { amount, split }
+        Damage { amount, split, on_hit: None }
+    }
+    pub fn with_effect(mut self, h: super::effects::OnHit) -> Self {
+        self.on_hit = Some(h);
+        self
     }
     pub fn physical(amount: f64) -> Self {
         Damage::new(amount, DamageSplit::physical())
