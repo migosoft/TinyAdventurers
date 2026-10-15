@@ -230,7 +230,7 @@ No format change. The new ids fit the `u16` bitmask and the own hero's effect li
 - **Fingerprints:**
   - `level_setup_is_unchanged` must not change.
   - In `simulation_is_unchanged_after_waking_the_boss`, the demon and dragon hall values may change (their fire hits now burn heroes). Re-record them with a dated comment naming the cause.
-  - The lich value must not change, since the lich has no fire.
+  - The lich value should not change, since the lich has no fire. It may change only if a barrel blast (50 % heat) hits a hero during the test, and that cause must be confirmed.
 
 ### Docs
 - TECHNICAL: damage over time, the element table, the rule that effect damage applies no effects, and how to add an elemental effect.
