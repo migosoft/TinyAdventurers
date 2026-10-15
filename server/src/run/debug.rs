@@ -28,6 +28,9 @@ impl Run {
         if !allowed {
             return;
         }
+        if !ratio.is_finite() {
+            return;
+        }
         let r = f64::from(ratio.clamp(0.0, 1.0));
         self.players[pi].darkvision = Some(r);
         self.debug_used = true;
@@ -38,6 +41,9 @@ impl Run {
     pub fn set_debug(&mut self, pi: usize, on: bool) {
         let on = on && allowed();
         self.players[pi].debug = on;
+        if !on {
+            self.players[pi].darkvision = None;
+        }
         self.debug_used |= on;
         if on {
             let name = self.players[pi].name.clone();
@@ -153,5 +159,21 @@ mod tests {
         run.set_darkvision_if(false, 0, 1.0);
         assert_eq!(run.players[0].darkvision, before);
         assert!(!run.debug_used);
+    }
+
+    #[test]
+    fn a_nan_darkvision_ratio_changes_nothing() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.set_darkvision_if(true, 0, f32::NAN);
+        assert_eq!(run.players[0].darkvision, None);
+        assert!(!run.debug_used);
+    }
+
+    #[test]
+    fn leaving_debug_resets_the_darkvision_override() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.set_darkvision_if(true, 0, 0.5);
+        run.set_debug(0, false);
+        assert_eq!(run.players[0].darkvision, None);
     }
 }

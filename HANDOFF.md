@@ -46,16 +46,18 @@ Vision and darkvision are built (2026-10-15) on `feature/vision`, which is **not
 - Phaser 3.90 differs from the plan's API: the pipeline reads its camera through `this.gameObject` (no `camera` property); the mask texture is `mask.source[0].glTexture` (a `CanvasTexture` has no `glTexture`); the pipeline is registered with `addPostPipeline` in `BootScene` (the game config's `pipeline` option fails `tsc`) and attached by its registered name, because the minified class name differs.
 
 **Verified (2026-10-15):**
-- Server: **271 tests pass** (253 on `feature/lighting`), no warnings. Fingerprint `level_setup_is_unchanged` unchanged; the other was re-recorded as above.
+- Server: **274 tests pass** (253 on `feature/lighting`), no warnings. Fingerprint `level_setup_is_unchanged` unchanged; the other was re-recorded as above.
 - Client: `npm test` **52 tests pass** (48 on `feature/lighting`), `npm run build` passes.
 - `?lights` screenshots at dv 0, 0.5 and 1: 0 and 1 show the effect; 0.5 shows no difference in the demo (no unlit tile within 4.5 tiles of its viewer).
 - Smoke test with two players, default query (F4 step skipped) and `?debug` (F4: 0 -> 50 -> 100 %): no browser errors.
+
+**Final whole-branch review (2026-10-15), all fixed:** the shared darkvision fixture was nearly vacuous (viewers on torch tiles); it now has viewers (12,5) r3, (18,4) r4.5, (3,14) r3, (11,7) r4.5 on unlit floor, plus a full-range (20,3) and a range-0 (20,17) case, and `export.rs` asserts every partial case has an unlit tile seen only by darkvision and an unlit FOV tile outside the range (the client test adds the exact boundary `darkReach(3, 4, 5)` true, `4.99` false). The server filter range now uses the same quantised percentage as `SelfW` (`dark_range`/`darkvision_pct` in `visibility.rs`); `set_darkvision_if` ignores a NaN ratio; `set_debug(pi, false)` resets the darkvision override. TECHNICAL wording fixed (`Lights::lit`, light refresh once per tick plus once per snapshot); TODO has the per-tick light cost note. Tests now: server **274**, client **52** (assertions added to existing tests).
 
 **Open (for the user):**
 - **Live check:** sneak past humans in an unlit corridor, see skeletons and demons notice you in the dark, orcs only up close; F4 greyscale in `?debug`.
 - **Is the easier lich fight OK?** The disciples stay idle in the dark.
 - All vision and darkvision numbers are first guesses for the balancing pass.
-- Deferred minor review findings: a NaN ratio is not guarded in `set_darkvision`; the darkvision fixture cases have viewers on torch tiles (weak); the `dvmask` is not primed at construction; each attach of `DarkvisionFX` compiles a new pipeline; boss vision is `vision: Some(25.0)` repeated in each boss's `Adjust` in `defs/bosses.rs` (it could become one shared constant). (TODO "Vision and darkvision follow-ups".)
+- Deferred minor review findings: the `dvmask` is not primed at construction; each attach of `DarkvisionFX` compiles a new pipeline; boss vision is `vision: Some(25.0)` repeated in each boss's `Adjust` in `defs/bosses.rs` (it could become one shared constant). (TODO "Vision and darkvision follow-ups".)
 - Next: the effect system draft's eight open questions (TODO priority 1).
 
 ## Session before (2026-10-15, light sources)

@@ -36,7 +36,18 @@ fn visible(fov: &Fov, p: Vec2, radius: f64) -> bool {
     false
 }
 
-/// The viewer's tile and darkvision range in tiles (`vision * darkvision`).
+/// The darkvision percentage (0-100) sent to the client in `SelfW`.
+pub(crate) fn darkvision_pct(sight: &crate::defs::entity_types::Sight) -> u8 {
+    (sight.darkvision * 100.0).round() as u8
+}
+
+/// The filter's darkvision range in tiles: vision times the quantised percentage the client gets,
+/// so server and client decide the same tiles.
+pub(crate) fn dark_range(sight: &crate::defs::entity_types::Sight) -> f64 {
+    sight.vision * (f64::from(darkvision_pct(sight)) / 100.0)
+}
+
+/// The viewer's tile and darkvision range in tiles (`vision * darkvision`, quantised).
 #[derive(Clone, Copy)]
 pub(crate) struct Dark {
     pub tile: (i32, i32),
@@ -155,7 +166,7 @@ pub fn send_snapshots(run: &mut Run) {
         let (tx, ty) = Map::tile_of(view_pos);
         let vision = sight.vision.round() as i32;
         fov.compute(&run.layout.map, tx, ty, vision);
-        let dark = Dark { tile: (tx, ty), range: sight.vision * sight.darkvision };
+        let dark = Dark { tile: (tx, ty), range: dark_range(&sight) };
 
         let lights = &run.lights;
         let mut ents = player_snaps.clone();
@@ -231,7 +242,7 @@ pub fn send_snapshots(run: &mut Run) {
                 cd2: me.cd2 as f32,
                 hidden: me.hidden as f32,
                 spectating: if me.alive { None } else { me.spectating },
-                darkvision: (sight.darkvision * 100.0).round() as u8,
+                darkvision: darkvision_pct(&sight),
             },
             boss: boss_bar.clone(),
             ev,
@@ -280,7 +291,7 @@ mod tests {
 
     fn dark_of(run: &Run) -> Dark {
         let sight = run.players[0].sight_now();
-        Dark { tile: Map::tile_of(run.players[0].pos()), range: sight.vision * sight.darkvision }
+        Dark { tile: Map::tile_of(run.players[0].pos()), range: dark_range(&sight) }
     }
 
     #[test]
@@ -480,6 +491,15 @@ mod tests {
         // vision 9 * 0.5 = 4.5 tiles
         assert!(dark_monster_sent(0.5, 4));
         assert!(!dark_monster_sent(0.5, 5));
+    }
+
+    #[test]
+    fn the_filter_range_is_the_quantised_darkvision_the_client_gets() {
+        let s = crate::defs::entity_types::Sight { vision: 9.0, darkvision: 1.0 / 3.0 };
+        assert_eq!(darkvision_pct(&s), 33);
+        assert_eq!(dark_range(&s), 9.0 * 0.33);
+        assert_eq!(dark_range(&crate::defs::entity_types::Sight { vision: 9.0, darkvision: 1.0 }), 9.0);
+        assert_eq!(dark_range(&crate::defs::entity_types::Sight { vision: 9.0, darkvision: 0.0 }), 0.0);
     }
 
     #[test]

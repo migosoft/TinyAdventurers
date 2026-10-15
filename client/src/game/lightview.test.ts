@@ -77,6 +77,8 @@ describe('darkvision', () => {
     expect(darkReach(0, 0, 4.5)).toBe(true);
     expect(darkReach(4, 2, 4.5)).toBe(true); // 16 + 4 = 20 <= 20.25
     expect(darkReach(5, 0, 4.5)).toBe(false);
+    expect(darkReach(3, 4, 5)).toBe(true); // exactly on the circle
+    expect(darkReach(3, 4, 4.99)).toBe(false);
   });
   it('dims a seen unlit tile in reach, else leaves darknessAlpha', () => {
     expect(tileDark(true, false, true, 0, 0, 0)).toBe(DV_DARK);
