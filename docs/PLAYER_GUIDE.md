@@ -20,7 +20,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 | **Mouse** | Aim |
 | **Left mouse button** | Primary attack, toward the mouse pointer. Hold it to keep attacking. |
 | **Right mouse button** | Secondary ability |
-| **E** (while alive) | Push the barrel right next to you (see Explosive barrels), or light or put out the torch next to you (see Seeing in the dark) |
+| **E** (while alive) | Wake a sleeping teammate next to you (see Status effects), push the barrel right next to you (see Explosive barrels), or light or put out the torch next to you (see Seeing in the dark) |
 | **Q / E** | After you die, switch which teammate you watch |
 | **Esc** | Menu (leave the dungeon) |
 | **F3** | Show ping, frame rate and network stats |
@@ -203,6 +203,10 @@ Tip: stay mobile, and don't stand between the demon and a chasm.
 - Casts **volleys of five gloom bolts**.
 - **Summons skeletons:** every 12 seconds it raises its army back up to **five skeletons and five skeleton archers** around it.
 - **Nova:** about every 10 seconds it stops, raises its staff and a **purple circle** fills up on the floor around it. When it is full, a dark blast hurts **everyone inside** and throws them **4 tiles away**, far enough to send you into a chasm. Step out of the circle in time, and don't stand between the lich and an edge.
+- **Three curses**, each aimed at one hero it can see (it sees only what you would see: it cannot curse you from behind a wall, and a hero who already suffers a curse is passed over):
+  - **Blinding curse:** about every 10 seconds the lich flings a **dark orb**. It is slow, so **step aside**. A hit does a little damage and **blinds** you for 3 seconds: you see almost nothing, not even with darkvision.
+  - **Sleep mist:** about every 14 seconds, a **purple orb**. A hit puts you to **sleep** for 4 seconds: you lie on the floor and cannot move, attack or use abilities, and you see only a little around you. **Step aside** from the orb, and **wake a sleeping teammate** by standing next to them and pressing **E**.
+  - **Stone gaze:** about every 18 seconds the lich stares at one hero and a **thin grey beam** links them for a second. When it ends, that hero **turns to stone** for 3 seconds: you cannot move, attack or turn, but you take much less damage and are hard to push. **Break the line of sight** (duck behind a pillar or a wall) before the beam ends and nothing happens.
 - Its drain beams show even when the lich or a disciple is out of your sight, so they point the way to both.
 
 Tip: kill the disciples first. Once the last one falls, the lich's protection breaks.
@@ -218,6 +222,20 @@ Every attack shows its pose first, while the dragon flashes red: that is your mo
 - **Landing smash:** a red circle on the ground shows where it comes down. The landing hits everyone inside the circle and pushes them away (36 px).
 
 Tip: when you see the smoke, get out of the area in front of its mouth. Don't stand directly behind it either, least of all with a chasm at your back. When it takes off, ranged heroes do the work; get out of the red circle before it lands.
+
+## Status effects
+
+Some attacks do more than damage. Your own effects show as small icons with the seconds left under your health bar, and your party's effects as icons in the party list (top left). Red icons are bad, green ones are good.
+
+| Icon | Effect | What it does |
+|---|---|---|
+| **B** | Blind | You see nothing around you (darkvision does not help) |
+| **Z** | Asleep | You lie down: no moving, attacking or abilities, and a very short view. A teammate's **E** wakes you at once |
+| **P** | Petrified | Stone: no moving, attacking or turning, but you take far less damage and are hard to push |
+| **S** | Slowed | You walk at half speed |
+| **H** | Hasted | You walk half as fast again (only the debug key gives this so far) |
+
+A sleeping or petrified hero cannot dodge, and a blind one cannot see what is coming, so the party's job is to keep the enemies off them. The final bosses resist some effects: all of them are immune to sleep. The effects end by themselves after a few seconds.
 
 ## Death, victory and defeat
 
@@ -255,3 +273,4 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 - Skeletons, demons and the dragon see you in the dark, so a lit torch behind you helps you see them. Humans and most monsters lose you in the dark: put out a torch (any non-fire hit does it) to slip past them, and light it again with **E** or with fire when you fight.
 - Barrels are a weapon and a danger: light them from a distance, and keep your back free. Archers shoot barrels next to you.
 - Put a chasm or a pool between you and melee enemies: they have to walk around it. In the demon's dungeon, lava doesn't stop the demons.
+- Against the lich, don't stand in a straight line with it for long: the dark and sleep orbs are slow but only a step to the side dodges them, and the stone gaze needs a clear line to you. When a teammate falls asleep, kill what is next to them first, then press **E**.

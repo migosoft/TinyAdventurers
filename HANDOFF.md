@@ -9,16 +9,12 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Next session: vision edges or the effect system (TODO priorities 1 and 2)
+## Next session: soft vision edges (TODO priority 2)
 
-Vision and darkvision are built (2026-10-15), approved by the user in the game, **merged into `main` (fast-forward) and pushed** at the user's request; `feature/lighting` was merged before it. Start the next feature on a new branch from `main`.
+The effect system is built on branch **`feature/effects`** (from `main` at `12acb8f`): all tasks are built and were reviewed per task, the **final whole-branch review is pending** and it is **not merged** into `main`. Finish that (fix what the review finds, play-test with the user, then merge at the user's request) before or alongside the next feature.
 
-0. **Straight, softly fading vision edges** (TODO priority 2, "Vision edges"): the user wants it soon. Client only and independent of the effect system, so it can go first while the effect draft's questions are open. Ask the user which one to start with.
-
-1. **Effect system** (blind, sleep, petrified; extensible; every creature; effects modify any stat). Spec settled (awaiting review, then a plan): [docs/superpowers/specs/2026-10-15-effects-design.md](docs/superpowers/specs/2026-10-15-effects-design.md).
-   - It has a proposed design: a data table of effects with stat modifiers (add, then multiply, then set), flags (no move, no act, no turn, prone) and break conditions; per-creature active effects; resolved `Stats`; a snapshot bitmask; client visuals (sleep lying with "zzz", petrified greyscale).
-   - It has eight **open questions** to settle with the user one at a time before it becomes a spec: sources, bosses, stacking, sleep rules, petrified rules, the blind hero's view, the HUD, folding in the mimic's `asleep` and the rogue's `hidden`.
-   - It builds on vision: blindness changes `Sight` (`defs/entity_types.rs`) and `perception::sees`, and the greyscale `DarkvisionFX` is a model for the petrified look.
+1. **Straight, softly fading vision edges** (TODO priority 2, "Vision edges"): the user wants it soon. Client only. Start it on a new branch from `main` once `feature/effects` is merged, or from `feature/effects` if it is not (the vision code it touches is `LightView`, which the effect work only fed a new `vision` number).
+2. Then TODO priority 3 (art and licences) and 4 (abilities; they can give Slowed and Accelerated a source).
 
 **Explosion art (2026-10-15):** the user supplied two ChatGPT explosion sheets, stored in `client/assets-src/explosion/`: `explosion_source.png` (barrel blast) and `fireball_source.png` (the wizard's Fireball, violet). Every file the user dropped in `images/` (these two and the barrel source) has an identical committed copy in `client/assets-src/`, so the user may delete `images/` (they asked, 2026-10-15). Neither sheet is built in; both are on the TODO list with low priority ("Barrels and world objects follow-ups"). Credit them as "AI-generated with ChatGPT for this game".
 
@@ -26,7 +22,27 @@ Vision and darkvision are built (2026-10-15), approved by the user in the game, 
 
 **Ideas the user liked** (not yet in TODO; ask before adding): ways to bring light. Early on, carry a wall torch, light braziers, find glow items (mushrooms, flares). Later, class gear and spells: the paladin's glowing shield, the wizard's light orb, a wisp companion, the ranger's flare arrows, and the rogue who prefers the dark. Before any hero light: a dead hero's light must switch off and come back on a revive (the registry drops it today).
 
-## Last feature (2026-10-15): vision and darkvision
+## Last feature (2026-10-15): the effect system
+
+**Branch:** `feature/effects` (from `main` at `12acb8f`), 11 task commits (`git log --oneline main..HEAD`) plus the docs commit. All tasks built and reviewed one by one; the final whole-branch review is pending. **Not merged.** Spec: [docs/superpowers/specs/2026-10-15-effects-design.md](docs/superpowers/specs/2026-10-15-effects-design.md). Docs: TECHNICAL §4 (protocol), §5 "Status effects", §10 (F8), §11 "How to add an effect", §12, §13; PLAYER_GUIDE ("Status effects", the lich, controls, tips); TODO ("Effect system follow-ups").
+
+**What was built:**
+- **Data and runtime:** `defs/effects.rs` (Blind, Sleep, Petrified, Slowed, Accelerated as an open `EffectKind`; stat mods resolved add, then multiply, then the lowest set; the resistance cap keeps immunity; flags; `EffectResponses` Immune/Reduced/Full) and `run/effects.rs` (`Effects` on every `Player` and `Monster`, `apply_effect`, `remove_effect`, `has_effect`, `hit_effect`, `tick_effects`, `damage_wakes`, `wake_teammate`).
+- **Hits carry effects:** `Damage::on_hit` and `with_effect`; `enemies::on_hit` and `abilities::on_hit` are stubs returning `None`.
+- **Bosses:** `defs/bosses.rs` `responses` (all immune to Sleep; lich also immune to Blind, Petrified reduced; dragon reduced to Blind, Petrified, Slowed, Accelerated). The lich casts a blinding curse (dark orb, `BlindOrb` 61), a sleep mist (purple orb, `SleepOrb` 62) and a stone gaze (`Anim::Gaze` 14, a beam the hero can break by line of sight) from its `SPELLS` table; the numbers are `LICH_*` constants.
+- **Wire:** `EntSnap` trailing `u16` bitmask, `SelfW` 14 to 17 (vision, effects, speed_mul, no_act), `Ev::Effect` code 13, `ClientMsg::DebugEffect` (F8 in `?debug`).
+- **Client:** `game/status.ts` (`StatusView`, `lyingPose`, `lieLayout`, `frameBounds`), `EntityView` (stone, slowed, lying), predictor speed, no-act and no-turn, `LightView` vision from the server, gaze beam, "E Wake" and asleep hints, HUD icons (letters B, Z, P, S, H), gallery rows, `LichDemoScene` spell phases.
+- **Rename:** the mimic's `asleep` is now `dormant` (`FLAG.DORMANT`), no behaviour change, so "asleep" only means the effect.
+
+**Verified (2026-10-15):** server **301 tests pass** (Docker: `docker compose -f docker-compose.test.yml run --rm test`), no warnings; client `npm test` **62 tests pass**, `npm run typecheck` clean. Fingerprints: `level_setup_is_unchanged` unchanged; the lich hall value of `simulation_is_unchanged_after_waking_the_boss` was re-recorded (2077949316875812891 to 4898485541812238644) because the lich's blinding curse now fires within the first 5 s, the other values did not move.
+
+**Open (for the user and the next agent):**
+- The final whole-branch review, then the user's decision to merge.
+- Play-test the lich's three spells and the HUD icons live; nothing was played in a real fight yet (F8 shows each effect alone).
+- The HUD glyphs are ASCII letters because the pixel font has no symbols; drawn icons would be nicer.
+- Every number (durations, cooldowns, `EFFECT_REDUCED`) is a first guess for the balancing pass. Full list in TODO "Effect system follow-ups".
+
+## Session before (2026-10-15, vision and darkvision)
 
 **Branch:** `feature/vision` (from `main` after `feature/lighting` was merged). **Merged into `main` (fast-forward) and pushed** at the user's request (2026-10-15). Commits: `git log --oneline 752c7c5..ba4790a` and the docs commit after it (tasks 1 to 7, the final-review fixes, the light-rim fix). Spec: [docs/superpowers/specs/2026-10-15-vision-darkvision-design.md](docs/superpowers/specs/2026-10-15-vision-darkvision-design.md); plan (7 tasks, run with superpowers:subagent-driven-development): [docs/superpowers/plans/2026-10-15-vision-darkvision.md](docs/superpowers/plans/2026-10-15-vision-darkvision.md). It was TODO priority 1 (now only the effect system remains there; new section "Vision and darkvision follow-ups").
 

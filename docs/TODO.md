@@ -4,8 +4,8 @@
 Ordered by technical complexity and by technical dependencies (what makes later items easier), not by quick wins. Items in the same tier can be done in either order unless noted.
 
 **Tier 1: foundations**
-1. **Effect system** (next item; vision and darkvision are done, built 2026-10-15 on `feature/vision`). Blind, sleep, petrified; extensible, every creature, effects modify any stat. Spec settled with the user (awaiting their review, then a plan): [docs/superpowers/specs/2026-10-15-effects-design.md](superpowers/specs/2026-10-15-effects-design.md). Blindness changes vision, so it builds on `Sight` and `perception::sees` (see "Vision and darkvision follow-ups").
-2. **Straight, softly fading vision edges** (user wants it soon; see "Vision and darkvision follow-ups", "Vision edges"). Client only, independent of the effect system, so it can go first while the effect draft's questions are open.
+1. **Effect system** (done, built 2026-10-15 on `feature/effects`; follow-ups in "Effect system follow-ups"). Blind, sleep, petrified, slowed, accelerated; extensible, every creature, effects modify any stat. Spec: [docs/superpowers/specs/2026-10-15-effects-design.md](superpowers/specs/2026-10-15-effects-design.md); TECHNICAL §5 "Status effects", §11 "How to add an effect". The lich casts three effect spells.
+2. **Straight, softly fading vision edges** (next item; the user wants it soon; see "Vision and darkvision follow-ups", "Vision edges"). Client only.
 3. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), gnolls. Little code, but the shadow, ghost, gnolls and sphinx wait on it.
 
 **Tier 2: larger features on top of tier 1**
@@ -17,7 +17,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 **Tier 3: content**
 
 7. **Ghost and shadow.** The shadow and the torch-extinguishing enemy use the light system (`is_lit`, `set_light`; see "Lighting follow-ups"). The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
-8. **Elves and bandits** (see "Elves and bandits"): the Elf entity type and the elven archer (a new playable hero class), then the dark elf. The elf needs the effect system (1, immunity to sleep) and the Enchanted Forest licence (3). The bandit (Human) needs only the licence; the dark elf also waits for its art.
+8. **Elves and bandits** (see "Elves and bandits"): the Elf entity type and the elven archer (a new playable hero class), then the dark elf. The effect system is built (1), so the elf's sleep immunity is one `EffectResponses` entry (see "Effect system follow-ups"); it still needs the Enchanted Forest licence (3). The bandit (Human) needs only the licence; the dark elf also waits for its art.
 9. **Assassin restyle and thrown knives** (see "Assassin restyle"): dark clothes and hair (maybe a hood), knives instead of arrows with a shorter range. Independent of the items above; vision is built, so the range can be set now.
 10. **Minions for the other bosses; more classes and bosses** (classes are easier after 4).
 11. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
@@ -153,6 +153,19 @@ Built 2026-10-15 on branch `feature/vision` (TECHNICAL §5 "Sight", §7, §11 "H
   - **Keep cheap:** the light colours, the darkvision mask and the tint stay on the 2 px per tile canvases. Do not raise their resolution for crisp edges (CPU upsampling and upload would grow about 64 times).
   - **Unchanged:** the server's per-tile visibility, the snapshot filter and targeting. An enemy on a visible tile can stand half in the drawn shadow; accept it or make the polygon a little generous for entities.
   - Check the look in `?lights` and with darkvision (F4).
+
+## Effect system follow-ups
+Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §11 "How to add an effect"): five effects, resistances and responses, hit effects, the lich's three spells, wake-up with E, HUD icons, F8 debug.
+- **Play-test (user):** the lich's blinding curse, sleep mist and stone gaze in a real fight (orb speed, how readable the wind-ups are, whether the gaze beam is easy to break), the HUD icons, the lying pose and the stone look.
+- **Tune** in the balancing pass: the durations in `defs/effects.rs` (blind 3 s, sleep 4 s, petrified 3 s, slowed and accelerated 3 s), `EFFECT_REDUCED` (0.5), the `LICH_*` numbers in `defs/bosses.rs` (windups, cooldowns 10, 14 and 18 s, first casts at 4, 7 and 9 s, the blind orb's damage), and the petrified resistances.
+- **Sources for Slowed and Accelerated:** nothing applies them yet (only F8). Hero abilities, tier 2 (priority 4), e.g. a slowing shot or a haste spell; `Damage::with_effect` or `apply_effect` is all they need.
+- **The rogue's hide as `Invisible`:** `Player.hidden` is still its own timer. Folding it in as an effect would let items and enemies share it.
+- **Monster sleep with `wakes_on_damage`:** the flag exists and `damage_wakes` is called, but no effect uses it. A sleep for monsters (a hero ability) needs it on a new kind or on `Sleep` with a per-target rule, and the AI already skips a monster with `no_act`.
+- **The elf's sleep immunity via `EffectResponses`:** per entity type or `Adjust` (today only bosses have a response table, `defs/bosses.rs`); give `Adjust` a `responses` field when the Elf type arrives.
+- **Effect sounds:** `Ev::Effect` is sent on every start and end and the client ignores it; it is the hook.
+- **Damage over time (poison, burning):** a tick rule on `EffectDef` (damage type and amount per second) run in `tick_effects`; fire patches and the dragon's breath could apply burning, poison hits could apply poison.
+- **HUD glyphs are letters (B, Z, P, S, H):** the pixel font has no symbols. Drawn icons (small sprites, so art or the user's go-ahead) would read better.
+- **Final whole-branch review:** pending at the time of writing; see HANDOFF.
 
 ## Riddle rooms
 Special rooms with a creature that asks the heroes a riddle. If they solve it, they get a reward. If they fail, they fight the creature, or enemies spawn.
