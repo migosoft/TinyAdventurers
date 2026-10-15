@@ -18,7 +18,8 @@ For: the next agent or developer continuing this project. Read this first, then 
 - **Plan written:** [docs/superpowers/plans/2026-10-15-light-sources.md](docs/superpowers/plans/2026-10-15-light-sources.md), with 12 tasks in three stages: A (server core, tasks 1–5), B (client core, tasks 6–8) and C (torches, generator, art, docs, tasks 9–12).
 - **In progress (2026-10-15):** being carried out subagent-driven (the user's choice), one implementer and one reviewer per task.
   - **Stage A done** (server core, tasks 1–5, commits `3f24459..61db8d7`): light kinds, protocol, registry and static light map, shot/hazard/lava lights, `set_tile`, visibility "in sight and lit" with hero events on sight only. 236 server tests pass, fingerprints unchanged.
-  - **Next:** Stage B (client, tasks 6–8), then Stage C (tasks 9–12).
+  - **Stage B done** (client core, tasks 6–8, up to `59c926e`): client light field matching the server map (shared fixture), light canvas (darkness + additive tint) replacing the fog, heroes above the darkness, `?lights` demo page. Phaser resets a canvas texture to NEAREST on every `refresh()` under `pixelArt`, so `LightView` re-applies LINEAR after each upload. The look (falloff, tint strength, flicker, 1 px per tile) still needs the user's OK.
+  - **Next:** Stage C (tasks 9–12: torches, placement, art, docs).
   - **User checkpoints are part of the plan:**
     - Task 8: the user looks at `?lights` (how the light fades, the colour strength, the flicker);
     - Task 11: the side-sconce look and a live test.
