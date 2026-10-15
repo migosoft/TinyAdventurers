@@ -9,12 +9,12 @@ export const DEPTH = {
   entityBase: 10,
   projectile: 5000,
   fx: 6000,
+  /** The heroes' HP bars: over figures and effects, under the darkness (heroes vanish in the dark). */
+  heroBars: 6500,
   /** Tint of the lights (ADD blend), just below the darkness. */
   tint: 6999,
-  /** The darkness (light canvas). */
+  /** The darkness (light canvas). Every figure and shot is under it, heroes too. */
   fog: 7000,
-  /** Heroes and the party's own shots: drawn above the darkness. */
-  heroes: 7000.5,
   /** Lich drain beams: above the fog, they show even where the hero cannot see. */
   beam: 7001,
   numbers: 8000,

@@ -74,6 +74,8 @@ export class GameScene extends Phaser.Scene {
   private endedShots = new Map<number, number>();
   private fx!: Effects;
   private bars!: Phaser.GameObjects.Graphics;
+  /** HP bars over heroes: under the darkness, so they vanish with their hero. */
+  private heroBars!: Phaser.GameObjects.Graphics;
   private beams!: Phaser.GameObjects.Graphics;
   private keys!: Record<'W' | 'A' | 'S' | 'D' | 'Q' | 'E', Phaser.Input.Keyboard.Key>;
   private acc = 0;
@@ -145,6 +147,7 @@ export class GameScene extends Phaser.Scene {
     this.lightView = new LightView(this, this.map, this.light);
     this.useHint = this.add.text(0, 0, 'E', { fontFamily: 'monospace', fontSize: '8px', color: '#ffffff', stroke: '#000000', strokeThickness: 2 }).setOrigin(0.5, 1).setVisible(false).setDepth(DEPTH.numbers);
     this.bars = this.add.graphics().setDepth(DEPTH.numbers - 1);
+    this.heroBars = this.add.graphics().setDepth(DEPTH.heroBars);
     this.beams = this.add.graphics().setDepth(DEPTH.beam);
     this.debugGfx = this.add.graphics().setDepth(DEPTH.fog + 1);
     this.debugOn = false;
@@ -479,7 +482,7 @@ export class GameScene extends Phaser.Scene {
   private spawnCosmetic(kind: number, shot: number, aim: number, speed: number, r: number, life: number, target?: [number, number]): void {
     const pd = PROJECTILES[kind];
     const { x, y } = this.pred.state;
-    const img = this.projectileImage(pd).setDepth(DEPTH.heroes);
+    const img = this.projectileImage(pd);
     this.orientProjectile(img, pd, aim);
     this.cosmetics.push({
       shot,
@@ -641,7 +644,6 @@ export class GameScene extends Phaser.Scene {
     if (!view) {
       const name = isPlayerKind(e.kind) ? this.info.players.find((p) => p.ent === e.id)?.name : undefined;
       view = new EntityView(this, e.kind, this.fx, me ? undefined : name);
-      if (isPlayerKind(e.kind)) view.aboveDark = true;
       this.views.set(e.id, view);
     }
     let s: ViewState;
@@ -739,7 +741,6 @@ export class GameScene extends Phaser.Scene {
       this.projViews.set(e.id, img);
     }
     img.setVisible(!mine).setPosition(Math.round(e.x), Math.round(e.y - 8));
-    if (this.info.players.some((p) => p.ent === owner)) img.setDepth(DEPTH.heroes);
     this.orientProjectile(img, pd, e.aim);
     if (!mine && pd.gloom) this.fx.gloomWisp(e.x, e.y - 8);
     else if (!mine && pd.trail && Math.random() < 0.5) this.fx.particle(e.x, e.y - 8, 0, 0, 0.25, pd.trail, { depth: DEPTH.projectile - 1 });
@@ -812,8 +813,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawBarsAndBeams(now: number): void {
-    const g = this.bars;
-    g.clear();
+    this.bars.clear();
+    this.heroBars.clear();
     for (const e of this.ents.values()) {
       if (isProjectileKind(e.kind) || e.kind === KIND.FirePatch || e.kind === KIND.Chest || e.kind === KIND.Barrel || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
       // The ogre (mini-boss) always shows a wide bar; others only once hurt.
@@ -824,8 +825,10 @@ export class GameScene extends Phaser.Scene {
       const w = ogre ? 28 : 12;
       const x = Math.round(e.x - w / 2);
       const y = Math.round(e.y - v.height - 3);
+      const hero = isPlayerKind(e.kind);
+      const g = hero ? this.heroBars : this.bars;
       g.fillStyle(0x140c1a, 1).fillRect(x - 1, y - 1, w + 2, 4);
-      g.fillStyle(isPlayerKind(e.kind) ? 0x40d060 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);
+      g.fillStyle(hero ? 0x40d060 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);
     }
     // Lich draining its disciples: red shimmering energy flowing to the lich.
     // The server sends both ends even when they are out of view (`drain`), and

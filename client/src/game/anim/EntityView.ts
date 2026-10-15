@@ -59,8 +59,6 @@ export function ensureShadowTexture(scene: Phaser.Scene, r: number): string {
 export class EntityView {
   readonly def: FigureDef;
   readonly root: Phaser.GameObjects.Container;
-  /** Heroes: drawn above the darkness. */
-  aboveDark = false;
   private figure: Phaser.GameObjects.Container;
   private shadow: Phaser.GameObjects.Image;
   private body: Phaser.GameObjects.Sprite;
@@ -123,7 +121,7 @@ export class EntityView {
     this.lastX = s.x;
     this.lastY = s.y;
     this.root.setPosition(Math.round(s.x), Math.round(s.y));
-    this.root.setDepth(this.aboveDark ? DEPTH.heroes + s.y / 1e5 : DEPTH.entityBase + s.y);
+    this.root.setDepth(DEPTH.entityBase + s.y);
 
     const dead = (s.flags & FLAG.DEAD) !== 0;
     this.root.setVisible(!dead);
