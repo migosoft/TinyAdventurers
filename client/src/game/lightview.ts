@@ -41,9 +41,17 @@ export function darkReach(dx: number, dy: number, range: number): boolean {
   return range > 0 && dx * dx + dy * dy <= range * range;
 }
 
-/** Darkness over one tile with darkvision: a seen, unlit tile in reach is dimmed to DV_DARK, else as `darknessAlpha`. */
+/** Darkness over one tile with darkvision: a seen tile in reach is never darker than DV_DARK (a dim light rim
+ *  included, so lights get no dark ring), else as `darknessAlpha`. */
 export function tileDark(visible: boolean, lit: boolean, inReach: boolean, r: number, g: number, b: number): number {
-  return visible && !lit && inReach ? DV_DARK : darknessAlpha(visible, lit, r, g, b);
+  const a = darknessAlpha(visible, lit, r, g, b);
+  return visible && inReach ? Math.min(a, DV_DARK) : a;
+}
+
+/** Greyscale strength (0..1) for a tile in darkvision reach whose light alone gives darkness `lightDark`:
+ *  1 where only darkvision shows it, fading to 0 where the light is at least as bright as darkvision. */
+export function dvMask(inReach: boolean, lightDark: number): number {
+  return inReach ? Math.min(1, Math.max(0, 1 - (1 - lightDark) / (1 - DV_DARK))) : 0;
 }
 
 /** The debug darkvision steps (F4, and V in ?lights): the next one above `current`, after 1 back to 0. */
@@ -212,9 +220,9 @@ export class LightView {
         const [r, g, b] = [this.rgb[i * 3], this.rgb[i * 3 + 1], this.rgb[i * 3 + 2]];
         const visible = this.fov.isVisible(x, y);
         const lit = this.field.isLit(x, y) || this.movingLit[i] === 1;
-        const reach = visible && !lit && darkReach(x - tx, y - ty, range);
+        const reach = visible && darkReach(x - tx, y - ty, range);
         dt[i] = tileDark(visible, lit, reach, r, g, b) * 255;
-        mt[i] = reach ? 255 : 0;
+        mt[i] = dvMask(reach, darknessAlpha(visible, lit, r, g, b)) * 255;
         tt[i * 4] = Math.min(255, r);
         tt[i * 4 + 1] = Math.min(255, g);
         tt[i * 4 + 2] = Math.min(255, b);
