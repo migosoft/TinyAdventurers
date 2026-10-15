@@ -28,7 +28,8 @@ pub struct WorldObject {
 pub enum ObjState {
     Chest { opened: Option<f64> },
     Barrel(Barrel),
-    Torch { wall: (i32, i32), side: crate::dungeon::TorchSide, light: u32, lit: bool },
+    /// Lit while its light is on (`torch_on`): the light registry holds that state.
+    Torch { wall: (i32, i32), side: crate::dungeon::TorchSide, light: u32 },
 }
 
 pub struct Barrel {
@@ -76,7 +77,7 @@ impl Run {
     pub fn spawn_torch(&mut self, t: &crate::dungeon::TorchSpawn) -> u32 {
         let (fx, fy) = t.front();
         let light = self.add_light(crate::defs::lights::LightKind::Torch, crate::run::light::Anchor::Tile(fx, fy), None);
-        self.spawn_object(EntityKind::Torch, t.pos(), ObjState::Torch { wall: t.wall, side: t.side, light, lit: true })
+        self.spawn_object(EntityKind::Torch, t.pos(), ObjState::Torch { wall: t.wall, side: t.side, light })
     }
 
     /// Footprints of the solid objects, except `except` (an object's own id).
@@ -89,12 +90,15 @@ impl Run {
     }
 }
 
-/// Lights or puts out a torch (and its light).
+/// Lights or puts out a torch (its light).
 pub fn set_torch(run: &mut Run, oi: usize, on: bool) {
-    let ObjState::Torch { light, lit, .. } = &mut run.objects[oi].state else { return };
-    *lit = on;
-    let id = *light;
-    run.set_light(id, on);
+    let ObjState::Torch { light, .. } = run.objects[oi].state else { return };
+    run.set_light(light, on);
+}
+
+/// Is the torch with this light burning?
+pub fn torch_on(run: &Run, light: u32) -> bool {
+    run.lights.get(light).map_or(false, |l| l.on)
 }
 
 /// A hit on an object; `by` is the hero's entity id. What it does depends on the kind.
@@ -195,14 +199,14 @@ pub fn use_object(run: &mut Run, pi: usize) {
         .objects
         .iter()
         .enumerate()
-        .filter(|(_, o)| !o.gone && matches!(&o.state, ObjState::Barrel(b) if b.sinking.is_none()) || matches!(o.state, ObjState::Torch { .. }))
+        .filter(|(_, o)| !o.gone && (matches!(&o.state, ObjState::Barrel(b) if b.sinking.is_none()) || matches!(o.state, ObjState::Torch { .. })))
         .map(|(i, o)| (i, o.pos.dist(at) - o.radius - PLAYER_RADIUS))
         .filter(|&(_, gap)| gap <= USE_REACH)
         .min_by(|a, b| a.1.total_cmp(&b.1));
     if let Some((oi, _)) = near {
         match run.objects[oi].state {
             ObjState::Barrel(_) => push_barrel(run, oi, at),
-            ObjState::Torch { lit, .. } => set_torch(run, oi, !lit),
+            ObjState::Torch { light, .. } => set_torch(run, oi, !torch_on(run, light)),
             ObjState::Chest { .. } => {}
         }
     }
@@ -329,8 +333,9 @@ fn ms_since(time: f64, t: f64) -> u16 {
     ((time - t) * 1000.0).clamp(0.0, 65535.0) as u16
 }
 
-/// Snapshot entry. Chests: anim 1 once opened, with the time since.
-pub fn snap(o: &WorldObject, time: f64) -> EntSnap {
+/// Snapshot entry. Chests: anim 1 once opened, with the time since; torches: anim 1 while lit.
+pub fn snap(run: &Run, o: &WorldObject) -> EntSnap {
+    let time = run.time;
     let (anim, since) = match &o.state {
         ObjState::Chest { opened } => opened.map_or((0, 0), |t| (1, ms_since(time, t))),
         ObjState::Barrel(b) => match (b.sinking, b.fuse) {
@@ -338,7 +343,7 @@ pub fn snap(o: &WorldObject, time: f64) -> EntSnap {
             (None, Some(_)) => (1, ms_since(time, b.lit_at)),
             _ => (0, 0),
         },
-        ObjState::Torch { lit, .. } => (*lit as u8, 0),
+        ObjState::Torch { light, .. } => (torch_on(run, *light) as u8, 0),
     };
     let extra = match &o.state {
         ObjState::Torch { side, .. } => *side as u32,
@@ -392,7 +397,7 @@ mod tests {
         assert!(lit(&run, oi));
         let ObjState::Barrel(b) = &run.objects[oi].state else { panic!() };
         assert_eq!((b.fuse, b.igniter), (Some(BARREL_FUSE), Some(pid)));
-        assert_eq!(snap(&run.objects[oi], run.time).5, 1, "anim 1 while the fuse burns");
+        assert_eq!(snap(&run, &run.objects[oi]).5, 1, "anim 1 while the fuse burns");
     }
 
     fn booms(run: &Run) -> usize {
@@ -706,7 +711,7 @@ mod tests {
     }
 
     fn torch_lit(run: &Run, oi: usize) -> bool {
-        matches!(run.objects[oi].state, ObjState::Torch { lit: true, .. })
+        matches!(run.objects[oi].state, ObjState::Torch { light, .. } if torch_on(run, light))
     }
 
     #[test]
@@ -715,8 +720,8 @@ mod tests {
         assert!(torch_lit(&run, oi));
         let p = run.players[0].pos();
         assert!(run.is_lit(p));
-        assert_eq!(snap(&run.objects[oi], run.time).5, 1);
-        assert_eq!(snap(&run.objects[oi], run.time).9, TorchSide::Face as u32);
+        assert_eq!(snap(&run, &run.objects[oi]).5, 1);
+        assert_eq!(snap(&run, &run.objects[oi]).9, TorchSide::Face as u32);
         assert!(run.objects[oi].owns_light() && !run.objects[oi].solid);
     }
 

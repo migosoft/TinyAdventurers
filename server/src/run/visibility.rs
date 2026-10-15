@@ -183,7 +183,7 @@ pub fn send_snapshots(run: &mut Run) {
             if !object_sent(&fov, lights, o) {
                 continue;
             }
-            ents.push(super::objects::snap(o, run.time));
+            ents.push(super::objects::snap(run, o));
         }
         for h in &run.hazards {
             if !seen(&fov, lights, h.pos, h.radius) {
@@ -328,6 +328,27 @@ mod tests {
         let ids: Vec<u64> = snap[2].as_array().unwrap().iter().map(|e| e[0].as_u64().unwrap()).collect();
         assert!(ids.contains(&(inside as u64)), "lit by the patch");
         assert!(!ids.contains(&(outside as u64)), "dark: the client draws it black");
+    }
+
+    #[test]
+    fn recolouring_a_moving_light_shows_in_the_snapshot_without_an_event() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run);
+        let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(stx);
+        run.tick = 1; // past the start: static changes would be events now
+        let orc = run.spawn_enemy(EnemyType::OrcWarrior, Map::center_of(tx + 2, ty), None, 1);
+        let light = run.add_light(LightKind::Fire, Anchor::Entity(orc), None);
+        run.events.clear();
+        run.set_light_colour(light, 0x3060ff);
+        assert_eq!(run.moving_lights()[0].colour, 0x3060ff);
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Light { .. })), "moving lights go out in snapshots only");
+        send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
+        let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        let lights = snap[8].as_array().unwrap();
+        assert_eq!(lights.len(), 1);
+        assert_eq!((lights[0][2].as_u64(), lights[0][3].as_u64()), (Some(LightKind::Fire as u64), Some(0x3060ff)));
     }
 
     #[test]
