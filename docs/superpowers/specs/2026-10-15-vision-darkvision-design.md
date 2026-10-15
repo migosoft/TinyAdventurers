@@ -22,7 +22,7 @@ User decisions (2026-10-15):
   - one shared perception rule for heroes and enemies (approach A);
   - a post-effect shader with a per-tile mask for the greyscale (approach A).
 
-**Status:** designed in chat and approved by the user. This written spec still needs the user's review, then a plan (superpowers:writing-plans).
+**Status:** designed in chat, written spec reviewed and approved by the user (2026-10-15). Plan: [../plans/2026-10-15-vision-darkvision.md](../plans/2026-10-15-vision-darkvision.md).
 
 **Relation to the effect system** ([2026-10-15-effects-design-draft.md](2026-10-15-effects-design-draft.md)): vision and darkvision are stats that effects can change (blindness sets vision to 0). Build this first; the effect system then wraps the resolved `Sight` like any other stat.
 
