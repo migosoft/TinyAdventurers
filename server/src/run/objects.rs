@@ -5,6 +5,7 @@
 use super::Run;
 use crate::defs::damage::{resolve, Damage, Resistances};
 use crate::defs::kinds::EntityKind;
+use crate::defs::lights::{self, LightKind};
 use crate::collision::line_of_sight;
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::abilities::{KNOCK_DECAY, KNOCK_MIN_SPEED};
@@ -297,6 +298,7 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
     let src = by.and_then(|id| run.player_idx(id));
     let (r, dmg, knock) = (BARREL_BLAST_R, barrel_blast(), BARREL_BLAST_KNOCK);
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: BOOM_BARREL }, Some(pos));
+    run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
     let map = &run.layout.map;
     let heroes: Vec<usize> = (0..run.players.len())
         .filter(|&i| {
@@ -769,5 +771,16 @@ mod tests {
         crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::Arrow, from, Vec2::new(0.0, -1.0), 200.0, 5.0, 2.0, 0.0, 0, 0.0);
         step_for(&mut run, 0.3);
         assert!(!torch_lit(&run, oi), "an arrow puts it out");
+    }
+
+    #[test]
+    fn a_barrel_blast_flashes_light() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        let (_, oi) = barrel_at(&mut run, Vec2::new(40.0, 0.0));
+        let pos = run.objects[oi].pos;
+        explode_barrel(&mut run, oi);
+        let flash = run.lights.sources.iter().find(|s| s.kind == crate::defs::lights::LightKind::Blast).expect("a flash");
+        assert_eq!(flash.anchor, crate::run::light::Anchor::Point(pos));
+        assert!(run.moving_lights().iter().any(|l| l.kind == crate::defs::lights::LightKind::Blast));
     }
 }

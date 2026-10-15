@@ -280,7 +280,7 @@ fn export_fixtures() {
     let lit: Vec<i32> = (0..map.w * map.h).filter(|i| lights.static_lit(i % map.w, i / map.w)).collect();
     let srcs: Vec<serde_json::Value> = lights.sources.iter().map(|s| match s.anchor {
         Anchor::Tile(x, y) => json!([s.id, s.kind as u8, s.colour, x, y, true]),
-        Anchor::Entity(_) => unreachable!(),
+        Anchor::Entity(_) | Anchor::Point(_) => unreachable!(),
     }).collect();
     // Moving lights (px, on the wire's 1/16 px grid): open floor, beside the
     // pillar's corner, against the long wall, exactly on a tile corner.

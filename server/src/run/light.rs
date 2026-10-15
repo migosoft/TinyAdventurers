@@ -4,8 +4,8 @@
 //! shadow, the torch-extinguishing enemy). Every light lights the tiles a
 //! shadowcast of its radius from its tile reaches. Static lights (anchored to
 //! a tile) are baked into a per-tile map, rebuilt only after a change; moving
-//! lights (anchored to an entity) are cast from the entity's tile into a
-//! second layer, once per snapshot. The client casts both the same way for
+//! lights (anchored to an entity, or a short-lived flash on a point) are cast
+//! from their tile into a second layer, once per snapshot. The client casts both the same way for
 //! drawing (`client/src/game/light.ts`, shared fixtures), so a tile the
 //! server counts as lit is never drawn fully black (its light fades out
 //! inside the lit tiles, never beyond them).
@@ -24,6 +24,8 @@ pub enum Anchor {
     Tile(i32, i32),
     /// Moving: follows the entity with this id (any list), removed with it.
     Entity(u32),
+    /// Moving (sent like one), but still: a flash at this spot (`Run::add_flash`).
+    Point(Vec2),
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +35,8 @@ pub struct LightSource {
     pub colour: Colour,
     pub anchor: Anchor,
     pub on: bool,
+    /// Run time at which the sweep removes it (flashes).
+    pub expires: Option<f64>,
 }
 
 /// A lit moving light at its entity's position (for one query or snapshot).
@@ -91,7 +95,7 @@ impl Lights {
         let id = self.next_id;
         self.next_id += 1;
         let colour = colour.unwrap_or(lights::def(kind).colour);
-        self.sources.push(LightSource { id, kind, colour, anchor, on: true });
+        self.sources.push(LightSource { id, kind, colour, anchor, on: true, expires: None });
         if matches!(anchor, Anchor::Tile(..)) {
             self.dirty = true;
         }
@@ -120,7 +124,7 @@ impl Lights {
             .filter(|s| s.on)
             .filter_map(|s| match s.anchor {
                 Anchor::Tile(x, y) => Some((x, y, s.kind)),
-                Anchor::Entity(_) => None,
+                Anchor::Entity(_) | Anchor::Point(_) => None,
             })
             .collect();
         for (x, y, kind) in statics {
@@ -188,6 +192,17 @@ impl Run {
         id
     }
 
+    /// A short flash of light on a spot (an explosion): a moving light that
+    /// the sweep removes after `secs`. No event: it goes out in snapshots.
+    pub fn add_flash(&mut self, kind: LightKind, pos: Vec2, secs: f64) -> u32 {
+        let id = self.add_light(kind, Anchor::Point(pos), None);
+        let expires = self.time + secs;
+        if let Some(s) = self.lights.sources.iter_mut().find(|s| s.id == id) {
+            s.expires = Some(expires);
+        }
+        id
+    }
+
     pub fn set_light(&mut self, id: u32, on: bool) {
         self.change_light(id, |s| s.on = on);
     }
@@ -226,15 +241,19 @@ impl Run {
             .or_else(|| self.objects.iter().find(|o| o.id == id && !o.gone).map(|o| o.pos))
     }
 
-    /// Every lit moving light at its entity's current position.
+    /// Every lit moving light at its entity's current position (a flash at its spot).
     pub fn moving_lights(&self) -> Vec<Lit> {
         self.lights
             .sources
             .iter()
             .filter(|s| s.on)
             .filter_map(|s| {
-                let Anchor::Entity(e) = s.anchor else { return None };
-                Some(Lit::new(self.entity_pos(e)?, s.kind, s.colour))
+                let pos = match s.anchor {
+                    Anchor::Entity(e) => self.entity_pos(e)?,
+                    Anchor::Point(p) => p,
+                    Anchor::Tile(..) => return None,
+                };
+                Some(Lit::new(pos, s.kind, s.colour))
             })
             .collect()
     }
@@ -282,16 +301,17 @@ impl Run {
         self.lights.mark_dirty();
     }
 
-    /// Drops moving lights whose entity is gone (after the step's clean-up).
+    /// Drops moving lights whose entity is gone and flashes that ran out (after the step's clean-up).
     pub fn sweep_lights(&mut self) {
         let gone: Vec<u32> = self
             .lights
             .sources
             .iter()
-            .filter_map(|s| match s.anchor {
-                Anchor::Entity(e) if self.entity_pos(e).is_none() => Some(s.id),
-                _ => None,
+            .filter(|s| match s.anchor {
+                Anchor::Entity(e) => self.entity_pos(e).is_none(),
+                _ => s.expires.is_some_and(|t| self.time >= t),
             })
+            .map(|s| s.id)
             .collect();
         self.lights.sources.retain(|s| !gone.contains(&s.id));
     }
@@ -303,7 +323,7 @@ impl Run {
             .iter()
             .filter_map(|s| match s.anchor {
                 Anchor::Tile(x, y) => Some(LightInfo(s.id, s.kind as u8, s.colour, x as u16, y as u16, s.on)),
-                Anchor::Entity(_) => None,
+                Anchor::Entity(_) | Anchor::Point(_) => None,
             })
             .collect()
     }
@@ -515,5 +535,34 @@ mod tests {
         assert!(run.is_lit(at(tx + 3, ty)), "through the gap");
         run.set_tile(tx + 1, ty, Tile::DoorClosed);
         assert!(!run.is_lit(at(tx + 3, ty)), "the door shuts the light in");
+    }
+
+    #[test]
+    fn an_explosion_flashes_light_for_a_moment() {
+        let (mut run, tx, ty) = dark_run();
+        for y in ty - 4..=ty + 4 {
+            run.layout.map.set(tx + 5, y, Tile::Wall);
+        }
+        // Three tiles from where the shot meets the wall: dark before and after the flash.
+        let near = at(tx + 4, ty + 3);
+        assert!(!run.is_lit(near));
+        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::DragonFireball, at(tx + 3, ty), Vec2::new(1.0, 0.0), 300.0, 1.0, 2.0, 20.0, 4, 0.0);
+        let mut n = 0;
+        while !run.projectiles.is_empty() {
+            run.step();
+            n += 1;
+            assert!(n < 30, "the shot hits the wall");
+        }
+        let boom = run.time;
+        assert!(run.is_lit(near), "the blast lights it up");
+        assert_eq!(run.moving_lights().iter().filter(|l| l.kind == LightKind::Blast).count(), 1);
+        while run.time + crate::run::DT < boom + lights::BLAST_FLASH - 1e-6 {
+            run.step();
+            assert!(run.is_lit(near), "lit while the flash lasts");
+        }
+        run.step();
+        run.step();
+        assert!(!run.is_lit(near), "dark again");
+        assert!(run.lights.sources.is_empty(), "the flash is swept");
     }
 }

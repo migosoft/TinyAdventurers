@@ -7,6 +7,7 @@ use crate::defs::abilities::{self as ab, AbilityId};
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::damage::{kind_split, Damage};
 use crate::defs::kinds::{Anim, EntityKind};
+use crate::defs::lights::{self, LightKind};
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
 
@@ -385,6 +386,7 @@ fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
 pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, from_player: bool, src: Option<usize>, k: u8, crit: bool, knock: f64) {
     // The heroes see their own explosions even out of view.
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, (!from_player).then_some(pos));
+    run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
     if from_player {
         let hits: Vec<usize> = run
             .monsters

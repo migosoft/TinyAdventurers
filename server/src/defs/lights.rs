@@ -15,11 +15,16 @@ pub enum LightKind {
     Lava = 1,
     Fire = 2,
     Magic = 3,
+    /// The flash of an explosion (`Run::add_flash`).
+    Blast = 4,
 }
 
 impl LightKind {
-    pub const ALL: [LightKind; 4] = [LightKind::Torch, LightKind::Lava, LightKind::Fire, LightKind::Magic];
+    pub const ALL: [LightKind; 5] = [LightKind::Torch, LightKind::Lava, LightKind::Fire, LightKind::Magic, LightKind::Blast];
 }
+
+/// How long an explosion lights its surroundings (s).
+pub const BLAST_FLASH: f64 = 0.4;
 
 /// First guesses for the balancing pass.
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -40,6 +45,7 @@ pub fn def(k: LightKind) -> LightDef {
         LightKind::Lava => LightDef { radius: 2, colour: 0xff461e, intensity: 0.8, flicker: 0.05 },
         LightKind::Fire => LightDef { radius: 4, colour: 0xff8c3c, intensity: 0.9, flicker: 0.2 },
         LightKind::Magic => LightDef { radius: 3, colour: 0x9678ff, intensity: 0.7, flicker: 0.1 },
+        LightKind::Blast => LightDef { radius: 4, colour: 0xffb060, intensity: 1.0, flicker: 0.3 },
     }
 }
 
