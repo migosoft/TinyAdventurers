@@ -20,7 +20,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 8. **Elves and bandits** (see "Elves and bandits"): the Elf entity type and the elven archer (a new playable hero class), then the dark elf. The effect system is built (1), so the elf's sleep immunity is one `EffectResponses` entry (see "Effect system follow-ups"); it still needs the Enchanted Forest licence (3). The bandit (Human) needs only the licence; the dark elf also waits for its art.
 9. **Assassin restyle and thrown knives** (see "Assassin restyle"): dark clothes and hair (maybe a hood), knives instead of arrows with a shorter range. Independent of the items above; vision is built, so the range can be set now.
 10. **Minions for the other bosses; more classes and bosses** (classes are easier after 4).
-11. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources.
+11. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources. Pillars (see "Pillars") also carry torches; best after the vision edges (2), which give them their shadows.
 12. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
 13. **4-direction sprites, attack frames, sound effects, better spell effects.** Independent; best done once events and animations have settled. Better spell effects means the paladin's healing circle (see "Other follow-ups"). The explosion sheets for barrel blasts and the wizard's Fireball (see "Barrels and world objects follow-ups") is low priority and fits here.
 
@@ -49,6 +49,14 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 - **Tune** `CHEST_COINS`, `coins_for_kill`, the chest rate (35 % of rooms) and the mimic share (25 %) in the balancing pass. Mimic stats are in `defs/enemies.rs`.
 - **More loot:** the pack also has flasks (8 colours/sizes), bombs and coins that could drop as pickups; crates (`crate`) could be breakable objects (see "Barrels and world objects follow-ups").
 - **More room dressing from the pack (unused so far):** floor spikes (animated), buttons and levers, columns, wall fountains (red/blue, animated), wall goo, floor ladder/stairs.
+
+## Pillars
+User request (2026-10-16), from the vision-edges demo:  on branch  has two free-standing pillars in room 1.
+- **What:** single wall tiles (maybe 2×2 in large halls) standing free inside larger rooms. They block sight, walking and shots like any wall. With the soft vision edges (priority 2) they cast straight shadow wedges, which gives cover and hiding places (the rogue, sneaking past humans in the dark).
+- **Generator** (): only in large rooms, never in the start room, not next to a door or on the straight line between two doors, so every door stays reachable (check it with a flood fill). Boss halls only if the fight is designed for it. Use a new RNG stream and re-record the  fingerprint.
+- **Torch mounts:** a pillar is a mounting point for torches, so the middle of a large room (today dark between the wall torches) can be lit.  gives runs under 3 tiles no torch, so a pillar needs its own rule, e.g. one torch on its brick face (south side) or a side sconce, at most one per pillar, and still  for the room.
+- **Look:** the autotiler already draws a free wall tile as a brick face with a top rim (as in the demo). The pack's columns (see "More room dressing") could look better; check whether their footprint fits one tile.
+- **Order:** after the vision edges; independent of other work.
 
 ## Demon dungeon follow-ups
 - **Tune** imp, chort and summoner stats (`defs/enemies.rs`) in the balancing pass. They start close to the skeletons they replace.
