@@ -15,7 +15,8 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 1. **Then: TODO priority 4** (new abilities for the other classes, then loadouts, then a way to spend coins). The ranger's wolf is the first new ability.
 2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
-3. **Server load** (new TODO priority 16, tier 4, section "Server performance follow-ups", 2026-10-16): measure, then cache each hero's view while nothing changed and share it with spectators. The views are estimated to be most of a run's CPU. Before any public launch; not urgent while play is private.
+3. **Breakable chests** (settled with the user 2026-10-16, not built; TODO "Chests, mimics and coins follow-ups"): any hit breaks a closed chest and pays a third of its coins, shots stop at chests, so hitting chests is no longer a free mimic test. Small change, no spec needed. The user is still thinking about bodies blocking movement (same section); do not build that.
+4. **Server load** (new TODO priority 16, tier 4, section "Server performance follow-ups", 2026-10-16): measure, then cache each hero's view while nothing changed and share it with spectators. The views are estimated to be most of a run's CPU. Before any public launch; not urgent while play is private.
 
 Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons. The vision edges are merged, pushed and approved by the user ("I like the new edges design").
 
