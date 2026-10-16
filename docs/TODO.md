@@ -52,7 +52,7 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 - **More room dressing from the pack (unused so far):** floor spikes (animated), buttons and levers, columns, wall fountains (red/blue, animated), wall goo, floor ladder/stairs.
 
 ## Pillars
-User request (2026-10-16), from the vision-edges demo: `?lights` on branch `spike/vision-edges` has two free-standing pillars in room 1.
+User request (2026-10-16), from the vision-edges demo: `?lights` has two free-standing pillars in room 1.
 - **What:** single wall tiles (maybe 2×2 in large halls) standing free inside larger rooms. They block sight, walking and shots like any wall. With the vision edges (built 2026-10-16) they cast straight shadow wedges, which gives cover and hiding places (the rogue, sneaking past humans in the dark).
 - **Generator** (`dungeon/generate.rs`): only in large rooms, never in the start room, not next to a door or on the straight line between two doors, so every door stays reachable (check it with a flood fill). Boss halls only if the fight is designed for it. Use a new RNG stream and re-record the `level_setup_is_unchanged` fingerprint.
 - **Torch mounts:** a pillar is a mounting point for torches, so the middle of a large room (today dark between the wall torches) can be lit. `place_torches` gives runs under 3 tiles no torch, so a pillar needs its own rule, e.g. one torch on its brick face (south side) or a side sconce, at most one per pillar, and still `DARK_SHARE` for the room.

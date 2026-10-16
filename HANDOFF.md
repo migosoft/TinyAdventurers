@@ -16,7 +16,6 @@ The straight vision edges (TODO priority 2) are **merged into `main` and pushed*
 1. Next: TODO priority 3 (art and licences) and 4 (abilities; they can give Slowed and Accelerated a source).
 2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
 3. **Server load** (new TODO priority 16, tier 4, section "Server performance follow-ups", 2026-10-16): measure, then cache each hero's view while nothing changed and share it with spectators. The views are estimated to be most of a run's CPU. Before any public launch; not urgent while play is private.
-4. The branch `spike/vision-edges` (the throwaway demo) is still there; delete it when the user agrees.
 
 **Explosion art (2026-10-15):** the user supplied two ChatGPT explosion sheets, stored in `client/assets-src/explosion/`: `explosion_source.png` (barrel blast) and `fireball_source.png` (the wizard's Fireball, violet). Every file the user dropped in `images/` (these two and the barrel source) has an identical committed copy in `client/assets-src/`, so the user may delete `images/` (they asked, 2026-10-15). Neither sheet is built in; both are on the TODO list with low priority ("Barrels and world objects follow-ups"). Credit them as "AI-generated with ChatGPT for this game".
 
@@ -28,7 +27,7 @@ The straight vision edges (TODO priority 2) are **merged into `main` and pushed*
 
 **Branch:** `feature/vision-edges` (from `main` at `3555d68`), commits `git log --oneline main..feature/vision-edges`: part 1 (spec, plan, polygon, mask, demo, docs), then part 2 after the final review (spec addendum, plan part 2, the `View` rule in TypeScript, the Rust port in the snapshot filter, the shared fixture and the client switch, docs). Built inline with superpowers:executing-plans, reviewed twice by a fresh reviewer (part 1, then part 2; the second review's edge-shading finding is fixed). **Merged into `main` and pushed (2026-10-16).** Deferred minors: a torch on a wall in the polygon's shadow can vanish while its light stays (the server decides by the floor tile in front of the wall); the server cost per snapshot is not measured (TODO priority 16). Spec: [docs/superpowers/specs/2026-10-16-vision-edges-design.md](docs/superpowers/specs/2026-10-16-vision-edges-design.md); plan: [docs/superpowers/plans/2026-10-16-vision-edges.md](docs/superpowers/plans/2026-10-16-vision-edges.md). Docs: TECHNICAL §7 "The vision mask", draw order, §12, §13; TODO (priority 2 done, "Vision edges follow-ups", "Pillars"); README (`?lights`).
 
-**How it came about:** a throwaway spike first (branch `spike/vision-edges`, reference only; delete it after the merge). The user looked at the demo and decided:
+**How it came about:** a throwaway spike first (branch `spike/vision-edges`, deleted after the merge at the user's request). The user looked at the demo and decided:
 - **Crisp edges, no blur.** A 3/4-tile fade made the shadow behind a pillar flare out.
 - **Out of sight stays pure black.** A dim map memory and a drifting fog were demoed and rejected.
 - **Pillars** go onto the TODO list as their own feature, with torch mounts.
