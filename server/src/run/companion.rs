@@ -277,8 +277,35 @@ fn tick_dash(run: &mut Run, mi: usize, pi: usize, dash: WolfDash, dt: f64) {
             }
         }
     }
-    let a = ally_mut(run, mi);
-    a.dash = if done { None } else { Some(WolfDash { left, ..dash }) };
+    if !done {
+        ally_mut(run, mi).dash = Some(WolfDash { left, ..dash });
+        return;
+    }
+    ally_mut(run, mi).dash = None;
+    if dash.attack && run.layout.map.blocks_at(run.monsters[mi].pos, Mover::Enemy) {
+        overrun(run, mi, dash.dir);
+    }
+}
+
+/// An attack dash that ended over ground the wolf cannot stand on (it touched its prey above a
+/// chasm): it carries on along `dir`, without more damage, to the first walkable ground within
+/// `WOLF_DASH_RANGE`. With none before a wall or that far, it dashes back to its last safe tile.
+fn overrun(run: &mut Run, mi: usize, dir: Vec2) {
+    let (map, pos, r) = (&run.layout.map, run.monsters[mi].pos, run.monsters[mi].radius);
+    let land = (1..=(WOLF_DASH_RANGE / 2.0) as usize)
+        .map(|i| pos + dir * (i as f64 * 2.0))
+        .take_while(|&p| !map.blocks_at(p, Mover::Dash))
+        .find(|&p| !map.blocks_at(p, Mover::Enemy))
+        .map(|p| p + dir * r) // a body's width onto the ground
+        .filter(|&p| !map.blocks_at(p, Mover::Enemy));
+    match land {
+        Some(to) => {
+            let left = pos.dist(to) / WOLF_DASH_SPEED;
+            ally_mut(run, mi).dash = Some(WolfDash { dir, left, attack: false });
+            set_anim(run, mi, Anim::Dash);
+        }
+        None => dash_back(run, mi),
+    }
 }
 
 /// The enemy the wolf goes for: alive, awake and visible to the heroes (not dormant, hiding or flying),
@@ -1025,6 +1052,47 @@ mod tests {
         assert!(ally(&run, id).prey.is_none());
     }
 
+    /// The boss hall, a floor spot 3 tiles inside its door and one 2 tiles outside it.
+    fn by_the_door(run: &Run) -> (crate::dungeon::Rect, Vec2, Vec2) {
+        let b = run.level.boss().unwrap();
+        let (hall, door) = (b.arena, b.door[0]);
+        let inward = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+            .into_iter()
+            .find(|&(dx, dy)| hall.contains_tile(door.0 + dx, door.1 + dy) && !hall.contains_tile(door.0 - dx, door.1 - dy))
+            .unwrap();
+        let inside = Map::center_of(door.0 + 3 * inward.0, door.1 + 3 * inward.1);
+        let outside = Map::center_of(door.0 - 2 * inward.0, door.1 - 2 * inward.1);
+        assert!(!run.layout.map.blocks_at(outside, crate::dungeon::Mover::Enemy));
+        assert!(!run.layout.map.blocks_at(inside, crate::dungeon::Mover::Enemy));
+        assert!(hall.contains(inside) && !hall.contains(outside));
+        (hall, inside, outside)
+    }
+
+    #[test]
+    fn the_wolf_dash_never_stops_over_a_chasm_in_front_of_its_prey() {
+        let (mut run, id) = guard_run();
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        move_ranger(&mut run, Map::center_of(tx + 1, ty));
+        for y in ty - 1..=ty + 1 {
+            run.layout.map.set(tx - 1, y, Tile::Chasm);
+        }
+        // The orc stands right at the chasm's far edge: the dash touches it over the chasm.
+        let edge = tx as f64 * crate::dungeon::TILE;
+        let orc = orc_at(&mut run, Vec2::new(edge + 6.0, Map::center_of(tx, ty).y));
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].ai.hold = 99.0;
+        run.monsters[oi].hp = 500.0;
+        set_wolf_pos(&mut run, id, Map::center_of(tx - 4, ty));
+        for _ in 0..60 {
+            run.step();
+            assert!(wolf(&run, id).sinking.is_none(), "it never falls");
+        }
+        let w = wolf(&run, id);
+        assert!(w.alive && w.sinking.is_none());
+        assert_eq!(run.layout.map.tile_at(w.pos), Tile::Floor as u8, "it ended on floor at {:?}", w.pos);
+        assert!(hp_of(&run, orc).unwrap() <= 500.0 - WOLF_DASH_DAMAGE + 1e-9, "the dash hit the orc");
+    }
+
     #[test]
     fn the_wolf_reappears_beside_the_ranger_when_far_or_locked_out() {
         // Far: 250 px away.
@@ -1045,17 +1113,7 @@ mod tests {
         // Locked out: the hall door closes with the ranger inside and the wolf outside.
         let (mut run, id) = ranger_with_wolf();
         run.players[0].debug = true;
-        let (hall, door) = {
-            let b = run.level.boss().unwrap();
-            (b.arena, b.door[0])
-        };
-        let inward = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-            .into_iter()
-            .find(|&(dx, dy)| hall.contains_tile(door.0 + dx, door.1 + dy) && !hall.contains_tile(door.0 - dx, door.1 - dy))
-            .unwrap();
-        let inside = Map::center_of(door.0 + 3 * inward.0, door.1 + 3 * inward.1);
-        let outside = Map::center_of(door.0 - 2 * inward.0, door.1 - 2 * inward.1);
-        assert!(!run.layout.map.blocks_at(outside, crate::dungeon::Mover::Enemy));
+        let (hall, inside, outside) = by_the_door(&run);
         assert!(inside.dist(outside) < WOLF_REAPPEAR, "near enough: only the door keeps it out");
         // Both outside first, so the reach check runs on its own clock.
         move_ranger(&mut run, outside);
@@ -1076,12 +1134,17 @@ mod tests {
     #[test]
     fn only_heroes_wake_the_boss_open_chests_and_reveal_mimics() {
         use crate::run::objects::ObjState;
-        // The wolf alone in the boss hall.
+        // The wolf alone in the boss hall, the ranger just outside the open door (near enough
+        // and with a path, so the wolf does not reappear beside them).
         let (mut run, id) = ranger_with_wolf();
-        let centre = run.level.boss().unwrap().arena.center_px() + Vec2::new(24.0, 0.0);
+        let (hall, inside, outside) = by_the_door(&run);
+        assert!(inside.dist(outside) < WOLF_REAPPEAR);
+        move_ranger(&mut run, outside);
         for _ in 0..60 {
-            set_wolf_pos(&mut run, id, centre);
+            set_wolf_pos(&mut run, id, inside);
             run.step();
+            assert!(hall.contains(wolf(&run, id).pos), "the wolf was in the hall: {:?}", wolf(&run, id).pos);
+            assert!(!hall.contains(run.players[0].pos()));
         }
         let b = run.level.boss().unwrap();
         assert!(!b.awake && !b.door_closed, "the wolf does not wake the boss or seal the door");
