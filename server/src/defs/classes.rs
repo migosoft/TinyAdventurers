@@ -24,7 +24,7 @@ pub fn def(class: ClassId) -> ClassDef {
         ClassId::Paladin => ClassDef { class, kind: EntityKind::Paladin, hp: 120.0, speed: 66.0, primary: Sword, secondary: Heal },
         ClassId::Barbarian => ClassDef { class, kind: EntityKind::Barbarian, hp: 140.0, speed: 70.0, primary: Axe, secondary: Dash },
         ClassId::ElvenRanger => {
-            ClassDef { class, kind: EntityKind::ElvenRanger, hp: 90.0, speed: 80.0, primary: CrossbowDagger, secondary: Hide }
+            ClassDef { class, kind: EntityKind::ElvenRanger, hp: 90.0, speed: 80.0, primary: CrossbowDagger, secondary: SummonWolf }
         }
     }
 }

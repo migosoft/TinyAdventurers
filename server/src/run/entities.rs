@@ -33,7 +33,6 @@ pub struct Player {
     pub aim_dist: f64,
     pub cd1: f64,
     pub cd2: f64,
-    pub hidden: f64,
     pub anim: Anim,
     pub anim_start: f64,
     pub moving: bool,

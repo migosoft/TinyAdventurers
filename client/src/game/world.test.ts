@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ABILITIES, CONST, TILE_ID } from '../generated/defs';
+import { CONST, TILE_ID } from '../generated/defs';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import { Predictor } from './world';
@@ -17,7 +17,7 @@ function chasmMap(): TileMap {
 }
 
 function snap(ack: number, x: number, y: number): Snapshot {
-  const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, hidden: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false };
+  const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false };
   return { tick: ack, ack, ents: [], me, boss: null, ev: [], drain: null, lights: [], srv_ms: 0 };
 }
 
@@ -82,25 +82,5 @@ describe('Predictor', () => {
     s.me.cd1 = cd - 2 * CONST.DT;
     pred.reconcile(s);
     expect(pred.cd1).toBeCloseTo(cd - 4 * CONST.DT, 6);
-  });
-
-  it('keeps the hide time of a Hide the server has not seen yet', () => {
-    const pred = new Predictor(chasmMap(), 'ElvenRanger', MODS, 3 * TILE + 8, 2 * TILE + 8);
-    const t = ABILITIES.Hide.duration;
-    pred.step(0, 0, null);
-    pred.useHide(t);
-    pred.step(0, 0, null, [null, pred.cooldownOf('Hide')]);
-    for (let i = 0; i < 4; i++) pred.step(0, 0, null);
-    expect(pred.hidden).toBeCloseTo(t - 4 * CONST.DT, 6);
-    // A snapshot from before the server saw the Hide: not hidden there yet.
-    pred.reconcile(snap(1, pred.state.x, pred.state.y));
-    expect(pred.hidden).toBeCloseTo(t - 4 * CONST.DT, 6);
-    // An attack the server has not seen yet ends it, here too.
-    pred.useHide(0);
-    pred.step(0, 0, null);
-    const s = snap(4, pred.state.x, pred.state.y);
-    s.me.hidden = t - 2 * CONST.DT;
-    pred.reconcile(s);
-    expect(pred.hidden).toBe(0);
   });
 });

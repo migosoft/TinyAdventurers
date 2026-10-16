@@ -35,7 +35,7 @@ export const CLASS_TEXT: Record<ClassId, { title: string; blurb: string; abiliti
     blurb: 'Keen-eyed elf of the deep woods, never alone.',
     abilities: [
       { name: 'Bow / Rapier', text: 'Shoots arrows; thrusts with the rapier automatically when an enemy is close.' },
-      { name: 'Hide', text: 'Vanish from enemy sight. Attacking from hiding deals x4 critical damage.' },
+      { name: 'Dire Wolf', text: '' },
     ],
   },
 };

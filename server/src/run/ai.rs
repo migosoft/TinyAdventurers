@@ -17,12 +17,12 @@ use rand::Rng;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
-/// Nearest living, non-hidden player the monster can see right now.
+/// Nearest living player the monster can see right now.
 pub fn find_visible_player(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
     run.players
         .iter()
         .enumerate()
-        .filter(|(_, p)| p.alive && p.hidden <= 0.0)
+        .filter(|(_, p)| p.alive)
         .filter(|(_, p)| super::perception::sees(run, sight, from, p.pos()))
         .map(|(i, p)| (i, p.pos().dist(from)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -629,16 +629,12 @@ mod tests {
     }
 
     #[test]
-    fn enemy_ignores_player_without_line_of_sight_or_hidden() {
+    fn enemy_ignores_player_without_line_of_sight() {
         const SIGHT: Sight = Sight { vision: 7.5, darkvision: 1.0 };
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let ppos = run.players[0].pos();
         // Open line of sight: seen.
         assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_some());
-        // Hidden: not seen.
-        run.players[0].hidden = 3.0;
-        assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_none());
-        run.players[0].hidden = 0.0;
         // Wall in between: not seen.
         let (tx, ty) = Map::tile_of(ppos);
         for dy in -3..=3 {
@@ -884,7 +880,7 @@ mod tests {
     }
 
     #[test]
-    fn a_seen_hero_becomes_the_target_and_hiding_drops_it() {
+    fn a_seen_hero_becomes_the_target() {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
         open_floor(&mut run);
         run.monsters.retain(|m| m.is_boss);
@@ -892,8 +888,6 @@ mod tests {
         let mi = run.monster_idx(id).unwrap();
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert_eq!(run.monsters[mi].ai.target, Some(crate::run::entities::Target::Player(run.players[0].id)));
-        crate::run::abilities::try_use(&mut run, 0, crate::defs::abilities::AbilityId::Hide, 1, false);
-        assert_eq!(run.monsters[mi].ai.target, None);
     }
 
     #[test]
@@ -959,17 +953,6 @@ mod tests {
         run.monsters.retain(|m| m.is_boss);
         run.lights = super::super::light::Lights::new(run.layout.map.w, run.layout.map.h);
         run.refresh_lights();
-    }
-
-    #[test]
-    fn a_hidden_hero_is_never_seen_even_by_darkvision() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
-        dark_floor(&mut run);
-        let undead = Sight { vision: 8.0, darkvision: 1.0 };
-        let from = run.players[0].pos() + Vec2::new(40.0, 0.0);
-        assert!(find_visible_player(&run, from, undead).is_some(), "in the dark but within darkvision");
-        run.players[0].hidden = 3.0;
-        assert!(find_visible_player(&run, from, undead).is_none());
     }
 
     #[test]

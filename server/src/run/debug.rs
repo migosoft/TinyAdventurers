@@ -165,7 +165,7 @@ mod tests {
         crate::run::visibility::send_snapshots(&mut run);
         let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
         let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
-        assert_eq!(snap[3][13], 50);
+        assert_eq!(snap[3][12], 50);
     }
 
     #[test]

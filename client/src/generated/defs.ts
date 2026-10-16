@@ -63,7 +63,6 @@ export const FLAG = {
   "DEAD": 32,
   "DORMANT": 8,
   "ENRAGED": 4,
-  "HIDDEN": 1,
   "HURT": 16,
   "IMMUNE": 2
 } as const;
@@ -116,7 +115,6 @@ export const CONST = {
   "DT": 0.016666666666666666,
   "FALL_TIME": 0.7,
   "FOV_RADIUS": 9,
-  "HIDDEN_CRIT_MULT": 4.0,
   "KNOCK_DECAY": 0.7788007830714049,
   "KNOCK_MIN_SPEED": 8.0,
   "LAVA_SPEED": 0.4,
@@ -156,7 +154,7 @@ export const CLASSES = {
     "hp": 90.0,
     "kind": 3,
     "primary": "CrossbowDagger",
-    "secondary": "Hide",
+    "secondary": "SummonWolf",
     "speed": 80.0
   },
   "Paladin": {
@@ -226,16 +224,6 @@ export const ABILITIES = {
     "range": 64.0,
     "speed": 0.0
   },
-  "Hide": {
-    "arc": 0.0,
-    "cooldown": 8.0,
-    "damage": 0.0,
-    "duration": 6.0,
-    "id": "Hide",
-    "radius": 0.0,
-    "range": 0.0,
-    "speed": 0.0
-  },
   "MagicMissile": {
     "arc": 0.0,
     "cooldown": 0.35,
@@ -245,6 +233,16 @@ export const ABILITIES = {
     "radius": 3.0,
     "range": 220.0,
     "speed": 230.0
+  },
+  "SummonWolf": {
+    "arc": 0.0,
+    "cooldown": 8.0,
+    "damage": 0.0,
+    "duration": 0.0,
+    "id": "SummonWolf",
+    "radius": 0.0,
+    "range": 0.0,
+    "speed": 0.0
   },
   "Sword": {
     "arc": 1.75,

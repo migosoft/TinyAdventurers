@@ -110,7 +110,7 @@ impl Lich {
             run.players
                 .iter()
                 .enumerate()
-                .filter(|(pi, p)| p.alive && p.hidden <= 0.0 && !run.has_effect(Creature::Player(*pi), s.effect()) && crate::run::perception::sees(run, sight, at, p.pos()))
+                .filter(|(pi, p)| p.alive && !run.has_effect(Creature::Player(*pi), s.effect()) && crate::run::perception::sees(run, sight, at, p.pos()))
                 .min_by(|a, b| at.dist(a.1.pos()).total_cmp(&at.dist(b.1.pos())))
                 .map(|(pi, _)| (k, pi))
         })
@@ -227,7 +227,7 @@ impl BossBehaviour for Lich {
                             if let Some(pi) = target {
                                 let sight = run.monsters[bi].sight_now();
                                 let p = &run.players[pi];
-                                if p.alive && p.hidden <= 0.0 && crate::run::perception::sees(run, sight, pos, p.pos()) {
+                                if p.alive && crate::run::perception::sees(run, sight, pos, p.pos()) {
                                     let h = OnHit { kind: EffectKind::Petrified, secs: LICH_GAZE_SECS, chance: 1.0 };
                                     run.hurt_player(pi, Damage::physical(0.0).with_effect(h));
                                 }
@@ -516,16 +516,6 @@ mod tests {
         ticks(&mut run, &mut l, 0.1);
         let bi = boss_idx(&run).unwrap();
         assert_ne!(run.monsters[bi].anim, Anim::Windup, "no target without the effect: no cast");
-    }
-
-    #[test]
-    fn a_hero_who_hides_during_the_gaze_windup_is_not_petrified() {
-        let (mut run, mut l) = only(Spell::Gaze, Vec2::new(60.0, 0.0));
-        ticks(&mut run, &mut l, 0.1);
-        assert_eq!(l.gaze_target(), Some(run.players[0].id));
-        run.players[0].hidden = 3.0;
-        ticks(&mut run, &mut l, LICH_GAZE_WINDUP);
-        assert!(!run.has_effect(Creature::Player(0), EffectKind::Petrified));
     }
 
     #[test]

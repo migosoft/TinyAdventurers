@@ -51,7 +51,6 @@ interface Cosmetic {
 }
 
 type AbilityName = keyof typeof ABILITIES;
-const ATTACKS: AbilityName[] = ['MagicMissile', 'Fireball', 'Sword', 'Axe', 'Dash', 'CrossbowDagger'];
 
 const SKELETAL = new Set<number>([KIND.SkeletonWarrior, KIND.SkeletonArcher, KIND.RaisedSkeleton, KIND.Lich]);
 
@@ -487,8 +486,7 @@ export class GameScene extends Phaser.Scene {
       case 'Dash':
         anim = ANIM.Dash;
         break;
-      case 'Hide':
-        this.pred.useHide(a.duration);
+      case 'SummonWolf':
         anim = ANIM.Cast;
         break;
       case 'Heal':
@@ -509,7 +507,6 @@ export class GameScene extends Phaser.Scene {
         break;
       }
     }
-    if (ATTACKS.includes(name)) this.pred.useHide(0);
     this.localAnim = { anim, start: now };
     return cooldown;
   }
@@ -707,8 +704,7 @@ export class GameScene extends Phaser.Scene {
         const moving = this.pred.speedMul > 0 && (this.keys.W.isDown || this.keys.A.isDown || this.keys.S.isDown || this.keys.D.isDown);
         anim = moving ? ANIM.Move : ANIM.Idle;
       }
-      let flags = this.myFlags & ~FLAG.HIDDEN;
-      if (this.pred.hidden > 0) flags |= FLAG.HIDDEN;
+      const flags = this.myFlags;
       // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
       s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects() };
     } else {

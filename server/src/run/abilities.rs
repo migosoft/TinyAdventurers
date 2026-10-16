@@ -1,6 +1,6 @@
 //! Player abilities (one executor per AbilityId) and projectile simulation.
 
-use super::entities::{AiState, Projectile, Target};
+use super::entities::Projectile;
 use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::{self as ab, AbilityId};
@@ -41,14 +41,13 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
         return;
     }
     let def = ab::def(id);
-    let (pos, aim, aim_dist, hidden) = {
+    let (pos, aim, aim_dist) = {
         let p = &run.players[pi];
-        (p.pos(), p.aim, p.aim_dist, p.hidden > 0.0)
+        (p.pos(), p.aim, p.aim_dist)
     };
     let dir = Vec2::from_angle(aim);
-    let attack = !matches!(id, AbilityId::Heal | AbilityId::Hide);
-    let crit = hidden && attack;
-    let mult = (if crit { ab::HIDDEN_CRIT_MULT } else { 1.0 }) * run.players[pi].mods.damage;
+    let crit = false;
+    let mult = run.players[pi].mods.damage;
     let on_hit = ab::on_hit(id);
     let mut cooldown = def.cooldown;
     let anim = match id {
@@ -97,26 +96,13 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
                 Anim::Shoot
             }
         }
-        AbilityId::Hide => {
-            let pid = run.players[pi].id;
-            run.players[pi].hidden = def.duration;
-            for m in &mut run.monsters {
-                if m.ai.target == Some(Target::Player(pid)) {
-                    m.ai.target = None;
-                    m.ai.windup = None;
-                    m.ai.state = AiState::Search;
-                    m.ai.search_t = 1.5;
-                    m.ai.path.clear();
-                }
-            }
+        AbilityId::SummonWolf => {
+            // Task 7: summon or heal the wolf
             Anim::Cast
         }
     };
     let p = &mut run.players[pi];
     let cooldown = cooldown / p.mods.attack_speed;
-    if attack {
-        p.hidden = 0.0;
-    }
     if primary {
         p.cd1 = cooldown;
     } else {
@@ -458,22 +444,6 @@ mod tests {
         try_use(&mut run, 0, AbilityId::CrossbowDagger, 1, true);
         assert_eq!(run.projectiles.len(), 1, "crossbow bolt fired");
         assert_eq!(run.projectiles[0].kind, EntityKind::Bolt);
-    }
-
-    #[test]
-    fn hidden_attack_crits_times_four_and_breaks_stealth() {
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
-        let mi = put_monster_near(&mut run, 0, 10.0);
-        run.monsters[mi].hp = 1000.0;
-        try_use(&mut run, 0, AbilityId::Hide, 1, false);
-        assert!(run.players[0].hidden > 0.0);
-        try_use(&mut run, 0, AbilityId::CrossbowDagger, 2, true);
-        assert_eq!(run.monsters[mi].hp, 1000.0 - ab::DAGGER_DAMAGE * ab::HIDDEN_CRIT_MULT);
-        assert_eq!(run.players[0].hidden, 0.0);
-        // Not hidden: normal damage.
-        run.players[0].cd1 = 0.0;
-        try_use(&mut run, 0, AbilityId::CrossbowDagger, 3, true);
-        assert_eq!(run.monsters[mi].hp, 1000.0 - ab::DAGGER_DAMAGE * (ab::HIDDEN_CRIT_MULT + 1.0));
     }
 
     #[test]

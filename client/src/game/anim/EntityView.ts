@@ -270,8 +270,7 @@ export class EntityView {
     this.status.update(fxBits, dt);
     if (asleep) this.weapon?.setVisible(false);
 
-    // Hidden ranger: faint shimmer (enemies do not see it at all).
-    this.root.setAlpha(s.flags & FLAG.HIDDEN ? 0.3 + Math.sin(this.clock * 8) * 0.08 : 1);
+    this.root.setAlpha(1);
 
     const ax = Math.cos(s.aim);
     const ay = Math.sin(s.aim);

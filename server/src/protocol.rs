@@ -188,8 +188,6 @@ pub struct SelfState {
     /// Remaining cooldowns (s).
     pub cd1: f32,
     pub cd2: f32,
-    /// Remaining hide time (s), 0 when visible.
-    pub hidden: f32,
     /// Entity id being spectated when dead.
     pub spectating: Option<u32>,
     /// The viewed hero's darkvision as a percentage of its vision, 0-100.

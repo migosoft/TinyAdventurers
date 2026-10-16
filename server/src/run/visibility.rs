@@ -144,9 +144,6 @@ pub fn send_snapshots(run: &mut Run) {
         .iter()
         .map(|p| {
             let mut f = 0;
-            if p.hidden > 0.0 {
-                f |= flags::HIDDEN;
-            }
             if p.hurt_t > 0.0 {
                 f |= flags::HURT;
             }
@@ -242,7 +239,6 @@ pub fn send_snapshots(run: &mut Run) {
                 knock_vy: me.mv.knock_vy,
                 cd1: me.cd1 as f32,
                 cd2: me.cd2 as f32,
-                hidden: me.hidden as f32,
                 spectating: if me.alive { None } else { me.spectating },
                 darkvision: darkvision_pct(&sight),
                 vision: sight.vision as f32,
@@ -384,7 +380,7 @@ mod tests {
         send_snapshots(&mut run);
         let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
         let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
-        assert_eq!(snap[3][13], 100);
+        assert_eq!(snap[3][12], 100);
         let ids: Vec<u64> = snap[2].as_array().unwrap().iter().map(|e| e[0].as_u64().unwrap()).collect();
         assert!(ids.contains(&(near as u64)), "seen in the dark through the viewed hero's darkvision");
     }
@@ -536,10 +532,10 @@ mod tests {
         let s: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
         let me_ent = s[2].as_array().unwrap().iter().find(|e| e[0] == run.players[0].id).unwrap();
         assert_eq!(me_ent[10], (EffectKind::Slowed.bit() | EffectKind::Blind.bit()) as u64);
-        assert_eq!(s[3][14], 0.0, "blind: vision 0");
-        assert_eq!(s[3][15].as_array().unwrap().len(), 2);
-        assert_eq!(s[3][16], 0.5);
-        assert_eq!(s[3][17], false);
+        assert_eq!(s[3][13], 0.0, "blind: vision 0");
+        assert_eq!(s[3][14].as_array().unwrap().len(), 2);
+        assert_eq!(s[3][15], 0.5);
+        assert_eq!(s[3][16], false);
     }
 
     #[test]

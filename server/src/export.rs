@@ -51,7 +51,6 @@ fn export_defs() {
         "KNOCK_MIN_SPEED": ab::KNOCK_MIN_SPEED,
         "DAGGER_RANGE": ab::DAGGER_RANGE,
         "DAGGER_COOLDOWN": ab::DAGGER_COOLDOWN,
-        "HIDDEN_CRIT_MULT": ab::HIDDEN_CRIT_MULT,
         "MIMIC_HOP_CYCLE": enemies::MIMIC_HOP_CYCLE,
         "MIMIC_HOP_AIR_START": enemies::MIMIC_HOP_AIR.0,
         "MIMIC_HOP_AIR_END": enemies::MIMIC_HOP_AIR.1,
@@ -111,7 +110,7 @@ fn export_defs() {
     });
     consts.as_object_mut().unwrap().extend(objs.as_object().unwrap().clone());
     let fl = json!({
-        "HIDDEN": flags::HIDDEN, "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,
+        "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,
         "DORMANT": flags::DORMANT, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE,
     });
     let tiles = json!({

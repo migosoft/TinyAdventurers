@@ -195,7 +195,6 @@ impl Run {
                 aim_dist: 0.0,
                 cd1: 0.0,
                 cd2: 0.0,
-                hidden: 0.0,
                 anim: Anim::Idle,
                 anim_start: 0.0,
                 moving: false,
@@ -502,11 +501,6 @@ impl Run {
         p.rtt = (input.rtt as f64 / 1000.0).clamp(0.0, 0.5);
         p.cd1 = (p.cd1 - DT).max(0.0);
         p.cd2 = (p.cd2 - DT).max(0.0);
-        let was_hidden = p.hidden > 0.0;
-        p.hidden = (p.hidden - DT).max(0.0);
-        if was_hidden && p.hidden <= 0.0 {
-            p.hidden = 0.0;
-        }
         if p.sinking.is_some() {
             p.moving = false;
             return; // falling or drowning: no more moves or attacks (the client predicts this too)

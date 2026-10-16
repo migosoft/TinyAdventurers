@@ -195,7 +195,7 @@ export interface StatusAnchor {
   body: Phaser.GameObjects.Sprite;
   /** World scale of the body. */
   scale: number;
-  /** The figure's own alpha (about 0.3 while a rogue is hidden); every mark multiplies it in. */
+  /** The figure's own alpha; every mark multiplies it in. */
   alpha: number;
 }
 
