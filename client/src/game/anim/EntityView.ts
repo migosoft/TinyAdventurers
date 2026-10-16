@@ -292,6 +292,12 @@ export class EntityView {
           this.body.y += ay * 1.5 * (1 - k);
           this.body.setAngle(sgn * 8 * Math.sin(k * Math.PI));
         }
+        // Darting toward the aim over the first 0.15 s, out and back (the wolf's bite).
+        if (d.lunge && !tail) {
+          const lk = Math.sin(Math.min(t / 0.15, 1) * Math.PI);
+          this.body.x += ax * d.lunge * lk;
+          this.body.y += ay * d.lunge * lk;
+        }
         const swing = tail ? d.tail : d.swing;
         if (!d.weapon && !this.shotFx && swing) {
           // Unarmed: claw swoosh in front (demons, dragon) or tail swoosh behind (dragon).
@@ -356,6 +362,7 @@ export class EntityView {
     this.weaponHeld = iced;
     const isMelee = s.anim === ANIM.Melee;
     w.setFrame(isMelee && d.meleeWeapon ? d.meleeWeapon : d.weapon!);
+    w.setScale(WEAPON_SCALE * ((isMelee && d.meleeWeapon ? d.meleeWeaponScale : undefined) ?? d.weaponScale ?? 1));
     const hx = (d.handX ?? 3) * sgn;
     let alpha = 1;
     let rot = 0;
@@ -396,7 +403,7 @@ export class EntityView {
         w.setOrigin(0.5, 0.5);
         rot = s.aim;
         if (isMelee && d.meleeWeapon) {
-          // Ranger dagger stab.
+          // Ranger rapier thrust: along the aim, not a swing.
           w.setOrigin(0.5, 0.85);
           rot = s.aim + HALF_PI;
           const k = Math.min(t / 0.15, 1);
