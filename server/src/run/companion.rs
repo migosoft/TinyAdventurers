@@ -155,6 +155,10 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         a.growl_cd -= dt;
         a.hold = (a.hold - dt).max(0.0);
     }
+    // Enemies that died may be growled at again as new ones: drop their ids.
+    let mut growled = std::mem::take(&mut ally_mut(run, mi).growled);
+    growled.retain(|&g| run.monster_idx(g).is_some_and(|i| run.monsters[i].alive));
+    ally_mut(run, mi).growled = growled;
 
     // 3a. A dash in progress.
     if let Some(dash) = run.monsters[mi].ally.as_ref().and_then(|a| a.dash) {
@@ -230,7 +234,10 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
 
-    // 6. Growl (the next task).
+    // 6. Growl: finish a step toward a detected enemy, or start the next growl.
+    if tick_growl(run, mi, ranger, dt) {
+        return;
+    }
 
     // 7. Follow.
     let pos = run.monsters[mi].pos;
@@ -251,6 +258,50 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         run.monsters[mi].aim = if run.players[pi].aim.cos() >= 0.0 { 0.0 } else { std::f64::consts::PI };
         set_anim(run, mi, Anim::Idle);
     }
+}
+
+/// The growl (no prey, no wind-up): true while the wolf is on its step toward a detected enemy.
+/// A growl is a sound, never a reveal: it goes to the whole party and the enemy is not shown.
+/// Each enemy is growled at once, and growls are `WOLF_GROWL_EVERY` apart.
+fn tick_growl(run: &mut Run, mi: usize, ranger: Vec2, dt: f64) -> bool {
+    let pos = run.monsters[mi].pos;
+    let a = ally_mut(run, mi);
+    if let Some(to) = a.growl_to {
+        if a.hold > 0.0 && pos.dist(to) >= 4.0 {
+            run.monsters[mi].aim = pos.angle_to(to);
+            ai::path_toward(run, mi, to, WOLF_SPEED, dt);
+            set_anim(run, mi, Anim::Move);
+            return true;
+        }
+        a.growl_to = None;
+        run.monsters[mi].ai.path.clear();
+    }
+    let a = ally_mut(run, mi);
+    if a.growl_cd > 0.0 {
+        return false;
+    }
+    let growled = a.growled.clone();
+    let sight = run.monsters[mi].sight_now();
+    let seen = run
+        .monsters
+        .iter()
+        .filter(|e| e.alive && !e.is_ally() && !e.dormant && !growled.contains(&e.id))
+        .filter(|e| perception::sees(run, sight, pos, e.pos))
+        .min_by(|a, b| a.pos.dist(pos).total_cmp(&b.pos.dist(pos)))
+        .map(|e| (e.id, e.pos));
+    let Some((eid, epos)) = seen else { return false };
+    let (d, map) = (pos.dist(epos), &run.layout.map);
+    let to = pos + (epos - pos).norm() * WOLF_GROWL_STEP.min(d - 8.0);
+    let step = (d > 8.0 && to.dist(ranger) <= WOLF_LEASH && !map.blocks_at(to, Mover::Enemy) && walk_line(map, pos, to, Mover::Enemy)).then_some(to);
+    let id = run.monsters[mi].id;
+    let a = ally_mut(run, mi);
+    a.growled.push(eid);
+    a.growl_cd = WOLF_GROWL_EVERY;
+    a.growl_to = step;
+    a.hold = 0.6;
+    run.monsters[mi].aim = pos.angle_to(epos);
+    run.event(Ev::Growl { id }, None);
+    false
 }
 
 /// One tick of the wolf's dash: through the air (it crosses chasms), an attack dash hits its prey once.
@@ -1184,5 +1235,122 @@ mod tests {
         assert!(wolf(&run, id).pos.dist(at) > 5.0, "thawed: it follows again");
         let wi = wolf_idx(&run, id);
         assert!(!run.apply_effect(Creature::Monster(wi), EffectKind::Sleep, Some(5.0)));
+    }
+
+    // ---- The growl ----
+
+    /// Open floor around hero 0 with no light at all (the ranger sees 6 tiles, the wolf 18).
+    fn dark_arena(run: &mut Run) {
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for y in ty - 3..=ty + 3 {
+            for x in tx - 8..=tx + 14 {
+                run.layout.map.set(x, y, Tile::Floor);
+            }
+        }
+        run.lights = crate::run::light::Lights::new(run.layout.map.w, run.layout.map.h);
+    }
+
+    fn held_orc(run: &mut Run, p: Vec2) -> u32 {
+        let orc = orc_at(run, p);
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].ai.hold = 1e9;
+        orc
+    }
+
+    fn growls(run: &Run, wolf_id: u32) -> usize {
+        run.events.iter().filter(|(e, _)| matches!(e, Ev::Growl { id } if *id == wolf_id)).count()
+    }
+
+    #[test]
+    fn the_wolf_growls_at_an_enemy_in_the_dark_and_steps_toward_it() {
+        let (mut run, id) = ranger_with_wolf();
+        dark_arena(&mut run);
+        let r = run.players[0].pos();
+        let orc = held_orc(&mut run, r + Vec2::new(10.0 * crate::dungeon::TILE, 0.0));
+        run.events.clear();
+        let (mut start, mut far) = (None, 0.0f64);
+        for _ in 0..120 {
+            let before = wolf(&run, id).pos;
+            run.step();
+            if start.is_none() && growls(&run, id) > 0 {
+                start = Some(before);
+            }
+            if let Some(s) = start {
+                far = far.max(wolf(&run, id).pos.dist(s));
+            }
+        }
+        assert_eq!(growls(&run, id), 1, "exactly one growl");
+        assert!(run.events.iter().any(|(e, at)| matches!(e, Ev::Growl { .. }) && at.is_none()), "party-wide, no position");
+        assert!((16.0..=25.0).contains(&far), "stepped {far} px toward the orc");
+        assert!(wolf(&run, id).pos.dist(run.players[0].pos()) <= WOLF_FOLLOW + 1.0, "and came back");
+        // The growl reveals nothing: the orc is not in the ranger's snapshot.
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        let p = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, p, 18);
+        run.lights.refresh(&run.layout.map);
+        let dark = Dark { tile: (tx, ty), range: dark_range(&run.players[0].sight_now()) };
+        let view = std::mem::replace(&mut run.players[0].view, crate::vispoly::View::new(0, 0));
+        let ents = snapshot_ents(&run, 0, &view, &dark);
+        assert!(!ents.iter().any(|e| e.0 == orc), "the orc stays hidden");
+    }
+
+    #[test]
+    fn the_wolf_growls_at_a_hiding_mimic_but_not_at_a_dormant_boss() {
+        let (mut run, id) = guard_run();
+        let r = run.players[0].pos();
+        let mimic = run.spawn_enemy(EnemyType::Mimic, r + Vec2::new(5.0 * crate::dungeon::TILE, 0.0), None, 1);
+        let mi = run.monster_idx(mimic).unwrap();
+        run.monsters[mi].hiding = true;
+        run.events.clear();
+        for _ in 0..90 {
+            run.step();
+        }
+        assert_eq!(growls(&run, id), 1, "one growl at the mimic");
+        assert!(run.monsters[run.monster_idx(mimic).unwrap()].hiding, "and it keeps its disguise");
+
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss || m.etype == Some(EnemyType::Disciple));
+        let id = spawn_wolf(&mut run, 0);
+        lit_arena(&mut run);
+        let r = run.players[0].pos();
+        for (n, mi) in run.monsters.iter().enumerate().filter(|(_, m)| !m.is_ally()).map(|(i, _)| i).collect::<Vec<_>>().into_iter().enumerate() {
+            run.monsters[mi].pos = r + Vec2::new(3.0 * crate::dungeon::TILE + n as f64 * 8.0, 0.0);
+        }
+        assert!(run.monsters.iter().filter(|m| !m.is_ally()).all(|m| m.dormant), "the lich and its disciples sleep");
+        run.events.clear();
+        for _ in 0..120 {
+            run.step();
+        }
+        assert_eq!(growls(&run, id), 0, "no growl at the dormant");
+    }
+
+    #[test]
+    fn each_enemy_is_growled_at_once_and_growls_are_4_s_apart() {
+        let (mut run, id) = ranger_with_wolf();
+        dark_arena(&mut run);
+        let r = run.players[0].pos();
+        let t = crate::dungeon::TILE;
+        let a = held_orc(&mut run, r + Vec2::new(10.0 * t, 0.0));
+        held_orc(&mut run, r + Vec2::new(11.0 * t, 16.0));
+        run.events.clear();
+        let mut at = Vec::new();
+        for tick in 0..60 * 12 {
+            let before = growls(&run, id);
+            run.step();
+            if growls(&run, id) > before {
+                at.push(tick);
+            }
+            if at.len() == 2 && tick == at[1] + 30 {
+                // One orc out of sight and back: no third growl.
+                let ai = run.monster_idx(a).unwrap();
+                run.monsters[ai].pos = r + Vec2::new(30.0 * t, 0.0);
+            }
+            if at.len() == 2 && tick == at[1] + 90 {
+                let ai = run.monster_idx(a).unwrap();
+                run.monsters[ai].pos = r + Vec2::new(10.0 * t, 0.0);
+            }
+        }
+        assert_eq!(at.len(), 2, "two enemies, two growls: {at:?}");
+        assert!(at[1] - at[0] >= 240 && at[1] - at[0] <= 245, "4 s apart: {at:?}");
     }
 }

@@ -242,6 +242,8 @@ pub enum Ev {
     LightRemove { id: u32 },
     /// A status effect started (on) or ended on entity id; kind = EffectKind id.
     Effect { id: u32, kind: u8, on: bool },
+    /// The wolf `id` growls at an enemy it detected (a sound: sent to the whole party, drawn above the darkness).
+    Growl { id: u32 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
