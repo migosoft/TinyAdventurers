@@ -9,6 +9,7 @@ export const KIND = {
   "Chest": 80,
   "Chort": 20,
   "Demon": 30,
+  "DireWolf": 23,
   "Disciple": 17,
   "Dragon": 32,
   "DragonFireball": 58,

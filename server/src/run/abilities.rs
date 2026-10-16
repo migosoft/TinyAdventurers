@@ -28,7 +28,7 @@ pub fn dagger_target(run: &Run, pi: usize) -> Option<usize> {
     run.monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive && !m.airborne)
+        .filter(|(_, m)| m.alive && !m.airborne && !m.is_ally())
         .map(|(i, m)| (i, m.pos_ago(rw).dist(pos) - m.radius))
         .filter(|&(_, d)| d <= ab::DAGGER_RANGE)
         .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -122,7 +122,7 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
         .enumerate()
         .filter(|(_, m)| {
             // Flying monsters are out of reach of melee.
-            if !m.alive || m.airborne {
+            if !m.alive || m.airborne || m.is_ally() {
                 return false;
             }
             let mp = m.pos_ago(rw);
@@ -164,7 +164,7 @@ pub fn dash_contact(run: &mut Run, pi: usize) {
         .monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive && !m.airborne && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + 4.0)
+        .filter(|(_, m)| m.alive && !m.airborne && !m.is_ally() && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + 4.0)
         .map(|(i, m)| (i, m.id))
         .collect();
     for (mi, id) in hits {
@@ -326,7 +326,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         }
         let pr = &run.projectiles[i];
         if pr.from_player {
-            let hit = run.monsters.iter().position(|m| m.alive && m.shot_dist(pos) < m.radius + pr.radius);
+            let hit = run.monsters.iter().position(|m| m.alive && !m.is_ally() && m.shot_dist(pos) < m.radius + pr.radius);
             if let Some(mi) = hit {
                 impact(run, i, pos, Some(mi));
                 break;
@@ -384,7 +384,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, from_player: bo
             .monsters
             .iter()
             .enumerate()
-            .filter(|(_, m)| m.alive && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos))
+            .filter(|(_, m)| m.alive && !m.is_ally() && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos))
             .map(|(i, _)| i)
             .collect();
         for mi in hits {

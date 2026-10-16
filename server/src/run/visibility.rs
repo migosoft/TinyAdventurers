@@ -125,21 +125,45 @@ fn hp_byte(hp: f64, max: f64) -> u8 {
     ((hp / max).clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-pub fn send_snapshots(run: &mut Run) {
-    let events = std::mem::take(&mut run.events);
-    let on_hero = std::mem::take(&mut run.on_hero);
-    run.refresh_lights(); // shots moved after the AI: the snapshot must match what the client casts
-    let moving = run.moving_lights();
+/// One monster's entry. An ally's `extra` is its owner (the ranger's id).
+fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, boss_enraged: bool, gaze: u32) -> EntSnap {
+    let mut f = 0;
+    if m.hurt_t > 0.0 {
+        f |= flags::HURT;
+    }
+    if m.dormant {
+        f |= flags::DORMANT;
+    }
+    if m.hiding {
+        f |= flags::HIDING;
+    }
+    if m.airborne {
+        f |= flags::AIRBORNE;
+    }
+    if m.is_boss && boss_immune {
+        f |= flags::IMMUNE;
+    }
+    if m.is_boss && boss_enraged {
+        f |= flags::ENRAGED;
+    }
+    let extra = match &m.ally {
+        Some(a) => a.owner,
+        None if m.anim == Anim::Gaze => gaze,
+        None => m.owner.unwrap_or(0),
+    };
+    EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits())
+}
+
+/// The entities hero `pi` is sent: the party and its allies always, the rest as seen
+/// through `view` and `dark`.
+pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> Vec<EntSnap> {
     let behaviour = run.level.boss().and_then(|b| b.behaviour.as_ref());
     let boss_immune = behaviour.map_or(false, |b| !b.can_be_damaged(run));
     let boss_enraged = behaviour.map_or(false, |b| b.enraged());
     let gaze = behaviour.and_then(|b| b.gaze_target()).unwrap_or(0);
-    let boss_bar = Level::boss_bar(run);
 
-    let drain = drain_points(run);
-
-    // Players are always visible to their party.
-    let player_snaps: Vec<EntSnap> = run
+    // Players and their allies are always visible to their party.
+    let mut ents: Vec<EntSnap> = run
         .players
         .iter()
         .map(|p| {
@@ -153,6 +177,47 @@ pub fn send_snapshots(run: &mut Run) {
             EntSnap(p.id, p.kind() as u8, p.mv.x as f32, p.mv.y as f32, hp_byte(p.hp, p.max_hp), p.anim as u8, p.aim as f32, ms_since(run, p.anim_start), f, 0, p.effects.bits())
         })
         .collect();
+    ents.extend(run.monsters.iter().filter(|m| m.alive && m.is_ally()).map(|m| monster_snap(run, m, boss_immune, boss_enraged, gaze)));
+
+    let lights = &run.lights;
+    for m in &run.monsters {
+        if !m.alive || m.is_ally() || !seen(view, lights, dark, m.pos, m.radius) {
+            continue;
+        }
+        ents.push(monster_snap(run, m, boss_immune, boss_enraged, gaze));
+    }
+    for pr in &run.projectiles {
+        // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
+        if pr.dead || !(pr.from_player || seen(view, lights, dark, pr.pos, 0.0)) {
+            continue;
+        }
+        let extra = (pr.owner << 16) | pr.shot as u32;
+        ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra, 0));
+    }
+    for o in &run.objects {
+        if !object_sent(view, lights, dark, o) {
+            continue;
+        }
+        ents.push(super::objects::snap(run, o));
+    }
+    for h in &run.hazards {
+        if !seen(view, lights, dark, h.pos, h.radius) {
+            continue;
+        }
+        let extra = (h.life * 1000.0) as u32;
+        ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, 0.0, 0, 0, extra, 0));
+    }
+    ents
+}
+
+pub fn send_snapshots(run: &mut Run) {
+    let events = std::mem::take(&mut run.events);
+    let on_hero = std::mem::take(&mut run.on_hero);
+    run.refresh_lights(); // shots moved after the AI: the snapshot must match what the client casts
+    let moving = run.moving_lights();
+    let boss_bar = Level::boss_bar(run);
+
+    let drain = drain_points(run);
 
     for pi in 0..run.players.len() {
         if run.players[pi].tx.is_none() {
@@ -167,55 +232,8 @@ pub fn send_snapshots(run: &mut Run) {
         view.compute(&run.layout.map, view_pos, vision);
         let dark = Dark { tile: (tx, ty), range: dark_range(&sight) };
 
+        let ents = snapshot_ents(run, pi, &view, &dark);
         let lights = &run.lights;
-        let mut ents = player_snaps.clone();
-        for m in &run.monsters {
-            if !m.alive || !seen(&view, lights, &dark, m.pos, m.radius) {
-                continue;
-            }
-            let mut f = 0;
-            if m.hurt_t > 0.0 {
-                f |= flags::HURT;
-            }
-            if m.dormant {
-                f |= flags::DORMANT;
-            }
-            if m.hiding {
-                f |= flags::HIDING;
-            }
-            if m.airborne {
-                f |= flags::AIRBORNE;
-            }
-            if m.is_boss && boss_immune {
-                f |= flags::IMMUNE;
-            }
-            if m.is_boss && boss_enraged {
-                f |= flags::ENRAGED;
-            }
-            let extra = if m.anim == Anim::Gaze { gaze } else { m.owner.unwrap_or(0) };
-            ents.push(EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits()));
-        }
-        for pr in &run.projectiles {
-            // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
-            if pr.dead || !(pr.from_player || seen(&view, lights, &dark, pr.pos, 0.0)) {
-                continue;
-            }
-            let extra = (pr.owner << 16) | pr.shot as u32;
-            ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra, 0));
-        }
-        for o in &run.objects {
-            if !object_sent(&view, lights, &dark, o) {
-                continue;
-            }
-            ents.push(super::objects::snap(run, o));
-        }
-        for h in &run.hazards {
-            if !seen(&view, lights, &dark, h.pos, h.radius) {
-                continue;
-            }
-            let extra = (h.life * 1000.0) as u32;
-            ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, 0.0, 0, 0, extra, 0));
-        }
         let ev: Vec<Ev> = events
             .iter()
             .enumerate()

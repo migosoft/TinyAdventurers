@@ -75,6 +75,8 @@ pub struct Player {
     pub darkvision: Option<f64>,
     /// Status effects (run/effects.rs).
     pub effects: crate::run::effects::Effects,
+    /// The Ranger's wolf (its monster id) while it lives.
+    pub wolf: Option<u32>,
 }
 
 /// How a hero is lost to the terrain (sent as `Ev::Sink { how }`).
@@ -166,6 +168,36 @@ impl Ai {
     }
 }
 
+/// A wolf's dash: toward `dir` for `left` seconds; `attack` is false for the dash back from a chasm.
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)] // read by the wolf's behaviour (the next task)
+pub struct WolfDash {
+    pub dir: Vec2,
+    pub left: f64,
+    pub attack: bool,
+}
+
+/// What makes a monster an ally of the heroes (the Ranger's wolf; run/companion.rs).
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // read by the wolf's behaviour (the next task)
+pub struct Ally {
+    /// The ranger's player id.
+    pub owner: u32,
+    /// Monsters (ids) it has growled at.
+    pub growled: Vec<u32>,
+    pub growl_cd: f64,
+    pub growl_to: Option<Vec2>,
+    /// Seconds it does nothing (a growl).
+    pub hold: f64,
+    pub prey: Option<u32>,
+    pub following: bool,
+    pub reach_t: f64,
+    pub dash: Option<WolfDash>,
+    pub dash_cd: f64,
+    /// Centre of the last safe tile it stood on (a dash back from a chasm goes there).
+    pub last_safe: Vec2,
+}
+
 pub struct Monster {
     pub id: u32,
     /// Resistances (entity types plus adjustments) and the split of its melee hits.
@@ -213,9 +245,14 @@ pub struct Monster {
     pub effects: crate::run::effects::Effects,
     /// How it takes each effect (bosses: defs/bosses.rs responses).
     pub responses: crate::defs::effects::EffectResponses,
+    /// Set for a hero's ally: no hero attack hurts it and enemies are its foes.
+    pub ally: Option<Ally>,
 }
 
 impl Monster {
+    pub fn is_ally(&self) -> bool {
+        self.ally.is_some()
+    }
     /// What it sees now: its sight through its effects (blindness).
     pub fn sight_now(&self) -> Sight {
         self.effects.sight(self.sight)

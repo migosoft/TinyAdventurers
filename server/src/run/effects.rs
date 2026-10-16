@@ -135,6 +135,7 @@ impl Run {
         let ev = Ev::Effect { id, kind: k as u8, on };
         match c {
             Creature::Player(_) => self.event_on_hero(ev, pos),
+            Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.is_ally()) => self.event_on_hero(ev, pos),
             Creature::Monster(_) => self.event(ev, Some(pos)),
         }
     }

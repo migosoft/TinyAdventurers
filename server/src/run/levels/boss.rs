@@ -75,6 +75,7 @@ pub fn spawn(run: &mut Run, party: usize) {
         last_hit_by: None,
         effects: Default::default(),
         responses: boss_defs::responses(boss_id),
+        ally: None,
     });
     enc_mut(run).boss_ent = id;
     let mut behaviour = bosses::create(boss_id);

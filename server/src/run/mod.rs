@@ -3,6 +3,7 @@
 pub mod abilities;
 pub mod ai;
 pub mod bosses;
+pub mod companion;
 pub mod debug;
 pub mod effects;
 pub mod entities;
@@ -218,6 +219,7 @@ impl Run {
                 sight: prof.sight,
                 darkvision: None,
                 effects: effects::Effects::default(),
+                wolf: None,
             });
         }
         let n = run.players.len();
@@ -292,6 +294,7 @@ impl Run {
             last_hit_by: None,
             effects: effects::Effects::default(),
             responses: crate::defs::effects::EffectResponses::FULL,
+            ally: None,
         });
         id
     }
@@ -414,6 +417,9 @@ impl Run {
                     m.anim_start = self.time;
                 }
                 continue;
+            }
+            if m.is_ally() {
+                continue; // Task 8: companion::tick_wolf
             }
             if self.layout.map.blocks_at(m.pos, m.mover) {
                 ai::escape_terrain(self, mi, DT);
@@ -852,6 +858,10 @@ impl Run {
             return false;
         }
         let pos = self.monsters[mi].pos;
+        let ally = self.monsters[mi].is_ally();
+        if ally && src_player.is_some() {
+            return false; // no hero attack hurts an ally
+        }
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             return false;
         }
@@ -868,7 +878,12 @@ impl Run {
             let healed = (-raw).min(m.max_hp - m.hp);
             m.hp += healed;
             if healed > 0.0 {
-                self.event(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: false }, seen_by);
+                let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
+                if ally {
+                    self.event_on_hero(ev, pos);
+                } else {
+                    self.event(ev, seen_by);
+                }
             }
             return true;
         }
@@ -879,7 +894,12 @@ impl Run {
             m.hurt_t = 0.15;
         }
         let applied = raw.min(m.hp + raw);
-        self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: false, ty, imm }, seen_by);
+        let ev = Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: ally, ty, imm };
+        if ally {
+            self.event_on_hero(ev, pos); // shown like damage on a hero
+        } else {
+            self.event(ev, seen_by);
+        }
         if src_player.is_none() && dmg.from_effect {
             if let Some(pi) = self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) {
                 self.players[pi].damage += applied;
@@ -927,6 +947,10 @@ impl Run {
     pub fn kill_monster(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
         if !m.alive {
+            return;
+        }
+        if m.is_ally() {
+            companion::wolf_died(self, mi);
             return;
         }
         m.alive = false;
