@@ -26,7 +26,7 @@ Still to do with the user from before: a real play-test of the lich fight (orbs,
 **Decided by the user (all in the spec):**
 - **The class:** `elf_m` art, HP 90, speed 80, primary `CrossbowDagger` unchanged. Entity type **Elf**: 10 % poison, vision 18 tiles, darkvision 1/3, immune to Sleep.
 - **Hide goes completely** (it may come back later as an "invisibility" effect).
-- **Saved characters are wiped** (test data only).
+- **All saved game data is wiped** (test data only): characters and the statistics (`runs`, `run_players`). Accounts stay (my reading).
 - **Secondary "Summon Companion: Dire Wolf":**
   - With no wolf, it summons one with a nice green sparkle puff (not poison green).
   - With the wolf alive, it heals it for 20 % and starts the 8 s cooldown.
@@ -46,7 +46,7 @@ Still to do with the user from before: a real play-test of the lich fight (orbs,
 - **New rule: sound text shows above the darkness** with a light outline (the growl, spoken words, the sleeping "Z"). Damage numbers keep today's rule.
 - **New monster state "hiding":** the mimic moves from `dormant` to `hiding`. The wolf growls at hiding things (on purpose: a way to find mimics) but never at dormant ones (the boss before the fight, idle disciples). It bites neither.
 
-**The calls I made** are listed at the end of the spec ("Calls I made"); the user has not reviewed them one by one. Raise them when the plan is reviewed.
+**The calls I made** are listed at the end of the spec ("Calls I made"); the user approved them all (2026-10-16) except the statistics one: wipe the statistics too.
 
 **Code map** (read while designing; the spec's section "How it fits the code" has the full pointers):
 - **Recommended shape:** the wolf is a `Monster` with an ally marker (`ally_of: Option<u32>`). It then reuses movement, terrain, knockback, effects (`Creature::Monster`), snapshots and lights. Every hero attack that loops over `run.monsters` must skip allies: `abilities.rs` `dagger_target`, `melee_arc`, `dash_contact`, `advance_projectile`, `explode`, plus the client's `GameScene.shotTouchesEnemy`. `kill_monster` (`run/mod.rs`) must pay no XP or coins for an ally. Write one test per hero attack.

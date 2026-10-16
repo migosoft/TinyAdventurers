@@ -52,7 +52,7 @@ The Assassin's figure is the pack's `elf_m` with a bow and does not look like an
 
 **Removals (Hide):** `AbilityId::Hide`, `HIDDEN_CRIT_MULT`, `Player.hidden`, the hidden checks in the AI and the lich (`find_visible_player`, lich spell targets), `flags::HIDDEN`, `SelfState.hidden` (wire `SelfW` field), the client's hidden shimmer (`EntityView`), `Predictor.useHide`/`hidden`, its tests and the text in `ui/text.ts`, PLAYER_GUIDE and TECHNICAL. Wire fields may be removed or left at 0; if removed, both sides and the wire fixtures change together.
 
-**Characters:** the user wipes all saved characters (2026-10-16: only test data). A new migration deletes every row of `characters` and replaces `'Assassin'` with `'ElvenRanger'` in the `characters.class` CHECK constraint. Old `run_players` rows keep their text `'Assassin'` (statistics history, no constraint). `db::class_from` falls back to Wizard for an unknown name, which is fine for old statistics rows. Whether `run_players` is also wiped: builder's call (my call: keep it).
+**Characters and statistics:** the user wipes all saved game data (2026-10-16: only test data, "wipe everything"). A new migration deletes every row of `characters`, `runs` and `run_players` (the statistics, so no old class text "Assassin" stays), and replaces `'Assassin'` with `'ElvenRanger'` in the `characters.class` CHECK constraint. Accounts, sessions, `activity_days` and `admin_actions` stay (logins and the admin log are not game data; my reading of "everything", check with the user if unsure).
 
 ## The entity type Magical Beast
 
@@ -196,5 +196,5 @@ The ability's id name, the event's shape, the wolf's bite reach and wind-up, the
 7. Bosses' area attacks hit the wolf, but bosses and the lich's curses still choose heroes as targets.
 8. The wolf is always sent to the party (like heroes), drawn only where lit.
 9. The wolf is not immortal in debug mode.
-10. Old statistics rows keep the class text "Assassin"; only characters are wiped.
+10. (Replaced by the user: characters and statistics are both wiped.)
 11. A hiding mimic is growled at but not bitten.
