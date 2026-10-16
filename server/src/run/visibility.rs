@@ -180,6 +180,9 @@ pub fn send_snapshots(run: &mut Run) {
             if m.dormant {
                 f |= flags::DORMANT;
             }
+            if m.hiding {
+                f |= flags::HIDING;
+            }
             if m.airborne {
                 f |= flags::AIRBORNE;
             }

@@ -63,6 +63,7 @@ export const FLAG = {
   "DEAD": 32,
   "DORMANT": 8,
   "ENRAGED": 4,
+  "HIDING": 1,
   "HURT": 16,
   "IMMUNE": 2
 } as const;

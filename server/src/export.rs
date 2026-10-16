@@ -111,7 +111,7 @@ fn export_defs() {
     consts.as_object_mut().unwrap().extend(objs.as_object().unwrap().clone());
     let fl = json!({
         "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,
-        "DORMANT": flags::DORMANT, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE,
+        "HIDING": flags::HIDING, "DORMANT": flags::DORMANT, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE,
     });
     let tiles = json!({
         "Void": Tile::Void as u8, "Floor": Tile::Floor as u8, "Wall": Tile::Wall as u8,

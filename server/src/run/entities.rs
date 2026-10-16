@@ -187,10 +187,13 @@ pub struct Monster {
     pub owner: Option<u32>,
     pub history: VecDeque<Vec2>,
     pub is_boss: bool,
-    /// Waiting until triggered: bosses until the party enters the hall, the lich's
-    /// disciples (idle channelling), mimics until touched. Not an effect (no source,
-    /// no timer); the Sleep effect is `effects` (run/effects.rs).
+    /// Waiting until triggered: bosses before the party enters the hall, the lich's
+    /// channelling disciples. Not an effect (no source, no timer); the Sleep effect is
+    /// `effects` (run/effects.rs).
     pub dormant: bool,
+    /// Concealed from the heroes (a mimic disguised as a chest); ends as the mimic's
+    /// dormant did. The wolf growls at hiding things, never at dormant ones.
+    pub hiding: bool,
     /// Walking rules: demons cross lava, other enemies avoid it.
     pub mover: Mover,
     /// Flying (the dragon): melee cannot reach it, projectiles and spells still do.

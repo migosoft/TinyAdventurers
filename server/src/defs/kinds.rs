@@ -161,6 +161,8 @@ impl Anim {
 }
 
 pub mod flags {
+    /// Concealed (a mimic as a chest).
+    pub const HIDING: u8 = 1;
     pub const IMMUNE: u8 = 2;
     pub const ENRAGED: u8 = 4;
     pub const DORMANT: u8 = 8;
