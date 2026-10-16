@@ -711,7 +711,7 @@ impl Run {
         for oi in 0..self.objects.len() {
             let o = &self.objects[oi];
             let objects::ObjState::Chest { opened: None } = o.state else { continue };
-            if !near(o.pos) {
+            if o.gone || !near(o.pos) {
                 continue;
             }
             let pos = o.pos;

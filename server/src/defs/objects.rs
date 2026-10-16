@@ -32,6 +32,8 @@ pub const BARREL_BLAST_DAMAGE: f64 = 30.0;
 pub const BARREL_BLAST_KNOCK: f64 = 40.0;
 /// How far a push with E slides a barrel (px).
 pub const BARREL_PUSH: f64 = 48.0;
+/// Share of a chest's coins the party still gets when the chest is smashed.
+pub const BROKEN_CHEST_SHARE: f64 = 1.0 / 3.0;
 /// Hand reach for using an object: gap (px) between the hero's and the object's footprints.
 pub const USE_REACH: f64 = 6.0;
 

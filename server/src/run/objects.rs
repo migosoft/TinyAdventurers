@@ -53,6 +53,11 @@ impl WorldObject {
 }
 
 impl WorldObject {
+    /// Ends a shot: a solid object, or a closed chest (like the hidden mimic it may be).
+    pub fn stops_shots(&self) -> bool {
+        self.blocks() || (!self.gone && matches!(self.state, ObjState::Chest { opened: None }))
+    }
+
     /// Owns a static light: always sent, so its light can be drawn from afar.
     pub fn owns_light(&self) -> bool {
         matches!(self.state, ObjState::Torch { .. })
@@ -109,6 +114,7 @@ pub fn hurt_object(run: &mut Run, oi: usize, dmg: Damage, by: Option<u32>) {
         return;
     }
     match &o.state {
+        ObjState::Chest { opened: None } => break_chest(run, oi),
         ObjState::Chest { .. } => {}
         ObjState::Torch { .. } => {
             let heat = dmg.split.share(crate::defs::damage::DamageType::Heat) > 0.0;
@@ -125,6 +131,17 @@ pub fn hurt_object(run: &mut Run, oi: usize, dmg: Damage, by: Option<u32>) {
             }
         }
     }
+}
+
+/// A hit smashes a closed chest: it is gone, and the party gets a third of
+/// what opening it would have paid (the rest is lost in the cracks).
+fn break_chest(run: &mut Run, oi: usize) {
+    let o = &mut run.objects[oi];
+    o.gone = true;
+    let (pos, r) = (o.pos, o.radius);
+    run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: BOOM_CHEST }, Some(pos));
+    let coins = rand::Rng::gen_range(&mut run.rng, crate::defs::progression::CHEST_COINS);
+    run.give_coins(pos, (coins as f64 * BROKEN_CHEST_SHARE).round() as u32);
 }
 
 /// Objects whose footprint an area attack at `at` with reach `r` touches,
@@ -155,6 +172,8 @@ pub fn hurt_objects_in(run: &mut Run, at: Vec2, r: f64, cone: Option<(f64, f64)>
 
 /// `Ev::Boom` kind of a barrel explosion.
 pub const BOOM_BARREL: u8 = 7;
+/// `Ev::Boom` kind of a chest breaking (wood splinters).
+pub const BOOM_CHEST: u8 = 8;
 
 /// Fuses burn down; a burnt-out fuse explodes the barrel.
 pub fn tick_objects(run: &mut Run, dt: f64) {
@@ -698,6 +717,113 @@ mod tests {
         run.events.clear();
         step_for(&mut run, BARREL_FUSE + 0.1);
         assert_eq!(booms(&run), 1);
+    }
+
+    /// A closed chest `off` from the hero in `clear_run`.
+    fn chest_at(run: &mut Run, off: Vec2) -> (u32, usize) {
+        let pos = run.players[0].pos() + off;
+        let id = run.spawn_object(EntityKind::Chest, pos, ObjState::Chest { opened: None });
+        (id, run.objects.len() - 1)
+    }
+
+    fn chest_booms(run: &Run) -> usize {
+        run.events.iter().filter(|(e, _)| matches!(e, Ev::Boom { k: BOOM_CHEST, .. })).count()
+    }
+
+    #[test]
+    fn a_hit_breaks_a_closed_chest_and_pays_the_party_a_third() {
+        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let (_, oi) = chest_at(&mut run, Vec2::new(40.0, 0.0));
+        run.events.clear();
+        hurt_object(&mut run, oi, Damage::physical(1.0), None);
+        assert!(run.objects[oi].gone, "broken");
+        let coins = run.players[0].coins;
+        let third = |c: u32| (c as f64 / 3.0).round() as u32;
+        let (lo, hi) = (third(*crate::defs::progression::CHEST_COINS.start()), third(*crate::defs::progression::CHEST_COINS.end()));
+        assert!((lo..=hi).contains(&coins), "{coins} coins is a third of a chest");
+        assert_eq!(run.players[1].coins, coins, "the whole party gets them, whoever broke it");
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Coins { .. })));
+        assert_eq!(chest_booms(&run), 1, "the splinter burst");
+        hurt_object(&mut run, oi, Damage::physical(1.0), None);
+        assert_eq!(run.players[0].coins, coins, "a broken chest pays once");
+    }
+
+    #[test]
+    fn poison_does_not_break_a_chest_and_an_opened_chest_takes_no_hits() {
+        let mut run = clear_run(BossId::Lich);
+        let (_, oi) = chest_at(&mut run, Vec2::new(40.0, 0.0));
+        hurt_object(&mut run, oi, Damage::new(5.0, DamageSplit::pure(DamageType::Poison)), None);
+        assert!(!run.objects[oi].gone, "objects resist poison fully");
+        run.objects[oi].state = ObjState::Chest { opened: Some(0.0) };
+        run.events.clear();
+        hurt_object(&mut run, oi, Damage::physical(5.0), None);
+        assert!(!run.objects[oi].gone && chest_booms(&run) == 0, "an opened chest stays");
+    }
+
+    #[test]
+    fn a_broken_chest_cannot_be_opened_any_more() {
+        let mut run = clear_run(BossId::Lich);
+        let (id, oi) = chest_at(&mut run, Vec2::new(40.0, 0.0));
+        let pos = run.objects[oi].pos;
+        hurt_object(&mut run, oi, Damage::physical(1.0), None);
+        let coins = run.players[0].coins;
+        run.players[0].mv.x = pos.x;
+        run.players[0].mv.y = pos.y;
+        run.step();
+        assert_eq!(run.players[0].coins, coins, "touching the remains pays nothing");
+        assert!(run.objects.iter().all(|o| o.id != id), "and it is gone");
+    }
+
+    fn use_ability(run: &mut Run, id: crate::defs::abilities::AbilityId, aim: f64) {
+        run.players[0].aim = aim;
+        crate::run::abilities::try_use(run, 0, id, 1, true);
+    }
+
+    #[test]
+    fn a_shot_stops_at_a_closed_chest_and_breaks_it() {
+        let mut run = clear_run(BossId::Lich);
+        let (id, _) = chest_at(&mut run, Vec2::new(40.0, 0.0));
+        let mi = monster_at(&mut run, Vec2::new(80.0, 0.0));
+        let hp = run.monsters[mi].hp;
+        use_ability(&mut run, crate::defs::abilities::AbilityId::MagicMissile, 0.0);
+        step_for(&mut run, 1.0);
+        assert!(run.objects.iter().all(|o| o.id != id), "the chest broke");
+        assert_eq!(run.monsters[mi].hp, hp, "the shot ended at the chest");
+    }
+
+    #[test]
+    fn a_shot_flies_over_an_opened_chest() {
+        let mut run = clear_run(BossId::Lich);
+        let (_, oi) = chest_at(&mut run, Vec2::new(40.0, 0.0));
+        run.objects[oi].state = ObjState::Chest { opened: Some(0.0) };
+        let mi = monster_at(&mut run, Vec2::new(80.0, 0.0));
+        let hp = run.monsters[mi].hp;
+        use_ability(&mut run, crate::defs::abilities::AbilityId::MagicMissile, 0.0);
+        step_for(&mut run, 1.0);
+        assert!(run.monsters[mi].hp < hp, "it hit the monster behind");
+    }
+
+    #[test]
+    fn a_sword_breaks_a_chest() {
+        let mut run = clear_run(BossId::Lich);
+        let (_, oi) = chest_at(&mut run, Vec2::new(14.0, 0.0));
+        use_ability(&mut run, crate::defs::abilities::AbilityId::Sword, 0.0);
+        assert!(run.objects[oi].gone);
+    }
+
+    #[test]
+    fn the_dagger_stabs_a_chest_in_reach_like_a_hidden_mimic() {
+        use crate::defs::abilities::DAGGER_RANGE;
+        let mut run = clear_run(BossId::Lich);
+        let r = run.objects.len();
+        let (_, oi) = chest_at(&mut run, Vec2::new(6.0 + DAGGER_RANGE - 1.0, 0.0));
+        assert_eq!(oi, r);
+        // Aimed away from it: the dagger still picks what is in reach, as it does for a mimic.
+        use_ability(&mut run, crate::defs::abilities::AbilityId::CrossbowDagger, std::f64::consts::PI);
+        assert!(run.objects[oi].gone, "stabbed");
+        assert!(run.projectiles.is_empty(), "no bolt");
+        assert_eq!(run.players[0].anim, crate::defs::kinds::Anim::Melee);
     }
 
     use crate::dungeon::{Map, Tile, TorchSide, TorchSpawn};

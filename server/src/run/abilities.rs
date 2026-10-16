@@ -21,18 +21,34 @@ fn rewind_ticks(run: &Run, pi: usize) -> usize {
     ((run.players[pi].view_lag * TICK_HZ).round() as usize).min(super::entities::HISTORY_LEN - 1)
 }
 
-/// The dagger is used instead of the crossbow when a monster is this close.
-pub fn dagger_target(run: &Run, pi: usize) -> Option<usize> {
+/// What the dagger stabs: a monster, or a closed chest (so a chest and a hidden mimic answer alike).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DaggerTarget {
+    Monster(usize),
+    Object(usize),
+}
+
+/// The dagger is used instead of the crossbow when a monster or a closed chest is this close.
+pub fn dagger_target(run: &Run, pi: usize) -> Option<DaggerTarget> {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
-    run.monsters
+    let monsters = run
+        .monsters
         .iter()
         .enumerate()
         .filter(|(_, m)| m.alive && !m.airborne)
-        .map(|(i, m)| (i, m.pos_ago(rw).dist(pos) - m.radius))
+        .map(|(i, m)| (DaggerTarget::Monster(i), m.pos_ago(rw).dist(pos) - m.radius));
+    let chests = run
+        .objects
+        .iter()
+        .enumerate()
+        .filter(|(_, o)| !o.gone && matches!(o.state, crate::run::objects::ObjState::Chest { opened: None }))
+        .map(|(i, o)| (DaggerTarget::Object(i), o.pos.dist(pos) - o.radius));
+    monsters
+        .chain(chests)
         .filter(|&(_, d)| d <= ab::DAGGER_RANGE)
         .min_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|(i, _)| i)
+        .map(|(t, _)| t)
 }
 
 pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool) {
@@ -88,9 +104,18 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
             Anim::Dash
         }
         AbilityId::CrossbowDagger => {
-            if let Some(mi) = dagger_target(run, pi) {
+            if let Some(t) = dagger_target(run, pi) {
                 cooldown = ab::DAGGER_COOLDOWN;
-                run.hurt_monster(mi, Damage { on_hit, ..Damage::new(ab::DAGGER_DAMAGE * mult, run.players[pi].melee) }, crit, Some(pi));
+                let dmg = Damage { on_hit, ..Damage::new(ab::DAGGER_DAMAGE * mult, run.players[pi].melee) };
+                match t {
+                    DaggerTarget::Monster(mi) => {
+                        run.hurt_monster(mi, dmg, crit, Some(pi));
+                    }
+                    DaggerTarget::Object(oi) => {
+                        let by = run.players[pi].id;
+                        crate::run::objects::hurt_object(run, oi, dmg, Some(by));
+                    }
+                }
                 Anim::Melee
             } else {
                 spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage * mult, def.radius, def.range / def.speed, 0.0, None, crit, on_hit);
@@ -334,7 +359,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             break;
         }
         let r = run.projectiles[i].radius;
-        if let Some(oi) = run.objects.iter().position(|o| o.blocks() && o.pos.dist(pos) < o.radius + r) {
+        if let Some(oi) = run.objects.iter().position(|o| o.stops_shots() && o.pos.dist(pos) < o.radius + r) {
             impact_object(run, i, pos, oi);
             break;
         }
