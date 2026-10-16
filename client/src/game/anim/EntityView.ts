@@ -270,7 +270,7 @@ export class EntityView {
     this.status.update(fxBits, dt);
     if (asleep) this.weapon?.setVisible(false);
 
-    // Hidden assassin: faint shimmer (enemies do not see it at all).
+    // Hidden ranger: faint shimmer (enemies do not see it at all).
     this.root.setAlpha(s.flags & FLAG.HIDDEN ? 0.3 + Math.sin(this.clock * 8) * 0.08 : 1);
 
     const ax = Math.cos(s.aim);
@@ -397,7 +397,7 @@ export class EntityView {
         w.setOrigin(0.5, 0.5);
         rot = s.aim;
         if (isMelee && d.meleeWeapon) {
-          // Assassin dagger stab.
+          // Ranger dagger stab.
           w.setOrigin(0.5, 0.85);
           rot = s.aim + HALF_PI;
           const k = Math.min(t / 0.15, 1);

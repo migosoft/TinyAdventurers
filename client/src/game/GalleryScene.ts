@@ -28,7 +28,7 @@ const STATES: [string, number][] = [
 ];
 
 /** Figures shown with each status effect. */
-const EFFECT_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.Assassin, KIND.SkeletonWarrior, KIND.OrcWarrior, KIND.Ogre, KIND.Lich];
+const EFFECT_KINDS = [KIND.Wizard, KIND.Paladin, KIND.Barbarian, KIND.ElvenRanger, KIND.SkeletonWarrior, KIND.OrcWarrior, KIND.Ogre, KIND.Lich];
 const EFFECT_TOP = 400;
 const EFFECT_ROW = 56;
 

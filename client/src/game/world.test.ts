@@ -68,7 +68,7 @@ describe('Predictor', () => {
 
   it('keeps the cooldown of a shot the server has not seen yet', () => {
     // Holding the button refired as soon as a snapshot from before the shot reset the cooldown to 0.
-    const pred = new Predictor(chasmMap(), 'Assassin', MODS, 3 * TILE + 8, 2 * TILE + 8);
+    const pred = new Predictor(chasmMap(), 'ElvenRanger', MODS, 3 * TILE + 8, 2 * TILE + 8);
     for (let i = 0; i < 2; i++) pred.step(0, 0, null);
     const cd = pred.cooldownOf('CrossbowDagger');
     pred.step(0, 0, null, [cd, null]);
@@ -85,7 +85,7 @@ describe('Predictor', () => {
   });
 
   it('keeps the hide time of a Hide the server has not seen yet', () => {
-    const pred = new Predictor(chasmMap(), 'Assassin', MODS, 3 * TILE + 8, 2 * TILE + 8);
+    const pred = new Predictor(chasmMap(), 'ElvenRanger', MODS, 3 * TILE + 8, 2 * TILE + 8);
     const t = ABILITIES.Hide.duration;
     pred.step(0, 0, null);
     pred.useHide(t);

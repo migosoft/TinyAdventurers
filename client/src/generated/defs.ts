@@ -2,7 +2,6 @@
 
 export const KIND = {
   "Arrow": 53,
-  "Assassin": 3,
   "Barbarian": 2,
   "Barrel": 81,
   "BlindOrb": 61,
@@ -13,6 +12,7 @@ export const KIND = {
   "Disciple": 17,
   "Dragon": 32,
   "DragonFireball": 58,
+  "ElvenRanger": 3,
   "FireBolt": 59,
   "FireBreath": 56,
   "FireOrb": 57,
@@ -145,19 +145,19 @@ export const CONST = {
 } as const;
 
 export const CLASSES = {
-  "Assassin": {
-    "hp": 90.0,
-    "kind": 3,
-    "primary": "CrossbowDagger",
-    "secondary": "Hide",
-    "speed": 80.0
-  },
   "Barbarian": {
     "hp": 140.0,
     "kind": 2,
     "primary": "Axe",
     "secondary": "Dash",
     "speed": 70.0
+  },
+  "ElvenRanger": {
+    "hp": 90.0,
+    "kind": 3,
+    "primary": "CrossbowDagger",
+    "secondary": "Hide",
+    "speed": 80.0
   },
   "Paladin": {
     "hp": 120.0,

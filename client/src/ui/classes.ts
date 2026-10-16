@@ -3,14 +3,14 @@ import type { ClassId } from '../generated/ClassId';
 import { spritePreview, type Atlas } from './atlas';
 import { CLASS_TEXT } from './text';
 
-export const CLASSES: ClassId[] = ['Wizard', 'Paladin', 'Barbarian', 'Assassin'];
+export const CLASSES: ClassId[] = ['Wizard', 'Paladin', 'Barbarian', 'ElvenRanger'];
 
 /** Pack figure and weapon of each class. */
 export const FIG: Record<ClassId, [string, string]> = {
   Wizard: ['wizzard_m', 'weapon_red_magic_staff'],
   Paladin: ['knight_m', 'weapon_knight_sword'],
   Barbarian: ['dwarf_m', 'weapon_double_axe'],
-  Assassin: ['elf_m', 'weapon_bow'],
+  ElvenRanger: ['elf_m', 'weapon_bow'],
 };
 
 export function classFigure(atlas: Atlas, c: ClassId, scale = 4): HTMLCanvasElement {

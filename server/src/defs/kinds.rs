@@ -7,7 +7,7 @@ pub enum EntityKind {
     Wizard = 0,
     Paladin = 1,
     Barbarian = 2,
-    Assassin = 3,
+    ElvenRanger = 3,
     // Monsters
     GoblinArcher = 10,
     SkeletonWarrior = 11,
@@ -56,7 +56,7 @@ impl EntityKind {
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
-        EntityKind::Assassin,
+        EntityKind::ElvenRanger,
         EntityKind::GoblinArcher,
         EntityKind::SkeletonWarrior,
         EntityKind::SkeletonArcher,

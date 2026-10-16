@@ -51,7 +51,7 @@ export class OgreDemoScene extends TerrainDemo {
     this.label(15.2, 13.3, `ground slam: radius ${SLAM} px, 24 px push`);
     hero(KIND.Wizard, 'Wizard', CLASSES.Wizard.speed, [23.7, 7]);
     hero(KIND.Paladin, 'Paladin 2', CLASSES.Paladin.speed, [21.8, 5.1]);
-    hero(KIND.Assassin, 'Assassin', CLASSES.Assassin.speed, [20.3, 8.4]);
+    hero(KIND.ElvenRanger, 'Ranger', CLASSES.ElvenRanger.speed, [20.3, 8.4]);
     hero(KIND.Barbarian, 'Barbarian 2', CLASSES.Barbarian.speed, [18.8, 6.4]);
     this.actor(KIND.Ogre, 'Ogre 2', 40, [{ to: [21.8, 7] }, { wait: 1.5, face: 0 }, { slam: SLAM, dist: 24, windup: SLAM_T }, { wait: 2 }]);
   }

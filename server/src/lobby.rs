@@ -543,7 +543,7 @@ mod tests {
         l.set_character(id, character(1, 10, ClassId::Barbarian));
         l.handle(id, ClientMsg::CreateRun { name: "r".into() });
         assert!(l.can_select(id).is_err(), "in a room");
-        l.set_character(id, character(1, 11, ClassId::Assassin));
+        l.set_character(id, character(1, 11, ClassId::ElvenRanger));
         assert_eq!(l.conns[&id].character.as_ref().unwrap().id, 10);
         l.handle(id, ClientMsg::LeaveRun);
         assert!(l.can_select(id).is_ok());

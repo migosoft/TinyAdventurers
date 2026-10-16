@@ -444,8 +444,8 @@ mod tests {
     }
 
     #[test]
-    fn assassin_uses_dagger_in_melee_range_and_crossbow_otherwise() {
-        let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
+    fn ranger_uses_dagger_in_melee_range_and_crossbow_otherwise() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         let hp = run.monsters[mi].hp;
         try_use(&mut run, 0, AbilityId::CrossbowDagger, 1, true);
@@ -453,7 +453,7 @@ mod tests {
         assert!(run.projectiles.is_empty(), "no bolt fired");
         assert_eq!(run.players[0].cd1, ab::DAGGER_COOLDOWN);
 
-        let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         put_monster_near(&mut run, 0, 60.0);
         try_use(&mut run, 0, AbilityId::CrossbowDagger, 1, true);
         assert_eq!(run.projectiles.len(), 1, "crossbow bolt fired");
@@ -462,7 +462,7 @@ mod tests {
 
     #[test]
     fn hidden_attack_crits_times_four_and_breaks_stealth() {
-        let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         run.monsters[mi].hp = 1000.0;
         try_use(&mut run, 0, AbilityId::Hide, 1, false);
@@ -490,8 +490,8 @@ mod tests {
         try_use(&mut run, 0, AbilityId::Sword, 2, true);
         assert!(run.monsters[mi].hp < hp, "and hits it on the ground");
 
-        // Dagger: the assassin shoots the crossbow instead.
-        let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
+        // Dagger: the ranger shoots the crossbow instead.
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         run.monsters[mi].airborne = true;
         assert_eq!(dagger_target(&run, 0), None);
@@ -600,7 +600,7 @@ mod tests {
 
     #[test]
     fn a_shot_stops_at_the_first_enemy_even_when_fast_forwarded() {
-        for (class, ability) in [(ClassId::Wizard, AbilityId::MagicMissile), (ClassId::Assassin, AbilityId::CrossbowDagger)] {
+        for (class, ability) in [(ClassId::Wizard, AbilityId::MagicMissile), (ClassId::ElvenRanger, AbilityId::CrossbowDagger)] {
             // Up to 150 ms fast-forward: the shot starts ~40 px out, past the first orc.
             for rtt in [0.0, 0.1, 0.3] {
                 let mut run = test_run(&[class], BossId::Demon);

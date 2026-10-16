@@ -14,11 +14,11 @@ pub enum ClassId {
     Wizard,
     Paladin,
     Barbarian,
-    Assassin,
+    ElvenRanger,
 }
 
 impl ClassId {
-    pub const ALL: [ClassId; 4] = [ClassId::Wizard, ClassId::Paladin, ClassId::Barbarian, ClassId::Assassin];
+    pub const ALL: [ClassId; 4] = [ClassId::Wizard, ClassId::Paladin, ClassId::Barbarian, ClassId::ElvenRanger];
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]

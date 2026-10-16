@@ -631,7 +631,7 @@ mod tests {
     #[test]
     fn enemy_ignores_player_without_line_of_sight_or_hidden() {
         const SIGHT: Sight = Sight { vision: 7.5, darkvision: 1.0 };
-        let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let ppos = run.players[0].pos();
         // Open line of sight: seen.
         assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_some());
@@ -885,7 +885,7 @@ mod tests {
 
     #[test]
     fn a_seen_hero_becomes_the_target_and_hiding_drops_it() {
-        let mut run = test_run(&[ClassId::Assassin], BossId::Lich);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
         open_floor(&mut run);
         run.monsters.retain(|m| m.is_boss);
         let id = run.spawn_enemy(EnemyType::OrcWarrior, run.players[0].pos() + Vec2::new(60.0, 0.0), None, 1);
@@ -963,7 +963,7 @@ mod tests {
 
     #[test]
     fn a_hidden_hero_is_never_seen_even_by_darkvision() {
-        let mut run = test_run(&[ClassId::Assassin], BossId::Lich);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
         dark_floor(&mut run);
         let undead = Sight { vision: 8.0, darkvision: 1.0 };
         let from = run.players[0].pos() + Vec2::new(40.0, 0.0);

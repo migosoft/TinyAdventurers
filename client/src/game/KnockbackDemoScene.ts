@@ -54,8 +54,8 @@ export class KnockbackDemoScene extends TerrainDemo {
     mob(KIND.Chort, 'Chort', 'Wizard', [1, 5.7], [5.8, 5.7], 14, true);
 
     this.label(0.2, 10.3, 'imp claw: no push');
-    hero(KIND.Assassin, 'Assassin', CLASSES.Assassin.speed, [7, 9.7]);
-    mob(KIND.Imp, 'Imp', 'Assassin', [1, 9.7], [6, 9.7], 0, true);
+    hero(KIND.ElvenRanger, 'Ranger', CLASSES.ElvenRanger.speed, [7, 9.7]);
+    mob(KIND.Imp, 'Imp', 'Ranger', [1, 9.7], [6, 9.7], 0, true);
 
     this.label(0.2, 14.3, 'a dash cannot escape a push');
     hero(KIND.Barbarian, 'Barbarian', CLASSES.Barbarian.speed, [7, 13.7]);
@@ -72,8 +72,8 @@ export class KnockbackDemoScene extends TerrainDemo {
 
     // The dragon: the hero stands 16 px from the edge, 40 px from the dragon.
     this.label(25.2, 6.3, 'dragon tail (behind it): 44 px');
-    hero(KIND.Assassin, 'Assassin 2', CLASSES.Assassin.speed, [31, 4.5]);
-    this.actor(KIND.Dragon, 'Dragon', 34, [{ to: [28.5, 4.5] }, { wait: 1.5, face: Math.PI }, { hit: 'Assassin 2', dist: 44, reach: 46, tail: true }, { wait: 1.5, face: Math.PI }]);
+    hero(KIND.ElvenRanger, 'Ranger 2', CLASSES.ElvenRanger.speed, [31, 4.5]);
+    this.actor(KIND.Dragon, 'Dragon', 34, [{ to: [28.5, 4.5] }, { wait: 1.5, face: Math.PI }, { hit: 'Ranger 2', dist: 44, reach: 46, tail: true }, { wait: 1.5, face: Math.PI }]);
 
     this.label(25.2, 14.3, 'dragon front claw: 32 px');
     hero(KIND.Barbarian, 'Barbarian 2', CLASSES.Barbarian.speed, [30.5, 12.5]);

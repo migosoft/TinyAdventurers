@@ -28,7 +28,7 @@ export interface FigureDef {
   hit?: string;
   weapon?: string;
   mount?: Mount;
-  /** Second weapon used for melee (assassin dagger). */
+  /** Second weapon used for melee (ranger dagger). */
   meleeWeapon?: string;
   weaponTint?: number;
   weaponScale?: number;
@@ -97,7 +97,7 @@ export const FIGURES: Record<number, FigureDef> = {
   [KIND.Wizard]: { ...hero('wizzard_m'), weapon: 'weapon_red_magic_staff', mount: 'staff', handY: 10, attack: 'caster', base: 0x4a7aff, baseR: 6, label: 'Wizard' },
   [KIND.Paladin]: { ...hero('knight_m'), swing: SWORD, weapon: 'weapon_knight_sword', mount: 'blade', handY: 10, attack: 'melee', base: 0xe8c040, baseR: 6, label: 'Paladin' },
   [KIND.Barbarian]: { ...hero('dwarf_m'), swing: AXE, weapon: 'weapon_double_axe', mount: 'blade', handY: 9, attack: 'melee', base: 0xd03030, baseR: 6, label: 'Barbarian' },
-  [KIND.Assassin]: { ...hero('elf_m'), weapon: 'weapon_bow', mount: 'bow', meleeWeapon: 'weapon_knife', weaponScale: 0.8, handY: 10, attack: 'ranged', base: 0x3aa060, baseR: 6, label: 'Assassin' },
+  [KIND.ElvenRanger]: { ...hero('elf_m'), weapon: 'weapon_bow', mount: 'bow', meleeWeapon: 'weapon_knife', weaponScale: 0.8, handY: 10, attack: 'ranged', base: 0x3aa060, baseR: 6, label: 'Elven Ranger' },
   [KIND.GoblinArcher]: { ...mob('goblin'), weapon: 'weapon_bow', mount: 'bow', weaponScale: 0.6, handY: 6, attack: 'ranged', base: 0x4a3a2a, baseR: 5 },
   [KIND.SkeletonWarrior]: { ...mob('skelet'), swing: MOB_SWING, weapon: 'weapon_rusty_sword', mount: 'blade', weaponScale: 0.8, handY: 6, attack: 'melee', base: 0x4a3a2a, baseR: 5 },
   [KIND.SkeletonArcher]: { ...mob('skelet'), weapon: 'weapon_bow_2', mount: 'bow', weaponScale: 0.6, handY: 6, attack: 'ranged', base: 0x4a3a2a, baseR: 5 },
@@ -165,7 +165,7 @@ export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?:
 };
 
 export function isPlayerKind(k: number): boolean {
-  return k <= KIND.Assassin;
+  return k <= KIND.ElvenRanger;
 }
 export function isProjectileKind(k: number): boolean {
   return k >= KIND.Missile && k < KIND.FirePatch;

@@ -368,10 +368,20 @@ pub mod tests {
     }
 
     #[tokio::test]
+    async fn the_class_check_takes_the_ranger_and_refuses_the_assassin() {
+        let Some(db) = test_db().await else { return };
+        let a = create_account(&db, "Archer", "h").await.unwrap();
+        let c = create_character(&db, a, "Ranger", ClassId::ElvenRanger).await.unwrap();
+        assert_eq!(c.class, ClassId::ElvenRanger);
+        let old = sqlx::query("INSERT INTO characters (account_id, name, class) VALUES ($1, 'Old', 'Assassin')").bind(a).execute(&db).await;
+        assert!(old.is_err(), "the CHECK constraint no longer allows Assassin");
+    }
+
+    #[tokio::test]
     async fn progress_changes_are_never_lost() {
         let Some(db) = test_db().await else { return };
         let a = create_account(&db, "Racer", "h").await.unwrap();
-        let c = create_character(&db, a, "Speedy", ClassId::Assassin).await.unwrap();
+        let c = create_character(&db, a, "Speedy", ClassId::ElvenRanger).await.unwrap();
         let other = create_character(&db, a, "Bystander", ClassId::Paladin).await.unwrap();
         bank_awards(&db, &[Award { character: c.id, xp: upgrade_cost(0) * 40, coins: 0 }]).await.unwrap();
 
