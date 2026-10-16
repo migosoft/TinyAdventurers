@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The Assassin becomes the Elven Ranger: entity type Elf, Hide removed, and a new secondary that summons and heals a Dire Wolf. The wolf is the first allied creature: it follows the ranger and guards them. It opens a fight with a dash and then bites, growls at enemies it detects, and never falls into a chasm. Enemies can kill it. The ranger's melee stab becomes a rapier.
+**Goal:** The Assassin becomes the Elven Ranger: entity type Elf, Hide removed, and a new secondary that summons and heals a Dire Wolf. The wolf is the first allied creature: it follows the ranger and guards them. It opens a fight with a dash and then bites, growls at enemies it detects, and escapes a chasm with its dash when the dash is ready. Enemies can kill it. The ranger's melee stab becomes a rapier.
 
 **Architecture:** The wolf is a `Monster` with an ally marker (`Monster.ally: Option<Ally>`). That way it reuses movement, terrain, knockback, effects (`Creature::Monster`) and snapshots. Its own behaviour lives in a new `server/src/run/companion.rs`, and its numbers in a new `server/src/defs/companions.rs`. Enemies pick their targets and deal area damage through a "foe" layer on `effects::Creature`: a foe is a hero (`Creature::Player`) or an ally (`Creature::Monster` with `ally`). Every hero attack skips allies. Mimics move from `dormant` to a new `hiding` state.
 
@@ -31,7 +31,7 @@
     - follows within about 2 tiles, guards about 3 tiles from the ranger, leash about 6 tiles, reappears beyond about 12 tiles
     - growls at most once every 4 s, with a step of 1 to 2 tiles
     - dash attack (the user, 2026-10-16): from up to 4 tiles (64 px) at 300 px/s, 20 damage, push 12 px, cooldown 5 s; it opens a fight, then the wolf bites
-    - never falls into a chasm: its dash jumps chasms, and a push that leaves it over a chasm makes it dash back to its last safe tile. Deep water and lava still work as for any monster (the user chose chasms only).
+    - chasms (the user, 2026-10-16): its dash jumps chasms. A push that leaves it over a chasm makes it dash back to its last safe tile **only if the dash is ready**. That escape uses the dash and starts its 5 s cooldown, like the Barbarian's. With the dash on cooldown it falls and dies. Deep water drowns it and lava burns it, as for any monster.
   - Ranger primary: same numbers, but the melee stab is drawn with the rapier `weapon_duel_sword` instead of `weapon_knife`; the lobby name is "Bow / Rapier".
   - Summon and heal cooldown 8 s, death cooldown 60 s, both divided by `mods.attack_speed`. A heal restores 20 % of the wolf's HP (16), never above its maximum.
 - Messages and labels: the class shows as "Elven Ranger". The death message is `"{name}'s wolf has fallen"`.
@@ -44,7 +44,7 @@ These failure modes are implied by the spec but no headline test covers them. Ea
 
 1. **Two rangers in one party:** each wolf follows, guards and is healed only by its own ranger. One ranger's ability never summons or heals the other's wolf. Task 7: `two_rangers_each_keep_their_own_wolf`.
 2. **The ranger leaves the dungeon or falls:** their wolf vanishes at once. There is no "wolf has fallen" message and no XP. A ranger who left never gets a wolf back. Task 7: `the_wolf_vanishes_when_its_ranger_falls_or_leaves`.
-3. **The wolf meets terrain:** a barrel blast pushes it over a chasm: it dashes back to safe ground and lives (Task 8: `a_wolf_blown_over_a_chasm_dashes_back_to_safe_ground`). A blast into deep water drowns it: nobody gets XP, coins or a kill, and the ranger's 60 s wait starts (Task 6: `a_wolf_blown_into_deep_water_drowns_without_paying_and_starts_the_wait`).
+3. **The wolf meets terrain:** a barrel blast pushes it over a chasm. With its dash ready, it dashes back to safe ground, lives, and its dash goes on cooldown. Right after an attack dash, it falls, pays nothing and starts the 60 s wait (Task 8: `a_wolf_blown_over_a_chasm_escapes_only_with_its_dash_ready`). A blast into deep water drowns it: nobody gets XP, coins or a kill, and the ranger's 60 s wait starts (Task 6: `a_wolf_blown_into_deep_water_drowns_without_paying_and_starts_the_wait`).
 4. **The wolf goes where only heroes count:** the wolf alone in the boss hall wakes nothing and seals nothing. The wolf on a chest opens nothing. The wolf next to a hiding mimic does not wake it. Task 8: `only_heroes_wake_the_boss_open_chests_and_reveal_mimics`.
 5. **Growl spam:** an enemy that steps in and out of the wolf's sight is growled at once. Two new enemies within 4 s give one growl, not two. Task 9: `each_enemy_is_growled_at_once_and_growls_are_4_s_apart`.
 
@@ -432,7 +432,7 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
 **Files:**
 - Modify: `server/src/run/companion.rs` (`tick_wolf` and its helpers), `server/src/run/mod.rs`:
   - `step`: replace Task 5's `if m.is_ally() { continue; }` with `companion::tick_wolf(self, mi, DT); continue;`.
-  - `terrain_monster`: an ally mid-dash skips the whole terrain check (it is in the air, like a dashing hero). An ally whose centre is over a chasm does not sink: it clears `knock` and calls `companion::dash_back(self, mi)`. On a `safe` tile it stores the tile centre in `ally.last_safe`.
+  - `terrain_monster`: an ally mid-dash skips the whole terrain check (it is in the air, like a dashing hero). An ally whose centre is over a chasm with `ally.dash_cd ≤ 0` does not sink: it clears `knock` and calls `companion::dash_back(self, mi)`. With the dash on cooldown it sinks and dies like any monster (`kill_monster` → `wolf_died`). On a `safe` tile it stores the tile centre in `ally.last_safe`.
   - `knock_monster`: an ally mid-dash is not pushed.
 
 **Interfaces:**
@@ -448,7 +448,8 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
      - An attack dash that touches its prey (`dist < radii + 4`) hits it once: `hurt_monster(prey, Damage::new(WOLF_DASH_DAMAGE, wolf.melee), false, Some(ranger_pi))`, then `knock_monster(prey, wolf.pos, WOLF_DASH_KNOCK)`. The dash ends and `ai.cd = WOLF_BITE_COOLDOWN`.
      - When `left` runs out, the dash ends. If it ended over a chasm, `terrain_monster` sends the wolf back with `dash_back` on the same tick.
      - Return while dashing.
-  - `companion::dash_back(run, mi)`: a non-attack dash straight to `ally.last_safe`, with `left = dist / WOLF_DASH_SPEED`.
+  - `companion::dash_back(run, mi)`: a non-attack dash straight to `ally.last_safe`, with `left = dist / WOLF_DASH_SPEED`. It sets `ally.dash_cd = WOLF_DASH_COOLDOWN`, the same cooldown as the attack dash.
+  - An attack dash that ends over a chasm has just set `dash_cd`, so the wolf falls. Only start an attack dash whose straight line ends on walkable ground (`!blocks_at(end, Mover::Enemy)`), so it never jumps to its death on its own.
   4. **Bite wind-up.** If one is running, count it down. When it ends, bite the prey if it is still alive and within `WOLF_BITE_RANGE + radii + 4`:
      - damage as above, then `knock_monster(prey, wolf.pos, WOLF_BITE_KNOCK)`;
      - `ai.cd = WOLF_BITE_COOLDOWN`, `Anim::Melee`;
@@ -476,11 +477,9 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
     - a bite of 10 follows within 1.5 s;
     - no second dash hit before 5 s have passed (count the orc's 20-point hits).
   - `the_wolf_dash_jumps_a_chasm`: a one-tile chasm strip between the wolf and an orc next to the ranger. The wolf dashes across, ends on floor, and is alive with `sinking == None`.
-  - `a_wolf_blown_over_a_chasm_dashes_back_to_safe_ground` (Review Focus 3):
-    - a chasm two tiles east (`terrain_run` pattern), and a barrel blast pushes the wolf onto it;
-    - within 1 s the wolf stands on a safe tile, alive, never `sinking`;
-    - no `Ev::Sink` for its id;
-    - `players[0].wolf` is unchanged.
+  - `a_wolf_blown_over_a_chasm_escapes_only_with_its_dash_ready` (Review Focus 3):
+    - **Dash ready:** a chasm two tiles east (`terrain_run` pattern), and a barrel blast pushes the wolf onto it. Within 1 s the wolf stands on a safe tile, alive and never `sinking`. No `Ev::Sink` was sent for its id, `players[0].wolf` is unchanged, and `ally.dash_cd ≈ 5`.
+    - **Dash on cooldown:** blast it again at once. It sinks (`Ev::Sink { how: 0 }` for its id). After `FALL_TIME` it is gone, `xp`, `coins` and `kills` are 0, `cd2 ≈ 60`, and the message was sent.
   - `the_wolf_ignores_enemies_far_from_the_ranger_and_never_leaves_the_leash`: an orc 80 px from the ranger whose AI is held (`ai.hold = 99`). After 120 ticks its HP is unchanged and the wolf stayed within `WOLF_LEASH` of the ranger.
   - `the_wolf_fights_back`: an orc 16 px from the wolf and 60 px from the ranger. Within 120 ticks the orc has lost HP.
   - `the_wolf_never_bites_dormant_or_hiding_monsters`: a dormant boss (the lich's hall, `lich_with` pattern) and a hiding mimic, each 20 px from the ranger. After 120 ticks both have full HP and keep their state.
@@ -492,7 +491,7 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
 - [ ] **Step 2: Run them** with `… cargo test --release companion`. Expected: they fail, because the wolf stands still.
 - [ ] **Step 3: Implement** `tick_wolf`.
 - [ ] **Step 4: Run every check.** Run the full server tests: the fingerprints are unchanged, and `run_simulates_without_panicking` now runs a ranger without a wolf.
-- [ ] **Step 5: Commit** with `git commit -m "Dire Wolf: follow, guard, dash, bite, leash, reappear; it never falls into a chasm"`.
+- [ ] **Step 5: Commit** with `git commit -m "Dire Wolf: follow, guard, dash, bite, leash, reappear; its dash escapes a chasm"`.
 
 ---
 

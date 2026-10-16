@@ -103,7 +103,7 @@ The user: the wolf **stays close and bites whatever comes near the ranger**; it 
 - **Guard:** it attacks an enemy that comes within about **3 tiles of the ranger** (my number), and an enemy that attacks the wolf itself (my call: it fights back). It picks the one nearest to the ranger. Dormant and hiding enemies are never bitten (see below).
 - **Leash:** it does not chase farther than about **6 tiles from the ranger** (my number); beyond that it turns back.
 - **Reappear:** if it is far from the ranger (about **12 tiles**, my number), or cannot reach them (no path), it reappears beside the ranger with the green puff. This covers the sealed boss hall: when the door closes with the wolf outside, the wolf appears next to the ranger inside (the user: "nobody gets locked out").
-- It cannot be pushed through walls. **It never falls into a chasm** (the user, 2026-10-16: "evade chasms flawlessly"): its paths avoid chasms, its dash jumps them, and when a push leaves its centre over a chasm it dashes straight back to the last safe tile it stood on. Deep water and lava work as for any monster: a push into deep water drowns it, lava burns it (the user chose chasms only).
+- It cannot be pushed through walls. **It escapes a chasm only with its dash** (the user, 2026-10-16): its paths avoid chasms and its dash jumps them. When a push leaves its centre over a chasm and the dash is ready, it dashes straight back to the last safe tile it stood on, and that starts the dash's 5 s cooldown, as any dash does (like the Barbarian's). With the dash on cooldown it falls and dies like any monster. Deep water drowns it and lava burns it, as for any monster.
 - While the ranger is asleep or stone, the wolf keeps guarding.
 
 ### Growl
