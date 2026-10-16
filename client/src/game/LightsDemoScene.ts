@@ -6,10 +6,14 @@
 // switches every 3 s.
 // `&slow=N` slows time. Key V cycles the viewer's darkvision 0 / 50% / 100% (greyscale
 // where it sees only by darkvision); `&dv=0.5` starts with it.
+// Two pillars in room 1 show the straight shadow edges (the vision mask). Click
+// moves the viewer (`&at=x,y` in tiles starts it there); E toggles old (tile)
+// and new edges (`&edges=old` starts with the old ones).
 import Phaser from 'phaser';
 import { CONST, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
 import { TILE, TileMap } from '../sim/map';
+import { sightRadius } from '../sim/vispoly';
 import { tileDraws } from './autotile';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
@@ -17,6 +21,7 @@ import { syncDarkvisionFX } from './darkvisionfx';
 import { LightView, nextDarkvision } from './lightview';
 import { TERRAIN, TerrainLayer } from './terrain';
 import { TorchView } from './torch';
+import { VisionMask } from './visionmask';
 
 const W = 30;
 const H = 20;
@@ -39,6 +44,8 @@ function buildMap(): TileMap {
   floor(2, 3, 11, 15); // room 1
   floor(12, CORRIDOR_Y, 14, CORRIDOR_Y); // corridor
   floor(15, 5, 28, 13); // room 2: the dark pocket
+  tiles[6 * W + 5] = TILE_ID.Wall; // two pillars in room 1, for the shadow edges
+  tiles[13 * W + 9] = TILE_ID.Wall;
   for (let y = 11; y <= 13; y++) for (let x = 3; x <= 6; x++) tiles[y * W + x] = TERRAIN.Lava;
   return new TileMap(W, H, tiles);
 }
@@ -53,6 +60,15 @@ export class LightsDemoScene extends Phaser.Scene {
   private layer!: TerrainLayer;
   private field!: LightField;
   private view!: LightView;
+  private mask!: VisionMask;
+  /** The viewer in px: `&at=x,y` (tiles) or the middle of room 1; a click moves it. */
+  private viewer = (() => {
+    const at = new URLSearchParams(location.search).get('at')?.split(',').map(Number);
+    return at?.length === 2 && at.every(Number.isFinite) ? { x: at[0] * TILE, y: at[1] * TILE } : { x: (VIEWER[0] + 0.5) * TILE, y: (VIEWER[1] + 0.5) * TILE };
+  })();
+  /** Straight edges (the vision mask) or the old tile edges (E, `&edges=old`). */
+  private straight = new URLSearchParams(location.search).get('edges') !== 'old';
+  private dot!: Phaser.GameObjects.Arc;
   private fireball!: Phaser.GameObjects.Image;
   private frost!: Phaser.GameObjects.Image;
   private blue = { id: 0, on: true };
@@ -99,6 +115,11 @@ export class LightsDemoScene extends Phaser.Scene {
       for (let x = 0; x < W; x++)
         if (map.get(x, y) === TERRAIN.Lava) this.field.add({ id: id++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x, y, on: true });
     this.view = new LightView(this, map, this.field);
+    this.mask = new VisionMask(this, map);
+    this.dot = this.add.circle(0, 0, 2, 0xffffff).setDepth(DEPTH.numbers);
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (!map.opaqueAt(p.worldX, p.worldY)) this.viewer = { x: p.worldX, y: p.worldY };
+    });
 
     const glow = (colour: number, scale: number) =>
       this.add.image(0, 0, 'glow').setTint(colour).setScale(scale).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.projectile);
@@ -117,6 +138,10 @@ export class LightsDemoScene extends Phaser.Scene {
       .setResolution(4)
       .setDepth(DEPTH.numbers);
     this.showCaption();
+    this.input.keyboard!.on('keydown-E', () => {
+      this.straight = !this.straight;
+      this.showCaption();
+    });
     this.input.keyboard!.on('keydown-V', () => {
       this.darkvision = nextDarkvision(this.darkvision);
       this.showCaption();
@@ -130,7 +155,7 @@ export class LightsDemoScene extends Phaser.Scene {
   private showCaption(): void {
     this.caption.setText(
       'lights demo: torches in four colours, lava, torch+lava mix, fireball into a dark room, explosion flash in its doorway, frost bolt; blue torch toggles every 3 s' +
-        `\ndarkvision ${Math.round(this.darkvision * 100)}% (V)`,
+        `\ndarkvision ${Math.round(this.darkvision * 100)}% (V), edges ${this.straight ? 'straight' : 'old'} (E), click moves the viewer`,
     );
   }
 
@@ -167,7 +192,11 @@ export class LightsDemoScene extends Phaser.Scene {
       [cx, cy, LIGHT_KIND.Magic, FROST_COLOUR],
     ];
     if (sinceBoom >= 0 && sinceBoom < FLASH) moving.push([boomX, fy, LIGHT_KIND.Blast, null]);
-    this.view.update(this.cameras.main.worldView, (VIEWER[0] + 0.5) * TILE, (VIEWER[1] + 0.5) * TILE, moving, this.t, this.darkvision, CONST.FOV_RADIUS);
+    this.view.wide = this.straight;
+    this.view.update(this.cameras.main.worldView, this.viewer.x, this.viewer.y, moving, this.t, this.darkvision, CONST.FOV_RADIUS);
+    this.mask.enabled = this.straight;
+    this.mask.update(this.cameras.main.worldView, this.viewer.x, this.viewer.y, sightRadius(CONST.FOV_RADIUS), this.view);
+    this.dot.setPosition(this.viewer.x, this.viewer.y);
     syncDarkvisionFX(this.cameras.main, this.darkvision, this.view.mask, [W * TILE, H * TILE]);
   }
 }
