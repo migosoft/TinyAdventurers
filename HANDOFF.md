@@ -11,14 +11,16 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Next session
 
-**Next: write the implementation plan for the Elven Ranger** (TODO priority 4a) with superpowers:writing-plans, from the settled spec [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](docs/superpowers/specs/2026-10-16-elven-ranger-design.md). Save it as `docs/superpowers/plans/2026-10-16-elven-ranger.md`, then let the user review it and choose the execution method (subagent-driven or native). Brainstorming is done; do not reopen decisions the spec records as the user's. See "Elven Ranger (designed 2026-10-16)" below for the decisions and the code map.
+**State:** the Elven Ranger and the Dire Wolf are built and reviewed on `feature/elven-ranger`. **The branch is not merged into `main` and not pushed** (it already contains `main` with the breakable chests, merge commit `29cd62a`). Ask the user before merging or pushing.
 
-1. **Then: TODO priority 4** (new abilities for the other classes, then loadouts, then a way to spend coins). The ranger's wolf is the first new ability.
-2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
-3. **Breakable chests: built** on `feature/breakable-chests` (see "Breakable chests" below), in parallel with the Elven Ranger, which another agent builds on `feature/elven-ranger`. Merged into `feature/elven-ranger` (2026-10-16). The user is still thinking about bodies blocking movement (TODO "Chests, mimics and coins follow-ups"); do not build that.
-4. **Server load** (new TODO priority 16, tier 4, section "Server performance follow-ups", 2026-10-16): measure, then cache each hero's view while nothing changed and share it with spectators. The views are estimated to be most of a run's CPU. Before any public launch; not urgent while play is private.
+1. **First: the user's play-test of the ranger** (these could not be scripted; see "Last feature (2026-10-16): Elven Ranger and the Dire Wolf", "Still to play"). Then the decision to merge into `main`, and push if asked.
+2. **Then: TODO priority 4** (new abilities for the other classes, then loadouts, then a way to spend coins). The wolf is the first new ability and the first companion.
+3. **Pillars** (TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
+4. **Breakable chests** are built and merged into this branch (see "Breakable chests"). The user is still thinking about bodies blocking movement (TODO "Chests, mimics and coins follow-ups"); do not build that.
+5. **Server load** (TODO priority 16, section "Server performance follow-ups"): measure, then cache each hero's view while nothing changed and share it with spectators. The ranger's 18-tile vision makes each of her views dearer. Before any public launch; not urgent while play is private.
+6. The Elven Ranger follow-ups (deferred review minors, edge cases, missing tests) are in TODO "Elven Ranger follow-ups".
 
-Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons. The vision edges are merged, pushed and approved by the user ("I like the new edges design").
+Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons.
 
 ## Breakable chests (built 2026-10-16)
 
@@ -29,54 +31,47 @@ Still to do with the user from before: a real play-test of the lich fight (orbs,
 - **Verified:** server **331 tests** (324 before, 7 new in `run/objects.rs`), no warnings, fingerprints unchanged; client **84 tests** (one hitbox test changed: a chest now stops shots exactly like a mimic), typecheck and build pass. **Not looked at live:** the splinter burst and breaking chests in a real run.
 - **Test isolation:** the test compose file has a fixed project name and shared cargo target volume; the parallel runs used `-p ta-chests-test` and an override mounting the volume `ta-target-chests`.
 
-## Elven Ranger (designed 2026-10-16, not built)
+## Last feature (2026-10-16): Elven Ranger and the Dire Wolf
 
-**How it came about:** the user wanted the Assassin restyle (TODO item 9) pulled forward, then decided instead: the Assassin's art is an elf, so the class becomes the **Elven Ranger** and the restyle (hood, dark clothes, thrown knives) is dropped. The Elven Ranger **is** the "elven archer" of TODO item 8. Built nothing yet; only the spec, TODO and this handoff changed.
+**Branch:** `feature/elven-ranger` (from `main` at `5857780`), `git log --oneline main..feature/elven-ranger`. Built task by task with subagent-driven development (12 tasks, each reviewed; the ledger with every ruling is `.superpowers/sdd/2026-10-16-elven-ranger/progress.md`). **Not merged into `main`, not pushed.** `main` (breakable chests) was merged into it (`29cd62a`). Spec: [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](docs/superpowers/specs/2026-10-16-elven-ranger-design.md); plan: [docs/superpowers/plans/2026-10-16-elven-ranger.md](docs/superpowers/plans/2026-10-16-elven-ranger.md). Docs: PLAYER_GUIDE (the ranger and her wolf), TECHNICAL §5 ("Hiding and dormant", "Companions", entity types), §4 (`Growl`, `Boom k 9`), §9 (sound text rule), TODO (4a done, "Elven Ranger follow-ups").
 
-**Decided by the user (all in the spec):**
-- **The class:** `elf_m` art, HP 90, speed 80, primary `CrossbowDagger` unchanged. Entity type **Elf**: 10 % poison, vision 18 tiles, darkvision 1/3, immune to Sleep.
-- **Hide goes completely** (it may come back later as an "invisibility" effect).
-- **All saved game data is wiped** (test data only): characters and the statistics (`runs`, `run_players`). Accounts stay (my reading).
-- **Secondary "Summon Companion: Dire Wolf":**
-  - With no wolf, it summons one with a nice green sparkle puff (not poison green).
-  - With the wolf alive, it heals it for 20 % and starts the 8 s cooldown.
-  - When the wolf dies, a 60 s cooldown starts.
-  - There is only ever one wolf.
-- **Magical Beast** (new entity type): 10 % poison, 10 % magical, immune to Sleep, attacks 80 % physical / 20 % magical, vision 18, darkvision 100 %.
-- **The wolf:** extra 20 % cold resistance (its fur), 80 HP, a bite of 10 every 0.9 s with an 8 px push, speed 88. Art: Superdark's Enchanted Forest `Wolf` (CC0).
-- **Its behaviour:**
-  - It **guards**: it stays close and bites whatever comes near the ranger.
-  - Enemies can attack and kill it.
-  - Holy Light heals it.
-  - It is visible only in light, with a health bar like a hero's.
-  - It vanishes when the ranger falls.
-  - It reappears next to the ranger when far away or locked out (the sealed boss door).
-- **Kills:** the wolf's kills count as the ranger's; XP and coins are shared as for every kill.
-- **Growl:** the wolf steps 1 to 2 tiles toward the nearest enemy it detects, shows "grrrr" and shakes.
-- **New rule: sound text shows above the darkness** with a light outline (the growl, spoken words, the sleeping "Z"). Damage numbers keep today's rule.
-- **New monster state "hiding":** the mimic moves from `dormant` to `hiding`. The wolf growls at hiding things (on purpose: a way to find mimics) but never at dormant ones (the boss before the fight, idle disciples). It bites neither.
+**How it came about:** the Assassin's art is an elf, so the user turned the class into the **Elven Ranger** and dropped the restyle (TODO item 9). The ranger is the "elven archer" of TODO item 8. All settled with the user; the decisions are in the spec.
 
-**The calls I made** are listed at the end of the spec ("Calls I made"); the user approved them all (2026-10-16) except the statistics one: wipe the statistics too.
+**What was built:**
+- **The class:** `ClassId::ElvenRanger` (`EntityKind::ElvenRanger` stays id 3), same `elf_m` art, 90 HP, speed 80, primary `CrossbowDagger` ("Bow / Rapier": the melee thrust is drawn with the rapier `weapon_duel_sword`). Entity type **Elf**: 10 % poison, vision 18 tiles, darkvision 1/3, immune to Sleep. Migration `0005_elven_ranger.sql` wipes characters and statistics (the user approved; accounts stay) and changes the class CHECK.
+- **Hide is gone** everywhere (`AbilityId::Hide`, `Player.hidden`, `flags::HIDDEN`, `SelfState.hidden`, the client shimmer and predictor, text). It may return later as an invisibility effect.
+- **Entity types carry effect responses** (`entity_types::responses`): Elf and the new **Magical Beast** (10 % poison, 10 % magical, 80/20 physical/magical melee, vision 18, darkvision 100 %, immune to Sleep).
+- **`hiding` split from `dormant`** (`Monster.hiding`, `FLAG.HIDING` 1): the mimic is hiding; the boss before its fight and the lich's disciples stay dormant.
+- **The Dire Wolf** (secondary, `AbilityId::SummonWolf`, 8 s; 60 s after its death): summon with a green puff (`Ev::Boom { k: 9 }`; k 8 is the chest splinters from the breakable-chests feature), or heal 20 %. 80 HP, bite 10 per 0.9 s, speed 88. It follows, guards (enemies within 3 tiles of the ranger), fights back, dashes at prey (4 tiles, 20 damage, 5 s; it jumps chasms, and an attack dash that would end over a chasm carries on to solid ground), reappears beside the ranger when far or locked out, vanishes when she falls, and **growls** (`Ev::Growl { id }`, wire code 14) at awake and hiding enemies it detects. Art: Superdark's Enchanted Forest `Wolf` (CC0), trimmed in the atlas as `dire_wolf_idle_anim_f0-3` and `dire_wolf_run_anim_f0-3`; its union box is 30×19 px.
+- **First allied creature:** an ordinary `Monster` with `ally: Some(Ally)`. Hero attacks never hurt it (a safety net in `hurt_monster`, plus a skip and a test per attack). Enemies and area attacks target heroes and allies through `Creature`, `foes_in` and `foes_touching`. Its kills count as the ranger's; its death pays nothing.
+- **Sound text above the darkness:** `SOUND_TEXT` (dark fill `#1a1020`, light outline `#d8d0e0`) at `DEPTH.sound` 7500, for the growl and the sleeper's Z. The plan's pale fill vanished inside the pale outline, so the fill is dark.
 
-**Code map** (read while designing; the spec's section "How it fits the code" has the full pointers):
-- **Recommended shape:** the wolf is a `Monster` with an ally marker (`ally_of: Option<u32>`). It then reuses movement, terrain, knockback, effects (`Creature::Monster`), snapshots and lights. Every hero attack that loops over `run.monsters` must skip allies: `abilities.rs` `dagger_target`, `melee_arc`, `dash_contact`, `advance_projectile`, `explode`, plus the client's `GameScene.shotTouchesEnemy`. `kill_monster` (`run/mod.rs`) must pay no XP or coins for an ally. Write one test per hero attack.
-- **Enemy targets are player indices everywhere:**
-  - in the AI: `ai::find_visible_player`, `Target::Player`, `perform_attack(run, mi, pi, ..)`, `hurt_player` and `knock_player`
-  - in the boss code: `bosses::target`, `bosses::players_in`, the lich's `nova`, demon and dragon attacks
-  - in other shared code: `abilities::explode`, `Run::tick_hazards`, `objects::explode_barrel`
-  - Area attacks need a "heroes and allies in range" helper.
-- **Snapshots:** `run/visibility.rs` `send_snapshots`. Heroes are always sent (`player_snaps`), monsters only when seen, so the wolf must be added like a hero. `Ev` events on heroes use `event_on_hero`.
-- **Entity types:** `defs/entity_types.rs` (`EntityType`, `type_def`, `Adjust`, `profile`). `classes::profile` makes every hero Human, and the test `every_enemy_has_its_entity_type` asserts that. `EffectResponses` (`defs/effects.rs`) come only from `bosses::responses` today, and `apply_effect` (`run/effects.rs`) gives players `Full` for everything. The Sleep immunity of Elf and Magical Beast needs responses per entity type.
-- **Hide lives in:**
-  - server: `Player.hidden`, `AbilityId::Hide`, `HIDDEN_CRIT_MULT`, `flags::HIDDEN`, `SelfState.hidden` (wire `SelfW`), the hidden filters in `ai.rs` and `bosses/lich.rs`
-  - client: `EntityView` (shimmer), `GameScene` (`pred.hidden`), `world.test.ts` (Hide test), `ui/text.ts`
-- **Rename `Assassin`:**
-  - server: `protocol.rs` `ClassId`, `kinds.rs` (`EntityKind::Assassin = 3`), `classes.rs`, `db.rs` (stored as text), `stats.rs` and `lobby.rs` tests, migration `0001` CHECK constraint (needs a new migration)
-  - client: `ui/classes.ts`, `ui/text.ts`, `anim/defs.ts`, `GalleryScene`, `KnockbackDemoScene`, `LichDemoScene`, `OgreDemoScene`, `world.test.ts`, the generated files
-  - docs: README, PLAYER_GUIDE, TECHNICAL
-- **Dormant:** used in `run/mod.rs` (13 places), `levels/boss.rs`, `bosses/*`, `ai.rs`, `visibility.rs` (`flags::DORMANT`), `export.rs`, and on the client in `game/mimic.ts` and `MimicDemoScene`.
-- **Float text:** `game/effects.ts` `text()` (outline `#140c1a`). Depths: `DEPTH.heroNumbers` 6501 under `fog` 7000, `numbers` 8000 above. The asleep "Z" is in `game/status.ts`.
-- **Wolf art:** `client/assets-src/enchanted-forest/frames/Wolf/` (32×32 canvases, about 26×17 px of wolf). `scripts/build-atlas.ts` needs a loader that trims them; `scripts/png.ts` has `decodePng`/`encodePng`.
+**Code map (real code):**
+- Server: `run/companion.rs` (`spawn_wolf`, `use_ability`, `vanish_orphans`, `tick_wolf`, `tick_growl`, `tick_dash`, `find_prey`, `reappear`, `dash_back`, `wolf_died`), `defs/companions.rs` (the `WOLF_*` numbers, `wolf_profile`, `wolf_responses`), `defs/entity_types.rs` (Elf, Magical Beast, `responses`), `run/entities.rs` (`Ally`, `WolfDash`), `run/mod.rs` (`foes_in`, `foes_touching`, `hurt_creature`, `heal_monster`; `kill_monster` calls `wolf_died`), `run/ai.rs` (`find_visible_foe`, `Target::Ally`), `run/visibility.rs` (`snapshot_ents`, `flags::HIDING`).
+- Client: `game/anim/defs.ts` (`isAllyKind`, `FIGURES[DireWolf]`), `game/GameScene.ts` (`Growl` handler and shake, `Boom k 9`, `SummonWolf` prediction, the dagger prediction skips allies), `game/effects.ts` (`DEPTH.sound`, `SOUND_TEXT`, `natureSparkles`), `game/status.ts` (the Z), `ui/hud.ts` (`secondaryLabel`), `scripts/wolf-frames.ts`.
+
+**Verified (2026-10-16):**
+- Server: **364 tests pass** in Docker, no warnings.
+- Client: `tsc --noEmit`, **89 tests** and `npm run build` pass.
+- `docker compose up --build -d` and `/health` are OK.
+- Smoke test `cd tools/e2e && node smoke.mjs http://localhost:8080/ "" shots ElvenRanger,Paladin` (the class argument is the wire name; the script lowercases it for the card `c-elvenranger`): "no browser errors". The screenshots show the ranger card with the wolf's ability, the elf with her wolf in the run, the HUD box reading "Heal Wolf", and F3 darkvision 33 %.
+- Seen earlier by the controller: the gallery (the wolf next to the heroes, dash afterimages), the growl and the sleeping Z in the dark.
+
+**Still to play (the user; these could not be scripted):**
+- The wolf's health bar **hidden under the fog in the dark** (it should vanish with the wolf on unlit tiles).
+- The **18-tile light and mask seam in a large room** (the ranger's vision reaches beyond the screen; the polygon, the mask canvas and the camera window were checked only in small cases).
+- The wolf's **death message and the 60 s fill in the HUD**.
+- A **real play of the ranger with the wolf**: the feel of follow, guard, dash and growl, and whether the `WOLF_*` numbers are right.
+
+**Rulings worth knowing:**
+- The wolf's union box is 30×19 px, not the spec's 26×17 (a scale factor in `FIGURES` if it looks wrong).
+- The puff is `Boom k 9`.
+- A ranger who is sinking but still alive keeps her wolf until she dies.
+- The lobby party row shows the wire class name "ElvenRanger" (no space), as for the other classes.
+
+**Follow-ups** (details in TODO "Elven Ranger follow-ups"): a non-attack dash stopped over a chasm can still sink; a wolf frozen mid-dash hovers over a chasm; the wolf reappears every 0.5 s beside a ranger walking on lava or chasm edges; `run/companion.rs` is about 1300 lines with its tests inline (split them); no vispoly parity fixture at radius 18; several tests are thin (listed there); the comment at `run/mod.rs` still calls mimics "dormant".
+
+## Art and idea notes (2026-10-16)
 
 **Art sources (TODO priority 3, done 2026-10-16, on `main`, commits `7767778..62b53f3`):** three packs checked, imported and credited; no figure is built into the atlas yet, each goes in with the feature that uses it.
 - **Licences** (quoted in each `LICENSE.txt` and in TODO "New enemies"): "16x16 Enchanted Forest Characters" by Superdark is CC0 (gnolls Brute, Overseer, Scout, Shaman; bandit; elves; the elf princess). "16x16 Fantasy RPG Characters" by Superdark (free NPC pack, registered at the user's request) has no formal licence but allows free and commercial use and changes. "Forest creatures" by LYASeeK is free to use, not to resell.
@@ -91,7 +86,7 @@ Still to do with the user from before: a real play-test of the lich fight (orbs,
 
 **Ideas the user liked** (not yet in TODO; ask before adding): ways to bring light. Early on, carry a wall torch, light braziers, find glow items (mushrooms, flares). Later, class gear and spells: the paladin's glowing shield, the wizard's light orb, a wisp companion, the ranger's flare arrows, and the rogue who prefers the dark. Before any hero light: a dead hero's light must switch off and come back on a revive (the registry drops it today).
 
-## Last feature (2026-10-16): straight vision edges
+## Feature before (2026-10-16): straight vision edges
 
 **Branch:** `feature/vision-edges` (from `main` at `3555d68`), commits `git log --oneline main..feature/vision-edges`: part 1 (spec, plan, polygon, mask, demo, docs), then part 2 after the final review (spec addendum, plan part 2, the `View` rule in TypeScript, the Rust port in the snapshot filter, the shared fixture and the client switch, docs). Built inline with superpowers:executing-plans, reviewed twice by a fresh reviewer (part 1, then part 2; the second review's edge-shading finding is fixed). **Merged into `main` and pushed (2026-10-16).** Deferred minors: a torch on a wall in the polygon's shadow can vanish while its light stays (the server decides by the floor tile in front of the wall); the server cost per snapshot is not measured (TODO priority 16). Spec: [docs/superpowers/specs/2026-10-16-vision-edges-design.md](docs/superpowers/specs/2026-10-16-vision-edges-design.md); plan: [docs/superpowers/plans/2026-10-16-vision-edges.md](docs/superpowers/plans/2026-10-16-vision-edges.md). Docs: TECHNICAL §7 "The vision mask", draw order, §12, §13; TODO (priority 2 done, "Vision edges follow-ups", "Pillars"); README (`?lights`).
 
@@ -882,7 +877,7 @@ Steps 2–6 followed in the next session.
 
 **Working end to end in Docker (`docker compose up --build`, port 8080):**
 - accounts (name + password, no e-mail) with up to 8 characters each, in PostgreSQL (`db` service, `ta-db` volume); signed HttpOnly session cookies
-- lobby, 4 classes (fixed per character), host-chosen or random end boss, random dungeon, light and darkness (torches, lava, glowing shots; heroes carry no light), vision and darkvision by entity type (humans do not see heroes in the dark, monsters only close)
+- lobby, 4 classes (Wizard, Paladin, Barbarian, Elven Ranger with her Dire Wolf; fixed per character), host-chosen or random end boss, random dungeon, light and darkness (torches, lava, glowing shots; heroes carry no light), vision and darkvision by entity type (humans do not see heroes in the dark, monsters only close)
 - level types behind `LevelRules` (`run/levels/`); the boss dungeon is the only one so far, there is no level picker yet
 - per-character progression: XP and coins banked after each run, permanent upgrades bought in the lobby
 - 11 enemy types (including the mimic and the ogre mini-boss, one per run; imps, chorts and summoners only in the demon's dungeon), 3 bosses
@@ -1025,7 +1020,7 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Vision edges (TODO priority 2) or the effect system (TODO priority 1)**: ask the user which first. The light look and the vision rules are approved; their numbers wait for the balancing pass.
+1. **The Elven Ranger play-test and merge** (see "Next session"); then TODO priority 4. The effect system, the vision edges and the Elven Ranger are built; the light look and the vision rules are approved, their numbers wait for the balancing pass.
 2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
 4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.

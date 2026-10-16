@@ -2,7 +2,7 @@
 
 A browser-based multiplayer dungeon crawler with tiny pixel figures on a board-game dungeon.
 
-- Players log in with an account (just a name and a password, no e-mail) and create up to 8 characters. Each character has a fixed class (Wizard, Paladin, Barbarian or Assassin) and its own progress.
+- Players log in with an account (just a name and a password, no e-mail) and create up to 8 characters. Each character has a fixed class (Wizard, Paladin, Barbarian or Elven Ranger) and its own progress.
 - Up to 4 players open or join a dungeon run.
 - Each run is one randomly generated dungeon of corridors, rooms and halls. Darkness hides what your hero can't see: wall torches, lava and glowing shots light the dungeon, and a torch can be put out or lit again.
 - The party fights through it to a random final boss: a demon, a lich or a dragon.

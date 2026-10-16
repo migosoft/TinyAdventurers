@@ -10,7 +10,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 **Tier 2: larger features on top of tier 1**
 
-4a. **Elven Ranger and the Dire Wolf** (next; replaces the Assassin restyle, the user, 2026-10-16): the Assassin becomes the **Elven Ranger** (entity type Elf, same art and primary); Hide is removed; the new secondary summons a **Dire Wolf** (entity type Magical Beast), the first allied creature, which guards the ranger, growls at enemies it detects and can be healed and killed. Also a new monster state **hiding** (the mimic, split from dormant) and the rule that sound text shows above the darkness. Spec: [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](superpowers/specs/2026-10-16-elven-ranger-design.md) (settled, builder-checked). **Next step: the implementation plan** (superpowers:writing-plans). Later summons (bear, forest guardian, several companions) come through progression.
+4a. **Elven Ranger and the Dire Wolf:** done (2026-10-16, branch `feature/elven-ranger`, not merged into `main` yet; follow-ups in "Elven Ranger follow-ups"). The Assassin became the Elven Ranger (entity type Elf, same art, rapier thrust); Hide is removed (it may return later as an invisibility effect); the secondary summons a Dire Wolf (Magical Beast), the first allied creature; the mimic has the new state `hiding`; sound text shows above the darkness. Spec: [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](superpowers/specs/2026-10-16-elven-ranger-design.md); plan: [docs/superpowers/plans/2026-10-16-elven-ranger.md](superpowers/plans/2026-10-16-elven-ranger.md); TECHNICAL §5 "Companions". Later summons (bear, forest guardian, several companions) come through progression.
 4. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
 5. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
 6. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
@@ -18,7 +18,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 **Tier 3: content**
 
 7. **Ghost and shadow: postponed** (the user, 2026-10-16; no art source yet, see "New enemies"). The shadow and the torch-extinguishing enemy use the light system (`is_lit`, `set_light`; see "Lighting follow-ups"). The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
-8. **Bandits and the dark elf** (see "Elves and bandits"): the Elf entity type and the elven archer come with 4a (the Elven Ranger is the elven archer, the user, 2026-10-16). The bandit (Human) needs only its art built in; the dark elf (Elf) waits for its art.
+8. **Bandits and the dark elf** (see "Elves and bandits"): the Elf entity type exists now (4a) and the Elven Ranger is the elven archer (the user, 2026-10-16), so only these two are left. The bandit (Human) needs only its art built in; the dark elf (Elf) waits for its art.
 9. **Assassin restyle: dropped** (the user, 2026-10-16): the Assassin becomes the Elven Ranger instead (4a).
 10. **Minions for the other bosses; more classes and bosses** (classes are easier after 4).
 11. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources. Pillars (see "Pillars") also carry torches; the vision edges give them their shadows.
@@ -101,13 +101,22 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 
 ## Elves and bandits
 New entity type and figures, from the user (2026-10-15). Priority item 8. The vision fields are the ones from the vision and darkvision work (vision in tiles, darkvision as a share of vision; Human is 9 tiles, 0).
-- **Elf (new entity type):** damage resistance poison 10 %; vision 200 % of Human (18 tiles); darkvision 1/3; **immune to the sleep effect**, so it waits for the effect system (priority 1). Built with 4a (Elven Ranger).
+- **Elf (new entity type):** damage resistance poison 10 %; vision 200 % of Human (18 tiles); darkvision 1/3; **immune to the sleep effect**, so it waits for the effect system (priority 1). Built with 4a (Elven Ranger, done); the dark elf will reuse it.
 - **Elven archer:** is the **Elven Ranger** (4a, the user, 2026-10-16), the former Assassin with its `elf_m` art; no second elf class. The wood-elf art is not needed for it.
 - **Bandit (new enemy):** entity type Human, no adjustments. Art from the same pack. Needs only the licence, not the effect system.
 - **Dark elf (new enemy):** entity type Elf, with a per-entity adjustment: darkvision 100 % of its vision range. The user will provide the art later.
 
 ## Assassin restyle
-Dropped (the user, 2026-10-16). The Assassin's art is an elf, so the class becomes the Elven Ranger (priority 4a; spec [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](superpowers/specs/2026-10-16-elven-ranger-design.md)). The dark clothes, the hood and the thrown knives are not planned any more.
+Dropped (the user, 2026-10-16). The Assassin's art is an elf, so the class becomes the Elven Ranger (priority 4a; spec [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](superpowers/specs/2026-10-16-elven-ranger-design.md)). The dark clothes, the hood and the thrown knives are not planned any more. Hide is gone; it may return as an invisibility effect (the user, 2026-10-16).
+
+## Elven Ranger follow-ups
+Built 2026-10-16 (4a). Not yet played by the user: the wolf bar hidden under the fog in the dark, the 18-tile light and mask seam in a large room, the wolf's death message and the 60 s fill in the HUD, and the feel of follow, guard, dash and growl (see HANDOFF). Smaller follow-ups from the reviews:
+- **Tune** in the balancing pass: every `WOLF_*` number (`defs/companions.rs`), the 60 s and 8 s cooldowns, the growl rate (4 s) and step (24 px); the wolf's fixed numbers do not scale with the ranger's upgrades or the party size.
+- **Wolf edge cases:** a non-attack dash stopped by a wall or barrel over a chasm can still sink; a wolf frozen mid-dash hovers over a chasm and cannot be pushed; a wolf beside a ranger walking on lava or chasm edges reappears every 0.5 s (undocumented before);
+- **Server code:** `run/companion.rs` is about 1300 lines with its tests inline: move the tests to their own file. `snapshot_ents` has an unused `_pi` and rebuilds the player entries per viewer; remove the `allow(dead_code)` marks. The inline 0.6, 8.0 and 4.0 in `tick_growl` should be constants. The mimic comment at `run/mod.rs` still says "dormant".
+- **Tests to add:** a vispoly server and client parity fixture at radius 18 (export cases use 9); the Ranger's no-hero-attack test mostly rests on the `hurt_monster` safety net (also check that a bolt passes through the wolf); enemy exploding projectiles and demon and dragon area attacks on the wolf; a sinking-but-alive ranger keeps the wolf; the drowning test does not assert the message; client tests for the shake, the `Growl` handler, `natureSparkles`, ally bar routing and the dagger's ally exclusion (the close predicate could be a pure function).
+- **Client minor:** `EntityView` calls `setAlpha(1)` every frame (dead code); the shake also jitters sinking figures; `secondaryLabel(f.wolf, '')` reads oddly; a wolf frame test pins only an upper bound of the size (30×19).
+- **Companions later:** bear, forest guardian and several companions through progression; commands for the wolf are a non-goal for now.
 
 ## Damage-type system
 Built 2026-10-14 (TECHNICAL §5, "Damage model"): five types (physical, cold, heat, magical, poison), a split per attack, resistances from entity types plus per-entity adjustments, one formula (`resolve`), coloured damage numbers and "immune". What is left:
