@@ -74,3 +74,37 @@ User decisions (2026-10-16):
 - **TODO:** remove "Vision edges" from priority 2 and the vision follow-ups. The pillars entry stays.
 - **README:** the `?lights` keys (E, click).
 - **HANDOFF:** the session notes.
+
+## Addendum (2026-10-16): the server sees by the same polygon
+
+**Why:** the final review found black floor inside the drawn polygon. The polygon is cast from the hero's pixel position, but `LightView` lit only the tile FOV (cast from the tile's centre) plus one ring. Behind a near corner the two shadow lines drift apart, so a wedge of tiles (up to about 7 tiles in a doorway case) stayed black with tile steps inside the lit cone. The user chose to fix it at the root: **the server's visibility follows the same polygon** (approved 2026-10-16). The other options (light the tiles on the client only, which shows empty floor where the server sends no monsters; cast from the tile centre, where edges jump while walking; accept it) were rejected.
+
+**One "seen tiles" rule, the same in Rust and TypeScript (`View`):**
+- `View.compute(map, px, py, vision)`:
+  - the tile FOV from the viewer's tile (`vision` rounded, as today);
+  - the visibility polygon from (px, py) with radius `sightRadius(vision)` = `(vision + 0.5) × TILE`.
+- `View.is_visible(x, y)`:
+  - **opaque tiles:** the tile FOV (walls and the torches on them, as the mask draws them);
+  - **open tiles:** seen if any of 16 sample points lies inside the polygon. The points form a 4×4 grid at `x × TILE + 2 + 4i`, `y × TILE + 2 + 4j` for i, j in 0..4.
+  - Off-map tiles are never visible.
+- **Point in polygon:** the polygon is star-shaped around the viewer, with its points sorted by angle. A sample point's angle is found by binary search among the ray angles. The point is inside when it lies on the viewer's side of the edge between the two bracketing points (the edge from the last point back to the first closes the circle across ±π).
+- Only open tiles within the polygon's bounding box are tested (about 400 tiles at vision 9).
+
+**Server (`server/src/vispoly.rs`, a port of `client/src/sim/vispoly.ts`):**
+- `wall_segments`, `visibility_polygon`, `sight_radius`, `inside` and `View`.
+- `Player.fov: Fov` becomes `Player.view: View`.
+- `run/visibility.rs` takes a `&View` wherever it took a `&Fov`: `visible`, `seen`, `hero_tile_seen`, `object_sent`, `ev_seen`, `drain_for`.
+- `send_snapshots` computes the view from the viewed hero's **position** (`viewed.pos()`, the spectated teammate when dead) and its vision.
+- Enemy perception (`run/perception.rs`), darkvision (`dark_reach` from the viewer's tile) and the light layers are unchanged.
+
+**Client:**
+- `client/src/sim/view.ts` holds `View`, the same rule as Rust.
+- `LightView` keeps a `View` (`LightView.view`), recomputed when the viewer moves (to 0.1 px), the vision changes or the map changes. Darkness, tint and darkvision use `view.isVisible` (with `wide` off, the old edges: the tile FOV only). `seenForLight` is removed.
+- `VisionMask.update(rect, view)` draws `view`'s polygon and its visible walls; it no longer casts a polygon of its own. Its redraw key is the view's version.
+
+**Shared fixture (`export.rs` → `fixtures.json`, checked by `view.test.ts`):**
+- `view` cases: viewer pixel positions on the fixture map (beside the long wall's end, beside the 3-tile pillar, beside the wall block, on a tile corner, in the open), with the polygon points and the visible tiles.
+- The TypeScript port must give the same visible tiles exactly. Polygon points are compared to 1e-6, because Rust's and V8's `sin`, `cos` and `atan2` may differ in the last bit.
+- The darkvision fixture uses `View` from the tile centre.
+
+**Accepted:** the client computes the view from its predicted (or interpolated) position, the server from its authoritative one. They differ by a few px, so a tile at the very edge can differ for a moment.
