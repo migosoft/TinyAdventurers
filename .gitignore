@@ -3,3 +3,5 @@ target/
 client/dist/
 client/public/assets/
 .env
+images/
+downloaded-assets/
