@@ -6,7 +6,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 **Tier 1: foundations**
 1. **Effect system** (done, built 2026-10-15 on `feature/effects`; follow-ups in "Effect system follow-ups"). Blind, sleep, petrified, slowed, accelerated and the elemental burning, frozen, poisoned; extensible, every creature, effects modify any stat. Spec: [docs/superpowers/specs/2026-10-15-effects-design.md](superpowers/specs/2026-10-15-effects-design.md); TECHNICAL §5 "Status effects", §11 "How to add an effect". The lich casts three effect spells.
 2. **Vision edges:** done (2026-10-16, branch `feature/vision-edges`): straight, crisp shadow edges from a visibility polygon (TECHNICAL §7 "The vision mask").
-3. **Art and licences:** done for the three packs (2026-10-16, see "New enemies"): licences checked, files stored in `client/assets-src/` (`enchanted-forest/`, `fantasy-npcs/`, `forest-animals/`) with licence notes and README credits. Not built into the atlas yet; each figure goes in with the feature that uses it (gnolls, bandit, elves). Still open: the ghost, shadow and sphinx have no free source (ask the user).
+3. **Art and licences:** done for the three packs (2026-10-16, see "New enemies"): licences checked, files stored in `client/assets-src/` (`enchanted-forest/`, `fantasy-npcs/`, `forest-animals/`) with licence notes and README credits. Not built into the atlas yet; each figure goes in with the feature that uses it (gnolls, bandit, elves). The ghost and shadow are postponed (the user, 2026-10-16); the sphinx has no free source either (see "Riddle rooms").
 
 **Tier 2: larger features on top of tier 1**
 
@@ -16,7 +16,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 **Tier 3: content**
 
-7. **Ghost and shadow.** The shadow and the torch-extinguishing enemy use the light system (`is_lit`, `set_light`; see "Lighting follow-ups"). The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
+7. **Ghost and shadow: postponed** (the user, 2026-10-16; no art source yet, see "New enemies"). The shadow and the torch-extinguishing enemy use the light system (`is_lit`, `set_light`; see "Lighting follow-ups"). The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
 8. **Elves and bandits** (see "Elves and bandits"): the Elf entity type and the elven archer (a new playable hero class), then the dark elf. The effect system is built (1), so the elf's sleep immunity is one `EffectResponses` entry (see "Effect system follow-ups"); it still needs the Enchanted Forest licence (3). The bandit (Human) needs only the licence; the dark elf also waits for its art.
 9. **Assassin restyle and thrown knives** (see "Assassin restyle"): dark clothes and hair (maybe a hood), knives instead of arrows with a shorter range. Independent of the items above; vision is built, so the range can be set now.
 10. **Minions for the other bosses; more classes and bosses** (classes are easier after 4).
@@ -75,7 +75,7 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 
 ## New enemies
 - **Ogre (done 2026-10-08):** tune its numbers in the balancing pass (`EnemyType::Ogre` in `defs/enemies.rs`: 260 HP, club 18 dmg / 28 px push, slam radius 34 px, 14 dmg, 24 px push, 5 s cooldown, 0.9 s wind-up; 60 XP, 30 coins). Ideas: a hit frame (the pack has none), more than one ogre in big dungeons.
-- **Ghost and shadow (new):** two new enemy types. The 0x72 pack has neither, so the art has to come from another pack or a CC0 set.
+- **Ghost and shadow (postponed by the user, 2026-10-16):** two new enemy types. The 0x72 pack has neither, so the art has to come from another pack or a CC0 set.
   - Ideas for the ghost: drifts through walls, or turns half transparent and can't be hit for a moment.
   - Ideas for the shadow: hard to see in the dark. It could be the enemy that puts out torches (see "Lighting follow-ups").
 - **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Also approved (2026-10-13): "Forest creatures" by lyaseek (https://lyaseek.itch.io/miniffanimals). Keep a licence note next to the imported art (the pages ship no licence file, so write `LICENSE.txt` with the quotes below and the page URL).
@@ -88,7 +88,7 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
     - `fantasy-npcs/`: `knights.png` and `frames/<figure>/...` in the same scheme.
     - `forest-animals/`: `Outline/` and `Without outline/` sheets (32×32 frames, rows of animations), plus the `.aseprite` sources.
     - **To build a figure in:** every superdark frame is a 32×32 canvas (golem 64×64) with the figure at the bottom, and there are only idle and walk frames (no attack or hit frames, like most 0x72 figures). `client/scripts/build-atlas.ts` reads only the 0x72 sheet plus the dragon, demon and torch folders today, so a loader for these frame folders is needed (trim to the figure's bounds, like the pack's frames). The forest animals are softer and less outlined than the 0x72 look; show a preview next to the heroes before using one.
-  - **Ghost, shadow and sphinx:** no free 0x72-style source found (2026-10-16). Superdark's free NPC pack has none. Paid 16×16 options exist (QuillGrafit "Fantasy Enemy - Ghosts 16x16 px", KrinJL "Ghost"); ask the user before buying anything. Other ways: a recoloured, half-transparent pack figure for the ghost or shadow (a runtime effect, no new art), or self-made art on request.
+  - **Ghost, shadow and sphinx:** no free 0x72-style source found (2026-10-16). Superdark's free NPC pack has none. Paid 16×16 options exist (QuillGrafit "Fantasy Enemy - Ghosts 16x16 px", KrinJL "Ghost"); ask the user before buying anything. Postponed (2026-10-16): pick this up only when the user brings it back. Other ways: a recoloured, half-transparent pack figure for the ghost or shadow (a runtime effect, no new art), or self-made art on request.
 
 ## Elves and bandits
 New entity type and figures, from the user (2026-10-15). Priority item 8. The vision fields are the ones from the vision and darkvision work (vision in tiles, darkvision as a share of vision; Human is 9 tiles, 0).
