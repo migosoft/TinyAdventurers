@@ -2,6 +2,7 @@
 //! search last known position, return home, and A* pathfinding.
 
 use super::abilities::spawn_monster_projectile;
+use super::effects::Creature;
 use super::entities::{AiState, Target, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
@@ -17,8 +18,8 @@ use rand::Rng;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
-/// Nearest living player the monster can see right now.
-pub fn find_visible_player(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
+/// Nearest living hero the monster can see right now.
+pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
     run.players
         .iter()
         .enumerate()
@@ -27,6 +28,19 @@ pub fn find_visible_player(run: &Run, from: Vec2, sight: Sight) -> Option<usize>
         .map(|(i, p)| (i, p.pos().dist(from)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(i, _)| i)
+}
+
+/// Nearest living hero or ally (not sinking) the monster can see right now; a hero wins a tie.
+pub fn find_visible_foe(run: &Run, from: Vec2, sight: Sight) -> Option<Creature> {
+    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive).map(Creature::Player);
+    let allies = (0..run.monsters.len()).filter(|&i| run.monsters[i].is_ally() && run.monsters[i].alive && run.monsters[i].sinking.is_none()).map(Creature::Monster);
+    heroes
+        .chain(allies)
+        .map(|c| (c, run.creature_pos(c)))
+        .filter(|&(_, p)| super::perception::sees(run, sight, from, p))
+        .map(|(c, p)| (c, p.dist(from)))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(c, _)| c)
 }
 
 fn set_anim(run: &mut Run, mi: usize, a: Anim) {
@@ -160,12 +174,15 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
     }
 
     // Perception: only players in sight radius with line of sight count.
-    let seen = find_visible_player(run, pos, sight);
-    if let Some(pi) = seen {
-        let (pid, ppos) = (run.players[pi].id, run.players[pi].pos());
+    let seen = find_visible_foe(run, pos, sight);
+    if let Some(foe) = seen {
+        let (fid, fpos) = (run.creature_id(foe), run.creature_pos(foe));
         let ai = &mut run.monsters[mi].ai;
-        ai.target = Some(Target::Player(pid));
-        ai.last_known = ppos;
+        ai.target = Some(match foe {
+            Creature::Player(_) => Target::Player(fid),
+            Creature::Monster(_) => Target::Ally(fid),
+        });
+        ai.last_known = fpos;
         ai.state = AiState::Chase;
         ai.path.clear();
     } else if run.monsters[mi].ai.target.is_some() {
@@ -198,15 +215,15 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                 .map(|o| o.pos),
             _ => None,
         };
-        if let Some(pi) = seen {
+        if let Some(foe) = seen {
             let attack = if w.alt { def.alt.unwrap_or(def.attack) } else { def.attack };
-            perform_attack(run, mi, pi, attack, w.alt, barrel);
+            perform_attack(run, mi, foe, attack, w.alt, barrel);
         }
         return;
     }
 
     if matches!(etype, EnemyType::Necromancer | EnemyType::Summoner) {
-        if let Some(_pi) = seen {
+        if seen.is_some() {
             let minions = run.monsters.iter().filter(|o| o.alive && o.owner == Some(run.monsters[mi].id)).count();
             if run.monsters[mi].ai.raise_cd <= 0.0 && minions < enemies::NECRO_MAX_MINIONS {
                 raise_minions(run, mi, etype == EnemyType::Summoner);
@@ -217,14 +234,15 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
 
     match run.monsters[mi].ai.state {
         AiState::Chase => {
-            let Some(pi) = seen else { return };
-            let ppos = run.players[pi].pos();
+            let Some(foe) = seen else { return };
+            let ppos = run.creature_pos(foe);
+            let foe_radius = run.creature_radius(foe);
             let d = pos.dist(ppos);
             let aim = pos.angle_to(ppos);
             run.monsters[mi].aim = aim;
             // Reach and wind-up of an attack; movement follows the main attack.
             let reach = |a: AttackStyle| match a {
-                AttackStyle::Melee { range, windup, .. } => (range + PLAYER_RADIUS + def.radius, 0.0, windup),
+                AttackStyle::Melee { range, windup, .. } => (range + foe_radius + def.radius, 0.0, windup),
                 AttackStyle::Ranged { range, preferred, windup, .. } => (range, preferred, windup),
                 AttackStyle::Slam { radius, windup, .. } => (radius, 0.0, windup),
             };
@@ -237,7 +255,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                     AttackStyle::Ranged { .. } => d <= alt_range && d >= enemies::ALT_BOLT_MIN_DIST && d > range,
                     // A slam is worth it for two heroes in reach, or one while the club recovers.
                     AttackStyle::Slam { radius, .. } => {
-                        let near = run.players.iter().filter(|p| p.alive && p.pos().dist(pos) <= radius).count();
+                        let near = run.foes_in(pos, radius, None).len();
                         near >= 2 || near == 1 && run.monsters[mi].ai.cd > 0.0
                     }
                 };
@@ -383,9 +401,9 @@ const ATTACK_GAP: f64 = 0.4;
 
 /// `alt`: the second attack, which has its own cooldown. Either attack also
 /// keeps the other one back for a moment, so they never land at once.
-fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt: bool, at: Option<Vec2>) {
+pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, attack: AttackStyle, alt: bool, at: Option<Vec2>) {
     let pos = run.monsters[mi].pos;
-    let ppos = run.players[pi].pos();
+    let ppos = run.creature_pos(foe);
     let aim = pos.angle_to(at.unwrap_or(ppos));
     run.monsters[mi].aim = aim;
     let set_cd = |run: &mut Run, cd: f64| {
@@ -407,11 +425,11 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt:
         AttackStyle::Melee { range, damage, cooldown, knock, .. } => {
             set_cd(run, cooldown);
             set_anim(run, mi, Anim::Melee);
-            let reach = range + PLAYER_RADIUS + run.monsters[mi].radius + 4.0;
+            let reach = range + run.creature_radius(foe) + run.monsters[mi].radius + 4.0;
             if pos.dist(ppos) <= reach {
                 let dmg = with(Damage::new(damage, run.monsters[mi].melee));
-                run.hurt_player(pi, dmg);
-                run.knock_player(pi, pos, aim, knock);
+                run.hurt_creature(foe, dmg);
+                run.knock_creature(foe, pos, aim, knock);
             }
         }
         AttackStyle::Ranged { projectile, speed, damage, cooldown, range, .. } => {
@@ -431,13 +449,10 @@ fn perform_attack(run: &mut Run, mi: usize, pi: usize, attack: AttackStyle, alt:
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: radius as f32, k: 5 }, Some(pos));
             let dmg = with(Damage::new(damage, run.monsters[mi].melee));
             crate::run::objects::hurt_objects_in(run, pos, radius, None, dmg);
-            for qi in 0..run.players.len() {
-                let q = &run.players[qi];
-                if q.alive && q.pos().dist(pos) <= radius {
-                    let away = pos.angle_to(q.pos());
-                    run.hurt_player(qi, dmg);
-                    run.knock_player(qi, pos, away, knock);
-                }
+            for c in run.foes_in(pos, radius, None) {
+                let away = pos.angle_to(run.creature_pos(c));
+                run.hurt_creature(c, dmg);
+                run.knock_creature(c, pos, away, knock);
             }
         }
     }
@@ -551,7 +566,7 @@ fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, 
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::super::tests::{test_run, test_run_seed};
     use super::*;
     use crate::defs::kinds::EntityKind;
@@ -599,7 +614,7 @@ mod tests {
             let ppos = run.players[0].pos();
             let id = run.spawn_enemy(EnemyType::Chort, ppos - Vec2::new(12.0, 0.0), None, 1);
             let mi = run.monster_idx(id).unwrap();
-            perform_attack(&mut run, mi, 0, enemies::def(EnemyType::Chort).attack, false, None);
+            perform_attack(&mut run, mi, Creature::Player(0), enemies::def(EnemyType::Chort).attack, false, None);
             hp - run.players[0].hp
         };
         assert!((hit(Resistances::NONE) - 9.0).abs() < 1e-9);
@@ -615,7 +630,7 @@ mod tests {
             let mi = run.monster_idx(id).unwrap();
             let d = enemies::def(t);
             let attack = if alt { d.alt.unwrap() } else { d.attack };
-            perform_attack(&mut run, mi, 0, attack, alt, None);
+            perform_attack(&mut run, mi, Creature::Player(0), attack, alt, None);
             run.players[0].mv.knocked()
         };
         assert!(pushes(EnemyType::OrcWarrior, false));
@@ -634,15 +649,15 @@ mod tests {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let ppos = run.players[0].pos();
         // Open line of sight: seen.
-        assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_some());
+        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_some());
         // Wall in between: not seen.
         let (tx, ty) = Map::tile_of(ppos);
         for dy in -3..=3 {
             run.layout.map.set(tx + 1, ty + dy, Tile::Wall);
         }
-        assert!(find_visible_player(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_none());
+        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_none());
         // Out of sight radius: not seen.
-        assert!(find_visible_player(&run, ppos + Vec2::new(0.0, -0.0) + Vec2::new(-200.0, 0.0), SIGHT).is_none());
+        assert!(find_visible_hero(&run, ppos + Vec2::new(0.0, -0.0) + Vec2::new(-200.0, 0.0), SIGHT).is_none());
     }
 
     #[test]
@@ -701,7 +716,7 @@ mod tests {
     }
 
     /// Open floor around player 0, so test monsters always see it.
-    fn open_floor(run: &mut Run) {
+    pub(crate) fn open_floor(run: &mut Run) {
         run.lights.fill(); // these tests are not about darkness
         let (tx, ty) = Map::tile_of(run.players[0].pos());
         for y in ty - 3..=ty + 3 {
@@ -740,7 +755,7 @@ mod tests {
     }
 
     /// Players 0.. stand at `offs` from a lone ogre on open floor, attacks ready.
-    fn ogre_among(offs: &[Vec2]) -> (Run, usize) {
+    pub(crate) fn ogre_among(offs: &[Vec2]) -> (Run, usize) {
         let classes = vec![ClassId::Paladin; offs.len()];
         let mut run = test_run(&classes, BossId::Lich);
         open_floor(&mut run);
@@ -781,7 +796,7 @@ mod tests {
         let hp: Vec<f64> = run.players.iter().map(|p| p.hp).collect();
         let slam = enemies::def(EnemyType::Ogre).alt.unwrap();
         run.events.clear();
-        perform_attack(&mut run, mi, 0, slam, true, None);
+        perform_attack(&mut run, mi, Creature::Player(0), slam, true, None);
         let p = &run.players;
         assert!(p[0].hp < hp[0] && p[0].mv.knock_vx > 0.0 && p[0].mv.knock_vy.abs() < 1e-9, "east hero pushed east");
         assert!(p[1].hp < hp[1] && p[1].mv.knock_vy < 0.0 && p[1].mv.knock_vx.abs() < 1e-9, "north hero pushed north");
@@ -800,7 +815,7 @@ mod tests {
         run.spawn_object(EntityKind::Barrel, at + Vec2::new(0.0, r), ObjState::Barrel(Barrel::new()));
         run.spawn_object(EntityKind::Barrel, at + Vec2::new(0.0, -(r + 10.0)), ObjState::Barrel(Barrel::new()));
         let slam = enemies::def(EnemyType::Ogre).alt.unwrap();
-        perform_attack(&mut run, mi, 0, slam, true, None);
+        perform_attack(&mut run, mi, Creature::Player(0), slam, true, None);
         let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
         assert_eq!(lit, vec![true, false], "the one in reach is lit, the one outside is not");
     }

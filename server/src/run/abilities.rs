@@ -9,6 +9,7 @@ use crate::defs::damage::{kind_split, Damage};
 use crate::defs::effects::OnHit;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::defs::lights::{self, LightKind};
+use super::effects::Creature;
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
 
@@ -73,6 +74,12 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
                 let q = &run.players[qi];
                 if q.alive && q.pos().dist(pos) <= def.radius {
                     total += run.heal_player(qi, def.damage);
+                }
+            }
+            for mi in 0..run.monsters.len() {
+                let m = &run.monsters[mi];
+                if m.is_ally() && m.alive && m.pos.dist(pos) <= def.radius {
+                    total += run.heal_monster(mi, def.damage);
                 }
             }
             run.players[pi].healing += total;
@@ -328,21 +335,23 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         if pr.from_player {
             let hit = run.monsters.iter().position(|m| m.alive && !m.is_ally() && m.shot_dist(pos) < m.radius + pr.radius);
             if let Some(mi) = hit {
-                impact(run, i, pos, Some(mi));
+                impact(run, i, pos, Some(Creature::Monster(mi)));
                 break;
             }
         } else {
-            let hit = run.players.iter().position(|p| p.alive && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius);
-            if let Some(qi) = hit {
-                impact(run, i, pos, Some(qi));
+            // Heroes first, then allies.
+            let hero = run.players.iter().position(|p| p.alive && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius).map(Creature::Player);
+            let ally = || run.monsters.iter().position(|m| m.is_ally() && m.alive && m.sinking.is_none() && m.shot_dist(pos) < m.radius + pr.radius).map(Creature::Monster);
+            if let Some(c) = hero.or_else(ally) {
+                impact(run, i, pos, Some(c));
                 break;
             }
         }
     }
 }
 
-/// Projectile `i` hits something at `pos` (target index on the opposing team, if any).
-fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<usize>) {
+/// Projectile `i` hits something at `pos` (a creature on the opposing team, if any).
+fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
     let (from_player, owner, damage, crit, explode_r, k, knock) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.knock);
@@ -351,12 +360,12 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<usize>) {
         explode(run, pos, explode_r, damage, from_player, src, k, crit, knock);
         return;
     }
-    if let Some(t) = target {
-        if from_player {
-            run.hurt_monster(t, damage, crit, src);
-        } else {
-            run.hurt_player(t, damage);
+    match target {
+        Some(Creature::Monster(mi)) if from_player => {
+            run.hurt_monster(mi, damage, crit, src);
         }
+        Some(c) if !from_player => run.hurt_creature(c, damage),
+        _ => {}
     }
 }
 
@@ -391,16 +400,9 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, from_player: bo
             run.hurt_monster(mi, damage, crit, src);
         }
     } else {
-        let hits: Vec<usize> = run
-            .players
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.alive && p.pos().dist(pos) < r + PLAYER_RADIUS && line_of_sight(&run.layout.map, pos, p.pos()))
-            .map(|(i, _)| i)
-            .collect();
-        for qi in hits {
-            run.hurt_player(qi, damage);
-            run.knock_player(qi, pos, 0.0, knock);
+        for c in run.foes_touching(pos, r, true) {
+            run.hurt_creature(c, damage);
+            run.knock_creature(c, pos, 0.0, knock);
         }
     }
     let by = src.map(|pi| run.players[pi].id);

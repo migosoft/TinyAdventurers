@@ -128,7 +128,7 @@ pub fn hurt_object(run: &mut Run, oi: usize, dmg: Damage, by: Option<u32>) {
 }
 
 /// Objects whose footprint an area attack at `at` with reach `r` touches,
-/// optionally within a cone `(direction, half angle)`; like `bosses::players_in`.
+/// optionally within a cone `(direction, half angle)`; like `Run::foes_in`.
 pub fn objects_in(run: &Run, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<usize> {
     run.objects
         .iter()
@@ -303,16 +303,11 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: BOOM_BARREL }, Some(pos));
     run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
     let map = &run.layout.map;
-    let heroes: Vec<usize> = (0..run.players.len())
-        .filter(|&i| {
-            let p = &run.players[i];
-            p.alive && p.pos().dist(pos) < r + PLAYER_RADIUS && line_of_sight(map, pos, p.pos())
-        })
-        .collect();
+    let foes = run.foes_touching(pos, r, true);
     let monsters: Vec<usize> = (0..run.monsters.len())
         .filter(|&i| {
             let m = &run.monsters[i];
-            m.alive && m.pos.dist(pos) < r + m.radius && line_of_sight(map, pos, m.pos)
+            m.alive && !m.is_ally() && m.pos.dist(pos) < r + m.radius && line_of_sight(map, pos, m.pos)
         })
         .collect();
     let barrels: Vec<usize> = (0..run.objects.len())
@@ -321,9 +316,9 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
             i != oi && !q.gone && q.pos.dist(pos) < r + q.radius && line_of_sight(map, pos, q.pos)
         })
         .collect();
-    for qi in heroes {
-        run.hurt_player(qi, dmg);
-        run.knock_player(qi, pos, 0.0, knock);
+    for c in foes {
+        run.hurt_creature(c, dmg);
+        run.knock_creature(c, pos, 0.0, knock);
     }
     for mi in monsters {
         run.hurt_monster(mi, dmg, false, src);

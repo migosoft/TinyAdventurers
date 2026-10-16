@@ -3,7 +3,7 @@
 //! recovery, so the client plays wind-up, strike and recovery frames.
 
 use crate::run::objects::hurt_objects_in;
-use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
+use super::{boss_idx, set_anim, target, BossBehaviour};
 use crate::defs::bosses::{DEMON_CLEAVE_KNOCK, DEMON_CLEAVE_RECOVER, DEMON_CLEAVE_WINDUP, DEMON_ENRAGED_PACE, DEMON_RING_RECOVER, DEMON_RING_WINDUP, DEMON_SWOOP_KNOCK, DEMON_SWOOP_RECOVER, DEMON_SWOOP_TIME, DEMON_SWOOP_WINDUP};
 use crate::defs::damage::Damage;
 use crate::defs::kinds::{Anim, EntityKind};
@@ -67,12 +67,12 @@ impl BossBehaviour for Demon {
                     let pos = run.monsters[bi].pos;
                     let reach = run.monsters[bi].radius + 8.0;
                     hurt_objects_in(run, pos, reach, None, Damage::new(30.0, run.monsters[bi].melee));
-                    for pi in players_in(run, pos, reach, None) {
-                        let id = run.players[pi].id;
+                    for c in run.foes_in(pos, reach, None) {
+                        let id = run.creature_id(c);
                         if !self.swoop_hit.contains(&id) {
                             self.swoop_hit.push(id);
-                            run.hurt_player(pi, Damage::new(30.0, run.monsters[bi].melee));
-                            run.knock_player(pi, pos, self.swoop_dir.angle(), DEMON_SWOOP_KNOCK);
+                            run.hurt_creature(c, Damage::new(30.0, run.monsters[bi].melee));
+                            run.knock_creature(c, pos, self.swoop_dir.angle(), DEMON_SWOOP_KNOCK);
                         }
                     }
                 }
@@ -87,9 +87,9 @@ impl BossBehaviour for Demon {
             match action {
                 Action::Cleave => {
                     hurt_objects_in(run, pos, CLEAVE_RANGE + 6.0, Some((aim, 1.05)), Damage::new(25.0, run.monsters[bi].melee));
-                    for pi in players_in(run, pos, CLEAVE_RANGE + 6.0, Some((aim, 1.05))) {
-                        run.hurt_player(pi, Damage::new(25.0, run.monsters[bi].melee));
-                        run.knock_player(pi, pos, aim, DEMON_CLEAVE_KNOCK);
+                    for c in run.foes_in(pos, CLEAVE_RANGE + 6.0, Some((aim, 1.05))) {
+                        run.hurt_creature(c, Damage::new(25.0, run.monsters[bi].melee));
+                        run.knock_creature(c, pos, aim, DEMON_CLEAVE_KNOCK);
                     }
                     self.action = Some((Action::Recover, DEMON_CLEAVE_RECOVER));
                 }

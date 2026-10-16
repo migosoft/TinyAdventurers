@@ -122,6 +122,8 @@ pub struct Windup {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Target {
     Player(u32),
+    /// An ally monster (the Ranger's wolf).
+    Ally(u32),
     Object(u32),
     #[allow(dead_code)] // for torches and the carriage
     Place(Vec2),

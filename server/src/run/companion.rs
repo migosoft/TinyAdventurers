@@ -104,6 +104,7 @@ mod tests {
     use crate::math::Vec2;
     use crate::protocol::{BossId, ClassId, Ev};
     use crate::run::abilities::{dagger_target, dash_contact, tick_projectiles, try_use};
+    use crate::run::effects::Creature;
     use crate::run::tests::test_run;
     use crate::run::visibility::{dark_range, snapshot_ents, Dark};
     use crate::run::{Run, DT};
@@ -251,5 +252,150 @@ mod tests {
         run.hurt_monster(mi, Damage::physical(5.0), false, None);
         let i = run.events.iter().position(|(e, _)| matches!(e, Ev::Dmg { p: true, .. })).expect("a hero-style Dmg");
         assert!(run.on_hero.contains(&i));
+    }
+    /// Open floor and light around hero 0, 14 tiles east and 3 tiles up and down; hero 0 in debug mode.
+    fn lit_arena(run: &mut Run) {
+        crate::run::ai::tests::open_floor(run);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for y in ty - 3..=ty + 3 {
+            for x in tx - 8..=tx + 14 {
+                run.layout.map.set(x, y, Tile::Floor);
+            }
+        }
+        run.lights.fill();
+        run.players[0].debug = true;
+    }
+
+    #[test]
+    fn an_orc_attacks_the_wolf_when_it_is_the_nearest_foe() {
+        use crate::defs::enemies::EnemyType;
+        let (mut run, id) = ranger_with_wolf();
+        lit_arena(&mut run);
+        // The ranger is 9 tiles away, beyond the orc's sight; the wolf stands 20 px from it.
+        let far = run.players[0].pos() + Vec2::new(9.0 * crate::dungeon::TILE, 0.0);
+        let mi = wolf_idx(&run, id);
+        run.monsters[mi].pos = far;
+        let orc = run.spawn_enemy(EnemyType::OrcWarrior, far + Vec2::new(20.0, 0.0), None, 1);
+        for _ in 0..120 {
+            run.step();
+        }
+        assert!(run.monsters[wolf_idx(&run, id)].hp < 80.0, "the orc hurt the wolf");
+        let oi = run.monster_idx(orc).unwrap();
+        assert_eq!(run.monsters[oi].ai.target, Some(crate::run::entities::Target::Ally(id)));
+    }
+
+    #[test]
+    fn an_enemy_arrow_hits_the_wolf() {
+        let (mut run, id) = ranger_with_wolf();
+        lit_arena(&mut run);
+        let mi = wolf_idx(&run, id);
+        let at = run.players[0].pos() + Vec2::new(6.0 * crate::dungeon::TILE, 0.0);
+        run.monsters[mi].pos = at;
+        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::Arrow, at - Vec2::new(30.0, 0.0), Vec2::new(1.0, 0.0), 180.0, 7.0, 2.0, 0.0, 0, 0.0);
+        for _ in 0..40 {
+            tick_projectiles(&mut run, DT);
+        }
+        let hp = run.monsters[wolf_idx(&run, id)].hp;
+        assert!((hp - 73.0).abs() < 1e-9, "the arrow's 7 damage, got hp {hp}");
+        assert!(run.projectiles.iter().all(|p| p.dead), "and it stopped there");
+    }
+
+    #[test]
+    fn area_attacks_hit_the_wolf() {
+        use crate::defs::enemies::{self, EnemyType};
+        use crate::run::objects::{explode_barrel, Barrel, ObjState};
+        // The ogre's slam.
+        let (mut run, oi) = crate::run::ai::tests::ogre_among(&[Vec2::new(200.0, 0.0)]);
+        let id = spawn_wolf(&mut run, 0);
+        let wi = wolf_idx(&run, id);
+        run.players[0].debug = true;
+        run.monsters[wi].pos = run.monsters[oi].pos + Vec2::new(enemies::OGRE_SLAM_RADIUS - 4.0, 0.0);
+        let slam = enemies::def(EnemyType::Ogre).alt.unwrap();
+        crate::run::ai::perform_attack(&mut run, oi, Creature::Monster(wi), slam, true, None);
+        let w = &run.monsters[wolf_idx(&run, id)];
+        assert!(w.hp < 80.0, "the slam hurt the wolf");
+        assert!(w.knock.x > 0.0, "and pushed it away from the ogre");
+
+        // A fire patch.
+        let (mut run, id) = ranger_with_wolf();
+        lit_arena(&mut run);
+        let at = run.monsters[wolf_idx(&run, id)].pos + Vec2::new(5.0 * crate::dungeon::TILE, 0.0);
+        let wi = wolf_idx(&run, id);
+        run.monsters[wi].pos = at;
+        run.spawn_hazard(EntityKind::FirePatch, at, 10.0, 2.0, 5.0);
+        for _ in 0..30 {
+            run.step();
+        }
+        assert!(run.monsters[wolf_idx(&run, id)].hp < 80.0, "the fire burned the wolf within half a second");
+
+        // A barrel blast.
+        let (mut run, id) = ranger_with_wolf();
+        lit_arena(&mut run);
+        let wi = wolf_idx(&run, id);
+        let at = run.players[0].pos() + Vec2::new(5.0 * crate::dungeon::TILE, 0.0);
+        run.monsters[wi].pos = at;
+        run.spawn_object(EntityKind::Barrel, at - Vec2::new(10.0, 0.0), ObjState::Barrel(Barrel::new()));
+        let bi = run.objects.len() - 1;
+        explode_barrel(&mut run, bi);
+        let w = &run.monsters[wolf_idx(&run, id)];
+        assert!(w.hp < 80.0 && w.knock.x > 0.0, "the blast hurt and pushed the wolf");
+    }
+
+    #[test]
+    fn a_bosses_area_attack_hits_the_wolf_but_the_boss_targets_heroes() {
+        use crate::defs::bosses::{LICH_NOVA_DAMAGE, LICH_NOVA_RADIUS};
+        let (mut run, bi) = crate::run::bosses::lich::tests::lich_with(&[Vec2::new(0.0, 4.0 * crate::dungeon::TILE)]);
+        let boss_pos = run.monsters[bi].pos;
+        let id = spawn_wolf(&mut run, 0);
+        let wi = wolf_idx(&run, id);
+        run.monsters[wi].pos = boss_pos + Vec2::new(LICH_NOVA_RADIUS - 10.0, 0.0);
+        crate::run::bosses::lich::Lich::nova(&mut run, boss_pos);
+        let hp = run.monsters[wolf_idx(&run, id)].hp;
+        assert!((hp - (80.0 - LICH_NOVA_DAMAGE * 0.9)).abs() < 1e-9, "magical resistance 10 %: hp {hp}");
+        // The boss sees the wolf (it is nearer than the hero) but targets the hero.
+        let seen = crate::run::bosses::target(&run, bi);
+        assert_eq!(seen.map(|t| t.0), Some(0));
+    }
+
+    #[test]
+    fn holy_light_heals_the_wolf_and_counts_as_healing() {
+        let (mut run, id) = run_with_wolf_beside(&[ClassId::ElvenRanger, ClassId::Paladin], 1, 20.0);
+        let wi = wolf_idx(&run, id);
+        run.monsters[wi].hp = 40.0;
+        run.events.clear();
+        try_use(&mut run, 1, AbilityId::Heal, 1, false);
+        assert_eq!(run.monsters[wolf_idx(&run, id)].hp, 75.0);
+        assert_eq!(run.players[1].healing, 35.0);
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Heal { v, p: true, .. } if *v == 35.0)));
+    }
+
+    #[test]
+    fn a_wolf_blown_into_deep_water_drowns_without_paying_and_starts_the_wait() {
+        use crate::run::objects::{explode_barrel, Barrel, ObjState};
+        let (mut run, id) = ranger_with_wolf();
+        lit_arena(&mut run);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for x in tx + 7..=tx + 9 {
+            run.layout.map.set(x, ty, Tile::DeepWater);
+        }
+        let wi = wolf_idx(&run, id);
+        let at = Map::center_of(tx + 6, ty);
+        run.monsters[wi].pos = at;
+        run.spawn_object(EntityKind::Barrel, at - Vec2::new(10.0, 0.0), ObjState::Barrel(Barrel::new()));
+        let bi = run.objects.len() - 1;
+        run.events.clear();
+        explode_barrel(&mut run, bi);
+        for _ in 0..8 {
+            run.step();
+        }
+        assert!(run.monsters[wolf_idx(&run, id)].sinking.is_some(), "it went into the water");
+        for _ in 0..240 {
+            run.step();
+        }
+        assert!(run.monsters.iter().all(|m| m.id != id || !m.alive), "the wolf is gone");
+        let p = &run.players[0];
+        assert!(p.xp == 0 && p.coins == 0 && p.kills == 0);
+        assert_eq!(p.wolf, None);
+        assert!(p.cd2 > 55.0 && p.cd2 <= 60.0, "the wait for the next wolf started: {}", p.cd2);
     }
 }

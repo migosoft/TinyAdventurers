@@ -759,11 +759,8 @@ impl Run {
             }
             h.pulse_t = 0.5;
             let (pos, r, dmg) = (h.pos, h.radius, h.damage);
-            for pi in 0..self.players.len() {
-                let p = &self.players[pi];
-                if p.alive && p.pos().dist(pos) < r + classes::PLAYER_RADIUS {
-                    self.hurt_player(pi, dmg);
-                }
+            for c in self.foes_touching(pos, r, false) {
+                self.hurt_creature(c, dmg);
             }
             objects::hurt_objects_in(self, pos, r, None, dmg);
         }
@@ -848,6 +845,81 @@ impl Run {
         let pos = p.pos();
         if healed > 0.0 {
             self.event_on_hero(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: true }, pos);
+        }
+        healed
+    }
+
+    /// Living heroes and living allies (not sinking) whose centre is within `r` of `at`, optionally inside a cone (dir, half-angle). Heroes first.
+    pub fn foes_in(&self, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<effects::Creature> {
+        let inside = |p: Vec2| p.dist(at) <= r && cone.map_or(true, |(dir, half)| crate::math::angle_diff(at.angle_to(p), dir).abs() <= half);
+        let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && inside(p.pos())).map(|(i, _)| effects::Creature::Player(i));
+        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.is_ally() && m.alive && m.sinking.is_none() && inside(m.pos)).map(|(i, _)| effects::Creature::Monster(i));
+        heroes.chain(allies).collect()
+    }
+
+    /// Living heroes within r + PLAYER_RADIUS and allies within r + radius of `at`; with `los`, only those in line of sight.
+    pub fn foes_touching(&self, at: Vec2, r: f64, los: bool) -> Vec<effects::Creature> {
+        let reach = |p: Vec2, radius: f64| p.dist(at) < r + radius && (!los || crate::collision::line_of_sight(&self.layout.map, at, p));
+        let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && reach(p.pos(), classes::PLAYER_RADIUS)).map(|(i, _)| effects::Creature::Player(i));
+        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.is_ally() && m.alive && m.sinking.is_none() && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
+        heroes.chain(allies).collect()
+    }
+
+    pub fn creature_pos(&self, c: effects::Creature) -> Vec2 {
+        match c {
+            effects::Creature::Player(i) => self.players[i].pos(),
+            effects::Creature::Monster(i) => self.monsters[i].pos,
+        }
+    }
+
+    pub fn creature_id(&self, c: effects::Creature) -> u32 {
+        match c {
+            effects::Creature::Player(i) => self.players[i].id,
+            effects::Creature::Monster(i) => self.monsters[i].id,
+        }
+    }
+
+    /// The body radius a melee reach is measured to.
+    pub fn creature_radius(&self, c: effects::Creature) -> f64 {
+        match c {
+            effects::Creature::Player(_) => classes::PLAYER_RADIUS,
+            effects::Creature::Monster(i) => self.monsters[i].radius,
+        }
+    }
+
+    /// An enemy attack on a hero or an ally (no hero is the source).
+    pub fn hurt_creature(&mut self, c: effects::Creature, dmg: Damage) {
+        match c {
+            effects::Creature::Player(i) => self.hurt_player(i, dmg),
+            effects::Creature::Monster(i) => {
+                self.hurt_monster(i, dmg, false, None);
+            }
+        }
+    }
+
+    pub fn knock_creature(&mut self, c: effects::Creature, from: Vec2, fallback: f64, dist: f64) {
+        match c {
+            effects::Creature::Player(i) => self.knock_player(i, from, fallback, dist),
+            effects::Creature::Monster(i) => self.knock_monster(i, from, dist),
+        }
+    }
+
+    /// Heals monster `mi` up to its maximum; returns what it gained. Shown like a hero's heal for an ally.
+    pub fn heal_monster(&mut self, mi: usize, amount: f64) -> f64 {
+        let m = &mut self.monsters[mi];
+        if !m.alive {
+            return 0.0;
+        }
+        let healed = amount.min(m.max_hp - m.hp).max(0.0);
+        m.hp += healed;
+        let (pos, ally) = (m.pos, m.is_ally());
+        if healed > 0.0 {
+            let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
+            if ally {
+                self.event_on_hero(ev, pos);
+            } else {
+                self.event(ev, Some(pos));
+            }
         }
         healed
     }
