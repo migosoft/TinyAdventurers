@@ -288,7 +288,7 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
     - its HP does not scale with the party;
     - placed by `companion::spot_beside(run, pos) -> Vec2`, the first of 8 points 12 px around `pos` (east first, then clockwise) that is not `blocks_at(_, Mover::Enemy)` and is clear of solid objects, else `pos`;
     - sets `players[pi].wolf`;
-    - sends `Ev::Boom { k: 8, r: 10 }` (the green puff) party-wide.
+    - sends `Ev::Boom { k: 9, r: 10 }` (the green puff) party-wide.
   - `companion::wolf_died(run: &mut Run, mi: usize)`:
     - `alive = false`, then `Ev::Died` party-wide (`None`);
     - `Ev::Msg "{name}'s wolf has fallen"`;
@@ -308,7 +308,7 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
     - `res.get(Cold) == 0.2`, `res.get(Poison) == 0.1`, `res.get(Magical) == 0.1`;
     - `responses.get(Sleep) == Immune`;
     - `ally.owner == run.players[0].id` and `run.players[0].wolf == Some(id)`;
-    - a `Boom { k: 8, .. }` event exists.
+    - a `Boom { k: 9, .. }` event exists.
   - `no_hero_attack_hurts_the_wolf`: one block per attack, each with a fresh run, the wolf placed 10 px east of the hero:
     - the dagger (`try_use(CrossbowDagger)`): `dagger_target` is `None` and a bolt is fired;
     - a bolt fired straight through the wolf;
@@ -405,7 +405,7 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
 **Interfaces:**
 - Produces:
   - `companion::use_ability(run: &mut Run, pi: usize)`: with no wolf, `spawn_wolf`; with a wolf alive, `heal_monster(wolf, WOLF_HP × WOLF_HEAL_SHARE)`. A heal at full HP still uses the ability and its cooldown. `try_use` already refuses while `cd2` runs, which covers the 60 s wait.
-  - `companion::vanish_orphans(run: &mut Run)`: every ally whose owner is not a living hero (fallen, sinking to death, or left) is removed at once: `alive = false`, an `Ev::Boom { k: 8 }` puff party-wide, the owner's `wolf = None`. No `Died` event, no message, no cooldown.
+  - `companion::vanish_orphans(run: &mut Run)`: every ally whose owner is not a living hero (fallen, sinking to death, or left) is removed at once: `alive = false`, an `Ev::Boom { k: 9 }` puff party-wide, the owner's `wolf = None`. No `Died` event, no message, no cooldown.
 
 - [ ] **Step 1: Write the failing tests** in `run/companion.rs` tests. One input per step, as the existing `walk` helper sends them: push `InputMsg { seq, secondary: Some(n), .. }`.
   - `right_click_summons_then_heals_and_the_wolf_never_doubles`:
@@ -417,7 +417,7 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
   - `after_the_wolf_falls_the_button_waits_60_s_then_summons`: kill the wolf, press: no wolf. Step `60 × 60` ticks and press: a new wolf.
   - `two_rangers_each_keep_their_own_wolf` (Review Focus 1): use `test_run(&[ElvenRanger, ElvenRanger], …)`. Both press: two wolves with owners `players[0].id` and `players[1].id`. Hurt wolf A; ranger B presses (after `cd2 = 0`): wolf A's HP is unchanged and B's wolf is healed (it was full: unchanged, but B's `cd2 ≈ 8`).
   - `the_wolf_vanishes_when_its_ranger_falls_or_leaves` (Review Focus 2):
-    - ranger 1 falls (`hurt_player` with 999 damage): after one `step`, its wolf is gone, a `Boom { k: 8 }` was sent, no `"wolf has fallen"` message, `xp == 0`;
+    - ranger 1 falls (`hurt_player` with 999 damage): after one `step`, its wolf is gone, a `Boom { k: 9 }` was sent, no `"wolf has fallen"` message, `xp == 0`;
     - ranger 2 sends `RunCmd::Leave`: same result;
     - a dead ranger's secondary input is ignored (no wolf comes back).
 - [ ] **Step 2: Run them** with `… cargo test --release companion`. Expected: they do not compile (`SummonWolf` is unknown).
@@ -441,7 +441,7 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
   1. **Ranger.** Find the owner; if they are missing, return (`vanish_orphans` handles it next tick).
   2. **Reappear.**
      - Every 0.5 s (`ally.reach_t`), check that the ranger can be reached: `walk_line(map, wolf, ranger, Mover::Enemy) || astar(map, wolf, ranger, 2500, Mover::Enemy).is_some()`.
-     - If the wolf is farther than `WOLF_REAPPEAR` from the ranger, or cannot reach them, it moves to `spot_beside(ranger)`. It clears its path, wind-up, prey, growl step and knockback, and sends a `Boom { k: 8 }` puff party-wide.
+     - If the wolf is farther than `WOLF_REAPPEAR` from the ranger, or cannot reach them, it moves to `spot_beside(ranger)`. It clears its path, wind-up, prey, growl step and knockback, and sends a `Boom { k: 9 }` puff party-wide.
      - This covers the sealed boss door: `DoorClosed` blocks the path.
   3. **Timers.** Count down `ai.cd`, `ally.dash_cd`, `ally.growl_cd` and `ally.hold`.
   3a. **Dash in progress.** While `ally.dash` is set, move along `dir` at `WOLF_DASH_SPEED` with `collision::move_box(…, Mover::Dash, &solids)` (it crosses chasms), `Anim::Dash`, and count down `left`.
@@ -484,7 +484,7 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
   - `the_wolf_fights_back`: an orc 16 px from the wolf and 60 px from the ranger. Within 120 ticks the orc has lost HP.
   - `the_wolf_never_bites_dormant_or_hiding_monsters`: a dormant boss (the lich's hall, `lich_with` pattern) and a hiding mimic, each 20 px from the ranger. After 120 ticks both have full HP and keep their state.
   - `the_wolf_reappears_beside_the_ranger_when_far_or_locked_out`:
-    - teleport the ranger 250 px away: within one tick the wolf is within 16 px of them and a `Boom { k: 8 }` was sent;
+    - teleport the ranger 250 px away: within one tick the wolf is within 16 px of them and a `Boom { k: 9 }` was sent;
     - then, inside the boss hall, close the door (`check_arena` with the ranger inside and the wolf outside the door): within 0.5 s + 1 tick the wolf is inside the hall (`arena.contains`).
   - `only_heroes_wake_the_boss_open_chests_and_reveal_mimics` (Review Focus 4): the wolf alone in the boss hall (the ranger outside) for 60 ticks leaves the boss `dormant` and the door open. The wolf standing on a chest leaves it `opened: None`. The wolf next to a hiding mimic leaves it `hiding`.
   - `a_frozen_wolf_does_nothing_and_a_sleep_never_takes`: `apply_effect(Creature::Monster(wolf), Frozen, Some(1.0))` stops it from moving for 1 s; `apply_effect(…, Sleep, …)` returns `false`.
@@ -580,7 +580,7 @@ it('trims the eight wolf frames to one box with the feet on the bottom row', () 
     - `text()` takes an optional `stroke` colour;
     - `natureSparkles(x, y, r)`: about 18 clear-green sparks, `0x60f070` / `0xc0ffb0`, rising and fading over 0.6 s. This is not the poison tint.
   - `client/src/game/GameScene.ts`:
-    - `Boom k === 8` → `natureSparkles`;
+    - `Boom k === 9` → `natureSparkles`;
     - `case 'Growl'`: `fx.text(wolf.x, wolf.y - 14, 'grrrr', '#e8e0d0', false, DEPTH.sound, '#d8d0e0')` and `views.get(id)?.shake(0.4)`;
     - wolf bars on `heroBars`: `const hero = isPlayerKind(e.kind) || isAllyKind(e.kind)`;
     - the dagger-prediction filter excludes `isAllyKind`;
@@ -590,7 +590,7 @@ it('trims the eight wolf frames to one box with the feet on the bottom row', () 
   - `client/src/game/status.ts` `sleep()`: the "Z" moves to `DEPTH.sound` with stroke `'#d8d0e0'`. The sound rule covers sleeping sounds.
 
 **Interfaces:**
-- Consumes: `KIND.DireWolf`, `isAllyKind`, `FIGURES[KIND.DireWolf]` (Task 10), `{ t: 'Growl', id }` (Task 9), `Boom k: 8` (Task 5).
+- Consumes: `KIND.DireWolf`, `isAllyKind`, `FIGURES[KIND.DireWolf]` (Task 10), `{ t: 'Growl', id }` (Task 9), `Boom k: 9` (Task 5).
 
 - [ ] **Step 1: Write the failing tests:**
   - `client/src/game/status.test.ts`: `it('draws the sleep Z above the darkness with a light outline')`. Drive `sleep(true, …)` past `Z_EVERY` with the existing test scene stub and assert the Z text's depth is `DEPTH.sound` and its stroke is `'#d8d0e0'`.
