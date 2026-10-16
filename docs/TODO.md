@@ -10,6 +10,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 **Tier 2: larger features on top of tier 1**
 
+4a. **Elven Ranger and the Dire Wolf** (next; replaces the Assassin restyle, the user, 2026-10-16): the Assassin becomes the **Elven Ranger** (entity type Elf, same art and primary); Hide is removed; the new secondary summons a **Dire Wolf** (entity type Magical Beast), the first allied creature, which guards the ranger, growls at enemies it detects and can be healed and killed. Also a new monster state **hiding** (the mimic, split from dormant) and the rule that sound text shows above the darkness. Spec: [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](superpowers/specs/2026-10-16-elven-ranger-design.md) (settled, builder-checked). **Next step: the implementation plan** (superpowers:writing-plans). Later summons (bear, forest guardian, several companions) come through progression.
 4. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
 5. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
 6. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
@@ -17,8 +18,8 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 **Tier 3: content**
 
 7. **Ghost and shadow: postponed** (the user, 2026-10-16; no art source yet, see "New enemies"). The shadow and the torch-extinguishing enemy use the light system (`is_lit`, `set_light`; see "Lighting follow-ups"). The ghost needs a movement rule that passes through walls and a decision on how a monster inside a wall tile is handled by visibility filtering.
-8. **Elves and bandits** (see "Elves and bandits"): the Elf entity type and the elven archer (a new playable hero class), then the dark elf. The effect system is built (1), so the elf's sleep immunity is one `EffectResponses` entry (see "Effect system follow-ups"); it still needs the Enchanted Forest licence (3). The bandit (Human) needs only the licence; the dark elf also waits for its art.
-9. **Assassin restyle and thrown knives** (see "Assassin restyle"): dark clothes and hair (maybe a hood), knives instead of arrows with a shorter range. Independent of the items above; vision is built, so the range can be set now.
+8. **Bandits and the dark elf** (see "Elves and bandits"): the Elf entity type and the elven archer come with 4a (the Elven Ranger is the elven archer, the user, 2026-10-16). The bandit (Human) needs only its art built in; the dark elf (Elf) waits for its art.
+9. **Assassin restyle: dropped** (the user, 2026-10-16): the Assassin becomes the Elven Ranger instead (4a).
 10. **Minions for the other bosses; more classes and bosses** (classes are easier after 4).
 11. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources. Pillars (see "Pillars") also carry torches; the vision edges give them their shadows.
 12. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
@@ -92,16 +93,13 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 
 ## Elves and bandits
 New entity type and figures, from the user (2026-10-15). Priority item 8. The vision fields are the ones from the vision and darkvision work (vision in tiles, darkvision as a share of vision; Human is 9 tiles, 0).
-- **Elf (new entity type):** damage resistance poison 10 %; vision 200 % of Human (18 tiles); darkvision 1/3; **immune to the sleep effect**, so it waits for the effect system (priority 1).
-- **Elven archer (new hero class, playable):** an Elf with the default attack damage type. As a class it needs a `defs/classes.rs` entry (HP, speed, primary and secondary ability), a visual entry in `client/src/game/anim/defs.ts` and a lobby entry; the heroes are Human today, so the class must carry its entity type (Elf) into the hero's resistances and vision. Its abilities are still to design (a bow primary fits; see "New abilities", priority 4). Art: the male wood elf from "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters; licence check first, priority 3).
+- **Elf (new entity type):** damage resistance poison 10 %; vision 200 % of Human (18 tiles); darkvision 1/3; **immune to the sleep effect**, so it waits for the effect system (priority 1). Built with 4a (Elven Ranger).
+- **Elven archer:** is the **Elven Ranger** (4a, the user, 2026-10-16), the former Assassin with its `elf_m` art; no second elf class. The wood-elf art is not needed for it.
 - **Bandit (new enemy):** entity type Human, no adjustments. Art from the same pack. Needs only the licence, not the effect system.
 - **Dark elf (new enemy):** entity type Elf, with a per-entity adjustment: darkvision 100 % of its vision range. The user will provide the art later.
 
 ## Assassin restyle
-From the user (2026-10-15). Priority item 9. Today the Assassin is the pack's `elf_m` with a bow (`anim/defs.ts`, `ui/classes.ts`) and the `CrossbowDagger` primary (`defs/abilities.rs`: 260 px range, 290 px/s, with an automatic dagger stab in melee).
-- **Look:** dark clothes (black, grey or purple) and dark hair. A palette recolour at atlas build time works like the summoner's (`RECOLORS` in `client/scripts/build-atlas.ts`). A **hood** needs pixel edits to the frames, so ask the user first (art rule: self-made art only on request), or find a hooded figure in the pack, a CC0 set or Enchanted Forest.
-- **Elf look:** the elven archer (priority 8) will be the real elf, so the Assassin moving away from the `elf_m` look also keeps the two classes apart.
-- **Thrown knives instead of arrows:** the projectile is drawn as a spinning knife (`weapon_knife` is already the melee weapon), with no bow in hand. The range drops to between half and 2/3 of the Assassin's vision: with Human vision (9 tiles, 144 px) that is 72 to 96 px, against 260 px today. Change the ability's range on the server; the client's prediction and the cosmetic shot follow it. A shorter range is a big nerf, so look at damage and cooldown in the balancing pass.
+Dropped (the user, 2026-10-16). The Assassin's art is an elf, so the class becomes the Elven Ranger (priority 4a; spec [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](superpowers/specs/2026-10-16-elven-ranger-design.md)). The dark clothes, the hood and the thrown knives are not planned any more.
 
 ## Damage-type system
 Built 2026-10-14 (TECHNICAL §5, "Damage model"): five types (physical, cold, heat, magical, poison), a split per attack, resistances from entity types plus per-entity adjustments, one formula (`resolve`), coloured damage numbers and "immune". What is left:

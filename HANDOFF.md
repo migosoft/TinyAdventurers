@@ -11,11 +11,62 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Next session
 
-The straight vision edges (TODO priority 2) are **merged into `main` and pushed** (2026-10-16, at the user's request; the server now sees by the same polygon as the client draws, see "Last feature" below). **The user played it and approved the look** (2026-10-16: "I like the new edges design"). Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons.
+**Next: write the implementation plan for the Elven Ranger** (TODO priority 4a) with superpowers:writing-plans, from the settled spec [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](docs/superpowers/specs/2026-10-16-elven-ranger-design.md). Save it as `docs/superpowers/plans/2026-10-16-elven-ranger.md`, then let the user review it and choose the execution method (subagent-driven or native). Brainstorming is done; do not reopen decisions the spec records as the user's. See "Elven Ranger (designed 2026-10-16)" below for the decisions and the code map.
 
-1. **Next: TODO priority 4** (new abilities, then loadouts, then a way to spend coins; abilities can give Slowed and Accelerated a source). Start with superpowers:brainstorming.
+1. **Then: TODO priority 4** (new abilities for the other classes, then loadouts, then a way to spend coins). The ranger's wolf is the first new ability.
 2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
 3. **Server load** (new TODO priority 16, tier 4, section "Server performance follow-ups", 2026-10-16): measure, then cache each hero's view while nothing changed and share it with spectators. The views are estimated to be most of a run's CPU. Before any public launch; not urgent while play is private.
+
+Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons. The vision edges are merged, pushed and approved by the user ("I like the new edges design").
+
+## Elven Ranger (designed 2026-10-16, not built)
+
+**How it came about:** the user wanted the Assassin restyle (TODO item 9) pulled forward, then decided instead: the Assassin's art is an elf, so the class becomes the **Elven Ranger** and the restyle (hood, dark clothes, thrown knives) is dropped. The Elven Ranger **is** the "elven archer" of TODO item 8. Built nothing yet; only the spec, TODO and this handoff changed.
+
+**Decided by the user (all in the spec):**
+- **The class:** `elf_m` art, HP 90, speed 80, primary `CrossbowDagger` unchanged. Entity type **Elf**: 10 % poison, vision 18 tiles, darkvision 1/3, immune to Sleep.
+- **Hide goes completely** (it may come back later as an "invisibility" effect).
+- **Saved characters are wiped** (test data only).
+- **Secondary "Summon Companion: Dire Wolf":**
+  - With no wolf, it summons one with a nice green sparkle puff (not poison green).
+  - With the wolf alive, it heals it for 20 % and starts the 8 s cooldown.
+  - When the wolf dies, a 60 s cooldown starts.
+  - There is only ever one wolf.
+- **Magical Beast** (new entity type): 10 % poison, 10 % magical, immune to Sleep, attacks 80 % physical / 20 % magical, vision 18, darkvision 100 %.
+- **The wolf:** extra 20 % cold resistance (its fur), 80 HP, a bite of 10 every 0.9 s with an 8 px push, speed 88. Art: Superdark's Enchanted Forest `Wolf` (CC0).
+- **Its behaviour:**
+  - It **guards**: it stays close and bites whatever comes near the ranger.
+  - Enemies can attack and kill it.
+  - Holy Light heals it.
+  - It is visible only in light, with a health bar like a hero's.
+  - It vanishes when the ranger falls.
+  - It reappears next to the ranger when far away or locked out (the sealed boss door).
+- **Kills:** the wolf's kills count as the ranger's; XP and coins are shared as for every kill.
+- **Growl:** the wolf steps 1 to 2 tiles toward the nearest enemy it detects, shows "grrrr" and shakes.
+- **New rule: sound text shows above the darkness** with a light outline (the growl, spoken words, the sleeping "Z"). Damage numbers keep today's rule.
+- **New monster state "hiding":** the mimic moves from `dormant` to `hiding`. The wolf growls at hiding things (on purpose: a way to find mimics) but never at dormant ones (the boss before the fight, idle disciples). It bites neither.
+
+**The calls I made** are listed at the end of the spec ("Calls I made"); the user has not reviewed them one by one. Raise them when the plan is reviewed.
+
+**Code map** (read while designing; the spec's section "How it fits the code" has the full pointers):
+- **Recommended shape:** the wolf is a `Monster` with an ally marker (`ally_of: Option<u32>`). It then reuses movement, terrain, knockback, effects (`Creature::Monster`), snapshots and lights. Every hero attack that loops over `run.monsters` must skip allies: `abilities.rs` `dagger_target`, `melee_arc`, `dash_contact`, `advance_projectile`, `explode`, plus the client's `GameScene.shotTouchesEnemy`. `kill_monster` (`run/mod.rs`) must pay no XP or coins for an ally. Write one test per hero attack.
+- **Enemy targets are player indices everywhere:**
+  - in the AI: `ai::find_visible_player`, `Target::Player`, `perform_attack(run, mi, pi, ..)`, `hurt_player` and `knock_player`
+  - in the boss code: `bosses::target`, `bosses::players_in`, the lich's `nova`, demon and dragon attacks
+  - in other shared code: `abilities::explode`, `Run::tick_hazards`, `objects::explode_barrel`
+  - Area attacks need a "heroes and allies in range" helper.
+- **Snapshots:** `run/visibility.rs` `send_snapshots`. Heroes are always sent (`player_snaps`), monsters only when seen, so the wolf must be added like a hero. `Ev` events on heroes use `event_on_hero`.
+- **Entity types:** `defs/entity_types.rs` (`EntityType`, `type_def`, `Adjust`, `profile`). `classes::profile` makes every hero Human, and the test `every_enemy_has_its_entity_type` asserts that. `EffectResponses` (`defs/effects.rs`) come only from `bosses::responses` today, and `apply_effect` (`run/effects.rs`) gives players `Full` for everything. The Sleep immunity of Elf and Magical Beast needs responses per entity type.
+- **Hide lives in:**
+  - server: `Player.hidden`, `AbilityId::Hide`, `HIDDEN_CRIT_MULT`, `flags::HIDDEN`, `SelfState.hidden` (wire `SelfW`), the hidden filters in `ai.rs` and `bosses/lich.rs`
+  - client: `EntityView` (shimmer), `GameScene` (`pred.hidden`), `world.test.ts` (Hide test), `ui/text.ts`
+- **Rename `Assassin`:**
+  - server: `protocol.rs` `ClassId`, `kinds.rs` (`EntityKind::Assassin = 3`), `classes.rs`, `db.rs` (stored as text), `stats.rs` and `lobby.rs` tests, migration `0001` CHECK constraint (needs a new migration)
+  - client: `ui/classes.ts`, `ui/text.ts`, `anim/defs.ts`, `GalleryScene`, `KnockbackDemoScene`, `LichDemoScene`, `OgreDemoScene`, `world.test.ts`, the generated files
+  - docs: README, PLAYER_GUIDE, TECHNICAL
+- **Dormant:** used in `run/mod.rs` (13 places), `levels/boss.rs`, `bosses/*`, `ai.rs`, `visibility.rs` (`flags::DORMANT`), `export.rs`, and on the client in `game/mimic.ts` and `MimicDemoScene`.
+- **Float text:** `game/effects.ts` `text()` (outline `#140c1a`). Depths: `DEPTH.heroNumbers` 6501 under `fog` 7000, `numbers` 8000 above. The asleep "Z" is in `game/status.ts`.
+- **Wolf art:** `client/assets-src/enchanted-forest/frames/Wolf/` (32×32 canvases, about 26×17 px of wolf). `scripts/build-atlas.ts` needs a loader that trims them; `scripts/png.ts` has `decodePng`/`encodePng`.
 
 **Art sources (TODO priority 3, done 2026-10-16, on `main`, commits `7767778..62b53f3`):** three packs checked, imported and credited; no figure is built into the atlas yet, each goes in with the feature that uses it.
 - **Licences** (quoted in each `LICENSE.txt` and in TODO "New enemies"): "16x16 Enchanted Forest Characters" by Superdark is CC0 (gnolls Brute, Overseer, Scout, Shaman; bandit; elves; the elf princess). "16x16 Fantasy RPG Characters" by Superdark (free NPC pack, registered at the user's request) has no formal licence but allows free and commercial use and changes. "Forest creatures" by LYASeeK is free to use, not to resell.
