@@ -312,6 +312,17 @@ export class Effects {
     }
   }
 
+  /** A smashed chest: wood chips thrown up and falling back, and a puff of dust. */
+  splinters(x: number, y: number): void {
+    const woods = [0x6a3e1e, 0x8a5a2a, 0xb07a3a, 0x4a2a14];
+    for (let i = 0; i < 16; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
+      const s = 50 + Math.random() * 60;
+      this.particle(x, y - 5, Math.cos(a) * s, Math.sin(a) * s, 0.45 + Math.random() * 0.3, woods[i % woods.length], { grav: 260, shrink: true });
+    }
+    this.burst(x, y - 2, 8, 0x9a8a78, 25, 0.5);
+  }
+
   hitSpark(x: number, y: number, color = 0xffffff): void {
     for (let i = 0; i < 5; i++) {
       const a = Math.random() * Math.PI * 2;

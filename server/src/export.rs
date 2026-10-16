@@ -104,7 +104,7 @@ fn export_defs() {
     let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
     consts.as_object_mut().unwrap().extend(shots.as_object().unwrap().clone());
     let objs = json!({
-        "BARREL_RADIUS": crate::defs::objects::BARREL_RADIUS, "TORCH_RADIUS": crate::defs::objects::TORCH_RADIUS,
+        "BARREL_RADIUS": crate::defs::objects::BARREL_RADIUS, "CHEST_RADIUS": crate::defs::objects::CHEST_RADIUS, "TORCH_RADIUS": crate::defs::objects::TORCH_RADIUS,
         "BARREL_FUSE": crate::defs::objects::BARREL_FUSE,
         "BARREL_BLAST_R": crate::defs::objects::BARREL_BLAST_R, "USE_REACH": crate::defs::objects::USE_REACH,
     });
@@ -127,6 +127,8 @@ fn export_defs() {
         hitbox.insert((kind as u8).to_string(), json!({ "r": r, "h": kind.body_height() }));
     }
     hitbox.insert((EntityKind::Barrel as u8).to_string(), json!({ "r": crate::defs::objects::BARREL_RADIUS, "h": 0.0 }));
+    // Closed chests stop shots too (the client skips opened ones).
+    hitbox.insert((EntityKind::Chest as u8).to_string(), json!({ "r": crate::defs::objects::CHEST_RADIUS, "h": 0.0 }));
     let ev: serde_json::Map<String, serde_json::Value> =
         crate::wire::EV_CODES.iter().enumerate().map(|(i, n)| (n.to_string(), json!(i))).collect();
     let dmg_types: serde_json::Map<_, _> = crate::defs::damage::DamageType::ALL.iter().map(|t| (t.name().to_string(), json!(*t as u8))).collect();

@@ -85,6 +85,7 @@ export const CONST = {
   "BARREL_BLAST_R": 40.0,
   "BARREL_FUSE": 0.3,
   "BARREL_RADIUS": 6.0,
+  "CHEST_RADIUS": 6.0,
   "DAGGER_COOLDOWN": 0.35,
   "DAGGER_RANGE": 22.0,
   "DASH_SPEED": 300.0,
@@ -322,6 +323,10 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   "32": {
     "h": 51.0,
     "r": 17.0
+  },
+  "80": {
+    "h": 0.0,
+    "r": 6.0
   },
   "81": {
     "h": 0.0,

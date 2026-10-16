@@ -21,8 +21,15 @@ describe('shot hitboxes', () => {
     expect(shotHits(KIND.Dragon, 0, 0, true, 0, -50, 3)).toBe(true);
   });
 
-  it('ignore heroes and props', () => {
+  it('ignore heroes', () => {
     expect(shotHits(KIND.Wizard, 0, 0, false, 0, 0, 3)).toBe(false);
-    expect(shotHits(KIND.Chest, 0, 0, false, 0, 0, 3)).toBe(false);
+  });
+
+  it('treat a chest exactly like a hidden mimic', () => {
+    for (const dx of [0, 5, 8.9, 9.1, 12]) {
+      expect(shotHits(KIND.Chest, 0, 0, false, dx, 0, 3)).toBe(shotHits(KIND.Mimic, 0, 0, false, dx, 0, 3));
+      expect(shotHits(KIND.Chest, 0, 0, false, 0, -dx, 3)).toBe(shotHits(KIND.Mimic, 0, 0, false, 0, -dx, 3));
+    }
+    expect(shotHits(KIND.Chest, 0, 0, false, 8, 0, 3)).toBe(true);
   });
 });

@@ -72,7 +72,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         }),
     });
     run.players[pi].wolf = Some(id);
-    run.event(Ev::Boom { x: spot.x as f32, y: spot.y as f32, r: 10.0, k: 8 }, None);
+    run.event(Ev::Boom { x: spot.x as f32, y: spot.y as f32, r: 10.0, k: 9 }, None);
     id
 }
 
@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(m.kind, EntityKind::DireWolf);
         assert_eq!(m.ally.as_ref().unwrap().owner, run.players[0].id);
         assert_eq!(run.players[0].wolf, Some(id));
-        assert!(run.events.iter().any(|(e, at)| matches!(e, Ev::Boom { k: 8, .. }) && at.is_none()), "the green puff goes to the whole party");
+        assert!(run.events.iter().any(|(e, at)| matches!(e, Ev::Boom { k: 9, .. }) && at.is_none()), "the green puff goes to the whole party");
     }
 
     #[test]
