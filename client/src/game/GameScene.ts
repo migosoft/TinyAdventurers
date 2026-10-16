@@ -344,7 +344,8 @@ export class GameScene extends Phaser.Scene {
           this.fx.explosion(ev.x, ev.y, ev.r, 0xffa030);
           this.fx.burst(ev.x, ev.y, 18, 0x8a5a2a, 70);
           this.cameras.main.shake(120, 0.004);
-        } else this.fx.explosion(ev.x, ev.y, ev.r);
+        } else if (ev.k === 8) this.fx.splinters(ev.x, ev.y);
+        else this.fx.explosion(ev.x, ev.y, ev.r);
         break;
       case 'Died': {
         // Lost to a chasm or deep water: nothing is left behind.
@@ -495,10 +496,12 @@ export class GameScene extends Phaser.Scene {
         anim = ANIM.Cast;
         break;
       case 'CrossbowDagger': {
-        const close = [...this.ents.values()].some(
+        const close = [...this.ents.values()].some((e) => {
+          // A closed chest is stabbed like the hidden mimic it may be (server `dagger_target`).
+          if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= CONST.DAGGER_RANGE;
           // A flying dragon is out of the dagger's reach (the server shoots the crossbow then).
-          (e) => !isPlayerKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= CONST.DAGGER_RANGE,
-        );
+          return !isPlayerKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= CONST.DAGGER_RANGE;
+        });
         if (close) {
           anim = ANIM.Melee;
           cooldown = this.pred.cooldownOf(name, true);
@@ -538,6 +541,8 @@ export class GameScene extends Phaser.Scene {
     const steps = Math.max(1, Math.ceil(Math.hypot(nx - c.x, ny - c.y) / 4));
     for (const e of this.ents.values()) {
       if (e.flags & FLAG.DEAD) continue;
+      // An opened chest lets shots pass; a closed one stops them (server `stops_shots`).
+      if (e.kind === KIND.Chest && e.anim !== 0) continue;
       const air = (e.flags & FLAG.AIRBORNE) !== 0;
       for (let k = 1; k <= steps; k++) {
         if (shotHits(e.kind, e.x, e.y, air, c.x + ((nx - c.x) * k) / steps, c.y + ((ny - c.y) * k) / steps, c.r)) return true;

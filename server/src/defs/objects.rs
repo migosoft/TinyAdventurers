@@ -14,13 +14,15 @@ pub struct ObjDef {
 
 pub fn def(kind: EntityKind) -> ObjDef {
     match kind {
-        EntityKind::Chest => ObjDef { radius: 6.0, solid: false },
+        EntityKind::Chest => ObjDef { radius: CHEST_RADIUS, solid: false },
         EntityKind::Barrel => ObjDef { radius: BARREL_RADIUS, solid: true },
         EntityKind::Torch => ObjDef { radius: TORCH_RADIUS, solid: false },
         _ => panic!("{kind:?} is not an object"),
     }
 }
 
+/// Chest footprint: the same as the mimic's, so shots and the dagger treat both alike.
+pub const CHEST_RADIUS: f64 = 6.0;
 /// Barrels (first guesses for the balancing pass).
 pub const BARREL_RADIUS: f64 = 6.0;
 /// Torch footprint (hits and hand reach); it hangs on the wall, nothing collides with it.

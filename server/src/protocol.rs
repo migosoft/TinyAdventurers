@@ -224,7 +224,7 @@ pub enum Ev {
     /// `p`: on a hero (drawn under the darkness with the hero).
     Heal { x: f32, y: f32, v: f32, p: bool },
     /// Explosion / area effect. k: 0 fireball, 1 heal ring, 2 fire ring, 3 dark burst, 4 dragon fireball,
-    /// 5 ogre ground slam (shockwave), 6 lich nova (dark purple burst), 7 barrel explosion
+    /// 5 ogre ground slam (shockwave), 6 lich nova (dark purple burst), 7 barrel explosion, 8 chest smashed (splinters)
     Boom { x: f32, y: f32, r: f32, k: u8 },
     Died { id: u32, x: f32, y: f32, kind: u8 },
     /// A minion appears. k: 0 raised skeleton (green), 1 summoned imp (fire), 2 raised by the lich (dark purple).

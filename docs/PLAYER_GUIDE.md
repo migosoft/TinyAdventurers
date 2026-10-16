@@ -119,7 +119,9 @@ Strong melee hits **push you away** from the attacker:
 
 Some rooms have a **treasure chest** against a wall. Walk into it to open it: **every living hero in the party** gets 8 to 15 coins.
 
-About one chest in four is a **mimic**. A mimic stays a closed chest until someone comes close or hits it. Then it jumps open and attacks. A careful hero can test a chest from a distance with a spell or arrow: a real chest does not stop a shot, a mimic wakes up. A chest that rattles when you come near is a bad sign.
+About one chest in four is a **mimic**. A mimic stays a closed chest until someone comes close or hits it. Then it jumps open and attacks. A chest that rattles when you come near is a bad sign.
+
+**Hitting a chest smashes it.** Any blow, arrow, spell or explosion breaks a closed chest, and most of the coins are lost in the cracks: the party gets only a third. So testing chests for mimics with a shot from afar costs you gold, and so does fighting carelessly next to a chest (enemy area attacks and barrel blasts break chests too). A closed chest stops shots, just as a mimic does. Poison does not hurt chests.
 
 ## Explosive barrels
 
@@ -155,7 +157,7 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 | Skeletons, raised skeletons, the Lich | physical 10 %, **poison completely** (the Lich: physical about half, magical 40 %) | heat 10 % more |
 | Imps, chorts, summoners, the Red Demon | **heat completely**, magical 20 % (the Red Demon 40 %) | cold |
 | Red Dragon | **heat completely**, magical half, physical 10 % | |
-| Barrels (chests take no damage) | physical half, poison completely | |
+| Barrels and chests | physical half, poison completely | |
 
 - Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
 - The Red Demon's claws and the Red Dragon's claws are partly fire.

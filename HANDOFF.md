@@ -15,10 +15,19 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 1. **Then: TODO priority 4** (new abilities for the other classes, then loadouts, then a way to spend coins). The ranger's wolf is the first new ability.
 2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
-3. **Breakable chests** (settled with the user 2026-10-16, not built; TODO "Chests, mimics and coins follow-ups"): any hit breaks a closed chest and pays a third of its coins, shots stop at chests, so hitting chests is no longer a free mimic test. Small change, no spec needed. The user is still thinking about bodies blocking movement (same section); do not build that.
+3. **Breakable chests: built** on `feature/breakable-chests` (see "Breakable chests" below), in parallel with the Elven Ranger, which another agent builds on `feature/elven-ranger`. Not merged. The user is still thinking about bodies blocking movement (TODO "Chests, mimics and coins follow-ups"); do not build that.
 4. **Server load** (new TODO priority 16, tier 4, section "Server performance follow-ups", 2026-10-16): measure, then cache each hero's view while nothing changed and share it with spectators. The views are estimated to be most of a run's CPU. Before any public launch; not urgent while play is private.
 
 Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons. The vision edges are merged, pushed and approved by the user ("I like the new edges design").
+
+## Breakable chests (built 2026-10-16)
+
+**Branch:** `feature/breakable-chests` (from `main` at `5857780`), worked in the worktree `.claude/worktrees/breakable-chests` while another agent built the Elven Ranger in the main checkout. **Not merged.** Decided with the user in chat (small change, no spec); the decisions are in TODO "Chests, mimics and coins follow-ups".
+- **Why:** hitting every chest once was a free mimic test.
+- **What:** any hit that gets through smashes a closed chest (`objects::break_chest`): `Boom k 8` splinters, a third of a `CHEST_COINS` roll for the party (`BROKEN_CHEST_SHARE`). A closed chest stops shots (`WorldObject::stops_shots`) and is a dagger target (`DaggerTarget`), like a hidden mimic. Client: the cosmetic shot stops at closed chests (`HITBOX` now has the chest), the dagger prediction counts them, `Effects.splinters`.
+- **Merge with the ranger:** both branches touch `run/abilities.rs` (`dagger_target`: the ranger adds an ally skip there; keep both), `GameScene.ts` (dagger prediction) and the docs. The TODO/handoff commit `a898f22` landed on `feature/elven-ranger` by accident (the other agent had switched the main checkout); this branch has the same change cherry-picked.
+- **Verified:** server **331 tests** (324 before, 7 new in `run/objects.rs`), no warnings, fingerprints unchanged; client **84 tests** (one hitbox test changed: a chest now stops shots exactly like a mimic), typecheck and build pass. **Not looked at live:** the splinter burst and breaking chests in a real run.
+- **Test isolation:** the test compose file has a fixed project name and shared cargo target volume; the parallel runs used `-p ta-chests-test` and an override mounting the volume `ta-target-chests`.
 
 ## Elven Ranger (designed 2026-10-16, not built)
 
