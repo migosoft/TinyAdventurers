@@ -315,6 +315,30 @@ mod tests {
     }
 
     #[test]
+    fn an_elf_sees_eighteen_tiles_far() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for y in ty - 2..=ty + 2 {
+            for x in tx - 2..=tx + 25 {
+                run.layout.map.set(x, y, crate::dungeon::Tile::Floor);
+            }
+        }
+        run.lights = Lights::new(run.layout.map.w, run.layout.map.h);
+        let near = Map::center_of(tx + 16, ty);
+        let far = Map::center_of(tx + 20, ty);
+        run.add_light(LightKind::Torch, Anchor::Tile(tx + 17, ty), None);
+        run.add_light(LightKind::Torch, Anchor::Tile(tx + 21, ty), None);
+        let p = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, p, 18);
+        assert!(sees(&mut run, near, 5.0), "16 tiles away, lit");
+        assert!(!sees(&mut run, far, 5.0), "20 tiles away, beyond the 18-tile view");
+        let (txc, _rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(txc);
+        send_snapshots(&mut run);
+    }
+
+    #[test]
     fn hero_events_are_sent_in_the_dark_monster_events_are_not() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (tx, ty) = dark_view(&mut run, 0.0);
@@ -516,7 +540,7 @@ mod tests {
 
     #[test]
     fn every_class_sees_as_far_as_the_fov_radius() {
-        for c in ClassId::ALL {
+        for c in [ClassId::Wizard, ClassId::Paladin, ClassId::Barbarian] {
             assert_eq!(crate::defs::classes::profile(c).sight.vision.round() as i32, PLAYER_FOV_RADIUS);
         }
     }

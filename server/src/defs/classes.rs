@@ -1,4 +1,5 @@
 use super::abilities::AbilityId;
+use super::effects::EffectResponses;
 use super::entity_types::{self, Adjust, EntityType, Profile};
 use super::kinds::EntityKind;
 use crate::protocol::ClassId;
@@ -29,7 +30,18 @@ pub fn def(class: ClassId) -> ClassDef {
     }
 }
 
-/// Every hero is human; armour items will add resistances later.
-pub fn profile(_class: ClassId) -> Profile {
-    entity_types::profile(&[EntityType::Human], Adjust::NONE)
+/// The entity types of a hero: humans, except the Ranger, an elf (armour items will add resistances later).
+fn types(class: ClassId) -> &'static [EntityType] {
+    match class {
+        ClassId::ElvenRanger => &[EntityType::Elf],
+        _ => &[EntityType::Human],
+    }
+}
+
+pub fn profile(class: ClassId) -> Profile {
+    entity_types::profile(types(class), Adjust::NONE)
+}
+
+pub fn responses(class: ClassId) -> EffectResponses {
+    entity_types::responses(types(class))
 }

@@ -177,6 +177,7 @@ impl Run {
                 id,
                 res: prof.res,
                 melee: prof.melee,
+                responses: classes::responses(m.class),
                 conn: m.conn,
                 tx: Some(m.tx),
                 name: m.name,

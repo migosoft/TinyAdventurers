@@ -22,6 +22,8 @@ pub struct Player {
     /// Resistances (entity types plus adjustments) and the split of its melee hits.
     pub res: Resistances,
     pub melee: DamageSplit,
+    /// How it takes each status effect (from its entity types).
+    pub responses: crate::defs::effects::EffectResponses,
     pub tx: Option<UnboundedSender<Message>>,
     pub name: String,
     pub class: ClassId,

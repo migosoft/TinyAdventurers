@@ -144,7 +144,7 @@ impl Run {
     /// creatures take nothing. True when the effect is on afterwards.
     pub fn apply_effect(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>) -> bool {
         let response = match c {
-            Creature::Player(_) => EffectResponse::Full,
+            Creature::Player(i) => self.players.get(i).map_or(EffectResponse::Immune, |p| p.responses.get(kind)),
             Creature::Monster(i) => self.monsters.get(i).map_or(EffectResponse::Immune, |m| m.responses.get(kind)),
         };
         let mut secs = secs.unwrap_or(def(kind).duration);
@@ -302,6 +302,13 @@ mod tests {
 
     fn boss(run: &crate::run::Run) -> usize {
         run.monsters.iter().position(|m| m.is_boss).unwrap()
+    }
+
+    #[test]
+    fn a_sleeping_curse_does_not_take_on_a_ranger() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        assert!(!run.apply_effect(Creature::Player(0), EffectKind::Sleep, None));
+        assert!(run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(1.0)));
     }
 
     #[test]
