@@ -316,12 +316,13 @@ fn export_fixtures() {
     // Darkvision: what a hero sees (FOV, and the static light or within range) from unlit floor,
     // partial ranges, so the circle's edge is tested: some unlit tile is seen only by darkvision
     // and some unlit FOV tile is not seen. Plus range 0 and the full range (the FOV radius).
+    let mut view = crate::vispoly::View::new(map.w, map.h);
     let mut dark_cases = Vec::new();
     for (cx, cy, range) in [(12, 5, 3.0), (18, 4, 4.5), (3, 14, 3.0), (11, 7, 4.5), (20, 3, PLAYER_FOV_RADIUS as f64), (20, 17, 0.0)] {
         assert!(!lights.lit(cx, cy), "darkvision viewer {cx},{cy} stands on an unlit tile");
-        fov.compute(&map, cx, cy, PLAYER_FOV_RADIUS);
-        let seen: Vec<i32> = (0..map.w * map.h).filter(|i| crate::run::visibility::hero_tile_seen(&fov, &lights, (cx, cy), range, i % map.w, i / map.w)).collect();
-        let unlit_fov = |i: &i32| fov.is_visible(i % map.w, i / map.w) && !lights.lit(i % map.w, i / map.w);
+        view.compute(&map, Map::center_of(cx, cy), PLAYER_FOV_RADIUS);
+        let seen: Vec<i32> = (0..map.w * map.h).filter(|i| crate::run::visibility::hero_tile_seen(&view, &lights, (cx, cy), range, i % map.w, i / map.w)).collect();
+        let unlit_fov = |i: &i32| view.is_visible(i % map.w, i / map.w) && !lights.lit(i % map.w, i / map.w);
         let dark_only = seen.iter().filter(|i| unlit_fov(i)).count();
         let dark_unseen = (0..map.w * map.h).filter(|i| unlit_fov(i) && !seen.contains(i)).count();
         println!("DV {cx},{cy} r{range}: seen {} dark-only {dark_only} dark-unseen {dark_unseen}", seen.len());

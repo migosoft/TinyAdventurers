@@ -6,7 +6,7 @@ use crate::defs::enemies::EnemyType;
 use crate::defs::entity_types::Sight;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
-use crate::fov::Fov;
+use crate::vispoly::View;
 use crate::math::Vec2;
 use crate::protocol::{ClassId, InputMsg};
 use axum::extract::ws::Message;
@@ -45,7 +45,7 @@ pub struct Player {
     pub rtt: f64,
     pub spectating: Option<u32>,
     pub dash_hit: Vec<u32>,
-    pub fov: Fov,
+    pub view: View,
     pub kills: u32,
     /// Left the dungeon early (the game then treats the hero as dead).
     pub left: bool,

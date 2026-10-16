@@ -19,7 +19,7 @@ use crate::defs::{classes, enemies};
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::{self, Layout, Mover, Tile};
-use crate::fov::Fov;
+use crate::vispoly::View;
 use crate::lobby::SharedLobby;
 use crate::math::Vec2;
 use crate::telemetry;
@@ -206,7 +206,7 @@ impl Run {
                 rtt: 0.05,
                 spectating: None,
                 dash_hit: Vec::new(),
-                fov: Fov::new(w, h),
+                view: View::new(w, h),
                 kills: 0,
                 left: false,
                 damage: 0.0,

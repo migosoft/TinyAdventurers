@@ -8,6 +8,7 @@ mod dungeon;
 #[cfg(test)]
 mod export;
 mod fov;
+mod vispoly;
 mod lobby;
 mod math;
 mod progress;

@@ -11,16 +11,17 @@ use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::defs::lights;
 use crate::dungeon::{Map, TILE};
-use crate::fov::{Fov, PLAYER_FOV_RADIUS};
+use crate::fov::PLAYER_FOV_RADIUS;
+use crate::vispoly::View;
 use crate::math::Vec2;
 use crate::protocol::{EntSnap, Ev, MovingLight, SelfState, Snapshot};
 use crate::run::light::{Lights, Lit};
 use crate::run::perception::dark_reach;
 use crate::wire::encode_snap;
 
-fn visible(fov: &Fov, p: Vec2, radius: f64) -> bool {
+fn visible(view: &View, p: Vec2, radius: f64) -> bool {
     let (x, y) = Map::tile_of(p);
-    if fov.is_visible(x, y) {
+    if view.is_visible(x, y) {
         return true;
     }
     if radius > 8.0 {
@@ -28,7 +29,7 @@ fn visible(fov: &Fov, p: Vec2, radius: f64) -> bool {
         let r = radius * 0.8;
         for (dx, dy) in [(-r, -r), (r, -r), (-r, r), (r, r)] {
             let (x, y) = Map::tile_of(p + Vec2::new(dx, dy));
-            if fov.is_visible(x, y) {
+            if view.is_visible(x, y) {
                 return true;
             }
         }
@@ -55,16 +56,16 @@ pub(crate) struct Dark {
 }
 
 /// A tile a hero is sent: in the viewer's field of view, and lit or within darkvision.
-pub(crate) fn hero_tile_seen(fov: &Fov, lights: &Lights, viewer: (i32, i32), range: f64, x: i32, y: i32) -> bool {
-    fov.is_visible(x, y) && (lights.lit(x, y) || dark_reach(viewer, (x, y), range))
+pub(crate) fn hero_tile_seen(view: &View, lights: &Lights, viewer: (i32, i32), range: f64, x: i32, y: i32) -> bool {
+    view.is_visible(x, y) && (lights.lit(x, y) || dark_reach(viewer, (x, y), range))
 }
 
 /// In the viewer's sight and lit or within darkvision (large figures: any part of them).
 /// The lights' layers must be current (`refresh`, `cast_moving`).
-fn seen(fov: &Fov, lights: &Lights, dark: &Dark, p: Vec2, radius: f64) -> bool {
+fn seen(view: &View, lights: &Lights, dark: &Dark, p: Vec2, radius: f64) -> bool {
     let at = |q: Vec2| {
         let (x, y) = Map::tile_of(q);
-        hero_tile_seen(fov, lights, dark.tile, dark.range, x, y)
+        hero_tile_seen(view, lights, dark.tile, dark.range, x, y)
     };
     if at(p) {
         return true;
@@ -77,17 +78,17 @@ fn seen(fov: &Fov, lights: &Lights, dark: &Dark, p: Vec2, radius: f64) -> bool {
 }
 
 /// A world object is sent when seen; a torch (it owns a light) when in sight, lit or not.
-fn object_sent(fov: &Fov, lights: &Lights, dark: &Dark, o: &super::objects::WorldObject) -> bool {
-    !o.gone && if o.owns_light() { visible(fov, o.pos, 0.0) } else { seen(fov, lights, dark, o.pos, 0.0) }
+fn object_sent(view: &View, lights: &Lights, dark: &Dark, o: &super::objects::WorldObject) -> bool {
+    !o.gone && if o.owns_light() { visible(view, o.pos, 0.0) } else { seen(view, lights, dark, o.pos, 0.0) }
 }
 
 /// Events: party-wide ones always; events on a hero where the hero is in
 /// sight; the rest where they are seen (in sight and lit, or within darkvision).
-fn ev_seen(fov: &Fov, lights: &Lights, dark: &Dark, at: Option<Vec2>, on_hero: bool) -> bool {
+fn ev_seen(view: &View, lights: &Lights, dark: &Dark, at: Option<Vec2>, on_hero: bool) -> bool {
     match at {
         None => true,
-        Some(p) if on_hero => visible(fov, p, 0.0),
-        Some(p) => seen(fov, lights, dark, p, 0.0),
+        Some(p) if on_hero => visible(view, p, 0.0),
+        Some(p) => seen(view, lights, dark, p, 0.0),
     }
 }
 
@@ -112,8 +113,8 @@ fn drain_points(run: &Run) -> Vec<Vec2> {
 /// The drain beams for one player: during the boss fight, or while the lich or
 /// any channelling disciple is in view, all of them, even the ends out of sight.
 /// FOV only, not light: the beams are magic light and show in the dark.
-fn drain_for(fov: &Fov, boss_awake: bool, pts: &[Vec2]) -> Option<Vec<(f32, f32)>> {
-    (pts.len() > 1 && (boss_awake || pts.iter().any(|&p| visible(fov, p, 0.0)))).then(|| pts.iter().map(|p| (p.x as f32, p.y as f32)).collect())
+fn drain_for(view: &View, boss_awake: bool, pts: &[Vec2]) -> Option<Vec<(f32, f32)>> {
+    (pts.len() > 1 && (boss_awake || pts.iter().any(|&p| visible(view, p, 0.0)))).then(|| pts.iter().map(|p| (p.x as f32, p.y as f32)).collect())
 }
 
 fn ms_since(run: &Run, t: f64) -> u16 {
@@ -163,16 +164,16 @@ pub fn send_snapshots(run: &mut Run) {
         let me = &run.players[pi];
         let viewed = if me.alive { me } else { me.spectating.and_then(|s| run.players.iter().find(|q| q.id == s)).unwrap_or(me) };
         let (view_pos, sight) = (viewed.pos(), viewed.sight_now());
-        let mut fov = std::mem::replace(&mut run.players[pi].fov, Fov::new(0, 0));
+        let mut view = std::mem::replace(&mut run.players[pi].view, View::new(0, 0));
         let (tx, ty) = Map::tile_of(view_pos);
         let vision = sight.vision.round() as i32;
-        fov.compute(&run.layout.map, tx, ty, vision);
+        view.compute(&run.layout.map, view_pos, vision);
         let dark = Dark { tile: (tx, ty), range: dark_range(&sight) };
 
         let lights = &run.lights;
         let mut ents = player_snaps.clone();
         for m in &run.monsters {
-            if !m.alive || !seen(&fov, lights, &dark, m.pos, m.radius) {
+            if !m.alive || !seen(&view, lights, &dark, m.pos, m.radius) {
                 continue;
             }
             let mut f = 0;
@@ -196,20 +197,20 @@ pub fn send_snapshots(run: &mut Run) {
         }
         for pr in &run.projectiles {
             // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
-            if pr.dead || !(pr.from_player || seen(&fov, lights, &dark, pr.pos, 0.0)) {
+            if pr.dead || !(pr.from_player || seen(&view, lights, &dark, pr.pos, 0.0)) {
                 continue;
             }
             let extra = (pr.owner << 16) | pr.shot as u32;
             ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra, 0));
         }
         for o in &run.objects {
-            if !object_sent(&fov, lights, &dark, o) {
+            if !object_sent(&view, lights, &dark, o) {
                 continue;
             }
             ents.push(super::objects::snap(run, o));
         }
         for h in &run.hazards {
-            if !seen(&fov, lights, &dark, h.pos, h.radius) {
+            if !seen(&view, lights, &dark, h.pos, h.radius) {
                 continue;
             }
             let extra = (h.life * 1000.0) as u32;
@@ -218,10 +219,10 @@ pub fn send_snapshots(run: &mut Run) {
         let ev: Vec<Ev> = events
             .iter()
             .enumerate()
-            .filter(|(i, (_, at))| ev_seen(&fov, lights, &dark, *at, on_hero.contains(i)))
+            .filter(|(i, (_, at))| ev_seen(&view, lights, &dark, *at, on_hero.contains(i)))
             .map(|(_, (e, _))| e.clone())
             .collect();
-        let drain = drain_for(&fov, run.level.boss().map_or(false, |b| b.awake), &drain);
+        let drain = drain_for(&view, run.level.boss().map_or(false, |b| b.awake), &drain);
 
         let me = &run.players[pi];
         let snap = Snapshot {
@@ -255,7 +256,7 @@ pub fn send_snapshots(run: &mut Run) {
             lights: lights_for(view_pos, vision, &moving),
             srv_ms: run.srv_ms,
         };
-        run.players[pi].fov = fov;
+        run.players[pi].view = view;
         if let Some(tx) = &run.players[pi].tx {
             let _ = tx.send(axum::extract::ws::Message::Binary(encode_snap(&snap).into()));
         }
@@ -282,7 +283,8 @@ mod tests {
             }
         }
         run.lights = Lights::new(run.layout.map.w, run.layout.map.h);
-        run.players[0].fov.compute(&run.layout.map, tx, ty, PLAYER_FOV_RADIUS);
+        let p = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, p, PLAYER_FOV_RADIUS);
         (tx, ty)
     }
 
@@ -291,7 +293,7 @@ mod tests {
         let moving = run.moving_lights();
         run.lights.cast_moving(&run.layout.map, &moving);
         let dark = dark_of(run);
-        seen(&run.players[0].fov, &run.lights, &dark, p, r)
+        seen(&run.players[0].view, &run.lights, &dark, p, r)
     }
 
     fn dark_of(run: &Run) -> Dark {
@@ -318,11 +320,11 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         run.lights.refresh(&run.layout.map);
-        let fov = &run.players[0].fov;
+        let view = &run.players[0].view;
         let near = Some(Map::center_of(tx + 2, ty));
-        assert!(ev_seen(fov, &run.lights, &dark_of(&run), near, true), "on a hero: sight is enough");
-        assert!(!ev_seen(fov, &run.lights, &dark_of(&run), near, false), "elsewhere: it must be lit");
-        assert!(ev_seen(fov, &run.lights, &dark_of(&run), None, false), "party-wide events always");
+        assert!(ev_seen(view, &run.lights, &dark_of(&run), near, true), "on a hero: sight is enough");
+        assert!(!ev_seen(view, &run.lights, &dark_of(&run), near, false), "elsewhere: it must be lit");
+        assert!(ev_seen(view, &run.lights, &dark_of(&run), None, false), "party-wide events always");
     }
 
     #[test]
@@ -415,13 +417,12 @@ mod tests {
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let near = run.spawn_enemy(EnemyType::GoblinArcher, ppos + Vec2::new(20.0, 0.0), None, 1);
         let far = run.spawn_enemy(EnemyType::GoblinArcher, ppos + Vec2::new(16.0 * 30.0, 0.0), None, 1);
-        let (tx, ty) = Map::tile_of(ppos);
-        run.players[0].fov.compute(&run.layout.map, tx, ty, PLAYER_FOV_RADIUS);
-        let fov = &run.players[0].fov;
+        run.players[0].view.compute(&run.layout.map, ppos, PLAYER_FOV_RADIUS);
+        let view = &run.players[0].view;
         let near_m = run.monsters.iter().find(|m| m.id == near).unwrap();
         let far_m = run.monsters.iter().find(|m| m.id == far).unwrap();
-        assert!(visible(fov, near_m.pos, near_m.radius));
-        assert!(!visible(fov, far_m.pos, far_m.radius));
+        assert!(visible(view, near_m.pos, near_m.radius));
+        assert!(!visible(view, far_m.pos, far_m.radius));
     }
 
     #[test]
@@ -432,18 +433,16 @@ mod tests {
         assert_eq!(pts[0], run.monsters.iter().find(|m| m.is_boss).unwrap().pos, "the lich comes first");
         // The heroes start far from the boss hall: nothing of the drain is in view.
         let ppos = run.players[0].pos();
-        let (tx, ty) = Map::tile_of(ppos);
-        run.players[0].fov.compute(&run.layout.map, tx, ty, PLAYER_FOV_RADIUS);
-        let fov = &run.players[0].fov;
-        assert!(pts.iter().all(|&p| !visible(fov, p, 0.0)));
-        assert_eq!(drain_for(fov, false, &pts), None, "not before the fight");
-        let sent = drain_for(fov, true, &pts).expect("sent during the fight although out of view");
+        run.players[0].view.compute(&run.layout.map, ppos, PLAYER_FOV_RADIUS);
+        let view = &run.players[0].view;
+        assert!(pts.iter().all(|&p| !visible(view, p, 0.0)));
+        assert_eq!(drain_for(view, false, &pts), None, "not before the fight");
+        let sent = drain_for(view, true, &pts).expect("sent during the fight although out of view");
         assert_eq!(sent.len(), pts.len());
         // Before the fight it is sent as soon as one end is in view.
-        let mut fov2 = Fov::new(run.layout.map.w, run.layout.map.h);
-        let (tx, ty) = Map::tile_of(pts[1]);
-        fov2.compute(&run.layout.map, tx, ty, 1);
-        assert!(drain_for(&fov2, false, &pts).is_some());
+        let mut view2 = View::new(run.layout.map.w, run.layout.map.h);
+        view2.compute(&run.layout.map, pts[1], 1);
+        assert!(drain_for(&view2, false, &pts).is_some());
     }
 
     #[test]
@@ -460,12 +459,12 @@ mod tests {
             crate::run::objects::set_torch(&mut run, oi, false);
         }
         run.lights.refresh(&run.layout.map);
-        let sent_dark = |run: &Run, oi: usize| object_sent(&run.players[0].fov, &run.lights, &dark_of(&run), &run.objects[oi]);
+        let sent_dark = |run: &Run, oi: usize| object_sent(&run.players[0].view, &run.lights, &dark_of(&run), &run.objects[oi]);
         assert!(sent_dark(&run, i_near), "in sight, out and dark");
         assert!(!sent_dark(&run, i_far), "out of sight");
         crate::run::objects::set_torch(&mut run, i_near, true);
         run.lights.refresh(&run.layout.map);
-        assert!(object_sent(&run.players[0].fov, &run.lights, &dark_of(&run), &run.objects[i_near]), "in sight, lit");
+        assert!(object_sent(&run.players[0].view, &run.lights, &dark_of(&run), &run.objects[i_near]), "in sight, lit");
         assert!(run.objects[i_near].owns_light());
     }
 
@@ -487,7 +486,8 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (tx, ty) = dark_view(&mut run, 1.0);
         run.layout.map.set(tx + 2, ty, crate::dungeon::Tile::Wall);
-        run.players[0].fov.compute(&run.layout.map, tx, ty, PLAYER_FOV_RADIUS);
+        let p = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, p, PLAYER_FOV_RADIUS);
         assert!(!sees(&mut run, Map::center_of(tx + 4, ty), 6.0), "behind a wall: out of FOV");
     }
 
