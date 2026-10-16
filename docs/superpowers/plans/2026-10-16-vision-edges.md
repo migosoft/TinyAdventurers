@@ -831,3 +831,99 @@ git commit -m "Docs: straight vision edges
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
+
+---
+
+## Part 2: the server sees by the same polygon (spec addendum)
+
+Added after the final review (Important: black floor inside the drawn polygon). The user chose the server change on 2026-10-16. **Spec:** the addendum "the server sees by the same polygon" at the end of the spec.
+
+**Global constraints (part 2):**
+- The same rule, bit for bit, in Rust and TypeScript: the same angle list (the 96 even angles first, then the segment ends in the same order, sorted ascending), the same 4×4 sample points, the same inside test.
+- Vision is rounded once (`Math.round` / `.round() as i32`) and both the FOV and `sightRadius` use the rounded value.
+- Enemy perception, darkvision (`dark_reach`) and the light layers do not change.
+- Server tests run in Docker: `docker compose -f docker-compose.test.yml run --rm test` (it also regenerates `client/src/generated/*`), then `docker compose -f docker-compose.test.yml down`.
+
+**Review focus (part 2):**
+1. **The polygon bracket across ±π:** a sample point whose angle lies before the first ray or after the last must use the closing edge (last → first). Tested in Task 5 (a point straight to the left of the viewer).
+2. **The spectator:** the server view uses the viewed hero's position, so a dead player gets the teammate's view. Covered by the existing test `a_spectator_gets_the_viewed_heros_darkvision`, which must still pass.
+3. **Rust and V8 trig differences:** the tile sets must match exactly on the fixture. A mismatch is a finding to report, not something to loosen silently.
+4. **A wall tile in sight:** it is visible through the FOV, not the polygon, so torches on walls are still sent. Covered by the existing test `torches_are_sent_in_sight_lit_or_not_and_not_out_of_sight`.
+
+### Task 5: The `View` rule in TypeScript
+
+**Files:** modify `client/src/sim/vispoly.ts`; create `client/src/sim/view.ts`, `client/src/sim/view.test.ts`.
+
+**Interfaces:**
+- Produces in `vispoly.ts`:
+  - `export interface SightPolygon { points: number[]; angles: number[] }`
+  - `export function sightPolygon(map: TileMap, px: number, py: number, r: number, steps = 96): SightPolygon` (the old body; `visibilityPolygon` becomes `sightPolygon(...).points`)
+  - `export function inside(s: SightPolygon, px: number, py: number, qx: number, qy: number): boolean`
+- Produces in `view.ts`: `export class View { readonly fov: Fov; polygon: SightPolygon; px: number; py: number; version: number; constructor(w: number, h: number); compute(map: TileMap, px: number, py: number, vision: number): void; isVisible(x: number, y: number): boolean }`
+
+- [ ] **Step 1: Failing tests** (`client/src/sim/view.test.ts`). Use the `grid`/`room` helpers from `vispoly.test.ts` (copied in). The cases:
+  - `inside` in an open room `room(21, 21)`, viewer (168, 168), r 80: true at +79 px right, false at +81; true at 79 px left (angle π: the closing edge), false at 81 px left.
+  - `inside` with a pillar at (13, 10), r 128: false at (240, 168) behind it, true at (240, 200) beside it.
+  - The final review's doorway case: an 11×21 map, wall ring, wall column x = 10 except the doorway (10, 5); viewer (144.8, 79.2), vision 9. Expect `fov.isVisible(15, 5)` false, `isVisible(15, 5)` true, `isVisible(15, 2)` false.
+  - Walls by the FOV: in `room(9, 9)` from the centre, `isVisible(0, 4)` equals `fov.isVisible(0, 4)` and is true; `isVisible(-1, 4)` is false.
+  - A blind viewer (vision 0) sees its own tile and not a tile 2 away.
+  - `version` grows by one per compute.
+- [ ] **Step 2: Run** `cd client && npx vitest run src/sim/view.test.ts`. Expected: FAIL (module `./view` missing).
+- [ ] **Step 3: Implement.**
+  - `vispoly.ts`: the old body becomes `sightPolygon`, returning `{ points, angles }` (the sorted angle list); `visibilityPolygon` returns `.points`.
+  - `inside`: the point's angle by `atan2`; a binary search for the last ray at or before it (none: the last ray, so the closing edge last → first); the edge from that point to the next. The point is inside when the cross products of the edge with (q − a) and with (viewer − a) have the same sign (≥ 0). If the viewer lies on the edge's line (|cross| < 1e-9), it is inside when its distance is at most the nearer end's distance.
+  - `view.ts`: a `View` with an `Fov`, a `Uint32Array` stamp and a generation. `compute` rounds the vision, computes the FOV from the viewer's tile and `sightPolygon` with `sightRadius(v)`. It stamps every tile in the polygon's bounding box (clamped to the map): opaque tiles when the FOV sees them, open tiles when any of the 16 samples `(x·TILE + 2 + 4i, y·TILE + 2 + 4j)` is `inside`. `isVisible` checks the bounds and the stamp; `version` counts computes.
+- [ ] **Step 4: Run** `cd client && npm test && npm run typecheck`. Expected: all pass.
+- [ ] **Step 5: Commit** `Vision edges: the View rule (polygon coverage, walls by FOV) in TypeScript`.
+
+### Task 6: The same rule in Rust, used by the snapshot filter
+
+**Files:** create `server/src/vispoly.rs` (with tests); modify `server/src/main.rs` (`mod vispoly;`), `server/src/run/entities.rs` (`pub fov: Fov` → `pub view: View`), `server/src/run/mod.rs`, `server/src/run/visibility.rs`, `server/src/export.rs`.
+
+**Interfaces:** `pub fn sight_radius(vision: i32) -> f64`, `pub fn wall_segments(map: &Map, px: f64, py: f64, r: f64) -> Vec<[f64; 4]>`, `pub struct SightPolygon { pub points: Vec<(f64, f64)>, pub angles: Vec<f64> }`, `pub fn sight_polygon(map: &Map, px: f64, py: f64, r: f64, steps: usize) -> SightPolygon`, `pub fn inside(s: &SightPolygon, px: f64, py: f64, qx: f64, qy: f64) -> bool`, `pub struct View { pub fov: Fov, .. }` with `View::new(w, h)`, `compute(&mut self, map: &Map, p: Vec2, vision: i32)`, `is_visible(&self, x: i32, y: i32) -> bool`.
+
+- [ ] **Step 1: Failing Rust tests** in `vispoly.rs`, mirroring Tasks 1 and 5:
+  - the 7×5 room gives exactly 4 segments, including `[16, 16, 96, 16]`;
+  - a circle in an open room;
+  - the pillar wedge stops at x = 208;
+  - `inside` across π;
+  - the doorway case: (15, 5) not in the FOV but visible, (15, 2) not visible;
+  - a blind view sees its own tile.
+- [ ] **Step 2: Implement `vispoly.rs`**, a line-by-line port of `vispoly.ts` and `view.ts`. Keep the same loop order and angle list (`(i / steps) · 2π − π`, then per segment end a − EPS, a, a + EPS), sort with `partial_cmp`, and use the same `cast` tolerances. The generation wraps and is never 0.
+- [ ] **Step 3: Wire it.**
+  - `visibility.rs`: `visible`, `seen`, `hero_tile_seen`, `object_sent`, `ev_seen` and `drain_for` take `&View`.
+  - `send_snapshots` swaps out `run.players[pi].view` and computes it from `view_pos` with the rounded vision.
+  - The player field is renamed.
+  - Tests: `fov.compute(map, tx, ty, R)` becomes `view.compute(map, pos, R)`.
+- [ ] **Step 4: Run the server tests in Docker.** Expected: all pass. If a visibility test's outcome changes, look at the geometry, keep the test's intent, and note a ruling. Re-record no fingerprint without checking that the change comes from the view.
+- [ ] **Step 5: Commit** `Vision edges: the server sees by the visibility polygon (vispoly.rs, View)`.
+
+### Task 7: Shared fixture and the client switch
+
+- [ ] **Step 1: Fixture** (`export.rs`):
+  - `"view"` cases for the viewers `(150.5, 200.3)`, `(90.7, 108.2)`, `(186.4, 168.9)`, `(176.0, 208.0)` and `(60.0, 200.0)` (assert open floor), vision `PLAYER_FOV_RADIUS`: `{ x, y, vision, points, visible }`.
+  - The darkvision cases use a `View` at the tile centre.
+- [ ] **Step 2: Client fixture tests:**
+  - `view.test.ts` "matches the server on the shared fixture": the visible tiles must be equal, and every point `toBeCloseTo(_, 6)`.
+  - `light.test.ts` darkvision: use a `View` at the tile centre.
+  - Regenerate with the Docker tests, then run `npm test`. A tile-set mismatch is a stop-and-report (Review Focus 3).
+- [ ] **Step 3: `LightView` on `View`:**
+  - `readonly view: View`, recomputed on a key of position (0.1 px), rounded vision, and `mapChanged`;
+  - `visible` = `wide ? view.isVisible : view.fov.isVisible`;
+  - `seen()` returns `view.isVisible`;
+  - remove `seenForLight` and its tests.
+- [ ] **Step 4: `VisionMask.update(rect, view: View)`** draws `view.polygon.points` and the walls where `map.opaque && view.isVisible`, with the key `${ox},${oy},${view.version}`. `GameScene` and `LightsDemoScene` pass `lightView.view`.
+- [ ] **Step 5: Checks:** `npm test`, typecheck, build, the `?lights` screenshots plus `&at=10.9,8.4` (beside the corridor mouth): no black wedges inside the lit cone.
+- [ ] **Step 6: Commit** `Vision edges: client lights the polygon's tiles (View), shared fixture`.
+
+### Task 8: Docs, smoke, review
+
+- [ ] TECHNICAL:
+  - §7 server snapshots: `seen` uses the view, computed from the viewed hero's pixel position.
+  - "The vision mask": `View`, coverage; remove `seenForLight`.
+  - §12: the new tests.
+  - §13: the limitation becomes "the client's predicted position against the server's, edge tiles can differ for a moment; walls per tile".
+- [ ] TODO: "Vision edges follow-ups" without "differ by up to a tile".
+- [ ] HANDOFF: part 2, verification, the commit-list wording.
+- [ ] Smoke test against a rebuilt Docker game.
+- [ ] Commit `Docs: the server sees by the polygon`, then the final whole-branch review again (one fix pass).
