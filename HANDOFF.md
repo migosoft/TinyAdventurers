@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Next session
 
-The straight vision edges (TODO priority 2) are **built on branch `feature/vision-edges`** (not merged yet). They wait for the user's look in the game and the merge decision (see "Last feature" below). Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons. The effect system is merged into `main` and pushed (2026-10-15).
+The straight vision edges (TODO priority 2) are **built on branch `feature/vision-edges`** (not merged yet; the server now sees by the same polygon as the client draws). They wait for the user's look in the game and the merge decision (see "Last feature" below). Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons. The effect system is merged into `main` and pushed (2026-10-15).
 
 1. After the merge: TODO priority 3 (art and licences) and 4 (abilities; they can give Slowed and Accelerated a source).
 2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
@@ -24,7 +24,7 @@ The straight vision edges (TODO priority 2) are **built on branch `feature/visio
 
 ## Last feature (2026-10-16): straight vision edges
 
-**Branch:** `feature/vision-edges` (from `main` at `3555d68`), commits `git log --oneline main..feature/vision-edges` (spec, plan, polygon, mask, demo, docs, then the final-review fixes). Built inline with superpowers:executing-plans. **Not merged.** Spec: [docs/superpowers/specs/2026-10-16-vision-edges-design.md](docs/superpowers/specs/2026-10-16-vision-edges-design.md); plan: [docs/superpowers/plans/2026-10-16-vision-edges.md](docs/superpowers/plans/2026-10-16-vision-edges.md). Docs: TECHNICAL §7 "The vision mask", draw order, §12, §13; TODO (priority 2 done, "Vision edges follow-ups", "Pillars"); README (`?lights`).
+**Branch:** `feature/vision-edges` (from `main` at `3555d68`), commits `git log --oneline main..feature/vision-edges`: part 1 (spec, plan, polygon, mask, demo, docs), then part 2 after the final review (spec addendum, plan part 2, the `View` rule in TypeScript, the Rust port in the snapshot filter, the shared fixture and the client switch, docs). Built inline with superpowers:executing-plans. **Not merged.** Spec: [docs/superpowers/specs/2026-10-16-vision-edges-design.md](docs/superpowers/specs/2026-10-16-vision-edges-design.md); plan: [docs/superpowers/plans/2026-10-16-vision-edges.md](docs/superpowers/plans/2026-10-16-vision-edges.md). Docs: TECHNICAL §7 "The vision mask", draw order, §12, §13; TODO (priority 2 done, "Vision edges follow-ups", "Pillars"); README (`?lights`).
 
 **How it came about:** a throwaway spike first (branch `spike/vision-edges`, reference only; delete it after the merge). The user looked at the demo and decided:
 - **Crisp edges, no blur.** A 3/4-tile fade made the shadow behind a pillar flare out.
@@ -33,14 +33,27 @@ The straight vision edges (TODO priority 2) are **built on branch `feature/visio
 
 **What was built:**
 - `sim/vispoly.ts` (pure, tested): `wallSegments` merges wall edges facing open tiles; `visibilityPolygon(map, px, py, r)` casts rays to every segment end (± 1e-4 rad) and at 96 even angles, each stopping at the nearest segment or at `sightRadius(vision)` = `(vision + 0.5) × TILE` px.
-- `game/visionmask.ts`: a canvas over the camera window (+2 tiles) at 8 px per tile, the polygon plus the walls in the tile FOV in white; a Phaser `Shader` game object at `DEPTH.fog + 0.5` draws black where it is not white. It redraws only when the window, the viewer, the radius or the map changes.
-- `LightView`: `seenForLight` lights open tiles next to the FOV so the light reaches under the mask's edge; `wide` (off = old edges) and `seen(x, y)`.
-- `GameScene`: the mask follows `camX`, `camY` (the own figure, or the spectated teammate) with the snapshot's vision; `Ev::Tile` calls `mapChanged`.
+- **One "seen tiles" rule on both sides (part 2):**
+  - `View` (`sim/view.ts`, `server/src/vispoly.rs`): open tiles count when any of 16 sample points lies inside the polygon; walls count by the tile FOV.
+  - The server's snapshot filter uses it (`Player.view` replaced `Player.fov`), computed from the viewed hero's pixel position.
+  - The client lights exactly those tiles.
+  - The shared fixture (`view` cases, 5 pixel positions) pins the TypeScript port to the Rust one. The tiles and points match exactly.
+  - Enemy perception and darkvision are unchanged.
+- `game/visionmask.ts`: a canvas over the camera window (+2 tiles) at 8 px per tile, with the view's polygon plus its walls in white. A Phaser `Shader` game object at `DEPTH.fog + 0.5` draws black where it is not white. It redraws when the window or the view's version changes.
+- `LightView`: `LightView.view`, recomputed when the viewer moves (0.1 px), the vision changes or the map changes. `wide` off means the old FOV edges.
+- `GameScene`: the view follows `camX`, `camY` (the own figure, or the spectated teammate) with the snapshot's vision; `Ev::Tile` calls `mapChanged` on both.
 - `?lights`: two pillars, click moves the viewer (`&at=x,y`), E toggles old and new edges (`&edges=old`). `tools/e2e/lights-shot.mjs` takes an extra query and a file prefix.
 
-**Verified (2026-10-16):** client `npm test` **76 tests pass** (65 before), `npm run typecheck` clean, `npm run build` passes. The polygon costs **0.051 ms** (Node, every floor tile of the fixture map, vision 9). `?lights` screenshots (pillars, old edges, doorway, darkvision 1) look as intended. Smoke test with two players (Wizard, Paladin) against Docker: no browser errors, straight edges in the game. No server change.
+**Why part 2:** the first final review found black floor inside the drawn polygon. The client lit only the tile FOV plus one ring, cast from the tile centre, while the polygon is cast from the pixel position. Behind a near corner the two drift apart, which left a black wedge with tile steps (up to about 7 tiles in a doorway). The user chose to move the server to the same polygon.
 
-**Not checked live:** a window resize in the game (the mask only grows; code reading only) and the spectator view after death.
+**Verified (2026-10-16):**
+- Server: **324 tests pass** (317 before; 7 new in `vispoly.rs`), no warnings. Fingerprints, the spectator test and the torch test are unchanged.
+- Client: `npm test` **79 tests pass** (65 before the feature); `npm run typecheck` clean; `npm run build` passes.
+- The polygon costs **0.051 ms** (Node, every floor tile of the fixture map, vision 9).
+- `?lights` screenshots (pillars, doorway, beside the corridor mouth `&at=10.9,8.4`, darkvision 1): no black wedges.
+- Smoke test with two players (Wizard, Paladin) against the rebuilt Docker game: no browser errors, straight edges in the game.
+
+**Not checked live:** a window resize in the game (the mask only grows; code reading and the reviewer agree) and the spectator view after death (the existing spectator test passes on the server). The frame time while walking was not measured (the mask redraws and uploads nearly every frame then).
 
 **Open (for the user):** look at it in a real run, then decide on the merge.
 
