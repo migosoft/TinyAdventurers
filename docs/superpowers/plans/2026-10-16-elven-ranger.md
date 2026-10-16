@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The Assassin becomes the Elven Ranger: entity type Elf, Hide removed, and a new secondary that summons and heals a Dire Wolf. The wolf is the first allied creature: it follows the ranger, guards them, bites enemies and growls at enemies it detects. Enemies can kill it.
+**Goal:** The Assassin becomes the Elven Ranger: entity type Elf, Hide removed, and a new secondary that summons and heals a Dire Wolf. The wolf is the first allied creature: it follows the ranger and guards them. It opens a fight with a dash and then bites, growls at enemies it detects, and never falls into a chasm. Enemies can kill it. The ranger's melee stab becomes a rapier.
 
 **Architecture:** The wolf is a `Monster` with an ally marker (`Monster.ally: Option<Ally>`). That way it reuses movement, terrain, knockback, effects (`Creature::Monster`) and snapshots. Its own behaviour lives in a new `server/src/run/companion.rs`, and its numbers in a new `server/src/defs/companions.rs`. Enemies pick their targets and deal area damage through a "foe" layer on `effects::Creature`: a foe is a hero (`Creature::Player`) or an ally (`Creature::Monster` with `ally`). Every hero attack skips allies. Mimics move from `dormant` to a new `hiding` state.
 
@@ -30,6 +30,9 @@
     - bite 10 every 0.9 s, push 8 px
     - follows within about 2 tiles, guards about 3 tiles from the ranger, leash about 6 tiles, reappears beyond about 12 tiles
     - growls at most once every 4 s, with a step of 1 to 2 tiles
+    - dash attack (the user, 2026-10-16): from up to 4 tiles (64 px) at 300 px/s, 20 damage, push 12 px, cooldown 5 s; it opens a fight, then the wolf bites
+    - never falls into a chasm: its dash jumps chasms, and a push that leaves it over a chasm makes it dash back to its last safe tile. Deep water and lava still work as for any monster (the user chose chasms only).
+  - Ranger primary: same numbers, but the melee stab is drawn with the rapier `weapon_duel_sword` instead of `weapon_knife`; the lobby name is "Bow / Rapier".
   - Summon and heal cooldown 8 s, death cooldown 60 s, both divided by `mods.attack_speed`. A heal restores 20 % of the wolf's HP (16), never above its maximum.
 - Messages and labels: the class shows as "Elven Ranger". The death message is `"{name}'s wolf has fallen"`.
 - Commits: work on a feature branch (`feature/elven-ranger`), not `main`. Each commit step means: `git add` the files the task touched, including the regenerated `client/src/generated/*`, then commit with the given message. End every message with `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`. Do not push unless the user asks.
@@ -41,7 +44,7 @@ These failure modes are implied by the spec but no headline test covers them. Ea
 
 1. **Two rangers in one party:** each wolf follows, guards and is healed only by its own ranger. One ranger's ability never summons or heals the other's wolf. Task 7: `two_rangers_each_keep_their_own_wolf`.
 2. **The ranger leaves the dungeon or falls:** their wolf vanishes at once. There is no "wolf has fallen" message and no XP. A ranger who left never gets a wolf back. Task 7: `the_wolf_vanishes_when_its_ranger_falls_or_leaves`.
-3. **The wolf dies to terrain:** a barrel blast pushes it into a chasm and it falls. Nobody gets XP, coins or a kill, and the ranger's 60 s wait starts. Task 6: `a_wolf_blown_into_a_chasm_dies_without_paying_and_starts_the_wait`.
+3. **The wolf meets terrain:** a barrel blast pushes it over a chasm: it dashes back to safe ground and lives (Task 8: `a_wolf_blown_over_a_chasm_dashes_back_to_safe_ground`). A blast into deep water drowns it: nobody gets XP, coins or a kill, and the ranger's 60 s wait starts (Task 6: `a_wolf_blown_into_deep_water_drowns_without_paying_and_starts_the_wait`).
 4. **The wolf goes where only heroes count:** the wolf alone in the boss hall wakes nothing and seals nothing. The wolf on a chest opens nothing. The wolf next to a hiding mimic does not wake it. Task 8: `only_heroes_wake_the_boss_open_chests_and_reveal_mimics`.
 5. **Growl spam:** an enemy that steps in and out of the wolf's sight is growled at once. Two new enemies within 4 s give one growl, not two. Task 9: `each_enemy_is_growled_at_once_and_growls_are_4_s_apart`.
 
@@ -85,7 +88,7 @@ async fn the_class_check_takes_the_ranger_and_refuses_the_assassin() {
 
 - [ ] **Step 3: Write `0005_elven_ranger.sql`.** It deletes every row of `run_players`, `runs` and `characters`, in that order. Then it drops `characters_class_check` and re-adds it as `CHECK (class IN ('Wizard', 'Paladin', 'Barbarian', 'ElvenRanger'))`. Postgres names an inline column CHECK `<table>_<column>_check`. If the drop fails, look the name up with `\d characters` in the test database. Leave accounts, sessions, `activity_days` and `admin_actions` alone.
 
-- [ ] **Step 4: Rename everywhere.** Do it with `grep -rn "Assassin\|assassin" server/src client/src client/scripts --include=*.rs --include=*.ts --include=*.css`. Leave `client/src/generated` to `cargo test`. Ranger text in `ui/text.ts`: `title: 'Elven Ranger'`, `blurb: 'Keen-eyed elf of the deep woods, never alone.'`. Rename the primary to `'Bow / Dagger'` with `text: 'Shoots arrows; stabs automatically when an enemy is close.'` (the figure carries a bow). Leave the secondary entry until Task 2.
+- [ ] **Step 4: Rename everywhere.** Do it with `grep -rn "Assassin\|assassin" server/src client/src client/scripts --include=*.rs --include=*.ts --include=*.css`. Leave `client/src/generated` to `cargo test`. Ranger text in `ui/text.ts`: `title: 'Elven Ranger'`, `blurb: 'Keen-eyed elf of the deep woods, never alone.'`. Rename the primary to `'Bow / Rapier'` with `text: 'Shoots arrows; thrusts with the rapier automatically when an enemy is close.'` (the user, 2026-10-16). The rapier art comes in Task 10. Leave the secondary entry until Task 2.
 
 - [ ] **Step 5: Run every check.** First `MSYS_NO_PATHCONV=1 docker compose -f docker-compose.test.yml run --rm test`. Then `cd client && npx tsc --noEmit && npm test`. Expected: all pass, and `client/src/generated/ClassId.ts` and `defs.ts` now say `ElvenRanger`.
 
@@ -270,11 +273,16 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
     pub const WOLF_GROWL_STEP: f64 = 24.0;
     pub const WOLF_HEAL_SHARE: f64 = 0.2;
     pub const WOLF_DEAD_COOLDOWN: f64 = 60.0;
+    pub const WOLF_DASH_RANGE: f64 = 64.0;
+    pub const WOLF_DASH_SPEED: f64 = crate::defs::abilities::DASH_SPEED; // 300, the Barbarian's
+    pub const WOLF_DASH_DAMAGE: f64 = 20.0;
+    pub const WOLF_DASH_KNOCK: f64 = 12.0;
+    pub const WOLF_DASH_COOLDOWN: f64 = 5.0;
     pub fn wolf_profile() -> Profile // [MagicalBeast] + Adjust { res: Cold 0.2, ..NONE }
     pub fn wolf_responses() -> EffectResponses // entity_types::responses(&[MagicalBeast])
     ```
 
-  - In `run/entities.rs`: `pub struct Ally { pub owner: u32 /* ranger's player id */, pub growled: Vec<u32>, pub growl_cd: f64, pub growl_to: Option<Vec2>, pub hold: f64, pub prey: Option<u32>, pub following: bool, pub reach_t: f64 }`, `Monster.ally: Option<Ally>`, `Monster::is_ally(&self) -> bool`, and `Player.wolf: Option<u32>` (the wolf's monster id).
+  - In `run/entities.rs`: `pub struct Ally { pub owner: u32 /* ranger's player id */, pub growled: Vec<u32>, pub growl_cd: f64, pub growl_to: Option<Vec2>, pub hold: f64, pub prey: Option<u32>, pub following: bool, pub reach_t: f64, pub dash: Option<WolfDash>, pub dash_cd: f64, pub last_safe: Vec2 }` and `pub struct WolfDash { pub dir: Vec2, pub left: f64 /* s */, pub attack: bool /* false: the dash back from a chasm */ }`. `last_safe` starts at the spawn tile's centre., `Monster.ally: Option<Ally>`, `Monster::is_ally(&self) -> bool`, and `Player.wolf: Option<u32>` (the wolf's monster id).
   - `companion::spawn_wolf(run: &mut Run, pi: usize) -> u32`:
     - a `Monster` with `etype: None`, `is_boss: false`, `kind: DireWolf`, `mover: Mover::Enemy` and the numbers above;
     - its HP does not scale with the party;
@@ -377,7 +385,7 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
     - a barrel blast (`explode_barrel`) next to it hurts and pushes it.
   - `a_bosses_area_attack_hits_the_wolf_but_the_boss_targets_heroes`: run the lich nova on a wolf within `LICH_NOVA_RADIUS` (the `lich_with` pattern). Assert the wolf lost `LICH_NOVA_DAMAGE × (1 − 0.1)` HP (its 10 % magical resistance) and that `bosses::target(&run, bi)` returns the hero, never the wolf.
   - `holy_light_heals_the_wolf_and_counts_as_healing`: a Paladin next to a hurt wolf (HP 40) uses `Heal`. The wolf is at `40 + 35`, and the Paladin's `healing` includes those 35.
-  - `a_wolf_blown_into_a_chasm_dies_without_paying_and_starts_the_wait` (Review Focus 3): set a chasm two tiles east (`terrain_run` pattern) and blow the wolf in with `explode_barrel`. Step until it falls. Assert the wolf is gone, `xp`, `coins` and `kills` are all 0, `cd2 ≈ 60`, and the message was sent.
+  - `a_wolf_blown_into_deep_water_drowns_without_paying_and_starts_the_wait` (Review Focus 3): set deep water two tiles east (`terrain_run` pattern) and blow the wolf in with `explode_barrel`. Step until it drowns. Assert the wolf is gone, `xp`, `coins` and `kills` are all 0, `cd2 ≈ 60`, and the message was sent.
 - [ ] **Step 2: Run them** with `… cargo test --release companion`. Expected: they fail (enemies ignore the wolf), or do not compile where the new names are used.
 - [ ] **Step 3: Implement** the helpers and every call-site change above.
 - [ ] **Step 4: Run every check.** Run the full server tests. Expected: all pass with **unchanged** fingerprints (no allies; heroes are found in the same order, nearest first). If a fingerprint changes, find the difference before re-recording: it must come from a behaviour change you can explain.
@@ -419,10 +427,13 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
 
 ---
 
-### Task 8: Wolf behaviour (follow, guard, bite, leash, reappear)
+### Task 8: Wolf behaviour (follow, guard, dash, bite, leash, reappear, chasm escape)
 
 **Files:**
-- Modify: `server/src/run/companion.rs` (`tick_wolf` and its helpers), `server/src/run/mod.rs` `step` (replace Task 5's `if m.is_ally() { continue; }` with `companion::tick_wolf(self, mi, DT); continue;`).
+- Modify: `server/src/run/companion.rs` (`tick_wolf` and its helpers), `server/src/run/mod.rs`:
+  - `step`: replace Task 5's `if m.is_ally() { continue; }` with `companion::tick_wolf(self, mi, DT); continue;`.
+  - `terrain_monster`: an ally mid-dash skips the whole terrain check (it is in the air, like a dashing hero). An ally whose centre is over a chasm does not sink: it clears `knock` and calls `companion::dash_back(self, mi)`. On a `safe` tile it stores the tile centre in `ally.last_safe`.
+  - `knock_monster`: an ally mid-dash is not pushed.
 
 **Interfaces:**
 - Consumes: `ai::path_toward`, `ai::move_toward`, `ai::astar`, `collision::walk_line`, `perception::sees`, `Run::knock_monster`, and `Run::hurt_monster(prey, Damage::new(WOLF_BITE_DAMAGE, wolf.melee), false, Some(ranger_pi))`. The bite credits the ranger with damage, kills and `last_hit_by`, so a wolf kill pays like any kill.
@@ -432,13 +443,19 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
      - Every 0.5 s (`ally.reach_t`), check that the ranger can be reached: `walk_line(map, wolf, ranger, Mover::Enemy) || astar(map, wolf, ranger, 2500, Mover::Enemy).is_some()`.
      - If the wolf is farther than `WOLF_REAPPEAR` from the ranger, or cannot reach them, it moves to `spot_beside(ranger)`. It clears its path, wind-up, prey, growl step and knockback, and sends a `Boom { k: 8 }` puff party-wide.
      - This covers the sealed boss door: `DoorClosed` blocks the path.
-  3. **Timers.** Count down `ai.cd`, `ally.growl_cd` and `ally.hold`.
+  3. **Timers.** Count down `ai.cd`, `ally.dash_cd`, `ally.growl_cd` and `ally.hold`.
+  3a. **Dash in progress.** While `ally.dash` is set, move along `dir` at `WOLF_DASH_SPEED` with `collision::move_box(…, Mover::Dash, &solids)` (it crosses chasms), `Anim::Dash`, and count down `left`.
+     - An attack dash that touches its prey (`dist < radii + 4`) hits it once: `hurt_monster(prey, Damage::new(WOLF_DASH_DAMAGE, wolf.melee), false, Some(ranger_pi))`, then `knock_monster(prey, wolf.pos, WOLF_DASH_KNOCK)`. The dash ends and `ai.cd = WOLF_BITE_COOLDOWN`.
+     - When `left` runs out, the dash ends. If it ended over a chasm, `terrain_monster` sends the wolf back with `dash_back` on the same tick.
+     - Return while dashing.
+  - `companion::dash_back(run, mi)`: a non-attack dash straight to `ally.last_safe`, with `left = dist / WOLF_DASH_SPEED`.
   4. **Bite wind-up.** If one is running, count it down. When it ends, bite the prey if it is still alive and within `WOLF_BITE_RANGE + radii + 4`:
      - damage as above, then `knock_monster(prey, wolf.pos, WOLF_BITE_KNOCK)`;
      - `ai.cd = WOLF_BITE_COOLDOWN`, `Anim::Melee`;
      - return.
   5. **Prey.** Choose the living enemy (not an ally, not `dormant`, not `hiding`, not `airborne`) that the wolf `sees`, with `dist(e, ranger) ≤ WOLF_GUARD + e.radius` or `dist(e, wolf) ≤ WOLF_DEFEND + e.radius`, and `dist(e, ranger) ≤ WOLF_LEASH`. Take the one nearest the ranger and store it in `ally.prey`. With prey:
-     - in reach and `ai.cd ≤ 0`: start the wind-up (`WOLF_BITE_WINDUP`, `Anim::Windup`, aim at the prey);
+     - out of bite reach by more than 8 px but within `WOLF_DASH_RANGE + radii`, `ally.dash_cd ≤ 0` and in line of sight: start an attack dash at the prey (`left = dist / WOLF_DASH_SPEED + 0.05`), `dash_cd = WOLF_DASH_COOLDOWN`;
+    - in reach and `ai.cd ≤ 0`: start the wind-up (`WOLF_BITE_WINDUP`, `Anim::Windup`, aim at the prey);
      - otherwise path toward it at `WOLF_SPEED`, `Anim::Move`;
      - return.
   6. **Growl.** This step comes from Task 9 and is a no-op until then.
@@ -453,6 +470,17 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
     - an orc warrior with `hp = 15`, 30 px from the ranger (the ranger in debug mode);
     - step until the orc is dead (at most 180 ticks);
     - `players[0].kills == 1`, `players[0].xp > 0`, `players[0].damage ≥ 15`.
+  - `the_wolf_opens_with_a_dash_and_then_bites`:
+    - an orc (AI held) 40 px from the ranger and 50 px from the wolf;
+    - within 30 ticks the wolf's anim was `Dash` and the orc lost exactly 20 HP;
+    - a bite of 10 follows within 1.5 s;
+    - no second dash hit before 5 s have passed (count the orc's 20-point hits).
+  - `the_wolf_dash_jumps_a_chasm`: a one-tile chasm strip between the wolf and an orc next to the ranger. The wolf dashes across, ends on floor, and is alive with `sinking == None`.
+  - `a_wolf_blown_over_a_chasm_dashes_back_to_safe_ground` (Review Focus 3):
+    - a chasm two tiles east (`terrain_run` pattern), and a barrel blast pushes the wolf onto it;
+    - within 1 s the wolf stands on a safe tile, alive, never `sinking`;
+    - no `Ev::Sink` for its id;
+    - `players[0].wolf` is unchanged.
   - `the_wolf_ignores_enemies_far_from_the_ranger_and_never_leaves_the_leash`: an orc 80 px from the ranger whose AI is held (`ai.hold = 99`). After 120 ticks its HP is unchanged and the wolf stayed within `WOLF_LEASH` of the ranger.
   - `the_wolf_fights_back`: an orc 16 px from the wolf and 60 px from the ranger. Within 120 ticks the orc has lost HP.
   - `the_wolf_never_bites_dormant_or_hiding_monsters`: a dormant boss (the lich's hall, `lich_with` pattern) and a hiding mimic, each 20 px from the ranger. After 120 ticks both have full HP and keep their state.
@@ -464,7 +492,7 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
 - [ ] **Step 2: Run them** with `… cargo test --release companion`. Expected: they fail, because the wolf stands still.
 - [ ] **Step 3: Implement** `tick_wolf`.
 - [ ] **Step 4: Run every check.** Run the full server tests: the fingerprints are unchanged, and `run_simulates_without_panicking` now runs a ranger without a wolf.
-- [ ] **Step 5: Commit** with `git commit -m "Dire Wolf: follow, guard, bite, leash and reappear"`.
+- [ ] **Step 5: Commit** with `git commit -m "Dire Wolf: follow, guard, dash, bite, leash, reappear; it never falls into a chasm"`.
 
 ---
 
@@ -504,13 +532,13 @@ fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
 
 ---
 
-### Task 10: Wolf art in the atlas and the gallery
+### Task 10: Wolf art in the atlas and the gallery; the ranger's rapier
 
 **Files:**
 - Create: `client/scripts/wolf-frames.ts`
 - Modify:
   - `client/scripts/build-atlas.ts`: place the wolf strip below the torches, following the pattern of the other strips, and add it to the header comment and the log line.
-  - `client/src/game/anim/defs.ts`: `FIGURES[KIND.DireWolf]` and `isAllyKind`.
+  - `client/src/game/anim/defs.ts`: `FIGURES[KIND.DireWolf]` and `isAllyKind`. The ranger's `meleeWeapon` becomes `'weapon_duel_sword'` (the pack's rapier, 9×30 px; the user, 2026-10-16). Add `meleeWeaponScale?: number` to `FigureDef` (it falls back to `weaponScale`) and pick a value so the blade reads as a rapier, not a greatsword (about 0.6, like other weapons). Check the stab in `EntityView` (line ~399): a thrust along the aim, not a swing. Update the comment on `meleeWeapon` ("ranger rapier").
   - `client/src/game/GalleryScene.ts`: show the wolf with the heroes.
   - `README.md` "Credits": the Enchanted Forest wolf is now built into the atlas.
 
@@ -539,7 +567,7 @@ it('trims the eight wolf frames to one box with the feet on the bottom row', () 
   Make sure vitest picks up `scripts/*.test.ts`; check `vite.config.ts` `test.include` and widen it if needed.
 - [ ] **Step 2: Run it** with `cd client && npx vitest run scripts/wolf-frames.test.ts`. Expected: FAIL (the module is missing).
 - [ ] **Step 3: Implement** `buildWolf`, the atlas placement, `FIGURES`, `isAllyKind` and `lunge`.
-- [ ] **Step 4: Check it in the browser.** Run `cd client && npm run atlas && npx tsc --noEmit && npm test`. Then open `?gallery` (Vite against the container): the wolf idles and walks next to the Elven Ranger, faces both ways, and its lunge and swoosh show in `?gallery&state=melee&slow=8`. Take screenshots with `cd tools/e2e && node gallery-shots.mjs http://localhost:5173/ shots melee` and look at them.
+- [ ] **Step 4: Check it in the browser.** Run `cd client && npm run atlas && npx tsc --noEmit && npm test`. Then open `?gallery` (Vite against the container): the wolf idles and walks next to the Elven Ranger, faces both ways, and its lunge and swoosh show in `?gallery&state=melee&slow=8`. Its dash shows in `?gallery&state=dash&slow=8` (afterimages like the Barbarian's charge; if `EntityView` draws those only for heroes, enable them for `isAllyKind` too). The ranger's melee shows the rapier thrust. Take screenshots with `cd tools/e2e && node gallery-shots.mjs http://localhost:5173/ shots melee` and look at them.
 - [ ] **Step 5: Commit** with `git commit -m "Dire Wolf art: trimmed Enchanted Forest frames in the atlas and the gallery"`.
 
 ---

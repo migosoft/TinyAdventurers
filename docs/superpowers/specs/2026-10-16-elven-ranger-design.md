@@ -43,7 +43,7 @@ The Assassin's figure is the pack's `elf_m` with a bow and does not look like an
 | Figure | `elf_m` with the bow (unchanged) | same |
 | HP, speed | 90, 80 (unchanged) | same |
 | Entity type | **Elf** | Human |
-| Primary | `CrossbowDagger`, unchanged (bow shots, automatic dagger stab in melee) | same |
+| Primary | `CrossbowDagger`, same numbers: bow shots, and the automatic melee stab is now drawn with a **rapier** (the pack's `weapon_duel_sword`; the user, 2026-10-16). Lobby name "Bow / Rapier" | crossbow and dagger |
 | Secondary | **Summon Companion: Dire Wolf** (`AbilityId::SummonWolf`, builder may name it) | Hide |
 
 **Entity type Elf** (from TODO "Elves and bandits", 2026-10-15): 10 % poison resistance; vision **18 tiles** (twice a Human's 9); darkvision **1/3** of vision; **immune to Sleep**. Its melee split is the default (physical).
@@ -76,6 +76,7 @@ The Assassin's figure is the pack's `elf_m` with a bow and does not look like an
 | Health | **80** |
 | Bite | **10 damage every 0.9 s** (melee split 80 % physical, 20 % magical), small push **8 px** |
 | Speed | **88** px/s (the ranger runs at 80, so it keeps up) |
+| Dash | opens a fight: from up to **4 tiles** away it dashes at its target at **300 px/s** (the Barbarian's dash speed), **20 damage** (same split as the bite), push **12 px**, cooldown **5 s**; then it bites. Mid-dash it is in the air and jumps chasms (user, 2026-10-16) |
 
 The bite's reach and wind-up are the builder's call, in line with the enemies' melee (`range` about 14 to 16 px, a short wind-up, for example 0.2 s). Its damage uses the ranger's progression damage modifier? **No** (my call): the wolf has fixed numbers in this build; scaling with the ranger's upgrades is a later progression item. Its health does not scale with the party size either.
 
@@ -102,7 +103,7 @@ The user: the wolf **stays close and bites whatever comes near the ranger**; it 
 - **Guard:** it attacks an enemy that comes within about **3 tiles of the ranger** (my number), and an enemy that attacks the wolf itself (my call: it fights back). It picks the one nearest to the ranger. Dormant and hiding enemies are never bitten (see below).
 - **Leash:** it does not chase farther than about **6 tiles from the ranger** (my number); beyond that it turns back.
 - **Reappear:** if it is far from the ranger (about **12 tiles**, my number), or cannot reach them (no path), it reappears beside the ranger with the green puff. This covers the sealed boss hall: when the door closes with the wolf outside, the wolf appears next to the ranger inside (the user: "nobody gets locked out").
-- It cannot be pushed through walls; it can be pushed (knockback, blasts) into a chasm or deep water and die there like any monster.
+- It cannot be pushed through walls. **It never falls into a chasm** (the user, 2026-10-16: "evade chasms flawlessly"): its paths avoid chasms, its dash jumps them, and when a push leaves its centre over a chasm it dashes straight back to the last safe tile it stood on. Deep water and lava work as for any monster: a push into deep water drowns it, lava burns it (the user chose chasms only).
 - While the ranger is asleep or stone, the wolf keeps guarding.
 
 ### Growl
@@ -148,7 +149,7 @@ Today `Monster.dormant` mixes two ideas. It splits into two states:
 - The wolf is drawn **like a hero**: visible only where there is light (under the darkness, `DEPTH` below `fog`), and sent to the whole party in every snapshot regardless of view, like the heroes (the user: "only visible where there is light"; my call that it is always sent, like heroes, so the party never loses track of it on the server side).
 - **Health bar:** a small bar over the wolf like the heroes' (`DEPTH.heroBars`, under the darkness).
 - **Damage and heal numbers** on the wolf follow the hero rule: they vanish with it in the dark.
-- Bite: a short lunge toward the target plus the usual hit flash.
+- Bite: a short lunge toward the target plus the usual hit flash. Dash: the dash animation (as the Barbarian's charge).
 - Gallery (`?gallery`) and the demo scenes that show the Assassin switch to the Elven Ranger; the gallery shows the wolf.
 
 ## Rule: sounds show above the darkness
