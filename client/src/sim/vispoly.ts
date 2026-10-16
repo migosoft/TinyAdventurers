@@ -72,8 +72,52 @@ function cast(ox: number, oy: number, dx: number, dy: number, segs: Segment[], m
 /** Ray angle offset beside a segment end. */
 const EPS = 1e-4;
 
+/** A visibility polygon: flat [x0, y0, x1, y1, ...] points and their ray angles, sorted (from -π). */
+export interface SightPolygon {
+  points: number[];
+  angles: number[];
+}
+
 /** The area seen from (px, py) within `r` px, as a flat [x0, y0, x1, y1, ...] polygon sorted by angle (from -π). */
 export function visibilityPolygon(map: TileMap, px: number, py: number, r: number, steps = 96): number[] {
+  return sightPolygon(map, px, py, r, steps).points;
+}
+
+/**
+ * Whether (qx, qy) lies inside `s`, cast from (px, py). The polygon is star-shaped around the viewer
+ * with its points sorted by angle: the point's angle is bracketed by binary search, and it is inside
+ * when it lies on the viewer's side of the edge between the two bracketing points (the edge from the
+ * last point back to the first closes the circle across ±π).
+ */
+export function inside(s: SightPolygon, px: number, py: number, qx: number, qy: number): boolean {
+  const n = s.angles.length;
+  if (n < 2) return false;
+  const a = Math.atan2(qy - py, qx - px);
+  let lo = 0;
+  let hi = n - 1;
+  let i = -1; // the last ray at or before the point's angle
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (s.angles[mid] <= a) {
+      i = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  if (i < 0) i = n - 1;
+  const j = i === n - 1 ? 0 : i + 1;
+  const ax = s.points[2 * i];
+  const ay = s.points[2 * i + 1];
+  const bx = s.points[2 * j];
+  const by = s.points[2 * j + 1];
+  const ex = bx - ax;
+  const ey = by - ay;
+  const sideV = ex * (py - ay) - ey * (px - ax);
+  if (Math.abs(sideV) < 1e-9) return Math.hypot(qx - px, qy - py) <= Math.min(Math.hypot(ax - px, ay - py), Math.hypot(bx - px, by - py));
+  return (ex * (qy - ay) - ey * (qx - ax)) * sideV >= 0;
+}
+
+/** The visibility polygon from (px, py) within `r` px, with its ray angles (for `inside`). */
+export function sightPolygon(map: TileMap, px: number, py: number, r: number, steps = 96): SightPolygon {
   const segs = wallSegments(map, px, py, r);
   const angles: number[] = [];
   for (let i = 0; i < steps; i++) angles.push((i / steps) * Math.PI * 2 - Math.PI);
@@ -94,5 +138,5 @@ export function visibilityPolygon(map: TileMap, px: number, py: number, r: numbe
     const t = cast(px, py, dx, dy, segs, r);
     out.push(px + dx * t, py + dy * t);
   }
-  return out;
+  return { points: out, angles };
 }
