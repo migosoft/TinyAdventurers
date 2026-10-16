@@ -3,13 +3,13 @@
 // (static ones from LightField, moving ones from the snapshot). The light is
 // worked out per tile, then upsampled to SUB pixels per tile (`upsample`; dark
 // tiles are set back to black, `blackenDarkTiles`) and drawn with LINEAR filtering, scaled up by TILE / SUB. Redrawn every frame
-// inside the camera window (cheap: about 60 x 34 tiles). The edge of sight is
-// drawn by the vision mask (visionmask.ts) on top; here, floor one tile past
-// the FOV counts as seen (`seenForLight`), so the light reaches under it.
+// inside the camera window (cheap: about 60 x 34 tiles). What the viewer sees
+// is its View (sim/view.ts: the tiles the visibility polygon covers, the same
+// rule as the server's); the vision mask (visionmask.ts) draws its straight edge.
 import type Phaser from 'phaser';
 import { LIGHT } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
-import { Fov } from '../sim/fov';
+import { View } from '../sim/view';
 import { TILE, type TileMap } from '../sim/map';
 import { DEPTH } from './effects';
 import type { LightField } from './light';
@@ -137,24 +137,11 @@ export function blackenDarkTiles(darkTile: Float32Array, w: number, x0: number, 
     }
 }
 
-/**
- * A tile counts as seen for the light canvases when it is in the FOV, or
- * (`wide`) is open and next to an open FOV tile (8 around). The light then
- * reaches under the vision mask's straight edge, so no tile step shows
- * through it. Walls outside the FOV stay black.
- */
-export function seenForLight(inFov: (x: number, y: number) => boolean, opaque: (x: number, y: number) => boolean, x: number, y: number, wide: boolean): boolean {
-  if (inFov(x, y)) return true;
-  if (!wide || opaque(x, y)) return false;
-  for (let dy = -1; dy <= 1; dy++)
-    for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && inFov(x + dx, y + dy) && !opaque(x + dx, y + dy)) return true;
-  return false;
-}
-
 export class LightView {
-  private fov: Fov;
-  private origin = [-1, -1];
-  private vision = -1;
+  /** What the viewer sees (polygon coverage, walls by FOV). */
+  readonly view: View;
+  /** The viewer and vision the view was computed for; empty: recompute. */
+  private viewKey = '';
   private dark: Phaser.Textures.CanvasTexture;
   private tint: Phaser.Textures.CanvasTexture;
   /** Per-tile darkvision mask (R = 255 where darkvision shows the tile, A = 255), for the greyscale shader. Not added to the scene. */
@@ -169,14 +156,12 @@ export class LightView {
   private tintTile: Float32Array;
   private maskTile: Float32Array;
   private tmp: Float32Array;
-  /** Light floor one tile past the FOV for the vision mask (false: the old tile edges, ?lights E). */
+  /** Light what the view covers (false: the tile FOV only, the old tile edges, ?lights E). */
   wide = true;
-  private inFov = (x: number, y: number) => this.fov.isVisible(x, y);
-  private opaque = (x: number, y: number) => this.map.opaque(x, y);
 
   constructor(scene: Phaser.Scene, private map: TileMap, private field: LightField) {
     const { w, h } = map;
-    this.fov = new Fov(w, h);
+    this.view = new View(w, h);
     for (const k of ['dark', 'tint', 'dvmask']) if (scene.textures.exists(k)) scene.textures.remove(k);
     this.dark = scene.textures.createCanvas('dark', w * SUB, h * SUB)!;
     this.tint = scene.textures.createCanvas('tint', w * SUB, h * SUB)!;
@@ -209,12 +194,7 @@ export class LightView {
 
   /** A tile changed: the viewer's sight is recomputed on the next update. */
   mapChanged(): void {
-    this.origin = [-1, -1];
-  }
-
-  /** The tile is in the viewer's FOV (walls included). */
-  seen(x: number, y: number): boolean {
-    return this.fov.isVisible(x, y);
+    this.viewKey = '';
   }
 
   update(view: Phaser.Geom.Rectangle, vx: number, vy: number, moving: MovingLight[], t: number, darkvision: number, vision: number): void {
@@ -222,10 +202,10 @@ export class LightView {
     const tx = Math.floor(vx / TILE);
     const ty = Math.floor(vy / TILE);
     const sight = Math.round(vision);
-    if (tx !== this.origin[0] || ty !== this.origin[1] || sight !== this.vision) {
-      this.origin = [tx, ty];
-      this.vision = sight;
-      this.fov.compute(this.map, tx, ty, sight);
+    const key = `${vx.toFixed(1)},${vy.toFixed(1)},${sight}`;
+    if (key !== this.viewKey) {
+      this.viewKey = key;
+      this.view.compute(this.map, vx, vy, sight);
     }
     const x0 = Math.max(0, Math.floor(view.x / TILE) - MARGIN);
     const y0 = Math.max(0, Math.floor(view.y / TILE) - MARGIN);
@@ -246,7 +226,7 @@ export class LightView {
       for (let x = x0; x < x1; x++) {
         const i = y * w + x;
         const [r, g, b] = [this.rgb[i * 3], this.rgb[i * 3 + 1], this.rgb[i * 3 + 2]];
-        const visible = seenForLight(this.inFov, this.opaque, x, y, this.wide);
+        const visible = this.wide ? this.view.isVisible(x, y) : this.view.fov.isVisible(x, y);
         const lit = this.field.isLit(x, y) || this.movingLit[i] === 1;
         const reach = visible && darkReach(x - tx, y - ty, range);
         dt[i] = tileDark(visible, lit, reach, r, g, b) * 255;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fixtures from '../generated/fixtures.json';
 import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
-import { Fov } from '../sim/fov';
+import { View } from '../sim/view';
 import { TileMap } from '../sim/map';
 import { darkReach } from './lightview';
 import { addColour, falloff, LightField } from './light';
@@ -34,12 +34,12 @@ describe('light field', () => {
     const m = fmap();
     const f = new LightField(m);
     f.load(fixtures.lights.sources as LightInfo[]);
-    const fov = new Fov(m.w, m.h);
+    const view = new View(m.w, m.h);
     for (const c of fixtures.darkvision) {
-      fov.compute(m, c.x, c.y, CONST.FOV_RADIUS);
+      view.compute(m, (c.x + 0.5) * CONST.TILE, (c.y + 0.5) * CONST.TILE, CONST.FOV_RADIUS);
       const seen: number[] = [];
       for (let y = 0; y < m.h; y++)
-        for (let x = 0; x < m.w; x++) if (fov.isVisible(x, y) && (f.isLit(x, y) || darkReach(x - c.x, y - c.y, c.range))) seen.push(y * m.w + x);
+        for (let x = 0; x < m.w; x++) if (view.isVisible(x, y) && (f.isLit(x, y) || darkReach(x - c.x, y - c.y, c.range))) seen.push(y * m.w + x);
       expect(seen, `viewer ${c.x},${c.y} range ${c.range}`).toEqual(c.seen);
     }
   });

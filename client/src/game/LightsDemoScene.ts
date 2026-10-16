@@ -13,7 +13,6 @@ import Phaser from 'phaser';
 import { CONST, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
 import { TILE, TileMap } from '../sim/map';
-import { sightRadius } from '../sim/vispoly';
 import { tileDraws } from './autotile';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
@@ -195,7 +194,7 @@ export class LightsDemoScene extends Phaser.Scene {
     this.view.wide = this.straight;
     this.view.update(this.cameras.main.worldView, this.viewer.x, this.viewer.y, moving, this.t, this.darkvision, CONST.FOV_RADIUS);
     this.mask.enabled = this.straight;
-    this.mask.update(this.cameras.main.worldView, this.viewer.x, this.viewer.y, sightRadius(CONST.FOV_RADIUS), this.view);
+    this.mask.update(this.cameras.main.worldView, this.view.view);
     this.dot.setPosition(this.viewer.x, this.viewer.y);
     syncDarkvisionFX(this.cameras.main, this.darkvision, this.view.mask, [W * TILE, H * TILE]);
   }

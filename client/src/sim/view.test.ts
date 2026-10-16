@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
+import fixtures from '../generated/fixtures.json';
 import { TILE, TileMap } from './map';
 import { View } from './view';
 import { inside, sightPolygon } from './vispoly';
@@ -74,5 +75,20 @@ describe('View', () => {
     const first = v.version;
     v.compute(map, 70, 70, 9);
     expect(v.version).toBe(first + 1);
+  });
+});
+
+describe('View on the shared fixture', () => {
+  it('matches the server: the same visible tiles and polygon', () => {
+    const map = new TileMap(fixtures.w, fixtures.h, Uint8Array.from(fixtures.tiles));
+    const v = new View(map.w, map.h);
+    for (const c of fixtures.view) {
+      v.compute(map, c.x, c.y, c.vision);
+      const visible: number[] = [];
+      for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) if (v.isVisible(x, y)) visible.push(y * map.w + x);
+      expect(visible, `viewer ${c.x},${c.y}`).toEqual(c.visible);
+      expect(v.polygon.points.length, `viewer ${c.x},${c.y} points`).toBe(c.points.length);
+      v.polygon.points.forEach((p, i) => expect(p, `viewer ${c.x},${c.y} point ${i}`).toBeCloseTo(c.points[i], 6));
+    }
   });
 });

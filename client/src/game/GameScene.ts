@@ -9,7 +9,6 @@ import type { Net } from '../net';
 import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
-import { sightRadius } from '../sim/vispoly';
 import type { Hud } from '../ui/hud';
 import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
@@ -609,7 +608,7 @@ export class GameScene extends Phaser.Scene {
     const darkvision = (this.lastSnap?.me.darkvision ?? 0) / 100;
     const vision = this.lastSnap?.me.vision ?? CONST.FOV_RADIUS;
     this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now, darkvision, vision);
-    this.visionMask.update(this.cameras.main.worldView, camX, camY, sightRadius(vision), this.lightView);
+    this.visionMask.update(this.cameras.main.worldView, this.lightView.view);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 
     const seen = new Set<number>();

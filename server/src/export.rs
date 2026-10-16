@@ -334,9 +334,21 @@ fn export_fixtures() {
         }
         dark_cases.push(json!({ "x": cx, "y": cy, "range": range, "seen": seen }));
     }
+    // The hero's view (vispoly.rs): polygon points and visible tiles from pixel positions beside
+    // the long wall's end, the 3-tile pillar and the wall block, on a tile corner and in the open.
+    let mut view_cases = Vec::new();
+    for (x, y) in [(150.5, 200.3), (90.7, 108.2), (186.4, 168.9), (176.0, 208.0), (60.0, 200.0)] {
+        let p = crate::math::Vec2::new(x, y);
+        assert!(!map.opaque_at(p), "view viewer {x},{y} stands on open floor");
+        view.compute(&map, p, PLAYER_FOV_RADIUS);
+        let poly = crate::vispoly::sight_polygon(&map, x, y, crate::vispoly::sight_radius(PLAYER_FOV_RADIUS), 96);
+        let points: Vec<f64> = poly.points.iter().flat_map(|&(a, b)| [a, b]).collect();
+        let visible: Vec<i32> = (0..map.w * map.h).filter(|i| view.is_visible(i % map.w, i / map.w)).collect();
+        view_cases.push(json!({ "x": x, "y": y, "vision": PLAYER_FOV_RADIUS, "points": points, "visible": visible }));
+    }
     let light_case = json!({ "sources": srcs, "lit": lit, "moving": moving });
     let doc = json!({
-        "lights": light_case, "darkvision": dark_cases,
+        "lights": light_case, "darkvision": dark_cases, "view": view_cases,
         "w": map.w, "h": map.h, "tiles": map.tiles,
         "radius": PLAYER_RADIUS, "dt": DT, "dashSpeed": ab::DASH_SPEED, "fovRadius": PLAYER_FOV_RADIUS,
         "solids": solids.iter().map(|s| json!([s.x, s.y, s.half])).collect::<Vec<_>>(),
