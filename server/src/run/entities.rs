@@ -1,6 +1,7 @@
 use crate::collision::MoveState;
 use crate::defs::classes::ClassDef;
 use crate::defs::damage::{Damage, DamageSplit, Resistances};
+use crate::defs::effects::EffectResponses;
 use crate::defs::progression::Modifiers;
 use crate::defs::enemies::EnemyType;
 use crate::defs::entity_types::Sight;
@@ -23,7 +24,7 @@ pub struct Player {
     pub res: Resistances,
     pub melee: DamageSplit,
     /// How it takes each status effect (from its entity types).
-    pub responses: crate::defs::effects::EffectResponses,
+    pub responses: EffectResponses,
     pub tx: Option<UnboundedSender<Message>>,
     pub name: String,
     pub class: ClassId,

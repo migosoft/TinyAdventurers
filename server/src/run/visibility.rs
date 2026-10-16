@@ -317,7 +317,7 @@ mod tests {
     #[test]
     fn an_elf_sees_eighteen_tiles_far() {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
-        run.monsters.retain(|m| m.is_boss);
+        run.monsters.clear();
         let (tx, ty) = Map::tile_of(run.players[0].pos());
         for y in ty - 2..=ty + 2 {
             for x in tx - 2..=tx + 25 {
@@ -325,17 +325,23 @@ mod tests {
             }
         }
         run.lights = Lights::new(run.layout.map.w, run.layout.map.h);
-        let near = Map::center_of(tx + 16, ty);
-        let far = Map::center_of(tx + 20, ty);
+        let sight = run.players[0].sight_now();
+        assert_eq!(sight.vision, 18.0);
+        let p = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, p, sight.vision.round() as i32);
+        let near = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 16, ty), None, 1);
+        let far = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 20, ty), None, 1);
         run.add_light(LightKind::Torch, Anchor::Tile(tx + 17, ty), None);
         run.add_light(LightKind::Torch, Anchor::Tile(tx + 21, ty), None);
-        let p = run.players[0].pos();
-        run.players[0].view.compute(&run.layout.map, p, 18);
-        assert!(sees(&mut run, near, 5.0), "16 tiles away, lit");
-        assert!(!sees(&mut run, far, 5.0), "20 tiles away, beyond the 18-tile view");
-        let (txc, _rx) = tokio::sync::mpsc::unbounded_channel();
-        run.players[0].tx = Some(txc);
+        assert!(sees(&mut run, Map::center_of(tx + 16, ty), 5.0), "16 tiles away, lit");
+        let (chan, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(chan);
         send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = rx.try_recv().unwrap() else { panic!() };
+        let s: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        let has = |id: u32| s[2].as_array().unwrap().iter().any(|e| e[0] == id as u64);
+        assert!(has(near), "a monster lit 16 tiles east is sent");
+        assert!(!has(far), "one 20 tiles east is beyond the 18-tile view");
     }
 
     #[test]
