@@ -1,0 +1,6 @@
+"16x16 Enchanted Forest Characters" by Superdark
+https://superdark.itch.io/enchanted-forest-characters
+License: CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/), confirmed by the author in a comment ("same size, same animations, and also cc-0").
+From the page: "This asset is completely free, like the original, you can use them however you like ... in free or commercial projects", "you can modify the sprites and no credit is required (but would be appreciated)".
+An add-on to 0x72's "16x16 DungeonTileset II" (CC0): "All original assets were created by 0x72".
+Licence checked 2026-10-16. sheet.png is the pack's sheet with animations; frames/ holds its individual frames, one folder per figure, as shipped (the "All" folder is left out: it repeats the same files).

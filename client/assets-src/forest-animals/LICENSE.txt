@@ -1,0 +1,6 @@
+"Forest creatures" (Minifolks Forest Animals) by LYASeeK
+https://lyaseek.itch.io/miniffanimals
+License: not CC0. Terms from the page: "You can use this asset as you like, just don't resell it." "Credit is not required but would be appreciated."
+The author in a comment: "You can use assets in commercial and non-commercial projects."
+Do not resell or redistribute these files as an asset pack. Credited in the README.
+Licence checked 2026-10-16. Outline/ and "Without outline"/ are the sprite sheets as shipped (32x32 frames, larger than the 0x72 16x16 grid); aseprite/ holds the source files from the download.

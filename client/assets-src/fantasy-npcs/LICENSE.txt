@@ -1,0 +1,7 @@
+"16x16 Fantasy RPG Characters" (free NPC pack) by Superdark
+https://superdark.itch.io/16x16-free-npc-pack
+License: no formal licence and no CC0 statement on the page. Its terms, quoted from the page:
+"These assets are completely free so you can use them however you like, in free and commercial projects", "you can even modify them to suit your needs", "you don't need to credit me but it is greatly appreciated if you do".
+Redistribution and resale of the files are not addressed, so they are kept here for this game only. Credited in the README anyway.
+A supplement to 0x72's "16x16 DungeonTileset II" ("inspired by 0x72's amazing work").
+Licence checked 2026-10-16. knights.png is a sheet from the download; frames/ holds the individual frames, one folder per figure, as shipped (the "All" folder is left out: it repeats them, misses the male townsfolk and names the tall nun "SkinnyNun").
