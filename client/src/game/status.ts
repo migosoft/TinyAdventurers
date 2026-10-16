@@ -204,7 +204,7 @@ interface Z {
   age: number;
   x: number;
   y: number;
-  /** Depth: just in front of the sleeper, under the darkness. */
+  /** Depth: the sound layer, above the darkness. */
   d: number;
 }
 
@@ -284,9 +284,9 @@ export class StatusView {
             .text(0, 0, 'Z', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4, color: '#ffffff' })
             .setFontSize(5)
             .setOrigin(0.5, 1)
-            .setStroke('#140c1a', 2)
+            .setStroke('#d8d0e0', 2)
             .setPadding(1);
-        this.zs.push({ t: t.setVisible(true), age: 0, x: a.x + 3, y: a.y - a.head, d: DEPTH.entityBase + a.y + 1 });
+        this.zs.push({ t: t.setVisible(true), age: 0, x: a.x + 3, y: a.y - a.head, d: DEPTH.sound });
       }
     } else this.zT = 0;
     for (let i = this.zs.length - 1; i >= 0; i--) {

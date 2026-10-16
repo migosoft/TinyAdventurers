@@ -84,3 +84,14 @@ describe('Predictor', () => {
     expect(pred.cd1).toBeCloseTo(cd - 4 * CONST.DT, 6);
   });
 });
+
+describe('wolf cooldown', () => {
+  it('takes the 60 s wait from the server when the wolf falls', () => {
+    const pred = new Predictor(chasmMap(), 'ElvenRanger', MODS, 3 * TILE + 8, 2 * TILE + 8);
+    expect(pred.cd2).toBe(0);
+    const s = snap(0, pred.state.x, pred.state.y);
+    s.me.cd2 = 60;
+    pred.reconcile(s);
+    expect(pred.cd2).toBeCloseTo(60, 1);
+  });
+});

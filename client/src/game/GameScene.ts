@@ -10,7 +10,7 @@ import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Hud } from '../ui/hud';
-import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
+import { FIGURES, PROJECTILES, isAllyKind, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
 import { BarrelView } from './barrel';
@@ -344,8 +344,15 @@ export class GameScene extends Phaser.Scene {
           this.fx.burst(ev.x, ev.y, 18, 0x8a5a2a, 70);
           this.cameras.main.shake(120, 0.004);
         } else if (ev.k === 8) this.fx.splinters(ev.x, ev.y);
+        else if (ev.k === 9) this.fx.natureSparkles(ev.x, ev.y, ev.r);
         else this.fx.explosion(ev.x, ev.y, ev.r);
         break;
+      case 'Growl': {
+        const wolf = this.ents.get(ev.id);
+        if (wolf) this.fx.text(wolf.x, wolf.y - 14, 'grrrr', '#e8e0d0', false, DEPTH.sound, '#d8d0e0');
+        this.views.get(ev.id)?.shake(0.4);
+        break;
+      }
       case 'Died': {
         // Lost to a chasm or deep water: nothing is left behind.
         if (this.sinks.delete(ev.id)) break;
@@ -498,7 +505,7 @@ export class GameScene extends Phaser.Scene {
           // A closed chest is stabbed like the hidden mimic it may be (server `dagger_target`).
           if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= CONST.DAGGER_RANGE;
           // A flying dragon is out of the dagger's reach (the server shoots the crossbow then).
-          return !isPlayerKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= CONST.DAGGER_RANGE;
+          return !isPlayerKind(e.kind) && !isAllyKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= CONST.DAGGER_RANGE;
         });
         if (close) {
           anim = ANIM.Melee;
@@ -687,6 +694,7 @@ export class GameScene extends Phaser.Scene {
       cd2: this.pred.cd2,
       ents: this.ents.size,
       darkvision,
+      wolf: this.info.players.find((p) => p.ent === this.info.you)?.class === 'ElvenRanger' ? [...this.ents.values()].some((e) => e.kind === KIND.DireWolf && e.extra === this.info.you && !(e.flags & FLAG.DEAD)) : null,
     });
   }
 
@@ -902,7 +910,7 @@ export class GameScene extends Phaser.Scene {
       const w = ogre ? 28 : 12;
       const x = Math.round(e.x - w / 2);
       const y = Math.round(e.y - v.height - 3);
-      const hero = isPlayerKind(e.kind);
+      const hero = isPlayerKind(e.kind) || isAllyKind(e.kind);
       const g = hero ? this.heroBars : this.bars;
       g.fillStyle(0x140c1a, 1).fillRect(x - 1, y - 1, w + 2, 4);
       g.fillStyle(hero ? 0x40d060 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EFFECT } from '../generated/defs';
-import { flameSpots, has, lieLayout, lyingPose, snowflakeAlpha } from './status';
+import { DEPTH } from './effects';
+import { StatusView, flameSpots, has, lieLayout, lyingPose, snowflakeAlpha } from './status';
 
 describe('status', () => {
   it('reads effect bits', () => {
@@ -44,5 +45,32 @@ describe('elemental visuals', () => {
       expect(y).toBeGreaterThanOrEqual(-20);
     }
     expect(flameSpots(12, 20, 3, 7)).toHaveLength(3);
+  });
+});
+
+describe('sleep Z', () => {
+  it('draws the sleep Z above the darkness with a light outline', () => {
+    const made: Array<{ depth: number; stroke: string }> = [];
+    const mk = () => {
+      const t: Record<string, unknown> = { depth: 0, stroke: '' };
+      const self = new Proxy(t, {
+        get: (o, k: string) => (k in o ? o[k] : (...a: unknown[]) => {
+          if (k === 'setDepth') o.depth = a[0];
+          if (k === 'setStroke') o.stroke = a[0];
+          return self;
+        }),
+      });
+      made.push(t as { depth: number; stroke: string });
+      return self;
+    };
+    const scene = { add: { text: mk, image: mk }, textures: { exists: () => true } } as never;
+    const body = { frame: { name: 'f', height: 16 }, x: 0, y: 0, originY: 1, flipX: false } as never;
+    const anchor = { x: 10, y: 20, head: 16, w: 10, cx: 0, body, scale: 1, alpha: 1 };
+    const view = new StatusView(scene, {} as never, () => anchor);
+    view.update(1 << EFFECT.Sleep, 0.7);
+    const z = made.find((t) => t.stroke !== '');
+    expect(z).toBeDefined();
+    expect(z!.depth).toBe(DEPTH.sound);
+    expect(z!.stroke).toBe('#d8d0e0');
   });
 });

@@ -19,6 +19,8 @@ export const DEPTH = {
   fog: 7000,
   /** Lich drain beams: above the fog, they show even where the hero cannot see. */
   beam: 7001,
+  /** Sound text ("grrrr", the sleeper's Z): above the darkness, under the damage numbers. */
+  sound: 7500,
   numbers: 8000,
 };
 
@@ -114,11 +116,20 @@ export class Effects {
   }
 
   /** A floating number or word; `depth`: `DEPTH.heroNumbers` for one on a hero. */
-  text(x: number, y: number, s: string, color: string, big = false, depth = DEPTH.numbers): void {
+  text(x: number, y: number, s: string, color: string, big = false, depth = DEPTH.numbers, stroke = '#140c1a'): void {
     const t = this.freeTexts.pop() ?? this.scene.add.text(0, 0, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4 });
-    t.setText(s).setColor(color).setFontSize(big ? 10 : 6).setStroke('#140c1a', big ? 3 : 2).setOrigin(0.5, 1);
+    t.setText(s).setColor(color).setFontSize(big ? 10 : 6).setStroke(stroke, big ? 3 : 2).setOrigin(0.5, 1);
     t.setPosition(Math.round(x + (Math.random() * 6 - 3)), Math.round(y)).setAlpha(1).setVisible(true).setDepth(depth).setScale(1);
     this.texts.push({ t, vy: big ? -34 : -26, life: big ? 0.9 : 0.7, max: big ? 0.9 : 0.7 });
+  }
+
+  /** The wolf's summon, reappear and vanish: about 18 clear-green sparks rising and fading over 0.6 s (not the poison tint). */
+  natureSparkles(x: number, y: number, r: number): void {
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.random() * Math.max(r, 6);
+      this.particle(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.5, (Math.random() - 0.5) * 14, -14 - Math.random() * 18, 0.6, Math.random() < 0.5 ? 0x60f070 : 0xc0ffb0, { frame: 'spark', fade: true });
+    }
   }
 
   update(dt: number): void {
