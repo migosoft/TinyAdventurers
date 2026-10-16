@@ -40,7 +40,7 @@ The straight vision edges (TODO priority 2) are **built on branch `feature/visio
   - The shared fixture (`view` cases, 5 pixel positions) pins the TypeScript port to the Rust one. The tiles and points match exactly.
   - Enemy perception and darkvision are unchanged.
 - `game/visionmask.ts`: a canvas over the camera window (+2 tiles) at 8 px per tile, with the view's polygon plus its walls in white. A Phaser `Shader` game object at `DEPTH.fog + 0.5` draws black where it is not white. It redraws when the window or the view's version changes.
-- `LightView`: `LightView.view`, recomputed when the viewer moves (0.1 px), the vision changes or the map changes. `wide` off means the old FOV edges.
+- `LightView`: `LightView.view`, recomputed when the viewer moves (0.1 px), the vision changes or the map changes. The light canvases use `seenForLight` (the view plus open tiles next to it, so grazed tiles do not shade the edge into notches; a second-review fix). `wide` off means the old FOV edges.
 - `GameScene`: the view follows `camX`, `camY` (the own figure, or the spectated teammate) with the snapshot's vision; `Ev::Tile` calls `mapChanged` on both.
 - `?lights`: two pillars, click moves the viewer (`&at=x,y`), E toggles old and new edges (`&edges=old`). `tools/e2e/lights-shot.mjs` takes an extra query and a file prefix.
 
@@ -48,7 +48,7 @@ The straight vision edges (TODO priority 2) are **built on branch `feature/visio
 
 **Verified (2026-10-16):**
 - Server: **324 tests pass** (317 before; 7 new in `vispoly.rs`), no warnings. Fingerprints, the spectator test and the torch test are unchanged.
-- Client: `npm test` **79 tests pass** (65 before the feature); `npm run typecheck` clean; `npm run build` passes.
+- Client: `npm test` **83 tests pass** (65 before the feature); `npm run typecheck` clean; `npm run build` passes.
 - The polygon costs **0.051 ms** (Node, every floor tile of the fixture map, vision 9).
 - `?lights` screenshots (pillars, doorway, beside the corridor mouth `&at=10.9,8.4`, darkvision 1): no black wedges.
 - Smoke test with two players (Wizard, Paladin) against the rebuilt Docker game: no browser errors, straight edges in the game.

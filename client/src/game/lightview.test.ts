@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND } from '../generated/defs';
-import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, nextDarkvision, SUB, tileDark, upsample } from './lightview';
+import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, nextDarkvision, seenForLight, SUB, tileDark, upsample } from './lightview';
 
 describe('darkness', () => {
   it('is black where not seen or not lit', () => {
@@ -107,5 +107,26 @@ describe('darkvision', () => {
     expect(nextDarkvision(0.3)).toBe(0.5);
     expect(nextDarkvision(0.6)).toBe(1);
     expect(nextDarkvision(50 / 100)).toBe(1); // the snapshot's percent
+  });
+});
+
+describe('seenForLight', () => {
+  // Row 0: floor; the view = only tile (1, 0). Tile (3, 0) is a wall.
+  const inView = (x: number, y: number) => x === 1 && y === 0;
+  const opaque = (x: number, _y: number) => x === 3;
+  it('keeps the view', () => {
+    expect(seenForLight(inView, opaque, 1, 0)).toBe(true);
+  });
+  it('lights open tiles next to an open tile in view, so a grazed tile does not darken the edge', () => {
+    expect(seenForLight(inView, opaque, 2, 0)).toBe(true);
+    expect(seenForLight(inView, opaque, 0, 1)).toBe(true); // diagonal
+  });
+  it('never adds walls or tiles two steps away', () => {
+    expect(seenForLight(inView, opaque, 3, 0)).toBe(false);
+    expect(seenForLight(inView, opaque, 4, 0)).toBe(false);
+  });
+  it('does not grow from a wall in view', () => {
+    const wallView = (x: number, y: number) => x === 3 && y === 0;
+    expect(seenForLight(wallView, opaque, 4, 0)).toBe(false);
   });
 });

@@ -137,6 +137,21 @@ export function blackenDarkTiles(darkTile: Float32Array, w: number, x0: number, 
     }
 }
 
+/**
+ * A tile counts as seen for the light canvases when it is in view, or is open
+ * and next to an open tile in view (8 around). A tile the polygon only grazes
+ * (no sample point inside) then stays lit, so the darkness does not fade the
+ * lit tile next to it into tile-shaped notches along the mask's straight edge.
+ * Those extra tiles lie under the mask apart from slivers under 2 px.
+ */
+export function seenForLight(inView: (x: number, y: number) => boolean, opaque: (x: number, y: number) => boolean, x: number, y: number): boolean {
+  if (inView(x, y)) return true;
+  if (opaque(x, y)) return false;
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && inView(x + dx, y + dy) && !opaque(x + dx, y + dy)) return true;
+  return false;
+}
+
 export class LightView {
   /** What the viewer sees (polygon coverage, walls by FOV). */
   readonly view: View;
@@ -158,6 +173,8 @@ export class LightView {
   private tmp: Float32Array;
   /** Light what the view covers (false: the tile FOV only, the old tile edges, ?lights E). */
   wide = true;
+  private inView = (x: number, y: number) => this.view.isVisible(x, y);
+  private opaque = (x: number, y: number) => this.map.opaque(x, y);
 
   constructor(scene: Phaser.Scene, private map: TileMap, private field: LightField) {
     const { w, h } = map;
@@ -226,7 +243,7 @@ export class LightView {
       for (let x = x0; x < x1; x++) {
         const i = y * w + x;
         const [r, g, b] = [this.rgb[i * 3], this.rgb[i * 3 + 1], this.rgb[i * 3 + 2]];
-        const visible = this.wide ? this.view.isVisible(x, y) : this.view.fov.isVisible(x, y);
+        const visible = this.wide ? seenForLight(this.inView, this.opaque, x, y) : this.view.fov.isVisible(x, y);
         const lit = this.field.isLit(x, y) || this.movingLit[i] === 1;
         const reach = visible && darkReach(x - tx, y - ty, range);
         dt[i] = tileDark(visible, lit, reach, r, g, b) * 255;
