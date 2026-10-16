@@ -396,6 +396,7 @@ impl Run {
         for pi in 0..self.players.len() {
             self.step_player(pi);
         }
+        companion::vanish_orphans(self);
         self.touch_chests();
         self.refresh_lights(); // the AI perceives by the lights of this tick
 

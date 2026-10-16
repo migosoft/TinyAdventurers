@@ -76,6 +76,37 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
     id
 }
 
+/// The ranger's secondary: summons the wolf, or heals the living one by its share of max HP.
+pub fn use_ability(run: &mut Run, pi: usize) {
+    match run.players[pi].wolf.and_then(|id| run.monster_idx(id)) {
+        Some(mi) if run.monsters[mi].alive => {
+            run.heal_monster(mi, WOLF_HP * WOLF_HEAL_SHARE);
+        }
+        _ => {
+            spawn_wolf(run, pi);
+        }
+    }
+}
+
+/// Allies whose owner is no longer a living hero (fallen or left) vanish at once, with a puff:
+/// no death event, no message, no cooldown.
+pub fn vanish_orphans(run: &mut Run) {
+    for mi in 0..run.monsters.len() {
+        let m = &run.monsters[mi];
+        let Some(owner) = m.ally.as_ref().map(|a| a.owner).filter(|_| m.alive) else { continue };
+        let pi = run.player_idx(owner);
+        if pi.is_some_and(|pi| run.players[pi].alive) {
+            continue;
+        }
+        let pos = m.pos;
+        run.monsters[mi].alive = false;
+        if let Some(pi) = pi {
+            run.players[pi].wolf = None;
+        }
+        run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: 10.0, k: 9 }, None);
+    }
+}
+
 /// The wolf `mi` has fallen: no XP, no coins, no kill; the ranger waits for the next one.
 pub fn wolf_died(run: &mut Run, mi: usize) {
     let m = &mut run.monsters[mi];
@@ -140,6 +171,119 @@ mod tests {
         let m = &run.monsters[wolf_idx(run, id)];
         assert_eq!(m.hp, 80.0, "{what}: the wolf lost no HP");
         assert_eq!(m.knock, Vec2::ZERO, "{what}: and was not pushed");
+    }
+
+    /// One input of hero `pi` per step (cooldowns tick per processed input), with the secondary pressed or not.
+    fn press(run: &mut Run, pi: usize, secondary: bool) {
+        let seq = run.players[pi].ack + 1;
+        let secondary = secondary.then_some(1);
+        run.players[pi].inputs.push_back(crate::protocol::InputMsg { seq, secondary, ..Default::default() });
+        run.step();
+    }
+
+    fn wolves(run: &Run) -> Vec<&crate::run::entities::Monster> {
+        run.monsters.iter().filter(|m| m.alive && m.is_ally()).collect()
+    }
+
+    #[test]
+    fn right_click_summons_then_heals_and_the_wolf_never_doubles() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        press(&mut run, 0, true);
+        assert_eq!(wolves(&run).len(), 1);
+        assert!((run.players[0].cd2 - 8.0).abs() < 0.1, "cd2 {}", run.players[0].cd2);
+        press(&mut run, 0, true);
+        assert_eq!(wolves(&run).len(), 1, "the cooldown refuses a second wolf");
+        let id = run.players[0].wolf.unwrap();
+        let wi = wolf_idx(&run, id);
+        run.monsters[wi].hp = 50.0;
+        run.players[0].cd2 = 0.0;
+        press(&mut run, 0, true);
+        assert_eq!(run.monsters[wolf_idx(&run, id)].hp, 66.0);
+        assert_eq!(wolves(&run).len(), 1);
+        run.players[0].cd2 = 0.0;
+        press(&mut run, 0, true);
+        assert_eq!(run.monsters[wolf_idx(&run, id)].hp, 80.0, "the heal stops at the maximum");
+        assert!((run.players[0].cd2 - 8.0).abs() < 0.1, "a heal at full HP still costs the cooldown: {}", run.players[0].cd2);
+    }
+
+    #[test]
+    fn the_cooldowns_follow_attack_speed() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        run.players[0].mods.attack_speed = 2.0;
+        press(&mut run, 0, true);
+        assert!((run.players[0].cd2 - 4.0).abs() < 0.1, "cd2 {}", run.players[0].cd2);
+        let id = run.players[0].wolf.unwrap();
+        let wi = wolf_idx(&run, id);
+        run.hurt_monster(wi, Damage::physical(200.0), false, None);
+        assert!((run.players[0].cd2 - 30.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn after_the_wolf_falls_the_button_waits_60_s_then_summons() {
+        let (mut run, id) = ranger_with_wolf();
+        let wi = wolf_idx(&run, id);
+        run.hurt_monster(wi, Damage::physical(200.0), false, None);
+        press(&mut run, 0, true);
+        assert!(wolves(&run).is_empty(), "no wolf during the wait");
+        for _ in 0..60 * 60 {
+            press(&mut run, 0, false);
+        }
+        press(&mut run, 0, true);
+        assert_eq!(wolves(&run).len(), 1, "a new wolf after 60 s");
+    }
+
+    #[test]
+    fn two_rangers_each_keep_their_own_wolf() {
+        let mut run = test_run(&[ClassId::ElvenRanger, ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        press(&mut run, 0, true);
+        press(&mut run, 1, true);
+        assert_eq!(wolves(&run).len(), 2);
+        let (a, b) = (run.players[0].wolf.unwrap(), run.players[1].wolf.unwrap());
+        assert_eq!(run.monsters[wolf_idx(&run, a)].ally.as_ref().unwrap().owner, run.players[0].id);
+        assert_eq!(run.monsters[wolf_idx(&run, b)].ally.as_ref().unwrap().owner, run.players[1].id);
+        let ai = wolf_idx(&run, a);
+        run.monsters[ai].hp = 30.0;
+        run.players[1].cd2 = 0.0;
+        press(&mut run, 1, true);
+        assert_eq!(run.monsters[wolf_idx(&run, a)].hp, 30.0, "ranger B does not heal wolf A");
+        assert_eq!(run.monsters[wolf_idx(&run, b)].hp, 80.0);
+        assert!((run.players[1].cd2 - 8.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn the_wolf_vanishes_when_its_ranger_falls_or_leaves() {
+        let mut run = test_run(&[ClassId::ElvenRanger, ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        press(&mut run, 0, true);
+        press(&mut run, 1, true);
+        assert_eq!(wolves(&run).len(), 2);
+
+        run.events.clear();
+        run.hurt_player(0, Damage::physical(999.0));
+        run.step();
+        assert_eq!(run.players[0].wolf, None);
+        assert_eq!(wolves(&run).len(), 1, "only the fallen ranger's wolf is gone");
+        assert!(run.events.iter().any(|(e, at)| matches!(e, Ev::Boom { k: 9, .. }) && at.is_none()));
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Msg { text } if text.contains("wolf has fallen"))));
+        assert_eq!(run.players[0].xp, 0);
+
+        run.events.clear();
+        let conn = run.players[1].conn;
+        run.handle(crate::run::RunCmd::Leave { conn });
+        run.step();
+        assert_eq!(run.players[1].wolf, None);
+        assert!(wolves(&run).is_empty());
+        assert!(run.events.iter().any(|(e, at)| matches!(e, Ev::Boom { k: 9, .. }) && at.is_none()));
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Msg { text } if text.contains("wolf has fallen"))));
+        assert_eq!(run.players[1].xp, 0);
+
+        // A dead ranger's secondary is ignored.
+        run.players[0].cd2 = 0.0;
+        press(&mut run, 0, true);
+        assert!(wolves(&run).is_empty());
     }
 
     #[test]

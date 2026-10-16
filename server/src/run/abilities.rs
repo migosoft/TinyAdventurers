@@ -129,7 +129,7 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
             }
         }
         AbilityId::SummonWolf => {
-            // Task 7: summon or heal the wolf
+            super::companion::use_ability(run, pi);
             Anim::Cast
         }
     };

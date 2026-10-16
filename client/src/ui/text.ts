@@ -35,7 +35,7 @@ export const CLASS_TEXT: Record<ClassId, { title: string; blurb: string; abiliti
     blurb: 'Keen-eyed elf of the deep woods, never alone.',
     abilities: [
       { name: 'Bow / Rapier', text: 'Shoots arrows; thrusts with the rapier automatically when an enemy is close.' },
-      { name: 'Dire Wolf', text: '' },
+      { name: 'Dire Wolf', text: 'Summons your dire wolf companion. While it lives, heals it for 20 %. If it falls, it can be summoned again after 60 s.' },
     ],
   },
 };
