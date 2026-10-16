@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND } from '../generated/defs';
-import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, nextDarkvision, SUB, tileDark, upsample } from './lightview';
+import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, nextDarkvision, seenForLight, SUB, tileDark, upsample } from './lightview';
 
 describe('darkness', () => {
   it('is black where not seen or not lit', () => {
@@ -107,5 +107,28 @@ describe('darkvision', () => {
     expect(nextDarkvision(0.3)).toBe(0.5);
     expect(nextDarkvision(0.6)).toBe(1);
     expect(nextDarkvision(50 / 100)).toBe(1); // the snapshot's percent
+  });
+});
+
+describe('seenForLight', () => {
+  // Row 0: floor; FOV = only tile (1, 0). Tile (3, 0) is a wall.
+  const fov = (x: number, y: number) => x === 1 && y === 0;
+  const opaque = (x: number, _y: number) => x === 3;
+  it('keeps the FOV', () => {
+    expect(seenForLight(fov, opaque, 1, 0, true)).toBe(true);
+    expect(seenForLight(fov, opaque, 1, 0, false)).toBe(true);
+  });
+  it('adds open tiles next to an open FOV tile when wide', () => {
+    expect(seenForLight(fov, opaque, 2, 0, true)).toBe(true);
+    expect(seenForLight(fov, opaque, 0, 1, true)).toBe(true); // diagonal
+    expect(seenForLight(fov, opaque, 2, 0, false)).toBe(false);
+  });
+  it('never adds walls or tiles two steps away', () => {
+    expect(seenForLight(fov, opaque, 3, 0, true)).toBe(false);
+    expect(seenForLight(fov, opaque, 4, 0, true)).toBe(false);
+  });
+  it('does not grow from a wall in the FOV', () => {
+    const wallFov = (x: number, y: number) => x === 3 && y === 0;
+    expect(seenForLight(wallFov, opaque, 4, 0, true)).toBe(false);
   });
 });

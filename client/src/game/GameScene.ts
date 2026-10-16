@@ -9,6 +9,7 @@ import type { Net } from '../net';
 import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
+import { sightRadius } from '../sim/vispoly';
 import type { Hud } from '../ui/hud';
 import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
@@ -21,6 +22,7 @@ import { DEPTH, Effects } from './effects';
 import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
 import { LightView, nextDarkvision } from './lightview';
+import { VisionMask } from './visionmask';
 import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
@@ -94,6 +96,7 @@ export class GameScene extends Phaser.Scene {
   private lastSnap?: Snapshot;
   private light!: LightField;
   private lightView!: LightView;
+  private visionMask!: VisionMask;
   private unsub?: () => void;
   private frameMs = 0;
   private myKind = 0;
@@ -151,6 +154,7 @@ export class GameScene extends Phaser.Scene {
     this.fx = new Effects(this);
     this.drawBoard();
     this.lightView = new LightView(this, this.map, this.light);
+    this.visionMask = new VisionMask(this, this.map);
     this.useHint = this.add.text(0, 0, 'E', { fontFamily: 'monospace', fontSize: '8px', color: '#ffffff', stroke: '#000000', strokeThickness: 2 }).setOrigin(0.5, 1).setVisible(false).setDepth(DEPTH.numbers);
     this.bars = this.add.graphics().setDepth(DEPTH.numbers - 1);
     this.heroBars = this.add.graphics().setDepth(DEPTH.heroBars);
@@ -369,6 +373,7 @@ export class GameScene extends Phaser.Scene {
         this.redrawTile(ev.x, ev.y);
         this.light.mapChanged();
         this.lightView.mapChanged();
+        this.visionMask.mapChanged();
         if (ev.v === TILE_ID.DoorClosed) {
           // The entrance tiles arrive one event each; only announce the first.
           if (!this.forceField) this.hud.message('A force field seals the hall behind you!');
@@ -602,7 +607,9 @@ export class GameScene extends Phaser.Scene {
     }
     this.cameras.main.centerOn(Math.round(camX), Math.round(camY - 8));
     const darkvision = (this.lastSnap?.me.darkvision ?? 0) / 100;
-    this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now, darkvision, this.lastSnap?.me.vision ?? CONST.FOV_RADIUS);
+    const vision = this.lastSnap?.me.vision ?? CONST.FOV_RADIUS;
+    this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now, darkvision, vision);
+    this.visionMask.update(this.cameras.main.worldView, camX, camY, sightRadius(vision), this.lightView);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 
     const seen = new Set<number>();
