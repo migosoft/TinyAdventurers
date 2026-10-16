@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Next session
 
-The straight vision edges (TODO priority 2) are **merged into `main` and pushed** (2026-10-16, at the user's request; the server now sees by the same polygon as the client draws, see "Last feature" below). Still to do with the user: a look at the edges in a real run (rebuild the Docker game first), and from before, a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons.
+The straight vision edges (TODO priority 2) are **merged into `main` and pushed** (2026-10-16, at the user's request; the server now sees by the same polygon as the client draws, see "Last feature" below). **The user played it and approved the look** (2026-10-16: "I like the new edges design"). Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons.
 
 1. Next: TODO priority 3 (art and licences) and 4 (abilities; they can give Slowed and Accelerated a source).
 2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
