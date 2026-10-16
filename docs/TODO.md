@@ -5,7 +5,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 **Tier 1: foundations**
 1. **Effect system** (done, built 2026-10-15 on `feature/effects`; follow-ups in "Effect system follow-ups"). Blind, sleep, petrified, slowed, accelerated and the elemental burning, frozen, poisoned; extensible, every creature, effects modify any stat. Spec: [docs/superpowers/specs/2026-10-15-effects-design.md](superpowers/specs/2026-10-15-effects-design.md); TECHNICAL §5 "Status effects", §11 "How to add an effect". The lich casts three effect spells.
-2. **Straight, softly fading vision edges** (next item; the user wants it soon; see "Vision and darkvision follow-ups", "Vision edges"). Client only.
+2. **Vision edges:** done (2026-10-16, branch `feature/vision-edges`): straight, crisp shadow edges from a visibility polygon (TECHNICAL §7 "The vision mask").
 3. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), gnolls. Little code, but the shadow, ghost, gnolls and sphinx wait on it.
 
 **Tier 2: larger features on top of tier 1**
@@ -20,7 +20,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 8. **Elves and bandits** (see "Elves and bandits"): the Elf entity type and the elven archer (a new playable hero class), then the dark elf. The effect system is built (1), so the elf's sleep immunity is one `EffectResponses` entry (see "Effect system follow-ups"); it still needs the Enchanted Forest licence (3). The bandit (Human) needs only the licence; the dark elf also waits for its art.
 9. **Assassin restyle and thrown knives** (see "Assassin restyle"): dark clothes and hair (maybe a hood), knives instead of arrows with a shorter range. Independent of the items above; vision is built, so the range can be set now.
 10. **Minions for the other bosses; more classes and bosses** (classes are easier after 4).
-11. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources. Pillars (see "Pillars") also carry torches; best after the vision edges (2), which give them their shadows.
+11. **More loot and room dressing:** item drops need a pickup system; levers and crates are new object kinds on `use_object` (done for barrels); floor spikes work like hazard terrain; fountains, braziers and goo can be light sources. Pillars (see "Pillars") also carry torches; the vision edges give them their shadows.
 12. **Terrain ideas:** bridges, lava in the dragon's dungeon, enemies that avoid shallow water.
 13. **4-direction sprites, attack frames, sound effects, better spell effects.** Independent; best done once events and animations have settled. Better spell effects means the paladin's healing circle (see "Other follow-ups"). The explosion sheets for barrel blasts and the wizard's Fireball (see "Barrels and world objects follow-ups") is low priority and fits here.
 
@@ -52,11 +52,11 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 
 ## Pillars
 User request (2026-10-16), from the vision-edges demo: `?lights` on branch `spike/vision-edges` has two free-standing pillars in room 1.
-- **What:** single wall tiles (maybe 2×2 in large halls) standing free inside larger rooms. They block sight, walking and shots like any wall. With the soft vision edges (priority 2) they cast straight shadow wedges, which gives cover and hiding places (the rogue, sneaking past humans in the dark).
+- **What:** single wall tiles (maybe 2×2 in large halls) standing free inside larger rooms. They block sight, walking and shots like any wall. With the vision edges (built 2026-10-16) they cast straight shadow wedges, which gives cover and hiding places (the rogue, sneaking past humans in the dark).
 - **Generator** (`dungeon/generate.rs`): only in large rooms, never in the start room, not next to a door or on the straight line between two doors, so every door stays reachable (check it with a flood fill). Boss halls only if the fight is designed for it. Use a new RNG stream and re-record the `level_setup_is_unchanged` fingerprint.
 - **Torch mounts:** a pillar is a mounting point for torches, so the middle of a large room (today dark between the wall torches) can be lit. `place_torches` gives runs under 3 tiles no torch, so a pillar needs its own rule, e.g. one torch on its brick face (south side) or a side sconce, at most one per pillar, and still `DARK_SHARE` for the room.
 - **Look:** the autotiler already draws a free wall tile as a brick face with a top rim (as in the demo). The pack's columns (see "More room dressing") could look better; check whether their footprint fits one tile.
-- **Order:** after the vision edges; independent of other work.
+- **Order:** independent of other work (the vision edges are built).
 
 ## Demon dungeon follow-ups
 - **Tune** imp, chort and summoner stats (`defs/enemies.rs`) in the balancing pass. They start close to the skeletons they replace.
@@ -155,12 +155,7 @@ Built 2026-10-15 on branch `feature/vision` (TECHNICAL §5 "Sight", §7, §11 "H
 - **Deferred minor review findings:** the `dvmask` is not primed at `LightView` construction; each attach of `DarkvisionFX` compiles a new pipeline; boss vision is `vision: Some(25.0)` repeated in each boss's `Adjust` in `defs/bosses.rs` and could become one shared constant.
 - **Per-tick light cost:** `moving_lights()` now runs every tick (60 Hz) and again on snapshot ticks, scanning the entity lists once per entity-anchored light. Watch `srv_ms` in projectile-heavy boss fights and cache the per-tick list for `send_snapshots` if it shows up.
 - **Heroes with darkvision for real:** a class or item with darkvision (the Elf type, see "Elves and bandits") needs only its `Sight` entry; the debug F4 toggle already shows the result.
-- **Vision edges (user request, 2026-10-15; priority item 2):** the edge of the visible area follows the tile grid and looks boxy, because `LightView` sets every tile outside the FOV back to black (`blackenDarkTiles`, `client/src/game/lightview.ts`). The user wants straight shadow lines that fade softly into the darkness, not a hard break.
-  - **Shape:** a visibility polygon from the hero's pixel position: rays to the wall corners within the FOV radius, against wall edges (merge runs of wall tiles into long edges). The outer limit of sight becomes a soft circle in the same step.
-  - **Soft edge:** draw the polygon on the GPU into its own mask texture (about 4 to 8 px per tile), blur it a little (fade about half a tile to one tile) and multiply the darkness by it, like the `DarkvisionFX` mask (`client/src/game/darkvisionfx.ts`). Shrink the polygon by a few px before the blur, so the fade lies inside the visible area and nothing behind a corner glows through.
-  - **Keep cheap:** the light colours, the darkvision mask and the tint stay on the 2 px per tile canvases. Do not raise their resolution for crisp edges (CPU upsampling and upload would grow about 64 times).
-  - **Unchanged:** the server's per-tile visibility, the snapshot filter and targeting. An enemy on a visible tile can stand half in the drawn shadow; accept it or make the polygon a little generous for entities.
-  - Check the look in `?lights` and with darkvision (F4).
+- **Vision edges follow-ups** (built 2026-10-16): walls in sight are shown per tile (their edge follows the bricks); the drawn polygon and the server's tile FOV differ by up to a tile (TECHNICAL §13). If monsters half in the drawn black bother anyone in play, make the polygon a little generous for entities, or cast from a few points around the hero.
 
 ## Effect system follow-ups
 Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §11 "How to add an effect"): eight effects (five plus the elemental burning, frozen and poisoned), resistances and responses, hit effects, the lich's three spells, wake-up with E, HUD icons, F8 debug.

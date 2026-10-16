@@ -9,12 +9,12 @@ For: the next agent or developer continuing this project. Read this first, then 
 3. [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md): the game as players see it (classes, enemies, bosses). Keep it in sync when gameplay changes.
 4. [docs/TODO.md](docs/TODO.md): open work and follow-ups (balancing pass, loadouts, art gaps).
 
-## Next session: soft vision edges (TODO priority 2)
+## Next session
 
-The effect system (eight effects, including the elemental burning, frozen and poisoned) is **merged into `main` and pushed** (2026-10-15, at the user's request; branch `feature/effects` deleted). Both final whole-branch reviews are done and their fixes are in. Still to do with the user: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons.
+The straight vision edges (TODO priority 2) are **built on branch `feature/vision-edges`** (not merged yet). They wait for the user's look in the game and the merge decision (see "Last feature" below). Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons. The effect system is merged into `main` and pushed (2026-10-15).
 
-1. **Straight, softly fading vision edges** (TODO priority 2, "Vision edges"): the user wants it soon. Client only. Start it on a new branch from `main` (the vision code it touches is `LightView`, which the effect work only fed a new `vision` number).
-2. Then TODO priority 3 (art and licences) and 4 (abilities; they can give Slowed and Accelerated a source).
+1. After the merge: TODO priority 3 (art and licences) and 4 (abilities; they can give Slowed and Accelerated a source).
+2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
 
 **Explosion art (2026-10-15):** the user supplied two ChatGPT explosion sheets, stored in `client/assets-src/explosion/`: `explosion_source.png` (barrel blast) and `fireball_source.png` (the wizard's Fireball, violet). Every file the user dropped in `images/` (these two and the barrel source) has an identical committed copy in `client/assets-src/`, so the user may delete `images/` (they asked, 2026-10-15). Neither sheet is built in; both are on the TODO list with low priority ("Barrels and world objects follow-ups"). Credit them as "AI-generated with ChatGPT for this game".
 
@@ -22,7 +22,29 @@ The effect system (eight effects, including the elemental burning, frozen and po
 
 **Ideas the user liked** (not yet in TODO; ask before adding): ways to bring light. Early on, carry a wall torch, light braziers, find glow items (mushrooms, flares). Later, class gear and spells: the paladin's glowing shield, the wizard's light orb, a wisp companion, the ranger's flare arrows, and the rogue who prefers the dark. Before any hero light: a dead hero's light must switch off and come back on a revive (the registry drops it today).
 
-## Last feature (2026-10-15): the effect system
+## Last feature (2026-10-16): straight vision edges
+
+**Branch:** `feature/vision-edges` (from `main` at `3555d68`), commits `git log --oneline main..feature/vision-edges` (spec, plan, polygon, mask, demo, docs, then the final-review fixes). Built inline with superpowers:executing-plans. **Not merged.** Spec: [docs/superpowers/specs/2026-10-16-vision-edges-design.md](docs/superpowers/specs/2026-10-16-vision-edges-design.md); plan: [docs/superpowers/plans/2026-10-16-vision-edges.md](docs/superpowers/plans/2026-10-16-vision-edges.md). Docs: TECHNICAL §7 "The vision mask", draw order, §12, §13; TODO (priority 2 done, "Vision edges follow-ups", "Pillars"); README (`?lights`).
+
+**How it came about:** a throwaway spike first (branch `spike/vision-edges`, reference only; delete it after the merge). The user looked at the demo and decided:
+- **Crisp edges, no blur.** A 3/4-tile fade made the shadow behind a pillar flare out.
+- **Out of sight stays pure black.** A dim map memory and a drifting fog were demoed and rejected.
+- **Pillars** go onto the TODO list as their own feature, with torch mounts.
+
+**What was built:**
+- `sim/vispoly.ts` (pure, tested): `wallSegments` merges wall edges facing open tiles; `visibilityPolygon(map, px, py, r)` casts rays to every segment end (± 1e-4 rad) and at 96 even angles, each stopping at the nearest segment or at `sightRadius(vision)` = `(vision + 0.5) × TILE` px.
+- `game/visionmask.ts`: a canvas over the camera window (+2 tiles) at 8 px per tile, the polygon plus the walls in the tile FOV in white; a Phaser `Shader` game object at `DEPTH.fog + 0.5` draws black where it is not white. It redraws only when the window, the viewer, the radius or the map changes.
+- `LightView`: `seenForLight` lights open tiles next to the FOV so the light reaches under the mask's edge; `wide` (off = old edges) and `seen(x, y)`.
+- `GameScene`: the mask follows `camX`, `camY` (the own figure, or the spectated teammate) with the snapshot's vision; `Ev::Tile` calls `mapChanged`.
+- `?lights`: two pillars, click moves the viewer (`&at=x,y`), E toggles old and new edges (`&edges=old`). `tools/e2e/lights-shot.mjs` takes an extra query and a file prefix.
+
+**Verified (2026-10-16):** client `npm test` **76 tests pass** (65 before), `npm run typecheck` clean, `npm run build` passes. The polygon costs **0.051 ms** (Node, every floor tile of the fixture map, vision 9). `?lights` screenshots (pillars, old edges, doorway, darkvision 1) look as intended. Smoke test with two players (Wizard, Paladin) against Docker: no browser errors, straight edges in the game. No server change.
+
+**Not checked live:** a window resize in the game (the mask only grows; code reading only) and the spectator view after death.
+
+**Open (for the user):** look at it in a real run, then decide on the merge.
+
+## Feature before (2026-10-15): the effect system
 
 **Branch:** `feature/effects` (from `main` at `12acb8f`), its commits are `git log --oneline 12acb8f..main` (the first five effects, then the elemental effects, each with docs and final-review fixes). All tasks built and reviewed one by one; both final whole-branch reviews (first five effects, then the elemental part) done and fixed. **Merged into `main` and pushed (2026-10-15).** Spec: [docs/superpowers/specs/2026-10-15-effects-design.md](docs/superpowers/specs/2026-10-15-effects-design.md). Docs: TECHNICAL §4 (protocol), §5 "Status effects", §10 (F8), §11 "How to add an effect", §12, §13; PLAYER_GUIDE ("Status effects", the lich, controls, tips); TODO ("Effect system follow-ups").
 
