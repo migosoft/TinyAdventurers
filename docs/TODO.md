@@ -28,12 +28,13 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 14. **`X-Forwarded-For`:** one change for both the player and the admin login limiters. Needed before running behind a proxy in production.
 15. **Password change, named admin accounts, `STATS_TZ`, monitoring stack** (plus `reqwest-rustls` for HTTPS).
-16. **Several game servers** (shared presence and login limiter in Valkey). After 14; only when one server is not enough.
+16. **Server load: measure, then cache the hero views** (see "Server performance follow-ups"). Before any public launch, and before 17: a cheaper server comes before spreading runs over several. Not urgent while play is private.
+17. **Several game servers** (shared presence and login limiter in Valkey). After 14 and 16; only when one server is not enough.
 
 **Tier 5: last**
 
-17. **Balancing pass:** every "Tune" item, including resistances, light radii, darkness and the vision and darkness values (see "Vision and darkvision follow-ups"). Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers.
-18. **Delta snapshots, WebTransport:** only if measurements show they are needed.
+18. **Balancing pass:** every "Tune" item, including resistances, light radii, darkness and the vision and darkness values (see "Vision and darkvision follow-ups"). Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers.
+19. **Delta snapshots, WebTransport:** only if measurements show they are needed.
 
 ## Progression follow-ups
 
@@ -156,6 +157,19 @@ Built 2026-10-15 on branch `feature/vision` (TECHNICAL §5 "Sight", §7, §11 "H
 - **Per-tick light cost:** `moving_lights()` now runs every tick (60 Hz) and again on snapshot ticks, scanning the entity lists once per entity-anchored light. Watch `srv_ms` in projectile-heavy boss fights and cache the per-tick list for `send_snapshots` if it shows up.
 - **Heroes with darkvision for real:** a class or item with darkvision (the Elf type, see "Elves and bandits") needs only its `Sight` entry; the debug F4 toggle already shows the result.
 - **Vision edges follow-ups** (built 2026-10-16; server and client share the polygon view): walls count per tile by the tile FOV, so a wall can show whole in the polygon's shadow or stay black where the polygon reaches its face outside the FOV (TECHNICAL §13). The mask redraws and uploads nearly every frame while walking; measure the frame time in a real dungeon if it ever matters.
+
+## Server performance follow-ups
+Priority item 16. Since the vision edges (2026-10-16) every snapshot computes one `View` per player (`vispoly.rs`: the tile FOV, the visibility polygon, up to 16 inside tests per open tile in the polygon's box). That is estimated at 0.15 to 0.3 ms per player, 30 snapshots a second, so about 24 ms of CPU per second for a 4-player run, against about 7 ms for the rest of the simulation (`srv_ms` ≈ 0.11 ms per tick). The views would be most of a run's cost. Runs are separate Tokio tasks on all cores, so roughly 100+ simultaneous runs fit on 4 cores before the CPU runs out. All numbers are estimates, not measured on the server.
+- **Measure first:** a timing span around `View::compute` and a **tick lateness** metric (how far behind schedule a tick starts), both in OpenTelemetry, so the admin area can show how close to full the server is.
+- **Cache the view while nothing changed:** keep each player's last view and recompute it only when the viewer's position, the rounded vision or the map (a door) changes. A hero standing still then costs nothing. Exact, and server only: the shared rule and its fixture do not change.
+- **One view per viewed hero:** a dead player spectating a teammate gets their own copy of the teammate's view today. Compute each hero's view once per snapshot and share it.
+- **Reuse buffers:** keep the segment, angle and point lists between computes, and drop the empty `View::new(0, 0)` that `send_snapshots` allocates per player per snapshot (`mem::replace`).
+- **Wall segments per map:** merge the wall edges once per map and refresh them on `Ev::Tile`, instead of rescanning the area around the hero on every compute.
+- **Later, only if measurements ask for it:**
+  - a cheaper tile test: skip tiles beyond the circle; per tile, compare with the polygon's nearest and farthest edge in its angle range, so only tiles that straddle an edge need the 16 samples. This changes the shared rule, so Rust and TypeScript must change together;
+  - admission control (refuse new runs when ticks run late);
+  - `MissedTickBehavior::Delay` instead of `Burst`;
+  - a lower snapshot rate under load.
 
 ## Effect system follow-ups
 Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §11 "How to add an effect"): eight effects (five plus the elemental burning, frozen and poisoned), resistances and responses, hit effects, the lich's three spells, wake-up with E, HUD icons, F8 debug.
