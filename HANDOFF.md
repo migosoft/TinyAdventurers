@@ -13,7 +13,8 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 The straight vision edges (TODO priority 2) are **merged into `main` and pushed** (2026-10-16, at the user's request; the server now sees by the same polygon as the client draws, see "Last feature" below). **The user played it and approved the look** (2026-10-16: "I like the new edges design"). Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons.
 
-1. Next: TODO priority 3 (art and licences) and 4 (abilities; they can give Slowed and Accelerated a source).
+1. **TODO priority 3, licences checked (2026-10-16):** "Enchanted Forest Characters" is CC0 and has the gnolls, bandit and elves; "Forest creatures" is free to use but not to resell (details in TODO "New enemies"). **Waiting on the user:** download both packs (name your own price, 0 is fine) into `images/`; then copy them into `client/assets-src/`, add a `LICENSE.txt` with the quoted terms, and credit them in the README. The ghost, shadow and sphinx have no free source; ask the user (paid pack, runtime recolour, or self-made on request).
+   Then TODO priority 4 (abilities; they can give Slowed and Accelerated a source).
 2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
 3. **Server load** (new TODO priority 16, tier 4, section "Server performance follow-ups", 2026-10-16): measure, then cache each hero's view while nothing changed and share it with spectators. The views are estimated to be most of a run's CPU. Before any public launch; not urgent while play is private.
 

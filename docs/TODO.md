@@ -6,7 +6,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 **Tier 1: foundations**
 1. **Effect system** (done, built 2026-10-15 on `feature/effects`; follow-ups in "Effect system follow-ups"). Blind, sleep, petrified, slowed, accelerated and the elemental burning, frozen, poisoned; extensible, every creature, effects modify any stat. Spec: [docs/superpowers/specs/2026-10-15-effects-design.md](superpowers/specs/2026-10-15-effects-design.md); TECHNICAL §5 "Status effects", §11 "How to add an effect". The lich casts three effect spells.
 2. **Vision edges:** done (2026-10-16, branch `feature/vision-edges`): straight, crisp shadow edges from a visibility polygon (TECHNICAL §7 "The vision mask").
-3. **Art and licences:** Enchanted Forest and Forest creatures licences (see "New enemies"), gnolls. Little code, but the shadow, ghost, gnolls and sphinx wait on it.
+3. **Art and licences:** licences checked (2026-10-16, see "New enemies"): both packs may be used, and Enchanted Forest has the gnolls, the bandit and the elves. Left: the user downloads both packs into `images/`, then import them with a licence note. The ghost, shadow and sphinx still have no free source.
 
 **Tier 2: larger features on top of tier 1**
 
@@ -78,7 +78,11 @@ Terrain is live (water, lava, chasms; TECHNICAL.md §5, §6 and §9).
 - **Ghost and shadow (new):** two new enemy types. The 0x72 pack has neither, so the art has to come from another pack or a CC0 set.
   - Ideas for the ghost: drifts through walls, or turns half transparent and can't be hit for a moment.
   - Ideas for the shadow: hard to see in the dark. It could be the enemy that puts out torches (see "Lighting follow-ups").
-- **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Also approved (2026-10-13): "Forest creatures" by lyaseek (https://lyaseek.itch.io/miniffanimals). For both, check the license and keep the license file next to the imported art.
+- **More monster art:** the user approved "Enchanted Forest Characters" by superdark (https://superdark.itch.io/enchanted-forest-characters) as a source for future monsters. Also approved (2026-10-13): "Forest creatures" by lyaseek (https://lyaseek.itch.io/miniffanimals). Keep a licence note next to the imported art (the pages ship no licence file, so write `LICENSE.txt` with the quotes below and the page URL).
+  - **Licences checked (2026-10-16, from the itch.io pages):**
+    - **Enchanted Forest Characters:** CC0, an add-on to the 0x72 pack in the same size and animations. The page says "completely free ... you can use them however you like ... in free or commercial projects", "you can modify the sprites and no credit is required"; the author confirms "cc-0" in a comment. Name your own price (0 is fine). Contents: forest bandit, dire wolf, bear, mushroom folk (3 sizes), troll brute, centaurs (m/f), forest guardian, wood elves (m/f), high elven princess, Elvenking, ent, forest ranger, old hermit wizard, high elf knight, travelling clerics (3 sizes), fairy, golem, and four gnolls (overseer, shaman, brute, grunt). So the gnolls (shaman for ranged, brute or grunt for melee), the bandit, the wood elf and the escort's princess are covered. No ghost, shadow or sphinx.
+    - **Forest creatures (lyaseek):** not CC0, but free: "You can use this asset as you like, just don't resell it"; the author confirms commercial use in a comment; credit not required but appreciated (credit it anyway). Name your own price. Contents: 8 animals (bird, bunny, fox, wolf, boar, two deer, bear), with and without outline. Check that its size and outline fit the 0x72 look before using it.
+  - **Ghost, shadow and sphinx:** no free 0x72-style source found (2026-10-16). Superdark's free NPC pack has none. Paid 16×16 options exist (QuillGrafit "Fantasy Enemy - Ghosts 16x16 px", KrinJL "Ghost"); ask the user before buying anything. Other ways: a recoloured, half-transparent pack figure for the ghost or shadow (a runtime effect, no new art), or self-made art on request.
 
 ## Elves and bandits
 New entity type and figures, from the user (2026-10-15). Priority item 8. The vision fields are the ones from the vision and darkvision work (vision in tiles, darkvision as a share of vision; Human is 9 tiles, 0).
@@ -136,7 +140,7 @@ An outdoor level where the heroes escort a carriage carrying the elven princess.
   2. start it again if it is stopped,
   3. repair it slowly while it is stopped.
 - **Enemies:** attack the carriage in waves. An enemy that a hero hits turns on the heroes, so the heroes can draw attacks away from the carriage.
-- **Enemy types:** orcs, goblins, and a new type from the woodland asset pack: gnolls, in a ranged and a melee version.
+- **Enemy types:** orcs, goblins, and gnolls from "Enchanted Forest Characters" (CC0, see "New enemies"), in a ranged (shaman) and a melee (brute or grunt) version.
 
 ## Lighting follow-ups
 Built 2026-10-15 on branch `feature/lighting` (TECHNICAL §5 "Light sources", §7, §11 "How to add a light source"): a light-kind table, a registry with tile or entity anchors, `is_lit`, visibility by sight and light, a coloured light canvas, wall torches (world objects), lava and glowing shots. Heroes have no light of their own.
@@ -191,7 +195,7 @@ Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §
 
 ## Riddle rooms
 Special rooms with a creature that asks the heroes a riddle. If they solve it, they get a reward. If they fail, they fight the creature, or enemies spawn.
-- **Creature art:** the 0x72 pack has unused figures that fit: `doc` (a plague doctor in a mask, which suits a mysterious riddle-giver), `angel`, `wogol` and `pumpkin_dude`. A classic sphinx is not in the pack; one might be in "Enchanted Forest Characters" (see "New enemies") or in a CC0 set.
+- **Creature art:** the 0x72 pack has unused figures that fit: `doc` (a plague doctor in a mask, which suits a mysterious riddle-giver), `angel`, `wogol` and `pumpkin_dude`. A classic sphinx is not in the pack nor in "Enchanted Forest Characters" (checked 2026-10-16); its old hermit wizard or forest guardian could be the riddle-giver instead.
 - **Questions to settle:**
   - How do players answer? Multiple choice (each player clicks an answer, the majority wins or the first answer counts) or typed text? Multiple choice is easier to check and works without exact spelling.
   - Riddles in German, English, or both? This sets how the riddle list is stored.
