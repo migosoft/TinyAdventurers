@@ -4,7 +4,7 @@
 // itself (lying down, grey stone, tints) is changed in EntityView.
 import Phaser from 'phaser';
 import { EFFECT } from '../generated/defs';
-import { DEPTH, GLOOM, type Effects } from './effects';
+import { DEPTH, GLOOM, SOUND_TEXT, type Effects } from './effects';
 
 /** True when the effect `kind` is set in the bitmask `bits` (bit = 1 << EffectKind id). */
 export function has(bits: number, kind: number): boolean {
@@ -281,10 +281,10 @@ export class StatusView {
         const t =
           this.freeZ.pop() ??
           this.scene.add
-            .text(0, 0, 'Z', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4, color: '#ffffff' })
+            .text(0, 0, 'Z', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4, color: SOUND_TEXT.fill })
             .setFontSize(5)
             .setOrigin(0.5, 1)
-            .setStroke('#d8d0e0', 2)
+            .setStroke(SOUND_TEXT.stroke, 2)
             .setPadding(1);
         this.zs.push({ t: t.setVisible(true), age: 0, x: a.x + 3, y: a.y - a.head, d: DEPTH.sound });
       }

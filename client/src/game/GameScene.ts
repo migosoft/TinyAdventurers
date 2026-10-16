@@ -17,7 +17,7 @@ import { BarrelView } from './barrel';
 import { TorchView } from './torch';
 import { ChestView } from './chest';
 import { dmgColor } from './damage';
-import { DEPTH, Effects } from './effects';
+import { DEPTH, Effects, SOUND_TEXT } from './effects';
 import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
 import { LightView, nextDarkvision } from './lightview';
@@ -349,7 +349,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'Growl': {
         const wolf = this.ents.get(ev.id);
-        if (wolf) this.fx.text(wolf.x, wolf.y - 14, 'grrrr', '#e8e0d0', false, DEPTH.sound, '#d8d0e0');
+        if (wolf) this.fx.text(wolf.x, wolf.y - 14, 'grrrr', SOUND_TEXT.fill, false, DEPTH.sound, SOUND_TEXT.stroke);
         this.views.get(ev.id)?.shake(0.4);
         break;
       }

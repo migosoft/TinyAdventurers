@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EFFECT } from '../generated/defs';
-import { DEPTH } from './effects';
+import { DEPTH, SOUND_TEXT } from './effects';
 import { StatusView, flameSpots, has, lieLayout, lyingPose, snowflakeAlpha } from './status';
 
 describe('status', () => {
@@ -50,9 +50,9 @@ describe('elemental visuals', () => {
 
 describe('sleep Z', () => {
   it('draws the sleep Z above the darkness with a light outline', () => {
-    const made: Array<{ depth: number; stroke: string }> = [];
-    const mk = () => {
-      const t: Record<string, unknown> = { depth: 0, stroke: '' };
+    const made: Array<{ depth: number; stroke: string; fill: string }> = [];
+    const mk = (_x?: number, _y?: number, _s?: string, style?: { color?: string }) => {
+      const t: Record<string, unknown> = { depth: 0, stroke: '', fill: style?.color ?? '' };
       const self = new Proxy(t, {
         get: (o, k: string) => (k in o ? o[k] : (...a: unknown[]) => {
           if (k === 'setDepth') o.depth = a[0];
@@ -60,7 +60,7 @@ describe('sleep Z', () => {
           return self;
         }),
       });
-      made.push(t as { depth: number; stroke: string });
+      made.push(t as { depth: number; stroke: string; fill: string });
       return self;
     };
     const scene = { add: { text: mk, image: mk }, textures: { exists: () => true } } as never;
@@ -71,6 +71,7 @@ describe('sleep Z', () => {
     const z = made.find((t) => t.stroke !== '');
     expect(z).toBeDefined();
     expect(z!.depth).toBe(DEPTH.sound);
-    expect(z!.stroke).toBe('#d8d0e0');
+    expect(z!.stroke).toBe(SOUND_TEXT.stroke);
+    expect(z!.fill).toBe(SOUND_TEXT.fill);
   });
 });

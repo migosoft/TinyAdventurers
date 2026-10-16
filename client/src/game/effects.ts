@@ -24,6 +24,9 @@ export const DEPTH = {
   numbers: 8000,
 };
 
+/** Sound text (growl, the sleeper's Z): a dark fill with a light outline, readable on black and on lit floors. */
+export const SOUND_TEXT = { fill: '#1a1020', stroke: '#d8d0e0' };
+
 /** The lich's magic: dark purple, gloomy, shimmering. */
 export const GLOOM = { dark: 0x2a0a3a, mid: 0x5a1a8a, light: 0xa060f0, spark: 0xe0c0ff };
 
