@@ -420,7 +420,8 @@ impl Run {
                 continue;
             }
             if m.is_ally() {
-                continue; // Task 8: companion::tick_wolf
+                companion::tick_wolf(self, mi, DT);
+                continue;
             }
             if self.layout.map.blocks_at(m.pos, m.mover) {
                 ai::escape_terrain(self, mi, DT);
@@ -559,6 +560,9 @@ impl Run {
         if !m.alive || m.is_boss || m.airborne || m.sinking.is_some() || dist <= 0.0 {
             return;
         }
+        if m.ally.as_ref().is_some_and(|a| a.dash.is_some()) {
+            return; // a dashing wolf is in the air, like a dashing hero
+        }
         let dist = dist * m.effects.knock_taken();
         let d = m.pos - from;
         let dir = if d.len() > 0.01 { d.norm() } else { Vec2::new(1.0, 0.0) };
@@ -582,10 +586,11 @@ impl Run {
 
     /// The ground under a monster's centre, like `terrain_player`: chasms and
     /// deep water take it (kill credit to the last hero who hurt it), lava
-    /// burns monsters that are not lava walkers.
+    /// burns monsters that are not lava walkers. The wolf is in the air while it
+    /// dashes, and over a chasm with its dash ready it dashes back to safe ground.
     fn terrain_monster(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
-        if !m.alive || m.is_boss || m.airborne {
+        if !m.alive || m.is_boss || m.airborne || m.ally.as_ref().is_some_and(|a| a.dash.is_some()) {
             return;
         }
         if let Some((t, how)) = m.sinking {
@@ -601,7 +606,18 @@ impl Run {
             return;
         }
         let pos = m.pos;
-        let tile = self.layout.map.tile_at(pos);
+        let (tx, ty) = dungeon::Map::tile_of(pos);
+        let tile = self.layout.map.get(tx, ty);
+        if let Some(a) = m.ally.as_mut() {
+            if tile == Tile::Chasm as u8 && a.dash_cd <= 0.0 {
+                m.knock = Vec2::ZERO;
+                companion::dash_back(self, mi);
+                return;
+            }
+            if self.layout.map.safe(tx, ty) {
+                a.last_safe = dungeon::Map::center_of(tx, ty);
+            }
+        }
         let how = if tile == Tile::Chasm as u8 {
             Some((dungeon::FALL_TIME, Sink::Fall))
         } else if tile == Tile::DeepWater as u8 {

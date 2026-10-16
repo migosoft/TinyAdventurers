@@ -172,7 +172,6 @@ impl Ai {
 
 /// A wolf's dash: toward `dir` for `left` seconds; `attack` is false for the dash back from a chasm.
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)] // read by the wolf's behaviour (the next task)
 pub struct WolfDash {
     pub dir: Vec2,
     pub left: f64,
@@ -181,11 +180,11 @@ pub struct WolfDash {
 
 /// What makes a monster an ally of the heroes (the Ranger's wolf; run/companion.rs).
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // read by the wolf's behaviour (the next task)
 pub struct Ally {
     /// The ranger's player id.
     pub owner: u32,
     /// Monsters (ids) it has growled at.
+    #[allow(dead_code)] // the growl (next task)
     pub growled: Vec<u32>,
     pub growl_cd: f64,
     pub growl_to: Option<Vec2>,
