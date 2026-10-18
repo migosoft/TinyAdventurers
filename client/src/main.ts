@@ -54,7 +54,7 @@ function viewSize(): { w: number; h: number; zoom: number } {
   return { w: Math.ceil(window.innerWidth / zoom), h: Math.ceil(window.innerHeight / zoom), zoom };
 }
 
-/** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich, ?demon, ?lights). */
+/** Dev pages, no server needed (the progression mock screens ?uidemo are in main()): sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich, ?demon, ?lights). */
 const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-demo', water: 'water-demo', chasm: 'chasm-demo', lava: 'lava-demo', knockback: 'knockback-demo', ogre: 'ogre-demo', dragon: 'dragon-demo', lich: 'lich-demo', demon: 'demon-demo', lights: 'lights-demo' };
 
 function gallery(): void {
@@ -81,6 +81,8 @@ async function main(): Promise<void> {
   const q = new URLSearchParams(location.search);
   if (q.has('gallery') || Object.keys(DEMOS).some((k) => q.has(k))) return gallery();
   const ui = document.getElementById('ui')!;
+  // Throwaway mock screens of the progression design (?uidemo=<screen>), loaded only when asked for.
+  if (q.has('uidemo')) return (await import('./uidemo')).showUiDemo(ui, q.get('uidemo') ?? '');
   let me;
   try {
     me = await api.me();

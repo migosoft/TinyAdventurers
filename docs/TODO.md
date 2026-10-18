@@ -10,7 +10,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 **Tier 2: larger features on top of tier 1**
 
-4. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
+4. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). **Designed 2026-10-18:** Attributes, races, weapons and items, class skill trees, 16 new abilities, loadouts and a new pre-run UI, in [docs/superpowers/specs/2026-10-18-progression-design.md](superpowers/specs/2026-10-18-progression-design.md) (waiting for the user's review; mock screens `?uidemo=…`). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
 5. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
 6. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
 

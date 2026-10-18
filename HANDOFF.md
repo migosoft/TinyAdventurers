@@ -11,9 +11,16 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Next session
 
+**Progression design approved by the user (2026-10-18, branch `feature/skill-tree-design`, uncommitted):**
+- Attributes, races, weapons and items, class skill trees, loadouts and a new pre-run UI.
+- **Spec:** [docs/superpowers/specs/2026-10-18-progression-design.md](docs/superpowers/specs/2026-10-18-progression-design.md), with screenshots in `docs/superpowers/specs/img/2026-10-18-progression/`. It ends with the "(my call)" list (for the user to check) and the builder check's questions, which the user has answered. Start there.
+- **Mock screens (throwaway spike, no server):** `?uidemo=roster|create|sheet|tree|tree-barbarian|equipment|loadout|room` (`client/src/uidemo/`); shots with `tools/e2e/ui-shots.mjs`. Delete the spike when the real UI lands (spec §14 step 6).
+- The decisions behind it: [docs/superpowers/plans/2026-10-18-progression-design-brief.md](docs/superpowers/plans/2026-10-18-progression-design-brief.md).
+- Next: the implementation plan (superpowers:writing-plans).
+
 The straight vision edges (TODO priority 2) are **merged into `main` and pushed** (2026-10-16, at the user's request; the server now sees by the same polygon as the client draws, see "Last feature" below). **The user played it and approved the look** (2026-10-16: "I like the new edges design"). Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons.
 
-1. **Next: TODO priority 4** (new abilities, then loadouts, then a way to spend coins; abilities can give Slowed and Accelerated a source). Start with superpowers:brainstorming.
+1. **Next: TODO priority 4**, now designed (see the progression spec above): review, then an implementation plan.
 2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
 3. **Server load** (new TODO priority 16, tier 4, section "Server performance follow-ups", 2026-10-16): measure, then cache each hero's view while nothing changed and share it with spectators. The views are estimated to be most of a run's CPU. Before any public launch; not urgent while play is private.
 
