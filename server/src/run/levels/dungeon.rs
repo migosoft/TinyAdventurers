@@ -29,8 +29,8 @@ impl DungeonLevel {
 }
 
 impl LevelRules for DungeonLevel {
-    fn populate(run: &mut Run, party: usize) {
-        boss::spawn(run, party);
+    fn populate(run: &mut Run) {
+        boss::spawn(run);
     }
     fn tick(run: &mut Run, dt: f64) {
         boss::tick(run, dt);

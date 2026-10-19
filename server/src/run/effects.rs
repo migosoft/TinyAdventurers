@@ -383,7 +383,7 @@ mod tests {
         }
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let at = run.players[0].pos();
-        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ogre, at, None, 1);
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ogre, at, None);
         let mi = run.monster_idx(id).unwrap();
         for k in EffectKind::ALL {
             assert!(run.apply_effect(Creature::Monster(mi), k, Some(3.0)), "the ogre takes {k:?} in full");
@@ -494,7 +494,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
-        let id = run.spawn_enemy(EnemyType::SkeletonArcher, at, None, 1);
+        let id = run.spawn_enemy(EnemyType::SkeletonArcher, at, None);
         let mi = run.monster_idx(id).unwrap();
         run.apply_effect(Creature::Monster(mi), EffectKind::Blind, Some(5.0));
         crate::run::ai::tick_monster(&mut run, mi, DT);
@@ -520,7 +520,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(20.0, 0.0);
-        run.spawn_enemy(EnemyType::OrcWarrior, at, None, 1);
+        run.spawn_enemy(EnemyType::OrcWarrior, at, None);
         run.players[0].darkvision = Some(1.0);
         run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(5.0));
         let s = run.players[0].sight_now();
@@ -703,7 +703,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
-        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None, 1);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
         let mi = run.monster_idx(id).unwrap();
         run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
         let before = run.players[0].damage;
@@ -748,7 +748,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
-        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None, 1);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
         let mi = run.monster_idx(id).unwrap();
         run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
         run.monsters[mi].hp = 2.0;
@@ -784,13 +784,13 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
-        let id = run.spawn_enemy(EnemyType::Imp, at, None, 1);
+        let id = run.spawn_enemy(EnemyType::Imp, at, None);
         let mi = run.monster_idx(id).unwrap();
         let hp = run.monsters[mi].hp;
         run.hurt_monster(mi, Damage::new(10.0, DamageSplit::pure(DamageType::Heat)), false, None);
         assert_eq!(run.monsters[mi].hp, hp);
         assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Burning));
-        let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None, 1);
+        let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None);
         let si = run.monster_idx(id).unwrap();
         run.hurt_monster(si, Damage::new(10.0, DamageSplit::pure(DamageType::Poison)), false, None);
         assert!(!run.has_effect(Creature::Monster(si), EffectKind::Poisoned), "undead are never poisoned");
@@ -855,7 +855,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
-        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ogre, at, None, 1);
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ogre, at, None);
         let mi = run.monster_idx(id).unwrap();
         let c = Creature::Monster(mi);
         run.monsters[mi].effect_res = EffectResistances::of(&[(EffectKind::Sleep, 1.0)]);

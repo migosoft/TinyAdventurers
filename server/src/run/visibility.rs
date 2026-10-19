@@ -347,8 +347,8 @@ mod tests {
         assert_eq!(sight.vision, 18.0);
         let p = run.players[0].pos();
         run.players[0].view.compute(&run.layout.map, p, sight.vision.round() as i32);
-        let near = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 16, ty), None, 1);
-        let far = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 20, ty), None, 1);
+        let near = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 16, ty), None);
+        let far = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 20, ty), None);
         run.add_light(LightKind::Torch, Anchor::Tile(tx + 17, ty), None);
         run.add_light(LightKind::Torch, Anchor::Tile(tx + 21, ty), None);
         assert!(sees(&mut run, Map::center_of(tx + 16, ty), 5.0), "16 tiles away, lit");
@@ -403,9 +403,9 @@ mod tests {
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
         run.spawn_hazard(EntityKind::FirePatch, Map::center_of(tx + 3, ty), 10.0, 3.0, 8.0);
-        let inside = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 7, ty), None, 1);
+        let inside = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 7, ty), None);
         // 4.1 tiles from the patch: outside its radius-4 shadowcast.
-        let outside = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 7, ty + 1), None, 1);
+        let outside = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 7, ty + 1), None);
         send_snapshots(&mut run);
         let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
         let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
@@ -427,7 +427,7 @@ mod tests {
         run.players[0].spectating = Some(target);
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
-        let near = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None, 1);
+        let near = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
         send_snapshots(&mut run);
         let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
         let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
@@ -443,7 +443,7 @@ mod tests {
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
         run.tick = 1; // past the start: static changes would be events now
-        let orc = run.spawn_enemy(EnemyType::OrcWarrior, Map::center_of(tx + 2, ty), None, 1);
+        let orc = run.spawn_enemy(EnemyType::OrcWarrior, Map::center_of(tx + 2, ty), None);
         let light = run.add_light(LightKind::Fire, Anchor::Entity(orc), None);
         run.events.clear();
         run.set_light_colour(light, 0x3060ff);
@@ -462,8 +462,8 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        let near = run.spawn_enemy(EnemyType::GoblinArcher, ppos + Vec2::new(20.0, 0.0), None, 1);
-        let far = run.spawn_enemy(EnemyType::GoblinArcher, ppos + Vec2::new(16.0 * 30.0, 0.0), None, 1);
+        let near = run.spawn_enemy(EnemyType::GoblinArcher, ppos + Vec2::new(20.0, 0.0), None);
+        let far = run.spawn_enemy(EnemyType::GoblinArcher, ppos + Vec2::new(16.0 * 30.0, 0.0), None);
         run.players[0].view.compute(&run.layout.map, ppos, PLAYER_FOV_RADIUS);
         let view = &run.players[0].view;
         let near_m = run.monsters.iter().find(|m| m.id == near).unwrap();
@@ -600,7 +600,7 @@ mod tests {
             run.players[0].darkvision = Some(1.0);
             run.monsters.clear();
             let pos = Vec2::new(run.players[0].mv.x + 20.0, run.players[0].mv.y);
-            let id = run.spawn_enemy(EnemyType::OrcWarrior, pos, None, 1);
+            let id = run.spawn_enemy(EnemyType::OrcWarrior, pos, None);
             if blind {
                 run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(5.0));
             }

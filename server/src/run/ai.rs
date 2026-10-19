@@ -467,7 +467,6 @@ fn raise_minions(run: &mut Run, mi: usize, fire: bool) {
     let (pos, id) = (run.monsters[mi].pos, run.monsters[mi].id);
     run.monsters[mi].ai.raise_cd = enemies::NECRO_RAISE_COOLDOWN;
     set_anim(run, mi, Anim::Cast);
-    let party = run.players.len();
     for k in 0..2 {
         let a = run.rng.gen_range(0.0..std::f64::consts::TAU);
         let mut spot = pos + Vec2::from_angle(a) * 14.0;
@@ -479,7 +478,7 @@ fn raise_minions(run: &mut Run, mi: usize, fire: bool) {
             break;
         }
         let t = if fire { EnemyType::SummonedImp } else { EnemyType::RaisedSkeleton };
-        run.spawn_enemy(t, spot, Some(id), party);
+        run.spawn_enemy(t, spot, Some(id));
         run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, k: fire as u8 }, Some(spot));
     }
 }
@@ -616,7 +615,7 @@ pub(crate) mod tests {
             run.players[0].res = res;
             let hp = run.players[0].hp;
             let ppos = run.players[0].pos();
-            let id = run.spawn_enemy(EnemyType::Chort, ppos - Vec2::new(12.0, 0.0), None, 1);
+            let id = run.spawn_enemy(EnemyType::Chort, ppos - Vec2::new(12.0, 0.0), None);
             let mi = run.monster_idx(id).unwrap();
             perform_attack(&mut run, mi, Creature::Player(0), enemies::def(EnemyType::Chort).attack, false, None);
             hp - run.players[0].hp
@@ -630,7 +629,7 @@ pub(crate) mod tests {
         let pushes = |t: EnemyType, alt: bool| {
             let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
             let ppos = run.players[0].pos();
-            let id = run.spawn_enemy(t, ppos - Vec2::new(12.0, 0.0), None, 1);
+            let id = run.spawn_enemy(t, ppos - Vec2::new(12.0, 0.0), None);
             let mi = run.monster_idx(id).unwrap();
             let d = enemies::def(t);
             let attack = if alt { d.alt.unwrap() } else { d.attack };
@@ -670,7 +669,7 @@ pub(crate) mod tests {
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let mi_pos = ppos + Vec2::new(30.0, 0.0);
-        run.spawn_enemy(EnemyType::GoblinArcher, mi_pos, None, 1);
+        run.spawn_enemy(EnemyType::GoblinArcher, mi_pos, None);
         let (tx, ty) = Map::tile_of(ppos);
         for dy in -4..=4 {
             run.layout.map.set(tx + 1, ty + dy, Tile::Wall);
@@ -688,7 +687,7 @@ pub(crate) mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        let necro = run.spawn_enemy(EnemyType::Necromancer, ppos + Vec2::new(60.0, 0.0), None, 1);
+        let necro = run.spawn_enemy(EnemyType::Necromancer, ppos + Vec2::new(60.0, 0.0), None);
         let ni = run.monster_idx(necro).unwrap();
         raise_minions(&mut run, ni, false);
         run.monsters[ni].ai.raise_cd = 0.0;
@@ -737,7 +736,7 @@ pub(crate) mod tests {
         open_floor(&mut run);
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss);
-        let id = run.spawn_enemy(t, ppos + off, None, 1);
+        let id = run.spawn_enemy(t, ppos + off, None);
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].ai.cd = 0.0;
         run.monsters[mi].ai.alt_cd = 0.0;
@@ -765,7 +764,7 @@ pub(crate) mod tests {
         open_floor(&mut run);
         let at = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss);
-        let id = run.spawn_enemy(EnemyType::Ogre, at, None, 1);
+        let id = run.spawn_enemy(EnemyType::Ogre, at, None);
         let mi = run.monster_idx(id).unwrap();
         for (p, off) in run.players.iter_mut().zip(offs) {
             p.mv.x = at.x + off.x;
@@ -830,7 +829,7 @@ pub(crate) mod tests {
         open_floor(&mut run);
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss);
-        let id = run.spawn_enemy(EnemyType::Chort, ppos + Vec2::new(80.0, 0.0), None, 1);
+        let id = run.spawn_enemy(EnemyType::Chort, ppos + Vec2::new(80.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].ai.alt_cd = 0.0;
         for _ in 0..60 {
@@ -851,7 +850,7 @@ pub(crate) mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        let s = run.spawn_enemy(EnemyType::Summoner, ppos + Vec2::new(60.0, 0.0), None, 1);
+        let s = run.spawn_enemy(EnemyType::Summoner, ppos + Vec2::new(60.0, 0.0), None);
         let si = run.monster_idx(s).unwrap();
         run.events.clear();
         raise_minions(&mut run, si, true);
@@ -903,7 +902,7 @@ pub(crate) mod tests {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
         open_floor(&mut run);
         run.monsters.retain(|m| m.is_boss);
-        let id = run.spawn_enemy(EnemyType::OrcWarrior, run.players[0].pos() + Vec2::new(60.0, 0.0), None, 1);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, run.players[0].pos() + Vec2::new(60.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert_eq!(run.monsters[mi].ai.target, Some(crate::run::entities::Target::Player(run.players[0].id)));
@@ -928,7 +927,7 @@ pub(crate) mod tests {
         open_floor(&mut run);
         run.monsters.retain(|m| m.is_boss);
         let p = run.players[0].pos();
-        let id = run.spawn_enemy(EnemyType::OrcArcher, p - Vec2::new(100.0, 0.0), None, 1);
+        let id = run.spawn_enemy(EnemyType::OrcArcher, p - Vec2::new(100.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].ai.cd = 0.0;
         let b = run.spawn_object(EntityKind::Barrel, p + barrel_off, crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
@@ -979,7 +978,7 @@ pub(crate) mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         dark_floor(&mut run);
         let ppos = run.players[0].pos();
-        let id = run.spawn_enemy(EnemyType::Necromancer, ppos + Vec2::new(5.0 * TILE, 0.0), None, 1);
+        let id = run.spawn_enemy(EnemyType::Necromancer, ppos + Vec2::new(5.0 * TILE, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert_eq!(run.monsters[mi].ai.target, None, "blind in the dark");
@@ -993,7 +992,7 @@ pub(crate) mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         dark_floor(&mut run);
         let ppos = run.players[0].pos();
-        let id = run.spawn_enemy(EnemyType::OrcWarrior, ppos + Vec2::new(5.0 * TILE, 0.0), None, 1);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, ppos + Vec2::new(5.0 * TILE, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         run.step();
         assert_eq!(run.monsters[mi].ai.target, None, "dark: not seen");

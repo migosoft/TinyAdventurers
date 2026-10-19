@@ -146,7 +146,6 @@ impl Lich {
         let mut raise: Vec<EnemyType> = Vec::new();
         raise.extend(std::iter::repeat(EnemyType::RaisedSkeleton).take(LICH_SKELETONS.saturating_sub(alive(run, EnemyType::RaisedSkeleton))));
         raise.extend(std::iter::repeat(EnemyType::RaisedArcher).take(LICH_ARCHERS.saturating_sub(alive(run, EnemyType::RaisedArcher))));
-        let party = run.players.len();
         let n = raise.len();
         let a0 = run.rng.gen_range(0.0..std::f64::consts::TAU);
         for (k, t) in raise.into_iter().enumerate() {
@@ -154,7 +153,7 @@ impl Lich {
             let slot = if k % 2 == 0 { k / 2 } else { n - 1 - k / 2 };
             let spot = pos + Vec2::from_angle(a0 + slot as f64 * std::f64::consts::TAU / n as f64) * 22.0;
             let spot = if run.layout.map.blocks_at(spot, Mover::Enemy) { pos } else { spot };
-            run.spawn_enemy(t, spot, Some(id), party);
+            run.spawn_enemy(t, spot, Some(id));
             run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, k: 2 }, Some(spot));
         }
     }
@@ -165,7 +164,7 @@ impl BossBehaviour for Lich {
         self.gaze
     }
 
-    fn spawn_extras(&mut self, run: &mut Run, boss_pos: Vec2, party: usize) {
+    fn spawn_extras(&mut self, run: &mut Run, boss_pos: Vec2) {
         let owner = run.level.boss().unwrap().boss_ent;
         for k in 0..LICH_DISCIPLES {
             let a = k as f64 * std::f64::consts::TAU / LICH_DISCIPLES as f64;
@@ -175,7 +174,7 @@ impl BossBehaviour for Lich {
                 r -= 8.0;
                 pos = boss_pos + Vec2::from_angle(a) * r;
             }
-            let id = run.spawn_enemy(EnemyType::Disciple, pos, Some(owner), party);
+            let id = run.spawn_enemy(EnemyType::Disciple, pos, Some(owner));
             let mi = run.monster_idx(id).unwrap();
             run.monsters[mi].dormant = true;
             run.monsters[mi].anim = Anim::Channel;

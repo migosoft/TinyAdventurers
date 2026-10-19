@@ -6,7 +6,7 @@
 
 use crate::defs::abilities::{self as ab, AbilityDef, AbilityId, Scaling};
 use crate::defs::attributes::{self, Attr, Attributes, Scaled, CON_MOVE};
-use crate::defs::bosses::{self, hp_scale};
+use crate::defs::bosses;
 use crate::defs::classes;
 use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT};
 use crate::defs::damage::{DamageSplit, Resistances};
@@ -125,28 +125,28 @@ pub struct MonsterStats {
     pub speed: f64,
 }
 
-/// Enemy stats for a party of `party` players (the same HP scaling the run applies).
-pub fn enemy_stats(t: EnemyType, party: usize) -> MonsterStats {
+/// Enemy stats. HP does not depend on the party size (TODO 4b).
+pub fn enemy_stats(t: EnemyType) -> MonsterStats {
     let d = enemies::def(t);
     let con = d.attrs.get(Attr::Con);
     MonsterStats {
         attrs: d.attrs,
         weight: d.weight,
-        max_hp: attributes::hp(enemies::base_hp(t), con) * enemies::party_hp_scale(party),
+        max_hp: attributes::hp(enemies::base_hp(t), con),
         speed: move_speed(d.speed, con, &d.attrs),
     }
 }
 
-/// Boss stats for a party of `party` players.
-pub fn boss_stats(b: BossId, party: usize) -> MonsterStats {
+/// Boss stats. HP does not depend on the party size (TODO 4b).
+pub fn boss_stats(b: BossId) -> MonsterStats {
     let d = bosses::def(b);
     let con = d.attrs.get(Attr::Con);
     // The boss HP is the total; take the CON bonus out and put it back.
     let base = d.hp - attributes::CON_HP * (con - attributes::BASELINE) as f64;
-    MonsterStats { attrs: d.attrs, weight: d.weight, max_hp: attributes::hp(base, con) * hp_scale(party), speed: move_speed(d.speed, con, &d.attrs) }
+    MonsterStats { attrs: d.attrs, weight: d.weight, max_hp: attributes::hp(base, con), speed: move_speed(d.speed, con, &d.attrs) }
 }
 
-/// The Ranger's wolf: never scaled by party size.
+/// The Ranger's wolf.
 pub fn wolf_stats() -> MonsterStats {
     let con = WOLF_ATTRS.get(Attr::Con);
     MonsterStats { attrs: WOLF_ATTRS, weight: WOLF_WEIGHT, max_hp: attributes::hp(wolf_base_hp(), con), speed: move_speed(WOLF_SPEED, con, &WOLF_ATTRS) }
@@ -258,13 +258,10 @@ mod tests {
     fn enemy_stats_reproduce_today() {
         for t in EnemyType::ALL {
             let d = enemies::def(t);
-            for party in 1..=4 {
-                let s = enemy_stats(t, party);
-                // The run's own scaling (run/mod.rs spawn_enemy).
-                assert_eq!(s.max_hp, d.hp * (0.75 + 0.25 * party as f64), "{t:?} x{party}");
-                assert_eq!(s.speed, d.speed, "{t:?}");
-                assert_eq!(s.weight, d.weight);
-            }
+            let s = enemy_stats(t);
+            assert_eq!(s.max_hp, d.hp, "{t:?}: the party size no longer scales HP (TODO 4b)");
+            assert_eq!(s.speed, d.speed, "{t:?}");
+            assert_eq!(s.weight, d.weight);
         }
     }
 
@@ -272,13 +269,10 @@ mod tests {
     fn boss_stats_reproduce_today() {
         for b in BossId::ALL {
             let d = bosses::def(b);
-            for party in 1..=4 {
-                let s = boss_stats(b, party);
-                // The run's own scaling (run/levels/boss.rs spawn).
-                assert_eq!(s.max_hp, d.hp * (0.5 + 0.5 * party as f64), "{b:?} x{party}");
-                assert_eq!(s.speed, d.speed, "{b:?}");
-                assert_eq!(s.weight, 40.0);
-            }
+            let s = boss_stats(b);
+            assert_eq!(s.max_hp, d.hp, "{b:?}: the party size no longer scales HP (TODO 4b)");
+            assert_eq!(s.speed, d.speed, "{b:?}");
+            assert_eq!(s.weight, 40.0);
         }
     }
 

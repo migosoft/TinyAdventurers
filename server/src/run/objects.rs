@@ -597,7 +597,7 @@ mod tests {
 
     fn monster_at(run: &mut Run, off: Vec2) -> usize {
         let at = run.players[0].pos() + off;
-        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at, None, 1);
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at, None);
         run.monster_idx(id).unwrap()
     }
 

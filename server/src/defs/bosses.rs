@@ -37,11 +37,6 @@ pub fn governing(kind: EntityKind) -> super::attributes::Attr {
     }
 }
 
-/// HP multiplier for party size.
-pub fn hp_scale(players: usize) -> f64 {
-    0.5 + 0.5 * players.max(1) as f64
-}
-
 /// Demon timings (s), shared with the client: each attack's animation starts
 /// with its wind-up (the hit lands at the end of it), then the strike frames
 /// play out in a short recovery. Enraged, every timer runs at

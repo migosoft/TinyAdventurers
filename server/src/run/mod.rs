@@ -222,23 +222,22 @@ impl Run {
                 sheet,
             });
         }
-        let n = run.players.len();
         let spawns = run.layout.spawns.clone();
         for s in spawns {
             let t = run.level.enemy_type(s.enemy);
-            run.spawn_enemy(t, s.pos, None, n);
+            run.spawn_enemy(t, s.pos, None);
         }
         // Mimics are monsters from the start, hiding and drawn as a closed chest.
         for c in run.layout.chests.clone() {
             if c.mimic {
-                let id = run.spawn_enemy(EnemyType::Mimic, c.pos, None, n);
+                let id = run.spawn_enemy(EnemyType::Mimic, c.pos, None);
                 let mi = run.monster_idx(id).unwrap();
                 run.monsters[mi].hiding = true;
             } else {
                 run.spawn_object(EntityKind::Chest, c.pos, objects::ObjState::Chest { opened: None });
             }
         }
-        Level::populate(&mut run, n);
+        Level::populate(&mut run);
         // Barrels last, so every other entity keeps its id.
         for b in run.layout.barrels.clone() {
             run.spawn_object(EntityKind::Barrel, b, objects::ObjState::Barrel(objects::Barrel::new()));
@@ -258,10 +257,10 @@ impl Run {
         id
     }
 
-    pub fn spawn_enemy(&mut self, t: EnemyType, pos: Vec2, owner: Option<u32>, party: usize) -> u32 {
+    pub fn spawn_enemy(&mut self, t: EnemyType, pos: Vec2, owner: Option<u32>) -> u32 {
         let d = enemies::def(t);
         let prof = enemies::profile(t);
-        let stats = crate::sheet::enemy_stats(t, party);
+        let stats = crate::sheet::enemy_stats(t);
         let id = self.alloc_id();
         let hp = stats.max_hp;
         self.monsters.push(Monster {
@@ -1242,10 +1241,10 @@ pub mod tests {
         assert!(!run.monsters.is_empty());
         for m in &run.monsters {
             let block = match m.etype {
-                Some(t) => enemy_stats(t, 1),
+                Some(t) => enemy_stats(t),
                 None => {
                     assert!(m.is_boss);
-                    boss_stats(BossId::Lich, 1)
+                    boss_stats(BossId::Lich)
                 }
             };
             assert_eq!(m.weight, block.weight, "{:?}", m.kind);
@@ -1264,7 +1263,7 @@ pub mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         run.monsters.retain(|m| m.is_boss);
         let at = run.players[0].pos() + Vec2::new(30.0, 0.0);
-        let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None, 1);
+        let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None);
         let mi = run.monster_idx(id).unwrap();
         let hp = run.monsters[mi].hp;
         run.events.clear();
@@ -1332,6 +1331,21 @@ pub mod tests {
     }
 
     #[test]
+    fn enemy_hp_ignores_party_size() {
+        let four = [ClassId::Wizard, ClassId::Paladin, ClassId::Barbarian, ClassId::ElvenRanger];
+        for b in BossId::ALL {
+            let run = test_run(&four, b);
+            let boss = run.monsters.iter().find(|m| m.is_boss).unwrap();
+            assert_eq!(boss.max_hp, crate::defs::bosses::def(b).hp, "{b:?} with four heroes");
+            for m in run.monsters.iter().filter(|m| !m.is_boss) {
+                if let Some(t) = m.etype {
+                    assert_eq!(m.max_hp, crate::defs::enemies::def(t).hp, "{t:?} with four heroes");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn start_and_end_messages_name_the_level_and_boss() {
         let run = test_run(&[ClassId::Wizard], BossId::Lich);
         let ServerMsg::RunStarted(info) = run.start_info(&run.players[0]) else { panic!() };
@@ -1375,7 +1389,10 @@ pub mod tests {
         // differs; demon and dragon unchanged.
         // 2026-10-15, damage-type effects: a barrel blast (half heat) now sets a monster on fire in the lich hall; the
         // burn damage changes its hp. (Lich cause confirmed from an event trace: a barrel blast of 30, half heat, set a monster on fire at about 3.7 s.) Dragon: its heat hits set heroes on fire; the burn damage changes their hp. Demon unchanged.
-        assert_eq!(got, vec![5430847933968611557, 15325243260565646054, 17290353229492298409]);
+        // 2026-10-19, TODO 4b: enemy and boss HP no longer scale with the party size. This run has two heroes,
+        // so every boss loses a third of its HP (×1.5 → ×1) and every enemy a fifth (×1.25 → ×1): all three
+        // halls differ. Part A (effect resistances) left all three values unchanged before this.
+        assert_eq!(got, vec![11853672065832131168, 7100769620128759448, 1468820053114872194]);
     }
 
     #[test]
@@ -1463,7 +1480,7 @@ pub mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.monsters.retain(|m| m.is_boss);
         let pos = run.layout.player_spawns[0] + Vec2::new(60.0, 0.0);
-        let id = run.spawn_enemy(EnemyType::Mimic, pos, None, 1);
+        let id = run.spawn_enemy(EnemyType::Mimic, pos, None);
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].hiding = true;
         // A player in plain sight does not wake it; only touching does.
@@ -1476,7 +1493,7 @@ pub mod tests {
         assert!(!run.monsters[mi].hiding);
         assert!(run.monsters[mi].ai.hold > 0.0);
         // The boss waking does not wake other mimics.
-        let id2 = run.spawn_enemy(EnemyType::Mimic, pos + Vec2::new(0.0, 32.0), None, 1);
+        let id2 = run.spawn_enemy(EnemyType::Mimic, pos + Vec2::new(0.0, 32.0), None);
         let m2 = run.monster_idx(id2).unwrap();
         run.monsters[m2].hiding = true;
         let hall = run.level.boss().unwrap().arena.center_px();
@@ -1499,7 +1516,7 @@ pub mod tests {
     fn orc_by(t: Tile) -> (Run, u32, Vec2) {
         let (mut run, at) = terrain_run(t);
         let orc = at - Vec2::new(16.0, 0.0);
-        let id = run.spawn_enemy(EnemyType::OrcWarrior, orc, None, 1);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, orc, None);
         run.players[0].debug = true;
         (run, id, at)
     }
@@ -1561,7 +1578,7 @@ pub mod tests {
         let at = run.players[0].pos();
         run.players[1].mv.x = at.x;
         run.players[1].mv.y = at.y;
-        let id = run.spawn_enemy(EnemyType::OrcWarrior, at - Vec2::new(16.0, 0.0), None, 1);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at - Vec2::new(16.0, 0.0), None);
         let oi = run.monster_idx(id).unwrap();
         let attack = crate::defs::enemies::def(EnemyType::OrcWarrior).attack;
         // STR 16: the Wizard (weight 9) the full 20 px, the Barbarian (weight 13) 20 x 3/4 = 15 px.
@@ -1733,7 +1750,7 @@ pub mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.monsters.retain(|m| m.is_boss);
         let start = run.layout.player_spawns[0];
-        let id = run.spawn_enemy(EnemyType::Mimic, start + Vec2::new(50.0, 0.0), None, 1);
+        let id = run.spawn_enemy(EnemyType::Mimic, start + Vec2::new(50.0, 0.0), None);
         assert!(!run.layout.map.blocks_at(start + Vec2::new(50.0, 0.0), Mover::Enemy));
         run.players[0].debug = true; // keep the target standing
         let mut moved_on_ground = false;

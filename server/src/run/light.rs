@@ -419,7 +419,7 @@ mod tests {
     #[test]
     fn a_moving_light_follows_its_entity_and_is_blocked_by_walls() {
         let (mut run, tx, ty) = dark_run();
-        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at(tx - 4, ty), None, 1);
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at(tx - 4, ty), None);
         run.add_light(LightKind::Fire, Anchor::Entity(id), None);
         assert!(run.is_lit(at(tx - 4, ty)) && run.is_lit(at(tx - 2, ty)));
         assert!(!run.is_lit(at(tx + 2, ty)), "out of range");
@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn the_sweep_drops_lights_of_gone_entities() {
         let (mut run, tx, ty) = dark_run();
-        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at(tx - 4, ty), None, 1);
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at(tx - 4, ty), None);
         run.add_light(LightKind::Fire, Anchor::Entity(id), None);
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].alive = false;

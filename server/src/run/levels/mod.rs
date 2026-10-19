@@ -20,7 +20,7 @@ use rand_chacha::ChaCha8Rng;
 /// in `run.level` while they run (boss behaviours read `boss_ent` from it).
 pub trait LevelRules {
     /// Spawns the level's own monsters after the shared enemies and chests.
-    fn populate(_run: &mut Run, _party: usize) {}
+    fn populate(_run: &mut Run) {}
     /// Before monster separation, where boss behaviours act.
     fn tick(_run: &mut Run, _dt: f64) {}
     /// After the step's clean-up, before the end check (wake-ups, doors).
@@ -109,7 +109,7 @@ impl Level {
         self.boss_id().map_or(t, |b| crate::defs::enemies::for_boss(t, b))
     }
 
-    pub fn populate(run: &mut Run, party: usize) { dispatch!(run.level, populate(run, party)) }
+    pub fn populate(run: &mut Run) { dispatch!(run.level, populate(run)) }
     pub fn tick(run: &mut Run, dt: f64) { dispatch!(run.level, tick(run, dt)) }
     pub fn post_tick(run: &mut Run) { dispatch!(run.level, post_tick(run)) }
     pub fn on_killed(run: &mut Run, id: u32) { dispatch!(run.level, on_killed(run, id)) }

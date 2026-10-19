@@ -266,11 +266,6 @@ pub const CHEST_TOUCH: f64 = 12.0;
 pub const NECRO_RAISE_COOLDOWN: f64 = 7.0;
 pub const NECRO_MAX_MINIONS: usize = 3;
 
-/// HP multiplier for party size.
-pub fn party_hp_scale(party: usize) -> f64 {
-    0.75 + 0.25 * party.max(1) as f64
-}
-
 /// HP before the CON bonus: today's HP minus 5 per CON point above 10, so the total stays.
 pub fn base_hp(t: EnemyType) -> f64 {
     let d = def(t);

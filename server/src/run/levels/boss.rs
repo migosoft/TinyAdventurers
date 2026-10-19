@@ -37,12 +37,12 @@ fn enc_mut(run: &mut Run) -> &mut BossEncounter {
 }
 
 /// Spawns the sleeping boss in the arena centre, then its extras.
-pub fn spawn(run: &mut Run, party: usize) {
+pub fn spawn(run: &mut Run) {
     let boss_id = enc(run).boss_id;
     let d = boss_defs::def(boss_id);
     let prof = boss_defs::profile(boss_id);
     let pos = enc(run).arena.center_px();
-    let stats = crate::sheet::boss_stats(boss_id, party);
+    let stats = crate::sheet::boss_stats(boss_id);
     let id = run.alloc_id();
     let hp = stats.max_hp;
     run.monsters.push(Monster {
@@ -82,7 +82,7 @@ pub fn spawn(run: &mut Run, party: usize) {
     });
     enc_mut(run).boss_ent = id;
     let mut behaviour = bosses::create(boss_id);
-    behaviour.spawn_extras(run, pos, party);
+    behaviour.spawn_extras(run, pos);
     enc_mut(run).behaviour = Some(behaviour);
 }
 

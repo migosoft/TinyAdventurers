@@ -489,7 +489,7 @@ mod tests {
     fn put_monster_near(run: &mut Run, pi: usize, dist: f64) -> usize {
         let pos = run.players[pi].pos() + Vec2::new(dist, 0.0);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        run.spawn_enemy(EnemyType::OrcWarrior, pos, None, 1);
+        run.spawn_enemy(EnemyType::OrcWarrior, pos, None);
         run.monsters.len() - 1
     }
 
@@ -567,7 +567,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let pos = run.players[0].pos() + Vec2::new(40.0, 0.0);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        run.spawn_enemy(EnemyType::Ogre, pos, None, 1);
+        run.spawn_enemy(EnemyType::Ogre, pos, None);
         let mi = run.monsters.len() - 1;
         let hp = run.monsters[mi].hp;
         // The ogre is drawn 26 px tall; a shot at its chest (drawn 8 px above its ground point) hits.
@@ -596,7 +596,7 @@ mod tests {
             let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
             run.monsters.retain(|m| m.is_boss || m.owner.is_some());
             let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
-            let id = run.spawn_enemy(t, at, None, 1);
+            let id = run.spawn_enemy(t, at, None);
             let mi = run.monster_idx(id).unwrap();
             run.monsters[mi].hp = 1000.0;
             explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), true, Some(0), 0, false, 0.0, 0);
@@ -643,7 +643,7 @@ mod tests {
                 let line: Vec<usize> = [30.0, 40.0, 50.0]
                     .iter()
                     .map(|&d| {
-                        run.spawn_enemy(EnemyType::OrcWarrior, p + Vec2::new(d, 0.0), None, 1);
+                        run.spawn_enemy(EnemyType::OrcWarrior, p + Vec2::new(d, 0.0), None);
                         run.monsters.len() - 1
                     })
                     .collect();
@@ -676,7 +676,7 @@ mod tests {
             run.monsters.retain(|m| m.is_boss);
             let p = run.players[0].pos();
             let id = run.spawn_object(EntityKind::Barrel, p + Vec2::new(30.0, 0.0), crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
-            run.spawn_enemy(EnemyType::OrcWarrior, p + Vec2::new(50.0, 0.0), None, 1);
+            run.spawn_enemy(EnemyType::OrcWarrior, p + Vec2::new(50.0, 0.0), None);
             let hp = run.monsters.last().unwrap().hp;
             if from_player {
                 run.players[0].aim = 0.0;
@@ -777,7 +777,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         run.monsters.retain(|m| m.is_boss);
         let p = run.players[0].pos();
-        let id = run.spawn_enemy(t, p + Vec2::new(60.0, 0.0), None, 1);
+        let id = run.spawn_enemy(t, p + Vec2::new(60.0, 0.0), None);
         if let Some(cha) = cha {
             let mi = run.monster_idx(id).unwrap();
             let now = run.monsters[mi].attrs.get(Attr::Cha);

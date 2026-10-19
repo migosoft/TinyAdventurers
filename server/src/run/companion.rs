@@ -698,7 +698,7 @@ mod tests {
         let far = Map::center_of(tx + 12, ty);
         let mi = wolf_idx(&run, id);
         run.monsters[mi].pos = far;
-        let goblin = run.spawn_enemy(crate::defs::enemies::EnemyType::GoblinArcher, far, None, 1);
+        let goblin = run.spawn_enemy(crate::defs::enemies::EnemyType::GoblinArcher, far, None);
         let p = run.players[0].pos();
         run.players[0].view.compute(&run.layout.map, p, 18);
         run.lights.refresh(&run.layout.map);
@@ -742,7 +742,7 @@ mod tests {
         let far = run.players[0].pos() + Vec2::new(9.0 * crate::dungeon::TILE, 0.0);
         let mi = wolf_idx(&run, id);
         run.monsters[mi].pos = far;
-        let orc = run.spawn_enemy(EnemyType::OrcWarrior, far + Vec2::new(20.0, 0.0), None, 1);
+        let orc = run.spawn_enemy(EnemyType::OrcWarrior, far + Vec2::new(20.0, 0.0), None);
         for _ in 0..120 {
             // Held there: the wolf would follow its ranger (out of its leash, the orc is no prey).
             let wi = wolf_idx(&run, id);
@@ -904,7 +904,7 @@ mod tests {
     }
 
     fn orc_at(run: &mut Run, p: Vec2) -> u32 {
-        run.spawn_enemy(EnemyType::OrcWarrior, p, None, 1)
+        run.spawn_enemy(EnemyType::OrcWarrior, p, None)
     }
 
     fn hp_of(run: &Run, id: u32) -> Option<f64> {
@@ -917,7 +917,7 @@ mod tests {
         let wi = wolf_idx(&run, id);
         let w = run.monsters[wi].pos;
         let ei = {
-            let e = run.spawn_enemy(t, w, None, 1);
+            let e = run.spawn_enemy(t, w, None);
             run.monster_idx(e).unwrap()
         };
         let gap = run.monsters[wi].radius + run.monsters[ei].radius + 2.0;
@@ -1132,7 +1132,7 @@ mod tests {
         run.monsters[bi].pos = r + Vec2::new(0.0, -20.0);
         let di = run.monsters.iter().position(|m| m.etype == Some(EnemyType::Disciple)).unwrap();
         run.monsters[di].pos = r + Vec2::new(-20.0, 0.0);
-        let mimic = run.spawn_enemy(EnemyType::Mimic, r + Vec2::new(0.0, 20.0), None, 1);
+        let mimic = run.spawn_enemy(EnemyType::Mimic, r + Vec2::new(0.0, 20.0), None);
         let mi = run.monster_idx(mimic).unwrap();
         run.monsters[mi].hiding = true;
         let (boss, disciple) = (run.monsters[bi].id, run.monsters[di].id);
@@ -1292,7 +1292,7 @@ mod tests {
         let (mut run, id) = guard_run();
         let r = run.players[0].pos();
         let chest = run.spawn_object(EntityKind::Chest, r + Vec2::new(25.0, 0.0), ObjState::Chest { opened: None });
-        let mimic = run.spawn_enemy(EnemyType::Mimic, r + Vec2::new(25.0, 10.0), None, 1);
+        let mimic = run.spawn_enemy(EnemyType::Mimic, r + Vec2::new(25.0, 10.0), None);
         let mi = run.monster_idx(mimic).unwrap();
         run.monsters[mi].hiding = true;
         for _ in 0..30 {
@@ -1385,7 +1385,7 @@ mod tests {
     fn the_wolf_growls_at_a_hiding_mimic_but_not_at_a_dormant_boss() {
         let (mut run, id) = guard_run();
         let r = run.players[0].pos();
-        let mimic = run.spawn_enemy(EnemyType::Mimic, r + Vec2::new(5.0 * crate::dungeon::TILE, 0.0), None, 1);
+        let mimic = run.spawn_enemy(EnemyType::Mimic, r + Vec2::new(5.0 * crate::dungeon::TILE, 0.0), None);
         let mi = run.monster_idx(mimic).unwrap();
         run.monsters[mi].hiding = true;
         run.events.clear();

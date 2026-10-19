@@ -406,7 +406,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 
 **Bosses (`bosses/`).**
 - Interface: `trait BossBehaviour { spawn_extras, can_be_damaged, enraged, tick }`, created by `bosses::create(BossId)` and held by the level's `BossEncounter`. During its tick the behaviour is taken out of the encounter (`behaviour: Option<…>`), so it can borrow `Run` mutably.
-- Boss HP is `base × (0.5 + 0.5 × players)`.
+- Boss HP is its base HP; it does not depend on the number of heroes (TODO 4b, 2026-10-19; before, `base × (0.5 + 0.5 × players)`, and enemies `× (0.75 + 0.25 × players)`).
 
 | Boss | Base HP | Behaviour |
 |---|---|---|

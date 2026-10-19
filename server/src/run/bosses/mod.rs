@@ -13,7 +13,7 @@ use crate::protocol::BossId;
 
 pub trait BossBehaviour: Send {
     /// Spawn extra monsters (e.g. lich disciples) when the run is created.
-    fn spawn_extras(&mut self, _run: &mut Run, _boss_pos: Vec2, _party: usize) {}
+    fn spawn_extras(&mut self, _run: &mut Run, _boss_pos: Vec2) {}
     /// Special damage condition (lich: all disciples dead).
     fn can_be_damaged(&self, _run: &Run) -> bool {
         true
