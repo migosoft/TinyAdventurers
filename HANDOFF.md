@@ -28,7 +28,8 @@ For: the next agent or developer continuing this project. Read this first, then 
   - Barrels and the wolf no longer move the ogre (weight 20).
   - Enemy hits push the Paladin and Barbarian less.
   - Element burns and freezes are a bit shorter on high-CON targets.
-- **Open decision for the user before plan 2:** element effects (Burning, Frozen and so on, from a damage split) use a fixed power of 10 against the target's CON, even from the Wizard's Fireball and the fire bosses. Spec §5 reads "INT for spells". Keep 10, or let the hit carry its source's power?
+  - Fireball and fire-boss burns last longer (the user's ruling, 2026-10-19: element effects use the source's governing Attribute, at least 10; spec §5).
+  - A resisted fire hit still thaws ice (the user's ruling, 2026-10-19: a cancel runs before the resistance check).
 
 **Other open items:**
 - **The user's play-test of the ranger** (see "Last feature (2026-10-16): Elven Ranger and the Dire Wolf", "Still to play"); follow-ups in TODO "Elven Ranger follow-ups".

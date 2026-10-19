@@ -161,7 +161,8 @@ pub struct RaceDef {
 - **Hard immunities** (race, boss `responses`, items, tree nodes) override the formula. `Reduced` (50 %) still multiplies after it.
 - **Effects from allies** (heals, buffs such as Haste) are never reduced.
 - `OnHit` gains `magical: bool` and `power: i32` (filled by the sheet when the hit is built). `apply_effect_from` takes the power and reads the target's save and scales the time; `apply_effect` is unscaled (debug and tests).
-- Open, 2026-10-19: element effects (Burning, Frozen and so on, from a damage split) use a fixed power of 10 against the target's CON, even from the Wizard's Fireball and the fire bosses. Spec §5 reads "INT for spells". Keep 10, or let the hit carry its source's power?
+- **Element effects** (Burning, Frozen and so on, from a damage split; decided by the user, 2026-10-19): non-magical (save CON), at the power of the source's governing Attribute but never below 10: `max(10, governing)`. The Wizard's Fireball burns at INT, the imps', chorts', demon's and dragon's fire at CHA (innate), the summoner's fire bolt at INT (a spell), a hero's melee and the wolf's bite at STR, finesse and ranged weapons at DEX. Sources without one (lava, barrels, burning ground, effect ticks, a shot whose owner is unknown) stay at 10.
+- **Cancels before resistance** (the user, 2026-10-19): an effect cancels its opposite even when the new effect is resisted (a fire hit on a heat-immune creature still thaws its ice).
 - **Examples:** the Wizard's Sleep (INT 15) on a goblin (WIL 8) lasts ×1.35; the lich's Sleep mist (INT 22) on the Paladin (WIL 12) ×1.5. The Elven Ranger and her wolf never fall asleep (race immunity).
 
 ## 6. Weapons and abilities

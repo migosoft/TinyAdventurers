@@ -170,11 +170,12 @@ pub struct OnHit {
     /// Saved against with WIL (spells, innate magic) instead of CON.
     pub magical: bool,
     /// The source's key Attribute (spells INT, innate magic CHA, a weapon's
-    /// wielder its key Attribute, terrain and elements 10); see `scaled_secs`.
+    /// wielder its key Attribute, terrain 10); see `scaled_secs`.
     pub power: i32,
 }
 
-/// Power of an element's effect from a hit's split, and of terrain: fixed, non-magical.
+/// The least power of an element's effect from a hit's split (non-magical): terrain,
+/// barrels and sources without a governing Attribute use it; stronger sources their own.
 pub const ELEMENT_POWER: i32 = 10;
 
 /// A harmful effect's seconds after the target's save:

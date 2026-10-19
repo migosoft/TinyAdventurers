@@ -203,7 +203,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             if w.pos.dist(e.pos) <= WOLF_BITE_RANGE + w.radius + e.radius + 4.0 {
                 let (from, melee) = (w.pos, w.melee);
                 run.monsters[mi].aim = from.angle_to(e.pos);
-                run.hurt_monster(ei, Damage::new(WOLF_BITE_DAMAGE, melee), false, Some(pi));
+                run.hurt_monster(ei, Damage::new(WOLF_BITE_DAMAGE, melee).with_power(WOLF_ATTRS.get(Attr::Str)), false, Some(pi));
                 run.knock_monster(ei, from, WOLF_BITE_KNOCK, WOLF_ATTRS.get(Attr::Str));
             }
         }
@@ -338,7 +338,7 @@ fn tick_dash(run: &mut Run, mi: usize, pi: usize, dash: WolfDash, dt: f64) {
             let (w, e) = (&run.monsters[mi], &run.monsters[ei]);
             if w.pos.dist(e.pos) < w.radius + e.radius + 4.0 {
                 let (from, melee) = (w.pos, w.melee);
-                run.hurt_monster(ei, Damage::new(WOLF_DASH_DAMAGE, melee), false, Some(pi));
+                run.hurt_monster(ei, Damage::new(WOLF_DASH_DAMAGE, melee).with_power(WOLF_ATTRS.get(Attr::Str)), false, Some(pi));
                 run.knock_monster(ei, from, WOLF_DASH_KNOCK, WOLF_ATTRS.get(Attr::Str));
                 run.monsters[mi].ai.cd = WOLF_BITE_COOLDOWN;
                 done = true;

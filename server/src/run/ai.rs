@@ -417,9 +417,11 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, attack: At
         }
     };
     let on_hit = run.monsters[mi].etype.and_then(|t| enemies::on_hit(t, alt));
+    // Melee and slams; a shot takes its owner's power in `spawn_monster_projectile`.
+    let power = run.monsters[mi].etype.map_or(0, |t| run.monsters[mi].attrs.get(enemies::governing(t, None)));
     let with = |d: Damage| match on_hit {
-        Some(h) => d.with_effect(h),
-        None => d,
+        Some(h) => d.with_power(power).with_effect(h),
+        None => d.with_power(power),
     };
     match attack {
         AttackStyle::Melee { range, damage, cooldown, knock, .. } => {

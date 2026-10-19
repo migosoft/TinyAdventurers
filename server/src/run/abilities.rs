@@ -53,6 +53,11 @@ pub fn dagger_target(run: &Run, pi: usize) -> Option<DaggerTarget> {
         .map(|(t, _)| t)
 }
 
+/// The power of an ability's element effects: the hero's governing Attribute for it (`ab::governing`).
+fn hero_power(run: &Run, pi: usize, id: AbilityId) -> i32 {
+    ab::governing(id).map_or(0, |a| run.players[pi].sheet.attrs.get(a))
+}
+
 /// Uses the hero's primary or secondary ability, with its numbers from the hero's sheet.
 pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     let cd = if primary { run.players[pi].cd1 } else { run.players[pi].cd2 };
@@ -68,20 +73,21 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     let dir = Vec2::from_angle(aim);
     let crit = false;
     let on_hit = ab::on_hit(id);
+    let power = hero_power(run, pi, id);
     let mut cooldown = def.cooldown;
     let anim = match id {
         AbilityId::MagicMissile => {
-            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, on_hit);
+            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, on_hit, power);
             Anim::Shoot
         }
         AbilityId::Fireball => {
             let target = pos + dir * aim_dist.clamp(24.0, def.range);
             let life = def.range / def.speed + 0.1;
-            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage, 4.0, life, def.radius, Some(target), crit, on_hit);
+            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage, 4.0, life, def.radius, Some(target), crit, on_hit, power);
             Anim::Cast
         }
         AbilityId::Sword | AbilityId::Axe => {
-            melee_arc(run, pi, def.range, def.arc, def.damage, crit, on_hit);
+            melee_arc(run, pi, def.range, def.arc, def.damage, crit, on_hit, power);
             Anim::Melee
         }
         AbilityId::Heal => {
@@ -115,7 +121,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             if let Some(t) = dagger_target(run, pi) {
                 let thrust = run.players[pi].sheet.fallback.expect("a hero with the crossbow has the rapier");
                 cooldown = thrust.cooldown;
-                let dmg = Damage { on_hit, ..Damage::new(thrust.damage, run.players[pi].melee) };
+                let dmg = Damage { on_hit, ..Damage::new(thrust.damage, run.players[pi].melee).with_power(power) };
                 match t {
                     DaggerTarget::Monster(mi) => {
                         run.hurt_monster(mi, dmg, crit, Some(pi));
@@ -127,7 +133,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
                 }
                 Anim::Melee
             } else {
-                spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, on_hit);
+                spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, on_hit, power);
                 Anim::Shoot
             }
         }
@@ -146,10 +152,11 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     p.anim_start = run.time;
 }
 
-fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: bool, on_hit: Option<OnHit>) {
+#[allow(clippy::too_many_arguments)]
+fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: bool, on_hit: Option<OnHit>, power: i32) {
     let rw = rewind_ticks(run, pi);
     let (pos, aim) = (run.players[pi].pos(), run.players[pi].aim);
-    let dmg = Damage { on_hit, ..Damage::new(damage, run.players[pi].melee) };
+    let dmg = Damage { on_hit, ..Damage::new(damage, run.players[pi].melee).with_power(power) };
     let hits: Vec<usize> = run
         .monsters
         .iter()
@@ -193,7 +200,10 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
 pub fn dash_contact(run: &mut Run, pi: usize) {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
-    let dmg = Damage { on_hit: ab::on_hit(AbilityId::Dash), ..Damage::new(run.players[pi].sheet.secondary.damage, run.players[pi].melee) };
+    let dmg = Damage {
+        on_hit: ab::on_hit(AbilityId::Dash),
+        ..Damage::new(run.players[pi].sheet.secondary.damage, run.players[pi].melee).with_power(hero_power(run, pi, AbilityId::Dash))
+    };
     let hits: Vec<(usize, u32)> = run
         .monsters
         .iter()
@@ -234,6 +244,7 @@ fn spawn_player_projectile(
     target: Option<Vec2>,
     crit: bool,
     on_hit: Option<OnHit>,
+    power: i32,
 ) {
     let p = &run.players[pi];
     let pos = p.pos() + dir * 6.0;
@@ -250,7 +261,7 @@ fn spawn_player_projectile(
         shot,
         pos,
         vel,
-        damage: Damage { on_hit, ..Damage::new(damage, kind_split(kind)) },
+        damage: Damage { on_hit, ..Damage::new(damage, kind_split(kind)).with_power(power) },
         radius,
         life: (life - ff).max(0.05),
         crit,
@@ -289,7 +300,7 @@ pub fn spawn_monster_projectile(
         shot: 0,
         pos,
         vel: dir * speed,
-        damage: Damage::new(damage, kind_split(kind)),
+        damage: Damage::new(damage, kind_split(kind)).with_power(shot_power(run, owner, kind)),
         radius: 3.0,
         life,
         crit: false,
@@ -300,6 +311,17 @@ pub fn spawn_monster_projectile(
         dead: false,
     });
     run.attach_kind_light(id, kind);
+}
+
+/// The power of a monster shot's element effects: its owner's governing Attribute
+/// (`enemies::governing`, `bosses::governing`); 0 (so `ELEMENT_POWER`) if the owner is unknown.
+fn shot_power(run: &Run, owner: u32, kind: EntityKind) -> i32 {
+    let Some(m) = run.monster_idx(owner).map(|mi| &run.monsters[mi]) else { return 0 };
+    match m.etype {
+        Some(t) => m.attrs.get(crate::defs::enemies::governing(t, Some(kind))),
+        None if m.is_boss => m.attrs.get(crate::defs::bosses::governing(kind)),
+        None => 0,
+    }
 }
 
 pub fn tick_projectiles(run: &mut Run, dt: f64) {
@@ -532,7 +554,7 @@ mod tests {
     fn missile_past(run: &mut Run, mi: usize, dy: f64) {
         let at = run.monsters[mi].pos + Vec2::new(-6.0, -dy);
         assert!(!run.layout.map.opaque_at(at) && !run.layout.map.opaque_at(at + Vec2::new(12.0, 0.0)), "open floor for the test shot");
-        spawn_player_projectile(run, 0, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), 230.0, 5.0, 3.0, 1.0, 0.0, None, false, None);
+        spawn_player_projectile(run, 0, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), 230.0, 5.0, 3.0, 1.0, 0.0, None, false, None, 0);
         run.projectiles[0].pos = at;
         for _ in 0..3 {
             tick_projectiles(run, 1.0 / TICK_HZ);
@@ -701,7 +723,7 @@ mod tests {
         // The aim point lies a hair inside the wall: the shot passes it on the step that enters the wall.
         let at = run.players[0].pos();
         let target = Vec2::new((tx + 3) as f64 * TILE + 0.01, at.y);
-        spawn_player_projectile(&mut run, 0, EntityKind::Fireball, 1, Vec2::new(1.0, 0.0), 300.0, 1.0, 4.0, 2.0, 20.0, Some(target), false, None);
+        spawn_player_projectile(&mut run, 0, EntityKind::Fireball, 1, Vec2::new(1.0, 0.0), 300.0, 1.0, 4.0, 2.0, 20.0, Some(target), false, None, 0);
         for _ in 0..30 {
             if run.projectiles.is_empty() {
                 break;
@@ -712,4 +734,97 @@ mod tests {
         let Anchor::Point(p) = flash.anchor else { panic!("a point light") };
         assert!(!run.layout.map.opaque_at(p), "the blast goes off in front of the wall, not inside it");
     }
+
+    // ---- Element effects at the source's governing Attribute ----
+
+    /// Seconds of Burning left on `c`, if it burns.
+    fn burn_left(run: &Run, c: Creature) -> Option<f64> {
+        let fx = match c {
+            Creature::Player(i) => &run.players[i].effects,
+            Creature::Monster(i) => &run.monsters[i].effects,
+        };
+        fx.list().iter().find(|a| a.kind == crate::defs::effects::EffectKind::Burning).map(|a| a.left)
+    }
+
+    fn burn_secs(power: i32, con: i32) -> f64 {
+        use crate::defs::effects::{def, scaled_secs, EffectKind};
+        scaled_secs(def(EffectKind::Burning).duration, power, con)
+    }
+
+    #[test]
+    fn a_fireball_burns_at_the_wizards_int() {
+        use crate::defs::attributes::Attr;
+        for int in [15, 18] {
+            let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+            let mi = put_monster_near(&mut run, 0, 40.0);
+            run.monsters[mi].hp = 1000.0;
+            let p = &mut run.players[0];
+            assert_eq!(p.sheet.attrs.get(Attr::Int), 15);
+            p.sheet.attrs.add(Attr::Int, int - 15);
+            (p.aim, p.aim_dist) = (0.0, 40.0);
+            try_use(&mut run, 0, false, 1);
+            for _ in 0..60 {
+                tick_projectiles(&mut run, 1.0 / TICK_HZ);
+            }
+            let con = run.monsters[mi].attrs.get(Attr::Con);
+            assert_eq!(burn_left(&run, Creature::Monster(mi)), Some(burn_secs(int, con)), "INT {int} against the orc's CON {con}");
+        }
+    }
+
+    /// A fire bolt fired by an enemy of type `t` (CHA set to `cha` if given) at the Paladin: the burn's seconds.
+    fn fire_bolt_burn(t: EnemyType, cha: Option<i32>) -> Option<f64> {
+        use crate::defs::attributes::Attr;
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let p = run.players[0].pos();
+        let id = run.spawn_enemy(t, p + Vec2::new(60.0, 0.0), None, 1);
+        if let Some(cha) = cha {
+            let mi = run.monster_idx(id).unwrap();
+            let now = run.monsters[mi].attrs.get(Attr::Cha);
+            run.monsters[mi].attrs.add(Attr::Cha, cha - now);
+        }
+        spawn_monster_projectile(&mut run, id, EntityKind::FireBolt, p - Vec2::new(10.0, 0.0), Vec2::new(1.0, 0.0), 180.0, 1.0, 2.0, 0.0, 0, 0.0);
+        for _ in 0..30 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        burn_left(&run, Creature::Player(0))
+    }
+
+    #[test]
+    fn a_fire_bolt_burns_at_its_casters_governing_attribute() {
+        let con = crate::defs::classes::def(ClassId::Paladin).attrs.get(crate::defs::attributes::Attr::Con);
+        assert_eq!(con, 13);
+        assert_eq!(fire_bolt_burn(EnemyType::Imp, None), Some(burn_secs(14, con)), "the imp's innate fire: CHA 14");
+        assert_eq!(fire_bolt_burn(EnemyType::Chort, None), Some(burn_secs(10, con)), "the chort's CHA 9: at least 10");
+        assert_eq!(fire_bolt_burn(EnemyType::Summoner, None), Some(burn_secs(15, con)), "the summoner's spell: INT 15, not CHA 16");
+        assert_eq!(fire_bolt_burn(EnemyType::Imp, Some(6)), Some(burn_secs(10, con)), "CHA 6: at least 10");
+    }
+
+    #[test]
+    fn a_shot_whose_owner_is_unknown_burns_at_10() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let p = run.players[0].pos();
+        spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, p - Vec2::new(10.0, 0.0), Vec2::new(1.0, 0.0), 180.0, 1.0, 2.0, 0.0, 0, 0.0);
+        for _ in 0..30 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        assert_eq!(burn_left(&run, Creature::Player(0)), Some(burn_secs(10, 13)));
+    }
+
+    #[test]
+    fn lava_and_a_barrel_blast_burn_at_10() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        run.monsters.clear();
+        run.objects.clear();
+        run.hurt_player(0, crate::defs::objects::barrel_blast());
+        assert_eq!(burn_left(&run, Creature::Player(0)), Some(burn_secs(10, 13)), "the barrel");
+        run.remove_effect(Creature::Player(0), crate::defs::effects::EffectKind::Burning);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        run.set_tile(tx, ty, crate::dungeon::Tile::Lava);
+        run.step();
+        let left = burn_left(&run, Creature::Player(0)).expect("lava burns");
+        assert!((left - burn_secs(10, 13)).abs() < 0.1, "lava, a tick later: {left}");
+    }
+
 }

@@ -167,7 +167,7 @@ impl BossBehaviour for Dragon {
                 self.pulse -= dt;
                 if self.pulse <= 0.0 {
                     self.pulse = 0.2;
-                    let breath = Damage::new(6.0, DamageSplit::pure(DamageType::Heat));
+                    let breath = breath_damage(run, bi);
                     for c in run.foes_in(pos, BREATH_RANGE, Some((aim, BREATH_HALF_ANGLE))) {
                         if crate::collision::line_of_sight(&run.layout.map, pos, run.creature_pos(c)) {
                             run.hurt_creature(c, breath);
@@ -289,6 +289,11 @@ impl BossBehaviour for Dragon {
             set_anim(run, bi, Anim::Idle);
         }
     }
+}
+
+/// One pulse of the breath: innate fire, at the dragon's CHA.
+fn breath_damage(run: &Run, bi: usize) -> Damage {
+    Damage::new(6.0, DamageSplit::pure(DamageType::Heat)).with_power(run.monsters[bi].attrs.get(governing(EntityKind::FireBreath)))
 }
 
 #[cfg(test)]
@@ -443,5 +448,17 @@ mod tests {
         Dragon::land_smash(&mut run, bi, pos, 0.0);
         assert_eq!(run.players[0].hp, hp);
         assert!(!run.players[0].mv.knocked());
+    }
+
+    #[test]
+    fn the_breath_burns_at_the_dragons_cha() {
+        use crate::defs::attributes::Attr;
+        use crate::defs::effects::{def, scaled_secs, EffectKind};
+        let (mut run, _, bi) = dragon_with(&[Vec2::new(30.0, 0.0)]);
+        assert_eq!(run.monsters[bi].attrs.get(Attr::Cha), 20);
+        let breath = breath_damage(&run, bi);
+        run.hurt_player(0, breath);
+        let left = run.players[0].effects.list().iter().find(|a| a.kind == EffectKind::Burning).map(|a| a.left);
+        assert_eq!(left, Some(scaled_secs(def(EffectKind::Burning).duration, 20, 13)), "CHA 20 against the Paladin's CON 13");
     }
 }

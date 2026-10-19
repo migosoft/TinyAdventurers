@@ -108,11 +108,19 @@ pub struct Damage {
     pub on_hit: Option<super::effects::OnHit>,
     /// Dealt by an effect over time: applies no effects (no loops).
     pub from_effect: bool,
+    /// The source's governing Attribute (spell INT, innate CHA, weapon STR or DEX):
+    /// the power of the element effects the hit applies, at least `ELEMENT_POWER`.
+    /// 0 for sources without one (terrain, barrels, effect ticks).
+    pub power: i32,
 }
 
 impl Damage {
     pub fn new(amount: f64, split: DamageSplit) -> Self {
-        Damage { amount, split, on_hit: None, from_effect: false }
+        Damage { amount, split, on_hit: None, from_effect: false, power: 0 }
+    }
+    pub fn with_power(mut self, power: i32) -> Self {
+        self.power = power;
+        self
     }
     pub fn with_effect(mut self, h: super::effects::OnHit) -> Self {
         self.on_hit = Some(h);

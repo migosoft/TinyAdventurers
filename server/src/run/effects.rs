@@ -229,13 +229,14 @@ impl Run {
     }
 
     /// After a normal hit: each element making up at least half of it applies its
-    /// effect, at the fixed non-magical `ELEMENT_POWER` against the target's CON.
+    /// effect, non-magical (against the target's CON), at the power of its source's
+    /// governing Attribute (`Damage::power`) but never below `ELEMENT_POWER`.
     pub fn element_hit(&mut self, c: Creature, dmg: &crate::defs::damage::Damage) {
         if dmg.from_effect {
             return;
         }
         for k in crate::defs::effects::element_effects(&dmg.split) {
-            self.apply_effect_from(c, k, None, ELEMENT_POWER, false);
+            self.apply_effect_from(c, k, None, dmg.power.max(ELEMENT_POWER), false);
         }
     }
 

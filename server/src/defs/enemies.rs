@@ -295,6 +295,18 @@ pub fn profile(t: EnemyType) -> Profile {
     races::profile(&[race(t)], Adjust { vision: Some(def(t).vision), ..Adjust::NONE })
 }
 
+/// The Attribute that governs an enemy's attack (spec §7), `shot` its projectile
+/// (None: a melee attack or slam): the power of the element effects it applies.
+pub fn governing(t: EnemyType, shot: Option<EntityKind>) -> Attr {
+    use EntityKind as K;
+    match shot {
+        None => Attr::Str, // weapons, claws, the ogre's slam
+        Some(K::Arrow) => Attr::Dex, // bows
+        Some(K::FireBolt) if t != EnemyType::Summoner => Attr::Cha, // imps' and chorts' innate fire
+        Some(_) => Attr::Int, // spells: shadow bolts, the summoner's fire bolt
+    }
+}
+
 /// An effect an enemy's attack (`alt`: its second attack) applies on a hit. None yet:
 /// e.g. `(EnemyType::GoblinArcher, false) => Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, chance: 0.3, magical: false,
 /// power: def(t).attrs.get(Attr::Dex) })` (a bow: the wielder's DEX; a spell would be INT and magical).
