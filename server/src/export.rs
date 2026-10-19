@@ -9,6 +9,7 @@
 
 use crate::collision::{step_move, MoveState, Solid};
 use crate::defs::abilities::{self as ab};
+use crate::defs::attributes::Attr;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::effects::{self, EffectKind};
 use crate::defs::{bosses, enemies};
@@ -34,7 +35,12 @@ fn export_defs() {
         .iter()
         .map(|c| {
             let d = classes::def(*c);
-            (format!("{c:?}"), json!({ "kind": d.kind as u8, "hp": d.hp, "speed": d.speed, "primary": d.primary, "secondary": d.secondary }))
+            let start = classes::start_attrs(*c);
+            let attrs: serde_json::Map<String, serde_json::Value> = Attr::ALL.iter().map(|a| (format!("{a:?}"), json!(start.get(*a)))).collect();
+            (
+                format!("{c:?}"),
+                json!({ "kind": d.kind as u8, "hp": d.hp, "speed": d.speed, "attrs": attrs, "weight": d.weight, "base_hp": d.base_hp, "primary": d.primary, "secondary": d.secondary }),
+            )
         })
         .collect();
     let abilities: serde_json::Map<String, serde_json::Value> =

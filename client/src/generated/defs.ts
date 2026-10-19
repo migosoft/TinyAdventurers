@@ -147,32 +147,72 @@ export const CONST = {
 
 export const CLASSES = {
   "Barbarian": {
+    "attrs": {
+      "Cha": 10,
+      "Con": 14,
+      "Dex": 13,
+      "Int": 8,
+      "Str": 15,
+      "Wil": 12
+    },
+    "base_hp": 120.0,
     "hp": 140.0,
     "kind": 2,
     "primary": "Axe",
     "secondary": "Dash",
-    "speed": 70.0
+    "speed": 70.0,
+    "weight": 13.0
   },
   "ElvenRanger": {
+    "attrs": {
+      "Cha": 13,
+      "Con": 12,
+      "Dex": 15,
+      "Int": 8,
+      "Str": 10,
+      "Wil": 14
+    },
+    "base_hp": 80.0,
     "hp": 90.0,
     "kind": 3,
     "primary": "CrossbowDagger",
     "secondary": "SummonWolf",
-    "speed": 80.0
+    "speed": 80.0,
+    "weight": 10.0
   },
   "Paladin": {
+    "attrs": {
+      "Cha": 14,
+      "Con": 13,
+      "Dex": 8,
+      "Int": 10,
+      "Str": 15,
+      "Wil": 12
+    },
+    "base_hp": 105.0,
     "hp": 120.0,
     "kind": 1,
     "primary": "Sword",
     "secondary": "Heal",
-    "speed": 66.0
+    "speed": 66.0,
+    "weight": 12.0
   },
   "Wizard": {
+    "attrs": {
+      "Cha": 10,
+      "Con": 12,
+      "Dex": 14,
+      "Int": 15,
+      "Str": 8,
+      "Wil": 13
+    },
+    "base_hp": 60.0,
     "hp": 70.0,
     "kind": 0,
     "primary": "MagicMissile",
     "secondary": "Fireball",
-    "speed": 72.0
+    "speed": 72.0,
+    "weight": 9.0
   }
 } as const;
 

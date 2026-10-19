@@ -726,6 +726,23 @@ The database, statistics, telemetry and the admin page take the level as text (`
 - **Applying:** `Lobby::start` copies the character's `StatUpgrades` into `Member.upgrades`. `Run::new` turns them into `Player.mods`, which the simulation uses and `RunStartInfo.mods` sends to the predictor.
 - **Tuning:** costs and per-level bonuses are in `defs/progression.rs`.
 
+**The character sheet and Attributes (progression plan 1; spec [2026-10-18-progression-design.md](superpowers/specs/2026-10-18-progression-design.md)).** The upgrade shop above stays in use until plan 4 replaces it.
+- **Where the numbers come from.** `sheet.rs` resolves every hero and monster number from a class or stat block plus its Attributes. `hero_sheet(class, extra, upgrades)` gives a hero's `Sheet`: max HP, speed, weight, resistances, effect responses, melee split, sight, the two abilities (`ResolvedAbility`) and the Ranger's melee `fallback`. `enemy_stats`, `boss_stats` and `wolf_stats` do the same for monsters. The run reads `Player.sheet` and the monsters' stats; it no longer reads `defs` numbers for these directly.
+- **Attributes** (`defs/attributes.rs`): STR, DEX, CON, INT, WIL, CHA, as `Attributes`. A hero's Attributes are the class's points plus the race bonus (`classes::start_attrs`) plus `extra` (shop, tree and item points, none yet). Per point from 10:
+  - STR: melee damage 5 %, ranged range and projectile speed 2 %.
+  - DEX: finesse and ranged damage 5 %, arc 3 %, attack and firing speed 2 %.
+  - CON: 5 max HP and 1 % move speed.
+  - INT: spell damage 5 %. CHA: innate damage and heals 5 %.
+  - WIL: the save against magical effects.
+  - The rule is `factor(v, pct) = max(0.1, 1 + pct × (v − 10))`, and `hp(base, con) = base + 5 × (con − 10)`.
+- **The `Scaled` rule is bit-exact.** A scaled number is stored as its value at a reference Attribute value, `Scaled { value, attr, pct, at }`, and resolved as `value × factor(cur, pct) / factor(at, pct)`. At the start Attributes the ratio is exactly 1.0, so today's numbers (and the fingerprint tests) come out unchanged to the bit. Do not write it as `base = today / start factor`: floats would drift. Cooldowns use `per`, which divides.
+- **Races** (`defs/races.rs`, formerly entity types): Human, Elf, Magical Beast, Goblin, Orc, Ogre and so on. A race carries resistances, effect responses, sight and an Attribute bonus. Only the Elf has one: DEX +2, so the Elven Ranger is class 10/13/12/8/14/13 plus 2 DEX = 10/15/12/8/14/13. The Dire Wolf's race Magical Beast adds +20 % cold as its `Adjust`.
+- **Weights and pushes.** Every creature and object has a weight (Wizard 9, Paladin 12, Barbarian 13, Ranger 10, bosses 40, barrel 6, chests 40, Dire Wolf 10). A push moves a target `base × min(1, (STR − weight) / 4)` px, and not at all unless the pusher's STR is above the weight (`attributes::push_dist`). Bosses push with `BOSS_KNOCK_STR` (30) and barrel blasts with `BARREL_BLAST_STR` (18).
+- **Effect durations** (`apply_effect_from`, `scaled_secs`): a harmful effect lasts `base × max(0, 1 + (power − save) / 20)`. The save is the target's WIL for a magical source and CON for a non-magical one. Element effects use `ELEMENT_POWER` (10). Positive effects are never scaled. The creature's `EffectResponse` (immune, half and so on) still applies after.
+- **`RunStartInfo`** carries the receiving hero's resolved `speed`, `abilities` (primary and secondary) and `fallback` instead of the old `mods`. The client predicts movement and cooldowns from these numbers as sent. It never computes an Attribute formula, so the server's rule has one home.
+- **Export:** `export.rs` writes `CLASSES` with `attrs` (start totals, class plus race), `weight` and `base_hp`; they are for display and the demo scenes.
+- `attr_price` and `ATTR_WEIGHT` are built and tested but unused until plan 4 (the Attribute shop).
+
 **Tamper safety.** The server is authoritative.
 - Everything the client gets (`Me`, `Character`) is for display only.
 - No message carries progress values from the client to the server.
