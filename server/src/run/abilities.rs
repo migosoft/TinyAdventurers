@@ -33,6 +33,7 @@ pub enum DaggerTarget {
 pub fn dagger_target(run: &Run, pi: usize) -> Option<DaggerTarget> {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
+    let reach = run.players[pi].sheet.fallback.map_or(ab::DAGGER_RANGE, |f| f.range);
     let monsters = run
         .monsters
         .iter()
@@ -47,39 +48,40 @@ pub fn dagger_target(run: &Run, pi: usize) -> Option<DaggerTarget> {
         .map(|(i, o)| (DaggerTarget::Object(i), o.pos.dist(pos) - o.radius));
     monsters
         .chain(chests)
-        .filter(|&(_, d)| d <= ab::DAGGER_RANGE)
+        .filter(|&(_, d)| d <= reach)
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(t, _)| t)
 }
 
-pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool) {
+/// Uses the hero's primary or secondary ability, with its numbers from the hero's sheet.
+pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     let cd = if primary { run.players[pi].cd1 } else { run.players[pi].cd2 };
     if cd > COOLDOWN_LEEWAY || !run.players[pi].alive {
         return;
     }
-    let def = ab::def(id);
+    let def = if primary { run.players[pi].sheet.primary } else { run.players[pi].sheet.secondary };
+    let id = def.id;
     let (pos, aim, aim_dist) = {
         let p = &run.players[pi];
         (p.pos(), p.aim, p.aim_dist)
     };
     let dir = Vec2::from_angle(aim);
     let crit = false;
-    let mult = run.players[pi].mods.damage;
     let on_hit = ab::on_hit(id);
     let mut cooldown = def.cooldown;
     let anim = match id {
         AbilityId::MagicMissile => {
-            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage * mult, def.radius, def.range / def.speed, 0.0, None, crit, on_hit);
+            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, on_hit);
             Anim::Shoot
         }
         AbilityId::Fireball => {
             let target = pos + dir * aim_dist.clamp(24.0, def.range);
             let life = def.range / def.speed + 0.1;
-            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage * mult, 4.0, life, def.radius, Some(target), crit, on_hit);
+            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage, 4.0, life, def.radius, Some(target), crit, on_hit);
             Anim::Cast
         }
         AbilityId::Sword | AbilityId::Axe => {
-            melee_arc(run, pi, def.range, def.arc, def.damage * mult, crit, on_hit);
+            melee_arc(run, pi, def.range, def.arc, def.damage, crit, on_hit);
             Anim::Melee
         }
         AbilityId::Heal => {
@@ -111,8 +113,9 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
         }
         AbilityId::CrossbowDagger => {
             if let Some(t) = dagger_target(run, pi) {
-                cooldown = ab::DAGGER_COOLDOWN;
-                let dmg = Damage { on_hit, ..Damage::new(ab::DAGGER_DAMAGE * mult, run.players[pi].melee) };
+                let thrust = run.players[pi].sheet.fallback.expect("a hero with the crossbow has the rapier");
+                cooldown = thrust.cooldown;
+                let dmg = Damage { on_hit, ..Damage::new(thrust.damage, run.players[pi].melee) };
                 match t {
                     DaggerTarget::Monster(mi) => {
                         run.hurt_monster(mi, dmg, crit, Some(pi));
@@ -124,7 +127,7 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
                 }
                 Anim::Melee
             } else {
-                spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage * mult, def.radius, def.range / def.speed, 0.0, None, crit, on_hit);
+                spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, on_hit);
                 Anim::Shoot
             }
         }
@@ -134,7 +137,6 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
         }
     };
     let p = &mut run.players[pi];
-    let cooldown = cooldown / p.mods.attack_speed;
     if primary {
         p.cd1 = cooldown;
     } else {
@@ -191,7 +193,7 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
 pub fn dash_contact(run: &mut Run, pi: usize) {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
-    let dmg = Damage { on_hit: ab::on_hit(AbilityId::Dash), ..Damage::new(ab::def(AbilityId::Dash).damage * run.players[pi].mods.damage, run.players[pi].melee) };
+    let dmg = Damage { on_hit: ab::on_hit(AbilityId::Dash), ..Damage::new(run.players[pi].sheet.secondary.damage, run.players[pi].melee) };
     let hits: Vec<(usize, u32)> = run
         .monsters
         .iter()
@@ -461,14 +463,14 @@ mod tests {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         let hp = run.monsters[mi].hp;
-        try_use(&mut run, 0, AbilityId::CrossbowDagger, 1, true);
+        try_use(&mut run, 0, true, 1);
         assert!(run.monsters[mi].hp < hp, "dagger hit immediately");
         assert!(run.projectiles.is_empty(), "no bolt fired");
         assert_eq!(run.players[0].cd1, ab::DAGGER_COOLDOWN);
 
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         put_monster_near(&mut run, 0, 60.0);
-        try_use(&mut run, 0, AbilityId::CrossbowDagger, 1, true);
+        try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles.len(), 1, "crossbow bolt fired");
         assert_eq!(run.projectiles[0].kind, EntityKind::Bolt);
     }
@@ -480,11 +482,11 @@ mod tests {
         let mi = put_monster_near(&mut run, 0, 12.0);
         run.monsters[mi].airborne = true;
         let hp = run.monsters[mi].hp;
-        try_use(&mut run, 0, AbilityId::Sword, 1, true);
+        try_use(&mut run, 0, true, 1);
         assert_eq!(run.monsters[mi].hp, hp, "the sword misses it in the air");
         run.monsters[mi].airborne = false;
         run.players[0].cd1 = 0.0;
-        try_use(&mut run, 0, AbilityId::Sword, 2, true);
+        try_use(&mut run, 0, true, 2);
         assert!(run.monsters[mi].hp < hp, "and hits it on the ground");
 
         // Dagger: the ranger shoots the crossbow instead.
@@ -575,7 +577,7 @@ mod tests {
     #[test]
     fn shots_carry_the_type_of_their_kind() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-        try_use(&mut run, 0, AbilityId::MagicMissile, 1, true);
+        try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles[0].damage.split, crate::defs::damage::DamageSplit::pure(crate::defs::damage::DamageType::Magical));
     }
 
@@ -613,7 +615,8 @@ mod tests {
                 run.players[0].aim = 0.0;
                 run.players[0].rtt = rtt;
                 let hp: Vec<f64> = line.iter().map(|&mi| run.monsters[mi].hp).collect();
-                try_use(&mut run, 0, ability, 1, true);
+                assert_eq!(run.players[0].sheet.primary.id, ability);
+                try_use(&mut run, 0, true, 1);
                 for _ in 0..30 {
                     tick_projectiles(&mut run, 1.0 / TICK_HZ);
                 }
@@ -626,8 +629,8 @@ mod tests {
     #[test]
     fn cooldown_is_enforced() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-        try_use(&mut run, 0, AbilityId::MagicMissile, 1, true);
-        try_use(&mut run, 0, AbilityId::MagicMissile, 2, true);
+        try_use(&mut run, 0, true, 1);
+        try_use(&mut run, 0, true, 2);
         assert_eq!(run.projectiles.len(), 1);
     }
 
@@ -642,7 +645,7 @@ mod tests {
             let hp = run.monsters.last().unwrap().hp;
             if from_player {
                 run.players[0].aim = 0.0;
-                try_use(&mut run, 0, AbilityId::MagicMissile, 1, true);
+                try_use(&mut run, 0, true, 1);
             } else {
                 spawn_monster_projectile(&mut run, 999, EntityKind::Arrow, p + Vec2::new(10.0, 0.0), Vec2::new(1.0, 0.0), 180.0, 5.0, 2.0, 0.0, 0, 0.0);
             }
@@ -661,7 +664,7 @@ mod tests {
         let p = run.players[0].pos();
         let id = run.spawn_object(EntityKind::Barrel, p + Vec2::new(14.0, 0.0), crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
         run.players[0].aim = 0.0;
-        try_use(&mut run, 0, AbilityId::Sword, 1, true);
+        try_use(&mut run, 0, true, 1);
         let lit = |run: &Run| matches!(&run.objects.iter().find(|o| o.id == id).unwrap().state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_some());
         assert!(lit(&run));
         let mut run = test_run(&[ClassId::Wizard], BossId::Lich);

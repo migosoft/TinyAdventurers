@@ -770,9 +770,13 @@ mod tests {
         assert!(run.objects.iter().all(|o| o.id != id), "and it is gone");
     }
 
+    /// Player 0 uses `id`, lent the sheet of the class that owns it.
     fn use_ability(run: &mut Run, id: crate::defs::abilities::AbilityId, aim: f64) {
+        let owner = crate::defs::abilities::owner(id);
+        let sheet = crate::sheet::hero_sheet(owner, Default::default(), &Default::default());
+        run.players[0].sheet = sheet;
         run.players[0].aim = aim;
-        crate::run::abilities::try_use(run, 0, id, 1, true);
+        crate::run::abilities::try_use(run, 0, sheet.primary.id == id, 1);
     }
 
     #[test]

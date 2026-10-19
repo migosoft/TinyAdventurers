@@ -37,6 +37,7 @@ fn summon_spot(run: &Run, pos: Vec2) -> Vec2 {
 /// Summons the wolf of hero `pi` beside them and returns its id.
 pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
     let prof = wolf_profile();
+    let stats = crate::sheet::wolf_stats();
     let owner = run.players[pi].id;
     let spot = summon_spot(run, run.players[pi].pos());
     let (tx, ty) = Map::tile_of(spot);
@@ -72,6 +73,8 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         last_hit_by: None,
         effects: Default::default(),
         responses: wolf_responses(),
+        attrs: stats.attrs,
+        weight: stats.weight,
         ally: Some(Ally {
             owner,
             growled: Vec::new(),
@@ -437,7 +440,8 @@ pub fn wolf_died(run: &mut Run, mi: usize) {
     if let Some(pi) = owner.and_then(|o| run.player_idx(o)) {
         let p = &mut run.players[pi];
         p.wolf = None;
-        p.cd2 = WOLF_DEAD_COOLDOWN / p.mods.attack_speed;
+        // The summon's cooldown ratio is the attack-speed upgrade (this form is bit-exact to `/ attack_speed`).
+        p.cd2 = WOLF_DEAD_COOLDOWN / (crate::defs::abilities::def(crate::defs::abilities::AbilityId::SummonWolf).cooldown / p.sheet.secondary.cooldown);
         let name = p.name.clone();
         run.event(Ev::Msg { text: format!("{name}'s wolf has fallen") }, None);
     }
@@ -446,7 +450,6 @@ pub fn wolf_died(run: &mut Run, mi: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defs::abilities::AbilityId;
     use crate::defs::damage::{Damage, DamageType};
     use crate::defs::effects::{EffectKind, EffectResponse};
     use crate::defs::kinds::EntityKind;
@@ -530,7 +533,7 @@ mod tests {
     fn the_cooldowns_follow_attack_speed() {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         run.monsters.retain(|m| m.is_boss);
-        run.players[0].mods.attack_speed = 2.0;
+        run.players[0].sheet.secondary.cooldown = 4.0; // attack speed ×2 on the 8 s summon
         press(&mut run, 0, true);
         assert!((run.players[0].cd2 - 4.0).abs() < 0.1, "cd2 {}", run.players[0].cd2);
         let id = run.players[0].wolf.unwrap();
@@ -625,13 +628,13 @@ mod tests {
         // The dagger: a wolf 10 px away is no dagger target, the crossbow fires instead.
         let (mut run, id) = run_with_wolf_beside(&[ClassId::ElvenRanger], 0, 10.0);
         assert_eq!(dagger_target(&run, 0), None);
-        try_use(&mut run, 0, AbilityId::CrossbowDagger, 1, true);
+        try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles.len(), 1, "a bolt is fired");
         untouched(&run, id, "dagger");
 
         // A bolt flies straight through it.
         let (mut run, id) = run_with_wolf_beside(&[ClassId::ElvenRanger], 0, 40.0);
-        try_use(&mut run, 0, AbilityId::CrossbowDagger, 1, true);
+        try_use(&mut run, 0, true, 1);
         for _ in 0..30 {
             tick_projectiles(&mut run, DT);
         }
@@ -639,20 +642,20 @@ mod tests {
 
         // Sword and axe swings.
         let (mut run, id) = run_with_wolf_beside(&[ClassId::ElvenRanger, ClassId::Paladin, ClassId::Barbarian], 1, 10.0);
-        try_use(&mut run, 1, AbilityId::Sword, 1, true);
+        try_use(&mut run, 1, true, 1);
         untouched(&run, id, "sword");
-        try_use(&mut run, 2, AbilityId::Axe, 1, true);
+        try_use(&mut run, 2, true, 1);
         untouched(&run, id, "axe");
 
         // The Barbarian's dash.
-        try_use(&mut run, 2, AbilityId::Dash, 1, false);
+        try_use(&mut run, 2, false, 1);
         dash_contact(&mut run, 2);
         untouched(&run, id, "dash");
 
         // A fireball that goes off on it.
         let (mut run, id) = run_with_wolf_beside(&[ClassId::ElvenRanger, ClassId::Wizard], 1, 30.0);
         run.players[1].aim_dist = 30.0;
-        try_use(&mut run, 1, AbilityId::Fireball, 1, true);
+        try_use(&mut run, 1, false, 1); // the fireball (the Wizard's secondary)
         for _ in 0..60 {
             tick_projectiles(&mut run, DT);
         }
@@ -834,7 +837,7 @@ mod tests {
         let wi = wolf_idx(&run, id);
         run.monsters[wi].hp = 40.0;
         run.events.clear();
-        try_use(&mut run, 1, AbilityId::Heal, 1, false);
+        try_use(&mut run, 1, false, 1);
         assert_eq!(run.monsters[wolf_idx(&run, id)].hp, 75.0);
         assert_eq!(run.players[1].healing, 35.0);
         assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Heal { v, p: true, .. } if *v == 35.0)));

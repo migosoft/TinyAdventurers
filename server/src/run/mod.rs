@@ -15,6 +15,7 @@ pub mod visibility;
 
 use crate::collision::MoveState;
 use crate::defs::damage::{kind_split, resolve, Damage, DamageSplit, DamageType};
+use crate::defs::attributes::Attributes;
 use crate::defs::progression::{self, StatUpgrades};
 use crate::defs::{classes, enemies};
 use crate::defs::enemies::EnemyType;
@@ -59,6 +60,8 @@ pub struct Member {
     pub account: Option<i32>,
     pub character: Option<i32>,
     pub upgrades: StatUpgrades,
+    /// Attribute points on top of the class's start Attributes (zero until the shop and tree).
+    pub extra: Attributes,
 }
 
 /// How a run ended, for the statistics.
@@ -168,26 +171,23 @@ impl Run {
             level,
         };
         for (i, m) in members.into_iter().enumerate() {
-            let prof = classes::profile(m.class);
-            let def = classes::def(m.class);
-            let mods = m.upgrades.modifiers();
-            let max_hp = def.hp * mods.life;
+            let sheet = crate::sheet::hero_sheet(m.class, m.extra, &m.upgrades);
+            let max_hp = sheet.max_hp;
             let p = run.layout.player_spawns[i % run.layout.player_spawns.len()];
             let id = run.alloc_id();
             run.players.push(Player {
                 id,
-                res: prof.res,
-                melee: prof.melee,
-                responses: classes::responses(m.class),
+                res: sheet.res,
+                melee: sheet.melee,
                 conn: m.conn,
                 tx: Some(m.tx),
                 name: m.name,
                 class: m.class,
-                def,
+                kind: classes::def(m.class).kind,
                 mv: MoveState::at(p.x, p.y),
                 hp: max_hp,
                 max_hp,
-                mods,
+                upgrades: m.upgrades,
                 xp: 0,
                 coins: 0,
                 account: m.account,
@@ -216,10 +216,11 @@ impl Run {
                 sinking: None,
                 last_safe: dungeon::Map::center_of(dungeon::Map::tile_of(p).0, dungeon::Map::tile_of(p).1),
                 burn_t: dungeon::LAVA_TICK,
-                sight: prof.sight,
+                sight: sheet.sight,
                 darkvision: None,
                 effects: effects::Effects::default(),
                 wolf: None,
+                sheet,
             });
         }
         let n = run.players.len();
@@ -261,8 +262,9 @@ impl Run {
     pub fn spawn_enemy(&mut self, t: EnemyType, pos: Vec2, owner: Option<u32>, party: usize) -> u32 {
         let d = enemies::def(t);
         let prof = enemies::profile(t);
+        let stats = crate::sheet::enemy_stats(t, party);
         let id = self.alloc_id();
-        let hp = d.hp * enemies::party_hp_scale(party);
+        let hp = stats.max_hp;
         self.monsters.push(Monster {
             id,
             res: prof.res,
@@ -272,7 +274,7 @@ impl Run {
             pos,
             hp,
             max_hp: hp,
-            speed: d.speed,
+            speed: stats.speed,
             radius: d.radius,
             sight: prof.sight,
             alive: true,
@@ -294,6 +296,8 @@ impl Run {
             last_hit_by: None,
             effects: effects::Effects::default(),
             responses: crate::defs::effects::EffectResponses::FULL,
+            attrs: stats.attrs,
+            weight: stats.weight,
             ally: None,
         });
         id
@@ -310,7 +314,7 @@ impl Run {
             players: self.players.iter().map(|q| PlayerInfo { ent: q.id, name: q.name.clone(), class: q.class }).collect(),
             spawn_x: p.mv.x,
             spawn_y: p.mv.y,
-            mods: p.mods,
+            mods: p.upgrades.modifiers(),
             lights: self.light_infos(),
         })
     }
@@ -523,7 +527,7 @@ impl Run {
             &p.mv,
             if fx.0 == 0.0 { 0 } else { input.mx },
             if fx.0 == 0.0 { 0 } else { input.my },
-            p.def.speed * p.mods.move_speed * fx.0,
+            p.sheet.speed * fx.0,
             crate::defs::abilities::DASH_SPEED,
             classes::PLAYER_RADIUS,
             DT,
@@ -543,12 +547,10 @@ impl Run {
             objects::use_object(self, pi);
         }
         if let Some(shot) = input.primary {
-            let id = self.players[pi].def.primary;
-            abilities::try_use(self, pi, id, shot, true);
+            abilities::try_use(self, pi, true, shot);
         }
         if let Some(shot) = input.secondary {
-            let id = self.players[pi].def.secondary;
-            abilities::try_use(self, pi, id, shot, false);
+            abilities::try_use(self, pi, false, shot);
         }
     }
 
@@ -803,7 +805,7 @@ impl Run {
             return;
         }
         let p = &mut self.players[pi];
-        let v = raw * (1.0 - p.mods.armor);
+        let v = raw * (1.0 - p.sheet.armor);
         let imm = raw == 0.0 && dmg.amount > 0.0;
         // Debug mode: hits still show, but nothing is subtracted.
         if !p.debug {
@@ -1204,10 +1206,40 @@ pub mod tests {
             .map(|(i, c)| {
                 let (tx, _rx) = unbounded_channel();
                 std::mem::forget(_rx);
-                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, upgrades: StatUpgrades::default() }
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, upgrades: StatUpgrades::default(), extra: Attributes::default() }
             })
             .collect();
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: Some(boss) })
+    }
+
+    #[test]
+    fn players_carry_their_sheet() {
+        use crate::defs::companions::{WOLF_ATTRS, WOLF_WEIGHT};
+        use crate::sheet::{boss_stats, enemy_stats, hero_sheet};
+        let run = test_run(&[ClassId::Barbarian], BossId::Lich);
+        let want = hero_sheet(ClassId::Barbarian, Attributes::default(), &StatUpgrades::default());
+        let s = &run.players[0].sheet;
+        assert_eq!(s.max_hp, want.max_hp);
+        assert_eq!(s.speed, want.speed);
+        assert_eq!(s.primary, want.primary);
+        assert_eq!(run.players[0].max_hp, want.max_hp);
+        assert!(!run.monsters.is_empty());
+        for m in &run.monsters {
+            let block = match m.etype {
+                Some(t) => enemy_stats(t, 1),
+                None => {
+                    assert!(m.is_boss);
+                    boss_stats(BossId::Lich, 1)
+                }
+            };
+            assert_eq!(m.weight, block.weight, "{:?}", m.kind);
+            assert_eq!(m.attrs, block.attrs, "{:?}", m.kind);
+        }
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
+        let id = companion::spawn_wolf(&mut run, 0);
+        let w = run.monsters.iter().find(|m| m.id == id).unwrap();
+        assert_eq!(w.weight, WOLF_WEIGHT);
+        assert_eq!(w.attrs, WOLF_ATTRS);
     }
 
     #[test]
@@ -1279,7 +1311,7 @@ pub mod tests {
     fn random_boss_run(seed: u64) -> Run {
         let (tx, _rx) = unbounded_channel();
         std::mem::forget(_rx);
-        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, upgrades: StatUpgrades::default() }];
+        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, upgrades: StatUpgrades::default(), extra: Attributes::default() }];
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: None })
     }
 

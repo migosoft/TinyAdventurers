@@ -145,7 +145,7 @@ impl Run {
     /// creatures take nothing. True when the effect is on afterwards.
     pub fn apply_effect(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>) -> bool {
         let response = match c {
-            Creature::Player(i) => self.players.get(i).map_or(EffectResponse::Immune, |p| p.responses.get(kind)),
+            Creature::Player(i) => self.players.get(i).map_or(EffectResponse::Immune, |p| p.sheet.responses.get(kind)),
             Creature::Monster(i) => self.monsters.get(i).map_or(EffectResponse::Immune, |m| m.responses.get(kind)),
         };
         let mut secs = secs.unwrap_or(def(kind).duration);

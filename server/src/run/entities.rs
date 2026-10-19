@@ -1,8 +1,7 @@
 use crate::collision::MoveState;
-use crate::defs::classes::ClassDef;
 use crate::defs::damage::{Damage, DamageSplit, Resistances};
-use crate::defs::effects::EffectResponses;
-use crate::defs::progression::Modifiers;
+use crate::defs::attributes::Attributes;
+use crate::defs::progression::StatUpgrades;
 use crate::defs::enemies::EnemyType;
 use crate::defs::races::Sight;
 use crate::defs::kinds::{Anim, EntityKind};
@@ -23,12 +22,12 @@ pub struct Player {
     /// Resistances (races plus adjustments) and the split of its melee hits.
     pub res: Resistances,
     pub melee: DamageSplit,
-    /// How it takes each status effect (from its races).
-    pub responses: EffectResponses,
     pub tx: Option<UnboundedSender<Message>>,
     pub name: String,
     pub class: ClassId,
-    pub def: ClassDef,
+    pub kind: EntityKind,
+    /// Every number of the hero (crate::sheet): HP, speed, abilities, effect responses.
+    pub sheet: crate::sheet::Sheet,
     pub mv: MoveState,
     pub hp: f64,
     pub alive: bool,
@@ -61,8 +60,8 @@ pub struct Player {
     /// Account and character the earned XP is banked to when the run ends.
     pub account: Option<i32>,
     pub character: Option<i32>,
-    /// Progression stat multipliers from the character's upgrades.
-    pub mods: Modifiers,
+    /// The character's bought upgrades (already in `sheet`; sent as `RunStartInfo.mods` until plan 1 Task 6).
+    pub upgrades: StatUpgrades,
     pub max_hp: f64,
     /// Falling into a chasm or drowning: seconds left until death, and how.
     pub sinking: Option<(f64, Sink)>,
@@ -95,7 +94,7 @@ impl Player {
         self.effects.sight(base)
     }
     pub fn kind(&self) -> EntityKind {
-        self.def.kind
+        self.kind
     }
 }
 
@@ -245,6 +244,11 @@ pub struct Monster {
     pub effects: crate::run::effects::Effects,
     /// How it takes each effect (bosses: defs/bosses.rs responses).
     pub responses: crate::defs::effects::EffectResponses,
+    /// Its Attributes and weight (crate::sheet::MonsterStats).
+    #[allow(dead_code)] // read from plan 1 Task 7/8
+    pub attrs: Attributes,
+    #[allow(dead_code)] // read from plan 1 Task 7/8
+    pub weight: f64,
     /// Set for a hero's ally: no hero attack hurts it and enemies are its foes.
     pub ally: Option<Ally>,
 }

@@ -42,8 +42,9 @@ pub fn spawn(run: &mut Run, party: usize) {
     let d = boss_defs::def(boss_id);
     let prof = boss_defs::profile(boss_id);
     let pos = enc(run).arena.center_px();
+    let stats = crate::sheet::boss_stats(boss_id, party);
     let id = run.alloc_id();
-    let hp = d.hp * boss_defs::hp_scale(party);
+    let hp = stats.max_hp;
     run.monsters.push(Monster {
         id,
         res: prof.res,
@@ -53,7 +54,7 @@ pub fn spawn(run: &mut Run, party: usize) {
         pos,
         hp,
         max_hp: hp,
-        speed: d.speed,
+        speed: stats.speed,
         radius: d.radius,
         sight: prof.sight,
         alive: true,
@@ -75,6 +76,8 @@ pub fn spawn(run: &mut Run, party: usize) {
         last_hit_by: None,
         effects: Default::default(),
         responses: boss_defs::responses(boss_id),
+        attrs: stats.attrs,
+        weight: stats.weight,
         ally: None,
     });
     enc_mut(run).boss_ent = id;

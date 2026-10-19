@@ -584,7 +584,7 @@ mod tests {
         let (mut run, tx, ty) = dark_run();
         let near = at(tx + 3, ty);
         assert!(!run.is_lit(near));
-        crate::run::abilities::try_use(&mut run, 0, crate::defs::abilities::AbilityId::Heal, 1, false);
+        crate::run::abilities::try_use(&mut run, 0, false, 1);
         assert!(run.is_lit(near), "the wave lights it up");
         assert_eq!(run.moving_lights().iter().filter(|l| l.kind == LightKind::Holy).count(), 1);
         let wave = run.time;

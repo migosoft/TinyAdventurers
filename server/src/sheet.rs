@@ -1,8 +1,8 @@
 //! The character sheet: every number of a hero or monster, resolved from its
 //! class or stat block and its Attributes. At the start Attributes each number
 //! equals today's `defs` value bit for bit (see `defs::attributes::Scaled`);
-//! each Attribute point above or below moves it. The simulation reads the
-//! sheet from plan 1 Task 5; until then only the tests do.
+//! each Attribute point above or below moves it. The simulation reads heroes
+//! and monsters from here.
 
 use crate::defs::abilities::{self as ab, AbilityDef, AbilityId, Scaling};
 use crate::defs::attributes::{self, Attr, Attributes, Scaled, CON_MOVE};
@@ -21,7 +21,6 @@ use ts_rs::TS;
 /// An ability with its numbers resolved for one hero.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, TS)]
 #[ts(export)]
-#[cfg_attr(not(test), allow(dead_code))] // read by the simulation from plan 1 Task 5
 pub struct ResolvedAbility {
     pub id: AbilityId,
     pub cooldown: f64,
@@ -34,12 +33,13 @@ pub struct ResolvedAbility {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)] // read by the simulation from plan 1 Task 5
 pub struct Sheet {
     /// Class + race + `extra`.
+    #[allow(dead_code)] // read from plan 1 Task 7/8
     pub attrs: Attributes,
     pub max_hp: f64,
     pub speed: f64,
+    #[allow(dead_code)] // read from plan 1 Task 7/8
     pub weight: f64,
     pub res: Resistances,
     pub responses: EffectResponses,
@@ -71,7 +71,8 @@ fn resolve(d: AbilityDef, s: Scaling, attrs: &Attributes, reference: &Attributes
     ResolvedAbility {
         id: d.id,
         cooldown: cooldown / m.attack_speed,
-        damage: get(d.damage, s.damage) * m.damage,
+        // The damage upgrade never touched heals.
+        damage: get(d.damage, s.damage) * if d.id == AbilityId::Heal { 1.0 } else { m.damage },
         range: get(d.range, s.reach),
         arc: get(d.arc, s.arc),
         speed: get(d.speed, s.reach),
@@ -81,7 +82,6 @@ fn resolve(d: AbilityDef, s: Scaling, attrs: &Attributes, reference: &Attributes
 }
 
 /// The sheet of a hero: `extra` is the shop, tree and item points on top of the start Attributes.
-#[allow(dead_code)] // read by the simulation from plan 1 Task 5
 pub fn hero_sheet(class: ClassId, extra: Attributes, up: &StatUpgrades) -> Sheet {
     let def = classes::def(class);
     let start = classes::start_attrs(class);
@@ -120,7 +120,6 @@ pub fn hero_sheet(class: ClassId, extra: Attributes, up: &StatUpgrades) -> Sheet
 
 /// The numbers a monster's spawn reads.
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[allow(dead_code)] // read by the simulation from plan 1 Task 5
 pub struct MonsterStats {
     pub attrs: Attributes,
     pub weight: f64,
@@ -129,7 +128,6 @@ pub struct MonsterStats {
 }
 
 /// Enemy stats for a party of `party` players (the same HP scaling the run applies).
-#[allow(dead_code)] // read by the simulation from plan 1 Task 5
 pub fn enemy_stats(t: EnemyType, party: usize) -> MonsterStats {
     let d = enemies::def(t);
     let con = d.attrs.get(Attr::Con);
@@ -142,7 +140,6 @@ pub fn enemy_stats(t: EnemyType, party: usize) -> MonsterStats {
 }
 
 /// Boss stats for a party of `party` players.
-#[allow(dead_code)] // read by the simulation from plan 1 Task 5
 pub fn boss_stats(b: BossId, party: usize) -> MonsterStats {
     let d = bosses::def(b);
     let con = d.attrs.get(Attr::Con);
@@ -152,7 +149,6 @@ pub fn boss_stats(b: BossId, party: usize) -> MonsterStats {
 }
 
 /// The Ranger's wolf: never scaled by party size.
-#[allow(dead_code)] // read by the simulation from plan 1 Task 5
 pub fn wolf_stats() -> MonsterStats {
     let con = WOLF_ATTRS.get(Attr::Con);
     MonsterStats { attrs: WOLF_ATTRS, weight: WOLF_WEIGHT, max_hp: attributes::hp(wolf_base_hp(), con), speed: move_speed(WOLF_SPEED, con, &WOLF_ATTRS) }
@@ -235,6 +231,7 @@ mod tests {
         assert_eq!(s.speed, 66.0 * m.move_speed);
         assert_eq!(s.max_hp, 120.0 * m.life);
         assert_eq!(s.armor, m.armor);
+        assert_eq!(s.secondary.damage, ab::def(AbilityId::Heal).damage, "the heal is no damage");
         // What the modifiers really give.
         assert!((m.damage - 1.16).abs() < 1e-12 && (m.attack_speed - 1.06).abs() < 1e-12);
         assert!((m.move_speed - 1.04).abs() < 1e-12 && (m.life - 1.10).abs() < 1e-12 && (m.armor - 0.04).abs() < 1e-12);

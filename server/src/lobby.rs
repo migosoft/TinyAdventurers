@@ -336,7 +336,7 @@ impl Lobby {
             .filter_map(|m| {
                 let c = self.conns.get(m)?;
                 let ch = c.character.as_ref()?;
-                Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), account: Some(c.account), character: Some(ch.id), upgrades: ch.progress.upgrades })
+                Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), account: Some(c.account), character: Some(ch.id), upgrades: ch.progress.upgrades, extra: Default::default() })
             })
             .collect();
         let seed: u64 = rand::random();
