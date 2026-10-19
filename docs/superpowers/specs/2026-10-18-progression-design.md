@@ -160,7 +160,8 @@ pub struct RaceDef {
   - A save 20 points above the power gives 0 s: immune.
 - **Hard immunities** (race, boss `responses`, items, tree nodes) override the formula. `Reduced` (50 %) still multiplies after it.
 - **Effects from allies** (heals, buffs such as Haste) are never reduced.
-- `OnHit` gains `magical: bool` and `power: i32` (filled by the sheet when the hit is built). `apply_effect` takes the power and reads the target's save.
+- `OnHit` gains `magical: bool` and `power: i32` (filled by the sheet when the hit is built). `apply_effect_from` takes the power and reads the target's save and scales the time; `apply_effect` is unscaled (debug and tests).
+- Open, 2026-10-19: element effects (Burning, Frozen and so on, from a damage split) use a fixed power of 10 against the target's CON, even from the Wizard's Fireball and the fire bosses. Spec §5 reads "INT for spells". Keep 10, or let the hit carry its source's power?
 - **Examples:** the Wizard's Sleep (INT 15) on a goblin (WIL 8) lasts ×1.35; the lich's Sleep mist (INT 22) on the Paladin (WIL 12) ×1.5. The Elven Ranger and her wolf never fall asleep (race immunity).
 
 ## 6. Weapons and abilities

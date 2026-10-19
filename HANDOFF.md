@@ -13,16 +13,22 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Merge done (2026-10-19):** `origin/feature/elven-ranger` (Elven Ranger, Dire Wolf, breakable chests) was fast-forwarded into local `main` (`c5b3860`, **not pushed**), and `main` was merged into `feature/skill-tree-design`.
 
-**Progression: designed and approved, plan 1 written (branch `feature/skill-tree-design`):**
+**Progression: designed and approved, plan 1 built (branch `feature/skill-tree-design`):**
 - Attributes, races, weapons and items, class skill trees, loadouts and a new pre-run UI.
 - **Spec:** [docs/superpowers/specs/2026-10-18-progression-design.md](docs/superpowers/specs/2026-10-18-progression-design.md), with screenshots in `docs/superpowers/specs/img/2026-10-18-progression/`. **Updated 2026-10-19 for the Elven Ranger** (section "Changes for the Elven Ranger" at its end): the user chose class DEX 13 + Elf race DEX +2, a stat block for the Dire Wolf, and asked the agent to draft the ranger's tree. **The ranger's tree and her four new abilities (Volley, Flanking Thrust, Entangle, Poison Coat) are a draft awaiting the user's approval** (`?uidemo=tree-ranger`); it only matters from plan 3 on.
 - **Plan 1 of 5:** [docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md](docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md). **Re-checked against the merged code on 2026-10-19** (races take over `responses`, the wolf's stat block and push power, the 60 s wait without `mods`, the Sleep test on the Paladin).
 - **Mock screens (throwaway spike):** `?uidemo=roster|create|sheet|tree|tree-barbarian|tree-ranger|equipment|loadout|room` (`client/src/uidemo/`); shots with `tools/e2e/ui-shots.mjs`.
-- **Plan 1 of 5 is built** (2026-10-19, commits `906774f..HEAD` on `feature/skill-tree-design`; HEAD is the "Progression plan 1: re-recorded fingerprints, docs" commit). Attributes, races, stat blocks, the character sheet, pushes by STR against weight and effect durations by power against save; no new UI. Technical description: TECHNICAL §11a ("The character sheet and Attributes"). Both fingerprint tests pass unchanged (see the dated comment next to `simulation_is_unchanged_after_waking_the_boss`); nothing was re-recorded. Verification numbers are in `.superpowers/sdd/2026-10-18-progression-1-attributes-and-sheet/task-9-report.md`. `attr_price` and `ATTR_WEIGHT` wait for plan 4.
+- **Plan 1 of 5 is built** (2026-10-19, commits `906774f..b895198` on `feature/skill-tree-design`; `b895198` is the "Progression plan 1: re-recorded fingerprints, docs" commit, and a final-review fix wave follows it). Attributes, races, stat blocks, the character sheet, pushes by STR against weight and effect durations by power against save; no new UI. Technical description: TECHNICAL §11a ("The character sheet and Attributes"). Both fingerprint tests pass unchanged (see the dated comment next to `simulation_is_unchanged_after_waking_the_boss`); nothing was re-recorded. Verification numbers are in `.superpowers/sdd/2026-10-18-progression-1-attributes-and-sheet/task-9-report.md`. `attr_price` and `ATTR_WEIGHT` wait for plan 4.
 - **Next, in this order:**
   1. The user approves (or changes) the drafted ranger tree; not needed before plan 2.
-  2. **Write plan 2** (weapons and items, spec §6.1–6.2, §8) with superpowers:writing-plans just before building it, then build it.
-  3. Then write and build each next plan with superpowers:writing-plans, **one at a time, just before building it**: plan 2 weapons and items (spec §6.1–6.2, §8), next; plan 3 abilities, the melee rule, overkill piercing, the 16 new abilities (§6.3–6.6, §7 enemy melee rule); plan 4 skill trees, Attribute shop, `Progress` v2, respec, protocol (§2, §9, §11, §12); plan 5 the new UI, deleting the spike (§13).
+  2. Write and build each next plan with superpowers:writing-plans, **one at a time, just before building it**: plan 2 weapons and items (spec §6.1–6.2, §8), next; plan 3 abilities, the melee rule, overkill piercing, the 16 new abilities (§6.3–6.6, §7 enemy melee rule); plan 4 skill trees, Attribute shop, `Progress` v2, respec, protocol (§2, §9, §11, §12); plan 5 the new UI, deleting the spike (§13).
+- **What a play-test will notice** (all intended, from the weight and save rules):
+  - The lich's effects last about 1.4 to 1.5 times longer on the heroes.
+  - The Wizard's E pushes a barrel half as far (24 px).
+  - Barrels and the wolf no longer move the ogre (weight 20).
+  - Enemy hits push the Paladin and Barbarian less.
+  - Element burns and freezes are a bit shorter on high-CON targets.
+- **Open decision for the user before plan 2:** element effects (Burning, Frozen and so on, from a damage split) use a fixed power of 10 against the target's CON, even from the Wizard's Fireball and the fire bosses. Spec §5 reads "INT for spells". Keep 10, or let the hit carry its source's power?
 
 **Other open items:**
 - **The user's play-test of the ranger** (see "Last feature (2026-10-16): Elven Ranger and the Dire Wolf", "Still to play"); follow-ups in TODO "Elven Ranger follow-ups".

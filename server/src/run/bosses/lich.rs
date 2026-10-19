@@ -121,6 +121,11 @@ impl Lich {
         run.monsters[bi].attrs.get(crate::defs::attributes::Attr::Int)
     }
 
+    /// The effect a lich spell carries: magical, so heroes save with WIL, at the lich's INT.
+    fn spell_hit(run: &Run, bi: usize, kind: EffectKind, secs: f64) -> OnHit {
+        OnHit { kind, secs, chance: 1.0, magical: true, power: Self::power(run, bi) }
+    }
+
     /// The nova: a dark burst that hurts every hero and ally within the radius and pushes them straight away.
     pub(crate) fn nova(run: &mut Run, pos: Vec2) {
         let r = LICH_NOVA_RADIUS;
@@ -233,7 +238,7 @@ impl BossBehaviour for Lich {
                                 let sight = run.monsters[bi].sight_now();
                                 let p = &run.players[pi];
                                 if p.alive && crate::run::perception::sees(run, sight, pos, p.pos()) {
-                                    let h = OnHit { kind: EffectKind::Petrified, secs: LICH_GAZE_SECS, chance: 1.0, magical: true, power: Self::power(run, bi) };
+                                    let h = Self::spell_hit(run, bi, EffectKind::Petrified, LICH_GAZE_SECS);
                                     run.hurt_player(pi, Damage::physical(0.0).with_effect(h));
                                 }
                             }
@@ -248,8 +253,8 @@ impl BossBehaviour for Lich {
                             };
                             spawn_monster_projectile(run, id, kind, pos + dir * 8.0, dir, LICH_ORB_SPEED, dmg, 3.0, 0.0, 0, 0.0);
                             // The orb just spawned carries the effect.
-                            let power = Self::power(run, bi);
-                            run.projectiles.last_mut().unwrap().damage.on_hit = Some(OnHit { kind: s.effect(), secs, chance: 1.0, magical: true, power });
+                            let hit = Self::spell_hit(run, bi, s.effect(), secs);
+                            run.projectiles.last_mut().unwrap().damage.on_hit = Some(hit);
                         }
                     }
                 }
@@ -499,6 +504,43 @@ pub(crate) mod tests {
         assert_eq!(l.gaze_target(), Some(run.players[0].id));
         ticks(&mut run, &mut l, LICH_GAZE_WINDUP);
         assert!(run.has_effect(Creature::Player(0), EffectKind::Petrified));
+    }
+
+    #[test]
+    fn the_gaze_is_a_magical_hit_at_the_lich_int() {
+        use crate::defs::attributes::Attr;
+        use crate::defs::effects::scaled_secs;
+        let (mut run, mut l) = only(Spell::Gaze, Vec2::new(60.0, 0.0));
+        let bi = boss_idx(&run).unwrap();
+        assert_eq!(run.monsters[bi].attrs.get(Attr::Int), 22, "the lich's INT from its stat block");
+        let h = Lich::spell_hit(&run, bi, EffectKind::Petrified, LICH_GAZE_SECS);
+        assert!(h.magical);
+        assert_eq!(h.power, 22);
+        // The real gaze: the Paladin (WIL 12) is petrified for the scaled time, not the base 3 s.
+        ticks(&mut run, &mut l, LICH_GAZE_WINDUP + 0.1);
+        let left = run.players[0].effects.list().iter().find(|e| e.kind == EffectKind::Petrified).expect("petrified").left;
+        let wil = run.players[0].sheet.attrs.get(Attr::Wil);
+        assert!((left - scaled_secs(LICH_GAZE_SECS, 22, wil)).abs() < 1e-9, "left {left}");
+        assert!(left > LICH_GAZE_SECS);
+    }
+
+    #[test]
+    fn the_orbs_carry_a_magical_hit_at_the_lich_int() {
+        for spell in [Spell::Blind, Spell::Sleep] {
+            let (mut run, mut l) = only(spell, Vec2::new(60.0, 0.0));
+            let mut hit = None;
+            for _ in 0..((LICH_SLEEP_WINDUP.max(LICH_BLIND_WINDUP) + 1.0) / DT) as usize {
+                l.tick(&mut run, DT);
+                if let Some(p) = run.projectiles.iter().find(|p| !p.dead) {
+                    hit = p.damage.on_hit;
+                    break;
+                }
+            }
+            let h = hit.unwrap_or_else(|| panic!("{spell:?} orb carries an effect"));
+            assert_eq!(h.kind, spell.effect());
+            assert!(h.magical, "{spell:?}");
+            assert_eq!(h.power, 22, "{spell:?}");
+        }
     }
 
     #[test]

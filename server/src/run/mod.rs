@@ -1349,10 +1349,8 @@ pub mod tests {
         assert_ne!(got[0], got[1]);
     }
 
-    // 2026-10-19 (progression plan 1): pushes by weight and effect durations by
-    // save did not change this value. The scripted boss halls push heroes with
-    // `BOSS_KNOCK_STR`, which is above every hero's weight + 4, and element
-    // effects at power 10 against CON 12-14 change no position or HP in 300 steps.
+    // Unchanged after pushes by weight and durations by save (2026-10-19); the
+    // boss scripts push with BOSS_KNOCK_STR above every hero weight + 4.
     #[test]
     fn simulation_is_unchanged_after_waking_the_boss() {
         let mut got = Vec::new();

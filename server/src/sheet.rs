@@ -219,6 +219,25 @@ mod tests {
     }
 
     #[test]
+    fn attributes_move_the_ranger_numbers() {
+        let up = StatUpgrades::default();
+        // The ranger starts at DEX 15 (class 13 + Elf 2) and STR 10.
+        let dex = hero_sheet(ClassId::ElvenRanger, plus(Attr::Dex, 2), &up);
+        let bow = dex.primary;
+        assert!((bow.damage - 16.0 * 1.35 / 1.25).abs() < 1e-12, "crossbow damage by DEX");
+        assert!((bow.cooldown - 0.7 / (1.14 / 1.10)).abs() < 1e-12, "firing speed by DEX");
+        assert_eq!((bow.range, bow.speed), (260.0, 290.0), "DEX does not move the reach");
+        let thrust = dex.fallback.expect("the ranger has a rapier thrust");
+        assert!((thrust.damage - 18.0 * 1.35 / 1.25).abs() < 1e-12, "rapier damage by DEX");
+        assert!((thrust.cooldown - 0.35 / (1.14 / 1.10)).abs() < 1e-12, "rapier speed by DEX");
+        assert_eq!(thrust.range, 22.0);
+        let str2 = hero_sheet(ClassId::ElvenRanger, plus(Attr::Str, 2), &up).primary;
+        assert!((str2.range - 260.0 * 1.04 / 1.00).abs() < 1e-12, "range by STR");
+        assert!((str2.speed - 290.0 * 1.04 / 1.00).abs() < 1e-12, "projectile speed by STR");
+        assert_eq!((str2.damage, str2.cooldown), (16.0, 0.7), "STR does not move damage or speed");
+    }
+
+    #[test]
     fn upgrades_still_apply() {
         let up = StatUpgrades { damage: 2, attack_speed: 1, move_speed: 1, life: 1, armor: 1, ..Default::default() };
         let m = up.modifiers();

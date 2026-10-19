@@ -502,9 +502,9 @@ export class GameScene extends Phaser.Scene {
       case 'CrossbowDagger': {
         const close = [...this.ents.values()].some((e) => {
           // A closed chest is stabbed like the hidden mimic it may be (server `dagger_target`).
-          if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= CONST.DAGGER_RANGE;
+          if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= (this.info.fallback?.range ?? CONST.DAGGER_RANGE);
           // A flying dragon is out of the dagger's reach (the server shoots the crossbow then).
-          return !isPlayerKind(e.kind) && !isAllyKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= CONST.DAGGER_RANGE;
+          return !isPlayerKind(e.kind) && !isAllyKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= (this.info.fallback?.range ?? CONST.DAGGER_RANGE);
         });
         if (close) {
           anim = ANIM.Melee;
