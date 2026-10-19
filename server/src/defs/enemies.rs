@@ -296,7 +296,7 @@ pub fn profile(t: EnemyType) -> Profile {
 }
 
 /// The Attribute that governs an enemy's attack (spec §7), `shot` its projectile
-/// (None: a melee attack or slam): the power of the element effects it applies.
+/// (None: a melee attack or slam): the power of the damage-type effects it applies.
 pub fn governing(t: EnemyType, shot: Option<EntityKind>) -> Attr {
     use EntityKind as K;
     match shot {

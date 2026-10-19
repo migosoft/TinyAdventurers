@@ -109,7 +109,7 @@ pub struct Damage {
     /// Dealt by an effect over time: applies no effects (no loops).
     pub from_effect: bool,
     /// The source's governing Attribute (spell INT, innate CHA, weapon STR or DEX):
-    /// the power of the element effects the hit applies, at least `ELEMENT_POWER`.
+    /// the power of the damage-type effects the hit applies, at least `TYPE_EFFECT_POWER`.
     /// 0 for sources without one (terrain, barrels, effect ticks).
     pub power: i32,
 }

@@ -53,7 +53,7 @@ pub fn dagger_target(run: &Run, pi: usize) -> Option<DaggerTarget> {
         .map(|(t, _)| t)
 }
 
-/// The power of an ability's element effects: the hero's governing Attribute for it (`ab::governing`).
+/// The power of an ability's damage-type effects: the hero's governing Attribute for it (`ab::governing`).
 fn hero_power(run: &Run, pi: usize, id: AbilityId) -> i32 {
     ab::governing(id).map_or(0, |a| run.players[pi].sheet.attrs.get(a))
 }
@@ -313,8 +313,8 @@ pub fn spawn_monster_projectile(
     run.attach_kind_light(id, kind);
 }
 
-/// The power of a monster shot's element effects: its owner's governing Attribute
-/// (`enemies::governing`, `bosses::governing`); 0 (so `ELEMENT_POWER`) if the owner is unknown.
+/// The power of a monster shot's damage-type effects: its owner's governing Attribute
+/// (`enemies::governing`, `bosses::governing`); 0 (so `TYPE_EFFECT_POWER`) if the owner is unknown.
 fn shot_power(run: &Run, owner: u32, kind: EntityKind) -> i32 {
     let Some(m) = run.monster_idx(owner).map(|mi| &run.monsters[mi]) else { return 0 };
     match m.etype {
@@ -735,7 +735,7 @@ mod tests {
         assert!(!run.layout.map.opaque_at(p), "the blast goes off in front of the wall, not inside it");
     }
 
-    // ---- Element effects at the source's governing Attribute ----
+    // ---- Damage-type effects at the source's governing Attribute ----
 
     /// Seconds of Burning left on `c`, if it burns.
     fn burn_left(run: &Run, c: Creature) -> Option<f64> {

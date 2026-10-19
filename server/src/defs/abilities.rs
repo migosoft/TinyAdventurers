@@ -109,7 +109,7 @@ pub fn scaling(id: AbilityId) -> Scaling {
     }
 }
 
-/// The Attribute that governs an ability (spec §5, §6.3): the power of the element
+/// The Attribute that governs an ability (spec §5, §6.3): the power of the damage-type
 /// effects its hits apply. Spells INT, innate magic CHA, melee weapons STR, finesse
 /// and ranged weapons DEX. Summon Wolf deals no damage of its own.
 pub fn governing(id: AbilityId) -> Option<Attr> {

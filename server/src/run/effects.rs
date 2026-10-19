@@ -4,7 +4,7 @@
 use crate::defs::damage::{Damage, DamageType, Resistances};
 use crate::dungeon::Tile;
 use crate::defs::attributes::Attr;
-use crate::defs::effects::{def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectResistances, Stat, DOT_TICK, ELEMENT_POWER};
+use crate::defs::effects::{def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectResistances, Stat, DOT_TICK, TYPE_EFFECT_POWER};
 use crate::defs::races::Sight;
 use crate::protocol::Ev;
 use crate::run::{Run, DT};
@@ -237,15 +237,15 @@ impl Run {
         }
     }
 
-    /// After a normal hit: each element making up at least half of it applies its
+    /// After a normal hit: each damage type making up at least half of it applies its
     /// effect, non-magical (against the target's CON), at the power of its source's
-    /// governing Attribute (`Damage::power`) but never below `ELEMENT_POWER`.
-    pub fn element_hit(&mut self, c: Creature, dmg: &crate::defs::damage::Damage) {
+    /// governing Attribute (`Damage::power`) but never below `TYPE_EFFECT_POWER`.
+    pub fn type_effect_hit(&mut self, c: Creature, dmg: &crate::defs::damage::Damage) {
         if dmg.from_effect {
             return;
         }
-        for k in crate::defs::effects::element_effects(&dmg.split) {
-            self.apply_effect_from(c, k, None, dmg.power.max(ELEMENT_POWER), false);
+        for k in crate::defs::effects::type_effects(&dmg.split) {
+            self.apply_effect_from(c, k, None, dmg.power.max(TYPE_EFFECT_POWER), false);
         }
     }
 
@@ -842,7 +842,7 @@ mod tests {
     fn burning_is_shorter_on_a_tough_hero() {
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
         open(&mut run);
-        run.element_hit(Creature::Player(0), &Damage::new(4.0, DamageSplit::pure(DamageType::Heat)));
+        run.type_effect_hit(Creature::Player(0), &Damage::new(4.0, DamageSplit::pure(DamageType::Heat)));
         let left = left_of(&run, Creature::Player(0), EffectKind::Burning).expect("burning");
         let want = crate::defs::effects::def(EffectKind::Burning).duration * 0.8;
         assert!((left - want).abs() < 1e-12, "power 10 against CON 14: ×0.8, got {left}");

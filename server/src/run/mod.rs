@@ -833,7 +833,7 @@ impl Run {
             if v > 0.0 {
                 self.damage_wakes(effects::Creature::Player(pi));
             }
-            self.element_hit(effects::Creature::Player(pi), &dmg);
+            self.type_effect_hit(effects::Creature::Player(pi), &dmg);
             if let Some(h) = dmg.on_hit {
                 self.hit_effect(effects::Creature::Player(pi), h);
             }
@@ -1042,7 +1042,7 @@ impl Run {
             if raw > 0.0 {
                 self.damage_wakes(effects::Creature::Monster(mi));
             }
-            self.element_hit(effects::Creature::Monster(mi), &dmg);
+            self.type_effect_hit(effects::Creature::Monster(mi), &dmg);
             if let Some(h) = dmg.on_hit {
                 self.hit_effect(effects::Creature::Monster(mi), h);
             }
@@ -1373,7 +1373,7 @@ pub mod tests {
         // Chase) and one orc warrior loses them too, so it wanders elsewhere. Only that hall changed.
         // 2026-10-15, effects: the lich casts its blinding curse after 4 s (an orb id and a blind hero), so its hall
         // differs; demon and dragon unchanged.
-        // 2026-10-15, elemental effects: a barrel blast (half heat) now sets a monster on fire in the lich hall; the
+        // 2026-10-15, damage-type effects: a barrel blast (half heat) now sets a monster on fire in the lich hall; the
         // burn damage changes its hp. (Lich cause confirmed from an event trace: a barrel blast of 30, half heat, set a monster on fire at about 3.7 s.) Dragon: its heat hits set heroes on fire; the burn damage changes their hp. Demon unchanged.
         assert_eq!(got, vec![5430847933968611557, 15325243260565646054, 17290353229492298409]);
     }

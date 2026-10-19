@@ -126,14 +126,15 @@ pub fn def(k: EffectKind) -> EffectDef {
 
 /// Damage over time ticks this often (s).
 pub const DOT_TICK: f64 = 0.5;
-/// A hit whose share of an element is at least this applies the element's effect.
-pub const ELEMENT_SHARE: f64 = 0.5;
-/// Element → the effect its hits apply. A new elemental effect is one line here.
-pub const ELEMENTS: [(DamageType, EffectKind); 3] = [(Heat, EffectKind::Burning), (Cold, EffectKind::Frozen), (Poison, EffectKind::Poisoned)];
+/// A hit whose share of a damage type is at least this applies the type's effect.
+pub const TYPE_EFFECT_SHARE: f64 = 0.5;
+/// Damage type → the effect its hits apply (the damage-type effects). A new one is one
+/// line here plus its def's `dot` type (`type_effects_match_their_defs` checks both agree).
+pub const TYPE_EFFECTS: [(DamageType, EffectKind); 3] = [(Heat, EffectKind::Burning), (Cold, EffectKind::Frozen), (Poison, EffectKind::Poisoned)];
 
-/// The effects a hit with this split applies (in `ELEMENTS` order).
-pub fn element_effects(split: &super::damage::DamageSplit) -> Vec<EffectKind> {
-    ELEMENTS.iter().filter(|(t, _)| split.share(*t) >= ELEMENT_SHARE - 1e-9).map(|&(_, k)| k).collect()
+/// The effects a hit with this split applies (in `TYPE_EFFECTS` order).
+pub fn type_effects(split: &super::damage::DamageSplit) -> Vec<EffectKind> {
+    TYPE_EFFECTS.iter().filter(|(t, _)| split.share(*t) >= TYPE_EFFECT_SHARE - 1e-9).map(|&(_, k)| k).collect()
 }
 
 /// How much a creature resists each effect, as a fraction: 0.5 halves the time,
@@ -189,9 +190,9 @@ pub struct OnHit {
     pub power: i32,
 }
 
-/// The least power of an element's effect from a hit's split (non-magical): terrain,
+/// The least power of a damage-type effect from a hit's split (non-magical): terrain,
 /// barrels and sources without a governing Attribute use it; stronger sources their own.
-pub const ELEMENT_POWER: i32 = 10;
+pub const TYPE_EFFECT_POWER: i32 = 10;
 
 /// A harmful effect's seconds after the target's save:
 /// `base × max(0, 1 + (power − save) / 20)`. A save 20 above the power: 0 s.
@@ -312,7 +313,7 @@ mod tests {
     }
 
     #[test]
-    fn elemental_effects_match_the_spec() {
+    fn damage_type_effects_match_the_spec() {
         let b = def(EffectKind::Burning);
         assert_eq!((b.dot, b.duration, b.ends_in_water), (Some((Heat, 6.0)), 3.0, true));
         assert_eq!(b.cancels, &[EffectKind::Frozen]);
@@ -332,15 +333,25 @@ mod tests {
     }
 
     #[test]
-    fn a_hit_applies_the_effect_of_each_element_making_up_half_of_it() {
+    fn type_effects_match_their_defs() {
+        for (t, k) in TYPE_EFFECTS {
+            assert_eq!(def(k).dot.map(|d| d.0), Some(t), "{k:?} is resisted by {t:?}");
+        }
+        for k in EffectKind::ALL.into_iter().filter(|&k| def(k).dot.is_some()) {
+            assert!(TYPE_EFFECTS.iter().any(|&(_, e)| e == k), "{k:?} has a damage type but no hit applies it");
+        }
+    }
+
+    #[test]
+    fn a_hit_applies_the_effect_of_each_damage_type_making_up_half_of_it() {
         use crate::defs::damage::DamageSplit;
-        assert_eq!(element_effects(&DamageSplit::pure(Heat)), vec![EffectKind::Burning]);
-        assert_eq!(element_effects(&DamageSplit::split(&[(Heat, 0.7), (Magical, 0.2)])), vec![EffectKind::Burning], "fireball");
-        assert_eq!(element_effects(&DamageSplit::split(&[(Heat, 0.5)])), vec![EffectKind::Burning], "barrel blast: exactly half");
-        assert!(element_effects(&DamageSplit::split(&[(Heat, 0.2)])).is_empty(), "claws");
-        assert_eq!(element_effects(&DamageSplit::pure(Cold)), vec![EffectKind::Frozen]);
-        assert_eq!(element_effects(&DamageSplit::pure(Poison)), vec![EffectKind::Poisoned]);
-        assert!(element_effects(&DamageSplit::physical()).is_empty());
-        assert_eq!(element_effects(&DamageSplit::split(&[(Heat, 0.5), (Cold, 0.5)])), vec![EffectKind::Burning, EffectKind::Frozen]);
+        assert_eq!(type_effects(&DamageSplit::pure(Heat)), vec![EffectKind::Burning]);
+        assert_eq!(type_effects(&DamageSplit::split(&[(Heat, 0.7), (Magical, 0.2)])), vec![EffectKind::Burning], "fireball");
+        assert_eq!(type_effects(&DamageSplit::split(&[(Heat, 0.5)])), vec![EffectKind::Burning], "barrel blast: exactly half");
+        assert!(type_effects(&DamageSplit::split(&[(Heat, 0.2)])).is_empty(), "claws");
+        assert_eq!(type_effects(&DamageSplit::pure(Cold)), vec![EffectKind::Frozen]);
+        assert_eq!(type_effects(&DamageSplit::pure(Poison)), vec![EffectKind::Poisoned]);
+        assert!(type_effects(&DamageSplit::physical()).is_empty());
+        assert_eq!(type_effects(&DamageSplit::split(&[(Heat, 0.5), (Cold, 0.5)])), vec![EffectKind::Burning, EffectKind::Frozen]);
     }
 }

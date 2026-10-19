@@ -27,7 +27,7 @@ pub fn def(id: BossId) -> BossDef {
 }
 
 /// The Attribute that governs a boss's shot or breath of kind `kind` (spec §7):
-/// the power of the element effects it applies. The demon's and the dragon's fire
+/// the power of the damage-type effects it applies. The demon's and the dragon's fire
 /// is innate (CHA), the lich's are spells (INT).
 pub fn governing(kind: EntityKind) -> super::attributes::Attr {
     use super::attributes::Attr;
