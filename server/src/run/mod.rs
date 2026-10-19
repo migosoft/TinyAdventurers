@@ -15,7 +15,7 @@ pub mod visibility;
 
 use crate::collision::MoveState;
 use crate::defs::damage::{kind_split, resolve, Damage, DamageSplit, DamageType};
-use crate::defs::attributes::Attributes;
+use crate::defs::attributes::{push_dist, Attr, Attributes};
 use crate::defs::progression::{self, StatUpgrades};
 use crate::defs::{classes, enemies};
 use crate::defs::enemies::EnemyType;
@@ -555,11 +555,13 @@ impl Run {
         }
     }
 
-    /// A blast pushes a monster `dist` px straight away from `from`. Bosses
+    /// A blast pushes a monster straight away from `from`: `dist` px by a pusher
+    /// of STR `str`, less or not at all against its weight (`push_dist`). Bosses
     /// and flying monsters are never pushed; only walls and solids stop the
     /// slide, so it can end in a chasm, deep water or lava.
-    pub fn knock_monster(&mut self, mi: usize, from: Vec2, dist: f64) {
+    pub fn knock_monster(&mut self, mi: usize, from: Vec2, dist: f64, str: i32) {
         let m = &mut self.monsters[mi];
+        let dist = push_dist(dist, str, m.weight);
         if !m.alive || m.is_boss || m.airborne || m.sinking.is_some() || dist <= 0.0 {
             return;
         }
@@ -838,12 +840,14 @@ impl Run {
         }
     }
 
-    /// Knockback from a strong melee hit: the hero slides `dist` px straight
-    /// away from `from` (along `fallback` if they stand on the same spot).
+    /// Knockback from a strong melee hit: the hero slides straight away from
+    /// `from` (along `fallback` if they stand on the same spot), `dist` px by a
+    /// pusher of STR `str`, less or not at all against their weight (`push_dist`).
     /// Mid-dash heroes are in the air and not pushed; a new push replaces an
     /// old one. Only walls stop the slide, so it can end in a chasm or deep water.
-    pub fn knock_player(&mut self, pi: usize, from: Vec2, fallback: f64, dist: f64) {
+    pub fn knock_player(&mut self, pi: usize, from: Vec2, fallback: f64, dist: f64, str: i32) {
         let p = &mut self.players[pi];
+        let dist = push_dist(dist, str, p.sheet.weight);
         if !p.alive || p.sinking.is_some() || p.mv.dash_t > 0.0 || dist <= 0.0 {
             return;
         }
@@ -917,10 +921,20 @@ impl Run {
         }
     }
 
-    pub fn knock_creature(&mut self, c: effects::Creature, from: Vec2, fallback: f64, dist: f64) {
+    pub fn knock_creature(&mut self, c: effects::Creature, from: Vec2, fallback: f64, dist: f64, str: i32) {
         match c {
-            effects::Creature::Player(i) => self.knock_player(i, from, fallback, dist),
-            effects::Creature::Monster(i) => self.knock_monster(i, from, dist),
+            effects::Creature::Player(i) => self.knock_player(i, from, fallback, dist, str),
+            effects::Creature::Monster(i) => self.knock_monster(i, from, dist, str),
+        }
+    }
+
+    /// The STR monster `mi` pushes with: its own, or `BOSS_KNOCK_STR` for a boss's scripted pushes.
+    pub fn push_str(&self, mi: usize) -> i32 {
+        let m = &self.monsters[mi];
+        if m.is_boss {
+            crate::defs::bosses::BOSS_KNOCK_STR
+        } else {
+            m.attrs.get(Attr::Str)
         }
     }
 
@@ -1194,6 +1208,7 @@ pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: Sh
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::defs::bosses::BOSS_KNOCK_STR;
     use tokio::sync::mpsc::unbounded_channel;
 
     pub fn test_run(classes: &[ClassId], boss: BossId) -> Run {
@@ -1493,7 +1508,7 @@ pub mod tests {
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].last_hit_by = Some(0);
         let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
-        run.knock_monster(mi, from, 40.0);
+        run.knock_monster(mi, from, 40.0, BOSS_KNOCK_STR);
         for _ in 0..30 {
             run.step();
         }
@@ -1515,7 +1530,7 @@ pub mod tests {
         let (mut run, id, _) = orc_by(Tile::DeepWater);
         let mi = run.monster_idx(id).unwrap();
         let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
-        run.knock_monster(mi, from, 40.0);
+        run.knock_monster(mi, from, 40.0, BOSS_KNOCK_STR);
         for _ in 0..30 + (dungeon::DROWN_TIME / DT) as usize {
             run.step();
         }
@@ -1537,11 +1552,29 @@ pub mod tests {
     }
 
     #[test]
+    fn orc_pushes_the_barbarian_less() {
+        use crate::run::effects::Creature;
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Barbarian], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos();
+        run.players[1].mv.x = at.x;
+        run.players[1].mv.y = at.y;
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at - Vec2::new(16.0, 0.0), None, 1);
+        let oi = run.monster_idx(id).unwrap();
+        let attack = crate::defs::enemies::def(EnemyType::OrcWarrior).attack;
+        // STR 16: the Wizard (weight 9) the full 20 px, the Barbarian (weight 13) 20 x 3/4 = 15 px.
+        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(0), attack, false, None);
+        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(1), attack, false, None);
+        assert_eq!(run.players[0].mv.knock_vx, crate::collision::knock_speed(20.0, DT));
+        assert_eq!(run.players[1].mv.knock_vx, crate::collision::knock_speed(15.0, DT));
+    }
+
+    #[test]
     fn bosses_are_never_pushed() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
         let from = run.monsters[bi].pos - Vec2::new(10.0, 0.0);
-        run.knock_monster(bi, from, 40.0);
+        run.knock_monster(bi, from, 40.0, BOSS_KNOCK_STR);
         assert_eq!(run.monsters[bi].knock, Vec2::ZERO);
     }
 
@@ -1615,11 +1648,11 @@ pub mod tests {
         let start = run.players[0].pos();
         // Mid-dash heroes are in the air: no push.
         run.players[0].mv.dash_t = 0.1;
-        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0);
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, BOSS_KNOCK_STR);
         assert!(!run.players[0].mv.knocked());
         run.players[0].mv.dash_t = 0.0;
         // 36 px away from a hit on the left, while walking left and attacking: slides right into the chasm.
-        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0);
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, BOSS_KNOCK_STR);
         assert!(run.players[0].mv.knocked());
         walk(&mut run, -1, Some(1));
         assert_eq!(run.players[0].cd1, 0.0, "no attack while pushed");
@@ -1640,7 +1673,7 @@ pub mod tests {
         stand_at(&mut run, at - Vec2::new(32.0, 0.0));
         let start = run.players[0].pos();
         // 14 px (a chort): stops short of the chasm 24 px away.
-        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 14.0);
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 14.0, BOSS_KNOCK_STR);
         for _ in 0..30 {
             walk(&mut run, 0, None);
         }

@@ -45,6 +45,9 @@ pub const DEMON_RING_RECOVER: f64 = 0.35;
 pub const DEMON_ENRAGED_PACE: f64 = 0.6;
 /// Knockback (px): heroes hit by the cleave or the swoop slide this far away from the
 /// demon. Its melee hits push hard (the user asked for "significant knockback").
+/// The STR every boss push carries: above every hero's weight + 4, so
+/// scripted boss pushes keep their full distance.
+pub const BOSS_KNOCK_STR: i32 = 30;
 pub const DEMON_CLEAVE_KNOCK: f64 = 56.0;
 pub const DEMON_SWOOP_KNOCK: f64 = 64.0;
 

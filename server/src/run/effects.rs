@@ -424,9 +424,9 @@ mod tests {
         let from = run.players[0].pos() - Vec2::new(10.0, 0.0);
         let mut free = test_run(&[ClassId::Barbarian], BossId::Demon);
         open(&mut free);
-        free.knock_player(0, from, 0.0, 40.0);
+        free.knock_player(0, from, 0.0, 40.0, crate::defs::bosses::BOSS_KNOCK_STR);
         run.apply_effect(Creature::Player(0), EffectKind::Petrified, Some(5.0));
-        run.knock_player(0, from, 0.0, 40.0);
+        run.knock_player(0, from, 0.0, 40.0, crate::defs::bosses::BOSS_KNOCK_STR);
         let (a, b) = (free.players[0].mv.knock_vx, run.players[0].mv.knock_vx);
         assert!(b > 0.0 && b < a, "still pushed, but less: {b} < {a}");
         // Let the slide end, then try to act and turn.

@@ -73,6 +73,17 @@ pub fn hp(base: f64, con: i32) -> f64 {
     base + CON_HP * (con - BASELINE) as f64
 }
 
+/// How far a push of `base` px moves a target of `weight`: nothing unless the
+/// pusher's STR is above the weight, the full distance from 4 points above.
+pub fn push_dist(base: f64, str: i32, weight: f64) -> f64 {
+    let over = str as f64 - weight;
+    if over <= 0.0 {
+        0.0
+    } else {
+        base * (over / 4.0).min(1.0)
+    }
+}
+
 /// A number stored as its value at the reference Attribute value `at`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Scaled {
@@ -109,6 +120,13 @@ pub fn attr_price(a: Attr, current: i32) -> u32 {
 mod tests {
     use super::Attr::*;
     use super::*;
+
+    #[test]
+    fn push_needs_str_above_weight() {
+        assert_eq!(push_dist(20.0, 9, 9.0), 0.0);
+        assert_eq!(push_dist(20.0, 16, 13.0), 15.0);
+        assert_eq!(push_dist(20.0, 19, 13.0), 20.0);
+    }
 
     #[test]
     fn factor_is_linear_around_ten() {

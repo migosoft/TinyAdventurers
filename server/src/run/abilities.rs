@@ -384,7 +384,8 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let (from_player, owner, damage, crit, explode_r, k, knock) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.knock);
     let src = if from_player { run.player_idx(owner) } else { None };
     if explode_r > 0.0 {
-        explode(run, pos, explode_r, damage, from_player, src, k, crit, knock);
+        let str = shot_str(run, from_player, owner);
+        explode(run, pos, explode_r, damage, from_player, src, k, crit, knock, str);
         return;
     }
     match target {
@@ -403,15 +404,27 @@ fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
     let (from_player, owner, damage, crit, explode_r, k, knock) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.knock);
     if explode_r > 0.0 {
         let src = if from_player { run.player_idx(owner) } else { None };
-        explode(run, pos, explode_r, damage, from_player, src, k, crit, knock);
+        let str = shot_str(run, from_player, owner);
+        explode(run, pos, explode_r, damage, from_player, src, k, crit, knock, str);
     } else {
         crate::run::objects::hurt_object(run, oi, damage, from_player.then_some(owner));
     }
 }
 
+/// The STR an exploding shot pushes with: its monster's (`Run::push_str`, a boss's
+/// `BOSS_KNOCK_STR`). Only bosses fire pushing shots and they are never removed,
+/// so a shot whose owner is gone is taken as a boss's. Hero explosions never push.
+fn shot_str(run: &Run, from_player: bool, owner: u32) -> i32 {
+    if from_player {
+        return 0;
+    }
+    run.monster_idx(owner).map_or(crate::defs::bosses::BOSS_KNOCK_STR, |mi| run.push_str(mi))
+}
+
 #[allow(clippy::too_many_arguments)]
-/// An explosion; `knock` pushes the heroes it hits straight away from it (px, enemy explosions only).
-pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, from_player: bool, src: Option<usize>, k: u8, crit: bool, knock: f64) {
+/// An explosion; `knock` pushes the heroes it hits straight away from it (px, enemy
+/// explosions only), with STR `str` against their weight.
+pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, from_player: bool, src: Option<usize>, k: u8, crit: bool, knock: f64, str: i32) {
     // The heroes see their own explosions even out of view.
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, (!from_player).then_some(pos));
     run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
@@ -429,7 +442,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, from_player: bo
     } else {
         for c in run.foes_touching(pos, r, true) {
             run.hurt_creature(c, damage);
-            run.knock_creature(c, pos, 0.0, knock);
+            run.knock_creature(c, pos, 0.0, knock, str);
         }
     }
     let by = src.map(|pi| run.players[pi].id);
@@ -508,10 +521,10 @@ mod tests {
     fn an_enemy_explosion_with_knock_pushes_heroes_away() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
         let at = run.players[0].pos() - Vec2::new(10.0, 0.0);
-        explode(&mut run, at, 30.0, Damage::physical(5.0), false, None, 4, false, 20.0);
+        explode(&mut run, at, 30.0, Damage::physical(5.0), false, None, 4, false, 20.0, crate::defs::bosses::BOSS_KNOCK_STR);
         assert!(run.players[0].mv.knock_vx > 0.0, "pushed east, away from the blast");
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
-        explode(&mut run, at, 30.0, Damage::physical(5.0), false, None, 4, false, 0.0);
+        explode(&mut run, at, 30.0, Damage::physical(5.0), false, None, 4, false, 0.0, 0);
         assert!(!run.players[0].mv.knocked(), "no knock: no push");
     }
 
@@ -564,7 +577,7 @@ mod tests {
             let id = run.spawn_enemy(t, at, None, 1);
             let mi = run.monster_idx(id).unwrap();
             run.monsters[mi].hp = 1000.0;
-            explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), true, Some(0), 0, false, 0.0);
+            explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), true, Some(0), 0, false, 0.0, 0);
             1000.0 - run.monsters[run.monster_idx(id).unwrap()].hp
         };
         // 70 % heat (demons: immune), 20 % magical (demons: 20 %), 10 % physical.
@@ -590,7 +603,7 @@ mod tests {
         assert!(matches!(run.events[..], [(Ev::Dmg { .. }, None)]), "damage number sent to the whole party");
         run.events.clear();
         let at = run.monsters[mi].pos;
-        explode(&mut run, at, 20.0, Damage::physical(5.0), true, Some(0), 0, false, 0.0);
+        explode(&mut run, at, 20.0, Damage::physical(5.0), true, Some(0), 0, false, 0.0, 0);
         assert!(matches!(run.events[0], (Ev::Boom { .. }, None)), "the hero's explosion too");
         run.events.clear();
         run.hurt_monster(mi, Damage::physical(5.0), false, None);
@@ -670,7 +683,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id2 = run.spawn_object(EntityKind::Barrel, at, crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
-        explode(&mut run, at + Vec2::new(10.0, 0.0), 20.0, Damage::physical(5.0), true, Some(0), 0, false, 0.0);
+        explode(&mut run, at + Vec2::new(10.0, 0.0), 20.0, Damage::physical(5.0), true, Some(0), 0, false, 0.0, 0);
         assert!(matches!(&run.objects.iter().find(|o| o.id == id2).unwrap().state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_some()));
     }
 

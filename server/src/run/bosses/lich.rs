@@ -9,7 +9,7 @@ use super::{boss_idx, set_anim, target, BossBehaviour};
 use crate::defs::bosses::{
     LICH_ARCHERS, LICH_BLIND_COOLDOWN, LICH_BLIND_DAMAGE, LICH_BLIND_FIRST, LICH_BLIND_SECS, LICH_BLIND_WINDUP, LICH_DISCIPLES, LICH_DRAIN_PER_DISCIPLE, LICH_GAZE_COOLDOWN,
     LICH_GAZE_FIRST, LICH_GAZE_SECS, LICH_GAZE_WINDUP, LICH_NOVA_DAMAGE, LICH_NOVA_EVERY, LICH_NOVA_KNOCK, LICH_NOVA_RADIUS, LICH_NOVA_WINDUP, LICH_ORB_SPEED,
-    LICH_SKELETONS, LICH_SLEEP_COOLDOWN, LICH_SLEEP_FIRST, LICH_SLEEP_SECS, LICH_SLEEP_WINDUP,
+    LICH_SKELETONS, LICH_SLEEP_COOLDOWN, LICH_SLEEP_FIRST, LICH_SLEEP_SECS, LICH_SLEEP_WINDUP, BOSS_KNOCK_STR,
 };
 use crate::defs::damage::{Damage, DamageSplit, DamageType};
 use crate::defs::effects::EffectKind;
@@ -125,7 +125,7 @@ impl Lich {
         for c in run.foes_in(pos, r, None) {
             let away = pos.angle_to(run.creature_pos(c));
             run.hurt_creature(c, dmg);
-            run.knock_creature(c, pos, away, LICH_NOVA_KNOCK);
+            run.knock_creature(c, pos, away, LICH_NOVA_KNOCK, BOSS_KNOCK_STR);
         }
     }
 

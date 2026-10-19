@@ -242,9 +242,7 @@ pub struct Monster {
     /// How it takes each effect (bosses: defs/bosses.rs responses).
     pub responses: crate::defs::effects::EffectResponses,
     /// Its Attributes and weight (crate::sheet::MonsterStats).
-    #[allow(dead_code)] // read from plan 1 Task 7/8
     pub attrs: Attributes,
-    #[allow(dead_code)] // read from plan 1 Task 7/8
     pub weight: f64,
     /// Set for a hero's ally: no hero attack hurts it and enemies are its foes.
     pub ally: Option<Ally>,

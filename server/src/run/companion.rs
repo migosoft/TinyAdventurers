@@ -3,6 +3,7 @@
 use super::entities::{Ai, Ally, Monster, Windup, WolfDash, HISTORY_LEN};
 use super::{ai, perception, Run};
 use crate::collision::{line_of_sight, move_box, walk_line};
+use crate::defs::attributes::Attr;
 use crate::defs::companions::*;
 use crate::defs::damage::Damage;
 use crate::defs::kinds::{Anim, EntityKind};
@@ -203,7 +204,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
                 let (from, melee) = (w.pos, w.melee);
                 run.monsters[mi].aim = from.angle_to(e.pos);
                 run.hurt_monster(ei, Damage::new(WOLF_BITE_DAMAGE, melee), false, Some(pi));
-                run.knock_monster(ei, from, WOLF_BITE_KNOCK);
+                run.knock_monster(ei, from, WOLF_BITE_KNOCK, WOLF_ATTRS.get(Attr::Str));
             }
         }
         run.monsters[mi].ai.cd = WOLF_BITE_COOLDOWN;
@@ -338,7 +339,7 @@ fn tick_dash(run: &mut Run, mi: usize, pi: usize, dash: WolfDash, dt: f64) {
             if w.pos.dist(e.pos) < w.radius + e.radius + 4.0 {
                 let (from, melee) = (w.pos, w.melee);
                 run.hurt_monster(ei, Damage::new(WOLF_DASH_DAMAGE, melee), false, Some(pi));
-                run.knock_monster(ei, from, WOLF_DASH_KNOCK);
+                run.knock_monster(ei, from, WOLF_DASH_KNOCK, WOLF_ATTRS.get(Attr::Str));
                 run.monsters[mi].ai.cd = WOLF_BITE_COOLDOWN;
                 done = true;
             }
@@ -908,6 +909,31 @@ mod tests {
 
     fn hp_of(run: &Run, id: u32) -> Option<f64> {
         run.monster_idx(id).map(|i| run.monsters[i].hp)
+    }
+
+    /// The wolf finishes a bite wind-up on a fresh `t` beside it; returns that enemy's push velocity.
+    fn bite_knock(t: EnemyType) -> Vec2 {
+        let (mut run, id) = ranger_with_wolf();
+        let wi = wolf_idx(&run, id);
+        let w = run.monsters[wi].pos;
+        let ei = {
+            let e = run.spawn_enemy(t, w, None, 1);
+            run.monster_idx(e).unwrap()
+        };
+        let gap = run.monsters[wi].radius + run.monsters[ei].radius + 2.0;
+        run.monsters[ei].pos = w + Vec2::new(gap, 0.0);
+        let eid = run.monsters[ei].id;
+        ally_mut(&mut run, wi).prey = Some(eid);
+        run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None });
+        tick_wolf(&mut run, wi, DT);
+        run.monsters[run.monster_idx(eid).unwrap()].knock
+    }
+
+    #[test]
+    fn wolf_bite_pushes_an_orc_not_an_ogre() {
+        // STR 17: the orc (weight 13) the full bite push, the ogre (weight 20) not at all.
+        assert_eq!(bite_knock(EnemyType::OrcWarrior), Vec2::new(crate::collision::knock_speed(WOLF_BITE_KNOCK, DT), 0.0));
+        assert_eq!(bite_knock(EnemyType::Ogre), Vec2::ZERO);
     }
 
     #[test]

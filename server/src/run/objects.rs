@@ -228,20 +228,28 @@ pub fn use_object(run: &mut Run, pi: usize) {
         .min_by(|a, b| a.1.total_cmp(&b.1));
     if let Some((oi, _)) = near {
         match run.objects[oi].state {
-            ObjState::Barrel(_) => push_barrel(run, oi, at),
+            ObjState::Barrel(_) => {
+                let str = run.players[pi].sheet.attrs.get(crate::defs::attributes::Attr::Str);
+                push_barrel(run, oi, at, str)
+            }
             ObjState::Torch { light, .. } => set_torch(run, oi, !torch_on(run, light)),
             ObjState::Chest { .. } => {}
         }
     }
 }
 
-/// Slides a barrel `BARREL_PUSH` px straight away from `from`.
-pub fn push_barrel(run: &mut Run, oi: usize, from: Vec2) {
+/// Slides a barrel straight away from `from`: `BARREL_PUSH` px by a hero of
+/// STR `str`, less or not at all against its weight (`push_dist`).
+pub fn push_barrel(run: &mut Run, oi: usize, from: Vec2, str: i32) {
     let o = &mut run.objects[oi];
+    let dist = crate::defs::attributes::push_dist(BARREL_PUSH, str, weight(o.kind));
+    if dist <= 0.0 {
+        return;
+    }
     let d = o.pos - from;
     let dir = if d.len() > 0.01 { d.norm() } else { Vec2::new(1.0, 0.0) };
     if let ObjState::Barrel(b) = &mut o.state {
-        b.vel = dir * crate::collision::knock_speed(BARREL_PUSH, crate::run::DT);
+        b.vel = dir * crate::collision::knock_speed(dist, crate::run::DT);
     }
 }
 
@@ -337,11 +345,11 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
         .collect();
     for c in foes {
         run.hurt_creature(c, dmg);
-        run.knock_creature(c, pos, 0.0, knock);
+        run.knock_creature(c, pos, 0.0, knock, BARREL_BLAST_STR);
     }
     for mi in monsters {
         run.hurt_monster(mi, dmg, false, src);
-        run.knock_monster(mi, pos, knock);
+        run.knock_monster(mi, pos, knock, BARREL_BLAST_STR);
     }
     for qi in barrels {
         hurt_object(run, qi, dmg, by);
@@ -394,6 +402,9 @@ mod tests {
     use crate::defs::damage::{DamageSplit, DamageType};
     use crate::protocol::{BossId, ClassId};
     use crate::run::tests::test_run;
+
+    /// Weight 6 + 4: pushes a barrel the full `BARREL_PUSH`.
+    const FULL_PUSH_STR: i32 = 10;
 
     pub fn barrel_at(run: &mut Run, off: Vec2) -> (u32, usize) {
         let pos = run.players[0].pos() + off;
@@ -455,6 +466,43 @@ mod tests {
     }
 
     #[test]
+    fn the_wizard_pushes_a_barrel() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        for x in tx - 1..=tx + 8 {
+            run.layout.map.set(x, ty, crate::dungeon::Tile::Floor);
+        }
+        let start = run.players[0].pos();
+        let (id, _) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + 4.0, 0.0));
+        push(&mut run);
+        for _ in 0..60 {
+            run.step();
+        }
+        let o = run.objects.iter().find(|o| o.id == id).unwrap();
+        let moved = o.pos.x - (start.x + PLAYER_RADIUS + BARREL_RADIUS + 4.0);
+        // STR 8 against weight 6: BARREL_PUSH x 2/4.
+        assert!((moved - BARREL_PUSH / 2.0).abs() < 2.0, "slid {moved} px east");
+    }
+
+    #[test]
+    fn bosses_and_chests_never_move() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.objects.retain(|o| o.kind != EntityKind::Barrel);
+        let bi = crate::run::bosses::boss_idx(&run).unwrap();
+        let at = run.monsters[bi].pos;
+        run.spawn_object(EntityKind::Barrel, at + Vec2::new(20.0, 0.0), ObjState::Barrel(Barrel::new()));
+        let oi = run.objects.len() - 1;
+        run.spawn_object(EntityKind::Chest, at + Vec2::new(30.0, 0.0), ObjState::Chest { opened: None });
+        let ci = run.objects.len() - 1;
+        let chest = run.objects[ci].pos;
+        explode_barrel(&mut run, oi);
+        assert_eq!(run.monsters[bi].knock, Vec2::ZERO, "the boss (weight 40) is not pushed by STR 18");
+        assert_eq!(run.monsters[bi].pos, at);
+        assert_eq!(run.objects[ci].pos, chest, "the chest (weight 40) stays put");
+    }
+
+    #[test]
     fn a_barrel_out_of_reach_does_not_move() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         let (id, _) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + USE_REACH + 2.0, 0.0));
@@ -473,7 +521,7 @@ mod tests {
         run.layout.map.set(tx + 3, ty, crate::dungeon::Tile::Wall);
         let (id, oi) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + 2.0, 0.0));
         let from = run.players[0].pos();
-        push_barrel(&mut run, oi, from);
+        push_barrel(&mut run, oi, from, FULL_PUSH_STR);
         for _ in 0..60 {
             run.step();
         }
@@ -493,7 +541,7 @@ mod tests {
         let start = run.objects[oi].pos;
         let b0 = run.objects.iter().find(|o| o.id == other).unwrap().pos;
         let from = run.players[0].pos();
-        push_barrel(&mut run, oi, from);
+        push_barrel(&mut run, oi, from, FULL_PUSH_STR);
         step_for(&mut run, 1.0);
         let a = run.objects.iter().find(|o| o.id == id).unwrap().pos;
         let b = run.objects.iter().find(|o| o.id == other).unwrap().pos;
@@ -514,7 +562,7 @@ mod tests {
         // Off the grid to begin with (and pushed at a slight angle).
         let (id, oi) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + 2.013, 0.37));
         let from = run.players[0].pos() - Vec2::new(0.0, 0.4);
-        push_barrel(&mut run, oi, from);
+        push_barrel(&mut run, oi, from, FULL_PUSH_STR);
         let start = run.objects[oi].pos;
         let mut seen_moving = false;
         for _ in 0..60 {
@@ -642,7 +690,7 @@ mod tests {
         run.layout.map.set(tx + 3, ty, t);
         let (id, oi) = barrel_at(&mut run, Vec2::new(PLAYER_RADIUS + BARREL_RADIUS + 2.0, 0.0));
         let from = run.players[0].pos();
-        push_barrel(&mut run, oi, from);
+        push_barrel(&mut run, oi, from, FULL_PUSH_STR);
         run.events.clear();
         (run, id)
     }

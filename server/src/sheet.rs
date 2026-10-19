@@ -35,11 +35,9 @@ pub struct ResolvedAbility {
 #[derive(Debug, Clone, Copy)]
 pub struct Sheet {
     /// Class + race + `extra`.
-    #[allow(dead_code)] // read from plan 1 Task 7/8
     pub attrs: Attributes,
     pub max_hp: f64,
     pub speed: f64,
-    #[allow(dead_code)] // read from plan 1 Task 7/8
     pub weight: f64,
     pub res: Resistances,
     pub responses: EffectResponses,

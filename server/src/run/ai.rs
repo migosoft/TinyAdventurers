@@ -429,7 +429,8 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, attack: At
             if pos.dist(ppos) <= reach {
                 let dmg = with(Damage::new(damage, run.monsters[mi].melee));
                 run.hurt_creature(foe, dmg);
-                run.knock_creature(foe, pos, aim, knock);
+                let str = run.push_str(mi);
+                run.knock_creature(foe, pos, aim, knock, str);
             }
         }
         AttackStyle::Ranged { projectile, speed, damage, cooldown, range, .. } => {
@@ -449,10 +450,11 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, attack: At
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: radius as f32, k: 5 }, Some(pos));
             let dmg = with(Damage::new(damage, run.monsters[mi].melee));
             crate::run::objects::hurt_objects_in(run, pos, radius, None, dmg);
+            let str = run.push_str(mi);
             for c in run.foes_in(pos, radius, None) {
                 let away = pos.angle_to(run.creature_pos(c));
                 run.hurt_creature(c, dmg);
-                run.knock_creature(c, pos, away, knock);
+                run.knock_creature(c, pos, away, knock, str);
             }
         }
     }
