@@ -1,3 +1,4 @@
+use super::attributes::Attributes;
 use super::races::{self, Adjust, Race, Profile};
 use super::kinds::EntityKind;
 use crate::protocol::BossId;
@@ -11,13 +12,19 @@ pub struct BossDef {
     pub hp: f64,
     pub radius: f64,
     pub speed: f64,
+    /// For effect power and saves (the scripts keep their own constants).
+    #[allow(dead_code)] // used from plan 1 Task 4/5
+    pub attrs: Attributes,
+    /// Never pushed.
+    #[allow(dead_code)] // used from plan 1 Task 4/5
+    pub weight: f64,
 }
 
 pub fn def(id: BossId) -> BossDef {
     match id {
-        BossId::Demon => BossDef { id, kind: EntityKind::Demon, hp: 1300.0, radius: 11.0, speed: 50.0 },
-        BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0 },
-        BossId::Dragon => BossDef { id, kind: EntityKind::Dragon, hp: 2000.0, radius: 17.0, speed: 34.0 },
+        BossId::Demon => BossDef { id, kind: EntityKind::Demon, hp: 1300.0, radius: 11.0, speed: 50.0, attrs: Attributes::new(22, 14, 20, 14, 16, 20), weight: 40.0 },
+        BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0, attrs: Attributes::new(10, 14, 14, 22, 18, 16), weight: 40.0 },
+        BossId::Dragon => BossDef { id, kind: EntityKind::Dragon, hp: 2000.0, radius: 17.0, speed: 34.0, attrs: Attributes::new(24, 10, 22, 16, 14, 20), weight: 40.0 },
     }
 }
 
@@ -124,3 +131,20 @@ pub const LICH_GAZE_FIRST: f64 = 9.0;
 pub const LICH_GAZE_SECS: f64 = 3.0;
 /// Speed of the blinding and sleep orbs (px/s): slow enough to dodge.
 pub const LICH_ORB_SPEED: f64 = 90.0;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::defs::attributes::Attr;
+
+    #[test]
+    fn bosses_weigh_forty() {
+        for id in BossId::ALL {
+            assert_eq!(def(id).weight, 40.0, "{id:?}");
+        }
+        assert_eq!(def(BossId::Lich).attrs.get(Attr::Int), 22);
+        assert_eq!(def(BossId::Demon).attrs, Attributes::new(22, 14, 20, 14, 16, 20));
+        assert_eq!(def(BossId::Dragon).attrs, Attributes::new(24, 10, 22, 16, 14, 20));
+        assert_eq!(def(BossId::Lich).attrs, Attributes::new(10, 14, 14, 22, 18, 16));
+    }
+}

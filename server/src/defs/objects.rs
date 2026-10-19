@@ -31,6 +31,9 @@ pub const TORCH_RADIUS: f64 = 4.0;
 pub const BARREL_FUSE: f64 = 0.3;
 pub const BARREL_BLAST_R: f64 = 40.0;
 pub const BARREL_BLAST_DAMAGE: f64 = 30.0;
+/// The blast pushes as if with this STR (even the Wizard, STR 8, is pushed by weight 6 targets only less).
+#[allow(dead_code)] // used from plan 1 Task 4/5
+pub const BARREL_BLAST_STR: i32 = 18;
 pub const BARREL_BLAST_KNOCK: f64 = 40.0;
 /// How far a push with E slides a barrel (px).
 pub const BARREL_PUSH: f64 = 48.0;
@@ -39,6 +42,16 @@ pub const BROKEN_CHEST_SHARE: f64 = 1.0 / 3.0;
 /// Hand reach for using an object: gap (px) between the hero's and the object's footprints.
 pub const USE_REACH: f64 = 6.0;
 
+/// Weight for pushes: barrels slide, chests never move.
+#[allow(dead_code)] // used from plan 1 Task 4/5
+pub fn weight(kind: EntityKind) -> f64 {
+    match kind {
+        EntityKind::Barrel => 6.0,
+        EntityKind::Chest => 40.0,
+        _ => panic!("{kind:?} has no object weight"),
+    }
+}
+
 pub fn barrel_blast() -> Damage {
     Damage::new(BARREL_BLAST_DAMAGE, DamageSplit::split(&[(DamageType::Heat, 0.5)]))
 }
@@ -46,4 +59,16 @@ pub fn barrel_blast() -> Damage {
 /// Every object is of race `Object` (so it resists poison fully).
 pub fn profile(_kind: EntityKind) -> Profile {
     races::profile(&[Race::Object], Adjust::NONE)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn object_weights() {
+        assert_eq!(weight(EntityKind::Barrel), 6.0);
+        assert_eq!(weight(EntityKind::Chest), 40.0);
+        assert_eq!(BARREL_BLAST_STR, 18);
+    }
 }

@@ -50,7 +50,6 @@ pub struct RaceDef {
     pub vision: f64,
     pub darkvision: f64,
     /// Attribute bonus of the race (only the Elf has one).
-    #[allow(dead_code)] // used from plan 1 Task 3
     pub attrs: Attributes,
     /// How the race takes status effects.
     pub responses: EffectResponses,
@@ -74,7 +73,6 @@ pub fn race_def(r: Race) -> RaceDef {
 }
 
 /// The summed Attribute bonuses of the races.
-#[allow(dead_code)] // used from plan 1 Task 3
 pub fn race_attrs(races: &[Race]) -> Attributes {
     races.iter().fold(Attributes::default(), |a, &r| a.plus(race_def(r).attrs))
 }
