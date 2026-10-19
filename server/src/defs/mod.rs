@@ -5,6 +5,7 @@ pub mod classes;
 pub mod companions;
 pub mod damage;
 pub mod effects;
+mod enum_list;
 pub mod enemies;
 pub mod races;
 pub mod kinds;

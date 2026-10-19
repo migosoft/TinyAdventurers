@@ -5,23 +5,25 @@
 use super::damage::DamageType;
 use serde::Serialize;
 
-/// Open set. The id is the effect's bit in the snapshot's `u16` bitmask.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
-#[repr(u8)]
-pub enum EffectKind {
-    Blind = 0,
-    Sleep = 1,
-    Petrified = 2,
-    Slowed = 3,
-    Accelerated = 4,
-    Burning = 5,
-    Frozen = 6,
-    Poisoned = 7,
+super::enum_list::listed_enum! {
+    /// Open set. The id is the effect's bit in the snapshot's `u16` bitmask.
+    /// `ALL` and `COUNT` grow with a new variant (`listed_enum!`).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+    pub enum EffectKind: u8 {
+        Blind = 0,
+        Sleep = 1,
+        Petrified = 2,
+        Slowed = 3,
+        Accelerated = 4,
+        Burning = 5,
+        Frozen = 6,
+        Poisoned = 7,
+    }
 }
 
+const _: () = assert!(EffectKind::COUNT <= 16, "an effect's id is its bit in the snapshot's u16 mask");
+
 impl EffectKind {
-    pub const COUNT: usize = 8;
-    pub const ALL: [EffectKind; EffectKind::COUNT] = [EffectKind::Blind, EffectKind::Sleep, EffectKind::Petrified, EffectKind::Slowed, EffectKind::Accelerated, EffectKind::Burning, EffectKind::Frozen, EffectKind::Poisoned];
     pub fn bit(self) -> u16 {
         1 << self as u8
     }

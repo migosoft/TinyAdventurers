@@ -3,20 +3,20 @@
 
 use super::kinds::EntityKind;
 
-/// Open set: a new type is a new variant, and `COUNT` and `ALL` grow with it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum DamageType {
-    Physical = 0,
-    Cold = 1,
-    Heat = 2,
-    Magical = 3,
-    Poison = 4,
+super::enum_list::listed_enum! {
+    /// Open set: a new type is a new variant; `ALL` and `COUNT` grow with it
+    /// (`listed_enum!`), and its resistance slot exists on every creature at 0.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum DamageType: u8 {
+        Physical = 0,
+        Cold = 1,
+        Heat = 2,
+        Magical = 3,
+        Poison = 4,
+    }
 }
 
 impl DamageType {
-    pub const COUNT: usize = 5;
-    pub const ALL: [DamageType; DamageType::COUNT] = [DamageType::Physical, DamageType::Cold, DamageType::Heat, DamageType::Magical, DamageType::Poison];
     pub fn name(self) -> &'static str {
         match self {
             DamageType::Physical => "Physical",
