@@ -262,7 +262,7 @@ impl Run {
         let d = enemies::def(t);
         let prof = enemies::profile(t);
         let id = self.alloc_id();
-        let hp = d.hp * (0.75 + 0.25 * party.max(1) as f64);
+        let hp = d.hp * enemies::party_hp_scale(party);
         self.monsters.push(Monster {
             id,
             res: prof.res,

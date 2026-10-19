@@ -13,10 +13,8 @@ pub struct BossDef {
     pub radius: f64,
     pub speed: f64,
     /// For effect power and saves (the scripts keep their own constants).
-    #[allow(dead_code)] // used from plan 1 Task 4/5
     pub attrs: Attributes,
     /// Never pushed.
-    #[allow(dead_code)] // used from plan 1 Task 4/5
     pub weight: f64,
 }
 

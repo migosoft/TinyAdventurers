@@ -1,8 +1,11 @@
+use super::attributes::{Attr, DEX_DMG, DEX_SPEED, DEX_ARC, INT_DMG, CHA_DMG, STR_DMG, STR_RANGE};
+use crate::protocol::ClassId;
 use serde::Serialize;
+use ts_rs::TS;
 
 /// Every attack/ability a class can have. A class picks one primary and one
 /// secondary; later loadout selection only needs to swap these ids.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, TS)]
 pub enum AbilityId {
     MagicMissile,
     Fireball,
@@ -64,6 +67,56 @@ pub fn def(id: AbilityId) -> AbilityDef {
         Dash => d(id, 5.0, 25.0, 0.0, 0.0, DASH_SPEED, 10.0, 0.18),
         CrossbowDagger => d(id, 0.7, 16.0, 260.0, 0.0, 290.0, 2.0, 0.0),
         SummonWolf => d(id, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+    }
+}
+
+/// Which Attribute moves which number of an ability, and by how much per point.
+/// Interim table: plan 3 replaces it with weapons.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Scaling {
+    pub damage: Option<(Attr, f64)>,
+    /// Attack speed: shortens the cooldown.
+    pub speed: Option<(Attr, f64)>,
+    pub arc: Option<(Attr, f64)>,
+    /// Melee reach or projectile range, and the projectile's speed.
+    pub reach: Option<(Attr, f64)>,
+}
+
+/// The Elven Ranger's rapier thrust (the crossbow's fallback in melee).
+pub const DAGGER_SCALING: Scaling =
+    Scaling { damage: Some((Attr::Dex, DEX_DMG)), speed: Some((Attr::Dex, DEX_SPEED)), arc: None, reach: None };
+
+pub fn scaling(id: AbilityId) -> Scaling {
+    use AbilityId::*;
+    let none = Scaling::default();
+    match id {
+        MagicMissile | Fireball => Scaling { damage: Some((Attr::Int, INT_DMG)), ..none },
+        Sword | Axe => Scaling {
+            damage: Some((Attr::Str, STR_DMG)),
+            speed: Some((Attr::Dex, DEX_SPEED)),
+            arc: Some((Attr::Dex, DEX_ARC)),
+            ..none
+        },
+        Heal => Scaling { damage: Some((Attr::Cha, CHA_DMG)), ..none },
+        Dash => Scaling { damage: Some((Attr::Str, STR_DMG)), ..none },
+        CrossbowDagger => Scaling {
+            damage: Some((Attr::Dex, DEX_DMG)),
+            speed: Some((Attr::Dex, DEX_SPEED)),
+            reach: Some((Attr::Str, STR_RANGE)),
+            ..none
+        },
+        SummonWolf => none,
+    }
+}
+
+/// The class whose start Attributes are the reference of this ability's numbers.
+pub fn owner(id: AbilityId) -> ClassId {
+    use AbilityId::*;
+    match id {
+        MagicMissile | Fireball => ClassId::Wizard,
+        Sword | Heal => ClassId::Paladin,
+        Axe | Dash => ClassId::Barbarian,
+        CrossbowDagger | SummonWolf => ClassId::ElvenRanger,
     }
 }
 

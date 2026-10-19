@@ -14,6 +14,7 @@ mod math;
 mod progress;
 mod protocol;
 mod run;
+mod sheet;
 mod stats;
 mod telemetry;
 mod wire;

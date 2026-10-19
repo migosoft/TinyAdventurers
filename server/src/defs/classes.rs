@@ -20,11 +20,9 @@ pub struct ClassDef {
     #[serde(skip)]
     pub attrs: Attributes,
     /// HP before the CON bonus: `hp(base_hp, start CON) == hp`.
-    #[allow(dead_code)] // used from plan 1 Task 4/5
     #[serde(skip)]
     pub base_hp: f64,
     /// Body weight for pushes (armor adds later).
-    #[allow(dead_code)] // used from plan 1 Task 4/5
     #[serde(skip)]
     pub weight: f64,
     pub primary: AbilityId,
@@ -52,7 +50,6 @@ pub fn races(class: ClassId) -> &'static [Race] {
 }
 
 /// Class points plus the race bonus (the Elf's DEX +2).
-#[allow(dead_code)] // used from plan 1 Task 4/5
 pub fn start_attrs(class: ClassId) -> Attributes {
     def(class).attrs.plus(races::race_attrs(races(class)))
 }

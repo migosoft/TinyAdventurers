@@ -68,10 +68,8 @@ pub struct EnemyDef {
     pub speed: f64,
     pub radius: f64,
     /// The stat block's Attributes (CON included: `hp` is the total, see `base_hp`).
-    #[allow(dead_code)] // used from plan 1 Task 4/5
     pub attrs: Attributes,
     /// Weight for pushes (see the spec's section 4).
-    #[allow(dead_code)] // used from plan 1 Task 4/5
     pub weight: f64,
     /// Vision (tiles); overrides the race's. Enemies only notice players inside it with line of sight.
     pub vision: f64,
@@ -268,8 +266,12 @@ pub const CHEST_TOUCH: f64 = 12.0;
 pub const NECRO_RAISE_COOLDOWN: f64 = 7.0;
 pub const NECRO_MAX_MINIONS: usize = 3;
 
+/// HP multiplier for party size.
+pub fn party_hp_scale(party: usize) -> f64 {
+    0.75 + 0.25 * party.max(1) as f64
+}
+
 /// HP before the CON bonus: today's HP minus 5 per CON point above 10, so the total stays.
-#[allow(dead_code)] // used from plan 1 Task 4/5
 pub fn base_hp(t: EnemyType) -> f64 {
     let d = def(t);
     d.hp - 5.0 * (d.attrs.get(Attr::Con) - 10) as f64

@@ -7,9 +7,7 @@ use super::races::{self, Adjust, Race, Profile};
 
 pub const WOLF_HP: f64 = 80.0;
 /// The stat block (spec section 7): saves and push power. HP, speed, bite and dash keep the `WOLF_*` numbers.
-#[allow(dead_code)] // used from plan 1 Task 4/5
 pub const WOLF_ATTRS: Attributes = Attributes::new(17, 15, 15, 3, 12, 7);
-#[allow(dead_code)] // used from plan 1 Task 4/5
 pub const WOLF_WEIGHT: f64 = 10.0;
 pub const WOLF_SPEED: f64 = 88.0;
 pub const WOLF_RADIUS: f64 = 5.0;
@@ -42,7 +40,6 @@ pub const WOLF_DASH_KNOCK: f64 = 12.0;
 pub const WOLF_DASH_COOLDOWN: f64 = 5.0;
 
 /// HP before the CON bonus (55): `WOLF_HP` minus 5 per CON point above 10.
-#[allow(dead_code)] // used from plan 1 Task 4/5
 pub fn wolf_base_hp() -> f64 {
     WOLF_HP - 5.0 * (15 - 10) as f64
 }
