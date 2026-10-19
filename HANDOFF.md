@@ -15,11 +15,11 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Progression: designed and approved, plan 1 written (branch `feature/skill-tree-design`):**
 - Attributes, races, weapons and items, class skill trees, loadouts and a new pre-run UI.
-- **Spec:** [docs/superpowers/specs/2026-10-18-progression-design.md](docs/superpowers/specs/2026-10-18-progression-design.md), with screenshots in `docs/superpowers/specs/img/2026-10-18-progression/`. **It was written before the Elven Ranger:** it still names the Assassin, Hide (ability, tree nodes, hidden crits) and plans the Elf race as future work. Those parts must be reconciled with the user before plan 1 is built.
-- **Plan 1 of 5:** [docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md](docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md). Needs the re-check against the merged code (entity types now carry `responses`, `classes::profile` is per class, Hide and `HIDDEN_CRIT_MULT` are gone, the wolf is an ally `Monster`).
-- **Mock screens (throwaway spike):** `?uidemo=roster|create|sheet|tree|tree-barbarian|equipment|loadout|room` (`client/src/uidemo/`); shots with `tools/e2e/ui-shots.mjs`.
+- **Spec:** [docs/superpowers/specs/2026-10-18-progression-design.md](docs/superpowers/specs/2026-10-18-progression-design.md), with screenshots in `docs/superpowers/specs/img/2026-10-18-progression/`. **Updated 2026-10-19 for the Elven Ranger** (section "Changes for the Elven Ranger" at its end): the user chose class DEX 13 + Elf race DEX +2, a stat block for the Dire Wolf, and asked the agent to draft the ranger's tree. **The ranger's tree and her four new abilities (Volley, Flanking Thrust, Entangle, Poison Coat) are a draft awaiting the user's approval** (`?uidemo=tree-ranger`); it only matters from plan 3 on.
+- **Plan 1 of 5:** [docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md](docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md). **Re-checked against the merged code on 2026-10-19** (races take over `responses`, the wolf's stat block and push power, the 60 s wait without `mods`, the Sleep test on the Paladin).
+- **Mock screens (throwaway spike):** `?uidemo=roster|create|sheet|tree|tree-barbarian|tree-ranger|equipment|loadout|room` (`client/src/uidemo/`); shots with `tools/e2e/ui-shots.mjs`.
 - **Next, in this order:**
-  1. Settle the Assassin → Elven Ranger questions in the spec with the user, then fix the spec and plan 1.
+  1. The user approves (or changes) the drafted ranger tree; not needed before plan 1.
   2. Build plan 1. Ask the user for the execution method; the recommendation is superpowers:subagent-driven-development.
   3. Then write and build each next plan with superpowers:writing-plans, **one at a time, just before building it**: plan 2 weapons and items (spec §6.1–6.2, §8); plan 3 abilities, the melee rule, overkill piercing, the 16 new abilities (§6.3–6.6, §7 enemy melee rule); plan 4 skill trees, Attribute shop, `Progress` v2, respec, protocol (§2, §9, §11, §12); plan 5 the new UI, deleting the spike (§13).
 

@@ -40,7 +40,8 @@ export const CLASS_START: Record<ClassId, ClassStart> = {
   Wizard: { attrs: { STR: 8, DEX: 14, CON: 12, INT: 15, WIL: 13, CHA: 10 }, baseHp: 60, weight: 9, speed: 72, melee: 'red_staff', ranged: null, primary: 'magic_missile', secondary: 'fireball', prof: ['Staff', 'Dagger', 'Cloth'] },
   Paladin: { attrs: { STR: 15, DEX: 8, CON: 13, INT: 10, WIL: 12, CHA: 14 }, baseHp: 105, weight: 12, speed: 66, melee: 'knight_sword', ranged: null, primary: 'strike', secondary: 'holy_light', prof: ['Sword', 'Mace', 'Hammer', 'All armor'] },
   Barbarian: { attrs: { STR: 15, DEX: 13, CON: 14, INT: 8, WIL: 12, CHA: 10 }, baseHp: 120, weight: 13, speed: 70, melee: 'great_axe', ranged: null, primary: 'strike', secondary: 'charge', prof: ['Axe', 'Hammer', 'Club', 'Sword', 'Spear', 'Throwing axe', 'Light + medium armor'] },
-  ElvenRanger: { attrs: { STR: 10, DEX: 15, CON: 12, INT: 8, WIL: 14, CHA: 13 }, baseHp: 80, weight: 10, speed: 80, melee: 'knife', ranged: 'crossbow', primary: 'shoot', secondary: 'hide', prof: ['Dagger', 'Duelling sword', 'Machete', 'Bow', 'Crossbow', 'Throwing knives', 'Light armor'] },
+  // DEX 13 from the class + 2 from the Elf race = 15.
+  ElvenRanger: { attrs: { STR: 10, DEX: 15, CON: 12, INT: 8, WIL: 14, CHA: 13 }, baseHp: 80, weight: 10, speed: 80, melee: 'rapier', ranged: 'elven_bow', primary: 'shoot', secondary: 'summon_wolf', prof: ['Dagger', 'Duelling sword', 'Machete', 'Bow', 'Crossbow', 'Light armor'] },
 };
 
 export function hp(cls: ClassId, con: number): number {
@@ -105,13 +106,13 @@ export const ABILITIES: Ability[] = [
   A({ id: 'hurl', name: 'Hurl', mono: 'HU', cls: 'Barbarian', slot: 'primary', category: 'WeaponAttack', uses: 'ranged', ranged: true, req: [{ weapon: ['Throwing axe'] }], tint: 'physical', damage: 'the throwing axe', stats: 'the throwing axe (thrown: STR)', light: 'the weapon', text: 'Throw axes. In melee you strike with your melee weapon instead.' }),
   A({ id: 'war_cry', name: 'War Cry', mono: 'WC', cls: 'Barbarian', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [{ attr: 'STR', min: 16 }], tint: 'none', damage: '–', stats: 'cd 12 s, radius 56: enemies Slowed 3 s (power STR, save CON), allies Accelerated 3 s', light: 'none', text: 'A roar that slows enemies and spurs allies on.' }),
   A({ id: 'ground_slam', name: 'Ground Slam', mono: 'GS', cls: 'Barbarian', slot: 'secondary', category: 'Technique', uses: 'melee', ranged: false, req: [{ attr: 'STR', min: 17 }, { weapon: ['Hammer', 'Club'] }], tint: 'physical', damage: 'weapon ×1.2', stats: 'cd 6 s, wind-up 0.5 s, radius 34 around you, pushes (STR)', light: 'the weapon', text: 'Slam the ground with a hammer or club, hitting and pushing everything around you.' }),
-  // Assassin
-  A({ id: 'shoot', name: 'Shoot', mono: 'SH', cls: 'ElvenRanger', slot: 'primary', category: 'WeaponAttack', uses: 'ranged', ranged: true, req: [], tint: 'physical', damage: 'the ranged weapon', stats: 'the ranged weapon; strikes with the melee weapon in melee', light: 'the weapon', text: 'Shoot your ranged weapon. In melee you stab instead.', start: true }),
-  A({ id: 'hide', name: 'Hide', mono: 'HI', cls: 'ElvenRanger', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [], tint: 'none', damage: '–', stats: 'cd 8 s, 6 s hidden; attacks from hiding ×4', light: 'none', text: 'Vanish from enemy sight. Attacking from hiding deals ×4 critical damage.', start: true }),
-  A({ id: 'fan_of_knives', name: 'Fan of Knives', mono: 'FK', cls: 'ElvenRanger', slot: 'primary', category: 'WeaponAttack', uses: 'ranged', ranged: true, req: [{ attr: 'DEX', min: 15 }, { weapon: ['Throwing knives'] }], tint: 'physical', damage: 'weapon ×0.6 per knife', stats: '3 knives in a 30° spread, attack time ×1.4', light: 'the weapon', text: 'Throw three knives at once.' }),
-  A({ id: 'backstab', name: 'Backstab', mono: 'BS', cls: 'ElvenRanger', slot: 'primary', category: 'WeaponAttack', uses: 'melee', ranged: false, req: [{ attr: 'DEX', min: 16 }, { weapon: ['Dagger', 'Duelling sword', 'Katana', 'Machete'] }], tint: 'physical', damage: 'weapon; ×2 from behind', stats: 'the finesse weapon; "behind" = within 60° of the target\'s back', light: 'the weapon', text: 'Quick stabs that hit twice as hard from behind.' }),
-  A({ id: 'smoke_bomb', name: 'Smoke Bomb', mono: 'SB', cls: 'ElvenRanger', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [{ attr: 'DEX', min: 15 }], tint: 'none', damage: '–', stats: 'cd 14 s; cloud at your feet, radius 40, 4 s: enemies inside Blind (power DEX, save CON)', light: 'none', text: 'Drop a cloud of smoke that blinds enemies inside it.' }),
-  A({ id: 'poison_coat', name: 'Poison Coat', mono: 'PC', cls: 'ElvenRanger', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [{ attr: 'WIL', min: 15 }], tint: 'poison', damage: '+30 % poison share', stats: 'cd 16 s; 6 s: your weapon attacks add a poison share and Poisoned 3 s on hit', light: 'none', text: 'Coat your weapons in poison for a while.' }),
+  // Elven Ranger
+  A({ id: 'shoot', name: 'Shoot', mono: 'SH', cls: 'ElvenRanger', slot: 'primary', category: 'WeaponAttack', uses: 'ranged', ranged: true, req: [], tint: 'physical', damage: 'the ranged weapon', stats: 'the ranged weapon; thrusts with the melee weapon in melee', light: 'the weapon', text: 'Shoot your bow. In melee you thrust with your rapier instead.', start: true }),
+  A({ id: 'summon_wolf', name: 'Summon Wolf', mono: 'SW', cls: 'ElvenRanger', slot: 'secondary', category: 'Innate', uses: 'none', ranged: false, req: [], tint: 'none', damage: 'heal 20 % (wolf alive)', stats: 'cd 8 s; 60 s after the wolf dies; the wolf: 80 HP, bite 10, dash 20', light: 'none', text: 'Call your Dire Wolf to your side, or heal it if it is already with you.', start: true }),
+  A({ id: 'volley', name: 'Volley', mono: 'VO', cls: 'ElvenRanger', slot: 'primary', category: 'WeaponAttack', uses: 'ranged', ranged: true, req: [{ attr: 'DEX', min: 15 }, { weapon: ['Bow', 'Longbow'] }], tint: 'physical', damage: 'weapon ×0.6 per arrow', stats: '3 arrows in a 30° spread, attack time ×1.4', light: 'the weapon', text: 'Loose three arrows at once.' }),
+  A({ id: 'flanking_thrust', name: 'Flanking Thrust', mono: 'FT', cls: 'ElvenRanger', slot: 'primary', category: 'WeaponAttack', uses: 'melee', ranged: false, req: [{ attr: 'DEX', min: 16 }, { weapon: ['Dagger', 'Duelling sword', 'Katana', 'Machete'] }], tint: 'physical', damage: 'weapon; ×2 from behind', stats: 'the finesse weapon; "behind" = within 60° of the target\'s back', light: 'the weapon', text: 'Quick thrusts that hit twice as hard from behind, while the enemy faces your wolf.' }),
+  A({ id: 'entangle', name: 'Entangle', mono: 'EN', cls: 'ElvenRanger', slot: 'secondary', category: 'Innate', uses: 'none', ranged: true, req: [{ attr: 'CHA', min: 14 }], tint: 'none', damage: '–', stats: 'cd 14 s; roots at a spot within 120 px, radius 36, 4 s: enemies inside Slowed (power CHA, save WIL)', light: 'none', text: 'Roots burst from the ground and hold enemies back.' }),
+  A({ id: 'poison_coat', name: 'Poison Coat', mono: 'PC', cls: 'ElvenRanger', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [{ attr: 'WIL', min: 15 }], tint: 'poison', damage: '+30 % poison share', stats: 'cd 16 s; 6 s: your weapon attacks add a poison share and Poisoned 3 s on hit', light: 'none', text: 'Coat your arrows and blade in poison for a while.' }),
 ];
 
 export const ABILITY: Record<string, Ability> = Object.fromEntries(ABILITIES.map((a) => [a.id, a]));
@@ -120,7 +121,7 @@ export const START_POOL: Record<ClassId, string[]> = {
   Wizard: ['magic_missile', 'fireball'],
   Paladin: ['strike', 'holy_light'],
   Barbarian: ['strike', 'charge'],
-  ElvenRanger: ['shoot', 'hide'],
+  ElvenRanger: ['shoot', 'summon_wolf'],
 };
 
 // ------------------------------------------------------------ skill trees
@@ -233,29 +234,29 @@ export const TREES: Record<ClassId, TreeNode[]> = {
     N('b_d5', 'keystone', 0, 4, 'Unbreakable', 'Your CON counts +4 for every save.', 1000, [], { req: r('CON', 16) }),
   ],
   ElvenRanger: [
-    N('a0', 'start', 0, 0, 'ElvenRanger', 'Where the tree starts. Always owned.', 0, ['a_u1', 'a_l1', 'a_r1', 'a_d1']),
-    // Shadow (up)
-    N('a_u1', 'improve', 0, -1, 'Deeper Shadows', 'Hide: +2 s.', 300, ['a_u2'], { ability: 'hide' }),
-    plus('a_u2', 'WIL', 0, -2, 160, ['a_u3', 'a_u4']),
-    N('a_u3', 'unlock', -1, -3, 'Smoke Bomb', 'Unlocks Smoke Bomb (secondary).', 600, ['a_u5'], { ability: 'smoke_bomb', req: r('DEX', 15) }),
-    N('a_u4', 'improve', 1, -3, 'Quick Vanish', 'Hide: cooldown −2 s.', 400, ['a_u5'], { ability: 'hide' }),
-    N('a_u5', 'keystone', 0, -4, 'Shadow Step', 'Leaving Hide makes you Accelerated for 2 s.', 1000, [], { req: r('WIL', 16) }),
+    N('e0', 'start', 0, 0, 'Elven Ranger', 'Where the tree starts. Always owned.', 0, ['e_u1', 'e_l1', 'e_r1', 'e_d1']),
+    // Wild (up): the wolf and nature magic
+    N('e_u1', 'improve', 0, -1, 'Thick Fur', 'Summon Wolf: the wolf has +25 % HP.', 300, ['e_u2'], { ability: 'summon_wolf' }),
+    plus('e_u2', 'CHA', 0, -2, 200, ['e_u3', 'e_u4']),
+    N('e_u3', 'unlock', -1, -3, 'Entangle', 'Unlocks Entangle (secondary).', 600, ['e_u5'], { ability: 'entangle', req: r('CHA', 14) }),
+    N('e_u4', 'improve', 1, -3, 'Swift Pounce', "Summon Wolf: the wolf's dash cooldown −2 s.", 400, ['e_u5'], { ability: 'summon_wolf' }),
+    N('e_u5', 'keystone', 0, -4, 'Pack Hunter', 'Enemies your wolf bit in the last 2 s take +20 % damage from you.', 1000, [], { req: r('WIL', 16) }),
     // Marksman (left)
-    plus('a_l1', 'DEX', -1, 0, 250, ['a_l2', 'a_l3']),
-    N('a_l2', 'improve', -2, -1, 'Long Shot', 'Shoot: range +15 %.', 350, ['a_l4'], { ability: 'shoot' }),
-    N('a_l3', 'prof', -2, 1, 'Medium Armor', 'Proficiency: medium armor.', 250, ['a_l4'], { icon: 'M' }),
-    N('a_l4', 'unlock', -3, 0, 'Fan of Knives', 'Unlocks Fan of Knives (primary).', 600, ['a_l5'], { ability: 'fan_of_knives', req: r('DEX', 15) }),
-    N('a_l5', 'keystone', -4, 0, 'Deadeye', 'Ranged hits on Slowed, Blind or sleeping enemies deal ×2.', 1200, [], { req: r('DEX', 18) }),
-    // Blades (right)
-    N('a_r1', 'unlock', 1, 0, 'Backstab', 'Unlocks Backstab (primary).', 500, ['a_r2', 'a_r3'], { ability: 'backstab', req: r('DEX', 16) }),
-    N('a_r2', 'improve', 2, -1, 'Twist the Knife', 'Backstab: "behind" widens to 90°.', 350, ['a_r4'], { ability: 'backstab' }),
-    N('a_r3', 'prof', 2, 1, 'Katana', 'Proficiency: katana.', 250, ['a_r4'], { icon: 'weapon_katana' }),
-    plus('a_r4', 'DEX', 3, 0, 350, []),
+    plus('e_l1', 'DEX', -1, 0, 250, ['e_l2', 'e_l3']),
+    N('e_l2', 'improve', -2, -1, 'Long Shot', 'Shoot: range +15 %.', 350, ['e_l4'], { ability: 'shoot' }),
+    N('e_l3', 'prof', -2, 1, 'Longbow', 'Proficiency: longbow.', 250, ['e_l4'], { icon: 'weapon_bow_2' }),
+    N('e_l4', 'unlock', -3, 0, 'Volley', 'Unlocks Volley (primary).', 600, ['e_l5'], { ability: 'volley', req: r('DEX', 15) }),
+    N('e_l5', 'keystone', -4, 0, 'Deadeye', 'Ranged hits on Slowed or sleeping enemies deal ×2.', 1200, [], { req: r('DEX', 18) }),
+    // Blade (right)
+    N('e_r1', 'unlock', 1, 0, 'Flanking Thrust', 'Unlocks Flanking Thrust (primary).', 500, ['e_r2', 'e_r3'], { ability: 'flanking_thrust', req: r('DEX', 16) }),
+    N('e_r2', 'improve', 2, -1, 'Find the Gap', 'Flanking Thrust: "behind" widens to 90°.', 350, ['e_r4'], { ability: 'flanking_thrust' }),
+    N('e_r3', 'prof', 2, 1, 'Katana', 'Proficiency: katana.', 250, ['e_r4'], { icon: 'weapon_katana' }),
+    plus('e_r4', 'DEX', 3, 0, 350, []),
     // Venom (down)
-    N('a_d1', 'unlock', 0, 1, 'Poison Coat', 'Unlocks Poison Coat (secondary).', 500, ['a_d2', 'a_d3'], { ability: 'poison_coat', req: r('WIL', 15) }),
-    N('a_d2', 'improve', -1, 2, 'Lingering Venom', 'Poison Coat: +3 s.', 300, ['a_d4'], { ability: 'poison_coat' }),
-    N('a_d3', 'resist', 1, 2, 'Mithridatism', '+20 % poison resistance.', 200, ['a_d4']),
-    N('a_d4', 'keystone', 0, 3, 'Venomancer', 'Poisoned enemies take +15 % damage from you.', 1000, [], { req: r('WIL', 16) }),
+    N('e_d1', 'unlock', 0, 1, 'Poison Coat', 'Unlocks Poison Coat (secondary).', 500, ['e_d2', 'e_d3'], { ability: 'poison_coat', req: r('WIL', 15) }),
+    N('e_d2', 'improve', -1, 2, 'Lingering Venom', 'Poison Coat: +3 s.', 300, ['e_d4'], { ability: 'poison_coat' }),
+    N('e_d3', 'resist', 1, 2, 'Forest Blood', '+20 % poison resistance.', 200, ['e_d4']),
+    N('e_d4', 'keystone', 0, 3, 'Venomancer', 'Poisoned enemies take +15 % damage from you.', 1000, [], { req: r('WIL', 16) }),
   ],
 };
 
@@ -287,8 +288,8 @@ export const ITEMS: Record<string, Item> = {
   ember_staff: { id: 'ember_staff', name: 'Ember Staff', slot: 'melee', icon: 'weapon_red_magic_staff', kind: 'Staff (melee, STR)', base: 'damage 6 · speed 1.0/s · arc 1.6 · push 0', props: [{ text: '+25 % heat share (flaming)', magical: true }, { text: 'Light: orange, 2 tiles', magical: true }], req: [] },
   knight_sword: { id: 'knight_sword', name: 'Knight Sword', slot: 'melee', icon: 'weapon_knight_sword', kind: 'Sword (melee, STR)', base: 'damage 20 · as today', props: [], req: [] },
   great_axe: { id: 'great_axe', name: 'Great Axe', slot: 'melee', icon: 'weapon_double_axe', kind: 'Axe (melee, STR)', base: 'damage 32 · as today', props: [], req: [] },
-  knife: { id: 'knife', name: 'Knife', slot: 'melee', icon: 'weapon_knife', kind: 'Dagger (finesse, DEX)', base: 'damage 18 · as today', props: [], req: [] },
-  crossbow: { id: 'crossbow', name: 'Crossbow', slot: 'ranged', icon: 'weapon_bow', kind: 'Crossbow (ranged, DEX)', base: 'damage 16 · as today', props: [], req: [] },
+  rapier: { id: 'rapier', name: 'Rapier', slot: 'melee', icon: 'weapon_duel_sword', kind: 'Duelling sword (finesse, DEX)', base: 'damage 18 · as today', props: [], req: [] },
+  elven_bow: { id: 'elven_bow', name: 'Elven Bow', slot: 'ranged', icon: 'weapon_bow', kind: 'Bow (ranged, DEX)', base: 'damage 16 · as today', props: [], req: [] },
   silk_robe: { id: 'silk_robe', name: 'Silk Robe', slot: 'armor', icon: 'Ar', kind: 'Cloth armor', base: '+5 % physical resistance · weight +1', props: [{ text: '+10 % magical resistance', magical: true }], req: [] },
   ring_embers: { id: 'ring_embers', name: 'Ring of Embers', slot: 'ring', icon: 'o', kind: 'Ring', base: '–', props: [{ text: '+15 % heat resistance', magical: true }], req: [] },
   band_vigor: { id: 'band_vigor', name: 'Band of Vigor', slot: 'ring', icon: 'o', kind: 'Ring', base: '–', props: [{ text: '+1 CON', magical: true }], req: [] },
@@ -347,6 +348,20 @@ export const BRUNHILD: MockChar = {
   bag: [],
   primary: 'strike',
   secondary: 'charge',
+};
+
+export const SHADE: MockChar = {
+  name: 'Shade',
+  cls: 'ElvenRanger',
+  xp: 95,
+  totalXp: 610,
+  coins: 12,
+  bought: {},
+  nodes: ['e0', 'e_u1', 'e_l1'],
+  equip: { melee: 'rapier', ranged: 'elven_bow' },
+  bag: [],
+  primary: 'shoot',
+  secondary: 'summon_wolf',
 };
 
 /** Attribute total and its sources: class, shop, tree, items. */

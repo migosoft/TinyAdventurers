@@ -1,10 +1,10 @@
 // Throwaway spike: mock screens of the progression redesign, for the spec's screenshots
-// (`?uidemo=roster|create|sheet|tree|tree-barbarian|equipment|loadout|room`, no server needed;
+// (`?uidemo=roster|create|sheet|tree|tree-barbarian|tree-ranger|equipment|loadout|room`, no server needed;
 // tools/e2e/ui-shots.mjs takes the pictures). Nothing here is wired to the game.
 import type { ClassId } from '../generated/ClassId';
 import { loadAtlas, spritePreview, type Atlas } from '../ui/atlas';
 import { CLASSES, classFigure, FIG } from '../ui/classes';
-import { BOSS_TEXT, CLASS_TEXT } from '../ui/text';
+import { BOSS_TEXT, CLASS_TEXT, className } from '../ui/text';
 import { logoHeader } from '../ui/logo';
 import {
   ABILITY,
@@ -13,6 +13,7 @@ import {
   attrPrice,
   attrSources,
   BRUNHILD,
+  SHADE,
   CLASS_START,
   hp,
   ITEMS,
@@ -59,6 +60,8 @@ export async function showUiDemo(ui: HTMLElement, screen: string): Promise<void>
       return hub(root, MERLIN, screen);
     case 'tree-barbarian':
       return hub(root, BRUNHILD, 'tree');
+    case 'tree-ranger':
+      return hub(root, SHADE, 'tree');
     default:
       return roster(root);
   }
@@ -159,7 +162,7 @@ function roster(root: HTMLElement): void {
   for (const [name, cls, xp, total, coins] of chars) {
     const card = h(`<button class="ud-char c-${cls.toLowerCase()}"></button>`);
     card.append(classFigure(atlas, cls, 4));
-    card.append(h(`<div class="cinfo"><b>${name}</b><small>${cls}</small><small>${xp} XP <span class="muted">(${total} earned)</span></small><small>${coin}${coins}</small></div>`));
+    card.append(h(`<div class="cinfo"><b>${name}</b><small>${className(cls)}</small><small>${xp} XP <span class="muted">(${total} earned)</span></small><small>${coin}${coins}</small></div>`));
     grid.append(card);
   }
   grid.append(h(`<button class="ud-char ud-new"><span class="plus">+</span><b>New character</b><small>5 slots left</small></button>`));
@@ -178,7 +181,7 @@ function create(root: HTMLElement): void {
     const card = h(`<button class="ud-class c-${cls.toLowerCase()}${cls === 'Wizard' ? ' selected' : ''}"></button>`);
     const fig = classFigure(atlas, cls, 4);
     card.append(h(`<div class="ud-classhead"></div>`));
-    card.firstElementChild!.append(fig, h(`<div><b>${cls}</b><small>${CLASS_TEXT[cls].blurb}</small></div>`));
+    card.firstElementChild!.append(fig, h(`<div><b>${className(cls)}</b><small>${CLASS_TEXT[cls].blurb}</small></div>`));
     card.append(
       h(`<div class="ud-attrs">${ATTRS.map((a) => `<span class="${s.attrs[a] === max ? 'hi' : s.attrs[a] === min ? 'lo' : ''}"><i>${a}</i>${s.attrs[a]}</span>`).join('')}</div>`),
     );
@@ -207,7 +210,7 @@ function create(root: HTMLElement): void {
 function hub(root: HTMLElement, c: MockChar, tab: Tab): void {
   const head = h(`<div class="ud-bar ud-w c-${c.cls.toLowerCase()}"><button>&lt; Roster</button><div class="ud-who"></div>
     <span class="ud-purse"><b>${c.xp} XP</b><span>${coin}${c.coins}</span></span><button class="primary">To the dungeon</button></div>`);
-  head.querySelector('.ud-who')!.append(classFigure(atlas, c.cls, 2), h(`<div class="cinfo"><b>${c.name}</b><small>${c.cls}</small></div>`));
+  head.querySelector('.ud-who')!.append(classFigure(atlas, c.cls, 2), h(`<div class="cinfo"><b>${c.name}</b><small>${className(c.cls)}</small></div>`));
   const tabs = h(`<div class="ud-tabs ud-w">${TABS.map(([t, n]) => `<button data-tab="${t}" class="${t === tab ? 'on' : ''}">${n}</button>`).join('')}</div>`);
   const body = h(`<div class="ud-body ud-w"></div>`);
   root.append(head, tabs, body);
@@ -422,7 +425,7 @@ function room(root: HTMLElement): void {
   const party: [string, ClassId, string[], string, string, string, boolean][] = [
     ['Brunhild', 'Barbarian', ['great_axe'], 'strike', 'charge', 'host', true],
     ['Merlin', 'Wizard', ['ember_staff'], 'frost_shard', 'fireball', 'you', false],
-    ['Shade', 'ElvenRanger', ['knife', 'crossbow'], 'shoot', 'hide', 'ready', true],
+    ['Shade', 'ElvenRanger', ['rapier', 'elven_bow'], 'shoot', 'summon_wolf', 'ready', true],
     ['Aldric', 'Paladin', ['knight_sword'], 'judgement', 'holy_light', 'not ready', false],
   ];
   root.append(h(`<h1>Brunhild's run</h1>`));
@@ -431,7 +434,7 @@ function room(root: HTMLElement): void {
       const me = status === 'you';
       const ab = (id: string, key: string) =>
         me ? `<button class="ud-abpick">${abIcon(ABILITY[id])}<kbd>${key}</kbd>${ABILITY[id].name}<i>v</i></button>` : `<span class="ud-abshow">${abIcon(ABILITY[id])}<kbd>${key}</kbd>${ABILITY[id].name}</span>`;
-      return `<li class="c-${cls.toLowerCase()}${me ? ' me' : ''}"><span class="pn">${name}${status === 'host' ? ' *' : ''}</span><span class="pc">${cls}</span>
+      return `<li class="c-${cls.toLowerCase()}${me ? ' me' : ''}"><span class="pn">${name}${status === 'host' ? ' *' : ''}</span><span class="pc">${className(cls)}</span>
         <span class="wp" data-w="${weapons.join(',')}"></span>${ab(p, 'LMB')}${ab(s, 'RMB')}
         <span class="${status === 'host' || status === 'ready' ? 'ok' : 'wait'}">${me ? 'not ready' : status}</span></li>`;
     })

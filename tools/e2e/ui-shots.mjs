@@ -1,12 +1,12 @@
 // Screenshots of the progression design's mock screens (?uidemo=<screen>, client/src/uidemo/).
 // Usage: node ui-shots.mjs [baseUrl] [outDir] [screen,screen,...]
 //   e.g. BROWSER=/usr/bin/brave-browser node ui-shots.mjs http://localhost:5173/ ../../docs/superpowers/specs/img/2026-10-18-progression
-// Screens: roster, create, sheet, tree, tree-barbarian, equipment, loadout, room.
+// Screens: roster, create, sheet, tree, tree-barbarian, tree-ranger, equipment, loadout, room.
 import { chromium } from 'playwright-core';
 
 const base = process.argv[2] ?? 'http://localhost:5173/';
 const out = process.argv[3] ?? '.';
-const screens = (process.argv[4] ?? 'roster,create,sheet,tree,tree-barbarian,equipment,loadout,room').split(',');
+const screens = (process.argv[4] ?? 'roster,create,sheet,tree,tree-barbarian,tree-ranger,equipment,loadout,room').split(',');
 const b = await chromium.launch({
   executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   headless: true,
