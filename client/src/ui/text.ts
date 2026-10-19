@@ -67,7 +67,8 @@ function pct(v: number): string {
 }
 
 /** One ASCII letter per status effect (the HUD's pixel font has no symbol glyphs). */
-const EFFECT_GLYPH: Record<number, string> = {
+/** One letter per effect; a new effect needs its glyph here (effectGlyph.test.ts checks). */
+export const EFFECT_GLYPH: Record<number, string> = {
   [EFFECT.Blind]: 'B',
   [EFFECT.Sleep]: 'Z',
   [EFFECT.Petrified]: 'P',
