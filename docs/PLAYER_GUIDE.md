@@ -172,7 +172,7 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 
 - Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
 - The Red Demon's claws and the Red Dragon's claws are partly fire.
-- Fire also sets things **burning** and poison **poisons** (see Status effects): a creature that resists the element completely is immune to the effect.
+- Fire also sets things **burning** and poison **poisons** (see Status effects): a creature that resists the type completely never takes the effect.
 - Your own **armour** upgrade still works on top of all this.
 
 ## Water, lava and chasms
@@ -252,12 +252,12 @@ Some attacks do more than damage. Your own effects show as small icons with the 
 | **I** | Frozen | Ice: you cannot move, act or turn for 2 seconds, and the cold hurts a little |
 | **X** | Poisoned | Poison eats at you for 4 seconds |
 
-A sleeping or petrified hero cannot dodge, and a blind one cannot see what is coming, so the party's job is to keep the enemies off them. The final bosses resist some effects: all of them are immune to sleep. The effects end by themselves after a few seconds.
+A sleeping or petrified hero cannot dodge, and a blind one cannot see what is coming, so the party's job is to keep the enemies off them. The final bosses resist some effects: all of them resist sleep completely, and some shorten other effects. The effects end by themselves after a few seconds.
 
-The last three come from elements. A hit that is **at least half heat, cold or poison** puts the matching effect on whoever it hits, hero or enemy: fireballs, fire bolts, barrel blasts and the dragon's fire burn, and so does **lava**. The damage over time hits twice a second, and a creature that resists the element takes less of it.
-- **Burning:** water puts it out, in a pool or in the shallows. Fire and ice cancel each other: a fire hit on a frozen creature thaws it instead of burning it, and a cold hit on a burning one puts the fire out. **Demons and the Red Dragon are immune** to burning (they resist heat completely), so use something else on them. A hero who burns a monster to death still gets the kill.
+The last three come from damage types. A hit that is **at least half heat, cold or poison** puts the matching effect on whoever it hits, hero or enemy: fireballs, fire bolts, barrel blasts and the dragon's fire burn, and so does **lava**. The damage over time hits twice a second, and a creature that resists the type takes less of it.
+- **Burning:** water puts it out, in a pool or in the shallows. Fire and ice cancel each other: a fire hit on a frozen creature thaws it instead of burning it, and a cold hit on a burning one puts the fire out. **Demons and the Red Dragon never burn** (they resist heat completely), so use something else on them. A hero who burns a monster to death still gets the kill.
 - **Frozen:** rooted and unable to act or turn until the ice ends, so a frozen hero needs the party to cover them. Fire thaws it at once. Nothing freezes anyone yet, so only the debug key gives it so far.
-- **Poisoned:** no other effect, just the damage. **Undead are immune** (they resist poison completely). Nothing poisons anyone yet either.
+- **Poisoned:** no other effect, just the damage. **Undead are never poisoned** (they resist poison completely). Nothing poisons anyone yet either.
 
 ## Death, victory and defeat
 

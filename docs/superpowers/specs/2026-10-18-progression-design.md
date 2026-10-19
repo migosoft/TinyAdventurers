@@ -2,7 +2,7 @@
 
 **Status:** spec, settled with the user on 2026-10-18 (brainstorming; decisions in [the brief](../plans/2026-10-18-progression-design-brief.md); the builder check's questions answered by the user the same day). **Updated 2026-10-19 after merging the [Elven Ranger](2026-10-16-elven-ranger-design.md)** (the Assassin became the Elven Ranger, Hide is gone, the Elf and Magical Beast races exist, the Dire Wolf is the first ally); see "Changes for the Elven Ranger" at the end. Marks: "(my call)" = decided by the agent; **the user approved all of them on 2026-10-18**; everything else is the user's. Next: an implementation plan (superpowers:writing-plans).
 
-**Builds on:** [damage types and objects](2026-10-14-damage-types-and-objects-design.md) (resistances, `DamageSplit`, pushes), [effects](2026-10-15-effects-design.md) (effects, responses, `OnHit`), [light sources](2026-10-15-light-sources-design.md) (`LightKind`), [vision](2026-10-15-vision-darkvision-design.md) (sight per entity type).
+**Builds on:** [damage types and objects](2026-10-14-damage-types-and-objects-design.md) (resistances, `DamageSplit`, pushes), [effects](2026-10-15-effects-design.md) (effects, `OnHit`; responses since replaced by effect resistances, TODO 4b), [light sources](2026-10-15-light-sources-design.md) (`LightKind`), [vision](2026-10-15-vision-darkvision-design.md) (sight per entity type).
 
 **Mock screens:** `?uidemo=<screen>` (throwaway spike in `client/src/uidemo/`, mock data, no server). Screenshots: `tools/e2e/ui-shots.mjs` into `img/2026-10-18-progression/`. The ability and tree tables below are printed from the spike's `uidemo/data.ts` (`cd client && npx tsx src/uidemo/spec-tables.ts`), so the pictures and the tables agree.
 
@@ -25,7 +25,7 @@ One **character sheet**, built at run start from all of these, is the only thing
 - **Attribute:** STR, DEX, CON, INT, WIL, CHA. The UI and the code never say "ability score".
 - **Ability:** only an LMB **primary** or RMB **secondary** ability. "Ability" never means an Attribute.
 - **Attribute shop:** where XP buys Attribute points (the Sheet tab).
-- **Race:** what `EntityType` becomes (resistances, sight, bonuses, immunities, natural attack).
+- **Race:** what `EntityType` becomes (damage and effect resistances, sight, bonuses, natural attack).
 - **Weapon kind** (Sword, Bow, …) and **weapon category** (Melee, Finesse, Ranged, Thrown, Natural).
 - **Sheet:** the resolved numbers of one hero or enemy for one run.
 
@@ -113,12 +113,12 @@ pub struct RaceDef {
     pub res: Resistances,
     pub vision: f64, pub darkvision: f64,
     pub attrs: Attributes,                 // bonuses, added to the class or the stat block
-    pub responses: EffectResponses,        // hard immunities (override §5); Elf, Magical Beast: Sleep
+    pub effect_res: EffectResistances,     // % per effect, after the save (§5); Elf, Magical Beast: Sleep 100 %
     pub natural: &'static [WeaponId],      // natural attacks; empty for Object
 }
 ```
 
-`Adjust` (an entity's own changes) stays as it is. `Profile` gains the race's natural attacks and responses.
+`Adjust` (an entity's own changes) stays as it is. `Profile` gains the race's natural attacks (its effect resistances are already there, TODO 4b).
 
 | Race | Natural attack | Resistances, sight | Members |
 |---|---|---|---|
@@ -130,12 +130,12 @@ pub struct RaceDef {
 | Undead | Unarmed strike | as today | Skeletons, lich |
 | Demon | Claws (20 % heat, as today's melee split) | as today | Imp, chort, Red Demon |
 | Dragon | Bite, claws, tail | as today | Red Dragon |
-| Elf | Unarmed strike | as today (10 % poison; vision 18, darkvision 1/3); **DEX +2**; immune to Sleep | Elven Ranger |
-| Magical Beast | Bite (80 % physical, 20 % magical, as today's melee split) | as today (10 % poison, 10 % magical; vision 18, darkvision 1); immune to Sleep | Dire Wolf |
+| Elf | Unarmed strike | as today (10 % poison; vision 18, darkvision 1/3); **DEX +2**; Sleep resistance 100 % | Elven Ranger |
+| Magical Beast | Bite (80 % physical, 20 % magical, as today's melee split) | as today (10 % poison, 10 % magical; vision 18, darkvision 1); Sleep resistance 100 % | Dire Wolf |
 | Object | none | as today | Chests, barrels |
 
 - **Attribute bonuses:** only the **Elf** has one: DEX +2 (the user, 2026-10-19). The Elven Ranger's class gives DEX 13, so her start total stays 15 and she plays like today. The other races have none (my call: the stat blocks in §7 already hold the final values); e.g. Undead CON +2 can come when a hero race needs it.
-- **Hard immunities:** today's boss `responses` stay where they are (`bosses.rs`). The race carries its own: Elf and Magical Beast are immune to Sleep (today's `entity_types::responses`, which moves into `RaceDef.responses`).
+- **Effect resistances** (TODO 4b, built 2026-10-19): one % per effect, next to the damage resistances. The bosses' sit in their `Adjust` (`bosses.rs`); the race carries its own (`RaceDef.effect_res`): Elf and Magical Beast resist Sleep 100 %.
 - The race's `melee: DamageSplit` moves to its natural weapons.
 
 ## 4. Weight and pushes
@@ -157,13 +157,13 @@ pub struct RaceDef {
 - **Duration** = `base × max(0, 1 + (power − save) / 20)` (my call).
   - **Power:** the source's key Attribute: INT for spells, CHA for innate magic; for non-magical effects the weapon wielder's key Attribute for that weapon (a poisoned blade), or the ability's stated power (War Cry: STR), or a fixed 10 for terrain (burning ground).
   - **Save:** WIL against magical effects, CON against non-magical ones.
-  - A save 20 points above the power gives 0 s: immune.
-- **Hard immunities** (race, boss `responses`, items, tree nodes) override the formula. `Reduced` (50 %) still multiplies after it.
+  - A save 20 points above the power gives 0 s: the effect does not apply.
+- **Effect resistance** (race, boss, items, tree nodes, effects) multiplies the time after the formula by `1 − r`; at 100 % the effect is refused. A damage-type effect (Burning, Frozen, Poisoned) has none of its own: its type's damage resistance resists it.
 - **Effects from allies** (heals, buffs such as Haste) are never reduced.
 - `OnHit` gains `magical: bool` and `power: i32` (filled by the sheet when the hit is built). `apply_effect_from` takes the power and reads the target's save and scales the time; `apply_effect` is unscaled (debug and tests).
-- **Element effects** (Burning, Frozen and so on, from a damage split; decided by the user, 2026-10-19): non-magical (save CON), at the power of the source's governing Attribute but never below 10: `max(10, governing)`. The Wizard's Fireball burns at INT, the imps', chorts', demon's and dragon's fire at CHA (innate), the summoner's fire bolt at INT (a spell), a hero's melee and the wolf's bite at STR, finesse and ranged weapons at DEX. Sources without one (lava, barrels, burning ground, effect ticks, a shot whose owner is unknown) stay at 10.
-- **Cancels before resistance** (the user, 2026-10-19): an effect cancels its opposite even when the new effect is resisted (a fire hit on a heat-immune creature still thaws its ice).
-- **Examples:** the Wizard's Sleep (INT 15) on a goblin (WIL 8) lasts ×1.35; the lich's Sleep mist (INT 22) on the Paladin (WIL 12) ×1.5. The Elven Ranger and her wolf never fall asleep (race immunity).
+- **Damage-type effects** (Burning, Frozen and so on, from a damage split; decided by the user, 2026-10-19): non-magical (save CON), at the power of the source's governing Attribute but never below 10: `max(10, governing)`. The Wizard's Fireball burns at INT, the imps', chorts', demon's and dragon's fire at CHA (innate), the summoner's fire bolt at INT (a spell), a hero's melee and the wolf's bite at STR, finesse and ranged weapons at DEX. Sources without one (lava, barrels, burning ground, effect ticks, a shot whose owner is unknown) stay at 10.
+- **Cancels before resistance** (the user, 2026-10-19): an effect cancels its opposite even when the new effect is resisted (a fire hit on a creature that resists heat completely still thaws its ice).
+- **Examples:** the Wizard's Sleep (INT 15) on a goblin (WIL 8) lasts ×1.35; the lich's Sleep mist (INT 22) on the Paladin (WIL 12) ×1.5. The Elven Ranger and her wolf never fall asleep (race Sleep resistance 100 %).
 
 ## 6. Weapons and abilities
 
@@ -267,7 +267,7 @@ Each has a category, uses, requirements, stats, damage types and light from the 
 | Paladin | **Judgement** | primary | Innate | none | yes | CHA 16 | 18 magical | cd 0.9 s, range 150, speed 220, radius 3 | Holy |
 | Paladin | **Smite** | primary | WeaponAttack | melee | no | CHA 15, Sword or Mace or Hammer | weapon ×1.4, +30 % magical share | the weapon, attack time ×1.6 | Holy, 0.3 s flash on hit |
 | Paladin | **Consecrate** | secondary | Innate | none | no | CHA 15 | 8 magical every 0.5 s | cd 12 s; ground circle at your feet, radius 40, 5 s | Holy, while it lasts |
-| Paladin | **Purify** | secondary | Innate | none | no | WIL 14 | – | cd 15 s; you and allies within 64 px: negative effects removed, immune to hostile magical effects 3 s | Holy, 0.3 s flash |
+| Paladin | **Purify** | secondary | Innate | none | no | WIL 14 | – | cd 15 s; you and allies within 64 px: negative effects removed, hostile magical effects resisted 100 % for 3 s | Holy, 0.3 s flash |
 | Barbarian | **Whirl** | primary | Technique | melee | no | DEX 14 | weapon ×0.75 | full circle (arc 2π), attack time ×1.3 | the weapon |
 | Barbarian | **Hurl** | primary | WeaponAttack | ranged | yes | Throwing axe | the throwing axe | the throwing axe (thrown: STR) | the weapon |
 | Barbarian | **War Cry** | secondary | Technique | none | no | STR 16 | – | cd 12 s, radius 56: enemies Slowed 3 s (power STR, save CON), allies Accelerated 3 s | none |
@@ -281,7 +281,7 @@ Notes:
 - **Projectiles:** Frost Shard reuses `EntityKind::FrostBolt` (cold, its light tint exists). Chain Spark and Judgement are new projectile kinds (Chain Spark: the Missile's look; Judgement: Holy light). Hurl uses its weapon's projectile (the throwing axe sprite); Volley fires three of the bow's arrows.
 - **Strike** and **Shoot** show "the weapon" because their numbers come from the equipped weapon.
 - **Chain Spark** jumps to the nearest enemy not yet hit within 48 px of the last target; damage ×0.7 per jump; jumps never return.
-- **Purify**'s immunity is an effect-immunity property for 3 s (my call: implemented as a positive effect `Warded` with `EffectResponse::Immune` for every magical negative effect).
+- **Purify**'s ward is a magical-effect resistance for 3 s (my call: a positive effect `Warded` whose mods are `Stat::ResistEffect(kind)` +1.0 for every magical negative effect, i.e. the effects saved with WIL; plan 3 fixes the exact set).
 - **Consecrate** is a ground area like today's `FirePatch` (a new `EntityKind::HolyGround`), damaging enemies only.
 - **Entangle** is a ground area like `FirePatch` (a new `EntityKind::Roots`, aimed like the Fireball) that slows enemies inside every 0.5 s (a 1 s Slowed, refreshed); it never hurts allies or the wolf.
 - **Flanking Thrust** reads the target's facing: monsters already face their target, so an enemy busy with the wolf shows its back to the ranger.
@@ -338,7 +338,7 @@ Notes:
 - **Enemy weapons are their own item defs** (my call: "Goblin Bow", "Orc Bow", … sharing sprites), so each enemy calibrates exactly even when two share a weapon kind with different numbers today (goblin bow 6, orc bow 10).
 - **Enemy HP:** base HP = today's HP − 5 × (CON − 10), so the total stays. **Enemy move speed:** base = today's speed / the CON factor, so it stays too (bosses included, wherever their scripts read a speed).
 - **The melee rule for enemies** (my call, from the user's "every entity always has a melee fallback"): an enemy whose only attack is ranged (archers, necromancer, summoner, disciple) switches to its melee weapon or natural attack when a hero is within its reach. **Unarmed strike** base stats (my call): damage 3 physical, 1.0 attack/s, arc 1.4, push 0, scaled by STR. This is new behaviour: run fingerprints change in step 4, deliberately. Imps and chorts already do this through `alt`; they keep it.
-- **Bosses** (my call): their scripts in `run/bosses/*.rs` keep their constants and behaviour. The boss sheet supplies only HP, weight, Attributes (for effect power and saves) and responses. The melee rule does not touch boss scripts. Moving boss attacks onto weapons is a later refactor, not this spec.
+- **Bosses** (my call): their scripts in `run/bosses/*.rs` keep their constants and behaviour. The boss sheet supplies only HP, weight, Attributes (for effect power and saves) and effect resistances. The melee rule does not touch boss scripts. Moving boss attacks onto weapons is a later refactor, not this spec.
 - **The Dire Wolf** (decided 2026-10-19) has a stat block in `defs/companions.rs` like an enemy's: race Magical Beast (with today's 20 % extra cold resistance as its `Adjust`), the Attributes above (my call, after the D&D dire wolf) and weight 10. They give its saves (WIL 12, CON 15) and its push power (STR 17: its bite and dash push an orc, not an ogre). Its HP (80), speed, bite and dash keep today's `WOLF_*` numbers: base HP and speed are worked back like an enemy's, they do not scale with the party, and its bite is not a weapon until plan 3. Only Thick Fur and Swift Pounce (§9) change it.
 - Overkill piercing (§6.5) applies to enemies' ranged weapons too. Enemy projectiles today never pierce; with overkill they could kill a hero and fly on (rare; accepted).
 
@@ -355,16 +355,16 @@ pub struct ItemDef { pub id: ItemId, pub name: &'static str, pub sprite: &'stati
 pub struct ItemProperty { pub kind: PropKind, pub magical: bool }
 pub enum PropKind {
     DamageShare(DamageType, f64), OnHit(OnHit), Light(LightKind), Resist(DamageType, f64), Attr(Attr, i32),
-    EffectImmunity(EffectKind), Weight(f64), MoveSpeed(f64),
-    Aura { radius: f64, grant: &'static PropKind },   // allies inside get `grant` (e.g. EffectImmunity, MaxHp)
+    EffectResist(EffectKind, f64), Weight(f64), MoveSpeed(f64),
+    Aura { radius: f64, grant: &'static PropKind },   // allies inside get `grant` (e.g. EffectResist, MaxHp)
     MaxHp(f64),
     GrantAbility { id: AbilityId, mods: &'static [AbilityMod], waive_attrs: bool },   // adds the ability to the loadout pool while worn
 }
 ```
 
 - **Slots:** melee weapon (always filled: the class starter), ranged weapon (optional), armor, ring ×2, shoes, belt, off-hand (reserved for shields; shown hatched).
-- **Armor:** physical resistance %, weight, optional properties (magical examples: an aura that makes everyone in its radius immune to an effect, or gives them more HP). Proficiency by `ArmorClass`.
-- **Rings, shoes and belts** (the user): magical properties only. They are the ways to attach magical effects to a character for as long as they are worn: any `PropKind` (Attribute points, resistances, move speed, effect immunity, light, an aura, max HP). No potions and no consumables. Equipment is fixed for the run, so their effects hold for the whole run.
+- **Armor:** physical resistance %, weight, optional properties (magical examples: an aura that gives everyone in its radius 100 % resistance to an effect, or gives them more HP). Proficiency by `ArmorClass`.
+- **Rings, shoes and belts** (the user): magical properties only. They are the ways to attach magical effects to a character for as long as they are worn: any `PropKind` (Attribute points, resistances, move speed, effect resistance, light, an aura, max HP). No potions and no consumables. Equipment is fixed for the run, so their effects hold for the whole run.
   - `ItemBase::Ring`, `Shoes` and `Belt` carry no stats of their own; an item def for one of these slots with a non-magical property fails a data test.
 - **Extensibility:** a new item is one `ItemDef` entry; a new property is one `PropKind` variant plus its line in the sheet builder (one exhaustive `match`). The user wants an "object-oriented" backend; the repo's idiom is typed data in `defs/*.rs` with exhaustive matches, which gives the same safety without trait objects (traits only where they help, e.g. none needed here).
 - **Items that grant abilities** (the user): `PropKind::GrantAbility(id)` adds an ability to the character's loadout pool **while the item is worn**. The pool = class start abilities + tree unlocks + abilities granted by equipped items.
@@ -439,8 +439,8 @@ pub enum NodeKind { Start, Attr(Attr, i32), Unlock(AbilityId), Improve(AbilityId
 | `p_l1` | -1,0 | unlock | Purify | Unlocks Purify (secondary). | 500 | WIL 14 | `p_l2` `p_l3` |
 | `p_l2` | -2,-1 | attr | +1 WIL | +1 WIL | 160 | – | `p_l4` |
 | `p_l3` | -2,1 | resist | Warded | +20 % magical resistance. | 300 | – | `p_l4` |
-| `p_l4` | -3,0 | improve | Lasting Ward | Purify: immunity 3 s → 5 s. | 400 | – | `p_l5` |
-| `p_l5` | -4,0 | keystone | Unshaken | Immune to Sleep (a hard immunity). | 1000 | WIL 16 | – |
+| `p_l4` | -3,0 | improve | Lasting Ward | Purify: ward 3 s → 5 s. | 400 | – | `p_l5` |
+| `p_l5` | -4,0 | keystone | Unshaken | Sleep resistance 100 %. | 1000 | WIL 16 | – |
 | `p_r1` | 1,0 | improve | Honed Edge | Strike: +10 % damage. | 300 | – | `p_r2` `p_r3` |
 | `p_r2` | 2,-1 | attr | +1 STR | +1 STR | 250 | – | `p_r4` |
 | `p_r3` | 2,1 | unlock | Smite | Unlocks Smite (primary). | 500 | CHA 15 | `p_r4` |
@@ -465,7 +465,7 @@ pub enum NodeKind { Start, Attr(Attr, i32), Unlock(AbilityId), Improve(AbilityId
 | `b_l2` | -2,-1 | improve | Thunderous | War Cry: radius +30 %. | 350 | – | `b_l4` |
 | `b_l3` | -2,1 | attr | +1 CHA | +1 CHA | 200 | – | `b_l4` |
 | `b_l4` | -3,0 | improve | Bowling Charge | Charge: carries +4 STR for pushes. | 400 | – | `b_l5` |
-| `b_l5` | -4,0 | keystone | Juggernaut | +4 weight; immune to Slowed. | 1000 | CON 16 | – |
+| `b_l5` | -4,0 | keystone | Juggernaut | +4 weight; Slowed resistance 100 %. | 1000 | CON 16 | – |
 | `b_r1` | 1,0 | prof | Heavy Armor | Proficiency: heavy armor. | 300 | – | `b_r2` `b_r3` |
 | `b_r2` | 2,-1 | unlock | Hurl | Unlocks Hurl (primary). | 500 | DEX 13 | `b_r4` |
 | `b_r3` | 2,1 | prof | Mace | Proficiency: mace. | 200 | – | `b_r4` |
@@ -510,7 +510,7 @@ pub fn hero_sheet(class: ClassId, p: &Progress) -> Result<Sheet, LoadoutError>;
 pub fn enemy_sheet(t: EnemyType) -> Sheet;   // and boss_sheet(b)
 pub struct Sheet {
     pub attrs: Attributes, pub hp: f64, pub speed: f64, pub weight: f64, pub res: Resistances,
-    pub responses: EffectResponses, pub sight: Sight, pub reach: f64, pub light: Option<LightKind>,
+    pub effect_res: EffectResistances, pub sight: Sight, pub reach: f64, pub light: Option<LightKind>,
     pub melee: ResolvedWeapon, pub ranged: Option<ResolvedWeapon>,
     pub primary: ResolvedAbility, pub secondary: ResolvedAbility, pub fallback: ResolvedAbility, // the melee-rule strike
     pub auras: Vec<Aura>, pub keystones: Vec<Keystone>,
@@ -609,7 +609,7 @@ Everything before the dungeon is redone; no backwards compatibility. The screens
 - **Calibration (step 2):** for every class at its start, every resolved number equals today's (cooldowns, damage, arc, range, speeds, radius, duration, HP, move speed); for every enemy and boss the same for HP and attacks. Exceptions asserted explicitly: Charge 25.6, Great Axe reach 22.
 - **Weapon kinds:** `category()` covers every `WeaponKind::ALL` member (the `match` itself enforces it at compile time; the test documents the table).
 - **Pushes:** no push at STR ≤ weight; full push at STR ≥ weight + 4; the barrel moves for the Wizard's E; bosses never move.
-- **Effects:** the duration formula, the two brief examples (×1.35, ×1.4), immunity at save ≥ power + 20, hard immunities override, allied buffs unreduced.
+- **Effects:** the duration formula, the two brief examples (×1.35, ×1.4), 0 s at save ≥ power + 20, effect resistance multiplies after, allied buffs unreduced.
 - **Melee rule:** a ranged primary with an enemy in reach strikes with the melee weapon (the Wizard's staff, a natural attack without a weapon); a ranged secondary does nothing and keeps its cooldown; area and self abilities still fire.
 - **Overkill:** a shot that kills carries the rest after resistances; a non-kill stops; an immune target stops; spells stop at the first enemy; Piercing Missiles lets one through.
 - **Weapon effects:** a flaming sword's heat share rides on Strike and Charge, not on Holy Light; a heat hit lights a torch.
@@ -646,7 +646,7 @@ TECHNICAL.md: replace §11a's upgrade shop with Attributes, the sheet, trees, it
 18. Purify as a positive `Warded` effect; Consecrate as a `HolyGround` area.
 19. `DebugGrantItem` for testing items.
 20. Static progression data exported by `export.rs` to `generated/progression.ts`.
-21. Enemies with only ranged attacks punch or strike in melee (unarmed strike: 3 damage, 1.0/s, arc 1.4); bosses keep their scripted constants and take only HP, weight, Attributes and responses from their sheet.
+21. Enemies with only ranged attacks punch or strike in melee (unarmed strike: 3 damage, 1.0/s, arc 1.4); bosses keep their scripted constants and take only HP, weight, Attributes and effect resistances from their sheet.
 22. In the run, heroes are drawn with their equipped weapons; the new abilities reuse existing visuals (§13).
 23. The v1 refund is in full even though it can buy most of a tree at once (only test characters exist today).
 24. CON gives ±1 % move speed per point (the user's idea, the size is mine); class and enemy base speeds are worked back so today's speeds stay.
@@ -667,10 +667,10 @@ The [Elven Ranger](2026-10-16-elven-ranger-design.md) was merged into `main` aft
 2. **The tree and abilities:** the agent drafts them; the Hide parts are replaced (§6.6, §9). Fan of Knives → **Volley** (the starter bow, no throwing knives: the restyle was dropped). Backstab → **Flanking Thrust** (the rapier; the wolf turns enemies around). Smoke Bomb → **Entangle** (elven nature magic, innate, CHA). Poison Coat stays. The Hide branch becomes the **Wild** branch: Thick Fur, +1 CHA, Entangle, Swift Pounce, the keystone **Pack Hunter**. Medium Armor → Longbow. Shadow Step is gone (Accelerated keeps two sources). Deadeye no longer names Blind (Smoke Bomb was its only hero source). **Draft, for the user's approval before plan 4.**
 3. **The Dire Wolf gets a stat block** like an enemy (§7): race Magical Beast, Attributes and weight for saves and pushes; its HP, bite and dash stay exactly as today and do not scale with the ranger (the ranger spec's call 6), except through its two tree nodes.
 
-Mechanical follow-ups: the starter weapons are the Rapier (Duelling sword) and the Elven Bow (Bow) with today's dagger and crossbow numbers; `ThrowingKnives` is dropped from the weapon kinds; the Elf and Magical Beast races exist (with today's resistances, sight and Sleep immunity); the effect-duration example uses the Paladin (the ranger is immune to Sleep); `Shape::Hide` → `Shape::Summon`; hidden crits are gone.
+Mechanical follow-ups: the starter weapons are the Rapier (Duelling sword) and the Elven Bow (Bow) with today's dagger and crossbow numbers; `ThrowingKnives` is dropped from the weapon kinds; the Elf and Magical Beast races exist (with today's resistances, sight and Sleep resistance 100 %); the effect-duration example uses the Paladin (the ranger resists Sleep); `Shape::Hide` → `Shape::Summon`; hidden crits are gone.
 
 ## Changes decided on 2026-10-19 (to be applied before plan 2, TODO 4b)
 
-- **No immunities, only resistances** (the user): every effect gets a resistance in %, where 100 % means immune. This replaces `EffectResponse` (`Immune`/`Reduced`) everywhere in this spec: §3 `RaceDef.responses`, §5 "hard immunities", §6.6 Purify's `Warded`, §8 `PropKind::EffectImmunity`, §9 Unshaken and Juggernaut, §10 `Sheet.responses`. The spec text is rewritten when 4b is planned.
+- **No immunities, only resistances** (the user): every effect gets a resistance in %, where 100 % means immune. This replaces `EffectResponse` (`Immune`/`Reduced`) everywhere in this spec: §3 `RaceDef.responses`, §5 "hard immunities", §6.6 Purify's `Warded`, §8 `PropKind::EffectImmunity`, §9 Unshaken and Juggernaut, §10 `Sheet.responses`. Rewritten 2026-10-19 with TODO 4b (`EffectResistances`, `Stat::ResistEffect`, `PropKind::EffectResist`).
 - **No HP scaling by party size** (the user): enemy and boss HP do not depend on the number of heroes. Any later scaling uses the number of enemies or their Attributes.
 

@@ -99,7 +99,7 @@ export const ABILITIES: Ability[] = [
   A({ id: 'judgement', name: 'Judgement', mono: 'JU', cls: 'Paladin', slot: 'primary', category: 'Innate', uses: 'none', ranged: true, req: [{ attr: 'CHA', min: 16 }], tint: 'holy', damage: '18 magical', stats: 'cd 0.9 s, range 150, speed 220, radius 3', light: 'Holy', text: 'A bolt of holy light. In melee you strike with your weapon instead.' }),
   A({ id: 'smite', name: 'Smite', mono: 'SM', cls: 'Paladin', slot: 'primary', category: 'WeaponAttack', uses: 'melee', ranged: false, req: [{ attr: 'CHA', min: 15 }, { weapon: ['Sword', 'Mace', 'Hammer'] }], tint: 'holy', damage: 'weapon ×1.4, +30 % magical share', stats: 'the weapon, attack time ×1.6', light: 'Holy, 0.3 s flash on hit', text: 'A slow, holy blow.' }),
   A({ id: 'consecrate', name: 'Consecrate', mono: 'CO', cls: 'Paladin', slot: 'secondary', category: 'Innate', uses: 'none', ranged: false, req: [{ attr: 'CHA', min: 15 }], tint: 'holy', damage: '8 magical every 0.5 s', stats: 'cd 12 s; ground circle at your feet, radius 40, 5 s', light: 'Holy, while it lasts', text: 'Blesses the ground: enemies standing on it burn with holy light.' }),
-  A({ id: 'purify', name: 'Purify', mono: 'PU', cls: 'Paladin', slot: 'secondary', category: 'Innate', uses: 'none', ranged: false, req: [{ attr: 'WIL', min: 14 }], tint: 'holy', damage: '–', stats: 'cd 15 s; you and allies within 64 px: negative effects removed, immune to hostile magical effects 3 s', light: 'Holy, 0.3 s flash', text: 'Cleanses you and nearby allies and shields them from curses.' }),
+  A({ id: 'purify', name: 'Purify', mono: 'PU', cls: 'Paladin', slot: 'secondary', category: 'Innate', uses: 'none', ranged: false, req: [{ attr: 'WIL', min: 14 }], tint: 'holy', damage: '–', stats: 'cd 15 s; you and allies within 64 px: negative effects removed, resist hostile magical effects 100 % 3 s', light: 'Holy, 0.3 s flash', text: 'Cleanses you and nearby allies and shields them from curses.' }),
   // Barbarian
   A({ id: 'charge', name: 'Charge', mono: 'CH', cls: 'Barbarian', slot: 'secondary', category: 'Technique', uses: 'melee', ranged: false, req: [], tint: 'physical', damage: 'weapon ×0.8', stats: 'cd 5 s, dash 0.18 s at 300 px/s, radius 10', light: 'the weapon', text: 'Dash toward the cursor, hitting everything in the way.', start: true }),
   A({ id: 'whirl', name: 'Whirl', mono: 'WH', cls: 'Barbarian', slot: 'primary', category: 'Technique', uses: 'melee', ranged: false, req: [{ attr: 'DEX', min: 14 }], tint: 'physical', damage: 'weapon ×0.75', stats: 'full circle (arc 2π), attack time ×1.3', light: 'the weapon', text: 'Spin with your weapon, hitting everything around you.' }),
@@ -192,8 +192,8 @@ export const TREES: Record<ClassId, TreeNode[]> = {
     N('p_l1', 'unlock', -1, 0, 'Purify', 'Unlocks Purify (secondary).', 500, ['p_l2', 'p_l3'], { ability: 'purify', req: r('WIL', 14) }),
     plus('p_l2', 'WIL', -2, -1, 160, ['p_l4']),
     N('p_l3', 'resist', -2, 1, 'Warded', '+20 % magical resistance.', 300, ['p_l4']),
-    N('p_l4', 'improve', -3, 0, 'Lasting Ward', 'Purify: immunity 3 s → 5 s.', 400, ['p_l5'], { ability: 'purify' }),
-    N('p_l5', 'keystone', -4, 0, 'Unshaken', 'Immune to Sleep (a hard immunity).', 1000, [], { req: r('WIL', 16) }),
+    N('p_l4', 'improve', -3, 0, 'Lasting Ward', 'Purify: ward 3 s → 5 s.', 400, ['p_l5'], { ability: 'purify' }),
+    N('p_l5', 'keystone', -4, 0, 'Unshaken', 'Sleep resistance 100 %.', 1000, [], { req: r('WIL', 16) }),
     // Steel (right)
     N('p_r1', 'improve', 1, 0, 'Honed Edge', 'Strike: +10 % damage.', 300, ['p_r2', 'p_r3'], { ability: 'strike' }),
     plus('p_r2', 'STR', 2, -1, 250, ['p_r4']),
@@ -219,7 +219,7 @@ export const TREES: Record<ClassId, TreeNode[]> = {
     N('b_l2', 'improve', -2, -1, 'Thunderous', 'War Cry: radius +30 %.', 350, ['b_l4'], { ability: 'war_cry' }),
     plus('b_l3', 'CHA', -2, 1, 200, ['b_l4']),
     N('b_l4', 'improve', -3, 0, 'Bowling Charge', 'Charge: carries +4 STR for pushes.', 400, ['b_l5'], { ability: 'charge' }),
-    N('b_l5', 'keystone', -4, 0, 'Juggernaut', '+4 weight; immune to Slowed.', 1000, [], { req: r('CON', 16) }),
+    N('b_l5', 'keystone', -4, 0, 'Juggernaut', '+4 weight; Slowed resistance 100 %.', 1000, [], { req: r('CON', 16) }),
     // Weapons (right)
     N('b_r1', 'prof', 1, 0, 'Heavy Armor', 'Proficiency: heavy armor.', 300, ['b_r2', 'b_r3'], { icon: 'H' }),
     N('b_r2', 'unlock', 2, -1, 'Hurl', 'Unlocks Hurl (primary).', 500, ['b_r4'], { ability: 'hurl', req: r('DEX', 13) }),
@@ -300,7 +300,7 @@ export const ITEMS: Record<string, Item> = {
   lich_staff: { id: 'lich_staff', name: 'Bone Staff', slot: 'melee', icon: 'weapon_lich_staff', kind: 'Staff (melee, STR)', base: 'damage 7 · speed 1.0/s · arc 1.6', props: [{ text: 'Your spells: +10 % damage', magical: true }, { text: 'Light: green, 1 tile', magical: true }], req: [{ attr: 'INT', min: 18 }] },
   golden_sword: { id: 'golden_sword', name: 'Golden Sword', slot: 'melee', icon: 'weapon_golden_sword', kind: 'Sword (melee, STR)', base: 'damage 22 · speed 2.0/s · arc 1.8', props: [{ text: 'Light: gold, 1 tile', magical: true }], req: [], noProf: true },
   bow: { id: 'bow', name: 'Short Bow', slot: 'ranged', icon: 'weapon_bow', kind: 'Bow (ranged, DEX)', base: 'damage 12 · 1.3/s · range 220', props: [], req: [], noProf: true },
-  leather_belt: { id: 'leather_belt', name: 'Girdle of Warding', slot: 'belt', icon: 'Be', kind: 'Belt', base: '–', props: [{ text: 'Immune to Blind', magical: true }, { text: 'Aura 48 px: allies +10 max HP', magical: true }], req: [] },
+  leather_belt: { id: 'leather_belt', name: 'Girdle of Warding', slot: 'belt', icon: 'Be', kind: 'Belt', base: '–', props: [{ text: 'Blind resistance 100 %', magical: true }, { text: 'Aura 48 px: allies +10 max HP', magical: true }], req: [] },
 };
 
 // ------------------------------------------------------------ the mock character (a Wizard)
