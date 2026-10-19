@@ -29,7 +29,7 @@ describe('status', () => {
   });
 });
 
-describe('elemental visuals', () => {
+describe('damage-type effect visuals', () => {
   it('snowflakes shimmer in, hold, and out', () => {
     expect(snowflakeAlpha(0, 1)).toBe(0);
     expect(snowflakeAlpha(0.5, 1)).toBe(1);
