@@ -3,6 +3,9 @@
 //! A scaled number is stored as its value at a reference Attribute (`Scaled`),
 //! so at that reference it resolves bit-exactly to the stored value.
 
+// Temporary: nothing uses these items until plan 1's later tasks; Task 9 removes this.
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -28,8 +31,8 @@ impl Attr {
 pub struct Attributes([i32; 6]);
 
 impl Attributes {
-    pub const fn new(str: i32, dex: i32, con: i32, int: i32, wil: i32, cha: i32) -> Self {
-        Attributes([str, dex, con, int, wil, cha])
+    pub const fn new(strength: i32, dex: i32, con: i32, int: i32, wil: i32, cha: i32) -> Self {
+        Attributes([strength, dex, con, int, wil, cha])
     }
     pub fn get(&self, a: Attr) -> i32 {
         self.0[a as usize]
@@ -88,7 +91,7 @@ impl Scaled {
     pub fn get(&self, a: &Attributes) -> f64 {
         self.value * self.ratio(a)
     }
-    /// The value for `a` when higher is slower to wait: cooldowns and other times.
+    /// For times (cooldowns): a higher Attribute shortens the wait.
     pub fn per(&self, a: &Attributes) -> f64 {
         self.value / self.ratio(a)
     }
