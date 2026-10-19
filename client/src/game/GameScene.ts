@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ABILITIES, ANIM, CLASSES, CONST, EFFECT, FLAG, KIND, TILE_ID } from '../generated/defs';
+import { ANIM, CLASSES, CONST, EFFECT, FLAG, KIND, TILE_ID } from '../generated/defs';
 import type { ClassId } from '../generated/ClassId';
 import type { Ev } from '../generated/Ev';
 import type { RunStartInfo } from '../generated/RunStartInfo';
@@ -49,8 +49,6 @@ interface Cosmetic {
   target?: [number, number];
   seenOnServer: boolean;
 }
-
-type AbilityName = keyof typeof ABILITIES;
 
 const SKELETAL = new Set<number>([KIND.SkeletonWarrior, KIND.SkeletonArcher, KIND.RaisedSkeleton, KIND.Lich]);
 
@@ -141,7 +139,7 @@ export class GameScene extends Phaser.Scene {
     const tiles = this.info.tiles instanceof Uint8Array ? this.info.tiles : Uint8Array.from(this.info.tiles as ArrayLike<number>);
     this.map = new TileMap(this.info.width, this.info.height, new Uint8Array(tiles));
     this.myKind = CLASSES[data.myClass].kind;
-    this.pred = new Predictor(this.map, data.myClass, this.info.mods, this.info.spawn_x, this.info.spawn_y);
+    this.pred = new Predictor(this.map, this.info.speed, this.info.abilities, this.info.fallback, this.info.spawn_x, this.info.spawn_y);
     this.light = new LightField(this.map);
     this.light.load(this.info.lights);
   }
@@ -444,12 +442,12 @@ export class GameScene extends Phaser.Scene {
     const used: [number | null, number | null] = [null, null];
     if (wantPrimary && this.pred.cd1 <= 0) {
       primary = this.shotId = (this.shotId + 1) & 0xffff;
-      used[0] = this.predictAbility(this.pred.primary, primary, aim, dist);
+      used[0] = this.predictAbility(0, primary, aim, dist);
     }
     if (wantSecondary && this.pred.cd2 <= 0) {
       secondary = this.shotId = (this.shotId + 1) & 0xffff;
-      used[1] = this.predictAbility(this.pred.secondary, secondary, aim, dist);
-      if (this.pred.secondary === 'Dash') dash = [Math.cos(aim), Math.sin(aim)];
+      used[1] = this.predictAbility(1, secondary, aim, dist);
+      if (this.info.abilities[1].id === 'Dash') dash = [Math.cos(aim), Math.sin(aim)];
     }
     const seq = this.pred.step(mx, my, dash, used);
     const viewLag = this.net.rtt / 2 + this.interp.delay * 1000;
@@ -469,12 +467,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** Play the action locally right away. Returns the predicted cooldown. */
-  private predictAbility(name: AbilityName, shot: number, aim: number, dist: number): number {
-    const a = ABILITIES[name];
+  private predictAbility(slot: 0 | 1, shot: number, aim: number, dist: number): number {
+    const a = this.info.abilities[slot];
+    const name = a.id;
     const now = performance.now() / 1000;
     const { x, y } = this.pred.state;
     let anim: number = ANIM.Cast;
-    let cooldown = this.pred.cooldownOf(name);
+    let cooldown = this.pred.cooldownOf(slot);
     switch (name) {
       case 'MagicMissile':
         this.spawnCosmetic(KIND.Missile, shot, aim, a.speed, a.radius, a.range / a.speed);
@@ -509,7 +508,7 @@ export class GameScene extends Phaser.Scene {
         });
         if (close) {
           anim = ANIM.Melee;
-          cooldown = this.pred.cooldownOf(name, true);
+          cooldown = this.pred.cooldownOf(slot, true);
         } else {
           this.spawnCosmetic(KIND.Bolt, shot, aim, a.speed, a.radius, a.range / a.speed);
           anim = ANIM.Shoot;

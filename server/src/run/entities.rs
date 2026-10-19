@@ -1,7 +1,6 @@
 use crate::collision::MoveState;
 use crate::defs::damage::{Damage, DamageSplit, Resistances};
 use crate::defs::attributes::Attributes;
-use crate::defs::progression::StatUpgrades;
 use crate::defs::enemies::EnemyType;
 use crate::defs::races::Sight;
 use crate::defs::kinds::{Anim, EntityKind};
@@ -60,8 +59,6 @@ pub struct Player {
     /// Account and character the earned XP is banked to when the run ends.
     pub account: Option<i32>,
     pub character: Option<i32>,
-    /// The character's bought upgrades (already in `sheet`; sent as `RunStartInfo.mods` until plan 1 Task 6).
-    pub upgrades: StatUpgrades,
     pub max_hp: f64,
     /// Falling into a chasm or drowning: seconds left until death, and how.
     pub sinking: Option<(f64, Sink)>,

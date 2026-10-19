@@ -145,8 +145,12 @@ pub struct RunStartInfo {
     pub players: Vec<PlayerInfo>,
     pub spawn_x: f64,
     pub spawn_y: f64,
-    /// Progression multipliers of the receiving player (prediction must use them).
-    pub mods: crate::defs::progression::Modifiers,
+    /// The receiving hero's resolved move speed (px/s); prediction uses it as sent.
+    pub speed: f64,
+    /// Primary and secondary ability with their numbers resolved for the receiving hero.
+    pub abilities: [crate::sheet::ResolvedAbility; 2],
+    /// The melee thrust of a ranged hero, if any.
+    pub fallback: Option<crate::sheet::ResolvedAbility>,
     /// Every static light (torches, lava) and its state.
     pub lights: Vec<LightInfo>,
 }

@@ -187,7 +187,6 @@ impl Run {
                 mv: MoveState::at(p.x, p.y),
                 hp: max_hp,
                 max_hp,
-                upgrades: m.upgrades,
                 xp: 0,
                 coins: 0,
                 account: m.account,
@@ -314,7 +313,9 @@ impl Run {
             players: self.players.iter().map(|q| PlayerInfo { ent: q.id, name: q.name.clone(), class: q.class }).collect(),
             spawn_x: p.mv.x,
             spawn_y: p.mv.y,
-            mods: p.upgrades.modifiers(),
+            speed: p.sheet.speed,
+            abilities: [p.sheet.primary, p.sheet.secondary],
+            fallback: p.sheet.fallback,
             lights: self.light_infos(),
         })
     }

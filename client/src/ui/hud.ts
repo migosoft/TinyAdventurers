@@ -1,4 +1,4 @@
-import { ABILITIES, CLASSES, EFFECTS, FLAG } from '../generated/defs';
+import { EFFECTS, FLAG } from '../generated/defs';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
@@ -108,11 +108,9 @@ export class Hud {
     this.coinCount = 0;
     this.showCoins();
     const me = info.players.find((p) => p.ent === info.you)!;
-    const c = CLASSES[me.class];
-    const names = [c.primary, c.secondary] as (keyof typeof ABILITIES)[];
-    names.forEach((n, i) => {
+    [0, 1].forEach((i) => {
       this.slots[i].querySelector('.name')!.textContent = CLASS_TEXT[me.class].abilities[i].name;
-      this.cdMax[i] = ABILITIES[n].cooldown;
+      this.cdMax[i] = info.abilities[i].cooldown;
     });
     this.party.innerHTML = '';
     for (const p of info.players) {

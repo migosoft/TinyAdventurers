@@ -1,9 +1,8 @@
 // Client view of the world: snapshot buffer with an adaptive interpolation
 // delay for remote entities, and prediction/reconciliation for the local player.
-import { ABILITIES, CLASSES, CONST, EFFECTS } from '../generated/defs';
-import type { ClassId } from '../generated/ClassId';
+import { CONST, EFFECTS } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
-import type { Modifiers } from '../generated/Modifiers';
+import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { Snapshot } from '../generated/Snapshot';
 import { knocked, sinking, stepMove, type MoveState, type Solid } from '../sim/collision';
 import type { TileMap } from '../sim/map';
@@ -122,8 +121,6 @@ interface Pending {
 
 type Used = [number | null, number | null];
 
-type AbilityName = keyof typeof ABILITIES;
-
 export class Predictor {
   state: MoveState;
   /** Visual smoothing of small corrections (decays to 0). */
@@ -141,20 +138,20 @@ export class Predictor {
   private pending: Pending[] = [];
   private seq = 0;
   readonly speed: number;
-  readonly primary: AbilityName;
-  readonly secondary: AbilityName;
+  /** Seconds a dash lasts: the secondary's, when that is the Dash. */
+  private dashDuration: number;
 
   constructor(
     private map: TileMap,
-    cls: ClassId,
-    private mods: Modifiers,
+    speed: number,
+    private abilities: ResolvedAbility[],
+    private fallback: ResolvedAbility | null,
     x: number,
     y: number,
   ) {
-    const c = CLASSES[cls];
-    this.speed = c.speed * mods.move_speed;
-    this.primary = c.primary as AbilityName;
-    this.secondary = c.secondary as AbilityName;
+    this.speed = speed;
+    const sec = abilities[1];
+    this.dashDuration = sec.id === 'Dash' ? sec.duration : 0;
     this.state = { x, y, dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0 };
   }
 
@@ -168,9 +165,9 @@ export class Predictor {
     return sinking(this.map, this.state);
   }
 
-  cooldownOf(name: AbilityName, daggerUsed = false): number {
-    const base = daggerUsed ? CONST.DAGGER_COOLDOWN : ABILITIES[name].cooldown;
-    return base / this.mods.attack_speed;
+  /** Cooldown the server resolved for the slot (or for the melee fallback). */
+  cooldownOf(slot: 0 | 1, fallback = false): number {
+    return (fallback && this.fallback ? this.fallback : this.abilities[slot]).cooldown;
   }
 
   /**
@@ -192,7 +189,7 @@ export class Predictor {
       if (this.knocked) dash = null;
       this.state = stepMove(this.map, this.state, mx, my, this.speed * this.speedMul, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);
     }
-    if (dash) this.state = { ...this.state, dashT: ABILITIES.Dash.duration, dashDx: dash[0], dashDy: dash[1] };
+    if (dash) this.state = { ...this.state, dashT: this.dashDuration, dashDx: dash[0], dashDy: dash[1] };
     if (this.pending.length > 240) this.pending.shift();
     return this.seq;
   }
@@ -210,7 +207,7 @@ export class Predictor {
       // A push the client learned of late still voids the dashes sent during it, as on the server.
       const wasKnocked = s.dashT <= 0 && knocked(s);
       s = stepMove(this.map, s, p.mx, p.my, this.speed * this.speedMul, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);
-      if (p.dash && !wasKnocked) s = { ...s, dashT: ABILITIES.Dash.duration, dashDx: p.dash[0], dashDy: p.dash[1] };
+      if (p.dash && !wasKnocked) s = { ...s, dashT: this.dashDuration, dashDx: p.dash[0], dashDy: p.dash[1] };
     }
     const ex = this.state.x - s.x;
     const ey = this.state.y - s.y;
