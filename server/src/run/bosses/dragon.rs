@@ -9,7 +9,7 @@
 //! wind-up pose, then the strike); the hit lands at the end of the wind-up.
 
 use crate::run::objects::{hurt_object, hurt_objects_in, objects_in};
-use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
+use super::{boss_idx, set_anim, target, BossBehaviour};
 use crate::defs::bosses::*;
 use crate::defs::damage::{Damage, DamageSplit, DamageType};
 use crate::defs::kinds::{Anim, EntityKind};
@@ -92,9 +92,9 @@ impl Dragon {
         let r = DRAGON_SMASH_RADIUS;
         run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: 5 }, Some(pos));
         hurt_objects_in(run, pos, r, None, Damage::new(DRAGON_SMASH_DAMAGE, run.monsters[bi].melee));
-        for pi in players_in(run, pos, r, None) {
-            run.hurt_player(pi, Damage::new(DRAGON_SMASH_DAMAGE, run.monsters[bi].melee));
-            run.knock_player(pi, pos, aim, DRAGON_SMASH_KNOCK);
+        for c in run.foes_in(pos, r, None) {
+            run.hurt_creature(c, Damage::new(DRAGON_SMASH_DAMAGE, run.monsters[bi].melee));
+            run.knock_creature(c, pos, aim, DRAGON_SMASH_KNOCK);
         }
     }
 
@@ -168,9 +168,9 @@ impl BossBehaviour for Dragon {
                 if self.pulse <= 0.0 {
                     self.pulse = 0.2;
                     let breath = Damage::new(6.0, DamageSplit::pure(DamageType::Heat));
-                    for pi in players_in(run, pos, BREATH_RANGE, Some((aim, BREATH_HALF_ANGLE))) {
-                        if crate::collision::line_of_sight(&run.layout.map, pos, run.players[pi].pos()) {
-                            run.hurt_player(pi, breath);
+                    for c in run.foes_in(pos, BREATH_RANGE, Some((aim, BREATH_HALF_ANGLE))) {
+                        if crate::collision::line_of_sight(&run.layout.map, pos, run.creature_pos(c)) {
+                            run.hurt_creature(c, breath);
                         }
                     }
                     for oi in objects_in(run, pos, BREATH_RANGE, Some((aim, BREATH_HALF_ANGLE))) {
@@ -203,25 +203,25 @@ impl BossBehaviour for Dragon {
                 Action::Tail => {
                     let behind = aim + std::f64::consts::PI;
                     hurt_objects_in(run, pos, 46.0, Some((behind, 1.2)), Damage::new(25.0, run.monsters[bi].melee));
-                    for pi in players_in(run, pos, 46.0, Some((behind, 1.2))) {
-                        run.hurt_player(pi, Damage::new(25.0, run.monsters[bi].melee));
-                        run.knock_player(pi, pos, behind, DRAGON_TAIL_KNOCK);
+                    for c in run.foes_in(pos, 46.0, Some((behind, 1.2))) {
+                        run.hurt_creature(c, Damage::new(25.0, run.monsters[bi].melee));
+                        run.knock_creature(c, pos, behind, DRAGON_TAIL_KNOCK);
                     }
                     self.action = Some((Action::Recover, RECOVER_TAIL));
                 }
                 Action::Claw => {
                     hurt_objects_in(run, pos, CLAW_RANGE, Some((aim, CLAW_HALF_ANGLE)), Damage::new(20.0, run.monsters[bi].melee));
-                    for pi in players_in(run, pos, CLAW_RANGE, Some((aim, CLAW_HALF_ANGLE))) {
-                        run.hurt_player(pi, Damage::new(20.0, run.monsters[bi].melee));
-                        run.knock_player(pi, pos, aim, DRAGON_CLAW_KNOCK);
+                    for c in run.foes_in(pos, CLAW_RANGE, Some((aim, CLAW_HALF_ANGLE))) {
+                        run.hurt_creature(c, Damage::new(20.0, run.monsters[bi].melee));
+                        run.knock_creature(c, pos, aim, DRAGON_CLAW_KNOCK);
                     }
                     self.action = Some((Action::Recover, RECOVER_CLAW));
                 }
                 Action::Bite => {
                     hurt_objects_in(run, pos, DRAGON_BITE_RANGE, Some((aim, DRAGON_BITE_HALF_ANGLE)), Damage::new(DRAGON_BITE_DAMAGE, run.monsters[bi].melee));
-                    for pi in players_in(run, pos, DRAGON_BITE_RANGE, Some((aim, DRAGON_BITE_HALF_ANGLE))) {
-                        run.hurt_player(pi, Damage::new(DRAGON_BITE_DAMAGE, run.monsters[bi].melee));
-                        run.knock_player(pi, pos, aim, DRAGON_BITE_KNOCK);
+                    for c in run.foes_in(pos, DRAGON_BITE_RANGE, Some((aim, DRAGON_BITE_HALF_ANGLE))) {
+                        run.hurt_creature(c, Damage::new(DRAGON_BITE_DAMAGE, run.monsters[bi].melee));
+                        run.knock_creature(c, pos, aim, DRAGON_BITE_KNOCK);
                     }
                     self.action = Some((Action::Recover, RECOVER_CLAW));
                 }

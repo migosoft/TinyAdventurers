@@ -30,15 +30,18 @@ export const CLASS_TEXT: Record<ClassId, { title: string; blurb: string; abiliti
       { name: 'Charge', text: 'Dash toward the cursor, hitting everything in the way.' },
     ],
   },
-  Assassin: {
-    title: 'Assassin',
-    blurb: 'Strikes from the shadows.',
+  ElvenRanger: {
+    title: 'Elven Ranger',
+    blurb: 'Keen-eyed elf of the deep woods, never alone.',
     abilities: [
-      { name: 'Crossbow / Dagger', text: 'Shoots bolts; stabs automatically when an enemy is close.' },
-      { name: 'Hide', text: 'Vanish from enemy sight. Attacking from hiding deals x4 critical damage.' },
+      { name: 'Bow / Rapier', text: 'Shoots arrows; thrusts with the rapier automatically when an enemy is close.' },
+      { name: 'Dire Wolf', text: 'Summons your dire wolf companion. While it lives, heals it for 20 %. If it falls, it can be summoned again after 60 s.' },
     ],
   },
 };
+
+/** The class as players read it ("Elven Ranger"); the wire value stays for CSS classes and keys. */
+export const className = (c: ClassId): string => CLASS_TEXT[c].title;
 
 export const BOSS_TEXT: Record<BossId, { name: string; short: string; blurb: string }> = {
   Demon: { name: 'Azgaroth, the Red Demon', short: 'Red Demon', blurb: 'Cleaves, charges across the hall and throws rings of fire.' },

@@ -3,6 +3,7 @@
 //! its own adjustments (`Adjust`). Balancing edits only this data.
 
 use super::damage::{DamageSplit, DamageType::*, Resistances};
+use super::effects::{EffectKind, EffectResponse, EffectResponses};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntityType {
@@ -11,6 +12,10 @@ pub enum EntityType {
     Monster,
     Demon,
     Dragon,
+    /// Elves: the Elven Ranger.
+    Elf,
+    /// Magical beasts: the Ranger's wolf.
+    MagicalBeast,
     /// Inanimate objects (chests, barrels): every one resists poison fully.
     Object,
 }
@@ -48,7 +53,21 @@ pub fn type_def(t: EntityType) -> TypeDef {
         EntityType::Demon => TypeDef { res: Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), melee: DamageSplit::split(&[(Heat, 0.2)]), vision: 9.0, darkvision: 1.0 },
         EntityType::Dragon => TypeDef { res: Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), melee: DamageSplit::physical(), vision: 25.0, darkvision: 1.0 },
         EntityType::Object => TypeDef { res: Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), melee: DamageSplit::physical(), vision: 0.0, darkvision: 0.0 },
+        EntityType::Elf => TypeDef { res: Resistances::of(&[(Poison, 0.1)]), melee: DamageSplit::physical(), vision: 18.0, darkvision: 1.0 / 3.0 },
+        EntityType::MagicalBeast => TypeDef { res: Resistances::of(&[(Poison, 0.1), (Magical, 0.1)]), melee: DamageSplit::split(&[(Magical, 0.2)]), vision: 18.0, darkvision: 1.0 },
     }
+}
+
+/// How the types take status effects: elves and magical beasts never fall asleep,
+/// the rest take everything in full. Over several types the strongest response wins.
+pub fn responses(types: &[EntityType]) -> EffectResponses {
+    let mut parts: Vec<(EffectKind, EffectResponse)> = Vec::new();
+    for t in types {
+        if matches!(t, EntityType::Elf | EntityType::MagicalBeast) {
+            parts.push((EffectKind::Sleep, EffectResponse::Immune));
+        }
+    }
+    EffectResponses::of(&parts)
 }
 
 /// One entity's own changes on top of its entity types.
@@ -120,11 +139,27 @@ mod tests {
         same(EnemyType::Ogre, EntityType::Monster);
         same(EnemyType::Necromancer, EntityType::Human);
         assert_eq!(p(EnemyType::Disciple).res, Resistances::NONE);
-        for c in ClassId::ALL {
+        for c in [ClassId::Wizard, ClassId::Paladin, ClassId::Barbarian] {
             assert_eq!(classes::profile(c), profile(&[EntityType::Human], Adjust::NONE));
         }
         let obj = profile(&[EntityType::Object], Adjust::NONE);
         assert_eq!((obj.res.get(Physical), obj.res.get(Poison)), (0.5, 1.0));
+    }
+
+    #[test]
+    fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
+        use crate::defs::effects::{EffectKind, EffectResponse, EffectResponses};
+        let r = classes::profile(ClassId::ElvenRanger);
+        assert!((r.res.get(Poison) - 0.1).abs() < 1e-12);
+        assert_eq!(r.sight, Sight { vision: 18.0, darkvision: 1.0 / 3.0 });
+        assert_eq!(r.melee, DamageSplit::physical());
+        assert_eq!(classes::responses(ClassId::ElvenRanger).get(EffectKind::Sleep), EffectResponse::Immune);
+        assert_eq!(classes::responses(ClassId::Wizard), EffectResponses::FULL);
+        let b = profile(&[EntityType::MagicalBeast], Adjust::NONE);
+        assert_eq!((b.res.get(Poison), b.res.get(Magical)), (0.1, 0.1));
+        assert!((b.melee.share(Magical) - 0.2).abs() < 1e-12 && (b.melee.share(Physical) - 0.8).abs() < 1e-12);
+        assert_eq!(b.sight, Sight { vision: 18.0, darkvision: 1.0 });
+        assert_eq!(responses(&[EntityType::Human, EntityType::MagicalBeast]).get(EffectKind::Sleep), EffectResponse::Immune);
     }
 
     #[test]

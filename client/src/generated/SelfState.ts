@@ -14,10 +14,6 @@ knock_vx: number, knock_vy: number,
  */
 cd1: number, cd2: number, 
 /**
- * Remaining hide time (s), 0 when visible.
- */
-hidden: number, 
-/**
  * Entity id being spectated when dead.
  */
 spectating: number | null, 

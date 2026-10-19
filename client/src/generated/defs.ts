@@ -2,7 +2,6 @@
 
 export const KIND = {
   "Arrow": 53,
-  "Assassin": 3,
   "Barbarian": 2,
   "Barrel": 81,
   "BlindOrb": 61,
@@ -10,9 +9,11 @@ export const KIND = {
   "Chest": 80,
   "Chort": 20,
   "Demon": 30,
+  "DireWolf": 23,
   "Disciple": 17,
   "Dragon": 32,
   "DragonFireball": 58,
+  "ElvenRanger": 3,
   "FireBolt": 59,
   "FireBreath": 56,
   "FireOrb": 57,
@@ -63,7 +64,7 @@ export const FLAG = {
   "DEAD": 32,
   "DORMANT": 8,
   "ENRAGED": 4,
-  "HIDDEN": 1,
+  "HIDING": 1,
   "HURT": 16,
   "IMMUNE": 2
 } as const;
@@ -84,6 +85,7 @@ export const CONST = {
   "BARREL_BLAST_R": 40.0,
   "BARREL_FUSE": 0.3,
   "BARREL_RADIUS": 6.0,
+  "CHEST_RADIUS": 6.0,
   "DAGGER_COOLDOWN": 0.35,
   "DAGGER_RANGE": 22.0,
   "DASH_SPEED": 300.0,
@@ -116,7 +118,6 @@ export const CONST = {
   "DT": 0.016666666666666666,
   "FALL_TIME": 0.7,
   "FOV_RADIUS": 9,
-  "HIDDEN_CRIT_MULT": 4.0,
   "KNOCK_DECAY": 0.7788007830714049,
   "KNOCK_MIN_SPEED": 8.0,
   "LAVA_SPEED": 0.4,
@@ -145,19 +146,19 @@ export const CONST = {
 } as const;
 
 export const CLASSES = {
-  "Assassin": {
-    "hp": 90.0,
-    "kind": 3,
-    "primary": "CrossbowDagger",
-    "secondary": "Hide",
-    "speed": 80.0
-  },
   "Barbarian": {
     "hp": 140.0,
     "kind": 2,
     "primary": "Axe",
     "secondary": "Dash",
     "speed": 70.0
+  },
+  "ElvenRanger": {
+    "hp": 90.0,
+    "kind": 3,
+    "primary": "CrossbowDagger",
+    "secondary": "SummonWolf",
+    "speed": 80.0
   },
   "Paladin": {
     "hp": 120.0,
@@ -226,16 +227,6 @@ export const ABILITIES = {
     "range": 64.0,
     "speed": 0.0
   },
-  "Hide": {
-    "arc": 0.0,
-    "cooldown": 8.0,
-    "damage": 0.0,
-    "duration": 6.0,
-    "id": "Hide",
-    "radius": 0.0,
-    "range": 0.0,
-    "speed": 0.0
-  },
   "MagicMissile": {
     "arc": 0.0,
     "cooldown": 0.35,
@@ -245,6 +236,16 @@ export const ABILITIES = {
     "radius": 3.0,
     "range": 220.0,
     "speed": 230.0
+  },
+  "SummonWolf": {
+    "arc": 0.0,
+    "cooldown": 8.0,
+    "damage": 0.0,
+    "duration": 0.0,
+    "id": "SummonWolf",
+    "radius": 0.0,
+    "range": 0.0,
+    "speed": 0.0
   },
   "Sword": {
     "arc": 1.75,
@@ -323,6 +324,10 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
     "h": 51.0,
     "r": 17.0
   },
+  "80": {
+    "h": 0.0,
+    "r": 6.0
+  },
   "81": {
     "h": 0.0,
     "r": 6.0
@@ -335,6 +340,7 @@ export const EV = {
   "Died": 3,
   "Dmg": 0,
   "Effect": 13,
+  "Growl": 14,
   "Heal": 1,
   "Immune": 5,
   "Light": 10,

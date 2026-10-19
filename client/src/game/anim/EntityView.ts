@@ -91,6 +91,8 @@ export class EntityView {
   private weaponHeld = false;
   /** Set after the first update (a figure that appears asleep or as stone still takes its facing once). */
   private faced = false;
+  /** Seconds of horizontal jitter left (the growl). */
+  private shakeT = 0;
   speed = 0;
 
   constructor(
@@ -144,6 +146,11 @@ export class EntityView {
 
   get height(): number {
     return this.body.height * (this.def.scale ?? 1);
+  }
+
+  /** A ±1 px horizontal jitter of the figure at 30 Hz for `secs`. */
+  shake(secs: number): void {
+    this.shakeT = secs;
   }
 
   update(s: ViewState, dt: number): void {
@@ -215,10 +222,11 @@ export class EntityView {
     this.weapon?.setVisible(drown < 0.4);
     this.shadow.setVisible(sink === 0 && fall === 0).setScale(1 - 0.3 * lift);
     this.figure
-      .setPosition(0, sink + Math.round(fall * 6))
+      .setPosition(this.shakeT > 0 ? (Math.floor(this.clock * 30) % 2 === 0 ? 1 : -1) : 0, sink + Math.round(fall * 6))
       .setScale((d.scale ?? 1) * (1 - fall * 0.2))
       .setAlpha(fall > 0.7 ? 1 - (fall - 0.7) / 0.3 : 1);
     this.label?.setVisible(fall === 0 && drown === 0);
+    this.shakeT = Math.max(0, this.shakeT - dt);
 
     if (hurt && !d.hit && Math.floor(this.clock * 30) % 2 === 0) this.body.setTintFill(0xffffff);
     else if (!stone && !iced && (s.anim === ANIM.Windup || s.anim === ANIM.Slam || own?.windup)) {
@@ -270,8 +278,7 @@ export class EntityView {
     this.status.update(fxBits, dt);
     if (asleep) this.weapon?.setVisible(false);
 
-    // Hidden assassin: faint shimmer (enemies do not see it at all).
-    this.root.setAlpha(s.flags & FLAG.HIDDEN ? 0.3 + Math.sin(this.clock * 8) * 0.08 : 1);
+    this.root.setAlpha(1);
 
     const ax = Math.cos(s.aim);
     const ay = Math.sin(s.aim);
@@ -292,6 +299,12 @@ export class EntityView {
           this.body.x += ax * (tail ? -3 : 3) * (1 - k);
           this.body.y += ay * 1.5 * (1 - k);
           this.body.setAngle(sgn * 8 * Math.sin(k * Math.PI));
+        }
+        // Darting toward the aim over the first 0.15 s, out and back (the wolf's bite).
+        if (d.lunge && !tail) {
+          const lk = Math.sin(Math.min(t / 0.15, 1) * Math.PI);
+          this.body.x += ax * d.lunge * lk;
+          this.body.y += ay * d.lunge * lk;
         }
         const swing = tail ? d.tail : d.swing;
         if (!d.weapon && !this.shotFx && swing) {
@@ -357,6 +370,7 @@ export class EntityView {
     this.weaponHeld = iced;
     const isMelee = s.anim === ANIM.Melee;
     w.setFrame(isMelee && d.meleeWeapon ? d.meleeWeapon : d.weapon!);
+    w.setScale(WEAPON_SCALE * ((isMelee && d.meleeWeapon ? d.meleeWeaponScale : undefined) ?? d.weaponScale ?? 1));
     const hx = (d.handX ?? 3) * sgn;
     let alpha = 1;
     let rot = 0;
@@ -397,7 +411,7 @@ export class EntityView {
         w.setOrigin(0.5, 0.5);
         rot = s.aim;
         if (isMelee && d.meleeWeapon) {
-          // Assassin dagger stab.
+          // Ranger rapier thrust: along the aim, not a swing.
           w.setOrigin(0.5, 0.85);
           rot = s.aim + HALF_PI;
           const k = Math.min(t / 0.15, 1);

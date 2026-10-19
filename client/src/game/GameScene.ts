@@ -10,14 +10,14 @@ import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Hud } from '../ui/hud';
-import { FIGURES, PROJECTILES, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
+import { FIGURES, PROJECTILES, isAllyKind, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
 import { BarrelView } from './barrel';
 import { TorchView } from './torch';
 import { ChestView } from './chest';
 import { dmgColor } from './damage';
-import { DEPTH, Effects } from './effects';
+import { DEPTH, Effects, SOUND_TEXT } from './effects';
 import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
 import { LightView, nextDarkvision } from './lightview';
@@ -51,7 +51,6 @@ interface Cosmetic {
 }
 
 type AbilityName = keyof typeof ABILITIES;
-const ATTACKS: AbilityName[] = ['MagicMissile', 'Fireball', 'Sword', 'Axe', 'Dash', 'CrossbowDagger'];
 
 const SKELETAL = new Set<number>([KIND.SkeletonWarrior, KIND.SkeletonArcher, KIND.RaisedSkeleton, KIND.Lich]);
 
@@ -344,8 +343,16 @@ export class GameScene extends Phaser.Scene {
           this.fx.explosion(ev.x, ev.y, ev.r, 0xffa030);
           this.fx.burst(ev.x, ev.y, 18, 0x8a5a2a, 70);
           this.cameras.main.shake(120, 0.004);
-        } else this.fx.explosion(ev.x, ev.y, ev.r);
+        } else if (ev.k === 8) this.fx.splinters(ev.x, ev.y);
+        else if (ev.k === 9) this.fx.natureSparkles(ev.x, ev.y, ev.r);
+        else this.fx.explosion(ev.x, ev.y, ev.r);
         break;
+      case 'Growl': {
+        const wolf = this.ents.get(ev.id);
+        if (wolf) this.fx.text(wolf.x, wolf.y - 14, 'grrrr', SOUND_TEXT.fill, false, DEPTH.sound, SOUND_TEXT.stroke);
+        this.views.get(ev.id)?.shake(0.4);
+        break;
+      }
       case 'Died': {
         // Lost to a chasm or deep water: nothing is left behind.
         if (this.sinks.delete(ev.id)) break;
@@ -487,18 +494,19 @@ export class GameScene extends Phaser.Scene {
       case 'Dash':
         anim = ANIM.Dash;
         break;
-      case 'Hide':
-        this.pred.useHide(a.duration);
+      case 'SummonWolf':
         anim = ANIM.Cast;
         break;
       case 'Heal':
         anim = ANIM.Cast;
         break;
       case 'CrossbowDagger': {
-        const close = [...this.ents.values()].some(
+        const close = [...this.ents.values()].some((e) => {
+          // A closed chest is stabbed like the hidden mimic it may be (server `dagger_target`).
+          if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= CONST.DAGGER_RANGE;
           // A flying dragon is out of the dagger's reach (the server shoots the crossbow then).
-          (e) => !isPlayerKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= CONST.DAGGER_RANGE,
-        );
+          return !isPlayerKind(e.kind) && !isAllyKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= CONST.DAGGER_RANGE;
+        });
         if (close) {
           anim = ANIM.Melee;
           cooldown = this.pred.cooldownOf(name, true);
@@ -509,7 +517,6 @@ export class GameScene extends Phaser.Scene {
         break;
       }
     }
-    if (ATTACKS.includes(name)) this.pred.useHide(0);
     this.localAnim = { anim, start: now };
     return cooldown;
   }
@@ -538,6 +545,8 @@ export class GameScene extends Phaser.Scene {
     const steps = Math.max(1, Math.ceil(Math.hypot(nx - c.x, ny - c.y) / 4));
     for (const e of this.ents.values()) {
       if (e.flags & FLAG.DEAD) continue;
+      // An opened chest lets shots pass; a closed one stops them (server `stops_shots`).
+      if (e.kind === KIND.Chest && e.anim !== 0) continue;
       const air = (e.flags & FLAG.AIRBORNE) !== 0;
       for (let k = 1; k <= steps; k++) {
         if (shotHits(e.kind, e.x, e.y, air, c.x + ((nx - c.x) * k) / steps, c.y + ((ny - c.y) * k) / steps, c.r)) return true;
@@ -685,6 +694,7 @@ export class GameScene extends Phaser.Scene {
       cd2: this.pred.cd2,
       ents: this.ents.size,
       darkvision,
+      wolf: this.info.players.find((p) => p.ent === this.info.you)?.class === 'ElvenRanger' ? [...this.ents.values()].some((e) => e.kind === KIND.DireWolf && e.extra === this.info.you && !(e.flags & FLAG.DEAD)) : null,
     });
   }
 
@@ -707,8 +717,7 @@ export class GameScene extends Phaser.Scene {
         const moving = this.pred.speedMul > 0 && (this.keys.W.isDown || this.keys.A.isDown || this.keys.S.isDown || this.keys.D.isDown);
         anim = moving ? ANIM.Move : ANIM.Idle;
       }
-      let flags = this.myFlags & ~FLAG.HIDDEN;
-      if (this.pred.hidden > 0) flags |= FLAG.HIDDEN;
+      const flags = this.myFlags;
       // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
       s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects() };
     } else {
@@ -901,7 +910,7 @@ export class GameScene extends Phaser.Scene {
       const w = ogre ? 28 : 12;
       const x = Math.round(e.x - w / 2);
       const y = Math.round(e.y - v.height - 3);
-      const hero = isPlayerKind(e.kind);
+      const hero = isPlayerKind(e.kind) || isAllyKind(e.kind);
       const g = hero ? this.heroBars : this.bars;
       g.fillStyle(0x140c1a, 1).fillRect(x - 1, y - 1, w + 2, 4);
       g.fillStyle(hero ? 0x40d060 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);

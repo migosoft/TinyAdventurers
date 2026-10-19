@@ -46,10 +46,20 @@ The toughest hero.
 - **Left – Great Axe:** a wide, heavy cleave. Slower than the sword, but it hits harder and wider.
 - **Right – Charge (5 s cooldown):** dash toward the mouse pointer, hitting every enemy you run through.
 
-### Assassin, 90 HP
-The fastest hero. Strikes from the shadows.
-- **Left – Crossbow / Dagger:** shoots crossbow bolts. When an enemy is right next to you, you stab with your dagger automatically instead, which is quicker.
-- **Right – Hide (8 s cooldown):** vanish for up to 6 seconds. Enemies forget about you. Your **next attack from hiding deals ×4 critical damage** and reveals you. Your teammates still see you as a faint shimmer.
+### Elven Ranger, 90 HP
+The fastest hero, and the only one who fights with a companion. An elf: she sees **twice as far** as the others (18 tiles, still only where there is light and no wall), she sees a third of that range into the dark, she shrugs off a tenth of poison and she **cannot be put to sleep**.
+- **Left – Bow / Rapier:** shoots arrows. When an enemy is right next to you, you thrust with the rapier automatically instead, which is quicker.
+- **Right – Dire Wolf (8 s cooldown):** with no wolf, **summons** one beside you in a puff of green sparkles. With the wolf alive, it **heals** the wolf for 20 % of its health (also at full health; the cooldown starts anyway). When the wolf falls, the box waits **60 seconds** before you can summon a new one. There is only ever one wolf per ranger.
+
+**Your wolf**
+- It has 80 HP, runs a little faster than you and bites for 10 about once a second, with a small push.
+- **It guards you.** It stays close, bites any enemy that comes within about three tiles of you, and fights back when something attacks it. It does not run off after what you shoot at, and it turns back when it has strayed about six tiles from you.
+- **It opens a fight with a leap:** from up to four tiles away it dashes at its prey for 20 damage (every 5 seconds), and the leap crosses chasms. A push into a chasm is escaped the same way, with the dash. With the dash resting it falls and dies, like any monster. It drowns in deep water and burns in lava.
+- **Nobody gets locked out.** If it falls far behind, or you are in the sealed boss hall without it, it appears next to you again in green sparkles.
+- **It growls.** When it notices an enemy, it steps a tile or two toward it, shakes and shows "grrrr" above its head (at most every four seconds). The growl shows even in total darkness: it is an early warning. It also **growls at hiding mimics**, so a wolf that growls at a chest is a hint (it does not bite them). It ignores enemies that merely wait, such as the boss before the fight.
+- **Enemies fight it.** They attack it and their area attacks hit it. Your own arrows, fireballs and swords, and those of your friends, **never** hurt it. The Paladin's Holy Light heals it.
+- **It shows only where there is light**, with a small health bar like a hero's. Its kills count as yours; its death gives no XP or coins, shows a message and starts the 60 seconds.
+- **If you fall, the wolf vanishes**, also when you leave the dungeon. Debug mode does not make it immortal.
 
 The two boxes at the bottom of the screen show your abilities. They darken while an ability recharges and light up gold when it is ready.
 
@@ -61,9 +71,10 @@ The two boxes at the bottom of the screen show your abilities. They darken while
 - **Glowing shots light the way:** fireballs and fire bolts light the corridor they fly through, and magic bolts glow violet, blue or purple. A shot fired into a dark corridor shows what is in it for a moment.
 - **Explosions light up** their surroundings for a moment: a fireball, a dragon's fireball or an exploding barrel shows what stands around it. The paladin's healing wave lights up its surroundings in pale gold, too.
 - **Lava glows red** and lights the floor around it. Light of different colours mixes: a torch next to lava gives a deeper orange.
+- **Sounds show in the dark.** The wolf's "grrrr", spoken words and the sleeping "Z" are drawn above the darkness, in dark letters with a light outline, so you notice them even where you can see nothing else.
 - Your shots fly on into the dark, and you still see their damage numbers when they hit something there.
 - **Enemies see in the dark only if they are built for it.** An enemy notices you when you are in its line of sight and either lit or very close. **Humans** (the necromancer, the summoner, the lich's disciples) do not see you in the dark at all, however close. **Monsters** (goblin and orc archers, orc warriors, mimics, the ogre) see you in the dark only from about three tiles away. **Undead** (skeletons, the lich), **demons** (imps, chorts, the Red Demon) and the **Red Dragon** see you in the dark as well as in the light.
-- **Hide in the dark.** Put out a torch, or stay out of the light, to slip past humans and monsters. Anything you light up (a fireball, a torch you relight, an exploding barrel) can be seen too, so fire is loud. Skeletons and demons are not fooled by darkness.
+- **Slip past in the dark.** Put out a torch, or stay out of the light, to slip past humans and monsters. Anything you light up (a fireball, a torch you relight, an exploding barrel) can be seen too, so fire is loud. Skeletons and demons are not fooled by darkness.
 
 ## Enemies
 
@@ -119,7 +130,9 @@ Strong melee hits **push you away** from the attacker:
 
 Some rooms have a **treasure chest** against a wall. Walk into it to open it: **every living hero in the party** gets 8 to 15 coins.
 
-About one chest in four is a **mimic**. A mimic stays a closed chest until someone comes close or hits it. Then it jumps open and attacks. A careful hero can test a chest from a distance with a spell or arrow: a real chest does not stop a shot, a mimic wakes up. A chest that rattles when you come near is a bad sign.
+About one chest in four is a **mimic**. A mimic stays a closed chest until someone comes close or hits it. Then it jumps open and attacks. A chest that rattles when you come near is a bad sign, and so is a wolf that growls at one.
+
+**Hitting a chest smashes it.** Any blow, arrow, spell or explosion breaks a closed chest, and most of the coins are lost in the cracks: the party gets only a third. So testing chests for mimics with a shot from afar costs you gold, and so does fighting carelessly next to a chest (enemy area attacks and barrel blasts break chests too). A closed chest stops shots, just as a mimic does. Poison does not hurt chests.
 
 ## Explosive barrels
 
@@ -155,7 +168,7 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 | Skeletons, raised skeletons, the Lich | physical 10 %, **poison completely** (the Lich: physical about half, magical 40 %) | heat 10 % more |
 | Imps, chorts, summoners, the Red Demon | **heat completely**, magical 20 % (the Red Demon 40 %) | cold |
 | Red Dragon | **heat completely**, magical half, physical 10 % | |
-| Barrels (chests take no damage) | physical half, poison completely | |
+| Barrels and chests | physical half, poison completely | |
 
 - Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
 - The Red Demon's claws and the Red Dragon's claws are partly fire.
@@ -277,7 +290,7 @@ The last three come from elements. A hit that is **at least half heat, cold or p
 
 - Melee heroes hit a little farther than their weapon looks. The white swoosh shows the real reach.
 - The Paladin's heal only reaches allies close by, so stick together.
-- Archers keep their distance. Close in, or use the Wizard and Assassin to pick them off.
+- Archers keep their distance. Close in, or use the Wizard and the Elven Ranger to pick them off.
 - Use corners: enemies can't attack what they can't see.
 - Skeletons, demons and the dragon see you in the dark, so a lit torch behind you helps you see them. Humans and most monsters lose you in the dark: put out a torch (any non-fire hit does it) to slip past them, and light it again with **E** or with fire when you fight.
 - Barrels are a weapon and a danger: light them from a distance, and keep your back free. Archers shoot barrels next to you.

@@ -147,7 +147,7 @@ function roster(root: HTMLElement): void {
   const chars: [string, ClassId, number, number, number][] = [
     ['Merlin', 'Wizard', 840, 3490, 137],
     ['Brunhild', 'Barbarian', 410, 2210, 64],
-    ['Shade', 'Assassin', 95, 610, 12],
+    ['Shade', 'ElvenRanger', 95, 610, 12],
   ];
   root.append(
     h(logoHeader),
@@ -422,7 +422,7 @@ function room(root: HTMLElement): void {
   const party: [string, ClassId, string[], string, string, string, boolean][] = [
     ['Brunhild', 'Barbarian', ['great_axe'], 'strike', 'charge', 'host', true],
     ['Merlin', 'Wizard', ['ember_staff'], 'frost_shard', 'fireball', 'you', false],
-    ['Shade', 'Assassin', ['knife', 'crossbow'], 'shoot', 'hide', 'ready', true],
+    ['Shade', 'ElvenRanger', ['knife', 'crossbow'], 'shoot', 'hide', 'ready', true],
     ['Aldric', 'Paladin', ['knight_sword'], 'judgement', 'holy_light', 'not ready', false],
   ];
   root.append(h(`<h1>Brunhild's run</h1>`));

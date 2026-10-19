@@ -5,7 +5,7 @@
 //! a sleep mist (purple orb) and a stone gaze (a beam that petrifies a hero the
 //! lich still sees when the wind-up ends).
 
-use super::{boss_idx, players_in, set_anim, target, BossBehaviour};
+use super::{boss_idx, set_anim, target, BossBehaviour};
 use crate::defs::bosses::{
     LICH_ARCHERS, LICH_BLIND_COOLDOWN, LICH_BLIND_DAMAGE, LICH_BLIND_FIRST, LICH_BLIND_SECS, LICH_BLIND_WINDUP, LICH_DISCIPLES, LICH_DRAIN_PER_DISCIPLE, LICH_GAZE_COOLDOWN,
     LICH_GAZE_FIRST, LICH_GAZE_SECS, LICH_GAZE_WINDUP, LICH_NOVA_DAMAGE, LICH_NOVA_EVERY, LICH_NOVA_KNOCK, LICH_NOVA_RADIUS, LICH_NOVA_WINDUP, LICH_ORB_SPEED,
@@ -110,22 +110,22 @@ impl Lich {
             run.players
                 .iter()
                 .enumerate()
-                .filter(|(pi, p)| p.alive && p.hidden <= 0.0 && !run.has_effect(Creature::Player(*pi), s.effect()) && crate::run::perception::sees(run, sight, at, p.pos()))
+                .filter(|(pi, p)| p.alive && !run.has_effect(Creature::Player(*pi), s.effect()) && crate::run::perception::sees(run, sight, at, p.pos()))
                 .min_by(|a, b| at.dist(a.1.pos()).total_cmp(&at.dist(b.1.pos())))
                 .map(|(pi, _)| (k, pi))
         })
     }
 
-    /// The nova: a dark burst that hurts every hero within the radius and pushes them straight away.
-    fn nova(run: &mut Run, pos: Vec2) {
+    /// The nova: a dark burst that hurts every hero and ally within the radius and pushes them straight away.
+    pub(crate) fn nova(run: &mut Run, pos: Vec2) {
         let r = LICH_NOVA_RADIUS;
         run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: 6 }, Some(pos));
         let dmg = Damage::new(LICH_NOVA_DAMAGE, DamageSplit::pure(DamageType::Magical));
         crate::run::objects::hurt_objects_in(run, pos, r, None, dmg);
-        for pi in players_in(run, pos, r, None) {
-            let away = pos.angle_to(run.players[pi].pos());
-            run.hurt_player(pi, dmg);
-            run.knock_player(pi, pos, away, LICH_NOVA_KNOCK);
+        for c in run.foes_in(pos, r, None) {
+            let away = pos.angle_to(run.creature_pos(c));
+            run.hurt_creature(c, dmg);
+            run.knock_creature(c, pos, away, LICH_NOVA_KNOCK);
         }
     }
 
@@ -227,7 +227,7 @@ impl BossBehaviour for Lich {
                             if let Some(pi) = target {
                                 let sight = run.monsters[bi].sight_now();
                                 let p = &run.players[pi];
-                                if p.alive && p.hidden <= 0.0 && crate::run::perception::sees(run, sight, pos, p.pos()) {
+                                if p.alive && crate::run::perception::sees(run, sight, pos, p.pos()) {
                                     let h = OnHit { kind: EffectKind::Petrified, secs: LICH_GAZE_SECS, chance: 1.0 };
                                     run.hurt_player(pi, Damage::physical(0.0).with_effect(h));
                                 }
@@ -300,7 +300,7 @@ impl BossBehaviour for Lich {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::protocol::{BossId, ClassId};
     use crate::run::tests::test_run;
@@ -336,7 +336,7 @@ mod tests {
     }
 
     /// A lich with its heroes placed at `offs` from it, awake and facing right.
-    fn lich_with(offs: &[Vec2]) -> (Run, usize) {
+    pub(crate) fn lich_with(offs: &[Vec2]) -> (Run, usize) {
         let classes = vec![ClassId::Paladin; offs.len()];
         let mut run = test_run(&classes, BossId::Lich);
         let bi = boss_idx(&run).unwrap();
@@ -516,16 +516,6 @@ mod tests {
         ticks(&mut run, &mut l, 0.1);
         let bi = boss_idx(&run).unwrap();
         assert_ne!(run.monsters[bi].anim, Anim::Windup, "no target without the effect: no cast");
-    }
-
-    #[test]
-    fn a_hero_who_hides_during_the_gaze_windup_is_not_petrified() {
-        let (mut run, mut l) = only(Spell::Gaze, Vec2::new(60.0, 0.0));
-        ticks(&mut run, &mut l, 0.1);
-        assert_eq!(l.gaze_target(), Some(run.players[0].id));
-        run.players[0].hidden = 3.0;
-        ticks(&mut run, &mut l, LICH_GAZE_WINDUP);
-        assert!(!run.has_effect(Creature::Player(0), EffectKind::Petrified));
     }
 
     #[test]

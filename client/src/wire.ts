@@ -29,6 +29,7 @@ type LightEvW = [number, number, boolean, number];
 type LightAddW = [number, number, number, number, number, number, boolean];
 type LightRemoveW = [number, number];
 type EffectW = [number, number, number, boolean];
+type GrowlW = [number, number];
 
 function unpackEv(e: EvW): Ev {
   switch (e[0]) {
@@ -88,6 +89,10 @@ function unpackEv(e: EvW): Ev {
       const [, id, kind, on] = e as EffectW;
       return { t: 'Effect', id, kind, on };
     }
+    case EV.Growl: {
+      const [, id] = e as GrowlW;
+      return { t: 'Growl', id };
+    }
     default:
       throw new Error(`unknown event code ${e[0]}`);
   }
@@ -110,15 +115,14 @@ export function unpackSnap(w: SnapW): Snapshot {
       dash_dy: me[7],
       cd1: me[8],
       cd2: me[9],
-      hidden: me[10],
-      spectating: me[11],
-      knock_vx: me[12]?.[0] ?? 0,
-      knock_vy: me[12]?.[1] ?? 0,
-      darkvision: me[13],
-      vision: me[14],
-      effects: me[15],
-      speed_mul: me[16],
-      no_act: me[17],
+      spectating: me[10],
+      knock_vx: me[11]?.[0] ?? 0,
+      knock_vy: me[11]?.[1] ?? 0,
+      darkvision: me[12],
+      vision: me[13],
+      effects: me[14],
+      speed_mul: me[15],
+      no_act: me[16],
     },
     boss: boss && { kind: boss[0], hp: boss[1], max_hp: boss[2], immune: boss[3], enraged: boss[4] },
     ev: ev.map(unpackEv),

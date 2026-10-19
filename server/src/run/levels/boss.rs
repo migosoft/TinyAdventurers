@@ -1,7 +1,6 @@
 //! A boss fight in a sealable arena. Any level can include one.
 
 use crate::defs::bosses as boss_defs;
-use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Mover, Rect, Tile};
 use crate::math::Vec2;
@@ -67,6 +66,7 @@ pub fn spawn(run: &mut Run, party: usize) {
         history: VecDeque::with_capacity(HISTORY_LEN),
         is_boss: true,
         dormant: true,
+        hiding: false,
         mover: if boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
         airborne: false,
         knock: Vec2::ZERO,
@@ -75,6 +75,7 @@ pub fn spawn(run: &mut Run, party: usize) {
         last_hit_by: None,
         effects: Default::default(),
         responses: boss_defs::responses(boss_id),
+        ally: None,
     });
     enc_mut(run).boss_ent = id;
     let mut behaviour = bosses::create(boss_id);
@@ -98,8 +99,8 @@ pub fn check_arena(run: &mut Run) {
     let alive: Vec<Vec2> = run.players.iter().filter(|p| p.alive).map(|p| p.pos()).collect();
     if !enc(run).awake && alive.iter().any(|p| hall.contains(*p)) {
         enc_mut(run).awake = true;
-        // Mimics elsewhere keep their disguise.
-        for m in run.monsters.iter_mut().filter(|m| m.etype != Some(EnemyType::Mimic)) {
+        // Mimics elsewhere keep their disguise (they are hiding, not dormant).
+        for m in run.monsters.iter_mut() {
             m.dormant = false;
         }
         let text = match enc(run).boss_id {

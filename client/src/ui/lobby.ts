@@ -9,7 +9,7 @@ import { spritePreview, type Atlas } from './atlas';
 import { esc } from './hud';
 import { logoHeader } from './logo';
 import { classFigure } from './classes';
-import { BOSS_TEXT, STAT_TEXT } from './text';
+import { BOSS_TEXT, STAT_TEXT, className } from './text';
 
 const BOSSES: BossId[] = ['Demon', 'Lich', 'Dragon'];
 /** Figure (atlas frame prefix), CSS filter approximating the in-game tint (anim/defs.ts) and preview scale. */
@@ -148,7 +148,7 @@ export class Lobby {
       hero.append(classFigure(this.atlas, c.class, 3));
       const info = document.createElement('div');
       info.className = 'cinfo';
-      info.innerHTML = `<small>Playing as</small><b>${esc(c.name)}</b><small>${c.class}</small>`;
+      info.innerHTML = `<small>Playing as</small><b>${esc(c.name)}</b><small>${className(c.class)}</small>`;
       hero.append(info);
     }
     const change = document.createElement('button');
@@ -171,7 +171,7 @@ export class Lobby {
     const players = room.players
       .map(
         (p) =>
-          `<li class="c-${p.class.toLowerCase()}"><span>${esc(p.name)}${p.id === room.host ? ' ★' : ''}</span><span>${p.class}</span><span class="${p.ready || p.id === room.host ? 'ok' : 'wait'}">${p.id === room.host ? 'host' : p.ready ? 'ready' : 'not ready'}</span></li>`,
+          `<li class="c-${p.class.toLowerCase()}"><span>${esc(p.name)}${p.id === room.host ? ' ★' : ''}</span><span>${className(p.class)}</span><span class="${p.ready || p.id === room.host ? 'ok' : 'wait'}">${p.id === room.host ? 'host' : p.ready ? 'ready' : 'not ready'}</span></li>`,
       )
       .join('');
     this.root.innerHTML = `

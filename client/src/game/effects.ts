@@ -19,8 +19,13 @@ export const DEPTH = {
   fog: 7000,
   /** Lich drain beams: above the fog, they show even where the hero cannot see. */
   beam: 7001,
+  /** Sound text ("grrrr", the sleeper's Z): above the darkness, under the damage numbers. */
+  sound: 7500,
   numbers: 8000,
 };
+
+/** Sound text (growl, the sleeper's Z): a dark fill with a light outline, readable on black and on lit floors. */
+export const SOUND_TEXT = { fill: '#1a1020', stroke: '#d8d0e0' };
 
 /** The lich's magic: dark purple, gloomy, shimmering. */
 export const GLOOM = { dark: 0x2a0a3a, mid: 0x5a1a8a, light: 0xa060f0, spark: 0xe0c0ff };
@@ -114,11 +119,20 @@ export class Effects {
   }
 
   /** A floating number or word; `depth`: `DEPTH.heroNumbers` for one on a hero. */
-  text(x: number, y: number, s: string, color: string, big = false, depth = DEPTH.numbers): void {
+  text(x: number, y: number, s: string, color: string, big = false, depth = DEPTH.numbers, stroke = '#140c1a'): void {
     const t = this.freeTexts.pop() ?? this.scene.add.text(0, 0, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4 });
-    t.setText(s).setColor(color).setFontSize(big ? 10 : 6).setStroke('#140c1a', big ? 3 : 2).setOrigin(0.5, 1);
+    t.setText(s).setColor(color).setFontSize(big ? 10 : 6).setStroke(stroke, big ? 3 : 2).setOrigin(0.5, 1);
     t.setPosition(Math.round(x + (Math.random() * 6 - 3)), Math.round(y)).setAlpha(1).setVisible(true).setDepth(depth).setScale(1);
     this.texts.push({ t, vy: big ? -34 : -26, life: big ? 0.9 : 0.7, max: big ? 0.9 : 0.7 });
+  }
+
+  /** The wolf's summon, reappear and vanish: about 18 clear-green sparks rising and fading over 0.6 s (not the poison tint). */
+  natureSparkles(x: number, y: number, r: number): void {
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.random() * Math.max(r, 6);
+      this.particle(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.5, (Math.random() - 0.5) * 14, -14 - Math.random() * 18, 0.6, Math.random() < 0.5 ? 0x60f070 : 0xc0ffb0, { frame: 'spark', fade: true });
+    }
   }
 
   update(dt: number): void {
@@ -310,6 +324,17 @@ export class Effects {
         depth: DEPTH.fx,
       });
     }
+  }
+
+  /** A smashed chest: wood chips thrown up and falling back, and a puff of dust. */
+  splinters(x: number, y: number): void {
+    const woods = [0x6a3e1e, 0x8a5a2a, 0xb07a3a, 0x4a2a14];
+    for (let i = 0; i < 16; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4;
+      const s = 50 + Math.random() * 60;
+      this.particle(x, y - 5, Math.cos(a) * s, Math.sin(a) * s, 0.45 + Math.random() * 0.3, woods[i % woods.length], { grav: 260, shrink: true });
+    }
+    this.burst(x, y - 2, 8, 0x9a8a78, 25, 0.5);
   }
 
   hitSpark(x: number, y: number, color = 0xffffff): void {

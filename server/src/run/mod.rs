@@ -3,6 +3,7 @@
 pub mod abilities;
 pub mod ai;
 pub mod bosses;
+pub mod companion;
 pub mod debug;
 pub mod effects;
 pub mod entities;
@@ -177,6 +178,7 @@ impl Run {
                 id,
                 res: prof.res,
                 melee: prof.melee,
+                responses: classes::responses(m.class),
                 conn: m.conn,
                 tx: Some(m.tx),
                 name: m.name,
@@ -195,7 +197,6 @@ impl Run {
                 aim_dist: 0.0,
                 cd1: 0.0,
                 cd2: 0.0,
-                hidden: 0.0,
                 anim: Anim::Idle,
                 anim_start: 0.0,
                 moving: false,
@@ -218,6 +219,7 @@ impl Run {
                 sight: prof.sight,
                 darkvision: None,
                 effects: effects::Effects::default(),
+                wolf: None,
             });
         }
         let n = run.players.len();
@@ -226,12 +228,12 @@ impl Run {
             let t = run.level.enemy_type(s.enemy);
             run.spawn_enemy(t, s.pos, None, n);
         }
-        // Mimics are monsters from the start, dormant and drawn as a closed chest.
+        // Mimics are monsters from the start, hiding and drawn as a closed chest.
         for c in run.layout.chests.clone() {
             if c.mimic {
                 let id = run.spawn_enemy(EnemyType::Mimic, c.pos, None, n);
                 let mi = run.monster_idx(id).unwrap();
-                run.monsters[mi].dormant = true;
+                run.monsters[mi].hiding = true;
             } else {
                 run.spawn_object(EntityKind::Chest, c.pos, objects::ObjState::Chest { opened: None });
             }
@@ -283,6 +285,7 @@ impl Run {
             history: VecDeque::with_capacity(HISTORY_LEN),
             is_boss: false,
             dormant: false,
+            hiding: false,
             mover: if enemies::is_demon(t) { Mover::Demon } else { Mover::Enemy },
             airborne: false,
             knock: Vec2::ZERO,
@@ -291,6 +294,7 @@ impl Run {
             last_hit_by: None,
             effects: effects::Effects::default(),
             responses: crate::defs::effects::EffectResponses::FULL,
+            ally: None,
         });
         id
     }
@@ -392,6 +396,7 @@ impl Run {
         for pi in 0..self.players.len() {
             self.step_player(pi);
         }
+        companion::vanish_orphans(self);
         self.touch_chests();
         self.refresh_lights(); // the AI perceives by the lights of this tick
 
@@ -412,6 +417,10 @@ impl Run {
                     m.anim = Anim::Idle;
                     m.anim_start = self.time;
                 }
+                continue;
+            }
+            if m.is_ally() {
+                companion::tick_wolf(self, mi, DT);
                 continue;
             }
             if self.layout.map.blocks_at(m.pos, m.mover) {
@@ -502,11 +511,6 @@ impl Run {
         p.rtt = (input.rtt as f64 / 1000.0).clamp(0.0, 0.5);
         p.cd1 = (p.cd1 - DT).max(0.0);
         p.cd2 = (p.cd2 - DT).max(0.0);
-        let was_hidden = p.hidden > 0.0;
-        p.hidden = (p.hidden - DT).max(0.0);
-        if was_hidden && p.hidden <= 0.0 {
-            p.hidden = 0.0;
-        }
         if p.sinking.is_some() {
             p.moving = false;
             return; // falling or drowning: no more moves or attacks (the client predicts this too)
@@ -556,6 +560,9 @@ impl Run {
         if !m.alive || m.is_boss || m.airborne || m.sinking.is_some() || dist <= 0.0 {
             return;
         }
+        if m.ally.as_ref().is_some_and(|a| a.dash.is_some()) {
+            return; // a dashing wolf is in the air, like a dashing hero
+        }
         let dist = dist * m.effects.knock_taken();
         let d = m.pos - from;
         let dir = if d.len() > 0.01 { d.norm() } else { Vec2::new(1.0, 0.0) };
@@ -579,10 +586,11 @@ impl Run {
 
     /// The ground under a monster's centre, like `terrain_player`: chasms and
     /// deep water take it (kill credit to the last hero who hurt it), lava
-    /// burns monsters that are not lava walkers.
+    /// burns monsters that are not lava walkers. The wolf is in the air while it
+    /// dashes, and over a chasm with its dash ready it dashes back to safe ground.
     fn terrain_monster(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
-        if !m.alive || m.is_boss || m.airborne {
+        if !m.alive || m.is_boss || m.airborne || m.ally.as_ref().is_some_and(|a| a.dash.is_some()) {
             return;
         }
         if let Some((t, how)) = m.sinking {
@@ -598,7 +606,18 @@ impl Run {
             return;
         }
         let pos = m.pos;
-        let tile = self.layout.map.tile_at(pos);
+        let (tx, ty) = dungeon::Map::tile_of(pos);
+        let tile = self.layout.map.get(tx, ty);
+        if let Some(a) = m.ally.as_mut() {
+            if tile == Tile::Chasm as u8 && a.dash_cd <= 0.0 {
+                m.knock = Vec2::ZERO;
+                companion::dash_back(self, mi);
+                return;
+            }
+            if self.layout.map.safe(tx, ty) {
+                a.last_safe = dungeon::Map::center_of(tx, ty);
+            }
+        }
         let how = if tile == Tile::Chasm as u8 {
             Some((dungeon::FALL_TIME, Sink::Fall))
         } else if tile == Tile::DeepWater as u8 {
@@ -711,7 +730,7 @@ impl Run {
         for oi in 0..self.objects.len() {
             let o = &self.objects[oi];
             let objects::ObjState::Chest { opened: None } = o.state else { continue };
-            if !near(o.pos) {
+            if o.gone || !near(o.pos) {
                 continue;
             }
             let pos = o.pos;
@@ -721,7 +740,7 @@ impl Run {
         }
         for mi in 0..self.monsters.len() {
             let m = &self.monsters[mi];
-            if m.alive && m.dormant && m.etype == Some(EnemyType::Mimic) && near(m.pos) {
+            if m.alive && m.hiding && m.etype == Some(EnemyType::Mimic) && near(m.pos) {
                 self.wake_mimic(mi);
             }
         }
@@ -730,7 +749,7 @@ impl Run {
     /// The mimic drops its disguise: a short pause while the lid flies open, then it hunts.
     pub fn wake_mimic(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
-        m.dormant = false;
+        m.hiding = false;
         m.ai.hold = enemies::MIMIC_WAKE_T;
         m.ai.cd = m.ai.cd.max(enemies::MIMIC_WAKE_T);
     }
@@ -757,11 +776,8 @@ impl Run {
             }
             h.pulse_t = 0.5;
             let (pos, r, dmg) = (h.pos, h.radius, h.damage);
-            for pi in 0..self.players.len() {
-                let p = &self.players[pi];
-                if p.alive && p.pos().dist(pos) < r + classes::PLAYER_RADIUS {
-                    self.hurt_player(pi, dmg);
-                }
+            for c in self.foes_touching(pos, r, false) {
+                self.hurt_creature(c, dmg);
             }
             objects::hurt_objects_in(self, pos, r, None, dmg);
         }
@@ -850,12 +866,91 @@ impl Run {
         healed
     }
 
+    /// Living heroes and living allies (not sinking) whose centre is within `r` of `at`, optionally inside a cone (dir, half-angle). Heroes first.
+    pub fn foes_in(&self, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<effects::Creature> {
+        let inside = |p: Vec2| p.dist(at) <= r && cone.map_or(true, |(dir, half)| crate::math::angle_diff(at.angle_to(p), dir).abs() <= half);
+        let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && inside(p.pos())).map(|(i, _)| effects::Creature::Player(i));
+        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.is_ally() && m.alive && m.sinking.is_none() && inside(m.pos)).map(|(i, _)| effects::Creature::Monster(i));
+        heroes.chain(allies).collect()
+    }
+
+    /// Living heroes within r + PLAYER_RADIUS and allies within r + radius of `at`; with `los`, only those in line of sight.
+    pub fn foes_touching(&self, at: Vec2, r: f64, los: bool) -> Vec<effects::Creature> {
+        let reach = |p: Vec2, radius: f64| p.dist(at) < r + radius && (!los || crate::collision::line_of_sight(&self.layout.map, at, p));
+        let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && reach(p.pos(), classes::PLAYER_RADIUS)).map(|(i, _)| effects::Creature::Player(i));
+        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.is_ally() && m.alive && m.sinking.is_none() && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
+        heroes.chain(allies).collect()
+    }
+
+    pub fn creature_pos(&self, c: effects::Creature) -> Vec2 {
+        match c {
+            effects::Creature::Player(i) => self.players[i].pos(),
+            effects::Creature::Monster(i) => self.monsters[i].pos,
+        }
+    }
+
+    pub fn creature_id(&self, c: effects::Creature) -> u32 {
+        match c {
+            effects::Creature::Player(i) => self.players[i].id,
+            effects::Creature::Monster(i) => self.monsters[i].id,
+        }
+    }
+
+    /// The body radius a melee reach is measured to.
+    pub fn creature_radius(&self, c: effects::Creature) -> f64 {
+        match c {
+            effects::Creature::Player(_) => classes::PLAYER_RADIUS,
+            effects::Creature::Monster(i) => self.monsters[i].radius,
+        }
+    }
+
+    /// An enemy attack on a hero or an ally (no hero is the source).
+    pub fn hurt_creature(&mut self, c: effects::Creature, dmg: Damage) {
+        match c {
+            effects::Creature::Player(i) => self.hurt_player(i, dmg),
+            effects::Creature::Monster(i) => {
+                self.hurt_monster(i, dmg, false, None);
+            }
+        }
+    }
+
+    pub fn knock_creature(&mut self, c: effects::Creature, from: Vec2, fallback: f64, dist: f64) {
+        match c {
+            effects::Creature::Player(i) => self.knock_player(i, from, fallback, dist),
+            effects::Creature::Monster(i) => self.knock_monster(i, from, dist),
+        }
+    }
+
+    /// Heals monster `mi` up to its maximum; returns what it gained. Shown like a hero's heal for an ally.
+    pub fn heal_monster(&mut self, mi: usize, amount: f64) -> f64 {
+        let m = &mut self.monsters[mi];
+        if !m.alive {
+            return 0.0;
+        }
+        let healed = amount.min(m.max_hp - m.hp).max(0.0);
+        m.hp += healed;
+        let (pos, ally) = (m.pos, m.is_ally());
+        if healed > 0.0 {
+            let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
+            if ally {
+                self.event_on_hero(ev, pos);
+            } else {
+                self.event(ev, Some(pos));
+            }
+        }
+        healed
+    }
+
     /// Returns true if the monster took damage.
     pub fn hurt_monster(&mut self, mi: usize, dmg: Damage, crit: bool, src_player: Option<usize>) -> bool {
         if !self.monsters[mi].alive {
             return false;
         }
         let pos = self.monsters[mi].pos;
+        let ally = self.monsters[mi].is_ally();
+        if ally && src_player.is_some() {
+            return false; // no hero attack hurts an ally
+        }
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             return false;
         }
@@ -872,7 +967,12 @@ impl Run {
             let healed = (-raw).min(m.max_hp - m.hp);
             m.hp += healed;
             if healed > 0.0 {
-                self.event(Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: false }, seen_by);
+                let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
+                if ally {
+                    self.event_on_hero(ev, pos);
+                } else {
+                    self.event(ev, seen_by);
+                }
             }
             return true;
         }
@@ -883,7 +983,12 @@ impl Run {
             m.hurt_t = 0.15;
         }
         let applied = raw.min(m.hp + raw);
-        self.event(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: false, ty, imm }, seen_by);
+        let ev = Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: ally, ty, imm };
+        if ally {
+            self.event_on_hero(ev, pos); // shown like damage on a hero
+        } else {
+            self.event(ev, seen_by);
+        }
         if src_player.is_none() && dmg.from_effect {
             if let Some(pi) = self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) {
                 self.players[pi].damage += applied;
@@ -901,7 +1006,7 @@ impl Run {
                 m.ai.path.clear();
                 m.ai.search_t = 3.0;
             }
-            if m.dormant && m.etype == Some(EnemyType::Mimic) {
+            if m.hiding {
                 self.wake_mimic(mi);
             }
             self.monsters[mi].dormant = false;
@@ -931,6 +1036,10 @@ impl Run {
     pub fn kill_monster(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
         if !m.alive {
+            return;
+        }
+        if m.is_ally() {
+            companion::wolf_died(self, mi);
             return;
         }
         m.alive = false;
@@ -1147,7 +1256,7 @@ pub mod tests {
             eat(m.pos.y.to_bits() as u64);
             eat(m.hp.to_bits() as u64);
             eat(m.is_boss as u64);
-            eat(m.dormant as u64);
+            eat((m.dormant || m.hiding) as u64);
         }
         // Chests only: barrels and torches are spawned last (after every other
         // id) and left out, so the rest of the setup is compared with the old values.
@@ -1288,31 +1397,43 @@ pub mod tests {
     }
 
     #[test]
+    fn a_mimic_is_hiding_not_dormant_and_the_boss_is_dormant_not_hiding() {
+        let run = (1..200)
+            .map(|seed| test_run_seed(&[ClassId::Paladin], BossId::Demon, seed))
+            .find(|r| r.monsters.iter().any(|m| m.etype == Some(EnemyType::Mimic)))
+            .expect("some seed has a mimic");
+        let mimics: Vec<&Monster> = run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Mimic)).collect();
+        assert!(mimics.iter().all(|m| m.hiding && !m.dormant));
+        let boss = run.monsters.iter().find(|m| m.is_boss).unwrap();
+        assert!(boss.dormant && !boss.hiding);
+    }
+
+    #[test]
     fn mimic_sleeps_until_touched_then_waits_before_hunting() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.monsters.retain(|m| m.is_boss);
         let pos = run.layout.player_spawns[0] + Vec2::new(60.0, 0.0);
         let id = run.spawn_enemy(EnemyType::Mimic, pos, None, 1);
         let mi = run.monster_idx(id).unwrap();
-        run.monsters[mi].dormant = true;
+        run.monsters[mi].hiding = true;
         // A player in plain sight does not wake it; only touching does.
         stand_at(&mut run, pos - Vec2::new(30.0, 0.0));
         let mi = run.monster_idx(id).unwrap();
-        assert!(run.monsters[mi].dormant);
+        assert!(run.monsters[mi].hiding);
         assert_eq!(run.monsters[mi].pos, pos);
         stand_at(&mut run, pos - Vec2::new(8.0, 0.0));
         let mi = run.monster_idx(id).unwrap();
-        assert!(!run.monsters[mi].dormant);
+        assert!(!run.monsters[mi].hiding);
         assert!(run.monsters[mi].ai.hold > 0.0);
         // The boss waking does not wake other mimics.
         let id2 = run.spawn_enemy(EnemyType::Mimic, pos + Vec2::new(0.0, 32.0), None, 1);
         let m2 = run.monster_idx(id2).unwrap();
-        run.monsters[m2].dormant = true;
+        run.monsters[m2].hiding = true;
         let hall = run.level.boss().unwrap().arena.center_px();
         stand_at(&mut run, hall);
         let m2 = run.monster_idx(id2).unwrap();
         assert!(run.level.boss().unwrap().awake);
-        assert!(run.monsters[m2].dormant);
+        assert!(run.monsters[m2].hiding);
     }
 
     /// Player 0 alone with the (sleeping) boss, next to a fresh terrain tile.

@@ -12,7 +12,8 @@ pub enum AbilityId {
     Dash,
     /// Crossbow, or an automatic dagger stab when an enemy is in melee range.
     CrossbowDagger,
-    Hide,
+    /// The Elven Ranger's secondary: summons or heals the Dire Wolf.
+    SummonWolf,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -28,14 +29,13 @@ pub struct AbilityDef {
     pub speed: f64,
     /// Projectile / effect radius (px).
     pub radius: f64,
-    /// Duration for dash / hide (s).
+    /// Duration for the dash (s).
     pub duration: f64,
 }
 
 pub const DAGGER_RANGE: f64 = 22.0;
 pub const DAGGER_DAMAGE: f64 = 18.0;
 pub const DAGGER_COOLDOWN: f64 = 0.35;
-pub const HIDDEN_CRIT_MULT: f64 = 4.0;
 pub const DASH_SPEED: f64 = 300.0;
 /// Knockback: the push speed is multiplied by this every 1/60 s step
 /// (e^-0.25, so a push is mostly over after about 0.2 s), and stops below
@@ -63,7 +63,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         Axe => d(id, 0.8, 32.0, 25.0, 2.45, 0.0, 0.0, 0.0),
         Dash => d(id, 5.0, 25.0, 0.0, 0.0, DASH_SPEED, 10.0, 0.18),
         CrossbowDagger => d(id, 0.7, 16.0, 260.0, 0.0, 290.0, 2.0, 0.0),
-        Hide => d(id, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 6.0),
+        SummonWolf => d(id, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
     }
 }
 
@@ -75,5 +75,5 @@ pub const ALL: [AbilityId; 8] = [
     AbilityId::Axe,
     AbilityId::Dash,
     AbilityId::CrossbowDagger,
-    AbilityId::Hide,
+    AbilityId::SummonWolf,
 ];

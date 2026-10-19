@@ -40,7 +40,7 @@ export const CLASS_START: Record<ClassId, ClassStart> = {
   Wizard: { attrs: { STR: 8, DEX: 14, CON: 12, INT: 15, WIL: 13, CHA: 10 }, baseHp: 60, weight: 9, speed: 72, melee: 'red_staff', ranged: null, primary: 'magic_missile', secondary: 'fireball', prof: ['Staff', 'Dagger', 'Cloth'] },
   Paladin: { attrs: { STR: 15, DEX: 8, CON: 13, INT: 10, WIL: 12, CHA: 14 }, baseHp: 105, weight: 12, speed: 66, melee: 'knight_sword', ranged: null, primary: 'strike', secondary: 'holy_light', prof: ['Sword', 'Mace', 'Hammer', 'All armor'] },
   Barbarian: { attrs: { STR: 15, DEX: 13, CON: 14, INT: 8, WIL: 12, CHA: 10 }, baseHp: 120, weight: 13, speed: 70, melee: 'great_axe', ranged: null, primary: 'strike', secondary: 'charge', prof: ['Axe', 'Hammer', 'Club', 'Sword', 'Spear', 'Throwing axe', 'Light + medium armor'] },
-  Assassin: { attrs: { STR: 10, DEX: 15, CON: 12, INT: 8, WIL: 14, CHA: 13 }, baseHp: 80, weight: 10, speed: 80, melee: 'knife', ranged: 'crossbow', primary: 'shoot', secondary: 'hide', prof: ['Dagger', 'Duelling sword', 'Machete', 'Bow', 'Crossbow', 'Throwing knives', 'Light armor'] },
+  ElvenRanger: { attrs: { STR: 10, DEX: 15, CON: 12, INT: 8, WIL: 14, CHA: 13 }, baseHp: 80, weight: 10, speed: 80, melee: 'knife', ranged: 'crossbow', primary: 'shoot', secondary: 'hide', prof: ['Dagger', 'Duelling sword', 'Machete', 'Bow', 'Crossbow', 'Throwing knives', 'Light armor'] },
 };
 
 export function hp(cls: ClassId, con: number): number {
@@ -106,12 +106,12 @@ export const ABILITIES: Ability[] = [
   A({ id: 'war_cry', name: 'War Cry', mono: 'WC', cls: 'Barbarian', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [{ attr: 'STR', min: 16 }], tint: 'none', damage: '–', stats: 'cd 12 s, radius 56: enemies Slowed 3 s (power STR, save CON), allies Accelerated 3 s', light: 'none', text: 'A roar that slows enemies and spurs allies on.' }),
   A({ id: 'ground_slam', name: 'Ground Slam', mono: 'GS', cls: 'Barbarian', slot: 'secondary', category: 'Technique', uses: 'melee', ranged: false, req: [{ attr: 'STR', min: 17 }, { weapon: ['Hammer', 'Club'] }], tint: 'physical', damage: 'weapon ×1.2', stats: 'cd 6 s, wind-up 0.5 s, radius 34 around you, pushes (STR)', light: 'the weapon', text: 'Slam the ground with a hammer or club, hitting and pushing everything around you.' }),
   // Assassin
-  A({ id: 'shoot', name: 'Shoot', mono: 'SH', cls: 'Assassin', slot: 'primary', category: 'WeaponAttack', uses: 'ranged', ranged: true, req: [], tint: 'physical', damage: 'the ranged weapon', stats: 'the ranged weapon; strikes with the melee weapon in melee', light: 'the weapon', text: 'Shoot your ranged weapon. In melee you stab instead.', start: true }),
-  A({ id: 'hide', name: 'Hide', mono: 'HI', cls: 'Assassin', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [], tint: 'none', damage: '–', stats: 'cd 8 s, 6 s hidden; attacks from hiding ×4', light: 'none', text: 'Vanish from enemy sight. Attacking from hiding deals ×4 critical damage.', start: true }),
-  A({ id: 'fan_of_knives', name: 'Fan of Knives', mono: 'FK', cls: 'Assassin', slot: 'primary', category: 'WeaponAttack', uses: 'ranged', ranged: true, req: [{ attr: 'DEX', min: 15 }, { weapon: ['Throwing knives'] }], tint: 'physical', damage: 'weapon ×0.6 per knife', stats: '3 knives in a 30° spread, attack time ×1.4', light: 'the weapon', text: 'Throw three knives at once.' }),
-  A({ id: 'backstab', name: 'Backstab', mono: 'BS', cls: 'Assassin', slot: 'primary', category: 'WeaponAttack', uses: 'melee', ranged: false, req: [{ attr: 'DEX', min: 16 }, { weapon: ['Dagger', 'Duelling sword', 'Katana', 'Machete'] }], tint: 'physical', damage: 'weapon; ×2 from behind', stats: 'the finesse weapon; "behind" = within 60° of the target\'s back', light: 'the weapon', text: 'Quick stabs that hit twice as hard from behind.' }),
-  A({ id: 'smoke_bomb', name: 'Smoke Bomb', mono: 'SB', cls: 'Assassin', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [{ attr: 'DEX', min: 15 }], tint: 'none', damage: '–', stats: 'cd 14 s; cloud at your feet, radius 40, 4 s: enemies inside Blind (power DEX, save CON)', light: 'none', text: 'Drop a cloud of smoke that blinds enemies inside it.' }),
-  A({ id: 'poison_coat', name: 'Poison Coat', mono: 'PC', cls: 'Assassin', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [{ attr: 'WIL', min: 15 }], tint: 'poison', damage: '+30 % poison share', stats: 'cd 16 s; 6 s: your weapon attacks add a poison share and Poisoned 3 s on hit', light: 'none', text: 'Coat your weapons in poison for a while.' }),
+  A({ id: 'shoot', name: 'Shoot', mono: 'SH', cls: 'ElvenRanger', slot: 'primary', category: 'WeaponAttack', uses: 'ranged', ranged: true, req: [], tint: 'physical', damage: 'the ranged weapon', stats: 'the ranged weapon; strikes with the melee weapon in melee', light: 'the weapon', text: 'Shoot your ranged weapon. In melee you stab instead.', start: true }),
+  A({ id: 'hide', name: 'Hide', mono: 'HI', cls: 'ElvenRanger', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [], tint: 'none', damage: '–', stats: 'cd 8 s, 6 s hidden; attacks from hiding ×4', light: 'none', text: 'Vanish from enemy sight. Attacking from hiding deals ×4 critical damage.', start: true }),
+  A({ id: 'fan_of_knives', name: 'Fan of Knives', mono: 'FK', cls: 'ElvenRanger', slot: 'primary', category: 'WeaponAttack', uses: 'ranged', ranged: true, req: [{ attr: 'DEX', min: 15 }, { weapon: ['Throwing knives'] }], tint: 'physical', damage: 'weapon ×0.6 per knife', stats: '3 knives in a 30° spread, attack time ×1.4', light: 'the weapon', text: 'Throw three knives at once.' }),
+  A({ id: 'backstab', name: 'Backstab', mono: 'BS', cls: 'ElvenRanger', slot: 'primary', category: 'WeaponAttack', uses: 'melee', ranged: false, req: [{ attr: 'DEX', min: 16 }, { weapon: ['Dagger', 'Duelling sword', 'Katana', 'Machete'] }], tint: 'physical', damage: 'weapon; ×2 from behind', stats: 'the finesse weapon; "behind" = within 60° of the target\'s back', light: 'the weapon', text: 'Quick stabs that hit twice as hard from behind.' }),
+  A({ id: 'smoke_bomb', name: 'Smoke Bomb', mono: 'SB', cls: 'ElvenRanger', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [{ attr: 'DEX', min: 15 }], tint: 'none', damage: '–', stats: 'cd 14 s; cloud at your feet, radius 40, 4 s: enemies inside Blind (power DEX, save CON)', light: 'none', text: 'Drop a cloud of smoke that blinds enemies inside it.' }),
+  A({ id: 'poison_coat', name: 'Poison Coat', mono: 'PC', cls: 'ElvenRanger', slot: 'secondary', category: 'Technique', uses: 'none', ranged: false, req: [{ attr: 'WIL', min: 15 }], tint: 'poison', damage: '+30 % poison share', stats: 'cd 16 s; 6 s: your weapon attacks add a poison share and Poisoned 3 s on hit', light: 'none', text: 'Coat your weapons in poison for a while.' }),
 ];
 
 export const ABILITY: Record<string, Ability> = Object.fromEntries(ABILITIES.map((a) => [a.id, a]));
@@ -120,7 +120,7 @@ export const START_POOL: Record<ClassId, string[]> = {
   Wizard: ['magic_missile', 'fireball'],
   Paladin: ['strike', 'holy_light'],
   Barbarian: ['strike', 'charge'],
-  Assassin: ['shoot', 'hide'],
+  ElvenRanger: ['shoot', 'hide'],
 };
 
 // ------------------------------------------------------------ skill trees
@@ -232,8 +232,8 @@ export const TREES: Record<ClassId, TreeNode[]> = {
     plus('b_d4', 'CON', 0, 3, 300, ['b_d5']),
     N('b_d5', 'keystone', 0, 4, 'Unbreakable', 'Your CON counts +4 for every save.', 1000, [], { req: r('CON', 16) }),
   ],
-  Assassin: [
-    N('a0', 'start', 0, 0, 'Assassin', 'Where the tree starts. Always owned.', 0, ['a_u1', 'a_l1', 'a_r1', 'a_d1']),
+  ElvenRanger: [
+    N('a0', 'start', 0, 0, 'ElvenRanger', 'Where the tree starts. Always owned.', 0, ['a_u1', 'a_l1', 'a_r1', 'a_d1']),
     // Shadow (up)
     N('a_u1', 'improve', 0, -1, 'Deeper Shadows', 'Hide: +2 s.', 300, ['a_u2'], { ability: 'hide' }),
     plus('a_u2', 'WIL', 0, -2, 160, ['a_u3', 'a_u4']),

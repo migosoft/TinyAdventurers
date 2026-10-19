@@ -7,7 +7,7 @@ pub enum EntityKind {
     Wizard = 0,
     Paladin = 1,
     Barbarian = 2,
-    Assassin = 3,
+    ElvenRanger = 3,
     // Monsters
     GoblinArcher = 10,
     SkeletonWarrior = 11,
@@ -22,6 +22,8 @@ pub enum EntityKind {
     Chort = 20,
     Summoner = 21,
     Ogre = 22,
+    /// The Elven Ranger's wolf: an ally monster.
+    DireWolf = 23,
     // Bosses
     Demon = 30,
     Lich = 31,
@@ -52,11 +54,11 @@ pub enum EntityKind {
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 37] = [
+    pub const ALL: [EntityKind; 38] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
-        EntityKind::Assassin,
+        EntityKind::ElvenRanger,
         EntityKind::GoblinArcher,
         EntityKind::SkeletonWarrior,
         EntityKind::SkeletonArcher,
@@ -70,6 +72,7 @@ impl EntityKind {
         EntityKind::Chort,
         EntityKind::Summoner,
         EntityKind::Ogre,
+        EntityKind::DireWolf,
         EntityKind::Demon,
         EntityKind::Lich,
         EntityKind::Dragon,
@@ -104,6 +107,7 @@ impl EntityKind {
             OrcWarrior | OrcArcher | Necromancer | Disciple | Summoner => 16.0,
             Chort => 18.0,
             Ogre => 26.0,
+            DireWolf => 12.0,
             Lich => 28.0,
             // 43 px frames drawn at 1.2x.
             Dragon => 51.0,
@@ -161,7 +165,8 @@ impl Anim {
 }
 
 pub mod flags {
-    pub const HIDDEN: u8 = 1;
+    /// Concealed (a mimic as a chest).
+    pub const HIDING: u8 = 1;
     pub const IMMUNE: u8 = 2;
     pub const ENRAGED: u8 = 4;
     pub const DORMANT: u8 = 8;

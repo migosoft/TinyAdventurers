@@ -1,6 +1,6 @@
 //! Player abilities (one executor per AbilityId) and projectile simulation.
 
-use super::entities::{AiState, Projectile, Target};
+use super::entities::Projectile;
 use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::{self as ab, AbilityId};
@@ -9,6 +9,7 @@ use crate::defs::damage::{kind_split, Damage};
 use crate::defs::effects::OnHit;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::defs::lights::{self, LightKind};
+use super::effects::Creature;
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
 
@@ -21,18 +22,34 @@ fn rewind_ticks(run: &Run, pi: usize) -> usize {
     ((run.players[pi].view_lag * TICK_HZ).round() as usize).min(super::entities::HISTORY_LEN - 1)
 }
 
-/// The dagger is used instead of the crossbow when a monster is this close.
-pub fn dagger_target(run: &Run, pi: usize) -> Option<usize> {
+/// What the dagger stabs: a monster, or a closed chest (so a chest and a hidden mimic answer alike).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DaggerTarget {
+    Monster(usize),
+    Object(usize),
+}
+
+/// The dagger is used instead of the crossbow when a monster or a closed chest is this close.
+pub fn dagger_target(run: &Run, pi: usize) -> Option<DaggerTarget> {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
-    run.monsters
+    let monsters = run
+        .monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive && !m.airborne)
-        .map(|(i, m)| (i, m.pos_ago(rw).dist(pos) - m.radius))
+        .filter(|(_, m)| m.alive && !m.airborne && !m.is_ally())
+        .map(|(i, m)| (DaggerTarget::Monster(i), m.pos_ago(rw).dist(pos) - m.radius));
+    let chests = run
+        .objects
+        .iter()
+        .enumerate()
+        .filter(|(_, o)| !o.gone && matches!(o.state, crate::run::objects::ObjState::Chest { opened: None }))
+        .map(|(i, o)| (DaggerTarget::Object(i), o.pos.dist(pos) - o.radius));
+    monsters
+        .chain(chests)
         .filter(|&(_, d)| d <= ab::DAGGER_RANGE)
         .min_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|(i, _)| i)
+        .map(|(t, _)| t)
 }
 
 pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool) {
@@ -41,14 +58,13 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
         return;
     }
     let def = ab::def(id);
-    let (pos, aim, aim_dist, hidden) = {
+    let (pos, aim, aim_dist) = {
         let p = &run.players[pi];
-        (p.pos(), p.aim, p.aim_dist, p.hidden > 0.0)
+        (p.pos(), p.aim, p.aim_dist)
     };
     let dir = Vec2::from_angle(aim);
-    let attack = !matches!(id, AbilityId::Heal | AbilityId::Hide);
-    let crit = hidden && attack;
-    let mult = (if crit { ab::HIDDEN_CRIT_MULT } else { 1.0 }) * run.players[pi].mods.damage;
+    let crit = false;
+    let mult = run.players[pi].mods.damage;
     let on_hit = ab::on_hit(id);
     let mut cooldown = def.cooldown;
     let anim = match id {
@@ -76,6 +92,12 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
                     total += run.heal_player(qi, def.damage);
                 }
             }
+            for mi in 0..run.monsters.len() {
+                let m = &run.monsters[mi];
+                if m.is_ally() && m.alive && m.pos.dist(pos) <= def.radius {
+                    total += run.heal_monster(mi, def.damage);
+                }
+            }
             run.players[pi].healing += total;
             Anim::Cast
         }
@@ -88,35 +110,31 @@ pub fn try_use(run: &mut Run, pi: usize, id: AbilityId, shot: u16, primary: bool
             Anim::Dash
         }
         AbilityId::CrossbowDagger => {
-            if let Some(mi) = dagger_target(run, pi) {
+            if let Some(t) = dagger_target(run, pi) {
                 cooldown = ab::DAGGER_COOLDOWN;
-                run.hurt_monster(mi, Damage { on_hit, ..Damage::new(ab::DAGGER_DAMAGE * mult, run.players[pi].melee) }, crit, Some(pi));
+                let dmg = Damage { on_hit, ..Damage::new(ab::DAGGER_DAMAGE * mult, run.players[pi].melee) };
+                match t {
+                    DaggerTarget::Monster(mi) => {
+                        run.hurt_monster(mi, dmg, crit, Some(pi));
+                    }
+                    DaggerTarget::Object(oi) => {
+                        let by = run.players[pi].id;
+                        crate::run::objects::hurt_object(run, oi, dmg, Some(by));
+                    }
+                }
                 Anim::Melee
             } else {
                 spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage * mult, def.radius, def.range / def.speed, 0.0, None, crit, on_hit);
                 Anim::Shoot
             }
         }
-        AbilityId::Hide => {
-            let pid = run.players[pi].id;
-            run.players[pi].hidden = def.duration;
-            for m in &mut run.monsters {
-                if m.ai.target == Some(Target::Player(pid)) {
-                    m.ai.target = None;
-                    m.ai.windup = None;
-                    m.ai.state = AiState::Search;
-                    m.ai.search_t = 1.5;
-                    m.ai.path.clear();
-                }
-            }
+        AbilityId::SummonWolf => {
+            super::companion::use_ability(run, pi);
             Anim::Cast
         }
     };
     let p = &mut run.players[pi];
     let cooldown = cooldown / p.mods.attack_speed;
-    if attack {
-        p.hidden = 0.0;
-    }
     if primary {
         p.cd1 = cooldown;
     } else {
@@ -136,7 +154,7 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
         .enumerate()
         .filter(|(_, m)| {
             // Flying monsters are out of reach of melee.
-            if !m.alive || m.airborne {
+            if !m.alive || m.airborne || m.is_ally() {
                 return false;
             }
             let mp = m.pos_ago(rw);
@@ -178,7 +196,7 @@ pub fn dash_contact(run: &mut Run, pi: usize) {
         .monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive && !m.airborne && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + 4.0)
+        .filter(|(_, m)| m.alive && !m.airborne && !m.is_ally() && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + 4.0)
         .map(|(i, m)| (i, m.id))
         .collect();
     for (mi, id) in hits {
@@ -334,29 +352,31 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             break;
         }
         let r = run.projectiles[i].radius;
-        if let Some(oi) = run.objects.iter().position(|o| o.blocks() && o.pos.dist(pos) < o.radius + r) {
+        if let Some(oi) = run.objects.iter().position(|o| o.stops_shots() && o.pos.dist(pos) < o.radius + r) {
             impact_object(run, i, pos, oi);
             break;
         }
         let pr = &run.projectiles[i];
         if pr.from_player {
-            let hit = run.monsters.iter().position(|m| m.alive && m.shot_dist(pos) < m.radius + pr.radius);
+            let hit = run.monsters.iter().position(|m| m.alive && !m.is_ally() && m.shot_dist(pos) < m.radius + pr.radius);
             if let Some(mi) = hit {
-                impact(run, i, pos, Some(mi));
+                impact(run, i, pos, Some(Creature::Monster(mi)));
                 break;
             }
         } else {
-            let hit = run.players.iter().position(|p| p.alive && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius);
-            if let Some(qi) = hit {
-                impact(run, i, pos, Some(qi));
+            // Heroes first, then allies.
+            let hero = run.players.iter().position(|p| p.alive && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius).map(Creature::Player);
+            let ally = || run.monsters.iter().position(|m| m.is_ally() && m.alive && m.sinking.is_none() && m.shot_dist(pos) < m.radius + pr.radius).map(Creature::Monster);
+            if let Some(c) = hero.or_else(ally) {
+                impact(run, i, pos, Some(c));
                 break;
             }
         }
     }
 }
 
-/// Projectile `i` hits something at `pos` (target index on the opposing team, if any).
-fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<usize>) {
+/// Projectile `i` hits something at `pos` (a creature on the opposing team, if any).
+fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
     let (from_player, owner, damage, crit, explode_r, k, knock) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.knock);
@@ -365,12 +385,12 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<usize>) {
         explode(run, pos, explode_r, damage, from_player, src, k, crit, knock);
         return;
     }
-    if let Some(t) = target {
-        if from_player {
-            run.hurt_monster(t, damage, crit, src);
-        } else {
-            run.hurt_player(t, damage);
+    match target {
+        Some(Creature::Monster(mi)) if from_player => {
+            run.hurt_monster(mi, damage, crit, src);
         }
+        Some(c) if !from_player => run.hurt_creature(c, damage),
+        _ => {}
     }
 }
 
@@ -398,23 +418,16 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, from_player: bo
             .monsters
             .iter()
             .enumerate()
-            .filter(|(_, m)| m.alive && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos))
+            .filter(|(_, m)| m.alive && !m.is_ally() && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos))
             .map(|(i, _)| i)
             .collect();
         for mi in hits {
             run.hurt_monster(mi, damage, crit, src);
         }
     } else {
-        let hits: Vec<usize> = run
-            .players
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.alive && p.pos().dist(pos) < r + PLAYER_RADIUS && line_of_sight(&run.layout.map, pos, p.pos()))
-            .map(|(i, _)| i)
-            .collect();
-        for qi in hits {
-            run.hurt_player(qi, damage);
-            run.knock_player(qi, pos, 0.0, knock);
+        for c in run.foes_touching(pos, r, true) {
+            run.hurt_creature(c, damage);
+            run.knock_creature(c, pos, 0.0, knock);
         }
     }
     let by = src.map(|pi| run.players[pi].id);
@@ -444,8 +457,8 @@ mod tests {
     }
 
     #[test]
-    fn assassin_uses_dagger_in_melee_range_and_crossbow_otherwise() {
-        let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
+    fn ranger_uses_dagger_in_melee_range_and_crossbow_otherwise() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         let hp = run.monsters[mi].hp;
         try_use(&mut run, 0, AbilityId::CrossbowDagger, 1, true);
@@ -453,27 +466,11 @@ mod tests {
         assert!(run.projectiles.is_empty(), "no bolt fired");
         assert_eq!(run.players[0].cd1, ab::DAGGER_COOLDOWN);
 
-        let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         put_monster_near(&mut run, 0, 60.0);
         try_use(&mut run, 0, AbilityId::CrossbowDagger, 1, true);
         assert_eq!(run.projectiles.len(), 1, "crossbow bolt fired");
         assert_eq!(run.projectiles[0].kind, EntityKind::Bolt);
-    }
-
-    #[test]
-    fn hidden_attack_crits_times_four_and_breaks_stealth() {
-        let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
-        let mi = put_monster_near(&mut run, 0, 10.0);
-        run.monsters[mi].hp = 1000.0;
-        try_use(&mut run, 0, AbilityId::Hide, 1, false);
-        assert!(run.players[0].hidden > 0.0);
-        try_use(&mut run, 0, AbilityId::CrossbowDagger, 2, true);
-        assert_eq!(run.monsters[mi].hp, 1000.0 - ab::DAGGER_DAMAGE * ab::HIDDEN_CRIT_MULT);
-        assert_eq!(run.players[0].hidden, 0.0);
-        // Not hidden: normal damage.
-        run.players[0].cd1 = 0.0;
-        try_use(&mut run, 0, AbilityId::CrossbowDagger, 3, true);
-        assert_eq!(run.monsters[mi].hp, 1000.0 - ab::DAGGER_DAMAGE * (ab::HIDDEN_CRIT_MULT + 1.0));
     }
 
     #[test]
@@ -490,8 +487,8 @@ mod tests {
         try_use(&mut run, 0, AbilityId::Sword, 2, true);
         assert!(run.monsters[mi].hp < hp, "and hits it on the ground");
 
-        // Dagger: the assassin shoots the crossbow instead.
-        let mut run = test_run(&[ClassId::Assassin], BossId::Demon);
+        // Dagger: the ranger shoots the crossbow instead.
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         run.monsters[mi].airborne = true;
         assert_eq!(dagger_target(&run, 0), None);
@@ -600,7 +597,7 @@ mod tests {
 
     #[test]
     fn a_shot_stops_at_the_first_enemy_even_when_fast_forwarded() {
-        for (class, ability) in [(ClassId::Wizard, AbilityId::MagicMissile), (ClassId::Assassin, AbilityId::CrossbowDagger)] {
+        for (class, ability) in [(ClassId::Wizard, AbilityId::MagicMissile), (ClassId::ElvenRanger, AbilityId::CrossbowDagger)] {
             // Up to 150 ms fast-forward: the shot starts ~40 px out, past the first orc.
             for rtt in [0.0, 0.1, 0.3] {
                 let mut run = test_run(&[class], BossId::Demon);

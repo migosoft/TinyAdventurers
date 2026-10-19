@@ -613,7 +613,7 @@ mod tests {
         assert!(p.players[0].online);
         assert_eq!(players(&db, "", "created", 0, &none).await.unwrap().players[0].name, "Underxscore", "newest first");
 
-        let c = db::create_character(&db, under, "Lefty", ClassId::Assassin).await.unwrap();
+        let c = db::create_character(&db, under, "Lefty", ClassId::ElvenRanger).await.unwrap();
         db::touch_activity(&db, under).await.unwrap();
         db::record_run(&db, &record(under, c.id, Outcome::Victory, false)).await.unwrap();
         let d = player(&db, under, &none, &|ch| ch == c.id).await.unwrap().unwrap();

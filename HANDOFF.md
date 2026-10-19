@@ -11,23 +11,77 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Next session
 
-**Progression: designed and approved, plan 1 written; ON HOLD (2026-10-18, branch `feature/skill-tree-design`):**
-- **Do not implement yet.** The user wants another branch (another agent, another computer) merged into `main` first.
+**Merge done (2026-10-19):** `origin/feature/elven-ranger` (Elven Ranger, Dire Wolf, breakable chests) was fast-forwarded into local `main` (`c5b3860`, **not pushed**), and `main` was merged into `feature/skill-tree-design`.
+
+**Progression: designed and approved, plan 1 written (branch `feature/skill-tree-design`):**
 - Attributes, races, weapons and items, class skill trees, loadouts and a new pre-run UI.
-- **Spec (approved, every decision final):** [docs/superpowers/specs/2026-10-18-progression-design.md](docs/superpowers/specs/2026-10-18-progression-design.md), with screenshots in `docs/superpowers/specs/img/2026-10-18-progression/`.
-- **Plan 1 of 5 (approved by the user):** [docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md](docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md).
+- **Spec:** [docs/superpowers/specs/2026-10-18-progression-design.md](docs/superpowers/specs/2026-10-18-progression-design.md), with screenshots in `docs/superpowers/specs/img/2026-10-18-progression/`. **It was written before the Elven Ranger:** it still names the Assassin, Hide (ability, tree nodes, hidden crits) and plans the Elf race as future work. Those parts must be reconciled with the user before plan 1 is built.
+- **Plan 1 of 5:** [docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md](docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md). Needs the re-check against the merged code (entity types now carry `responses`, `classes::profile` is per class, Hide and `HIDDEN_CRIT_MULT` are gone, the wolf is an ally `Monster`).
 - **Mock screens (throwaway spike):** `?uidemo=roster|create|sheet|tree|tree-barbarian|equipment|loadout|room` (`client/src/uidemo/`); shots with `tools/e2e/ui-shots.mjs`.
-- **When resuming, in this order:**
-  1. Check that the other branch is merged into `main`. Merge `main` into `feature/skill-tree-design`; the likely conflicts are `HANDOFF.md`, `docs/TODO.md` and `client/src/main.ts` (the `?uidemo` hook).
-  2. **Re-check plan 1 against the merged code:** the files, functions and line references it names, the fingerprint values in `run/mod.rs`, and whether the merged work changed anything the spec builds on (abilities, classes, enemies, effects, protocol). Fix the plan; if a spec decision is affected, ask the user.
-  3. Build plan 1. Ask the user for the execution method; the recommendation is superpowers:subagent-driven-development.
-  4. Then write and build each next plan with superpowers:writing-plans, **one at a time, just before building it** (each builds on the code the previous one creates): plan 2 weapons and items (spec §6.1–6.2, §8); plan 3 abilities, the melee rule, overkill piercing, the 16 new abilities (§6.3–6.6, §7 enemy melee rule); plan 4 skill trees, Attribute shop, `Progress` v2, respec, protocol (§2, §9, §11, §12); plan 5 the new UI, deleting the spike (§13).
+- **Next, in this order:**
+  1. Settle the Assassin → Elven Ranger questions in the spec with the user, then fix the spec and plan 1.
+  2. Build plan 1. Ask the user for the execution method; the recommendation is superpowers:subagent-driven-development.
+  3. Then write and build each next plan with superpowers:writing-plans, **one at a time, just before building it**: plan 2 weapons and items (spec §6.1–6.2, §8); plan 3 abilities, the melee rule, overkill piercing, the 16 new abilities (§6.3–6.6, §7 enemy melee rule); plan 4 skill trees, Attribute shop, `Progress` v2, respec, protocol (§2, §9, §11, §12); plan 5 the new UI, deleting the spike (§13).
 
-The straight vision edges (TODO priority 2) are **merged into `main` and pushed** (2026-10-16, at the user's request; the server now sees by the same polygon as the client draws, see "Last feature" below). **The user played it and approved the look** (2026-10-16: "I like the new edges design"). Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons.
+**Other open items:**
+- **The user's play-test of the ranger** (see "Last feature (2026-10-16): Elven Ranger and the Dire Wolf", "Still to play"); follow-ups in TODO "Elven Ranger follow-ups".
+- **Push `main`** when the user asks (local `main` is ahead of `origin/main` by the ranger and the breakable chests).
+- **Pillars** (TODO section): free-standing wall tiles in large rooms, also as torch mounts.
+- **Breakable chests** are built (see below). The user is still thinking about bodies blocking movement; do not build that.
+- **Server load** (TODO priority 16): measure, then cache each hero's view while nothing changed and share it with spectators. The ranger's 18-tile vision makes each view dearer. Before any public launch.
+- Still to do with the user from before: a real play-test of the lich fight (orbs, stone gaze) and of fire in the demon and dragon dungeons.
 
-1. **TODO priority 4** is designed and planned (plan 1), on hold until the other branch is merged into `main` (see above).
-2. **Pillars** (new TODO section, the user liked them in the vision-edges demo, 2026-10-16): free-standing wall tiles in large rooms, also as torch mounts.
-3. **Server load** (new TODO priority 16, tier 4, section "Server performance follow-ups", 2026-10-16): measure, then cache each hero's view while nothing changed and share it with spectators. The views are estimated to be most of a run's CPU. Before any public launch; not urgent while play is private.
+## Breakable chests (built 2026-10-16)
+
+**Branch:** `feature/breakable-chests` (from `main` at `5857780`), worked in the worktree `.claude/worktrees/breakable-chests` while another agent built the Elven Ranger in the main checkout. **Merged** into `feature/elven-ranger` (`29cd62a`); `main` was fast-forwarded to it (`5eab088`), local only, not pushed. Decided with the user in chat (small change, no spec); the decisions are in TODO "Chests, mimics and coins follow-ups".
+- **Why:** hitting every chest once was a free mimic test.
+- **What:** any hit that gets through smashes a closed chest (`objects::break_chest`): `Boom k 8` splinters, a third of a `CHEST_COINS` roll for the party (`BROKEN_CHEST_SHARE`). A closed chest stops shots (`WorldObject::stops_shots`) and is a dagger target (`DaggerTarget`), like a hidden mimic. Client: the cosmetic shot stops at closed chests (`HITBOX` now has the chest), the dagger prediction counts them, `Effects.splinters`.
+- **Merge with the ranger:** both branches touch `run/abilities.rs` (`dagger_target`: the ranger adds an ally skip there; keep both), `GameScene.ts` (dagger prediction) and the docs. The TODO/handoff commit `a898f22` landed on `feature/elven-ranger` by accident (the other agent had switched the main checkout); this branch has the same change cherry-picked.
+- **Verified:** server **331 tests** (324 before, 7 new in `run/objects.rs`), no warnings, fingerprints unchanged; client **84 tests** (one hitbox test changed: a chest now stops shots exactly like a mimic), typecheck and build pass. **Not looked at live:** the splinter burst and breaking chests in a real run.
+- **Test isolation:** the test compose file has a fixed project name and shared cargo target volume; the parallel runs used `-p ta-chests-test` and an override mounting the volume `ta-target-chests`.
+
+## Last feature (2026-10-16): Elven Ranger and the Dire Wolf
+
+**Branch:** `feature/elven-ranger` (from `main` at `5857780`), `git log --oneline main..feature/elven-ranger`. Built task by task with subagent-driven development (12 tasks, each reviewed, then a final whole-branch review). **The full technical description with every decision and its reason:** [docs/superpowers/reports/2026-10-16-elven-ranger-implementation.md](docs/superpowers/reports/2026-10-16-elven-ranger-implementation.md) (the working ledger was deleted after the final review; the report replaces it). **Pushed to `origin/feature/elven-ranger`, not merged into `main`**; another agent takes over the merge. Local `main` is at `5eab088` (breakable chests), which is not pushed yet. `main` (breakable chests) was merged into it (`29cd62a`). Spec: [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](docs/superpowers/specs/2026-10-16-elven-ranger-design.md); plan: [docs/superpowers/plans/2026-10-16-elven-ranger.md](docs/superpowers/plans/2026-10-16-elven-ranger.md). Docs: PLAYER_GUIDE (the ranger and her wolf), TECHNICAL §5 ("Hiding and dormant", "Companions", entity types), §4 (`Growl`, `Boom k 9`), §7 (sound text rule, next to the draw order), TODO (4a done, "Elven Ranger follow-ups").
+
+**How it came about:** the Assassin's art is an elf, so the user turned the class into the **Elven Ranger** and dropped the restyle (TODO item 9). The ranger is the "elven archer" of TODO item 8. All settled with the user; the decisions are in the spec.
+
+**What was built:**
+- **The class:** `ClassId::ElvenRanger` (`EntityKind::ElvenRanger` stays id 3), same `elf_m` art, 90 HP, speed 80, primary `CrossbowDagger` ("Bow / Rapier": the melee thrust is drawn with the rapier `weapon_duel_sword`). Entity type **Elf**: 10 % poison, vision 18 tiles, darkvision 1/3, immune to Sleep. Migration `0005_elven_ranger.sql` wipes characters and statistics (the user approved; accounts stay) and changes the class CHECK.
+- **Hide is gone** everywhere (`AbilityId::Hide`, `Player.hidden`, `flags::HIDDEN`, `SelfState.hidden`, the client shimmer and predictor, text). It may return later as an invisibility effect.
+- **Entity types carry effect responses** (`entity_types::responses`): Elf and the new **Magical Beast** (10 % poison, 10 % magical, 80/20 physical/magical melee, vision 18, darkvision 100 %, immune to Sleep).
+- **`hiding` split from `dormant`** (`Monster.hiding`, `FLAG.HIDING` 1): the mimic is hiding; the boss before its fight and the lich's disciples stay dormant.
+- **The Dire Wolf** (secondary, `AbilityId::SummonWolf`, 8 s; 60 s after its death): summon with a green puff (`Ev::Boom { k: 9 }`; k 8 is the chest splinters from the breakable-chests feature), or heal 20 %. 80 HP, bite 10 per 0.9 s, speed 88. It follows, guards (enemies within 3 tiles of the ranger), fights back, dashes at prey (4 tiles, 20 damage, 5 s; it jumps chasms, and an attack dash that would end over a chasm carries on to solid ground), reappears beside the ranger when far or locked out, vanishes when she falls, and **growls** (`Ev::Growl { id }`, wire code 14) at awake and hiding enemies it detects. Art: Superdark's Enchanted Forest `Wolf` (CC0), trimmed in the atlas as `dire_wolf_idle_anim_f0-3` and `dire_wolf_run_anim_f0-3`; its union box is 30×19 px.
+- **First allied creature:** an ordinary `Monster` with `ally: Some(Ally)`. Hero attacks never hurt it (a safety net in `hurt_monster`, plus a skip and a test per attack). Enemies and area attacks target heroes and allies through `Creature`, `foes_in` and `foes_touching`. Its kills count as the ranger's; its death pays nothing.
+- **Sound text above the darkness:** `SOUND_TEXT` (dark fill `#1a1020`, light outline `#d8d0e0`) at `DEPTH.sound` 7500, for the growl and the sleeper's Z. The plan's pale fill vanished inside the pale outline, so the fill is dark.
+
+**Code map (real code):**
+- Server: `run/companion.rs` (`spawn_wolf`, `use_ability`, `vanish_orphans`, `tick_wolf`, `tick_growl`, `tick_dash`, `find_prey`, `reappear`, `dash_back`, `wolf_died`), `defs/companions.rs` (the `WOLF_*` numbers, `wolf_profile`, `wolf_responses`), `defs/entity_types.rs` (Elf, Magical Beast, `responses`), `run/entities.rs` (`Ally`, `WolfDash`), `run/mod.rs` (`foes_in`, `foes_touching`, `hurt_creature`, `heal_monster`; `kill_monster` calls `wolf_died`), `run/ai.rs` (`find_visible_foe`, `Target::Ally`), `run/visibility.rs` (`snapshot_ents`, `flags::HIDING`).
+- Client: `game/anim/defs.ts` (`isAllyKind`, `FIGURES[DireWolf]`), `game/GameScene.ts` (`Growl` handler and shake, `Boom k 9`, `SummonWolf` prediction, the dagger prediction skips allies), `game/effects.ts` (`DEPTH.sound`, `SOUND_TEXT`, `natureSparkles`), `game/status.ts` (the Z), `ui/hud.ts` (`secondaryLabel`), `scripts/wolf-frames.ts`.
+
+**Verified (2026-10-16):**
+- Server: **364 tests pass** in Docker, no warnings.
+- Client: `tsc --noEmit`, **89 tests** and `npm run build` pass.
+- `docker compose up --build -d` and `/health` are OK.
+- Smoke test `cd tools/e2e && node smoke.mjs http://localhost:8080/ "" shots ElvenRanger,Paladin` (the class argument is the wire name; the script lowercases it for the card `c-elvenranger`): "no browser errors". The screenshots show the ranger card with the wolf's ability, the elf with her wolf in the run, the HUD box reading "Heal Wolf", and F3 darkvision 33 %.
+- Seen earlier by the controller: the gallery (the wolf next to the heroes, dash afterimages), the growl and the sleeping Z in the dark.
+
+**Still to play (the user; these could not be scripted):**
+- The wolf's health bar **hidden under the fog in the dark** (it should vanish with the wolf on unlit tiles).
+- The **18-tile light and mask seam in a large room** (the ranger's vision reaches beyond the screen; the polygon, the mask canvas and the camera window were checked only in small cases).
+- The wolf's **death message and the 60 s fill in the HUD**.
+- An **archer shooting the wolf from range** (the wolf fights back only against enemies within 1.5 tiles of itself, or within 3 tiles of the ranger), and a look at `?mimic`.
+- A **real play of the ranger with the wolf**: the feel of follow, guard, dash and growl, and whether the `WOLF_*` numbers are right.
+
+**Rulings worth knowing:**
+- The wolf's union box is 30×19 px, not the spec's 26×17 (a scale factor in `FIGURES` if it looks wrong).
+- The puff is `Boom k 9`.
+- A ranger who is sinking but still alive keeps her wolf until she dies.
+- The UI shows the class as "Elven Ranger" (`className()` in `ui/text.ts`); the wire value "ElvenRanger" stays for CSS classes and keys.
+
+**Follow-ups** (details in TODO "Elven Ranger follow-ups"): a non-attack dash stopped over a chasm can still sink; a wolf frozen mid-dash hovers over a chasm; `run/companion.rs` is about 1300 lines with its tests inline (split them); no vispoly parity fixture at radius 18; several tests are thin (listed there).
+
+## Art and idea notes (2026-10-16)
 
 **Art sources (TODO priority 3, done 2026-10-16, on `main`, commits `7767778..62b53f3`):** three packs checked, imported and credited; no figure is built into the atlas yet, each goes in with the feature that uses it.
 - **Licences** (quoted in each `LICENSE.txt` and in TODO "New enemies"): "16x16 Enchanted Forest Characters" by Superdark is CC0 (gnolls Brute, Overseer, Scout, Shaman; bandit; elves; the elf princess). "16x16 Fantasy RPG Characters" by Superdark (free NPC pack, registered at the user's request) has no formal licence but allows free and commercial use and changes. "Forest creatures" by LYASeeK is free to use, not to resell.
@@ -42,7 +96,7 @@ The straight vision edges (TODO priority 2) are **merged into `main` and pushed*
 
 **Ideas the user liked** (not yet in TODO; ask before adding): ways to bring light. Early on, carry a wall torch, light braziers, find glow items (mushrooms, flares). Later, class gear and spells: the paladin's glowing shield, the wizard's light orb, a wisp companion, the ranger's flare arrows, and the rogue who prefers the dark. Before any hero light: a dead hero's light must switch off and come back on a revive (the registry drops it today).
 
-## Last feature (2026-10-16): straight vision edges
+## Feature before (2026-10-16): straight vision edges
 
 **Branch:** `feature/vision-edges` (from `main` at `3555d68`), commits `git log --oneline main..feature/vision-edges`: part 1 (spec, plan, polygon, mask, demo, docs), then part 2 after the final review (spec addendum, plan part 2, the `View` rule in TypeScript, the Rust port in the snapshot filter, the shared fixture and the client switch, docs). Built inline with superpowers:executing-plans, reviewed twice by a fresh reviewer (part 1, then part 2; the second review's edge-shading finding is fixed). **Merged into `main` and pushed (2026-10-16).** Deferred minors: a torch on a wall in the polygon's shadow can vanish while its light stays (the server decides by the floor tile in front of the wall); the server cost per snapshot is not measured (TODO priority 16). Spec: [docs/superpowers/specs/2026-10-16-vision-edges-design.md](docs/superpowers/specs/2026-10-16-vision-edges-design.md); plan: [docs/superpowers/plans/2026-10-16-vision-edges.md](docs/superpowers/plans/2026-10-16-vision-edges.md). Docs: TECHNICAL §7 "The vision mask", draw order, §12, §13; TODO (priority 2 done, "Vision edges follow-ups", "Pillars"); README (`?lights`).
 
@@ -833,7 +887,7 @@ Steps 2–6 followed in the next session.
 
 **Working end to end in Docker (`docker compose up --build`, port 8080):**
 - accounts (name + password, no e-mail) with up to 8 characters each, in PostgreSQL (`db` service, `ta-db` volume); signed HttpOnly session cookies
-- lobby, 4 classes (fixed per character), host-chosen or random end boss, random dungeon, light and darkness (torches, lava, glowing shots; heroes carry no light), vision and darkvision by entity type (humans do not see heroes in the dark, monsters only close)
+- lobby, 4 classes (Wizard, Paladin, Barbarian, Elven Ranger with her Dire Wolf; fixed per character), host-chosen or random end boss, random dungeon, light and darkness (torches, lava, glowing shots; heroes carry no light), vision and darkvision by entity type (humans do not see heroes in the dark, monsters only close)
 - level types behind `LevelRules` (`run/levels/`); the boss dungeon is the only one so far, there is no level picker yet
 - per-character progression: XP and coins banked after each run, permanent upgrades bought in the lobby
 - 11 enemy types (including the mimic and the ogre mini-boss, one per run; imps, chorts and summoners only in the demon's dungeon), 3 bosses
@@ -976,7 +1030,7 @@ Steps 2–6 followed in the next session.
 
 ## Suggested next steps
 
-1. **Vision edges (TODO priority 2) or the effect system (TODO priority 1)**: ask the user which first. The light look and the vision rules are approved; their numbers wait for the balancing pass.
+1. **The Elven Ranger play-test and merge** (see "Next session"); then TODO priority 4. The effect system, the vision edges and the Elven Ranger are built; the light look and the vision rules are approved, their numbers wait for the balancing pass.
 2. **One combined balancing pass** when the user asks for it (they want everything balanced together): progression (`defs/progression.rs`), classes (`defs/classes.rs`), bosses (`server/src/run/bosses/*.rs`, `defs/bosses.rs`) and enemies.
 3. Loadouts: design new abilities, then add the lobby picker, paid with coins.
 4. More from the pack for the environment (the user asked for a less empty dungeon): floor spikes, levers/buttons, breakable crates, flasks as pickups, wall fountains, columns. See TODO.md.

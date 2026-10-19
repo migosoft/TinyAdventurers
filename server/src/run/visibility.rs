@@ -125,28 +125,49 @@ fn hp_byte(hp: f64, max: f64) -> u8 {
     ((hp / max).clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-pub fn send_snapshots(run: &mut Run) {
-    let events = std::mem::take(&mut run.events);
-    let on_hero = std::mem::take(&mut run.on_hero);
-    run.refresh_lights(); // shots moved after the AI: the snapshot must match what the client casts
-    let moving = run.moving_lights();
+/// One monster's entry. An ally's `extra` is its owner (the ranger's id).
+fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, boss_enraged: bool, gaze: u32) -> EntSnap {
+    let mut f = 0;
+    if m.hurt_t > 0.0 {
+        f |= flags::HURT;
+    }
+    if m.dormant {
+        f |= flags::DORMANT;
+    }
+    if m.hiding {
+        f |= flags::HIDING;
+    }
+    if m.airborne {
+        f |= flags::AIRBORNE;
+    }
+    if m.is_boss && boss_immune {
+        f |= flags::IMMUNE;
+    }
+    if m.is_boss && boss_enraged {
+        f |= flags::ENRAGED;
+    }
+    let extra = match &m.ally {
+        Some(a) => a.owner,
+        None if m.anim == Anim::Gaze => gaze,
+        None => m.owner.unwrap_or(0),
+    };
+    EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits())
+}
+
+/// The entities hero `pi` is sent: the party and its allies always, the rest as seen
+/// through `view` and `dark`.
+pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> Vec<EntSnap> {
     let behaviour = run.level.boss().and_then(|b| b.behaviour.as_ref());
     let boss_immune = behaviour.map_or(false, |b| !b.can_be_damaged(run));
     let boss_enraged = behaviour.map_or(false, |b| b.enraged());
     let gaze = behaviour.and_then(|b| b.gaze_target()).unwrap_or(0);
-    let boss_bar = Level::boss_bar(run);
 
-    let drain = drain_points(run);
-
-    // Players are always visible to their party.
-    let player_snaps: Vec<EntSnap> = run
+    // Players and their allies are always visible to their party.
+    let mut ents: Vec<EntSnap> = run
         .players
         .iter()
         .map(|p| {
             let mut f = 0;
-            if p.hidden > 0.0 {
-                f |= flags::HIDDEN;
-            }
             if p.hurt_t > 0.0 {
                 f |= flags::HURT;
             }
@@ -156,6 +177,47 @@ pub fn send_snapshots(run: &mut Run) {
             EntSnap(p.id, p.kind() as u8, p.mv.x as f32, p.mv.y as f32, hp_byte(p.hp, p.max_hp), p.anim as u8, p.aim as f32, ms_since(run, p.anim_start), f, 0, p.effects.bits())
         })
         .collect();
+    ents.extend(run.monsters.iter().filter(|m| m.alive && m.is_ally()).map(|m| monster_snap(run, m, boss_immune, boss_enraged, gaze)));
+
+    let lights = &run.lights;
+    for m in &run.monsters {
+        if !m.alive || m.is_ally() || !seen(view, lights, dark, m.pos, m.radius) {
+            continue;
+        }
+        ents.push(monster_snap(run, m, boss_immune, boss_enraged, gaze));
+    }
+    for pr in &run.projectiles {
+        // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
+        if pr.dead || !(pr.from_player || seen(view, lights, dark, pr.pos, 0.0)) {
+            continue;
+        }
+        let extra = (pr.owner << 16) | pr.shot as u32;
+        ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra, 0));
+    }
+    for o in &run.objects {
+        if !object_sent(view, lights, dark, o) {
+            continue;
+        }
+        ents.push(super::objects::snap(run, o));
+    }
+    for h in &run.hazards {
+        if !seen(view, lights, dark, h.pos, h.radius) {
+            continue;
+        }
+        let extra = (h.life * 1000.0) as u32;
+        ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, 0.0, 0, 0, extra, 0));
+    }
+    ents
+}
+
+pub fn send_snapshots(run: &mut Run) {
+    let events = std::mem::take(&mut run.events);
+    let on_hero = std::mem::take(&mut run.on_hero);
+    run.refresh_lights(); // shots moved after the AI: the snapshot must match what the client casts
+    let moving = run.moving_lights();
+    let boss_bar = Level::boss_bar(run);
+
+    let drain = drain_points(run);
 
     for pi in 0..run.players.len() {
         if run.players[pi].tx.is_none() {
@@ -170,52 +232,8 @@ pub fn send_snapshots(run: &mut Run) {
         view.compute(&run.layout.map, view_pos, vision);
         let dark = Dark { tile: (tx, ty), range: dark_range(&sight) };
 
+        let ents = snapshot_ents(run, pi, &view, &dark);
         let lights = &run.lights;
-        let mut ents = player_snaps.clone();
-        for m in &run.monsters {
-            if !m.alive || !seen(&view, lights, &dark, m.pos, m.radius) {
-                continue;
-            }
-            let mut f = 0;
-            if m.hurt_t > 0.0 {
-                f |= flags::HURT;
-            }
-            if m.dormant {
-                f |= flags::DORMANT;
-            }
-            if m.airborne {
-                f |= flags::AIRBORNE;
-            }
-            if m.is_boss && boss_immune {
-                f |= flags::IMMUNE;
-            }
-            if m.is_boss && boss_enraged {
-                f |= flags::ENRAGED;
-            }
-            let extra = if m.anim == Anim::Gaze { gaze } else { m.owner.unwrap_or(0) };
-            ents.push(EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits()));
-        }
-        for pr in &run.projectiles {
-            // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
-            if pr.dead || !(pr.from_player || seen(&view, lights, &dark, pr.pos, 0.0)) {
-                continue;
-            }
-            let extra = (pr.owner << 16) | pr.shot as u32;
-            ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra, 0));
-        }
-        for o in &run.objects {
-            if !object_sent(&view, lights, &dark, o) {
-                continue;
-            }
-            ents.push(super::objects::snap(run, o));
-        }
-        for h in &run.hazards {
-            if !seen(&view, lights, &dark, h.pos, h.radius) {
-                continue;
-            }
-            let extra = (h.life * 1000.0) as u32;
-            ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, 0.0, 0, 0, extra, 0));
-        }
         let ev: Vec<Ev> = events
             .iter()
             .enumerate()
@@ -242,7 +260,6 @@ pub fn send_snapshots(run: &mut Run) {
                 knock_vy: me.mv.knock_vy,
                 cd1: me.cd1 as f32,
                 cd2: me.cd2 as f32,
-                hidden: me.hidden as f32,
                 spectating: if me.alive { None } else { me.spectating },
                 darkvision: darkvision_pct(&sight),
                 vision: sight.vision as f32,
@@ -316,6 +333,36 @@ mod tests {
     }
 
     #[test]
+    fn an_elf_sees_eighteen_tiles_far() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.clear();
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for y in ty - 2..=ty + 2 {
+            for x in tx - 2..=tx + 25 {
+                run.layout.map.set(x, y, crate::dungeon::Tile::Floor);
+            }
+        }
+        run.lights = Lights::new(run.layout.map.w, run.layout.map.h);
+        let sight = run.players[0].sight_now();
+        assert_eq!(sight.vision, 18.0);
+        let p = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, p, sight.vision.round() as i32);
+        let near = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 16, ty), None, 1);
+        let far = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 20, ty), None, 1);
+        run.add_light(LightKind::Torch, Anchor::Tile(tx + 17, ty), None);
+        run.add_light(LightKind::Torch, Anchor::Tile(tx + 21, ty), None);
+        assert!(sees(&mut run, Map::center_of(tx + 16, ty), 5.0), "16 tiles away, lit");
+        let (chan, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(chan);
+        send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = rx.try_recv().unwrap() else { panic!() };
+        let s: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        let has = |id: u32| s[2].as_array().unwrap().iter().any(|e| e[0] == id as u64);
+        assert!(has(near), "a monster lit 16 tiles east is sent");
+        assert!(!has(far), "one 20 tiles east is beyond the 18-tile view");
+    }
+
+    #[test]
     fn hero_events_are_sent_in_the_dark_monster_events_are_not() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (tx, ty) = dark_view(&mut run, 0.0);
@@ -384,7 +431,7 @@ mod tests {
         send_snapshots(&mut run);
         let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
         let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
-        assert_eq!(snap[3][13], 100);
+        assert_eq!(snap[3][12], 100);
         let ids: Vec<u64> = snap[2].as_array().unwrap().iter().map(|e| e[0].as_u64().unwrap()).collect();
         assert!(ids.contains(&(near as u64)), "seen in the dark through the viewed hero's darkvision");
     }
@@ -517,7 +564,7 @@ mod tests {
 
     #[test]
     fn every_class_sees_as_far_as_the_fov_radius() {
-        for c in ClassId::ALL {
+        for c in [ClassId::Wizard, ClassId::Paladin, ClassId::Barbarian] {
             assert_eq!(crate::defs::classes::profile(c).sight.vision.round() as i32, PLAYER_FOV_RADIUS);
         }
     }
@@ -536,10 +583,10 @@ mod tests {
         let s: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
         let me_ent = s[2].as_array().unwrap().iter().find(|e| e[0] == run.players[0].id).unwrap();
         assert_eq!(me_ent[10], (EffectKind::Slowed.bit() | EffectKind::Blind.bit()) as u64);
-        assert_eq!(s[3][14], 0.0, "blind: vision 0");
-        assert_eq!(s[3][15].as_array().unwrap().len(), 2);
-        assert_eq!(s[3][16], 0.5);
-        assert_eq!(s[3][17], false);
+        assert_eq!(s[3][13], 0.0, "blind: vision 0");
+        assert_eq!(s[3][14].as_array().unwrap().len(), 2);
+        assert_eq!(s[3][15], 0.5);
+        assert_eq!(s[3][16], false);
     }
 
     #[test]

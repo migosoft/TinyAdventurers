@@ -1,6 +1,7 @@
 pub mod abilities;
 pub mod bosses;
 pub mod classes;
+pub mod companions;
 pub mod damage;
 pub mod effects;
 pub mod enemies;

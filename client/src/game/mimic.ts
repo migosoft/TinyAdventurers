@@ -15,14 +15,14 @@ export const HOP_CYCLE = CONST.MIMIC_HOP_CYCLE;
 export const HOP = { crouch: CONST.MIMIC_HOP_AIR_START, air: CONST.MIMIC_HOP_AIR_END, land: CONST.MIMIC_HOP_AIR_END + 0.15 };
 export const BITE_T = 0.35;
 export const WAKE_T = CONST.MIMIC_WAKE_T;
-/** A dormant mimic rattles now and then when a hero is this close (px). */
+/** A hiding mimic rattles now and then when a hero is this close (px). */
 const RATTLE_NEAR = 40;
 
 export interface MimicState {
   x: number;
   y: number;
   /** Still a chest: closed lid, occasional rattle when `rattle` > 0 (0..1 intensity). */
-  dormant: boolean;
+  hiding: boolean;
   rattle?: number;
   /** Seconds since waking (the reveal pop), or -1. */
   wakeT?: number;
@@ -65,7 +65,7 @@ export class MimicView {
     this.root.add([this.shadow, this.piece]);
   }
 
-  private wasDormant: boolean | undefined;
+  private wasHiding: boolean | undefined;
   private wakeClock = -1;
   private rattleAt = 1 + Math.random() * 3;
 
@@ -76,14 +76,14 @@ export class MimicView {
     const dead = (e.flags & FLAG.DEAD) !== 0;
     this.root.setVisible(!dead);
     if (dead) return;
-    const dormant = (e.flags & FLAG.DORMANT) !== 0;
-    // The reveal plays only when we saw it dormant; a late joiner just sees the mimic.
-    if (this.wasDormant && !dormant) this.wakeClock = 0;
+    const hiding = (e.flags & FLAG.HIDING) !== 0;
+    // The reveal plays only when we saw it hiding; a late joiner just sees the mimic.
+    if (this.wasHiding && !hiding) this.wakeClock = 0;
     else if (this.wakeClock >= 0) this.wakeClock += dt;
-    this.wasDormant = dormant;
+    this.wasHiding = hiding;
     // A disguised mimic gives itself away now and then when a hero comes close.
     let rattle = 0;
-    if (dormant && heroDist < RATTLE_NEAR) {
+    if (hiding && heroDist < RATTLE_NEAR) {
       this.rattleAt -= dt;
       if (this.rattleAt < 0) rattle = 0.5;
       if (this.rattleAt < -0.35) this.rattleAt = 1.5 + Math.random() * 2.5;
@@ -92,7 +92,7 @@ export class MimicView {
       {
         x: e.x,
         y: e.y,
-        dormant,
+        hiding,
         rattle,
         wakeT: this.wakeClock,
         hop: e.anim === ANIM.Move ? (e.animT / HOP_CYCLE) % 1 : e.anim === ANIM.Windup ? HOP.crouch * 0.8 : -1,
@@ -118,7 +118,7 @@ export class MimicView {
     let by = 0;
     let angle = 0;
 
-    if (s.dormant) {
+    if (s.hiding) {
       // Just a chest. A rattle is a quick shiver with the lid lifting a crack.
       const r = s.rattle ?? 0;
       if (r > 0 && Math.floor(this.clock * 24) % 2 === 0) {

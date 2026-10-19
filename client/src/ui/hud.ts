@@ -6,7 +6,7 @@ import type { PlayerStats } from '../generated/PlayerStats';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
 import { endText } from './endText';
-import { BOSS_TEXT, CLASS_TEXT, effectGlyph } from './text';
+import { BOSS_TEXT, CLASS_TEXT, className, effectGlyph } from './text';
 
 export interface FrameStats {
   fps: number;
@@ -22,6 +22,13 @@ export interface FrameStats {
   ents: number;
   /** The viewed hero's darkvision, 0..1. */
   darkvision: number;
+  /** Elven Ranger only: whether the hero has a living wolf; null for other classes. */
+  wolf: boolean | null;
+}
+
+/** The secondary slot's name: the ranger's reads by whether the wolf lives. */
+export function secondaryLabel(wolf: boolean | null, base: string): string {
+  return wolf === null ? base : wolf ? 'Heal Wolf' : 'Summon Wolf';
 }
 
 const el = (tag: string, cls?: string, html?: string) => {
@@ -180,6 +187,11 @@ export class Hud {
   }
 
   frame(f: FrameStats): void {
+    if (f.wolf !== null) {
+      const name = this.slots[1].querySelector('.name')!;
+      const label = secondaryLabel(f.wolf, '');
+      if (name.textContent !== label) name.textContent = label;
+    }
     [f.cd1, f.cd2].forEach((cd, i) => {
       if (cd > this.lastCd[i] + 0.01) this.cdMax[i] = cd;
       this.lastCd[i] = cd;
@@ -240,7 +252,7 @@ export class Hud {
     const rows = m.stats
       .map(
         (s) =>
-          `<tr class="${s.alive ? '' : 'dead'}"><td>${esc(s.name)}</td><td>${s.class}</td><td>${s.kills}</td><td>${Math.round(s.damage)}</td><td>${Math.round(s.healing)}</td><td>${s.xp}</td><td>${s.coins}</td></tr>`,
+          `<tr class="${s.alive ? '' : 'dead'}"><td>${esc(s.name)}</td><td>${className(s.class)}</td><td>${s.kills}</td><td>${Math.round(s.damage)}</td><td>${Math.round(s.healing)}</td><td>${s.xp}</td><td>${s.coins}</td></tr>`,
       )
       .join('');
     this.end.innerHTML = `

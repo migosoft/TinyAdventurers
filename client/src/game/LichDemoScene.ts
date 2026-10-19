@@ -101,7 +101,7 @@ export class LichDemoScene extends TerrainDemo {
     const hero = (kind: number, name: string, speed: number, at: [number, number]): void => this.actor(kind, name, speed, [{ to: at }, { wait: 3 }]);
     hero(KIND.Wizard, 'Wizard', CLASSES.Wizard.speed, [24, 8]);
     hero(KIND.Paladin, 'Paladin', CLASSES.Paladin.speed, [21.5, 5.6]);
-    hero(KIND.Assassin, 'Assassin', CLASSES.Assassin.speed, [19.6, 9.8]);
+    hero(KIND.ElvenRanger, 'Ranger', CLASSES.ElvenRanger.speed, [19.6, 9.8]);
     hero(KIND.Barbarian, 'Barbarian', CLASSES.Barbarian.speed, [17.6, 7.2]);
     // Effect spells: a third lich and three heroes standing still.
     this.spellAt = this.px([31, 7]);

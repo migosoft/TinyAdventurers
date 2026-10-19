@@ -3,9 +3,9 @@
 
 mod demon;
 mod dragon;
-mod lich;
+pub(crate) mod lich;
 
-use super::ai::find_visible_player;
+use super::ai::find_visible_hero;
 use super::Run;
 use crate::defs::kinds::Anim;
 use crate::math::Vec2;
@@ -50,29 +50,11 @@ pub(crate) fn set_anim(run: &mut Run, bi: usize, a: Anim) {
     }
 }
 
-/// Nearest player the boss can see.
+/// Nearest hero the boss can see (bosses never target allies).
 pub(crate) fn target(run: &Run, bi: usize) -> Option<(usize, Vec2, f64)> {
     let m = &run.monsters[bi];
-    find_visible_player(run, m.pos, m.sight_now()).map(|pi| {
+    find_visible_hero(run, m.pos, m.sight_now()).map(|pi| {
         let p = run.players[pi].pos();
         (pi, p, p.dist(m.pos))
     })
-}
-
-/// Players within `r` of `at` (optionally inside a cone around `dir`).
-pub(crate) fn players_in(run: &Run, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<usize> {
-    run.players
-        .iter()
-        .enumerate()
-        .filter(|(_, p)| {
-            if !p.alive || p.pos().dist(at) > r {
-                return false;
-            }
-            match cone {
-                Some((dir, half)) => crate::math::angle_diff(at.angle_to(p.pos()), dir).abs() <= half,
-                None => true,
-            }
-        })
-        .map(|(i, _)| i)
-        .collect()
 }

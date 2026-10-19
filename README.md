@@ -2,7 +2,7 @@
 
 A browser-based multiplayer dungeon crawler with tiny pixel figures on a board-game dungeon.
 
-- Players log in with an account (just a name and a password, no e-mail) and create up to 8 characters. Each character has a fixed class (Wizard, Paladin, Barbarian or Assassin) and its own progress.
+- Players log in with an account (just a name and a password, no e-mail) and create up to 8 characters. Each character has a fixed class (Wizard, Paladin, Barbarian or Elven Ranger) and its own progress.
 - Up to 4 players open or join a dungeon run.
 - Each run is one randomly generated dungeon of corridors, rooms and halls. Darkness hides what your hero can't see: wall torches, lava and glowing shots light the dungeon, and a torch can be put out or lit again.
 - The party fights through it to a random final boss: a demon, a lich or a dragon.
@@ -108,7 +108,7 @@ Thanks to the artists whose work this game uses. None of them asks for credit; t
 
 - **0x72**: "16x16 DungeonTileset II" (CC0), https://0x72.itch.io/dungeontileset-ii. The tiles, heroes and most enemies.
 - **Natural_Privateer**: "Simple Torch Animation 16x16" (CC0), https://opengameart.org/content/simple-torch-animation-16x16. The wall torches.
-- **Superdark**: "16x16 Enchanted Forest Characters" (CC0), https://superdark.itch.io/enchanted-forest-characters. Stored in `client/assets-src/enchanted-forest/` for coming figures (gnolls, bandit, elves), not built in yet.
+- **Superdark**: "16x16 Enchanted Forest Characters" (CC0), https://superdark.itch.io/enchanted-forest-characters. Stored in `client/assets-src/enchanted-forest/`; its wolf frames (Wolf_Idle, Wolf_Walk) are built into the atlas as the Elven Ranger's Dire Wolf (trimmed only). The other figures (gnolls, bandit, elves) are not built in yet.
 - **Superdark**: "16x16 Fantasy RPG Characters" (free for any use), https://superdark.itch.io/16x16-free-npc-pack. Stored in `client/assets-src/fantasy-npcs/` for coming figures, not built in yet.
 - **LYASeeK**: "Forest creatures" (free use, no resale), https://lyaseek.itch.io/miniffanimals. Stored in `client/assets-src/forest-animals/`, not built in yet.
 

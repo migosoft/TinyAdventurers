@@ -14,7 +14,7 @@ use crate::protocol::{BossId, Ev, InputMsg, Snapshot};
 pub const POS_SCALE: f64 = 16.0;
 
 /// Event codes on the wire, by index. Exported to the client as `EV`.
-pub const EV_CODES: [&str; 14] = ["Dmg", "Heal", "Boom", "Died", "Raise", "Immune", "Tile", "Msg", "Coins", "Sink", "Light", "LightAdd", "LightRemove", "Effect"];
+pub const EV_CODES: [&str; 15] = ["Dmg", "Heal", "Boom", "Died", "Raise", "Immune", "Tile", "Msg", "Coins", "Sink", "Light", "LightAdd", "LightRemove", "Effect", "Growl"];
 
 pub fn q_pos(v: f64) -> u32 {
     (v * POS_SCALE).round().max(0.0) as u32
@@ -30,11 +30,11 @@ pub fn q_aim(a: f64) -> u8 {
 #[ts(export)]
 pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u16, pub u8, pub u32, pub u16);
 
-/// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, hidden, spectating, knock, darkvision, vision, effects, speed_mul, no_act]`, exact values;
+/// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act]`, exact values;
 /// `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32)>, pub f32, pub bool);
+pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32)>, pub f32, pub bool);
 
 /// `[kind, hp, max_hp, immune, enraged]`
 #[derive(Debug, Clone, Serialize, TS)]
@@ -60,6 +60,7 @@ pub enum EvW {
     LightAdd(u8, u32, u8, u32, u16, u16, bool),
     LightRemove(u8, u32),
     Effect(u8, u32, u8, bool),
+    Growl(u8, u32),
 }
 
 /// `[x, y, kind, colour]`, positions scaled, see `MovingLight`.
@@ -101,13 +102,14 @@ fn ev_w(e: &Ev) -> EvW {
         Ev::LightAdd { id, kind, colour, x, y, on } => EvW::LightAdd(11, *id, *kind, *colour, *x, *y, *on),
         Ev::LightRemove { id } => EvW::LightRemove(12, *id),
         Ev::Effect { id, kind, on } => EvW::Effect(13, *id, *kind, *on),
+        Ev::Growl { id } => EvW::Growl(14, *id),
     }
 }
 
 pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
     let ents = s.ents.iter().map(|e| EntW(e.0, e.1, q_pos(e.2 as f64), q_pos(e.3 as f64), e.4, e.5, q_aim(e.6 as f64), e.7, e.8, e.9, e.10)).collect();
     let m = &s.me;
-    let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.hidden, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act);
+    let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act);
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune, b.enraged));
     let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
     let lights = s.lights.iter().map(|l| LightW(q_pos(l.0 as f64), q_pos(l.1 as f64), l.2, l.3)).collect();
@@ -143,7 +145,6 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             knock_vy: 31.0625,
             cd1: 0.25,
             cd2: 1.5,
-            hidden: 0.0,
             spectating: None,
             darkvision: 0,
             vision: 9.0,
@@ -167,6 +168,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             Ev::LightAdd { id: 400, kind: 1, colour: 0xff461e, x: 33, y: 71, on: true },
             Ev::LightRemove { id: 12 },
             Ev::Effect { id: 2, kind: 1, on: true },
+            Ev::Growl { id: 2 },
         ],
         drain: Some(vec![(400.25, 300.5), (480.0, 300.0), (330.06, 260.7)]),
         lights: vec![MovingLight(100.3, 200.7, 2, None), MovingLight(55.0, 66.06, 3, Some(0x78c8ff))],
@@ -189,7 +191,6 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             knock_vy: 0.0,
             cd1: 0.0,
             cd2: 0.0,
-            hidden: 0.0,
             spectating: Some(2),
             darkvision: 35,
             vision: 9.0,
