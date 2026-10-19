@@ -73,7 +73,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         burn_t: dungeon::LAVA_TICK,
         last_hit_by: None,
         effects: Default::default(),
-        responses: wolf_responses(),
+        effect_res: prof.effect_res,
         attrs: stats.attrs,
         weight: stats.weight,
         ally: Some(Ally {
@@ -452,7 +452,7 @@ pub fn wolf_died(run: &mut Run, mi: usize) {
 mod tests {
     use super::*;
     use crate::defs::damage::{Damage, DamageType};
-    use crate::defs::effects::{EffectKind, EffectResponse};
+    use crate::defs::effects::EffectKind;
     use crate::defs::kinds::EntityKind;
     use crate::dungeon::{Map, Tile};
     use crate::math::Vec2;
@@ -617,7 +617,7 @@ mod tests {
         assert!((m.res.get(DamageType::Cold) - 0.2).abs() < 1e-12);
         assert!((m.res.get(DamageType::Poison) - 0.1).abs() < 1e-12);
         assert!((m.res.get(DamageType::Magical) - 0.1).abs() < 1e-12);
-        assert_eq!(m.responses.get(EffectKind::Sleep), EffectResponse::Immune);
+        assert_eq!(m.effect_res.get(EffectKind::Sleep), 1.0);
         assert_eq!(m.kind, EntityKind::DireWolf);
         assert_eq!(m.ally.as_ref().unwrap().owner, run.players[0].id);
         assert_eq!(run.players[0].wolf, Some(id));

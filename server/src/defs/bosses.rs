@@ -108,22 +108,23 @@ pub const DRAGON_FIREBALL_KNOCK: f64 = 20.0;
 /// Race plus each boss's own adjustments.
 pub fn profile(id: BossId) -> Profile {
     use super::damage::{DamageSplit, DamageType::*, Resistances};
+    use super::effects::{EffectKind::*, EffectResistances as Fx};
+    // Effect resistances: the user, 2026-10-15 (then immune = 1, reduced = 0.5).
     let (ty, adj) = match id {
-        BossId::Demon => (Race::Demon, Adjust { res: Resistances::of(&[(Magical, 0.2)]), melee: None, vision: Some(25.0), darkvision: None }),
-        BossId::Lich => (Race::Undead, Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), melee: None, vision: Some(25.0), darkvision: None }),
-        BossId::Dragon => (Race::Dragon, Adjust { res: Resistances::of(&[(Heat, 1.0)]), melee: Some(DamageSplit::split(&[(Heat, 0.2)])), vision: Some(25.0), darkvision: None }),
+        BossId::Demon => (Race::Demon, Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0)]), melee: None, vision: Some(25.0), darkvision: None }),
+        BossId::Lich => (Race::Undead, Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5)]), melee: None, vision: Some(25.0), darkvision: None }),
+        BossId::Dragon => (
+            Race::Dragon,
+            Adjust {
+                res: Resistances::of(&[(Heat, 1.0)]),
+                effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5)]),
+                melee: Some(DamageSplit::split(&[(Heat, 0.2)])),
+                vision: Some(25.0),
+                darkvision: None,
+            },
+        ),
     };
     races::profile(&[ty], adj)
-}
-
-/// How each boss takes effects (user, 2026-10-15). Everyone else takes them in full.
-pub fn responses(id: BossId) -> crate::defs::effects::EffectResponses {
-    use crate::defs::effects::{EffectKind::*, EffectResponse::*, EffectResponses};
-    match id {
-        BossId::Lich => EffectResponses::of(&[(Sleep, Immune), (Blind, Immune), (Petrified, Reduced)]),
-        BossId::Dragon => EffectResponses::of(&[(Sleep, Immune), (Blind, Reduced), (Petrified, Reduced), (Slowed, Reduced), (Accelerated, Reduced)]),
-        BossId::Demon => EffectResponses::of(&[(Sleep, Immune)]),
-    }
 }
 
 /// Lich effect spells (user, 2026-10-15; tune in the balancing pass). Wind-up,

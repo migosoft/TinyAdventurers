@@ -2,7 +2,6 @@
 
 use super::attributes::Attributes;
 use super::damage::{DamageType::Cold, Resistances};
-use super::effects::EffectResponses;
 use super::races::{self, Adjust, Race, Profile};
 
 pub const WOLF_HP: f64 = 80.0;
@@ -47,10 +46,6 @@ pub fn wolf_base_hp() -> f64 {
 /// A magical beast with 20 % extra cold resistance.
 pub fn wolf_profile() -> Profile {
     races::profile(&[Race::MagicalBeast], Adjust { res: Resistances::of(&[(Cold, 0.2)]), ..Adjust::NONE })
-}
-
-pub fn wolf_responses() -> EffectResponses {
-    races::responses(&[Race::MagicalBeast])
 }
 
 #[cfg(test)]

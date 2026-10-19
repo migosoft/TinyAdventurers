@@ -41,6 +41,8 @@ pub enum Stat {
     /// Share of vision.
     Darkvision,
     Resist(DamageType),
+    /// An effect resistance (see `EffectResistances`).
+    ResistEffect(EffectKind),
     /// Factor on knockback distances taken (base 1).
     KnockTaken,
 }
@@ -134,32 +136,43 @@ pub fn element_effects(split: &super::damage::DamageSplit) -> Vec<EffectKind> {
     ELEMENTS.iter().filter(|(t, _)| split.share(*t) >= ELEMENT_SHARE - 1e-9).map(|&(_, k)| k).collect()
 }
 
-/// Duration factor for a `Reduced` response.
-pub const EFFECT_REDUCED: f64 = 0.5;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EffectResponse {
-    Immune,
-    Reduced,
-    Full,
-}
-
-/// How a creature takes each effect; `Full` unless listed.
+/// How much a creature resists each effect, as a fraction: 0.5 halves the time,
+/// 1 or more refuses it, a negative value lengthens it (floored at
+/// `MIN_RESISTANCE`). Held next to the damage `Resistances` (race, the entity's
+/// own `Adjust`, later items and tree nodes; effects through `Stat::ResistEffect`).
+/// A damage-type effect (one whose def has a `dot`) has none: its type's damage
+/// resistance alone resists it. One slot per effect, so a new effect has one at 0.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct EffectResponses([EffectResponse; EffectKind::COUNT]);
+pub struct EffectResistances([f64; EffectKind::COUNT]);
 
-impl EffectResponses {
-    pub const FULL: EffectResponses = EffectResponses([EffectResponse::Full; EffectKind::COUNT]);
-    pub fn of(parts: &[(EffectKind, EffectResponse)]) -> Self {
-        let mut r = Self::FULL;
+impl EffectResistances {
+    pub const NONE: EffectResistances = EffectResistances([0.0; EffectKind::COUNT]);
+    pub fn of(parts: &[(EffectKind, f64)]) -> Self {
+        let mut r = Self::NONE;
         for &(k, v) in parts {
-            r.0[k as usize] = v;
+            r.0[k as usize] += v;
         }
         r
     }
-    pub fn get(&self, k: EffectKind) -> EffectResponse {
+    pub fn get(&self, k: EffectKind) -> f64 {
         self.0[k as usize]
     }
+    pub fn set(&mut self, k: EffectKind, v: f64) {
+        self.0[k as usize] = v;
+    }
+    pub fn plus(self, o: EffectResistances) -> Self {
+        let mut r = self.0;
+        for (a, b) in r.iter_mut().zip(o.0) {
+            *a += b;
+        }
+        EffectResistances(r)
+    }
+}
+
+/// An effect's seconds after an effect resistance `r`: `secs × (1 − r)`, with `r`
+/// floored at `MIN_RESISTANCE`; `None` (refused) at `r >= 1`.
+pub fn effect_secs(secs: f64, r: f64) -> Option<f64> {
+    (r < 1.0).then(|| secs * (1.0 - r.max(super::damage::MIN_RESISTANCE)))
 }
 
 /// An effect a hit applies after its damage (see `Damage::on_hit`).
@@ -196,7 +209,7 @@ pub fn resolve_stat(base: f64, stat: Stat, kinds: &[EffectKind]) -> f64 {
     if let Some(set) = mods().filter(|md| md.op == Op::Set).map(|md| md.value).reduce(f64::min) {
         v = set;
     }
-    if matches!(stat, Stat::Resist(_)) && v > base {
+    if matches!(stat, Stat::Resist(_) | Stat::ResistEffect(_)) && v > base {
         v = v.min(base.max(1.0));
     }
     v
@@ -243,11 +256,59 @@ mod tests {
     }
 
     #[test]
-    fn responses_default_to_full() {
-        let r = EffectResponses::of(&[(EffectKind::Sleep, EffectResponse::Immune)]);
-        assert_eq!(r.get(EffectKind::Sleep), EffectResponse::Immune);
-        assert_eq!(r.get(EffectKind::Blind), EffectResponse::Full);
-        assert_eq!(EffectResponses::FULL.get(EffectKind::Petrified), EffectResponse::Full);
+    fn effect_resistances_default_to_zero() {
+        let r = EffectResistances::of(&[(EffectKind::Sleep, 1.0)]);
+        assert_eq!(r.get(EffectKind::Sleep), 1.0);
+        assert_eq!(r.get(EffectKind::Blind), 0.0);
+        assert_eq!(EffectResistances::NONE.get(EffectKind::Petrified), 0.0);
+    }
+
+    #[test]
+    fn effect_secs_scales_and_refuses() {
+        assert_eq!(effect_secs(4.0, 0.5), Some(2.0));
+        assert_eq!(effect_secs(4.0, 1.0), None);
+        assert_eq!(effect_secs(4.0, 0.0), Some(4.0));
+    }
+
+    #[test]
+    fn negative_effect_resistance_lengthens_at_most_double() {
+        assert_eq!(effect_secs(4.0, -0.5), Some(6.0));
+        assert_eq!(effect_secs(4.0, -3.0), Some(8.0));
+    }
+
+    /// One number per thing: a damage-type effect is resisted only by its type's
+    /// damage resistance, so no creature holds an effect resistance for it.
+    #[test]
+    fn damage_type_effects_have_no_effect_resistance() {
+        use crate::defs::races::{self, Adjust, Race};
+        use crate::defs::{bosses, classes, companions, enemies};
+        use crate::protocol::{BossId, ClassId};
+        let races = [Race::Human, Race::Goblin, Race::Orc, Race::Ogre, Race::Mimic, Race::Undead, Race::Demon, Race::Dragon, Race::Elf, Race::MagicalBeast, Race::Object];
+        let mut tables: Vec<(String, EffectResistances)> = races.iter().map(|&r| (format!("{r:?}"), races::profile(&[r], Adjust::NONE).effect_res)).collect();
+        tables.extend(BossId::ALL.iter().map(|&b| (format!("{b:?}"), bosses::profile(b).effect_res)));
+        tables.extend(ClassId::ALL.iter().map(|&c| (format!("{c:?}"), classes::profile(c).effect_res)));
+        tables.extend(enemies::EnemyType::ALL.iter().map(|&t| (format!("{t:?}"), enemies::profile(t).effect_res)));
+        tables.push(("wolf".into(), companions::wolf_profile().effect_res));
+        for (who, t) in tables {
+            for k in EffectKind::ALL.into_iter().filter(|&k| def(k).dot.is_some()) {
+                assert_eq!(t.get(k), 0.0, "{who} sets an effect resistance for the damage-type effect {k:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn boss_effect_resistances_follow_the_table() {
+        use crate::defs::bosses;
+        use crate::protocol::BossId;
+        use EffectKind::*;
+        let want = |b| match b {
+            BossId::Lich => EffectResistances::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5)]),
+            BossId::Dragon => EffectResistances::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5)]),
+            BossId::Demon => EffectResistances::of(&[(Sleep, 1.0)]),
+        };
+        for b in BossId::ALL {
+            assert_eq!(bosses::profile(b).effect_res, want(b), "{b:?}");
+        }
     }
 
     #[test]

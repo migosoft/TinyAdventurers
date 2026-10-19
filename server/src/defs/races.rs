@@ -5,7 +5,7 @@
 
 use super::attributes::Attributes;
 use super::damage::{DamageSplit, DamageType::*, Resistances};
-use super::effects::{EffectKind, EffectResponse, EffectResponses};
+use super::effects::{EffectKind, EffectResistances};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Race {
@@ -51,15 +51,14 @@ pub struct RaceDef {
     pub darkvision: f64,
     /// Attribute bonus of the race (only the Elf has one).
     pub attrs: Attributes,
-    /// How the race takes status effects.
-    pub responses: EffectResponses,
+    /// Its effect resistances (elves and magical beasts never fall asleep).
+    pub effect_res: EffectResistances,
 }
 
 pub fn race_def(r: Race) -> RaceDef {
     let none = Attributes::default();
-    let sleep_immune = EffectResponses::of(&[(EffectKind::Sleep, EffectResponse::Immune)]);
-    let full = EffectResponses::FULL;
-    let plain = |res, melee, vision, darkvision| RaceDef { res, melee, vision, darkvision, attrs: none, responses: full };
+    let never_sleeps = EffectResistances::of(&[(EffectKind::Sleep, 1.0)]);
+    let plain = |res, melee, vision, darkvision| RaceDef { res, melee, vision, darkvision, attrs: none, effect_res: EffectResistances::NONE };
     match r {
         Race::Human => plain(Resistances::NONE, DamageSplit::physical(), 9.0, 0.0),
         Race::Goblin | Race::Orc | Race::Ogre | Race::Mimic => plain(Resistances::NONE, DamageSplit::physical(), 8.0, 1.0 / 3.0),
@@ -67,8 +66,8 @@ pub fn race_def(r: Race) -> RaceDef {
         Race::Demon => plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), DamageSplit::split(&[(Heat, 0.2)]), 9.0, 1.0),
         Race::Dragon => plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), DamageSplit::physical(), 25.0, 1.0),
         Race::Object => plain(Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), DamageSplit::physical(), 0.0, 0.0),
-        Race::Elf => RaceDef { attrs: Attributes::new(0, 2, 0, 0, 0, 0), responses: sleep_immune, ..plain(Resistances::of(&[(Poison, 0.1)]), DamageSplit::physical(), 18.0, 1.0 / 3.0) },
-        Race::MagicalBeast => RaceDef { responses: sleep_immune, ..plain(Resistances::of(&[(Poison, 0.1), (Magical, 0.1)]), DamageSplit::split(&[(Magical, 0.2)]), 18.0, 1.0) },
+        Race::Elf => RaceDef { attrs: Attributes::new(0, 2, 0, 0, 0, 0), effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1)]), DamageSplit::physical(), 18.0, 1.0 / 3.0) },
+        Race::MagicalBeast => RaceDef { effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1), (Magical, 0.1)]), DamageSplit::split(&[(Magical, 0.2)]), 18.0, 1.0) },
     }
 }
 
@@ -77,25 +76,11 @@ pub fn race_attrs(races: &[Race]) -> Attributes {
     races.iter().fold(Attributes::default(), |a, &r| a.plus(race_def(r).attrs))
 }
 
-/// How the races take status effects: elves and magical beasts never fall asleep,
-/// the rest take everything in full. Over several races the strongest response wins.
-pub fn responses(races: &[Race]) -> EffectResponses {
-    let rank = |r: EffectResponse| match r {
-        EffectResponse::Immune => 0,
-        EffectResponse::Reduced => 1,
-        EffectResponse::Full => 2,
-    };
-    let parts: Vec<(EffectKind, EffectResponse)> = EffectKind::ALL
-        .iter()
-        .map(|&k| (k, races.iter().map(|&r| race_def(r).responses.get(k)).min_by_key(|&x| rank(x)).unwrap_or(EffectResponse::Full)))
-        .collect();
-    EffectResponses::of(&parts)
-}
-
 /// One entity's own changes on top of its races.
 #[derive(Debug, Clone, Copy)]
 pub struct Adjust {
     pub res: Resistances,
+    pub effect_res: EffectResistances,
     /// Replaces the melee split of the races.
     pub melee: Option<DamageSplit>,
     /// Replace the vision and darkvision (tiles) of the races.
@@ -104,25 +89,27 @@ pub struct Adjust {
 }
 
 impl Adjust {
-    pub const NONE: Adjust = Adjust { res: Resistances::NONE, melee: None, vision: None, darkvision: None };
+    pub const NONE: Adjust = Adjust { res: Resistances::NONE, effect_res: EffectResistances::NONE, melee: None, vision: None, darkvision: None };
 }
 
 /// What an entity takes and deals: stored on it at spawn.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Profile {
     pub res: Resistances,
+    pub effect_res: EffectResistances,
     pub melee: DamageSplit,
     pub sight: Sight,
 }
 
-/// Resistances of all its races plus the adjustment; the adjustment's melee
+/// Resistances (damage and effect) of all its races plus the adjustment; the adjustment's melee
 /// split, else the first race's. Sight: the best of the races, else the adjustment's.
 pub fn profile(races: &[Race], adj: Adjust) -> Profile {
     let res = races.iter().fold(Resistances::NONE, |r, &t| r.plus(race_def(t).res)).plus(adj.res);
+    let effect_res = races.iter().fold(EffectResistances::NONE, |r, &t| r.plus(race_def(t).effect_res)).plus(adj.effect_res);
     let melee = adj.melee.unwrap_or_else(|| races.first().map_or(DamageSplit::physical(), |&t| race_def(t).melee));
     let best = |f: fn(&RaceDef) -> f64| races.iter().map(|&t| f(&race_def(t))).fold(0.0, f64::max);
     let sight = Sight { vision: adj.vision.unwrap_or_else(|| best(|d| d.vision)), darkvision: adj.darkvision.unwrap_or_else(|| best(|d| d.darkvision)) };
-    Profile { res, melee, sight }
+    Profile { res, effect_res, melee, sight }
 }
 
 #[cfg(test)]
@@ -174,18 +161,25 @@ mod tests {
 
     #[test]
     fn the_ranger_is_an_elf_and_elves_and_magical_beasts_sleep_never() {
-        use crate::defs::effects::{EffectKind, EffectResponse, EffectResponses};
+        use crate::defs::effects::{EffectKind, EffectResistances};
         let r = classes::profile(ClassId::ElvenRanger);
         assert!((r.res.get(Poison) - 0.1).abs() < 1e-12);
         assert_eq!(r.sight, Sight { vision: 18.0, darkvision: 1.0 / 3.0 });
         assert_eq!(r.melee, DamageSplit::physical());
-        assert_eq!(classes::responses(ClassId::ElvenRanger).get(EffectKind::Sleep), EffectResponse::Immune);
-        assert_eq!(classes::responses(ClassId::Wizard), EffectResponses::FULL);
+        assert_eq!(r.effect_res.get(EffectKind::Sleep), 1.0);
+        assert_eq!(classes::profile(ClassId::Wizard).effect_res, EffectResistances::NONE);
         let b = profile(&[Race::MagicalBeast], Adjust::NONE);
         assert_eq!((b.res.get(Poison), b.res.get(Magical)), (0.1, 0.1));
         assert!((b.melee.share(Magical) - 0.2).abs() < 1e-12 && (b.melee.share(Physical) - 0.8).abs() < 1e-12);
         assert_eq!(b.sight, Sight { vision: 18.0, darkvision: 1.0 });
-        assert_eq!(responses(&[Race::Human, Race::MagicalBeast]).get(EffectKind::Sleep), EffectResponse::Immune);
+        assert_eq!(profile(&[Race::Human, Race::MagicalBeast], Adjust::NONE).effect_res.get(EffectKind::Sleep), 1.0);
+    }
+
+    #[test]
+    fn effect_res_sums_races_and_adjust() {
+        use crate::defs::effects::{EffectKind, EffectResistances};
+        let p = profile(&[Race::Elf], Adjust { effect_res: EffectResistances::of(&[(EffectKind::Blind, 0.25)]), ..Adjust::NONE });
+        assert_eq!((p.effect_res.get(EffectKind::Sleep), p.effect_res.get(EffectKind::Blind)), (1.0, 0.25));
     }
 
     #[test]

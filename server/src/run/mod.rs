@@ -294,7 +294,7 @@ impl Run {
             burn_t: dungeon::LAVA_TICK,
             last_hit_by: None,
             effects: effects::Effects::default(),
-            responses: crate::defs::effects::EffectResponses::FULL,
+            effect_res: prof.effect_res,
             attrs: stats.attrs,
             weight: stats.weight,
             ally: None,

@@ -25,7 +25,7 @@ pub struct Player {
     pub name: String,
     pub class: ClassId,
     pub kind: EntityKind,
-    /// Every number of the hero (crate::sheet): HP, speed, abilities, effect responses.
+    /// Every number of the hero (crate::sheet): HP, speed, abilities, effect resistances.
     pub sheet: crate::sheet::Sheet,
     pub mv: MoveState,
     pub hp: f64,
@@ -239,8 +239,8 @@ pub struct Monster {
     pub last_hit_by: Option<usize>,
     /// Status effects (run/effects.rs).
     pub effects: crate::run::effects::Effects,
-    /// How it takes each effect (bosses: defs/bosses.rs responses).
-    pub responses: crate::defs::effects::EffectResponses,
+    /// Its effect resistances (from its profile: races plus its `Adjust`).
+    pub effect_res: crate::defs::effects::EffectResistances,
     /// Its Attributes and weight (crate::sheet::MonsterStats).
     pub attrs: Attributes,
     pub weight: f64,

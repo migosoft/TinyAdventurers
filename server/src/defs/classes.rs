@@ -1,6 +1,5 @@
 use super::abilities::AbilityId;
 use super::attributes::Attributes;
-use super::effects::EffectResponses;
 use super::races::{self, Adjust, Race, Profile};
 use super::kinds::EntityKind;
 use crate::protocol::ClassId;
@@ -56,10 +55,6 @@ pub fn start_attrs(class: ClassId) -> Attributes {
 
 pub fn profile(class: ClassId) -> Profile {
     races::profile(races(class), Adjust::NONE)
-}
-
-pub fn responses(class: ClassId) -> EffectResponses {
-    races::responses(races(class))
 }
 
 #[cfg(test)]

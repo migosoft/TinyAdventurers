@@ -4,7 +4,7 @@
 use crate::defs::damage::{Damage, DamageType, Resistances};
 use crate::dungeon::Tile;
 use crate::defs::attributes::Attr;
-use crate::defs::effects::{def, resolve_stat, scaled_secs, EffectKind, EffectResponse, Stat, DOT_TICK, EFFECT_REDUCED, ELEMENT_POWER};
+use crate::defs::effects::{def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectResistances, Stat, DOT_TICK, ELEMENT_POWER};
 use crate::defs::races::Sight;
 use crate::protocol::Ev;
 use crate::run::{Run, DT};
@@ -103,6 +103,14 @@ impl Effects {
         }
         r
     }
+    pub fn effect_res(&self, base: EffectResistances) -> EffectResistances {
+        let k = self.kinds();
+        let mut r = base;
+        for e in EffectKind::ALL {
+            r.set(e, resolve_stat(base.get(e), Stat::ResistEffect(e), &k));
+        }
+        r
+    }
     pub fn knock_taken(&self) -> f64 {
         resolve_stat(1.0, Stat::KnockTaken, &self.kinds())
     }
@@ -142,7 +150,8 @@ impl Run {
     }
 
     /// Puts `kind` on a creature for `secs` (default: its def's duration),
-    /// shortened or refused by the creature's response. Dead or sinking
+    /// shortened or refused by the creature's effect resistance (a damage-type
+    /// effect: refused at full resistance to its type). Dead or sinking
     /// creatures take nothing. An effect that cancels another (fire and ice)
     /// cancels it even when the creature resists the new effect itself.
     /// True when the effect is on afterwards.
@@ -158,15 +167,15 @@ impl Run {
             }
             return false; // fire thaws ice / ice puts out fire
         }
-        let response = match c {
-            Creature::Player(i) => self.players.get(i).map_or(EffectResponse::Immune, |p| p.sheet.responses.get(kind)),
-            Creature::Monster(i) => self.monsters.get(i).map_or(EffectResponse::Immune, |m| m.responses.get(kind)),
-        };
         let mut secs = secs.unwrap_or(def(kind).duration);
-        match response {
-            EffectResponse::Immune => return false,
-            EffectResponse::Reduced => secs *= EFFECT_REDUCED,
-            EffectResponse::Full => {}
+        if def(kind).dot.is_none() {
+            // A damage-type effect is resisted by its type's damage resistance (below) only.
+            let r = match c {
+                Creature::Player(i) => self.players.get(i).map(|p| p.effects.effect_res(p.sheet.effect_res).get(kind)),
+                Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.effect_res(m.effect_res).get(kind)),
+            };
+            let Some(left) = r.and_then(|r| effect_secs(secs, r)) else { return false };
+            secs = left;
         }
         if secs <= 0.0 {
             return false;
@@ -192,7 +201,7 @@ impl Run {
 
     /// Like `apply_effect`, from a source of `power`: a harmful effect's time is
     /// scaled by the target's save (WIL against `magical`, else CON) before its
-    /// response applies. Positive effects are never scaled.
+    /// effect resistance applies. Positive effects are never scaled.
     pub fn apply_effect_from(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>, power: i32, magical: bool) -> bool {
         let base = secs.unwrap_or(def(kind).duration);
         if def(kind).positive {
@@ -358,7 +367,7 @@ mod tests {
     }
 
     #[test]
-    fn boss_responses_follow_the_table() {
+    fn boss_effect_resistances_follow_the_table() {
         for (b, sleep, blind, petrify) in [
             (BossId::Lich, None, None, Some(1.5)),
             (BossId::Dragon, None, Some(1.5), Some(1.5)),
@@ -658,7 +667,6 @@ mod tests {
     #[test]
     fn a_resisted_effect_still_cancels_its_opposite() {
         use crate::defs::damage::{DamageType, Resistances};
-        use crate::defs::effects::{EffectResponse, EffectResponses};
         let me = Creature::Player(0);
         let frozen_then_fire = |run: &mut crate::run::Run, how: &str| {
             run.apply_effect(me, EffectKind::Frozen, None);
@@ -670,9 +678,6 @@ mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.players[0].sheet.attrs = run.players[0].sheet.attrs.plus(crate::defs::attributes::Attributes::new(0, 0, 40, 0, 0, 0));
         frozen_then_fire(&mut run, "saved to 0 s");
-        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
-        run.players[0].sheet.responses = EffectResponses::of(&[(EffectKind::Burning, EffectResponse::Immune)]);
-        frozen_then_fire(&mut run, "immune to Burning");
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.players[0].res = Resistances::of(&[(DamageType::Heat, 1.0)]);
         frozen_then_fire(&mut run, "immune to heat");
@@ -844,16 +849,31 @@ mod tests {
     }
 
     #[test]
-    fn responses_still_override_the_formula() {
-        use crate::defs::effects::{EffectResponse, EffectResponses};
+    fn effect_resistance_applies_after_the_save() {
+        use crate::defs::attributes::Attr;
+        use crate::defs::effects::{scaled_secs, EffectResistances};
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ogre, at, None, 1);
         let mi = run.monster_idx(id).unwrap();
-        run.monsters[mi].responses = EffectResponses::of(&[(EffectKind::Sleep, EffectResponse::Immune)]);
-        assert!(!run.apply_effect_from(Creature::Monster(mi), EffectKind::Sleep, None, 40, true));
-        assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Sleep));
+        let c = Creature::Monster(mi);
+        run.monsters[mi].effect_res = EffectResistances::of(&[(EffectKind::Sleep, 1.0)]);
+        assert!(!run.apply_effect_from(c, EffectKind::Sleep, None, 40, true));
+        assert!(!run.has_effect(c, EffectKind::Sleep));
+        run.monsters[mi].effect_res = EffectResistances::of(&[(EffectKind::Sleep, 0.5)]);
+        let wil = run.monsters[mi].attrs.get(Attr::Wil);
+        assert!(run.apply_effect_from(c, EffectKind::Sleep, None, 10, true));
+        let want = scaled_secs(4.0, 10, wil) * 0.5;
+        assert!((left_of(&run, c, EffectKind::Sleep).unwrap() - want).abs() < 1e-9);
+    }
+
+    #[test]
+    fn dragon_haste_is_halved() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Dragon);
+        let c = Creature::Monster(boss(&run));
+        assert!(run.apply_effect_from(c, EffectKind::Accelerated, None, 0, true));
+        assert_eq!(left_of(&run, c, EffectKind::Accelerated), Some(crate::defs::effects::def(EffectKind::Accelerated).duration * 0.5));
     }
 
     #[test]

@@ -75,7 +75,7 @@ pub fn spawn(run: &mut Run, party: usize) {
         burn_t: crate::dungeon::LAVA_TICK,
         last_hit_by: None,
         effects: Default::default(),
-        responses: boss_defs::responses(boss_id),
+        effect_res: prof.effect_res,
         attrs: stats.attrs,
         weight: stats.weight,
         ally: None,

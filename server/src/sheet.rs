@@ -10,7 +10,7 @@ use crate::defs::bosses::{self, hp_scale};
 use crate::defs::classes;
 use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT};
 use crate::defs::damage::{DamageSplit, Resistances};
-use crate::defs::effects::EffectResponses;
+use crate::defs::effects::EffectResistances;
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::progression::{Modifiers, StatUpgrades};
 use crate::defs::races::Sight;
@@ -40,7 +40,7 @@ pub struct Sheet {
     pub speed: f64,
     pub weight: f64,
     pub res: Resistances,
-    pub responses: EffectResponses,
+    pub effect_res: EffectResistances,
     pub melee: DamageSplit,
     pub sight: Sight,
     pub primary: ResolvedAbility,
@@ -106,7 +106,7 @@ pub fn hero_sheet(class: ClassId, extra: Attributes, up: &StatUpgrades) -> Sheet
         speed: move_speed(def.speed, start.get(Attr::Con), &attrs) * m.move_speed,
         weight: def.weight,
         res: prof.res,
-        responses: classes::responses(class),
+        effect_res: prof.effect_res,
         melee: prof.melee,
         sight: prof.sight,
         primary: ability(def.primary),
