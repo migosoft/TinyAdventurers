@@ -143,8 +143,21 @@ impl Run {
 
     /// Puts `kind` on a creature for `secs` (default: its def's duration),
     /// shortened or refused by the creature's response. Dead or sinking
-    /// creatures take nothing. True when the effect is on afterwards.
+    /// creatures take nothing. An effect that cancels another (fire and ice)
+    /// cancels it even when the creature resists the new effect itself.
+    /// True when the effect is on afterwards.
     pub fn apply_effect(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>) -> bool {
+        let Some((_, _, pos, ok)) = self.creature(c) else { return false };
+        if !ok {
+            return false;
+        }
+        let cancelled: Vec<EffectKind> = def(kind).cancels.iter().copied().filter(|&k| self.has_effect(c, k)).collect();
+        if !cancelled.is_empty() {
+            for k in cancelled {
+                self.remove_effect(c, k);
+            }
+            return false; // fire thaws ice / ice puts out fire
+        }
         let response = match c {
             Creature::Player(i) => self.players.get(i).map_or(EffectResponse::Immune, |p| p.sheet.responses.get(kind)),
             Creature::Monster(i) => self.monsters.get(i).map_or(EffectResponse::Immune, |m| m.responses.get(kind)),
@@ -155,8 +168,7 @@ impl Run {
             EffectResponse::Reduced => secs *= EFFECT_REDUCED,
             EffectResponse::Full => {}
         }
-        let Some((_, _, pos, ok)) = self.creature(c) else { return false };
-        if !ok || secs <= 0.0 {
+        if secs <= 0.0 {
             return false;
         }
         if def(kind).ends_in_water && self.in_water(pos) {
@@ -170,13 +182,6 @@ impl Run {
             if res.is_some_and(|r| r >= 1.0) {
                 return false; // immune to its damage: no effect at all
             }
-        }
-        let cancelled: Vec<EffectKind> = def(kind).cancels.iter().copied().filter(|&k| self.has_effect(c, k)).collect();
-        if !cancelled.is_empty() {
-            for k in cancelled {
-                self.remove_effect(c, k);
-            }
-            return false; // fire thaws ice / ice puts out fire
         }
         let Some((fx, id, pos, _)) = self.creature(c) else { return false };
         if fx.add(kind, secs) {
@@ -647,6 +652,29 @@ mod tests {
         run.apply_effect(me, EffectKind::Burning, None);
         assert!(!run.apply_effect(me, EffectKind::Frozen, None));
         assert!(!run.has_effect(me, EffectKind::Frozen) && !run.has_effect(me, EffectKind::Burning), "put out, not frozen");
+    }
+
+    #[test]
+    fn a_resisted_effect_still_cancels_its_opposite() {
+        use crate::defs::damage::{DamageType, Resistances};
+        use crate::defs::effects::{EffectResponse, EffectResponses};
+        let me = Creature::Player(0);
+        let frozen_then_fire = |run: &mut crate::run::Run, how: &str| {
+            run.apply_effect(me, EffectKind::Frozen, None);
+            assert!(run.has_effect(me, EffectKind::Frozen));
+            assert!(!run.apply_effect_from(me, EffectKind::Burning, None, 10, false));
+            assert!(!run.has_effect(me, EffectKind::Frozen), "{how}: the fire still thaws the ice");
+            assert!(!run.has_effect(me, EffectKind::Burning), "{how}: and does not burn");
+        };
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.players[0].sheet.attrs = run.players[0].sheet.attrs.plus(crate::defs::attributes::Attributes::new(0, 0, 40, 0, 0, 0));
+        frozen_then_fire(&mut run, "saved to 0 s");
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.players[0].sheet.responses = EffectResponses::of(&[(EffectKind::Burning, EffectResponse::Immune)]);
+        frozen_then_fire(&mut run, "immune to Burning");
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.players[0].res = Resistances::of(&[(DamageType::Heat, 1.0)]);
+        frozen_then_fire(&mut run, "immune to heat");
     }
 
     #[test]
