@@ -1,4 +1,4 @@
-use super::entity_types::{self, Adjust, EntityType, Profile};
+use super::races::{self, Adjust, Race, Profile};
 use super::kinds::EntityKind;
 use crate::protocol::BossId;
 
@@ -66,7 +66,7 @@ pub struct EnemyDef {
     pub hp: f64,
     pub speed: f64,
     pub radius: f64,
-    /// Vision (tiles); overrides the entity type's. Enemies only notice players inside it with line of sight.
+    /// Vision (tiles); overrides the race's. Enemies only notice players inside it with line of sight.
     pub vision: f64,
     pub attack: AttackStyle,
     /// Second attack with its own cooldown. Melee is used when the target is
@@ -239,16 +239,19 @@ pub const CHEST_TOUCH: f64 = 12.0;
 pub const NECRO_RAISE_COOLDOWN: f64 = 7.0;
 pub const NECRO_MAX_MINIONS: usize = 3;
 
-/// Entity type of each enemy (see `entity_types`).
+/// Race of each enemy (see `races`).
 pub fn profile(t: EnemyType) -> Profile {
     use EnemyType::*;
     let ty = match t {
-        Necromancer | Summoner | Disciple => EntityType::Human,
-        SkeletonWarrior | SkeletonArcher | RaisedSkeleton | RaisedArcher => EntityType::Undead,
-        GoblinArcher | OrcWarrior | OrcArcher | Mimic | Ogre => EntityType::Monster,
-        Imp | Chort | SummonedImp => EntityType::Demon,
+        Necromancer | Summoner | Disciple => Race::Human,
+        SkeletonWarrior | SkeletonArcher | RaisedSkeleton | RaisedArcher => Race::Undead,
+        GoblinArcher => Race::Goblin,
+        OrcWarrior | OrcArcher => Race::Orc,
+        Ogre => Race::Ogre,
+        Mimic => Race::Mimic,
+        Imp | Chort | SummonedImp => Race::Demon,
     };
-    entity_types::profile(&[ty], Adjust { vision: Some(def(t).vision), ..Adjust::NONE })
+    races::profile(&[ty], Adjust { vision: Some(def(t).vision), ..Adjust::NONE })
 }
 
 /// An effect an enemy's attack (`alt`: its second attack) applies on a hit. None yet:

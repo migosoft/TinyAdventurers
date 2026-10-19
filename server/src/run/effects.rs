@@ -4,7 +4,7 @@
 use crate::defs::damage::{Damage, DamageType, Resistances};
 use crate::dungeon::Tile;
 use crate::defs::effects::{def, resolve_stat, EffectKind, EffectResponse, Stat, DOT_TICK, EFFECT_REDUCED};
-use crate::defs::entity_types::Sight;
+use crate::defs::races::Sight;
 use crate::protocol::Ev;
 use crate::run::{Run, DT};
 
@@ -379,10 +379,10 @@ mod tests {
         assert_eq!(e.speed_mul(), 0.0, "no_move stops even an accelerated creature");
         assert!(e.no_act() && e.no_turn() && !e.has(EffectKind::Blind));
         assert_eq!(e.bits(), EffectKind::Slowed.bit() | EffectKind::Accelerated.bit() | EffectKind::Petrified.bit());
-        let s = e.sight(crate::defs::entity_types::Sight { vision: 9.0, darkvision: 0.5 });
+        let s = e.sight(crate::defs::races::Sight { vision: 9.0, darkvision: 0.5 });
         assert_eq!(s.vision, 9.0);
         e.add(EffectKind::Blind, 1.0);
-        let s = e.sight(crate::defs::entity_types::Sight { vision: 9.0, darkvision: 0.5 });
+        let s = e.sight(crate::defs::races::Sight { vision: 9.0, darkvision: 0.5 });
         assert_eq!((s.vision, s.darkvision), (0.0, 0.0));
     }
 

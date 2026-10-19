@@ -6,7 +6,7 @@ pub mod companions;
 pub mod damage;
 pub mod effects;
 pub mod enemies;
-pub mod entity_types;
+pub mod races;
 pub mod kinds;
 pub mod lights;
 pub mod objects;

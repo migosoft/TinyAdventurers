@@ -13,7 +13,7 @@ use crate::defs::kinds::Anim;
 use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
 use crate::protocol::Ev;
-use crate::defs::entity_types::Sight;
+use crate::defs::races::Sight;
 use rand::Rng;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};

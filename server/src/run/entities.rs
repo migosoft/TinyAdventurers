@@ -4,7 +4,7 @@ use crate::defs::damage::{Damage, DamageSplit, Resistances};
 use crate::defs::effects::EffectResponses;
 use crate::defs::progression::Modifiers;
 use crate::defs::enemies::EnemyType;
-use crate::defs::entity_types::Sight;
+use crate::defs::races::Sight;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
 use crate::vispoly::View;
@@ -20,10 +20,10 @@ pub const HISTORY_LEN: usize = 32;
 pub struct Player {
     pub id: u32,
     pub conn: u32,
-    /// Resistances (entity types plus adjustments) and the split of its melee hits.
+    /// Resistances (races plus adjustments) and the split of its melee hits.
     pub res: Resistances,
     pub melee: DamageSplit,
-    /// How it takes each status effect (from its entity types).
+    /// How it takes each status effect (from its races).
     pub responses: EffectResponses,
     pub tx: Option<UnboundedSender<Message>>,
     pub name: String,
@@ -200,7 +200,7 @@ pub struct Ally {
 
 pub struct Monster {
     pub id: u32,
-    /// Resistances (entity types plus adjustments) and the split of its melee hits.
+    /// Resistances (races plus adjustments) and the split of its melee hits.
     pub res: Resistances,
     pub melee: DamageSplit,
     /// None for bosses (driven by their BossBehaviour).

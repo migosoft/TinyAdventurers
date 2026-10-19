@@ -2,7 +2,7 @@
 
 use super::damage::{DamageType::Cold, Resistances};
 use super::effects::EffectResponses;
-use super::entity_types::{self, Adjust, EntityType, Profile};
+use super::races::{self, Adjust, Race, Profile};
 
 pub const WOLF_HP: f64 = 80.0;
 pub const WOLF_SPEED: f64 = 88.0;
@@ -37,9 +37,9 @@ pub const WOLF_DASH_COOLDOWN: f64 = 5.0;
 
 /// A magical beast with 20 % extra cold resistance.
 pub fn wolf_profile() -> Profile {
-    entity_types::profile(&[EntityType::MagicalBeast], Adjust { res: Resistances::of(&[(Cold, 0.2)]), ..Adjust::NONE })
+    races::profile(&[Race::MagicalBeast], Adjust { res: Resistances::of(&[(Cold, 0.2)]), ..Adjust::NONE })
 }
 
 pub fn wolf_responses() -> EffectResponses {
-    entity_types::responses(&[EntityType::MagicalBeast])
+    races::responses(&[Race::MagicalBeast])
 }

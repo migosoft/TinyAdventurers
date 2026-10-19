@@ -38,13 +38,13 @@ fn visible(view: &View, p: Vec2, radius: f64) -> bool {
 }
 
 /// The darkvision percentage (0-100) sent to the client in `SelfW`.
-pub(crate) fn darkvision_pct(sight: &crate::defs::entity_types::Sight) -> u8 {
+pub(crate) fn darkvision_pct(sight: &crate::defs::races::Sight) -> u8 {
     (sight.darkvision * 100.0).round() as u8
 }
 
 /// The filter's darkvision range in tiles: vision times the quantised percentage the client gets,
 /// so server and client decide the same tiles.
-pub(crate) fn dark_range(sight: &crate::defs::entity_types::Sight) -> f64 {
+pub(crate) fn dark_range(sight: &crate::defs::races::Sight) -> f64 {
     sight.vision * (f64::from(darkvision_pct(sight)) / 100.0)
 }
 
@@ -547,11 +547,11 @@ mod tests {
 
     #[test]
     fn the_filter_range_is_the_quantised_darkvision_the_client_gets() {
-        let s = crate::defs::entity_types::Sight { vision: 9.0, darkvision: 1.0 / 3.0 };
+        let s = crate::defs::races::Sight { vision: 9.0, darkvision: 1.0 / 3.0 };
         assert_eq!(darkvision_pct(&s), 33);
         assert_eq!(dark_range(&s), 9.0 * 0.33);
-        assert_eq!(dark_range(&crate::defs::entity_types::Sight { vision: 9.0, darkvision: 1.0 }), 9.0);
-        assert_eq!(dark_range(&crate::defs::entity_types::Sight { vision: 9.0, darkvision: 0.0 }), 0.0);
+        assert_eq!(dark_range(&crate::defs::races::Sight { vision: 9.0, darkvision: 1.0 }), 9.0);
+        assert_eq!(dark_range(&crate::defs::races::Sight { vision: 9.0, darkvision: 0.0 }), 0.0);
     }
 
     #[test]

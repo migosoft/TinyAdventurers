@@ -1,6 +1,6 @@
 use super::abilities::AbilityId;
 use super::effects::EffectResponses;
-use super::entity_types::{self, Adjust, EntityType, Profile};
+use super::races::{self, Adjust, Race, Profile};
 use super::kinds::EntityKind;
 use crate::protocol::ClassId;
 use serde::Serialize;
@@ -30,18 +30,18 @@ pub fn def(class: ClassId) -> ClassDef {
     }
 }
 
-/// The entity types of a hero: humans, except the Ranger, an elf (armour items will add resistances later).
-fn types(class: ClassId) -> &'static [EntityType] {
+/// The races of a hero: humans, except the Ranger, an elf (armour items will add resistances later).
+pub fn races(class: ClassId) -> &'static [Race] {
     match class {
-        ClassId::ElvenRanger => &[EntityType::Elf],
-        _ => &[EntityType::Human],
+        ClassId::ElvenRanger => &[Race::Elf],
+        _ => &[Race::Human],
     }
 }
 
 pub fn profile(class: ClassId) -> Profile {
-    entity_types::profile(types(class), Adjust::NONE)
+    races::profile(races(class), Adjust::NONE)
 }
 
 pub fn responses(class: ClassId) -> EffectResponses {
-    entity_types::responses(types(class))
+    races::responses(races(class))
 }

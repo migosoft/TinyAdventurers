@@ -1,7 +1,7 @@
 //! One perception rule for every creature: within vision, in line of sight, and lit or within darkvision.
 use super::Run;
 use crate::collision::line_of_sight;
-use crate::defs::entity_types::Sight;
+use crate::defs::races::Sight;
 use crate::dungeon::Map;
 use crate::math::Vec2;
 

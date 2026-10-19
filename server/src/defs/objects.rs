@@ -1,7 +1,7 @@
 //! World object definitions (see `run/objects.rs`).
 
 use super::damage::{Damage, DamageSplit, DamageType};
-use super::entity_types::{self, Adjust, EntityType, Profile};
+use super::races::{self, Adjust, Race, Profile};
 use super::kinds::EntityKind;
 
 #[derive(Debug, Clone, Copy)]
@@ -43,7 +43,7 @@ pub fn barrel_blast() -> Damage {
     Damage::new(BARREL_BLAST_DAMAGE, DamageSplit::split(&[(DamageType::Heat, 0.5)]))
 }
 
-/// Every object is of entity type `Object` (so it resists poison fully).
+/// Every object is of race `Object` (so it resists poison fully).
 pub fn profile(_kind: EntityKind) -> Profile {
-    entity_types::profile(&[EntityType::Object], Adjust::NONE)
+    races::profile(&[Race::Object], Adjust::NONE)
 }
