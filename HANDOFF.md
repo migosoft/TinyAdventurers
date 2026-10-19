@@ -11,7 +11,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Next session
 
-**First, before progression plan 2 (the user, 2026-10-19): TODO 4b.** Two changes, each in a fresh session with a short spec and plan:
+**First, before progression plan 2 (the user, 2026-10-19): TODO 4b.** **The spec is written and agreed (2026-10-19): [docs/superpowers/specs/2026-10-19-resistances-design.md](docs/superpowers/specs/2026-10-19-resistances-design.md)**, covering both changes plus two the user added: generic "damage-type effect" naming (no "element"), and hardening so a new `DamageType`/`EffectKind` variant cannot be half-added. **Next session:** write one plan from it with superpowers:writing-plans, then build part A (fingerprints must stay unchanged) before part B (fingerprints re-recorded). The two changes:
 1. **One resistance system:** remove the per-effect immunities (`EffectResponse::Immune`/`Reduced`), and give every effect a resistance in %, where 100 % means immune. Details are in TODO "Resistances instead of immunities". It comes before plan 2 because items, Purify and the keystones would otherwise be built as immunities.
 2. **No HP bonus from party size:** remove `enemies::party_hp_scale` (×0.75 + 0.25 per hero) and `bosses::hp_scale` (×0.5 + 0.5 per hero). Re-record the fingerprints once. Any later scaling comes from enemy count or Attributes (TODO 18).
 
