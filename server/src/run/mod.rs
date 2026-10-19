@@ -228,7 +228,7 @@ impl Run {
             let t = run.level.enemy_type(s.enemy);
             run.spawn_enemy(t, s.pos, None, n);
         }
-        // Mimics are monsters from the start, dormant and drawn as a closed chest.
+        // Mimics are monsters from the start, hiding and drawn as a closed chest.
         for c in run.layout.chests.clone() {
             if c.mimic {
                 let id = run.spawn_enemy(EnemyType::Mimic, c.pos, None, n);

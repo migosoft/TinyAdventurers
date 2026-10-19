@@ -6,7 +6,7 @@ import type { PlayerStats } from '../generated/PlayerStats';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
 import { endText } from './endText';
-import { BOSS_TEXT, CLASS_TEXT, effectGlyph } from './text';
+import { BOSS_TEXT, CLASS_TEXT, className, effectGlyph } from './text';
 
 export interface FrameStats {
   fps: number;
@@ -252,7 +252,7 @@ export class Hud {
     const rows = m.stats
       .map(
         (s) =>
-          `<tr class="${s.alive ? '' : 'dead'}"><td>${esc(s.name)}</td><td>${s.class}</td><td>${s.kills}</td><td>${Math.round(s.damage)}</td><td>${Math.round(s.healing)}</td><td>${s.xp}</td><td>${s.coins}</td></tr>`,
+          `<tr class="${s.alive ? '' : 'dead'}"><td>${esc(s.name)}</td><td>${className(s.class)}</td><td>${s.kills}</td><td>${Math.round(s.damage)}</td><td>${Math.round(s.healing)}</td><td>${s.xp}</td><td>${s.coins}</td></tr>`,
       )
       .join('');
     this.end.innerHTML = `

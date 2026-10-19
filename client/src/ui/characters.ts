@@ -8,6 +8,7 @@ import type { Atlas } from './atlas';
 import { classCard, classFigure, CLASSES } from './classes';
 import { esc } from './hud';
 import { logoHeader } from './logo';
+import { className } from './text';
 
 export class Characters {
   private root = document.createElement('div');
@@ -89,7 +90,7 @@ export class Characters {
       li.append(classFigure(this.atlas, c.class, 3));
       const info = document.createElement('div');
       info.className = 'cinfo';
-      info.innerHTML = `<b>${esc(c.name)}</b><small>${c.class}</small>
+      info.innerHTML = `<b>${esc(c.name)}</b><small>${className(c.class)}</small>
         <small>${c.xp} XP <span class="muted">(${c.total_xp} earned)</span> · <i class="coin-icon"></i>${c.coins}</small>`;
       li.append(info);
       const play = document.createElement('button');

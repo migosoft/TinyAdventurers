@@ -12,20 +12,33 @@ use crate::protocol::Ev;
 use std::collections::VecDeque;
 
 /// The first of 8 points 12 px around `pos` (east first, then clockwise) where the
-/// wolf can stand: walkable ground, clear of solid objects. Else `pos` itself.
-pub fn spot_beside(run: &Run, pos: Vec2) -> Vec2 {
+/// wolf can stand: walkable ground, clear of solid objects. None when there is no such point.
+pub fn spot_beside(run: &Run, pos: Vec2) -> Option<Vec2> {
     let solids = run.solids(None);
     (0..8)
         .map(|i| pos + Vec2::from_angle(i as f64 * std::f64::consts::FRAC_PI_4) * 12.0)
         .find(|&p| !run.layout.map.blocks_at(p, Mover::Enemy) && !solids.iter().any(|s| (p.x - s.x).abs() < s.half + WOLF_RADIUS && (p.y - s.y).abs() < s.half + WOLF_RADIUS))
-        .unwrap_or(pos)
+}
+
+/// Where a summoned wolf appears: beside `pos`, else the nearest walkable tile centre within
+/// 2 tiles, else `pos` itself (a summon is never refused).
+fn summon_spot(run: &Run, pos: Vec2) -> Vec2 {
+    spot_beside(run, pos).unwrap_or_else(|| {
+        let (tx, ty) = Map::tile_of(pos);
+        (-2i32..=2)
+            .flat_map(|dy| (-2i32..=2).map(move |dx| (tx + dx, ty + dy)))
+            .map(|(x, y)| Map::center_of(x, y))
+            .filter(|&c| !run.layout.map.blocks_at(c, Mover::Enemy))
+            .min_by(|a, b| a.dist(pos).total_cmp(&b.dist(pos)))
+            .unwrap_or(pos)
+    })
 }
 
 /// Summons the wolf of hero `pi` beside them and returns its id.
 pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
     let prof = wolf_profile();
     let owner = run.players[pi].id;
-    let spot = spot_beside(run, run.players[pi].pos());
+    let spot = summon_spot(run, run.players[pi].pos());
     let (tx, ty) = Map::tile_of(spot);
     let id = run.alloc_id();
     run.monsters.push(Monster {
@@ -139,10 +152,10 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
     if a.reach_t <= 0.0 && !dashing {
         a.reach_t = WOLF_REACH_EVERY;
         let map = &run.layout.map;
-        lost |= !(walk_line(map, pos, ranger, Mover::Enemy) || ai::astar(map, pos, ranger, 2500, Mover::Enemy).is_some());
+        // A ranger on lava or over a chasm cannot be reached on foot, and no spot beside her is safe.
+        lost |= !map.blocks_at(ranger, Mover::Enemy) && !(walk_line(map, pos, ranger, Mover::Enemy) || ai::astar(map, pos, ranger, 2500, Mover::Enemy).is_some());
     }
-    if lost {
-        reappear(run, mi, ranger);
+    if lost && reappear(run, mi, ranger) {
         return;
     }
 
@@ -379,8 +392,9 @@ fn find_prey(run: &Run, mi: usize, ranger: Vec2) -> Option<usize> {
 }
 
 /// The wolf appears beside the ranger with the green puff, dropping whatever it was doing.
-fn reappear(run: &mut Run, mi: usize, ranger: Vec2) {
-    let spot = spot_beside(run, ranger);
+/// With no free spot beside her it stays where it is (false).
+fn reappear(run: &mut Run, mi: usize, ranger: Vec2) -> bool {
+    let Some(spot) = spot_beside(run, ranger) else { return false };
     let m = &mut run.monsters[mi];
     m.pos = spot;
     m.knock = Vec2::ZERO;
@@ -393,6 +407,7 @@ fn reappear(run: &mut Run, mi: usize, ranger: Vec2) {
     a.following = false;
     set_anim(run, mi, Anim::Idle);
     run.event(Ev::Boom { x: spot.x as f32, y: spot.y as f32, r: 10.0, k: 9 }, None);
+    true
 }
 
 /// Pushed over a chasm with the dash ready: the wolf dashes straight back to the last
@@ -1180,6 +1195,49 @@ mod tests {
             run.step();
         }
         assert!(hall.contains(wolf(&run, id).pos), "the wolf is inside the hall: {:?}", wolf(&run, id).pos);
+    }
+
+    /// The ranger (debug, so the lava spares her) in the middle of a 3x3 patch of lava on lit open floor.
+    fn ranger_on_lava() -> (Run, u32, (i32, i32)) {
+        let (mut run, id) = guard_run();
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for y in ty - 1..=ty + 1 {
+            for x in tx - 1..=tx + 1 {
+                run.layout.map.set(x, y, Tile::Lava);
+            }
+        }
+        move_ranger(&mut run, Map::center_of(tx, ty));
+        (run, id, (tx, ty))
+    }
+
+    #[test]
+    fn the_wolf_never_reappears_onto_lava_beside_a_ranger_standing_on_it() {
+        let (mut run, id, (tx, ty)) = ranger_on_lava();
+        set_wolf_pos(&mut run, id, Map::center_of(tx - 4, ty));
+        for _ in 0..120 {
+            run.step();
+            let w = wolf(&run, id);
+            assert!(w.alive, "the wolf lives");
+            assert!(!run.layout.map.blocks_at(w.pos, Mover::Enemy), "the wolf stands on walkable ground: {:?}", w.pos);
+        }
+    }
+
+    #[test]
+    fn a_summon_beside_lava_lands_on_walkable_ground() {
+        let (mut run, _, (tx, ty)) = ranger_on_lava();
+        // Standing on the lava, no point beside her is safe: the nearest walkable tile centre.
+        run.monsters.retain(|m| m.is_boss);
+        let id = spawn_wolf(&mut run, 0);
+        let w = wolf(&run, id);
+        assert!(!run.layout.map.blocks_at(w.pos, Mover::Enemy), "on walkable ground: {:?}", w.pos);
+        assert!(w.pos.dist(Map::center_of(tx, ty)) <= 2.0 * crate::dungeon::TILE * 1.5);
+        // Beside a lava tile: a free point beside her.
+        let (mut run, _) = guard_run();
+        run.monsters.retain(|m| m.is_boss);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        run.layout.map.set(tx + 1, ty, Tile::Lava);
+        let id = spawn_wolf(&mut run, 0);
+        assert!(!run.layout.map.blocks_at(wolf(&run, id).pos, Mover::Enemy));
     }
 
     #[test]

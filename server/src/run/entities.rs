@@ -184,7 +184,6 @@ pub struct Ally {
     /// The ranger's player id.
     pub owner: u32,
     /// Monsters (ids) it has growled at.
-    #[allow(dead_code)] // the growl (next task)
     pub growled: Vec<u32>,
     pub growl_cd: f64,
     pub growl_to: Option<Vec2>,

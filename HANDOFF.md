@@ -61,15 +61,16 @@ Still to do with the user from before: a real play-test of the lich fight (orbs,
 - The wolf's health bar **hidden under the fog in the dark** (it should vanish with the wolf on unlit tiles).
 - The **18-tile light and mask seam in a large room** (the ranger's vision reaches beyond the screen; the polygon, the mask canvas and the camera window were checked only in small cases).
 - The wolf's **death message and the 60 s fill in the HUD**.
+- An **archer shooting the wolf from range** (the wolf fights back only against enemies within 1.5 tiles of itself, or within 3 tiles of the ranger), and a look at `?mimic`.
 - A **real play of the ranger with the wolf**: the feel of follow, guard, dash and growl, and whether the `WOLF_*` numbers are right.
 
 **Rulings worth knowing:**
 - The wolf's union box is 30×19 px, not the spec's 26×17 (a scale factor in `FIGURES` if it looks wrong).
 - The puff is `Boom k 9`.
 - A ranger who is sinking but still alive keeps her wolf until she dies.
-- The lobby party row shows the wire class name "ElvenRanger" (no space), as for the other classes.
+- The UI shows the class as "Elven Ranger" (`className()` in `ui/text.ts`); the wire value "ElvenRanger" stays for CSS classes and keys.
 
-**Follow-ups** (details in TODO "Elven Ranger follow-ups"): a non-attack dash stopped over a chasm can still sink; a wolf frozen mid-dash hovers over a chasm; the wolf reappears every 0.5 s beside a ranger walking on lava or chasm edges; `run/companion.rs` is about 1300 lines with its tests inline (split them); no vispoly parity fixture at radius 18; several tests are thin (listed there); the comment at `run/mod.rs` still calls mimics "dormant".
+**Follow-ups** (details in TODO "Elven Ranger follow-ups"): a non-attack dash stopped over a chasm can still sink; a wolf frozen mid-dash hovers over a chasm; `run/companion.rs` is about 1300 lines with its tests inline (split them); no vispoly parity fixture at radius 18; several tests are thin (listed there).
 
 ## Art and idea notes (2026-10-16)
 

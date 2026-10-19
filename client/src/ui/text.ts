@@ -40,6 +40,9 @@ export const CLASS_TEXT: Record<ClassId, { title: string; blurb: string; abiliti
   },
 };
 
+/** The class as players read it ("Elven Ranger"); the wire value stays for CSS classes and keys. */
+export const className = (c: ClassId): string => CLASS_TEXT[c].title;
+
 export const BOSS_TEXT: Record<BossId, { name: string; short: string; blurb: string }> = {
   Demon: { name: 'Azgaroth, the Red Demon', short: 'Red Demon', blurb: 'Cleaves, charges across the hall and throws rings of fire.' },
   Lich: { name: 'Vael, the Undying Lich', short: 'Lich', blurb: 'Immune while its disciples live. Gloom bolts, skeleton hordes and a nova that hurls heroes away.' },
