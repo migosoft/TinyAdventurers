@@ -669,3 +669,8 @@ The [Elven Ranger](2026-10-16-elven-ranger-design.md) was merged into `main` aft
 
 Mechanical follow-ups: the starter weapons are the Rapier (Duelling sword) and the Elven Bow (Bow) with today's dagger and crossbow numbers; `ThrowingKnives` is dropped from the weapon kinds; the Elf and Magical Beast races exist (with today's resistances, sight and Sleep immunity); the effect-duration example uses the Paladin (the ranger is immune to Sleep); `Shape::Hide` → `Shape::Summon`; hidden crits are gone.
 
+## Changes decided on 2026-10-19 (to be applied before plan 2, TODO 4b)
+
+- **No immunities, only resistances** (the user): every effect gets a resistance in %, where 100 % means immune. This replaces `EffectResponse` (`Immune`/`Reduced`) everywhere in this spec: §3 `RaceDef.responses`, §5 "hard immunities", §6.6 Purify's `Warded`, §8 `PropKind::EffectImmunity`, §9 Unshaken and Juggernaut, §10 `Sheet.responses`. The spec text is rewritten when 4b is planned.
+- **No HP scaling by party size** (the user): enemy and boss HP do not depend on the number of heroes. Any later scaling uses the number of enemies or their Attributes.
+

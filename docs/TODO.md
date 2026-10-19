@@ -11,7 +11,10 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 **Tier 2: larger features on top of tier 1**
 
 4a. **Elven Ranger and the Dire Wolf:** done (2026-10-16, merged into `main` 2026-10-19; follow-ups in "Elven Ranger follow-ups"). The Assassin became the Elven Ranger (entity type Elf, same art, rapier thrust); Hide is removed (it may return later as an invisibility effect); the secondary summons a Dire Wolf (Magical Beast), the first allied creature; the mimic has the new state `hiding`; sound text shows above the darkness. Spec: [docs/superpowers/specs/2026-10-16-elven-ranger-design.md](superpowers/specs/2026-10-16-elven-ranger-design.md); plan: [docs/superpowers/plans/2026-10-16-elven-ranger.md](superpowers/plans/2026-10-16-elven-ranger.md); TECHNICAL §5 "Companions". Later summons (bear, forest guardian, several companions) come through progression.
-4. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). **Designed 2026-10-18:** Attributes, races, weapons and items, class skill trees, 16 new abilities, loadouts and a new pre-run UI, in [docs/superpowers/specs/2026-10-18-progression-design.md](superpowers/specs/2026-10-18-progression-design.md) (approved; **plan 1 of 5 is done (2026-10-19)**: Attributes, races, the character sheet, pushes by weight, effect durations by save; plan 2 (weapons and items) is next; plan 1 is in `docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md`; the Elven Ranger is now merged in; the spec still names the Assassin and Hide and needs updating, see HANDOFF "Next session"). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
+4. **New abilities, then loadouts, then a way to spend coins** (each depends on the one before). **Designed 2026-10-18:** Attributes, races, weapons and items, class skill trees, 16 new abilities, loadouts and a new pre-run UI, in [docs/superpowers/specs/2026-10-18-progression-design.md](superpowers/specs/2026-10-18-progression-design.md) (approved; **plan 1 of 5 is done (2026-10-19)**: Attributes, races, the character sheet, pushes by weight, effect durations by save; plan 2 (weapons and items) is next; plan 1 is in `docs/superpowers/plans/2026-10-18-progression-1-attributes-and-sheet.md`; the spec is updated for the Elven Ranger; **4b comes before plan 2**, see HANDOFF "Next session"). Abilities can be designed with their light and damage types from the start. Enemies now fall, drown and burn when pushed (built for barrel blasts), so a pushing ability needs nothing more.
+4b. **Before progression plan 2: one resistance system, no party-size HP** (the user, 2026-10-19; details in "Resistances instead of immunities" below). Two changes, both before plan 2 because plans 2 and 4 would otherwise build item and tree immunities that then have to be removed:
+   - **Every immunity becomes a resistance.** Effects without a damage type (Sleep, Blind, Petrified, Slowed, Accelerated, …) get an effect resistance in %, 100 % means immune. The `EffectResponse` lists (`Immune`, `Reduced`) are removed everywhere (code, spec, docs).
+   - **No HP bonus from party size.** `enemies::party_hp_scale` and `bosses::hp_scale` go; enemy and boss HP no longer depend on the number of heroes. Fingerprints change once, deliberately. If scaling is wanted later, it comes from the number of enemies or their Attributes (balancing pass, 18).
 5. **Riddle rooms:** special room types in the generator, a door lock for any room (today only the boss hall can be sealed), the world objects (done: `run/objects.rs`), a dialog panel. Answer the open design questions first.
 6. **Woodland escort level:** needs the world objects and the object targets (done), plus its own level type (the run is already split from "dungeon + boss", see TECHNICAL.md "How to add a level type"), a road-map generator, a wave spawner and gnoll art. The carriage lantern is a moving light source; a night level needs lighting.
 
@@ -34,7 +37,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 **Tier 5: last**
 
-18. **Balancing pass:** every "Tune" item, including resistances, light radii, darkness and the vision and darkness values (see "Vision and darkvision follow-ups"). Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers.
+18. **Balancing pass:** every "Tune" item, including resistances, light radii, darkness and the vision and darkness values (see "Vision and darkvision follow-ups"). Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers. **Party size** (the user, 2026-10-19): if bigger parties need harder fights, scale the number of enemies or their Attributes, never their HP (4b removes today's HP bonus).
 19. **Delta snapshots, WebTransport:** only if measurements show they are needed.
 
 ## Progression follow-ups
@@ -45,6 +48,28 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 - **Behind a reverse proxy**, read `X-Forwarded-For` (only from a trusted proxy) so the per-IP login limits apply per player again.
 - **Several game servers** would need shared presence (one connection per account) and a shared login limiter, e.g. in Valkey. See "Scaling later" in TECHNICAL.md §11a.
 - **Piercing shots (idea from the user, 2026-10-14):** an unlockable upgrade for ranged attacks so a shot passes through a limited number of enemies (first 2, later 3, maybe 4). Today every hero shot ends at the first enemy (`advance_projectile` in `run/abilities.rs`; the client's cosmetic copy stops there too, `GameScene.shotTouchesEnemy`). A pierce count would go on `Projectile` (plus the ids already hit), with the cosmetic copy taking the same count.
+
+## Resistances instead of immunities
+
+Decided by the user on 2026-10-19: "Remove straight forward immunities and do everything with resistances. I think it is easier to have less sources of something and put everything into one coherent system." To be done before progression plan 2 (TODO 4b), in its own short spec and plan.
+
+- **Today there are two systems:**
+  - **Damage-type resistance.** At 100 % or more, a creature is immune to that damage and to its effect (Burning = heat, Frozen = cold, Poisoned = poison).
+  - **Per-effect responses** (`EffectResponse::Immune` / `Reduced` in `defs/effects.rs`, `EffectResponses`). Today they are:
+    - the boss tables in `defs/bosses.rs` (the lich: Sleep and Blind immune, Petrified reduced; the dragon: Sleep immune, Blind, Petrified, Slowed and Accelerated reduced; the demon: Sleep immune);
+    - the Elf and Magical Beast races (Sleep immune, `RaceDef.responses`);
+    - `Sheet.responses`.
+- **Target: one system.** Every effect has a resistance in %, held in the same place as the damage-type resistances (race, the entity's own adjustment, items, tree nodes, effects). It shortens the effect's duration after the save formula; 100 % or more means immune. The old `Reduced` becomes 50 %. Effects with a damage type keep using that type's resistance (decide whether Burning also gets its own effect resistance or keeps reading heat).
+- **Spec changes (progression spec):**
+  - §3 `RaceDef.responses` → effect resistances;
+  - §5 "Hard immunities … override the formula" → resistances;
+  - §6.6 Purify's `Warded` → a magical-effect resistance;
+  - §8 `PropKind::EffectImmunity` → an effect resistance property;
+  - §9 keystones Unshaken (Sleep) and Juggernaut (Slowed) → 100 % resistances;
+  - §10 `Sheet.responses`;
+  - the effects spec (2026-10-15) where it defines responses.
+- **Remove every reference to immunities** in code, spec, TECHNICAL, PLAYER_GUIDE and the client (effect icons or texts that say "immune", if any).
+- **Behaviour stays the same** at today's numbers (immune = 100 %, reduced = 50 %). The tests must show that.
 
 ## Chests, mimics and coins follow-ups
 - **Breakable chests (built 2026-10-16 on `feature/breakable-chests`, TECHNICAL §5 "World objects"; the record of what was decided stays here).** Open: look at the splinter burst in a real run; tune `BROKEN_CHEST_SHARE` (1/3) in the balancing pass. Enemy shots stop at closed chests and break them, but pass a hidden mimic (enemy shots only test heroes), so an archer firing past a chest is a faint tell; it needs a fight right next to a chest to notice.

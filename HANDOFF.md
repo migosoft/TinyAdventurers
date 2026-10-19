@@ -11,6 +11,10 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 ## Next session
 
+**First, before progression plan 2 (the user, 2026-10-19): TODO 4b.** Two changes, each in a fresh session with a short spec and plan:
+1. **One resistance system:** remove the per-effect immunities (`EffectResponse::Immune`/`Reduced`), and give every effect a resistance in %, where 100 % means immune. Details are in TODO "Resistances instead of immunities". It comes before plan 2 because items, Purify and the keystones would otherwise be built as immunities.
+2. **No HP bonus from party size:** remove `enemies::party_hp_scale` (×0.75 + 0.25 per hero) and `bosses::hp_scale` (×0.5 + 0.5 per hero). Re-record the fingerprints once. Any later scaling comes from enemy count or Attributes (TODO 18).
+
 **Merge done (2026-10-19):** `origin/feature/elven-ranger` (Elven Ranger, Dire Wolf, breakable chests) was fast-forwarded into local `main` (`c5b3860`, **not pushed**), and `main` was merged into `feature/skill-tree-design`.
 
 **Progression: designed and approved, plan 1 built (branch `feature/skill-tree-design`):**
