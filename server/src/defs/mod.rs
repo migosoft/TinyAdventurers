@@ -1,4 +1,5 @@
 pub mod abilities;
+pub mod attributes;
 pub mod bosses;
 pub mod classes;
 pub mod companions;
