@@ -116,6 +116,11 @@ impl Lich {
         })
     }
 
+    /// Its spells' power: its INT (stat block: defs/bosses.rs, 22), saved against with WIL.
+    fn power(run: &Run, bi: usize) -> i32 {
+        run.monsters[bi].attrs.get(crate::defs::attributes::Attr::Int)
+    }
+
     /// The nova: a dark burst that hurts every hero and ally within the radius and pushes them straight away.
     pub(crate) fn nova(run: &mut Run, pos: Vec2) {
         let r = LICH_NOVA_RADIUS;
@@ -228,7 +233,7 @@ impl BossBehaviour for Lich {
                                 let sight = run.monsters[bi].sight_now();
                                 let p = &run.players[pi];
                                 if p.alive && crate::run::perception::sees(run, sight, pos, p.pos()) {
-                                    let h = OnHit { kind: EffectKind::Petrified, secs: LICH_GAZE_SECS, chance: 1.0 };
+                                    let h = OnHit { kind: EffectKind::Petrified, secs: LICH_GAZE_SECS, chance: 1.0, magical: true, power: Self::power(run, bi) };
                                     run.hurt_player(pi, Damage::physical(0.0).with_effect(h));
                                 }
                             }
@@ -243,7 +248,8 @@ impl BossBehaviour for Lich {
                             };
                             spawn_monster_projectile(run, id, kind, pos + dir * 8.0, dir, LICH_ORB_SPEED, dmg, 3.0, 0.0, 0, 0.0);
                             // The orb just spawned carries the effect.
-                            run.projectiles.last_mut().unwrap().damage.on_hit = Some(OnHit { kind: s.effect(), secs, chance: 1.0 });
+                            let power = Self::power(run, bi);
+                            run.projectiles.last_mut().unwrap().damage.on_hit = Some(OnHit { kind: s.effect(), secs, chance: 1.0, magical: true, power });
                         }
                     }
                 }

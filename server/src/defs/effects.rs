@@ -167,6 +167,20 @@ pub struct OnHit {
     pub secs: f64,
     /// 0..=1; 1 or more applies without a roll.
     pub chance: f64,
+    /// Saved against with WIL (spells, innate magic) instead of CON.
+    pub magical: bool,
+    /// The source's key Attribute (spells INT, innate magic CHA, a weapon's
+    /// wielder its key Attribute, terrain and elements 10); see `scaled_secs`.
+    pub power: i32,
+}
+
+/// Power of an element's effect from a hit's split, and of terrain: fixed, non-magical.
+pub const ELEMENT_POWER: i32 = 10;
+
+/// A harmful effect's seconds after the target's save:
+/// `base × max(0, 1 + (power − save) / 20)`. A save 20 above the power: 0 s.
+pub fn scaled_secs(base: f64, power: i32, save: i32) -> f64 {
+    base * (1.0 + (power - save) as f64 / 20.0).max(0.0)
 }
 
 /// `base` with every mod on `stat` of the active `kinds`: all `Add`s, then

@@ -3,7 +3,8 @@
 
 use crate::defs::damage::{Damage, DamageType, Resistances};
 use crate::dungeon::Tile;
-use crate::defs::effects::{def, resolve_stat, EffectKind, EffectResponse, Stat, DOT_TICK, EFFECT_REDUCED};
+use crate::defs::attributes::Attr;
+use crate::defs::effects::{def, resolve_stat, scaled_secs, EffectKind, EffectResponse, Stat, DOT_TICK, EFFECT_REDUCED, ELEMENT_POWER};
 use crate::defs::races::Sight;
 use crate::protocol::Ev;
 use crate::run::{Run, DT};
@@ -184,6 +185,23 @@ impl Run {
         true
     }
 
+    /// Like `apply_effect`, from a source of `power`: a harmful effect's time is
+    /// scaled by the target's save (WIL against `magical`, else CON) before its
+    /// response applies. Positive effects are never scaled.
+    pub fn apply_effect_from(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>, power: i32, magical: bool) -> bool {
+        let base = secs.unwrap_or(def(kind).duration);
+        if def(kind).positive {
+            return self.apply_effect(c, kind, Some(base));
+        }
+        let save_attr = if magical { Attr::Wil } else { Attr::Con };
+        let save = match c {
+            Creature::Player(i) => self.players.get(i).map(|p| p.sheet.attrs.get(save_attr)),
+            Creature::Monster(i) => self.monsters.get(i).map(|m| m.attrs.get(save_attr)),
+        };
+        let Some(save) = save else { return false };
+        self.apply_effect(c, kind, Some(scaled_secs(base, power, save)))
+    }
+
     fn in_water(&self, pos: crate::math::Vec2) -> bool {
         let tile = self.layout.map.tile_at(pos);
         tile == Tile::ShallowWater as u8 || tile == Tile::DeepWater as u8
@@ -205,13 +223,14 @@ impl Run {
         }
     }
 
-    /// After a normal hit: each element making up at least half of it applies its effect.
+    /// After a normal hit: each element making up at least half of it applies its
+    /// effect, at the fixed non-magical `ELEMENT_POWER` against the target's CON.
     pub fn element_hit(&mut self, c: Creature, dmg: &crate::defs::damage::Damage) {
         if dmg.from_effect {
             return;
         }
         for k in crate::defs::effects::element_effects(&dmg.split) {
-            self.apply_effect(c, k, None);
+            self.apply_effect_from(c, k, None, ELEMENT_POWER, false);
         }
     }
 
@@ -219,7 +238,7 @@ impl Run {
     pub fn hit_effect(&mut self, c: Creature, h: OnHit) {
         let lands = h.chance >= 1.0 || (h.chance > 0.0 && rand::Rng::gen::<f64>(&mut self.rng) < h.chance);
         if lands {
-            self.apply_effect(c, h.kind, Some(h.secs));
+            self.apply_effect_from(c, h.kind, Some(h.secs), h.power, h.magical);
         }
     }
 
@@ -494,7 +513,7 @@ mod tests {
     }
 
     fn sleepy(chance: f64) -> OnHit {
-        OnHit { kind: EffectKind::Sleep, secs: 2.0, chance }
+        OnHit { kind: EffectKind::Sleep, secs: 2.0, chance, magical: false, power: 10 }
     }
 
     #[test]
@@ -515,7 +534,7 @@ mod tests {
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep));
         run.events.clear();
         let hp = run.players[0].hp;
-        run.hurt_player(0, Damage::physical(0.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, chance: 1.0 }));
+        run.hurt_player(0, Damage::physical(0.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, chance: 1.0, magical: false, power: 10 }));
         assert_eq!(run.players[0].hp, hp);
         assert!(run.has_effect(Creature::Player(0), EffectKind::Blind));
         assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "a pure effect hit shows no number");
@@ -527,7 +546,7 @@ mod tests {
         run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy(1.0)));
         run.hurt_player(0, Damage::physical(5.0));
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep), "damage does not wake");
-        run.hurt_player(0, Damage::physical(10_000.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, chance: 1.0 }));
+        run.hurt_player(0, Damage::physical(10_000.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, chance: 1.0, magical: false, power: 10 }));
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Blind));
     }
 
@@ -614,7 +633,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat));
         assert!(run.players[0].effects.list().is_empty());
-        run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(OnHit { kind: EffectKind::Slowed, secs: 1.0, chance: 1.0 }));
+        run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(OnHit { kind: EffectKind::Slowed, secs: 1.0, chance: 1.0, magical: false, power: 10 }));
         assert!(run.players[0].effects.list().is_empty(), "not even an on_hit");
     }
 
@@ -741,6 +760,80 @@ mod tests {
         let si = run.monster_idx(id).unwrap();
         run.hurt_monster(si, Damage::new(10.0, DamageSplit::pure(DamageType::Poison)), false, None);
         assert!(!run.has_effect(Creature::Monster(si), EffectKind::Poisoned), "undead are never poisoned");
+    }
+
+    // ---- Durations by power against save ----
+
+    fn left_of(run: &crate::run::Run, c: Creature, k: EffectKind) -> Option<f64> {
+        let fx = match c {
+            Creature::Player(i) => &run.players[i].effects,
+            Creature::Monster(i) => &run.monsters[i].effects,
+        };
+        fx.list().iter().find(|a| a.kind == k).map(|a| a.left)
+    }
+
+    fn lich_sleep() -> OnHit {
+        OnHit { kind: EffectKind::Sleep, secs: 2.0, chance: 1.0, magical: true, power: 22 }
+    }
+
+    #[test]
+    fn duration_follows_power_against_save() {
+        use crate::defs::effects::scaled_secs;
+        assert!((scaled_secs(3.0, 15, 8) - 3.0 * 1.35).abs() < 1e-12);
+        assert!((scaled_secs(3.0, 22, 14) - 3.0 * 1.4).abs() < 1e-12);
+        assert_eq!(scaled_secs(3.0, 10, 30), 0.0);
+    }
+
+    #[test]
+    fn lich_sleep_lasts_longer_on_the_paladin() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.hurt_player(0, Damage::physical(0.0).with_effect(lich_sleep()));
+        let left = left_of(&run, Creature::Player(0), EffectKind::Sleep).expect("asleep");
+        assert!((left - 3.0).abs() < 1e-12, "2 s × (1 + (22 − 12) / 20) = 3 s, got {left}");
+    }
+
+    #[test]
+    fn elves_and_the_wolf_stay_immune_to_sleep() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let id = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(id).unwrap();
+        run.hurt_player(0, Damage::physical(0.0).with_effect(lich_sleep()));
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Sleep), "the elf");
+        run.hit_effect(Creature::Monster(wi), lich_sleep());
+        assert!(!run.has_effect(Creature::Monster(wi), EffectKind::Sleep), "the wolf");
+    }
+
+    #[test]
+    fn burning_is_shorter_on_a_tough_hero() {
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        open(&mut run);
+        run.element_hit(Creature::Player(0), &Damage::new(4.0, DamageSplit::pure(DamageType::Heat)));
+        let left = left_of(&run, Creature::Player(0), EffectKind::Burning).expect("burning");
+        let want = crate::defs::effects::def(EffectKind::Burning).duration * 0.8;
+        assert!((left - want).abs() < 1e-12, "power 10 against CON 14: ×0.8, got {left}");
+    }
+
+    #[test]
+    fn responses_still_override_the_formula() {
+        use crate::defs::effects::{EffectResponse, EffectResponses};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ogre, at, None, 1);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].responses = EffectResponses::of(&[(EffectKind::Sleep, EffectResponse::Immune)]);
+        assert!(!run.apply_effect_from(Creature::Monster(mi), EffectKind::Sleep, None, 40, true));
+        assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Sleep));
+    }
+
+    #[test]
+    fn buffs_are_never_shortened() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        let bi = boss(&run);
+        assert_eq!(run.monsters[bi].attrs.get(crate::defs::attributes::Attr::Wil), 18);
+        assert!(run.apply_effect_from(Creature::Monster(bi), EffectKind::Accelerated, None, 0, true));
+        assert_eq!(left_of(&run, Creature::Monster(bi), EffectKind::Accelerated), Some(crate::defs::effects::def(EffectKind::Accelerated).duration));
     }
 
     #[test]
