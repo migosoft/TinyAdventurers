@@ -379,7 +379,7 @@ export class GameScene extends Phaser.Scene {
         else if (ev.k === 10) this.fx.nova(ev.x, ev.y, ev.r, 0x78c8ff);
         else if (ev.k === 11) {
           this.fx.ring(ev.x, ev.y, ev.r, 0xff6020, 0.5, true);
-          if (Math.hypot(ev.x - this.pred.state.x, ev.y - this.pred.state.y) < 4) this.cameras.main.shake(100, 0.003);
+          if (Math.hypot(ev.x - this.pred.state.x, ev.y - this.pred.state.y) < CONST.PLAYER_RADIUS * 2) this.cameras.main.shake(100, 0.003);
         } else if (ev.k === 12) this.fx.ring(ev.x, ev.y, ev.r, 0xffe040, 0.5, true);
         else if (ev.k === 13) this.fx.healRing(ev.x, ev.y, ev.r, 0xfff0b0);
         else this.fx.explosion(ev.x, ev.y, ev.r);
@@ -689,6 +689,8 @@ export class GameScene extends Phaser.Scene {
       c.y = ny;
       const pd = PROJECTILES[c.kind];
       c.img.setPosition(Math.round(c.x), Math.round(c.y - 8));
+      // The thrower only sees this copy: a spinning axe must keep turning.
+      if (pd.spin) this.orientProjectile(c.img, pd, Math.atan2(c.vy, c.vx));
       if (pd.trail && Math.random() < 0.6) this.fx.particle(c.x, c.y - 8, 0, 0, 0.25, pd.trail, { depth: DEPTH.projectile - 1 });
     }
   }

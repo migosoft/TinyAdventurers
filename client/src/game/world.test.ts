@@ -197,6 +197,7 @@ describe('EffectLooks', () => {
 describe('Volley', () => {
   it('volleyShotIds never contains 0 and wraps', () => {
     expect(volleyShotIds(5, 3)).toEqual([5, 6, 7]);
+    expect(volleyShotIds(0xfffd, 3)).toEqual([0xfffd, 0xfffe, 0xffff]);
     expect(volleyShotIds(0xfffe, 3)).toEqual([1, 2, 3]);
     expect(volleyShotIds(0xffff, 1)).toEqual([0xffff]);
     expect(volleyShotIds(0, 1)).toEqual([1]);
