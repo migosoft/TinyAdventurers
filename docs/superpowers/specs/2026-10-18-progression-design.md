@@ -256,7 +256,7 @@ The Wizard's Red Staff is a new weapon (my call: damage 6 at STR 8 → base 6.67
 
 ### 6.6 New abilities (2 primary + 2 secondary per class, 16 in all)
 
-Each has a category, uses, requirements, stats, damage types and light from the start (TODO priority 4). Numbers are at the requirement's minimum and are starting values for the balancing pass. Since 2026-10-21 hits with 25–50 % cold **Chill** (Frost Shard), Entangle **Roots** and War Cry **frightens** (see "Changes decided on 2026-10-21"); **Accelerated** has two sources (Haste, War Cry).
+Each has a category, uses, requirements, stats, damage types and light from the start (TODO priority 4). Numbers are at the requirement's minimum and are starting values for the balancing pass. Since 2026-10-21 hits with 25–50 % cold **Chill** (Frost Shard), Entangle **entangles** and War Cry **frightens** (see "Changes decided on 2026-10-21"); **Accelerated** has two sources (Haste, War Cry).
 
 | Class | Ability | Slot | Category | Uses | Blocked in melee | Requirements | Damage | Stats | Light |
 |---|---|---|---|---|---|---|---|---|---|
@@ -274,7 +274,7 @@ Each has a category, uses, requirements, stats, damage types and light from the 
 | Barbarian | **Ground Slam** | secondary | Technique | melee | no | STR 17, Hammer or Club | weapon ×1.2 | cd 6 s, wind-up 0.5 s, radius 34 around you, pushes (STR) | the weapon |
 | Elven Ranger | **Volley** | primary | WeaponAttack | ranged | yes | DEX 15, Bow or Longbow | weapon ×0.6 per arrow | 3 arrows in a 30° spread, attack time ×1.4 | the weapon |
 | Elven Ranger | **Flanking Thrust** | primary | WeaponAttack | melee | no | DEX 16, Dagger or Duelling sword or Katana or Machete | weapon; ×2 from behind | the finesse weapon; "behind" = within 60° of the target's back | the weapon |
-| Elven Ranger | **Entangle** | secondary | Innate | none | yes | CHA 14 | – | cd 14 s; roots at a spot within 120 px, radius 36, 4 s: enemies inside Rooted (power CHA, save WIL; 2026-10-21) | none |
+| Elven Ranger | **Entangle** | secondary | Innate | none | yes | CHA 14 | – | cd 14 s; roots at a spot within 120 px, radius 36, 4 s: enemies inside Entangled (power CHA, save STR; 2026-10-21) | none |
 | Elven Ranger | **Poison Coat** | secondary | Technique | none | no | WIL 15 | +30 % poison share | cd 16 s; 6 s: your weapon attacks add a poison share and Poisoned 3 s on hit | none |
 
 Notes:
@@ -283,7 +283,7 @@ Notes:
 - **Chain Spark** jumps to the nearest enemy not yet hit within 48 px of the last target; damage ×0.7 per jump; jumps never return.
 - **Purify**'s ward is a magical-effect resistance for 3 s (my call: a positive effect `Warded` whose mods are `Stat::ResistEffect(kind)` +1.0 for every magical negative effect, i.e. the effects saved with WIL; plan 3 fixes the exact set).
 - **Consecrate** is a ground area like today's `FirePatch` (a new `EntityKind::HolyGround`), damaging enemies only.
-- **Entangle** is a ground area like `FirePatch` (a new `EntityKind::Roots`, aimed like the Fireball) that roots enemies inside every 0.5 s (a 1 s Rooted, refreshed; 2026-10-21); it never hurts allies or the wolf.
+- **Entangle** is a ground area like `FirePatch` (a new `EntityKind::Roots`, aimed like the Fireball) that entangles enemies inside every 0.5 s (a 1 s Entangled, refreshed; 2026-10-21); it never hurts allies or the wolf.
 - **Flanking Thrust** reads the target's facing: monsters already face their target, so an enemy busy with the wolf shows its back to the ranger.
 - **The wolf's improvement nodes** (Thick Fur, Swift Pounce) are `AbilityMod`s on Summon Wolf: `CompanionHpMul(f64)`, `CompanionDashCooldownAdd(f64)`. Its other numbers stay fixed (the ranger spec's call 6).
 
@@ -465,7 +465,7 @@ pub enum NodeKind { Start, Attr(Attr, i32), Unlock(AbilityId), Improve(AbilityId
 | `b_l2` | -2,-1 | improve | Thunderous | War Cry: radius +30 %. | 350 | – | `b_l4` |
 | `b_l3` | -2,1 | attr | +1 CHA | +1 CHA | 200 | – | `b_l4` |
 | `b_l4` | -3,0 | improve | Bowling Charge | Charge: carries +4 STR for pushes. | 400 | – | `b_l5` |
-| `b_l5` | -4,0 | keystone | Juggernaut | +4 weight; Slowed, Chilled and Rooted resistance 100 % (2026-10-21). | 1000 | CON 16 | – |
+| `b_l5` | -4,0 | keystone | Juggernaut | +4 weight; Slowed, Chilled and Entangled resistance 100 % (2026-10-21). | 1000 | CON 16 | – |
 | `b_r1` | 1,0 | prof | Heavy Armor | Proficiency: heavy armor. | 300 | – | `b_r2` `b_r3` |
 | `b_r2` | 2,-1 | unlock | Hurl | Unlocks Hurl (primary). | 500 | DEX 13 | `b_r4` |
 | `b_r3` | 2,1 | prof | Mace | Proficiency: mace. | 200 | – | `b_r4` |
@@ -491,7 +491,7 @@ pub enum NodeKind { Start, Attr(Attr, i32), Unlock(AbilityId), Improve(AbilityId
 | `e_l2` | -2,-1 | improve | Long Shot | Shoot: range +15 %. | 350 | – | `e_l4` |
 | `e_l3` | -2,1 | prof | Longbow | Proficiency: longbow. | 250 | – | `e_l4` |
 | `e_l4` | -3,0 | unlock | Volley | Unlocks Volley (primary). | 600 | DEX 15 | `e_l5` |
-| `e_l5` | -4,0 | keystone | Deadeye | Ranged hits on Slowed, Chilled, Rooted or sleeping enemies deal ×2 (2026-10-21). | 1200 | DEX 18 | – |
+| `e_l5` | -4,0 | keystone | Deadeye | Ranged hits on Slowed, Chilled, Entangled or sleeping enemies deal ×2 (2026-10-21). | 1200 | DEX 18 | – |
 | `e_r1` | 1,0 | unlock | Flanking Thrust | Unlocks Flanking Thrust (primary). | 500 | DEX 16 | `e_r2` `e_r3` |
 | `e_r2` | 2,-1 | improve | Find the Gap | Flanking Thrust: "behind" widens to 90°. | 350 | – | `e_r4` |
 | `e_r3` | 2,1 | prof | Katana | Proficiency: katana. | 250 | – | `e_r4` |
@@ -712,17 +712,17 @@ One table (`TYPE_EFFECTS` in `defs/effects.rs`) decides which effect a hit appli
 - **Biting Cold** (tree node, plan 4; the agent's call): "Frost Shard: +20 % damage" instead of the chance. A higher cold share would make a primary freeze, against the design rule below.
 - **Poison Coat** keeps "+30 % poison share" (so its hits Taint) and "Poisoned 3 s on hit", which now always lands.
 
-### Rooted and Fear (the user)
+### Entangled and Fear (the user)
 
-- **Entangle roots** instead of slowing: the new negative effect **Rooted** (no moving; turning and acting stay allowed, so an archer in the roots keeps shooting). The roots renew it every 0.5 s on each enemy inside (1 s each time, so it ends at most 1 s after the creature is out of the roots or the roots are gone). Power CHA, save WIL (innate magic). It cancels nothing and fire does not burn the roots.
+- **Entangle entangles** instead of slowing: the new negative effect **Entangled** (unable to move; turning and acting stay allowed, so an archer in the roots keeps shooting). The roots renew it every 0.5 s on each enemy inside (1 s each time, so it ends at most 1 s after the roots are gone). Power CHA, **save STR** (the user: strength breaks free; `EffectDef.save`, below). It cancels nothing and fire does not burn the roots.
 - **War Cry frightens** instead of slowing: enemies within its radius get the new negative effect **Fear**, base 3 s, power STR. Allies still get Accelerated 3 s.
 - **Fear** (from the TODO; the user): the creature **runs straight away from the one who frightened it** for the whole time. The agent's calls (approved): it cannot attack while it flees; it moves with its normal movement (no running into chasms or lava; along a wall or stopped by it). The effect remembers its source (the hero's position is read each tick; if the source is gone, the creature flees from where the source was last).
-- **Each effect may name its own save** (the user: "WIL reduces the duration"): Fear is always saved with **WIL**, although War Cry is not magic. `EffectDef` gains `save: Option<Attr>`; `None` keeps the rule of §5 (WIL against magical, CON otherwise). Example at STR 16: a goblin (WIL 8) flees 4.2 s, an orc (WIL 11) 3.75 s.
+- **Each effect may name its own save** (the user: "WIL reduces the duration"): Fear is always saved with **WIL**, although War Cry is not magic; Entangled with **STR**. `EffectDef` gains `save: Option<Attr>`; `None` keeps the rule of §5 (WIL against magical, CON otherwise). Example at STR 16: a goblin (WIL 8) flees 4.2 s, an orc (WIL 11) 3.75 s.
 - **Who resists Fear** (the user; no immunities, only resistances): the **Undead** race 100 % (every skeleton and the lich), the **Demon** race 50 % (imps, chorts, the demon), the bosses 100 % in total (the demon's own list adds 50 % to its race's, the dragon's and the lich's lists reach 100 %). Everything else is left to the balancing pass.
 - **Heroes and Fear:** no enemy frightens yet. Fear on a hero (forced running, no attacks) is a TODO for when one does; the wolf is an ally, so War Cry never frightens it.
 - **Look:** an HUD letter like the other effects; a fleeing monster shows a small "!" above its head (the agent's call).
 
-- **Tree nodes that named Slowed** (plan 4; the agent's calls): Deep Winter reads Chilled or Frozen, Juggernaut resists Slowed, Chilled and Rooted, Deadeye counts Slowed, Chilled, Rooted or sleeping targets.
+- **Tree nodes that named Slowed** (plan 4; the agent's calls): Deep Winter reads Chilled or Frozen, Juggernaut resists Slowed, Chilled and Entangled, Deadeye counts Slowed, Chilled, Entangled or sleeping targets.
 
 ### Design rule (the user)
 
@@ -733,4 +733,4 @@ One table (`TYPE_EFFECTS` in `defs/effects.rs`) decides which effect a hit appli
 - **The ranger's tree and her four abilities** (Volley, Flanking Thrust, Entangle, Poison Coat) are **approved as drafted** (the user, 2026-10-21).
 - **Debug weapons** (the user): plan 3b adds the hero items **Throwing Axes** (ThrowingAxe, `weapon_throwing_axe`), **War Hammer** (Hammer, `weapon_hammer`) and **Katana** (Katana, `weapon_katana`), and a debug-only `ClientMsg::DebugEquip { slot, item }` with two weapon selects (melee, ranged) in the `?debug` waiting-room row, so Hurl, Ground Slam and the katana's Flanking Thrust can be tried. Plan 4 may fold it into `DebugGrantItem`.
 - **The wolf's wait after it dies** (the user): it keeps scaling with the Summon Wolf version's cooldown ratio (a `CooldownAdd` that halves the cooldown halves the 60 s wait).
-- **Warded** (Purify; the agent's call, 2026-10-21): +100 % effect resistance to **Blind, Sleep and Petrified**, the effects hostile sources apply magically today (the lich's spells). Rooted (magical) is added once an enemy roots heroes; Fear (saved with WIL, but not magical) is left out.
+- **Warded** (Purify; the agent's call, 2026-10-21): +100 % effect resistance to **Blind, Sleep and Petrified**, the effects hostile sources apply magically today (the lich's spells). Entangled (magical, but saved with STR) is added once an enemy entangles heroes; Fear (saved with WIL, but not magical) is left out.
