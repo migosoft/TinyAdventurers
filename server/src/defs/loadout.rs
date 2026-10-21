@@ -119,7 +119,7 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
     shares.sort_by(|a, b| (a.0 as u8).cmp(&(b.0 as u8)).then(a.1.total_cmp(&b.1)));
     let longer = !duration.is_empty();
     let new_duration = (r.duration + sum(duration)).max(0.0);
-    let base = Base { mods_mult: product(damage), ..r.base };
+    let base = Base { mods_mult: r.base.mods_mult * product(damage), ..r.base };
     ResolvedAbility {
         // Clamped: a negative factor or a large negative add never makes a number negative.
         radius: (r.radius * product(radius)).max(0.0),

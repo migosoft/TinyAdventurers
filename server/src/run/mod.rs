@@ -156,16 +156,7 @@ pub struct Run {
 /// A patch of fire that hurts heroes and allies (the dragon's; the wolf's fire).
 pub fn spawn_fire_patch(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64) {
     let kind = EntityKind::FirePatch;
-    run.spawn_hazard(kind, pos, radius, life, HazardSide::Monsters, HazardPulse::Hurt(Damage::new(damage, kind_split(kind))));
-}
-
-/// A hazard's pulse as a hit: a pulse that came from an ability keeps its source; the rest are the
-/// hazard's own, by its owner when it has one.
-fn hazard_hit(dmg: Damage, kind: EntityKind, owner: Option<u32>) -> Damage {
-    if dmg.why.what != What::Unknown {
-        return dmg;
-    }
-    Damage { why: Why { by: owner, what: What::Hazard(kind), ..dmg.why }, ..dmg }
+    run.spawn_hazard(kind, pos, radius, life, HazardSide::Monsters, HazardPulse::Hurt(Damage { why: Why { what: What::Hazard(kind), ..Why::NONE }, ..Damage::new(damage, kind_split(kind)) }));
 }
 
 impl Run {
@@ -821,10 +812,9 @@ impl Run {
                 continue;
             }
             h.pulse_t = 0.5;
-            let (pos, r, side, pulse, kind) = (h.pos, h.radius, h.side, h.pulse, h.kind);
+            let (pos, r, side, pulse) = (h.pos, h.radius, h.side, h.pulse);
             match (side, pulse) {
                 (HazardSide::Monsters, HazardPulse::Hurt(dmg)) => {
-                    let dmg = hazard_hit(dmg, kind, None);
                     for c in self.foes_touching(pos, r, false) {
                         self.hurt_creature(c, dmg);
                     }
@@ -836,7 +826,6 @@ impl Run {
                     }
                 }
                 (HazardSide::Heroes { owner }, HazardPulse::Hurt(dmg)) => {
-                    let dmg = hazard_hit(dmg, kind, Some(owner));
                     let credit = self.players.iter().position(|p| p.id == owner);
                     for mi in self.enemies_touching(pos, r) {
                         self.hurt_monster(mi, dmg, false, credit);

@@ -135,7 +135,7 @@ fn damage_and_cooldown(kind: WeaponKind, damage: f64, cooldown: f64, at: At, a: 
 
 pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> ResolvedWeapon {
     let (damage, cooldown, scale) = damage_and_cooldown(kind, s.damage, s.cooldown, s.at, attrs);
-    let base = Base { given: s.damage, scale: Some(scale), ability_mult: 1.0, mods_mult: 1.0 };
+    let base = Base { given: s.damage, scale: Some(scale), ability_mult: 1.0, mods_mult: 1.0, upgrade_mult: 1.0 };
     debug_assert_eq!(damage.to_bits(), base.amount().to_bits());
     ResolvedWeapon {
         kind,
@@ -157,7 +157,7 @@ pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> Re
 
 pub fn resolve_ranged(kind: WeaponKind, s: &RangedStats, attrs: &Attributes) -> ResolvedWeapon {
     let (damage, cooldown, scale) = damage_and_cooldown(kind, s.damage, s.cooldown, s.at, attrs);
-    let base = Base { given: s.damage, scale: Some(scale), ability_mult: 1.0, mods_mult: 1.0 };
+    let base = Base { given: s.damage, scale: Some(scale), ability_mult: 1.0, mods_mult: 1.0, upgrade_mult: 1.0 };
     debug_assert_eq!(damage.to_bits(), base.amount().to_bits());
     ResolvedWeapon {
         kind,

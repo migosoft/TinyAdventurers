@@ -218,7 +218,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
             let base = match gov {
                 Some((attr, pct)) => {
                     let ratio = Scaled { value: own.damage, attr, pct, at: own.at }.ratio(attrs);
-                    Base { given: own.damage, scale: Some(BaseScale { attr, at: own.at, have: attrs.get(attr), ratio }), ability_mult: 1.0, mods_mult: 1.0 }
+                    Base { given: own.damage, scale: Some(BaseScale { attr, at: own.at, have: attrs.get(attr), ratio }), ability_mult: 1.0, mods_mult: 1.0, upgrade_mult: 1.0 }
                 }
                 None => Base::plain(own.damage),
             };
@@ -340,8 +340,8 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
     // (damage not on Holy Light).
     let reach = classes::HERO_REACH + PLAYER_RADIUS;
     let upgraded = |r: ResolvedAbility| {
-        let damage = if r.id == AbilityId::HolyLight { r.damage } else { r.damage * m.damage };
-        ResolvedAbility { damage, cooldown: r.cooldown / m.attack_speed, ..r }
+        let base = if r.id == AbilityId::HolyLight { r.base } else { Base { upgrade_mult: m.damage, ..r.base } };
+        ResolvedAbility { damage: base.amount(), base, cooldown: r.cooldown / m.attack_speed, ..r }
     };
     let ability = |slot: AbilitySlot, p: Pick| -> Result<(ResolvedAbility, &'static [AbilityMod]), LoadoutError> {
         let (mods, waive_attrs) = pick_version(class, b, slot, p)?;
@@ -577,7 +577,7 @@ mod tests {
     }
 
     /// Every (class, ability) the class's loadout allows, with the sheet built around it.
-    fn every_allowed_ability(extra: Attributes, ring: Option<ItemId>) -> Vec<(ClassId, ResolvedAbility)> {
+    fn every_allowed_ability(extra: Attributes, ring: Option<ItemId>, upgrades: StatUpgrades) -> Vec<(ClassId, ResolvedAbility, ResolvedAbility)> {
         use crate::defs::abilities as ab;
         use crate::defs::loadout::{Loadout, Source};
         let mut out = vec![];
@@ -596,9 +596,9 @@ mod tests {
                         AbilitySlot::Primary => Loadout { primary: pick, ..start },
                         AbilitySlot::Secondary => Loadout { secondary: pick, ..start },
                     };
-                    let build = Build { extra, equipment, loadout, own: vec![id], ..Build::start(class) };
+                    let build = Build { extra, equipment, loadout, own: vec![id], upgrades, ..Build::start(class) };
                     if let Ok(s) = hero_sheet(class, &build) {
-                        out.push((class, if slot == AbilitySlot::Primary { s.primary } else { s.secondary }));
+                        out.push((class, if slot == AbilitySlot::Primary { s.primary } else { s.secondary }, s.fallback));
                     }
                 }
             }
@@ -609,27 +609,35 @@ mod tests {
     #[test]
     fn damage_is_its_base_amount_for_every_ability() {
         let mut seen = 0;
-        for lift in [0, 4] {
-            for attr in [Attr::Int, Attr::Str, Attr::Dex] {
-                let mut extra = Attributes::default();
-                extra.add(attr, lift);
-                for (class, a) in every_allowed_ability(extra, None) {
-                    assert_eq!(a.damage.to_bits(), a.base.amount().to_bits(), "{class:?} {:?} {attr:?}+{lift}", a.id);
-                    assert_eq!(a.base.mods_mult, 1.0);
-                    seen += 1;
-                }
-                for (class, a) in every_allowed_ability(extra, Some(ItemId::RingOfTheMagus)) {
-                    assert_eq!(a.damage.to_bits(), a.base.amount().to_bits(), "{class:?} {:?} with the ring", a.id);
-                    if a.id == AbilityId::MagicMissile && a.base.mods_mult != 1.0 {
-                        assert_eq!(a.base.mods_mult, 0.75, "the ring's DamageMul");
+        let boosted = StatUpgrades { damage: 2, attack_speed: 1, move_speed: 1, life: 1, armor: 1, ..Default::default() };
+        let dmg_up = boosted.modifiers().damage;
+        assert!(dmg_up != 1.0);
+        for (up, mult) in [(StatUpgrades::default(), 1.0), (boosted, dmg_up)] {
+            for lift in [0, 4] {
+                for attr in [Attr::Int, Attr::Str, Attr::Dex] {
+                    let mut extra = Attributes::default();
+                    extra.add(attr, lift);
+                    for ring in [None, Some(ItemId::RingOfTheMagus)] {
+                        for (class, a, fb) in every_allowed_ability(extra, ring, up) {
+                            assert_eq!(a.damage.to_bits(), a.base.amount().to_bits(), "{class:?} {:?} {attr:?}+{lift}", a.id);
+                            assert_eq!(fb.damage.to_bits(), fb.base.amount().to_bits(), "{class:?} fallback");
+                            assert_eq!(fb.base.upgrade_mult, mult, "{class:?} fallback");
+                            let want = if a.id == AbilityId::HolyLight { 1.0 } else { mult };
+                            assert_eq!(a.base.upgrade_mult, want, "{class:?} {:?}", a.id);
+                            if a.id == AbilityId::MagicMissile && a.base.mods_mult != 1.0 {
+                                assert_eq!(a.base.mods_mult, 0.75, "the ring's DamageMul");
+                            } else {
+                                assert_eq!(a.base.mods_mult, 1.0);
+                            }
+                            seen += 1;
+                        }
                     }
-                    seen += 1;
                 }
             }
         }
-        assert!(seen > 100, "{seen} sheets");
-        let wiz = every_allowed_ability(Attributes::default(), Some(ItemId::RingOfTheMagus));
-        assert!(wiz.iter().any(|(_, a)| a.id == AbilityId::MagicMissile && a.base.mods_mult == 0.75), "the ring's version was built");
+        assert!(seen > 200, "{seen} sheets");
+        let wiz = every_allowed_ability(Attributes::default(), Some(ItemId::RingOfTheMagus), StatUpgrades::default());
+        assert!(wiz.iter().any(|(_, a, _)| a.id == AbilityId::MagicMissile && a.base.mods_mult == 0.75), "the ring's version was built");
     }
 
     #[test]

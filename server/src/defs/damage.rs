@@ -155,15 +155,17 @@ pub struct Base {
     pub scale: Option<BaseScale>,
     pub ability_mult: f64,
     pub mods_mult: f64,
+    /// The old stat upgrades' damage factor, applied last (1 on Holy Light and before upgrades).
+    pub upgrade_mult: f64,
 }
 
 impl Base {
     pub fn plain(v: f64) -> Self {
-        Base { given: v, scale: None, ability_mult: 1.0, mods_mult: 1.0 }
+        Base { given: v, scale: None, ability_mult: 1.0, mods_mult: 1.0, upgrade_mult: 1.0 }
     }
     pub fn amount(&self) -> f64 {
         let ratio = self.scale.map_or(1.0, |s| s.ratio);
-        ((self.given * ratio) * self.ability_mult * self.mods_mult).max(0.0)
+        (((self.given * ratio) * self.ability_mult) * self.mods_mult).max(0.0) * self.upgrade_mult
     }
 }
 
@@ -175,7 +177,7 @@ pub enum What {
     Attack,
     /// An enemy projectile.
     Shot(EntityKind),
-    /// A boss script's named move ("Bite", "Smash", "Tail", "Breath", "Cleave", "Stomp", "Nova").
+    /// A boss script's named move ("Bite", "Smash", "Tail", "Claw", "Breath", "Cleave", "Swoop", "Nova").
     Move(&'static str),
     Tick(EffectKind),
     Lava,
