@@ -600,7 +600,8 @@ mod tests {
         assert_eq!(ember.light, Some(LightKind::Fire));
         assert_eq!(ember.primary, start.primary, "Magic Missile ignores the staff");
         let rot = with(ClassId::Wizard, plus(Attr::Int, 0), &[(EquipSlot::Melee, ItemId::StaffOfRot)]);
-        assert_eq!(rot.melee.on_hit, Some(OnHit { kind: EffectKind::Poisoned, secs: 3.0, chance: 0.15, magical: false, power: 8 }));
+        assert_eq!(rot.melee.on_hit, None, "the Staff of Rot poisons by its share, not an on-hit");
+        assert!((rot.melee.split.share(DamageType::Poison) - 0.5).abs() < 1e-12);
         assert_eq!(rot.primary, start.primary, "Magic Missile ignores the staff");
     }
 

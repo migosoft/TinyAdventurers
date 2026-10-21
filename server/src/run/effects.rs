@@ -152,8 +152,13 @@ impl Run {
     /// Puts `kind` on a creature for `secs` (default: its def's duration),
     /// shortened or refused by the creature's effect resistance (a damage-type
     /// effect: refused at full resistance to its type). Dead or sinking
-    /// creatures take nothing. An effect that cancels another (fire and ice)
-    /// cancels it even when the creature resists the new effect itself.
+    /// creatures take nothing. In this order:
+    /// 1. an effect that cancels another (fire and ice) cancels it even when the
+    ///    creature resists the new effect itself, and is not applied (false);
+    /// 2. an effect whose stronger tier is on (an active effect `replaces` it) is refused;
+    /// 3. resistance, water and `secs <= 0` refuse it;
+    /// 4. it is added, and only then are the weaker tiers it `replaces` removed
+    ///    (a refused Frozen leaves an existing Chilled alone).
     /// True when the effect is on afterwards.
     pub fn apply_effect(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>) -> bool {
         let Some((_, _, pos, ok)) = self.creature(c) else { return false };
@@ -167,8 +172,15 @@ impl Run {
             }
             return false; // fire thaws ice / ice puts out fire
         }
+        let held = match c {
+            Creature::Player(i) => self.players.get(i).map(|p| p.effects.kinds()),
+            Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.kinds()),
+        };
+        if held.is_some_and(|h| h.iter().any(|&k| def(k).replaces.contains(&kind))) {
+            return false; // the stronger tier is on
+        }
         let mut secs = secs.unwrap_or(def(kind).duration);
-        if def(kind).dot.is_none() {
+        if def(kind).resisted_by.is_none() {
             // A damage-type effect is resisted by its type's damage resistance (below) only.
             let r = match c {
                 Creature::Player(i) => self.players.get(i).map(|p| p.effects.effect_res(p.sheet.effect_res).get(kind)),
@@ -183,7 +195,7 @@ impl Run {
         if def(kind).ends_in_water && self.in_water(pos) {
             return false; // no flicker on and off in water
         }
-        if let Some((t, _)) = def(kind).dot {
+        if let Some(t) = def(kind).resisted_by {
             let res = match c {
                 Creature::Player(i) => self.players.get(i).map(|p| p.effects.res(p.res).get(t)),
                 Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.res(m.res).get(t)),
@@ -195,6 +207,9 @@ impl Run {
         let Some((fx, id, pos, _)) = self.creature(c) else { return false };
         if fx.add(kind, secs) {
             self.effect_event(c, id, pos, kind, true);
+        }
+        for &weaker in def(kind).replaces {
+            self.remove_effect(c, weaker);
         }
         true
     }
@@ -237,8 +252,8 @@ impl Run {
         }
     }
 
-    /// After a normal hit: each damage type making up at least half of it applies its
-    /// effect, non-magical (against the target's CON), at the power of its source's
+    /// After a normal hit: each damage type making up at least a quarter of it applies its
+    /// effect (the higher tier its share meets, see `type_effects`), non-magical (against the target's CON), at the power of its source's
     /// governing Attribute (`Damage::power`) but never below `TYPE_EFFECT_POWER`.
     pub fn type_effect_hit(&mut self, c: Creature, dmg: &crate::defs::damage::Damage) {
         if dmg.from_effect {
@@ -249,12 +264,9 @@ impl Run {
         }
     }
 
-    /// A hit's effect: rolled on the run's rng unless certain (chance >= 1 draws nothing).
+    /// A hit's effect: always applied (no roll); the target's save and resistance only shorten or refuse it.
     pub fn hit_effect(&mut self, c: Creature, h: OnHit) {
-        let lands = h.chance >= 1.0 || (h.chance > 0.0 && rand::Rng::gen::<f64>(&mut self.rng) < h.chance);
-        if lands {
-            self.apply_effect_from(c, h.kind, Some(h.secs), h.power, h.magical);
-        }
+        self.apply_effect_from(c, h.kind, Some(h.secs), h.power, h.magical);
     }
 
     /// Damage ends effects that break on it (none yet).
@@ -527,17 +539,90 @@ mod tests {
         assert_eq!((s.vision, s.darkvision), (0.0, 0.0), "darkvision does not help");
     }
 
-    fn sleepy(chance: f64) -> OnHit {
-        OnHit { kind: EffectKind::Sleep, secs: 2.0, chance, magical: false, power: 10 }
+    fn sleepy() -> OnHit {
+        OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: false, power: 10 }
     }
 
     #[test]
-    fn a_hit_applies_its_effect_by_chance() {
+    fn a_hit_applies_its_effect() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
-        run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy(0.0)));
-        assert!(!run.has_effect(Creature::Player(0), EffectKind::Sleep), "chance 0 never");
-        run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy(1.0)));
-        assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep), "chance 1 always");
+        run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy()));
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep));
+    }
+
+    /// A fresh ogre next to the hero (no other monsters but the boss).
+    fn fresh_ogre(run: &mut crate::run::Run) -> Creature {
+        let at = run.players[0].pos();
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ogre, at, None);
+        Creature::Monster(run.monster_idx(id).unwrap())
+    }
+
+    #[test]
+    fn the_stronger_tier_replaces_the_weaker() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        for (weak, strong) in [(EffectKind::Chilled, EffectKind::Frozen), (EffectKind::Singed, EffectKind::Burning), (EffectKind::Tainted, EffectKind::Poisoned)] {
+            assert!(run.apply_effect(c, weak, None));
+            assert!(run.apply_effect(c, strong, None));
+            assert!(!run.has_effect(c, weak), "{strong:?} ends {weak:?}");
+            assert!(!run.apply_effect(c, weak, None), "a creature with {strong:?} does not take {weak:?}");
+            assert!(!run.has_effect(c, weak) && run.has_effect(c, strong));
+            run.remove_effect(c, strong);
+        }
+    }
+
+    #[test]
+    fn a_refused_freeze_leaves_the_chill() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        assert!(run.apply_effect(c, EffectKind::Chilled, None));
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.monsters[mi].res = Resistances::of(&[(DamageType::Cold, 1.0)]);
+        assert!(!run.apply_effect(c, EffectKind::Frozen, None));
+        assert!(run.has_effect(c, EffectKind::Chilled) && !run.has_effect(c, EffectKind::Frozen));
+        run.monsters[mi].res = Resistances::NONE;
+        let con = run.monsters[mi].attrs.get(crate::defs::attributes::Attr::Con);
+        assert!(!run.apply_effect_from(c, EffectKind::Frozen, None, con - 20, false), "a save 20 above the power: 0 s");
+        assert!(run.has_effect(c, EffectKind::Chilled) && !run.has_effect(c, EffectKind::Frozen));
+    }
+
+    #[test]
+    fn fire_and_cold_cancel_across_tiers() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        use EffectKind::*;
+        for (cold, heat) in [(Frozen, Singed), (Chilled, Singed), (Frozen, Burning), (Chilled, Burning)] {
+            assert!(run.apply_effect(c, cold, None));
+            assert!(!run.apply_effect(c, heat, None), "{heat:?} is not applied itself");
+            assert!(!run.has_effect(c, cold) && !run.has_effect(c, heat), "{heat:?} ends {cold:?}");
+            assert!(run.apply_effect(c, heat, None));
+            assert!(!run.apply_effect(c, cold, None), "{cold:?} is not applied itself");
+            assert!(!run.has_effect(c, cold) && !run.has_effect(c, heat), "{cold:?} ends {heat:?}");
+        }
+    }
+
+    #[test]
+    fn a_resisted_singe_still_thaws() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.apply_effect(c, EffectKind::Frozen, None);
+        run.monsters[mi].res = Resistances::of(&[(DamageType::Heat, 1.0)]);
+        run.hit_effect(c, OnHit { kind: EffectKind::Singed, secs: 3.0, magical: false, power: 10 });
+        assert!(!run.has_effect(c, EffectKind::Frozen) && !run.has_effect(c, EffectKind::Singed));
+    }
+
+    #[test]
+    fn an_on_hit_effect_always_lands() {
+        use rand::RngCore;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mut twin = run.rng.clone();
+        for _ in 0..20 {
+            let c = fresh_ogre(&mut run);
+            run.hit_effect(c, OnHit { kind: EffectKind::Blind, secs: 2.0, magical: false, power: 10 });
+            assert!(run.has_effect(c, EffectKind::Blind));
+        }
+        assert_eq!(run.rng.next_u64(), twin.next_u64(), "no roll drew from the run's rng");
     }
 
     #[test]
@@ -545,11 +630,11 @@ mod tests {
         use crate::defs::damage::Resistances;
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.players[0].res = Resistances::of(&[(DamageType::Magical, 1.0)]);
-        run.hurt_player(0, Damage::new(10.0, DamageSplit::pure(DamageType::Magical)).with_effect(sleepy(1.0)));
+        run.hurt_player(0, Damage::new(10.0, DamageSplit::pure(DamageType::Magical)).with_effect(sleepy()));
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep));
         run.events.clear();
         let hp = run.players[0].hp;
-        run.hurt_player(0, Damage::physical(0.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, chance: 1.0, magical: false, power: 10 }));
+        run.hurt_player(0, Damage::physical(0.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, magical: false, power: 10 }));
         assert_eq!(run.players[0].hp, hp);
         assert!(run.has_effect(Creature::Player(0), EffectKind::Blind));
         assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "a pure effect hit shows no number");
@@ -558,10 +643,10 @@ mod tests {
     #[test]
     fn a_killing_hit_applies_no_effect_and_sleep_survives_damage() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
-        run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy(1.0)));
+        run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy()));
         run.hurt_player(0, Damage::physical(5.0));
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep), "damage does not wake");
-        run.hurt_player(0, Damage::physical(10_000.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, chance: 1.0, magical: false, power: 10 }));
+        run.hurt_player(0, Damage::physical(10_000.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, magical: false, power: 10 }));
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Blind));
     }
 
@@ -648,7 +733,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat));
         assert!(run.players[0].effects.list().is_empty());
-        run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(OnHit { kind: EffectKind::Slowed, secs: 1.0, chance: 1.0, magical: false, power: 10 }));
+        run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(OnHit { kind: EffectKind::Slowed, secs: 1.0, magical: false, power: 10 }));
         assert!(run.players[0].effects.list().is_empty(), "not even an on_hit");
     }
 
@@ -807,7 +892,7 @@ mod tests {
     }
 
     fn lich_sleep() -> OnHit {
-        OnHit { kind: EffectKind::Sleep, secs: 2.0, chance: 1.0, magical: true, power: 22 }
+        OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22 }
     }
 
     #[test]

@@ -1,6 +1,9 @@
 //! Status effects: data only (like `defs/lights.rs`). The timers live in
 //! `run/effects.rs`. Adding an effect: a new `EffectKind` (next id), its
-//! `def`, a client visual in `client/src/game/status.ts` and a HUD glyph.
+//! `def`, a client visual in `client/src/game/status.ts` and a HUD glyph. A damage-type
+//! effect (one a hit applies by its share of a damage type) also sets `resisted_by` (its
+//! type's damage resistance alone resists it), `replaces` (the weaker tier it ends) and
+//! gets a row in `TYPE_EFFECTS`.
 
 use super::damage::DamageType;
 use serde::Serialize;
@@ -18,6 +21,9 @@ super::enum_list::listed_enum! {
         Burning = 5,
         Frozen = 6,
         Poisoned = 7,
+        Chilled = 8,
+        Singed = 9,
+        Tainted = 10,
     }
 }
 
@@ -84,13 +90,19 @@ pub struct EffectDef {
     /// Damage over time: its type and damage per second, dealt every `DOT_TICK`
     /// as effect damage. A creature fully resistant to the type never takes the effect.
     pub dot: Option<(DamageType, f64)>,
+    /// The damage type whose resistance alone resists this effect (a damage-type effect:
+    /// 100 % refuses it, and it has no effect resistance of its own).
+    pub resisted_by: Option<DamageType>,
+    /// The weaker tier of the same type: it ends when this effect lands, and a creature
+    /// that has this effect does not take it.
+    pub replaces: &'static [EffectKind],
     /// Applying this effect ends these instead (fire thaws ice, ice puts out fire).
     pub cancels: &'static [EffectKind],
     /// Standing in shallow or deep water ends it.
     pub ends_in_water: bool,
 }
 
-const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, cancels: &[], ends_in_water: false };
+const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, resisted_by: None, replaces: &[], cancels: &[], ends_in_water: false };
 
 use DamageType::*;
 use Op::*;
@@ -108,8 +120,10 @@ const PETRIFIED_MODS: &[StatMod] = &[
 ];
 const SLOWED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 0.5)];
 const ACCELERATED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 1.5)];
-const FROZEN_CANCELS: &[EffectKind] = &[EffectKind::Frozen];
-const BURNING_CANCELS: &[EffectKind] = &[EffectKind::Burning];
+const CHILLED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 0.7)];
+/// Any heat effect ends any cold effect and the other way round.
+const HEAT_CANCELS: &[EffectKind] = &[EffectKind::Frozen, EffectKind::Chilled];
+const COLD_CANCELS: &[EffectKind] = &[EffectKind::Burning, EffectKind::Singed];
 
 pub fn def(k: EffectKind) -> EffectDef {
     match k {
@@ -118,30 +132,50 @@ pub fn def(k: EffectKind) -> EffectDef {
         EffectKind::Petrified => EffectDef { mods: PETRIFIED_MODS, no_move: true, no_act: true, no_turn: true, ..NONE },
         EffectKind::Slowed => EffectDef { mods: SLOWED_MODS, ..NONE },
         EffectKind::Accelerated => EffectDef { positive: true, mods: ACCELERATED_MODS, ..NONE },
-        EffectKind::Burning => EffectDef { dot: Some((Heat, 6.0)), cancels: FROZEN_CANCELS, ends_in_water: true, ..NONE },
-        EffectKind::Frozen => EffectDef { duration: 2.0, dot: Some((Cold, 4.0)), cancels: BURNING_CANCELS, no_move: true, no_act: true, no_turn: true, ..NONE },
-        EffectKind::Poisoned => EffectDef { duration: 4.0, dot: Some((Poison, 4.0)), ..NONE },
+        EffectKind::Burning => EffectDef { dot: Some((Heat, 6.0)), resisted_by: Some(Heat), replaces: &[EffectKind::Singed], cancels: HEAT_CANCELS, ends_in_water: true, ..NONE },
+        EffectKind::Frozen => EffectDef { duration: 2.0, dot: Some((Cold, 4.0)), resisted_by: Some(Cold), replaces: &[EffectKind::Chilled], cancels: COLD_CANCELS, no_move: true, no_act: true, no_turn: true, ..NONE },
+        EffectKind::Poisoned => EffectDef { duration: 4.0, dot: Some((Poison, 4.0)), resisted_by: Some(Poison), replaces: &[EffectKind::Tainted], ..NONE },
+        EffectKind::Chilled => EffectDef { resisted_by: Some(Cold), mods: CHILLED_MODS, cancels: COLD_CANCELS, ..NONE },
+        EffectKind::Singed => EffectDef { dot: Some((Heat, 3.0)), resisted_by: Some(Heat), cancels: HEAT_CANCELS, ends_in_water: true, ..NONE },
+        EffectKind::Tainted => EffectDef { dot: Some((Poison, 2.0)), resisted_by: Some(Poison), ..NONE },
     }
 }
 
 /// Damage over time ticks this often (s).
 pub const DOT_TICK: f64 = 0.5;
-/// A hit whose share of a damage type is at least this applies the type's effect.
+/// A hit whose share of a damage type is at least this applies the type's higher tier.
 pub const TYPE_EFFECT_SHARE: f64 = 0.5;
-/// Damage type → the effect its hits apply (the damage-type effects). A new one is one
-/// line here plus its def's `dot` type (`type_effects_match_their_defs` checks both agree).
-pub const TYPE_EFFECTS: [(DamageType, EffectKind); 3] = [(Heat, EffectKind::Burning), (Cold, EffectKind::Frozen), (Poison, EffectKind::Poisoned)];
+/// ... at least this (below `TYPE_EFFECT_SHARE`) its lower tier (Chilled, Singed, Tainted).
+pub const TYPE_EFFECT_LOW: f64 = 0.25;
+/// (damage type, least share of a hit, effect it applies): the damage-type effects. The
+/// stronger tier of a type comes first. A new one is a row here plus its def's
+/// `resisted_by`/`replaces` (`type_effect_rows_match_their_defs` checks they agree).
+pub const TYPE_EFFECTS: [(DamageType, f64, EffectKind); 6] = [
+    (Heat, TYPE_EFFECT_SHARE, EffectKind::Burning),
+    (Heat, TYPE_EFFECT_LOW, EffectKind::Singed),
+    (Cold, TYPE_EFFECT_SHARE, EffectKind::Frozen),
+    (Cold, TYPE_EFFECT_LOW, EffectKind::Chilled),
+    (Poison, TYPE_EFFECT_SHARE, EffectKind::Poisoned),
+    (Poison, TYPE_EFFECT_LOW, EffectKind::Tainted),
+];
 
-/// The effects a hit with this split applies (in `TYPE_EFFECTS` order).
+/// The effects a hit with this split applies: at most one per damage type, the highest
+/// tier its share meets (in `TYPE_EFFECTS` order).
 pub fn type_effects(split: &super::damage::DamageSplit) -> Vec<EffectKind> {
-    TYPE_EFFECTS.iter().filter(|(t, _)| split.share(*t) >= TYPE_EFFECT_SHARE - 1e-9).map(|&(_, k)| k).collect()
+    let mut out: Vec<(DamageType, EffectKind)> = Vec::new();
+    for &(t, least, k) in &TYPE_EFFECTS {
+        if split.share(t) >= least - 1e-9 && !out.iter().any(|&(o, _)| o == t) {
+            out.push((t, k));
+        }
+    }
+    out.into_iter().map(|(_, k)| k).collect()
 }
 
 /// How much a creature resists each effect, as a fraction: 0.5 halves the time,
 /// 1 or more refuses it, a negative value lengthens it (floored at
 /// `MIN_RESISTANCE`). Held next to the damage `Resistances` (race, the entity's
 /// own `Adjust`, later items and tree nodes; effects through `Stat::ResistEffect`).
-/// A damage-type effect (one whose def has a `dot`) has none: its type's damage
+/// A damage-type effect (one whose def has `resisted_by`) has none: its type's damage
 /// resistance alone resists it. One slot per effect, so a new effect has one at 0.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EffectResistances([f64; EffectKind::COUNT]);
@@ -181,8 +215,6 @@ pub fn effect_secs(secs: f64, r: f64) -> Option<f64> {
 pub struct OnHit {
     pub kind: EffectKind,
     pub secs: f64,
-    /// 0..=1; 1 or more applies without a roll.
-    pub chance: f64,
     /// Saved against with WIL (spells, innate magic) instead of CON.
     pub magical: bool,
     /// The source's key Attribute (spells INT, innate magic CHA, a weapon's
@@ -291,7 +323,7 @@ mod tests {
         tables.extend(enemies::EnemyType::ALL.iter().map(|&t| (format!("{t:?}"), enemies::profile(t).effect_res)));
         tables.push(("wolf".into(), companions::wolf_profile().effect_res));
         for (who, t) in tables {
-            for k in EffectKind::ALL.into_iter().filter(|&k| def(k).dot.is_some()) {
+            for k in EffectKind::ALL.into_iter().filter(|&k| def(k).resisted_by.is_some()) {
                 assert_eq!(t.get(k), 0.0, "{who} sets an effect resistance for the damage-type effect {k:?}");
             }
         }
@@ -316,11 +348,11 @@ mod tests {
     fn damage_type_effects_match_the_spec() {
         let b = def(EffectKind::Burning);
         assert_eq!((b.dot, b.duration, b.ends_in_water), (Some((Heat, 6.0)), 3.0, true));
-        assert_eq!(b.cancels, &[EffectKind::Frozen]);
+        assert_eq!(b.cancels, &[EffectKind::Frozen, EffectKind::Chilled]);
         assert!(!b.no_move && !b.positive);
         let f = def(EffectKind::Frozen);
         assert_eq!((f.dot, f.duration, f.ends_in_water), (Some((Cold, 4.0)), 2.0, false));
-        assert_eq!(f.cancels, &[EffectKind::Burning]);
+        assert_eq!(f.cancels, &[EffectKind::Burning, EffectKind::Singed]);
         assert!(f.no_move && f.no_act && f.no_turn && !f.prone);
         let p = def(EffectKind::Poisoned);
         assert_eq!((p.dot, p.duration), (Some((Poison, 4.0)), 4.0));
@@ -329,17 +361,47 @@ mod tests {
             assert!(def(k).dot.is_none() && def(k).cancels.is_empty() && !def(k).ends_in_water, "{k:?}");
         }
         assert_eq!((EffectKind::Burning as u8, EffectKind::Frozen as u8, EffectKind::Poisoned as u8), (5, 6, 7));
-        assert_eq!(EffectKind::COUNT, 8);
+        assert_eq!(EffectKind::COUNT, 11);
     }
 
     #[test]
-    fn type_effects_match_their_defs() {
-        for (t, k) in TYPE_EFFECTS {
-            assert_eq!(def(k).dot.map(|d| d.0), Some(t), "{k:?} is resisted by {t:?}");
+    fn type_effect_rows_match_their_defs() {
+        for (t, _, k) in TYPE_EFFECTS {
+            assert_eq!(def(k).resisted_by, Some(t), "{k:?} is resisted by {t:?}");
         }
-        for k in EffectKind::ALL.into_iter().filter(|&k| def(k).dot.is_some()) {
-            assert!(TYPE_EFFECTS.iter().any(|&(_, e)| e == k), "{k:?} has a damage type but no hit applies it");
+        for k in EffectKind::ALL.into_iter().filter(|&k| def(k).resisted_by.is_some()) {
+            assert_eq!(TYPE_EFFECTS.iter().filter(|&&(_, _, e)| e == k).count(), 1, "{k:?} has a damage type, so exactly one row applies it");
+            for r in def(k).replaces {
+                assert_eq!(def(*r).resisted_by, def(k).resisted_by, "{k:?} replaces a tier of another type");
+            }
         }
+        for t in [Heat, Cold, Poison] {
+            let rows: Vec<f64> = TYPE_EFFECTS.iter().filter(|r| r.0 == t).map(|r| r.1).collect();
+            assert!(rows.windows(2).all(|w| w[0] > w[1]), "{t:?}: the stronger tier comes first");
+        }
+    }
+
+    #[test]
+    fn tiers_pick_one_effect_per_type() {
+        use crate::defs::damage::DamageSplit;
+        assert_eq!(type_effects(&DamageSplit::split(&[(Cold, 0.4)])), vec![EffectKind::Chilled]);
+        assert_eq!(type_effects(&DamageSplit::pure(Cold)), vec![EffectKind::Frozen]);
+        assert_eq!(type_effects(&DamageSplit::split(&[(Heat, 0.25)])), vec![EffectKind::Singed]);
+        assert_eq!(type_effects(&DamageSplit::split(&[(Heat, 0.2)])), vec![], "the claws' 20 % stay below the floor");
+        assert_eq!(type_effects(&DamageSplit::split(&[(Poison, 0.3)])), vec![EffectKind::Tainted]);
+        assert_eq!(type_effects(&DamageSplit::split(&[(Heat, 0.7), (Magical, 0.2)])), vec![EffectKind::Burning]);
+    }
+
+    #[test]
+    fn tier_effects_have_their_numbers() {
+        let c = def(EffectKind::Chilled);
+        assert_eq!((c.resisted_by, c.mods), (Some(Cold), &[m(MoveSpeed, Mul, 0.7)][..]));
+        assert_eq!((def(EffectKind::Singed).dot, def(EffectKind::Singed).duration), (Some((Heat, 3.0)), 3.0));
+        assert!(def(EffectKind::Singed).ends_in_water);
+        assert_eq!((def(EffectKind::Tainted).dot, def(EffectKind::Tainted).duration), (Some((Poison, 2.0)), 3.0));
+        assert_eq!(def(EffectKind::Frozen).replaces, &[EffectKind::Chilled]);
+        assert_eq!(def(EffectKind::Burning).replaces, &[EffectKind::Singed]);
+        assert_eq!(def(EffectKind::Poisoned).replaces, &[EffectKind::Tainted]);
     }
 
     #[test]

@@ -123,7 +123,7 @@ impl Lich {
 
     /// The effect a lich spell carries: magical, so heroes save with WIL, at the lich's INT.
     fn spell_hit(run: &Run, bi: usize, kind: EffectKind, secs: f64) -> OnHit {
-        OnHit { kind, secs, chance: 1.0, magical: true, power: Self::power(run, bi) }
+        OnHit { kind, secs, magical: true, power: Self::power(run, bi) }
     }
 
     /// The nova: a dark burst that hurts every hero and ally within the radius and pushes them straight away.

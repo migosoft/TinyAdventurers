@@ -402,7 +402,7 @@ pub fn governing(t: EnemyType, shot: Option<EntityKind>) -> Attr {
 }
 
 /// An effect an enemy's attack (`alt`: its second attack) applies on a hit. None yet:
-/// e.g. `(EnemyType::GoblinArcher, false) => Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, chance: 0.3, magical: false,
+/// e.g. `(EnemyType::GoblinArcher, false) => Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false,
 /// power: def(t).attrs.get(Attr::Dex) })` (a bow: the wielder's DEX; a spell would be INT and magical).
 pub fn on_hit(t: EnemyType, alt: bool) -> Option<super::effects::OnHit> {
     let _ = (t, alt);

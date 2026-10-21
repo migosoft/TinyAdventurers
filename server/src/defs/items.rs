@@ -139,6 +139,7 @@ pub struct ItemProperty {
 #[derive(Debug, Clone, Copy)]
 pub enum PropKind {
     DamageShare(DamageType, f64),
+    #[allow(dead_code)] // no item has one since the Staff of Rot lost its; later gear and Poison Coat do
     OnHit(OnHit),
     Light(LightKind),
     Resist(DamageType, f64),
@@ -224,10 +225,7 @@ pub fn def(id: ItemId) -> ItemDef {
             melee(K::Staff, 6.0, 1.0, 1.6, 0.0, phys(), At::BASE),
             WIZARD,
             &[Requirement::Attr(Attr::Int, 14)],
-            &[
-                plain!(PropKind::DamageShare(DamageType::Poison, 0.3)),
-                plain!(PropKind::OnHit(OnHit { kind: EffectKind::Poisoned, secs: 3.0, chance: 0.15, magical: false, power: 0 })),
-            ],
+            &[plain!(PropKind::DamageShare(DamageType::Poison, 0.5))],
         ),
         I::BoneStaff => item(
             "Bone Staff",

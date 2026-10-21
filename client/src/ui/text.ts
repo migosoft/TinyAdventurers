@@ -77,6 +77,9 @@ export const EFFECT_GLYPH: Record<number, string> = {
   [EFFECT.Burning]: 'F',
   [EFFECT.Frozen]: 'I',
   [EFFECT.Poisoned]: 'X',
+  [EFFECT.Chilled]: 'C',
+  [EFFECT.Singed]: 'G',
+  [EFFECT.Tainted]: 'T',
 };
 
 export function effectGlyph(id: number): string {

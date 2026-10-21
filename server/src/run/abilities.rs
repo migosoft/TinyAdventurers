@@ -687,7 +687,7 @@ mod tests {
         assert_eq!(run.projectiles[0].damage.split, heat, "the bolt carries the primary's split");
 
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
-        let hit = OnHit { kind: EffectKind::Slowed, secs: 2.0, chance: 1.0, magical: false, power: 10 };
+        let hit = OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10 };
         run.players[0].sheet.secondary.on_hit = Some(hit);
         let mi = put_monster_near(&mut run, 0, 6.0);
         run.monsters[mi].hp = 1000.0;
@@ -906,7 +906,7 @@ mod tests {
         use crate::defs::effects::{EffectKind, OnHit};
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         assert_eq!(run.players[0].sheet.primary.damage, 16.0);
-        run.players[0].sheet.primary.on_hit = Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, chance: 1.0, magical: false, power: 10 });
+        run.players[0].sheet.primary.on_hit = Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10 });
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.players[0].aim = 0.0;
         let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 16.0);
@@ -1320,12 +1320,10 @@ mod tests {
     }
 
     #[test]
-    fn a_poisoned_blade_poisons_at_the_wielders_power() {
+    fn the_staff_of_rot_poisons_every_hit() {
         use crate::defs::attributes::Attr;
         use crate::defs::effects::{scaled_secs, EffectKind};
         let mut run = armed(ClassId::Wizard, EquipSlot::Melee, ItemId::StaffOfRot);
-        let h = run.players[0].sheet.fallback.on_hit.as_mut().expect("the staff's on-hit");
-        h.chance = 1.0;
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let id = run.spawn_enemy(EnemyType::GoblinArcher, run.players[0].pos() + Vec2::new(12.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
@@ -1337,7 +1335,8 @@ mod tests {
         let strike = ResolvedAbility { range: 20.0, arc: 1.6, damage: 6.0, ..run.players[0].sheet.fallback };
         melee_arc(&mut run, 0, &strike, false);
         let poison = run.monsters[mi].effects.list().iter().find(|a| a.kind == EffectKind::Poisoned).map(|a| a.left);
-        assert_eq!(poison, Some(scaled_secs(3.0, 8, con)), "STR 8 against the goblin's CON 10");
+        // A 50 % poison share is the higher tier: Poisoned (4 s) at power max(10, STR 8) = 10.
+        assert_eq!(poison, Some(scaled_secs(4.0, 10, con)));
     }
 
     #[test]
