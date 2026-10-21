@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ANIM, CLASSES, CONST, EFFECT, ENEMY_KINDS, FLAG, HITBOX, KIND, TILE_ID } from '../generated/defs';
+import { ABILITIES, ANIM, CLASSES, CONST, EFFECT, ENEMY_KINDS, FLAG, HITBOX, KIND, TILE_ID } from '../generated/defs';
 import type { ClassId } from '../generated/ClassId';
 import type { Ev } from '../generated/Ev';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
@@ -11,7 +11,7 @@ import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Hud } from '../ui/hud';
-import { FIGURES, PROJECTILES, isAllyKind, isBossKind, isPlayerKind, isProjectileKind } from './anim/defs';
+import { FIGURES, PROJECTILES, isAllyKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
 import { BarrelView } from './barrel';
@@ -27,7 +27,7 @@ import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
-import { abilityChoice, cosmeticPierce, EffectLooks, Interpolator, Predictor, type EntState } from './world';
+import { abilityChoice, cosmeticCount, cosmeticPierce, EffectLooks, Interpolator, Predictor, volleyAngles, volleyShotIds, type EntState } from './world';
 
 export interface GameInit {
   info: RunStartInfo;
@@ -59,6 +59,16 @@ interface Cosmetic {
   /** Where the last enemy it passed stood. */
   lastPass?: [number, number];
 }
+
+/**
+ * How each hazard looks: glow tint, base radius (px, used when the server sends none), the glow's
+ * squash, its strength, and its rising sparks (chance per frame, speed, colors).
+ */
+const HAZARD_LOOKS: Record<number, { tint: number; r: number; sx: number; sy: number; alpha: number; sparks: number; rise: number; colors: number[] }> = {
+  [KIND.FirePatch]: { tint: 0xff5010, r: 10, sx: 1.75, sy: 0.98, alpha: 1, sparks: 0.5, rise: 25, colors: [0xff7020, 0xffd040] },
+  [KIND.HolyGround]: { tint: 0xffd040, r: 40, sx: 1, sy: 0.7, alpha: 0.45, sparks: 0.15, rise: 15, colors: [0xffd040, 0xfff0a0] },
+  [KIND.Roots]: { tint: 0x40a040, r: 36, sx: 1, sy: 0.7, alpha: 0.5, sparks: 0.2, rise: 10, colors: [0x60c050, 0x90e070] },
+};
 
 /** Kind id -> name, to look up `ENEMY_KINDS`. */
 const KIND_NAME: Record<number, string> = Object.fromEntries(Object.entries(KIND).map(([name, id]) => [id, name]));
@@ -107,7 +117,7 @@ export class GameScene extends Phaser.Scene {
   private primaryClicked = false;
   private secondaryClicked = false;
   private actPressed = false;
-  private localAnim = { anim: ANIM.Idle as number, start: 0 };
+  private localAnim: { anim: number; start: number; arc?: number } = { anim: ANIM.Idle as number, start: 0 };
   private alive = true;
   private myFlags = 0;
   private spectating: number | null = null;
@@ -366,10 +376,16 @@ export class GameScene extends Phaser.Scene {
           this.cameras.main.shake(120, 0.004);
         } else if (ev.k === 8) this.fx.splinters(ev.x, ev.y);
         else if (ev.k === 9) this.fx.natureSparkles(ev.x, ev.y, ev.r);
+        else if (ev.k === 10) this.fx.nova(ev.x, ev.y, ev.r, 0x78c8ff);
+        else if (ev.k === 11) {
+          this.fx.ring(ev.x, ev.y, ev.r, 0xff6020, 0.5, true);
+          if (Math.hypot(ev.x - this.pred.state.x, ev.y - this.pred.state.y) < 4) this.cameras.main.shake(100, 0.003);
+        } else if (ev.k === 12) this.fx.ring(ev.x, ev.y, ev.r, 0xffe040, 0.5, true);
+        else if (ev.k === 13) this.fx.healRing(ev.x, ev.y, ev.r, 0xfff0b0);
         else this.fx.explosion(ev.x, ev.y, ev.r);
         break;
       case 'Zap':
-        // Drawn in plan 3b, task 9.
+        this.fx.zap(ev.x, ev.y, ev.x2, ev.y2);
         break;
       case 'Growl': {
         const wolf = this.ents.get(ev.id);
@@ -468,14 +484,16 @@ export class GameScene extends Phaser.Scene {
     let dash: [number, number] | null = null;
     const used: [number | null, number | null] = [null, null];
     if (wantPrimary && this.pred.cd1 <= 0) {
-      primary = this.shotId = (this.shotId + 1) & 0xffff;
-      used[0] = this.predictAbility(0, primary, aim, dist);
+      const ids = this.reserveShots(0);
+      primary = ids[0];
+      used[0] = this.predictAbility(0, ids, aim, dist);
     }
     if (wantSecondary && this.pred.cd2 <= 0) {
-      secondary = this.shotId = (this.shotId + 1) & 0xffff;
-      used[1] = this.predictAbility(1, secondary, aim, dist);
+      const ids = this.reserveShots(1);
+      secondary = ids[0];
+      used[1] = this.predictAbility(1, ids, aim, dist);
       if (used[1] === null) secondary = null;
-      else if (this.info.abilities[1].id === 'Charge') dash = [Math.cos(aim), Math.sin(aim)];
+      else if (ABILITIES[this.info.abilities[1].id].shape === 'Dash') dash = [Math.cos(aim), Math.sin(aim)];
     }
     const seq = this.pred.step(mx, my, dash, used);
     const viewLag = this.net.rtt / 2 + this.interp.delay * 1000;
@@ -508,11 +526,18 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  /** The shot ids of the next use of the ability in `slot` (a Volley takes a run of them, none 0); the first is sent. */
+  private reserveShots(slot: 0 | 1): number[] {
+    const ids = volleyShotIds(this.shotId + 1, cosmeticCount(this.info.abilities[slot].id));
+    this.shotId = ids[ids.length - 1];
+    return ids;
+  }
+
   /**
    * Play the action locally right away. Returns the predicted cooldown, or null when the
    * ability is blocked (a ranged secondary in melee): then it is not sent.
    */
-  private predictAbility(slot: 0 | 1, shot: number, aim: number, dist: number): number | null {
+  private predictAbility(slot: 0 | 1, shots: number[], aim: number, dist: number): number | null {
     const a = this.info.abilities[slot];
     const now = performance.now() / 1000;
     const { x, y } = this.pred.state;
@@ -526,36 +551,44 @@ export class GameScene extends Phaser.Scene {
       return this.pred.cooldownOf(slot, true);
     }
     let anim: number = ANIM.Cast;
-    switch (a.id) {
-      case 'MagicMissile':
-        this.spawnCosmetic(KIND.Missile, shot, aim, a, a.radius, a.range / a.speed);
+    let arc: number | undefined;
+    const shape = ABILITIES[a.id].shape;
+    switch (shape) {
+      case 'Projectile': {
+        if (a.projectile !== null) {
+          const angles = volleyAngles(aim, shots.length, CONST.VOLLEY_SPREAD);
+          shots.forEach((shot, i) => this.spawnCosmetic(a.projectile!, shot, angles[i], a, a.radius, a.range / a.speed));
+        }
         anim = ANIM.Shoot;
         break;
-      case 'Fireball': {
+      }
+      case 'Blast': {
         const d = Math.min(Math.max(dist, 24), a.range);
         // It flies with radius 4 (server abilities.rs); `a.radius` is its blast.
-        this.spawnCosmetic(KIND.Fireball, shot, aim, a, 4, a.range / a.speed + 0.1, [x + Math.cos(aim) * d, y + Math.sin(aim) * d]);
+        this.spawnCosmetic(KIND.Fireball, shots[0], aim, a, 4, a.range / a.speed + 0.1, [x + Math.cos(aim) * d, y + Math.sin(aim) * d]);
         anim = ANIM.Cast;
         break;
       }
-      case 'Strike':
+      case 'Swing':
         anim = ANIM.Melee;
+        arc = a.arc;
         break;
-      case 'Charge':
+      case 'Dash':
         anim = ANIM.Dash;
         break;
-      case 'SummonWolf':
+      case 'Ring':
+      case 'SelfArea':
+      case 'GroundArea':
+      case 'Buff':
+      case 'Summon':
         anim = ANIM.Cast;
         break;
-      case 'HolyLight':
-        anim = ANIM.Cast;
-        break;
-      case 'Shoot':
-        if (a.projectile !== null) this.spawnCosmetic(a.projectile, shot, aim, a, a.radius, a.range / a.speed);
-        anim = ANIM.Shoot;
-        break;
+      default: {
+        const unhandled: never = shape;
+        throw new Error(`unhandled shape ${String(unhandled)}`);
+      }
     }
-    this.localAnim = { anim, start: now };
+    this.localAnim = { anim, start: now, arc };
     return this.pred.cooldownOf(slot);
   }
 
@@ -706,8 +739,7 @@ export class GameScene extends Phaser.Scene {
     for (const e of this.ents.values()) {
       seen.add(e.id);
       if (e.kind === KIND.Torch) this.drawTorch(e, now);
-      else if (e.kind === KIND.FirePatch) this.drawHazard(e);
-      else if (e.kind === KIND.HolyGround || e.kind === KIND.Roots) continue; // drawn from the ground-area task on; never a figure
+      else if (isHazardKind(e.kind)) this.drawHazard(e);
       else if (e.kind === KIND.Chest) this.drawChest(e);
       else if (e.kind === KIND.Barrel) this.drawBarrel(e);
       else if (e.kind === KIND.Mimic) this.drawMimic(e, dt, px, py);
@@ -795,7 +827,7 @@ export class GameScene extends Phaser.Scene {
       }
       const flags = this.myFlags;
       // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
-      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects() };
+      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects(), swingArc: anim === ANIM.Melee ? this.localAnim.arc : undefined };
     } else {
       s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects };
     }
@@ -939,24 +971,35 @@ export class GameScene extends Phaser.Scene {
 
   private orientProjectile(img: Phaser.GameObjects.Image, pd: (typeof PROJECTILES)[number], aim: number): void {
     // Pack arrows point up; glows are round but pulse a little.
-    if (pd.frame) img.setRotation(aim + Math.PI / 2);
+    if (pd.spin) img.setRotation((performance.now() / 1000) * 14);
+    else if (pd.frame) img.setRotation(aim + Math.PI / 2);
     // Gloom shimmers: an unsteady flicker instead of a smooth pulse.
     else if (pd.gloom) img.setScale(pd.scale * (0.8 + Math.random() * 0.35)).setAlpha(0.7 + Math.random() * 0.3);
     else img.setScale(pd.scale * (0.9 + 0.15 * Math.sin(performance.now() / 50)));
   }
 
-  /** Burning ground from dragon breath: a glow with rising flames (no pack sprite exists). */
+  /**
+   * Ground hazards: burning ground from dragon breath, a hero's Consecrate (gold) or Entangle
+   * (roots). A glow of the hazard's radius (the server sends it in the aim field) with rising sparks.
+   */
   private drawHazard(e: EntState): void {
+    const look = HAZARD_LOOKS[e.kind];
     let img = this.hazardViews.get(e.id);
     if (!img) {
-      img = this.add.image(0, 0, 'glow').setTint(0xff5010).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.hazard).setScale(2.5, 1.4);
+      img = this.add.image(0, 0, 'glow').setTint(look.tint).setBlendMode(Phaser.BlendModes.ADD).setDepth(DEPTH.hazard);
       this.hazardViews.set(e.id, img);
     }
-    img.setPosition(Math.round(e.x), Math.round(e.y)).setAlpha(Math.min(1, e.extra / 500) * (0.7 + 0.3 * Math.sin(performance.now() / 70 + e.id)));
-    if (Math.random() < 0.5)
-      this.fx.particle(e.x + (Math.random() * 16 - 8), e.y, 0, -25 - Math.random() * 20, 0.5, Math.random() < 0.5 ? 0xff7020 : 0xffd040, {
+    const r = e.aim > 0 ? e.aim : look.r;
+    // The glow texture is 14 px wide: scaled to the hazard's diameter, then squashed into an ellipse (the fire patch keeps its old, wider look).
+    img.setScale(((r * 2) / 14) * look.sx, ((r * 2) / 14) * look.sy);
+    img.setPosition(Math.round(e.x), Math.round(e.y)).setAlpha(Math.min(1, e.extra / 500) * (0.7 + 0.3 * Math.sin(performance.now() / 70 + e.id)) * look.alpha);
+    if (Math.random() < look.sparks) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.sqrt(Math.random()) * r;
+      this.fx.particle(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d * 0.6, 0, -look.rise - Math.random() * 20, 0.5, look.colors[Math.floor(Math.random() * look.colors.length)], {
         depth: DEPTH.entityBase + e.y,
       });
+    }
   }
 
   /** The own hero's effects as a bitmask, from the own snapshot. */
@@ -987,7 +1030,7 @@ export class GameScene extends Phaser.Scene {
     this.bars.clear();
     this.heroBars.clear();
     for (const e of this.ents.values()) {
-      if (isProjectileKind(e.kind) || e.kind === KIND.FirePatch || e.kind === KIND.HolyGround || e.kind === KIND.Roots || e.kind === KIND.Chest || e.kind === KIND.Barrel || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
+      if (isProjectileKind(e.kind) || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
       // The ogre (mini-boss) always shows a wide bar; others only once hurt.
       const ogre = e.kind === KIND.Ogre;
       if (e.hp >= 1 && !ogre) continue;

@@ -2,6 +2,7 @@
 // delay for remote entities, and prediction/reconciliation for the local player.
 import { CONST, EFFECTS } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
+import type { AbilityId } from '../generated/AbilityId';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { Snapshot } from '../generated/Snapshot';
 import { knocked, sinking, stepMove, type MoveState, type Solid } from '../sim/collision';
@@ -313,4 +314,23 @@ export class Predictor {
     this.offY *= k;
     return [this.state.x + this.offX, this.state.y + this.offY];
   }
+}
+
+/** `n` consecutive shot ids from `next`, wrapping at 0x10000 and never containing 0 (server `volley_shot` just adds). */
+export function volleyShotIds(next: number, n: number): number[] {
+  let first = next & 0xffff;
+  // A run that would include 0 (the wrap) starts again at 1.
+  if (first === 0 || first + n - 1 > 0xffff) first = 1;
+  return Array.from({ length: n }, (_, i) => first + i);
+}
+
+/** The aim angles of `n` arrows spread evenly over `spread` radians around `aim`. */
+export function volleyAngles(aim: number, n: number, spread: number): number[] {
+  if (n <= 1) return [aim];
+  return Array.from({ length: n }, (_, i) => aim - spread / 2 + (spread * i) / (n - 1));
+}
+
+/** How many cosmetic projectiles an ability fires at once. */
+export function cosmeticCount(id: AbilityId): number {
+  return id === 'Volley' ? CONST.VOLLEY_ARROWS : 1;
 }

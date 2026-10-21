@@ -121,6 +121,7 @@ export const CONST = {
   "DT": 0.016666666666666666,
   "FALL_TIME": 0.7,
   "FOV_RADIUS": 9,
+  "HERO_REACH": 17.0,
   "KNOCK_DECAY": 0.7788007830714049,
   "KNOCK_MIN_SPEED": 8.0,
   "LAVA_SPEED": 0.4,
@@ -145,7 +146,9 @@ export const CONST = {
   "TICK_HZ": 60.0,
   "TILE": 16.0,
   "TORCH_RADIUS": 4.0,
-  "USE_REACH": 6.0
+  "USE_REACH": 6.0,
+  "VOLLEY_ARROWS": 3,
+  "VOLLEY_SPREAD": 0.5235987755982988
 } as const;
 
 export const CLASSES = {

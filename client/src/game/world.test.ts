@@ -4,7 +4,7 @@ import type { EntSnap } from '../generated/EntSnap';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
-import { EffectLooks, Interpolator, Predictor, abilityChoice, cosmeticPierce, type EntState } from './world';
+import { EffectLooks, Interpolator, Predictor, abilityChoice, cosmeticCount, cosmeticPierce, volleyAngles, volleyShotIds, type EntState } from './world';
 
 const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, behind: 0, ...over });
 /** Predictor for tests: the class only picks which ids the abilities carry. */
@@ -191,5 +191,25 @@ describe('EffectLooks', () => {
     expect(l.get(7)).toEqual(new Map([[EFFECT.Entangled, EFFECT_LOOK.Vines]]));
     l.event(7, EFFECT.Entangled, false, 0);
     expect(l.get(7)).toBeUndefined();
+  });
+});
+
+describe('Volley', () => {
+  it('volleyShotIds never contains 0 and wraps', () => {
+    expect(volleyShotIds(5, 3)).toEqual([5, 6, 7]);
+    expect(volleyShotIds(0xfffe, 3)).toEqual([1, 2, 3]);
+    expect(volleyShotIds(0xffff, 1)).toEqual([0xffff]);
+    expect(volleyShotIds(0, 1)).toEqual([1]);
+  });
+  it('volleyAngles spreads evenly around the aim', () => {
+    const a = volleyAngles(1, 3, Math.PI / 6);
+    expect(a[0]).toBeCloseTo(1 - Math.PI / 12);
+    expect(a[1]).toBeCloseTo(1);
+    expect(a[2]).toBeCloseTo(1 + Math.PI / 12);
+    expect(volleyAngles(1, 1, Math.PI / 6)).toEqual([1]);
+  });
+  it('only Volley fires more than one cosmetic', () => {
+    expect(cosmeticCount('Volley')).toBe(3);
+    expect(cosmeticCount('Shoot')).toBe(1);
   });
 });

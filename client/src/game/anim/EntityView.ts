@@ -17,6 +17,8 @@ export interface ViewState {
   animT: number;
   aim: number;
   flags: number;
+  /** The real arc (rad) of the own hero's melee swing, when it is known; otherwise the figure's fixed one. */
+  swingArc?: number;
   /** Bitmask of `EffectKind` ids on the creature. */
   effects?: number;
   /** Pixels the figure stands below a surface (wading in water or lava). */
@@ -385,10 +387,12 @@ export class EntityView {
         rot = s.aim + HALF_PI;
         if (isMelee && d.swing) {
           const k = Math.min(t / MELEE_T, 1);
-          const half = d.swing.arc / 2;
+          // A full-circle swing (Whirl) sweeps all the way round.
+          const arc = s.swingArc ?? d.swing.arc;
+          const half = Math.min(arc, Math.PI * 2) / 2;
           if (!this.shotFx) {
             this.shotFx = true;
-            this.swoosh(s, s.aim, sgn, d.swing.reach, d.swing.arc);
+            this.swoosh(s, s.aim, sgn, d.swing.reach, arc);
           }
           if (k < 0.5) {
             rot -= sgn * half;

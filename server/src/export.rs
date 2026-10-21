@@ -127,6 +127,8 @@ fn export_defs() {
     consts.as_object_mut().unwrap().extend(lich.as_object().unwrap().clone());
     let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
     consts.as_object_mut().unwrap().extend(shots.as_object().unwrap().clone());
+    let hero = json!({ "VOLLEY_ARROWS": ab::VOLLEY_ARROWS, "VOLLEY_SPREAD": ab::VOLLEY_SPREAD, "HERO_REACH": classes::HERO_REACH });
+    consts.as_object_mut().unwrap().extend(hero.as_object().unwrap().clone());
     let objs = json!({
         "BARREL_RADIUS": crate::defs::objects::BARREL_RADIUS, "CHEST_RADIUS": crate::defs::objects::CHEST_RADIUS, "TORCH_RADIUS": crate::defs::objects::TORCH_RADIUS,
         "BARREL_FUSE": crate::defs::objects::BARREL_FUSE,

@@ -66,6 +66,12 @@ interface Swoosh {
   max: number;
 }
 
+interface Zap {
+  g: Phaser.GameObjects.Graphics;
+  life: number;
+  max: number;
+}
+
 interface FloatText {
   t: Phaser.GameObjects.Text;
   vy: number;
@@ -79,6 +85,7 @@ export class Effects {
   private rings: Ring[] = [];
   private freeRings: Phaser.GameObjects.Graphics[] = [];
   private swooshes: Swoosh[] = [];
+  private zaps: Zap[] = [];
   private texts: FloatText[] = [];
   private freeTexts: Phaser.GameObjects.Text[] = [];
 
@@ -172,6 +179,17 @@ export class Effects {
       r.g.lineStyle(2, r.color, 1 - k);
       r.g.strokeCircle(r.x, r.y, rad);
     }
+    for (let i = this.zaps.length - 1; i >= 0; i--) {
+      const z = this.zaps[i];
+      z.life -= dt;
+      if (z.life <= 0) {
+        z.g.clear().setVisible(false).setAlpha(1);
+        this.freeRings.push(z.g);
+        this.zaps.splice(i, 1);
+        continue;
+      }
+      z.g.setAlpha(z.life / z.max);
+    }
     for (let i = this.swooshes.length - 1; i >= 0; i--) {
       const s = this.swooshes[i];
       s.life -= dt;
@@ -256,13 +274,38 @@ export class Effects {
     this.scene.cameras.main.shake(140, 0.005);
   }
 
-  healRing(x: number, y: number, r: number): void {
-    this.ring(x, y, r, 0xffe070, 0.6, true);
+  /** A healing ring; `color` tints the ring (the purify ring is white-gold). */
+  healRing(x: number, y: number, r: number, color = 0xffe070): void {
+    this.ring(x, y, r, color, 0.6, true);
     for (let i = 0; i < 18; i++) {
       const a = Math.random() * Math.PI * 2;
       const d = Math.random() * r;
       this.particle(x + Math.cos(a) * d, y + Math.sin(a) * d, 0, -20 - Math.random() * 20, 0.8, 0xfff0a0, { frame: 'spark' });
     }
+  }
+
+  /** Chain Spark's arc: a short-lived jagged line between two points. */
+  zap(x: number, y: number, x2: number, y2: number, color = 0xb090ff, life = 0.18): void {
+    const g = this.freeRings.pop() ?? this.scene.add.graphics();
+    g.setVisible(true).setAlpha(1).setDepth(DEPTH.fx);
+    const len = Math.hypot(x2 - x, y2 - y);
+    const n = Math.max(2, Math.round(len / 6));
+    const nx = len > 0 ? -(y2 - y) / len : 0;
+    const ny = len > 0 ? (x2 - x) / len : 0;
+    const pts: [number, number][] = [[x, y]];
+    for (let i = 1; i < n; i++) {
+      const off = (Math.random() * 2 - 1) * 3;
+      pts.push([x + ((x2 - x) * i) / n + nx * off, y + ((y2 - y) * i) / n + ny * off]);
+    }
+    pts.push([x2, y2]);
+    g.clear();
+    for (const [w, c] of [[3, color], [1, 0xffffff]] as const) {
+      g.lineStyle(w, c, 1);
+      g.beginPath().moveTo(pts[0][0], pts[0][1]);
+      for (const [px, py] of pts.slice(1)) g.lineTo(px, py);
+      g.strokePath();
+    }
+    this.zaps.push({ g, life, max: life });
   }
 
   /** A minion appears. k: 0 green (raised skeleton), 1 fiery (summoned imp), 2 dark purple (raised by the lich). */
@@ -289,20 +332,21 @@ export class Effects {
   }
 
   /** The lich's nova: a dark purple burst out to the hit radius, gloomy smoke and pale sparks, a strong jolt. */
-  nova(x: number, y: number, r: number): void {
-    this.ring(x, y, r, GLOOM.dark, 0.55, true);
-    this.ring(x, y, r, GLOOM.light, 0.35);
-    this.particle(x, y - 6, 0, 0, 0.35, GLOOM.light, { frame: 'glow', scale: 3 });
+  nova(x: number, y: number, r: number, tint?: number): void {
+    const gloom = tint === undefined ? GLOOM : { dark: tint, mid: tint, light: tint, spark: 0xffffff };
+    this.ring(x, y, r, gloom.dark, 0.55, true);
+    this.ring(x, y, r, gloom.light, 0.35);
+    this.particle(x, y - 6, 0, 0, 0.35, gloom.light, { frame: 'glow', scale: 3 });
     for (let i = 0; i < 40; i++) {
       const a = (i / 40) * Math.PI * 2 + Math.random() * 0.15;
       const sp = r * (2 + Math.random() * 1.4);
       const dark = i % 3 !== 0;
-      this.particle(x + Math.cos(a) * 4, y + Math.sin(a) * 4, Math.cos(a) * sp, Math.sin(a) * sp * 0.8, 0.4 + Math.random() * 0.25, dark ? GLOOM.dark : GLOOM.mid, { scale: dark ? 2 : 1.5 });
+      this.particle(x + Math.cos(a) * 4, y + Math.sin(a) * 4, Math.cos(a) * sp, Math.sin(a) * sp * 0.8, 0.4 + Math.random() * 0.25, dark ? gloom.dark : gloom.mid, { scale: dark ? 2 : 1.5 });
     }
     for (let i = 0; i < 18; i++) {
       const a = Math.random() * Math.PI * 2;
       const sp = r * (1.5 + Math.random() * 2);
-      this.particle(x, y - 4, Math.cos(a) * sp, Math.sin(a) * sp * 0.8, 0.45, GLOOM.spark, { frame: 'spark' });
+      this.particle(x, y - 4, Math.cos(a) * sp, Math.sin(a) * sp * 0.8, 0.45, gloom.spark, { frame: 'spark' });
     }
     this.scene.cameras.main.shake(200, 0.007);
   }

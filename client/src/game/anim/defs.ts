@@ -11,9 +11,9 @@ import { DEMON_ANIMS, DEMON_FRAME, demonFrameName, type DemonAnim } from "./demo
 
 // Player swings reach as far as the server hits: a hero's reach (server `HERO_REACH` +
 // `PLAYER_RADIUS`) + a typical monster radius. Strike hits every enemy in the aimed arc; these
-// arcs are fixed visuals of the sword's and the axe's swoosh, while the real arc follows the
-// weapon and DEX (`ResolvedAbility.arc`). Only the ranged primary's melee fallback is single-target.
-const HERO_REACH = 22;
+// arcs are fixed visuals of the sword's and the axe's swoosh for the other heroes; the own hero's
+// swoosh uses the real arc, which follows the weapon, DEX and the ability (`ResolvedAbility.arc`). Only the ranged primary's melee fallback is single-target.
+const HERO_REACH = CONST.HERO_REACH + CONST.PLAYER_RADIUS;
 const SWORD = { reach: HERO_REACH + 5, arc: 1.75 };
 const AXE = { reach: HERO_REACH + 5, arc: 2.45, color: 0xffe0d0 };
 const MOB_SWING = { reach: 22, arc: 1.6, color: 0xffd0d0 };
@@ -158,7 +158,7 @@ export const FIGURES: Record<number, FigureDef> = {
 
 /** Projectiles: a pack sprite (arrows) or a runtime glow of the given color. */
 /** `gloom`: the lich's dark purple shimmer (a flickering glow trailing dark smoke and sparks, see `Effects.gloomWisp`). */
-export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?: number; trail?: number; gloom?: boolean }> = {
+export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?: number; trail?: number; gloom?: boolean; spin?: boolean }> = {
   [KIND.Missile]: { glow: 0xa080ff, scale: 0.8, trail: 0x9a7aff },
   [KIND.Fireball]: { glow: 0xff7020, scale: 1.4, trail: 0xffb040 },
   [KIND.Bolt]: { frame: 'weapon_arrow', scale: 0.6 },
@@ -171,6 +171,9 @@ export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?:
   [KIND.DragonFireball]: { glow: 0xff5010, scale: 2, trail: 0xffb040 },
   [KIND.BlindOrb]: { glow: 0x3a1a5a, scale: 1.4, trail: 0x1a0a2a, gloom: true },
   [KIND.SleepOrb]: { glow: 0xc080ff, scale: 1.3, trail: 0x8040c0, gloom: true },
+  [KIND.ChainSpark]: { glow: 0xa080ff, scale: 0.8, trail: 0x9a7aff },
+  [KIND.Judgement]: { glow: 0xffd860, scale: 1, trail: 0xfff0a0 },
+  [KIND.ThrownAxe]: { frame: 'weapon_throwing_axe', scale: 0.8, spin: true },
 };
 
 export function isPlayerKind(k: number): boolean {
@@ -182,6 +185,10 @@ export function isAllyKind(k: number): boolean {
 }
 export function isProjectileKind(k: number): boolean {
   return k >= KIND.Missile && k < KIND.FirePatch;
+}
+/** Ground hazards: burning ground, consecrated ground, entangling roots. */
+export function isHazardKind(k: number): boolean {
+  return k === KIND.FirePatch || k === KIND.HolyGround || k === KIND.Roots;
 }
 export function isBossKind(k: number): boolean {
   return k === KIND.Demon || k === KIND.Lich || k === KIND.Dragon;
