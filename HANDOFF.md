@@ -29,9 +29,17 @@ For: the next agent or developer continuing this project. Read this first, then 
 - Not planned: boss weapons (their scripts keep their constants, spec §7).
 - **Shields (pinned by the user, 2026-10-21):** an off-hand item characters can carry. The slot and `ItemBase::Shield` are reserved; no shield art exists yet. See TODO "Shields".
 
-**How to resume (next session):** the branch `feature/skill-tree-design` is at the "Progression plan 3a" commits, **local only, not pushed** (push when the user says). Start with superpowers:writing-plans for plan 3b, from spec §6.6 and the ranger's drafted tree (`?uidemo=tree-ranger`, still waiting for the user's approval; Volley, Flanking Thrust, Entangle and Poison Coat are drafts). Verify with `cd server && cargo test -- --skip export_bindings` (the crate is bin-only: focused runs use `cargo test --bin '*' <filter> -- --skip export_bindings`).
+**How to resume (next session):**
+- **Git state (2026-10-21):** plans 1, 2, 3a and TODO 4b are merged into `main` (fast-forward to `bf05142`) and **pushed** (`origin/main` and `origin/feature/skill-tree-design` both at `bf05142`). `feature/skill-tree-design` is fully merged; start each next plan on a fresh branch from `main` (for example `feature/progression-3b`).
+- **Before 3b, ask the user to:** (1) approve or change the ranger's drafted tree and her four drafted abilities (`?uidemo=tree-ranger`: Volley, Flanking Thrust, Entangle, Poison Coat), because 3b builds them; (2) do the two browser checks from 3a (a piercing arrow never reappears short of an enemy; the "Debug loadout" row only with `?debug`).
+- **Order of the remaining plans** (each written with superpowers:writing-plans just before it is built, then built subagent-driven):
+  1. **Plan 3b: the 16 new abilities** (spec §6.6; two primary and two secondary per class). It adds the shapes Ring, GroundArea and Buff; the entity kinds `HolyGround` and `Roots`; the projectile kinds for Chain Spark and Judgement; the positive effect `Warded` (Purify; fix its exact effect set from the effects saved with WIL); `AbilityMod::OnHitChance`, `AddOnHit` and `BehindArc`; the client visuals that reuse existing art (spec §13 "In the run"). Use `DebugLoadout` (`?debug`) to try them. Settle the `CooldownAdd`-on-Summon-Wolf question from "3a leftovers".
+  2. **Plan 4: skill trees, Attribute shop, `Progress` v2, respec, protocol** (spec §2, §9, §11, §12), with the plan-4 carry-overs above (`SetLoadout` replaces `DebugLoadout`).
+  3. **Plan 5: the new UI** (spec §13), deleting the `?uidemo` spike.
+- **How to build (user rules, 2026-10-21):** implementers and fixers run on **Sonnet**; task reviews and the final whole-branch review on **Opus** (small re-reviews of a fix may use Sonnet). Merges, pushes and the finishing step stay in the main session; push or merge only when the user says.
+- **Verify:** `cd server && cargo test -- --skip export_bindings` (bin-only crate: focused runs `cargo test --bin '*' <filter> -- --skip export_bindings`; `cargo test export_bindings` regenerates `client/src/generated` except `Attr.ts`/`Attributes.ts`, which root owns); client `cd client && bash -lic 'npx vitest run && npx tsc --noEmit && npm run build'`; full suite `docker compose -f docker-compose.test.yml run --rm test`; smoke `cd tools/e2e && BROWSER=/usr/bin/brave-browser node smoke.mjs http://localhost:8080/ "" shots ElvenRanger,Paladin` (and `Wizard,Barbarian`) after rebuilding the containers. clippy is not installed in the agent sandbox.
 
-**Merge done (2026-10-19):** `origin/feature/elven-ranger` (Elven Ranger, Dire Wolf, breakable chests) was fast-forwarded into local `main` (`c5b3860`, **not pushed**), and `main` was merged into `feature/skill-tree-design`.
+**Merge done (2026-10-19):** `origin/feature/elven-ranger` (Elven Ranger, Dire Wolf, breakable chests) was fast-forwarded into local `main` (`c5b3860`; pushed since), and `main` was merged into `feature/skill-tree-design`.
 
 **Progression: designed and approved, plan 1 built (branch `feature/skill-tree-design`):**
 - Attributes, races, weapons and items, class skill trees, loadouts and a new pre-run UI.
@@ -53,7 +61,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 
 **Other open items:**
 - **The user's play-test of the ranger** (see "Last feature (2026-10-16): Elven Ranger and the Dire Wolf", "Still to play"); follow-ups in TODO "Elven Ranger follow-ups".
-- **Push `main`** when the user asks (local `main` is ahead of `origin/main` by the ranger and the breakable chests).
+- The merged remote branches (barrels, demon-art, demon-walk, elven-ranger, lighting, and now skill-tree-design) are not deleted yet; ask the user before deleting remote branches.
 - **Pillars** (TODO section): free-standing wall tiles in large rooms, also as torch mounts.
 - **Breakable chests** are built (see below). The user is still thinking about bodies blocking movement; do not build that.
 - **Server load** (TODO priority 16): measure, then cache each hero's view while nothing changed and share it with spectators. The ranger's 18-tile vision makes each view dearer. Before any public launch.
