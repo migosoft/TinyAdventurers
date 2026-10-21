@@ -19,6 +19,9 @@ For: the next agent or developer continuing this project. Read this first, then 
 - Plan 3: `PropKind::GrantAbility` and `AbilityMod` (they need the loadout pool); `Requirement::WeaponKind` (only abilities use it); the melee rule and the unarmed strike for archers, with the enemy staffs only the melee rule uses; Charge = weapon × 0.8 and the Great Axe's reach of 22 (the ability merge; it removes the empty-slot fallback to the starters).
 - Plan 4: `PropKind::Aura` (needs a per-tick area layer and a rule for HP when you walk in or out of a max-HP aura); drawing heroes with their equipped weapons; `DebugGrantItem`; `Progress` v2 storing equipment.
 - Not planned: boss weapons (their scripts keep their constants, spec §7).
+- **Shields (pinned by the user, 2026-10-21):** an off-hand item characters can carry. The slot and `ItemBase::Shield` are reserved; no shield art exists yet. See TODO "Shields". Do not build them in plan 3.
+
+**How to resume (next session):** the branch `feature/skill-tree-design` is at the "Progression plan 2" commits, **local only, not pushed** (push when the user says). Start with superpowers:writing-plans for plan 3, from the spec §6.3–6.6 and §7 (melee rule) and the carry-overs below. The ranger's tree draft (`?uidemo=tree-ranger`) still waits for the user's approval; it matters from plan 4 on. Verify with `cd server && cargo test -- --skip export_bindings` (the crate is bin-only: focused runs use `cargo test --bin '*' <filter> -- --skip export_bindings`).
 
 **Carry-overs from plan 2's final review (for plan 3/4):**
 - Plan 3 first step: build each enemy's `attack`/`alt` from its `melee_weapon`/`ranged_weapon` fields (today the id is written twice in `enemies::def`; drift risk), or test that they rebuild from the fields.

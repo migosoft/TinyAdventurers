@@ -47,6 +47,19 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 - **Several game servers** would need shared presence (one connection per account) and a shared login limiter, e.g. in Valkey. See "Scaling later" in TECHNICAL.md §11a.
 - **Piercing shots (idea from the user, 2026-10-14):** an unlockable upgrade for ranged attacks so a shot passes through a limited number of enemies (first 2, later 3, maybe 4). Today every hero shot ends at the first enemy (`advance_projectile` in `run/abilities.rs`; the client's cosmetic copy stops there too, `GameScene.shotTouchesEnemy`). A pierce count would go on `Projectile` (plus the ids already hit), with the cosmetic copy taking the same count.
 
+## Shields (pinned by the user, 2026-10-21)
+
+Shields are items characters can carry, in the off-hand slot. The item system already has room for them:
+- `EquipSlot::OffHand` exists, and `check_equip` refuses everything there for now.
+- `ItemBase::Shield` is reserved, and no item uses it yet.
+
+Still to decide and build:
+- **Art first:** there is no shield sprite in the atlas or in any pack in `client/assets-src/`. Either find a CC0 shield in 0x72's 16×16 style, or draw one in the pack's colours. Both need the user's go-ahead (the art rule).
+- **Stats:** what a shield does. For example, physical resistance and weight like armor, a block chance, or a block against shots from the front.
+- **Rules:** a shield proficiency per class (by weight class like armor, or its own list). Also which weapons leave the off-hand free: two-handed weapons such as the Great Axe, bows and staffs probably do not.
+- **Drawing:** the hero is drawn holding it in the run. This goes with plan 4's "heroes drawn with their equipped weapons".
+- **Where it fits:** after progression plan 4 (equipping and `Progress` v2), or as its own small plan once the art exists.
+
 ## Resistances instead of immunities
 
 Done 2026-10-19 (TODO 4b above): one effect resistance per effect, 100 % refuses it; see TECHNICAL §5 "Status effects" ("Effect resistances").
