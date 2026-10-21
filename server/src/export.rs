@@ -12,6 +12,7 @@ use crate::defs::abilities::{self as ab};
 use crate::defs::attributes::Attr;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::effects::{self, EffectKind};
+use crate::defs::items::Equipment;
 use crate::defs::{bosses, enemies};
 use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::dungeon::{Map, Tile, TILE};
@@ -45,6 +46,12 @@ fn export_defs() {
         .collect();
     let abilities: serde_json::Map<String, serde_json::Value> =
         ab::ALL.iter().map(|a| (format!("{a:?}"), serde_json::to_value(ab::def(*a)).unwrap())).collect();
+    // The Elven Ranger's rapier thrust at her start Attributes.
+    let ranger = ClassId::ElvenRanger;
+    let rapier_cooldown = crate::sheet::hero_sheet(ranger, Default::default(), &Equipment::starter(ranger), &Default::default())
+        .fallback
+        .expect("the ranger has a rapier thrust")
+        .cooldown;
     let mut consts = json!({
         "TILE": TILE,
         "TICK_HZ": TICK_HZ,
@@ -56,7 +63,7 @@ fn export_defs() {
         "KNOCK_DECAY": ab::KNOCK_DECAY,
         "KNOCK_MIN_SPEED": ab::KNOCK_MIN_SPEED,
         "DAGGER_RANGE": ab::DAGGER_RANGE,
-        "DAGGER_COOLDOWN": ab::DAGGER_COOLDOWN,
+        "DAGGER_COOLDOWN": rapier_cooldown,
         "MIMIC_HOP_CYCLE": enemies::MIMIC_HOP_CYCLE,
         "MIMIC_HOP_AIR_START": enemies::MIMIC_HOP_AIR.0,
         "MIMIC_HOP_AIR_END": enemies::MIMIC_HOP_AIR.1,

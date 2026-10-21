@@ -71,7 +71,6 @@ pub struct At {
 
 impl At {
     /// Sample items.
-    #[allow(dead_code)] // plan 2, task 3 (sample items)
     pub const BASE: At = At { str: 10, dex: 10 };
 }
 
@@ -127,7 +126,6 @@ fn damage_and_cooldown(kind: WeaponKind, damage: f64, cooldown: f64, at: At, a: 
     (dmg, cd)
 }
 
-#[allow(dead_code)] // plan 2, task 4 (the hero sheet)
 pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> ResolvedWeapon {
     let (damage, cooldown) = damage_and_cooldown(kind, s.damage, s.cooldown, s.at, attrs);
     ResolvedWeapon {
@@ -146,7 +144,6 @@ pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> Re
     }
 }
 
-#[allow(dead_code)] // plan 2, task 4 (the hero sheet)
 pub fn resolve_ranged(kind: WeaponKind, s: &RangedStats, attrs: &Attributes) -> ResolvedWeapon {
     let (damage, cooldown) = damage_and_cooldown(kind, s.damage, s.cooldown, s.at, attrs);
     ResolvedWeapon {

@@ -26,25 +26,21 @@ super::enum_list::listed_enum! {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
 pub struct Equipment {
     pub slots: [Option<ItemId>; EquipSlot::COUNT],
 }
 
 impl Equipment {
-    #[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
     pub fn get(&self, s: EquipSlot) -> Option<ItemId> {
         self.slots[s as usize]
     }
 
-    #[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
     pub fn with(mut self, s: EquipSlot, id: ItemId) -> Equipment {
         self.slots[s as usize] = Some(id);
         self
     }
 
     /// The class's starting weapons: Melee and, if it has one, Ranged.
-    #[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
     pub fn starter(class: ClassId) -> Equipment {
         let (melee, ranged) = classes::def(class).starter;
         let e = Equipment::default().with(EquipSlot::Melee, melee);
@@ -106,7 +102,6 @@ pub enum ArmorClass {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)] // plan 2, tasks 3-4 (equip rules, hero sheet)
 pub struct ArmorStats {
     pub class: ArmorClass,
     pub physical: f64,
@@ -114,7 +109,6 @@ pub struct ArmorStats {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)] // plan 2, tasks 3-4 (equip rules, hero sheet)
 pub enum ItemBase {
     Melee(WeaponKind, MeleeStats),
     Ranged(WeaponKind, RangedStats),
@@ -128,14 +122,12 @@ pub enum ItemBase {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)] // plan 2, tasks 3-4 (equip rules, hero sheet)
 pub struct ItemProperty {
     pub kind: PropKind,
     pub magical: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)] // plan 2, tasks 3-4 (equip rules, hero sheet)
 pub enum PropKind {
     DamageShare(DamageType, f64),
     OnHit(OnHit),
@@ -150,7 +142,7 @@ pub enum PropKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)] // plan 2, tasks 3-4 (equip rules, hero sheet)
+#[allow(dead_code)] // id, name, sprite: plan 4 (drawing, the equip UI)
 pub struct ItemDef {
     pub id: ItemId,
     pub name: &'static str,
@@ -192,7 +184,6 @@ const ALL: &[ClassId] = &ClassId::ALL;
 const WIZARD: &[ClassId] = &[ClassId::Wizard];
 const RANGER: &[ClassId] = &[ClassId::ElvenRanger];
 
-#[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
 pub fn def(id: ItemId) -> ItemDef {
     use ItemId as I;
     use WeaponKind as K;
@@ -270,7 +261,6 @@ pub fn def(id: ItemId) -> ItemDef {
     }
 }
 
-#[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EquipError {
     WrongSlot,
@@ -281,7 +271,6 @@ pub enum EquipError {
 
 /// Whether `item` can be worn by `class` in `slot`. `attrs` are the Attributes
 /// without item points. Order: slot, class, proficiency, requirements.
-#[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
 pub fn check_equip(class: ClassId, slot: EquipSlot, item: ItemId, attrs: &Attributes) -> Result<(), EquipError> {
     let d = def(item);
     let fits = match (slot, d.base) {
@@ -315,7 +304,6 @@ pub fn check_equip(class: ClassId, slot: EquipSlot, item: ItemId, attrs: &Attrib
 }
 
 /// Checks every filled slot, in slot order.
-#[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
 pub fn check_equipment(class: ClassId, e: &Equipment, attrs: &Attributes) -> Result<(), (EquipSlot, EquipError)> {
     for slot in EquipSlot::ALL {
         if let Some(item) = e.get(slot) {

@@ -55,7 +55,6 @@ impl DamageSplit {
     /// This split with `add` on top: the non-physical base shares stay, physical
     /// takes what is left. If they come to more than 100 %, only the added
     /// shares shrink until the total is exactly 1.
-    #[allow(dead_code)] // plan 2, task 5 (item properties on weapons)
     pub fn with_shares(&self, add: &[(DamageType, f64)]) -> Self {
         let mut s = self.0;
         s[DamageType::Physical as usize] = 0.0;

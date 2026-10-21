@@ -1,4 +1,5 @@
-use super::attributes::{Attr, DEX_DMG, DEX_SPEED, DEX_ARC, INT_DMG, CHA_DMG, STR_DMG, STR_RANGE};
+use super::attributes::{Attr, INT_DMG, CHA_DMG, STR_DMG};
+use super::items::EquipSlot;
 use crate::protocol::ClassId;
 use serde::Serialize;
 use ts_rs::TS;
@@ -37,8 +38,6 @@ pub struct AbilityDef {
 }
 
 pub const DAGGER_RANGE: f64 = 22.0;
-pub const DAGGER_DAMAGE: f64 = 18.0;
-pub const DAGGER_COOLDOWN: f64 = 0.35;
 pub const DASH_SPEED: f64 = 300.0;
 /// Knockback: the push speed is multiplied by this every 1/60 s step
 /// (e^-0.25, so a push is mostly over after about 0.2 s), and stops below
@@ -82,44 +81,38 @@ pub struct Scaling {
     pub reach: Option<(Attr, f64)>,
 }
 
-/// The Elven Ranger's rapier thrust (the crossbow's fallback in melee).
-pub const DAGGER_SCALING: Scaling =
-    Scaling { damage: Some((Attr::Dex, DEX_DMG)), speed: Some((Attr::Dex, DEX_SPEED)), arc: None, reach: None };
-
 pub fn scaling(id: AbilityId) -> Scaling {
     use AbilityId::*;
     let none = Scaling::default();
     match id {
         MagicMissile | Fireball => Scaling { damage: Some((Attr::Int, INT_DMG)), ..none },
-        Sword | Axe => Scaling {
-            damage: Some((Attr::Str, STR_DMG)),
-            speed: Some((Attr::Dex, DEX_SPEED)),
-            arc: Some((Attr::Dex, DEX_ARC)),
-            ..none
-        },
         Heal => Scaling { damage: Some((Attr::Cha, CHA_DMG)), ..none },
         Dash => Scaling { damage: Some((Attr::Str, STR_DMG)), ..none },
-        CrossbowDagger => Scaling {
-            damage: Some((Attr::Dex, DEX_DMG)),
-            speed: Some((Attr::Dex, DEX_SPEED)),
-            reach: Some((Attr::Str, STR_RANGE)),
-            ..none
-        },
-        SummonWolf => none,
+        // The weapon abilities take their numbers from the weapon (`uses_weapon`).
+        Sword | Axe | CrossbowDagger | SummonWolf => none,
+    }
+}
+
+/// The weapon slot whose weapon an ability strikes with (interim until plan 3).
+pub fn uses_weapon(id: AbilityId) -> Option<EquipSlot> {
+    use AbilityId::*;
+    match id {
+        Sword | Axe | Dash => Some(EquipSlot::Melee),
+        CrossbowDagger => Some(EquipSlot::Ranged),
+        MagicMissile | Fireball | Heal | SummonWolf => None,
     }
 }
 
 /// The Attribute that governs an ability (spec §5, §6.3): the power of the damage-type
-/// effects its hits apply. Spells INT, innate magic CHA, melee weapons STR, finesse
-/// and ranged weapons DEX. Summon Wolf deals no damage of its own.
+/// effects its hits apply. Spells INT, innate magic CHA. The weapon abilities have
+/// none: their power is the weapon's (`ResolvedWeapon::power`). Summon Wolf deals no
+/// damage of its own.
 pub fn governing(id: AbilityId) -> Option<Attr> {
     use AbilityId::*;
     match id {
         MagicMissile | Fireball => Some(Attr::Int),
         Heal => Some(Attr::Cha),
-        Sword | Axe | Dash => Some(Attr::Str),
-        CrossbowDagger => Some(Attr::Dex),
-        SummonWolf => None,
+        Sword | Axe | Dash | CrossbowDagger | SummonWolf => None,
     }
 }
 

@@ -7,6 +7,7 @@ use crate::defs::abilities::{self as ab, AbilityId};
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::damage::{kind_split, Damage};
 use crate::defs::effects::OnHit;
+use crate::defs::items::EquipSlot;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::defs::lights::{self, LightKind};
 use super::effects::Creature;
@@ -53,9 +54,15 @@ pub fn dagger_target(run: &Run, pi: usize) -> Option<DaggerTarget> {
         .map(|(t, _)| t)
 }
 
-/// The power of an ability's damage-type effects: the hero's governing Attribute for it (`ab::governing`).
+/// The power of an ability's damage-type effects: its weapon's power (`ab::uses_weapon`),
+/// else the hero's governing Attribute for it (`ab::governing`).
 fn hero_power(run: &Run, pi: usize, id: AbilityId) -> i32 {
-    ab::governing(id).map_or(0, |a| run.players[pi].sheet.attrs.get(a))
+    let sheet = &run.players[pi].sheet;
+    match ab::uses_weapon(id) {
+        Some(EquipSlot::Ranged) => sheet.ranged.map_or(0, |w| w.power),
+        Some(_) => sheet.melee.power,
+        None => ab::governing(id).map_or(0, |a| sheet.attrs.get(a)),
+    }
 }
 
 /// Uses the hero's primary or secondary ability, with its numbers from the hero's sheet.
@@ -121,6 +128,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             if let Some(t) = dagger_target(run, pi) {
                 let thrust = run.players[pi].sheet.fallback.expect("a hero with the crossbow has the rapier");
                 cooldown = thrust.cooldown;
+                let power = run.players[pi].sheet.melee.power;
                 let dmg = Damage { on_hit, ..Damage::new(thrust.damage, run.players[pi].melee).with_power(power) };
                 match t {
                     DaggerTarget::Monster(mi) => {
@@ -501,7 +509,7 @@ mod tests {
         try_use(&mut run, 0, true, 1);
         assert!(run.monsters[mi].hp < hp, "dagger hit immediately");
         assert!(run.projectiles.is_empty(), "no bolt fired");
-        assert_eq!(run.players[0].cd1, ab::DAGGER_COOLDOWN);
+        assert_eq!(run.players[0].cd1, 0.35, "the rapier's interval");
 
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         put_monster_near(&mut run, 0, 60.0);

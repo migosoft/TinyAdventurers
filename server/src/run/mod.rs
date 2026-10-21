@@ -19,6 +19,7 @@ use crate::defs::attributes::{push_dist, Attr, Attributes};
 use crate::defs::progression::{self, StatUpgrades};
 use crate::defs::{classes, enemies};
 use crate::defs::enemies::EnemyType;
+use crate::defs::items::Equipment;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::{self, Layout, Mover, Tile};
 use crate::vispoly::View;
@@ -171,14 +172,14 @@ impl Run {
             level,
         };
         for (i, m) in members.into_iter().enumerate() {
-            let sheet = crate::sheet::hero_sheet(m.class, m.extra, &m.upgrades);
+            let sheet = crate::sheet::hero_sheet(m.class, m.extra, &Equipment::starter(m.class), &m.upgrades);
             let max_hp = sheet.max_hp;
             let p = run.layout.player_spawns[i % run.layout.player_spawns.len()];
             let id = run.alloc_id();
             run.players.push(Player {
                 id,
                 res: sheet.res,
-                melee: sheet.melee,
+                melee: sheet.melee.split,
                 conn: m.conn,
                 tx: Some(m.tx),
                 name: m.name,
@@ -1232,7 +1233,7 @@ pub mod tests {
         use crate::defs::companions::{WOLF_ATTRS, WOLF_WEIGHT};
         use crate::sheet::{boss_stats, enemy_stats, hero_sheet};
         let run = test_run(&[ClassId::Barbarian], BossId::Lich);
-        let want = hero_sheet(ClassId::Barbarian, Attributes::default(), &StatUpgrades::default());
+        let want = hero_sheet(ClassId::Barbarian, Attributes::default(), &Equipment::starter(ClassId::Barbarian), &StatUpgrades::default());
         let s = &run.players[0].sheet;
         assert_eq!(s.max_hp, want.max_hp);
         assert_eq!(s.speed, want.speed);
