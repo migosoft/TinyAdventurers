@@ -1,12 +1,21 @@
+use super::tags::{export_tag_names, tag_name};
 use super::*;
 use crate::defs::bosses;
 use crate::defs::enemies::{self, EnemyType};
 use crate::protocol::{BossId, ClassId};
-use crate::run::tests::test_run;
+use crate::run::tests::{test_run, test_run_seed};
 use std::collections::BTreeMap;
 
 fn count(run: &Run, kind: EntityKind) -> usize {
     run.monsters.iter().filter(|m| m.kind == kind).count()
+}
+
+/// A fresh run whose level setup has a mimic (about one chest in four is one).
+fn run_with_a_mimic() -> Run {
+    (1..200)
+        .map(|seed| test_run_seed(&[ClassId::Wizard], BossId::Demon, seed))
+        .find(|r| r.monsters.iter().any(|m| m.kind == EntityKind::Mimic))
+        .expect("some seed has a mimic")
 }
 
 fn ent(id: u32, kind: EntityKind) -> EntSnap {
@@ -31,12 +40,9 @@ fn monsters_are_numbered_per_kind_in_spawn_order() {
 
 #[test]
 fn a_hidden_mimic_is_a_chest_until_revealed() {
-    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-    let pos = run.players[0].pos();
-    // The level's chest loop spawns mimics hiding; do the same.
-    let id = run.spawn_enemy(EnemyType::Mimic, pos, None);
-    let mi = run.monster_idx(id).unwrap();
-    run.monsters[mi].hiding = true;
+    let mut run = run_with_a_mimic();
+    let mi = run.monsters.iter().position(|m| m.kind == EntityKind::Mimic).unwrap();
+    let id = run.monsters[mi].id;
     let tag = tag_of(&run, id);
     assert!(tag.starts_with("Chest "), "{tag}");
     let sent = snapshot_tags(&run, &[ent(id, EntityKind::Chest)]);
@@ -51,12 +57,17 @@ fn a_hidden_mimic_is_a_chest_until_revealed() {
 
 #[test]
 fn mimics_are_only_spawned_hiding() {
+    let mut seen = 0;
     for boss in BossId::ALL {
-        let run = test_run(&[ClassId::Wizard], boss);
-        for m in run.monsters.iter().filter(|m| m.kind == EntityKind::Mimic) {
-            assert!(m.hiding, "mimic {} spawned awake under {boss:?}", m.id);
+        for seed in 1..60 {
+            let run = test_run_seed(&[ClassId::Wizard], boss, seed);
+            for m in run.monsters.iter().filter(|m| m.kind == EntityKind::Mimic) {
+                assert!(m.hiding, "mimic {} spawned awake under {boss:?}, seed {seed}", m.id);
+                seen += 1;
+            }
         }
     }
+    assert!(seen > 0, "no seed had a mimic");
 }
 
 #[test]

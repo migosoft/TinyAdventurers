@@ -27,18 +27,14 @@ pub fn revealed(run: &mut Run, id: u32) {
     run.log.tags.revealed(id);
 }
 
-pub use tags::tag_name;
-
+#[allow(dead_code)] // Task 2 calls it.
 /// How the log names an entity: "Ayla", "Ayla's wolf", "Goblin Archer 2".
 pub(crate) fn tag_of(run: &Run, id: u32) -> String {
     tags::tag_of(run, id)
 }
 
+#[allow(dead_code)] // Task 2 calls it.
 /// (entity id, the `EntityKind` id its name comes from, number) for each sent entity with a tag.
 pub(crate) fn snapshot_tags(run: &Run, ents: &[EntSnap]) -> Vec<(u32, u8, u16)> {
     tags::snapshot_tags(run, ents)
-}
-
-pub fn export_tag_names() -> String {
-    tags::export_tag_names()
 }

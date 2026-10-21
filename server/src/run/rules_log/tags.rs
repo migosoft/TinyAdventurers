@@ -70,6 +70,7 @@ pub fn tag_name(kind: EntityKind) -> Option<&'static str> {
     }
 }
 
+#[allow(dead_code)] // Task 2 calls it.
 pub(crate) fn tag_of(run: &Run, id: u32) -> String {
     if let Some(p) = run.players.iter().find(|p| p.id == id) {
         return p.name.clone();
@@ -85,11 +86,13 @@ pub(crate) fn tag_of(run: &Run, id: u32) -> String {
     }
 }
 
+#[allow(dead_code)] // Task 2 calls it.
 pub(crate) fn snapshot_tags(run: &Run, ents: &[EntSnap]) -> Vec<(u32, u8, u16)> {
     ents.iter().filter_map(|e| run.log.tags.of.get(&e.0).map(|&(kind, n)| (e.0, kind as u8, n))).collect()
 }
 
 /// The `TAG_NAME` block for `defs.ts`: one entry per `EntityKind` that has a name.
+#[cfg(test)] // Only export.rs (test-only) uses it.
 pub fn export_tag_names() -> String {
     let rows: Vec<String> =
         EntityKind::ALL.iter().filter_map(|&k| tag_name(k).map(|n| format!("  {}: {:?},\n", k as u8, n))).collect();
