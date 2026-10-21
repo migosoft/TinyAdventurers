@@ -270,6 +270,10 @@ Special rooms with a creature that asks the heroes a riddle. If they solve it, t
 - **Monitoring stack:** OTLP export is ready (TECHNICAL.md §11c); ClickStack or another collector is not set up yet. HTTPS endpoints need the `reqwest-rustls` feature of `opentelemetry-otlp`.
 - **`X-Forwarded-For`** is not read, so behind a proxy the admin login limiter (like the player one) sees one IP for everyone.
 
+## Chat window (much later; the user, 2026-10-21)
+
+- A chat window so players in a party can write to each other during a run and in the waiting room. Not planned yet; do it after the progression plans. It may share its panel with the rules log (if that is built as a text panel).
+
 ## Other follow-ups
 - **Balancing pass (later, all at once):** progression, classes, enemies and boss fights together. All three bosses were played live without problems; their numbers are in `server/src/run/bosses/*.rs` and `defs/bosses.rs`.
 - **Loadouts:** choose primary/secondary per class. Each class has only its one pair today, so new abilities (server executor, client prediction, pack-sprite visuals) are needed first. The picker and a field on `Member` are the easy part.
