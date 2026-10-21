@@ -11,6 +11,7 @@ pub mod levels;
 pub mod light;
 pub mod objects;
 pub mod perception;
+pub mod rules_log;
 pub mod visibility;
 
 use crate::collision::MoveState;
@@ -146,6 +147,7 @@ pub struct Run {
     /// Someone used debug mode (immortal): no XP is banked for this run.
     pub debug_used: bool,
     pub srv_ms: f32,
+    pub log: rules_log::RulesLog,
 }
 
 /// A patch of fire that hurts heroes and allies (the dragon's; the wolf's fire).
@@ -176,6 +178,7 @@ impl Run {
             ended: None,
             debug_used: false,
             srv_ms: 0.0,
+            log: rules_log::RulesLog::default(),
             layout,
             level,
         };
@@ -312,6 +315,7 @@ impl Run {
             weight: stats.weight,
             ally: None,
         });
+        rules_log::spawned(self, id, d.kind);
         id
     }
 
@@ -773,6 +777,7 @@ impl Run {
 
     /// The mimic drops its disguise: a short pause while the lid flies open, then it hunts.
     pub fn wake_mimic(&mut self, mi: usize) {
+        rules_log::revealed(self, self.monsters[mi].id);
         let m = &mut self.monsters[mi];
         m.hiding = false;
         m.ai.hold = enemies::MIMIC_WAKE_T;

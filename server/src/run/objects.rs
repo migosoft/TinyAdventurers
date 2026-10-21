@@ -76,6 +76,7 @@ impl Run {
         let id = self.alloc_id();
         let res = crate::defs::objects::profile(kind).res;
         self.objects.push(WorldObject { id, kind, pos, radius: d.radius, solid: d.solid, res, state, gone: false });
+        crate::run::rules_log::spawned(self, id, kind);
         id
     }
 

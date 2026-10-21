@@ -80,6 +80,7 @@ pub fn spawn(run: &mut Run) {
         weight: stats.weight,
         ally: None,
     });
+    crate::run::rules_log::spawned(run, id, d.kind);
     enc_mut(run).boss_ent = id;
     let mut behaviour = bosses::create(boss_id);
     behaviour.spawn_extras(run, pos);

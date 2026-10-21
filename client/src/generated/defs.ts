@@ -1124,3 +1124,25 @@ export const ENEMY_KINDS = {
     }
   }
 } as const;
+
+export const TAG_NAME: Record<number, string> = {
+  10: "Goblin Archer",
+  11: "Skeleton Warrior",
+  12: "Skeleton Archer",
+  13: "Orc Warrior",
+  14: "Orc Archer",
+  15: "Necromancer",
+  16: "Raised Skeleton",
+  17: "Disciple",
+  18: "Mimic",
+  19: "Imp",
+  20: "Chort",
+  21: "Summoner",
+  22: "Ogre",
+  23: "Dire Wolf",
+  30: "Demon",
+  31: "Lich",
+  32: "Dragon",
+  80: "Chest",
+  81: "Barrel",
+};

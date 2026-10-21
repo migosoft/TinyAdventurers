@@ -192,7 +192,7 @@ fn export_defs() {
          export const EFFECT = {} as const;\n\n\
          export const EFFECTS: Record<number, {{ positive: boolean; prone: boolean; no_turn: boolean; flees: boolean; duration: number }}> = {};\n\n\
          export const EFFECT_LOOK = {} as const;\n\n\
-         export const ENEMY_KINDS = {} as const;\n",
+         export const ENEMY_KINDS = {} as const;\n\n{}",
         p(&json!(kinds)),
         p(&json!(anims)),
         p(&fl),
@@ -210,6 +210,7 @@ fn export_defs() {
         p(&json!(effect_defs)),
         p(&json!(effect_look)),
         p(&json!(enemy_kinds())),
+        crate::run::rules_log::tags::export_tag_names(),
     );
     std::fs::create_dir_all(out_dir()).unwrap();
     std::fs::write(out_dir().join("defs.ts"), ts).unwrap();
