@@ -35,10 +35,14 @@ export function debugChoices(cls: ClassId, slot: 'Primary' | 'Secondary'): Abili
 
 /** Debug mode only: `?debug&boss=demon|lich|dragon` preselects the end boss on the host's page. */
 function debugBoss(): BossId | null {
-  const q = new URLSearchParams(location.search);
-  const b = q.has('debug') ? (q.get('boss') ?? '') : '';
+  const b = debugOn() ? (new URLSearchParams(location.search).get('boss') ?? '') : '';
   const id = b.charAt(0).toUpperCase() + b.slice(1).toLowerCase();
   return BOSSES.includes(id as BossId) ? (id as BossId) : null;
+}
+
+/** Debug mode only (`?debug`): the waiting room shows the debug loadout picker. */
+function debugOn(): boolean {
+  return new URLSearchParams(location.search).has('debug');
 }
 
 export class Lobby {
@@ -192,7 +196,7 @@ export class Lobby {
       <div class="panel"><h2>Party (${room.players.length}/4)</h2><ul class="players">${players}</ul></div>
       <div class="panel"><h2>End boss${isHost ? '' : ' (chosen by the host)'}</h2><div class="bosses"></div></div>
       ${this.upgradesPanel()}
-      ${me && (isHost || !me.ready) ? this.debugLoadoutRow(room.run_id, me.class) : ''}
+      ${me && debugOn() && (isHost || !me.ready) ? this.debugLoadoutRow(room.run_id, me.class) : ''}
       <div class="row actions">
         <button id="leave">Leave</button>
         ${isHost ? `<button id="start" class="primary">Enter the dungeon</button>` : `<button id="ready" class="primary">${me?.ready ? 'Not ready' : 'Ready!'}</button>`}

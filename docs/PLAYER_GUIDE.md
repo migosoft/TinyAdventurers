@@ -45,12 +45,12 @@ Fragile, but deadly from range.
 
 ### Paladin, 120 HP
 An armoured holy warrior who keeps the party alive.
-- **Left – Strike (Sword):** a strike with your sword at the nearest enemy in reach.
+- **Left – Strike (Sword):** a swing of your sword toward the mouse pointer. It hits every enemy in reach in front of you.
 - **Right – Holy Light (10 s cooldown):** heals you and every ally close to you.
 
 ### Barbarian, 140 HP
 The toughest hero.
-- **Left – Strike (Great Axe):** a heavy strike. Slower than the sword, but it hits harder.
+- **Left – Strike (Great Axe):** a heavy swing toward the mouse pointer that hits every enemy in reach in front of you. Slower than the sword, but it hits harder.
 - **Right – Charge (5 s cooldown):** dash toward the mouse pointer, hitting every enemy you run through with your axe (a little weaker than a strike). It works with enemies right next to you.
 
 ### Elven Ranger, 90 HP

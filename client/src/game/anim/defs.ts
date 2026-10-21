@@ -10,8 +10,9 @@ import { DRAGON_ANIMS, DRAGON_FRAME, dragonFrameName, dragonPoints, type DragonA
 import { DEMON_ANIMS, DEMON_FRAME, demonFrameName, type DemonAnim } from "./demonFrames";
 
 // Player swings reach as far as the server hits: a hero's reach (server `HERO_REACH` +
-// `PLAYER_RADIUS`) + a typical monster radius. Strike hits a single target, so the arcs
-// are only the look of the sword's and the axe's swoosh.
+// `PLAYER_RADIUS`) + a typical monster radius. Strike hits every enemy in the aimed arc; these
+// arcs are fixed visuals of the sword's and the axe's swoosh, while the real arc follows the
+// weapon and DEX (`ResolvedAbility.arc`). Only the ranged primary's melee fallback is single-target.
 const HERO_REACH = 22;
 const SWORD = { reach: HERO_REACH + 5, arc: 1.75 };
 const AXE = { reach: HERO_REACH + 5, arc: 2.45, color: 0xffe0d0 };

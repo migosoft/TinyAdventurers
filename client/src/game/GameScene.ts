@@ -864,9 +864,11 @@ export class GameScene extends Phaser.Scene {
     // Our own projectiles are shown by the local cosmetic copy, also once it has ended.
     const stop = owner === this.info.you ? this.stoppedShots.get(shot) : undefined;
     // Predicted to stop, but the server's shot flew on past the enemy: show it from here on.
-    // Its newest snapshot position decides (not the extrapolated one, which may overshoot).
+    // Both the position it is drawn at (interpolated, so it reappears past the enemy, never before it)
+    // and its newest snapshot position (so an extrapolated overshoot of a shot that did stop never shows) must be past.
+    const past = (x: number, y: number) => stop !== undefined && (x - stop.x) * stop.dx + (y - stop.y) * stop.dy > stop.past;
     const raw = stop && this.interp.latest()?.get(e.id);
-    if (stop && raw && (raw[2] - stop.x) * stop.dx + (raw[3] - stop.y) * stop.dy > stop.past) {
+    if (raw && past(raw[2], raw[3]) && past(e.x, e.y)) {
       this.stoppedShots.delete(shot);
       this.endedShots.delete(shot);
     }

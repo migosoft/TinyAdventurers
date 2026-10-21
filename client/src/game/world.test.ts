@@ -150,6 +150,10 @@ describe('cosmeticPierce', () => {
     const r = cosmeticPierce(shot, 127.5, 24, phys, none);
     expect(r === 'stop' ? r : r.damage).toBeCloseTo(4, 9);
   });
+  it('stops at an exact kill, like the server', () => {
+    expect(cosmeticPierce(shot, 255, 16, phys, none)).toBe('stop');
+    expect(cosmeticPierce(shot, 255, 16 - 1e-12, phys, none)).toBe('stop');
+  });
   it('stops at an enemy it does not kill', () => expect(cosmeticPierce(shot, 255, 24, phys, none)).toBe('stop'));
   it('stops at an immune enemy', () => expect(cosmeticPierce(shot, 255, 5, phys, { ...none, Physical: 1.0 })).toBe('stop'));
   it('counts down a limited overkill pierce and stops at 0', () => {

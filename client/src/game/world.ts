@@ -123,11 +123,13 @@ export function abilityChoice(a: ResolvedAbility, slot: 0 | 1, inMelee: boolean)
 const MIN_RESISTANCE = -1;
 /** `pierce` value for "no limit" (`u8::MAX`). */
 const PIERCE_UNLIMITED = 255;
+/** The smallest rest that flies on; at or below it the kill is exact (`OVERKILL_EPS` in defs/damage.rs). */
+const OVERKILL_EPS = 1e-9;
 
 /**
  * Whether an own shot predicted to touch an enemy flies on, and with what
  * (server `impact`): it first passes `through` enemies with full damage, then
- * flies on with the rest of its damage only if it kills (`overkill_rest`), while
+ * flies on with the rest of its damage only if it kills with damage to spare (`overkill_rest`), while
  * `pierce` allows it. The enemy's HP is estimated from its byte share of max HP.
  * Unknown kinds and immune enemies stop it.
  */
@@ -143,8 +145,10 @@ export function cosmeticPierce(
   const hp = (hpShare / 255) * maxHp;
   let eff = 0;
   for (const [t, share] of Object.entries(split)) eff += share * (1 - Math.max(res[t] ?? 0, MIN_RESISTANCE));
-  if (eff <= 0 || state.damage * eff < hp) return 'stop';
-  return { pierce: state.pierce === PIERCE_UNLIMITED ? PIERCE_UNLIMITED : state.pierce - 1, through: 0, damage: state.damage - hp / eff };
+  if (eff <= 0) return 'stop';
+  const rest = state.damage - hp / eff;
+  if (rest <= OVERKILL_EPS) return 'stop';
+  return { pierce: state.pierce === PIERCE_UNLIMITED ? PIERCE_UNLIMITED : state.pierce - 1, through: 0, damage: rest };
 }
 
 // ------------------------------------------------------------ local prediction
