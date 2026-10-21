@@ -3,13 +3,14 @@
 use super::entities::{Pierce, Projectile};
 use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
-use crate::defs::abilities::{self as ab, AbilityId, Shape};
+use crate::defs::abilities::{self as ab, AbilityId, Shape, Uses};
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::damage::{kind_split, overkill_rest, Damage, DamageSplit};
-use crate::defs::effects::OnHit;
+use crate::defs::damage::DamageType;
+use crate::defs::effects::{EffectKind, EffectLook, OnHit};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::defs::lights::{self, LightKind};
-use super::effects::Creature;
+use super::effects::{Apply, Creature};
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
 use crate::sheet::ResolvedAbility;
@@ -61,7 +62,7 @@ pub fn melee_target(run: &Run, pi: usize) -> Option<MeleeTarget> {
 fn melee_strike(run: &mut Run, pi: usize, targets: &[MeleeTarget], strike: &ResolvedAbility, crit: bool) {
     let pos = run.players[pi].pos();
     let aim = run.players[pi].aim;
-    let mut dmg = damage_of(strike);
+    let mut dmg = weapon_damage(run, pi, strike);
     for &t in targets {
         match t {
             MeleeTarget::Monster(mi) => {
@@ -93,6 +94,18 @@ fn kind_of(id: Option<u8>) -> EntityKind {
 /// The damage of one hit of `a`: its split, on-hit and power.
 fn damage_of(a: &ResolvedAbility) -> Damage {
     Damage { on_hit: a.on_hit, ..Damage::new(a.damage, a.split).with_power(a.power) }
+}
+
+/// The damage of one hit of the weapon attack `a` (or of an ability that uses none: `damage_of`).
+/// While the hero is coated (Poison Coat) every weapon attack adds a poison share and applies
+/// Poisoned instead of its weapon's own on-hit.
+fn weapon_damage(run: &Run, pi: usize, a: &ResolvedAbility) -> Damage {
+    let dmg = damage_of(a);
+    if ab::def(a.id).uses == Uses::Nothing || !run.players[pi].effects.has(EffectKind::Coated) {
+        return dmg;
+    }
+    let on_hit = OnHit { kind: EffectKind::Poisoned, secs: ab::COAT_POISON_SECS, magical: false, power: a.power, look: EffectLook::Plain };
+    Damage { split: a.split.with_shares(&[(DamageType::Poison, ab::COAT_SHARE)]), on_hit: Some(on_hit), ..dmg }
 }
 
 /// Uses the hero's primary or secondary ability, with its numbers from the hero's sheet.
@@ -153,25 +166,26 @@ fn use_projectile(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> A
     let crit = false;
     let pierce = Pierce::new(a.pierce, a.pierce_through);
     let life = a.range / a.speed;
+    let w = weapon_damage(run, pi, a);
     match a.id {
         AbilityId::MagicMissile => {
-            spawn_player_projectile(run, pi, EntityKind::Missile, shot, Vec2::from_angle(aim), a.speed, a.damage, a.radius, life, 0.0, None, crit, a.split, a.on_hit, a.power, pierce);
+            spawn_player_projectile(run, pi, EntityKind::Missile, shot, Vec2::from_angle(aim), a.speed, w.amount, a.radius, life, 0.0, None, crit, w.split, w.on_hit, w.power, pierce);
         }
         AbilityId::FrostShard | AbilityId::Judgement | AbilityId::Shoot | AbilityId::Hurl => {
-            spawn_player_projectile(run, pi, kind_of(a.projectile), shot, Vec2::from_angle(aim), a.speed, a.damage, a.radius, life, 0.0, None, crit, a.split, a.on_hit, a.power, pierce);
+            spawn_player_projectile(run, pi, kind_of(a.projectile), shot, Vec2::from_angle(aim), a.speed, w.amount, a.radius, life, 0.0, None, crit, w.split, w.on_hit, w.power, pierce);
         }
         // It stops at the first enemy; the jumps are made there (`chain_jumps`).
         AbilityId::ChainSpark => {
-            spawn_player_projectile(run, pi, kind_of(a.projectile), shot, Vec2::from_angle(aim), a.speed, a.damage, a.radius, life, 0.0, None, crit, a.split, a.on_hit, a.power, Pierce::Never);
+            spawn_player_projectile(run, pi, kind_of(a.projectile), shot, Vec2::from_angle(aim), a.speed, w.amount, a.radius, life, 0.0, None, crit, w.split, w.on_hit, w.power, Pierce::Never);
         }
         AbilityId::Volley => {
             let step = ab::VOLLEY_SPREAD / (ab::VOLLEY_ARROWS - 1) as f64;
             for i in 0..ab::VOLLEY_ARROWS {
                 let angle = aim + (i as f64 - (ab::VOLLEY_ARROWS - 1) as f64 / 2.0) * step;
-                spawn_player_projectile(run, pi, kind_of(a.projectile), ab::volley_shot(shot, i), Vec2::from_angle(angle), a.speed, a.damage, a.radius, life, 0.0, None, crit, a.split, a.on_hit, a.power, pierce);
+                spawn_player_projectile(run, pi, kind_of(a.projectile), ab::volley_shot(shot, i), Vec2::from_angle(angle), a.speed, w.amount, a.radius, life, 0.0, None, crit, w.split, w.on_hit, w.power, pierce);
             }
         }
-        AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf => {
+        AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
             unreachable!("{:?} is not a projectile", a.id)
         }
     }
@@ -193,19 +207,27 @@ fn use_blast(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> Anim {
             let life = a.range / a.speed + 0.1;
             spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, a.speed, a.damage, 4.0, life, a.radius, Some(target), crit, a.split, a.on_hit, a.power, Pierce::Never);
         }
-        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
+        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
             unreachable!("{:?} is not a blast", a.id)
         }
     }
     Anim::Cast
 }
 
-/// A swing of the melee weapon: Strike.
+/// A swing of the melee weapon: Strike, Smite (a holy flash where it first hits), Whirl (all around)
+/// and Flanking Thrust (double from behind).
 fn use_swing(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Swing);
     match a.id {
-        AbilityId::Strike => melee_arc(run, pi, a, false),
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
+        AbilityId::Strike | AbilityId::Whirl | AbilityId::FlankingThrust => {
+            melee_arc(run, pi, a, false);
+        }
+        AbilityId::Smite => {
+            if let Some(at) = melee_arc(run, pi, a, false) {
+                run.add_flash(LightKind::Holy, at, ab::SMITE_FLASH);
+            }
+        }
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat => {
             unreachable!("{:?} is not a swing", a.id)
         }
     }
@@ -216,7 +238,7 @@ fn use_swing(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim 
 fn use_ring(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Ring);
     match a.id {
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
             unreachable!("{:?} is not a ring", a.id)
         }
     }
@@ -234,7 +256,7 @@ fn use_dash(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
             p.mv.dash_dy = dir.y;
             p.dash_hit.clear();
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
             unreachable!("{:?} is not a dash", a.id)
         }
     }
@@ -264,7 +286,7 @@ fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> A
             }
             run.players[pi].healing += total;
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
             unreachable!("{:?} is not a self area", a.id)
         }
     }
@@ -275,20 +297,25 @@ fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> A
 fn use_ground_area(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::GroundArea);
     match a.id {
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
             unreachable!("{:?} is not a ground area", a.id)
         }
     }
 }
 
-/// An effect on the user only: no ability has one yet.
-fn use_buff(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
+/// An effect on the user only: Poison Coat.
+fn use_buff(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Buff);
     match a.id {
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
+        AbilityId::PoisonCoat => {
+            let own = a.effect.expect("Poison Coat has its own effect");
+            run.apply(Creature::Player(pi), Apply::from_hit(own));
+        }
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust => {
             unreachable!("{:?} is not a buff", a.id)
         }
     }
+    Anim::Cast
 }
 
 /// Summons or heals the companion: Summon Wolf.
@@ -296,18 +323,20 @@ fn use_summon(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim
     debug_assert!(ab::def(a.id).shape == Shape::Summon);
     match a.id {
         AbilityId::SummonWolf => super::companion::use_ability(run, pi),
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
             unreachable!("{:?} is not a summon", a.id)
         }
     }
     Anim::Cast
 }
 
-/// A swing of the melee ability `a` (its reach, arc, damage, split, on-hit and power).
-fn melee_arc(run: &mut Run, pi: usize, a: &ResolvedAbility, crit: bool) {
+/// A swing of the melee ability `a` (its reach, arc, damage, split, on-hit and power). A hit from
+/// behind its target (`a.behind`) does `BEHIND_MULT` times the damage and counts as a crit.
+/// Returns where it first hit a monster.
+fn melee_arc(run: &mut Run, pi: usize, a: &ResolvedAbility, crit: bool) -> Option<Vec2> {
     let rw = rewind_ticks(run, pi);
     let (pos, aim) = (run.players[pi].pos(), run.players[pi].aim);
-    let (range, arc, dmg) = (a.range, a.arc, damage_of(a));
+    let (range, arc, dmg) = (a.range, a.arc, weapon_damage(run, pi, a));
     let hits: Vec<usize> = run
         .monsters
         .iter()
@@ -327,8 +356,15 @@ fn melee_arc(run: &mut Run, pi: usize, a: &ResolvedAbility, crit: bool) {
         })
         .map(|(i, _)| i)
         .collect();
+    let first = hits.first().map(|&mi| run.monsters[mi].pos);
     for mi in hits {
-        run.hurt_monster(mi, dmg, crit, Some(pi));
+        let m = &run.monsters[mi];
+        let behind = a.behind > 0.0 && angle_diff(m.pos_ago(rw).angle_to(pos), m.aim + std::f64::consts::PI).abs() <= a.behind;
+        if behind {
+            run.hurt_monster(mi, Damage { amount: dmg.amount * ab::BEHIND_MULT, ..dmg }, true, Some(pi));
+        } else {
+            run.hurt_monster(mi, dmg, crit, Some(pi));
+        }
         if a.push > 0.0 {
             run.knock_creature(Creature::Monster(mi), pos, aim, a.push, a.push_str);
         }
@@ -348,6 +384,7 @@ fn melee_arc(run: &mut Run, pi: usize, a: &ResolvedAbility, crit: bool) {
     for oi in objs {
         crate::run::objects::hurt_object(run, oi, dmg, Some(by));
     }
+    first
 }
 
 /// Barbarian Charge: damage each monster touched once per dash, with the secondary's damage, split, on-hit and power.
@@ -355,7 +392,7 @@ pub fn dash_contact(run: &mut Run, pi: usize) {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
     let (aim, ab) = (run.players[pi].aim, run.players[pi].sheet.secondary);
-    let dmg = damage_of(&ab);
+    let dmg = weapon_damage(run, pi, &ab);
     let hits: Vec<(usize, u32)> = run
         .monsters
         .iter()
@@ -1570,7 +1607,8 @@ mod tests {
     use crate::defs::damage::{resolve, DamageType};
     use crate::defs::effects::EffectKind;
     use crate::defs::items::Equipment;
-    use crate::defs::loadout::{Build, Loadout, Pick, Source};
+    use crate::defs::loadout::{Build, Loadout, LoadoutError, Pick, Source};
+    use crate::defs::attributes::Attr;
 
     /// A run whose one hero of `class` has `id` in `slot` (from its own pool), `extra` Attribute
     /// points and `equipment`, on a cleared, open floor.
@@ -1775,5 +1813,193 @@ mod tests {
         assert!(run.monsters[mi].hp < 1000.0, "the rapier struck");
         assert!(run.projectiles.is_empty());
         assert_eq!(run.players[0].cd1, run.players[0].sheet.fallback.cooldown, "the rapier's interval");
+    }
+
+    // ---- Plan 3b: weapon swings and the coat ----
+
+    use crate::defs::abilities::{BEHIND_ARC, BEHIND_MULT, COAT_POISON_SECS, COAT_SHARE, SMITE_FLASH};
+    use crate::defs::effects::OnHit;
+    use crate::run::light::Anchor;
+    use std::f64::consts::{PI, TAU};
+
+    /// The damage hero 0's weapon deals to monster `mi` in one hit of `dmg` (its resistances applied).
+    fn dealt(run: &Run, mi: usize, dmg: f64, split: DamageSplit) -> f64 {
+        resolve(&Damage::new(dmg, split), &run.monsters[mi].effects.res(run.monsters[mi].res))
+    }
+
+    fn paladin_smite() -> Run {
+        run_with_ability(ClassId::Paladin, AbilitySlot::Primary, AbilityId::Smite, Attributes::new(0, 0, 0, 0, 0, 1), Equipment::starter(ClassId::Paladin))
+    }
+
+    #[test]
+    fn smite_adds_holy_and_flashes() {
+        let mut run = paladin_smite();
+        let a = run.players[0].sheet.primary;
+        assert_eq!(a.id, AbilityId::Smite);
+        let sword = run.players[0].sheet.melee;
+        assert!((a.damage - 20.0 * 1.4).abs() < 1e-9 && (sword.damage - 20.0).abs() < 1e-9);
+        assert!((a.split.share(DamageType::Magical) - 0.3).abs() < 1e-12);
+        assert!((a.split.share(DamageType::Physical) - 0.7).abs() < 1e-12);
+        let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 20.0, 1000.0);
+        let at = run.monsters[mi].pos;
+        try_use(&mut run, 0, true, 1);
+        assert!((run.players[0].cd1 - 0.45 * 1.6).abs() < 1e-9);
+        let expect = dealt(&run, mi, 28.0, a.split);
+        assert!((lost(&run, mi, 1000.0) - expect).abs() < 1e-9, "{} vs {expect}", lost(&run, mi, 1000.0));
+        let flash = run.lights.sources.iter().find(|s| s.kind == LightKind::Holy).expect("a Holy flash");
+        assert!(matches!(flash.anchor, Anchor::Point(p) if p.dist(at) < 1e-9), "at the first enemy hit");
+        assert!((flash.expires.unwrap() - (run.time + SMITE_FLASH)).abs() < 1e-9);
+
+        // A swing at nothing makes no flash.
+        let mut run = paladin_smite();
+        try_use(&mut run, 0, true, 1);
+        assert!(!run.lights.sources.iter().any(|s| s.kind == LightKind::Holy && s.expires.is_some()), "no flash");
+    }
+
+    #[test]
+    fn smite_needs_a_sword_mace_or_hammer() {
+        use crate::defs::loadout::check_pick;
+        use crate::defs::requirements::Requirement;
+        use crate::defs::weapons::WeaponKind;
+        let d = ab::def(AbilityId::Smite);
+        let attrs = Attributes::new(15, 8, 13, 10, 12, 15);
+        let kinds = &[WeaponKind::Sword, WeaponKind::Mace, WeaponKind::Hammer];
+        assert_eq!(check_pick(&d, false, &attrs, Some(WeaponKind::Axe)), Err(LoadoutError::Requirement(AbilityId::Smite, Requirement::WeaponKind(kinds))));
+        for k in kinds {
+            assert_eq!(check_pick(&d, false, &attrs, Some(*k)), Ok(()));
+        }
+        // Without the CHA it is refused too.
+        let weak = Attributes::new(15, 8, 13, 10, 12, 14);
+        assert_eq!(check_pick(&d, false, &weak, Some(WeaponKind::Sword)), Err(LoadoutError::Requirement(AbilityId::Smite, Requirement::Attr(Attr::Cha, 15))));
+        // A Paladin's own build can hold it (her weapons are all of the three kinds).
+        let build = Build { own: vec![AbilityId::Smite], loadout: Loadout { primary: Pick { ability: AbilityId::Smite, source: Source::Own }, ..Loadout::start(ClassId::Paladin) }, extra: Attributes::new(0, 0, 0, 0, 0, 1), ..Build::start(ClassId::Paladin) };
+        assert!(crate::sheet::hero_sheet(ClassId::Paladin, &build).is_ok());
+    }
+
+    #[test]
+    fn whirl_hits_all_around() {
+        let mut run = run_with_ability(ClassId::Barbarian, AbilitySlot::Primary, AbilityId::Whirl, Attributes::new(0, 1, 0, 0, 0, 0), Equipment::starter(ClassId::Barbarian));
+        let a = run.players[0].sheet.primary;
+        assert_eq!(a.id, AbilityId::Whirl);
+        assert!((a.arc - TAU).abs() < 1e-12);
+        let axe = run.players[0].sheet.melee;
+        let here = run.players[0].pos();
+        let ids: Vec<usize> = [Vec2::new(20.0, 0.0), Vec2::new(-20.0, 0.0), Vec2::new(0.0, 20.0), Vec2::new(0.0, -20.0)]
+            .into_iter()
+            .map(|d| {
+                let id = run.spawn_enemy(EnemyType::GoblinArcher, here + d, None);
+                let mi = run.monster_idx(id).unwrap();
+                run.monsters[mi].hp = 1000.0;
+                mi
+            })
+            .collect();
+        try_use(&mut run, 0, true, 1);
+        assert!((run.players[0].cd1 - axe.cooldown * 1.3).abs() < 1e-9, "0.8 x 1.3");
+        for &mi in &ids {
+            let expect = dealt(&run, mi, axe.damage * 0.75, axe.split);
+            assert!((lost(&run, mi, 1000.0) - expect).abs() < 1e-9, "{} vs {expect}", lost(&run, mi, 1000.0));
+        }
+    }
+
+    fn ranger_thrust() -> (Run, usize) {
+        let mut run = run_with_ability(ClassId::ElvenRanger, AbilitySlot::Primary, AbilityId::FlankingThrust, Attributes::new(0, 5, 0, 0, 0, 0), Equipment::starter(ClassId::ElvenRanger));
+        assert_eq!(run.players[0].sheet.primary.id, AbilityId::FlankingThrust);
+        assert!((run.players[0].sheet.primary.behind - BEHIND_ARC).abs() < 1e-12);
+        let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 18.0, 1000.0);
+        (run, mi)
+    }
+
+    /// One thrust at a goblin whose back is `off` rad from the hero (0: facing straight away): the damage and the Dmg event's crit.
+    fn thrust_at(run: &mut Run, mi: usize, off: f64) -> (f64, bool) {
+        // The hero is west of the goblin: aim 0 faces away from the hero, so its back is to the hero.
+        run.monsters[mi].aim = off;
+        run.monsters[mi].hp = 1000.0;
+        run.players[0].cd1 = 0.0;
+        run.events.clear();
+        try_use(run, 0, true, 1);
+        let crit = run.events.iter().find_map(|(e, _)| if let Ev::Dmg { crit, .. } = e { Some(*crit) } else { None }).expect("a hit");
+        (lost(run, mi, 1000.0), crit)
+    }
+
+    #[test]
+    fn flanking_thrust_doubles_from_behind() {
+        let (mut run, mi) = ranger_thrust();
+        let blade = run.players[0].sheet.melee;
+        let one = dealt(&run, mi, blade.damage, blade.split);
+        let (v, crit) = thrust_at(&mut run, mi, 0.0);
+        assert!((v - one * BEHIND_MULT).abs() < 1e-9 && crit, "from behind: {v} vs {}", one * BEHIND_MULT);
+        let (v, crit) = thrust_at(&mut run, mi, PI);
+        assert!((v - one).abs() < 1e-9 && !crit, "facing the ranger");
+        let deg = |d: f64| d.to_radians();
+        let (v, crit) = thrust_at(&mut run, mi, deg(59.0));
+        assert!((v - one * 2.0).abs() < 1e-9 && crit, "59 degrees off its back");
+        let (v, crit) = thrust_at(&mut run, mi, deg(61.0));
+        assert!((v - one).abs() < 1e-9 && !crit, "61 degrees off its back");
+    }
+
+    #[test]
+    fn find_the_gap_widens_behind() {
+        let (mut run, mi) = ranger_thrust();
+        let blade = run.players[0].sheet.melee;
+        let one = dealt(&run, mi, blade.damage, blade.split);
+        let (v, _) = thrust_at(&mut run, mi, 80.0_f64.to_radians());
+        assert!((v - one).abs() < 1e-9, "80 degrees is outside the plain arc");
+        run.players[0].sheet.primary.behind += 30.0_f64.to_radians();
+        let (v, crit) = thrust_at(&mut run, mi, 80.0_f64.to_radians());
+        assert!((v - one * 2.0).abs() < 1e-9 && crit, "and inside the widened one");
+    }
+
+    #[test]
+    fn poison_coat_poisons_weapon_attacks_only() {
+        let mut run = run_with_ability(ClassId::ElvenRanger, AbilitySlot::Secondary, AbilityId::PoisonCoat, Attributes::new(0, 0, 0, 0, 1, 0), Equipment::starter(ClassId::ElvenRanger));
+        let coat = run.players[0].sheet.secondary;
+        assert_eq!(coat.id, AbilityId::PoisonCoat);
+        assert_eq!(run.players[0].sheet.primary.id, AbilityId::Shoot);
+        let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
+        let bow = run.players[0].sheet.primary;
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.players[0].cd2, 16.0);
+        let held = run.players[0].effects.list().iter().find(|e| e.kind == EffectKind::Coated).expect("coated");
+        assert!((held.left - 6.0).abs() < 1e-9);
+        // A bow shot carries the share and the on-hit.
+        try_use(&mut run, 0, true, 2);
+        let shot = run.projectiles[0].damage;
+        assert!((shot.split.share(DamageType::Poison) - COAT_SHARE).abs() < 1e-12);
+        assert!((shot.split.share(DamageType::Physical) - (1.0 - COAT_SHARE)).abs() < 1e-12);
+        let on_hit = shot.on_hit.expect("the coat's on-hit");
+        assert_eq!((on_hit.kind, on_hit.secs, on_hit.magical, on_hit.power), (EffectKind::Poisoned, COAT_POISON_SECS, false, bow.power));
+        fly(&mut run);
+        let m = Creature::Monster(mi);
+        assert!(run.has_effect(m, EffectKind::Poisoned) && !run.has_effect(m, EffectKind::Tainted), "Poisoned replaces the Tainted its share alone would give");
+        // The coat itself is no weapon attack: a Technique with no weapon adds nothing to itself.
+        assert_eq!(run.players[0].sheet.secondary.split, coat.split);
+        // After 6 s the bow is plain again.
+        for _ in 0..361 {
+            run.tick_effects();
+        }
+        assert!(!run.players[0].effects.has(EffectKind::Coated));
+        run.players[0].cd1 = 0.0;
+        try_use(&mut run, 0, true, 3);
+        let plain = run.projectiles.last().unwrap().damage;
+        assert_eq!(plain.split, bow.split);
+        assert_eq!(plain.on_hit, bow.on_hit);
+    }
+
+    #[test]
+    fn the_coat_replaces_a_weapon_on_hit_while_it_lasts() {
+        let slowed = OnHit { kind: EffectKind::Slowed, secs: 3.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain };
+        let strike = |coated: bool| {
+            let mut run = run_with_ability(ClassId::Barbarian, AbilitySlot::Primary, AbilityId::Strike, Attributes::default(), Equipment::starter(ClassId::Barbarian));
+            run.players[0].sheet.primary.on_hit = Some(slowed);
+            if coated {
+                run.apply_effect(Creature::Player(0), EffectKind::Coated, Some(6.0));
+            }
+            let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 20.0, 1000.0);
+            try_use(&mut run, 0, true, 1);
+            let m = Creature::Monster(mi);
+            (run.has_effect(m, EffectKind::Poisoned), run.has_effect(m, EffectKind::Slowed))
+        };
+        assert_eq!(strike(true), (true, false), "the coat's Poisoned wins");
+        assert_eq!(strike(false), (false, true), "the weapon's own effect comes back");
     }
 }

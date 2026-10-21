@@ -245,6 +245,15 @@ export const ABILITIES = {
     "shape": "Blast",
     "slot": "Secondary"
   },
+  "FlankingThrust": {
+    "classes": [
+      "ElvenRanger"
+    ],
+    "name": "Flanking Thrust",
+    "ranged": false,
+    "shape": "Swing",
+    "slot": "Primary"
+  },
   "FrostShard": {
     "classes": [
       "Wizard"
@@ -290,6 +299,15 @@ export const ABILITIES = {
     "shape": "Projectile",
     "slot": "Primary"
   },
+  "PoisonCoat": {
+    "classes": [
+      "ElvenRanger"
+    ],
+    "name": "Poison Coat",
+    "ranged": false,
+    "shape": "Buff",
+    "slot": "Secondary"
+  },
   "Shoot": {
     "classes": [
       "ElvenRanger"
@@ -297,6 +315,15 @@ export const ABILITIES = {
     "name": "Shoot",
     "ranged": true,
     "shape": "Projectile",
+    "slot": "Primary"
+  },
+  "Smite": {
+    "classes": [
+      "Paladin"
+    ],
+    "name": "Smite",
+    "ranged": false,
+    "shape": "Swing",
     "slot": "Primary"
   },
   "Strike": {
@@ -325,6 +352,15 @@ export const ABILITIES = {
     "name": "Volley",
     "ranged": true,
     "shape": "Projectile",
+    "slot": "Primary"
+  },
+  "Whirl": {
+    "classes": [
+      "Barbarian"
+    ],
+    "name": "Whirl",
+    "ranged": false,
+    "shape": "Swing",
     "slot": "Primary"
   }
 } as const;

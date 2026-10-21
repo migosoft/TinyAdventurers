@@ -36,6 +36,14 @@ super::enum_list::listed_enum! {
         Hurl = 10,
         /// Three arrows in a fan.
         Volley = 11,
+        /// A sword, mace or hammer strike with a holy share.
+        Smite = 12,
+        /// A swing all around.
+        Whirl = 13,
+        /// A thrust that does double from behind.
+        FlankingThrust = 14,
+        /// Coats the weapon in poison for a while.
+        PoisonCoat = 15,
     }
 }
 
@@ -151,6 +159,14 @@ pub const VOLLEY_SPREAD: f64 = 30.0 * std::f64::consts::PI / 180.0;
 pub const CHAIN_JUMPS: u8 = 2;
 pub const CHAIN_REACH: f64 = 48.0;
 pub const CHAIN_FALLOFF: f64 = 0.7;
+/// "From behind": the half-angle (60 degrees) of the cone behind a target, and the factor on a hit inside it.
+pub const BEHIND_ARC: f64 = 60.0 * std::f64::consts::PI / 180.0;
+pub const BEHIND_MULT: f64 = 2.0;
+/// Poison Coat: the poison share added to every weapon attack, and the seconds of Poisoned it applies.
+pub const COAT_SHARE: f64 = 0.3;
+pub const COAT_POISON_SECS: f64 = 3.0;
+/// How long (s) Smite's holy flash lasts.
+pub const SMITE_FLASH: f64 = 0.3;
 
 /// The id of arrow `i` of a Volley that starts at `shot`: the server's rule; the client
 /// reserves ids so that none is 0.
@@ -220,6 +236,26 @@ pub fn def(id: AbilityId) -> AbilityDef {
             req: &[Requirement::Attr(Attr::Dex, 15), Requirement::WeaponKind(&[WeaponKind::Bow, WeaponKind::Longbow])],
             weapon_mult: WeaponMult { damage: 0.6, time: 1.4, ..WeaponMult::ONE },
             ..base("Volley", Primary, C::WeaponAttack, Uses::Ranged, true, Shape::Projectile, NO_OWN, &[K::ElvenRanger])
+        },
+        Smite => AbilityDef {
+            req: &[Requirement::Attr(Attr::Cha, 15), Requirement::WeaponKind(&[WeaponKind::Sword, WeaponKind::Mace, WeaponKind::Hammer])],
+            weapon_mult: WeaponMult { damage: 1.4, time: 1.6, share: Some((DamageType::Magical, 0.3)), ..WeaponMult::ONE },
+            ..base("Smite", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[K::Paladin])
+        },
+        Whirl => AbilityDef {
+            req: &[Requirement::Attr(Attr::Dex, 14)],
+            weapon_mult: WeaponMult { damage: 0.75, time: 1.3, arc: Some(std::f64::consts::TAU), ..WeaponMult::ONE },
+            ..base("Whirl", Primary, C::Technique, Uses::Melee, false, Shape::Swing, NO_OWN, &[K::Barbarian])
+        },
+        FlankingThrust => AbilityDef {
+            req: &[Requirement::Attr(Attr::Dex, 16), Requirement::WeaponKind(&[WeaponKind::Dagger, WeaponKind::DuellingSword, WeaponKind::Katana, WeaponKind::Machete])],
+            behind: BEHIND_ARC,
+            ..base("Flanking Thrust", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[K::ElvenRanger])
+        },
+        PoisonCoat => AbilityDef {
+            req: &[Requirement::Attr(Attr::Wil, 15)],
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Coated, power: Attr::Wil, look: EffectLook::Plain }), ..own(0.0, 16.0, 0.0, 0.0, 0.0, 6.0, None, 0) },
+            ..base("Poison Coat", Secondary, C::Technique, Uses::Nothing, false, Shape::Buff, NO_OWN, &[K::ElvenRanger])
         },
         SummonWolf => base("Summon Wolf", Secondary, C::Innate, Uses::Nothing, false, Shape::Summon, own(0.0, 8.0, 0.0, 0.0, 0.0, 0.0, None, 13), &[K::ElvenRanger]),
     }
