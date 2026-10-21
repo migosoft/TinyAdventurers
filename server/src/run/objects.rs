@@ -818,9 +818,9 @@ mod tests {
         assert!(run.objects.iter().all(|o| o.id != id), "and it is gone");
     }
 
-    /// Player 0 uses `id`, lent the sheet of the class that owns it.
+    /// Player 0 uses `id`, lent the sheet of the first class that can hold it.
     fn use_ability(run: &mut Run, id: crate::defs::abilities::AbilityId, aim: f64) {
-        let owner = crate::defs::abilities::owner(id);
+        let owner = crate::defs::abilities::def(id).classes[0];
         let sheet = crate::sheet::hero_sheet(owner, Default::default(), &crate::defs::items::Equipment::starter(owner), &Default::default());
         run.players[0].sheet = sheet;
         run.players[0].aim = aim;
@@ -855,19 +855,19 @@ mod tests {
     fn a_sword_breaks_a_chest() {
         let mut run = clear_run(BossId::Lich);
         let (_, oi) = chest_at(&mut run, Vec2::new(14.0, 0.0));
-        use_ability(&mut run, crate::defs::abilities::AbilityId::Sword, 0.0);
+        use_ability(&mut run, crate::defs::abilities::AbilityId::Strike, 0.0);
         assert!(run.objects[oi].gone);
     }
 
     #[test]
     fn the_dagger_stabs_a_chest_in_reach_like_a_hidden_mimic() {
-        use crate::defs::abilities::DAGGER_RANGE;
+        let reach = crate::defs::classes::HERO_REACH + crate::defs::classes::PLAYER_RADIUS;
         let mut run = clear_run(BossId::Lich);
         let r = run.objects.len();
-        let (_, oi) = chest_at(&mut run, Vec2::new(6.0 + DAGGER_RANGE - 1.0, 0.0));
+        let (_, oi) = chest_at(&mut run, Vec2::new(6.0 + reach - 1.0, 0.0));
         assert_eq!(oi, r);
         // Aimed away from it: the dagger still picks what is in reach, as it does for a mimic.
-        use_ability(&mut run, crate::defs::abilities::AbilityId::CrossbowDagger, std::f64::consts::PI);
+        use_ability(&mut run, crate::defs::abilities::AbilityId::Shoot, std::f64::consts::PI);
         assert!(run.objects[oi].gone, "stabbed");
         assert!(run.projectiles.is_empty(), "no bolt");
         assert_eq!(run.players[0].anim, crate::defs::kinds::Anim::Melee);

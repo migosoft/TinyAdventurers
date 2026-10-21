@@ -149,8 +149,8 @@ pub struct RunStartInfo {
     pub speed: f64,
     /// Primary and secondary ability with their numbers resolved for the receiving hero.
     pub abilities: [crate::sheet::ResolvedAbility; 2],
-    /// The melee thrust of a ranged hero, if any.
-    pub fallback: Option<crate::sheet::ResolvedAbility>,
+    /// Strike with the melee weapon: what a ranged primary does in melee.
+    pub fallback: crate::sheet::ResolvedAbility,
     /// Every static light (torches, lava) and its state.
     pub lights: Vec<LightInfo>,
 }

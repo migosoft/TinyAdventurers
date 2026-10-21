@@ -12,7 +12,6 @@ use crate::defs::abilities::{self as ab};
 use crate::defs::attributes::Attr;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::effects::{self, EffectKind};
-use crate::defs::items::Equipment;
 use crate::defs::{bosses, enemies};
 use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::dungeon::{Map, Tile, TILE};
@@ -44,14 +43,13 @@ fn export_defs() {
             )
         })
         .collect();
-    let abilities: serde_json::Map<String, serde_json::Value> =
-        ab::ALL.iter().map(|a| (format!("{a:?}"), serde_json::to_value(ab::def(*a)).unwrap())).collect();
-    // The Elven Ranger's rapier thrust at her start Attributes.
-    let ranger = ClassId::ElvenRanger;
-    let rapier_cooldown = crate::sheet::hero_sheet(ranger, Default::default(), &Equipment::starter(ranger), &Default::default())
-        .fallback
-        .expect("the ranger has a rapier thrust")
-        .cooldown;
+    let abilities: serde_json::Map<String, serde_json::Value> = ab::AbilityId::ALL
+        .iter()
+        .map(|&a| {
+            let d = ab::def(a);
+            (format!("{a:?}"), json!({ "name": d.name, "slot": d.slot, "ranged": d.ranged, "classes": d.classes }))
+        })
+        .collect();
     let mut consts = json!({
         "TILE": TILE,
         "TICK_HZ": TICK_HZ,
@@ -62,8 +60,6 @@ fn export_defs() {
         "DASH_SPEED": ab::DASH_SPEED,
         "KNOCK_DECAY": ab::KNOCK_DECAY,
         "KNOCK_MIN_SPEED": ab::KNOCK_MIN_SPEED,
-        "DAGGER_RANGE": ab::DAGGER_RANGE,
-        "DAGGER_COOLDOWN": rapier_cooldown,
         "MIMIC_HOP_CYCLE": enemies::MIMIC_HOP_CYCLE,
         "MIMIC_HOP_AIR_START": enemies::MIMIC_HOP_AIR.0,
         "MIMIC_HOP_AIR_END": enemies::MIMIC_HOP_AIR.1,
@@ -175,7 +171,8 @@ fn export_defs() {
          export const LIGHT_KIND = {} as const;\n\n\
          export const LIGHT: Record<number, {{ radius: number; colour: number; intensity: number; flicker: number }}> = {};\n\n\
          export const EFFECT = {} as const;\n\n\
-         export const EFFECTS: Record<number, {{ positive: boolean; prone: boolean; no_turn: boolean; duration: number }}> = {};\n",
+         export const EFFECTS: Record<number, {{ positive: boolean; prone: boolean; no_turn: boolean; duration: number }}> = {};\n\n\
+         export const ENEMY_KINDS = {} as const;\n",
         p(&json!(kinds)),
         p(&json!(anims)),
         p(&fl),
@@ -190,9 +187,48 @@ fn export_defs() {
         p(&json!(light_defs)),
         p(&json!(effect_ids)),
         p(&json!(effect_defs)),
+        p(&json!(enemy_kinds())),
     );
     std::fs::create_dir_all(out_dir()).unwrap();
     std::fs::write(out_dir().join("defs.ts"), ts).unwrap();
+}
+
+/// Each enemy kind's max HP and damage resistances, from the first enemy type of that kind
+/// (the client estimates an enemy's HP from its HP share to predict a kill).
+fn enemy_kinds() -> serde_json::Map<String, serde_json::Value> {
+    let mut out = serde_json::Map::new();
+    for t in enemies::EnemyType::ALL {
+        let key = format!("{:?}", enemies::def(t).kind);
+        if out.contains_key(&key) {
+            continue;
+        }
+        let res = enemies::profile(t).res;
+        let res: serde_json::Map<_, _> = crate::defs::damage::DamageType::ALL.iter().map(|&dt| (dt.name().to_string(), json!(res.get(dt)))).collect();
+        out.insert(key, json!({ "max_hp": crate::sheet::enemy_stats(t).max_hp, "res": res }));
+    }
+    out
+}
+
+#[test]
+fn each_enemy_kind_is_its_first_enemy_type() {
+    use crate::defs::damage::DamageType;
+    use enemies::EnemyType;
+    let kinds = enemy_kinds();
+    for t in EnemyType::ALL {
+        let kind = enemies::def(t).kind;
+        let first = *EnemyType::ALL.iter().find(|&&u| enemies::def(u).kind == kind).unwrap();
+        let e = &kinds[&format!("{kind:?}")];
+        assert_eq!(e["max_hp"], json!(crate::sheet::enemy_stats(first).max_hp), "{t:?}");
+        let res = enemies::profile(first).res;
+        for dt in DamageType::ALL {
+            assert_eq!(e["res"][dt.name()], json!(res.get(dt)), "{t:?} {dt:?}");
+        }
+    }
+    let distinct: std::collections::HashSet<_> = EnemyType::ALL.iter().map(|&t| enemies::def(t).kind).collect();
+    assert_eq!(kinds.len(), distinct.len());
+    // A kind shared by two types takes the normal one's HP.
+    assert_eq!(kinds["SkeletonArcher"]["max_hp"], json!(30.0));
+    assert_eq!(kinds["Imp"]["max_hp"], json!(30.0));
 }
 
 /// A small room with pillars, a corridor and every kind of terrain for the

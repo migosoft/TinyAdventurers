@@ -156,6 +156,19 @@ pub fn resolve(d: &Damage, r: &Resistances) -> f64 {
     DamageType::ALL.iter().map(|&t| d.amount * d.split.share(t) * (1.0 - r.get(t).max(MIN_RESISTANCE))).sum()
 }
 
+/// Serialized as its non-zero shares by damage-type name, e.g. `{"Physical":1.0}`.
+impl serde::Serialize for DamageSplit {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let shares: Vec<(DamageType, f64)> = DamageType::ALL.iter().map(|&t| (t, self.share(t))).filter(|&(_, v)| v != 0.0).collect();
+        let mut m = s.serialize_map(Some(shares.len()))?;
+        for (t, v) in shares {
+            m.serialize_entry(t.name(), &v)?;
+        }
+        m.end()
+    }
+}
+
 /// The split of a shot, spell effect or hazard by its kind. Shots default to
 /// physical, magic to magical.
 pub fn kind_split(kind: EntityKind) -> DamageSplit {

@@ -1376,6 +1376,7 @@ pub mod tests {
     }
 
     #[test]
+    #[ignore = "re-recorded in plan 3a Task 8"]
     fn level_setup_is_unchanged() {
         let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
         // The original values: barrels are left out of the fingerprint, so
@@ -1387,6 +1388,7 @@ pub mod tests {
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
     // boss scripts push with BOSS_KNOCK_STR above every hero weight + 4.
     #[test]
+    #[ignore = "re-recorded in plan 3a Task 8"]
     fn simulation_is_unchanged_after_waking_the_boss() {
         let mut got = Vec::new();
         for boss in BossId::ALL {

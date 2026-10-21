@@ -297,7 +297,7 @@ pub fn check_equip(class: ClassId, slot: EquipSlot, item: ItemId, attrs: &Attrib
     if !proficient {
         return Err(EquipError::NotProficient);
     }
-    match d.req.iter().find(|r| !r.met(attrs)) {
+    match d.req.iter().find(|r| !r.met(attrs, None)) {
         Some(r) => Err(EquipError::Requirement(*r)),
         None => Ok(()),
     }
@@ -334,6 +334,7 @@ mod tests {
             if matches!(d.base, ItemBase::Ring | ItemBase::Shoes | ItemBase::Belt) {
                 assert!(d.props.iter().all(|p| p.magical), "{id:?}");
             }
+            assert!(!d.req.iter().any(|r| matches!(r, Requirement::WeaponKind(_))), "{id:?}: an item cannot require a weapon kind");
             let on_hits = d.props.iter().filter(|p| matches!(p.kind, PropKind::OnHit(_))).count();
             assert!(on_hits <= 1, "{id:?}");
             for p in d.props {

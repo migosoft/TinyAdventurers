@@ -8,6 +8,8 @@ use crate::protocol::ClassId;
 use serde::Serialize;
 
 pub const PLAYER_RADIUS: f64 = 5.0;
+/// How far a hero's melee reaches beyond its body: a hero's reach is `HERO_REACH + PLAYER_RADIUS`.
+pub const HERO_REACH: f64 = 17.0;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct ClassDef {
@@ -44,10 +46,10 @@ pub fn def(class: ClassId) -> ClassDef {
     use WeaponKind as K;
     match class {
         ClassId::Wizard => ClassDef { class, kind: EntityKind::Wizard, hp: 70.0, speed: 72.0, attrs: Attributes::new(8, 14, 12, 15, 13, 10), base_hp: 60.0, weight: 9.0, primary: MagicMissile, secondary: Fireball, weapons: &[K::Staff, K::Dagger], max_armor: ArmorClass::Cloth, starter: (ItemId::RedStaff, None) },
-        ClassId::Paladin => ClassDef { class, kind: EntityKind::Paladin, hp: 120.0, speed: 66.0, attrs: Attributes::new(15, 8, 13, 10, 12, 14), base_hp: 105.0, weight: 12.0, primary: Sword, secondary: Heal, weapons: &[K::Sword, K::Mace, K::Hammer], max_armor: ArmorClass::Heavy, starter: (ItemId::KnightSword, None) },
-        ClassId::Barbarian => ClassDef { class, kind: EntityKind::Barbarian, hp: 140.0, speed: 70.0, attrs: Attributes::new(15, 13, 14, 8, 12, 10), base_hp: 120.0, weight: 13.0, primary: Axe, secondary: Dash, weapons: &[K::Axe, K::Hammer, K::Club, K::Sword, K::Spear, K::ThrowingAxe], max_armor: ArmorClass::Medium, starter: (ItemId::GreatAxe, None) },
+        ClassId::Paladin => ClassDef { class, kind: EntityKind::Paladin, hp: 120.0, speed: 66.0, attrs: Attributes::new(15, 8, 13, 10, 12, 14), base_hp: 105.0, weight: 12.0, primary: Strike, secondary: HolyLight, weapons: &[K::Sword, K::Mace, K::Hammer], max_armor: ArmorClass::Heavy, starter: (ItemId::KnightSword, None) },
+        ClassId::Barbarian => ClassDef { class, kind: EntityKind::Barbarian, hp: 140.0, speed: 70.0, attrs: Attributes::new(15, 13, 14, 8, 12, 10), base_hp: 120.0, weight: 13.0, primary: Strike, secondary: Charge, weapons: &[K::Axe, K::Hammer, K::Club, K::Sword, K::Spear, K::ThrowingAxe], max_armor: ArmorClass::Medium, starter: (ItemId::GreatAxe, None) },
         ClassId::ElvenRanger => {
-            ClassDef { class, kind: EntityKind::ElvenRanger, hp: 90.0, speed: 80.0, attrs: Attributes::new(10, 13, 12, 8, 14, 13), base_hp: 80.0, weight: 10.0, primary: CrossbowDagger, secondary: SummonWolf, weapons: &[K::Dagger, K::DuellingSword, K::Machete, K::Bow, K::Crossbow], max_armor: ArmorClass::Light, starter: (ItemId::Rapier, Some(ItemId::ElvenBow)) }
+            ClassDef { class, kind: EntityKind::ElvenRanger, hp: 90.0, speed: 80.0, attrs: Attributes::new(10, 13, 12, 8, 14, 13), base_hp: 80.0, weight: 10.0, primary: Shoot, secondary: SummonWolf, weapons: &[K::Dagger, K::DuellingSword, K::Machete, K::Bow, K::Crossbow], max_armor: ArmorClass::Light, starter: (ItemId::Rapier, Some(ItemId::ElvenBow)) }
         }
     }
 }

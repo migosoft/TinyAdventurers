@@ -442,7 +442,7 @@ pub fn wolf_died(run: &mut Run, mi: usize) {
         let p = &mut run.players[pi];
         p.wolf = None;
         // The summon's cooldown ratio is the attack-speed upgrade (this form is bit-exact to `/ attack_speed`).
-        p.cd2 = WOLF_DEAD_COOLDOWN / (crate::defs::abilities::def(crate::defs::abilities::AbilityId::SummonWolf).cooldown / p.sheet.secondary.cooldown);
+        p.cd2 = WOLF_DEAD_COOLDOWN / (crate::defs::abilities::def(crate::defs::abilities::AbilityId::SummonWolf).own.cooldown / p.sheet.secondary.cooldown);
         let name = p.name.clone();
         run.event(Ev::Msg { text: format!("{name}'s wolf has fallen") }, None);
     }

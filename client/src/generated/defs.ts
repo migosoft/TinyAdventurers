@@ -86,8 +86,6 @@ export const CONST = {
   "BARREL_FUSE": 0.3,
   "BARREL_RADIUS": 6.0,
   "CHEST_RADIUS": 6.0,
-  "DAGGER_COOLDOWN": 0.35,
-  "DAGGER_RANGE": 22.0,
   "DASH_SPEED": 300.0,
   "DEMON_CLEAVE_KNOCK": 56.0,
   "DEMON_CLEAVE_RECOVER": 0.3,
@@ -158,8 +156,8 @@ export const CLASSES = {
     "base_hp": 120.0,
     "hp": 140.0,
     "kind": 2,
-    "primary": "Axe",
-    "secondary": "Dash",
+    "primary": "Strike",
+    "secondary": "Charge",
     "speed": 70.0,
     "weight": 13.0
   },
@@ -175,7 +173,7 @@ export const CLASSES = {
     "base_hp": 80.0,
     "hp": 90.0,
     "kind": 3,
-    "primary": "CrossbowDagger",
+    "primary": "Shoot",
     "secondary": "SummonWolf",
     "speed": 80.0,
     "weight": 10.0
@@ -192,8 +190,8 @@ export const CLASSES = {
     "base_hp": 105.0,
     "hp": 120.0,
     "kind": 1,
-    "primary": "Sword",
-    "secondary": "Heal",
+    "primary": "Strike",
+    "secondary": "HolyLight",
     "speed": 66.0,
     "weight": 12.0
   },
@@ -217,85 +215,62 @@ export const CLASSES = {
 } as const;
 
 export const ABILITIES = {
-  "Axe": {
-    "arc": 2.45,
-    "cooldown": 0.8,
-    "damage": 32.0,
-    "duration": 0.0,
-    "id": "Axe",
-    "radius": 0.0,
-    "range": 25.0,
-    "speed": 0.0
-  },
-  "CrossbowDagger": {
-    "arc": 0.0,
-    "cooldown": 0.7,
-    "damage": 16.0,
-    "duration": 0.0,
-    "id": "CrossbowDagger",
-    "radius": 2.0,
-    "range": 260.0,
-    "speed": 290.0
-  },
-  "Dash": {
-    "arc": 0.0,
-    "cooldown": 5.0,
-    "damage": 25.0,
-    "duration": 0.18,
-    "id": "Dash",
-    "radius": 10.0,
-    "range": 0.0,
-    "speed": 300.0
+  "Charge": {
+    "classes": [
+      "Barbarian"
+    ],
+    "name": "Charge",
+    "ranged": false,
+    "slot": "Secondary"
   },
   "Fireball": {
-    "arc": 0.0,
-    "cooldown": 6.0,
-    "damage": 45.0,
-    "duration": 0.0,
-    "id": "Fireball",
-    "radius": 38.0,
-    "range": 260.0,
-    "speed": 140.0
+    "classes": [
+      "Wizard"
+    ],
+    "name": "Fireball",
+    "ranged": true,
+    "slot": "Secondary"
   },
-  "Heal": {
-    "arc": 0.0,
-    "cooldown": 10.0,
-    "damage": 35.0,
-    "duration": 0.0,
-    "id": "Heal",
-    "radius": 64.0,
-    "range": 64.0,
-    "speed": 0.0
+  "HolyLight": {
+    "classes": [
+      "Paladin"
+    ],
+    "name": "Holy Light",
+    "ranged": false,
+    "slot": "Secondary"
   },
   "MagicMissile": {
-    "arc": 0.0,
-    "cooldown": 0.35,
-    "damage": 12.0,
-    "duration": 0.0,
-    "id": "MagicMissile",
-    "radius": 3.0,
-    "range": 220.0,
-    "speed": 230.0
+    "classes": [
+      "Wizard"
+    ],
+    "name": "Magic Missile",
+    "ranged": true,
+    "slot": "Primary"
+  },
+  "Shoot": {
+    "classes": [
+      "ElvenRanger"
+    ],
+    "name": "Shoot",
+    "ranged": true,
+    "slot": "Primary"
+  },
+  "Strike": {
+    "classes": [
+      "Paladin",
+      "Barbarian"
+    ],
+    "name": "Strike",
+    "ranged": false,
+    "slot": "Primary"
   },
   "SummonWolf": {
-    "arc": 0.0,
-    "cooldown": 8.0,
-    "damage": 0.0,
-    "duration": 0.0,
-    "id": "SummonWolf",
-    "radius": 0.0,
-    "range": 0.0,
-    "speed": 0.0
-  },
-  "Sword": {
-    "arc": 1.75,
-    "cooldown": 0.45,
-    "damage": 20.0,
-    "duration": 0.0,
-    "id": "Sword",
-    "radius": 0.0,
-    "range": 22.0,
-    "speed": 0.0
+    "classes": [
+      "ElvenRanger"
+    ],
+    "name": "Summon Wolf",
+    "ranged": false,
+    "slot": "Secondary"
   }
 } as const;
 
@@ -509,3 +484,136 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   }
 };
+
+export const ENEMY_KINDS = {
+  "Chort": {
+    "max_hp": 40.0,
+    "res": {
+      "Cold": -0.5,
+      "Heat": 1.0,
+      "Magical": 0.2,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "Disciple": {
+    "max_hp": 45.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "GoblinArcher": {
+    "max_hp": 24.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "Imp": {
+    "max_hp": 30.0,
+    "res": {
+      "Cold": -0.5,
+      "Heat": 1.0,
+      "Magical": 0.2,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "Mimic": {
+    "max_hp": 90.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "Necromancer": {
+    "max_hp": 60.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "Ogre": {
+    "max_hp": 260.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "OrcArcher": {
+    "max_hp": 50.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "OrcWarrior": {
+    "max_hp": 70.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "RaisedSkeleton": {
+    "max_hp": 26.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": -0.1,
+      "Magical": 0.0,
+      "Physical": 0.1,
+      "Poison": 1.0
+    }
+  },
+  "SkeletonArcher": {
+    "max_hp": 30.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": -0.1,
+      "Magical": 0.0,
+      "Physical": 0.1,
+      "Poison": 1.0
+    }
+  },
+  "SkeletonWarrior": {
+    "max_hp": 40.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": -0.1,
+      "Magical": 0.0,
+      "Physical": 0.1,
+      "Poison": 1.0
+    }
+  },
+  "Summoner": {
+    "max_hp": 60.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  }
+} as const;

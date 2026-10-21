@@ -4,17 +4,17 @@
 //! each Attribute point above or below moves it. The simulation reads heroes
 //! and monsters from here.
 
-use crate::defs::abilities::{self as ab, AbilityDef, AbilityId, Scaling};
-use crate::defs::attributes::{self, Attr, Attributes, Scaled, CON_MOVE};
+use crate::defs::abilities::{self as ab, AbilityDef, AbilityId, Uses};
+use crate::defs::attributes::{self, Attr, Attributes, Scaled, CHA_DMG, CON_MOVE, INT_DMG};
 use crate::defs::bosses;
-use crate::defs::classes;
+use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT};
-use crate::defs::damage::{DamageType, Resistances};
+use crate::defs::damage::{kind_split, DamageSplit, DamageType, Resistances};
 use crate::defs::effects::{EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::items::{self, EquipSlot, Equipment, ItemBase, ItemId, PropKind};
 use crate::defs::lights::{self, LightKind};
-use crate::defs::progression::{Modifiers, StatUpgrades};
+use crate::defs::progression::StatUpgrades;
 use crate::defs::races::Sight;
 use crate::defs::weapons::{resolve_melee, resolve_ranged, ResolvedWeapon};
 use crate::protocol::{BossId, ClassId};
@@ -33,6 +33,33 @@ pub struct ResolvedAbility {
     pub speed: f64,
     pub radius: f64,
     pub duration: f64,
+    /// How many more enemies a shot may hit by overkill: 0 none, `u8::MAX` no limit.
+    pub pierce: u8,
+    /// How many enemies a shot passes through with full damage before the overkill rule.
+    pub pierce_through: u8,
+    /// In melee a ranged primary falls back to Strike, a ranged secondary is blocked.
+    pub ranged: bool,
+    /// The `EntityKind` id of its projectile.
+    #[ts(type = "number | null")]
+    pub projectile: Option<u8>,
+    /// Sent as the non-zero shares by damage-type name (see `DamageSplit`'s `Serialize`).
+    #[ts(type = "Partial<Record<DamageType, number>>")]
+    pub split: DamageSplit,
+    #[serde(skip)]
+    #[ts(skip)]
+    pub on_hit: Option<OnHit>,
+    /// The power of its damage-type effects.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub power: i32,
+    /// The push of its weapon (px).
+    #[serde(skip)]
+    #[ts(skip)]
+    pub push: f64,
+    /// The STR it pushes with.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub push_str: i32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -53,8 +80,10 @@ pub struct Sheet {
     pub sight: Sight,
     pub primary: ResolvedAbility,
     pub secondary: ResolvedAbility,
-    /// The melee thrust of a ranged hero (the Elven Ranger's rapier); none for the others until plan 3.
-    pub fallback: Option<ResolvedAbility>,
+    /// Strike with the melee weapon: what a ranged primary does in melee.
+    pub fallback: ResolvedAbility,
+    /// How far the hero's melee reaches (px): `HERO_REACH + PLAYER_RADIUS`.
+    pub reach: f64,
     /// Fraction of incoming damage blocked by the old armor upgrade (removed in plan 4).
     pub armor: f64,
 }
@@ -64,27 +93,92 @@ fn move_speed(base: f64, ref_con: i32, attrs: &Attributes) -> f64 {
     Scaled { value: base, attr: Attr::Con, pct: CON_MOVE, at: ref_con }.get(attrs)
 }
 
-/// One ability for a hero with `attrs`; the reference Attributes are the owner class's start values.
-fn resolve(d: AbilityDef, s: Scaling, attrs: &Attributes, reference: &Attributes, m: &Modifiers) -> ResolvedAbility {
-    let get = |value: f64, sc: Option<(Attr, f64)>| match sc {
-        Some((attr, pct)) => Scaled { value, attr, pct, at: reference.get(attr) }.get(attrs),
-        None => value,
-    };
-    let cooldown = match s.speed {
-        Some((attr, pct)) => Scaled { value: d.cooldown, attr, pct, at: reference.get(attr) }.per(attrs),
-        None => d.cooldown,
-    };
-    ResolvedAbility {
+/// One ability for a hero with `attrs`, its weapons and its melee `reach`. `None` if it
+/// shoots the ranged weapon and the hero has none.
+fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, ranged: Option<&ResolvedWeapon>, reach: f64) -> Option<ResolvedAbility> {
+    let own = d.own;
+    let mult = d.weapon_mult;
+    // A technique or weapon attack: its own cooldown, else the weapon's interval.
+    let cooldown = |w: &ResolvedWeapon| if own.cooldown > 0.0 { own.cooldown } else { w.cooldown * mult.time };
+    // What every rule fills in the same way; the numbers it does not set stay 0.
+    let blank = ResolvedAbility {
         id: d.id,
-        cooldown: cooldown / m.attack_speed,
-        // The damage upgrade never touched heals.
-        damage: get(d.damage, s.damage) * if d.id == AbilityId::Heal { 1.0 } else { m.damage },
-        range: get(d.range, s.reach),
-        arc: get(d.arc, s.arc),
-        speed: get(d.speed, s.reach),
-        radius: d.radius,
-        duration: d.duration,
-    }
+        cooldown: 0.0,
+        damage: 0.0,
+        range: 0.0,
+        arc: 0.0,
+        speed: 0.0,
+        radius: 0.0,
+        duration: 0.0,
+        pierce: 0,
+        pierce_through: 0,
+        ranged: d.ranged,
+        projectile: None,
+        split: DamageSplit::physical(),
+        on_hit: None,
+        power: 0,
+        push: 0.0,
+        push_str: attrs.get(Attr::Str),
+    };
+    Some(match d.uses {
+        Uses::Melee => ResolvedAbility {
+            cooldown: cooldown(melee),
+            damage: melee.damage * mult.damage,
+            range: reach,
+            arc: mult.arc.unwrap_or(melee.arc),
+            speed: own.speed,
+            radius: own.radius,
+            duration: own.duration,
+            split: melee.split,
+            on_hit: melee.on_hit,
+            power: melee.power,
+            push: melee.push,
+            ..blank
+        },
+        Uses::Ranged => {
+            let w = ranged?;
+            ResolvedAbility {
+                cooldown: cooldown(w),
+                damage: w.damage * mult.damage,
+                range: w.range,
+                speed: w.projectile_speed,
+                radius: w.radius,
+                duration: own.duration,
+                pierce: u8::MAX,
+                projectile: w.projectile.map(|k| k as u8),
+                split: w.split,
+                on_hit: w.on_hit,
+                power: w.power,
+                ..blank
+            }
+        }
+        Uses::Nothing => {
+            let gov = ab::governing(d.category);
+            let damage = match gov {
+                Some(attr) => {
+                    let pct = match attr {
+                        Attr::Int => INT_DMG,
+                        Attr::Cha => CHA_DMG,
+                        other => unreachable!("governing returned {other:?}"),
+                    };
+                    Scaled { value: own.damage, attr, pct, at: own.at }.get(attrs)
+                }
+                None => own.damage,
+            };
+            ResolvedAbility {
+                cooldown: own.cooldown,
+                damage,
+                range: own.range,
+                speed: own.speed,
+                radius: own.radius,
+                duration: own.duration,
+                projectile: own.kind.map(|k| k as u8),
+                split: own.kind.map_or(DamageSplit::physical(), kind_split),
+                power: if own.damage > 0.0 { gov.map_or(0, |a| attrs.get(a)) } else { 0 },
+                ..blank
+            }
+        }
+    })
 }
 
 /// A weapon item for one wielder, with the shares and on-hit its own properties gave it.
@@ -175,37 +269,13 @@ pub fn hero_sheet(class: ClassId, extra: Attributes, equip: &Equipment, up: &Sta
     let melee = arm(melee_id, &attrs, &shares[0], on_hits[0]);
     let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], on_hits[1]));
 
-    // Abilities: the weapon ones take the weapon's numbers (interim until plan 3); the old upgrades multiply after.
+    // Abilities; the old upgrades multiply after (damage not on Holy Light).
+    let reach = classes::HERO_REACH + PLAYER_RADIUS;
     let ability = |id: AbilityId| {
-        let r = resolve(ab::def(id), ab::scaling(id), &attrs, &classes::start_attrs(ab::owner(id)), &m);
-        match id {
-            AbilityId::Sword | AbilityId::Axe => {
-                ResolvedAbility { damage: melee.damage * m.damage, cooldown: melee.cooldown / m.attack_speed, arc: melee.arc, ..r }
-            }
-            AbilityId::CrossbowDagger => {
-                let w = ranged.expect("the crossbow needs a ranged weapon");
-                ResolvedAbility {
-                    damage: w.damage * m.damage,
-                    cooldown: w.cooldown / m.attack_speed,
-                    range: w.range,
-                    speed: w.projectile_speed,
-                    radius: w.radius,
-                    ..r
-                }
-            }
-            AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Heal | AbilityId::Dash | AbilityId::SummonWolf => r,
-        }
+        let r = resolve_ability(&ab::def(id), &attrs, &melee, ranged.as_ref(), reach).unwrap_or_else(|| panic!("{class:?}: {id:?} needs a ranged weapon"));
+        let damage = if id == AbilityId::HolyLight { r.damage } else { r.damage * m.damage };
+        ResolvedAbility { damage, cooldown: r.cooldown / m.attack_speed, ..r }
     };
-    let fallback = (class == ClassId::ElvenRanger).then(|| ResolvedAbility {
-        id: AbilityId::CrossbowDagger,
-        cooldown: melee.cooldown / m.attack_speed,
-        damage: melee.damage * m.damage,
-        range: ab::DAGGER_RANGE,
-        arc: 0.0,
-        speed: 0.0,
-        radius: 0.0,
-        duration: 0.0,
-    });
     Sheet {
         attrs,
         max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp) * m.life,
@@ -219,7 +289,8 @@ pub fn hero_sheet(class: ClassId, extra: Attributes, equip: &Equipment, up: &Sta
         sight: prof.sight,
         primary: ability(def.primary),
         secondary: ability(def.secondary),
-        fallback,
+        fallback: ability(AbilityId::Strike),
+        reach,
         armor: m.armor,
     }
 }
@@ -263,9 +334,7 @@ pub fn wolf_stats() -> MonsterStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defs::abilities::DAGGER_RANGE;
     use crate::defs::attributes::{factor, STR_DMG};
-    use crate::defs::damage::DamageSplit;
     use crate::defs::effects::EffectKind;
     use crate::defs::kinds::EntityKind;
     use crate::defs::companions::WOLF_HP;
@@ -276,49 +345,71 @@ mod tests {
         x
     }
 
-    fn same(r: &ResolvedAbility, d: &AbilityDef) {
-        assert_eq!(r.id, d.id);
-        assert_eq!(r.cooldown, d.cooldown, "{:?} cooldown", d.id);
-        assert_eq!(r.damage, d.damage, "{:?} damage", d.id);
-        assert_eq!(r.range, d.range, "{:?} range", d.id);
-        assert_eq!(r.arc, d.arc, "{:?} arc", d.id);
-        assert_eq!(r.speed, d.speed, "{:?} speed", d.id);
-        assert_eq!(r.radius, d.radius, "{:?} radius", d.id);
-        assert_eq!(r.duration, d.duration, "{:?} duration", d.id);
+    /// Today's numbers of an ability at the class start: id, cooldown, damage, range, arc, speed, radius, duration.
+    type Row = (AbilityId, f64, f64, f64, f64, f64, f64, f64);
+
+    fn same(r: &ResolvedAbility, want: Row) {
+        let (id, cooldown, damage, range, arc, speed, radius, duration) = want;
+        assert_eq!(r.id, id);
+        assert_eq!(r.cooldown, cooldown, "{id:?} cooldown");
+        assert_eq!(r.damage, damage, "{id:?} damage");
+        assert_eq!(r.range, range, "{id:?} range");
+        assert_eq!(r.arc, arc, "{id:?} arc");
+        assert_eq!(r.speed, speed, "{id:?} speed");
+        assert_eq!(r.radius, radius, "{id:?} radius");
+        assert_eq!(r.duration, duration, "{id:?} duration");
     }
 
     #[test]
     fn hero_sheet_reproduces_today() {
-        for c in ClassId::ALL {
+        use AbilityId::*;
+        // Today's numbers (the old `abilities::def` rows, with the weapon abilities' weapons), and the
+        // deliberate exceptions: the Barbarian's Strike reaches 22 (was 25); Charge strikes with the axe
+        // at 0.8 (25.6, was 25), and as a melee ability it carries the hero's reach and the axe's arc,
+        // which the dash does not read (both were 0).
+        let today: [(ClassId, Row, Row); 4] = [
+            (ClassId::Wizard, (MagicMissile, 0.35, 12.0, 220.0, 0.0, 230.0, 3.0, 0.0), (Fireball, 6.0, 45.0, 260.0, 0.0, 140.0, 38.0, 0.0)),
+            (ClassId::Paladin, (Strike, 0.45, 20.0, 22.0, 1.75, 0.0, 0.0, 0.0), (HolyLight, 10.0, 35.0, 64.0, 0.0, 0.0, 64.0, 0.0)),
+            (ClassId::Barbarian, (Strike, 0.8, 32.0, 22.0, 2.45, 0.0, 0.0, 0.0), (Charge, 5.0, 32.0 * 0.8, 22.0, 2.45, ab::DASH_SPEED, 10.0, 0.18)),
+            (ClassId::ElvenRanger, (Shoot, 0.7, 16.0, 260.0, 0.0, 290.0, 2.0, 0.0), (SummonWolf, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
+        ];
+        for (c, primary, secondary) in today {
             let d = classes::def(c);
             let s = hero_sheet(c, Attributes::default(), &Equipment::starter(c), &StatUpgrades::default());
             assert_eq!(s.max_hp, d.hp, "{c:?}");
             assert_eq!(s.speed, d.speed, "{c:?}");
             assert_eq!(s.weight, d.weight, "{c:?}");
-            same(&s.primary, &ab::def(d.primary));
-            same(&s.secondary, &ab::def(d.secondary));
+            same(&s.primary, primary);
+            same(&s.secondary, secondary);
+            assert_eq!(s.reach, 22.0, "{c:?}");
+            assert_eq!(s.fallback.id, Strike, "{c:?}");
+            assert_eq!(s.fallback.range, 22.0, "{c:?}");
+            assert_eq!((s.fallback.damage, s.fallback.cooldown), (s.melee.damage, s.melee.cooldown), "{c:?}");
             assert_eq!(s.armor, 0.0);
             assert_eq!(s.melee.split, DamageSplit::physical(), "{c:?}");
             assert_eq!(s.light, None, "{c:?}");
             assert_eq!(s.res, classes::profile(c).res, "{c:?}");
         }
-        let r = hero_sheet(ClassId::ElvenRanger, Attributes::default(), &Equipment::starter(ClassId::ElvenRanger), &StatUpgrades::default());
+        let sheet = |c| hero_sheet(c, Attributes::default(), &Equipment::starter(c), &StatUpgrades::default());
+        let r = sheet(ClassId::ElvenRanger);
         assert_eq!(r.attrs.get(Attr::Dex), 15);
-        assert_eq!(
-            r.fallback,
-            Some(ResolvedAbility {
-                id: AbilityId::CrossbowDagger,
-                cooldown: 0.35,
-                damage: 18.0,
-                range: DAGGER_RANGE,
-                arc: 0.0,
-                speed: 0.0,
-                radius: 0.0,
-                duration: 0.0
-            })
-        );
+        assert_eq!((r.fallback.damage, r.fallback.cooldown), (18.0, 0.35));
         assert_eq!(r.ranged.unwrap().projectile, Some(EntityKind::Bolt));
-        assert!(hero_sheet(ClassId::Wizard, Attributes::default(), &Equipment::starter(ClassId::Wizard), &StatUpgrades::default()).fallback.is_none());
+        assert_eq!(r.primary.projectile, Some(EntityKind::Bolt as u8));
+        assert_eq!(r.primary.pierce, u8::MAX);
+        assert!(r.primary.ranged);
+        let w = sheet(ClassId::Wizard);
+        assert_eq!(w.primary.pierce, 0);
+        assert!(w.primary.ranged && w.secondary.ranged);
+        // The power of each ability's damage-type effects.
+        assert_eq!((w.primary.power, w.secondary.power), (15, 15), "the Wizard's INT");
+        let p = sheet(ClassId::Paladin);
+        assert_eq!((p.primary.power, p.secondary.power), (15, 14), "the sword's STR, Holy Light's CHA");
+        assert!(!p.primary.ranged && !p.secondary.ranged);
+        assert_eq!(r.primary.power, 15, "the bow's DEX");
+        assert_eq!(r.secondary.power, 0, "Summon Wolf deals no damage");
+        // The split goes to the client as its non-zero shares by name.
+        assert_eq!(serde_json::to_value(p.primary).unwrap()["split"], serde_json::json!({ "Physical": 1.0 }));
     }
 
     #[test]
@@ -343,7 +434,7 @@ mod tests {
         assert!((bow.damage - 16.0 * 1.35 / 1.25).abs() < 1e-12, "crossbow damage by DEX");
         assert!((bow.cooldown - 0.7 / (1.14 / 1.10)).abs() < 1e-12, "firing speed by DEX");
         assert_eq!((bow.range, bow.speed), (260.0, 290.0), "DEX does not move the reach");
-        let thrust = dex.fallback.expect("the ranger has a rapier thrust");
+        let thrust = dex.fallback;
         assert!((thrust.damage - 18.0 * 1.35 / 1.25).abs() < 1e-12, "rapier damage by DEX");
         assert!((thrust.cooldown - 0.35 / (1.14 / 1.10)).abs() < 1e-12, "rapier speed by DEX");
         assert_eq!(thrust.range, 22.0);
@@ -358,13 +449,12 @@ mod tests {
         let up = StatUpgrades { damage: 2, attack_speed: 1, move_speed: 1, life: 1, armor: 1, ..Default::default() };
         let m = up.modifiers();
         let s = hero_sheet(ClassId::Paladin, Attributes::default(), &Equipment::starter(ClassId::Paladin), &up);
-        let sword = ab::def(AbilityId::Sword);
-        assert_eq!(s.primary.damage, sword.damage * m.damage);
-        assert_eq!(s.primary.cooldown, sword.cooldown / m.attack_speed);
+        assert_eq!(s.primary.damage, 20.0 * m.damage);
+        assert_eq!(s.primary.cooldown, 0.45 / m.attack_speed);
         assert_eq!(s.speed, 66.0 * m.move_speed);
         assert_eq!(s.max_hp, 120.0 * m.life);
         assert_eq!(s.armor, m.armor);
-        assert_eq!(s.secondary.damage, ab::def(AbilityId::Heal).damage, "the heal is no damage");
+        assert_eq!(s.secondary.damage, 35.0, "the heal is no damage");
         // What the modifiers really give.
         assert!((m.damage - 1.16).abs() < 1e-12 && (m.attack_speed - 1.06).abs() < 1e-12);
         assert!((m.move_speed - 1.04).abs() < 1e-12 && (m.life - 1.10).abs() < 1e-12 && (m.armor - 0.04).abs() < 1e-12);
@@ -393,7 +483,7 @@ mod tests {
         assert!((p.primary.damage - want).abs() < 1e-12 && (want - 27.5).abs() < 1e-12, "{}", p.primary.damage);
         assert!((p.primary.cooldown - 0.5 / (0.96 / 1.0)).abs() < 1e-12);
         assert!((p.primary.arc - 1.8 * 0.94).abs() < 1e-12);
-        assert_eq!(p.primary.range, ab::def(AbilityId::Sword).range);
+        assert_eq!(p.primary.range, p.reach);
         assert_eq!(p.light, Some(LightKind::Holy));
         let b = with(ClassId::Barbarian, Attributes::default(), &[(EquipSlot::Melee, ItemId::KnightSword)]);
         assert_eq!(b.primary.damage, 20.0);
