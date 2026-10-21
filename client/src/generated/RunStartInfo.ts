@@ -26,9 +26,9 @@ speed: number,
  */
 abilities: [ResolvedAbility, ResolvedAbility], 
 /**
- * The melee thrust of a ranged hero, if any.
+ * Strike with the melee weapon: what a ranged primary does in melee.
  */
-fallback: ResolvedAbility | null, 
+fallback: ResolvedAbility, 
 /**
  * Every static light (torches, lava) and its state.
  */

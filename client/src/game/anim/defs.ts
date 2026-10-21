@@ -4,14 +4,17 @@
 // The dragon and the demon are the exceptions: their own frames for every action
 // (dragonRig.ts, demonFrames.ts).
 // The lich has its own idle/run frames in the pack style (scripts/lich-frames.ts).
-import { ABILITIES, ANIM, CONST, KIND } from "../../generated/defs";
+import { ANIM, CONST, KIND } from "../../generated/defs";
 import { GLOOM } from "../effects";
 import { DRAGON_ANIMS, DRAGON_FRAME, dragonFrameName, dragonPoints, type DragonAnim } from "./dragonRig";
 import { DEMON_ANIMS, DEMON_FRAME, demonFrameName, type DemonAnim } from "./demonFrames";
 
-// Player swings reach as far as the server hits: ability range + a typical monster radius.
-const SWORD = { reach: ABILITIES.Sword.range + 5, arc: ABILITIES.Sword.arc };
-const AXE = { reach: ABILITIES.Axe.range + 5, arc: ABILITIES.Axe.arc, color: 0xffe0d0 };
+// Player swings reach as far as the server hits: a hero's reach (server `HERO_REACH` +
+// `PLAYER_RADIUS`) + a typical monster radius. Strike hits a single target, so the arcs
+// are only the look of the sword's and the axe's swoosh.
+const HERO_REACH = 22;
+const SWORD = { reach: HERO_REACH + 5, arc: 1.75 };
+const AXE = { reach: HERO_REACH + 5, arc: 2.45, color: 0xffe0d0 };
 const MOB_SWING = { reach: 22, arc: 1.6, color: 0xffd0d0 };
 // Demons fight with bare claws: a swoosh at the damage reach, no weapon sprite.
 const CLAW = { reach: 20, arc: 1.6, color: 0xffb080 };

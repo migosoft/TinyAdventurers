@@ -846,3 +846,14 @@ kbd {
   padding: 4px 8px;
   text-shadow: none;
 }
+.slot.too-close .name {
+  color: #ff8060;
+}
+.debug-loadout {
+  width: min(760px, 100%);
+  align-items: center;
+  font-size: 8px;
+}
+.debug-loadout small {
+  color: var(--muted);
+}

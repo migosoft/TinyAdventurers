@@ -3,14 +3,14 @@ import { CONST, TILE_ID } from '../generated/defs';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
-import { Predictor } from './world';
+import { Predictor, abilityChoice, cosmeticPierce } from './world';
 
-const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, ...over });
+const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, ...over });
 /** Predictor for tests: the class only picks which ids the abilities carry. */
 function mk(map: TileMap, cls: 'Wizard' | 'Barbarian' | 'ElvenRanger', x: number, y: number): Predictor {
-  const ids: Record<string, [ResolvedAbility['id'], ResolvedAbility['id']]> = { Wizard: ['MagicMissile', 'Fireball'], Barbarian: ['Axe', 'Dash'], ElvenRanger: ['CrossbowDagger', 'SummonWolf'] };
+  const ids: Record<string, [ResolvedAbility['id'], ResolvedAbility['id']]> = { Wizard: ['MagicMissile', 'Fireball'], Barbarian: ['Strike', 'Charge'], ElvenRanger: ['Shoot', 'SummonWolf'] };
   const [a, b] = ids[cls];
-  return new Predictor(map, 60, [ab(a, { cooldown: 0.6 }), ab(b)], cls === 'ElvenRanger' ? ab('CrossbowDagger', { cooldown: 0.4 }) : null, x, y);
+  return new Predictor(map, 60, [ab(a, { cooldown: 0.6 }), ab(b)], ab('Strike', { cooldown: 0.4 }), x, y);
 }
 
 /** 12x5 floor in walls, with a chasm at tile (8, 2). */
@@ -106,7 +106,7 @@ describe('wolf cooldown', () => {
 describe('resolved numbers', () => {
   it('predictor_uses_resolved_numbers', () => {
     const x0 = 3 * TILE + 8, y0 = 2 * TILE + 8;
-    const pred = new Predictor(chasmMap(), 90, [ab('MagicMissile', { cooldown: 0.5 }), ab('Dash', { duration: 0.25 })], ab('CrossbowDagger', { cooldown: 0.3 }), x0, y0);
+    const pred = new Predictor(chasmMap(), 90, [ab('MagicMissile', { cooldown: 0.5 }), ab('Charge', { duration: 0.25 })], ab('Strike', { cooldown: 0.3 }), x0, y0);
     pred.step(1, 0, null);
     expect(pred.state.x - x0).toBeCloseTo(90 * CONST.DT, 6);
     expect(pred.cooldownOf(0)).toBe(0.5);
@@ -114,5 +114,56 @@ describe('resolved numbers', () => {
     expect(pred.cooldownOf(0, true)).toBe(0.3);
     pred.step(1, 0, [1, 0]);
     expect(pred.state.dashT).toBe(0.25);
+  });
+});
+
+describe('abilityChoice', () => {
+  const ranged = ab('MagicMissile', { ranged: true });
+  const fire = ab('Fireball', { ranged: true });
+  it('falls back to Strike for a ranged primary in melee', () => expect(abilityChoice(ranged, 0, true)).toBe('fallback'));
+  it('blocks a ranged secondary in melee', () => expect(abilityChoice(fire, 1, true)).toBe('blocked'));
+  it('uses a melee ability in melee', () => {
+    expect(abilityChoice(ab('Strike'), 0, true)).toBe('use');
+    expect(abilityChoice(ab('HolyLight'), 1, true)).toBe('use');
+  });
+  it('uses anything out of melee', () => {
+    expect(abilityChoice(ranged, 0, false)).toBe('use');
+    expect(abilityChoice(fire, 1, false)).toBe('use');
+    expect(abilityChoice(ab('Charge'), 1, false)).toBe('use');
+  });
+});
+
+describe('cosmeticPierce', () => {
+  const none = { Physical: 0, Cold: 0, Heat: 0, Magical: 0, Poison: 0 };
+  const phys = { Physical: 1 };
+  const shot = { pierce: 255, through: 0, damage: 16 };
+  it('flies on with the rest after an overkill', () => {
+    const r = cosmeticPierce(shot, 255, 5, phys, none);
+    expect(r).not.toBe('stop');
+    if (r === 'stop') return;
+    expect(r.damage).toBeCloseTo(11, 9);
+    expect(r.pierce).toBe(255);
+    expect(r.through).toBe(0);
+  });
+  it('estimates the HP from the share', () => {
+    // Half of 24 HP is 12: a kill, 4 left.
+    const r = cosmeticPierce(shot, 127.5, 24, phys, none);
+    expect(r === 'stop' ? r : r.damage).toBeCloseTo(4, 9);
+  });
+  it('stops at an enemy it does not kill', () => expect(cosmeticPierce(shot, 255, 24, phys, none)).toBe('stop'));
+  it('stops at an immune enemy', () => expect(cosmeticPierce(shot, 255, 5, phys, { ...none, Physical: 1.0 })).toBe('stop'));
+  it('counts down a limited overkill pierce and stops at 0', () => {
+    expect(cosmeticPierce({ ...shot, pierce: 1 }, 255, 5, phys, none)).toEqual({ pierce: 0, through: 0, damage: 11 });
+    expect(cosmeticPierce({ ...shot, pierce: 0 }, 255, 5, phys, none)).toBe('stop');
+  });
+  it('passes through with full damage first, then follows the overkill rule', () => {
+    expect(cosmeticPierce({ pierce: 0, through: 1, damage: 16 }, 255, 70, phys, none)).toEqual({ pierce: 0, through: 0, damage: 16 });
+    expect(cosmeticPierce({ pierce: 0, through: 0, damage: 16 }, 255, 70, phys, none)).toBe('stop');
+  });
+  it('stops at an enemy of unknown max HP', () => expect(cosmeticPierce(shot, 255, undefined, phys, undefined)).toBe('stop'));
+  it('floors a weakness at -1 like the server', () => {
+    // Weakness -3 counts as -1: 16 x 2 = 32 against 24 HP, 4 left.
+    const r = cosmeticPierce(shot, 255, 24, { Cold: 1 }, { ...none, Cold: -3 });
+    expect(r === 'stop' ? r : r.damage).toBeCloseTo(4, 9);
   });
 });

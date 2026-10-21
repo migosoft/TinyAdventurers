@@ -1,4 +1,4 @@
-import { EFFECTS, FLAG } from '../generated/defs';
+import { ABILITIES, EFFECTS, FLAG } from '../generated/defs';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
@@ -6,7 +6,7 @@ import type { PlayerStats } from '../generated/PlayerStats';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
 import { endText } from './endText';
-import { BOSS_TEXT, CLASS_TEXT, className, effectGlyph } from './text';
+import { BOSS_TEXT, className, effectGlyph } from './text';
 
 export interface FrameStats {
   fps: number;
@@ -48,6 +48,9 @@ export class Hud {
   private coins = el('div', 'coins');
   private coinCount = 0;
   private slots: HTMLElement[] = [];
+  /** The equipped abilities' names, and until when (ms) each slot reads "Too close". */
+  private slotNames = ['', ''];
+  private tooCloseUntil = [0, 0];
   private party = el('div', 'party');
   private boss = el('div', 'boss hidden');
   private msgs = el('div', 'messages');
@@ -107,9 +110,10 @@ export class Hud {
     this.fxKey = '';
     this.coinCount = 0;
     this.showCoins();
-    const me = info.players.find((p) => p.ent === info.you)!;
     [0, 1].forEach((i) => {
-      this.slots[i].querySelector('.name')!.textContent = CLASS_TEXT[me.class].abilities[i].name;
+      this.slotNames[i] = ABILITIES[info.abilities[i].id].name;
+      this.tooCloseUntil[i] = 0;
+      this.slots[i].querySelector('.name')!.textContent = this.slotNames[i];
       this.cdMax[i] = info.abilities[i].cooldown;
     });
     this.party.innerHTML = '';
@@ -184,12 +188,19 @@ export class Hud {
       .join('');
   }
 
+  /** A ranged ability used in melee: the slot reads "Too close" for 0.8 s. */
+  tooClose(slot: 0 | 1): void {
+    this.tooCloseUntil[slot] = performance.now() + 800;
+  }
+
   frame(f: FrameStats): void {
-    if (f.wolf !== null) {
-      const name = this.slots[1].querySelector('.name')!;
-      const label = secondaryLabel(f.wolf, '');
+    const now = performance.now();
+    [0, 1].forEach((i) => {
+      const name = this.slots[i].querySelector('.name')!;
+      const label = now < this.tooCloseUntil[i] ? 'Too close' : i === 1 ? secondaryLabel(f.wolf, this.slotNames[1]) : this.slotNames[0];
       if (name.textContent !== label) name.textContent = label;
-    }
+      this.slots[i].classList.toggle('too-close', now < this.tooCloseUntil[i]);
+    });
     [f.cd1, f.cd2].forEach((cd, i) => {
       if (cd > this.lastCd[i] + 0.01) this.cdMax[i] = cd;
       this.lastCd[i] = cd;

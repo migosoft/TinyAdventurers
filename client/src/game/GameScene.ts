@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
-import { ANIM, CLASSES, CONST, EFFECT, FLAG, KIND, TILE_ID } from '../generated/defs';
+import { ANIM, CLASSES, CONST, EFFECT, ENEMY_KINDS, FLAG, HITBOX, KIND, TILE_ID } from '../generated/defs';
 import type { ClassId } from '../generated/ClassId';
 import type { Ev } from '../generated/Ev';
+import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { ServerMsg } from '../generated/ServerMsg';
 import type { Snapshot } from '../generated/Snapshot';
@@ -26,7 +27,7 @@ import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
-import { Interpolator, Predictor, type EntState } from './world';
+import { abilityChoice, cosmeticPierce, Interpolator, Predictor, type EntState } from './world';
 
 export interface GameInit {
   info: RunStartInfo;
@@ -48,7 +49,20 @@ interface Cosmetic {
   r: number;
   target?: [number, number];
   seenOnServer: boolean;
+  /** Piercing left (`ResolvedAbility.pierce` / `pierce_through`) and the damage it still carries. */
+  pierce: number;
+  through: number;
+  damage: number;
+  split: Record<string, number>;
+  /** Enemies it was predicted to pass (never touched again, like the server's `hit`). */
+  hit: Set<number>;
+  /** Where the last enemy it passed stood. */
+  lastPass?: [number, number];
 }
+
+/** Kind id -> name, to look up `ENEMY_KINDS`. */
+const KIND_NAME: Record<number, string> = Object.fromEntries(Object.entries(KIND).map(([name, id]) => [id, name]));
+const ENEMY_KIND: Record<string, { max_hp: number; res: Record<string, number> } | undefined> = ENEMY_KINDS;
 
 const SKELETAL = new Set<number>([KIND.SkeletonWarrior, KIND.SkeletonArcher, KIND.RaisedSkeleton, KIND.Lich]);
 
@@ -72,6 +86,12 @@ export class GameScene extends Phaser.Scene {
   private cosmetics: Cosmetic[] = [];
   /** Own shots whose cosmetic copy has ended (shot id -> time, s): their server copy stays hidden. */
   private endedShots = new Map<number, number>();
+  /**
+   * Own shots whose cosmetic copy was predicted to stop at an enemy (shot id -> the enemy's
+   * position, the shot's direction and how far past the enemy's centre a shot has surely
+   * passed it). If the server's shot is seen that far past, it is drawn.
+   */
+  private stoppedShots = new Map<number, { x: number; y: number; dx: number; dy: number; past: number }>();
   private fx!: Effects;
   private bars!: Phaser.GameObjects.Graphics;
   /** HP bars over heroes: under the darkness, so they vanish with their hero. */
@@ -129,6 +149,7 @@ export class GameScene extends Phaser.Scene {
     this.torchViews = new Map();
     this.cosmetics = [];
     this.endedShots.clear();
+    this.stoppedShots.clear();
     this.interp = new Interpolator();
     this.ents = new Map();
     this.alive = true;
@@ -447,7 +468,8 @@ export class GameScene extends Phaser.Scene {
     if (wantSecondary && this.pred.cd2 <= 0) {
       secondary = this.shotId = (this.shotId + 1) & 0xffff;
       used[1] = this.predictAbility(1, secondary, aim, dist);
-      if (this.info.abilities[1].id === 'Dash') dash = [Math.cos(aim), Math.sin(aim)];
+      if (used[1] === null) secondary = null;
+      else if (this.info.abilities[1].id === 'Charge') dash = [Math.cos(aim), Math.sin(aim)];
     }
     const seq = this.pred.step(mx, my, dash, used);
     const viewLag = this.net.rtt / 2 + this.interp.delay * 1000;
@@ -466,61 +488,73 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  /** Play the action locally right away. Returns the predicted cooldown. */
-  private predictAbility(slot: 0 | 1, shot: number, aim: number, dist: number): number {
+  /**
+   * Whether a monster on the ground (not an ally) or a closed chest is within the hero's
+   * reach (server `melee_target`): in melee a ranged ability falls back or is blocked.
+   */
+  private inMelee(x: number, y: number): boolean {
+    const reach = this.info.fallback.range;
+    return [...this.ents.values()].some((e) => {
+      // A closed chest is struck like the hidden mimic it may be.
+      if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= reach;
+      // A flying dragon is out of reach.
+      return !isPlayerKind(e.kind) && !isAllyKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
+    });
+  }
+
+  /**
+   * Play the action locally right away. Returns the predicted cooldown, or null when the
+   * ability is blocked (a ranged secondary in melee): then it is not sent.
+   */
+  private predictAbility(slot: 0 | 1, shot: number, aim: number, dist: number): number | null {
     const a = this.info.abilities[slot];
-    const name = a.id;
     const now = performance.now() / 1000;
     const { x, y } = this.pred.state;
+    const choice = abilityChoice(a, slot, a.ranged && this.inMelee(x, y));
+    if (choice === 'blocked') {
+      this.hud.tooClose(1);
+      return null;
+    }
+    if (choice === 'fallback') {
+      this.localAnim = { anim: ANIM.Melee, start: now };
+      return this.pred.cooldownOf(slot, true);
+    }
     let anim: number = ANIM.Cast;
-    let cooldown = this.pred.cooldownOf(slot);
-    switch (name) {
+    switch (a.id) {
       case 'MagicMissile':
-        this.spawnCosmetic(KIND.Missile, shot, aim, a.speed, a.radius, a.range / a.speed);
+        this.spawnCosmetic(KIND.Missile, shot, aim, a, a.radius, a.range / a.speed);
         anim = ANIM.Shoot;
         break;
       case 'Fireball': {
         const d = Math.min(Math.max(dist, 24), a.range);
         // It flies with radius 4 (server abilities.rs); `a.radius` is its blast.
-        this.spawnCosmetic(KIND.Fireball, shot, aim, a.speed, 4, a.range / a.speed + 0.1, [x + Math.cos(aim) * d, y + Math.sin(aim) * d]);
+        this.spawnCosmetic(KIND.Fireball, shot, aim, a, 4, a.range / a.speed + 0.1, [x + Math.cos(aim) * d, y + Math.sin(aim) * d]);
         anim = ANIM.Cast;
         break;
       }
-      case 'Sword':
-      case 'Axe':
+      case 'Strike':
         anim = ANIM.Melee;
         break;
-      case 'Dash':
+      case 'Charge':
         anim = ANIM.Dash;
         break;
       case 'SummonWolf':
         anim = ANIM.Cast;
         break;
-      case 'Heal':
+      case 'HolyLight':
         anim = ANIM.Cast;
         break;
-      case 'CrossbowDagger': {
-        const close = [...this.ents.values()].some((e) => {
-          // A closed chest is stabbed like the hidden mimic it may be (server `dagger_target`).
-          if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= (this.info.fallback?.range ?? CONST.DAGGER_RANGE);
-          // A flying dragon is out of the dagger's reach (the server shoots the crossbow then).
-          return !isPlayerKind(e.kind) && !isAllyKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= (this.info.fallback?.range ?? CONST.DAGGER_RANGE);
-        });
-        if (close) {
-          anim = ANIM.Melee;
-          cooldown = this.pred.cooldownOf(slot, true);
-        } else {
-          this.spawnCosmetic(KIND.Bolt, shot, aim, a.speed, a.radius, a.range / a.speed);
-          anim = ANIM.Shoot;
-        }
+      case 'Shoot':
+        if (a.projectile !== null) this.spawnCosmetic(a.projectile, shot, aim, a, a.radius, a.range / a.speed);
+        anim = ANIM.Shoot;
         break;
-      }
     }
     this.localAnim = { anim, start: now };
-    return cooldown;
+    return this.pred.cooldownOf(slot);
   }
 
-  private spawnCosmetic(kind: number, shot: number, aim: number, speed: number, r: number, life: number, target?: [number, number]): void {
+  private spawnCosmetic(kind: number, shot: number, aim: number, a: ResolvedAbility, r: number, life: number, target?: [number, number]): void {
+    const speed = a.speed;
     const pd = PROJECTILES[kind];
     const { x, y } = this.pred.state;
     const img = this.projectileImage(pd);
@@ -537,25 +571,50 @@ export class GameScene extends Phaser.Scene {
       r,
       target,
       seenOnServer: false,
+      pierce: a.pierce,
+      through: a.pierce_through,
+      damage: a.damage,
+      split: a.split,
+      hit: new Set(),
     });
   }
 
-  private shotTouchesEnemy(c: Cosmetic, nx: number, ny: number): boolean {
+  /** The first thing the shot touches on its way to (nx, ny), skipping the enemies it passed. */
+  private shotTouchesEnemy(c: Cosmetic, nx: number, ny: number): EntState | null {
     const steps = Math.max(1, Math.ceil(Math.hypot(nx - c.x, ny - c.y) / 4));
     for (const e of this.ents.values()) {
-      if (e.flags & FLAG.DEAD) continue;
+      if (e.flags & FLAG.DEAD || c.hit.has(e.id)) continue;
       // An opened chest lets shots pass; a closed one stops them (server `stops_shots`).
       if (e.kind === KIND.Chest && e.anim !== 0) continue;
       const air = (e.flags & FLAG.AIRBORNE) !== 0;
       for (let k = 1; k <= steps; k++) {
-        if (shotHits(e.kind, e.x, e.y, air, c.x + ((nx - c.x) * k) / steps, c.y + ((ny - c.y) * k) / steps, c.r)) return true;
+        if (shotHits(e.kind, e.x, e.y, air, c.x + ((nx - c.x) * k) / steps, c.y + ((ny - c.y) * k) / steps, c.r)) return e;
       }
     }
-    return false;
+    return null;
+  }
+
+  /** Whether the shot flies on past `e` (server `impact`); updates its piercing and damage if so. */
+  private passes(c: Cosmetic, e: EntState): boolean {
+    // Objects (a closed chest, a barrel) always stop a shot (server `impact_object`); so does a blast.
+    if (c.target || e.kind === KIND.Chest || e.kind === KIND.Barrel) return false;
+    const kind = ENEMY_KIND[KIND_NAME[e.kind]];
+    const next = cosmeticPierce(c, e.hp * 255, kind?.max_hp, c.split, kind?.res);
+    if (next === 'stop') return false;
+    c.pierce = next.pierce;
+    c.through = next.through;
+    c.damage = next.damage;
+    c.hit.add(e.id);
+    c.lastPass = [e.x, e.y];
+    return true;
   }
 
   private updateCosmetics(dt: number, serverShots: Set<number>, now: number): void {
-    for (const [shot, t] of this.endedShots) if (now - t > 2) this.endedShots.delete(shot);
+    for (const [shot, t] of this.endedShots) {
+      if (now - t <= 2) continue;
+      this.endedShots.delete(shot);
+      this.stoppedShots.delete(shot);
+    }
     for (let i = this.cosmetics.length - 1; i >= 0; i--) {
       const c = this.cosmetics[i];
       const onServer = serverShots.has(c.shot);
@@ -567,13 +626,24 @@ export class GameScene extends Phaser.Scene {
       const hitWall = !lineOfSight(this.map, c.x, c.y, nx, ny) || this.map.opaqueAt(nx, ny);
       // The server projectile hit something: ours ends too.
       const goneOnServer = c.seenOnServer && !onServer;
-      // Shots stop at the first enemy they touch (the server decides the damage), checked every 4 px like there.
-      const hitEnemy = !hitWall && this.shotTouchesEnemy(c, nx, ny);
+      // Shots stop at the first enemy they touch unless they are predicted to pierce it
+      // (the server decides the damage), checked every 4 px like there.
+      const touched = hitWall ? null : this.shotTouchesEnemy(c, nx, ny);
+      const hitEnemy = touched !== null && !this.passes(c, touched);
       if (c.life <= 0 || hitWall || goneOnServer || reachedTarget || hitEnemy) {
-        if (hitWall) this.fx.hitSpark(c.x, c.y, PROJECTILES[c.kind].trail ?? 0xffffff);
+        const trail = PROJECTILES[c.kind].trail ?? 0xffffff;
+        if (hitWall) this.fx.hitSpark(c.x, c.y, trail);
+        // We predicted a kill the server did not see: the shot ends at the last enemy it passed.
+        else if (goneOnServer && c.lastPass) this.fx.hitSpark(c.lastPass[0], c.lastPass[1] + 4, trail);
         c.img.destroy();
         this.cosmetics.splice(i, 1);
         this.endedShots.set(c.shot, now);
+        // Predicted to stop: if the server's shot flies on past this enemy after all, it is drawn
+        // (`drawProjectile`).
+        if (hitEnemy) {
+          const v = Math.hypot(c.vx, c.vy) || 1;
+          this.stoppedShots.set(c.shot, { x: touched.x, y: touched.y, dx: c.vx / v, dy: c.vy / v, past: (HITBOX[touched.kind]?.r ?? 6) + c.r });
+        }
         continue;
       }
       c.x = nx;
@@ -693,7 +763,7 @@ export class GameScene extends Phaser.Scene {
       cd2: this.pred.cd2,
       ents: this.ents.size,
       darkvision,
-      wolf: this.info.players.find((p) => p.ent === this.info.you)?.class === 'ElvenRanger' ? [...this.ents.values()].some((e) => e.kind === KIND.DireWolf && e.extra === this.info.you && !(e.flags & FLAG.DEAD)) : null,
+      wolf: this.info.abilities[1].id === 'SummonWolf' ? [...this.ents.values()].some((e) => e.kind === KIND.DireWolf && e.extra === this.info.you && !(e.flags & FLAG.DEAD)) : null,
     });
   }
 
@@ -792,6 +862,14 @@ export class GameScene extends Phaser.Scene {
     const owner = e.extra >>> 16;
     const shot = e.extra & 0xffff;
     // Our own projectiles are shown by the local cosmetic copy, also once it has ended.
+    const stop = owner === this.info.you ? this.stoppedShots.get(shot) : undefined;
+    // Predicted to stop, but the server's shot flew on past the enemy: show it from here on.
+    // Its newest snapshot position decides (not the extrapolated one, which may overshoot).
+    const raw = stop && this.interp.latest()?.get(e.id);
+    if (stop && raw && (raw[2] - stop.x) * stop.dx + (raw[3] - stop.y) * stop.dy > stop.past) {
+      this.stoppedShots.delete(shot);
+      this.endedShots.delete(shot);
+    }
     const mine = owner === this.info.you && (this.endedShots.has(shot) || this.cosmetics.some((c) => c.shot === shot));
     const pd = PROJECTILES[e.kind];
     if (!pd) return;

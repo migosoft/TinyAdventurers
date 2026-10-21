@@ -47,7 +47,7 @@ pub struct ResolvedAbility {
     #[ts(type = "number | null")]
     pub projectile: Option<u8>,
     /// Sent as the non-zero shares by damage-type name (see `DamageSplit`'s `Serialize`).
-    #[ts(type = "Partial<Record<DamageType, number>>")]
+    #[ts(type = "Record<string, number>")]
     pub split: DamageSplit,
     #[serde(skip)]
     #[ts(skip)]

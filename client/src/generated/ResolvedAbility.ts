@@ -4,4 +4,24 @@ import type { AbilityId } from "./AbilityId";
 /**
  * An ability with its numbers resolved for one hero.
  */
-export type ResolvedAbility = { id: AbilityId, cooldown: number, damage: number, range: number, arc: number, speed: number, radius: number, duration: number, };
+export type ResolvedAbility = { id: AbilityId, cooldown: number, damage: number, range: number, arc: number, speed: number, radius: number, duration: number, 
+/**
+ * How many more enemies a shot may hit by overkill: 0 none, `u8::MAX` no limit.
+ */
+pierce: number, 
+/**
+ * How many enemies a shot passes through with full damage before the overkill rule.
+ */
+pierce_through: number, 
+/**
+ * In melee a ranged primary falls back to Strike, a ranged secondary is blocked.
+ */
+ranged: boolean, 
+/**
+ * The `EntityKind` id of its projectile.
+ */
+projectile: number | null, 
+/**
+ * Sent as the non-zero shares by damage-type name (see `DamageSplit`'s `Serialize`).
+ */
+split: Record<string, number>, };

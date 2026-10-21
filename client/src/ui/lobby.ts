@@ -1,4 +1,7 @@
+import { ABILITIES, CLASSES } from '../generated/defs';
+import type { AbilityId } from '../generated/AbilityId';
 import type { BossId } from '../generated/BossId';
+import type { ClassId } from '../generated/ClassId';
 import type { CharacterInfo } from '../generated/CharacterInfo';
 import type { LevelId } from '../generated/LevelId';
 import type { RoomPlayer } from '../generated/RoomPlayer';
@@ -22,6 +25,14 @@ const STATS: UpgradeStat[] = ['Damage', 'AttackSpeed', 'MoveSpeed', 'Life', 'Arm
 
 type Room = { run_id: number; name: string; host: number; players: RoomPlayer[]; level: LevelId; boss: BossId | null };
 
+/** The abilities of `slot` that class `cls` may use (the debug loadout's choices). */
+export function debugChoices(cls: ClassId, slot: 'Primary' | 'Secondary'): AbilityId[] {
+  return (Object.keys(ABILITIES) as AbilityId[]).filter((id) => {
+    const a = ABILITIES[id];
+    return a.slot === slot && (a.classes as readonly ClassId[]).includes(cls);
+  });
+}
+
 /** Debug mode only: `?debug&boss=demon|lich|dragon` preselects the end boss on the host's page. */
 function debugBoss(): BossId | null {
   const q = new URLSearchParams(location.search);
@@ -37,6 +48,8 @@ export class Lobby {
   private character: CharacterInfo | null = null;
   /** Room the debug boss was already preselected in. */
   private preselected = 0;
+  /** The debug loadout picked in a waiting room (the server sends no echo). */
+  private debugPick: { run: number; cls: ClassId; primary: AbilityId; secondary: AbilityId } | null = null;
   myId = 0;
 
   constructor(
@@ -179,6 +192,7 @@ export class Lobby {
       <div class="panel"><h2>Party (${room.players.length}/4)</h2><ul class="players">${players}</ul></div>
       <div class="panel"><h2>End boss${isHost ? '' : ' (chosen by the host)'}</h2><div class="bosses"></div></div>
       ${this.upgradesPanel()}
+      ${me && (isHost || !me.ready) ? this.debugLoadoutRow(room.run_id, me.class) : ''}
       <div class="row actions">
         <button id="leave">Leave</button>
         ${isHost ? `<button id="start" class="primary">Enter the dungeon</button>` : `<button id="ready" class="primary">${me?.ready ? 'Not ready' : 'Ready!'}</button>`}
@@ -214,5 +228,26 @@ export class Lobby {
     if (start) start.onclick = () => this.net.send({ t: 'StartRun' });
     const ready = this.root.querySelector<HTMLButtonElement>('#ready');
     if (ready) ready.onclick = () => this.net.send({ t: 'SetReady', ready: !me?.ready });
+    this.root.querySelectorAll<HTMLSelectElement>('.debug-loadout select').forEach((sel) => {
+      sel.onchange = () => {
+        const pick = this.debugPick!;
+        if (sel.dataset.slot === 'primary') pick.primary = sel.value as AbilityId;
+        else pick.secondary = sel.value as AbilityId;
+        this.net.send({ t: 'DebugLoadout', primary: { ability: pick.primary, source: 'Own' }, secondary: { ability: pick.secondary, source: 'Own' } });
+      };
+    });
+  }
+
+  /** Debug: two pickers for any primary and secondary of your class (sent as `DebugLoadout`). */
+  private debugLoadoutRow(run: number, cls: ClassId): string {
+    if (!this.debugPick || this.debugPick.run !== run || this.debugPick.cls !== cls) {
+      this.debugPick = { run, cls, primary: CLASSES[cls].primary, secondary: CLASSES[cls].secondary };
+    }
+    const pick = this.debugPick;
+    const select = (slot: 'primary' | 'secondary', chosen: AbilityId) =>
+      `<select data-slot="${slot}">${debugChoices(cls, slot === 'primary' ? 'Primary' : 'Secondary')
+        .map((id) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${ABILITIES[id].name}</option>`)
+        .join('')}</select>`;
+    return `<div class="row debug-loadout"><small>Debug loadout</small>${select('primary', pick.primary)}${select('secondary', pick.secondary)}</div>`;
   }
 }

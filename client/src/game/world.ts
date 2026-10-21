@@ -107,6 +107,46 @@ function toState(e: EntSnap, x: number, y: number, aim: number): EntState {
   return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9], effects: e[10] };
 }
 
+// ------------------------------------------------------------ abilities
+
+/**
+ * What an ability does when used (server: the melee rule). In melee a ranged
+ * primary strikes with the melee weapon instead (the fallback), and a ranged
+ * secondary is blocked. Anything else is used as it is.
+ */
+export function abilityChoice(a: ResolvedAbility, slot: 0 | 1, inMelee: boolean): 'use' | 'fallback' | 'blocked' {
+  if (!a.ranged || !inMelee) return 'use';
+  return slot === 0 ? 'fallback' : 'blocked';
+}
+
+/** The weakness floor of the server's damage formula (`MIN_RESISTANCE` in defs/damage.rs). */
+const MIN_RESISTANCE = -1;
+/** `pierce` value for "no limit" (`u8::MAX`). */
+const PIERCE_UNLIMITED = 255;
+
+/**
+ * Whether an own shot predicted to touch an enemy flies on, and with what
+ * (server `impact`): it first passes `through` enemies with full damage, then
+ * flies on with the rest of its damage only if it kills (`overkill_rest`), while
+ * `pierce` allows it. The enemy's HP is estimated from its byte share of max HP.
+ * Unknown kinds and immune enemies stop it.
+ */
+export function cosmeticPierce(
+  state: { pierce: number; through: number; damage: number },
+  hpShare: number,
+  maxHp: number | undefined,
+  split: Record<string, number>,
+  res: Record<string, number> | undefined,
+): 'stop' | { pierce: number; through: number; damage: number } {
+  if (state.through > 0) return { ...state, through: state.through - 1 };
+  if (state.pierce <= 0 || maxHp === undefined || res === undefined) return 'stop';
+  const hp = (hpShare / 255) * maxHp;
+  let eff = 0;
+  for (const [t, share] of Object.entries(split)) eff += share * (1 - Math.max(res[t] ?? 0, MIN_RESISTANCE));
+  if (eff <= 0 || state.damage * eff < hp) return 'stop';
+  return { pierce: state.pierce === PIERCE_UNLIMITED ? PIERCE_UNLIMITED : state.pierce - 1, through: 0, damage: state.damage - hp / eff };
+}
+
 // ------------------------------------------------------------ local prediction
 
 interface Pending {
@@ -138,20 +178,20 @@ export class Predictor {
   private pending: Pending[] = [];
   private seq = 0;
   readonly speed: number;
-  /** Seconds a dash lasts: the secondary's, when that is the Dash. */
+  /** Seconds a dash lasts: the secondary's, when that is Charge. */
   private dashDuration: number;
 
   constructor(
     private map: TileMap,
     speed: number,
     private abilities: ResolvedAbility[],
-    private fallback: ResolvedAbility | null,
+    private fallback: ResolvedAbility,
     x: number,
     y: number,
   ) {
     this.speed = speed;
     const sec = abilities[1];
-    this.dashDuration = sec.id === 'Dash' ? sec.duration : 0;
+    this.dashDuration = sec.id === 'Charge' ? sec.duration : 0;
     this.state = { x, y, dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0 };
   }
 
@@ -167,7 +207,7 @@ export class Predictor {
 
   /** Cooldown the server resolved for the slot (or for the melee fallback). */
   cooldownOf(slot: 0 | 1, fallback = false): number {
-    return (fallback && this.fallback ? this.fallback : this.abilities[slot]).cooldown;
+    return (fallback ? this.fallback : this.abilities[slot]).cooldown;
   }
 
   /**
