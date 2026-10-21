@@ -2,6 +2,7 @@
 import type { BossBar } from "./BossBar";
 import type { EntSnap } from "./EntSnap";
 import type { Ev } from "./Ev";
+import type { LogW } from "./LogW";
 import type { MovingLight } from "./MovingLight";
 import type { SelfState } from "./SelfState";
 
@@ -28,4 +29,8 @@ looks: Array<[number, number, number]>,
 /**
  * Server simulation time spent per tick (ms, averaged).
  */
-srv_ms: number, };
+srv_ms: number, 
+/**
+ * The rules log, for a player who turned it on.
+ */
+log: LogW | null, };

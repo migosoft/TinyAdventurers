@@ -376,6 +376,7 @@ impl Run {
                     ClientMsg::Debug { on } => self.set_debug(pi, on),
                     ClientMsg::DebugDarkvision { ratio } => self.set_darkvision(pi, ratio),
                     ClientMsg::DebugEffect { kind } => self.debug_effect(pi, kind),
+                    ClientMsg::RulesLog { on, details } => rules_log::set_prefs(self, pi, on, details),
                     _ => {}
                 }
             }
@@ -391,6 +392,7 @@ impl Run {
                         let name = self.players[pi].name.clone();
                         self.event(Ev::Msg { text: format!("{name} left the dungeon") }, None);
                     }
+                    rules_log::forget(self, self.players[pi].id);
                 }
             }
         }
@@ -1443,6 +1445,18 @@ pub mod tests {
         // 2026-10-21, plan 3a: checked again, unchanged.
     }
 
+    #[test]
+    fn level_setup_is_unchanged_with_the_log_on() {
+        let got: Vec<u64> = (0..6)
+            .map(|s| {
+                let mut run = random_boss_run(s);
+                run.log.forced = true;
+                fingerprint(&run)
+            })
+            .collect();
+        assert_eq!(got, vec![15034865796308420847, 11583993820610399499, 14176587140014399478, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
+    }
+
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
     // boss scripts push with BOSS_KNOCK_STR above every hero weight + 4.
     #[test]
@@ -1477,10 +1491,35 @@ pub mod tests {
         assert_eq!(got, vec![11853672065832131168, 7100769620128759448, 1468820053114872194]);
     }
 
+    #[test]
+    fn simulation_is_unchanged_after_waking_the_boss_with_the_log_on() {
+        let mut got = Vec::new();
+        for boss in BossId::ALL {
+            let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], boss);
+            run.log.forced = true;
+            let hall = run.level.boss().unwrap().arena.center_px();
+            for p in &mut run.players {
+                p.mv.x = hall.x;
+                p.mv.y = hall.y + 40.0;
+            }
+            for _ in 0..300 {
+                run.step();
+            }
+            got.push(fingerprint(&run));
+        }
+        assert_eq!(got, vec![11853672065832131168, 7100769620128759448, 1468820053114872194]);
+    }
+
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
     /// of type `t` placed `dists` px east of it with `hps`; the run after 2 s.
     fn fight(class: ClassId, t: crate::defs::enemies::EnemyType, dists: &[f64], hps: &[f64], fire: bool) -> Run {
+        fight_with_log(class, t, dists, hps, fire, false)
+    }
+
+    /// `fight`, with the rules log forced on or not.
+    fn fight_with_log(class: ClassId, t: crate::defs::enemies::EnemyType, dists: &[f64], hps: &[f64], fire: bool, log: bool) -> Run {
         let mut run = test_run(&[class], BossId::Demon);
+        run.log.forced = log;
         run.monsters.retain(|m| m.is_boss);
         let p = run.players[0].pos();
         for (&d, &hp) in dists.iter().zip(hps) {
@@ -1509,6 +1548,16 @@ pub mod tests {
         assert!(enemies(&ranger).is_empty(), "the three goblins fall");
         assert!(matches!(enemies(&wizard)[..], [(true, hp)] if hp < 60.0) && wizard.projectiles.is_empty(), "the staff, not missiles");
         assert!(paladin.players[0].hp < paladin.players[0].max_hp, "the archer punches");
+        let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
+        assert_eq!(got, [12818716789722319080, 10046494661674442087, 18070867878348641130]);
+    }
+
+    #[test]
+    fn plan_3a_fight_is_pinned_with_the_log_on() {
+        use crate::defs::enemies::EnemyType as E;
+        let ranger = fight_with_log(ClassId::ElvenRanger, E::GoblinArcher, &[40.0, 50.0, 60.0], &[5.0, 5.0, 24.0], true, true);
+        let wizard = fight_with_log(ClassId::Wizard, E::OrcWarrior, &[12.0], &[60.0], true, true);
+        let paladin = fight_with_log(ClassId::Paladin, E::GoblinArcher, &[12.0], &[24.0], false, true);
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
         assert_eq!(got, [12818716789722319080, 10046494661674442087, 18070867878348641130]);
     }

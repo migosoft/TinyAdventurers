@@ -104,6 +104,8 @@ pub enum ClientMsg {
     DebugLoadout { primary: Pick, secondary: Pick },
     /// Debug, waiting room: put a weapon in your Melee or Ranged slot (`None` = an empty slot).
     DebugEquip { slot: EquipSlot, item: Option<ItemId> },
+    /// In a run: the rules log on or off, and whether to send detail lines. Sent again on every run start.
+    RulesLog { on: bool, details: bool },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -281,6 +283,8 @@ pub struct Snapshot {
     pub looks: Vec<(u32, u8, u8)>,
     /// Server simulation time spent per tick (ms, averaged).
     pub srv_ms: f32,
+    /// The rules log, for a player who turned it on.
+    pub log: Option<crate::run::rules_log::LogW>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

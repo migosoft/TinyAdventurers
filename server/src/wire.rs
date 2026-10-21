@@ -70,10 +70,34 @@ pub enum EvW {
 pub struct LightW(pub u32, pub u32, pub u8, pub Option<u32>);
 
 /// `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none;
-/// `looks` is `[[entity, effect, look], ...]` for the non-default looks of the sent entities' effects.
-#[derive(Debug, Clone, Serialize, TS)]
+/// `looks` is `[[entity, effect, look], ...]` for the non-default looks of the sent entities' effects;
+/// an eleventh field `log` follows only for a player with the rules log on.
+#[derive(Debug, Clone, TS)]
 #[ts(export)]
-pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>, pub Vec<LightW>, pub Vec<(u32, u8, u8)>);
+pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>, pub Vec<LightW>, pub Vec<(u32, u8, u8)>, pub Option<crate::run::rules_log::LogW>);
+
+/// A bare array of 10 fields, or 11 when the rules log is on: the log is the last field and is left out
+/// when `None`, so the bytes while it is off are what they always were.
+impl Serialize for SnapW {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeTuple;
+        let mut t = s.serialize_tuple(if self.10.is_some() { 11 } else { 10 })?;
+        t.serialize_element(&self.0)?;
+        t.serialize_element(&self.1)?;
+        t.serialize_element(&self.2)?;
+        t.serialize_element(&self.3)?;
+        t.serialize_element(&self.4)?;
+        t.serialize_element(&self.5)?;
+        t.serialize_element(&self.6)?;
+        t.serialize_element(&self.7)?;
+        t.serialize_element(&self.8)?;
+        t.serialize_element(&self.9)?;
+        if let Some(log) = &self.10 {
+            t.serialize_element(log)?;
+        }
+        t.end()
+    }
+}
 
 /// `[seq, mx, my, aim, aim_dist, primary, secondary, view_lag, rtt, act]`, see `InputMsg`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -116,7 +140,7 @@ pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune, b.enraged));
     let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
     let lights = s.lights.iter().map(|l| LightW(q_pos(l.0 as f64), q_pos(l.1 as f64), l.2, l.3)).collect();
-    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain, lights, s.looks.clone());
+    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain, lights, s.looks.clone(), s.log.clone());
     rmp_serde::to_vec(&w).expect("encode snapshot")
 }
 
@@ -179,6 +203,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         lights: vec![MovingLight(100.3, 200.7, 2, None), MovingLight(55.0, 66.06, 3, Some(0x78c8ff))],
         looks: vec![(3, 11, 1)],
         srv_ms: 0.125,
+        log: None,
     };
     let spectator = Snapshot {
         tick: 99,
@@ -210,6 +235,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         lights: vec![],
         looks: vec![],
         srv_ms: 0.0,
+        log: None,
     };
     vec![busy, spectator]
 }

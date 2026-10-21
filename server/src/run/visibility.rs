@@ -62,7 +62,7 @@ pub(crate) fn hero_tile_seen(view: &View, lights: &Lights, viewer: (i32, i32), r
 
 /// In the viewer's sight and lit or within darkvision (large figures: any part of them).
 /// The lights' layers must be current (`refresh`, `cast_moving`).
-fn seen(view: &View, lights: &Lights, dark: &Dark, p: Vec2, radius: f64) -> bool {
+pub(crate) fn seen(view: &View, lights: &Lights, dark: &Dark, p: Vec2, radius: f64) -> bool {
     let at = |q: Vec2| {
         let (x, y) = Map::tile_of(q);
         hero_tile_seen(view, lights, dark.tile, dark.range, x, y)
@@ -78,7 +78,7 @@ fn seen(view: &View, lights: &Lights, dark: &Dark, p: Vec2, radius: f64) -> bool
 }
 
 /// A world object is sent when seen; a torch (it owns a light) when in sight, lit or not.
-fn object_sent(view: &View, lights: &Lights, dark: &Dark, o: &super::objects::WorldObject) -> bool {
+pub(crate) fn object_sent(view: &View, lights: &Lights, dark: &Dark, o: &super::objects::WorldObject) -> bool {
     !o.gone && if o.owns_light() { visible(view, o.pos, 0.0) } else { seen(view, lights, dark, o.pos, 0.0) }
 }
 
@@ -219,6 +219,7 @@ fn looks_of(run: &Run, ents: &[EntSnap]) -> Vec<(u32, u8, u8)> {
 
 pub fn send_snapshots(run: &mut Run) {
     let events = std::mem::take(&mut run.events);
+    let records = super::rules_log::take(run);
     let on_hero = std::mem::take(&mut run.on_hero);
     run.refresh_lights(); // shots moved after the AI: the snapshot must match what the client casts
     let moving = run.moving_lights();
@@ -232,7 +233,7 @@ pub fn send_snapshots(run: &mut Run) {
         }
         let me = &run.players[pi];
         let viewed = if me.alive { me } else { me.spectating.and_then(|s| run.players.iter().find(|q| q.id == s)).unwrap_or(me) };
-        let (view_pos, sight) = (viewed.pos(), viewed.sight_now());
+        let (view_pos, sight, viewed_id) = (viewed.pos(), viewed.sight_now(), viewed.id);
         let mut view = std::mem::replace(&mut run.players[pi].view, View::new(0, 0));
         let (tx, ty) = Map::tile_of(view_pos);
         let vision = sight.vision.round() as i32;
@@ -252,6 +253,7 @@ pub fn send_snapshots(run: &mut Run) {
 
         let me = &run.players[pi];
         let snap = Snapshot {
+            log: super::rules_log::for_viewer(run, pi, viewed_id, &view, &dark, &ents, &records),
             tick: run.tick,
             ack: me.ack,
             ents,

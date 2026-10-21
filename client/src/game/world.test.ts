@@ -26,7 +26,7 @@ function chasmMap(): TileMap {
 
 function snap(ack: number, x: number, y: number): Snapshot {
   const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false };
-  return { tick: ack, ack, ents: [], me, boss: null, ev: [], drain: null, lights: [], looks: [], srv_ms: 0 };
+  return { tick: ack, ack, ents: [], me, boss: null, ev: [], drain: null, lights: [], looks: [], srv_ms: 0, log: null };
 }
 
 describe('Predictor', () => {

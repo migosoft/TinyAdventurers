@@ -135,6 +135,7 @@ export function unpackSnap(w: SnapW): Snapshot {
     lights: lights.map((l): MovingLight => [pos(l[0]), pos(l[1]), l[2], l[3]]),
     looks,
     srv_ms,
+    log: w[10] ?? null,
   };
 }
 
