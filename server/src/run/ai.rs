@@ -110,8 +110,9 @@ pub fn flee(run: &mut Run, mi: usize, dt: f64) {
     let pos = m.pos;
     let speed = gait(run, mi, m.speed);
     move_toward(run, mi, pos + dir * 24.0, speed, dt);
+    let moved = run.monsters[mi].pos.dist(pos) > 1e-9;
     run.monsters[mi].aim = dir.angle();
-    set_anim(run, mi, Anim::Move);
+    set_anim(run, mi, if moved { Anim::Move } else { Anim::Idle });
 }
 
 /// Move a monster toward `to` with wall sliding. Returns true when arrived.

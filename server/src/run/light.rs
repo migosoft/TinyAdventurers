@@ -202,7 +202,12 @@ impl Run {
     /// A short flash of light on a spot (an explosion): a moving light that
     /// the sweep removes after `secs`. No event: it goes out in snapshots.
     pub fn add_flash(&mut self, kind: LightKind, pos: Vec2, secs: f64) -> u32 {
-        let id = self.add_light(kind, Anchor::Point(pos), None);
+        self.add_tinted_flash(kind, None, pos, secs)
+    }
+
+    /// `add_flash` in a colour of its own (`None`: the kind's).
+    pub fn add_tinted_flash(&mut self, kind: LightKind, colour: Option<Colour>, pos: Vec2, secs: f64) -> u32 {
+        let id = self.add_light(kind, Anchor::Point(pos), colour);
         let expires = self.time + secs;
         if let Some(s) = self.lights.sources.iter_mut().find(|s| s.id == id) {
             s.expires = Some(expires);

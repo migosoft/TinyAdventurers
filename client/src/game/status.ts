@@ -11,15 +11,6 @@ export function has(bits: number, kind: number): boolean {
   return (bits & (1 << kind)) !== 0;
 }
 
-/**
- * The look an effect has on an entity: the look sent in the snapshot's `looks`
- * (entity id, effect id, look id; only non-default ones), else `Plain`.
- */
-export function lookOf(looks: readonly (readonly [number, number, number])[], id: number, effect: number): number {
-  for (const [i, e, l] of looks) if (i === id && e === effect) return l;
-  return EFFECT_LOOK.Plain;
-}
-
 type Look = (typeof EFFECT_LOOK)[keyof typeof EFFECT_LOOK];
 
 /** How Entangled is drawn around the feet, by look (a later web is one more entry; the compiler lists the missing ones). */

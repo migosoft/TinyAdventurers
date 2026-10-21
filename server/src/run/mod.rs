@@ -437,7 +437,7 @@ impl Run {
                 }
                 continue;
             }
-            if m.effects.fear_from().is_some() {
+            if m.effects.fear_from().is_some() && !m.hiding && !m.dormant {
                 ai::flee(self, mi, DT);
                 continue;
             }
@@ -829,12 +829,13 @@ impl Run {
         }
     }
 
-    /// The living enemy monsters (not allies) whose bodies touch the circle at `at`.
+    /// The living, awake enemy monsters (not allies, not hiding mimics or dormant ones) whose
+    /// bodies touch the circle at `at` and that its centre can see (a hazard does not reach through walls).
     fn enemies_touching(&self, at: Vec2, r: f64) -> Vec<usize> {
         (0..self.monsters.len())
             .filter(|&mi| {
                 let m = &self.monsters[mi];
-                m.alive && !m.is_ally() && m.sinking.is_none() && m.pos.dist(at) < r + m.radius
+                m.alive && !m.is_ally() && !m.hiding && !m.dormant && m.sinking.is_none() && m.pos.dist(at) < r + m.radius && crate::collision::line_of_sight(&self.layout.map, at, m.pos)
             })
             .collect()
     }

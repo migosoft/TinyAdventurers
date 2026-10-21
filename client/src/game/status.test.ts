@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { EFFECT, EFFECT_LOOK } from '../generated/defs';
 import { DEPTH, SOUND_TEXT } from './effects';
-import { StatusView, flameSpots, has, lieLayout, lookOf, lyingPose, snowflakeAlpha } from './status';
+import { StatusView, flameSpots, has, lieLayout, lyingPose, snowflakeAlpha } from './status';
+import { lookOf } from './looks';
 
 describe('status', () => {
   it('reads effect bits', () => {

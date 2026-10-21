@@ -242,7 +242,7 @@ fn use_ring(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     match a.id {
         AbilityId::FrostNova => {
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 10 }, Some(pos));
-            run.add_flash(LightKind::Magic, pos, ab::NOVA_FLASH);
+            run.add_tinted_flash(LightKind::Magic, Some(ab::NOVA_TINT), pos, ab::NOVA_FLASH);
             let hit: Vec<usize> = (0..run.monsters.len())
                 .filter(|&mi| {
                     let m = &run.monsters[mi];
@@ -260,7 +260,7 @@ fn use_ring(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
             let afraid: Vec<usize> = (0..run.monsters.len())
                 .filter(|&mi| {
                     let m = &run.monsters[mi];
-                    m.alive && !m.is_ally() && m.pos.dist(pos) <= a.radius
+                    m.alive && !m.is_ally() && !m.hiding && !m.dormant && m.pos.dist(pos) <= a.radius
                 })
                 .collect();
             for mi in afraid {
@@ -315,7 +315,7 @@ pub fn land_slam(run: &mut Run, pi: usize) {
     let push = a.push.max(ab::SLAM_PUSH);
     for mi in 0..run.monsters.len() {
         let m = &run.monsters[mi];
-        if !(m.alive && !m.airborne && !m.is_ally() && m.pos.dist(pos) <= a.radius) {
+        if !(m.alive && !m.airborne && !m.is_ally() && m.pos.dist(pos) <= a.radius && line_of_sight(&run.layout.map, pos, m.pos)) {
             continue;
         }
         run.hurt_monster(mi, dmg, false, Some(pi));
@@ -781,7 +781,7 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
 
 /// Chain Spark: from the first target `first`, up to `CHAIN_JUMPS` jumps, each to the nearest living
 /// enemy within `CHAIN_REACH` of the last target that the spark has not hit and sees (no wall between,
-/// no ally, no object, no chest that is a hiding mimic), for `CHAIN_FALLOFF` times the damage of the
+/// no ally, no object, no hiding mimic or dormant monster), for `CHAIN_FALLOFF` times the damage of the
 /// jump before. Every jump draws a `Zap`.
 fn chain_jumps(run: &mut Run, pi: usize, first: usize, damage: Damage) {
     let mut hit = vec![first];
@@ -793,7 +793,7 @@ fn chain_jumps(run: &mut Run, pi: usize, first: usize, damage: Damage) {
             .monsters
             .iter()
             .enumerate()
-            .filter(|(i, m)| m.alive && !m.is_ally() && !m.hiding && !hit.contains(i) && m.pos.dist(from) <= ab::CHAIN_REACH && line_of_sight(&run.layout.map, from, m.pos))
+            .filter(|(i, m)| m.alive && !m.is_ally() && !m.hiding && !m.dormant && !hit.contains(i) && m.pos.dist(from) <= ab::CHAIN_REACH && line_of_sight(&run.layout.map, from, m.pos))
             .min_by(|a, b| a.1.pos.dist(from).total_cmp(&b.1.pos.dist(from)))
             .map(|(i, _)| i);
         let Some(mi) = next else { return };
@@ -2096,7 +2096,7 @@ mod tests {
         let m = Creature::Monster(mi);
         assert!(run.has_effect(m, EffectKind::Poisoned) && !run.has_effect(m, EffectKind::Tainted), "Poisoned replaces the Tainted its share alone would give");
         // The coat itself is no weapon attack: a Technique with no weapon adds nothing to itself.
-        assert_eq!(run.players[0].sheet.secondary.split, coat.split);
+        assert_eq!(weapon_damage(&run, 0, &coat), damage_of(&coat), "a coated hero's Technique gets no coat");
         // After 6 s the bow is plain again.
         for _ in 0..361 {
             run.tick_effects();
@@ -2528,5 +2528,108 @@ mod tests {
         assert!(at.x < here.x + 60.0 && at.x > here.x && !run.layout.map.opaque_at(at), "on the hero's side of the wall");
         run.tick_hazards(0.3);
         assert!(!run.has_effect(Creature::Monster(g), EffectKind::Entangled), "the goblin behind the wall is not entangled");
+    }
+
+    #[test]
+    fn war_cry_and_roots_skip_hidden_mimics_and_dormant_monsters() {
+        let mut run = barbarian_war_cry();
+        let mimic = put_enemy(&mut run, 0, EnemyType::Mimic, 40.0, 1000.0);
+        let sleeper = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 1000.0);
+        run.monsters[mimic].hiding = true;
+        run.monsters[sleeper].dormant = true;
+        let at = run.monsters[mimic].pos;
+        try_use(&mut run, 0, false, 1);
+        for _ in 0..30 {
+            run.step();
+        }
+        assert!(!run.has_effect(Creature::Monster(mimic), EffectKind::Fear) && !run.has_effect(Creature::Monster(sleeper), EffectKind::Fear), "no Fear on them");
+        assert!(run.monsters[mimic].hiding && run.monsters[mimic].pos == at, "the mimic stays put and disguised");
+        // Roots over them: not entangled either.
+        let mut run = entangle_run();
+        let mimic = put_enemy(&mut run, 0, EnemyType::Mimic, 80.0, 1000.0);
+        let sleeper = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 84.0, 1000.0);
+        run.monsters[mimic].hiding = true;
+        run.monsters[sleeper].dormant = true;
+        try_use(&mut run, 0, false, 1);
+        run.tick_hazards(0.3);
+        assert!(!run.has_effect(Creature::Monster(mimic), EffectKind::Entangled) && !run.has_effect(Creature::Monster(sleeper), EffectKind::Entangled));
+    }
+
+    #[test]
+    fn a_frightened_hidden_mimic_does_not_walk() {
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mimic = put_enemy(&mut run, 0, EnemyType::Mimic, 40.0, 1000.0);
+        run.monsters[mimic].hiding = true;
+        run.apply_effect(Creature::Monster(mimic), EffectKind::Fear, Some(3.0));
+        let at = run.monsters[mimic].pos;
+        for _ in 0..30 {
+            run.step();
+        }
+        assert!(run.monsters[mimic].hiding && run.monsters[mimic].pos == at, "the backstop: no flee while hiding");
+    }
+
+    #[test]
+    fn roots_do_not_reach_through_a_wall() {
+        let mut run = entangle_run();
+        let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
+        try_use(&mut run, 0, false, 1);
+        let at = run.hazards[0].pos;
+        let (tx, ty) = crate::dungeon::Map::tile_of(at);
+        run.monsters[g].pos = crate::dungeon::Map::center_of(tx + 1, ty);
+        run.layout.map.set(tx, ty, crate::dungeon::Tile::Wall);
+        let near = run.monsters[g].pos;
+        assert!(near.dist(at) < 36.0 + run.monsters[g].radius, "within the circle");
+        assert!(!line_of_sight(&run.layout.map, at, near), "but walled off");
+        run.tick_hazards(0.3);
+        assert!(!run.has_effect(Creature::Monster(g), EffectKind::Entangled));
+    }
+
+    #[test]
+    fn ground_slam_does_not_hit_through_walls() {
+        let mut run = ground_slam();
+        let g = goblins(&mut run, &[30.0]);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.monsters[g[0]].pos);
+        run.layout.map.set(tx - 1, ty, crate::dungeon::Tile::Wall);
+        assert!(!line_of_sight(&run.layout.map, run.players[0].pos(), run.monsters[g[0]].pos), "walled off");
+        try_use(&mut run, 0, false, 1);
+        for _ in 0..40 {
+            run.step_player(0);
+        }
+        assert_eq!(run.monsters[g[0]].hp, 1000.0, "untouched");
+    }
+
+    #[test]
+    fn chain_spark_skips_dormant_monsters() {
+        let mut run = wizard_with(AbilityId::ChainSpark, 3);
+        let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        let sleeper = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        run.monsters[sleeper].pos = run.monsters[first].pos + Vec2::new(0.0, 20.0);
+        run.monsters[sleeper].dormant = true;
+        try_use(&mut run, 0, true, 1);
+        fly(&mut run);
+        assert!(run.monsters[first].hp < 1000.0);
+        assert_eq!(run.monsters[sleeper].hp, 1000.0);
+    }
+
+    #[test]
+    fn frost_nova_flashes_icy_blue() {
+        let mut run = wizard_secondary(AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0));
+        try_use(&mut run, 0, false, 1);
+        let flash = run.lights.sources.iter().find(|s| s.kind == LightKind::Magic && s.expires.is_some()).expect("a Magic flash");
+        assert_eq!(flash.colour, 0x78c8ff);
+    }
+
+    #[test]
+    fn a_rooted_frightened_monster_does_not_play_its_walk() {
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
+        run.apply_effect(Creature::Monster(g), EffectKind::Fear, Some(3.0));
+        run.apply_effect(Creature::Monster(g), EffectKind::Entangled, Some(3.0));
+        let at = run.monsters[g].pos;
+        for _ in 0..10 {
+            run.step();
+        }
+        assert_eq!(run.monsters[g].pos, at, "rooted");
+        assert_eq!(run.monsters[g].anim, Anim::Idle);
     }
 }

@@ -117,13 +117,17 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
     }
     // `with_shares` sums the added shares: sort them so their order does not matter either.
     shares.sort_by(|a, b| (a.0 as u8).cmp(&(b.0 as u8)).then(a.1.total_cmp(&b.1)));
+    let longer = !duration.is_empty();
+    let new_duration = (r.duration + sum(duration)).max(0.0);
     ResolvedAbility {
         // Clamped: a negative factor or a large negative add never makes a number negative.
         radius: (r.radius * product(radius)).max(0.0),
         range: (r.range * product(range)).max(0.0),
         damage: (r.damage * product(damage)).max(0.0),
         arc: (r.arc * product(arc)).max(0.0),
-        duration: (r.duration + sum(duration)).max(0.0),
+        duration: new_duration,
+        // The ability's own effect lasts as long as the ability does.
+        effect: if longer { r.effect.map(|e| OnHit { secs: new_duration, ..e }) } else { r.effect },
         cooldown: if cooldown.is_empty() { r.cooldown } else { (r.cooldown + sum(cooldown)).max(MIN_COOLDOWN) },
         split: if shares.is_empty() { r.split } else { r.split.with_shares(&shares) },
         behind: (r.behind + sum(behind)).max(0.0),
@@ -335,6 +339,17 @@ mod tests {
         assert_eq!(a.cooldown, MIN_COOLDOWN, "a cooldown never reaches 0");
         assert_eq!((a.duration, a.damage, a.radius, a.range, a.arc), (0.0, 0.0, 0.0, 0.0, 0.0), "no negative numbers");
         assert_eq!(apply_mods(r, &[]).cooldown, r.cooldown, "no mods, no floor");
+    }
+
+    #[test]
+    fn a_duration_mod_lengthens_the_own_effect() {
+        let r = hero_sheet(ClassId::Wizard, &Build::start(ClassId::Wizard)).unwrap().secondary;
+        let mut r = r;
+        r.effect = Some(OnHit { kind: crate::defs::effects::EffectKind::Accelerated, secs: r.duration, magical: true, power: 5, look: crate::defs::effects::EffectLook::Plain });
+        let a = apply_mods(r, &[AbilityMod::DurationAdd(2.0)]);
+        assert_eq!(a.duration, r.duration + 2.0);
+        assert_eq!(a.effect.unwrap().secs, a.duration, "the effect follows the duration");
+        assert_eq!(apply_mods(r, &[]).effect, r.effect, "no mod, no change");
     }
 
     #[test]

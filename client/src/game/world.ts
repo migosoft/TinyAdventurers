@@ -7,7 +7,7 @@ import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { Snapshot } from '../generated/Snapshot';
 import { knocked, sinking, stepMove, type MoveState, type Solid } from '../sim/collision';
 import type { TileMap } from '../sim/map';
-import { lookOf } from './status';
+import { lookOf } from './looks';
 
 export interface EntState {
   id: number;

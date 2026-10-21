@@ -186,6 +186,8 @@ pub const SLAM_WINDUP: f64 = 0.5;
 pub const SLAM_PUSH: f64 = 24.0;
 /// How long (s) Frost Nova's and Purify's flashes last.
 pub const NOVA_FLASH: f64 = 0.3;
+/// The Magic flash's colour: icy blue, like the Frost Shard's light.
+pub const NOVA_TINT: u32 = 0x78c8ff;
 pub const PURIFY_FLASH: f64 = 0.3;
 /// Entangle: the seconds of Entangled each pulse of the roots (every 0.5 s) renews.
 pub const ENTANGLE_PULSE_SECS: f64 = 1.0;
