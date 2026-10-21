@@ -80,7 +80,7 @@
   - `every_kind_has_its_category`: a table of all 19 `(kind, category)` pairs from spec §6.1, with `len == WeaponKind::COUNT`. `key_attr` is Str for Melee, Thrown and Natural, and Dex for Finesse and Ranged.
   - `a_weapon_is_exact_at_its_reference`: for `MeleeStats { damage: 20.0, cooldown: 0.45, arc: 1.75, push: 0.0, split: physical, at: At { str: 15, dex: 8 } }` at Attributes (15, 8, …), `damage == 20.0`, `cooldown == 0.45` and `arc == 1.75`, all with `assert_eq!`.
   - `strength_and_dexterity_move_the_right_numbers`:
-    - The same sword at STR 17 has damage `20 × 1.35 / 1.25`. At DEX 10 it has cooldown `0.45 / (1.04 / 0.96)` and arc `1.75 × 1.06 / 0.94`.
+    - The same sword at STR 17 has damage `20 × 1.35 / 1.25`. At DEX 10 it has cooldown `0.45 / (1.00 / 0.96)` and arc `1.75 × 1.00 / 0.94`.
     - A Finesse kind (`DuellingSword`) scales damage by DEX, not STR.
     - `RangedStats { damage 16, cooldown 0.7, range 260, projectile_speed 290, at (10, 15) }` at STR 12 has range `260 × 1.04` and projectile speed `290 × 1.04`, with damage unchanged.
     - `power` is the key Attribute value: 15 for the sword at STR 15, 15 for the bow at DEX 15.
@@ -105,7 +105,7 @@
     - `pub fn met(&self, attrs: &Attributes) -> bool`.
   - `items.rs`:
     - `listed_enum! { … pub enum EquipSlot: u8 { Melee = 0, Ranged, OffHand, Armor, Ring1, Ring2, Shoes, Belt } }`.
-    - `#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)] pub struct Equipment { pub slots: [Option<ItemId>; EquipSlot::COUNT] }` with `get(EquipSlot) -> Option<ItemId>`, `with(EquipSlot, ItemId) -> Equipment`, and `pub fn starter(class: ClassId) -> Equipment` (from Task 3's `ClassDef.starter`).
+    - `#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)] pub struct Equipment { pub slots: [Option<ItemId>; EquipSlot::COUNT] }` with `get(EquipSlot) -> Option<ItemId>`, and `with(EquipSlot, ItemId) -> Equipment`. (`Equipment::starter` comes in Task 3, with `ClassDef.starter`.)
     - `listed_enum! { #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)] pub enum ItemId: u16 { … } }`, with the ids in the table below.
     - `#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)] pub enum ArmorClass { Cloth, Light, Medium, Heavy }`.
     - `pub struct ArmorStats { pub class: ArmorClass, pub physical: f64, pub weight: f64 }`.
@@ -268,13 +268,14 @@ Enemy and natural items list `ClassId::ALL` in `classes`, so that the data test 
   - `another_weapon_changes_the_strike`:
     - A Paladin with GoldenSword has primary damage `22 × factor(15, STR_DMG) / factor(10, STR_DMG)` = 27.5, cooldown `0.5 / (0.96 / 1.0)` and arc `1.8 × 0.94`, and `light == Some(Holy)`.
     - A Barbarian with KnightSword has damage 20.0 (same STR 15) and cooldown `0.45 / (1.06 / 0.96)`.
-  - `armor_and_trinkets_fold_in`: a Paladin with PlateArmor, BandOfVigor, BootsOfHaste, IronBoots and GirdleOfWarding has:
+  - `armor_and_trinkets_fold_in`: a Paladin with PlateArmor, BandOfVigor, BootsOfHaste and GirdleOfWarding has:
     - `res.get(Physical) == 0.25`
-    - `weight == 12 + 7 + 3`
+    - `weight == 12 + 7`
     - `attrs.get(Con) == 14`
     - `max_hp == 125 + 10`
-    - `speed == 66 × 1.04 / 1.03 × (1 + 0.05 − 0.05)` within 1e-12
+    - `speed == 66 × 1.04 / 1.03 × 1.05` within 1e-12
     - `effect_res.get(Blind) == 1.0`
+    The same Paladin with IronBoots instead of BootsOfHaste has `weight == 12 + 7 + 3` and `speed == 66 × 1.04 / 1.03 × 0.95` within 1e-12 (one Shoes slot).
   - `weapon_properties_fill_split_and_on_hit`:
     - A Wizard with EmberStaff has melee split Heat 0.25 and `light == Some(Fire)`.
     - A Wizard at start with StaffOfRot (pass `extra` INT 0; the start INT 15 meets INT 14) has `melee.on_hit == Some(OnHit { kind: Poisoned, secs: 3.0, chance: 0.15, magical: false, power: 8 })`, where 8 is its STR (a Staff is a Melee weapon).
