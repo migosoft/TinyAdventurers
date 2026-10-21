@@ -381,20 +381,19 @@ impl Lobby {
     /// Debug: put a weapon in the Melee or Ranged slot (`None` = the class starter of that slot, which for Ranged is no weapon unless the class has one).
     /// Same guards as `debug_loadout_if`; `hero_sheet` still checks proficiency on Ready and Start.
     fn debug_equip_if(&mut self, allowed: bool, id: u32, slot: EquipSlot, item: Option<ItemId>) {
+        if !self.debug_allowed(allowed, id) {
+            return;
+        }
         match slot {
             EquipSlot::Melee | EquipSlot::Ranged => {}
             EquipSlot::OffHand | EquipSlot::Armor | EquipSlot::Ring1 | EquipSlot::Ring2 | EquipSlot::Shoes | EquipSlot::Belt => {
                 return self.error(id, "Only weapons.");
             }
         }
-        if !self.debug_allowed(allowed, id) {
-            return;
+        if let Some(c) = self.conns.get_mut(&id) {
+            c.debug_equipment.set(slot, item);
+            c.debug_loadout = true;
         }
-        let Some(c) = self.conns.get_mut(&id) else { return };
-        let Some(class) = c.character.as_ref().map(|ch| ch.class) else { return };
-        let starter = Equipment::starter(class);
-        c.debug_equipment.slots[slot as usize] = item.or(starter.get(slot));
-        c.debug_loadout = true;
     }
 
     /// The guards every debug waiting-room message shares; sends the error and returns false when refused.
@@ -909,6 +908,8 @@ mod tests {
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
         l.debug_equip_if(false, a, slot, axes);
         assert_eq!(errors(&mut rx), ["Debug is off."]);
+        l.debug_equip_if(false, a, EquipSlot::Armor, None);
+        assert_eq!(errors(&mut rx), ["Debug is off."], "the guards come before Only weapons");
         l.debug_equip_if(true, a, EquipSlot::Armor, Some(ItemId::PlateArmor));
         assert_eq!(errors(&mut rx), ["Only weapons."]);
         l.handle(a, ClientMsg::SetReady { ready: true });
@@ -964,5 +965,29 @@ mod tests {
         for a in [Attr::Str, Attr::Dex, Attr::Con, Attr::Cha] {
             assert_eq!(got.get(a), start.get(a), "{a:?}");
         }
+    }
+
+    #[tokio::test]
+    async fn debug_equip_none_clears_the_slot() {
+        use crate::defs::items::{EquipSlot, ItemId};
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (tx, mut rx) = unbounded_channel();
+        let a = join(&mut l, 1, ClassId::ElvenRanger);
+        l.conns.get_mut(&a).unwrap().tx = tx;
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        assert_eq!(l.conns[&a].debug_equipment.get(EquipSlot::Ranged), Some(ItemId::ElvenBow));
+        l.debug_equip_if(true, a, EquipSlot::Ranged, None);
+        assert_eq!(l.conns[&a].debug_equipment.get(EquipSlot::Ranged), None);
+        // Shoot needs the ranged weapon, so the Ranger without a bow is refused at Ready.
+        l.debug_loadout_if(true, a, pick(AbilityId::Shoot), pick(AbilityId::SummonWolf));
+        l.handle(a, ClientMsg::SetReady { ready: true });
+        assert!(!l.conns[&a].ready);
+        let e = errors(&mut rx);
+        assert!(e.iter().any(|m| m.contains("Shoot") && m.contains("ranged")), "{e:?}");
+        // Putting the bow back is allowed.
+        l.debug_equip_if(true, a, EquipSlot::Ranged, Some(ItemId::ElvenBow));
+        l.handle(a, ClientMsg::SetReady { ready: true });
+        assert!(l.conns[&a].ready);
     }
 }

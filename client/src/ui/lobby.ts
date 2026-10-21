@@ -49,6 +49,24 @@ export function isDebugGuardError(msg: string): boolean {
   return ['Debug is off.', 'Join a dungeon first.', 'Not during a run.', 'Not while ready.', 'Choose a character first.', 'Only weapons.'].includes(msg);
 }
 
+/** Which debug picks the user changed since the last reset (only those can be answered by an error). */
+export type DebugTouched = { loadout: boolean; melee: boolean; ranged: boolean };
+
+const BUILD_ERROR = /needs |is not one of your abilities|cannot go in the|does not fit the|cannot use the item|not trained in the item/;
+
+/**
+ * What to do with a server error about the debug picks the user changed: `reset` the selects to
+ * their defaults, and `resend` the defaults of those the server may have stored (a refused sheet;
+ * a guard refusal stored nothing). Errors that are not about a pick, or name another player, do nothing.
+ */
+export function debugReject(msg: string, touched: DebugTouched, others: string[]): { reset: DebugTouched; resend: DebugTouched } {
+  const none: DebugTouched = { loadout: false, melee: false, ranged: false };
+  if (!touched.loadout && !touched.melee && !touched.ranged) return { reset: none, resend: none };
+  if (isDebugGuardError(msg)) return { reset: { ...touched }, resend: none };
+  if (others.some((n) => msg.startsWith(`${n}: `)) || !BUILD_ERROR.test(msg)) return { reset: none, resend: none };
+  return { reset: { ...touched }, resend: { ...touched } };
+}
+
 /** Debug mode only: `?debug&boss=demon|lich|dragon` preselects the end boss on the host's page. */
 function debugBoss(): BossId | null {
   const b = debugOn() ? (new URLSearchParams(location.search).get('boss') ?? '') : '';
@@ -69,7 +87,7 @@ export class Lobby {
   /** Room the debug boss was already preselected in. */
   private preselected = 0;
   /** The debug loadout picked in a waiting room (the server sends no echo). */
-  private debugPick: { run: number; cls: ClassId; primary: AbilityId; secondary: AbilityId; melee: WeaponId | null; ranged: WeaponId | null } | null = null;
+  private debugPick: { run: number; cls: ClassId; primary: AbilityId; secondary: AbilityId; melee: WeaponId | null; ranged: WeaponId | null; touched: DebugTouched } | null = null;
   myId = 0;
 
   constructor(
@@ -128,18 +146,28 @@ export class Lobby {
 
   /**
    * The server keeps no echo of a debug pick, and a refused one (a weapon the class is not trained in,
-   * an Attribute shortfall) would stay selected: reset the selects, and the server with them unless the
-   * message says it never stored the pick (resending then could only be refused again).
+   * an Attribute shortfall) would stay selected: reset the selects the user changed, and the server
+   * with them when it may have stored them. Nothing is ever sent for a pick the user did not change.
    */
   private resetRejectedDebugPick(msg: string): void {
     const pick = this.debugPick;
     if (!pick || !this.room) return;
-    this.debugPick = null;
-    if (!isDebugGuardError(msg)) {
-      const { cls } = pick;
-      this.net.send({ t: 'DebugLoadout', primary: { ability: CLASSES[cls].primary, source: 'Own' }, secondary: { ability: CLASSES[cls].secondary, source: 'Own' } });
-      this.net.send({ t: 'DebugEquip', slot: 'Melee', item: null });
-      this.net.send({ t: 'DebugEquip', slot: 'Ranged', item: null });
+    const me = this.room.players.find((p) => p.id === this.myId);
+    const others = this.room.players.filter((p) => p !== me).map((p) => p.name);
+    const { reset, resend } = debugReject(msg, pick.touched, others);
+    if (!reset.loadout && !reset.melee && !reset.ranged) return;
+    const start = CLASSES[pick.cls];
+    if (reset.loadout) {
+      pick.primary = start.primary;
+      pick.secondary = start.secondary;
+      pick.touched.loadout = false;
+      if (resend.loadout) this.net.send({ t: 'DebugLoadout', primary: { ability: pick.primary, source: 'Own' }, secondary: { ability: pick.secondary, source: 'Own' } });
+    }
+    for (const [key, slot] of [['melee', 'Melee'], ['ranged', 'Ranged']] as const) {
+      if (!reset[key]) continue;
+      pick[key] = start.starter[key] as WeaponId | null;
+      pick.touched[key] = false;
+      if (resend[key]) this.net.send({ t: 'DebugEquip', slot, item: pick[key] });
     }
     this.render();
     const e = this.root.querySelector('.error');
@@ -276,9 +304,11 @@ export class Lobby {
         if (slot === 'melee' || slot === 'ranged') {
           const item = sel.value === '' ? null : (sel.value as WeaponId);
           pick[slot] = item;
+          pick.touched[slot] = true;
           this.net.send({ t: 'DebugEquip', slot: slot === 'melee' ? 'Melee' : 'Ranged', item });
           return;
         }
+        pick.touched.loadout = true;
         if (slot === 'primary') pick.primary = sel.value as AbilityId;
         else pick.secondary = sel.value as AbilityId;
         this.net.send({ t: 'DebugLoadout', primary: { ability: pick.primary, source: 'Own' }, secondary: { ability: pick.secondary, source: 'Own' } });
@@ -289,20 +319,22 @@ export class Lobby {
   /** Debug: pickers for any primary and secondary of your class (`DebugLoadout`) and for its melee and ranged weapon (`DebugEquip`). */
   private debugLoadoutRow(run: number, cls: ClassId): string {
     if (!this.debugPick || this.debugPick.run !== run || this.debugPick.cls !== cls) {
-      this.debugPick = { run, cls, primary: CLASSES[cls].primary, secondary: CLASSES[cls].secondary, melee: null, ranged: null };
+      this.debugPick = { run, cls, primary: CLASSES[cls].primary, secondary: CLASSES[cls].secondary, melee: CLASSES[cls].starter.melee, ranged: CLASSES[cls].starter.ranged, touched: { loadout: false, melee: false, ranged: false } };
     }
     const pick = this.debugPick;
     const select = (slot: 'primary' | 'secondary', chosen: AbilityId) =>
       `<select data-slot="${slot}">${debugChoices(cls, slot === 'primary' ? 'Primary' : 'Secondary')
         .map((id) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${ABILITIES[id].name}</option>`)
         .join('')}</select>`;
-    // An empty value asks for the class's starter of that slot (no weapon, for a class without a ranged one).
+    // The starter is a plain choice (its item id); an empty value empties the slot (the Ranger's bow can go,
+    // an empty melee slot falls back to the starter on the server).
     const weapon = (slot: 'melee' | 'ranged', chosen: WeaponId | null) => {
-      const starter = slot === 'melee' || CLASSES[cls].starter.ranged ? '(starter)' : '(none)';
+      const starter = CLASSES[cls].starter[slot];
       const options = debugWeapons(cls, slot === 'melee' ? 'Melee' : 'Ranged')
-        .map((id) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${ITEMS[id].name}</option>`)
+        .map((id) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${ITEMS[id].name}${id === starter ? ' (starter)' : ''}</option>`)
         .join('');
-      return `<select data-slot="${slot}"><option value=""${chosen === null ? ' selected' : ''}>${starter}</option>${options}</select>`;
+      const empty = slot === 'ranged' ? `<option value=""${chosen === null ? ' selected' : ''}>(none)</option>` : '';
+      return `<select data-slot="${slot}">${empty}${options}</select>`;
     };
     return `<div class="row debug-loadout"><small>Debug loadout</small>${select('primary', pick.primary)}${select('secondary', pick.secondary)}${weapon('melee', pick.melee)}${weapon('ranged', pick.ranged)}</div>`;
   }

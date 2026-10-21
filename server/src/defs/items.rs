@@ -44,6 +44,10 @@ impl Equipment {
         self
     }
 
+    pub fn set(&mut self, s: EquipSlot, item: Option<ItemId>) {
+        self.slots[s as usize] = item;
+    }
+
     /// The class's starting weapons: Melee and, if it has one, Ranged.
     pub fn starter(class: ClassId) -> Equipment {
         let (melee, ranged) = classes::def(class).starter;

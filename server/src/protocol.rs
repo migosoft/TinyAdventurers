@@ -102,7 +102,7 @@ pub enum ClientMsg {
     DebugEffect { kind: u8 },
     /// Debug, waiting room: set any ability of your class in the two slots, if the server allows debug.
     DebugLoadout { primary: Pick, secondary: Pick },
-    /// Debug, waiting room: put a weapon in your Melee or Ranged slot (`None` = the starter, or no ranged weapon).
+    /// Debug, waiting room: put a weapon in your Melee or Ranged slot (`None` = an empty slot).
     DebugEquip { slot: EquipSlot, item: Option<ItemId> },
 }
 
