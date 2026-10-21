@@ -119,7 +119,8 @@ pub struct ResolvedWeapon {
 fn damage_and_cooldown(kind: WeaponKind, damage: f64, cooldown: f64, at: At, a: &Attributes) -> (f64, f64) {
     let (attr, pct, at_key) = match key_attr(category(kind)) {
         Attr::Str => (Attr::Str, STR_DMG, at.str),
-        _ => (Attr::Dex, DEX_DMG, at.dex),
+        Attr::Dex => (Attr::Dex, DEX_DMG, at.dex),
+        other => unreachable!("key_attr returned {other:?}"),
     };
     let dmg = Scaled { value: damage, attr, pct, at: at_key }.get(a);
     let cd = Scaled { value: cooldown, attr: Attr::Dex, pct: DEX_SPEED, at: at.dex }.per(a);

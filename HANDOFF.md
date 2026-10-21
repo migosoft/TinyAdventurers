@@ -20,6 +20,16 @@ For: the next agent or developer continuing this project. Read this first, then 
 - Plan 4: `PropKind::Aura` (needs a per-tick area layer and a rule for HP when you walk in or out of a max-HP aura); drawing heroes with their equipped weapons; `DebugGrantItem`; `Progress` v2 storing equipment.
 - Not planned: boss weapons (their scripts keep their constants, spec §7).
 
+**Carry-overs from plan 2's final review (for plan 3/4):**
+- Plan 3 first step: build each enemy's `attack`/`alt` from its `melee_weapon`/`ranged_weapon` fields (today the id is written twice in `enemies::def`; drift risk), or test that they rebuild from the fields.
+- Plan 3 Shoot: spawn the ranged weapon's `projectile` (`sheet.ranged.projectile`), not a hard-coded `EntityKind::Bolt`.
+- Plan 3: make `hero_power` in `run/abilities.rs` exhaustive over `EquipSlot` (today `Some(_) => sheet.melee.power`).
+- Plan 3: callers of `DamageSplit::with_shares` (AbilityMod shares) should `debug_assert!` no Physical entry.
+- Plan 3 tests: a ranged-weapon property never reaches melee; the bolt takes `sheet.ranged` split/on-hit; the dash takes `sheet.melee.on_hit`.
+- Plan 3: hero melee swings ignore `ResolvedWeapon.push` (decide in the ability merge); drop the exported `DAGGER_COOLDOWN` (client reads `info.fallback.cooldown`).
+- Plan 4: `equip` must validate with `check_equipment` against the Attributes without items before saving (`hero_sheet` only debug-asserts; `arm` panics on a non-weapon in a weapon slot).
+- Cosmetic leftovers: redundant `#[allow(dead_code)]` on `ItemBase::Shield`, mid-module `use` and redundant imports in items.rs tests, the comment on the `SummonWolf` arm in `abilities::scaling()`.
+
 **Merge done (2026-10-19):** `origin/feature/elven-ranger` (Elven Ranger, Dire Wolf, breakable chests) was fast-forwarded into local `main` (`c5b3860`, **not pushed**), and `main` was merged into `feature/skill-tree-design`.
 
 **Progression: designed and approved, plan 1 built (branch `feature/skill-tree-design`):**
