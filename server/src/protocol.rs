@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::defs::items::{EquipSlot, ItemId};
 use crate::defs::loadout::Pick;
 use crate::defs::progression::{Modifiers, StatUpgrades, UpgradeStat};
 
@@ -101,6 +102,8 @@ pub enum ClientMsg {
     DebugEffect { kind: u8 },
     /// Debug, waiting room: set any ability of your class in the two slots, if the server allows debug.
     DebugLoadout { primary: Pick, secondary: Pick },
+    /// Debug, waiting room: put a weapon in your Melee or Ranged slot (`None` = the starter, or no ranged weapon).
+    DebugEquip { slot: EquipSlot, item: Option<ItemId> },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -376,5 +379,21 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
+    }
+
+    #[test]
+    fn debug_equip_round_trips() {
+        let json = r#"{"t":"DebugEquip","slot":"Ranged","item":"ThrowingAxes"}"#;
+        let m: ClientMsg = serde_json::from_str(json).unwrap();
+        let bytes = rmp_serde::to_vec_named(&m).unwrap();
+        match decode(&bytes) {
+            Some(ClientMsg::DebugEquip { slot, item }) => {
+                assert_eq!(slot, EquipSlot::Ranged);
+                assert_eq!(item, Some(ItemId::ThrowingAxes));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        let none: ClientMsg = serde_json::from_str(r#"{"t":"DebugEquip","slot":"Ranged","item":null}"#).unwrap();
+        assert!(matches!(none, ClientMsg::DebugEquip { item: None, .. }));
     }
 }

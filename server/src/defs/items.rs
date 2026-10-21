@@ -56,7 +56,7 @@ impl Equipment {
 }
 
 super::enum_list::listed_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
     pub enum ItemId: u16 {
         RedStaff = 0,
         KnightSword = 1,

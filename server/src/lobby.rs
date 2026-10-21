@@ -4,7 +4,11 @@
 //! (`set_character`, `apply_progress`), so the lock is only held briefly.
 
 use crate::db::{self, Character, Db};
+use crate::defs::attributes::{Attr, Attributes};
+use crate::defs::classes;
+use crate::defs::items::{self, EquipSlot, Equipment, ItemId};
 use crate::defs::loadout::{Build, Loadout, Pick};
+use crate::defs::requirements::Requirement;
 use crate::defs::abilities::{self, AbilityId};
 use crate::sheet::hero_sheet;
 use crate::progress::Progress;
@@ -31,8 +35,33 @@ pub struct Conn {
     pub loadout: Option<Loadout>,
     /// `loadout` came from `DebugLoadout`, so the run counts as a debug run.
     pub debug_loadout: bool,
+    /// The weapons set by `DebugEquip` (the class's starters until then; reset with the character).
+    pub debug_equipment: Equipment,
     /// When it connected (Unix ms), for the admin's online list.
     pub since: f64,
+}
+
+/// The Attribute points that lift each Attribute of `class` to the highest Attribute requirement of
+/// the build's two picks and its equipped items (debug builds only; proficiency is not lifted).
+pub fn debug_lift(class: ClassId, b: &Build) -> Attributes {
+    let start = classes::start_attrs(class);
+    let mut need = [0i32; Attr::COUNT];
+    let picks = [b.loadout.primary.ability, b.loadout.secondary.ability];
+    let reqs = picks
+        .iter()
+        .flat_map(|a| abilities::def(*a).req.iter())
+        .chain(EquipSlot::ALL.iter().filter_map(|s| b.equipment.get(*s)).flat_map(|i| items::def(i).req.iter()));
+    for r in reqs {
+        match *r {
+            Requirement::Attr(a, n) => need[a as usize] = need[a as usize].max(n),
+            Requirement::WeaponKind(_) => {}
+        }
+    }
+    let mut lift = Attributes::default();
+    for a in Attr::ALL {
+        lift.add(a, (need[a as usize] - start.get(a)).max(0));
+    }
+    lift
 }
 
 fn unix_ms() -> f64 {
@@ -125,7 +154,7 @@ impl Lobby {
         let id = self.next_conn;
         self.next_conn += 1;
         send(&tx, &ServerMsg::Welcome { id });
-        self.conns.insert(id, Conn { account, tx, room: None, ready: false, character: None, loadout: None, debug_loadout: false, since: unix_ms() });
+        self.conns.insert(id, Conn { account, tx, room: None, ready: false, character: None, loadout: None, debug_loadout: false, debug_equipment: Equipment::default(), since: unix_ms() });
         self.send_lobby_to(id);
         id
     }
@@ -214,9 +243,11 @@ impl Lobby {
             return;
         }
         let info = character.info();
+        let character_class = character.class;
         c.character = Some(character);
         c.loadout = None;
         c.debug_loadout = false;
+        c.debug_equipment = Equipment::starter(character_class);
         send(&c.tx, &ServerMsg::Character(info));
     }
 
@@ -316,6 +347,7 @@ impl Lobby {
             }
             ClientMsg::StartRun => self.start(id),
             ClientMsg::DebugLoadout { primary, secondary } => self.debug_loadout_if(crate::run::debug::allowed(), id, primary, secondary),
+            ClientMsg::DebugEquip { slot, item } => self.debug_equip_if(crate::run::debug::allowed(), id, slot, item),
             _ => {}
         }
     }
@@ -337,26 +369,56 @@ impl Lobby {
     /// Debug: set any ability of the character's class in the two slots. It skips the
     /// "unlocked" check only; `hero_sheet` still checks Attributes and weapons on Ready and Start.
     fn debug_loadout_if(&mut self, allowed: bool, id: u32, primary: Pick, secondary: Pick) {
-        if !allowed {
-            return self.error(id, "Debug is off.");
-        }
-        let Some(c) = self.conns.get(&id) else { return };
-        let Some(room) = c.room.and_then(|r| self.rooms.get(&r)) else {
-            return self.error(id, "Join a dungeon first.");
-        };
-        if room.run_tx.is_some() {
-            return self.error(id, "Not during a run.");
-        }
-        if c.ready {
-            return self.error(id, "Not while ready.");
-        }
-        if c.character.is_none() {
-            return self.error(id, "Choose a character first.");
+        if !self.debug_allowed(allowed, id) {
+            return;
         }
         if let Some(c) = self.conns.get_mut(&id) {
             c.loadout = Some(Loadout { primary, secondary });
             c.debug_loadout = true;
         }
+    }
+
+    /// Debug: put a weapon in the Melee or Ranged slot (`None` = the class starter of that slot, which for Ranged is no weapon unless the class has one).
+    /// Same guards as `debug_loadout_if`; `hero_sheet` still checks proficiency on Ready and Start.
+    fn debug_equip_if(&mut self, allowed: bool, id: u32, slot: EquipSlot, item: Option<ItemId>) {
+        match slot {
+            EquipSlot::Melee | EquipSlot::Ranged => {}
+            EquipSlot::OffHand | EquipSlot::Armor | EquipSlot::Ring1 | EquipSlot::Ring2 | EquipSlot::Shoes | EquipSlot::Belt => {
+                return self.error(id, "Only weapons.");
+            }
+        }
+        if !self.debug_allowed(allowed, id) {
+            return;
+        }
+        let Some(c) = self.conns.get_mut(&id) else { return };
+        let Some(class) = c.character.as_ref().map(|ch| ch.class) else { return };
+        let starter = Equipment::starter(class);
+        c.debug_equipment.slots[slot as usize] = item.or(starter.get(slot));
+        c.debug_loadout = true;
+    }
+
+    /// The guards every debug waiting-room message shares; sends the error and returns false when refused.
+    fn debug_allowed(&self, allowed: bool, id: u32) -> bool {
+        if !allowed {
+            self.error(id, "Debug is off.");
+            return false;
+        }
+        let Some(c) = self.conns.get(&id) else { return false };
+        let Some(room) = c.room.and_then(|r| self.rooms.get(&r)) else {
+            self.error(id, "Join a dungeon first.");
+            return false;
+        };
+        let msg = if room.run_tx.is_some() {
+            "Not during a run."
+        } else if c.ready {
+            "Not while ready."
+        } else if c.character.is_none() {
+            "Choose a character first."
+        } else {
+            return true;
+        };
+        self.error(id, msg);
+        false
     }
 
     /// The character's start build with this connection's loadout and debug pool.
@@ -369,6 +431,8 @@ impl Lobby {
         }
         if c.debug_loadout {
             build.own = AbilityId::ALL.iter().copied().filter(|a| abilities::def(*a).classes.contains(&ch.class)).collect();
+            build.equipment = c.debug_equipment;
+            build.extra = debug_lift(ch.class, &build);
         }
         Some(build)
     }
@@ -807,5 +871,98 @@ mod tests {
         assert!(l.rooms[&rid].run_tx.is_none(), "no run");
         let e = errors(&mut host_rx);
         assert!(e.iter().any(|m| m.contains("Fireball")), "{e:?}");
+    }
+
+    #[tokio::test]
+    async fn debug_equip_sets_a_weapon() {
+        use crate::defs::items::{EquipSlot, ItemId};
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let a = join(&mut l, 1, ClassId::Barbarian);
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        l.debug_equip_if(true, a, EquipSlot::Ranged, Some(ItemId::ThrowingAxes));
+        l.debug_loadout_if(true, a, pick(AbilityId::Hurl), pick(AbilityId::Charge));
+        l.handle(a, ClientMsg::SetReady { ready: true });
+        assert!(l.conns[&a].ready, "Hurl with Throwing Axes passes the sheet");
+        let rid = l.conns[&a].room.unwrap();
+        let members = l.members_of(rid).unwrap();
+        let run = Run::new(rid, members, 7, LevelChoice::Dungeon { boss: None });
+        let sheet = &run.players[0].sheet;
+        assert_eq!(sheet.primary.id, AbilityId::Hurl);
+        assert_eq!(sheet.primary.projectile, Some(crate::defs::kinds::EntityKind::ThrownAxe as u8));
+    }
+
+    #[tokio::test]
+    async fn debug_equip_is_refused_during_a_run_and_while_ready() {
+        use crate::defs::items::{EquipSlot, ItemId};
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (tx, mut rx) = unbounded_channel();
+        let a = join(&mut l, 1, ClassId::Barbarian);
+        l.conns.get_mut(&a).unwrap().tx = tx;
+        let axes = Some(ItemId::ThrowingAxes);
+        let slot = EquipSlot::Ranged;
+        let none = |l: &Lobby| l.conns[&a].debug_equipment == Equipment::starter(ClassId::Barbarian) && !l.conns[&a].debug_loadout;
+
+        l.debug_equip_if(true, a, slot, axes);
+        assert_eq!(errors(&mut rx), ["Join a dungeon first."]);
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        l.debug_equip_if(false, a, slot, axes);
+        assert_eq!(errors(&mut rx), ["Debug is off."]);
+        l.debug_equip_if(true, a, EquipSlot::Armor, Some(ItemId::PlateArmor));
+        assert_eq!(errors(&mut rx), ["Only weapons."]);
+        l.handle(a, ClientMsg::SetReady { ready: true });
+        errors(&mut rx);
+        l.debug_equip_if(true, a, slot, axes);
+        assert_eq!(errors(&mut rx), ["Not while ready."]);
+        l.handle(a, ClientMsg::SetReady { ready: false });
+        l.forget_character(10);
+        l.debug_equip_if(true, a, slot, axes);
+        assert_eq!(errors(&mut rx), ["Choose a character first."]);
+        assert!(none(&l));
+        l.conns.get_mut(&a).unwrap().character = Some(character(1, 10, ClassId::Barbarian));
+        let rid = l.conns[&a].room.unwrap();
+        l.rooms.get_mut(&rid).unwrap().run_tx = Some(unbounded_channel().0);
+        l.debug_equip_if(true, a, slot, axes);
+        assert_eq!(errors(&mut rx), ["Not during a run."]);
+        assert!(none(&l));
+    }
+
+    #[tokio::test]
+    async fn debug_lift_only_for_debug_builds() {
+        use crate::defs::attributes::Attr;
+        use crate::defs::classes::start_attrs;
+        use crate::defs::items::{EquipSlot, ItemId};
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let a = join(&mut l, 1, ClassId::Barbarian);
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        assert_eq!(l.build_of(a).unwrap().extra, Attributes::default());
+        l.debug_equip_if(true, a, EquipSlot::Melee, Some(ItemId::WarHammer));
+        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::GroundSlam));
+        let b = l.build_of(a).unwrap();
+        assert_eq!(start_attrs(ClassId::Barbarian).plus(b.extra).get(Attr::Str), 17);
+        assert!(hero_sheet(ClassId::Barbarian, &b).is_ok());
+        // A new character drops the debug picks and the lift with them.
+        l.handle(a, ClientMsg::LeaveRun);
+        l.set_character(a, character(1, 11, ClassId::Barbarian));
+        l.handle(a, ClientMsg::CreateRun { name: "r2".into() });
+        assert_eq!(l.build_of(a).unwrap().extra, Attributes::default());
+        assert_eq!(l.build_of(a).unwrap().equipment, Equipment::starter(ClassId::Barbarian));
+    }
+
+    #[test]
+    fn the_lift_meets_both_picks() {
+        use crate::defs::attributes::Attr;
+        use crate::defs::classes::start_attrs;
+        let mut b = Build::start(ClassId::Wizard);
+        b.loadout = Loadout { primary: pick(AbilityId::ChainSpark), secondary: pick(AbilityId::Haste) };
+        let got = start_attrs(ClassId::Wizard).plus(debug_lift(ClassId::Wizard, &b));
+        let start = start_attrs(ClassId::Wizard);
+        assert_eq!(got.get(Attr::Int), 18);
+        assert_eq!(got.get(Attr::Wil), 14);
+        for a in [Attr::Str, Attr::Dex, Attr::Con, Attr::Cha] {
+            assert_eq!(got.get(a), start.get(a), "{a:?}");
+        }
     }
 }

@@ -164,6 +164,18 @@ export const CLASSES = {
     "primary": "Strike",
     "secondary": "Charge",
     "speed": 70.0,
+    "starter": {
+      "melee": "GreatAxe",
+      "ranged": null
+    },
+    "weapons": [
+      "Axe",
+      "Hammer",
+      "Club",
+      "Sword",
+      "Spear",
+      "ThrowingAxe"
+    ],
     "weight": 13.0
   },
   "ElvenRanger": {
@@ -181,6 +193,17 @@ export const CLASSES = {
     "primary": "Shoot",
     "secondary": "SummonWolf",
     "speed": 80.0,
+    "starter": {
+      "melee": "Rapier",
+      "ranged": "ElvenBow"
+    },
+    "weapons": [
+      "Dagger",
+      "DuellingSword",
+      "Machete",
+      "Bow",
+      "Crossbow"
+    ],
     "weight": 10.0
   },
   "Paladin": {
@@ -198,6 +221,15 @@ export const CLASSES = {
     "primary": "Strike",
     "secondary": "HolyLight",
     "speed": 66.0,
+    "starter": {
+      "melee": "KnightSword",
+      "ranged": null
+    },
+    "weapons": [
+      "Sword",
+      "Mace",
+      "Hammer"
+    ],
     "weight": 12.0
   },
   "Wizard": {
@@ -215,6 +247,14 @@ export const CLASSES = {
     "primary": "MagicMissile",
     "secondary": "Fireball",
     "speed": 72.0,
+    "starter": {
+      "melee": "RedStaff",
+      "ranged": null
+    },
+    "weapons": [
+      "Staff",
+      "Dagger"
+    ],
     "weight": 9.0
   }
 } as const;
@@ -427,6 +467,244 @@ export const ABILITIES = {
     "ranged": false,
     "shape": "Swing",
     "slot": "Primary"
+  }
+} as const;
+
+export const ITEMS = {
+  "BoneStaff": {
+    "classes": [
+      "Wizard"
+    ],
+    "kind": "Staff",
+    "name": "Bone Staff",
+    "slot": "Melee"
+  },
+  "Cleaver": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Axe",
+    "name": "Cleaver",
+    "slot": "Melee"
+  },
+  "ElvenBow": {
+    "classes": [
+      "ElvenRanger"
+    ],
+    "kind": "Bow",
+    "name": "Elven Bow",
+    "slot": "Ranged"
+  },
+  "EmberStaff": {
+    "classes": [
+      "Wizard"
+    ],
+    "kind": "Staff",
+    "name": "Ember Staff",
+    "slot": "Melee"
+  },
+  "FlameTongue": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Sword",
+    "name": "Flame Tongue",
+    "slot": "Melee"
+  },
+  "GoblinBow": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Bow",
+    "name": "Goblin Bow",
+    "slot": "Ranged"
+  },
+  "GoldenSword": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Sword",
+    "name": "Golden Sword",
+    "slot": "Melee"
+  },
+  "GreatAxe": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Axe",
+    "name": "Great Axe",
+    "slot": "Melee"
+  },
+  "HuntersBow": {
+    "classes": [
+      "ElvenRanger"
+    ],
+    "kind": "Bow",
+    "name": "Hunter's Bow",
+    "slot": "Ranged"
+  },
+  "Knife": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Dagger",
+    "name": "Knife",
+    "slot": "Melee"
+  },
+  "KnightSword": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Sword",
+    "name": "Knight Sword",
+    "slot": "Melee"
+  },
+  "NecromancerStaff": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Staff",
+    "name": "Necromancer Staff",
+    "slot": "Melee"
+  },
+  "OrcBow": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Bow",
+    "name": "Orc Bow",
+    "slot": "Ranged"
+  },
+  "Rapier": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "DuellingSword",
+    "name": "Rapier",
+    "slot": "Melee"
+  },
+  "RedStaff": {
+    "classes": [
+      "Wizard"
+    ],
+    "kind": "Staff",
+    "name": "Red Staff",
+    "slot": "Melee"
+  },
+  "RustySword": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Sword",
+    "name": "Rusty Sword",
+    "slot": "Melee"
+  },
+  "ShortBow": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Bow",
+    "name": "Short Bow",
+    "slot": "Ranged"
+  },
+  "SkeletonLongbow": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Longbow",
+    "name": "Skeleton Longbow",
+    "slot": "Ranged"
+  },
+  "SpikedClub": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Club",
+    "name": "Spiked Club",
+    "slot": "Melee"
+  },
+  "StaffOfRot": {
+    "classes": [
+      "Wizard"
+    ],
+    "kind": "Staff",
+    "name": "Staff of Rot",
+    "slot": "Melee"
+  },
+  "SummonerStaff": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Staff",
+    "name": "Summoner Staff",
+    "slot": "Melee"
+  },
+  "ThrowingAxes": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "ThrowingAxe",
+    "name": "Throwing Axes",
+    "slot": "Ranged"
+  },
+  "WarHammer": {
+    "classes": [
+      "Wizard",
+      "Paladin",
+      "Barbarian",
+      "ElvenRanger"
+    ],
+    "kind": "Hammer",
+    "name": "War Hammer",
+    "slot": "Melee"
   }
 } as const;
 

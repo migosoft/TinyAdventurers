@@ -12,6 +12,8 @@ use crate::defs::abilities::{self as ab};
 use crate::defs::attributes::Attr;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::effects::{self, EffectKind};
+use crate::defs::items::{self, EquipSlot, ItemBase, ItemId};
+use crate::defs::weapons::{category, WeaponCategory};
 use crate::defs::{bosses, enemies};
 use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::dungeon::{Map, Tile, TILE};
@@ -39,7 +41,7 @@ fn export_defs() {
             let attrs: serde_json::Map<String, serde_json::Value> = Attr::ALL.iter().map(|a| (format!("{a:?}"), json!(start.get(*a)))).collect();
             (
                 format!("{c:?}"),
-                json!({ "kind": d.kind as u8, "hp": d.hp, "speed": d.speed, "attrs": attrs, "weight": d.weight, "base_hp": d.base_hp, "primary": d.primary, "secondary": d.secondary }),
+                json!({ "kind": d.kind as u8, "hp": d.hp, "speed": d.speed, "attrs": attrs, "weight": d.weight, "base_hp": d.base_hp, "primary": d.primary, "secondary": d.secondary, "weapons": d.weapons.iter().map(|k| format!("{k:?}")).collect::<Vec<_>>(), "starter": { "melee": d.starter.0, "ranged": d.starter.1 } }),
             )
         })
         .collect();
@@ -48,6 +50,19 @@ fn export_defs() {
         .map(|&a| {
             let d = ab::def(a);
             (format!("{a:?}"), json!({ "name": d.name, "slot": d.slot, "ranged": d.ranged, "shape": d.shape, "classes": d.classes }))
+        })
+        .collect();
+    // The weapon items (the client's debug weapon selects): slot, kind and the classes that can hold them.
+    let items: serde_json::Map<String, serde_json::Value> = ItemId::ALL
+        .iter()
+        .filter_map(|&i| {
+            let d = items::def(i);
+            let (slot, kind) = match d.base {
+                ItemBase::Melee(k, _) if category(k) != WeaponCategory::Natural => (EquipSlot::Melee, k),
+                ItemBase::Ranged(k, _) => (EquipSlot::Ranged, k),
+                ItemBase::Melee(..) | ItemBase::Armor(_) | ItemBase::Ring | ItemBase::Shoes | ItemBase::Belt | ItemBase::Shield => return None,
+            };
+            Some((format!("{i:?}"), json!({ "name": d.name, "slot": slot, "kind": format!("{kind:?}"), "classes": d.classes })))
         })
         .collect();
     let mut consts = json!({
@@ -166,6 +181,7 @@ fn export_defs() {
          export const CONST = {} as const;\n\n\
          export const CLASSES = {} as const;\n\n\
          export const ABILITIES = {} as const;\n\n\
+         export const ITEMS = {} as const;\n\n\
          export const HITBOX: Record<number, {{ r: number; h: number }}> = {};\n\n\
          export const EV = {} as const;\n\n\
          export const DMG_TYPE = {} as const;\n\n\
@@ -182,6 +198,7 @@ fn export_defs() {
         p(&consts),
         p(&json!(class_defs)),
         p(&json!(abilities)),
+        p(&json!(items)),
         p(&json!(hitbox)),
         p(&json!(ev)),
         p(&json!(dmg_types)),

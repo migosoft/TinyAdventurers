@@ -1,4 +1,4 @@
-import { ABILITIES, CLASSES } from '../generated/defs';
+import { ABILITIES, CLASSES, ITEMS } from '../generated/defs';
 import type { AbilityId } from '../generated/AbilityId';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
@@ -33,6 +33,22 @@ export function debugChoices(cls: ClassId, slot: 'Primary' | 'Secondary'): Abili
   });
 }
 
+type WeaponId = keyof typeof ITEMS;
+
+/** The weapon items of `slot` that class `cls` can hold and is trained in (the debug weapon selects' choices). */
+export function debugWeapons(cls: ClassId, slot: 'Melee' | 'Ranged'): WeaponId[] {
+  const trained: readonly string[] = CLASSES[cls].weapons;
+  return (Object.keys(ITEMS) as WeaponId[]).filter((id) => {
+    const it = ITEMS[id];
+    return it.slot === slot && (it.classes as readonly ClassId[]).includes(cls) && trained.includes(it.kind);
+  });
+}
+
+/** The server's answers that mean a debug message was refused before it stored anything. */
+export function isDebugGuardError(msg: string): boolean {
+  return ['Debug is off.', 'Join a dungeon first.', 'Not during a run.', 'Not while ready.', 'Choose a character first.', 'Only weapons.'].includes(msg);
+}
+
 /** Debug mode only: `?debug&boss=demon|lich|dragon` preselects the end boss on the host's page. */
 function debugBoss(): BossId | null {
   const b = debugOn() ? (new URLSearchParams(location.search).get('boss') ?? '') : '';
@@ -53,7 +69,7 @@ export class Lobby {
   /** Room the debug boss was already preselected in. */
   private preselected = 0;
   /** The debug loadout picked in a waiting room (the server sends no echo). */
-  private debugPick: { run: number; cls: ClassId; primary: AbilityId; secondary: AbilityId } | null = null;
+  private debugPick: { run: number; cls: ClassId; primary: AbilityId; secondary: AbilityId; melee: WeaponId | null; ranged: WeaponId | null } | null = null;
   myId = 0;
 
   constructor(
@@ -105,6 +121,27 @@ export class Lobby {
   }
 
   error(msg: string): void {
+    this.resetRejectedDebugPick(msg);
+    const e = this.root.querySelector('.error');
+    if (e) e.textContent = msg;
+  }
+
+  /**
+   * The server keeps no echo of a debug pick, and a refused one (a weapon the class is not trained in,
+   * an Attribute shortfall) would stay selected: reset the selects, and the server with them unless the
+   * message says it never stored the pick (resending then could only be refused again).
+   */
+  private resetRejectedDebugPick(msg: string): void {
+    const pick = this.debugPick;
+    if (!pick || !this.room) return;
+    this.debugPick = null;
+    if (!isDebugGuardError(msg)) {
+      const { cls } = pick;
+      this.net.send({ t: 'DebugLoadout', primary: { ability: CLASSES[cls].primary, source: 'Own' }, secondary: { ability: CLASSES[cls].secondary, source: 'Own' } });
+      this.net.send({ t: 'DebugEquip', slot: 'Melee', item: null });
+      this.net.send({ t: 'DebugEquip', slot: 'Ranged', item: null });
+    }
+    this.render();
     const e = this.root.querySelector('.error');
     if (e) e.textContent = msg;
   }
@@ -235,23 +272,38 @@ export class Lobby {
     this.root.querySelectorAll<HTMLSelectElement>('.debug-loadout select').forEach((sel) => {
       sel.onchange = () => {
         const pick = this.debugPick!;
-        if (sel.dataset.slot === 'primary') pick.primary = sel.value as AbilityId;
+        const slot = sel.dataset.slot;
+        if (slot === 'melee' || slot === 'ranged') {
+          const item = sel.value === '' ? null : (sel.value as WeaponId);
+          pick[slot] = item;
+          this.net.send({ t: 'DebugEquip', slot: slot === 'melee' ? 'Melee' : 'Ranged', item });
+          return;
+        }
+        if (slot === 'primary') pick.primary = sel.value as AbilityId;
         else pick.secondary = sel.value as AbilityId;
         this.net.send({ t: 'DebugLoadout', primary: { ability: pick.primary, source: 'Own' }, secondary: { ability: pick.secondary, source: 'Own' } });
       };
     });
   }
 
-  /** Debug: two pickers for any primary and secondary of your class (sent as `DebugLoadout`). */
+  /** Debug: pickers for any primary and secondary of your class (`DebugLoadout`) and for its melee and ranged weapon (`DebugEquip`). */
   private debugLoadoutRow(run: number, cls: ClassId): string {
     if (!this.debugPick || this.debugPick.run !== run || this.debugPick.cls !== cls) {
-      this.debugPick = { run, cls, primary: CLASSES[cls].primary, secondary: CLASSES[cls].secondary };
+      this.debugPick = { run, cls, primary: CLASSES[cls].primary, secondary: CLASSES[cls].secondary, melee: null, ranged: null };
     }
     const pick = this.debugPick;
     const select = (slot: 'primary' | 'secondary', chosen: AbilityId) =>
       `<select data-slot="${slot}">${debugChoices(cls, slot === 'primary' ? 'Primary' : 'Secondary')
         .map((id) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${ABILITIES[id].name}</option>`)
         .join('')}</select>`;
-    return `<div class="row debug-loadout"><small>Debug loadout</small>${select('primary', pick.primary)}${select('secondary', pick.secondary)}</div>`;
+    // An empty value asks for the class's starter of that slot (no weapon, for a class without a ranged one).
+    const weapon = (slot: 'melee' | 'ranged', chosen: WeaponId | null) => {
+      const starter = slot === 'melee' || CLASSES[cls].starter.ranged ? '(starter)' : '(none)';
+      const options = debugWeapons(cls, slot === 'melee' ? 'Melee' : 'Ranged')
+        .map((id) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${ITEMS[id].name}</option>`)
+        .join('');
+      return `<select data-slot="${slot}"><option value=""${chosen === null ? ' selected' : ''}>${starter}</option>${options}</select>`;
+    };
+    return `<div class="row debug-loadout"><small>Debug loadout</small>${select('primary', pick.primary)}${select('secondary', pick.secondary)}${weapon('melee', pick.melee)}${weapon('ranged', pick.ranged)}</div>`;
   }
 }
