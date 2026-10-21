@@ -5,7 +5,7 @@ use super::{ai, perception, Run};
 use crate::collision::{line_of_sight, move_box, walk_line};
 use crate::defs::attributes::Attr;
 use crate::defs::companions::*;
-use crate::defs::damage::Damage;
+use crate::defs::damage::{Damage, What};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::{self, Map, Mover};
 use crate::math::Vec2;
@@ -202,9 +202,9 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive) {
             let (w, e) = (&run.monsters[mi], &run.monsters[ei]);
             if w.pos.dist(e.pos) <= WOLF_BITE_RANGE + w.radius + e.radius + 4.0 {
-                let (from, melee) = (w.pos, w.melee);
+                let (from, melee, wolf_id) = (w.pos, w.melee, w.id);
                 run.monsters[mi].aim = from.angle_to(e.pos);
-                run.hurt_monster(ei, Damage::new(WOLF_BITE_DAMAGE, melee).with_power(WOLF_ATTRS.get(Attr::Str)), false, Some(pi));
+                run.hurt_monster(ei, Damage::new(WOLF_BITE_DAMAGE, melee).with_power(WOLF_ATTRS.get(Attr::Str)).by(wolf_id, What::Attack), false, Some(pi));
                 run.knock_monster(ei, from, WOLF_BITE_KNOCK, WOLF_ATTRS.get(Attr::Str));
             }
         }
@@ -339,8 +339,8 @@ fn tick_dash(run: &mut Run, mi: usize, pi: usize, dash: WolfDash, dt: f64) {
         if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive) {
             let (w, e) = (&run.monsters[mi], &run.monsters[ei]);
             if w.pos.dist(e.pos) < w.radius + e.radius + 4.0 {
-                let (from, melee) = (w.pos, w.melee);
-                run.hurt_monster(ei, Damage::new(WOLF_DASH_DAMAGE, melee).with_power(WOLF_ATTRS.get(Attr::Str)), false, Some(pi));
+                let (from, melee, wolf_id) = (w.pos, w.melee, w.id);
+                run.hurt_monster(ei, Damage::new(WOLF_DASH_DAMAGE, melee).with_power(WOLF_ATTRS.get(Attr::Str)).by(wolf_id, What::Attack), false, Some(pi));
                 run.knock_monster(ei, from, WOLF_DASH_KNOCK, WOLF_ATTRS.get(Attr::Str));
                 run.monsters[mi].ai.cd = WOLF_BITE_COOLDOWN;
                 done = true;
@@ -853,7 +853,7 @@ mod tests {
         let id = spawn_wolf(&mut run, 0);
         let wi = wolf_idx(&run, id);
         run.monsters[wi].pos = boss_pos + Vec2::new(LICH_NOVA_RADIUS - 10.0, 0.0);
-        crate::run::bosses::lich::Lich::nova(&mut run, boss_pos);
+        crate::run::bosses::lich::Lich::nova(&mut run, bi, boss_pos);
         let hp = run.monsters[wolf_idx(&run, id)].hp;
         assert!((hp - (80.0 - LICH_NOVA_DAMAGE * 0.9)).abs() < 1e-9, "magical resistance 10 %: hp {hp}");
         // The boss sees the wolf (it is nearer than the hero) but targets the hero.

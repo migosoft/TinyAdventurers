@@ -11,7 +11,7 @@
 use crate::run::objects::{hurt_object, hurt_objects_in, objects_in};
 use super::{boss_idx, set_anim, target, BossBehaviour};
 use crate::defs::bosses::*;
-use crate::defs::damage::{Damage, DamageSplit, DamageType};
+use crate::defs::damage::{Damage, DamageSplit, DamageType, What};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
@@ -91,9 +91,9 @@ impl Dragon {
     fn land_smash(run: &mut Run, bi: usize, pos: Vec2, aim: f64) {
         let r = DRAGON_SMASH_RADIUS;
         run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: 5 }, Some(pos));
-        hurt_objects_in(run, pos, r, None, Damage::new(DRAGON_SMASH_DAMAGE, run.monsters[bi].melee));
+        hurt_objects_in(run, pos, r, None, Damage::new(DRAGON_SMASH_DAMAGE, run.monsters[bi].melee).by(run.monsters[bi].id, What::Move("Smash")));
         for c in run.foes_in(pos, r, None) {
-            run.hurt_creature(c, Damage::new(DRAGON_SMASH_DAMAGE, run.monsters[bi].melee));
+            run.hurt_creature(c, Damage::new(DRAGON_SMASH_DAMAGE, run.monsters[bi].melee).by(run.monsters[bi].id, What::Move("Smash")));
             run.knock_creature(c, pos, aim, DRAGON_SMASH_KNOCK, BOSS_KNOCK_STR);
         }
     }
@@ -202,25 +202,25 @@ impl BossBehaviour for Dragon {
                 Action::Breath | Action::Recover => set_anim(run, bi, Anim::Idle),
                 Action::Tail => {
                     let behind = aim + std::f64::consts::PI;
-                    hurt_objects_in(run, pos, 46.0, Some((behind, 1.2)), Damage::new(25.0, run.monsters[bi].melee));
+                    hurt_objects_in(run, pos, 46.0, Some((behind, 1.2)), Damage::new(25.0, run.monsters[bi].melee).by(run.monsters[bi].id, What::Move("Tail")));
                     for c in run.foes_in(pos, 46.0, Some((behind, 1.2))) {
-                        run.hurt_creature(c, Damage::new(25.0, run.monsters[bi].melee));
+                        run.hurt_creature(c, Damage::new(25.0, run.monsters[bi].melee).by(run.monsters[bi].id, What::Move("Tail")));
                         run.knock_creature(c, pos, behind, DRAGON_TAIL_KNOCK, BOSS_KNOCK_STR);
                     }
                     self.action = Some((Action::Recover, RECOVER_TAIL));
                 }
                 Action::Claw => {
-                    hurt_objects_in(run, pos, CLAW_RANGE, Some((aim, CLAW_HALF_ANGLE)), Damage::new(20.0, run.monsters[bi].melee));
+                    hurt_objects_in(run, pos, CLAW_RANGE, Some((aim, CLAW_HALF_ANGLE)), Damage::new(20.0, run.monsters[bi].melee).by(run.monsters[bi].id, What::Move("Claw")));
                     for c in run.foes_in(pos, CLAW_RANGE, Some((aim, CLAW_HALF_ANGLE))) {
-                        run.hurt_creature(c, Damage::new(20.0, run.monsters[bi].melee));
+                        run.hurt_creature(c, Damage::new(20.0, run.monsters[bi].melee).by(run.monsters[bi].id, What::Move("Claw")));
                         run.knock_creature(c, pos, aim, DRAGON_CLAW_KNOCK, BOSS_KNOCK_STR);
                     }
                     self.action = Some((Action::Recover, RECOVER_CLAW));
                 }
                 Action::Bite => {
-                    hurt_objects_in(run, pos, DRAGON_BITE_RANGE, Some((aim, DRAGON_BITE_HALF_ANGLE)), Damage::new(DRAGON_BITE_DAMAGE, run.monsters[bi].melee));
+                    hurt_objects_in(run, pos, DRAGON_BITE_RANGE, Some((aim, DRAGON_BITE_HALF_ANGLE)), Damage::new(DRAGON_BITE_DAMAGE, run.monsters[bi].melee).by(run.monsters[bi].id, What::Move("Bite")));
                     for c in run.foes_in(pos, DRAGON_BITE_RANGE, Some((aim, DRAGON_BITE_HALF_ANGLE))) {
-                        run.hurt_creature(c, Damage::new(DRAGON_BITE_DAMAGE, run.monsters[bi].melee));
+                        run.hurt_creature(c, Damage::new(DRAGON_BITE_DAMAGE, run.monsters[bi].melee).by(run.monsters[bi].id, What::Move("Bite")));
                         run.knock_creature(c, pos, aim, DRAGON_BITE_KNOCK, BOSS_KNOCK_STR);
                     }
                     self.action = Some((Action::Recover, RECOVER_CLAW));
@@ -293,7 +293,7 @@ impl BossBehaviour for Dragon {
 
 /// One pulse of the breath: innate fire, at the dragon's CHA.
 fn breath_damage(run: &Run, bi: usize) -> Damage {
-    Damage::new(6.0, DamageSplit::pure(DamageType::Heat)).with_power(run.monsters[bi].attrs.get(governing(EntityKind::FireBreath)))
+    Damage::new(6.0, DamageSplit::pure(DamageType::Heat)).with_power(run.monsters[bi].attrs.get(governing(EntityKind::FireBreath))).by(run.monsters[bi].id, What::Move("Breath"))
 }
 
 #[cfg(test)]

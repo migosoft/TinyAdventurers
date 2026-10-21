@@ -20,6 +20,17 @@ pub enum Attr {
 impl Attr {
     pub const COUNT: usize = 6;
     pub const ALL: [Attr; Attr::COUNT] = [Attr::Str, Attr::Dex, Attr::Con, Attr::Int, Attr::Wil, Attr::Cha];
+    #[allow(dead_code)] // read by the rules log, Task 4
+    pub fn short(self) -> &'static str {
+        match self {
+            Attr::Str => "STR",
+            Attr::Dex => "DEX",
+            Attr::Con => "CON",
+            Attr::Int => "INT",
+            Attr::Wil => "WIL",
+            Attr::Cha => "CHA",
+        }
+    }
 }
 
 /// One value per Attribute, indexed by `Attr`.
@@ -91,7 +102,7 @@ pub struct Scaled {
 }
 
 impl Scaled {
-    fn ratio(&self, a: &Attributes) -> f64 {
+    pub(crate) fn ratio(&self, a: &Attributes) -> f64 {
         // Ratio first: x / x is exactly 1.0, so the reference value is bit-exact.
         factor(a.get(self.attr), self.pct) / factor(self.at, self.pct)
     }

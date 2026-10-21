@@ -3,7 +3,7 @@
 //! weapon resolves bit-exactly to them there and moves with STR and DEX around it.
 
 use super::attributes::{Attr, Attributes, Scaled, DEX_ARC, DEX_DMG, DEX_SPEED, STR_DMG, STR_RANGE};
-use super::damage::DamageSplit;
+use super::damage::{Base, BaseScale, DamageSplit};
 use super::effects::OnHit;
 use super::kinds::EntityKind;
 
@@ -102,6 +102,8 @@ pub struct RangedStats {
 pub struct ResolvedWeapon {
     pub kind: WeaponKind,
     pub damage: f64,
+    /// `damage` as its breakdown: `damage == base.amount()`.
+    pub base: Base,
     pub cooldown: f64,
     pub arc: f64,
     pub push: f64,
@@ -118,22 +120,27 @@ pub struct ResolvedWeapon {
 }
 
 /// Damage by the category's key Attribute, cooldown by DEX.
-fn damage_and_cooldown(kind: WeaponKind, damage: f64, cooldown: f64, at: At, a: &Attributes) -> (f64, f64) {
+fn damage_and_cooldown(kind: WeaponKind, damage: f64, cooldown: f64, at: At, a: &Attributes) -> (f64, f64, BaseScale) {
     let (attr, pct, at_key) = match key_attr(category(kind)) {
         Attr::Str => (Attr::Str, STR_DMG, at.str),
         Attr::Dex => (Attr::Dex, DEX_DMG, at.dex),
         other => unreachable!("key_attr returned {other:?}"),
     };
-    let dmg = Scaled { value: damage, attr, pct, at: at_key }.get(a);
+    let scaled = Scaled { value: damage, attr, pct, at: at_key };
+    let ratio = scaled.ratio(a);
+    let dmg = scaled.value * ratio;
     let cd = Scaled { value: cooldown, attr: Attr::Dex, pct: DEX_SPEED, at: at.dex }.per(a);
-    (dmg, cd)
+    (dmg, cd, BaseScale { attr, at: at_key, have: a.get(attr), ratio })
 }
 
 pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> ResolvedWeapon {
-    let (damage, cooldown) = damage_and_cooldown(kind, s.damage, s.cooldown, s.at, attrs);
+    let (damage, cooldown, scale) = damage_and_cooldown(kind, s.damage, s.cooldown, s.at, attrs);
+    let base = Base { given: s.damage, scale: Some(scale), ability_mult: 1.0, mods_mult: 1.0 };
+    debug_assert_eq!(damage.to_bits(), base.amount().to_bits());
     ResolvedWeapon {
         kind,
-        damage,
+        damage: base.amount(),
+        base,
         cooldown,
         arc: Scaled { value: s.arc, attr: Attr::Dex, pct: DEX_ARC, at: s.at.dex }.get(attrs),
         push: s.push,
@@ -149,10 +156,13 @@ pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> Re
 }
 
 pub fn resolve_ranged(kind: WeaponKind, s: &RangedStats, attrs: &Attributes) -> ResolvedWeapon {
-    let (damage, cooldown) = damage_and_cooldown(kind, s.damage, s.cooldown, s.at, attrs);
+    let (damage, cooldown, scale) = damage_and_cooldown(kind, s.damage, s.cooldown, s.at, attrs);
+    let base = Base { given: s.damage, scale: Some(scale), ability_mult: 1.0, mods_mult: 1.0 };
+    debug_assert_eq!(damage.to_bits(), base.amount().to_bits());
     ResolvedWeapon {
         kind,
-        damage,
+        damage: base.amount(),
+        base,
         cooldown,
         arc: 0.0,
         push: 0.0,

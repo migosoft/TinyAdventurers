@@ -7,7 +7,7 @@ use super::entities::{AiState, Pierce, Target, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
 use crate::defs::classes::PLAYER_RADIUS;
-use crate::defs::damage::Damage;
+use crate::defs::damage::{Damage, What};
 use crate::defs::enemies::{self, AttackStyle, EnemyType};
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Map, Mover, TILE};
@@ -455,9 +455,10 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, attack: At
     let on_hit = run.monsters[mi].etype.and_then(|t| enemies::on_hit(t, alt));
     // Melee and slams; a shot takes its owner's power in `spawn_monster_projectile`.
     let power = run.monsters[mi].etype.map_or(0, |t| run.monsters[mi].attrs.get(enemies::governing(t, None)));
+    let me = run.monsters[mi].id;
     let with = |d: Damage| match on_hit {
-        Some(h) => d.with_power(power).with_effect(h),
-        None => d.with_power(power),
+        Some(h) => d.with_power(power).with_effect(h).by(me, What::Attack),
+        None => d.with_power(power).by(me, What::Attack),
     };
     match attack {
         AttackStyle::Melee { range, damage, cooldown, knock, .. } => {

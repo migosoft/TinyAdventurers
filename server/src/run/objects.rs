@@ -327,7 +327,7 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
         _ => None,
     };
     let src = by.and_then(|id| run.player_idx(id));
-    let (r, dmg, knock) = (BARREL_BLAST_R, barrel_blast(), BARREL_BLAST_KNOCK);
+    let (r, dmg, knock) = (BARREL_BLAST_R, barrel_blast().by(run.objects[oi].id, crate::defs::damage::What::Blast), BARREL_BLAST_KNOCK);
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: BOOM_BARREL }, Some(pos));
     run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
     let map = &run.layout.map;

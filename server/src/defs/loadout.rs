@@ -4,7 +4,7 @@
 use super::abilities::{self as ab, AbilityDef, AbilityId, AbilitySlot};
 use super::attributes::{Attr, Attributes};
 use super::classes;
-use super::damage::DamageType;
+use super::damage::{Base, DamageType};
 use super::effects::OnHit;
 use super::items::{self, EquipError, EquipSlot, Equipment, PropKind};
 use super::progression::StatUpgrades;
@@ -119,11 +119,13 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
     shares.sort_by(|a, b| (a.0 as u8).cmp(&(b.0 as u8)).then(a.1.total_cmp(&b.1)));
     let longer = !duration.is_empty();
     let new_duration = (r.duration + sum(duration)).max(0.0);
+    let base = Base { mods_mult: product(damage), ..r.base };
     ResolvedAbility {
         // Clamped: a negative factor or a large negative add never makes a number negative.
         radius: (r.radius * product(radius)).max(0.0),
         range: (r.range * product(range)).max(0.0),
-        damage: (r.damage * product(damage)).max(0.0),
+        damage: base.amount(),
+        base,
         arc: (r.arc * product(arc)).max(0.0),
         duration: new_duration,
         // The ability's own effect lasts as long as the ability does.

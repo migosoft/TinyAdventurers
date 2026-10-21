@@ -1,7 +1,7 @@
 //! Status effects at run time: the timers on each creature and the only
 //! API other code uses to touch them. Data: `defs/effects.rs`.
 
-use crate::defs::damage::{Damage, DamageType, Resistances};
+use crate::defs::damage::{Damage, DamageType, Resistances, What, Why};
 use crate::dungeon::Tile;
 use crate::defs::attributes::Attr;
 use crate::defs::effects::{def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectLook, EffectResistances, Stat, DOT_TICK, TYPE_EFFECT_POWER};
@@ -105,14 +105,14 @@ impl Effects {
     }
     /// Counts down; returns the kinds that ran out (removed) and the
     /// damage-over-time ticks due this step.
-    fn tick(&mut self, dt: f64) -> (Vec<EffectKind>, Vec<(DamageType, f64)>) {
+    fn tick(&mut self, dt: f64) -> (Vec<EffectKind>, Vec<(DamageType, f64, EffectKind, Option<u32>)>) {
         let mut hits = Vec::new();
         for a in &mut self.0 {
             if let Some((t, dps)) = def(a.kind).dot {
                 a.dot_t += dt;
                 if a.dot_t >= DOT_TICK - 1e-9 {
                     a.dot_t -= DOT_TICK;
-                    hits.push((t, dps * DOT_TICK));
+                    hits.push((t, dps * DOT_TICK, a.kind, a.source));
                 }
             }
             a.left -= dt;
@@ -363,11 +363,12 @@ impl Run {
             for k in gone {
                 self.effect_event(c, id, pos, k, false, EffectLook::Plain);
             }
-            for (t, amount) in hits {
+            for (t, amount, kind, source) in hits {
+                let tick = Damage { why: Why { by: source, what: What::Tick(kind), ..Why::NONE }, ..Damage::effect_tick(amount, t) };
                 match c {
-                    Creature::Player(i) => self.hurt_player(i, Damage::effect_tick(amount, t)),
+                    Creature::Player(i) => self.hurt_player(i, tick),
                     Creature::Monster(i) => {
-                        self.hurt_monster(i, Damage::effect_tick(amount, t), false, None);
+                        self.hurt_monster(i, tick, false, None);
                     }
                 }
             }

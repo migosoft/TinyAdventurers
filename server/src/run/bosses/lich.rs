@@ -11,7 +11,7 @@ use crate::defs::bosses::{
     LICH_GAZE_FIRST, LICH_GAZE_SECS, LICH_GAZE_WINDUP, LICH_NOVA_DAMAGE, LICH_NOVA_EVERY, LICH_NOVA_KNOCK, LICH_NOVA_RADIUS, LICH_NOVA_WINDUP, LICH_ORB_SPEED,
     LICH_SKELETONS, LICH_SLEEP_COOLDOWN, LICH_SLEEP_FIRST, LICH_SLEEP_SECS, LICH_SLEEP_WINDUP, BOSS_KNOCK_STR,
 };
-use crate::defs::damage::{Damage, DamageSplit, DamageType};
+use crate::defs::damage::{Damage, DamageSplit, DamageType, What};
 use crate::defs::effects::EffectKind;
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{Anim, EntityKind};
@@ -127,10 +127,10 @@ impl Lich {
     }
 
     /// The nova: a dark burst that hurts every hero and ally within the radius and pushes them straight away.
-    pub(crate) fn nova(run: &mut Run, pos: Vec2) {
+    pub(crate) fn nova(run: &mut Run, bi: usize, pos: Vec2) {
         let r = LICH_NOVA_RADIUS;
         run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: 6 }, Some(pos));
-        let dmg = Damage::new(LICH_NOVA_DAMAGE, DamageSplit::pure(DamageType::Magical));
+        let dmg = Damage::new(LICH_NOVA_DAMAGE, DamageSplit::pure(DamageType::Magical)).by(run.monsters[bi].id, What::Move("Nova"));
         crate::run::objects::hurt_objects_in(run, pos, r, None, dmg);
         for c in run.foes_in(pos, r, None) {
             let away = pos.angle_to(run.creature_pos(c));
@@ -226,7 +226,7 @@ impl BossBehaviour for Lich {
                 }
                 Action::Nova => {
                     set_anim(run, bi, Anim::Cast);
-                    Self::nova(run, pos);
+                    Self::nova(run, bi, pos);
                 }
                 Action::Spell(s) => {
                     set_anim(run, bi, Anim::Cast);
@@ -373,7 +373,7 @@ pub(crate) mod tests {
         let pos = run.monsters[bi].pos;
         run.spawn_object(EntityKind::Barrel, pos + Vec2::new(LICH_NOVA_RADIUS, 0.0), ObjState::Barrel(Barrel::new()));
         run.spawn_object(EntityKind::Barrel, pos + Vec2::new(-(LICH_NOVA_RADIUS + 10.0), 0.0), ObjState::Barrel(Barrel::new()));
-        Lich::nova(&mut run, pos);
+        Lich::nova(&mut run, bi, pos);
         let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
         assert_eq!(lit, vec![true, false]);
     }
@@ -385,10 +385,10 @@ pub(crate) mod tests {
         run.players[0].res = Resistances::of(&[(DamageType::Magical, 1.0)]);
         let hp = run.players[0].hp;
         let pos = run.monsters[bi].pos;
-        Lich::nova(&mut run, pos);
+        Lich::nova(&mut run, bi, pos);
         assert_eq!(run.players[0].hp, hp, "magic resistance blocks the nova");
         run.players[0].res = Resistances::of(&[(DamageType::Heat, 1.0), (DamageType::Physical, 1.0)]);
-        Lich::nova(&mut run, pos);
+        Lich::nova(&mut run, bi, pos);
         assert_eq!(run.players[0].hp, hp - LICH_NOVA_DAMAGE, "heat and physical resistance do not");
     }
 
@@ -415,7 +415,7 @@ pub(crate) mod tests {
         let (mut run, bi) = lich_with(&[Vec2::new(LICH_NOVA_RADIUS + 8.0, 0.0)]);
         let hp = run.players[0].hp;
         let pos = run.monsters[bi].pos;
-        Lich::nova(&mut run, pos);
+        Lich::nova(&mut run, bi, pos);
         assert_eq!(run.players[0].hp, hp);
         assert!(!run.players[0].mv.knocked());
     }

@@ -15,7 +15,7 @@ pub mod rules_log;
 pub mod visibility;
 
 use crate::collision::MoveState;
-use crate::defs::damage::{kind_split, resolve, Damage, DamageSplit, DamageType};
+use crate::defs::damage::{kind_split, resolve, Damage, DamageSplit, DamageType, What, Why};
 use crate::defs::attributes::{push_dist, Attr};
 use crate::defs::progression;
 use crate::defs::{classes, enemies};
@@ -148,12 +148,24 @@ pub struct Run {
     pub debug_used: bool,
     pub srv_ms: f32,
     pub log: rules_log::RulesLog,
+    /// Test-only capture of the last `Damage` that reached `hurt_monster` or `hurt_player`.
+    #[cfg(test)]
+    pub last_hit: Option<Damage>,
 }
 
 /// A patch of fire that hurts heroes and allies (the dragon's; the wolf's fire).
 pub fn spawn_fire_patch(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64) {
     let kind = EntityKind::FirePatch;
     run.spawn_hazard(kind, pos, radius, life, HazardSide::Monsters, HazardPulse::Hurt(Damage::new(damage, kind_split(kind))));
+}
+
+/// A hazard's pulse as a hit: a pulse that came from an ability keeps its source; the rest are the
+/// hazard's own, by its owner when it has one.
+fn hazard_hit(dmg: Damage, kind: EntityKind, owner: Option<u32>) -> Damage {
+    if dmg.why.what != What::Unknown {
+        return dmg;
+    }
+    Damage { why: Why { by: owner, what: What::Hazard(kind), ..dmg.why }, ..dmg }
 }
 
 impl Run {
@@ -179,6 +191,8 @@ impl Run {
             debug_used: false,
             srv_ms: 0.0,
             log: rules_log::RulesLog::default(),
+            #[cfg(test)]
+            last_hit: None,
             layout,
             level,
         };
@@ -670,7 +684,7 @@ impl Run {
             m.burn_t += DT;
             if m.burn_t >= dungeon::LAVA_TICK {
                 m.burn_t -= dungeon::LAVA_TICK;
-                self.hurt_monster(mi, Damage::new(dungeon::LAVA_DAMAGE, DamageSplit::pure(DamageType::Heat)), false, None);
+                self.hurt_monster(mi, Damage { why: Why { what: What::Lava, ..Why::NONE }, ..Damage::new(dungeon::LAVA_DAMAGE, DamageSplit::pure(DamageType::Heat)) }, false, None);
             }
         } else {
             m.burn_t = dungeon::LAVA_TICK;
@@ -721,7 +735,7 @@ impl Run {
             p.burn_t += DT;
             if p.burn_t >= dungeon::LAVA_TICK {
                 p.burn_t -= dungeon::LAVA_TICK;
-                self.hurt_player(pi, Damage::new(dungeon::LAVA_DAMAGE, DamageSplit::pure(DamageType::Heat)));
+                self.hurt_player(pi, Damage { why: Why { what: What::Lava, ..Why::NONE }, ..Damage::new(dungeon::LAVA_DAMAGE, DamageSplit::pure(DamageType::Heat)) });
             }
         } else {
             p.burn_t = dungeon::LAVA_TICK; // the first touch of lava burns at once
@@ -807,9 +821,10 @@ impl Run {
                 continue;
             }
             h.pulse_t = 0.5;
-            let (pos, r, side, pulse) = (h.pos, h.radius, h.side, h.pulse);
+            let (pos, r, side, pulse, kind) = (h.pos, h.radius, h.side, h.pulse, h.kind);
             match (side, pulse) {
                 (HazardSide::Monsters, HazardPulse::Hurt(dmg)) => {
+                    let dmg = hazard_hit(dmg, kind, None);
                     for c in self.foes_touching(pos, r, false) {
                         self.hurt_creature(c, dmg);
                     }
@@ -821,6 +836,7 @@ impl Run {
                     }
                 }
                 (HazardSide::Heroes { owner }, HazardPulse::Hurt(dmg)) => {
+                    let dmg = hazard_hit(dmg, kind, Some(owner));
                     let credit = self.players.iter().position(|p| p.id == owner);
                     for mi in self.enemies_touching(pos, r) {
                         self.hurt_monster(mi, dmg, false, credit);
@@ -854,6 +870,10 @@ impl Run {
     }
 
     pub fn hurt_player(&mut self, pi: usize, dmg: Damage) {
+        #[cfg(test)]
+        {
+            self.last_hit = Some(dmg);
+        }
         if !self.players[pi].alive {
             return;
         }
@@ -1019,6 +1039,10 @@ impl Run {
 
     /// Returns true if the monster took damage.
     pub fn hurt_monster(&mut self, mi: usize, dmg: Damage, crit: bool, src_player: Option<usize>) -> bool {
+        #[cfg(test)]
+        {
+            self.last_hit = Some(dmg);
+        }
         if !self.monsters[mi].alive {
             return false;
         }

@@ -1,6 +1,9 @@
 //! Damage types, typed damage and resistances. `resolve` is the only damage
 //! formula: every hit on a hero, monster or object goes through it.
 
+use super::abilities::AbilityId;
+use super::attributes::Attr;
+use super::effects::EffectKind;
 use super::kinds::EntityKind;
 
 super::enum_list::listed_enum! {
@@ -129,11 +132,111 @@ pub struct Damage {
     /// the power of the damage-type effects the hit applies, at least `TYPE_EFFECT_POWER`.
     /// 0 for sources without one (terrain, barrels, effect ticks).
     pub power: i32,
+    /// Where the hit came from, for the rules log. No rule reads it.
+    pub why: Why,
+}
+
+/// The Attribute that scaled a base amount: `ratio = factor(have) / factor(at)`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BaseScale {
+    pub attr: Attr,
+    /// The Attribute value the stored number holds at.
+    pub at: i32,
+    /// The wielder's value.
+    pub have: i32,
+    pub ratio: f64,
+}
+
+/// An ability's damage before any hit: the stored number, its Attribute ratio, the ability's own
+/// multiplier and the item mods' product. `amount()` IS the ability's damage (`ResolvedAbility::damage`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Base {
+    pub given: f64,
+    pub scale: Option<BaseScale>,
+    pub ability_mult: f64,
+    pub mods_mult: f64,
+}
+
+impl Base {
+    pub fn plain(v: f64) -> Self {
+        Base { given: v, scale: None, ability_mult: 1.0, mods_mult: 1.0 }
+    }
+    pub fn amount(&self) -> f64 {
+        let ratio = self.scale.map_or(1.0, |s| s.ratio);
+        ((self.given * ratio) * self.ability_mult * self.mods_mult).max(0.0)
+    }
+}
+
+/// What dealt a hit.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum What {
+    Ability(AbilityId),
+    /// A monster's or the wolf's melee.
+    Attack,
+    /// An enemy projectile.
+    Shot(EntityKind),
+    /// A boss script's named move ("Bite", "Smash", "Tail", "Breath", "Cleave", "Stomp", "Nova").
+    Move(&'static str),
+    Tick(EffectKind),
+    Lava,
+    /// A barrel.
+    Blast,
+    Hazard(EntityKind),
+    Unknown,
+}
+
+/// A factor that changed a hit's amount on its way.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Mult {
+    Behind(f64),
+    Chain { jump: u8, factor: f64 },
+    Overkill { from: u32 },
+    Coat(f64),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Why {
+    pub by: Option<u32>,
+    pub what: What,
+    pub base: Option<Base>,
+    pub mults: [Option<Mult>; 3],
+}
+
+impl Why {
+    pub const NONE: Why = Why { by: None, what: What::Unknown, base: None, mults: [None; 3] };
+    /// Fills the first free slot; when all three are full the first three stay. A shot that pierces
+    /// on by overkill many times has one `Overkill` (the latest kill: the rest it carries now).
+    pub fn with_mult(mut self, m: Mult) -> Self {
+        if let Mult::Overkill { .. } = m {
+            if let Some(slot) = self.mults.iter_mut().find(|s| matches!(s, Some(Mult::Overkill { .. }))) {
+                *slot = Some(m);
+                return self;
+            }
+        }
+        match self.mults.iter_mut().find(|s| s.is_none()) {
+            Some(slot) => *slot = Some(m),
+            None => debug_assert!(false, "a hit with more than three multipliers: {m:?}"),
+        }
+        self
+    }
 }
 
 impl Damage {
     pub fn new(amount: f64, split: DamageSplit) -> Self {
-        Damage { amount, split, on_hit: None, from_effect: false, power: 0 }
+        Damage { amount, split, on_hit: None, from_effect: false, power: 0, why: Why::NONE }
+    }
+    pub fn by(mut self, id: u32, what: What) -> Self {
+        self.why.by = Some(id);
+        self.why.what = what;
+        self
+    }
+    pub fn with_base(mut self, b: Base) -> Self {
+        self.why.base = Some(b);
+        self
+    }
+    pub fn with_mult(mut self, m: Mult) -> Self {
+        self.why = self.why.with_mult(m);
+        self
     }
     pub fn with_power(mut self, power: i32) -> Self {
         self.power = power;
@@ -153,7 +256,16 @@ impl Damage {
 
 /// Σ part × (1 − resistance) over the types. Negative = the hit heals.
 pub fn resolve(d: &Damage, r: &Resistances) -> f64 {
-    DamageType::ALL.iter().map(|&t| d.amount * d.split.share(t) * (1.0 - r.get(t).max(MIN_RESISTANCE))).sum()
+    resolve_parts(d, r).iter().sum()
+}
+
+/// Each type's part of a hit after its resistance, in `DamageType::ALL` order; `resolve` is their sum.
+pub fn resolve_parts(d: &Damage, r: &Resistances) -> [f64; DamageType::COUNT] {
+    let mut parts = [0.0; DamageType::COUNT];
+    for &t in DamageType::ALL.iter() {
+        parts[t as usize] = d.amount * d.split.share(t) * (1.0 - r.get(t).max(MIN_RESISTANCE));
+    }
+    parts
 }
 
 /// The per-type multiplier `resolve` uses: `Σ share × (1 − resistance)`, with the weakness floor.
@@ -242,6 +354,23 @@ mod tests {
         assert!((resolve(&d, &res) - 5.0).abs() < 1e-9, "immune to heat: only the physical half");
         let half = Resistances::of(&[(Physical, 0.5)]);
         assert!((resolve(&Damage::physical(10.0), &half) - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn resolve_is_the_sum_of_its_parts() {
+        let splits = [DamageSplit::physical(), DamageSplit::pure(Cold), DamageSplit::split(&[(Heat, 0.7), (Magical, 0.2)]), DamageSplit::split(&[(Heat, 0.3)])];
+        let ress = [Resistances::NONE, Resistances::of(&[(Heat, 1.0)]), Resistances::of(&[(Cold, -3.0), (Physical, 0.5)]), Resistances::of(&[(Poison, 1.5), (Magical, 0.37)])];
+        for s in splits {
+            for r in &ress {
+                for amount in [0.0, 7.3, 10.0, 33.333] {
+                    let d = Damage::new(amount, s);
+                    let parts = resolve_parts(&d, r);
+                    let want: f64 = DamageType::ALL.iter().map(|&t| d.amount * d.split.share(t) * (1.0 - r.get(t).max(MIN_RESISTANCE))).sum();
+                    assert_eq!(resolve(&d, r).to_bits(), want.to_bits());
+                    assert_eq!(resolve(&d, r).to_bits(), parts.iter().sum::<f64>().to_bits());
+                }
+            }
+        }
     }
 
     #[test]

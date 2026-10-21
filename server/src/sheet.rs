@@ -9,7 +9,7 @@ use crate::defs::attributes::{self, Attr, Attributes, Scaled, CON_MOVE};
 use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT};
-use crate::defs::damage::{kind_split, DamageSplit, DamageType, Resistances};
+use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, Resistances};
 use crate::defs::effects::{EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::items::{self, EquipSlot, ItemBase, ItemId, PropKind};
@@ -32,6 +32,10 @@ pub struct ResolvedAbility {
     pub id: AbilityId,
     pub cooldown: f64,
     pub damage: f64,
+    /// `damage` as its breakdown for the rules log: `damage == base.amount()`.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub base: Base,
     pub range: f64,
     pub arc: f64,
     pub speed: f64,
@@ -152,6 +156,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
         id: d.id,
         cooldown: 0.0,
         damage: 0.0,
+        base: Base::plain(0.0),
         range: 0.0,
         arc: 0.0,
         speed: 0.0,
@@ -170,25 +175,31 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
         push_str: attrs.get(Attr::Str),
     };
     Some(match d.uses {
-        Uses::Melee => ResolvedAbility {
-            cooldown: cooldown(melee),
-            damage: melee.damage * mult.damage,
-            range: reach,
-            arc: mult.arc.unwrap_or(melee.arc),
-            speed: own.speed,
-            radius: own.radius,
-            duration: own.duration,
-            split: with_share(melee.split, mult.share),
-            on_hit: melee.on_hit,
-            power: melee.power,
-            push: melee.push,
-            ..blank
-        },
+        Uses::Melee => {
+            let base = Base { ability_mult: mult.damage, ..melee.base };
+            ResolvedAbility {
+                cooldown: cooldown(melee),
+                damage: base.amount(),
+                base,
+                range: reach,
+                arc: mult.arc.unwrap_or(melee.arc),
+                speed: own.speed,
+                radius: own.radius,
+                duration: own.duration,
+                split: with_share(melee.split, mult.share),
+                on_hit: melee.on_hit,
+                power: melee.power,
+                push: melee.push,
+                ..blank
+            }
+        }
         Uses::Ranged => {
             let w = ranged?;
+            let base = Base { ability_mult: mult.damage, ..w.base };
             ResolvedAbility {
                 cooldown: cooldown(w),
-                damage: w.damage * mult.damage,
+                damage: base.amount(),
+                base,
                 range: w.range,
                 speed: w.projectile_speed,
                 radius: w.radius,
@@ -204,13 +215,17 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
         }
         Uses::Nothing => {
             let gov = ab::governing(d.category);
-            let damage = match gov {
-                Some((attr, pct)) => Scaled { value: own.damage, attr, pct, at: own.at }.get(attrs),
-                None => own.damage,
+            let base = match gov {
+                Some((attr, pct)) => {
+                    let ratio = Scaled { value: own.damage, attr, pct, at: own.at }.ratio(attrs);
+                    Base { given: own.damage, scale: Some(BaseScale { attr, at: own.at, have: attrs.get(attr), ratio }), ability_mult: 1.0, mods_mult: 1.0 }
+                }
+                None => Base::plain(own.damage),
             };
             ResolvedAbility {
                 cooldown: own.cooldown,
-                damage,
+                damage: base.amount(),
+                base,
                 range: own.range,
                 speed: own.speed,
                 radius: own.radius,
@@ -559,6 +574,84 @@ mod tests {
         // What the modifiers really give.
         assert!((m.damage - 1.16).abs() < 1e-12 && (m.attack_speed - 1.06).abs() < 1e-12);
         assert!((m.move_speed - 1.04).abs() < 1e-12 && (m.life - 1.10).abs() < 1e-12 && (m.armor - 0.04).abs() < 1e-12);
+    }
+
+    /// Every (class, ability) the class's loadout allows, with the sheet built around it.
+    fn every_allowed_ability(extra: Attributes, ring: Option<ItemId>) -> Vec<(ClassId, ResolvedAbility)> {
+        use crate::defs::abilities as ab;
+        use crate::defs::loadout::{Loadout, Source};
+        let mut out = vec![];
+        for class in ClassId::ALL {
+            for id in AbilityId::ALL {
+                let slot = ab::def(id).slot;
+                let mut picks = vec![Pick { ability: id, source: Source::Own }];
+                let mut equipment = Equipment::starter(class);
+                if let Some(r) = ring {
+                    equipment = equipment.with(EquipSlot::Ring1, r);
+                    picks.push(Pick { ability: id, source: Source::Item(EquipSlot::Ring1) });
+                }
+                for pick in picks {
+                    let start = Loadout::start(class);
+                    let loadout = match slot {
+                        AbilitySlot::Primary => Loadout { primary: pick, ..start },
+                        AbilitySlot::Secondary => Loadout { secondary: pick, ..start },
+                    };
+                    let build = Build { extra, equipment, loadout, own: vec![id], ..Build::start(class) };
+                    if let Ok(s) = hero_sheet(class, &build) {
+                        out.push((class, if slot == AbilitySlot::Primary { s.primary } else { s.secondary }));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn damage_is_its_base_amount_for_every_ability() {
+        let mut seen = 0;
+        for lift in [0, 4] {
+            for attr in [Attr::Int, Attr::Str, Attr::Dex] {
+                let mut extra = Attributes::default();
+                extra.add(attr, lift);
+                for (class, a) in every_allowed_ability(extra, None) {
+                    assert_eq!(a.damage.to_bits(), a.base.amount().to_bits(), "{class:?} {:?} {attr:?}+{lift}", a.id);
+                    assert_eq!(a.base.mods_mult, 1.0);
+                    seen += 1;
+                }
+                for (class, a) in every_allowed_ability(extra, Some(ItemId::RingOfTheMagus)) {
+                    assert_eq!(a.damage.to_bits(), a.base.amount().to_bits(), "{class:?} {:?} with the ring", a.id);
+                    if a.id == AbilityId::MagicMissile && a.base.mods_mult != 1.0 {
+                        assert_eq!(a.base.mods_mult, 0.75, "the ring's DamageMul");
+                    }
+                    seen += 1;
+                }
+            }
+        }
+        assert!(seen > 100, "{seen} sheets");
+        let wiz = every_allowed_ability(Attributes::default(), Some(ItemId::RingOfTheMagus));
+        assert!(wiz.iter().any(|(_, a)| a.id == AbilityId::MagicMissile && a.base.mods_mult == 0.75), "the ring's version was built");
+    }
+
+    #[test]
+    fn the_base_names_the_governing_attribute() {
+        use crate::defs::abilities as ab;
+        use crate::defs::loadout::{Loadout, Source};
+        let class = ClassId::Wizard;
+        let at = ab::def(AbilityId::FrostShard).own.at;
+        let pick = Pick { ability: AbilityId::FrostShard, source: Source::Own };
+        let mk = |extra| hero_sheet(class, &Build { extra, loadout: Loadout { primary: pick, ..Loadout::start(class) }, own: vec![AbilityId::FrostShard], ..Build::start(class) }).unwrap().primary;
+        let have0 = mk(Attributes::default()).base.scale.expect("scaled").have;
+        let mut extra = Attributes::default();
+        extra.add(Attr::Int, 16 - have0);
+        let sc = mk(extra).base.scale.expect("a spell is scaled");
+        assert_eq!((sc.attr, sc.have, sc.at), (Attr::Int, 16, at));
+
+        let strike = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap().primary;
+        assert_eq!(strike.id, AbilityId::Strike);
+        let sc = strike.base.scale.expect("a weapon is scaled");
+        let ItemBase::Melee(_, stats) = items::def(Equipment::starter(ClassId::Paladin).get(EquipSlot::Melee).unwrap()).base else { panic!("a melee starter") };
+        assert_eq!((sc.attr, sc.at), (Attr::Str, stats.at.str));
+        assert_eq!(strike.base.given, stats.damage);
     }
 
     fn with(c: ClassId, extra: Attributes, items: &[(EquipSlot, ItemId)]) -> Sheet {
