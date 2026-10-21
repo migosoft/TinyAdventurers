@@ -5,7 +5,7 @@ use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::AbilityId;
 use crate::defs::classes::PLAYER_RADIUS;
-use crate::defs::damage::{kind_split, Damage, DamageSplit};
+use crate::defs::damage::{kind_split, overkill_rest, Damage, DamageSplit};
 use crate::defs::effects::OnHit;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::defs::lights::{self, LightKind};
@@ -23,35 +23,71 @@ fn rewind_ticks(run: &Run, pi: usize) -> usize {
     ((run.players[pi].view_lag * TICK_HZ).round() as usize).min(super::entities::HISTORY_LEN - 1)
 }
 
-/// What the dagger stabs: a monster, or a closed chest (so a chest and a hidden mimic answer alike).
+/// What a hero's melee strike hits: a monster, or a closed chest (so a chest and a hidden mimic answer alike).
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum DaggerTarget {
+pub enum MeleeTarget {
     Monster(usize),
     Object(usize),
 }
 
-/// The dagger is used instead of the crossbow when a monster or a closed chest is this close.
-pub fn dagger_target(run: &Run, pi: usize) -> Option<DaggerTarget> {
+/// Every monster on the ground (not an ally) or closed chest within the hero's reach, nearest first.
+pub fn melee_targets(run: &Run, pi: usize) -> Vec<MeleeTarget> {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
-    let reach = run.players[pi].sheet.fallback.range;
+    let reach = run.players[pi].sheet.reach;
     let monsters = run
         .monsters
         .iter()
         .enumerate()
         .filter(|(_, m)| m.alive && !m.airborne && !m.is_ally())
-        .map(|(i, m)| (DaggerTarget::Monster(i), m.pos_ago(rw).dist(pos) - m.radius));
+        .map(|(i, m)| (MeleeTarget::Monster(i), m.pos_ago(rw).dist(pos) - m.radius));
     let chests = run
         .objects
         .iter()
         .enumerate()
         .filter(|(_, o)| !o.gone && matches!(o.state, crate::run::objects::ObjState::Chest { opened: None }))
-        .map(|(i, o)| (DaggerTarget::Object(i), o.pos.dist(pos) - o.radius));
-    monsters
-        .chain(chests)
-        .filter(|&(_, d)| d <= reach)
-        .min_by(|a, b| a.1.total_cmp(&b.1))
-        .map(|(t, _)| t)
+        .map(|(i, o)| (MeleeTarget::Object(i), o.pos.dist(pos) - o.radius));
+    let mut near: Vec<(MeleeTarget, f64)> = monsters.chain(chests).filter(|&(_, d)| d <= reach).collect();
+    near.sort_by(|a, b| a.1.total_cmp(&b.1));
+    near.into_iter().map(|(t, _)| t).collect()
+}
+
+/// The nearest thing in melee reach: where a ranged primary strikes instead of shooting, and what blocks a ranged secondary.
+pub fn melee_target(run: &Run, pi: usize) -> Option<MeleeTarget> {
+    melee_targets(run, pi).first().copied()
+}
+
+/// The melee-rule strike: `strike` hits the nearest of `targets`; a kill carries the rest of its damage on to the next.
+fn melee_strike(run: &mut Run, pi: usize, targets: &[MeleeTarget], strike: &ResolvedAbility, crit: bool) {
+    let pos = run.players[pi].pos();
+    let aim = run.players[pi].aim;
+    let mut dmg = damage_of(strike);
+    for &t in targets {
+        match t {
+            MeleeTarget::Monster(mi) => {
+                let m = &run.monsters[mi];
+                let rest = overkill_rest(dmg.amount, &dmg.split, m.hp, &m.effects.res(m.res));
+                run.hurt_monster(mi, dmg, crit, Some(pi));
+                if strike.push > 0.0 {
+                    run.knock_creature(Creature::Monster(mi), pos, aim, strike.push, strike.push_str);
+                }
+                match rest {
+                    Some(rest) if !run.monsters[mi].alive => dmg.amount = rest,
+                    _ => break,
+                }
+            }
+            MeleeTarget::Object(oi) => {
+                let by = run.players[pi].id;
+                crate::run::objects::hurt_object(run, oi, dmg, Some(by));
+                break;
+            }
+        }
+    }
+}
+
+/// The projectile kind for an `EntityKind` id.
+fn kind_of(id: Option<u8>) -> EntityKind {
+    EntityKind::ALL.into_iter().find(|&k| Some(k as u8) == id).expect("a shot has a projectile")
 }
 
 /// The damage of one hit of `a`: its split, on-hit and power.
@@ -73,7 +109,22 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     };
     let dir = Vec2::from_angle(aim);
     let crit = false;
-    let mut cooldown = def.cooldown;
+    let cooldown = def.cooldown;
+    if def.ranged {
+        let targets = melee_targets(run, pi);
+        if !targets.is_empty() {
+            if !primary {
+                return;
+            }
+            let fallback = run.players[pi].sheet.fallback;
+            melee_strike(run, pi, &targets, &fallback, crit);
+            let p = &mut run.players[pi];
+            p.cd1 = fallback.cooldown;
+            p.anim = Anim::Melee;
+            p.anim_start = run.time;
+            return;
+        }
+    }
     let anim = match id {
         AbilityId::MagicMissile => {
             spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, def.split, def.on_hit, def.power);
@@ -117,25 +168,8 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             Anim::Dash
         }
         AbilityId::Shoot => {
-            if let Some(t) = dagger_target(run, pi) {
-                let thrust = run.players[pi].sheet.fallback;
-                cooldown = thrust.cooldown;
-                let dmg = damage_of(&thrust);
-                match t {
-                    DaggerTarget::Monster(mi) => {
-                        run.hurt_monster(mi, dmg, crit, Some(pi));
-                    }
-                    DaggerTarget::Object(oi) => {
-                        let by = run.players[pi].id;
-                        crate::run::objects::hurt_object(run, oi, dmg, Some(by));
-                    }
-                }
-                Anim::Melee
-            } else {
-                let kind = EntityKind::ALL.into_iter().find(|&k| Some(k as u8) == def.projectile).expect("a shot has a projectile");
-                spawn_player_projectile(run, pi, kind, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, def.split, def.on_hit, def.power);
-                Anim::Shoot
-            }
+            spawn_player_projectile(run, pi, kind_of(def.projectile), shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, def.split, def.on_hit, def.power);
+            Anim::Shoot
         }
         AbilityId::SummonWolf => {
             super::companion::use_ability(run, pi);
@@ -178,6 +212,9 @@ fn melee_arc(run: &mut Run, pi: usize, a: &ResolvedAbility, crit: bool) {
         .collect();
     for mi in hits {
         run.hurt_monster(mi, dmg, crit, Some(pi));
+        if a.push > 0.0 {
+            run.knock_creature(Creature::Monster(mi), pos, aim, a.push, a.push_str);
+        }
     }
     let objs: Vec<usize> = (0..run.objects.len())
         .filter(|&i| {
@@ -200,7 +237,8 @@ fn melee_arc(run: &mut Run, pi: usize, a: &ResolvedAbility, crit: bool) {
 pub fn dash_contact(run: &mut Run, pi: usize) {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
-    let dmg = damage_of(&run.players[pi].sheet.secondary);
+    let (aim, ab) = (run.players[pi].aim, run.players[pi].sheet.secondary);
+    let dmg = damage_of(&ab);
     let hits: Vec<(usize, u32)> = run
         .monsters
         .iter()
@@ -211,6 +249,9 @@ pub fn dash_contact(run: &mut Run, pi: usize) {
     for (mi, id) in hits {
         run.players[pi].dash_hit.push(id);
         run.hurt_monster(mi, dmg, false, Some(pi));
+        if ab.push > 0.0 {
+            run.knock_creature(Creature::Monster(mi), pos, aim, ab.push, ab.push_str);
+        }
     }
     let objs: Vec<(usize, u32)> = run
         .objects
@@ -491,21 +532,137 @@ mod tests {
         run.monsters.len() - 1
     }
 
+    /// An enemy of type `t` `dist` px east of hero `pi`, with `hp`; its index.
+    fn put_enemy(run: &mut Run, pi: usize, t: EnemyType, dist: f64, hp: f64) -> usize {
+        let pos = run.players[pi].pos() + Vec2::new(dist, 0.0);
+        let id = run.spawn_enemy(t, pos, None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].hp = hp;
+        run.monsters[mi].max_hp = run.monsters[mi].max_hp.max(hp);
+        mi
+    }
+
     #[test]
-    fn ranger_uses_dagger_in_melee_range_and_crossbow_otherwise() {
+    fn a_ranged_primary_strikes_in_melee() {
+        use crate::defs::damage::DamageType;
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         let hp = run.monsters[mi].hp;
         try_use(&mut run, 0, true, 1);
-        assert!(run.monsters[mi].hp < hp, "dagger hit immediately");
+        assert!(run.monsters[mi].hp < hp, "the thrust hit immediately");
         assert!(run.projectiles.is_empty(), "no bolt fired");
         assert_eq!(run.players[0].cd1, 0.35, "the rapier's interval");
 
-        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = put_monster_near(&mut run, 0, 10.0);
+        let hp = run.monsters[mi].hp;
+        let res = run.monsters[mi].res.get(DamageType::Physical);
+        try_use(&mut run, 0, true, 1);
+        assert!((hp - run.monsters[mi].hp - 6.0 * (1.0 - res)).abs() < 1e-9, "the Red Staff at STR 8");
+        assert!(run.projectiles.is_empty());
+        assert_eq!(run.players[0].cd1, 1.0);
+
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         put_monster_near(&mut run, 0, 60.0);
         try_use(&mut run, 0, true, 1);
-        assert_eq!(run.projectiles.len(), 1, "crossbow bolt fired");
-        assert_eq!(run.projectiles[0].kind, EntityKind::Bolt);
+        assert_eq!(run.projectiles.len(), 1);
+        assert_eq!(run.projectiles[0].kind, EntityKind::Missile);
+    }
+
+    #[test]
+    fn a_ranged_secondary_in_melee_does_nothing() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = put_monster_near(&mut run, 0, 10.0);
+        let hp = run.monsters[mi].hp;
+        run.events.clear();
+        try_use(&mut run, 0, false, 1);
+        assert!(run.projectiles.is_empty());
+        assert_eq!(run.players[0].cd2, 0.0);
+        assert_eq!(run.monsters[mi].hp, hp);
+        assert!(run.events.is_empty(), "no event");
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        put_monster_near(&mut run, 0, 60.0);
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.projectiles.len(), 1);
+        assert_eq!(run.projectiles[0].kind, EntityKind::Fireball);
+        assert_eq!(run.players[0].cd2, 6.0);
+    }
+
+    #[test]
+    fn area_and_self_abilities_still_fire_in_melee() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        put_monster_near(&mut run, 0, 10.0);
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.players[0].cd2, 10.0);
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        put_monster_near(&mut run, 0, 10.0);
+        try_use(&mut run, 0, false, 1);
+        assert!(run.players[0].mv.dash_t > 0.0);
+    }
+
+    #[test]
+    fn shoot_fires_its_weapons_projectile() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.players[0].sheet.primary.projectile = Some(EntityKind::Arrow as u8);
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.projectiles[0].kind, EntityKind::Arrow);
+    }
+
+    #[test]
+    fn ranged_properties_stay_off_melee() {
+        use crate::defs::damage::DamageType;
+        use crate::defs::effects::{EffectKind, OnHit};
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let heat = DamageSplit::pure(DamageType::Heat);
+        run.players[0].sheet.primary.split = heat;
+        let mi = put_monster_near(&mut run, 0, 10.0);
+        run.monsters[mi].hp = 1000.0;
+        run.events.clear();
+        try_use(&mut run, 0, true, 1);
+        let ty = run.events.iter().find_map(|(e, _)| if let Ev::Dmg { ty, .. } = e { Some(*ty) } else { None });
+        assert_eq!(ty, Some(DamageType::Physical as u8), "the thrust is physical");
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.players[0].sheet.primary.split = heat;
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.projectiles[0].damage.split, heat, "the bolt carries the primary's split");
+
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let hit = OnHit { kind: EffectKind::Slowed, secs: 2.0, chance: 1.0, magical: false, power: 10 };
+        run.players[0].sheet.secondary.on_hit = Some(hit);
+        let mi = put_monster_near(&mut run, 0, 6.0);
+        run.monsters[mi].hp = 1000.0;
+        dash_contact(&mut run, 0);
+        assert!(run.monsters[mi].effects.list().iter().any(|a| a.kind == EffectKind::Slowed));
+    }
+
+    #[test]
+    fn a_melee_kill_carries_on() {
+        let goblins = |hps: [f64; 3]| {
+            let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+            run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+            run.players[0].aim = 0.0;
+            let mis: Vec<usize> = [8.0, 12.0, 16.0].iter().zip(hps).map(|(&d, hp)| put_enemy(&mut run, 0, EnemyType::GoblinArcher, d, hp)).collect();
+            try_use(&mut run, 0, true, 1);
+            mis.iter().map(|&mi| (run.monsters[mi].alive, run.monsters[mi].hp)).collect::<Vec<_>>()
+        };
+        let r = goblins([5.0, 5.0, 24.0]);
+        assert!(!r[0].0 && !r[1].0);
+        assert!((r[2].1 - 16.0).abs() < 1e-9, "24 - (18 - 5 - 5) = 16: {r:?}");
+        let r = goblins([24.0, 5.0, 24.0]);
+        assert!((r[0].1 - 6.0).abs() < 1e-9 && r[1].1 == 5.0 && r[2].1 == 24.0, "{r:?}");
+    }
+
+    #[test]
+    fn a_pushing_weapon_pushes_on_strike() {
+        for (push, pushed) in [(20.0, true), (0.0, false)] {
+            let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+            run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+            run.players[0].aim = 0.0;
+            let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 12.0, 1000.0);
+            run.players[0].sheet.primary.push = push;
+            try_use(&mut run, 0, true, 1);
+            assert_eq!(run.monsters[mi].knock.x > 0.0, pushed, "push {push}");
+        }
     }
 
     #[test]
@@ -526,7 +683,7 @@ mod tests {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         run.monsters[mi].airborne = true;
-        assert_eq!(dagger_target(&run, 0), None);
+        assert_eq!(melee_target(&run, 0), None);
 
         // Barbarian dash.
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);

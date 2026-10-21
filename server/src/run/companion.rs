@@ -466,7 +466,7 @@ mod tests {
     use crate::dungeon::{Map, Tile};
     use crate::math::Vec2;
     use crate::protocol::{BossId, ClassId, Ev};
-    use crate::run::abilities::{dagger_target, dash_contact, tick_projectiles, try_use};
+    use crate::run::abilities::{melee_target, dash_contact, tick_projectiles, try_use};
     use crate::run::effects::Creature;
     use crate::run::tests::test_run;
     use crate::run::visibility::{dark_range, snapshot_ents, Dark};
@@ -655,7 +655,7 @@ mod tests {
     fn no_hero_attack_hurts_the_wolf() {
         // The dagger: a wolf 10 px away is no dagger target, the crossbow fires instead.
         let (mut run, id) = run_with_wolf_beside(&[ClassId::ElvenRanger], 0, 10.0);
-        assert_eq!(dagger_target(&run, 0), None);
+        assert_eq!(melee_target(&run, 0), None);
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles.len(), 1, "a bolt is fired");
         untouched(&run, id, "dagger");

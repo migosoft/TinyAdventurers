@@ -156,6 +156,19 @@ pub fn resolve(d: &Damage, r: &Resistances) -> f64 {
     DamageType::ALL.iter().map(|&t| d.amount * d.split.share(t) * (1.0 - r.get(t).max(MIN_RESISTANCE))).sum()
 }
 
+/// The per-type multiplier `resolve` uses: `Σ share × (1 − resistance)`, with the weakness floor.
+fn effective(split: &DamageSplit, res: &Resistances) -> f64 {
+    DamageType::ALL.iter().map(|&t| split.share(t) * (1.0 - res.get(t).max(MIN_RESISTANCE))).sum()
+}
+
+/// What is left of a hit of `amount` after it kills a target with `hp_left` HP: `amount - hp_left / eff`,
+/// where `eff` is the target's multiplier for the split. `None` if the hit does not kill, or the target is
+/// immune (`eff <= 0`).
+pub fn overkill_rest(amount: f64, split: &DamageSplit, hp_left: f64, res: &Resistances) -> Option<f64> {
+    let eff = effective(split, res);
+    (eff > 0.0 && amount * eff >= hp_left).then(|| amount - hp_left / eff)
+}
+
 /// Serialized as its non-zero shares by damage-type name, e.g. `{"Physical":1.0}`.
 impl serde::Serialize for DamageSplit {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
@@ -188,6 +201,16 @@ pub fn kind_split(kind: EntityKind) -> DamageSplit {
 mod tests {
     use super::DamageType::*;
     use super::*;
+
+    #[test]
+    fn overkill_after_resistances() {
+        let phys = DamageSplit::physical();
+        assert_eq!(overkill_rest(30.0, &phys, 10.0, &Resistances::NONE), Some(20.0));
+        let half = Resistances::of(&[(Physical, 0.5)]);
+        assert_eq!(overkill_rest(30.0, &phys, 10.0, &half), Some(10.0));
+        assert_eq!(overkill_rest(10.0, &phys, 30.0, &Resistances::NONE), None);
+        assert_eq!(overkill_rest(30.0, &phys, 10.0, &Resistances::of(&[(Physical, 1.0)])), None);
+    }
 
     #[test]
     fn a_partial_split_is_filled_up_with_physical() {
