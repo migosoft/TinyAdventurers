@@ -27,7 +27,7 @@ import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
-import { abilityChoice, cosmeticPierce, Interpolator, Predictor, type EntState } from './world';
+import { abilityChoice, cosmeticPierce, EffectLooks, Interpolator, Predictor, type EntState } from './world';
 
 export interface GameInit {
   info: RunStartInfo;
@@ -75,6 +75,8 @@ export class GameScene extends Phaser.Scene {
   private pred!: Predictor;
   private interp = new Interpolator();
   private ents = new Map<number, EntState>();
+  /** Looks of effects from start events (drawing: later). */
+  readonly effectLooks = new EffectLooks();
   private views = new Map<number, EntityView>();
   private projViews = new Map<number, Phaser.GameObjects.Image>();
   private hazardViews = new Map<number, Phaser.GameObjects.Image>();
@@ -415,7 +417,8 @@ export class GameScene extends Phaser.Scene {
         this.light.remove(ev.id);
         break;
       case 'Effect':
-        break; // drawn from the snapshot bitmask (status.ts)
+        this.effectLooks.event(ev.id, ev.kind, ev.on, ev.look); // drawn from the snapshot bitmask (status.ts)
+        break;
       case 'Msg':
         this.hud.message(ev.text);
         break;

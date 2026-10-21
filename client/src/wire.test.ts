@@ -71,6 +71,14 @@ describe('wire', () => {
     expect(unpackSnap(decode(Uint8Array.from(fixtures.cases[1].bytes)) as SnapW).looks).toEqual([]);
   });
 
+  it('carries the look on the effect event', () => {
+    const snap = unpackSnap(decode(Uint8Array.from(fixtures.cases[0].bytes)) as SnapW);
+    const fx = snap.ev.filter((e) => e.t === 'Effect');
+    expect(fx).toEqual([
+      { t: 'Effect', id: 3, kind: EFFECT.Entangled, on: true, look: EFFECT_LOOK.Vines },
+    ]);
+  });
+
   it('packs inputs in field order with null for no shot', () => {
     const i = { seq: 7, mx: 1, my: -1, aim: 0.5, aim_dist: 30, primary: 3, secondary: undefined as unknown as null, view_lag: 80, rtt: 40, act: true };
     expect(packInput(i)).toEqual([7, 1, -1, 0.5, 30, 3, null, 80, 40, true]);

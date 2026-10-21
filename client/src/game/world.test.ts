@@ -4,7 +4,7 @@ import type { EntSnap } from '../generated/EntSnap';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
-import { Interpolator, Predictor, abilityChoice, cosmeticPierce, type EntState } from './world';
+import { EffectLooks, Interpolator, Predictor, abilityChoice, cosmeticPierce, type EntState } from './world';
 
 const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, ...over });
 /** Predictor for tests: the class only picks which ids the abilities carry. */
@@ -181,5 +181,15 @@ describe('Interpolator looks', () => {
     const out = new Map<number, EntState>();
     it.sample(1, out);
     expect(out.get(7)?.looks).toEqual(new Map([[EFFECT.Entangled, EFFECT_LOOK.Vines]]));
+  });
+});
+
+describe('EffectLooks', () => {
+  it('keeps a look from its start event until the effect ends', () => {
+    const l = new EffectLooks();
+    l.event(7, EFFECT.Entangled, true, EFFECT_LOOK.Vines);
+    expect(l.get(7)).toEqual(new Map([[EFFECT.Entangled, EFFECT_LOOK.Vines]]));
+    l.event(7, EFFECT.Entangled, false, 0);
+    expect(l.get(7)).toBeUndefined();
   });
 });

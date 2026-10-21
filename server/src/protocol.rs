@@ -247,8 +247,9 @@ pub enum Ev {
     /// A static light created mid-run (tile coordinates).
     LightAdd { id: u32, kind: u8, colour: u32, x: u16, y: u16, on: bool },
     LightRemove { id: u32 },
-    /// A status effect started (on) or ended on entity id; kind = EffectKind id.
-    Effect { id: u32, kind: u8, on: bool },
+    /// A status effect started (on) or ended on entity id; kind = EffectKind id, look = EffectLook id
+    /// (0 when it ended).
+    Effect { id: u32, kind: u8, on: bool, look: u8 },
     /// The wolf `id` growls at an enemy it detected (a sound: sent to the whole party, drawn above the darkness).
     Growl { id: u32 },
 }

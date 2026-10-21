@@ -192,8 +192,8 @@ impl Run {
         }
     }
 
-    fn effect_event(&mut self, c: Creature, id: u32, pos: crate::math::Vec2, k: EffectKind, on: bool) {
-        let ev = Ev::Effect { id, kind: k as u8, on };
+    fn effect_event(&mut self, c: Creature, id: u32, pos: crate::math::Vec2, k: EffectKind, on: bool, look: EffectLook) {
+        let ev = Ev::Effect { id, kind: k as u8, on, look: look as u8 };
         match c {
             Creature::Player(_) => self.event_on_hero(ev, pos),
             Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.is_ally()) => self.event_on_hero(ev, pos),
@@ -269,7 +269,7 @@ impl Run {
         }
         let Some((fx, id, pos, _)) = self.creature(c) else { return false };
         if fx.add_with(kind, secs, a.look, a.source) {
-            self.effect_event(c, id, pos, kind, true);
+            self.effect_event(c, id, pos, kind, true, a.look);
         }
         for &weaker in def(kind).replaces {
             self.remove_effect(c, weaker);
@@ -296,7 +296,7 @@ impl Run {
         let Some((fx, id, pos, _)) = self.creature(c) else { return false };
         let removed = fx.remove(kind);
         if removed {
-            self.effect_event(c, id, pos, kind, false);
+            self.effect_event(c, id, pos, kind, false, EffectLook::Plain);
         }
         removed
     }
@@ -347,7 +347,7 @@ impl Run {
             }
             if !ok {
                 for k in fx.take_all() {
-                    self.effect_event(c, id, pos, k, false);
+                    self.effect_event(c, id, pos, k, false, EffectLook::Plain);
                 }
                 continue;
             }
@@ -361,7 +361,7 @@ impl Run {
             let Some((fx, ..)) = self.creature(c) else { continue };
             let (gone, hits) = fx.tick(DT);
             for k in gone {
-                self.effect_event(c, id, pos, k, false);
+                self.effect_event(c, id, pos, k, false, EffectLook::Plain);
             }
             for (t, amount) in hits {
                 match c {
@@ -1042,7 +1042,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
-        let mut spawn = |run: &mut crate::run::Run, t| {
+        let spawn = |run: &mut crate::run::Run, t| {
             let id = run.spawn_enemy(t, at, None);
             Creature::Monster(run.monster_idx(id).unwrap())
         };
@@ -1121,5 +1121,16 @@ mod tests {
         for b in BossId::ALL {
             assert!(crate::defs::bosses::profile(b).effect_res.get(EffectKind::Fear) >= 1.0, "{b:?}");
         }
+    }
+
+    #[test]
+    fn the_start_event_carries_the_look() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        run.events.clear();
+        assert!(run.apply(c, Apply { look: EffectLook::Vines, ..Apply::plain(EffectKind::Entangled, Some(1.0)) }));
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Effect { kind: 11, on: true, look: 1, .. })));
+        run.remove_effect(c, EffectKind::Entangled);
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Effect { kind: 11, on: false, look: 0, .. })));
     }
 }

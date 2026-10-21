@@ -89,14 +89,24 @@ pub fn flee(run: &mut Run, mi: usize, dt: f64) {
         let alive = |p: &crate::run::entities::Player| p.alive && p.id == id;
         run.players.iter().find(|p| alive(p)).map(|p| p.pos()).or_else(|| run.monsters.iter().find(|o| o.alive && o.id == id).map(|o| o.pos))
     });
-    let from = now.unwrap_or(last);
-    if now.is_some() {
-        run.monsters[mi].effects.set_fear_from(from);
+    // A source standing on the creature gives no direction: keep the remembered spot.
+    let mut from = last;
+    if let Some(p) = now.filter(|p| p.dist(run.monsters[mi].pos) >= 1.0) {
+        from = p;
+        run.monsters[mi].effects.set_fear_from(p);
     }
     let m = &run.monsters[mi];
     let away = m.pos - from;
-    // Standing on the source: run along the reversed aim instead.
-    let dir = if away.len() < 1.0 { Vec2::new(-m.aim.cos(), -m.aim.sin()) } else { away.norm() };
+    let dir = if away.len() < 1.0 {
+        // On the spot: turn around once and remember a spot behind, so the next tick keeps going.
+        let dir = Vec2::new(-m.aim.cos(), -m.aim.sin());
+        let behind = m.pos - dir * 2.0;
+        run.monsters[mi].effects.set_fear_from(behind);
+        dir
+    } else {
+        away.norm()
+    };
+    let m = &run.monsters[mi];
     let pos = m.pos;
     let speed = gait(run, mi, m.speed);
     move_toward(run, mi, pos + dir * 24.0, speed, dt);
@@ -1101,15 +1111,30 @@ pub(crate) mod tests {
         let x0 = run.monsters[mi].pos.x;
         flee(&mut run, mi, crate::run::DT);
         assert!(run.monsters[mi].pos.x > x0, "walks east, away from the spot 10 px west");
-        // On the spot itself: along the reversed aim.
-        run.remove_effect(Creature::Monster(mi), EffectKind::Fear);
-        let here = run.monsters[mi].pos;
-        run.monsters[mi].aim = 0.0;
-        scared_of(&mut run, mi, Some((999, here)));
-        flee(&mut run, mi, crate::run::DT);
-        let (p, d) = (run.monsters[mi].pos, run.monsters[mi].pos - here);
-        assert!(p.x.is_finite() && p.y.is_finite());
-        assert!(d.x < 0.0 && d.y.abs() < 1e-9, "reversed aim: west, got {d:?}");
+        // On the spot itself, with no source alive and with a live hero overlapping: it keeps
+        // going along the reversed aim instead of jittering.
+        for overlap in [false, true] {
+            run.remove_effect(Creature::Monster(mi), EffectKind::Fear);
+            let here = run.monsters[mi].pos;
+            run.monsters[mi].aim = 0.0;
+            let src = if overlap {
+                run.players[0].alive = true;
+                run.players[0].mv.x = here.x;
+                run.players[0].mv.y = here.y;
+                run.players[0].id
+            } else {
+                999
+            };
+            scared_of(&mut run, mi, Some((src, here)));
+            for _ in 0..30 {
+                flee(&mut run, mi, crate::run::DT);
+                let p = run.monsters[mi].pos;
+                assert!(p.x.is_finite() && p.y.is_finite());
+            }
+            let d = run.monsters[mi].pos - here;
+            assert!(-d.x >= 10.0 && d.y.abs() < 1e-6, "overlap {overlap}: net west along the reversed aim, got {d:?}");
+            run.players[0].alive = false;
+        }
         // No source at all: from Vec2::ZERO, still finite.
         run.remove_effect(Creature::Monster(mi), EffectKind::Fear);
         scared_of(&mut run, mi, None);

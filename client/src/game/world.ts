@@ -113,6 +113,21 @@ export class Interpolator {
   }
 }
 
+/** The looks of effects that started on entities, kept from `Effect` events (the snapshot carries them too). */
+export class EffectLooks {
+  private byEntity = new Map<number, Map<number, number>>();
+  event(id: number, kind: number, on: boolean, look: number): void {
+    const m = this.byEntity.get(id) ?? new Map<number, number>();
+    if (on && look !== 0) m.set(kind, look);
+    else m.delete(kind);
+    if (m.size > 0) this.byEntity.set(id, m);
+    else this.byEntity.delete(id);
+  }
+  get(id: number): Map<number, number> | undefined {
+    return this.byEntity.get(id);
+  }
+}
+
 function toState(e: EntSnap, x: number, y: number, aim: number, looks?: Map<number, number>): EntState {
   return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9], effects: e[10], looks };
 }

@@ -28,7 +28,7 @@ type SinkW = [number, number, number, number, number];
 type LightEvW = [number, number, boolean, number];
 type LightAddW = [number, number, number, number, number, number, boolean];
 type LightRemoveW = [number, number];
-type EffectW = [number, number, number, boolean];
+type EffectW = [number, number, number, boolean, number];
 type GrowlW = [number, number];
 
 function unpackEv(e: EvW): Ev {
@@ -86,8 +86,8 @@ function unpackEv(e: EvW): Ev {
       return { t: 'LightRemove', id };
     }
     case EV.Effect: {
-      const [, id, kind, on] = e as EffectW;
-      return { t: 'Effect', id, kind, on };
+      const [, id, kind, on, look] = e as EffectW;
+      return { t: 'Effect', id, kind, on, look };
     }
     case EV.Growl: {
       const [, id] = e as GrowlW;

@@ -59,7 +59,7 @@ pub enum EvW {
     Light(u8, u32, bool, u32),
     LightAdd(u8, u32, u8, u32, u16, u16, bool),
     LightRemove(u8, u32),
-    Effect(u8, u32, u8, bool),
+    Effect(u8, u32, u8, bool, u8),
     Growl(u8, u32),
 }
 
@@ -102,7 +102,7 @@ fn ev_w(e: &Ev) -> EvW {
         Ev::Light { id, on, colour } => EvW::Light(10, *id, *on, *colour),
         Ev::LightAdd { id, kind, colour, x, y, on } => EvW::LightAdd(11, *id, *kind, *colour, *x, *y, *on),
         Ev::LightRemove { id } => EvW::LightRemove(12, *id),
-        Ev::Effect { id, kind, on } => EvW::Effect(13, *id, *kind, *on),
+        Ev::Effect { id, kind, on, look } => EvW::Effect(13, *id, *kind, *on, *look),
         Ev::Growl { id } => EvW::Growl(14, *id),
     }
 }
@@ -169,7 +169,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             Ev::Light { id: 3, on: false, colour: 0xffaa5a },
             Ev::LightAdd { id: 400, kind: 1, colour: 0xff461e, x: 33, y: 71, on: true },
             Ev::LightRemove { id: 12 },
-            Ev::Effect { id: 2, kind: 1, on: true },
+            Ev::Effect { id: 3, kind: 11, on: true, look: 1 },
             Ev::Growl { id: 2 },
         ],
         drain: Some(vec![(400.25, 300.5), (480.0, 300.0), (330.06, 260.7)]),
