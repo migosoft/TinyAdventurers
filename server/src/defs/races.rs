@@ -6,6 +6,7 @@
 use super::attributes::Attributes;
 use super::damage::{DamageSplit, DamageType::*, Resistances};
 use super::effects::{EffectKind, EffectResistances};
+use super::items::{self, ItemBase, ItemId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Race {
@@ -45,7 +46,8 @@ impl Sight {
 
 pub struct RaceDef {
     pub res: Resistances,
-    pub melee: DamageSplit,
+    /// Its natural weapons (part of the body, never equipped).
+    pub natural: &'static [ItemId],
     /// Vision and darkvision (tiles).
     pub vision: f64,
     pub darkvision: f64,
@@ -58,16 +60,26 @@ pub struct RaceDef {
 pub fn race_def(r: Race) -> RaceDef {
     let none = Attributes::default();
     let never_sleeps = EffectResistances::of(&[(EffectKind::Sleep, 1.0)]);
-    let plain = |res, melee, vision, darkvision| RaceDef { res, melee, vision, darkvision, attrs: none, effect_res: EffectResistances::NONE };
+    let plain = |res, natural: &'static [ItemId], vision, darkvision| RaceDef { res, natural, vision, darkvision, attrs: none, effect_res: EffectResistances::NONE };
+    use ItemId::*;
     match r {
-        Race::Human => plain(Resistances::NONE, DamageSplit::physical(), 9.0, 0.0),
-        Race::Goblin | Race::Orc | Race::Ogre | Race::Mimic => plain(Resistances::NONE, DamageSplit::physical(), 8.0, 1.0 / 3.0),
-        Race::Undead => plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), DamageSplit::physical(), 8.0, 1.0),
-        Race::Demon => plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), DamageSplit::split(&[(Heat, 0.2)]), 9.0, 1.0),
-        Race::Dragon => plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), DamageSplit::physical(), 25.0, 1.0),
-        Race::Object => plain(Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), DamageSplit::physical(), 0.0, 0.0),
-        Race::Elf => RaceDef { attrs: Attributes::new(0, 2, 0, 0, 0, 0), effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1)]), DamageSplit::physical(), 18.0, 1.0 / 3.0) },
-        Race::MagicalBeast => RaceDef { effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1), (Magical, 0.1)]), DamageSplit::split(&[(Magical, 0.2)]), 18.0, 1.0) },
+        Race::Human => plain(Resistances::NONE, &[UnarmedStrike], 9.0, 0.0),
+        Race::Goblin | Race::Orc | Race::Ogre => plain(Resistances::NONE, &[UnarmedStrike], 8.0, 1.0 / 3.0),
+        Race::Mimic => plain(Resistances::NONE, &[Bite], 8.0, 1.0 / 3.0),
+        Race::Undead => plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), &[UnarmedStrike], 8.0, 1.0),
+        Race::Demon => plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), &[Claws], 9.0, 1.0),
+        Race::Dragon => plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), &[Bite, Claws, Tail], 25.0, 1.0),
+        Race::Object => plain(Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), &[], 0.0, 0.0),
+        Race::Elf => RaceDef { attrs: Attributes::new(0, 2, 0, 0, 0, 0), effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1)]), &[UnarmedStrike], 18.0, 1.0 / 3.0) },
+        Race::MagicalBeast => RaceDef { effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1), (Magical, 0.1)]), &[BeastBite], 18.0, 1.0) },
+    }
+}
+
+/// The damage split of a natural weapon.
+fn natural_split(id: ItemId) -> DamageSplit {
+    match items::def(id).base {
+        ItemBase::Melee(_, s) => s.split,
+        _ => panic!("{id:?} is not a melee weapon"),
     }
 }
 
@@ -102,11 +114,11 @@ pub struct Profile {
 }
 
 /// Resistances (damage and effect) of all its races plus the adjustment; the adjustment's melee
-/// split, else the first race's. Sight: the best of the races, else the adjustment's.
+/// split, else that of the first race's first natural weapon. Sight: the best of the races, else the adjustment's.
 pub fn profile(races: &[Race], adj: Adjust) -> Profile {
     let res = races.iter().fold(Resistances::NONE, |r, &t| r.plus(race_def(t).res)).plus(adj.res);
     let effect_res = races.iter().fold(EffectResistances::NONE, |r, &t| r.plus(race_def(t).effect_res)).plus(adj.effect_res);
-    let melee = adj.melee.unwrap_or_else(|| races.first().map_or(DamageSplit::physical(), |&t| race_def(t).melee));
+    let melee = adj.melee.unwrap_or_else(|| races.first().and_then(|&t| race_def(t).natural.first().copied()).map_or(DamageSplit::physical(), natural_split));
     let best = |f: fn(&RaceDef) -> f64| races.iter().map(|&t| f(&race_def(t))).fold(0.0, f64::max);
     let sight = Sight { vision: adj.vision.unwrap_or_else(|| best(|d| d.vision)), darkvision: adj.darkvision.unwrap_or_else(|| best(|d| d.darkvision)) };
     Profile { res, effect_res, melee, sight }
@@ -116,8 +128,22 @@ pub fn profile(races: &[Race], adj: Adjust) -> Profile {
 mod tests {
     use super::*;
     use crate::defs::enemies::{self, EnemyType};
+    use crate::defs::items::ItemId;
     use crate::defs::{bosses, classes};
     use crate::protocol::{BossId, ClassId};
+
+    #[test]
+    fn race_melee_comes_from_natural_weapons() {
+        let melee = |r| profile(&[r], Adjust::NONE).melee;
+        assert!((melee(Race::Demon).share(Heat) - 0.2).abs() < 1e-12);
+        let b = melee(Race::MagicalBeast);
+        assert!((b.share(Magical) - 0.2).abs() < 1e-12 && (b.share(Physical) - 0.8).abs() < 1e-12);
+        assert_eq!(melee(Race::Human), DamageSplit::physical());
+        assert_eq!(melee(Race::Object), DamageSplit::physical());
+        assert!(race_def(Race::Object).natural.is_empty());
+        assert_eq!(race_def(Race::Dragon).natural, &[ItemId::Bite, ItemId::Claws, ItemId::Tail]);
+        assert!((bosses::profile(BossId::Dragon).melee.share(Heat) - 0.2).abs() < 1e-12);
+    }
 
     #[test]
     fn adjustments_add_to_the_races() {

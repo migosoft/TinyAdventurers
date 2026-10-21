@@ -272,7 +272,7 @@ impl Run {
         self.monsters.push(Monster {
             id,
             res: prof.res,
-            melee: prof.melee,
+            melee: enemies::melee_split(t),
             etype: Some(t),
             kind: d.kind,
             pos,
@@ -1806,6 +1806,20 @@ pub mod tests {
                 run.step();
                 visibility::send_snapshots(&mut run);
             }
+        }
+    }
+
+    #[test]
+    fn enemy_melee_splits_are_unchanged() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        for t in EnemyType::ALL {
+            let id = run.spawn_enemy(t, Vec2::new(40.0, 40.0), None);
+            let m = run.monsters.iter().find(|m| m.id == id).unwrap();
+            let today = match t {
+                EnemyType::Imp | EnemyType::SummonedImp | EnemyType::Chort => DamageSplit::split(&[(DamageType::Heat, 0.2)]),
+                _ => DamageSplit::physical(),
+            };
+            assert_eq!(m.melee, today, "{t:?}");
         }
     }
 }
