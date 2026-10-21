@@ -760,7 +760,7 @@ mod tests {
             assert_eq!(p.sheet.attrs.get(Attr::Int), 15);
             let mut extra = crate::defs::attributes::Attributes::default();
             extra.add(Attr::Int, int - 15);
-            p.sheet = crate::sheet::hero_sheet(ClassId::Wizard, extra, &crate::defs::items::Equipment::starter(ClassId::Wizard), &Default::default());
+            p.sheet = crate::sheet::hero_sheet(ClassId::Wizard, &crate::defs::loadout::Build { extra, ..crate::defs::loadout::Build::start(ClassId::Wizard) }).unwrap();
             (p.aim, p.aim_dist) = (0.0, 40.0);
             try_use(&mut run, 0, false, 1);
             for _ in 0..60 {
@@ -829,11 +829,12 @@ mod tests {
 
     // ---- Weapon effects ride only on that weapon's attacks ----
 
-    use crate::defs::items::{EquipSlot, Equipment, ItemId};
+    use crate::defs::items::{EquipSlot, ItemId};
 
     /// One hero of `class` wearing the starters with `item` in `slot`.
     fn armed(class: ClassId, slot: EquipSlot, item: ItemId) -> Run {
-        super::super::tests::test_run_with(&[(class, Equipment::starter(class).with(slot, item))], BossId::Lich)
+        use super::super::tests::{build_with, test_run_with};
+        test_run_with(&[(class, build_with(class, slot, item))], BossId::Lich)
     }
 
     fn has_effects(run: &Run, mi: usize) -> bool {

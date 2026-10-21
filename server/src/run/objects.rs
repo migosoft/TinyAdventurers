@@ -821,7 +821,7 @@ mod tests {
     /// Player 0 uses `id`, lent the sheet of the first class that can hold it.
     fn use_ability(run: &mut Run, id: crate::defs::abilities::AbilityId, aim: f64) {
         let owner = crate::defs::abilities::def(id).classes[0];
-        let sheet = crate::sheet::hero_sheet(owner, Default::default(), &crate::defs::items::Equipment::starter(owner), &Default::default());
+        let sheet = crate::sheet::hero_sheet(owner, &crate::defs::loadout::Build::start(owner)).unwrap();
         run.players[0].sheet = sheet;
         run.players[0].aim = aim;
         crate::run::abilities::try_use(run, 0, sheet.primary.id == id, 1);

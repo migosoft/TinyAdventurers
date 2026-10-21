@@ -15,11 +15,11 @@ pub mod visibility;
 
 use crate::collision::MoveState;
 use crate::defs::damage::{kind_split, resolve, Damage, DamageSplit, DamageType};
-use crate::defs::attributes::{push_dist, Attr, Attributes};
-use crate::defs::progression::{self, StatUpgrades};
+use crate::defs::attributes::{push_dist, Attr};
+use crate::defs::progression;
 use crate::defs::{classes, enemies};
 use crate::defs::enemies::EnemyType;
-use crate::defs::items::Equipment;
+use crate::defs::loadout::Build;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::{self, Layout, Mover, Tile};
 use crate::vispoly::View;
@@ -57,14 +57,11 @@ pub struct Member {
     pub name: String,
     pub class: ClassId,
     pub tx: UnboundedSender<Message>,
-    /// Account and character the XP is banked to, and its bought upgrades.
+    /// Account and character the XP is banked to.
     pub account: Option<i32>,
     pub character: Option<i32>,
-    pub upgrades: StatUpgrades,
-    /// Attribute points on top of the class's start Attributes (zero until the shop and tree).
-    pub extra: Attributes,
-    /// What the hero wears (the class starters until plan 4 saves it).
-    pub equipment: Equipment,
+    /// Extra Attributes, equipment, loadout and bought upgrades (validated in the lobby).
+    pub build: Build,
 }
 
 /// How a run ended, for the statistics.
@@ -174,7 +171,7 @@ impl Run {
             level,
         };
         for (i, m) in members.into_iter().enumerate() {
-            let sheet = crate::sheet::hero_sheet(m.class, m.extra, &m.equipment, &m.upgrades);
+            let sheet = crate::sheet::hero_sheet(m.class, &m.build).expect("validated in the lobby");
             let max_hp = sheet.max_hp;
             let p = run.layout.player_spawns[i % run.layout.player_spawns.len()];
             let id = run.alloc_id();
@@ -1214,22 +1211,28 @@ pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: Sh
 pub mod tests {
     use super::*;
     use crate::defs::bosses::BOSS_KNOCK_STR;
+    use crate::defs::items::{EquipSlot, Equipment, ItemId};
     use tokio::sync::mpsc::unbounded_channel;
 
     pub fn test_run(classes: &[ClassId], boss: BossId) -> Run {
-        let with: Vec<(ClassId, Equipment)> = classes.iter().map(|&c| (c, Equipment::starter(c))).collect();
+        let with: Vec<(ClassId, Build)> = classes.iter().map(|&c| (c, Build::start(c))).collect();
         test_run_with(&with, boss)
     }
 
-    /// A run whose heroes wear the given equipment.
-    pub fn test_run_with(classes: &[(ClassId, Equipment)], boss: BossId) -> Run {
+    /// The class start with `item` in `slot`.
+    pub fn build_with(class: ClassId, slot: EquipSlot, item: ItemId) -> Build {
+        Build { equipment: Equipment::starter(class).with(slot, item), ..Build::start(class) }
+    }
+
+    /// A run whose heroes bring the given builds.
+    pub fn test_run_with(classes: &[(ClassId, Build)], boss: BossId) -> Run {
         let members = classes
             .iter()
             .enumerate()
-            .map(|(i, &(c, equipment))| {
+            .map(|(i, (c, build))| {
                 let (tx, _rx) = unbounded_channel();
                 std::mem::forget(_rx);
-                Member { conn: i as u32 + 1, name: format!("p{i}"), class: c, tx, account: None, character: None, upgrades: StatUpgrades::default(), extra: Attributes::default(), equipment }
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, build: build.clone() }
             })
             .collect();
         Run::new(1, members, 7, LevelChoice::Dungeon { boss: Some(boss) })
@@ -1242,7 +1245,7 @@ pub mod tests {
             .map(|(i, c)| {
                 let (tx, _rx) = unbounded_channel();
                 std::mem::forget(_rx);
-                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, upgrades: StatUpgrades::default(), extra: Attributes::default(), equipment: Equipment::starter(*c) }
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, build: Build::start(*c) }
             })
             .collect();
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: Some(boss) })
@@ -1253,7 +1256,7 @@ pub mod tests {
         use crate::defs::companions::{WOLF_ATTRS, WOLF_WEIGHT};
         use crate::sheet::{boss_stats, enemy_stats, hero_sheet};
         let run = test_run(&[ClassId::Barbarian], BossId::Lich);
-        let want = hero_sheet(ClassId::Barbarian, Attributes::default(), &Equipment::starter(ClassId::Barbarian), &StatUpgrades::default());
+        let want = hero_sheet(ClassId::Barbarian, &Build::start(ClassId::Barbarian)).unwrap();
         let s = &run.players[0].sheet;
         assert_eq!(s.max_hp, want.max_hp);
         assert_eq!(s.speed, want.speed);
@@ -1347,7 +1350,7 @@ pub mod tests {
     fn random_boss_run(seed: u64) -> Run {
         let (tx, _rx) = unbounded_channel();
         std::mem::forget(_rx);
-        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, upgrades: StatUpgrades::default(), extra: Attributes::default(), equipment: Equipment::starter(ClassId::Paladin) }];
+        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, build: Build::start(ClassId::Paladin) }];
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: None })
     }
 

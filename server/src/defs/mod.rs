@@ -10,6 +10,7 @@ pub mod enemies;
 pub mod races;
 pub mod kinds;
 pub mod items;
+pub mod loadout;
 pub mod lights;
 pub mod objects;
 pub mod progression;

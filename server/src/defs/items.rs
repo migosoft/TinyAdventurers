@@ -1,18 +1,22 @@
 //! Items: equipment slots, base types and properties. Data only; the equip
 //! rules and the hero sheet that reads it come later in plan 2.
 
+use super::abilities::AbilityId;
 use super::attributes::{Attr, Attributes};
 use super::classes;
 use super::damage::{DamageSplit, DamageType};
 use super::effects::{EffectKind, OnHit};
 use super::kinds::EntityKind;
 use super::lights::LightKind;
+use super::loadout::AbilityMod;
 use super::requirements::Requirement;
 use super::weapons::{category, At, MeleeStats, RangedStats, WeaponCategory, WeaponKind};
 use crate::protocol::ClassId;
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 super::enum_list::listed_enum! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
     pub enum EquipSlot: u8 {
         Melee = 0,
         Ranged = 1,
@@ -90,6 +94,8 @@ super::enum_list::listed_enum! {
         Claws = 33,
         BeastBite = 34,
         Tail = 35,
+        RingOfTheMagus = 36,
+        SeekersBand = 37,
     }
 }
 
@@ -139,6 +145,9 @@ pub enum PropKind {
     /// A fraction: 0.05 is +5 %.
     MoveSpeed(f64),
     MaxHp(f64),
+    /// A version of an ability the wearer may pick (`loadout::Source::Item`): the ability,
+    /// its mods, and whether it waives the ability's Attribute requirements.
+    GrantAbility { id: AbilityId, mods: &'static [AbilityMod], waive_attrs: bool },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -258,6 +267,22 @@ pub fn def(id: ItemId) -> ItemDef {
         I::Claws => item("Claws", "", melee(K::Claws, 6.0, 0.8, 1.6, 0.0, heat(), At::BASE), ALL, &[], &[]),
         I::BeastBite => item("Beast Bite", "", melee(K::Bite, 10.0, 0.9, 1.0, 0.0, DamageSplit::split(&[(DamageType::Magical, 0.2)]), At::BASE), ALL, &[], &[]),
         I::Tail => item("Tail", "", melee(K::Tail, 10.0, 1.25, 2.4, 10.0, phys(), At::BASE), ALL, &[], &[]),
+        I::RingOfTheMagus => item(
+            "Ring of the Magus",
+            "",
+            ItemBase::Ring,
+            ALL,
+            &[],
+            &[mag!(PropKind::GrantAbility { id: AbilityId::MagicMissile, mods: &[AbilityMod::DamageMul(0.75)], waive_attrs: true })],
+        ),
+        I::SeekersBand => item(
+            "Seeker's Band",
+            "",
+            ItemBase::Ring,
+            ALL,
+            &[],
+            &[mag!(PropKind::GrantAbility { id: AbilityId::MagicMissile, mods: &[AbilityMod::Pierce(1)], waive_attrs: false })],
+        ),
     }
 }
 
@@ -340,6 +365,9 @@ mod tests {
             for p in d.props {
                 if matches!(p.kind, PropKind::DamageShare(..) | PropKind::OnHit(_)) {
                     assert!(weapon, "{id:?}");
+                }
+                if matches!(p.kind, PropKind::GrantAbility { .. }) {
+                    assert!(p.magical, "{id:?}: granting an ability is magical");
                 }
                 assert!(!matches!(p.kind, PropKind::DamageShare(DamageType::Physical, _)), "{id:?}");
             }

@@ -4,7 +4,7 @@
 //! each Attribute point above or below moves it. The simulation reads heroes
 //! and monsters from here.
 
-use crate::defs::abilities::{self as ab, AbilityDef, AbilityId, Uses};
+use crate::defs::abilities::{self as ab, AbilityDef, AbilityId, AbilitySlot, Uses};
 use crate::defs::attributes::{self, Attr, Attributes, Scaled, CHA_DMG, CON_MOVE, INT_DMG};
 use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
@@ -12,8 +12,12 @@ use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT}
 use crate::defs::damage::{kind_split, DamageSplit, DamageType, Resistances};
 use crate::defs::effects::{EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
-use crate::defs::items::{self, EquipSlot, Equipment, ItemBase, ItemId, PropKind};
+use crate::defs::items::{self, EquipSlot, ItemBase, ItemId, PropKind};
+#[cfg(test)]
+use crate::defs::items::Equipment;
 use crate::defs::lights::{self, LightKind};
+use crate::defs::loadout::{apply_mods, check_pick, pick_version, AbilityMod, Build, LoadoutError, Pick};
+#[cfg(test)]
 use crate::defs::progression::StatUpgrades;
 use crate::defs::races::Sight;
 use crate::defs::weapons::{resolve_melee, resolve_ranged, ResolvedWeapon};
@@ -73,7 +77,7 @@ pub struct Sheet {
     pub effect_res: EffectResistances,
     /// The Melee slot's weapon, or the class starter.
     pub melee: ResolvedWeapon,
-    /// The Ranged slot's weapon, or the class starter (none for the classes without one).
+    /// The Ranged slot's weapon; none when the slot is empty.
     pub ranged: Option<ResolvedWeapon>,
     /// The light of the worn item with the largest radius.
     pub light: Option<LightKind>,
@@ -86,6 +90,38 @@ pub struct Sheet {
     pub reach: f64,
     /// Fraction of incoming damage blocked by the old armor upgrade (removed in plan 4).
     pub armor: f64,
+    /// What the Summon Wolf version's mods do to the wolf.
+    pub wolf: WolfMods,
+}
+
+/// The wolf's numbers from the Summon Wolf version: its max HP is multiplied by `hp_mul`,
+/// and `dash_cooldown_add` is added to its dash cooldown.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WolfMods {
+    pub hp_mul: f64,
+    pub dash_cooldown_add: f64,
+}
+
+impl WolfMods {
+    pub const NONE: WolfMods = WolfMods { hp_mul: 1.0, dash_cooldown_add: 0.0 };
+}
+
+/// The companion mods of a version; the others do nothing to the wolf.
+pub fn wolf_mods(mods: &[AbilityMod]) -> WolfMods {
+    use AbilityMod::*;
+    let mut hp: Vec<f64> = vec![];
+    let mut dash: Vec<f64> = vec![];
+    for &m in mods {
+        match m {
+            CompanionHpMul(f) => hp.push(f),
+            CompanionDashCooldownAdd(s) => dash.push(s),
+            Pierce(_) | PierceThrough(_) | RadiusMul(_) | RangeMul(_) | DurationAdd(_) | CooldownAdd(_) | DamageMul(_) | ArcMul(_) | AddShare(..) | PushStr(_) => {}
+        }
+    }
+    // A fixed order, so the order of the mods never matters.
+    hp.sort_by(f64::total_cmp);
+    dash.sort_by(f64::total_cmp);
+    WolfMods { hp_mul: hp.into_iter().product(), dash_cooldown_add: dash.into_iter().sum() }
 }
 
 /// Movement speed: `base` is the value at `ref_con`; CON moves it by `CON_MOVE` per point.
@@ -191,26 +227,27 @@ fn arm(id: ItemId, attrs: &Attributes, shares: &[(DamageType, f64)], on_hit: Opt
     ResolvedWeapon { split: w.split.with_shares(shares), on_hit: on_hit.map(|h| OnHit { power: w.power, ..h }), ..w }
 }
 
-/// The sheet of a hero: `extra` is the shop and tree points on top of the start
-/// Attributes. `equip` must be valid for the class (`items::check_equipment`);
-/// an empty weapon slot uses the class's starter.
-pub fn hero_sheet(class: ClassId, extra: Attributes, equip: &Equipment, up: &StatUpgrades) -> Sheet {
+/// The sheet of a hero with build `b`. The equipment is checked first, against the
+/// Attributes without items (class + race + `b.extra`); then each pick: its version, its
+/// requirements, its weapon. An empty Melee slot uses the class's starter; an empty Ranged
+/// slot is no ranged weapon.
+pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
     let def = classes::def(class);
     let start = classes::start_attrs(class);
-    let unequipped = start.plus(extra);
-    debug_assert!(items::check_equipment(class, equip, &unequipped).is_ok(), "{class:?}: {:?}", items::check_equipment(class, equip, &unequipped));
-    let m = up.modifiers();
+    let unequipped = start.plus(b.extra);
+    let equip = &b.equipment;
+    items::check_equipment(class, equip, &unequipped).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
+    let m = b.upgrades.modifiers();
     let prof = classes::profile(class);
 
-    // The worn items, with the starters in empty weapon slots.
-    let (starter_melee, starter_ranged) = def.starter;
+    // The worn items, with the starter in an empty Melee slot.
+    let (starter_melee, _) = def.starter;
     let worn: Vec<(EquipSlot, ItemId)> = EquipSlot::ALL
         .iter()
         .filter_map(|&s| {
             let id = match s {
                 EquipSlot::Melee => Some(equip.get(s).unwrap_or(starter_melee)),
-                EquipSlot::Ranged => equip.get(s).or(starter_ranged),
-                _ => equip.get(s),
+                EquipSlot::Ranged | EquipSlot::OffHand | EquipSlot::Armor | EquipSlot::Ring1 | EquipSlot::Ring2 | EquipSlot::Shoes | EquipSlot::Belt => equip.get(s),
             };
             id.map(|id| (s, id))
         })
@@ -236,7 +273,7 @@ pub fn hero_sheet(class: ClassId, extra: Attributes, equip: &Equipment, up: &Sta
         let weapon = match slot {
             EquipSlot::Melee => Some(0),
             EquipSlot::Ranged => Some(1),
-            _ => None,
+            EquipSlot::OffHand | EquipSlot::Armor | EquipSlot::Ring1 | EquipSlot::Ring2 | EquipSlot::Shoes | EquipSlot::Belt => None,
         };
         for p in items::def(id).props {
             match p.kind {
@@ -262,6 +299,8 @@ pub fn hero_sheet(class: ClassId, extra: Attributes, equip: &Equipment, up: &Sta
                         on_hits[i] = Some(OnHit { magical: p.magical, ..h });
                     }
                 }
+                // Read by the picks below (`pick_version`).
+                PropKind::GrantAbility { .. } => {}
             }
         }
     }
@@ -269,14 +308,30 @@ pub fn hero_sheet(class: ClassId, extra: Attributes, equip: &Equipment, up: &Sta
     let melee = arm(melee_id, &attrs, &shares[0], on_hits[0]);
     let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], on_hits[1]));
 
-    // Abilities; the old upgrades multiply after (damage not on Holy Light).
+    // Abilities: version, requirements, weapon, mods; the old upgrades multiply after
+    // (damage not on Holy Light).
     let reach = classes::HERO_REACH + PLAYER_RADIUS;
-    let ability = |id: AbilityId| {
-        let r = resolve_ability(&ab::def(id), &attrs, &melee, ranged.as_ref(), reach).unwrap_or_else(|| panic!("{class:?}: {id:?} needs a ranged weapon"));
-        let damage = if id == AbilityId::HolyLight { r.damage } else { r.damage * m.damage };
+    let upgraded = |r: ResolvedAbility| {
+        let damage = if r.id == AbilityId::HolyLight { r.damage } else { r.damage * m.damage };
         ResolvedAbility { damage, cooldown: r.cooldown / m.attack_speed, ..r }
     };
-    Sheet {
+    let ability = |slot: AbilitySlot, p: Pick| -> Result<(ResolvedAbility, &'static [AbilityMod]), LoadoutError> {
+        let (mods, waive_attrs) = pick_version(class, b, slot, p)?;
+        let d = ab::def(p.ability);
+        let weapon = match d.uses {
+            Uses::Melee => Some(melee.kind),
+            Uses::Ranged => ranged.map(|w| w.kind),
+            Uses::Nothing => None,
+        };
+        check_pick(&d, waive_attrs, &attrs, weapon)?;
+        let r = resolve_ability(&d, &attrs, &melee, ranged.as_ref(), reach).ok_or(LoadoutError::NoWeapon(p.ability, EquipSlot::Ranged))?;
+        Ok((upgraded(apply_mods(r, mods)), mods))
+    };
+    let (primary, _) = ability(AbilitySlot::Primary, b.loadout.primary)?;
+    let (secondary, secondary_mods) = ability(AbilitySlot::Secondary, b.loadout.secondary)?;
+    let wolf = if secondary.id == AbilityId::SummonWolf { wolf_mods(secondary_mods) } else { WolfMods::NONE };
+    let strike = resolve_ability(&ab::def(AbilityId::Strike), &attrs, &melee, ranged.as_ref(), reach).expect("Strike uses the melee weapon");
+    Ok(Sheet {
         attrs,
         max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp) * m.life,
         speed: move_speed(def.speed, start.get(Attr::Con), &attrs) * (1.0 + move_frac) * m.move_speed,
@@ -287,12 +342,13 @@ pub fn hero_sheet(class: ClassId, extra: Attributes, equip: &Equipment, up: &Sta
         ranged,
         light,
         sight: prof.sight,
-        primary: ability(def.primary),
-        secondary: ability(def.secondary),
-        fallback: ability(AbilityId::Strike),
+        primary,
+        secondary,
+        fallback: upgraded(strike),
         reach,
         armor: m.armor,
-    }
+        wolf,
+    })
 }
 
 /// The numbers a monster's spawn reads.
@@ -345,6 +401,12 @@ mod tests {
         x
     }
 
+    /// The class start with `extra` Attribute points, `equip` and `up`.
+    fn sheet_of(class: ClassId, extra: Attributes, equip: &Equipment, up: &StatUpgrades) -> Sheet {
+        let b = Build { extra, equipment: *equip, upgrades: *up, ..Build::start(class) };
+        hero_sheet(class, &b).unwrap()
+    }
+
     /// Today's numbers of an ability at the class start: id, cooldown, damage, range, arc, speed, radius, duration.
     type Row = (AbilityId, f64, f64, f64, f64, f64, f64, f64);
 
@@ -375,7 +437,7 @@ mod tests {
         ];
         for (c, primary, secondary) in today {
             let d = classes::def(c);
-            let s = hero_sheet(c, Attributes::default(), &Equipment::starter(c), &StatUpgrades::default());
+            let s = sheet_of(c, Attributes::default(), &Equipment::starter(c), &StatUpgrades::default());
             assert_eq!(s.max_hp, d.hp, "{c:?}");
             assert_eq!(s.speed, d.speed, "{c:?}");
             assert_eq!(s.weight, d.weight, "{c:?}");
@@ -390,7 +452,7 @@ mod tests {
             assert_eq!(s.light, None, "{c:?}");
             assert_eq!(s.res, classes::profile(c).res, "{c:?}");
         }
-        let sheet = |c| hero_sheet(c, Attributes::default(), &Equipment::starter(c), &StatUpgrades::default());
+        let sheet = |c| sheet_of(c, Attributes::default(), &Equipment::starter(c), &StatUpgrades::default());
         let r = sheet(ClassId::ElvenRanger);
         assert_eq!(r.attrs.get(Attr::Dex), 15);
         assert_eq!((r.fallback.damage, r.fallback.cooldown), (18.0, 0.35));
@@ -415,12 +477,12 @@ mod tests {
     #[test]
     fn attributes_move_the_numbers() {
         let up = StatUpgrades::default();
-        let w = hero_sheet(ClassId::Wizard, plus(Attr::Int, 2), &Equipment::starter(ClassId::Wizard), &up);
+        let w = sheet_of(ClassId::Wizard, plus(Attr::Int, 2), &Equipment::starter(ClassId::Wizard), &up);
         assert!((w.primary.damage - 12.0 * 1.35 / 1.25).abs() < 1e-12);
-        let b = hero_sheet(ClassId::Barbarian, plus(Attr::Dex, 2), &Equipment::starter(ClassId::Barbarian), &up);
+        let b = sheet_of(ClassId::Barbarian, plus(Attr::Dex, 2), &Equipment::starter(ClassId::Barbarian), &up);
         assert!((b.primary.cooldown - 0.8 / (1.10 / 1.06)).abs() < 1e-12);
         assert!((b.primary.arc - 2.45 * 1.15 / 1.09).abs() < 1e-12);
-        let p = hero_sheet(ClassId::Paladin, plus(Attr::Con, 2), &Equipment::starter(ClassId::Paladin), &up);
+        let p = sheet_of(ClassId::Paladin, plus(Attr::Con, 2), &Equipment::starter(ClassId::Paladin), &up);
         assert_eq!(p.max_hp, 130.0);
         assert!((p.speed - 66.0 * 1.05 / 1.03).abs() < 1e-12);
     }
@@ -429,7 +491,7 @@ mod tests {
     fn attributes_move_the_ranger_numbers() {
         let up = StatUpgrades::default();
         // The ranger starts at DEX 15 (class 13 + Elf 2) and STR 10.
-        let dex = hero_sheet(ClassId::ElvenRanger, plus(Attr::Dex, 2), &Equipment::starter(ClassId::ElvenRanger), &up);
+        let dex = sheet_of(ClassId::ElvenRanger, plus(Attr::Dex, 2), &Equipment::starter(ClassId::ElvenRanger), &up);
         let bow = dex.primary;
         assert!((bow.damage - 16.0 * 1.35 / 1.25).abs() < 1e-12, "crossbow damage by DEX");
         assert!((bow.cooldown - 0.7 / (1.14 / 1.10)).abs() < 1e-12, "firing speed by DEX");
@@ -438,7 +500,7 @@ mod tests {
         assert!((thrust.damage - 18.0 * 1.35 / 1.25).abs() < 1e-12, "rapier damage by DEX");
         assert!((thrust.cooldown - 0.35 / (1.14 / 1.10)).abs() < 1e-12, "rapier speed by DEX");
         assert_eq!(thrust.range, 22.0);
-        let str2 = hero_sheet(ClassId::ElvenRanger, plus(Attr::Str, 2), &Equipment::starter(ClassId::ElvenRanger), &up).primary;
+        let str2 = sheet_of(ClassId::ElvenRanger, plus(Attr::Str, 2), &Equipment::starter(ClassId::ElvenRanger), &up).primary;
         assert!((str2.range - 260.0 * 1.04 / 1.00).abs() < 1e-12, "range by STR");
         assert!((str2.speed - 290.0 * 1.04 / 1.00).abs() < 1e-12, "projectile speed by STR");
         assert_eq!((str2.damage, str2.cooldown), (16.0, 0.7), "STR does not move damage or speed");
@@ -448,7 +510,7 @@ mod tests {
     fn upgrades_still_apply() {
         let up = StatUpgrades { damage: 2, attack_speed: 1, move_speed: 1, life: 1, armor: 1, ..Default::default() };
         let m = up.modifiers();
-        let s = hero_sheet(ClassId::Paladin, Attributes::default(), &Equipment::starter(ClassId::Paladin), &up);
+        let s = sheet_of(ClassId::Paladin, Attributes::default(), &Equipment::starter(ClassId::Paladin), &up);
         assert_eq!(s.primary.damage, 20.0 * m.damage);
         assert_eq!(s.primary.cooldown, 0.45 / m.attack_speed);
         assert_eq!(s.speed, 66.0 * m.move_speed);
@@ -462,18 +524,29 @@ mod tests {
 
     fn with(c: ClassId, extra: Attributes, items: &[(EquipSlot, ItemId)]) -> Sheet {
         let e = items.iter().fold(Equipment::starter(c), |e, &(s, i)| e.with(s, i));
-        hero_sheet(c, extra, &e, &StatUpgrades::default())
+        sheet_of(c, extra, &e, &StatUpgrades::default())
     }
 
     #[test]
-    fn empty_slots_fall_back_to_the_starters() {
+    fn an_empty_melee_slot_is_the_starter() {
         let up = StatUpgrades::default();
-        for c in ClassId::ALL {
-            let a = hero_sheet(c, Attributes::default(), &Equipment::default(), &up);
-            let b = hero_sheet(c, Attributes::default(), &Equipment::starter(c), &up);
-            assert_eq!((a.primary, a.secondary, a.fallback, a.melee), (b.primary, b.secondary, b.fallback, b.melee), "{c:?}");
-            assert_eq!(a.ranged, b.ranged, "{c:?}");
-        }
+        let c = ClassId::Paladin;
+        let a = sheet_of(c, Attributes::default(), &Equipment::default(), &up);
+        let b = sheet_of(c, Attributes::default(), &Equipment::starter(c), &up);
+        assert_eq!((a.primary, a.secondary, a.fallback, a.melee), (b.primary, b.secondary, b.fallback, b.melee));
+        // An empty Ranged slot is no ranged weapon: the ranger cannot shoot.
+        let r = ClassId::ElvenRanger;
+        let none = hero_sheet(r, &Build { equipment: Equipment::default(), ..Build::start(r) });
+        assert_eq!(none.err(), Some(LoadoutError::NoWeapon(AbilityId::Shoot, EquipSlot::Ranged)));
+    }
+
+    #[test]
+    fn equipment_is_checked_without_item_points() {
+        let c = ClassId::Wizard;
+        let low = Attributes::new(0, 0, 0, -2, 0, 0);
+        let e = Equipment::starter(c).with(EquipSlot::Melee, ItemId::StaffOfRot).with(EquipSlot::Ring1, ItemId::RingOfInsight);
+        let err = hero_sheet(c, &Build { extra: low, equipment: e, ..Build::start(c) }).err();
+        assert_eq!(err, Some(LoadoutError::Equip(EquipSlot::Melee, items::EquipError::Requirement(crate::defs::requirements::Requirement::Attr(Attr::Int, 14)))));
     }
 
     #[test]
@@ -514,7 +587,7 @@ mod tests {
 
     #[test]
     fn weapon_properties_fill_split_and_on_hit() {
-        let start = hero_sheet(ClassId::Wizard, Attributes::default(), &Equipment::starter(ClassId::Wizard), &StatUpgrades::default());
+        let start = sheet_of(ClassId::Wizard, Attributes::default(), &Equipment::starter(ClassId::Wizard), &StatUpgrades::default());
         let ember = with(ClassId::Wizard, Attributes::default(), &[(EquipSlot::Melee, ItemId::EmberStaff)]);
         assert!((ember.melee.split.share(DamageType::Heat) - 0.25).abs() < 1e-12);
         assert_eq!(ember.light, Some(LightKind::Fire));

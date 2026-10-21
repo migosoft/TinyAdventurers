@@ -40,6 +40,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
     let prof = wolf_profile();
     let stats = crate::sheet::wolf_stats();
     let owner = run.players[pi].id;
+    let max_hp = WOLF_HP * run.players[pi].sheet.wolf.hp_mul;
     let spot = summon_spot(run, run.players[pi].pos());
     let (tx, ty) = Map::tile_of(spot);
     let id = run.alloc_id();
@@ -50,8 +51,8 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         etype: None,
         kind: EntityKind::DireWolf,
         pos: spot,
-        hp: WOLF_HP,
-        max_hp: WOLF_HP,
+        hp: max_hp,
+        max_hp,
         speed: WOLF_SPEED,
         radius: WOLF_RADIUS,
         sight: prof.sight,
@@ -99,7 +100,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
 pub fn use_ability(run: &mut Run, pi: usize) {
     match run.players[pi].wolf.and_then(|id| run.monster_idx(id)) {
         Some(mi) if run.monsters[mi].alive => {
-            run.heal_monster(mi, WOLF_HP * WOLF_HEAL_SHARE);
+            run.heal_monster(mi, run.monsters[mi].max_hp * WOLF_HEAL_SHARE);
         }
         _ => {
             spawn_wolf(run, pi);
@@ -229,9 +230,10 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             let left = d / WOLF_DASH_SPEED + 0.05;
             // Never a jump to its death: the dash must end on walkable ground.
             if !run.layout.map.blocks_at(pos + dir * (WOLF_DASH_SPEED * left), Mover::Enemy) {
+                let cooldown = dash_cooldown(run, mi);
                 let a = ally_mut(run, mi);
                 a.dash = Some(WolfDash { dir, left, attack: true });
-                a.dash_cd = WOLF_DASH_COOLDOWN;
+                a.dash_cd = cooldown;
                 run.monsters[mi].ai.path.clear();
                 set_anim(run, mi, Anim::Dash);
                 return;
@@ -414,9 +416,16 @@ fn reappear(run: &mut Run, mi: usize, ranger: Vec2) -> bool {
     true
 }
 
+/// The dash cooldown of wolf `mi`: its ranger's Summon Wolf version may change it.
+fn dash_cooldown(run: &Run, mi: usize) -> f64 {
+    let owner = run.monsters[mi].ally.as_ref().and_then(|a| run.player_idx(a.owner));
+    WOLF_DASH_COOLDOWN + owner.map_or(0.0, |pi| run.players[pi].sheet.wolf.dash_cooldown_add)
+}
+
 /// Pushed over a chasm with the dash ready: the wolf dashes straight back to the last
 /// safe tile it stood on. That uses the dash (its cooldown starts).
 pub fn dash_back(run: &mut Run, mi: usize) {
+    let cooldown = dash_cooldown(run, mi);
     let m = &mut run.monsters[mi];
     let pos = m.pos;
     m.ai.windup = None;
@@ -426,7 +435,7 @@ pub fn dash_back(run: &mut Run, mi: usize) {
     let d = pos.dist(to);
     let dir = if d > 1e-6 { (to - pos).norm() } else { Vec2::new(1.0, 0.0) };
     a.dash = Some(WolfDash { dir, left: d / WOLF_DASH_SPEED, attack: false });
-    a.dash_cd = WOLF_DASH_COOLDOWN;
+    a.dash_cd = cooldown;
     set_anim(run, mi, Anim::Dash);
 }
 
@@ -622,6 +631,24 @@ mod tests {
         assert_eq!(m.ally.as_ref().unwrap().owner, run.players[0].id);
         assert_eq!(run.players[0].wolf, Some(id));
         assert!(run.events.iter().any(|(e, at)| matches!(e, Ev::Boom { k: 9, .. }) && at.is_none()), "the green puff goes to the whole party");
+    }
+
+    #[test]
+    fn wolf_mods_change_the_wolf() {
+        use crate::defs::loadout::AbilityMod::{CompanionDashCooldownAdd, CompanionHpMul};
+        use crate::sheet::{wolf_mods, WolfMods};
+        let mods = wolf_mods(&[CompanionHpMul(1.25), CompanionDashCooldownAdd(-2.0)]);
+        assert_eq!(mods, WolfMods { hp_mul: 1.25, dash_cooldown_add: -2.0 });
+        assert_eq!(wolf_mods(&[]), WolfMods::NONE);
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        assert_eq!(run.players[0].sheet.wolf, WolfMods::NONE, "the start version");
+        run.players[0].sheet.wolf = mods;
+        let id = spawn_wolf(&mut run, 0);
+        let mi = wolf_idx(&run, id);
+        assert_eq!((run.monsters[mi].hp, run.monsters[mi].max_hp), (WOLF_HP * 1.25, WOLF_HP * 1.25));
+        dash_back(&mut run, mi);
+        assert_eq!(run.monsters[mi].ally.as_ref().unwrap().dash_cd, 3.0);
     }
 
     #[test]
