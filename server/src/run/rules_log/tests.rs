@@ -117,7 +117,7 @@ fn walk(dir: &std::path::Path, root: &std::path::Path, out: &mut BTreeMap<String
             if rel.starts_with("run/rules_log/") {
                 continue;
             }
-            let n = std::fs::read_to_string(&path).unwrap().lines().filter(|l| l.contains("rules_log")).count();
+            let n = std::fs::read_to_string(&path).unwrap().lines().filter(|l| l.contains("rules_log") || l.contains("RulesLog")).count();
             if n > 0 {
                 out.insert(rel, n);
             }
@@ -132,7 +132,7 @@ fn rules_log_is_reached_only_through_its_hooks() {
     walk(&root, &root, &mut found);
     // Lines naming `rules_log` outside the module, per file. Each task updates this with its hooks.
     let hooks: BTreeMap<String, usize> =
-        [("run/mod.rs", 7), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 1), ("wire.rs", 1), ("export.rs", 1)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        [("run/mod.rs", 7), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 1)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     assert_eq!(found, hooks);
 }
 
