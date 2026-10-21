@@ -12,3 +12,4 @@ pub mod kinds;
 pub mod lights;
 pub mod objects;
 pub mod progression;
+pub mod weapons;

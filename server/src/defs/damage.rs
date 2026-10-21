@@ -52,6 +52,24 @@ impl DamageSplit {
         s[DamageType::Physical as usize] += (1.0 - listed).max(0.0);
         DamageSplit(s)
     }
+    /// This split with `add` on top: the non-physical base shares stay, physical
+    /// takes what is left. If they come to more than 100 %, only the added
+    /// shares shrink until the total is exactly 1.
+    #[allow(dead_code)] // plan 2, task 5 (item properties on weapons)
+    pub fn with_shares(&self, add: &[(DamageType, f64)]) -> Self {
+        let mut s = self.0;
+        s[DamageType::Physical as usize] = 0.0;
+        let base: f64 = s.iter().sum();
+        let added: f64 = add.iter().map(|&(_, share)| share).sum();
+        let room = (1.0 - base).max(0.0);
+        let scale = if added > room { room / added } else { 1.0 };
+        for &(t, share) in add {
+            s[t as usize] += share * scale;
+        }
+        let listed: f64 = s.iter().sum();
+        s[DamageType::Physical as usize] = (1.0 - listed).max(0.0);
+        DamageSplit(s)
+    }
     pub fn share(&self, t: DamageType) -> f64 {
         self.0[t as usize]
     }
@@ -214,5 +232,25 @@ mod tests {
         assert!((kind_split(K::FireBolt).share(Magical) - 0.3).abs() < 1e-12);
         assert_eq!(kind_split(K::FirePatch), DamageSplit::pure(Heat));
         assert_eq!(kind_split(K::DragonFireball), DamageSplit::pure(Heat));
+    }
+
+    #[test]
+    fn shares_take_from_physical() {
+        let s = DamageSplit::physical().with_shares(&[(Heat, 0.25)]);
+        assert!((s.share(Heat) - 0.25).abs() < 1e-12);
+        assert!((s.share(Physical) - 0.75).abs() < 1e-12);
+    }
+
+    #[test]
+    fn added_shares_are_scaled_down_to_fit() {
+        let s = DamageSplit::split(&[(Heat, 0.2)]).with_shares(&[(Heat, 0.9)]);
+        let sum: f64 = DamageType::ALL.iter().map(|&t| s.share(t)).sum();
+        assert!((sum - 1.0).abs() < 1e-12);
+        assert!((s.share(Heat) - 1.0).abs() < 1e-12);
+        assert!(s.share(Physical).abs() < 1e-12);
+        let m = DamageSplit::split(&[(Magical, 0.6)]).with_shares(&[(Heat, 0.8)]);
+        assert!((m.share(Magical) - 0.6).abs() < 1e-12, "the base is kept");
+        assert!((m.share(Heat) - 0.4).abs() < 1e-12);
+        assert!(m.share(Physical).abs() < 1e-12);
     }
 }
