@@ -245,7 +245,8 @@ pub fn pick_version(class: ClassId, b: &Build, slot: AbilitySlot, p: Pick) -> Re
                     | PropKind::EffectResist(..)
                     | PropKind::Weight(_)
                     | PropKind::MoveSpeed(_)
-                    | PropKind::MaxHp(_) => None,
+                    | PropKind::MaxHp(_)
+                    | PropKind::Pierce(_) => None,
                 })
             })
             .ok_or(LoadoutError::NotInPool(id)),

@@ -302,6 +302,39 @@ pub struct Projectile {
     /// Explode when reaching this point (fireball at cursor).
     pub target: Option<Vec2>,
     pub dead: bool,
+    /// How it goes on after hitting a creature.
+    pub pierce: Pierce,
+    /// The creatures (ids) it has already hit: never hit twice.
+    pub hit: Vec<u32>,
+}
+
+/// How a shot goes on after hitting a creature. `u8::MAX` is no limit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pierce {
+    /// It ends at the first creature it hits.
+    Never,
+    /// A kill lets the rest of its damage fly on, up to `left` more times.
+    Overkill { left: u8 },
+    /// It passes `left` creatures with full damage, killed or not, then becomes `Pierce::from_u8(then)`.
+    Through { left: u8, then: u8 },
+}
+
+impl Pierce {
+    /// From `ResolvedAbility.pierce` (overkill) and `pierce_through`.
+    pub fn new(overkill: u8, through: u8) -> Pierce {
+        if through > 0 {
+            Pierce::Through { left: through, then: overkill }
+        } else {
+            Pierce::from_u8(overkill)
+        }
+    }
+    /// An overkill count: 0 is `Never`.
+    pub fn from_u8(overkill: u8) -> Pierce {
+        match overkill {
+            0 => Pierce::Never,
+            left => Pierce::Overkill { left },
+        }
+    }
 }
 
 pub struct Hazard {

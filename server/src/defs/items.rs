@@ -98,6 +98,7 @@ super::enum_list::listed_enum! {
         SeekersBand = 37,
         NecromancerStaff = 38,
         SummonerStaff = 39,
+        HuntersBow = 40,
     }
 }
 
@@ -150,6 +151,8 @@ pub enum PropKind {
     /// A version of an ability the wearer may pick (`loadout::Source::Item`): the ability,
     /// its mods, and whether it waives the ability's Attribute requirements.
     GrantAbility { id: AbilityId, mods: &'static [AbilityMod], waive_attrs: bool },
+    /// Its shots pass this many enemies with full damage (ranged weapons only).
+    Pierce(u8),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -271,6 +274,14 @@ pub fn def(id: ItemId) -> ItemDef {
         I::Tail => item("Tail", "", melee(K::Tail, 10.0, 1.25, 2.4, 10.0, phys(), At::BASE), ALL, &[], &[]),
         I::NecromancerStaff => item("Necromancer Staff", "weapon_green_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::SummonerStaff => item("Summoner Staff", "weapon_red_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
+        I::HuntersBow => item(
+            "Hunter's Bow",
+            "weapon_bow",
+            ranged(K::Bow, 15.0, 0.75, 250.0, 280.0, 2.0, EntityKind::Bolt, At::BASE),
+            RANGER,
+            &[],
+            &[plain!(PropKind::Pierce(2))],
+        ),
         I::RingOfTheMagus => item(
             "Ring of the Magus",
             "",
@@ -374,6 +385,9 @@ mod tests {
                     assert!(p.magical, "{id:?}: granting an ability is magical");
                 }
                 assert!(!matches!(p.kind, PropKind::DamageShare(DamageType::Physical, _)), "{id:?}");
+                if matches!(p.kind, PropKind::Pierce(_)) {
+                    assert!(matches!(d.base, ItemBase::Ranged(..)), "{id:?}: only a ranged weapon pierces");
+                }
             }
             match d.base {
                 ItemBase::Melee(k, _) => assert!(matches!(category(k), C::Melee | C::Finesse | C::Natural), "{id:?}"),

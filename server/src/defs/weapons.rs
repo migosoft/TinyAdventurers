@@ -113,6 +113,8 @@ pub struct ResolvedWeapon {
     pub on_hit: Option<OnHit>,
     /// The wielder's key Attribute: the power of the weapon's effects.
     pub power: i32,
+    /// Enemies its shots pass with full damage (the sum of its `PropKind::Pierce`).
+    pub pierce_through: u8,
 }
 
 /// Damage by the category's key Attribute, cooldown by DEX.
@@ -142,6 +144,7 @@ pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> Re
         split: s.split,
         on_hit: None,
         power: attrs.get(key_attr(category(kind))),
+        pierce_through: 0,
     }
 }
 
@@ -160,6 +163,7 @@ pub fn resolve_ranged(kind: WeaponKind, s: &RangedStats, attrs: &Attributes) -> 
         split: s.split,
         on_hit: None,
         power: attrs.get(key_attr(category(kind))),
+        pierce_through: 0,
     }
 }
 

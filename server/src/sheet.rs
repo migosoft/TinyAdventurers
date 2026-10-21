@@ -181,6 +181,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
                 radius: w.radius,
                 duration: own.duration,
                 pierce: u8::MAX,
+                pierce_through: w.pierce_through,
                 projectile: w.projectile.map(|k| k as u8),
                 split: w.split,
                 on_hit: w.on_hit,
@@ -218,13 +219,13 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
 }
 
 /// A weapon item for one wielder, with the shares and on-hit its own properties gave it.
-fn arm(id: ItemId, attrs: &Attributes, shares: &[(DamageType, f64)], on_hit: Option<OnHit>) -> ResolvedWeapon {
+fn arm(id: ItemId, attrs: &Attributes, shares: &[(DamageType, f64)], on_hit: Option<OnHit>, pierce_through: u8) -> ResolvedWeapon {
     let w = match items::def(id).base {
         ItemBase::Melee(k, s) => resolve_melee(k, &s, attrs),
         ItemBase::Ranged(k, s) => resolve_ranged(k, &s, attrs),
         b => panic!("{id:?} is not a weapon: {b:?}"),
     };
-    ResolvedWeapon { split: w.split.with_shares(shares), on_hit: on_hit.map(|h| OnHit { power: w.power, ..h }), ..w }
+    ResolvedWeapon { split: w.split.with_shares(shares), on_hit: on_hit.map(|h| OnHit { power: w.power, ..h }), pierce_through, ..w }
 }
 
 /// The sheet of a hero with build `b`. The equipment is checked first, against the
@@ -269,6 +270,7 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
     // Index 0: the melee weapon, 1: the ranged one.
     let mut shares: [Vec<(DamageType, f64)>; 2] = Default::default();
     let mut on_hits: [Option<OnHit>; 2] = [None, None];
+    let mut pierce: [u8; 2] = [0, 0];
     for &(slot, id) in &worn {
         let weapon = match slot {
             EquipSlot::Melee => Some(0),
@@ -299,14 +301,19 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
                         on_hits[i] = Some(OnHit { magical: p.magical, ..h });
                     }
                 }
+                PropKind::Pierce(n) => {
+                    if let Some(i) = weapon {
+                        pierce[i] = pierce[i].saturating_add(n);
+                    }
+                }
                 // Read by the picks below (`pick_version`).
                 PropKind::GrantAbility { .. } => {}
             }
         }
     }
     let melee_id = worn.iter().find(|w| w.0 == EquipSlot::Melee).map(|w| w.1).expect("a hero always has a melee weapon");
-    let melee = arm(melee_id, &attrs, &shares[0], on_hits[0]);
-    let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], on_hits[1]));
+    let melee = arm(melee_id, &attrs, &shares[0], on_hits[0], pierce[0]);
+    let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], on_hits[1], pierce[1]));
 
     // Abilities: version, requirements, weapon, mods; the old upgrades multiply after
     // (damage not on Holy Light).

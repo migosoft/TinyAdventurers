@@ -1,6 +1,6 @@
 //! Player abilities (one executor per AbilityId) and projectile simulation.
 
-use super::entities::Projectile;
+use super::entities::{Pierce, Projectile};
 use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::AbilityId;
@@ -127,13 +127,13 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     }
     let anim = match id {
         AbilityId::MagicMissile => {
-            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, def.split, def.on_hit, def.power);
+            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, def.split, def.on_hit, def.power, Pierce::new(def.pierce, def.pierce_through));
             Anim::Shoot
         }
         AbilityId::Fireball => {
             let target = pos + dir * aim_dist.clamp(24.0, def.range);
             let life = def.range / def.speed + 0.1;
-            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage, 4.0, life, def.radius, Some(target), crit, def.split, def.on_hit, def.power);
+            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage, 4.0, life, def.radius, Some(target), crit, def.split, def.on_hit, def.power, Pierce::Never);
             Anim::Cast
         }
         AbilityId::Strike => {
@@ -168,7 +168,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             Anim::Dash
         }
         AbilityId::Shoot => {
-            spawn_player_projectile(run, pi, kind_of(def.projectile), shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, def.split, def.on_hit, def.power);
+            spawn_player_projectile(run, pi, kind_of(def.projectile), shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, def.split, def.on_hit, def.power, Pierce::new(def.pierce, def.pierce_through));
             Anim::Shoot
         }
         AbilityId::SummonWolf => {
@@ -284,6 +284,7 @@ fn spawn_player_projectile(
     split: DamageSplit,
     on_hit: Option<OnHit>,
     power: i32,
+    pierce: Pierce,
 ) {
     let p = &run.players[pi];
     let pos = p.pos() + dir * 6.0;
@@ -309,6 +310,8 @@ fn spawn_player_projectile(
         knock: 0.0,
         target,
         dead: false,
+        pierce,
+        hit: Vec::new(),
     });
     run.attach_kind_light(id, kind);
     // Through the same hit checks as every tick, so it cannot skip an enemy on the way.
@@ -348,6 +351,8 @@ pub fn spawn_monster_projectile(
         knock,
         target: None,
         dead: false,
+        pierce: Pierce::Never,
+        hit: Vec::new(),
     });
     run.attach_kind_light(id, kind);
 }
@@ -380,8 +385,9 @@ pub fn tick_projectiles(run: &mut Run, dt: f64) {
     }
 }
 
-/// Moves projectile `i` for `dt` in steps of at most 4 px. It ends at the
-/// first wall, target point or figure it meets: shots never pass through.
+/// Moves projectile `i` for `dt` in steps of at most 4 px. It ends at the first wall,
+/// target point or object it meets, and at a figure unless it pierces it (`impact`);
+/// it never hits a figure twice.
 fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
     if dt <= 0.0 {
         return;
@@ -420,18 +426,23 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             break;
         }
         let pr = &run.projectiles[i];
-        if pr.from_player {
-            let hit = run.monsters.iter().position(|m| m.alive && !m.is_ally() && m.shot_dist(pos) < m.radius + pr.radius);
-            if let Some(mi) = hit {
-                impact(run, i, pos, Some(Creature::Monster(mi)));
-                break;
-            }
+        let target = if pr.from_player {
+            run.monsters.iter().position(|m| m.alive && !m.is_ally() && !pr.hit.contains(&m.id) && m.shot_dist(pos) < m.radius + pr.radius).map(Creature::Monster)
         } else {
             // Heroes first, then allies.
-            let hero = run.players.iter().position(|p| p.alive && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius).map(Creature::Player);
-            let ally = || run.monsters.iter().position(|m| m.is_ally() && m.alive && m.sinking.is_none() && m.shot_dist(pos) < m.radius + pr.radius).map(Creature::Monster);
-            if let Some(c) = hero.or_else(ally) {
-                impact(run, i, pos, Some(c));
+            let hero = run.players.iter().position(|p| p.alive && !pr.hit.contains(&p.id) && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius).map(Creature::Player);
+            let ally = || {
+                run.monsters
+                    .iter()
+                    .position(|m| m.is_ally() && m.alive && m.sinking.is_none() && !pr.hit.contains(&m.id) && m.shot_dist(pos) < m.radius + pr.radius)
+                    .map(Creature::Monster)
+            };
+            hero.or_else(ally)
+        };
+        if let Some(c) = target {
+            impact(run, i, pos, Some(c));
+            // A piercing shot flies on through the rest of this step.
+            if run.projectiles[i].dead {
                 break;
             }
         }
@@ -439,23 +450,72 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
 }
 
 /// Projectile `i` hits something at `pos` (a creature on the opposing team, if any).
+/// An explosion never pierces. A shot that pierces (`Pierce`) stays alive: through-piercing
+/// with full damage, overkill with the rest of its damage after a kill.
 fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
-    let (from_player, owner, damage, crit, explode_r, k, knock) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.knock);
+    let (from_player, owner, damage, crit, explode_r, k, knock, pierce) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.knock, pr.pierce);
     let src = if from_player { run.player_idx(owner) } else { None };
     if explode_r > 0.0 {
         let str = shot_str(run, from_player, owner);
         explode(run, pos, explode_r, damage, from_player, src, k, crit, knock, str);
         return;
     }
-    match target {
-        Some(Creature::Monster(mi)) if from_player => {
+    let Some(c) = target else { return };
+    // The rest after a kill, from the target's HP and resistances before the hit.
+    let rest = match pierce {
+        Pierce::Overkill { left } if left > 0 => overkill_left(run, c, &damage),
+        Pierce::Overkill { .. } | Pierce::Never | Pierce::Through { .. } => None,
+    };
+    match c {
+        Creature::Monster(mi) if from_player => {
             run.hurt_monster(mi, damage, crit, src);
         }
-        Some(c) if !from_player => run.hurt_creature(c, damage),
+        _ if !from_player => run.hurt_creature(c, damage),
         _ => {}
     }
+    let (id, alive) = match c {
+        Creature::Player(pi) => (run.players[pi].id, run.players[pi].alive),
+        Creature::Monster(mi) => (run.monsters[mi].id, run.monsters[mi].alive),
+    };
+    let pr = &mut run.projectiles[i];
+    let next = match pr.pierce {
+        Pierce::Through { left, then } if left > 0 => Some(if left == 1 { Pierce::from_u8(then) } else { Pierce::Through { left: left - 1, then } }),
+        Pierce::Overkill { left } => match rest {
+            Some(rest) if !alive => {
+                pr.damage.amount = rest;
+                Some(if left == u8::MAX { pr.pierce } else { Pierce::from_u8(left - 1) })
+            }
+            Some(_) | None => None,
+        },
+        Pierce::Through { .. } | Pierce::Never => None,
+    };
+    if let Some(next) = next {
+        pr.pierce = next;
+        pr.hit.push(id);
+        pr.dead = false;
+    }
+}
+
+/// What is left of `damage` if it kills creature `c` (`overkill_rest`), with the HP, resistances
+/// and armor its hurt function uses.
+fn overkill_left(run: &Run, c: Creature, damage: &Damage) -> Option<f64> {
+    let (hp, res, armor) = match c {
+        Creature::Player(pi) => {
+            let p = &run.players[pi];
+            (p.hp, p.effects.res(p.res), p.sheet.armor)
+        }
+        Creature::Monster(mi) => {
+            let m = &run.monsters[mi];
+            (m.hp, m.effects.res(m.res), 0.0)
+        }
+    };
+    // A hero's armor takes its share after the resistances (`hurt_player`).
+    if armor >= 1.0 {
+        return None;
+    }
+    overkill_rest(damage.amount, &damage.split, hp / (1.0 - armor), &res)
 }
 
 /// Projectile `i` hits a solid object: an explosion goes off there, a plain shot hurts the object.
@@ -709,7 +769,7 @@ mod tests {
     fn missile_past(run: &mut Run, mi: usize, dy: f64) {
         let at = run.monsters[mi].pos + Vec2::new(-6.0, -dy);
         assert!(!run.layout.map.opaque_at(at) && !run.layout.map.opaque_at(at + Vec2::new(12.0, 0.0)), "open floor for the test shot");
-        spawn_player_projectile(run, 0, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), 230.0, 5.0, 3.0, 1.0, 0.0, None, false, kind_split(EntityKind::Missile), None, 0);
+        spawn_player_projectile(run, 0, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), 230.0, 5.0, 3.0, 1.0, 0.0, None, false, kind_split(EntityKind::Missile), None, 0, Pierce::Never);
         run.projectiles[0].pos = at;
         for _ in 0..3 {
             tick_projectiles(run, 1.0 / TICK_HZ);
@@ -816,6 +876,143 @@ mod tests {
         }
     }
 
+    // ---- Piercing: overkill and through ----
+
+    /// Hero 0 aims east at enemies of type `t` at `dists` px with `hps`; it uses its primary,
+    /// the shots fly for half a second, and each enemy's (alive, HP lost) comes back.
+    fn shoot_line(mut run: Run, t: EnemyType, dists: &[f64], hps: &[f64]) -> Vec<(bool, f64)> {
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        run.players[0].aim = 0.0;
+        let mis: Vec<usize> = dists.iter().zip(hps).map(|(&d, &hp)| put_enemy(&mut run, 0, t, d, hp)).collect();
+        try_use(&mut run, 0, true, 1);
+        assert!(!run.projectiles.is_empty(), "a shot");
+        for _ in 0..30 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        mis.iter().zip(hps).map(|(&mi, &hp)| (run.monsters[mi].alive, hp - run.monsters[mi].hp.max(0.0))).collect()
+    }
+
+    #[test]
+    fn a_killing_bolt_flies_on() {
+        let run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        assert_eq!(run.players[0].sheet.primary.damage, 16.0);
+        let r = shoot_line(run, EnemyType::GoblinArcher, &[30.0, 40.0, 50.0], &[5.0, 5.0, 24.0]);
+        assert!(!r[0].0 && !r[1].0, "{r:?}");
+        assert!(r[2].0 && (r[2].1 - 6.0).abs() < 1e-9, "16 - 5 - 5 = 6: {r:?}");
+    }
+
+    #[test]
+    fn spells_stop_at_the_first_enemy() {
+        let run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let r = shoot_line(run, EnemyType::GoblinArcher, &[30.0, 40.0], &[1.0, 1.0]);
+        assert_eq!(r, [(false, 1.0), (true, 0.0)]);
+
+        use super::super::tests::test_run_with;
+        use crate::defs::loadout::{Build, Pick, Source};
+        let c = ClassId::Wizard;
+        let mut b = Build::start(c);
+        b.equipment = crate::defs::items::Equipment::starter(c).with(EquipSlot::Ring1, ItemId::SeekersBand);
+        b.loadout.primary = Pick { ability: AbilityId::MagicMissile, source: Source::Item(EquipSlot::Ring1) };
+        let run = test_run_with(&[(c, b)], BossId::Demon);
+        assert_eq!(run.players[0].sheet.primary.pierce, 1);
+        let r = shoot_line(run, EnemyType::GoblinArcher, &[30.0, 40.0, 50.0], &[1.0, 1.0, 1.0]);
+        assert_eq!(r, [(false, 1.0), (false, 1.0), (true, 0.0)]);
+    }
+
+    #[test]
+    fn an_immune_target_stops_the_shot() {
+        use crate::defs::damage::DamageType;
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.players[0].sheet.primary.split = DamageSplit::pure(DamageType::Poison);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        run.players[0].aim = 0.0;
+        let skel = put_enemy(&mut run, 0, EnemyType::SkeletonWarrior, 30.0, 1.0);
+        let gob = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 24.0);
+        try_use(&mut run, 0, true, 1);
+        for _ in 0..30 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        assert!(run.monsters[skel].alive, "poison does not hurt the skeleton");
+        assert_eq!(run.monsters[gob].hp, 24.0, "and the goblin behind it is untouched");
+    }
+
+    #[test]
+    fn overkill_never_hits_the_same_enemy_twice() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        run.players[0].aim = 0.0;
+        run.players[0].rtt = 0.3;
+        let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 5.0);
+        let x = run.monsters[mi].pos.x as f32;
+        run.events.clear();
+        try_use(&mut run, 0, true, 1);
+        for _ in 0..30 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        assert!(!run.monsters[mi].alive);
+        let hurt = run.events.iter().filter(|(e, _)| matches!(e, Ev::Dmg { x: ex, .. } if *ex == x)).count();
+        assert_eq!(hurt, 1);
+    }
+
+    #[test]
+    fn through_piercing_ignores_hp() {
+        let c = ClassId::ElvenRanger;
+        let line = |hps: &[f64]| {
+            let run = armed(c, EquipSlot::Ranged, ItemId::HuntersBow);
+            assert_eq!(run.players[0].sheet.primary.pierce_through, 2);
+            let bolt = run.players[0].sheet.primary.damage;
+            (bolt, shoot_line(run, EnemyType::OrcWarrior, &[30.0, 40.0, 50.0, 60.0], hps))
+        };
+        // Two passes at full damage, then the overkill rule: the third is hit and stops the bolt.
+        let (bolt, r) = line(&[70.0, 70.0, 70.0, 70.0]);
+        assert_eq!(r, [(true, bolt), (true, bolt), (true, bolt), (true, 0.0)], "bolt {bolt}");
+        // A 1-HP third orc dies, and the rest flies on to the fourth.
+        let (bolt, r) = line(&[70.0, 70.0, 1.0, 70.0]);
+        assert_eq!(&r[..2], [(true, bolt), (true, bolt)]);
+        assert_eq!(r[2], (false, 1.0));
+        assert!((r[3].1 - (bolt - 1.0)).abs() < 1e-9, "{r:?}");
+    }
+
+    #[test]
+    fn a_through_mod_works_on_a_spell() {
+        use crate::defs::loadout::{apply_mods, AbilityMod};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.players[0].sheet.primary = apply_mods(run.players[0].sheet.primary, &[AbilityMod::PierceThrough(1)]);
+        let dmg = run.players[0].sheet.primary.damage;
+        let r = shoot_line(run, EnemyType::OrcWarrior, &[30.0, 40.0, 50.0], &[70.0, 70.0, 70.0]);
+        assert_eq!(r, [(true, dmg), (true, dmg), (true, 0.0)]);
+    }
+
+    #[test]
+    fn an_enemy_arrow_can_pierce() {
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let p = run.players[0].pos();
+        run.players[1].mv.x = p.x - 10.0;
+        run.players[1].mv.y = p.y;
+        run.players[0].hp = 1.0;
+        let id = run.spawn_enemy(EnemyType::OrcArcher, p + Vec2::new(60.0, 0.0), None);
+        let oi = run.monster_idx(id).unwrap();
+        let attack = crate::defs::enemies::def(EnemyType::OrcArcher).attack;
+        let hp = run.players[1].hp;
+        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(0), attack, false, None);
+        assert_eq!(run.projectiles.last().unwrap().pierce, super::super::entities::Pierce::Overkill { left: u8::MAX });
+        for _ in 0..60 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        assert!(!run.players[0].alive, "the Wizard falls");
+        assert!(run.players[1].hp < hp, "and the arrow flies on into the Paladin");
+    }
+
+    #[test]
+    fn pierce_new_encodes_the_two_numbers() {
+        use super::super::entities::Pierce;
+        assert_eq!(Pierce::new(0, 0), Pierce::Never);
+        assert_eq!(Pierce::new(3, 0), Pierce::Overkill { left: 3 });
+        assert_eq!(Pierce::new(u8::MAX, 2), Pierce::Through { left: 2, then: u8::MAX });
+        assert_eq!(Pierce::from_u8(0), Pierce::Never);
+    }
+
     #[test]
     fn cooldown_is_enforced() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
@@ -878,7 +1075,7 @@ mod tests {
         // The aim point lies a hair inside the wall: the shot passes it on the step that enters the wall.
         let at = run.players[0].pos();
         let target = Vec2::new((tx + 3) as f64 * TILE + 0.01, at.y);
-        spawn_player_projectile(&mut run, 0, EntityKind::Fireball, 1, Vec2::new(1.0, 0.0), 300.0, 1.0, 4.0, 2.0, 20.0, Some(target), false, kind_split(EntityKind::Fireball), None, 0);
+        spawn_player_projectile(&mut run, 0, EntityKind::Fireball, 1, Vec2::new(1.0, 0.0), 300.0, 1.0, 4.0, 2.0, 20.0, Some(target), false, kind_split(EntityKind::Fireball), None, 0, Pierce::Never);
         for _ in 0..30 {
             if run.projectiles.is_empty() {
                 break;

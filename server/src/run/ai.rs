@@ -3,7 +3,7 @@
 
 use super::abilities::spawn_monster_projectile;
 use super::effects::Creature;
-use super::entities::{AiState, Target, Windup};
+use super::entities::{AiState, Pierce, Target, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
 use crate::defs::classes::PLAYER_RADIUS;
@@ -435,7 +435,7 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, attack: At
                 run.knock_creature(foe, pos, aim, knock, str);
             }
         }
-        AttackStyle::Ranged { projectile, speed, damage, cooldown, range, .. } => {
+        AttackStyle::Ranged { projectile, speed, damage, cooldown, range, pierce, .. } => {
             let cd = cooldown * run.rng.gen_range(0.85..1.15);
             set_cd(run, cd);
             set_anim(run, mi, Anim::Shoot);
@@ -444,6 +444,9 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, attack: At
             spawn_monster_projectile(run, id, projectile, pos + dir * 5.0, dir, speed, damage, range * 1.3 / speed, 0.0, 0, 0.0);
             if let Some(h) = on_hit {
                 run.projectiles.last_mut().unwrap().damage.on_hit = Some(h); // the shot just spawned
+            }
+            if pierce {
+                run.projectiles.last_mut().unwrap().pierce = Pierce::Overkill { left: u8::MAX }; // a weapon shot
             }
         }
         AttackStyle::Slam { radius, damage, cooldown, knock, .. } => {
