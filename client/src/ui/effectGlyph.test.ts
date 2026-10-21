@@ -25,5 +25,9 @@ describe('effectGlyph names', () => {
     expect(effectGlyph(EFFECT.Chilled)).toBe('C');
     expect(effectGlyph(EFFECT.Singed)).toBe('G');
     expect(effectGlyph(EFFECT.Tainted)).toBe('T');
+    expect(effectGlyph(EFFECT.Entangled)).toBe('E');
+    expect(effectGlyph(EFFECT.Fear)).toBe('R');
+    expect(effectGlyph(EFFECT.Warded)).toBe('W');
+    expect(effectGlyph(EFFECT.Coated)).toBe('V');
   });
 });

@@ -4,7 +4,8 @@
 use crate::defs::damage::{Damage, DamageType, Resistances};
 use crate::dungeon::Tile;
 use crate::defs::attributes::Attr;
-use crate::defs::effects::{def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectResistances, Stat, DOT_TICK, TYPE_EFFECT_POWER};
+use crate::defs::effects::{def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectLook, EffectResistances, Stat, DOT_TICK, TYPE_EFFECT_POWER};
+use crate::math::Vec2;
 use crate::defs::races::Sight;
 use crate::protocol::Ev;
 use crate::run::{Run, DT};
@@ -18,6 +19,37 @@ pub struct ActiveEffect {
     pub left: f64,
     /// Time since the last damage-over-time tick.
     pub dot_t: f64,
+    /// How it is drawn, chosen by whoever applied it.
+    pub look: EffectLook,
+    /// The creature that applied it (Fear: who it runs from), if any.
+    pub source: Option<u32>,
+    /// Where the source was last seen; `Vec2::ZERO` when there is no source.
+    pub from: Vec2,
+}
+
+/// One application of an effect: the single description every source builds (a hit's
+/// `OnHit`, an aura, terrain) and `Run::apply` takes.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Apply {
+    pub kind: EffectKind,
+    /// Seconds before the target's save and resistance (default: the def's duration).
+    pub secs: Option<f64>,
+    /// The source's power: a harmful effect's time is scaled by the target's save. `None`: unscaled.
+    pub power: Option<i32>,
+    /// Saved against with WIL instead of CON (unless the effect names its own save).
+    pub magical: bool,
+    pub look: EffectLook,
+    /// Who applied it and where they stand.
+    pub source: Option<(u32, Vec2)>,
+}
+
+impl Apply {
+    pub fn plain(kind: EffectKind, secs: Option<f64>) -> Apply {
+        Apply { kind, secs, power: None, magical: false, look: EffectLook::Plain, source: None }
+    }
+    pub fn from_hit(h: OnHit) -> Apply {
+        Apply { kind: h.kind, secs: Some(h.secs), power: Some(h.power), magical: h.magical, look: h.look, source: None }
+    }
 }
 
 /// The effects on one creature (a handful at most) and its stats through them.
@@ -39,12 +71,32 @@ impl Effects {
     }
     /// Refresh: the longer of the remaining and the new time. True when newly added.
     pub fn add(&mut self, k: EffectKind, secs: f64) -> bool {
+        self.add_with(k, secs, EffectLook::Plain, None)
+    }
+    /// `add` with a look and a source; a refresh takes the new look, source and position too.
+    pub fn add_with(&mut self, k: EffectKind, secs: f64, look: EffectLook, source: Option<(u32, Vec2)>) -> bool {
+        let (source, from) = source.map_or((None, Vec2::ZERO), |(id, at)| (Some(id), at));
         if let Some(a) = self.0.iter_mut().find(|a| a.kind == k) {
             a.left = a.left.max(secs);
+            (a.look, a.source, a.from) = (look, source, from);
             return false;
         }
-        self.0.push(ActiveEffect { kind: k, left: secs, dot_t: 0.0 });
+        self.0.push(ActiveEffect { kind: k, left: secs, dot_t: 0.0, look, source, from });
         true
+    }
+    /// The non-`Plain` looks (the client draws them).
+    pub fn looks(&self) -> impl Iterator<Item = (EffectKind, EffectLook)> + '_ {
+        self.0.iter().filter(|a| a.look != EffectLook::Plain).map(|a| (a.kind, a.look))
+    }
+    /// The source and last known position of the effect that makes the creature flee.
+    pub fn fear_from(&self) -> Option<(Option<u32>, Vec2)> {
+        self.0.iter().find(|a| def(a.kind).flees).map(|a| (a.source, a.from))
+    }
+    /// The frightening source was seen at `at`.
+    pub fn set_fear_from(&mut self, at: Vec2) {
+        for a in self.0.iter_mut().filter(|a| def(a.kind).flees) {
+            a.from = at;
+        }
     }
     pub fn remove(&mut self, k: EffectKind) -> bool {
         let n = self.0.len();
@@ -149,18 +201,20 @@ impl Run {
         }
     }
 
-    /// Puts `kind` on a creature for `secs` (default: its def's duration),
-    /// shortened or refused by the creature's effect resistance (a damage-type
-    /// effect: refused at full resistance to its type). Dead or sinking
-    /// creatures take nothing. In this order:
+    /// Puts an effect on a creature: the one apply path. A harmful effect with a `power` is
+    /// first scaled by the target's save (the effect's own `save`, else WIL against `magical`,
+    /// CON otherwise; positive effects are never scaled); then the creature's effect
+    /// resistance shortens or refuses it (a damage-type effect: refused at full resistance to
+    /// its type). Dead or sinking creatures take nothing. In this order:
     /// 1. an effect that cancels another (fire and ice) cancels it even when the
     ///    creature resists the new effect itself, and is not applied (false);
     /// 2. an effect whose stronger tier is on (an active effect `replaces` it) is refused;
-    /// 3. resistance, water and `secs <= 0` refuse it;
+    /// 3. save, resistance, water and `secs <= 0` refuse it;
     /// 4. it is added, and only then are the weaker tiers it `replaces` removed
     ///    (a refused Frozen leaves an existing Chilled alone).
     /// True when the effect is on afterwards.
-    pub fn apply_effect(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>) -> bool {
+    pub fn apply(&mut self, c: Creature, a: Apply) -> bool {
+        let kind = a.kind;
         let Some((_, _, pos, ok)) = self.creature(c) else { return false };
         if !ok {
             return false;
@@ -179,7 +233,16 @@ impl Run {
         if held.is_some_and(|h| h.iter().any(|&k| def(k).replaces.contains(&kind))) {
             return false; // the stronger tier is on
         }
-        let mut secs = secs.unwrap_or(def(kind).duration);
+        let mut secs = a.secs.unwrap_or(def(kind).duration);
+        if let (Some(power), false) = (a.power, def(kind).positive) {
+            let save_attr = def(kind).save.unwrap_or(if a.magical { Attr::Wil } else { Attr::Con });
+            let save = match c {
+                Creature::Player(i) => self.players.get(i).map(|p| p.sheet.attrs.get(save_attr)),
+                Creature::Monster(i) => self.monsters.get(i).map(|m| m.attrs.get(save_attr)),
+            };
+            let Some(save) = save else { return false };
+            secs = scaled_secs(secs, power, save);
+        }
         if def(kind).resisted_by.is_none() {
             // A damage-type effect is resisted by its type's damage resistance (below) only.
             let r = match c {
@@ -205,7 +268,7 @@ impl Run {
             }
         }
         let Some((fx, id, pos, _)) = self.creature(c) else { return false };
-        if fx.add(kind, secs) {
+        if fx.add_with(kind, secs, a.look, a.source) {
             self.effect_event(c, id, pos, kind, true);
         }
         for &weaker in def(kind).replaces {
@@ -214,21 +277,14 @@ impl Run {
         true
     }
 
-    /// Like `apply_effect`, from a source of `power`: a harmful effect's time is
-    /// scaled by the target's save (WIL against `magical`, else CON) before its
-    /// effect resistance applies. Positive effects are never scaled.
+    /// `apply` of `kind` for `secs` (default: its def's duration), unscaled and `Plain`.
+    pub fn apply_effect(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>) -> bool {
+        self.apply(c, Apply::plain(kind, secs))
+    }
+
+    /// `apply` from a source of `power`: the time is scaled by the target's save (see `apply`).
     pub fn apply_effect_from(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>, power: i32, magical: bool) -> bool {
-        let base = secs.unwrap_or(def(kind).duration);
-        if def(kind).positive {
-            return self.apply_effect(c, kind, Some(base));
-        }
-        let save_attr = if magical { Attr::Wil } else { Attr::Con };
-        let save = match c {
-            Creature::Player(i) => self.players.get(i).map(|p| p.sheet.attrs.get(save_attr)),
-            Creature::Monster(i) => self.monsters.get(i).map(|m| m.attrs.get(save_attr)),
-        };
-        let Some(save) = save else { return false };
-        self.apply_effect(c, kind, Some(scaled_secs(base, power, save)))
+        self.apply(c, Apply { power: Some(power), magical, ..Apply::plain(kind, secs) })
     }
 
     fn in_water(&self, pos: crate::math::Vec2) -> bool {
@@ -266,7 +322,7 @@ impl Run {
 
     /// A hit's effect: always applied (no roll); the target's save and resistance only shorten or refuse it.
     pub fn hit_effect(&mut self, c: Creature, h: OnHit) {
-        self.apply_effect_from(c, h.kind, Some(h.secs), h.power, h.magical);
+        self.apply(c, Apply::from_hit(h));
     }
 
     /// Damage ends effects that break on it (none yet).
@@ -343,6 +399,7 @@ impl Run {
 mod tests {
     use super::*;
     use crate::protocol::{BossId, ClassId, Ev};
+    use crate::defs::attributes::Attr;
     use crate::defs::damage::DamageSplit;
     use crate::run::tests::test_run;
     use crate::run::DT;
@@ -540,7 +597,7 @@ mod tests {
     }
 
     fn sleepy() -> OnHit {
-        OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: false, power: 10 }
+        OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: false, power: 10, look: EffectLook::Plain }
     }
 
     #[test]
@@ -608,7 +665,7 @@ mod tests {
         let Creature::Monster(mi) = c else { unreachable!() };
         run.apply_effect(c, EffectKind::Frozen, None);
         run.monsters[mi].res = Resistances::of(&[(DamageType::Heat, 1.0)]);
-        run.hit_effect(c, OnHit { kind: EffectKind::Singed, secs: 3.0, magical: false, power: 10 });
+        run.hit_effect(c, OnHit { kind: EffectKind::Singed, secs: 3.0, magical: false, power: 10, look: EffectLook::Plain });
         assert!(!run.has_effect(c, EffectKind::Frozen) && !run.has_effect(c, EffectKind::Singed));
     }
 
@@ -619,7 +676,7 @@ mod tests {
         let mut twin = run.rng.clone();
         for _ in 0..20 {
             let c = fresh_ogre(&mut run);
-            run.hit_effect(c, OnHit { kind: EffectKind::Blind, secs: 2.0, magical: false, power: 10 });
+            run.hit_effect(c, OnHit { kind: EffectKind::Blind, secs: 2.0, magical: false, power: 10, look: EffectLook::Plain });
             assert!(run.has_effect(c, EffectKind::Blind));
         }
         assert_eq!(run.rng.next_u64(), twin.next_u64(), "no roll drew from the run's rng");
@@ -634,7 +691,7 @@ mod tests {
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep));
         run.events.clear();
         let hp = run.players[0].hp;
-        run.hurt_player(0, Damage::physical(0.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, magical: false, power: 10 }));
+        run.hurt_player(0, Damage::physical(0.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, magical: false, power: 10, look: EffectLook::Plain }));
         assert_eq!(run.players[0].hp, hp);
         assert!(run.has_effect(Creature::Player(0), EffectKind::Blind));
         assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "a pure effect hit shows no number");
@@ -646,7 +703,7 @@ mod tests {
         run.hurt_player(0, Damage::physical(1.0).with_effect(sleepy()));
         run.hurt_player(0, Damage::physical(5.0));
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep), "damage does not wake");
-        run.hurt_player(0, Damage::physical(10_000.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, magical: false, power: 10 }));
+        run.hurt_player(0, Damage::physical(10_000.0).with_effect(OnHit { kind: EffectKind::Blind, secs: 1.0, magical: false, power: 10, look: EffectLook::Plain }));
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Blind));
     }
 
@@ -733,7 +790,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat));
         assert!(run.players[0].effects.list().is_empty());
-        run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(OnHit { kind: EffectKind::Slowed, secs: 1.0, magical: false, power: 10 }));
+        run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(OnHit { kind: EffectKind::Slowed, secs: 1.0, magical: false, power: 10, look: EffectLook::Plain }));
         assert!(run.players[0].effects.list().is_empty(), "not even an on_hit");
     }
 
@@ -892,7 +949,7 @@ mod tests {
     }
 
     fn lich_sleep() -> OnHit {
-        OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22 }
+        OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain }
     }
 
     #[test]
@@ -978,5 +1035,91 @@ mod tests {
         let bi = boss(&run);
         assert!(!run.hurt_monster(bi, Damage::new(10.0, kind_split(EntityKind::Fireball)), false, Some(0)), "disciples alive: refused");
         assert!(!run.has_effect(Creature::Monster(bi), EffectKind::Burning));
+    }
+
+    #[test]
+    fn an_effect_names_its_own_save() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let mut spawn = |run: &mut crate::run::Run, t| {
+            let id = run.spawn_enemy(t, at, None);
+            Creature::Monster(run.monster_idx(id).unwrap())
+        };
+        use crate::defs::enemies::EnemyType;
+        for magical in [false, true] {
+            let goblin = spawn(&mut run, EnemyType::GoblinArcher);
+            assert!(run.apply_effect_from(goblin, EffectKind::Fear, None, 16, magical));
+            assert!((left_of(&run, goblin, EffectKind::Fear).unwrap() - 3.0 * 1.4).abs() < 1e-9, "WIL 8 whatever `magical` says");
+            let orc = spawn(&mut run, EnemyType::OrcWarrior);
+            assert!(run.apply_effect_from(orc, EffectKind::Fear, None, 16, magical));
+            assert!((left_of(&run, orc, EffectKind::Fear).unwrap() - 3.75).abs() < 1e-9, "WIL 11");
+        }
+        let ogre = spawn(&mut run, EnemyType::Ogre);
+        assert!(run.apply_effect_from(ogre, EffectKind::Entangled, None, 14, true));
+        let want = 3.0 * (1.0 + (14.0 - 19.0) / 20.0);
+        assert!((left_of(&run, ogre, EffectKind::Entangled).unwrap() - want).abs() < 1e-9, "STR 19");
+    }
+
+    #[test]
+    fn the_look_and_source_ride_on_the_effect() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let (hid, hpos) = (run.players[0].id, run.players[0].pos());
+        let vines = Apply { look: EffectLook::Vines, source: Some((hid, hpos)), ..Apply::plain(EffectKind::Entangled, Some(2.0)) };
+        assert!(run.apply(c, vines));
+        let Creature::Monster(mi) = c else { unreachable!() };
+        let fx = &run.monsters[mi].effects;
+        assert_eq!(fx.looks().collect::<Vec<_>>(), vec![(EffectKind::Entangled, EffectLook::Vines)]);
+        let a = fx.list().iter().find(|a| a.kind == EffectKind::Entangled).unwrap();
+        assert_eq!((a.source, a.from), (Some(hid), hpos));
+        assert!(run.apply(c, Apply::plain(EffectKind::Entangled, Some(1.0))));
+        let fx = &run.monsters[mi].effects;
+        assert_eq!(fx.looks().count(), 0, "a refresh takes the new look");
+        let a = fx.list().iter().find(|a| a.kind == EffectKind::Entangled).unwrap();
+        assert_eq!((a.left, a.source, a.from), (2.0, None, Vec2::ZERO), "and keeps the longer time");
+    }
+
+    #[test]
+    fn fear_remembers_its_source() {
+        let mut e = Effects::default();
+        assert_eq!(e.fear_from(), None);
+        e.add_with(EffectKind::Fear, 3.0, EffectLook::Plain, Some((5, Vec2::new(1.0, 2.0))));
+        assert_eq!(e.fear_from(), Some((Some(5), Vec2::new(1.0, 2.0))));
+        e.set_fear_from(Vec2::new(3.0, 4.0));
+        assert_eq!(e.fear_from(), Some((Some(5), Vec2::new(3.0, 4.0))));
+    }
+
+    #[test]
+    fn warded_refuses_the_lichs_spells_only() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let me = Creature::Player(0);
+        assert!(run.apply_effect(me, EffectKind::Warded, Some(3.0)));
+        for k in [EffectKind::Sleep, EffectKind::Blind, EffectKind::Petrified] {
+            assert!(!run.apply_effect(me, k, Some(2.0)), "{k:?} is refused");
+        }
+        for k in [EffectKind::Slowed, EffectKind::Burning] {
+            assert!(run.apply_effect(me, k, Some(2.0)), "{k:?} still lands");
+        }
+    }
+
+    #[test]
+    fn undead_and_bosses_never_fear_and_demons_fear_half() {
+        use crate::defs::enemies::EnemyType;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None);
+        let skel = Creature::Monster(run.monster_idx(id).unwrap());
+        assert!(!run.apply_effect(skel, EffectKind::Fear, Some(3.0)), "undead are never frightened");
+        let id = run.spawn_enemy(EnemyType::Imp, at, None);
+        let imp = Creature::Monster(run.monster_idx(id).unwrap());
+        assert!(run.apply_effect_from(imp, EffectKind::Fear, None, 16, false));
+        let Creature::Monster(ii) = imp else { unreachable!() };
+        let wil = run.monsters[ii].attrs.get(Attr::Wil);
+        assert!((left_of(&run, imp, EffectKind::Fear).unwrap() - scaled_secs(3.0, 16, wil) * 0.5).abs() < 1e-9, "half the scaled time");
+        for b in BossId::ALL {
+            assert!(crate::defs::bosses::profile(b).effect_res.get(EffectKind::Fear) >= 1.0, "{b:?}");
+        }
     }
 }

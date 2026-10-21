@@ -79,6 +79,31 @@ pub fn escape_terrain(run: &mut Run, mi: usize, dt: f64) {
     }
 }
 
+/// A frightened monster: no attacks, no wind-up; it walks straight away from the one who
+/// frightened it (the source's position is read each tick; once the source is gone, from
+/// where it was last seen). Its normal movement, so walls slide it and chasms stop it.
+pub fn flee(run: &mut Run, mi: usize, dt: f64) {
+    run.monsters[mi].ai.windup = None;
+    let Some((source, last)) = run.monsters[mi].effects.fear_from() else { return };
+    let now = source.and_then(|id| {
+        let alive = |p: &crate::run::entities::Player| p.alive && p.id == id;
+        run.players.iter().find(|p| alive(p)).map(|p| p.pos()).or_else(|| run.monsters.iter().find(|o| o.alive && o.id == id).map(|o| o.pos))
+    });
+    let from = now.unwrap_or(last);
+    if now.is_some() {
+        run.monsters[mi].effects.set_fear_from(from);
+    }
+    let m = &run.monsters[mi];
+    let away = m.pos - from;
+    // Standing on the source: run along the reversed aim instead.
+    let dir = if away.len() < 1.0 { Vec2::new(-m.aim.cos(), -m.aim.sin()) } else { away.norm() };
+    let pos = m.pos;
+    let speed = gait(run, mi, m.speed);
+    move_toward(run, mi, pos + dir * 24.0, speed, dt);
+    run.monsters[mi].aim = dir.angle();
+    set_anim(run, mi, Anim::Move);
+}
+
 /// Move a monster toward `to` with wall sliding. Returns true when arrived.
 pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> bool {
     let m = &run.monsters[mi];
@@ -1030,5 +1055,84 @@ pub(crate) mod tests {
         super::super::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, ppos + Vec2::new(TILE, 0.0), Vec2::new(0.0, 1.0), 1.0, 1.0, 3.0, 0.0, 0, 0.0);
         run.step();
         assert_eq!(run.monsters[mi].ai.target, Some(Target::Player(run.players[0].id)));
+    }
+
+    use crate::defs::effects::EffectKind;
+    use crate::math::angle_diff;
+    use crate::run::effects::Apply;
+
+    fn scared_of(run: &mut Run, mi: usize, source: Option<(u32, Vec2)>) {
+        let a = Apply { source, ..Apply::plain(EffectKind::Fear, Some(5.0)) };
+        assert!(run.apply(Creature::Monster(mi), a));
+    }
+
+    #[test]
+    fn a_frightened_monster_runs_away_and_does_not_attack() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let (hero, hid) = (run.players[0].pos(), run.players[0].id);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(20.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        run.step();
+        assert_eq!(run.monsters[mi].ai.state, AiState::Chase, "it chases the hero first");
+        scared_of(&mut run, mi, Some((hid, hero)));
+        run.events.clear();
+        let hp = run.players[0].hp;
+        for _ in 0..30 {
+            run.step();
+        }
+        let m = &run.monsters[mi];
+        assert!(m.pos.dist(hero) > 20.0 + 5.0, "farther: {}", m.pos.dist(hero));
+        assert!(angle_diff(m.aim, hero.angle_to(m.pos)).abs() < 0.3, "its aim points away");
+        assert!(m.ai.windup.is_none());
+        assert_eq!(run.players[0].hp, hp);
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "no blow on the hero");
+    }
+
+    #[test]
+    fn fear_flees_from_the_last_known_spot_when_the_source_is_gone() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        run.players[0].alive = false; // keeps the monsters from other business
+        scared_of(&mut run, mi, Some((999, at - Vec2::new(10.0, 0.0))));
+        let x0 = run.monsters[mi].pos.x;
+        flee(&mut run, mi, crate::run::DT);
+        assert!(run.monsters[mi].pos.x > x0, "walks east, away from the spot 10 px west");
+        // On the spot itself: along the reversed aim.
+        run.remove_effect(Creature::Monster(mi), EffectKind::Fear);
+        let here = run.monsters[mi].pos;
+        run.monsters[mi].aim = 0.0;
+        scared_of(&mut run, mi, Some((999, here)));
+        flee(&mut run, mi, crate::run::DT);
+        let (p, d) = (run.monsters[mi].pos, run.monsters[mi].pos - here);
+        assert!(p.x.is_finite() && p.y.is_finite());
+        assert!(d.x < 0.0 && d.y.abs() < 1e-9, "reversed aim: west, got {d:?}");
+        // No source at all: from Vec2::ZERO, still finite.
+        run.remove_effect(Creature::Monster(mi), EffectKind::Fear);
+        scared_of(&mut run, mi, None);
+        for _ in 0..10 {
+            flee(&mut run, mi, crate::run::DT);
+        }
+        assert!(run.monsters[mi].pos.x.is_finite() && run.monsters[mi].pos.y.is_finite());
+    }
+
+    #[test]
+    fn an_entangled_monster_stays_put_but_still_shoots() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let hero = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::GoblinArcher, hero + Vec2::new(60.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        assert!(run.apply_effect(Creature::Monster(mi), EffectKind::Entangled, Some(3.0)));
+        let pos = run.monsters[mi].pos;
+        for _ in 0..60 {
+            run.step();
+        }
+        let mi = run.monster_idx(id).unwrap();
+        assert_eq!(run.monsters[mi].pos, pos, "rooted");
+        assert!(run.projectiles.iter().any(|p| p.owner == id), "but the arrow flies");
     }
 }

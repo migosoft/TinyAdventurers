@@ -3,7 +3,7 @@
 // the wire by design; everything else must match.
 import { decode } from '@msgpack/msgpack';
 import { describe, expect, it } from 'vitest';
-import { CONST } from './generated/defs';
+import { CONST, EFFECT, EFFECT_LOOK } from './generated/defs';
 import type { SelfW } from './generated/SelfW';
 import type { SnapW } from './generated/SnapW';
 import fixtures from './generated/wire-fixtures.json';
@@ -55,14 +55,20 @@ describe('wire', () => {
 
   it('keeps an exactly-left aim at +pi (the staff swing uses the raw angle)', () => {
     const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false];
-    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0, 0]], me, null, [], 0, null, []]);
+    const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0, 0]], me, null, [], 0, null, [], []]);
     expect(snap.ents[0][6]).toBe(Math.PI);
   });
 
   it('unpacks moving lights with an optional colour', () => {
     const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false];
-    const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [[160, 320, 2, null], [16, 32, 3, 0x78c8ff]]]);
+    const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [[160, 320, 2, null], [16, 32, 3, 0x78c8ff]], []]);
     expect(snap.lights).toEqual([[10, 20, 2, null], [1, 2, 3, 0x78c8ff]]);
+  });
+
+  it('unpacks the effect looks', () => {
+    const snap = unpackSnap(decode(Uint8Array.from(fixtures.cases[0].bytes)) as SnapW);
+    expect(snap.looks).toEqual([[3, EFFECT.Entangled, EFFECT_LOOK.Vines]]);
+    expect(unpackSnap(decode(Uint8Array.from(fixtures.cases[1].bytes)) as SnapW).looks).toEqual([]);
   });
 
   it('packs inputs in field order with null for no shot', () => {

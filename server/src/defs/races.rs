@@ -60,14 +60,15 @@ pub struct RaceDef {
 pub fn race_def(r: Race) -> RaceDef {
     let none = Attributes::default();
     let never_sleeps = EffectResistances::of(&[(EffectKind::Sleep, 1.0)]);
+    let fear = |r| EffectResistances::of(&[(EffectKind::Fear, r)]);
     let plain = |res, natural: &'static [ItemId], vision, darkvision| RaceDef { res, natural, vision, darkvision, attrs: none, effect_res: EffectResistances::NONE };
     use ItemId::*;
     match r {
         Race::Human => plain(Resistances::NONE, &[UnarmedStrike], 9.0, 0.0),
         Race::Goblin | Race::Orc | Race::Ogre => plain(Resistances::NONE, &[UnarmedStrike], 8.0, 1.0 / 3.0),
         Race::Mimic => plain(Resistances::NONE, &[Bite], 8.0, 1.0 / 3.0),
-        Race::Undead => plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), &[UnarmedStrike], 8.0, 1.0),
-        Race::Demon => plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), &[Claws], 9.0, 1.0),
+        Race::Undead => RaceDef { effect_res: fear(1.0), ..plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), &[UnarmedStrike], 8.0, 1.0) },
+        Race::Demon => RaceDef { effect_res: fear(0.5), ..plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), &[Claws], 9.0, 1.0) },
         Race::Dragon => plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), &[Bite, Claws, Tail], 25.0, 1.0),
         Race::Object => plain(Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), &[], 0.0, 0.0),
         Race::Elf => RaceDef { attrs: Attributes::new(0, 2, 0, 0, 0, 0), effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1)]), &[UnarmedStrike], 18.0, 1.0 / 3.0) },

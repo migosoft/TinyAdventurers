@@ -429,6 +429,10 @@ impl Run {
                 }
                 continue;
             }
+            if m.effects.fear_from().is_some() {
+                ai::flee(self, mi, DT);
+                continue;
+            }
             if m.is_ally() {
                 companion::tick_wolf(self, mi, DT);
                 continue;

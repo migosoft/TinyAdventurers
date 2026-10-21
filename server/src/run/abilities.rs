@@ -687,7 +687,7 @@ mod tests {
         assert_eq!(run.projectiles[0].damage.split, heat, "the bolt carries the primary's split");
 
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
-        let hit = OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10 };
+        let hit = OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain };
         run.players[0].sheet.secondary.on_hit = Some(hit);
         let mi = put_monster_near(&mut run, 0, 6.0);
         run.monsters[mi].hp = 1000.0;
@@ -906,7 +906,7 @@ mod tests {
         use crate::defs::effects::{EffectKind, OnHit};
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         assert_eq!(run.players[0].sheet.primary.damage, 16.0);
-        run.players[0].sheet.primary.on_hit = Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10 });
+        run.players[0].sheet.primary.on_hit = Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain });
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.players[0].aim = 0.0;
         let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 16.0);

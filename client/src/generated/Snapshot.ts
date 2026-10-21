@@ -21,6 +21,11 @@ drain: Array<[number, number]> | null,
  */
 lights: Array<MovingLight>, 
 /**
+ * The non-default looks of the effects on the sent entities: (entity id, `EffectKind` id,
+ * `EffectLook` id).
+ */
+looks: Array<[number, number, number]>, 
+/**
  * Server simulation time spent per tick (ms, averaged).
  */
 srv_ms: number, };

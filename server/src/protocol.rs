@@ -269,6 +269,9 @@ pub struct Snapshot {
     pub drain: Option<Vec<(f32, f32)>>,
     /// Moving lights whose light can reach the viewer's sight.
     pub lights: Vec<MovingLight>,
+    /// The non-default looks of the effects on the sent entities: (entity id, `EffectKind` id,
+    /// `EffectLook` id).
+    pub looks: Vec<(u32, u8, u8)>,
     /// Server simulation time spent per tick (ms, averaged).
     pub srv_ms: f32,
 }

@@ -99,7 +99,7 @@ function unpackEv(e: EvW): Ev {
 }
 
 export function unpackSnap(w: SnapW): Snapshot {
-  const [tick, ack, ents, me, boss, ev, srv_ms, drain, lights] = w;
+  const [tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks] = w;
   return {
     tick,
     ack,
@@ -128,6 +128,7 @@ export function unpackSnap(w: SnapW): Snapshot {
     ev: ev.map(unpackEv),
     drain: drain && Array.from({ length: drain.length / 2 }, (_, i): [number, number] => [pos(drain[2 * i]), pos(drain[2 * i + 1])]),
     lights: lights.map((l): MovingLight => [pos(l[0]), pos(l[1]), l[2], l[3]]),
+    looks,
     srv_ms,
   };
 }

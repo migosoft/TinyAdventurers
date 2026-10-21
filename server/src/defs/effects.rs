@@ -5,6 +5,7 @@
 //! type's damage resistance alone resists it), `replaces` (the weaker tier it ends) and
 //! gets a row in `TYPE_EFFECTS`.
 
+use super::attributes::Attr;
 use super::damage::DamageType;
 use serde::Serialize;
 
@@ -24,6 +25,26 @@ super::enum_list::listed_enum! {
         Chilled = 8,
         Singed = 9,
         Tainted = 10,
+        Entangled = 11,
+        Fear = 12,
+        Warded = 13,
+        Coated = 14,
+    }
+}
+
+super::enum_list::listed_enum! {
+    /// How an active effect is drawn: the source picks it (Entangle's vines, later a web's
+    /// webbing). `Plain` is the effect's default look; the rest travel to the client with it.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum EffectLook: u8 {
+        Plain = 0,
+        Vines = 1,
+    }
+}
+
+impl Serialize for EffectLook {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_u8(*self as u8)
     }
 }
 
@@ -100,9 +121,14 @@ pub struct EffectDef {
     pub cancels: &'static [EffectKind],
     /// Standing in shallow or deep water ends it.
     pub ends_in_water: bool,
+    /// The Attribute that shortens it (strength breaks roots, will resists fear);
+    /// `None`: WIL against a magical source, else CON.
+    pub save: Option<Attr>,
+    /// The creature runs away from the effect's source and cannot attack (Fear).
+    pub flees: bool,
 }
 
-const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, resisted_by: None, replaces: &[], cancels: &[], ends_in_water: false };
+const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, resisted_by: None, replaces: &[], cancels: &[], ends_in_water: false, save: None, flees: false };
 
 use DamageType::*;
 use Op::*;
@@ -118,6 +144,9 @@ const PETRIFIED_MODS: &[StatMod] = &[
     m(Resist(Poison), Add, 0.5),
     m(KnockTaken, Mul, 0.4),
 ];
+/// The effects hostile sources apply magically today (the lich's spells); Fear is saved with
+/// WIL but is not magic, so it is left out.
+const WARDED_MODS: &[StatMod] = &[m(ResistEffect(EffectKind::Blind), Add, 1.0), m(ResistEffect(EffectKind::Sleep), Add, 1.0), m(ResistEffect(EffectKind::Petrified), Add, 1.0)];
 const SLOWED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 0.5)];
 const ACCELERATED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 1.5)];
 const CHILLED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 0.7)];
@@ -138,6 +167,10 @@ pub fn def(k: EffectKind) -> EffectDef {
         EffectKind::Chilled => EffectDef { resisted_by: Some(Cold), mods: CHILLED_MODS, cancels: COLD_CANCELS, ..NONE },
         EffectKind::Singed => EffectDef { dot: Some((Heat, 3.0)), resisted_by: Some(Heat), cancels: HEAT_CANCELS, ends_in_water: true, ..NONE },
         EffectKind::Tainted => EffectDef { dot: Some((Poison, 2.0)), resisted_by: Some(Poison), ..NONE },
+        EffectKind::Entangled => EffectDef { no_move: true, save: Some(Attr::Str), ..NONE },
+        EffectKind::Fear => EffectDef { save: Some(Attr::Wil), flees: true, ..NONE },
+        EffectKind::Warded => EffectDef { positive: true, mods: WARDED_MODS, ..NONE },
+        EffectKind::Coated => EffectDef { positive: true, ..NONE },
     }
 }
 
@@ -220,6 +253,8 @@ pub struct OnHit {
     /// The source's key Attribute (spells INT, innate magic CHA, a weapon's
     /// wielder its key Attribute, terrain 10); see `scaled_secs`.
     pub power: i32,
+    /// How the effect is drawn (`Plain` for every source today).
+    pub look: EffectLook,
 }
 
 /// The least power of a damage-type effect from a hit's split (non-magical): terrain,
@@ -280,7 +315,7 @@ mod tests {
         let p = def(EffectKind::Petrified);
         assert!(p.no_move && p.no_act && p.no_turn && !p.wakes_on_use);
         assert!(def(EffectKind::Accelerated).positive);
-        assert!(EffectKind::ALL.iter().filter(|&&k| k != EffectKind::Accelerated).all(|&k| !def(k).positive));
+        assert!(EffectKind::ALL.iter().filter(|&&k| !matches!(k, EffectKind::Accelerated | EffectKind::Warded | EffectKind::Coated)).all(|&k| !def(k).positive));
         for k in EffectKind::ALL {
             assert_eq!(EffectKind::from_u8(k as u8), Some(k));
             assert_eq!(k.bit(), 1 << k as u8);
@@ -335,9 +370,9 @@ mod tests {
         use crate::protocol::BossId;
         use EffectKind::*;
         let want = |b| match b {
-            BossId::Lich => EffectResistances::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5)]),
-            BossId::Dragon => EffectResistances::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5)]),
-            BossId::Demon => EffectResistances::of(&[(Sleep, 1.0)]),
+            BossId::Lich => EffectResistances::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5), (Fear, 1.0)]),
+            BossId::Dragon => EffectResistances::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5), (Fear, 1.0)]),
+            BossId::Demon => EffectResistances::of(&[(Sleep, 1.0), (Fear, 1.0)]),
         };
         for b in BossId::ALL {
             assert_eq!(bosses::profile(b).effect_res, want(b), "{b:?}");
@@ -361,7 +396,7 @@ mod tests {
             assert!(def(k).dot.is_none() && def(k).cancels.is_empty() && !def(k).ends_in_water, "{k:?}");
         }
         assert_eq!((EffectKind::Burning as u8, EffectKind::Frozen as u8, EffectKind::Poisoned as u8), (5, 6, 7));
-        assert_eq!(EffectKind::COUNT, 11);
+        assert_eq!(EffectKind::COUNT, 15);
     }
 
     #[test]
@@ -415,5 +450,29 @@ mod tests {
         assert_eq!(type_effects(&DamageSplit::pure(Poison)), vec![EffectKind::Poisoned]);
         assert!(type_effects(&DamageSplit::physical()).is_empty());
         assert_eq!(type_effects(&DamageSplit::split(&[(Heat, 0.5), (Cold, 0.5)])), vec![EffectKind::Burning, EffectKind::Frozen]);
+    }
+
+    #[test]
+    fn new_effects_have_their_rules() {
+        use crate::defs::attributes::Attr;
+        let e = def(EffectKind::Entangled);
+        assert!(e.no_move && !e.no_act && !e.no_turn && !e.positive && !e.flees);
+        assert_eq!(e.save, Some(Attr::Str));
+        let f = def(EffectKind::Fear);
+        assert!(f.flees && !f.positive && !f.no_move);
+        assert_eq!((f.save, f.duration), (Some(Attr::Wil), 3.0));
+        let w = def(EffectKind::Warded);
+        assert!(w.positive && !w.flees);
+        assert_eq!(w.mods, &[m(ResistEffect(EffectKind::Blind), Add, 1.0), m(ResistEffect(EffectKind::Sleep), Add, 1.0), m(ResistEffect(EffectKind::Petrified), Add, 1.0)]);
+        let c = def(EffectKind::Coated);
+        assert!(c.positive && c.mods.is_empty());
+        assert_eq!((EffectKind::Entangled as u8, EffectKind::Fear as u8, EffectKind::Warded as u8, EffectKind::Coated as u8), (11, 12, 13, 14));
+        assert_eq!(EffectKind::COUNT, 15);
+        for k in EffectKind::ALL.into_iter().filter(|k| !matches!(k, EffectKind::Entangled | EffectKind::Fear)) {
+            assert_eq!(def(k).save, None, "{k:?} keeps the rule of section 5");
+        }
+        assert_eq!(EffectKind::ALL.iter().filter(|&&k| def(k).flees).count(), 1);
+        assert_eq!((EffectLook::Plain as u8, EffectLook::Vines as u8), (0, 1));
+        assert_eq!(serde_json::to_string(&EffectLook::Vines).unwrap(), "1");
     }
 }

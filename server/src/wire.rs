@@ -68,10 +68,11 @@ pub enum EvW {
 #[ts(export)]
 pub struct LightW(pub u32, pub u32, pub u8, pub Option<u32>);
 
-/// `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none.
+/// `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none;
+/// `looks` is `[[entity, effect, look], ...]` for the non-default looks of the sent entities' effects.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>, pub Vec<LightW>);
+pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>, pub Vec<LightW>, pub Vec<(u32, u8, u8)>);
 
 /// `[seq, mx, my, aim, aim_dist, primary, secondary, view_lag, rtt, act]`, see `InputMsg`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -113,7 +114,7 @@ pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune, b.enraged));
     let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
     let lights = s.lights.iter().map(|l| LightW(q_pos(l.0 as f64), q_pos(l.1 as f64), l.2, l.3)).collect();
-    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain, lights);
+    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain, lights, s.looks.clone());
     rmp_serde::to_vec(&w).expect("encode snapshot")
 }
 
@@ -128,6 +129,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         ents: vec![
             EntSnap(1, 0, 123.47, 456.03, 200, 2, -1.2, 350, 0, 0, 0),
             EntSnap(2, 1, 130.0, 460.5, 255, 0, 3.1, 0, 0, 0, 0b101),
+            EntSnap(3, 1, 141.5, 470.25, 255, 0, 0.5, 0, 0, 0, 1 << 11),
             EntSnap(300, 5, 2000.5, 1800.27, 128, 1, -3.1406, 1200, 8, 1, 0),
             EntSnap(70000, 12, 50.1, 60.9, 255, 0, 0.7854, 0, 0, (1 << 16) | 42, 0),
             EntSnap(70001, 12, 5000.25, 4100.0, 255, 0, 3.1416, 0, 0, 0, 0),
@@ -172,6 +174,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         ],
         drain: Some(vec![(400.25, 300.5), (480.0, 300.0), (330.06, 260.7)]),
         lights: vec![MovingLight(100.3, 200.7, 2, None), MovingLight(55.0, 66.06, 3, Some(0x78c8ff))],
+        looks: vec![(3, 11, 1)],
         srv_ms: 0.125,
     };
     let spectator = Snapshot {
@@ -202,6 +205,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         ev: vec![],
         drain: None,
         lights: vec![],
+        looks: vec![],
         srv_ms: 0.0,
     };
     vec![busy, spectator]
@@ -259,9 +263,18 @@ mod tests {
         for s in sample_snapshots() {
             let new = encode_snap(&s);
             let old = rmp_serde::to_vec_named(&ServerMsg::Snap(s)).unwrap();
-            assert_eq!(new[0], 0x99, "fixarray of 9 fields");
+            assert_eq!(new[0], 0x9a, "fixarray of 10 fields");
             println!("snapshot: old {} B, new {} B", old.len(), new.len());
             assert!(new.len() * 10 <= old.len() * 7, "old {} B, new {} B", old.len(), new.len());
         }
+    }
+
+    #[test]
+    fn snapshot_carries_effect_looks() {
+        let mut s = sample_snapshots().remove(1);
+        s.looks = vec![(7, 11, 1)];
+        let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&s)).unwrap();
+        assert_eq!(v.as_array().unwrap().len(), 10);
+        assert_eq!(v[9], serde_json::json!([[7, 11, 1]]));
     }
 }

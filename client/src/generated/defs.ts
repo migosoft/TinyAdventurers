@@ -428,83 +428,131 @@ export const EFFECT = {
   "Blind": 0,
   "Burning": 5,
   "Chilled": 8,
+  "Coated": 14,
+  "Entangled": 11,
+  "Fear": 12,
   "Frozen": 6,
   "Petrified": 2,
   "Poisoned": 7,
   "Singed": 9,
   "Sleep": 1,
   "Slowed": 3,
-  "Tainted": 10
+  "Tainted": 10,
+  "Warded": 13
 } as const;
 
-export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_turn: boolean; duration: number }> = {
+export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_turn: boolean; flees: boolean; duration: number }> = {
   "0": {
     "duration": 3.0,
+    "flees": false,
     "no_turn": false,
     "positive": false,
     "prone": false
   },
   "1": {
     "duration": 4.0,
+    "flees": false,
     "no_turn": false,
     "positive": false,
     "prone": true
   },
   "10": {
     "duration": 3.0,
+    "flees": false,
     "no_turn": false,
     "positive": false,
     "prone": false
   },
+  "11": {
+    "duration": 3.0,
+    "flees": false,
+    "no_turn": false,
+    "positive": false,
+    "prone": false
+  },
+  "12": {
+    "duration": 3.0,
+    "flees": true,
+    "no_turn": false,
+    "positive": false,
+    "prone": false
+  },
+  "13": {
+    "duration": 3.0,
+    "flees": false,
+    "no_turn": false,
+    "positive": true,
+    "prone": false
+  },
+  "14": {
+    "duration": 3.0,
+    "flees": false,
+    "no_turn": false,
+    "positive": true,
+    "prone": false
+  },
   "2": {
     "duration": 3.0,
+    "flees": false,
     "no_turn": true,
     "positive": false,
     "prone": false
   },
   "3": {
     "duration": 3.0,
+    "flees": false,
     "no_turn": false,
     "positive": false,
     "prone": false
   },
   "4": {
     "duration": 3.0,
+    "flees": false,
     "no_turn": false,
     "positive": true,
     "prone": false
   },
   "5": {
     "duration": 3.0,
+    "flees": false,
     "no_turn": false,
     "positive": false,
     "prone": false
   },
   "6": {
     "duration": 2.0,
+    "flees": false,
     "no_turn": true,
     "positive": false,
     "prone": false
   },
   "7": {
     "duration": 4.0,
+    "flees": false,
     "no_turn": false,
     "positive": false,
     "prone": false
   },
   "8": {
     "duration": 3.0,
+    "flees": false,
     "no_turn": false,
     "positive": false,
     "prone": false
   },
   "9": {
     "duration": 3.0,
+    "flees": false,
     "no_turn": false,
     "positive": false,
     "prone": false
   }
 };
+
+export const EFFECT_LOOK = {
+  "Plain": 0,
+  "Vines": 1
+} as const;
 
 export const ENEMY_KINDS = {
   "Chort": {

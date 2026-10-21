@@ -6,6 +6,7 @@ import type { LightW } from "./LightW";
 import type { SelfW } from "./SelfW";
 
 /**
- * `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none.
+ * `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none;
+ * `looks` is `[[entity, effect, look], ...]` for the non-default looks of the sent entities' effects.
  */
-export type SnapW = [number, number, Array<EntW>, SelfW, BossW | null, Array<EvW>, number, Array<number> | null, Array<LightW>];
+export type SnapW = [number, number, Array<EntW>, SelfW, BossW | null, Array<EvW>, number, Array<number> | null, Array<LightW>, Array<[number, number, number]>];

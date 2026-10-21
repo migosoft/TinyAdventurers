@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CONST, TILE_ID } from '../generated/defs';
+import { CONST, EFFECT, EFFECT_LOOK, TILE_ID } from '../generated/defs';
+import type { EntSnap } from '../generated/EntSnap';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
-import { Predictor, abilityChoice, cosmeticPierce } from './world';
+import { Interpolator, Predictor, abilityChoice, cosmeticPierce, type EntState } from './world';
 
 const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, ...over });
 /** Predictor for tests: the class only picks which ids the abilities carry. */
@@ -25,7 +26,7 @@ function chasmMap(): TileMap {
 
 function snap(ack: number, x: number, y: number): Snapshot {
   const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false };
-  return { tick: ack, ack, ents: [], me, boss: null, ev: [], drain: null, lights: [], srv_ms: 0 };
+  return { tick: ack, ack, ents: [], me, boss: null, ev: [], drain: null, lights: [], looks: [], srv_ms: 0 };
 }
 
 describe('Predictor', () => {
@@ -169,5 +170,16 @@ describe('cosmeticPierce', () => {
     // Weakness -3 counts as -1: 16 x 2 = 32 against 24 HP, 4 left.
     const r = cosmeticPierce(shot, 255, 24, { Cold: 1 }, { ...none, Cold: -3 });
     expect(r === 'stop' ? r : r.damage).toBeCloseTo(4, 9);
+  });
+});
+
+describe('Interpolator looks', () => {
+  it('hands an entity its effects looks', () => {
+    const it = new Interpolator();
+    const s = { ...snap(1, 0, 0), ents: [[7, 1, 10, 10, 255, 0, 0, 0, 0, 0, 1 << EFFECT.Entangled] as EntSnap], looks: [[7, EFFECT.Entangled, EFFECT_LOOK.Vines] as [number, number, number]] };
+    it.push(s, 0);
+    const out = new Map<number, EntState>();
+    it.sample(1, out);
+    expect(out.get(7)?.looks).toEqual(new Map([[EFFECT.Entangled, EFFECT_LOOK.Vines]]));
   });
 });

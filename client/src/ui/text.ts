@@ -80,6 +80,10 @@ export const EFFECT_GLYPH: Record<number, string> = {
   [EFFECT.Chilled]: 'C',
   [EFFECT.Singed]: 'G',
   [EFFECT.Tainted]: 'T',
+  [EFFECT.Entangled]: 'E',
+  [EFFECT.Fear]: 'R',
+  [EFFECT.Warded]: 'W',
+  [EFFECT.Coated]: 'V',
 };
 
 export function effectGlyph(id: number): string {

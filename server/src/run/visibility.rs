@@ -210,6 +210,13 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
     ents
 }
 
+/// The non-default effect looks of the creatures among `ents` (a creature's id is its entity id).
+fn looks_of(run: &Run, ents: &[EntSnap]) -> Vec<(u32, u8, u8)> {
+    let sent = |id: u32| ents.iter().any(|e| e.0 == id);
+    let fx = run.players.iter().map(|p| (p.id, &p.effects)).chain(run.monsters.iter().filter(|m| m.alive).map(|m| (m.id, &m.effects)));
+    fx.filter(|&(id, _)| sent(id)).flat_map(|(id, e)| e.looks().map(move |(k, l)| (id, k as u8, l as u8))).collect()
+}
+
 pub fn send_snapshots(run: &mut Run) {
     let events = std::mem::take(&mut run.events);
     let on_hero = std::mem::take(&mut run.on_hero);
@@ -233,6 +240,7 @@ pub fn send_snapshots(run: &mut Run) {
         let dark = Dark { tile: (tx, ty), range: dark_range(&sight) };
 
         let ents = snapshot_ents(run, pi, &view, &dark);
+        let looks = looks_of(run, &ents);
         let lights = &run.lights;
         let ev: Vec<Ev> = events
             .iter()
@@ -271,6 +279,7 @@ pub fn send_snapshots(run: &mut Run) {
             ev,
             drain,
             lights: lights_for(view_pos, vision, &moving),
+            looks,
             srv_ms: run.srv_ms,
         };
         run.players[pi].view = view;
