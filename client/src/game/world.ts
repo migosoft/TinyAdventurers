@@ -1,12 +1,13 @@
 // Client view of the world: snapshot buffer with an adaptive interpolation
 // delay for remote entities, and prediction/reconciliation for the local player.
-import { CONST, EFFECTS } from '../generated/defs';
+import { CONST, EFFECT, EFFECTS } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import type { AbilityId } from '../generated/AbilityId';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { Snapshot } from '../generated/Snapshot';
 import { knocked, sinking, stepMove, type MoveState, type Solid } from '../sim/collision';
 import type { TileMap } from '../sim/map';
+import { lookOf } from './status';
 
 export interface EntState {
   id: number;
@@ -20,11 +21,15 @@ export interface EntState {
   flags: number;
   extra: number;
   effects: number;
+  /** The look of its Entangled effect in the same snapshot as `effects`. */
+  entangled: number;
 }
 
 interface TimedSnap {
   serverTime: number;
   ents: Map<number, EntSnap>;
+  /** The snapshot's non-default effect looks (entity id, effect id, look id). */
+  looks: Snapshot['looks'];
 }
 
 const SNAP_INTERVAL = 1 / CONST.SNAPSHOT_HZ;
@@ -57,7 +62,7 @@ export class Interpolator {
     this.delay += (target - this.delay) * 0.05;
     const ents = new Map<number, EntSnap>();
     for (const e of snap.ents) ents.set(e[0], e);
-    this.snaps.push({ serverTime, ents });
+    this.snaps.push({ serverTime, ents, looks: snap.looks });
     while (this.snaps.length > 2 && this.snaps[1].serverTime < this.renderTime(now) - 0.5) this.snaps.shift();
   }
 
@@ -83,7 +88,7 @@ export class Interpolator {
       for (const [id, e] of b.ents) {
         const p = prev.ents.get(id);
         const k = p ? ext / span : 0;
-        out.set(id, toState(e, p ? e[2] + (e[2] - p[2]) * k : e[2], p ? e[3] + (e[3] - p[3]) * k : e[3], e[6]));
+        out.set(id, toState(e, p ? e[2] + (e[2] - p[2]) * k : e[2], p ? e[3] + (e[3] - p[3]) * k : e[3], e[6], b.looks));
       }
       return;
     }
@@ -92,10 +97,10 @@ export class Interpolator {
     for (const [id, eb] of b.ents) {
       const ea = a.ents.get(id);
       if (!ea) {
-        out.set(id, toState(eb, eb[2], eb[3], eb[6]));
+        out.set(id, toState(eb, eb[2], eb[3], eb[6], b.looks));
         continue;
       }
-      out.set(id, toState(eb, ea[2] + (eb[2] - ea[2]) * f, ea[3] + (eb[3] - ea[3]) * f, lerpAngle(ea[6], eb[6], f)));
+      out.set(id, toState(eb, ea[2] + (eb[2] - ea[2]) * f, ea[3] + (eb[3] - ea[3]) * f, lerpAngle(ea[6], eb[6], f), b.looks));
     }
   }
 
@@ -104,8 +109,8 @@ export class Interpolator {
   }
 }
 
-function toState(e: EntSnap, x: number, y: number, aim: number): EntState {
-  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9], effects: e[10] };
+function toState(e: EntSnap, x: number, y: number, aim: number, looks: Snapshot['looks']): EntState {
+  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9], effects: e[10], entangled: lookOf(looks, e[0], EFFECT.Entangled) };
 }
 
 // ------------------------------------------------------------ abilities

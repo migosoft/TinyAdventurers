@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CONST, TILE_ID } from '../generated/defs';
+import { CONST, EFFECT, EFFECT_LOOK, TILE_ID } from '../generated/defs';
+import type { EntSnap } from '../generated/EntSnap';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
-import { Predictor, abilityChoice, cosmeticCount, cosmeticPierce, volleyAngles, volleyShotIds } from './world';
+import { Interpolator, Predictor, abilityChoice, cosmeticCount, cosmeticPierce, volleyAngles, volleyShotIds, type EntState } from './world';
 
 const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, behind: 0, ...over });
 /** Predictor for tests: the class only picks which ids the abilities carry. */
@@ -169,6 +170,20 @@ describe('cosmeticPierce', () => {
     // Weakness -3 counts as -1: 16 x 2 = 32 against 24 HP, 4 left.
     const r = cosmeticPierce(shot, 255, 24, { Cold: 1 }, { ...none, Cold: -3 });
     expect(r === 'stop' ? r : r.damage).toBeCloseTo(4, 9);
+  });
+});
+
+describe('Interpolator looks', () => {
+  it('the look follows the sampled snapshot, not the newest', () => {
+    const ent = [7, 1, 10, 10, 255, 0, 0, 0, 0, 0, 1 << EFFECT.Entangled] as EntSnap;
+    const it = new Interpolator();
+    it.push({ ...snap(1, 0, 0), ents: [ent], looks: [[7, EFFECT.Entangled, EFFECT_LOOK.Vines]] }, 0);
+    // The newest snapshot no longer has the look (the entangle ended there).
+    it.push({ ...snap(2, 0, 0), ents: [ent], looks: [] }, 1 / CONST.SNAPSHOT_HZ);
+    const out = new Map<number, EntState>();
+    // Render time is still at the first snapshot (the interpolation delay): its bitmask and its look.
+    it.sample(it.delay, out);
+    expect(out.get(7)?.entangled).toBe(EFFECT_LOOK.Vines);
   });
 });
 

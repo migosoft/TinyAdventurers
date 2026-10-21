@@ -509,6 +509,7 @@ export class StatusView {
     g.clear().setVisible(true).setDepth(DEPTH.entityBase + a.y + 1).setAlpha(a.alpha);
     const cx = Math.round(a.x + a.cx);
     if (look !== undefined) {
+      // `?? Plain`: a newer server may send a look id this client does not know.
       const { color, vines } = ENTANGLE[look as Look] ?? ENTANGLE[EFFECT_LOOK.Plain];
       const rx = Math.round(a.w / 2) + 1;
       const fy = Math.round(a.y);

@@ -82,4 +82,33 @@ describe('sleep Z', () => {
     expect(lookOf(looks, 4, EFFECT.Entangled)).toBe(EFFECT_LOOK.Plain);
     expect(lookOf([], 3, EFFECT.Entangled)).toBe(EFFECT_LOOK.Plain);
   });
+
+  it('shows the Fear "!" in the sound style above the head and hides it when the fear ends', () => {
+    const made: Array<{ s?: string; depth: number; stroke: string; visible: boolean }> = [];
+    const mk = (_x?: number, _y?: number, s?: string) => {
+      const t: Record<string, unknown> = { s, depth: 0, stroke: '', visible: true };
+      const self = new Proxy(t, {
+        get: (o, k: string) => (k in o ? o[k] : (...a: unknown[]) => {
+          if (k === 'setDepth') o.depth = a[0];
+          if (k === 'setStroke') o.stroke = a[0];
+          if (k === 'setVisible') o.visible = a[0];
+          return self;
+        }),
+      });
+      made.push(t as never);
+      return self;
+    };
+    const scene = { add: { text: mk, image: mk }, textures: { exists: () => true } } as never;
+    const body = { frame: { name: 'f', height: 16 }, x: 0, y: 0, originY: 1, flipX: false } as never;
+    const anchor = { x: 10, y: 20, head: 16, w: 10, cx: 0, hand: { x: 3, y: 10 }, body, scale: 1, alpha: 1 };
+    const view = new StatusView(scene, {} as never, () => anchor);
+    view.update(1 << EFFECT.Fear, 0.1);
+    const bang = made.find((t) => t.s === '!');
+    expect(bang).toBeDefined();
+    expect(bang!.visible).toBe(true);
+    expect(bang!.depth).toBe(DEPTH.sound);
+    expect(bang!.stroke).toBe(SOUND_TEXT.stroke);
+    view.update(0, 0.1);
+    expect(bang!.visible).toBe(false);
+  });
 });

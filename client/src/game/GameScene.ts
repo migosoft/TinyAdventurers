@@ -749,7 +749,7 @@ export class GameScene extends Phaser.Scene {
     // Own figure is always drawn from prediction.
     if (!seen.has(this.info.you) && this.alive) {
       seen.add(this.info.you);
-      this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: this.myEffects() }, dt, px, py, now);
+      this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: this.myEffects(), entangled: lookOf(this.lastSnap?.looks ?? [], this.info.you, EFFECT.Entangled) }, dt, px, py, now);
     }
     for (const [id, v] of this.views) if (!seen.has(id)) (v.destroy(), this.views.delete(id), this.wade.delete(id));
     for (const [id, v] of this.projViews) if (!seen.has(id)) (v.destroy(), this.projViews.delete(id));
@@ -827,9 +827,9 @@ export class GameScene extends Phaser.Scene {
       }
       const flags = this.myFlags;
       // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
-      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects(), entangled: lookOf(this.lastSnap?.looks ?? [], e.id, EFFECT.Entangled), swingArc: anim === ANIM.Melee ? this.localAnim.arc : undefined };
+      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects(), entangled: e.entangled, swingArc: anim === ANIM.Melee ? this.localAnim.arc : undefined };
     } else {
-      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: lookOf(this.lastSnap?.looks ?? [], e.id, EFFECT.Entangled) };
+      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled };
     }
     this.terrainState(e, s, me && this.alive, dt);
     view.update(s, dt);
