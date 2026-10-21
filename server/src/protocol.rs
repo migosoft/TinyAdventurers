@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::defs::loadout::Pick;
 use crate::defs::progression::{Modifiers, StatUpgrades, UpgradeStat};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -98,6 +99,8 @@ pub enum ClientMsg {
     DebugDarkvision { ratio: f32 },
     /// Debug: put an effect (EffectKind id) on your hero, if the server allows debug.
     DebugEffect { kind: u8 },
+    /// Debug, waiting room: set any ability of your class in the two slots, if the server allows debug.
+    DebugLoadout { primary: Pick, secondary: Pick },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -339,6 +342,9 @@ pub fn decode(bytes: &[u8]) -> Option<ClientMsg> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::defs::abilities::AbilityId;
+    use crate::defs::items::EquipSlot;
+    use crate::defs::loadout::Source;
 
     #[test]
     fn client_msg_roundtrip() {
@@ -353,5 +359,15 @@ mod tests {
         }
         let select = rmp_serde::to_vec_named(&ClientMsg::SelectCharacter { id: 3 }).unwrap();
         assert!(matches!(decode(&select), Some(ClientMsg::SelectCharacter { id: 3 })));
+        let json = r#"{"t":"DebugLoadout","primary":{"ability":"Strike","source":"Own"},"secondary":{"ability":"Charge","source":{"Item":"Ring1"}}}"#;
+        let m: ClientMsg = serde_json::from_str(json).unwrap();
+        let bytes = rmp_serde::to_vec_named(&m).unwrap();
+        match decode(&bytes) {
+            Some(ClientMsg::DebugLoadout { primary, secondary }) => {
+                assert_eq!(primary, Pick { ability: AbilityId::Strike, source: Source::Own });
+                assert_eq!(secondary, Pick { ability: AbilityId::Charge, source: Source::Item(EquipSlot::Ring1) });
+            }
+            other => panic!("unexpected {other:?}"),
+        }
     }
 }

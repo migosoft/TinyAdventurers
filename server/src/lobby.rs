@@ -4,7 +4,9 @@
 //! (`set_character`, `apply_progress`), so the lock is only held briefly.
 
 use crate::db::{self, Character, Db};
-use crate::defs::loadout::Build;
+use crate::defs::loadout::{Build, Loadout, Pick};
+use crate::defs::abilities::{self, AbilityId};
+use crate::sheet::hero_sheet;
 use crate::progress::Progress;
 use crate::protocol::{encode, BossId, ClassId, ClientMsg, LevelChoice, LevelId, RoomPlayer, RunSummary, ServerMsg};
 use crate::run::{run_task, Award, Member, Run, RunCmd, RunRecord};
@@ -25,6 +27,10 @@ pub struct Conn {
     pub ready: bool,
     /// The character this connection plays (a cached copy of its database row).
     pub character: Option<Character>,
+    /// The debug loadout, if one was set (reset when the character changes).
+    pub loadout: Option<Loadout>,
+    /// `loadout` came from `DebugLoadout`, so the run counts as a debug run.
+    pub debug_loadout: bool,
     /// When it connected (Unix ms), for the admin's online list.
     pub since: f64,
 }
@@ -119,7 +125,7 @@ impl Lobby {
         let id = self.next_conn;
         self.next_conn += 1;
         send(&tx, &ServerMsg::Welcome { id });
-        self.conns.insert(id, Conn { account, tx, room: None, ready: false, character: None, since: unix_ms() });
+        self.conns.insert(id, Conn { account, tx, room: None, ready: false, character: None, loadout: None, debug_loadout: false, since: unix_ms() });
         self.send_lobby_to(id);
         id
     }
@@ -209,6 +215,8 @@ impl Lobby {
         }
         let info = character.info();
         c.character = Some(character);
+        c.loadout = None;
+        c.debug_loadout = false;
         send(&c.tx, &ServerMsg::Character(info));
     }
 
@@ -289,6 +297,11 @@ impl Lobby {
                 self.send_lobby_to(id);
             }
             ClientMsg::SetReady { ready } => {
+                if ready {
+                    if let Err(e) = self.check_build(id) {
+                        return self.error(id, &e);
+                    }
+                }
                 if let Some(c) = self.conns.get_mut(&id) {
                     c.ready = ready;
                 }
@@ -302,6 +315,7 @@ impl Lobby {
                 }
             }
             ClientMsg::StartRun => self.start(id),
+            ClientMsg::DebugLoadout { primary, secondary } => self.debug_loadout_if(crate::run::debug::allowed(), id, primary, secondary),
             _ => {}
         }
     }
@@ -320,6 +334,68 @@ impl Lobby {
         }
     }
 
+    /// Debug: set any ability of the character's class in the two slots. It skips the
+    /// "unlocked" check only; `hero_sheet` still checks Attributes and weapons on Ready and Start.
+    fn debug_loadout_if(&mut self, allowed: bool, id: u32, primary: Pick, secondary: Pick) {
+        if !allowed {
+            return self.error(id, "Debug is off.");
+        }
+        let Some(c) = self.conns.get(&id) else { return };
+        let Some(room) = c.room.and_then(|r| self.rooms.get(&r)) else {
+            return self.error(id, "Join a dungeon first.");
+        };
+        if room.run_tx.is_some() {
+            return self.error(id, "Not during a run.");
+        }
+        if c.ready {
+            return self.error(id, "Not while ready.");
+        }
+        if c.character.is_none() {
+            return self.error(id, "Choose a character first.");
+        }
+        if let Some(c) = self.conns.get_mut(&id) {
+            c.loadout = Some(Loadout { primary, secondary });
+            c.debug_loadout = true;
+        }
+    }
+
+    /// The character's start build with this connection's loadout and debug pool.
+    fn build_of(&self, id: u32) -> Option<Build> {
+        let c = self.conns.get(&id)?;
+        let ch = c.character.as_ref()?;
+        let mut build = Build { upgrades: ch.progress.upgrades, ..Build::start(ch.class) };
+        if let Some(l) = c.loadout {
+            build.loadout = l;
+        }
+        if c.debug_loadout {
+            build.own = AbilityId::ALL.iter().copied().filter(|a| abilities::def(*a).classes.contains(&ch.class)).collect();
+        }
+        Some(build)
+    }
+
+    /// Does this connection's hero pass `hero_sheet`? The message names what is wrong.
+    fn check_build(&self, id: u32) -> Result<(), String> {
+        let c = self.conns.get(&id).ok_or("Not connected.")?;
+        let ch = c.character.as_ref().ok_or("Choose a character first.")?;
+        let build = self.build_of(id).ok_or("Choose a character first.")?;
+        hero_sheet(ch.class, &build).map(|_| ()).map_err(|e| e.message())
+    }
+
+    /// The room's heroes, or `None` when the room is gone.
+    fn members_of(&self, rid: u32) -> Option<Vec<Member>> {
+        let room = self.rooms.get(&rid)?;
+        Some(
+            room.members
+                .iter()
+                .filter_map(|m| {
+                    let c = self.conns.get(m)?;
+                    let ch = c.character.as_ref()?;
+                    Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), account: Some(c.account), character: Some(ch.id), build: self.build_of(*m)?, debug_loadout: c.debug_loadout })
+                })
+                .collect(),
+        )
+    }
+
     fn start(&mut self, id: u32) {
         let Some(rid) = self.conns.get(&id).and_then(|c| c.room) else { return };
         let Some(room) = self.rooms.get(&rid) else { return };
@@ -331,15 +407,15 @@ impl Lobby {
             self.error(id, "Not everyone is ready yet.");
             return;
         }
-        let members: Vec<Member> = room
-            .members
-            .iter()
-            .filter_map(|m| {
-                let c = self.conns.get(m)?;
-                let ch = c.character.as_ref()?;
-                Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), account: Some(c.account), character: Some(ch.id), build: Build { upgrades: ch.progress.upgrades, ..Build::start(ch.class) } })
-            })
-            .collect();
+        // The Ready check can be stale (a character changed since), so check everyone again.
+        for m in &room.members {
+            if let Err(e) = self.check_build(*m) {
+                let who = if *m == id { e } else { format!("{}: {e}", self.conns.get(m).and_then(|c| c.character.as_ref()).map_or("A player", |ch| ch.name.as_str())) };
+                self.error(id, &who);
+                return;
+            }
+        }
+        let Some(members) = self.members_of(rid) else { return };
         let seed: u64 = rand::random();
         let choice = match room.level {
             LevelId::Dungeon => LevelChoice::Dungeon { boss: room.boss },
@@ -452,6 +528,8 @@ impl Lobby {
 mod tests {
     use super::*;
     use crate::defs::progression::UpgradeStat;
+    use crate::defs::abilities::AbilityId;
+    use crate::defs::loadout::{Loadout, Pick, Source};
     use crate::protocol::ClassId;
 
     fn character(account: i32, id: i32, class: ClassId) -> Character {
@@ -625,5 +703,109 @@ mod tests {
         assert_eq!(l.account_of(second), Some(1));
         l.kick_account(1, "bye");
         assert!(l.conns.is_empty());
+    }
+
+    fn pick(ability: AbilityId) -> Pick {
+        Pick { ability, source: Source::Own }
+    }
+
+    /// The server messages a connection received, errors only.
+    fn errors(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Message>) -> Vec<String> {
+        let mut out = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            if let Message::Binary(b) = m {
+                if let Ok(v) = rmp_serde::from_slice::<serde_json::Value>(&b) {
+                    if v["t"] == "Error" {
+                        out.push(v["msg"].as_str().unwrap_or_default().to_string());
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    #[tokio::test]
+    async fn debug_loadout_is_refused_when_it_must_be() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let a = join(&mut l, 1, ClassId::Barbarian);
+        let (p, s) = (pick(AbilityId::Strike), pick(AbilityId::Charge));
+
+        l.debug_loadout_if(true, a, p, s); // outside a room
+        assert!(!l.conns[&a].debug_loadout && l.conns[&a].loadout.is_none());
+
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        l.debug_loadout_if(false, a, p, s); // debug off
+        assert!(l.conns[&a].loadout.is_none());
+
+        l.handle(a, ClientMsg::SetReady { ready: true });
+        l.debug_loadout_if(true, a, p, s); // ready
+        assert!(l.conns[&a].loadout.is_none());
+
+        l.handle(a, ClientMsg::SetReady { ready: false });
+        l.debug_loadout_if(true, a, p, s);
+        assert_eq!(l.conns[&a].loadout, Some(Loadout { primary: p, secondary: s }));
+        assert!(l.conns[&a].debug_loadout);
+    }
+
+    #[tokio::test]
+    async fn a_debug_loadout_reaches_the_run() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let a = join(&mut l, 1, ClassId::Barbarian);
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::Charge));
+        let rid = l.conns[&a].room.unwrap();
+        let members = l.members_of(rid).unwrap();
+        assert!(members[0].debug_loadout);
+        let run = Run::new(rid, members, 7, LevelChoice::Dungeon { boss: None });
+        assert_eq!(run.players[0].sheet.secondary.id, AbilityId::Charge);
+        assert!(run.debug_used);
+    }
+
+    #[tokio::test]
+    async fn a_new_character_resets_the_debug_loadout() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let a = join(&mut l, 1, ClassId::Barbarian);
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::Charge));
+        l.handle(a, ClientMsg::LeaveRun);
+        l.set_character(a, character(1, 11, ClassId::Wizard));
+        assert!(l.conns[&a].loadout.is_none() && !l.conns[&a].debug_loadout);
+    }
+
+    #[tokio::test]
+    async fn ready_and_start_refuse_an_invalid_loadout() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let host = join(&mut l, 1, ClassId::Wizard);
+        let (tx, mut host_rx) = unbounded_channel();
+        l.conns.get_mut(&host).unwrap().tx = tx;
+        let guest = join(&mut l, 2, ClassId::Wizard);
+        let (tx, mut guest_rx) = unbounded_channel();
+        l.conns.get_mut(&guest).unwrap().tx = tx;
+        l.handle(host, ClientMsg::CreateRun { name: "r".into() });
+        let rid = l.conns[&host].room.unwrap();
+        l.handle(guest, ClientMsg::JoinRun { run_id: rid });
+        errors(&mut guest_rx);
+        errors(&mut host_rx);
+
+        l.debug_loadout_if(true, guest, pick(AbilityId::Fireball), pick(AbilityId::MagicMissile));
+        l.handle(guest, ClientMsg::SetReady { ready: true });
+        assert!(!l.conns[&guest].ready);
+        let e = errors(&mut guest_rx);
+        assert!(e.iter().any(|m| m.contains("Fireball")), "{e:?}");
+
+        // A valid one is accepted.
+        l.debug_loadout_if(true, guest, pick(AbilityId::MagicMissile), pick(AbilityId::Fireball));
+        l.handle(guest, ClientMsg::SetReady { ready: true });
+        assert!(l.conns[&guest].ready);
+
+        l.debug_loadout_if(true, host, pick(AbilityId::Fireball), pick(AbilityId::MagicMissile));
+        l.handle(host, ClientMsg::StartRun);
+        assert!(l.rooms[&rid].run_tx.is_none(), "no run");
+        let e = errors(&mut host_rx);
+        assert!(e.iter().any(|m| m.contains("Fireball")), "{e:?}");
     }
 }

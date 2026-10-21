@@ -23,7 +23,7 @@ pub enum Source {
     Item(EquipSlot),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
 pub struct Pick {
     pub ability: AbilityId,
     pub source: Source,

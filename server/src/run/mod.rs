@@ -62,6 +62,8 @@ pub struct Member {
     pub character: Option<i32>,
     /// Extra Attributes, equipment, loadout and bought upgrades (validated in the lobby).
     pub build: Build,
+    /// The loadout was set with the debug message (counts as a debug run).
+    pub debug_loadout: bool,
 }
 
 /// How a run ended, for the statistics.
@@ -170,6 +172,7 @@ impl Run {
             layout,
             level,
         };
+        run.debug_used = members.iter().any(|m| m.debug_loadout);
         for (i, m) in members.into_iter().enumerate() {
             let sheet = crate::sheet::hero_sheet(m.class, &m.build).expect("validated in the lobby");
             let max_hp = sheet.max_hp;
@@ -1232,7 +1235,7 @@ pub mod tests {
             .map(|(i, (c, build))| {
                 let (tx, _rx) = unbounded_channel();
                 std::mem::forget(_rx);
-                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, build: build.clone() }
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, build: build.clone(), debug_loadout: false }
             })
             .collect();
         Run::new(1, members, 7, LevelChoice::Dungeon { boss: Some(boss) })
@@ -1245,7 +1248,7 @@ pub mod tests {
             .map(|(i, c)| {
                 let (tx, _rx) = unbounded_channel();
                 std::mem::forget(_rx);
-                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, build: Build::start(*c) }
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, build: Build::start(*c), debug_loadout: false }
             })
             .collect();
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: Some(boss) })
@@ -1350,7 +1353,7 @@ pub mod tests {
     fn random_boss_run(seed: u64) -> Run {
         let (tx, _rx) = unbounded_channel();
         std::mem::forget(_rx);
-        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, build: Build::start(ClassId::Paladin) }];
+        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, build: Build::start(ClassId::Paladin), debug_loadout: false }];
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: None })
     }
 
