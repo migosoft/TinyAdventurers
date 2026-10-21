@@ -19,7 +19,7 @@ import { TorchView } from './torch';
 import { ChestView } from './chest';
 import { dmgColor } from './damage';
 import { DEPTH, Effects, SOUND_TEXT } from './effects';
-import { drawGazeBeam, has } from './status';
+import { drawGazeBeam, has, lookOf } from './status';
 import { LightField } from './light';
 import { LightView, nextDarkvision } from './lightview';
 import { VisionMask } from './visionmask';
@@ -27,7 +27,7 @@ import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
-import { abilityChoice, cosmeticCount, cosmeticPierce, EffectLooks, Interpolator, Predictor, volleyAngles, volleyShotIds, type EntState } from './world';
+import { abilityChoice, cosmeticCount, cosmeticPierce, Interpolator, Predictor, volleyAngles, volleyShotIds, type EntState } from './world';
 
 export interface GameInit {
   info: RunStartInfo;
@@ -85,8 +85,6 @@ export class GameScene extends Phaser.Scene {
   private pred!: Predictor;
   private interp = new Interpolator();
   private ents = new Map<number, EntState>();
-  /** Looks of effects from start events (drawing: later). */
-  readonly effectLooks = new EffectLooks();
   private views = new Map<number, EntityView>();
   private projViews = new Map<number, Phaser.GameObjects.Image>();
   private hazardViews = new Map<number, Phaser.GameObjects.Image>();
@@ -436,7 +434,7 @@ export class GameScene extends Phaser.Scene {
         this.light.remove(ev.id);
         break;
       case 'Effect':
-        this.effectLooks.event(ev.id, ev.kind, ev.on, ev.look); // drawn from the snapshot bitmask (status.ts)
+        // Drawn from the snapshot bitmask and its looks (status.ts).
         break;
       case 'Msg':
         this.hud.message(ev.text);
@@ -829,9 +827,9 @@ export class GameScene extends Phaser.Scene {
       }
       const flags = this.myFlags;
       // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
-      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects(), swingArc: anim === ANIM.Melee ? this.localAnim.arc : undefined };
+      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects(), entangled: lookOf(this.lastSnap?.looks ?? [], e.id, EFFECT.Entangled), swingArc: anim === ANIM.Melee ? this.localAnim.arc : undefined };
     } else {
-      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects };
+      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: lookOf(this.lastSnap?.looks ?? [], e.id, EFFECT.Entangled) };
     }
     this.terrainState(e, s, me && this.alive, dt);
     view.update(s, dt);

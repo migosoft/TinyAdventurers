@@ -20,15 +20,11 @@ export interface EntState {
   flags: number;
   extra: number;
   effects: number;
-  /** Effect id → look id for the effects drawn with a non-default look (e.g. Entangled by vines). */
-  looks?: Map<number, number>;
 }
 
 interface TimedSnap {
   serverTime: number;
   ents: Map<number, EntSnap>;
-  /** Entity id → its effects' non-default looks. */
-  looks: Map<number, Map<number, number>>;
 }
 
 const SNAP_INTERVAL = 1 / CONST.SNAPSHOT_HZ;
@@ -61,13 +57,7 @@ export class Interpolator {
     this.delay += (target - this.delay) * 0.05;
     const ents = new Map<number, EntSnap>();
     for (const e of snap.ents) ents.set(e[0], e);
-    const looks = new Map<number, Map<number, number>>();
-    for (const [id, effect, look] of snap.looks) {
-      const m = looks.get(id) ?? new Map<number, number>();
-      m.set(effect, look);
-      looks.set(id, m);
-    }
-    this.snaps.push({ serverTime, ents, looks });
+    this.snaps.push({ serverTime, ents });
     while (this.snaps.length > 2 && this.snaps[1].serverTime < this.renderTime(now) - 0.5) this.snaps.shift();
   }
 
@@ -93,7 +83,7 @@ export class Interpolator {
       for (const [id, e] of b.ents) {
         const p = prev.ents.get(id);
         const k = p ? ext / span : 0;
-        out.set(id, toState(e, p ? e[2] + (e[2] - p[2]) * k : e[2], p ? e[3] + (e[3] - p[3]) * k : e[3], e[6], b.looks.get(id)));
+        out.set(id, toState(e, p ? e[2] + (e[2] - p[2]) * k : e[2], p ? e[3] + (e[3] - p[3]) * k : e[3], e[6]));
       }
       return;
     }
@@ -102,10 +92,10 @@ export class Interpolator {
     for (const [id, eb] of b.ents) {
       const ea = a.ents.get(id);
       if (!ea) {
-        out.set(id, toState(eb, eb[2], eb[3], eb[6], b.looks.get(id)));
+        out.set(id, toState(eb, eb[2], eb[3], eb[6]));
         continue;
       }
-      out.set(id, toState(eb, ea[2] + (eb[2] - ea[2]) * f, ea[3] + (eb[3] - ea[3]) * f, lerpAngle(ea[6], eb[6], f), b.looks.get(id)));
+      out.set(id, toState(eb, ea[2] + (eb[2] - ea[2]) * f, ea[3] + (eb[3] - ea[3]) * f, lerpAngle(ea[6], eb[6], f)));
     }
   }
 
@@ -114,23 +104,8 @@ export class Interpolator {
   }
 }
 
-/** The looks of effects that started on entities, kept from `Effect` events (the snapshot carries them too). */
-export class EffectLooks {
-  private byEntity = new Map<number, Map<number, number>>();
-  event(id: number, kind: number, on: boolean, look: number): void {
-    const m = this.byEntity.get(id) ?? new Map<number, number>();
-    if (on && look !== 0) m.set(kind, look);
-    else m.delete(kind);
-    if (m.size > 0) this.byEntity.set(id, m);
-    else this.byEntity.delete(id);
-  }
-  get(id: number): Map<number, number> | undefined {
-    return this.byEntity.get(id);
-  }
-}
-
-function toState(e: EntSnap, x: number, y: number, aim: number, looks?: Map<number, number>): EntState {
-  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9], effects: e[10], looks };
+function toState(e: EntSnap, x: number, y: number, aim: number): EntState {
+  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9], effects: e[10] };
 }
 
 // ------------------------------------------------------------ abilities

@@ -1,15 +1,32 @@
 // Status effects on a figure (blind, asleep, petrified, slowed, accelerated,
-// burning, frozen, poisoned):
+// burning, frozen, poisoned, chilled, singed, tainted, entangled, fear, warded, coated):
 // pure pose helpers plus the small marks drawn around the figure. The body
 // itself (lying down, grey stone, tints) is changed in EntityView.
 import Phaser from 'phaser';
-import { EFFECT } from '../generated/defs';
+import { EFFECT, EFFECT_LOOK } from '../generated/defs';
 import { DEPTH, GLOOM, SOUND_TEXT, type Effects } from './effects';
 
 /** True when the effect `kind` is set in the bitmask `bits` (bit = 1 << EffectKind id). */
 export function has(bits: number, kind: number): boolean {
   return (bits & (1 << kind)) !== 0;
 }
+
+/**
+ * The look an effect has on an entity: the look sent in the snapshot's `looks`
+ * (entity id, effect id, look id; only non-default ones), else `Plain`.
+ */
+export function lookOf(looks: readonly (readonly [number, number, number])[], id: number, effect: number): number {
+  for (const [i, e, l] of looks) if (i === id && e === effect) return l;
+  return EFFECT_LOOK.Plain;
+}
+
+type Look = (typeof EFFECT_LOOK)[keyof typeof EFFECT_LOOK];
+
+/** How Entangled is drawn around the feet, by look (a later web is one more entry; the compiler lists the missing ones). */
+const ENTANGLE: Record<Look, { color: number; vines: boolean }> = {
+  [EFFECT_LOOK.Plain]: { color: 0xa8a8b0, vines: false },
+  [EFFECT_LOOK.Vines]: { color: 0x4fa83a, vines: true },
+};
 
 /**
  * A prone figure (asleep) lies down towards its facing: rotated ±90° about
@@ -138,6 +155,15 @@ const BUBBLE_EVERY = 0.35;
 const BUBBLE_LIFE = 0.8;
 const BUBBLE_RISE = 8;
 const BUBBLE_COLOR = 0x7fd650;
+const CHILL_EVERY = 0.55;
+const CHILL_LIFE = 0.9;
+const EMBER_EVERY = 0.35;
+const EMBER_LIFE = 0.6;
+const EMBER_RISE = 12;
+const GLINT_EVERY = 0.45;
+const GLINT_LIFE = 0.25;
+const GLINT_COLOR = 0x7fe060;
+const WARD_COLOR = 0xffd24a;
 
 /** A burning figure's flame: its spot on the body, re-seeded now and then. */
 interface Flame {
@@ -195,6 +221,8 @@ export interface StatusAnchor {
   body: Phaser.GameObjects.Sprite;
   /** World scale of the body. */
   scale: number;
+  /** Where the weapon is held, from the feet (x already towards the facing, y up; px, world scale). */
+  hand: { x: number; y: number };
   /** The figure's own alpha; every mark multiplies it in. */
   alpha: number;
 }
@@ -220,7 +248,13 @@ export class StatusView {
   private haze?: Phaser.GameObjects.Image;
   private flakes: Flake[] = [];
   private bubbleT = 0;
+  private chillT = 0;
+  private emberT = 0;
+  private glintT = 0;
   private seeds = 0;
+  private fearMark?: Phaser.GameObjects.Text;
+  /** Entangled bands and the Warded outline, redrawn each frame. */
+  private g?: Phaser.GameObjects.Graphics;
 
   constructor(
     private scene: Phaser.Scene,
@@ -228,7 +262,8 @@ export class StatusView {
     private anchor: () => StatusAnchor,
   ) {}
 
-  update(bits: number, dt: number): void {
+  /** `entangled`: the look of the Entangled effect on this figure (`lookOf`). */
+  update(bits: number, dt: number, entangled: number = EFFECT_LOOK.Plain): void {
     this.clock += dt;
     const a = this.anchor();
     this.blind(has(bits, EFFECT.Blind), a);
@@ -236,6 +271,11 @@ export class StatusView {
     this.burning(has(bits, EFFECT.Burning), a, dt);
     this.frozen(has(bits, EFFECT.Frozen), a, dt);
     this.poisoned(has(bits, EFFECT.Poisoned), a, dt);
+    this.chilled(has(bits, EFFECT.Chilled), a, dt);
+    this.singed(has(bits, EFFECT.Singed), a, dt);
+    this.fear(has(bits, EFFECT.Fear), a);
+    this.coated(has(bits, EFFECT.Coated), a, dt);
+    this.drawings(has(bits, EFFECT.Entangled) ? entangled : undefined, has(bits, EFFECT.Warded), a);
     if (has(bits, EFFECT.Accelerated)) {
       this.ghostT -= dt;
       if (this.ghostT <= 0) {
@@ -386,7 +426,117 @@ export class StatusView {
     });
   }
 
+  /** Chilled: an occasional single snowflake drifting down (lighter than Frozen; the pale tint is on the body). */
+  private chilled(on: boolean, a: StatusAnchor, dt: number): void {
+    if (!on) {
+      this.chillT = 0;
+      return;
+    }
+    this.chillT -= dt;
+    if (this.chillT > 0) return;
+    this.chillT = CHILL_EVERY * (0.6 + Math.random() * 0.8);
+    const x = a.x + a.cx + (Math.random() - 0.5) * (a.w + 6);
+    const y = a.y - a.head * (0.4 + Math.random() * 0.7);
+    this.fx.particle(Math.round(x), Math.round(y), 0, 6 / CHILL_LIFE, CHILL_LIFE, Math.random() < 0.5 ? 0xffffff : 0xd8f0ff, {
+      frame: 'spark',
+      depth: DEPTH.entityBase + a.y + 1,
+      alpha: 0.8 * a.alpha,
+    });
+  }
+
+  /** Singed: a few small embers lifting off the body (fewer and smaller than Burning's flames). */
+  private singed(on: boolean, a: StatusAnchor, dt: number): void {
+    if (!on) {
+      this.emberT = 0;
+      return;
+    }
+    this.emberT -= dt;
+    if (this.emberT > 0) return;
+    this.emberT = EMBER_EVERY * (0.6 + Math.random() * 0.8);
+    const x = a.x + a.cx + (Math.random() - 0.5) * a.w * 0.8;
+    const y = a.y - a.head * (0.2 + Math.random() * 0.5);
+    this.fx.particle(Math.round(x), Math.round(y), (Math.random() - 0.5) * 6, -EMBER_RISE / EMBER_LIFE, EMBER_LIFE, Math.random() < 0.5 ? 0xff7a20 : 0xffb040, {
+      depth: DEPTH.entityBase + a.y + 1,
+      alpha: a.alpha,
+    });
+  }
+
+  /** Fear: a small "!" above the head, bobbing (the wolf's growl text style). */
+  private fear(on: boolean, a: StatusAnchor): void {
+    if (!on) {
+      this.fearMark?.setVisible(false);
+      return;
+    }
+    this.fearMark ??= this.scene.add
+      .text(0, 0, '!', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4, color: SOUND_TEXT.fill })
+      .setFontSize(6)
+      .setOrigin(0.5, 1)
+      .setStroke(SOUND_TEXT.stroke, 2)
+      .setPadding(1);
+    this.fearMark
+      .setVisible(true)
+      .setPosition(Math.round(a.x + a.cx), Math.round(a.y - a.head - 3 - Math.abs(Math.sin(this.clock * 9)) * 1.5))
+      .setAlpha(a.alpha)
+      .setDepth(DEPTH.sound);
+  }
+
+  /** Coated: a green glint twinkling on the weapon hand (the weapon was dipped in poison). */
+  private coated(on: boolean, a: StatusAnchor, dt: number): void {
+    if (!on) {
+      this.glintT = 0;
+      return;
+    }
+    this.glintT -= dt;
+    if (this.glintT > 0) return;
+    this.glintT = GLINT_EVERY * (0.7 + Math.random() * 0.6);
+    this.fx.particle(Math.round(a.x + a.hand.x + (Math.random() - 0.5) * 4), Math.round(a.y - a.hand.y + (Math.random() - 0.5) * 6), 0, 0, GLINT_LIFE, GLINT_COLOR, {
+      frame: 'spark',
+      depth: DEPTH.entityBase + a.y + 1,
+      alpha: a.alpha,
+    });
+  }
+
+  /**
+   * The marks drawn as lines: the Entangled bands (grey, or green vines, by `look`;
+   * undefined: not entangled) around the feet and the thin Warded outline pulsing around the body.
+   */
+  private drawings(look: number | undefined, warded: boolean, a: StatusAnchor): void {
+    if (look === undefined && !warded) {
+      this.g?.clear().setVisible(false);
+      return;
+    }
+    const g = (this.g ??= this.scene.add.graphics());
+    g.clear().setVisible(true).setDepth(DEPTH.entityBase + a.y + 1).setAlpha(a.alpha);
+    const cx = Math.round(a.x + a.cx);
+    if (look !== undefined) {
+      const { color, vines } = ENTANGLE[look as Look] ?? ENTANGLE[EFFECT_LOOK.Plain];
+      const rx = Math.round(a.w / 2) + 1;
+      const fy = Math.round(a.y);
+      // Two bands one above the other, round the ankles.
+      g.lineStyle(1, color, 0.95);
+      g.strokeEllipse(cx, fy - 1, rx * 2, 4);
+      g.strokeEllipse(cx, fy - 4, rx * 2 - 2, 4);
+      if (vines) {
+        // Short tendrils and leaves sticking out of the bands.
+        g.fillStyle(0x8fe05a, 1);
+        for (const k of [-1, 1]) {
+          g.lineBetween(cx + k * rx, fy - 1, cx + k * (rx + 2), fy - 4);
+          g.fillRect(cx + k * (rx + 2) - (k < 0 ? 1 : 0), fy - 5, 2, 1);
+        }
+      }
+    }
+    if (warded) {
+      const k = 0.5 + 0.5 * Math.sin(this.clock * 4);
+      g.lineStyle(1, WARD_COLOR, 0.35 + 0.5 * k);
+      g.strokeEllipse(cx, Math.round(a.y - a.head / 2), a.w + 5, a.head + 5);
+    }
+  }
+
   destroy(): void {
+    this.g?.destroy();
+    this.fearMark?.destroy();
+    this.g = undefined;
+    this.fearMark = undefined;
     for (const f of this.flames) f.img.destroy();
     for (const f of this.flakes) f.img.destroy();
     this.haze?.destroy();

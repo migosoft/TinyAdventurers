@@ -21,6 +21,8 @@ export interface ViewState {
   swingArc?: number;
   /** Bitmask of `EffectKind` ids on the creature. */
   effects?: number;
+  /** The look of its Entangled effect (`lookOf`); Plain when absent. */
+  entangled?: number;
   /** Pixels the figure stands below a surface (wading in water or lava). */
   sink?: number;
   /** Falling into a chasm, 0..1: the figure shrinks a little and vanishes into the dark. */
@@ -139,6 +141,7 @@ export class EntityView {
         head: this.lying ? (b.r - b.l + 1) * sc : ((d.footY ?? this.body.height) - b.t) * sc,
         w: this.lying ? ((d.footY ?? this.body.height) - b.t) * sc : (b.r - b.l + 1) * sc,
         cx: this.lying ? 0 : (mid + 0.5 - this.body.originX * fw) * sc,
+        hand: { x: (d.handX ?? 3) * (this.body.flipX ? -1 : 1) * sc, y: d.handY * sc },
         body: this.body,
         scale: sc,
         alpha: this.root.alpha,
@@ -177,6 +180,8 @@ export class EntityView {
     const slowed = has(fxBits, EFFECT.Slowed);
     const iced = has(fxBits, EFFECT.Frozen);
     const poisoned = has(fxBits, EFFECT.Poisoned);
+    const chilled = has(fxBits, EFFECT.Chilled);
+    const tainted = has(fxBits, EFFECT.Tainted);
     if (!iced) this.weaponHeld = false;
     // A new action starts when the anim changes or its timer restarts (repeated swings).
     if (s.anim !== this.lastAnim || s.animT < this.lastAnimT - 0.02) {
@@ -198,8 +203,8 @@ export class EntityView {
     // ---- body: pack idle/run/hit frames ----
     const hurt = (s.flags & FLAG.HURT) !== 0;
     const moving = s.anim === ANIM.Move || s.anim === ANIM.Dash || this.speed > 8;
-    // Slowed: the legs run at half pace; accelerated: half as fast again.
-    const pace = slowed ? 0.5 : has(fxBits, EFFECT.Accelerated) ? 1.5 : 1;
+    // Slowed: the legs run at half pace; accelerated: half as fast again; chilled: at 0.7 (the move speed it has).
+    const pace = (slowed ? 0.5 : has(fxBits, EFFECT.Accelerated) ? 1.5 : 1) * (chilled ? 0.7 : 1);
     if (moving) this.runClock += dt * Math.min(Math.max(this.speed / 40, 0.7), 2) * pace;
     const own = d.frames ? pickFrame(d, s, this.clock, this.runClock, moving) : null;
     let frame: string;
@@ -238,6 +243,8 @@ export class EntityView {
       if (own) this.body.y += Math.floor(this.clock * 40) % 2;
     } else if (poisoned) this.body.setTint(shade(1, 0x9be37a, 0.5 + 0.5 * Math.sin(this.clock * Math.PI * 3)));
     else if (slowed) this.body.setTint(0xa0c8ff);
+    else if (chilled) this.body.setTint(0xd8ecff);
+    else if (tainted) this.body.setTint(shade(1, 0x9be37a, 0.3 * (0.5 + 0.5 * Math.sin(this.clock * Math.PI * 2))));
     else if (s.flags & FLAG.ENRAGED) this.body.setTint(Math.floor(this.clock * 4) % 2 ? 0xff6060 : 0xff9090);
     else if (d.tint) this.body.setTint(d.tint);
     else this.body.clearTint();
@@ -277,7 +284,7 @@ export class EntityView {
     }
     if (this.stone) this.stone.active = stone;
     if (this.weaponStone) this.weaponStone.active = stone;
-    this.status.update(fxBits, dt);
+    this.status.update(fxBits, dt, s.entangled);
     if (asleep) this.weapon?.setVisible(false);
 
     this.root.setAlpha(1);

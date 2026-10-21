@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { EFFECT } from '../generated/defs';
+import { EFFECT, EFFECT_LOOK } from '../generated/defs';
 import { DEPTH, SOUND_TEXT } from './effects';
-import { StatusView, flameSpots, has, lieLayout, lyingPose, snowflakeAlpha } from './status';
+import { StatusView, flameSpots, has, lieLayout, lookOf, lyingPose, snowflakeAlpha } from './status';
 
 describe('status', () => {
   it('reads effect bits', () => {
@@ -65,7 +65,7 @@ describe('sleep Z', () => {
     };
     const scene = { add: { text: mk, image: mk }, textures: { exists: () => true } } as never;
     const body = { frame: { name: 'f', height: 16 }, x: 0, y: 0, originY: 1, flipX: false } as never;
-    const anchor = { x: 10, y: 20, head: 16, w: 10, cx: 0, body, scale: 1, alpha: 1 };
+    const anchor = { x: 10, y: 20, head: 16, w: 10, cx: 0, hand: { x: 3, y: 10 }, body, scale: 1, alpha: 1 };
     const view = new StatusView(scene, {} as never, () => anchor);
     view.update(1 << EFFECT.Sleep, 0.7);
     const z = made.find((t) => t.stroke !== '');
@@ -73,5 +73,13 @@ describe('sleep Z', () => {
     expect(z!.depth).toBe(DEPTH.sound);
     expect(z!.stroke).toBe(SOUND_TEXT.stroke);
     expect(z!.fill).toBe(SOUND_TEXT.fill);
+  });
+
+  it('looks up the look of an effect on an entity, Plain when none is sent', () => {
+    const looks: [number, number, number][] = [[3, EFFECT.Entangled, EFFECT_LOOK.Vines]];
+    expect(lookOf(looks, 3, EFFECT.Entangled)).toBe(EFFECT_LOOK.Vines);
+    expect(lookOf(looks, 3, EFFECT.Frozen)).toBe(EFFECT_LOOK.Plain);
+    expect(lookOf(looks, 4, EFFECT.Entangled)).toBe(EFFECT_LOOK.Plain);
+    expect(lookOf([], 3, EFFECT.Entangled)).toBe(EFFECT_LOOK.Plain);
   });
 });
