@@ -21,7 +21,7 @@ pub fn def(kind: EntityKind) -> ObjDef {
     }
 }
 
-/// Chest footprint: the same as the mimic's, so shots and the dagger treat both alike.
+/// Chest footprint: the same as the mimic's, so shots and the melee strike treat both alike.
 pub const CHEST_RADIUS: f64 = 6.0;
 /// Barrels (first guesses for the balancing pass).
 pub const BARREL_RADIUS: f64 = 6.0;

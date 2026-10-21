@@ -451,7 +451,9 @@ pub fn wolf_died(run: &mut Run, mi: usize) {
         let p = &mut run.players[pi];
         p.wolf = None;
         // The summon's cooldown ratio is the attack-speed upgrade (this form is bit-exact to `/ attack_speed`).
-        p.cd2 = WOLF_DEAD_COOLDOWN / (crate::defs::abilities::def(crate::defs::abilities::AbilityId::SummonWolf).own.cooldown / p.sheet.secondary.cooldown);
+        // The sheet's cooldown is above 0 (`loadout::MIN_COOLDOWN`); the guard only keeps a 0 from dividing.
+        let cooldown = p.sheet.secondary.cooldown.max(f64::MIN_POSITIVE);
+        p.cd2 = WOLF_DEAD_COOLDOWN / (crate::defs::abilities::def(crate::defs::abilities::AbilityId::SummonWolf).own.cooldown / cooldown);
         let name = p.name.clone();
         run.event(Ev::Msg { text: format!("{name}'s wolf has fallen") }, None);
     }
@@ -653,12 +655,12 @@ mod tests {
 
     #[test]
     fn no_hero_attack_hurts_the_wolf() {
-        // The dagger: a wolf 10 px away is no dagger target, the crossbow fires instead.
+        // The rapier: a wolf 10 px away is no melee target, the bow fires instead.
         let (mut run, id) = run_with_wolf_beside(&[ClassId::ElvenRanger], 0, 10.0);
         assert_eq!(melee_target(&run, 0), None);
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles.len(), 1, "a bolt is fired");
-        untouched(&run, id, "dagger");
+        untouched(&run, id, "rapier");
 
         // A bolt flies straight through it.
         let (mut run, id) = run_with_wolf_beside(&[ClassId::ElvenRanger], 0, 40.0);

@@ -500,7 +500,7 @@ mod tests {
         // The ranger starts at DEX 15 (class 13 + Elf 2) and STR 10.
         let dex = sheet_of(ClassId::ElvenRanger, plus(Attr::Dex, 2), &Equipment::starter(ClassId::ElvenRanger), &up);
         let bow = dex.primary;
-        assert!((bow.damage - 16.0 * 1.35 / 1.25).abs() < 1e-12, "crossbow damage by DEX");
+        assert!((bow.damage - 16.0 * 1.35 / 1.25).abs() < 1e-12, "bow damage by DEX");
         assert!((bow.cooldown - 0.7 / (1.14 / 1.10)).abs() < 1e-12, "firing speed by DEX");
         assert_eq!((bow.range, bow.speed), (260.0, 290.0), "DEX does not move the reach");
         let thrust = dex.fallback;

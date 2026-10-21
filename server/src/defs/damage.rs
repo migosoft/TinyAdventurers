@@ -162,12 +162,20 @@ fn effective(split: &DamageSplit, res: &Resistances) -> f64 {
 }
 
 /// What is left of a hit of `amount` after it kills a target with `hp_left` HP: `amount - hp_left / eff`,
-/// where `eff` is the target's multiplier for the split. `None` if the hit does not kill, or the target is
-/// immune (`eff <= 0`).
+/// where `eff` is the target's multiplier for the split. `None` if the hit does not kill, the target is
+/// immune (`eff <= 0`), or the kill is exact (a rest of at most `OVERKILL_EPS`): nothing flies on, so an
+/// exact kill never hands the next target a 0-damage hit with its on-hit effect.
 pub fn overkill_rest(amount: f64, split: &DamageSplit, hp_left: f64, res: &Resistances) -> Option<f64> {
     let eff = effective(split, res);
-    (eff > 0.0 && amount * eff >= hp_left).then(|| amount - hp_left / eff)
+    if eff <= 0.0 {
+        return None;
+    }
+    let rest = amount - hp_left / eff;
+    (rest > OVERKILL_EPS).then_some(rest)
 }
+
+/// The smallest overkill rest that flies on; anything at or below it is an exact kill (float rounding).
+pub const OVERKILL_EPS: f64 = 1e-9;
 
 /// Serialized as its non-zero shares by damage-type name, e.g. `{"Physical":1.0}`.
 impl serde::Serialize for DamageSplit {
@@ -209,6 +217,8 @@ mod tests {
         let half = Resistances::of(&[(Physical, 0.5)]);
         assert_eq!(overkill_rest(30.0, &phys, 10.0, &half), Some(10.0));
         assert_eq!(overkill_rest(10.0, &phys, 30.0, &Resistances::NONE), None);
+        assert_eq!(overkill_rest(10.0, &phys, 10.0, &Resistances::NONE), None, "an exact kill leaves nothing to fly on");
+        assert_eq!(overkill_rest(10.0, &phys, 10.0 - 1e-12, &Resistances::NONE), None, "nor does a rounding crumb");
         assert_eq!(overkill_rest(30.0, &phys, 10.0, &Resistances::of(&[(Physical, 1.0)])), None);
     }
 

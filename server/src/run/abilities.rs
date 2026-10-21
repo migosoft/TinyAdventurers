@@ -739,7 +739,7 @@ mod tests {
         try_use(&mut run, 0, true, 2);
         assert!(run.monsters[mi].hp < hp, "and hits it on the ground");
 
-        // Dagger: the ranger shoots the crossbow instead.
+        // Rapier: the ranger shoots the bow instead.
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 10.0);
         run.monsters[mi].airborne = true;
@@ -899,6 +899,41 @@ mod tests {
         let r = shoot_line(run, EnemyType::GoblinArcher, &[30.0, 40.0, 50.0], &[5.0, 5.0, 24.0]);
         assert!(!r[0].0 && !r[1].0, "{r:?}");
         assert!(r[2].0 && (r[2].1 - 6.0).abs() < 1e-9, "16 - 5 - 5 = 6: {r:?}");
+    }
+
+    #[test]
+    fn an_exact_kill_stops_the_shot() {
+        use crate::defs::effects::{EffectKind, OnHit};
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        assert_eq!(run.players[0].sheet.primary.damage, 16.0);
+        run.players[0].sheet.primary.on_hit = Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, chance: 1.0, magical: false, power: 10 });
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        run.players[0].aim = 0.0;
+        let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 16.0);
+        let second = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 24.0);
+        try_use(&mut run, 0, true, 1);
+        for _ in 0..30 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        assert!(!run.monsters[first].alive);
+        assert_eq!(run.monsters[second].hp, 24.0, "the goblin behind is untouched");
+        assert!(run.monsters[second].effects.list().is_empty(), "and not slowed");
+    }
+
+    #[test]
+    fn an_exact_melee_kill_stops_the_strike() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        run.players[0].aim = 0.0;
+        // The rapier thrust does 18 (a_melee_kill_carries_on).
+        let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 8.0, 18.0);
+        let second = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 12.0, 24.0);
+        run.events.clear();
+        try_use(&mut run, 0, true, 1);
+        assert!(!run.monsters[first].alive);
+        assert_eq!(run.monsters[second].hp, 24.0, "the next goblin is untouched");
+        let hurt = run.events.iter().filter(|(e, _)| matches!(e, Ev::Dmg { .. })).count();
+        assert_eq!(hurt, 1, "one damage number");
     }
 
     #[test]

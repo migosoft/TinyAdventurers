@@ -1421,9 +1421,44 @@ pub mod tests {
         // so every boss loses a third of its HP (×1.5 → ×1) and every enemy a fifth (×1.25 → ×1): all three
         // halls differ. Part A (effect resistances) left all three values unchanged before this.
         // 2026-10-21, plan 3a (Charge 25.6, reach 22, staffs and punches in melee, overkill piercing): checked
-        // again and all three values are unchanged. The two heroes stand still in the hall, nobody reaches
-        // anybody with a changed number, and no shot kills with damage to spare.
+        // again, values unchanged by plan 3a. `plan_3a_fight_is_pinned` pins a fight that does exercise it.
         assert_eq!(got, vec![11853672065832131168, 7100769620128759448, 1468820053114872194]);
+    }
+
+    /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
+    /// of type `t` placed `dists` px east of it with `hps`; the run after 2 s.
+    fn fight(class: ClassId, t: crate::defs::enemies::EnemyType, dists: &[f64], hps: &[f64], fire: bool) -> Run {
+        let mut run = test_run(&[class], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let p = run.players[0].pos();
+        for (&d, &hp) in dists.iter().zip(hps) {
+            let id = run.spawn_enemy(t, p + Vec2::new(d, 0.0), None);
+            let mi = run.monster_idx(id).unwrap();
+            run.monsters[mi].hp = hp;
+        }
+        for i in 0..120u16 {
+            let seq = run.players[0].ack + 1;
+            let primary = fire.then_some(i + 1);
+            run.players[0].inputs.push_back(InputMsg { seq, aim: 0.0, aim_dist: 60.0, primary, ..Default::default() });
+            run.step();
+        }
+        run
+    }
+
+    // 2026-10-21: pins plan 3a's behaviour in a real fight: a ranger's bolts piercing a line of goblins
+    // on overkill, a Wizard's staff on an orc in melee, a goblin archer punching a hero beside it.
+    #[test]
+    fn plan_3a_fight_is_pinned() {
+        use crate::defs::enemies::EnemyType as E;
+        let enemies = |run: &Run| run.monsters.iter().filter(|m| !m.is_boss).map(|m| (m.alive, m.hp)).collect::<Vec<_>>();
+        let ranger = fight(ClassId::ElvenRanger, E::GoblinArcher, &[40.0, 50.0, 60.0], &[5.0, 5.0, 24.0], true);
+        let wizard = fight(ClassId::Wizard, E::OrcWarrior, &[12.0], &[60.0], true);
+        let paladin = fight(ClassId::Paladin, E::GoblinArcher, &[12.0], &[24.0], false);
+        assert!(enemies(&ranger).is_empty(), "the three goblins fall");
+        assert!(matches!(enemies(&wizard)[..], [(true, hp)] if hp < 60.0) && wizard.projectiles.is_empty(), "the staff, not missiles");
+        assert!(paladin.players[0].hp < paladin.players[0].max_hp, "the archer punches");
+        let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
+        assert_eq!(got, [12818716789722319080, 10046494661674442087, 18070867878348641130]);
     }
 
     #[test]

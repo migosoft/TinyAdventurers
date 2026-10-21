@@ -78,6 +78,10 @@ fn sum(mut xs: Vec<f64>) -> f64 {
     xs.into_iter().sum()
 }
 
+/// The shortest cooldown mods can give an ability (three ticks at 60 Hz), so `CooldownAdd` never
+/// drives it to 0 or below (`companion::wolf_died` divides by it, too).
+pub const MIN_COOLDOWN: f64 = 0.05;
+
 /// `r` with a version's mods.
 pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
     use AbilityMod::*;
@@ -106,12 +110,13 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
     // `with_shares` sums the added shares: sort them so their order does not matter either.
     shares.sort_by(|a, b| (a.0 as u8).cmp(&(b.0 as u8)).then(a.1.total_cmp(&b.1)));
     ResolvedAbility {
-        radius: r.radius * product(radius),
-        range: r.range * product(range),
-        damage: r.damage * product(damage),
-        arc: r.arc * product(arc),
-        duration: r.duration + sum(duration),
-        cooldown: r.cooldown + sum(cooldown),
+        // Clamped: a negative factor or a large negative add never makes a number negative.
+        radius: (r.radius * product(radius)).max(0.0),
+        range: (r.range * product(range)).max(0.0),
+        damage: (r.damage * product(damage)).max(0.0),
+        arc: (r.arc * product(arc)).max(0.0),
+        duration: (r.duration + sum(duration)).max(0.0),
+        cooldown: if cooldown.is_empty() { r.cooldown } else { (r.cooldown + sum(cooldown)).max(MIN_COOLDOWN) },
         split: if shares.is_empty() { r.split } else { r.split.with_shares(&shares) },
         pierce,
         pierce_through: through,
@@ -310,6 +315,16 @@ mod tests {
         assert!((a.split.share(DamageType::Heat) - 0.25).abs() < 1e-12 && (a.split.share(DamageType::Physical) - 0.75).abs() < 1e-12);
         let c = apply_mods(r, &[CompanionHpMul(2.0), CompanionDashCooldownAdd(-1.0)]);
         assert_eq!(c, r, "the companion mods leave the ability alone");
+    }
+
+    #[test]
+    fn mods_never_drive_a_number_below_its_floor() {
+        use AbilityMod::*;
+        let r = hero_sheet(ClassId::Wizard, &Build::start(ClassId::Wizard)).unwrap().secondary;
+        let a = apply_mods(r, &[CooldownAdd(-100.0), DurationAdd(-100.0), DamageMul(-1.0), RadiusMul(-1.0), RangeMul(-1.0), ArcMul(-1.0)]);
+        assert_eq!(a.cooldown, MIN_COOLDOWN, "a cooldown never reaches 0");
+        assert_eq!((a.duration, a.damage, a.radius, a.range, a.arc), (0.0, 0.0, 0.0, 0.0, 0.0), "no negative numbers");
+        assert_eq!(apply_mods(r, &[]).cooldown, r.cooldown, "no mods, no floor");
     }
 
     #[test]
