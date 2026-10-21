@@ -721,6 +721,8 @@ One table (`TYPE_EFFECTS` in `defs/effects.rs`) decides which effect a hit appli
 - **Who resists Fear** (the user; no immunities, only resistances): the **Undead** race 100 % (every skeleton and the lich), the **Demon** race 50 % (imps, chorts, the demon), the bosses 100 % in total (the demon's own list adds 50 % to its race's, the dragon's and the lich's lists reach 100 %). Everything else is left to the balancing pass.
 - **Heroes and Fear:** no enemy frightens yet. Fear on a hero (forced running, no attacks) is a TODO for when one does; the wolf is an ally, so War Cry never frightens it.
 - **Look:** an HUD letter like the other effects; a fleeing monster shows a small "!" above its head (the agent's call).
+- **Effects are general** (the user): any source can apply them later (spider webs or a web spell entangle; an aura may frighten). Nothing about Entangled or Fear is tied to Entangle or War Cry: the save belongs to the effect (STR breaks roots and webs alike).
+- **The source picks the effect's look** (the user): an active effect carries a `look` chosen by whoever applies it, so the same effect can be drawn differently by source (Entangled by Entangle: greenish vines; later by a web: white-grey webbing). Each effect has a default look; Entangled's first named look is **Vines**. The look travels to the client with the effect (the start event and the snapshot), so a creature that comes into view later is drawn right too. Plan 3b builds the field and the Vines look; other looks are a new variant plus its drawing.
 
 - **Tree nodes that named Slowed** (plan 4; the agent's calls): Deep Winter reads Chilled or Frozen, Juggernaut resists Slowed, Chilled and Entangled, Deadeye counts Slowed, Chilled, Entangled or sleeping targets.
 
