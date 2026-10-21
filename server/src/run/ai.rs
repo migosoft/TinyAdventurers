@@ -625,6 +625,32 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn an_archer_punches_a_hero_in_reach() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let ppos = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::GoblinArcher, ppos - Vec2::new(10.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].ai.cd = 0.0;
+        run.monsters[mi].ai.alt_cd = 0.0;
+        run.projectiles.clear();
+        let hp = run.players[0].hp;
+        let mut first = None;
+        for _ in 0..120 {
+            run.step();
+            if first.is_none() {
+                first = run.monsters[mi].ai.windup.map(|w| w.alt);
+            }
+            if run.players[0].hp < hp {
+                break;
+            }
+        }
+        assert_eq!(first, Some(true), "the first wind-up is the melee alt");
+        assert!(run.players[0].hp < hp, "the punch lands");
+        assert!(run.projectiles.is_empty(), "no arrow is shot");
+    }
+
+    #[test]
     fn only_strong_melee_pushes() {
         let pushes = |t: EnemyType, alt: bool| {
             let mut run = test_run(&[ClassId::Paladin], BossId::Demon);

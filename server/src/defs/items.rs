@@ -96,6 +96,8 @@ super::enum_list::listed_enum! {
         Tail = 35,
         RingOfTheMagus = 36,
         SeekersBand = 37,
+        NecromancerStaff = 38,
+        SummonerStaff = 39,
     }
 }
 
@@ -267,6 +269,8 @@ pub fn def(id: ItemId) -> ItemDef {
         I::Claws => item("Claws", "", melee(K::Claws, 6.0, 0.8, 1.6, 0.0, heat(), At::BASE), ALL, &[], &[]),
         I::BeastBite => item("Beast Bite", "", melee(K::Bite, 10.0, 0.9, 1.0, 0.0, DamageSplit::split(&[(DamageType::Magical, 0.2)]), At::BASE), ALL, &[], &[]),
         I::Tail => item("Tail", "", melee(K::Tail, 10.0, 1.25, 2.4, 10.0, phys(), At::BASE), ALL, &[], &[]),
+        I::NecromancerStaff => item("Necromancer Staff", "weapon_green_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
+        I::SummonerStaff => item("Summoner Staff", "weapon_red_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::RingOfTheMagus => item(
             "Ring of the Magus",
             "",
