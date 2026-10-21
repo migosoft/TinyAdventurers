@@ -445,7 +445,7 @@ mod tests {
     #[test]
     fn a_moving_light_lights_the_shadowcast_from_its_tile() {
         let (mut run, tx, ty) = dark_run();
-        run.spawn_hazard(EntityKind::FirePatch, at(tx, ty), 10.0, 3.0, 8.0);
+        crate::run::spawn_fire_patch(&mut run, at(tx, ty), 10.0, 3.0, 8.0);
         assert!(run.is_lit(at(tx + 4, ty)), "radius 4");
         assert!(!run.is_lit(at(tx + 4, ty + 1)), "outside the radius-4 shadowcast, though near its centre");
         let corner = Vec2::new((tx + 4) as f64 * TILE + 15.9, ty as f64 * TILE + 15.9);
@@ -497,7 +497,7 @@ mod tests {
     #[test]
     fn fire_patches_glow() {
         let (mut run, tx, ty) = dark_run();
-        run.spawn_hazard(EntityKind::FirePatch, at(tx, ty), 10.0, 3.0, 8.0);
+        crate::run::spawn_fire_patch(&mut run, at(tx, ty), 10.0, 3.0, 8.0);
         assert!(run.is_lit(at(tx + 2, ty)));
     }
 

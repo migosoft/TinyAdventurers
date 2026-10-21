@@ -205,7 +205,7 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
             continue;
         }
         let extra = (h.life * 1000.0) as u32;
-        ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, 0.0, 0, 0, extra, 0));
+        ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, h.radius as f32, 0, 0, extra, 0));
     }
     ents
 }
@@ -411,7 +411,7 @@ mod tests {
         let (tx, ty) = dark_view(&mut run, 0.0);
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
-        run.spawn_hazard(EntityKind::FirePatch, Map::center_of(tx + 3, ty), 10.0, 3.0, 8.0);
+        crate::run::spawn_fire_patch(&mut run, Map::center_of(tx + 3, ty), 10.0, 3.0, 8.0);
         let inside = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 7, ty), None);
         // 4.1 tiles from the patch: outside its radius-4 shadowcast.
         let outside = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 7, ty + 1), None);

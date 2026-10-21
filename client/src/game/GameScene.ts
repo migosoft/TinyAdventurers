@@ -707,6 +707,7 @@ export class GameScene extends Phaser.Scene {
       seen.add(e.id);
       if (e.kind === KIND.Torch) this.drawTorch(e, now);
       else if (e.kind === KIND.FirePatch) this.drawHazard(e);
+      else if (e.kind === KIND.HolyGround || e.kind === KIND.Roots) continue; // drawn from the ground-area task on; never a figure
       else if (e.kind === KIND.Chest) this.drawChest(e);
       else if (e.kind === KIND.Barrel) this.drawBarrel(e);
       else if (e.kind === KIND.Mimic) this.drawMimic(e, dt, px, py);
@@ -986,7 +987,7 @@ export class GameScene extends Phaser.Scene {
     this.bars.clear();
     this.heroBars.clear();
     for (const e of this.ents.values()) {
-      if (isProjectileKind(e.kind) || e.kind === KIND.FirePatch || e.kind === KIND.Chest || e.kind === KIND.Barrel || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
+      if (isProjectileKind(e.kind) || e.kind === KIND.FirePatch || e.kind === KIND.HolyGround || e.kind === KIND.Roots || e.kind === KIND.Chest || e.kind === KIND.Barrel || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
       // The ogre (mini-boss) always shows a wide bar; others only once hurt.
       const ogre = e.kind === KIND.Ogre;
       if (e.hp >= 1 && !ogre) continue;

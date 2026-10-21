@@ -30,6 +30,7 @@ use crate::protocol::{encode, BossId, ClassId, ClientMsg, Ev, InputMsg, LevelCho
 use axum::extract::ws::Message;
 use levels::Level;
 use entities::*;
+use effects::Apply;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::VecDeque;
@@ -145,6 +146,12 @@ pub struct Run {
     /// Someone used debug mode (immortal): no XP is banked for this run.
     pub debug_used: bool,
     pub srv_ms: f32,
+}
+
+/// A patch of fire that hurts heroes and allies (the dragon's; the wolf's fire).
+pub fn spawn_fire_patch(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64) {
+    let kind = EntityKind::FirePatch;
+    run.spawn_hazard(kind, pos, radius, life, HazardSide::Monsters, HazardPulse::Hurt(Damage::new(damage, kind_split(kind))));
 }
 
 impl Run {
@@ -793,17 +800,48 @@ impl Run {
                 continue;
             }
             h.pulse_t = 0.5;
-            let (pos, r, dmg) = (h.pos, h.radius, h.damage);
-            for c in self.foes_touching(pos, r, false) {
-                self.hurt_creature(c, dmg);
+            let (pos, r, side, pulse) = (h.pos, h.radius, h.side, h.pulse);
+            match (side, pulse) {
+                (HazardSide::Monsters, HazardPulse::Hurt(dmg)) => {
+                    for c in self.foes_touching(pos, r, false) {
+                        self.hurt_creature(c, dmg);
+                    }
+                    objects::hurt_objects_in(self, pos, r, None, dmg);
+                }
+                (HazardSide::Monsters, HazardPulse::Bind(on)) => {
+                    for c in self.foes_touching(pos, r, false) {
+                        self.apply(c, Apply::from_hit(on));
+                    }
+                }
+                (HazardSide::Heroes { owner }, HazardPulse::Hurt(dmg)) => {
+                    let credit = self.players.iter().position(|p| p.id == owner);
+                    for mi in self.enemies_touching(pos, r) {
+                        self.hurt_monster(mi, dmg, false, credit);
+                    }
+                }
+                (HazardSide::Heroes { owner }, HazardPulse::Bind(on)) => {
+                    let from = self.players.iter().find(|p| p.id == owner).map_or(pos, |p| p.pos());
+                    for mi in self.enemies_touching(pos, r) {
+                        self.apply(effects::Creature::Monster(mi), Apply { source: Some((owner, from)), ..Apply::from_hit(on) });
+                    }
+                }
             }
-            objects::hurt_objects_in(self, pos, r, None, dmg);
         }
     }
 
-    pub fn spawn_hazard(&mut self, kind: EntityKind, pos: Vec2, radius: f64, life: f64, damage: f64) {
+    /// The living enemy monsters (not allies) whose bodies touch the circle at `at`.
+    fn enemies_touching(&self, at: Vec2, r: f64) -> Vec<usize> {
+        (0..self.monsters.len())
+            .filter(|&mi| {
+                let m = &self.monsters[mi];
+                m.alive && !m.is_ally() && m.sinking.is_none() && m.pos.dist(at) < r + m.radius
+            })
+            .collect()
+    }
+
+    pub fn spawn_hazard(&mut self, kind: EntityKind, pos: Vec2, radius: f64, life: f64, side: HazardSide, pulse: HazardPulse) {
         let id = self.alloc_id();
-        self.hazards.push(Hazard { id, kind, pos, radius, life, pulse_t: 0.25, damage: Damage::new(damage, kind_split(kind)) });
+        self.hazards.push(Hazard { id, kind, pos, radius, life, pulse_t: 0.25, side, pulse });
         self.attach_kind_light(id, kind);
     }
 
@@ -1874,5 +1912,19 @@ pub mod tests {
             };
             assert_eq!(m.melee, today, "{t:?}");
         }
+    }
+
+    #[test]
+    fn fire_patches_still_burn_heroes() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        let at = run.players[0].pos();
+        let hp = run.players[0].hp;
+        spawn_fire_patch(&mut run, at, 10.0, 3.0, 8.0);
+        assert!(matches!(run.hazards[0].side, HazardSide::Monsters));
+        run.tick_hazards(0.3);
+        assert!(run.players[0].hp < hp, "the first pulse comes at 0.25 s");
+        let after = run.players[0].hp;
+        run.tick_hazards(0.3);
+        assert_eq!(run.players[0].hp, after, "the next is 0.5 s later");
     }
 }

@@ -23,6 +23,7 @@ export const KIND = {
   "FrostBolt": 55,
   "GloomBolt": 60,
   "GoblinArcher": 10,
+  "HolyGround": 71,
   "Imp": 19,
   "Judgement": 64,
   "Lich": 31,
@@ -34,6 +35,7 @@ export const KIND = {
   "OrcWarrior": 13,
   "Paladin": 1,
   "RaisedSkeleton": 16,
+  "Roots": 72,
   "ShadowBolt": 54,
   "SkeletonArcher": 12,
   "SkeletonWarrior": 11,
@@ -234,6 +236,24 @@ export const ABILITIES = {
     "name": "Charge",
     "ranged": false,
     "shape": "Dash",
+    "slot": "Secondary"
+  },
+  "Consecrate": {
+    "classes": [
+      "Paladin"
+    ],
+    "name": "Consecrate",
+    "ranged": false,
+    "shape": "GroundArea",
+    "slot": "Secondary"
+  },
+  "Entangle": {
+    "classes": [
+      "ElvenRanger"
+    ],
+    "name": "Entangle",
+    "ranged": true,
+    "shape": "GroundArea",
     "slot": "Secondary"
   },
   "Fireball": {

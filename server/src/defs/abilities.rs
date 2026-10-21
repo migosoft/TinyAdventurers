@@ -54,6 +54,10 @@ super::enum_list::listed_enum! {
         Haste = 19,
         /// Cleanses the party around and wards it.
         Purify = 20,
+        /// Holy ground at the Paladin's feet that hurts enemies standing in it.
+        Consecrate = 21,
+        /// Roots at an aimed spot that entangle enemies standing in them.
+        Entangle = 22,
     }
 }
 
@@ -183,6 +187,8 @@ pub const SLAM_PUSH: f64 = 24.0;
 /// How long (s) Frost Nova's and Purify's flashes last.
 pub const NOVA_FLASH: f64 = 0.3;
 pub const PURIFY_FLASH: f64 = 0.3;
+/// Entangle: the seconds of Entangled each pulse of the roots (every 0.5 s) renews.
+pub const ENTANGLE_PULSE_SECS: f64 = 1.0;
 
 /// The id of arrow `i` of a Volley that starts at `shot`: the server's rule; the client
 /// reserves ids so that none is 0.
@@ -297,6 +303,15 @@ pub fn def(id: AbilityId) -> AbilityDef {
             req: &[Requirement::Attr(Attr::Wil, 14)],
             own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Warded, power: Attr::Cha, look: EffectLook::Plain }), ..own(0.0, 15.0, 64.0, 0.0, 64.0, 3.0, None, 0) },
             ..base("Purify", Secondary, C::Innate, Uses::Nothing, false, Shape::SelfArea, NO_OWN, &[K::Paladin])
+        },
+        Consecrate => AbilityDef {
+            req: &[Requirement::Attr(Attr::Cha, 15)],
+            ..base("Consecrate", Secondary, C::Innate, Uses::Nothing, false, Shape::GroundArea, own(8.0, 12.0, 0.0, 0.0, 40.0, 5.0, Some(EntityKind::HolyGround), 15), &[K::Paladin])
+        },
+        Entangle => AbilityDef {
+            req: &[Requirement::Attr(Attr::Cha, 14)],
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Entangled, power: Attr::Cha, look: EffectLook::Vines }), ..own(0.0, 14.0, 120.0, 0.0, 36.0, 4.0, Some(EntityKind::Roots), 0) },
+            ..base("Entangle", Secondary, C::Innate, Uses::Nothing, true, Shape::GroundArea, NO_OWN, &[K::ElvenRanger])
         },
         SummonWolf => base("Summon Wolf", Secondary, C::Innate, Uses::Nothing, false, Shape::Summon, own(0.0, 8.0, 0.0, 0.0, 0.0, 0.0, None, 13), &[K::ElvenRanger]),
     }

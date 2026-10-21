@@ -663,7 +663,7 @@ mod tests {
         let mut run = clear_run(BossId::Lich);
         let (_, oi) = barrel_at(&mut run, Vec2::new(40.0, 0.0));
         let at = run.objects[oi].pos + Vec2::new(12.0, 0.0);
-        run.spawn_hazard(EntityKind::FirePatch, at, 10.0, 3.0, 8.0);
+        crate::run::spawn_fire_patch(&mut run, at, 10.0, 3.0, 8.0);
         run.tick_hazards(0.3);
         assert!(lit(&run, oi));
     }

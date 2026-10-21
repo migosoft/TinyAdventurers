@@ -826,7 +826,7 @@ mod tests {
         // The ranger stands beside it, so the wolf stays in the fire instead of following.
         run.players[0].mv.x = at.x - 16.0;
         run.players[0].mv.y = at.y;
-        run.spawn_hazard(EntityKind::FirePatch, at, 10.0, 2.0, 5.0);
+        crate::run::spawn_fire_patch(&mut run, at, 10.0, 2.0, 5.0);
         for _ in 0..30 {
             run.step();
         }

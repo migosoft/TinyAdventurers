@@ -183,7 +183,7 @@ impl BossBehaviour for Dragon {
                         let d = run.rng.gen_range(30.0..BREATH_RANGE);
                         let at = pos + Vec2::from_angle(a) * d;
                         if !run.layout.map.opaque_at(at) {
-                            run.spawn_hazard(EntityKind::FirePatch, at, 10.0, 3.0, 8.0);
+                            crate::run::spawn_fire_patch(run, at, 10.0, 3.0, 8.0);
                         }
                     }
                 }

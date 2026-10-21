@@ -1,6 +1,6 @@
 //! Player abilities (one executor per AbilityId) and projectile simulation.
 
-use super::entities::{Pierce, Projectile};
+use super::entities::{HazardPulse, HazardSide, Pierce, Projectile};
 use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::{self as ab, AbilityId, Shape, Uses};
@@ -185,7 +185,7 @@ fn use_projectile(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> A
                 spawn_player_projectile(run, pi, kind_of(a.projectile), ab::volley_shot(shot, i), Vec2::from_angle(angle), a.speed, w.amount, a.radius, life, 0.0, None, crit, w.split, w.on_hit, w.power, pierce);
             }
         }
-        AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
+        AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle => {
             unreachable!("{:?} is not a projectile", a.id)
         }
     }
@@ -207,7 +207,7 @@ fn use_blast(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> Anim {
             let life = a.range / a.speed + 0.1;
             spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, a.speed, a.damage, 4.0, life, a.radius, Some(target), crit, a.split, a.on_hit, a.power, Pierce::Never);
         }
-        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
+        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle => {
             unreachable!("{:?} is not a blast", a.id)
         }
     }
@@ -227,7 +227,7 @@ fn use_swing(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim 
                 run.add_flash(LightKind::Holy, at, ab::SMITE_FLASH);
             }
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle => {
             unreachable!("{:?} is not a swing", a.id)
         }
     }
@@ -273,7 +273,7 @@ fn use_ring(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
         AbilityId::GroundSlam => {
             run.players[pi].slam = Some(ab::SLAM_WINDUP);
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::Haste | AbilityId::Purify => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle => {
             unreachable!("{:?} is not a ring", a.id)
         }
     }
@@ -335,7 +335,7 @@ fn use_dash(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
             p.mv.dash_dy = dir.y;
             p.dash_hit.clear();
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle => {
             unreachable!("{:?} is not a dash", a.id)
         }
     }
@@ -387,21 +387,37 @@ fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> A
                 run.apply(c, Apply::plain(own.kind, Some(own.secs)));
             }
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Consecrate | AbilityId::Entangle => {
             unreachable!("{:?} is not a self area", a.id)
         }
     }
     Anim::Cast
 }
 
-/// A hazard placed at the user's feet or at an aimed spot: no ability has one yet.
-fn use_ground_area(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
+/// A hazard of the hero's side, placed at the user's feet (Consecrate hurts) or at an aimed spot
+/// (Entangle binds).
+fn use_ground_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::GroundArea);
+    let (id, pos, aim, aim_dist) = {
+        let p = &run.players[pi];
+        (p.id, p.pos(), p.aim, p.aim_dist)
+    };
+    let side = HazardSide::Heroes { owner: id };
     match a.id {
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
+        AbilityId::Consecrate => {
+            run.spawn_hazard(kind_of(a.projectile), pos, a.radius, a.duration, side, HazardPulse::Hurt(damage_of(a)));
+        }
+        AbilityId::Entangle => {
+            let at = pos + Vec2::from_angle(aim) * aim_dist.clamp(24.0, a.range);
+            let own = a.effect.expect("Entangle has its own effect");
+            let bind = OnHit { secs: ab::ENTANGLE_PULSE_SECS, ..own };
+            run.spawn_hazard(kind_of(a.projectile), at, a.radius, a.duration, side, HazardPulse::Bind(bind));
+        }
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle => {
             unreachable!("{:?} is not a ground area", a.id)
         }
     }
+    Anim::Cast
 }
 
 /// An effect on the user only: Poison Coat.
@@ -412,7 +428,7 @@ fn use_buff(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
             let own = a.effect.expect("Poison Coat has its own effect");
             run.apply(Creature::Player(pi), Apply::from_hit(own));
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle => {
             unreachable!("{:?} is not a buff", a.id)
         }
     }
@@ -424,7 +440,7 @@ fn use_summon(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim
     debug_assert!(ab::def(a.id).shape == Shape::Summon);
     match a.id {
         AbilityId::SummonWolf => super::companion::use_ability(run, pi),
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle => {
             unreachable!("{:?} is not a summon", a.id)
         }
     }
@@ -2382,5 +2398,110 @@ mod tests {
         assert_eq!(booms(&run, 13).len(), 1);
         assert!(!run.apply_effect(me, EffectKind::Sleep, Some(5.0)), "Warded refuses Sleep");
         assert!(!run.has_effect(me, EffectKind::Sleep));
+    }
+
+    fn consecrate_run() -> Run {
+        run_with_ability(ClassId::Paladin, AbilitySlot::Secondary, AbilityId::Consecrate, Attributes::new(0, 0, 0, 0, 0, 8), Equipment::starter(ClassId::Paladin))
+    }
+
+    fn entangle_run() -> Run {
+        let mut run = run_with_ability(ClassId::ElvenRanger, AbilitySlot::Secondary, AbilityId::Entangle, Attributes::new(0, 0, 0, 0, 0, 14), Equipment::starter(ClassId::ElvenRanger));
+        run.players[0].aim_dist = 80.0;
+        run
+    }
+
+    #[test]
+    fn consecrate_hurts_enemies_only() {
+        let mut run = consecrate_run();
+        let a = run.players[0].sheet.secondary;
+        assert_eq!(a.id, AbilityId::Consecrate);
+        let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 20.0, 1000.0);
+        let doomed = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 25.0, 1.0);
+        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(wolf).unwrap();
+        run.monsters[wi].pos = run.players[0].pos() + Vec2::new(0.0, 15.0);
+        let (wolf_hp, hero_hp, kills) = (run.monsters[wi].hp, run.players[0].hp, run.players[0].kills);
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.players[0].cd2, 12.0);
+        assert_eq!(run.hazards.len(), 1);
+        let h = &run.hazards[0];
+        assert_eq!((h.kind, h.radius, h.life), (EntityKind::HolyGround, 40.0, 5.0));
+        assert_eq!(h.side, HazardSide::Heroes { owner: run.players[0].id });
+        let hid = h.id;
+        assert!(run.lights.sources.iter().any(|l| l.kind == LightKind::Holy && l.anchor == Anchor::Entity(hid)), "Holy light while it lasts");
+        let res = run.monsters[g].effects.res(run.monsters[g].res);
+        let one = resolve(&Damage::new(a.damage, a.split), &res);
+        assert!(one > 0.0);
+        let mut seen = Vec::new();
+        for _ in 0..300 {
+            run.tick_hazards(1.0 / 60.0); // the hazard alone: nobody walks out of it
+            let n = ((1000.0 - run.monsters[g].hp) / one).round() as usize;
+            if seen.last() != Some(&n) {
+                seen.push(n);
+            }
+        }
+        assert_eq!(seen, (0..=10).collect::<Vec<_>>(), "a pulse every 0.5 s from 0.25 s for 5 s");
+        assert!(!run.monsters[doomed].alive);
+        assert_eq!(run.players[0].kills, kills + 1, "the kill is the paladin's");
+        assert_eq!(run.monsters[wi].hp, wolf_hp, "the wolf is untouched");
+        assert_eq!(run.players[0].hp, hero_hp, "so is the hero");
+        assert!(run.hazards[0].life < 0.05, "it lasts 5 s");
+        run.step();
+        assert!(run.hazards.is_empty());
+    }
+
+    #[test]
+    fn entangle_binds_enemies_at_the_aimed_spot() {
+        let mut run = entangle_run();
+        let a = run.players[0].sheet.secondary;
+        assert_eq!(a.id, AbilityId::Entangle);
+        let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
+        let far = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 140.0, 1000.0);
+        let here = run.players[0].pos();
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.players[0].cd2, 14.0);
+        let h = &run.hazards[0];
+        assert_eq!((h.kind, h.radius, h.life), (EntityKind::Roots, 36.0, 4.0));
+        assert!((h.pos.x - (here.x + 80.0)).abs() < 1e-9 && (h.pos.y - here.y).abs() < 1e-9);
+        assert!(matches!(h.pulse, HazardPulse::Bind(on) if on.kind == EffectKind::Entangled && on.look == EffectLook::Vines && on.secs == ab::ENTANGLE_PULSE_SECS));
+        run.tick_hazards(0.3);
+        let m = Creature::Monster(g);
+        assert!(run.has_effect(m, EffectKind::Entangled));
+        assert!(run.monsters[g].effects.no_move() && !run.monsters[g].effects.no_act(), "it cannot move but still acts");
+        assert!(run.monsters[g].effects.looks().any(|(k, l)| k == EffectKind::Entangled && l == EffectLook::Vines));
+        assert!(!run.has_effect(Creature::Monster(far), EffectKind::Entangled), "out of the roots");
+        // The roots end 3.7 s from now; the last pulse's Entangled (1 s before the save) runs out
+        // `scaled_secs` later, and nothing renews it.
+        let power = a.effect.unwrap().power;
+        let last = scaled_secs(ab::ENTANGLE_PULSE_SECS, power, run.monsters[g].attrs.get(Attr::Str));
+        for _ in 0..((3.7 + last) * 60.0) as usize + 5 {
+            run.step();
+        }
+        assert!(run.hazards.is_empty());
+        assert!(!run.has_effect(m, EffectKind::Entangled), "free within one pulse's time of the roots ending");
+    }
+
+    #[test]
+    fn entangle_is_blocked_in_melee() {
+        let mut run = entangle_run();
+        put_enemy(&mut run, 0, EnemyType::GoblinArcher, 10.0, 1000.0);
+        try_use(&mut run, 0, false, 1);
+        assert!(run.hazards.is_empty());
+        assert_eq!(run.players[0].cd2, 0.0);
+    }
+
+    #[test]
+    fn strong_creatures_break_free_sooner() {
+        let mut run = entangle_run();
+        let a = run.players[0].sheet.secondary;
+        let power = a.effect.unwrap().power;
+        let goblin = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
+        let ogre = put_enemy(&mut run, 0, EnemyType::Ogre, 85.0, 1000.0);
+        try_use(&mut run, 0, false, 1);
+        run.tick_hazards(0.3);
+        let (g, o) = (left(&run, Creature::Monster(goblin), EffectKind::Entangled).unwrap(), left(&run, Creature::Monster(ogre), EffectKind::Entangled).unwrap());
+        assert!((g - scaled_secs(1.0, power, run.monsters[goblin].attrs.get(Attr::Str))).abs() < 1e-9);
+        assert!((o - scaled_secs(1.0, power, run.monsters[ogre].attrs.get(Attr::Str))).abs() < 1e-9);
+        assert!(o < g, "STR 19 against STR 8: {o} vs {g}");
     }
 }

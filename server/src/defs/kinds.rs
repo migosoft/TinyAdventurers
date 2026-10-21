@@ -52,6 +52,10 @@ pub enum EntityKind {
     ThrownAxe = 65,
     // Hazards
     FirePatch = 70,
+    /// Consecrate: holy ground that hurts enemies.
+    HolyGround = 71,
+    /// Entangle: roots that bind enemies.
+    Roots = 72,
     // Props
     Chest = 80,
     Barrel = 81,
@@ -60,7 +64,7 @@ pub enum EntityKind {
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 41] = [
+    pub const ALL: [EntityKind; 43] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -99,6 +103,8 @@ impl EntityKind {
         EntityKind::Judgement,
         EntityKind::ThrownAxe,
         EntityKind::FirePatch,
+        EntityKind::HolyGround,
+        EntityKind::Roots,
         EntityKind::Chest,
         EntityKind::Barrel,
         EntityKind::Torch,

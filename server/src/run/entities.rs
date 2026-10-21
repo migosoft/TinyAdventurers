@@ -1,5 +1,6 @@
 use crate::collision::MoveState;
 use crate::defs::damage::{Damage, DamageSplit, Resistances};
+use crate::defs::effects::OnHit;
 use crate::defs::attributes::Attributes;
 use crate::defs::enemies::EnemyType;
 use crate::defs::races::Sight;
@@ -339,6 +340,22 @@ impl Pierce {
     }
 }
 
+/// Whose hazard it is.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HazardSide {
+    /// Hurts heroes and allies (fire patches).
+    Monsters,
+    /// Acts on enemy monsters only, crediting the hero with entity id `owner`.
+    Heroes { owner: u32 },
+}
+
+/// What a hazard does every 0.5 s to those it acts on.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum HazardPulse {
+    Hurt(Damage),
+    Bind(OnHit),
+}
+
 pub struct Hazard {
     pub id: u32,
     pub kind: EntityKind,
@@ -346,5 +363,6 @@ pub struct Hazard {
     pub radius: f64,
     pub life: f64,
     pub pulse_t: f64,
-    pub damage: Damage,
+    pub side: HazardSide,
+    pub pulse: HazardPulse,
 }
