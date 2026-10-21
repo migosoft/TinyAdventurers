@@ -6,6 +6,7 @@ use super::damage::{DamageSplit, DamageType};
 use super::effects::{EffectKind, EffectLook};
 use super::kinds::EntityKind;
 use super::requirements::Requirement;
+use super::weapons::WeaponKind;
 use crate::protocol::ClassId;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -25,6 +26,16 @@ super::enum_list::listed_enum! {
         Shoot = 5,
         /// Summons or heals the Dire Wolf.
         SummonWolf = 6,
+        /// A frost bolt that chills.
+        FrostShard = 7,
+        /// A spark that jumps on to the nearest enemies.
+        ChainSpark = 8,
+        /// The Paladin's holy bolt.
+        Judgement = 9,
+        /// A throw of the Throwing Axes.
+        Hurl = 10,
+        /// Three arrows in a fan.
+        Volley = 11,
     }
 }
 
@@ -132,6 +143,20 @@ pub struct AbilityDef {
 }
 
 pub const DASH_SPEED: f64 = 300.0;
+/// Volley: the arrows of one shot, and the angle between the outer two (30 degrees).
+pub const VOLLEY_ARROWS: u8 = 3;
+pub const VOLLEY_SPREAD: f64 = 30.0 * std::f64::consts::PI / 180.0;
+/// Chain Spark: how many times it jumps on, how far (px) from the last target, and the factor on
+/// the damage of each jump.
+pub const CHAIN_JUMPS: u8 = 2;
+pub const CHAIN_REACH: f64 = 48.0;
+pub const CHAIN_FALLOFF: f64 = 0.7;
+
+/// The id of arrow `i` of a Volley that starts at `shot`: the server's rule; the client
+/// reserves ids so that none is 0.
+pub fn volley_shot(shot: u16, i: u8) -> u16 {
+    shot.wrapping_add(i as u16)
+}
 /// Knockback: the push speed is multiplied by this every 1/60 s step
 /// (e^-0.25, so a push is mostly over after about 0.2 s), and stops below
 /// `KNOCK_MIN_SPEED` px/s. See `collision::knock_speed`.
@@ -174,6 +199,28 @@ pub fn def(id: AbilityId) -> AbilityDef {
             ..base("Charge", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, own(0.0, 5.0, 0.0, DASH_SPEED, 10.0, 0.18, None, 0), &[K::Barbarian])
         },
         Shoot => base("Shoot", Primary, C::WeaponAttack, Uses::Ranged, true, Shape::Projectile, NO_OWN, &[K::ElvenRanger]),
+        FrostShard => AbilityDef {
+            req: &[Requirement::Attr(Attr::Int, 14)],
+            own: OwnStats { split: Some(DamageSplit::split(&[(DamageType::Cold, 0.4), (DamageType::Magical, 0.3)])), ..own(10.0, 0.5, 200.0, 200.0, 3.0, 0.0, Some(EntityKind::FrostBolt), 14) },
+            ..base("Frost Shard", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[K::Wizard])
+        },
+        ChainSpark => AbilityDef {
+            req: &[Requirement::Attr(Attr::Int, 18)],
+            ..base("Chain Spark", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, own(14.0, 0.8, 180.0, 260.0, 3.0, 0.0, Some(EntityKind::ChainSpark), 18), &[K::Wizard])
+        },
+        Judgement => AbilityDef {
+            req: &[Requirement::Attr(Attr::Cha, 16)],
+            ..base("Judgement", Primary, C::Innate, Uses::Nothing, true, Shape::Projectile, own(18.0, 0.9, 150.0, 220.0, 3.0, 0.0, Some(EntityKind::Judgement), 16), &[K::Paladin])
+        },
+        Hurl => AbilityDef {
+            req: &[Requirement::WeaponKind(&[WeaponKind::ThrowingAxe])],
+            ..base("Hurl", Primary, C::WeaponAttack, Uses::Ranged, true, Shape::Projectile, NO_OWN, &[K::Barbarian])
+        },
+        Volley => AbilityDef {
+            req: &[Requirement::Attr(Attr::Dex, 15), Requirement::WeaponKind(&[WeaponKind::Bow, WeaponKind::Longbow])],
+            weapon_mult: WeaponMult { damage: 0.6, time: 1.4, ..WeaponMult::ONE },
+            ..base("Volley", Primary, C::WeaponAttack, Uses::Ranged, true, Shape::Projectile, NO_OWN, &[K::ElvenRanger])
+        },
         SummonWolf => base("Summon Wolf", Secondary, C::Innate, Uses::Nothing, false, Shape::Summon, own(0.0, 8.0, 0.0, 0.0, 0.0, 0.0, None, 13), &[K::ElvenRanger]),
     }
 }

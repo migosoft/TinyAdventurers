@@ -30,6 +30,7 @@ type LightAddW = [number, number, number, number, number, number, boolean];
 type LightRemoveW = [number, number];
 type EffectW = [number, number, number, boolean, number];
 type GrowlW = [number, number];
+type ZapW = [number, number, number, number, number];
 
 function unpackEv(e: EvW): Ev {
   switch (e[0]) {
@@ -92,6 +93,10 @@ function unpackEv(e: EvW): Ev {
     case EV.Growl: {
       const [, id] = e as GrowlW;
       return { t: 'Growl', id };
+    }
+    case EV.Zap: {
+      const [, x, y, x2, y2] = e as ZapW;
+      return { t: 'Zap', x: pos(x), y: pos(y), x2: pos(x2), y2: pos(y2) };
     }
     default:
       throw new Error(`unknown event code ${e[0]}`);

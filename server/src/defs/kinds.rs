@@ -44,6 +44,12 @@ pub enum EntityKind {
     /// The lich's blinding curse (dark orb) and sleep mist (purple cloud).
     BlindOrb = 61,
     SleepOrb = 62,
+    /// Chain Spark: a spark that jumps on from the first enemy it hits.
+    ChainSpark = 63,
+    /// Judgement: the Paladin's holy bolt.
+    Judgement = 64,
+    /// The Barbarian's Throwing Axes.
+    ThrownAxe = 65,
     // Hazards
     FirePatch = 70,
     // Props
@@ -54,7 +60,7 @@ pub enum EntityKind {
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 38] = [
+    pub const ALL: [EntityKind; 41] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -89,6 +95,9 @@ impl EntityKind {
         EntityKind::GloomBolt,
         EntityKind::BlindOrb,
         EntityKind::SleepOrb,
+        EntityKind::ChainSpark,
+        EntityKind::Judgement,
+        EntityKind::ThrownAxe,
         EntityKind::FirePatch,
         EntityKind::Chest,
         EntityKind::Barrel,

@@ -6,6 +6,7 @@ export const KIND = {
   "Barrel": 81,
   "BlindOrb": 61,
   "Bolt": 52,
+  "ChainSpark": 63,
   "Chest": 80,
   "Chort": 20,
   "Demon": 30,
@@ -23,6 +24,7 @@ export const KIND = {
   "GloomBolt": 60,
   "GoblinArcher": 10,
   "Imp": 19,
+  "Judgement": 64,
   "Lich": 31,
   "Mimic": 18,
   "Missile": 50,
@@ -37,6 +39,7 @@ export const KIND = {
   "SkeletonWarrior": 11,
   "SleepOrb": 62,
   "Summoner": 21,
+  "ThrownAxe": 65,
   "Torch": 82,
   "Wizard": 0
 } as const;
@@ -215,6 +218,15 @@ export const CLASSES = {
 } as const;
 
 export const ABILITIES = {
+  "ChainSpark": {
+    "classes": [
+      "Wizard"
+    ],
+    "name": "Chain Spark",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
+  },
   "Charge": {
     "classes": [
       "Barbarian"
@@ -233,6 +245,15 @@ export const ABILITIES = {
     "shape": "Blast",
     "slot": "Secondary"
   },
+  "FrostShard": {
+    "classes": [
+      "Wizard"
+    ],
+    "name": "Frost Shard",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
+  },
   "HolyLight": {
     "classes": [
       "Paladin"
@@ -241,6 +262,24 @@ export const ABILITIES = {
     "ranged": false,
     "shape": "SelfArea",
     "slot": "Secondary"
+  },
+  "Hurl": {
+    "classes": [
+      "Barbarian"
+    ],
+    "name": "Hurl",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
+  },
+  "Judgement": {
+    "classes": [
+      "Paladin"
+    ],
+    "name": "Judgement",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
   },
   "MagicMissile": {
     "classes": [
@@ -278,6 +317,15 @@ export const ABILITIES = {
     "ranged": false,
     "shape": "Summon",
     "slot": "Secondary"
+  },
+  "Volley": {
+    "classes": [
+      "ElvenRanger"
+    ],
+    "name": "Volley",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
   }
 } as const;
 
@@ -371,7 +419,8 @@ export const EV = {
   "Msg": 7,
   "Raise": 4,
   "Sink": 9,
-  "Tile": 6
+  "Tile": 6,
+  "Zap": 15
 } as const;
 
 export const DMG_TYPE = {

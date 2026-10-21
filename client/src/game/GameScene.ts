@@ -368,6 +368,9 @@ export class GameScene extends Phaser.Scene {
         else if (ev.k === 9) this.fx.natureSparkles(ev.x, ev.y, ev.r);
         else this.fx.explosion(ev.x, ev.y, ev.r);
         break;
+      case 'Zap':
+        // Drawn in plan 3b, task 9.
+        break;
       case 'Growl': {
         const wolf = this.ents.get(ev.id);
         if (wolf) this.fx.text(wolf.x, wolf.y - 14, 'grrrr', SOUND_TEXT.fill, false, DEPTH.sound, SOUND_TEXT.stroke);

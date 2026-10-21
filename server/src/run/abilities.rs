@@ -145,17 +145,31 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
 // An id-specific rule is a `match a.id` listing every id of the shape; the ids of other shapes
 // share one arm that names them, so a new id cannot be forgotten.
 
-/// A shot: Magic Missile (its own numbers) or Shoot (the ranged weapon's projectile).
+/// A shot: a spell's or innate ability's own projectile (Magic Missile, Frost Shard, Chain Spark,
+/// Judgement), or the ranged weapon's (Shoot, Hurl; Volley fires three in a fan).
 fn use_projectile(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Projectile);
-    let dir = Vec2::from_angle(run.players[pi].aim);
+    let aim = run.players[pi].aim;
     let crit = false;
+    let pierce = Pierce::new(a.pierce, a.pierce_through);
+    let life = a.range / a.speed;
     match a.id {
         AbilityId::MagicMissile => {
-            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, a.speed, a.damage, a.radius, a.range / a.speed, 0.0, None, crit, a.split, a.on_hit, a.power, Pierce::new(a.pierce, a.pierce_through));
+            spawn_player_projectile(run, pi, EntityKind::Missile, shot, Vec2::from_angle(aim), a.speed, a.damage, a.radius, life, 0.0, None, crit, a.split, a.on_hit, a.power, pierce);
         }
-        AbilityId::Shoot => {
-            spawn_player_projectile(run, pi, kind_of(a.projectile), shot, dir, a.speed, a.damage, a.radius, a.range / a.speed, 0.0, None, crit, a.split, a.on_hit, a.power, Pierce::new(a.pierce, a.pierce_through));
+        AbilityId::FrostShard | AbilityId::Judgement | AbilityId::Shoot | AbilityId::Hurl => {
+            spawn_player_projectile(run, pi, kind_of(a.projectile), shot, Vec2::from_angle(aim), a.speed, a.damage, a.radius, life, 0.0, None, crit, a.split, a.on_hit, a.power, pierce);
+        }
+        // It stops at the first enemy; the jumps are made there (`chain_jumps`).
+        AbilityId::ChainSpark => {
+            spawn_player_projectile(run, pi, kind_of(a.projectile), shot, Vec2::from_angle(aim), a.speed, a.damage, a.radius, life, 0.0, None, crit, a.split, a.on_hit, a.power, Pierce::Never);
+        }
+        AbilityId::Volley => {
+            let step = ab::VOLLEY_SPREAD / (ab::VOLLEY_ARROWS - 1) as f64;
+            for i in 0..ab::VOLLEY_ARROWS {
+                let angle = aim + (i as f64 - (ab::VOLLEY_ARROWS - 1) as f64 / 2.0) * step;
+                spawn_player_projectile(run, pi, kind_of(a.projectile), ab::volley_shot(shot, i), Vec2::from_angle(angle), a.speed, a.damage, a.radius, life, 0.0, None, crit, a.split, a.on_hit, a.power, pierce);
+            }
         }
         AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf => {
             unreachable!("{:?} is not a projectile", a.id)
@@ -179,7 +193,7 @@ fn use_blast(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> Anim {
             let life = a.range / a.speed + 0.1;
             spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, a.speed, a.damage, 4.0, life, a.radius, Some(target), crit, a.split, a.on_hit, a.power, Pierce::Never);
         }
-        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
             unreachable!("{:?} is not a blast", a.id)
         }
     }
@@ -191,7 +205,7 @@ fn use_swing(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim 
     debug_assert!(ab::def(a.id).shape == Shape::Swing);
     match a.id {
         AbilityId::Strike => melee_arc(run, pi, a, false),
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
             unreachable!("{:?} is not a swing", a.id)
         }
     }
@@ -202,7 +216,7 @@ fn use_swing(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim 
 fn use_ring(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Ring);
     match a.id {
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
             unreachable!("{:?} is not a ring", a.id)
         }
     }
@@ -220,7 +234,7 @@ fn use_dash(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
             p.mv.dash_dy = dir.y;
             p.dash_hit.clear();
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
             unreachable!("{:?} is not a dash", a.id)
         }
     }
@@ -250,7 +264,7 @@ fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> A
             }
             run.players[pi].healing += total;
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
             unreachable!("{:?} is not a self area", a.id)
         }
     }
@@ -261,7 +275,7 @@ fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> A
 fn use_ground_area(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::GroundArea);
     match a.id {
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
             unreachable!("{:?} is not a ground area", a.id)
         }
     }
@@ -271,7 +285,7 @@ fn use_ground_area(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) 
 fn use_buff(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Buff);
     match a.id {
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
             unreachable!("{:?} is not a buff", a.id)
         }
     }
@@ -282,7 +296,7 @@ fn use_summon(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim
     debug_assert!(ab::def(a.id).shape == Shape::Summon);
     match a.id {
         AbilityId::SummonWolf => super::companion::use_ability(run, pi),
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley => {
             unreachable!("{:?} is not a summon", a.id)
         }
     }
@@ -558,7 +572,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
 fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
-    let (from_player, owner, damage, crit, explode_r, k, knock, pierce) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.knock, pr.pierce);
+    let (from_player, owner, damage, crit, explode_r, k, knock, pierce, kind) = (pr.from_player, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.knock, pr.pierce, pr.kind);
     let src = if from_player { run.player_idx(owner) } else { None };
     if explode_r > 0.0 {
         let str = shot_str(run, from_player, owner);
@@ -574,6 +588,9 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     match c {
         Creature::Monster(mi) if from_player => {
             run.hurt_monster(mi, damage, crit, src);
+            if let (EntityKind::ChainSpark, Some(pi)) = (kind, src) {
+                chain_jumps(run, pi, mi, damage);
+            }
         }
         _ if !from_player => run.hurt_creature(c, damage),
         _ => {}
@@ -598,6 +615,33 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
         pr.pierce = next;
         pr.hit.push(id);
         pr.dead = false;
+    }
+}
+
+/// Chain Spark: from the first target `first`, up to `CHAIN_JUMPS` jumps, each to the nearest living
+/// enemy within `CHAIN_REACH` of the last target that the spark has not hit and sees (no wall between,
+/// no ally, no object, no chest that is a hiding mimic), for `CHAIN_FALLOFF` times the damage of the
+/// jump before. Every jump draws a `Zap`.
+fn chain_jumps(run: &mut Run, pi: usize, first: usize, damage: Damage) {
+    let mut hit = vec![first];
+    let mut last = first;
+    let mut amount = damage.amount;
+    for _ in 0..ab::CHAIN_JUMPS {
+        let from = run.monsters[last].pos;
+        let next = run
+            .monsters
+            .iter()
+            .enumerate()
+            .filter(|(i, m)| m.alive && !m.is_ally() && !m.hiding && !hit.contains(i) && m.pos.dist(from) <= ab::CHAIN_REACH && line_of_sight(&run.layout.map, from, m.pos))
+            .min_by(|a, b| a.1.pos.dist(from).total_cmp(&b.1.pos.dist(from)))
+            .map(|(i, _)| i);
+        let Some(mi) = next else { return };
+        amount *= ab::CHAIN_FALLOFF;
+        let to = run.monsters[mi].pos;
+        run.event(Ev::Zap { x: from.x as f32, y: from.y as f32, x2: to.x as f32, y2: to.y as f32 }, None);
+        run.hurt_monster(mi, Damage { amount, ..damage }, false, Some(pi));
+        hit.push(mi);
+        last = mi;
     }
 }
 
@@ -1517,5 +1561,219 @@ mod tests {
                 assert!(run.players[0].wolf.is_some(), "the wolf is summoned");
             }
         }
+    }
+
+    // ---- Plan 3b: the projectile abilities ----
+
+    use crate::defs::abilities::{AbilitySlot, CHAIN_FALLOFF, CHAIN_REACH, VOLLEY_ARROWS};
+    use crate::defs::attributes::Attributes;
+    use crate::defs::damage::{resolve, DamageType};
+    use crate::defs::effects::EffectKind;
+    use crate::defs::items::Equipment;
+    use crate::defs::loadout::{Build, Loadout, Pick, Source};
+
+    /// A run whose one hero of `class` has `id` in `slot` (from its own pool), `extra` Attribute
+    /// points and `equipment`, on a cleared, open floor.
+    fn run_with_ability(class: ClassId, slot: AbilitySlot, id: AbilityId, extra: Attributes, equipment: Equipment) -> Run {
+        let start = Loadout::start(class);
+        let pick = Pick { ability: id, source: Source::Own };
+        let loadout = match slot {
+            AbilitySlot::Primary => Loadout { primary: pick, ..start },
+            AbilitySlot::Secondary => Loadout { secondary: pick, ..start },
+        };
+        let build = Build { own: vec![id], loadout, extra, equipment, ..Build::start(class) };
+        let mut run = super::super::tests::test_run_with(&[(class, build)], BossId::Demon);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        for y in ty - 3..=ty + 3 {
+            for x in tx - 2..=tx + 14 {
+                run.layout.map.set(x, y, crate::dungeon::Tile::Floor);
+            }
+        }
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        run.players[0].aim = 0.0;
+        run
+    }
+
+    fn wizard_with(id: AbilityId, int: i32) -> Run {
+        run_with_ability(ClassId::Wizard, AbilitySlot::Primary, id, Attributes::new(0, 0, 0, int, 0, 0), Equipment::starter(ClassId::Wizard))
+    }
+
+    /// Steps the projectiles alone (no monster acts) until none is left.
+    fn fly(run: &mut Run) {
+        for _ in 0..240 {
+            tick_projectiles(run, 1.0 / 60.0);
+            run.projectiles.retain(|p| !p.dead);
+            if run.projectiles.is_empty() {
+                break;
+            }
+        }
+    }
+
+    fn lost(run: &Run, mi: usize, before: f64) -> f64 {
+        before - run.monsters[mi].hp
+    }
+
+    #[test]
+    fn frost_shard_chills_and_never_freezes() {
+        let mut run = wizard_with(AbilityId::FrostShard, 0);
+        let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        let a = run.players[0].sheet.primary;
+        assert_eq!(a.id, AbilityId::FrostShard);
+        assert_eq!(a.projectile, Some(EntityKind::FrostBolt as u8));
+        assert!((a.split.share(DamageType::Cold) - 0.4).abs() < 1e-12);
+        assert!((a.split.share(DamageType::Magical) - 0.3).abs() < 1e-12);
+        assert!((a.split.share(DamageType::Physical) - 0.3).abs() < 1e-12);
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.projectiles.len(), 1);
+        assert_eq!(run.projectiles[0].kind, EntityKind::FrostBolt);
+        assert_eq!(run.players[0].cd1, 0.5);
+        fly(&mut run);
+        let res = run.monsters[mi].effects.res(run.monsters[mi].res);
+        let expect = resolve(&Damage::new(a.damage, a.split), &res);
+        assert!((lost(&run, mi, 1000.0) - expect).abs() < 1e-9, "{} vs {expect}", lost(&run, mi, 1000.0));
+        assert!(run.has_effect(Creature::Monster(mi), EffectKind::Chilled));
+        assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Frozen));
+    }
+
+    /// Goblins at the given distances east of the hero, each with 1000 HP.
+    fn goblins(run: &mut Run, dists: &[f64]) -> Vec<usize> {
+        dists.iter().map(|&d| put_enemy(run, 0, EnemyType::GoblinArcher, d, 1000.0)).collect()
+    }
+
+    #[test]
+    fn chain_spark_jumps_twice_with_falloff() {
+        let mut run = wizard_with(AbilityId::ChainSpark, 3);
+        let g = goblins(&mut run, &[60.0, 90.0, 120.0, 200.0]);
+        let a = run.players[0].sheet.primary;
+        assert_eq!(a.id, AbilityId::ChainSpark);
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.projectiles[0].kind, EntityKind::ChainSpark);
+        assert_eq!(run.players[0].cd1, 0.8);
+        run.events.clear();
+        fly(&mut run);
+        for (n, &mi) in g[..3].iter().enumerate() {
+            let res = run.monsters[mi].effects.res(run.monsters[mi].res);
+            let expect = resolve(&Damage::new(a.damage * CHAIN_FALLOFF.powi(n as i32), a.split), &res);
+            assert!((lost(&run, mi, 1000.0) - expect).abs() < 1e-9, "goblin {n}: {} vs {expect}", lost(&run, mi, 1000.0));
+        }
+        assert_eq!(run.monsters[g[3]].hp, 1000.0, "the fourth is out of reach");
+        let zaps: Vec<_> = run.events.iter().filter(|(e, _)| matches!(e, Ev::Zap { .. })).collect();
+        assert_eq!(zaps.len(), 2);
+        assert!(zaps.iter().all(|(_, at)| at.is_none()), "sent to the whole party");
+        assert!(run.projectiles.is_empty(), "the spark itself stopped at the first");
+    }
+
+    #[test]
+    fn chain_spark_skips_allies_objects_and_walls() {
+        let mut run = wizard_with(AbilityId::ChainSpark, 3);
+        let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        // A wolf and a chest beside the first target.
+        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(wolf).unwrap();
+        let at = run.monsters[first].pos;
+        run.monsters[wi].pos = at + Vec2::new(0.0, 20.0);
+        let wolf_hp = run.monsters[wi].hp;
+        let chest = run.spawn_object(EntityKind::Chest, at + Vec2::new(0.0, -20.0), crate::run::objects::ObjState::Chest { opened: None });
+        // A goblin within reach, behind a wall tile.
+        let (tx, ty) = crate::dungeon::Map::tile_of(at);
+        for x in tx - 1..=tx + 1 {
+            run.layout.map.set(x, ty + 1, crate::dungeon::Tile::Wall);
+        }
+        let behind = run.spawn_enemy(EnemyType::GoblinArcher, crate::dungeon::Map::center_of(tx, ty + 2), None);
+        let bi = run.monster_idx(behind).unwrap();
+        assert!(run.monsters[bi].pos.dist(at) <= CHAIN_REACH, "within reach");
+        assert!(!line_of_sight(&run.layout.map, at, run.monsters[bi].pos), "but not in sight");
+        let behind_hp = run.monsters[bi].hp;
+        try_use(&mut run, 0, true, 1);
+        run.events.clear();
+        fly(&mut run);
+        assert!(run.monsters[first].hp < 1000.0, "the first target is hit");
+        assert_eq!(run.monsters[wi].hp, wolf_hp, "the wolf is safe");
+        assert_eq!(run.monsters[bi].hp, behind_hp, "no jump through a wall");
+        let o = run.objects.iter().find(|o| o.id == chest).unwrap();
+        assert!(matches!(o.state, crate::run::objects::ObjState::Chest { opened: None }) && !o.gone, "the chest is untouched");
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Zap { .. })), "no zap");
+    }
+
+    #[test]
+    fn chain_spark_never_returns() {
+        let mut run = wizard_with(AbilityId::ChainSpark, 3);
+        let g = goblins(&mut run, &[60.0, 90.0]);
+        let a = run.players[0].sheet.primary;
+        try_use(&mut run, 0, true, 1);
+        run.events.clear();
+        fly(&mut run);
+        let zaps = run.events.iter().filter(|(e, _)| matches!(e, Ev::Zap { .. })).count();
+        assert_eq!(zaps, 1, "one jump, not back to the first");
+        let res = run.monsters[g[0]].effects.res(run.monsters[g[0]].res);
+        let expect = resolve(&Damage::new(a.damage, a.split), &res);
+        assert!((lost(&run, g[0], 1000.0) - expect).abs() < 1e-9, "the first is hit once");
+    }
+
+    #[test]
+    fn judgement_is_holy_and_magical() {
+        use crate::defs::lights::LightKind;
+        let mut run = run_with_ability(ClassId::Paladin, AbilitySlot::Primary, AbilityId::Judgement, Attributes::new(0, 0, 0, 0, 0, 6), Equipment::starter(ClassId::Paladin));
+        let a = run.players[0].sheet.primary;
+        assert_eq!(a.id, AbilityId::Judgement);
+        assert_eq!(a.split, DamageSplit::pure(DamageType::Magical));
+        put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.projectiles.len(), 1);
+        assert_eq!(run.projectiles[0].kind, EntityKind::Judgement);
+        assert_eq!(run.projectiles[0].damage.split, DamageSplit::pure(DamageType::Magical));
+        assert!(run.moving_lights().iter().any(|l| l.kind == LightKind::Holy), "a Holy light is attached");
+    }
+
+    #[test]
+    fn hurl_needs_a_throwing_axe() {
+        use crate::defs::loadout::LoadoutError;
+        use crate::defs::requirements::Requirement;
+        use crate::defs::weapons::WeaponKind;
+        let pick = Pick { ability: AbilityId::Hurl, source: Source::Own };
+        let build = Build { own: vec![AbilityId::Hurl], loadout: Loadout { primary: pick, ..Loadout::start(ClassId::Barbarian) }, ..Build::start(ClassId::Barbarian) };
+        let err = crate::sheet::hero_sheet(ClassId::Barbarian, &build).err();
+        assert_eq!(err, Some(LoadoutError::Requirement(AbilityId::Hurl, Requirement::WeaponKind(&[WeaponKind::ThrowingAxe]))));
+
+        let equipment = Equipment::starter(ClassId::Barbarian).with(EquipSlot::Ranged, ItemId::ThrowingAxes);
+        let mut run = run_with_ability(ClassId::Barbarian, AbilitySlot::Primary, AbilityId::Hurl, Attributes::default(), equipment);
+        assert_eq!(run.players[0].sheet.primary.id, AbilityId::Hurl);
+        put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.projectiles.len(), 1);
+        assert_eq!(run.projectiles[0].kind, EntityKind::ThrownAxe);
+        assert_eq!(run.projectiles[0].pierce, Pierce::Overkill { left: u8::MAX });
+    }
+
+    fn ranger_volley() -> Run {
+        run_with_ability(ClassId::ElvenRanger, AbilitySlot::Primary, AbilityId::Volley, Attributes::new(0, 5, 0, 0, 0, 0), Equipment::starter(ClassId::ElvenRanger))
+    }
+
+    #[test]
+    fn volley_spawns_three_shots_with_consecutive_ids() {
+        let mut run = ranger_volley();
+        run.players[0].aim = 0.4;
+        let bow = run.players[0].sheet.ranged.unwrap();
+        try_use(&mut run, 0, true, 0xfffe);
+        assert_eq!(run.projectiles.len(), VOLLEY_ARROWS as usize);
+        let shots: Vec<u16> = run.projectiles.iter().map(|p| p.shot).collect();
+        assert_eq!(shots, vec![0xfffe, 0xffff, 0x0000]);
+        let spread = 15.0_f64.to_radians();
+        for (p, off) in run.projectiles.iter().zip([-spread, 0.0, spread]) {
+            assert!(angle_diff(p.vel.y.atan2(p.vel.x), 0.4 + off).abs() < 1e-9, "{off}");
+            assert!((p.damage.amount - bow.damage * 0.6).abs() < 1e-9);
+            assert_eq!(p.pierce, Pierce::Overkill { left: u8::MAX });
+        }
+        assert!((run.players[0].cd1 - bow.cooldown * 1.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn volley_falls_back_to_strike_in_melee() {
+        let mut run = ranger_volley();
+        let mi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 10.0, 1000.0);
+        try_use(&mut run, 0, true, 1);
+        assert!(run.monsters[mi].hp < 1000.0, "the rapier struck");
+        assert!(run.projectiles.is_empty());
+        assert_eq!(run.players[0].cd1, run.players[0].sheet.fallback.cooldown, "the rapier's interval");
     }
 }

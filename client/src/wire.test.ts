@@ -79,6 +79,15 @@ describe('wire', () => {
     ]);
   });
 
+  it('decodes the Zap event', () => {
+    const snap = unpackSnap(decode(Uint8Array.from(fixtures.cases[0].bytes)) as SnapW);
+    const zaps = snap.ev.filter((e) => e.t === 'Zap');
+    expect(zaps).toHaveLength(1);
+    const z = zaps[0] as { x: number; y: number; x2: number; y2: number };
+    expect(z.x).toBeCloseTo(100.03, 1);
+    expect(z.y2).toBeCloseTo(190.25, 1);
+  });
+
   it('packs inputs in field order with null for no shot', () => {
     const i = { seq: 7, mx: 1, my: -1, aim: 0.5, aim_dist: 30, primary: 3, secondary: undefined as unknown as null, view_lag: 80, rtt: 40, act: true };
     expect(packInput(i)).toEqual([7, 1, -1, 0.5, 30, 3, null, 80, 40, true]);

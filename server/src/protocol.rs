@@ -252,6 +252,8 @@ pub enum Ev {
     Effect { id: u32, kind: u8, on: bool, look: u8 },
     /// The wolf `id` growls at an enemy it detected (a sound: sent to the whole party, drawn above the darkness).
     Growl { id: u32 },
+    /// Chain Spark jumps from (x, y) to (x2, y2); sent to the whole party like hero hits.
+    Zap { x: f32, y: f32, x2: f32, y2: f32 },
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
