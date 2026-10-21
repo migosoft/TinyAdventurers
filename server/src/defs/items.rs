@@ -360,9 +360,10 @@ fn heat() -> DamageSplit {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defs::attributes::Attr;
-    use crate::defs::damage::{DamageSplit, DamageType};
-    use crate::defs::weapons::{category, At, WeaponCategory as C, WeaponKind as K};
+    use crate::defs::classes::start_attrs;
+    use crate::defs::weapons::{WeaponCategory as C, WeaponKind as K};
+    use EquipSlot as S;
+    use ItemId as I;
 
     #[test]
     fn item_data_follows_the_rules() {
@@ -434,11 +435,6 @@ mod tests {
         }
         assert_eq!(def(ItemId::StaffOfRot).req, &[Requirement::Attr(Attr::Int, 14)]);
     }
-
-    use crate::defs::attributes::Attributes;
-    use crate::defs::classes::start_attrs;
-    use EquipSlot as S;
-    use ItemId as I;
 
     fn ok(c: ClassId, slot: EquipSlot, item: ItemId) -> Result<(), EquipError> {
         check_equip(c, slot, item, &start_attrs(c))

@@ -29,26 +29,33 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 
 Your teammates' names float above their heroes, and the party list (top left) shows everyone's health.
 
-Bolts and spells stop at the first enemy they hit; they don't pass through a line of enemies. A fireball still explodes there and hurts everyone around it.
+**Abilities.** Every hero has two: left mouse button (primary) and right (secondary). The four names are **Strike** (hit with your melee weapon), **Shoot** (fire your ranged weapon), **Charge** (a dash that hurts everything you run through) and **Holy Light** (a heal for you and your friends). Spells such as Magic Missile and Fireball are abilities too.
+
+**Fighting up close.** A ranged ability does not work with an enemy (or a closed chest) right next to you, about a body's width and a bit more.
+- Your **left button then strikes with your melee weapon** instead: the Wizard hits with his staff (weakly, so step back), the Elven Ranger thrusts her rapier. It hits the nearest target. If the blow kills it with damage to spare, the rest of the blow carries on to the next target in reach.
+- Your **right button** does nothing if it is a ranged ability (the Wizard's Fireball) and shows "Too close"; it costs no cooldown. Holy Light, Charge and the Dire Wolf still work up close.
+- Enemies follow the same rule: archers punch, and the Necromancer and the Summoner hit with their staffs when you get close.
+
+**Piercing shots.** An arrow (or any shot from a ranged weapon) that **kills** an enemy flies on with the damage it had left, and can hit the next one, and the next. It stops at an enemy it does not kill, or one that is immune. Shots that are spells (Magic Missile) stop at the first enemy they hit, unless an item gives them piercing; a fireball still explodes there and hurts everyone around it. Some items make a shot pass through a number of enemies at full damage first (the Hunter's Bow: two). You see this as you shoot: a shot that kills keeps flying.
 
 ### Wizard, 70 HP
 Fragile, but deadly from range.
-- **Left – Magic Missile:** fast arcane bolts in quick succession.
-- **Right – Fireball (6 s cooldown):** a slow ball of fire that explodes where your mouse pointer is, or earlier if it hits something. It damages every enemy in the blast. It can't hurt your friends.
+- **Left – Magic Missile:** fast arcane bolts in quick succession. With an enemy right next to you, you hit with your staff instead.
+- **Right – Fireball (6 s cooldown):** a slow ball of fire that explodes where your mouse pointer is, or earlier if it hits something. It damages every enemy in the blast. It can't hurt your friends. It cannot be cast with an enemy right next to you.
 
 ### Paladin, 120 HP
 An armoured holy warrior who keeps the party alive.
-- **Left – Sword:** a sweeping strike in front of you.
+- **Left – Strike (Sword):** a strike with your sword at the nearest enemy in reach.
 - **Right – Holy Light (10 s cooldown):** heals you and every ally close to you.
 
 ### Barbarian, 140 HP
 The toughest hero.
-- **Left – Great Axe:** a wide, heavy cleave. Slower than the sword, but it hits harder and wider.
-- **Right – Charge (5 s cooldown):** dash toward the mouse pointer, hitting every enemy you run through.
+- **Left – Strike (Great Axe):** a heavy strike. Slower than the sword, but it hits harder.
+- **Right – Charge (5 s cooldown):** dash toward the mouse pointer, hitting every enemy you run through with your axe (a little weaker than a strike). It works with enemies right next to you.
 
 ### Elven Ranger, 90 HP
 The fastest hero, and the only one who fights with a companion. An elf: she sees **twice as far** as the others (18 tiles, still only where there is light and no wall), she sees a third of that range into the dark, she shrugs off a tenth of poison and she **cannot be put to sleep**.
-- **Left – Bow / Rapier:** shoots arrows. When an enemy is right next to you, you thrust with the rapier automatically instead, which is quicker.
+- **Left – Shoot (Bow) / Strike (Rapier):** shoots arrows, which pierce enemies they kill. When an enemy is right next to you, you thrust with the rapier automatically instead, which is quicker.
 - **Right – Dire Wolf (8 s cooldown):** with no wolf, **summons** one beside you in a puff of green sparkles. With the wolf alive, it **heals** the wolf for 20 % of its health (also at full health; the cooldown starts anyway). When the wolf falls, the box waits **60 seconds** before you can summon a new one. There is only ever one wolf per ranger.
 
 **Your wolf**

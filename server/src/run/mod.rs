@@ -1382,19 +1382,18 @@ pub mod tests {
     }
 
     #[test]
-    #[ignore = "re-recorded in plan 3a Task 8"]
     fn level_setup_is_unchanged() {
         let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
         // The original values: barrels are left out of the fingerprint, so
         // this proves the rest of the setup is unchanged by them.
         assert_eq!(got, vec![15034865796308420847, 11583993820610399499, 14176587140014399478, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
         assert_ne!(got[0], got[1]);
+        // 2026-10-21, plan 3a: checked again, unchanged.
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
     // boss scripts push with BOSS_KNOCK_STR above every hero weight + 4.
     #[test]
-    #[ignore = "re-recorded in plan 3a Task 8"]
     fn simulation_is_unchanged_after_waking_the_boss() {
         let mut got = Vec::new();
         for boss in BossId::ALL {
@@ -1421,6 +1420,9 @@ pub mod tests {
         // 2026-10-19, TODO 4b: enemy and boss HP no longer scale with the party size. This run has two heroes,
         // so every boss loses a third of its HP (×1.5 → ×1) and every enemy a fifth (×1.25 → ×1): all three
         // halls differ. Part A (effect resistances) left all three values unchanged before this.
+        // 2026-10-21, plan 3a (Charge 25.6, reach 22, staffs and punches in melee, overkill piercing): checked
+        // again and all three values are unchanged. The two heroes stand still in the hall, nobody reaches
+        // anybody with a changed number, and no shot kills with damage to spare.
         assert_eq!(got, vec![11853672065832131168, 7100769620128759448, 1468820053114872194]);
     }
 
