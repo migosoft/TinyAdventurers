@@ -63,6 +63,8 @@ pub struct Member {
     pub upgrades: StatUpgrades,
     /// Attribute points on top of the class's start Attributes (zero until the shop and tree).
     pub extra: Attributes,
+    /// What the hero wears (the class starters until plan 4 saves it).
+    pub equipment: Equipment,
 }
 
 /// How a run ended, for the statistics.
@@ -172,14 +174,13 @@ impl Run {
             level,
         };
         for (i, m) in members.into_iter().enumerate() {
-            let sheet = crate::sheet::hero_sheet(m.class, m.extra, &Equipment::starter(m.class), &m.upgrades);
+            let sheet = crate::sheet::hero_sheet(m.class, m.extra, &m.equipment, &m.upgrades);
             let max_hp = sheet.max_hp;
             let p = run.layout.player_spawns[i % run.layout.player_spawns.len()];
             let id = run.alloc_id();
             run.players.push(Player {
                 id,
                 res: sheet.res,
-                melee: sheet.melee.split,
                 conn: m.conn,
                 tx: Some(m.tx),
                 name: m.name,
@@ -222,6 +223,10 @@ impl Run {
                 wolf: None,
                 sheet,
             });
+            // An item's light goes with its wearer (light ids are separate from entity ids).
+            if let Some(k) = run.players.last().unwrap().sheet.light {
+                run.add_light(k, light::Anchor::Entity(id), None);
+            }
         }
         let spawns = run.layout.spawns.clone();
         for s in spawns {
@@ -1212,7 +1217,22 @@ pub mod tests {
     use tokio::sync::mpsc::unbounded_channel;
 
     pub fn test_run(classes: &[ClassId], boss: BossId) -> Run {
-        test_run_seed(classes, boss, 7)
+        let with: Vec<(ClassId, Equipment)> = classes.iter().map(|&c| (c, Equipment::starter(c))).collect();
+        test_run_with(&with, boss)
+    }
+
+    /// A run whose heroes wear the given equipment.
+    pub fn test_run_with(classes: &[(ClassId, Equipment)], boss: BossId) -> Run {
+        let members = classes
+            .iter()
+            .enumerate()
+            .map(|(i, &(c, equipment))| {
+                let (tx, _rx) = unbounded_channel();
+                std::mem::forget(_rx);
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: c, tx, account: None, character: None, upgrades: StatUpgrades::default(), extra: Attributes::default(), equipment }
+            })
+            .collect();
+        Run::new(1, members, 7, LevelChoice::Dungeon { boss: Some(boss) })
     }
 
     pub fn test_run_seed(classes: &[ClassId], boss: BossId, seed: u64) -> Run {
@@ -1222,7 +1242,7 @@ pub mod tests {
             .map(|(i, c)| {
                 let (tx, _rx) = unbounded_channel();
                 std::mem::forget(_rx);
-                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, upgrades: StatUpgrades::default(), extra: Attributes::default() }
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, upgrades: StatUpgrades::default(), extra: Attributes::default(), equipment: Equipment::starter(*c) }
             })
             .collect();
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: Some(boss) })
@@ -1327,7 +1347,7 @@ pub mod tests {
     fn random_boss_run(seed: u64) -> Run {
         let (tx, _rx) = unbounded_channel();
         std::mem::forget(_rx);
-        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, upgrades: StatUpgrades::default(), extra: Attributes::default() }];
+        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, upgrades: StatUpgrades::default(), extra: Attributes::default(), equipment: Equipment::starter(ClassId::Paladin) }];
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: None })
     }
 

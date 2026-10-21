@@ -5,7 +5,7 @@ use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::{self as ab, AbilityId};
 use crate::defs::classes::PLAYER_RADIUS;
-use crate::defs::damage::{kind_split, Damage};
+use crate::defs::damage::{kind_split, Damage, DamageSplit};
 use crate::defs::effects::OnHit;
 use crate::defs::items::EquipSlot;
 use crate::defs::kinds::{Anim, EntityKind};
@@ -79,22 +79,23 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     };
     let dir = Vec2::from_angle(aim);
     let crit = false;
+    // Spells carry their own on-hit; a weapon attack carries its weapon's (below).
     let on_hit = ab::on_hit(id);
     let power = hero_power(run, pi, id);
     let mut cooldown = def.cooldown;
     let anim = match id {
         AbilityId::MagicMissile => {
-            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, on_hit, power);
+            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, kind_split(EntityKind::Missile), on_hit, power);
             Anim::Shoot
         }
         AbilityId::Fireball => {
             let target = pos + dir * aim_dist.clamp(24.0, def.range);
             let life = def.range / def.speed + 0.1;
-            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage, 4.0, life, def.radius, Some(target), crit, on_hit, power);
+            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage, 4.0, life, def.radius, Some(target), crit, kind_split(EntityKind::Fireball), on_hit, power);
             Anim::Cast
         }
         AbilityId::Sword | AbilityId::Axe => {
-            melee_arc(run, pi, def.range, def.arc, def.damage, crit, on_hit, power);
+            melee_arc(run, pi, def.range, def.arc, def.damage, crit);
             Anim::Melee
         }
         AbilityId::Heal => {
@@ -128,8 +129,8 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             if let Some(t) = dagger_target(run, pi) {
                 let thrust = run.players[pi].sheet.fallback.expect("a hero with the crossbow has the rapier");
                 cooldown = thrust.cooldown;
-                let power = run.players[pi].sheet.melee.power;
-                let dmg = Damage { on_hit, ..Damage::new(thrust.damage, run.players[pi].melee).with_power(power) };
+                let w = &run.players[pi].sheet.melee;
+                let dmg = Damage { on_hit: w.on_hit, ..Damage::new(thrust.damage, w.split).with_power(w.power) };
                 match t {
                     DaggerTarget::Monster(mi) => {
                         run.hurt_monster(mi, dmg, crit, Some(pi));
@@ -141,7 +142,8 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
                 }
                 Anim::Melee
             } else {
-                spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, on_hit, power);
+                let w = run.players[pi].sheet.ranged.expect("a hero with the crossbow has a ranged weapon");
+                spawn_player_projectile(run, pi, EntityKind::Bolt, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, w.split, w.on_hit, w.power);
                 Anim::Shoot
             }
         }
@@ -160,11 +162,12 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     p.anim_start = run.time;
 }
 
-#[allow(clippy::too_many_arguments)]
-fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: bool, on_hit: Option<OnHit>, power: i32) {
+/// A swing of the hero's melee weapon: its split, on-hit and power.
+fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: bool) {
     let rw = rewind_ticks(run, pi);
     let (pos, aim) = (run.players[pi].pos(), run.players[pi].aim);
-    let dmg = Damage { on_hit, ..Damage::new(damage, run.players[pi].melee).with_power(power) };
+    let w = &run.players[pi].sheet.melee;
+    let dmg = Damage { on_hit: w.on_hit, ..Damage::new(damage, w.split).with_power(w.power) };
     let hits: Vec<usize> = run
         .monsters
         .iter()
@@ -204,14 +207,12 @@ fn melee_arc(run: &mut Run, pi: usize, range: f64, arc: f64, damage: f64, crit: 
     }
 }
 
-/// Barbarian dash: damage each monster touched once per dash.
+/// Barbarian dash: damage each monster touched once per dash, with the melee weapon's split, on-hit and power.
 pub fn dash_contact(run: &mut Run, pi: usize) {
     let rw = rewind_ticks(run, pi);
     let pos = run.players[pi].pos();
-    let dmg = Damage {
-        on_hit: ab::on_hit(AbilityId::Dash),
-        ..Damage::new(run.players[pi].sheet.secondary.damage, run.players[pi].melee).with_power(hero_power(run, pi, AbilityId::Dash))
-    };
+    let w = &run.players[pi].sheet.melee;
+    let dmg = Damage { on_hit: w.on_hit, ..Damage::new(run.players[pi].sheet.secondary.damage, w.split).with_power(w.power) };
     let hits: Vec<(usize, u32)> = run
         .monsters
         .iter()
@@ -251,6 +252,7 @@ fn spawn_player_projectile(
     explode_r: f64,
     target: Option<Vec2>,
     crit: bool,
+    split: DamageSplit,
     on_hit: Option<OnHit>,
     power: i32,
 ) {
@@ -269,7 +271,7 @@ fn spawn_player_projectile(
         shot,
         pos,
         vel,
-        damage: Damage { on_hit, ..Damage::new(damage, kind_split(kind)).with_power(power) },
+        damage: Damage { on_hit, ..Damage::new(damage, split).with_power(power) },
         radius,
         life: (life - ff).max(0.05),
         crit,
@@ -562,7 +564,7 @@ mod tests {
     fn missile_past(run: &mut Run, mi: usize, dy: f64) {
         let at = run.monsters[mi].pos + Vec2::new(-6.0, -dy);
         assert!(!run.layout.map.opaque_at(at) && !run.layout.map.opaque_at(at + Vec2::new(12.0, 0.0)), "open floor for the test shot");
-        spawn_player_projectile(run, 0, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), 230.0, 5.0, 3.0, 1.0, 0.0, None, false, None, 0);
+        spawn_player_projectile(run, 0, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), 230.0, 5.0, 3.0, 1.0, 0.0, None, false, kind_split(EntityKind::Missile), None, 0);
         run.projectiles[0].pos = at;
         for _ in 0..3 {
             tick_projectiles(run, 1.0 / TICK_HZ);
@@ -731,7 +733,7 @@ mod tests {
         // The aim point lies a hair inside the wall: the shot passes it on the step that enters the wall.
         let at = run.players[0].pos();
         let target = Vec2::new((tx + 3) as f64 * TILE + 0.01, at.y);
-        spawn_player_projectile(&mut run, 0, EntityKind::Fireball, 1, Vec2::new(1.0, 0.0), 300.0, 1.0, 4.0, 2.0, 20.0, Some(target), false, None, 0);
+        spawn_player_projectile(&mut run, 0, EntityKind::Fireball, 1, Vec2::new(1.0, 0.0), 300.0, 1.0, 4.0, 2.0, 20.0, Some(target), false, kind_split(EntityKind::Fireball), None, 0);
         for _ in 0..30 {
             if run.projectiles.is_empty() {
                 break;
@@ -833,6 +835,165 @@ mod tests {
         run.step();
         let left = burn_left(&run, Creature::Player(0)).expect("lava burns");
         assert!((left - burn_secs(10, 13)).abs() < 0.1, "lava, a tick later: {left}");
+    }
+
+    // ---- Weapon effects ride only on that weapon's attacks ----
+
+    use crate::defs::items::{Equipment, ItemId};
+
+    /// One hero of `class` wearing the starters with `item` in `slot`.
+    fn armed(class: ClassId, slot: EquipSlot, item: ItemId) -> Run {
+        super::super::tests::test_run_with(&[(class, Equipment::starter(class).with(slot, item))], BossId::Lich)
+    }
+
+    fn has_effects(run: &Run, mi: usize) -> bool {
+        !run.monsters[mi].effects.list().is_empty()
+    }
+
+    #[test]
+    fn weapon_effects_ride_only_on_weapon_attacks() {
+        use crate::defs::attributes::Attr;
+        use crate::defs::damage::{DamageSplit, DamageType};
+        // A Paladin's Flame Tongue swing: half heat, so the orc burns at the wielder's STR 15.
+        let mut run = armed(ClassId::Paladin, EquipSlot::Melee, ItemId::FlameTongue);
+        let mi = put_monster_near(&mut run, 0, 12.0);
+        run.monsters[mi].hp = 1000.0;
+        run.players[0].aim = 0.0;
+        try_use(&mut run, 0, true, 1);
+        let con = run.monsters[mi].attrs.get(Attr::Con);
+        assert_eq!(con, 16);
+        assert_eq!(burn_left(&run, Creature::Monster(mi)), Some(burn_secs(15, con)), "the swing burns");
+
+        // Her Holy Light does not carry the sword's heat.
+        let mut run = armed(ClassId::Paladin, EquipSlot::Melee, ItemId::FlameTongue);
+        let mi = put_monster_near(&mut run, 0, 20.0);
+        assert_eq!(run.players[0].sheet.secondary.id, AbilityId::Heal);
+        assert!(run.monsters[mi].pos.dist(run.players[0].pos()) <= run.players[0].sheet.secondary.radius);
+        try_use(&mut run, 0, false, 1);
+        assert!(!has_effects(&run, mi), "Holy Light leaves the orc as it was");
+
+        // A Barbarian dashing through an orc with Flame Tongue.
+        let mut run = armed(ClassId::Barbarian, EquipSlot::Melee, ItemId::FlameTongue);
+        let mi = put_monster_near(&mut run, 0, 6.0);
+        run.monsters[mi].hp = 1000.0;
+        dash_contact(&mut run, 0);
+        let power = run.players[0].sheet.melee.power;
+        assert_eq!(burn_left(&run, Creature::Monster(mi)), Some(burn_secs(power, 16)), "the dash burns");
+
+        // The Ember Staff's heat stays off Magic Missile.
+        let mut run = armed(ClassId::Wizard, EquipSlot::Melee, ItemId::EmberStaff);
+        assert!(run.players[0].sheet.melee.split.share(DamageType::Heat) > 0.0);
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.projectiles[0].damage.split, kind_split(EntityKind::Missile));
+
+        // The wolf bites with its own race's split, whatever its owner wields.
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
+        run.players[0].sheet.melee.split = DamageSplit::pure(DamageType::Heat);
+        assert_eq!(run.players[0].sheet.secondary.id, AbilityId::SummonWolf);
+        try_use(&mut run, 0, false, 1);
+        let wolf = run.players[0].wolf.and_then(|id| run.monster_idx(id)).expect("a wolf");
+        let bite = run.monsters[wolf].melee;
+        assert!((bite.share(DamageType::Magical) - 0.2).abs() < 1e-12, "{bite:?}");
+        assert_eq!(bite.share(DamageType::Heat), 0.0);
+    }
+
+    /// A torch on a wall north of hero 0, with the hero right under it, facing it.
+    fn torch_ahead(run: &mut Run) -> usize {
+        use crate::dungeon::{Map, Tile, TorchSide, TorchSpawn};
+        run.monsters.retain(|m| m.is_boss);
+        run.objects.clear();
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for y in ty - 1..=ty + 1 {
+            for x in tx - 2..=tx + 2 {
+                run.layout.map.set(x, y, Tile::Floor);
+            }
+        }
+        for x in tx - 2..=tx + 2 {
+            run.layout.map.set(x, ty - 2, Tile::Wall);
+        }
+        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face });
+        let oi = run.objects.len() - 1;
+        let at = run.objects[oi].pos;
+        run.players[0].mv.x = at.x;
+        run.players[0].mv.y = at.y + 8.0;
+        run.players[0].aim = -std::f64::consts::FRAC_PI_2;
+        oi
+    }
+
+    fn torch_lit(run: &Run, oi: usize) -> bool {
+        matches!(run.objects[oi].state, crate::run::objects::ObjState::Torch { light, .. } if crate::run::objects::torch_on(run, light))
+    }
+
+    #[test]
+    fn a_flaming_sword_lights_a_torch() {
+        let mut run = armed(ClassId::Paladin, EquipSlot::Melee, ItemId::FlameTongue);
+        let oi = torch_ahead(&mut run);
+        crate::run::objects::set_torch(&mut run, oi, false);
+        try_use(&mut run, 0, true, 1);
+        assert!(torch_lit(&run, oi), "Flame Tongue lights it");
+
+        let mut run = armed(ClassId::Paladin, EquipSlot::Melee, ItemId::KnightSword);
+        let oi = torch_ahead(&mut run);
+        assert!(torch_lit(&run, oi));
+        try_use(&mut run, 0, true, 1);
+        assert!(!torch_lit(&run, oi), "a plain sword puts it out");
+    }
+
+    #[test]
+    fn a_poisoned_blade_poisons_at_the_wielders_power() {
+        use crate::defs::attributes::Attr;
+        use crate::defs::effects::{scaled_secs, EffectKind};
+        let mut run = armed(ClassId::Wizard, EquipSlot::Melee, ItemId::StaffOfRot);
+        let h = run.players[0].sheet.melee.on_hit.as_mut().expect("the staff's on-hit");
+        h.chance = 1.0;
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let id = run.spawn_enemy(EnemyType::GoblinArcher, run.players[0].pos() + Vec2::new(12.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].hp = 1000.0;
+        run.players[0].aim = 0.0;
+        assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), 8);
+        let con = run.monsters[mi].attrs.get(Attr::Con);
+        assert_eq!(con, 10);
+        melee_arc(&mut run, 0, 20.0, 1.6, 6.0, false);
+        let poison = run.monsters[mi].effects.list().iter().find(|a| a.kind == EffectKind::Poisoned).map(|a| a.left);
+        assert_eq!(poison, Some(scaled_secs(3.0, 8, con)), "STR 8 against the goblin's CON 10");
+    }
+
+    #[test]
+    fn an_items_light_follows_the_hero() {
+        use crate::run::light::Anchor;
+        let run = armed(ClassId::Paladin, EquipSlot::Melee, ItemId::GoldenSword);
+        let id = run.players[0].id;
+        let l = run.lights.sources.iter().find(|s| s.anchor == Anchor::Entity(id)).expect("the sword's light");
+        assert_eq!(l.kind, LightKind::Holy);
+        let run = test_run(&[ClassId::Paladin], BossId::Lich);
+        let id = run.players[0].id;
+        assert!(!run.lights.sources.iter().any(|s| s.anchor == Anchor::Entity(id)), "a starter hero carries no light");
+    }
+
+    #[test]
+    fn heavy_armor_is_pushed_less_and_resists() {
+        use crate::defs::attributes::push_dist;
+        assert_eq!(push_dist(20.0, 16, 19.0), 0.0);
+        assert_eq!(push_dist(20.0, 16, 12.0), 20.0);
+        let hit = |run: &mut Run| {
+            run.monsters.retain(|m| m.is_boss);
+            let at = run.players[0].pos();
+            let id = run.spawn_enemy(EnemyType::OrcWarrior, at - Vec2::new(16.0, 0.0), None);
+            let oi = run.monster_idx(id).unwrap();
+            let attack = crate::defs::enemies::def(EnemyType::OrcWarrior).attack;
+            let hp = run.players[0].hp;
+            crate::run::ai::perform_attack(run, oi, Creature::Player(0), attack, false, None);
+            (hp - run.players[0].hp, run.players[0].mv.knock_vx)
+        };
+        let mut run = armed(ClassId::Paladin, EquipSlot::Armor, ItemId::PlateArmor);
+        let (lost, knock) = hit(&mut run);
+        assert!((lost - 14.0 * 0.75).abs() < 1e-9, "plate blocks a quarter: {lost}");
+        assert_eq!(knock, 0.0, "and is not pushed");
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        let (lost, knock) = hit(&mut run);
+        assert_eq!(lost, 14.0);
+        assert_eq!(knock, crate::collision::knock_speed(20.0, super::super::DT));
     }
 
 }

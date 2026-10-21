@@ -18,9 +18,8 @@ pub const HISTORY_LEN: usize = 32;
 pub struct Player {
     pub id: u32,
     pub conn: u32,
-    /// Resistances (races plus adjustments) and the split of its melee hits.
+    /// Resistances (races plus adjustments; the split of its hits is its weapons', in `sheet`).
     pub res: Resistances,
-    pub melee: DamageSplit,
     pub tx: Option<UnboundedSender<Message>>,
     pub name: String,
     pub class: ClassId,

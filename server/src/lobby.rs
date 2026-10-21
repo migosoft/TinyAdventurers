@@ -4,6 +4,7 @@
 //! (`set_character`, `apply_progress`), so the lock is only held briefly.
 
 use crate::db::{self, Character, Db};
+use crate::defs::items::Equipment;
 use crate::progress::Progress;
 use crate::protocol::{encode, BossId, ClassId, ClientMsg, LevelChoice, LevelId, RoomPlayer, RunSummary, ServerMsg};
 use crate::run::{run_task, Award, Member, Run, RunCmd, RunRecord};
@@ -336,7 +337,7 @@ impl Lobby {
             .filter_map(|m| {
                 let c = self.conns.get(m)?;
                 let ch = c.character.as_ref()?;
-                Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), account: Some(c.account), character: Some(ch.id), upgrades: ch.progress.upgrades, extra: Default::default() })
+                Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), account: Some(c.account), character: Some(ch.id), upgrades: ch.progress.upgrades, extra: Default::default(), equipment: Equipment::starter(ch.class) })
             })
             .collect();
         let seed: u64 = rand::random();

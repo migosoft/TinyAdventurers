@@ -49,7 +49,6 @@ pub struct Sheet {
     /// The Ranged slot's weapon, or the class starter (none for the classes without one).
     pub ranged: Option<ResolvedWeapon>,
     /// The light of the worn item with the largest radius.
-    #[allow(dead_code)] // plan 2, task 5 (the run carries it)
     pub light: Option<LightKind>,
     pub sight: Sight,
     pub primary: ResolvedAbility,
