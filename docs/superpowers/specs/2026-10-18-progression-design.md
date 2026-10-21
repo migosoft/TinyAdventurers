@@ -161,7 +161,7 @@ pub struct RaceDef {
 - **Effect resistance** (race, boss, items, tree nodes, effects) multiplies the time after the formula by `1 − r`; at 100 % the effect is refused. A damage-type effect (Burning, Frozen, Poisoned) has none of its own: its type's damage resistance resists it.
 - **Effects from allies** (heals, buffs such as Haste) are never reduced.
 - `OnHit` gains `magical: bool` and `power: i32` (filled by the sheet when the hit is built). `apply_effect_from` takes the power and reads the target's save and scales the time; `apply_effect` is unscaled (debug and tests).
-- **Damage-type effects** (Burning, Frozen and so on, from a damage split; decided by the user, 2026-10-19): non-magical (save CON), at the power of the source's governing Attribute but never below 10: `max(10, governing)`. The Wizard's Fireball burns at INT, the imps', chorts', demon's and dragon's fire at CHA (innate), the summoner's fire bolt at INT (a spell), a hero's melee and the wolf's bite at STR, finesse and ranged weapons at DEX. Sources without one (lava, barrels, burning ground, effect ticks, a shot whose owner is unknown) stay at 10.
+- **Damage-type effects** (Burning, Frozen and so on, from a damage split; decided by the user, 2026-10-19; two tiers by share since 2026-10-21, see "Changes decided on 2026-10-21"): non-magical (save CON), at the power of the source's governing Attribute but never below 10: `max(10, governing)`. The Wizard's Fireball burns at INT, the imps', chorts', demon's and dragon's fire at CHA (innate), the summoner's fire bolt at INT (a spell), a hero's melee and the wolf's bite at STR, finesse and ranged weapons at DEX. Sources without one (lava, barrels, burning ground, effect ticks, a shot whose owner is unknown) stay at 10.
 - **Cancels before resistance** (the user, 2026-10-19): an effect cancels its opposite even when the new effect is resisted (a fire hit on a creature that resists heat completely still thaws its ice).
 - **Examples:** the Wizard's Sleep (INT 15) on a goblin (WIL 8) lasts ×1.35; the lich's Sleep mist (INT 22) on the Paladin (WIL 12) ×1.5. The Elven Ranger and her wolf never fall asleep (race Sleep resistance 100 %).
 
@@ -256,13 +256,13 @@ The Wizard's Red Staff is a new weapon (my call: damage 6 at STR 8 → base 6.67
 
 ### 6.6 New abilities (2 primary + 2 secondary per class, 16 in all)
 
-Each has a category, uses, requirements, stats, damage types and light from the start (TODO priority 4). Numbers are at the requirement's minimum and are starting values for the balancing pass. **Slowed** gets four sources (Frost Shard, Frost Nova, War Cry, Entangle), **Accelerated** two (Haste, War Cry).
+Each has a category, uses, requirements, stats, damage types and light from the start (TODO priority 4). Numbers are at the requirement's minimum and are starting values for the balancing pass. Since 2026-10-21 hits with 25–50 % cold **Chill** (Frost Shard), Entangle **Roots** and War Cry **frightens** (see "Changes decided on 2026-10-21"); **Accelerated** has two sources (Haste, War Cry).
 
 | Class | Ability | Slot | Category | Uses | Blocked in melee | Requirements | Damage | Stats | Light |
 |---|---|---|---|---|---|---|---|---|---|
-| Wizard | **Frost Shard** | primary | Spell | none | yes | INT 14 | 10 cold | cd 0.5 s, range 200, speed 200, radius 3; on hit: Slowed 2 s, 35 % | Magic, tint 0x78c8ff (the FrostBolt kind) |
+| Wizard | **Frost Shard** | primary | Spell | none | yes | INT 14 | 10: 40 % cold, 30 % physical, 30 % magical (2026-10-21) | cd 0.5 s, range 200, speed 200, radius 3; its cold share slows (tier rule, 2026-10-21) | Magic, tint 0x78c8ff (the FrostBolt kind) |
 | Wizard | **Chain Spark** | primary | Spell | none | yes | INT 18 | 14 magical, ×0.7 per jump | cd 0.8 s, range 180, speed 260; jumps to 2 more enemies within 48 px | Magic (as the Missile) |
-| Wizard | **Frost Nova** | secondary | Spell | none | no | INT 17 | 22 cold | cd 9 s, ring around you, radius 44; Slowed 3 s on every enemy hit | Magic, tint 0x78c8ff, 0.3 s flash |
+| Wizard | **Frost Nova** | secondary | Spell | none | no | INT 17 | 22 cold | cd 9 s, ring around you, radius 44; pure cold, so it freezes (tier rule, 2026-10-21) | Magic, tint 0x78c8ff, 0.3 s flash |
 | Wizard | **Haste** | secondary | Spell | none | no | INT 15, WIL 14 | – | cd 14 s; you and allies within 64 px: Accelerated 4 s | none |
 | Paladin | **Judgement** | primary | Innate | none | yes | CHA 16 | 18 magical | cd 0.9 s, range 150, speed 220, radius 3 | Holy |
 | Paladin | **Smite** | primary | WeaponAttack | melee | no | CHA 15, Sword or Mace or Hammer | weapon ×1.4, +30 % magical share | the weapon, attack time ×1.6 | Holy, 0.3 s flash on hit |
@@ -270,11 +270,11 @@ Each has a category, uses, requirements, stats, damage types and light from the 
 | Paladin | **Purify** | secondary | Innate | none | no | WIL 14 | – | cd 15 s; you and allies within 64 px: negative effects removed, hostile magical effects resisted 100 % for 3 s | Holy, 0.3 s flash |
 | Barbarian | **Whirl** | primary | Technique | melee | no | DEX 14 | weapon ×0.75 | full circle (arc 2π), attack time ×1.3 | the weapon |
 | Barbarian | **Hurl** | primary | WeaponAttack | ranged | yes | Throwing axe | the throwing axe | the throwing axe (thrown: STR) | the weapon |
-| Barbarian | **War Cry** | secondary | Technique | none | no | STR 16 | – | cd 12 s, radius 56: enemies Slowed 3 s (power STR, save CON), allies Accelerated 3 s | none |
+| Barbarian | **War Cry** | secondary | Technique | none | no | STR 16 | – | cd 12 s, radius 56: enemies Fear 3 s (power STR, save WIL; 2026-10-21), allies Accelerated 3 s | none |
 | Barbarian | **Ground Slam** | secondary | Technique | melee | no | STR 17, Hammer or Club | weapon ×1.2 | cd 6 s, wind-up 0.5 s, radius 34 around you, pushes (STR) | the weapon |
 | Elven Ranger | **Volley** | primary | WeaponAttack | ranged | yes | DEX 15, Bow or Longbow | weapon ×0.6 per arrow | 3 arrows in a 30° spread, attack time ×1.4 | the weapon |
 | Elven Ranger | **Flanking Thrust** | primary | WeaponAttack | melee | no | DEX 16, Dagger or Duelling sword or Katana or Machete | weapon; ×2 from behind | the finesse weapon; "behind" = within 60° of the target's back | the weapon |
-| Elven Ranger | **Entangle** | secondary | Innate | none | yes | CHA 14 | – | cd 14 s; roots at a spot within 120 px, radius 36, 4 s: enemies inside Slowed (power CHA, save WIL) | none |
+| Elven Ranger | **Entangle** | secondary | Innate | none | yes | CHA 14 | – | cd 14 s; roots at a spot within 120 px, radius 36, 4 s: enemies inside Rooted (power CHA, save WIL; 2026-10-21) | none |
 | Elven Ranger | **Poison Coat** | secondary | Technique | none | no | WIL 15 | +30 % poison share | cd 16 s; 6 s: your weapon attacks add a poison share and Poisoned 3 s on hit | none |
 
 Notes:
@@ -283,7 +283,7 @@ Notes:
 - **Chain Spark** jumps to the nearest enemy not yet hit within 48 px of the last target; damage ×0.7 per jump; jumps never return.
 - **Purify**'s ward is a magical-effect resistance for 3 s (my call: a positive effect `Warded` whose mods are `Stat::ResistEffect(kind)` +1.0 for every magical negative effect, i.e. the effects saved with WIL; plan 3 fixes the exact set).
 - **Consecrate** is a ground area like today's `FirePatch` (a new `EntityKind::HolyGround`), damaging enemies only.
-- **Entangle** is a ground area like `FirePatch` (a new `EntityKind::Roots`, aimed like the Fireball) that slows enemies inside every 0.5 s (a 1 s Slowed, refreshed); it never hurts allies or the wolf.
+- **Entangle** is a ground area like `FirePatch` (a new `EntityKind::Roots`, aimed like the Fireball) that roots enemies inside every 0.5 s (a 1 s Rooted, refreshed; 2026-10-21); it never hurts allies or the wolf.
 - **Flanking Thrust** reads the target's facing: monsters already face their target, so an enemy busy with the wolf shows its back to the ranger.
 - **The wolf's improvement nodes** (Thick Fur, Swift Pounce) are `AbilityMod`s on Summon Wolf: `CompanionHpMul(f64)`, `CompanionDashCooldownAdd(f64)`. Its other numbers stay fixed (the ranger spec's call 6).
 
@@ -393,7 +393,7 @@ pub enum NodeKind { Start, Attr(Attr, i32), Unlock(AbilityId), Improve(AbilityId
                     Resist(DamageType, f64), Keystone(Keystone) }
 ```
 
-- `AbilityMod` (my call): a small enum of data changes (`Pierce(u8)`, `RadiusMul(f64)`, `DurationAdd(f64)`, `CooldownAdd(f64)`, `DamageMul(f64)`, `ArcMul(f64)`, `OnHitChance(f64)`, `AddOnHit(OnHit)`, `PushStr(i32)`, `BehindArc(f64)`, `CompanionHpMul(f64)`, `CompanionDashCooldownAdd(f64)`), applied by the sheet builder only to the equipped ability.
+- `AbilityMod` (my call): a small enum of data changes (`Pierce(u8)`, `RadiusMul(f64)`, `DurationAdd(f64)`, `CooldownAdd(f64)`, `DamageMul(f64)`, `ArcMul(f64)`, `AddOnHit(OnHit)` (`OnHitChance` dropped 2026-10-21: no chance), `PushStr(i32)`, `BehindArc(f64)`, `CompanionHpMul(f64)`, `CompanionDashCooldownAdd(f64)`), applied by the sheet builder only to the equipped ability.
 - `Keystone`: one enum variant per keystone, each handled in one place in the sheet builder or the run (for example `Berserker` is read by the damage code).
 - **Positions** are grid coordinates (start at 0,0); the client draws the graph from them.
 - **Totals:** a full tree costs about 8,500–10,400 XP (today maxing all five upgrades costs 21,875).
@@ -409,11 +409,11 @@ pub enum NodeKind { Start, Attr(Attr, i32), Unlock(AbilityId), Improve(AbilityId
 | `w_a4` | 1,-3 | attr | +1 INT | +1 INT | 300 | – | `w_a5` |
 | `w_a5` | 0,-4 | keystone | Arcane Overflow | Spell damage +15 %; spell cooldowns +10 %. | 1200 | INT 18 | – |
 | `w_f1` | -1,0 | unlock | Frost Shard | Unlocks Frost Shard (primary). | 400 | INT 14 | `w_f2` `w_f3` |
-| `w_f2` | -2,-1 | improve | Biting Cold | Frost Shard: Slowed chance 35 % → 100 %. | 350 | – | `w_f4` |
+| `w_f2` | -2,-1 | improve | Biting Cold | Frost Shard: +20 % damage (2026-10-21: no chance). | 350 | – | `w_f4` |
 | `w_f3` | -2,1 | resist | Cold Blood | +20 % cold resistance. | 250 | – | `w_f4` |
 | `w_f4` | -3,0 | unlock | Frost Nova | Unlocks Frost Nova (secondary). | 700 | INT 17 | `w_f5` |
 | `w_f5` | -4,0 | improve | Wide Nova | Frost Nova: radius +25 %. | 400 | – | `w_f6` |
-| `w_f6` | -5,0 | keystone | Deep Winter | Slowed enemies take +20 % cold damage from you. | 1200 | INT 17 | – |
+| `w_f6` | -5,0 | keystone | Deep Winter | Chilled or Frozen enemies take +20 % cold damage from you (2026-10-21). | 1200 | INT 17 | – |
 | `w_r1` | 1,0 | improve | Bigger Bang | Fireball: blast radius +20 %. | 350 | – | `w_r2` `w_r3` |
 | `w_r2` | 2,-1 | resist | Ember Skin | +20 % heat resistance. | 250 | – | `w_r4` |
 | `w_r3` | 2,1 | improve | Scorched Earth | Fireball: the blast sets Burning (3 s) on everything it hits. | 500 | INT 16 | `w_r4` |
@@ -465,7 +465,7 @@ pub enum NodeKind { Start, Attr(Attr, i32), Unlock(AbilityId), Improve(AbilityId
 | `b_l2` | -2,-1 | improve | Thunderous | War Cry: radius +30 %. | 350 | – | `b_l4` |
 | `b_l3` | -2,1 | attr | +1 CHA | +1 CHA | 200 | – | `b_l4` |
 | `b_l4` | -3,0 | improve | Bowling Charge | Charge: carries +4 STR for pushes. | 400 | – | `b_l5` |
-| `b_l5` | -4,0 | keystone | Juggernaut | +4 weight; Slowed resistance 100 %. | 1000 | CON 16 | – |
+| `b_l5` | -4,0 | keystone | Juggernaut | +4 weight; Slowed, Chilled and Rooted resistance 100 % (2026-10-21). | 1000 | CON 16 | – |
 | `b_r1` | 1,0 | prof | Heavy Armor | Proficiency: heavy armor. | 300 | – | `b_r2` `b_r3` |
 | `b_r2` | 2,-1 | unlock | Hurl | Unlocks Hurl (primary). | 500 | DEX 13 | `b_r4` |
 | `b_r3` | 2,1 | prof | Mace | Proficiency: mace. | 200 | – | `b_r4` |
@@ -491,7 +491,7 @@ pub enum NodeKind { Start, Attr(Attr, i32), Unlock(AbilityId), Improve(AbilityId
 | `e_l2` | -2,-1 | improve | Long Shot | Shoot: range +15 %. | 350 | – | `e_l4` |
 | `e_l3` | -2,1 | prof | Longbow | Proficiency: longbow. | 250 | – | `e_l4` |
 | `e_l4` | -3,0 | unlock | Volley | Unlocks Volley (primary). | 600 | DEX 15 | `e_l5` |
-| `e_l5` | -4,0 | keystone | Deadeye | Ranged hits on Slowed or sleeping enemies deal ×2. | 1200 | DEX 18 | – |
+| `e_l5` | -4,0 | keystone | Deadeye | Ranged hits on Slowed, Chilled, Rooted or sleeping enemies deal ×2 (2026-10-21). | 1200 | DEX 18 | – |
 | `e_r1` | 1,0 | unlock | Flanking Thrust | Unlocks Flanking Thrust (primary). | 500 | DEX 16 | `e_r2` `e_r3` |
 | `e_r2` | 2,-1 | improve | Find the Gap | Flanking Thrust: "behind" widens to 90°. | 350 | – | `e_r4` |
 | `e_r3` | 2,1 | prof | Katana | Proficiency: katana. | 250 | – | `e_r4` |
@@ -675,3 +675,62 @@ Mechanical follow-ups: the starter weapons are the Rapier (Duelling sword) and t
 - **No immunities, only resistances** (the user): every effect gets a resistance in %, where 100 % means immune. This replaces `EffectResponse` (`Immune`/`Reduced`) everywhere in this spec: §3 `RaceDef.responses`, §5 "hard immunities", §6.6 Purify's `Warded`, §8 `PropKind::EffectImmunity`, §9 Unshaken and Juggernaut, §10 `Sheet.responses`. Rewritten 2026-10-19 with TODO 4b (`EffectResistances`, `Stat::ResistEffect`, `PropKind::EffectResist`).
 - **No HP scaling by party size** (the user): enemy and boss HP do not depend on the number of heroes. Any later scaling uses the number of enemies or their Attributes.
 
+
+## Changes decided on 2026-10-21 (before plan 3b)
+
+The user decided these while plan 3b was being written. They override the sections they name; those sections are edited to match.
+
+### No chance anywhere (the user)
+
+- Nothing in the game is decided by a roll. Every effect a hit carries **always lands**; the target's save (CON or WIL, §5) and its effect resistance only shorten or refuse it.
+- `OnHit.chance` and the roll in `Run::hit_effect` are removed. `AbilityMod::OnHitChance` is dropped from the planned mods (§9).
+- Frost Shard's "Slowed 2 s, 35 %" is gone (§6.6). The Staff of Rot loses its 15 % poison (below). The tree node Biting Cold no longer raises a chance (below).
+
+### Damage-type effects get two tiers (the user)
+
+One table (`TYPE_EFFECTS` in `defs/effects.rs`) decides which effect a hit applies by the share of each damage type in its split:
+
+| Share of the hit | Cold | Heat | Poison |
+|---|---|---|---|
+| at least 25 % (below 50 %) | **Chilled** (new) | **Singed** (new) | **Tainted** (new) |
+| at least 50 % | Frozen | Burning | Poisoned |
+
+- **Chilled** (new effect; the user: a cold slow is not the same as War Cry's or Entangle's): move speed ×0.7 (the agent's call: milder than Slowed's ×0.5, as a primary's effect should be). With Slowed as well, both multiply (×0.35).
+- **Singed** (new effect): heat damage over time, 3 per s, 3 s; ends in water like Burning. **Tainted** (new effect; the name is the agent's): poison damage over time, 2 per s, 3 s. Both are negative.
+- Every tier is a damage-type effect as in §5: non-magical (save CON), power `max(10, governing)`, resisted by its damage type's resistance (100 % refuses it). A hit applies **only its higher tier** for each type.
+- **The stronger tier replaces the weaker** (the user): applying the stronger effect ends the weaker one on that creature; a creature that has the stronger effect does not take the weaker. Frozen ends Chilled (after the ice melts the creature moves at full speed), Burning ends Singed, Poisoned ends Tainted. The weaker tier ends only when the stronger one **lands** (the agent's call): a Frozen that the save cuts to 0 s or the cold resistance refuses leaves an existing Chilled alone.
+- **Opposites cancel across tiers** (the agent's call, approved): any heat effect (Singed, Burning) ends any cold effect (Chilled, Frozen) and the other way round, also when the new effect is resisted (the 2026-10-19 ruling). As today, an effect that cancels its opposite is not applied itself.
+- **Later switch** (the user may change it in the balancing pass): the lower heat tier may become **Scorched** (the target's resistances −15 points each for 3 s, so the party hits it harder) instead of Singed. That is one changed row in the table plus the new effect.
+- Effects of the existing gear: the Ember Staff (25 % heat) now Singes on every hit. Enemy claws and the demon's melee (20 % heat) stay below the floor. The barrel blast (50 % heat), Fireball and fire bolts (70 %) burn as before.
+- **Slowed** stays a plain effect (×0.5, no cancelling, resisted by its effect resistance) for future sources; no 3b ability applies it. War Cry and Entangle get their own effects (below).
+
+### Abilities and items changed by this (the user)
+
+- **Frost Shard** stays a primary: 10 damage as **40 % cold, 30 % physical (ice), 30 % magical**, no on-hit effect of its own. Its 40 % cold Chills by the tier rule. Cooldown, range, speed and radius as in §6.6.
+- **Frost Nova** stays a secondary and pure cold, so it freezes (CON-scaled) by the tier rule; its separate "Slowed 3 s" is gone.
+- **Staff of Rot**: a 50 % poison share and no on-hit effect, so it poisons every hit. It is the sample poison weapon (poison weapons for other classes come later).
+- **Biting Cold** (tree node, plan 4; the agent's call): "Frost Shard: +20 % damage" instead of the chance. A higher cold share would make a primary freeze, against the design rule below.
+- **Poison Coat** keeps "+30 % poison share" (so its hits Taint) and "Poisoned 3 s on hit", which now always lands.
+
+### Rooted and Fear (the user)
+
+- **Entangle roots** instead of slowing: the new negative effect **Rooted** (no moving; turning and acting stay allowed, so an archer in the roots keeps shooting). The roots renew it every 0.5 s on each enemy inside (1 s each time, so it ends at most 1 s after the creature is out of the roots or the roots are gone). Power CHA, save WIL (innate magic). It cancels nothing and fire does not burn the roots.
+- **War Cry frightens** instead of slowing: enemies within its radius get the new negative effect **Fear**, base 3 s, power STR. Allies still get Accelerated 3 s.
+- **Fear** (from the TODO; the user): the creature **runs straight away from the one who frightened it** for the whole time. The agent's calls (approved): it cannot attack while it flees; it moves with its normal movement (no running into chasms or lava; along a wall or stopped by it). The effect remembers its source (the hero's position is read each tick; if the source is gone, the creature flees from where the source was last).
+- **Each effect may name its own save** (the user: "WIL reduces the duration"): Fear is always saved with **WIL**, although War Cry is not magic. `EffectDef` gains `save: Option<Attr>`; `None` keeps the rule of §5 (WIL against magical, CON otherwise). Example at STR 16: a goblin (WIL 8) flees 4.2 s, an orc (WIL 11) 3.75 s.
+- **Who resists Fear** (the user; no immunities, only resistances): the **Undead** race 100 % (every skeleton and the lich), the **Demon** race 50 % (imps, chorts, the demon), the bosses 100 % in total (the demon's own list adds 50 % to its race's, the dragon's and the lich's lists reach 100 %). Everything else is left to the balancing pass.
+- **Heroes and Fear:** no enemy frightens yet. Fear on a hero (forced running, no attacks) is a TODO for when one does; the wolf is an ally, so War Cry never frightens it.
+- **Look:** an HUD letter like the other effects; a fleeing monster shows a small "!" above its head (the agent's call).
+
+- **Tree nodes that named Slowed** (plan 4; the agent's calls): Deep Winter reads Chilled or Frozen, Juggernaut resists Slowed, Chilled and Rooted, Deadeye counts Slowed, Chilled, Rooted or sleeping targets.
+
+### Design rule (the user)
+
+- **Primaries** (LMB) are the dependable attack used all the time: damage with at most a mild effect. **Strong control** (freezing, sleep, roots, and similar) belongs on **secondaries** with long cooldowns. A repeated effect kept up by an entity's active actions is fine as a gameplay element (allies save a locked hero by killing or distracting the attacker); what must not happen is a fast primary that locks a target by itself.
+
+### Decided for plan 3b
+
+- **The ranger's tree and her four abilities** (Volley, Flanking Thrust, Entangle, Poison Coat) are **approved as drafted** (the user, 2026-10-21).
+- **Debug weapons** (the user): plan 3b adds the hero items **Throwing Axes** (ThrowingAxe, `weapon_throwing_axe`), **War Hammer** (Hammer, `weapon_hammer`) and **Katana** (Katana, `weapon_katana`), and a debug-only `ClientMsg::DebugEquip { slot, item }` with two weapon selects (melee, ranged) in the `?debug` waiting-room row, so Hurl, Ground Slam and the katana's Flanking Thrust can be tried. Plan 4 may fold it into `DebugGrantItem`.
+- **The wolf's wait after it dies** (the user): it keeps scaling with the Summon Wolf version's cooldown ratio (a `CooldownAdd` that halves the cooldown halves the 60 s wait).
+- **Warded** (Purify; the agent's call, 2026-10-21): +100 % effect resistance to **Blind, Sleep and Petrified**, the effects hostile sources apply magically today (the lich's spells). Rooted (magical) is added once an enemy roots heroes; Fear (saved with WIL, but not magical) is left out.
