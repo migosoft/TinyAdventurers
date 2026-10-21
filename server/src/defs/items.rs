@@ -100,6 +100,7 @@ super::enum_list::listed_enum! {
         SummonerStaff = 39,
         HuntersBow = 40,
         ThrowingAxes = 41,
+        WarHammer = 42,
     }
 }
 
@@ -282,6 +283,7 @@ pub fn def(id: ItemId) -> ItemDef {
             &[plain!(PropKind::Pierce(2))],
         ),
         // The agent's numbers, for the balancing pass.
+        I::WarHammer => item("War Hammer", "weapon_hammer", melee(K::Hammer, 26.0, 1.0, 1.8, 24.0, phys(), At::BASE), ALL, &[], &[]),
         I::ThrowingAxes => item("Throwing Axes", "weapon_throwing_axe", ranged(K::ThrowingAxe, 16.0, 0.9, 170.0, 220.0, 3.0, EntityKind::ThrownAxe, At::BASE), ALL, &[], &[]),
         I::RingOfTheMagus => item(
             "Ring of the Magus",

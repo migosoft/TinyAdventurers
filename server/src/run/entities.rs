@@ -72,6 +72,8 @@ pub struct Player {
     pub effects: crate::run::effects::Effects,
     /// The Ranger's wolf (its monster id) while it lives.
     pub wolf: Option<u32>,
+    /// Ground Slam: seconds until it lands; lost when the hero dies, sinks or is pushed.
+    pub slam: Option<f64>,
 }
 
 /// How a hero is lost to the terrain (sent as `Ev::Sink { how }`).

@@ -185,7 +185,7 @@ fn use_projectile(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> A
                 spawn_player_projectile(run, pi, kind_of(a.projectile), ab::volley_shot(shot, i), Vec2::from_angle(angle), a.speed, w.amount, a.radius, life, 0.0, None, crit, w.split, w.on_hit, w.power, pierce);
             }
         }
-        AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
+        AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
             unreachable!("{:?} is not a projectile", a.id)
         }
     }
@@ -207,7 +207,7 @@ fn use_blast(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> Anim {
             let life = a.range / a.speed + 0.1;
             spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, a.speed, a.damage, 4.0, life, a.radius, Some(target), crit, a.split, a.on_hit, a.power, Pierce::Never);
         }
-        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
+        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
             unreachable!("{:?} is not a blast", a.id)
         }
     }
@@ -227,20 +227,99 @@ fn use_swing(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim 
                 run.add_flash(LightKind::Holy, at, ab::SMITE_FLASH);
             }
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
             unreachable!("{:?} is not a swing", a.id)
         }
     }
     Anim::Melee
 }
 
-/// An instant hit on the enemies around the user: no ability has one yet.
-fn use_ring(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
+/// An instant effect on the enemies around the user: Frost Nova hurts them (and freezes), War Cry
+/// frightens them and hastens the party, Ground Slam starts its wind-up (`land_slam`).
+fn use_ring(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Ring);
+    let pos = run.players[pi].pos();
     match a.id {
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
+        AbilityId::FrostNova => {
+            run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 10 }, Some(pos));
+            run.add_flash(LightKind::Magic, pos, ab::NOVA_FLASH);
+            let hit: Vec<usize> = (0..run.monsters.len())
+                .filter(|&mi| {
+                    let m = &run.monsters[mi];
+                    m.alive && !m.is_ally() && m.pos.dist(pos) <= a.radius && line_of_sight(&run.layout.map, pos, m.pos)
+                })
+                .collect();
+            for mi in hit {
+                run.hurt_monster(mi, damage_of(a), false, Some(pi));
+            }
+        }
+        AbilityId::WarCry => {
+            run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 11 }, Some(pos));
+            let own = a.effect.expect("War Cry has its own effect");
+            let source = Some((run.players[pi].id, pos));
+            let afraid: Vec<usize> = (0..run.monsters.len())
+                .filter(|&mi| {
+                    let m = &run.monsters[mi];
+                    m.alive && !m.is_ally() && m.pos.dist(pos) <= a.radius
+                })
+                .collect();
+            for mi in afraid {
+                run.apply(Creature::Monster(mi), Apply { source, ..Apply::from_hit(own) });
+            }
+            for c in party_around(run, pos, a.radius) {
+                run.apply(c, Apply::plain(EffectKind::Accelerated, Some(a.duration)));
+            }
+        }
+        AbilityId::GroundSlam => {
+            run.players[pi].slam = Some(ab::SLAM_WINDUP);
+        }
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::Haste | AbilityId::Purify => {
             unreachable!("{:?} is not a ring", a.id)
         }
+    }
+    Anim::Cast
+}
+
+/// Every living hero and ally (the wolf) within `radius` of `pos`, the user included.
+fn party_around(run: &Run, pos: Vec2, radius: f64) -> Vec<Creature> {
+    let heroes = run.players.iter().enumerate().filter(|(_, q)| q.alive && q.pos().dist(pos) <= radius).map(|(qi, _)| Creature::Player(qi));
+    let allies = run.monsters.iter().enumerate().filter(|(_, m)| m.is_ally() && m.alive && m.pos.dist(pos) <= radius).map(|(mi, _)| Creature::Monster(mi));
+    heroes.chain(allies).collect()
+}
+
+/// Counts down a hero's Ground Slam wind-up; it lands at the hero's position then. A hero who
+/// died (`step_player` clears it), sinks or is pushed loses it.
+pub fn tick_slam(run: &mut Run, pi: usize) {
+    let p = &mut run.players[pi];
+    let Some(left) = p.slam else { return };
+    if p.sinking.is_some() || p.mv.knocked() || p.mv.dash_t > 0.0 {
+        p.slam = None;
+        return;
+    }
+    let left = left - super::DT;
+    if left > 1e-9 {
+        p.slam = Some(left);
+    } else {
+        land_slam(run, pi);
+    }
+}
+
+/// Ground Slam lands: the weapon's damage on every enemy within its radius, pushed away from the hero.
+pub fn land_slam(run: &mut Run, pi: usize) {
+    run.players[pi].slam = None;
+    let a = run.players[pi].sheet.secondary;
+    debug_assert!(a.id == AbilityId::GroundSlam);
+    let (pos, aim) = (run.players[pi].pos(), run.players[pi].aim);
+    run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 5 }, Some(pos));
+    let dmg = weapon_damage(run, pi, &a);
+    let push = a.push.max(ab::SLAM_PUSH);
+    for mi in 0..run.monsters.len() {
+        let m = &run.monsters[mi];
+        if !(m.alive && !m.airborne && !m.is_ally() && m.pos.dist(pos) <= a.radius) {
+            continue;
+        }
+        run.hurt_monster(mi, dmg, false, Some(pi));
+        run.knock_creature(Creature::Monster(mi), pos, aim, push, a.push_str);
     }
 }
 
@@ -256,14 +335,14 @@ fn use_dash(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
             p.mv.dash_dy = dir.y;
             p.dash_hit.clear();
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
             unreachable!("{:?} is not a dash", a.id)
         }
     }
     Anim::Dash
 }
 
-/// An effect or a heal on the user and the allies around: Holy Light.
+/// An effect or a heal on the user and the allies around: Holy Light, Haste, Purify.
 fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::SelfArea);
     let pos = run.players[pi].pos();
@@ -286,7 +365,29 @@ fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> A
             }
             run.players[pi].healing += total;
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
+        AbilityId::Haste => {
+            run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 12 }, Some(pos));
+            let own = a.effect.expect("Haste has its own effect");
+            for c in party_around(run, pos, a.radius) {
+                run.apply(c, Apply::plain(own.kind, Some(own.secs)));
+            }
+        }
+        AbilityId::Purify => {
+            run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 13 }, Some(pos));
+            run.add_flash(LightKind::Holy, pos, ab::PURIFY_FLASH);
+            let own = a.effect.expect("Purify has its own effect");
+            for c in party_around(run, pos, a.radius) {
+                let held = match c {
+                    Creature::Player(i) => run.players[i].effects.kinds(),
+                    Creature::Monster(i) => run.monsters[i].effects.kinds(),
+                };
+                for k in held.into_iter().filter(|&k| !crate::defs::effects::def(k).positive) {
+                    run.remove_effect(c, k);
+                }
+                run.apply(c, Apply::plain(own.kind, Some(own.secs)));
+            }
+        }
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam => {
             unreachable!("{:?} is not a self area", a.id)
         }
     }
@@ -297,7 +398,7 @@ fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> A
 fn use_ground_area(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::GroundArea);
     match a.id {
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
             unreachable!("{:?} is not a ground area", a.id)
         }
     }
@@ -311,7 +412,7 @@ fn use_buff(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
             let own = a.effect.expect("Poison Coat has its own effect");
             run.apply(Creature::Player(pi), Apply::from_hit(own));
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
             unreachable!("{:?} is not a buff", a.id)
         }
     }
@@ -323,7 +424,7 @@ fn use_summon(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim
     debug_assert!(ab::def(a.id).shape == Shape::Summon);
     match a.id {
         AbilityId::SummonWolf => super::companion::use_ability(run, pi),
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
             unreachable!("{:?} is not a summon", a.id)
         }
     }
@@ -2001,5 +2102,285 @@ mod tests {
         };
         assert_eq!(strike(true), (true, false), "the coat's Poisoned wins");
         assert_eq!(strike(false), (false, true), "the weapon's own effect comes back");
+    }
+
+    // ---- Plan 3b: rings and party effects ----
+
+    use crate::defs::abilities::SLAM_WINDUP;
+    use crate::defs::effects::scaled_secs;
+
+    /// The seconds left of `kind` on `c`, if it is on.
+    fn left(run: &Run, c: Creature, kind: EffectKind) -> Option<f64> {
+        let fx = match c {
+            Creature::Player(i) => run.players[i].effects.list(),
+            Creature::Monster(i) => run.monsters[i].effects.list(),
+        };
+        fx.iter().find(|a| a.kind == kind).map(|a| a.left)
+    }
+
+    fn booms(run: &Run, k: u8) -> Vec<(f32, f32, f32)> {
+        run.events.iter().filter_map(|(e, _)| if let Ev::Boom { x, y, r, k: kk } = e { (*kk == k).then_some((*x, *y, *r)) } else { None }).collect()
+    }
+
+    fn wizard_secondary(id: AbilityId, extra: Attributes) -> Run {
+        run_with_ability(ClassId::Wizard, AbilitySlot::Secondary, id, extra, Equipment::starter(ClassId::Wizard))
+    }
+
+    fn barbarian_secondary(id: AbilityId, extra: Attributes, melee: ItemId) -> Run {
+        let equipment = Equipment::starter(ClassId::Barbarian).with(EquipSlot::Melee, melee);
+        run_with_ability(ClassId::Barbarian, AbilitySlot::Secondary, id, extra, equipment)
+    }
+
+    #[test]
+    fn frost_nova_freezes_around_the_wizard() {
+        let mut run = wizard_secondary(AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0));
+        let a = run.players[0].sheet.secondary;
+        assert_eq!(a.id, AbilityId::FrostNova);
+        assert_eq!(a.split, DamageSplit::pure(DamageType::Cold));
+        let g = goblins(&mut run, &[30.0, 60.0]);
+        // Works with an enemy in melee reach: it is not a ranged ability.
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(a.cooldown, 9.0);
+        assert_eq!(run.players[0].cd2, 9.0);
+        assert_eq!(run.players[0].anim, Anim::Cast);
+        let expect = dealt(&run, g[0], a.damage, a.split);
+        assert!((lost(&run, g[0], 1000.0) - expect).abs() < 1e-9, "{} vs {expect}", lost(&run, g[0], 1000.0));
+        assert!(run.has_effect(Creature::Monster(g[0]), EffectKind::Frozen), "a pure cold hit freezes");
+        assert_eq!(run.monsters[g[1]].hp, 1000.0, "the far one is outside 44 px");
+        assert!(!run.has_effect(Creature::Monster(g[1]), EffectKind::Frozen));
+        let pos = run.players[0].pos();
+        assert_eq!(booms(&run, 10), vec![(pos.x as f32, pos.y as f32, a.radius as f32)]);
+        assert_eq!(a.radius, 44.0);
+    }
+
+    #[test]
+    fn frost_nova_does_not_reach_through_walls_or_the_wolf() {
+        let mut run = wizard_secondary(AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0));
+        let near = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 1000.0);
+        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(wolf).unwrap();
+        run.monsters[wi].pos = run.players[0].pos() + Vec2::new(0.0, 20.0);
+        let wolf_hp = run.monsters[wi].hp;
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.monsters[near].pos);
+        run.layout.map.set(tx - 1, ty, crate::dungeon::Tile::Wall);
+        let hp = run.monsters[near].hp;
+        assert!(!line_of_sight(&run.layout.map, run.players[0].pos(), run.monsters[near].pos), "walled off");
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.monsters[near].hp, hp);
+        assert_eq!(run.monsters[wi].hp, wolf_hp, "the wolf is safe");
+    }
+
+    fn barbarian_war_cry() -> Run {
+        barbarian_secondary(AbilityId::WarCry, Attributes::new(1, 0, 0, 0, 0, 0), ItemId::GreatAxe)
+    }
+
+    #[test]
+    fn war_cry_frightens_enemies_and_hastens_allies() {
+        let mut run = barbarian_war_cry();
+        let a = run.players[0].sheet.secondary;
+        assert_eq!(a.id, AbilityId::WarCry);
+        assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), 16);
+        // The wolf beside the hero.
+        let goblin = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
+        let far = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 90.0, 1000.0);
+        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(wolf).unwrap();
+        run.monsters[wi].pos = run.players[0].pos() + Vec2::new(0.0, 30.0);
+        let hero_id = run.players[0].id;
+        let hero_pos = run.players[0].pos();
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.players[0].cd2, 12.0);
+        let wil = run.monsters[goblin].attrs.get(Attr::Wil);
+        let want = scaled_secs(3.0, 16, wil);
+        let got = left(&run, Creature::Monster(goblin), EffectKind::Fear).expect("frightened");
+        assert!((got - want).abs() < 1e-9, "{got} vs {want}");
+        let fx = run.monsters[goblin].effects.fear_from();
+        assert_eq!(fx, Some((Some(hero_id), hero_pos)), "afraid of the hero, from where it stood");
+        assert!(!run.has_effect(Creature::Monster(far), EffectKind::Fear), "outside 56 px");
+        assert!(!run.has_effect(Creature::Monster(wi), EffectKind::Fear), "the wolf is never frightened");
+        assert_eq!(left(&run, Creature::Monster(wi), EffectKind::Accelerated), Some(3.0));
+        assert_eq!(left(&run, Creature::Player(0), EffectKind::Accelerated), Some(3.0));
+        assert_eq!(booms(&run, 11).len(), 1);
+    }
+
+    #[test]
+    fn war_cry_hastens_a_second_hero_in_range_only() {
+        let barb = ClassId::Barbarian;
+        let start = Loadout::start(barb);
+        let pick = Pick { ability: AbilityId::WarCry, source: Source::Own };
+        let build = Build { own: vec![AbilityId::WarCry], loadout: Loadout { secondary: pick, ..start }, extra: Attributes::new(1, 0, 0, 0, 0, 0), ..Build::start(barb) };
+        let mut run = super::super::tests::test_run_with(&[(barb, build), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::Demon);
+        let here = run.players[0].pos();
+        run.players[1].mv.x = here.x + 50.0;
+        run.players[1].mv.y = here.y;
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(left(&run, Creature::Player(1), EffectKind::Accelerated), Some(3.0));
+        let mut run2 = super::super::tests::test_run_with(&[(barb, Build { own: vec![AbilityId::WarCry], loadout: Loadout { secondary: pick, ..Loadout::start(barb) }, extra: Attributes::new(1, 0, 0, 0, 0, 0), ..Build::start(barb) }), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::Demon);
+        let here = run2.players[0].pos();
+        run2.players[1].mv.x = here.x + 100.0;
+        run2.players[1].mv.y = here.y;
+        try_use(&mut run2, 0, false, 1);
+        assert_eq!(left(&run2, Creature::Player(1), EffectKind::Accelerated), None);
+    }
+
+    #[test]
+    fn war_cry_spares_the_undead() {
+        let mut run = barbarian_war_cry();
+        let s = put_enemy(&mut run, 0, EnemyType::SkeletonWarrior, 40.0, 1000.0);
+        let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
+        try_use(&mut run, 0, false, 1);
+        assert!(!run.has_effect(Creature::Monster(s), EffectKind::Fear), "the undead resist Fear fully");
+        assert!(run.has_effect(Creature::Monster(g), EffectKind::Fear));
+    }
+
+    fn ground_slam() -> Run {
+        barbarian_secondary(AbilityId::GroundSlam, Attributes::new(2, 0, 0, 0, 0, 0), ItemId::WarHammer)
+    }
+
+    #[test]
+    fn ground_slam_lands_after_its_windup() {
+        let mut run = ground_slam();
+        let a = run.players[0].sheet.secondary;
+        assert_eq!(a.id, AbilityId::GroundSlam);
+        let hammer = run.players[0].sheet.melee;
+        assert!((a.damage - hammer.damage * 1.2).abs() < 1e-9);
+        assert_eq!(a.radius, 34.0);
+        let g = goblins(&mut run, &[20.0, 30.0, 90.0]);
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.players[0].slam, Some(SLAM_WINDUP));
+        assert_eq!(run.players[0].anim, Anim::Cast);
+        assert_eq!(run.players[0].cd2, 6.0);
+        assert!(g.iter().all(|&i| run.monsters[i].hp == 1000.0), "nothing yet");
+        assert!(booms(&run, 5).is_empty());
+        let mut steps = 0;
+        while run.players[0].slam.is_some() {
+            run.step_player(0);
+            steps += 1;
+            assert!(steps <= 40, "it lands");
+            if run.players[0].slam.is_some() {
+                assert!(g.iter().all(|&i| run.monsters[i].hp == 1000.0), "still winding up");
+            }
+        }
+        assert!((steps as f64 / 60.0 - SLAM_WINDUP).abs() < 0.05, "{steps} steps");
+        for &i in &g[..2] {
+            let expect = dealt(&run, i, a.damage, a.split);
+            assert!((lost(&run, i, 1000.0) - expect).abs() < 1e-9, "{} vs {expect}", lost(&run, i, 1000.0));
+        }
+        assert_eq!(run.monsters[g[2]].hp, 1000.0, "outside 34 px");
+        let pos = run.players[0].pos();
+        assert_eq!(booms(&run, 5), vec![(pos.x as f32, pos.y as f32, 34.0)]);
+        // Pushed away from the hero (they are east of it).
+        for &i in &g[..2] {
+            assert!(run.monsters[i].knock.x > 0.0, "pushed east");
+        }
+    }
+
+    #[test]
+    fn ground_slam_pushes_at_least_slam_push() {
+        let mut run = ground_slam();
+        assert_eq!(run.players[0].sheet.secondary.push, 24.0, "the hammer's own push");
+        run.players[0].sheet.secondary.push = 0.0;
+        let g = goblins(&mut run, &[20.0]);
+        try_use(&mut run, 0, false, 1);
+        for _ in 0..40 {
+            run.step_player(0);
+        }
+        assert!(run.monsters[g[0]].knock.len() > 0.0, "pushed by SLAM_PUSH even when the weapon does not push");
+    }
+
+    #[test]
+    fn ground_slam_needs_a_hammer_or_club() {
+        use crate::defs::requirements::Requirement;
+        use crate::defs::weapons::WeaponKind;
+        let pick = Pick { ability: AbilityId::GroundSlam, source: Source::Own };
+        let build = Build { own: vec![AbilityId::GroundSlam], loadout: Loadout { secondary: pick, ..Loadout::start(ClassId::Barbarian) }, extra: Attributes::new(2, 0, 0, 0, 0, 0), ..Build::start(ClassId::Barbarian) };
+        let err = crate::sheet::hero_sheet(ClassId::Barbarian, &build).err();
+        assert_eq!(err, Some(LoadoutError::Requirement(AbilityId::GroundSlam, Requirement::WeaponKind(&[WeaponKind::Hammer, WeaponKind::Club]))));
+    }
+
+    #[test]
+    fn a_knocked_hero_loses_the_slam() {
+        let mut run = ground_slam();
+        let g = goblins(&mut run, &[20.0]);
+        try_use(&mut run, 0, false, 1);
+        assert!(run.players[0].slam.is_some());
+        run.knock_player(0, run.players[0].pos() + Vec2::new(20.0, 0.0), 0.0, 40.0, 30);
+        assert!(run.players[0].mv.knocked());
+        for _ in 0..40 {
+            run.step_player(0);
+        }
+        assert_eq!(run.players[0].slam, None);
+        assert_eq!(run.monsters[g[0]].hp, 1000.0, "nothing landed");
+        assert!(booms(&run, 5).is_empty());
+    }
+
+    #[test]
+    fn a_dead_hero_loses_the_slam() {
+        let mut run = ground_slam();
+        let g = goblins(&mut run, &[20.0]);
+        try_use(&mut run, 0, false, 1);
+        run.players[0].alive = false;
+        for _ in 0..40 {
+            run.step_player(0);
+        }
+        assert_eq!(run.players[0].slam, None);
+        assert_eq!(run.monsters[g[0]].hp, 1000.0);
+    }
+
+    #[test]
+    fn ground_slam_carries_the_coat() {
+        let mut run = ground_slam();
+        let g = goblins(&mut run, &[20.0]);
+        run.apply_effect(Creature::Player(0), EffectKind::Coated, Some(6.0));
+        try_use(&mut run, 0, false, 1);
+        for _ in 0..40 {
+            run.step_player(0);
+        }
+        assert!(run.has_effect(Creature::Monster(g[0]), EffectKind::Poisoned), "a weapon attack: the coat applies");
+    }
+
+    #[test]
+    fn haste_hastens_the_party_in_range() {
+        let wiz = ClassId::Wizard;
+        let pick = Pick { ability: AbilityId::Haste, source: Source::Own };
+        let mk = || Build { own: vec![AbilityId::Haste], loadout: Loadout { secondary: pick, ..Loadout::start(wiz) }, extra: Attributes::new(0, 0, 0, 5, 2, 0), ..Build::start(wiz) };
+        let mut run = super::super::tests::test_run_with(&[(wiz, mk()), (ClassId::Paladin, Build::start(ClassId::Paladin)), (ClassId::Barbarian, Build::start(ClassId::Barbarian))], BossId::Demon);
+        let here = run.players[0].pos();
+        run.players[1].mv.x = here.x + 50.0;
+        run.players[1].mv.y = here.y;
+        run.players[2].mv.x = here.x + 100.0;
+        run.players[2].mv.y = here.y;
+        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(wolf).unwrap();
+        run.monsters[wi].pos = here + Vec2::new(0.0, 40.0);
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.players[0].cd2, 14.0);
+        assert_eq!(run.players[0].anim, Anim::Cast);
+        assert_eq!(left(&run, Creature::Player(0), EffectKind::Accelerated), Some(4.0));
+        assert_eq!(left(&run, Creature::Player(1), EffectKind::Accelerated), Some(4.0));
+        assert_eq!(left(&run, Creature::Monster(wi), EffectKind::Accelerated), Some(4.0));
+        assert_eq!(left(&run, Creature::Player(2), EffectKind::Accelerated), None, "at 100 px");
+        assert_eq!(booms(&run, 12).len(), 1);
+    }
+
+    #[test]
+    fn purify_cleanses_and_wards() {
+        let mut run = run_with_ability(ClassId::Paladin, AbilitySlot::Secondary, AbilityId::Purify, Attributes::new(0, 0, 0, 0, 2, 0), Equipment::starter(ClassId::Paladin));
+        let a = run.players[0].sheet.secondary;
+        assert_eq!(a.id, AbilityId::Purify);
+        let me = Creature::Player(0);
+        run.apply_effect(me, EffectKind::Burning, Some(5.0));
+        run.apply_effect(me, EffectKind::Slowed, Some(5.0));
+        run.apply_effect(me, EffectKind::Accelerated, Some(5.0));
+        assert!(run.has_effect(me, EffectKind::Burning) && run.has_effect(me, EffectKind::Slowed));
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.players[0].cd2, 15.0);
+        assert!(!run.has_effect(me, EffectKind::Burning));
+        assert!(!run.has_effect(me, EffectKind::Slowed));
+        assert!(run.has_effect(me, EffectKind::Accelerated), "a positive effect stays");
+        assert_eq!(left(&run, me, EffectKind::Warded), Some(3.0));
+        assert_eq!(booms(&run, 13).len(), 1);
+        assert!(!run.apply_effect(me, EffectKind::Sleep, Some(5.0)), "Warded refuses Sleep");
+        assert!(!run.has_effect(me, EffectKind::Sleep));
     }
 }

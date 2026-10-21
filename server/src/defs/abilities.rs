@@ -44,6 +44,16 @@ super::enum_list::listed_enum! {
         FlankingThrust = 14,
         /// Coats the weapon in poison for a while.
         PoisonCoat = 15,
+        /// A ring of frost around the Wizard that freezes.
+        FrostNova = 16,
+        /// A shout that frightens enemies and hastens allies.
+        WarCry = 17,
+        /// A hammer blow that lands after a wind-up.
+        GroundSlam = 18,
+        /// Hastens the party around.
+        Haste = 19,
+        /// Cleanses the party around and wards it.
+        Purify = 20,
     }
 }
 
@@ -167,6 +177,12 @@ pub const COAT_SHARE: f64 = 0.3;
 pub const COAT_POISON_SECS: f64 = 3.0;
 /// How long (s) Smite's holy flash lasts.
 pub const SMITE_FLASH: f64 = 0.3;
+/// Ground Slam: the wind-up (s) before it lands, and the push (px) it gives at least.
+pub const SLAM_WINDUP: f64 = 0.5;
+pub const SLAM_PUSH: f64 = 24.0;
+/// How long (s) Frost Nova's and Purify's flashes last.
+pub const NOVA_FLASH: f64 = 0.3;
+pub const PURIFY_FLASH: f64 = 0.3;
 
 /// The id of arrow `i` of a Volley that starts at `shot`: the server's rule; the client
 /// reserves ids so that none is 0.
@@ -256,6 +272,31 @@ pub fn def(id: AbilityId) -> AbilityDef {
             req: &[Requirement::Attr(Attr::Wil, 15)],
             own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Coated, power: Attr::Wil, look: EffectLook::Plain }), ..own(0.0, 16.0, 0.0, 0.0, 0.0, 6.0, None, 0) },
             ..base("Poison Coat", Secondary, C::Technique, Uses::Nothing, false, Shape::Buff, NO_OWN, &[K::ElvenRanger])
+        },
+        FrostNova => AbilityDef {
+            req: &[Requirement::Attr(Attr::Int, 17)],
+            own: OwnStats { split: Some(DamageSplit::pure(DamageType::Cold)), ..own(22.0, 9.0, 0.0, 0.0, 44.0, 0.0, None, 17) },
+            ..base("Frost Nova", Secondary, C::Spell, Uses::Nothing, false, Shape::Ring, NO_OWN, &[K::Wizard])
+        },
+        WarCry => AbilityDef {
+            req: &[Requirement::Attr(Attr::Str, 16)],
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Fear, power: Attr::Str, look: EffectLook::Plain }), ..own(0.0, 12.0, 0.0, 0.0, 56.0, 3.0, None, 0) },
+            ..base("War Cry", Secondary, C::Technique, Uses::Nothing, false, Shape::Ring, NO_OWN, &[K::Barbarian])
+        },
+        GroundSlam => AbilityDef {
+            req: &[Requirement::Attr(Attr::Str, 17), Requirement::WeaponKind(&[WeaponKind::Hammer, WeaponKind::Club])],
+            weapon_mult: WeaponMult { damage: 1.2, ..WeaponMult::ONE },
+            ..base("Ground Slam", Secondary, C::Technique, Uses::Melee, false, Shape::Ring, own(0.0, 6.0, 0.0, 0.0, 34.0, 0.0, None, 0), &[K::Barbarian])
+        },
+        Haste => AbilityDef {
+            req: &[Requirement::Attr(Attr::Int, 15), Requirement::Attr(Attr::Wil, 14)],
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Accelerated, power: Attr::Int, look: EffectLook::Plain }), ..own(0.0, 14.0, 64.0, 0.0, 64.0, 4.0, None, 0) },
+            ..base("Haste", Secondary, C::Spell, Uses::Nothing, false, Shape::SelfArea, NO_OWN, &[K::Wizard])
+        },
+        Purify => AbilityDef {
+            req: &[Requirement::Attr(Attr::Wil, 14)],
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Warded, power: Attr::Cha, look: EffectLook::Plain }), ..own(0.0, 15.0, 64.0, 0.0, 64.0, 3.0, None, 0) },
+            ..base("Purify", Secondary, C::Innate, Uses::Nothing, false, Shape::SelfArea, NO_OWN, &[K::Paladin])
         },
         SummonWolf => base("Summon Wolf", Secondary, C::Innate, Uses::Nothing, false, Shape::Summon, own(0.0, 8.0, 0.0, 0.0, 0.0, 0.0, None, 13), &[K::ElvenRanger]),
     }

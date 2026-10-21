@@ -254,6 +254,15 @@ export const ABILITIES = {
     "shape": "Swing",
     "slot": "Primary"
   },
+  "FrostNova": {
+    "classes": [
+      "Wizard"
+    ],
+    "name": "Frost Nova",
+    "ranged": false,
+    "shape": "Ring",
+    "slot": "Secondary"
+  },
   "FrostShard": {
     "classes": [
       "Wizard"
@@ -262,6 +271,24 @@ export const ABILITIES = {
     "ranged": true,
     "shape": "Projectile",
     "slot": "Primary"
+  },
+  "GroundSlam": {
+    "classes": [
+      "Barbarian"
+    ],
+    "name": "Ground Slam",
+    "ranged": false,
+    "shape": "Ring",
+    "slot": "Secondary"
+  },
+  "Haste": {
+    "classes": [
+      "Wizard"
+    ],
+    "name": "Haste",
+    "ranged": false,
+    "shape": "SelfArea",
+    "slot": "Secondary"
   },
   "HolyLight": {
     "classes": [
@@ -306,6 +333,15 @@ export const ABILITIES = {
     "name": "Poison Coat",
     "ranged": false,
     "shape": "Buff",
+    "slot": "Secondary"
+  },
+  "Purify": {
+    "classes": [
+      "Paladin"
+    ],
+    "name": "Purify",
+    "ranged": false,
+    "shape": "SelfArea",
     "slot": "Secondary"
   },
   "Shoot": {
@@ -353,6 +389,15 @@ export const ABILITIES = {
     "ranged": true,
     "shape": "Projectile",
     "slot": "Primary"
+  },
+  "WarCry": {
+    "classes": [
+      "Barbarian"
+    ],
+    "name": "War Cry",
+    "ranged": false,
+    "shape": "Ring",
+    "slot": "Secondary"
   },
   "Whirl": {
     "classes": [

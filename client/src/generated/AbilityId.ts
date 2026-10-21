@@ -3,4 +3,4 @@
 /**
  * Every ability a hero can have: one primary (LMB) and one secondary (RMB).
  */
-export type AbilityId = "MagicMissile" | "Fireball" | "Strike" | "HolyLight" | "Charge" | "Shoot" | "SummonWolf" | "FrostShard" | "ChainSpark" | "Judgement" | "Hurl" | "Volley" | "Smite" | "Whirl" | "FlankingThrust" | "PoisonCoat";
+export type AbilityId = "MagicMissile" | "Fireball" | "Strike" | "HolyLight" | "Charge" | "Shoot" | "SummonWolf" | "FrostShard" | "ChainSpark" | "Judgement" | "Hurl" | "Volley" | "Smite" | "Whirl" | "FlankingThrust" | "PoisonCoat" | "FrostNova" | "WarCry" | "GroundSlam" | "Haste" | "Purify";

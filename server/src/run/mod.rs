@@ -221,6 +221,7 @@ impl Run {
                 darkvision: None,
                 effects: effects::Effects::default(),
                 wolf: None,
+                slam: None,
                 sheet,
             });
             // An item's light goes with its wearer (light ids are separate from entity ids).
@@ -480,6 +481,7 @@ impl Run {
         let p = &mut self.players[pi];
         p.hurt_t = (p.hurt_t - DT).max(0.0);
         if !p.alive {
+            p.slam = None;
             p.inputs.clear();
             let spec = p.spectating;
             if spec.map_or(true, |s| !self.players.iter().any(|q| q.id == s && q.alive)) {
@@ -488,6 +490,8 @@ impl Run {
             }
             return;
         }
+        abilities::tick_slam(self, pi);
+        let p = &mut self.players[pi];
         // One input per step; catch up with two when the queue builds up.
         let n = if p.inputs.len() > 3 { 2 } else { 1 };
         for _ in 0..n {
