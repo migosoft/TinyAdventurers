@@ -408,12 +408,19 @@ fn use_ground_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) ->
             run.spawn_hazard(kind_of(a.projectile), pos, a.radius, a.duration, side, HazardPulse::Hurt(damage_of(a)));
         }
         AbilityId::Entangle => {
-            let at = pos + Vec2::from_angle(aim) * aim_dist.clamp(24.0, a.range);
+            // Aimed like the Fireball, but it stops short of the first wall on the way.
+            let dir = Vec2::from_angle(aim);
+            let want = aim_dist.clamp(24.0, a.range);
+            let mut d = 0.0;
+            while d + 2.0 <= want && !run.layout.map.opaque_at(pos + dir * (d + 2.0)) {
+                d += 2.0;
+            }
+            let at = pos + dir * if d + 2.0 > want && !run.layout.map.opaque_at(pos + dir * want) { want } else { d };
             let own = a.effect.expect("Entangle has its own effect");
             let bind = OnHit { secs: ab::ENTANGLE_PULSE_SECS, ..own };
             run.spawn_hazard(kind_of(a.projectile), at, a.radius, a.duration, side, HazardPulse::Bind(bind));
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify => {
             unreachable!("{:?} is not a ground area", a.id)
         }
     }
@@ -2415,6 +2422,7 @@ mod tests {
         let mut run = consecrate_run();
         let a = run.players[0].sheet.secondary;
         assert_eq!(a.id, AbilityId::Consecrate);
+        assert_eq!(a.split, DamageSplit::pure(DamageType::Magical));
         let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 20.0, 1000.0);
         let doomed = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 25.0, 1.0);
         let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
@@ -2499,9 +2507,26 @@ mod tests {
         let ogre = put_enemy(&mut run, 0, EnemyType::Ogre, 85.0, 1000.0);
         try_use(&mut run, 0, false, 1);
         run.tick_hazards(0.3);
+        assert!(run.has_effect(Creature::Monster(ogre), EffectKind::Entangled), "the ogre is entangled");
         let (g, o) = (left(&run, Creature::Monster(goblin), EffectKind::Entangled).unwrap(), left(&run, Creature::Monster(ogre), EffectKind::Entangled).unwrap());
         assert!((g - scaled_secs(1.0, power, run.monsters[goblin].attrs.get(Attr::Str))).abs() < 1e-9);
         assert!((o - scaled_secs(1.0, power, run.monsters[ogre].attrs.get(Attr::Str))).abs() < 1e-9);
         assert!(o < g, "STR 19 against STR 8: {o} vs {g}");
+    }
+
+    #[test]
+    fn entangle_stops_at_walls() {
+        let mut run = entangle_run();
+        let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 100.0, 1000.0);
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos() + Vec2::new(60.0, 0.0));
+        run.layout.map.set(tx, ty, crate::dungeon::Tile::Wall);
+        run.players[0].aim_dist = 100.0;
+        let here = run.players[0].pos();
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.hazards.len(), 1);
+        let at = run.hazards[0].pos;
+        assert!(at.x < here.x + 60.0 && at.x > here.x && !run.layout.map.opaque_at(at), "on the hero's side of the wall");
+        run.tick_hazards(0.3);
+        assert!(!run.has_effect(Creature::Monster(g), EffectKind::Entangled), "the goblin behind the wall is not entangled");
     }
 }
