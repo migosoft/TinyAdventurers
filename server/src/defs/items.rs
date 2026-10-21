@@ -1,13 +1,14 @@
 //! Items: equipment slots, base types and properties. Data only; the equip
 //! rules and the hero sheet that reads it come later in plan 2.
 
-use super::attributes::Attr;
+use super::attributes::{Attr, Attributes};
+use super::classes;
 use super::damage::{DamageSplit, DamageType};
 use super::effects::{EffectKind, OnHit};
 use super::kinds::EntityKind;
 use super::lights::LightKind;
 use super::requirements::Requirement;
-use super::weapons::{At, MeleeStats, RangedStats, WeaponKind};
+use super::weapons::{category, At, MeleeStats, RangedStats, WeaponCategory, WeaponKind};
 use crate::protocol::ClassId;
 
 super::enum_list::listed_enum! {
@@ -25,20 +26,32 @@ super::enum_list::listed_enum! {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
 pub struct Equipment {
     pub slots: [Option<ItemId>; EquipSlot::COUNT],
 }
 
 impl Equipment {
-    #[allow(dead_code)] // plan 2, task 3 (the equip rules)
+    #[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
     pub fn get(&self, s: EquipSlot) -> Option<ItemId> {
         self.slots[s as usize]
     }
 
-    #[allow(dead_code)] // plan 2, task 3 (the equip rules)
+    #[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
     pub fn with(mut self, s: EquipSlot, id: ItemId) -> Equipment {
         self.slots[s as usize] = Some(id);
         self
+    }
+
+    /// The class's starting weapons: Melee and, if it has one, Ranged.
+    #[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
+    pub fn starter(class: ClassId) -> Equipment {
+        let (melee, ranged) = classes::def(class).starter;
+        let e = Equipment::default().with(EquipSlot::Melee, melee);
+        match ranged {
+            Some(r) => e.with(EquipSlot::Ranged, r),
+            None => e,
+        }
     }
 }
 
@@ -179,7 +192,7 @@ const ALL: &[ClassId] = &ClassId::ALL;
 const WIZARD: &[ClassId] = &[ClassId::Wizard];
 const RANGER: &[ClassId] = &[ClassId::ElvenRanger];
 
-#[allow(dead_code)] // plan 2, task 3 (the equip rules)
+#[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
 pub fn def(id: ItemId) -> ItemDef {
     use ItemId as I;
     use WeaponKind as K;
@@ -257,6 +270,61 @@ pub fn def(id: ItemId) -> ItemDef {
     }
 }
 
+#[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EquipError {
+    WrongSlot,
+    ClassNotListed,
+    NotProficient,
+    Requirement(Requirement),
+}
+
+/// Whether `item` can be worn by `class` in `slot`. `attrs` are the Attributes
+/// without item points. Order: slot, class, proficiency, requirements.
+#[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
+pub fn check_equip(class: ClassId, slot: EquipSlot, item: ItemId, attrs: &Attributes) -> Result<(), EquipError> {
+    let d = def(item);
+    let fits = match (slot, d.base) {
+        (EquipSlot::Melee, ItemBase::Melee(k, _)) => category(k) != WeaponCategory::Natural,
+        (EquipSlot::Ranged, ItemBase::Ranged(..)) => true,
+        (EquipSlot::Armor, ItemBase::Armor(_)) => true,
+        (EquipSlot::Ring1 | EquipSlot::Ring2, ItemBase::Ring) => true,
+        (EquipSlot::Shoes, ItemBase::Shoes) => true,
+        (EquipSlot::Belt, ItemBase::Belt) => true,
+        _ => false,
+    };
+    if !fits {
+        return Err(EquipError::WrongSlot);
+    }
+    if !d.classes.contains(&class) {
+        return Err(EquipError::ClassNotListed);
+    }
+    let cd = classes::def(class);
+    let proficient = match d.base {
+        ItemBase::Melee(k, _) | ItemBase::Ranged(k, _) => cd.weapons.contains(&k),
+        ItemBase::Armor(a) => a.class <= cd.max_armor,
+        _ => true,
+    };
+    if !proficient {
+        return Err(EquipError::NotProficient);
+    }
+    match d.req.iter().find(|r| !r.met(attrs)) {
+        Some(r) => Err(EquipError::Requirement(*r)),
+        None => Ok(()),
+    }
+}
+
+/// Checks every filled slot, in slot order.
+#[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
+pub fn check_equipment(class: ClassId, e: &Equipment, attrs: &Attributes) -> Result<(), (EquipSlot, EquipError)> {
+    for slot in EquipSlot::ALL {
+        if let Some(item) = e.get(slot) {
+            check_equip(class, slot, item, attrs).map_err(|err| (slot, err))?;
+        }
+    }
+    Ok(())
+}
+
 fn heat() -> DamageSplit {
     DamageSplit::split(&[(DamageType::Heat, 0.2)])
 }
@@ -330,5 +398,70 @@ mod tests {
             _ => panic!(),
         }
         assert_eq!(def(ItemId::StaffOfRot).req, &[Requirement::Attr(Attr::Int, 14)]);
+    }
+
+    use crate::defs::attributes::Attributes;
+    use crate::defs::classes::start_attrs;
+    use EquipSlot as S;
+    use ItemId as I;
+
+    fn ok(c: ClassId, slot: EquipSlot, item: ItemId) -> Result<(), EquipError> {
+        check_equip(c, slot, item, &start_attrs(c))
+    }
+
+    #[test]
+    fn starters_are_valid() {
+        for c in ClassId::ALL {
+            assert_eq!(check_equipment(c, &Equipment::starter(c), &start_attrs(c)), Ok(()), "{c:?}");
+        }
+        assert_eq!(Equipment::starter(ClassId::ElvenRanger).get(S::Ranged), Some(I::ElvenBow));
+        assert_eq!(Equipment::starter(ClassId::Wizard).get(S::Ranged), None);
+    }
+
+    #[test]
+    fn proficiency_gates_weapons_and_armor() {
+        use ClassId as C;
+        assert_eq!(ok(C::Wizard, S::Melee, I::KnightSword), Err(EquipError::NotProficient));
+        assert_eq!(ok(C::Wizard, S::Melee, I::Knife), Ok(()));
+        assert_eq!(ok(C::Paladin, S::Armor, I::PlateArmor), Ok(()));
+        assert_eq!(ok(C::Barbarian, S::Armor, I::PlateArmor), Err(EquipError::NotProficient));
+        assert_eq!(ok(C::Barbarian, S::Armor, I::ChainMail), Ok(()));
+        assert_eq!(ok(C::ElvenRanger, S::Armor, I::ChainMail), Err(EquipError::NotProficient));
+        assert_eq!(ok(C::ElvenRanger, S::Armor, I::LeatherArmor), Ok(()));
+        assert_eq!(ok(C::ElvenRanger, S::Armor, I::SilkRobe), Ok(()));
+        assert_eq!(ok(C::Barbarian, S::Melee, I::Cleaver), Ok(()));
+    }
+
+    #[test]
+    fn slots_take_their_own_bases() {
+        use ClassId as C;
+        assert_eq!(ok(C::Paladin, S::Ring1, I::BandOfVigor), Ok(()));
+        assert_eq!(ok(C::Paladin, S::Ring2, I::BandOfVigor), Ok(()));
+        assert_eq!(ok(C::Paladin, S::Shoes, I::BandOfVigor), Err(EquipError::WrongSlot));
+        assert_eq!(ok(C::Paladin, S::Shoes, I::IronBoots), Ok(()));
+        assert_eq!(ok(C::Paladin, S::Belt, I::GirdleOfWarding), Ok(()));
+        assert_eq!(ok(C::Paladin, S::Melee, I::Claws), Err(EquipError::WrongSlot));
+        assert_eq!(ok(C::Paladin, S::OffHand, I::Knife), Err(EquipError::WrongSlot));
+        assert_eq!(ok(C::Paladin, S::OffHand, I::SilkRobe), Err(EquipError::WrongSlot));
+        assert_eq!(ok(C::ElvenRanger, S::Melee, I::ElvenBow), Err(EquipError::WrongSlot));
+        assert_eq!(ok(C::ElvenRanger, S::Ranged, I::ElvenBow), Ok(()));
+    }
+
+    #[test]
+    fn classes_restrict_items() {
+        assert_eq!(ok(ClassId::Paladin, S::Melee, I::StaffOfRot), Err(EquipError::ClassNotListed));
+        assert_eq!(ok(ClassId::Barbarian, S::Ranged, I::ElvenBow), Err(EquipError::ClassNotListed));
+    }
+
+    #[test]
+    fn item_requirements_ignore_item_points() {
+        let c = ClassId::Wizard;
+        let low = start_attrs(c).plus(Attributes::new(0, 0, 0, -2, 0, 0));
+        let want = EquipError::Requirement(Requirement::Attr(Attr::Int, 14));
+        assert_eq!(check_equip(c, S::Melee, I::StaffOfRot, &low), Err(want));
+        let e = Equipment::default().with(S::Melee, I::StaffOfRot).with(S::Ring1, I::RingOfInsight);
+        assert_eq!(check_equipment(c, &e, &low), Err((S::Melee, want)));
+        let ok14 = start_attrs(c).plus(Attributes::new(0, 0, 0, -1, 0, 0));
+        assert_eq!(check_equipment(c, &e, &ok14), Ok(()));
     }
 }

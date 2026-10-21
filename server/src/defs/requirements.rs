@@ -9,7 +9,7 @@ pub enum Requirement {
 }
 
 impl Requirement {
-    #[allow(dead_code)] // plan 2, task 3 (the equip rules)
+    #[allow(dead_code)] // plan 2, task 4 (hero sheet) and plan 4 (equip)
     pub fn met(&self, attrs: &Attributes) -> bool {
         match *self {
             Requirement::Attr(a, n) => attrs.get(a) >= n,
