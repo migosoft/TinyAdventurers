@@ -29,7 +29,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 
 Your teammates' names float above their heroes, and the party list (top left) shows everyone's health.
 
-**Abilities.** Every hero has two: left mouse button (primary) and right (secondary). The four names are **Strike** (hit with your melee weapon), **Shoot** (fire your ranged weapon), **Charge** (a dash that hurts everything you run through) and **Holy Light** (a heal for you and your friends). Spells such as Magic Missile and Fireball are abilities too.
+**Abilities.** Every hero has two: left mouse button (primary) and right (secondary). The four starting names are **Strike** (hit with your melee weapon), **Shoot** (fire your ranged weapon), **Charge** (a dash that hurts everything you run through) and **Holy Light** (a heal for you and your friends). Spells such as Magic Missile and Fireball are abilities too. Every class has four more, two for the left button and two for the right, listed under its heading below. They are built, but you cannot learn them in the game yet: the skill tree comes later. Until then you try them in a debug game (`?debug` in the address, the "Debug loadout" row in the waiting room, which also lifts your Attributes and lets you pick weapons). Each needs Attribute values (INT, CHA, STR, DEX, WIL; items count) and some a kind of weapon, shown after its name.
 
 **Fighting up close.** A ranged ability does not work with an enemy (or a closed chest) right next to you, about a body's width and a bit more.
 - Your **left button then strikes with your melee weapon** instead: the Wizard hits with his staff (weakly, so step back), the Elven Ranger thrusts her rapier. It hits the nearest target. If the blow kills it with damage to spare, the rest of the blow carries on to the next target in reach.
@@ -42,21 +42,29 @@ Your teammates' names float above their heroes, and the party list (top left) sh
 Fragile, but deadly from range.
 - **Left – Magic Missile:** fast arcane bolts in quick succession. With an enemy right next to you, you hit with your staff instead.
 - **Right – Fireball (6 s cooldown):** a slow ball of fire that explodes where your mouse pointer is, or earlier if it hits something. It damages every enemy in the blast. It can't hurt your friends. It cannot be cast with an enemy right next to you.
+- **More, left button:** **Frost Shard** (INT 14): a quick bolt that is mostly cold and chills what it hits (slows it). **Chain Spark** (INT 18): a bolt that jumps to up to two more enemies close by, weaker each time, with a line of lightning between them.
+- **More, right button:** **Frost Nova** (INT 17, 9 s): a ring of cold around you that hurts every enemy in sight and freezes it. **Haste** (INT 15, WIL 14, 14 s): you and the friends close to you run faster for 4 seconds.
 
 ### Paladin, 120 HP
 An armoured holy warrior who keeps the party alive.
 - **Left – Strike (Sword):** a swing of your sword toward the mouse pointer. It hits every enemy in reach in front of you.
 - **Right – Holy Light (10 s cooldown):** heals you and every ally close to you.
+- **More, left button:** **Judgement** (CHA 16): a bolt of holy light. **Smite** (CHA 15, needs a sword, mace or hammer): a slow, hard swing with a holy part, and a gold flash where it lands.
+- **More, right button:** **Purify** (WIL 14, 15 s): clears every bad effect from you and your friends close to you, and for 3 seconds nothing can blind, sleep or petrify them. **Consecrate** (CHA 15, 12 s): holy ground under your feet for 5 seconds that hurts the enemies standing on it.
 
 ### Barbarian, 140 HP
 The toughest hero.
 - **Left – Strike (Great Axe):** a heavy swing toward the mouse pointer that hits every enemy in reach in front of you. Slower than the sword, but it hits harder.
 - **Right – Charge (5 s cooldown):** dash toward the mouse pointer, hitting every enemy you run through with your axe (a little weaker than a strike). It works with enemies right next to you.
+- **More, left button:** **Hurl** (needs Throwing Axes in the ranged slot): throw an axe that spins as it flies. **Whirl** (DEX 14): a swing all the way around you, weaker and slower than a strike.
+- **More, right button:** **War Cry** (STR 16, 12 s): a shout that sends the enemies close to you running for 3 seconds (they cannot attack while afraid), and speeds up you and your friends close to you. **Ground Slam** (STR 17, needs a hammer or a club, 6 s): you raise your weapon, and half a second later it lands, hurting and pushing the enemies around you.
 
 ### Elven Ranger, 90 HP
 The fastest hero, and the only one who fights with a companion. An elf: she sees **twice as far** as the others (18 tiles, still only where there is light and no wall), she sees a third of that range into the dark, she shrugs off a tenth of poison and she **cannot be put to sleep**.
 - **Left – Shoot (Bow) / Strike (Rapier):** shoots arrows, which pierce enemies they kill. When an enemy is right next to you, you thrust with the rapier automatically instead, which is quicker.
 - **Right – Dire Wolf (8 s cooldown):** with no wolf, **summons** one beside you in a puff of green sparkles. With the wolf alive, it **heals** the wolf for 20 % of its health (also at full health; the cooldown starts anyway). When the wolf falls, the box waits **60 seconds** before you can summon a new one. There is only ever one wolf per ranger.
+- **More, left button:** **Volley** (DEX 15, needs a bow or longbow): three arrows in a fan, each weaker, and it takes longer to nock. **Flanking Thrust** (DEX 16, needs a dagger, duelling sword, katana or machete): a thrust that does **double damage** to an enemy you hit from behind.
+- **More, right button:** **Poison Coat** (WIL 15, 16 s): for 6 seconds your weapon attacks add poison and poison what they hit. **Entangle** (CHA 14, 14 s): vines grow where you aim, up to 120 pixels away and not through walls, and root the enemies in them for 4 seconds (a strong enemy breaks free sooner). You cannot aim it with an enemy right next to you. A rooted enemy still attacks.
 
 **Your wolf**
 - It has 80 HP, runs a little faster than you and bites for 10 about once a second, with a small push.
@@ -179,7 +187,7 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 
 - Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
 - The Red Demon's claws and the Red Dragon's claws are partly fire.
-- Fire also sets things **burning** and poison **poisons** (see Status effects): a creature that resists the type completely never takes the effect.
+- Fire also sets things **burning** and poison **poisons** (see Status effects), and a smaller share of a type has a weaker effect: a creature that resists the type completely never takes the effect.
 - Your own **armour** upgrade still works on top of all this.
 
 ## Water, lava and chasms
@@ -254,17 +262,25 @@ Some attacks do more than damage. Your own effects show as small icons with the 
 | **Z** | Asleep | You lie down: no moving, attacking or abilities, and a very short view. A teammate's **E** wakes you at once |
 | **P** | Petrified | Stone: no moving, attacking or turning, but you take far less damage and are hard to push |
 | **S** | Slowed | You walk at half speed |
-| **A** | Accelerated | You walk half as fast again (only the debug key gives this so far) |
+| **A** | Accelerated | You walk half as fast again (Haste and War Cry give it to heroes) |
 | **F** | Burning | Fire eats at you: heat damage for 3 seconds. Water puts it out |
 | **I** | Frozen | Ice: you cannot move, act or turn for 2 seconds, and the cold hurts a little |
 | **X** | Poisoned | Poison eats at you for 4 seconds |
+| **C** | Chilled | Cold slows you to 70 % speed for 3 seconds |
+| **G** | Singed | A weaker burn: a little heat damage for 3 seconds. Water puts it out |
+| **T** | Tainted | A weaker poison: a little poison damage for 3 seconds |
+| **E** | Entangled | Roots hold you: you cannot move for a few seconds, but you can still turn and attack |
+| **R** | Fear | You run away from whoever scared you and cannot attack (enemies only, for now) |
+| **W** | Warded | Green: nothing can blind, sleep or petrify you (Purify) |
+| **V** | Coated | Green: your weapon attacks add poison and poison what they hit (Poison Coat) |
 
 A sleeping or petrified hero cannot dodge, and a blind one cannot see what is coming, so the party's job is to keep the enemies off them. The final bosses resist some effects: all of them resist sleep completely, and some shorten other effects. The effects end by themselves after a few seconds.
 
-The last three come from damage types. A hit that is **at least half heat, cold or poison** puts the matching effect on whoever it hits, hero or enemy: fireballs, fire bolts, barrel blasts and the dragon's fire burn, and so does **lava**. The damage over time hits twice a second, and a creature that resists the type takes less of it.
-- **Burning:** water puts it out, in a pool or in the shallows. Fire and ice cancel each other: a fire hit on a frozen creature thaws it instead of burning it, and a cold hit on a burning one puts the fire out. **Demons and the Red Dragon never burn** (they resist heat completely), so use something else on them. A hero who burns a monster to death still gets the kill.
-- **Frozen:** rooted and unable to act or turn until the ice ends, so a frozen hero needs the party to cover them. Fire thaws it at once. Nothing freezes anyone yet, so only the debug key gives it so far.
-- **Poisoned:** no other effect, just the damage. **Undead are never poisoned** (they resist poison completely). Nothing poisons anyone yet either.
+The effects from damage types work in two tiers. A hit that is **at least half heat, cold or poison** puts the strong effect on whoever it hits, hero or enemy: Burning, Frozen or Poisoned. A hit that is **at least a quarter** (and less than half) puts the weak one: Singed, Chilled or Tainted. Fireballs, fire bolts, barrel blasts and the dragon's fire burn, and so does **lava**. The strong effect replaces the weak one of its kind. There is no chance involved: the effect always starts, and the target's resistance or toughness only shortens it or stops it. The damage over time hits twice a second, and a creature that resists the type takes less of it.
+- **Burning and Singed:** water puts them out, in a pool or in the shallows. Fire and ice cancel each other, weak and strong: a fire hit on a frozen or chilled creature thaws it instead of burning it, and a cold hit on a burning or singed one puts the fire out. **Demons and the Red Dragon never burn** (they resist heat completely), so use something else on them. A hero who burns a monster to death still gets the kill.
+- **Frozen and Chilled:** Frozen roots a creature and stops it from acting or turning until the ice ends, so a frozen hero needs the party to cover them. Fire thaws it at once. Frost Shard chills, and Frost Nova freezes. The Ember Staff now singes.
+- **Poisoned and Tainted:** just the damage. **Undead are never poisoned** (they resist poison completely). The Staff of Rot poisons, and Poison Coat poisons what your weapon hits.
+- **Entangled** (Entangle) and **Fear** (War Cry): your **Strength** shortens roots and your **Willpower** shortens fear, on you and on enemies alike, so a strong monster breaks out sooner. A rooted enemy can still attack you, and an enemy that runs away comes back when the fear ends. **Undead and bosses cannot be frightened**, and demons only half as long.
 
 ## Death, victory and defeat
 
