@@ -1,7 +1,9 @@
 //! The abilities as data (spec §6.3): what each one is, what it uses and its own numbers.
 //! `sheet::resolve_ability` turns a def into a hero's numbers.
 
-use super::attributes::Attr;
+use super::attributes::{Attr, CHA_DMG, INT_DMG};
+use super::damage::{DamageSplit, DamageType};
+use super::effects::{EffectKind, EffectLook};
 use super::kinds::EntityKind;
 use super::requirements::Requirement;
 use crate::protocol::ClassId;
@@ -53,9 +55,26 @@ pub enum Shape {
     Swing,
     Projectile,
     Blast,
+    /// An instant hit on the enemies around the user.
+    Ring,
     Dash,
+    /// An effect or a heal on the user and the allies around.
     SelfArea,
+    /// A hazard placed at the user's feet or at an aimed spot.
+    GroundArea,
+    /// An effect on the user only.
+    Buff,
     Summon,
+}
+
+/// The effect an ability applies by itself (to the user, the allies around, or the enemies a
+/// ring or a hazard touches), for its `duration`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OwnEffect {
+    pub kind: EffectKind,
+    /// The Attribute whose value is the effect's power.
+    pub power: Attr,
+    pub look: EffectLook,
 }
 
 /// An ability's own numbers (those it does not take from a weapon).
@@ -67,8 +86,12 @@ pub struct OwnStats {
     pub speed: f64,
     pub radius: f64,
     pub duration: f64,
-    /// The spell's projectile; its split is `kind_split(kind)`.
+    /// Its projectile or ground area; its split is `kind_split(kind)` unless `split` is set.
     pub kind: Option<EntityKind>,
+    /// The split, instead of `kind_split(kind)`.
+    pub split: Option<DamageSplit>,
+    /// The effect it applies by itself.
+    pub effect: Option<OwnEffect>,
     /// The governing Attribute's value at which `damage` is given.
     pub at: i32,
 }
@@ -81,10 +104,12 @@ pub struct WeaponMult {
     pub time: f64,
     /// The arc, instead of the weapon's.
     pub arc: Option<f64>,
+    /// A non-physical share added to the weapon's split (`DamageSplit::with_shares`).
+    pub share: Option<(DamageType, f64)>,
 }
 
 impl WeaponMult {
-    pub const ONE: WeaponMult = WeaponMult { damage: 1.0, time: 1.0, arc: None };
+    pub const ONE: WeaponMult = WeaponMult { damage: 1.0, time: 1.0, arc: None, share: None };
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -100,6 +125,8 @@ pub struct AbilityDef {
     pub shape: Shape,
     pub own: OwnStats,
     pub weapon_mult: WeaponMult,
+    /// The half-angle (rad) of the cone "from behind" its target in which it does more; 0 = none.
+    pub behind: f64,
     /// The classes whose own pool can hold it: the class start now, the tree in plan 4.
     pub classes: &'static [ClassId],
 }
@@ -112,7 +139,7 @@ pub const KNOCK_DECAY: f64 = 0.7788007830714049;
 pub const KNOCK_MIN_SPEED: f64 = 8.0;
 
 /// No own numbers: a weapon ability takes them all from its weapon.
-const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, at: 0 };
+const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, split: None, effect: None, at: 0 };
 
 pub fn def(id: AbilityId) -> AbilityDef {
     use AbilityCategory as C;
@@ -121,7 +148,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
     use ClassId as K;
     #[allow(clippy::too_many_arguments)]
     const fn own(damage: f64, cooldown: f64, range: f64, speed: f64, radius: f64, duration: f64, kind: Option<EntityKind>, at: i32) -> OwnStats {
-        OwnStats { damage, cooldown, range, speed, radius, duration, kind, at }
+        OwnStats { damage, cooldown, range, speed, radius, duration, kind, split: None, effect: None, at }
     }
     let base = |name: &'static str, slot, category, uses, ranged, shape, own, classes: &'static [ClassId]| AbilityDef {
         id,
@@ -134,6 +161,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         shape,
         own,
         weapon_mult: WeaponMult::ONE,
+        behind: 0.0,
         classes,
     };
     match id {
@@ -151,12 +179,13 @@ pub fn def(id: AbilityId) -> AbilityDef {
 }
 
 /// The Attribute that governs an ability's category (spec §5, §6.3): it scales a spell's or
-/// innate ability's damage and is the power of its damage-type effects. Weapon attacks and
-/// techniques have none: their numbers and power are the weapon's.
-pub fn governing(c: AbilityCategory) -> Option<Attr> {
+/// innate ability's damage and is the power of its damage-type effects, with the percentage
+/// each point moves that damage by. Weapon attacks and techniques have none: their numbers and
+/// power are the weapon's.
+pub fn governing(c: AbilityCategory) -> Option<(Attr, f64)> {
     match c {
-        AbilityCategory::Spell => Some(Attr::Int),
-        AbilityCategory::Innate => Some(Attr::Cha),
+        AbilityCategory::Spell => Some((Attr::Int, INT_DMG)),
+        AbilityCategory::Innate => Some((Attr::Cha, CHA_DMG)),
         AbilityCategory::WeaponAttack | AbilityCategory::Technique => None,
     }
 }
@@ -172,12 +201,25 @@ mod tests {
             let d = def(id);
             assert_eq!(d.id, id);
             assert!(!d.classes.is_empty(), "{id:?}");
-            let nothing = d.uses == Uses::Nothing;
             let magic = matches!(d.category, AbilityCategory::Spell | AbilityCategory::Innate);
-            assert_eq!(nothing, magic, "{id:?}: uses nothing iff a spell or innate");
-            if d.uses == Uses::Melee {
-                assert!(matches!(d.shape, Shape::Swing | Shape::Dash), "{id:?}: a melee ability swings or dashes");
+            if magic {
+                assert_eq!(d.uses, Uses::Nothing, "{id:?}: a spell or innate ability uses nothing");
             }
+            match d.uses {
+                Uses::Melee => assert!(matches!(d.shape, Shape::Swing | Shape::Dash | Shape::Ring), "{id:?}: a melee ability swings, dashes or rings"),
+                Uses::Ranged => assert_eq!(d.shape, Shape::Projectile, "{id:?}: a ranged ability shoots"),
+                Uses::Nothing => {}
+            }
+            if matches!(d.shape, Shape::Blast | Shape::GroundArea) && d.ranged {
+                assert!(d.own.range > 0.0, "{id:?}: an aimed area needs a range");
+            }
+            if d.own.effect.is_some() {
+                assert!(matches!(d.shape, Shape::Ring | Shape::SelfArea | Shape::GroundArea | Shape::Buff), "{id:?}: an own effect needs an area or a buff");
+            }
+            if magic && d.own.damage > 0.0 {
+                assert!(d.own.at > 0, "{id:?}: a spell's damage is given at an Attribute value");
+            }
+            let nothing = d.uses == Uses::Nothing;
             if d.req.iter().any(|r| matches!(r, Requirement::WeaponKind(_))) {
                 assert!(!nothing, "{id:?}: a weapon-kind requirement needs a weapon");
             }

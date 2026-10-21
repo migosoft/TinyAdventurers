@@ -4,8 +4,8 @@
 //! each Attribute point above or below moves it. The simulation reads heroes
 //! and monsters from here.
 
-use crate::defs::abilities::{self as ab, AbilityDef, AbilityId, AbilitySlot, Uses};
-use crate::defs::attributes::{self, Attr, Attributes, Scaled, CHA_DMG, CON_MOVE, INT_DMG};
+use crate::defs::abilities::{self as ab, AbilityCategory, AbilityDef, AbilityId, AbilitySlot, Uses};
+use crate::defs::attributes::{self, Attr, Attributes, Scaled, CON_MOVE};
 use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT};
@@ -52,6 +52,12 @@ pub struct ResolvedAbility {
     #[serde(skip)]
     #[ts(skip)]
     pub on_hit: Option<OnHit>,
+    /// The half-angle (rad) of the "from behind" cone; 0 = none.
+    pub behind: f64,
+    /// The effect it applies by itself (an `OwnEffect` resolved for this hero).
+    #[serde(skip)]
+    #[ts(skip)]
+    pub effect: Option<OnHit>,
     /// The power of its damage-type effects.
     #[serde(skip)]
     #[ts(skip)]
@@ -115,7 +121,7 @@ pub fn wolf_mods(mods: &[AbilityMod]) -> WolfMods {
         match m {
             CompanionHpMul(f) => hp.push(f),
             CompanionDashCooldownAdd(s) => dash.push(s),
-            Pierce(_) | PierceThrough(_) | RadiusMul(_) | RangeMul(_) | DurationAdd(_) | CooldownAdd(_) | DamageMul(_) | ArcMul(_) | AddShare(..) | PushStr(_) => {}
+            Pierce(_) | PierceThrough(_) | RadiusMul(_) | RangeMul(_) | DurationAdd(_) | CooldownAdd(_) | DamageMul(_) | ArcMul(_) | AddShare(..) | PushStr(_) | AddOnHit(_) | BehindArc(_) => {}
         }
     }
     // A fixed order, so the order of the mods never matters.
@@ -127,6 +133,11 @@ pub fn wolf_mods(mods: &[AbilityMod]) -> WolfMods {
 /// Movement speed: `base` is the value at `ref_con`; CON moves it by `CON_MOVE` per point.
 fn move_speed(base: f64, ref_con: i32, attrs: &Attributes) -> f64 {
     Scaled { value: base, attr: Attr::Con, pct: CON_MOVE, at: ref_con }.get(attrs)
+}
+
+/// `split` with a weapon ability's added share, if it has one.
+fn with_share(split: DamageSplit, share: Option<(DamageType, f64)>) -> DamageSplit {
+    share.map_or(split, |s| split.with_shares(&[s]))
 }
 
 /// One ability for a hero with `attrs`, its weapons and its melee `reach`. `None` if it
@@ -152,6 +163,8 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
         projectile: None,
         split: DamageSplit::physical(),
         on_hit: None,
+        behind: d.behind,
+        effect: own.effect.map(|e| OnHit { kind: e.kind, secs: own.duration, magical: matches!(d.category, AbilityCategory::Spell | AbilityCategory::Innate), power: attrs.get(e.power), look: e.look }),
         power: 0,
         push: 0.0,
         push_str: attrs.get(Attr::Str),
@@ -165,7 +178,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
             speed: own.speed,
             radius: own.radius,
             duration: own.duration,
-            split: melee.split,
+            split: with_share(melee.split, mult.share),
             on_hit: melee.on_hit,
             power: melee.power,
             push: melee.push,
@@ -183,7 +196,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
                 pierce: u8::MAX,
                 pierce_through: w.pierce_through,
                 projectile: w.projectile.map(|k| k as u8),
-                split: w.split,
+                split: with_share(w.split, mult.share),
                 on_hit: w.on_hit,
                 power: w.power,
                 ..blank
@@ -192,14 +205,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
         Uses::Nothing => {
             let gov = ab::governing(d.category);
             let damage = match gov {
-                Some(attr) => {
-                    let pct = match attr {
-                        Attr::Int => INT_DMG,
-                        Attr::Cha => CHA_DMG,
-                        other => unreachable!("governing returned {other:?}"),
-                    };
-                    Scaled { value: own.damage, attr, pct, at: own.at }.get(attrs)
-                }
+                Some((attr, pct)) => Scaled { value: own.damage, attr, pct, at: own.at }.get(attrs),
                 None => own.damage,
             };
             ResolvedAbility {
@@ -210,8 +216,8 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
                 radius: own.radius,
                 duration: own.duration,
                 projectile: own.kind.map(|k| k as u8),
-                split: own.kind.map_or(DamageSplit::physical(), kind_split),
-                power: if own.damage > 0.0 { gov.map_or(0, |a| attrs.get(a)) } else { 0 },
+                split: own.split.unwrap_or_else(|| own.kind.map_or(DamageSplit::physical(), kind_split)),
+                power: if own.damage > 0.0 { gov.map_or(0, |(a, _)| attrs.get(a)) } else { 0 },
                 ..blank
             }
         }
@@ -406,6 +412,32 @@ mod tests {
         let mut x = Attributes::default();
         x.add(a, n);
         x
+    }
+
+    #[test]
+    fn own_split_and_share_and_effect_resolve() {
+        use crate::defs::abilities::{OwnEffect, WeaponMult};
+        use crate::defs::effects::EffectLook;
+        let sheet = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap();
+        let resolve = |d: &AbilityDef| resolve_ability(d, &sheet.attrs, &sheet.melee, sheet.ranged.as_ref(), sheet.reach).unwrap();
+        // An own split wins over the projectile's.
+        let mm = ab::def(AbilityId::MagicMissile);
+        let cold = DamageSplit::pure(DamageType::Cold);
+        assert_eq!(resolve(&mm).split, kind_split(EntityKind::Missile));
+        let own = ab::OwnStats { split: Some(cold), ..mm.own };
+        assert_eq!(resolve(&AbilityDef { own, ..mm }).split, cold);
+        // A weapon share on top of the sword.
+        let strike = ab::def(AbilityId::Strike);
+        assert_eq!(resolve(&strike).split, sheet.melee.split);
+        let shared = AbilityDef { weapon_mult: WeaponMult { share: Some((DamageType::Magical, 0.3)), ..WeaponMult::ONE }, ..strike };
+        let r = resolve(&shared);
+        assert!((r.split.share(DamageType::Magical) - 0.3).abs() < 1e-12 && (r.split.share(DamageType::Physical) - 0.7).abs() < 1e-12, "{:?}", r.split);
+        // An own effect: power from its Attribute, secs from the duration.
+        let hl = ab::def(AbilityId::HolyLight);
+        assert_eq!(resolve(&hl).effect, None);
+        let own = ab::OwnStats { duration: 4.0, effect: Some(OwnEffect { kind: EffectKind::Warded, power: Attr::Cha, look: EffectLook::Plain }), ..hl.own };
+        let e = resolve(&AbilityDef { own, ..hl }).effect.expect("an own effect");
+        assert_eq!((e.kind, e.secs, e.power, e.magical, e.look), (EffectKind::Warded, 4.0, sheet.attrs.get(Attr::Cha), true, EffectLook::Plain));
     }
 
     /// The class start with `extra` Attribute points, `equip` and `up`.

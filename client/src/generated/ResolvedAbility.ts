@@ -24,4 +24,8 @@ projectile: number | null,
 /**
  * Sent as the non-zero shares by damage-type name (see `DamageSplit`'s `Serialize`).
  */
-split: Record<string, number>, };
+split: Record<string, number>, 
+/**
+ * The half-angle (rad) of the "from behind" cone; 0 = none.
+ */
+behind: number, };

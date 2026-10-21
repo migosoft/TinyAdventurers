@@ -47,7 +47,7 @@ fn export_defs() {
         .iter()
         .map(|&a| {
             let d = ab::def(a);
-            (format!("{a:?}"), json!({ "name": d.name, "slot": d.slot, "ranged": d.ranged, "classes": d.classes }))
+            (format!("{a:?}"), json!({ "name": d.name, "slot": d.slot, "ranged": d.ranged, "shape": d.shape, "classes": d.classes }))
         })
         .collect();
     let mut consts = json!({

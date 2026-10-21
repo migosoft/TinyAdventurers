@@ -221,6 +221,7 @@ export const ABILITIES = {
     ],
     "name": "Charge",
     "ranged": false,
+    "shape": "Dash",
     "slot": "Secondary"
   },
   "Fireball": {
@@ -229,6 +230,7 @@ export const ABILITIES = {
     ],
     "name": "Fireball",
     "ranged": true,
+    "shape": "Blast",
     "slot": "Secondary"
   },
   "HolyLight": {
@@ -237,6 +239,7 @@ export const ABILITIES = {
     ],
     "name": "Holy Light",
     "ranged": false,
+    "shape": "SelfArea",
     "slot": "Secondary"
   },
   "MagicMissile": {
@@ -245,6 +248,7 @@ export const ABILITIES = {
     ],
     "name": "Magic Missile",
     "ranged": true,
+    "shape": "Projectile",
     "slot": "Primary"
   },
   "Shoot": {
@@ -253,6 +257,7 @@ export const ABILITIES = {
     ],
     "name": "Shoot",
     "ranged": true,
+    "shape": "Projectile",
     "slot": "Primary"
   },
   "Strike": {
@@ -262,6 +267,7 @@ export const ABILITIES = {
     ],
     "name": "Strike",
     "ranged": false,
+    "shape": "Swing",
     "slot": "Primary"
   },
   "SummonWolf": {
@@ -270,6 +276,7 @@ export const ABILITIES = {
     ],
     "name": "Summon Wolf",
     "ranged": false,
+    "shape": "Summon",
     "slot": "Secondary"
   }
 } as const;

@@ -6,7 +6,7 @@ import { TILE, TileMap } from '../sim/map';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import { EffectLooks, Interpolator, Predictor, abilityChoice, cosmeticPierce, type EntState } from './world';
 
-const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, ...over });
+const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, behind: 0, ...over });
 /** Predictor for tests: the class only picks which ids the abilities carry. */
 function mk(map: TileMap, cls: 'Wizard' | 'Barbarian' | 'ElvenRanger', x: number, y: number): Predictor {
   const ids: Record<string, [ResolvedAbility['id'], ResolvedAbility['id']]> = { Wizard: ['MagicMissile', 'Fireball'], Barbarian: ['Strike', 'Charge'], ElvenRanger: ['Shoot', 'SummonWolf'] };

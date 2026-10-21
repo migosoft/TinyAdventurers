@@ -3,7 +3,7 @@
 use super::entities::{Pierce, Projectile};
 use super::{Run, TICK_HZ};
 use crate::collision::line_of_sight;
-use crate::defs::abilities::AbilityId;
+use crate::defs::abilities::{self as ab, AbilityId, Shape};
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::damage::{kind_split, overkill_rest, Damage, DamageSplit};
 use crate::defs::effects::OnHit;
@@ -103,11 +103,6 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     }
     let def = if primary { run.players[pi].sheet.primary } else { run.players[pi].sheet.secondary };
     let id = def.id;
-    let (pos, aim, aim_dist) = {
-        let p = &run.players[pi];
-        (p.pos(), p.aim, p.aim_dist)
-    };
-    let dir = Vec2::from_angle(aim);
     let crit = false;
     let cooldown = def.cooldown;
     if def.ranged {
@@ -125,56 +120,16 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             return;
         }
     }
-    let anim = match id {
-        AbilityId::MagicMissile => {
-            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, def.split, def.on_hit, def.power, Pierce::new(def.pierce, def.pierce_through));
-            Anim::Shoot
-        }
-        AbilityId::Fireball => {
-            let target = pos + dir * aim_dist.clamp(24.0, def.range);
-            let life = def.range / def.speed + 0.1;
-            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, def.speed, def.damage, 4.0, life, def.radius, Some(target), crit, def.split, def.on_hit, def.power, Pierce::Never);
-            Anim::Cast
-        }
-        AbilityId::Strike => {
-            melee_arc(run, pi, &def, crit);
-            Anim::Melee
-        }
-        AbilityId::HolyLight => {
-            run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: def.radius as f32, k: 1 }, Some(pos));
-            run.add_flash(LightKind::Holy, pos, lights::HOLY_FLASH);
-            let mut total = 0.0;
-            for qi in 0..run.players.len() {
-                let q = &run.players[qi];
-                if q.alive && q.pos().dist(pos) <= def.radius {
-                    total += run.heal_player(qi, def.damage);
-                }
-            }
-            for mi in 0..run.monsters.len() {
-                let m = &run.monsters[mi];
-                if m.is_ally() && m.alive && m.pos.dist(pos) <= def.radius {
-                    total += run.heal_monster(mi, def.damage);
-                }
-            }
-            run.players[pi].healing += total;
-            Anim::Cast
-        }
-        AbilityId::Charge => {
-            let p = &mut run.players[pi];
-            p.mv.dash_t = def.duration;
-            p.mv.dash_dx = dir.x;
-            p.mv.dash_dy = dir.y;
-            p.dash_hit.clear();
-            Anim::Dash
-        }
-        AbilityId::Shoot => {
-            spawn_player_projectile(run, pi, kind_of(def.projectile), shot, dir, def.speed, def.damage, def.radius, def.range / def.speed, 0.0, None, crit, def.split, def.on_hit, def.power, Pierce::new(def.pierce, def.pierce_through));
-            Anim::Shoot
-        }
-        AbilityId::SummonWolf => {
-            super::companion::use_ability(run, pi);
-            Anim::Cast
-        }
+    let anim = match ab::def(id).shape {
+        Shape::Projectile => use_projectile(run, pi, &def, shot),
+        Shape::Blast => use_blast(run, pi, &def, shot),
+        Shape::Swing => use_swing(run, pi, &def, shot),
+        Shape::Ring => use_ring(run, pi, &def, shot),
+        Shape::Dash => use_dash(run, pi, &def, shot),
+        Shape::SelfArea => use_self_area(run, pi, &def, shot),
+        Shape::GroundArea => use_ground_area(run, pi, &def, shot),
+        Shape::Buff => use_buff(run, pi, &def, shot),
+        Shape::Summon => use_summon(run, pi, &def, shot),
     };
     let p = &mut run.players[pi];
     if primary {
@@ -184,6 +139,154 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     }
     p.anim = anim;
     p.anim_start = run.time;
+}
+
+// One function per ability shape: it does the ability's effect and returns the hero's animation.
+// An id-specific rule is a `match a.id` listing every id of the shape; the ids of other shapes
+// share one arm that names them, so a new id cannot be forgotten.
+
+/// A shot: Magic Missile (its own numbers) or Shoot (the ranged weapon's projectile).
+fn use_projectile(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> Anim {
+    debug_assert!(ab::def(a.id).shape == Shape::Projectile);
+    let dir = Vec2::from_angle(run.players[pi].aim);
+    let crit = false;
+    match a.id {
+        AbilityId::MagicMissile => {
+            spawn_player_projectile(run, pi, EntityKind::Missile, shot, dir, a.speed, a.damage, a.radius, a.range / a.speed, 0.0, None, crit, a.split, a.on_hit, a.power, Pierce::new(a.pierce, a.pierce_through));
+        }
+        AbilityId::Shoot => {
+            spawn_player_projectile(run, pi, kind_of(a.projectile), shot, dir, a.speed, a.damage, a.radius, a.range / a.speed, 0.0, None, crit, a.split, a.on_hit, a.power, Pierce::new(a.pierce, a.pierce_through));
+        }
+        AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf => {
+            unreachable!("{:?} is not a projectile", a.id)
+        }
+    }
+    Anim::Shoot
+}
+
+/// A shot that bursts where it lands: Fireball, at the aimed distance.
+fn use_blast(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> Anim {
+    debug_assert!(ab::def(a.id).shape == Shape::Blast);
+    let (pos, aim, aim_dist) = {
+        let p = &run.players[pi];
+        (p.pos(), p.aim, p.aim_dist)
+    };
+    let dir = Vec2::from_angle(aim);
+    let crit = false;
+    match a.id {
+        AbilityId::Fireball => {
+            let target = pos + dir * aim_dist.clamp(24.0, a.range);
+            let life = a.range / a.speed + 0.1;
+            spawn_player_projectile(run, pi, EntityKind::Fireball, shot, dir, a.speed, a.damage, 4.0, life, a.radius, Some(target), crit, a.split, a.on_hit, a.power, Pierce::Never);
+        }
+        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+            unreachable!("{:?} is not a blast", a.id)
+        }
+    }
+    Anim::Cast
+}
+
+/// A swing of the melee weapon: Strike.
+fn use_swing(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
+    debug_assert!(ab::def(a.id).shape == Shape::Swing);
+    match a.id {
+        AbilityId::Strike => melee_arc(run, pi, a, false),
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+            unreachable!("{:?} is not a swing", a.id)
+        }
+    }
+    Anim::Melee
+}
+
+/// An instant hit on the enemies around the user: no ability has one yet.
+fn use_ring(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
+    debug_assert!(ab::def(a.id).shape == Shape::Ring);
+    match a.id {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+            unreachable!("{:?} is not a ring", a.id)
+        }
+    }
+}
+
+/// A dash that hurts what it touches (`dash_contact`): Charge.
+fn use_dash(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
+    debug_assert!(ab::def(a.id).shape == Shape::Dash);
+    let dir = Vec2::from_angle(run.players[pi].aim);
+    match a.id {
+        AbilityId::Charge => {
+            let p = &mut run.players[pi];
+            p.mv.dash_t = a.duration;
+            p.mv.dash_dx = dir.x;
+            p.mv.dash_dy = dir.y;
+            p.dash_hit.clear();
+        }
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf => {
+            unreachable!("{:?} is not a dash", a.id)
+        }
+    }
+    Anim::Dash
+}
+
+/// An effect or a heal on the user and the allies around: Holy Light.
+fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
+    debug_assert!(ab::def(a.id).shape == Shape::SelfArea);
+    let pos = run.players[pi].pos();
+    match a.id {
+        AbilityId::HolyLight => {
+            run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 1 }, Some(pos));
+            run.add_flash(LightKind::Holy, pos, lights::HOLY_FLASH);
+            let mut total = 0.0;
+            for qi in 0..run.players.len() {
+                let q = &run.players[qi];
+                if q.alive && q.pos().dist(pos) <= a.radius {
+                    total += run.heal_player(qi, a.damage);
+                }
+            }
+            for mi in 0..run.monsters.len() {
+                let m = &run.monsters[mi];
+                if m.is_ally() && m.alive && m.pos.dist(pos) <= a.radius {
+                    total += run.heal_monster(mi, a.damage);
+                }
+            }
+            run.players[pi].healing += total;
+        }
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+            unreachable!("{:?} is not a self area", a.id)
+        }
+    }
+    Anim::Cast
+}
+
+/// A hazard placed at the user's feet or at an aimed spot: no ability has one yet.
+fn use_ground_area(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
+    debug_assert!(ab::def(a.id).shape == Shape::GroundArea);
+    match a.id {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+            unreachable!("{:?} is not a ground area", a.id)
+        }
+    }
+}
+
+/// An effect on the user only: no ability has one yet.
+fn use_buff(_run: &mut Run, _pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
+    debug_assert!(ab::def(a.id).shape == Shape::Buff);
+    match a.id {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf => {
+            unreachable!("{:?} is not a buff", a.id)
+        }
+    }
+}
+
+/// Summons or heals the companion: Summon Wolf.
+fn use_summon(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
+    debug_assert!(ab::def(a.id).shape == Shape::Summon);
+    match a.id {
+        AbilityId::SummonWolf => super::companion::use_ability(run, pi),
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot => {
+            unreachable!("{:?} is not a summon", a.id)
+        }
+    }
+    Anim::Cast
 }
 
 /// A swing of the melee ability `a` (its reach, arc, damage, split, on-hit and power).
@@ -1376,4 +1479,43 @@ mod tests {
         assert_eq!(knock, crate::collision::knock_speed(20.0, super::super::DT));
     }
 
+    #[test]
+    fn every_shape_still_plays_today() {
+        use crate::defs::abilities::{self as ab, Shape};
+        // (class, primary?, id, shape, anim, cooldown, spawned projectile kind)
+        let rows = [
+            (ClassId::Wizard, true, AbilityId::MagicMissile, Shape::Projectile, Anim::Shoot, 0.35, Some(EntityKind::Missile)),
+            (ClassId::Wizard, false, AbilityId::Fireball, Shape::Blast, Anim::Cast, 6.0, Some(EntityKind::Fireball)),
+            (ClassId::Paladin, true, AbilityId::Strike, Shape::Swing, Anim::Melee, 0.0, None),
+            (ClassId::Paladin, false, AbilityId::HolyLight, Shape::SelfArea, Anim::Cast, 10.0, None),
+            (ClassId::Barbarian, false, AbilityId::Charge, Shape::Dash, Anim::Dash, 5.0, None),
+            (ClassId::ElvenRanger, true, AbilityId::Shoot, Shape::Projectile, Anim::Shoot, 0.0, None),
+            (ClassId::ElvenRanger, false, AbilityId::SummonWolf, Shape::Summon, Anim::Cast, 8.0, None),
+        ];
+        for (class, primary, id, shape, anim, cooldown, kind) in rows {
+            let mut run = test_run(&[class], BossId::Demon);
+            let sheet = run.players[0].sheet;
+            let a = if primary { sheet.primary } else { sheet.secondary };
+            assert_eq!(a.id, id);
+            assert_eq!(ab::def(id).shape, shape, "{id:?}");
+            let want = if cooldown > 0.0 { cooldown } else { a.cooldown };
+            try_use(&mut run, 0, primary, 1);
+            let p = &run.players[0];
+            assert_eq!(if primary { p.cd1 } else { p.cd2 }, want, "{id:?} cooldown");
+            assert_eq!(p.anim, anim, "{id:?} anim");
+            if let Some(k) = kind {
+                assert_eq!(run.projectiles.len(), 1, "{id:?}");
+                assert_eq!(run.projectiles[0].kind, k, "{id:?}");
+            }
+            if id == AbilityId::Shoot {
+                assert_eq!(run.projectiles.len(), 1, "{id:?} fires");
+            }
+            if id == AbilityId::Charge {
+                assert!(run.players[0].mv.dash_t > 0.0);
+            }
+            if id == AbilityId::SummonWolf {
+                assert!(run.players[0].wolf.is_some(), "the wolf is summoned");
+            }
+        }
+    }
 }

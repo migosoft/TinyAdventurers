@@ -5,6 +5,7 @@ use super::abilities::{self as ab, AbilityDef, AbilityId, AbilitySlot};
 use super::attributes::{Attr, Attributes};
 use super::classes;
 use super::damage::DamageType;
+use super::effects::OnHit;
 use super::items::{self, EquipError, EquipSlot, Equipment, PropKind};
 use super::progression::StatUpgrades;
 use super::requirements::Requirement;
@@ -60,6 +61,10 @@ pub enum AbilityMod {
     /// A non-physical share added to the split.
     AddShare(DamageType, f64),
     PushStr(i32),
+    /// An effect on its hits (a `power` of 0 takes the ability's own).
+    AddOnHit(OnHit),
+    /// Radians added to the half-angle of the "from behind" cone.
+    BehindArc(f64),
     /// The summoned wolf's max HP (read by `sheet::wolf_mods`).
     CompanionHpMul(f64),
     /// The summoned wolf's dash cooldown (read by `sheet::wolf_mods`).
@@ -86,7 +91,8 @@ pub const MIN_COOLDOWN: f64 = 0.05;
 pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
     use AbilityMod::*;
     let (mut radius, mut range, mut damage, mut arc) = (vec![], vec![], vec![], vec![]);
-    let (mut duration, mut cooldown) = (vec![], vec![]);
+    let (mut duration, mut cooldown, mut behind) = (vec![], vec![], vec![]);
+    let mut on_hit = r.on_hit;
     let mut shares: Vec<(DamageType, f64)> = vec![];
     let (mut pierce, mut through, mut push_str) = (r.pierce, r.pierce_through, r.push_str);
     for &m in mods {
@@ -104,6 +110,8 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
                 shares.push((t, v));
             }
             PushStr(n) => push_str += n,
+            AddOnHit(h) => on_hit = Some(OnHit { power: if h.power == 0 { r.power } else { h.power }, ..h }),
+            BehindArc(a) => behind.push(a),
             CompanionHpMul(_) | CompanionDashCooldownAdd(_) => {}
         }
     }
@@ -118,6 +126,8 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
         duration: (r.duration + sum(duration)).max(0.0),
         cooldown: if cooldown.is_empty() { r.cooldown } else { (r.cooldown + sum(cooldown)).max(MIN_COOLDOWN) },
         split: if shares.is_empty() { r.split } else { r.split.with_shares(&shares) },
+        behind: (r.behind + sum(behind)).max(0.0),
+        on_hit,
         pierce,
         pierce_through: through,
         push_str,
@@ -325,6 +335,22 @@ mod tests {
         assert_eq!(a.cooldown, MIN_COOLDOWN, "a cooldown never reaches 0");
         assert_eq!((a.duration, a.damage, a.radius, a.range, a.arc), (0.0, 0.0, 0.0, 0.0, 0.0), "no negative numbers");
         assert_eq!(apply_mods(r, &[]).cooldown, r.cooldown, "no mods, no floor");
+    }
+
+    #[test]
+    fn add_on_hit_and_behind_arc_mods() {
+        use crate::defs::effects::{EffectKind, EffectLook, OnHit};
+        let r = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap().primary;
+        assert_eq!(r.id, Strike);
+        let hit = OnHit { kind: EffectKind::Poisoned, secs: 2.0, magical: true, power: 0, look: EffectLook::Plain };
+        let a = apply_mods(r, &[AbilityMod::AddOnHit(hit)]);
+        assert_eq!(a.on_hit, Some(OnHit { power: r.power, ..hit }), "a power of 0 takes the ability's");
+        let own = OnHit { power: 17, ..hit };
+        assert_eq!(apply_mods(r, &[AbilityMod::AddOnHit(own)]).on_hit, Some(own));
+        let b = ResolvedAbility { behind: 1.0, ..r };
+        assert_eq!(apply_mods(b, &[AbilityMod::BehindArc(0.5), AbilityMod::BehindArc(0.5)]).behind, 2.0);
+        assert_eq!(apply_mods(b, &[AbilityMod::BehindArc(-5.0)]).behind, 0.0);
+        assert_eq!(apply_mods(r, &[]).behind, 0.0);
     }
 
     #[test]
