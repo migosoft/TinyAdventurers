@@ -3,6 +3,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { Atlas } from '../atlas';
 import type { ClientMsg } from '../../generated/ClientMsg';
 import type { CharacterInfo } from '../../generated/CharacterInfo';
+import { ITEMS } from '../../generated/progression';
 import { renderEquipment } from './equipment';
 import { fixtureInfo, type FixtureOptions } from './fixture';
 import { clearTips } from './tip';
@@ -110,7 +111,30 @@ test('the tooltip of the Staff of Rot shows its prop as non-magical', () => {
 test('the items line lists item Attribute points and worn non-weapon props', () => {
   draw(wiz({ slots: { Ring1: 'BandOfVigor' }, attrs: { Con: { total: 11, items: 1 } } }));
   expect(el.textContent).toContain('From items: +1 CON');
-  expect(el.textContent).not.toMatch(/\+1 CON · \+1 CON/);
+  expect(el.querySelector('.ui-small')!.textContent).toBe('From items: +1 CON');
   draw(wiz());
   expect(el.textContent).not.toContain('From items');
+});
+test('two worn Bands read +2 CON once; two Rings of Embers list their text twice', () => {
+  draw(wiz({ slots: { Ring1: 'BandOfVigor', Ring2: 'BandOfVigor' }, attrs: { Con: { total: 12, items: 2 } } }));
+  expect($('.ui-small').textContent).toBe('From items: +2 CON');
+  draw(wiz({ slots: { Ring1: 'RingOfEmbers', Ring2: 'RingOfEmbers' } }));
+  expect($('.ui-small').textContent!.match(/\+15 % heat resistance/g)!.length).toBe(2);
+});
+test('hovering a worn slot shows its tooltip', () => {
+  draw(wiz({ slots: { Melee: 'StaffOfRot' } }));
+  $('[data-slot="Melee"]').dispatchEvent(new Event('mouseenter'));
+  expect(document.querySelector('.ui-tip')!.textContent).toContain('Staff of Rot');
+});
+test('clicking a cell whose item has no slot sends nothing', () => {
+  const d = (ITEMS as unknown as Record<string, { slot: string }>).BoneStaff;
+  const was = d.slot;
+  d.slot = 'OffHand';
+  try {
+    draw(wiz({ inventory: ['BoneStaff'] }));
+    $('[data-item]').click();
+  } finally {
+    d.slot = was;
+  }
+  expect(sent).toEqual([]);
 });

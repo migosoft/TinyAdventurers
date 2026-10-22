@@ -34,15 +34,16 @@ function tipHtml(ctx: TabCtx, id: ItemId): string {
   return `<b>${esc(d.name)}</b><small>${kind}</small>${d.base ? `<p>${esc(d.base)}</p>` : ''}<ul>${props.join('')}${reqs.join('')}</ul>${note}`;
 }
 
-/** "From items: +1 CON · …": item Attribute points, then the props of every worn non-weapon item. */
+/** "From items: +1 CON · …": the AttrLine item points, then the props of each worn non-weapon item (its Attribute grants are already in the points). */
 function itemsLine(ctx: TabCtx): string {
   const { info } = ctx;
+  const isAttr = (t: string) => /^[+−-]\d+ ([A-Z]{3})$/.test(t) && Object.values(ATTRS).some((a) => t.endsWith(` ${a.short}`));
   const parts = info.sheet.attrs.filter((l) => l.items !== 0).map((l) => `${l.items > 0 ? '+' : '−'}${Math.abs(l.items)} ${ATTRS[l.attr].short}`);
   for (const id of info.equipment.slots) {
     const d = id ? defs[id] : null;
-    if (d && !isWeapon(d)) parts.push(...d.props.map((p) => p.text));
+    if (d && !isWeapon(d)) parts.push(...d.props.map((p) => p.text).filter((t) => !isAttr(t)));
   }
-  return [...new Set(parts)].join(' · '); // a prop that restates an Attribute point reads once
+  return parts.join(' · ');
 }
 
 export function renderEquipment(ctx: TabCtx): HTMLElement {
