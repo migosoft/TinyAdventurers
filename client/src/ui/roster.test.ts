@@ -57,4 +57,7 @@ test('the create screen shows start values and creates the chosen class', async 
   host.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
   await vi.waitFor(() => expect(created).toEqual(['Sir']));
   expect(spy).toHaveBeenCalledWith('Sir', 'Paladin');
+  expect(host.querySelector<HTMLButtonElement>('#char-create')!.disabled).toBe(true);
+  host.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+  expect(spy).toHaveBeenCalledTimes(1);
 });

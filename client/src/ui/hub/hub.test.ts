@@ -128,3 +128,14 @@ test('the bar buttons call back', () => {
   own.querySelector<HTMLButtonElement>('#to-dungeon')!.click();
   expect(calls).toEqual(['roster', 'dungeon']);
 });
+test('resistances are shown as percent, from the server fractions', () => {
+  hub.open(1);
+  const info = fixtureInfo('ElvenRanger');
+  info.sheet.res = [['Poison', 0.1], ['Heat', -0.25]];
+  info.sheet.effect_res = [['Sleep', 1]];
+  hub.setCharacter(info);
+  const res = $('.ui-res')!.textContent!;
+  expect(res).toContain('10 %');
+  expect(res).toContain('−25 %');
+  expect(res).toContain('100 %');
+});

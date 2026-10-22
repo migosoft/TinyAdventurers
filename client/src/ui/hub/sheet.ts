@@ -11,6 +11,8 @@ const ORDER: Attr[] = ['Str', 'Dex', 'Con', 'Int', 'Wil', 'Cha'];
 const NAME: Record<Attr, string> = { Str: 'Strength', Dex: 'Dexterity', Con: 'Constitution', Int: 'Intelligence', Wil: 'Willpower', Cha: 'Charisma' };
 const COIN = '<i class="coin-icon"></i>';
 
+/** The server sends resistances as fractions (0.1 = 10 %); a negative one keeps its sign. */
+export const fraction = (v: number): string => `${v < 0 ? '−' : ''}${Math.abs(Math.round(v * 100))} %`;
 const num = (v: number): number => Math.round(v * 10) / 10;
 
 export function renderSheet(ctx: TabCtx): HTMLElement {
@@ -42,7 +44,7 @@ export function renderSheet(ctx: TabCtx): HTMLElement {
 
   const resist = (list: [string, number][]) =>
     list.length
-      ? `<div class="ui-res">${list.map(([n, v]) => `<span class="r-${esc(n.toLowerCase())}"><i>${esc(spaced(n))}</i>${v} %</span>`).join('')}</div>`
+      ? `<div class="ui-res">${list.map(([n, v]) => `<span class="r-${esc(n.toLowerCase())}"><i>${esc(spaced(n))}</i>${fraction(v)}</span>`).join('')}</div>`
       : '<p class="ui-small">None.</p>';
   const keystones = s.keystones.length ? s.keystones.map(spaced).join(', ') : 'None.';
   const right = document.createElement('div');

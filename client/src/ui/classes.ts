@@ -1,12 +1,9 @@
 // Class figures and the class card, shared by the character screen and the lobby.
-import { ABILITIES, CLASSES as CLASS_DEFS } from '../generated/defs';
-import { ABILITY_INFO, ITEMS } from '../generated/progression';
+import { CLASSES as CLASS_DEFS } from '../generated/defs';
+import { ITEMS } from '../generated/progression';
 import type { CharacterInfo } from '../generated/CharacterInfo';
 import type { ClassId } from '../generated/ClassId';
 import { spritePreview, type Atlas } from './atlas';
-import { CLASS_TEXT } from './text';
-
-const START = (c: ClassId) => [CLASS_DEFS[c].primary, CLASS_DEFS[c].secondary] as const;
 
 export const CLASSES: ClassId[] = ['Wizard', 'Paladin', 'Barbarian', 'ElvenRanger'];
 
@@ -31,20 +28,4 @@ export function figureWeapon(info: CharacterInfo): string {
   const ranged = info.equipment.slots[1];
   const s = info.class === 'ElvenRanger' ? sprite(ranged) || sprite(melee) : sprite(melee);
   return s || FIG[info.class][1];
-}
-
-/** A card with figure, blurb and both abilities. */
-export function classCard(atlas: Atlas, c: ClassId, selected: boolean): HTMLButtonElement {
-  const t = CLASS_TEXT[c];
-  const card = document.createElement('button');
-  card.type = 'button';
-  card.className = `class-card c-${c.toLowerCase()}${selected ? ' selected' : ''}`;
-  card.append(classFigure(atlas, c));
-  const info = document.createElement('div');
-  info.innerHTML = `<b>${t.title}</b><small>${t.blurb}</small>
-    ${START(c)
-      .map((id, i) => `<p><kbd>${i ? 'RMB' : 'LMB'}</kbd> ${ABILITIES[id].name}<br><span>${ABILITY_INFO[id].text}</span></p>`)
-      .join('')}`;
-  card.append(info);
-  return card;
 }

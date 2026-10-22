@@ -96,11 +96,15 @@ export class Create {
     this.root.querySelector<HTMLButtonElement>('#create-back')!.onclick = () => this.onBack();
     this.root.querySelector<HTMLFormElement>('.ui-createbar')!.onsubmit = async (e) => {
       e.preventDefault();
+      const button = this.root.querySelector<HTMLButtonElement>('#char-create')!;
+      if (button.disabled) return;
+      button.disabled = true; // a double click must not create two characters
       try {
         const c = await api.createCharacter(this.root.querySelector<HTMLInputElement>('#char-name')!.value.trim(), this.cls);
         this.onCreated(c);
       } catch (err) {
         this.root.querySelector('.error')!.textContent = err instanceof ApiFail ? err.message : String(err);
+        button.disabled = false;
       }
     };
   }
