@@ -195,6 +195,19 @@
   border-color: var(--panel-edge);
   border-top-color: var(--accent, #555);
 }
+.ui-new:hover {
+  border-top-color: var(--edge-soft);
+}
+.ui-char:active,
+.ui-class:active {
+  transform: none;
+}
+.ui-char:active {
+  box-shadow: none;
+}
+.ui-class:not(.selected):active {
+  box-shadow: inset 0 1px 0 rgba(255, 235, 200, 0.05);
+}
 .ui-char canvas {
   height: 96px;
   image-rendering: pixelated;
@@ -236,6 +249,7 @@
   line-height: 1.45;
 }
 .ui-class:hover {
+  background: linear-gradient(180deg, #2a1b26, #20141d);
   border-color: #85607a;
 }
 .ui-class.selected {

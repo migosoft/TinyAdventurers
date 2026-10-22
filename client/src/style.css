@@ -156,9 +156,7 @@ button:disabled {
   opacity: 0.4;
   transform: none;
 }
-button:focus-visible,
-select:focus-visible,
-.check:focus-within {
+button:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
@@ -275,6 +273,7 @@ h3,
     radial-gradient(ellipse at 50% 45%, #0a0608 0%, #0a0608 30%, rgba(10, 6, 8, 0.85) 55%, rgba(10, 6, 8, 0.6) 100%),
     url(/assets/logo.png) center / cover no-repeat,
     var(--bg);
+  image-rendering: pixelated;
   display: flex;
   flex-direction: column;
   align-items: center;
