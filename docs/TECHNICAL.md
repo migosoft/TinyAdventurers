@@ -735,7 +735,7 @@ The database, statistics, telemetry and the admin page take the level as text (`
   `Run.debug_used` (set by `set_debug`) makes `awards` empty.
 - **Spending:** `BuyUpgrade` is handled in `main.rs` before the lobby: `can_shop`, then `db::update_progress(…, |p| p.buy(stat))`, then `apply_progress`. The lobby lock is never held during a query.
 - **Coins** are a second currency with nothing to buy yet; they are meant for loadouts.
-- **Applying:** `Lobby::start` copies the character's `StatUpgrades` into `Member.upgrades`. `Run::new` turns them into `Player.sheet`, which the simulation uses; `RunStartInfo.speed`, `abilities` and `fallback` send the resolved numbers to the predictor.
+- **Applying:** `Lobby::build_of` takes the character's saved build (`Progress::build`, with the debug picks on top) into `Member.build`. `Run::new` turns them into `Player.sheet`, which the simulation uses; `RunStartInfo.speed`, `abilities` and `fallback` send the resolved numbers to the predictor.
 - **Tuning:** costs and per-level bonuses are in `defs/progression.rs`.
 
 **The character sheet and Attributes (progression plan 1; spec [2026-10-18-progression-design.md](superpowers/specs/2026-10-18-progression-design.md)).** The upgrade shop above stays in use until plan 4 replaces it.

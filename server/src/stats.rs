@@ -26,7 +26,7 @@ pub struct AdminStats {
     /// Last 30 days, per level and boss.
     pub level_runs: Vec<LevelRunStats>,
     pub classes: Vec<ClassStats>,
-    /// Characters by the number of upgrades bought.
+    /// Characters by the number of tree nodes bought.
     pub levels: Vec<LevelBucket>,
     pub top: Vec<TopCharacter>,
     /// The last 30 days, oldest first.
@@ -113,7 +113,7 @@ pub struct ClassStats {
 #[derive(Serialize, TS)]
 #[ts(export)]
 pub struct LevelBucket {
-    pub upgrades: u32,
+    pub nodes: u32,
     pub characters: u32,
 }
 
@@ -127,7 +127,7 @@ pub struct TopCharacter {
     pub account: String,
     pub total_xp: u32,
     pub coins: u32,
-    pub upgrades: u32,
+    pub nodes: u32,
 }
 
 #[derive(Serialize, TS)]
@@ -330,20 +330,18 @@ async fn classes(db: &Db) -> Result<Vec<ClassStats>, sqlx::Error> {
     Ok(ClassId::ALL.into_iter().map(|c| ClassStats { class: c, characters: count(&owned, c), played: count(&played, c) }).collect())
 }
 
-/// Upgrades bought, summed from the progress document.
-const UPGRADES: &str = "(coalesce((progress->'upgrades'->>'damage')::int, 0) + coalesce((progress->'upgrades'->>'attack_speed')::int, 0) \
-     + coalesce((progress->'upgrades'->>'move_speed')::int, 0) + coalesce((progress->'upgrades'->>'life')::int, 0) \
-     + coalesce((progress->'upgrades'->>'armor')::int, 0))";
+/// Skill-tree nodes bought, counted in the progress document.
+const NODES: &str = "(CASE WHEN jsonb_typeof(progress->'nodes') = 'array' THEN jsonb_array_length(progress->'nodes') ELSE 0 END)";
 
 async fn levels(db: &Db) -> Result<Vec<LevelBucket>, sqlx::Error> {
-    let rows = sqlx::query(&format!("SELECT lvl, count(*) FROM (SELECT {UPGRADES} AS lvl FROM characters) c GROUP BY lvl ORDER BY lvl")).fetch_all(db).await?;
-    Ok(rows.iter().map(|r| LevelBucket { upgrades: r.get::<i32, _>(0).max(0) as u32, characters: n(r, 1) }).collect())
+    let rows = sqlx::query(&format!("SELECT lvl, count(*) FROM (SELECT {NODES} AS lvl FROM characters) c GROUP BY lvl ORDER BY lvl")).fetch_all(db).await?;
+    Ok(rows.iter().map(|r| LevelBucket { nodes: r.get::<i32, _>(0).max(0) as u32, characters: n(r, 1) }).collect())
 }
 
 async fn top(db: &Db) -> Result<Vec<TopCharacter>, sqlx::Error> {
     let rows = sqlx::query(&format!(
         "SELECT c.id, c.name, c.class, a.id, a.name, coalesce((c.progress->>'total_xp')::bigint, 0) AS txp, \
-         coalesce((c.progress->>'coins')::bigint, 0), {UPGRADES}::bigint \
+         coalesce((c.progress->>'coins')::bigint, 0), {NODES}::bigint \
          FROM characters c JOIN accounts a ON a.id = c.account_id ORDER BY txp DESC, c.id LIMIT 10"
     ))
     .fetch_all(db)
@@ -358,7 +356,7 @@ async fn top(db: &Db) -> Result<Vec<TopCharacter>, sqlx::Error> {
             account: r.get(4),
             total_xp: n(r, 5),
             coins: n(r, 6),
-            upgrades: n(r, 7),
+            nodes: n(r, 7),
         })
         .collect())
 }
@@ -552,7 +550,7 @@ mod tests {
         assert_eq!((barb.characters, barb.played), (1, 3));
         assert_eq!(s.top[0].name, "Grim");
         assert_eq!((s.top[0].total_xp, s.top[0].coins, s.totals.total_xp), (70, 9, 70.0));
-        assert_eq!(s.levels.iter().map(|l| (l.upgrades, l.characters)).collect::<Vec<_>>(), vec![(0, 1)]);
+        assert_eq!(s.levels.iter().map(|l| (l.nodes, l.characters)).collect::<Vec<_>>(), vec![(0, 1)]);
         let today = s.trend.last().unwrap();
         assert_eq!((today.runs, today.victories, today.registrations), (2, 1, 1));
     }
@@ -644,5 +642,18 @@ mod tests {
         assert_eq!(log.len(), 2);
         assert_eq!((log[0].action.as_str(), log[0].detail.as_deref()), ("delete_character", Some("of account Victim")), "newest first");
         assert!(log[1].at > 0.0);
+    }
+
+    #[tokio::test]
+    async fn tree_nodes_bought_fill_the_histogram_and_the_top_list() {
+        let Some(db) = test_db().await else { return };
+        let a = db::create_account(&db, "Treer", "h").await.unwrap();
+        let c = db::create_character(&db, a, "Branch", ClassId::Wizard).await.unwrap();
+        db::create_character(&db, a, "Bare", ClassId::Wizard).await.unwrap();
+        sqlx::query("UPDATE characters SET progress = jsonb_set(progress, '{nodes}', '[\"WA1\",\"WA2\"]') WHERE id = $1").bind(c.id).execute(&db).await.unwrap();
+        let s = overview(&db, Live::default()).await.unwrap();
+        let buckets = s.levels.iter().map(|l| (l.nodes, l.characters)).collect::<Vec<_>>();
+        assert_eq!(buckets, vec![(0, 1), (2, 1)]);
+        assert_eq!(s.top.iter().find(|t| t.name == "Branch").unwrap().nodes, 2);
     }
 }

@@ -12,11 +12,11 @@ use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT}
 use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, Resistances};
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
-use crate::defs::items::{self, EquipSlot, ItemBase, ItemId, PropKind};
+use crate::defs::items::{self, ArmorClass, EquipSlot, ItemBase, ItemId, PropKind};
 #[cfg(test)]
 use crate::defs::items::Equipment;
 use crate::defs::lights::{self, LightKind};
-use crate::defs::loadout::{apply_mods, check_pick, pick_version, AbilityMod, Build, LoadoutError, Pick};
+use crate::defs::loadout::{apply_mods, check_pick, pick_version, AbilityMod, Build, Loadout, LoadoutError, Pick};
 use crate::defs::races::Sight;
 use crate::defs::trees::{self, Keystone, KeystoneSet, NodeId, Prof};
 use crate::defs::weapons::{resolve_melee, resolve_ranged, ResolvedWeapon};
@@ -275,7 +275,6 @@ fn worn_items(class: ClassId, b: &Build) -> Vec<(EquipSlot, ItemId)> {
         .collect()
 }
 
-#[allow(dead_code)] // plan 4: Progress buys nodes against it (task 5)
 /// `attrs_without_items` plus the worn items' Attribute points, whatever the loadout.
 pub fn attrs_with_items(class: ClassId, b: &Build) -> Attributes {
     let mut attrs = attrs_without_items(class, b);
@@ -429,6 +428,127 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
         reach,
         wolf,
     })
+}
+
+/// One Attribute of the character screen, by source.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct AttrLine {
+    pub attr: Attr,
+    pub total: i32,
+    /// Class and race.
+    pub class: i32,
+    /// Points bought in the shop (and the debug lift).
+    pub shop: i32,
+    pub tree: i32,
+    pub items: i32,
+}
+
+/// What the character screen shows of a build: the sheet's numbers and why the loadout may not play.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct SheetSummary {
+    pub attrs: Vec<AttrLine>,
+    pub hp: f64,
+    pub speed: f64,
+    pub weight: f64,
+    /// The STR the hero pushes with.
+    pub push: i32,
+    pub save_con: i32,
+    pub save_wil: i32,
+    /// The non-zero resistances by damage type.
+    #[ts(type = "Array<[string, number]>")]
+    pub res: Vec<(DamageType, f64)>,
+    /// The non-zero effect resistances by effect.
+    #[ts(type = "Array<[string, number]>")]
+    pub effect_res: Vec<(EffectKind, f64)>,
+    /// "Sword", "Light armor", ...
+    pub profs: Vec<String>,
+    pub keystones: Vec<Keystone>,
+    /// Why the build cannot play (Ready and Start refuse it); the numbers are then those of the same
+    /// build with the start loadout, or the starter equipment too when the equipment is what fails.
+    pub loadout_error: Option<String>,
+}
+
+fn spaced(name: &str) -> String {
+    let mut out = String::new();
+    for (i, ch) in name.chars().enumerate() {
+        if i > 0 && ch.is_uppercase() {
+            out.push(' ');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn prof_name(p: Prof) -> String {
+    match p {
+        Prof::Weapon(k) => spaced(&format!("{k:?}")),
+        Prof::Armor(a) => format!(
+            "{} armor",
+            match a {
+                ArmorClass::Cloth => "Cloth",
+                ArmorClass::Light => "Light",
+                ArmorClass::Medium => "Medium",
+                ArmorClass::Heavy => "Heavy",
+            }
+        ),
+    }
+}
+
+/// The character screen's numbers for `b`.
+pub fn summary(class: ClassId, b: &Build) -> SheetSummary {
+    let (sheet, used, loadout_error) = match hero_sheet(class, b) {
+        Ok(s) => (s, b.clone(), None),
+        Err(e) => {
+            let err = Some(e.message());
+            let with_start = Build { loadout: Loadout::start(class), ..b.clone() };
+            match hero_sheet(class, &with_start) {
+                Ok(s) => (s, with_start, err),
+                Err(_) => {
+                    let starters = Build { equipment: items::Equipment::starter(class), ..with_start };
+                    match hero_sheet(class, &starters) {
+                        Ok(s) => (s, starters, err),
+                        Err(_) => {
+                            let start = Build::start(class);
+                            (hero_sheet(class, &start).expect("the class start is valid"), start, err)
+                        }
+                    }
+                }
+            }
+        }
+    };
+    let base = classes::start_attrs(class);
+    let tree = trees::gains(&used.nodes).attrs;
+    let attrs = Attr::ALL
+        .iter()
+        .map(|&a| {
+            let total = sheet.attrs.get(a);
+            let (class, shop, tree) = (base.get(a), used.extra.get(a), tree.get(a));
+            AttrLine { attr: a, total, class, shop, tree, items: total - class - shop - tree }
+        })
+        .collect();
+    let mut profs: Vec<String> = Vec::new();
+    for p in self::profs(class, &used.nodes) {
+        let name = prof_name(p);
+        if !profs.contains(&name) {
+            profs.push(name);
+        }
+    }
+    SheetSummary {
+        attrs,
+        hp: sheet.max_hp,
+        speed: sheet.speed,
+        weight: sheet.weight,
+        push: sheet.attrs.get(Attr::Str),
+        save_con: sheet.save(Attr::Con),
+        save_wil: sheet.save(Attr::Wil),
+        res: DamageType::ALL.iter().map(|&t| (t, sheet.res.get(t))).filter(|r| r.1 != 0.0).collect(),
+        effect_res: EffectKind::ALL.iter().map(|&k| (k, sheet.effect_res.get(k))).filter(|r| r.1 != 0.0).collect(),
+        profs,
+        keystones: sheet.keystones.iter().collect(),
+        loadout_error,
+    }
 }
 
 impl Sheet {
@@ -983,5 +1103,58 @@ mod tests {
         assert_eq!(with_nodes(c, &[]).light, None);
         let gold = hero_sheet(c, &Build { nodes: vec![NodeId::PU5], extra: Attributes::new(5, 5, 5, 5, 5, 5), equipment: Equipment::starter(c).with(EquipSlot::Melee, ItemId::GoldenSword), ..Build::start(c) }).unwrap();
         assert_eq!(gold.light, Some(LightKind::Holy), "the larger light wins");
+    }
+
+    #[test]
+    fn summary_lists_sources() {
+        use crate::defs::trees::NodeId;
+        let c = ClassId::Paladin;
+        let b = Build { nodes: vec![NodeId::PU1], extra: Attributes::new(1, 0, 0, 0, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor).with(EquipSlot::Armor, ItemId::PlateArmor), ..Build::start(c) };
+        let s = summary(c, &b);
+        assert_eq!(s.loadout_error, None);
+        let line = |a: Attr| s.attrs.iter().find(|l| l.attr == a).unwrap();
+        let cha = line(Attr::Cha);
+        assert_eq!((cha.class, cha.shop, cha.tree, cha.items, cha.total), (14, 0, 1, 0, 15));
+        let str_ = line(Attr::Str);
+        assert_eq!((str_.shop, str_.tree, str_.items), (1, 0, 0));
+        let con = line(Attr::Con);
+        assert_eq!((con.shop, con.tree, con.items), (0, 0, 1));
+        for l in &s.attrs {
+            assert_eq!(l.total, l.class + l.shop + l.tree + l.items, "{:?}", l.attr);
+        }
+        let sheet = hero_sheet(c, &b).unwrap();
+        assert_eq!(s.attrs.iter().map(|l| l.total).collect::<Vec<_>>(), Attr::ALL.map(|a| sheet.attrs.get(a)).to_vec());
+        assert_eq!((s.hp, s.speed, s.weight, s.push), (sheet.max_hp, sheet.speed, sheet.weight, sheet.attrs.get(Attr::Str)));
+        assert_eq!((s.save_con, s.save_wil), (sheet.save(Attr::Con), sheet.save(Attr::Wil)));
+        assert!(s.res.iter().all(|r| r.1 != 0.0) && s.effect_res.iter().all(|r| r.1 != 0.0), "only non-zero resistances");
+        assert!(s.res.iter().any(|r| r.0 == DamageType::Physical), "the paladin's armor shows");
+        assert!(s.profs.iter().any(|p| p == "Sword") && s.profs.iter().any(|p| p == "Heavy armor"), "{:?}", s.profs);
+        assert!(s.keystones.is_empty());
+        let radiant = summary(c, &Build { nodes: vec![NodeId::PU5], ..Build::start(c) });
+        assert_eq!(radiant.keystones, vec![Keystone::Radiant]);
+    }
+
+    #[test]
+    fn unequipping_a_granting_item_reports_the_loadout() {
+        let c = ClassId::Paladin;
+        let mut b = Build::start(c);
+        b.equipment = Equipment::starter(c).with(EquipSlot::Ring1, ItemId::RingOfTheMagus);
+        b.loadout.primary = Pick { ability: AbilityId::MagicMissile, source: crate::defs::loadout::Source::Item(EquipSlot::Ring1) };
+        assert_eq!(summary(c, &b).loadout_error, None);
+        b.equipment.set(EquipSlot::Ring1, None);
+        let s = summary(c, &b);
+        assert_eq!(s.loadout_error.as_deref(), Some("Magic Missile is not one of your abilities."));
+        assert_eq!(s.attrs.len(), Attr::COUNT);
+        assert!(s.hp > 0.0, "the numbers come from the start loadout");
+    }
+
+    #[test]
+    fn a_failing_equipment_falls_back_to_the_starters() {
+        let c = ClassId::Paladin;
+        let mut b = Build::start(c);
+        b.equipment.set(EquipSlot::Armor, Some(ItemId::LeatherArmor));
+        b.equipment.set(EquipSlot::Melee, Some(ItemId::StaffOfRot));
+        let s = summary(c, &b);
+        assert!(s.loadout_error.is_some() && s.hp > 0.0);
     }
 }

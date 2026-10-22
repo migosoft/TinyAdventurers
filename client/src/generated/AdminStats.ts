@@ -18,7 +18,7 @@ windows: Array<WindowStats>,
  */
 level_runs: Array<LevelRunStats>, classes: Array<ClassStats>, 
 /**
- * Characters by the number of upgrades bought.
+ * Characters by the number of tree nodes bought.
  */
 levels: Array<LevelBucket>, top: Array<TopCharacter>, 
 /**

@@ -225,9 +225,9 @@ function renderDashboard(s: AdminStats, main: HTMLElement, updated: Date): void 
   const levels =
     s.levels.length > 0
       ? columnChart({
-          title: 'Characters by upgrades bought',
-          labels: s.levels.map((l) => String(l.upgrades)),
-          longLabel: (i) => `${s.levels[i].upgrades} upgrade${s.levels[i].upgrades === 1 ? '' : 's'}`,
+          title: 'Characters by tree nodes bought',
+          labels: s.levels.map((l) => String(l.nodes)),
+          longLabel: (i) => `${s.levels[i].nodes} node${s.levels[i].nodes === 1 ? '' : 's'}`,
           series: [{ name: 'Characters', color: 'var(--series-1)', values: s.levels.map((l) => l.characters) }],
         })
       : h('p', { class: 'muted' }, 'No characters yet.');
@@ -235,8 +235,8 @@ function renderDashboard(s: AdminStats, main: HTMLElement, updated: Date): void 
   const top = section(
     'Top characters by XP earned',
     table(
-      ['Character', 'Class', 'Player', ['XP earned', 'num'], ['Upgrades', 'num'], ['Coins', 'num']],
-      s.top.map((c) => [c.name, c.class, playerLink(c.account_id, c.account), compact(c.total_xp), String(c.upgrades), compact(c.coins)]),
+      ['Character', 'Class', 'Player', ['XP earned', 'num'], ['Nodes', 'num'], ['Coins', 'num']],
+      s.top.map((c) => [c.name, c.class, playerLink(c.account_id, c.account), compact(c.total_xp), String(c.nodes), compact(c.coins)]),
     ),
   );
 
@@ -351,9 +351,8 @@ async function player(id: number): Promise<void> {
   const reload = () => void player(id);
 
   const characters = table(
-    ['Character', 'Class', ['XP earned', 'num'], ['Unspent XP', 'num'], ['Coins', 'num'], 'Upgrades', 'Created', ''],
+    ['Character', 'Class', ['XP earned', 'num'], ['Unspent XP', 'num'], ['Coins', 'num'], 'Build', 'Created', ''],
     d.characters.map((c) => {
-      const u = c.info.upgrades;
       const del = h(
         'button',
         {
@@ -361,7 +360,7 @@ async function player(id: number): Promise<void> {
           on: {
             click: async () => {
               const warn = c.in_use ? ' They are playing it right now and will be logged out.' : '';
-              if (!confirm(`Delete the character "${c.info.name}" of ${p.name}? Its XP, coins and upgrades are lost.${warn}`)) return;
+              if (!confirm(`Delete the character "${c.info.name}" of ${p.name}? Its XP, coins, tree nodes and items are lost.${warn}`)) return;
               try {
                 await adminApi.deleteCharacter(c.info.id);
                 reload();
@@ -380,7 +379,7 @@ async function player(id: number): Promise<void> {
         compact(c.info.total_xp),
         compact(c.info.xp),
         compact(c.info.coins),
-        `Damage ${u.damage} · Speed ${u.attack_speed} · Move ${u.move_speed} · Life ${u.life} · Armor ${u.armor}`,
+        `${c.info.nodes.length} tree node${c.info.nodes.length === 1 ? '' : 's'} · ${c.info.xp_spent} XP spent`,
         date(c.created),
         del,
       ];

@@ -5,6 +5,7 @@
 
 use crate::db::{self, Character, Db};
 use crate::defs::attributes::{Attr, Attributes};
+use crate::defs::classes;
 use crate::defs::items::{self, EquipSlot, Equipment, ItemId};
 use crate::defs::loadout::{Build, Loadout, Pick};
 use crate::defs::requirements::Requirement;
@@ -250,22 +251,36 @@ impl Lobby {
         send(&c.tx, &ServerMsg::Character(info));
     }
 
-    /// The character to buy upgrades for: never during a run.
-    pub fn can_shop(&self, id: u32) -> Result<i32, &'static str> {
+    /// The character whose build may change now (buy, respec, equip, loadout, grant): not during a
+    /// run (Ruling 8) and not while ready. Returns its id and class.
+    pub fn can_change(&self, id: u32) -> Result<(i32, ClassId), &'static str> {
+        let c = self.conns.get(&id).ok_or("Not connected.")?;
+        let ch = c.character.as_ref().ok_or("Choose a character first.")?;
         if self.in_running_run(id) {
-            return Err("Upgrades can only be bought between runs.");
+            return Err("Not during a run.");
         }
-        self.conns.get(&id).and_then(|c| c.character.as_ref()).map(|ch| ch.id).ok_or("Choose a character first.")
+        if c.ready {
+            return Err("Not while ready.");
+        }
+        Ok((ch.id, ch.class))
     }
 
     /// New progress of a character, fresh from the database. Older results
     /// arriving late (`rev`) are ignored.
     pub fn apply_progress(&mut self, character: i32, p: Progress) {
+        let mut changed: Vec<Option<u32>> = Vec::new();
         for c in self.conns.values_mut() {
             if let Some(ch) = c.character.as_mut().filter(|ch| ch.id == character && p.rev > ch.progress.rev) {
                 ch.progress = p.clone();
                 send(&c.tx, &ServerMsg::Character(ch.info()));
+                changed.push(c.room);
             }
+        }
+        // The party lists show the saved builds.
+        changed.sort();
+        changed.dedup();
+        for rid in changed.into_iter().flatten() {
+            self.send_room(rid);
         }
     }
 
@@ -419,18 +434,22 @@ impl Lobby {
         false
     }
 
-    /// The character's start build with this connection's loadout and debug pool.
+    /// The character's saved build, with this connection's debug picks and pool on top.
     fn build_of(&self, id: u32) -> Option<Build> {
         let c = self.conns.get(&id)?;
         let ch = c.character.as_ref()?;
-        let mut build = Build::start(ch.class);
+        let mut build = ch.progress.build(ch.class);
         if let Some(l) = c.loadout {
             build.loadout = l;
         }
         if c.debug_loadout {
             build.own = AbilityId::ALL.iter().copied().filter(|a| abilities::def(*a).classes.contains(&ch.class)).collect();
-            build.equipment = c.debug_equipment;
-            build.extra = debug_lift(ch.class, &build);
+            // The debug weapons replace the weapons; armor, rings and the rest stay as saved.
+            for s in [EquipSlot::Melee, EquipSlot::Ranged] {
+                build.equipment.set(s, c.debug_equipment.get(s));
+            }
+            // The bought points stay; the lift counts them.
+            build.extra = build.extra.plus(debug_lift(ch.class, &build));
         }
         Some(build)
     }
@@ -574,7 +593,15 @@ impl Lobby {
             .filter_map(|m| {
                 let c = self.conns.get(m)?;
                 let ch = c.character.as_ref()?;
-                Some(RoomPlayer { id: *m, name: ch.name.clone(), class: ch.class, ready: c.ready })
+                let build = self.build_of(*m)?;
+                let weapons = [EquipSlot::Melee, EquipSlot::Ranged]
+                    .into_iter()
+                    .filter_map(|s| match s {
+                        EquipSlot::Melee => Some(build.equipment.get(s).unwrap_or(classes::def(ch.class).starter.0)),
+                        _ => build.equipment.get(s),
+                    })
+                    .collect();
+                Some(RoomPlayer { id: *m, name: ch.name.clone(), class: ch.class, ready: c.ready, loadout: build.loadout, weapons })
             })
             .collect();
         let msg = ServerMsg::Room { run_id: rid, name: room.name.clone(), host: room.host, players, level: room.level, boss: room.boss };
@@ -691,18 +718,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn shopping_between_runs_only_and_newest_progress_wins() {
+    async fn build_changes_are_refused_in_a_run_and_while_ready() {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
+        let (tx, rx) = unbounded_channel();
+        std::mem::forget(rx);
+        let none = l.connect(5, tx);
+        assert_eq!(l.can_change(none), Err("Choose a character first."));
         let id = join(&mut l, 1, ClassId::Wizard);
-        assert_eq!(l.can_shop(id), Ok(10));
+        assert_eq!(l.can_change(id), Ok((10, ClassId::Wizard)), "the lobby is fine");
         l.handle(id, ClientMsg::CreateRun { name: "r".into() });
-        assert_eq!(l.can_shop(id), Ok(10), "waiting room is fine");
+        assert_eq!(l.can_change(id), Ok((10, ClassId::Wizard)), "waiting room is fine");
+        l.handle(id, ClientMsg::SetReady { ready: true });
+        assert_eq!(l.can_change(id), Err("Not while ready."));
+        l.handle(id, ClientMsg::SetReady { ready: false });
         l.handle(id, ClientMsg::StartRun);
-        assert!(l.can_shop(id).is_err(), "no shopping during a run");
+        assert_eq!(l.can_change(id), Err("Not during a run."));
         let rid = l.conns[&id].room.unwrap();
         l.run_finished(rid);
-        assert_eq!(l.can_shop(id), Ok(10));
+        assert_eq!(l.can_change(id), Ok((10, ClassId::Wizard)));
 
         let mut newer = Progress::new(ClassId::Wizard);
         newer.bank(500, 0);
@@ -988,5 +1022,154 @@ mod tests {
         l.debug_equip_if(true, a, EquipSlot::Ranged, Some(ItemId::ElvenBow));
         l.handle(a, ClientMsg::SetReady { ready: true });
         assert!(l.conns[&a].ready);
+    }
+
+    fn character_with(account: i32, id: i32, class: ClassId, progress: Progress) -> Character {
+        Character { id, account_id: account, name: format!("hero{id}"), class, progress }
+    }
+
+    /// Connects `account` with a character holding `progress`; returns the connection id and its receiver.
+    fn join_with(l: &mut Lobby, account: i32, class: ClassId, progress: Progress) -> (u32, tokio::sync::mpsc::UnboundedReceiver<Message>) {
+        let (tx, rx) = unbounded_channel();
+        let id = l.connect(account, tx);
+        l.set_character(id, character_with(account, account * 10, class, progress));
+        (id, rx)
+    }
+
+    /// The last server message of type `t`, as JSON.
+    fn last(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Message>, t: &str) -> Option<serde_json::Value> {
+        let mut found = None;
+        while let Ok(m) = rx.try_recv() {
+            if let Message::Binary(b) = m {
+                if let Ok(v) = rmp_serde::from_slice::<serde_json::Value>(&b) {
+                    if v["t"] == t {
+                        found = Some(v);
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    fn frost_shard_progress(nodes: Vec<crate::defs::trees::NodeId>) -> Progress {
+        let mut p = Progress::new(ClassId::Wizard);
+        p.nodes = nodes;
+        p.loadout.primary = pick(AbilityId::FrostShard);
+        p
+    }
+
+    #[tokio::test]
+    async fn a_saved_loadout_reaches_the_run() {
+        use crate::defs::trees::NodeId;
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (a, _rx) = join_with(&mut l, 1, ClassId::Wizard, frost_shard_progress(vec![NodeId::WF1]));
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        let rid = l.conns[&a].room.unwrap();
+        let members = l.members_of(rid).unwrap();
+        assert_eq!(members[0].build.loadout.primary, pick(AbilityId::FrostShard));
+        assert_eq!(members[0].build.nodes, vec![NodeId::WF1]);
+        assert!(!members[0].debug_loadout);
+        l.handle(a, ClientMsg::SetReady { ready: true });
+        assert!(l.conns[&a].ready, "the saved pick is valid");
+        let run = Run::new(rid, members, 7, LevelChoice::Dungeon { boss: None });
+        assert_eq!(run.players[0].sheet.primary.id, AbilityId::FrostShard);
+        assert!(!run.debug_used);
+    }
+
+    #[tokio::test]
+    async fn ready_refuses_a_saved_invalid_loadout() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (a, mut rx) = join_with(&mut l, 1, ClassId::Wizard, frost_shard_progress(vec![]));
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        errors(&mut rx);
+        l.handle(a, ClientMsg::SetReady { ready: true });
+        assert!(!l.conns[&a].ready);
+        let e = errors(&mut rx);
+        assert!(e.iter().any(|m| m.contains("Frost Shard")), "{e:?}");
+        l.handle(a, ClientMsg::StartRun);
+        assert!(l.rooms[&l.conns[&a].room.unwrap()].run_tx.is_none(), "Start refuses too");
+    }
+
+    #[tokio::test]
+    async fn an_unequipped_item_version_breaks_neither_the_character_nor_the_party_list() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let mut p = Progress::new(ClassId::Paladin);
+        p.loadout.primary = Pick { ability: AbilityId::MagicMissile, source: Source::Item(EquipSlot::Ring1) };
+        let (a, mut rx) = join_with(&mut l, 1, ClassId::Paladin, p);
+        let ch = last(&mut rx, "Character").expect("a Character message");
+        assert_eq!(ch["sheet"]["loadout_error"], "Magic Missile is not one of your abilities.");
+        assert!(ch["sheet"]["hp"].as_f64().unwrap() > 0.0);
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        let room = last(&mut rx, "Room").expect("a Room message");
+        assert_eq!(room["players"][0]["loadout"]["primary"]["ability"], "MagicMissile");
+        l.handle(a, ClientMsg::SetReady { ready: true });
+        assert!(!l.conns[&a].ready);
+    }
+
+    #[tokio::test]
+    async fn the_party_list_shows_loadouts_and_weapons() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let mut p = Progress::new(ClassId::Barbarian);
+        p.inventory.push(ItemId::ThrowingAxes);
+        p.equipment.set(EquipSlot::Ranged, Some(ItemId::ThrowingAxes));
+        p.loadout.primary = pick(AbilityId::Strike);
+        let (a, mut rx) = join_with(&mut l, 1, ClassId::Barbarian, p);
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        let room = last(&mut rx, "Room").unwrap();
+        let me = &room["players"][0];
+        assert_eq!(me["loadout"]["primary"]["ability"], "Strike");
+        assert_eq!(me["loadout"]["secondary"]["ability"], "Charge");
+        let weapons: Vec<&str> = me["weapons"].as_array().unwrap().iter().map(|w| w.as_str().unwrap()).collect();
+        let starter = Equipment::starter(ClassId::Barbarian).get(EquipSlot::Melee).unwrap();
+        assert_eq!(weapons, vec![format!("{starter:?}"), "ThrowingAxes".to_string()]);
+
+        // The debug picks win while they are set.
+        l.debug_equip_if(true, a, EquipSlot::Ranged, None);
+        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::GroundSlam));
+        l.send_room(l.conns[&a].room.unwrap());
+        let room = last(&mut rx, "Room").unwrap();
+        let me = &room["players"][0];
+        assert_eq!(me["loadout"]["secondary"]["ability"], "GroundSlam");
+        assert_eq!(me["weapons"].as_array().unwrap().len(), 1, "the debug equipment has no ranged weapon");
+    }
+
+    #[tokio::test]
+    async fn the_debug_flag_starts_from_the_real_build() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let mut p = Progress::new(ClassId::Barbarian);
+        p.bought = Attributes::new(2, 0, 0, 0, 0, 0);
+        let (a, _rx) = join_with(&mut l, 1, ClassId::Barbarian, p);
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        assert_eq!(l.build_of(a).unwrap().extra, Attributes::new(2, 0, 0, 0, 0, 0), "no debug, no lift");
+        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::Charge));
+        let b = l.build_of(a).unwrap();
+        assert_eq!(b.extra.get(Attr::Str), 2 + debug_lift(ClassId::Barbarian, &Build { extra: Attributes::new(2, 0, 0, 0, 0, 0), ..b.clone() }).get(Attr::Str));
+        assert!(b.extra.get(Attr::Str) >= 2, "the two bought STR stay");
+        assert!(b.own.contains(&AbilityId::GroundSlam), "the whole class pool");
+        assert_eq!(b.loadout.secondary, pick(AbilityId::Charge));
+        assert!(crate::sheet::hero_sheet(ClassId::Barbarian, &b).is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_progress_change_resends_the_room() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (a, mut rx) = join_with(&mut l, 1, ClassId::Wizard, Progress::new(ClassId::Wizard));
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        while rx.try_recv().is_ok() {}
+        let mut p = Progress::new(ClassId::Wizard);
+        p.rev = 1;
+        p.loadout.primary = pick(AbilityId::MagicMissile);
+        l.apply_progress(10, p);
+        let mut seen = Vec::new();
+        while let Ok(Message::Binary(b)) = rx.try_recv() {
+            seen.push(rmp_serde::from_slice::<serde_json::Value>(&b).unwrap()["t"].as_str().unwrap().to_string());
+        }
+        assert!(seen.contains(&"Character".to_string()) && seen.contains(&"Room".to_string()), "{seen:?}: the party list follows the saved build");
     }
 }

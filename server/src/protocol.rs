@@ -6,9 +6,9 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::defs::attributes::Attributes;
-use crate::defs::items::{EquipSlot, ItemId};
-use crate::defs::loadout::Pick;
+use crate::defs::attributes::{Attr, Attributes};
+use crate::defs::items::{EquipSlot, Equipment, ItemId};
+use crate::defs::loadout::{Loadout, Pick};
 use crate::defs::trees::NodeId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -95,6 +95,19 @@ pub enum ClientMsg {
     Spectate { dir: i8 },
     /// Debug mode: immortal + shortest path to the boss (if the server allows debug).
     Debug { on: bool },
+    /// Lobby or waiting room, not while ready: buy the next point of an Attribute with XP.
+    BuyAttribute { attr: Attr },
+    /// Buy a skill-tree node of your class with XP.
+    BuyNode { node: NodeId },
+    /// Give back all XP spent on the shop and the tree, for coins.
+    Respec,
+    /// Put an owned item in a slot (`None` = empty the slot).
+    Equip { slot: EquipSlot, item: Option<ItemId> },
+    /// Save the two abilities taken into the next run. Any pick that fits its slot is stored; what is
+    /// wrong with it shows in `CharacterInfo.sheet.loadout_error` and stops Ready and Start.
+    SetLoadout { primary: Pick, secondary: Pick },
+    /// Debug: put a copy of an item in your inventory, if the server allows debug.
+    DebugGrantItem { item: ItemId },
     /// Debug: set your hero's darkvision (0..=1 of its vision), if the server allows debug.
     DebugDarkvision { ratio: f32 },
     /// Debug: put an effect (EffectKind id) on your hero, if the server allows debug.
@@ -124,6 +137,10 @@ pub struct RoomPlayer {
     pub name: String,
     pub class: ClassId,
     pub ready: bool,
+    /// The two abilities that will play (the debug picks when set).
+    pub loadout: Loadout,
+    /// The Melee and Ranged weapons that will play.
+    pub weapons: Vec<ItemId>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -340,8 +357,19 @@ pub struct CharacterInfo {
     pub bought: Attributes,
     /// Owned skill-tree nodes (sorted, without the start node).
     pub nodes: Vec<NodeId>,
+    pub equipment: Equipment,
+    /// Owned items (the equipped ones too).
+    pub inventory: Vec<ItemId>,
+    /// The saved abilities.
+    pub loadout: Loadout,
     /// XP spent on the shop and the tree (refunded by a respec).
     pub xp_spent: u32,
+    /// The coins a respec costs now.
+    pub respec_price: u32,
+    /// The XP price of the next point of each Attribute, in `Attr` order.
+    pub prices: [u32; 6],
+    /// The sheet numbers of the saved build.
+    pub sheet: crate::sheet::SheetSummary,
 }
 
 pub fn encode(msg: &ServerMsg) -> Vec<u8> {
@@ -402,5 +430,30 @@ mod tests {
         }
         let none: ClientMsg = serde_json::from_str(r#"{"t":"DebugEquip","slot":"Ranged","item":null}"#).unwrap();
         assert!(matches!(none, ClientMsg::DebugEquip { item: None, .. }));
+    }
+
+    #[test]
+    fn build_messages_round_trip() {
+        use crate::defs::abilities::AbilityId;
+        use crate::defs::attributes::Attr;
+        use crate::defs::loadout::Source;
+        let via = |json: &str| -> ClientMsg {
+            let m: ClientMsg = serde_json::from_str(json).unwrap();
+            decode(&rmp_serde::to_vec_named(&m).unwrap()).unwrap_or_else(|| panic!("{json} does not decode"))
+        };
+        assert!(matches!(via(r#"{"t":"BuyAttribute","attr":"Str"}"#), ClientMsg::BuyAttribute { attr: Attr::Str }));
+        assert!(matches!(via(r#"{"t":"BuyNode","node":"WA1"}"#), ClientMsg::BuyNode { node: NodeId::WA1 }));
+        assert!(matches!(via(r#"{"t":"Respec"}"#), ClientMsg::Respec));
+        assert!(matches!(via(r#"{"t":"Equip","slot":"Melee","item":null}"#), ClientMsg::Equip { slot: EquipSlot::Melee, item: None }));
+        assert!(matches!(via(r#"{"t":"Equip","slot":"Ring1","item":"RingOfInsight"}"#), ClientMsg::Equip { slot: EquipSlot::Ring1, item: Some(ItemId::RingOfInsight) }));
+        assert!(matches!(via(r#"{"t":"DebugGrantItem","item":"WarHammer"}"#), ClientMsg::DebugGrantItem { item: ItemId::WarHammer }));
+        let json = r#"{"t":"SetLoadout","primary":{"ability":"Strike","source":"Own"},"secondary":{"ability":"Charge","source":{"Item":"Ring1"}}}"#;
+        match via(json) {
+            ClientMsg::SetLoadout { primary, secondary } => {
+                assert_eq!(primary, Pick { ability: AbilityId::Strike, source: Source::Own });
+                assert_eq!(secondary, Pick { ability: AbilityId::Charge, source: Source::Item(EquipSlot::Ring1) });
+            }
+            other => panic!("unexpected {other:?}"),
+        }
     }
 }

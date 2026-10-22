@@ -9,7 +9,7 @@ use super::kinds::EntityKind;
 super::enum_list::listed_enum! {
     /// Open set: a new type is a new variant; `ALL` and `COUNT` grow with it
     /// (`listed_enum!`), and its resistance slot exists on every creature at 0.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
     pub enum DamageType: u8 {
         Physical = 0,
         Cold = 1,

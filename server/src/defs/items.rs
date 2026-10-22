@@ -30,8 +30,11 @@ super::enum_list::listed_enum! {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct Equipment {
+    /// In `EquipSlot` order.
+    #[ts(as = "Vec<Option<ItemId>>")]
     pub slots: [Option<ItemId>; EquipSlot::COUNT],
 }
 

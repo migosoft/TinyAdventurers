@@ -28,6 +28,8 @@ use axum::routing::get;
 use axum::serve::ListenerExt;
 use axum::Router;
 use futures_util::{SinkExt, StreamExt};
+use defs::loadout::Loadout;
+use progress::Change;
 use protocol::{encode, ClientMsg, ServerMsg};
 use run::RunCmd;
 use std::net::SocketAddr;
@@ -184,6 +186,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, id_hash
             }
             // These need the database: query first, then lock the lobby only to apply the result.
             ClientMsg::SelectCharacter { id: character } => select_character(&state, id, character).await,
+            ClientMsg::BuyAttribute { attr } => change_build(&state, id, Change::BuyAttr(attr)).await,
+            ClientMsg::BuyNode { node } => change_build(&state, id, Change::BuyNode(node)).await,
+            ClientMsg::Respec => change_build(&state, id, Change::Respec).await,
+            ClientMsg::Equip { slot, item } => change_build(&state, id, Change::Equip(slot, item)).await,
+            ClientMsg::SetLoadout { primary, secondary } => change_build(&state, id, Change::SetLoadout(Loadout { primary, secondary })).await,
+            ClientMsg::DebugGrantItem { item } => {
+                if !run::debug::allowed() {
+                    lobby.lock().unwrap().error(id, "Debug is off.");
+                    continue;
+                }
+                change_build(&state, id, Change::GrantItem(item)).await
+            }
             other => lobby.lock().unwrap().handle(id, other),
         }
     }
@@ -194,6 +208,27 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, id_hash
     // Playing is activity: the idle clock of the session restarts when the game connection ends.
     if let Err(e) = db::extend_session(&state.db, &id_hash, state.auth.session_idle).await {
         tracing::error!("session: {e}");
+    }
+}
+
+/// A change to the build of the connection's character (Ruling 8: not during a run, not while
+/// ready): the row is locked, changed and saved, then every connection playing it hears.
+async fn change_build(state: &AppState, conn: u32, change: Change) {
+    let check = state.lobby.lock().unwrap().can_change(conn);
+    let (character, class) = match check {
+        Ok(c) => c,
+        Err(e) => return state.lobby.lock().unwrap().error(conn, e),
+    };
+    let result = db::update_progress(&state.db, character, |p| p.apply(class, change)).await;
+    let mut l = state.lobby.lock().unwrap();
+    match result {
+        Ok(Some(Ok(p))) => l.apply_progress(character, p),
+        Ok(Some(Err(e))) => l.error(conn, e),
+        Ok(None) => l.error(conn, "No such character."),
+        Err(e) => {
+            tracing::error!("change build: {e}");
+            l.error(conn, "Something went wrong on the server. Please try again.");
+        }
     }
 }
 

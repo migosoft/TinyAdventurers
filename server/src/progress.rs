@@ -340,7 +340,13 @@ impl Progress {
             coins: self.coins,
             bought: self.bought,
             nodes: self.nodes.clone(),
+            equipment: self.equipment,
+            inventory: self.inventory.clone(),
+            loadout: self.loadout,
             xp_spent: self.xp_spent,
+            respec_price: self.respec_price(),
+            prices: self.attr_prices(class),
+            sheet: crate::sheet::summary(class, &self.build(class)),
         }
     }
 }
