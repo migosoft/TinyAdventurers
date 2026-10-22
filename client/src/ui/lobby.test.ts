@@ -6,7 +6,7 @@ import type { Net } from '../net';
 import type { Pick } from '../generated/Pick';
 import type { PoolCard } from '../generated/PoolCard';
 import { fixtureInfo } from './hub/fixture';
-import { debugReject, debugWeapons, isBuildRefusal, isDebugGuardError, Lobby } from './lobby';
+import { debugReject, debugWeapons, isBuildRefusal, isDebugGuardError, Lobby, pickOptionLabel } from './lobby';
 
 vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ imageSmoothingEnabled: false, clearRect() {}, drawImage() {} } as unknown as CanvasRenderingContext2D);
 const atlas = { img: new Image(), frames: new Proxy({}, { get: () => ({ frame: { x: 0, y: 0, w: 16, h: 16 } }) }) } as unknown as Atlas;
@@ -143,5 +143,27 @@ describe('Lobby', () => {
     p.value = JSON.stringify(own('FrostShard'));
     p.dispatchEvent(new Event('change'));
     expect(dbg().value).toBe('FrostShard');
+  });
+});
+
+describe('pickOptionLabel', () => {
+  it('adds the needs part, the whole error otherwise, nothing without one', () => {
+    expect(pickOptionLabel('Frost Shard', 'Frost Shard needs INT 14.')).toBe('Frost Shard (needs INT 14.)');
+    expect(pickOptionLabel('Strike', 'Strike is not one of your abilities.')).toBe('Strike (Strike is not one of your abilities.)');
+    expect(pickOptionLabel('Fireball', null)).toBe('Fireball');
+  });
+});
+
+describe('Lobby with a saved pick that left the pool', () => {
+  it('keeps it selected as unavailable, and the other select sends it unchanged', () => {
+    const l = make();
+    const info = fixtureInfo('Wizard', { pool: [card(own('FrostShard')), card(own('Fireball')), card(own('Fireball'))] });
+    l.setCharacter(info); // saved primary MagicMissile is not in the pool
+    l.setRoom({ run_id: 5, name: 'Run', host: 1, level: 'Level1', boss: null, players: [player(1, true), player(2, false, 'Wizard')] } as never);
+    const p = sel('Primary')!;
+    expect(p.selectedOptions[0].textContent).toBe('Magic Missile (unavailable)');
+    const s = sel('Secondary')!;
+    s.dispatchEvent(new Event('change'));
+    expect(sent).toEqual([{ t: 'SetLoadout', primary: own('MagicMissile'), secondary: own('Fireball') }]);
   });
 });

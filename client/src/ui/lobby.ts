@@ -55,6 +55,12 @@ export type DebugTouched = { loadout: boolean; melee: boolean; ranged: boolean }
 
 export const BUILD_ERROR = /needs |is not one of your abilities|cannot go in the|does not fit the|cannot use the item|not trained in the item/;
 
+/** The select label of a pool card: its name, plus the reason when it is invalid ("Frost Nova (needs INT 17.)"). */
+export function pickOptionLabel(label: string, error: string | null): string {
+  if (!error) return label;
+  return `${label} (${error.includes('needs ') ? error.slice(error.indexOf('needs ')) : error})`;
+}
+
 /** A server answer that refuses a build change (the selects must be drawn from the saved state again). */
 export const isBuildRefusal = (msg: string): boolean => isDebugGuardError(msg) || BUILD_ERROR.test(msg);
 
@@ -244,10 +250,11 @@ export class Lobby {
       const icon = abilityIcon(pick.ability);
       if (!(editable && p.id === this.myId)) return `<span class="ui-abshow">${icon}<kbd>${key}</kbd>${esc(ABILITIES[pick.ability].name)}</span>`;
       const saved = ch!.loadout[slot === 'Primary' ? 'primary' : 'secondary'];
-      const options = poolFor(ch!, slot)
-        .filter((c) => !c.locked)
-        .map((c) => `<option value='${esc(JSON.stringify(c.pick))}'${samePick(c.pick, saved) ? ' selected' : ''}>${esc(pickLabel(c.pick, ch!) + (c.error ? ` (${/needs /.test(c.error) ? c.error.slice(c.error.indexOf('needs ')) : c.error})` : ''))}</option>`)
-        .join('');
+      const cards = poolFor(ch!, slot).filter((c) => !c.locked);
+      const opt = (pick: Pick, label: string, on: boolean) => `<option value='${esc(JSON.stringify(pick))}'${on ? ' selected' : ''}>${esc(label)}</option>`;
+      // A saved pick that left the pool (a ring taken off) stays selectable, so the other select cannot overwrite it.
+      const gone = cards.some((c) => samePick(c.pick, saved)) ? '' : opt(saved, `${pickLabel(saved, ch!)} (unavailable)`, true);
+      const options = gone + cards.map((c) => opt(c.pick, pickOptionLabel(pickLabel(c.pick, ch!), c.error), samePick(c.pick, saved))).join('');
       return `<span class="ui-abpick">${abilityIcon(saved.ability)}<kbd>${key}</kbd><select data-own="${slot}">${options}</select></span>`;
     };
     const players = room.players
