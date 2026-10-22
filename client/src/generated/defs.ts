@@ -819,6 +819,7 @@ export const LIGHT_KIND = {
   "Holy": 5,
   "Lava": 1,
   "Magic": 3,
+  "Radiant": 6,
   "Torch": 0
 } as const;
 
@@ -858,6 +859,12 @@ export const LIGHT: Record<number, { radius: number; colour: number; intensity: 
     "flicker": 0.1,
     "intensity": 0.9,
     "radius": 4
+  },
+  "6": {
+    "colour": 16771216,
+    "flicker": 0.05,
+    "intensity": 0.6,
+    "radius": 2
   }
 };
 

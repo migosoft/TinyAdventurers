@@ -15,6 +15,6 @@ pub mod lights;
 pub mod objects;
 pub mod progression;
 pub mod requirements;
-#[allow(dead_code)] // plan 4: keystones (task 3) and check_buy (task 5) are not consumed yet
+#[allow(dead_code)] // plan 4: check_buy (task 5) is not consumed yet
 pub mod trees;
 pub mod weapons;

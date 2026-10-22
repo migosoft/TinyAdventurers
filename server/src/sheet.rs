@@ -10,7 +10,7 @@ use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT};
 use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, Resistances};
-use crate::defs::effects::{EffectResistances, OnHit};
+use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::items::{self, EquipSlot, ItemBase, ItemId, PropKind};
 #[cfg(test)]
@@ -18,7 +18,7 @@ use crate::defs::items::Equipment;
 use crate::defs::lights::{self, LightKind};
 use crate::defs::loadout::{apply_mods, check_pick, pick_version, AbilityMod, Build, LoadoutError, Pick};
 use crate::defs::races::Sight;
-use crate::defs::trees::{self, NodeId, Prof};
+use crate::defs::trees::{self, Keystone, KeystoneSet, NodeId, Prof};
 use crate::defs::weapons::{resolve_melee, resolve_ranged, ResolvedWeapon};
 use crate::protocol::{BossId, ClassId};
 use serde::Serialize;
@@ -90,6 +90,8 @@ pub struct Sheet {
     pub ranged: Option<ResolvedWeapon>,
     /// The light of the worn item with the largest radius.
     pub light: Option<LightKind>,
+    /// The keystones the hero owns; the run reads the dynamic ones from here.
+    pub keystones: KeystoneSet,
     pub sight: Sight,
     pub primary: ResolvedAbility,
     pub secondary: ResolvedAbility,
@@ -309,15 +311,31 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
     for &(t, v) in &tree.res {
         res.set(t, res.get(t) + v);
     }
+    let ks = tree.keystones;
     let mut weight = def.weight;
+    let armor_weight = if ks.has(Keystone::Bulwark) { 0.5 } else { 1.0 };
     for &(_, id) in &worn {
         if let ItemBase::Armor(a) = items::def(id).base {
             res.set(DamageType::Physical, res.get(DamageType::Physical) + a.physical);
-            weight += a.weight;
+            weight += a.weight * armor_weight;
         }
+    }
+    if ks.has(Keystone::Bulwark) {
+        res.set(DamageType::Physical, res.get(DamageType::Physical) + 0.1);
+    }
+    if ks.has(Keystone::Juggernaut) {
+        weight += 4.0;
     }
     let mut attrs = unequipped;
     let mut effect_res = prof.effect_res;
+    if ks.has(Keystone::Unshaken) {
+        effect_res.set(EffectKind::Sleep, effect_res.get(EffectKind::Sleep) + 1.0);
+    }
+    if ks.has(Keystone::Juggernaut) {
+        for k in [EffectKind::Slowed, EffectKind::Chilled, EffectKind::Entangled] {
+            effect_res.set(k, effect_res.get(k) + 1.0);
+        }
+    }
     let (mut move_frac, mut bonus_hp) = (0.0, 0.0);
     let mut light: Option<LightKind> = None;
     // Index 0: the melee weapon, 1: the ranged one.
@@ -381,12 +399,18 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
         check_pick(&d, waive_attrs, &attrs, weapon)?;
         let r = resolve_ability(&d, &attrs, &melee, ranged.as_ref(), reach).ok_or(LoadoutError::NoWeapon(p.ability, EquipSlot::Ranged))?;
         let mods: Vec<AbilityMod> = version.iter().copied().chain(tree.improves.iter().filter(|(a, _)| *a == p.ability).map(|&(_, m)| m)).collect();
-        Ok((apply_mods(r, &mods), mods))
+        Ok((keystone_ability(apply_mods(r, &mods), &d, &ks), mods))
     };
     let (primary, _) = ability(AbilitySlot::Primary, b.loadout.primary)?;
     let (secondary, secondary_mods) = ability(AbilitySlot::Secondary, b.loadout.secondary)?;
     let wolf = if secondary.id == AbilityId::SummonWolf { wolf_mods(&secondary_mods) } else { WolfMods::NONE };
-    let strike = resolve_ability(&ab::def(AbilityId::Strike), &attrs, &melee, ranged.as_ref(), reach).expect("Strike uses the melee weapon");
+    let strike_def = ab::def(AbilityId::Strike);
+    let strike = resolve_ability(&strike_def, &attrs, &melee, ranged.as_ref(), reach).expect("Strike uses the melee weapon");
+    let strike = keystone_ability(strike, &strike_def, &ks);
+    // Radiant lights two tiles, unless a worn light reaches further.
+    if ks.has(Keystone::Radiant) && light.is_none_or(|l| lights::def(LightKind::Radiant).radius > lights::def(l).radius) {
+        light = Some(LightKind::Radiant);
+    }
     Ok(Sheet {
         attrs,
         max_hp: attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp,
@@ -397,6 +421,7 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
         melee,
         ranged,
         light,
+        keystones: ks,
         sight: prof.sight,
         primary,
         secondary,
@@ -404,6 +429,29 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
         reach,
         wolf,
     })
+}
+
+impl Sheet {
+    /// The Attribute a save is made with: its value, and Unbreakable adds 4 to CON.
+    pub fn save(&self, a: Attr) -> i32 {
+        self.attrs.get(a) + if a == Attr::Con && self.keystones.has(Keystone::Unbreakable) { UNBREAKABLE_CON } else { 0 }
+    }
+}
+
+/// What Unbreakable adds to the CON of every save.
+const UNBREAKABLE_CON: i32 = 4;
+
+/// The static keystones that change a resolved ability: Arcane Overflow (spells) and Pyromancer.
+fn keystone_ability(mut r: ResolvedAbility, d: &AbilityDef, ks: &KeystoneSet) -> ResolvedAbility {
+    if ks.has(Keystone::ArcaneOverflow) && d.category == AbilityCategory::Spell {
+        r.base.keystone_mult *= 1.15;
+        r.cooldown *= 1.1;
+    }
+    if ks.has(Keystone::Pyromancer) {
+        r.base.keystone_mult *= 1.0 + 0.2 * r.split.share(DamageType::Heat) - 0.2 * r.split.share(DamageType::Cold);
+    }
+    r.damage = r.base.amount();
+    r
 }
 
 /// The numbers a monster's spawn reads.
@@ -446,7 +494,6 @@ pub fn wolf_stats() -> MonsterStats {
 mod tests {
     use super::*;
     use crate::defs::attributes::{factor, STR_DMG};
-    use crate::defs::effects::EffectKind;
     use crate::defs::kinds::EntityKind;
     use crate::defs::companions::WOLF_HP;
 
@@ -870,5 +917,71 @@ mod tests {
     fn low_con_enemy_still_moves() {
         let block = Attributes::new(10, 10, -200, 10, 10, 10);
         assert!(move_speed(40.0, 12, &block) > 0.0);
+    }
+
+    fn with_nodes(c: ClassId, nodes: &[NodeId]) -> Sheet {
+        hero_sheet(c, &Build { nodes: nodes.to_vec(), extra: Attributes::new(5, 5, 5, 5, 5, 5), ..Build::start(c) }).unwrap()
+    }
+
+    #[test]
+    fn arcane_overflow_and_pyromancer_change_spells() {
+        let c = ClassId::Wizard;
+        let base = with_nodes(c, &[]);
+        // Only the keystone node, so the Attributes stay equal and the damage compares directly.
+        let arc = with_nodes(c, &[NodeId::WA5]);
+        assert_eq!(base.primary.base.keystone_mult, 1.0);
+        assert_eq!(arc.primary.base.keystone_mult, 1.15);
+        assert_eq!(arc.secondary.base.keystone_mult, 1.15);
+        assert!((arc.primary.cooldown - base.primary.cooldown * 1.1).abs() < 1e-12);
+        assert!((arc.secondary.cooldown - base.secondary.cooldown * 1.1).abs() < 1e-12);
+        assert!((arc.primary.damage - base.primary.damage * 1.15).abs() < 1e-9);
+        assert_eq!(arc.fallback.base.keystone_mult, 1.0, "Strike is a weapon attack");
+        assert_eq!(arc.fallback.cooldown, base.fallback.cooldown);
+        let pyro = with_nodes(c, &[NodeId::WR5]);
+        assert!(pyro.secondary.split.share(DamageType::Heat) > 0.69 && pyro.secondary.split.share(DamageType::Heat) < 0.71);
+        assert!((pyro.secondary.base.keystone_mult - (1.0 + 0.2 * pyro.secondary.split.share(DamageType::Heat))).abs() < 1e-12);
+        assert_eq!(pyro.primary.base.keystone_mult, 1.0, "Magic Missile has no heat or cold");
+        assert_eq!(pyro.primary.cooldown, base.primary.cooldown);
+        assert!((pyro.secondary.damage - base.secondary.damage * pyro.secondary.base.keystone_mult).abs() < 1e-9);
+        assert_eq!(pyro.keystones.iter().collect::<Vec<_>>(), vec![Keystone::Pyromancer]);
+    }
+
+    #[test]
+    fn defensive_keystones() {
+        let p0 = with_nodes(ClassId::Paladin, &[]);
+        let p = with_nodes(ClassId::Paladin, &[NodeId::PL5]);
+        assert_eq!(p.effect_res.get(EffectKind::Sleep), 1.0 + p0.effect_res.get(EffectKind::Sleep));
+        let j = with_nodes(ClassId::Barbarian, &[NodeId::BL5]);
+        let b0 = with_nodes(ClassId::Barbarian, &[]);
+        assert_eq!(j.weight, b0.weight + 4.0);
+        for k in [EffectKind::Slowed, EffectKind::Chilled, EffectKind::Entangled] {
+            assert_eq!(j.effect_res.get(k), b0.effect_res.get(k) + 1.0);
+        }
+        let u = with_nodes(ClassId::Barbarian, &[NodeId::BD5]);
+        assert_eq!(u.save(Attr::Con), u.attrs.get(Attr::Con) + 4);
+        assert_eq!(u.save(Attr::Wil), u.attrs.get(Attr::Wil));
+        assert_eq!((u.weight, u.max_hp, u.speed), (b0.weight, b0.max_hp, b0.speed), "saves only");
+        assert_eq!(b0.save(Attr::Con), b0.attrs.get(Attr::Con));
+    }
+
+    #[test]
+    fn bulwark_halves_armor_weight() {
+        let c = ClassId::Paladin;
+        let build = |nodes: &[NodeId]| Build { nodes: nodes.to_vec(), extra: Attributes::new(5, 5, 5, 5, 5, 5), equipment: Equipment::starter(c).with(EquipSlot::Armor, ItemId::PlateArmor), ..Build::start(c) };
+        let plain = hero_sheet(c, &build(&[])).unwrap();
+        let bul = hero_sheet(c, &build(&[NodeId::PR5])).unwrap();
+        assert_eq!(plain.weight, 12.0 + 7.0);
+        assert_eq!(bul.weight, 12.0 + 3.5);
+        assert!((bul.res.get(DamageType::Physical) - plain.res.get(DamageType::Physical) - 0.1).abs() < 1e-12);
+    }
+
+    #[test]
+    fn radiant_sheds_light() {
+        let c = ClassId::Paladin;
+        let r = with_nodes(c, &[NodeId::PU5]);
+        assert_eq!(r.light, Some(LightKind::Radiant));
+        assert_eq!(with_nodes(c, &[]).light, None);
+        let gold = hero_sheet(c, &Build { nodes: vec![NodeId::PU5], extra: Attributes::new(5, 5, 5, 5, 5, 5), equipment: Equipment::starter(c).with(EquipSlot::Melee, ItemId::GoldenSword), ..Build::start(c) }).unwrap();
+        assert_eq!(gold.light, Some(LightKind::Holy), "the larger light wins");
     }
 }

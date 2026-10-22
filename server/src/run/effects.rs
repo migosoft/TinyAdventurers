@@ -291,7 +291,7 @@ impl Run {
         if let (Some(power), false) = (a.power, def(kind).positive) {
             let save_attr = def(kind).save.unwrap_or(if a.magical { Attr::Wil } else { Attr::Con });
             let save = match c {
-                Creature::Player(i) => self.players.get(i).map(|p| p.sheet.attrs.get(save_attr)),
+                Creature::Player(i) => self.players.get(i).map(|p| p.sheet.save(save_attr)),
                 Creature::Monster(i) => self.monsters.get(i).map(|m| m.attrs.get(save_attr)),
             };
             let Some(save) = save else { return (EffectOutcome::NotThere, d, 0) };
@@ -1069,6 +1069,21 @@ mod tests {
         let left = left_of(&run, Creature::Player(0), EffectKind::Burning).expect("burning");
         let want = crate::defs::effects::def(EffectKind::Burning).duration * 0.8;
         assert!((left - want).abs() < 1e-12, "power 10 against CON 14: ×0.8, got {left}");
+    }
+
+    #[test]
+    fn unbreakable_shortens_con_saves() {
+        use crate::defs::loadout::Build;
+        use crate::defs::trees::NodeId;
+        let burn = |nodes: &[NodeId]| {
+            let b = Build { nodes: nodes.to_vec(), ..Build::start(ClassId::Barbarian) };
+            let mut run = crate::run::tests::test_run_with(&[(ClassId::Barbarian, b)], BossId::Demon);
+            open(&mut run);
+            assert!(run.apply_effect_from(Creature::Player(0), EffectKind::Burning, None, 15, false));
+            left_of(&run, Creature::Player(0), EffectKind::Burning).expect("burning")
+        };
+        let (free, tough) = (burn(&[]), burn(&[NodeId::BD5]));
+        assert!(tough < free, "{tough} vs {free}");
     }
 
     #[test]

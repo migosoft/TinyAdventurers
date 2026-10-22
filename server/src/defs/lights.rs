@@ -19,10 +19,12 @@ pub enum LightKind {
     Blast = 4,
     /// The flash of a healing wave (`Run::add_flash`).
     Holy = 5,
+    /// The Radiant keystone's glow around the hero.
+    Radiant = 6,
 }
 
 impl LightKind {
-    pub const ALL: [LightKind; 6] = [LightKind::Torch, LightKind::Lava, LightKind::Fire, LightKind::Magic, LightKind::Blast, LightKind::Holy];
+    pub const ALL: [LightKind; 7] = [LightKind::Torch, LightKind::Lava, LightKind::Fire, LightKind::Magic, LightKind::Blast, LightKind::Holy, LightKind::Radiant];
 }
 
 /// How long an explosion lights its surroundings (s).
@@ -51,6 +53,7 @@ pub fn def(k: LightKind) -> LightDef {
         LightKind::Magic => LightDef { radius: 3, colour: 0x9678ff, intensity: 0.7, flicker: 0.1 },
         LightKind::Blast => LightDef { radius: 4, colour: 0xffb060, intensity: 1.0, flicker: 0.3 },
         LightKind::Holy => LightDef { radius: 4, colour: 0xffe890, intensity: 0.9, flicker: 0.1 },
+        LightKind::Radiant => LightDef { radius: 2, colour: 0xffe890, intensity: 0.6, flicker: 0.05 },
     }
 }
 
