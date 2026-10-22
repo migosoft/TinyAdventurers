@@ -235,6 +235,10 @@ pub fn effect(run: &mut Run, f: EffectFacts) {
     if let Some((_, rec, _)) = run.log.open.last_mut().filter(|(_, r, _)| r.who.first().is_some_and(|w| w.id == target)) {
         // The suffix is appended to the finished head in place: the hit's head is built once, by `hit_begin`.
         rec.head.push_str(&text::effect_suffix(&f));
+        // The hero's own state may show on the short line, by name only: the details carry the attacker's power.
+        if let Some(u) = rec.unseen.as_mut() {
+            u.head.push_str(&text::effect_suffix(&f));
+        }
         rec.details.extend(lines);
         rec.secs = left.or(rec.secs);
         return;

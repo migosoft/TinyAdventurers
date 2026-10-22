@@ -868,7 +868,7 @@ impl Run {
             return;
         }
         if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit, dmg.from_effect) {
-            self.hit_effect(effects::Creature::Player(pi), h); // a pure effect hit: no number, no flash
+            self.hit_effect_by(effects::Creature::Player(pi), h, dmg.why); // a pure effect hit: no number, no flash
             return;
         }
         let res = self.players[pi].effects.res(self.players[pi].res);
@@ -1069,7 +1069,7 @@ impl Run {
             return false;
         }
         if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit, dmg.from_effect) {
-            self.hit_effect(effects::Creature::Monster(mi), h);
+            self.hit_effect_by(effects::Creature::Monster(mi), h, dmg.why);
             return true;
         }
         let res = self.monsters[mi].effects.res(self.monsters[mi].res);

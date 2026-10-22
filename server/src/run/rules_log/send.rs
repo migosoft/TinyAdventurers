@@ -60,7 +60,7 @@ pub fn for_viewer(run: &Run, pi: usize, viewed: u32, view: &View, dark: &Dark, e
         lines.push(LineW(r.t as f32, r.kind as u8, head.clone(), details.to_vec()));
     }
     if omitted > 0 {
-        lines.push(LineW(run.time as f32, LineKind::Note as u8, format!("… {omitted} more lines (log limit)"), Vec::new()));
+        lines.push(LineW(run.time as f32, LineKind::Note as u8, format!("… {omitted} more records (log limit)"), Vec::new()));
     }
     Some(LogW(super::snapshot_tags(run, ents), lines))
 }

@@ -398,6 +398,12 @@ impl Run {
         self.apply(c, Apply::from_hit(h));
     }
 
+    /// A pure effect hit (no damage): the same, with the hit's cause for the rules log.
+    pub fn hit_effect_by(&mut self, c: Creature, h: OnHit, why: Why) {
+        let origin = why.by.map(|by| (by, why.what));
+        self.apply(c, Apply { origin, ..Apply::from_hit(h) });
+    }
+
     /// Damage ends effects that break on it (none yet).
     pub fn damage_wakes(&mut self, c: Creature) {
         let kinds = match c {

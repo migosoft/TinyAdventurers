@@ -321,8 +321,8 @@ Press **L** to open a log that explains what the rules are doing. It answers two
 - **Shift+L** (or the small button on the panel) hides the calculation lines and leaves one headline per event. Use it in a big fight.
 - **Other lines:** hits enemies land on you (so you see your own resistances at work), heals, damage over time (one short line per tick), kills and deaths, abilities that skipped a target with the reason (Chain Spark found no line of sight, a wall was in the way), "Too close" when a secondary is blocked in melee, and "... is in melee reach, strikes instead" when a primary turns into a Strike.
 - **Tags:** while the log is on, every creature shows a small name above its figure, such as "Goblin 3", and the log uses the same names, so you can match a line to a figure. Everyone in the party sees the same numbers. A hidden mimic is tagged as a chest until it shows itself.
-- **You only read what you can see.** A hit on something in the dark, or behind a wall, has no line, and neither does anything you could not have seen. The one exception is damage you take: "you took 7 from something unseen", with your own resistance steps and nothing about the attacker.
-- In a very big fight the panel may end with "... more lines (log limit)".
+- **You only read what you can see.** A hit on something in the dark, or behind a wall, has no line, and neither does anything you could not have seen. The one exception is damage you take: "<your name> took 7 from something unseen", with your own resistance steps and nothing about the attacker (an effect that came with the hit adds only its name, such as " · Chilled").
+- In a very big fight the panel may end with "… n more records (log limit)".
 
 ## Tips
 

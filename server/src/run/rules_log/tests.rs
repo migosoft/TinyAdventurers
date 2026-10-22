@@ -302,7 +302,12 @@ fn the_log_is_capped_per_snapshot() {
     assert!(bytes <= LOG_BYTES_PER_SNAP, "{bytes}");
     assert_eq!(real.len(), 40);
     assert_eq!(note[0].1, LineKind::Note as u8);
-    assert_eq!(note[0].2, "… 160 more lines (log limit)");
+    assert_eq!(note[0].2, "… 160 more records (log limit)");
+    // What is counted is records, not their detail lines.
+    let recs: Vec<LogRec> = (0..200).map(|_| LogRec { details: vec!["d".repeat(100); 3], ..rec(LineKind::Hit, "head", vec![]) }).collect();
+    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &recs).unwrap();
+    let kept = got.1.len() - 1;
+    assert_eq!(got.1[kept].2, format!("… {} more records (log limit)", 200 - kept));
 }
 
 #[test]
@@ -636,6 +641,12 @@ fn the_logged_duration_is_the_duration_applied() {
     let left = timer(&run, c, EffectKind::Burning).unwrap();
     assert_eq!(rec.secs, Some(left), "bit-equal");
     assert!(all_text(&rec).contains(&format!("= {} s", n1(left))), "{}", all_text(&rec));
+    // The Duration the rule itself returns is the same number, bit for bit (a twin skeleton, same application).
+    let twin = Creature::Monster(enemy_near(&mut run, EnemyType::SkeletonWarrior));
+    let (outcome, d, _) = run.apply_traced(twin, burn(14));
+    assert_eq!(outcome, EffectOutcome::Added);
+    assert_eq!(d.secs.to_bits(), timer(&run, twin, EffectKind::Burning).unwrap().to_bits(), "the Duration is the timer");
+    assert_eq!(d.secs.to_bits(), left.to_bits(), "and what the log states");
     println!("{}\n  {}", rec.head, rec.details.join("\n  "));
     // Frost Nova's Frozen on a goblin: the effect rides on the nova's hit.
     let mut run = hero_secondary(ClassId::Wizard, AbilityId::FrostNova, Attributes::new(0, 0, 0, 4, 0, 0));
@@ -1278,6 +1289,7 @@ fn fight(class: ClassId, primary: AbilityId, secondary: AbilityId, spectate: boo
     let near: Vec<u32> = [(3, -2, 40.0), (4, -1, 5000.0), (2, -3, 40.0)].iter().map(|&(dx, dy, hp)| spawn_at(&mut run, EnemyType::GoblinArcher, (tx + dx, ty + dy), hp)).collect();
     let hero = run.players[0].id;
     let mut f = Fight { hero1: vec![], hero0: vec![], unseen: vec![], dark, walled, heads: vec![], tags: Default::default() };
+    let mut prev_ents: Vec<u32> = vec![];
     for tick in 0..300u32 {
         // Burn a goblin early; it runs out later.
         if tick == 3 {
@@ -1321,13 +1333,13 @@ fn fight(class: ClassId, primary: AbilityId, secondary: AbilityId, spectate: boo
                 f.unseen.push((u.head.clone(), u.details.clone()));
             }
         }
-        let alive: Vec<u32> = run.monsters.iter().filter(|m| m.alive).map(|m| m.id).chain(run.objects.iter().filter(|o| !o.gone).map(|o| o.id)).collect();
         let got = sent_to_all(&mut run);
         let mut got = got.into_iter();
         let (g0, g1) = (got.next().unwrap(), got.next().unwrap());
         f.hero1.extend(g1.log.1);
         assert!(spectate || g1.ents.iter().all(|id| !f.tags.contains_key(id)), "hero 1 sees no creature or object: {:?}", g1.ents);
-        f.hero0.extend(g0.log.1.into_iter().map(|l| (l, g0.ents.clone(), alive.clone())));
+        f.hero0.extend(g0.log.1.into_iter().map(|l| (l, g0.ents.clone(), prev_ents.clone())));
+        prev_ents = g0.ents.clone();
     }
     (run, f)
 }
@@ -1344,13 +1356,13 @@ fn no_line_names_a_creature_its_viewer_cannot_see() {
                 }
             }
         }
-        // Hero 0: every creature tag is of a creature in that snapshot, or of one that died in it.
+        // Hero 0: every creature tag is of a creature in that snapshot or the one before (one that died in between was seen).
         let mut named = 0;
-        for (l, ents, alive) in &f.hero0 {
+        for (l, ents, prev) in &f.hero0 {
             for (id, tags) in &f.tags {
                 for t in tags.iter().filter(|t| *t != "something") {
                     if names(&text_of(l), t) {
-                        assert!(ents.contains(id) || !alive.contains(id), "{class:?}: hero 0 got {t} unseen: {}", l.2);
+                        assert!(ents.contains(id) || prev.contains(id), "{class:?}: hero 0 got {t} unseen: {}", l.2);
                         named += 1;
                     }
                 }
@@ -1564,4 +1576,43 @@ fn an_arrow_from_a_dead_archer_does_not_name_it() {
         }
     }
     }
+}
+
+#[test]
+fn an_effect_on_a_hit_from_something_unseen_adds_only_its_name_to_the_short_line() {
+    // Ruling 11: the hero's own state may show, the attacker's power may not.
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+    let (tx, ty) = walled(&mut run);
+    set_prefs(&mut run, 0, true, true);
+    let archer = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
+    let chill = OnHit { kind: EffectKind::Chilled, secs: 4.0, magical: true, power: 33, look: EffectLook::Plain };
+    let _ = take(&mut run);
+    run.hurt_player(0, Damage::physical(6.0).by(archer, What::Attack).with_effect(chill));
+    assert!(run.has_effect(Creature::Player(0), EffectKind::Chilled));
+    let recs = take(&mut run);
+    assert_eq!(recs.len(), 1);
+    let u = recs[0].unseen.as_ref().expect("the short line");
+    assert!(u.head.ends_with("from something unseen · Chilled"), "{}", u.head);
+    let shown: Vec<&String> = std::iter::once(&u.head).chain(u.details.iter()).collect();
+    assert!(shown.iter().all(|l| !l.contains("33") && !l.contains("power") && !l.contains("Chilled: ")), "{shown:?}");
+    assert!(recs[0].head.ends_with(" · Chilled"), "the full record is unchanged: {}", recs[0].head);
+}
+
+#[test]
+fn a_pure_effect_hit_from_something_unseen_does_not_reach_the_hero_with_its_power() {
+    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let (tx, ty) = walled(&mut run);
+    set_prefs(&mut run, 0, true, true);
+    let archer = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
+    let h0 = run.players[0].id;
+    let sleep = OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 77, look: EffectLook::Plain };
+    let _ = take(&mut run);
+    run.hurt_player(0, Damage::physical(0.0).by(archer, What::Shot(EntityKind::SleepOrb)).with_effect(sleep));
+    let recs = take(&mut run);
+    assert_eq!(recs.len(), 1);
+    assert!(recs[0].who.iter().any(|w| w.id == archer), "the record names the attacker: {:?}", recs[0].who);
+    let (view, dark) = view_of(&mut run, 0);
+    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &recs);
+    let lines = got.map(|g| g.1).unwrap_or_default();
+    assert!(lines.is_empty(), "{lines:?}");
 }

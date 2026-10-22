@@ -132,10 +132,7 @@ fn base_lines(f: &HitFacts) -> Vec<String> {
     }
     if b.ability_mult != 1.0 {
         v *= b.ability_mult;
-        let name = match why.what {
-            What::Ability(id) => abilities::def(id).name.to_string(),
-            w => what(w),
-        };
+        let name = what(why.what);
         out.push(format!("{name} ×{:.2} → {}", b.ability_mult, n1(v)));
     }
     if b.mods_mult != 1.0 {

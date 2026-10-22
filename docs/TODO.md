@@ -274,7 +274,7 @@ Special rooms with a creature that asks the heroes a riddle. If they solve it, t
 
 The rules log is built (TECHNICAL §11d). Left out on purpose or noticed on the way:
 - **No lines for pushes, knockback and coins.** Pushes by STR against weight, knockback and coin pick-ups are not logged. Add them if players ask (a facts struct and a hook each).
-- **Ruling 11:** an effect riding on a hit from something unseen adds only its name to the "something unseen" line. Revisit before merge if the final review wants it stricter or richer.
+- **Ruling 11** (done in the final fix wave): an effect riding on a hit from something unseen adds only its name to the "something unseen" line.
 - **Chat:** the chat window may share the log's panel (below).
 - **Panel look:** the position, size and colours were never tuned by a player; the user's browser check comes first.
 
