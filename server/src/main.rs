@@ -184,26 +184,6 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, id_hash
             }
             // These need the database: query first, then lock the lobby only to apply the result.
             ClientMsg::SelectCharacter { id: character } => select_character(&state, id, character).await,
-            ClientMsg::BuyUpgrade { stat } => {
-                let check = lobby.lock().unwrap().can_shop(id);
-                let result = match check {
-                    Ok(character) => db::update_progress(&state.db, character, |p| p.buy(stat)).await.map(|r| (character, r)),
-                    Err(e) => {
-                        lobby.lock().unwrap().error(id, e);
-                        continue;
-                    }
-                };
-                let mut l = lobby.lock().unwrap();
-                match result {
-                    Ok((character, Some(Ok(p)))) => l.apply_progress(character, p),
-                    Ok((_, Some(Err(e)))) => l.error(id, e),
-                    Ok((_, None)) => l.error(id, "No such character."),
-                    Err(e) => {
-                        tracing::error!("buy upgrade: {e}");
-                        l.error(id, "Something went wrong on the server. Please try again.");
-                    }
-                }
-            }
             other => lobby.lock().unwrap().handle(id, other),
         }
     }

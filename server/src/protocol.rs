@@ -6,9 +6,10 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::defs::attributes::Attributes;
 use crate::defs::items::{EquipSlot, ItemId};
 use crate::defs::loadout::Pick;
-use crate::defs::progression::{Modifiers, StatUpgrades, UpgradeStat};
+use crate::defs::trees::NodeId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -89,8 +90,6 @@ pub enum ClientMsg {
     SelectBoss { boss: Option<BossId> },
     /// Host only. Uses the room's chosen boss.
     StartRun,
-    /// Spend the character's XP on the next level of a stat (not during a run).
-    BuyUpgrade { stat: UpgradeStat },
     Input(InputMsg),
     Ping { time: f64 },
     Spectate { dir: i8 },
@@ -337,10 +336,12 @@ pub struct CharacterInfo {
     pub total_xp: u32,
     /// Unspent coins (nothing to buy with them yet).
     pub coins: u32,
-    pub upgrades: StatUpgrades,
-    pub mods: Modifiers,
-    /// `costs[level]` = XP for the next level; `costs.len()` = max level.
-    pub costs: Vec<u32>,
+    /// Attribute points bought in the shop.
+    pub bought: Attributes,
+    /// Owned skill-tree nodes (sorted, without the start node).
+    pub nodes: Vec<NodeId>,
+    /// XP spent on the shop and the tree (refunded by a respec).
+    pub xp_spent: u32,
 }
 
 pub fn encode(msg: &ServerMsg) -> Vec<u8> {

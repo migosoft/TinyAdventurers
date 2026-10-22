@@ -30,7 +30,7 @@ super::enum_list::listed_enum! {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Equipment {
     pub slots: [Option<ItemId>; EquipSlot::COUNT],
 }

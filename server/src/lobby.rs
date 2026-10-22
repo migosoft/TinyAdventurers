@@ -589,13 +589,13 @@ impl Lobby {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defs::progression::UpgradeStat;
+    use crate::defs::attributes::Attr;
     use crate::defs::abilities::AbilityId;
     use crate::defs::loadout::{Loadout, Pick, Source};
     use crate::protocol::ClassId;
 
     fn character(account: i32, id: i32, class: ClassId) -> Character {
-        Character { id, account_id: account, name: format!("hero{id}"), class, progress: Progress::new() }
+        Character { id, account_id: account, name: format!("hero{id}"), class, progress: Progress::new(class) }
     }
 
     fn test_record(account: i32, character: i32) -> RunRecord {
@@ -704,15 +704,15 @@ mod tests {
         l.run_finished(rid);
         assert_eq!(l.can_shop(id), Ok(10));
 
-        let mut newer = Progress::new();
+        let mut newer = Progress::new(ClassId::Wizard);
         newer.bank(500, 0);
-        newer.buy(UpgradeStat::Life).unwrap();
+        newer.buy_attr(ClassId::Wizard, Attr::Int).unwrap();
         newer.rev = 3;
-        let mut older = Progress::new();
+        let mut older = Progress::new(ClassId::Wizard);
         older.rev = 2;
         l.apply_progress(10, newer.clone());
         l.apply_progress(10, older);
-        l.apply_progress(77, Progress { rev: 9, xp: 1, ..Progress::new() });
+        l.apply_progress(77, Progress { rev: 9, xp: 1, ..Progress::new(ClassId::Wizard) });
         assert_eq!(l.conns[&id].character.as_ref().unwrap().progress, newer);
     }
 
@@ -742,7 +742,7 @@ mod tests {
         }
         let stored = db::load_character(&db, a, played.id).await.unwrap().unwrap().progress;
         assert_eq!((stored.xp, stored.total_xp, stored.coins), (120, 120, 7));
-        assert_eq!(db::load_character(&db, a, idle.id).await.unwrap().unwrap().progress, Progress::new());
+        assert_eq!(db::load_character(&db, a, idle.id).await.unwrap().unwrap().progress, Progress::new(ClassId::Paladin));
         let recorded: (String, Option<String>, String, i32) = sqlx::query_as("SELECT r.level, r.boss, r.outcome, p.kills FROM runs r JOIN run_players p ON p.run_id = r.id WHERE p.character_id = $1")
             .bind(played.id)
             .fetch_one(&db)

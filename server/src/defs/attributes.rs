@@ -116,11 +116,9 @@ impl Scaled {
 }
 
 /// Price weight per Attribute, indexed by `Attr`.
-#[allow(dead_code)] // plan 4 (the Attribute shop) uses the prices
 pub const ATTR_WEIGHT: [f64; 6] = [1.0, 1.25, 1.0, 1.0, 0.8, 1.0];
 
 /// Gold to raise `a` from `current` by one point.
-#[allow(dead_code)] // plan 4 (the Attribute shop)
 pub fn attr_price(a: Attr, current: i32) -> u32 {
     ((100 + 25 * (current - BASELINE).max(0)) as f64 * ATTR_WEIGHT[a as usize]).round() as u32
 }

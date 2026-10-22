@@ -30,7 +30,8 @@ pub struct Pick {
     pub source: Source,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct Loadout {
     pub primary: Pick,
     pub secondary: Pick,

@@ -169,12 +169,13 @@ pub async fn delete_session(db: &Db, id_hash: &[u8]) -> Result<(), sqlx::Error> 
 // ---------------------------------------------------------------- characters
 
 fn character_from(r: &sqlx::postgres::PgRow) -> Character {
+    let class = class_from(r.get::<&str, _>("class"));
     Character {
         id: r.get("id"),
         account_id: r.get("account_id"),
         name: r.get("name"),
-        class: class_from(r.get::<&str, _>("class")),
-        progress: Progress::from_json(r.get("progress")),
+        class,
+        progress: Progress::from_json(r.get("progress"), class),
     }
 }
 
@@ -200,7 +201,7 @@ pub async fn create_character(db: &Db, account_id: i32, name: &str, class: Class
     if count >= MAX_CHARACTERS {
         return Err(DbError::TooManyCharacters);
     }
-    let progress = Progress::new();
+    let progress = Progress::new(class);
     let row = sqlx::query("INSERT INTO characters (account_id, name, class, progress) VALUES ($1, $2, $3, $4) RETURNING id")
         .bind(account_id)
         .bind(name)
@@ -233,10 +234,10 @@ pub async fn delete_character_any(db: &Db, id: i32) -> Result<Option<(i32, Strin
 /// none is lost. `Ok(None)` if the character no longer exists; an error from
 /// `f` rolls back and is returned as `Ok(Some(Err(_)))`.
 async fn modify<E>(conn: &mut PgConnection, id: i32, f: impl FnOnce(&mut Progress) -> Result<(), E>) -> Result<Option<Result<Progress, E>>, sqlx::Error> {
-    let Some(row) = sqlx::query("SELECT progress FROM characters WHERE id = $1 FOR UPDATE").bind(id).fetch_optional(&mut *conn).await? else {
+    let Some(row) = sqlx::query("SELECT class, progress FROM characters WHERE id = $1 FOR UPDATE").bind(id).fetch_optional(&mut *conn).await? else {
         return Ok(None);
     };
-    let mut p = Progress::from_json(row.get(0));
+    let mut p = Progress::from_json(row.get(1), class_from(row.get::<&str, _>(0)));
     if let Err(e) = f(&mut p) {
         return Ok(Some(Err(e)));
     }
@@ -326,7 +327,7 @@ pub mod tests {
     //! These tests need PostgreSQL: they run when `DATABASE_URL` is set (each
     //! test creates its own throwaway database) and pass vacuously otherwise.
     use super::*;
-    use crate::defs::progression::{upgrade_cost, UpgradeStat};
+    use crate::defs::attributes::Attr;
     use sqlx::Executor;
 
     pub const WEEK: Duration = Duration::from_secs(7 * 24 * 3600);
@@ -383,7 +384,7 @@ pub mod tests {
         let a = create_account(&db, "Racer", "h").await.unwrap();
         let c = create_character(&db, a, "Speedy", ClassId::ElvenRanger).await.unwrap();
         let other = create_character(&db, a, "Bystander", ClassId::Paladin).await.unwrap();
-        bank_awards(&db, &[Award { character: c.id, xp: upgrade_cost(0) * 40, coins: 0 }]).await.unwrap();
+        bank_awards(&db, &[Award { character: c.id, xp: 10_000, coins: 0 }]).await.unwrap();
 
         // 20 bankings and 10 purchases at the same time.
         let mut tasks = Vec::new();
@@ -393,23 +394,23 @@ pub mod tests {
         }
         for i in 0..10 {
             let db = db.clone();
-            let stat = [UpgradeStat::Damage, UpgradeStat::Life][i % 2];
-            tasks.push(tokio::spawn(async move { update_progress(&db, c.id, |p| p.buy(stat)).await.unwrap().unwrap().unwrap(); }));
+            let attr = [Attr::Dex, Attr::Wil][i % 2];
+            tasks.push(tokio::spawn(async move { update_progress(&db, c.id, |p| p.buy_attr(ClassId::ElvenRanger, attr)).await.unwrap().unwrap().unwrap(); }));
         }
         for t in tasks {
             t.await.unwrap();
         }
         let p = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
         assert_eq!(p.coins, 40);
-        assert_eq!(p.total_xp, upgrade_cost(0) * 40 + 20);
-        assert_eq!((p.upgrades.damage, p.upgrades.life), (5, 5));
-        let spent: u32 = (0..5).map(upgrade_cost).sum::<u32>() * 2;
-        assert_eq!(p.xp, p.total_xp - spent);
+        assert_eq!(p.total_xp, 10_000 + 20);
+        assert_eq!((p.bought.get(Attr::Dex), p.bought.get(Attr::Wil)), (5, 5));
+        assert_eq!(p.xp, p.total_xp - p.xp_spent);
+        assert!(p.xp_spent > 0);
         assert_eq!(p.rev, 31);
 
-        assert_eq!(load_character(&db, a, other.id).await.unwrap().unwrap().progress, Progress::new(), "other character untouched");
+        assert_eq!(load_character(&db, a, other.id).await.unwrap().unwrap().progress, Progress::new(ClassId::Paladin), "other character untouched");
         // A failed purchase changes nothing.
-        let rich = update_progress(&db, other.id, |p| p.buy(UpgradeStat::Armor)).await.unwrap().unwrap();
+        let rich = update_progress(&db, other.id, |p| p.buy_attr(ClassId::Paladin, Attr::Str)).await.unwrap().unwrap();
         assert!(rich.is_err());
         assert_eq!(load_character(&db, a, other.id).await.unwrap().unwrap().progress.rev, 0);
         // Banking to a deleted character is skipped.
@@ -424,8 +425,10 @@ pub mod tests {
         let c = create_character(&db, a, "Oldie", ClassId::Barbarian).await.unwrap();
         sqlx::query("UPDATE characters SET progress = '{\"xp\": 300, \"upgrades\": {\"armor\": 1}, \"future\": true}' WHERE id = $1").bind(c.id).execute(&db).await.unwrap();
         let p = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
-        assert_eq!((p.xp, p.upgrades.armor, p.version), (300, 1, CURRENT_VERSION));
-        update_progress(&db, c.id, |p| p.buy(UpgradeStat::Armor)).await.unwrap().unwrap().unwrap();
+        assert_eq!((p.xp, p.version), (300 + 100, CURRENT_VERSION), "the v1 level is refunded");
+        update_progress(&db, c.id, |p| p.buy_attr(ClassId::Barbarian, Attr::Str)).await.unwrap().unwrap().unwrap();
+        let again = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
+        assert_eq!(again.xp, 400 - again.xp_spent, "read twice, refunded once");
         let v: i64 = sqlx::query("SELECT (progress->>'version')::bigint FROM characters WHERE id = $1").bind(c.id).fetch_one(&db).await.unwrap().get(0);
         assert_eq!(v, CURRENT_VERSION as i64);
     }
