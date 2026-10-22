@@ -20,7 +20,6 @@ pub enum Attr {
 impl Attr {
     pub const COUNT: usize = 6;
     pub const ALL: [Attr; Attr::COUNT] = [Attr::Str, Attr::Dex, Attr::Con, Attr::Int, Attr::Wil, Attr::Cha];
-    #[allow(dead_code)] // read by the rules log, Task 4
     pub fn short(self) -> &'static str {
         match self {
             Attr::Str => "STR",

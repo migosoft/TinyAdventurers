@@ -5,7 +5,7 @@ use crate::math::Vec2;
 use crate::run::effects::Creature;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // Tasks 4-6 push these kinds.
+#[allow(dead_code)] // Tasks 5-6 push the other kinds.
 pub enum LineKind {
     Hit,
     Heal,
@@ -43,7 +43,7 @@ pub struct LogRec {
     pub details: Vec<String>,
     pub who: Vec<Seen>,
     pub unseen: Option<Unseen>,
-    #[allow(dead_code)] // Task 4's tests read it.
+    #[allow(dead_code)] // Only tests read it.
     /// HP lost, as the record states it (kept for tests, not sent).
     pub dealt: Option<f64>,
     #[allow(dead_code)] // Task 5's tests read it.
@@ -52,14 +52,13 @@ pub struct LogRec {
 }
 
 /// Keeps a record for the next snapshot (nothing while the log is off).
-#[allow(dead_code)] // Tasks 4-6 call it.
+#[allow(dead_code)] // Tasks 5-6 call it.
 pub(crate) fn push(run: &mut Run, rec: LogRec) {
     if on(run) {
         run.log.records.push(rec);
     }
 }
 
-#[allow(dead_code)] // Tasks 4-6 call it.
 pub(crate) fn seen_creature(run: &Run, c: Creature) -> Seen {
     match c {
         Creature::Player(i) => {
@@ -73,7 +72,6 @@ pub(crate) fn seen_creature(run: &Run, c: Creature) -> Seen {
     }
 }
 
-#[allow(dead_code)] // Tasks 4-6 call it.
 pub(crate) fn seen_object(run: &Run, oi: usize) -> Seen {
     let o = &run.objects[oi];
     Seen { id: o.id, pos: o.pos, radius: 0.0, party: false, object: true }

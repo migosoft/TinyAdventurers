@@ -70,7 +70,6 @@ pub fn tag_name(kind: EntityKind) -> Option<&'static str> {
     }
 }
 
-#[allow(dead_code)] // Task 2 calls it.
 pub(crate) fn tag_of(run: &Run, id: u32) -> String {
     if let Some(p) = run.players.iter().find(|p| p.id == id) {
         return p.name.clone();

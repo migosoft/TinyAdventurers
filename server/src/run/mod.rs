@@ -15,7 +15,7 @@ pub mod rules_log;
 pub mod visibility;
 
 use crate::collision::MoveState;
-use crate::defs::damage::{kind_split, resolve, Damage, DamageSplit, DamageType, What, Why};
+use crate::defs::damage::{kind_split, resolve_parts, Damage, DamageSplit, DamageType, What, Why};
 use crate::defs::attributes::{push_dist, Attr};
 use crate::defs::progression;
 use crate::defs::{classes, enemies};
@@ -870,14 +870,21 @@ impl Run {
             self.hit_effect(effects::Creature::Player(pi), h); // a pure effect hit: no number, no flash
             return;
         }
-        let raw = resolve(&dmg, &self.players[pi].effects.res(self.players[pi].res));
+        let res = self.players[pi].effects.res(self.players[pi].res);
+        let parts = resolve_parts(&dmg, &res);
+        let raw: f64 = parts.iter().sum();
         if raw < 0.0 {
-            self.heal_player(pi, -raw);
+            let hp_before = self.players[pi].hp;
+            let healed = self.heal_player(pi, -raw);
+            let hp_after = self.players[pi].hp;
+            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, armor: 0.0, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
             return;
         }
         let p = &mut self.players[pi];
-        let v = raw * (1.0 - p.sheet.armor);
+        let armor = p.sheet.armor;
+        let v = raw * (1.0 - armor);
         let imm = raw == 0.0 && dmg.amount > 0.0;
+        let hp_before = p.hp;
         // Debug mode: hits still show, but nothing is subtracted.
         if !p.debug {
             p.hp -= v;
@@ -885,7 +892,9 @@ impl Run {
         if !imm {
             p.hurt_t = 0.15;
         }
+        let (hp_after, debug) = (p.hp.max(0.0), p.debug);
         let pos = p.pos();
+        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, armor, hp_before, hp_after, dealt: hp_before - hp_after, taken: v, outcome: if imm { rules_log::HitOutcome::Immune } else if debug { rules_log::HitOutcome::DebugNoLoss } else { rules_log::HitOutcome::Dealt } });
         let ty = dmg.split.main_type() as u8;
         self.event_on_hero(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: v as f32, crit: false, p: true, ty, imm }, pos);
         let p = &mut self.players[pi];
@@ -906,6 +915,7 @@ impl Run {
                 self.hit_effect(effects::Creature::Player(pi), h);
             }
         }
+        rules_log::hit_end(self);
     }
 
     /// Knockback from a strong melee hit: the hero slides straight away from
@@ -1041,20 +1051,27 @@ impl Run {
             return false; // no hero attack hurts an ally
         }
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
+            let (hp, res) = (self.monsters[mi].hp, self.monsters[mi].res);
+            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts: [0.0; DamageType::COUNT], armor: 0.0, hp_before: hp, hp_after: hp, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Shielded }); rules_log::hit_end(self);
             return false;
         }
         if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit, dmg.from_effect) {
             self.hit_effect(effects::Creature::Monster(mi), h);
             return true;
         }
-        let raw = resolve(&dmg, &self.monsters[mi].effects.res(self.monsters[mi].res));
+        let res = self.monsters[mi].effects.res(self.monsters[mi].res);
+        let parts = resolve_parts(&dmg, &res);
+        let raw: f64 = parts.iter().sum();
         let ty = dmg.split.main_type() as u8;
         // Hits by heroes go to the whole party, even out of view: the shot was seen leaving.
         let seen_by = src_player.is_none().then_some(pos);
         if raw < 0.0 {
             let m = &mut self.monsters[mi];
+            let hp_before = m.hp;
             let healed = (-raw).min(m.max_hp - m.hp);
             m.hp += healed;
+            let hp_after = m.hp;
+            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts, armor: 0.0, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
             if healed > 0.0 {
                 let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
                 if ally {
@@ -1067,11 +1084,14 @@ impl Run {
         }
         let imm = raw == 0.0 && dmg.amount > 0.0;
         let m = &mut self.monsters[mi];
+        let hp_before = m.hp;
         m.hp -= raw;
         if !imm {
             m.hurt_t = 0.15;
         }
         let applied = raw.min(m.hp + raw);
+        let hp_after = m.hp.max(0.0);
+        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts, armor: 0.0, hp_before, hp_after, dealt: applied, taken: raw, outcome: if imm { rules_log::HitOutcome::Immune } else { rules_log::HitOutcome::Dealt } });
         let ev = Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: ally, ty, imm };
         if ally {
             self.event_on_hero(ev, pos); // shown like damage on a hero
@@ -1119,6 +1139,7 @@ impl Run {
                 self.hit_effect(effects::Creature::Monster(mi), h);
             }
         }
+        rules_log::hit_end(self);
         true
     }
 

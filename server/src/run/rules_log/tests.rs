@@ -1,8 +1,9 @@
 use super::record::{LineKind, Seen, Unseen};
 use super::send::{LineW, LOG_BYTES_PER_SNAP};
 use super::tags::{export_tag_names, tag_name};
-use super::text::{n1, pct};
+use super::text::{n1, pct, type_name};
 use super::*;
+use super::text;
 use crate::dungeon::{Map, Tile};
 use crate::protocol::ClientMsg;
 use crate::run::effects::Creature;
@@ -132,7 +133,7 @@ fn rules_log_is_reached_only_through_its_hooks() {
     walk(&root, &root, &mut found);
     // Lines naming `rules_log` outside the module, per file. Each task updates this with its hooks.
     let hooks: BTreeMap<String, usize> =
-        [("run/mod.rs", 7), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 1)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        [("run/mod.rs", 14), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 1)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     assert_eq!(found, hooks);
 }
 
@@ -323,4 +324,254 @@ fn leaving_forgets_the_player() {
     assert!(on(&run));
     run.handle(RunCmd::Leave { conn: 2 });
     assert!(!on(&run));
+}
+
+// ---- Damage records (Task 4) ----
+
+use crate::defs::abilities::AbilityId;
+use crate::defs::attributes::Attributes;
+use crate::defs::damage::{resolve, Damage, DamageSplit, DamageType, Mult, What, MIN_RESISTANCE};
+use crate::defs::items::Equipment;
+use crate::defs::loadout::{Build, Loadout, Pick, Source};
+
+/// A wizard with `id` as primary and `extra` Attribute points, on open floor, alone with the boss.
+fn wizard_with(id: AbilityId, extra: Attributes) -> Run {
+    let start = Loadout::start(ClassId::Wizard);
+    let loadout = Loadout { primary: Pick { ability: id, source: Source::Own }, ..start };
+    let build = Build { own: vec![id], loadout, extra, equipment: Equipment::starter(ClassId::Wizard), ..Build::start(ClassId::Wizard) };
+    let mut run = crate::run::tests::test_run_with(&[(ClassId::Wizard, build)], BossId::Demon);
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    for y in ty - 3..=ty + 3 {
+        for x in tx - 2..=tx + 14 {
+            run.layout.map.set(x, y, Tile::Floor);
+        }
+    }
+    run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+    run.players[0].aim = 0.0;
+    run.log.forced = true;
+    run
+}
+
+fn goblin_near(run: &mut Run, hp: Option<f64>) -> usize {
+    let pos = run.players[0].pos() + crate::math::Vec2::new(60.0, 0.0);
+    let id = run.spawn_enemy(EnemyType::GoblinArcher, pos, None);
+    let mi = run.monster_idx(id).unwrap();
+    if let Some(hp) = hp {
+        run.monsters[mi].hp = hp;
+        run.monsters[mi].max_hp = hp;
+    }
+    mi
+}
+
+fn only_rec(run: &mut Run) -> LogRec {
+    let mut recs = take(run);
+    assert_eq!(recs.len(), 1, "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    recs.remove(0)
+}
+
+fn fly(run: &mut Run) {
+    for _ in 0..240 {
+        crate::run::abilities::tick_projectiles(run, 1.0 / 60.0);
+        run.projectiles.retain(|p| !p.dead);
+        if run.projectiles.is_empty() {
+            break;
+        }
+    }
+}
+
+#[test]
+fn the_logged_damage_is_the_damage_dealt() {
+    // One monster hit per case, hand-built the way each rule builds it; the record says what was lost.
+    let hero_id = |run: &Run| run.players[0].id;
+    let cases: Vec<(&str, Box<dyn Fn(&Run, u32) -> Damage>, EnemyType)> = vec![
+        ("flank", Box::new(|run, _| Damage { amount: 14.0, ..Damage::physical(7.0) }.by(hero_id(run), What::Ability(AbilityId::FlankingThrust)).with_mult(Mult::Behind(2.0))), EnemyType::GoblinArcher),
+        ("chain", Box::new(|run, _| Damage::new(9.3, DamageSplit::pure(DamageType::Magical)).by(hero_id(run), What::Ability(AbilityId::ChainSpark)).with_mult(Mult::Chain { jump: 2, factor: 0.64 })), EnemyType::GoblinArcher),
+        ("overkill", Box::new(|run, other| Damage::physical(6.7).by(hero_id(run), What::Ability(AbilityId::MagicMissile)).with_mult(Mult::Overkill { from: other })), EnemyType::GoblinArcher),
+        ("coat", Box::new(|run, _| Damage::new(8.1, DamageSplit::split(&[(DamageType::Poison, 0.3)])).by(hero_id(run), What::Ability(AbilityId::PoisonCoat)).with_mult(Mult::Coat(0.3))), EnemyType::GoblinArcher),
+        ("fire on an imp", Box::new(|run, _| Damage::new(11.0, DamageSplit::pure(DamageType::Heat)).by(hero_id(run), What::Ability(AbilityId::Fireball))), EnemyType::Imp),
+    ];
+    for (name, make, etype) in cases {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.log.forced = true;
+        run.monsters.retain(|m| m.is_boss);
+        let pos = run.players[0].pos() + crate::math::Vec2::new(60.0, 0.0);
+        let id = run.spawn_enemy(etype, pos, None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].hp = 1000.0;
+        run.monsters[mi].max_hp = 1000.0;
+        let _ = take(&mut run);
+        let dmg = make(&run, id);
+        let credited = run.players[0].damage;
+        run.hurt_monster(mi, dmg, false, Some(0));
+        let rec = only_rec(&mut run);
+        let dealt = rec.dealt.unwrap();
+        assert_eq!(dealt, run.players[0].damage - credited, "{name}: the value the rule credited");
+        assert!((dealt - (1000.0 - run.monsters[mi].hp)).abs() < 1e-9, "{name}: the HP lost");
+        assert!(rec.head.contains(&n1(dealt)), "{name}: {}", rec.head);
+    }
+    // An orc's melee on the Paladin: armor.
+    let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+    run.log.forced = true;
+    run.monsters.retain(|m| m.is_boss);
+    let at = run.players[0].pos();
+    let id = run.spawn_enemy(EnemyType::OrcWarrior, at - crate::math::Vec2::new(16.0, 0.0), None);
+    let gi = run.monster_idx(id).unwrap();
+    let attack = enemies::def(EnemyType::OrcWarrior).attack;
+    run.players[0].sheet.armor = 0.25; // armor comes from items; the starter has none
+    let _ = take(&mut run);
+    let hp = run.players[0].hp;
+    crate::run::ai::perform_attack(&mut run, gi, Creature::Player(0), attack, false, None);
+    let rec = only_rec(&mut run);
+    assert!(run.players[0].sheet.armor > 0.0);
+    assert_eq!(rec.dealt, Some(hp - run.players[0].hp), "bit-equal to the HP lost");
+    assert!(rec.head.contains(&n1(rec.dealt.unwrap())), "{}", rec.head);
+    assert!(rec.details.last().unwrap().starts_with("armor "), "{:?}", rec.details);
+    assert_eq!(rec.unseen.as_ref().map(|u| u.viewer), Some(run.players[0].id));
+}
+
+#[test]
+fn a_frost_shard_line_reads_like_the_spec() {
+    // Wizard at INT 16 against a fresh goblin.
+    let probe = wizard_with(AbilityId::FrostShard, Attributes::default());
+    let have = probe.players[0].sheet.primary.base.scale.expect("scaled by an Attribute").have;
+    let mut run = wizard_with(AbilityId::FrostShard, Attributes::new(0, 0, 0, 16 - have, 0, 0));
+    let mi = goblin_near(&mut run, None);
+    let goblin = tag_of(&run, run.monsters[mi].id);
+    let hp0 = run.monsters[mi].hp;
+    let res = run.monsters[mi].effects.res(run.monsters[mi].res);
+    let a = run.players[0].sheet.primary;
+    let b = a.base;
+    let s = b.scale.unwrap();
+    assert_eq!(s.have, 16);
+    crate::run::abilities::try_use(&mut run, 0, true, 1);
+    let _ = take(&mut run);
+    fly(&mut run);
+    let rec = only_rec(&mut run);
+    let dealt = resolve(&Damage::new(a.damage, a.split), &res).min(hp0);
+    let after = (hp0 - resolve(&Damage::new(a.damage, a.split), &res)).max(0.0);
+    let name = run.players[0].name.clone();
+    assert_eq!(rec.head, format!("{name} ▸ Frost Shard ▸ {goblin}: {} damage (HP {} → {})", n1(dealt), n1(hp0), n1(after)));
+    let mut want = vec![format!("base {} (given at INT {}), your INT {}: ×{:.2} → {}", n1(b.given), s.at, s.have, s.ratio, n1(b.given * s.ratio))];
+    let mut v = b.given * s.ratio;
+    if b.ability_mult != 1.0 {
+        v *= b.ability_mult;
+        want.push(format!("Frost Shard ×{:.2} → {}", b.ability_mult, n1(v)));
+    }
+    if b.mods_mult != 1.0 {
+        v = (v * b.mods_mult).max(0.0);
+        want.push(format!("items ×{:.2} → {}", b.mods_mult, n1(v)));
+    }
+    if b.upgrade_mult != 1.0 {
+        want.push(format!("upgrades ×{:.2} → {}", b.upgrade_mult, n1(b.amount())));
+    }
+    for t in DamageType::ALL {
+        let share = a.split.share(t);
+        if share > 0.0 {
+            let r = res.get(t).max(MIN_RESISTANCE);
+            want.push(format!("{} {}  {} × (1 − {} resist) = {}", type_name(t), pct(share), n1(a.damage * share), pct(r), n1(a.damage * share * (1.0 - r))));
+        }
+    }
+    assert_eq!(rec.details, want);
+    assert_eq!(rec.kind, LineKind::Hit);
+    println!("{}\n  {}", rec.head, rec.details.join("\n  "));
+}
+
+#[test]
+fn an_immune_hit_says_so() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let mi = goblin_near(&mut run, Some(50.0));
+    run.monsters[mi].res.set(DamageType::Physical, 1.0);
+    let hero = run.players[0].id;
+    let goblin = tag_of(&run, run.monsters[mi].id);
+    let name = run.players[0].name.clone();
+    run.hurt_monster(mi, Damage::physical(5.0).by(hero, What::Attack), false, Some(0));
+    let rec = only_rec(&mut run);
+    assert_eq!(rec.head, format!("{name} ▸ attack ▸ {goblin}: no damage (immune)"));
+    assert_eq!(rec.dealt, Some(0.0));
+    // Over 100 %: it heals.
+    run.monsters[mi].res.set(DamageType::Physical, 1.5);
+    run.monsters[mi].hp = 40.0;
+    run.hurt_monster(mi, Damage::physical(10.0).by(hero, What::Attack), false, Some(0));
+    let rec = only_rec(&mut run);
+    assert_eq!(rec.head, format!("{name} ▸ attack ▸ {goblin}: healed 5 (resistance over 100 %)"));
+    assert_eq!(rec.kind, LineKind::Heal);
+}
+
+#[test]
+fn the_shielded_boss_says_so() {
+    let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+    run.log.forced = true;
+    let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+    let hero = run.players[0].id;
+    let boss = tag_of(&run, run.monsters[bi].id);
+    let name = run.players[0].name.clone();
+    let hp = run.monsters[bi].hp;
+    let _ = take(&mut run);
+    assert!(!run.hurt_monster(bi, Damage::physical(100.0).by(hero, What::Attack), false, Some(0)));
+    let rec = only_rec(&mut run);
+    assert_eq!(rec.head, format!("{name} ▸ attack ▸ {boss}: no damage ({boss} cannot be hurt now)"));
+    assert_eq!(run.monsters[bi].hp, hp);
+}
+
+#[test]
+fn damage_from_an_unseen_attacker_gives_the_short_line() {
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+    let (tx, ty) = walled(&mut run);
+    set_prefs(&mut run, 0, true, true);
+    set_prefs(&mut run, 1, true, true);
+    // Put the Paladin (armor) in the hit's place so there is an armor line.
+    let archer = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
+    let (h0, h1) = (run.players[0].id, run.players[1].id);
+    let _ = take(&mut run);
+    let hp = run.players[0].hp;
+    run.hurt_player(0, Damage::physical(6.0).by(archer, What::Attack));
+    let recs = take(&mut run);
+    assert_eq!(recs.len(), 1);
+    let dealt = hp - run.players[0].hp;
+    let (view, dark) = view_of(&mut run, 0);
+    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &recs).unwrap();
+    assert_eq!(got.1.len(), 1);
+    let name = run.players[0].name.clone();
+    assert_eq!(got.1[0].2, format!("{name} took {} from something unseen", n1(dealt)));
+    let shown: Vec<&String> = std::iter::once(&got.1[0].2).chain(got.1[0].3.iter()).collect();
+    assert!(shown.iter().all(|l| !l.contains("Goblin") && !l.contains("attack")), "{shown:?}");
+    assert_eq!(got.1[0].3.len(), recs[0].unseen.as_ref().unwrap().details.len());
+    assert!(got.1[0].3[0].starts_with("physical 100 %"), "{:?}", got.1[0].3);
+    let got = for_viewer(&run, 1, h1, &view, &dark, &[], &recs).unwrap();
+    assert!(got.1.is_empty(), "hero 1 sees nothing");
+}
+
+#[test]
+fn a_hit_that_sets_off_another_files_both_in_order() {
+    // Two hits opened one inside the other, as a kill that sets off a blast would: the outer one is filed first.
+    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    run.log.forced = true;
+    let hero = run.players[0].id;
+    let (mi, mj) = (goblin_near(&mut run, Some(100.0)), goblin_near(&mut run, Some(100.0)));
+    let res = run.monsters[mi].res;
+    let facts = |run: &Run, mi: usize, amount: f64| {
+        let dmg = Damage::physical(amount).by(hero, What::Attack);
+        let parts = crate::defs::damage::resolve_parts(&dmg, &res);
+        let hp = run.monsters[mi].hp;
+        HitFacts { target: Creature::Monster(mi), dmg, res, parts, armor: 0.0, hp_before: hp, hp_after: hp - amount, dealt: amount, taken: amount, outcome: HitOutcome::Dealt }
+    };
+    let _ = take(&mut run);
+    let (f1, f2) = (facts(&run, mi, 1.0), facts(&run, mj, 2.0));
+    hit_begin(&mut run, f1);
+    hit_begin(&mut run, f2);
+    hit_end(&mut run);
+    hit_end(&mut run);
+    let recs = take(&mut run);
+    assert_eq!(recs.iter().map(|r| r.dealt).collect::<Vec<_>>(), vec![Some(1.0), Some(2.0)]);
+    assert!(run.log.open.is_empty());
+}
+
+#[test]
+fn the_damage_text_is_exhaustive_and_plain() {
+    assert_eq!(text::what(What::Unknown), "something");
+    assert_eq!(text::what(What::Hazard(EntityKind::HolyGround)), "Holy Ground");
+    assert_eq!(text::what(What::Hazard(EntityKind::FirePatch)), "fire");
+    assert_eq!(text::what(What::Hazard(EntityKind::Torch)), "hazard");
+    assert_eq!(text::what(What::Ability(AbilityId::FrostShard)), "Frost Shard");
+    assert_eq!(text::what(What::Tick(crate::defs::effects::EffectKind::Burning)), "Burning");
 }
