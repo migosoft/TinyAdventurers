@@ -42,7 +42,7 @@ function itemsLine(ctx: TabCtx): string {
     const d = id ? defs[id] : null;
     if (d && !isWeapon(d)) parts.push(...d.props.map((p) => p.text));
   }
-  return parts.join(' · ');
+  return [...new Set(parts)].join(' · '); // a prop that restates an Attribute point reads once
 }
 
 export function renderEquipment(ctx: TabCtx): HTMLElement {

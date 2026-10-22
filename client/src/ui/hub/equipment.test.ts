@@ -110,6 +110,7 @@ test('the tooltip of the Staff of Rot shows its prop as non-magical', () => {
 test('the items line lists item Attribute points and worn non-weapon props', () => {
   draw(wiz({ slots: { Ring1: 'BandOfVigor' }, attrs: { Con: { total: 11, items: 1 } } }));
   expect(el.textContent).toContain('From items: +1 CON');
+  expect(el.textContent).not.toMatch(/\+1 CON · \+1 CON/);
   draw(wiz());
   expect(el.textContent).not.toContain('From items');
 });
