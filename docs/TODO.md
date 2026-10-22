@@ -40,8 +40,25 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 ## Progression follow-ups
 
-Progression is live: accounts with up to 8 characters, per-character progress in PostgreSQL, XP banked at run end, lobby upgrade shop. See TECHNICAL.md §11a.
-- **Tune** `upgrade_cost` and the per-level bonuses in `defs/progression.rs` as part of the balancing pass. A typical cleared run gives a few hundred XP plus 300 for the boss; maxing one stat costs 4,375 XP.
+Progression is live: accounts with up to 8 characters, per-character progress in PostgreSQL, XP banked at run end, Attribute shop, skill trees (plan 4, built 2026-10-22). See TECHNICAL.md §11a.
+- ~~Lobby upgrade shop / `upgrade_cost` tuning~~ Replaced by the Attribute shop and the skill trees in plan 4.
+- **Tune** in the balancing pass: `attr_price` and `ATTR_WEIGHT`, every node cost and bonus in `defs/trees.rs`, the keystone numbers (`sheet.rs` `keystone_ability`, `run/keystones.rs`), `RESPEC_BASE`/`RESPEC_PER`. A typical cleared run gives a few hundred XP plus 300 for the boss.
+- **Plan 5, the new UI:** the temporary "Character (temporary)" panel (`client/src/ui/progressPanel.ts`) is replaced by the real character screen (tree view, Loadout tab, inventory, item art). Also the `Progression 4` deferred minors the final review leaves open.
+- **Plan 4 rulings to check with the user** (the plan's "Rulings made for this plan"; all approved with the plan on 2026-10-22, the user may still veto after seeing them in play):
+  1. Improvements apply to the equipped version from either source and stack with the item's mods.
+  2. Unbreakable: +4 CON for every save only (not HP, speed or prices).
+  3. Run-time keystones count the hero's own hits (not effect ticks, not the wolf).
+  4. Pyromancer and Deep Winter scale by the damage type's share of the hit.
+  5. Berserker: below 50 % HP, damage x1.25, cooldowns ÷ 1.25, every resistance −0.10 (also below 0).
+  6. Deadeye: hits of abilities with `ranged: true`; Slowed, Chilled, Entangled or Sleep targets.
+  7. Radiant: Innate-category abilities; Undead or Demon races; the new Radiant light.
+  8. Build changes are refused during a run and while Ready.
+  9. `SetLoadout` stores any pick that fits its slot; the sheet reports the rest; Ready and Start refuse it.
+  10. Equip moves items between the inventory and a slot; starters are ordinary items.
+  11. Respec unequips items the build can no longer wear.
+  12. Unknown ids in a stored document are dropped with a warning.
+  13. The debug flag stays (whole class pool, Attribute lift, no banking), on top of the real build; `DebugGrantItem`.
+  14. Admin statistics count tree nodes bought.
 - **Password change** (old + new password) is not built yet; only deleting the account is.
 - **Behind a reverse proxy**, read `X-Forwarded-For` (only from a trusted proxy) so the per-IP login limits apply per player again.
 - **Several game servers** would need shared presence (one connection per account) and a shared login limiter, e.g. in Valkey. See "Scaling later" in TECHNICAL.md §11a.
@@ -162,12 +179,11 @@ Built 2026-10-14 (TECHNICAL §5, "Damage model"): five types (physical, cold, he
   - **acid:** could lower the target's resistances for a while.
 - **Damage over time (decided, built):** it has one of the damage types, and resistances apply to every tick. Burning, frozen and poisoned deal it (TECHNICAL §5): each tick is one `Damage::effect_tick` with its type. Lava still hurts through its own tick (`LAVA_TICK`) and now also sets creatures burning.
 - **Armour and items (decided):** armour stops being a stat raised with XP. Items give armour, and so resistances. An armour piece gives at least physical resistance, and any item can give resistances to other types.
-  - **The XP armour upgrade still exists** (`Modifiers.armor`): `hurt_player` applies it after `resolve`. Removing it waits for items.
-  - Remove `Armor` from the lobby upgrade shop (`UpgradeStat`, `StatUpgrades.armor`, `Modifiers.armor` in `defs/progression.rs`) and the `mods.armor` reduction in `hurt_player`.
+  - ~~The XP armour upgrade~~ Gone in plan 4 (`Sheet.armor`, `Modifiers` and the shop are removed; v1 purchases were refunded as XP).
   - Items need an equipment system: item slots per character, stored with the character's progress in PostgreSQL, and a way to get items (drops, the lobby, or coins; see "Spend coins").
 - **Open questions (armour):**
-  - Characters that already bought armour levels: refund the XP they spent, or keep the levels as a fixed physical resistance? `progress.rs` needs a version bump either way.
-  - Removing armour before items exist leaves heroes with no damage reduction. Should both ship together?
+  - ~~(answered in plan 4: refunded as XP)~~ Characters that already bought armour levels: refund the XP they spent, or keep the levels as a fixed physical resistance? `progress.rs` needs a version bump either way.
+  - ~~(answered: both shipped)~~ Removing armour before items exist leaves heroes with no damage reduction. Should both ship together?
 - **Tune** every resistance, split and the −100 % floor in the balancing pass (`defs/entity_types.rs`, `defs/damage.rs`).
 
 ## Barrels and world objects follow-ups

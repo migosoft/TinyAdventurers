@@ -6,7 +6,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 
 1. Open the game in your browser. Your host will give you the address, for example `http://192.168.1.20:8080`.
 2. **Create an account**: a name and a password, nothing else. No e-mail is stored, so **a forgotten password cannot be recovered**. Write it down or use a password manager. Next time, just log in.
-3. **Create a character**: give it a name and choose its class. The class can't be changed later. You can have up to 8 characters, also several of the same class. Each one collects its own XP, coins and upgrades.
+3. **Create a character**: give it a name and choose its class. The class can't be changed later. You can have up to 8 characters, also several of the same class. Each one collects its own XP and coins and has its own Attributes, skill tree and items.
 4. Click **Play** on a character. "Change character" in the lobby brings you back to the list.
 5. **Open a new run**, or **Join** an open run in the list. Runs already in progress can't be joined. Several players may play the same class.
 6. The host **chooses the end boss**, or leaves it on **Random**. Everyone sees the choice.
@@ -31,7 +31,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 
 Your teammates' names float above their heroes, and the party list (top left) shows everyone's health.
 
-**Abilities.** Every hero has two: left mouse button (primary) and right (secondary). The four starting names are **Strike** (hit with your melee weapon), **Shoot** (fire your ranged weapon), **Charge** (a dash that hurts everything you run through) and **Holy Light** (a heal for you and your friends). Spells such as Magic Missile and Fireball are abilities too. Every class has four more, two for the left button and two for the right, listed under its heading below. They are built, but you cannot learn them in the game yet: the skill tree comes later. Until then you try them in a debug game (`?debug` in the address, the "Debug loadout" row in the waiting room, which also lifts your Attributes and lets you pick weapons). Each needs Attribute values (INT, CHA, STR, DEX, WIL; items count) and some a kind of weapon, shown after its name.
+**Abilities.** Every hero has two: left mouse button (primary) and right (secondary). The four starting names are **Strike** (hit with your melee weapon), **Shoot** (fire your ranged weapon), **Charge** (a dash that hurts everything you run through) and **Holy Light** (a heal for you and your friends). Spells such as Magic Missile and Fireball are abilities too. Every class has four more, two for the left button and two for the right, listed under its heading below. You learn them in the skill tree (see "XP, coins and the character"). To try any of them at once, use a debug game (`?debug` in the address, the "Debug loadout" row in the waiting room, which also lifts your Attributes and lets you pick weapons). Each needs Attribute values (INT, CHA, STR, DEX, WIL; items count) and some a kind of weapon, shown after its name.
 
 **Fighting up close.** A ranged ability does not work with an enemy (or a closed chest) right next to you, about a body's width and a bit more.
 - Your **left button then strikes with your melee weapon** instead: the Wizard hits with his staff (weakly, so step back), the Elven Ranger thrusts her rapier. It hits the nearest target. If the blow kills it with damage to spare, the rest of the blow carries on to the next target in reach.
@@ -190,7 +190,7 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 - Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
 - The Red Demon's claws and the Red Dragon's claws are partly fire.
 - Fire also sets things **burning** and poison **poisons** (see Status effects), and a smaller share of a type has a weaker effect: a creature that resists the type completely never takes the effect.
-- Your own **armour** upgrade still works on top of all this.
+- Armour comes from the armour you wear, not from XP.
 
 ## Water, lava and chasms
 
@@ -290,26 +290,28 @@ The effects from damage types work in two tiers. A hit that is **at least half h
 - If the whole party falls, the run is lost.
 - **Slay the boss** to win. The end screen shows each hero's kills, damage, healing, **XP** and **coins**.
 
-## XP, coins and upgrades
-
-- **Coins** come from treasure chests, mimics (25) and the boss (50). Like XP, they go to every living hero and are added to your character when the run ends. The lobby shows your coins next to your XP. There is nothing to buy with them yet: they are saved for loadouts.
+## XP, coins and the character
 
 - Every kill gives **XP to every living member of the party**: 2 for a raised skeleton or summoned imp, 5 for a goblin, 8 for a skeleton, imp or chort, 12 for an orc, 20 for a disciple, 25 for a necromancer or summoner and **300 for the boss**. Once you have fallen, you stop earning.
-- When the run ends, won or lost, your XP is added to the **character** you played. If you leave early, you keep what you earned so far.
-- Spend XP in the **Upgrades** panel in the lobby. Each stat has 10 levels; the first level costs 100 XP and each further level 75 XP more.
+- **Coins** come from treasure chests, mimics (25) and the boss (50). Like XP, they go to every living hero. They pay for a respec (below).
+- When the run ends, won or lost, your XP and coins are added to the **character** you played. If you leave early, you keep what you earned so far.
+- Runs where someone used debug mode give no XP and no coins.
 
-| Stat | Per level | At level 10 |
-|---|---|---|
-| Damage | +8 % damage | +80 % |
-| Attack speed | +6 % attack speed (shorter cooldowns) | +60 % |
-| Move speed | +4 % move speed | +40 % |
-| Life | +10 % max life | +100 % |
-| Armor | blocks 4 % of incoming damage | 40 % |
+**The character panel** (in the lobby and the waiting room; a plain temporary panel, a proper screen comes later). You can change your build there while you are not Ready and not in a run; otherwise the game says "Not while ready." or "Not during a run."
 
-- Upgrades are **permanent** and belong to the **character** that bought them. Your other characters have their own.
+- **Attributes.** STR, DEX, CON, INT, WIL and CHA. Each line shows the total and where it comes from: class and race, XP you bought, the skill tree and your items. Buy one more point of an Attribute with XP. The price rises with the Attribute: 100 XP for a point at 10 and 25 more for each point above 10, times a weight (DEX costs a quarter more, WIL a fifth less). Items never raise the price.
+- **The skill tree.** Every class has its own tree, starting at a free first node. You can buy a node that touches one you own, if you have the XP and meet its requirement (an Attribute value, your items count). A node can give an Attribute point, a resistance, a kind of weapon or armour you may use, a new ability, or an improvement of one ability (it works only while you have that ability equipped, also when an item gives it to you). The last node of a branch is a **keystone**, a big change to how you play:
+  - Wizard: **Arcane Overflow** (spells +15 % damage, +10 % cooldown), **Deep Winter** (+20 % cold damage to chilled or frozen enemies), **Pyromancer** (+20 % heat damage, −20 % cold damage).
+  - Paladin: **Radiant** (innate abilities +20 % against the undead and demons, and a glow around you), **Unshaken** (sleep cannot affect you), **Bulwark** (armour weighs half, +10 % physical resistance).
+  - Barbarian: **Berserker** (below half life +25 % damage and cooldowns 25 % faster, but every resistance 10 points lower), **Juggernaut** (heavier, and slow, chill and roots cannot hold you), **Unbreakable** (your CON counts 4 higher for every saving throw).
+  - Elven Ranger: **Pack Hunter** (enemies your wolf bit in the last 2 seconds take 20 % more from you), **Deadeye** (shots from a ranged ability do double damage to slowed, chilled, rooted or sleeping enemies), **Venomancer** (poisoned enemies take 15 % more from you).
+  - A keystone's damage bonus counts only your own hits, not your wolf's bites or burning and poison ticks.
+- **Respec.** Gives back all the XP you spent on Attributes and the tree, for coins: 20 coins plus 1 for every 50 XP spent. It also resets your chosen abilities. Items you can no longer wear go back to your inventory; nothing is lost.
+- **Items.** Put an item from your inventory into a slot, or take the slot's item back. The class starters are ordinary items. You can wear an item only if your class is proficient with it and you meet its requirement (Attributes without items). In a debug game the panel can also add any item to your inventory.
+- **Abilities.** Pick the left and right button ability from those you have unlocked, or that a worn item gives you. If a pick cannot be played (a missing weapon, a requirement not met) the panel says why and **Ready** and **Enter the dungeon** are refused until you fix it.
 - Your characters are stored on the server, so you can log in from any browser or device. If you log in somewhere else, the game in the first window closes.
 - **Deleting a character or your account is final.** Deleting the account removes all of its characters. Both are on the character screen.
-- Runs where someone used debug mode give no XP and no coins.
+- Characters from before the skill tree got all the XP they had spent on stat upgrades back, once.
 
 ## The rules log
 
