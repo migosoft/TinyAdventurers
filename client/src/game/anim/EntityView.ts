@@ -7,6 +7,7 @@ import { ANIM, EFFECT, FLAG } from '../../generated/defs';
 import { DEPTH, Effects, GLOOM } from '../effects';
 import { FONT_TEXT } from '../../fonts';
 import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from '../worldText';
+import { TagEffects } from '../tagEffects';
 import { frameBounds, has, lieLayout, lyingPose, StatusView } from '../status';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
 import { pickFrame, windupOf } from './pickFrame';
@@ -75,6 +76,7 @@ export class EntityView {
   /** Ground slam telegraph (the ogre), drawn on the floor. */
   private tele?: Phaser.GameObjects.Graphics;
   private label?: Phaser.GameObjects.Text;
+  private tagFx?: TagEffects;
   private clock = 0;
   private runClock = 0;
   private lastX = 0;
@@ -131,6 +133,7 @@ export class EntityView {
         .setStroke('#000000', 2);
       smoothText(this.label);
       this.root.add(this.label);
+      this.tagFx = new TagEffects(scene, this.root);
     }
     this.status = new StatusView(scene, fx, () => {
       const sc = d.scale ?? 1;
@@ -236,7 +239,9 @@ export class EntityView {
       .setPosition(this.shakeT > 0 ? (Math.floor(this.clock * 30) % 2 === 0 ? 1 : -1) : 0, sink + Math.round(fall * 6))
       .setScale((d.scale ?? 1) * (1 - fall * 0.2))
       .setAlpha(fall > 0.7 ? 1 - (fall - 0.7) / 0.3 : 1);
-    this.label?.setVisible(fall === 0 && drown === 0);
+    const tagShown = fall === 0 && drown === 0;
+    this.label?.setVisible(tagShown);
+    if (this.label && this.tagFx) this.tagFx.set(tagShown ? fxBits : 0, this.label.x + this.label.displayWidth / 2, this.label.y - this.label.displayHeight / 2);
     this.shakeT = Math.max(0, this.shakeT - dt);
 
     if (hurt && !d.hit && Math.floor(this.clock * 30) % 2 === 0) this.body.setTintFill(0xffffff);
@@ -565,6 +570,7 @@ export class EntityView {
   destroy(): void {
     this.tele?.destroy();
     this.status.destroy();
+    this.tagFx?.destroy();
     this.root.destroy(true);
   }
 }

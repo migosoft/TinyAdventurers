@@ -18,6 +18,7 @@ import { Net } from './net';
 import { loadAtlas, type Atlas } from './ui/atlas';
 import { showAuth } from './ui/auth';
 import { Create } from './ui/create';
+import { EFFECT_ICON, effectIconDataUri, iconTextureKey } from './ui/effectIcons';
 import { Hub } from './ui/hub/hub';
 import { Hud } from './ui/hud';
 import { Lobby } from './ui/lobby';
@@ -33,8 +34,11 @@ class BootScene extends Phaser.Scene {
   }
   preload(): void {
     this.load.atlas('atlas', 'assets/atlas.png', 'assets/atlas.json');
+    for (const id of Object.keys(EFFECT_ICON).map(Number)) this.load.svg(iconTextureKey(id), effectIconDataUri(id, 32), { width: 32, height: 32 });
   }
   create(): void {
+    // The game runs with pixelArt (nearest filtering); the effect symbols are smooth line art.
+    for (const id of Object.keys(EFFECT_ICON).map(Number)) this.textures.get(iconTextureKey(id)).setFilter(Phaser.Textures.FilterMode.LINEAR);
     // Tiny runtime textures for particles and magic glows (the pack has no effect sprites).
     const g = this.make.graphics({}, false);
     g.fillStyle(0xffffff, 1).fillRect(0, 0, 2, 2);
