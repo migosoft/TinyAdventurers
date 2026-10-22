@@ -270,7 +270,7 @@ export abstract class TerrainDemo extends Phaser.Scene {
     d.t += dt;
     const dur = d.kind === 'fall' ? FALL_T : DROWN_T;
     if (d.t >= dur && d.t - dt < dur)
-      this.fx.text(a.x, a.y - 20, d.kind === 'fall' ? `${a.name} fell into the abyss` : `${a.name} drowned`, '#ff6060', true);
+      this.fx.text(a.x, a.y - 20, d.kind === 'fall' ? `${a.name} fell into the abyss` : `${a.name} drowned`, '#ff6060', { big: true });
     if (d.kind === 'drown' && d.t < dur + 0.4) {
       // Bubbles rising where the figure went down.
       bubbleFx(this.fx, a.x, a.y, dt);

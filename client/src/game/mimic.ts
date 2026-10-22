@@ -138,7 +138,7 @@ export class MimicView {
       if (!this.wakeFx && k >= 0.15) {
         this.wakeFx = true;
         this.fx.burst(s.x, s.y - 8, 10, 0xffe070, 45, 0.45, 60);
-        this.fx.text(s.x, s.y - 18, '!', '#ff5050', true);
+        this.fx.text(s.x, s.y - 18, '!', '#ff5050', { kind: 'mark' });
       }
     } else if ((s.biteT ?? -1) >= 0 && s.biteT! < BITE_T) {
       // Snap: open wide while lunging, then clamp shut.

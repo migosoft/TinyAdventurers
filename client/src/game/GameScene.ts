@@ -359,15 +359,15 @@ export class GameScene extends Phaser.Scene {
       case 'Dmg': {
         // Numbers on heroes vanish in the dark with them; numbers on monsters stay above the darkness.
         const depth = ev.p ? DEPTH.heroNumbers : DEPTH.numbers;
-        if (ev.imm) this.fx.text(ev.x, ev.y, 'immune', '#a0a0a0', false, depth, '#000000', 'small');
-        else if (ev.crit) this.fx.text(ev.x, ev.y, critLabel(ev.v), WORLD_TEXT.crit.color, true, depth);
-        else this.fx.text(ev.x, ev.y, `${Math.round(ev.v)}`, dmgColor(ev.ty, ev.p), false, depth);
+        if (ev.imm) this.fx.text(ev.x, ev.y, 'immune', '#a0a0a0', { depth, kind: 'small' });
+        else if (ev.crit) this.fx.text(ev.x, ev.y, critLabel(ev.v), WORLD_TEXT.crit.color, { big: true, depth });
+        else this.fx.text(ev.x, ev.y, `${Math.round(ev.v)}`, dmgColor(ev.ty, ev.p), { depth });
         if (!ev.imm) this.fx.hitSpark(ev.x, ev.y + 4, ev.p ? 0xff4040 : 0xffffff);
         if (ev.p && !ev.imm && Math.hypot(ev.x - this.pred.state.x, ev.y + 10 - this.pred.state.y) < 4) this.cameras.main.shake(90, 0.003);
         break;
       }
       case 'Heal':
-        this.fx.text(ev.x, ev.y, `+${Math.round(ev.v)}`, '#60ff80', false, ev.p ? DEPTH.heroNumbers : DEPTH.numbers);
+        this.fx.text(ev.x, ev.y, `+${Math.round(ev.v)}`, '#60ff80', { depth: ev.p ? DEPTH.heroNumbers : DEPTH.numbers });
         break;
       case 'Boom':
         if (ev.k === 1) this.fx.healRing(ev.x, ev.y, ev.r);
@@ -396,7 +396,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'Growl': {
         const wolf = this.ents.get(ev.id);
-        if (wolf) this.fx.text(wolf.x, wolf.y - 14, 'grrrr', SOUND_TEXT.fill, false, DEPTH.sound, SOUND_TEXT.stroke, 'sound');
+        if (wolf) this.fx.text(wolf.x, wolf.y - 14, 'grrrr', SOUND_TEXT.fill, { depth: DEPTH.sound, stroke: SOUND_TEXT.stroke, kind: 'sound' });
         this.views.get(ev.id)?.shake(0.4);
         break;
       }
@@ -450,7 +450,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'Coins':
         this.fx.coins(ev.x, ev.y, Math.min(10, 3 + Math.floor(ev.v / 4)));
-        this.fx.text(ev.x, ev.y - 14, `+${ev.v} coins`, '#ffd040', false, DEPTH.numbers, '#000000', 'small');
+        this.fx.text(ev.x, ev.y - 14, `+${ev.v} coins`, '#ffd040', { kind: 'small' });
         if (this.alive) this.hud.addCoins(ev.v);
         break;
     }

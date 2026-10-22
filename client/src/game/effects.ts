@@ -131,10 +131,11 @@ export class Effects {
   }
 
   /**
-   * A floating number or word; `depth`: `DEPTH.heroNumbers` for one on a hero. `big` is the crit path
-   * (gold, larger, pops); `kind` picks the size and weight of the others (default: a damage number).
+   * A floating number or word; `depth`: `DEPTH.heroNumbers` for one on a hero. `opts.big` is the crit path
+   * (gold, larger, pops); `opts.kind` picks the size and weight of the others (default: a damage number).
    */
-  text(x: number, y: number, s: string, color: string, big = false, depth = DEPTH.numbers, stroke = '#000000', kind: WorldTextKind = 'number'): void {
+  text(x: number, y: number, s: string, color: string, opts: { big?: boolean; depth?: number; stroke?: string; kind?: WorldTextKind } = {}): void {
+    const { big = false, depth = DEPTH.numbers, stroke = '#000000', kind = 'number' } = opts;
     const t = this.freeTexts.pop() ?? smoothText(this.scene.add.text(0, 0, '', { fontFamily: FONT_TEXT, resolution: TEXT_RESOLUTION }));
     const w = WORLD_TEXT[big ? 'crit' : kind];
     t.setText(s).setColor(color).setFontStyle(w.style).setFontSize(w.size).setStroke(stroke, 2).setOrigin(0.5, 1);
@@ -364,7 +365,7 @@ export class Effects {
 
   immune(x: number, y: number): void {
     this.ring(x, y - 8, 14, 0x9ae0ff, 0.3);
-    this.text(x, y - 18, 'IMMUNE', '#9ae0ff', false, DEPTH.numbers, '#000000', 'small');
+    this.text(x, y - 18, 'IMMUNE', '#9ae0ff', { kind: 'small' });
   }
 
   /** Pack coins popping out of a chest or a fallen enemy. */

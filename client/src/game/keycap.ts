@@ -1,12 +1,12 @@
-import type Phaser from "phaser";
-import { FONT_TEXT } from "../fonts";
-import { DEPTH } from "./effects";
-import { smoothText, TEXT_RESOLUTION } from "./worldText";
+import type Phaser from 'phaser';
+import { FONT_TEXT } from '../fonts';
+import { DEPTH } from './effects';
+import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 
 const W = 11;
 const H = 11;
 
-/** The use hint: a gold key cap with a dark "E" and an optional white label ("Wake") to its right. */
+/** The use hint: a gold key cap with a dark 'E' and an optional white label ('Wake') to its right. */
 export class KeyCap {
   private g: Phaser.GameObjects.Graphics;
   private e: Phaser.GameObjects.Text;
@@ -20,11 +20,11 @@ export class KeyCap {
     this.g.lineStyle(1, 0x000000, 1).strokeRoundedRect(-W / 2, -H, W, H, 2);
     this.e = smoothText(
       scene.add
-        .text(0, 0, "E", {
+        .text(0, 0, 'E', {
           fontFamily: FONT_TEXT,
-          fontStyle: "800",
-          fontSize: "7px",
-          color: "#2a1806",
+          fontStyle: WORLD_TEXT.mark.style,
+          fontSize: `${WORLD_TEXT.mark.size}px`,
+          color: '#2a1806',
           resolution: TEXT_RESOLUTION,
         })
         .setOrigin(0.5, 0.5)
@@ -33,14 +33,14 @@ export class KeyCap {
     );
     this.label = smoothText(
       scene.add
-        .text(0, 0, "", {
+        .text(0, 0, '', {
           fontFamily: FONT_TEXT,
-          fontStyle: "600",
-          fontSize: "6.5px",
-          color: "#ffffff",
+          fontStyle: WORLD_TEXT.tag.style,
+          fontSize: `${WORLD_TEXT.tag.size}px`,
+          color: '#ffffff',
           resolution: TEXT_RESOLUTION,
         })
-        .setStroke("#000000", 2)
+        .setStroke('#000000', 2)
         .setOrigin(0, 0.5)
         .setDepth(DEPTH.numbers)
         .setVisible(false),
@@ -67,7 +67,7 @@ export class KeyCap {
     this.e.setVisible(on).setPosition(x, y - H / 2);
     this.label
       .setVisible(on && label !== null)
-      .setText(label ?? "")
+      .setText(label ?? '')
       .setPosition(x + W / 2 + 2, y - H / 2);
   }
 

@@ -61,17 +61,24 @@ function viewSize(): { w: number; h: number; zoom: number } {
 /**
  * The canvas is at screen resolution (so Inter text is crisp) and the integer zoom lives on each scene's
  * main camera, which shows the same world area as a world-resolution canvas scaled up by CSS would.
- * Checked every frame, so a scene created later or a resize picks it up (LightsDemoScene fits its own zoom).
+ * Every scene except the game keeps the world's (0, 0) at the top left (origin 0, 0), like a plain canvas;
+ * the game centres its camera. LightsDemoScene fits its own zoom.
  */
-function keepCameraZoom(game: Phaser.Game): void {
-  game.events.on(Phaser.Core.Events.PRE_STEP, () => {
-    const zoom = viewSize().zoom;
-    for (const sc of game.scene.getScenes(true)) {
-      if (sc.sys.settings.key === 'lights-demo') continue;
-      const cam = sc.cameras?.main;
-      if (cam && cam.zoom !== zoom) cam.setZoom(zoom);
-    }
+function applyView(sc: Phaser.Scene): void {
+  const key = sc.sys.settings.key;
+  if (key === 'lights-demo') return;
+  const cam = sc.cameras?.main;
+  if (!cam) return;
+  if (key !== 'game') cam.setOrigin(0, 0);
+  cam.setZoom(viewSize().zoom);
+}
+
+/** Applies the view to every scene when it is created (before its first frame); the returned function re-applies it to the running scenes (resize). */
+function watchViews(game: Phaser.Game): () => void {
+  game.events.once('assets-ready', () => {
+    for (const sc of game.scene.getScenes(false)) sc.events.on(Phaser.Scenes.Events.CREATE, () => applyView(sc));
   });
+  return () => game.scene.getScenes(true).forEach(applyView);
 }
 
 /** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich, ?demon, ?lights). */
@@ -89,7 +96,7 @@ async function gallery(): Promise<void> {
     scale: { mode: Phaser.Scale.NONE, width: v.w * v.zoom, height: v.h * v.zoom, zoom: 1 },
     scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene, WaterDemoScene, ChasmDemoScene, LavaDemoScene, KnockbackDemoScene, OgreDemoScene, DragonDemoScene, LichDemoScene, DemonDemoScene, LightsDemoScene],
   });
-  keepCameraZoom(game);
+  watchViews(game);
   game.events.once('assets-ready', () => game.scene.start(start));
   document.getElementById('game')!.classList.add('active');
 }
@@ -177,10 +184,11 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
     scene: [BootScene, GameScene],
     fps: { smoothStep: false },
   });
-  keepCameraZoom(game);
+  const refreshViews = watchViews(game);
   window.addEventListener('resize', () => {
     const s = viewSize();
     game.scale.resize(s.w * s.zoom, s.h * s.zoom);
+    refreshViews();
   });
   const ready = new Promise<void>((r) => game.events.once('assets-ready', r));
   const gameEl = document.getElementById('game')!;
