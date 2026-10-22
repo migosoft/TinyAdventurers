@@ -46,7 +46,7 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 - **Adding an `EquipSlot`:** whoever adds one must also add a `read_equipment` step in `progress.rs`; its length filter otherwise drops every stored worn item to the class starters on the next read.
 - **Wolf-death cooldown and Berserk:** `companion.rs` (~458) divides the dead-wolf cooldown by the sheet's cooldown ratio only; Berserk's run-time speed-up is not in it. Unreachable today (Berserker is Barbarian-only, Summon Wolf Ranger-only); revisit if abilities cross classes.
 - **Overkill carry and Chain Spark jumps use the pre-keystone amount** (decided in plan 4; TECHNICAL §11a states it). Revisit in the balancing pass if it feels weak.
-- ~~Plan 5, the new UI~~ Built (see TECHNICAL §11a "The character screens"). Leftover (d) of the `Progression 4` final review stays open: smaller test and style notes (no Radiant-vs-boss test, `keystones::races` returns one race, check_buy error strings asserted only via `progress.rs`, keystone numbers inline, SheetSummary `items` derived by subtraction, the export's hand-written item slot mapping). Leftovers (b) and (c) are done; (a) is under "Plan 5 follow-ups".
+- ~~Plan 5, the new UI~~ Built (see TECHNICAL §11a "The character screens"). Leftover (d) of the `Progression 4` final review stays open: smaller test and style notes (no Radiant-vs-boss test, `keystones::races` returns one race, check_buy error strings asserted only via `progress.rs`, keystone numbers inline, SheetSummary `items` derived by subtraction, the export's hand-written item slot mapping). Leftovers (a), (b) and (c) are done.
 - **Plan 4 rulings to check with the user** (the plan's "Rulings made for this plan"; all approved with the plan on 2026-10-22, the user may still veto after seeing them in play):
   1. Improvements apply to the equipped version from either source and stack with the item's mods.
   2. Unbreakable: +4 CON for every save only (not HP, speed or prices).
@@ -71,7 +71,7 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 
 Left open by the plan 5 task reviews (none blocks play). Check the first group in the browser.
 - **Never seen live:** the red unmet-requirement ring on a tree node; the Loadout tab's invalid card and warning hint; the tree labels (6 px) at a real screen size.
-- **Waiting room:** with `?debug`, the debug row still shows the old debug abilities after a real `SetLoadout` cleared them on the server (`ui/lobby.ts` `debugPick`; leftover (a)). The room root gets the `.ui` class, which nobody asked for (harmless).
+- **Waiting room:** the room root gets the `.ui` class, which nobody asked for (harmless).
 - **Roster and Create:** an `Error` or a lost connection while the roster or Create screen shows goes to the hidden lobby, so it is not shown.
 - **Texts:** the Loadout cards and tree tooltips print the raw category ("WeaponAttack"). `OnHit` prop text uses the `EffectKind` Debug name (no item has `OnHit` yet). `Weight`, `MaxHp` and `Attr` prop texts would print "+-" for a negative value (none exist). The attribute hint also fires for equip requirement errors, and the `USES` fallback ("no weapon") is silent.
 - **Tooltips:** a worn-slot tooltip is always placed to the right and can cover its neighbours.
