@@ -15,4 +15,6 @@ pub mod lights;
 pub mod objects;
 pub mod progression;
 pub mod requirements;
+#[allow(dead_code)] // plan 4: the sheet, Progress and the protocol consume the trees in the next tasks
+pub mod trees;
 pub mod weapons;
