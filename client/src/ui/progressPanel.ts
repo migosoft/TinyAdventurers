@@ -1,6 +1,6 @@
 // The stopgap "Character (temporary)" panel: the Attribute shop, the skill tree, respec, loadout and
 // equipment, in plain markup. Plan 5 replaces it. The helpers are pure; render and bind stay thin.
-import { ABILITIES, CLASSES } from '../generated/defs';
+import { ABILITIES } from '../generated/defs';
 import { ATTRS, ITEMS, TREES } from '../generated/progression';
 import type { Attr } from '../generated/Attr';
 import type { CharacterInfo } from '../generated/CharacterInfo';
@@ -11,80 +11,16 @@ import type { ItemId } from '../generated/ItemId';
 import type { NodeId } from '../generated/NodeId';
 import type { Pick } from '../generated/Pick';
 import { esc } from './hud';
-
-type AnyNode = { cost: number; kind: string; links: readonly string[]; name: string; req: readonly string[]; text: string; ability?: string; attr?: string };
-export type NodeState = 'owned' | 'buyable' | 'blocked' | 'locked';
+import { blockReason, fitsSlot, nodeState, poolFor, samePick } from './hub/model';
 
 const EQUIP_SLOTS: EquipSlot[] = ['Melee', 'Ranged', 'OffHand', 'Armor', 'Ring1', 'Ring2', 'Shoes', 'Belt'];
-const ATTR_KEYS = Object.keys(ATTRS) as Attr[];
 /** The `prices` order, which is the `Attr` order. */
 const PRICE_ORDER: Attr[] = ['Str', 'Dex', 'Con', 'Int', 'Wil', 'Cha'];
 const itemDef = (id: string) => (ITEMS as Record<string, { name: string; slot: string; classes: readonly string[]; grants: readonly string[]; hero: boolean }>)[id];
-const nodesOf = (cls: ClassId) => (TREES as unknown as Record<string, { nodes: Record<string, AnyNode>; start: string }>)[cls];
-
-function owned(cls: ClassId, info: CharacterInfo): Set<string> {
-  return new Set<string>([nodesOf(cls).start, ...info.nodes]);
-}
-
-/** The first requirement ("INT 18") the sheet does not meet, as text, or null. */
-function unmetRequirement(info: CharacterInfo, req: readonly string[]): string | null {
-  for (const r of req) {
-    const [short, n] = r.split(' ');
-    const attr = ATTR_KEYS.find((a) => ATTRS[a].short === short);
-    const total = info.sheet.attrs.find((l) => l.attr === attr)?.total ?? 0;
-    if (total < Number(n)) return r;
-  }
-  return null;
-}
-
-function blockReason(cls: ClassId, info: CharacterInfo, node: NodeId): string | null {
-  const n = nodesOf(cls).nodes[node];
-  const req = unmetRequirement(info, n.req);
-  if (req) return `needs ${req}`;
-  if (info.xp < n.cost) return 'not enough XP';
-  return null;
-}
-
-export function nodeState(cls: ClassId, info: CharacterInfo, node: NodeId): NodeState {
-  const tree = nodesOf(cls);
-  const have = owned(cls, info);
-  if (have.has(node)) return 'owned';
-  // Links are undirected: a neighbour is anything the node links to or that links to it.
-  const near = tree.nodes[node].links.some((l) => have.has(l)) || [...have].some((o) => tree.nodes[o]?.links.includes(node));
-  if (!near) return 'locked';
-  return blockReason(cls, info, node) ? 'blocked' : 'buyable';
-}
-
-/** What can fill a loadout slot: the start ability, owned Unlock nodes, and worn items that grant one. */
-export function loadoutPool(cls: ClassId, info: CharacterInfo, slot: 'Primary' | 'Secondary'): Pick[] {
-  const abilities = ABILITIES as Record<string, { slot: string }>;
-  const pool: Pick[] = [];
-  const tree = nodesOf(cls);
-  const own = (a: string) => {
-    if (abilities[a]?.slot === slot && !pool.some((p) => p.ability === a && p.source === 'Own')) pool.push({ ability: a as Pick['ability'], source: 'Own' });
-  };
-  own(slot === 'Primary' ? CLASSES[cls].primary : CLASSES[cls].secondary);
-  for (const id of info.nodes) {
-    const n = tree.nodes[id];
-    if (n?.kind === 'Unlock' && n.ability) own(n.ability);
-  }
-  EQUIP_SLOTS.forEach((es, i) => {
-    const item = info.equipment.slots[i];
-    if (!item) return;
-    for (const g of itemDef(item)?.grants ?? []) {
-      if (abilities[g]?.slot === slot) pool.push({ ability: g as Pick['ability'], source: { Item: es } });
-    }
-  });
-  return pool;
-}
+const nodesOf = (cls: ClassId) => (TREES as unknown as Record<string, { nodes: Record<string, { cost: number; name: string; text: string }>; start: string }>)[cls];
+const owned = (cls: ClassId, info: CharacterInfo): Set<string> => new Set<string>([nodesOf(cls).start, ...info.nodes]);
 
 const pickName = (p: Pick) => `${ABILITIES[p.ability].name}${p.source === 'Own' ? '' : ` (${p.source.Item})`}`;
-const sameSource = (a: Pick, b: Pick) => a.ability === b.ability && JSON.stringify(a.source) === JSON.stringify(b.source);
-
-function fitsSlot(id: string, slot: EquipSlot): boolean {
-  const s = itemDef(id)?.slot;
-  return s === slot || (s === 'Ring' && (slot === 'Ring1' || slot === 'Ring2'));
-}
 
 export function progressPanel(info: CharacterInfo, opts: { debug: boolean; ready: boolean }): string {
   const cls = info.class;
@@ -104,16 +40,16 @@ export function progressPanel(info: CharacterInfo, opts: { debug: boolean; ready
     const n = tree.nodes[id];
     return `<li><b>${esc(n.name)}</b> ${esc(n.text)} · ${n.cost} XP ${extra}</li>`;
   };
-  const buyable = all.filter((id) => nodeState(cls, info, id) === 'buyable').map((id) => row(id, `<button data-node="${id}"${off}>Buy</button>`));
-  const blocked = all.filter((id) => nodeState(cls, info, id) === 'blocked').map((id) => row(id, `<small>(${blockReason(cls, info, id)})</small>`));
+  const buyable = all.filter((id) => nodeState(info, id) === 'buyable').map((id) => row(id, `<button data-node="${id}"${off}>Buy</button>`));
+  const blocked = all.filter((id) => nodeState(info, id) === 'blocked').map((id) => row(id, `<small>(${blockReason(info, id)})</small>`));
   const ownedRows = all.filter((id) => have.has(id) && id !== tree.start).map((id) => row(id, '<small>(owned)</small>'));
 
   const poolSelect = (slot: 'Primary' | 'Secondary', current: Pick) => {
-    const pool = loadoutPool(cls, info, slot);
+    const pool = poolFor(info, slot).map((c) => c.pick);
     // Ruling 9 keeps a stored pick that left the pool; show it, so changing the other select resends it.
-    const gone = pool.some((p) => sameSource(p, current)) ? '' : `<option value="${esc(JSON.stringify(current))}" selected>${esc(pickName(current))} (unavailable)</option>`;
+    const gone = pool.some((p) => samePick(p, current)) ? '' : `<option value="${esc(JSON.stringify(current))}" selected>${esc(pickName(current))} (unavailable)</option>`;
     return `<select data-loadout="${slot}"${off}>${gone}${pool
-      .map((p) => `<option value="${esc(JSON.stringify(p))}"${sameSource(p, current) ? ' selected' : ''}>${esc(pickName(p))}</option>`)
+      .map((p) => `<option value="${esc(JSON.stringify(p))}"${samePick(p, current) ? ' selected' : ''}>${esc(pickName(p))}</option>`)
       .join('')}</select>`;
   };
 

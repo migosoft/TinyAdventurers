@@ -1,4 +1,7 @@
 // Class figures and the class card, shared by the character screen and the lobby.
+import { CLASSES as CLASS_DEFS } from '../generated/defs';
+import { ITEMS } from '../generated/progression';
+import type { CharacterInfo } from '../generated/CharacterInfo';
 import type { ClassId } from '../generated/ClassId';
 import { spritePreview, type Atlas } from './atlas';
 import { CLASS_TEXT } from './text';
@@ -13,8 +16,19 @@ export const FIG: Record<ClassId, [string, string]> = {
   ElvenRanger: ['elf_m', 'weapon_bow'],
 };
 
-export function classFigure(atlas: Atlas, c: ClassId, scale = 4): HTMLCanvasElement {
-  return spritePreview(atlas, FIG[c][0], scale, FIG[c][1]);
+export function classFigure(atlas: Atlas, c: ClassId, scale = 4, weapon?: string): HTMLCanvasElement {
+  return spritePreview(atlas, FIG[c][0], scale, weapon ?? FIG[c][1]);
+}
+
+/** The sprite the figure holds (Ruling 8): a Ranger the ranged item, others the melee item (the class starter
+ * when the slot is empty); the class's own sprite when the item has none. */
+export function figureWeapon(info: CharacterInfo): string {
+  const sprite = (id: string | null | undefined) => (id ? (ITEMS as unknown as Record<string, { sprite: string }>)[id]?.sprite : '') || '';
+  const start = CLASS_DEFS[info.class].starter;
+  const melee = info.equipment.slots[0] ?? start.melee;
+  const ranged = info.equipment.slots[1] ?? start.ranged;
+  const s = info.class === 'ElvenRanger' ? sprite(ranged) || sprite(melee) : sprite(melee);
+  return s || FIG[info.class][1];
 }
 
 /** A card with figure, blurb and both abilities. */

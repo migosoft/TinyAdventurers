@@ -22,6 +22,7 @@ import { Hud } from './ui/hud';
 import { Lobby } from './ui/lobby';
 import { logoHeader } from './ui/logo';
 import './style.css';
+import './ui/screens.css';
 
 class BootScene extends Phaser.Scene {
   constructor() {
