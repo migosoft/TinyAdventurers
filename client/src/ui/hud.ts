@@ -31,6 +31,19 @@ export function secondaryLabel(wolf: boolean | null, base: string): string {
   return wolf === null ? base : wolf ? 'Heal Wolf' : 'Summon Wolf';
 }
 
+/** The help line's keys and what they do; each key is drawn as a key cap. */
+export const HELP_KEYS: [keys: string[], label: string][] = [
+  [['WASD'], 'move'],
+  [['LMB', 'RMB'], 'attack'],
+  [['L'], 'log'],
+  [['Esc'], 'menu'],
+  [['F3'], 'stats'],
+];
+
+export function helpHtml(): string {
+  return HELP_KEYS.map(([keys, label]) => `<span>${keys.map((k) => `<kbd>${k}</kbd>`).join('')}${label}</span>`).join('');
+}
+
 const el = (tag: string, cls?: string, html?: string) => {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -56,9 +69,9 @@ export class Hud {
   private msgs = el('div', 'messages');
   private debug = el('pre', 'debug hidden');
   private banner = el('div', 'banner hidden');
-  /** A line about the own hero's state (asleep), centred under the figure. */
-  private statusHint = el('div', 'status-hint hidden');
-  private statusText: string | null = null;
+  /** A panel above the HP bar while the own hero is asleep. */
+  private statusHint = el('div', 'status-hint hidden', 'Asleep. A teammate can wake you <kbd>E</kbd>');
+  private asleep = false;
   private menu = el('div', 'menu hidden');
   private end = el("div", "end hidden");
   private debugBadge = el("div", "debug-badge hidden", "DEBUG · immortal · paths to boss (yellow) and ogre (blue)");
@@ -82,19 +95,19 @@ export class Hud {
       abil.append(s);
     }
     const hpCol = el('div', 'hp-col');
-    hpCol.append(this.hp, this.fx);
+    hpCol.append(this.statusHint, this.hp, this.fx);
     bottom.append(hpCol, this.coins, abil);
-    this.menu.append(el('div', 'title', 'Paused menu'), el('p', '', 'The dungeon keeps going while this is open.'));
-    const leave = el('button', '', 'Leave dungeon');
+    this.menu.append(el('div', 'title', 'Paused'), el('p', '', 'The dungeon keeps going while this is open.'));
+    const leave = el('button', 'danger', 'Leave dungeon');
     leave.onclick = () => {
       this.toggleMenu();
       this.onLeave();
     };
-    const resume = el('button', '', 'Resume');
+    const resume = el('button', 'primary', 'Resume');
     resume.onclick = () => this.toggleMenu();
     this.menu.append(resume, leave);
-    this.root.append(this.party, this.boss, this.msgs, this.banner, this.statusHint, bottom, this.debug, this.debugBadge, this.menu, this.end);
-    this.root.append(el('div', 'help', 'WASD move · LMB/RMB attack · Esc menu · F3 stats'));
+    this.root.append(this.party, this.boss, this.msgs, this.banner, bottom, this.debug, this.debugBadge, this.menu, this.end);
+    this.root.append(el('div', 'help', helpHtml()));
     host.append(this.root);
   }
 
@@ -104,7 +117,7 @@ export class Hud {
     this.debugBadge.classList.add("hidden");
     this.boss.classList.add('hidden');
     this.banner.classList.add('hidden');
-    this.setStatusHint(null);
+    this.setAsleep(false);
     this.msgs.innerHTML = '';
     this.fx.innerHTML = '';
     this.fxKey = '';
@@ -167,7 +180,7 @@ export class Hud {
     }
     if (s.boss) {
       this.boss.classList.remove('hidden');
-      const tags = `${s.boss.immune ? '<b class="immune">IMMUNE</b>' : ''}${s.boss.enraged ? '<b class="enraged">ENRAGED</b>' : ''}`;
+      const tags = `${s.boss.immune ? '<b class="chip immune">Immune</b>' : ''}${s.boss.enraged ? '<b class="chip enraged">Enraged</b>' : ''}`;
       this.boss.innerHTML = `<div class="bname">${BOSS_TEXT[s.boss.kind].name} ${tags}</div><div class="bbar"><div class="fill" style="width:${(s.boss.hp / s.boss.max_hp) * 100}%"></div></div>`;
     }
     if (!s.me.alive) {
@@ -225,16 +238,15 @@ export class Hud {
     }
   }
 
-  /** Shows (or hides, `null`) the line about the own hero's state, e.g. asleep. */
-  setStatusHint(text: string | null): void {
-    if (text === this.statusText) return;
-    this.statusText = text;
-    this.statusHint.textContent = text ?? '';
-    this.statusHint.classList.toggle('hidden', text === null);
+  /** Shows (or hides) the panel above the HP bar that tells the own hero is asleep. */
+  setAsleep(on: boolean): void {
+    if (on === this.asleep) return;
+    this.asleep = on;
+    this.statusHint.classList.toggle('hidden', !on);
   }
 
-  message(text: string): void {
-    const m = el('div', 'msg', text);
+  message(text: string, kind: 'game' | 'notice' = 'notice'): void {
+    const m = el('div', `msg ${kind}`, text);
     this.msgs.append(m);
     setTimeout(() => m.classList.add('fade'), 3000);
     setTimeout(() => m.remove(), 4000);

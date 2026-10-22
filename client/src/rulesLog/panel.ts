@@ -13,6 +13,7 @@ export class LogPanel {
     const head = document.createElement('div');
     head.className = 'rl-head';
     const title = document.createElement('span');
+    title.className = 'rl-title';
     title.textContent = 'Rules log';
     this.toggle.className = 'rl-toggle';
     this.toggle.type = 'button';

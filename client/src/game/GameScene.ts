@@ -426,7 +426,7 @@ export class GameScene extends Phaser.Scene {
         this.visionMask.mapChanged();
         if (ev.v === TILE_ID.DoorClosed) {
           // The entrance tiles arrive one event each; only announce the first.
-          if (!this.forceField) this.hud.message('A force field seals the hall behind you!');
+          if (!this.forceField) this.hud.message('A force field seals the hall behind you!', 'game');
           this.syncForceField(true);
         }
         break;
@@ -443,7 +443,7 @@ export class GameScene extends Phaser.Scene {
         // Drawn from the snapshot bitmask and its looks (status.ts).
         break;
       case 'Msg':
-        this.hud.message(ev.text);
+        this.hud.message(ev.text, 'game');
         break;
       case 'Coins':
         this.fx.coins(ev.x, ev.y, Math.min(10, 3 + Math.floor(ev.v / 4)));
@@ -783,7 +783,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.useHint.setVisible(hint !== null).setText(wake ? 'E Wake' : 'E');
-    this.hud.setStatusHint(this.alive && has(this.myEffects(), EFFECT.Sleep) ? 'Asleep. A teammate can wake you (E).' : null);
+    this.hud.setAsleep(this.alive && has(this.myEffects(), EFFECT.Sleep));
     if (hint) this.useHint.setPosition(Math.round(hint.x), Math.round(hint.y - 26));
 
     this.updateCosmetics(dt, myShots, now);
