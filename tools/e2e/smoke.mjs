@@ -4,6 +4,8 @@
 // Usage: node smoke.mjs [baseUrl] [query] [outDir] [Class1,Class2]
 //   e.g. node smoke.mjs http://localhost:8080/ "?debug&boss=dragon" shots Paladin,Wizard
 // Set BROWSER to a Chrome/Edge executable if Edge is not at the default Windows path.
+// Set LOG=1 to turn the rules log on in both windows (key L) and assert that a `.rules-log .rl-row` appears.
+// An empty start room logs nothing, so use LOG=1 with a `debug` query (F8 puts a debug effect on Alice).
 import { chromium } from 'playwright-core';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
@@ -71,6 +73,12 @@ await p2.waitForSelector('#game.active', { timeout: 10000 });
 await p1.waitForTimeout(1500);
 await p1.screenshot({ path: `${out}/2-start.png` });
 
+const logOn = process.env.LOG === '1';
+if (logOn) {
+  await p1.keyboard.press('l');
+  await p2.keyboard.press('l');
+}
+
 // Move and attack.
 await p1.mouse.move(900, 300);
 await p1.keyboard.down('w');
@@ -92,6 +100,21 @@ await p2.keyboard.up('a');
 await p2.mouse.click(300, 300);
 await p2.waitForTimeout(80);
 await p2.screenshot({ path: `${out}/4-p2.png` });
+if (logOn && query.includes('debug')) {
+  // The start room is usually empty of enemies; a debug effect on her own hero (F8) is a certain log event.
+  await p1.keyboard.press('F8');
+  await p1.waitForTimeout(500);
+}
+if (logOn) {
+  // Both windows must show at least one row: this also proves the opt-in reaches the run.
+  for (const [name, page] of [['Alice', p1], ['Bob', p2]]) {
+    await page.waitForSelector('.rules-log .rl-row', { timeout: 10000 }).then(
+      async () => console.log(`rules log: ${name} sees ${await page.locator('.rules-log .rl-row').count()} rows`),
+      () => errors.push(`rules log: no .rules-log .rl-row appeared for ${name}`),
+    );
+  }
+  await p1.screenshot({ path: `${out}/3b-log.png` });
+}
 await p1.keyboard.press('F3');
 await p1.waitForTimeout(600);
 await p1.screenshot({ path: `${out}/5-debug.png` });

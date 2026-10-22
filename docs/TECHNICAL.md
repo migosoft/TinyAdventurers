@@ -60,6 +60,8 @@ server/                              Rust crate `tiny-adventurers-server`
   src/run/bosses/                    BossBehaviour trait + demon.rs, lich.rs, dragon.rs
   src/run/visibility.rs              per-player snapshots, filtered by sight and light
   src/run/debug.rs                   debug mode (immortal + path to the level's target, the boss)
+  src/run/rules_log/                 the rules log (removable; see 11d): hooks, records, text, tags, per-viewer filter
+  src/run/targets.rs                 why an area target was skipped (read by the rules log)
   src/export.rs                      (test-only) writes client/src/generated/defs.ts, fixtures.json, wire-fixtures.json
 client/                              Vite + TypeScript + Phaser 3.90
   scripts/build-atlas.ts             pack sheet + tile list -> public/assets/atlas.{png,json}
@@ -89,6 +91,7 @@ client/                              Vite + TypeScript + Phaser 3.90
   src/game/light.ts, lightview.ts    `LightField` (static light map and colour mixing, same rule as the server) and `LightView` (darkness and tint canvases)
   src/game/torch.ts                  wall torch view (flame, burnt out, side sconces)
   src/game/effects.ts                pooled particles, rings, swooshes, floating numbers
+  src/rulesLog/                      the rules log (removable; see 11d): panel, keys, buffer, tags above figures
   src/game/GalleryScene.ts           dev page ?gallery
   src/game/MimicDemoScene.ts         dev page ?mimic (chaser mimic, chest, reveal; no server)
   src/game/DaemonDemoScene.ts        dev page ?daemons (imp, chort, summoner vs a knight; no server)
@@ -950,6 +953,66 @@ Debug runs only count in `ta.runs.finished{debug=true}`.
 1. Run a throwaway collector that prints what it receives (`otel/opentelemetry-collector` with an `otlp` HTTP receiver on 4318 and the `debug` exporter) on the compose network (`--network tinyadventurers_default --name otel-check`).
 2. Start the game with `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-check:4318`.
 3. Play, then read `docker logs otel-check`.
+
+## 11d. Rules log
+
+A toggleable text log that tells the player why a hit was 9 and not 12 and why an effect did or did not take. Design: `docs/superpowers/specs/2026-10-21-rules-log-design.md`. It is built to be removable: it lives in two folders and the game reaches it through a fixed list of one-line hooks, pinned by a boundary test on each side.
+
+### The two folders
+
+- `server/src/run/rules_log/`: `mod.rs` (the hook functions, `RulesLog` state on `Run`, the facts structs), `record.rs` (`LogRec`, `LineKind`, `Seen`/`Unseen`: what is kept until the snapshot), `text.rs` (all wording and number formatting), `tags.rs` (creature numbering), `send.rs` (the per-viewer filter, `LogW`/`LineW`, the byte cap), `tests.rs` (including the boundary test).
+- `client/src/rulesLog/`: `index.ts` (`RulesLog`: keys, opt-in message, ties it together), `buffer.ts` (the last 300 records), `prefs.ts` (localStorage `ta.rulesLog`), `panel.ts` + `rulesLog.css` (the DOM panel, bottom-left, JetBrains Mono 11 px), `tags.ts` (the tag texts above figures), tests including `boundary.test.ts`.
+
+### How it works
+
+- **Opt-in.** The client sends `ClientMsg::RulesLog { on, details }` (on `L` / `Shift+L`, and once at the start of a run if the saved prefs say on). `main.rs` forwards it to the run, which stores it per player (`set_prefs`). `rules_log::on(run)` is false when nobody has the log on: every hook returns at once, nothing is recorded and `Snapshot.log` is `None`.
+- **Recording.** The hooks sit inside the game's own computations (`hurt_player`, `hurt_monster`, `Run::apply`, `heal_*`, the ability executors) and are handed facts the game already computed; they never mutate the game. The six fingerprint tests pass unchanged with the log on and off.
+- **Visibility rule.** A record is sent to a player only if that player sees every creature it names at that moment (party members always count as seen; a gone creature never does, so the record is unseeable). Otherwise it is dropped, except damage the viewer (or their wolf) took: that gives the record's short `unseen` line, with the viewer's own resistance steps and no attacker data. An Immune or Healed hit from something unseen gives no line. A hidden mimic is tagged and named as a chest until it is revealed. A spectator gets what the spectated hero gets.
+- **The cap.** `LOG_BYTES_PER_SNAP` = 4096 text bytes per snapshot; the rest is summed up in a closing note ("... n more lines (log limit)"). The client keeps the last 300 records. With details off the server does not send the detail lines at all.
+- **Text.** All wording is in `text.rs`; the client formats nothing. A line is `LineW(time, kind, headline, details)`. Numbers are rounded to one decimal. Effect lines are details of their hit, with a headline suffix (" · Chilled").
+- **Tags.** `tags.rs` numbers each creature once at spawn, per name ("Goblin 3"), as a plain counter whether or not the log is on, so numbers stay stable when someone turns it on mid-run. The snapshot carries `[entity, kind, number]` for the sent entities; `TAG_NAME` in the generated `defs.ts` gives the names. The client draws the tags above the figures only while the log is on, at scale zoom x camera zoom x devicePixelRatio so they are sharp at the screen's real pixels.
+- **Wire.** `Snapshot.log: Option<LogW>` is the eleventh element of `SnapW`. A hand-written `Serialize` for `SnapW` in `wire.rs` writes 10 elements while the log is off and 11 while it is on (serde cannot skip a trailing tuple field). This code is log-only but outside the module and not counted by the boundary test. The generated `SnapW.ts` types the 11th element as `LogW | null` although it is absent while off; `client/src/wire.ts` uses `w[10] ?? null`.
+
+### Server hooks (as built)
+
+Every line outside `run/rules_log/` that contains `rules_log` or `RulesLog` (`grep -rn "rules_log\|RulesLog" server/src --include=*.rs | grep -v "run/rules_log/"`); the boundary test `rules_log_is_reached_only_through_its_hooks` pins the count per file.
+
+| File | Lines | What |
+|---|---|---|
+| `protocol.rs` | 2 | `ClientMsg::RulesLog { on, details }`; `Snapshot.log: Option<LogW>` |
+| `wire.rs` | 1 | the `Option<LogW>` field of `SnapW` (plus the hand-written `Serialize`, not counted) |
+| `main.rs` | 1 | the arm forwarding `ClientMsg::RulesLog` to the run (Ruling 5) |
+| `export.rs` | 2 | `export_tag_names()` into `defs.ts`; a `LogW` in the wire fixtures |
+| `run/mod.rs` | 18 | `pub mod rules_log`; the `log: RulesLog` field and its `default()`; `spawned` (monster spawn); `set_prefs` in the message handler; `forget` when a player leaves; `revealed` for a mimic; in `hurt_player` and `hurt_monster`: five `hit_begin` calls (one per outcome: immune, healed, damaged), two `death`, two `hit_end`; `heal` in `heal_player` and `heal_monster` |
+| `run/visibility.rs` | 2 | `take` the records once per tick; `for_viewer` per player snapshot |
+| `run/levels/boss.rs` | 1 | `spawned` for the boss |
+| `run/objects.rs` | 1 | `spawned` for barrels and chests |
+| `run/effects.rs` | 5 | `effect` after `apply` decided the outcome; `EndReason` in `remove_effect_why`'s signature and its `ended` call; the Water and RanOut `ended` calls |
+| `run/abilities.rs` | 12 | `too_close` for the melee-blocked secondary; five `rules_log::on(run)` guards and five `skipped` calls (area abilities, Chain Spark); `EndReason::Purify` in Purify |
+
+(44 lines in all. The counts are the ones the test pins; the test and `grep` are the authority if they differ.)
+
+### Client hooks
+
+`grep -rn "rulesLog\|RulesLog" client/src --include=*.ts | grep -v "src/rulesLog/" | grep -v generated`: `wire.ts` (`log: w[10] ?? null`) and six lines in `game/GameScene.ts` (the import, the field, creation in `create`, `onSnapshot`, `draw` each frame with the entity views, `destroy` on cleanup). The generated `defs.ts` also carries `TAG_NAME`.
+
+### Game data the log reads
+
+The log reads these; they stay useful without it. `Damage.why` (`Why`, `What`, `Mult`: who, with what, which multipliers); `Base` (given, ratio, ability mult, mods mult, `upgrade_mult` for StatUpgrades; `Base::amount()` is the damage) on `ResolvedWeapon` and `ResolvedAbility`, built in `resolve_parts`; `Attr::short`; `EffectOutcome`, `Duration`, `apply_traced`, `Apply.origin` and `effect_left` in effects; `run/targets.rs` (why a target was skipped); the `by` parameter of `heal_player`/`heal_monster` and the private `mend_player`; `#[cfg(test)] Run.last_hit`.
+
+### How to add a line or a reason
+
+- A new reason for an effect that was refused, replaced or ended: add a variant to the outcome enum (`EffectOutcome`) or to `EndReason`; the compiler lists every `match` to extend (no `_ =>` arms), then put the wording in `text.rs`.
+- A new damage step or multiplier: add it to `Mult` (or `Base`) where the game computes it, and write its detail line in `text.rs`. The logged final number must stay the damage actually dealt; extend the `dealt` tests.
+- A new kind of event: a facts struct and a hook function in `rules_log/mod.rs`, a `LineKind`, and one hook line at the site. Add the line to the boundary test's per-file count and to the table above. Every record names the creatures in it (`Seen`), so the visibility rule applies without further work; add the line kind to the leak test.
+- A new creature kind needs a name in `tags.rs::tag_name` (a compile error tells you).
+
+### How to remove the rules log
+
+1. Delete both folders: `server/src/run/rules_log/` and `client/src/rulesLog/`.
+2. Delete every hook line in the two tables: `grep -rn "rules_log\|RulesLog" server/src --include=*.rs` and `grep -rn "rulesLog\|RulesLog" client/src --include=*.ts`. Where a hook sits inside an expression (`remove_effect_why`'s `EndReason` parameter, the `rules_log::on(run)` guards), take the wrapper out and keep the game's own call.
+3. Drop `ClientMsg::RulesLog`, `Snapshot.log`, the eleventh `SnapW` field and the hand-written `Serialize` for `SnapW` (back to a derive), the `TAG_NAME` export; regenerate the bindings with the docker suite and commit `client/src/generated`.
+4. Optional cleanup (harmless if kept): `Damage.why`, `Base` and `resolve_parts`, `Attr::short`, `EffectOutcome`/`Duration`/`apply_traced`/`Apply.origin`/`effect_left`, `run/targets.rs`, the `by` parameter of the heals and `mend_player`, `Run.last_hit`. Then remove the "Rules log" key rows from the player guide and this section.
 
 ## 12. Tests
 

@@ -270,6 +270,14 @@ Special rooms with a creature that asks the heroes a riddle. If they solve it, t
 - **Monitoring stack:** OTLP export is ready (TECHNICAL.md §11c); ClickStack or another collector is not set up yet. HTTPS endpoints need the `reqwest-rustls` feature of `opentelemetry-otlp`.
 - **`X-Forwarded-For`** is not read, so behind a proxy the admin login limiter (like the player one) sees one IP for everyone.
 
+## Rules log follow-ups (2026-10-22)
+
+The rules log is built (TECHNICAL §11d). Left out on purpose or noticed on the way:
+- **No lines for pushes, knockback and coins.** Pushes by STR against weight, knockback and coin pick-ups are not logged. Add them if players ask (a facts struct and a hook each).
+- **Ruling 11:** an effect riding on a hit from something unseen adds only its name to the "something unseen" line. Revisit before merge if the final review wants it stricter or richer.
+- **Chat:** the chat window may share the log's panel (below).
+- **Panel look:** the position, size and colours were never tuned by a player; the user's browser check comes first.
+
 ## Chat window (much later; the user, 2026-10-21)
 
 - A chat window so players in a party can write to each other during a run and in the waiting room. Not planned yet; do it after the progression plans. It may share its panel with the rules log (if that is built as a text panel).

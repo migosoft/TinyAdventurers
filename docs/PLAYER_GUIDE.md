@@ -23,6 +23,8 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 | **E** (while alive) | Wake a sleeping teammate next to you (see Status effects), push the barrel right next to you (see Explosive barrels), or light or put out the torch next to you (see Seeing in the dark) |
 | **Q / E** | After you die, switch which teammate you watch |
 | **Esc** | Menu (leave the dungeon) |
+| **L** | Turn the rules log on or off (see The rules log) |
+| **Shift+L** | Show or hide the calculation lines of the rules log |
 | **F3** | Show ping, frame rate and network stats |
 
 ## The heroes
@@ -308,6 +310,19 @@ The effects from damage types work in two tiers. A hit that is **at least half h
 - Your characters are stored on the server, so you can log in from any browser or device. If you log in somewhere else, the game in the first window closes.
 - **Deleting a character or your account is final.** Deleting the account removes all of its characters. Both are on the character screen.
 - Runs where someone used debug mode give no XP and no coins.
+
+## The rules log
+
+Press **L** to open a log that explains what the rules are doing. It answers two questions: why did that enemy take that much damage, and why was it not affected by my ability? It is off at first, and your choice is remembered in this browser.
+
+- **The panel** sits at the bottom left, newest line at the bottom; scroll it with the mouse wheel. Clicks on the panel stay on the panel, so aim past it. It keeps the last 300 lines.
+- **Each event is a headline** with the time in seconds: who hit whom with what, the damage and the target's HP before and after. For example `12.4s  Ayla > Frost Shard > Goblin 3: 9 damage (HP 14 > 5)`.
+- **Under it, the calculation**, step by step: the base number and your Attributes, the split by damage type, each resistance, every multiplier (from behind, Poison Coat, Chain Spark falloff, carried-on damage) and the result. Effects show whether they were applied (with the duration formula and the save), refused (and why), replaced or cancelled.
+- **Shift+L** (or the small button on the panel) hides the calculation lines and leaves one headline per event. Use it in a big fight.
+- **Other lines:** hits enemies land on you (so you see your own resistances at work), heals, damage over time (one short line per tick), kills and deaths, abilities that skipped a target with the reason (Chain Spark found no line of sight, a wall was in the way), and "Too close" when a secondary is blocked in melee.
+- **Tags:** while the log is on, every creature shows a small name above its figure, such as "Goblin 3", and the log uses the same names, so you can match a line to a figure. Everyone in the party sees the same numbers. A hidden mimic is tagged as a chest until it shows itself.
+- **You only read what you can see.** A hit on something in the dark, or behind a wall, has no line, and neither does anything you could not have seen. The one exception is damage you take: "you took 7 from something unseen", with your own resistance steps and nothing about the attacker.
+- In a very big fight the panel may end with "... more lines (log limit)".
 
 ## Tips
 
