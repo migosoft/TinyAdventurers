@@ -64,6 +64,7 @@ test('a click on a locked or blocked node does nothing', () => {
   const confirm = vi.fn(() => true);
   vi.stubGlobal('confirm', confirm);
   open('Wizard', { xp: 0 });
+  expect(node('WF4').classList.contains('locked')).toBe(true);
   node('WF4').click();
   neighbours()[0].click();
   expect(confirm).not.toHaveBeenCalled();

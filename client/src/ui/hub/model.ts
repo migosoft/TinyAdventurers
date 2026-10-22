@@ -1,6 +1,7 @@
 // Pure helpers for the character screens: tree node state, requirements, equipment slots, ability numbers.
 import { ABILITIES } from '../../generated/defs';
 import { ATTRS, ITEMS, TREES } from '../../generated/progression';
+import type { AbilityId } from '../../generated/AbilityId';
 import type { Attr } from '../../generated/Attr';
 import type { CharacterInfo } from '../../generated/CharacterInfo';
 import type { EquipSlot } from '../../generated/EquipSlot';
@@ -10,31 +11,39 @@ import type { Pick } from '../../generated/Pick';
 import type { PoolCard } from '../../generated/PoolCard';
 import type { ResolvedAbility } from '../../generated/ResolvedAbility';
 
-type AnyNode = { cost: number; kind: string; links: readonly string[]; name: string; req: readonly string[]; text: string; ability?: string; attr?: string };
+export type TreeKind = 'Start' | 'Attr' | 'Unlock' | 'Improve' | 'Proficiency' | 'Resist' | 'Keystone';
+/** One tree node as the generated `TREES` data has it (that file types the fields loosely). */
+export type TreeNode = { cost: number; kind: TreeKind; links: readonly string[]; name: string; pos: readonly [number, number]; req: readonly string[]; text: string; ability?: AbilityId; attr?: Attr };
 type ItemDef = { name: string; slot: string; classes: readonly string[]; prof: string | null; req: readonly string[] };
 export type NodeState = 'owned' | 'buyable' | 'blocked' | 'locked';
 
 export const EQUIP_SLOTS: EquipSlot[] = ['Melee', 'Ranged', 'OffHand', 'Armor', 'Ring1', 'Ring2', 'Shoes', 'Belt'];
 const ATTR_KEYS = Object.keys(ATTRS) as Attr[];
 const itemDef = (id: string) => (ITEMS as unknown as Record<string, ItemDef>)[id];
-const nodesOf = (info: CharacterInfo) => (TREES as unknown as Record<string, { nodes: Record<string, AnyNode>; start: string }>)[info.class];
+export const nodesOf = (info: CharacterInfo) => (TREES as unknown as Record<string, { nodes: Record<string, TreeNode>; start: string }>)[info.class];
 
 const owned = (info: CharacterInfo): Set<string> => new Set<string>([nodesOf(info).start, ...info.nodes]);
 const attrOf = (info: CharacterInfo, a: Attr) => info.sheet.attrs.find((l) => l.attr === a);
 
-/** The Attribute requirements ("INT 18") the sheet does not meet; other requirement texts are skipped. */
-export function unmetRequirements(info: CharacterInfo, req: readonly string[], withItems: boolean): { text: string; have: number }[] {
-  const out: { text: string; have: number }[] = [];
+/** Each Attribute requirement ("INT 18") with the points the hero has and whether that is enough; other requirement texts are skipped. */
+export function requirementStatus(info: CharacterInfo, req: readonly string[], withItems: boolean): { text: string; have: number; ok: boolean }[] {
+  const out: { text: string; have: number; ok: boolean }[] = [];
   for (const r of req) {
     const m = /^([A-Z]{3}) (\d+)$/.exec(r);
     const attr = m && ATTR_KEYS.find((a) => ATTRS[a].short === m[1]);
     if (!m || !attr) continue;
     const l = attrOf(info, attr);
     const have = l ? (withItems ? l.total : l.total - l.items) : 0;
-    if (have < Number(m[2])) out.push({ text: r, have });
+    out.push({ text: r, have, ok: have >= Number(m[2]) });
   }
   return out;
 }
+
+/** The Attribute requirements the sheet does not meet. */
+export const unmetRequirements = (info: CharacterInfo, req: readonly string[], withItems: boolean): { text: string; have: number }[] =>
+  requirementStatus(info, req, withItems)
+    .filter((r) => !r.ok)
+    .map(({ text, have }) => ({ text, have }));
 
 export function blockReason(info: CharacterInfo, node: NodeId): string | null {
   const n = nodesOf(info).nodes[node];

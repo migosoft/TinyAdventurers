@@ -509,13 +509,17 @@
 .ui-node.locked canvas {
   filter: grayscale(1);
 }
-.ui-node.open {
+.ui-node.buyable,
+.ui-node.blocked {
   color: var(--text);
   box-shadow:
     inset 0 0 0 3px #c8b8a0,
     0 0 8px rgba(255, 240, 200, 0.35);
 }
-.ui-node.open.unmet {
+.ui-node.blocked {
+  opacity: 0.8;
+}
+.ui-node.blocked.unmet {
   box-shadow:
     inset 0 0 0 3px #d04848,
     0 0 8px rgba(255, 80, 80, 0.4);
@@ -535,7 +539,8 @@
 .ui-node.k-proficiency.owned {
   background: #4a3a18;
 }
-.ui-node.k-keystone.open > span::before {
+.ui-node.k-keystone.buyable > span::before,
+.ui-node.k-keystone.blocked > span::before {
   background: #c8a040;
 }
 .ui-node.k-keystone.owned {
@@ -554,7 +559,7 @@
 .ui-nlabel.owned {
   color: var(--gold);
 }
-.ui-nlabel.open {
+.ui-nlabel.reach {
   color: var(--text);
 }
 .ui-legend ul {
