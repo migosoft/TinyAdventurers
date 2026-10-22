@@ -1,13 +1,6 @@
 import './rulesLog.css';
 import type { Row } from './buffer';
 
-export const FONT_HREF = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap';
-
-/** True when the JetBrains Mono stylesheet is not among the page's link hrefs yet. */
-export function fontLinkNeeded(hrefs: string[]): boolean {
-  return !hrefs.includes(FONT_HREF);
-}
-
 /** The log panel: bottom-left, newest line at the bottom, sticking there unless the player scrolled up. */
 export class LogPanel {
   private root = document.createElement('div');
@@ -16,13 +9,6 @@ export class LogPanel {
   private details = true;
 
   constructor(parent: HTMLElement, private onDetails: (on: boolean) => void) {
-    const hrefs = Array.from(document.head.querySelectorAll('link')).map((l) => l.href || l.getAttribute('href') || '');
-    if (fontLinkNeeded(hrefs)) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = FONT_HREF;
-      document.head.append(link);
-    }
     this.root.className = 'rules-log';
     const head = document.createElement('div');
     head.className = 'rl-head';

@@ -9,7 +9,7 @@
   flex-direction: column;
   background: rgba(10, 6, 14, 0.82);
   color: #e8d8c8;
-  font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-family: var(--font-text);
   font-size: 11px;
   line-height: 1.35;
   -webkit-font-smoothing: antialiased;

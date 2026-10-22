@@ -898,7 +898,7 @@
 }
 .ui-party select {
   pointer-events: auto;
-  font-family: var(--font);
+  font-family: var(--font-text);
   font-size: 8px;
   min-width: 0;
   max-width: 190px;

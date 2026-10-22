@@ -112,4 +112,6 @@ Thanks to the artists whose work this game uses. None of them asks for credit; t
 - **Superdark**: "16x16 Fantasy RPG Characters" (free for any use), https://superdark.itch.io/16x16-free-npc-pack. Stored in `client/assets-src/fantasy-npcs/` for coming figures, not built in yet.
 - **LYASeeK**: "Forest creatures" (free use, no resale), https://lyaseek.itch.io/miniffanimals. Stored in `client/assets-src/forest-animals/`, not built in yet.
 
+Fonts: Inter by Rasmus Andersson and IM Fell English SC by Igino Marini, both SIL Open Font License 1.1 (files and licences in `client/public/fonts/`).
+
 Each pack folder in `client/assets-src/` has its licence note. The AI-generated and self-made art is listed above.

@@ -1,13 +1,41 @@
 :root {
-  --bg: #1a1018;
-  --panel: #2a1c26;
+  --bg: #0f090e;
+  --panel: #221620;
   --panel-edge: #5a3a4a;
   --text: #f0e6d8;
-  --muted: #a89aa0;
+  --muted: #b3a3a8;
   --gold: #e8c040;
-  --red: #d03838;
-  --green: #48c060;
-  --font: 'Press Start 2P', ui-monospace, monospace;
+  --red: #e05050;
+  --green: #5cc870;
+  --faint: #847379;
+  --well: #150d13;
+  --gold-deep: #9a7420;
+  --gold-ink: #2a1806;
+  --edge-soft: #3d2834;
+  --font-text: 'Inter', system-ui, sans-serif;
+  --font-head: 'IM Fell English SC', Georgia, serif;
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/inter-latin-wght-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/inter-latin-wght-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IM Fell English SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/im-fell-english-sc-latin-400-normal.woff2') format('woff2');
 }
 
 * {
@@ -21,8 +49,9 @@ body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font);
-  font-size: 12px;
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.45;
   image-rendering: pixelated;
 }
 
@@ -51,7 +80,7 @@ body {
 
 button,
 input {
-  font-family: var(--font);
+  font-family: var(--font-text);
   font-size: 11px;
 }
 
@@ -306,7 +335,7 @@ button.danger:hover {
   color: var(--muted);
 }
 kbd {
-  font-family: var(--font);
+  font-family: var(--font-text);
   font-size: 8px;
   background: #4a3040;
   padding: 2px 4px;
@@ -654,7 +683,7 @@ kbd {
   top: 12px;
   right: 12px;
   margin: 0;
-  font-family: var(--font);
+  font-family: var(--font-text);
   font-size: 8px;
   line-height: 1.7;
   background: rgba(10, 6, 12, 0.75);

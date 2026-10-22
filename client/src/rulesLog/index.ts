@@ -4,12 +4,12 @@ import type { Net } from '../net';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
 import { DEPTH } from '../game/effects';
+import { FONT_TEXT } from '../fonts';
 import { tagText } from './tags';
 import { LogBuffer } from './buffer';
 import { LogPanel } from './panel';
 import { loadPrefs, savePrefs, type LogPrefs } from './prefs';
 
-const FONT = "'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace";
 
 const storage = (): Storage | null => {
   try {
@@ -30,7 +30,6 @@ export class RulesLog {
   private you: number;
   private seen = new Set<number>();
   private res = 0;
-  private gone = false;
   private pool: Phaser.GameObjects.Text[] = [];
   private used = new Map<number, Phaser.GameObjects.Text>();
   private store = storage();
@@ -50,7 +49,6 @@ export class RulesLog {
     scene.input.keyboard?.on('keydown-L', this.onKey);
     if (this.prefs.on) this.send();
     this.res = this.resolution();
-    this.watchFont();
   }
 
   onSnapshot(s: Snapshot): void {
@@ -92,7 +90,7 @@ export class RulesLog {
   private makeText(): Phaser.GameObjects.Text {
     return this.scene.add
       .text(0, 0, '', {
-        fontFamily: FONT,
+        fontFamily: FONT_TEXT,
         fontStyle: '600',
         fontSize: '8px',
         color: '#ffffff',
@@ -116,19 +114,6 @@ export class RulesLog {
     for (const t of [...this.pool, ...this.used.values()]) t.setResolution(r);
   }
 
-  /** Canvas text drawn before the web font loaded kept the fallback: redraw it once the font is there. */
-  private watchFont(): void {
-    const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
-    if (!fonts?.load) return;
-    fonts.load(`600 8px ${FONT}`).then(
-      () => {
-        if (this.gone) return;
-        for (const t of [...this.pool, ...this.used.values()]) t.setFontFamily(FONT);
-      },
-      () => {},
-    );
-  }
-
   private release(seen: Set<number>): void {
     for (const [id, t] of this.used) {
       if (seen.has(id)) continue;
@@ -139,7 +124,6 @@ export class RulesLog {
   }
 
   destroy(): void {
-    this.gone = true;
     this.scene.input.keyboard?.off('keydown-L', this.onKey);
     this.panel.destroy();
     for (const t of [...this.pool, ...this.used.values()]) t.destroy();

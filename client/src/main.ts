@@ -23,6 +23,7 @@ import { Hud } from './ui/hud';
 import { Lobby } from './ui/lobby';
 import { logoHeader } from './ui/logo';
 import { Roster } from './ui/roster';
+import { loadFonts } from './fonts';
 import './style.css';
 import './ui/screens.css';
 
@@ -60,10 +61,11 @@ function viewSize(): { w: number; h: number; zoom: number } {
 /** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich, ?demon, ?lights). */
 const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-demo', water: 'water-demo', chasm: 'chasm-demo', lava: 'lava-demo', knockback: 'knockback-demo', ogre: 'ogre-demo', dragon: 'dragon-demo', lich: 'lich-demo', demon: 'demon-demo', lights: 'lights-demo' };
 
-function gallery(): void {
+async function gallery(): Promise<void> {
   const q = new URLSearchParams(location.search);
   const start = Object.entries(DEMOS).find(([k]) => q.has(k))?.[1] ?? 'gallery';
   const v = viewSize();
+  await loadFonts();
   const game = new Phaser.Game({
     type: Phaser.WEBGL,
     parent: 'game',
@@ -110,7 +112,7 @@ async function main(): Promise<void> {
         starting = null;
         return false;
       }
-      session = startGame(ui, net, atlas, toRoster);
+      session = await startGame(ui, net, atlas, toRoster);
       return true;
     })());
   const open = async (c: CharacterInfo) => {
@@ -136,7 +138,7 @@ async function main(): Promise<void> {
 }
 
 /** Connected: the hub, the lobby and the Phaser game. */
-function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () => void): { net: Net; lobby: Lobby; hub: Hub } {
+async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () => void): Promise<{ net: Net; lobby: Lobby; hub: Hub }> {
   const hub = new Hub(ui, atlas, (m) => net.send(m), onRoster, () => {
     hub.hide();
     lobby.show();
@@ -147,6 +149,7 @@ function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () => void
   });
 
   const v = viewSize();
+  await loadFonts();
   const game = new Phaser.Game({
     type: Phaser.WEBGL,
     parent: 'game',
