@@ -5,6 +5,7 @@ import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
 import { DEPTH } from '../game/effects';
 import { FONT_TEXT } from '../fonts';
+import { smoothText, WORLD_TEXT } from '../game/worldText';
 import { tagText } from './tags';
 import { LogBuffer } from './buffer';
 import { LogPanel } from './panel';
@@ -88,18 +89,20 @@ export class RulesLog {
   }
 
   private makeText(): Phaser.GameObjects.Text {
-    return this.scene.add
-      .text(0, 0, '', {
-        fontFamily: FONT_TEXT,
-        fontStyle: '600',
-        fontSize: '8px',
-        color: '#ffffff',
-        stroke: '#000000',
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(DEPTH.numbers)
-      .setResolution(this.res);
+    return smoothText(
+      this.scene.add
+        .text(0, 0, '', {
+          fontFamily: FONT_TEXT,
+          fontStyle: WORLD_TEXT.tag.style,
+          fontSize: `${WORLD_TEXT.tag.size}px`,
+          color: '#ffffff',
+          stroke: '#000000',
+          strokeThickness: 2,
+        })
+        .setOrigin(0.5, 1)
+        .setDepth(DEPTH.numbers)
+        .setResolution(this.res),
+    );
   }
 
   private resolution(): number {

@@ -4,6 +4,8 @@
 // itself (lying down, grey stone, tints) is changed in EntityView.
 import Phaser from 'phaser';
 import { EFFECT, EFFECT_LOOK } from '../generated/defs';
+import { FONT_TEXT } from '../fonts';
+import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 import { DEPTH, GLOOM, SOUND_TEXT, type Effects } from './effects';
 
 /** True when the effect `kind` is set in the bitmask `bits` (bit = 1 << EffectKind id). */
@@ -311,12 +313,13 @@ export class StatusView {
         this.zT = Z_EVERY;
         const t =
           this.freeZ.pop() ??
-          this.scene.add
-            .text(0, 0, 'Z', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4, color: SOUND_TEXT.fill })
-            .setFontSize(5)
-            .setOrigin(0.5, 1)
-            .setStroke(SOUND_TEXT.stroke, 2)
-            .setPadding(1);
+          smoothText(
+            this.scene.add
+              .text(0, 0, 'Z', { fontFamily: FONT_TEXT, fontStyle: WORLD_TEXT.mark.style, fontSize: `${WORLD_TEXT.mark.size}px`, resolution: TEXT_RESOLUTION, color: SOUND_TEXT.fill })
+              .setOrigin(0.5, 1)
+              .setStroke(SOUND_TEXT.stroke, 2)
+              .setPadding(1),
+          );
         this.zs.push({ t: t.setVisible(true), age: 0, x: a.x + 3, y: a.y - a.head, d: DEPTH.sound });
       }
     } else this.zT = 0;
@@ -458,12 +461,13 @@ export class StatusView {
       this.fearMark?.setVisible(false);
       return;
     }
-    this.fearMark ??= this.scene.add
-      .text(0, 0, '!', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4, color: SOUND_TEXT.fill })
-      .setFontSize(6)
-      .setOrigin(0.5, 1)
-      .setStroke(SOUND_TEXT.stroke, 2)
-      .setPadding(1);
+    this.fearMark ??= smoothText(
+      this.scene.add
+        .text(0, 0, '!', { fontFamily: FONT_TEXT, fontStyle: WORLD_TEXT.mark.style, fontSize: `${WORLD_TEXT.mark.size}px`, resolution: TEXT_RESOLUTION, color: SOUND_TEXT.fill })
+        .setOrigin(0.5, 1)
+        .setStroke(SOUND_TEXT.stroke, 2)
+        .setPadding(1),
+    );
     this.fearMark
       .setVisible(true)
       .setPosition(Math.round(a.x + a.cx), Math.round(a.y - a.head - 3 - Math.abs(Math.sin(this.clock * 9)) * 1.5))

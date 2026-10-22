@@ -1,6 +1,8 @@
 // Pooled visual effects: particles, damage numbers, rings, decals.
 // Everything is pooled so combat does not allocate per frame.
 import type Phaser from 'phaser';
+import { FONT_TEXT } from '../fonts';
+import { popScale, smoothText, TEXT_RESOLUTION, WORLD_TEXT, type WorldTextKind } from './worldText';
 
 export const DEPTH = {
   map: 0,
@@ -74,6 +76,9 @@ interface Zap {
 
 interface FloatText {
   t: Phaser.GameObjects.Text;
+  /** Seconds since it appeared; only a crit pops. */
+  age: number;
+  pop: boolean;
   vy: number;
   life: number;
   max: number;
@@ -125,12 +130,16 @@ export class Effects {
     this.rings.push({ g, x, y, r, color, life, max: life, fill });
   }
 
-  /** A floating number or word; `depth`: `DEPTH.heroNumbers` for one on a hero. */
-  text(x: number, y: number, s: string, color: string, big = false, depth = DEPTH.numbers, stroke = '#140c1a'): void {
-    const t = this.freeTexts.pop() ?? this.scene.add.text(0, 0, '', { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4 });
-    t.setText(s).setColor(color).setFontSize(big ? 10 : 6).setStroke(stroke, big ? 3 : 2).setOrigin(0.5, 1);
-    t.setPosition(Math.round(x + (Math.random() * 6 - 3)), Math.round(y)).setAlpha(1).setVisible(true).setDepth(depth).setScale(1);
-    this.texts.push({ t, vy: big ? -34 : -26, life: big ? 0.9 : 0.7, max: big ? 0.9 : 0.7 });
+  /**
+   * A floating number or word; `depth`: `DEPTH.heroNumbers` for one on a hero. `big` is the crit path
+   * (gold, larger, pops); `kind` picks the size and weight of the others (default: a damage number).
+   */
+  text(x: number, y: number, s: string, color: string, big = false, depth = DEPTH.numbers, stroke = '#000000', kind: WorldTextKind = 'number'): void {
+    const t = this.freeTexts.pop() ?? smoothText(this.scene.add.text(0, 0, '', { fontFamily: FONT_TEXT, resolution: TEXT_RESOLUTION }));
+    const w = WORLD_TEXT[big ? 'crit' : kind];
+    t.setText(s).setColor(color).setFontStyle(w.style).setFontSize(w.size).setStroke(stroke, 2).setOrigin(0.5, 1);
+    t.setPosition(Math.round(x + (Math.random() * 6 - 3)), Math.round(y)).setAlpha(1).setVisible(true).setDepth(depth).setScale(big ? popScale(0) : 1);
+    this.texts.push({ t, age: 0, pop: big, vy: big ? -34 : -26, life: big ? 0.9 : 0.7, max: big ? 0.9 : 0.7 });
   }
 
   /** The wolf's summon, reappear and vanish: about 18 clear-green sparks rising and fading over 0.6 s (not the poison tint). */
@@ -210,6 +219,8 @@ export class Effects {
         this.texts.splice(i, 1);
         continue;
       }
+      f.age += dt;
+      if (f.pop) f.t.setScale(popScale(f.age));
       f.t.y += f.vy * dt;
       f.vy *= 0.92;
       f.t.setAlpha(Math.min(1, (f.life / f.max) * 2));
@@ -353,7 +364,7 @@ export class Effects {
 
   immune(x: number, y: number): void {
     this.ring(x, y - 8, 14, 0x9ae0ff, 0.3);
-    this.text(x, y - 18, 'IMMUNE', '#9ae0ff');
+    this.text(x, y - 18, 'IMMUNE', '#9ae0ff', false, DEPTH.numbers, '#000000', 'small');
   }
 
   /** Pack coins popping out of a chest or a fallen enemy. */

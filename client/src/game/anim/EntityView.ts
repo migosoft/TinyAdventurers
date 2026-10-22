@@ -5,6 +5,8 @@
 import Phaser from 'phaser';
 import { ANIM, EFFECT, FLAG } from '../../generated/defs';
 import { DEPTH, Effects, GLOOM } from '../effects';
+import { FONT_TEXT } from '../../fonts';
+import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from '../worldText';
 import { frameBounds, has, lieLayout, lyingPose, StatusView } from '../status';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
 import { pickFrame, windupOf } from './pickFrame';
@@ -124,10 +126,10 @@ export class EntityView {
     this.root.add(this.figure);
     if (name) {
       this.label = scene.add
-        .text(0, -(d.footY ?? this.body.height) * scale - 3, name, { fontFamily: '"Press Start 2P", monospace', fontSize: '8px', resolution: 4, color: '#ffffff' })
-        .setFontSize(5)
+        .text(0, -(d.footY ?? this.body.height) * scale - 3, name, { fontFamily: FONT_TEXT, fontStyle: WORLD_TEXT.tag.style, fontSize: `${WORLD_TEXT.tag.size}px`, resolution: TEXT_RESOLUTION, color: '#ffffff' })
         .setOrigin(0.5, 1)
-        .setStroke('#140c1a', 2);
+        .setStroke('#000000', 2);
+      smoothText(this.label);
       this.root.add(this.label);
     }
     this.status = new StatusView(scene, fx, () => {

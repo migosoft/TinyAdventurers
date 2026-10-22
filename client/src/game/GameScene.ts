@@ -28,6 +28,8 @@ import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { RulesLog } from '../rulesLog';
+import { KeyCap } from './keycap';
+import { critLabel, WORLD_TEXT } from './worldText';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
 import { abilityChoice, cosmeticCount, cosmeticPierce, Interpolator, Predictor, volleyAngles, volleyShotIds, type EntState } from './world';
 
@@ -95,7 +97,7 @@ export class GameScene extends Phaser.Scene {
   private chestViews = new Map<number, ChestView>();
   private barrelViews = new Map<number, BarrelView>();
   private torchViews = new Map<number, TorchView>();
-  private useHint!: Phaser.GameObjects.Text;
+  private useHint!: KeyCap;
   private cosmetics: Cosmetic[] = [];
   /** Own shots whose cosmetic copy has ended (shot id -> time, s): their server copy stays hidden. */
   private endedShots = new Map<number, number>();
@@ -185,7 +187,7 @@ export class GameScene extends Phaser.Scene {
     this.drawBoard();
     this.lightView = new LightView(this, this.map, this.light);
     this.visionMask = new VisionMask(this, this.map);
-    this.useHint = this.add.text(0, 0, 'E', { fontFamily: 'monospace', fontSize: '8px', color: '#ffffff', stroke: '#000000', strokeThickness: 2 }).setOrigin(0.5, 1).setVisible(false).setDepth(DEPTH.numbers);
+    this.useHint = new KeyCap(this);
     this.bars = this.add.graphics().setDepth(DEPTH.numbers - 1);
     this.heroBars = this.add.graphics().setDepth(DEPTH.heroBars);
     this.beams = this.add.graphics().setDepth(DEPTH.beam);
@@ -244,6 +246,7 @@ export class GameScene extends Phaser.Scene {
   private cleanup(): void {
     this.unsub?.();
     this.rulesLog.destroy();
+    this.useHint.destroy();
     for (const v of this.views.values()) v.destroy();
     this.views.clear();
     for (const v of this.mimicViews.values()) v.destroy();
@@ -356,8 +359,8 @@ export class GameScene extends Phaser.Scene {
       case 'Dmg': {
         // Numbers on heroes vanish in the dark with them; numbers on monsters stay above the darkness.
         const depth = ev.p ? DEPTH.heroNumbers : DEPTH.numbers;
-        if (ev.imm) this.fx.text(ev.x, ev.y, 'immune', '#a0a0a0', false, depth);
-        else if (ev.crit) this.fx.text(ev.x, ev.y, `CRIT ${Math.round(ev.v)}`, '#ffe040', true, depth);
+        if (ev.imm) this.fx.text(ev.x, ev.y, 'immune', '#a0a0a0', false, depth, '#000000', 'small');
+        else if (ev.crit) this.fx.text(ev.x, ev.y, critLabel(ev.v), WORLD_TEXT.crit.color, true, depth);
         else this.fx.text(ev.x, ev.y, `${Math.round(ev.v)}`, dmgColor(ev.ty, ev.p), false, depth);
         if (!ev.imm) this.fx.hitSpark(ev.x, ev.y + 4, ev.p ? 0xff4040 : 0xffffff);
         if (ev.p && !ev.imm && Math.hypot(ev.x - this.pred.state.x, ev.y + 10 - this.pred.state.y) < 4) this.cameras.main.shake(90, 0.003);
@@ -393,7 +396,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'Growl': {
         const wolf = this.ents.get(ev.id);
-        if (wolf) this.fx.text(wolf.x, wolf.y - 14, 'grrrr', SOUND_TEXT.fill, false, DEPTH.sound, SOUND_TEXT.stroke);
+        if (wolf) this.fx.text(wolf.x, wolf.y - 14, 'grrrr', SOUND_TEXT.fill, false, DEPTH.sound, SOUND_TEXT.stroke, 'sound');
         this.views.get(ev.id)?.shake(0.4);
         break;
       }
@@ -447,7 +450,7 @@ export class GameScene extends Phaser.Scene {
         break;
       case 'Coins':
         this.fx.coins(ev.x, ev.y, Math.min(10, 3 + Math.floor(ev.v / 4)));
-        this.fx.text(ev.x, ev.y - 14, `+${ev.v} coins`, '#ffd040');
+        this.fx.text(ev.x, ev.y - 14, `+${ev.v} coins`, '#ffd040', false, DEPTH.numbers, '#000000', 'small');
         if (this.alive) this.hud.addCoins(ev.v);
         break;
     }
@@ -782,9 +785,9 @@ export class GameScene extends Phaser.Scene {
         if (gap <= CONST.USE_REACH && gap < best) (best = gap), (hint = e);
       }
     }
-    this.useHint.setVisible(hint !== null).setText(wake ? 'E Wake' : 'E');
     this.hud.setAsleep(this.alive && has(this.myEffects(), EFFECT.Sleep));
-    if (hint) this.useHint.setPosition(Math.round(hint.x), Math.round(hint.y - 26));
+    if (hint) this.useHint.set(wake ? 'Wake' : null, Math.round(hint.x), Math.round(hint.y - 26));
+    else this.useHint.hide();
 
     this.updateCosmetics(dt, myShots, now);
     this.drawBarsAndBeams(now);
