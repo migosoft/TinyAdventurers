@@ -166,7 +166,7 @@ pub fn hit_begin(run: &mut Run, f: HitFacts) {
     // The line also names where an overkill came from.
     who.extend(f.dmg.why.mults.iter().flatten().filter_map(|m| match *m {
         crate::defs::damage::Mult::Overkill { from } => Some(seen_by_id(run, from)),
-        crate::defs::damage::Mult::Behind(_) | crate::defs::damage::Mult::Chain { .. } | crate::defs::damage::Mult::Coat(_) => None,
+        crate::defs::damage::Mult::Behind(_) | crate::defs::damage::Mult::Chain { .. } | crate::defs::damage::Mult::Coat(_) | crate::defs::damage::Mult::Keystone(..) => None,
     }));
     let viewer = match f.target {
         Creature::Player(i) => Some(run.players[i].id),

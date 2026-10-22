@@ -212,6 +212,8 @@ pub struct SelfState {
     pub speed_mul: f32,
     /// The own hero cannot act (asleep, stone): no predicted abilities.
     pub no_act: bool,
+    /// Factor on the own hero's cooldowns: 0.8 while Berserker is active, else 1. Prediction multiplies by it.
+    pub cd_mul: f32,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

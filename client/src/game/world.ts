@@ -184,6 +184,8 @@ export class Predictor {
   /** From the snapshot: movement factor (0 while it cannot move), no casting, no turning. */
   speedMul = 1;
   noAct = false;
+  /** From the snapshot: the factor on cooldowns (0.8 while Berserker is active). */
+  cdMul = 1;
   noTurn = false;
   private pending: Pending[] = [];
   private seq = 0;
@@ -217,7 +219,7 @@ export class Predictor {
 
   /** Cooldown the server resolved for the slot (or for the melee fallback). */
   cooldownOf(slot: 0 | 1, fallback = false): number {
-    return (fallback ? this.fallback : this.abilities[slot]).cooldown;
+    return (fallback ? this.fallback : this.abilities[slot]).cooldown * this.cdMul;
   }
 
   /**
@@ -249,6 +251,7 @@ export class Predictor {
     const me = snap.me;
     this.speedMul = me.speed_mul;
     this.noAct = me.no_act;
+    this.cdMul = me.cd_mul;
     this.noTurn = me.effects.some(([k]) => EFFECTS[k]?.no_turn);
     this.pending = this.pending.filter((p) => p.seq > snap.ack);
     let s: MoveState = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy };

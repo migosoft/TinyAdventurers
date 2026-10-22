@@ -25,7 +25,7 @@ function chasmMap(): TileMap {
 }
 
 function snap(ack: number, x: number, y: number): Snapshot {
-  const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false };
+  const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false, cd_mul: 1 };
   return { tick: ack, ack, ents: [], me, boss: null, ev: [], drain: null, lights: [], looks: [], srv_ms: 0, log: null };
 }
 
@@ -48,6 +48,17 @@ describe('Predictor', () => {
     for (let i = 0; i < 4; i++) pred.step(1, 0, null);
     pred.reconcile({ ...snap(1, x0, y0), me: { ...snap(1, x0, y0).me, speed_mul: 0.5 } });
     expect(pred.state.x - x0).toBeCloseTo(3 * pred.speed * 0.5 * CONST.DT, 6);
+  });
+
+  it('predicts a cooldown times the factor the server sends', () => {
+    const pred = mk(chasmMap(), 'Barbarian', 3 * TILE + 8, 2 * TILE + 8);
+    const s = snap(0, pred.state.x, pred.state.y);
+    expect(pred.cooldownOf(0)).toBeCloseTo(0.6, 9);
+    pred.reconcile({ ...s, me: { ...s.me, cd_mul: 0.8 } });
+    expect(pred.cooldownOf(0)).toBeCloseTo(0.48, 9);
+    expect(pred.cooldownOf(0, true)).toBeCloseTo(0.32, 9);
+    pred.reconcile(s);
+    expect(pred.cooldownOf(0)).toBeCloseTo(0.6, 9);
   });
 
   it('cannot act or turn while the server says so', () => {

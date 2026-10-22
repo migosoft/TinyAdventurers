@@ -36,4 +36,8 @@ speed_mul: number,
 /**
  * The own hero cannot act (asleep, stone): no predicted abilities.
  */
-no_act: boolean, };
+no_act: boolean, 
+/**
+ * Factor on the own hero's cooldowns: 0.8 while Berserker is active, else 1. Prediction multiplies by it.
+ */
+cd_mul: number, };

@@ -194,6 +194,8 @@ pub enum Mult {
     Chain { jump: u8, factor: f64 },
     Overkill { from: u32 },
     Coat(f64),
+    /// A run-time keystone's factor on the hit (`run::keystones`).
+    Keystone(super::trees::Keystone, f64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

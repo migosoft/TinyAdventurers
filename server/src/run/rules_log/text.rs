@@ -108,6 +108,7 @@ pub(super) fn hit_details(run: &Run, f: &HitFacts) -> Vec<String> {
             Mult::Chain { jump, factor } => format!("Chain Spark jump {jump}: ×{factor:.2}"),
             Mult::Overkill { from } => format!("overkill: {} carried on from {}", n1(f.dmg.amount), tag_of(run, from)),
             Mult::Coat(s) => format!("Poison Coat +{} poison", pct(s)),
+            Mult::Keystone(k, x) => format!("{} ×{x:.2}", crate::run::keystones::name(k)),
         });
     }
     out.extend(part_lines(f));

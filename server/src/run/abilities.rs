@@ -133,7 +133,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             let fallback = run.players[pi].sheet.fallback;
             melee_strike(run, pi, &targets, &fallback, crit);
             let p = &mut run.players[pi];
-            p.cd1 = fallback.cooldown;
+            p.cd1 = super::keystones::cooldown(p, fallback.cooldown);
             p.anim = Anim::Melee;
             p.anim_start = run.time;
             return;
@@ -151,6 +151,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
         Shape::Summon => use_summon(run, pi, &def, shot),
     };
     let p = &mut run.players[pi];
+    let cooldown = super::keystones::cooldown(p, cooldown);
     if primary {
         p.cd1 = cooldown;
     } else {

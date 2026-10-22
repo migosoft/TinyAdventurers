@@ -7,6 +7,7 @@ pub mod companion;
 pub mod debug;
 pub mod effects;
 pub mod entities;
+pub mod keystones;
 pub mod levels;
 pub mod light;
 pub mod objects;
@@ -303,6 +304,7 @@ impl Run {
             anim: Anim::Idle,
             anim_start: self.time,
             hurt_t: 0.0,
+            wolf_bit: 0.0,
             ai: Ai::new(pos),
             owner,
             history: VecDeque::with_capacity(HISTORY_LEN),
@@ -485,6 +487,7 @@ impl Run {
             }
             m.history.push_back(m.pos);
             m.hurt_t = (m.hurt_t - DT).max(0.0);
+            keystones::cool(m, DT);
         }
         self.monsters.retain(|m| m.alive);
         self.projectiles.retain(|p| !p.dead);
@@ -871,7 +874,7 @@ impl Run {
             self.hit_effect_by(effects::Creature::Player(pi), h, dmg.why); // a pure effect hit: no number, no flash
             return;
         }
-        let res = self.players[pi].effects.res(self.players[pi].res);
+        let res = keystones::hurt_res(&self.players[pi], self.players[pi].effects.res(self.players[pi].res));
         let parts = resolve_parts(&dmg, &res);
         let raw: f64 = parts.iter().sum();
         if raw < 0.0 {
@@ -1050,6 +1053,7 @@ impl Run {
 
     /// Returns true if the monster took damage.
     pub fn hurt_monster(&mut self, mi: usize, dmg: Damage, crit: bool, src_player: Option<usize>) -> bool {
+        let dmg = keystones::on_hit(self, mi, dmg);
         #[cfg(test)]
         {
             self.last_hit = Some(dmg);

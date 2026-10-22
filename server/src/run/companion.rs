@@ -1,7 +1,7 @@
 //! The Elven Ranger's wolf: an ally monster. Spawn, behaviour and death here.
 
 use super::entities::{Ai, Ally, Monster, Windup, WolfDash, HISTORY_LEN};
-use super::{ai, perception, Run};
+use super::{ai, keystones, perception, Run};
 use crate::collision::{line_of_sight, move_box, walk_line};
 use crate::defs::attributes::Attr;
 use crate::defs::companions::*;
@@ -61,6 +61,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         anim: Anim::Idle,
         anim_start: run.time,
         hurt_t: 0.0,
+        wolf_bit: 0.0,
         ai: Ai::new(spot),
         owner: None,
         history: VecDeque::with_capacity(HISTORY_LEN),
@@ -205,6 +206,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
                 let (from, melee, wolf_id) = (w.pos, w.melee, w.id);
                 run.monsters[mi].aim = from.angle_to(e.pos);
                 run.hurt_monster(ei, Damage::new(WOLF_BITE_DAMAGE, melee).with_power(WOLF_ATTRS.get(Attr::Str)).by(wolf_id, What::Attack), false, Some(pi));
+                keystones::bite(&mut run.monsters[ei]);
                 run.knock_monster(ei, from, WOLF_BITE_KNOCK, WOLF_ATTRS.get(Attr::Str));
             }
         }

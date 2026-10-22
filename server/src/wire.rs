@@ -34,7 +34,7 @@ pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u
 /// `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32)>, pub f32, pub bool);
+pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32)>, pub f32, pub bool, pub f32);
 
 /// `[kind, hp, max_hp, immune, enraged]`
 #[derive(Debug, Clone, Serialize, TS)]
@@ -136,7 +136,7 @@ fn ev_w(e: &Ev) -> EvW {
 pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
     let ents = s.ents.iter().map(|e| EntW(e.0, e.1, q_pos(e.2 as f64), q_pos(e.3 as f64), e.4, e.5, q_aim(e.6 as f64), e.7, e.8, e.9, e.10)).collect();
     let m = &s.me;
-    let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act);
+    let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act, m.cd_mul);
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune, b.enraged));
     let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
     let lights = s.lights.iter().map(|l| LightW(q_pos(l.0 as f64), q_pos(l.1 as f64), l.2, l.3)).collect();
@@ -179,6 +179,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             effects: vec![(1, 2.5), (3, 0.75)],
             speed_mul: 0.0,
             no_act: true,
+            cd_mul: 0.8,
         },
         boss: Some(BossBar { kind: BossId::Demon, hp: 1234.5, max_hp: 2000.0, immune: true, enraged: false }),
         ev: vec![
@@ -228,6 +229,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             effects: vec![],
             speed_mul: 1.0,
             no_act: false,
+            cd_mul: 1.0,
         },
         boss: None,
         ev: vec![],

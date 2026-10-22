@@ -4,4 +4,4 @@
  * `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act]`, exact values;
  * `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
  */
-export type SelfW = [boolean, number, number, number, number, number, number, number, number, number, number | null, [number, number] | null, number, number, Array<[number, number]>, number, boolean];
+export type SelfW = [boolean, number, number, number, number, number, number, number, number, number, number | null, [number, number] | null, number, number, Array<[number, number]>, number, boolean, number];

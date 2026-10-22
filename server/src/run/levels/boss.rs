@@ -62,6 +62,7 @@ pub fn spawn(run: &mut Run) {
         anim: Anim::Idle,
         anim_start: 0.0,
         hurt_t: 0.0,
+        wolf_bit: 0.0,
         ai: Ai::new(pos),
         owner: None,
         history: VecDeque::with_capacity(HISTORY_LEN),

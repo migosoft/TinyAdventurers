@@ -215,6 +215,8 @@ pub struct Monster {
     pub anim: Anim,
     pub anim_start: f64,
     pub hurt_t: f64,
+    /// Seconds left of the wolf-bite mark (Pack Hunter).
+    pub wolf_bit: f64,
     pub ai: Ai,
     /// Necromancer / lich that raised or binds this monster.
     pub owner: Option<u32>,

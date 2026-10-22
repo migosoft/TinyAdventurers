@@ -276,6 +276,7 @@ pub fn send_snapshots(run: &mut Run) {
                 effects: me.effects.list().iter().map(|a| (a.kind as u8, a.left as f32)).collect(),
                 speed_mul: me.effects.speed_mul() as f32,
                 no_act: me.effects.no_act(),
+                cd_mul: super::keystones::cd_mul(me),
             },
             boss: boss_bar.clone(),
             ev,

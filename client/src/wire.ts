@@ -128,6 +128,7 @@ export function unpackSnap(w: SnapW): Snapshot {
       effects: me[14],
       speed_mul: me[15],
       no_act: me[16],
+      cd_mul: me[17],
     },
     boss: boss && { kind: boss[0], hp: boss[1], max_hp: boss[2], immune: boss[3], enraged: boss[4] },
     ev: ev.map(unpackEv),
