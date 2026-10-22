@@ -38,6 +38,13 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 18. **Balancing pass:** every "Tune" item, including resistances, light radii, darkness and the vision and darkness values (see "Vision and darkvision follow-ups"). Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers. **Party size** (the user, 2026-10-19): if bigger parties need harder fights, scale the number of enemies or their Attributes, never their HP (4b removes today's HP bonus).
 19. **Delta snapshots, WebTransport:** only if measurements show they are needed.
 
+## UI polishing (next; the user, 2026-10-22)
+
+Comes before every other item, including the balancing pass (postponed by the user, 2026-10-22).
+- **Font:** the text is hard to read; Press Start 2P is far too boxy. Replace it everywhere with a readable font (the user suggested Inter). Today `--font` in `client/src/style.css` sets Press Start 2P for all HTML; Phaser texts set it themselves (`game/effects.ts`, `game/anim/EntityView.ts`, `game/status.ts`); the rules log uses JetBrains Mono.
+- **Input elements:** a more polished design for buttons, text fields, selects, tabs and panels. It need not follow the game area's pixel style, but it should fit an adventure game.
+- Brainstorm first (font choice, scope, look), then spec and plan.
+
 ## Progression follow-ups
 
 Progression is live: accounts with up to 8 characters, per-character progress in PostgreSQL, XP banked at run end, Attribute shop, skill trees (plan 4, built 2026-10-22). See TECHNICAL.md §11a.
