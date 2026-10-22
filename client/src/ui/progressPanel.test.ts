@@ -29,7 +29,7 @@ function fixtureInfo(cls: ClassId, o: { xp?: number; nodes?: string[]; ring1?: s
     prices: [225, 225, 225, 225, 225, 225],
     sheet: {
       attrs: ATTR_ORDER.map((attr) => ({ attr, total: start.attrs[attr], class: start.attrs[attr], shop: 0, tree: 0, items: 0 })),
-      hp: 10, speed: 70, weight: 0, push: 10, save_con: 0, save_wil: 0, res: [], effect_res: [], profs: [], keystones: [], loadout_error: null,
+      hp: 10, speed: 70, weight: 0, push: 10, save_con: 0, save_wil: 0, res: [], effect_res: [], profs: [], keystones: [], loadout_error: null, pool: [],
     },
   } as unknown as CharacterInfo;
 }

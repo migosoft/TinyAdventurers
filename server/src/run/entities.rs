@@ -24,6 +24,8 @@ pub struct Player {
     pub tx: Option<UnboundedSender<Message>>,
     pub name: String,
     pub class: ClassId,
+    /// The worn melee and ranged weapons (the melee falls back to the class starter), for `PlayerInfo`.
+    pub weapons: (crate::defs::items::ItemId, Option<crate::defs::items::ItemId>),
     pub kind: EntityKind,
     /// Every number of the hero (crate::sheet): HP, speed, abilities, effect resistances.
     pub sheet: crate::sheet::Sheet,

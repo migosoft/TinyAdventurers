@@ -16,7 +16,7 @@ use crate::defs::items::{self, ArmorClass, EquipSlot, ItemBase, ItemId, PropKind
 #[cfg(test)]
 use crate::defs::items::Equipment;
 use crate::defs::lights::{self, LightKind};
-use crate::defs::loadout::{apply_mods, check_pick, pick_version, AbilityMod, Build, Loadout, LoadoutError, Pick};
+use crate::defs::loadout::{apply_mods, check_pick, pick_version, AbilityMod, Build, Loadout, LoadoutError, Pick, Source};
 use crate::defs::races::Sight;
 use crate::defs::trees::{self, Keystone, KeystoneSet, NodeId, Prof};
 use crate::defs::weapons::{resolve_melee, resolve_ranged, ResolvedWeapon};
@@ -295,6 +295,44 @@ pub fn attrs_with_items(class: ClassId, b: &Build) -> Attributes {
 /// and the tree's improvements for that ability). An empty Melee slot uses the class's starter;
 /// an empty Ranged slot is no ranged weapon.
 pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
+    let (mut sheet, cx) = sheet_core(class, b)?;
+    let (primary, _) = resolve_pick(class, b, AbilitySlot::Primary, b.loadout.primary, &cx)?;
+    let (secondary, secondary_mods) = resolve_pick(class, b, AbilitySlot::Secondary, b.loadout.secondary, &cx)?;
+    sheet.wolf = if secondary.id == AbilityId::SummonWolf { wolf_mods(&secondary_mods) } else { WolfMods::NONE };
+    sheet.primary = primary;
+    sheet.secondary = secondary;
+    Ok(sheet)
+}
+
+/// What resolving a pick needs: the numbers of the hero without the picks.
+struct PickCx {
+    attrs: Attributes,
+    melee: ResolvedWeapon,
+    ranged: Option<ResolvedWeapon>,
+    improves: Vec<(AbilityId, AbilityMod)>,
+    ks: KeystoneSet,
+    reach: f64,
+}
+
+/// A pick's version, requirements, weapon and mods (the version's, then the tree's improvements
+/// for that ability), resolved; and the mods, for the wolf.
+fn resolve_pick(class: ClassId, b: &Build, slot: AbilitySlot, p: Pick, cx: &PickCx) -> Result<(ResolvedAbility, Vec<AbilityMod>), LoadoutError> {
+    let (version, waive_attrs) = pick_version(class, b, slot, p)?;
+    let d = ab::def(p.ability);
+    let weapon = match d.uses {
+        Uses::Melee => Some(cx.melee.kind),
+        Uses::Ranged => cx.ranged.map(|w| w.kind),
+        Uses::Nothing => None,
+    };
+    check_pick(&d, waive_attrs, &cx.attrs, weapon)?;
+    let r = resolve_ability(&d, &cx.attrs, &cx.melee, cx.ranged.as_ref(), cx.reach).ok_or(LoadoutError::NoWeapon(p.ability, EquipSlot::Ranged))?;
+    let mods: Vec<AbilityMod> = version.iter().copied().chain(cx.improves.iter().filter(|(a, _)| *a == p.ability).map(|&(_, m)| m)).collect();
+    Ok((keystone_ability(apply_mods(r, &mods), &d, &cx.ks), mods))
+}
+
+/// The sheet without its two picks (they hold the Strike until `hero_sheet` resolves them), and
+/// what resolving any pick needs.
+fn sheet_core(class: ClassId, b: &Build) -> Result<(Sheet, PickCx), LoadoutError> {
     let def = classes::def(class);
     let start = classes::start_attrs(class);
     let unequipped = attrs_without_items(class, b);
@@ -385,24 +423,7 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
     let melee = arm(melee_id, &attrs, &shares[0], on_hits[0], pierce[0]);
     let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], on_hits[1], pierce[1]));
 
-    // Abilities: version, requirements, weapon, mods (version, then the tree's improvements).
     let reach = classes::HERO_REACH + PLAYER_RADIUS;
-    let ability = |slot: AbilitySlot, p: Pick| -> Result<(ResolvedAbility, Vec<AbilityMod>), LoadoutError> {
-        let (version, waive_attrs) = pick_version(class, b, slot, p)?;
-        let d = ab::def(p.ability);
-        let weapon = match d.uses {
-            Uses::Melee => Some(melee.kind),
-            Uses::Ranged => ranged.map(|w| w.kind),
-            Uses::Nothing => None,
-        };
-        check_pick(&d, waive_attrs, &attrs, weapon)?;
-        let r = resolve_ability(&d, &attrs, &melee, ranged.as_ref(), reach).ok_or(LoadoutError::NoWeapon(p.ability, EquipSlot::Ranged))?;
-        let mods: Vec<AbilityMod> = version.iter().copied().chain(tree.improves.iter().filter(|(a, _)| *a == p.ability).map(|&(_, m)| m)).collect();
-        Ok((keystone_ability(apply_mods(r, &mods), &d, &ks), mods))
-    };
-    let (primary, _) = ability(AbilitySlot::Primary, b.loadout.primary)?;
-    let (secondary, secondary_mods) = ability(AbilitySlot::Secondary, b.loadout.secondary)?;
-    let wolf = if secondary.id == AbilityId::SummonWolf { wolf_mods(&secondary_mods) } else { WolfMods::NONE };
     let strike_def = ab::def(AbilityId::Strike);
     let strike = resolve_ability(&strike_def, &attrs, &melee, ranged.as_ref(), reach).expect("Strike uses the melee weapon");
     let strike = keystone_ability(strike, &strike_def, &ks);
@@ -410,7 +431,8 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
     if ks.has(Keystone::Radiant) && light.is_none_or(|l| lights::def(LightKind::Radiant).radius > lights::def(l).radius) {
         light = Some(LightKind::Radiant);
     }
-    Ok(Sheet {
+    let cx = PickCx { attrs, melee, ranged, improves: tree.improves.clone(), ks, reach };
+    let sheet = Sheet {
         attrs,
         max_hp: attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp,
         speed: move_speed(def.speed, start.get(Attr::Con), &attrs) * (1.0 + move_frac),
@@ -422,12 +444,13 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
         light,
         keystones: ks,
         sight: prof.sight,
-        primary,
-        secondary,
+        primary: strike,
+        secondary: strike,
         fallback: strike,
         reach,
-        wolf,
-    })
+        wolf: WolfMods::NONE,
+    };
+    Ok((sheet, cx))
 }
 
 /// One Attribute of the character screen, by source.
@@ -468,6 +491,8 @@ pub struct SheetSummary {
     /// Why the build cannot play (Ready and Start refuse it); the numbers are then those of the same
     /// build with the start loadout, or the starter equipment too when the equipment is what fails.
     pub loadout_error: Option<String>,
+    /// Every ability the hero could slot, with its numbers and why it cannot play yet.
+    pub pool: Vec<PoolCard>,
 }
 
 fn spaced(name: &str) -> String {
@@ -504,6 +529,77 @@ pub fn item_prof(b: &ItemBase) -> Option<String> {
         ItemBase::Armor(a) => Some(prof_name(Prof::Armor(a.class))),
         _ => None,
     }
+}
+
+/// One ability the hero could put in a slot, for the Loadout tab and the tree tooltips.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct PoolCard {
+    pub pick: Pick,
+    /// Its numbers for this build (version mods and tree improvements applied); None when the weapon it uses is missing.
+    pub ability: Option<ResolvedAbility>,
+    /// Why it cannot play in its slot now (`LoadoutError::message`); None when it can.
+    pub error: Option<String>,
+    /// A tree unlock the hero does not own yet.
+    pub locked: bool,
+}
+
+/// Every ability `b` could slot, with its numbers and why it cannot play yet. Order: the class
+/// start primary and secondary, `b.own`, owned tree unlocks (node order), item versions (slot
+/// order), then the locked tree unlocks (node order). Empty when the equipment itself fails.
+pub fn pool_cards(class: ClassId, b: &Build) -> Vec<PoolCard> {
+    let Ok((_, cx)) = sheet_core(class, b) else { return Vec::new() };
+    let cd = classes::def(class);
+    let nodes = trees::tree(class);
+    let unlock_of = |n: &trees::NodeDef| match n.kind {
+        trees::NodeKind::Unlock(a) => Some((n.id, a)),
+        _ => None,
+    };
+    let own = |a: AbilityId| Pick { ability: a, source: Source::Own };
+    let mut cands: Vec<(Pick, bool)> = Vec::new();
+    let mut add = |p: Pick, locked: bool| {
+        if !cands.iter().any(|c| c.0 == p) {
+            cands.push((p, locked));
+        }
+    };
+    for a in [cd.primary, cd.secondary].into_iter().chain(b.own.iter().copied()) {
+        add(own(a), false);
+    }
+    for (id, a) in nodes.iter().filter_map(unlock_of) {
+        if b.nodes.contains(&id) {
+            add(own(a), false);
+        }
+    }
+    for &slot in EquipSlot::ALL.iter() {
+        if let Some(item) = b.equipment.get(slot) {
+            for prop in items::def(item).props {
+                if let PropKind::GrantAbility { id, .. } = prop.kind {
+                    add(Pick { ability: id, source: Source::Item(slot) }, false);
+                }
+            }
+        }
+    }
+    for (id, a) in nodes.iter().filter_map(unlock_of) {
+        if !b.nodes.contains(&id) {
+            add(own(a), true);
+        }
+    }
+    cands
+        .into_iter()
+        .map(|(pick, locked)| {
+            let d = ab::def(pick.ability);
+            let error = resolve_pick(class, b, d.slot, pick, &cx).err().map(|e| e.message());
+            let ability = if locked {
+                resolve_ability(&d, &cx.attrs, &cx.melee, cx.ranged.as_ref(), cx.reach).map(|r| keystone_ability(r, &d, &cx.ks))
+            } else {
+                // Numbers even when a requirement fails: the version's mods and the tree's improvements.
+                let version = pick_version(class, b, d.slot, pick).map(|v| v.0).unwrap_or(&[]);
+                let mods: Vec<AbilityMod> = version.iter().copied().chain(cx.improves.iter().filter(|(a, _)| *a == pick.ability).map(|&(_, m)| m)).collect();
+                resolve_ability(&d, &cx.attrs, &cx.melee, cx.ranged.as_ref(), cx.reach).map(|r| keystone_ability(apply_mods(r, &mods), &d, &cx.ks))
+            };
+            PoolCard { pick, ability, error, locked }
+        })
+        .collect()
 }
 
 /// The character screen's numbers for `b`.
@@ -558,6 +654,7 @@ pub fn summary(class: ClassId, b: &Build) -> SheetSummary {
         profs,
         keystones: sheet.keystones.iter().collect(),
         loadout_error,
+        pool: pool_cards(class, &used),
     }
 }
 
@@ -1173,5 +1270,55 @@ mod tests {
         b.equipment.set(EquipSlot::Melee, Some(ItemId::StaffOfRot));
         let s = summary(c, &b);
         assert!(s.loadout_error.is_some() && s.hp > 0.0);
+    }
+
+    #[test]
+    fn the_start_pool_is_the_two_start_abilities() {
+        let cards = pool_cards(ClassId::Wizard, &Build::start(ClassId::Wizard));
+        let own: Vec<_> = cards.iter().filter(|c| !c.locked).map(|c| c.pick.ability).collect();
+        assert_eq!(own, [AbilityId::MagicMissile, AbilityId::Fireball]);
+        assert!(cards.iter().filter(|c| !c.locked).all(|c| c.error.is_none() && c.ability.is_some()));
+        let mm = cards[0].ability.unwrap();
+        assert_eq!(mm, hero_sheet(ClassId::Wizard, &Build::start(ClassId::Wizard)).unwrap().primary);
+    }
+
+    #[test]
+    fn locked_unlocks_come_with_numbers_and_a_reason() {
+        let cards = pool_cards(ClassId::Wizard, &Build::start(ClassId::Wizard));
+        let nova = cards.iter().find(|c| c.pick.ability == AbilityId::FrostNova).unwrap();
+        assert!(nova.locked && nova.ability.is_some());
+        assert_eq!(nova.error.as_deref(), Some("Frost Nova is not one of your abilities."));
+    }
+
+    #[test]
+    fn an_owned_unlock_with_a_missing_attribute_says_so() {
+        // The Wizard node that unlocks Frost Nova, owned without INT 17.
+        let mut b = Build::start(ClassId::Wizard);
+        b.nodes = vec![NodeId::WF1, NodeId::WF2, NodeId::WF4]; // W0 -> Frost Shard -> its improvement -> Frost Nova
+        let nova = pool_cards(ClassId::Wizard, &b).into_iter().find(|c| c.pick.ability == AbilityId::FrostNova).unwrap();
+        assert!(!nova.locked);
+        assert_eq!(nova.error.as_deref(), Some("Frost Nova needs INT 17."));
+    }
+
+    #[test]
+    fn a_worn_granting_item_adds_its_version() {
+        let mut b = Build::start(ClassId::Paladin);
+        b.equipment.set(EquipSlot::Ring1, Some(ItemId::RingOfTheMagus));
+        let cards = pool_cards(ClassId::Paladin, &b);
+        assert!(cards.iter().any(|c| c.pick == Pick { ability: AbilityId::MagicMissile, source: crate::defs::loadout::Source::Item(EquipSlot::Ring1) } && !c.locked));
+    }
+
+    #[test]
+    fn shoot_without_a_ranged_weapon_has_no_numbers() {
+        let mut b = Build::start(ClassId::ElvenRanger);
+        b.equipment.set(EquipSlot::Ranged, None);
+        let shoot = pool_cards(ClassId::ElvenRanger, &b).into_iter().find(|c| c.pick.ability == AbilityId::Shoot).unwrap();
+        assert!(shoot.ability.is_none() && shoot.error.is_some());
+    }
+
+    #[test]
+    fn the_summary_carries_the_pool() {
+        let c = ClassId::Wizard;
+        assert_eq!(summary(c, &Build::start(c)).pool, pool_cards(c, &Build::start(c)));
     }
 }

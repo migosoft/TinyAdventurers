@@ -150,6 +150,9 @@ pub struct PlayerInfo {
     pub ent: u32,
     pub name: String,
     pub class: ClassId,
+    /// The worn melee weapon (the class starter when the slot is empty) and the worn ranged one.
+    pub melee: ItemId,
+    pub ranged: Option<ItemId>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

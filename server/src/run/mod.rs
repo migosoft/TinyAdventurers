@@ -202,6 +202,7 @@ impl Run {
                 tx: Some(m.tx),
                 name: m.name,
                 class: m.class,
+                weapons: (m.build.equipment.get(crate::defs::items::EquipSlot::Melee).unwrap_or(classes::def(m.class).starter.0), m.build.equipment.get(crate::defs::items::EquipSlot::Ranged)),
                 kind: classes::def(m.class).kind,
                 mv: MoveState::at(p.x, p.y),
                 hp: max_hp,
@@ -335,7 +336,7 @@ impl Run {
             tiles: self.layout.map.tiles.clone(),
             tile_size: crate::dungeon::TILE as u16,
             you: p.id,
-            players: self.players.iter().map(|q| PlayerInfo { ent: q.id, name: q.name.clone(), class: q.class }).collect(),
+            players: self.players.iter().map(|q| PlayerInfo { ent: q.id, name: q.name.clone(), class: q.class, melee: q.weapons.0, ranged: q.weapons.1 }).collect(),
             spawn_x: p.mv.x,
             spawn_y: p.mv.y,
             speed: p.sheet.speed,
@@ -1473,6 +1474,14 @@ pub mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn player_info_carries_the_worn_weapons() {
+        let run = test_run_with(&[(ClassId::Paladin, build_with(ClassId::Paladin, EquipSlot::Melee, ItemId::WarHammer)), (ClassId::ElvenRanger, Build::start(ClassId::ElvenRanger))], BossId::Lich);
+        let ServerMsg::RunStarted(info) = run.start_info(&run.players[0]) else { panic!() };
+        assert_eq!((info.players[0].melee, info.players[0].ranged), (ItemId::WarHammer, None));
+        assert_eq!((info.players[1].melee, info.players[1].ranged), (ItemId::Rapier, Some(ItemId::ElvenBow)));
     }
 
     #[test]
