@@ -4,6 +4,7 @@
 // its shadow stays on the floor and shrinks.
 import Phaser from 'phaser';
 import { ANIM, CONST, FLAG } from '../generated/defs';
+import { CHEST_HEIGHT } from './chest';
 import { DEPTH, Effects } from './effects';
 
 const F = 'chest_mimic_open_anim_f';
@@ -69,7 +70,7 @@ export class MimicView {
   private wakeClock = -1;
   private rattleAt = 1 + Math.random() * 3;
 
-  height = 16;
+  height = CHEST_HEIGHT;
 
   /** Drive the view from the server state. `heroDist`: distance to the nearest hero (px). */
   sync(e: MimicSnap, dt: number, heroDist: number): void {

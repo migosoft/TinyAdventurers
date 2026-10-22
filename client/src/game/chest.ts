@@ -5,12 +5,15 @@
 import Phaser from 'phaser';
 import { DEPTH } from './effects';
 
+/** Tag height; a hidden mimic uses the same, so the log's tags cannot tell them apart. */
+export const CHEST_HEIGHT = 16;
 const OPEN_T = 0.3;
 const EMPTY_AFTER = 0.5;
 
 export class ChestView {
   readonly root: Phaser.GameObjects.Container;
   private body: Phaser.GameObjects.Sprite;
+  readonly height = CHEST_HEIGHT;
 
   constructor(scene: Phaser.Scene) {
     const shadow = scene.add.ellipse(0, 0, 13, 5, 0x000000, 0.4);

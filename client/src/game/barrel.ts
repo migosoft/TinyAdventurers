@@ -4,12 +4,14 @@
 // chasm, 3 sinking in deep water (anim_ms since it started).
 import Phaser from 'phaser';
 import { CONST } from '../generated/defs';
+import { CHEST_HEIGHT } from './chest';
 import { DEPTH } from './effects';
 
 export class BarrelView {
   readonly root: Phaser.GameObjects.Container;
   private body: Phaser.GameObjects.Sprite;
   private shadow: Phaser.GameObjects.Ellipse;
+  readonly height = CHEST_HEIGHT;
 
   constructor(scene: Phaser.Scene, frame = 'barrel_explosive') {
     this.shadow = scene.add.ellipse(0, 0, 13, 5, 0x000000, 0.4);
