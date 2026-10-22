@@ -37,6 +37,8 @@ pub struct Conn {
     pub debug_loadout: bool,
     /// The weapons set by `DebugEquip` (the class's starters until then; reset with the character).
     pub debug_equipment: Equipment,
+    /// The slots `DebugEquip` touched: only those replace the saved weapons.
+    pub debug_touched: [bool; EquipSlot::COUNT],
     /// When it connected (Unix ms), for the admin's online list.
     pub since: f64,
 }
@@ -154,7 +156,7 @@ impl Lobby {
         let id = self.next_conn;
         self.next_conn += 1;
         send(&tx, &ServerMsg::Welcome { id });
-        self.conns.insert(id, Conn { account, tx, room: None, ready: false, character: None, loadout: None, debug_loadout: false, debug_equipment: Equipment::default(), since: unix_ms() });
+        self.conns.insert(id, Conn { account, tx, room: None, ready: false, character: None, loadout: None, debug_loadout: false, debug_equipment: Equipment::default(), debug_touched: [false; EquipSlot::COUNT], since: unix_ms() });
         self.send_lobby_to(id);
         id
     }
@@ -248,6 +250,7 @@ impl Lobby {
         c.loadout = None;
         c.debug_loadout = false;
         c.debug_equipment = Equipment::starter(character_class);
+        c.debug_touched = [false; EquipSlot::COUNT];
         send(&c.tx, &ServerMsg::Character(info));
     }
 
@@ -406,6 +409,7 @@ impl Lobby {
         }
         if let Some(c) = self.conns.get_mut(&id) {
             c.debug_equipment.set(slot, item);
+            c.debug_touched[slot as usize] = true;
             c.debug_loadout = true;
         }
     }
@@ -444,9 +448,11 @@ impl Lobby {
         }
         if c.debug_loadout {
             build.own = AbilityId::ALL.iter().copied().filter(|a| abilities::def(*a).classes.contains(&ch.class)).collect();
-            // The debug weapons replace the weapons; armor, rings and the rest stay as saved.
+            // Only the weapon slots `DebugEquip` touched change; the rest stays as saved.
             for s in [EquipSlot::Melee, EquipSlot::Ranged] {
-                build.equipment.set(s, c.debug_equipment.get(s));
+                if c.debug_touched[s as usize] {
+                    build.equipment.set(s, c.debug_equipment.get(s));
+                }
             }
             // The bought points stay; the lift counts them.
             build.extra = build.extra.plus(debug_lift(ch.class, &build));
@@ -1171,5 +1177,26 @@ mod tests {
             seen.push(rmp_serde::from_slice::<serde_json::Value>(&b).unwrap()["t"].as_str().unwrap().to_string());
         }
         assert!(seen.contains(&"Character".to_string()) && seen.contains(&"Room".to_string()), "{seen:?}: the party list follows the saved build");
+    }
+
+    #[tokio::test]
+    async fn debug_loadout_alone_keeps_the_saved_weapons_and_debug_equip_overrides() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let mut p = Progress::new(ClassId::Barbarian);
+        p.inventory.push(ItemId::WarHammer);
+        p.equipment.set(EquipSlot::Melee, Some(ItemId::WarHammer));
+        p.equipment.set(EquipSlot::Ranged, Some(ItemId::ThrowingAxes));
+        let (a, _rx) = join_with(&mut l, 1, ClassId::Barbarian, p);
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::Charge));
+        let e = l.build_of(a).unwrap().equipment;
+        assert_eq!((e.get(EquipSlot::Melee), e.get(EquipSlot::Ranged)), (Some(ItemId::WarHammer), Some(ItemId::ThrowingAxes)));
+        l.debug_equip_if(true, a, EquipSlot::Ranged, None);
+        let e = l.build_of(a).unwrap().equipment;
+        assert_eq!((e.get(EquipSlot::Melee), e.get(EquipSlot::Ranged)), (Some(ItemId::WarHammer), None), "only the touched slot changes");
+        l.handle(a, ClientMsg::LeaveRun);
+        l.set_character(a, character_with(1, 10, ClassId::Barbarian, Progress::new(ClassId::Barbarian)));
+        assert_eq!(l.conns[&a].debug_touched, [false; EquipSlot::COUNT]);
     }
 }
