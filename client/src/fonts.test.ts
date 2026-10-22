@@ -19,7 +19,7 @@ describe('fonts', () => {
     await expect(loadFonts({ load: () => new Promise(() => {}) } as unknown as FontFaceSet, 10)).resolves.toBeUndefined();
   });
   it('no page or stylesheet loads a font CDN', () => {
-    for (const f of ['index.html', 'admin.html', 'src/style.css', `src/${RL}/panel.ts`, `src/${RL}/${RL}.css`])
+    for (const f of ['index.html', 'admin.html', 'src/style.css', 'src/fonts.css', 'src/admin/admin.css', `src/${RL}/panel.ts`, `src/${RL}/${RL}.css`])
       expect(readFileSync(join(__dirname, '..', f), 'utf8'), f).not.toMatch(/fonts\.(googleapis|gstatic)\.com|Press Start|JetBrains/);
   });
   it('index.html and admin.html preload the woff2 files that exist', () => {

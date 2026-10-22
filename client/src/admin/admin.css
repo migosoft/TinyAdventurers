@@ -57,14 +57,8 @@ a {
   color: var(--accent);
 }
 h1,
-h2,
-.page-head {
+h2 {
   font-family: var(--font-head);
-  font-weight: 400;
-}
-/* Only the title takes the heading face; the notes beside it are small text. */
-.page-head > :not(h1) {
-  font-family: var(--font-text);
   font-weight: 400;
 }
 h1 {
@@ -436,6 +430,8 @@ button:disabled {
   cursor: default;
   transform: none;
 }
+a:focus-visible,
+summary:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
