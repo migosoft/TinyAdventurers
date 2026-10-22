@@ -58,6 +58,22 @@ function viewSize(): { w: number; h: number; zoom: number } {
   return { w: Math.ceil(window.innerWidth / zoom), h: Math.ceil(window.innerHeight / zoom), zoom };
 }
 
+/**
+ * The canvas is at screen resolution (so Inter text is crisp) and the integer zoom lives on each scene's
+ * main camera, which shows the same world area as a world-resolution canvas scaled up by CSS would.
+ * Checked every frame, so a scene created later or a resize picks it up (LightsDemoScene fits its own zoom).
+ */
+function keepCameraZoom(game: Phaser.Game): void {
+  game.events.on(Phaser.Core.Events.PRE_STEP, () => {
+    const zoom = viewSize().zoom;
+    for (const sc of game.scene.getScenes(true)) {
+      if (sc.sys.settings.key === 'lights-demo') continue;
+      const cam = sc.cameras?.main;
+      if (cam && cam.zoom !== zoom) cam.setZoom(zoom);
+    }
+  });
+}
+
 /** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich, ?demon, ?lights). */
 const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-demo', water: 'water-demo', chasm: 'chasm-demo', lava: 'lava-demo', knockback: 'knockback-demo', ogre: 'ogre-demo', dragon: 'dragon-demo', lich: 'lich-demo', demon: 'demon-demo', lights: 'lights-demo' };
 
@@ -70,9 +86,10 @@ async function gallery(): Promise<void> {
     type: Phaser.WEBGL,
     parent: 'game',
     pixelArt: true,
-    scale: { mode: Phaser.Scale.NONE, width: v.w, height: v.h, zoom: v.zoom },
+    scale: { mode: Phaser.Scale.NONE, width: v.w * v.zoom, height: v.h * v.zoom, zoom: 1 },
     scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene, WaterDemoScene, ChasmDemoScene, LavaDemoScene, KnockbackDemoScene, OgreDemoScene, DragonDemoScene, LichDemoScene, DemonDemoScene, LightsDemoScene],
   });
+  keepCameraZoom(game);
   game.events.once('assets-ready', () => game.scene.start(start));
   document.getElementById('game')!.classList.add('active');
 }
@@ -156,14 +173,14 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
     pixelArt: true,
     antialias: false,
     backgroundColor: '#000000',
-    scale: { mode: Phaser.Scale.NONE, width: v.w, height: v.h, zoom: v.zoom },
+    scale: { mode: Phaser.Scale.NONE, width: v.w * v.zoom, height: v.h * v.zoom, zoom: 1 },
     scene: [BootScene, GameScene],
     fps: { smoothStep: false },
   });
+  keepCameraZoom(game);
   window.addEventListener('resize', () => {
     const s = viewSize();
-    game.scale.resize(s.w, s.h);
-    game.scale.setZoom(s.zoom);
+    game.scale.resize(s.w * s.zoom, s.h * s.zoom);
   });
   const ready = new Promise<void>((r) => game.events.once('assets-ready', r));
   const gameEl = document.getElementById('game')!;

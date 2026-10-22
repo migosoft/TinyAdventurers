@@ -1,5 +1,5 @@
 // Sizes and styles of every text drawn in the world (Phaser), in world px.
-// At the 1280 x 720 smoke size the scale zoom is 2, so 6.5 world px is about 13 screen px.
+// At the 1280 x 720 smoke size the camera zoom is 2, so 6.5 world px is about 13 screen px.
 export const WORLD_TEXT = {
   tag: { size: 6.5, style: "600" },
   number: { size: 7, style: "800" },
@@ -13,7 +13,7 @@ export const WORLD_TEXT = {
 
 export type WorldTextKind = keyof typeof WORLD_TEXT;
 
-/** Canvas text resolution: sharp at any zoom. */
+/** Text texture resolution: at least the camera zoom (2 at 1280 x 720, up to 4 on big screens), so text is never upscaled. */
 export const TEXT_RESOLUTION = 4;
 
 const POP_FROM = 1.4;
