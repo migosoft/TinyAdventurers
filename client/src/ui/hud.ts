@@ -5,6 +5,7 @@ import type { LevelId } from '../generated/LevelId';
 import type { PlayerStats } from '../generated/PlayerStats';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
+import { CooldownTracker } from './cooldown';
 import { endText } from './endText';
 import { BOSS_TEXT, className, effectGlyph } from './text';
 
@@ -75,8 +76,7 @@ export class Hud {
   private menu = el('div', 'menu hidden');
   private end = el("div", "end hidden");
   private debugBadge = el("div", "debug-badge hidden", "DEBUG · immortal · paths to boss (yellow) and ogre (blue)");
-  private cdMax = [1, 1];
-  private lastCd = [0, 0];
+  private trackers = [new CooldownTracker(), new CooldownTracker()];
   private debugT = 0;
   menuOpen = false;
 
@@ -90,7 +90,7 @@ export class Hud {
     const abil = el('div', 'abilities');
     for (let i = 0; i < 2; i++) {
       const s = el('div', 'slot');
-      s.append(el('div', 'sweep'), el('div', 'key', i === 0 ? 'LMB' : 'RMB'), el('div', 'name'));
+      s.append(el('div', 'ring'), el('span', 'cd'), el('div', 'key', i === 0 ? 'LMB' : 'RMB'), el('div', 'name'));
       this.slots.push(s);
       abil.append(s);
     }
@@ -127,7 +127,8 @@ export class Hud {
       this.slotNames[i] = ABILITIES[info.abilities[i].id].name;
       this.tooCloseUntil[i] = 0;
       this.slots[i].querySelector('.name')!.textContent = this.slotNames[i];
-      this.cdMax[i] = info.abilities[i].cooldown;
+      this.trackers[i] = new CooldownTracker(info.abilities[i].cooldown);
+      this.slots[i].classList.remove('flash');
     });
     this.party.innerHTML = '';
     for (const p of info.players) {
@@ -222,12 +223,17 @@ export class Hud {
       this.slots[i].classList.toggle('too-close', now < this.tooCloseUntil[i]);
     });
     [f.cd1, f.cd2].forEach((cd, i) => {
-      if (cd > this.lastCd[i] + 0.01) this.cdMax[i] = cd;
-      this.lastCd[i] = cd;
-      const k = cd > 0 ? cd / this.cdMax[i] : 0;
-      const sw = this.slots[i].querySelector('.sweep') as HTMLElement;
-      sw.style.background = k > 0 ? `conic-gradient(rgba(10,6,18,.75) ${k * 360}deg, transparent 0)` : 'transparent';
-      this.slots[i].classList.toggle('ready', k === 0);
+      const { view, flash } = this.trackers[i].update(cd);
+      const slot = this.slots[i];
+      slot.style.setProperty('--p', `${view.fill * 100}%`);
+      const cdEl = slot.querySelector('.cd')!;
+      if (cdEl.textContent !== view.label) cdEl.textContent = view.label;
+      slot.classList.toggle('ready', view.ready);
+      if (flash) {
+        slot.classList.remove('flash');
+        void slot.offsetWidth;
+        slot.classList.add('flash');
+      }
     });
     if (!this.debug.classList.contains('hidden') && performance.now() - this.debugT > 200) {
       this.debugT = performance.now();

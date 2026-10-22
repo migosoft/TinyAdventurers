@@ -845,10 +845,12 @@ kbd {
 }
 .slot {
   position: relative;
-  width: 64px;
-  height: 46px;
-  background: #2a1c26;
-  box-shadow: 0 0 0 2px var(--panel-edge);
+  width: 74px;
+  height: 54px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #2f1f2b, #1f141c);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 235, 200, 0.07);
+  transition: box-shadow 160ms;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -857,16 +859,52 @@ kbd {
   overflow: hidden;
 }
 .slot.ready {
-  box-shadow: 0 0 0 2px var(--gold);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.55), 0 0 16px rgba(232, 192, 64, 0.45), inset 0 1px 0 rgba(255, 235, 200, 0.1);
 }
-.slot .sweep {
+.slot .ring {
   position: absolute;
   inset: 0;
+  border-radius: 9px;
+  padding: 2px;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, #f6dc86 0, #d9a42a var(--p, 100%), rgba(106, 74, 92, 0.85) var(--p, 100%) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.slot.ready .ring {
+  background: linear-gradient(180deg, #fbe7a0, #d9a42a);
+}
+.slot.flash {
+  animation: ready-flash 420ms ease-out;
+}
+@keyframes ready-flash {
+  0% { transform: scale(1.08); filter: brightness(1.6); }
+  100% { transform: scale(1); filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slot.flash { animation: none; }
+}
+.slot:not(.ready) .name,
+.slot:not(.ready) .key {
+  opacity: 0.6;
+}
+.slot .cd {
+  position: absolute;
+  right: 6px;
+  top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
 }
 .slot .key {
   color: var(--muted);
   font-size: 11px;
   position: relative;
+}
+.slot.ready .key {
+  color: var(--gold);
 }
 .slot .name {
   font-size: 11px;
