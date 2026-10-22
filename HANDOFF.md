@@ -218,7 +218,7 @@ For: the next agent or developer continuing this project. Read this first, then 
 **Open (for the user and the next agent):**
 - The final whole-branch review, then the user's decision to merge.
 - Play-test the lich's three spells and the HUD icons live; nothing was played in a real fight yet (F8 shows each effect alone).
-- The HUD glyphs are ASCII letters because the pixel font has no symbols; drawn icons would be nicer.
+- The HUD glyphs are ASCII letters because the pixel font has no symbols; drawn icons would be nicer (replaced by drawn symbols in UI polish, 2026-10-22).
 - Every number (durations, cooldowns, `EFFECT_REDUCED`) is a first guess for the balancing pass. Full list in TODO "Effect system follow-ups".
 
 ## Session before (2026-10-15, vision and darkvision)
