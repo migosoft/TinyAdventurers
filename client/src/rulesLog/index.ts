@@ -57,8 +57,8 @@ export class RulesLog {
     if (!this.prefs.on || !s.log) return;
     this.tags = new Map(s.log[0].map(([id, k, n]) => [id, [k, n]]));
     if (s.log[1].length === 0) return;
-    this.buffer.push(s.log[1]);
-    this.render();
+    const { add, drop } = this.buffer.push(s.log[1], this.prefs.details);
+    this.panel.append(add, drop);
   }
 
   /** Creature tags over the heads, 4 px above the health bar; nothing is created while the log is off. */
@@ -175,6 +175,6 @@ export class RulesLog {
   }
 
   private render(): void {
-    this.panel.render(this.buffer.rows(this.prefs.details));
+    this.panel.render(this.buffer.recordRows(this.prefs.details));
   }
 }

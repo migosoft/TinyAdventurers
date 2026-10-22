@@ -36,3 +36,25 @@ describe('LogBuffer', () => {
     expect(b.rows(true)).toEqual([]);
   });
 });
+
+describe('LogBuffer.push', () => {
+  it('returns the new records and how many old ones fell off', () => {
+    const b = new LogBuffer(3);
+    expect(b.push([line(1, 'a'), line(2, 'b')], false)).toEqual({
+      add: [[{ t: 1, kind: 0, text: '1.0s  a', detail: false }], [{ t: 2, kind: 0, text: '2.0s  b', detail: false }]],
+      drop: 0,
+    });
+    const r = b.push([line(3, 'c', ['d']), line(4, 'd')], true);
+    expect(r.drop).toBe(1);
+    expect(r.add.map((x) => x.length)).toEqual([2, 1]);
+    expect(b.rows(false).map((x) => x.text)).toEqual(['2.0s  b', '3.0s  c', '4.0s  d']);
+  });
+
+  it('a batch bigger than the cap keeps only its last records and drops all old ones', () => {
+    const b = new LogBuffer(2);
+    b.push([line(1, 'a')]);
+    const r = b.push([line(2, 'b'), line(3, 'c'), line(4, 'd')]);
+    expect(r.drop).toBe(1);
+    expect(r.add.map((x) => x[0].text)).toEqual(['3.0s  c', '4.0s  d']);
+  });
+});

@@ -15,7 +15,6 @@
   -webkit-font-smoothing: antialiased;
   text-shadow: none;
   pointer-events: auto;
-  z-index: 20;
 }
 .rules-log.open {
   display: flex;
@@ -35,8 +34,12 @@
   color: #e8d8c8;
   background: transparent;
   border: 1px solid #6a5a70;
+  box-shadow: none;
   padding: 0 6px;
   cursor: pointer;
+}
+.rules-log .rl-toggle:hover {
+  background: #2a2230;
 }
 .rules-log .rl-toggle.on {
   background: #3a3040;

@@ -36,7 +36,10 @@ export class LogPanel {
     head.append(title, this.toggle);
     this.body.className = 'rl-body';
     this.root.append(head, this.body);
-    parent.append(this.root);
+    // Before #ui in the page, so the pause menu and the end screen (inside #ui) paint above the log.
+    const ui = parent.querySelector(':scope > #ui');
+    if (ui) ui.before(this.root);
+    else parent.append(this.root);
     this.setDetails(this.details);
   }
 
@@ -44,17 +47,41 @@ export class LogPanel {
     this.root.classList.toggle('open', on);
   }
 
-  render(rows: Row[]): void {
-    const stick = this.body.scrollHeight - this.body.scrollTop - this.body.clientHeight < 4;
+  /** Rows per record on screen, oldest first: lets `append` trim from the top without a rebuild. */
+  private counts: number[] = [];
+
+  private rowEl(r: Row): HTMLElement {
+    const d = document.createElement('div');
+    d.className = `rl-row k${r.kind}${r.detail ? ' detail' : ''}`;
+    d.textContent = r.text;
+    return d;
+  }
+
+  /** Full rebuild: a details toggle or a clear. */
+  render(recs: Row[][]): void {
+    const stick = this.sticks();
     const frag = document.createDocumentFragment();
-    for (const r of rows) {
-      const d = document.createElement('div');
-      d.className = `rl-row k${r.kind}${r.detail ? ' detail' : ''}`;
-      d.textContent = r.text;
-      frag.append(d);
-    }
+    for (const rows of recs) for (const r of rows) frag.append(this.rowEl(r));
     this.body.replaceChildren(frag);
+    this.counts = recs.map((rows) => rows.length);
     if (stick) this.body.scrollTop = this.body.scrollHeight;
+  }
+
+  /** Follows along: `drop` records leave the top, `add` come in at the bottom; nothing else is touched. */
+  append(add: Row[][], drop: number): void {
+    const stick = this.sticks();
+    for (const n of this.counts.splice(0, drop)) for (let i = 0; i < n; i++) this.body.firstElementChild?.remove();
+    const frag = document.createDocumentFragment();
+    for (const rows of add) {
+      for (const r of rows) frag.append(this.rowEl(r));
+      this.counts.push(rows.length);
+    }
+    this.body.append(frag);
+    if (stick) this.body.scrollTop = this.body.scrollHeight;
+  }
+
+  private sticks(): boolean {
+    return this.body.scrollHeight - this.body.scrollTop - this.body.clientHeight < 4;
   }
 
   setDetails(on: boolean): void {
