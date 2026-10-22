@@ -1,0 +1,531 @@
+<title>Tiny Adventurers In-Game Trial</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,600&family=JetBrains+Mono:wght@400;600&family=Press+Start+2P&display=swap">
+<style>
+/* Layout: one 1280x720 game frame scaled to the page width, the switches above it, a short key below.
+   Single dark look on purpose: the game is dark. */
+:root {
+  color-scheme: dark;
+  --bg: #0f090e;
+  --panel: #221620;
+  --edge-soft: #3d2834;
+  --edge: #5a3a4a;
+  --text: #f0e6d8;
+  --muted: #b3a3a8;
+  --faint: #847379;
+  --gold: #e8c040;
+  --gold-ink: #2a1806;
+  --red: #e05050;
+  --green: #5cc870;
+  --fell: 'IM Fell English SC', Georgia, serif;
+  --inter: 'Inter', system-ui, sans-serif;
+  --pixel: 'Press Start 2P', monospace;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: var(--inter); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+.wrap { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+header.page h1 { font-family: var(--fell); font-weight: 400; font-size: clamp(26px, 4vw, 36px); margin: 0 0 6px; color: var(--gold); text-wrap: balance; }
+header.page p { margin: 0; color: var(--muted); max-width: 72ch; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.seg > span { font: 600 11px/1 var(--inter); letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin-right: 4px; }
+.seg button { font: 500 13px/1 var(--inter); color: var(--muted); background: transparent; border: 1px solid var(--edge-soft); border-radius: 999px; padding: 7px 12px; cursor: pointer; }
+.seg button:hover { color: var(--text); border-color: var(--edge); }
+.seg button[aria-pressed="true"] { color: var(--gold-ink); background: var(--gold); border-color: var(--gold); }
+.seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.seg button:disabled { opacity: 0.35; cursor: default; }
+
+.frame { position: relative; width: 100%; overflow: hidden; border-radius: 10px; border: 1px solid var(--edge-soft); background: #000; }
+.stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; overflow: hidden; }
+.stage canvas { position: absolute; inset: 0; width: 1280px; height: 720px; image-rendering: pixelated; }
+
+.key { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.key article { background: var(--panel); border: 1px solid var(--edge-soft); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.key h3 { margin: 0 0 6px; font: 400 19px/1.2 var(--fell); color: var(--gold); }
+.key p { margin: 0; color: var(--muted); font-size: 14px; }
+
+/* ================================================================ world texts (shared positions) */
+.w { position: absolute; white-space: nowrap; transform: translate(-50%, -100%); pointer-events: none; }
+.float { animation: rise 1.8s ease-out infinite; }
+.float.d2 { animation-delay: 0.6s; }
+.float.d3 { animation-delay: 1.2s; }
+@keyframes rise {
+  0% { opacity: 0; transform: translate(-50%, -60%) scale(0.85); }
+  12% { opacity: 1; transform: translate(-50%, -110%) scale(1.08); }
+  25% { transform: translate(-50%, -120%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -260%); }
+}
+.zz { animation: zz 2.4s ease-in-out infinite; }
+@keyframes zz { 0% { opacity: 0; transform: translate(-50%, -80%); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(-20%, -260%); } }
+@media (prefers-reduced-motion: reduce) { .float, .zz { animation: none; } }
+
+/* ================================================================ HUD: shared boxes */
+.hud { position: absolute; inset: 0; pointer-events: none; }
+.party { position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 7px; }
+.member { border-left: 4px solid var(--accent); padding-left: 7px; }
+.member .pname { display: block; margin-bottom: 3px; }
+.member .mini { width: 120px; height: 6px; background: #140c12; }
+.member .mini .fill { height: 100%; background: var(--green); }
+.pfx { display: flex; gap: 3px; margin-top: 4px; }
+.c-wiz { --accent: #4a7aff; } .c-bar { --accent: #d03030; } .c-pal { --accent: #e8c040; }
+
+.boss { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: 520px; text-align: center; }
+.boss .bname { margin-bottom: 6px; color: #ffb0a0; }
+.boss .bbar { height: 12px; background: #140c12; }
+.boss .bbar .fill { width: 64%; height: 100%; background: linear-gradient(#e04040, #a01818); }
+
+.messages { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.msg { color: var(--gold); text-align: center; }
+
+.bottom { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: flex-end; gap: 20px; }
+.hp-col { display: flex; flex-direction: column; gap: 6px; }
+.effects { display: flex; gap: 4px; }
+.hp-bar { position: relative; width: 210px; height: 20px; background: #140c12; }
+.hp-bar .fill { width: 64%; height: 100%; background: linear-gradient(#e04848, #a02020); }
+.hp-bar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.abilities { display: flex; gap: 8px; }
+.slot { position: relative; width: 66px; height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; overflow: hidden; background: #2a1c26; }
+.slot .sweep { position: absolute; inset: 0; }
+.slot .k, .slot .n { position: relative; text-align: center; }
+.coins { display: flex; align-items: center; color: var(--gold); height: 20px; }
+.coin { display: inline-block; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe68a, #d9a42a 60%, #8a6216); }
+.help { position: absolute; right: 12px; bottom: 12px; color: var(--muted); }
+.status-hint { position: absolute; top: 60%; left: 50%; transform: translateX(-50%); color: #d8c8ff; white-space: nowrap; }
+
+.rlog { position: absolute; left: 12px; bottom: 64px; width: 430px; display: flex; flex-direction: column; color: #e8d8c8; }
+.rlog .rl-body { padding: 4px 8px 6px; }
+.rlog .row { font-weight: 600; white-space: pre-wrap; }
+.rlog .row.detail { font-weight: 400; padding-left: 2ch; color: #b8aca0; }
+.rlog .k1 { color: #70d080; } .rlog .k2 { color: #c0a0ff; } .rlog .k3 { color: #ff7070; }
+
+.menu { position: absolute; inset: 0; display: none; place-items: center; background: rgba(6, 3, 6, 0.55); pointer-events: auto; }
+.stage.menu-on .menu { display: grid; }
+.menu .box { width: 320px; display: flex; flex-direction: column; gap: 10px; padding: 22px; text-align: center; }
+.menu .title { margin-bottom: 6px; }
+
+/* ================================================================ TODAY: the game as it is */
+.stage.today .hud { font-family: var(--pixel); font-size: 9px; text-shadow: 2px 2px 0 #000; }
+.stage.today .boss .bname { font-size: 11px; }
+.stage.today .boss .bbar { box-shadow: 0 0 0 2px #5a1a1a; }
+.stage.today .boss .chip { font-size: 8px; padding: 2px 4px; margin-left: 4px; background: #8a1a1a; color: #ffd0d0; text-shadow: none; }
+.stage.today .msg { font-size: 11px; }
+.stage.today .msg.sub { display: none; }
+.stage.today .hp-bar { box-shadow: 0 0 0 2px #4a2a2a; width: 200px; height: 18px; }
+.stage.today .fx { width: 14px; height: 14px; border: 1px solid #c04040; background: #140c12; color: #c04040; font-size: 8px; line-height: 12px; text-align: center; text-shadow: none; }
+.stage.today .fx.pos { border-color: #40c060; color: #40c060; }
+.stage.today .pfx .fx { width: 12px; height: 12px; font-size: 6px; line-height: 10px; }
+.stage.today .slot { width: 64px; height: 46px; box-shadow: 0 0 0 2px var(--edge); }
+.stage.today .slot.ready { box-shadow: 0 0 0 2px var(--gold); }
+.stage.today .slot .k { font-size: 7px; color: var(--muted); }
+.stage.today .slot .n { font-size: 6px; line-height: 1.4; }
+.stage.today .slot .sweep { background: linear-gradient(to top, rgba(0,0,0,0.6) 0 var(--left, 0%), transparent var(--left, 0%)); }
+.stage.today .coins { font-size: 9px; }
+.stage.today .coin { width: 14px; height: 14px; margin-right: 6px; }
+.stage.today .help { font-size: 7px; }
+.stage.today .help kbd { font: inherit; }
+.stage.today .status-hint { font-size: 11px; background: rgba(10, 6, 12, 0.7); padding: 6px 10px; }
+.stage.today .rlog { font-family: var(--mono); font-size: 11px; line-height: 1.35; background: rgba(10, 6, 14, 0.82); text-shadow: none; }
+.stage.today .rlog .rl-head { display: flex; justify-content: space-between; padding: 2px 6px; font-weight: 600; border-bottom: 1px solid #3a3040; }
+.stage.today .rlog .rl-head button { font: inherit; font-weight: 400; color: #e8d8c8; background: #3a3040; border: 1px solid #6a5a70; padding: 0 6px; }
+.stage.today .rlog .rl-head .t { font: inherit; }
+.stage.today .menu .box { background: #2a1c26; border: 3px solid #5a3a4a; font-family: var(--pixel); }
+.stage.today .menu .title { font-size: 14px; color: var(--gold); }
+.stage.today .menu button { font: 11px var(--pixel); color: var(--text); background: #4a3040; border: 0; padding: 10px 14px; box-shadow: inset -3px -3px 0 #2a1822, inset 3px 3px 0 #6a4a5a; }
+.stage.today .menu button.danger { background: #6a2424; box-shadow: inset -3px -3px 0 #3a1010, inset 3px 3px 0 #8a3a3a; }
+.stage.today .w { font-family: var(--pixel); color: #fff; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
+.stage.today .ntag { font-size: 10px; }
+.stage.today .dmg { font-size: 12px; color: #fff; }
+.stage.today .dmg.hit { color: #ff6060; }
+.stage.today .dmg.heal { color: #60e070; }
+.stage.today .eff { font-size: 8px; color: #9fd0ff; }
+.stage.today .mark { font-size: 12px; }
+.stage.today .sound { font-size: 9px; color: #1a1020; text-shadow: -1px -1px 0 #d8d0e0, 1px -1px 0 #d8d0e0, -1px 1px 0 #d8d0e0, 1px 1px 0 #d8d0e0; }
+.stage.today .ehint { font-family: monospace; font-size: 14px; font-weight: 700; }
+
+/* ================================================================ NEW: Inter text, Fell headings, leather & brass */
+.stage.new .hud { font-family: var(--inter); font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.9), 0 0 1px #000; font-variant-numeric: tabular-nums; }
+.stage.new .member .pname { font-weight: 600; }
+.stage.new .member .pname em { font-style: normal; font-weight: 400; color: var(--muted); }
+.stage.new .member .mini { height: 6px; border-radius: 3px; overflow: hidden; box-shadow: 0 0 0 1px rgba(106, 74, 92, 0.9); }
+.stage.new .boss .bname { font-family: var(--fell); font-size: 24px; letter-spacing: 0.02em; text-shadow: 0 2px 4px #000; }
+.stage.new .boss .chip { font: 600 11px/1 var(--inter); letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 8px; margin-left: 8px; border-radius: 999px; vertical-align: 4px; background: #7a1a1a; color: #ffd0d0; box-shadow: 0 0 0 1px #c04040; text-shadow: none; }
+.stage.new .boss .bbar { height: 12px; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px #8a3030, 0 0 0 3px rgba(0,0,0,0.6), inset 0 2px 3px rgba(0,0,0,0.6); }
+.stage.new .boss .bbar .fill { box-shadow: inset 0 1px 0 rgba(255,200,200,0.35); }
+.stage.new .msg { font-family: var(--fell); font-size: 26px; text-shadow: 0 2px 6px #000; }
+.stage.new .msg.sub { font-family: var(--inter); font-size: 14px; font-weight: 600; color: #f0e0b0; }
+.stage.new .hp-bar { border-radius: 7px; overflow: hidden; box-shadow: 0 0 0 1px #8a5a6a, 0 0 0 3px rgba(0,0,0,0.55), inset 0 2px 3px rgba(0,0,0,0.6); }
+.stage.new .hp-bar .fill { box-shadow: inset 0 1px 0 rgba(255,210,210,0.35); }
+.stage.new .hp-bar span { font-weight: 700; font-size: 12px; }
+.stage.new .fx { width: 20px; height: 20px; border-radius: 5px; display: grid; place-items: center; font: 700 10px/1 var(--inter); color: #ffb0b0; background: linear-gradient(180deg, #4a1c22, #2a1014); box-shadow: 0 0 0 1px #c04848; text-shadow: none; }
+.stage.new .fx.pos { color: #b0f0c0; background: linear-gradient(180deg, #1c3a24, #102016); box-shadow: 0 0 0 1px #48b060; }
+.stage.new .fx.ice { color: #cfe8ff; background: linear-gradient(180deg, #1c2c4a, #101a2c); box-shadow: 0 0 0 1px #5a8ad8; }
+.stage.new .pfx .fx { width: 16px; height: 16px; font-size: 9px; border-radius: 4px; }
+.stage.new .slot { width: 74px; height: 54px; border-radius: 9px; background: linear-gradient(180deg, #2f1f2b, #1f141c); box-shadow: 0 0 0 1px #6a4a5c, 0 0 0 3px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,235,200,0.07); }
+.stage.new .slot.ready { box-shadow: 0 0 0 1px #f6dc86, 0 0 0 3px rgba(0,0,0,0.55), 0 0 14px rgba(232,192,64,0.35), inset 0 1px 0 rgba(255,235,200,0.1); }
+.stage.new .slot .k { font: 600 10px/1 var(--inter); letter-spacing: 0.06em; color: var(--muted); padding: 2px 5px; border-radius: 4px; background: rgba(0,0,0,0.35); text-shadow: none; }
+.stage.new .slot.ready .k { color: var(--gold); }
+.stage.new .slot .n { font-size: 11.5px; font-weight: 600; line-height: 1.15; padding: 0 3px; }
+/* cooldown: the gold rim fills clockwise from the top as the ability recovers */
+.slot .ring { display: none; }
+.stage.new .slot .sweep { display: none; }
+.stage.new .slot { box-shadow: 0 0 0 3px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,235,200,0.07); transition: box-shadow 160ms; }
+.stage.new .slot .ring {
+  display: block; position: absolute; inset: 0; border-radius: 9px; padding: 2px; pointer-events: none;
+  background: conic-gradient(from 0deg, #f6dc86 0, #d9a42a var(--p, 100%), rgba(106, 74, 92, 0.85) var(--p, 100%) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.stage.new .slot.ready { box-shadow: 0 0 0 3px rgba(0,0,0,0.55), 0 0 16px rgba(232,192,64,0.45), inset 0 1px 0 rgba(255,235,200,0.1); }
+.stage.new .slot.ready .ring { background: linear-gradient(180deg, #fbe7a0, #d9a42a); }
+.stage.new .slot.flash { animation: ready-flash 420ms ease-out; }
+@keyframes ready-flash { 0% { transform: scale(1.08); filter: brightness(1.6); } 100% { transform: scale(1); filter: none; } }
+.stage.new .slot:not(.ready) .n, .stage.new .slot:not(.ready) .k { opacity: 0.6; }
+.stage.new .slot .cd { position: absolute; right: 6px; top: 4px; font-size: 10px; font-weight: 700; color: #fff; }
+.stage.new .slot.ready .cd { display: none; }
+.stage.today .slot .cd { display: none; }
+.stage.new .coins { font-size: 14px; font-weight: 700; }
+.stage.new .coin { width: 15px; height: 15px; margin-right: 6px; box-shadow: 0 0 0 1px #6a4a10; }
+.stage.new .help { font-size: 12px; display: flex; gap: 12px; }
+.stage.new .help kbd { font: 600 11px/1 var(--inter); color: var(--text); padding: 3px 6px; border-radius: 4px; background: rgba(42, 28, 38, 0.85); box-shadow: 0 0 0 1px #5a3a4a, 0 2px 0 rgba(0,0,0,0.6); margin-right: 4px; text-shadow: none; }
+.stage.new .status-hint { font-size: 14px; font-weight: 600; padding: 7px 12px; border-radius: 8px; background: rgba(20, 12, 24, 0.82); box-shadow: 0 0 0 1px #6a5a90; text-shadow: none; }
+.stage.new .rlog { font-size: 12.5px; line-height: 1.45; border-radius: 10px; overflow: hidden; background: rgba(16, 9, 14, 0.86); box-shadow: 0 0 0 1px #4a3240, 0 10px 30px rgba(0,0,0,0.5); text-shadow: none; }
+.stage.new .rlog .rl-head { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; border-bottom: 1px solid #3d2834; }
+.stage.new .rlog .rl-head .t { font: 400 16px/1 var(--fell); color: var(--gold); }
+.stage.new .rlog .rl-head button { font: 600 11px/1.3 var(--inter); color: var(--text); background: linear-gradient(180deg, #4b3242, #382431); border: 1px solid #6a4a5c; border-radius: 6px; padding: 3px 8px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.09); }
+.stage.new .rlog .rl-body { padding: 6px 10px 8px; }
+.stage.new.log-mono .rlog .rl-body { font-family: var(--mono); font-size: 11.5px; }
+.stage.new.log-inter .rlog .rl-body { font-family: var(--inter); }
+.stage.new .menu .box { background: linear-gradient(180deg, #2a1b26, #20141d); border: 1px solid #4a3240; border-radius: 12px; box-shadow: inset 0 1px 0 rgba(255,235,200,0.05), 0 20px 50px rgba(0,0,0,0.6); font-family: var(--inter); }
+.stage.new .menu .title { font: 400 30px/1.1 var(--fell); color: var(--gold); }
+.stage.new .menu .hint { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.stage.new .menu button { font: 600 14px/1.3 var(--inter); color: var(--text); background: linear-gradient(180deg, #4b3242, #382431); border: 1px solid #6a4a5c; border-radius: 6px; padding: 6px 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 0 rgba(0,0,0,0.45); cursor: pointer; }
+.stage.new .menu button.primary { color: var(--gold-ink); background: linear-gradient(180deg, #f1cf63, #c9962c 55%, #a97a1c); border-color: #f6dc86; box-shadow: inset 0 1px 0 rgba(255,250,220,0.6), 0 2px 0 #5a3e0c; }
+.stage.new .menu button.danger { background: linear-gradient(180deg, #7a2a2a, #5a1c1c); border-color: #a04444; }
+.stage.today .menu .hint { display: none; }
+.stage.today .menu button.primary { background: #7a5a18; box-shadow: inset -3px -3px 0 #4a3408, inset 3px 3px 0 #b08a30; }
+
+/* effect symbols */
+.ic { width: 14px; height: 14px; fill: currentColor; stroke: none; display: block; }
+.ic.line { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ic.weak { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; }
+.ic.line.weak { stroke-width: 1.2; opacity: 0.85; }
+.fx b { font: inherit; }
+.stage.today .fx .ic, .stage.today .tagfx { display: none; }
+.stage.new .fx b { display: none; }
+.stage.new .fx { color: inherit; }
+.stage.new .pfx .ic { width: 11px; height: 11px; }
+.stage.new .tagfx { filter: drop-shadow(0 0 1px #000) drop-shadow(0 1px 1px #000); }
+.stage.new .tagfx .ic { width: 13px; height: 13px; }
+.status-hint { display: none !important; }
+.sleepfx { display: none !important; }
+.stage.asleep .status-hint { display: flex !important; }
+.stage.asleep .sleepfx { display: grid !important; }
+.stage.today .status-hint .ic { display: none; }
+.stage.today .status-hint kbd { font: inherit; }
+.stage.today .status-hint kbd::before { content: '('; } .stage.today .status-hint kbd::after { content: ')'; }
+.stage.new .status-hint { top: auto; bottom: 104px; align-items: center; gap: 8px; font-size: 13px; }
+.stage.new .status-hint .ic { width: 15px; height: 15px; }
+.stage.new .status-hint kbd { font: 700 11px/1 var(--inter); color: var(--gold-ink); background: linear-gradient(180deg, #f1cf63, #c9962c); border-radius: 4px; padding: 2px 5px; margin-left: 2px; }
+.legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 14px; }
+.legend > div { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
+.legend .fx { width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; background: linear-gradient(180deg, #3a1a20, #22100f); box-shadow: 0 0 0 1px #a04048; flex: none; }
+.legend .fx.pos { background: linear-gradient(180deg, #1c3a24, #102016); box-shadow: 0 0 0 1px #48b060; }
+.legend .ic { width: 16px; height: 16px; }
+
+/* world texts, new: Inter with a crisp dark outline */
+.stage.new .w { font-family: var(--inter); color: #fff; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 3px rgba(0,0,0,0.7); }
+.stage.new .ntag { font-size: 13px; font-weight: 600; }
+.stage.new .ntag.you { color: #cfe0ff; }
+.stage.new .dmg { font-size: 18px; font-weight: 800; color: #fff; }
+.stage.new .dmg.hit { color: #ff6a6a; }
+.stage.new .dmg.heal { color: #70f080; }
+.stage.new .dmg.big { font-size: 22px; color: #ffd24a; }
+.stage.new .eff { font-size: 12px; font-weight: 700; color: #a8d8ff; letter-spacing: 0.02em; }
+.stage.new .mark { font-size: 18px; font-weight: 800; }
+.stage.new .mark.alert { color: #ffd24a; }
+.stage.new .mark.z { color: #d8c8ff; }
+.stage.new .sound { font-size: 12px; font-weight: 600; font-style: italic; color: #1a1020; text-shadow: -1px -1px 0 #d8d0e0, 1px -1px 0 #d8d0e0, -1px 1px 0 #d8d0e0, 1px 1px 0 #d8d0e0; }
+.stage.new .ehint { font-size: 12px; font-weight: 700; color: var(--gold-ink); background: linear-gradient(180deg, #f1cf63, #c9962c); border-radius: 4px; padding: 1px 6px; box-shadow: 0 0 0 1px #000, 0 2px 0 rgba(0,0,0,0.6); text-shadow: none; }
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <h1>Tiny Adventurers in the dungeon</h1>
+    <p>A two-hero fight with every in-game text and the HUD, in today's look and in the new one: Inter for all text, IM Fell English SC for the big headings, Leather &amp; brass frames. The room itself stays pixel art.</p>
+  </header>
+
+  <div class="controls">
+    <div class="seg" id="segLook" role="group" aria-label="Look">
+      <span>Look</span>
+      <button data-v="today" aria-pressed="false">Today</button>
+      <button data-v="new" aria-pressed="true">New</button>
+    </div>
+    <div class="seg" id="segLog" role="group" aria-label="Rules log font">
+      <span>Rules log font</span>
+      <button data-v="mono" aria-pressed="false">JetBrains Mono</button>
+      <button data-v="inter" aria-pressed="true">Inter</button>
+    </div>
+    <div class="seg" id="segSleep" role="group" aria-label="Alice asleep">
+      <span>Alice asleep</span>
+      <button data-v="off" aria-pressed="true">No</button>
+      <button data-v="on" aria-pressed="false">Yes</button>
+    </div>
+    <div class="seg" id="segMenu" role="group" aria-label="Esc menu">
+      <span>Esc menu</span>
+      <button data-v="off" aria-pressed="true">Hidden</button>
+      <button data-v="on" aria-pressed="false">Shown</button>
+    </div>
+  </div>
+
+  <div class="frame" id="frame">
+    <div class="stage new log-inter" id="stage">
+      <canvas id="cv" width="320" height="180"></canvas>
+
+      <!-- world texts (stage px = canvas px x 4) -->
+      <span class="w ntag you" style="left:600px; top:352px">Alice</span>
+      <span class="w ntag" style="left:520px; top:432px">Bob Smith</span>
+      <span class="w dmg float" style="left:770px; top:330px">12</span>
+      <span class="w dmg big float d2" style="left:832px; top:400px">31</span>
+      <span class="w dmg hit float d3" style="left:520px; top:418px">7</span>
+      <span class="w dmg heal float d2" style="left:600px; top:338px">+5</span>
+      <span class="w tagfx" style="left:574px; top:434px"><svg class="ic" style="color:#6ad04a"><use href="#i-drop"/></svg></span>
+      <span class="w mark z zz" style="left:378px; top:186px">Z</span>
+      <span class="w mark alert" style="left:944px; top:150px">!</span>
+      <span class="w sound" style="left:1000px; top:110px">*clatter*</span>
+      <span class="w ehint" style="left:408px; top:524px">E</span>
+
+      <div class="hud">
+        <div class="party">
+          <div class="member c-wiz"><span class="pname">Alice <em>(you)</em></span><div class="mini"><div class="fill" style="width:64%"></div></div><div class="pfx"><span class="fx pos"><b>A</b><svg class="ic line" style="color:#70e080"><use href="#i-haste"/></svg></span><span class="fx"><b>C</b><svg class="ic line weak" style="color:#8cc8ff"><use href="#i-frost"/></svg></span></div></div>
+          <div class="member c-bar"><span class="pname">Bob Smith</span><div class="mini"><div class="fill" style="width:82%"></div></div><div class="pfx"><span class="fx"><b>X</b><svg class="ic" style="color:#6ad04a"><use href="#i-drop"/></svg></span></div></div>
+        </div>
+
+        <div class="boss"><div class="bname">Orc Warlord<span class="chip">Enraged</span></div><div class="bbar"><div class="fill"></div></div></div>
+
+        <div class="messages">
+          <div class="msg">The Warlord's hall is sealed</div>
+          <div class="msg sub">Defeat him to open the doors</div>
+        </div>
+
+        <div class="rlog">
+          <div class="rl-head"><span class="t">Rules log</span><button type="button">details</button></div>
+          <div class="rl-body">
+            <div class="row">Alice hit Orc 2 with Magic Missile for 12</div>
+            <div class="row detail">12 = 8 base × 1.25 INT 15 × 1.20 Red Staff</div>
+            <div class="row k2">Orc 2 is Chilled (25 %)</div>
+            <div class="row k3">Orc 1 hit Bob Smith for 7</div>
+            <div class="row detail">9 slashing − 2 (resistance 20 %)</div>
+            <div class="row k1">Alice healed 5 with Haste</div>
+          </div>
+        </div>
+
+        <div class="status-hint"><svg class="ic" style="color:#c8b8ff"><use href="#i-moon"/></svg><span>Asleep. A teammate can wake you <kbd>E</kbd></span></div>
+
+        <div class="bottom">
+          <div class="hp-col">
+            <div class="effects"><span class="fx pos"><b>A</b><svg class="ic line" style="color:#70e080"><use href="#i-haste"/></svg></span><span class="fx"><b>C</b><svg class="ic line weak" style="color:#8cc8ff"><use href="#i-frost"/></svg></span><span class="fx sleepfx"><b>Z</b><svg class="ic" style="color:#c8b8ff"><use href="#i-moon"/></svg></span></div>
+            <div class="hp-bar"><div class="fill"></div><span>45 / 70</span></div>
+          </div>
+          <div class="abilities">
+            <div class="slot ready" id="s1" data-cd="0.8" data-rest="2.2"><div class="sweep"></div><div class="ring"></div><span class="cd"></span><div class="k">LMB</div><div class="n">Magic Missile</div></div>
+            <div class="slot" id="s2" data-cd="5" data-rest="1.4"><div class="sweep"></div><div class="ring"></div><span class="cd">3.2</span><div class="k">RMB</div><div class="n">Fireball</div></div>
+          </div>
+          <div class="coins"><i class="coin"></i>25</div>
+        </div>
+
+        <div class="help"><span><kbd>WASD</kbd>move</span><span><kbd>LMB</kbd><kbd>RMB</kbd>attack</span><span><kbd>L</kbd>log</span><span><kbd>Esc</kbd>menu</span></div>
+      </div>
+
+      <div class="menu">
+        <div class="box">
+          <div class="title">Paused</div>
+          <div class="hint">The run goes on while this menu is open.</div>
+          <button type="button" class="primary">Resume</button>
+          <button type="button">Settings</button>
+          <button type="button" class="danger">Leave the run</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-flame" viewBox="0 0 16 16"><path d="M8 1c1 3 4.5 4.5 4.5 8.6A4.5 4.5 0 0 1 3.5 9.6C3.5 7 5.2 6 5.8 3.8c.9 1.2 1.2 2.4 1.2 3.4C8.2 5.8 8.4 3.6 8 1z"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 16 16"><path d="M8 1.5S3 7.4 3 10.4a5 5 0 0 0 10 0C13 7.4 8 1.5 8 1.5z"/></symbol>
+    <symbol id="i-frost" viewBox="0 0 16 16"><path d="M8 1v14M1.9 4.5l12.2 7M1.9 11.5l12.2-7M6 2.2 8 4l2-1.8M6 13.8 8 12l2 1.8"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 16 16"><path d="M10.5 1.5a6.5 6.5 0 1 0 4 11.2A5.3 5.3 0 0 1 10.5 1.5z"/></symbol>
+    <symbol id="i-blind" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM2.5 13.5l11-11"/></symbol>
+    <symbol id="i-stone" viewBox="0 0 16 16"><path d="M3 13.5 1.6 8.2 4.6 3l6-1.2 3.6 4-1 6.4-5.4 2.2z"/><path d="m6 6 2.2 2.4-1 3" fill="none" stroke="#140c12" stroke-width="1.1"/></symbol>
+    <symbol id="i-hourglass" viewBox="0 0 16 16"><path d="M3.5 1h9v2.2c0 2.2-2.2 3.6-3.2 4.8 1 1.2 3.2 2.6 3.2 4.8V15h-9v-2.2c0-2.2 2.2-3.6 3.2-4.8-1-1.2-3.2-2.6-3.2-4.8z"/></symbol>
+    <symbol id="i-haste" viewBox="0 0 16 16"><path d="m2.5 3 5 5-5 5M8.5 3l5 5-5 5"/></symbol>
+    <symbol id="i-vine" viewBox="0 0 16 16"><path d="M2 14.5C5.5 11 3.5 7 7.5 5.5S11.5 2 14 1.5M4.6 9.6C3 8.6 1.8 9.2 1.8 9.2M8.4 5.2c-.3-1.8.6-3.4.6-3.4M10.6 8.2c1.6-.4 3 .4 3 .4"/></symbol>
+    <symbol id="i-skull" viewBox="0 0 16 16"><path d="M8 1.2A5.8 5.8 0 0 0 2.2 7c0 2.1 1 3.4 2.1 4.1V14h7.4v-2.9c1.1-.7 2.1-2 2.1-4.1A5.8 5.8 0 0 0 8 1.2z"/><circle cx="5.6" cy="7.4" r="1.5" fill="#140c12"/><circle cx="10.4" cy="7.4" r="1.5" fill="#140c12"/><path d="M7 14v-2M9 14v-2" stroke="#140c12" stroke-width="1"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 1 14 3.4V8c0 3.6-3 6.1-6 7-3-.9-6-3.4-6-7V3.4z"/></symbol>
+    <symbol id="i-blade" viewBox="0 0 16 16"><path d="M2.5 13.5 11.5 4.5M9.5 2.5l4 4M3.8 9.8l2.4 2.4"/></symbol>
+  </svg>
+
+  <section>
+    <h2 style="font: 400 22px/1.2 var(--fell); color: var(--gold); margin: 6px 0 4px;">Effect symbols</h2>
+    <p style="margin: 0 0 12px; color: var(--muted); max-width: 72ch;">They replace today's letters in the HUD and the party list. A hero's effects also show as small symbols next to their name tag, instead of any words on the board. The weaker step of a damage-type effect is the same symbol drawn as an outline.</p>
+    <div class="legend">
+      <div><span class="fx"><svg class="ic" style="color:#ff8a30"><use href="#i-flame"/></svg></span>Burning</div>
+      <div><span class="fx"><svg class="ic weak" style="color:#ff8a30"><use href="#i-flame"/></svg></span>Singed</div>
+      <div><span class="fx"><svg class="ic line" style="color:#8cc8ff"><use href="#i-frost"/></svg></span>Frozen</div>
+      <div><span class="fx"><svg class="ic line weak" style="color:#8cc8ff"><use href="#i-frost"/></svg></span>Chilled</div>
+      <div><span class="fx"><svg class="ic" style="color:#6ad04a"><use href="#i-drop"/></svg></span>Poisoned</div>
+      <div><span class="fx"><svg class="ic weak" style="color:#6ad04a"><use href="#i-drop"/></svg></span>Tainted</div>
+      <div><span class="fx"><svg class="ic" style="color:#c8b8ff"><use href="#i-moon"/></svg></span>Sleep</div>
+      <div><span class="fx"><svg class="ic line" style="color:#d8d0d0"><use href="#i-blind"/></svg></span>Blind</div>
+      <div><span class="fx"><svg class="ic" style="color:#b8a890"><use href="#i-stone"/></svg></span>Petrified</div>
+      <div><span class="fx"><svg class="ic" style="color:#d8b060"><use href="#i-hourglass"/></svg></span>Slowed</div>
+      <div><span class="fx"><svg class="ic line" style="color:#70b040"><use href="#i-vine"/></svg></span>Entangled</div>
+      <div><span class="fx"><svg class="ic" style="color:#d8c0ff"><use href="#i-skull"/></svg></span>Fear</div>
+      <div><span class="fx pos"><svg class="ic line" style="color:#70e080"><use href="#i-haste"/></svg></span>Accelerated</div>
+      <div><span class="fx pos"><svg class="ic" style="color:#e8c040"><use href="#i-shield"/></svg></span>Warded</div>
+      <div><span class="fx pos"><svg class="ic line" style="color:#a0e070"><use href="#i-blade"/></svg></span>Coated</div>
+    </div>
+  </section>
+
+  <section class="key">
+    <article><h3>Text in the world</h3><p>Name tags, damage and heal numbers, the Z and ! marks and the noises are Inter with a one-pixel black outline. A crit (Flanking Thrust from behind) is a larger gold number with no word. The E use hint becomes a small gold key cap. No effect words on the board: a hero's effects are symbols next to the name tag.</p></article>
+    <article><h3>HUD</h3><p>Inter for every label and number, with digits that keep their width. The bars, effect icons and ability slots get the brass rim. While an ability cools down, the slot's gold rim fills clockwise from the top, and the seconds left show in the corner. When the rim closes, the slot flashes once and glows gold until used.</p></article>
+    <article><h3>Headings</h3><p>IM Fell only where text is large: the boss name, the room messages, the rules log title and the menu title.</p></article>
+    <article><h3>Rules log</h3><p>Inter, like the rest of the game (chosen). The switch above still shows JetBrains Mono for comparison.</p></article>
+    <article><h3>Asleep</h3><p>The one real status line moves off the board, above the HP bar, with a moon symbol and the E key cap. Switch "Alice asleep" to see it.</p></article>
+  </section>
+</div>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage'), frame = document.getElementById('frame');
+  function fit() {
+    var s = frame.clientWidth / 1280;
+    stage.style.transform = 'scale(' + s + ')';
+    frame.style.height = (720 * s) + 'px';
+  }
+  window.addEventListener('resize', fit); fit();
+
+  function seg(id, fn) {
+    var bs = document.querySelectorAll('#' + id + ' button');
+    bs.forEach(function (b) { b.addEventListener('click', function () {
+      bs.forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); }); fn(b.dataset.v);
+    }); });
+  }
+  var logBtns = document.querySelectorAll('#segLog button');
+  seg('segLook', function (v) { stage.classList.toggle('new', v === 'new'); stage.classList.toggle('today', v === 'today'); logBtns.forEach(function (b) { b.disabled = v === 'today'; }); });
+  seg('segLog', function (v) { stage.classList.toggle('log-mono', v === 'mono'); stage.classList.toggle('log-inter', v === 'inter'); });
+  seg('segMenu', function (v) { stage.classList.toggle('menu-on', v === 'on'); });
+  seg('segSleep', function (v) { stage.classList.toggle('asleep', v === 'on'); });
+
+  // ---------------------------------------------------------------- cooldowns: each slot cools, then stays ready a while
+  var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  ['s1', 's2'].forEach(function (id, i) {
+    var s = document.getElementById(id), cdEl = s.querySelector('.cd');
+    var cd = parseFloat(s.dataset.cd), rest = parseFloat(s.dataset.rest), period = cd + rest;
+    var t0 = performance.now() - (i ? 1800 : 0), wasReady = null;
+    function show(t) {
+      var p = Math.min(1, t / cd), ready = t >= cd;
+      s.style.setProperty('--p', (p * 100).toFixed(1) + '%');
+      s.style.setProperty('--left', ((1 - p) * 100).toFixed(1) + '%');
+      cdEl.textContent = ready ? '' : (cd - t).toFixed(1);
+      if (ready !== wasReady) {
+        s.classList.toggle('ready', ready);
+        if (ready && wasReady === false) { s.classList.remove('flash'); void s.offsetWidth; s.classList.add('flash'); }
+        wasReady = ready;
+      }
+    }
+    if (still) { show(i ? cd * 0.36 : cd); return; }
+    (function tick(now) { show(((now - t0) / 1000) % period); requestAnimationFrame(tick); })(performance.now());
+  });
+
+  // ---------------------------------------------------------------- the room, drawn in pixels (320x180)
+  var cv = document.getElementById('cv'), g = cv.getContext('2d');
+  var T = 16;
+  function rnd(i) { var x = Math.sin(i * 12.9898) * 43758.5453; return x - Math.floor(x); }
+  // floor
+  for (var ty = 0; ty < 12; ty++) for (var tx = 0; tx < 20; tx++) {
+    var r = rnd(tx * 31 + ty * 7);
+    var base = 70 + Math.floor(r * 10);
+    g.fillStyle = 'rgb(' + base + ',' + (base - 6) + ',' + (base - 2) + ')';
+    g.fillRect(tx * T, ty * T, T, T);
+    g.fillStyle = 'rgba(30,24,28,0.9)';
+    g.fillRect(tx * T, ty * T, T, 1); g.fillRect(tx * T, ty * T, 1, T);
+    if (r > 0.78) { g.fillStyle = 'rgba(30,24,28,0.6)'; g.fillRect(tx * T + 4, ty * T + 7, 6, 1); g.fillRect(tx * T + 9, ty * T + 8, 1, 3); }
+  }
+  // walls: top band and side walls
+  function brick(x, y, w, h) {
+    for (var yy = y; yy < y + h; yy += 4) for (var xx = x + ((yy / 4) % 2 ? 0 : 4); xx < x + w; xx += 8) {
+      var c = 92 + Math.floor(rnd(xx * 3 + yy * 11) * 22);
+      g.fillStyle = 'rgb(' + c + ',' + (c - 14) + ',' + (c - 24) + ')';
+      g.fillRect(xx, yy, 7, 3);
+    }
+  }
+  g.fillStyle = '#2a2024'; g.fillRect(0, 0, 320, 26); brick(0, 6, 320, 20);
+  g.fillStyle = '#1a1216'; g.fillRect(0, 26, 320, 2);
+  g.fillStyle = '#2a2024'; g.fillRect(0, 0, 40, 180); brick(4, 26, 32, 154);
+  g.fillStyle = '#2a2024'; g.fillRect(288, 0, 32, 180); brick(290, 26, 28, 154);
+  // torches
+  [[80, 14], [160, 14], [240, 14]].forEach(function (p) {
+    g.fillStyle = '#5a3a20'; g.fillRect(p[0], p[1] + 2, 2, 6);
+    g.fillStyle = '#ffd040'; g.fillRect(p[0] - 1, p[1] - 2, 4, 4);
+    g.fillStyle = '#ff8020'; g.fillRect(p[0], p[1] - 4, 2, 3);
+  });
+
+  function sprite(rows, pal, x, y) {
+    rows.forEach(function (row, j) { for (var i = 0; i < row.length; i++) { var c = pal[row[i]]; if (c) { g.fillStyle = c; g.fillRect(x + i, y + j, 1, 1); } } });
+  }
+  var wiz = ['...HH....', '..HHHH...', '.HHHHHH.r', 'HHHHHHHHr', '..SSSS..r', '..SESE..r', '..WWWW..r', '.BWWWWB.r', '.BBBBBB.r', '.BBBBBB.r', '..B..B..r'];
+  var bar = ['..RRRR....', '.RRRRRR.aa', '.RSSSSR.aa', '.RSESES..s', '..SSSS...s', '.SSLLSS..s', '.LLLLLL..s', '.LLLLLL..s', '..LLLL...s', '..P..P....', '..P..P....'];
+  var orc = ['..GGGG..', '.GGGGGG.', '.GYGGYG.', '.GGGGGG.', '.GTGGTG.', 'KKKKKKKK', 'GKKKKKKG', 'GKKKKKKG', '.KKKKKK.', '.DD..DD.'];
+  var boss = ['...CCCC...', '..CGGGGC..', '.GGGGGGGG.', '.GYGGGGYG.', '.GGGGGGGG.', '.GTGGGGTG.', 'KKKKKKKKKK', 'GKKKMMKKKG', 'GKKKKKKKKG', 'GKKKKKKKKG', '.KKKKKKKK.', '.KKK..KKK.', '.DDD..DDD.'];
+  var skel = ['..WWWW..', '.WWWWWW.', '.WXWWXW.', '.WWWWWW.', '..WXXW..', '...WW...', '.WWWWWW.', 'W.W..W.W', '..WWWW..', '..W..W..', '..W..W..'];
+  var gob = ['.gggg.', 'gYggYg', 'gggggg', '.KKKK.', 'gKKKKg', '.D..D.'];
+  var chest = ['.OOOOOOOO.', 'OYYYYYYYYO', 'OOOOOOOOOO', 'OYYYGGYYYO', 'OYYYGGYYYO', 'OYYYYYYYYO', 'OOOOOOOOOO'];
+  var P = { H: '#3e64c8', S: '#f0c8a0', E: '#222', W: '#e8e8f0', B: '#3a56b0', r: '#b0502a', R: '#d84a28', L: '#8a5a30', P: '#5a3a20', a: '#9ad0e0', s: '#6a4a30',
+    G: '#5a9a3a', Y: '#ff3030', T: '#eeeeee', K: '#5a4a40', D: '#3a3020', C: '#e8c040', M: '#c04040', X: '#111', g: '#7ab04a', O: '#4a2a10' };
+  var PC = Object.assign({}, P, { Y: '#9a6a2a', G: '#e8c040' });
+  // shadows
+  function shadow(x, y, w) { g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x + 1, y, w - 2, 2); }
+  shadow(146, 98, 9); sprite(wiz, P, 146, 88);
+  shadow(126, 118, 10); sprite(bar, P, 126, 108);
+  shadow(190, 96, 8); sprite(orc, P, 190, 86);
+  shadow(204, 118, 10); sprite(boss, P, 204, 106);
+  shadow(90, 58, 8); sprite(skel, P, 90, 48);
+  shadow(234, 44, 6); sprite(gob, P, 234, 38);
+  shadow(97, 134, 10); sprite(chest, PC, 97, 127);
+  // a magic missile in flight and a frost spark on the orc
+  g.fillStyle = 'rgba(180,120,255,0.5)'; g.fillRect(160, 92, 22, 1);
+  g.fillStyle = '#e0c0ff'; g.fillRect(180, 91, 3, 3);
+  g.fillStyle = '#a8d8ff'; [[189, 84], [198, 88], [193, 95]].forEach(function (p) { g.fillRect(p[0], p[1], 1, 1); });
+  // coins on the floor
+  [[170, 140], [174, 143], [118, 70]].forEach(function (p) { g.fillStyle = '#e8c040'; g.fillRect(p[0], p[1], 2, 2); g.fillStyle = '#8a6216'; g.fillRect(p[0] + 1, p[1] + 1, 1, 1); });
+
+  // darkness with light holes
+  var dk = document.createElement('canvas'); dk.width = 320; dk.height = 180;
+  var d = dk.getContext('2d');
+  d.fillStyle = 'rgba(0,0,0,0.92)'; d.fillRect(0, 0, 320, 180);
+  d.globalCompositeOperation = 'destination-out';
+  [[150, 100, 80], [80, 14, 36], [160, 14, 36], [240, 14, 36], [130, 116, 50]].forEach(function (l) {
+    var gr = d.createRadialGradient(l[0], l[1], 0, l[0], l[1], l[2]);
+    gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.85)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    d.fillStyle = gr; d.beginPath(); d.arc(l[0], l[1], l[2], 0, Math.PI * 2); d.fill();
+  });
+  g.drawImage(dk, 0, 0);
+  // warm torch tint
+  g.globalCompositeOperation = 'overlay';
+  var warm = g.createRadialGradient(150, 100, 0, 150, 100, 90);
+  warm.addColorStop(0, 'rgba(255,170,80,0.35)'); warm.addColorStop(1, 'rgba(255,170,80,0)');
+  g.fillStyle = warm; g.fillRect(0, 0, 320, 180);
+  g.globalCompositeOperation = 'source-over';
+})();
+</script>

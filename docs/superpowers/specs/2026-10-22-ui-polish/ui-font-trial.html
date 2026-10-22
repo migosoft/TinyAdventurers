@@ -1,0 +1,505 @@
+<title>Tiny Adventurers Type Trial</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+SC:wght@500;700&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Cinzel:wght@500;700&family=IM+Fell+English+SC&family=Inter:wght@400;500;600;700&family=Press+Start+2P&display=swap">
+<style>
+/* Layout: one dark page; a font strip to compare at a glance, then one live mock of the character hub
+   whose font and control style switch in place. Single dark look on purpose: the game is dark. */
+:root {
+  color-scheme: dark;
+  --bg: #0f090e;
+  --panel: #221620;
+  --panel-2: #2b1c27;
+  --well: #150d13;
+  --edge: #5a3a4a;
+  --edge-soft: #3d2834;
+  --text: #f0e6d8;
+  --muted: #b3a3a8;
+  --faint: #847379;
+  --gold: #e8c040;
+  --gold-deep: #9a7420;
+  --gold-ink: #2a1806;
+  --red: #e05050;
+  --green: #5cc870;
+  --blue: #5b86e8;
+
+  --body: 'Inter', system-ui, sans-serif;
+  --head: 'Cinzel', Georgia, serif;
+  --fs: 15px;
+  --fs-small: 13px;
+  --fs-tiny: 11.5px;
+  --head-case: none;
+  --head-track: 0.02em;
+  --num: 'Inter', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 64px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+header.page h1 { font-family: 'Cinzel', Georgia, serif; font-weight: 700; font-size: clamp(24px, 4vw, 34px); margin: 0 0 6px; letter-spacing: 0.02em; color: var(--gold); text-wrap: balance; }
+header.page p { margin: 0; color: var(--muted); max-width: 68ch; }
+h2.sec { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); margin: 0 0 14px; }
+
+/* ---------------------------------------------------------------- font strip */
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.fcard {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--panel); border: 1px solid var(--edge-soft); border-radius: 10px;
+  padding: 16px; color: var(--text); min-width: 0;
+}
+.fcard:hover { border-color: var(--edge); }
+.fcard:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.fcard[aria-pressed="true"] { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold) inset; }
+.fcard .tag { font: 600 11px/1 'Inter', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+.fcard[aria-pressed="true"] .tag { color: var(--gold); }
+.fcard .h { font-size: 21px; line-height: 1.2; color: var(--gold); }
+.fcard .p { font-size: 14px; color: var(--text); }
+.fcard .s { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums lining-nums; }
+.fcard .names { font: 400 12px/1.4 'Inter', sans-serif; color: var(--faint); margin-top: auto; }
+
+/* per-pairing faces, used both in the strip and in the mock */
+[data-font="pixel"]    { --body: 'Press Start 2P', monospace; --head: 'Press Start 2P', monospace; --num: 'Press Start 2P', monospace; --fs: 10px; --fs-small: 9px; --fs-tiny: 7.5px; --head-track: 0; }
+[data-font="inter"]    { --body: 'Inter', system-ui, sans-serif; --head: 'Inter', system-ui, sans-serif; --num: 'Inter', system-ui, sans-serif; --head-track: -0.01em; }
+[data-font="cinzel"]   { --body: 'Inter', system-ui, sans-serif; --head: 'Cinzel', Georgia, serif; --num: 'Inter', system-ui, sans-serif; --head-track: 0.03em; }
+[data-font="alegreya"] { --body: 'Alegreya Sans', system-ui, sans-serif; --head: 'Alegreya SC', Georgia, serif; --num: 'Alegreya Sans', system-ui, sans-serif; --fs: 16px; --fs-small: 14px; --fs-tiny: 12.5px; --head-track: 0.02em; }
+[data-font="fell"]     { --body: 'Inter', system-ui, sans-serif; --head: 'IM Fell English SC', Georgia, serif; --num: 'Inter', system-ui, sans-serif; --head-track: 0.01em; }
+.fcard .h { font-family: var(--head); letter-spacing: var(--head-track); font-weight: 700; }
+.fcard .p, .fcard .s { font-family: var(--body); }
+.fcard[data-font="pixel"] .h { font-size: 13px; }
+.fcard[data-font="pixel"] .p, .fcard[data-font="pixel"] .s { font-size: 9px; line-height: 1.8; }
+.fcard[data-font="fell"] .h { font-weight: 400; }
+
+/* ---------------------------------------------------------------- switcher */
+.controls { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; margin-bottom: 14px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.seg > span { font: 600 11px/1 'Inter', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); margin-right: 4px; }
+.seg button {
+  font: 500 13px/1 'Inter', sans-serif; color: var(--muted); background: transparent;
+  border: 1px solid var(--edge-soft); border-radius: 999px; padding: 7px 12px; cursor: pointer;
+}
+.seg button:hover { color: var(--text); border-color: var(--edge); }
+.seg button[aria-pressed="true"] { color: var(--gold-ink); background: var(--gold); border-color: var(--gold); }
+.seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- mock: shared */
+.mock {
+  font-family: var(--body); font-size: var(--fs); line-height: 1.45;
+  border-radius: 14px; padding: 18px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(90, 58, 74, 0.25), transparent 60%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0 2px, transparent 2px 24px),
+    #0b0709;
+  border: 1px solid var(--edge-soft);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.mock[data-font="pixel"] { line-height: 1.7; }
+.mock .hd { font-family: var(--head); letter-spacing: var(--head-track); font-weight: 700; }
+.mock[data-font="fell"] .hd { font-weight: 400; }
+.mock .num { font-family: var(--num); font-variant-numeric: tabular-nums lining-nums; }
+
+.topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.who { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 200px; }
+.portrait { width: 40px; height: 40px; flex: none; display: grid; place-items: center; }
+.portrait svg { width: 32px; height: 40px; image-rendering: pixelated; }
+.who .name { font-size: calc(var(--fs) * 1.3); line-height: 1.15; }
+.who .cls { font-size: var(--fs-small); color: var(--muted); }
+.wallet { display: flex; align-items: center; gap: 14px; color: var(--gold); font-weight: 600; }
+.coin { display: inline-block; width: 0.95em; height: 0.95em; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe68a, #d9a42a 60%, #8a6216); vertical-align: -0.12em; margin-right: 4px; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+
+.ptitle { font-size: calc(var(--fs) * 1.08); color: var(--text); margin: 0 0 10px; }
+.mock[data-font="pixel"] .ptitle { font-size: 11px; }
+.attr {
+  display: grid; grid-template-columns: 3.2em minmax(0, 8em) 2.4em minmax(0, 1fr) auto; gap: 4px 12px; align-items: center;
+  padding: 8px 10px; margin-bottom: 4px;
+}
+.attr .ab { color: var(--gold); font-weight: 700; font-size: var(--fs-small); letter-spacing: 0.04em; }
+.attr .nm { min-width: 0; }
+.attr .nm small { display: block; color: var(--faint); font-size: var(--fs-tiny); }
+.attr .val { font-size: calc(var(--fs) * 1.35); font-weight: 700; text-align: right; }
+.attr .fx { color: var(--muted); font-size: var(--fs-small); min-width: 0; }
+@media (max-width: 620px) {
+  .attr { grid-template-columns: 3em minmax(0, 1fr) 2.2em; }
+  .attr .fx { grid-column: 2 / -1; }
+  .attr .buy { grid-column: 2 / -1; justify-self: start; }
+}
+.note { color: var(--faint); font-size: var(--fs-tiny); margin: 8px 2px 0; }
+
+dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0 0 12px; }
+dl.kv dt { color: var(--muted); font-size: var(--fs-small); align-self: center; }
+dl.kv dd { margin: 0; font-weight: 600; }
+.sub { font-size: var(--fs-small); color: var(--muted); margin: 0 0 12px; }
+
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label { font-size: var(--fs-small); color: var(--muted); }
+.field .hint { font-size: var(--fs-tiny); color: var(--faint); }
+.field .hint.err { color: var(--red); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.check { display: flex; align-items: center; gap: 10px; font-size: var(--fs-small); cursor: pointer; }
+
+.tip { max-width: 300px; padding: 12px 14px; font-size: var(--fs-small); }
+.tip .t { font-size: var(--fs); color: var(--gold); margin-bottom: 2px; }
+.tip .k { color: var(--faint); font-size: var(--fs-tiny); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+.tip .bad { color: var(--red); margin-top: 8px; }
+.tip ul { margin: 0; padding-left: 1.1em; color: var(--text); }
+
+.lower { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 860px) { .lower { grid-template-columns: minmax(0, 1fr); } }
+
+/* in-game strip */
+.arena {
+  position: relative; height: 150px; border-radius: 8px; overflow: hidden;
+  background:
+    linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)),
+    repeating-linear-gradient(90deg, #2a2a30 0 31px, #1f1f25 31px 32px),
+    repeating-linear-gradient(0deg, #2a2a30 0 31px, #1f1f25 31px 32px);
+  background-blend-mode: normal, multiply, normal;
+}
+.arena .hero, .arena .foe { position: absolute; bottom: 30px; width: 24px; height: 30px; }
+.arena .hero { left: 22%; background: linear-gradient(#3e64c8 0 40%, #f0d8b0 40% 60%, #3e64c8 60%); border-radius: 4px 4px 2px 2px; }
+.arena .foe { left: 62%; background: linear-gradient(#4f8a3a 0 55%, #2e5222 55%); border-radius: 6px 6px 2px 2px; }
+.ntag, .dmg, .eff {
+  position: absolute; white-space: nowrap; color: #fff; transform: translateX(-50%);
+  text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 3px rgba(0,0,0,0.6);
+}
+.ntag { font-family: var(--body); font-weight: 600; font-size: 12px; left: calc(22% + 12px); bottom: 66px; }
+.dmg { font-family: var(--num); font-weight: 800; font-size: 16px; color: #ffd24a; left: calc(62% + 22px); bottom: 78px; }
+.eff { font-family: var(--body); font-weight: 600; font-size: 11px; color: #9fd0ff; left: calc(62% + 12px); bottom: 64px; }
+.mock[data-font="pixel"] .ntag, .mock[data-font="pixel"] .eff { font-size: 8px; }
+.mock[data-font="pixel"] .dmg { font-size: 10px; }
+.arena .cap { position: absolute; left: 10px; top: 8px; font: 500 11px/1.2 'Inter', sans-serif; color: rgba(255,255,255,0.55); }
+
+/* ================================================================ control styles */
+
+/* --- current: the game's pixel bevel today --- */
+[data-style="pixel"] .panel { background: #2a1c26; border: 3px solid #5a3a4a; padding: 14px; }
+[data-style="pixel"] .attr { background: #1f141c; }
+[data-style="pixel"] .btn { font: inherit; font-size: var(--fs-small); color: var(--text); background: #4a3040; border: 0; padding: 9px 13px; cursor: pointer; box-shadow: inset -3px -3px 0 #2a1822, inset 3px 3px 0 #6a4a5a; }
+[data-style="pixel"] .btn:hover { background: #5a3a4e; }
+[data-style="pixel"] .btn:active { box-shadow: inset 3px 3px 0 #2a1822, inset -3px -3px 0 #6a4a5a; }
+[data-style="pixel"] .btn.primary { background: #7a5a18; box-shadow: inset -3px -3px 0 #4a3408, inset 3px 3px 0 #b08a30; }
+[data-style="pixel"] .btn.ghost { background: #2a1c26; color: var(--faint); box-shadow: inset 0 0 0 2px #3d2834; }
+[data-style="pixel"] .btn.danger { background: #6a2424; box-shadow: inset -3px -3px 0 #3a1010, inset 3px 3px 0 #8a3a3a; }
+[data-style="pixel"] .btn:disabled { opacity: 0.45; cursor: default; }
+[data-style="pixel"] .input, [data-style="pixel"] .select { font: inherit; font-size: var(--fs-small); color: var(--text); background: #140c12; border: 2px solid #5a3a4a; padding: 9px; border-radius: 0; width: 100%; }
+[data-style="pixel"] .input.bad { border-color: var(--red); }
+[data-style="pixel"] .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+[data-style="pixel"] .tab { font: inherit; font-size: var(--fs-small); color: var(--text); background: #2a1c26; border: 2px solid #5a3a4a; padding: 7px 14px; cursor: pointer; }
+[data-style="pixel"] .tab[aria-selected="true"] { background: #7a5a18; border-color: #b08a30; }
+[data-style="pixel"] .box { width: 16px; height: 16px; border: 2px solid #5a3a4a; background: #140c12; display: grid; place-items: center; }
+[data-style="pixel"] .box.on::after { content: ""; width: 8px; height: 8px; background: var(--gold); }
+[data-style="pixel"] .tip { background: #1a1018; border: 2px solid #5a3a4a; }
+
+/* --- leather & brass: soft depth, thin metal edges, rounded --- */
+[data-style="brass"] .panel {
+  background: linear-gradient(180deg, #2a1b26, #20141d);
+  border: 1px solid #4a3240; border-radius: 12px; padding: 16px;
+  box-shadow: inset 0 1px 0 rgba(255,235,200,0.05), 0 10px 30px rgba(0,0,0,0.35);
+}
+[data-style="brass"] .attr { background: rgba(0,0,0,0.22); border-radius: 8px; border: 1px solid rgba(255,255,255,0.03); }
+[data-style="brass"] .btn {
+  font: inherit; font-size: var(--fs-small); font-weight: 600; color: var(--text); cursor: pointer;
+  background: linear-gradient(180deg, #4b3242, #382431); border: 1px solid #6a4a5c; border-radius: 6px; padding: 5px 10px; line-height: 1.3;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 0 rgba(0,0,0,0.45);
+  transition: background 120ms, border-color 120ms, transform 80ms;
+}
+[data-style="brass"] .btn:hover { background: linear-gradient(180deg, #57394c, #432b3a); border-color: #85607a; }
+[data-style="brass"] .btn:active { transform: translateY(1px); box-shadow: inset 0 1px 2px rgba(0,0,0,0.4); }
+[data-style="brass"] .btn.primary { color: var(--gold-ink); background: linear-gradient(180deg, #f1cf63, #c9962c 55%, #a97a1c); border-color: #f6dc86; text-shadow: 0 1px 0 rgba(255,240,190,0.4); box-shadow: inset 0 1px 0 rgba(255,250,220,0.6), 0 2px 0 #5a3e0c, 0 0 18px rgba(232,192,64,0.18); }
+[data-style="brass"] .btn.primary:hover { background: linear-gradient(180deg, #f7da7a, #d6a434 55%, #b5861f); }
+[data-style="brass"] .btn.ghost { background: transparent; border-color: #4a3240; color: var(--muted); box-shadow: none; }
+[data-style="brass"] .btn.ghost:hover { color: var(--gold); border-color: var(--gold-deep); }
+[data-style="brass"] .btn.danger { background: linear-gradient(180deg, #7a2a2a, #5a1c1c); border-color: #a04444; }
+[data-style="brass"] .btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+[data-style="brass"] .btn:focus-visible, [data-style="brass"] .tab:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+[data-style="brass"] .input, [data-style="brass"] .select {
+  font: inherit; font-size: var(--fs-small); color: var(--text); width: 100%;
+  background: #130b11; border: 1px solid #4a3240; border-radius: 8px; padding: 10px 12px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5); transition: border-color 120ms, box-shadow 120ms;
+}
+[data-style="brass"] .select { appearance: none; padding-right: 34px; background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%); background-position: calc(100% - 18px) 55%, calc(100% - 13px) 55%; background-size: 5px 5px; background-repeat: no-repeat; }
+[data-style="brass"] .input:focus, [data-style="brass"] .select:focus { outline: none; border-color: var(--gold); box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 0 0 0 3px rgba(232,192,64,0.2); }
+[data-style="brass"] .input.bad { border-color: var(--red); box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 0 0 0 3px rgba(224,80,80,0.18); }
+[data-style="brass"] .tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid #3d2834; }
+[data-style="brass"] .tab { font: inherit; font-size: var(--fs-small); font-weight: 600; color: var(--muted); background: none; border: 0; padding: 7px 12px; cursor: pointer; position: relative; }
+[data-style="brass"] .tab:hover { color: var(--text); }
+[data-style="brass"] .tab[aria-selected="true"] { color: var(--gold); }
+[data-style="brass"] .tab[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: linear-gradient(90deg, #a97a1c, #f1cf63, #a97a1c); }
+[data-style="brass"] .box { width: 18px; height: 18px; border-radius: 5px; border: 1px solid #6a4a5c; background: #130b11; display: grid; place-items: center; box-shadow: inset 0 1px 3px rgba(0,0,0,0.6); }
+[data-style="brass"] .box.on { background: linear-gradient(180deg, #f1cf63, #c9962c); border-color: #f6dc86; }
+[data-style="brass"] .box.on::after { content: ""; width: 5px; height: 9px; border: solid var(--gold-ink); border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px, -1px); }
+[data-style="brass"] .tip { background: linear-gradient(180deg, #2c1e29, #1c1219); border: 1px solid #6a4a5c; border-radius: 10px; box-shadow: 0 12px 30px rgba(0,0,0,0.6); }
+
+/* --- carved stone: chamfered plates, engraved edges, small-caps buttons --- */
+[data-style="stone"] .panel {
+  --cut: 10px;
+  position: relative; padding: 18px;
+  background: linear-gradient(180deg, #2a2128, #1d161c);
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  box-shadow: inset 0 0 0 1px #5d4a52, inset 0 0 0 4px #1a1418, inset 0 0 0 5px rgba(232,192,64,0.22);
+}
+[data-style="stone"] .attr { background: #181216; border-top: 1px solid #000; border-bottom: 1px solid rgba(255,255,255,0.05); }
+[data-style="stone"] .btn {
+  --cut: 6px;
+  font: inherit; font-size: var(--fs-small); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #eadfcf; cursor: pointer;
+  background: linear-gradient(180deg, #4d4049, #352a32); border: 0; padding: 10px 18px;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% 50%, calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 50%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -2px 0 rgba(0,0,0,0.4);
+}
+[data-style="stone"] .mock[data-font="pixel"] .btn, .mock[data-font="pixel"][data-style="stone"] .btn { letter-spacing: 0; }
+[data-style="stone"] .btn:hover { background: linear-gradient(180deg, #5c4d57, #40333c); }
+[data-style="stone"] .btn:active { background: linear-gradient(180deg, #2f252c, #40333c); }
+[data-style="stone"] .btn.primary { color: #2a1806; background: linear-gradient(180deg, #e9c66a, #b58a2c); box-shadow: inset 0 1px 0 rgba(255,250,220,0.6), inset 0 -2px 0 rgba(80,50,0,0.45); }
+[data-style="stone"] .btn.primary:hover { background: linear-gradient(180deg, #f3d47e, #c39632); }
+[data-style="stone"] .btn.ghost { background: #241c22; color: var(--faint); }
+[data-style="stone"] .btn.danger { background: linear-gradient(180deg, #7a3030, #551e1e); }
+[data-style="stone"] .btn:disabled { opacity: 0.4; cursor: default; }
+[data-style="stone"] .btn:focus-visible, [data-style="stone"] .tab:focus-visible { outline: 2px solid var(--gold); outline-offset: -4px; }
+[data-style="stone"] .input, [data-style="stone"] .select {
+  font: inherit; font-size: var(--fs-small); color: var(--text); width: 100%; border-radius: 0;
+  background: #120d11; border: 0; padding: 10px 12px;
+  box-shadow: inset 0 2px 0 #000, inset 0 -1px 0 rgba(255,255,255,0.07), inset 0 0 0 1px #3a2e35;
+}
+[data-style="stone"] .select { appearance: none; padding-right: 34px; background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%); background-position: calc(100% - 18px) 55%, calc(100% - 13px) 55%; background-size: 5px 5px; background-repeat: no-repeat; }
+[data-style="stone"] .input:focus, [data-style="stone"] .select:focus { outline: none; box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px var(--gold); }
+[data-style="stone"] .input.bad { box-shadow: inset 0 2px 0 #000, inset 0 0 0 1px var(--red); }
+[data-style="stone"] .tabs { display: flex; flex-wrap: wrap; gap: 2px; }
+[data-style="stone"] .tab {
+  --cut: 8px;
+  font: inherit; font-size: var(--fs-small); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); cursor: pointer;
+  background: #221a20; border: 0; padding: 10px 20px;
+  clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% 100%, 0 100%);
+}
+[data-style="stone"] .tab:hover { color: var(--text); background: #2c2229; }
+[data-style="stone"] .tab[aria-selected="true"] { color: var(--gold); background: linear-gradient(180deg, #3a2e36, #2a2128); box-shadow: inset 0 2px 0 var(--gold); }
+[data-style="stone"] .box { width: 18px; height: 18px; transform: rotate(45deg) scale(0.8); background: #120d11; box-shadow: inset 0 0 0 1px #6a5560; display: grid; place-items: center; }
+[data-style="stone"] .box.on::after { content: ""; width: 8px; height: 8px; background: var(--gold); box-shadow: 0 0 6px rgba(232,192,64,0.6); }
+[data-style="stone"] .tip { background: #1a1418; box-shadow: inset 0 0 0 1px #5d4a52, inset 0 0 0 4px #1a1418, inset 0 0 0 5px rgba(232,192,64,0.22), 0 12px 30px rgba(0,0,0,0.6); }
+
+/* pixel font in modern styles: undo the uppercase / weights that a pixel face can't carry */
+.mock[data-font="pixel"] .btn, .mock[data-font="pixel"] .tab { text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.verdict article { background: var(--panel); border: 1px solid var(--edge-soft); border-radius: 10px; padding: 14px 16px; }
+.verdict h3 { margin: 0 0 6px; font: 600 14px/1.3 'Inter', sans-serif; color: var(--gold); }
+.verdict p { margin: 0; color: var(--muted); font-size: 14px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <h1>Tiny Adventurers type trial</h1>
+    <p>Four readable font pairings and two new control styles, shown on the real character hub. Click a pairing or switch the style above the mock. "Today" shows the game as it looks now.</p>
+  </header>
+
+  <section>
+    <h2 class="sec">The pairings at a glance</h2>
+    <div class="strip" id="strip">
+      <button class="fcard" data-font="pixel" data-pick="pixel" aria-pressed="false">
+        <span class="tag">Today</span>
+        <span class="h">The Lich's Crypt</span>
+        <span class="p">Fragile master of the arcane. Starts with the Red Staff.</span>
+        <span class="s">STR 8 · DEX 14 · HP 70 · 250 XP</span>
+        <span class="names">Press Start 2P everywhere</span>
+      </button>
+      <button class="fcard" data-font="inter" data-pick="inter" aria-pressed="false">
+        <span class="tag">A · Inter only</span>
+        <span class="h">The Lich's Crypt</span>
+        <span class="p">Fragile master of the arcane. Starts with the Red Staff.</span>
+        <span class="s">STR 8 · DEX 14 · HP 70 · 250 XP</span>
+        <span class="names">Inter for headings and text</span>
+      </button>
+      <button class="fcard" data-font="cinzel" data-pick="cinzel" aria-pressed="false">
+        <span class="tag">B · Inter + Cinzel</span>
+        <span class="h">The Lich's Crypt</span>
+        <span class="p">Fragile master of the arcane. Starts with the Red Staff.</span>
+        <span class="s">STR 8 · DEX 14 · HP 70 · 250 XP</span>
+        <span class="names">Cinzel headings, Inter text</span>
+      </button>
+      <button class="fcard" data-font="alegreya" data-pick="alegreya" aria-pressed="false">
+        <span class="tag">C · Alegreya</span>
+        <span class="h">The Lich's Crypt</span>
+        <span class="p">Fragile master of the arcane. Starts with the Red Staff.</span>
+        <span class="s">STR 8 · DEX 14 · HP 70 · 250 XP</span>
+        <span class="names">Alegreya SC headings, Alegreya Sans text</span>
+      </button>
+      <button class="fcard" data-font="fell" data-pick="fell" aria-pressed="true">
+        <span class="tag">D · Fell + Inter</span>
+        <span class="h">The Lich's Crypt</span>
+        <span class="p">Fragile master of the arcane. Starts with the Red Staff.</span>
+        <span class="s">STR 8 · DEX 14 · HP 70 · 250 XP</span>
+        <span class="names">IM Fell English SC headings, Inter text</span>
+      </button>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec">On the character hub</h2>
+    <div class="controls">
+      <div class="seg" id="segFont" role="group" aria-label="Font">
+        <span>Font</span>
+        <button data-v="pixel" aria-pressed="false">Today</button>
+        <button data-v="inter" aria-pressed="false">A</button>
+        <button data-v="cinzel" aria-pressed="false">B</button>
+        <button data-v="alegreya" aria-pressed="false">C</button>
+        <button data-v="fell" aria-pressed="true">D</button>
+      </div>
+      <div class="seg" id="segStyle" role="group" aria-label="Control style">
+        <span>Controls</span>
+        <button data-v="pixel" aria-pressed="false">Today</button>
+        <button data-v="brass" aria-pressed="true">Leather &amp; brass</button>
+        <button data-v="stone" aria-pressed="false">Carved stone</button>
+      </div>
+    </div>
+
+    <div class="mock" id="mock" data-font="fell" data-style="brass">
+      <div class="panel topbar">
+        <button class="btn ghost" type="button">‹ Roster</button>
+        <div class="who">
+          <div class="portrait" aria-hidden="true">
+            <svg viewBox="0 0 8 10" shape-rendering="crispEdges">
+              <rect x="3" y="0" width="2" height="1" fill="#3e64c8"/><rect x="2" y="1" width="4" height="2" fill="#3e64c8"/>
+              <rect x="1" y="3" width="6" height="1" fill="#3e64c8"/><rect x="2" y="4" width="4" height="2" fill="#f0d0a8"/>
+              <rect x="2" y="6" width="4" height="2" fill="#e8e8f0"/><rect x="2" y="8" width="4" height="2" fill="#3e64c8"/>
+              <rect x="7" y="1" width="1" height="9" fill="#b0502a"/><rect x="7" y="0" width="1" height="1" fill="#e04030"/>
+            </svg>
+          </div>
+          <div style="min-width:0">
+            <div class="name hd">Alice</div>
+            <div class="cls">Wizard · Human</div>
+          </div>
+        </div>
+        <div class="wallet num"><span>340 XP</span><span><i class="coin"></i>25</span></div>
+        <button class="btn primary" type="button">To the dungeon</button>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true">Sheet</button>
+        <button class="tab" role="tab" aria-selected="false">Skill tree</button>
+        <button class="tab" role="tab" aria-selected="false">Equipment</button>
+        <button class="tab" role="tab" aria-selected="false">Loadout</button>
+      </div>
+
+      <div class="cols">
+        <div class="panel">
+          <h3 class="ptitle hd">Attributes</h3>
+          <div class="attr"><span class="ab">STR</span><span class="nm">Strength<small>class 8</small></span><span class="val num">8</span><span class="fx">melee and thrown damage −10 % · push power 8</span><button class="btn buy" type="button"><span class="num">+1 · 100 XP</span></button></div>
+          <div class="attr"><span class="ab">DEX</span><span class="nm">Dexterity<small>class 14</small></span><span class="val num">14</span><span class="fx">finesse and ranged damage +20 % · speed +8 %</span><button class="btn buy" type="button"><span class="num">+1 · 250 XP</span></button></div>
+          <div class="attr"><span class="ab">CON</span><span class="nm">Constitution<small>class 12</small></span><span class="val num">12</span><span class="fx">HP +10 · move speed +2 % · save 12</span><button class="btn buy" type="button"><span class="num">+1 · 150 XP</span></button></div>
+          <div class="attr"><span class="ab">INT</span><span class="nm">Intelligence<small>class 15</small></span><span class="val num">15</span><span class="fx">spell damage and power +25 %</span><button class="btn buy" type="button"><span class="num">+1 · 225 XP</span></button></div>
+          <div class="attr"><span class="ab">WIL</span><span class="nm">Willpower<small>class 13</small></span><span class="val num">13</span><span class="fx">magical save 13</span><button class="btn buy" type="button" disabled><span class="num">+1 · 440 XP</span></button></div>
+          <p class="note">Price per point: (100 + 25 × points above 10) × weight. Item points do not raise the price.</p>
+        </div>
+        <div class="panel">
+          <h3 class="ptitle hd">Derived</h3>
+          <dl class="kv num">
+            <dt>HP</dt><dd>70</dd>
+            <dt>Move speed</dt><dd>72</dd>
+            <dt>Push power</dt><dd>8</dd>
+            <dt>Saves</dt><dd>WIL 13 · CON 12</dd>
+          </dl>
+          <h3 class="ptitle hd">Respec</h3>
+          <p class="sub">Resets the skill tree and the bought Attributes and refunds all 340 XP spent. Items stay.</p>
+          <button class="btn danger" type="button"><span class="num">Respec for <i class="coin"></i>20</span></button>
+        </div>
+      </div>
+
+      <div class="lower">
+        <div class="panel">
+          <h3 class="ptitle hd">New character</h3>
+          <div class="form">
+            <div class="field">
+              <label for="f-name">Name</label>
+              <input class="input" id="f-name" value="Bob Smith">
+              <span class="hint">3–20 letters, single spaces between words.</span>
+            </div>
+            <div class="field">
+              <label for="f-bad">Name (taken)</label>
+              <input class="input bad" id="f-bad" value="Alice">
+              <span class="hint err">That name is taken. Pick another one.</span>
+            </div>
+            <div class="field">
+              <label for="f-lmb">Primary (LMB)</label>
+              <select class="select" id="f-lmb"><option>Magic Missile</option><option>Chain Spark</option><option>Frost Bolt</option></select>
+              <span class="hint">Waiting-room picker</span>
+            </div>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <button class="btn primary" type="button">Create Wizard</button>
+            <button class="btn" type="button">Cancel</button>
+            <button class="btn" type="button" disabled>Ready</button>
+            <label class="check" id="chk"><span class="box on" aria-hidden="true"></span>Show calculation lines</label>
+          </div>
+        </div>
+        <div class="tip">
+          <div class="t hd">Red Staff</div>
+          <div class="k">Staff · two hands</div>
+          <ul class="num">
+            <li>Spell damage +10 %</li>
+            <li>Grants Fireball</li>
+          </ul>
+          <div class="bad">Needs INT 16 (you have 15).</div>
+        </div>
+      </div>
+
+      <div class="arena">
+        <span class="cap">In the run: name tags, damage numbers, effects</span>
+        <div class="hero"></div><span class="ntag">Alice</span>
+        <div class="foe"></div><span class="dmg">−12</span><span class="eff">Chilled</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec">What to look for</h2>
+    <div class="verdict">
+      <article><h3>A · Inter only</h3><p>Clearest at small sizes and best for the dense sheet and tooltip texts. Neutral, so the adventure flavour has to come from the controls and the art.</p></article>
+      <article><h3>B · Inter + Cinzel</h3><p>Inter's readability for every text, Cinzel's carved Roman capitals for headings and names only. My pick: the flavour sits where it is cheap and the text stays easy to read.</p></article>
+      <article><h3>C · Alegreya</h3><p>A bookish, storybook feel in one family. Warmer than Inter and still readable, but the numbers in tight tables are a little less crisp.</p></article>
+      <article><h3>D · Fell + Inter (chosen)</h3><p>Old print headings, the most "ancient tome" mood. The headings are rougher and get hard to read below about 16 px, so they stay at heading sizes; every other text is Inter, in-game text too. Shown with Leather &amp; brass and tighter button padding.</p></article>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var mock = document.getElementById('mock');
+  function setFont(v) {
+    mock.dataset.font = v;
+    document.querySelectorAll('#segFont button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.v === v)); });
+    document.querySelectorAll('#strip .fcard').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.pick === v)); });
+    try { localStorage.setItem('tt-font', v); } catch (e) {}
+  }
+  function setStyle(v) {
+    mock.dataset.style = v;
+    document.querySelectorAll('#segStyle button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.v === v)); });
+    try { localStorage.setItem('tt-style', v); } catch (e) {}
+  }
+  document.querySelectorAll('#segFont button').forEach(function (b) { b.addEventListener('click', function () { setFont(b.dataset.v); }); });
+  document.querySelectorAll('#segStyle button').forEach(function (b) { b.addEventListener('click', function () { setStyle(b.dataset.v); }); });
+  document.querySelectorAll('#strip .fcard').forEach(function (b) { b.addEventListener('click', function () { setFont(b.dataset.pick); mock.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); });
+  document.querySelectorAll('.tab').forEach(function (t) { t.addEventListener('click', function () { document.querySelectorAll('.tab').forEach(function (x) { x.setAttribute('aria-selected', String(x === t)); }); }); });
+  var chk = document.getElementById('chk');
+  chk.addEventListener('click', function () { chk.querySelector('.box').classList.toggle('on'); });
+  try {
+    var f = localStorage.getItem('tt-font'), s = localStorage.getItem('tt-style');
+    if (f) setFont(f);
+    if (s) setStyle(s);
+  } catch (e) {}
+})();
+</script>
