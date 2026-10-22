@@ -104,8 +104,10 @@ export class EntityView {
     kind: number | FigureDef,
     private fx: Effects,
     name?: string,
+    weapons?: Pick<FigureDef, 'weapon' | 'meleeWeapon'>,
   ) {
-    this.def = typeof kind === 'number' ? (FIGURES[kind] ?? FIGURES[0]) : kind;
+    const base = typeof kind === 'number' ? (FIGURES[kind] ?? FIGURES[0]) : kind;
+    this.def = weapons ? { ...base, ...weapons } : base;
     const d = this.def;
     const scale = d.scale ?? 1;
     this.root = scene.add.container(0, 0);

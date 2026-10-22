@@ -6,6 +6,8 @@
 // The lich has its own idle/run frames in the pack style (scripts/lich-frames.ts).
 import { ANIM, CONST, KIND } from "../../generated/defs";
 import { GLOOM } from "../effects";
+import type { ItemId } from "../../generated/ItemId";
+import { ITEMS } from "../../generated/progression";
 import { DRAGON_ANIMS, DRAGON_FRAME, dragonFrameName, dragonPoints, type DragonAnim } from "./dragonRig";
 import { DEMON_ANIMS, DEMON_FRAME, demonFrameName, type DemonAnim } from "./demonFrames";
 
@@ -192,4 +194,14 @@ export function isHazardKind(k: number): boolean {
 }
 export function isBossKind(k: number): boolean {
   return k === KIND.Demon || k === KIND.Lich || k === KIND.Dragon;
+}
+
+/** The weapon frames a hero holds in the run (Ruling 8): a ranged-style figure the ranged item (thrusting with the
+ * melee one), others the melee item. An item without art keeps the def's frame. Keep in step with `figureWeapon`
+ * in `ui/classes.ts`. */
+export function heroWeapons(d: FigureDef, melee: ItemId, ranged: ItemId | null): Pick<FigureDef, 'weapon' | 'meleeWeapon'> {
+  const sprite = (id: ItemId | null) => (id ? ITEMS[id].sprite : '');
+  const m = sprite(melee);
+  if (d.attack !== 'ranged') return { weapon: m || d.weapon, meleeWeapon: d.meleeWeapon };
+  return { weapon: sprite(ranged) || m || d.weapon, meleeWeapon: m || d.meleeWeapon };
 }

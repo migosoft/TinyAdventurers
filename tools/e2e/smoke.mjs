@@ -79,6 +79,7 @@ await p1.waitForSelector('#game.active', { timeout: 10000 });
 await p2.waitForSelector('#game.active', { timeout: 10000 });
 await p1.waitForTimeout(1500);
 await p1.screenshot({ path: `${out}/2-start.png` });
+await p1.screenshot({ path: `${out}/3-weapons.png` });
 
 const logOn = process.env.LOG === '1';
 if (logOn) {

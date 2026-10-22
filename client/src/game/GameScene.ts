@@ -11,7 +11,7 @@ import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Hud } from '../ui/hud';
-import { FIGURES, PROJECTILES, isAllyKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
+import { FIGURES, PROJECTILES, heroWeapons, isAllyKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
 import { BarrelView } from './barrel';
@@ -817,8 +817,9 @@ export class GameScene extends Phaser.Scene {
     const me = e.id === this.info.you;
     let view = this.views.get(e.id);
     if (!view) {
-      const name = isPlayerKind(e.kind) ? this.info.players.find((p) => p.ent === e.id)?.name : undefined;
-      view = new EntityView(this, e.kind, this.fx, me ? undefined : name);
+      const pi = isPlayerKind(e.kind) ? this.info.players.find((p) => p.ent === e.id) : undefined;
+      const weapons = pi ? heroWeapons(FIGURES[e.kind], pi.melee, pi.ranged) : undefined;
+      view = new EntityView(this, e.kind, this.fx, me ? undefined : pi?.name, weapons);
       this.views.set(e.id, view);
     }
     let s: ViewState;
