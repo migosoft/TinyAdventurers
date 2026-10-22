@@ -6,6 +6,7 @@ import type { Atlas } from '../atlas';
 import { esc } from '../hud';
 import { className } from '../text';
 import { renderEquipment } from './equipment';
+import { renderLoadout } from './loadout';
 import { renderSheet } from './sheet';
 import { renderTree } from './tree';
 import { clearTips } from './tip';
@@ -21,14 +22,7 @@ const TABS: [HubTab, string][] = [
 ];
 const COIN = '<i class="coin-icon"></i>';
 
-const soon = (): HTMLElement => {
-  const p = document.createElement('div');
-  p.className = 'panel';
-  p.textContent = 'Coming in this plan';
-  return p;
-};
-/** Task 7 replaces the loadout placeholder. */
-const RENDER: Record<HubTab, (ctx: TabCtx) => HTMLElement> = { sheet: renderSheet, tree: renderTree, equipment: renderEquipment, loadout: soon };
+const RENDER: Record<HubTab, (ctx: TabCtx) => HTMLElement> = { sheet: renderSheet, tree: renderTree, equipment: renderEquipment, loadout: renderLoadout };
 
 const debugOn = (): boolean => new URLSearchParams(location.search).has('debug');
 

@@ -123,7 +123,9 @@ export function attrEffect(attr: Attr, v: number): string {
 }
 
 /** The numbers line of an ability card. `uses` is accepted for callers; the numbers do not depend on it. */
-export function abilityNumbers(r: ResolvedAbility, _uses: string): string {
+export function abilityNumbers(res: ResolvedAbility, _uses: string): string {
+  const n = (v: number) => Math.round(v * 100) / 100;
+  const r = { ...res, damage: n(res.damage), cooldown: n(res.cooldown), range: n(res.range), radius: n(res.radius), duration: n(res.duration) };
   const out: string[] = [];
   if (r.damage > 0) {
     const shares = Object.entries(r.split).sort((a, b) => b[1] - a[1]);

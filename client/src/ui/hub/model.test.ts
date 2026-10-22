@@ -72,6 +72,10 @@ describe('abilityNumbers', () => {
   test('a mixed split lists the shares', () => {
     expect(abilityNumbers(ab({ damage: 45, split: { Heat: 0.7, Magical: 0.2, Physical: 0.1 } }), 'Ranged')).toMatch(/^45: 70 % heat, 20 % magical, 10 % physical/);
   });
+  test('numbers print with at most 2 decimals', () => {
+    expect(abilityNumbers(ab({ damage: 10.416666666666668, cooldown: 0.3500000014, split: { Cold: 1 } }), 'Ranged')).toBe('10.42 cold · cd 0.35 s');
+    expect(abilityNumbers(ab({ damage: 20.370370370370367, cooldown: 9, split: { Cold: 0.4, Heat: 0.6 }, duration: 3.999999 }), 'Ranged')).toBe('20.37: 60 % heat, 40 % cold · cd 9 s · 4 s');
+  });
   test('Holy Light heals; duration and pierce show', () => {
     expect(abilityNumbers(ab({ id: 'HolyLight', damage: 35, duration: 4, pierce_through: 2 }), 'Nothing')).toBe('heal 35 · 4 s · pierces 2');
   });
