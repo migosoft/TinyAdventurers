@@ -5,7 +5,7 @@ use crate::math::Vec2;
 use crate::run::effects::Creature;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // Tasks 5-6 push the other kinds.
+#[allow(dead_code)] // Task 6 pushes the other kinds.
 pub enum LineKind {
     Hit,
     Heal,
@@ -46,13 +46,12 @@ pub struct LogRec {
     #[allow(dead_code)] // Only tests read it.
     /// HP lost, as the record states it (kept for tests, not sent).
     pub dealt: Option<f64>,
-    #[allow(dead_code)] // Task 5's tests read it.
+    #[allow(dead_code)] // Only tests read it.
     /// Seconds applied, as the record states it (kept for tests, not sent).
     pub secs: Option<f64>,
 }
 
 /// Keeps a record for the next snapshot (nothing while the log is off).
-#[allow(dead_code)] // Tasks 5-6 call it.
 pub(crate) fn push(run: &mut Run, rec: LogRec) {
     if on(run) {
         run.log.records.push(rec);

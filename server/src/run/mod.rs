@@ -834,7 +834,7 @@ impl Run {
                 (HazardSide::Heroes { owner }, HazardPulse::Bind(on)) => {
                     let from = self.players.iter().find(|p| p.id == owner).map_or(pos, |p| p.pos());
                     for mi in self.enemies_touching(pos, r) {
-                        self.apply(effects::Creature::Monster(mi), Apply { source: Some((owner, from)), ..Apply::from_hit(on) });
+                        self.apply(effects::Creature::Monster(mi), Apply { source: Some((owner, from)), origin: Some((owner, What::Ability(crate::defs::abilities::AbilityId::Entangle))), ..Apply::from_hit(on) });
                     }
                 }
             }

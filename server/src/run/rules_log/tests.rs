@@ -133,7 +133,7 @@ fn rules_log_is_reached_only_through_its_hooks() {
     walk(&root, &root, &mut found);
     // Lines naming `rules_log` outside the module, per file. Each task updates this with its hooks.
     let hooks: BTreeMap<String, usize> =
-        [("run/mod.rs", 14), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 1)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        [("run/mod.rs", 14), ("run/effects.rs", 5), ("run/abilities.rs", 1), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 1)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     assert_eq!(found, hooks);
 }
 
@@ -450,7 +450,8 @@ fn a_frost_shard_line_reads_like_the_spec() {
     let dealt = resolve(&Damage::new(a.damage, a.split), &res).min(hp0);
     let after = (hp0 - resolve(&Damage::new(a.damage, a.split), &res)).max(0.0);
     let name = run.players[0].name.clone();
-    assert_eq!(rec.head, format!("{name} ▸ Frost Shard ▸ {goblin}: {} damage (HP {} → {})", n1(dealt), n1(hp0), n1(after)));
+    // The shard also chills (Task 5): the effect rides on the hit, as a suffix and a last detail.
+    assert_eq!(rec.head, format!("{name} ▸ Frost Shard ▸ {goblin}: {} damage (HP {} → {}) · Chilled", n1(dealt), n1(hp0), n1(after)));
     let mut want = vec![format!("base {} (given at INT {}), your INT {}: ×{:.2} → {}", n1(b.given), s.at, s.have, s.ratio, n1(b.given * s.ratio))];
     let mut v = b.given * s.ratio;
     if b.ability_mult != 1.0 {
@@ -471,7 +472,8 @@ fn a_frost_shard_line_reads_like_the_spec() {
             want.push(format!("{} {}  {} × (1 − {} resist) = {}", type_name(t), pct(share), n1(a.damage * share), pct(r), n1(a.damage * share * (1.0 - r))));
         }
     }
-    assert_eq!(rec.details, want);
+    assert!(rec.details.last().unwrap().starts_with("Chilled: applied"), "{:?}", rec.details);
+    assert_eq!(rec.details[..rec.details.len() - 1], want);
     assert_eq!(rec.kind, LineKind::Hit);
     println!("{}\n  {}", rec.head, rec.details.join("\n  "));
 }
@@ -574,4 +576,275 @@ fn the_damage_text_is_exhaustive_and_plain() {
     assert_eq!(text::what(What::Hazard(EntityKind::Torch)), "hazard");
     assert_eq!(text::what(What::Ability(AbilityId::FrostShard)), "Frost Shard");
     assert_eq!(text::what(What::Tick(crate::defs::effects::EffectKind::Burning)), "Burning");
+}
+
+// ---- Task 5: effect outcomes ----
+
+use crate::defs::effects::{EffectKind, EffectLook, OnHit};
+use crate::run::effects::{Apply, EffectOutcome};
+
+fn timer(run: &Run, c: Creature, k: EffectKind) -> Option<f64> {
+    let fx = match c {
+        Creature::Player(i) => &run.players[i].effects,
+        Creature::Monster(i) => &run.monsters[i].effects,
+    };
+    fx.list().iter().find(|a| a.kind == k).map(|a| a.left)
+}
+
+fn all_text(r: &LogRec) -> String {
+    format!("{}\n{}", r.head, r.details.join("\n"))
+}
+
+/// A Barbarian alone with the boss, on open floor, with `id` as secondary and `extra` Attribute points.
+fn hero_secondary(class: ClassId, id: AbilityId, extra: Attributes) -> Run {
+    let start = Loadout::start(class);
+    let loadout = Loadout { secondary: Pick { ability: id, source: Source::Own }, ..start };
+    let build = Build { own: vec![id], loadout, extra, equipment: Equipment::starter(class), ..Build::start(class) };
+    let mut run = crate::run::tests::test_run_with(&[(class, build)], BossId::Demon);
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    for y in ty - 3..=ty + 3 {
+        for x in tx - 2..=tx + 14 {
+            run.layout.map.set(x, y, Tile::Floor);
+        }
+    }
+    run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+    run.players[0].aim = 0.0;
+    run.log.forced = true;
+    run
+}
+
+fn enemy_near(run: &mut Run, t: EnemyType) -> usize {
+    let pos = run.players[0].pos() + crate::math::Vec2::new(60.0, 0.0);
+    let id = run.spawn_enemy(t, pos, None);
+    run.monster_idx(id).unwrap()
+}
+
+fn burn(power: i32) -> Apply {
+    Apply { power: Some(power), ..Apply::plain(EffectKind::Burning, None) }
+}
+
+#[test]
+fn the_logged_duration_is_the_duration_applied() {
+    // Fireball's Burning on a skeleton (a standalone application).
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let si = enemy_near(&mut run, EnemyType::SkeletonWarrior);
+    let c = Creature::Monster(si);
+    let _ = take(&mut run);
+    assert!(run.apply(c, burn(14)));
+    let rec = only_rec(&mut run);
+    let left = timer(&run, c, EffectKind::Burning).unwrap();
+    assert_eq!(rec.secs, Some(left), "bit-equal");
+    assert!(all_text(&rec).contains(&format!("= {} s", n1(left))), "{}", all_text(&rec));
+    println!("{}\n  {}", rec.head, rec.details.join("\n  "));
+    // Frost Nova's Frozen on a goblin: the effect rides on the nova's hit.
+    let mut run = hero_secondary(ClassId::Wizard, AbilityId::FrostNova, Attributes::new(0, 0, 0, 4, 0, 0));
+    let gi = goblin_near(&mut run, Some(500.0));
+    run.monsters[gi].pos = run.players[0].pos() + crate::math::Vec2::new(20.0, 0.0);
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    let recs = take(&mut run);
+    let hit = recs.iter().find(|r| r.kind == LineKind::Hit).expect("the nova's hit");
+    assert!(recs.iter().all(|r| r.kind != LineKind::Effect));
+    let left = timer(&run, Creature::Monster(gi), EffectKind::Frozen).expect("frozen");
+    assert_eq!(hit.secs, Some(left), "bit-equal");
+    assert!(all_text(hit).contains(&n1(left)), "{}", all_text(hit));
+    // The lich's Sleep on a hero.
+    let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+    run.log.forced = true;
+    let _ = take(&mut run);
+    let sleep = OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain };
+    run.hit_effect(Creature::Player(0), sleep);
+    let rec = only_rec(&mut run);
+    let left = timer(&run, Creature::Player(0), EffectKind::Sleep).unwrap();
+    assert_eq!(rec.secs, Some(left));
+    assert!(all_text(&rec).contains(&format!("2 s × (1 + (power 22 − WIL {}) / 20) = {} s", run.players[0].sheet.attrs.get(crate::defs::attributes::Attr::Wil), n1(left))), "{}", all_text(&rec));
+    println!("{}\n  {}", rec.head, rec.details.join("\n  "));
+}
+
+#[test]
+fn fear_on_a_skeleton_is_refused_by_its_undead_resistance() {
+    let mut run = hero_secondary(ClassId::Barbarian, AbilityId::WarCry, Attributes::new(1, 0, 0, 0, 0, 0));
+    let si = enemy_near(&mut run, EnemyType::SkeletonWarrior);
+    run.monsters[si].pos = run.players[0].pos() + crate::math::Vec2::new(30.0, 0.0);
+    let skeleton = tag_of(&run, run.monsters[si].id);
+    let name = run.players[0].name.clone();
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    let recs: Vec<LogRec> = take(&mut run).into_iter().filter(|r| r.kind == LineKind::Effect).collect();
+    let fear: Vec<&LogRec> = recs.iter().filter(|r| r.head.contains(&skeleton)).collect();
+    assert_eq!(fear.len(), 1, "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    assert_eq!(fear[0].head, format!("{name} ▸ War Cry ▸ {skeleton}: Fear refused"));
+    assert!(fear[0].details.iter().any(|l| l.contains("undead resist Fear 100 %")), "{:?}", fear[0].details);
+    assert!(!run.has_effect(Creature::Monster(si), EffectKind::Fear));
+    println!("{}\n  {}", fear[0].head, fear[0].details.join("\n  "));
+}
+
+#[test]
+fn each_refusal_names_its_rule() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let gi = goblin_near(&mut run, Some(500.0));
+    let c = Creature::Monster(gi);
+    let one = |run: &mut Run, a: Apply| {
+        let _ = take(run);
+        let r = run.apply(c, a);
+        (r, only_rec(run))
+    };
+    let said = |rec: &LogRec, s: &str| assert!(rec.details.iter().any(|l| l.contains(s)), "want {s:?} in {:?}", rec.details);
+    // StrongerOn: Chilled while Frozen.
+    run.apply_effect_from(c, EffectKind::Frozen, None, 14, true);
+    let (r, rec) = one(&mut run, Apply { power: Some(14), ..Apply::plain(EffectKind::Chilled, None) });
+    assert!(!r);
+    said(&rec, "Chilled: refused (Frozen is on)");
+    assert!(rec.head.ends_with(": Chilled refused"), "{}", rec.head);
+    // Cancelled: Singed on Frozen.
+    let (r, rec) = one(&mut run, Apply { power: Some(14), ..Apply::plain(EffectKind::Singed, None) });
+    assert!(!r);
+    said(&rec, "Singed: cancelled Frozen");
+    assert!(!run.has_effect(c, EffectKind::Frozen));
+    // replaced: Frozen over Chilled.
+    run.apply_effect_from(c, EffectKind::Chilled, None, 14, true);
+    let (r, rec) = one(&mut run, Apply { power: Some(14), ..Apply::plain(EffectKind::Frozen, None) });
+    assert!(r);
+    said(&rec, "Frozen: replaced Chilled");
+    assert!(!run.has_effect(c, EffectKind::Chilled));
+    // SavedToZero: power 10 against CON 40.
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let gi = goblin_near(&mut run, Some(500.0));
+    let c = Creature::Monster(gi);
+    run.monsters[gi].attrs = Attributes::new(10, 10, 40, 10, 10, 10);
+    let _ = take(&mut run);
+    assert!(!run.apply(c, burn(10)));
+    let rec = only_rec(&mut run);
+    said(&rec, "Burning: refused (saved down to 0 s: power 10 − CON 40)");
+    println!("{}\n  {}", rec.head, rec.details.join("\n  "));
+    // TypeImmune: Burning on heat resistance 1.
+    run.monsters[gi].attrs = Attributes::new(10, 10, 10, 10, 10, 10);
+    run.monsters[gi].res.set(DamageType::Heat, 1.0);
+    let _ = take(&mut run);
+    assert!(!run.apply(c, burn(10)));
+    said(&only_rec(&mut run), "Burning: refused (immune to heat)");
+    // InWater: Burning in shallow water.
+    run.monsters[gi].res.set(DamageType::Heat, 0.0);
+    let (tx, ty) = Map::tile_of(run.monsters[gi].pos);
+    run.layout.map.set(tx, ty, Tile::ShallowWater);
+    let _ = take(&mut run);
+    assert!(!run.apply(c, burn(10)));
+    said(&only_rec(&mut run), "Burning: refused (in water)");
+    // A hero's race: the elf is immune to Sleep.
+    let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+    run.log.forced = true;
+    let _ = take(&mut run);
+    run.hit_effect(Creature::Player(0), OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 22, look: EffectLook::Plain });
+    said(&only_rec(&mut run), "elf resist Sleep 100 %");
+    // Dead targets give no line.
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let gi = goblin_near(&mut run, Some(500.0));
+    run.monsters[gi].alive = false;
+    let _ = take(&mut run);
+    assert!(!run.apply(Creature::Monster(gi), burn(10)));
+    assert!(take(&mut run).is_empty());
+}
+
+#[test]
+fn effect_lines_ride_on_their_hit() {
+    let mut run = wizard_with(AbilityId::FrostShard, Attributes::default());
+    let mi = goblin_near(&mut run, Some(500.0));
+    crate::run::abilities::try_use(&mut run, 0, true, 1);
+    let _ = take(&mut run);
+    fly(&mut run);
+    let rec = only_rec(&mut run);
+    assert_eq!(rec.kind, LineKind::Hit);
+    assert!(rec.head.ends_with(" · Chilled"), "{}", rec.head);
+    assert!(rec.details.iter().any(|l| l.starts_with("Chilled: applied")), "{:?}", rec.details);
+    let left = timer(&run, Creature::Monster(mi), EffectKind::Chilled).unwrap();
+    assert_eq!(rec.secs, Some(left));
+    println!("{}\n  {}", rec.head, rec.details.join("\n  "));
+}
+
+#[test]
+fn an_effect_that_runs_out_says_so() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let gi = goblin_near(&mut run, Some(500.0));
+    let c = Creature::Monster(gi);
+    let goblin = tag_of(&run, run.monsters[gi].id);
+    run.apply_effect(c, EffectKind::Slowed, Some(0.5));
+    let _ = take(&mut run);
+    for _ in 0..40 {
+        run.tick_effects();
+    }
+    assert!(!run.has_effect(c, EffectKind::Slowed));
+    let recs = take(&mut run);
+    assert_eq!(recs.len(), 1);
+    assert_eq!(recs[0].head, format!("Slowed on {goblin} ended"));
+    assert_eq!(recs[0].kind, LineKind::Effect);
+    // Water puts out fire.
+    run.apply(c, burn(10));
+    let (tx, ty) = Map::tile_of(run.monsters[gi].pos);
+    run.layout.map.set(tx, ty, Tile::ShallowWater);
+    let _ = take(&mut run);
+    run.tick_effects();
+    let recs = take(&mut run);
+    assert!(recs.iter().any(|r| r.head == format!("Burning on {goblin} ended (water)")), "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+}
+
+#[test]
+fn purify_says_what_it_ended() {
+    let mut run = hero_secondary(ClassId::Paladin, AbilityId::Purify, Attributes::new(0, 0, 0, 0, 2, 0));
+    let name = run.players[0].name.clone();
+    run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(5.0));
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    assert!(!run.has_effect(Creature::Player(0), EffectKind::Blind));
+    let recs = take(&mut run);
+    let heads: Vec<&String> = recs.iter().map(|r| &r.head).collect();
+    let ended = heads.iter().position(|h| **h == format!("Blind on {name} ended (Purify)")).unwrap_or_else(|| panic!("{heads:?}"));
+    let warded = heads.iter().position(|h| **h == format!("{name} ▸ Purify ▸ {name}: Warded applied")).unwrap_or_else(|| panic!("{heads:?}"));
+    assert!(ended < warded);
+}
+
+#[test]
+fn apply_still_returns_what_it_did() {
+    // Each scenario twice: `apply` and `apply_traced` on identical runs.
+    let scenario = |n: usize| -> (Run, Creature, Apply) {
+        let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+        let gi = goblin_near(&mut run, Some(500.0));
+        let c = Creature::Monster(gi);
+        let mut a = burn(14);
+        match n {
+            0 => {}
+            1 => {
+                run.apply(c, burn(14));
+            }
+            2 => {
+                run.apply(c, Apply { power: Some(14), ..Apply::plain(EffectKind::Frozen, None) });
+                a = Apply { power: Some(14), ..Apply::plain(EffectKind::Singed, None) };
+            }
+            3 => {
+                run.apply(c, Apply { power: Some(14), ..Apply::plain(EffectKind::Frozen, None) });
+                a = Apply { power: Some(14), ..Apply::plain(EffectKind::Chilled, None) };
+            }
+            4 => run.monsters[gi].attrs = Attributes::new(10, 10, 40, 10, 10, 10),
+            5 => run.monsters[gi].res.set(DamageType::Heat, 1.0),
+            6 => {
+                let (tx, ty) = Map::tile_of(run.monsters[gi].pos);
+                run.layout.map.set(tx, ty, Tile::ShallowWater);
+            }
+            7 => run.monsters[gi].alive = false,
+            8 => a = Apply::plain(EffectKind::Sleep, Some(2.0)),
+            _ => a = Apply::plain(EffectKind::Slowed, Some(0.0)),
+        }
+        (run, c, a)
+    };
+    let mut seen = std::collections::HashSet::new();
+    for n in 0..10 {
+        let (mut r1, c, a) = scenario(n);
+        let (mut r2, _, _) = scenario(n);
+        let got = r1.apply(c, a);
+        let (outcome, _, _) = r2.apply_traced(c, a);
+        assert_eq!(got, matches!(outcome, EffectOutcome::Added | EffectOutcome::Refreshed), "scenario {n}: {outcome:?}");
+        let Creature::Monster(i) = c else { unreachable!() };
+        assert_eq!(r1.monsters[i].effects.bits(), r2.monsters[i].effects.bits(), "scenario {n}");
+        seen.insert(std::mem::discriminant(&outcome));
+    }
+    assert!(seen.len() >= 6, "the scenarios reach several outcomes: {}", seen.len());
 }

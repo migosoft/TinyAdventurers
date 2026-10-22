@@ -1,9 +1,11 @@
 //! The text of the log's lines: number formatting and what each fact is called.
 
-use super::{tag_of, HitFacts, HitOutcome};
+use super::{tag_of, EffectFacts, EndReason, HitFacts, HitOutcome};
 use crate::defs::abilities;
 use crate::defs::damage::{DamageType, Mult, What, MIN_RESISTANCE};
 use crate::defs::effects::EffectKind;
+use crate::defs::races::{race_def, Race};
+use crate::run::effects::EffectOutcome;
 use crate::defs::kinds::EntityKind;
 use crate::run::effects::Creature;
 use crate::run::Run;
@@ -165,4 +167,112 @@ pub(super) fn part_lines(f: &HitFacts) -> Vec<String> {
         out.push(format!("armor {}: {} × (1 − {}) = {}", pct(f.armor), n1(raw), pct(f.armor), n1(f.taken)));
     }
     out
+}
+
+/// The kinds in a bit set, named and joined.
+fn kind_names(bits: u16) -> Vec<&'static str> {
+    EffectKind::ALL.into_iter().filter(|k| bits & k.bit() != 0).map(effect_name).collect()
+}
+
+fn race_name(r: Race) -> &'static str {
+    match r {
+        Race::Human => "human",
+        Race::Goblin => "goblin",
+        Race::Orc => "orc",
+        Race::Ogre => "ogre",
+        Race::Mimic => "mimic",
+        Race::Undead => "undead",
+        Race::Demon => "demon",
+        Race::Dragon => "dragon",
+        Race::Elf => "elf",
+        Race::MagicalBeast => "magical beast",
+        Race::Object => "object",
+    }
+}
+
+/// The race a creature's resistance to `kind` comes from, if it is its race's own value.
+fn resisting_race(run: &Run, c: Creature, kind: EffectKind, r: f64) -> Option<Race> {
+    let race = match c {
+        Creature::Player(i) => *crate::defs::classes::races(run.players[i].class).first()?,
+        Creature::Monster(i) => crate::defs::enemies::race(run.monsters[i].etype?),
+    };
+    (race_def(race).effect_res.get(kind) == r).then_some(race)
+}
+
+/// How an application ended, in a word: "applied", "refused", "cancelled Frozen".
+fn verdict(f: &EffectFacts) -> String {
+    match f.outcome {
+        EffectOutcome::Added => "applied".to_string(),
+        EffectOutcome::Refreshed => "refreshed".to_string(),
+        EffectOutcome::Cancelled { removed } => format!("cancelled {}", kind_names(removed).join(", ")),
+        EffectOutcome::StrongerOn(_) | EffectOutcome::SavedToZero | EffectOutcome::Resisted | EffectOutcome::TypeImmune(_) | EffectOutcome::InWater | EffectOutcome::NotThere => "refused".to_string(),
+    }
+}
+
+/// " · Chilled" after a hit's headline, or " · Chilled refused".
+pub(super) fn effect_suffix(f: &EffectFacts) -> String {
+    let name = effect_name(f.kind);
+    match f.outcome {
+        EffectOutcome::Added | EffectOutcome::Refreshed => format!(" · {name}"),
+        EffectOutcome::Cancelled { .. } | EffectOutcome::StrongerOn(_) | EffectOutcome::SavedToZero | EffectOutcome::Resisted | EffectOutcome::TypeImmune(_) | EffectOutcome::InWater | EffectOutcome::NotThere => {
+            format!(" · {name} {}", verdict(f))
+        }
+    }
+}
+
+/// "Ayla ▸ War Cry ▸ Skeleton Warrior 1: Fear refused", or without a cause "Goblin Archer 1: Burning applied".
+pub(super) fn effect_head(run: &Run, f: &EffectFacts, target: u32) -> String {
+    let lead = match f.origin {
+        Some((by, w)) => format!("{} ▸ {} ▸ {}", tag_of(run, by), what(w), tag_of(run, target)),
+        None => tag_of(run, target),
+    };
+    format!("{lead}: {} {}", effect_name(f.kind), verdict(f))
+}
+
+/// The outcome line, then one line per weaker tier it replaced.
+pub(super) fn effect_lines(run: &Run, f: &EffectFacts) -> Vec<String> {
+    let e = effect_name(f.kind);
+    let d = &f.duration;
+    let mut out = vec![match f.outcome {
+        EffectOutcome::NotThere => return vec![],
+        EffectOutcome::Added => {
+            let mut s = format!("{e}: applied, ");
+            match d.save {
+                Some((power, attr, save, after)) => s.push_str(&format!("{} s × (1 + (power {power} − {} {save}) / 20) = {} s", n1(d.base), attr.short(), n1(after))),
+                None => s.push_str(&if d.resist.is_some_and(|(r, _)| r != 0.0) { format!("{} s", n1(d.base)) } else { format!("{} s", n1(d.secs)) }),
+            }
+            if let Some((r, _)) = d.resist.filter(|&(r, _)| r != 0.0) {
+                s.push_str(&format!(" × (1 − {} resist) = {} s", pct(r), n1(d.secs)));
+            }
+            s
+        }
+        EffectOutcome::Refreshed => format!("{e}: refreshed to {} s", n1(f.left)),
+        EffectOutcome::Cancelled { removed } => format!("{e}: cancelled {}", kind_names(removed).join(", ")),
+        EffectOutcome::StrongerOn(k) => format!("{e}: refused ({} is on)", effect_name(k)),
+        EffectOutcome::SavedToZero => match d.save {
+            Some((power, attr, save, _)) => format!("{e}: refused (saved down to 0 s: power {power} − {} {save})", attr.short()),
+            None => format!("{e}: refused (0 s)"),
+        },
+        EffectOutcome::Resisted => {
+            let r = d.resist.map_or(1.0, |(r, _)| r);
+            match resisting_race(run, f.target, f.kind, r) {
+                Some(race) => format!("{e}: refused ({} resist {e} {})", race_name(race), pct(r)),
+                None => format!("{e}: refused (resist {e} {})", pct(r)),
+            }
+        }
+        EffectOutcome::TypeImmune(t) => format!("{e}: refused (immune to {})", type_name(t)),
+        EffectOutcome::InWater => format!("{e}: refused (in water)"),
+    }];
+    out.extend(kind_names(f.replaced).into_iter().map(|w| format!("{e}: replaced {w}")));
+    out
+}
+
+/// "Burning on Goblin Archer 1 ended (water)".
+pub(super) fn ended_head(run: &Run, target: u32, kind: EffectKind, why: EndReason) -> String {
+    let tail = match why {
+        EndReason::RanOut => "",
+        EndReason::Water => " (water)",
+        EndReason::Purify => " (Purify)",
+    };
+    format!("{} on {} ended{tail}", effect_name(kind), tag_of(run, target))
 }

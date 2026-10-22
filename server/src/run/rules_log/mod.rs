@@ -2,10 +2,11 @@
 //! only through one-line hooks (see the boundary test in `tests.rs`); everything else lives here.
 
 use super::Run;
-use crate::defs::damage::{Damage, DamageType, Resistances};
+use crate::defs::damage::{Damage, DamageType, Resistances, What};
+use crate::defs::effects::EffectKind;
 use crate::defs::kinds::EntityKind;
 use crate::protocol::EntSnap;
-use crate::run::effects::Creature;
+use crate::run::effects::{Creature, Duration, EffectOutcome};
 
 pub mod record;
 pub mod send;
@@ -135,6 +136,17 @@ fn creature_id(run: &Run, c: Creature) -> u32 {
     }
 }
 
+/// A hero, monster or object by id, as a record names it.
+fn seen_by_id(run: &Run, id: u32) -> Option<record::Seen> {
+    if let Some(i) = run.player_idx(id) {
+        Some(record::seen_creature(run, Creature::Player(i)))
+    } else if let Some(i) = run.monster_idx(id) {
+        Some(record::seen_creature(run, Creature::Monster(i)))
+    } else {
+        run.objects.iter().position(|o| o.id == id).map(|oi| record::seen_object(run, oi))
+    }
+}
+
 /// A hit begins: its record is built now and filed by `hit_end`.
 pub fn hit_begin(run: &mut Run, f: HitFacts) {
     if !on(run) {
@@ -142,15 +154,7 @@ pub fn hit_begin(run: &mut Run, f: HitFacts) {
     }
     let target = creature_id(run, f.target);
     let mut who = vec![record::seen_creature(run, f.target)];
-    if let Some(by) = f.dmg.why.by {
-        if let Some(i) = run.player_idx(by) {
-            who.push(record::seen_creature(run, Creature::Player(i)));
-        } else if let Some(i) = run.monster_idx(by) {
-            who.push(record::seen_creature(run, Creature::Monster(i)));
-        } else if let Some(oi) = run.objects.iter().position(|o| o.id == by) {
-            who.push(record::seen_object(run, oi));
-        }
-    }
+    who.extend(f.dmg.why.by.and_then(|by| seen_by_id(run, by)));
     let viewer = match f.target {
         Creature::Player(i) => Some(run.players[i].id),
         Creature::Monster(i) => run.monsters[i].ally.as_ref().map(|a| a.owner),
@@ -183,4 +187,57 @@ pub fn hit_end(run: &mut Run) {
         let at = at.min(run.log.records.len());
         run.log.records.insert(at, rec);
     }
+}
+
+/// What `apply` hands over: its outcome and the numbers it used.
+#[derive(Clone, Copy, Debug)]
+pub struct EffectFacts {
+    pub target: Creature,
+    pub kind: EffectKind,
+    pub outcome: EffectOutcome,
+    pub duration: Duration,
+    /// The weaker tiers it removed (`EffectKind::bit`s).
+    pub replaced: u16,
+    /// The creature's timer for `kind` after the call.
+    pub left: f64,
+    pub origin: Option<(u32, What)>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EndReason {
+    RanOut,
+    Water,
+    Purify,
+}
+
+/// An effect application has an outcome. During a hit on the same creature its line becomes a detail of
+/// that hit's record and the headline gets a suffix; otherwise it is a record of its own.
+pub fn effect(run: &mut Run, f: EffectFacts) {
+    if !on(run) || f.outcome == EffectOutcome::NotThere {
+        return;
+    }
+    let target = creature_id(run, f.target);
+    let lines = text::effect_lines(run, &f);
+    let left = matches!(f.outcome, EffectOutcome::Added | EffectOutcome::Refreshed).then_some(f.left);
+    if let Some((_, rec)) = run.log.open.last_mut().filter(|(_, r)| r.who.first().is_some_and(|w| w.id == target)) {
+        // The suffix is appended to the finished head in place: the hit's head is built once, by `hit_begin`.
+        rec.head.push_str(&text::effect_suffix(&f));
+        rec.details.extend(lines);
+        rec.secs = left.or(rec.secs);
+        return;
+    }
+    let mut who = vec![record::seen_creature(run, f.target)];
+    who.extend(f.origin.and_then(|(by, _)| seen_by_id(run, by)));
+    let head = text::effect_head(run, &f, target);
+    record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: lines, who, unseen: None, dealt: None, secs: left });
+}
+
+/// An effect ended on its own (it ran out, water, Purify).
+pub fn ended(run: &mut Run, c: Creature, kind: EffectKind, why: EndReason) {
+    if !on(run) {
+        return;
+    }
+    let head = text::ended_head(run, creature_id(run, c), kind, why);
+    let who = vec![record::seen_creature(run, c)];
+    record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: vec![], who, unseen: None, dealt: None, secs: None });
 }

@@ -1,7 +1,7 @@
 //! Status effects at run time: the timers on each creature and the only
 //! API other code uses to touch them. Data: `defs/effects.rs`.
 
-use crate::defs::damage::{Damage, DamageType, Resistances, What, Why};
+use crate::defs::damage::{Damage, DamageType, Resistances, What, Why, MIN_RESISTANCE};
 use crate::dungeon::Tile;
 use crate::defs::attributes::Attr;
 use crate::defs::effects::{def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectLook, EffectResistances, Stat, DOT_TICK, TYPE_EFFECT_POWER};
@@ -41,14 +41,46 @@ pub struct Apply {
     pub look: EffectLook,
     /// Who applied it and where they stand.
     pub source: Option<(u32, Vec2)>,
+    /// A standalone application's cause (an ability), for the rules log: who and what.
+    pub origin: Option<(u32, What)>,
+}
+
+/// What `apply_traced` did with an application.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EffectOutcome {
+    Added,
+    Refreshed,
+    /// The effect cancelled others (fire and ice) and was not applied: the kinds removed, as `EffectKind::bit`s.
+    Cancelled { removed: u16 },
+    /// A stronger tier is on.
+    StrongerOn(EffectKind),
+    SavedToZero,
+    Resisted,
+    TypeImmune(DamageType),
+    InWater,
+    /// Dead, sinking or unknown target.
+    NotThere,
+}
+
+/// The numbers `apply` computed on the way to the seconds, as it computed them.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct Duration {
+    /// Seconds before the target's save and resistance.
+    pub base: f64,
+    /// The source's power, the save Attribute, its value on the target, and the seconds after the save.
+    pub save: Option<(i32, Attr, i32, f64)>,
+    /// The effect resistance as used, and the seconds after it.
+    pub resist: Option<(f64, f64)>,
+    /// The seconds the effect got (as far as it got).
+    pub secs: f64,
 }
 
 impl Apply {
     pub fn plain(kind: EffectKind, secs: Option<f64>) -> Apply {
-        Apply { kind, secs, power: None, magical: false, look: EffectLook::Plain, source: None }
+        Apply { kind, secs, power: None, magical: false, look: EffectLook::Plain, source: None, origin: None }
     }
     pub fn from_hit(h: OnHit) -> Apply {
-        Apply { kind: h.kind, secs: Some(h.secs), power: Some(h.power), magical: h.magical, look: h.look, source: None }
+        Apply { kind: h.kind, secs: Some(h.secs), power: Some(h.power), magical: h.magical, look: h.look, source: None, origin: None }
     }
 }
 
@@ -214,34 +246,58 @@ impl Run {
     ///    (a refused Frozen leaves an existing Chilled alone).
     /// True when the effect is on afterwards.
     pub fn apply(&mut self, c: Creature, a: Apply) -> bool {
+        let (outcome, duration, replaced) = self.apply_traced(c, a);
+        let left = self.effect_left(c, a.kind);
+        super::rules_log::effect(self, super::rules_log::EffectFacts { target: c, kind: a.kind, outcome, duration, replaced, left, origin: a.origin });
+        matches!(outcome, EffectOutcome::Added | EffectOutcome::Refreshed)
+    }
+
+    /// Seconds left of `kind` on `c` (0 when it is not on).
+    fn effect_left(&self, c: Creature, kind: EffectKind) -> f64 {
+        let fx = match c {
+            Creature::Player(i) => self.players.get(i).map(|p| &p.effects),
+            Creature::Monster(i) => self.monsters.get(i).map(|m| &m.effects),
+        };
+        fx.and_then(|fx| fx.list().iter().find(|e| e.kind == kind)).map_or(0.0, |e| e.left)
+    }
+
+    /// The body of `apply`: what happened, the numbers on the way, and the weaker tiers it removed (bits).
+    pub fn apply_traced(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u16) {
         let kind = a.kind;
-        let Some((_, _, pos, ok)) = self.creature(c) else { return false };
+        let mut d = Duration::default();
+        let Some((_, _, pos, ok)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
         if !ok {
-            return false;
+            return (EffectOutcome::NotThere, d, 0);
         }
         let cancelled: Vec<EffectKind> = def(kind).cancels.iter().copied().filter(|&k| self.has_effect(c, k)).collect();
         if !cancelled.is_empty() {
+            let mut removed = 0;
             for k in cancelled {
                 self.remove_effect(c, k);
+                removed |= k.bit();
             }
-            return false; // fire thaws ice / ice puts out fire
+            return (EffectOutcome::Cancelled { removed }, d, 0); // fire thaws ice / ice puts out fire
         }
         let held = match c {
             Creature::Player(i) => self.players.get(i).map(|p| p.effects.kinds()),
             Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.kinds()),
         };
-        if held.is_some_and(|h| h.iter().any(|&k| def(k).replaces.contains(&kind))) {
-            return false; // the stronger tier is on
+        if let Some(k) = held.and_then(|h| h.into_iter().find(|&k| def(k).replaces.contains(&kind))) {
+            return (EffectOutcome::StrongerOn(k), d, 0); // the stronger tier is on
         }
         let mut secs = a.secs.unwrap_or(def(kind).duration);
+        d.base = secs;
+        d.secs = secs;
         if let (Some(power), false) = (a.power, def(kind).positive) {
             let save_attr = def(kind).save.unwrap_or(if a.magical { Attr::Wil } else { Attr::Con });
             let save = match c {
                 Creature::Player(i) => self.players.get(i).map(|p| p.sheet.attrs.get(save_attr)),
                 Creature::Monster(i) => self.monsters.get(i).map(|m| m.attrs.get(save_attr)),
             };
-            let Some(save) = save else { return false };
+            let Some(save) = save else { return (EffectOutcome::NotThere, d, 0) };
             secs = scaled_secs(secs, power, save);
+            d.save = Some((power, save_attr, save, secs));
+            d.secs = secs;
         }
         if def(kind).resisted_by.is_none() {
             // A damage-type effect is resisted by its type's damage resistance (below) only.
@@ -249,14 +305,18 @@ impl Run {
                 Creature::Player(i) => self.players.get(i).map(|p| p.effects.effect_res(p.sheet.effect_res).get(kind)),
                 Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.effect_res(m.effect_res).get(kind)),
             };
-            let Some(left) = r.and_then(|r| effect_secs(secs, r)) else { return false };
+            let Some(r) = r else { return (EffectOutcome::NotThere, d, 0) };
+            d.resist = Some((r.max(MIN_RESISTANCE), 0.0));
+            let Some(left) = effect_secs(secs, r) else { return (EffectOutcome::Resisted, d, 0) };
             secs = left;
+            d.resist = Some((r.max(MIN_RESISTANCE), left));
+            d.secs = secs;
         }
         if secs <= 0.0 {
-            return false;
+            return (EffectOutcome::SavedToZero, d, 0);
         }
         if def(kind).ends_in_water && self.in_water(pos) {
-            return false; // no flicker on and off in water
+            return (EffectOutcome::InWater, d, 0); // no flicker on and off in water
         }
         if let Some(t) = def(kind).resisted_by {
             let res = match c {
@@ -264,17 +324,21 @@ impl Run {
                 Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.res(m.res).get(t)),
             };
             if res.is_some_and(|r| r >= 1.0) {
-                return false; // immune to its damage: no effect at all
+                return (EffectOutcome::TypeImmune(t), d, 0); // immune to its damage: no effect at all
             }
         }
-        let Some((fx, id, pos, _)) = self.creature(c) else { return false };
-        if fx.add_with(kind, secs, a.look, a.source) {
+        let Some((fx, id, pos, _)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
+        let added = fx.add_with(kind, secs, a.look, a.source);
+        if added {
             self.effect_event(c, id, pos, kind, true, a.look);
         }
+        let mut replaced = 0;
         for &weaker in def(kind).replaces {
-            self.remove_effect(c, weaker);
+            if self.remove_effect(c, weaker) {
+                replaced |= weaker.bit();
+            }
         }
-        true
+        (if added { EffectOutcome::Added } else { EffectOutcome::Refreshed }, d, replaced)
     }
 
     /// `apply` of `kind` for `secs` (default: its def's duration), unscaled and `Plain`.
@@ -297,6 +361,15 @@ impl Run {
         let removed = fx.remove(kind);
         if removed {
             self.effect_event(c, id, pos, kind, false, EffectLook::Plain);
+        }
+        removed
+    }
+
+    /// `remove_effect`, and the rules log is told why it ended.
+    pub fn remove_effect_why(&mut self, c: Creature, kind: EffectKind, why: super::rules_log::EndReason) -> bool {
+        let removed = self.remove_effect(c, kind);
+        if removed {
+            super::rules_log::ended(self, c, kind, why);
         }
         removed
     }
@@ -355,13 +428,14 @@ impl Run {
             // Water puts out fire.
             if self.in_water(pos) {
                 for k in kinds.into_iter().filter(|&k| def(k).ends_in_water) {
-                    self.remove_effect(c, k);
+                    self.remove_effect_why(c, k, super::rules_log::EndReason::Water);
                 }
             }
             let Some((fx, ..)) = self.creature(c) else { continue };
             let (gone, hits) = fx.tick(DT);
             for k in gone {
                 self.effect_event(c, id, pos, k, false, EffectLook::Plain);
+                super::rules_log::ended(self, c, k, super::rules_log::EndReason::RanOut);
             }
             for (t, amount, kind, source) in hits {
                 let tick = Damage { why: Why { by: source, what: What::Tick(kind), ..Why::NONE }, ..Damage::effect_tick(amount, t) };

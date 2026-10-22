@@ -263,6 +263,7 @@ fn use_ring(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 11 }, Some(pos));
             let own = a.effect.expect("War Cry has its own effect");
             let source = Some((run.players[pi].id, pos));
+            let origin = Some((run.players[pi].id, What::Ability(a.id)));
             let afraid: Vec<usize> = (0..run.monsters.len())
                 .filter(|&mi| {
                     let m = &run.monsters[mi];
@@ -270,10 +271,10 @@ fn use_ring(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
                 })
                 .collect();
             for mi in afraid {
-                run.apply(Creature::Monster(mi), Apply { source, ..Apply::from_hit(own) });
+                run.apply(Creature::Monster(mi), Apply { source, origin, ..Apply::from_hit(own) });
             }
             for c in party_around(run, pos, a.radius) {
-                run.apply(c, Apply::plain(EffectKind::Accelerated, Some(a.duration)));
+                run.apply(c, Apply { origin, ..Apply::plain(EffectKind::Accelerated, Some(a.duration)) });
             }
         }
         AbilityId::GroundSlam => {
@@ -375,7 +376,7 @@ fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> A
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 12 }, Some(pos));
             let own = a.effect.expect("Haste has its own effect");
             for c in party_around(run, pos, a.radius) {
-                run.apply(c, Apply::plain(own.kind, Some(own.secs)));
+                run.apply(c, Apply { origin: Some((run.players[pi].id, What::Ability(a.id))), ..Apply::plain(own.kind, Some(own.secs)) });
             }
         }
         AbilityId::Purify => {
@@ -388,9 +389,9 @@ fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> A
                     Creature::Monster(i) => run.monsters[i].effects.kinds(),
                 };
                 for k in held.into_iter().filter(|&k| !crate::defs::effects::def(k).positive) {
-                    run.remove_effect(c, k);
+                    run.remove_effect_why(c, k, super::rules_log::EndReason::Purify);
                 }
-                run.apply(c, Apply::plain(own.kind, Some(own.secs)));
+                run.apply(c, Apply { origin: Some((run.players[pi].id, What::Ability(a.id))), ..Apply::plain(own.kind, Some(own.secs)) });
             }
         }
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Consecrate | AbilityId::Entangle => {
