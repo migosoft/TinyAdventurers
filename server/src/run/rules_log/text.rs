@@ -1,6 +1,8 @@
 //! The text of the log's lines: number formatting and what each fact is called.
 
-use super::{tag_of, EffectFacts, EndReason, HitFacts, HitOutcome};
+use super::{tag_of, DeathFacts, EffectFacts, EndReason, HealFacts, HitFacts, HitOutcome};
+use crate::defs::abilities::AbilityId;
+use crate::run::targets::Skip;
 use crate::defs::abilities;
 use crate::defs::damage::{DamageType, Mult, What, MIN_RESISTANCE};
 use crate::defs::effects::EffectKind;
@@ -275,4 +277,74 @@ pub(super) fn ended_head(run: &Run, target: u32, kind: EffectKind, why: EndReaso
         EndReason::Purify => " (Purify)",
     };
     format!("{} on {} ended{tail}", effect_name(kind), tag_of(run, target))
+}
+
+/// "Ayla ▸ Holy Light ▸ Ayla's wolf: healed 8 (HP 12 → 20)", or without a source "Goblin Archer 1: healed 3 (HP 1 → 4)".
+pub(super) fn heal_head(run: &Run, f: &HealFacts, target: u32, hp_after: f64) -> String {
+    let lead = match f.by {
+        Some((by, w)) => format!("{} ▸ {} ▸ {}", tag_of(run, by), what(w), tag_of(run, target)),
+        None => tag_of(run, target),
+    };
+    format!("{lead}: healed {} (HP {} → {})", n1(f.healed), n1(f.hp_before), n1(hp_after))
+}
+
+/// "Goblin Archer 1 died (killed by Ayla)", "Goblin Archer 1 died (Burning; credited to Ayla)", "Ayla fell (killed by Orc Warrior 1)".
+pub(super) fn death_head(run: &Run, f: &DeathFacts, target: u32) -> String {
+    let (name, verb) = match f.target {
+        Creature::Player(_) => (tag_of(run, target), "fell"),
+        Creature::Monster(_) => (tag_of(run, target), "died"),
+    };
+    let cause = match (f.tick, f.by) {
+        (Some(k), _) => {
+            let credit = f.credit.and_then(|pi| run.players.get(pi)).map(|p| format!("; credited to {}", tag_of(run, p.id)));
+            format!(" ({}{})", effect_name(k), credit.unwrap_or_default())
+        }
+        (None, Some(by)) => format!(" (killed by {})", tag_of(run, by)),
+        (None, None) => String::new(),
+    };
+    format!("{name} {verb}{cause}")
+}
+
+/// What a viewer who cannot see the killer is told: "Ayla fell to something unseen".
+pub(super) fn death_unseen_head(run: &Run, target: Creature, id: u32) -> String {
+    match target {
+        Creature::Player(_) => format!("{} fell to something unseen", tag_of(run, id)),
+        Creature::Monster(_) => format!("{} died to something unseen", tag_of(run, id)),
+    }
+}
+
+/// Why a monster was passed over, in words; `None` for the reasons the log does not tell.
+pub(super) fn skip_reason(s: Skip) -> Option<&'static str> {
+    match s {
+        Skip::Ally => Some("an ally"),
+        Skip::Dormant => Some("it is dormant"),
+        Skip::Airborne => Some("it is flying"),
+        Skip::NoLineOfSight => Some("no line of sight"),
+        Skip::AlreadyHit => Some("already hit"),
+        Skip::Dead | Skip::Hiding | Skip::OutOfReach | Skip::OutsideArc => None,
+    }
+}
+
+/// "Frost Nova did not reach Goblin Archer 1: no line of sight", or "Chain Spark did not jump to …".
+pub(super) fn skip_head(run: &Run, w: What, chain: bool, target: u32, reason: &str) -> String {
+    if chain {
+        format!("Chain Spark did not jump to {}: {reason}", tag_of(run, target))
+    } else {
+        format!("{} did not reach {}: {reason}", what(w), tag_of(run, target))
+    }
+}
+
+/// "Chain Spark stopped: Goblin Archer 3 is out of reach (52 > 48)".
+pub(super) fn chain_stop_head(run: &Run, target: u32, d: f64) -> String {
+    format!("{} stopped: {} is out of reach ({} > {})", what(What::Ability(AbilityId::ChainSpark)), tag_of(run, target), n1(d), n1(abilities::CHAIN_REACH))
+}
+
+/// The two "Too close" lines of a ranged ability next to an enemy.
+pub(super) fn too_close_head(run: &Run, hero: u32, ability: AbilityId, primary: bool, target: u32) -> String {
+    let (hero, name, target) = (tag_of(run, hero), abilities::def(ability).name, tag_of(run, target));
+    if primary {
+        format!("{hero} ▸ {name}: {target} is in melee reach, strikes instead")
+    } else {
+        format!("{hero} ▸ {name}: blocked, {target} is in melee reach (Too close)")
+    }
 }

@@ -133,7 +133,7 @@ fn rules_log_is_reached_only_through_its_hooks() {
     walk(&root, &root, &mut found);
     // Lines naming `rules_log` outside the module, per file. Each task updates this with its hooks.
     let hooks: BTreeMap<String, usize> =
-        [("run/mod.rs", 14), ("run/effects.rs", 5), ("run/abilities.rs", 1), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 1)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        [("run/mod.rs", 18), ("run/effects.rs", 5), ("run/abilities.rs", 12), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 1)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     assert_eq!(found, hooks);
 }
 
@@ -847,4 +847,259 @@ fn apply_still_returns_what_it_did() {
         seen.insert(std::mem::discriminant(&outcome));
     }
     assert!(seen.len() >= 6, "the scenarios reach several outcomes: {}", seen.len());
+}
+
+fn kinds_of(recs: &[LogRec], kind: LineKind) -> Vec<&LogRec> {
+    recs.iter().filter(|r| r.kind == kind).collect()
+}
+
+#[test]
+fn holy_light_logs_each_heal_with_its_source() {
+    let mut run = hero_secondary(ClassId::Paladin, AbilityId::HolyLight, Attributes::default());
+    let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+    let wi = run.monster_idx(wolf).unwrap();
+    run.players[0].hp = run.players[0].max_hp - 3.0;
+    run.monsters[wi].hp = 1.0;
+    run.monsters[wi].pos = run.players[0].pos();
+    let (hero_before, wolf_before) = (run.players[0].hp, run.monsters[wi].hp);
+    let (hero, name) = (run.players[0].id, run.players[0].name.clone());
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    let recs = take(&mut run);
+    let heals = kinds_of(&recs, LineKind::Heal);
+    assert_eq!(heals.len(), 2, "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    let after = |hp: f64| n1(hp);
+    assert_eq!(heals[0].head, format!("{name} ▸ Holy Light ▸ {name}: healed 3 (HP {} → {})", after(hero_before), after(run.players[0].max_hp)));
+    let wolf_tag = tag_of(&run, wolf);
+    assert_eq!(heals[1].head, format!("{name} ▸ Holy Light ▸ {wolf_tag}: healed {} (HP {} → {})", n1(run.monsters[wi].hp - wolf_before), n1(wolf_before), n1(run.monsters[wi].hp)));
+    assert_eq!(heals[0].who.iter().map(|w| w.id).collect::<Vec<_>>(), vec![hero, hero]);
+}
+
+#[test]
+fn a_full_hero_gets_no_heal_line() {
+    let mut run = hero_secondary(ClassId::Paladin, AbilityId::HolyLight, Attributes::default());
+    assert_eq!(run.players[0].hp, run.players[0].max_hp);
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    assert!(take(&mut run).is_empty());
+}
+
+#[test]
+fn a_resistance_heal_gets_only_its_hit_record() {
+    // Resistance over 100 %: the Healed hit already says it, the heal adds no line of its own.
+    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    run.log.forced = true;
+    run.players[0].hp = 1.0;
+    run.players[0].res.set(DamageType::Heat, 1.5);
+    let _ = take(&mut run);
+    run.hurt_player(0, Damage::new(4.0, DamageSplit::pure(DamageType::Heat)));
+    let recs = take(&mut run);
+    assert_eq!(recs.len(), 1, "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    assert_eq!(recs[0].kind, LineKind::Heal);
+}
+
+#[test]
+fn a_kill_names_the_killer() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let mi = goblin_near(&mut run, Some(5.0));
+    let (hero, name) = (run.players[0].id, run.players[0].name.clone());
+    let goblin = tag_of(&run, run.monsters[mi].id);
+    let _ = take(&mut run);
+    run.hurt_monster(mi, Damage::physical(50.0).by(hero, What::Attack), false, Some(0));
+    let recs = take(&mut run);
+    assert_eq!(recs.iter().map(|r| r.kind).collect::<Vec<_>>(), vec![LineKind::Hit, LineKind::Death]);
+    assert_eq!(recs[1].head, format!("{goblin} died (killed by {name})"));
+    assert!(run.log.open.is_empty());
+}
+
+#[test]
+fn a_death_follows_its_own_hit_even_when_hits_nest() {
+    // A hit sets off another before it ends (as a kill that sets off a blast would): both are filed in
+    // order, each death right after the hit that caused it.
+    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    run.log.forced = true;
+    let hero = run.players[0].id;
+    let (mi, mj) = (goblin_near(&mut run, Some(100.0)), goblin_near(&mut run, Some(100.0)));
+    let res = run.monsters[mi].res;
+    let facts = |run: &Run, mi: usize| {
+        let dmg = Damage::physical(1.0).by(hero, What::Attack);
+        let parts = crate::defs::damage::resolve_parts(&dmg, &res);
+        let hp = run.monsters[mi].hp;
+        HitFacts { target: Creature::Monster(mi), dmg, res, parts, armor: 0.0, hp_before: hp, hp_after: 0.0, dealt: 1.0, taken: 1.0, outcome: HitOutcome::Dealt }
+    };
+    let death = |mi: usize| DeathFacts { target: Creature::Monster(mi), by: Some(hero), tick: None, credit: None };
+    let _ = take(&mut run);
+    let (f1, f2) = (facts(&run, mi), facts(&run, mj));
+    hit_begin(&mut run, f1);
+    death_of(&mut run, death(mi));
+    hit_begin(&mut run, f2);
+    death_of(&mut run, death(mj));
+    hit_end(&mut run);
+    hit_end(&mut run);
+    let recs = take(&mut run);
+    let (a, b) = (tag_of(&run, run.monsters[mi].id), tag_of(&run, run.monsters[mj].id));
+    let kinds = recs.iter().map(|r| r.kind).collect::<Vec<_>>();
+    assert_eq!(kinds, vec![LineKind::Hit, LineKind::Death, LineKind::Hit, LineKind::Death]);
+    assert!(recs[1].head.starts_with(&a) && recs[3].head.starts_with(&b), "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+}
+
+fn death_of(run: &mut Run, f: DeathFacts) {
+    death(run, f);
+}
+
+#[test]
+fn a_burn_kill_credits_the_hero() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let mi = goblin_near(&mut run, Some(1.0));
+    let (hero, name) = (run.players[0].id, run.players[0].name.clone());
+    let goblin = tag_of(&run, run.monsters[mi].id);
+    run.monsters[mi].last_hit_by = Some(0);
+    let _ = take(&mut run);
+    let tick = Damage { why: crate::defs::damage::Why { by: Some(hero), what: What::Tick(EffectKind::Burning), ..crate::defs::damage::Why::NONE }, ..Damage::effect_tick(5.0, DamageType::Heat) };
+    run.hurt_monster(mi, tick, false, None);
+    let recs = take(&mut run);
+    let deaths = kinds_of(&recs, LineKind::Death);
+    assert_eq!(deaths.len(), 1);
+    assert_eq!(deaths[0].head, format!("{goblin} died (Burning; credited to {name})"));
+    assert_eq!(run.players[0].kills, 1);
+}
+
+#[test]
+fn a_hero_death_names_the_killer_or_says_unseen() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let mi = goblin_near(&mut run, Some(100.0));
+    let (hero, name) = (run.players[0].id, run.players[0].name.clone());
+    let goblin_id = run.monsters[mi].id;
+    let goblin = tag_of(&run, goblin_id);
+    run.players[0].hp = 1.0;
+    let _ = take(&mut run);
+    run.hurt_player(0, Damage::physical(50.0).by(goblin_id, What::Attack));
+    let recs = take(&mut run);
+    let deaths = kinds_of(&recs, LineKind::Death);
+    assert_eq!(deaths.len(), 1);
+    assert_eq!(deaths[0].head, format!("{name} fell (killed by {goblin})"));
+    let unseen = deaths[0].unseen.as_ref().expect("a short line for the dead hero");
+    assert_eq!((unseen.viewer, unseen.head.as_str()), (hero, format!("{name} fell to something unseen").as_str()));
+    assert_eq!(recs.last().unwrap().kind, LineKind::Death, "after its hit");
+}
+
+#[test]
+fn chain_spark_logs_why_it_did_not_jump() {
+    let mut run = wizard_with(AbilityId::ChainSpark, Attributes::new(0, 0, 0, 3, 0, 0));
+    let first = goblin_near(&mut run, Some(1000.0));
+    let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+    let at = run.monsters[first].pos;
+    let wi = run.monster_idx(wolf).unwrap();
+    run.monsters[wi].pos = at + crate::math::Vec2::new(0.0, 20.0);
+    let (tx, ty) = Map::tile_of(at);
+    for x in tx - 1..=tx + 1 {
+        run.layout.map.set(x, ty + 1, Tile::Wall);
+    }
+    let behind = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx, ty + 2), None);
+    let (behind_tag, wolf_tag) = (tag_of(&run, behind), tag_of(&run, wolf));
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, true, 1);
+    fly(&mut run);
+    let recs = take(&mut run);
+    let skips: Vec<&str> = kinds_of(&recs, LineKind::Skip).iter().map(|r| r.head.as_str()).collect();
+    assert_eq!(skips.len(), 2, "{skips:?}");
+    assert!(skips.contains(&format!("Chain Spark did not jump to {behind_tag}: no line of sight").as_str()), "{skips:?}");
+    assert!(skips.contains(&format!("Chain Spark did not jump to {wolf_tag}: an ally").as_str()), "{skips:?}");
+}
+
+#[test]
+fn a_chain_that_stops_names_what_was_just_out_of_reach() {
+    let mut run = wizard_with(AbilityId::ChainSpark, Attributes::new(0, 0, 0, 3, 0, 0));
+    let first = goblin_near(&mut run, Some(1000.0));
+    let at = run.monsters[first].pos;
+    let far = run.spawn_enemy(EnemyType::GoblinArcher, at + crate::math::Vec2::new(0.0, 60.0), None);
+    let far_tag = tag_of(&run, far);
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, true, 1);
+    fly(&mut run);
+    let recs = take(&mut run);
+    let skips: Vec<&str> = kinds_of(&recs, LineKind::Skip).iter().map(|r| r.head.as_str()).collect();
+    assert_eq!(skips, vec![format!("Chain Spark stopped: {far_tag} is out of reach (60 > 48)").as_str()]);
+}
+
+#[test]
+fn a_hidden_mimic_is_never_a_skip_line() {
+    for (class, id) in [(ClassId::Wizard, AbilityId::FrostNova), (ClassId::Barbarian, AbilityId::WarCry)] {
+        let mut run = hero_secondary(class, id, Attributes::new(1, 0, 0, 7, 0, 0));
+        let mimic = enemy_near(&mut run, EnemyType::Mimic);
+        run.monsters[mimic].hiding = true;
+        run.monsters[mimic].pos = run.players[0].pos() + crate::math::Vec2::new(20.0, 0.0);
+        let _ = take(&mut run);
+        crate::run::abilities::try_use(&mut run, 0, false, 1);
+        let recs = take(&mut run);
+        assert!(kinds_of(&recs, LineKind::Skip).is_empty(), "{id:?}: {:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    }
+}
+
+#[test]
+fn a_ring_logs_the_ally_it_passed_over() {
+    let mut run = hero_secondary(ClassId::Wizard, AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0));
+    let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+    let wi = run.monster_idx(wolf).unwrap();
+    run.monsters[wi].pos = run.players[0].pos() + crate::math::Vec2::new(0.0, 20.0);
+    let wolf_tag = tag_of(&run, wolf);
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    let recs = take(&mut run);
+    let skips: Vec<&str> = kinds_of(&recs, LineKind::Skip).iter().map(|r| r.head.as_str()).collect();
+    assert_eq!(skips, vec![format!("Frost Nova did not reach {wolf_tag}: an ally").as_str()]);
+}
+
+#[test]
+fn too_close_is_logged_once_a_second() {
+    // Volley is a ranger's primary: held next to an enemy it strikes instead, and says so once a second.
+    let start = Loadout::start(ClassId::ElvenRanger);
+    let loadout = Loadout { primary: Pick { ability: AbilityId::Volley, source: Source::Own }, ..start };
+    let build = Build { own: vec![AbilityId::Volley], loadout, equipment: Equipment::starter(ClassId::ElvenRanger), ..Build::start(ClassId::ElvenRanger) };
+    let mut run = crate::run::tests::test_run_with(&[(ClassId::ElvenRanger, build)], BossId::Demon);
+    run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+    run.log.forced = true;
+    let mi = enemy_near(&mut run, EnemyType::GoblinArcher);
+    run.monsters[mi].pos = run.players[0].pos() + crate::math::Vec2::new(10.0, 0.0);
+    run.monsters[mi].hp = 1e9;
+    run.monsters[mi].max_hp = 1e9;
+    let (name, goblin) = (run.players[0].name.clone(), tag_of(&run, run.monsters[mi].id));
+    let _ = take(&mut run);
+    for _ in 0..120 {
+        run.time += crate::run::DT;
+        run.players[0].cd1 = 0.0;
+        crate::run::abilities::try_use(&mut run, 0, true, 1);
+    }
+    let recs = take(&mut run);
+    let notes = kinds_of(&recs, LineKind::Note);
+    assert_eq!(notes.len(), 2, "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    assert_eq!(notes[0].head, format!("{name} ▸ Volley: {goblin} is in melee reach, strikes instead"));
+}
+
+#[test]
+fn a_blocked_secondary_says_why() {
+    let mut run = hero_secondary(ClassId::ElvenRanger, AbilityId::Entangle, Attributes::new(0, 0, 0, 0, 0, 10));
+    let mi = enemy_near(&mut run, EnemyType::GoblinArcher);
+    run.monsters[mi].pos = run.players[0].pos() + crate::math::Vec2::new(10.0, 0.0);
+    let (name, goblin) = (run.players[0].name.clone(), tag_of(&run, run.monsters[mi].id));
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    let recs = take(&mut run);
+    let notes = kinds_of(&recs, LineKind::Note);
+    assert_eq!(notes.len(), 1, "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    assert_eq!(notes[0].head, format!("{name} ▸ Entangle: blocked, {goblin} is in melee reach (Too close)"));
+}
+
+#[test]
+fn a_primary_that_strikes_instead_says_so() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let mi = goblin_near(&mut run, Some(1000.0));
+    run.monsters[mi].pos = run.players[0].pos() + crate::math::Vec2::new(10.0, 0.0);
+    let (name, goblin) = (run.players[0].name.clone(), tag_of(&run, run.monsters[mi].id));
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, true, 1);
+    let recs = take(&mut run);
+    let notes = kinds_of(&recs, LineKind::Note);
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0].head, format!("{name} ▸ Magic Missile: {goblin} is in melee reach, strikes instead"));
 }

@@ -1,7 +1,7 @@
 //! Player abilities (one executor per AbilityId) and projectile simulation.
 
 use super::entities::{HazardPulse, HazardSide, Pierce, Projectile};
-use super::{Run, TICK_HZ};
+use super::{targets, Run, TICK_HZ};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::{self as ab, AbilityId, Shape, Uses};
 use crate::defs::classes::PLAYER_RADIUS;
@@ -126,6 +126,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     if def.ranged {
         let targets = melee_targets(run, pi);
         if !targets.is_empty() {
+            super::rules_log::too_close(run, pi, primary, targets[0]);
             if !primary {
                 return;
             }
@@ -249,12 +250,11 @@ fn use_ring(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
         AbilityId::FrostNova => {
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 10 }, Some(pos));
             run.add_tinted_flash(LightKind::Magic, Some(ab::NOVA_TINT), pos, ab::NOVA_FLASH);
-            let hit: Vec<usize> = (0..run.monsters.len())
-                .filter(|&mi| {
-                    let m = &run.monsters[mi];
-                    m.alive && !m.is_ally() && m.pos.dist(pos) <= a.radius && line_of_sight(&run.layout.map, pos, m.pos)
-                })
-                .collect();
+            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: true, skip_hiding: false, skip_dormant: false, skip_airborne: false };
+            let log = super::rules_log::on(run);
+            let (hit, skips) = targets::select(run, &rule, &[], log, |mi| run.monsters[mi].pos);
+            let by = run.players[pi].id;
+            super::rules_log::skipped(run, by, What::Ability(a.id), &skips, None);
             for mi in hit {
                 run.hurt_monster(mi, damage_of(run.players[pi].id, a), false, Some(pi));
             }
@@ -264,12 +264,10 @@ fn use_ring(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
             let own = a.effect.expect("War Cry has its own effect");
             let source = Some((run.players[pi].id, pos));
             let origin = Some((run.players[pi].id, What::Ability(a.id)));
-            let afraid: Vec<usize> = (0..run.monsters.len())
-                .filter(|&mi| {
-                    let m = &run.monsters[mi];
-                    m.alive && !m.is_ally() && !m.hiding && !m.dormant && m.pos.dist(pos) <= a.radius
-                })
-                .collect();
+            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: false };
+            let log = super::rules_log::on(run);
+            let (afraid, skips) = targets::select(run, &rule, &[], log, |mi| run.monsters[mi].pos);
+            super::rules_log::skipped(run, run.players[pi].id, What::Ability(a.id), &skips, None);
             for mi in afraid {
                 run.apply(Creature::Monster(mi), Apply { source, origin, ..Apply::from_hit(own) });
             }
@@ -320,11 +318,11 @@ pub fn land_slam(run: &mut Run, pi: usize) {
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 5 }, Some(pos));
     let dmg = weapon_damage(run, pi, &a);
     let push = a.push.max(ab::SLAM_PUSH);
-    for mi in 0..run.monsters.len() {
-        let m = &run.monsters[mi];
-        if !(m.alive && !m.airborne && !m.is_ally() && m.pos.dist(pos) <= a.radius && line_of_sight(&run.layout.map, pos, m.pos)) {
-            continue;
-        }
+    let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: true, skip_hiding: false, skip_dormant: false, skip_airborne: true };
+    let log = super::rules_log::on(run);
+    let (hit, skips) = targets::select(run, &rule, &[], log, |mi| run.monsters[mi].pos);
+    super::rules_log::skipped(run, run.players[pi].id, What::Ability(a.id), &skips, None);
+    for mi in hit {
         run.hurt_monster(mi, dmg, false, Some(pi));
         run.knock_creature(Creature::Monster(mi), pos, aim, push, a.push_str);
     }
@@ -358,16 +356,17 @@ fn use_self_area(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> A
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 1 }, Some(pos));
             run.add_flash(LightKind::Holy, pos, lights::HOLY_FLASH);
             let mut total = 0.0;
+            let by = Some((run.players[pi].id, What::Ability(a.id)));
             for qi in 0..run.players.len() {
                 let q = &run.players[qi];
                 if q.alive && q.pos().dist(pos) <= a.radius {
-                    total += run.heal_player(qi, a.damage);
+                    total += run.heal_player(qi, a.damage, by);
                 }
             }
             for mi in 0..run.monsters.len() {
                 let m = &run.monsters[mi];
                 if m.is_ally() && m.alive && m.pos.dist(pos) <= a.radius {
-                    total += run.heal_monster(mi, a.damage);
+                    total += run.heal_monster(mi, a.damage, by);
                 }
             }
             run.players[pi].healing += total;
@@ -468,25 +467,11 @@ fn melee_arc(run: &mut Run, pi: usize, a: &ResolvedAbility, crit: bool) -> Optio
     let rw = rewind_ticks(run, pi);
     let (pos, aim) = (run.players[pi].pos(), run.players[pi].aim);
     let (range, arc, dmg) = (a.range, a.arc, weapon_damage(run, pi, a));
-    let hits: Vec<usize> = run
-        .monsters
-        .iter()
-        .enumerate()
-        .filter(|(_, m)| {
-            // Flying monsters are out of reach of melee.
-            if !m.alive || m.airborne || m.is_ally() {
-                return false;
-            }
-            let mp = m.pos_ago(rw);
-            let d = mp.dist(pos);
-            if d > range + m.radius {
-                return false;
-            }
-            let in_arc = angle_diff(pos.angle_to(mp), aim).abs() <= arc / 2.0 || d < m.radius + PLAYER_RADIUS;
-            in_arc && line_of_sight(&run.layout.map, pos, mp)
-        })
-        .map(|(i, _)| i)
-        .collect();
+    // Flying monsters are out of reach of melee; a monster touching the hero is hit whatever the arc.
+    let rule = targets::Rule { at: pos, reach: range, plus_radius: true, arc: Some((aim, arc)), los: true, skip_hiding: false, skip_dormant: false, skip_airborne: true };
+    let log = super::rules_log::on(run);
+    let (hits, skips) = targets::select(run, &rule, &[], log, |mi| run.monsters[mi].pos_ago(rw));
+    super::rules_log::skipped(run, run.players[pi].id, What::Ability(a.id), &skips, None);
     let first = hits.first().map(|&mi| run.monsters[mi].pos);
     for mi in hits {
         let m = &run.monsters[mi];
@@ -792,16 +777,21 @@ fn chain_jumps(run: &mut Run, pi: usize, first: usize, damage: Damage) {
     let mut hit = vec![first];
     let mut last = first;
     let mut amount = damage.amount;
+    let log = super::rules_log::on(run);
+    let (mut skips, mut stop) = (Vec::new(), None);
     for jump in 1..=ab::CHAIN_JUMPS {
         let from = run.monsters[last].pos;
-        let next = run
-            .monsters
-            .iter()
-            .enumerate()
-            .filter(|(i, m)| m.alive && !m.is_ally() && !m.hiding && !m.dormant && !hit.contains(i) && m.pos.dist(from) <= ab::CHAIN_REACH && line_of_sight(&run.layout.map, from, m.pos))
-            .min_by(|a, b| a.1.pos.dist(from).total_cmp(&b.1.pos.dist(from)))
-            .map(|(i, _)| i);
-        let Some(mi) = next else { return };
+        let rule = targets::Rule { at: from, reach: ab::CHAIN_REACH, plus_radius: false, arc: None, los: true, skip_hiding: true, skip_dormant: true, skip_airborne: false };
+        let (near, more) = targets::select(run, &rule, &hit, log, |mi| run.monsters[mi].pos);
+        // The target the spark stands on is not a candidate to log.
+        targets::merge(&mut skips, more.into_iter().filter(|&(mi, _)| mi != last).collect());
+        let next = near.into_iter().min_by(|&a, &b| run.monsters[a].pos.dist(from).total_cmp(&run.monsters[b].pos.dist(from)));
+        let Some(mi) = next else {
+            if log {
+                stop = targets::nearest_beyond(run, &rule, &hit);
+            }
+            break;
+        };
         amount *= ab::CHAIN_FALLOFF;
         let jump = jump as u8;
         let to = run.monsters[mi].pos;
@@ -810,6 +800,7 @@ fn chain_jumps(run: &mut Run, pi: usize, first: usize, damage: Damage) {
         hit.push(mi);
         last = mi;
     }
+    super::rules_log::skipped(run, run.players[pi].id, What::Ability(AbilityId::ChainSpark), &skips, stop);
 }
 
 /// What is left of `damage` if it kills creature `c` (`overkill_rest`), with the HP, resistances

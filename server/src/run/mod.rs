@@ -12,6 +12,7 @@ pub mod light;
 pub mod objects;
 pub mod perception;
 pub mod rules_log;
+pub mod targets;
 pub mod visibility;
 
 use crate::collision::MoveState;
@@ -875,7 +876,7 @@ impl Run {
         let raw: f64 = parts.iter().sum();
         if raw < 0.0 {
             let hp_before = self.players[pi].hp;
-            let healed = self.heal_player(pi, -raw);
+            let healed = self.mend_player(pi, -raw);
             let hp_after = self.players[pi].hp;
             rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, armor: 0.0, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
             return;
@@ -905,6 +906,7 @@ impl Run {
             let (id, kind, name) = (p.id, p.kind() as u8, p.name.clone());
             self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
             self.event(Ev::Msg { text: format!("{name} has fallen") }, None);
+            rules_log::death(self, rules_log::DeathFacts { target: effects::Creature::Player(pi), by: dmg.why.by, tick: if let What::Tick(k) = dmg.why.what { Some(k) } else { None }, credit: None });
         }
         if self.players[pi].alive && !dmg.from_effect {
             if v > 0.0 {
@@ -937,7 +939,16 @@ impl Run {
         p.mv.knock_vy = dir.y * v;
     }
 
-    pub fn heal_player(&mut self, pi: usize, amount: f64) -> f64 {
+    /// Heals hero `pi` up to the maximum; returns what they gained. `by` is who heals them and with what.
+    pub fn heal_player(&mut self, pi: usize, amount: f64, by: Option<(u32, What)>) -> f64 {
+        let hp_before = self.players[pi].hp;
+        let healed = self.mend_player(pi, amount);
+        rules_log::heal(self, rules_log::HealFacts { target: effects::Creature::Player(pi), by, healed, hp_before });
+        healed
+    }
+
+    /// The heal itself. A resistance over 100 % heals through this, with no line of its own: its hit's record tells it.
+    fn mend_player(&mut self, pi: usize, amount: f64) -> f64 {
         let p = &mut self.players[pi];
         if !p.alive {
             return 0.0;
@@ -1017,11 +1028,12 @@ impl Run {
     }
 
     /// Heals monster `mi` up to its maximum; returns what it gained. Shown like a hero's heal for an ally.
-    pub fn heal_monster(&mut self, mi: usize, amount: f64) -> f64 {
+    pub fn heal_monster(&mut self, mi: usize, amount: f64, by: Option<(u32, What)>) -> f64 {
         let m = &mut self.monsters[mi];
         if !m.alive {
             return 0.0;
         }
+        let hp_before = m.hp;
         let healed = amount.min(m.max_hp - m.hp).max(0.0);
         m.hp += healed;
         let (pos, ally) = (m.pos, m.is_ally());
@@ -1033,6 +1045,7 @@ impl Run {
                 self.event(ev, Some(pos));
             }
         }
+        rules_log::heal(self, rules_log::HealFacts { target: effects::Creature::Monster(mi), by, healed, hp_before });
         healed
     }
 
@@ -1121,13 +1134,12 @@ impl Run {
             self.monsters[mi].dormant = false;
         }
         if self.monsters[mi].hp <= 0.0 {
-            if let Some(pi) = src_player {
+            // The kill goes to the hero who struck, or whose effect ticked it down.
+            let credit = if src_player.is_some() { src_player } else if dmg.from_effect { self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) } else { None };
+            if let Some(pi) = credit {
                 self.players[pi].kills += 1;
-            } else if dmg.from_effect {
-                if let Some(pi) = self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) {
-                    self.players[pi].kills += 1;
-                }
             }
+            rules_log::death(self, rules_log::DeathFacts { target: effects::Creature::Monster(mi), by: dmg.why.by, tick: if let What::Tick(k) = dmg.why.what { Some(k) } else { None }, credit });
             self.kill_monster(mi);
         }
         if self.monsters[mi].alive && !dmg.from_effect {

@@ -391,7 +391,7 @@ mod tests {
         run.events.clear();
         run.on_hero.clear();
         run.hurt_player(0, crate::defs::damage::Damage::physical(5.0));
-        run.heal_player(0, 3.0);
+        run.heal_player(0, 3.0, None);
         assert_eq!(run.on_hero, vec![0, 1]);
     }
 

@@ -100,7 +100,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
 pub fn use_ability(run: &mut Run, pi: usize) {
     match run.players[pi].wolf.and_then(|id| run.monster_idx(id)) {
         Some(mi) if run.monsters[mi].alive => {
-            run.heal_monster(mi, run.monsters[mi].max_hp * WOLF_HEAL_SHARE);
+            run.heal_monster(mi, run.monsters[mi].max_hp * WOLF_HEAL_SHARE, Some((run.players[pi].id, What::Ability(crate::defs::abilities::AbilityId::SummonWolf))));
         }
         _ => {
             spawn_wolf(run, pi);

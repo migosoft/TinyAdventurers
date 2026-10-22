@@ -5,7 +5,6 @@ use crate::math::Vec2;
 use crate::run::effects::Creature;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // Task 6 pushes the other kinds.
 pub enum LineKind {
     Hit,
     Heal,

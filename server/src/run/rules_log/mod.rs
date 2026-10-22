@@ -2,6 +2,9 @@
 //! only through one-line hooks (see the boundary test in `tests.rs`); everything else lives here.
 
 use super::Run;
+use crate::run::abilities::MeleeTarget;
+use crate::run::targets::Skip;
+use crate::defs::abilities::AbilityId;
 use crate::defs::damage::{Damage, DamageType, Resistances, What};
 use crate::defs::effects::EffectKind;
 use crate::defs::kinds::EntityKind;
@@ -28,7 +31,10 @@ pub struct RulesLog {
     /// Records still being filled by a hit in progress.
     /// With the `records.len()` they were opened at: a hit is filed where it began, so a nested hit
     /// follows the one that set it off.
-    open: Vec<(usize, LogRec)>,
+    /// Each also holds the records that must follow it (a death), filed right after it.
+    open: Vec<(usize, LogRec, Vec<LogRec>)>,
+    /// When "Too close" was last logged, per hero id and slot (`true` is the primary).
+    too_close: Vec<(u32, bool, f64)>,
 }
 
 /// An entity was spawned: it takes the next number of its name (whether or not the log is on).
@@ -178,14 +184,14 @@ pub fn hit_begin(run: &mut Run, f: HitFacts) {
         secs: None,
     };
     let at = run.log.records.len();
-    run.log.open.push((at, rec));
+    run.log.open.push((at, rec, Vec::new()));
 }
 
 /// The hit that `hit_begin` opened last is over: its record is filed where it began.
 pub fn hit_end(run: &mut Run) {
-    if let Some((at, rec)) = run.log.open.pop() {
+    if let Some((at, rec, after)) = run.log.open.pop() {
         let at = at.min(run.log.records.len());
-        run.log.records.insert(at, rec);
+        run.log.records.splice(at..at, std::iter::once(rec).chain(after));
     }
 }
 
@@ -219,7 +225,7 @@ pub fn effect(run: &mut Run, f: EffectFacts) {
     let target = creature_id(run, f.target);
     let lines = text::effect_lines(run, &f);
     let left = matches!(f.outcome, EffectOutcome::Added | EffectOutcome::Refreshed).then_some(f.left);
-    if let Some((_, rec)) = run.log.open.last_mut().filter(|(_, r)| r.who.first().is_some_and(|w| w.id == target)) {
+    if let Some((_, rec, _)) = run.log.open.last_mut().filter(|(_, r, _)| r.who.first().is_some_and(|w| w.id == target)) {
         // The suffix is appended to the finished head in place: the hit's head is built once, by `hit_begin`.
         rec.head.push_str(&text::effect_suffix(&f));
         rec.details.extend(lines);
@@ -240,4 +246,108 @@ pub fn ended(run: &mut Run, c: Creature, kind: EffectKind, why: EndReason) {
     let head = text::ended_head(run, creature_id(run, c), kind, why);
     let who = vec![record::seen_creature(run, c)];
     record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+}
+
+/// What a heal hands over. `healed` is what the creature gained (0 when it was full).
+#[derive(Clone, Copy, Debug)]
+pub struct HealFacts {
+    pub target: Creature,
+    pub by: Option<(u32, What)>,
+    pub healed: f64,
+    pub hp_before: f64,
+}
+
+/// A creature was healed. Nothing is logged for a heal of 0.
+pub fn heal(run: &mut Run, f: HealFacts) {
+    if !on(run) || f.healed <= 0.0 {
+        return;
+    }
+    let target = creature_id(run, f.target);
+    let hp_after = match f.target {
+        Creature::Player(i) => run.players[i].hp,
+        Creature::Monster(i) => run.monsters[i].hp,
+    };
+    let mut who = vec![record::seen_creature(run, f.target)];
+    who.extend(f.by.and_then(|(by, _)| seen_by_id(run, by)));
+    let head = text::heal_head(run, &f, target, hp_after);
+    record::push(run, LogRec { t: run.time, kind: LineKind::Heal, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+}
+
+/// What a death hands over: who got the kill, or the effect that ticked it down and who it is credited to.
+#[derive(Clone, Copy, Debug)]
+pub struct DeathFacts {
+    pub target: Creature,
+    pub by: Option<u32>,
+    pub tick: Option<EffectKind>,
+    /// The index of the hero credited with a tick's kill.
+    pub credit: Option<usize>,
+}
+
+/// A creature died of a hit. While the hit's record is open the death waits and is filed right after it.
+pub fn death(run: &mut Run, f: DeathFacts) {
+    if !on(run) {
+        return;
+    }
+    let target = creature_id(run, f.target);
+    let mut who = vec![record::seen_creature(run, f.target)];
+    who.extend(f.by.and_then(|by| seen_by_id(run, by)));
+    let viewer = match f.target {
+        Creature::Player(i) => Some(run.players[i].id),
+        Creature::Monster(i) => run.monsters[i].ally.as_ref().map(|a| a.owner),
+    };
+    let unseen = viewer.map(|viewer| Unseen { viewer, head: text::death_unseen_head(run, f.target, target), details: vec![] });
+    let rec = LogRec { t: run.time, kind: LineKind::Death, head: text::death_head(run, &f, target), details: vec![], who, unseen, dealt: None, secs: None };
+    match run.log.open.last_mut() {
+        Some((_, _, after)) => after.push(rec),
+        None => record::push(run, rec),
+    }
+}
+
+/// Ability `what` of hero `by` passed over monsters: one record each, for the reasons worth telling.
+/// `chain_stop` is the nearest monster a Chain Spark stopped short of, and how far it was.
+pub fn skipped(run: &mut Run, by: u32, what: What, skips: &[(usize, Skip)], chain_stop: Option<(usize, f64)>) {
+    if !on(run) {
+        return;
+    }
+    let chain = matches!(what, What::Ability(AbilityId::ChainSpark));
+    for &(mi, skip) in skips {
+        let Some(reason) = text::skip_reason(skip) else { continue };
+        let id = run.monsters[mi].id;
+        let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
+        who.extend(seen_by_id(run, by));
+        let head = text::skip_head(run, what, chain, id, reason);
+        record::push(run, LogRec { t: run.time, kind: LineKind::Skip, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+    }
+    if let Some((mi, d)) = chain_stop {
+        let id = run.monsters[mi].id;
+        let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
+        who.extend(seen_by_id(run, by));
+        let head = text::chain_stop_head(run, id, d);
+        record::push(run, LogRec { t: run.time, kind: LineKind::Skip, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+    }
+}
+
+/// "Too close" is told at most this often (seconds) per hero and slot.
+pub const TOO_CLOSE_EVERY: f64 = 1.0;
+
+/// Hero `pi`'s ability is blocked (a secondary) or becomes a Strike (a primary) by `target` in melee reach.
+pub fn too_close(run: &mut Run, pi: usize, primary: bool, target: MeleeTarget) {
+    if !on(run) {
+        return;
+    }
+    let hero = run.players[pi].id;
+    let now = run.time;
+    match run.log.too_close.iter_mut().find(|(h, p, _)| *h == hero && *p == primary) {
+        Some((_, _, last)) if now - *last < TOO_CLOSE_EVERY - 1e-9 => return,
+        Some((_, _, last)) => *last = now,
+        None => run.log.too_close.push((hero, primary, now)),
+    }
+    let (target_id, seen) = match target {
+        MeleeTarget::Monster(mi) => (run.monsters[mi].id, record::seen_creature(run, Creature::Monster(mi))),
+        MeleeTarget::Object(oi) => (run.objects[oi].id, record::seen_object(run, oi)),
+    };
+    let ability = if primary { run.players[pi].sheet.primary.id } else { run.players[pi].sheet.secondary.id };
+    let head = text::too_close_head(run, hero, ability, primary, target_id);
+    let who = vec![record::seen_creature(run, Creature::Player(pi)), seen];
+    record::push(run, LogRec { t: run.time, kind: LineKind::Note, head, details: vec![], who, unseen: None, dealt: None, secs: None });
 }
