@@ -27,6 +27,7 @@ import { VisionMask } from './visionmask';
 import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
+import { RulesLog } from '../rulesLog';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
 import { abilityChoice, cosmeticCount, cosmeticPierce, Interpolator, Predictor, volleyAngles, volleyShotIds, type EntState } from './world';
 
@@ -80,6 +81,7 @@ const SKELETAL = new Set<number>([KIND.SkeletonWarrior, KIND.SkeletonArcher, KIN
 export class GameScene extends Phaser.Scene {
   private net!: Net;
   private hud!: Hud;
+  private rulesLog!: RulesLog;
   private info!: RunStartInfo;
   private map!: TileMap;
   private mapRt!: Phaser.GameObjects.RenderTexture;
@@ -235,11 +237,13 @@ export class GameScene extends Phaser.Scene {
     this.unsub = this.net.on((m) => this.onMessage(m));
     this.events.once('shutdown', () => this.cleanup());
     this.hud.startRun(this.info);
+    this.rulesLog = new RulesLog(this, this.net, this.info);
     if (new URLSearchParams(location.search).has("debug")) this.net.send({ t: "Debug", on: true });
   }
 
   private cleanup(): void {
     this.unsub?.();
+    this.rulesLog.destroy();
     for (const v of this.views.values()) v.destroy();
     this.views.clear();
     for (const v of this.mimicViews.values()) v.destroy();
@@ -344,6 +348,7 @@ export class GameScene extends Phaser.Scene {
     this.myFlags = mine ? mine[8] : 0;
     for (const ev of s.ev) this.onEvent(ev);
     this.hud.snapshot(s, this.info);
+    this.rulesLog.onSnapshot(s);
   }
 
   private onEvent(ev: Ev): void {

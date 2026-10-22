@@ -435,7 +435,12 @@ fn export_fixtures() {
 /// `wire.test.ts` unpacks the bytes and compares.
 #[test]
 fn export_wire_fixtures() {
-    let cases: Vec<serde_json::Value> = crate::wire::sample_snapshots()
+    // A third case: the second sample with a rules log (tags and lines, with and without details).
+    let mut with_log = crate::wire::sample_snapshots().remove(1);
+    with_log.log = Some(crate::run::rules_log::LogW(vec![(1, 2, 3), (7, 4, 0)], vec![crate::run::rules_log::send::LineW(1.5, 0, "Goblin 1 hits Mage".into(), vec!["9 Slashing".into(), "x2 vs Mage".into()]), crate::run::rules_log::send::LineW(2.25, 3, "Goblin 1 dies".into(), vec![])]));
+    let mut samples = crate::wire::sample_snapshots();
+    samples.push(with_log);
+    let cases: Vec<serde_json::Value> = samples
         .iter()
         .map(|s| json!({ "bytes": crate::wire::encode_snap(s), "snap": s }))
         .collect();

@@ -37,7 +37,7 @@ function close(got: unknown, want: unknown, path: string): void {
 
 describe('wire', () => {
   it('unpacks the server snapshots', () => {
-    expect(fixtures.cases.length).toBe(2);
+    expect(fixtures.cases.length).toBe(3);
     for (const c of fixtures.cases) {
       const snap = unpackSnap(decode(Uint8Array.from(c.bytes)) as SnapW);
       close(snap, c.snap, '');
@@ -91,5 +91,20 @@ describe('wire', () => {
   it('packs inputs in field order with null for no shot', () => {
     const i = { seq: 7, mx: 1, my: -1, aim: 0.5, aim_dist: 30, primary: 3, secondary: undefined as unknown as null, view_lag: 80, rtt: 40, act: true };
     expect(packInput(i)).toEqual([7, 1, -1, 0.5, 30, 3, null, 80, 40, true]);
+  });
+
+  it('a snapshot without the log field decodes with log null', () => {
+    for (const c of fixtures.cases.slice(0, 2)) {
+      expect(unpackSnap(decode(Uint8Array.from(c.bytes)) as SnapW).log).toBeNull();
+    }
+  });
+
+  it('a snapshot with a log keeps its tags and lines', () => {
+    expect(fixtures.cases.length).toBe(3);
+    const snap = unpackSnap(decode(Uint8Array.from(fixtures.cases[2].bytes)) as SnapW);
+    expect(snap.log).toEqual([
+      [[1, 2, 3], [7, 4, 0]],
+      [[1.5, 0, 'Goblin 1 hits Mage', ['9 Slashing', 'x2 vs Mage']], [2.25, 3, 'Goblin 1 dies', []]],
+    ]);
   });
 });
