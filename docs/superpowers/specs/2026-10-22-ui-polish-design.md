@@ -37,7 +37,11 @@ The user finds the text hard to read. Press Start 2P, the pixel font used for ev
 - **Inter** (weights 400, 500, 600, 700, 800) for all text. Numbers use Inter's fixed-width digits (`font-variant-numeric: tabular-nums`) wherever numbers stand in columns or change in place (sheet, prices, HP, coins, cooldown seconds, rules log).
 - **IM Fell English SC** (one weight, 400) for headings as listed in Goal 2.
 - **Press Start 2P and JetBrains Mono are removed** from the client. The rules log uses Inter too (the user's choice, knowing its calculation lines no longer line up in columns).
-- **Loading:** Google Fonts, the way `client/index.html` loads Press Start 2P today, and the way `rulesLog/panel.ts` loads JetBrains Mono (`FONT_HREF`, pinned by a test). Self-hosting is not needed. *(My call.)*
+- **Loading: self-hosted, no CDN** (the user, 2026-10-22: "preload fonts to the server, don't use CDN where avoidable"). The font files are committed to the repo and served by our own server with the client's other static files:
+  - Inter as a variable `woff2` (one file for every weight; its italic file only if the italic sound texts need it) and IM Fell English SC as `woff2`, under `client/public/fonts/` (or wherever the Vite build serves static files from), each with its OFL licence file beside it.
+  - `@font-face` rules in `style.css` with `font-display: swap`, and `<link rel="preload" as="font" type="font/woff2" crossorigin>` in `client/index.html` (and `admin.html`) for the files used on the first screen.
+  - The Google Fonts links go: the `<link>`s in `client/index.html` and `FONT_HREF` in `rulesLog/panel.ts` (its test is updated). No request to `fonts.googleapis.com` or `fonts.gstatic.com` remains.
+  - The files are fetched once from the official sources (the Inter release by rsms, the IM Fell fonts from the Google Fonts repository) when the work is built, not at run time. The fonts get credits in the README, next to the art credits.
 - **Phaser texts** must not be created before Inter is ready, or they render in a fallback and keep it. Wait on `document.fonts.load(...)` for the weights used in the game before the first scene creates text. *(How to wait is left to the builder.)*
 - **Base sizes** (from the mockups): body text 15 px, small text 13 px, the smallest labels 11.5 px; the HUD 13 px. No text in the HTML UI below 11 px.
 
@@ -148,7 +152,7 @@ The admin page (`client/admin.html`, `src/admin/admin.css`) has its own plain li
 
 ## Calls I made (for the user to check)
 
-1. Google Fonts as today; no self-hosting.
+1. ~~Google Fonts as today~~ Replaced by the user: the fonts are self-hosted, no CDN.
 2. The Settings screen holds only today's three switches (rules log, calculation lines, network stats).
 3. The admin page becomes dark-only, like the game.
 4. Fields and selects keep their padding (10 × 12); only buttons and tabs got tighter.
