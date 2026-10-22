@@ -1,27 +1,28 @@
-// Character select: every character has a name, a fixed class and its own
-// progress. Also holds the account actions (logout, delete account).
+// The roster: the account's characters as cards (a card opens its hub), the "new character" card, and the
+// account actions (logout, delete account).
 import { api, ApiFail } from '../api';
 import type { CharacterInfo } from '../generated/CharacterInfo';
-import type { ClassId } from '../generated/ClassId';
 import type { Me } from '../generated/Me';
 import type { Atlas } from './atlas';
-import { classCard, classFigure, CLASSES } from './classes';
+import { classFigure, figureWeapon } from './classes';
 import { esc } from './hud';
 import { logoHeader } from './logo';
 import { className } from './text';
 
-export class Characters {
+const COIN = '<i class="coin-icon"></i>';
+
+export class Roster {
   private root = document.createElement('div');
   private me: Me | null = null;
-  private newClass: ClassId = 'Wizard';
   private confirmDelete = false;
 
   constructor(
     host: HTMLElement,
     private atlas: Atlas,
-    private onPlay: (c: CharacterInfo) => void,
+    private onOpen: (c: CharacterInfo) => void,
+    private onNew: () => void,
   ) {
-    this.root.className = 'lobby hidden';
+    this.root.className = 'lobby ui hidden';
     host.append(this.root);
   }
 
@@ -49,10 +50,10 @@ export class Characters {
 
   private render(): void {
     const me = this.me!;
-    const full = me.characters.length >= me.max_characters;
+    const left = me.max_characters - me.characters.length;
     this.root.innerHTML = `
       ${logoHeader}
-      <div class="panel account">
+      <div class="panel account ui-w">
         <span>Logged in as <b>${esc(me.name)}</b></span>
         <span class="row"><button id="logout">Log out</button><button id="delete-account" class="danger">Delete account</button></span>
         ${
@@ -65,42 +66,30 @@ export class Characters {
             : ''
         }
       </div>
-      <div class="panel">
+      <div class="panel ui-w">
         <h2>Your characters (${me.characters.length}/${me.max_characters})</h2>
-        <ul class="chars"></ul>
+        <div class="ui-roster"></div>
         <div class="error"></div>
-      </div>
-      ${
-        full
-          ? ''
-          : `<form class="panel new-char">
-              <h2>New character</h2>
-              <div class="row"><input id="char-name" maxlength="16" placeholder="Character name" required>
-              <button type="submit" id="char-create" class="primary">Create</button></div>
-              <div class="classes"></div>
-              <small class="hint">The class cannot be changed later. Each character has its own XP, coins, Attributes and skill tree.</small>
-            </form>`
-      }`;
+      </div>`;
 
-    const list = this.root.querySelector('.chars')!;
-    if (!me.characters.length) list.innerHTML = '<li class="empty">No characters yet. Create your first one below!</li>';
+    const grid = this.root.querySelector('.ui-roster')!;
     for (const c of me.characters) {
-      const li = document.createElement('li');
-      li.className = `c-${c.class.toLowerCase()}`;
-      li.append(classFigure(this.atlas, c.class, 3));
+      const slot = document.createElement('div');
+      slot.className = 'ui-slot';
+      const card = document.createElement('button');
+      card.className = `ui-char c-${c.class.toLowerCase()}`;
+      card.dataset.open = c.name;
+      card.append(classFigure(this.atlas, c.class, 4, figureWeapon(c)));
       const info = document.createElement('div');
       info.className = 'cinfo';
       info.innerHTML = `<b>${esc(c.name)}</b><small>${className(c.class)}</small>
-        <small>${c.xp} XP <span class="muted">(${c.total_xp} earned)</span> · <i class="coin-icon"></i>${c.coins}</small>`;
-      li.append(info);
-      const play = document.createElement('button');
-      play.className = 'primary';
-      play.textContent = 'Play';
-      play.dataset.play = c.name;
-      play.onclick = () => this.onPlay(c);
+        <small>${c.xp} XP <span class="muted">(${c.total_xp} earned)</span></small><small>${COIN}${c.coins}</small>`;
+      card.append(info);
+      card.onclick = () => this.onOpen(c);
       const del = document.createElement('button');
       del.className = 'danger';
       del.textContent = 'Delete';
+      del.dataset.delete = c.name;
       del.onclick = async () => {
         if (!confirm(`Delete ${c.name} and all of its progress for good?`)) return;
         try {
@@ -110,8 +99,16 @@ export class Characters {
           this.error(e instanceof ApiFail ? e.message : String(e));
         }
       };
-      li.append(play, del);
-      list.append(li);
+      slot.append(card, del);
+      grid.append(slot);
+    }
+    if (left > 0) {
+      const add = document.createElement('button');
+      add.id = 'new-char';
+      add.className = 'ui-char ui-new';
+      add.innerHTML = `<span class="plus">+</span><b>New character</b><small>${left} ${left === 1 ? 'slot' : 'slots'} left</small>`;
+      add.onclick = () => this.onNew();
+      grid.append(add);
     }
 
     const $ = <T extends HTMLElement>(sel: string) => this.root.querySelector<T>(sel);
@@ -135,28 +132,6 @@ export class Characters {
         try {
           await api.deleteAccount($<HTMLInputElement>('#delete-password')!.value);
           location.reload();
-        } catch (err) {
-          this.error(err instanceof ApiFail ? err.message : String(err));
-        }
-      };
-    }
-
-    const form = $<HTMLFormElement>('.new-char');
-    if (form) {
-      const classes = form.querySelector('.classes')!;
-      for (const c of CLASSES) {
-        const card = classCard(this.atlas, c, this.newClass === c);
-        card.onclick = () => {
-          this.newClass = c;
-          classes.querySelectorAll('.class-card').forEach((el) => el.classList.toggle('selected', el === card));
-        };
-        classes.append(card);
-      }
-      form.onsubmit = async (e) => {
-        e.preventDefault();
-        try {
-          await api.createCharacter($<HTMLInputElement>('#char-name')!.value.trim(), this.newClass);
-          await this.show();
         } catch (err) {
           this.error(err instanceof ApiFail ? err.message : String(err));
         }

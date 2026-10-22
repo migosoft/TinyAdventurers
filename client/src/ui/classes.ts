@@ -1,10 +1,12 @@
 // Class figures and the class card, shared by the character screen and the lobby.
-import { CLASSES as CLASS_DEFS } from '../generated/defs';
-import { ITEMS } from '../generated/progression';
+import { ABILITIES, CLASSES as CLASS_DEFS } from '../generated/defs';
+import { ABILITY_INFO, ITEMS } from '../generated/progression';
 import type { CharacterInfo } from '../generated/CharacterInfo';
 import type { ClassId } from '../generated/ClassId';
 import { spritePreview, type Atlas } from './atlas';
 import { CLASS_TEXT } from './text';
+
+const START = (c: ClassId) => [CLASS_DEFS[c].primary, CLASS_DEFS[c].secondary] as const;
 
 export const CLASSES: ClassId[] = ['Wizard', 'Paladin', 'Barbarian', 'ElvenRanger'];
 
@@ -20,8 +22,8 @@ export function classFigure(atlas: Atlas, c: ClassId, scale = 4, weapon?: string
   return spritePreview(atlas, FIG[c][0], scale, weapon ?? FIG[c][1]);
 }
 
-/** The sprite the figure holds (Ruling 8): a Ranger the ranged item, others the melee item (the class starter
- * when the slot is empty); the class's own sprite when the item has none. */
+/** The sprite the figure holds (Ruling 8): a Ranger the ranged item, others the melee item (only the melee slot
+ * falls back to the class starter when empty); the class's own sprite when the item has none. */
 export function figureWeapon(info: CharacterInfo): string {
   const sprite = (id: string | null | undefined) => (id ? (ITEMS as unknown as Record<string, { sprite: string }>)[id]?.sprite : '') || '';
   const start = CLASS_DEFS[info.class].starter;
@@ -40,8 +42,9 @@ export function classCard(atlas: Atlas, c: ClassId, selected: boolean): HTMLButt
   card.append(classFigure(atlas, c));
   const info = document.createElement('div');
   info.innerHTML = `<b>${t.title}</b><small>${t.blurb}</small>
-    <p><kbd>LMB</kbd> ${t.abilities[0].name}<br><span>${t.abilities[0].text}</span></p>
-    <p><kbd>RMB</kbd> ${t.abilities[1].name}<br><span>${t.abilities[1].text}</span></p>`;
+    ${START(c)
+      .map((id, i) => `<p><kbd>${i ? 'RMB' : 'LMB'}</kbd> ${ABILITIES[id].name}<br><span>${ABILITY_INFO[id].text}</span></p>`)
+      .join('')}`;
   card.append(info);
   return card;
 }

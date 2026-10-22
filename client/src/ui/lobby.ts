@@ -100,13 +100,16 @@ export class Lobby {
     host: HTMLElement,
     private net: Net,
     private atlas: Atlas,
-    /** Back to the character screen (only outside of rooms). */
-    private onChangeCharacter: () => void,
+    /** Back to the character hub (only outside of rooms). */
+    private onBackToHub: () => void,
   ) {
     this.root.className = 'lobby hidden';
     host.append(this.root);
   }
 
+  get visible(): boolean {
+    return !this.root.classList.contains('hidden');
+  }
   show(): void {
     this.root.classList.remove('hidden');
     this.render();
@@ -221,11 +224,11 @@ export class Lobby {
       info.innerHTML = `<small>Playing as</small><b>${esc(c.name)}</b><small>${className(c.class)}</small>`;
       hero.append(info);
     }
-    const change = document.createElement('button');
-    change.id = 'change-char';
-    change.textContent = 'Change character';
-    change.onclick = () => this.onChangeCharacter();
-    hero.append(change);
+    const back = document.createElement('button');
+    back.id = 'to-hub';
+    back.textContent = '< Character';
+    back.onclick = () => this.onBackToHub();
+    hero.append(back);
     this.root.querySelector<HTMLButtonElement>('#create')!.onclick = () => {
       this.net.send({ t: 'CreateRun', name: this.root.querySelector<HTMLInputElement>('#runname')!.value });
     };

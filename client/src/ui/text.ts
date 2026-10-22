@@ -3,38 +3,22 @@ import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
 
-export const CLASS_TEXT: Record<ClassId, { title: string; blurb: string; abilities: { name: string; text: string }[] }> = {
+export const CLASS_TEXT: Record<ClassId, { title: string; blurb: string }> = {
   Wizard: {
     title: 'Wizard',
     blurb: 'Fragile master of the arcane.',
-    abilities: [
-      { name: 'Magic Missile', text: 'Fast arcane bolts.' },
-      { name: 'Fireball', text: 'Explodes at the cursor, hurting everything nearby.' },
-    ],
   },
   Paladin: {
     title: 'Paladin',
     blurb: 'Armored holy warrior.',
-    abilities: [
-      { name: 'Sword', text: 'Sweeping melee strike.' },
-      { name: 'Holy Light', text: 'Heals you and nearby allies.' },
-    ],
   },
   Barbarian: {
     title: 'Barbarian',
     blurb: 'Toughest of them all.',
-    abilities: [
-      { name: 'Great Axe', text: 'Wide, heavy cleave.' },
-      { name: 'Charge', text: 'Dash toward the cursor, hitting everything in the way.' },
-    ],
   },
   ElvenRanger: {
     title: 'Elven Ranger',
     blurb: 'Keen-eyed elf of the deep woods, never alone.',
-    abilities: [
-      { name: 'Bow / Rapier', text: 'Shoots arrows; thrusts with the rapier automatically when an enemy is close.' },
-      { name: 'Dire Wolf', text: 'Summons your dire wolf companion. While it lives, heals it for 20 %. If it falls, it can be summoned again after 60 s.' },
-    ],
   },
 };
 

@@ -17,10 +17,12 @@ import type { CharacterInfo } from './generated/CharacterInfo';
 import { Net } from './net';
 import { loadAtlas, type Atlas } from './ui/atlas';
 import { showAuth } from './ui/auth';
-import { Characters } from './ui/characters';
+import { Create } from './ui/create';
+import { Hub } from './ui/hub/hub';
 import { Hud } from './ui/hud';
 import { Lobby } from './ui/lobby';
 import { logoHeader } from './ui/logo';
+import { Roster } from './ui/roster';
 import './style.css';
 import './ui/screens.css';
 
@@ -77,7 +79,7 @@ function fatal(ui: HTMLElement, msg: string): void {
   ui.innerHTML = `<div class="lobby">${logoHeader}<div class="panel">${msg}</div></div>`;
 }
 
-/** Login, then the character screen; "Play" connects to the game. */
+/** Login, then the roster; opening a character connects to the game and shows its hub. */
 async function main(): Promise<void> {
   const q = new URLSearchParams(location.search);
   if (q.has('gallery') || Object.keys(DEMOS).some((k) => q.has(k))) return gallery();
@@ -93,32 +95,58 @@ async function main(): Promise<void> {
   const atlas = await loadAtlas();
   if (!me) me = await showAuth(ui);
 
-  let session: { net: Net; lobby: Lobby } | null = null;
-  const characters = new Characters(ui, atlas, async (c: CharacterInfo) => {
-    if (session && !session.net.connected) return location.reload();
-    if (!session) {
+  // The session (WebSocket, lobby, hub, Phaser) starts with the first opened character.
+  let session: { net: Net; lobby: Lobby; hub: Hub } | null = null;
+  let starting: Promise<boolean> | null = null;
+  const toRoster = () => {
+    session?.hub.hide();
+    void roster.show();
+  };
+  /** Connects on first use; false when the server cannot be reached. */
+  const ensureSession = (): Promise<boolean> =>
+    (starting ??= (async () => {
       const net = new Net();
       try {
         await net.connect();
       } catch {
-        return fatal(ui, 'Cannot reach the game server. Is it running?');
+        starting = null;
+        return false;
       }
-      const lobby = startGame(ui, net, atlas, () => {
-        lobby.hide();
-        characters.show();
-      });
-      session = { net, lobby };
-    }
-    session.net.send({ t: 'SelectCharacter', id: c.id });
-    characters.hide();
-    session.lobby.show();
+      session = startGame(ui, net, atlas, toRoster);
+      return true;
+    })());
+  const open = async (c: CharacterInfo) => {
+    if (session && !session.net.connected) return location.reload();
+    if (!(await ensureSession())) return fatal(ui, 'Cannot reach the game server. Is it running?');
+    const s = session!;
+    roster.hide();
+    create.hide();
+    s.hub.open(c.id);
+    s.net.send({ t: 'SelectCharacter', id: c.id });
+    s.hub.show();
+  };
+  const roster = new Roster(ui, atlas, open, () => {
+    roster.hide();
+    create.show();
   });
-  characters.show(me);
+  // The roster reloads the account whenever it is shown again, so a new character needs no refresh here.
+  const create = new Create(ui, atlas, open, () => {
+    create.hide();
+    void roster.show();
+  });
+  roster.show(me);
 }
 
-/** Connected: the lobby and the Phaser game. Returns the lobby. */
-function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onChangeCharacter: () => void): Lobby {
-  const lobby = new Lobby(ui, net, atlas, onChangeCharacter);
+/** Connected: the hub, the lobby and the Phaser game. */
+function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () => void): { net: Net; lobby: Lobby; hub: Hub } {
+  const hub = new Hub(ui, atlas, (m) => net.send(m), onRoster, () => {
+    hub.hide();
+    lobby.show();
+  });
+  const lobby = new Lobby(ui, net, atlas, () => {
+    lobby.hide();
+    hub.show();
+  });
 
   const v = viewSize();
   const game = new Phaser.Game({
@@ -163,6 +191,7 @@ function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onChangeCharacter: (
     const msg = `${why} Reload the page to reconnect.`;
     hud.message(msg);
     lobby.error(msg);
+    hub.error(msg);
   };
 
   net.on(async (m) => {
@@ -177,11 +206,13 @@ function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onChangeCharacter: (
         lobby.setRoom(m);
         break;
       case 'Character':
+        hub.setCharacter(m);
         lobby.setCharacter(m);
         break;
       case 'Error':
         lastError = { msg: m.msg, at: performance.now() };
-        lobby.error(m.msg);
+        if (hub.visible) hub.error(m.msg);
+        else lobby.error(m.msg);
         break;
       case 'RunStarted': {
         await ready;
@@ -196,7 +227,7 @@ function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onChangeCharacter: (
       }
     }
   });
-  return lobby;
+  return { net, lobby, hub };
 }
 
 main();

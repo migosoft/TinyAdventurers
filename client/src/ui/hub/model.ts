@@ -136,3 +136,6 @@ export function monogram(name: string): string {
   const words = name.split(/\s+/).filter(Boolean);
   return (words.length > 1 ? words[0][0] + words[1][0] : name.slice(0, 2)).toUpperCase();
 }
+
+/** "ArcaneOverflow" -> "Arcane Overflow". */
+export const spaced = (s: string): string => s.replace(/([a-z])([A-Z])/g, '$1 $2');

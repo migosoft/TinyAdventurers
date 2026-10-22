@@ -904,3 +904,20 @@
 .ui .actions {
   width: min(1220px, 100%);
 }
+
+/* ------------------------------------------------------------ roster slot (card plus its delete button) */
+
+.ui-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ui-slot .ui-char {
+  flex: 1;
+}
+.ui-derived h2:not(:first-child) {
+  margin-top: 14px;
+}
+.ui .error:empty {
+  display: none;
+}

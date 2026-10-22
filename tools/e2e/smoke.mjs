@@ -33,20 +33,23 @@ async function login(page, account, register) {
   await page.fill('#auth-password', PASSWORD);
   if (register) await page.fill('#auth-password2', PASSWORD);
   await page.click(register ? '#register' : '#login');
-  await page.waitForSelector('.chars');
+  await page.waitForSelector('.ui-roster');
 }
-/** Registers a fresh account, creates a character of `cls` and enters the lobby with it. */
+/** Registers a fresh account, creates a character of `cls` (its hub opens) and enters the runs list with it. */
 async function player(name, cls, shots) {
   const account = `e2e_${tag()}`;
   const page = await open(name);
   if (shots) await page.screenshot({ path: `${out}/0-login.png` });
   await login(page, account, true);
+  await page.click('#new-char');
   await page.fill('#char-name', `${name}${tag()}`);
-  await page.click(`.new-char .class-card.c-${cls.toLowerCase()}`);
+  await page.click(`.ui-class.c-${cls.toLowerCase()}`);
+  if (shots) await page.screenshot({ path: `${out}/0-create.png` });
   await page.click('#char-create');
-  await page.waitForSelector('[data-play]');
-  if (shots) await page.screenshot({ path: `${out}/0-characters.png` });
-  await page.click('[data-play]');
+  await page.waitForSelector('.ui-bar');
+  await page.waitForSelector('[data-attr]'); // the Sheet tab, after the Character message
+  if (shots) await page.screenshot({ path: `${out}/0-hub-sheet.png` });
+  await page.click('#to-dungeon');
   await page.waitForSelector('#runname');
   await page.waitForSelector('.hero .cinfo');
   return { page, account };
@@ -142,7 +145,9 @@ if (query.includes('debug')) {
 // A second login to Alice's account closes her first window.
 const p3 = await open('Alice2');
 await login(p3, a1.account, false);
-await p3.click('[data-play]');
+await p3.click('[data-open]');
+await p3.waitForSelector('[data-attr]');
+await p3.click('#to-dungeon');
 await p3.waitForSelector('#runname');
 await p1.waitForFunction(() => /another window/.test(document.body.textContent ?? ''), null, { timeout: 10000 });
 console.log('second login closed the first window');
@@ -151,7 +156,8 @@ console.log('second login closed the first window');
 // w, a, s, d, e: game keys must not be swallowed outside the game).
 await p2.keyboard.press('Escape');
 await p2.click('text=Leave dungeon');
-await p2.click('#change-char');
+await p2.click('#to-hub');
+await p2.click('#to-roster');
 await p2.click('#delete-account');
 await p2.click('#delete-password');
 await p2.keyboard.type(PASSWORD);
