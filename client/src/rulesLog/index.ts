@@ -9,6 +9,8 @@ import { LogBuffer } from './buffer';
 import { LogPanel } from './panel';
 import { loadPrefs, savePrefs, type LogPrefs } from './prefs';
 
+const FONT = "'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace";
+
 const storage = (): Storage | null => {
   try {
     return window.localStorage;
@@ -17,7 +19,7 @@ const storage = (): Storage | null => {
   }
 };
 
-/** The rules log, client side: opt-in, keys, buffer and panel. GameScene reaches it through four one-line hooks. */
+/** The rules log, client side: opt-in, keys, buffer and panel. GameScene reaches it through five one-line hooks (create, onSnapshot, draw and cleanup in GameScene, plus the raw log element in wire.ts). */
 export class RulesLog {
   private prefs: LogPrefs;
   private buffer = new LogBuffer();
@@ -26,6 +28,9 @@ export class RulesLog {
   private tags = new Map<number, [number, number]>();
   private names = new Map<number, string>();
   private you: number;
+  private seen = new Set<number>();
+  private res = 0;
+  private gone = false;
   private pool: Phaser.GameObjects.Text[] = [];
   private used = new Map<number, Phaser.GameObjects.Text>();
   private store = storage();
@@ -44,6 +49,8 @@ export class RulesLog {
     this.panel.show(this.prefs.on);
     scene.input.keyboard?.on('keydown-L', this.onKey);
     if (this.prefs.on) this.send();
+    this.res = this.resolution();
+    this.watchFont();
   }
 
   onSnapshot(s: Snapshot): void {
@@ -57,10 +64,15 @@ export class RulesLog {
   /** Creature tags over the heads, 4 px above the health bar; nothing is created while the log is off. */
   draw(ents: Iterable<EntState>, heightOf: (id: number) => number | undefined): void {
     if (!this.prefs.on) {
-      this.release(new Set());
+      if (this.used.size > 0) {
+        this.seen.clear();
+        this.release(this.seen);
+      }
       return;
     }
-    const seen = new Set<number>();
+    const seen = this.seen;
+    seen.clear();
+    this.syncResolution();
     for (const e of ents) {
       const h = heightOf(e.id);
       if (h === undefined) continue;
@@ -78,10 +90,9 @@ export class RulesLog {
   }
 
   private makeText(): Phaser.GameObjects.Text {
-    const cam = this.scene.cameras.main;
     return this.scene.add
       .text(0, 0, '', {
-        fontFamily: "'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace",
+        fontFamily: FONT,
         fontStyle: '600',
         fontSize: '8px',
         color: '#ffffff',
@@ -90,7 +101,32 @@ export class RulesLog {
       })
       .setOrigin(0.5, 1)
       .setDepth(DEPTH.numbers)
-      .setResolution(cam.zoom * (window.devicePixelRatio || 1));
+      .setResolution(this.res);
+  }
+
+  private resolution(): number {
+    return this.scene.scale.zoom * this.scene.cameras.main.zoom * (window.devicePixelRatio || 1);
+  }
+
+  /** The screen's real pixels per world pixel changed (window resize): re-apply, only on change. */
+  private syncResolution(): void {
+    const r = this.resolution();
+    if (r === this.res) return;
+    this.res = r;
+    for (const t of [...this.pool, ...this.used.values()]) t.setResolution(r);
+  }
+
+  /** Canvas text drawn before the web font loaded kept the fallback: redraw it once the font is there. */
+  private watchFont(): void {
+    const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
+    if (!fonts?.load) return;
+    fonts.load(`600 8px ${FONT}`).then(
+      () => {
+        if (this.gone) return;
+        for (const t of [...this.pool, ...this.used.values()]) t.setFontFamily(FONT);
+      },
+      () => {},
+    );
   }
 
   private release(seen: Set<number>): void {
@@ -103,6 +139,7 @@ export class RulesLog {
   }
 
   destroy(): void {
+    this.gone = true;
     this.scene.input.keyboard?.off('keydown-L', this.onKey);
     this.panel.destroy();
     for (const t of [...this.pool, ...this.used.values()]) t.destroy();
