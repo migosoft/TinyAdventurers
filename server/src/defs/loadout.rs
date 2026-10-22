@@ -7,8 +7,8 @@ use super::classes;
 use super::damage::{Base, DamageType};
 use super::effects::OnHit;
 use super::items::{self, EquipError, EquipSlot, Equipment, PropKind};
-use super::progression::StatUpgrades;
 use super::requirements::Requirement;
+use super::trees::{self, NodeId};
 use super::weapons::WeaponKind;
 use crate::protocol::ClassId;
 use crate::sheet::ResolvedAbility;
@@ -144,19 +144,20 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
 /// Everything a hero brings into a run besides the class.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Build {
-    /// Attribute points on top of the class's start Attributes (shop and tree).
+    /// Attribute points on top of the class's start Attributes (the shop, and the debug lift).
     pub extra: Attributes,
+    /// The owned skill-tree nodes.
+    pub nodes: Vec<NodeId>,
     pub equipment: Equipment,
     pub loadout: Loadout,
-    /// Abilities unlocked beyond the class start (the debug pool, later the tree).
+    /// Abilities unlocked beyond the class start and the tree (the debug pool only).
     pub own: Vec<AbilityId>,
-    pub upgrades: StatUpgrades,
 }
 
 impl Build {
-    /// The class start: starter weapons, the starting abilities, no extra points or upgrades.
+    /// The class start: starter weapons, the starting abilities, no extra points or nodes.
     pub fn start(class: ClassId) -> Build {
-        Build { extra: Attributes::default(), equipment: Equipment::starter(class), loadout: Loadout::start(class), own: Vec::new(), upgrades: StatUpgrades::default() }
+        Build { extra: Attributes::default(), nodes: Vec::new(), equipment: Equipment::starter(class), loadout: Loadout::start(class), own: Vec::new() }
     }
 }
 
@@ -244,7 +245,7 @@ pub fn pick_version(class: ClassId, b: &Build, slot: AbilitySlot, p: Pick) -> Re
     match p.source {
         Source::Own => {
             let cd = classes::def(class);
-            let pooled = cd.primary == id || cd.secondary == id || b.own.contains(&id);
+            let pooled = cd.primary == id || cd.secondary == id || b.own.contains(&id) || trees::gains(&b.nodes).unlocks.contains(&id);
             if pooled && d.classes.contains(&class) {
                 Ok((&[], false))
             } else {

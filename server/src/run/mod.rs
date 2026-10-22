@@ -63,7 +63,7 @@ pub struct Member {
     /// Account and character the XP is banked to.
     pub account: Option<i32>,
     pub character: Option<i32>,
-    /// Extra Attributes, equipment, loadout and bought upgrades (validated in the lobby).
+    /// Extra Attributes, nodes, equipment and loadout (validated in the lobby).
     pub build: Build,
     /// The loadout was set with the debug message (counts as a debug run).
     pub debug_loadout: bool,
@@ -882,8 +882,7 @@ impl Run {
             return;
         }
         let p = &mut self.players[pi];
-        let armor = p.sheet.armor;
-        let v = raw * (1.0 - armor);
+        let v = raw;
         let imm = raw == 0.0 && dmg.amount > 0.0;
         let hp_before = p.hp;
         // Debug mode: hits still show, but nothing is subtracted.
@@ -895,7 +894,7 @@ impl Run {
         }
         let (hp_after, debug) = (p.hp.max(0.0), p.debug);
         let pos = p.pos();
-        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, armor, hp_before, hp_after, dealt: hp_before - hp_after, taken: v, outcome: if imm { rules_log::HitOutcome::Immune } else if debug { rules_log::HitOutcome::DebugNoLoss } else { rules_log::HitOutcome::Dealt } });
+        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, armor: 0.0, hp_before, hp_after, dealt: hp_before - hp_after, taken: v, outcome: if imm { rules_log::HitOutcome::Immune } else if debug { rules_log::HitOutcome::DebugNoLoss } else { rules_log::HitOutcome::Dealt } });
         let ty = dmg.split.main_type() as u8;
         self.event_on_hero(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: v as f32, crit: false, p: true, ty, imm }, pos);
         let p = &mut self.players[pi];

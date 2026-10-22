@@ -805,23 +805,19 @@ fn chain_jumps(run: &mut Run, pi: usize, first: usize, damage: Damage) {
 }
 
 /// What is left of `damage` if it kills creature `c` (`overkill_rest`), with the HP, resistances
-/// and armor its hurt function uses.
+/// its hurt function uses.
 fn overkill_left(run: &Run, c: Creature, damage: &Damage) -> Option<f64> {
-    let (hp, res, armor) = match c {
+    let (hp, res) = match c {
         Creature::Player(pi) => {
             let p = &run.players[pi];
-            (p.hp, p.effects.res(p.res), p.sheet.armor)
+            (p.hp, p.effects.res(p.res))
         }
         Creature::Monster(mi) => {
             let m = &run.monsters[mi];
-            (m.hp, m.effects.res(m.res), 0.0)
+            (m.hp, m.effects.res(m.res))
         }
     };
-    // A hero's armor takes its share after the resistances (`hurt_player`).
-    if armor >= 1.0 {
-        return None;
-    }
-    overkill_rest(damage.amount, &damage.split, hp / (1.0 - armor), &res)
+    overkill_rest(damage.amount, &damage.split, hp, &res)
 }
 
 /// Projectile `i` hits a solid object: an explosion goes off there, a plain shot hurts the object.
@@ -999,6 +995,27 @@ mod tests {
         run.monsters[mi].hp = 1000.0;
         dash_contact(&mut run, 0);
         assert!(run.monsters[mi].effects.list().iter().any(|a| a.kind == EffectKind::Slowed));
+    }
+
+    #[test]
+    fn bowling_charge_pushes_with_more_str() {
+        use crate::defs::trees::NodeId;
+        let barb = ClassId::Barbarian;
+        // STR 16 against a weight of 17 pushes nothing; Bowling Charge (BL4) carries +4 STR: 20 pushes 3/4.
+        let knock_of = |nodes: Vec<NodeId>| {
+            // The Great Axe does not push, so the dash wields the Cleaver (push 20).
+            let equipment = crate::defs::items::Equipment::starter(barb).with(EquipSlot::Melee, crate::defs::items::ItemId::Cleaver);
+            let build = Build { nodes, equipment, extra: Attributes::new(1, 0, 0, 0, 0, 0), ..Build::start(barb) };
+            let mut run = super::super::tests::test_run_with(&[(barb, build)], BossId::Demon);
+            assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), 16);
+            let mi = put_monster_near(&mut run, 0, 6.0);
+            run.monsters[mi].hp = 1000.0;
+            run.monsters[mi].weight = 17.0;
+            dash_contact(&mut run, 0);
+            run.monsters[mi].knock.len()
+        };
+        assert_eq!(knock_of(vec![]), 0.0, "STR 16 against weight 17");
+        assert!(knock_of(vec![NodeId::BL1, NodeId::BL2, NodeId::BL4]) > 0.0, "STR 20 against weight 17");
     }
 
     #[test]

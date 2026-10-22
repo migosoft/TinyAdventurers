@@ -155,17 +155,17 @@ pub struct Base {
     pub scale: Option<BaseScale>,
     pub ability_mult: f64,
     pub mods_mult: f64,
-    /// The old stat upgrades' damage factor, applied last (1 on Holy Light and before upgrades).
-    pub upgrade_mult: f64,
+    /// The keystone damage factor, applied last (1 until the keystones set it).
+    pub keystone_mult: f64,
 }
 
 impl Base {
     pub fn plain(v: f64) -> Self {
-        Base { given: v, scale: None, ability_mult: 1.0, mods_mult: 1.0, upgrade_mult: 1.0 }
+        Base { given: v, scale: None, ability_mult: 1.0, mods_mult: 1.0, keystone_mult: 1.0 }
     }
     pub fn amount(&self) -> f64 {
         let ratio = self.scale.map_or(1.0, |s| s.ratio);
-        (((self.given * ratio) * self.ability_mult) * self.mods_mult).max(0.0) * self.upgrade_mult
+        (((self.given * ratio) * self.ability_mult) * self.mods_mult).max(0.0) * self.keystone_mult
     }
 }
 

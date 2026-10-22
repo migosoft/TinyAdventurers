@@ -415,7 +415,7 @@ fn the_logged_damage_is_the_damage_dealt() {
         assert!((dealt - (1000.0 - run.monsters[mi].hp)).abs() < 1e-9, "{name}: the HP lost");
         assert!(rec.head.contains(&n1(dealt)), "{name}: {}", rec.head);
     }
-    // An orc's melee on the Paladin: armor.
+    // An orc's melee on the Paladin: no armor line (armor left the sheet in plan 4).
     let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
     run.log.forced = true;
     run.monsters.retain(|m| m.is_boss);
@@ -423,15 +423,13 @@ fn the_logged_damage_is_the_damage_dealt() {
     let id = run.spawn_enemy(EnemyType::OrcWarrior, at - crate::math::Vec2::new(16.0, 0.0), None);
     let gi = run.monster_idx(id).unwrap();
     let attack = enemies::def(EnemyType::OrcWarrior).attack;
-    run.players[0].sheet.armor = 0.25; // armor comes from items; the starter has none
     let _ = take(&mut run);
     let hp = run.players[0].hp;
     crate::run::ai::perform_attack(&mut run, gi, Creature::Player(0), attack, false, None);
     let rec = only_rec(&mut run);
-    assert!(run.players[0].sheet.armor > 0.0);
     assert_eq!(rec.dealt, Some(hp - run.players[0].hp), "bit-equal to the HP lost");
     assert!(rec.head.contains(&n1(rec.dealt.unwrap())), "{}", rec.head);
-    assert!(rec.details.last().unwrap().starts_with("armor "), "{:?}", rec.details);
+    assert!(!rec.details.iter().any(|d| d.starts_with("armor ")), "{:?}", rec.details);
     assert_eq!(rec.unseen.as_ref().map(|u| u.viewer), Some(run.players[0].id));
 }
 
@@ -468,8 +466,8 @@ fn a_frost_shard_line_reads_like_the_spec() {
         v = (v * b.mods_mult).max(0.0);
         want.push(format!("items ×{:.2} → {}", b.mods_mult, n1(v)));
     }
-    if b.upgrade_mult != 1.0 {
-        want.push(format!("upgrades ×{:.2} → {}", b.upgrade_mult, n1(b.amount())));
+    if b.keystone_mult != 1.0 {
+        want.push(format!("keystones ×{:.2} → {}", b.keystone_mult, n1(b.amount())));
     }
     for t in DamageType::ALL {
         let share = a.split.share(t);

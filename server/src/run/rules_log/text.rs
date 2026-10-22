@@ -139,8 +139,8 @@ fn base_lines(f: &HitFacts) -> Vec<String> {
         v = (v * b.mods_mult).max(0.0);
         out.push(format!("items ×{:.2} → {}", b.mods_mult, n1(v)));
     }
-    if b.upgrade_mult != 1.0 {
-        out.push(format!("upgrades ×{:.2} → {}", b.upgrade_mult, n1(b.amount())));
+    if b.keystone_mult != 1.0 {
+        out.push(format!("keystones ×{:.2} → {}", b.keystone_mult, n1(b.amount())));
     }
     out
 }

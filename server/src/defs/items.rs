@@ -10,6 +10,7 @@ use super::kinds::EntityKind;
 use super::lights::LightKind;
 use super::loadout::AbilityMod;
 use super::requirements::Requirement;
+use super::trees::Prof;
 use super::weapons::{category, At, MeleeStats, RangedStats, WeaponCategory, WeaponKind};
 use crate::protocol::ClassId;
 use serde::{Deserialize, Serialize};
@@ -317,8 +318,8 @@ pub enum EquipError {
 }
 
 /// Whether `item` can be worn by `class` in `slot`. `attrs` are the Attributes
-/// without item points. Order: slot, class, proficiency, requirements.
-pub fn check_equip(class: ClassId, slot: EquipSlot, item: ItemId, attrs: &Attributes) -> Result<(), EquipError> {
+/// without item points; `profs` are the class's plus the tree's. Order: slot, class, proficiency, requirements.
+pub fn check_equip(class: ClassId, profs: &[Prof], slot: EquipSlot, item: ItemId, attrs: &Attributes) -> Result<(), EquipError> {
     let d = def(item);
     let fits = match (slot, d.base) {
         (EquipSlot::Melee, ItemBase::Melee(k, _)) => category(k) != WeaponCategory::Natural,
@@ -335,10 +336,9 @@ pub fn check_equip(class: ClassId, slot: EquipSlot, item: ItemId, attrs: &Attrib
     if !d.classes.contains(&class) {
         return Err(EquipError::ClassNotListed);
     }
-    let cd = classes::def(class);
     let proficient = match d.base {
-        ItemBase::Melee(k, _) | ItemBase::Ranged(k, _) => cd.weapons.contains(&k),
-        ItemBase::Armor(a) => a.class <= cd.max_armor,
+        ItemBase::Melee(k, _) | ItemBase::Ranged(k, _) => profs.contains(&Prof::Weapon(k)),
+        ItemBase::Armor(a) => profs.iter().any(|p| matches!(p, Prof::Armor(c) if a.class <= *c)),
         _ => true,
     };
     if !proficient {
@@ -351,10 +351,10 @@ pub fn check_equip(class: ClassId, slot: EquipSlot, item: ItemId, attrs: &Attrib
 }
 
 /// Checks every filled slot, in slot order.
-pub fn check_equipment(class: ClassId, e: &Equipment, attrs: &Attributes) -> Result<(), (EquipSlot, EquipError)> {
+pub fn check_equipment(class: ClassId, profs: &[Prof], e: &Equipment, attrs: &Attributes) -> Result<(), (EquipSlot, EquipError)> {
     for slot in EquipSlot::ALL {
         if let Some(item) = e.get(slot) {
-            check_equip(class, slot, item, attrs).map_err(|err| (slot, err))?;
+            check_equip(class, profs, slot, item, attrs).map_err(|err| (slot, err))?;
         }
     }
     Ok(())
@@ -444,13 +444,13 @@ mod tests {
     }
 
     fn ok(c: ClassId, slot: EquipSlot, item: ItemId) -> Result<(), EquipError> {
-        check_equip(c, slot, item, &start_attrs(c))
+        check_equip(c, &classes::prof_base(c), slot, item, &start_attrs(c))
     }
 
     #[test]
     fn starters_are_valid() {
         for c in ClassId::ALL {
-            assert_eq!(check_equipment(c, &Equipment::starter(c), &start_attrs(c)), Ok(()), "{c:?}");
+            assert_eq!(check_equipment(c, &classes::prof_base(c), &Equipment::starter(c), &start_attrs(c)), Ok(()), "{c:?}");
         }
         assert_eq!(Equipment::starter(ClassId::ElvenRanger).get(S::Ranged), Some(I::ElvenBow));
         assert_eq!(Equipment::starter(ClassId::Wizard).get(S::Ranged), None);
@@ -496,10 +496,10 @@ mod tests {
         let c = ClassId::Wizard;
         let low = start_attrs(c).plus(Attributes::new(0, 0, 0, -2, 0, 0));
         let want = EquipError::Requirement(Requirement::Attr(Attr::Int, 14));
-        assert_eq!(check_equip(c, S::Melee, I::StaffOfRot, &low), Err(want));
+        assert_eq!(check_equip(c, &classes::prof_base(c), S::Melee, I::StaffOfRot, &low), Err(want));
         let e = Equipment::default().with(S::Melee, I::StaffOfRot).with(S::Ring1, I::RingOfInsight);
-        assert_eq!(check_equipment(c, &e, &low), Err((S::Melee, want)));
+        assert_eq!(check_equipment(c, &classes::prof_base(c), &e, &low), Err((S::Melee, want)));
         let ok14 = start_attrs(c).plus(Attributes::new(0, 0, 0, -1, 0, 0));
-        assert_eq!(check_equipment(c, &e, &ok14), Ok(()));
+        assert_eq!(check_equipment(c, &classes::prof_base(c), &e, &ok14), Ok(()));
     }
 }

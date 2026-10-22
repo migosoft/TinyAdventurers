@@ -17,9 +17,8 @@ use crate::defs::items::{self, EquipSlot, ItemBase, ItemId, PropKind};
 use crate::defs::items::Equipment;
 use crate::defs::lights::{self, LightKind};
 use crate::defs::loadout::{apply_mods, check_pick, pick_version, AbilityMod, Build, LoadoutError, Pick};
-#[cfg(test)]
-use crate::defs::progression::StatUpgrades;
 use crate::defs::races::Sight;
+use crate::defs::trees::{self, NodeId, Prof};
 use crate::defs::weapons::{resolve_melee, resolve_ranged, ResolvedWeapon};
 use crate::protocol::{BossId, ClassId};
 use serde::Serialize;
@@ -78,7 +77,7 @@ pub struct ResolvedAbility {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Sheet {
-    /// Class + race + `extra` + item points.
+    /// Class + race + `extra` + tree + item points.
     pub attrs: Attributes,
     pub max_hp: f64,
     pub speed: f64,
@@ -98,8 +97,6 @@ pub struct Sheet {
     pub fallback: ResolvedAbility,
     /// How far the hero's melee reaches (px): `HERO_REACH + PLAYER_RADIUS`.
     pub reach: f64,
-    /// Fraction of incoming damage blocked by the old armor upgrade (removed in plan 4).
-    pub armor: f64,
     /// What the Summon Wolf version's mods do to the wolf.
     pub wolf: WolfMods,
 }
@@ -218,7 +215,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
             let base = match gov {
                 Some((attr, pct)) => {
                     let ratio = Scaled { value: own.damage, attr, pct, at: own.at }.ratio(attrs);
-                    Base { given: own.damage, scale: Some(BaseScale { attr, at: own.at, have: attrs.get(attr), ratio }), ability_mult: 1.0, mods_mult: 1.0, upgrade_mult: 1.0 }
+                    Base { given: own.damage, scale: Some(BaseScale { attr, at: own.at, have: attrs.get(attr), ratio }), ability_mult: 1.0, mods_mult: 1.0, keystone_mult: 1.0 }
                 }
                 None => Base::plain(own.damage),
             };
@@ -249,34 +246,69 @@ fn arm(id: ItemId, attrs: &Attributes, shares: &[(DamageType, f64)], on_hit: Opt
     ResolvedWeapon { split: w.split.with_shares(shares), on_hit: on_hit.map(|h| OnHit { power: w.power, ..h }), pierce_through, ..w }
 }
 
-/// The sheet of a hero with build `b`. The equipment is checked first, against the
-/// Attributes without items (class + race + `b.extra`); then each pick: its version, its
-/// requirements, its weapon. An empty Melee slot uses the class's starter; an empty Ranged
-/// slot is no ranged weapon.
-pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
-    let def = classes::def(class);
-    let start = classes::start_attrs(class);
-    let unequipped = start.plus(b.extra);
-    let equip = &b.equipment;
-    items::check_equipment(class, equip, &unequipped).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
-    let m = b.upgrades.modifiers();
-    let prof = classes::profile(class);
+/// The proficiencies of a hero: the class's own plus what the owned `nodes` teach.
+pub fn profs(class: ClassId, nodes: &[NodeId]) -> Vec<Prof> {
+    let mut v = classes::prof_base(class);
+    v.extend(trees::gains(nodes).profs);
+    v
+}
 
-    // The worn items, with the starter in an empty Melee slot.
-    let (starter_melee, _) = def.starter;
-    let worn: Vec<(EquipSlot, ItemId)> = EquipSlot::ALL
+/// Start Attributes + the shop's `extra` + the tree's Attribute nodes; no item points.
+pub fn attrs_without_items(class: ClassId, b: &Build) -> Attributes {
+    classes::start_attrs(class).plus(b.extra).plus(trees::gains(&b.nodes).attrs)
+}
+
+/// The worn items, with the starter in an empty Melee slot.
+fn worn_items(class: ClassId, b: &Build) -> Vec<(EquipSlot, ItemId)> {
+    let (starter_melee, _) = classes::def(class).starter;
+    EquipSlot::ALL
         .iter()
         .filter_map(|&s| {
             let id = match s {
-                EquipSlot::Melee => Some(equip.get(s).unwrap_or(starter_melee)),
-                EquipSlot::Ranged | EquipSlot::OffHand | EquipSlot::Armor | EquipSlot::Ring1 | EquipSlot::Ring2 | EquipSlot::Shoes | EquipSlot::Belt => equip.get(s),
+                EquipSlot::Melee => Some(b.equipment.get(s).unwrap_or(starter_melee)),
+                EquipSlot::Ranged | EquipSlot::OffHand | EquipSlot::Armor | EquipSlot::Ring1 | EquipSlot::Ring2 | EquipSlot::Shoes | EquipSlot::Belt => b.equipment.get(s),
             };
             id.map(|id| (s, id))
         })
-        .collect();
+        .collect()
+}
+
+#[allow(dead_code)] // plan 4: Progress buys nodes against it (task 5)
+/// `attrs_without_items` plus the worn items' Attribute points, whatever the loadout.
+pub fn attrs_with_items(class: ClassId, b: &Build) -> Attributes {
+    let mut attrs = attrs_without_items(class, b);
+    for (_, id) in worn_items(class, b) {
+        for p in items::def(id).props {
+            if let PropKind::Attr(a, n) = p.kind {
+                attrs.add(a, n);
+            }
+        }
+    }
+    attrs
+}
+
+/// The sheet of a hero with build `b`, in the spec's order (§10): class, race, shop (`extra`),
+/// tree nodes (Attributes, resistances, proficiencies), items; then the derived numbers, the
+/// weapons and the two picks. The equipment is checked first, against the Attributes without
+/// items; then each pick: its version, its requirements, its weapon, its mods (the version's
+/// and the tree's improvements for that ability). An empty Melee slot uses the class's starter;
+/// an empty Ranged slot is no ranged weapon.
+pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
+    let def = classes::def(class);
+    let start = classes::start_attrs(class);
+    let unequipped = attrs_without_items(class, b);
+    let equip = &b.equipment;
+    let tree = trees::gains(&b.nodes);
+    items::check_equipment(class, &profs(class, &b.nodes), equip, &unequipped).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
+    let prof = classes::profile(class);
+
+    let worn = worn_items(class, b);
 
     // Armor bases first, then the properties (spec §10).
     let mut res = prof.res;
+    for &(t, v) in &tree.res {
+        res.set(t, res.get(t) + v);
+    }
     let mut weight = def.weight;
     for &(_, id) in &worn {
         if let ItemBase::Armor(a) = items::def(id).base {
@@ -336,15 +368,10 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
     let melee = arm(melee_id, &attrs, &shares[0], on_hits[0], pierce[0]);
     let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], on_hits[1], pierce[1]));
 
-    // Abilities: version, requirements, weapon, mods; the old upgrades multiply after
-    // (damage not on Holy Light).
+    // Abilities: version, requirements, weapon, mods (version, then the tree's improvements).
     let reach = classes::HERO_REACH + PLAYER_RADIUS;
-    let upgraded = |r: ResolvedAbility| {
-        let base = if r.id == AbilityId::HolyLight { r.base } else { Base { upgrade_mult: m.damage, ..r.base } };
-        ResolvedAbility { damage: base.amount(), base, cooldown: r.cooldown / m.attack_speed, ..r }
-    };
-    let ability = |slot: AbilitySlot, p: Pick| -> Result<(ResolvedAbility, &'static [AbilityMod]), LoadoutError> {
-        let (mods, waive_attrs) = pick_version(class, b, slot, p)?;
+    let ability = |slot: AbilitySlot, p: Pick| -> Result<(ResolvedAbility, Vec<AbilityMod>), LoadoutError> {
+        let (version, waive_attrs) = pick_version(class, b, slot, p)?;
         let d = ab::def(p.ability);
         let weapon = match d.uses {
             Uses::Melee => Some(melee.kind),
@@ -353,16 +380,17 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
         };
         check_pick(&d, waive_attrs, &attrs, weapon)?;
         let r = resolve_ability(&d, &attrs, &melee, ranged.as_ref(), reach).ok_or(LoadoutError::NoWeapon(p.ability, EquipSlot::Ranged))?;
-        Ok((upgraded(apply_mods(r, mods)), mods))
+        let mods: Vec<AbilityMod> = version.iter().copied().chain(tree.improves.iter().filter(|(a, _)| *a == p.ability).map(|&(_, m)| m)).collect();
+        Ok((apply_mods(r, &mods), mods))
     };
     let (primary, _) = ability(AbilitySlot::Primary, b.loadout.primary)?;
     let (secondary, secondary_mods) = ability(AbilitySlot::Secondary, b.loadout.secondary)?;
-    let wolf = if secondary.id == AbilityId::SummonWolf { wolf_mods(secondary_mods) } else { WolfMods::NONE };
+    let wolf = if secondary.id == AbilityId::SummonWolf { wolf_mods(&secondary_mods) } else { WolfMods::NONE };
     let strike = resolve_ability(&ab::def(AbilityId::Strike), &attrs, &melee, ranged.as_ref(), reach).expect("Strike uses the melee weapon");
     Ok(Sheet {
         attrs,
-        max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp) * m.life,
-        speed: move_speed(def.speed, start.get(Attr::Con), &attrs) * (1.0 + move_frac) * m.move_speed,
+        max_hp: attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp,
+        speed: move_speed(def.speed, start.get(Attr::Con), &attrs) * (1.0 + move_frac),
         weight,
         res,
         effect_res,
@@ -372,9 +400,8 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
         sight: prof.sight,
         primary,
         secondary,
-        fallback: upgraded(strike),
+        fallback: strike,
         reach,
-        armor: m.armor,
         wolf,
     })
 }
@@ -455,9 +482,9 @@ mod tests {
         assert_eq!((e.kind, e.secs, e.power, e.magical, e.look), (EffectKind::Warded, 4.0, sheet.attrs.get(Attr::Cha), true, EffectLook::Plain));
     }
 
-    /// The class start with `extra` Attribute points, `equip` and `up`.
-    fn sheet_of(class: ClassId, extra: Attributes, equip: &Equipment, up: &StatUpgrades) -> Sheet {
-        let b = Build { extra, equipment: *equip, upgrades: *up, ..Build::start(class) };
+    /// The class start with `extra` Attribute points and `equip`.
+    fn sheet_of(class: ClassId, extra: Attributes, equip: &Equipment) -> Sheet {
+        let b = Build { extra, equipment: *equip, ..Build::start(class) };
         hero_sheet(class, &b).unwrap()
     }
 
@@ -491,7 +518,7 @@ mod tests {
         ];
         for (c, primary, secondary) in today {
             let d = classes::def(c);
-            let s = sheet_of(c, Attributes::default(), &Equipment::starter(c), &StatUpgrades::default());
+            let s = sheet_of(c, Attributes::default(), &Equipment::starter(c));
             assert_eq!(s.max_hp, d.hp, "{c:?}");
             assert_eq!(s.speed, d.speed, "{c:?}");
             assert_eq!(s.weight, d.weight, "{c:?}");
@@ -501,12 +528,11 @@ mod tests {
             assert_eq!(s.fallback.id, Strike, "{c:?}");
             assert_eq!(s.fallback.range, 22.0, "{c:?}");
             assert_eq!((s.fallback.damage, s.fallback.cooldown), (s.melee.damage, s.melee.cooldown), "{c:?}");
-            assert_eq!(s.armor, 0.0);
             assert_eq!(s.melee.split, DamageSplit::physical(), "{c:?}");
             assert_eq!(s.light, None, "{c:?}");
             assert_eq!(s.res, classes::profile(c).res, "{c:?}");
         }
-        let sheet = |c| sheet_of(c, Attributes::default(), &Equipment::starter(c), &StatUpgrades::default());
+        let sheet = |c| sheet_of(c, Attributes::default(), &Equipment::starter(c));
         let r = sheet(ClassId::ElvenRanger);
         assert_eq!(r.attrs.get(Attr::Dex), 15);
         assert_eq!((r.fallback.damage, r.fallback.cooldown), (18.0, 0.35));
@@ -529,23 +555,116 @@ mod tests {
     }
 
     #[test]
+    fn tree_points_resistances_and_proficiencies_reach_the_sheet() {
+        use crate::defs::trees::NodeId;
+        let c = ClassId::Wizard;
+        let b = Build { nodes: vec![NodeId::WA1, NodeId::WF1, NodeId::WF3, NodeId::WB1, NodeId::WB3], ..Build::start(c) };
+        let s = hero_sheet(c, &b).unwrap();
+        let start = hero_sheet(c, &Build::start(c)).unwrap();
+        assert_eq!(s.attrs.get(Attr::Int), start.attrs.get(Attr::Int) + 1);
+        assert_eq!(s.max_hp, start.max_hp + 5.0, "CON +1");
+        assert!((s.res.get(DamageType::Cold) - start.res.get(DamageType::Cold) - 0.2).abs() < 1e-12);
+        // Light armor: refused without the node, fine with it.
+        let robe = |nodes: Vec<NodeId>| Build { nodes, equipment: Equipment::starter(c).with(EquipSlot::Armor, ItemId::LeatherArmor), ..Build::start(c) };
+        assert!(matches!(hero_sheet(c, &robe(vec![])), Err(LoadoutError::Equip(EquipSlot::Armor, items::EquipError::NotProficient))));
+        assert!(hero_sheet(c, &robe(vec![NodeId::WB1, NodeId::WB3])).is_ok());
+    }
+
+    #[test]
+    fn a_weapon_proficiency_node_lets_the_class_wield_it() {
+        use crate::defs::trees::NodeId;
+        let c = ClassId::ElvenRanger;
+        let bow = |nodes: Vec<NodeId>| Build { nodes, equipment: Equipment::starter(c).with(EquipSlot::Ranged, ItemId::SkeletonLongbow), ..Build::start(c) };
+        let r = hero_sheet(c, &bow(vec![]));
+        assert!(matches!(r, Err(LoadoutError::Equip(EquipSlot::Ranged, items::EquipError::NotProficient))), "{r:?}");
+        assert!(hero_sheet(c, &bow(vec![NodeId::EL3])).is_ok());
+    }
+
+    #[test]
+    fn an_unlock_puts_the_ability_in_the_pool() {
+        use crate::defs::loadout::Source;
+        use crate::defs::trees::NodeId;
+        let c = ClassId::Wizard;
+        let pick = Pick { ability: AbilityId::FrostShard, source: Source::Own };
+        let mut b = Build::start(c);
+        b.loadout.primary = pick;
+        assert_eq!(hero_sheet(c, &b).err(), Some(LoadoutError::NotInPool(AbilityId::FrostShard)));
+        b.nodes = vec![NodeId::WF1];
+        assert_eq!(hero_sheet(c, &b).unwrap().primary.id, AbilityId::FrostShard);
+    }
+
+    #[test]
+    fn improvements_apply_only_to_the_equipped_ability() {
+        use crate::defs::trees::NodeId;
+        let c = ClassId::Paladin;
+        let plain = hero_sheet(c, &Build::start(c)).unwrap();
+        let honed = hero_sheet(c, &Build { nodes: vec![NodeId::PR1], ..Build::start(c) }).unwrap();
+        assert!((honed.primary.damage - plain.primary.damage * 1.1).abs() < 1e-9, "Strike equipped");
+        assert_eq!(honed.fallback.damage, plain.fallback.damage, "never on the fallback");
+        // Greater Light (PU2) behind +1 CHA (PU1): compare with the same CHA bought in the shop.
+        let cha = hero_sheet(c, &Build { extra: Attributes::new(0, 0, 0, 0, 0, 1), ..Build::start(c) }).unwrap();
+        let greater = hero_sheet(c, &Build { nodes: vec![NodeId::PU1, NodeId::PU2], ..Build::start(c) }).unwrap();
+        assert!((greater.secondary.damage - cha.secondary.damage * 1.25).abs() < 1e-9, "Holy Light equipped");
+        // Not equipped, not improved: Strike's node does nothing to a Paladin whose primary is another ability.
+        let hl_only = hero_sheet(c, &Build { nodes: vec![NodeId::PR1], ..Build::start(c) }).unwrap();
+        assert_eq!(hl_only.secondary.damage, plain.secondary.damage);
+    }
+
+    #[test]
+    fn an_item_version_gets_the_tree_improvement_too() {
+        use crate::defs::loadout::Source;
+        use crate::defs::trees::NodeId;
+        // Ruling 1: a Wizard with Piercing Missiles (WA1, WA2) picking the Seeker's Band's Magic Missile pierces 2.
+        let c = ClassId::Wizard;
+        let equipment = Equipment::starter(c).with(EquipSlot::Ring1, ItemId::SeekersBand);
+        let item_pick = Pick { ability: AbilityId::MagicMissile, source: Source::Item(EquipSlot::Ring1) };
+        let with = |nodes: Vec<NodeId>, pick: Pick| {
+            let mut b = Build { nodes, equipment, ..Build::start(c) };
+            b.loadout.primary = pick;
+            hero_sheet(c, &b).unwrap().primary
+        };
+        let own_pick = Pick { ability: AbilityId::MagicMissile, source: Source::Own };
+        assert_eq!(with(vec![], item_pick).pierce, 1, "the band alone");
+        assert_eq!(with(vec![NodeId::WA1, NodeId::WA2], item_pick).pierce, 2, "the band and the node");
+        assert_eq!(with(vec![NodeId::WA1, NodeId::WA2], own_pick).pierce, 1, "the node alone");
+    }
+
+    #[test]
+    fn attrs_with_and_without_items() {
+        use crate::defs::trees::NodeId;
+        let c = ClassId::Paladin;
+        let b = Build { nodes: vec![NodeId::PU1], extra: Attributes::new(1, 0, 0, 0, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor), ..Build::start(c) };
+        let without = attrs_without_items(c, &b);
+        assert_eq!(without.get(Attr::Str), 16);
+        assert_eq!(without.get(Attr::Cha), 15);
+        assert!(attrs_with_items(c, &b).get(Attr::Con) > without.get(Attr::Con), "the band's CON counts with items only");
+        assert_eq!(attrs_with_items(c, &b), hero_sheet(c, &b).unwrap().attrs, "the same numbers the sheet uses");
+    }
+
+    #[test]
+    fn profs_are_the_class_plus_the_tree() {
+        use crate::defs::trees::NodeId;
+        let c = ClassId::Wizard;
+        assert_eq!(profs(c, &[]), classes::prof_base(c));
+        assert!(profs(c, &[NodeId::WB3]).contains(&Prof::Armor(crate::defs::items::ArmorClass::Light)));
+    }
+
+    #[test]
     fn attributes_move_the_numbers() {
-        let up = StatUpgrades::default();
-        let w = sheet_of(ClassId::Wizard, plus(Attr::Int, 2), &Equipment::starter(ClassId::Wizard), &up);
+        let w = sheet_of(ClassId::Wizard, plus(Attr::Int, 2), &Equipment::starter(ClassId::Wizard));
         assert!((w.primary.damage - 12.0 * 1.35 / 1.25).abs() < 1e-12);
-        let b = sheet_of(ClassId::Barbarian, plus(Attr::Dex, 2), &Equipment::starter(ClassId::Barbarian), &up);
+        let b = sheet_of(ClassId::Barbarian, plus(Attr::Dex, 2), &Equipment::starter(ClassId::Barbarian));
         assert!((b.primary.cooldown - 0.8 / (1.10 / 1.06)).abs() < 1e-12);
         assert!((b.primary.arc - 2.45 * 1.15 / 1.09).abs() < 1e-12);
-        let p = sheet_of(ClassId::Paladin, plus(Attr::Con, 2), &Equipment::starter(ClassId::Paladin), &up);
+        let p = sheet_of(ClassId::Paladin, plus(Attr::Con, 2), &Equipment::starter(ClassId::Paladin));
         assert_eq!(p.max_hp, 130.0);
         assert!((p.speed - 66.0 * 1.05 / 1.03).abs() < 1e-12);
     }
 
     #[test]
     fn attributes_move_the_ranger_numbers() {
-        let up = StatUpgrades::default();
         // The ranger starts at DEX 15 (class 13 + Elf 2) and STR 10.
-        let dex = sheet_of(ClassId::ElvenRanger, plus(Attr::Dex, 2), &Equipment::starter(ClassId::ElvenRanger), &up);
+        let dex = sheet_of(ClassId::ElvenRanger, plus(Attr::Dex, 2), &Equipment::starter(ClassId::ElvenRanger));
         let bow = dex.primary;
         assert!((bow.damage - 16.0 * 1.35 / 1.25).abs() < 1e-12, "bow damage by DEX");
         assert!((bow.cooldown - 0.7 / (1.14 / 1.10)).abs() < 1e-12, "firing speed by DEX");
@@ -554,30 +673,14 @@ mod tests {
         assert!((thrust.damage - 18.0 * 1.35 / 1.25).abs() < 1e-12, "rapier damage by DEX");
         assert!((thrust.cooldown - 0.35 / (1.14 / 1.10)).abs() < 1e-12, "rapier speed by DEX");
         assert_eq!(thrust.range, 22.0);
-        let str2 = sheet_of(ClassId::ElvenRanger, plus(Attr::Str, 2), &Equipment::starter(ClassId::ElvenRanger), &up).primary;
+        let str2 = sheet_of(ClassId::ElvenRanger, plus(Attr::Str, 2), &Equipment::starter(ClassId::ElvenRanger)).primary;
         assert!((str2.range - 260.0 * 1.04 / 1.00).abs() < 1e-12, "range by STR");
         assert!((str2.speed - 290.0 * 1.04 / 1.00).abs() < 1e-12, "projectile speed by STR");
         assert_eq!((str2.damage, str2.cooldown), (16.0, 0.7), "STR does not move damage or speed");
     }
 
-    #[test]
-    fn upgrades_still_apply() {
-        let up = StatUpgrades { damage: 2, attack_speed: 1, move_speed: 1, life: 1, armor: 1, ..Default::default() };
-        let m = up.modifiers();
-        let s = sheet_of(ClassId::Paladin, Attributes::default(), &Equipment::starter(ClassId::Paladin), &up);
-        assert_eq!(s.primary.damage, 20.0 * m.damage);
-        assert_eq!(s.primary.cooldown, 0.45 / m.attack_speed);
-        assert_eq!(s.speed, 66.0 * m.move_speed);
-        assert_eq!(s.max_hp, 120.0 * m.life);
-        assert_eq!(s.armor, m.armor);
-        assert_eq!(s.secondary.damage, 35.0, "the heal is no damage");
-        // What the modifiers really give.
-        assert!((m.damage - 1.16).abs() < 1e-12 && (m.attack_speed - 1.06).abs() < 1e-12);
-        assert!((m.move_speed - 1.04).abs() < 1e-12 && (m.life - 1.10).abs() < 1e-12 && (m.armor - 0.04).abs() < 1e-12);
-    }
-
     /// Every (class, ability) the class's loadout allows, with the sheet built around it.
-    fn every_allowed_ability(extra: Attributes, ring: Option<ItemId>, upgrades: StatUpgrades) -> Vec<(ClassId, ResolvedAbility, ResolvedAbility)> {
+    fn every_allowed_ability(extra: Attributes, ring: Option<ItemId>) -> Vec<(ClassId, ResolvedAbility, ResolvedAbility)> {
         use crate::defs::abilities as ab;
         use crate::defs::loadout::{Loadout, Source};
         let mut out = vec![];
@@ -596,7 +699,7 @@ mod tests {
                         AbilitySlot::Primary => Loadout { primary: pick, ..start },
                         AbilitySlot::Secondary => Loadout { secondary: pick, ..start },
                     };
-                    let build = Build { extra, equipment, loadout, own: vec![id], upgrades, ..Build::start(class) };
+                    let build = Build { extra, equipment, loadout, own: vec![id], ..Build::start(class) };
                     if let Ok(s) = hero_sheet(class, &build) {
                         out.push((class, if slot == AbilitySlot::Primary { s.primary } else { s.secondary }, s.fallback));
                     }
@@ -609,21 +712,17 @@ mod tests {
     #[test]
     fn damage_is_its_base_amount_for_every_ability() {
         let mut seen = 0;
-        let boosted = StatUpgrades { damage: 2, attack_speed: 1, move_speed: 1, life: 1, armor: 1, ..Default::default() };
-        let dmg_up = boosted.modifiers().damage;
-        assert!(dmg_up != 1.0);
-        for (up, mult) in [(StatUpgrades::default(), 1.0), (boosted, dmg_up)] {
+        {
             for lift in [0, 4] {
                 for attr in [Attr::Int, Attr::Str, Attr::Dex] {
                     let mut extra = Attributes::default();
                     extra.add(attr, lift);
                     for ring in [None, Some(ItemId::RingOfTheMagus)] {
-                        for (class, a, fb) in every_allowed_ability(extra, ring, up) {
+                        for (class, a, fb) in every_allowed_ability(extra, ring) {
                             assert_eq!(a.damage.to_bits(), a.base.amount().to_bits(), "{class:?} {:?} {attr:?}+{lift}", a.id);
                             assert_eq!(fb.damage.to_bits(), fb.base.amount().to_bits(), "{class:?} fallback");
-                            assert_eq!(fb.base.upgrade_mult, mult, "{class:?} fallback");
-                            let want = if a.id == AbilityId::HolyLight { 1.0 } else { mult };
-                            assert_eq!(a.base.upgrade_mult, want, "{class:?} {:?}", a.id);
+                            assert_eq!(fb.base.keystone_mult, 1.0, "{class:?} fallback");
+                            assert_eq!(a.base.keystone_mult, 1.0, "{class:?} {:?}", a.id);
                             if a.id == AbilityId::MagicMissile && a.base.mods_mult != 1.0 {
                                 assert_eq!(a.base.mods_mult, 0.75, "the ring's DamageMul");
                             } else {
@@ -635,8 +734,8 @@ mod tests {
                 }
             }
         }
-        assert!(seen > 200, "{seen} sheets");
-        let wiz = every_allowed_ability(Attributes::default(), Some(ItemId::RingOfTheMagus), StatUpgrades::default());
+        assert!(seen > 100, "{seen} sheets");
+        let wiz = every_allowed_ability(Attributes::default(), Some(ItemId::RingOfTheMagus));
         assert!(wiz.iter().any(|(_, a, _)| a.id == AbilityId::MagicMissile && a.base.mods_mult == 0.75), "the ring's version was built");
     }
 
@@ -664,15 +763,14 @@ mod tests {
 
     fn with(c: ClassId, extra: Attributes, items: &[(EquipSlot, ItemId)]) -> Sheet {
         let e = items.iter().fold(Equipment::starter(c), |e, &(s, i)| e.with(s, i));
-        sheet_of(c, extra, &e, &StatUpgrades::default())
+        sheet_of(c, extra, &e)
     }
 
     #[test]
     fn an_empty_melee_slot_is_the_starter() {
-        let up = StatUpgrades::default();
         let c = ClassId::Paladin;
-        let a = sheet_of(c, Attributes::default(), &Equipment::default(), &up);
-        let b = sheet_of(c, Attributes::default(), &Equipment::starter(c), &up);
+        let a = sheet_of(c, Attributes::default(), &Equipment::default());
+        let b = sheet_of(c, Attributes::default(), &Equipment::starter(c));
         assert_eq!((a.primary, a.secondary, a.fallback, a.melee), (b.primary, b.secondary, b.fallback, b.melee));
         // An empty Ranged slot is no ranged weapon: the ranger cannot shoot.
         let r = ClassId::ElvenRanger;
@@ -727,7 +825,7 @@ mod tests {
 
     #[test]
     fn weapon_properties_fill_split_and_on_hit() {
-        let start = sheet_of(ClassId::Wizard, Attributes::default(), &Equipment::starter(ClassId::Wizard), &StatUpgrades::default());
+        let start = sheet_of(ClassId::Wizard, Attributes::default(), &Equipment::starter(ClassId::Wizard));
         let ember = with(ClassId::Wizard, Attributes::default(), &[(EquipSlot::Melee, ItemId::EmberStaff)]);
         assert!((ember.melee.split.share(DamageType::Heat) - 0.25).abs() < 1e-12);
         assert_eq!(ember.light, Some(LightKind::Fire));

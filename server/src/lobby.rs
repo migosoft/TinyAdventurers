@@ -5,7 +5,6 @@
 
 use crate::db::{self, Character, Db};
 use crate::defs::attributes::{Attr, Attributes};
-use crate::defs::classes;
 use crate::defs::items::{self, EquipSlot, Equipment, ItemId};
 use crate::defs::loadout::{Build, Loadout, Pick};
 use crate::defs::requirements::Requirement;
@@ -44,7 +43,7 @@ pub struct Conn {
 /// The Attribute points that lift each Attribute of `class` to the highest Attribute requirement of
 /// the build's two picks and its equipped items (debug builds only; proficiency is not lifted).
 pub fn debug_lift(class: ClassId, b: &Build) -> Attributes {
-    let start = classes::start_attrs(class);
+    let start = crate::sheet::attrs_without_items(class, b);
     let mut need = [0i32; Attr::COUNT];
     let picks = [b.loadout.primary.ability, b.loadout.secondary.ability];
     let reqs = picks
@@ -424,7 +423,7 @@ impl Lobby {
     fn build_of(&self, id: u32) -> Option<Build> {
         let c = self.conns.get(&id)?;
         let ch = c.character.as_ref()?;
-        let mut build = Build { upgrades: ch.progress.upgrades, ..Build::start(ch.class) };
+        let mut build = Build::start(ch.class);
         if let Some(l) = c.loadout {
             build.loadout = l;
         }
