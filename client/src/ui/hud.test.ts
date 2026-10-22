@@ -36,4 +36,28 @@ describe('Hud', () => {
     expect(document.querySelector('.menu .title')!.textContent).toBe('Paused');
     expect(document.querySelector('.menu p')!.textContent).toBe('The dungeon keeps going while this is open.');
   });
+  it('shows server message text literally', () => {
+    hud.message('<b>x</b>', 'game');
+    const m = document.querySelector('.msg')!;
+    expect(m.textContent).toBe('<b>x</b>');
+    expect(m.querySelector('b')).toBeNull();
+  });
+  it('mutes the (you) suffix in the party list', () => {
+    const info = {
+      you: 1,
+      abilities: [
+        { id: 'MagicMissile', cooldown: 1 },
+        { id: 'Fireball', cooldown: 1 },
+      ],
+      players: [
+        { ent: 1, name: 'Al', class: 'Wizard' },
+        { ent: 2, name: 'Bo', class: 'Barbarian' },
+      ],
+    } as unknown as Parameters<Hud['startRun']>[0];
+    hud.startRun(info);
+    const rows = [...document.querySelectorAll('.member .pname')];
+    expect(rows[0].querySelector('em')!.textContent).toBe(' (you)');
+    expect(rows[0].textContent).toBe('Al (you)');
+    expect(rows[1].querySelector('em')).toBeNull();
+  });
 });

@@ -133,7 +133,14 @@ export class Hud {
     for (const p of info.players) {
       const row = el('div', `member c-${p.class.toLowerCase()}`);
       row.dataset.ent = String(p.ent);
-      row.append(el('span', 'pname', `${p.name}${p.ent === info.you ? ' (you)' : ''}`), el('div', 'mini'), el('div', 'pfx'));
+      const pname = el('span', 'pname');
+      pname.textContent = p.name;
+      if (p.ent === info.you) {
+        const you = el('em');
+        you.textContent = ' (you)';
+        pname.append(you);
+      }
+      row.append(pname, el('div', 'mini'), el('div', 'pfx'));
       row.querySelector('.mini')!.append(el('div', 'fill'));
       this.party.append(row);
     }
@@ -246,7 +253,8 @@ export class Hud {
   }
 
   message(text: string, kind: 'game' | 'notice' = 'notice'): void {
-    const m = el('div', `msg ${kind}`, text);
+    const m = el('div', `msg ${kind}`);
+    m.textContent = text;
     this.msgs.append(m);
     setTimeout(() => m.classList.add('fade'), 3000);
     setTimeout(() => m.remove(), 4000);
