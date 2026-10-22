@@ -6,6 +6,8 @@
 
 **Mock screens:** `?uidemo=<screen>` (throwaway spike in `client/src/uidemo/`, mock data, no server). Screenshots: `tools/e2e/ui-shots.mjs` into `img/2026-10-18-progression/`. The ability and tree tables below are printed from the spike's `uidemo/data.ts` (`cd client && npx tsx src/uidemo/spec-tables.ts`), so the pictures and the tables agree.
 
+**Note, 2026-10-22:** the spike (`client/src/uidemo/`, `?uidemo`, `tools/e2e/ui-shots.mjs`) was deleted in plan 5, which built the real screens. The tables below stay as printed; the screenshots in `img/2026-10-18-progression/` are the mock's. The real screens are in TECHNICAL §11a "The character screens".
+
 ## Goal
 
 Replace the five XP stat upgrades with a character build:

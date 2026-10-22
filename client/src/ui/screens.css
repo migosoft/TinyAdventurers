@@ -396,9 +396,6 @@
   font-size: 5px;
   color: var(--muted);
 }
-.ui-res .zero {
-  color: var(--muted);
-}
 .ui-res .r-heat {
   color: #f08040;
 }

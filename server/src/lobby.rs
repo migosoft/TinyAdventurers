@@ -31,7 +31,8 @@ pub struct Conn {
     pub ready: bool,
     /// The character this connection plays (a cached copy of its database row).
     pub character: Option<Character>,
-    /// The debug loadout, if one was set (reset when the character changes).
+    /// The debug loadout, if one was set (reset when the character changes, and replaced by a real
+    /// `SetLoadout`, which clears it and `debug_loadout`).
     pub loadout: Option<Loadout>,
     /// `loadout` came from `DebugLoadout`, so the run counts as a debug run.
     pub debug_loadout: bool,

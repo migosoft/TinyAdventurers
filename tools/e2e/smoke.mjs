@@ -48,7 +48,17 @@ async function player(name, cls, shots) {
   await page.click('#char-create');
   await page.waitForSelector('.ui-bar');
   await page.waitForSelector('[data-attr]'); // the Sheet tab, after the Character message
-  if (shots) await page.screenshot({ path: `${out}/0-hub-sheet.png` });
+  if (shots) {
+    await page.screenshot({ path: `${out}/0-hub-sheet.png` });
+    for (const tab of ['tree', 'equipment', 'loadout']) {
+      await page.click(`[data-tab="${tab}"]`);
+      if (tab === 'tree') await page.waitForSelector('.ui-node.owned');
+      else await page.waitForTimeout(150);
+      await page.screenshot({ path: `${out}/0-hub-${tab}.png` });
+    }
+    console.log('hub: four tabs shown');
+    await page.click('[data-tab="sheet"]');
+  }
   await page.click('#to-dungeon');
   await page.waitForSelector('#runname');
   await page.waitForSelector('.hero .cinfo');
@@ -79,7 +89,6 @@ await p1.waitForSelector('#game.active', { timeout: 10000 });
 await p2.waitForSelector('#game.active', { timeout: 10000 });
 await p1.waitForTimeout(1500);
 await p1.screenshot({ path: `${out}/2-start.png` });
-await p1.screenshot({ path: `${out}/3-weapons.png` });
 
 const logOn = process.env.LOG === '1';
 if (logOn) {
@@ -95,6 +104,7 @@ await p1.keyboard.up('w');
 await p1.keyboard.down('d');
 await p1.waitForTimeout(500);
 await p1.keyboard.up('d');
+await p1.screenshot({ path: `${out}/3-weapons.png` }); // the heroes after moving, holding their weapons
 for (let i = 0; i < 3; i++) {
   await p1.mouse.click(900, 300);
   await p1.waitForTimeout(120);
