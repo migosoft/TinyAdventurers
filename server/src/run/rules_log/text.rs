@@ -95,7 +95,7 @@ pub(super) fn hit_head(run: &Run, f: &HitFacts, target: u32) -> String {
     }
 }
 
-/// The steps: base, multipliers, parts, armor.
+/// The steps: base, multipliers, parts.
 pub(super) fn hit_details(run: &Run, f: &HitFacts) -> Vec<String> {
     if f.outcome == HitOutcome::Shielded {
         return vec![];
@@ -146,7 +146,7 @@ fn base_lines(f: &HitFacts) -> Vec<String> {
     out
 }
 
-/// One line per type with a share, and a hero's armor: all that a viewer who cannot see the source gets.
+/// One line per type with a share: all that a viewer who cannot see the source gets.
 pub(super) fn part_lines(f: &HitFacts) -> Vec<String> {
     let mut out = vec![];
     for t in DamageType::ALL {
@@ -161,10 +161,6 @@ pub(super) fn part_lines(f: &HitFacts) -> Vec<String> {
                 n1(f.parts[t as usize])
             ));
         }
-    }
-    if f.armor > 0.0 && matches!(f.target, Creature::Player(_)) {
-        let raw: f64 = f.parts.iter().sum();
-        out.push(format!("armor {}: {} × (1 − {}) = {}", pct(f.armor), n1(raw), pct(f.armor), n1(f.taken)));
     }
     out
 }

@@ -124,14 +124,12 @@ pub struct HitFacts {
     pub res: Resistances,
     /// `resolve_parts(&dmg, &res)`: the rule's `raw` is their sum.
     pub parts: [f64; DamageType::COUNT],
-    /// A hero's armor (0 for everyone else, and when it was not applied).
-    pub armor: f64,
     pub hp_before: f64,
     /// Clamped at 0.
     pub hp_after: f64,
     /// The HP lost (a monster's `applied`; a hero's before minus after).
     pub dealt: f64,
-    /// The damage the rule applied before HP limits: a hero's `raw * (1 - armor)`, a monster's `raw`.
+    /// The damage the rule applied before HP limits: the sum of `parts`.
     pub taken: f64,
     pub outcome: HitOutcome,
 }

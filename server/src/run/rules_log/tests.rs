@@ -525,7 +525,6 @@ fn damage_from_an_unseen_attacker_gives_the_short_line() {
     let (tx, ty) = walled(&mut run);
     set_prefs(&mut run, 0, true, true);
     set_prefs(&mut run, 1, true, true);
-    // Put the Paladin (armor) in the hit's place so there is an armor line.
     let archer = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
     let (h0, h1) = (run.players[0].id, run.players[1].id);
     let _ = take(&mut run);
@@ -559,7 +558,7 @@ fn a_hit_that_sets_off_another_files_both_in_order() {
         let dmg = Damage::physical(amount).by(hero, What::Attack);
         let parts = crate::defs::damage::resolve_parts(&dmg, &res);
         let hp = run.monsters[mi].hp;
-        HitFacts { target: Creature::Monster(mi), dmg, res, parts, armor: 0.0, hp_before: hp, hp_after: hp - amount, dealt: amount, taken: amount, outcome: HitOutcome::Dealt }
+        HitFacts { target: Creature::Monster(mi), dmg, res, parts, hp_before: hp, hp_after: hp - amount, dealt: amount, taken: amount, outcome: HitOutcome::Dealt }
     };
     let _ = take(&mut run);
     let (f1, f2) = (facts(&run, mi, 1.0), facts(&run, mj, 2.0));
@@ -935,7 +934,7 @@ fn a_death_follows_its_own_hit_even_when_hits_nest() {
         let dmg = Damage::physical(1.0).by(hero, What::Attack);
         let parts = crate::defs::damage::resolve_parts(&dmg, &res);
         let hp = run.monsters[mi].hp;
-        HitFacts { target: Creature::Monster(mi), dmg, res, parts, armor: 0.0, hp_before: hp, hp_after: 0.0, dealt: 1.0, taken: 1.0, outcome: HitOutcome::Dealt }
+        HitFacts { target: Creature::Monster(mi), dmg, res, parts, hp_before: hp, hp_after: 0.0, dealt: 1.0, taken: 1.0, outcome: HitOutcome::Dealt }
     };
     let death = |mi: usize| DeathFacts { target: Creature::Monster(mi), by: Some(hero), tick: None, credit: None };
     let _ = take(&mut run);

@@ -881,7 +881,7 @@ impl Run {
             let hp_before = self.players[pi].hp;
             let healed = self.mend_player(pi, -raw);
             let hp_after = self.players[pi].hp;
-            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, armor: 0.0, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
+            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
             return;
         }
         let p = &mut self.players[pi];
@@ -897,7 +897,7 @@ impl Run {
         }
         let (hp_after, debug) = (p.hp.max(0.0), p.debug);
         let pos = p.pos();
-        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, armor: 0.0, hp_before, hp_after, dealt: hp_before - hp_after, taken: v, outcome: if imm { rules_log::HitOutcome::Immune } else if debug { rules_log::HitOutcome::DebugNoLoss } else { rules_log::HitOutcome::Dealt } });
+        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, hp_before, hp_after, dealt: hp_before - hp_after, taken: v, outcome: if imm { rules_log::HitOutcome::Immune } else if debug { rules_log::HitOutcome::DebugNoLoss } else { rules_log::HitOutcome::Dealt } });
         let ty = dmg.split.main_type() as u8;
         self.event_on_hero(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: v as f32, crit: false, p: true, ty, imm }, pos);
         let p = &mut self.players[pi];
@@ -1068,7 +1068,7 @@ impl Run {
         }
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             let (hp, res) = (self.monsters[mi].hp, self.monsters[mi].res);
-            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts: [0.0; DamageType::COUNT], armor: 0.0, hp_before: hp, hp_after: hp, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Shielded }); rules_log::hit_end(self);
+            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts: [0.0; DamageType::COUNT], hp_before: hp, hp_after: hp, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Shielded }); rules_log::hit_end(self);
             return false;
         }
         if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit, dmg.from_effect) {
@@ -1087,7 +1087,7 @@ impl Run {
             let healed = (-raw).min(m.max_hp - m.hp);
             m.hp += healed;
             let hp_after = m.hp;
-            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts, armor: 0.0, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
+            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
             if healed > 0.0 {
                 let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
                 if ally {
@@ -1107,7 +1107,7 @@ impl Run {
         }
         let applied = raw.min(m.hp + raw);
         let hp_after = m.hp.max(0.0);
-        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts, armor: 0.0, hp_before, hp_after, dealt: applied, taken: raw, outcome: if imm { rules_log::HitOutcome::Immune } else { rules_log::HitOutcome::Dealt } });
+        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts, hp_before, hp_after, dealt: applied, taken: raw, outcome: if imm { rules_log::HitOutcome::Immune } else { rules_log::HitOutcome::Dealt } });
         let ev = Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: ally, ty, imm };
         if ally {
             self.event_on_hero(ev, pos); // shown like damage on a hero
