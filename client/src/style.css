@@ -359,16 +359,6 @@ kbd {
     inset 0 0 0 3px #d04030,
     0 0 12px #d04030;
 }
-.upgrades h2 {
-  display: flex;
-  justify-content: space-between;
-}
-.upgrades .xp {
-  color: var(--gold);
-}
-.upgrades .coins {
-  margin-left: 12px;
-}
 /* The pack's coin (atlas 289,385, 6x7) at 3x. Height `auto` keeps the atlas's
    aspect ratio (it is not square). */
 .coin-icon {
@@ -392,38 +382,6 @@ kbd {
 @keyframes coin-pop {
   from {
     transform: scale(1.4);
-  }
-}
-.stats {
-  list-style: none;
-  margin: 0 0 8px;
-  padding: 0;
-}
-.stats li {
-  display: grid;
-  grid-template-columns: 1fr 48px 1.4fr auto;
-  gap: 10px;
-  align-items: center;
-  padding: 6px 10px;
-  background: #1e141c;
-  margin-bottom: 4px;
-  font-size: 9px;
-}
-.stats .lvl,
-.stats .bonus,
-.upgrades .hint {
-  color: var(--muted);
-  font-size: 8px;
-}
-.stats button {
-  font-size: 8px;
-}
-@media (max-width: 520px) {
-  .stats li {
-    grid-template-columns: 1fr auto;
-  }
-  .stats .bonus {
-    display: none;
   }
 }
 .c-wizard {

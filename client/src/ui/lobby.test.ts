@@ -1,5 +1,44 @@
-import { describe, expect, it } from 'vitest';
-import { debugReject, debugWeapons, isDebugGuardError } from './lobby';
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Atlas } from './atlas';
+import type { ClientMsg } from '../generated/ClientMsg';
+import type { Net } from '../net';
+import type { Pick } from '../generated/Pick';
+import type { PoolCard } from '../generated/PoolCard';
+import { fixtureInfo } from './hub/fixture';
+import { debugReject, debugWeapons, isBuildRefusal, isDebugGuardError, Lobby } from './lobby';
+
+vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ imageSmoothingEnabled: false, clearRect() {}, drawImage() {} } as unknown as CanvasRenderingContext2D);
+const atlas = { img: new Image(), frames: new Proxy({}, { get: () => ({ frame: { x: 0, y: 0, w: 16, h: 16 } }) }) } as unknown as Atlas;
+const own = (ability: Pick['ability']): Pick => ({ ability, source: 'Own' });
+const card = (pick: Pick, o: Partial<PoolCard> = {}): PoolCard => ({ pick, ability: null, error: null, locked: false, ...o });
+const pool = [card(own('MagicMissile')), card(own('FrostShard'), { error: 'Frost Shard needs INT 14.' }), card(own('Fireball')), card(own('FrostNova'), { locked: true })];
+
+let sent: ClientMsg[];
+function make(debug = false): Lobby {
+  sent = [];
+  window.history.replaceState(null, '', debug ? '/?debug' : '/');
+  document.body.replaceChildren();
+  const net = { send: (m: ClientMsg) => sent.push(m) } as unknown as Net;
+  const l = new Lobby(document.body, net, atlas, () => {});
+  l.myId = 2;
+  l.show();
+  return l;
+}
+const player = (id: number, ready: boolean, cls: 'Wizard' | 'Barbarian' = 'Barbarian') => ({
+  id,
+  name: `P${id}`,
+  class: cls,
+  ready,
+  loadout: { primary: own(cls === 'Wizard' ? 'MagicMissile' : 'Strike'), secondary: own(cls === 'Wizard' ? 'Fireball' : 'Charge') },
+  weapons: cls === 'Wizard' ? ['RedStaff'] : ['WarHammer', 'ThrowingAxes'],
+});
+function inRoom(l: Lobby, meReady: boolean): void {
+  l.setCharacter(fixtureInfo('Wizard', { pool }));
+  l.setRoom({ run_id: 5, name: 'Run', host: 1, level: 'Level1', boss: null, players: [player(1, true), player(2, meReady, 'Wizard')] } as never);
+}
+const sel = (name: string) => document.querySelector<HTMLSelectElement>(`[data-own="${name}"]`);
+afterEach(() => window.history.replaceState(null, '', '/'));
 
 const NONE = { loadout: false, melee: false, ranged: false };
 const ALL = { loadout: true, melee: true, ranged: true };
@@ -47,5 +86,62 @@ describe('debugReject', () => {
   });
   it('leaves my picks alone when the error is another player\'s build', () => {
     expect(debugReject('Bob: Ground Slam needs STR 17.', ALL, ['Bob'])).toEqual({ reset: NONE, resend: NONE });
+  });
+});
+
+describe('isBuildRefusal', () => {
+  it('is true for build refusals and debug guards, false for other errors', () => {
+    expect(isBuildRefusal('Frost Shard needs INT 14.')).toBe(true);
+    expect(isBuildRefusal('Not while ready.')).toBe(true);
+    expect(isBuildRefusal('That run is full.')).toBe(false);
+  });
+});
+
+describe('Lobby', () => {
+  it('keeps a half-typed run name when an unrelated error arrives', () => {
+    const l = make();
+    document.querySelector<HTMLInputElement>('#runname')!.value = 'abc';
+    l.error('That run is full.');
+    expect(document.querySelector<HTMLInputElement>('#runname')!.value).toBe('abc');
+    expect(document.querySelector('.error')!.textContent).toBe('That run is full.');
+  });
+  it('shows the own loadout selects while not ready, listing the non-locked cards with the reason', () => {
+    const l = make();
+    inRoom(l, false);
+    expect(document.querySelectorAll('[data-own]').length).toBe(2);
+    const opts = [...sel('Primary')!.options].map((o) => o.textContent);
+    expect(opts).toEqual(['Magic Missile', 'Frost Shard (needs INT 14.)']);
+    expect([...sel('Secondary')!.options].map((o) => o.textContent)).toEqual(['Fireball']);
+  });
+  it('sends SetLoadout with the other select\'s pick when one changes', () => {
+    const l = make();
+    inRoom(l, false);
+    const p = sel('Primary')!;
+    p.value = JSON.stringify(own('FrostShard'));
+    p.dispatchEvent(new Event('change'));
+    expect(sent).toEqual([{ t: 'SetLoadout', primary: own('FrostShard'), secondary: own('Fireball') }]);
+  });
+  it('shows no selects once ready', () => {
+    const l = make();
+    inRoom(l, true);
+    expect(document.querySelectorAll('[data-own]').length).toBe(0);
+  });
+  it('draws one weapon icon per weapon in the other rows', () => {
+    const l = make();
+    inRoom(l, false);
+    const rows = document.querySelectorAll('.players li');
+    expect(rows[0].querySelectorAll('.wp canvas, .wp .ui-letter').length).toBe(2);
+    expect(rows[1].classList.contains('me')).toBe(true);
+    expect(document.querySelector('.players li kbd')!.textContent).toBe('LMB');
+  });
+  it('lets the debug row follow a real SetLoadout', () => {
+    const l = make(true);
+    inRoom(l, false);
+    const dbg = () => document.querySelector<HTMLSelectElement>('.debug-loadout [data-slot="primary"]')!;
+    expect(dbg().value).toBe('MagicMissile');
+    const p = sel('Primary')!;
+    p.value = JSON.stringify(own('FrostShard'));
+    p.dispatchEvent(new Event('change'));
+    expect(dbg().value).toBe('FrostShard');
   });
 });

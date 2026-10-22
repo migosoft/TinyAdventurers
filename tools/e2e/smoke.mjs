@@ -66,12 +66,13 @@ const a2 = await player('Bob', classes[1]);
 const p2 = a2.page;
 await p2.waitForSelector('[data-join]');
 await p2.screenshot({ path: `${out}/0-lobby.png` });
-// The stopgap character panel (progression plan 4) is on the lobby page.
-if (!(await p2.textContent('.progress'))?.includes('Character (temporary)') || (await p2.locator('.progress [data-attr]').count()) < 1) errors.push('character panel: heading or +1 button missing');
-else console.log('character panel: shown with Attribute buttons');
 await p2.click('[data-join]');
 await p2.waitForSelector('.players li');
+// Your own row offers the loadout selects until you are Ready.
+await p2.waitForSelector('[data-own="Primary"]', { timeout: 5000 });
 await p2.click('#ready');
+await p2.waitForFunction(() => !document.querySelector('[data-own]'));
+console.log('waiting room: own loadout picker shown');
 await p1.waitForFunction(() => document.querySelectorAll('.players .ok').length === 2);
 await p1.click('#start');
 await p1.waitForSelector('#game.active', { timeout: 10000 });

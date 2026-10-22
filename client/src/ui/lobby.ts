@@ -10,8 +10,10 @@ import type { Net } from '../net';
 import { spritePreview, type Atlas } from './atlas';
 import { esc } from './hud';
 import { logoHeader } from './logo';
-import { classFigure } from './classes';
-import { bindProgressPanel, progressPanel } from './progressPanel';
+import { classFigure, figureWeapon } from './classes';
+import { abilityIcon, itemIcon } from './icons';
+import { pickLabel, poolFor, samePick } from './hub/model';
+import type { Pick } from '../generated/Pick';
 import { BOSS_TEXT, className } from './text';
 
 const BOSSES: BossId[] = ['Demon', 'Lich', 'Dragon'];
@@ -21,13 +23,6 @@ const BOSS_FIG: Record<BossId, [string, string, number]> = {
   Lich: ['lich', '', 3],
   Dragon: ['dragon', '', 2],
 };
-
-/** "Primary / Secondary" ability names and the weapon names of a party member. */
-export function partyBuild(p: RoomPlayer): string {
-  const name = (k: { ability: AbilityId }) => ABILITIES[k.ability].name;
-  const items = ITEMS as Record<string, { name: string }>;
-  return `${name(p.loadout.primary)} / ${name(p.loadout.secondary)} · ${p.weapons.map((w) => items[w]?.name ?? w).join(', ')}`;
-}
 
 type Room = { run_id: number; name: string; host: number; players: RoomPlayer[]; level: LevelId; boss: BossId | null };
 
@@ -58,7 +53,10 @@ export function isDebugGuardError(msg: string): boolean {
 /** Which debug picks the user changed since the last reset (only those can be answered by an error). */
 export type DebugTouched = { loadout: boolean; melee: boolean; ranged: boolean };
 
-const BUILD_ERROR = /needs |is not one of your abilities|cannot go in the|does not fit the|cannot use the item|not trained in the item/;
+export const BUILD_ERROR = /needs |is not one of your abilities|cannot go in the|does not fit the|cannot use the item|not trained in the item/;
+
+/** A server answer that refuses a build change (the selects must be drawn from the saved state again). */
+export const isBuildRefusal = (msg: string): boolean => isDebugGuardError(msg) || BUILD_ERROR.test(msg);
 
 /**
  * What to do with a server error about the debug picks the user changed: `reset` the selects to
@@ -150,7 +148,8 @@ export class Lobby {
   error(msg: string): void {
     this.resetRejectedDebugPick(msg);
     // A refused build change is not followed by a Character message: draw the selects from the saved state again.
-    this.render();
+    // Any other error only writes the line, so half-typed input stays.
+    if (isBuildRefusal(msg)) this.render();
     const e = this.root.querySelector('.error');
     if (e) e.textContent = msg;
   }
@@ -188,14 +187,10 @@ export class Lobby {
   private render(): void {
     if (this.room) this.renderRoom();
     else this.renderHome();
-    bindProgressPanel(this.root, (m) => this.net.send(m));
-  }
-
-  private progressHtml(ready: boolean): string {
-    return this.character ? progressPanel(this.character, { debug: debugOn(), ready }) : '';
   }
 
   private renderHome(): void {
+    this.root.classList.remove('ui');
     const list = this.runs.length
       ? this.runs
           .map(
@@ -212,13 +207,12 @@ export class Lobby {
         <ul class="runs">${list}</ul>
         <div class="row"><input id="runname" maxlength="24" placeholder="Name your dungeon run"><button id="create">Open new run</button></div>
         <div class="error"></div>
-      </div>
-      ${this.progressHtml(false)}`;
+      </div>`;
     const hero = this.root.querySelector('.hero')!;
     const c = this.character;
     if (c) {
       hero.classList.add(`c-${c.class.toLowerCase()}`);
-      hero.append(classFigure(this.atlas, c.class, 3));
+      hero.append(classFigure(this.atlas, c.class, 3, figureWeapon(c)));
       const info = document.createElement('div');
       info.className = 'cinfo';
       info.innerHTML = `<small>Playing as</small><b>${esc(c.name)}</b><small>${className(c.class)}</small>`;
@@ -241,23 +235,60 @@ export class Lobby {
     const room = this.room!;
     const me = room.players.find((p) => p.id === this.myId);
     const isHost = room.host === this.myId;
+    this.root.classList.add('ui');
+    const ch = this.character;
+    // Your own row offers the pool while the sheet can still change (the host: until the run starts).
+    const editable = !!me && !!ch && (isHost || !me.ready);
+    const ability = (p: RoomPlayer, slot: 'Primary' | 'Secondary', key: string): string => {
+      const pick = p.loadout[slot === 'Primary' ? 'primary' : 'secondary'];
+      const icon = abilityIcon(pick.ability);
+      if (!(editable && p.id === this.myId)) return `<span class="ui-abshow">${icon}<kbd>${key}</kbd>${esc(ABILITIES[pick.ability].name)}</span>`;
+      const saved = ch!.loadout[slot === 'Primary' ? 'primary' : 'secondary'];
+      const options = poolFor(ch!, slot)
+        .filter((c) => !c.locked)
+        .map((c) => `<option value='${esc(JSON.stringify(c.pick))}'${samePick(c.pick, saved) ? ' selected' : ''}>${esc(pickLabel(c.pick, ch!) + (c.error ? ` (${/needs /.test(c.error) ? c.error.slice(c.error.indexOf('needs ')) : c.error})` : ''))}</option>`)
+        .join('');
+      return `<span class="ui-abpick">${abilityIcon(saved.ability)}<kbd>${key}</kbd><select data-own="${slot}">${options}</select></span>`;
+    };
     const players = room.players
       .map(
         (p) =>
-          `<li class="c-${p.class.toLowerCase()}"><span>${esc(p.name)}${p.id === room.host ? ' ★' : ''}</span><span>${className(p.class)}</span><span class="abilities">${esc(partyBuild(p))}</span><span class="${p.ready || p.id === room.host ? 'ok' : 'wait'}">${p.id === room.host ? 'host' : p.ready ? 'ready' : 'not ready'}</span></li>`,
+          `<li class="c-${p.class.toLowerCase()}${p.id === this.myId ? ' me' : ''}"><span class="pn">${esc(p.name)}${p.id === room.host ? ' ★' : ''}</span><span class="pc">${className(p.class)}</span><span class="wp" data-id="${p.id}"></span>${ability(p, 'Primary', 'LMB')}${ability(p, 'Secondary', 'RMB')}<span class="${p.ready || p.id === room.host ? 'ok' : 'wait'}">${p.id === room.host ? 'host' : p.ready ? 'ready' : 'not ready'}</span></li>`,
       )
       .join('');
     this.root.innerHTML = `
       <h1>${esc(room.name)}</h1>
-      <div class="panel"><h2>Party (${room.players.length}/4)</h2><ul class="players">${players}</ul></div>
+      <div class="panel ui-party"><h2>Party (${room.players.length}/4)</h2><ul class="players">${players}</ul></div>
       <div class="panel"><h2>End boss${isHost ? '' : ' (chosen by the host)'}</h2><div class="bosses"></div></div>
-      ${this.progressHtml(!!me?.ready)}
       ${me && debugOn() && (isHost || !me.ready) ? this.debugLoadoutRow(room.run_id, me.class) : ''}
       <div class="row actions">
         <button id="leave">Leave</button>
         ${isHost ? `<button id="start" class="primary">Enter the dungeon</button>` : `<button id="ready" class="primary">${me?.ready ? 'Not ready' : 'Ready!'}</button>`}
       </div>
       <div class="error"></div>`;
+    for (const p of room.players) {
+      const wp = this.root.querySelector(`.wp[data-id="${p.id}"]`)!;
+      for (const w of p.weapons) wp.append(itemIcon(this.atlas, w, 28));
+    }
+    this.root.querySelectorAll<HTMLSelectElement>('[data-own]').forEach((sel) => {
+      sel.onchange = () => {
+        const get = (name: string): Pick => JSON.parse(this.root.querySelector<HTMLSelectElement>(`[data-own="${name}"]`)!.value) as Pick;
+        const primary = get('Primary');
+        const secondary = get('Secondary');
+        this.net.send({ t: 'SetLoadout', primary, secondary });
+        // A real SetLoadout clears the server's debug picks: the debug row shows the new abilities.
+        const dbg = this.debugPick;
+        if (dbg) {
+          dbg.primary = primary.ability;
+          dbg.secondary = secondary.ability;
+          dbg.touched.loadout = false;
+          for (const [slot, id] of [['primary', primary.ability], ['secondary', secondary.ability]] as const) {
+            const d = this.root.querySelector<HTMLSelectElement>(`.debug-loadout [data-slot="${slot}"]`);
+            if (d) d.value = id;
+          }
+        }
+      };
+    });
     const bosses = this.root.querySelector('.bosses')!;
     for (const b of [null, ...BOSSES]) {
       const card = document.createElement('button');
@@ -310,7 +341,8 @@ export class Lobby {
   /** Debug: pickers for any primary and secondary of your class (`DebugLoadout`) and for its melee and ranged weapon (`DebugEquip`). */
   private debugLoadoutRow(run: number, cls: ClassId): string {
     if (!this.debugPick || this.debugPick.run !== run || this.debugPick.cls !== cls) {
-      this.debugPick = { run, cls, primary: CLASSES[cls].primary, secondary: CLASSES[cls].secondary, melee: CLASSES[cls].starter.melee, ranged: CLASSES[cls].starter.ranged, touched: { loadout: false, melee: false, ranged: false } };
+      const lo = this.character?.class === cls ? this.character.loadout : null;
+      this.debugPick = { run, cls, primary: lo?.primary.ability ?? CLASSES[cls].primary, secondary: lo?.secondary.ability ?? CLASSES[cls].secondary, melee: CLASSES[cls].starter.melee, ranged: CLASSES[cls].starter.ranged, touched: { loadout: false, melee: false, ranged: false } };
     }
     const pick = this.debugPick;
     const select = (slot: 'primary' | 'secondary', chosen: AbilityId) =>

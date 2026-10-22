@@ -899,6 +899,17 @@
   margin-right: 6px;
   font-size: 6px;
 }
+.ui-party select {
+  pointer-events: auto;
+  font-family: var(--font);
+  font-size: 8px;
+  min-width: 0;
+  max-width: 190px;
+  padding: 4px;
+  background: #140c12;
+  color: var(--text);
+  border: 2px solid var(--panel-edge);
+}
 .ui-abpick i {
   font-style: normal;
   margin-left: 8px;
