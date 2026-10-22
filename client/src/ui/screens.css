@@ -499,7 +499,7 @@
 .ui-node.k-unlock {
   background: color-mix(in srgb, var(--t) 25%, #1a1218);
 }
-.ui-node.k-prof canvas {
+.ui-node.k-proficiency canvas {
   max-height: 24px;
   width: auto;
 }
@@ -532,7 +532,7 @@
 .ui-node.k-attr.owned,
 .ui-node.k-resist.owned,
 .ui-node.k-improve.owned,
-.ui-node.k-prof.owned {
+.ui-node.k-proficiency.owned {
   background: #4a3a18;
 }
 .ui-node.k-keystone.open > span::before {

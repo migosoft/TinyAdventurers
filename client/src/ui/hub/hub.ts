@@ -6,6 +6,7 @@ import type { Atlas } from '../atlas';
 import { esc } from '../hud';
 import { className } from '../text';
 import { renderSheet } from './sheet';
+import { renderTree } from './tree';
 import { clearTips } from './tip';
 
 export type HubTab = 'sheet' | 'tree' | 'equipment' | 'loadout';
@@ -25,8 +26,8 @@ const soon = (): HTMLElement => {
   p.textContent = 'Coming in this plan';
   return p;
 };
-/** Tasks 5 to 7 replace the placeholders. */
-const RENDER: Record<HubTab, (ctx: TabCtx) => HTMLElement> = { sheet: renderSheet, tree: soon, equipment: soon, loadout: soon };
+/** Tasks 6 and 7 replace the placeholders. */
+const RENDER: Record<HubTab, (ctx: TabCtx) => HTMLElement> = { sheet: renderSheet, tree: renderTree, equipment: soon, loadout: soon };
 
 const debugOn = (): boolean => new URLSearchParams(location.search).has('debug');
 
