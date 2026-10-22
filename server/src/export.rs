@@ -8,7 +8,7 @@
 //! The protocol types themselves are exported by ts-rs (`#[ts(export)]`).
 
 use crate::collision::{step_move, MoveState, Solid};
-use crate::defs::abilities::{self as ab};
+use crate::defs::abilities::{self as ab, AbilityId};
 use crate::defs::attributes::Attr;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::effects::{self, EffectKind};
@@ -288,7 +288,35 @@ fn export_progression() {
                     _ => None,
                 })
                 .collect();
-            (format!("{i:?}"), json!({ "name": d.name, "slot": slot, "classes": d.classes.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>(), "hero": items::hero_can_hold(&d), "grants": grants }))
+            let kind = match &d.base {
+                ItemBase::Ring => "Ring".to_string(),
+                ItemBase::Shoes => "Shoes".to_string(),
+                ItemBase::Belt => "Belt".to_string(),
+                ItemBase::Shield => "Shield".to_string(),
+                b => crate::sheet::item_prof(b).unwrap(),
+            };
+            let props: Vec<serde_json::Value> = d.props.iter().map(|p| json!({ "text": items::prop_text(p), "magical": p.magical })).collect();
+            (format!("{i:?}"), json!({ "name": d.name, "sprite": d.sprite, "kind": kind, "prof": crate::sheet::item_prof(&d.base), "base": items::base_text(&d.base), "props": props, "req": d.req.iter().map(requirement_text).collect::<Vec<_>>(), "slot": slot, "classes": d.classes.iter().map(|c| format!("{c:?}")).collect::<Vec<_>>(), "hero": items::hero_can_hold(&d), "grants": grants }))
+        })
+        .collect();
+    let ability_map: serde_json::Map<String, serde_json::Value> = AbilityId::ALL
+        .iter()
+        .map(|&id| {
+            let d = ab::def(id);
+            let tint = if d.uses != ab::Uses::Nothing {
+                Some("Physical")
+            } else if d.own.damage > 0.0 {
+                d.own.split.or_else(|| d.own.kind.map(crate::defs::damage::kind_split)).map(|s| s.main_type().name())
+            } else {
+                None
+            };
+            (
+                format!("{id:?}"),
+                json!({
+                    "category": format!("{:?}", d.category), "uses": format!("{:?}", d.uses),
+                    "req": d.req.iter().map(requirement_text).collect::<Vec<_>>(), "text": ab::text(id), "tint": tint,
+                }),
+            )
         })
         .collect();
     let p = |v: &serde_json::Value| serde_json::to_string_pretty(v).unwrap();
@@ -297,10 +325,12 @@ fn export_progression() {
          export const TREES = {} as const;\n\n\
          export const ATTRS = {} as const;\n\n\
          export const ITEMS = {} as const;\n\n\
+         export const ABILITY_INFO = {} as const;\n\n\
          export const RESPEC = {{ base: {}, per: {} }} as const;\n",
         p(&json!(tree_map)),
         p(&json!(attrs)),
         p(&json!(item_map)),
+        p(&json!(ability_map)),
         crate::progress::RESPEC_BASE,
         crate::progress::RESPEC_PER,
     );

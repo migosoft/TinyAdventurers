@@ -1442,6 +1442,7 @@ export const ATTRS = {
 
 export const ITEMS = {
   "BandOfVigor": {
+    "base": "",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1450,10 +1451,21 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Ring",
     "name": "Band of Vigor",
-    "slot": "Ring"
+    "prof": null,
+    "props": [
+      {
+        "magical": true,
+        "text": "+1 CON"
+      }
+    ],
+    "req": [],
+    "slot": "Ring",
+    "sprite": ""
   },
   "BeastBite": {
+    "base": "10 damage · every 0.9 s · arc 1",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1462,10 +1474,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": false,
+    "kind": "Bite",
     "name": "Beast Bite",
-    "slot": "Melee"
+    "prof": "Bite",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
   },
   "Bite": {
+    "base": "8 damage · every 1 s · arc 1",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1474,19 +1492,38 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": false,
+    "kind": "Bite",
     "name": "Bite",
-    "slot": "Melee"
+    "prof": "Bite",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
   },
   "BoneStaff": {
+    "base": "7 damage · every 1 s · arc 1.6",
     "classes": [
       "Wizard"
     ],
     "grants": [],
     "hero": true,
+    "kind": "Staff",
     "name": "Bone Staff",
-    "slot": "Melee"
+    "prof": "Staff",
+    "props": [
+      {
+        "magical": true,
+        "text": "Gives light (Magic)"
+      }
+    ],
+    "req": [
+      "INT 18"
+    ],
+    "slot": "Melee",
+    "sprite": "weapon_lich_staff"
   },
   "BootsOfHaste": {
+    "base": "",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1495,10 +1532,21 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Shoes",
     "name": "Boots of Haste",
-    "slot": "Shoes"
+    "prof": null,
+    "props": [
+      {
+        "magical": true,
+        "text": "Move speed +5 %"
+      }
+    ],
+    "req": [],
+    "slot": "Shoes",
+    "sprite": ""
   },
   "ChainMail": {
+    "base": "Medium armor · +15 % physical resistance · weight 4",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1507,10 +1555,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Medium armor",
     "name": "Chain Mail",
-    "slot": "Armor"
+    "prof": "Medium armor",
+    "props": [],
+    "req": [],
+    "slot": "Armor",
+    "sprite": ""
   },
   "ChortClaws": {
+    "base": "9 damage · every 1 s · arc 1.6 · push 14",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1519,10 +1573,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": false,
+    "kind": "Claws",
     "name": "Chort Claws",
-    "slot": "Melee"
+    "prof": "Claws",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
   },
   "Claws": {
+    "base": "6 damage · every 0.8 s · arc 1.6",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1531,10 +1591,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": false,
+    "kind": "Claws",
     "name": "Claws",
-    "slot": "Melee"
+    "prof": "Claws",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
   },
   "Cleaver": {
+    "base": "14 damage · every 1.2 s · arc 1.8 · push 20",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1543,28 +1609,55 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Axe",
     "name": "Cleaver",
-    "slot": "Melee"
+    "prof": "Axe",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_cleaver"
   },
   "ElvenBow": {
+    "base": "16 damage · every 0.7 s · range 260",
     "classes": [
       "ElvenRanger"
     ],
     "grants": [],
     "hero": true,
+    "kind": "Bow",
     "name": "Elven Bow",
-    "slot": "Ranged"
+    "prof": "Bow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow"
   },
   "EmberStaff": {
+    "base": "6 damage · every 1 s · arc 1.6",
     "classes": [
       "Wizard"
     ],
     "grants": [],
     "hero": true,
+    "kind": "Staff",
     "name": "Ember Staff",
-    "slot": "Melee"
+    "prof": "Staff",
+    "props": [
+      {
+        "magical": true,
+        "text": "+25 % heat share"
+      },
+      {
+        "magical": true,
+        "text": "Gives light (Fire)"
+      }
+    ],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_red_magic_staff"
   },
   "FlameTongue": {
+    "base": "18 damage · every 0.5 s · arc 1.75",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1573,10 +1666,23 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Sword",
     "name": "Flame Tongue",
-    "slot": "Melee"
+    "prof": "Sword",
+    "props": [
+      {
+        "magical": true,
+        "text": "+50 % heat share"
+      }
+    ],
+    "req": [
+      "STR 13"
+    ],
+    "slot": "Melee",
+    "sprite": "weapon_red_gem_sword"
   },
   "GirdleOfWarding": {
+    "base": "",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1585,10 +1691,25 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Belt",
     "name": "Girdle of Warding",
-    "slot": "Belt"
+    "prof": null,
+    "props": [
+      {
+        "magical": true,
+        "text": "Blind resistance +100 %"
+      },
+      {
+        "magical": true,
+        "text": "+10 HP"
+      }
+    ],
+    "req": [],
+    "slot": "Belt",
+    "sprite": ""
   },
   "GoblinBow": {
+    "base": "6 damage · every 1.4 s · range 140",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1597,10 +1718,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Bow",
     "name": "Goblin Bow",
-    "slot": "Ranged"
+    "prof": "Bow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow"
   },
   "GoldenSword": {
+    "base": "22 damage · every 0.5 s · arc 1.8",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1609,10 +1736,21 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Sword",
     "name": "Golden Sword",
-    "slot": "Melee"
+    "prof": "Sword",
+    "props": [
+      {
+        "magical": true,
+        "text": "Gives light (Holy)"
+      }
+    ],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_golden_sword"
   },
   "GreatAxe": {
+    "base": "32 damage · every 0.8 s · arc 2.45",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1621,19 +1759,36 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Axe",
     "name": "Great Axe",
-    "slot": "Melee"
+    "prof": "Axe",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_double_axe"
   },
   "HuntersBow": {
+    "base": "15 damage · every 0.75 s · range 250",
     "classes": [
       "ElvenRanger"
     ],
     "grants": [],
     "hero": true,
+    "kind": "Bow",
     "name": "Hunter's Bow",
-    "slot": "Ranged"
+    "prof": "Bow",
+    "props": [
+      {
+        "magical": false,
+        "text": "Shots pass 2 enemies"
+      }
+    ],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow"
   },
   "ImpClaws": {
+    "base": "6 damage · every 0.9 s · arc 1.6",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1642,10 +1797,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": false,
+    "kind": "Claws",
     "name": "Imp Claws",
-    "slot": "Melee"
+    "prof": "Claws",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
   },
   "IronBoots": {
+    "base": "",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1654,10 +1815,25 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Shoes",
     "name": "Iron Boots",
-    "slot": "Shoes"
+    "prof": null,
+    "props": [
+      {
+        "magical": true,
+        "text": "Weight +3"
+      },
+      {
+        "magical": true,
+        "text": "Move speed −5 %"
+      }
+    ],
+    "req": [],
+    "slot": "Shoes",
+    "sprite": ""
   },
   "Knife": {
+    "base": "14 damage · every 0.45 s · arc 1.2",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1666,10 +1842,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Dagger",
     "name": "Knife",
-    "slot": "Melee"
+    "prof": "Dagger",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_knife"
   },
   "KnightSword": {
+    "base": "20 damage · every 0.45 s · arc 1.75",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1678,10 +1860,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Sword",
     "name": "Knight Sword",
-    "slot": "Melee"
+    "prof": "Sword",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_knight_sword"
   },
   "LeatherArmor": {
+    "base": "Light armor · +8 % physical resistance · weight 2",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1690,10 +1878,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Light armor",
     "name": "Leather Armor",
-    "slot": "Armor"
+    "prof": "Light armor",
+    "props": [],
+    "req": [],
+    "slot": "Armor",
+    "sprite": ""
   },
   "MimicBite": {
+    "base": "13 damage · every 1 s · arc 1",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1702,10 +1896,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": false,
+    "kind": "Bite",
     "name": "Mimic Bite",
-    "slot": "Melee"
+    "prof": "Bite",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
   },
   "NecromancerStaff": {
+    "base": "5 damage · every 1.2 s · arc 1.6",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1714,10 +1914,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Staff",
     "name": "Necromancer Staff",
-    "slot": "Melee"
+    "prof": "Staff",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_green_magic_staff"
   },
   "OrcBow": {
+    "base": "10 damage · every 1.7 s · range 150",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1726,10 +1932,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Bow",
     "name": "Orc Bow",
-    "slot": "Ranged"
+    "prof": "Bow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow"
   },
   "PlateArmor": {
+    "base": "Heavy armor · +25 % physical resistance · weight 7",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1738,10 +1950,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Heavy armor",
     "name": "Plate Armor",
-    "slot": "Armor"
+    "prof": "Heavy armor",
+    "props": [],
+    "req": [],
+    "slot": "Armor",
+    "sprite": ""
   },
   "Rapier": {
+    "base": "18 damage · every 0.35 s · arc 1",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1750,19 +1968,31 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Duelling Sword",
     "name": "Rapier",
-    "slot": "Melee"
+    "prof": "Duelling Sword",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_duel_sword"
   },
   "RedStaff": {
+    "base": "6 damage · every 1 s · arc 1.6",
     "classes": [
       "Wizard"
     ],
     "grants": [],
     "hero": true,
+    "kind": "Staff",
     "name": "Red Staff",
-    "slot": "Melee"
+    "prof": "Staff",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_red_magic_staff"
   },
   "RingOfEmbers": {
+    "base": "",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1771,10 +2001,21 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Ring",
     "name": "Ring of Embers",
-    "slot": "Ring"
+    "prof": null,
+    "props": [
+      {
+        "magical": true,
+        "text": "+15 % heat resistance"
+      }
+    ],
+    "req": [],
+    "slot": "Ring",
+    "sprite": ""
   },
   "RingOfInsight": {
+    "base": "",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1783,10 +2024,21 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Ring",
     "name": "Ring of Insight",
-    "slot": "Ring"
+    "prof": null,
+    "props": [
+      {
+        "magical": true,
+        "text": "+1 INT"
+      }
+    ],
+    "req": [],
+    "slot": "Ring",
+    "sprite": ""
   },
   "RingOfTheMagus": {
+    "base": "",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1797,10 +2049,21 @@ export const ITEMS = {
       "MagicMissile"
     ],
     "hero": true,
+    "kind": "Ring",
     "name": "Ring of the Magus",
-    "slot": "Ring"
+    "prof": null,
+    "props": [
+      {
+        "magical": true,
+        "text": "Grants Magic Missile (ignores its Attribute needs)"
+      }
+    ],
+    "req": [],
+    "slot": "Ring",
+    "sprite": ""
   },
   "RustySword": {
+    "base": "9 damage · every 1 s · arc 1.6",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1809,10 +2072,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Sword",
     "name": "Rusty Sword",
-    "slot": "Melee"
+    "prof": "Sword",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_rusty_sword"
   },
   "SeekersBand": {
+    "base": "",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1823,10 +2092,21 @@ export const ITEMS = {
       "MagicMissile"
     ],
     "hero": true,
+    "kind": "Ring",
     "name": "Seeker's Band",
-    "slot": "Ring"
+    "prof": null,
+    "props": [
+      {
+        "magical": true,
+        "text": "Grants Magic Missile"
+      }
+    ],
+    "req": [],
+    "slot": "Ring",
+    "sprite": ""
   },
   "ShortBow": {
+    "base": "12 damage · every 0.77 s · range 220",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1835,10 +2115,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Bow",
     "name": "Short Bow",
-    "slot": "Ranged"
+    "prof": "Bow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow"
   },
   "SilkRobe": {
+    "base": "Cloth armor · +5 % physical resistance · weight 1",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1847,10 +2133,21 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Cloth armor",
     "name": "Silk Robe",
-    "slot": "Armor"
+    "prof": "Cloth armor",
+    "props": [
+      {
+        "magical": true,
+        "text": "+10 % magical resistance"
+      }
+    ],
+    "req": [],
+    "slot": "Armor",
+    "sprite": ""
   },
   "SkeletonLongbow": {
+    "base": "7 damage · every 1.6 s · range 150",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1859,10 +2156,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Longbow",
     "name": "Skeleton Longbow",
-    "slot": "Ranged"
+    "prof": "Longbow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow_2"
   },
   "SpikedClub": {
+    "base": "18 damage · every 1.6 s · arc 2 · push 28",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1871,19 +2174,38 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Club",
     "name": "Spiked Club",
-    "slot": "Melee"
+    "prof": "Club",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_baton_with_spikes"
   },
   "StaffOfRot": {
+    "base": "6 damage · every 1 s · arc 1.6",
     "classes": [
       "Wizard"
     ],
     "grants": [],
     "hero": true,
+    "kind": "Staff",
     "name": "Staff of Rot",
-    "slot": "Melee"
+    "prof": "Staff",
+    "props": [
+      {
+        "magical": false,
+        "text": "+50 % poison share"
+      }
+    ],
+    "req": [
+      "INT 14"
+    ],
+    "slot": "Melee",
+    "sprite": "weapon_green_magic_staff"
   },
   "SummonerStaff": {
+    "base": "5 damage · every 1.2 s · arc 1.6",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1892,10 +2214,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Staff",
     "name": "Summoner Staff",
-    "slot": "Melee"
+    "prof": "Staff",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_red_magic_staff"
   },
   "Tail": {
+    "base": "10 damage · every 1.25 s · arc 2.4 · push 10",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1904,10 +2232,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": false,
+    "kind": "Tail",
     "name": "Tail",
-    "slot": "Melee"
+    "prof": "Tail",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
   },
   "ThrowingAxes": {
+    "base": "16 damage · every 0.9 s · range 170",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1916,10 +2250,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Throwing Axe",
     "name": "Throwing Axes",
-    "slot": "Ranged"
+    "prof": "Throwing Axe",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_throwing_axe"
   },
   "UnarmedStrike": {
+    "base": "3 damage · every 1 s · arc 1.4",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1928,10 +2268,16 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": false,
+    "kind": "Unarmed",
     "name": "Unarmed Strike",
-    "slot": "Melee"
+    "prof": "Unarmed",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
   },
   "WarHammer": {
+    "base": "26 damage · every 1 s · arc 1.8 · push 24",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1940,8 +2286,214 @@ export const ITEMS = {
     ],
     "grants": [],
     "hero": true,
+    "kind": "Hammer",
     "name": "War Hammer",
-    "slot": "Melee"
+    "prof": "Hammer",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_hammer"
+  }
+} as const;
+
+export const ABILITY_INFO = {
+  "ChainSpark": {
+    "category": "Spell",
+    "req": [
+      "INT 18"
+    ],
+    "text": "A bolt that jumps to up to two more enemies close by, weaker each time.",
+    "tint": "Magical",
+    "uses": "Nothing"
+  },
+  "Charge": {
+    "category": "Technique",
+    "req": [],
+    "text": "Dash toward the cursor, hitting everything in the way.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
+  "Consecrate": {
+    "category": "Innate",
+    "req": [
+      "CHA 15"
+    ],
+    "text": "Holy ground under your feet that hurts enemies standing in it.",
+    "tint": "Magical",
+    "uses": "Nothing"
+  },
+  "Entangle": {
+    "category": "Innate",
+    "req": [
+      "CHA 14"
+    ],
+    "text": "Vines grow where you aim and root the enemies in them.",
+    "tint": null,
+    "uses": "Nothing"
+  },
+  "Fireball": {
+    "category": "Spell",
+    "req": [],
+    "text": "Explodes where it lands, hurting everything nearby.",
+    "tint": "Heat",
+    "uses": "Nothing"
+  },
+  "FlankingThrust": {
+    "category": "WeaponAttack",
+    "req": [
+      "DEX 16",
+      "a weapon of kind Dagger or DuellingSword or Katana or Machete"
+    ],
+    "text": "A thrust that does double damage from behind.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
+  "FrostNova": {
+    "category": "Spell",
+    "req": [
+      "INT 17"
+    ],
+    "text": "A ring of cold around you that hurts and freezes every enemy in sight.",
+    "tint": "Cold",
+    "uses": "Nothing"
+  },
+  "FrostShard": {
+    "category": "Spell",
+    "req": [
+      "INT 14"
+    ],
+    "text": "A quick bolt, mostly cold, that chills what it hits.",
+    "tint": "Cold",
+    "uses": "Nothing"
+  },
+  "GroundSlam": {
+    "category": "Technique",
+    "req": [
+      "STR 17",
+      "a weapon of kind Hammer or Club"
+    ],
+    "text": "Slam the ground after a short wind-up, hitting and pushing everything around you.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
+  "Haste": {
+    "category": "Spell",
+    "req": [
+      "INT 15",
+      "WIL 14"
+    ],
+    "text": "You and the allies close to you run faster for a while.",
+    "tint": null,
+    "uses": "Nothing"
+  },
+  "HolyLight": {
+    "category": "Innate",
+    "req": [],
+    "text": "Heals you and the allies close to you.",
+    "tint": null,
+    "uses": "Nothing"
+  },
+  "Hurl": {
+    "category": "WeaponAttack",
+    "req": [
+      "a weapon of kind ThrowingAxe"
+    ],
+    "text": "Throw an axe that spins as it flies.",
+    "tint": "Physical",
+    "uses": "Ranged"
+  },
+  "Judgement": {
+    "category": "Innate",
+    "req": [
+      "CHA 16"
+    ],
+    "text": "A bolt of holy light. In melee you strike with your weapon instead.",
+    "tint": "Magical",
+    "uses": "Nothing"
+  },
+  "MagicMissile": {
+    "category": "Spell",
+    "req": [],
+    "text": "Fast arcane bolts.",
+    "tint": "Magical",
+    "uses": "Nothing"
+  },
+  "PoisonCoat": {
+    "category": "Technique",
+    "req": [
+      "WIL 15"
+    ],
+    "text": "For a while your weapon attacks add poison and poison what they hit.",
+    "tint": null,
+    "uses": "Nothing"
+  },
+  "Purify": {
+    "category": "Innate",
+    "req": [
+      "WIL 14"
+    ],
+    "text": "Clears bad effects from you and the allies close to you and wards you against curses for a moment.",
+    "tint": null,
+    "uses": "Nothing"
+  },
+  "Shoot": {
+    "category": "WeaponAttack",
+    "req": [],
+    "text": "Shoot your ranged weapon. In melee you strike with your melee weapon instead.",
+    "tint": "Physical",
+    "uses": "Ranged"
+  },
+  "Smite": {
+    "category": "WeaponAttack",
+    "req": [
+      "CHA 15",
+      "a weapon of kind Sword or Mace or Hammer"
+    ],
+    "text": "A slow, hard swing with a holy part.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
+  "Strike": {
+    "category": "WeaponAttack",
+    "req": [],
+    "text": "A sweeping blow with your melee weapon.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
+  "SummonWolf": {
+    "category": "Innate",
+    "req": [],
+    "text": "Calls your Dire Wolf, or heals it while it lives.",
+    "tint": null,
+    "uses": "Nothing"
+  },
+  "Volley": {
+    "category": "WeaponAttack",
+    "req": [
+      "DEX 15",
+      "a weapon of kind Bow or Longbow"
+    ],
+    "text": "Three arrows in a fan, each weaker.",
+    "tint": "Physical",
+    "uses": "Ranged"
+  },
+  "WarCry": {
+    "category": "Technique",
+    "req": [
+      "STR 16"
+    ],
+    "text": "A shout that frightens the enemies close to you and speeds up you and your allies.",
+    "tint": null,
+    "uses": "Nothing"
+  },
+  "Whirl": {
+    "category": "Technique",
+    "req": [
+      "DEX 14"
+    ],
+    "text": "A swing all the way around you, weaker and slower than a strike.",
+    "tint": "Physical",
+    "uses": "Melee"
   }
 } as const;
 

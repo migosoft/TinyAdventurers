@@ -481,7 +481,7 @@ fn spaced(name: &str) -> String {
     out
 }
 
-fn prof_name(p: Prof) -> String {
+pub fn prof_name(p: Prof) -> String {
     match p {
         Prof::Weapon(k) => spaced(&format!("{k:?}")),
         Prof::Armor(a) => format!(
@@ -493,6 +493,16 @@ fn prof_name(p: Prof) -> String {
                 ArmorClass::Heavy => "Heavy",
             }
         ),
+    }
+}
+
+/// The proficiency an item needs, spelled like `SheetSummary.profs`; `None` for rings, shoes and belts.
+#[allow(dead_code)] // read by the progression.ts export (a test) only
+pub fn item_prof(b: &ItemBase) -> Option<String> {
+    match b {
+        ItemBase::Melee(k, _) | ItemBase::Ranged(k, _) => Some(prof_name(Prof::Weapon(*k))),
+        ItemBase::Armor(a) => Some(prof_name(Prof::Armor(a.class))),
+        _ => None,
     }
 }
 
@@ -616,6 +626,13 @@ mod tests {
     use crate::defs::attributes::{factor, STR_DMG};
     use crate::defs::kinds::EntityKind;
     use crate::defs::companions::WOLF_HP;
+
+    #[test]
+    fn item_prof_names_the_needed_proficiency() {
+        assert_eq!(item_prof(&items::def(ItemId::Rapier).base).as_deref(), Some("Duelling Sword"));
+        assert_eq!(item_prof(&items::def(ItemId::SilkRobe).base).as_deref(), Some("Cloth armor"));
+        assert_eq!(item_prof(&items::def(ItemId::BandOfVigor).base), None);
+    }
 
     fn plus(a: Attr, n: i32) -> Attributes {
         let mut x = Attributes::default();

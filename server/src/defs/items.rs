@@ -167,7 +167,7 @@ pub enum PropKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-#[allow(dead_code)] // id, name, sprite: plan 4 (drawing, the equip UI)
+#[allow(dead_code)] // id, name, sprite: read by the progression.ts export (a test) only
 pub struct ItemDef {
     pub id: ItemId,
     pub name: &'static str,
@@ -177,6 +177,61 @@ pub struct ItemDef {
     pub classes: &'static [ClassId],
     pub req: &'static [Requirement],
     pub props: &'static [ItemProperty],
+}
+
+#[allow(dead_code)] // read by the progression.ts export (a test) only
+fn pct(v: f64) -> String {
+    let n = (v * 100.0).round() as i64;
+    if n < 0 {
+        format!("−{}", -n)
+    } else {
+        format!("+{n}")
+    }
+}
+
+/// A base's numbers as the tooltip reads them ("" for rings, shoes and belts).
+#[allow(dead_code)] // read by the progression.ts export (a test) only
+pub fn base_text(b: &ItemBase) -> String {
+    match b {
+        ItemBase::Melee(_, m) => {
+            let mut t = format!("{} damage · every {} s · arc {}", m.damage, m.cooldown, m.arc);
+            if m.push > 0.0 {
+                t.push_str(&format!(" · push {}", m.push));
+            }
+            t
+        }
+        ItemBase::Ranged(_, r) => format!("{} damage · every {} s · range {}", r.damage, r.cooldown, r.range),
+        ItemBase::Armor(a) => {
+            let class = match a.class {
+                ArmorClass::Cloth => "Cloth",
+                ArmorClass::Light => "Light",
+                ArmorClass::Medium => "Medium",
+                ArmorClass::Heavy => "Heavy",
+            };
+            format!("{class} armor · {} % physical resistance · weight {}", pct(a.physical), a.weight)
+        }
+        ItemBase::Ring | ItemBase::Shoes | ItemBase::Belt | ItemBase::Shield => String::new(),
+    }
+}
+
+/// One property as the tooltip reads it.
+#[allow(dead_code)] // read by the progression.ts export (a test) only
+pub fn prop_text(p: &ItemProperty) -> String {
+    match p.kind {
+        PropKind::DamageShare(t, v) => format!("{} % {} share", pct(v), t.name().to_lowercase()),
+        PropKind::OnHit(h) => format!("On hit: {:?}", h.kind),
+        PropKind::Light(k) => format!("Gives light ({k:?})"),
+        PropKind::Resist(t, v) => format!("{} % {} resistance", pct(v), t.name().to_lowercase()),
+        PropKind::Attr(a, n) => format!("+{n} {}", a.short()),
+        PropKind::EffectResist(k, v) => format!("{k:?} resistance {} %", pct(v)),
+        PropKind::Weight(w) => format!("Weight +{w}"),
+        PropKind::MoveSpeed(f) => format!("Move speed {} %", pct(f)),
+        PropKind::MaxHp(hp) => format!("+{hp} HP"),
+        PropKind::GrantAbility { id, waive_attrs, .. } => {
+            format!("Grants {}{}", super::abilities::def(id).name, if waive_attrs { " (ignores its Attribute needs)" } else { "" })
+        }
+        PropKind::Pierce(n) => format!("Shots pass {n} enemies"),
+    }
 }
 
 /// Whether a hero may own the item at all: natural weapons (bites, claws) belong to enemies.
@@ -379,6 +434,24 @@ mod tests {
     use crate::defs::weapons::{WeaponCategory as C, WeaponKind as K};
     use EquipSlot as S;
     use ItemId as I;
+
+    #[test]
+    fn item_texts_read_like_the_tooltip() {
+        assert_eq!(base_text(&def(ItemId::KnightSword).base), "20 damage · every 0.45 s · arc 1.75");
+        assert_eq!(base_text(&def(ItemId::WarHammer).base), "26 damage · every 1 s · arc 1.8 · push 24");
+        assert_eq!(base_text(&def(ItemId::ElvenBow).base), "16 damage · every 0.7 s · range 260");
+        assert_eq!(base_text(&def(ItemId::ChainMail).base), "Medium armor · +15 % physical resistance · weight 4");
+        assert_eq!(base_text(&def(ItemId::BandOfVigor).base), "");
+        let t = |id| def(id).props.iter().map(prop_text).collect::<Vec<_>>();
+        assert_eq!(t(ItemId::EmberStaff), ["+25 % heat share", "Gives light (Fire)"]);
+        assert_eq!(t(ItemId::BandOfVigor), ["+1 CON"]);
+        assert_eq!(t(ItemId::IronBoots), ["Weight +3", "Move speed −5 %"]);
+        assert_eq!(t(ItemId::GirdleOfWarding), ["Blind resistance +100 %", "+10 HP"]);
+        assert_eq!(t(ItemId::RingOfEmbers), ["+15 % heat resistance"]);
+        assert_eq!(t(ItemId::HuntersBow), ["Shots pass 2 enemies"]);
+        assert_eq!(t(ItemId::RingOfTheMagus)[0], "Grants Magic Missile (ignores its Attribute needs)");
+        assert_eq!(t(ItemId::SeekersBand)[0], "Grants Magic Missile");
+    }
 
     #[test]
     fn item_data_follows_the_rules() {

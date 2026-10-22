@@ -206,6 +206,36 @@ pub const KNOCK_MIN_SPEED: f64 = 8.0;
 /// No own numbers: a weapon ability takes them all from its weapon.
 const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, split: None, effect: None, at: 0 };
 
+/// One sentence on what the ability does, for the character screens.
+#[allow(dead_code)] // read by the progression.ts export (a test) only
+pub fn text(id: AbilityId) -> &'static str {
+    match id {
+        AbilityId::MagicMissile => "Fast arcane bolts.",
+        AbilityId::Fireball => "Explodes where it lands, hurting everything nearby.",
+        AbilityId::Strike => "A sweeping blow with your melee weapon.",
+        AbilityId::HolyLight => "Heals you and the allies close to you.",
+        AbilityId::Charge => "Dash toward the cursor, hitting everything in the way.",
+        AbilityId::Shoot => "Shoot your ranged weapon. In melee you strike with your melee weapon instead.",
+        AbilityId::SummonWolf => "Calls your Dire Wolf, or heals it while it lives.",
+        AbilityId::FrostShard => "A quick bolt, mostly cold, that chills what it hits.",
+        AbilityId::ChainSpark => "A bolt that jumps to up to two more enemies close by, weaker each time.",
+        AbilityId::Judgement => "A bolt of holy light. In melee you strike with your weapon instead.",
+        AbilityId::Hurl => "Throw an axe that spins as it flies.",
+        AbilityId::Volley => "Three arrows in a fan, each weaker.",
+        AbilityId::Smite => "A slow, hard swing with a holy part.",
+        AbilityId::Whirl => "A swing all the way around you, weaker and slower than a strike.",
+        AbilityId::FlankingThrust => "A thrust that does double damage from behind.",
+        AbilityId::PoisonCoat => "For a while your weapon attacks add poison and poison what they hit.",
+        AbilityId::FrostNova => "A ring of cold around you that hurts and freezes every enemy in sight.",
+        AbilityId::WarCry => "A shout that frightens the enemies close to you and speeds up you and your allies.",
+        AbilityId::GroundSlam => "Slam the ground after a short wind-up, hitting and pushing everything around you.",
+        AbilityId::Haste => "You and the allies close to you run faster for a while.",
+        AbilityId::Purify => "Clears bad effects from you and the allies close to you and wards you against curses for a moment.",
+        AbilityId::Consecrate => "Holy ground under your feet that hurts enemies standing in it.",
+        AbilityId::Entangle => "Vines grow where you aim and root the enemies in them.",
+    }
+}
+
 pub fn def(id: AbilityId) -> AbilityDef {
     use AbilityCategory as C;
     use AbilityId::*;
@@ -335,6 +365,13 @@ pub fn governing(c: AbilityCategory) -> Option<(Attr, f64)> {
 mod tests {
     use super::*;
     use crate::defs::classes;
+
+    #[test]
+    fn every_ability_has_a_text() {
+        for &id in AbilityId::ALL.iter() {
+            assert!(!text(id).is_empty() && text(id).ends_with('.'), "{id:?}");
+        }
+    }
 
     #[test]
     fn ability_data_is_consistent() {
