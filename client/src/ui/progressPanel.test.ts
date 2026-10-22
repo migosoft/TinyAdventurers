@@ -22,7 +22,7 @@ function fixtureInfo(cls: ClassId, o: { xp?: number; nodes?: string[]; ring1?: s
     bought: [0, 0, 0, 0, 0, 0],
     nodes: (o.nodes ?? []) as NodeId[],
     equipment: { slots },
-    inventory: slots.filter((s): s is ItemId => s !== null),
+    inventory: [] as ItemId[], // worn items leave the inventory (Ruling 10)
     loadout: { primary: { ability: start.primary, source: 'Own' }, secondary: { ability: start.secondary, source: 'Own' } },
     xp_spent: 0,
     respec_price: 20,
@@ -58,8 +58,18 @@ describe('the panel text', () => {
     expect(html).toContain('INT 15 (class 15, shop 0, tree 0, items 0)');
     expect(html).toContain('+1 · 225 XP');
   });
-  test('buttons are disabled while ready', () => {
-    const html = progressPanel(fixtureInfo('Wizard', { xp: 1000 }), { debug: false, ready: true });
-    expect(html).not.toMatch(/<button data-attr="[A-Za-z]+"(?![^>]*disabled)/);
+  test('everything is disabled while ready', () => {
+    const html = progressPanel(fixtureInfo('Wizard', { xp: 1000 }), { debug: true, ready: true });
+    const live = html.match(/<(button|select)\b[^>]*>/g)!.filter((t) => !t.includes('disabled'));
+    expect(live).toEqual([]);
+    expect(html).toContain('data-node=');
+    expect(html).toContain('data-respec');
+    expect(html).toContain('data-grant-go');
+  });
+  test('the worn item is its own selected option, not "(empty)"', () => {
+    const html = progressPanel(fixtureInfo('Paladin', { ring1: 'RingOfTheMagus' }), { debug: false, ready: false });
+    const sel = html.match(/<select data-equip="Ring1"[^>]*>.*?<\/select>/)![0];
+    expect(sel).toContain('<option value="RingOfTheMagus" selected>Ring of the Magus</option>');
+    expect(sel).not.toContain('<option value="" selected>');
   });
 });

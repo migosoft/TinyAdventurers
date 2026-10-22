@@ -119,14 +119,15 @@ export function progressPanel(info: CharacterInfo, opts: { debug: boolean; ready
       .filter((id, k) => fitsSlot(id, slot) && info.inventory.indexOf(id) === k && itemDef(id).classes.includes(cls))
       .map((id) => `<option value="${id}"${id === cur ? ' selected' : ''}>${esc(itemDef(id).name)}</option>`)
       .join('');
-    return `<li>${slot} <select data-equip="${slot}"${off}><option value=""${cur ? '' : ' selected'}>(empty)</option>${opt}</select></li>`;
+    const worn = cur ? `<option value="${cur}" selected>${esc(itemDef(cur).name)}</option>` : '';
+    return `<li>${slot} <select data-equip="${slot}"${off}><option value=""${cur ? '' : ' selected'}>(empty)</option>${worn}${opt}</select></li>`;
   }).join('');
 
   const grant = opts.debug
-    ? `<p>Grant item <select data-grant>${Object.keys(ITEMS)
+    ? `<p>Grant item <select data-grant${off}>${Object.keys(ITEMS)
         .filter((id) => itemDef(id).hero && itemDef(id).classes.includes(cls))
         .map((id) => `<option value="${id}">${esc(itemDef(id).name)}</option>`)
-        .join('')}</select> <button data-grant-go>Grant</button></p>`
+        .join('')}</select> <button data-grant-go${off}>Grant</button></p>`
     : '';
   const err = info.sheet.loadout_error ? `<p style="color:#e05050">${esc(info.sheet.loadout_error)}</p>` : '';
 
