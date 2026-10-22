@@ -26,8 +26,8 @@ describe('rules log boundary', () => {
       const n = readFileSync(f, 'utf8').split('\n').filter((l) => l.includes('rulesLog')).length;
       if (n > 0) found[relative(SRC, f)] = n;
     }
-    // GameScene: import, field, create, onSnapshot, cleanup = 5 now; Task 9 adds `draw` -> 6.
-    expect(found).toEqual({ 'game/GameScene.ts': 5 });
+    // GameScene: import, field, create, onSnapshot, cleanup + draw = 6.
+    expect(found).toEqual({ 'game/GameScene.ts': 6 });
   });
 
   it('wire.ts passes the raw log element through once', () => {

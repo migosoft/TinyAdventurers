@@ -788,6 +788,7 @@ export class GameScene extends Phaser.Scene {
 
     this.updateCosmetics(dt, myShots, now);
     this.drawBarsAndBeams(now);
+    this.rulesLog.draw(this.ents.values(), (id) => (this.views.get(id) ?? this.mimicViews.get(id))?.height);
     this.drawGaze(px, py, now);
     this.drawDebugPath(px, py, now);
     this.forceField?.update(dt);
