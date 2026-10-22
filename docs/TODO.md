@@ -47,7 +47,7 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 - **Wolf-death cooldown and Berserk:** `companion.rs` (~458) divides the dead-wolf cooldown by the sheet's cooldown ratio only; Berserk's run-time speed-up is not in it. Unreachable today (Berserker is Barbarian-only, Summon Wolf Ranger-only); revisit if abilities cross classes.
 - **Overkill carry and Chain Spark jumps use the pre-keystone amount** (decided in plan 4; TECHNICAL §11a states it). Revisit in the balancing pass if it feels weak.
 - ~~Plan 5, the new UI~~ Built (see TECHNICAL §11a "The character screens"). Leftover (d) of the `Progression 4` final review stays open: smaller test and style notes (no Radiant-vs-boss test, `keystones::races` returns one race, check_buy error strings asserted only via `progress.rs`, keystone numbers inline, SheetSummary `items` derived by subtraction, the export's hand-written item slot mapping). Leftovers (a), (b) and (c) are done.
-- **Plan 4 rulings to check with the user** (the plan's "Rulings made for this plan"; all approved with the plan on 2026-10-22, the user may still veto after seeing them in play):
+- **Plan 4 rulings** (the plan's "Rulings made for this plan"; approved with the plan and confirmed again by the user on 2026-10-22):
   1. Improvements apply to the equipped version from either source and stack with the item's mods.
   2. Unbreakable: +4 CON for every save only (not HP, speed or prices).
   3. Run-time keystones count the hero's own hits (not effect ticks, not the wolf).
@@ -63,6 +63,7 @@ Progression is live: accounts with up to 8 characters, per-character progress in
   13. The debug flag stays (whole class pool, Attribute lift, no banking), on top of the real build; `DebugGrantItem`.
   14. Admin statistics count tree nodes bought.
 - **Password change** (old + new password) is not built yet; only deleting the account is.
+- **Spaces in character names** (the user, 2026-10-22, from the plan 5 browser check): character names share `auth::check_name` with account names, so they can't contain spaces. Agreed approach: a separate check for character names only (account names keep today's rule); single spaces between words, the name trimmed and runs of spaces collapsed to one, so "Bob  Smith" can't pass for "Bob Smith" (uniqueness already ignores case); ASCII letters only (no Unicode normalisation for now); length 3–20 so two-word names fit (the user, 2026-10-22; longer names widen the hero tags and rules-log lines, so check those). Touches `auth.rs` (new check and its test), `api.rs` `create_character`, a name hint on the Create screen (`ui/create.ts` has none yet; the register hint in `ui/auth.ts` stays for accounts), TECHNICAL §11a ("Names are 3–16 …").
 - **Behind a reverse proxy**, read `X-Forwarded-For` (only from a trusted proxy) so the per-IP login limits apply per player again.
 - **Several game servers** would need shared presence (one connection per account) and a shared login limiter, e.g. in Valkey. See "Scaling later" in TECHNICAL.md §11a.
 - ~~**Piercing shots**~~ Done in progression plan 3a (2026-10-21): overkill piercing for ranged weapon shots, `Pierce(n)` items for through-piercing, cosmetic prediction on the client. See TECHNICAL §11a "Overkill piercing".
