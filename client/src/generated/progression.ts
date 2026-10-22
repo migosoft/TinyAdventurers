@@ -2342,7 +2342,7 @@ export const ABILITY_INFO = {
     "category": "WeaponAttack",
     "req": [
       "DEX 16",
-      "a weapon of kind Dagger or DuellingSword or Katana or Machete"
+      "a weapon of kind Dagger or Duelling Sword or Katana or Machete"
     ],
     "text": "A thrust that does double damage from behind.",
     "tint": "Physical",
@@ -2396,7 +2396,7 @@ export const ABILITY_INFO = {
   "Hurl": {
     "category": "WeaponAttack",
     "req": [
-      "a weapon of kind ThrowingAxe"
+      "a weapon of kind Throwing Axe"
     ],
     "text": "Throw an axe that spins as it flies.",
     "tint": "Physical",

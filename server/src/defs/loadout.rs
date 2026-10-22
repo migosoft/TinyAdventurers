@@ -201,7 +201,7 @@ pub fn requirement_text(r: &Requirement) -> String {
     match *r {
         Requirement::Attr(a, n) => format!("{} {n}", attr_name(a)),
         Requirement::WeaponKind(kinds) => {
-            let names: Vec<String> = kinds.iter().map(|k| format!("{k:?}")).collect();
+            let names: Vec<String> = kinds.iter().map(|k| crate::sheet::spaced(&format!("{k:?}"))).collect();
             format!("a weapon of kind {}", names.join(" or "))
         }
     }

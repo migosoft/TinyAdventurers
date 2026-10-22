@@ -495,7 +495,7 @@ pub struct SheetSummary {
     pub pool: Vec<PoolCard>,
 }
 
-fn spaced(name: &str) -> String {
+pub fn spaced(name: &str) -> String {
     let mut out = String::new();
     for (i, ch) in name.chars().enumerate() {
         if i > 0 && ch.is_uppercase() {
