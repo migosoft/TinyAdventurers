@@ -22,7 +22,7 @@ export function showAuth(host: HTMLElement): Promise<Me> {
             autocomplete="${register ? 'new-password' : 'current-password'}" required></label>
           ${register ? '<label>Repeat password <input id="auth-password2" type="password" maxlength="128" autocomplete="new-password" required></label>' : ''}
           <div class="row actions">
-            <button type="button" id="auth-switch">${register ? 'I have an account' : 'Create an account'}</button>
+            <button type="button" id="auth-switch" class="ghost">${register ? 'I have an account' : 'Create an account'}</button>
             <button type="submit" id="${register ? 'register' : 'login'}" class="primary">${register ? 'Create account' : 'Log in'}</button>
           </div>
           <div class="error"></div>

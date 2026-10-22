@@ -211,7 +211,7 @@ export class Lobby {
       <div class="panel">
         <h2>Dungeon runs</h2>
         <ul class="runs">${list}</ul>
-        <div class="row"><input id="runname" maxlength="24" placeholder="Name your dungeon run"><button id="create">Open new run</button></div>
+        <div class="row"><input id="runname" maxlength="24" placeholder="Name your dungeon run"><button id="create" class="primary">Open new run</button></div>
         <div class="error"></div>
       </div>`;
     const hero = this.root.querySelector('.hero')!;
@@ -269,7 +269,7 @@ export class Lobby {
       <div class="panel"><h2>End boss${isHost ? '' : ' (chosen by the host)'}</h2><div class="bosses"></div></div>
       ${me && debugOn() && (isHost || !me.ready) ? this.debugLoadoutRow(room.run_id, me.class) : ''}
       <div class="row actions">
-        <button id="leave">Leave</button>
+        <button id="leave" class="ghost">Leave</button>
         ${isHost ? `<button id="start" class="primary">Enter the dungeon</button>` : `<button id="ready" class="primary">${me?.ready ? 'Not ready' : 'Ready!'}</button>`}
       </div>
       <div class="error"></div>`;

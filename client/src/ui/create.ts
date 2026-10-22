@@ -84,7 +84,7 @@ export class Create {
 
   private render(): void {
     this.root.innerHTML = `
-      <div class="ui-bar ui-w"><button id="create-back">&lt; Roster</button><h1 class="ui-title">New character</h1><span></span></div>
+      <div class="ui-bar ui-w"><button id="create-back" class="ghost">&lt; Roster</button><h1 class="ui-title">New character</h1><span></span></div>
       <div class="ui-classes ui-w"></div>
       <form class="panel ui-w ui-createbar">
         <input id="char-name" maxlength="16" placeholder="Character name" required>

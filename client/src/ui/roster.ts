@@ -55,13 +55,13 @@ export class Roster {
       ${logoHeader}
       <div class="panel account ui-w">
         <span>Logged in as <b>${esc(me.name)}</b></span>
-        <span class="row"><button id="logout">Log out</button><button id="delete-account" class="danger">Delete account</button></span>
+        <span class="row"><button id="logout" class="ghost">Log out</button><button id="delete-account" class="danger">Delete account</button></span>
         ${
           this.confirmDelete
             ? `<form class="confirm-delete">
                 <p>This deletes your account and all characters for good. Enter your password to confirm.</p>
                 <div class="row"><input id="delete-password" type="password" autocomplete="current-password" placeholder="Password">
-                <button type="submit" id="delete-confirm" class="danger">Delete forever</button><button type="button" id="delete-cancel">Cancel</button></div>
+                <button type="submit" id="delete-confirm" class="danger">Delete forever</button><button type="button" id="delete-cancel" class="ghost">Cancel</button></div>
               </form>`
             : ''
         }

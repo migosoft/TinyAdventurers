@@ -12,6 +12,10 @@
   --gold-deep: #9a7420;
   --gold-ink: #2a1806;
   --edge-soft: #3d2834;
+  --brass-hi: #f1cf63;
+  --brass-mid: #c9962c;
+  --brass-lo: #a97a1c;
+  --focus-ring: 0 0 0 3px rgba(232, 192, 64, 0.2);
   --font-text: 'Inter', system-ui, sans-serif;
   --font-head: 'IM Fell English SC', Georgia, serif;
 }
@@ -52,6 +56,9 @@ body {
   font-family: var(--font-text);
   font-size: 15px;
   line-height: 1.45;
+}
+
+canvas {
   image-rendering: pixelated;
 }
 
@@ -79,52 +86,179 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font-family: var(--font-text);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 button {
   pointer-events: auto;
   cursor: pointer;
-  background: #4a3040;
+  font-weight: 600;
+  line-height: 1.3;
   color: var(--text);
-  border: 0;
-  padding: 10px 14px;
+  background: linear-gradient(180deg, #4b3242, #382431);
+  border: 1px solid #6a4a5c;
+  border-radius: 6px;
+  padding: 5px 10px;
   box-shadow:
-    inset -3px -3px 0 #2a1822,
-    inset 3px 3px 0 #6a4a5a;
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 2px 0 rgba(0, 0, 0, 0.45);
+  transition:
+    background 120ms,
+    border-color 120ms,
+    transform 80ms;
 }
 button:hover {
-  background: #5a3a4e;
+  background: linear-gradient(180deg, #57394c, #432b3a);
+  border-color: #85607a;
 }
 button:active {
-  box-shadow:
-    inset 3px 3px 0 #2a1822,
-    inset -3px -3px 0 #6a4a5a;
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 button.primary {
-  background: #7a5a18;
+  color: var(--gold-ink);
+  background: linear-gradient(180deg, var(--brass-hi), var(--brass-mid) 55%, var(--brass-lo));
+  border-color: #f6dc86;
+  text-shadow: 0 1px 0 rgba(255, 240, 190, 0.4);
   box-shadow:
-    inset -3px -3px 0 #4a3408,
-    inset 3px 3px 0 #b08a30;
+    inset 0 1px 0 rgba(255, 250, 220, 0.6),
+    0 2px 0 #5a3e0c,
+    0 0 18px rgba(232, 192, 64, 0.18);
 }
 button.primary:hover {
-  background: #8a6a20;
+  background: linear-gradient(180deg, #f7da7a, #d6a434 55%, #b5861f);
+  border-color: #f6dc86;
+}
+button.ghost {
+  background: transparent;
+  border-color: #4a3240;
+  color: var(--muted);
+  box-shadow: none;
+}
+button.ghost:hover {
+  background: transparent;
+  color: var(--gold);
+  border-color: var(--gold-deep);
+}
+button.danger {
+  background: linear-gradient(180deg, #7a2a2a, #5a1c1c);
+  border-color: #a04444;
+}
+button.danger:hover {
+  background: linear-gradient(180deg, #8a3232, #6a2222);
+  border-color: #b85555;
 }
 button:disabled {
   cursor: default;
-  opacity: 0.45;
-  background: #4a3040;
+  opacity: 0.4;
+  transform: none;
+}
+button:focus-visible,
+select:focus-visible,
+.check:focus-within {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 
-input {
+input,
+select {
   pointer-events: auto;
-  background: #140c12;
   color: var(--text);
-  border: 2px solid var(--panel-edge);
-  padding: 9px;
+  background: #130b11;
+  border: 1px solid #4a3240;
+  border-radius: 8px;
+  padding: 10px 12px;
   min-width: 0;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+}
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.5),
+    var(--focus-ring);
+}
+input.bad {
+  border-color: var(--red);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.5),
+    0 0 0 3px rgba(224, 80, 80, 0.18);
+}
+select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 34px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 55%,
+    calc(100% - 13px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+select:focus-visible {
+  outline: none;
+}
+select option {
+  background: #130b11;
+  color: var(--text);
+}
+
+/* Checkbox: a label.check wraps an input[type=checkbox]. */
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 6px;
+}
+input[type='checkbox'] {
+  appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid #6a4a5c;
+  background: #130b11;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+input[type='checkbox']:checked {
+  background: linear-gradient(180deg, var(--brass-hi), var(--brass-mid));
+  border-color: #f6dc86;
+}
+input[type='checkbox']:checked::after {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border: solid var(--gold-ink);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+.ui-title {
+  font-family: var(--font-head);
+  font-weight: 400;
+  letter-spacing: 0.01em;
 }
 
 /* ------------------------------------------------------------ lobby */
@@ -141,7 +275,6 @@ input {
     radial-gradient(ellipse at 50% 45%, #0a0608 0%, #0a0608 30%, rgba(10, 6, 8, 0.85) 55%, rgba(10, 6, 8, 0.6) 100%),
     url(/assets/logo.png) center / cover no-repeat,
     var(--bg);
-  image-rendering: pixelated;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -177,24 +310,25 @@ input {
   mask-image: radial-gradient(ellipse at 50% 50%, #000 45%, transparent 70%);
 }
 .lobby h1 {
-  font-size: clamp(18px, 4vw, 32px);
+  font-size: clamp(24px, 4vw, 34px);
   color: var(--gold);
-  text-shadow: 3px 3px 0 #5a2a10;
   margin: 12px 0 8px;
   text-align: center;
 }
 .lobby h2 {
-  font-size: 12px;
+  font-size: 18px;
   color: var(--muted);
   margin: 0 0 12px;
 }
 .panel {
   width: min(760px, 100%);
-  background: var(--panel);
+  background: linear-gradient(180deg, #2a1b26, #20141d);
+  border: 1px solid #4a3240;
+  border-radius: 12px;
   padding: 16px;
   box-shadow:
-    0 0 0 3px var(--panel-edge),
-    6px 6px 0 3px #0a0608;
+    inset 0 1px 0 rgba(255, 235, 200, 0.05),
+    0 10px 30px rgba(0, 0, 0, 0.35);
 }
 .panel label {
   display: flex;
@@ -227,7 +361,9 @@ input {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  background: #1e141c;
+  background: var(--well);
+  border: 1px solid var(--edge-soft);
+  border-radius: 8px;
   margin-bottom: 4px;
   line-height: 1.6;
 }
@@ -243,7 +379,7 @@ input {
 }
 .tag {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11.5px;
 }
 .players .ok {
   color: var(--green);
@@ -252,20 +388,10 @@ input {
   color: var(--muted);
 }
 .error {
-  color: #ff7070;
+  color: var(--red);
   min-height: 14px;
   margin-top: 8px;
-  font-size: 10px;
-}
-
-button.danger {
-  background: #6a2020;
-  box-shadow:
-    inset -3px -3px 0 #3a1010,
-    inset 3px 3px 0 #9a3a3a;
-}
-button.danger:hover {
-  background: #7a2828;
+  font-size: 13px;
 }
 .muted {
   color: var(--muted);
@@ -286,8 +412,8 @@ button.danger:hover {
 }
 .auth .hint {
   color: var(--muted);
-  font-size: 8px;
-  line-height: 1.8;
+  font-size: 13px;
+  line-height: 1.5;
 }
 .account {
   display: flex;
@@ -298,20 +424,18 @@ button.danger:hover {
 }
 .confirm-delete {
   width: 100%;
-  font-size: 9px;
-  line-height: 1.8;
+  font-size: 13px;
+  line-height: 1.5;
 }
 .hero {
   display: flex;
   gap: 12px;
   align-items: center;
   padding: 8px 10px;
-  background: #1e141c;
+  background: var(--panel);
+  border-radius: 8px;
   margin-bottom: 4px;
   border-left: 4px solid var(--accent, #555);
-}
-.hero {
-  background: var(--panel);
 }
 .hero canvas {
   image-rendering: pixelated;
@@ -326,19 +450,23 @@ button.danger:hover {
   line-height: 1.5;
 }
 .cinfo b {
-  font-size: 12px;
+  font-size: 15px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cinfo small {
-  font-size: 9px;
+  font-size: 13px;
   color: var(--muted);
 }
 kbd {
   font-family: var(--font-text);
-  font-size: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
   background: #4a3040;
-  padding: 2px 4px;
+  border-radius: 4px;
+  padding: 1px 5px;
 }
 .bosses {
   display: grid;
