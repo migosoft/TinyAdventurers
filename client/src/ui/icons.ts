@@ -13,6 +13,7 @@ export function itemIcon(atlas: Atlas, item: ItemId, box: number): HTMLElement {
   if (!f) {
     const s = document.createElement('span');
     s.className = 'ui-letter';
+    s.style.setProperty('--box', `${box}px`);
     s.textContent = def.name.slice(0, 2).toUpperCase();
     return s;
   }
@@ -20,6 +21,7 @@ export function itemIcon(atlas: Atlas, item: ItemId, box: number): HTMLElement {
   const c = document.createElement('canvas');
   c.width = f.w * scale;
   c.height = f.h * scale;
+  c.className = 'ui-frame';
   const ctx = c.getContext('2d');
   if (ctx) {
     ctx.imageSmoothingEnabled = false;

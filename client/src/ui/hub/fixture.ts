@@ -7,9 +7,9 @@ import type { EquipSlot } from '../../generated/EquipSlot';
 import type { ItemId } from '../../generated/ItemId';
 import type { NodeId } from '../../generated/NodeId';
 import type { PoolCard } from '../../generated/PoolCard';
+import { EQUIP_SLOTS } from './model';
 
 export const ATTR_ORDER: Attr[] = ['Str', 'Dex', 'Con', 'Int', 'Wil', 'Cha'];
-export const EQUIP_SLOTS: EquipSlot[] = ['Melee', 'Ranged', 'OffHand', 'Armor', 'Ring1', 'Ring2', 'Shoes', 'Belt'];
 /** Every proficiency except Heavy armor, unless a test says otherwise. */
 const DEFAULT_PROFS = ['Axe', 'Bow', 'Club', 'Cloth armor', 'Dagger', 'Hammer', 'Light armor', 'Medium armor', 'Staff', 'Sword'];
 

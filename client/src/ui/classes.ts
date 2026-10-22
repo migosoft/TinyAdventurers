@@ -26,7 +26,7 @@ export function figureWeapon(info: CharacterInfo): string {
   const sprite = (id: string | null | undefined) => (id ? (ITEMS as unknown as Record<string, { sprite: string }>)[id]?.sprite : '') || '';
   const start = CLASS_DEFS[info.class].starter;
   const melee = info.equipment.slots[0] ?? start.melee;
-  const ranged = info.equipment.slots[1] ?? start.ranged;
+  const ranged = info.equipment.slots[1];
   const s = info.class === 'ElvenRanger' ? sprite(ranged) || sprite(melee) : sprite(melee);
   return s || FIG[info.class][1];
 }

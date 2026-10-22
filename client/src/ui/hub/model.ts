@@ -1,5 +1,5 @@
 // Pure helpers for the character screens: tree node state, requirements, equipment slots, ability numbers.
-import { ABILITIES, CLASSES } from '../../generated/defs';
+import { ABILITIES } from '../../generated/defs';
 import { ATTRS, ITEMS, TREES } from '../../generated/progression';
 import type { Attr } from '../../generated/Attr';
 import type { CharacterInfo } from '../../generated/CharacterInfo';
@@ -136,6 +136,3 @@ export function monogram(name: string): string {
   const words = name.split(/\s+/).filter(Boolean);
   return (words.length > 1 ? words[0][0] + words[1][0] : name.slice(0, 2)).toUpperCase();
 }
-
-/** The class start item of a slot, for a hero with it empty. */
-export const starterOf = (info: CharacterInfo, slot: 'melee' | 'ranged'): ItemId | null => CLASSES[info.class].starter[slot] as ItemId | null;
