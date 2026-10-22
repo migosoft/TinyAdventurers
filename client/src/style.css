@@ -801,35 +801,45 @@ kbd {
 }
 .effects {
   display: flex;
-  gap: 4px;
-  min-height: 14px;
+  gap: 6px;
+  min-height: 20px;
 }
 .fx {
   position: relative;
-  width: 14px;
-  height: 14px;
+  width: 20px;
+  height: 20px;
   box-sizing: border-box;
-  border: 1px solid #c04040;
-  background: #140c12;
-  color: #c04040;
-  font-size: 8px;
-  line-height: 12px;
-  text-align: center;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #4a1c22, #2a1014);
+  box-shadow: 0 0 0 1px #c04848;
   text-shadow: none;
 }
 .fx.pos {
-  border-color: #40c060;
-  color: #40c060;
+  background: linear-gradient(180deg, #1c3a24, #102016);
+  box-shadow: 0 0 0 1px #48b060;
+}
+.fx .ic {
+  display: block;
 }
 .fx i {
   position: absolute;
-  right: 0;
-  bottom: 0;
+  right: -2px;
+  bottom: -3px;
   font-style: normal;
-  font-size: 5px;
-  line-height: 5px;
+  font: 700 10px/1 var(--font-text);
+  font-variant-numeric: tabular-nums;
   color: #fff;
-  text-shadow: 1px 1px 0 #000;
+  text-shadow: 0 0 2px #000, 1px 1px 0 #000;
+}
+.status-hint .ic {
+  flex: none;
+}
+.pfx .fx {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
 }
 .pfx {
   display: flex;

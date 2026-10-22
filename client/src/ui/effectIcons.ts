@@ -20,7 +20,7 @@ const BLADE = '<path d="M2.5 13.5 11.5 4.5M9.5 2.5l4 4M3.8 9.8l2.4 2.4"/>';
 
 const def = (body: string, mode: IconMode, color: string, weak = false): IconDef => ({ body, mode, weak, color });
 
-export const EFFECT_ICON: Record<number, IconDef> = {
+export const EFFECT_ICON: Record<(typeof EFFECT)[keyof typeof EFFECT], IconDef> = {
   [EFFECT.Burning]: def(FLAME, 'fill', '#ff8a30'),
   [EFFECT.Singed]: def(FLAME, 'fill', '#ff8a30', true),
   [EFFECT.Frozen]: def(FROST, 'line', '#8cc8ff'),
@@ -40,10 +40,10 @@ export const EFFECT_ICON: Record<number, IconDef> = {
 
 /** The symbol as a standalone `<svg>` string of `px` x `px`. */
 export function effectIconSvg(id: number, px: number): string {
-  const d = EFFECT_ICON[id];
+  const d = (EFFECT_ICON as Record<number, IconDef>)[id];
   let paint: string;
   if (d.mode === 'fill') {
-    paint = d.weak ? `fill="none" stroke="${d.color}" stroke-width="1.4"` : `fill="${d.color}"`;
+    paint = d.weak ? `fill="none" stroke="${d.color}" stroke-width="1.4" stroke-linejoin="round"` : `fill="${d.color}"`;
   } else {
     const w = d.weak ? '1.2' : '2';
     paint = `fill="none" stroke="${d.color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"${d.weak ? ' opacity="0.85"' : ''}`;

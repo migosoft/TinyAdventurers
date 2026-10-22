@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Hud, helpHtml, secondaryLabel } from './hud';
+import { EFFECT } from '../generated/defs';
+import { EFFECT_ICON } from './effectIcons';
 
 describe('secondaryLabel', () => {
   it('reads Heal Wolf while the wolf lives', () => expect(secondaryLabel(true, 'Dire Wolf')).toBe('Heal Wolf'));
@@ -59,5 +61,45 @@ describe('Hud', () => {
     expect(rows[0].querySelector('em')!.textContent).toBe(' (you)');
     expect(rows[0].textContent).toBe('Al (you)');
     expect(rows[1].querySelector('em')).toBeNull();
+  });
+  describe('effect symbols', () => {
+    const info = {
+      you: 1,
+      abilities: [
+        { id: 'MagicMissile', cooldown: 1 },
+        { id: 'Fireball', cooldown: 1 },
+      ],
+      players: [
+        { ent: 1, name: 'Al', class: 'Wizard' },
+        { ent: 2, name: 'Bo', class: 'Barbarian' },
+      ],
+    } as unknown as Parameters<Hud['startRun']>[0];
+    const snap = (effects: [number, number][], bits: number) =>
+      ({
+        me: { hp: 10, max_hp: 10, alive: true, effects },
+        ents: [[2, 0, 0, 0, 255, 0, 0, 0, 0, 0, bits]],
+      }) as unknown as Parameters<Hud['snapshot']>[0];
+    it('draws the own effect as a symbol with seconds and keeps the node while unchanged', () => {
+      hud.startRun(info);
+      hud.snapshot(snap([[EFFECT.Poisoned, 2.3]], 0), info);
+      const fx = document.querySelector('.effects .fx')!;
+      expect(fx.querySelector('svg.ic')).not.toBeNull();
+      expect(fx.querySelector('i')!.textContent).toBe('3');
+      expect(fx.classList.contains('neg')).toBe(true);
+      hud.snapshot(snap([[EFFECT.Poisoned, 2.3]], 0), info);
+      expect(document.querySelector('.effects .fx')).toBe(fx);
+    });
+    it('draws party effects as symbols', () => {
+      hud.startRun(info);
+      hud.snapshot(snap([], 1 << EFFECT.Accelerated), info);
+      const icons = document.querySelectorAll('.member .pfx svg.ic');
+      expect(icons.length).toBe(1);
+      expect(icons[0].parentElement!.classList.contains('pos')).toBe(true);
+    });
+    it('shows the moon symbol in the asleep panel', () => {
+      hud.setAsleep(true);
+      const svg = document.querySelector('.status-hint svg.ic')!;
+      expect(svg.querySelector('path')!.getAttribute('d')).toBe(/d="([^"]+)"/.exec(EFFECT_ICON[EFFECT.Sleep].body)![1]);
+    });
   });
 });

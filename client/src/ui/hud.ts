@@ -1,4 +1,4 @@
-import { ABILITIES, EFFECTS, FLAG } from '../generated/defs';
+import { ABILITIES, EFFECT, EFFECTS, FLAG } from '../generated/defs';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
@@ -7,7 +7,8 @@ import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
 import { CooldownTracker } from './cooldown';
 import { endText } from './endText';
-import { BOSS_TEXT, className, effectGlyph } from './text';
+import { BOSS_TEXT, className } from './text';
+import { effectIconSvg } from './effectIcons';
 
 export interface FrameStats {
   fps: number;
@@ -71,7 +72,7 @@ export class Hud {
   private debug = el('pre', 'debug hidden');
   private banner = el('div', 'banner hidden');
   /** A panel above the HP bar while the own hero is asleep. */
-  private statusHint = el('div', 'status-hint hidden', 'Asleep. A teammate can wake you <kbd>E</kbd>');
+  private statusHint = el('div', 'status-hint hidden', `${effectIconSvg(EFFECT.Sleep, 14)}Asleep. A teammate can wake you <kbd>E</kbd>`);
   private asleep = false;
   private menu = el('div', 'menu hidden');
   private end = el("div", "end hidden");
@@ -182,7 +183,7 @@ export class Hud {
         pfx.innerHTML = Object.keys(EFFECTS)
           .map(Number)
           .filter((id) => (e[10] & (1 << id)) !== 0)
-          .map((id) => `<span class="fx ${EFFECTS[id].positive ? 'pos' : 'neg'}">${effectGlyph(id)}</span>`)
+          .map((id) => `<span class="fx ${EFFECTS[id].positive ? 'pos' : 'neg'}">${effectIconSvg(id, 11)}</span>`)
           .join('');
       }
     }
@@ -205,7 +206,7 @@ export class Hud {
     if (key === this.fxKey) return;
     this.fxKey = key;
     this.fx.innerHTML = rows
-      .map(([k, t]) => `<span class="fx ${EFFECTS[k]?.positive ? 'pos' : 'neg'}">${effectGlyph(k)}<i>${t}</i></span>`)
+      .map(([k, t]) => `<span class="fx ${EFFECTS[k]?.positive ? 'pos' : 'neg'}">${effectIconSvg(k, 14)}<i>${t}</i></span>`)
       .join('');
   }
 
