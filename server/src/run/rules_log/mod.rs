@@ -144,13 +144,14 @@ fn creature_id(run: &Run, c: Creature) -> u32 {
 }
 
 /// A hero, monster or object by id, as a record names it.
-fn seen_by_id(run: &Run, id: u32) -> Option<record::Seen> {
+/// One that is gone from the run (dead and removed) still gets a `Seen`, one nobody sees: its tag is in the line.
+fn seen_by_id(run: &Run, id: u32) -> record::Seen {
     if let Some(i) = run.player_idx(id) {
-        Some(record::seen_creature(run, Creature::Player(i)))
+        record::seen_creature(run, Creature::Player(i))
     } else if let Some(i) = run.monster_idx(id) {
-        Some(record::seen_creature(run, Creature::Monster(i)))
+        record::seen_creature(run, Creature::Monster(i))
     } else {
-        run.objects.iter().position(|o| o.id == id).map(|oi| record::seen_object(run, oi))
+        run.objects.iter().position(|o| o.id == id).map_or_else(|| record::seen_gone(id), |oi| record::seen_object(run, oi))
     }
 }
 
@@ -161,7 +162,12 @@ pub fn hit_begin(run: &mut Run, f: HitFacts) {
     }
     let target = creature_id(run, f.target);
     let mut who = vec![record::seen_creature(run, f.target)];
-    who.extend(f.dmg.why.by.and_then(|by| seen_by_id(run, by)));
+    who.extend(f.dmg.why.by.map(|by| seen_by_id(run, by)));
+    // The line also names where an overkill came from.
+    who.extend(f.dmg.why.mults.iter().flatten().filter_map(|m| match *m {
+        crate::defs::damage::Mult::Overkill { from } => Some(seen_by_id(run, from)),
+        crate::defs::damage::Mult::Behind(_) | crate::defs::damage::Mult::Chain { .. } | crate::defs::damage::Mult::Coat(_) => None,
+    }));
     let viewer = match f.target {
         Creature::Player(i) => Some(run.players[i].id),
         Creature::Monster(i) => run.monsters[i].ally.as_ref().map(|a| a.owner),
@@ -234,7 +240,7 @@ pub fn effect(run: &mut Run, f: EffectFacts) {
         return;
     }
     let mut who = vec![record::seen_creature(run, f.target)];
-    who.extend(f.origin.and_then(|(by, _)| seen_by_id(run, by)));
+    who.extend(f.origin.map(|(by, _)| seen_by_id(run, by)));
     let head = text::effect_head(run, &f, target);
     record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: lines, who, unseen: None, dealt: None, secs: left });
 }
@@ -269,7 +275,7 @@ pub fn heal(run: &mut Run, f: HealFacts) {
         Creature::Monster(i) => run.monsters[i].hp,
     };
     let mut who = vec![record::seen_creature(run, f.target)];
-    who.extend(f.by.and_then(|(by, _)| seen_by_id(run, by)));
+    who.extend(f.by.map(|(by, _)| seen_by_id(run, by)));
     let head = text::heal_head(run, &f, target, hp_after);
     record::push(run, LogRec { t: run.time, kind: LineKind::Heal, head, details: vec![], who, unseen: None, dealt: None, secs: None });
 }
@@ -291,7 +297,7 @@ pub fn death(run: &mut Run, f: DeathFacts) {
     }
     let target = creature_id(run, f.target);
     let mut who = vec![record::seen_creature(run, f.target)];
-    who.extend(f.by.and_then(|by| seen_by_id(run, by)));
+    who.extend(f.by.map(|by| seen_by_id(run, by)));
     let viewer = match f.target {
         Creature::Player(i) => Some(run.players[i].id),
         Creature::Monster(i) => run.monsters[i].ally.as_ref().map(|a| a.owner),
@@ -319,14 +325,14 @@ pub fn skipped(run: &mut Run, by: u32, what: What, skips: &[(usize, Skip)], chai
         }
         let id = run.monsters[mi].id;
         let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
-        who.extend(seen_by_id(run, by));
+        who.push(seen_by_id(run, by));
         let head = text::skip_head(run, what, chain, id, reason);
         record::push(run, LogRec { t: run.time, kind: LineKind::Skip, head, details: vec![], who, unseen: None, dealt: None, secs: None });
     }
     if let Some((mi, d)) = chain_stop {
         let id = run.monsters[mi].id;
         let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
-        who.extend(seen_by_id(run, by));
+        who.push(seen_by_id(run, by));
         let head = text::chain_stop_head(run, id, d);
         record::push(run, LogRec { t: run.time, kind: LineKind::Skip, head, details: vec![], who, unseen: None, dealt: None, secs: None });
     }

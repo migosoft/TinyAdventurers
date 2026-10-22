@@ -23,6 +23,8 @@ pub struct Seen {
     /// A hero or an ally: always in the party's snapshot, so always seen by it.
     pub party: bool,
     pub object: bool,
+    /// Named by id but no longer in the run (a dead archer whose arrow landed): nobody sees it.
+    pub gone: bool,
 }
 
 /// The short line for the one viewer who sees only part of a record.
@@ -61,16 +63,21 @@ pub(crate) fn seen_creature(run: &Run, c: Creature) -> Seen {
     match c {
         Creature::Player(i) => {
             let p = &run.players[i];
-            Seen { id: p.id, pos: p.pos(), radius: 0.0, party: true, object: false }
+            Seen { id: p.id, pos: p.pos(), radius: 0.0, party: true, object: false, gone: false }
         }
         Creature::Monster(i) => {
             let m = &run.monsters[i];
-            Seen { id: m.id, pos: m.pos, radius: m.radius, party: m.is_ally(), object: false }
+            Seen { id: m.id, pos: m.pos, radius: m.radius, party: m.is_ally(), object: false, gone: false }
         }
     }
 }
 
 pub(crate) fn seen_object(run: &Run, oi: usize) -> Seen {
     let o = &run.objects[oi];
-    Seen { id: o.id, pos: o.pos, radius: 0.0, party: false, object: true }
+    Seen { id: o.id, pos: o.pos, radius: 0.0, party: false, object: true, gone: false }
+}
+
+/// A party the record names that can no longer be found: it is never seen, so only the `unseen` line goes out.
+pub(crate) fn seen_gone(id: u32) -> Seen {
+    Seen { id, pos: Vec2::ZERO, radius: 0.0, party: false, object: false, gone: true }
 }

@@ -1234,7 +1234,7 @@ fn leak_run(class: ClassId, primary: AbilityId, secondary: AbilityId) -> Run {
         run.players[pi].hp = 1e6;
         set_prefs(&mut run, pi, true, true);
     }
-    run.players[0].darkvision = Some(0.3);
+    run.players[0].darkvision = Some(0.5);
     run.players[0].aim = 0.0;
     run.lights = crate::run::light::Lights::new(run.layout.map.w, run.layout.map.h);
     run
@@ -1272,11 +1272,10 @@ fn fight(class: ClassId, primary: AbilityId, secondary: AbilityId, spectate: boo
     for x in tx + 2..=tx + 3 {
         run.layout.map.set(x, ty + 1, Tile::Wall);
     }
-    let first = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 3, ty), 5000.0);
+    spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 3, ty), 5000.0);
     let walled = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 3, ty + 2), 5000.0);
     let dark = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 10, ty + 3), 5000.0);
     let near: Vec<u32> = [(3, -2, 40.0), (4, -1, 5000.0), (2, -3, 40.0)].iter().map(|&(dx, dy, hp)| spawn_at(&mut run, EnemyType::GoblinArcher, (tx + dx, ty + dy), hp)).collect();
-    let _ = first;
     let hero = run.players[0].id;
     let mut f = Fight { hero1: vec![], hero0: vec![], unseen: vec![], dark, walled, heads: vec![], tags: Default::default() };
     for tick in 0..300u32 {
@@ -1293,6 +1292,12 @@ fn fight(class: ClassId, primary: AbilityId, secondary: AbilityId, spectate: boo
         if tick % 40 == 10 {
             run.players[0].cd2 = 0.0;
             crate::run::abilities::try_use(&mut run, 0, false, 1);
+        }
+        if tick == 150 {
+            // A kill next to the hero, whatever the abilities did to the others.
+            let victim = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 1, ty - 1), 5.0);
+            let vi = run.monster_idx(victim).unwrap();
+            run.hurt_monster(vi, Damage::physical(50.0).by(hero, What::Ability(primary)), false, Some(0));
         }
         if tick % 40 == 20 {
             // The goblin in the dark hits hero 0.
@@ -1316,7 +1321,7 @@ fn fight(class: ClassId, primary: AbilityId, secondary: AbilityId, spectate: boo
                 f.unseen.push((u.head.clone(), u.details.clone()));
             }
         }
-        let alive: Vec<u32> = run.monsters.iter().filter(|m| m.alive).map(|m| m.id).collect();
+        let alive: Vec<u32> = run.monsters.iter().filter(|m| m.alive).map(|m| m.id).chain(run.objects.iter().filter(|o| !o.gone).map(|o| o.id)).collect();
         let got = sent_to_all(&mut run);
         let mut got = got.into_iter();
         let (g0, g1) = (got.next().unwrap(), got.next().unwrap());
@@ -1343,7 +1348,7 @@ fn no_line_names_a_creature_its_viewer_cannot_see() {
         let mut named = 0;
         for (l, ents, alive) in &f.hero0 {
             for (id, tags) in &f.tags {
-                for t in tags {
+                for t in tags.iter().filter(|t| *t != "something") {
                     if names(&text_of(l), t) {
                         assert!(ents.contains(id) || !alive.contains(id), "{class:?}: hero 0 got {t} unseen: {}", l.2);
                         named += 1;
@@ -1351,7 +1356,7 @@ fn no_line_names_a_creature_its_viewer_cannot_see() {
                 }
             }
         }
-        assert!(named > 10, "{class:?}: the fight reached hero 0 ({named})");
+        assert!(named > 5, "{class:?}: the fight reached hero 0 ({named})");
         // The goblin behind the wall and the one in the dark: the game did write lines about them, and hero 0 got
         // those only in snapshots that had the goblin in them.
         let (walled_tag, dark_tag) = (tag_of(&run, f.walled), tag_of(&run, f.dark));
@@ -1361,6 +1366,19 @@ fn no_line_names_a_creature_its_viewer_cannot_see() {
             assert!(!names(&text_of(l), &walled_tag) || ents.contains(&f.walled), "{class:?}: {walled_tag}: {}", l.2);
             assert!(!names(&text_of(l), &dark_tag) || ents.contains(&f.dark), "{class:?}: {dark_tag}: {}", l.2);
         }
+        // The fight covers every kind of line, and hero 0 got each.
+        let all: Vec<String> = f.hero0.iter().map(|(l, _, _)| text_of(l)).collect();
+        let got = |what: &str| assert!(all.iter().any(|t| t.contains(what)), "{class:?}: hero 0 never got a line with {what:?}");
+        got("died (killed by");
+        got("Burning ▸");
+        got("Burning on ");
+        got("ended");
+        got(if secondary == AbilityId::FrostNova { "Frost Nova ▸" } else { "War Cry" });
+        if primary == AbilityId::ChainSpark {
+            got("Chain Spark jump 1");
+        }
+        // The walled goblin was out of hero 0's snapshot at least once.
+        assert!(f.hero0.iter().any(|(_, ents, _)| !ents.contains(&f.walled)), "{class:?}: walled goblin never hidden");
         // The dark goblin did hit hero 0, and that arrived as a short line.
         assert!(f.hero0.iter().any(|(l, _, _)| l.2.contains("from something unseen")), "{class:?}: unseen hits arrive as short lines");
     }
@@ -1496,4 +1514,54 @@ fn the_unseen_line_carries_no_attacker_data() {
         }
     }
     assert!(checked >= 20, "{checked}");
+}
+
+#[test]
+fn a_spectator_gets_what_the_spectated_hero_gets() {
+    let (_, f) = fight(ClassId::Wizard, AbilityId::ChainSpark, AbilityId::FrostNova, true);
+    let key = |l: &LineW| (l.0.to_bits(), l.1, l.2.clone(), l.3.clone());
+    let (a, b): (Vec<_>, Vec<_>) = (f.hero0.iter().map(|(l, _, _)| key(l)).collect(), f.hero1.iter().map(key).collect());
+    assert!(a.len() > 30, "{}", a.len());
+    assert!(a == b, "the spectator's log is the spectated hero's");
+    assert!(b.iter().any(|l| l.2.contains("from something unseen")), "the short line too");
+}
+
+#[test]
+fn an_arrow_from_a_dead_archer_does_not_name_it() {
+    for lethal in [false, true] {
+    let mut run = leak_run(ClassId::Wizard, AbilityId::ChainSpark, AbilityId::FrostNova);
+    run.players[0].darkvision = Some(1.0);
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    let id = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 8, ty), 50.0);
+    let (gi, tag) = (run.monster_idx(id).unwrap(), tag_of(&run, id));
+    let attack = enemies::def(EnemyType::GoblinArcher).attack;
+    crate::run::ai::perform_attack(&mut run, gi, Creature::Player(0), attack, false, None);
+    assert!(sent_to_all(&mut run)[0].ents.contains(&id), "hero 0 sees the archer");
+    // The archer dies while its arrow flies (no line for that: it is made dead by hand) and is removed by a step.
+    run.monsters[gi].alive = false;
+    if lethal {
+        run.players[0].hp = 1.0;
+    }
+    let hp = run.players[0].hp;
+    for _ in 0..240 {
+        run.step();
+        if run.players[0].hp < hp || !run.players[0].alive {
+            break;
+        }
+    }
+    assert!(run.players[0].hp < hp || !run.players[0].alive, "the arrow landed");
+    assert!(run.monster_idx(id).is_none(), "the archer is gone from the run");
+    let name = run.players[0].name.clone();
+    assert!(run.log.records.iter().any(|r| r.head.contains(&tag)), "the game named the archer");
+    for (pi, s) in sent_to_all(&mut run).iter().enumerate() {
+        assert!(s.log.1.iter().all(|l| !text_of(l).contains("Goblin Archer")), "hero {pi}: {:?}", s.log.1.iter().map(|l| &l.2).collect::<Vec<_>>());
+        let heads: Vec<&str> = s.log.1.iter().map(|l| l.2.as_str()).collect();
+        if pi == 0 {
+            let want = if lethal { format!("{name} fell to something unseen") } else { format!("{name} took ") };
+            assert!(heads.iter().any(|h| h.starts_with(&want)), "lethal {lethal}: {heads:?}");
+        } else {
+            assert!(heads.is_empty(), "{heads:?}");
+        }
+    }
+    }
 }

@@ -22,6 +22,9 @@ pub struct LineW(pub f32, pub u8, pub String, pub Vec<String>);
 pub struct LogW(pub Vec<(u32, u8, u16)>, pub Vec<LineW>);
 
 fn sees(run: &Run, view: &View, dark: &Dark, s: &Seen) -> bool {
+    if s.gone {
+        return false;
+    }
     if s.party {
         return true;
     }
