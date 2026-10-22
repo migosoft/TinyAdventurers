@@ -6,7 +6,7 @@ import type { NodeId } from '../../generated/NodeId';
 import { classFigure, figureWeapon } from '../classes';
 import { esc } from '../hud';
 import { abilityIcon } from '../icons';
-import { abilityNumbers, monogram, nodeState, nodesOf, requirementStatus, unmetRequirements, type NodeState, type TreeKind, type TreeNode } from './model';
+import { abilityNumbers, monogram, nodeState, nodesOf, requirementStatus, spaced, unmetRequirements, type NodeState, type TreeKind, type TreeNode } from './model';
 import { clearTips, showTip } from './tip';
 import type { TabCtx } from './hub';
 
@@ -41,10 +41,12 @@ function label(n: TreeNode, ctx: TabCtx): string | Node {
   }
 }
 
+const KIND_LABEL: Record<string, string> = { Attr: 'Attribute', Resist: 'Resistance', Proficiency: 'Proficiency', Keystone: 'Keystone', Start: 'Start' };
+
 function tipHtml(n: TreeNode, state: NodeState, ctx: TabCtx): string {
   const { info } = ctx;
   const ab = n.ability ? ABILITIES[n.ability] : null;
-  const kindLine = !ab ? n.kind : n.kind === 'Unlock' ? `New ${ab.slot.toLowerCase()} ability · ${ABILITY_INFO[n.ability!].category}` : `Improves ${ab.name}`;
+  const kindLine = !ab ? (KIND_LABEL[n.kind] ?? n.kind) : n.kind === 'Unlock' ? `New ${ab.slot.toLowerCase()} ability · ${spaced(ABILITY_INFO[n.ability!].category)}` : `Improves ${ab.name}`;
   let body: string;
   if (n.kind === 'Unlock') {
     const card = info.sheet.pool.find((c) => c.pick.ability === n.ability && c.pick.source === 'Own');

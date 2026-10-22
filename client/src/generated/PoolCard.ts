@@ -7,7 +7,7 @@ import type { ResolvedAbility } from "./ResolvedAbility";
  */
 export type PoolCard = { pick: Pick, 
 /**
- * Its numbers for this build (version mods and tree improvements applied); None when the weapon it uses is missing.
+ * Its numbers for this build (version mods and tree improvements applied); None when the weapon it uses is missing. A locked card carries base numbers only.
  */
 ability: ResolvedAbility | null, 
 /**

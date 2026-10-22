@@ -536,7 +536,7 @@ pub fn item_prof(b: &ItemBase) -> Option<String> {
 #[ts(export)]
 pub struct PoolCard {
     pub pick: Pick,
-    /// Its numbers for this build (version mods and tree improvements applied); None when the weapon it uses is missing.
+    /// Its numbers for this build (version mods and tree improvements applied); None when the weapon it uses is missing. A locked card carries base numbers only.
     pub ability: Option<ResolvedAbility>,
     /// Why it cannot play in its slot now (`LoadoutError::message`); None when it can.
     pub error: Option<String>,
@@ -546,7 +546,7 @@ pub struct PoolCard {
 
 /// Every ability `b` could slot, with its numbers and why it cannot play yet. Order: the class
 /// start primary and secondary, `b.own`, owned tree unlocks (node order), item versions (slot
-/// order), then the locked tree unlocks (node order). Empty when the equipment itself fails.
+/// order), then the locked tree unlocks (node order). Never empty: `summary` passes the starter equipment when the equipment fails.
 pub fn pool_cards(class: ClassId, b: &Build) -> Vec<PoolCard> {
     let Ok((_, cx)) = sheet_core(class, b) else { return Vec::new() };
     let cd = classes::def(class);

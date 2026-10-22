@@ -928,12 +928,12 @@
 
 /* ------------------------------------------------------------ roster slot (card plus its delete button) */
 
-.ui-slot {
+.ui-charslot {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.ui-slot .ui-char {
+.ui-charslot .ui-char {
   flex: 1;
 }
 .ui-derived h2:not(:first-child) {

@@ -84,6 +84,15 @@ test('hovering the Frost Nova node shows its numbers and requirement, leaving re
   node('WF4').dispatchEvent(new MouseEvent('mouseleave'));
   expect(document.body.querySelectorAll('.ui-tip')).toHaveLength(0);
 });
+test('a tooltip names the node kind in words, not the enum', () => {
+  open('Wizard', { xp: 1000 });
+  node('WA1').dispatchEvent(new MouseEvent('mouseenter'));
+  const small = document.body.querySelector('.ui-tip small')!.textContent;
+  expect(small).toBe('Attribute');
+  node('WA1').dispatchEvent(new MouseEvent('mouseleave'));
+  node('WF4').dispatchEvent(new MouseEvent('mouseenter'));
+  expect(document.body.querySelector('.ui-tip small')!.textContent).not.toMatch(/[a-z][A-Z]/);
+});
 test('the cost is red when the XP is short', () => {
   open('Wizard', { xp: 100 });
   node('WF4').dispatchEvent(new MouseEvent('mouseenter'));

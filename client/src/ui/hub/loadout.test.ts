@@ -64,6 +64,17 @@ test('the warning points at the Equipment tab for weapon errors, and is absent w
   draw(wiz({ pool }));
   expect(el.querySelector('.ui-warn')).toBeNull();
 });
+test('a weapon attack card reads "Weapon Attack"', () => {
+  draw(fixtureInfo('Barbarian', { pool: [card(own('Strike'))] }));
+  expect(el.textContent).toContain('Weapon Attack');
+  expect(el.textContent).not.toContain('WeaponAttack');
+});
+test('the warning for an equipment requirement points at the Equipment tab, not at items', () => {
+  draw(wiz({ pool, loadout_error: 'The item in the main hand slot needs STR 14.' }));
+  const t = el.querySelector('.ui-warn')!.textContent!;
+  expect(t).toContain('Change the item on the Equipment tab, or buy STR on the Sheet.');
+  expect(t).not.toContain('wear an item');
+});
 test('an item version reads "Magic Missile (Ring of the Magus)"', () => {
   const item: Pick = { ability: 'MagicMissile', source: { Item: 'Ring1' } };
   draw(wiz({ pool: [card(own('MagicMissile')), card(item), card(own('Fireball'))], slots: { Ring1: 'RingOfTheMagus' } }));

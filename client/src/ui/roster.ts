@@ -75,7 +75,7 @@ export class Roster {
     const grid = this.root.querySelector('.ui-roster')!;
     for (const c of me.characters) {
       const slot = document.createElement('div');
-      slot.className = 'ui-slot';
+      slot.className = 'ui-charslot';
       const card = document.createElement('button');
       card.className = `ui-char c-${c.class.toLowerCase()}`;
       card.dataset.open = c.name;

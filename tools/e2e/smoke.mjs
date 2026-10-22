@@ -41,6 +41,7 @@ async function player(name, cls, shots) {
   const page = await open(name);
   if (shots) await page.screenshot({ path: `${out}/0-login.png` });
   await login(page, account, true);
+  if (shots) await page.screenshot({ path: `${out}/0-roster.png` });
   await page.click('#new-char');
   await page.fill('#char-name', `${name}${tag()}`);
   await page.click(`.ui-class.c-${cls.toLowerCase()}`);

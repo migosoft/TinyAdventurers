@@ -6,7 +6,7 @@ import type { PoolCard } from '../../generated/PoolCard';
 import { esc } from '../hud';
 import { abilityIcon } from '../icons';
 import type { TabCtx } from './hub';
-import { abilityNumbers, pickLabel, poolFor, samePick } from './model';
+import { abilityNumbers, pickLabel, poolFor, samePick, spaced } from './model';
 
 type Slot = 'Primary' | 'Secondary';
 type Info = { category: string; uses: string; req: readonly string[]; text: string };
@@ -24,12 +24,14 @@ function cardHtml(c: PoolCard, info: CharacterInfo, unavailable: boolean): strin
       : c.error
         ? `<em class="bad">${esc(c.error)}</em>`
         : `<small class="muted">Requires: ${a.req.length ? esc(a.req.join(', ')) : 'none'}</small>`;
-  return `${abilityIcon(id, true)}<div><b>${esc(pickLabel(c.pick, info))}${unavailable ? ' (unavailable)' : ''}</b><small>${a.category} · ${USES[a.uses] ?? 'no weapon'}${ranged}</small>
+  return `${abilityIcon(id, true)}<div><b>${esc(pickLabel(c.pick, info))}${unavailable ? ' (unavailable)' : ''}</b><small>${spaced(a.category)} · ${USES[a.uses] ?? 'no weapon'}${ranged}</small>
     <span>${esc(a.text)}</span><small class="muted">${esc(numbers)}</small>${last}</div>`;
 }
 
 function hint(error: string): string {
   const m = /needs ([A-Z]{3}) \d+/.exec(error);
+  // Equipment is checked against the Attributes without items, so wearing another item cannot help.
+  if (m && /^The item in the .* slot needs/.test(error)) return `Change the item on the Equipment tab, or buy ${m[1]} on the Sheet.`;
   if (m) return `Buy ${m[1]} on the Sheet, or wear an item that gives it.`;
   if (/needs a .* weapon|a weapon of kind/.test(error)) return 'Change the weapon on the Equipment tab.';
   return '';

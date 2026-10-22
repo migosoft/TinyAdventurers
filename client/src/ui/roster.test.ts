@@ -29,6 +29,9 @@ test('a card opens its character; Delete is a separate button outside the card',
   const del = host.querySelector('[data-delete="Merlin1"]')!;
   expect(del.className).toBe('danger');
   expect(card.contains(del)).toBe(false);
+  // The wrapper must not reuse the equipment doll's `.ui-slot` class (its CSS shrinks the card).
+  expect(host.querySelector('.ui-slot')).toBeNull();
+  expect(card.parentElement!.className).toBe('ui-charslot');
 });
 test('the new-character card shows the free slots, and is gone when the roster is full', async () => {
   const host = document.createElement('div');
