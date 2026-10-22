@@ -179,6 +179,11 @@ pub struct ItemDef {
     pub props: &'static [ItemProperty],
 }
 
+/// Whether a hero may own the item at all: natural weapons (bites, claws) belong to enemies.
+pub fn hero_can_hold(d: &ItemDef) -> bool {
+    !matches!(d.base, ItemBase::Melee(k, _) if category(k) == WeaponCategory::Natural)
+}
+
 // Macros, not `const fn`s: only struct literals are promoted to `'static`.
 macro_rules! mag {
     ($k:expr) => {

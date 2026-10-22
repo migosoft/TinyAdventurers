@@ -197,7 +197,7 @@ fn attr_name(a: Attr) -> &'static str {
     }
 }
 
-fn requirement_text(r: &Requirement) -> String {
+pub fn requirement_text(r: &Requirement) -> String {
     match *r {
         Requirement::Attr(a, n) => format!("{} {n}", attr_name(a)),
         Requirement::WeaponKind(kinds) => {

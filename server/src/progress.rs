@@ -10,16 +10,18 @@
 
 use crate::defs::abilities::{self, AbilitySlot};
 use crate::defs::attributes::{attr_price, Attr, Attributes};
-use crate::defs::items::{self, check_equip, EquipError, EquipSlot, Equipment, ItemBase, ItemId};
+use crate::defs::items::{self, check_equip, EquipError, EquipSlot, Equipment, ItemId};
 use crate::defs::loadout::{Build, Loadout};
 use crate::defs::trees::{self, NodeId};
-use crate::defs::weapons::{category, WeaponCategory};
 use crate::protocol::{CharacterInfo, ClassId};
 use crate::sheet::{attrs_with_items, attrs_without_items, profs};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
 pub const CURRENT_VERSION: u32 = 2;
+/// A respec costs `RESPEC_BASE` coins plus one more per `RESPEC_PER` XP spent.
+pub const RESPEC_BASE: u32 = 20;
+pub const RESPEC_PER: u32 = 50;
 
 /// The v1 price of the next level of a stat (kept only to refund old purchases).
 fn v1_upgrade_cost(level: u32) -> u32 {
@@ -227,7 +229,7 @@ impl Progress {
 
     /// The coins a respec costs now.
     pub fn respec_price(&self) -> u32 {
-        20 + self.xp_spent / 50
+        RESPEC_BASE + self.xp_spent / RESPEC_PER
     }
 
     fn spend(&mut self, cost: u32) -> Result<(), &'static str> {
@@ -311,8 +313,7 @@ impl Progress {
     /// Adds an item to the inventory (loot, the shop, debug).
     pub fn grant_item(&mut self, class: ClassId, item: ItemId) -> Result<(), &'static str> {
         let d = items::def(item);
-        let natural = matches!(d.base, ItemBase::Melee(k, _) if category(k) == WeaponCategory::Natural);
-        if natural || !d.classes.contains(&class) {
+        if !items::hero_can_hold(&d) || !d.classes.contains(&class) {
             return Err("Your class cannot use that item.");
         }
         self.inventory.push(item);
