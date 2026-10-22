@@ -969,7 +969,7 @@ A toggleable text log that tells the player why a hit was 9 and not 12 and why a
 - **Recording.** The hooks sit inside the game's own computations (`hurt_player`, `hurt_monster`, `Run::apply`, `heal_*`, the ability executors) and are handed facts the game already computed; they never mutate the game. The six fingerprint tests pass unchanged with the log on and off.
 - **Visibility rule.** A record is sent to a player only if that player sees every creature it names at that moment (party members always count as seen; a gone creature never does, so the record is unseeable). Otherwise it is dropped, except damage the viewer (or their wolf) took: that gives the record's short `unseen` line, with the viewer's own resistance steps and no attacker data. An Immune or Healed hit from something unseen gives no line. A hidden mimic is tagged and named as a chest until it is revealed. A spectator gets what the spectated hero gets.
 - **The cap.** `LOG_BYTES_PER_SNAP` = 4096 text bytes per snapshot; the rest is summed up in a closing note ("... n more lines (log limit)"). The client keeps the last 300 records. With details off the server does not send the detail lines at all.
-- **Text.** All wording is in `text.rs`; the client formats nothing. A line is `LineW(time, kind, headline, details)`. Numbers are rounded to one decimal. Effect lines are details of their hit, with a headline suffix (" · Chilled").
+- **Text.** All wording is in `text.rs`; the client formats nothing. A line is `LineW(time, kind, headline, details)`. Numbers are rounded to one decimal; multipliers show two (×0.49). Effect lines are details of their hit, with a headline suffix (" · Chilled").
 - **Tags.** `tags.rs` numbers each creature once at spawn, per name ("Goblin 3"), as a plain counter whether or not the log is on, so numbers stay stable when someone turns it on mid-run. The snapshot carries `[entity, kind, number]` for the sent entities; `TAG_NAME` in the generated `defs.ts` gives the names. The client draws the tags above the figures only while the log is on, at scale zoom x camera zoom x devicePixelRatio so they are sharp at the screen's real pixels.
 - **Wire.** `Snapshot.log: Option<LogW>` is the eleventh element of `SnapW`. A hand-written `Serialize` for `SnapW` in `wire.rs` writes 10 elements while the log is off and 11 while it is on (serde cannot skip a trailing tuple field). This code is log-only but outside the module and not counted by the boundary test. The generated `SnapW.ts` types the 11th element as `LogW | null` although it is absent while off; `client/src/wire.ts` uses `w[10] ?? null`.
 
@@ -983,18 +983,18 @@ Every line outside `run/rules_log/` that contains `rules_log` or `RulesLog` (`gr
 | `wire.rs` | 1 | the `Option<LogW>` field of `SnapW` (plus the hand-written `Serialize`, not counted) |
 | `main.rs` | 1 | the arm forwarding `ClientMsg::RulesLog` to the run (Ruling 5) |
 | `export.rs` | 2 | `export_tag_names()` into `defs.ts`; a `LogW` in the wire fixtures |
-| `run/mod.rs` | 18 | `pub mod rules_log`; the `log: RulesLog` field and its `default()`; `spawned` (monster spawn); `set_prefs` in the message handler; `forget` when a player leaves; `revealed` for a mimic; in `hurt_player` and `hurt_monster`: five `hit_begin` calls (one per outcome: immune, healed, damaged), two `death`, two `hit_end`; `heal` in `heal_player` and `heal_monster` |
+| `run/mod.rs` | 18 | `pub mod rules_log`; the `log: RulesLog` field and its `default()`; `spawned` (monster spawn); `set_prefs` in the message handler; `forget` when a player leaves; `revealed` for a mimic; in `hurt_player` and `hurt_monster`: five `hit_begin` calls (player healed; player dealt, immune or debug; boss shielded, not yet hurtable; monster healed; monster dealt or immune), five `hit_end` (three share a line with their `hit_begin`), two `death`; `heal` in `heal_player` and `heal_monster` |
 | `run/visibility.rs` | 2 | `take` the records once per tick; `for_viewer` per player snapshot |
 | `run/levels/boss.rs` | 1 | `spawned` for the boss |
 | `run/objects.rs` | 1 | `spawned` for barrels and chests |
 | `run/effects.rs` | 5 | `effect` after `apply` decided the outcome; `EndReason` in `remove_effect_why`'s signature and its `ended` call; the Water and RanOut `ended` calls |
 | `run/abilities.rs` | 12 | `too_close` for the melee-blocked secondary; five `rules_log::on(run)` guards and five `skipped` calls (area abilities, Chain Spark); `EndReason::Purify` in Purify |
 
-(44 lines in all. The counts are the ones the test pins; the test and `grep` are the authority if they differ.)
+(45 lines in all. The counts are the ones the test pins; the test and `grep` are the authority if they differ.)
 
 ### Client hooks
 
-`grep -rn "rulesLog\|RulesLog" client/src --include=*.ts | grep -v "src/rulesLog/" | grep -v generated`: `wire.ts` (`log: w[10] ?? null`) and six lines in `game/GameScene.ts` (the import, the field, creation in `create`, `onSnapshot`, `draw` each frame with the entity views, `destroy` on cleanup). The generated `defs.ts` also carries `TAG_NAME`.
+`grep -rn "rulesLog\|RulesLog\|w\[10\]" client/src --include=*.ts | grep -v "src/rulesLog/" | grep -v generated` finds `wire.ts:138` (`log: w[10] ?? null`) and six lines in `game/GameScene.ts` (the import, the field, creation in `create`, `onSnapshot`, `draw` each frame with the entity views, `destroy` on cleanup). The generated `defs.ts` also carries `TAG_NAME`.
 
 ### Game data the log reads
 
@@ -1010,9 +1010,20 @@ The log reads these; they stay useful without it. `Damage.why` (`Why`, `What`, `
 ### How to remove the rules log
 
 1. Delete both folders: `server/src/run/rules_log/` and `client/src/rulesLog/`.
-2. Delete every hook line in the two tables: `grep -rn "rules_log\|RulesLog" server/src --include=*.rs` and `grep -rn "rulesLog\|RulesLog" client/src --include=*.ts`. Where a hook sits inside an expression (`remove_effect_why`'s `EndReason` parameter, the `rules_log::on(run)` guards), take the wrapper out and keep the game's own call.
-3. Drop `ClientMsg::RulesLog`, `Snapshot.log`, the eleventh `SnapW` field and the hand-written `Serialize` for `SnapW` (back to a derive), the `TAG_NAME` export; regenerate the bindings with the docker suite and commit `client/src/generated`.
-4. Optional cleanup (harmless if kept): `Damage.why`, `Base` and `resolve_parts`, `Attr::short`, `EffectOutcome`/`Duration`/`apply_traced`/`Apply.origin`/`effect_left`, `run/targets.rs`, the `by` parameter of the heals and `mend_player`, `Run.last_hit`. Then remove the "Rules log" key rows from the player guide and this section.
+2. Delete every hook line in the two tables: `grep -rn "rules_log\|RulesLog" server/src --include=*.rs` and `grep -rn "rulesLog\|RulesLog\|w\[10\]" client/src --include=*.ts` (the second also finds `wire.ts` `log: w[10] ?? null`). Where a hook sits inside the game's code, take only the hook out:
+   - `effects.rs`: `remove_effect_why` loses its `EndReason` parameter (keep the removal itself); delete the Water and RanOut `ended` calls and the `effect` call after `apply`; the Water and Purify callers of `remove_effect_why` drop their `EndReason` argument (`abilities.rs` ~391 too), and `too_close` (~129) goes.
+   - `abilities.rs`: in the four area executors (Frost Nova, War Cry and the two others), delete the `let log = ...on(run);` line and the `skipped` call, and pass `false` to `targets::select` (or drop its `collect` parameter and edit `targets.rs`). In `chain_jumps` also delete `skips`/`stop` (`let (mut skips, mut stop)`, the `targets::merge` line, the `if log { stop = targets::nearest_beyond(..) }` block inside the `let Some(mi) = next else`, the `skips.retain` line and the `skipped` call); the `else { break; }` stays.
+   - `run/mod.rs`: delete the `hit_begin`, `hit_end`, `death`, `heal`, `spawned`, `revealed`, `forget` and `set_prefs` lines, the `log` field and its `default()`, and `pub mod rules_log`.
+3. Drop what names the log without the grep strings:
+   - `protocol.rs`: `ClientMsg::RulesLog` and `Snapshot.log`.
+   - `wire.rs`: the eleventh `SnapW` field and the hand-written `Serialize` for `SnapW` (back to a derive); `s.log.clone()` in the `SnapW(...)` call (~143); `log: None,` in `sample_snapshots` (~206 and ~238).
+   - `main.rs`: `ClientMsg::RulesLog { .. }` in the forwarding arm.
+   - `export.rs`: the `export_tag_names()` line (~213, and the `TAG_NAME` export); in `export_wire_fixtures` the `let mut with_log = ...` (~439), the `with_log.log = ...` line (~440) and `samples.push(with_log)` (~442; then `samples` can be the plain `sample_snapshots()`).
+   - `run/mod.rs` tests: `level_setup_is_unchanged_with_the_log_on`, `simulation_is_unchanged_after_waking_the_boss_with_the_log_on`, `plan_3a_fight_is_pinned_with_the_log_on`, the `run.log.forced` lines (~1499, ~1545, ~1568) and the `fight_with_log` helper (~1566; make `fight` build the run directly).
+   - Client: `src/wire.test.ts` (~96-110): the two log tests, and the `cases.length === 3` expectation (back to 2); the `log` field of `Snapshot` in `wire.ts`.
+   Regenerate the bindings with the docker suite and commit `client/src/generated`.
+4. Then run `cargo build`, `cargo test -- --skip export_bindings`, the docker suite, `tsc --noEmit` and `vitest`, and fix what the compiler names; the sites above are the known ones.
+5. Optional cleanup (harmless if kept): `Damage.why`, `Base` and `resolve_parts`, `Attr::short`, `EffectOutcome`/`Duration`/`apply_traced`/`Apply.origin`/`effect_left`, `run/targets.rs`, the `by` parameter of the heals and `mend_player`, `Run.last_hit`. Then remove the "Rules log" rows and section of the player guide and this section.
 
 ## 12. Tests
 

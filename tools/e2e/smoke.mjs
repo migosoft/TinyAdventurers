@@ -105,7 +105,8 @@ if (logOn && query.includes('debug')) {
   await p1.keyboard.press('F8');
   await p1.waitForTimeout(500);
 }
-if (logOn) {
+if (logOn && !query.includes('debug')) console.log('WARNING: LOG=1 without a debug query: the empty start room logs nothing, so the row assertion is skipped');
+if (logOn && query.includes('debug')) {
   // Both windows must show at least one row: this also proves the opt-in reaches the run.
   for (const [name, page] of [['Alice', p1], ['Bob', p2]]) {
     await page.waitForSelector('.rules-log .rl-row', { timeout: 10000 }).then(
