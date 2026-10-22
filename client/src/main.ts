@@ -176,6 +176,19 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
     hub.show();
   });
 
+  // The server explains why it closes a connection (logged in elsewhere, logged out)
+  // in an Error right before closing.
+  let lastError = { msg: '', at: 0 };
+  // (installed before the font wait, so a close during it still shows the message; the Hud exists later)
+  let hudForClose: Hud | undefined;
+  net.onClose = () => {
+    const why = performance.now() - lastError.at < 2000 ? lastError.msg : 'Connection lost.';
+    const msg = `${why} Reload the page to reconnect.`;
+    hudForClose?.message(msg);
+    lobby.error(msg);
+    hub.error(msg);
+  };
+
   const v = viewSize();
   await loadFonts();
   const game = new Phaser.Game({
@@ -212,17 +225,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
     },
     backToLobby,
   );
-
-  // The server explains why it closes a connection (logged in elsewhere, logged out)
-  // in an Error right before closing.
-  let lastError = { msg: '', at: 0 };
-  net.onClose = () => {
-    const why = performance.now() - lastError.at < 2000 ? lastError.msg : 'Connection lost.';
-    const msg = `${why} Reload the page to reconnect.`;
-    hud.message(msg);
-    lobby.error(msg);
-    hub.error(msg);
-  };
+  hudForClose = hud;
 
   net.on(async (m) => {
     switch (m.t) {

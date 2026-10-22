@@ -12,7 +12,6 @@ import { LogPanel } from './panel';
 import type { Toggle } from '../ui/settings';
 import { loadPrefs, savePrefs, type LogPrefs } from './prefs';
 
-
 const storage = (): Storage | null => {
   try {
     return window.localStorage;

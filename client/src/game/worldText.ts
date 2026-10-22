@@ -13,7 +13,7 @@ export const WORLD_TEXT = {
 
 export type WorldTextKind = keyof typeof WORLD_TEXT;
 
-/** Text texture resolution: at least the camera zoom (2 at 1280 x 720, up to 4 on big screens), so text is never upscaled. */
+/** Text texture resolution: at least the camera zoom (2 at 1280 x 720, 4 at 2560 x 1440, 6 at 3840 x 2160; larger zooms upscale a little), so text is never upscaled. */
 export const TEXT_RESOLUTION = 4;
 
 const POP_FROM = 1.4;

@@ -310,7 +310,12 @@ export class Hud {
   toggleMenu(): void {
     this.menuOpen = !this.menuOpen;
     this.menu.classList.toggle('hidden', !this.menuOpen);
-    if (!this.menuOpen) this.showSettings(false);
+    if (!this.menuOpen) {
+      this.showSettings(false);
+      // A hidden focused checkbox or button must not react to Space during play.
+      const active = document.activeElement as HTMLElement | null;
+      if (active && this.menu.contains(active)) active.blur();
+    }
   }
 
   showEnd(m: { victory: boolean; level: LevelId; boss: BossId | null; time: number; stats: PlayerStats[]; banked: boolean }): void {

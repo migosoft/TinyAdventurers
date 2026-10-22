@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import { EFFECT_ICON, iconTextureKey } from '../ui/effectIcons';
 
-const GAP = 2; // world px between the name tag and the first symbol, and between symbols
+const GAP = 2; // world px between the name tag and the first symbol (symbols are 1 px apart)
 const SIZE = 5.5; // world px per symbol
 
 /** The symbols of a hero's status effects, in a row to the right of the name tag. Images are pooled. */

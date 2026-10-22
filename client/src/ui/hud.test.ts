@@ -58,6 +58,14 @@ describe('Hud', () => {
     hud.toggleMenu();
     expect(document.querySelector('.menu')!.classList.contains('in-settings')).toBe(false);
   });
+  it('blurs the focused control when the menu closes', () => {
+    hud.toggleMenu();
+    const resume = [...document.querySelectorAll<HTMLButtonElement>('.menu button')].find((b) => b.textContent === 'Settings')!;
+    resume.focus();
+    expect(document.activeElement).toBe(resume);
+    hud.toggleMenu();
+    expect(document.activeElement).not.toBe(resume);
+  });
   it('shows server message text literally', () => {
     hud.message('<b>x</b>', 'game');
     const m = document.querySelector('.msg')!;

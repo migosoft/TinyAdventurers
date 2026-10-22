@@ -44,9 +44,8 @@ UI polishing is built (Inter, brass controls, cooldown ring, effect symbols, Set
 - **FPS cost of the screen-resolution canvas:** the canvas has zoom squared times more pixels (4x at 1280 x 720); the smoke test's frame rate in headless swiftshader fell from about 27 to about 15. Measure on a real GPU; if it hurts, lower the render resolution or draw the world texts at a smaller resolution.
 - **Two text resolution policies:** world texts use the fixed `TEXT_RESOLUTION` (4), the rules-log tags zoom x camera zoom x devicePixelRatio. Pick one; a hi-DPI screen may upscale the fixed one.
 - **Login screen scrolls at 720 px tall** (the splash logo is about 470 px). Cap it with a `max-height` in vh.
-- **Bottom HUD row is tight at 1280 px:** about 12 px of margin; a 4-digit coin counter would eat most of it.
 - **Tag symbols could have a dark drop-shadow** (the mockup has a 1 px black one); pale symbols can be hard to read on a lit floor.
-- **Settings focus handling:** focus is not managed when Settings opens, on Back or when the menu closes, so a hidden focused checkbox could be flipped by Space during play. No Hud test that `frame()` re-syncs an open Settings view or that F3 shows and hides the panel.
+- **Settings focus handling:** closing the menu now blurs a focused control, but focus is still not managed when Settings opens or on Back. No Hud test that `frame()` re-syncs an open Settings view or that F3 shows and hides the panel.
 - **Admin tokens are duplicated:** `admin/admin.css` copies the `:root` tokens of `style.css` (drift risk) and hard-codes some brass hexes; a shared `tokens.css` would fix it.
 - **Tree labels** are 11 px bold: "CON" spills past its circle, "MM+" fills its diamond (legible). `effectIconSvg` throws on an unknown id (the old letters fell back to "?"). The "0.0" shown for a cooldown under 0.05 s.
 - **Not seen in a browser yet:** the crit number and its pop, the E key cap at a chest, door and sleeping teammate, the cooldown flash, an effect symbol beside a lit teammate's tag, the asleep panel, the Esc menu and Settings, the end screen, game versus notice messages, and the admin page.
