@@ -2,8 +2,6 @@ import { EFFECT } from '../generated/defs';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
-import type { Modifiers } from '../generated/Modifiers';
-import type { UpgradeStat } from '../generated/UpgradeStat';
 
 export const CLASS_TEXT: Record<ClassId, { title: string; blurb: string; abilities: { name: string; text: string }[] }> = {
   Wizard: {
@@ -52,19 +50,6 @@ export const BOSS_TEXT: Record<BossId, { name: string; short: string; blurb: str
 export const LEVEL_TEXT: Record<LevelId, { name: string; victory: string; defeat: string }> = {
   Dungeon: { name: 'Dungeon', victory: 'The dungeon is cleared.', defeat: 'The dungeon claims another party.' },
 };
-
-/** Upgrade shop rows: label and the current bonus from the profile's modifiers. */
-export const STAT_TEXT: Record<UpgradeStat, { name: string; bonus: (m: Modifiers) => string }> = {
-  Damage: { name: 'Damage', bonus: (m) => `+${pct(m.damage - 1)} damage` },
-  AttackSpeed: { name: 'Attack speed', bonus: (m) => `+${pct(m.attack_speed - 1)} attack speed` },
-  MoveSpeed: { name: 'Move speed', bonus: (m) => `+${pct(m.move_speed - 1)} move speed` },
-  Life: { name: 'Life', bonus: (m) => `+${pct(m.life - 1)} max life` },
-  Armor: { name: 'Armor', bonus: (m) => `${pct(m.armor)} damage blocked` },
-};
-
-function pct(v: number): string {
-  return `${Math.round(v * 100)}%`;
-}
 
 /** One ASCII letter per status effect (the HUD's pixel font has no symbol glyphs). */
 /** One letter per effect; a new effect needs its glyph here (effectGlyph.test.ts checks). */

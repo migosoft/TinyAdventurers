@@ -63,6 +63,9 @@ const a2 = await player('Bob', classes[1]);
 const p2 = a2.page;
 await p2.waitForSelector('[data-join]');
 await p2.screenshot({ path: `${out}/0-lobby.png` });
+// The stopgap character panel (progression plan 4) is on the lobby page.
+if (!(await p2.textContent('.progress'))?.includes('Character (temporary)') || (await p2.locator('.progress [data-attr]').count()) < 1) errors.push('character panel: heading or +1 button missing');
+else console.log('character panel: shown with Attribute buttons');
 await p2.click('[data-join]');
 await p2.waitForSelector('.players li');
 await p2.click('#ready');

@@ -268,7 +268,7 @@ export class Hud {
       <div class="title ${m.victory ? 'win' : 'lose'}">${m.victory ? 'VICTORY' : 'DEFEAT'}</div>
       <p>${endText(m.victory, m.level, m.boss)} Time ${mins}:${secs}</p>
       <table><tr><th>Hero</th><th>Class</th><th>Kills</th><th>Damage</th><th>Healing</th><th>XP</th><th>Coins</th></tr>${rows}</table>
-      <p class="note">${m.banked ? 'Your XP and coins were added to your profile. Spend XP on upgrades in the lobby.' : 'Debug mode was used: no XP or coins were added to the profiles.'}</p>`;
+      <p class="note">${m.banked ? 'Your XP and coins were added to your profile. Spend XP on Attributes and the skill tree in the lobby.' : 'Debug mode was used: no XP or coins were added to the profiles.'}</p>`;
     const back = el('button', '', 'Back to lobby');
     back.onclick = () => this.onBack();
     this.end.append(back);

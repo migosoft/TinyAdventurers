@@ -6,13 +6,13 @@ import type { CharacterInfo } from '../generated/CharacterInfo';
 import type { LevelId } from '../generated/LevelId';
 import type { RoomPlayer } from '../generated/RoomPlayer';
 import type { RunSummary } from '../generated/RunSummary';
-import type { UpgradeStat } from '../generated/UpgradeStat';
 import type { Net } from '../net';
 import { spritePreview, type Atlas } from './atlas';
 import { esc } from './hud';
 import { logoHeader } from './logo';
 import { classFigure } from './classes';
-import { BOSS_TEXT, STAT_TEXT, className } from './text';
+import { bindProgressPanel, progressPanel } from './progressPanel';
+import { BOSS_TEXT, className } from './text';
 
 const BOSSES: BossId[] = ['Demon', 'Lich', 'Dragon'];
 /** Figure (atlas frame prefix), CSS filter approximating the in-game tint (anim/defs.ts) and preview scale. */
@@ -21,7 +21,13 @@ const BOSS_FIG: Record<BossId, [string, string, number]> = {
   Lich: ['lich', '', 3],
   Dragon: ['dragon', '', 2],
 };
-const STATS: UpgradeStat[] = ['Damage', 'AttackSpeed', 'MoveSpeed', 'Life', 'Armor'];
+
+/** "Primary / Secondary" ability names and the weapon names of a party member. */
+export function partyBuild(p: RoomPlayer): string {
+  const name = (k: { ability: AbilityId }) => ABILITIES[k.ability].name;
+  const items = ITEMS as Record<string, { name: string }>;
+  return `${name(p.loadout.primary)} / ${name(p.loadout.secondary)} · ${p.weapons.map((w) => items[w]?.name ?? w).join(', ')}`;
+}
 
 type Room = { run_id: number; name: string; host: number; players: RoomPlayer[]; level: LevelId; boss: BossId | null };
 
@@ -177,31 +183,11 @@ export class Lobby {
   private render(): void {
     if (this.room) this.renderRoom();
     else this.renderHome();
-    this.bindUpgrades();
+    bindProgressPanel(this.root, (m) => this.net.send(m));
   }
 
-  private upgradesPanel(): string {
-    const p = this.character;
-    if (!p) return '';
-    const max = p.costs.length;
-    const rows = STATS.map((s) => {
-      const key = ({ Damage: 'damage', AttackSpeed: 'attack_speed', MoveSpeed: 'move_speed', Life: 'life', Armor: 'armor' } as const)[s];
-      const level = p.upgrades[key];
-      const cost = level < max ? p.costs[level] : null;
-      const buy =
-        cost === null
-          ? '<button disabled>Max</button>'
-          : `<button data-buy="${s}"${p.xp < cost ? ' disabled' : ''}>Buy ${cost} XP</button>`;
-      return `<li><span class="sname">${STAT_TEXT[s].name}</span><span class="lvl">${level}/${max}</span><span class="bonus">${STAT_TEXT[s].bonus(p.mods)}</span>${buy}</li>`;
-    }).join('');
-    return `<div class="panel upgrades"><h2>Upgrades <span class="xp">${p.xp} XP <span class="coins"><i class="coin-icon"></i>${p.coins}</span></span></h2><ul class="stats">${rows}</ul>
-      <small class="hint">Earn XP in the dungeon. Upgrades are permanent and belong to this character. Coins come from chests and mimics; they will buy loadouts later.</small></div>`;
-  }
-
-  private bindUpgrades(): void {
-    this.root.querySelectorAll<HTMLButtonElement>('[data-buy]').forEach((b) => {
-      b.onclick = () => this.net.send({ t: 'BuyUpgrade', stat: b.dataset.buy as UpgradeStat });
-    });
+  private progressHtml(ready: boolean): string {
+    return this.character ? progressPanel(this.character, { debug: debugOn(), ready }) : '';
   }
 
   private renderHome(): void {
@@ -222,7 +208,7 @@ export class Lobby {
         <div class="row"><input id="runname" maxlength="24" placeholder="Name your dungeon run"><button id="create">Open new run</button></div>
         <div class="error"></div>
       </div>
-      ${this.upgradesPanel()}`;
+      ${this.progressHtml(false)}`;
     const hero = this.root.querySelector('.hero')!;
     const c = this.character;
     if (c) {
@@ -253,14 +239,14 @@ export class Lobby {
     const players = room.players
       .map(
         (p) =>
-          `<li class="c-${p.class.toLowerCase()}"><span>${esc(p.name)}${p.id === room.host ? ' ★' : ''}</span><span>${className(p.class)}</span><span class="${p.ready || p.id === room.host ? 'ok' : 'wait'}">${p.id === room.host ? 'host' : p.ready ? 'ready' : 'not ready'}</span></li>`,
+          `<li class="c-${p.class.toLowerCase()}"><span>${esc(p.name)}${p.id === room.host ? ' ★' : ''}</span><span>${className(p.class)}</span><span class="abilities">${esc(partyBuild(p))}</span><span class="${p.ready || p.id === room.host ? 'ok' : 'wait'}">${p.id === room.host ? 'host' : p.ready ? 'ready' : 'not ready'}</span></li>`,
       )
       .join('');
     this.root.innerHTML = `
       <h1>${esc(room.name)}</h1>
       <div class="panel"><h2>Party (${room.players.length}/4)</h2><ul class="players">${players}</ul></div>
       <div class="panel"><h2>End boss${isHost ? '' : ' (chosen by the host)'}</h2><div class="bosses"></div></div>
-      ${this.upgradesPanel()}
+      ${this.progressHtml(!!me?.ready)}
       ${me && debugOn() && (isHost || !me.ready) ? this.debugLoadoutRow(room.run_id, me.class) : ''}
       <div class="row actions">
         <button id="leave">Leave</button>

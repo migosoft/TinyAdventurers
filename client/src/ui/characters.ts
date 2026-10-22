@@ -78,7 +78,7 @@ export class Characters {
               <div class="row"><input id="char-name" maxlength="16" placeholder="Character name" required>
               <button type="submit" id="char-create" class="primary">Create</button></div>
               <div class="classes"></div>
-              <small class="hint">The class cannot be changed later. Each character has its own XP, coins and upgrades.</small>
+              <small class="hint">The class cannot be changed later. Each character has its own XP, coins, Attributes and skill tree.</small>
             </form>`
       }`;
 
