@@ -38,6 +38,26 @@ describe('Hud', () => {
     expect(document.querySelector('.menu .title')!.textContent).toBe('Paused');
     expect(document.querySelector('.menu p')!.textContent).toBe('The dungeon keeps going while this is open.');
   });
+  it('has Resume, Settings, Leave dungeon and a Settings view that Back closes', () => {
+    hud.setToggles([{ label: 'Rules log', key: 'L', get: () => false, set: () => {} }]);
+    expect([...document.querySelectorAll('.menu > button')].map((b) => b.textContent)).toEqual(['Resume', 'Settings', 'Leave dungeon']);
+    const menu = document.querySelector<HTMLElement>('.menu')!;
+    const settings = menu.querySelector<HTMLElement>('.settings')!;
+    expect(menu.classList.contains('in-settings')).toBe(false);
+    [...menu.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Settings')!.click();
+    expect(menu.classList.contains('in-settings')).toBe(true);
+    expect(settings.hidden).toBe(false);
+    [...settings.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === 'Back')!.click();
+    expect(menu.classList.contains('in-settings')).toBe(false);
+    expect(settings.hidden).toBe(true);
+  });
+  it('returns to the main menu after the menu was closed from Settings', () => {
+    hud.toggleMenu();
+    [...document.querySelectorAll<HTMLButtonElement>('.menu button')].find((b) => b.textContent === 'Settings')!.click();
+    hud.toggleMenu();
+    hud.toggleMenu();
+    expect(document.querySelector('.menu')!.classList.contains('in-settings')).toBe(false);
+  });
   it('shows server message text literally', () => {
     hud.message('<b>x</b>', 'game');
     const m = document.querySelector('.msg')!;

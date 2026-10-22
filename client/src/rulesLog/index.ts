@@ -9,6 +9,7 @@ import { smoothText, WORLD_TEXT } from '../game/worldText';
 import { tagText } from './tags';
 import { LogBuffer } from './buffer';
 import { LogPanel } from './panel';
+import type { Toggle } from '../ui/settings';
 import { loadPrefs, savePrefs, type LogPrefs } from './prefs';
 
 
@@ -150,6 +151,14 @@ export class RulesLog {
     this.panel.setDetails(on);
     this.render();
     this.persist();
+  }
+
+  /** The rules log's switches for the Settings view; they save the prefs as the keys do. */
+  settings(): Toggle[] {
+    return [
+      { label: 'Rules log', key: 'L', get: () => this.prefs.on, set: (on) => this.setOn(on) },
+      { label: 'Calculation lines', key: 'Shift+L', get: () => this.prefs.details, set: (on) => this.setDetails(on) },
+    ];
   }
 
   private persist(): void {

@@ -1060,3 +1060,29 @@ kbd {
 .debug-loadout small {
   color: var(--muted);
 }
+
+/* Esc menu: the Settings view replaces the main buttons. */
+.menu.in-settings > :not(.settings) {
+  display: none;
+}
+.settings {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.settings[hidden] {
+  display: none;
+}
+.settings .title {
+  font: 400 30px/1.1 var(--font-head);
+  color: var(--gold);
+}
+.settings .check {
+  align-self: stretch;
+  font-size: 15px;
+  padding: 4px 2px;
+}
+.settings .check kbd {
+  margin-left: auto;
+}

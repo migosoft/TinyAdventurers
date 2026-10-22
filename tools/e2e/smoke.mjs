@@ -113,6 +113,13 @@ for (let i = 0; i < 3; i++) {
 await p1.mouse.click(900, 250, { button: 'right' });
 await p1.waitForTimeout(150);
 await p1.screenshot({ path: `${out}/3-attack.png` });
+await p1.keyboard.press('Escape');
+await p1.click('text=Settings');
+await p1.waitForTimeout(150);
+await p1.screenshot({ path: `${out}/3c-settings.png` });
+if ((await p1.locator('.menu input[type=checkbox]').count()) !== 3) throw new Error('Settings view must hold three checkboxes');
+await p1.click('.menu .settings button');
+await p1.keyboard.press('Escape');
 await p2.keyboard.down('a');
 await p2.waitForTimeout(600);
 await p2.keyboard.up('a');

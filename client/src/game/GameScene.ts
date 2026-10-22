@@ -240,6 +240,7 @@ export class GameScene extends Phaser.Scene {
     this.events.once('shutdown', () => this.cleanup());
     this.hud.startRun(this.info);
     this.rulesLog = new RulesLog(this, this.net, this.info);
+    this.hud.setToggles(this.rulesLog.settings());
     if (new URLSearchParams(location.search).has("debug")) this.net.send({ t: "Debug", on: true });
   }
 

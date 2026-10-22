@@ -9,6 +9,7 @@ import { CooldownTracker } from './cooldown';
 import { endText } from './endText';
 import { BOSS_TEXT, className } from './text';
 import { effectIconSvg } from './effectIcons';
+import { SettingsView, type Toggle } from './settings';
 
 export interface FrameStats {
   fps: number;
@@ -80,6 +81,9 @@ export class Hud {
   private trackers = [new CooldownTracker(), new CooldownTracker()];
   private debugT = 0;
   menuOpen = false;
+  private toggles: Toggle[] = [];
+  private view!: SettingsView;
+  private inSettings = false;
 
   constructor(
     host: HTMLElement,
@@ -106,10 +110,35 @@ export class Hud {
     };
     const resume = el('button', 'primary', 'Resume');
     resume.onclick = () => this.toggleMenu();
-    this.menu.append(resume, leave);
+    const settings = el('button', '', 'Settings');
+    settings.onclick = () => this.showSettings(true);
+    this.menu.append(resume, settings, leave);
+    this.buildView();
     this.root.append(this.party, this.boss, this.msgs, this.banner, bottom, this.debug, this.debugBadge, this.menu, this.end);
     this.root.append(el('div', 'help', helpHtml()));
     host.append(this.root);
+  }
+
+  /** The switches of the Settings view (the Hud adds Network stats last). */
+  setToggles(t: Toggle[]): void {
+    this.toggles = t;
+    this.buildView();
+  }
+
+  private buildView(): void {
+    const net: Toggle = { label: 'Network stats', key: 'F3', get: () => !this.debug.classList.contains('hidden'), set: (on) => this.debug.classList.toggle('hidden', !on) };
+    const old = this.view?.root;
+    this.view = new SettingsView([...this.toggles, net], () => this.showSettings(false));
+    this.view.root.hidden = !this.inSettings;
+    if (old) old.replaceWith(this.view.root);
+    else this.menu.append(this.view.root);
+  }
+
+  private showSettings(on: boolean): void {
+    this.inSettings = on;
+    this.menu.classList.toggle('in-settings', on);
+    this.view.root.hidden = !on;
+    if (on) this.view.sync();
   }
 
   startRun(info: RunStartInfo): void {
@@ -216,6 +245,7 @@ export class Hud {
   }
 
   frame(f: FrameStats): void {
+    if (this.inSettings) this.view.sync();
     const now = performance.now();
     [0, 1].forEach((i) => {
       const name = this.slots[i].querySelector('.name')!;
@@ -280,6 +310,7 @@ export class Hud {
   toggleMenu(): void {
     this.menuOpen = !this.menuOpen;
     this.menu.classList.toggle('hidden', !this.menuOpen);
+    if (!this.menuOpen) this.showSettings(false);
   }
 
   showEnd(m: { victory: boolean; level: LevelId; boss: BossId | null; time: number; stats: PlayerStats[]; banked: boolean }): void {
