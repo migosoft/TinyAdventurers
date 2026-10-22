@@ -207,9 +207,6 @@ async function adminPass() {
   await page.waitForSelector(`text=${a1.account}`);
   console.log(`admin: dashboard shows ${await page.textContent('.tile.hero .tile-value')} online, ${a1.account} among them`);
   await page.screenshot({ path: `${out}/6-admin-dashboard.png`, fullPage: true });
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await page.screenshot({ path: `${out}/6-admin-dashboard-dark.png`, fullPage: true });
-  await page.emulateMedia({ colorScheme: 'light' });
 
   await page.click('nav >> text=Players');
   await page.fill('input[type=search]', a1.account);
