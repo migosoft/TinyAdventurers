@@ -642,6 +642,14 @@
 .ui-tip li.bad span {
   color: #c06060;
 }
+.ui-tip small .bad {
+  color: #ff7070;
+}
+.ui-grant {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
 .ui-tip .cost {
   color: var(--gold);
   font-size: 10px;

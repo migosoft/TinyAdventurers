@@ -5,6 +5,7 @@ import { classFigure, figureWeapon } from '../classes';
 import type { Atlas } from '../atlas';
 import { esc } from '../hud';
 import { className } from '../text';
+import { renderEquipment } from './equipment';
 import { renderSheet } from './sheet';
 import { renderTree } from './tree';
 import { clearTips } from './tip';
@@ -26,8 +27,8 @@ const soon = (): HTMLElement => {
   p.textContent = 'Coming in this plan';
   return p;
 };
-/** Tasks 6 and 7 replace the placeholders. */
-const RENDER: Record<HubTab, (ctx: TabCtx) => HTMLElement> = { sheet: renderSheet, tree: renderTree, equipment: soon, loadout: soon };
+/** Task 7 replaces the loadout placeholder. */
+const RENDER: Record<HubTab, (ctx: TabCtx) => HTMLElement> = { sheet: renderSheet, tree: renderTree, equipment: renderEquipment, loadout: soon };
 
 const debugOn = (): boolean => new URLSearchParams(location.search).has('debug');
 
