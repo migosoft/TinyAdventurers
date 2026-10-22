@@ -2696,4 +2696,86 @@ mod tests {
         assert_eq!(run.monsters[g].pos, at, "rooted");
         assert_eq!(run.monsters[g].anim, Anim::Idle);
     }
+
+    // What today's code selects (recorded before the `targets::check` refactor, never re-recorded).
+    const PIN_NOVA: &[&str] = &["ok", "dormant", "air", "hide", "back", "touch", "air_near", "dormant_near"];
+    const PIN_CRY: &[&str] = &["ok", "wall", "air", "back", "touch", "air_near"];
+    const PIN_SLAM: &[&str] = &["ok", "dormant", "hide", "back", "touch", "dormant_near"];
+    const PIN_STRIKE: &[&str] = &["ok", "touch", "dormant_near"];
+    const PIN_CHAIN: &[&str] = &["ok", "touch", "air_near"];
+
+    /// The same crowd for every shape: (name, monster index). Hero at the origin, aiming east.
+    /// "wall" is behind a wall tile, "back" behind the hero, "wolf" is the hero's ally.
+    fn crowd(run: &mut Run) -> Vec<(&'static str, usize)> {
+        let at = |run: &mut Run, name: &'static str, off: Vec2| {
+            let pos = run.players[0].pos() + off;
+            let id = run.spawn_enemy(EnemyType::GoblinArcher, pos, None);
+            let mi = run.monster_idx(id).unwrap();
+            run.monsters[mi].hp = 1000.0;
+            run.monsters[mi].max_hp = 1000.0;
+            (name, mi)
+        };
+        let ok = at(run, "ok", Vec2::new(20.0, 0.0));
+        let dormant = at(run, "dormant", Vec2::new(26.0, -10.0));
+        let air = at(run, "air", Vec2::new(0.0, -26.0));
+        let hide = at(run, "hide", Vec2::new(30.0, -6.0));
+        let back = at(run, "back", Vec2::new(-25.0, 0.0));
+        let far = at(run, "far", Vec2::new(200.0, 0.0));
+        let touch = at(run, "touch", Vec2::new(-6.0, 3.0)); // behind, but touching the hero
+        let air_near = at(run, "air_near", Vec2::new(12.0, -5.0));
+        let dormant_near = at(run, "dormant_near", Vec2::new(14.0, 5.0));
+        run.monsters[air_near.1].airborne = true;
+        run.monsters[dormant_near.1].dormant = true;
+        run.monsters[dormant.1].dormant = true;
+        run.monsters[air.1].airborne = true;
+        run.monsters[hide.1].hiding = true;
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        run.layout.map.set(tx, ty + 1, crate::dungeon::Tile::Wall);
+        let wall_id = run.spawn_enemy(EnemyType::GoblinArcher, crate::dungeon::Map::center_of(tx, ty + 2), None);
+        let wall = run.monster_idx(wall_id).unwrap();
+        run.monsters[wall].hp = 1000.0;
+        run.monsters[wall].max_hp = 1000.0;
+        assert!(!line_of_sight(&run.layout.map, run.players[0].pos(), run.monsters[wall].pos), "walled off");
+        let wolf_id = crate::run::companion::spawn_wolf(run, 0);
+        let wolf = run.monster_idx(wolf_id).unwrap();
+        run.monsters[wolf].pos = run.players[0].pos() + Vec2::new(-10.0, -18.0);
+        vec![ok, ("wall", wall), dormant, air, hide, back, touch, air_near, dormant_near, far, ("wolf", wolf)]
+    }
+
+    /// The names of those in `crowd` that took damage or, with `fear`, are afraid.
+    fn hit_names(run: &Run, crowd: &[(&'static str, usize)], fear: bool) -> Vec<&'static str> {
+        crowd.iter().filter(|&&(n, mi)| if fear { run.has_effect(Creature::Monster(mi), EffectKind::Fear) } else { n != "wolf" && run.monsters[mi].hp < 1000.0 }).map(|&(n, _)| n).collect()
+    }
+
+    /// Pins which targets Frost Nova, War Cry, Ground Slam, a Strike and a Chain Spark select, so the
+    /// shared `targets::check` cannot change a rule.
+    #[test]
+    fn target_checks_keep_the_same_targets() {
+        let mut run = wizard_secondary(AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0));
+        let c = crowd(&mut run);
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(hit_names(&run, &c, false), PIN_NOVA, "Frost Nova");
+
+        let mut run = barbarian_war_cry();
+        let c = crowd(&mut run);
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(hit_names(&run, &c, true), PIN_CRY, "War Cry");
+
+        let mut run = ground_slam();
+        let c = crowd(&mut run);
+        land_slam(&mut run, 0);
+        assert_eq!(hit_names(&run, &c, false), PIN_SLAM, "Ground Slam");
+
+        let mut run = run_with_ability(ClassId::Barbarian, AbilitySlot::Primary, AbilityId::Strike, Attributes::default(), Equipment::starter(ClassId::Barbarian));
+        let c = crowd(&mut run);
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(hit_names(&run, &c, false), PIN_STRIKE, "Strike");
+
+        let mut run = wizard_with(AbilityId::ChainSpark, 3);
+        run.players[0].sheet.reach = 0.0; // nobody in melee reach: the spark flies instead of a Strike
+        let c = crowd(&mut run);
+        try_use(&mut run, 0, true, 1);
+        fly(&mut run);
+        assert_eq!(hit_names(&run, &c, false), PIN_CHAIN, "Chain Spark");
+    }
 }
