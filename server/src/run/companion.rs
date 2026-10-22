@@ -452,7 +452,7 @@ pub fn wolf_died(run: &mut Run, mi: usize) {
     if let Some(pi) = owner.and_then(|o| run.player_idx(o)) {
         let p = &mut run.players[pi];
         p.wolf = None;
-        // The summon's cooldown ratio is the attack-speed upgrade (this form is bit-exact to `/ attack_speed`).
+        // The dead-wolf cooldown is divided by how much shorter the sheet makes Summon Wolf's cooldown than its base (this form is bit-exact to `/ attack_speed`); a run-time speed-up such as Berserk is not in it.
         // The sheet's cooldown is above 0 (`loadout::MIN_COOLDOWN`); the guard only keeps a 0 from dividing.
         let cooldown = p.sheet.secondary.cooldown.max(f64::MIN_POSITIVE);
         p.cd2 = WOLF_DEAD_COOLDOWN / (crate::defs::abilities::def(crate::defs::abilities::AbilityId::SummonWolf).own.cooldown / cooldown);

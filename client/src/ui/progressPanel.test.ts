@@ -72,4 +72,14 @@ describe('the panel text', () => {
     expect(sel).toContain('<option value="RingOfTheMagus" selected>Ring of the Magus</option>');
     expect(sel).not.toContain('<option value="" selected>');
   });
+  test('a stored pick missing from the pool is a selected "(unavailable)" option', () => {
+    const info = fixtureInfo('Wizard');
+    info.loadout = { ...info.loadout, secondary: { ability: 'Haste', source: { Item: 'Ring1' } } } as CharacterInfo['loadout'];
+    const html = progressPanel(info, { debug: false, ready: false });
+    const sel = html.match(/<select data-loadout="Secondary"[^>]*>.*?<\/select>/)![0];
+    expect(sel).toMatch(/<option value="[^"]*Haste[^"]*" selected>Haste \(Ring1\) \(unavailable\)<\/option>/);
+    expect(sel.match(/ selected/g)).toHaveLength(1);
+    const ok = progressPanel(fixtureInfo('Wizard'), { debug: false, ready: false });
+    expect(ok).not.toContain('(unavailable)');
+  });
 });

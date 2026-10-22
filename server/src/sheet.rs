@@ -88,7 +88,7 @@ pub struct Sheet {
     pub melee: ResolvedWeapon,
     /// The Ranged slot's weapon; none when the slot is empty.
     pub ranged: Option<ResolvedWeapon>,
-    /// The light of the worn item with the largest radius.
+    /// The light of the worn item with the largest radius, or the Radiant keystone's glow when that reaches further (or nothing is worn).
     pub light: Option<LightKind>,
     /// The keystones the hero owns; the run reads the dynamic ones from here.
     pub keystones: KeystoneSet,

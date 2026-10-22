@@ -274,6 +274,14 @@ impl Lobby {
         let mut changed: Vec<Option<u32>> = Vec::new();
         for c in self.conns.values_mut() {
             if let Some(ch) = c.character.as_mut().filter(|ch| ch.id == character && p.rev > ch.progress.rev) {
+                // A real `SetLoadout` replaces the debug picks; debug weapon overrides stay (`debug_touched`).
+                // The debug flag goes too when no weapon override keeps it meaningful.
+                if ch.progress.loadout != p.loadout {
+                    c.loadout = None;
+                    if !c.debug_touched.iter().any(|t| *t) {
+                        c.debug_loadout = false;
+                    }
+                }
                 ch.progress = p.clone();
                 send(&c.tx, &ServerMsg::Character(ch.info()));
                 changed.push(c.room);
@@ -1198,5 +1206,29 @@ mod tests {
         l.handle(a, ClientMsg::LeaveRun);
         l.set_character(a, character_with(1, 10, ClassId::Barbarian, Progress::new(ClassId::Barbarian)));
         assert_eq!(l.conns[&a].debug_touched, [false; EquipSlot::COUNT]);
+    }
+
+    #[tokio::test]
+    async fn a_real_set_loadout_replaces_the_debug_picks() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (a, _rx) = join_with(&mut l, 1, ClassId::Barbarian, Progress::new(ClassId::Barbarian));
+        l.handle(a, ClientMsg::CreateRun { name: "r".into() });
+        l.debug_loadout_if(true, a, pick(AbilityId::Hurl), pick(AbilityId::Charge));
+        assert_eq!(l.build_of(a).unwrap().loadout.primary, pick(AbilityId::Hurl));
+        let mut p = Progress::new(ClassId::Barbarian);
+        p.rev = 1;
+        p.loadout.secondary = pick(AbilityId::GroundSlam);
+        l.apply_progress(10, p);
+        assert!(l.conns[&a].loadout.is_none() && !l.conns[&a].debug_loadout);
+        let b = l.build_of(a).unwrap();
+        assert_eq!((b.loadout.primary, b.loadout.secondary), (pick(AbilityId::Strike), pick(AbilityId::GroundSlam)));
+        // Debug weapon overrides survive, and keep the debug flag.
+        l.debug_equip_if(true, a, EquipSlot::Ranged, None);
+        l.debug_loadout_if(true, a, pick(AbilityId::Hurl), pick(AbilityId::Charge));
+        let mut p = Progress::new(ClassId::Barbarian);
+        p.rev = 2;
+        l.apply_progress(10, p);
+        assert!(l.conns[&a].loadout.is_none() && l.conns[&a].debug_loadout && l.conns[&a].debug_touched[EquipSlot::Ranged as usize]);
     }
 }

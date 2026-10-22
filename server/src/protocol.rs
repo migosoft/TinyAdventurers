@@ -351,14 +351,14 @@ pub struct CharacterInfo {
     pub xp: u32,
     /// All XP ever earned.
     pub total_xp: u32,
-    /// Unspent coins (nothing to buy with them yet).
+    /// Unspent coins (a respec costs coins).
     pub coins: u32,
     /// Attribute points bought in the shop.
     pub bought: Attributes,
     /// Owned skill-tree nodes (sorted, without the start node).
     pub nodes: Vec<NodeId>,
     pub equipment: Equipment,
-    /// Owned items (the equipped ones too).
+    /// Owned items that are not worn (a worn item leaves the inventory).
     pub inventory: Vec<ItemId>,
     /// The saved abilities.
     pub loadout: Loadout,

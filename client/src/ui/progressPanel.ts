@@ -108,10 +108,14 @@ export function progressPanel(info: CharacterInfo, opts: { debug: boolean; ready
   const blocked = all.filter((id) => nodeState(cls, info, id) === 'blocked').map((id) => row(id, `<small>(${blockReason(cls, info, id)})</small>`));
   const ownedRows = all.filter((id) => have.has(id) && id !== tree.start).map((id) => row(id, '<small>(owned)</small>'));
 
-  const poolSelect = (slot: 'Primary' | 'Secondary', current: Pick) =>
-    `<select data-loadout="${slot}"${off}>${loadoutPool(cls, info, slot)
+  const poolSelect = (slot: 'Primary' | 'Secondary', current: Pick) => {
+    const pool = loadoutPool(cls, info, slot);
+    // Ruling 9 keeps a stored pick that left the pool; show it, so changing the other select resends it.
+    const gone = pool.some((p) => sameSource(p, current)) ? '' : `<option value="${esc(JSON.stringify(current))}" selected>${esc(pickName(current))} (unavailable)</option>`;
+    return `<select data-loadout="${slot}"${off}>${gone}${pool
       .map((p) => `<option value="${esc(JSON.stringify(p))}"${sameSource(p, current) ? ' selected' : ''}>${esc(pickName(p))}</option>`)
       .join('')}</select>`;
+  };
 
   const equipRows = EQUIP_SLOTS.map((slot, i) => {
     const cur = info.equipment.slots[i];

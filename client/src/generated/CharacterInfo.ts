@@ -21,7 +21,7 @@ xp: number,
  */
 total_xp: number, 
 /**
- * Unspent coins (nothing to buy with them yet).
+ * Unspent coins (a respec costs coins).
  */
 coins: number, 
 /**
@@ -33,7 +33,7 @@ bought: Attributes,
  */
 nodes: Array<NodeId>, equipment: Equipment, 
 /**
- * Owned items (the equipped ones too).
+ * Owned items that are not worn (a worn item leaves the inventory).
  */
 inventory: Array<ItemId>, 
 /**

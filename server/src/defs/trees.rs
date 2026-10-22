@@ -279,7 +279,8 @@ pub fn start(class: ClassId) -> NodeId {
     }
 }
 
-/// Every node of a class's tree, the start included, in id order.
+/// Every node of a class's tree, the start included, in id order (the exporter and the tests read it).
+#[cfg(test)]
 pub fn tree(class: ClassId) -> Vec<NodeDef> {
     NodeId::ALL.into_iter().map(def).filter(|d| d.class == class).collect()
 }

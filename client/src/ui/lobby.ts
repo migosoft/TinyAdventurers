@@ -146,6 +146,8 @@ export class Lobby {
 
   error(msg: string): void {
     this.resetRejectedDebugPick(msg);
+    // A refused build change is not followed by a Character message: draw the selects from the saved state again.
+    this.render();
     const e = this.root.querySelector('.error');
     if (e) e.textContent = msg;
   }

@@ -63,13 +63,13 @@ pub fn races(class: ClassId) -> &'static [Race] {
     }
 }
 
-/// Class points plus the race bonus (the Elf's DEX +2).
 /// The class's own proficiencies: its weapon kinds and armor up to `max_armor`.
 pub fn prof_base(class: ClassId) -> Vec<Prof> {
     let d = def(class);
     d.weapons.iter().map(|&k| Prof::Weapon(k)).chain(std::iter::once(Prof::Armor(d.max_armor))).collect()
 }
 
+/// Class points plus the race bonus (the Elf's DEX +2).
 pub fn start_attrs(class: ClassId) -> Attributes {
     def(class).attrs.plus(races::race_attrs(races(class)))
 }
