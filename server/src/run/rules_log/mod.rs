@@ -90,6 +90,7 @@ pub fn set_prefs(run: &mut Run, pi: usize, on: bool, details: bool) {
 /// A player left the run: their prefs go.
 pub fn forget(run: &mut Run, player_id: u32) {
     run.log.prefs.retain(|(i, _)| *i != player_id);
+    run.log.too_close.retain(|(h, _, _)| *h != player_id);
     if !self::on(run) {
         run.log.records.clear();
         run.log.open.clear();
@@ -312,6 +313,10 @@ pub fn skipped(run: &mut Run, by: u32, what: What, skips: &[(usize, Skip)], chai
     let chain = matches!(what, What::Ability(AbilityId::ChainSpark));
     for &(mi, skip) in skips {
         let Some(reason) = text::skip_reason(skip) else { continue };
+        // A disguised mimic is a chest to everyone: a chest is never named in such a line.
+        if run.monsters[mi].hiding {
+            continue;
+        }
         let id = run.monsters[mi].id;
         let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
         who.extend(seen_by_id(run, by));

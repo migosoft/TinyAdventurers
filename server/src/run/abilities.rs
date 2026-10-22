@@ -800,6 +800,7 @@ fn chain_jumps(run: &mut Run, pi: usize, first: usize, damage: Damage) {
         hit.push(mi);
         last = mi;
     }
+    skips.retain(|(mi, _)| !hit.contains(mi)); // hit on a later jump: no "did not jump" line
     super::rules_log::skipped(run, run.players[pi].id, What::Ability(AbilityId::ChainSpark), &skips, stop);
 }
 
@@ -2754,8 +2755,10 @@ mod tests {
 
         let mut run = ground_slam();
         let c = crowd(&mut run);
+        let wolf_at = run.monsters[c.last().unwrap().1].pos;
         land_slam(&mut run, 0);
         assert_eq!(hit_names(&run, &c, false), PIN_SLAM, "Ground Slam");
+        assert_eq!(run.monsters[c.last().unwrap().1].pos, wolf_at, "the wolf is not knocked");
 
         let mut run = run_with_ability(ClassId::Barbarian, AbilitySlot::Primary, AbilityId::Strike, Attributes::default(), Equipment::starter(ClassId::Barbarian));
         let c = crowd(&mut run);
@@ -2768,5 +2771,21 @@ mod tests {
         try_use(&mut run, 0, true, 1);
         fly(&mut run);
         assert_eq!(hit_names(&run, &c, false), PIN_CHAIN, "Chain Spark");
+        assert_eq!(run.monsters[c.last().unwrap().1].hp, 80.0, "no jump to the wolf");
+
+        // Line of sight for a Strike: a goblin in the arc and in reach, standing in a wall tile, is not hit.
+        for walled in [false, true] {
+            let mut run = run_with_ability(ClassId::Barbarian, AbilitySlot::Primary, AbilityId::Strike, Attributes::default(), Equipment::starter(ClassId::Barbarian));
+            let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+            let g = run.spawn_enemy(EnemyType::GoblinArcher, crate::dungeon::Map::center_of(tx + 1, ty), None);
+            let gi = run.monster_idx(g).unwrap();
+            run.monsters[gi].hp = 1000.0;
+            if walled {
+                run.layout.map.set(tx + 1, ty, crate::dungeon::Tile::Wall);
+            }
+            assert_eq!(line_of_sight(&run.layout.map, run.players[0].pos(), run.monsters[gi].pos), !walled);
+            try_use(&mut run, 0, true, 1);
+            assert_eq!(run.monsters[gi].hp < 1000.0, !walled, "Strike, walled: {walled}");
+        }
     }
 }

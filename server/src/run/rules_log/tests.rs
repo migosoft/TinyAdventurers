@@ -3,6 +3,7 @@ use super::send::{LineW, LOG_BYTES_PER_SNAP};
 use super::tags::{export_tag_names, tag_name};
 use super::text::{n1, pct, type_name};
 use super::*;
+use crate::collision::line_of_sight;
 use super::text;
 use crate::dungeon::{Map, Tile};
 use crate::protocol::ClientMsg;
@@ -1024,16 +1025,61 @@ fn a_chain_that_stops_names_what_was_just_out_of_reach() {
 
 #[test]
 fn a_hidden_mimic_is_never_a_skip_line() {
-    for (class, id) in [(ClassId::Wizard, AbilityId::FrostNova), (ClassId::Barbarian, AbilityId::WarCry)] {
-        let mut run = hero_secondary(class, id, Attributes::new(1, 0, 0, 7, 0, 0));
-        let mimic = enemy_near(&mut run, EnemyType::Mimic);
-        run.monsters[mimic].hiding = true;
-        run.monsters[mimic].pos = run.players[0].pos() + crate::math::Vec2::new(20.0, 0.0);
-        let _ = take(&mut run);
-        crate::run::abilities::try_use(&mut run, 0, false, 1);
-        let recs = take(&mut run);
-        assert!(kinds_of(&recs, LineKind::Skip).is_empty(), "{id:?}: {:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    for (class, id, primary) in [(ClassId::Wizard, AbilityId::FrostNova, false), (ClassId::Barbarian, AbilityId::WarCry, false), (ClassId::Barbarian, AbilityId::WarCry, true)] {
+        // In reach and in the open (War Cry skips it), then in reach behind a wall (Nova and Strike would log "no line of sight").
+        for walled in [false, true] {
+            let mut run = hero_secondary(class, id, Attributes::new(1, 0, 0, 7, 0, 0));
+            let mimic = enemy_near(&mut run, EnemyType::Mimic);
+            run.monsters[mimic].hiding = true;
+            if walled {
+                let (tx, ty) = Map::tile_of(run.players[0].pos());
+                run.layout.map.set(tx + 1, ty, Tile::Wall);
+                run.monsters[mimic].pos = Map::center_of(tx + 1, ty);
+            } else {
+                run.monsters[mimic].pos = run.players[0].pos() + crate::math::Vec2::new(20.0, 0.0);
+            }
+            let _ = take(&mut run);
+            crate::run::abilities::try_use(&mut run, 0, primary, 1);
+            let recs = take(&mut run);
+            assert!(kinds_of(&recs, LineKind::Skip).is_empty(), "{id:?} walled {walled}: {:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+        }
     }
+}
+
+#[test]
+fn a_goblin_hit_on_a_later_jump_has_no_did_not_jump_line() {
+    // C is behind a wall from the first target F but in sight of B, the jump after F: it is hit, so no line says otherwise.
+    let mut run = wizard_with(AbilityId::ChainSpark, Attributes::new(0, 0, 0, 3, 0, 0));
+    let f = goblin_near(&mut run, Some(1000.0));
+    let (tx, ty) = Map::tile_of(run.monsters[f].pos);
+    run.layout.map.set(tx, ty + 1, Tile::Wall);
+    let b = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 2, ty + 1), None);
+    let c = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 1, ty + 2), None);
+    let (bi, ci) = (run.monster_idx(b).unwrap(), run.monster_idx(c).unwrap());
+    let map = &run.layout.map;
+    assert!(line_of_sight(map, run.monsters[f].pos, run.monsters[bi].pos), "F sees B");
+    assert!(!line_of_sight(map, run.monsters[f].pos, run.monsters[ci].pos), "F does not see C");
+    assert!(line_of_sight(map, run.monsters[bi].pos, run.monsters[ci].pos), "B sees C");
+    let (hp_b, hp_c) = (run.monsters[bi].hp, run.monsters[ci].hp);
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, true, 1);
+    fly(&mut run);
+    assert!(run.monsters[bi].hp < hp_b && run.monsters[ci].hp < hp_c, "both jumped to");
+    let recs = take(&mut run);
+    let skips: Vec<&str> = kinds_of(&recs, LineKind::Skip).iter().map(|r| r.head.as_str()).collect();
+    assert!(!skips.iter().any(|h| h.contains("no line of sight")), "{skips:?}");
+}
+
+#[test]
+fn leaving_forgets_the_too_close_throttle() {
+    let mut run = hero_secondary(ClassId::ElvenRanger, AbilityId::Entangle, Attributes::new(0, 0, 0, 0, 0, 10));
+    let mi = enemy_near(&mut run, EnemyType::GoblinArcher);
+    run.monsters[mi].pos = run.players[0].pos() + crate::math::Vec2::new(10.0, 0.0);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    assert_eq!(run.log.too_close.len(), 1);
+    let id = run.players[0].id;
+    forget(&mut run, id);
+    assert!(run.log.too_close.is_empty());
 }
 
 #[test]
@@ -1102,4 +1148,27 @@ fn a_primary_that_strikes_instead_says_so() {
     let notes = kinds_of(&recs, LineKind::Note);
     assert_eq!(notes.len(), 1);
     assert_eq!(notes[0].head, format!("{name} ▸ Magic Missile: {goblin} is in melee reach, strikes instead"));
+}
+
+#[test]
+fn a_hidden_mimic_behind_a_wall_is_no_slam_skip_line() {
+    let pick = Pick { ability: AbilityId::GroundSlam, source: Source::Own };
+    let equipment = Equipment::starter(ClassId::Barbarian).with(crate::defs::items::EquipSlot::Melee, crate::defs::items::ItemId::WarHammer);
+    let build = Build { own: vec![AbilityId::GroundSlam], loadout: Loadout { secondary: pick, ..Loadout::start(ClassId::Barbarian) }, extra: Attributes::new(2, 0, 0, 0, 0, 0), equipment, ..Build::start(ClassId::Barbarian) };
+    let mut run = crate::run::tests::test_run_with(&[(ClassId::Barbarian, build)], BossId::Demon);
+    run.log.forced = true;
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    for y in ty - 3..=ty + 3 {
+        for x in tx - 2..=tx + 14 {
+            run.layout.map.set(x, y, Tile::Floor);
+        }
+    }
+    run.layout.map.set(tx + 1, ty, Tile::Wall);
+    let id = run.spawn_enemy(EnemyType::Mimic, Map::center_of(tx + 1, ty), None);
+    let mi = run.monster_idx(id).unwrap();
+    run.monsters[mi].hiding = true;
+    let _ = take(&mut run);
+    crate::run::abilities::land_slam(&mut run, 0);
+    let recs = take(&mut run);
+    assert!(kinds_of(&recs, LineKind::Skip).is_empty(), "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
 }
