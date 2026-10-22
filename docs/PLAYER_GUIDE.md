@@ -22,10 +22,14 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 | **Right mouse button** | Secondary ability |
 | **E** (while alive) | Wake a sleeping teammate next to you (see Status effects), push the barrel right next to you (see Explosive barrels), or light or put out the torch next to you (see Seeing in the dark) |
 | **Q / E** | After you die, switch which teammate you watch |
-| **Esc** | Menu (leave the dungeon) |
+| **Esc** | Menu: resume, Settings or leave the dungeon |
 | **L** | Turn the rules log on or off (see The rules log) |
 | **Shift+L** | Show or hide the calculation lines of the rules log |
 | **F3** | Show ping, frame rate and network stats |
+
+The **Settings** view of the Esc menu has a checkbox for each switch: the rules log (L), its calculation lines (Shift+L) and the network stats (F3). The keys and the checkboxes always agree.
+
+On the screen, the **E** hint is a small gold key cap that floats over the thing you can use (a chest, a door, a sleeping teammate with the word "Wake"). A **critical hit** shows as a big gold number. Messages come in two kinds: story messages in the middle of the screen (a force field, a teammate leaving the dungeon) and small notices (such as "You have fallen").
 
 ## The heroes
 
@@ -78,7 +82,7 @@ The fastest hero, and the only one who fights with a companion. An elf: she sees
 - **It shows only where there is light**, with a small health bar like a hero's. Its kills count as yours; its death gives no XP or coins, shows a message and starts the 60 seconds.
 - **If you fall, the wolf vanishes**, also when you leave the dungeon. Debug mode does not make it immortal.
 
-The two boxes at the bottom of the screen show your abilities. They darken while an ability recharges and light up gold when it is ready.
+The two boxes at the bottom of the screen show your abilities. While an ability recharges, the gold rim around its box fills up clockwise and the seconds left show inside; the box flashes once when the ability is ready again.
 
 ## Seeing in the dark
 
@@ -256,25 +260,25 @@ Tip: when you see the smoke, get out of the area in front of its mouth. Don't st
 
 ## Status effects
 
-Some attacks do more than damage. Your own effects show as small icons with the seconds left under your health bar, and your party's effects as icons in the party list (top left). Red icons are bad, green ones are good.
+Some attacks do more than damage. Your own effects show as small symbols with the seconds left under your health bar, and your party's effects as symbols in the party list (top left). A teammate's effects also show beside their floating name. A **thin outline symbol** is the weaker tier of an effect (Singed, Chilled, Tainted). While you are asleep, a panel with a moon appears above your health bar.
 
-| Icon | Effect | What it does |
+| Symbol | Effect | What it does |
 |---|---|---|
-| **B** | Blind | You see nothing around you (darkvision does not help) |
-| **Z** | Asleep | You lie down: no moving, attacking or abilities, and a very short view. A teammate's **E** wakes you at once |
-| **P** | Petrified | Stone: no moving, attacking or turning, but you take far less damage and are hard to push |
-| **S** | Slowed | You walk at half speed |
-| **A** | Accelerated | You walk half as fast again (Haste and War Cry give it to heroes) |
-| **F** | Burning | Fire eats at you: heat damage for 3 seconds. Water puts it out |
-| **I** | Frozen | Ice: you cannot move, act or turn for 2 seconds, and the cold hurts a little |
-| **X** | Poisoned | Poison eats at you for 4 seconds |
-| **C** | Chilled | Cold slows you to 70 % speed for 3 seconds |
-| **G** | Singed | A weaker burn: a little heat damage for 3 seconds. Water puts it out |
-| **T** | Tainted | A weaker poison: a little poison damage for 3 seconds |
-| **E** | Entangled | Roots hold you: you cannot move for a few seconds, but you can still turn and attack |
-| **R** | Fear | You run away from whoever scared you and cannot attack (enemies only, for now) |
-| **W** | Warded | Green: nothing can blind, sleep or petrify you (Purify) |
-| **V** | Coated | Green: your weapon attacks add poison and poison what they hit (Poison Coat) |
+| Crossed-out eye | Blind | You see nothing around you (darkvision does not help) |
+| Moon | Asleep | You lie down: no moving, attacking or abilities, and a very short view. A teammate's **E** wakes you at once |
+| Cracked stone | Petrified | Stone: no moving, attacking or turning, but you take far less damage and are hard to push |
+| Hourglass | Slowed | You walk at half speed |
+| Double arrow | Accelerated | You walk half as fast again (Haste and War Cry give it to heroes) |
+| Flame | Burning | Fire eats at you: heat damage for 3 seconds. Water puts it out |
+| Snowflake | Frozen | Ice: you cannot move, act or turn for 2 seconds, and the cold hurts a little |
+| Drop | Poisoned | Poison eats at you for 4 seconds |
+| Thin snowflake | Chilled | Cold slows you to 70 % speed for 3 seconds |
+| Thin flame | Singed | A weaker burn: a little heat damage for 3 seconds. Water puts it out |
+| Thin drop | Tainted | A weaker poison: a little poison damage for 3 seconds |
+| Vine | Entangled | Roots hold you: you cannot move for a few seconds, but you can still turn and attack |
+| Skull | Fear | You run away from whoever scared you and cannot attack (enemies only, for now) |
+| Shield | Warded | Gold: nothing can blind, sleep or petrify you (Purify) |
+| Blade | Coated | Green: your weapon attacks add poison and poison what they hit (Poison Coat) |
 
 A sleeping or petrified hero cannot dodge, and a blind one cannot see what is coming, so the party's job is to keep the enemies off them. The final bosses resist some effects: all of them resist sleep completely, and some shorten other effects. The effects end by themselves after a few seconds.
 

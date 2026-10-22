@@ -38,12 +38,18 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 18. **Balancing pass:** every "Tune" item, including resistances, light radii, darkness and the vision and darkness values (see "Vision and darkvision follow-ups"). Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers. **Party size** (the user, 2026-10-19): if bigger parties need harder fights, scale the number of enemies or their Attributes, never their HP (4b removes today's HP bonus).
 19. **Delta snapshots, WebTransport:** only if measurements show they are needed.
 
-## UI polishing (next; the user, 2026-10-22)
+## UI polish follow-ups (built 2026-10-22 on `feature/ui-polish`)
 
-Comes before every other item, including the balancing pass (postponed by the user, 2026-10-22).
-- **Font:** the text is hard to read; Press Start 2P is far too boxy. Replace it everywhere with a readable font (the user suggested Inter). Today `--font` in `client/src/style.css` sets Press Start 2P for all HTML; Phaser texts set it themselves (`game/effects.ts`, `game/anim/EntityView.ts`, `game/status.ts`); the rules log uses JetBrains Mono.
-- **Input elements:** a more polished design for buttons, text fields, selects, tabs and panels. It need not follow the game area's pixel style, but it should fit an adventure game.
-- Brainstorm first (font choice, scope, look), then spec and plan.
+UI polishing is built (Inter, brass controls, cooldown ring, effect symbols, Settings, the admin page in the game's look); see TECHNICAL §9 and §11a. Left over:
+- **FPS cost of the screen-resolution canvas:** the canvas has zoom squared times more pixels (4x at 1280 x 720); the smoke test's frame rate in headless swiftshader fell from about 27 to about 15. Measure on a real GPU; if it hurts, lower the render resolution or draw the world texts at a smaller resolution.
+- **Two text resolution policies:** world texts use the fixed `TEXT_RESOLUTION` (4), the rules-log tags zoom x camera zoom x devicePixelRatio. Pick one; a hi-DPI screen may upscale the fixed one.
+- **Login screen scrolls at 720 px tall** (the splash logo is about 470 px). Cap it with a `max-height` in vh.
+- **Bottom HUD row is tight at 1280 px:** about 12 px of margin; a 4-digit coin counter would eat most of it.
+- **Tag symbols could have a dark drop-shadow** (the mockup has a 1 px black one); pale symbols can be hard to read on a lit floor.
+- **Settings focus handling:** focus is not managed when Settings opens, on Back or when the menu closes, so a hidden focused checkbox could be flipped by Space during play. No Hud test that `frame()` re-syncs an open Settings view or that F3 shows and hides the panel.
+- **Admin tokens are duplicated:** `admin/admin.css` copies the `:root` tokens of `style.css` (drift risk) and hard-codes some brass hexes; a shared `tokens.css` would fix it.
+- **Tree labels** are 11 px bold: "CON" spills past its circle, "MM+" fills its diamond (legible). `effectIconSvg` throws on an unknown id (the old letters fell back to "?"). The "0.0" shown for a cooldown under 0.05 s.
+- **Not seen in a browser yet:** the crit number and its pop, the E key cap at a chest, door and sleeping teammate, the cooldown flash, an effect symbol beside a lit teammate's tag, the asleep panel, the Esc menu and Settings, the end screen, game versus notice messages, and the admin page.
 
 ## Progression follow-ups
 
@@ -78,7 +84,7 @@ Progression is live: accounts with up to 8 characters, per-character progress in
 ## Plan 5 follow-ups
 
 Left open by the plan 5 task reviews (none blocks play). Check the first group in the browser.
-- **Never seen live:** the red unmet-requirement ring on a tree node; the Loadout tab's invalid card and warning hint; the tree labels (6 px) at a real screen size.
+- **Never seen live:** the red unmet-requirement ring on a tree node; the Loadout tab's invalid card and warning hint; the tree labels at a real screen size (now 11 px).
 - **Waiting room:** the room root gets the `.ui` class, which nobody asked for (harmless).
 - **Roster and Create:** an `Error` or a lost connection while the roster or Create screen shows goes to the hidden lobby, so it is not shown.
 - **Texts:** `OnHit` prop text uses the `EffectKind` Debug name (no item has `OnHit` yet). `Weight`, `MaxHp` and `Attr` prop texts would print "+-" for a negative value (none exist). The `USES` fallback ("no weapon") is silent.
@@ -285,7 +291,6 @@ Built 2026-10-15 on branch `feature/effects` (TECHNICAL §5 "Status effects", §
 - **Effect sounds:** `Ev::Effect` is sent on every start and end and the client ignores it; it is the hook.
 - **Petrified and Burning:** a petrified creature has heat resistance 0.5 from the stone, so one with half heat resistance already (no creature today) reaches 100 % and does not burn (full resistance to the type refuses its effect). Decide whether stone should protect from fire that way.
 - **Poisoned tint overrides the enraged and variant tints:** the green pulse in `EntityView.ts` (~228) wins over them. Revisit when a poison source arrives.
-- **HUD glyphs are letters (B, Z, P, S, A, F, I, X):** the pixel font has no symbols. Drawn icons (small sprites, so art or the user's go-ahead) would read better.
 - **A frozen boss's running action is paused, not cancelled:** `levels/boss.rs` skips the behaviour tick, while the spec says a running wind-up is cancelled. Decide, or add a `cancel()` hook on `BossBehaviour`, before a hero ability gives bosses effects.
 - **Sleeping or petrified monsters can still be pushed** by `separate_monsters`.
 - **`Ev::Effect` drives no client burst yet** (start and end of an effect could play a puff).
