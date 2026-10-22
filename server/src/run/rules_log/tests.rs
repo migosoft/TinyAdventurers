@@ -1172,3 +1172,328 @@ fn a_hidden_mimic_behind_a_wall_is_no_slam_skip_line() {
     let recs = take(&mut run);
     assert!(kinds_of(&recs, LineKind::Skip).is_empty(), "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
 }
+
+// ---- Leak tests (Task 7) ----
+
+/// What `send_snapshots` would hand each player for the records since the last call:
+/// the same view, darkness and entity list, then the same filter.
+struct Sent {
+    log: LogW,
+    ents: Vec<u32>,
+}
+
+fn sent_to_all(run: &mut Run) -> Vec<Sent> {
+    let records = take(run);
+    let mut out = Vec::new();
+    for pi in 0..run.players.len() {
+        let me = &run.players[pi];
+        let viewed = if me.alive { pi } else { me.spectating.and_then(|s| run.players.iter().position(|q| q.id == s)).unwrap_or(pi) };
+        let viewed_id = run.players[viewed].id;
+        let (view, dark) = view_of(run, viewed);
+        let ents = crate::run::visibility::snapshot_ents(run, pi, &view, &dark);
+        let log = for_viewer(run, pi, viewed_id, &view, &dark, &ents, &records).expect("log is on");
+        out.push(Sent { log, ents: ents.iter().map(|e| e.0).collect() });
+    }
+    out
+}
+
+fn text_of(l: &LineW) -> String {
+    format!("{}\n{}", l.2, l.3.join("\n"))
+}
+
+/// Does `text` contain `tag` as a whole tag ("Goblin Archer 1" is not in "Goblin Archer 12")?
+fn names(text: &str, tag: &str) -> bool {
+    text.match_indices(tag).any(|(i, _)| !text[i + tag.len()..].starts_with(|c: char| c.is_ascii_digit()))
+}
+
+/// Hero 0 (`class`) fights goblins on open floor; hero 1 stands in a far room of his own.
+fn leak_run(class: ClassId, primary: AbilityId, secondary: AbilityId) -> Run {
+    let loadout = Loadout { primary: Pick { ability: primary, source: Source::Own }, secondary: Pick { ability: secondary, source: Source::Own } };
+    let build = Build { own: vec![primary, secondary], loadout, extra: Attributes::new(1, 0, 0, 7, 0, 7), equipment: Equipment::starter(class), ..Build::start(class) };
+    let mut run = crate::run::tests::test_run_with(&[(class, build), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::Demon);
+    run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    for y in ty - 4..=ty + 4 {
+        for x in tx - 2..=tx + 14 {
+            run.layout.map.set(x, y, Tile::Floor);
+        }
+    }
+    // Hero 1: a closed room in the far corner.
+    let (w, h) = (run.layout.map.w as i32, run.layout.map.h as i32);
+    let (fx, fy) = if tx < w / 2 { (w - 6, h - 6) } else { (5, 5) };
+    for y in fy - 2..=fy + 2 {
+        for x in fx - 2..=fx + 2 {
+            run.layout.map.set(x, y, if x.abs_diff(fx) == 2 || y.abs_diff(fy) == 2 { Tile::Wall } else { Tile::Floor });
+        }
+    }
+    let far = Map::center_of(fx, fy);
+    run.players[1].mv.x = far.x;
+    run.players[1].mv.y = far.y;
+    for pi in 0..2 {
+        run.players[pi].max_hp = 1e6;
+        run.players[pi].hp = 1e6;
+        set_prefs(&mut run, pi, true, true);
+    }
+    run.players[0].darkvision = Some(0.3);
+    run.players[0].aim = 0.0;
+    run.lights = crate::run::light::Lights::new(run.layout.map.w, run.layout.map.h);
+    run
+}
+
+fn spawn_at(run: &mut Run, t: EnemyType, tile: (i32, i32), hp: f64) -> u32 {
+    let id = run.spawn_enemy(t, Map::center_of(tile.0, tile.1), None);
+    let mi = run.monster_idx(id).unwrap();
+    run.monsters[mi].hp = hp;
+    run.monsters[mi].max_hp = hp;
+    id
+}
+
+struct Fight {
+    /// Every hero 1 snapshot's lines.
+    hero1: Vec<LineW>,
+    /// Hero 0's, with the snapshot's entity ids and the ids of monsters alive after the tick.
+    hero0: Vec<(LineW, Vec<u32>, Vec<u32>)>,
+    /// Every unseen line of every record of the run.
+    unseen: Vec<(String, Vec<String>)>,
+    dark: u32,
+    walled: u32,
+    heads: Vec<String>,
+    tags: std::collections::HashMap<u32, std::collections::BTreeSet<String>>,
+}
+
+fn fight(class: ClassId, primary: AbilityId, secondary: AbilityId, spectate: bool) -> (Run, Fight) {
+    let mut run = leak_run(class, primary, secondary);
+    if spectate {
+        run.players[1].alive = false;
+        run.players[1].spectating = Some(run.players[0].id);
+    }
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    // F is the chain's first target; W stands behind walls from F and from the hero; D is out in the dark.
+    for x in tx + 2..=tx + 3 {
+        run.layout.map.set(x, ty + 1, Tile::Wall);
+    }
+    let first = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 3, ty), 5000.0);
+    let walled = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 3, ty + 2), 5000.0);
+    let dark = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 10, ty + 3), 5000.0);
+    let near: Vec<u32> = [(3, -2, 40.0), (4, -1, 5000.0), (2, -3, 40.0)].iter().map(|&(dx, dy, hp)| spawn_at(&mut run, EnemyType::GoblinArcher, (tx + dx, ty + dy), hp)).collect();
+    let _ = first;
+    let hero = run.players[0].id;
+    let mut f = Fight { hero1: vec![], hero0: vec![], unseen: vec![], dark, walled, heads: vec![], tags: Default::default() };
+    for tick in 0..300u32 {
+        // Burn a goblin early; it runs out later.
+        if tick == 3 {
+            let mi = run.monster_idx(near[1]).unwrap();
+            let at = run.players[0].pos();
+            run.apply(Creature::Monster(mi), Apply { power: Some(2), secs: Some(2.0), source: Some((hero, at)), origin: Some((hero, What::Ability(primary))), ..Apply::plain(EffectKind::Burning, None) });
+        }
+        if tick % 25 == 5 {
+            run.players[0].cd1 = 0.0;
+            crate::run::abilities::try_use(&mut run, 0, true, 1);
+        }
+        if tick % 40 == 10 {
+            run.players[0].cd2 = 0.0;
+            crate::run::abilities::try_use(&mut run, 0, false, 1);
+        }
+        if tick % 40 == 20 {
+            // The goblin in the dark hits hero 0.
+            run.hurt_player(0, Damage::physical(6.0).by(dark, What::Attack));
+        }
+        if tick % 40 == 30 {
+            // Hits with a multiplier and with another type: their steps are the attacker's, not hero 0's.
+            run.hurt_player(0, Damage { amount: 12.0, ..Damage::physical(6.0) }.by(dark, What::Ability(AbilityId::FlankingThrust)).with_mult(Mult::Behind(2.0)));
+            run.hurt_player(0, Damage::new(9.3, DamageSplit::pure(DamageType::Magical)).by(dark, What::Ability(AbilityId::ChainSpark)).with_mult(Mult::Chain { jump: 2, factor: 0.64 }));
+        }
+        run.step();
+        f.heads.extend(run.log.records.iter().map(|r| r.head.clone()));
+        for m in &run.monsters {
+            f.tags.entry(m.id).or_default().insert(tag_of(&run, m.id));
+        }
+        for o in &run.objects {
+            f.tags.entry(o.id).or_default().insert(tag_of(&run, o.id));
+        }
+        for r in &run.log.records {
+            if let Some(u) = &r.unseen {
+                f.unseen.push((u.head.clone(), u.details.clone()));
+            }
+        }
+        let alive: Vec<u32> = run.monsters.iter().filter(|m| m.alive).map(|m| m.id).collect();
+        let got = sent_to_all(&mut run);
+        let mut got = got.into_iter();
+        let (g0, g1) = (got.next().unwrap(), got.next().unwrap());
+        f.hero1.extend(g1.log.1);
+        assert!(spectate || g1.ents.iter().all(|id| !f.tags.contains_key(id)), "hero 1 sees no creature or object: {:?}", g1.ents);
+        f.hero0.extend(g0.log.1.into_iter().map(|l| (l, g0.ents.clone(), alive.clone())));
+    }
+    (run, f)
+}
+
+#[test]
+fn no_line_names_a_creature_its_viewer_cannot_see() {
+    for (class, primary, secondary) in [(ClassId::Wizard, AbilityId::ChainSpark, AbilityId::FrostNova), (ClassId::Barbarian, Loadout::start(ClassId::Barbarian).primary.ability, AbilityId::WarCry)] {
+        let (run, f) = fight(class, primary, secondary, false);
+        // Hero 1 saw nothing of the fight: not one creature tag in any line.
+        for l in &f.hero1 {
+            for tags in f.tags.values() {
+                for t in tags {
+                    assert!(!names(&text_of(l), t), "{class:?}: hero 1 got {t}: {}", l.2);
+                }
+            }
+        }
+        // Hero 0: every creature tag is of a creature in that snapshot, or of one that died in it.
+        let mut named = 0;
+        for (l, ents, alive) in &f.hero0 {
+            for (id, tags) in &f.tags {
+                for t in tags {
+                    if names(&text_of(l), t) {
+                        assert!(ents.contains(id) || !alive.contains(id), "{class:?}: hero 0 got {t} unseen: {}", l.2);
+                        named += 1;
+                    }
+                }
+            }
+        }
+        assert!(named > 10, "{class:?}: the fight reached hero 0 ({named})");
+        // The goblin behind the wall and the one in the dark: the game did write lines about them, and hero 0 got
+        // those only in snapshots that had the goblin in them.
+        let (walled_tag, dark_tag) = (tag_of(&run, f.walled), tag_of(&run, f.dark));
+        assert!(f.heads.iter().any(|h| names(h, &walled_tag)), "{class:?}: the game wrote a line about {walled_tag}");
+        assert!(f.heads.iter().any(|h| names(h, &dark_tag)), "{class:?}: the game wrote a line about {dark_tag}");
+        for (l, ents, _) in &f.hero0 {
+            assert!(!names(&text_of(l), &walled_tag) || ents.contains(&f.walled), "{class:?}: {walled_tag}: {}", l.2);
+            assert!(!names(&text_of(l), &dark_tag) || ents.contains(&f.dark), "{class:?}: {dark_tag}: {}", l.2);
+        }
+        // The dark goblin did hit hero 0, and that arrived as a short line.
+        assert!(f.hero0.iter().any(|(l, _, _)| l.2.contains("from something unseen")), "{class:?}: unseen hits arrive as short lines");
+    }
+}
+
+#[test]
+fn a_chain_that_stops_names_nothing_its_viewer_cannot_see() {
+    let mut run = leak_run(ClassId::Wizard, AbilityId::ChainSpark, AbilityId::FrostNova);
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    let first = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 3, ty), 5000.0);
+    // E is just beyond the spark's reach from F, and far enough from the hero to be in the dark.
+    let e = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 3, ty + 4), 5000.0);
+    let (e_tag, f_tag) = (tag_of(&run, e), tag_of(&run, first));
+    run.players[0].darkvision = Some(0.5);
+    let _ = take(&mut run);
+    run.players[0].cd1 = 0.0;
+    crate::run::abilities::try_use(&mut run, 0, true, 1);
+    fly(&mut run);
+    assert!(run.log.records.iter().any(|r| r.head.contains(&format!("stopped: {e_tag} is out of reach"))), "the game wrote the stop line");
+    let got = sent_to_all(&mut run);
+    assert!(got[0].log.1.iter().any(|l| l.2.contains(&f_tag)), "hero 0 saw the hit on F");
+    assert!(!got[0].ents.contains(&e), "E is in the dark");
+    for pi in 0..2 {
+        assert!(got[pi].log.1.iter().all(|l| !names(&text_of(l), &e_tag)), "hero {pi} was told about {e_tag}");
+    }
+}
+
+#[test]
+fn a_hidden_mimic_is_a_chest_in_every_line() {
+    let mut run = run_with_a_mimic();
+    run.log.forced = true;
+    run.monsters.retain(|m| m.is_boss || m.kind == EntityKind::Mimic);
+    let mi = run.monsters.iter().position(|m| m.kind == EntityKind::Mimic).unwrap();
+    let (id, hero) = (run.monsters[mi].id, run.players[0].id);
+    let chest = tag_of(&run, id);
+    assert!(chest.starts_with("Chest "), "{chest}");
+    run.monsters[mi].hp = 1000.0;
+    run.monsters[mi].max_hp = 1000.0;
+    let _ = take(&mut run);
+    // The revealing hit, with an effect on it: every line says Chest.
+    let burn = Damage { on_hit: Some(OnHit { kind: EffectKind::Burning, secs: 2.0, magical: true, power: 5, look: EffectLook::Plain }), ..Damage::physical(5.0).by(hero, What::Ability(AbilityId::MagicMissile)) };
+    run.hurt_monster(mi, burn, false, Some(0));
+    assert!(!run.monsters[mi].hiding, "the hit woke it");
+    let first = take(&mut run);
+    assert!(!first.is_empty());
+    assert!(first[0].head.contains(&chest), "{}", first[0].head);
+    for r in &first {
+        assert!(!all_text(r).contains("Mimic"), "before the reveal: {}", all_text(r));
+        assert!(r.unseen.as_ref().map_or(true, |u| !u.head.contains("Mimic")));
+    }
+    // The next hit, and the kill after it, say Mimic 1.
+    run.hurt_monster(mi, Damage::physical(5.0).by(hero, What::Ability(AbilityId::MagicMissile)), false, Some(0));
+    let next = take(&mut run);
+    assert!(next[0].head.contains("Mimic 1"), "{}", next[0].head);
+    assert!(next.iter().all(|r| !all_text(r).contains("Chest")), "{:?}", next.iter().map(all_text).collect::<Vec<_>>());
+    run.hurt_monster(mi, Damage::physical(5000.0).by(hero, What::Ability(AbilityId::MagicMissile)), false, Some(0));
+    let kill = take(&mut run);
+    assert!(kill.iter().any(|r| r.kind == LineKind::Death && r.head.starts_with("Mimic 1 died")), "{:?}", kill.iter().map(|r| &r.head).collect::<Vec<_>>());
+}
+
+#[test]
+fn a_kill_line_reaches_who_saw_it_die() {
+    let mut run = leak_run(ClassId::Wizard, AbilityId::MagicMissile, AbilityId::FrostNova);
+    run.players[0].darkvision = Some(1.0);
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    let id = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 3, ty), 5.0);
+    let (mi, hero, tag) = (run.monster_idx(id).unwrap(), run.players[0].id, tag_of(&run, id));
+    let name = run.players[0].name.clone();
+    let _ = take(&mut run);
+    // Seen now; killed on the first tick of the snapshot pair, so it is dead and gone from `ents` at the second.
+    assert!(sent_to_all(&mut run)[0].ents.contains(&id));
+    run.hurt_monster(mi, Damage::physical(50.0).by(hero, What::Ability(AbilityId::MagicMissile)), false, Some(0));
+    assert!(!run.monsters[mi].alive);
+    run.step();
+    let got = sent_to_all(&mut run);
+    assert!(!got[0].ents.contains(&id), "gone from the entity list");
+    let heads: Vec<&str> = got[0].log.1.iter().map(|l| l.2.as_str()).collect();
+    assert!(heads.iter().any(|h| h.contains(&format!("{name} ▸ Magic Missile ▸ {tag}"))), "{heads:?}");
+    assert!(heads.contains(&format!("{tag} died (killed by {name})").as_str()), "{heads:?}");
+    assert!(got[1].log.1.is_empty(), "hero 1 saw nothing of it");
+    // The kill happened where it could not be seen: nobody is told.
+    let dark = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 12, ty + 3), 5.0);
+    run.players[0].darkvision = Some(0.0);
+    let (di, dtag) = (run.monster_idx(dark).unwrap(), tag_of(&run, dark));
+    let _ = take(&mut run);
+    run.hurt_monster(di, Damage::physical(50.0).by(hero, What::Ability(AbilityId::MagicMissile)), false, Some(0));
+    assert!(run.log.records.iter().any(|r| r.head.contains(&dtag)), "the game wrote the lines");
+    for s in sent_to_all(&mut run) {
+        assert!(s.log.1.is_empty(), "{:?}", s.log.1.iter().map(|l| &l.2).collect::<Vec<_>>());
+    }
+    // A heal between a goblin hero 0 sees and one in the dark, either way round: no line for anyone.
+    run.players[0].darkvision = Some(0.3);
+    let near = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 1, ty), 50.0);
+    let far = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 12, ty + 4), 50.0);
+    let ents = sent_to_all(&mut run)[0].ents.clone();
+    assert!(ents.contains(&near) && !ents.contains(&far));
+    for (healer, healed) in [(near, far), (far, near)] {
+        let hi = run.monster_idx(healed).unwrap();
+        run.monsters[hi].hp = 10.0;
+        let _ = take(&mut run);
+        run.heal_monster(hi, 20.0, Some((healer, What::Attack)));
+        assert!(run.log.records.iter().any(|r| r.kind == LineKind::Heal), "the game wrote a heal line");
+        for s in sent_to_all(&mut run) {
+            assert!(s.log.1.is_empty(), "{:?}", s.log.1.iter().map(|l| &l.2).collect::<Vec<_>>());
+        }
+    }
+}
+
+#[test]
+fn the_unseen_line_carries_no_attacker_data() {
+    let mut checked = 0;
+    for (class, primary, secondary) in [(ClassId::Wizard, AbilityId::ChainSpark, AbilityId::FrostNova), (ClassId::Barbarian, Loadout::start(ClassId::Barbarian).primary.ability, AbilityId::WarCry)] {
+        let (_, f) = fight(class, primary, secondary, false);
+        let tags: Vec<&String> = f.tags.values().flatten().filter(|t| *t != "something").collect();
+        let kinds: Vec<String> = EntityKind::ALL.iter().flat_map(|&k| [Some(format!("{k:?}")), tag_name(k).map(String::from)]).flatten().collect();
+        let words = ["base", "given at", "jump", "behind", "overkill", "Overkill", "coat", "Coat", "Behind", "Chain", "Flank", "attack"];
+        let attributes = ["STR", "DEX", "CON", "INT", "WIL", "CHA"];
+        for (head, details) in &f.unseen {
+            let text = format!("{head}\n{}", details.join("\n"));
+            assert!(head.contains("from something unseen"), "{head}");
+            for t in &tags {
+                assert!(!names(&text, t), "{class:?}: {t} in {text}");
+            }
+            for k in &kinds {
+                assert!(!text.contains(k.as_str()), "{class:?}: {k} in {text}");
+            }
+            for w in words.iter().chain(attributes.iter()) {
+                assert!(!text.contains(w), "{class:?}: {w} in {text}");
+            }
+            // Only the hero's own side: the amount in and the resistance steps.
+            assert!(details.iter().all(|d| d.contains("resist")), "{details:?}");
+            checked += 1;
+        }
+    }
+    assert!(checked >= 20, "{checked}");
+}
