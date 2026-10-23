@@ -42,7 +42,7 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 
 Plan them in a fresh session, before the balancing pass. Details and the findings so far are in HANDOFF "Next session".
 - **Damage numbers and the darkness:** numbers on heroes show over the darkness; numbers on enemies stay under it (hidden in the dark). Today it is the other way round (`DEPTH.heroNumbers` / `DEPTH.numbers` in `client/src/game/effects.ts`).
-- **Attributes only on the Sheet:** remove the 21 "+1 Attribute" nodes from the skill trees (there are no Attribute maximums; the tree nodes only had a fixed price and a place on a branch). Shorter trees are fine (the user: more skills come later anyway), so nothing has to replace them; reconnect the branches and refund owned ones.
+- **Attributes only on the Sheet:** remove the 21 "+1 Attribute" nodes from the skill trees (there are no Attribute maximums; the tree nodes only had a fixed price and a place on a branch). Shorter trees are fine (the user: more skills come later anyway), so nothing has to replace them; reconnect the branches. No refund needed: not in production yet, all stored data may be deleted (the user).
 
 ## UI polish follow-ups (built 2026-10-22 on `feature/ui-polish`)
 
