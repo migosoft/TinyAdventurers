@@ -389,13 +389,13 @@ mod tests {
     fn stale_ids_are_dropped_not_the_document() {
         let mut p = Progress::new(W);
         p.bank(5000, 30);
-        p.buy_node(W, NodeId::WA1).unwrap();
+        p.buy_node(W, NodeId::WA2).unwrap();
         let mut v = p.to_json();
         v["nodes"].as_array_mut().unwrap().push(json!("NoSuchNode"));
         v["inventory"] = json!(["NoSuchItem", "Knife"]);
         v["equipment"]["slots"][4] = json!("NoSuchRing");
         let q = Progress::from_json(v, W);
-        assert_eq!((q.xp, q.coins, q.nodes.clone(), q.inventory.clone()), (p.xp, 30, vec![NodeId::WA1], vec![ItemId::Knife]));
+        assert_eq!((q.xp, q.coins, q.nodes.clone(), q.inventory.clone()), (p.xp, 30, vec![NodeId::WA2], vec![ItemId::Knife]));
         assert_eq!(q.equipment, p.equipment);
         assert_eq!(q.xp_spent, p.xp_spent);
     }
@@ -416,8 +416,28 @@ mod tests {
     #[test]
     fn nodes_of_another_class_or_the_start_are_dropped() {
         let mut v = Progress::new(W).to_json();
-        v["nodes"] = json!(["WA2", "B0", "W0", "BU1", "WA1", "WA1"]);
-        assert_eq!(Progress::from_json(v, W).nodes, vec![NodeId::WA1, NodeId::WA2]);
+        v["nodes"] = json!(["WA3", "B0", "W0", "BU2", "WA2", "WA2", "WA1"]);
+        assert_eq!(Progress::from_json(v, W).nodes, vec![NodeId::WA2, NodeId::WA3]);
+    }
+
+    #[test]
+    fn a_removed_node_is_dropped_and_its_xp_stays_spent() {
+        let mut v = Progress::new(W).to_json();
+        v["nodes"] = json!(["WA1", "WA2"]);
+        v["xp_spent"] = json!(500);
+        v["xp"] = json!(0);
+        let mut q = Progress::from_json(v, W);
+        assert_eq!(q.nodes, vec![NodeId::WA2]);
+        assert_eq!(q.xp_spent, 500);
+        q.bank(0, 100);
+        q.respec(W).unwrap();
+        assert_eq!(q.xp, 500);
+
+        let mut v = Progress::new(W).to_json();
+        v["nodes"] = json!(["WA4", "WA5"]);
+        let q = Progress::from_json(v, W);
+        assert_eq!(q.nodes, vec![NodeId::WA5]);
+        assert!(hero_sheet(W, &q.build(W)).is_ok());
     }
 
     #[test]
@@ -447,17 +467,17 @@ mod tests {
     fn buying_nodes() {
         let mut p = Progress::new(W);
         p.bank(3000, 0);
-        assert_eq!(p.buy_node(W, NodeId::WA2), Err("Buy a neighbouring node first."));
+        assert_eq!(p.buy_node(W, NodeId::WA3), Err("Buy a neighbouring node first."));
         assert_eq!(p.buy_node(W, NodeId::B0), Err("That node is not in your tree."));
-        p.buy_node(W, NodeId::WA1).unwrap();
-        assert_eq!((p.xp, p.xp_spent), (2800, 200));
-        assert_eq!(p.buy_node(W, NodeId::WA1), Err("You already have that node."));
-        p.buy_node(W, NodeId::WB1).unwrap();
         p.buy_node(W, NodeId::WA2).unwrap();
-        p.buy_node(W, NodeId::WA4).unwrap();
-        assert_eq!(p.nodes, vec![NodeId::WA1, NodeId::WA2, NodeId::WA4, NodeId::WB1]);
-        assert_eq!(p.xp_spent, 200 + 200 + 300 + 300);
-        // WA3 needs INT 18: class 15 + WA1 + WA4 = 17; a ring of insight makes it 18.
+        assert_eq!((p.xp, p.xp_spent), (2700, 300));
+        assert_eq!(p.buy_node(W, NodeId::WA2), Err("You already have that node."));
+        p.buy_node(W, NodeId::WB3).unwrap();
+        assert_eq!(p.nodes, vec![NodeId::WA2, NodeId::WB3]);
+        p.buy_attr(W, Attr::Int).unwrap();
+        p.buy_attr(W, Attr::Int).unwrap();
+        assert_eq!(p.xp_spent, 300 + 300 + 475);
+        // WA3 needs INT 18: class 15 + two shop points = 17; a ring of insight makes it 18.
         let before = p.clone();
         assert_eq!(p.buy_node(W, NodeId::WA3), Err("A requirement of that node is not met."));
         assert_eq!(p, before);
@@ -479,20 +499,20 @@ mod tests {
         p.bank(5000, 100);
         p.buy_attr(W, Attr::Int).unwrap();
         p.buy_attr(W, Attr::Int).unwrap();
-        for n in [NodeId::WA1, NodeId::WA2, NodeId::WA4] {
+        for n in [NodeId::WA2, NodeId::WB3] {
             p.buy_node(W, n).unwrap();
         }
         p.set_loadout(Loadout { primary: Pick { ability: AbilityId::MagicMissile, source: Source::Own }, secondary: Pick { ability: AbilityId::Haste, source: Source::Own } }).unwrap();
-        assert_eq!(p.xp_spent, 475 + 800);
+        assert_eq!(p.xp_spent, 475 + 600);
         let price = p.respec_price();
-        assert_eq!(price, 20 + 1275 / 50);
+        assert_eq!(price, 20 + 1075 / 50);
         p.respec(W).unwrap();
         assert_eq!((p.xp, p.xp_spent, p.coins), (5000, 0, 100 - price));
         assert_eq!((p.bought, p.nodes.clone(), p.loadout), (Attributes::default(), vec![], Loadout::start(W)));
         assert_eq!(p.respec_price(), 20);
 
         // Too few coins: nothing changes.
-        p.buy_node(W, NodeId::WA1).unwrap();
+        p.buy_node(W, NodeId::WA2).unwrap();
         p.coins = 19;
         let before = p.clone();
         assert_eq!(p.respec(W), Err("Not enough coins."));
@@ -559,7 +579,7 @@ mod tests {
         let mut p = Progress::new(W);
         p.bank(500, 0);
         p.apply(W, Change::BuyAttr(Attr::Wil)).unwrap();
-        p.apply(W, Change::BuyNode(NodeId::WA1)).unwrap();
+        p.apply(W, Change::BuyNode(NodeId::WA2)).unwrap();
         p.apply(W, Change::GrantItem(ItemId::Knife)).unwrap();
         p.apply(W, Change::Equip(EquipSlot::Melee, Some(ItemId::Knife))).unwrap();
         p.apply(W, Change::SetLoadout(Loadout::start(W))).unwrap();

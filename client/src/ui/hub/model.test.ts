@@ -8,11 +8,11 @@ describe('nodeState', () => {
   test('the start node is owned, its neighbours buyable with XP', () => {
     const info = fixtureInfo('Wizard', { xp: 1000 });
     expect(nodeState(info, 'W0')).toBe('owned');
-    expect(nodeState(info, 'WA1')).toBe('buyable');
-    expect(nodeState(info, 'WA2')).toBe('locked');
+    expect(nodeState(info, 'WA2')).toBe('buyable');
+    expect(nodeState(info, 'WA3')).toBe('locked');
   });
   test('a requirement or XP shortfall blocks', () => {
-    const info = fixtureInfo('Wizard', { xp: 50, nodes: ['WA1', 'WA2'] });
+    const info = fixtureInfo('Wizard', { xp: 50, nodes: ['WA2'] });
     expect(nodeState(info, 'WA3')).toBe('blocked'); // INT 18, and XP
     expect(blockReason(info, 'WA3')).toBe('needs INT 18');
   });

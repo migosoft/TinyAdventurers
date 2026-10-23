@@ -650,7 +650,7 @@ mod tests {
         let a = db::create_account(&db, "Treer", "h").await.unwrap();
         let c = db::create_character(&db, a, "Branch", ClassId::Wizard).await.unwrap();
         db::create_character(&db, a, "Bare", ClassId::Wizard).await.unwrap();
-        sqlx::query("UPDATE characters SET progress = jsonb_set(progress, '{nodes}', '[\"WA1\",\"WA2\"]') WHERE id = $1").bind(c.id).execute(&db).await.unwrap();
+        sqlx::query("UPDATE characters SET progress = jsonb_set(progress, '{nodes}', '[\"WA2\",\"WA3\"]') WHERE id = $1").bind(c.id).execute(&db).await.unwrap();
         let s = overview(&db, Live::default()).await.unwrap();
         let buckets = s.levels.iter().map(|l| (l.nodes, l.characters)).collect::<Vec<_>>();
         assert_eq!(buckets, vec![(0, 1), (2, 1)]);

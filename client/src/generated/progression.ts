@@ -7,10 +7,11 @@ export const TREES = {
         "cost": 0,
         "kind": "Start",
         "links": [
-          "BU1",
+          "BU2",
           "BL1",
           "BR1",
-          "BD1"
+          "BD2",
+          "BD3"
         ],
         "name": "Barbarian",
         "pos": [
@@ -20,34 +21,17 @@ export const TREES = {
         "req": [],
         "text": "Where the tree starts. Always owned."
       },
-      "BD1": {
-        "attr": "Con",
-        "cost": 200,
-        "kind": "Attr",
-        "links": [
-          "BD2",
-          "BD3",
-          "B0"
-        ],
-        "name": "+1 CON",
-        "pos": [
-          0,
-          1
-        ],
-        "req": [],
-        "text": "+1 CON"
-      },
       "BD2": {
         "cost": 300,
         "kind": "Resist",
         "links": [
-          "BD4",
-          "BD1"
+          "BD5",
+          "B0"
         ],
         "name": "Thick Hide",
         "pos": [
           -1,
-          2
+          1
         ],
         "req": [],
         "text": "+10 % physical resistance."
@@ -56,44 +40,28 @@ export const TREES = {
         "cost": 200,
         "kind": "Resist",
         "links": [
-          "BD4",
-          "BD1"
+          "BD5",
+          "B0"
         ],
         "name": "Iron Gut",
         "pos": [
           1,
-          2
+          1
         ],
         "req": [],
         "text": "+20 % poison resistance."
-      },
-      "BD4": {
-        "attr": "Con",
-        "cost": 300,
-        "kind": "Attr",
-        "links": [
-          "BD5",
-          "BD2",
-          "BD3"
-        ],
-        "name": "+1 CON",
-        "pos": [
-          0,
-          3
-        ],
-        "req": [],
-        "text": "+1 CON"
       },
       "BD5": {
         "cost": 1000,
         "kind": "Keystone",
         "links": [
-          "BD4"
+          "BD2",
+          "BD3"
         ],
         "name": "Unbreakable",
         "pos": [
           0,
-          4
+          2
         ],
         "req": [
           "CON 16"
@@ -106,7 +74,6 @@ export const TREES = {
         "kind": "Unlock",
         "links": [
           "BL2",
-          "BL3",
           "B0"
         ],
         "name": "War Cry",
@@ -130,26 +97,10 @@ export const TREES = {
         "name": "Thunderous",
         "pos": [
           -2,
-          -1
+          0
         ],
         "req": [],
         "text": "War Cry: radius +30 %."
-      },
-      "BL3": {
-        "attr": "Cha",
-        "cost": 200,
-        "kind": "Attr",
-        "links": [
-          "BL4",
-          "BL1"
-        ],
-        "name": "+1 CHA",
-        "pos": [
-          -2,
-          1
-        ],
-        "req": [],
-        "text": "+1 CHA"
       },
       "BL4": {
         "ability": "Charge",
@@ -157,8 +108,7 @@ export const TREES = {
         "kind": "Improve",
         "links": [
           "BL5",
-          "BL2",
-          "BL3"
+          "BL2"
         ],
         "name": "Bowling Charge",
         "pos": [
@@ -267,35 +217,18 @@ export const TREES = {
         "req": [],
         "text": "Ground Slam: radius +20 %."
       },
-      "BU1": {
-        "attr": "Str",
-        "cost": 250,
-        "kind": "Attr",
-        "links": [
-          "BU2",
-          "B0"
-        ],
-        "name": "+1 STR",
-        "pos": [
-          0,
-          -1
-        ],
-        "req": [],
-        "text": "+1 STR"
-      },
       "BU2": {
         "ability": "Strike",
         "cost": 300,
         "kind": "Improve",
         "links": [
           "BU3",
-          "BU4",
-          "BU1"
+          "B0"
         ],
         "name": "Wide Swings",
         "pos": [
           0,
-          -2
+          -1
         ],
         "req": [],
         "text": "Strike: arc +15 %."
@@ -310,41 +243,24 @@ export const TREES = {
         ],
         "name": "Whirl",
         "pos": [
-          -1,
-          -3
+          0,
+          -2
         ],
         "req": [
           "DEX 14"
         ],
         "text": "Unlocks Whirl (primary)."
       },
-      "BU4": {
-        "attr": "Str",
-        "cost": 300,
-        "kind": "Attr",
-        "links": [
-          "BU5",
-          "BU2"
-        ],
-        "name": "+1 STR",
-        "pos": [
-          1,
-          -3
-        ],
-        "req": [],
-        "text": "+1 STR"
-      },
       "BU5": {
         "cost": 1200,
         "kind": "Keystone",
         "links": [
-          "BU3",
-          "BU4"
+          "BU3"
         ],
         "name": "Berserker",
         "pos": [
           0,
-          -4
+          -3
         ],
         "req": [
           "STR 17"
@@ -361,7 +277,8 @@ export const TREES = {
         "kind": "Start",
         "links": [
           "EU1",
-          "EL1",
+          "EL2",
+          "EL3",
           "ER1",
           "ED1"
         ],
@@ -440,34 +357,17 @@ export const TREES = {
         ],
         "text": "Poisoned enemies take +15 % damage from you."
       },
-      "EL1": {
-        "attr": "Dex",
-        "cost": 250,
-        "kind": "Attr",
-        "links": [
-          "EL2",
-          "EL3",
-          "E0"
-        ],
-        "name": "+1 DEX",
-        "pos": [
-          -1,
-          0
-        ],
-        "req": [],
-        "text": "+1 DEX"
-      },
       "EL2": {
         "ability": "Shoot",
         "cost": 350,
         "kind": "Improve",
         "links": [
           "EL4",
-          "EL1"
+          "E0"
         ],
         "name": "Long Shot",
         "pos": [
-          -2,
+          -1,
           -1
         ],
         "req": [],
@@ -478,11 +378,11 @@ export const TREES = {
         "kind": "Proficiency",
         "links": [
           "EL4",
-          "EL1"
+          "E0"
         ],
         "name": "Longbow",
         "pos": [
-          -2,
+          -1,
           1
         ],
         "req": [],
@@ -499,7 +399,7 @@ export const TREES = {
         ],
         "name": "Volley",
         "pos": [
-          -3,
+          -2,
           0
         ],
         "req": [
@@ -515,7 +415,7 @@ export const TREES = {
         ],
         "name": "Deadeye",
         "pos": [
-          -4,
+          -3,
           0
         ],
         "req": [
@@ -547,7 +447,6 @@ export const TREES = {
         "cost": 350,
         "kind": "Improve",
         "links": [
-          "ER4",
           "ER1"
         ],
         "name": "Find the Gap",
@@ -562,7 +461,6 @@ export const TREES = {
         "cost": 250,
         "kind": "Proficiency",
         "links": [
-          "ER4",
           "ER1"
         ],
         "name": "Katana",
@@ -573,28 +471,13 @@ export const TREES = {
         "req": [],
         "text": "Proficiency: katana."
       },
-      "ER4": {
-        "attr": "Dex",
-        "cost": 350,
-        "kind": "Attr",
-        "links": [
-          "ER2",
-          "ER3"
-        ],
-        "name": "+1 DEX",
-        "pos": [
-          3,
-          0
-        ],
-        "req": [],
-        "text": "+1 DEX"
-      },
       "EU1": {
         "ability": "SummonWolf",
         "cost": 300,
         "kind": "Improve",
         "links": [
-          "EU2",
+          "EU3",
+          "EU4",
           "E0"
         ],
         "name": "Thick Fur",
@@ -605,35 +488,18 @@ export const TREES = {
         "req": [],
         "text": "Summon Wolf: the wolf has +25 % HP."
       },
-      "EU2": {
-        "attr": "Cha",
-        "cost": 200,
-        "kind": "Attr",
-        "links": [
-          "EU3",
-          "EU4",
-          "EU1"
-        ],
-        "name": "+1 CHA",
-        "pos": [
-          0,
-          -2
-        ],
-        "req": [],
-        "text": "+1 CHA"
-      },
       "EU3": {
         "ability": "Entangle",
         "cost": 600,
         "kind": "Unlock",
         "links": [
           "EU5",
-          "EU2"
+          "EU1"
         ],
         "name": "Entangle",
         "pos": [
           -1,
-          -3
+          -2
         ],
         "req": [
           "CHA 14"
@@ -646,12 +512,12 @@ export const TREES = {
         "kind": "Improve",
         "links": [
           "EU5",
-          "EU2"
+          "EU1"
         ],
         "name": "Swift Pounce",
         "pos": [
           1,
-          -3
+          -2
         ],
         "req": [],
         "text": "Summon Wolf: the wolf's dash cooldown −2 s."
@@ -666,7 +532,7 @@ export const TREES = {
         "name": "Pack Hunter",
         "pos": [
           0,
-          -4
+          -3
         ],
         "req": [
           "WIL 16"
@@ -682,10 +548,11 @@ export const TREES = {
         "cost": 0,
         "kind": "Start",
         "links": [
-          "PU1",
+          "PU2",
           "PL1",
           "PR1",
-          "PD1"
+          "PD2",
+          "PD3"
         ],
         "name": "Paladin",
         "pos": [
@@ -695,34 +562,16 @@ export const TREES = {
         "req": [],
         "text": "Where the tree starts. Always owned."
       },
-      "PD1": {
-        "attr": "Con",
-        "cost": 200,
-        "kind": "Attr",
-        "links": [
-          "PD2",
-          "PD3",
-          "P0"
-        ],
-        "name": "+1 CON",
-        "pos": [
-          0,
-          1
-        ],
-        "req": [],
-        "text": "+1 CON"
-      },
       "PD2": {
         "cost": 350,
         "kind": "Resist",
         "links": [
-          "PD4",
-          "PD1"
+          "P0"
         ],
         "name": "Steadfast",
         "pos": [
           -1,
-          2
+          1
         ],
         "req": [],
         "text": "+10 % physical resistance."
@@ -731,39 +580,21 @@ export const TREES = {
         "cost": 250,
         "kind": "Proficiency",
         "links": [
-          "PD4",
-          "PD1"
+          "P0"
         ],
         "name": "Spear",
         "pos": [
           1,
-          2
+          1
         ],
         "req": [],
         "text": "Proficiency: spear."
-      },
-      "PD4": {
-        "attr": "Con",
-        "cost": 300,
-        "kind": "Attr",
-        "links": [
-          "PD2",
-          "PD3"
-        ],
-        "name": "+1 CON",
-        "pos": [
-          0,
-          3
-        ],
-        "req": [],
-        "text": "+1 CON"
       },
       "PL1": {
         "ability": "Purify",
         "cost": 500,
         "kind": "Unlock",
         "links": [
-          "PL2",
           "PL3",
           "P0"
         ],
@@ -777,22 +608,6 @@ export const TREES = {
         ],
         "text": "Unlocks Purify (secondary)."
       },
-      "PL2": {
-        "attr": "Wil",
-        "cost": 160,
-        "kind": "Attr",
-        "links": [
-          "PL4",
-          "PL1"
-        ],
-        "name": "+1 WIL",
-        "pos": [
-          -2,
-          -1
-        ],
-        "req": [],
-        "text": "+1 WIL"
-      },
       "PL3": {
         "cost": 300,
         "kind": "Resist",
@@ -803,7 +618,7 @@ export const TREES = {
         "name": "Warded",
         "pos": [
           -2,
-          1
+          0
         ],
         "req": [],
         "text": "+20 % magical resistance."
@@ -814,7 +629,6 @@ export const TREES = {
         "kind": "Improve",
         "links": [
           "PL5",
-          "PL2",
           "PL3"
         ],
         "name": "Lasting Ward",
@@ -846,7 +660,6 @@ export const TREES = {
         "cost": 300,
         "kind": "Improve",
         "links": [
-          "PR2",
           "PR3",
           "P0"
         ],
@@ -857,22 +670,6 @@ export const TREES = {
         ],
         "req": [],
         "text": "Strike: +10 % damage."
-      },
-      "PR2": {
-        "attr": "Str",
-        "cost": 250,
-        "kind": "Attr",
-        "links": [
-          "PR4",
-          "PR1"
-        ],
-        "name": "+1 STR",
-        "pos": [
-          2,
-          -1
-        ],
-        "req": [],
-        "text": "+1 STR"
       },
       "PR3": {
         "ability": "Smite",
@@ -885,7 +682,7 @@ export const TREES = {
         "name": "Smite",
         "pos": [
           2,
-          1
+          0
         ],
         "req": [
           "CHA 15"
@@ -898,7 +695,6 @@ export const TREES = {
         "kind": "Unlock",
         "links": [
           "PR5",
-          "PR2",
           "PR3"
         ],
         "name": "Consecrate",
@@ -927,35 +723,18 @@ export const TREES = {
         ],
         "text": "Armor weighs half for you; +10 % physical resistance."
       },
-      "PU1": {
-        "attr": "Cha",
-        "cost": 200,
-        "kind": "Attr",
-        "links": [
-          "PU2",
-          "P0"
-        ],
-        "name": "+1 CHA",
-        "pos": [
-          0,
-          -1
-        ],
-        "req": [],
-        "text": "+1 CHA"
-      },
       "PU2": {
         "ability": "HolyLight",
         "cost": 350,
         "kind": "Improve",
         "links": [
           "PU3",
-          "PU4",
-          "PU1"
+          "P0"
         ],
         "name": "Greater Light",
         "pos": [
           0,
-          -2
+          -1
         ],
         "req": [],
         "text": "Holy Light: heal +25 %."
@@ -970,41 +749,24 @@ export const TREES = {
         ],
         "name": "Judgement",
         "pos": [
-          -1,
-          -3
+          0,
+          -2
         ],
         "req": [
           "CHA 16"
         ],
         "text": "Unlocks Judgement (primary)."
       },
-      "PU4": {
-        "attr": "Cha",
-        "cost": 300,
-        "kind": "Attr",
-        "links": [
-          "PU5",
-          "PU2"
-        ],
-        "name": "+1 CHA",
-        "pos": [
-          1,
-          -3
-        ],
-        "req": [],
-        "text": "+1 CHA"
-      },
       "PU5": {
         "cost": 1200,
         "kind": "Keystone",
         "links": [
-          "PU3",
-          "PU4"
+          "PU3"
         ],
         "name": "Radiant",
         "pos": [
           0,
-          -4
+          -3
         ],
         "req": [
           "CHA 17"
@@ -1020,10 +782,10 @@ export const TREES = {
         "cost": 0,
         "kind": "Start",
         "links": [
-          "WA1",
+          "WA2",
           "WF1",
           "WR1",
-          "WB1"
+          "WB3"
         ],
         "name": "Wizard",
         "pos": [
@@ -1033,35 +795,18 @@ export const TREES = {
         "req": [],
         "text": "Where the tree starts. Always owned."
       },
-      "WA1": {
-        "attr": "Int",
-        "cost": 200,
-        "kind": "Attr",
-        "links": [
-          "WA2",
-          "W0"
-        ],
-        "name": "+1 INT",
-        "pos": [
-          0,
-          -1
-        ],
-        "req": [],
-        "text": "+1 INT"
-      },
       "WA2": {
         "ability": "MagicMissile",
         "cost": 300,
         "kind": "Improve",
         "links": [
           "WA3",
-          "WA4",
-          "WA1"
+          "W0"
         ],
         "name": "Piercing Missiles",
         "pos": [
           0,
-          -2
+          -1
         ],
         "req": [
           "INT 15"
@@ -1078,91 +823,41 @@ export const TREES = {
         ],
         "name": "Chain Spark",
         "pos": [
-          -1,
-          -3
+          0,
+          -2
         ],
         "req": [
           "INT 18"
         ],
         "text": "Unlocks Chain Spark (primary)."
       },
-      "WA4": {
-        "attr": "Int",
-        "cost": 300,
-        "kind": "Attr",
-        "links": [
-          "WA5",
-          "WA2"
-        ],
-        "name": "+1 INT",
-        "pos": [
-          1,
-          -3
-        ],
-        "req": [],
-        "text": "+1 INT"
-      },
       "WA5": {
         "cost": 1200,
         "kind": "Keystone",
         "links": [
-          "WA3",
-          "WA4"
+          "WA3"
         ],
         "name": "Arcane Overflow",
         "pos": [
           0,
-          -4
+          -3
         ],
         "req": [
           "INT 18"
         ],
         "text": "Spell damage +15 %; spell cooldowns +10 %."
       },
-      "WB1": {
-        "attr": "Con",
-        "cost": 200,
-        "kind": "Attr",
-        "links": [
-          "WB2",
-          "WB3",
-          "W0"
-        ],
-        "name": "+1 CON",
-        "pos": [
-          0,
-          1
-        ],
-        "req": [],
-        "text": "+1 CON"
-      },
-      "WB2": {
-        "attr": "Wil",
-        "cost": 160,
-        "kind": "Attr",
-        "links": [
-          "WB4",
-          "WB1"
-        ],
-        "name": "+1 WIL",
-        "pos": [
-          -1,
-          2
-        ],
-        "req": [],
-        "text": "+1 WIL"
-      },
       "WB3": {
         "cost": 300,
         "kind": "Proficiency",
         "links": [
           "WB4",
-          "WB1"
+          "W0"
         ],
         "name": "Light Armor",
         "pos": [
-          1,
-          2
+          0,
+          1
         ],
         "req": [],
         "text": "Proficiency: light armor."
@@ -1173,14 +868,12 @@ export const TREES = {
         "kind": "Unlock",
         "links": [
           "WB5",
-          "WB6",
-          "WB2",
           "WB3"
         ],
         "name": "Haste",
         "pos": [
           0,
-          3
+          2
         ],
         "req": [
           "INT 15",
@@ -1197,26 +890,11 @@ export const TREES = {
         ],
         "name": "Lasting Haste",
         "pos": [
-          -1,
-          4
+          0,
+          3
         ],
         "req": [],
         "text": "Haste: +2 s."
-      },
-      "WB6": {
-        "attr": "Dex",
-        "cost": 250,
-        "kind": "Attr",
-        "links": [
-          "WB4"
-        ],
-        "name": "+1 DEX",
-        "pos": [
-          1,
-          4
-        ],
-        "req": [],
-        "text": "+1 DEX"
       },
       "WF1": {
         "ability": "FrostShard",
@@ -1340,7 +1018,7 @@ export const TREES = {
         "cost": 250,
         "kind": "Resist",
         "links": [
-          "WR4",
+          "WR5",
           "WR1"
         ],
         "name": "Ember Skin",
@@ -1356,7 +1034,7 @@ export const TREES = {
         "cost": 500,
         "kind": "Improve",
         "links": [
-          "WR4",
+          "WR5",
           "WR1"
         ],
         "name": "Scorched Earth",
@@ -1369,32 +1047,16 @@ export const TREES = {
         ],
         "text": "Fireball: the blast sets Burning (3 s) on everything it hits."
       },
-      "WR4": {
-        "attr": "Int",
-        "cost": 300,
-        "kind": "Attr",
-        "links": [
-          "WR5",
-          "WR2",
-          "WR3"
-        ],
-        "name": "+1 INT",
-        "pos": [
-          3,
-          0
-        ],
-        "req": [],
-        "text": "+1 INT"
-      },
       "WR5": {
         "cost": 1200,
         "kind": "Keystone",
         "links": [
-          "WR4"
+          "WR2",
+          "WR3"
         ],
         "name": "Pyromancer",
         "pos": [
-          4,
+          3,
           0
         ],
         "req": [

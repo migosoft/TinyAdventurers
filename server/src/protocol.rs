@@ -445,7 +445,7 @@ mod tests {
             decode(&rmp_serde::to_vec_named(&m).unwrap()).unwrap_or_else(|| panic!("{json} does not decode"))
         };
         assert!(matches!(via(r#"{"t":"BuyAttribute","attr":"Str"}"#), ClientMsg::BuyAttribute { attr: Attr::Str }));
-        assert!(matches!(via(r#"{"t":"BuyNode","node":"WA1"}"#), ClientMsg::BuyNode { node: NodeId::WA1 }));
+        assert!(matches!(via(r#"{"t":"BuyNode","node":"WA2"}"#), ClientMsg::BuyNode { node: NodeId::WA2 }));
         assert!(matches!(via(r#"{"t":"Respec"}"#), ClientMsg::Respec));
         assert!(matches!(via(r#"{"t":"Equip","slot":"Melee","item":null}"#), ClientMsg::Equip { slot: EquipSlot::Melee, item: None }));
         assert!(matches!(via(r#"{"t":"Equip","slot":"Ring1","item":"RingOfInsight"}"#), ClientMsg::Equip { slot: EquipSlot::Ring1, item: Some(ItemId::RingOfInsight) }));

@@ -836,19 +836,19 @@ mod tests {
     }
 
     #[test]
-    fn tree_points_resistances_and_proficiencies_reach_the_sheet() {
+    fn tree_resistances_and_proficiencies_reach_the_sheet() {
         use crate::defs::trees::NodeId;
         let c = ClassId::Wizard;
-        let b = Build { nodes: vec![NodeId::WA1, NodeId::WF1, NodeId::WF3, NodeId::WB1, NodeId::WB3], ..Build::start(c) };
+        let b = Build { nodes: vec![NodeId::WF1, NodeId::WF3, NodeId::WB3], ..Build::start(c) };
         let s = hero_sheet(c, &b).unwrap();
         let start = hero_sheet(c, &Build::start(c)).unwrap();
-        assert_eq!(s.attrs.get(Attr::Int), start.attrs.get(Attr::Int) + 1);
-        assert_eq!(s.max_hp, start.max_hp + 5.0, "CON +1");
+        assert_eq!(s.attrs.get(Attr::Int), start.attrs.get(Attr::Int));
+        assert_eq!(s.max_hp, start.max_hp);
         assert!((s.res.get(DamageType::Cold) - start.res.get(DamageType::Cold) - 0.2).abs() < 1e-12);
         // Light armor: refused without the node, fine with it.
         let robe = |nodes: Vec<NodeId>| Build { nodes, equipment: Equipment::starter(c).with(EquipSlot::Armor, ItemId::LeatherArmor), ..Build::start(c) };
         assert!(matches!(hero_sheet(c, &robe(vec![])), Err(LoadoutError::Equip(EquipSlot::Armor, items::EquipError::NotProficient))));
-        assert!(hero_sheet(c, &robe(vec![NodeId::WB1, NodeId::WB3])).is_ok());
+        assert!(hero_sheet(c, &robe(vec![NodeId::WB3])).is_ok());
     }
 
     #[test]
@@ -882,10 +882,9 @@ mod tests {
         let honed = hero_sheet(c, &Build { nodes: vec![NodeId::PR1], ..Build::start(c) }).unwrap();
         assert!((honed.primary.damage - plain.primary.damage * 1.1).abs() < 1e-9, "Strike equipped");
         assert_eq!(honed.fallback.damage, plain.fallback.damage, "never on the fallback");
-        // Greater Light (PU2) behind +1 CHA (PU1): compare with the same CHA bought in the shop.
-        let cha = hero_sheet(c, &Build { extra: Attributes::new(0, 0, 0, 0, 0, 1), ..Build::start(c) }).unwrap();
-        let greater = hero_sheet(c, &Build { nodes: vec![NodeId::PU1, NodeId::PU2], ..Build::start(c) }).unwrap();
-        assert!((greater.secondary.damage - cha.secondary.damage * 1.25).abs() < 1e-9, "Holy Light equipped");
+        // Greater Light (PU2) next to the start.
+        let greater = hero_sheet(c, &Build { nodes: vec![NodeId::PU2], ..Build::start(c) }).unwrap();
+        assert!((greater.secondary.damage - plain.secondary.damage * 1.25).abs() < 1e-9, "Holy Light equipped");
         // Not equipped, not improved: Strike's node does nothing to a Paladin whose primary is another ability.
         let hl_only = hero_sheet(c, &Build { nodes: vec![NodeId::PR1], ..Build::start(c) }).unwrap();
         assert_eq!(hl_only.secondary.damage, plain.secondary.damage);
@@ -895,7 +894,7 @@ mod tests {
     fn an_item_version_gets_the_tree_improvement_too() {
         use crate::defs::loadout::Source;
         use crate::defs::trees::NodeId;
-        // Ruling 1: a Wizard with Piercing Missiles (WA1, WA2) picking the Seeker's Band's Magic Missile pierces 2.
+        // Ruling 1: a Wizard with Piercing Missiles (WA2) picking the Seeker's Band's Magic Missile pierces 2.
         let c = ClassId::Wizard;
         let equipment = Equipment::starter(c).with(EquipSlot::Ring1, ItemId::SeekersBand);
         let item_pick = Pick { ability: AbilityId::MagicMissile, source: Source::Item(EquipSlot::Ring1) };
@@ -906,18 +905,17 @@ mod tests {
         };
         let own_pick = Pick { ability: AbilityId::MagicMissile, source: Source::Own };
         assert_eq!(with(vec![], item_pick).pierce, 1, "the band alone");
-        assert_eq!(with(vec![NodeId::WA1, NodeId::WA2], item_pick).pierce, 2, "the band and the node");
-        assert_eq!(with(vec![NodeId::WA1, NodeId::WA2], own_pick).pierce, 1, "the node alone");
+        assert_eq!(with(vec![NodeId::WA2], item_pick).pierce, 2, "the band and the node");
+        assert_eq!(with(vec![NodeId::WA2], own_pick).pierce, 1, "the node alone");
     }
 
     #[test]
     fn attrs_with_and_without_items() {
-        use crate::defs::trees::NodeId;
         let c = ClassId::Paladin;
-        let b = Build { nodes: vec![NodeId::PU1], extra: Attributes::new(1, 0, 0, 0, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor), ..Build::start(c) };
+        let b = Build { nodes: vec![], extra: Attributes::new(1, 0, 0, 0, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor), ..Build::start(c) };
         let without = attrs_without_items(c, &b);
         assert_eq!(without.get(Attr::Str), 16);
-        assert_eq!(without.get(Attr::Cha), 15);
+        assert_eq!(without.get(Attr::Cha), 14);
         assert!(attrs_with_items(c, &b).get(Attr::Con) > without.get(Attr::Con), "the band's CON counts with items only");
         assert_eq!(attrs_with_items(c, &b), hero_sheet(c, &b).unwrap().attrs, "the same numbers the sheet uses");
     }
@@ -1223,12 +1221,12 @@ mod tests {
     fn summary_lists_sources() {
         use crate::defs::trees::NodeId;
         let c = ClassId::Paladin;
-        let b = Build { nodes: vec![NodeId::PU1], extra: Attributes::new(1, 0, 0, 0, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor).with(EquipSlot::Armor, ItemId::PlateArmor), ..Build::start(c) };
+        let b = Build { nodes: vec![], extra: Attributes::new(1, 0, 0, 0, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor).with(EquipSlot::Armor, ItemId::PlateArmor), ..Build::start(c) };
         let s = summary(c, &b);
         assert_eq!(s.loadout_error, None);
         let line = |a: Attr| s.attrs.iter().find(|l| l.attr == a).unwrap();
         let cha = line(Attr::Cha);
-        assert_eq!((cha.class, cha.shop, cha.tree, cha.items, cha.total), (14, 0, 1, 0, 15));
+        assert_eq!((cha.class, cha.shop, cha.tree, cha.items, cha.total), (14, 0, 0, 0, 14));
         let str_ = line(Attr::Str);
         assert_eq!((str_.shop, str_.tree, str_.items), (1, 0, 0));
         let con = line(Attr::Con);

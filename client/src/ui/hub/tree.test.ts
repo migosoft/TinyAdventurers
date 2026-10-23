@@ -86,10 +86,10 @@ test('hovering the Frost Nova node shows its numbers and requirement, leaving re
 });
 test('a tooltip names the node kind in words, not the enum', () => {
   open('Wizard', { xp: 1000 });
-  node('WA1').dispatchEvent(new MouseEvent('mouseenter'));
+  node('WA2').dispatchEvent(new MouseEvent('mouseenter'));
   const small = document.body.querySelector('.ui-tip small')!.textContent;
-  expect(small).toBe('Attribute');
-  node('WA1').dispatchEvent(new MouseEvent('mouseleave'));
+  expect(small).toBe('Improves Magic Missile');
+  node('WA2').dispatchEvent(new MouseEvent('mouseleave'));
   node('WF4').dispatchEvent(new MouseEvent('mouseenter'));
   expect(document.body.querySelector('.ui-tip small')!.textContent).not.toMatch(/[a-z][A-Z]/);
 });
