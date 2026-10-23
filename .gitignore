@@ -5,3 +5,4 @@ client/public/assets/
 .env
 images/
 downloaded-assets/
+.superpowers/
