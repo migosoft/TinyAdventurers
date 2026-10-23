@@ -18,7 +18,7 @@ import { BarrelView } from './barrel';
 import { TorchView } from './torch';
 import { ChestView } from './chest';
 import { dmgColor } from './damage';
-import { DEPTH, Effects, SOUND_TEXT } from './effects';
+import { DEPTH, Effects, numberDepth, SOUND_TEXT } from './effects';
 import { lookOf } from './looks';
 import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
@@ -188,7 +188,7 @@ export class GameScene extends Phaser.Scene {
     this.lightView = new LightView(this, this.map, this.light);
     this.visionMask = new VisionMask(this, this.map);
     this.useHint = new KeyCap(this);
-    this.bars = this.add.graphics().setDepth(DEPTH.numbers - 1);
+    this.bars = this.add.graphics().setDepth(DEPTH.enemyBars);
     this.heroBars = this.add.graphics().setDepth(DEPTH.heroBars);
     this.beams = this.add.graphics().setDepth(DEPTH.beam);
     this.gaze = this.add.graphics().setDepth(DEPTH.fx);
@@ -358,8 +358,8 @@ export class GameScene extends Phaser.Scene {
   private onEvent(ev: Ev): void {
     switch (ev.t) {
       case 'Dmg': {
-        // Numbers on heroes vanish in the dark with them; numbers on monsters stay above the darkness.
-        const depth = ev.p ? DEPTH.heroNumbers : DEPTH.numbers;
+        // Numbers on heroes and allies show over the darkness; numbers on enemies stay under it.
+        const depth = numberDepth(ev.p);
         if (ev.imm) this.fx.text(ev.x, ev.y, 'immune', '#a0a0a0', { depth, kind: 'small' });
         else if (ev.crit) this.fx.text(ev.x, ev.y, critLabel(ev.v), WORLD_TEXT.crit.color, { big: true, depth });
         else this.fx.text(ev.x, ev.y, `${Math.round(ev.v)}`, dmgColor(ev.ty, ev.p), { depth });
@@ -368,7 +368,7 @@ export class GameScene extends Phaser.Scene {
         break;
       }
       case 'Heal':
-        this.fx.text(ev.x, ev.y, `+${Math.round(ev.v)}`, '#60ff80', { depth: ev.p ? DEPTH.heroNumbers : DEPTH.numbers });
+        this.fx.text(ev.x, ev.y, `+${Math.round(ev.v)}`, '#60ff80', { depth: numberDepth(ev.p) });
         break;
       case 'Boom':
         if (ev.k === 1) this.fx.healRing(ev.x, ev.y, ev.r);

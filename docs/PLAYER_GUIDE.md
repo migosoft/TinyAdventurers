@@ -93,7 +93,7 @@ The two boxes at the bottom of the screen show your abilities. While an ability 
 - **Explosions light up** their surroundings for a moment: a fireball, a dragon's fireball or an exploding barrel shows what stands around it. The paladin's healing wave lights up its surroundings in pale gold, too.
 - **Lava glows red** and lights the floor around it. Light of different colours mixes: a torch next to lava gives a deeper orange.
 - **Sounds show in the dark.** The wolf's "grrrr", spoken words and the sleeping "Z" are drawn above the darkness, in dark letters with a light outline, so you notice them even where you can see nothing else.
-- Your shots fly on into the dark, and you still see their damage numbers when they hit something there.
+- Numbers and health bars on heroes and the wolf show even in the dark; numbers and health bars on enemies show only where you can see the enemy.
 - **Enemies see in the dark only if they are built for it.** An enemy notices you when you are in its line of sight and either lit or very close. **Humans** (the necromancer, the summoner, the lich's disciples) do not see you in the dark at all, however close. **Monsters** (goblin and orc archers, orc warriors, mimics, the ogre) see you in the dark only from about three tiles away. **Undead** (skeletons, the lich), **demons** (imps, chorts, the Red Demon) and the **Red Dragon** see you in the dark as well as in the light.
 - **Slip past in the dark.** Put out a torch, or stay out of the light, to slip past humans and monsters. Anything you light up (a fireball, a torch you relight, an exploding barrel) can be seen too, so fire is loud. Skeletons and demons are not fooled by darkness.
 

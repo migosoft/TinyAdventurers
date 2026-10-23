@@ -11,10 +11,10 @@ export const DEPTH = {
   entityBase: 10,
   projectile: 5000,
   fx: 6000,
-  /** The heroes' HP bars: over figures and effects, under the darkness (heroes vanish in the dark). */
-  heroBars: 6500,
-  /** Damage and heal numbers on heroes: under the darkness with their hero. */
-  heroNumbers: 6501,
+  /** Enemy HP bars: over figures and effects, under the darkness, so they vanish where it is dark. */
+  enemyBars: 6500,
+  /** Damage and heal numbers on enemies: under the darkness, so they vanish where it is dark. */
+  enemyNumbers: 6501,
   /** Tint of the lights (ADD blend), just below the darkness. */
   tint: 6999,
   /** The darkness (light canvas). Every figure and shot is under it, heroes too. */
@@ -23,8 +23,16 @@ export const DEPTH = {
   beam: 7001,
   /** Sound text ("grrrr", the sleeper's Z): above the darkness, under the damage numbers. */
   sound: 7500,
+  /** Hero and ally HP bars: over the darkness, so they show even when the hero is unlit. */
+  heroBars: 7999,
+  /** Numbers on heroes and allies, coins, key caps and other top world text: over the darkness. */
   numbers: 8000,
 };
+
+/** The depth of a damage or heal number: over the darkness on a hero or ally, under it on an enemy. */
+export function numberDepth(onHero: boolean): number {
+  return onHero ? DEPTH.numbers : DEPTH.enemyNumbers;
+}
 
 /** Sound text (growl, the sleeper's Z): a dark fill with a light outline, readable on black and on lit floors. */
 export const SOUND_TEXT = { fill: '#1a1020', stroke: '#d8d0e0' };
@@ -131,7 +139,7 @@ export class Effects {
   }
 
   /**
-   * A floating number or word; `depth`: `DEPTH.heroNumbers` for one on a hero. `opts.big` is the crit path
+   * A floating number or word; `depth`: `numberDepth(onHero)` for a damage or heal number. `opts.big` is the crit path
    * (gold, larger, pops); `opts.kind` picks the size and weight of the others (default: a damage number).
    */
   text(x: number, y: number, s: string, color: string, opts: { big?: boolean; depth?: number; stroke?: string; kind?: WorldTextKind } = {}): void {
