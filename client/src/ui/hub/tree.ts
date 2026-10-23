@@ -11,7 +11,7 @@ import { clearTips, showTip } from './tip';
 import type { TabCtx } from './hub';
 
 
-const NODE_SIZE: Record<TreeKind, number> = { Start: 46, Keystone: 40, Unlock: 38, Improve: 30, Proficiency: 32, Resist: 30, Attr: 30 };
+const NODE_SIZE: Record<TreeKind, number> = { Start: 46, Keystone: 40, Unlock: 38, Improve: 30, Proficiency: 32, Resist: 30 };
 const SPACE_X = 84;
 const SPACE_Y = 58;
 const ATTR_ORDER: Attr[] = ['Str', 'Dex', 'Con', 'Int', 'Wil', 'Cha'];
@@ -28,8 +28,6 @@ function label(n: TreeNode, ctx: TabCtx): string | Node {
       return monogram(ABILITIES[n.ability!].name);
     case 'Improve':
       return `${monogram(ABILITIES[n.ability!].name)}<i>+</i>`;
-    case 'Attr':
-      return ATTRS[n.attr!].short;
     case 'Resist':
       return '%';
     case 'Proficiency':
@@ -41,7 +39,7 @@ function label(n: TreeNode, ctx: TabCtx): string | Node {
   }
 }
 
-const KIND_LABEL: Record<string, string> = { Attr: 'Attribute', Resist: 'Resistance', Proficiency: 'Proficiency', Keystone: 'Keystone', Start: 'Start' };
+const KIND_LABEL: Record<string, string> = { Resist: 'Resistance', Proficiency: 'Proficiency', Keystone: 'Keystone', Start: 'Start' };
 
 function tipHtml(n: TreeNode, state: NodeState, ctx: TabCtx): string {
   const { info } = ctx;
@@ -119,7 +117,6 @@ export function renderTree(ctx: TabCtx): HTMLElement {
   const legend = div(
     'ui-col',
     `<div class="panel ui-legend"><h2>Legend</h2><ul>
-    <li><span class="ui-node k-attr owned mini"><span>INT</span></span>+1 Attribute</li>
     <li><span class="ui-node k-unlock owned mini t-magical"><span>MM</span></span>New ability</li>
     <li><span class="ui-node k-improve owned mini"><span>MM<i>+</i></span></span>Improves an ability (only while equipped)</li>
     <li><span class="ui-node k-proficiency owned mini"><span>P</span></span>Proficiency</li>

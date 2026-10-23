@@ -11,9 +11,9 @@ import type { Pick } from '../../generated/Pick';
 import type { PoolCard } from '../../generated/PoolCard';
 import type { ResolvedAbility } from '../../generated/ResolvedAbility';
 
-export type TreeKind = 'Start' | 'Attr' | 'Unlock' | 'Improve' | 'Proficiency' | 'Resist' | 'Keystone';
+export type TreeKind = 'Start' | 'Unlock' | 'Improve' | 'Proficiency' | 'Resist' | 'Keystone';
 /** One tree node as the generated `TREES` data has it (that file types the fields loosely). */
-export type TreeNode = { cost: number; kind: TreeKind; links: readonly string[]; name: string; pos: readonly [number, number]; req: readonly string[]; text: string; ability?: AbilityId; attr?: Attr };
+export type TreeNode = { cost: number; kind: TreeKind; links: readonly string[]; name: string; pos: readonly [number, number]; req: readonly string[]; text: string; ability?: AbilityId };
 type ItemDef = { name: string; slot: string; classes: readonly string[]; prof: string | null; req: readonly string[] };
 export type NodeState = 'owned' | 'buyable' | 'blocked' | 'locked';
 

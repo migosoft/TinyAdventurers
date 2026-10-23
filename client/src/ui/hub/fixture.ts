@@ -52,7 +52,7 @@ export function fixtureInfo(cls: ClassId, o: FixtureOptions = {}): CharacterInfo
       attrs: ATTR_ORDER.map((attr) => {
         const a = o.attrs?.[attr];
         const cl = start.attrs[attr];
-        return { attr, total: a?.total ?? cl, class: cl, shop: 0, tree: 0, items: a?.items ?? 0 };
+        return { attr, total: a?.total ?? cl, class: cl, shop: 0, items: a?.items ?? 0 };
       }),
       hp: 10, speed: 70, weight: 0, push: 10, save_con: 0, save_wil: 0, res: [], effect_res: [],
       profs: o.profs ?? DEFAULT_PROFS, keystones: [], loadout_error: o.loadout_error ?? null, pool: o.pool ?? [],

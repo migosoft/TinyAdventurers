@@ -77,7 +77,7 @@ pub struct ResolvedAbility {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Sheet {
-    /// Class + race + `extra` + tree + item points.
+    /// Class + race + `extra` + item points.
     pub attrs: Attributes,
     pub max_hp: f64,
     pub speed: f64,
@@ -255,9 +255,9 @@ pub fn profs(class: ClassId, nodes: &[NodeId]) -> Vec<Prof> {
     v
 }
 
-/// Start Attributes + the shop's `extra` + the tree's Attribute nodes; no item points.
+/// Start Attributes + the shop's `extra`; no item points (the tree no longer adds Attributes).
 pub fn attrs_without_items(class: ClassId, b: &Build) -> Attributes {
-    classes::start_attrs(class).plus(b.extra).plus(trees::gains(&b.nodes).attrs)
+    classes::start_attrs(class).plus(b.extra)
 }
 
 /// The worn items, with the starter in an empty Melee slot.
@@ -463,7 +463,6 @@ pub struct AttrLine {
     pub class: i32,
     /// Points bought in the shop (and the debug lift).
     pub shop: i32,
-    pub tree: i32,
     pub items: i32,
 }
 
@@ -625,13 +624,12 @@ pub fn summary(class: ClassId, b: &Build) -> SheetSummary {
         }
     };
     let base = classes::start_attrs(class);
-    let tree = trees::gains(&used.nodes).attrs;
     let attrs = Attr::ALL
         .iter()
         .map(|&a| {
             let total = sheet.attrs.get(a);
-            let (class, shop, tree) = (base.get(a), used.extra.get(a), tree.get(a));
-            AttrLine { attr: a, total, class, shop, tree, items: total - class - shop - tree }
+            let (class, shop) = (base.get(a), used.extra.get(a));
+            AttrLine { attr: a, total, class, shop, items: total - class - shop }
         })
         .collect();
     let mut profs: Vec<String> = Vec::new();
@@ -1226,13 +1224,13 @@ mod tests {
         assert_eq!(s.loadout_error, None);
         let line = |a: Attr| s.attrs.iter().find(|l| l.attr == a).unwrap();
         let cha = line(Attr::Cha);
-        assert_eq!((cha.class, cha.shop, cha.tree, cha.items, cha.total), (14, 0, 0, 0, 14));
+        assert_eq!((cha.class, cha.shop, cha.items, cha.total), (14, 0, 0, 14));
         let str_ = line(Attr::Str);
-        assert_eq!((str_.shop, str_.tree, str_.items), (1, 0, 0));
+        assert_eq!((str_.shop, str_.items), (1, 0));
         let con = line(Attr::Con);
-        assert_eq!((con.shop, con.tree, con.items), (0, 0, 1));
+        assert_eq!((con.shop, con.items), (0, 1));
         for l in &s.attrs {
-            assert_eq!(l.total, l.class + l.shop + l.tree + l.items, "{:?}", l.attr);
+            assert_eq!(l.total, l.class + l.shop + l.items, "{:?}", l.attr);
         }
         let sheet = hero_sheet(c, &b).unwrap();
         assert_eq!(s.attrs.iter().map(|l| l.total).collect::<Vec<_>>(), Attr::ALL.map(|a| sheet.attrs.get(a)).to_vec());

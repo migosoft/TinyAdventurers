@@ -564,12 +564,8 @@
   margin-left: 1px;
   color: var(--green);
 }
-.ui-node.k-attr,
 .ui-node.k-resist {
   border-radius: 50%;
-}
-.ui-node.k-attr {
-  font-size: 11px;
 }
 .ui-node.k-improve {
   transform: rotate(45deg) scale(0.86);
@@ -634,7 +630,6 @@
 .ui-node.k-unlock.owned {
   background: var(--t);
 }
-.ui-node.k-attr.owned,
 .ui-node.k-resist.owned,
 .ui-node.k-improve.owned,
 .ui-node.k-proficiency.owned {

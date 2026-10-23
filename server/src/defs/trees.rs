@@ -131,7 +131,6 @@ pub enum Prof {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeKind {
     Start,
-    Attr(Attr, i32),
     Unlock(AbilityId),
     /// Works only while that ability is equipped.
     Improve(AbilityId, AbilityMod),
@@ -254,7 +253,6 @@ pub fn neighbours(id: NodeId) -> Vec<NodeId> {
 /// What a set of owned nodes adds up to (the sheet builder applies it).
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TreeGains {
-    pub attrs: Attributes,
     pub profs: Vec<Prof>,
     pub res: Vec<(DamageType, f64)>,
     pub unlocks: Vec<AbilityId>,
@@ -267,7 +265,6 @@ pub fn gains(nodes: &[NodeId]) -> TreeGains {
     for &n in nodes {
         match def(n).kind {
             NodeKind::Start => {}
-            NodeKind::Attr(a, v) => g.attrs.add(a, v),
             NodeKind::Unlock(a) => g.unlocks.push(a),
             NodeKind::Improve(a, m) => g.improves.push((a, m)),
             NodeKind::Proficiency(p) => g.profs.push(p),

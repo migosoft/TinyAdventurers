@@ -12,4 +12,4 @@ class: number,
 /**
  * Points bought in the shop (and the debug lift).
  */
-shop: number, tree: number, items: number, };
+shop: number, items: number, };

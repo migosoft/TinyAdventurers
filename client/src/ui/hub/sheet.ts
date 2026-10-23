@@ -23,7 +23,7 @@ export function renderSheet(ctx: TabCtx): HTMLElement {
 
   const rows = ORDER.map((attr, i) => {
     const l = s.attrs.find((x) => x.attr === attr)!;
-    const parts = [`class ${l.class}`, l.shop && `shop +${l.shop}`, l.tree && `tree +${l.tree}`, l.items && `items +${l.items}`].filter(Boolean).join(' · ');
+    const parts = [`class ${l.class}`, l.shop && `shop +${l.shop}`, l.items && `items +${l.items}`].filter(Boolean).join(' · ');
     const price = info.prices[i];
     return `<li data-row="${attr}"><span class="ab">${ATTRS[attr].short}</span><span class="nm">${NAME[attr]}<small>${parts}</small></span><b class="val">${l.total}</b>
       <span class="eff">${esc(attrEffect(attr, l.total))}</span><button data-attr="${attr}"${info.xp < price ? ' disabled' : ''}>+1 · ${price} XP</button></li>`;

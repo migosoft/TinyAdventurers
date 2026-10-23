@@ -239,14 +239,13 @@ fn export_progression() {
     for c in ClassId::ALL {
         let mut nodes = serde_json::Map::new();
         for d in trees::tree(c) {
-            let (kind, ability, attr) = match d.kind {
-                NodeKind::Start => ("Start", None, None),
-                NodeKind::Attr(a, _) => ("Attr", None, Some(a)),
-                NodeKind::Unlock(a) => ("Unlock", Some(a), None),
-                NodeKind::Improve(a, _) => ("Improve", Some(a), None),
-                NodeKind::Proficiency(_) => ("Proficiency", None, None),
-                NodeKind::Resist(..) => ("Resist", None, None),
-                NodeKind::Keystone(_) => ("Keystone", None, None),
+            let (kind, ability) = match d.kind {
+                NodeKind::Start => ("Start", None),
+                NodeKind::Unlock(a) => ("Unlock", Some(a)),
+                NodeKind::Improve(a, _) => ("Improve", Some(a)),
+                NodeKind::Proficiency(_) => ("Proficiency", None),
+                NodeKind::Resist(..) => ("Resist", None),
+                NodeKind::Keystone(_) => ("Keystone", None),
             };
             let links: Vec<String> = trees::neighbours(d.id).iter().map(|n| format!("{n:?}")).collect();
             let mut n = json!({
@@ -255,9 +254,6 @@ fn export_progression() {
             });
             if let Some(a) = ability {
                 n["ability"] = json!(format!("{a:?}"));
-            }
-            if let Some(a) = attr {
-                n["attr"] = json!(format!("{a:?}"));
             }
             nodes.insert(format!("{:?}", d.id), n);
         }
