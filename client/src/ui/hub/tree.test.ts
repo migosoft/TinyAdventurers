@@ -92,6 +92,9 @@ test('a tooltip names the node kind in words, not the enum', () => {
   node('WA2').dispatchEvent(new MouseEvent('mouseleave'));
   node('WF4').dispatchEvent(new MouseEvent('mouseenter'));
   expect(document.body.querySelector('.ui-tip small')!.textContent).not.toMatch(/[a-z][A-Z]/);
+  node('WF4').dispatchEvent(new MouseEvent('mouseleave'));
+  node('WF3').dispatchEvent(new MouseEvent('mouseenter'));
+  expect(document.body.querySelector('.ui-tip small')!.textContent).toContain('Resistance');
 });
 test('the cost is red when the XP is short', () => {
   open('Wizard', { xp: 100 });

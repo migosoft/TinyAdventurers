@@ -1,5 +1,5 @@
 //! What a hero must have to use an item or an ability. An item's are checked
-//! against the Attributes without items (class + race + shop + tree).
+//! against the Attributes without items (class + race + shop).
 
 use super::attributes::{Attr, Attributes};
 use super::weapons::WeaponKind;
