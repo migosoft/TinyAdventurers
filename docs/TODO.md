@@ -38,6 +38,12 @@ Ordered by technical complexity and by technical dependencies (what makes later 
 18. **Balancing pass:** every "Tune" item, including resistances, light radii, darkness and the vision and darkness values (see "Vision and darkvision follow-ups"). Lighting, new enemies, abilities and the escort level all change the balance, so tuning earlier would have to be redone. It includes the damage-type numbers (resistances, splits) and the barrel numbers. **Party size** (the user, 2026-10-19): if bigger parties need harder fights, scale the number of enemies or their Attributes, never their HP (4b removes today's HP bonus).
 19. **Delta snapshots, WebTransport:** only if measurements show they are needed.
 
+## Next: two small changes (the user, 2026-10-23)
+
+Plan them in a fresh session, before the balancing pass. Details and the findings so far are in HANDOFF "Next session".
+- **Damage numbers and the darkness:** numbers on heroes show over the darkness; numbers on enemies stay under it (hidden in the dark). Today it is the other way round (`DEPTH.heroNumbers` / `DEPTH.numbers` in `client/src/game/effects.ts`).
+- **Attributes only on the Sheet:** remove the 21 "+1 Attribute" nodes from the skill trees (there are no Attribute maximums; the tree nodes only had a fixed price and a place on a branch). Decide what replaces them, and refund owned ones.
+
 ## UI polish follow-ups (built 2026-10-22 on `feature/ui-polish`)
 
 UI polishing is built (Inter, brass controls, cooldown ring, effect symbols, Settings, the admin page in the game's look); see TECHNICAL §9 and §11a. Left over:
