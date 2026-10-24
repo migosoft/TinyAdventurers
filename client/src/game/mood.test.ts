@@ -222,6 +222,18 @@ describe('Mood', () => {
   });
 
   describe('stirred air (#158)', () => {
+    it('loose specks never show on unseen tiles', () => {
+      const { mood, light, made, sprites } = setup(60, 40, TILE_ID.Floor);
+      run(mood, 2);
+      sweep(mood, 1);
+      expect(mood.counts.stirred).toBeGreaterThan(0);
+      light.seenLit.fill(0);
+      mood.update(1 / 60, view(), [], []);
+      expect(mood.counts.stirred).toBeGreaterThan(0);
+      const shown = (made as unknown as { alpha?: number }[]).filter((o) => !(sprites as unknown[]).includes(o) && (o.alpha ?? 0) > 0.01);
+      expect(shown).toHaveLength(0);
+    });
+
     it('a moving figure on a seen tile pushes air', () => {
       const { mood } = setup(60, 40, TILE_ID.Floor);
       mood.on.draft = false;

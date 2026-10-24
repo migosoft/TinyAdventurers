@@ -16,6 +16,8 @@ const SPREAD_RATE = 10;
 const MAX_BLUR = 0.25;
 /** Longest frame the field integrates, in s. */
 const MAX_DT = 0.1;
+/** Air slower than this (px/s) settles to exactly still. */
+const REST_SPEED = 0.05;
 /** Most pending pushes, wakes and blasts between two steps. */
 const MAX_EVENTS = 512;
 /** Event slots: kind, x, y, vx, vy, r. */
@@ -73,6 +75,10 @@ export class Wind {
   private j0 = 0;
   private j1 = 0;
   private bx = 0;
+  /** The wall mask needs rebuilding (the grid moved or grew, or the map changed). */
+  private wallsDirty = true;
+  /** The grid may hold air (false: every cell is exactly 0). */
+  private active = false;
   private by = 0;
 
   constructor(private solid: (px: number, py: number) => boolean) {}
@@ -82,10 +88,17 @@ export class Wind {
     dt = Number.isFinite(dt) ? Math.min(MAX_DT, Math.max(0, dt)) : 0;
     this.anchor(view);
     this.time += dt;
-    this.markWalls();
-    if (dt > 0) this.flow(dt);
+    if (this.wallsDirty) this.markWalls();
+    // Still air and nothing queued: nothing to move.
+    if (!this.active && this.count === 0) return;
+    if (dt > 0 && this.active) this.flow(dt);
     this.applyEvents(dt);
     this.finish();
+  }
+
+  /** The solid cells changed (the map was edited): the wall mask is rebuilt on the next `step`. */
+  wallsChanged(): void {
+    this.wallsDirty = true;
   }
 
   /** A figure's pocket of air. v in px/s, r = body radius in px. */
@@ -177,9 +190,11 @@ export class Wind {
     this.oy = oy;
     this.nx = nx;
     this.ny = ny;
+    this.wallsDirty = true;
   }
 
   private markWalls(): void {
+    this.wallsDirty = false;
     for (let j = 0; j < this.ny; j++) {
       const y = this.oy + (j + 0.5) * WIND_CELL;
       for (let i = 0; i < this.nx; i++) this.wall[j * this.nx + i] = this.solid(this.ox + (i + 0.5) * WIND_CELL, y) ? 1 : 0;
@@ -334,6 +349,7 @@ export class Wind {
   /** Zeroes solid cells and caps the speed. */
   private finish(): void {
     const cap2 = WIND_MAX * WIND_MAX;
+    let any = false;
     for (let c = 0; c < this.nx * this.ny; c++) {
       if (this.wall[c]) {
         this.vx[c] = 0;
@@ -341,12 +357,20 @@ export class Wind {
         continue;
       }
       const m2 = this.vx[c] * this.vx[c] + this.vy[c] * this.vy[c];
+      if (m2 < REST_SPEED * REST_SPEED) {
+        // Too slow to matter: settle to exactly still (also keeps tiny floats out of the field).
+        this.vx[c] = 0;
+        this.vy[c] = 0;
+        continue;
+      }
+      any = true;
       if (m2 > cap2) {
         const s = WIND_MAX / Math.sqrt(m2);
         this.vx[c] *= s;
         this.vy[c] *= s;
       }
     }
+    this.active = any;
   }
 
   /** Sets the cell range within `rad` px of (x, y), clipped to the grid. */

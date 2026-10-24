@@ -131,4 +131,25 @@ describe('Wind', () => {
     }
     expect(Math.hypot(...(at(w, 40, 100).map((c, i) => c - at(w, 240, 100)[i]) as [number, number]))).toBeGreaterThan(0.05);
   });
+
+  it('settles to exactly still once the air has died down', () => {
+    const wind = make();
+    wind.step(1 / 60, view);
+    wind.push(160, 120, 100, 0, 6);
+    for (let i = 0; i < 600; i++) wind.step(1 / 60, view);
+    for (let x = 100; x <= 220; x += 8) for (let y = 80; y <= 160; y += 8) expect(at(wind, x, y)).toEqual([0, 0]);
+  });
+
+  it('asks which cells are solid only when the grid moves or the walls change', () => {
+    let calls = 0;
+    const wind = make(() => (calls++, false));
+    wind.step(1 / 60, view);
+    const first = calls;
+    expect(first).toBeGreaterThan(0);
+    wind.step(1 / 60, view);
+    expect(calls).toBe(first);
+    wind.wallsChanged();
+    wind.step(1 / 60, view);
+    expect(calls).toBe(2 * first);
+  });
 });

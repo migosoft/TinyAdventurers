@@ -192,6 +192,7 @@ export class Mood {
 
   /** Terrain changed: collect the lava and water tiles again. Puffs already in the air die out by themselves. */
   mapChanged(): void {
+    this.wind.wallsChanged();
     this.lava = [];
     this.water = [];
     for (let y = 0; y < this.map.h; y++)
@@ -325,6 +326,7 @@ export class Mood {
           m.oy = Math.sin(a) * d;
           m.vx = (Math.random() - 0.5) * 1.5;
           m.vy = (Math.random() - 0.5) * 1.5;
+          m.a = 0;
         }
         return;
       }
@@ -342,6 +344,7 @@ export class Mood {
       if (n >= this.activeClouds) {
         for (const m of c.motes) m.img.setVisible(false);
         c.stirred = false;
+        c.wait = 0;
         c.life = Math.random() * 2; // starts staggered when it is needed again
         return;
       }
@@ -385,8 +388,8 @@ export class Mood {
         const y = c.y + m.oy;
         const [b, tint] = this.lightAt(x, y);
         const twinkle = 0.6 + 0.4 * Math.sin(this.t * 2.3 + m.phase);
-        const a = this.on.dust ? DUST_ALPHA * Math.min(1, b * 1.3) * fade * twinkle : 0;
-        m.a = a;
+        m.a = DUST_ALPHA * fade * twinkle;
+        const a = this.on.dust ? m.a * Math.min(1, b * 1.3) : 0;
         m.img.setVisible(a > 0.01).setPosition(x, y).setBlendMode(ADD).setTint(tint).setAlpha(a);
       }
     });
@@ -404,6 +407,7 @@ export class Mood {
   /** The cloud falls apart: each mote keeps its place and the cloud's velocity, and will fade out in 1 to 2 s. */
   private stir(c: Cloud): void {
     c.stirred = true;
+    c.wait = 0;
     for (const m of c.motes) {
       m.wx = c.x + m.ox;
       m.wy = c.y + m.oy;
@@ -432,8 +436,8 @@ export class Mood {
       m.vy = (m.vy + (w[1] - m.vy) * k) * drag;
       m.wx += m.vx * dt;
       m.wy += m.vy * dt;
-      const [, tint] = this.lightAt(m.wx, m.wy);
-      const a = this.on.dust ? m.a0 * (m.left / m.total) : 0;
+      const [b, tint] = this.lightAt(m.wx, m.wy);
+      const a = this.on.dust ? m.a0 * Math.min(1, b * 1.3) * (m.left / m.total) : 0;
       m.img.setVisible(a > 0.01).setPosition(m.wx, m.wy).setBlendMode(ADD).setTint(tint).setAlpha(a);
     }
     if (alive) return;
