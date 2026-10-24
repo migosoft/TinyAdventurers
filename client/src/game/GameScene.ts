@@ -137,7 +137,7 @@ export class GameScene extends Phaser.Scene {
   private wade = new Map<number, WadeFx>();
   /** Heroes falling into a chasm or drowning (from `Ev::Sink`, or predicted for the own hero). */
   private sinks = new Map<number, { x: number; y: number; drown: boolean; t: number }>();
-  // Debug mode (?debug): immortal + path to the boss, drawn above the fog.
+  // Debug mode (a debug run): immortal + path to the boss, drawn above the fog.
   private debugOn = false;
   private debugImmortal = true;
   private debugEffect = -1;
@@ -194,7 +194,8 @@ export class GameScene extends Phaser.Scene {
     this.beams = this.add.graphics().setDepth(DEPTH.beam);
     this.gaze = this.add.graphics().setDepth(DEPTH.fx);
     this.debugGfx = this.add.graphics().setDepth(DEPTH.fog + 1);
-    this.debugOn = false;
+    // A debug run (from a debug room): the server puts every hero in debug mode, so the badge and F4/F8/F9 work from the first frame.
+    this.debugOn = this.info.debug;
     this.debugImmortal = true;
     this.debugPath = [];
     this.debugOgre = [];
@@ -247,9 +248,9 @@ export class GameScene extends Phaser.Scene {
     this.unsub = this.net.on((m) => this.onMessage(m));
     this.events.once('shutdown', () => this.cleanup());
     this.hud.startRun(this.info);
+    if (this.info.debug) this.hud.setDebug(true, true, false);
     this.rulesLog = new RulesLog(this, this.net, this.info);
     this.hud.setToggles(this.rulesLog.settings());
-    if (new URLSearchParams(location.search).has("debug")) this.net.send({ t: "Debug", on: true });
   }
 
   private cleanup(): void {

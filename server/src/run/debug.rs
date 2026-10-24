@@ -1,11 +1,12 @@
 //! Debug mode: the player is immortal (F9 turns that off and on) and receives the shortest walkable
-//! path to the boss (and to the ogre mini-boss while it lives). Can be disabled on a server with `ALLOW_DEBUG=0`.
+//! path to the boss (and to the ogre mini-boss while it lives).
+//! Only in a debug run (`Run::debug`, from a debug room): every hero starts in it, and the debug messages do
+//! nothing in a normal run.
 
 use super::ai::astar;
 use super::levels::Level;
 use super::Run;
 use crate::collision::walk_line;
-use crate::defs::damage::Damage;
 use crate::defs::enemies::EnemyType;
 use crate::dungeon::Mover;
 use crate::math::Vec2;
@@ -14,54 +15,37 @@ use crate::protocol::{Ev, ServerMsg};
 /// Path updates every 30 ticks (0.5 s).
 pub const PATH_EVERY: u32 = 30;
 
-pub fn allowed() -> bool {
-    !matches!(std::env::var("ALLOW_DEBUG").as_deref(), Ok("0") | Ok("false") | Ok("no"))
-}
-
 impl Run {
     /// Debug cheat: your hero's darkvision as a share (0..=1) of its vision.
     pub fn set_darkvision(&mut self, pi: usize, ratio: f32) {
-        self.set_darkvision_if(allowed(), pi, ratio);
-    }
-
-    fn set_darkvision_if(&mut self, allowed: bool, pi: usize, ratio: f32) {
-        if !allowed {
-            return;
-        }
-        if !ratio.is_finite() {
+        if !self.debug || !ratio.is_finite() {
             return;
         }
         let r = f64::from(ratio.clamp(0.0, 1.0));
         self.players[pi].darkvision = Some(r);
-        self.debug_used = true;
         let name = self.players[pi].name.clone();
         self.event(Ev::Msg { text: format!("{name} darkvision {}%", (r * 100.0).round()) }, None);
     }
 
     /// Debug cheat: put an effect (an `EffectKind` id) on your hero.
     pub fn debug_effect(&mut self, pi: usize, kind: u8) {
-        self.debug_effect_if(allowed(), pi, kind);
-    }
-
-    fn debug_effect_if(&mut self, allowed: bool, pi: usize, kind: u8) {
-        let Some(k) = crate::defs::effects::EffectKind::from_u8(kind) else { return };
-        if !allowed {
+        if !self.debug {
             return;
         }
-        self.debug_used = true;
+        let Some(k) = crate::defs::effects::EffectKind::from_u8(kind) else { return };
         self.apply_effect(crate::run::effects::Creature::Player(pi), k, None);
         let name = self.players[pi].name.clone();
         self.event(Ev::Msg { text: format!("{name}: {k:?}") }, None);
     }
 
+    /// Debug mode on or off for a hero; never on in a normal run.
     pub fn set_debug(&mut self, pi: usize, on: bool) {
-        let on = on && allowed();
+        let on = on && self.debug;
         self.players[pi].debug = on;
         self.players[pi].mortal = false;
         if !on {
             self.players[pi].darkvision = None;
         }
-        self.debug_used |= on;
         if on {
             let name = self.players[pi].name.clone();
             self.event(Ev::Msg { text: format!("{name} entered debug mode (immortal)") }, None);
@@ -133,12 +117,14 @@ pub fn send_paths(run: &Run) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::defs::damage::Damage;
     use crate::protocol::{BossId, ClassId};
     use crate::run::tests::test_run;
 
     #[test]
     fn debug_player_is_immortal_and_gets_a_path_to_the_boss() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Dragon);
+        run.debug = true;
         run.set_debug(0, true);
         let hp = run.players[0].hp;
         run.hurt_player(0, Damage::physical(10_000.0));
@@ -175,9 +161,10 @@ mod tests {
         run.set_immortal(0, false);
         assert!(!run.players[0].mortal);
 
+        run.debug = true;
         run.set_debug(0, true);
         run.set_debug(1, true);
-        run.set_darkvision_if(true, 0, 0.5);
+        run.set_darkvision(0, 0.5);
         run.set_immortal(0, false);
         assert!(run.players[0].debug && !run.players[0].immortal(), "still debug, but mortal");
         assert_eq!(run.players[0].darkvision, Some(0.5), "the other debug cheats stay");
@@ -193,7 +180,7 @@ mod tests {
         run.set_immortal(1, false);
         run.hurt_player(1, Damage::physical(10_000.0));
         assert!(!run.players[1].alive, "a mortal debug hero can die");
-        assert!(run.debug_used, "still a debug run");
+        assert!(run.debug, "still a debug run");
         run.set_debug(1, true);
         assert!(!run.players[1].mortal, "debug on again starts immortal");
     }
@@ -203,9 +190,9 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
         run.players[0].tx = Some(stx);
-        run.set_darkvision_if(true, 0, 0.5);
+        run.debug = true;
+        run.set_darkvision(0, 0.5);
         assert_eq!(run.players[0].darkvision, Some(0.5));
-        assert!(run.debug_used);
         crate::run::visibility::send_snapshots(&mut run);
         let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
         let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
@@ -213,40 +200,40 @@ mod tests {
     }
 
     #[test]
-    fn the_debug_toggle_is_ignored_when_debug_is_not_allowed() {
+    fn the_debug_toggle_is_ignored_in_a_normal_run() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let before = run.players[0].darkvision;
-        run.set_darkvision_if(false, 0, 1.0);
+        run.set_darkvision(0, 1.0);
         assert_eq!(run.players[0].darkvision, before);
-        assert!(!run.debug_used);
     }
 
     #[test]
     fn a_nan_darkvision_ratio_changes_nothing() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-        run.set_darkvision_if(true, 0, f32::NAN);
+        run.debug = true;
+        run.set_darkvision(0, f32::NAN);
         assert_eq!(run.players[0].darkvision, None);
-        assert!(!run.debug_used);
     }
 
     #[test]
     fn leaving_debug_resets_the_darkvision_override() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-        run.set_darkvision_if(true, 0, 0.5);
+        run.debug = true;
+        run.set_darkvision(0, 0.5);
         run.set_debug(0, false);
         assert_eq!(run.players[0].darkvision, None);
     }
 
     #[test]
-    fn debug_effect_applies_to_the_own_hero_only_when_allowed() {
+    fn debug_effect_applies_to_the_own_hero_only_in_a_debug_run() {
         use crate::defs::effects::EffectKind;
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-        run.debug_effect_if(false, 0, EffectKind::Sleep as u8);
+        run.debug_effect(0, EffectKind::Sleep as u8);
         assert!(run.players[0].effects.list().is_empty());
-        run.debug_effect_if(true, 0, EffectKind::Sleep as u8);
+        run.debug = true;
+        run.debug_effect(0, EffectKind::Sleep as u8);
         assert!(run.players[0].effects.has(EffectKind::Sleep));
-        assert!(run.debug_used);
-        run.debug_effect_if(true, 0, 200);
+        run.debug_effect(0, 200);
         assert_eq!(run.players[0].effects.list().len(), 1, "an unknown id is ignored");
     }
 }

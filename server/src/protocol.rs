@@ -93,8 +93,6 @@ pub enum ClientMsg {
     Input(InputMsg),
     Ping { time: f64 },
     Spectate { dir: i8 },
-    /// Debug mode: immortal + shortest path to the boss (if the server allows debug).
-    Debug { on: bool },
     /// Lobby or waiting room, not while ready: buy the next point of an Attribute with XP.
     BuyAttribute { attr: Attr },
     /// Buy a skill-tree node of your class with XP.
@@ -106,19 +104,19 @@ pub enum ClientMsg {
     /// Save the two abilities taken into the next run. Any pick that fits its slot is stored; what is
     /// wrong with it shows in `CharacterInfo.sheet.loadout_error` and stops Ready and Start.
     SetLoadout { primary: Pick, secondary: Pick },
-    /// Debug: put a copy of an item in your inventory, if the server allows debug.
+    /// Debug: put a copy of an item in your inventory, in a debug run.
     DebugGrantItem { item: ItemId },
-    /// Debug: set your hero's darkvision (0..=1 of its vision), if the server allows debug.
+    /// Debug: set your hero's darkvision (0..=1 of its vision), in a debug run.
     DebugDarkvision { ratio: f32 },
-    /// Debug: put an effect (EffectKind id) on your hero, if the server allows debug.
+    /// Debug: put an effect (EffectKind id) on your hero, in a debug run.
     DebugEffect { kind: u8 },
-    /// Debug, waiting room: set any ability of your class in the two slots, if the server allows debug.
+    /// Debug, waiting room: set any ability of your class in the two slots, in a debug run.
     DebugLoadout { primary: Pick, secondary: Pick },
     /// Debug, waiting room: put a weapon in your Melee or Ranged slot (`None` = an empty slot).
     DebugEquip { slot: EquipSlot, item: Option<ItemId> },
     /// Debug, in a run with debug on: immortal (the default) or mortal. The run stays a debug run.
     DebugImmortal { on: bool },
-    /// Debug, lobby or waiting room: `BuyAttribute` without the XP cost, if the server allows debug.
+    /// Debug, lobby or waiting room: `BuyAttribute` without the XP cost, in a debug run.
     DebugBuyAttribute { attr: Attr },
     /// Debug: `BuyNode` without the XP cost (the neighbour and Attribute checks stay).
     DebugBuyNode { node: NodeId },
@@ -188,6 +186,8 @@ pub struct RunStartInfo {
     pub fallback: crate::sheet::ResolvedAbility,
     /// Every static light (torches, lava) and its state.
     pub lights: Vec<LightInfo>,
+    /// A debug run: every hero is in debug mode (badge, F4/F8/F9).
+    pub debug: bool,
 }
 
 /// A static light at run start, as an array: `[id, kind, colour, x, y, on]`
@@ -341,8 +341,8 @@ pub enum ServerMsg {
     Character(CharacterInfo),
     RunStarted(RunStartInfo),
     Snap(Snapshot),
-    /// `boss`: the level's end boss, if it has one. `banked`: the XP was added to the characters (false after a debug run).
-    RunEnded { victory: bool, level: LevelId, boss: Option<BossId>, time: f32, stats: Vec<PlayerStats>, banked: bool },
+    /// `boss`: the level's end boss, if it has one.
+    RunEnded { victory: bool, level: LevelId, boss: Option<BossId>, time: f32, stats: Vec<PlayerStats> },
     Pong { time: f64 },
     Error { msg: String },
     /// Debug mode: shortest walkable path from the player to the boss (pixel waypoints).

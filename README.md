@@ -97,7 +97,6 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
   - The yellow badge at the bottom lists the debug keys (F4, F8, F9).
   - In the character screen the Attribute **+1**, skill-tree nodes and the respec are free (no XP or coins). They are saved on the character, so use a test character.
   - Dashed lines show the shortest walkable path to the boss (yellow) and to the ogre mini-boss (blue, while it lives), updated every 0.5 s.
-  - It is on by default. Disable it on a server with `ALLOW_DEBUG=0` in `docker-compose.yml`.
   - Add `&boss=demon|lich|dragon` on the host's page to preselect that end boss in the lobby, e.g. `?debug&boss=dragon`.
   - Runs where debug mode was used give no XP.
 - `?lag=150&jitter=40&loss=2`: simulates a bad network connection

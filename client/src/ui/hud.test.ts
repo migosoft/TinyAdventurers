@@ -31,6 +31,10 @@ describe('Hud', () => {
     hud.setAsleep(false);
     expect(el.classList.contains('hidden')).toBe(true);
   });
+  it('always says the XP and coins were banked on the end screen', () => {
+    hud.showEnd({ victory: true, level: 'Dungeon', boss: null, time: 75, stats: [] });
+    expect(document.querySelector('.note')!.textContent).toBe('Your XP and coins were added to your profile. Spend XP on Attributes and the skill tree in the lobby.');
+  });
   it('writes the help line as key caps', () => {
     expect(helpHtml()).toBe('<span><kbd>WASD</kbd>move</span><span><kbd>LMB</kbd><kbd>RMB</kbd>attack</span><span><kbd>L</kbd>log</span><span><kbd>Esc</kbd>menu</span><span><kbd>F3</kbd>stats</span>');
   });

@@ -502,7 +502,7 @@ impl Lobby {
                 .filter_map(|m| {
                     let c = self.conns.get(m)?;
                     let ch = c.character.as_ref()?;
-                    Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), account: Some(c.account), character: Some(ch.id), build: self.build_of(*m)?, debug_loadout: c.debug_loadout })
+                    Some(Member { conn: *m, name: ch.name.clone(), class: ch.class, tx: c.tx.clone(), account: Some(c.account), character: Some(ch.id), build: self.build_of(*m)? })
                 })
                 .collect(),
         )
@@ -908,11 +908,9 @@ mod tests {
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
         l.debug_loadout_if(a, pick(AbilityId::Strike), pick(AbilityId::Charge));
         let rid = l.conns[&a].room.unwrap();
-        let members = l.members_of(rid).unwrap();
-        assert!(members[0].debug_loadout);
-        let run = Run::new(rid, members, 7, LevelChoice::Dungeon { boss: None });
+        let run = l.new_run(rid, 7).unwrap();
         assert_eq!(run.players[0].sheet.secondary.id, AbilityId::Charge);
-        assert!(run.debug_used);
+        assert!(run.debug, "a debug room's run is a debug run");
     }
 
     #[tokio::test]
@@ -1136,12 +1134,11 @@ mod tests {
         let members = l.members_of(rid).unwrap();
         assert_eq!(members[0].build.loadout.primary, pick(AbilityId::FrostShard));
         assert_eq!(members[0].build.nodes, vec![NodeId::WF1]);
-        assert!(!members[0].debug_loadout);
         l.handle(a, ClientMsg::SetReady { ready: true });
         assert!(l.conns[&a].ready, "the saved pick is valid");
         let run = Run::new(rid, members, 7, LevelChoice::Dungeon { boss: None });
         assert_eq!(run.players[0].sheet.primary.id, AbilityId::FrostShard);
-        assert!(!run.debug_used);
+        assert!(!run.debug);
     }
 
     #[tokio::test]
