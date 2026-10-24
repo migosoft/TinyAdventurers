@@ -12,6 +12,7 @@ use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT}
 use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, Resistances};
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
+use crate::defs::kinds::EntityKind;
 use crate::defs::items::{self, ArmorClass, EquipSlot, ItemBase, ItemId, PropKind};
 #[cfg(test)]
 use crate::defs::items::Equipment;
@@ -42,13 +43,13 @@ pub struct ResolvedAbility {
     pub duration: f64,
     /// How many more enemies a shot may hit by overkill: 0 none, `u8::MAX` no limit.
     pub pierce: u8,
-    /// How many enemies a shot passes through with full damage before the overkill rule.
+    /// How many enemies a shot passes through with full damage before the overkill rule: `u8::MAX` no limit.
     pub pierce_through: u8,
     /// In melee a ranged primary falls back to Strike, a ranged secondary is blocked.
     pub ranged: bool,
-    /// The `EntityKind` id of its projectile.
+    /// Its projectile, sent as the `EntityKind` id.
     #[ts(type = "number | null")]
-    pub projectile: Option<u8>,
+    pub projectile: Option<EntityKind>,
     /// Sent as the non-zero shares by damage-type name (see `DamageSplit`'s `Serialize`).
     #[ts(type = "Record<string, number>")]
     pub split: DamageSplit,
@@ -84,9 +85,12 @@ pub struct Sheet {
     pub weight: f64,
     pub res: Resistances,
     pub effect_res: EffectResistances,
-    /// The Melee slot's weapon, or the class starter.
+    /// The Melee slot's weapon, or the class starter. The run reads the resolved abilities instead;
+    /// the tests check these.
+    #[allow(dead_code)]
     pub melee: ResolvedWeapon,
     /// The Ranged slot's weapon; none when the slot is empty.
+    #[allow(dead_code)]
     pub ranged: Option<ResolvedWeapon>,
     /// The light of the worn item with the largest radius, or the Radiant keystone's glow when that reaches further (or nothing is worn).
     pub light: Option<LightKind>,
@@ -205,7 +209,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
                 duration: own.duration,
                 pierce: u8::MAX,
                 pierce_through: w.pierce_through,
-                projectile: w.projectile.map(|k| k as u8),
+                projectile: w.projectile,
                 split: with_share(w.split, mult.share),
                 on_hit: w.on_hit,
                 power: w.power,
@@ -229,7 +233,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
                 speed: own.speed,
                 radius: own.radius,
                 duration: own.duration,
-                projectile: own.kind.map(|k| k as u8),
+                projectile: own.kind,
                 split: own.split.unwrap_or_else(|| own.kind.map_or(DamageSplit::physical(), kind_split)),
                 power: if own.damage > 0.0 { gov.map_or(0, |(a, _)| attrs.get(a)) } else { 0 },
                 ..blank
@@ -719,7 +723,6 @@ pub fn wolf_stats() -> MonsterStats {
 mod tests {
     use super::*;
     use crate::defs::attributes::{factor, STR_DMG};
-    use crate::defs::kinds::EntityKind;
     use crate::defs::companions::WOLF_HP;
 
     #[test]
@@ -816,7 +819,7 @@ mod tests {
         assert_eq!(r.attrs.get(Attr::Dex), 15);
         assert_eq!((r.fallback.damage, r.fallback.cooldown), (18.0, 0.35));
         assert_eq!(r.ranged.unwrap().projectile, Some(EntityKind::Bolt));
-        assert_eq!(r.primary.projectile, Some(EntityKind::Bolt as u8));
+        assert_eq!(r.primary.projectile, Some(EntityKind::Bolt));
         assert_eq!(r.primary.pierce, u8::MAX);
         assert!(r.primary.ranged);
         let w = sheet(ClassId::Wizard);

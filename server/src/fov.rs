@@ -89,6 +89,7 @@ impl Fov {
     }
 }
 
+#[cfg(test)]
 pub const PLAYER_FOV_RADIUS: i32 = 9;
 
 #[cfg(test)]

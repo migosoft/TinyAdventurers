@@ -127,7 +127,7 @@ export function abilityChoice(a: ResolvedAbility, slot: 0 | 1, inMelee: boolean)
 
 /** The weakness floor of the server's damage formula (`MIN_RESISTANCE` in defs/damage.rs). */
 const MIN_RESISTANCE = -1;
-/** `pierce` value for "no limit" (`u8::MAX`). */
+/** `pierce` and `through` value for "no limit" (`u8::MAX`). */
 const PIERCE_UNLIMITED = 255;
 /** The smallest rest that flies on; at or below it the kill is exact (`OVERKILL_EPS` in defs/damage.rs). */
 const OVERKILL_EPS = 1e-9;
@@ -146,6 +146,7 @@ export function cosmeticPierce(
   split: Record<string, number>,
   res: Record<string, number> | undefined,
 ): 'stop' | { pierce: number; through: number; damage: number } {
+  if (state.through === PIERCE_UNLIMITED) return state;
   if (state.through > 0) return { ...state, through: state.through - 1 };
   if (state.pierce <= 0 || maxHp === undefined || res === undefined) return 'stop';
   const hp = (hpShare / 255) * maxHp;
@@ -155,6 +156,17 @@ export function cosmeticPierce(
   const rest = state.damage - hp / eff;
   if (rest <= OVERKILL_EPS) return 'stop';
   return { pierce: state.pierce === PIERCE_UNLIMITED ? PIERCE_UNLIMITED : state.pierce - 1, through: 0, damage: rest };
+}
+
+/** Extra time (s) a fired shot may take to show up in the interpolated view. */
+const UNSEEN_SLACK = 0.15;
+
+/**
+ * How long (s) an own shot may stay unseen on the server before a predicted pass is taken
+ * back: the round trip (`rttMs`) plus the interpolation `delay` (s), plus some slack.
+ */
+export function unseenShotLimit(rttMs: number, delay: number): number {
+  return rttMs / 1000 + delay + UNSEEN_SLACK;
 }
 
 // ------------------------------------------------------------ local prediction

@@ -31,7 +31,7 @@ import { RulesLog } from '../rulesLog';
 import { KeyCap } from './keycap';
 import { critLabel, WORLD_TEXT } from './worldText';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
-import { abilityChoice, cosmeticCount, cosmeticPierce, Interpolator, Predictor, volleyAngles, volleyShotIds, type EntState } from './world';
+import { abilityChoice, cosmeticCount, cosmeticPierce, Interpolator, Predictor, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
 
 export interface GameInit {
   info: RunStartInfo;
@@ -60,8 +60,8 @@ interface Cosmetic {
   split: Record<string, number>;
   /** Enemies it was predicted to pass (never touched again, like the server's `hit`). */
   hit: Set<number>;
-  /** Where the last enemy it passed stood. */
-  lastPass?: [number, number];
+  /** When it was fired (s, `performance.now`). */
+  born: number;
 }
 
 /**
@@ -633,6 +633,7 @@ export class GameScene extends Phaser.Scene {
       damage: a.damage,
       split: a.split,
       hit: new Set(),
+      born: performance.now() / 1000,
     });
   }
 
@@ -662,7 +663,6 @@ export class GameScene extends Phaser.Scene {
     c.through = next.through;
     c.damage = next.damage;
     c.hit.add(e.id);
-    c.lastPass = [e.x, e.y];
     return true;
   }
 
@@ -683,15 +683,15 @@ export class GameScene extends Phaser.Scene {
       const hitWall = !lineOfSight(this.map, c.x, c.y, nx, ny) || this.map.opaqueAt(nx, ny);
       // The server projectile hit something: ours ends too.
       const goneOnServer = c.seenOnServer && !onServer;
+      // Predicted to pass an enemy, but the server's shot never showed up: it ended there (or soon after).
+      const neverSeen = !c.seenOnServer && c.hit.size > 0 && now - c.born > unseenShotLimit(this.net.rtt, this.interp.delay);
       // Shots stop at the first enemy they touch unless they are predicted to pierce it
       // (the server decides the damage), checked every 4 px like there.
       const touched = hitWall ? null : this.shotTouchesEnemy(c, nx, ny);
       const hitEnemy = touched !== null && !this.passes(c, touched);
-      if (c.life <= 0 || hitWall || goneOnServer || reachedTarget || hitEnemy) {
-        const trail = PROJECTILES[c.kind].trail ?? 0xffffff;
-        if (hitWall) this.fx.hitSpark(c.x, c.y, trail);
-        // We predicted a kill the server did not see: the shot ends at the last enemy it passed.
-        else if (goneOnServer && c.lastPass) this.fx.hitSpark(c.lastPass[0], c.lastPass[1] + 4, trail);
+      if (c.life <= 0 || hitWall || goneOnServer || neverSeen || reachedTarget || hitEnemy) {
+        // A wrongly predicted pass needs no spark of its own: the server's `Dmg` draws one at that enemy.
+        if (hitWall) this.fx.hitSpark(c.x, c.y, PROJECTILES[c.kind].trail ?? 0xffffff);
         c.img.destroy();
         this.cosmetics.splice(i, 1);
         this.endedShots.set(c.shot, now);

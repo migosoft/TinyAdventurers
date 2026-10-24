@@ -219,6 +219,7 @@ impl Lobby {
         self.conns.values().find(|c| c.character.as_ref().map_or(false, |ch| ch.id == character)).map(|c| c.account)
     }
 
+    #[cfg(test)]
     pub fn account_of(&self, id: u32) -> Option<i32> {
         self.conns.get(&id).map(|c| c.account)
     }
@@ -878,7 +879,9 @@ mod tests {
     async fn debug_loadout_is_refused_when_it_must_be() {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
+        let (tx, mut rx) = unbounded_channel();
         let a = join_debug(&mut l, 1, ClassId::Barbarian);
+        l.conns.get_mut(&a).unwrap().tx = tx;
         let (p, s) = (pick(AbilityId::Strike), pick(AbilityId::Charge));
 
         l.debug_loadout_if(a, p, s); // outside a room
@@ -896,6 +899,14 @@ mod tests {
         assert!(l.conns[&a].loadout.is_none());
 
         l.handle(a, ClientMsg::SetReady { ready: false });
+        let rid = l.conns[&a].room.unwrap();
+        l.rooms.get_mut(&rid).unwrap().run_tx = Some(unbounded_channel().0);
+        errors(&mut rx);
+        l.debug_loadout_if(a, p, s); // during a run
+        assert_eq!(errors(&mut rx), ["Not during a run."]);
+        assert!(l.conns[&a].loadout.is_none() && !l.conns[&a].debug_loadout);
+
+        l.rooms.get_mut(&rid).unwrap().run_tx = None;
         l.debug_loadout_if(a, p, s);
         assert_eq!(l.conns[&a].loadout, Some(Loadout { primary: p, secondary: s }));
         assert!(l.conns[&a].debug_loadout);
@@ -976,7 +987,7 @@ mod tests {
         let run = Run::new(rid, members, 7, LevelChoice::Dungeon { boss: None });
         let sheet = &run.players[0].sheet;
         assert_eq!(sheet.primary.id, AbilityId::Hurl);
-        assert_eq!(sheet.primary.projectile, Some(crate::defs::kinds::EntityKind::ThrownAxe as u8));
+        assert_eq!(sheet.primary.projectile, Some(crate::defs::kinds::EntityKind::ThrownAxe));
     }
 
     #[tokio::test]

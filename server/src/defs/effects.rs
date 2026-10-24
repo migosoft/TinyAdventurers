@@ -102,7 +102,8 @@ pub struct EffectDef {
     pub no_move: bool,
     pub no_act: bool,
     pub no_turn: bool,
-    /// Lying down (drawn rotated on the client).
+    /// Lying down (drawn rotated on the client; exported, so the server never reads it).
+    #[allow(dead_code)]
     pub prone: bool,
     /// Damage ends it (none yet; for a future monster sleep).
     pub wakes_on_damage: bool,

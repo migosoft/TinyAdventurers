@@ -10,7 +10,7 @@ export type ResolvedAbility = { id: AbilityId, cooldown: number, damage: number,
  */
 pierce: number, 
 /**
- * How many enemies a shot passes through with full damage before the overkill rule.
+ * How many enemies a shot passes through with full damage before the overkill rule: `u8::MAX` no limit.
  */
 pierce_through: number, 
 /**
@@ -18,7 +18,7 @@ pierce_through: number,
  */
 ranged: boolean, 
 /**
- * The `EntityKind` id of its projectile.
+ * Its projectile, sent as the `EntityKind` id.
  */
 projectile: number | null, 
 /**

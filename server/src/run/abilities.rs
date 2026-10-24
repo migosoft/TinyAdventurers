@@ -56,6 +56,7 @@ pub fn melee_targets(run: &Run, pi: usize) -> Vec<MeleeTarget> {
 }
 
 /// The nearest thing in melee reach: where a ranged primary strikes instead of shooting, and what blocks a ranged secondary.
+#[cfg(test)]
 pub fn melee_target(run: &Run, pi: usize) -> Option<MeleeTarget> {
     melee_targets(run, pi).first().copied()
 }
@@ -91,9 +92,9 @@ fn melee_strike(run: &mut Run, pi: usize, targets: &[MeleeTarget], strike: &Reso
     }
 }
 
-/// The projectile kind for an `EntityKind` id.
-fn kind_of(id: Option<u8>) -> EntityKind {
-    EntityKind::ALL.into_iter().find(|&k| Some(k as u8) == id).expect("a shot has a projectile")
+/// The projectile of a shooting ability.
+fn kind_of(projectile: Option<EntityKind>) -> EntityKind {
+    projectile.expect("a shot has a projectile")
 }
 
 /// The damage of one hit of `a`: its split, on-hit and power.
@@ -752,7 +753,11 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     };
     let pr = &mut run.projectiles[i];
     let next = match pr.pierce {
-        Pierce::Through { left, then } if left > 0 => Some(if left == 1 { Pierce::from_u8(then) } else { Pierce::Through { left: left - 1, then } }),
+        Pierce::Through { left, then } if left > 0 => Some(match left {
+            u8::MAX => pr.pierce,
+            1 => Pierce::from_u8(then),
+            _ => Pierce::Through { left: left - 1, then },
+        }),
         Pierce::Overkill { left } => match rest {
             Some(rest) if !alive => {
                 pr.damage.amount = rest;
@@ -922,7 +927,7 @@ mod tests {
         let res = run.monsters[mi].res.get(DamageType::Physical);
         try_use(&mut run, 0, true, 1);
         assert!((hp - run.monsters[mi].hp - 6.0 * (1.0 - res)).abs() < 1e-9, "the Red Staff at STR 8");
-        assert!(run.projectiles.is_empty());
+        assert!(run.projectiles.iter().all(|p| p.dead), "the shot is spent");
         assert_eq!(run.players[0].cd1, 1.0);
 
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
@@ -939,7 +944,7 @@ mod tests {
         let hp = run.monsters[mi].hp;
         run.events.clear();
         try_use(&mut run, 0, false, 1);
-        assert!(run.projectiles.is_empty());
+        assert!(run.projectiles.iter().all(|p| p.dead), "the shot is spent");
         assert_eq!(run.players[0].cd2, 0.0);
         assert_eq!(run.monsters[mi].hp, hp);
         assert!(run.events.is_empty(), "no event");
@@ -966,7 +971,7 @@ mod tests {
     #[test]
     fn shoot_fires_its_weapons_projectile() {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
-        run.players[0].sheet.primary.projectile = Some(EntityKind::Arrow as u8);
+        run.players[0].sheet.primary.projectile = Some(EntityKind::Arrow);
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles[0].kind, EntityKind::Arrow);
     }
@@ -1017,6 +1022,29 @@ mod tests {
         };
         assert_eq!(knock_of(vec![]), 0.0, "STR 16 against weight 17");
         assert!(knock_of(vec![NodeId::BL1, NodeId::BL2, NodeId::BL4]) > 0.0, "STR 20 against weight 17");
+    }
+
+    #[test]
+    fn charge_pushes_away_from_the_hero_once_per_dash() {
+        use crate::defs::attributes::push_dist;
+        let barb = ClassId::Barbarian;
+        let equipment = crate::defs::items::Equipment::starter(barb).with(EquipSlot::Melee, crate::defs::items::ItemId::Cleaver);
+        let build = Build { equipment, ..Build::start(barb) };
+        let mut run = super::super::tests::test_run_with(&[(barb, build)], BossId::Demon);
+        let ab = run.players[0].sheet.secondary;
+        assert_eq!(ab.id, AbilityId::Charge);
+        assert!(ab.push > 0.0, "the Cleaver pushes");
+        let mi = put_monster_near(&mut run, 0, 6.0);
+        run.monsters[mi].hp = 1000.0;
+        run.monsters[mi].weight = 10.0;
+        dash_contact(&mut run, 0);
+        let k = run.monsters[mi].knock;
+        let want = crate::collision::knock_speed(push_dist(ab.push, ab.push_str, 10.0), crate::run::DT);
+        assert!(k.x > 0.0 && k.y.abs() < 1e-9, "east, away from the hero: {k:?}");
+        assert!((k.len() - want).abs() < 1e-9, "{} vs {want}", k.len());
+        run.monsters[mi].knock = Vec2::ZERO;
+        dash_contact(&mut run, 0);
+        assert_eq!(run.monsters[mi].knock, Vec2::ZERO, "touched again in the same dash: no second push");
     }
 
     #[test]
@@ -1343,6 +1371,28 @@ mod tests {
     }
 
     #[test]
+    fn an_unlimited_through_mod_passes_every_enemy() {
+        use crate::defs::loadout::{apply_mods, AbilityMod};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.players[0].sheet.primary = apply_mods(run.players[0].sheet.primary, &[AbilityMod::PierceThrough(200), AbilityMod::PierceThrough(200)]);
+        assert_eq!(run.players[0].sheet.primary.pierce_through, u8::MAX);
+        let dmg = run.players[0].sheet.primary.damage;
+        let mut one = test_run(&[ClassId::Wizard], BossId::Demon);
+        one.players[0].sheet.primary = run.players[0].sheet.primary;
+        one.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        one.players[0].aim = 0.0;
+        let mi = put_enemy(&mut one, 0, EnemyType::OrcWarrior, 30.0, 70.0);
+        try_use(&mut one, 0, true, 1);
+        while one.monsters[mi].hp == 70.0 {
+            tick_projectiles(&mut one, 1.0 / TICK_HZ);
+        }
+        use super::super::entities::Pierce;
+        assert_eq!(one.projectiles[0].pierce, Pierce::Through { left: u8::MAX, then: 0 }, "the count does not go down");
+        let r = shoot_line(run, EnemyType::OrcWarrior, &[30.0, 40.0, 50.0, 60.0], &[70.0, 70.0, 70.0, 70.0]);
+        assert_eq!(r, [(true, dmg); 4]);
+    }
+
+    #[test]
     fn an_enemy_arrow_can_pierce() {
         let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Lich);
         run.monsters.retain(|m| m.is_boss);
@@ -1402,6 +1452,25 @@ mod tests {
             assert!(matches!(&o.state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_some()), "lit (player shot: {from_player})");
             assert_eq!(run.monsters.last().unwrap().hp, hp, "the orc behind it is spared");
         }
+    }
+
+    #[test]
+    fn an_overkill_shot_stops_at_a_chest() {
+        use crate::run::objects::ObjState;
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        run.players[0].aim = 0.0;
+        let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 5.0);
+        let chest = run.spawn_object(EntityKind::Chest, run.players[0].pos() + Vec2::new(45.0, 0.0), ObjState::Chest { opened: None });
+        let behind = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 24.0);
+        try_use(&mut run, 0, true, 1);
+        for _ in 0..30 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        assert!(!run.monsters[first].alive, "the kill lets the rest fly on");
+        assert!(run.objects.iter().find(|o| o.id == chest).unwrap().gone, "the rest smashes the chest");
+        assert_eq!(run.monsters[behind].hp, 24.0, "and stops there");
+        assert!(run.projectiles.iter().all(|p| p.dead), "the shot is spent");
     }
 
     #[test]
@@ -1855,7 +1924,7 @@ mod tests {
         let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
         let a = run.players[0].sheet.primary;
         assert_eq!(a.id, AbilityId::FrostShard);
-        assert_eq!(a.projectile, Some(EntityKind::FrostBolt as u8));
+        assert_eq!(a.projectile, Some(EntityKind::FrostBolt));
         assert!((a.split.share(DamageType::Cold) - 0.4).abs() < 1e-12);
         assert!((a.split.share(DamageType::Magical) - 0.3).abs() < 1e-12);
         assert!((a.split.share(DamageType::Physical) - 0.3).abs() < 1e-12);
@@ -2009,7 +2078,7 @@ mod tests {
         let mi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 10.0, 1000.0);
         try_use(&mut run, 0, true, 1);
         assert!(run.monsters[mi].hp < 1000.0, "the rapier struck");
-        assert!(run.projectiles.is_empty());
+        assert!(run.projectiles.iter().all(|p| p.dead), "the shot is spent");
         assert_eq!(run.players[0].cd1, run.players[0].sheet.fallback.cooldown, "the rapier's interval");
     }
 

@@ -4,7 +4,7 @@
 //! centered at the top), then rotated by a random quarter turn so the start
 //! can be on any side and the boss hall is centered on the opposite side.
 
-use super::{is_terrain, ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile, TorchSide, TorchSpawn};
+use super::{ChestSpawn, Dungeon, Map, Rect, Room, RoomKind, Spawn, Tile, TorchSide, TorchSpawn};
 use crate::defs::enemies::EnemyType;
 use crate::math::Vec2;
 use crate::protocol::BossId;
@@ -923,6 +923,7 @@ fn place_barrels(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room], spawns: &[Spaw
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dungeon::is_terrain;
 
     #[test]
     fn torches_hang_on_walls_with_floor_in_front_spaced_and_never_adjacent() {

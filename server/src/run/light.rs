@@ -162,6 +162,7 @@ impl Lights {
     }
 
     /// The static layer (call `refresh` first).
+    #[cfg(test)]
     pub fn static_lit(&self, x: i32, y: i32) -> bool {
         self.inside(x, y) && self.lit[(y * self.w + x) as usize]
     }
@@ -219,6 +220,7 @@ impl Run {
         self.change_light(id, |s| s.on = on);
     }
 
+    #[cfg(test)]
     pub fn set_light_colour(&mut self, id: u32, colour: Colour) {
         self.change_light(id, |s| s.colour = colour);
     }
@@ -278,6 +280,7 @@ impl Run {
     }
 
     /// Is this spot lit by any light? (Its tile is in the static or the moving layer.)
+    #[cfg(test)]
     pub fn is_lit(&mut self, p: Vec2) -> bool {
         self.refresh_lights();
         let (x, y) = Map::tile_of(p);

@@ -102,6 +102,7 @@ impl Effects {
         self.0.iter().fold(0, |b, a| b | a.kind.bit())
     }
     /// Refresh: the longer of the remaining and the new time. True when newly added.
+    #[cfg(test)]
     pub fn add(&mut self, k: EffectKind, secs: f64) -> bool {
         self.add_with(k, secs, EffectLook::Plain, None)
     }

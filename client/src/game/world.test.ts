@@ -4,7 +4,7 @@ import type { EntSnap } from '../generated/EntSnap';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
-import { Interpolator, Predictor, abilityChoice, cosmeticCount, cosmeticPierce, volleyAngles, volleyShotIds, type EntState } from './world';
+import { Interpolator, Predictor, abilityChoice, cosmeticCount, cosmeticPierce, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
 
 const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, behind: 0, ...over });
 /** Predictor for tests: the class only picks which ids the abilities carry. */
@@ -145,6 +145,13 @@ describe('abilityChoice', () => {
   });
 });
 
+describe('unseenShotLimit', () => {
+  it('is the round trip plus the interpolation delay plus slack', () => {
+    expect(unseenShotLimit(100, 0.1)).toBeCloseTo(0.35, 9);
+    expect(unseenShotLimit(300, 0.1)).toBeGreaterThan(unseenShotLimit(100, 0.1));
+  });
+});
+
 describe('cosmeticPierce', () => {
   const none = { Physical: 0, Cold: 0, Heat: 0, Magical: 0, Poison: 0 };
   const phys = { Physical: 1 };
@@ -175,6 +182,9 @@ describe('cosmeticPierce', () => {
   it('passes through with full damage first, then follows the overkill rule', () => {
     expect(cosmeticPierce({ pierce: 0, through: 1, damage: 16 }, 255, 70, phys, none)).toEqual({ pierce: 0, through: 0, damage: 16 });
     expect(cosmeticPierce({ pierce: 0, through: 0, damage: 16 }, 255, 70, phys, none)).toBe('stop');
+  });
+  it('never counts down an unlimited pass-through', () => {
+    expect(cosmeticPierce({ pierce: 0, through: 255, damage: 16 }, 255, 70, phys, none)).toEqual({ pierce: 0, through: 255, damage: 16 });
   });
   it('stops at an enemy of unknown max HP', () => expect(cosmeticPierce(shot, 255, undefined, phys, undefined)).toBe('stop'));
   it('floors a weakness at -1 like the server', () => {

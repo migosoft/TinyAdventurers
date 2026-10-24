@@ -24,6 +24,7 @@ pub enum LightKind {
 }
 
 impl LightKind {
+    #[cfg(test)]
     pub const ALL: [LightKind; 7] = [LightKind::Torch, LightKind::Lava, LightKind::Fire, LightKind::Magic, LightKind::Blast, LightKind::Holy, LightKind::Radiant];
 }
 
