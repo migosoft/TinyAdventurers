@@ -34,6 +34,18 @@ describe('dustTint', () => {
     expect(dustTint(255, 170, 90)).toEqual([1, 0xffd5ad]);
     expect(dustTint(0, 0, 0)[0]).toBe(0);
   });
+
+  it('keeps the hue of a sum over 255 instead of overflowing a channel', () => {
+    expect(dustTint(510, 340, 180)).toEqual([1, 0xffd5ad]);
+    const [b, c] = dustTint(100, 60, 30);
+    expect(c).toBe(0xffcca6);
+    expect(b).toBeCloseTo(100 / 255, 5);
+    for (let v = 0; v <= 1000; v += 50) {
+      const col = dustTint(v, v / 2, v / 5)[1];
+      expect(col).toBeGreaterThanOrEqual(0);
+      expect(col).toBeLessThanOrEqual(0xffffff);
+    }
+  });
 });
 
 describe('BurstOnce', () => {

@@ -172,7 +172,7 @@ export class Mood {
     if (this.gone) return;
     this.t += dt;
     this.collectInView(view);
-    this.updateFire(dt, shots);
+    this.updateFire(dt, view, shots);
     this.drips.update(dt, this.waterNow, this.on.drips);
     this.updateDust(dt, view);
     this.updateTorchSmoke(dt, view, torches);
@@ -297,12 +297,17 @@ export class Mood {
   }
 
   /** Fire shots trail embers; a blast throws a burst once, when it first shows. */
-  private updateFire(dt: number, shots: AirShot[]): void {
+  private updateFire(dt: number, view: Phaser.Geom.Rectangle, shots: AirShot[]): void {
     this.fireClock += dt;
     const trail = this.fireClock > 0.04;
     if (trail) this.fireClock = 0;
     const blasts: AirShot[] = [];
+    const x0 = view.x - MARGIN * TILE;
+    const x1 = view.right + MARGIN * TILE;
+    const y0 = view.y - MARGIN * TILE;
+    const y1 = view.bottom + MARGIN * TILE;
     for (const m of shots) {
+      if (m.x < x0 || m.x > x1 || m.y < y0 || m.y > y1) continue;
       if (m.kind === LIGHT_KIND.Fire && trail) this.ember(m.x + (Math.random() - 0.5) * 6, m.y + (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 16, -rnd(6, 20), rnd(0.35, 0.8));
       if (m.kind === LIGHT_KIND.Blast) blasts.push(m);
     }

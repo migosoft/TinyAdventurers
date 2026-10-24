@@ -25,10 +25,14 @@ export function spawnCount(acc: number, dt: number, n: number, every: number): [
   return [count, total - count];
 }
 
-/** Brightness (0..1, from the brightest channel) and colour (the hue blended halfway to white, 0xRRGGBB) of a light sample. */
+/**
+ * Brightness (0..1, from the brightest channel) and colour (0xRRGGBB) of a light sample: the hue, scaled so its brightest
+ * channel is 255 (the sum of lights is not clamped), blended halfway to white.
+ */
 export function dustTint(r: number, g: number, b: number): [brightness: number, colour: number] {
-  const half = (c: number) => Math.round((255 + c) / 2); // = 255 * (0.5 + 0.5 * c / 255), without the float error
-  return [Math.min(1, Math.max(r, g, b) / 255), (half(r) << 16) | (half(g) << 8) | half(b)];
+  const m = Math.max(r, g, b, 1);
+  const ch = (c: number) => Math.round((255 * m + 255 * Math.max(0, c)) / (2 * m));
+  return [Math.min(1, Math.max(r, g, b) / 255), (ch(r) << 16) | (ch(g) << 8) | ch(b)];
 }
 
 /** Reports each key once while it stays present: a blast bursts once while it shows. */

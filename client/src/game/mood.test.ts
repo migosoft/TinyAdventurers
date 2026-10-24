@@ -104,6 +104,12 @@ describe('Mood', () => {
     expect(mood.counts.embers).toBe(18);
   });
 
+  it('throws no embers for shots outside the view', () => {
+    const { mood } = setup(60, 40, TILE_ID.Floor);
+    run(mood, 0.5, [], [{ x: 900, y: 600, kind: LIGHT_KIND.Blast }, { x: 900, y: 600, kind: LIGHT_KIND.Fire }]);
+    expect(mood.counts.embers).toBe(0);
+  });
+
   it('trails embers behind a fire shot', () => {
     const { mood } = setup(20, 20, TILE_ID.Floor);
     run(mood, 0.5, [], [{ x: 100, y: 100, kind: LIGHT_KIND.Fire }]);
