@@ -190,6 +190,9 @@ export class GameScene extends Phaser.Scene {
     this.drawBoard();
     this.lightView = new LightView(this, this.map, this.light);
     this.mood = new Mood(this, this.map, this.lightView);
+    // #158 phase 1: the stirred air shows only in the ?mood demo until the user has judged it there.
+    this.mood.on.stir = false;
+    this.mood.on.draft = false;
     this.visionMask = new VisionMask(this, this.map);
     this.useHint = new KeyCap(this);
     this.bars = this.add.graphics().setDepth(DEPTH.enemyBars);
