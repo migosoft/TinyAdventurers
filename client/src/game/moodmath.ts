@@ -1,0 +1,44 @@
+// Pure helpers behind the mood layer (dust, clouds, smoke, embers, drips): counts, spawn rates, tints.
+
+/** Opacity of the light-coloured dust motes. */
+export const DUST_ALPHA = 0.55;
+export const MAX_CLOUDS = 24;
+export const MAX_SMOKE = 200;
+export const MAX_EMBERS = 160;
+export const MAX_DRIPS = 12;
+/** Seconds between smoke puffs / embers per lava tile, and between drips per source. */
+export const LAVA_SMOKE_EVERY = 4.2;
+export const LAVA_EMBER_EVERY = 1.08;
+export const DRIP_EVERY = 7;
+
+/** Number of fog clouds for a world of `worldW` x `worldH` px: 7 per 240 tiles, clamped to 4..24. */
+export function cloudCount(worldW: number, worldH: number): number {
+  const n = Math.round((7 * ((worldW / 16) * (worldH / 16))) / 240);
+  return Math.min(MAX_CLOUDS, Math.max(4, n));
+}
+
+/** Accumulates `dt * n / every` spawns on top of `acc`; returns the whole spawns due and the remainder. */
+export function spawnCount(acc: number, dt: number, n: number, every: number): [count: number, acc: number] {
+  if (n <= 0 || !Number.isFinite(every) || every <= 0) return [0, 0];
+  const total = acc + (dt * n) / every;
+  const count = Math.floor(total);
+  return [count, total - count];
+}
+
+/** Brightness (0..1, from the brightest channel) and colour (the hue blended halfway to white, 0xRRGGBB) of a light sample. */
+export function dustTint(r: number, g: number, b: number): [brightness: number, colour: number] {
+  const half = (c: number) => Math.round((255 + c) / 2); // = 255 * (0.5 + 0.5 * c / 255), without the float error
+  return [Math.min(1, Math.max(r, g, b) / 255), (half(r) << 16) | (half(g) << 8) | half(b)];
+}
+
+/** Reports each key once while it stays present: a blast bursts once while it shows. */
+export class BurstOnce {
+  private seen = new Set<string>();
+
+  /** The keys not present in the previous call. */
+  fresh(keys: string[]): string[] {
+    const out = keys.filter((k) => !this.seen.has(k));
+    this.seen = new Set(keys);
+    return out;
+  }
+}
