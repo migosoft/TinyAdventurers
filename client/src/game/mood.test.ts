@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
 import { cloudCount } from './moodmath';
-import { Mood, type AirTorch } from './mood';
+import { Mood, type AirMover, type AirTorch } from './mood';
 import { TERRAIN } from './terrain';
 
 // terrain.ts and torch.ts import Phaser, which needs a browser window; Mood itself only uses it for types.
@@ -65,8 +65,19 @@ function setup(w: number, h: number, tile: number, lit = 1) {
   return { map, light, mood, made, scene, sprites, canvases };
 }
 
-const run = (mood: Mood, secs: number, torches: AirTorch[] = [], shots: { x: number; y: number; kind: number }[] = [], v = view()) => {
-  for (let i = 0; i < secs * 60; i++) mood.update(1 / 60, v, torches, shots);
+const run = (mood: Mood, secs: number, torches: AirTorch[] = [], shots: { x: number; y: number; kind: number }[] = [], v = view(), movers: AirMover[] = []) => {
+  for (let i = 0; i < secs * 60; i++) mood.update(1 / 60, v, torches, shots, movers);
+};
+
+const figure = (x: number, y: number, vx: number): AirMover => ({ x, y, vx, vy: 0, r: 6, shot: false });
+
+/** Nine movers sweeping the whole 640x360 view in rows at 300 px/s, for `secs` s. */
+const sweep = (mood: Mood, secs: number) => {
+  const movers = Array.from({ length: 9 }, (_, k) => figure(0, 20 + 40 * k, 300));
+  for (let i = 0; i < secs * 60; i++) {
+    for (const m of movers) m.x = (i * 5) % 640;
+    mood.update(1 / 60, view(), [], [], movers);
+  }
 };
 
 describe('Mood', () => {
@@ -208,5 +219,94 @@ describe('Mood', () => {
     expect(mood.counts.smoke).toBeGreaterThan(0); // still alive, but invisible
     const shown = (made as unknown as { alpha?: number; destroyed: number }[]).filter((o) => !(sprites as unknown[]).includes(o) && (o.alpha ?? 0) > 0.001); // the haze keeps its own alpha
     expect(shown).toHaveLength(0);
+  });
+
+  describe('stirred air (#158)', () => {
+    it('a moving figure on a seen tile pushes air', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      run(mood, 1 / 60, [], [], view(), [figure(200, 150, 80)]);
+      expect(mood.airAt(214, 150)[0]).toBeGreaterThan(0);
+    });
+
+    it('a mover on an unseen tile pushes nothing', () => {
+      const { mood, light } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      light.seenLit[Math.floor(150 / TILE) * 60 + Math.floor(200 / TILE)] = 0;
+      run(mood, 1 / 60, [], [], view(), [figure(200, 150, 80)]);
+      expect(mood.airAt(214, 150)).toEqual([0, 0]);
+    });
+
+    it('stir off pushes nothing', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      mood.on.stir = false;
+      run(mood, 1 / 60, [], [], view(), [figure(200, 150, 80)]);
+      expect(mood.airAt(214, 150)).toEqual([0, 0]);
+    });
+
+    it('movers outside the view push nothing', () => {
+      const { mood } = setup(80, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      const x = 640 + 3 * TILE;
+      run(mood, 1 / 60, [], [], view(), [figure(x, 150, 80)]);
+      expect(mood.airAt(x + 14, 150)).toEqual([0, 0]);
+      expect(mood.airAt(640 + 8, 150)).toEqual([0, 0]);
+    });
+
+    it('a projectile leaves a wake', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      run(mood, 1 / 60, [], [], view(), [{ x: 200, y: 150, vx: 200, vy: 0, r: 3, shot: true }]);
+      expect(mood.airAt(202, 150)[0]).toBeGreaterThan(0);
+    });
+
+    it('a dash through the room stirs clouds, which come back', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.stirDelay = 3;
+      run(mood, 2);
+      expect(mood.counts.stirred).toBe(0);
+      sweep(mood, 4);
+      expect(mood.counts.stirred).toBeGreaterThan(0);
+      run(mood, 2);
+      expect(mood.counts.stirred).toBeGreaterThan(0); // fading or waiting
+      run(mood, 4);
+      expect(mood.counts.stirred).toBe(0);
+      expect(mood.counts.clouds).toBe(cloudCount(640, 360));
+    });
+
+    it('with no delay a stirred cloud respawns once it has faded', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.stirDelay = 0;
+      run(mood, 2);
+      sweep(mood, 4);
+      run(mood, 2.5);
+      expect(mood.counts.stirred).toBe(0);
+    });
+
+    it('a blast pushes the air once', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      mood.update(1 / 60, view(), [], [{ x: 300, y: 150, kind: LIGHT_KIND.Blast }]);
+      expect(mood.airAt(330, 150)[0]).toBeGreaterThan(0);
+    });
+
+    it('the draft alone moves the air slowly and stirs nothing', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      run(mood, 5);
+      const [x, y] = mood.airAt(100, 100);
+      expect(Math.hypot(x, y)).toBeGreaterThan(0);
+      expect(Math.hypot(x, y)).toBeLessThanOrEqual(3.01);
+      expect(mood.counts.stirred).toBe(0);
+    });
+
+    it('stir and draft off keep #148\'s air', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.stir = false;
+      mood.on.draft = false;
+      run(mood, 5, [], [], view(), [figure(200, 150, 80)]);
+      expect(mood.airAt(100, 100)).toEqual([0, 0]);
+      expect(mood.counts.stirred).toBe(0);
+    });
   });
 });
