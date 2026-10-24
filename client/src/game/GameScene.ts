@@ -248,7 +248,7 @@ export class GameScene extends Phaser.Scene {
     this.unsub = this.net.on((m) => this.onMessage(m));
     this.events.once('shutdown', () => this.cleanup());
     this.hud.startRun(this.info);
-    if (this.info.debug) this.hud.setDebug(true, true, false);
+    if (this.info.debug) this.hud.setDebug(true, true, true);
     this.rulesLog = new RulesLog(this, this.net, this.info);
     this.hud.setToggles(this.rulesLog.settings());
   }

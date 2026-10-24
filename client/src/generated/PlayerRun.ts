@@ -11,6 +11,6 @@ started: number, level: string, boss: string | null, outcome: string, duration_s
  */
 character: string | null, class: ClassId, kills: number, xp: number, coins: number, survived: boolean, 
 /**
- * A debug run (it banked nothing for a normal account).
+ * A debug run (only debug accounts bank from it).
  */
 debug: boolean, };

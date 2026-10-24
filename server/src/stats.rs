@@ -204,7 +204,7 @@ pub struct PlayerRun {
     pub xp: u32,
     pub coins: u32,
     pub survived: bool,
-    /// A debug run (it banked nothing for a normal account).
+    /// A debug run (only debug accounts bank from it).
     pub debug: bool,
 }
 

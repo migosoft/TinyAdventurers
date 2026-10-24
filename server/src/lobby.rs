@@ -36,7 +36,8 @@ pub struct Conn {
     /// The debug loadout, if one was set (reset when the character changes, and replaced by a real
     /// `SetLoadout`, which clears it and `debug_loadout`).
     pub loadout: Option<Loadout>,
-    /// `loadout` came from `DebugLoadout`, so the run counts as a debug run.
+    /// `loadout` came from `DebugLoadout` (only debug connections can set it): it switches on the whole
+    /// class pool and the Attribute lift in `build_of`. The run's kind comes from the room.
     pub debug_loadout: bool,
     /// The weapons set by `DebugEquip` (the class's starters until then; reset with the character).
     pub debug_equipment: Equipment,
