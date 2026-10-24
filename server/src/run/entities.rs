@@ -53,8 +53,10 @@ pub struct Player {
     pub left: bool,
     pub damage: f64,
     pub healing: f64,
-    /// Debug mode: takes no damage and receives the path to the boss.
+    /// Debug mode: takes no damage (unless `mortal`) and receives the path to the boss.
     pub debug: bool,
+    /// Debug mode with immortality turned off (F9): hits and terrain hurt as in a normal run.
+    pub mortal: bool,
     pub xp: u32,
     /// Coins earned this run (banked to the character like XP).
     pub coins: u32,
@@ -87,6 +89,10 @@ pub enum Sink {
 }
 
 impl Player {
+    /// Debug mode with immortality on: hits show but take no HP, and terrain does not kill.
+    pub fn immortal(&self) -> bool {
+        self.debug && !self.mortal
+    }
     pub fn pos(&self) -> Vec2 {
         Vec2::new(self.mv.x, self.mv.y)
     }

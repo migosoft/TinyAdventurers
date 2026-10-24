@@ -755,7 +755,7 @@ mod tests {
 
         let mut newer = Progress::new(ClassId::Wizard);
         newer.bank(500, 0);
-        newer.buy_attr(ClassId::Wizard, Attr::Int).unwrap();
+        newer.buy_attr(ClassId::Wizard, Attr::Int, false).unwrap();
         newer.rev = 3;
         let mut older = Progress::new(ClassId::Wizard);
         older.rev = 2;

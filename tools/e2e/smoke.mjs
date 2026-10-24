@@ -160,6 +160,16 @@ if (query.includes('debug')) {
   } catch (e) {
     console.log(`F4 darkvision FAILED: ${e.message.split('\n')[0]}`);
   }
+  // F9: mortal (the badge says so), then immortal again.
+  try {
+    for (const want of ['MORTAL', 'immortal']) {
+      await p1.keyboard.press('F9');
+      await p1.waitForFunction((w) => document.querySelector('.debug-badge b')?.textContent === `DEBUG · ${w}`, want, { timeout: 5000 });
+    }
+    console.log('F9 immortality: MORTAL -> immortal');
+  } catch (e) {
+    console.log(`F9 immortality FAILED: ${e.message.split('\n')[0]}`);
+  }
 } else console.log('F4 darkvision step skipped (no debug in the query)');
 
 // A second login to Alice's account closes her first window.

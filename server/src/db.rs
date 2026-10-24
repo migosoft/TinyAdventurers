@@ -395,7 +395,7 @@ pub mod tests {
         for i in 0..10 {
             let db = db.clone();
             let attr = [Attr::Dex, Attr::Wil][i % 2];
-            tasks.push(tokio::spawn(async move { update_progress(&db, c.id, |p| p.buy_attr(ClassId::ElvenRanger, attr)).await.unwrap().unwrap().unwrap(); }));
+            tasks.push(tokio::spawn(async move { update_progress(&db, c.id, |p| p.buy_attr(ClassId::ElvenRanger, attr, false)).await.unwrap().unwrap().unwrap(); }));
         }
         for t in tasks {
             t.await.unwrap();
@@ -410,7 +410,7 @@ pub mod tests {
 
         assert_eq!(load_character(&db, a, other.id).await.unwrap().unwrap().progress, Progress::new(ClassId::Paladin), "other character untouched");
         // A failed purchase changes nothing.
-        let rich = update_progress(&db, other.id, |p| p.buy_attr(ClassId::Paladin, Attr::Str)).await.unwrap().unwrap();
+        let rich = update_progress(&db, other.id, |p| p.buy_attr(ClassId::Paladin, Attr::Str, false)).await.unwrap().unwrap();
         assert!(rich.is_err());
         assert_eq!(load_character(&db, a, other.id).await.unwrap().unwrap().progress.rev, 0);
         // Banking to a deleted character is skipped.
@@ -426,7 +426,7 @@ pub mod tests {
         sqlx::query("UPDATE characters SET progress = '{\"xp\": 300, \"upgrades\": {\"armor\": 1}, \"future\": true}' WHERE id = $1").bind(c.id).execute(&db).await.unwrap();
         let p = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
         assert_eq!((p.xp, p.version), (300 + 100, CURRENT_VERSION), "the v1 level is refunded");
-        update_progress(&db, c.id, |p| p.buy_attr(ClassId::Barbarian, Attr::Str)).await.unwrap().unwrap().unwrap();
+        update_progress(&db, c.id, |p| p.buy_attr(ClassId::Barbarian, Attr::Str, false)).await.unwrap().unwrap().unwrap();
         let again = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
         assert_eq!(again.xp, 400 - again.xp_spent, "read twice, refunded once");
         let v: i64 = sqlx::query("SELECT (progress->>'version')::bigint FROM characters WHERE id = $1").bind(c.id).fetch_one(&db).await.unwrap().get(0);

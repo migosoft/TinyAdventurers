@@ -139,6 +139,7 @@ export class GameScene extends Phaser.Scene {
   private sinks = new Map<number, { x: number; y: number; drown: boolean; t: number }>();
   // Debug mode (?debug): immortal + path to the boss, drawn above the fog.
   private debugOn = false;
+  private debugImmortal = true;
   private debugEffect = -1;
   private lastAim = 0;
   private debugPath: [number, number][] = [];
@@ -194,6 +195,7 @@ export class GameScene extends Phaser.Scene {
     this.gaze = this.add.graphics().setDepth(DEPTH.fx);
     this.debugGfx = this.add.graphics().setDepth(DEPTH.fog + 1);
     this.debugOn = false;
+    this.debugImmortal = true;
     this.debugPath = [];
     this.debugOgre = [];
 
@@ -228,6 +230,12 @@ export class GameScene extends Phaser.Scene {
       if (e.repeat || !this.debugOn || !this.alive) return;
       this.debugEffect = (this.debugEffect + 1) % Object.keys(EFFECT).length;
       this.net.send({ t: 'DebugEffect', kind: this.debugEffect });
+    });
+    // Debug mode only (?debug): immortality off and on (the run stays a debug run).
+    kb.on('keydown-F9', (e: KeyboardEvent) => {
+      e.preventDefault();
+      if (e.repeat || !this.debugOn || !this.alive) return;
+      this.net.send({ t: 'DebugImmortal', on: !this.debugImmortal });
     });
     kb.on('keydown-ESC', () => this.hud.toggleMenu());
     this.input.mouse?.disableContextMenu();
@@ -331,8 +339,9 @@ export class GameScene extends Phaser.Scene {
   private onMessage(m: ServerMsg): void {
     if (m.t === "Snap") this.onSnapshot(m);
     else if (m.t === "DebugPath") {
-      if (m.on !== this.debugOn) this.hud.setDebug(m.on);
+      if (m.on !== this.debugOn || m.immortal !== this.debugImmortal) this.hud.setDebug(m.on, m.immortal, m.on !== this.debugOn);
       this.debugOn = m.on;
+      this.debugImmortal = m.immortal;
       this.debugPath = m.points;
       this.debugOgre = m.ogre;
     }

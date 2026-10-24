@@ -16,6 +16,13 @@ describe('nodeState', () => {
     expect(nodeState(info, 'WA3')).toBe('blocked'); // INT 18, and XP
     expect(blockReason(info, 'WA3')).toBe('needs INT 18');
   });
+  test('debug buys are free: no XP needed, but requirements and neighbours still count', () => {
+    const info = fixtureInfo('Wizard', { xp: 0 });
+    expect(nodeState(info, 'WA2')).toBe('blocked');
+    expect(nodeState(info, 'WA2', true)).toBe('buyable');
+    expect(nodeState(info, 'WA3', true)).toBe('locked');
+    expect(blockReason({ ...info, nodes: ['WA2'] }, 'WA3', true)).toBe('needs INT 18');
+  });
 });
 
 describe('unmetRequirements', () => {

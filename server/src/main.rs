@@ -178,7 +178,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, id_hash
             ClientMsg::Ping { time } => {
                 let _ = tx.send(Message::Binary(encode(&ServerMsg::Pong { time }).into()));
             }
-            ClientMsg::Input(_) | ClientMsg::Spectate { .. } | ClientMsg::Debug { .. } | ClientMsg::DebugDarkvision { .. } | ClientMsg::DebugEffect { .. } | ClientMsg::RulesLog { .. } => {
+            ClientMsg::Input(_) | ClientMsg::Spectate { .. } | ClientMsg::Debug { .. } | ClientMsg::DebugDarkvision { .. } | ClientMsg::DebugEffect { .. } | ClientMsg::DebugImmortal { .. } | ClientMsg::RulesLog { .. } => {
                 let run_tx = lobby.lock().unwrap().run_of(id);
                 if let Some(run_tx) = run_tx {
                     let _ = run_tx.send(RunCmd::Msg { conn: id, msg: cm });
@@ -191,12 +191,18 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, id_hash
             ClientMsg::Respec => change_build(&state, id, Change::Respec).await,
             ClientMsg::Equip { slot, item } => change_build(&state, id, Change::Equip(slot, item)).await,
             ClientMsg::SetLoadout { primary, secondary } => change_build(&state, id, Change::SetLoadout(Loadout { primary, secondary })).await,
-            ClientMsg::DebugGrantItem { item } => {
+            ClientMsg::DebugGrantItem { .. } | ClientMsg::DebugBuyAttribute { .. } | ClientMsg::DebugBuyNode { .. } | ClientMsg::DebugRespec => {
                 if !run::debug::allowed() {
                     lobby.lock().unwrap().error(id, "Debug is off.");
                     continue;
                 }
-                change_build(&state, id, Change::GrantItem(item)).await
+                let change = match cm {
+                    ClientMsg::DebugGrantItem { item } => Change::GrantItem(item),
+                    ClientMsg::DebugBuyAttribute { attr } => Change::FreeAttr(attr),
+                    ClientMsg::DebugBuyNode { node } => Change::FreeNode(node),
+                    _ => Change::FreeRespec,
+                };
+                change_build(&state, id, change).await
             }
             other => lobby.lock().unwrap().handle(id, other),
         }

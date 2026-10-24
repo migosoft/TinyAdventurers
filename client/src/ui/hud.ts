@@ -43,6 +43,19 @@ export const HELP_KEYS: [keys: string[], label: string][] = [
   [['F3'], 'stats'],
 ];
 
+/** The in-run debug keys (only with `?debug`), listed on the debug badge. */
+export const DEBUG_KEYS: [key: string, label: string][] = [
+  ['F4', 'darkvision 0/50/100 %'],
+  ['F8', 'next effect on you'],
+  ['F9', 'immortal on/off'],
+];
+
+/** The debug badge: the immortality state, the debug keys and the path colours. */
+export function debugBadgeHtml(immortal: boolean): string {
+  const keys = DEBUG_KEYS.map(([k, l]) => `<span><kbd>${k}</kbd>${l}</span>`).join('');
+  return `<b>DEBUG · ${immortal ? 'immortal' : 'MORTAL'}</b>${keys}<span>paths: boss (yellow), ogre (blue)</span>`;
+}
+
 export function helpHtml(): string {
   return HELP_KEYS.map(([keys, label]) => `<span>${keys.map((k) => `<kbd>${k}</kbd>`).join('')}${label}</span>`).join('');
 }
@@ -77,7 +90,7 @@ export class Hud {
   private asleep = false;
   private menu = el('div', 'menu hidden');
   private end = el("div", "end hidden");
-  private debugBadge = el("div", "debug-badge hidden", "DEBUG · immortal · paths to boss (yellow) and ogre (blue)");
+  private debugBadge = el("div", "debug-badge hidden", debugBadgeHtml(true));
   private trackers = [new CooldownTracker(), new CooldownTracker()];
   private debugT = 0;
   menuOpen = false;
@@ -298,9 +311,11 @@ export class Hud {
     while (this.msgs.children.length > 4) this.msgs.firstChild?.remove();
   }
 
-  setDebug(on: boolean): void {
+  /** `on` changed: announce debug mode; `immortal` changed while on: the server announces it to the party. */
+  setDebug(on: boolean, immortal: boolean, announce: boolean): void {
     this.debugBadge.classList.toggle("hidden", !on);
-    this.message(on ? "Debug mode on: immortal, paths to the boss (yellow) and the ogre (blue) shown." : "Debug mode off.");
+    this.debugBadge.innerHTML = debugBadgeHtml(immortal);
+    if (announce) this.message(on ? "Debug mode on: immortal (F9 toggles), paths to the boss (yellow) and the ogre (blue) shown." : "Debug mode off.");
   }
 
   toggleDebug(): void {

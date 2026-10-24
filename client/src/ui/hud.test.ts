@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Hud, helpHtml, secondaryLabel } from './hud';
+import { Hud, debugBadgeHtml, helpHtml, secondaryLabel } from './hud';
 import { EFFECT } from '../generated/defs';
 import { EFFECT_ICON } from './effectIcons';
 
@@ -33,6 +33,12 @@ describe('Hud', () => {
   });
   it('writes the help line as key caps', () => {
     expect(helpHtml()).toBe('<span><kbd>WASD</kbd>move</span><span><kbd>LMB</kbd><kbd>RMB</kbd>attack</span><span><kbd>L</kbd>log</span><span><kbd>Esc</kbd>menu</span><span><kbd>F3</kbd>stats</span>');
+  });
+  it('lists every debug key on the debug badge and shows when the hero is mortal', () => {
+    const on = debugBadgeHtml(true);
+    for (const k of ['F4', 'F8', 'F9']) expect(on).toContain(`<kbd>${k}</kbd>`);
+    expect(on).toContain('DEBUG · immortal');
+    expect(debugBadgeHtml(false)).toContain('DEBUG · MORTAL');
   });
   it('titles the menu Paused and keeps its hint', () => {
     expect(document.querySelector('.menu .title')!.textContent).toBe('Paused');

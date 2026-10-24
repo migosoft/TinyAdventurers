@@ -232,6 +232,7 @@ impl Run {
                 damage: 0.0,
                 healing: 0.0,
                 debug: false,
+                mortal: false,
                 sinking: None,
                 last_safe: dungeon::Map::center_of(dungeon::Map::tile_of(p).0, dungeon::Map::tile_of(p).1),
                 burn_t: dungeon::LAVA_TICK,
@@ -383,6 +384,7 @@ impl Run {
                     }
                     ClientMsg::Spectate { dir } => self.cycle_spectate(pi, dir),
                     ClientMsg::Debug { on } => self.set_debug(pi, on),
+                    ClientMsg::DebugImmortal { on } => self.set_immortal(pi, on),
                     ClientMsg::DebugDarkvision { ratio } => self.set_darkvision(pi, ratio),
                     ClientMsg::DebugEffect { kind } => self.debug_effect(pi, kind),
                     ClientMsg::RulesLog { on, details } => rules_log::set_prefs(self, pi, on, details),
@@ -745,7 +747,7 @@ impl Run {
         if !p.alive {
             return;
         }
-        if p.debug {
+        if p.immortal() {
             p.mv = MoveState::at(p.last_safe.x, p.last_safe.y);
             let (id, at) = (p.id, p.last_safe);
             self.event(Ev::Sink { id, x: at.x as f32, y: at.y as f32, how: 2 }, None);
@@ -890,13 +892,13 @@ impl Run {
         let imm = raw == 0.0 && dmg.amount > 0.0;
         let hp_before = p.hp;
         // Debug mode: hits still show, but nothing is subtracted.
-        if !p.debug {
+        if !p.immortal() {
             p.hp -= v;
         }
         if !imm {
             p.hurt_t = 0.15;
         }
-        let (hp_after, debug) = (p.hp.max(0.0), p.debug);
+        let (hp_after, debug) = (p.hp.max(0.0), p.immortal());
         let pos = p.pos();
         rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, hp_before, hp_after, dealt: hp_before - hp_after, taken: v, outcome: if imm { rules_log::HitOutcome::Immune } else if debug { rules_log::HitOutcome::DebugNoLoss } else { rules_log::HitOutcome::Dealt } });
         let ty = dmg.split.main_type() as u8;

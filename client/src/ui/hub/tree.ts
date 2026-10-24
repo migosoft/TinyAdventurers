@@ -55,7 +55,7 @@ function tipHtml(n: TreeNode, state: NodeState, ctx: TabCtx): string {
     .map((r) => `<li class="${r.ok ? 'ok' : 'bad'}">Needs ${esc(r.text)} <span>(you have ${r.have})</span></li>`)
     .join('');
   const near = `<li class="${state === 'locked' ? 'bad' : 'ok'}">Next to an owned node</li>`;
-  const cost = state === 'owned' || n.kind === 'Start' ? '' : `<div class="cost${info.xp < n.cost ? ' bad' : ''}">${n.cost} XP</div>`;
+  const cost = state === 'owned' || n.kind === 'Start' ? '' : ctx.debug ? `<div class="cost">${n.cost} XP · free (debug)</div>` : `<div class="cost${info.xp < n.cost ? ' bad' : ''}">${n.cost} XP</div>`;
   return `<b>${esc(n.name)}</b><small>${esc(kindLine)}</small>${body}<ul>${reqs}${state === 'owned' ? '' : near}</ul>${cost}`;
 }
 
@@ -69,7 +69,7 @@ export function renderTree(ctx: TabCtx): HTMLElement {
   const w = (Math.max(...xs) - x0) * SPACE_X + 120;
   const ht = (Math.max(...ys) - y0) * SPACE_Y + 70;
   const px = (n: TreeNode): [number, number] => [(n.pos[0] - x0) * SPACE_X + 60, (n.pos[1] - y0) * SPACE_Y + 35];
-  const state = new Map(entries.map(([id]) => [id, nodeState(info, id)]));
+  const state = new Map(entries.map(([id]) => [id, nodeState(info, id, ctx.debug)]));
   const owned = (id: string) => state.get(id as NodeId) === 'owned';
 
   const el = div('ui-split ui-treewrap');
@@ -106,7 +106,9 @@ export function renderTree(ctx: TabCtx): HTMLElement {
     e.onmouseenter = () => showTip(e, tipHtml(n, st, ctx), 'left');
     e.onmouseleave = () => clearTips();
     e.onclick = () => {
-      if (st === 'buyable' && confirm(`Buy ${n.name} for ${n.cost} XP?`)) send({ t: 'BuyNode', node: id });
+      if (st !== 'buyable') return;
+      if (ctx.debug) send({ t: 'DebugBuyNode', node: id });
+      else if (confirm(`Buy ${n.name} for ${n.cost} XP?`)) send({ t: 'BuyNode', node: id });
     };
     graph.append(e);
   }
@@ -124,7 +126,7 @@ export function renderTree(ctx: TabCtx): HTMLElement {
     <li><span class="ui-node k-keystone owned mini"><span></span></span>Keystone</li>
     </ul><p class="ui-small"><span class="gold">Gold</span>: owned. <span class="lit">Bright</span>: can buy (next to an owned node). Dim: not yet reachable.</p></div>
     <div class="panel ui-mini"><h2>${esc(info.name)}</h2><div class="ui-attrs">${ATTR_ORDER.map((a) => `<span><i>${ATTRS[a].short}</i>${info.sheet.attrs.find((l) => l.attr === a)?.total ?? 0}</span>`).join('')}</div>
-    <p class="ui-small">${info.xp} XP to spend · ${info.nodes.length} nodes owned</p></div>`,
+    <p class="ui-small">${info.xp} XP to spend · ${info.nodes.length} nodes owned</p>${ctx.debug ? '<p class="ui-small">Debug: nodes are free (saved on this character).</p>' : ''}</div>`,
   );
   el.append(legend);
   return el;

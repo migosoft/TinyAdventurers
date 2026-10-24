@@ -300,6 +300,7 @@ The effects from damage types work in two tiers. A hit that is **at least half h
 - **Coins** come from treasure chests, mimics (25) and the boss (50). Like XP, they go to every living hero. They pay for a respec (below).
 - When the run ends, won or lost, your XP and coins are added to the **character** you played. If you leave early, you keep what you earned so far.
 - Runs where someone used debug mode give no XP and no coins.
+- **Debug games** (`?debug` in the address, for testing): your hero is immortal; **F9** turns that off and on, **F4** cycles your darkvision and **F8** puts the next effect on you. The yellow badge at the bottom lists these keys. In the character screen, Attribute points, skill-tree nodes and the respec are free. They are saved on the character, so use a test character for this.
 
 **The roster and the character screen.** After login you see one card per character, with its figure holding its weapon (a Ranger also shows its ranged weapon; other heroes hold their melee weapon). Click a card to open the character screen, or click **New character** to create a character (its screen opens at once). The screen has four tabs: **Sheet**, **Skill tree**, **Equipment** and **Loadout**. You can change your build there while you are not Ready and not in a run; otherwise the game says "Not while ready." or "Not during a run."
 

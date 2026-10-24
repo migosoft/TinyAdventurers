@@ -63,6 +63,10 @@ pub enum Change {
     Equip(EquipSlot, Option<ItemId>),
     SetLoadout(Loadout),
     GrantItem(ItemId),
+    /// Debug: the same buys without the XP or coin cost (the caller checks that debug is allowed).
+    FreeAttr(Attr),
+    FreeNode(NodeId),
+    FreeRespec,
 }
 
 fn equip_message(e: EquipError) -> &'static str {
@@ -232,7 +236,11 @@ impl Progress {
         RESPEC_BASE + self.xp_spent / RESPEC_PER
     }
 
-    fn spend(&mut self, cost: u32) -> Result<(), &'static str> {
+    /// `free` (debug): nothing is taken and nothing counts as spent, so a respec refunds only paid XP.
+    fn spend(&mut self, cost: u32, free: bool) -> Result<(), &'static str> {
+        if free {
+            return Ok(());
+        }
         if self.xp < cost {
             return Err("Not enough XP.");
         }
@@ -241,16 +249,16 @@ impl Progress {
         Ok(())
     }
 
-    pub fn buy_attr(&mut self, class: ClassId, a: Attr) -> Result<(), &'static str> {
+    pub fn buy_attr(&mut self, class: ClassId, a: Attr, free: bool) -> Result<(), &'static str> {
         let price = self.attr_prices(class)[a as usize];
-        self.spend(price)?;
+        self.spend(price, free)?;
         self.bought.add(a, 1);
         Ok(())
     }
 
-    pub fn buy_node(&mut self, class: ClassId, n: NodeId) -> Result<(), &'static str> {
+    pub fn buy_node(&mut self, class: ClassId, n: NodeId, free: bool) -> Result<(), &'static str> {
         trees::check_buy(class, &self.nodes, n, &attrs_with_items(class, &self.build(class)))?;
-        self.spend(trees::def(n).cost)?;
+        self.spend(trees::def(n).cost, free)?;
         self.nodes.push(n);
         self.nodes.sort();
         Ok(())
@@ -258,9 +266,9 @@ impl Progress {
 
     /// Refunds all XP spent on the shop and the tree for coins, and resets both and the
     /// loadout. Items stay, except those the build can no longer wear (they go to the
-    /// inventory).
-    pub fn respec(&mut self, class: ClassId) -> Result<(), &'static str> {
-        let price = self.respec_price();
+    /// inventory). `free` (debug): no coins are taken.
+    pub fn respec(&mut self, class: ClassId, free: bool) -> Result<(), &'static str> {
+        let price = if free { 0 } else { self.respec_price() };
         if self.coins < price {
             return Err("Not enough coins.");
         }
@@ -322,9 +330,12 @@ impl Progress {
 
     pub fn apply(&mut self, class: ClassId, c: Change) -> Result<(), &'static str> {
         match c {
-            Change::BuyAttr(a) => self.buy_attr(class, a),
-            Change::BuyNode(n) => self.buy_node(class, n),
-            Change::Respec => self.respec(class),
+            Change::BuyAttr(a) => self.buy_attr(class, a, false),
+            Change::BuyNode(n) => self.buy_node(class, n, false),
+            Change::Respec => self.respec(class, false),
+            Change::FreeAttr(a) => self.buy_attr(class, a, true),
+            Change::FreeNode(n) => self.buy_node(class, n, true),
+            Change::FreeRespec => self.respec(class, true),
             Change::Equip(slot, item) => self.equip(class, slot, item),
             Change::SetLoadout(l) => self.set_loadout(l),
             Change::GrantItem(item) => self.grant_item(class, item),
@@ -389,7 +400,7 @@ mod tests {
     fn stale_ids_are_dropped_not_the_document() {
         let mut p = Progress::new(W);
         p.bank(5000, 30);
-        p.buy_node(W, NodeId::WA2).unwrap();
+        p.buy_node(W, NodeId::WA2, false).unwrap();
         let mut v = p.to_json();
         v["nodes"].as_array_mut().unwrap().push(json!("NoSuchNode"));
         v["inventory"] = json!(["NoSuchItem", "Knife"]);
@@ -430,7 +441,7 @@ mod tests {
         assert_eq!(q.nodes, vec![NodeId::WA2]);
         assert_eq!(q.xp_spent, 500);
         q.bank(0, 100);
-        q.respec(W).unwrap();
+        q.respec(W, false).unwrap();
         assert_eq!(q.xp, 500);
 
         let mut v = Progress::new(W).to_json();
@@ -445,20 +456,20 @@ mod tests {
         let mut p = Progress::new(W);
         p.bank(1000, 0);
         assert_eq!(p.attr_prices(W)[Attr::Int as usize], 225);
-        p.buy_attr(W, Attr::Int).unwrap();
+        p.buy_attr(W, Attr::Int, false).unwrap();
         assert_eq!((p.xp, p.xp_spent, p.bought.get(Attr::Int)), (775, 225, 1));
         assert_eq!(p.attr_prices(W)[Attr::Int as usize], 250);
         // A ring adding INT does not change the next price.
         p.grant_item(W, ItemId::RingOfInsight).unwrap();
         p.equip(W, EquipSlot::Ring1, Some(ItemId::RingOfInsight)).unwrap();
         assert_eq!(p.attr_prices(W)[Attr::Int as usize], 250);
-        p.buy_attr(W, Attr::Int).unwrap();
+        p.buy_attr(W, Attr::Int, false).unwrap();
         assert_eq!((p.xp, p.xp_spent), (525, 475));
         // Not enough XP: nothing changes.
         let before = p.clone();
         p.xp = 10;
         let mut poor = p.clone();
-        assert_eq!(poor.buy_attr(W, Attr::Int), Err("Not enough XP."));
+        assert_eq!(poor.buy_attr(W, Attr::Int, false), Err("Not enough XP."));
         assert_eq!(poor, p);
         assert_eq!(before.bought.get(Attr::Int), 2);
     }
@@ -467,29 +478,29 @@ mod tests {
     fn buying_nodes() {
         let mut p = Progress::new(W);
         p.bank(3000, 0);
-        assert_eq!(p.buy_node(W, NodeId::WA3), Err("Buy a neighbouring node first."));
-        assert_eq!(p.buy_node(W, NodeId::B0), Err("That node is not in your tree."));
-        p.buy_node(W, NodeId::WA2).unwrap();
+        assert_eq!(p.buy_node(W, NodeId::WA3, false), Err("Buy a neighbouring node first."));
+        assert_eq!(p.buy_node(W, NodeId::B0, false), Err("That node is not in your tree."));
+        p.buy_node(W, NodeId::WA2, false).unwrap();
         assert_eq!((p.xp, p.xp_spent), (2700, 300));
-        assert_eq!(p.buy_node(W, NodeId::WA2), Err("You already have that node."));
-        p.buy_node(W, NodeId::WB3).unwrap();
+        assert_eq!(p.buy_node(W, NodeId::WA2, false), Err("You already have that node."));
+        p.buy_node(W, NodeId::WB3, false).unwrap();
         assert_eq!(p.nodes, vec![NodeId::WA2, NodeId::WB3]);
-        p.buy_attr(W, Attr::Int).unwrap();
-        p.buy_attr(W, Attr::Int).unwrap();
+        p.buy_attr(W, Attr::Int, false).unwrap();
+        p.buy_attr(W, Attr::Int, false).unwrap();
         assert_eq!(p.xp_spent, 300 + 300 + 475);
         // WA3 needs INT 18: class 15 + two shop points = 17; a ring of insight makes it 18.
         let before = p.clone();
-        assert_eq!(p.buy_node(W, NodeId::WA3), Err("A requirement of that node is not met."));
+        assert_eq!(p.buy_node(W, NodeId::WA3, false), Err("A requirement of that node is not met."));
         assert_eq!(p, before);
         p.grant_item(W, ItemId::RingOfInsight).unwrap();
         p.equip(W, EquipSlot::Ring1, Some(ItemId::RingOfInsight)).unwrap();
-        p.buy_node(W, NodeId::WA3).unwrap();
+        p.buy_node(W, NodeId::WA3, false).unwrap();
         assert!(p.nodes.contains(&NodeId::WA3));
         assert_eq!(p.nodes, { let mut s = p.nodes.clone(); s.sort(); s });
         // Not enough XP.
         p.xp = 0;
         let before = p.clone();
-        assert_eq!(p.buy_node(W, NodeId::WA5), Err("Not enough XP."));
+        assert_eq!(p.buy_node(W, NodeId::WA5, false), Err("Not enough XP."));
         assert_eq!(p, before);
     }
 
@@ -497,26 +508,47 @@ mod tests {
     fn respec_refunds_resets_and_charges() {
         let mut p = Progress::new(W);
         p.bank(5000, 100);
-        p.buy_attr(W, Attr::Int).unwrap();
-        p.buy_attr(W, Attr::Int).unwrap();
+        p.buy_attr(W, Attr::Int, false).unwrap();
+        p.buy_attr(W, Attr::Int, false).unwrap();
         for n in [NodeId::WA2, NodeId::WB3] {
-            p.buy_node(W, n).unwrap();
+            p.buy_node(W, n, false).unwrap();
         }
         p.set_loadout(Loadout { primary: Pick { ability: AbilityId::MagicMissile, source: Source::Own }, secondary: Pick { ability: AbilityId::Haste, source: Source::Own } }).unwrap();
         assert_eq!(p.xp_spent, 475 + 600);
         let price = p.respec_price();
         assert_eq!(price, 20 + 1075 / 50);
-        p.respec(W).unwrap();
+        p.respec(W, false).unwrap();
         assert_eq!((p.xp, p.xp_spent, p.coins), (5000, 0, 100 - price));
         assert_eq!((p.bought, p.nodes.clone(), p.loadout), (Attributes::default(), vec![], Loadout::start(W)));
         assert_eq!(p.respec_price(), 20);
 
         // Too few coins: nothing changes.
-        p.buy_node(W, NodeId::WA2).unwrap();
+        p.buy_node(W, NodeId::WA2, false).unwrap();
         p.coins = 19;
         let before = p.clone();
-        assert_eq!(p.respec(W), Err("Not enough coins."));
+        assert_eq!(p.respec(W, false), Err("Not enough coins."));
         assert_eq!(p, before);
+    }
+
+    #[test]
+    fn free_debug_buys_cost_nothing_and_respec_refunds_only_paid_xp() {
+        let mut p = Progress::new(W);
+        p.bank(500, 0);
+        p.apply(W, Change::FreeAttr(Attr::Int)).unwrap();
+        p.apply(W, Change::FreeNode(NodeId::WA2)).unwrap();
+        assert_eq!((p.xp, p.xp_spent, p.bought.get(Attr::Int)), (500, 0, 1));
+        assert_eq!(p.nodes, vec![NodeId::WA2]);
+        // The tree's checks stay.
+        assert_eq!(p.apply(W, Change::FreeNode(NodeId::WA5)), Err("Buy a neighbouring node first."));
+        assert_eq!(p.apply(W, Change::FreeNode(NodeId::B0)), Err("That node is not in your tree."));
+
+        p.buy_attr(W, Attr::Wil, false).unwrap();
+        let paid = p.xp_spent;
+        assert!(paid > 0);
+        assert_eq!(p.respec(W, false), Err("Not enough coins."), "no coins for a real respec");
+        p.apply(W, Change::FreeRespec).unwrap();
+        assert_eq!((p.xp, p.xp_spent, p.coins), (500, 0, 0), "only the paid XP comes back, no coins taken");
+        assert_eq!((p.bought, p.nodes.clone()), (Attributes::default(), vec![]));
     }
 
     #[test]
@@ -524,11 +556,11 @@ mod tests {
         let c = ClassId::Barbarian;
         let mut p = Progress::new(c);
         p.bank(1000, 50);
-        p.buy_node(c, NodeId::BR1).unwrap();
+        p.buy_node(c, NodeId::BR1, false).unwrap();
         p.grant_item(c, ItemId::PlateArmor).unwrap();
         p.equip(c, EquipSlot::Armor, Some(ItemId::PlateArmor)).unwrap();
         assert!(hero_sheet(c, &p.build(c)).is_ok());
-        p.respec(c).unwrap();
+        p.respec(c, false).unwrap();
         assert_eq!((p.equipment.get(EquipSlot::Armor), p.inventory.clone()), (None, vec![ItemId::PlateArmor]));
         assert_eq!(p.equipment.get(EquipSlot::Melee), Some(ItemId::GreatAxe), "the proper weapon stays");
         assert!(hero_sheet(c, &p.build(c)).is_ok());
@@ -598,8 +630,8 @@ mod tests {
     fn json_roundtrip() {
         let mut p = Progress::new(ClassId::Barbarian);
         p.bank(900, 20);
-        p.buy_attr(ClassId::Barbarian, Attr::Str).unwrap();
-        p.buy_node(ClassId::Barbarian, NodeId::BR1).unwrap();
+        p.buy_attr(ClassId::Barbarian, Attr::Str, false).unwrap();
+        p.buy_node(ClassId::Barbarian, NodeId::BR1, false).unwrap();
         p.grant_item(ClassId::Barbarian, ItemId::Knife).unwrap();
         p.rev = 7;
         assert_eq!(Progress::from_json(p.to_json(), ClassId::Barbarian), p);

@@ -45,22 +45,23 @@ export const unmetRequirements = (info: CharacterInfo, req: readonly string[], w
     .filter((r) => !r.ok)
     .map(({ text, have }) => ({ text, have }));
 
-export function blockReason(info: CharacterInfo, node: NodeId): string | null {
+/** `free`: debug buys cost no XP. */
+export function blockReason(info: CharacterInfo, node: NodeId, free = false): string | null {
   const n = nodesOf(info).nodes[node];
   const req = unmetRequirements(info, n.req, true)[0];
   if (req) return `needs ${req.text}`;
-  if (info.xp < n.cost) return 'not enough XP';
+  if (!free && info.xp < n.cost) return 'not enough XP';
   return null;
 }
 
-export function nodeState(info: CharacterInfo, node: NodeId): NodeState {
+export function nodeState(info: CharacterInfo, node: NodeId, free = false): NodeState {
   const tree = nodesOf(info);
   const have = owned(info);
   if (have.has(node)) return 'owned';
   // Links are undirected: a neighbour is anything the node links to or that links to it.
   const near = tree.nodes[node].links.some((l) => have.has(l)) || [...have].some((o) => tree.nodes[o]?.links.includes(node));
   if (!near) return 'locked';
-  return blockReason(info, node) ? 'blocked' : 'buyable';
+  return blockReason(info, node, free) ? 'blocked' : 'buyable';
 }
 
 /** The loadout pool cards of one slot, in the server's order. */

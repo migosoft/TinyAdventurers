@@ -1020,7 +1020,7 @@ kbd {
 
 .debug-badge {
   position: absolute;
-  bottom: 70px;
+  bottom: 96px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 11.5px;
@@ -1030,6 +1030,17 @@ kbd {
   border-radius: 4px;
   padding: 4px 8px;
   text-shadow: none;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  white-space: nowrap;
+}
+.debug-badge kbd {
+  font: inherit;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 3px;
+  margin-right: 4px;
 }
 .slot.too-close .name {
   color: #ff8060;

@@ -116,6 +116,14 @@ pub enum ClientMsg {
     DebugLoadout { primary: Pick, secondary: Pick },
     /// Debug, waiting room: put a weapon in your Melee or Ranged slot (`None` = an empty slot).
     DebugEquip { slot: EquipSlot, item: Option<ItemId> },
+    /// Debug, in a run with debug on: immortal (the default) or mortal. The run stays a debug run.
+    DebugImmortal { on: bool },
+    /// Debug, lobby or waiting room: `BuyAttribute` without the XP cost, if the server allows debug.
+    DebugBuyAttribute { attr: Attr },
+    /// Debug: `BuyNode` without the XP cost (the neighbour and Attribute checks stay).
+    DebugBuyNode { node: NodeId },
+    /// Debug: `Respec` without the coin cost.
+    DebugRespec,
     /// In a run: the rules log on or off, and whether to send detail lines. Sent again on every run start.
     RulesLog { on: bool, details: bool },
 }
@@ -338,8 +346,8 @@ pub enum ServerMsg {
     Pong { time: f64 },
     Error { msg: String },
     /// Debug mode: shortest walkable path from the player to the boss (pixel waypoints).
-    /// `ogre`: the path to the ogre mini-boss while it lives (else empty).
-    DebugPath { on: bool, points: Vec<(f32, f32)>, ogre: Vec<(f32, f32)> },
+    /// `ogre`: the path to the ogre mini-boss while it lives (else empty). `immortal`: false after `DebugImmortal { on: false }`.
+    DebugPath { on: bool, immortal: bool, points: Vec<(f32, f32)>, ogre: Vec<(f32, f32)> },
 }
 
 /// A character and its progress, as the client sees it (read only: the server

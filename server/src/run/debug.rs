@@ -1,4 +1,4 @@
-//! Debug mode: the player is immortal and receives the shortest walkable
+//! Debug mode: the player is immortal (F9 turns that off and on) and receives the shortest walkable
 //! path to the boss (and to the ogre mini-boss while it lives). Can be disabled on a server with `ALLOW_DEBUG=0`.
 
 use super::ai::astar;
@@ -57,6 +57,7 @@ impl Run {
     pub fn set_debug(&mut self, pi: usize, on: bool) {
         let on = on && allowed();
         self.players[pi].debug = on;
+        self.players[pi].mortal = false;
         if !on {
             self.players[pi].darkvision = None;
         }
@@ -66,7 +67,20 @@ impl Run {
             self.event(Ev::Msg { text: format!("{name} entered debug mode (immortal)") }, None);
         }
         let (points, ogre) = if on { (boss_path(self, pi), ogre_path(self, pi)) } else { (Vec::new(), Vec::new()) };
-        self.send(&self.players[pi], &ServerMsg::DebugPath { on, points, ogre });
+        self.send(&self.players[pi], &ServerMsg::DebugPath { on, immortal: on, points, ogre });
+    }
+
+    /// Debug cheat (F9): immortality on or off. Only in debug mode; the run stays a debug run.
+    pub fn set_immortal(&mut self, pi: usize, on: bool) {
+        let p = &mut self.players[pi];
+        if !p.debug || !p.alive {
+            return;
+        }
+        p.mortal = !on;
+        let name = p.name.clone();
+        self.event(Ev::Msg { text: format!("{name} is {} (debug)", if on { "immortal" } else { "mortal" }) }, None);
+        let (points, ogre) = (boss_path(self, pi), ogre_path(self, pi));
+        self.send(&self.players[pi], &ServerMsg::DebugPath { on: true, immortal: on, points, ogre });
     }
 }
 
@@ -111,7 +125,7 @@ pub fn send_paths(run: &Run) {
     for (pi, p) in run.players.iter().enumerate() {
         if p.debug && p.alive && p.tx.is_some() {
             let (points, ogre) = (boss_path(run, pi), ogre_path(run, pi));
-            run.send(p, &ServerMsg::DebugPath { on: true, points, ogre });
+            run.send(p, &ServerMsg::DebugPath { on: true, immortal: p.immortal(), points, ogre });
         }
     }
 }
@@ -152,6 +166,36 @@ mod tests {
         run.set_debug(0, false);
         run.hurt_player(0, Damage::physical(10_000.0));
         assert!(!run.players[0].alive, "mortal again");
+    }
+
+    #[test]
+    fn f9_makes_a_debug_hero_mortal_and_immortal_again() {
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Barbarian], BossId::Demon);
+        // Not in debug mode: ignored.
+        run.set_immortal(0, false);
+        assert!(!run.players[0].mortal);
+
+        run.set_debug(0, true);
+        run.set_debug(1, true);
+        run.set_darkvision_if(true, 0, 0.5);
+        run.set_immortal(0, false);
+        assert!(run.players[0].debug && !run.players[0].immortal(), "still debug, but mortal");
+        assert_eq!(run.players[0].darkvision, Some(0.5), "the other debug cheats stay");
+        let hp = run.players[0].hp;
+        run.hurt_player(0, Damage::physical(1.0));
+        assert!(run.players[0].hp < hp, "hits hurt");
+
+        run.set_immortal(0, true);
+        let hp = run.players[0].hp;
+        run.hurt_player(0, Damage::physical(10_000.0));
+        assert_eq!(run.players[0].hp, hp, "immortal again");
+
+        run.set_immortal(1, false);
+        run.hurt_player(1, Damage::physical(10_000.0));
+        assert!(!run.players[1].alive, "a mortal debug hero can die");
+        assert!(run.debug_used, "still a debug run");
+        run.set_debug(1, true);
+        assert!(!run.players[1].mortal, "debug on again starts immortal");
     }
 
     #[test]

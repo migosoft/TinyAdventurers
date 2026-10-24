@@ -56,6 +56,8 @@ Accounts and characters are stored in PostgreSQL on the `ta-db` Docker volume, s
 | Esc | Menu (leave the dungeon) |
 | F3 | Network and performance stats |
 | F4 | Debug mode only (`?debug`): cycle your own hero's darkvision 0 / 50% / 100% |
+| F8 | Debug mode only: put the next effect (blind, sleep, petrified, …) on your own hero |
+| F9 | Debug mode only: turn your hero's immortality off and on |
 
 ## Development
 
@@ -91,7 +93,9 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 - `?demon`: the red demon looping through every action: walking, cleave, the swoop charge, the ring of fire and an enraged cleave (no server needed; Space pauses, S slow motion, 1-7 jump to an action)
 - `?lights`: the light system on a small board: torches in several colours, lava with a torch beside it, a fireball and a frost bolt lighting a corridor, an explosion flash in a dark doorway, a torch that switches (no server needed; `&slow=3` works too). V cycles the viewer's darkvision 0 / 50% / 100% (greyscale where it sees only by darkvision); `&dv=0.5` starts with it. Two pillars show the straight vision edges; click moves the viewer (`&at=x,y` in tiles), E toggles the old tile edges (`&edges=old`).
 - `?debug`: debug mode for the whole run
-  - Your hero is immortal. Hits still show damage numbers, but your health doesn't drop.
+  - Your hero is immortal. Hits still show damage numbers, but your health doesn't drop. F9 makes you mortal (and immortal again); the run stays a debug run.
+  - The yellow badge at the bottom lists the debug keys (F4, F8, F9).
+  - In the character screen the Attribute **+1**, skill-tree nodes and the respec are free (no XP or coins). They are saved on the character, so use a test character.
   - Dashed lines show the shortest walkable path to the boss (yellow) and to the ogre mini-boss (blue, while it lives), updated every 0.5 s.
   - It is on by default. Disable it on a server with `ALLOW_DEBUG=0` in `docker-compose.yml`.
   - Add `&boss=demon|lich|dragon` on the host's page to preselect that end boss in the lobby, e.g. `?debug&boss=dragon`.

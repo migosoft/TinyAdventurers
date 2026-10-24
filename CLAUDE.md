@@ -61,7 +61,7 @@ Lasting rules that are not one issue's business. Feature-specific decisions live
 - **Naming:** say "damage-type effects", never "elemental" (future types such as holy are not elements). A new enum variant must be impossible to half-add (`listed_enum!`).
 - **Desktop only:** keyboard and mouse in a desktop browser. No phone layouts or touch controls.
 - **Responsiveness is a priority** ("no lag"): keep prediction, interpolation and lag compensation working. Check with `?lag=150&jitter=40&loss=2` and F3.
-- **Debug mode is URL-only:** `?debug`, optionally `&boss=demon|lich|dragon`. Debug runs bank no XP. Don't add an in-game toggle.
+- **Debug mode is URL-only:** `?debug`, optionally `&boss=demon|lich|dragon`. Debug runs bank no XP. Don't add an in-game toggle for debug mode itself; inside a debug run F9 switches only immortality (2026-10-24).
 - **Facing is left/right only** (the pack has no up/down frames); the code keeps a `Dir` hook.
 - **Minions are never tinted:** raised skeletons and summoned imps look like the ordinary ones.
 - **Demon dungeon:** imps (ranged, claw up close) and chorts (melee, a bolt from afar) replace skeletons; summoners (red robe, summon imps) replace necromancers.
