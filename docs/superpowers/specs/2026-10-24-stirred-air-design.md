@@ -8,6 +8,7 @@ The user, 2026-10-24: dust and smoke should swirl "as if there's real air", reac
 
 ## What the player sees
 
+- **A pocket of air** (the user, 2026-10-24: "influenced before an actual touch … as if there's a pocket of air pushed around by things"): every moving thing carries a cushion of air reaching well beyond its body. Specks ahead of it start to move before it arrives, pushed forward and aside like a bow wave; specks beside it slide outward; behind it the air is drawn along into the wake. The push fades smoothly with distance, so far specks only stir a little.
 - **Figures** (heroes, allies, enemies, bosses) that move push the air along their direction and a little outward, more strongly the faster they move. The dust curls into a swirl behind them, not just a straight shove. Standing still pushes nothing. A dash or charge makes a strong swirl. Bigger figures (bosses, the ogre) stir a wider area.
 - **Projectiles** (arrows, bolts, fireballs, magic missiles) cut a narrow wake: specks along the path are pushed aside and along the flight direction.
 - **Explosions** (the snapshot's `LIGHT_KIND.Blast`) push the air outward in a ring.
@@ -20,10 +21,10 @@ The user, 2026-10-24: dust and smoke should swirl "as if there's real air", reac
 Agreed with the user: one invisible, coarse wind map over the view, so everything reacts as one body of air rather than through separate tricks.
 
 - A **grid of air velocities** (cells about half a tile, 8 px) covering the camera view plus a margin, **anchored to the world** so camera movement does not move the air. It is a new pure module (e.g. `client/src/game/wind.ts`) with no Phaser dependency, so it is unit-tested directly.
-- **Movers push air into it** each frame: position, velocity and a size. A moving figure adds air along its motion in a soft blob around it, plus a weak counter-rotating pair behind it so a wake curls. A projectile adds a narrow push along its path. A blast adds an outward ring once, when it first shows (the existing `BurstOnce`).
+- **Movers push air into it** each frame: position, velocity and a size. A moving figure adds air in a soft pocket that reaches about twice its size around it and leans forward (so the air ahead moves first): forward and outward ahead, outward at the sides, along with it behind, plus a weak counter-rotating pair behind it so a wake curls. A projectile adds a narrow push along its path. A blast adds an outward ring once, when it first shows (the existing `BurstOnce`).
 - **The air spreads and calms:** each frame the velocities blur into neighbouring cells and decay, so a gust lives about a second and fades. Cells inside walls (opaque tiles) hold no air, so wind does not pass through walls.
 - **Everything samples it:** each dust speck, smoke puff and ember adds the wind at its position (smoothly interpolated between cells) to its own drift. Smoke and embers react less strongly than loose dust (they are heavier / have their own rise), the builder tunes how much.
-- **A stirred cloud:** when the wind at any of a cloud's specks passes a threshold, the **whole cloud** lets go of all its specks (the issue: "once a dust cloud is disturbed, it dissipates"). Its specks keep their world positions, move with the wind plus their own momentum and drag, fade out over about 1–2 s, and when all have faded the cloud respawns. Specks the gust did not reach just drift and fade where they are.
+- **A stirred cloud:** the gentle edge of a pocket only nudges a cloud's specks (they sway and drift back). When the wind at any of a cloud's specks passes a threshold, the **whole cloud** lets go of all its specks (the issue: "once a dust cloud is disturbed, it dissipates"). Its specks keep their world positions, move with the wind plus their own momentum and drag, fade out over about 1–2 s, and when all have faded the cloud respawns. Specks the gust did not reach just drift and fade where they are.
 
 ## Respawn after stirring (to try in the demo)
 
