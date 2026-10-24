@@ -674,6 +674,7 @@ mod tests {
         db::bank_awards(&db, &[Award { character: cn.id, xp: 100, coins: 0 }], false).await.unwrap();
         db::bank_awards(&db, &[Award { character: cd.id, xp: 900, coins: 0 }], true).await.unwrap();
         db::record_run(&db, &record(d, cd.id, Outcome::Victory, true)).await.unwrap();
+        db::record_run(&db, &record(n, cn.id, Outcome::Victory, false)).await.unwrap();
 
         let s = overview(&db, Live::default()).await.unwrap();
         assert_eq!((s.totals.characters, s.totals.total_xp, s.totals.accounts), (1, 100.0, 2));
@@ -688,5 +689,8 @@ mod tests {
         let det = player(&db, d, &|_| false, &|_| false).await.unwrap().unwrap();
         assert!(det.player.debug);
         assert!(det.recent_runs[0].debug);
+        let normal = player(&db, n, &|_| false, &|_| false).await.unwrap().unwrap();
+        assert!(!normal.player.debug);
+        assert!(!normal.recent_runs[0].debug, "a normal run is not marked debug");
     }
 }

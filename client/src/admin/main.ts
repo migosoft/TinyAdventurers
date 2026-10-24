@@ -412,11 +412,11 @@ async function player(id: number): Promise<void> {
     h('button', { type: 'submit', class: 'primary' }, 'Change password'),
   );
 
-  const unmarkName = h('input', { autocomplete: 'off', 'aria-label': `Type ${p.name} to confirm` });
+  const unmarkName = h('input', { autocomplete: 'off', 'aria-label': `Type ${p.name} to confirm removing the debug mark` });
   const unmarkButton = h('button', { type: 'submit', class: 'danger', disabled: true }, 'Remove debug mark and wipe');
   unmarkName.addEventListener('input', () => (unmarkButton.disabled = unmarkName.value !== p.name));
 
-  const confirmName = h('input', { autocomplete: 'off', 'aria-label': `Type ${p.name} to confirm` });
+  const confirmName = h('input', { autocomplete: 'off', 'aria-label': `Type ${p.name} to confirm deleting the player` });
   const delButton = h('button', { type: 'submit', class: 'danger', disabled: true }, 'Delete player');
   confirmName.addEventListener('input', () => (delButton.disabled = confirmName.value !== p.name));
   const delForm = h(
