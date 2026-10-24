@@ -43,12 +43,13 @@ const SWIRL_BEHIND = 2;
 /** Wake target speeds as shares of the projectile's speed (along the flight, outward from the path), times a size factor. */
 const WAKE_ALONG = 0.45;
 const WAKE_OUT = 0.25;
-/** Eddies: one swirl every EDDY_STEP wake radii travelled, centred EDDY_BEHIND radii behind and EDDY_SIDE to one side; radius EDDY_RADIUS radii; peak speed EDDY_SPEED of the shot's. */
-const EDDY_STEP = 1.5;
+/** Eddies: radius max(EDDY_RADIUS wake radii, EDDY_MIN_RADIUS px) (big enough for the 8 px grid to keep them); one swirl every EDDY_STEP eddy radii travelled, centred EDDY_BEHIND eddy radii behind the shot and EDDY_SIDE to one side; peak speed EDDY_SPEED of the shot's. */
+const EDDY_RADIUS = 1.2;
+const EDDY_MIN_RADIUS = 16;
+const EDDY_STEP = 2;
 const EDDY_BEHIND = 1;
-const EDDY_SIDE = 0.6;
-const EDDY_RADIUS = 0.8;
-const EDDY_SPEED = 0.25;
+const EDDY_SIDE = 0.8;
+const EDDY_SPEED = 0.4;
 /** Upward air (px/s) a fully hot shot leaves behind it. */
 const HEAT_RISE = 18;
 /** Blast: peak speed (px/s) at BLAST_PEAK_R px, reaching 0 at BLAST_END_R px. */
@@ -303,7 +304,7 @@ export class Wind {
       const py = y + POCKET_AHEAD * r * dy;
       this.stir(px, py, dx, dy, reach, POCKET_ALONG * speed * gain, POCKET_OUT * speed * gain);
       const swirlR = Math.max(SWIRL_RADIUS * r, SWIRL_MIN_RADIUS);
-      const tangent = POCKET_SWIRL * speed * gain * Math.sqrt(Math.E);
+      const tangent = POCKET_SWIRL * speed * gain * Math.sqrt(2 * Math.E);
       const cx = px - SWIRL_BEHIND * r * dx;
       const cy = py - SWIRL_BEHIND * r * dy;
       const side = SWIRL_SIDE * r;
@@ -317,18 +318,20 @@ export class Wind {
   private wakeAt(x: number, y: number, dx: number, dy: number, speed: number, r: number, heat: number, dt: number): void {
     if (!(r > 0) || dt <= 0) return;
     const size = Math.min(1.5, 0.7 + (0.3 * r) / 12);
-    // The share of the target one frame injects: a spot receives about the full target once while the shot passes.
+    // The share of the target one frame injects (the along-path Gaussian makes the total about sqrt(pi) x the target on purpose: wakes should be strong): a spot receives about the full target once while the shot passes.
     const share = Math.min(1, (speed * dt) / r);
     this.kick(x, y, dx, dy, r, WAKE_ALONG * speed * size * share, WAKE_OUT * speed * size * share, 0);
     if (heat > 0) this.kick(x - 0.5 * r * dx, y - 0.5 * r * dy, dx, dy, r, 0, 0, -HEAT_RISE * heat * share);
-    const step = EDDY_STEP * r;
+    const er = Math.max(EDDY_RADIUS * r, EDDY_MIN_RADIUS);
+    const step = EDDY_STEP * er;
     const s = x * dx + y * dy;
     const k = Math.floor(s / step);
     if (k !== Math.floor((s - speed * dt) / step)) {
       const sign = k & 1 ? 1 : -1;
-      const cx = x - EDDY_BEHIND * r * dx - sign * EDDY_SIDE * r * dy;
-      const cy = y - EDDY_BEHIND * r * dy + sign * EDDY_SIDE * r * dx;
-      this.swirl(cx, cy, dx, dy, EDDY_RADIUS * r, sign * EDDY_SPEED * speed * size * Math.sqrt(Math.E));
+      const cx = x - EDDY_BEHIND * er * dx - sign * EDDY_SIDE * er * dy;
+      const cy = y - EDDY_BEHIND * er * dy + sign * EDDY_SIDE * er * dx;
+      // The swirl profile peaks at tangent / sqrt(2 e), so this is the peak speed.
+      this.swirl(cx, cy, dx, dy, er, sign * EDDY_SPEED * speed * size * Math.sqrt(2 * Math.E));
     }
   }
 

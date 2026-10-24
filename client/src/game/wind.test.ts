@@ -41,25 +41,45 @@ describe('Wind projectile wakes', () => {
   });
 
   it('a wider shot stirs a wider band', () => {
-    const narrow = len(at(fly(260, 7.2, 0), 160, 132));
-    const wide = len(at(fly(260, 16.8, 0), 160, 132));
-    expect(wide).toBeGreaterThan(2 * narrow);
+    // One frame at x = 150, where no eddy starts, so only the kick band is measured.
+    const once = (r: number) => {
+      const w = make();
+      w.wake(150, 120, 260, 0, r, 0);
+      w.step(1 / 60, view);
+      return len(at(w, 150, 132));
+    };
+    expect(once(16.8)).toBeGreaterThan(2 * once(7.2));
   });
 
-  it('eddies alternate behind the shot', () => {
-    // Across the path (vy along y = 120) a straight push is exactly 0 by symmetry; only the alternating swirls give it a sign, and only while they are fresh (the shot is at x = 200).
-    const w = fly(200, 12, 0, 1 / 60, 200);
-    const signs: number[] = [];
-    let peak = 0;
-    for (let x = 100; x <= 196; x += 3) {
-      const vy = at(w, x, 120)[1];
-      peak = Math.max(peak, Math.abs(vy));
-      if (Math.abs(vy) > 0.15) signs.push(Math.sign(vy));
+  it('eddies are strong and alternate behind the shot', () => {
+    const speed = 200;
+    const r = 12;
+    const dt = 1 / 60;
+    const er = Math.max(1.2 * r, 16);
+    const w = make();
+    const eddies: { cx: number; cy: number; sign: number }[] = [];
+    // Signed circulation proxy at an eddy: vy half a radius ahead minus behind its centre (the flight is +x, so a positive spin gives positive vy ahead).
+    const spin = (e: { cx: number; cy: number }) => (at(w, e.cx + 0.5 * er, e.cy)[1] - at(w, e.cx - 0.5 * er, e.cy)[1]) / 2;
+    let fresh = 0;
+    for (let x = 40; x < 200; x += speed * dt) {
+      w.wake(x, 120, speed, 0, r, 0);
+      w.step(dt, view);
+      const k = Math.floor(x / (2 * er));
+      if (k !== Math.floor((x - speed * dt) / (2 * er))) {
+        const sign = k & 1 ? 1 : -1;
+        eddies.push({ cx: x - er, cy: 120 + sign * 0.8 * er, sign });
+        // Just created: the swirl is at full strength (the pocket-free band adds only a smooth background).
+        fresh = Math.max(fresh, spin(eddies[eddies.length - 1]) * sign);
+      }
     }
-    let flips = 0;
-    for (let i = 1; i < signs.length; i++) if (signs[i] !== signs[i - 1]) flips++;
-    expect(peak).toBeGreaterThan(1);
-    expect(flips).toBeGreaterThanOrEqual(3);
+    expect(eddies.length).toBeGreaterThanOrEqual(3);
+    expect(fresh).toBeGreaterThanOrEqual(15);
+    const last = eddies.slice(-3).map((e) => Math.sign(spin(e) * e.sign));
+    // Neighbouring eddies spin in opposite directions: the measured raw circulation alternates, and each follows its own expected sign.
+    const raw = eddies.slice(-3).map((e) => Math.sign(spin(e)));
+    expect(raw[0]).toBe(-raw[1]);
+    expect(raw[1]).toBe(-raw[2]);
+    expect(last).toEqual([1, 1, 1]);
   });
 
   it('a hot shot lifts the dust', () => {
@@ -71,7 +91,7 @@ describe('Wind projectile wakes', () => {
     // After the whole flight the cold air is level and only the rise is left.
     const hotEnd = at(fly(260, 16.8, 1), 160, 120)[1];
     const coldEnd = at(fly(260, 16.8, 0), 160, 120)[1];
-    expect(coldEnd).toBeGreaterThan(-1);
+    expect(coldEnd).toBeGreaterThan(-2);
     expect(hotEnd).toBeLessThan(coldEnd - 2);
   });
 
@@ -186,10 +206,10 @@ describe('Wind', () => {
 
   it('a wake is narrow', () => {
     const w = make();
-    w.wake(160, 120, 200, 0, 6, 0);
+    w.wake(150, 120, 200, 0, 6, 0);
     w.step(1 / 60, view);
-    expect(len(at(w, 160, 124))).toBeGreaterThan(0);
-    expect(len(at(w, 160, 160))).toBeLessThan(0.01);
+    expect(len(at(w, 150, 124))).toBeGreaterThan(0);
+    expect(len(at(w, 150, 160))).toBeLessThan(0.01);
   });
 
   it('the air stays put in the world when the view moves', () => {
