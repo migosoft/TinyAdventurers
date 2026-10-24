@@ -115,7 +115,7 @@ pub async fn finish_run(lobby: &SharedLobby, rid: u32, awards: Vec<Award>, recor
     };
     let Some(db) = db else { return };
     if !awards.is_empty() {
-        match db::bank_awards(&db, &awards).await {
+        match db::bank_awards(&db, &awards, record.debug).await {
             Ok(banked) => {
                 let mut l = lobby.lock().unwrap();
                 for (id, p) in banked {
@@ -637,7 +637,7 @@ mod tests {
     use crate::protocol::ClassId;
 
     fn character(account: i32, id: i32, class: ClassId) -> Character {
-        Character { id, account_id: account, name: format!("hero{id}"), class, progress: Progress::new(class) }
+        Character { id, account_id: account, name: format!("hero{id}"), class, progress: Progress::new(class), debug: false }
     }
 
     fn test_record(account: i32, character: i32) -> RunRecord {
@@ -1040,7 +1040,7 @@ mod tests {
     }
 
     fn character_with(account: i32, id: i32, class: ClassId, progress: Progress) -> Character {
-        Character { id, account_id: account, name: format!("hero{id}"), class, progress }
+        Character { id, account_id: account, name: format!("hero{id}"), class, progress, debug: false }
     }
 
     /// Connects `account` with a character holding `progress`; returns the connection id and its receiver.

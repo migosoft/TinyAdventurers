@@ -225,12 +225,13 @@ async fn change_build(state: &AppState, conn: u32, change: Change) {
         Ok(c) => c,
         Err(e) => return state.lobby.lock().unwrap().error(conn, e),
     };
-    let result = db::update_progress(&state.db, character, |p| p.apply(class, change)).await;
+    let result = db::update_progress(&state.db, character, change, class).await;
     let mut l = state.lobby.lock().unwrap();
     match result {
-        Ok(Some(Ok(p))) => l.apply_progress(character, p),
-        Ok(Some(Err(e))) => l.error(conn, e),
-        Ok(None) => l.error(conn, "No such character."),
+        Ok(db::Modified::Done(p)) => l.apply_progress(character, p),
+        Ok(db::Modified::Refused(e)) => l.error(conn, e),
+        Ok(db::Modified::Missing) => l.error(conn, "No such character."),
+        Ok(db::Modified::WrongKind) => l.error(conn, "Debug is off."),
         Err(e) => {
             tracing::error!("change build: {e}");
             l.error(conn, "Something went wrong on the server. Please try again.");

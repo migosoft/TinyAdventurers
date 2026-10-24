@@ -534,7 +534,7 @@ mod tests {
         db::record_run(&db, &record(a, c.id, Outcome::Victory, true)).await.unwrap();
         db::record_run(&db, &record(a, c.id, Outcome::Abandoned, false)).await.unwrap();
         sqlx::query("UPDATE runs SET started_at = now() - interval '5 days' WHERE outcome = 'defeat'").execute(&db).await.unwrap();
-        db::bank_awards(&db, &[Award { character: c.id, xp: 70, coins: 9 }]).await.unwrap();
+        db::bank_awards(&db, &[Award { character: c.id, xp: 70, coins: 9 }], false).await.unwrap();
 
         let s = overview(&db, Live::default()).await.unwrap();
         let (d1, d7, d30) = (win(&s, 1), win(&s, 7), win(&s, 30));
