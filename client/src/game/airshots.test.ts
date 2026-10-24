@@ -42,4 +42,8 @@ describe('airshots', () => {
   it('an override wins', () => {
     expect(shotAir({ scale: 1, glow: 0xff7020, air: { heat: 0, r: 9 } })).toEqual({ r: 9, heat: 0 });
   });
+  it('gives the same object for the same kind', () => {
+    expect(projectileAir(KIND.Arrow)).toBe(projectileAir(KIND.Arrow));
+    expect(projectileAir(-1)).toBe(projectileAir(-1));
+  });
 });

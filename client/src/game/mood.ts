@@ -44,6 +44,8 @@ const EMBER_WIND = 0.4;
 export interface AirMover {
   x: number;
   y: number;
+  /** The y where the air is injected (default `y`): a shot is drawn 8 px above its ground position. */
+  airY?: number;
   vx: number;
   vy: number;
   r: number;
@@ -246,8 +248,9 @@ export class Mood {
       const y1 = view.bottom + MARGIN * TILE;
       for (const m of movers) {
         if (m.x < x0 || m.x > x1 || m.y < y0 || m.y > y1 || !this.seenAt(m.x, m.y)) continue;
-        if (m.shot) this.wind.wake(m.x, m.y, m.vx, m.vy, m.r, m.heat);
-        else this.wind.push(m.x, m.y, m.vx, m.vy, m.r);
+        const ay = m.airY !== undefined && !this.map.opaqueAt(m.x, m.airY) ? m.airY : m.y;
+        if (m.shot) this.wind.wake(m.x, ay, m.vx, m.vy, m.r, m.heat);
+        else this.wind.push(m.x, ay, m.vx, m.vy, m.r);
       }
     }
     this.wind.step(dt, view);
@@ -579,7 +582,9 @@ export class Mood {
         p.x += (p.vx + Math.sin(this.t * 1.7 + p.max * 9) * p.sway * k) * dt;
         p.y += p.vy * dt;
         if (this.windOn) {
-          const w = this.wind.sample(p.x, p.y, this.air);
+          // A wall-face torch's flame is drawn inside the opaque wall tile, where the air is 0: sample inside its floor tile.
+          const sy = p.src >= 0 ? Math.max(p.y, Math.floor(p.src / this.map.w) * TILE + 1) : p.y;
+          const w = this.wind.sample(p.x, sy, this.air);
           const share = list === this.puffs ? SMOKE_WIND : EMBER_WIND;
           p.x += w[0] * share * dt;
           p.y += w[1] * share * dt;

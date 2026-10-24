@@ -3,8 +3,8 @@ import { PROJECTILES } from './anim/defs';
 
 /** How a projectile stirs the air: wake half-width in px and heat (0..1). */
 export interface ShotAir {
-  r: number;
-  heat: number;
+  readonly r: number;
+  readonly heat: number;
 }
 
 const MIN_R = 6;
@@ -27,8 +27,15 @@ export function shotAir(def: { scale: number; glow?: number; air?: { r?: number;
   };
 }
 
-/** For a projectile kind; kinds without a PROJECTILES entry get the arrow-like default { r: 6, heat: 0 }. */
+const cache = new Map<number, ShotAir>();
+
+/** For a projectile kind; kinds without a PROJECTILES entry get the arrow-like default { r: 6, heat: 0 }. Memoized: the same object every time, never mutate it. */
 export function projectileAir(kind: number): ShotAir {
-  const def = PROJECTILES[kind];
-  return def ? shotAir(def) : { r: MIN_R, heat: 0 };
+  let a = cache.get(kind);
+  if (!a) {
+    const def = PROJECTILES[kind];
+    a = def ? shotAir(def) : { r: MIN_R, heat: 0 };
+    cache.set(kind, a);
+  }
+  return a;
 }

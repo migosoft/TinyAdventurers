@@ -7,8 +7,9 @@ const JUMP = 48;
 const MAX_SPEED = 400;
 
 export class MoverTracker {
-  private prev = new Map<number, [number, number]>();
-  private cur = new Map<number, [number, number]>();
+  // Position records are mutated in place, so a frame allocates none for ids seen before.
+  private prev = new Map<number, { x: number; y: number }>();
+  private cur = new Map<number, { x: number; y: number }>();
   private dt = 0;
 
   /** Starts a frame: ids not given again before the next `begin` are forgotten. */
@@ -22,11 +23,19 @@ export class MoverTracker {
 
   /** The mover for this id at (x, y), or null on its first frame, when it stood still, or when it jumped more than JUMP px. */
   track(id: number, x: number, y: number, r: number, shot: boolean, heat: number): AirMover | null {
-    this.cur.set(id, [x, y]);
     const o = this.prev.get(id);
+    let c = this.cur.get(id);
+    if (!c) {
+      c = o ?? { x, y }; // shared with `prev` until the next `begin` clears that map
+      this.cur.set(id, c);
+    }
+    const px = o ? o.x : x;
+    const py = o ? o.y : y;
+    c.x = x;
+    c.y = y;
     if (!o || this.dt <= 0) return null;
-    const dx = x - o[0];
-    const dy = y - o[1];
+    const dx = x - px;
+    const dy = y - py;
     const d = Math.hypot(dx, dy);
     if (d === 0 || d > JUMP) return null;
     const k = Math.min(1, MAX_SPEED / (d / this.dt));

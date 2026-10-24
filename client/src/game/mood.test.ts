@@ -243,6 +243,54 @@ describe('Mood', () => {
   });
 
   describe('stirred air (#158)', () => {
+    it('wall-face torch smoke rides the air (sampled inside the floor tile)', () => {
+      const firstX = (dir: number) => {
+        const rnd = vi.spyOn(Math, 'random').mockImplementation(mulberry32(11));
+        try {
+          const t = new Uint8Array(20 * 20).fill(TILE_ID.Floor);
+          t.fill(TILE_ID.Wall, 0, 20 * 5);
+          const map = new TileMap(20, 20, t);
+          const light = { light: new Float32Array(400 * 3).fill(255), seenLit: new Uint8Array(400).fill(1) };
+          const { scene } = fakeScene();
+          const mood = new Mood(scene, map, light as never);
+          Object.assign(mood.on, { draft: false, dust: false, haze: false, drips: false, embers: false }); // only the torch draws random numbers
+          const torch: AirTorch = { x: 5.5 * TILE, y: 5 * TILE + 0.5, side: 0, lit: true };
+          const movers = dir ? [figure(5.5 * TILE, 5 * TILE + 6, 200 * dir)] : [];
+          for (let i = 0; i < 90; i++) {
+            if (dir) movers[0].x = 5.5 * TILE + dir * (((i * 2) % 8) - 4);
+            mood.update(1 / 60, view(), [torch], [], movers);
+          }
+          const puffs = (mood as unknown as { puffs: { x: number; src: number }[] }).puffs.filter((p) => p.src >= 0);
+          expect(puffs.length).toBeGreaterThan(0);
+          return puffs[0].x; // the oldest puff, which exists in every run
+        } finally {
+          rnd.mockRestore();
+        }
+      };
+      expect(firstX(1) - firstX(-1)).toBeGreaterThan(1); // the mover's gust blows the smoke along
+    });
+
+    it('a shot injects air at airY, not at its ground y', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      run(mood, 1 / 60, [], [], view(), [{ x: 200, y: 150, airY: 142, vx: 0, vy: 200, r: 4, shot: true, heat: 0 }]);
+      const hi = Math.abs(mood.airAt(202, 142)[1]);
+      const lo = Math.abs(mood.airAt(202, 150)[1]);
+      expect(hi).toBeGreaterThan(lo);
+    });
+
+    it('a shot whose airY is inside a wall injects at y', () => {
+      const t = new Uint8Array(60 * 40).fill(TILE_ID.Floor);
+      t.fill(TILE_ID.Wall, 0, 60 * 9); // rows 0..8 are wall
+      const map = new TileMap(60, 40, t);
+      const light = { light: new Float32Array(2400 * 3).fill(255), seenLit: new Uint8Array(2400).fill(1) };
+      const mood = new Mood(fakeScene().scene, map, light as never);
+      mood.on.draft = false;
+      const y = 9 * TILE + 2;
+      run(mood, 1 / 60, [], [], view(), [{ x: 200, y, airY: y - 8, vx: 200, vy: 0, r: 4, shot: true, heat: 0 }]);
+      expect(mood.airAt(202, y + 2)[0]).toBeGreaterThan(0);
+    });
+
     it('loose specks never show on unseen tiles', () => {
       const { mood, light, made, sprites } = setup(60, 40, TILE_ID.Floor);
       run(mood, 2);
