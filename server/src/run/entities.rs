@@ -328,7 +328,8 @@ pub enum Pierce {
     Never,
     /// A kill lets the rest of its damage fly on, up to `left` more times.
     Overkill { left: u8 },
-    /// It passes `left` creatures with full damage, killed or not, then becomes `Pierce::from_u8(then)`.
+    /// It passes `left` creatures with full damage, killed or not, then becomes `Pierce::from_u8(then)`;
+    /// `left == u8::MAX` passes every creature.
     Through { left: u8, then: u8 },
 }
 

@@ -340,6 +340,9 @@ pub enum ServerMsg {
     /// The receiving player's selected character and its progress.
     Character(CharacterInfo),
     RunStarted(RunStartInfo),
+    /// Never built: snapshots go out as a bare array (`wire::encode_snap`). The variant keeps the
+    /// exported `ServerMsg` type complete for the client.
+    #[allow(dead_code)]
     Snap(Snapshot),
     /// `boss`: the level's end boss, if it has one.
     RunEnded { victory: bool, level: LevelId, boss: Option<BossId>, time: f32, stats: Vec<PlayerStats> },

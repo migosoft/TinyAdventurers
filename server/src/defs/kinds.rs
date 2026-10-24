@@ -63,7 +63,15 @@ pub enum EntityKind {
     Torch = 82,
 }
 
+/// Serialized as its id.
+impl serde::Serialize for EntityKind {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_u8(*self as u8)
+    }
+}
+
 impl EntityKind {
+    #[cfg(test)]
     pub const ALL: [EntityKind; 43] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
@@ -160,6 +168,7 @@ pub enum Anim {
 }
 
 impl Anim {
+    #[cfg(test)]
     pub const ALL: [Anim; 15] = [
         Anim::Idle,
         Anim::Move,

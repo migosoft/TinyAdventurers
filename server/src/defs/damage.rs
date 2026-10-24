@@ -267,14 +267,19 @@ pub fn resolve(d: &Damage, r: &Resistances) -> f64 {
 pub fn resolve_parts(d: &Damage, r: &Resistances) -> [f64; DamageType::COUNT] {
     let mut parts = [0.0; DamageType::COUNT];
     for &t in DamageType::ALL.iter() {
-        parts[t as usize] = d.amount * d.split.share(t) * (1.0 - r.get(t).max(MIN_RESISTANCE));
+        parts[t as usize] = d.amount * d.split.share(t) * kept(r, t);
     }
     parts
 }
 
-/// The per-type multiplier `resolve` uses: `Σ share × (1 − resistance)`, with the weakness floor.
+/// What a resistance leaves of a type's part: `1 − resistance`, with the weakness floor.
+fn kept(r: &Resistances, t: DamageType) -> f64 {
+    1.0 - r.get(t).max(MIN_RESISTANCE)
+}
+
+/// The per-type multiplier `resolve` uses: `Σ share × kept`.
 fn effective(split: &DamageSplit, res: &Resistances) -> f64 {
-    DamageType::ALL.iter().map(|&t| split.share(t) * (1.0 - res.get(t).max(MIN_RESISTANCE))).sum()
+    DamageType::ALL.iter().map(|&t| split.share(t) * kept(res, t)).sum()
 }
 
 /// What is left of a hit of `amount` after it kills a target with `hp_left` HP: `amount - hp_left / eff`,

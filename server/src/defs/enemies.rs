@@ -35,6 +35,7 @@ pub enum EnemyType {
 }
 
 impl EnemyType {
+    #[cfg(test)]
     pub const ALL: [EnemyType; 15] = [
         EnemyType::GoblinArcher,
         EnemyType::SkeletonWarrior,
@@ -82,10 +83,13 @@ pub struct EnemyDef {
     pub alt: Option<AttackStyle>,
     /// The weapons `attack` and `alt` are built from (`weapon_melee`, `weapon_ranged`).
     pub melee_weapon: Option<ItemId>,
+    /// A record only: the defs name the bow again in their `weapon_ranged` call.
+    #[allow(dead_code)]
     pub ranged_weapon: Option<ItemId>,
 }
 
 /// The weapon an enemy strikes with: its melee weapon, else its race's first natural weapon.
+#[cfg(test)]
 pub fn melee_item(t: EnemyType) -> ItemId {
     def(t).melee_weapon.unwrap_or_else(|| natural_melee(t))
 }

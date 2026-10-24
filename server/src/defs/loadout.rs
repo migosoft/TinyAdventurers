@@ -51,15 +51,19 @@ impl Loadout {
 pub enum AbilityMod {
     /// More enemies hit by overkill.
     Pierce(u8),
-    /// More enemies passed through with full damage.
+    /// More enemies passed through with full damage. No item or node uses it yet.
+    #[allow(dead_code)]
     PierceThrough(u8),
     RadiusMul(f64),
     RangeMul(f64),
     DurationAdd(f64),
+    /// No item or node uses it yet.
+    #[allow(dead_code)]
     CooldownAdd(f64),
     DamageMul(f64),
     ArcMul(f64),
-    /// A non-physical share added to the split.
+    /// A non-physical share added to the split. No item or node uses it yet.
+    #[allow(dead_code)]
     AddShare(DamageType, f64),
     PushStr(i32),
     /// An effect on its hits (a `power` of 0 takes the ability's own).

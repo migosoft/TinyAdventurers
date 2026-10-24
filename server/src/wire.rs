@@ -14,6 +14,7 @@ use crate::protocol::{BossId, Ev, InputMsg, Snapshot};
 pub const POS_SCALE: f64 = 16.0;
 
 /// Event codes on the wire, by index. Exported to the client as `EV`.
+#[cfg(test)]
 pub const EV_CODES: [&str; 16] = ["Dmg", "Heal", "Boom", "Died", "Raise", "Immune", "Tile", "Msg", "Coins", "Sink", "Light", "LightAdd", "LightRemove", "Effect", "Growl", "Zap"];
 
 pub fn q_pos(v: f64) -> u32 {

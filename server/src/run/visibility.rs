@@ -11,7 +11,6 @@ use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::defs::lights;
 use crate::dungeon::{Map, TILE};
-use crate::fov::PLAYER_FOV_RADIUS;
 use crate::vispoly::View;
 use crate::math::Vec2;
 use crate::protocol::{EntSnap, Ev, MovingLight, SelfState, Snapshot};
@@ -295,6 +294,7 @@ pub fn send_snapshots(run: &mut Run) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fov::PLAYER_FOV_RADIUS;
     use crate::defs::enemies::EnemyType;
     use crate::protocol::{BossId, ClassId};
     use crate::run::tests::test_run;

@@ -384,14 +384,14 @@ pub enum EquipError {
 /// without item points; `profs` are the class's plus the tree's. Order: slot, class, proficiency, requirements.
 pub fn check_equip(class: ClassId, profs: &[Prof], slot: EquipSlot, item: ItemId, attrs: &Attributes) -> Result<(), EquipError> {
     let d = def(item);
-    let fits = match (slot, d.base) {
-        (EquipSlot::Melee, ItemBase::Melee(k, _)) => category(k) != WeaponCategory::Natural,
-        (EquipSlot::Ranged, ItemBase::Ranged(..)) => true,
-        (EquipSlot::Armor, ItemBase::Armor(_)) => true,
-        (EquipSlot::Ring1 | EquipSlot::Ring2, ItemBase::Ring) => true,
-        (EquipSlot::Shoes, ItemBase::Shoes) => true,
-        (EquipSlot::Belt, ItemBase::Belt) => true,
-        _ => false,
+    let fits = match d.base {
+        ItemBase::Melee(k, _) => slot == EquipSlot::Melee && category(k) != WeaponCategory::Natural,
+        ItemBase::Ranged(..) => slot == EquipSlot::Ranged,
+        ItemBase::Armor(_) => slot == EquipSlot::Armor,
+        ItemBase::Ring => matches!(slot, EquipSlot::Ring1 | EquipSlot::Ring2),
+        ItemBase::Shoes => slot == EquipSlot::Shoes,
+        ItemBase::Belt => slot == EquipSlot::Belt,
+        ItemBase::Shield => slot == EquipSlot::OffHand,
     };
     if !fits {
         return Err(EquipError::WrongSlot);

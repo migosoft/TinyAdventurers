@@ -36,6 +36,7 @@ pub struct Sight {
 }
 
 impl Sight {
+    #[cfg(test)]
     pub const NONE: Sight = Sight { vision: 0.0, darkvision: 0.0 };
 
     /// Vision radius in px.

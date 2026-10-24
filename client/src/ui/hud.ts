@@ -25,7 +25,7 @@ export interface FrameStats {
   ents: number;
   /** The viewed hero's darkvision, 0..1. */
   darkvision: number;
-  /** Elven Ranger only: whether the hero has a living wolf; null for other classes. */
+  /** Whether the hero has a living wolf; null when the secondary is not Summon Wolf. */
   wolf: boolean | null;
 }
 
