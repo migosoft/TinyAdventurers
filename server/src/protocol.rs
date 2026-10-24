@@ -104,23 +104,23 @@ pub enum ClientMsg {
     /// Save the two abilities taken into the next run. Any pick that fits its slot is stored; what is
     /// wrong with it shows in `CharacterInfo.sheet.loadout_error` and stops Ready and Start.
     SetLoadout { primary: Pick, secondary: Pick },
-    /// Debug: put a copy of an item in your inventory, in a debug run.
+    /// Debug: put a copy of an item in your inventory (for a debug account).
     DebugGrantItem { item: ItemId },
     /// Debug: set your hero's darkvision (0..=1 of its vision), in a debug run.
     DebugDarkvision { ratio: f32 },
     /// Debug: put an effect (EffectKind id) on your hero, in a debug run.
     DebugEffect { kind: u8 },
-    /// Debug, waiting room: set any ability of your class in the two slots, in a debug run.
+    /// Debug, waiting room: set any ability of your class in the two slots (for a debug account, in a debug room).
     DebugLoadout { primary: Pick, secondary: Pick },
-    /// Debug, waiting room: put a weapon in your Melee or Ranged slot (`None` = an empty slot).
+    /// Debug, waiting room: put a weapon in your Melee or Ranged slot (`None` = an empty slot; for a debug account, in a debug room).
     DebugEquip { slot: EquipSlot, item: Option<ItemId> },
-    /// Debug, in a run with debug on: immortal (the default) or mortal. The run stays a debug run.
+    /// Debug, in a debug run: immortal (the default) or mortal.
     DebugImmortal { on: bool },
-    /// Debug, lobby or waiting room: `BuyAttribute` without the XP cost, in a debug run.
+    /// Debug, lobby or waiting room: `BuyAttribute` without the XP cost (for a debug account).
     DebugBuyAttribute { attr: Attr },
-    /// Debug: `BuyNode` without the XP cost (the neighbour and Attribute checks stay).
+    /// Debug: `BuyNode` without the XP cost (for a debug account; the neighbour and Attribute checks stay).
     DebugBuyNode { node: NodeId },
-    /// Debug: `Respec` without the coin cost.
+    /// Debug: `Respec` without the coin cost (for a debug account).
     DebugRespec,
     /// In a run: the rules log on or off, and whether to send detail lines. Sent again on every run start.
     RulesLog { on: bool, details: bool },

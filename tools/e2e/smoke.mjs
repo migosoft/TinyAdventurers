@@ -2,11 +2,14 @@
 // create/join a run, start, move, attack, screenshots; then a second login closes
 // the first window, and both accounts are deleted again.
 // Usage: node smoke.mjs [baseUrl] [query] [outDir] [Class1,Class2]
-//   e.g. node smoke.mjs http://localhost:8080/ "?debug&boss=dragon" shots Paladin,Wizard
+//   e.g. node smoke.mjs http://localhost:8080/ "?debug" shots Paladin,Wizard
 // Set BROWSER to a Chrome/Edge executable if Edge is not at the default Windows path.
 // Set LOG=1 to turn the rules log on in both windows (key L) and assert that a `.rules-log .rl-row` appears.
+// A `debug` query makes both throwaway accounts debug accounts (the game reads the account's flag, not the URL):
+// through the admin API when ADMIN_USER and ADMIN_PASSWORD are set, else with psql on the local compose stack.
 // An empty start room logs nothing, so use LOG=1 with a `debug` query (F8 puts a debug effect on Alice).
 import { chromium } from 'playwright-core';
+import { execFileSync } from 'node:child_process';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
@@ -16,6 +19,32 @@ const browser = await chromium.launch({ executablePath: process.env.BROWSER ?? '
 const errors = [];
 const PASSWORD = 'smoke-test-password';
 const tag = () => Math.random().toString(16).slice(2, 8);
+
+/** Marks one of this script's own e2e_* accounts as a debug account. */
+let adminCookie = null;
+async function markDebug(account) {
+  if (!/^e2e_[0-9a-f]+$/.test(account)) throw new Error(`refusing to mark ${account}`);
+  const { ADMIN_USER, ADMIN_PASSWORD } = process.env;
+  if (ADMIN_USER && ADMIN_PASSWORD) {
+    const api = async (path, method, body) => {
+      const r = await fetch(new URL(path, base), { method, headers: { 'content-type': 'application/json', ...(adminCookie ? { cookie: adminCookie } : {}) }, body: body && JSON.stringify(body) });
+      if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${await r.text()}`);
+      return r;
+    };
+    if (!adminCookie) {
+      const r = await api('api/admin/login', 'POST', { name: ADMIN_USER, password: ADMIN_PASSWORD });
+      adminCookie = r.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+    }
+    const found = await (await api(`api/admin/players?q=${account}`, 'GET')).json();
+    const row = found.players.find((p) => p.name === account);
+    if (!row) throw new Error(`admin list has no ${account}`);
+    await api(`api/admin/players/${row.id}/debug`, 'POST', { debug: true });
+    console.log(`marked ${account} as debug (admin API)`);
+  } else {
+    execFileSync('docker', ['compose', 'exec', '-T', 'db', 'psql', '-U', 'tiny', '-d', 'tiny', '-c', `update accounts set debug = true where name = '${account}'`], { stdio: 'inherit' });
+    console.log(`marked ${account} as debug (psql)`);
+  }
+}
 
 async function open(name) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
@@ -41,6 +70,7 @@ async function player(name, cls, shots) {
   const page = await open(name);
   if (shots) await page.screenshot({ path: `${out}/0-login.png` });
   await login(page, account, true);
+  if (query.includes('debug')) await markDebug(account); // no WebSocket yet, so the connection reads the new flag
   if (shots) await page.screenshot({ path: `${out}/0-roster.png` });
   await page.click('#new-char');
   await page.fill('#char-name', `${name}${tag()}`);
@@ -243,7 +273,8 @@ async function adminPass() {
   if (logins.join() !== '401,200') errors.push(`after the admin changed the password: old/new login gave ${logins}`);
   else console.log('admin: old password refused, new one works');
 
-  await page.fill(`input[aria-label="Type ${a1.account} to confirm"]`, a1.account);
+  // A debug account's page has two such inputs (unmark first, delete last).
+  await page.locator(`input[aria-label="Type ${a1.account} to confirm"]`).last().fill(a1.account);
   await page.click('button:text-is("Delete player")');
   await page.waitForSelector('.flash >> text=deleted');
   await page.click('nav >> text=Audit log');

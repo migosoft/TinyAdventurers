@@ -63,7 +63,7 @@ pub enum Change {
     Equip(EquipSlot, Option<ItemId>),
     SetLoadout(Loadout),
     GrantItem(ItemId),
-    /// Debug: the same buys without the XP or coin cost (the caller checks that debug is allowed).
+    /// Debug: the same buys without the XP or coin cost (the save checks `Change::is_debug` against the account's flag in the database).
     FreeAttr(Attr),
     FreeNode(NodeId),
     FreeRespec,

@@ -19,7 +19,7 @@ Read the issue, its comments and any spec or plan it links before starting. Move
 
 **Stopping before an issue is done:** leave a comment on the issue: the branch, what is done (commits), what is next, open questions, and links to the spec and plan. The next session starts from that comment.
 
-**Finishing:** the closing comment names the commits, the verification run, and whether it is merged, pushed and deployed. Leftovers become new issues ("Follow-up of #N").
+**Finishing:** before an issue is closed, always update the technical documentation ([docs/TECHNICAL.md](docs/TECHNICAL.md)) and the player documentation ([docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md)) to match the finished work, and commit the update with it. If one of them needs no change, say so in the closing comment. The closing comment names the commits, the verification run, and whether it is merged, pushed and deployed. Leftovers become new issues ("Follow-up of #N").
 
 ## Work tracking: GitHub issues and the project board
 
@@ -61,7 +61,7 @@ Lasting rules that are not one issue's business. Feature-specific decisions live
 - **Naming:** say "damage-type effects", never "elemental" (future types such as holy are not elements). A new enum variant must be impossible to half-add (`listed_enum!`).
 - **Desktop only:** keyboard and mouse in a desktop browser. No phone layouts or touch controls.
 - **Responsiveness is a priority** ("no lag"): keep prediction, interpolation and lag compensation working. Check with `?lag=150&jitter=40&loss=2` and F3.
-- **Debug mode is URL-only:** `?debug`, optionally `&boss=demon|lich|dragon`. Debug runs bank no XP. Don't add an in-game toggle for debug mode itself; inside a debug run F9 switches only immortality (2026-10-24).
+- **Debug accounts** (2026-10-24, #151): only accounts the admin marks in `/admin` can use debug; they play only with each other; debug runs bank; unmarking wipes the account's progress. No `ALLOW_DEBUG`, no `?debug`, no URL boss preselect. Inside a debug run F9 switches only immortality.
 - **Facing is left/right only** (the pack has no up/down frames); the code keeps a `Dir` hook.
 - **Minions are never tinted:** raised skeletons and summoned imps look like the ordinary ones.
 - **Demon dungeon:** imps (ranged, claw up close) and chorts (melee, a bolt from afar) replace skeletons; summoners (red robe, summon imps) replace necromancers.
@@ -100,7 +100,7 @@ Lasting rules that are not one issue's business. Feature-specific decisions live
 10. Equip moves items between the inventory and a slot; starters are ordinary items.
 11. Respec unequips items the build can no longer wear.
 12. Unknown ids in a stored document are dropped with a warning.
-13. The debug flag stays (whole class pool, Attribute lift, no banking), on top of the real build; `DebugGrantItem`.
+13. The debug flag stays (whole class pool, Attribute lift), on top of the real build; `DebugGrantItem`. Debug runs bank (#151).
 14. Admin statistics count tree nodes bought.
 
 ## Environment (this machine)
