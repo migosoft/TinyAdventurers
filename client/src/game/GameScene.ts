@@ -216,7 +216,7 @@ export class GameScene extends Phaser.Scene {
       e.preventDefault();
       this.hud.toggleDebug();
     });
-    // Debug mode only (?debug): cycle your own hero's darkvision 0 -> 50% -> 100% -> 0.
+    // Debug runs only (debug accounts): cycle your own hero's darkvision 0 -> 50% -> 100% -> 0.
     // Ignored otherwise, so a stray F4 never turns a normal run into a debug run, and
     // while dead (spectating, the snapshot's darkvision is the teammate's).
     kb.on('keydown-F4', (e: KeyboardEvent) => {
@@ -225,14 +225,14 @@ export class GameScene extends Phaser.Scene {
       // The server announces the change to the party.
       this.net.send({ t: 'DebugDarkvision', ratio: nextDarkvision((this.lastSnap?.me.darkvision ?? 0) / 100) });
     });
-    // Debug mode only (?debug): put the next effect on your own hero (Blind, Sleep, Petrified, Slowed, Accelerated).
+    // Debug runs only (debug accounts): put the next effect on your own hero (Blind, Sleep, Petrified, Slowed, Accelerated).
     kb.on('keydown-F8', (e: KeyboardEvent) => {
       e.preventDefault();
       if (e.repeat || !this.debugOn || !this.alive) return;
       this.debugEffect = (this.debugEffect + 1) % Object.keys(EFFECT).length;
       this.net.send({ t: 'DebugEffect', kind: this.debugEffect });
     });
-    // Debug mode only (?debug): immortality off and on (the run stays a debug run).
+    // Debug runs only (debug accounts): immortality off and on (the run stays a debug run).
     kb.on('keydown-F9', (e: KeyboardEvent) => {
       e.preventDefault();
       if (e.repeat || !this.debugOn || !this.alive) return;

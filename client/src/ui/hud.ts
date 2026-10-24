@@ -43,7 +43,7 @@ export const HELP_KEYS: [keys: string[], label: string][] = [
   [['F3'], 'stats'],
 ];
 
-/** The in-run debug keys (only with `?debug`), listed on the debug badge. */
+/** The in-run debug keys (debug runs, i.e. debug accounts), listed on the debug badge. */
 export const DEBUG_KEYS: [key: string, label: string][] = [
   ['F4', 'darkvision 0/50/100 %'],
   ['F8', 'next effect on you'],

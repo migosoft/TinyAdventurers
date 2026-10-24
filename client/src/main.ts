@@ -231,6 +231,8 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
     switch (m.t) {
       case 'Welcome':
         lobby.myId = m.id;
+        lobby.debug = m.debug;
+        hub.setDebug(m.debug);
         break;
       case 'Lobby':
         lobby.setRuns(m.runs);
