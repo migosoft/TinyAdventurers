@@ -80,6 +80,17 @@ const sweep = (mood: Mood, secs: number) => {
   }
 };
 
+/** A small seeded generator, so a test never depends on a lucky or unlucky torch gust. */
+function mulberry32(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 describe('Mood', () => {
   it('keeps as many dust clouds as the view area asks for', () => {
     const { mood } = setup(60, 40, TILE_ID.Floor);
@@ -125,6 +136,8 @@ describe('Mood', () => {
   });
 
   it('smokes only from lit torches whose tile is seen and lit', () => {
+    const rnd = vi.spyOn(Math, 'random').mockImplementation(mulberry32(7));
+    try {
     const torch: AirTorch = { x: 5.5 * TILE, y: 5.5 * TILE, side: 0, lit: true };
     const dark = setup(20, 20, TILE_ID.Floor, 0);
     run(dark.mood, 3, [torch]);
@@ -136,6 +149,9 @@ describe('Mood', () => {
     const out = setup(20, 20, TILE_ID.Floor, 1);
     run(out.mood, 3, [{ ...torch, lit: false }]);
     expect(out.mood.counts.smoke).toBe(0);
+    } finally {
+      rnd.mockRestore();
+    }
   });
 
   it('throws a blast burst once, not every frame', () => {
@@ -210,6 +226,8 @@ describe('Mood', () => {
   });
 
   it('fades existing torch smoke out once the torch tile is no longer seen', () => {
+    const rnd = vi.spyOn(Math, 'random').mockImplementation(mulberry32(7));
+    try {
     const torch: AirTorch = { x: 5.5 * TILE, y: 5.5 * TILE, side: 0, lit: true };
     const { mood, light, made, sprites } = setup(20, 20, TILE_ID.Floor, 1);
     run(mood, 3, [torch]);
@@ -219,6 +237,9 @@ describe('Mood', () => {
     expect(mood.counts.smoke).toBeGreaterThan(0); // still alive, but invisible
     const shown = (made as unknown as { alpha?: number; destroyed: number }[]).filter((o) => !(sprites as unknown[]).includes(o) && (o.alpha ?? 0) > 0.001); // the haze keeps its own alpha
     expect(shown).toHaveLength(0);
+    } finally {
+      rnd.mockRestore();
+    }
   });
 
   describe('stirred air (#158)', () => {

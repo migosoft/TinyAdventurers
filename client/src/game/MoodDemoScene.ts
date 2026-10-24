@@ -148,7 +148,7 @@ export class MoodDemoScene extends Phaser.Scene {
 
     this.arrow = this.add.image(0, 0, 'atlas', 'weapon_arrow').setScale(0.6).setRotation(Math.PI / 2).setDepth(DEPTH.projectile);
     this.knight = this.add.image(0, 0, 'atlas', 'knight_m_run_anim_f0').setOrigin(0.5, 1);
-    if (q.get('wind') === '1') this.wind = this.add.graphics().setDepth(DEPTH.airEmbers + 1);
+    if (q.get('wind') === '1') this.wind = this.add.graphics().setDepth(DEPTH.fog + 1);
 
     const cam = this.cameras.main;
     const barH = 64;
@@ -184,7 +184,7 @@ export class MoodDemoScene extends Phaser.Scene {
     document.body.appendChild(bar);
   }
 
-  /** ?wind=1: a short line per 16 px along the air velocity (length = speed x 0.2 px, capped 12). */
+  /** ?wind=1: a short line per 16 px along the air velocity (length = speed x 0.6 px, capped 14, plus a dot at each point). */
   private drawWind(): void {
     const g = this.wind;
     if (!g) return;
@@ -194,8 +194,10 @@ export class MoodDemoScene extends Phaser.Scene {
       for (let x = TILE + 8; x < 14 * TILE; x += 16) {
         const [vx, vy] = this.mood.airAt(x, y);
         const sp = Math.hypot(vx, vy);
+        g.fillStyle(0x66ccff, 0.9);
+        g.fillRect(x, y, 1, 1);
         if (sp < 1) continue;
-        const len = Math.min(12, sp * 0.2);
+        const len = Math.min(14, sp * 0.6);
         g.lineBetween(x, y, x + (vx / sp) * len, y + (vy / sp) * len);
       }
   }
