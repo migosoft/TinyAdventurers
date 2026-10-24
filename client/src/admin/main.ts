@@ -299,7 +299,7 @@ function players(): void {
         h('p', { class: 'muted small' }, `${compact(p.total)} player${p.total === 1 ? '' : 's'}`),
         table(
           ['Name', 'Status', ['Characters', 'num'], 'Last active', 'Registered'],
-          p.players.map((r) => [playerLink(r.id, r.name), r.online ? h('span', { class: 'badge on' }, 'Online') : h('span', { class: 'muted' }, 'Offline'), String(r.characters), r.last_active ?? '–', date(r.created)]),
+          p.players.map((r) => [h('span', null, playerLink(r.id, r.name), r.debug ? h('span', { class: 'badge' }, 'Debug') : null), r.online ? h('span', { class: 'badge on' }, 'Online') : h('span', { class: 'muted' }, 'Offline'), String(r.characters), r.last_active ?? '–', date(r.created)]),
           'No players match.',
         ),
         h(
@@ -412,6 +412,10 @@ async function player(id: number): Promise<void> {
     h('button', { type: 'submit', class: 'primary' }, 'Change password'),
   );
 
+  const unmarkName = h('input', { autocomplete: 'off', 'aria-label': `Type ${p.name} to confirm` });
+  const unmarkButton = h('button', { type: 'submit', class: 'danger', disabled: true }, 'Remove debug mark and wipe');
+  unmarkName.addEventListener('input', () => (unmarkButton.disabled = unmarkName.value !== p.name));
+
   const confirmName = h('input', { autocomplete: 'off', 'aria-label': `Type ${p.name} to confirm` });
   const delButton = h('button', { type: 'submit', class: 'danger', disabled: true }, 'Delete player');
   confirmName.addEventListener('input', () => (delButton.disabled = confirmName.value !== p.name));
@@ -437,13 +441,65 @@ async function player(id: number): Promise<void> {
     delButton,
   );
 
+  const debugCard = p.debug
+    ? h(
+        'section',
+        { class: 'card danger-zone' },
+        h('h2', null, 'Debug account'),
+        h('p', { class: 'muted small' }, 'Removing the mark wipes all progress (XP, coins, tree, items) of every character of this account, so nothing from debug reaches normal games. The player is logged out.'),
+        h(
+          'form',
+          {
+            class: 'form-row',
+            on: {
+              submit: async (ev) => {
+                ev.preventDefault();
+                if (unmarkName.value !== p.name) return;
+                try {
+                  await adminApi.setDebug(id, false);
+                  reload();
+                  flash(`${p.name} is a normal account again; their characters were wiped.`);
+                } catch (e) {
+                  failed(e);
+                }
+              },
+            },
+          },
+          h('label', null, h('span', null, 'Type ', h('strong', null, p.name), ' to confirm'), unmarkName),
+          unmarkButton,
+        ),
+      )
+    : section(
+        'Debug account',
+        h('p', { class: 'muted small' }, 'Only characters of a debug account can use debug mode, and they only play with other debug accounts. Their progress is kept. The player is logged out.'),
+        h(
+          'button',
+          {
+            class: 'primary',
+            on: {
+              click: async () => {
+                if (!confirm(`Make ${p.name} a debug account? They are logged out.`)) return;
+                try {
+                  await adminApi.setDebug(id, true);
+                  reload();
+                  flash(`${p.name} is now a debug account.`);
+                } catch (e) {
+                  failed(e);
+                }
+              },
+            },
+          },
+          'Make debug account',
+        ),
+      );
+
   const runs = table(
     ['Started', 'Character', 'Level', 'Result', ['Length', 'num'], ['Party', 'num'], ['Kills', 'num'], ['XP', 'num'], ['Coins', 'num']],
     d.recent_runs.map((r) => [
       dateTime(r.started),
       `${r.character ?? '(deleted)'} (${r.class})`,
       levelLabel(r.level, r.boss),
-      r.outcome === 'victory' ? 'Won' : r.outcome === 'defeat' ? 'Lost' : 'Left',
+      (r.outcome === 'victory' ? 'Won' : r.outcome === 'defeat' ? 'Lost' : 'Left') + (r.debug ? ' (debug)' : ''),
       duration(r.duration_s),
       String(r.players),
       compact(r.kills),
@@ -455,7 +511,7 @@ async function player(id: number): Promise<void> {
 
   main.replaceChildren(
     h('p', null, h('a', { href: '#/players' }, '← All players')),
-    h('div', { class: 'page-head' }, h('h1', null, p.name), p.online ? h('span', { class: 'badge on' }, 'Online') : h('span', { class: 'badge' }, 'Offline')),
+    h('div', { class: 'page-head' }, h('h1', null, p.name), p.online ? h('span', { class: 'badge on' }, 'Online') : h('span', { class: 'badge' }, 'Offline'), p.debug ? h('span', { class: 'badge' }, 'Debug') : null),
     h(
       'div',
       { class: 'tiles' },
@@ -467,6 +523,7 @@ async function player(id: number): Promise<void> {
     ),
     section('Characters', characters),
     section('Recent runs', runs),
+    debugCard,
     section('Change password', h('p', { class: 'muted small' }, 'The player is logged out everywhere and must use the new password. There is no e-mail, so tell them yourself.'), pwForm),
     h('section', { class: 'card danger-zone' }, h('h2', null, 'Delete player'), h('p', { class: 'muted small' }, 'Deletes the account and all its characters for good. The player is logged out at once.'), delForm),
   );
@@ -478,7 +535,7 @@ async function audit(): Promise<void> {
   const main = shell('audit', h('p', { class: 'muted' }, 'Loading…'));
   try {
     const rows = await adminApi.actions();
-    const label: Record<string, string> = { delete_account: 'Deleted player', set_password: 'Changed password', delete_character: 'Deleted character' };
+    const label: Record<string, string> = { delete_account: 'Deleted player', set_password: 'Changed password', delete_character: 'Deleted character', set_debug: 'Made debug account', clear_debug: 'Removed debug mark (wiped)' };
     main.replaceChildren(
       h('div', { class: 'page-head' }, h('h1', null, 'Audit log'), h('span', { class: 'muted small' }, 'The last 100 changes made in the admin area.')),
       h('section', { class: 'card' }, table(['When', 'Admin', 'Action', 'Target', 'Detail'], rows.map((a) => [dateTime(a.at), a.admin, label[a.action] ?? a.action, a.target, a.detail ?? '']), 'No changes yet.')),

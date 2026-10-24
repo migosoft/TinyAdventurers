@@ -152,6 +152,8 @@ pub struct PlayerRow {
     pub last_active: Option<String>,
     pub characters: u32,
     pub online: bool,
+    /// A debug account (see the design of #151).
+    pub debug: bool,
 }
 
 #[derive(Serialize, TS)]
@@ -202,6 +204,8 @@ pub struct PlayerRun {
     pub xp: u32,
     pub coins: u32,
     pub survived: bool,
+    /// A debug run (it banked nothing for a normal account).
+    pub debug: bool,
 }
 
 #[derive(Serialize, TS)]
@@ -270,9 +274,10 @@ async fn live_stats(db: &Db, live: Live) -> Result<LiveStats, sqlx::Error> {
 
 async fn totals(db: &Db) -> Result<Totals, sqlx::Error> {
     let r = sqlx::query(
-        "SELECT (SELECT count(*) FROM accounts), (SELECT count(*) FROM characters), \
-         (SELECT coalesce(sum((progress->>'total_xp')::bigint), 0)::float8 FROM characters), \
-         (SELECT coalesce(sum((progress->>'coins')::bigint), 0)::float8 FROM characters), \
+        "SELECT (SELECT count(*) FROM accounts), \
+         (SELECT count(*) FROM characters c JOIN accounts a ON a.id = c.account_id WHERE NOT a.debug), \
+         (SELECT coalesce(sum((c.progress->>'total_xp')::bigint), 0)::float8 FROM characters c JOIN accounts a ON a.id = c.account_id WHERE NOT a.debug), \
+         (SELECT coalesce(sum((c.progress->>'coins')::bigint), 0)::float8 FROM characters c JOIN accounts a ON a.id = c.account_id WHERE NOT a.debug), \
          (SELECT count(*) FROM runs WHERE NOT debug)",
     )
     .fetch_one(db)
@@ -324,7 +329,7 @@ async fn level_runs(db: &Db) -> Result<Vec<LevelRunStats>, sqlx::Error> {
 }
 
 async fn classes(db: &Db) -> Result<Vec<ClassStats>, sqlx::Error> {
-    let owned = sqlx::query("SELECT class, count(*) FROM characters GROUP BY class").fetch_all(db).await?;
+    let owned = sqlx::query("SELECT c.class, count(*) FROM characters c JOIN accounts a ON a.id = c.account_id WHERE NOT a.debug GROUP BY c.class").fetch_all(db).await?;
     let played = sqlx::query(&format!("{WINDOW} SELECT p.class, count(*) FROM run_players p JOIN r ON r.id = p.run_id GROUP BY p.class")).bind(29).fetch_all(db).await?;
     let count = |rows: &[sqlx::postgres::PgRow], c: ClassId| rows.iter().find(|r| r.get::<&str, _>(0) == format!("{c:?}")).map_or(0, |r| n(r, 1));
     Ok(ClassId::ALL.into_iter().map(|c| ClassStats { class: c, characters: count(&owned, c), played: count(&played, c) }).collect())
@@ -334,7 +339,7 @@ async fn classes(db: &Db) -> Result<Vec<ClassStats>, sqlx::Error> {
 const NODES: &str = "(CASE WHEN jsonb_typeof(progress->'nodes') = 'array' THEN jsonb_array_length(progress->'nodes') ELSE 0 END)";
 
 async fn levels(db: &Db) -> Result<Vec<LevelBucket>, sqlx::Error> {
-    let rows = sqlx::query(&format!("SELECT lvl, count(*) FROM (SELECT {NODES} AS lvl FROM characters) c GROUP BY lvl ORDER BY lvl")).fetch_all(db).await?;
+    let rows = sqlx::query(&format!("SELECT lvl, count(*) FROM (SELECT {NODES} AS lvl FROM characters ch JOIN accounts a ON a.id = ch.account_id WHERE NOT a.debug) c GROUP BY lvl ORDER BY lvl")).fetch_all(db).await?;
     Ok(rows.iter().map(|r| LevelBucket { nodes: r.get::<i32, _>(0).max(0) as u32, characters: n(r, 1) }).collect())
 }
 
@@ -342,7 +347,7 @@ async fn top(db: &Db) -> Result<Vec<TopCharacter>, sqlx::Error> {
     let rows = sqlx::query(&format!(
         "SELECT c.id, c.name, c.class, a.id, a.name, coalesce((c.progress->>'total_xp')::bigint, 0) AS txp, \
          coalesce((c.progress->>'coins')::bigint, 0), {NODES}::bigint \
-         FROM characters c JOIN accounts a ON a.id = c.account_id ORDER BY txp DESC, c.id LIMIT 10"
+         FROM characters c JOIN accounts a ON a.id = c.account_id WHERE NOT a.debug ORDER BY txp DESC, c.id LIMIT 10"
     ))
     .fetch_all(db)
     .await?;
@@ -381,11 +386,11 @@ async fn trend(db: &Db) -> Result<Vec<DayPoint>, sqlx::Error> {
 
 const PLAYER_COLUMNS: &str = "a.id, a.name, (extract(epoch FROM a.created_at) * 1000)::float8, \
      (SELECT max(day)::text FROM activity_days d WHERE d.account_id = a.id), \
-     (SELECT count(*) FROM characters c WHERE c.account_id = a.id)";
+     (SELECT count(*) FROM characters c WHERE c.account_id = a.id), a.debug";
 
 fn player_row(r: &sqlx::postgres::PgRow, online: &(dyn Fn(i32) -> bool + Sync)) -> PlayerRow {
     let id = r.get(0);
-    PlayerRow { id, name: r.get(1), created: r.get(2), last_active: r.get(3), characters: n(r, 4), online: online(id) }
+    PlayerRow { id, name: r.get(1), created: r.get(2), last_active: r.get(3), characters: n(r, 4), online: online(id), debug: r.get(5) }
 }
 
 /// `query` matches anywhere in the name, ignoring case. `sort`: "name"
@@ -433,7 +438,7 @@ pub async fn player(db: &Db, id: i32, online: &(dyn Fn(i32) -> bool + Sync), in_
     .await?;
     let runs = sqlx::query(
         "SELECT r.id, (extract(epoch FROM r.started_at) * 1000)::float8, r.level, r.boss, r.outcome, r.duration_s::float8, r.players::int, \
-         c.name, p.class, p.kills, p.xp, p.coins, p.survived \
+         c.name, p.class, p.kills, p.xp, p.coins, p.survived, r.debug \
          FROM run_players p JOIN runs r ON r.id = p.run_id LEFT JOIN characters c ON c.id = p.character_id \
          WHERE p.account_id = $1 ORDER BY r.started_at DESC LIMIT 10",
     )
@@ -461,6 +466,7 @@ pub async fn player(db: &Db, id: i32, online: &(dyn Fn(i32) -> bool + Sync), in_
                 xp: r.get::<i32, _>(10).max(0) as u32,
                 coins: r.get::<i32, _>(11).max(0) as u32,
                 survived: r.get(12),
+                debug: r.get(13),
             })
             .collect(),
     }))
@@ -655,5 +661,32 @@ mod tests {
         let buckets = s.levels.iter().map(|l| (l.nodes, l.characters)).collect::<Vec<_>>();
         assert_eq!(buckets, vec![(0, 1), (2, 1)]);
         assert_eq!(s.top.iter().find(|t| t.name == "Branch").unwrap().nodes, 2);
+    }
+
+    #[tokio::test]
+    async fn debug_accounts_are_left_out_of_the_character_statistics() {
+        let Some(db) = test_db().await else { return };
+        let n = db::create_account(&db, "Normal", "h").await.unwrap();
+        let d = db::create_account(&db, "Tester", "h").await.unwrap();
+        db::set_account_debug(&db, d, true).await.unwrap();
+        let cn = db::create_character(&db, n, "Plain", ClassId::Wizard).await.unwrap();
+        let cd = db::create_character(&db, d, "Dbg", ClassId::Paladin).await.unwrap();
+        db::bank_awards(&db, &[Award { character: cn.id, xp: 100, coins: 0 }], false).await.unwrap();
+        db::bank_awards(&db, &[Award { character: cd.id, xp: 900, coins: 0 }], true).await.unwrap();
+        db::record_run(&db, &record(d, cd.id, Outcome::Victory, true)).await.unwrap();
+
+        let s = overview(&db, Live::default()).await.unwrap();
+        assert_eq!((s.totals.characters, s.totals.total_xp, s.totals.accounts), (1, 100.0, 2));
+        assert_eq!(s.classes.iter().find(|c| c.class == ClassId::Paladin).unwrap().characters, 0);
+        assert_eq!(s.classes.iter().find(|c| c.class == ClassId::Wizard).unwrap().characters, 1);
+        assert_eq!(s.top.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), vec!["Plain"]);
+        assert_eq!(s.levels.iter().map(|l| l.characters).sum::<u32>(), 1);
+
+        let p = players(&db, "", "name", 0, &|_| false).await.unwrap();
+        assert!(p.players.iter().find(|r| r.id == d).unwrap().debug);
+        assert!(!p.players.iter().find(|r| r.id == n).unwrap().debug);
+        let det = player(&db, d, &|_| false, &|_| false).await.unwrap().unwrap();
+        assert!(det.player.debug);
+        assert!(det.recent_runs[0].debug);
     }
 }
