@@ -9,6 +9,12 @@ Read [README.md](README.md) (what the game is, how to run it), [docs/TECHNICAL.m
 3. Otherwise take the top card in **Next**. The order of the cards in a column is the priority; the user sets it by dragging.
 4. If Next is empty, ask the user. Never pick from the Backlog on your own.
 
+`gh project item-list` does not keep the board order. Read the columns in order with:
+
+```sh
+gh api graphql --paginate -f query='query($endCursor:String){user(login:"migosoft"){projectV2(number:1){items(first:100,after:$endCursor,orderBy:{field:POSITION,direction:ASC}){pageInfo{hasNextPage endCursor} nodes{content{... on Issue{number title}} fieldValueByName(name:"Status"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}' --jq '.data.user.projectV2.items.nodes[] | select(.fieldValueByName.name=="In progress" or .fieldValueByName.name=="Next") | "\(.fieldValueByName.name)\t#\(.content.number) \(.content.title)"'
+```
+
 Read the issue, its comments and any spec or plan it links before starting. Move the card to In progress when you begin.
 
 **Stopping before an issue is done:** leave a comment on the issue: the branch, what is done (commits), what is next, open questions, and links to the spec and plan. The next session starts from that comment.
