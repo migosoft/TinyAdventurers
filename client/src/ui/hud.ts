@@ -50,10 +50,17 @@ export const DEBUG_KEYS: [key: string, label: string][] = [
   ['F9', 'immortal on/off'],
 ];
 
-/** The debug badge: the immortality state, the debug keys and the path colours. */
+/** The debug paths drawn in the dungeon and their colours (`GameScene.drawPathLine`). */
+const DEBUG_PATHS: [colour: string, label: string][] = [
+  ['#ffe040', 'path to the boss'],
+  ['#40a0ff', 'path to the ogre'],
+];
+
+/** The debug badge: the immortality state, then one row per debug key and per path colour. */
 export function debugBadgeHtml(immortal: boolean): string {
-  const keys = DEBUG_KEYS.map(([k, l]) => `<span><kbd>${k}</kbd>${l}</span>`).join('');
-  return `<b>DEBUG · ${immortal ? 'immortal' : 'MORTAL'}</b>${keys}<span>paths: boss (yellow), ogre (blue)</span>`;
+  const keys = DEBUG_KEYS.map(([k, l]) => `<div class="db-row"><kbd>${k}</kbd><span>${l}</span></div>`).join('');
+  const paths = DEBUG_PATHS.map(([c, l]) => `<div class="db-row"><i class="db-swatch" style="background:${c}"></i><span>${l}</span></div>`).join('');
+  return `<div class="db-title${immortal ? '' : ' mortal'}">DEBUG · ${immortal ? 'immortal' : 'MORTAL'}</div>${keys}${paths}`;
 }
 
 export function helpHtml(): string {
