@@ -333,7 +333,7 @@ pub struct PlayerStats {
 #[serde(tag = "t")]
 #[ts(export)]
 pub enum ServerMsg {
-    Welcome { id: u32 },
+    Welcome { id: u32, debug: bool },
     Lobby { runs: Vec<RunSummary> },
     /// `level`: the level the run will play; `boss`: the host's choice of end boss for the dungeon, `None` = random.
     Room { run_id: u32, name: String, host: u32, players: Vec<RoomPlayer>, level: LevelId, boss: Option<BossId> },

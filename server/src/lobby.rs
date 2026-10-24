@@ -26,6 +26,8 @@ pub type SharedLobby = Arc<Mutex<Lobby>>;
 
 pub struct Conn {
     pub account: i32,
+    /// The account's debug flag when it connected: fixed for the connection's life.
+    pub debug: bool,
     pub tx: UnboundedSender<Message>,
     pub room: Option<u32>,
     pub ready: bool,
@@ -80,6 +82,8 @@ pub struct Room {
     /// Always the dungeon until there is a level picker.
     pub level: LevelId,
     pub run_tx: Option<UnboundedSender<RunCmd>>,
+    /// Fixed at creation from the creator's connection: debug and normal players never share a room.
+    pub debug: bool,
 }
 
 pub struct Lobby {
@@ -152,12 +156,12 @@ pub struct LivePlayer {
 impl Lobby {
     /// A new connection of a logged-in account. An older connection of the
     /// same account is closed: one account plays in one place only.
-    pub fn connect(&mut self, account: i32, tx: UnboundedSender<Message>) -> u32 {
+    pub fn connect(&mut self, account: i32, debug: bool, tx: UnboundedSender<Message>) -> u32 {
         self.kick_account(account, "You logged in from another window.");
         let id = self.next_conn;
         self.next_conn += 1;
-        send(&tx, &ServerMsg::Welcome { id });
-        self.conns.insert(id, Conn { account, tx, room: None, ready: false, character: None, loadout: None, debug_loadout: false, debug_equipment: Equipment::default(), debug_touched: [false; EquipSlot::COUNT], since: unix_ms() });
+        send(&tx, &ServerMsg::Welcome { id, debug });
+        self.conns.insert(id, Conn { account, debug, tx, room: None, ready: false, character: None, loadout: None, debug_loadout: false, debug_equipment: Equipment::default(), debug_touched: [false; EquipSlot::COUNT], since: unix_ms() });
         self.send_lobby_to(id);
         id
     }
@@ -245,6 +249,11 @@ impl Lobby {
         if c.account != character.account_id {
             return;
         }
+        if character.debug != c.debug {
+            // The account was marked or unmarked since this connection opened.
+            let account = c.account;
+            return self.kick_account(account, "Your account was changed. Please log in again.");
+        }
         let info = character.info();
         let character_class = character.class;
         c.character = Some(character);
@@ -323,7 +332,8 @@ impl Lobby {
                 self.next_room += 1;
                 let name: String = name.trim().chars().filter(|c| !c.is_control()).take(24).collect();
                 let name = if name.is_empty() { format!("Dungeon #{rid}") } else { name };
-                self.rooms.insert(rid, Room { name, host: id, members: vec![id], boss: None, level: LevelId::Dungeon, run_tx: None });
+                let debug = self.is_debug(id);
+                self.rooms.insert(rid, Room { name, host: id, members: vec![id], boss: None, level: LevelId::Dungeon, run_tx: None, debug });
                 if let Some(c) = self.conns.get_mut(&id) {
                     c.room = Some(rid);
                     c.ready = false;
@@ -335,7 +345,8 @@ impl Lobby {
                 if !self.has_character(id) {
                     return;
                 }
-                let ok = self.rooms.get(&run_id).map_or(false, |r| r.run_tx.is_none() && r.members.len() < MAX_PLAYERS);
+                let debug = self.is_debug(id);
+                let ok = self.rooms.get(&run_id).map_or(false, |r| r.run_tx.is_none() && r.members.len() < MAX_PLAYERS && r.debug == debug);
                 if !ok {
                     self.error(id, "That dungeon is full or has already started.");
                     return;
@@ -372,8 +383,8 @@ impl Lobby {
                 }
             }
             ClientMsg::StartRun => self.start(id),
-            ClientMsg::DebugLoadout { primary, secondary } => self.debug_loadout_if(crate::run::debug::allowed(), id, primary, secondary),
-            ClientMsg::DebugEquip { slot, item } => self.debug_equip_if(crate::run::debug::allowed(), id, slot, item),
+            ClientMsg::DebugLoadout { primary, secondary } => self.debug_loadout_if(id, primary, secondary),
+            ClientMsg::DebugEquip { slot, item } => self.debug_equip_if(id, slot, item),
             _ => {}
         }
     }
@@ -394,8 +405,8 @@ impl Lobby {
 
     /// Debug: set any ability of the character's class in the two slots. It skips the
     /// "unlocked" check only; `hero_sheet` still checks Attributes and weapons on Ready and Start.
-    fn debug_loadout_if(&mut self, allowed: bool, id: u32, primary: Pick, secondary: Pick) {
-        if !self.debug_allowed(allowed, id) {
+    fn debug_loadout_if(&mut self, id: u32, primary: Pick, secondary: Pick) {
+        if !self.debug_allowed(id) {
             return;
         }
         if let Some(c) = self.conns.get_mut(&id) {
@@ -406,8 +417,8 @@ impl Lobby {
 
     /// Debug: put a weapon in the Melee or Ranged slot (`None` = the class starter of that slot, which for Ranged is no weapon unless the class has one).
     /// Same guards as `debug_loadout_if`; `hero_sheet` still checks proficiency on Ready and Start.
-    fn debug_equip_if(&mut self, allowed: bool, id: u32, slot: EquipSlot, item: Option<ItemId>) {
-        if !self.debug_allowed(allowed, id) {
+    fn debug_equip_if(&mut self, id: u32, slot: EquipSlot, item: Option<ItemId>) {
+        if !self.debug_allowed(id) {
             return;
         }
         match slot {
@@ -424,12 +435,12 @@ impl Lobby {
     }
 
     /// The guards every debug waiting-room message shares; sends the error and returns false when refused.
-    fn debug_allowed(&self, allowed: bool, id: u32) -> bool {
-        if !allowed {
+    fn debug_allowed(&self, id: u32) -> bool {
+        let Some(c) = self.conns.get(&id) else { return false };
+        if !c.debug {
             self.error(id, "Debug is off.");
             return false;
         }
-        let Some(c) = self.conns.get(&id) else { return false };
         let Some(room) = c.room.and_then(|r| self.rooms.get(&r)) else {
             self.error(id, "Join a dungeon first.");
             return false;
@@ -445,6 +456,11 @@ impl Lobby {
         };
         self.error(id, msg);
         false
+    }
+
+    /// The connection's debug flag (false if it is gone).
+    pub fn is_debug(&self, id: u32) -> bool {
+        self.conns.get(&id).map_or(false, |c| c.debug)
     }
 
     /// The character's saved build, with this connection's debug picks and pool on top.
@@ -492,6 +508,18 @@ impl Lobby {
         )
     }
 
+    /// The room's run, built from its members; it is a debug run exactly when the room is.
+    fn new_run(&self, rid: u32, seed: u64) -> Option<Run> {
+        let room = self.rooms.get(&rid)?;
+        let members = self.members_of(rid)?;
+        let choice = match room.level {
+            LevelId::Dungeon => LevelChoice::Dungeon { boss: room.boss },
+        };
+        let mut run = Run::new(rid, members, seed, choice);
+        run.debug = room.debug;
+        Some(run)
+    }
+
     fn start(&mut self, id: u32) {
         let Some(rid) = self.conns.get(&id).and_then(|c| c.room) else { return };
         let Some(room) = self.rooms.get(&rid) else { return };
@@ -511,13 +539,13 @@ impl Lobby {
                 return;
             }
         }
-        let Some(members) = self.members_of(rid) else { return };
-        let seed: u64 = rand::random();
-        let choice = match room.level {
-            LevelId::Dungeon => LevelChoice::Dungeon { boss: room.boss },
-        };
+        // Defence in depth: the join check keeps the kinds apart already.
+        if room.members.iter().any(|m| self.conns.get(m).map_or(true, |c| c.debug != room.debug)) {
+            self.error(id, "Mixed party.");
+            return;
+        }
         let boss = room.boss;
-        let run = Run::new(rid, members, seed, choice);
+        let Some(run) = self.new_run(rid, rand::random()) else { return };
         tracing::info!("run {rid} started: {} player(s), {:?} boss {:?}{}", run.players.len(), run.level.id(), run.level.boss_id(), if boss.is_some() { " (chosen)" } else { "" });
         let (tx, rx) = unbounded_channel();
         self.rooms.get_mut(&rid).unwrap().run_tx = Some(tx);
@@ -565,9 +593,10 @@ impl Lobby {
         self.broadcast_lobby();
     }
 
-    fn summaries(&self) -> Vec<RunSummary> {
+    fn summaries_for(&self, debug: bool) -> Vec<RunSummary> {
         self.rooms
             .iter()
+            .filter(|(_, r)| r.debug == debug)
             .map(|(id, r)| RunSummary {
                 id: *id,
                 name: r.name.clone(),
@@ -580,14 +609,14 @@ impl Lobby {
 
     fn send_lobby_to(&self, id: u32) {
         if let Some(c) = self.conns.get(&id) {
-            send(&c.tx, &ServerMsg::Lobby { runs: self.summaries() });
+            send(&c.tx, &ServerMsg::Lobby { runs: self.summaries_for(c.debug) });
         }
     }
 
     fn broadcast_lobby(&self) {
-        let msg = ServerMsg::Lobby { runs: self.summaries() };
+        let (debug_list, normal_list) = (ServerMsg::Lobby { runs: self.summaries_for(true) }, ServerMsg::Lobby { runs: self.summaries_for(false) });
         for c in self.conns.values().filter(|c| c.room.is_none()) {
-            send(&c.tx, &msg);
+            send(&c.tx, if c.debug { &debug_list } else { &normal_list });
         }
     }
 
@@ -636,8 +665,8 @@ mod tests {
     use crate::defs::loadout::{Loadout, Pick, Source};
     use crate::protocol::ClassId;
 
-    fn character(account: i32, id: i32, class: ClassId) -> Character {
-        Character { id, account_id: account, name: format!("hero{id}"), class, progress: Progress::new(class), debug: false }
+    fn character(account: i32, id: i32, class: ClassId, debug: bool) -> Character {
+        Character { id, account_id: account, name: format!("hero{id}"), class, progress: Progress::new(class), debug }
     }
 
     fn test_record(account: i32, character: i32) -> RunRecord {
@@ -660,7 +689,7 @@ mod tests {
         let b = join(&mut l, 2, ClassId::Paladin);
         let (tx, rx) = unbounded_channel();
         std::mem::forget(rx);
-        l.connect(3, tx); // no character yet
+        l.connect(3, false, tx); // no character yet
         l.handle(a, ClientMsg::CreateRun { name: "running".into() });
         l.handle(a, ClientMsg::StartRun);
         l.handle(b, ClientMsg::CreateRun { name: "waiting".into() });
@@ -680,10 +709,19 @@ mod tests {
 
     /// Connects `account` and selects a character for it; returns the connection id.
     fn join(l: &mut Lobby, account: i32, class: ClassId) -> u32 {
+        join_kind(l, account, class, false)
+    }
+
+    /// The same for a debug connection (a debug account's character).
+    fn join_debug(l: &mut Lobby, account: i32, class: ClassId) -> u32 {
+        join_kind(l, account, class, true)
+    }
+
+    fn join_kind(l: &mut Lobby, account: i32, class: ClassId, debug: bool) -> u32 {
         let (tx, rx) = unbounded_channel();
         std::mem::forget(rx);
-        let id = l.connect(account, tx);
-        l.set_character(id, character(account, account * 10, class));
+        let id = l.connect(account, debug, tx);
+        l.set_character(id, character(account, account * 10, class, debug));
         id
     }
 
@@ -717,16 +755,16 @@ mod tests {
         let mut l = shared.lock().unwrap();
         let (tx, rx) = unbounded_channel();
         std::mem::forget(rx);
-        let id = l.connect(1, tx);
+        let id = l.connect(1, false, tx);
         l.handle(id, ClientMsg::CreateRun { name: "r".into() });
         assert!(l.rooms.is_empty(), "no character, no room");
 
-        l.set_character(id, character(2, 99, ClassId::Wizard));
+        l.set_character(id, character(2, 99, ClassId::Wizard, false));
         assert!(l.conns[&id].character.is_none(), "someone else's character");
-        l.set_character(id, character(1, 10, ClassId::Barbarian));
+        l.set_character(id, character(1, 10, ClassId::Barbarian, false));
         l.handle(id, ClientMsg::CreateRun { name: "r".into() });
         assert!(l.can_select(id).is_err(), "in a room");
-        l.set_character(id, character(1, 11, ClassId::ElvenRanger));
+        l.set_character(id, character(1, 11, ClassId::ElvenRanger, false));
         assert_eq!(l.conns[&id].character.as_ref().unwrap().id, 10);
         l.handle(id, ClientMsg::LeaveRun);
         assert!(l.can_select(id).is_ok());
@@ -738,7 +776,7 @@ mod tests {
         let mut l = shared.lock().unwrap();
         let (tx, rx) = unbounded_channel();
         std::mem::forget(rx);
-        let none = l.connect(5, tx);
+        let none = l.connect(5, false, tx);
         assert_eq!(l.can_change(none), Err("Choose a character first."));
         let id = join(&mut l, 1, ClassId::Wizard);
         assert_eq!(l.can_change(id), Ok((10, ClassId::Wizard)), "the lobby is fine");
@@ -777,7 +815,7 @@ mod tests {
             let mut l = shared.lock().unwrap();
             let (tx, rx) = unbounded_channel();
             std::mem::forget(rx);
-            let id = l.connect(a, tx);
+            let id = l.connect(a, false, tx);
             l.set_character(id, played.clone());
             l.handle(id, ClientMsg::CreateRun { name: "r".into() });
             (l.conns[&id].room.unwrap(), id)
@@ -839,22 +877,25 @@ mod tests {
     async fn debug_loadout_is_refused_when_it_must_be() {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
-        let a = join(&mut l, 1, ClassId::Barbarian);
+        let a = join_debug(&mut l, 1, ClassId::Barbarian);
         let (p, s) = (pick(AbilityId::Strike), pick(AbilityId::Charge));
 
-        l.debug_loadout_if(true, a, p, s); // outside a room
+        l.debug_loadout_if(a, p, s); // outside a room
         assert!(!l.conns[&a].debug_loadout && l.conns[&a].loadout.is_none());
 
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
-        l.debug_loadout_if(false, a, p, s); // debug off
-        assert!(l.conns[&a].loadout.is_none());
+        let (n, mut nrx) = join_with(&mut l, 2, ClassId::Barbarian, Progress::new(ClassId::Barbarian)); // a normal connection
+        l.handle(n, ClientMsg::CreateRun { name: "n".into() });
+        l.debug_loadout_if(n, p, s); // debug off
+        assert!(l.conns[&n].loadout.is_none() && !l.conns[&n].debug_loadout);
+        assert_eq!(errors(&mut nrx), ["Debug is off."]);
 
         l.handle(a, ClientMsg::SetReady { ready: true });
-        l.debug_loadout_if(true, a, p, s); // ready
+        l.debug_loadout_if(a, p, s); // ready
         assert!(l.conns[&a].loadout.is_none());
 
         l.handle(a, ClientMsg::SetReady { ready: false });
-        l.debug_loadout_if(true, a, p, s);
+        l.debug_loadout_if(a, p, s);
         assert_eq!(l.conns[&a].loadout, Some(Loadout { primary: p, secondary: s }));
         assert!(l.conns[&a].debug_loadout);
     }
@@ -863,9 +904,9 @@ mod tests {
     async fn a_debug_loadout_reaches_the_run() {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
-        let a = join(&mut l, 1, ClassId::Barbarian);
+        let a = join_debug(&mut l, 1, ClassId::Barbarian);
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
-        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::Charge));
+        l.debug_loadout_if(a, pick(AbilityId::Strike), pick(AbilityId::Charge));
         let rid = l.conns[&a].room.unwrap();
         let members = l.members_of(rid).unwrap();
         assert!(members[0].debug_loadout);
@@ -878,11 +919,11 @@ mod tests {
     async fn a_new_character_resets_the_debug_loadout() {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
-        let a = join(&mut l, 1, ClassId::Barbarian);
+        let a = join_debug(&mut l, 1, ClassId::Barbarian);
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
-        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::Charge));
+        l.debug_loadout_if(a, pick(AbilityId::Strike), pick(AbilityId::Charge));
         l.handle(a, ClientMsg::LeaveRun);
-        l.set_character(a, character(1, 11, ClassId::Wizard));
+        l.set_character(a, character(1, 11, ClassId::Wizard, true));
         assert!(l.conns[&a].loadout.is_none() && !l.conns[&a].debug_loadout);
     }
 
@@ -890,10 +931,10 @@ mod tests {
     async fn ready_and_start_refuse_an_invalid_loadout() {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
-        let host = join(&mut l, 1, ClassId::Wizard);
+        let host = join_debug(&mut l, 1, ClassId::Wizard);
         let (tx, mut host_rx) = unbounded_channel();
         l.conns.get_mut(&host).unwrap().tx = tx;
-        let guest = join(&mut l, 2, ClassId::Wizard);
+        let guest = join_debug(&mut l, 2, ClassId::Wizard);
         let (tx, mut guest_rx) = unbounded_channel();
         l.conns.get_mut(&guest).unwrap().tx = tx;
         l.handle(host, ClientMsg::CreateRun { name: "r".into() });
@@ -902,18 +943,18 @@ mod tests {
         errors(&mut guest_rx);
         errors(&mut host_rx);
 
-        l.debug_loadout_if(true, guest, pick(AbilityId::Fireball), pick(AbilityId::MagicMissile));
+        l.debug_loadout_if(guest, pick(AbilityId::Fireball), pick(AbilityId::MagicMissile));
         l.handle(guest, ClientMsg::SetReady { ready: true });
         assert!(!l.conns[&guest].ready);
         let e = errors(&mut guest_rx);
         assert!(e.iter().any(|m| m.contains("Fireball")), "{e:?}");
 
         // A valid one is accepted.
-        l.debug_loadout_if(true, guest, pick(AbilityId::MagicMissile), pick(AbilityId::Fireball));
+        l.debug_loadout_if(guest, pick(AbilityId::MagicMissile), pick(AbilityId::Fireball));
         l.handle(guest, ClientMsg::SetReady { ready: true });
         assert!(l.conns[&guest].ready);
 
-        l.debug_loadout_if(true, host, pick(AbilityId::Fireball), pick(AbilityId::MagicMissile));
+        l.debug_loadout_if(host, pick(AbilityId::Fireball), pick(AbilityId::MagicMissile));
         l.handle(host, ClientMsg::StartRun);
         assert!(l.rooms[&rid].run_tx.is_none(), "no run");
         let e = errors(&mut host_rx);
@@ -925,10 +966,10 @@ mod tests {
         use crate::defs::items::{EquipSlot, ItemId};
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
-        let a = join(&mut l, 1, ClassId::Barbarian);
+        let a = join_debug(&mut l, 1, ClassId::Barbarian);
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
-        l.debug_equip_if(true, a, EquipSlot::Ranged, Some(ItemId::ThrowingAxes));
-        l.debug_loadout_if(true, a, pick(AbilityId::Hurl), pick(AbilityId::Charge));
+        l.debug_equip_if(a, EquipSlot::Ranged, Some(ItemId::ThrowingAxes));
+        l.debug_loadout_if(a, pick(AbilityId::Hurl), pick(AbilityId::Charge));
         l.handle(a, ClientMsg::SetReady { ready: true });
         assert!(l.conns[&a].ready, "Hurl with Throwing Axes passes the sheet");
         let rid = l.conns[&a].room.unwrap();
@@ -945,34 +986,37 @@ mod tests {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
         let (tx, mut rx) = unbounded_channel();
-        let a = join(&mut l, 1, ClassId::Barbarian);
+        let a = join_debug(&mut l, 1, ClassId::Barbarian);
         l.conns.get_mut(&a).unwrap().tx = tx;
         let axes = Some(ItemId::ThrowingAxes);
         let slot = EquipSlot::Ranged;
         let none = |l: &Lobby| l.conns[&a].debug_equipment == Equipment::starter(ClassId::Barbarian) && !l.conns[&a].debug_loadout;
 
-        l.debug_equip_if(true, a, slot, axes);
+        l.debug_equip_if(a, slot, axes);
         assert_eq!(errors(&mut rx), ["Join a dungeon first."]);
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
-        l.debug_equip_if(false, a, slot, axes);
-        assert_eq!(errors(&mut rx), ["Debug is off."]);
-        l.debug_equip_if(false, a, EquipSlot::Armor, None);
-        assert_eq!(errors(&mut rx), ["Debug is off."], "the guards come before Only weapons");
-        l.debug_equip_if(true, a, EquipSlot::Armor, Some(ItemId::PlateArmor));
+        let (n, mut nrx) = join_with(&mut l, 2, ClassId::Barbarian, Progress::new(ClassId::Barbarian)); // a normal connection
+        l.handle(n, ClientMsg::CreateRun { name: "n".into() });
+        l.debug_equip_if(n, slot, axes);
+        assert_eq!(errors(&mut nrx), ["Debug is off."]);
+        l.debug_equip_if(n, EquipSlot::Armor, None);
+        assert_eq!(errors(&mut nrx), ["Debug is off."], "the guards come before Only weapons");
+        assert!(none(&l) && l.conns[&n].debug_equipment == Equipment::starter(ClassId::Barbarian));
+        l.debug_equip_if(a, EquipSlot::Armor, Some(ItemId::PlateArmor));
         assert_eq!(errors(&mut rx), ["Only weapons."]);
         l.handle(a, ClientMsg::SetReady { ready: true });
         errors(&mut rx);
-        l.debug_equip_if(true, a, slot, axes);
+        l.debug_equip_if(a, slot, axes);
         assert_eq!(errors(&mut rx), ["Not while ready."]);
         l.handle(a, ClientMsg::SetReady { ready: false });
         l.forget_character(10);
-        l.debug_equip_if(true, a, slot, axes);
+        l.debug_equip_if(a, slot, axes);
         assert_eq!(errors(&mut rx), ["Choose a character first."]);
         assert!(none(&l));
-        l.conns.get_mut(&a).unwrap().character = Some(character(1, 10, ClassId::Barbarian));
+        l.conns.get_mut(&a).unwrap().character = Some(character(1, 10, ClassId::Barbarian, true));
         let rid = l.conns[&a].room.unwrap();
         l.rooms.get_mut(&rid).unwrap().run_tx = Some(unbounded_channel().0);
-        l.debug_equip_if(true, a, slot, axes);
+        l.debug_equip_if(a, slot, axes);
         assert_eq!(errors(&mut rx), ["Not during a run."]);
         assert!(none(&l));
     }
@@ -984,17 +1028,17 @@ mod tests {
         use crate::defs::items::{EquipSlot, ItemId};
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
-        let a = join(&mut l, 1, ClassId::Barbarian);
+        let a = join_debug(&mut l, 1, ClassId::Barbarian);
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
         assert_eq!(l.build_of(a).unwrap().extra, Attributes::default());
-        l.debug_equip_if(true, a, EquipSlot::Melee, Some(ItemId::WarHammer));
-        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::GroundSlam));
+        l.debug_equip_if(a, EquipSlot::Melee, Some(ItemId::WarHammer));
+        l.debug_loadout_if(a, pick(AbilityId::Strike), pick(AbilityId::GroundSlam));
         let b = l.build_of(a).unwrap();
         assert_eq!(start_attrs(ClassId::Barbarian).plus(b.extra).get(Attr::Str), 17);
         assert!(hero_sheet(ClassId::Barbarian, &b).is_ok());
         // A new character drops the debug picks and the lift with them.
         l.handle(a, ClientMsg::LeaveRun);
-        l.set_character(a, character(1, 11, ClassId::Barbarian));
+        l.set_character(a, character(1, 11, ClassId::Barbarian, true));
         l.handle(a, ClientMsg::CreateRun { name: "r2".into() });
         assert_eq!(l.build_of(a).unwrap().extra, Attributes::default());
         assert_eq!(l.build_of(a).unwrap().equipment, Equipment::starter(ClassId::Barbarian));
@@ -1021,33 +1065,41 @@ mod tests {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
         let (tx, mut rx) = unbounded_channel();
-        let a = join(&mut l, 1, ClassId::ElvenRanger);
+        let a = join_debug(&mut l, 1, ClassId::ElvenRanger);
         l.conns.get_mut(&a).unwrap().tx = tx;
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
         assert_eq!(l.conns[&a].debug_equipment.get(EquipSlot::Ranged), Some(ItemId::ElvenBow));
-        l.debug_equip_if(true, a, EquipSlot::Ranged, None);
+        l.debug_equip_if(a, EquipSlot::Ranged, None);
         assert_eq!(l.conns[&a].debug_equipment.get(EquipSlot::Ranged), None);
         // Shoot needs the ranged weapon, so the Ranger without a bow is refused at Ready.
-        l.debug_loadout_if(true, a, pick(AbilityId::Shoot), pick(AbilityId::SummonWolf));
+        l.debug_loadout_if(a, pick(AbilityId::Shoot), pick(AbilityId::SummonWolf));
         l.handle(a, ClientMsg::SetReady { ready: true });
         assert!(!l.conns[&a].ready);
         let e = errors(&mut rx);
         assert!(e.iter().any(|m| m.contains("Shoot") && m.contains("ranged")), "{e:?}");
         // Putting the bow back is allowed.
-        l.debug_equip_if(true, a, EquipSlot::Ranged, Some(ItemId::ElvenBow));
+        l.debug_equip_if(a, EquipSlot::Ranged, Some(ItemId::ElvenBow));
         l.handle(a, ClientMsg::SetReady { ready: true });
         assert!(l.conns[&a].ready);
     }
 
-    fn character_with(account: i32, id: i32, class: ClassId, progress: Progress) -> Character {
-        Character { id, account_id: account, name: format!("hero{id}"), class, progress, debug: false }
+    fn character_with(account: i32, id: i32, class: ClassId, progress: Progress, debug: bool) -> Character {
+        Character { id, account_id: account, name: format!("hero{id}"), class, progress, debug }
     }
 
     /// Connects `account` with a character holding `progress`; returns the connection id and its receiver.
     fn join_with(l: &mut Lobby, account: i32, class: ClassId, progress: Progress) -> (u32, tokio::sync::mpsc::UnboundedReceiver<Message>) {
+        join_with_kind(l, account, class, progress, false)
+    }
+
+    fn join_with_debug(l: &mut Lobby, account: i32, class: ClassId, progress: Progress) -> (u32, tokio::sync::mpsc::UnboundedReceiver<Message>) {
+        join_with_kind(l, account, class, progress, true)
+    }
+
+    fn join_with_kind(l: &mut Lobby, account: i32, class: ClassId, progress: Progress, debug: bool) -> (u32, tokio::sync::mpsc::UnboundedReceiver<Message>) {
         let (tx, rx) = unbounded_channel();
-        let id = l.connect(account, tx);
-        l.set_character(id, character_with(account, account * 10, class, progress));
+        let id = l.connect(account, debug, tx);
+        l.set_character(id, character_with(account, account * 10, class, progress, debug));
         (id, rx)
     }
 
@@ -1132,7 +1184,7 @@ mod tests {
         p.inventory.push(ItemId::ThrowingAxes);
         p.equipment.set(EquipSlot::Ranged, Some(ItemId::ThrowingAxes));
         p.loadout.primary = pick(AbilityId::Strike);
-        let (a, mut rx) = join_with(&mut l, 1, ClassId::Barbarian, p);
+        let (a, mut rx) = join_with_debug(&mut l, 1, ClassId::Barbarian, p);
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
         let room = last(&mut rx, "Room").unwrap();
         let me = &room["players"][0];
@@ -1143,8 +1195,8 @@ mod tests {
         assert_eq!(weapons, vec![format!("{starter:?}"), "ThrowingAxes".to_string()]);
 
         // The debug picks win while they are set.
-        l.debug_equip_if(true, a, EquipSlot::Ranged, None);
-        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::GroundSlam));
+        l.debug_equip_if(a, EquipSlot::Ranged, None);
+        l.debug_loadout_if(a, pick(AbilityId::Strike), pick(AbilityId::GroundSlam));
         l.send_room(l.conns[&a].room.unwrap());
         let room = last(&mut rx, "Room").unwrap();
         let me = &room["players"][0];
@@ -1158,10 +1210,10 @@ mod tests {
         let mut l = shared.lock().unwrap();
         let mut p = Progress::new(ClassId::Barbarian);
         p.bought = Attributes::new(2, 0, 0, 0, 0, 0);
-        let (a, _rx) = join_with(&mut l, 1, ClassId::Barbarian, p);
+        let (a, _rx) = join_with_debug(&mut l, 1, ClassId::Barbarian, p);
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
         assert_eq!(l.build_of(a).unwrap().extra, Attributes::new(2, 0, 0, 0, 0, 0), "no debug, no lift");
-        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::Charge));
+        l.debug_loadout_if(a, pick(AbilityId::Strike), pick(AbilityId::Charge));
         let b = l.build_of(a).unwrap();
         assert_eq!(b.extra.get(Attr::Str), 2 + debug_lift(ClassId::Barbarian, &Build { extra: Attributes::new(2, 0, 0, 0, 0, 0), ..b.clone() }).get(Attr::Str));
         assert!(b.extra.get(Attr::Str) >= 2, "the two bought STR stay");
@@ -1196,16 +1248,16 @@ mod tests {
         p.inventory.push(ItemId::WarHammer);
         p.equipment.set(EquipSlot::Melee, Some(ItemId::WarHammer));
         p.equipment.set(EquipSlot::Ranged, Some(ItemId::ThrowingAxes));
-        let (a, _rx) = join_with(&mut l, 1, ClassId::Barbarian, p);
+        let (a, _rx) = join_with_debug(&mut l, 1, ClassId::Barbarian, p);
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
-        l.debug_loadout_if(true, a, pick(AbilityId::Strike), pick(AbilityId::Charge));
+        l.debug_loadout_if(a, pick(AbilityId::Strike), pick(AbilityId::Charge));
         let e = l.build_of(a).unwrap().equipment;
         assert_eq!((e.get(EquipSlot::Melee), e.get(EquipSlot::Ranged)), (Some(ItemId::WarHammer), Some(ItemId::ThrowingAxes)));
-        l.debug_equip_if(true, a, EquipSlot::Ranged, None);
+        l.debug_equip_if(a, EquipSlot::Ranged, None);
         let e = l.build_of(a).unwrap().equipment;
         assert_eq!((e.get(EquipSlot::Melee), e.get(EquipSlot::Ranged)), (Some(ItemId::WarHammer), None), "only the touched slot changes");
         l.handle(a, ClientMsg::LeaveRun);
-        l.set_character(a, character_with(1, 10, ClassId::Barbarian, Progress::new(ClassId::Barbarian)));
+        l.set_character(a, character_with(1, 10, ClassId::Barbarian, Progress::new(ClassId::Barbarian), true));
         assert_eq!(l.conns[&a].debug_touched, [false; EquipSlot::COUNT]);
     }
 
@@ -1213,9 +1265,9 @@ mod tests {
     async fn a_real_set_loadout_replaces_the_debug_picks() {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
-        let (a, _rx) = join_with(&mut l, 1, ClassId::Barbarian, Progress::new(ClassId::Barbarian));
+        let (a, _rx) = join_with_debug(&mut l, 1, ClassId::Barbarian, Progress::new(ClassId::Barbarian));
         l.handle(a, ClientMsg::CreateRun { name: "r".into() });
-        l.debug_loadout_if(true, a, pick(AbilityId::Hurl), pick(AbilityId::Charge));
+        l.debug_loadout_if(a, pick(AbilityId::Hurl), pick(AbilityId::Charge));
         assert_eq!(l.build_of(a).unwrap().loadout.primary, pick(AbilityId::Hurl));
         let mut p = Progress::new(ClassId::Barbarian);
         p.rev = 1;
@@ -1225,11 +1277,119 @@ mod tests {
         let b = l.build_of(a).unwrap();
         assert_eq!((b.loadout.primary, b.loadout.secondary), (pick(AbilityId::Strike), pick(AbilityId::GroundSlam)));
         // Debug weapon overrides survive, and keep the debug flag.
-        l.debug_equip_if(true, a, EquipSlot::Ranged, None);
-        l.debug_loadout_if(true, a, pick(AbilityId::Hurl), pick(AbilityId::Charge));
+        l.debug_equip_if(a, EquipSlot::Ranged, None);
+        l.debug_loadout_if(a, pick(AbilityId::Hurl), pick(AbilityId::Charge));
         let mut p = Progress::new(ClassId::Barbarian);
         p.rev = 2;
         l.apply_progress(10, p);
         assert!(l.conns[&a].loadout.is_none() && l.conns[&a].debug_loadout && l.conns[&a].debug_touched[EquipSlot::Ranged as usize]);
+    }
+
+    /// A debug and a normal connection with their own rooms.
+    fn two_kinds(l: &mut Lobby) -> (u32, u32, u32, u32) {
+        let d = join_debug(l, 1, ClassId::Wizard);
+        let n = join(l, 2, ClassId::Wizard);
+        l.handle(d, ClientMsg::CreateRun { name: "dbg".into() });
+        l.handle(n, ClientMsg::CreateRun { name: "norm".into() });
+        let (rd, rn) = (l.conns[&d].room.unwrap(), l.conns[&n].room.unwrap());
+        (d, n, rd, rn)
+    }
+
+    #[tokio::test]
+    async fn rooms_of_the_other_kind_cannot_be_joined_or_seen() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (tx, mut drx) = unbounded_channel();
+        let d = l.connect(1, true, tx);
+        l.set_character(d, character(1, 10, ClassId::Wizard, true));
+        let (n, mut nrx) = join_with(&mut l, 2, ClassId::Wizard, Progress::new(ClassId::Wizard));
+        l.handle(d, ClientMsg::CreateRun { name: "dbg".into() });
+        l.handle(n, ClientMsg::CreateRun { name: "norm".into() });
+        let (rd, rn) = (l.conns[&d].room.unwrap(), l.conns[&n].room.unwrap());
+        // A second member of each kind keeps the room open when the first one leaves.
+        let d2 = join_debug(&mut l, 3, ClassId::Wizard);
+        let n2 = join(&mut l, 4, ClassId::Wizard);
+        l.handle(d2, ClientMsg::JoinRun { run_id: rd });
+        l.handle(n2, ClientMsg::JoinRun { run_id: rn });
+        assert_eq!((l.rooms[&rd].members.clone(), l.rooms[&rn].members.clone()), (vec![d, d2], vec![n, n2]));
+        assert_eq!(l.rooms[&rd].debug, true);
+        assert_eq!(l.rooms[&rn].debug, false);
+        let ids = |v: Vec<RunSummary>| v.into_iter().map(|r| r.id).collect::<Vec<_>>();
+        assert_eq!(ids(l.summaries_for(false)), [rn]);
+        assert_eq!(ids(l.summaries_for(true)), [rd]);
+
+        errors(&mut nrx);
+        l.handle(n, ClientMsg::LeaveRun);
+        l.handle(n, ClientMsg::JoinRun { run_id: rd });
+        assert_eq!(l.conns[&n].room, None);
+        assert_eq!(l.rooms[&rd].members, [d, d2]);
+        assert_eq!(errors(&mut nrx), ["That dungeon is full or has already started."]);
+
+        errors(&mut drx);
+        l.handle(d, ClientMsg::LeaveRun);
+        l.handle(d, ClientMsg::JoinRun { run_id: rn });
+        assert_eq!(l.conns[&d].room, None);
+        assert_eq!(l.rooms[&rn].members, [n2]);
+        assert_eq!(errors(&mut drx), ["That dungeon is full or has already started."]);
+        // The lobby list each one received lists its own kind only.
+        let lists = |rx: &mut tokio::sync::mpsc::UnboundedReceiver<Message>| last(rx, "Lobby").map(|m| m["runs"].as_array().unwrap().iter().map(|r| r["id"].as_u64().unwrap() as u32).collect::<Vec<_>>());
+        assert_eq!(lists(&mut nrx), Some(vec![rn]));
+        l.handle(d, ClientMsg::LeaveRun);
+        assert_eq!(lists(&mut drx), Some(vec![rd]));
+    }
+
+    #[tokio::test]
+    async fn debug_waiting_room_messages_need_a_debug_connection() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (d, n, _, _) = two_kinds(&mut l);
+        let (p, s) = (pick(AbilityId::Fireball), pick(AbilityId::MagicMissile));
+        l.debug_loadout_if(n, p, s);
+        l.debug_equip_if(n, EquipSlot::Ranged, Some(ItemId::ElvenBow));
+        assert!(l.conns[&n].loadout.is_none() && !l.conns[&n].debug_loadout && l.conns[&n].debug_touched == [false; EquipSlot::COUNT]);
+        l.debug_loadout_if(d, p, s);
+        l.debug_equip_if(d, EquipSlot::Ranged, Some(ItemId::ElvenBow));
+        assert!(l.conns[&d].loadout.is_some() && l.conns[&d].debug_loadout && l.conns[&d].debug_touched[EquipSlot::Ranged as usize]);
+        assert!(l.is_debug(d) && !l.is_debug(n) && !l.is_debug(999));
+    }
+
+    #[tokio::test]
+    async fn a_character_whose_account_flag_changed_closes_the_connection() {
+        for conn_debug in [false, true] {
+            let shared = new_shared(None);
+            let mut l = shared.lock().unwrap();
+            let (tx, rx) = unbounded_channel();
+            std::mem::forget(rx);
+            let id = l.connect(1, conn_debug, tx);
+            l.set_character(id, character(1, 10, ClassId::Wizard, !conn_debug));
+            assert!(!l.conns.contains_key(&id), "kicked");
+            let (tx, rx) = unbounded_channel();
+            std::mem::forget(rx);
+            let id = l.connect(1, conn_debug, tx);
+            l.set_character(id, character(1, 10, ClassId::Wizard, conn_debug));
+            assert!(l.conns[&id].character.is_some(), "the matching kind is accepted");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_debug_room_starts_a_debug_run_and_a_normal_room_a_normal_one() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (_, _, rd, rn) = two_kinds(&mut l);
+        assert!(l.new_run(rd, 1).unwrap().debug);
+        assert!(!l.new_run(rn, 1).unwrap().debug);
+    }
+
+    #[tokio::test]
+    async fn a_mixed_party_does_not_start() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let (d, n, _, rn) = two_kinds(&mut l);
+        // Force the impossible: a debug connection inside the normal room.
+        l.rooms.get_mut(&rn).unwrap().members.push(d);
+        l.conns.get_mut(&d).unwrap().room = Some(rn);
+        l.conns.get_mut(&d).unwrap().ready = true;
+        l.handle(n, ClientMsg::StartRun);
+        assert!(l.rooms[&rn].run_tx.is_none(), "nothing started");
     }
 }

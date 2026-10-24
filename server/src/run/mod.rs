@@ -148,6 +148,8 @@ pub struct Run {
     pub ended: Option<(bool, f64)>,
     /// Someone used debug mode (immortal): no XP is banked for this run.
     pub debug_used: bool,
+    /// A debug room's run (set by the lobby); Task 3 makes it drive the debug behaviour.
+    pub debug: bool,
     pub srv_ms: f32,
     pub log: rules_log::RulesLog,
     /// Test-only capture of the last `Damage` that reached `hurt_monster` or `hurt_player`.
@@ -182,6 +184,7 @@ impl Run {
             rng,
             ended: None,
             debug_used: false,
+            debug: false,
             srv_ms: 0.0,
             log: rules_log::RulesLog::default(),
             #[cfg(test)]
