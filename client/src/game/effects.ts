@@ -26,7 +26,7 @@ export const DEPTH = {
   /** The darkness (light canvas). Every figure and shot is under it, heroes too. */
   fog: 7000,
   /** Smoke from torches in sight: just over the darkness (it rises into the dark wall top), only from seen, lit torches. */
-  torchSmoke: 7000.5,
+  torchSmoke: 7000.6,
   /** Lich drain beams: above the fog, they show even where the hero cannot see. */
   beam: 7001,
   /** Sound text ("grrrr", the sleeper's Z): above the darkness, under the damage numbers. */

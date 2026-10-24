@@ -29,7 +29,7 @@ describe('the dungeon air depths', () => {
     expect(new Set(air).size).toBe(air.length);
   });
   it('draws torch smoke just over the darkness and under the lich beams', () => {
-    expect(DEPTH.torchSmoke).toBeGreaterThan(DEPTH.fog);
+    expect(DEPTH.torchSmoke).toBeGreaterThan(DEPTH.fog + 0.5); // over the vision mask (fog + 0.5)
     expect(DEPTH.torchSmoke).toBeLessThan(DEPTH.beam);
   });
 });

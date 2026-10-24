@@ -21,6 +21,11 @@ const MARGIN = 1;
 /** Phaser's blend modes NORMAL and ADD (a runtime import of Phaser would not load in unit tests). */
 const NORMAL = 0;
 const ADD = 1;
+/** The two haze layers: alpha, tile scale, and drift (px/s) of the cloud pattern. */
+const HAZE = [[0.1, 1.6, 2.2, 0.6], [0.07, 1.1, -1.4, 1.1]] as const;
+/** Pixels the haze sprites reach beyond the view, and the step their size grows in. */
+const HAZE_MARGIN = 32;
+const HAZE_STEP = 64;
 const EMBER_COLOURS = [0xffb040, 0xff6a20];
 
 /** A torch in the window; its smoke needs `lit` and a seen, lit floor tile. */
@@ -131,10 +136,9 @@ export class Mood {
       // Staggered first lives, so the clouds do not all appear and vanish together.
       this.clouds.push({ x: -1000, y: -1000, vx: 0, vy: 0, life: Math.random() * 2, max: 1, r: 10, motes });
     }
-    const W = map.w * TILE;
-    const H = map.h * TILE;
-    for (const [alpha, scale] of [[0.1, 1.6], [0.07, 1.1]] as const)
-      this.haze.push(this.own(scene.add.tileSprite(0, 0, W, H, HAZE_TEX).setOrigin(0).setTileScale(scale).setTint(0x8a7c6c).setAlpha(alpha).setDepth(DEPTH.airHaze)));
+    // Haze sprites cover the view plus a margin only (a TileSprite allocates its full size); `update` resizes them.
+    for (const [alpha, scale] of HAZE)
+      this.haze.push(this.own(scene.add.tileSprite(0, 0, 64, 64, HAZE_TEX).setOrigin(0).setTileScale(scale).setTint(0x8a7c6c).setAlpha(alpha).setDepth(DEPTH.airHaze)));
   }
 
   /** Read-only counts, for tests. */
@@ -168,6 +172,7 @@ export class Mood {
     this.haze = [];
   }
 
+  /** Advances the air by `dt` s: `view` is the camera window (world px), `torches` and `shots` what the snapshot shows. */
   update(dt: number, view: Phaser.Geom.Rectangle, torches: AirTorch[], shots: AirShot[]): void {
     if (this.gone) return;
     this.t += dt;
@@ -178,9 +183,20 @@ export class Mood {
     this.updateTorchSmoke(dt, view, torches);
     this.updateLava(dt);
     this.advance(dt);
-    // Haze: two layers drifting slowly at different speeds.
-    this.haze[0].setVisible(this.on.haze).setTilePosition(this.t * 2.2, this.t * 0.6);
-    this.haze[1].setVisible(this.on.haze).setTilePosition(-this.t * 1.4, this.t * 1.1);
+    this.updateHaze(view);
+  }
+
+  /** Haze: two layers drifting at different speeds; sprites follow the view, the pattern stays anchored to the world. */
+  private updateHaze(view: Phaser.Geom.Rectangle): void {
+    const w = Math.ceil((view.width + 2 * HAZE_MARGIN) / HAZE_STEP) * HAZE_STEP;
+    const h = Math.ceil((view.height + 2 * HAZE_MARGIN) / HAZE_STEP) * HAZE_STEP;
+    const px = Math.floor(view.x) - HAZE_MARGIN;
+    const py = Math.floor(view.y) - HAZE_MARGIN;
+    this.haze.forEach((s, i) => {
+      const [, scale, dx, dy] = HAZE[i];
+      if (w > s.width || h > s.height) s.setSize(Math.max(w, s.width), Math.max(h, s.height));
+      s.setVisible(this.on.haze).setPosition(px, py).setTilePosition(px / scale + this.t * dx, py / scale + this.t * dy);
+    });
   }
 
   private own<T extends { destroy(): void }>(o: T): T {
@@ -198,7 +214,17 @@ export class Mood {
       for (const t of from) if (t[0] + 1 > x0 && t[0] < x1 && t[1] + 1 > y0 && t[1] < y1) into.push(t);
     };
     pick(this.lava, this.lavaNow);
+    // Lava in unseen tiles must not spill smoke or embers into the seen view.
+    const w = this.map.w;
+    this.lavaNow = this.lavaNow.filter((t) => this.light.seenLit[t[1] * w + t[0]] === 1);
     pick(this.water, this.waterNow);
+  }
+
+  /** True when the tile under (x, y) is seen (a moving light lights its own tile). */
+  private seenAt(x: number, y: number): boolean {
+    const tx = Math.floor(x / TILE);
+    const ty = Math.floor(y / TILE);
+    return tx >= 0 && ty >= 0 && tx < this.map.w && ty < this.map.h && this.light.seenLit[ty * this.map.w + tx] === 1;
   }
 
   /** Brightness (0..1) and colour of the light on the tile under (x, y); 0 where unseen or unlit. */
@@ -308,6 +334,8 @@ export class Mood {
     const y1 = view.bottom + MARGIN * TILE;
     for (const m of shots) {
       if (m.x < x0 || m.x > x1 || m.y < y0 || m.y > y1) continue;
+      // The server sends lights without line of sight: only shots on a seen tile make air.
+      if (!this.seenAt(m.x, m.y)) continue;
       if (m.kind === LIGHT_KIND.Fire && trail) this.ember(m.x + (Math.random() - 0.5) * 6, m.y + (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 16, -rnd(6, 20), rnd(0.35, 0.8));
       if (m.kind === LIGHT_KIND.Blast) blasts.push(m);
     }

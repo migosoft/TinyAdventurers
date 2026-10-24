@@ -17,6 +17,7 @@ interface Drip {
   t: number;
 }
 
+/** The water drips of the dungeon air; the owner calls `update` every frame. */
 export class Drips {
   private drips: Drip[] = [];
   private freeDrops: Phaser.GameObjects.Image[] = [];
@@ -26,13 +27,15 @@ export class Drips {
   /** `own` registers each made object with the owner, which destroys them. */
   constructor(private scene: Phaser.Scene, private own: <T extends { destroy(): void }>(o: T) => T) {}
 
+  /** Drips in progress (falling or rippling). */
   get count(): number {
     return this.drips.length;
   }
 
-  /** Drops fall into the `water` tiles in view (about one per tile per `DRIP_EVERY` s), up to `MAX_DRIPS` at once; `on` false: none new, none shown. */
-  
-  /** Drops falling into water in view, each leaving two ripple rings (flattened for the 3/4 view) and a splash. */
+  /**
+   * Drops fall into the `water` tiles in view (about one per tile per `DRIP_EVERY` s), up to `MAX_DRIPS` at once;
+   * `on` false: none new, none shown. Each leaves two ripple rings (flattened for the 3/4 view) and a splash.
+   */
   update(dt: number, water: [number, number][], on: boolean): void {
     let c: number;
     [c, this.acc] = spawnCount(this.acc, dt, water.length, DRIP_EVERY);

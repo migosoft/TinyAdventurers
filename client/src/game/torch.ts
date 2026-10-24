@@ -12,7 +12,7 @@ function torchOffset(side: number): [number, number, boolean] {
   return side === 0 ? [0, -3, false] : side === 1 ? [1, 2, false] : [-1, 2, true];
 }
 
-/** The tip of the flame (px) for a torch at (x, y) on `side`: the frames' flame reaches about 17 px above the foot, half a pixel right of centre. */
+/** The tip of the flame (px) for a torch at (x, y) on `side`: the frames' flame reaches about 17 px above the foot, half a pixel towards the flame side. */
 export function flameTip(x: number, y: number, side: number): [number, number] {
   const [dx, dy, flip] = torchOffset(side);
   return [Math.round(x + dx) + (flip ? -0.5 : 0.5), Math.round(y + dy) - 17];

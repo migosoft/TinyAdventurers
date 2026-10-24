@@ -2,16 +2,22 @@
 
 /** Opacity of the light-coloured dust motes. */
 export const DUST_ALPHA = 0.55;
+/** Most dust clouds at once. */
 export const MAX_CLOUDS = 24;
+/** Most smoke puffs at once. */
 export const MAX_SMOKE = 200;
+/** Most embers at once. */
 export const MAX_EMBERS = 160;
+/** Most water drips at once. */
 export const MAX_DRIPS = 12;
-/** Seconds between smoke puffs / embers per lava tile, and between drips per source. */
+/** Seconds between smoke puffs per lava tile. */
 export const LAVA_SMOKE_EVERY = 4.2;
+/** Seconds between embers per lava tile. */
 export const LAVA_EMBER_EVERY = 1.08;
+/** Seconds between drips per water tile. */
 export const DRIP_EVERY = 7;
 
-/** Number of fog clouds for a world of `worldW` x `worldH` px: 7 per 240 tiles, clamped to 4..24. */
+/** Number of dust clouds for a world of `worldW` x `worldH` px: 7 per 240 tiles, clamped to 4..24. */
 export function cloudCount(worldW: number, worldH: number): number {
   const n = Math.round((7 * ((worldW / 16) * (worldH / 16))) / 240);
   return Math.min(MAX_CLOUDS, Math.max(4, n));
