@@ -27,9 +27,19 @@ const WAKE = 1;
 const BLAST = 2;
 
 /** Pocket: peak air speed along the motion, outward and swirl, as shares of the mover's speed. */
-const POCKET_ALONG = 0.8;
+const POCKET_ALONG = 0.7;
 const POCKET_OUT = 0.35;
 const POCKET_SWIRL = 0.3;
+/** Pocket reach: POCKET_REACH body radii, at least POCKET_MIN_REACH px. */
+const POCKET_REACH = 4;
+const POCKET_MIN_REACH = 24;
+/** The pocket centre sits this many body radii ahead of the mover. */
+const POCKET_AHEAD = 1;
+/** Swirls: radius (body radii, at least SWIRL_MIN_RADIUS px), sideways offset and distance behind the pocket centre (body radii). */
+const SWIRL_RADIUS = 2;
+const SWIRL_MIN_RADIUS = 10;
+const SWIRL_SIDE = 1.5;
+const SWIRL_BEHIND = 2;
 /** Wake shares of the projectile's speed, and its radius in px. */
 const WAKE_ALONG = 0.5;
 const WAKE_OUT = 0.3;
@@ -43,8 +53,8 @@ const BLAST_END_R = 56;
 const DRAFT_K = (2 * Math.PI) / 160;
 const DRAFT_W = (2 * Math.PI) / 20;
 
-/** Seconds a mover's push takes to fill its pocket: a held push settles at its peak speed. */
-const PUSH_FILL = WIND_DECAY;
+/** Seconds a mover's push takes to fill its pocket. A held push settles at about POCKET_ALONG * WIND_DECAY / PUSH_FILL (1.6 with 0.7, 0.45, 0.2) times the mover's speed in the centre, capped by WIND_MAX. */
+const PUSH_FILL = 0.2;
 
 export interface WindView {
   x: number;
@@ -279,14 +289,17 @@ export class Wind {
         this.stir(x, y, dx, dy, r, WAKE_ALONG * speed * gain, WAKE_OUT * speed * gain);
         continue;
       }
-      const reach = Math.max(2 * r, 12);
-      this.stir(x + 0.6 * r * dx, y + 0.6 * r * dy, dx, dy, reach, POCKET_ALONG * speed * gain, POCKET_OUT * speed * gain);
-      const swirlR = Math.max(r, WAKE_RADIUS);
+      const reach = Math.max(POCKET_REACH * r, POCKET_MIN_REACH);
+      const px = x + POCKET_AHEAD * r * dx;
+      const py = y + POCKET_AHEAD * r * dy;
+      this.stir(px, py, dx, dy, reach, POCKET_ALONG * speed * gain, POCKET_OUT * speed * gain);
+      const swirlR = Math.max(SWIRL_RADIUS * r, SWIRL_MIN_RADIUS);
       const tangent = POCKET_SWIRL * speed * gain * Math.sqrt(Math.E);
-      const cx = x + 0.6 * r * dx - 1.2 * r * dx;
-      const cy = y + 0.6 * r * dy - 1.2 * r * dy;
-      this.swirl(cx - r * dy, cy + r * dx, dx, dy, swirlR, tangent);
-      this.swirl(cx + r * dy, cy - r * dx, dx, dy, swirlR, -tangent);
+      const cx = px - SWIRL_BEHIND * r * dx;
+      const cy = py - SWIRL_BEHIND * r * dy;
+      const side = SWIRL_SIDE * r;
+      this.swirl(cx - side * dy, cy + side * dx, dx, dy, swirlR, tangent);
+      this.swirl(cx + side * dy, cy - side * dx, dx, dy, swirlR, -tangent);
     }
     this.count = 0;
   }
@@ -299,6 +312,7 @@ export class Wind {
       for (let i = this.i0; i <= this.i1; i++) {
         const px = this.ox + (i + 0.5) * WIND_CELL - x;
         const py = this.oy + (j + 0.5) * WIND_CELL - y;
+        if (!this.open(x, y, px, py)) continue;
         const w = Math.exp(-(px * px + py * py) / (reach * reach));
         const side = -px * dy + py * dx;
         const away = side / Math.sqrt(side * side + soft);
@@ -316,6 +330,7 @@ export class Wind {
       for (let i = this.i0; i <= this.i1; i++) {
         const px = this.ox + (i + 0.5) * WIND_CELL - x;
         const py = this.oy + (j + 0.5) * WIND_CELL - y;
+        if (!this.open(x, y, px, py)) continue;
         const w = (tangent * Math.exp(-(px * px + py * py) / (reach * reach))) / reach;
         const a = px * dx + py * dy;
         const b = -px * dy + py * dx;
@@ -334,7 +349,7 @@ export class Wind {
         const px = this.ox + (i + 0.5) * WIND_CELL - x;
         const py = this.oy + (j + 0.5) * WIND_CELL - y;
         const d = Math.hypot(px, py);
-        if (d <= 0 || d >= BLAST_END_R) continue;
+        if (d <= 0 || d >= BLAST_END_R || !this.open(x, y, px, py)) continue;
         const f =
           d < BLAST_PEAK_R
             ? d / BLAST_PEAK_R
@@ -344,6 +359,18 @@ export class Wind {
         this.vy[c] += (BLAST_SPEED * f * py) / d;
       }
     }
+  }
+
+  /** True when the straight line from (x, y) to the offset (px, py) crosses no wall cell (sampled every half cell; a centre inside a wall opens nothing). */
+  private open(x: number, y: number, px: number, py: number): boolean {
+    const steps = Math.ceil((Math.hypot(px, py) / WIND_CELL) * 2);
+    for (let s = 0; s <= steps; s++) {
+      const f = steps > 0 ? s / steps : 0;
+      const ci = Math.floor((x + px * f - this.ox) / WIND_CELL);
+      const cj = Math.floor((y + py * f - this.oy) / WIND_CELL);
+      if (ci >= 0 && cj >= 0 && ci < this.nx && cj < this.ny && this.wall[cj * this.nx + ci]) return false;
+    }
+    return true;
   }
 
   /** Zeroes solid cells and caps the speed. */

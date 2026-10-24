@@ -68,6 +68,43 @@ describe('Wind', () => {
     expect(len(at(w, 190, 120))).toBeLessThan(1);
   });
 
+  it('the pocket reaches a tile and a half', () => {
+    const w = make();
+    for (let i = 0; i < 10; i++) {
+      w.push(100, 120, 60, 0, 6);
+      w.step(1 / 60, view);
+    }
+    expect(at(w, 100 + 22, 120)[0]).toBeGreaterThan(4);
+    expect(at(w, 100, 120 + 20)[1]).toBeGreaterThan(0);
+  });
+
+  it('a passing walker stirs the air ahead noticeably', () => {
+    const w = make();
+    let x = 40;
+    for (let i = 0; i < 60; i++) {
+      w.push(x, 120, 60, 0, 6);
+      w.step(1 / 60, view);
+      x += 1;
+    }
+    expect(at(w, x + 16, 120)[0]).toBeGreaterThan(10);
+  });
+
+  it('walls stop the pocket', () => {
+    const w = make((px) => px >= 160 && px < 176);
+    for (let i = 0; i < 30; i++) {
+      w.push(150, 120, 200, 0, 6);
+      w.step(1 / 60, view);
+    }
+    for (let x = 180; x <= 200; x += 2) for (let y = 100; y <= 140; y += 2) expect(len(at(w, x, y))).toBeLessThan(0.5);
+  });
+
+  it('a blast behind a wall stays behind it', () => {
+    const w = make((px) => px >= 160 && px < 176);
+    w.blast(140, 120);
+    w.step(1 / 60, view);
+    expect(at(w, 185, 120)).toEqual([0, 0]);
+  });
+
   it('a blast pushes outward', () => {
     const w = make();
     w.blast(160, 120);

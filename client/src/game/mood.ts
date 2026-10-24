@@ -29,7 +29,7 @@ const HAZE_MARGIN = 32;
 const HAZE_STEP = 64;
 const EMBER_COLOURS = [0xffb040, 0xff6a20];
 /** Air faster than this (px/s) stirs a dust cloud apart; the ambient draft (at most DRAFT_MAX) never does. */
-const STIR_SPEED = 12;
+const STIR_SPEED = 8;
 /** Seconds a stirred cloud waits, hidden, before it respawns. */
 const STIR_DELAY = 3;
 /** How fast (1/s) a drifting cloud and a loose mote follow the air, and the drag on a loose mote (1/s). */

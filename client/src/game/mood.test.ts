@@ -303,7 +303,7 @@ describe('Mood', () => {
       expect(mood.counts.stirred).toBeGreaterThan(0);
       run(mood, 2);
       expect(mood.counts.stirred).toBeGreaterThan(0); // fading or waiting
-      run(mood, 4);
+      run(mood, 7); // the wider pockets leave air above STIR_SPEED for about 1.5 s
       expect(mood.counts.stirred).toBe(0);
       expect(mood.counts.clouds).toBe(cloudCount(640, 360));
     });
@@ -313,7 +313,7 @@ describe('Mood', () => {
       mood.stirDelay = 0;
       run(mood, 2);
       sweep(mood, 4);
-      run(mood, 2.5);
+      run(mood, 4.5); // clouds respawning into the fading air stir again, for 2 s at most
       expect(mood.counts.stirred).toBe(0);
     });
 
