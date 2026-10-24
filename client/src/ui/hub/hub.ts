@@ -24,8 +24,6 @@ const COIN = '<i class="coin-icon"></i>';
 
 const RENDER: Record<HubTab, (ctx: TabCtx) => HTMLElement> = { sheet: renderSheet, tree: renderTree, equipment: renderEquipment, loadout: renderLoadout };
 
-const debugOn = (): boolean => new URLSearchParams(location.search).has('debug');
-
 export class Hub {
   tab: HubTab = 'sheet';
   private root = document.createElement('div');
@@ -39,6 +37,8 @@ export class Hub {
   /** The character this hub is for; messages for any other id are ignored. */
   private id = 0;
   private info: CharacterInfo | null = null;
+  /** The account is a debug account (`Welcome.debug`). */
+  private debug = false;
 
   constructor(
     host: HTMLElement,
@@ -79,6 +79,11 @@ export class Hub {
     this.info = null;
     this.tab = 'sheet';
     this.errorLine.textContent = '';
+    this.render();
+  }
+
+  setDebug(on: boolean): void {
+    this.debug = on;
     this.render();
   }
 
@@ -127,6 +132,6 @@ export class Hub {
     info.innerHTML = `<b>${esc(c.name)}</b><small>${className(c.class)}</small>`;
     this.who.replaceChildren(classFigure(this.atlas, c.class, 2, figureWeapon(c)), info);
     this.purse.innerHTML = `<b>${c.xp} XP</b><span>${COIN}${c.coins}</span>`;
-    this.body.append(RENDER[this.tab]({ info: c, atlas: this.atlas, send: this.send, debug: debugOn() }));
+    this.body.append(RENDER[this.tab]({ info: c, atlas: this.atlas, send: this.send, debug: this.debug }));
   }
 }

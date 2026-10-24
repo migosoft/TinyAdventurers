@@ -63,10 +63,17 @@ pub enum Change {
     Equip(EquipSlot, Option<ItemId>),
     SetLoadout(Loadout),
     GrantItem(ItemId),
-    /// Debug: the same buys without the XP or coin cost (the caller checks that debug is allowed).
+    /// Debug: the same buys without the XP or coin cost (the save checks `Change::is_debug` against the account's flag in the database).
     FreeAttr(Attr),
     FreeNode(NodeId),
     FreeRespec,
+}
+
+impl Change {
+    /// The changes only a debug account may make: they give things away for free.
+    pub fn is_debug(&self) -> bool {
+        matches!(self, Change::GrantItem(_) | Change::FreeAttr(_) | Change::FreeNode(_) | Change::FreeRespec)
+    }
 }
 
 fn equip_message(e: EquipError) -> &'static str {
@@ -372,6 +379,26 @@ mod tests {
     use serde_json::json;
 
     const W: ClassId = ClassId::Wizard;
+
+    #[test]
+    fn an_empty_progress_document_is_a_new_character() {
+        for c in ClassId::ALL {
+            assert_eq!(Progress::from_json(json!({}), c), Progress::new(c));
+        }
+    }
+
+    #[test]
+    fn only_the_free_changes_are_debug_changes() {
+        assert!(Change::GrantItem(ItemId::Knife).is_debug());
+        assert!(Change::FreeAttr(Attr::Str).is_debug());
+        assert!(Change::FreeNode(NodeId::WA2).is_debug());
+        assert!(Change::FreeRespec.is_debug());
+        assert!(!Change::BuyAttr(Attr::Str).is_debug());
+        assert!(!Change::BuyNode(NodeId::WA2).is_debug());
+        assert!(!Change::Respec.is_debug());
+        assert!(!Change::Equip(EquipSlot::Melee, None).is_debug());
+        assert!(!Change::SetLoadout(Loadout::start(W)).is_debug());
+    }
 
     #[test]
     fn v1_refund_is_exact_and_happens_once() {

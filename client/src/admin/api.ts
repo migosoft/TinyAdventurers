@@ -49,6 +49,7 @@ export const adminApi = {
   players: (q: string, sort: PlayerSort, page: number) => call<PlayerPage>('GET', `players?${new URLSearchParams({ q, sort, page: String(page) })}`),
   player: (id: number) => call<PlayerDetail>('GET', `players/${id}`),
   setPassword: (id: number, password: string) => call<void>('POST', `players/${id}/password`, { password }),
+  setDebug: (id: number, debug: boolean) => call<void>('POST', `players/${id}/debug`, { debug }),
   deletePlayer: (id: number) => call<void>('DELETE', `players/${id}`),
   deleteCharacter: (id: number) => call<void>('DELETE', `characters/${id}`),
   actions: () => call<AdminAction[]>('GET', 'actions'),

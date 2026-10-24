@@ -77,25 +77,13 @@ export function debugReject(msg: string, touched: DebugTouched, others: string[]
   return { reset: { ...touched }, resend: { ...touched } };
 }
 
-/** Debug mode only: `?debug&boss=demon|lich|dragon` preselects the end boss on the host's page. */
-function debugBoss(): BossId | null {
-  const b = debugOn() ? (new URLSearchParams(location.search).get('boss') ?? '') : '';
-  const id = b.charAt(0).toUpperCase() + b.slice(1).toLowerCase();
-  return BOSSES.includes(id as BossId) ? (id as BossId) : null;
-}
-
-/** Debug mode only (`?debug`): the waiting room shows the debug loadout picker. */
-function debugOn(): boolean {
-  return new URLSearchParams(location.search).has('debug');
-}
-
 export class Lobby {
   private root = document.createElement('div');
   private runs: RunSummary[] = [];
   private room: Room | null = null;
   private character: CharacterInfo | null = null;
-  /** Room the debug boss was already preselected in. */
-  private preselected = 0;
+  /** The account is a debug account (`Welcome.debug`): the waiting room shows the debug loadout picker. */
+  debug = false;
   /** The debug loadout picked in a waiting room (the server sends no echo). */
   private debugPick: { run: number; cls: ClassId; primary: AbilityId; secondary: AbilityId; melee: WeaponId | null; ranged: WeaponId | null; touched: DebugTouched } | null = null;
   myId = 0;
@@ -133,11 +121,6 @@ export class Lobby {
 
   setRoom(room: Room): void {
     this.room = room;
-    const dev = debugBoss();
-    if (dev && room.host === this.myId && this.preselected !== room.run_id) {
-      this.preselected = room.run_id;
-      if (room.boss !== dev) this.net.send({ t: 'SelectBoss', boss: dev });
-    }
     this.render();
   }
 
@@ -209,7 +192,7 @@ export class Lobby {
       ${logoHeader}
       <div class="panel hero"></div>
       <div class="panel">
-        <h2>Dungeon runs</h2>
+        <h2>${this.debug ? 'Debug dungeons' : 'Dungeon runs'}</h2>
         <ul class="runs">${list}</ul>
         <div class="row"><input id="runname" maxlength="24" placeholder="Name your dungeon run"><button id="create" class="primary">Open new run</button></div>
         <div class="error"></div>
@@ -267,7 +250,7 @@ export class Lobby {
       <h1>${esc(room.name)}</h1>
       <div class="panel ui-party"><h2>Party (${room.players.length}/4)</h2><ul class="players">${players}</ul></div>
       <div class="panel"><h2>End boss${isHost ? '' : ' (chosen by the host)'}</h2><div class="bosses"></div></div>
-      ${me && debugOn() && (isHost || !me.ready) ? this.debugLoadoutRow(room.run_id, me.class) : ''}
+      ${me && this.debug && (isHost || !me.ready) ? this.debugLoadoutRow(room.run_id, me.class) : ''}
       <div class="row actions">
         <button id="leave" class="danger">Leave</button>
         ${isHost ? `<button id="start" class="primary">Enter the dungeon</button>` : `<button id="ready" class="primary">${me?.ready ? 'Not ready' : 'Ready!'}</button>`}

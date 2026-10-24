@@ -9,4 +9,8 @@ started: number, level: string, boss: string | null, outcome: string, duration_s
 /**
  * The character's current name (`None` if it was deleted).
  */
-character: string | null, class: ClassId, kills: number, xp: number, coins: number, survived: boolean, };
+character: string | null, class: ClassId, kills: number, xp: number, coins: number, survived: boolean, 
+/**
+ * A debug run (only debug accounts bank from it).
+ */
+debug: boolean, };

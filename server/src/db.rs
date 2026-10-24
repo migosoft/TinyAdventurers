@@ -3,7 +3,7 @@
 //! read-only statistics queries of the admin area are in `stats.rs`.
 //! Queries are checked at runtime (`sqlx::query`), so building needs no database.
 
-use crate::progress::{Progress, CURRENT_VERSION};
+use crate::progress::{Change, Progress, CURRENT_VERSION};
 use crate::protocol::{CharacterInfo, ClassId};
 use crate::run::{Award, RunRecord};
 use sqlx::postgres::{PgConnection, PgPoolOptions};
@@ -35,6 +35,7 @@ pub struct Account {
     pub id: i32,
     pub name: String,
     pub password_hash: String,
+    pub debug: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +45,8 @@ pub struct Character {
     pub name: String,
     pub class: ClassId,
     pub progress: Progress,
+    /// The account's debug flag at load time.
+    pub debug: bool,
 }
 
 impl Character {
@@ -90,14 +93,14 @@ pub async fn create_account(db: &Db, name: &str, password_hash: &str) -> Result<
 
 #[tracing::instrument(skip_all)]
 pub async fn find_account(db: &Db, name: &str) -> Result<Option<Account>, sqlx::Error> {
-    let row = sqlx::query("SELECT id, name, password_hash FROM accounts WHERE lower(name) = lower($1)").bind(name).fetch_optional(db).await?;
-    Ok(row.map(|r| Account { id: r.get(0), name: r.get(1), password_hash: r.get(2) }))
+    let row = sqlx::query("SELECT id, name, password_hash, debug FROM accounts WHERE lower(name) = lower($1)").bind(name).fetch_optional(db).await?;
+    Ok(row.map(|r| Account { id: r.get(0), name: r.get(1), password_hash: r.get(2), debug: r.get(3) }))
 }
 
 #[tracing::instrument(skip_all)]
 pub async fn account(db: &Db, id: i32) -> Result<Option<Account>, sqlx::Error> {
-    let row = sqlx::query("SELECT id, name, password_hash FROM accounts WHERE id = $1").bind(id).fetch_optional(db).await?;
-    Ok(row.map(|r| Account { id: r.get(0), name: r.get(1), password_hash: r.get(2) }))
+    let row = sqlx::query("SELECT id, name, password_hash, debug FROM accounts WHERE id = $1").bind(id).fetch_optional(db).await?;
+    Ok(row.map(|r| Account { id: r.get(0), name: r.get(1), password_hash: r.get(2), debug: r.get(3) }))
 }
 
 /// Deletes the account with its sessions and characters (ON DELETE CASCADE).
@@ -176,19 +179,20 @@ fn character_from(r: &sqlx::postgres::PgRow) -> Character {
         name: r.get("name"),
         class,
         progress: Progress::from_json(r.get("progress"), class),
+        debug: r.get("debug"),
     }
 }
 
 #[tracing::instrument(skip_all)]
 pub async fn list_characters(db: &Db, account_id: i32) -> Result<Vec<Character>, sqlx::Error> {
-    let rows = sqlx::query("SELECT id, account_id, name, class, progress FROM characters WHERE account_id = $1 ORDER BY id").bind(account_id).fetch_all(db).await?;
+    let rows = sqlx::query("SELECT c.id, c.account_id, c.name, c.class, c.progress, a.debug AS debug FROM characters c JOIN accounts a ON a.id = c.account_id WHERE c.account_id = $1 ORDER BY c.id").bind(account_id).fetch_all(db).await?;
     Ok(rows.iter().map(character_from).collect())
 }
 
 /// One of the account's characters (`None` if it belongs to someone else).
 #[tracing::instrument(skip_all)]
 pub async fn load_character(db: &Db, account_id: i32, id: i32) -> Result<Option<Character>, sqlx::Error> {
-    let row = sqlx::query("SELECT id, account_id, name, class, progress FROM characters WHERE id = $1 AND account_id = $2").bind(id).bind(account_id).fetch_optional(db).await?;
+    let row = sqlx::query("SELECT c.id, c.account_id, c.name, c.class, c.progress, a.debug AS debug FROM characters c JOIN accounts a ON a.id = c.account_id WHERE c.id = $1 AND c.account_id = $2").bind(id).bind(account_id).fetch_optional(db).await?;
     Ok(row.as_ref().map(character_from))
 }
 
@@ -196,7 +200,7 @@ pub async fn load_character(db: &Db, account_id: i32, id: i32) -> Result<Option<
 pub async fn create_character(db: &Db, account_id: i32, name: &str, class: ClassId) -> Result<Character, DbError> {
     let mut tx = db.begin().await?;
     // Lock the account row so two parallel creates cannot both pass the cap.
-    sqlx::query("SELECT id FROM accounts WHERE id = $1 FOR UPDATE").bind(account_id).fetch_one(&mut *tx).await?;
+    let debug: bool = sqlx::query("SELECT debug FROM accounts WHERE id = $1 FOR UPDATE").bind(account_id).fetch_one(&mut *tx).await?.get(0);
     let count: i64 = sqlx::query("SELECT count(*) FROM characters WHERE account_id = $1").bind(account_id).fetch_one(&mut *tx).await?.get(0);
     if count >= MAX_CHARACTERS {
         return Err(DbError::TooManyCharacters);
@@ -210,7 +214,7 @@ pub async fn create_character(db: &Db, account_id: i32, name: &str, class: Class
         .fetch_one(&mut *tx)
         .await?;
     tx.commit().await?;
-    Ok(Character { id: row.get(0), account_id, name: name.to_string(), class, progress })
+    Ok(Character { id: row.get(0), account_id, name: name.to_string(), class, progress, debug })
 }
 
 /// True if the character existed and belonged to the account.
@@ -229,55 +233,131 @@ pub async fn delete_character_any(db: &Db, id: i32) -> Result<Option<(i32, Strin
 
 // ------------------------------------------------------------------ progress
 
+/// The outcome of `modify`.
+#[derive(Debug, PartialEq)]
+pub enum Modified<E> {
+    /// Changed and written; the new progress.
+    Done(Progress),
+    /// The change itself was refused (nothing written).
+    Refused(E),
+    /// The character no longer exists (or moved to another account).
+    Missing,
+    /// The account's debug flag is not the required one (nothing written).
+    WrongKind,
+}
+
 /// Lock, change in Rust, write back: the one way progress is modified. The
 /// row lock serialises concurrent changes (banking a run while buying), so
-/// none is lost. `Ok(None)` if the character no longer exists; an error from
-/// `f` rolls back and is returned as `Ok(Some(Err(_)))`.
-async fn modify<E>(conn: &mut PgConnection, id: i32, f: impl FnOnce(&mut Progress) -> Result<(), E>) -> Result<Option<Result<Progress, E>>, sqlx::Error> {
-    let Some(row) = sqlx::query("SELECT class, progress FROM characters WHERE id = $1 FOR UPDATE").bind(id).fetch_optional(&mut *conn).await? else {
-        return Ok(None);
+/// none is lost. With `require = Some(flag)` the account must have exactly
+/// that debug flag; it is read under `FOR SHARE`, so marking or unmarking the
+/// account (which takes the row `FOR UPDATE`) cannot slip in between. Lock
+/// order: the account row first, then the character row.
+async fn modify<E>(conn: &mut PgConnection, id: i32, require: Option<bool>, f: impl FnOnce(&mut Progress) -> Result<(), E>) -> Result<Modified<E>, sqlx::Error> {
+    let Some(row) = sqlx::query("SELECT account_id FROM characters WHERE id = $1").bind(id).fetch_optional(&mut *conn).await? else {
+        return Ok(Modified::Missing);
     };
+    let account: i32 = row.get(0);
+    let mut flag = None;
+    if require.is_some() {
+        flag = sqlx::query("SELECT debug FROM accounts WHERE id = $1 FOR SHARE").bind(account).fetch_optional(&mut *conn).await?.map(|r| r.get::<bool, _>(0));
+        if flag.is_none() {
+            return Ok(Modified::Missing);
+        }
+    }
+    let Some(row) = sqlx::query("SELECT class, progress, account_id FROM characters WHERE id = $1 FOR UPDATE").bind(id).fetch_optional(&mut *conn).await? else {
+        return Ok(Modified::Missing);
+    };
+    if row.get::<i32, _>(2) != account {
+        return Ok(Modified::Missing);
+    }
+    if require.is_some() && flag != require {
+        return Ok(Modified::WrongKind);
+    }
     let mut p = Progress::from_json(row.get(1), class_from(row.get::<&str, _>(0)));
     if let Err(e) = f(&mut p) {
-        return Ok(Some(Err(e)));
+        return Ok(Modified::Refused(e));
     }
     p.version = CURRENT_VERSION;
     p.rev += 1;
     sqlx::query("UPDATE characters SET progress = $2 WHERE id = $1").bind(id).bind(p.to_json()).execute(&mut *conn).await?;
-    Ok(Some(Ok(p)))
+    Ok(Modified::Done(p))
 }
 
+/// Applies a build change and saves it; commits only when it is `Done`. A
+/// debug change needs a debug account at save time.
 #[tracing::instrument(skip_all)]
-pub async fn update_progress<E>(db: &Db, id: i32, f: impl FnOnce(&mut Progress) -> Result<(), E>) -> Result<Option<Result<Progress, E>>, sqlx::Error> {
+pub async fn update_progress(db: &Db, id: i32, change: Change, class: ClassId) -> Result<Modified<&'static str>, sqlx::Error> {
+    let require = change.is_debug().then_some(true);
     let mut tx = db.begin().await?;
-    let out = modify(&mut tx, id, f).await?;
-    if matches!(out, Some(Ok(_))) {
+    let out = modify(&mut tx, id, require, |p| p.apply(class, change)).await?;
+    if matches!(out, Modified::Done(_)) {
         tx.commit().await?;
     }
     Ok(out)
 }
 
 /// Banks a finished run for all its characters in one transaction. Returns
-/// the new progress of each character that still exists.
+/// the new progress of each character that still exists and whose account is
+/// of the run's kind (`debug_run`); the others are skipped.
 #[tracing::instrument(skip_all)]
-pub async fn bank_awards(db: &Db, awards: &[Award]) -> Result<Vec<(i32, Progress)>, sqlx::Error> {
+pub async fn bank_awards(db: &Db, awards: &[Award], debug_run: bool) -> Result<Vec<(i32, Progress)>, sqlx::Error> {
     let mut tx = db.begin().await?;
     let mut out = Vec::new();
-    // A fixed lock order keeps two parallel bankings from deadlocking.
+    // A fixed lock order keeps two parallel bankings from deadlocking: the
+    // accounts by id first, then the characters by id.
     let mut awards = awards.to_vec();
     awards.sort_by_key(|a| a.character);
+    let ids: Vec<i32> = awards.iter().map(|a| a.character).collect();
+    sqlx::query("SELECT a.id, a.debug FROM accounts a JOIN characters c ON c.account_id = a.id WHERE c.id = ANY($1) ORDER BY a.id FOR SHARE OF a")
+        .bind(&ids)
+        .fetch_all(&mut *tx)
+        .await?;
     for a in &awards {
-        if let Some(Ok(p)) = modify(&mut tx, a.character, |p| -> Result<(), ()> {
+        match modify(&mut tx, a.character, Some(debug_run), |p| -> Result<(), ()> {
             p.bank(a.xp, a.coins);
             Ok(())
         })
         .await?
         {
-            out.push((a.character, p));
+            Modified::Done(p) => out.push((a.character, p)),
+            Modified::WrongKind => tracing::warn!(character = a.character, debug_run, "award skipped: the account's kind changed"),
+            Modified::Missing | Modified::Refused(()) => {}
         }
     }
     tx.commit().await?;
     Ok(out)
+}
+
+/// Admin: marks or unmarks an account as a debug account. Unmarking wipes
+/// every character of the account (their progress was never earned); marking
+/// keeps the progress. `None` if there is no such account, else the number of
+/// characters wiped. The account row is locked first, like everywhere.
+#[tracing::instrument(skip_all)]
+pub async fn set_account_debug(db: &Db, id: i32, on: bool) -> Result<Option<u32>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let Some(row) = sqlx::query("SELECT debug FROM accounts WHERE id = $1 FOR UPDATE").bind(id).fetch_optional(&mut *tx).await? else {
+        return Ok(None);
+    };
+    let was: bool = row.get(0);
+    sqlx::query("UPDATE accounts SET debug = $2 WHERE id = $1").bind(id).bind(on).execute(&mut *tx).await?;
+    let mut wiped = 0;
+    if was && !on {
+        let rows = sqlx::query("SELECT id, class FROM characters WHERE account_id = $1 ORDER BY id").bind(id).fetch_all(&mut *tx).await?;
+        for r in &rows {
+            let class = class_from(r.get::<&str, _>(1));
+            let reset = |p: &mut Progress| {
+                let rev = p.rev;
+                *p = Progress::new(class);
+                p.rev = rev;
+                Ok::<_, ()>(())
+            };
+            if matches!(modify(&mut tx, r.get(0), None, reset).await?, Modified::Done(_)) {
+                wiped += 1;
+            }
+        }
+    }
+    tx.commit().await?;
+    Ok(Some(wiped))
 }
 
 // --------------------------------------------------------------- statistics
@@ -328,6 +408,7 @@ pub mod tests {
     //! test creates its own throwaway database) and pass vacuously otherwise.
     use super::*;
     use crate::defs::attributes::Attr;
+    use crate::defs::items::ItemId;
     use sqlx::Executor;
 
     pub const WEEK: Duration = Duration::from_secs(7 * 24 * 3600);
@@ -378,24 +459,118 @@ pub mod tests {
         assert!(old.is_err(), "the CHECK constraint no longer allows Assassin");
     }
 
+    fn done(m: Modified<&'static str>) -> Progress {
+        match m {
+            Modified::Done(p) => p,
+            other => panic!("expected Done, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn debug_changes_need_a_debug_account_at_save_time() {
+        let Some(db) = test_db().await else { return };
+        let a = create_account(&db, "Cheater", "h").await.unwrap();
+        let c = create_character(&db, a, "Sneak", ClassId::Wizard).await.unwrap();
+        let w = ClassId::Wizard;
+        let before = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
+        assert_eq!(update_progress(&db, c.id, Change::GrantItem(ItemId::Knife), w).await.unwrap(), Modified::WrongKind);
+        let after = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
+        assert_eq!((after.rev, after.inventory.clone()), (before.rev, before.inventory.clone()), "nothing written");
+
+        bank_awards(&db, &[Award { character: c.id, xp: 10_000, coins: 0 }], false).await.unwrap();
+        done(update_progress(&db, c.id, Change::BuyAttr(Attr::Wil), w).await.unwrap());
+
+        assert_eq!(set_account_debug(&db, a, true).await.unwrap(), Some(0));
+        let p = done(update_progress(&db, c.id, Change::GrantItem(ItemId::Knife), w).await.unwrap());
+        assert!(p.inventory.contains(&ItemId::Knife));
+
+        delete_character(&db, a, c.id).await.unwrap();
+        assert_eq!(update_progress(&db, c.id, Change::GrantItem(ItemId::Knife), w).await.unwrap(), Modified::Missing);
+        assert_eq!(update_progress(&db, c.id, Change::BuyAttr(Attr::Wil), w).await.unwrap(), Modified::Missing);
+    }
+
+    #[tokio::test]
+    async fn bank_skips_characters_whose_account_kind_differs() {
+        let Some(db) = test_db().await else { return };
+        let n = create_account(&db, "Normal", "h").await.unwrap();
+        let d = create_account(&db, "Dbg", "h").await.unwrap();
+        set_account_debug(&db, d, true).await.unwrap();
+        let cn = create_character(&db, n, "Plain", ClassId::Paladin).await.unwrap();
+        let cd = create_character(&db, d, "Tester", ClassId::Paladin).await.unwrap();
+        assert!(!cn.debug && cd.debug, "create_character fills the flag");
+        let awards = [Award { character: cn.id, xp: 10, coins: 1 }, Award { character: cd.id, xp: 20, coins: 2 }];
+
+        let out = bank_awards(&db, &awards, true).await.unwrap();
+        assert_eq!(out.iter().map(|(id, _)| *id).collect::<Vec<_>>(), vec![cd.id]);
+        let (pn, pd) = (load_character(&db, n, cn.id).await.unwrap().unwrap().progress, load_character(&db, d, cd.id).await.unwrap().unwrap().progress);
+        assert_eq!((pn.xp, pd.xp, pd.coins), (0, 20, 2));
+
+        let out = bank_awards(&db, &awards, false).await.unwrap();
+        assert_eq!(out.iter().map(|(id, _)| *id).collect::<Vec<_>>(), vec![cn.id]);
+        assert_eq!(load_character(&db, n, cn.id).await.unwrap().unwrap().progress.xp, 10);
+    }
+
+    #[tokio::test]
+    async fn unmarking_wipes_every_character_and_marking_keeps_progress() {
+        let Some(db) = test_db().await else { return };
+        let a = create_account(&db, "Flip", "h").await.unwrap();
+        let c1 = create_character(&db, a, "One", ClassId::Wizard).await.unwrap();
+        let c2 = create_character(&db, a, "Two", ClassId::Barbarian).await.unwrap();
+        assert_eq!(set_account_debug(&db, a, true).await.unwrap(), Some(0));
+        assert!(account(&db, a).await.unwrap().unwrap().debug);
+        for c in [&c1, &c2] {
+            bank_awards(&db, &[Award { character: c.id, xp: 50, coins: 5 }], true).await.unwrap();
+            done(update_progress(&db, c.id, Change::GrantItem(ItemId::Knife), c.class).await.unwrap());
+        }
+        let before: Vec<Progress> = list_characters(&db, a).await.unwrap().into_iter().map(|c| c.progress).collect();
+        assert!(before.iter().all(|p| p.xp == 50 && p.inventory.contains(&ItemId::Knife)));
+        assert_eq!(set_account_debug(&db, a, true).await.unwrap(), Some(0), "marking again keeps the progress");
+        let same: Vec<Progress> = list_characters(&db, a).await.unwrap().into_iter().map(|c| c.progress).collect();
+        assert_eq!(same, before);
+
+        assert_eq!(set_account_debug(&db, a, false).await.unwrap(), Some(2));
+        assert!(!account(&db, a).await.unwrap().unwrap().debug);
+        for (c, old) in list_characters(&db, a).await.unwrap().iter().zip(&before) {
+            let fresh = Progress::new(c.class);
+            let p = &c.progress;
+            assert_eq!((p.xp, p.total_xp), (0, 0));
+            assert_eq!((&p.coins, &p.inventory, &p.nodes, &p.bought), (&fresh.coins, &fresh.inventory, &fresh.nodes, &fresh.bought));
+            assert!(p.rev > old.rev);
+        }
+        assert_eq!(set_account_debug(&db, a, false).await.unwrap(), Some(0));
+        assert_eq!(set_account_debug(&db, 9999, true).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn loaded_characters_carry_the_account_flag() {
+        let Some(db) = test_db().await else { return };
+        let a = create_account(&db, "Flagged", "h").await.unwrap();
+        let c = create_character(&db, a, "Marked", ClassId::Wizard).await.unwrap();
+        assert!(!load_character(&db, a, c.id).await.unwrap().unwrap().debug);
+        assert!(!list_characters(&db, a).await.unwrap()[0].debug);
+        set_account_debug(&db, a, true).await.unwrap();
+        assert!(load_character(&db, a, c.id).await.unwrap().unwrap().debug);
+        assert!(list_characters(&db, a).await.unwrap()[0].debug);
+    }
+
     #[tokio::test]
     async fn progress_changes_are_never_lost() {
         let Some(db) = test_db().await else { return };
         let a = create_account(&db, "Racer", "h").await.unwrap();
         let c = create_character(&db, a, "Speedy", ClassId::ElvenRanger).await.unwrap();
         let other = create_character(&db, a, "Bystander", ClassId::Paladin).await.unwrap();
-        bank_awards(&db, &[Award { character: c.id, xp: 10_000, coins: 0 }]).await.unwrap();
+        bank_awards(&db, &[Award { character: c.id, xp: 10_000, coins: 0 }], false).await.unwrap();
 
         // 20 bankings and 10 purchases at the same time.
         let mut tasks = Vec::new();
         for _ in 0..20 {
             let db = db.clone();
-            tasks.push(tokio::spawn(async move { bank_awards(&db, &[Award { character: c.id, xp: 1, coins: 2 }]).await.unwrap(); }));
+            tasks.push(tokio::spawn(async move { bank_awards(&db, &[Award { character: c.id, xp: 1, coins: 2 }], false).await.unwrap(); }));
         }
         for i in 0..10 {
             let db = db.clone();
             let attr = [Attr::Dex, Attr::Wil][i % 2];
-            tasks.push(tokio::spawn(async move { update_progress(&db, c.id, |p| p.buy_attr(ClassId::ElvenRanger, attr, false)).await.unwrap().unwrap().unwrap(); }));
+            tasks.push(tokio::spawn(async move { update_progress(&db, c.id, Change::BuyAttr(attr), ClassId::ElvenRanger).await.unwrap(); }));
         }
         for t in tasks {
             t.await.unwrap();
@@ -410,12 +585,12 @@ pub mod tests {
 
         assert_eq!(load_character(&db, a, other.id).await.unwrap().unwrap().progress, Progress::new(ClassId::Paladin), "other character untouched");
         // A failed purchase changes nothing.
-        let rich = update_progress(&db, other.id, |p| p.buy_attr(ClassId::Paladin, Attr::Str, false)).await.unwrap().unwrap();
-        assert!(rich.is_err());
+        let rich = update_progress(&db, other.id, Change::BuyAttr(Attr::Str), ClassId::Paladin).await.unwrap();
+        assert!(matches!(rich, Modified::Refused(_)));
         assert_eq!(load_character(&db, a, other.id).await.unwrap().unwrap().progress.rev, 0);
         // Banking to a deleted character is skipped.
         delete_character(&db, a, other.id).await.unwrap();
-        assert!(bank_awards(&db, &[Award { character: other.id, xp: 5, coins: 0 }]).await.unwrap().is_empty());
+        assert!(bank_awards(&db, &[Award { character: other.id, xp: 5, coins: 0 }], false).await.unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -426,7 +601,7 @@ pub mod tests {
         sqlx::query("UPDATE characters SET progress = '{\"xp\": 300, \"upgrades\": {\"armor\": 1}, \"future\": true}' WHERE id = $1").bind(c.id).execute(&db).await.unwrap();
         let p = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
         assert_eq!((p.xp, p.version), (300 + 100, CURRENT_VERSION), "the v1 level is refunded");
-        update_progress(&db, c.id, |p| p.buy_attr(ClassId::Barbarian, Attr::Str, false)).await.unwrap().unwrap().unwrap();
+        update_progress(&db, c.id, Change::BuyAttr(Attr::Str), ClassId::Barbarian).await.unwrap();
         let again = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
         assert_eq!(again.xp, 400 - again.xp_spent, "read twice, refunded once");
         let v: i64 = sqlx::query("SELECT (progress->>'version')::bigint FROM characters WHERE id = $1").bind(c.id).fetch_one(&db).await.unwrap().get(0);

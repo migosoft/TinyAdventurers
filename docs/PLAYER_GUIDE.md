@@ -35,7 +35,7 @@ On the screen, the **E** hint is a small gold key cap that floats over the thing
 
 Your teammates' names float above their heroes, and the party list (top left) shows everyone's health.
 
-**Abilities.** Every hero has two: left mouse button (primary) and right (secondary). The four starting names are **Strike** (hit with your melee weapon), **Shoot** (fire your ranged weapon), **Charge** (a dash that hurts everything you run through) and **Holy Light** (a heal for you and your friends). Spells such as Magic Missile and Fireball are abilities too. Every class has four more, two for the left button and two for the right, listed under its heading below. You learn them in the skill tree (see "XP, coins and the character"). To try any of them at once, use a debug game (`?debug` in the address, the "Debug loadout" row in the waiting room, which also lifts your Attributes and lets you pick weapons). Each needs Attribute values (INT, CHA, STR, DEX, WIL; items count) and some a kind of weapon, shown after its name.
+**Abilities.** Every hero has two: left mouse button (primary) and right (secondary). The four starting names are **Strike** (hit with your melee weapon), **Shoot** (fire your ranged weapon), **Charge** (a dash that hurts everything you run through) and **Holy Light** (a heal for you and your friends). Spells such as Magic Missile and Fireball are abilities too. Every class has four more, two for the left button and two for the right, listed under its heading below. You learn them in the skill tree (see "XP, coins and the character"). Each needs Attribute values (INT, CHA, STR, DEX, WIL; items count) and some a kind of weapon, shown after its name.
 
 **Fighting up close.** A ranged ability does not work with an enemy (or a closed chest) right next to you, about a body's width and a bit more.
 - Your **left button then strikes with your melee weapon** instead: the Wizard hits with his staff (weakly, so step back), the Elven Ranger thrusts her rapier. It hits the nearest target. If the blow kills it with damage to spare, the rest of the blow carries on to the next target in reach.
@@ -212,7 +212,7 @@ Some rooms and halls hold terrain. **Chasms** appear in every dungeon. **Water**
 - **Demons** (imps, chorts, summoners and the Red Demon) walk through lava unharmed and at full speed. Other enemies go around lava, and no enemy follows you into a chasm or deep water.
 - Shots and sight pass over all terrain.
 - Enemies can fall, drown and burn too, if a **barrel blast** pushes them in (see Explosive barrels).
-- In debug mode a hero who falls or drowns climbs back out onto the last safe tile.
+- In debug mode (test accounts only) a hero who falls or drowns climbs back out onto the last safe tile.
 
 ## Final bosses
 
@@ -299,8 +299,7 @@ The effects from damage types work in two tiers. A hit that is **at least half h
 - Every kill gives **XP to every living member of the party**: 2 for a raised skeleton or summoned imp, 5 for a goblin, 8 for a skeleton, imp or chort, 12 for an orc, 20 for a disciple, 25 for a necromancer or summoner and **300 for the boss**. Once you have fallen, you stop earning.
 - **Coins** come from treasure chests, mimics (25) and the boss (50). Like XP, they go to every living hero. They pay for a respec (below).
 - When the run ends, won or lost, your XP and coins are added to the **character** you played. If you leave early, you keep what you earned so far.
-- Runs where someone used debug mode give no XP and no coins.
-- **Debug games** (`?debug` in the address, for testing): your hero is immortal; **F9** turns that off and on, **F4** cycles your darkvision and **F8** puts the next effect on you. The yellow badge at the bottom lists these keys. In the character screen, Attribute points, skill-tree nodes and the respec are free. They are saved on the character, so use a test character for this.
+- **Debug mode** is a developer tool on test accounts that the admin marks. It never mixes with normal games: debug accounts see only debug rooms, and you cannot turn it on yourself.
 
 **The roster and the character screen.** After login you see one card per character, with its figure holding its weapon (a Ranger also shows its ranged weapon; other heroes hold their melee weapon). Click a card to open the character screen, or click **New character** to create a character (its screen opens at once). The screen has four tabs: **Sheet**, **Skill tree**, **Equipment** and **Loadout**. You can change your build there while you are not Ready and not in a run; otherwise the game says "Not while ready." or "Not during a run."
 

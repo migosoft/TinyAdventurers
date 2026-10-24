@@ -147,16 +147,33 @@ async fn ws_handler(ws: WebSocketUpgrade, headers: HeaderMap, State(state): Stat
     if let Err(e) = db::touch_activity(&state.db, session.account).await {
         tracing::error!("activity: {e}");
     }
-    ws.on_upgrade(move |socket| handle_socket(socket, state, session.account, session.id_hash))
+    // The account's flag decides the connection's kind for its whole life.
+    let debug = match connect_flag(db::account(&state.db, session.account).await) {
+        Ok(d) => d,
+        Err(s) => return s.into_response(),
+    };
+    ws.on_upgrade(move |socket| handle_socket(socket, state, session.account, debug, session.id_hash))
+}
+
+/// The connection's debug flag from the account row: an unknown account is refused, a database error too.
+fn connect_flag(r: Result<Option<db::Account>, sqlx::Error>) -> Result<bool, StatusCode> {
+    match r {
+        Ok(Some(a)) => Ok(a.debug),
+        Ok(None) => Err(StatusCode::UNAUTHORIZED),
+        Err(e) => {
+            tracing::error!("account: {e}");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
 }
 
 #[tracing::instrument(name = "ws", skip(socket, state, id_hash))]
-async fn handle_socket(socket: WebSocket, state: AppState, account: i32, id_hash: Vec<u8>) {
+async fn handle_socket(socket: WebSocket, state: AppState, account: i32, flag: bool, id_hash: Vec<u8>) {
     telemetry::metrics().ws_connected(true);
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = unbounded_channel::<Message>();
     let lobby = state.lobby.clone();
-    let id = lobby.lock().unwrap().connect(account, tx.clone());
+    let id = lobby.lock().unwrap().connect(account, flag, tx.clone());
 
     let writer = tokio::spawn(async move {
         while let Some(m) = rx.recv().await {
@@ -178,7 +195,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, id_hash
             ClientMsg::Ping { time } => {
                 let _ = tx.send(Message::Binary(encode(&ServerMsg::Pong { time }).into()));
             }
-            ClientMsg::Input(_) | ClientMsg::Spectate { .. } | ClientMsg::Debug { .. } | ClientMsg::DebugDarkvision { .. } | ClientMsg::DebugEffect { .. } | ClientMsg::DebugImmortal { .. } | ClientMsg::RulesLog { .. } => {
+            ClientMsg::Input(_) | ClientMsg::Spectate { .. } | ClientMsg::DebugDarkvision { .. } | ClientMsg::DebugEffect { .. } | ClientMsg::DebugImmortal { .. } | ClientMsg::RulesLog { .. } => {
                 let run_tx = lobby.lock().unwrap().run_of(id);
                 if let Some(run_tx) = run_tx {
                     let _ = run_tx.send(RunCmd::Msg { conn: id, msg: cm });
@@ -192,7 +209,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, account: i32, id_hash
             ClientMsg::Equip { slot, item } => change_build(&state, id, Change::Equip(slot, item)).await,
             ClientMsg::SetLoadout { primary, secondary } => change_build(&state, id, Change::SetLoadout(Loadout { primary, secondary })).await,
             ClientMsg::DebugGrantItem { .. } | ClientMsg::DebugBuyAttribute { .. } | ClientMsg::DebugBuyNode { .. } | ClientMsg::DebugRespec => {
-                if !run::debug::allowed() {
+                if !lobby.lock().unwrap().is_debug(id) {
                     lobby.lock().unwrap().error(id, "Debug is off.");
                     continue;
                 }
@@ -225,12 +242,13 @@ async fn change_build(state: &AppState, conn: u32, change: Change) {
         Ok(c) => c,
         Err(e) => return state.lobby.lock().unwrap().error(conn, e),
     };
-    let result = db::update_progress(&state.db, character, |p| p.apply(class, change)).await;
+    let result = db::update_progress(&state.db, character, change, class).await;
     let mut l = state.lobby.lock().unwrap();
     match result {
-        Ok(Some(Ok(p))) => l.apply_progress(character, p),
-        Ok(Some(Err(e))) => l.error(conn, e),
-        Ok(None) => l.error(conn, "No such character."),
+        Ok(db::Modified::Done(p)) => l.apply_progress(character, p),
+        Ok(db::Modified::Refused(e)) => l.error(conn, e),
+        Ok(db::Modified::Missing) => l.error(conn, "No such character."),
+        Ok(db::Modified::WrongKind) => l.error(conn, "Debug is off."),
         Err(e) => {
             tracing::error!("change build: {e}");
             l.error(conn, "Something went wrong on the server. Please try again.");
@@ -281,5 +299,14 @@ mod tests {
         assert!(!same_origin(&h));
         h.insert(header::ORIGIN, "null".parse().unwrap());
         assert!(!same_origin(&h));
+    }
+
+    #[test]
+    fn connect_flag_refuses_on_error_and_unknown_accounts() {
+        let acc = |debug| db::Account { id: 1, name: "a".into(), password_hash: String::new(), debug };
+        assert_eq!(connect_flag(Ok(Some(acc(true)))), Ok(true));
+        assert_eq!(connect_flag(Ok(Some(acc(false)))), Ok(false));
+        assert_eq!(connect_flag(Ok(None)), Err(StatusCode::UNAUTHORIZED));
+        assert_eq!(connect_flag(Err(sqlx::Error::PoolTimedOut)), Err(StatusCode::INTERNAL_SERVER_ERROR));
     }
 }

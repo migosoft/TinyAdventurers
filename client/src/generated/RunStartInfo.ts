@@ -32,4 +32,8 @@ fallback: ResolvedAbility,
 /**
  * Every static light (torches, lava) and its state.
  */
-lights: Array<LightInfo>, };
+lights: Array<LightInfo>, 
+/**
+ * A debug run: every hero is in debug mode (badge, F4/F8/F9).
+ */
+debug: boolean, };

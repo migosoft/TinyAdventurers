@@ -17,11 +17,13 @@ const pool = [card(own('MagicMissile')), card(own('FrostShard'), { error: 'Frost
 let sent: ClientMsg[];
 function make(debug = false): Lobby {
   sent = [];
-  window.history.replaceState(null, '', debug ? '/?debug' : '/');
+  // The URL says debug whatever the account is: only the flag from Welcome counts.
+  window.history.replaceState(null, '', '/?debug&boss=dragon');
   document.body.replaceChildren();
   const net = { send: (m: ClientMsg) => sent.push(m) } as unknown as Net;
   const l = new Lobby(document.body, net, atlas, () => {});
   l.myId = 2;
+  l.debug = debug;
   l.show();
   return l;
 }
@@ -143,6 +145,25 @@ describe('Lobby', () => {
     p.value = JSON.stringify(own('FrostShard'));
     p.dispatchEvent(new Event('change'));
     expect(dbg().value).toBe('FrostShard');
+  });
+});
+
+describe('debug UI', () => {
+  it('follows the account flag, not the URL', () => {
+    const off = make(false);
+    inRoom(off, false);
+    expect(document.querySelector('.debug-loadout')).toBeNull();
+    expect(sent.some((m) => m.t === 'SelectBoss')).toBe(false);
+    const on = make(true);
+    inRoom(on, false);
+    expect(document.querySelector('.debug-loadout')).not.toBeNull();
+    expect(sent.some((m) => m.t === 'SelectBoss')).toBe(false);
+  });
+  it('titles the room list for debug accounts', () => {
+    const l = make(true);
+    l.setCharacter(fixtureInfo('Wizard', { pool }));
+    l.setRuns([]);
+    expect(document.querySelector('h2')!.textContent).toBe('Debug dungeons');
   });
 });
 

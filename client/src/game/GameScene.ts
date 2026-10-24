@@ -137,7 +137,7 @@ export class GameScene extends Phaser.Scene {
   private wade = new Map<number, WadeFx>();
   /** Heroes falling into a chasm or drowning (from `Ev::Sink`, or predicted for the own hero). */
   private sinks = new Map<number, { x: number; y: number; drown: boolean; t: number }>();
-  // Debug mode (?debug): immortal + path to the boss, drawn above the fog.
+  // Debug mode (a debug run): immortal + path to the boss, drawn above the fog.
   private debugOn = false;
   private debugImmortal = true;
   private debugEffect = -1;
@@ -194,7 +194,8 @@ export class GameScene extends Phaser.Scene {
     this.beams = this.add.graphics().setDepth(DEPTH.beam);
     this.gaze = this.add.graphics().setDepth(DEPTH.fx);
     this.debugGfx = this.add.graphics().setDepth(DEPTH.fog + 1);
-    this.debugOn = false;
+    // A debug run (from a debug room): the server puts every hero in debug mode, so the badge and F4/F8/F9 work from the first frame.
+    this.debugOn = this.info.debug;
     this.debugImmortal = true;
     this.debugPath = [];
     this.debugOgre = [];
@@ -215,7 +216,7 @@ export class GameScene extends Phaser.Scene {
       e.preventDefault();
       this.hud.toggleDebug();
     });
-    // Debug mode only (?debug): cycle your own hero's darkvision 0 -> 50% -> 100% -> 0.
+    // Debug runs only (debug accounts): cycle your own hero's darkvision 0 -> 50% -> 100% -> 0.
     // Ignored otherwise, so a stray F4 never turns a normal run into a debug run, and
     // while dead (spectating, the snapshot's darkvision is the teammate's).
     kb.on('keydown-F4', (e: KeyboardEvent) => {
@@ -224,14 +225,14 @@ export class GameScene extends Phaser.Scene {
       // The server announces the change to the party.
       this.net.send({ t: 'DebugDarkvision', ratio: nextDarkvision((this.lastSnap?.me.darkvision ?? 0) / 100) });
     });
-    // Debug mode only (?debug): put the next effect on your own hero (Blind, Sleep, Petrified, Slowed, Accelerated).
+    // Debug runs only (debug accounts): put the next effect on your own hero (Blind, Sleep, Petrified, Slowed, Accelerated).
     kb.on('keydown-F8', (e: KeyboardEvent) => {
       e.preventDefault();
       if (e.repeat || !this.debugOn || !this.alive) return;
       this.debugEffect = (this.debugEffect + 1) % Object.keys(EFFECT).length;
       this.net.send({ t: 'DebugEffect', kind: this.debugEffect });
     });
-    // Debug mode only (?debug): immortality off and on (the run stays a debug run).
+    // Debug runs only (debug accounts): immortality off and on (the run stays a debug run).
     kb.on('keydown-F9', (e: KeyboardEvent) => {
       e.preventDefault();
       if (e.repeat || !this.debugOn || !this.alive) return;
@@ -247,9 +248,9 @@ export class GameScene extends Phaser.Scene {
     this.unsub = this.net.on((m) => this.onMessage(m));
     this.events.once('shutdown', () => this.cleanup());
     this.hud.startRun(this.info);
+    if (this.info.debug) this.hud.setDebug(true, true, true);
     this.rulesLog = new RulesLog(this, this.net, this.info);
     this.hud.setToggles(this.rulesLog.settings());
-    if (new URLSearchParams(location.search).has("debug")) this.net.send({ t: "Debug", on: true });
   }
 
   private cleanup(): void {

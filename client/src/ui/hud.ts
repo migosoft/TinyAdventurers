@@ -43,7 +43,7 @@ export const HELP_KEYS: [keys: string[], label: string][] = [
   [['F3'], 'stats'],
 ];
 
-/** The in-run debug keys (only with `?debug`), listed on the debug badge. */
+/** The in-run debug keys (debug runs, i.e. debug accounts), listed on the debug badge. */
 export const DEBUG_KEYS: [key: string, label: string][] = [
   ['F4', 'darkvision 0/50/100 %'],
   ['F8', 'next effect on you'],
@@ -333,7 +333,7 @@ export class Hud {
     }
   }
 
-  showEnd(m: { victory: boolean; level: LevelId; boss: BossId | null; time: number; stats: PlayerStats[]; banked: boolean }): void {
+  showEnd(m: { victory: boolean; level: LevelId; boss: BossId | null; time: number; stats: PlayerStats[] }): void {
     const mins = Math.floor(m.time / 60);
     const secs = Math.floor(m.time % 60).toString().padStart(2, '0');
     const rows = m.stats
@@ -346,7 +346,7 @@ export class Hud {
       <div class="title ${m.victory ? 'win' : 'lose'}">${m.victory ? 'VICTORY' : 'DEFEAT'}</div>
       <p>${endText(m.victory, m.level, m.boss)} Time ${mins}:${secs}</p>
       <table><tr><th>Hero</th><th>Class</th><th>Kills</th><th>Damage</th><th>Healing</th><th>XP</th><th>Coins</th></tr>${rows}</table>
-      <p class="note">${m.banked ? 'Your XP and coins were added to your profile. Spend XP on Attributes and the skill tree in the lobby.' : 'Debug mode was used: no XP or coins were added to the profiles.'}</p>`;
+      <p class="note">Your XP and coins were added to your profile. Spend XP on Attributes and the skill tree in the lobby.</p>`;
     const back = el('button', '', 'Back to lobby');
     back.onclick = () => this.onBack();
     this.end.append(back);

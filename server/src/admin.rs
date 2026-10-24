@@ -110,6 +110,11 @@ pub struct AdminMe {
 }
 
 #[derive(Deserialize)]
+pub struct SetDebug {
+    debug: bool,
+}
+
+#[derive(Deserialize)]
 pub struct PlayersQuery {
     q: Option<String>,
     sort: Option<String>,
@@ -153,6 +158,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/admin/players", get(players))
         .route("/api/admin/players/{id}", get(player).delete(delete_player))
         .route("/api/admin/players/{id}/password", post(set_password))
+        .route("/api/admin/players/{id}/debug", post(set_debug))
         .route("/api/admin/characters/{id}", delete(delete_character))
         .route("/api/admin/actions", get(actions))
         .layer(axum::middleware::from_fn(api::require_json))
@@ -232,6 +238,21 @@ async fn set_password(State(state): State<AppState>, admin: AdminSession, Path(i
     }
     state.lobby.lock().unwrap().kick_account(id, "Your password was changed by an admin. Please log in again.");
     audit(&state, &admin, "set_password", &account.name, None).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn set_debug(State(state): State<AppState>, admin: AdminSession, Path(id): Path<i32>, Json(c): Json<SetDebug>) -> ApiResult<StatusCode> {
+    let account = db::account(&state.db, id).await?.ok_or_else(|| fail(StatusCode::NOT_FOUND, "No such player."))?;
+    // The database change is committed first; only then is the player sent to
+    // the login, so no dungeon banks onto characters about to be wiped.
+    let wiped = db::set_account_debug(&state.db, id, c.debug).await?.ok_or_else(|| fail(StatusCode::NOT_FOUND, "No such player."))?;
+    state.lobby.lock().unwrap().kick_account(id, "Your account was changed by an admin. Please log in again.");
+    if c.debug {
+        audit(&state, &admin, "set_debug", &account.name, Some("on")).await;
+    } else {
+        let detail = format!("{wiped} character(s) wiped");
+        audit(&state, &admin, "clear_debug", &account.name, Some(&detail)).await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

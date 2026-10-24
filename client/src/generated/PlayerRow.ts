@@ -8,4 +8,8 @@ created: number,
 /**
  * `YYYY-MM-DD` of the last active day, if any since tracking began.
  */
-last_active: string | null, characters: number, online: boolean, };
+last_active: string | null, characters: number, online: boolean, 
+/**
+ * A debug account (see the design of #151).
+ */
+debug: boolean, };

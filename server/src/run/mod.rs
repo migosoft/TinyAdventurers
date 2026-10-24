@@ -66,8 +66,6 @@ pub struct Member {
     pub character: Option<i32>,
     /// Extra Attributes, nodes, equipment and loadout (validated in the lobby).
     pub build: Build,
-    /// The loadout was set with the debug message (counts as a debug run).
-    pub debug_loadout: bool,
 }
 
 /// How a run ended, for the statistics.
@@ -146,8 +144,8 @@ pub struct Run {
     pub next_id: u32,
     pub rng: ChaCha8Rng,
     pub ended: Option<(bool, f64)>,
-    /// Someone used debug mode (immortal): no XP is banked for this run.
-    pub debug_used: bool,
+    /// A debug run (its room was a debug room): every hero is in debug mode and the debug messages work. Recorded as `runs.debug`.
+    pub debug: bool,
     pub srv_ms: f32,
     pub log: rules_log::RulesLog,
     /// Test-only capture of the last `Damage` that reached `hurt_monster` or `hurt_player`.
@@ -181,7 +179,7 @@ impl Run {
             next_id: 1,
             rng,
             ended: None,
-            debug_used: false,
+            debug: false,
             srv_ms: 0.0,
             log: rules_log::RulesLog::default(),
             #[cfg(test)]
@@ -189,7 +187,6 @@ impl Run {
             layout,
             level,
         };
-        run.debug_used = members.iter().any(|m| m.debug_loadout);
         for (i, m) in members.into_iter().enumerate() {
             let sheet = crate::sheet::hero_sheet(m.class, &m.build).expect("validated in the lobby");
             let max_hp = sheet.max_hp;
@@ -344,6 +341,7 @@ impl Run {
             abilities: [p.sheet.primary, p.sheet.secondary],
             fallback: p.sheet.fallback,
             lights: self.light_infos(),
+            debug: self.debug,
         })
     }
 
@@ -383,7 +381,6 @@ impl Run {
                         }
                     }
                     ClientMsg::Spectate { dir } => self.cycle_spectate(pi, dir),
-                    ClientMsg::Debug { on } => self.set_debug(pi, on),
                     ClientMsg::DebugImmortal { on } => self.set_immortal(pi, on),
                     ClientMsg::DebugDarkvision { ratio } => self.set_darkvision(pi, ratio),
                     ClientMsg::DebugEffect { kind } => self.debug_effect(pi, kind),
@@ -1208,7 +1205,6 @@ impl Run {
             level: self.level.id(),
             boss: self.level.boss_id(),
             time: self.time as f32,
-            banked: !self.debug_used,
             stats: self
                 .players
                 .iter()
@@ -1237,7 +1233,7 @@ impl Run {
                 None => Outcome::Abandoned,
             },
             duration_s: self.time,
-            debug: self.debug_used,
+            debug: self.debug,
             players: self
                 .players
                 .iter()
@@ -1258,11 +1254,9 @@ impl Run {
     }
 
     /// XP and coins to bank per character. Players who left early keep
-    /// what they earned; a run where debug mode was used awards nothing.
+    /// what they earned. A debug run awards too: the database banks only
+    /// characters whose account kind matches `record().debug`.
     pub fn awards(&self) -> Vec<Award> {
-        if self.debug_used {
-            return Vec::new();
-        }
         self.players
             .iter()
             .filter_map(|p| Some(Award { character: p.character?, xp: p.xp, coins: p.coins }))
@@ -1277,6 +1271,11 @@ pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: Sh
     let mut outcome = None;
     for p in &run.players {
         run.send(p, &run.start_info(p));
+    }
+    if run.debug {
+        for pi in 0..run.players.len() {
+            run.set_debug(pi, true);
+        }
     }
     let mut interval = tokio::time::interval(Duration::from_secs_f64(DT));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Burst);
@@ -1341,7 +1340,7 @@ pub mod tests {
             .map(|(i, (c, build))| {
                 let (tx, _rx) = unbounded_channel();
                 std::mem::forget(_rx);
-                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, build: build.clone(), debug_loadout: false }
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, build: build.clone() }
             })
             .collect();
         Run::new(1, members, 7, LevelChoice::Dungeon { boss: Some(boss) })
@@ -1354,7 +1353,7 @@ pub mod tests {
             .map(|(i, c)| {
                 let (tx, _rx) = unbounded_channel();
                 std::mem::forget(_rx);
-                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, build: Build::start(*c), debug_loadout: false }
+                Member { conn: i as u32 + 1, name: format!("p{i}"), class: *c, tx, account: None, character: None, build: Build::start(*c) }
             })
             .collect();
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: Some(boss) })
@@ -1459,7 +1458,7 @@ pub mod tests {
     fn random_boss_run(seed: u64) -> Run {
         let (tx, _rx) = unbounded_channel();
         std::mem::forget(_rx);
-        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, build: Build::start(ClassId::Paladin), debug_loadout: false }];
+        let members = vec![Member { conn: 1, name: "p0".into(), class: ClassId::Paladin, tx, account: None, character: None, build: Build::start(ClassId::Paladin) }];
         Run::new(1, members, seed, LevelChoice::Dungeon { boss: None })
     }
 
@@ -1623,16 +1622,50 @@ pub mod tests {
     }
 
     #[test]
-    fn awards_go_to_characters_unless_debug_was_used() {
+    fn awards_go_to_characters_in_both_kinds_of_run() {
+        for debug in [false, true] {
+            let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+            run.debug = debug;
+            run.players[0].character = Some(5);
+            run.players[0].xp = 40;
+            run.players[0].coins = 12;
+            run.players[1].xp = 10; // no character
+            assert_eq!(run.awards(), vec![Award { character: 5, xp: 40, coins: 12 }]);
+            assert_eq!(run.record(Some(true)).debug, debug);
+        }
+    }
+
+    #[test]
+    fn debug_messages_do_nothing_in_a_normal_run() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        assert!(!run.debug);
+        run.handle(RunCmd::Msg { conn: 1, msg: ClientMsg::DebugDarkvision { ratio: 1.0 } });
+        run.handle(RunCmd::Msg { conn: 1, msg: ClientMsg::DebugEffect { kind: 0 } });
+        run.handle(RunCmd::Msg { conn: 1, msg: ClientMsg::DebugImmortal { on: false } });
+        run.set_debug(0, true);
+        assert!(run.players[0].darkvision.is_none());
+        assert!(run.players[0].effects.list().is_empty());
+        assert!(!run.players[0].debug && !run.players[0].immortal());
+        assert!(!run.record(Some(true)).debug);
+        let ServerMsg::RunStarted(info) = run.start_info(&run.players[0]) else { panic!() };
+        assert!(!info.debug);
+    }
+
+    #[test]
+    fn a_debug_run_puts_every_hero_in_debug_mode_and_still_banks() {
         let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
-        run.players[0].character = Some(5);
-        run.players[0].xp = 40;
-        run.players[0].coins = 12;
-        run.players[1].xp = 10; // no character
-        assert_eq!(run.awards(), vec![Award { character: 5, xp: 40, coins: 12 }]);
-        run.set_debug(1, true);
-        assert!(run.awards().is_empty());
-        assert!(matches!(run.end_msg(true), ServerMsg::RunEnded { banked: false, .. }));
+        run.debug = true;
+        for pi in 0..2 {
+            run.players[pi].character = Some(pi as i32 + 1);
+            run.players[pi].xp = 10;
+            run.players[pi].coins = 3;
+            run.set_debug(pi, true);
+        }
+        assert!(run.players.iter().all(|p| p.debug && p.immortal()));
+        assert_eq!(run.awards().len(), 2);
+        assert!(run.record(Some(true)).debug);
+        let ServerMsg::RunStarted(info) = run.start_info(&run.players[0]) else { panic!() };
+        assert!(info.debug);
     }
 
     #[test]
@@ -1655,8 +1688,6 @@ pub mod tests {
         assert!(r.players[0].survived && !r.players[1].survived);
         assert_eq!(run.record(Some(true)).outcome, Outcome::Victory);
         assert_eq!(run.record(None).outcome, Outcome::Abandoned, "everyone left");
-        run.set_debug(1, true);
-        assert!(run.record(Some(true)).debug);
     }
 
     /// Moves player 0 onto `pos` and steps once.
@@ -1848,6 +1879,7 @@ pub mod tests {
         assert!(said(&run, "fell into the abyss"));
 
         let (mut run, at) = terrain_run(Tile::Chasm);
+        run.debug = true;
         run.set_debug(0, true);
         stand_at(&mut run, at);
         for _ in 0..=(dungeon::FALL_TIME / DT) as usize {
