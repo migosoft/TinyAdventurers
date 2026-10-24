@@ -11,14 +11,22 @@ export const DEPTH = {
   entityBase: 10,
   projectile: 5000,
   fx: 6000,
+  /** The dungeon air (mood.ts), over figures, shots and effects, under enemy HP bars and numbers, the tint and the darkness. Lowest first: haze, dust, smoke, drips, embers. */
+  airHaze: 6490,
+  airDust: 6491,
+  airSmoke: 6492,
+  airDrips: 6493,
+  airEmbers: 6494,
   /** Enemy HP bars: over figures and effects, under the darkness, so they vanish where it is dark. */
   enemyBars: 6500,
   /** Damage and heal numbers on enemies: under the darkness, so they vanish where it is dark. */
   enemyNumbers: 6501,
-  /** Tint of the lights (ADD blend), just below the darkness. */
+  /** Tint of the lights (MULTIPLY blend), just below the darkness. */
   tint: 6999,
   /** The darkness (light canvas). Every figure and shot is under it, heroes too. */
   fog: 7000,
+  /** Smoke from torches in sight: just over the darkness (it rises into the dark wall top), only from seen, lit torches. */
+  torchSmoke: 7000.6,
   /** Lich drain beams: above the fog, they show even where the hero cannot see. */
   beam: 7001,
   /** Sound text ("grrrr", the sleeper's Z): above the darkness, under the damage numbers. */

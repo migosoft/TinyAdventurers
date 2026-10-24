@@ -1,5 +1,5 @@
 // The light canvas: darkness everywhere except tiles in the viewer's sight
-// that a light reaches, plus an additive colour tint per tile from every light
+// that a light reaches, plus a warm colour tint per tile from every light
 // (static ones from LightField, moving ones from the snapshot). The light is
 // worked out per tile, then upsampled to SUB pixels per tile (`upsample`; dark
 // tiles are set back to black, `blackenDarkTiles`) and drawn with LINEAR filtering, scaled up by TILE / SUB. Redrawn every frame
@@ -14,13 +14,13 @@ import { TILE, type TileMap } from '../sim/map';
 import { DEPTH } from './effects';
 import type { LightField } from './light';
 
-// Phaser's FilterMode.LINEAR and BlendModes.ADD as numbers: a value import of
+// Phaser's FilterMode.LINEAR and BlendModes.MULTIPLY as numbers: a value import of
 // Phaser needs a browser, and the pure functions below are unit-tested.
 const LINEAR = 0;
-const ADD = 1;
+const MULTIPLY = 2;
 
-/** How strongly the light colour tints what it lights (ADD blend). */
-const TINT_ALPHA = 0.35;
+/** How strongly a light's hue tints what it lights (MULTIPLY blend): at most this far from white towards the hue. */
+export const WARM = 0.45;
 /** A lit tile is at least this bright (about the falloff's edge), so it is never fully black but its rim really fades. */
 const MIN_LIT = 0.08;
 /** Canvas pixels per tile. One pixel per tile with LINEAR filtering is plain bilinear, which shows creases along the tile grid in a long fade. */
@@ -33,6 +33,18 @@ export function darknessAlpha(visible: boolean, lit: boolean, r: number, g: numb
   if (!visible || !lit) return 1;
   const bright = Math.min(1, Math.max(r, g, b) / 255);
   return 1 - Math.max(bright, MIN_LIT);
+}
+
+/**
+ * The tint pixel (0..255 per channel) of a tile whose summed light colour is `r, g, b`, multiplied over the scene:
+ * the light's hue with its brightest channel at 1, by up to WARM and by how bright the light is. Warms the colours
+ * and never makes them paler. White (no change) where the tile is not seen and lit.
+ */
+export function warmTint(r: number, g: number, b: number, lit: boolean): [number, number, number] {
+  if (!lit) return [255, 255, 255];
+  const m = Math.max(r, g, b, 1);
+  const s = WARM * Math.min(1, m / 255);
+  return [255 * (1 - s * (1 - r / m)), 255 * (1 - s * (1 - g / m)), 255 * (1 - s * (1 - b / m))];
 }
 
 /** Darkness over a tile seen only by darkvision: dim, not black. */
@@ -171,6 +183,10 @@ export class LightView {
   private tintTile: Float32Array;
   private maskTile: Float32Array;
   private tmp: Float32Array;
+  /** Per tile: the summed light colour (r, g, b; 0..255 and over). */
+  get light(): Float32Array { return this.rgb; }
+  /** Per tile: 1 where it is seen and lit this frame. */
+  readonly seenLit: Uint8Array;
   /** Light what the view covers (false: the tile FOV only, the old tile edges, ?lights E). */
   wide = true;
   private inView = (x: number, y: number) => this.view.isVisible(x, y);
@@ -196,8 +212,9 @@ export class LightView {
     this.darkTile = new Float32Array(w * h).fill(255);
     this.tintTile = new Float32Array(w * h * 4);
     this.maskTile = new Float32Array(w * h);
+    this.seenLit = new Uint8Array(w * h);
     this.tmp = new Float32Array(w * SUB * h * 4);
-    scene.add.image(0, 0, 'tint').setOrigin(0, 0).setScale(TILE / SUB).setDepth(DEPTH.tint).setBlendMode(ADD);
+    scene.add.image(0, 0, 'tint').setOrigin(0, 0).setScale(TILE / SUB).setDepth(DEPTH.tint).setBlendMode(MULTIPLY);
     scene.add.image(0, 0, 'dark').setOrigin(0, 0).setScale(TILE / SUB).setDepth(DEPTH.fog);
   }
 
@@ -248,10 +265,10 @@ export class LightView {
         const reach = visible && darkReach(x - tx, y - ty, range);
         dt[i] = tileDark(visible, lit, reach, r, g, b) * 255;
         mt[i] = dvMask(reach, darknessAlpha(visible, lit, r, g, b)) * 255;
-        tt[i * 4] = Math.min(255, r);
-        tt[i * 4 + 1] = Math.min(255, g);
-        tt[i * 4 + 2] = Math.min(255, b);
-        tt[i * 4 + 3] = visible && lit ? TINT_ALPHA * 255 : 0;
+        const sl = visible && lit;
+        this.seenLit[i] = sl ? 1 : 0;
+        [tt[i * 4], tt[i * 4 + 1], tt[i * 4 + 2]] = warmTint(r, g, b, sl);
+        tt[i * 4 + 3] = 255;
       }
     upsample(dt, 1, w, h, x0, y0, x1, y1, this.tmp, this.darkImg.data, 3);
     upsample(tt, 4, w, h, x0, y0, x1, y1, this.tmp, this.tintImg.data, 0);

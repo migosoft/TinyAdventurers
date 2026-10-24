@@ -17,3 +17,19 @@ describe('numbers and bars against the darkness', () => {
     expect(DEPTH.enemyBars).toBeLessThan(DEPTH.enemyNumbers);
   });
 });
+
+describe('the dungeon air depths', () => {
+  it('sits over effects and under enemy bars, ordered haze to embers', () => {
+    const air = [DEPTH.airHaze, DEPTH.airDust, DEPTH.airSmoke, DEPTH.airDrips, DEPTH.airEmbers];
+    for (const d of air) {
+      expect(d).toBeGreaterThan(DEPTH.fx);
+      expect(d).toBeLessThan(DEPTH.enemyBars);
+    }
+    expect([...air].sort((a, b) => a - b)).toEqual(air);
+    expect(new Set(air).size).toBe(air.length);
+  });
+  it('draws torch smoke just over the darkness and under the lich beams', () => {
+    expect(DEPTH.torchSmoke).toBeGreaterThan(DEPTH.fog + 0.5); // over the vision mask (fog + 0.5)
+    expect(DEPTH.torchSmoke).toBeLessThan(DEPTH.beam);
+  });
+});

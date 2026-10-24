@@ -23,6 +23,7 @@ import { lookOf } from './looks';
 import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
 import { LightView, nextDarkvision } from './lightview';
+import { Mood, type AirTorch, type AirShot } from './mood';
 import { VisionMask } from './visionmask';
 import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
@@ -127,6 +128,7 @@ export class GameScene extends Phaser.Scene {
   private lastSnap?: Snapshot;
   private light!: LightField;
   private lightView!: LightView;
+  private mood!: Mood;
   private visionMask!: VisionMask;
   private unsub?: () => void;
   private frameMs = 0;
@@ -187,6 +189,7 @@ export class GameScene extends Phaser.Scene {
     this.fx = new Effects(this);
     this.drawBoard();
     this.lightView = new LightView(this, this.map, this.light);
+    this.mood = new Mood(this, this.map, this.lightView);
     this.visionMask = new VisionMask(this, this.map);
     this.useHint = new KeyCap(this);
     this.bars = this.add.graphics().setDepth(DEPTH.enemyBars);
@@ -255,6 +258,7 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup(): void {
     this.unsub?.();
+    this.mood.destroy();
     this.rulesLog.destroy();
     this.useHint.destroy();
     for (const v of this.views.values()) v.destroy();
@@ -437,6 +441,7 @@ export class GameScene extends Phaser.Scene {
         this.redrawTile(ev.x, ev.y);
         this.light.mapChanged();
         this.lightView.mapChanged();
+        this.mood.mapChanged();
         this.visionMask.mapChanged();
         if (ev.v === TILE_ID.DoorClosed) {
           // The entrance tiles arrive one event each; only announce the first.
@@ -745,6 +750,10 @@ export class GameScene extends Phaser.Scene {
     const darkvision = (this.lastSnap?.me.darkvision ?? 0) / 100;
     const vision = this.lastSnap?.me.vision ?? CONST.FOV_RADIUS;
     this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now, darkvision, vision);
+    const torches: AirTorch[] = [];
+    for (const e of this.ents.values()) if (e.kind === KIND.Torch) torches.push({ x: e.x, y: e.y, side: e.extra, lit: e.anim === 1 });
+    const shots: AirShot[] = (this.lastSnap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
+    this.mood.update(dt, this.cameras.main.worldView, torches, shots);
     this.visionMask.update(this.cameras.main.worldView, this.lightView.view);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 
