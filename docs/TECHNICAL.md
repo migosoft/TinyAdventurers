@@ -1,6 +1,6 @@
 # Tiny Adventurers — Technical Documentation
 
-Audience: developers and coding agents working on the code. For gameplay see [PLAYER_GUIDE.md](PLAYER_GUIDE.md); for open work see [TODO.md](TODO.md).
+Audience: developers and coding agents working on the code. For gameplay see [PLAYER_GUIDE.md](PLAYER_GUIDE.md); for open work see the [GitHub issues](https://github.com/migosoft/TinyAdventurers/issues) ([CLAUDE.md](../CLAUDE.md) "Work tracking").
 
 ## 1. Overview
 
@@ -107,8 +107,8 @@ client/                              Vite + TypeScript + Phaser 3.90
   admin.html, src/admin/             the separate admin page (/admin): main.ts (views), api.ts, charts.ts (SVG
                                      column charts), dom.ts (DOM builder, formatting), admin.css; no Phaser
 tools/e2e/                           browser smoke tests and screenshot scripts (playwright-core + installed Edge/Chrome)
-docs/                                this file, player guide, TODO
-HANDOFF.md                           state + instructions for the next agent
+docs/                                this file, player guide (open work: GitHub issues)
+CLAUDE.md                            workflow, standing decisions, environment for the next agent
 ```
 
 ## 3. Build, run, test
@@ -552,7 +552,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
   - `favicon.png`: the treasure chest on top, area-averaged to 64×64. The admin page has no favicon.
   - The `<h1>` around the images keeps the name for screen readers (`alt`); the edges fade out with `mask-image` (header from 70% to 85% of the radius, so the full width of ADVENTURERS stays opaque).
 - **Recolors:** `RECOLORS` in `build-atlas.ts` swaps whole pack colors for other pack colors and writes the result as new frames in a strip below the sheet (32 px per entry). Today: `summoner_anim_f0-3`, the necromancer with its purple robe (`5f2d56`, trim `9f294e`) turned maroon and red (`62232f`, `da4e38`, the imp's and chort's reds). `scripts/png.ts` is a small PNG codec (8-bit RGB/RGBA, no interlace), so no image library is needed.
-- No other self-drawn sprites: only the terrain tiles and the lich, both at the user's request. See HANDOFF.md.
+- No other self-drawn sprites: only the terrain tiles and the lich, both at the user's request. See CLAUDE.md "Art".
 - Runtime-generated textures are limited to simple effect shapes (`dot`, `spark`, `glow`) and the ground shadow ellipses under figures.
 
 **Board (`GameScene.drawBoard` + `autotile.ts`).**
@@ -652,7 +652,7 @@ The test `guarantees_hold_over_many_seeds` checks 200 seeds (both themes), inclu
 | `?lich` `[&slow=3]` | The lich's magic: the gloom bolt volley and the summon of 5 skeletons + 5 archers (left), and the nova: the purple telegraph ring at the real radius, the burst, three heroes pushed 64 px (one into the chasm) and one spared just outside. |
 | `?ogre` `[&slow=3]` | The ogre's club next to the orc warrior's push (only the club's knocks a hero into the chasm), and the ground slam: the telegraph ring at the real radius, the shockwave, three heroes pushed away (one into a chasm) and one spared just outside. The user approved it. |
 | `?daemons[&slow=3]` | Imp, chort and a pack of both fighting a walking knight, and a summoner summoning imps. Uses the real figure definitions; the attack logic is a local imitation of the server AI. No server needed. |
-| `?lights` | The light system on a scripted room, no server needed: four torches in four colours, a lava pool with a warm torch beside it (mixing), a fireball flying down a corridor into a dark room and back, an explosion with a `Blast` flash in the dark room's doorway while the fireball is at its far end, a frost bolt circling in the first room, and a blue torch that switches every 3 s (so a burnt-out torch shows). It loops every 4 s, `&slow=N` slows time; `tools/e2e/lights-shot.mjs` takes a screenshot every 0.5 s (a third argument, e.g. `0.5`, sets `&dv=`). V cycles the viewer's darkvision 0 / 50% / 100% and `&dv=0.5` starts with it: the doorway tiles of the dark room it sees only by darkvision turn dim grey (at 50% nothing unlit is in reach, so it looks as at 0). The user approved the look on 2026-10-15 and asked for the changes in HANDOFF "Look check". |
+| `?lights` | The light system on a scripted room, no server needed: four torches in four colours, a lava pool with a warm torch beside it (mixing), a fireball flying down a corridor into a dark room and back, an explosion with a `Blast` flash in the dark room's doorway while the fireball is at its far end, a frost bolt circling in the first room, and a blue torch that switches every 3 s (so a burnt-out torch shows). It loops every 4 s, `&slow=N` slows time; `tools/e2e/lights-shot.mjs` takes a screenshot every 0.5 s (a third argument, e.g. `0.5`, sets `&dv=`). V cycles the viewer's darkvision 0 / 50% / 100% and `&dv=0.5` starts with it: the doorway tiles of the dark room it sees only by darkvision turn dim grey (at 50% nothing unlit is in reach, so it looks as at 0). The user approved the look on 2026-10-15 and asked for the changes made then. |
 | `?lag=150&jitter=40&loss=2` | Network simulator. |
 
 ## 11. Extending
@@ -783,7 +783,7 @@ The database, statistics, telemetry and the admin page take the level as text (`
 - **Rules.** `check_equip` and `check_equipment` refuse an item whose slot, class, requirement or proficiency does not fit. Weapon and armor proficiencies are per class in `defs/classes.rs`. Armor is a maximum: Cloth < Light < Medium < Heavy, and a class wears its maximum and everything lighter (Wizard Cloth, Paladin Heavy, Barbarian Medium, Elven Ranger Light). `Requirement::Attr(attr, n)` (`defs/requirements.rs`) is checked against the Attributes without items (class + race + shop), so a ring cannot unlock the staff that unlocks the ring.
 - **The sheet folds equipment in.** `hero_sheet(class, &Build)` first adds the armor bases (physical resistance, weight), then the properties: `Attr` points, resistances, effect resistances, weight, move speed, max HP. The Attributes with items then scale the weapons. `DamageShare` and `OnHit` are weapon-only: they go to their own weapon (index 0 melee, 1 ranged), so they ride only on that weapon's attacks (a flaming sword's heat on Sword and Axe, not on Holy Light or Fireball), and a data test refuses them on other items. An item has at most one `OnHit`. Added shares are scaled down so a split never passes 100 % (`DamageSplit::with_shares`). A hero carries the light of the item with the largest light radius, or `LightKind::Radiant` (radius 2) with that keystone, whichever is larger.
 - **Enemies and races.** Enemy stat blocks in `defs/enemies.rs` point to enemy weapons (Goblin Bow, Rusty Sword, Skeleton Longbow, Cleaver, Orc Bow, Spiked Club, Mimic Bite, Imp Claws, Chort Claws) and `enemy_attacks_are_pinned` pins their numbers. Races in `defs/races.rs` carry natural weapons (Unarmed Strike, Bite, Claws, Beast Bite, Tail); they are part of the body and never go into a slot. Boss weapons are not defined: their scripts keep their constants.
-- **Not built yet.** `PropKind::Aura` (it needs a per-tick area layer and an HP rule), the shield (see TODO "Shields"). Heroes are drawn with their equipped weapons and the equip UI is real (plan 5, §11a "The character screens").
+- **Not built yet.** `PropKind::Aura` (it needs a per-tick area layer and an HP rule), the shield (see the "Shields" issue). Heroes are drawn with their equipped weapons and the equip UI is real (plan 5, §11a "The character screens").
 
 **Abilities (progression plans 3a and 3b; spec §6.3–6.6).** Plan 3b added the 16 new abilities (ids 7 to 22) on the 3a framework; their table follows the 3a rules below.
 - **Data.** `defs/abilities.rs`: `AbilityId` (declared with `listed_enum!`, ids 0..=22: `MagicMissile, Fireball, Strike, HolyLight, Charge, Shoot, SummonWolf`, then the 16 of plan 3b) and one `AbilityDef` row per id in `abilities::def`: `slot` (Primary or Secondary), `category`, `uses`, `ranged`, `req`, `shape`, `own`, `weapon_mult` and `classes` (whose own pool can hold it: the class start, or a tree unlock node). Every `match` over these enums is exhaustive, with no `_ =>` arm.
@@ -1207,8 +1207,8 @@ The log reads these; they stay useful without it. `Damage.why` (`Why`, `What`, `
 
 - Pack art gaps: no attack frames, no up/down facing. (The dragon, the demon and the lich have their own frames.)
 - No sound.
-- Damage types, resistances and the barrel numbers are first guesses for the balancing pass, and the user has not played the barrels yet (see HANDOFF, open points).
-- Lighting: all numbers (radius, intensity, flicker per kind, `TORCH_SPACING`, `DARK_SHARE`, `MIN_LIT`, `TINT_ALPHA`, the falloff edge, `BLAST_FLASH`, `HOLY_FLASH`) are first guesses for the balancing pass. The user approved the overall look (HANDOFF "Look check").
+- Damage types, resistances and the barrel numbers are first guesses for the balancing pass, and the user has not played the barrels yet (see the `balancing` issues).
+- Lighting: all numbers (radius, intensity, flicker per kind, `TORCH_SPACING`, `DARK_SHARE`, `MIN_LIT`, `TINT_ALPHA`, the falloff edge, `BLAST_FLASH`, `HOLY_FLASH`) are first guesses for the balancing pass. The user approved the overall look (2026-10-15).
 - The light canvas is upsampled from per-tile values and dark tiles are set back to black, so the light-to-dark step sits on the tile boundary: the LINEAR filter softens it by half a canvas pixel (a quarter tile) on each side, and the lit tile next to a dark one darkens towards it.
 - **Vision edges:** the client computes the view from its predicted (or interpolated) position, the server from its own, so a tile at the very edge can differ for a moment. A monster on a seen tile can stand partly in the drawn black (a tile counts when any of its 16 sample points is in sight). Walls count per tile by the tile FOV, so a wall the FOV marks can show whole although the polygon's shadow covers its face, and a wall face the polygon reaches outside the FOV stays black.
 - The moving-light list uses a distance test without line of sight, so the glow of a shot or enemy behind a wall within range is sent and drawn (its carrier is not).
