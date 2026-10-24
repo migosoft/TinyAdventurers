@@ -88,7 +88,7 @@ A projectile's air behaviour is derived from data every projectile already has (
 
 The wake (`Wind.wake(x, y, vx, vy, r, heat)`, once per frame):
 - **Kick:** each frame injects a share `min(1, speed * dt / r)` of the target into a Gaussian band (half-width and length `r`), so a spot receives about the full target once as the shot passes, independent of frame rate. Target: 0.45 x speed along the flight and 0.25 x speed outward, times `min(1.5, 0.7 + 0.3 * r / 12)`.
-- **Eddies:** every `1.5 * r` px of travel a swirl appears `r` behind the shot and `0.6 * r` to one side (radius `0.8 * r`, peak `0.25 x speed` x the size factor), alternating side and spin.
+- **Eddies:** a swirl of radius `e = max(1.2 * r, 16)` px (at least two grid cells, or the grid smears it out within a few frames) appears every `2 * e` px of travel, `e` behind the shot and `0.8 * e` to one side, with peak `0.4 x speed` x the size factor, alternating side and spin.
 - **Heat:** a hot shot adds `18 px/s x heat` of upward air behind it.
 - Walls stop all of it (line-of-sight check).
 
