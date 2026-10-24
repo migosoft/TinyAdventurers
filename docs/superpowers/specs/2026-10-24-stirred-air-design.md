@@ -12,6 +12,7 @@ The user, 2026-10-24: dust and smoke should swirl "as if there's real air", reac
 - **Figures** (heroes, allies, enemies, bosses) that move push the air along their direction and a little outward, more strongly the faster they move. The dust curls into a swirl behind them, not just a straight shove. Standing still pushes nothing. A dash or charge makes a strong swirl. Bigger figures (bosses, the ogre) stir a wider area.
 - **Projectiles** (arrows, bolts, fireballs, magic missiles) cut a narrow wake: specks along the path are pushed aside and along the flight direction.
 - **Explosions** (the snapshot's `LIGHT_KIND.Blast`) push the air outward in a ring.
+- **A gentle background draft** (the user, 2026-10-24): even with nothing moving, the air is never quite still. A faint current wanders slowly; its direction and strength change over tens of seconds and differ a little from place to place, so neighbouring clouds do not move in lockstep. It is far too weak to break up a cloud. Dust clouds drift with it (it **replaces** #148's random drift of the whole cloud; the small wander of each speck inside its cloud stays, and so does the slight upward float), and smoke leans with it.
 - **Torch and lava smoke** bends the same way: a passing figure or shot sways the plume for a moment, then it rises straight again as the air calms.
 - **Embers** drift with the air too.
 - **Disturbed dust clouds dissipate** (decided with the user in the issue): once a cloud is stirred, its specks are released from the cloud's pull, drift on with the air, slow down and fade out over about 1–2 s, and the cloud then respawns at a new lit spot. A busy fight visibly clears the air; the dust settles back afterwards.
@@ -23,6 +24,7 @@ Agreed with the user: one invisible, coarse wind map over the view, so everythin
 - A **grid of air velocities** (cells about half a tile, 8 px) covering the camera view plus a margin, **anchored to the world** so camera movement does not move the air. It is a new pure module (e.g. `client/src/game/wind.ts`) with no Phaser dependency, so it is unit-tested directly.
 - **Movers push air into it** each frame: position, velocity and a size. A moving figure adds air in a soft pocket that reaches about twice its size around it and leans forward (so the air ahead moves first): forward and outward ahead, outward at the sides, along with it behind, plus a weak counter-rotating pair behind it so a wake curls. A projectile adds a narrow push along its path. A blast adds an outward ring once, when it first shows (the existing `BurstOnce`).
 - **The air spreads and calms:** each frame the velocities blur into neighbouring cells and decay, so a gust lives about a second and fades. Cells inside walls (opaque tiles) hold no air, so wind does not pass through walls.
+- **The draft** is not stored in the grid: it is a smooth, slowly changing function of position and time (low-frequency noise), added to the grid's value wherever the air is sampled. Inside walls it is zero like the rest.
 - **Everything samples it:** each dust speck, smoke puff and ember adds the wind at its position (smoothly interpolated between cells) to its own drift. Smoke and embers react less strongly than loose dust (they are heavier / have their own rise), the builder tunes how much.
 - **A stirred cloud:** the gentle edge of a pocket only nudges a cloud's specks (they sway and drift back). When the wind at any of a cloud's specks passes a threshold, the **whole cloud** lets go of all its specks (the issue: "once a dust cloud is disturbed, it dissipates"). Its specks keep their world positions, move with the wind plus their own momentum and drag, fade out over about 1–2 s, and when all have faded the cloud respawns. Specks the gust did not reach just drift and fade where they are.
 
@@ -77,6 +79,7 @@ New buttons: **Stir: on/off** (to compare with #148) and **Respawn: instant/dela
 
 ## Calls made by Claude (not discussed with the user)
 
+- The draft is room-wide noise, not flowing along corridors and through doorways (that version was offered as noticeably more work; a possible follow-up). The demo's **Stir** button switches the draft too; a separate **Draft: on/off** button lets the user judge it alone.
 - The haze stays as it is: it is one world-anchored tiled texture, and bending it locally would need a shader. Can be a follow-up if the user misses it.
 - The method: a coarse velocity grid with blur and decay, plus a small vortex pair behind movers for the curl, rather than a full fluid solver (no pressure solve).
 - Cell size about 8 px; a gust lasts about a second.
