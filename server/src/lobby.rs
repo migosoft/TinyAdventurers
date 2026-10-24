@@ -1382,12 +1382,17 @@ mod tests {
     async fn a_mixed_party_does_not_start() {
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
-        let (d, n, _, rn) = two_kinds(&mut l);
+        let d = join_debug(&mut l, 1, ClassId::Wizard);
+        let (n, mut nrx) = join_with(&mut l, 2, ClassId::Wizard, Progress::new(ClassId::Wizard));
+        l.handle(n, ClientMsg::CreateRun { name: "norm".into() });
+        let rn = l.conns[&n].room.unwrap();
         // Force the impossible: a debug connection inside the normal room.
         l.rooms.get_mut(&rn).unwrap().members.push(d);
         l.conns.get_mut(&d).unwrap().room = Some(rn);
         l.conns.get_mut(&d).unwrap().ready = true;
+        errors(&mut nrx);
         l.handle(n, ClientMsg::StartRun);
         assert!(l.rooms[&rn].run_tx.is_none(), "nothing started");
+        assert_eq!(errors(&mut nrx), vec!["Mixed party.".to_string()]);
     }
 }

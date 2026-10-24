@@ -194,7 +194,7 @@ if (query.includes('debug')) {
   try {
     for (const want of ['MORTAL', 'immortal']) {
       await p1.keyboard.press('F9');
-      await p1.waitForFunction((w) => document.querySelector('.debug-badge b')?.textContent === `DEBUG · ${w}`, want, { timeout: 5000 });
+      await p1.waitForFunction((w) => document.querySelector('.debug-badge .db-title')?.textContent === `DEBUG · ${w}`, want, { timeout: 5000 });
     }
     console.log('F9 immortality: MORTAL -> immortal');
   } catch (e) {
@@ -273,8 +273,7 @@ async function adminPass() {
   if (logins.join() !== '401,200') errors.push(`after the admin changed the password: old/new login gave ${logins}`);
   else console.log('admin: old password refused, new one works');
 
-  // A debug account's page has two such inputs (unmark first, delete last).
-  await page.locator(`input[aria-label="Type ${a1.account} to confirm"]`).last().fill(a1.account);
+  await page.fill(`input[aria-label="Type ${a1.account} to confirm deleting the player"]`, a1.account);
   await page.click('button:text-is("Delete player")');
   await page.waitForSelector('.flash >> text=deleted');
   await page.click('nav >> text=Audit log');

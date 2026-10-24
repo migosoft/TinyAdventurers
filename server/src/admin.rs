@@ -245,12 +245,16 @@ async fn set_debug(State(state): State<AppState>, admin: AdminSession, Path(id):
     let account = db::account(&state.db, id).await?.ok_or_else(|| fail(StatusCode::NOT_FOUND, "No such player."))?;
     // The database change is committed first; only then is the player sent to
     // the login, so no dungeon banks onto characters about to be wiped.
-    let wiped = db::set_account_debug(&state.db, id, c.debug).await?.ok_or_else(|| fail(StatusCode::NOT_FOUND, "No such player."))?;
+    let change = db::set_account_debug(&state.db, id, c.debug).await?.ok_or_else(|| fail(StatusCode::NOT_FOUND, "No such player."))?;
+    // Already in that state (a stale admin tab): nothing changed, nothing to log.
+    if change.was == c.debug {
+        return Ok(StatusCode::NO_CONTENT);
+    }
     state.lobby.lock().unwrap().kick_account(id, "Your account was changed by an admin. Please log in again.");
     if c.debug {
         audit(&state, &admin, "set_debug", &account.name, Some("on")).await;
     } else {
-        let detail = format!("{wiped} character(s) wiped");
+        let detail = format!("{} character(s) wiped", change.wiped);
         audit(&state, &admin, "clear_debug", &account.name, Some(&detail)).await;
     }
     Ok(StatusCode::NO_CONTENT)
@@ -310,6 +314,57 @@ mod tests {
         admin.end(b"t");
         assert!(!admin.touch(b"t", t0, true), "logged out");
         assert!(!admin.touch(b"unknown", t0, true));
+    }
+
+    /// Needs PostgreSQL (`DATABASE_URL`), see `db::tests`.
+    #[tokio::test]
+    async fn set_debug_kicks_and_audits_real_changes_only() {
+        let Some(db) = db::tests::test_db().await else { return };
+        let state = AppState {
+            lobby: crate::lobby::new_shared(Some(db.clone())),
+            db: db.clone(),
+            auth: std::sync::Arc::new(auth::Auth::new(b"admin-test-secret-admin-test-secret", false)),
+            admin: std::sync::Arc::new(AdminState::new(None, Duration::from_secs(600))),
+        };
+        let call = |id: i32, debug: bool| set_debug(State(state.clone()), AdminSession { name: "root".into() }, Path(id), Json(SetDebug { debug }));
+        let connect = |account: i32| {
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            state.lobby.lock().unwrap().connect(account, false, tx);
+            while rx.try_recv().is_ok() {} // the welcome
+            rx
+        };
+        let online = |account: i32| state.lobby.lock().unwrap().online_ids().0.contains(&account);
+        let log = || async { stats::recent_actions(&db, 10).await.unwrap().into_iter().map(|a| (a.action, a.target, a.detail)).collect::<Vec<_>>() };
+        let a = db::create_account(&db, "Flagged", "h").await.unwrap();
+        db::create_character(&db, a, "Tester", crate::protocol::ClassId::Wizard).await.unwrap();
+
+        let missing = call(9999, true).await.unwrap_err().into_response();
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+        // A no-op (a stale admin tab) neither kicks nor writes an audit row.
+        let mut rx = connect(a);
+        assert_eq!(call(a, false).await.ok(), Some(StatusCode::NO_CONTENT));
+        assert!(online(a) && rx.try_recv().is_err(), "not kicked");
+        assert!(log().await.is_empty());
+
+        // Marking: committed, then the player is sent to the login, then audited.
+        assert_eq!(call(a, true).await.ok(), Some(StatusCode::NO_CONTENT));
+        assert!(db::account(&db, a).await.unwrap().unwrap().debug);
+        assert!(!online(a), "kicked");
+        assert!(matches!(rx.try_recv(), Ok(axum::extract::ws::Message::Binary(_))), "the error message");
+        assert!(matches!(rx.try_recv(), Ok(axum::extract::ws::Message::Close(None))));
+        assert_eq!(log().await, vec![("set_debug".into(), "Flagged".into(), Some("on".into()))]);
+
+        let rx = connect(a);
+        assert_eq!(call(a, true).await.ok(), Some(StatusCode::NO_CONTENT));
+        assert!(online(a), "marking a debug account again is a no-op");
+        assert_eq!(log().await.len(), 1);
+
+        assert_eq!(call(a, false).await.ok(), Some(StatusCode::NO_CONTENT));
+        assert!(!db::account(&db, a).await.unwrap().unwrap().debug);
+        assert!(!online(a), "kicked");
+        drop(rx);
+        assert_eq!(log().await[0], ("clear_debug".into(), "Flagged".into(), Some("1 character(s) wiped".into())));
     }
 
     #[test]

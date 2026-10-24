@@ -328,20 +328,32 @@ pub async fn bank_awards(db: &Db, awards: &[Award], debug_run: bool) -> Result<V
     Ok(out)
 }
 
+/// What `set_account_debug` did: the flag before, and how many characters
+/// were wiped. `was == on` means nothing changed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DebugChange {
+    pub was: bool,
+    pub wiped: u32,
+}
+
 /// Admin: marks or unmarks an account as a debug account. Unmarking wipes
 /// every character of the account (their progress was never earned); marking
-/// keeps the progress. `None` if there is no such account, else the number of
-/// characters wiped. The account row is locked first, like everywhere.
+/// keeps the progress. `None` if there is no such account. A request that
+/// matches the current flag writes nothing. The account row is locked first,
+/// like everywhere.
 #[tracing::instrument(skip_all)]
-pub async fn set_account_debug(db: &Db, id: i32, on: bool) -> Result<Option<u32>, sqlx::Error> {
+pub async fn set_account_debug(db: &Db, id: i32, on: bool) -> Result<Option<DebugChange>, sqlx::Error> {
     let mut tx = db.begin().await?;
     let Some(row) = sqlx::query("SELECT debug FROM accounts WHERE id = $1 FOR UPDATE").bind(id).fetch_optional(&mut *tx).await? else {
         return Ok(None);
     };
     let was: bool = row.get(0);
+    if was == on {
+        return Ok(Some(DebugChange { was, wiped: 0 }));
+    }
     sqlx::query("UPDATE accounts SET debug = $2 WHERE id = $1").bind(id).bind(on).execute(&mut *tx).await?;
     let mut wiped = 0;
-    if was && !on {
+    if was {
         let rows = sqlx::query("SELECT id, class FROM characters WHERE account_id = $1 ORDER BY id").bind(id).fetch_all(&mut *tx).await?;
         for r in &rows {
             let class = class_from(r.get::<&str, _>(1));
@@ -357,7 +369,7 @@ pub async fn set_account_debug(db: &Db, id: i32, on: bool) -> Result<Option<u32>
         }
     }
     tx.commit().await?;
-    Ok(Some(wiped))
+    Ok(Some(DebugChange { was, wiped }))
 }
 
 // --------------------------------------------------------------- statistics
@@ -480,7 +492,7 @@ pub mod tests {
         bank_awards(&db, &[Award { character: c.id, xp: 10_000, coins: 0 }], false).await.unwrap();
         done(update_progress(&db, c.id, Change::BuyAttr(Attr::Wil), w).await.unwrap());
 
-        assert_eq!(set_account_debug(&db, a, true).await.unwrap(), Some(0));
+        assert_eq!(set_account_debug(&db, a, true).await.unwrap(), Some(DebugChange { was: false, wiped: 0 }));
         let p = done(update_progress(&db, c.id, Change::GrantItem(ItemId::Knife), w).await.unwrap());
         assert!(p.inventory.contains(&ItemId::Knife));
 
@@ -516,7 +528,7 @@ pub mod tests {
         let a = create_account(&db, "Flip", "h").await.unwrap();
         let c1 = create_character(&db, a, "One", ClassId::Wizard).await.unwrap();
         let c2 = create_character(&db, a, "Two", ClassId::Barbarian).await.unwrap();
-        assert_eq!(set_account_debug(&db, a, true).await.unwrap(), Some(0));
+        assert_eq!(set_account_debug(&db, a, true).await.unwrap(), Some(DebugChange { was: false, wiped: 0 }));
         assert!(account(&db, a).await.unwrap().unwrap().debug);
         for c in [&c1, &c2] {
             bank_awards(&db, &[Award { character: c.id, xp: 50, coins: 5 }], true).await.unwrap();
@@ -524,11 +536,11 @@ pub mod tests {
         }
         let before: Vec<Progress> = list_characters(&db, a).await.unwrap().into_iter().map(|c| c.progress).collect();
         assert!(before.iter().all(|p| p.xp == 50 && p.inventory.contains(&ItemId::Knife)));
-        assert_eq!(set_account_debug(&db, a, true).await.unwrap(), Some(0), "marking again keeps the progress");
+        assert_eq!(set_account_debug(&db, a, true).await.unwrap(), Some(DebugChange { was: true, wiped: 0 }), "marking again keeps the progress");
         let same: Vec<Progress> = list_characters(&db, a).await.unwrap().into_iter().map(|c| c.progress).collect();
         assert_eq!(same, before);
 
-        assert_eq!(set_account_debug(&db, a, false).await.unwrap(), Some(2));
+        assert_eq!(set_account_debug(&db, a, false).await.unwrap(), Some(DebugChange { was: true, wiped: 2 }));
         assert!(!account(&db, a).await.unwrap().unwrap().debug);
         for (c, old) in list_characters(&db, a).await.unwrap().iter().zip(&before) {
             let fresh = Progress::new(c.class);
@@ -537,7 +549,7 @@ pub mod tests {
             assert_eq!((&p.coins, &p.inventory, &p.nodes, &p.bought), (&fresh.coins, &fresh.inventory, &fresh.nodes, &fresh.bought));
             assert!(p.rev > old.rev);
         }
-        assert_eq!(set_account_debug(&db, a, false).await.unwrap(), Some(0));
+        assert_eq!(set_account_debug(&db, a, false).await.unwrap(), Some(DebugChange { was: false, wiped: 0 }));
         assert_eq!(set_account_debug(&db, 9999, true).await.unwrap(), None);
     }
 
@@ -570,7 +582,7 @@ pub mod tests {
         for i in 0..10 {
             let db = db.clone();
             let attr = [Attr::Dex, Attr::Wil][i % 2];
-            tasks.push(tokio::spawn(async move { update_progress(&db, c.id, Change::BuyAttr(attr), ClassId::ElvenRanger).await.unwrap(); }));
+            tasks.push(tokio::spawn(async move { done(update_progress(&db, c.id, Change::BuyAttr(attr), ClassId::ElvenRanger).await.unwrap()); }));
         }
         for t in tasks {
             t.await.unwrap();
@@ -601,7 +613,7 @@ pub mod tests {
         sqlx::query("UPDATE characters SET progress = '{\"xp\": 300, \"upgrades\": {\"armor\": 1}, \"future\": true}' WHERE id = $1").bind(c.id).execute(&db).await.unwrap();
         let p = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
         assert_eq!((p.xp, p.version), (300 + 100, CURRENT_VERSION), "the v1 level is refunded");
-        update_progress(&db, c.id, Change::BuyAttr(Attr::Str), ClassId::Barbarian).await.unwrap();
+        done(update_progress(&db, c.id, Change::BuyAttr(Attr::Str), ClassId::Barbarian).await.unwrap());
         let again = load_character(&db, a, c.id).await.unwrap().unwrap().progress;
         assert_eq!(again.xp, 400 - again.xp_spent, "read twice, refunded once");
         let v: i64 = sqlx::query("SELECT (progress->>'version')::bigint FROM characters WHERE id = $1").bind(c.id).fetch_one(&db).await.unwrap().get(0);

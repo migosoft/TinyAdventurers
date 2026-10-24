@@ -38,11 +38,21 @@ describe('Hud', () => {
   it('writes the help line as key caps', () => {
     expect(helpHtml()).toBe('<span><kbd>WASD</kbd>move</span><span><kbd>LMB</kbd><kbd>RMB</kbd>attack</span><span><kbd>L</kbd>log</span><span><kbd>Esc</kbd>menu</span><span><kbd>F3</kbd>stats</span>');
   });
-  it('lists every debug key on the debug badge and shows when the hero is mortal', () => {
-    const on = debugBadgeHtml(true);
-    for (const k of ['F4', 'F8', 'F9']) expect(on).toContain(`<kbd>${k}</kbd>`);
-    expect(on).toContain('DEBUG · immortal');
-    expect(debugBadgeHtml(false)).toContain('DEBUG · MORTAL');
+  it('lists every debug key on its own row of the debug badge and shows when the hero is mortal', () => {
+    const badge = document.createElement('div');
+    badge.innerHTML = debugBadgeHtml(true);
+    const rows = [...badge.querySelectorAll('.db-row')].map((r) => [r.querySelector('kbd, .db-swatch')!.textContent, r.textContent]);
+    expect(rows).toEqual([
+      ['F4', 'F4darkvision 0/50/100 %'],
+      ['F8', 'F8next effect on you'],
+      ['F9', 'F9immortal on/off'],
+      ['', 'path to the boss'],
+      ['', 'path to the ogre'],
+    ]);
+    expect(badge.querySelector('.db-title')!.textContent).toBe('DEBUG · immortal');
+    expect(badge.querySelector('.db-title.mortal')).toBeNull();
+    badge.innerHTML = debugBadgeHtml(false);
+    expect(badge.querySelector('.db-title.mortal')!.textContent).toBe('DEBUG · MORTAL');
   });
   it('titles the menu Paused and keeps its hint', () => {
     expect(document.querySelector('.menu .title')!.textContent).toBe('Paused');
