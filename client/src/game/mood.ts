@@ -514,6 +514,8 @@ export class Mood {
         g.burst = !g.burst;
         g.left = g.burst ? rnd(0.3, 1.1) : rnd(0.5, 1.9);
         g.soot = Math.random() < 0.3 ? 0.65 : 0.12;
+        // A gust puffs at once: a wait left over from the quiet gap could outlast a short gust.
+        if (g.burst) g.next = 0;
       }
       g.next -= dt;
       if (g.next > 0) continue;
