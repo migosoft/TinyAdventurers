@@ -311,7 +311,7 @@ export class Mood {
       const x = view.x + Math.random() * view.width;
       const y = view.y + Math.random() * view.height;
       const [b] = this.lightAt(x, y);
-      if (b > 0.05 && Math.random() < b * b) {
+      if (b > 0.05 && Math.random() < b * b && !this.stirredAt(x, y)) {
         c.stirred = false;
         c.x = x;
         c.y = y;
@@ -393,6 +393,12 @@ export class Mood {
         m.img.setVisible(a > 0.01).setPosition(x, y).setBlendMode(ADD).setTint(tint).setAlpha(a);
       }
     });
+  }
+
+  /** True when the air at (x, y) is faster than STIR_SPEED. */
+  private stirredAt(x: number, y: number): boolean {
+    const w = this.wind.sample(x, y, this.air);
+    return w[0] * w[0] + w[1] * w[1] > STIR_SPEED * STIR_SPEED;
   }
 
   /** True when any mote of the cloud sits in air faster than STIR_SPEED. */

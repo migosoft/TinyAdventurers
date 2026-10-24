@@ -303,7 +303,7 @@ describe('Mood', () => {
       expect(mood.counts.stirred).toBeGreaterThan(0);
       run(mood, 2);
       expect(mood.counts.stirred).toBeGreaterThan(0); // fading or waiting
-      run(mood, 7); // the wider pockets leave air above STIR_SPEED for about 1.5 s
+      run(mood, 6); // fade 2 s + stirDelay 3 s + 1 s margin
       expect(mood.counts.stirred).toBe(0);
       expect(mood.counts.clouds).toBe(cloudCount(640, 360));
     });
@@ -313,8 +313,19 @@ describe('Mood', () => {
       mood.stirDelay = 0;
       run(mood, 2);
       sweep(mood, 4);
-      run(mood, 4.5); // clouds respawning into the fading air stir again, for 2 s at most
+      run(mood, 3.5); // fade 2 s, plus up to 1.5 s for the swept air to calm below STIR_SPEED
       expect(mood.counts.stirred).toBe(0);
+    });
+
+    it('no cloud spawns inside stirred air', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      const gust: AirMover[] = [];
+      for (let x = 0; x <= 640; x += 24) for (let y = 0; y <= 360; y += 24) gust.push(figure(x, y, 300));
+      for (let i = 0; i < 120; i++) {
+        mood.update(1 / 60, view(), [], [], gust);
+        if (i > 20) expect(mood.counts.stirred).toBe(0);
+      }
     });
 
     it('a blast pushes the air once', () => {
