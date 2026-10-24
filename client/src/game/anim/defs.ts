@@ -160,7 +160,7 @@ export const FIGURES: Record<number, FigureDef> = {
 
 /** Projectiles: a pack sprite (arrows) or a runtime glow of the given color. */
 /** `gloom`: the lich's dark purple shimmer (a flickering glow trailing dark smoke and sparks, see `Effects.gloomWisp`). */
-export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?: number; trail?: number; gloom?: boolean; spin?: boolean }> = {
+export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?: number; trail?: number; gloom?: boolean; spin?: boolean; /** Overrides the air's guess from size and glow; rarely needed. */ air?: { r?: number; heat?: number } }> = {
   [KIND.Missile]: { glow: 0xa080ff, scale: 0.8, trail: 0x9a7aff },
   [KIND.Fireball]: { glow: 0xff7020, scale: 1.4, trail: 0xffb040 },
   [KIND.Bolt]: { frame: 'weapon_arrow', scale: 0.6 },

@@ -120,7 +120,7 @@ Lasting rules that are not one issue's business. Feature-specific decisions live
 3. Full suite against a throwaway Postgres: `docker compose -f docker-compose.test.yml run --rm test`, then `docker compose -f docker-compose.test.yml down`. Every change to exported data regenerates `client/src/generated` this way.
 4. `docker compose up --build -d`, then `curl localhost:8080/health` prints `OK`.
 5. Smoke: `cd tools/e2e && BROWSER=/usr/bin/brave-browser node smoke.mjs http://localhost:8080/ "" shots ElvenRanger,Paladin` (and `Wizard,Barbarian`). It should print "no browser errors"; look at the screenshots in `shots/`.
-6. Visual changes: `node gallery-shots.mjs http://localhost:8080/ shots melee,breath`, or open `?gallery&state=<state>&slow=10`. Demos: `?mimic`, `?ogre`, `?daemons`, `?lights` (`node lights-shot.mjs`), `?mood` (dungeon air), `?water`, `?chasm`, `?lava`, `?dragon`, `?demon`, `?knockback` (add `&slow=3`). Terrain tile changes: edit `client/scripts/terrain-tiles.ts`, then `npm run atlas`.
+6. Visual changes: `node gallery-shots.mjs http://localhost:8080/ shots melee,breath`, or open `?gallery&state=<state>&slow=10`. Demos: `?mimic`, `?ogre`, `?daemons`, `?lights` (`node lights-shot.mjs`), `?mood` (dungeon air; add `&wind=1` to see the wind), `?water`, `?chasm`, `?lava`, `?dragon`, `?demon`, `?knockback` (add `&slow=3`). Terrain tile changes: edit `client/scripts/terrain-tiles.ts`, then `npm run atlas`.
 7. Fingerprint tests (`level_setup_is_unchanged`, `simulation_is_unchanged_after_waking_the_boss`, `plan_3a_fight_is_pinned`) must pass unchanged unless the change is meant to alter the simulation; then re-record them once and say so.
 
 ## Gotchas

@@ -23,7 +23,9 @@ import { lookOf } from './looks';
 import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
 import { LightView, nextDarkvision } from './lightview';
-import { Mood, type AirTorch, type AirShot } from './mood';
+import { Mood, type AirTorch, type AirShot, type AirMover } from './mood';
+import { MoverTracker } from './airmovers';
+import { projectileAir } from './airshots';
 import { VisionMask } from './visionmask';
 import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
@@ -129,6 +131,8 @@ export class GameScene extends Phaser.Scene {
   private light!: LightField;
   private lightView!: LightView;
   private mood!: Mood;
+  private movers = new MoverTracker(); // replaced in init() for every run
+  private airMovers: AirMover[] = [];
   private visionMask!: VisionMask;
   private unsub?: () => void;
   private frameMs = 0;
@@ -166,6 +170,7 @@ export class GameScene extends Phaser.Scene {
     this.barrelViews = new Map();
     this.torchViews = new Map();
     this.cosmetics = [];
+    this.movers = new MoverTracker();
     this.endedShots.clear();
     this.stoppedShots.clear();
     this.interp = new Interpolator();
@@ -753,7 +758,7 @@ export class GameScene extends Phaser.Scene {
     const torches: AirTorch[] = [];
     for (const e of this.ents.values()) if (e.kind === KIND.Torch) torches.push({ x: e.x, y: e.y, side: e.extra, lit: e.anim === 1 });
     const shots: AirShot[] = (this.lastSnap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
-    this.mood.update(dt, this.cameras.main.worldView, torches, shots);
+    this.mood.update(dt, this.cameras.main.worldView, torches, shots, this.collectMovers(dt, px, py));
     this.visionMask.update(this.cameras.main.worldView, this.lightView.view);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 
@@ -1055,6 +1060,40 @@ export class GameScene extends Phaser.Scene {
       const ty = me ? py : t!.y;
       drawGazeBeam(g, e.x, e.y, tx, ty, now);
     }
+  }
+
+  /** What moves through the air this frame: figures, the own hero (from prediction), others' shots and the own cosmetic shots, each once. */
+  private collectMovers(dt: number, px: number, py: number): AirMover[] {
+    const out = this.airMovers;
+    out.length = 0;
+    const tr = this.movers;
+    tr.begin(dt);
+    const add = (m: AirMover | null) => {
+      if (m) out.push(m);
+    };
+    // Projectiles are drawn 8 px above their ground position; their air follows the drawing.
+    const shotMover = (m: AirMover | null): AirMover | null => {
+      if (m) m.airY = m.y - 8;
+      return m;
+    };
+    for (const e of this.ents.values()) {
+      if (e.id === this.info.you || e.flags & FLAG.DEAD) continue;
+      if (isProjectileKind(e.kind)) {
+        if (e.extra >>> 16 === this.info.you) continue; // own shots come from this.cosmetics
+        const a = projectileAir(e.kind);
+        add(shotMover(tr.track(e.id, e.x, e.y, a.r, true, a.heat)));
+      } else if (e.kind === KIND.Torch || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel) {
+        continue;
+      } else {
+        add(tr.track(e.id, e.x, e.y, FIGURES[e.kind]?.baseR ?? 6, false, 0));
+      }
+    }
+    if (this.alive) add(tr.track(-1, px, py, FIGURES[this.myKind]?.baseR ?? 6, false, 0));
+    for (const c of this.cosmetics) {
+      const a = projectileAir(c.kind);
+      add(shotMover(tr.track(-(100000 + c.shot), c.x, c.y, a.r, true, a.heat)));
+    }
+    return out;
   }
 
   private drawBarsAndBeams(now: number): void {

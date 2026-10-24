@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
 import { cloudCount } from './moodmath';
-import { Mood, type AirTorch } from './mood';
+import { Mood, type AirMover, type AirTorch } from './mood';
 import { TERRAIN } from './terrain';
 
 // terrain.ts and torch.ts import Phaser, which needs a browser window; Mood itself only uses it for types.
@@ -65,9 +65,31 @@ function setup(w: number, h: number, tile: number, lit = 1) {
   return { map, light, mood, made, scene, sprites, canvases };
 }
 
-const run = (mood: Mood, secs: number, torches: AirTorch[] = [], shots: { x: number; y: number; kind: number }[] = [], v = view()) => {
-  for (let i = 0; i < secs * 60; i++) mood.update(1 / 60, v, torches, shots);
+const run = (mood: Mood, secs: number, torches: AirTorch[] = [], shots: { x: number; y: number; kind: number }[] = [], v = view(), movers: AirMover[] = []) => {
+  for (let i = 0; i < secs * 60; i++) mood.update(1 / 60, v, torches, shots, movers);
 };
+
+const figure = (x: number, y: number, vx: number): AirMover => ({ x, y, vx, vy: 0, r: 6, shot: false, heat: 0 });
+
+/** Nine movers sweeping the whole 640x360 view in rows at 300 px/s, for `secs` s. */
+const sweep = (mood: Mood, secs: number) => {
+  const movers = Array.from({ length: 9 }, (_, k) => figure(0, 20 + 40 * k, 300));
+  for (let i = 0; i < secs * 60; i++) {
+    for (const m of movers) m.x = (i * 5) % 640;
+    mood.update(1 / 60, view(), [], [], movers);
+  }
+};
+
+/** A small seeded generator, so a test never depends on a lucky or unlucky torch gust. */
+function mulberry32(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 describe('Mood', () => {
   it('keeps as many dust clouds as the view area asks for', () => {
@@ -114,6 +136,8 @@ describe('Mood', () => {
   });
 
   it('smokes only from lit torches whose tile is seen and lit', () => {
+    const rnd = vi.spyOn(Math, 'random').mockImplementation(mulberry32(7));
+    try {
     const torch: AirTorch = { x: 5.5 * TILE, y: 5.5 * TILE, side: 0, lit: true };
     const dark = setup(20, 20, TILE_ID.Floor, 0);
     run(dark.mood, 3, [torch]);
@@ -125,6 +149,9 @@ describe('Mood', () => {
     const out = setup(20, 20, TILE_ID.Floor, 1);
     run(out.mood, 3, [{ ...torch, lit: false }]);
     expect(out.mood.counts.smoke).toBe(0);
+    } finally {
+      rnd.mockRestore();
+    }
   });
 
   it('throws a blast burst once, not every frame', () => {
@@ -199,6 +226,8 @@ describe('Mood', () => {
   });
 
   it('fades existing torch smoke out once the torch tile is no longer seen', () => {
+    const rnd = vi.spyOn(Math, 'random').mockImplementation(mulberry32(7));
+    try {
     const torch: AirTorch = { x: 5.5 * TILE, y: 5.5 * TILE, side: 0, lit: true };
     const { mood, light, made, sprites } = setup(20, 20, TILE_ID.Floor, 1);
     run(mood, 3, [torch]);
@@ -208,5 +237,168 @@ describe('Mood', () => {
     expect(mood.counts.smoke).toBeGreaterThan(0); // still alive, but invisible
     const shown = (made as unknown as { alpha?: number; destroyed: number }[]).filter((o) => !(sprites as unknown[]).includes(o) && (o.alpha ?? 0) > 0.001); // the haze keeps its own alpha
     expect(shown).toHaveLength(0);
+    } finally {
+      rnd.mockRestore();
+    }
+  });
+
+  describe('stirred air (#158)', () => {
+    it('wall-face torch smoke rides the air (sampled inside the floor tile)', () => {
+      const firstX = (dir: number) => {
+        const rnd = vi.spyOn(Math, 'random').mockImplementation(mulberry32(11));
+        try {
+          const t = new Uint8Array(20 * 20).fill(TILE_ID.Floor);
+          t.fill(TILE_ID.Wall, 0, 20 * 5);
+          const map = new TileMap(20, 20, t);
+          const light = { light: new Float32Array(400 * 3).fill(255), seenLit: new Uint8Array(400).fill(1) };
+          const { scene } = fakeScene();
+          const mood = new Mood(scene, map, light as never);
+          Object.assign(mood.on, { draft: false, dust: false, haze: false, drips: false, embers: false }); // only the torch draws random numbers
+          const torch: AirTorch = { x: 5.5 * TILE, y: 5 * TILE + 0.5, side: 0, lit: true };
+          const movers = dir ? [figure(5.5 * TILE, 5 * TILE + 6, 200 * dir)] : [];
+          for (let i = 0; i < 90; i++) {
+            if (dir) movers[0].x = 5.5 * TILE + dir * (((i * 2) % 8) - 4);
+            mood.update(1 / 60, view(), [torch], [], movers);
+          }
+          const puffs = (mood as unknown as { puffs: { x: number; src: number }[] }).puffs.filter((p) => p.src >= 0);
+          expect(puffs.length).toBeGreaterThan(0);
+          return puffs[0].x; // the oldest puff, which exists in every run
+        } finally {
+          rnd.mockRestore();
+        }
+      };
+      expect(firstX(1) - firstX(-1)).toBeGreaterThan(1); // the mover's gust blows the smoke along
+    });
+
+    it('a shot injects air at airY, not at its ground y', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      run(mood, 1 / 60, [], [], view(), [{ x: 200, y: 150, airY: 142, vx: 0, vy: 200, r: 4, shot: true, heat: 0 }]);
+      const hi = Math.abs(mood.airAt(202, 142)[1]);
+      const lo = Math.abs(mood.airAt(202, 150)[1]);
+      expect(hi).toBeGreaterThan(lo);
+    });
+
+    it('a shot whose airY is inside a wall injects at y', () => {
+      const t = new Uint8Array(60 * 40).fill(TILE_ID.Floor);
+      t.fill(TILE_ID.Wall, 0, 60 * 9); // rows 0..8 are wall
+      const map = new TileMap(60, 40, t);
+      const light = { light: new Float32Array(2400 * 3).fill(255), seenLit: new Uint8Array(2400).fill(1) };
+      const mood = new Mood(fakeScene().scene, map, light as never);
+      mood.on.draft = false;
+      const y = 9 * TILE + 2;
+      run(mood, 1 / 60, [], [], view(), [{ x: 200, y, airY: y - 8, vx: 200, vy: 0, r: 4, shot: true, heat: 0 }]);
+      expect(mood.airAt(202, y + 2)[0]).toBeGreaterThan(0);
+    });
+
+    it('loose specks never show on unseen tiles', () => {
+      const { mood, light, made, sprites } = setup(60, 40, TILE_ID.Floor);
+      run(mood, 2);
+      sweep(mood, 1);
+      expect(mood.counts.stirred).toBeGreaterThan(0);
+      light.seenLit.fill(0);
+      mood.update(1 / 60, view(), [], []);
+      expect(mood.counts.stirred).toBeGreaterThan(0);
+      const shown = (made as unknown as { alpha?: number }[]).filter((o) => !(sprites as unknown[]).includes(o) && (o.alpha ?? 0) > 0.01);
+      expect(shown).toHaveLength(0);
+    });
+
+    it('a moving figure on a seen tile pushes air', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      run(mood, 1 / 60, [], [], view(), [figure(200, 150, 80)]);
+      expect(mood.airAt(214, 150)[0]).toBeGreaterThan(0);
+    });
+
+    it('a mover on an unseen tile pushes nothing', () => {
+      const { mood, light } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      light.seenLit[Math.floor(150 / TILE) * 60 + Math.floor(200 / TILE)] = 0;
+      run(mood, 1 / 60, [], [], view(), [figure(200, 150, 80)]);
+      expect(mood.airAt(214, 150)).toEqual([0, 0]);
+    });
+
+    it('stir off pushes nothing', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      mood.on.stir = false;
+      run(mood, 1 / 60, [], [], view(), [figure(200, 150, 80)]);
+      expect(mood.airAt(214, 150)).toEqual([0, 0]);
+    });
+
+    it('movers outside the view push nothing', () => {
+      const { mood } = setup(80, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      const x = 640 + 3 * TILE;
+      run(mood, 1 / 60, [], [], view(), [figure(x, 150, 80)]);
+      expect(mood.airAt(x + 14, 150)).toEqual([0, 0]);
+      expect(mood.airAt(640 + 8, 150)).toEqual([0, 0]);
+    });
+
+    it('a projectile leaves a wake', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      run(mood, 1 / 60, [], [], view(), [{ x: 200, y: 150, vx: 200, vy: 0, r: 3, shot: true, heat: 0 }]);
+      expect(mood.airAt(202, 150)[0]).toBeGreaterThan(0);
+    });
+
+    it('a dash through the room stirs clouds, which come back', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.stirDelay = 3;
+      run(mood, 2);
+      expect(mood.counts.stirred).toBe(0);
+      sweep(mood, 4);
+      expect(mood.counts.stirred).toBeGreaterThan(0);
+      run(mood, 2);
+      expect(mood.counts.stirred).toBeGreaterThan(0); // fading or waiting
+      run(mood, 6); // fade 2 s + stirDelay 3 s + 1 s margin
+      expect(mood.counts.stirred).toBe(0);
+      expect(mood.counts.clouds).toBe(cloudCount(640, 360));
+    });
+
+    it('with no delay a stirred cloud respawns once it has faded', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.stirDelay = 0;
+      run(mood, 2);
+      sweep(mood, 4);
+      run(mood, 3.5); // fade 2 s, plus up to 1.5 s for the swept air to calm below STIR_SPEED
+      expect(mood.counts.stirred).toBe(0);
+    });
+
+    it('no cloud spawns inside stirred air', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      const gust: AirMover[] = [];
+      for (let x = 0; x <= 640; x += 24) for (let y = 0; y <= 360; y += 24) gust.push(figure(x, y, 300));
+      for (let i = 0; i < 120; i++) {
+        mood.update(1 / 60, view(), [], [], gust);
+        if (i > 20) expect(mood.counts.stirred).toBe(0);
+      }
+    });
+
+    it('a blast pushes the air once', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.draft = false;
+      mood.update(1 / 60, view(), [], [{ x: 300, y: 150, kind: LIGHT_KIND.Blast }]);
+      expect(mood.airAt(330, 150)[0]).toBeGreaterThan(0);
+    });
+
+    it('the draft alone moves the air slowly and stirs nothing', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      run(mood, 5);
+      const [x, y] = mood.airAt(100, 100);
+      expect(Math.hypot(x, y)).toBeGreaterThan(0);
+      expect(Math.hypot(x, y)).toBeLessThanOrEqual(3.01);
+      expect(mood.counts.stirred).toBe(0);
+    });
+
+    it('stir and draft off keep #148\'s air', () => {
+      const { mood } = setup(60, 40, TILE_ID.Floor);
+      mood.on.stir = false;
+      mood.on.draft = false;
+      run(mood, 5, [], [], view(), [figure(200, 150, 80)]);
+      expect(mood.airAt(100, 100)).toEqual([0, 0]);
+      expect(mood.counts.stirred).toBe(0);
+    });
   });
 });
