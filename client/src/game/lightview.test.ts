@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND } from '../generated/defs';
-import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, nextDarkvision, seenForLight, SUB, tileDark, upsample } from './lightview';
+import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, nextDarkvision, seenForLight, SUB, tileDark, upsample, warmTint, WARM } from './lightview';
 
 describe('darkness', () => {
   it('is black where not seen or not lit', () => {
@@ -128,5 +128,32 @@ describe('seenForLight', () => {
   it('does not grow from a wall in view', () => {
     const wallView = (x: number, y: number) => x === 3 && y === 0;
     expect(seenForLight(wallView, opaque, 4, 0)).toBe(false);
+  });
+});
+
+describe('warmTint', () => {
+  it('is white where the tile is not lit', () => {
+    expect(warmTint(0, 0, 0, false)).toEqual([255, 255, 255]);
+    expect(warmTint(255, 170, 90, false)).toEqual([255, 255, 255]);
+  });
+  it('multiplies by the light hue, its brightest channel staying 255', () => {
+    const [r, g, b] = warmTint(255, 170, 90, true);
+    expect(r).toBe(255);
+    expect(g).toBeCloseTo(255 * (1 - WARM * (1 - 170 / 255)), 1);
+    expect(b).toBeCloseTo(255 * (1 - WARM * (1 - 90 / 255)), 1);
+  });
+  it('scales the strength with a dim light', () => {
+    const [, g] = warmTint(127.5, 85, 45, true);
+    expect(g).toBeCloseTo(255 * (1 - 0.225 * (1 - 85 / 127.5)), 1);
+  });
+  it('clamps the strength for over-bright sums', () => {
+    expect(warmTint(510, 340, 180, true)).toEqual(warmTint(255, 170, 90, true));
+  });
+  it('is never paler than white', () => {
+    for (let n = 0; n < 200; n++) {
+      const [r, g, b] = warmTint(Math.random() * 600, Math.random() * 600, Math.random() * 600, true);
+      expect(Math.max(r, g, b)).toBeCloseTo(255, 9);
+      for (const c of [r, g, b]) expect(c).toBeLessThanOrEqual(255 + 1e-9);
+    }
   });
 });

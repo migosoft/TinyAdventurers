@@ -15,7 +15,7 @@ export const DEPTH = {
   enemyBars: 6500,
   /** Damage and heal numbers on enemies: under the darkness, so they vanish where it is dark. */
   enemyNumbers: 6501,
-  /** Tint of the lights (ADD blend), just below the darkness. */
+  /** Tint of the lights (MULTIPLY blend), just below the darkness. */
   tint: 6999,
   /** The darkness (light canvas). Every figure and shot is under it, heroes too. */
   fog: 7000,
