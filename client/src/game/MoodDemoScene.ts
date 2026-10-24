@@ -6,7 +6,7 @@
 // Respawn (instant / 3 s). URL: ?dust=0 etc., ?stir=0, ?draft=0, ?respawn=<seconds>, and
 // ?wind=1 draws the wind field as short lines. Zoomed to fit the room to the screen, so it reads on a phone.
 import Phaser from 'phaser';
-import { CONST, LIGHT_KIND, TILE_ID } from '../generated/defs';
+import { CONST, KIND, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
 import { TILE, TileMap } from '../sim/map';
 import { tileDraws } from './autotile';
@@ -14,6 +14,7 @@ import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
 import { LightView } from './lightview';
 import { Mood, type AirMover } from './mood';
+import { projectileAir } from './airshots';
 import { TERRAIN, TerrainLayer } from './terrain';
 import { TorchView } from './torch';
 import { VisionMask } from './visionmask';
@@ -37,6 +38,8 @@ const DASH_SPEED = 300;
 const DASH_EVERY = 6;
 const DASH_TIME = 0.25;
 const ARROW_SPEED = 260;
+const arrowAir = projectileAir(KIND.Arrow);
+const fireAir = projectileAir(KIND.Fireball);
 // The walker's loop: a rounded rectangle round the pillar (feet positions, px).
 const LX0 = 3.3 * TILE;
 const LX1 = 11.7 * TILE;
@@ -211,10 +214,10 @@ export class MoodDemoScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const movers: AirMover[] = [];
     // Velocity = the change of position since the last frame / dt.
-    const mover = (key: string, x: number, y: number, r: number, shot: boolean) => {
+    const mover = (key: string, x: number, y: number, r: number, shot: boolean, heat = 0) => {
       const o = this.prev.get(key);
       this.prev.set(key, [x, y]);
-      if (o && dt > 0) movers.push({ x, y, vx: (x - o[0]) / dt, vy: (y - o[1]) / dt, r, shot });
+      if (o && dt > 0) movers.push({ x, y, vx: (x - o[0]) / dt, vy: (y - o[1]) / dt, r, shot, heat });
     };
     // The knight walks the loop and dashes for 0.25 s every 6 s.
     const dashing = this.t % DASH_EVERY < DASH_TIME;
@@ -232,7 +235,7 @@ export class MoodDemoScene extends Phaser.Scene {
     const ax = (1.5 * TILE) + ap * ARROW_SPEED;
     if (ax < 13.5 * TILE) {
       this.arrow.setVisible(true).setPosition(ax, 8.5 * TILE);
-      mover('arrow', ax, 8.5 * TILE, 3, true);
+      mover('arrow', ax, 8.5 * TILE, arrowAir.r, true, arrowAir.heat);
     } else {
       this.arrow.setVisible(false);
       this.prev.delete('arrow');
@@ -245,7 +248,7 @@ export class MoodDemoScene extends Phaser.Scene {
       const fx = (2.5 + 10 * (p / 2)) * TILE;
       this.fireball.setVisible(true).setPosition(fx, fy);
       moving.push([fx, fy, LIGHT_KIND.Fire, 0xff7020]);
-      mover('fireball', fx, fy, 3, true);
+      mover('fireball', fx, fy, fireAir.r, true, fireAir.heat);
     } else {
       this.fireball.setVisible(false);
       this.prev.delete('fireball');

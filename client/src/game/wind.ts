@@ -20,8 +20,8 @@ const MAX_DT = 0.1;
 const REST_SPEED = 0.05;
 /** Most pending pushes, wakes and blasts between two steps. */
 const MAX_EVENTS = 512;
-/** Event slots: kind, x, y, vx, vy, r. */
-const EVENT_SIZE = 6;
+/** Event slots: kind, x, y, vx, vy, r, heat. */
+const EVENT_SIZE = 7;
 const PUSH = 0;
 const WAKE = 1;
 const BLAST = 2;
@@ -31,8 +31,8 @@ const POCKET_ALONG = 0.7;
 const POCKET_OUT = 0.35;
 const POCKET_SWIRL = 0.3;
 /** Pocket reach: POCKET_REACH body radii, at least POCKET_MIN_REACH px. */
-const POCKET_REACH = 4;
-const POCKET_MIN_REACH = 24;
+const POCKET_REACH = 2.7;
+const POCKET_MIN_REACH = 16;
 /** The pocket centre sits this many body radii ahead of the mover. */
 const POCKET_AHEAD = 1;
 /** Swirls: radius (body radii, at least SWIRL_MIN_RADIUS px), sideways offset and distance behind the pocket centre (body radii). */
@@ -40,10 +40,17 @@ const SWIRL_RADIUS = 2;
 const SWIRL_MIN_RADIUS = 10;
 const SWIRL_SIDE = 1.5;
 const SWIRL_BEHIND = 2;
-/** Wake shares of the projectile's speed, and its radius in px. */
-const WAKE_ALONG = 0.5;
-const WAKE_OUT = 0.3;
-const WAKE_RADIUS = 6;
+/** Wake target speeds as shares of the projectile's speed (along the flight, outward from the path), times a size factor. */
+const WAKE_ALONG = 0.45;
+const WAKE_OUT = 0.25;
+/** Eddies: one swirl every EDDY_STEP wake radii travelled, centred EDDY_BEHIND radii behind and EDDY_SIDE to one side; radius EDDY_RADIUS radii; peak speed EDDY_SPEED of the shot's. */
+const EDDY_STEP = 1.5;
+const EDDY_BEHIND = 1;
+const EDDY_SIDE = 0.6;
+const EDDY_RADIUS = 0.8;
+const EDDY_SPEED = 0.25;
+/** Upward air (px/s) a fully hot shot leaves behind it. */
+const HEAT_RISE = 18;
 /** Blast: peak speed (px/s) at BLAST_PEAK_R px, reaching 0 at BLAST_END_R px. */
 const BLAST_SPEED = 120;
 const BLAST_PEAK_R = 24;
@@ -116,9 +123,9 @@ export class Wind {
     this.queue(PUSH, x, y, vx, vy, r);
   }
 
-  /** A projectile's narrow wake. */
-  wake(x: number, y: number, vx: number, vy: number): void {
-    this.queue(WAKE, x, y, vx, vy, WAKE_RADIUS);
+  /** A projectile's wake: r = half-width in px, heat 0..1 (warm shots lift the air). Call once per frame at the shot's position. */
+  wake(x: number, y: number, vx: number, vy: number, r: number, heat: number): void {
+    this.queue(WAKE, x, y, vx, vy, r, heat);
   }
 
   /** An outward ring, once per blast. */
@@ -147,7 +154,7 @@ export class Wind {
     return out;
   }
 
-  private queue(kind: number, x: number, y: number, vx: number, vy: number, r: number): void {
+  private queue(kind: number, x: number, y: number, vx: number, vy: number, r: number, heat = 0): void {
     if (this.count >= MAX_EVENTS) return;
     const e = this.events;
     const o = this.count++ * EVENT_SIZE;
@@ -157,6 +164,7 @@ export class Wind {
     e[o + 3] = vx;
     e[o + 4] = vy;
     e[o + 5] = r;
+    e[o + 6] = heat;
   }
 
   /** Moves the grid to the view, keeping the air where it is in the world; grows the arrays only if the view grew. */
@@ -277,6 +285,7 @@ export class Wind {
       const mx = e[o + 3];
       const my = e[o + 4];
       const r = e[o + 5];
+      const heat = e[o + 6];
       if (kind === BLAST) {
         this.blastAt(x, y);
         continue;
@@ -286,7 +295,7 @@ export class Wind {
       const dx = mx / speed;
       const dy = my / speed;
       if (kind === WAKE) {
-        this.stir(x, y, dx, dy, r, WAKE_ALONG * speed * gain, WAKE_OUT * speed * gain);
+        this.wakeAt(x, y, dx, dy, speed, r, heat, dt);
         continue;
       }
       const reach = Math.max(POCKET_REACH * r, POCKET_MIN_REACH);
@@ -302,6 +311,44 @@ export class Wind {
       this.swirl(cx + side * dy, cy - side * dx, dx, dy, swirlR, -tangent);
     }
     this.count = 0;
+  }
+
+  /** A projectile's wake for one frame: a kick into the band around it, eddies every EDDY_STEP px, and heat. */
+  private wakeAt(x: number, y: number, dx: number, dy: number, speed: number, r: number, heat: number, dt: number): void {
+    if (!(r > 0) || dt <= 0) return;
+    const size = Math.min(1.5, 0.7 + (0.3 * r) / 12);
+    // The share of the target one frame injects: a spot receives about the full target once while the shot passes.
+    const share = Math.min(1, (speed * dt) / r);
+    this.kick(x, y, dx, dy, r, WAKE_ALONG * speed * size * share, WAKE_OUT * speed * size * share, 0);
+    if (heat > 0) this.kick(x - 0.5 * r * dx, y - 0.5 * r * dy, dx, dy, r, 0, 0, -HEAT_RISE * heat * share);
+    const step = EDDY_STEP * r;
+    const s = x * dx + y * dy;
+    const k = Math.floor(s / step);
+    if (k !== Math.floor((s - speed * dt) / step)) {
+      const sign = k & 1 ? 1 : -1;
+      const cx = x - EDDY_BEHIND * r * dx - sign * EDDY_SIDE * r * dy;
+      const cy = y - EDDY_BEHIND * r * dy + sign * EDDY_SIDE * r * dx;
+      this.swirl(cx, cy, dx, dy, EDDY_RADIUS * r, sign * EDDY_SPEED * speed * size * Math.sqrt(Math.E));
+    }
+  }
+
+  /** Gaussian band of half-width and length `r` at (x, y): `along` px/s along (dx, dy), `out` px/s away from the path, `rise` px/s down the screen. */
+  private kick(x: number, y: number, dx: number, dy: number, r: number, along: number, out: number, rise: number): void {
+    this.region(x, y, 2 * r);
+    const soft = (r * 0.25) ** 2;
+    for (let j = this.j0; j <= this.j1; j++) {
+      for (let i = this.i0; i <= this.i1; i++) {
+        const px = this.ox + (i + 0.5) * WIND_CELL - x;
+        const py = this.oy + (j + 0.5) * WIND_CELL - y;
+        if (!this.open(x, y, px, py)) continue;
+        const w = Math.exp(-(px * px + py * py) / (r * r));
+        const side = -px * dy + py * dx;
+        const away = side / Math.sqrt(side * side + soft);
+        const c = j * this.nx + i;
+        this.vx[c] += w * (along * dx - out * away * dy);
+        this.vy[c] += w * (along * dy + out * away * dx + rise);
+      }
+    }
   }
 
   /** Gaussian bump of radius `reach` at (x, y): `along` px/s along (dx, dy), `out` px/s away from the line through it. */

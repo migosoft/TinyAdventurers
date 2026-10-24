@@ -69,7 +69,7 @@ const run = (mood: Mood, secs: number, torches: AirTorch[] = [], shots: { x: num
   for (let i = 0; i < secs * 60; i++) mood.update(1 / 60, v, torches, shots, movers);
 };
 
-const figure = (x: number, y: number, vx: number): AirMover => ({ x, y, vx, vy: 0, r: 6, shot: false });
+const figure = (x: number, y: number, vx: number): AirMover => ({ x, y, vx, vy: 0, r: 6, shot: false, heat: 0 });
 
 /** Nine movers sweeping the whole 640x360 view in rows at 300 px/s, for `secs` s. */
 const sweep = (mood: Mood, secs: number) => {
@@ -290,7 +290,7 @@ describe('Mood', () => {
     it('a projectile leaves a wake', () => {
       const { mood } = setup(60, 40, TILE_ID.Floor);
       mood.on.draft = false;
-      run(mood, 1 / 60, [], [], view(), [{ x: 200, y: 150, vx: 200, vy: 0, r: 3, shot: true }]);
+      run(mood, 1 / 60, [], [], view(), [{ x: 200, y: 150, vx: 200, vy: 0, r: 3, shot: true, heat: 0 }]);
       expect(mood.airAt(202, 150)[0]).toBeGreaterThan(0);
     });
 

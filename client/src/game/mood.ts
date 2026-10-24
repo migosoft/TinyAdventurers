@@ -48,6 +48,8 @@ export interface AirMover {
   vy: number;
   r: number;
   shot: boolean;
+  /** 0..1: how much a shot warms the air it passes (0 for figures). */
+  heat: number;
 }
 
 /** A torch in the window; its smoke needs `lit` and a seen, lit floor tile. */
@@ -244,7 +246,7 @@ export class Mood {
       const y1 = view.bottom + MARGIN * TILE;
       for (const m of movers) {
         if (m.x < x0 || m.x > x1 || m.y < y0 || m.y > y1 || !this.seenAt(m.x, m.y)) continue;
-        if (m.shot) this.wind.wake(m.x, m.y, m.vx, m.vy);
+        if (m.shot) this.wind.wake(m.x, m.y, m.vx, m.vy, m.r, m.heat);
         else this.wind.push(m.x, m.y, m.vx, m.vy, m.r);
       }
     }

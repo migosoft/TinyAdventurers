@@ -77,6 +77,21 @@ New buttons: **Stir: on/off** (to compare with #148) and **Respawn: instant/dela
 - Dust that never comes back: the room must not stay empty after a fight.
 - A frame-rate cost players notice.
 
+## Projectile wakes (tune 2)
+
+User feedback on the phone demo (2026-10-24): pockets reach about 1 tile (not 1.5), and projectiles stirred too little. The pocket reach is now `2.7` body radii, at least 16 px.
+
+A projectile's air behaviour is derived from data every projectile already has (`airshots.ts`, from `PROJECTILES` in `anim/defs.ts`), so a new projectile needs no air code:
+- **Width:** `r = clamp(12 * scale, 6, 28)` px (arrow 7.2, frost bolt 12, fireball 16.8, dragon fireball 24).
+- **Heat:** 1 when the glow is warm (red >= 0xc0, red > green, red > 1.4 x blue), else 0; no glow means 0.
+- **Override:** an optional `air: { r?, heat? }` on a `PROJECTILES` entry wins; kinds with no entry get `{ r: 6, heat: 0 }`.
+
+The wake (`Wind.wake(x, y, vx, vy, r, heat)`, once per frame):
+- **Kick:** each frame injects a share `min(1, speed * dt / r)` of the target into a Gaussian band (half-width and length `r`), so a spot receives about the full target once as the shot passes, independent of frame rate. Target: 0.45 x speed along the flight and 0.25 x speed outward, times `min(1.5, 0.7 + 0.3 * r / 12)`.
+- **Eddies:** every `1.5 * r` px of travel a swirl appears `r` behind the shot and `0.6 * r` to one side (radius `0.8 * r`, peak `0.25 x speed` x the size factor), alternating side and spin.
+- **Heat:** a hot shot adds `18 px/s x heat` of upward air behind it.
+- Walls stop all of it (line-of-sight check).
+
 ## Calls made by Claude (not discussed with the user)
 
 - The draft is room-wide noise, not flowing along corridors and through doorways (that version was offered as noticeably more work; a possible follow-up). The demo's **Stir** button switches the draft too; a separate **Draft: on/off** button lets the user judge it alone.

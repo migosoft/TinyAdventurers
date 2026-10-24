@@ -16,6 +16,76 @@ function at(w: Wind, x: number, y: number): [number, number] {
 
 const len = (v: [number, number]) => Math.hypot(v[0], v[1]);
 
+/** A shot flying +x along y = 120 from x = 40 to x = `end`, one wake per frame, then one more step. */
+function fly(speed: number, r: number, heat: number, dt = 1 / 60, end = 280): Wind {
+  const w = make();
+  for (let x = 40; x < end; x += speed * dt) {
+    w.wake(x, 120, speed, 0, r, heat);
+    w.step(dt, view);
+  }
+  w.step(dt, view);
+  return w;
+}
+
+describe('Wind projectile wakes', () => {
+  it('a passing arrow kicks the air hard', () => {
+    // Measured just behind the shot (it is at x = 190): the kick fades with the air's decay, so by the end of a 240 px flight only about 16 px/s is left at x = 160.
+    const w = fly(260, 7.2, 0, 1 / 60, 190);
+    expect(at(w, 160, 120)[0]).toBeGreaterThan(40);
+  });
+
+  it('the kick does not depend on frame rate', () => {
+    const a = at(fly(260, 7.2, 0, 1 / 60), 160, 120)[0];
+    const b = at(fly(260, 7.2, 0, 1 / 30), 160, 120)[0];
+    expect(Math.abs(a - b)).toBeLessThan(0.25 * Math.max(a, b));
+  });
+
+  it('a wider shot stirs a wider band', () => {
+    const narrow = len(at(fly(260, 7.2, 0), 160, 132));
+    const wide = len(at(fly(260, 16.8, 0), 160, 132));
+    expect(wide).toBeGreaterThan(2 * narrow);
+  });
+
+  it('eddies alternate behind the shot', () => {
+    // Across the path (vy along y = 120) a straight push is exactly 0 by symmetry; only the alternating swirls give it a sign, and only while they are fresh (the shot is at x = 200).
+    const w = fly(200, 12, 0, 1 / 60, 200);
+    const signs: number[] = [];
+    let peak = 0;
+    for (let x = 100; x <= 196; x += 3) {
+      const vy = at(w, x, 120)[1];
+      peak = Math.max(peak, Math.abs(vy));
+      if (Math.abs(vy) > 0.15) signs.push(Math.sign(vy));
+    }
+    let flips = 0;
+    for (let i = 1; i < signs.length; i++) if (signs[i] !== signs[i - 1]) flips++;
+    expect(peak).toBeGreaterThan(1);
+    expect(flips).toBeGreaterThanOrEqual(3);
+  });
+
+  it('a hot shot lifts the dust', () => {
+    // Just behind the shot (at x = 190) the cold shot's own eddies still add some vertical air, so compare with it.
+    const hot = at(fly(260, 16.8, 1, 1 / 60, 190), 160, 120)[1];
+    const cold = at(fly(260, 16.8, 0, 1 / 60, 190), 160, 120)[1];
+    expect(hot).toBeLessThan(-5);
+    expect(hot).toBeLessThan(cold - 3);
+    // After the whole flight the cold air is level and only the rise is left.
+    const hotEnd = at(fly(260, 16.8, 1), 160, 120)[1];
+    const coldEnd = at(fly(260, 16.8, 0), 160, 120)[1];
+    expect(coldEnd).toBeGreaterThan(-1);
+    expect(hotEnd).toBeLessThan(coldEnd - 2);
+  });
+
+  it('a wake stops at walls', () => {
+    const w = make((px) => px >= 160 && px < 176);
+    for (let y = 40; y < 200; y += 260 / 60) {
+      w.wake(150, y, 0, 260, 16.8, 1);
+      w.step(1 / 60, view);
+    }
+    w.step(1 / 60, view);
+    expect(at(w, 185, 120)).toEqual([0, 0]);
+  });
+});
+
 describe('Wind', () => {
   it('still air stays still', () => {
     const w = make();
@@ -68,14 +138,14 @@ describe('Wind', () => {
     expect(len(at(w, 190, 120))).toBeLessThan(1);
   });
 
-  it('the pocket reaches a tile and a half', () => {
+  it('the pocket reaches a tile', () => {
     const w = make();
     for (let i = 0; i < 10; i++) {
       w.push(100, 120, 60, 0, 6);
       w.step(1 / 60, view);
     }
-    expect(at(w, 100 + 22, 120)[0]).toBeGreaterThan(4);
-    expect(at(w, 100, 120 + 20)[1]).toBeGreaterThan(0);
+    expect(at(w, 100 + 14, 120)[0]).toBeGreaterThan(4);
+    expect(at(w, 100, 120 + 14)[1]).toBeGreaterThan(0);
   });
 
   it('a passing walker stirs the air ahead noticeably', () => {
@@ -116,7 +186,7 @@ describe('Wind', () => {
 
   it('a wake is narrow', () => {
     const w = make();
-    w.wake(160, 120, 200, 0);
+    w.wake(160, 120, 200, 0, 6, 0);
     w.step(1 / 60, view);
     expect(len(at(w, 160, 124))).toBeGreaterThan(0);
     expect(len(at(w, 160, 160))).toBeLessThan(0.01);
