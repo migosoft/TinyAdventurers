@@ -187,7 +187,7 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
     }
     for pr in &run.projectiles {
         // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
-        if pr.dead || !(pr.from_player || seen(view, lights, dark, pr.pos, 0.0)) {
+        if pr.dead || !(pr.side == super::targets::Side::Heroes || seen(view, lights, dark, pr.pos, 0.0)) {
             continue;
         }
         let extra = (pr.owner << 16) | pr.shot as u32;

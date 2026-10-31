@@ -312,14 +312,16 @@ pub fn death(run: &mut Run, f: DeathFacts) {
     }
 }
 
-/// Ability `what` of hero `by` passed over monsters: one record each, for the reasons worth telling.
+/// Ability `what` of caster `by` passed over monsters: one record each, for the reasons worth telling.
 /// `chain_stop` is the nearest monster a Chain Spark stopped short of, and how far it was.
-pub fn skipped(run: &mut Run, by: u32, what: What, skips: &[(usize, Skip)], chain_stop: Option<(usize, f64)>) {
+pub fn skipped(run: &mut Run, by: u32, what: What, skips: &[(Creature, Skip)], chain_stop: Option<(Creature, f64)>) {
     if !on(run) {
         return;
     }
     let chain = matches!(what, What::Ability(AbilityId::ChainSpark));
-    for &(mi, skip) in skips {
+    for &(c, skip) in skips {
+        // Only monsters are told about; no line names a hero as passed over.
+        let Creature::Monster(mi) = c else { continue };
         let Some(reason) = text::skip_reason(skip) else { continue };
         // A disguised mimic is a chest to everyone: a chest is never named in such a line.
         if run.monsters[mi].hiding {
@@ -331,7 +333,7 @@ pub fn skipped(run: &mut Run, by: u32, what: What, skips: &[(usize, Skip)], chai
         let head = text::skip_head(run, what, chain, id, reason);
         record::push(run, LogRec { t: run.time, kind: LineKind::Skip, head, details: vec![], who, unseen: None, dealt: None, secs: None });
     }
-    if let Some((mi, d)) = chain_stop {
+    if let Some((Creature::Monster(mi), d)) = chain_stop {
         let id = run.monsters[mi].id;
         let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
         who.push(seen_by_id(run, by));

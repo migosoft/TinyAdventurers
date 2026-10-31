@@ -6,6 +6,7 @@ use crate::defs::enemies::EnemyType;
 use crate::defs::races::Sight;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
+use super::targets::Side;
 use crate::vispoly::View;
 use crate::math::Vec2;
 use crate::protocol::{ClassId, InputMsg};
@@ -299,7 +300,8 @@ pub struct Projectile {
     pub id: u32,
     pub kind: EntityKind,
     pub owner: u32,
-    pub from_player: bool,
+    /// The side it hurts the foes of.
+    pub side: Side,
     pub shot: u16,
     pub pos: Vec2,
     pub vel: Vec2,
@@ -310,8 +312,10 @@ pub struct Projectile {
     /// Explosion radius on impact (0 = none) and its effect kind.
     pub explode_r: f64,
     pub explode_k: u8,
-    /// Knockback (px) of the explosion on the heroes it hits (dragon fireballs).
-    pub knock: f64,
+    /// Push (px) of the explosion on the foes it hits, and the STR it pushes with: the caster's, taken at
+    /// spawn so a shot that outlives its caster still pushes.
+    pub push: f64,
+    pub push_str: i32,
     /// Explode when reaching this point (fireball at cursor).
     pub target: Option<Vec2>,
     pub dead: bool,

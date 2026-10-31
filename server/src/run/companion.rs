@@ -681,7 +681,7 @@ mod tests {
 
         // The Barbarian's dash.
         try_use(&mut run, 2, false, 1);
-        dash_contact(&mut run, 2);
+        dash_contact(&mut run, Creature::Player(2));
         untouched(&run, id, "dash");
 
         // A fireball that goes off on it.

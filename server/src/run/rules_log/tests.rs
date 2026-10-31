@@ -1176,7 +1176,7 @@ fn a_hidden_mimic_behind_a_wall_is_no_slam_skip_line() {
     let mi = run.monster_idx(id).unwrap();
     run.monsters[mi].hiding = true;
     let _ = take(&mut run);
-    crate::run::abilities::land_slam(&mut run, 0);
+    crate::run::abilities::land_slam(&mut run, Creature::Player(0));
     let recs = take(&mut run);
     assert!(kinds_of(&recs, LineKind::Skip).is_empty(), "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
 }

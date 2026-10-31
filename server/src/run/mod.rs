@@ -574,7 +574,7 @@ impl Run {
         );
         p.moving = !knocked && fx.0 > 0.0 && (input.mx != 0 || input.my != 0);
         if dashing {
-            abilities::dash_contact(self, pi);
+            abilities::dash_contact(self, effects::Creature::Player(pi));
         }
         if knocked {
             return;
