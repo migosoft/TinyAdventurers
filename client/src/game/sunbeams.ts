@@ -8,21 +8,21 @@ import { TILE } from '../sim/map';
 import { DEPTH } from './effects';
 import type { LightField } from './light';
 import type { LightView } from './lightview';
-import { beamShape, cloudAt, rayShapes, sunLook, type Ray } from './sunmath';
+import { beamShape, cloudAt, rayGlow, rayShapes, sunLook, type Ray } from './sunmath';
 
 const PATCH_TEX = 'sun-patch';
 /** Phaser's `FilterMode.LINEAR` and blend mode ADD (a runtime import of Phaser would not load in unit tests). */
 const LINEAR = 0;
 const ADD = 1;
-/** Tiles beyond the view in which a beam is still kept. */
-const MARGIN = 4;
+/** Tiles beyond the view in which a beam is still kept, on top of its own height and slant. */
+const MARGIN = 1;
 const MOTES = 24;
 /** Beam alpha at the top, at BEAM_PEAK_AT of the way down, and at the floor. */
 const BEAM_PEAK = 0.22;
 const BEAM_PEAK_AT = 2 / 3;
 const BEAM_FLOOR = 0.2;
-/** How far the beam runs on past the floor edge, in patch widths, fading to 0. */
-const BEAM_FOOT = 0.4;
+/** How far the beam runs on past the floor edge, in patch widths, fading to 0 (the patch reaches 0.3 below its centre). */
+const BEAM_FOOT = 0.25;
 const PATCH_ALPHA = 0.6;
 const MOTE_ALPHA = 0.8;
 /** Mote drift speed range along the beam (px/s). */
@@ -81,7 +81,7 @@ export class Sunbeams {
   }
 
   update(dt: number, view: Phaser.Geom.Rectangle, t: number): void {
-    const m = MARGIN * TILE;
+    const m = (MARGIN + sunLook.height + sunLook.slant) * TILE;
     const seen = new Set<number>();
     for (const l of this.field.lights.values()) {
       if (l.kind !== LIGHT_KIND.Daylight || !l.on) continue;
@@ -157,7 +157,7 @@ export class Sunbeams {
       }
       m.x += m.vx * dt;
       m.y += m.vy * dt;
-      if (!b.rays.some((r) => this.inside(r, m.x, m.y))) this.respawn(m, b.rays);
+      if (!this.insideAny(b.rays, m.x, m.y)) this.respawn(m, b.rays);
       const lit = this.light.seenLit[Math.floor(m.y / TILE) * this.light.w + Math.floor(m.x / TILE)] === 1;
       const twinkle = 0.6 + 0.4 * Math.sin(t * 2 + m.phase);
       m.img.setVisible(lit).setPosition(m.x, m.y).setTint(colour).setAlpha(MOTE_ALPHA * twinkle * cloud);
@@ -168,10 +168,10 @@ export class Sunbeams {
   private draw(b: Beam, colour: number, glow: number): void {
     const g = b.beam.clear();
     // Rays overlap, so each is dimmer: the total stays near one beam's brightness.
-    for (const r of b.rays) this.drawRay(g, r, colour, glow / Math.sqrt(b.rays.length));
+    for (const r of b.rays) this.drawRay(g, r, colour, rayGlow(glow, b.rays.length), b.shape.patch.w);
   }
 
-  private drawRay(g: Phaser.GameObjects.Graphics, { top, bottom }: Ray, colour: number, glow: number): void {
+  private drawRay(g: Phaser.GameObjects.Graphics, { top, bottom }: Ray, colour: number, glow: number, patchW: number): void {
     const at = (k: number): [Pt, Pt] => [
       [lerp(top[0][0], bottom[0][0], k), lerp(top[0][1], bottom[0][1], k)],
       [lerp(top[1][0], bottom[1][0], k), lerp(top[1][1], bottom[1][1], k)],
@@ -186,11 +186,16 @@ export class Sunbeams {
       g.fillTriangle(a[1][0], a[1][1], c[1][0], c[1][1], c[0][0], c[0][1]);
     };
     const mid = at(BEAM_PEAK_AT);
-    const foot = at(1 + (BEAM_FOOT * (bottom[1][0] - bottom[0][0])) / (bottom[0][1] - top[0][1]));
+    const foot = at(1 + (BEAM_FOOT * patchW) / (bottom[0][1] - top[0][1]));
     band(top as [Pt, Pt], mid, 0, BEAM_PEAK);
     band(mid, bottom as [Pt, Pt], BEAM_PEAK, BEAM_FLOOR);
     // The beam runs on past the floor edge and fades to nothing, so it melts into the patch with no hard line.
     band(bottom as [Pt, Pt], foot, BEAM_FLOOR, 0);
+  }
+
+  private insideAny(rays: Ray[], x: number, y: number): boolean {
+    for (const r of rays) if (this.inside(r, x, y)) return true;
+    return false;
   }
 
   /** Is (x, y) inside the beam trapezoid? */

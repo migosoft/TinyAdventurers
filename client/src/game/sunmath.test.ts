@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TILE } from '../sim/map';
-import { beamShape, cloudAt, rayShapes, sunLook } from './sunmath';
+import { beamShape, cloudAt, rayGlow, rayShapes, sunLook } from './sunmath';
 
 const look = { ...sunLook };
 
@@ -63,17 +63,32 @@ describe('rayShapes', () => {
     const w = widths(4, 3);
     expect(new Set(w.map((x) => x.toFixed(3))).size).toBeGreaterThan(1);
   });
-  it('starts every ray near the beam top centre and keeps its foot inside the beam', () => {
-    const topC = (shape.top[0][0] + shape.top[1][0]) / 2;
-    const topW = shape.top[1][0] - shape.top[0][0];
-    for (const id of [1, 2, 3, 99]) {
-      for (const r of rayShapes(shape, id, { ...sunLook, rays: 3 })) {
-        expect(Math.abs((r.top[0][0] + r.top[1][0]) / 2 - topC)).toBeLessThanOrEqual(0.3 * topW + 0.01);
-        expect(r.bottom[0][0]).toBeGreaterThanOrEqual(shape.bottom[0][0] - 0.01);
-        expect(r.bottom[1][0]).toBeLessThanOrEqual(shape.bottom[1][0] + 0.01);
-        expect(r.top[0][1]).toBe(shape.top[0][1]);
-        expect(r.bottom[0][1]).toBe(shape.bottom[0][1]);
+  it('spans about the beam width at the floor and the top, never beyond the beam', () => {
+    const bw = shape.bottom[1][0] - shape.bottom[0][0];
+    const tw = shape.top[1][0] - shape.top[0][0];
+    for (const n of [2, 3] as const) {
+      for (const id of [1, 2, 3, 4, 5, 99, 1234]) {
+        const rays = rayShapes(shape, id, { ...sunLook, rays: n });
+        const bl = Math.min(...rays.map((r) => r.bottom[0][0]));
+        const br = Math.max(...rays.map((r) => r.bottom[1][0]));
+        expect((br - bl) / bw).toBeGreaterThanOrEqual(0.85);
+        expect(bl).toBeGreaterThanOrEqual(shape.bottom[0][0] - 0.01);
+        expect(br).toBeLessThanOrEqual(shape.bottom[1][0] + 0.01);
+        const tl = Math.min(...rays.map((r) => r.top[0][0]));
+        const tr = Math.max(...rays.map((r) => r.top[1][0]));
+        expect((tr - tl) / tw).toBeGreaterThanOrEqual(0.7);
+        for (const r of rays) {
+          expect(r.top[0][0]).toBeGreaterThanOrEqual(shape.top[0][0] - 0.01);
+          expect(r.top[1][0]).toBeLessThanOrEqual(shape.top[1][0] + 0.01);
+          expect(r.top[0][1]).toBe(shape.top[0][1]);
+          expect(r.bottom[0][1]).toBe(shape.bottom[0][1]);
+        }
       }
     }
+  });
+  it('dims each ray so overlapping rays stay near one beam', () => {
+    expect(rayGlow(1, 1)).toBe(1);
+    expect(rayGlow(2, 4)).toBeCloseTo(1);
+    expect(rayGlow(1, 2) * Math.sqrt(2)).toBeCloseTo(1);
   });
 });

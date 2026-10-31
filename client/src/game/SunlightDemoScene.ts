@@ -117,7 +117,8 @@ export class SunlightDemoScene extends Phaser.Scene {
     sunLook.slant = num('slant') ?? sunLook.slant;
     if (q.get('from') !== null) sunLook.dir = q.get('from') === 'right' ? 1 : -1;
     sunLook.clouds = num('clouds') ?? sunLook.clouds;
-    sunLook.height = num('height') ?? sunLook.height;
+    const height = num('height');
+    if (height !== null && HEIGHTS.includes(height)) sunLook.height = height;
     const rays = num('rays');
     if (rays === 1 || rays === 2 || rays === 3) sunLook.rays = rays;
     sunLook.glow = num('glow') ?? sunLook.glow;

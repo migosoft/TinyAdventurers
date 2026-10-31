@@ -22,7 +22,7 @@ export interface SunLook {
   glow: number;
 }
 
-export const sunLook: SunLook = { widen: true, patch: 2, slant: 2, dir: -1, clouds: 0.3, gap: [8, 25], glow: 1, height: 4, rays: 1 };
+export const sunLook: SunLook = { widen: true, patch: 2, slant: 2, dir: -1, clouds: 0.3, gap: [8, 25], glow: 1, height: 4, rays: 2 };
 
 /** Uniform [0,1) from a hash of (id, cloud index, salt). */
 function rnd(id: number, n: number, salt: number): number {
@@ -99,10 +99,10 @@ export interface Ray {
 }
 
 /**
- * The beam of light `id` as `look.rays` narrower rays that start near the same spot and fan out a little:
- * each ray's top centre is within +-0.3 of the beam's top width of its centre, and each ray's bottom lies
- * inside the beam's bottom span; widths are 0.4..0.8 of the beam's. All hashed from (id, ray index), so they
- * never change; they overlap, mostly near the top. One ray is the whole beam.
+ * The beam of light `id` as `look.rays` narrower rays of differing widths (0.5..0.8 of the beam's) that overlap
+ * partly. The first ray starts at the beam's left edge and the last ends at its right edge at the floor, so
+ * together they span the beam's width; the top edges follow the same layout, nudged slightly, and are kept
+ * inside the beam's top span. Hashed from (id, ray index), so they never change. One ray is the whole beam.
  */
 export function rayShapes(shape: { top: [number, number][]; bottom: [number, number][] }, id: number, look: SunLook): Ray[] {
   const n = look.rays;
@@ -113,14 +113,20 @@ export function rayShapes(shape: { top: [number, number][]; bottom: [number, num
   const botW = br - bl;
   const rays: Ray[] = [];
   for (let i = 0; i < n; i++) {
-    const tc = (tl + tr) / 2 + (rnd(id, i, 3) - 0.5) * 0.6 * topW;
-    const th = 0.5 * topW * (0.4 + 0.4 * rnd(id, i, 4));
-    const bw = botW * (0.4 + 0.4 * rnd(id, i, 5));
-    const bc = (bl + br) / 2 + (rnd(id, i, 6) * 2 - 1) * 0.5 * (botW - bw);
+    const w = 0.5 + 0.3 * rnd(id, i, 5);
+    // Left edge, as a share of the beam's width: the first ray at 0, the last at 1 - w, the others between.
+    const u0 = i === 0 ? 0 : i === n - 1 ? 1 - w : (1 - w) * (0.25 + 0.5 * rnd(id, i, 6));
+    const tw = w * topW;
+    const tLeft = Math.min(tr - tw, Math.max(tl, tl + u0 * topW + (rnd(id, i, 3) - 0.5) * 0.2 * topW));
     rays.push({
-      top: [[tc - th, shape.top[0][1]], [tc + th, shape.top[0][1]]],
-      bottom: [[bc - bw / 2, shape.bottom[0][1]], [bc + bw / 2, shape.bottom[0][1]]],
+      top: [[tLeft, shape.top[0][1]], [tLeft + tw, shape.top[0][1]]],
+      bottom: [[bl + u0 * botW, shape.bottom[0][1]], [bl + (u0 + w) * botW, shape.bottom[0][1]]],
     });
   }
   return rays;
+}
+
+/** Brightness factor of each of `rays` overlapping rays, so that together they stay near one beam's brightness. */
+export function rayGlow(glow: number, rays: number): number {
+  return glow / Math.sqrt(Math.max(1, rays));
 }
