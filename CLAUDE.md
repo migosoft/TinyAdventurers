@@ -40,13 +40,13 @@ GitHub links them by the issue number, so every piece of work names its issue:
 - **Commits:** end each commit's subject or body with `(#N)` or `Refs #N`. The commit then shows in the issue's timeline. A commit touching several issues names each.
 - **Closing:** `Closes #N` (or `Fixes #N`) in the PR description, or in the last commit, closes the issue once it reaches `main`. Use it only when the issue is fully done. Also set the card to Done if the board's "Item closed" workflow is off.
 - **Fast-forward merges without a PR** work the same: the closing keyword in a commit message counts when the commit is pushed to `main`.
-- **Specs and plans** (`docs/superpowers/`) name their issue at the top, and the issue links back to them in a comment.
+- **Specs and plans live in the issue, not in the repo** (the user, 2026-10-31). Once approved, the design is posted as a "Design" comment and the plan as an "Implementation plan" comment on the issue; no `.md` file for them is committed. Changes later on (picked values, plan fixes) are edited into those comments or added as new ones. The older files in `docs/superpowers/` are history; leave them.
 
 ## How the user wants work done
 
 - **One feature per session.** When it is done: update the docs (TECHNICAL, PLAYER_GUIDE), run the verification below, then commit.
 - **Branches:** `main` holds finished work. Ask before merging into `main` or pushing. Never delete remote branches without asking.
-- **Bigger features:** brainstorm, spec, then a plan (superpowers skills), built subagent-driven: implementers and fixers on **Sonnet**, task reviews and the final whole-branch review on **Opus** (small re-reviews of a fix may use Sonnet). Merges, pushes and the finishing step stay in the main session.
+- **Bigger features, in two sessions:** session 1 reads the issue, brainstorms, writes the design and the plan (superpowers skills; draft them in the scratchpad, not in the repo), and posts both to the issue once the user approves. Session 2 reads the issue with those comments and implements the plan, subagent-driven: implementers and fixers on **Sonnet**, task reviews and the final whole-branch review on **Opus** (small re-reviews of a fix may use Sonnet). Merges, pushes and the finishing step stay in the main session.
 - **Remote:** `origin` = https://github.com/migosoft/TinyAdventurers.git; `main` tracks `origin/main`. `.gitattributes` keeps LF line endings.
 
 ## Standing decisions
