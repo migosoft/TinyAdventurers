@@ -8,6 +8,7 @@
 
 use super::{boss_idx, set_anim, target, BossBehaviour};
 use crate::defs::abilities::AbilityId;
+use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::bosses::*;
 use crate::defs::kinds::Anim;
 use crate::math::{angle_diff, Vec2};
@@ -60,6 +61,9 @@ const RECOVER_TAIL: f64 = 0.5;
 const RECOVER_FIREBALL: f64 = 0.35;
 /// How long (s) it stands in its cast pose before a Fireball leaves: the pose is animation, the ball has no wind-up.
 const FIREBALL_POSE: f64 = 0.6;
+/// How far inside its reach (px, centre distance) a hero must stand for a strike or the tail whip to start.
+const STRIKE_SLACK: f64 = 4.0;
+const TAIL_SLACK: f64 = 2.0;
 /// Hovering, it does not chase heroes closer than this.
 const HOVER_KEEP: f64 = 30.0;
 
@@ -200,10 +204,11 @@ impl BossBehaviour for Dragon {
         let to_target = pos.angle_to(ppos);
         // Tail whip when someone sneaks behind (not in the air).
         let tail = kit(run, bi, AbilityId::TailWhip);
+        // A kit range is measured to the target's edge: the centre distance adds the hero's radius.
         let someone_behind = run
             .players
             .iter()
-            .any(|p| p.alive && p.pos().dist(pos) < tail.range && angle_diff(pos.angle_to(p.pos()), aim).abs() > 2.0);
+            .any(|p| p.alive && p.pos().dist(pos) < tail.range + PLAYER_RADIUS - TAIL_SLACK && angle_diff(pos.angle_to(p.pos()), aim).abs() > 2.0);
         if !air && someone_behind && ready(run, bi, AbilityId::TailWhip) {
             self.start(run, bi, Action::Tail, tail.windup, Anim::Tail);
             return;
@@ -221,9 +226,9 @@ impl BossBehaviour for Dragon {
             } else {
                 set_anim(run, bi, Anim::Idle);
             }
-        } else if ready(run, bi, AbilityId::Bite) && dist <= bite.range - 4.0 {
+        } else if ready(run, bi, AbilityId::Bite) && dist <= bite.range + PLAYER_RADIUS - STRIKE_SLACK {
             self.start(run, bi, Action::Bite, bite.windup, Anim::Bite);
-        } else if ready(run, bi, AbilityId::Strike) && dist <= claw.range - 4.0 {
+        } else if ready(run, bi, AbilityId::Strike) && dist <= claw.range + PLAYER_RADIUS - STRIKE_SLACK {
             self.start(run, bi, Action::Claw, claw.windup, Anim::Melee);
         } else if ready(run, bi, AbilityId::Fireball) {
             self.start(run, bi, Action::Fireball, FIREBALL_POSE, Anim::Windup);
@@ -301,6 +306,27 @@ mod tests {
         run.monsters[bi].cds.start(AbilityId::Bite, 1.0);
         d.tick(&mut run, DT);
         assert_eq!(run.monsters[bi].anim, Anim::Melee, "bite not ready: claw");
+    }
+
+    #[test]
+    fn the_bite_starts_at_todays_distance_from_a_hero() {
+        // Today's bite: it starts within 46 - 4 px of the hero's centre, and not beyond.
+        for (dist, starts) in [(42.0, true), (42.5, false)] {
+            let (mut run, mut d, _) = dragon_with_ready(&[Vec2::new(dist, 0.0)], &[AbilityId::Bite]);
+            d.tick(&mut run, DT);
+            assert_eq!(d.action.map(|(a, _)| a) == Some(Action::Bite), starts, "{dist} px");
+        }
+        // And the hit reaches the 46 px of today.
+        let (mut run, mut d, bi) = dragon_with_ready(&[Vec2::new(42.0, 0.0)], &[AbilityId::Bite]);
+        let hp = run.players[0].hp;
+        let w = windup(&run, bi, AbilityId::Bite);
+        ticks(&mut run, &mut d, w + 2.0 * DT);
+        assert!(run.players[0].hp < hp);
+        let (mut run, _, bi) = dragon_with_ready(&[Vec2::new(46.0, 0.0), Vec2::new(47.0, 0.0)], &[AbilityId::Bite]);
+        let hp: Vec<f64> = run.players.iter().map(|p| p.hp).collect();
+        let at = ahead(&run, bi);
+        assert!(monster_cast(&mut run, bi, AbilityId::Bite, at));
+        assert!(run.players[0].hp < hp[0] && run.players[1].hp == hp[1], "reaches 46, not 47");
     }
 
     #[test]

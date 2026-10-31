@@ -88,7 +88,8 @@ fn export_defs() {
         "OGRE_SLAM_WINDUP": ogre_slam.windup,
         "DRAGON_CLAW_WINDUP": dragon_ability(AbilityId::Strike).windup,
         "DRAGON_BITE_WINDUP": dragon_ability(AbilityId::Bite).windup,
-        "DRAGON_BITE_RANGE": dragon_ability(AbilityId::Bite).range,
+        // The client telegraph measures from the hero's centre: the kit range reaches the hero's edge.
+        "DRAGON_BITE_RANGE": dragon_ability(AbilityId::Bite).range + PLAYER_RADIUS,
         "DRAGON_BITE_KNOCK": dragon_ability(AbilityId::Bite).push,
         "DRAGON_TAIL_WINDUP": dragon_ability(AbilityId::TailWhip).windup,
         "DRAGON_BREATH_WINDUP": dragon_ability(AbilityId::FireBreath).windup,
