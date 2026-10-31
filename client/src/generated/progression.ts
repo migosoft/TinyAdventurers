@@ -1274,6 +1274,58 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": "weapon_cleaver"
   },
+  "DemonClaws": {
+    "base": "25 damage · every 1.6 s · arc 2.1 · push 56 · wind-up 0.45 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Claws",
+    "name": "Demon Claws",
+    "prof": "Claws",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
+  "DragonBite": {
+    "base": "28 damage · every 3 s · arc 0.7 · push 24 · wind-up 0.45 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Bite",
+    "name": "Dragon Bite",
+    "prof": "Bite",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
+  "DragonClaws": {
+    "base": "20 damage · every 2.5 s · arc 1.6 · push 32 · wind-up 0.4 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Claws",
+    "name": "Dragon Claws",
+    "prof": "Claws",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
+  "DragonTail": {
+    "base": "25 damage · every 3 s · arc 2.4 · push 44 · wind-up 0.4 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Tail",
+    "name": "Dragon Tail",
+    "prof": "Tail",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
   "ElvenBow": {
     "base": "16 damage · every 0.7 s · range 260",
     "classes": [
@@ -2067,6 +2119,13 @@ export const ABILITY_INFO = {
     "tint": "Physical",
     "uses": "Melee"
   },
+  "BlindingCurse": {
+    "category": "Spell",
+    "req": [],
+    "text": "A slow orb that blinds what it hits.",
+    "tint": "Magical",
+    "uses": "Nothing"
+  },
   "ChainSpark": {
     "category": "Spell",
     "req": [
@@ -2108,6 +2167,13 @@ export const ABILITY_INFO = {
     "tint": "Heat",
     "uses": "Nothing"
   },
+  "FireBreath": {
+    "category": "Innate",
+    "req": [],
+    "text": "A cone of fire held for a moment, leaving burning patches on the ground.",
+    "tint": "Heat",
+    "uses": "Nothing"
+  },
   "Fireball": {
     "category": "Spell",
     "req": [],
@@ -2141,6 +2207,13 @@ export const ABILITY_INFO = {
     ],
     "text": "A quick bolt, mostly cold, that chills what it hits.",
     "tint": "Cold",
+    "uses": "Nothing"
+  },
+  "GloomBolts": {
+    "category": "Spell",
+    "req": [],
+    "text": "Five bolts of gloom in a fan.",
+    "tint": "Magical",
     "uses": "Nothing"
   },
   "GroundSlam": {
@@ -2195,6 +2268,13 @@ export const ABILITY_INFO = {
     "tint": "Magical",
     "uses": "Nothing"
   },
+  "Nova": {
+    "category": "Spell",
+    "req": [],
+    "text": "A burst of dark power that hurts and pushes everything around the caster.",
+    "tint": "Magical",
+    "uses": "Nothing"
+  },
   "PoisonCoat": {
     "category": "Technique",
     "req": [
@@ -2220,6 +2300,13 @@ export const ABILITY_INFO = {
     "tint": null,
     "uses": "Nothing"
   },
+  "RingOfFire": {
+    "category": "Innate",
+    "req": [],
+    "text": "Sixteen fire orbs flung out in a ring.",
+    "tint": "Heat",
+    "uses": "Nothing"
+  },
   "ShadowBolt": {
     "category": "Spell",
     "req": [],
@@ -2234,6 +2321,20 @@ export const ABILITY_INFO = {
     "tint": "Physical",
     "uses": "Ranged"
   },
+  "SleepMist": {
+    "category": "Spell",
+    "req": [],
+    "text": "A slow orb that puts what it hits to sleep.",
+    "tint": null,
+    "uses": "Nothing"
+  },
+  "Smash": {
+    "category": "Technique",
+    "req": [],
+    "text": "A blow all around the caster that pushes everything away.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
   "Smite": {
     "category": "WeaponAttack",
     "req": [
@@ -2243,6 +2344,13 @@ export const ABILITY_INFO = {
     "text": "A slow, hard swing with a holy part.",
     "tint": "Physical",
     "uses": "Melee"
+  },
+  "StoneGaze": {
+    "category": "Spell",
+    "req": [],
+    "text": "A stare that turns the target to stone, if it still sees it when the gaze lands.",
+    "tint": null,
+    "uses": "Nothing"
   },
   "Strike": {
     "category": "WeaponAttack",
@@ -2257,6 +2365,22 @@ export const ABILITY_INFO = {
     "text": "Calls your Dire Wolf, or heals it while it lives.",
     "tint": null,
     "uses": "Nothing"
+  },
+  "Swoop": {
+    "category": "Technique",
+    "req": [],
+    "text": "A long rush that hurts each enemy it passes once and pushes it hard.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
+  "TailWhip": {
+    "category": "WeaponAttack",
+    "req": [
+      "a weapon of kind Tail"
+    ],
+    "text": "A lash of the tail behind the caster.",
+    "tint": "Physical",
+    "uses": "Melee"
   },
   "Volley": {
     "category": "WeaponAttack",

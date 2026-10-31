@@ -63,7 +63,7 @@ pub fn spawn(run: &mut Run) {
         anim: Anim::Idle,
         anim_start: 0.0,
         hurt_t: 0.0,
-        kit: Default::default(),
+        kit: crate::sheet::boss_kit(boss_id),
         cds: Default::default(),
         slam: None,
         dash: None,

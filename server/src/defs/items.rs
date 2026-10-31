@@ -119,6 +119,11 @@ super::enum_list::listed_enum! {
         OgreClub = 48,
         NecromancerRod = 49,
         SummonerRod = 50,
+        // The bosses' natural weapons: the numbers of their old attacks, as items.
+        DragonBite = 51,
+        DragonClaws = 52,
+        DragonTail = 53,
+        DemonClaws = 54,
     }
 }
 
@@ -383,6 +388,10 @@ pub fn def(id: ItemId) -> ItemDef {
         I::OgreClub => item("Ogre Club", "weapon_baton_with_spikes", winding(melee(K::Club, 18.0, 1.6, 2.0, 28.0, phys(), at(19, 8)), 22.0, 0.5), NONE, &[], &[]),
         I::NecromancerRod => item("Necromancer Rod", "weapon_green_magic_staff", winding(melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), 16.0, 0.25), NONE, &[], &[]),
         I::SummonerRod => item("Summoner Rod", "weapon_red_magic_staff", winding(melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), 16.0, 0.25), NONE, &[], &[]),
+        I::DragonBite => item("Dragon Bite", "", winding(melee(K::Bite, 28.0, 3.0, 0.70, 24.0, heat(), at(24, 10)), 24.0, 0.45), NONE, &[], &[]),
+        I::DragonClaws => item("Dragon Claws", "", winding(melee(K::Claws, 20.0, 2.5, 1.60, 32.0, heat(), at(24, 10)), 18.0, 0.40), NONE, &[], &[]),
+        I::DragonTail => item("Dragon Tail", "", winding(melee(K::Tail, 25.0, 3.0, 2.40, 44.0, phys(), at(24, 10)), 24.0, 0.40), NONE, &[], &[]),
+        I::DemonClaws => item("Demon Claws", "", winding(melee(K::Claws, 25.0, 1.6, 2.10, 56.0, heat(), at(22, 14)), 24.0, 0.45), NONE, &[], &[]),
         I::NecromancerStaff => item("Necromancer Staff", "weapon_green_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::SummonerStaff => item("Summoner Staff", "weapon_red_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::HuntersBow => item(

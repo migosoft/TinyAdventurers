@@ -66,6 +66,26 @@ super::enum_list::listed_enum! {
         FireBolt = 25,
         /// The wolf's leap: a dash that crosses chasms, stops at the first foe it hits and hurts it hard.
         Pounce = 26,
+        /// A swing behind the caster with a tail weapon: the dragon's tail whip.
+        TailWhip = 27,
+        /// The dragon's channelled cone of fire, which leaves burning patches.
+        FireBreath = 28,
+        /// The dragon's landing: an instant blow all around.
+        Smash = 29,
+        /// The demon's long dash that hurts each foe it passes once.
+        Swoop = 30,
+        /// The demon's ring of fire orbs.
+        RingOfFire = 31,
+        /// The lich's burst of dark power, pushing everything away.
+        Nova = 32,
+        /// The lich's fan of five gloom bolts.
+        GloomBolts = 33,
+        /// A slow orb that blinds.
+        BlindingCurse = 34,
+        /// A slow orb that puts to sleep.
+        SleepMist = 35,
+        /// The lich's gaze that turns its target to stone.
+        StoneGaze = 36,
     }
 }
 
@@ -106,6 +126,10 @@ pub enum Shape {
     /// An effect on the user only.
     Buff,
     Summon,
+    /// A channelled cone: damage pulses and burning patches over its duration.
+    Breath,
+    /// An effect on the target the caster has locked, if it still sees it.
+    Gaze,
 }
 
 /// The effect an ability applies by itself (to the user, the allies around, or the enemies a
@@ -220,6 +244,23 @@ pub const SLAM_PUSH: f64 = 24.0;
 /// The wind-up (s) of the monsters' bolts, before the shot leaves (balancing).
 pub const SHADOW_BOLT_WINDUP: f64 = 0.5;
 pub const FIRE_BOLT_WINDUP: f64 = 0.35;
+/// Fire Breath: the seconds between pulses, and the burning patches each pulse may leave (the
+/// chance, the radius in px, the seconds they burn, the damage of a patch's pulse, and how far
+/// from the caster a patch lands at the nearest).
+/// Fire Breath's half-angle (rad): the cone reaches this far to each side of the aim.
+pub const BREATH_HALF_ARC: f64 = 0.38;
+#[allow(dead_code)] // read by the breath executor (Task 7)
+pub const BREATH_PULSE: f64 = 0.2;
+#[allow(dead_code)]
+pub const BREATH_PATCH_CHANCE: f64 = 0.5;
+#[allow(dead_code)]
+pub const BREATH_PATCH_RADIUS: f64 = 10.0;
+#[allow(dead_code)]
+pub const BREATH_PATCH_SECS: f64 = 3.0;
+#[allow(dead_code)]
+pub const BREATH_PATCH_DAMAGE: f64 = 8.0;
+#[allow(dead_code)]
+pub const BREATH_PATCH_NEAREST: f64 = 30.0;
 /// How long (s) Frost Nova's and Purify's flashes last.
 pub const NOVA_FLASH: f64 = 0.3;
 /// The Magic flash's colour: icy blue, like the Frost Shard's light.
@@ -227,6 +268,22 @@ pub const NOVA_TINT: u32 = 0x78c8ff;
 pub const PURIFY_FLASH: f64 = 0.3;
 /// Entangle: the seconds of Entangled each pulse of the roots (every 0.5 s) renews.
 pub const ENTANGLE_PULSE_SECS: f64 = 1.0;
+
+/// The angles (rad), relative to the aim, of the shots of one cast of `count` (0 means 1) over
+/// `spread`: a single shot flies straight ahead; a `spread` of a full circle or more spaces them
+/// evenly all around (`TAU / count`); otherwise they fan out symmetrically, the outer two `spread` apart.
+pub fn shot_offsets(count: u8, spread: f64) -> Vec<f64> {
+    let n = count.max(1) as usize;
+    if n == 1 {
+        return vec![0.0];
+    }
+    if spread >= std::f64::consts::TAU {
+        let step = std::f64::consts::TAU / n as f64;
+        return (0..n).map(|i| i as f64 * step).collect();
+    }
+    let step = spread / (n - 1) as f64;
+    (0..n).map(|i| (i as f64 - (n - 1) as f64 / 2.0) * step).collect()
+}
 
 /// The id of arrow `i` of a Volley that starts at `shot`: the server's rule; the client
 /// reserves ids so that none is 0.
@@ -273,6 +330,16 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::ShadowBolt => "A slow bolt of shadow.",
         AbilityId::FireBolt => "A bolt of fire.",
         AbilityId::Pounce => "A leap that crosses chasms and hits the first enemy it reaches, hard.",
+        AbilityId::TailWhip => "A lash of the tail behind the caster.",
+        AbilityId::FireBreath => "A cone of fire held for a moment, leaving burning patches on the ground.",
+        AbilityId::Smash => "A blow all around the caster that pushes everything away.",
+        AbilityId::Swoop => "A long rush that hurts each enemy it passes once and pushes it hard.",
+        AbilityId::RingOfFire => "Sixteen fire orbs flung out in a ring.",
+        AbilityId::Nova => "A burst of dark power that hurts and pushes everything around the caster.",
+        AbilityId::GloomBolts => "Five bolts of gloom in a fan.",
+        AbilityId::BlindingCurse => "A slow orb that blinds what it hits.",
+        AbilityId::SleepMist => "A slow orb that puts what it hits to sleep.",
+        AbilityId::StoneGaze => "A stare that turns the target to stone, if it still sees it when the gaze lands.",
     }
 }
 
@@ -403,6 +470,48 @@ pub fn def(id: AbilityId) -> AbilityDef {
             weapon_mult: WeaponMult { damage: 2.0, ..WeaponMult::ONE },
             ..base("Pounce", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, OwnStats { push: 12.0, ..own(0.0, 5.0, 64.0, DASH_SPEED, 0.0, 0.0, None, 0) }, &[])
         },
+        TailWhip => AbilityDef {
+            req: &[Requirement::WeaponKind(&[WeaponKind::Tail])],
+            backward: true,
+            ..base("Tail Whip", Secondary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
+        },
+        FireBreath => AbilityDef {
+            weapon_mult: WeaponMult { arc: Some(2.0 * BREATH_HALF_ARC), ..WeaponMult::ONE },
+            own: OwnStats { windup: 0.8, ..own(6.0, 6.5, 115.0, 0.0, 0.0, 1.4, Some(EntityKind::FireBreath), 20) },
+            ..base("Fire Breath", Secondary, C::Innate, Uses::Nothing, false, Shape::Breath, NO_OWN, &[])
+        },
+        Smash => AbilityDef {
+            weapon_mult: WeaponMult { damage: 1.1, ..WeaponMult::ONE },
+            ..base("Smash", Secondary, C::Technique, Uses::Melee, false, Shape::Ring, OwnStats { push: 36.0, ..own(0.0, 0.0, 0.0, 0.0, 40.0, 0.0, None, 0) }, &[])
+        },
+        Swoop => AbilityDef {
+            weapon_mult: WeaponMult { damage: 1.2, ..WeaponMult::ONE },
+            ..base("Swoop", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, OwnStats { push: 64.0, windup: 0.15, ..own(0.0, 6.0, 0.0, 260.0, 8.0, 0.55, None, 0) }, &[])
+        },
+        RingOfFire => AbilityDef {
+            own: OwnStats { windup: 0.5, count: 16, spread: std::f64::consts::TAU, ..own(12.0, 9.0, 231.0, 105.0, 3.0, 0.0, Some(EntityKind::FireOrb), 20) },
+            ..base("Ring of Fire", Secondary, C::Innate, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        Nova => AbilityDef {
+            own: OwnStats { split: Some(DamageSplit::pure(DamageType::Magical)), push: 64.0, windup: 1.2, ..own(24.0, 10.0, 0.0, 0.0, 56.0, 0.0, None, 22) },
+            ..base("Nova", Secondary, C::Spell, Uses::Nothing, false, Shape::Ring, NO_OWN, &[])
+        },
+        GloomBolts => AbilityDef {
+            own: OwnStats { windup: 0.5, count: 5, spread: 0.8, ..own(10.0, 2.5, 280.0, 140.0, 3.0, 0.0, Some(EntityKind::GloomBolt), 22) },
+            ..base("Gloom Bolts", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        BlindingCurse => AbilityDef {
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Blind, power: Attr::Int, look: EffectLook::Plain }), windup: 0.6, ..own(6.0, 10.0, 270.0, 90.0, 3.0, 3.0, Some(EntityKind::BlindOrb), 22) },
+            ..base("Blinding Curse", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        SleepMist => AbilityDef {
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Sleep, power: Attr::Int, look: EffectLook::Plain }), windup: 0.8, ..own(0.0, 14.0, 270.0, 90.0, 3.0, 4.0, Some(EntityKind::SleepOrb), 22) },
+            ..base("Sleep Mist", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        StoneGaze => AbilityDef {
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Petrified, power: Attr::Int, look: EffectLook::Plain }), windup: 1.0, ..own(0.0, 18.0, 0.0, 0.0, 0.0, 3.0, None, 0) },
+            ..base("Stone Gaze", Secondary, C::Spell, Uses::Nothing, false, Shape::Gaze, NO_OWN, &[])
+        },
         SummonWolf => base("Summon Wolf", Secondary, C::Innate, Uses::Nothing, false, Shape::Summon, own(0.0, 8.0, 0.0, 0.0, 0.0, 0.0, None, 13), &[K::ElvenRanger]),
     }
 }
@@ -449,7 +558,7 @@ mod tests {
                 assert!(d.own.range > 0.0, "{id:?}: an aimed area needs a range");
             }
             if d.own.effect.is_some() {
-                assert!(matches!(d.shape, Shape::Ring | Shape::SelfArea | Shape::GroundArea | Shape::Buff), "{id:?}: an own effect needs an area or a buff");
+                assert!(matches!(d.shape, Shape::Ring | Shape::SelfArea | Shape::GroundArea | Shape::Buff | Shape::Projectile | Shape::Gaze), "{id:?}: an own effect needs an area, a buff, a shot or a gaze");
             }
             if magic && d.own.damage > 0.0 {
                 assert!(d.own.at > 0, "{id:?}: a spell's damage is given at an Attribute value");
@@ -475,6 +584,18 @@ mod tests {
                 assert!(!same_name(def(*a).name, def(*b).name), "{a:?} and {b:?} share a name");
             }
         }
+    }
+
+    #[test]
+    fn shot_offsets_handle_one_shot_a_fan_and_a_full_circle() {
+        assert_eq!(shot_offsets(0, 0.5), vec![0.0], "0 means 1");
+        assert_eq!(shot_offsets(1, 0.5), vec![0.0], "a single shot flies straight ahead");
+        let fan = shot_offsets(3, 0.6);
+        assert!(fan.iter().zip([-0.3, 0.0, 0.3]).all(|(a, b)| (a - b).abs() < 1e-12), "{fan:?}");
+        let ring = shot_offsets(16, std::f64::consts::TAU);
+        assert_eq!(ring.len(), 16);
+        assert!(ring.windows(2).all(|w| (w[1] - w[0] - std::f64::consts::TAU / 16.0).abs() < 1e-12));
+        assert_eq!(ring[0], 0.0);
     }
 
     #[test]

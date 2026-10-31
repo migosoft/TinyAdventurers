@@ -265,6 +265,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
                 speed: own.speed,
                 radius: own.radius,
                 duration: own.duration,
+                arc: mult.arc.unwrap_or(0.0),
                 projectile: own.kind,
                 split: own.split.unwrap_or_else(|| own.kind.map_or(DamageSplit::physical(), kind_split)),
                 power: if own.damage > 0.0 { gov.map_or(0, |(a, _)| attrs.get(a)) } else { 0 },
@@ -310,6 +311,12 @@ pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], bo
         })
         .collect();
     Kit(kit)
+}
+
+/// The kit of boss `b`, from its stat block.
+pub fn boss_kit(b: BossId) -> Kit {
+    let d = bosses::def(b);
+    monster_kit(d.abilities, &d.attrs, d.weapons, Body { radius: d.radius })
 }
 
 /// The Ranger's wolf: Bite and Pounce from its Attributes and Beast Bite, Pounce changed by its version.
@@ -1259,6 +1266,38 @@ mod tests {
             assert_eq!(s.speed, d.speed, "{b:?}");
             assert_eq!(s.weight, 40.0);
         }
+    }
+
+    #[test]
+    fn boss_kits_resolve_to_todays_numbers() {
+        use crate::defs::bosses::*;
+        let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-9, "{what}: {a} vs {b}");
+        for b in BossId::ALL {
+            let k = boss_kit(b);
+            for &id in def(b).abilities {
+                assert!(k.get(id).is_some(), "{b:?} {id:?}");
+            }
+        }
+        let dragon = boss_kit(BossId::Dragon);
+        let demon = boss_kit(BossId::Demon);
+        let lich = boss_kit(BossId::Lich);
+        let check = |k: &Kit, id: AbilityId, damage: f64, push: f64| {
+            let a = k.get(id).unwrap_or_else(|| panic!("{id:?}"));
+            near(a.damage, damage, &format!("{id:?} damage"));
+            near(a.push, push, &format!("{id:?} push"));
+        };
+        check(&dragon, AbilityId::Bite, DRAGON_BITE_DAMAGE, DRAGON_BITE_KNOCK);
+        check(&dragon, AbilityId::Strike, 20.0, DRAGON_CLAW_KNOCK);
+        check(&dragon, AbilityId::TailWhip, 25.0, DRAGON_TAIL_KNOCK);
+        check(&dragon, AbilityId::Smash, DRAGON_SMASH_DAMAGE, DRAGON_SMASH_KNOCK);
+        check(&demon, AbilityId::Strike, 25.0, DEMON_CLEAVE_KNOCK);
+        check(&demon, AbilityId::Swoop, 30.0, DEMON_SWOOP_KNOCK);
+        check(&lich, AbilityId::Nova, LICH_NOVA_DAMAGE, LICH_NOVA_KNOCK);
+        // The rest of today's numbers: the breath pulse, the orbs and bolts.
+        near(dragon.get(AbilityId::FireBreath).unwrap().damage, 6.0, "breath pulse");
+        near(demon.get(AbilityId::RingOfFire).unwrap().damage, 12.0, "ring of fire");
+        near(lich.get(AbilityId::GloomBolts).unwrap().damage, 10.0, "gloom bolts");
+        near(lich.get(AbilityId::BlindingCurse).unwrap().damage, 6.0, "blinding curse");
     }
 
     #[test]

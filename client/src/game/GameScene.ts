@@ -613,6 +613,9 @@ export class GameScene extends Phaser.Scene {
       case 'GroundArea':
       case 'Buff':
       case 'Summon':
+      // No hero has these shapes (the bosses' breath and gaze).
+      case 'Breath':
+      case 'Gaze':
         anim = ANIM.Cast;
         break;
       default: {

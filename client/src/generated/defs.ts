@@ -271,6 +271,14 @@ export const ABILITIES = {
     "shape": "Swing",
     "slot": "Primary"
   },
+  "BlindingCurse": {
+    "classes": [],
+    "hero": false,
+    "name": "Blinding Curse",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Secondary"
+  },
   "ChainSpark": {
     "classes": [
       "Wizard"
@@ -319,6 +327,14 @@ export const ABILITIES = {
     "shape": "Projectile",
     "slot": "Primary"
   },
+  "FireBreath": {
+    "classes": [],
+    "hero": false,
+    "name": "Fire Breath",
+    "ranged": false,
+    "shape": "Breath",
+    "slot": "Secondary"
+  },
   "Fireball": {
     "classes": [
       "Wizard"
@@ -355,6 +371,14 @@ export const ABILITIES = {
     ],
     "hero": true,
     "name": "Frost Shard",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
+  },
+  "GloomBolts": {
+    "classes": [],
+    "hero": false,
+    "name": "Gloom Bolts",
     "ranged": true,
     "shape": "Projectile",
     "slot": "Primary"
@@ -419,6 +443,14 @@ export const ABILITIES = {
     "shape": "Projectile",
     "slot": "Primary"
   },
+  "Nova": {
+    "classes": [],
+    "hero": false,
+    "name": "Nova",
+    "ranged": false,
+    "shape": "Ring",
+    "slot": "Secondary"
+  },
   "PoisonCoat": {
     "classes": [
       "ElvenRanger"
@@ -447,6 +479,14 @@ export const ABILITIES = {
     "shape": "SelfArea",
     "slot": "Secondary"
   },
+  "RingOfFire": {
+    "classes": [],
+    "hero": false,
+    "name": "Ring of Fire",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Secondary"
+  },
   "ShadowBolt": {
     "classes": [],
     "hero": false,
@@ -465,6 +505,22 @@ export const ABILITIES = {
     "shape": "Projectile",
     "slot": "Primary"
   },
+  "SleepMist": {
+    "classes": [],
+    "hero": false,
+    "name": "Sleep Mist",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Secondary"
+  },
+  "Smash": {
+    "classes": [],
+    "hero": false,
+    "name": "Smash",
+    "ranged": false,
+    "shape": "Ring",
+    "slot": "Secondary"
+  },
   "Smite": {
     "classes": [
       "Paladin"
@@ -474,6 +530,14 @@ export const ABILITIES = {
     "ranged": false,
     "shape": "Swing",
     "slot": "Primary"
+  },
+  "StoneGaze": {
+    "classes": [],
+    "hero": false,
+    "name": "Stone Gaze",
+    "ranged": false,
+    "shape": "Gaze",
+    "slot": "Secondary"
   },
   "Strike": {
     "classes": [
@@ -494,6 +558,22 @@ export const ABILITIES = {
     "name": "Summon Wolf",
     "ranged": false,
     "shape": "Summon",
+    "slot": "Secondary"
+  },
+  "Swoop": {
+    "classes": [],
+    "hero": false,
+    "name": "Swoop",
+    "ranged": false,
+    "shape": "Dash",
+    "slot": "Secondary"
+  },
+  "TailWhip": {
+    "classes": [],
+    "hero": false,
+    "name": "Tail Whip",
+    "ranged": false,
+    "shape": "Swing",
     "slot": "Secondary"
   },
   "Volley": {

@@ -1,5 +1,7 @@
 use super::attributes::Attributes;
 use super::races::{self, Adjust, Race, Profile};
+use super::abilities::AbilityId;
+use super::items::ItemId;
 use super::kinds::EntityKind;
 use crate::protocol::BossId;
 
@@ -16,13 +18,19 @@ pub struct BossDef {
     pub attrs: Attributes,
     /// Never pushed.
     pub weight: f64,
+    /// The abilities it casts, as the scripts choose them.
+    pub abilities: &'static [AbilityId],
+    /// What the abilities use: the first melee weapon is the one Strike and Smash take.
+    pub weapons: &'static [ItemId],
 }
 
 pub fn def(id: BossId) -> BossDef {
+    use AbilityId::*;
+    use ItemId::*;
     match id {
-        BossId::Demon => BossDef { id, kind: EntityKind::Demon, hp: 1300.0, radius: 11.0, speed: 50.0, attrs: Attributes::new(22, 14, 20, 14, 16, 20), weight: 40.0 },
-        BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0, attrs: Attributes::new(10, 14, 14, 22, 18, 16), weight: 40.0 },
-        BossId::Dragon => BossDef { id, kind: EntityKind::Dragon, hp: 2000.0, radius: 17.0, speed: 34.0, attrs: Attributes::new(24, 10, 22, 16, 14, 20), weight: 40.0 },
+        BossId::Demon => BossDef { id, kind: EntityKind::Demon, hp: 1300.0, radius: 11.0, speed: 50.0, attrs: Attributes::new(22, 14, 20, 14, 16, 20), weight: 40.0, abilities: &[Strike, Swoop, RingOfFire], weapons: &[DemonClaws] },
+        BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0, attrs: Attributes::new(10, 14, 14, 22, 18, 16), weight: 40.0, abilities: &[Nova, GloomBolts, BlindingCurse, SleepMist, StoneGaze], weapons: &[] },
+        BossId::Dragon => BossDef { id, kind: EntityKind::Dragon, hp: 2000.0, radius: 17.0, speed: 34.0, attrs: Attributes::new(24, 10, 22, 16, 14, 20), weight: 40.0, abilities: &[Strike, AbilityId::Bite, TailWhip, FireBreath, Smash], weapons: &[DragonClaws, DragonBite, DragonTail] },
     }
 }
 
@@ -102,18 +110,17 @@ pub const DRAGON_FIREBALL_KNOCK: f64 = 20.0;
 
 /// Race plus each boss's own adjustments.
 pub fn profile(id: BossId) -> Profile {
-    use super::damage::{DamageSplit, DamageType::*, Resistances};
+    use super::damage::{DamageType::*, Resistances};
     use super::effects::{EffectKind::*, EffectResistances as Fx};
     // Effect resistances: the user, 2026-10-15 (then immune = 1, reduced = 0.5).
     let (ty, adj) = match id {
-        BossId::Demon => (Race::Demon, Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0), (Fear, 0.5)]), melee: None, vision: Some(25.0), darkvision: None }),
-        BossId::Lich => (Race::Undead, Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5)]), melee: None, vision: Some(25.0), darkvision: None }),
+        BossId::Demon => (Race::Demon, Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0), (Fear, 0.5)]), vision: Some(25.0), darkvision: None }),
+        BossId::Lich => (Race::Undead, Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5)]), vision: Some(25.0), darkvision: None }),
         BossId::Dragon => (
             Race::Dragon,
             Adjust {
                 res: Resistances::of(&[(Heat, 1.0)]),
                 effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5), (Fear, 1.0)]),
-                melee: Some(DamageSplit::split(&[(Heat, 0.2)])),
                 vision: Some(25.0),
                 darkvision: None,
             },
