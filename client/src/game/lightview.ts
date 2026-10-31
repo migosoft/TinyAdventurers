@@ -12,7 +12,7 @@ import type { MovingLight } from '../generated/MovingLight';
 import { View } from '../sim/view';
 import { TILE, type TileMap } from '../sim/map';
 import { DEPTH } from './effects';
-import { cloudAt, sunLook } from './sunmath';
+import { cloudAt, lookFor, sunLook } from './sunmath';
 import type { LightField } from './light';
 
 // Phaser's FilterMode.LINEAR and BlendModes.MULTIPLY as numbers: a value import of
@@ -252,7 +252,7 @@ export class LightView {
       this.rgb.fill(0, (y * w + x0) * 3, (y * w + x1) * 3);
       this.movingLit.fill(0, y * w + x0, y * w + x1);
     }
-    this.field.accumulate(this.rgb, x0, y0, x1, y1, (l) => flicker(l.kind, l.id, t), (l) => (l.kind === LIGHT_KIND.Daylight ? cloudAt(l.id, t, sunLook) : 1));
+    this.field.accumulate(this.rgb, x0, y0, x1, y1, (l) => flicker(l.kind, l.id, t), (l) => (l.kind === LIGHT_KIND.Daylight ? cloudAt(l.id, t, lookFor(l.id, sunLook)) : 1));
     moving.forEach(([mx, my, kind, colour], n) =>
       this.field.addMoving(this.rgb, this.movingLit, mx, my, kind, colour ?? LIGHT[kind].colour, flicker(kind, 1000 + n, t), TILE));
     const dt = this.darkTile;

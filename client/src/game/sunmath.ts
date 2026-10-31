@@ -18,11 +18,15 @@ export interface SunLook {
   height: number;
   /** Sub-beams side by side, as if the crack had several parts. */
   rays: 1 | 2 | 3;
+  /** Range of a ray's width as a share of the beam's (rays > 1). */
+  rayWidth: [number, number];
+  /** Each sun gets its own random look (`sunVariant`); only slant, dir and gap come from here. */
+  vary: boolean;
   /** Brightness of the beam and the patch (their alphas are multiplied by it, capped at 1). */
   glow: number;
 }
 
-export const sunLook: SunLook = { widen: true, patch: 2, slant: 2, dir: -1, clouds: 0.3, gap: [8, 25], glow: 1, height: 4, rays: 2 };
+export const sunLook: SunLook = { widen: true, patch: 2, slant: 2, dir: -1, clouds: 0.3, gap: [8, 25], glow: 1, height: 4, rays: 2, rayWidth: [0.5, 0.8], vary: true };
 
 /** Uniform [0,1) from a hash of (id, cloud index, salt). */
 function rnd(id: number, n: number, salt: number): number {
@@ -99,7 +103,7 @@ export interface Ray {
 }
 
 /**
- * The beam of light `id` as `look.rays` narrower rays of differing widths (0.5..0.8 of the beam's) that overlap
+ * The beam of light `id` as `look.rays` narrower rays of differing widths (`look.rayWidth`, 0.5..0.8 of the beam's by default) that overlap
  * partly. The first ray starts at the beam's left edge and the last ends at its right edge at the floor, so
  * together they span the beam's width; the top edges follow the same layout, nudged slightly, and are kept
  * inside the beam's top span. Hashed from (id, ray index), so they never change. One ray is the whole beam.
@@ -113,7 +117,7 @@ export function rayShapes(shape: { top: [number, number][]; bottom: [number, num
   const botW = br - bl;
   const rays: Ray[] = [];
   for (let i = 0; i < n; i++) {
-    const w = 0.5 + 0.3 * rnd(id, i, 5);
+    const w = look.rayWidth[0] + (look.rayWidth[1] - look.rayWidth[0]) * rnd(id, i, 5);
     // Left edge, as a share of the beam's width: the first ray at 0, the last at 1 - w, the others between.
     const u0 = i === 0 ? 0 : i === n - 1 ? 1 - w : (1 - w) * (0.25 + 0.5 * rnd(id, i, 6));
     const tw = w * topW;
@@ -129,4 +133,33 @@ export function rayShapes(shape: { top: [number, number][]; bottom: [number, num
 /** Brightness factor of each of `rays` overlapping rays, so that together they stay near one beam's brightness. */
 export function rayGlow(glow: number, rays: number): number {
   return glow / Math.sqrt(Math.max(1, rays));
+}
+
+/** The look of sun spot `id`: random but the same for everyone (a hash of the id). Slant, direction and cloud gap stay those of `base`. */
+export function sunVariant(id: number, base: SunLook): SunLook {
+  const r = (salt: number) => rnd(id, 0, 20 + salt);
+  const rays = r(4);
+  return {
+    ...base,
+    widen: r(0) < 0.65,
+    patch: 1.5 + 1.5 * r(1),
+    height: 3 + 3 * r(2),
+    rays: rays < 0.3 ? 1 : rays < 0.75 ? 2 : 3,
+    rayWidth: [0.25, 0.9],
+    glow: 0.8 + 0.5 * r(5),
+    clouds: 0.45 * r(6),
+  };
+}
+
+const variants = new Map<number, SunLook>();
+
+/** The look sun spot `id` is drawn and dimmed with: `base` itself unless `base.vary`; else `sunVariant`, cached until slant, dir or gap change. */
+export function lookFor(id: number, base: SunLook): SunLook {
+  if (!base.vary) return base;
+  let v = variants.get(id);
+  if (!v || v.slant !== base.slant || v.dir !== base.dir || v.gap !== base.gap) {
+    v = sunVariant(id, base);
+    variants.set(id, v);
+  }
+  return v;
 }

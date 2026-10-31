@@ -8,13 +8,13 @@ import { TILE } from '../sim/map';
 import { DEPTH } from './effects';
 import type { LightField } from './light';
 import type { LightView } from './lightview';
-import { beamShape, cloudAt, rayGlow, rayShapes, sunLook, type Ray } from './sunmath';
+import { beamShape, cloudAt, lookFor, rayGlow, rayShapes, sunLook, type Ray, type SunLook } from './sunmath';
 
 const PATCH_TEX = 'sun-patch';
 /** Phaser's `FilterMode.LINEAR` and blend mode ADD (a runtime import of Phaser would not load in unit tests). */
 const LINEAR = 0;
 const ADD = 1;
-/** Tiles beyond the view in which a beam is still kept, on top of its own height and slant. */
+/** Tiles beyond the view in which a beam is still kept, on top of the tallest beam (6 tiles) and the slant. */
 const MARGIN = 1;
 const MOTES = 24;
 /** Beam alpha at the top (0), at BEAM_PEAK_AT of the way down to the floor, and where it ends (0): the top edge of the patch. */
@@ -78,7 +78,7 @@ export class Sunbeams {
   }
 
   update(dt: number, view: Phaser.Geom.Rectangle, t: number): void {
-    const m = (MARGIN + sunLook.height + sunLook.slant) * TILE;
+    const m = (MARGIN + 6 + Math.abs(sunLook.slant)) * TILE;
     const seen = new Set<number>();
     for (const l of this.field.lights.values()) {
       if (l.kind !== LIGHT_KIND.Daylight || !l.on) continue;
@@ -93,7 +93,8 @@ export class Sunbeams {
         this.active.set(l.id, b);
         b.key = '';
       }
-      this.place(b, l.id, l.x, l.y, l.colour ?? LIGHT[LIGHT_KIND.Daylight].colour, cloudAt(l.id, t, sunLook), dt, t);
+      const look = lookFor(l.id, sunLook);
+      this.place(b, l.id, look, l.x, l.y, l.colour ?? LIGHT[LIGHT_KIND.Daylight].colour, cloudAt(l.id, t, look), dt, t);
     }
     for (const [id, b] of this.active) {
       if (seen.has(id)) continue;
@@ -134,9 +135,8 @@ export class Sunbeams {
     for (const m of b.motes) m.img.setVisible(false);
   }
 
-  private place(b: Beam, id: number, tx: number, ty: number, colour: number, cloud: number, dt: number, t: number): void {
-    const look = sunLook;
-    const key = `${tx},${ty},${colour},${look.widen},${look.patch},${look.slant},${look.dir},${look.glow},${look.height},${look.rays},${id}`;
+  private place(b: Beam, id: number, look: SunLook, tx: number, ty: number, colour: number, cloud: number, dt: number, t: number): void {
+    const key = `${tx},${ty},${colour},${look.widen},${look.patch},${look.slant},${look.dir},${look.glow},${look.height},${look.rays},${look.rayWidth[0]},${look.rayWidth[1]},${id}`;
     if (key !== b.key) {
       b.key = key;
       b.shape = beamShape(tx, ty, look);

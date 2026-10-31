@@ -83,8 +83,9 @@ describe('Sunbeams', () => {
   });
 
   it('scales the beam and patch alphas by glow, capped at 1', () => {
-    const old = sunLook.glow;
+    const old = [sunLook.glow, sunLook.vary] as const;
     try {
+      sunLook.vary = false;
       const at = (glow: number) => {
         sunLook.glow = glow;
         const s = setup(1);
@@ -100,7 +101,7 @@ describe('Sunbeams', () => {
       expect(big.peak).toBe(1);
       expect(big.patch).toBe(1);
     } finally {
-      sunLook.glow = old;
+      [sunLook.glow, sunLook.vary] = old;
     }
   });
 

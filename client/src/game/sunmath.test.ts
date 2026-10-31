@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TILE } from '../sim/map';
-import { beamShape, cloudAt, rayGlow, rayShapes, sunLook } from './sunmath';
+import { beamShape, cloudAt, lookFor, rayGlow, rayShapes, sunLook, sunVariant } from './sunmath';
 
 const look = { ...sunLook };
 
@@ -90,5 +90,61 @@ describe('rayShapes', () => {
     expect(rayGlow(1, 1)).toBe(1);
     expect(rayGlow(2, 4)).toBeCloseTo(1);
     expect(rayGlow(1, 2) * Math.sqrt(2)).toBeCloseTo(1);
+  });
+});
+
+describe('sunVariant', () => {
+  const base = { ...sunLook, slant: 1.7, dir: 1 as const, gap: [3, 9] as [number, number] };
+  const ids = Array.from({ length: 1000 }, (_, i) => i + 1);
+  it('is deterministic per id, and keeps slant, direction and gap', () => {
+    expect(sunVariant(7, base)).toEqual(sunVariant(7, base));
+    expect(sunVariant(7, base)).not.toEqual(sunVariant(8, base));
+    for (const id of ids.slice(0, 200)) {
+      const v = sunVariant(id, base);
+      expect(v.slant).toBe(1.7);
+      expect(v.dir).toBe(1);
+      expect(v.gap).toBe(base.gap);
+    }
+  });
+  it('stays within its ranges', () => {
+    for (const id of ids) {
+      const v = sunVariant(id, base);
+      expect(v.patch).toBeGreaterThanOrEqual(1.5);
+      expect(v.patch).toBeLessThanOrEqual(3);
+      expect(v.height).toBeGreaterThanOrEqual(3);
+      expect(v.height).toBeLessThanOrEqual(6);
+      expect(v.glow).toBeGreaterThanOrEqual(0.8);
+      expect(v.glow).toBeLessThanOrEqual(1.3);
+      expect(v.clouds).toBeGreaterThanOrEqual(0);
+      expect(v.clouds).toBeLessThanOrEqual(0.45);
+      expect([1, 2, 3]).toContain(v.rays);
+    }
+  });
+  it('mixes the looks: rays about 30 / 45 / 25 %, widening about 65 %', () => {
+    const count = (f: (l: ReturnType<typeof sunVariant>) => boolean) => ids.filter((id) => f(sunVariant(id, base))).length / ids.length;
+    expect(count((l) => l.rays === 1)).toBeCloseTo(0.3, 1);
+    expect(count((l) => l.rays === 2)).toBeCloseTo(0.45, 1);
+    expect(count((l) => l.rays === 3)).toBeCloseTo(0.25, 1);
+    expect(count((l) => l.widen)).toBeCloseTo(0.65, 1);
+  });
+  it('lookFor uses the base itself unless vary, and caches per id', () => {
+    expect(lookFor(5, { ...base, vary: false })).toEqual({ ...base, vary: false });
+    const on = { ...base, vary: true };
+    expect(lookFor(5, on)).toBe(lookFor(5, on));
+    expect(lookFor(5, { ...on, slant: 2 }).slant).toBe(2);
+  });
+  it('rays of a variant can differ a lot in width but still span the beam', () => {
+    const shape = beamShape(5, 8, { ...sunLook, widen: true });
+    let thin = 0;
+    for (const id of ids.slice(0, 300)) {
+      const v = sunVariant(id, base);
+      const rays = rayShapes(shape, id, v);
+      if (rays.length < 2) continue;
+      const ws = rays.map((r) => r.bottom[1][0] - r.bottom[0][0]);
+      if (Math.max(...ws) / Math.min(...ws) > 2) thin++;
+      expect(Math.min(...rays.map((r) => r.bottom[0][0]))).toBeCloseTo(shape.bottom[0][0]);
+      expect(Math.max(...rays.map((r) => r.bottom[1][0]))).toBeCloseTo(shape.bottom[1][0]);
+    }
+    expect(thin).toBeGreaterThan(20);
   });
 });
