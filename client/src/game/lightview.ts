@@ -188,6 +188,8 @@ export class LightView {
   get light(): Float32Array { return this.rgb; }
   /** Per tile: 1 where it is seen and lit this frame. */
   readonly seenLit: Uint8Array;
+  /** Map width in tiles (the row length of `seenLit` and `light`). */
+  get w(): number { return this.map.w; }
   /** Light what the view covers (false: the tile FOV only, the old tile edges, ?lights E). */
   wide = true;
   private inView = (x: number, y: number) => this.view.isVisible(x, y);

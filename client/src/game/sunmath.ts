@@ -1,5 +1,7 @@
 /** Daylight look: how the sun patch is drawn and how clouds dim it. Pure; the demo switches `sunLook`. */
 
+import { TILE } from '../sim/map';
+
 export interface SunLook {
   widen: boolean;
   /** Tiles across. */
@@ -64,4 +66,26 @@ export function cloudAt(id: number, t: number, look: SunLook): number {
   if (t < c.start) return 1;
   const u = (t - c.start) / c.dur;
   return 1 - look.clouds * c.depth * 0.5 * (1 - Math.cos(2 * Math.PI * u));
+}
+
+/** Height of a beam above its patch centre. */
+export const BEAM_HEIGHT = 3 * TILE;
+
+/** The beam of a skylight at tile (tx, ty) and its floor patch, in px. Edges run [left, right]; the top is on the side the light comes from. */
+export function beamShape(
+  tx: number,
+  ty: number,
+  look: SunLook,
+): { top: [number, number][]; bottom: [number, number][]; patch: { x: number; y: number; w: number; h: number } } {
+  const cx = (tx + 0.5) * TILE;
+  const cy = (ty + 0.5) * TILE;
+  const w = look.patch * TILE;
+  const topHalf = (look.widen ? 0.25 : 0.5) * w;
+  const topX = cx + look.dir * look.slant * TILE;
+  const topY = cy - BEAM_HEIGHT;
+  return {
+    top: [[topX - topHalf, topY], [topX + topHalf, topY]],
+    bottom: [[cx - w / 2, cy], [cx + w / 2, cy]],
+    patch: { x: cx, y: cy, w, h: 0.6 * w },
+  };
 }

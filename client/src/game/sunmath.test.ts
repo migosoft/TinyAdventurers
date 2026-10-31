@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cloudAt, sunLook } from './sunmath';
+import { TILE } from '../sim/map';
+import { beamShape, cloudAt, sunLook } from './sunmath';
 
 const look = { ...sunLook };
 
@@ -29,5 +30,21 @@ describe('cloudAt', () => {
 
   it('with clouds 0 is always 1', () => {
     expect(cloudAt(3, 17.3, { ...look, clouds: 0 })).toBe(1);
+  });
+});
+
+describe('beamShape', () => {
+  it('the patch is centred on the tile and 0.6 as tall as wide', () => {
+    const s = beamShape(5, 8, { ...sunLook, patch: 2 });
+    expect(s.patch).toEqual({ x: 5.5 * TILE, y: 8.5 * TILE, w: 2 * TILE, h: 1.2 * TILE });
+  });
+  it('the top is 3 tiles up, shifted to the light side, narrower when widening', () => {
+    const s = beamShape(5, 8, { ...sunLook, slant: 1.5, dir: -1, widen: true });
+    const cx = (s.top[0][0] + s.top[1][0]) / 2;
+    expect(cx).toBeCloseTo(5.5 * TILE - 1.5 * TILE);
+    expect(s.top[0][1]).toBeCloseTo(8.5 * TILE - 3 * TILE);
+    expect(Math.abs(s.top[1][0] - s.top[0][0])).toBeCloseTo(0.5 * Math.abs(s.bottom[1][0] - s.bottom[0][0]));
+    const straight = beamShape(5, 8, { ...sunLook, widen: false });
+    expect(Math.abs(straight.top[1][0] - straight.top[0][0])).toBeCloseTo(Math.abs(straight.bottom[1][0] - straight.bottom[0][0]));
   });
 });
