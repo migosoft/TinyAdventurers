@@ -103,7 +103,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 attrs,
                 weight: 6.0,
                 abilities: &[Shoot, Strike],
-                weapons: &[UnarmedStrike, GoblinBow],
+                weapons: &[UnarmedStrike, GoblinShortbow],
                 preferred: 90.0,
             }
         }
@@ -118,7 +118,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 attrs,
                 weight: 9.0,
                 abilities: &[Strike],
-                weapons: &[RustySword],
+                weapons: &[SkeletonSword],
                 preferred: 0.0,
             }
         }
@@ -133,7 +133,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 attrs,
                 weight: 9.0,
                 abilities: &[Shoot, Strike],
-                weapons: &[UnarmedStrike, SkeletonLongbow],
+                weapons: &[UnarmedStrike, SkeletonBow],
                 preferred: 100.0,
             }
         }
@@ -148,7 +148,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 attrs,
                 weight: 13.0,
                 abilities: &[Strike],
-                weapons: &[Cleaver],
+                weapons: &[OrcCleaver],
                 preferred: 0.0,
             }
         }
@@ -163,7 +163,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 attrs,
                 weight: 13.0,
                 abilities: &[Shoot, Strike],
-                weapons: &[UnarmedStrike, OrcBow],
+                weapons: &[UnarmedStrike, OrcWarbow],
                 preferred: 100.0,
             }
         }
@@ -178,7 +178,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 attrs,
                 weight: 10.0,
                 abilities: if t == Summoner { &[FireBolt, Strike] } else { &[ShadowBolt, Strike] },
-                weapons: if t == Summoner { &[SummonerStaff] } else { &[NecromancerStaff] },
+                weapons: if t == Summoner { &[SummonerRod] } else { &[NecromancerRod] },
                 preferred: 110.0,
             }
         }
@@ -255,7 +255,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 attrs,
                 weight: 20.0,
                 abilities: &[Strike, GroundSlam],
-                weapons: &[SpikedClub],
+                weapons: &[OgreClub],
                 preferred: 0.0,
             }
         }
@@ -501,15 +501,15 @@ mod kit_pins {
         let pins = [
             (GoblinArcher, Shoot, Pin { damage: 6.0, cooldown: 1.4, range: 140.0, speed: 170.0, radius: 3.0, windup: 0.3, push: 0.0 }),
             (GoblinArcher, Strike, Pin { damage: 2.7, cooldown: 0.9090909090909091, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
-            (SkeletonWarrior, Strike, Pin { damage: 9.0, cooldown: 1.0, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
+            (SkeletonWarrior, Strike, Pin { damage: 9.0, cooldown: 1.0, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
             (SkeletonArcher, Shoot, Pin { damage: 7.0, cooldown: 1.6, range: 150.0, speed: 180.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (SkeletonArcher, Strike, Pin { damage: 3.0, cooldown: 0.9090909090909091, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
-            (OrcWarrior, Strike, Pin { damage: 14.0, cooldown: 1.2, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.35, push: 20.0 }),
+            (OrcWarrior, Strike, Pin { damage: 14.0, cooldown: 1.2, range: 26.0, speed: 0.0, radius: 0.0, windup: 0.35, push: 20.0 }),
             (OrcArcher, Shoot, Pin { damage: 10.0, cooldown: 1.7, range: 150.0, speed: 190.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (OrcArcher, Strike, Pin { damage: 3.5999999999999996, cooldown: 0.9259259259259258, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Necromancer, ShadowBolt, Pin { damage: 12.0, cooldown: 2.0, range: 180.0, speed: 130.0, radius: 3.0, windup: 0.5, push: 0.0 }),
-            (Necromancer, Strike, Pin { damage: 5.0, cooldown: 1.2, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
-            (RaisedSkeleton, Strike, Pin { damage: 9.0, cooldown: 1.0, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
+            (Necromancer, Strike, Pin { damage: 5.0, cooldown: 1.2, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (RaisedSkeleton, Strike, Pin { damage: 9.0, cooldown: 1.0, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
             (RaisedArcher, Shoot, Pin { damage: 7.0, cooldown: 1.6, range: 150.0, speed: 180.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (RaisedArcher, Strike, Pin { damage: 3.0, cooldown: 0.9090909090909091, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Disciple, ShadowBolt, Pin { damage: 10.222222222222221, cooldown: 2.0, range: 180.0, speed: 130.0, radius: 3.0, windup: 0.5, push: 0.0 }),
@@ -520,11 +520,11 @@ mod kit_pins {
             (Chort, Strike, Pin { damage: 9.0, cooldown: 1.0, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 14.0 }),
             (Chort, FireBolt, Pin { damage: 5.541666666666666, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (Summoner, FireBolt, Pin { damage: 7.583333333333334, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
-            (Summoner, Strike, Pin { damage: 5.0, cooldown: 1.2, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Summoner, Strike, Pin { damage: 5.0, cooldown: 1.2, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (SummonedImp, FireBolt, Pin { damage: 7.0, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (SummonedImp, Strike, Pin { damage: 6.0, cooldown: 0.9, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
-            (Ogre, Strike, Pin { damage: 18.0, cooldown: 1.6, range: 27.0, speed: 0.0, radius: 0.0, windup: 0.5, push: 28.0 }),
-            (Ogre, GroundSlam, Pin { damage: 21.599999999999998, cooldown: 6.0, range: 27.0, speed: 0.0, radius: 34.0, windup: 1.0, push: 28.0 }),
+            (Ogre, Strike, Pin { damage: 18.0, cooldown: 1.6, range: 32.0, speed: 0.0, radius: 0.0, windup: 0.5, push: 28.0 }),
+            (Ogre, GroundSlam, Pin { damage: 21.599999999999998, cooldown: 6.0, range: 32.0, speed: 0.0, radius: 34.0, windup: 1.0, push: 28.0 }),
         ];
         let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
         for t in EnemyType::ALL {

@@ -3190,7 +3190,7 @@ mod monster_casts {
         let attrs = Attributes::default();
         let body = crate::sheet::Body { radius: 5.0 };
         // Bite needs a bite weapon, Shoot a bow.
-        for (id, weapon) in [(AbilityId::Bite, ItemId::RustySword), (AbilityId::Shoot, ItemId::RustySword)] {
+        for (id, weapon) in [(AbilityId::Bite, ItemId::SkeletonSword), (AbilityId::Shoot, ItemId::SkeletonSword)] {
             let r = std::panic::catch_unwind(|| crate::sheet::monster_kit(&[id], &attrs, &[weapon], body));
             assert!(r.is_err(), "{id:?} with {weapon:?}");
         }
@@ -3203,7 +3203,7 @@ mod monster_casts {
         use crate::defs::weapons::resolve_melee;
         let d = ab::def(AbilityId::GroundSlam);
         let attrs = crate::defs::attributes::Attributes::new(19, 8, 16, 5, 7, 7);
-        let crate::defs::items::ItemBase::Melee(kind, stats) = crate::defs::items::def(crate::defs::items::ItemId::SpikedClub).base else { panic!() };
+        let crate::defs::items::ItemBase::Melee(kind, stats) = crate::defs::items::def(crate::defs::items::ItemId::OgreClub).base else { panic!() };
         let club = resolve_melee(kind, &stats, &attrs);
         let resolved = |radius| crate::sheet::resolve_ability(&d, &attrs, &[club], crate::sheet::Body { radius }).unwrap();
         let (hero, ogre) = (resolved(PLAYER_RADIUS), resolved(10.0));

@@ -578,6 +578,12 @@ export const ITEMS = {
     "name": "Goblin Bow",
     "slot": "Ranged"
   },
+  "GoblinShortbow": {
+    "classes": [],
+    "kind": "Bow",
+    "name": "Goblin Shortbow",
+    "slot": "Ranged"
+  },
   "GoldenSword": {
     "classes": [
       "Wizard",
@@ -630,6 +636,12 @@ export const ITEMS = {
     "name": "Knight Sword",
     "slot": "Melee"
   },
+  "NecromancerRod": {
+    "classes": [],
+    "kind": "Staff",
+    "name": "Necromancer Rod",
+    "slot": "Melee"
+  },
   "NecromancerStaff": {
     "classes": [
       "Wizard",
@@ -641,6 +653,12 @@ export const ITEMS = {
     "name": "Necromancer Staff",
     "slot": "Melee"
   },
+  "OgreClub": {
+    "classes": [],
+    "kind": "Club",
+    "name": "Ogre Club",
+    "slot": "Melee"
+  },
   "OrcBow": {
     "classes": [
       "Wizard",
@@ -650,6 +668,18 @@ export const ITEMS = {
     ],
     "kind": "Bow",
     "name": "Orc Bow",
+    "slot": "Ranged"
+  },
+  "OrcCleaver": {
+    "classes": [],
+    "kind": "Axe",
+    "name": "Orc Cleaver",
+    "slot": "Melee"
+  },
+  "OrcWarbow": {
+    "classes": [],
+    "kind": "Bow",
+    "name": "Orc Warbow",
     "slot": "Ranged"
   },
   "Rapier": {
@@ -693,6 +723,12 @@ export const ITEMS = {
     "name": "Short Bow",
     "slot": "Ranged"
   },
+  "SkeletonBow": {
+    "classes": [],
+    "kind": "Longbow",
+    "name": "Skeleton Bow",
+    "slot": "Ranged"
+  },
   "SkeletonLongbow": {
     "classes": [
       "Wizard",
@@ -703,6 +739,12 @@ export const ITEMS = {
     "kind": "Longbow",
     "name": "Skeleton Longbow",
     "slot": "Ranged"
+  },
+  "SkeletonSword": {
+    "classes": [],
+    "kind": "Sword",
+    "name": "Skeleton Sword",
+    "slot": "Melee"
   },
   "SpikedClub": {
     "classes": [
@@ -721,6 +763,12 @@ export const ITEMS = {
     ],
     "kind": "Staff",
     "name": "Staff of Rot",
+    "slot": "Melee"
+  },
+  "SummonerRod": {
+    "classes": [],
+    "kind": "Staff",
+    "name": "Summoner Rod",
     "slot": "Melee"
   },
   "SummonerStaff": {

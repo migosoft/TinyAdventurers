@@ -804,7 +804,12 @@ mod tests {
         for id in ItemId::ALL {
             if let ItemBase::Melee(_, m) = items::def(id).base {
                 if items::hero_can_hold(&items::def(id)) {
-                    assert_eq!(m.reach, classes::HERO_REACH, "{id:?}");
+                    assert_eq!((m.reach, m.windup), (classes::HERO_REACH, 0.0), "{id:?}");
+                }
+            }
+            if let ItemBase::Ranged(_, r) = items::def(id).base {
+                if items::hero_can_hold(&items::def(id)) {
+                    assert_eq!(r.windup, 0.0, "{id:?}");
                 }
             }
         }

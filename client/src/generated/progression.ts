@@ -1262,7 +1262,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "Cleaver": {
-    "base": "14 damage · every 1.2 s · arc 1.8 · push 20 · wind-up 0.35 s",
+    "base": "14 damage · every 1.2 s · arc 1.8 · push 20",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1371,7 +1371,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "GoblinBow": {
-    "base": "6 damage · every 1.4 s · range 140 · wind-up 0.3 s",
+    "base": "6 damage · every 1.4 s · range 140",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1382,6 +1382,19 @@ export const ITEMS = {
     "hero": true,
     "kind": "Bow",
     "name": "Goblin Bow",
+    "prof": "Bow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow"
+  },
+  "GoblinShortbow": {
+    "base": "6 damage · every 1.4 s · range 140 · wind-up 0.3 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Bow",
+    "name": "Goblin Shortbow",
     "prof": "Bow",
     "props": [],
     "req": [],
@@ -1566,8 +1579,21 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": ""
   },
-  "NecromancerStaff": {
+  "NecromancerRod": {
     "base": "5 damage · every 1.2 s · arc 1.6 · wind-up 0.25 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Staff",
+    "name": "Necromancer Rod",
+    "prof": "Staff",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_green_magic_staff"
+  },
+  "NecromancerStaff": {
+    "base": "5 damage · every 1.2 s · arc 1.6",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1584,8 +1610,21 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": "weapon_green_magic_staff"
   },
+  "OgreClub": {
+    "base": "18 damage · every 1.6 s · arc 2 · push 28 · wind-up 0.5 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Club",
+    "name": "Ogre Club",
+    "prof": "Club",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_baton_with_spikes"
+  },
   "OrcBow": {
-    "base": "10 damage · every 1.7 s · range 150 · wind-up 0.35 s",
+    "base": "10 damage · every 1.7 s · range 150",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1596,6 +1635,32 @@ export const ITEMS = {
     "hero": true,
     "kind": "Bow",
     "name": "Orc Bow",
+    "prof": "Bow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow"
+  },
+  "OrcCleaver": {
+    "base": "14 damage · every 1.2 s · arc 1.8 · push 20 · wind-up 0.35 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Axe",
+    "name": "Orc Cleaver",
+    "prof": "Axe",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_cleaver"
+  },
+  "OrcWarbow": {
+    "base": "10 damage · every 1.7 s · range 150 · wind-up 0.35 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Bow",
+    "name": "Orc Warbow",
     "prof": "Bow",
     "props": [],
     "req": [],
@@ -1725,7 +1790,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "RustySword": {
-    "base": "9 damage · every 1 s · arc 1.6 · wind-up 0.3 s",
+    "base": "9 damage · every 1 s · arc 1.6",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1808,8 +1873,21 @@ export const ITEMS = {
     "slot": "Armor",
     "sprite": ""
   },
-  "SkeletonLongbow": {
+  "SkeletonBow": {
     "base": "7 damage · every 1.6 s · range 150 · wind-up 0.35 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Longbow",
+    "name": "Skeleton Bow",
+    "prof": "Longbow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow_2"
+  },
+  "SkeletonLongbow": {
+    "base": "7 damage · every 1.6 s · range 150",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1826,8 +1904,21 @@ export const ITEMS = {
     "slot": "Ranged",
     "sprite": "weapon_bow_2"
   },
+  "SkeletonSword": {
+    "base": "9 damage · every 1 s · arc 1.6 · wind-up 0.3 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Sword",
+    "name": "Skeleton Sword",
+    "prof": "Sword",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_rusty_sword"
+  },
   "SpikedClub": {
-    "base": "18 damage · every 1.6 s · arc 2 · push 28 · wind-up 0.5 s",
+    "base": "18 damage · every 1.6 s · arc 2 · push 28",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1866,8 +1957,21 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": "weapon_green_magic_staff"
   },
-  "SummonerStaff": {
+  "SummonerRod": {
     "base": "5 damage · every 1.2 s · arc 1.6 · wind-up 0.25 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Staff",
+    "name": "Summoner Rod",
+    "prof": "Staff",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_red_magic_staff"
+  },
+  "SummonerStaff": {
+    "base": "5 damage · every 1.2 s · arc 1.6",
     "classes": [
       "Wizard",
       "Paladin",
