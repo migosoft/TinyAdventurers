@@ -1290,10 +1290,10 @@ mod tests {
         let ids = [AbilityId::Bite, AbilityId::Pounce];
         check("wolf", &wolf_kit(&WolfMods::NONE), &ids, &WOLF_ATTRS, &[ItemId::BeastBite], WOLF_RADIUS);
         // A version's mod goes through `apply_mods`, on the Pounce alone.
-        let slower = AbilityMod::CooldownAdd(-0.5);
-        let kit = wolf_kit(&WolfMods { hp_mul: 1.0, pounce: Some(slower) });
+        let faster = AbilityMod::CooldownAdd(-0.5);
+        let kit = wolf_kit(&WolfMods { hp_mul: 1.0, pounce: Some(faster) });
         let plain = wolf_kit(&WolfMods::NONE);
-        assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(*plain.get(AbilityId::Pounce).unwrap(), &[slower])));
+        assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(*plain.get(AbilityId::Pounce).unwrap(), &[faster])));
         assert_eq!(kit.get(AbilityId::Bite), plain.get(AbilityId::Bite));
     }
 

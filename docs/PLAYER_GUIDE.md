@@ -35,7 +35,7 @@ On the screen, the **E** hint is a small gold key cap that floats over the thing
 
 Your teammates' names float above their heroes, and the party list (top left) shows everyone's health.
 
-**Abilities.** Every hero has two: left mouse button (primary) and right (secondary). The four starting names are **Strike** (hit with your melee weapon), **Shoot** (fire your ranged weapon), **Charge** (a dash that hurts everything you run through) and **Holy Light** (a heal for you and your friends). Spells such as Magic Missile and Fireball are abilities too. **Enemies and bosses use the same abilities, with the same rules and their own Attributes**: an ability's name always means the same thing, whoever casts it. A melee **Strike** or **Bite** hits everything in the weapon's arc, barrels and chests included; **Ground Slam** hits no barrels or chests; **Swoop** and **Pounce** hit creatures only. Every class has four more, two for the left button and two for the right, listed under its heading below. You learn them in the skill tree (see "XP, coins and the character"). Each needs Attribute values (INT, CHA, STR, DEX, WIL; items count) and some a kind of weapon, shown after its name.
+**Abilities.** Every hero has two: left mouse button (primary) and right (secondary). The four starting names are **Strike** (hit with your melee weapon), **Shoot** (fire your ranged weapon), **Charge** (a dash that hurts everything you run through) and **Holy Light** (a heal for you and your friends). Spells such as Magic Missile and Fireball are abilities too. **Enemies and bosses use the same abilities, with the same rules and their own Attributes**: an ability's name always means the same thing, whoever uses it. A melee **Strike** or **Bite** hits everything in the weapon's arc, barrels and chests included; **Ground Slam** hits no barrels or chests; **Swoop** and **Pounce** hit creatures only. Every class has four more, two for the left button and two for the right, listed under its heading below. You learn them in the skill tree (see "XP, coins and the character"). Each needs Attribute values (INT, CHA, STR, DEX, WIL; items count) and some a kind of weapon, shown after its name.
 
 **Fighting up close.** A ranged ability does not work with an enemy (or a closed chest) right next to you, about a body's width and a bit more.
 - Your **left button then strikes with your melee weapon** instead: the Wizard hits with his staff (weakly, so step back), the Elven Ranger thrusts her rapier. It hits the nearest target. If the blow kills it with damage to spare, the rest of the blow carries on to the next target in reach.
@@ -47,7 +47,7 @@ Your teammates' names float above their heroes, and the party list (top left) sh
 ### Wizard, 70 HP
 Fragile, but deadly from range.
 - **Left – Magic Missile:** fast arcane bolts in quick succession. With an enemy right next to you, you hit with your staff instead.
-- **Right – Fireball (6 s cooldown):** a slow ball of fire that explodes where your mouse pointer is, or earlier if it hits something. It damages every enemy in the blast and **pushes** them a little (20 px, more with more STR; never a boss or a hiding mimic). It can't hurt your friends. It cannot be cast with an enemy right next to you.
+- **Right – Fireball (6 s cooldown):** a slow ball of fire that explodes where your mouse pointer is, or earlier if it hits something. It damages every enemy in the blast and **pushes** them: **up to 20 px**, and only if your STR beats the enemy's weight (a push is full once your STR is 4 above the weight). A starting Wizard (STR 8) moves only light enemies: an imp 20 px, a goblin archer (weight 6) 10 px, and nothing heavier. Never a boss, a friend of yours, or a hiding mimic. It can't hurt your friends. It cannot be cast with an enemy right next to you.
 - **More, left button:** **Frost Shard** (INT 14): a quick bolt that is mostly cold and chills what it hits (slows it). **Chain Spark** (INT 18): a bolt that jumps to up to two more enemies close by, weaker each time, with a line of lightning between them.
 - **More, right button:** **Frost Nova** (INT 17, 9 s): a ring of cold around you that hurts every enemy in sight and freezes it. **Haste** (INT 15, WIL 14, 14 s): you and the friends close to you run faster for 4 seconds.
 
@@ -131,7 +131,7 @@ Enemies **flash red and shake** just before they strike. That is your moment to 
 
 ### Knockback
 
-Some attacks **push you away** from the caster. How far depends on the pusher's **STR** against your weight (a pusher whose STR does not beat your weight moves you not at all), and the same rule works for you: your **Fireball** pushes the enemies it hits (20 px, with your STR), and so does the dragon's. Typical pushes, for a hero of the Wizard's weight:
+Some attacks **push you away** from the attacker. Every push is a **maximum** distance: the pusher's **STR** must beat the target's weight, and the push is full only when it beats it by 4 or more (a pusher that does not beat the weight moves nothing). The same rule works for you: your **Fireball** pushes the enemies it hits, **up to 20 px**. The numbers below are the full push; a pusher with less STR moves the heavier heroes (Paladin 12, Barbarian 13) less. The bosses' STR (22 to 24) gives the full push against every hero, except the lich (STR 10):
 
 | Attacker | Push |
 |---|---|
@@ -140,8 +140,8 @@ Some attacks **push you away** from the caster. How far depends on the pusher's 
 | Chort (its claw) | a little less (14 px) |
 | Red Demon: cleave / swoop | a long way (about 3.5 / 4 tiles) |
 | Red Dragon: front claw / bite / tail whip | 2 / 1.5 / almost 3 tiles (32 / 24 / 44 px) |
-| Red Dragon: landing smash / exploding fireball | over 2 tiles (36 px), everyone in the circle / about a tile (20 px) |
-| Lich: Nova | a small push, everyone in the circle (the lich's STR is only 10) |
+| Red Dragon: landing smash / Fireball | over 2 tiles (36 px), everyone in the circle / about a tile (20 px) |
+| Lich: Nova | only the Wizard, 16 px (the lich's STR is only 10) |
 
 - The push slides you for a moment. **You have no control until it ends**: no walking, no attacks, and a dash can't break out of it.
 - Walls stop the slide, but **chasms and deep water do not**: a push over the edge is a fall or a drowning. Lava just burns.
@@ -237,16 +237,16 @@ Tip: stay mobile, and don't stand between the demon and a chasm.
 
 ### The Lich
 - **Cannot be harmed** while its **disciples** live. The bar shows **IMMUNE**. There are at least five red-robed disciples around the hall.
-- **Heals** from the disciples' life force: the red shimmering streams flowing to it.
+- The red shimmering streams flowing to it show its protection: while they flow, it cannot be harmed.
 - All its magic is **dark purple gloom**.
 - Casts **Gloom Bolts**: a fan of five.
 - **Summons skeletons:** every 12 seconds it raises its army back up to **five skeletons and five skeleton archers** around it.
-- **Nova:** about every 10 seconds it stops, raises its staff and a **purple circle** fills up on the floor around it. When it is full, a dark blast hurts **everyone inside** and pushes them. The lich is weak (STR 10), so the push is small and heavy heroes hardly move, but a light hero near a chasm edge can still be shoved in. Step out of the circle in time.
+- **Nova:** about every 10 seconds it stops, raises its staff and a **purple circle** fills up on the floor around it. When it is full, a dark blast hurts **everyone inside** and pushes them. The lich is weak (STR 10): only the Wizard (weight 9) is pushed, a little (16 px); every other hero stands firm. Step out of the circle in time.
 - **Three curses**, each aimed at one hero it can see (it sees only what you would see: it cannot curse you from behind a wall. A hero who already suffers *that* curse is passed over, and the lich picks the nearest hero it sees):
   - **Blinding Curse:** about every 10 seconds the lich flings a **dark orb**. It is slow, so **step aside**. A hit does a little damage and **blinds** you for 3 seconds: you see almost nothing, not even with darkvision.
   - **Sleep Mist:** about every 14 seconds, a **purple orb**. A hit puts you to **sleep** for 4 seconds: you lie on the floor and cannot move, attack or use abilities, and you see only a little around you. **Step aside** from the orb, and **wake a sleeping teammate** by standing next to them and pressing **E**.
   - **Stone Gaze:** about every 18 seconds the lich stares at one hero and a **thin grey beam** links them for a second. When it ends, that hero **turns to stone** for 3 seconds: you cannot move, attack or turn, but you take much less damage and are hard to push. **Break the line of sight** (duck behind a pillar or a wall) before the beam ends and nothing happens.
-- Its drain beams show even when the lich or a disciple is out of your sight, so they point the way to both.
+- Those streams show even when the lich or a disciple is out of your sight, so they point the way to both.
 
 Tip: kill the disciples first. Once the last one falls, the lich's protection breaks.
 
@@ -256,7 +256,7 @@ Every attack shows its pose first, while the dragon flashes red: that is your mo
 - **Bite:** it pulls its head back, then lunges straight ahead with its neck, a little further than its claw reaches. Hard-hitting, pushes you back (24 px). Only the hero right in front of its mouth is bitten.
 - **Front claw** (**Strike**): raises a paw and swipes at heroes in front of its face, pushing them back (32 px).
 - **Tail Whip:** curls its tail, then whips anyone standing behind it and flings them away (44 px). The tail is physical damage.
-- **Fireball:** the Wizard's spell, which the dragon casts too: an exploding ball that pushes you a little (20 px, with the dragon's STR).
+- **Fireball:** the Wizard's spell, which the dragon casts too: an exploding ball that pushes you a little (20 px).
 - **Flight:** every 10 to 12 seconds it takes off and hovers after the party for a few seconds. **Swords, axes, the dagger and the dash can't reach it in the air**; bolts, missiles and spells still hit. In the air its only attack is the Fire Breath, also from above.
 - **Smash (landing):** a red circle on the ground shows where it comes down. The landing hits everyone inside the circle and pushes them away (36 px).
 

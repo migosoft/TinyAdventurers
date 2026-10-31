@@ -1572,7 +1572,7 @@ pub mod tests {
         // 2026-10-21, plan 3a (Charge 25.6, reach 22, staffs and punches in melee, overkill piercing): checked
         // again, values unchanged by plan 3a. `plan_3a_fight_is_pinned` pins a fight that does exercise it.
         // 2026-10-31, #177 (one name, one ability): monsters and bosses use shared abilities with their own
-        // cooldowns, so the boss fight (first two seeds) plays out differently. Re-recorded once, on purpose.
+        // cooldowns, so the Demon and Lich fights (the first two values) play out differently; the Dragon's is unchanged. Re-recorded once, on purpose.
         assert_eq!(got, vec![6511878345562000907, 15469823654463399686, 1468820053114872194]);
     }
 
