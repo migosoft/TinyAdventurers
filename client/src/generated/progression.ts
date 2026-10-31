@@ -2037,12 +2037,7 @@ export const ITEMS = {
   },
   "Tail": {
     "base": "10 damage · every 1.25 s · arc 2.4 · push 10",
-    "classes": [
-      "Wizard",
-      "Paladin",
-      "Barbarian",
-      "ElvenRanger"
-    ],
+    "classes": [],
     "grants": [],
     "hero": false,
     "kind": "Tail",

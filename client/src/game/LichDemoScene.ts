@@ -2,9 +2,9 @@
 // gloom. Left: the gloom bolt volley (5 bolts) and the summon (5 raised
 // skeletons and 5 raised archers in a ring). Right: the nova; the ring on the
 // floor shows the real radius and fills up during the wind-up, then every
-// hero inside is hurt and pushed 64 px straight away (one into the chasm);
-// the hero just outside is spared. Far right: the effect spells on three
-// standing heroes, one after the other: the blinding curse (a dark orb), the
+// hero inside is hurt and pushed as the rules say: the lich's STR is 10, so
+// only the Wizard (weight 9) moves, 16 px; the others are too heavy.
+// Far right: the effect spells on three standing heroes, one after the other: the blinding curse (a dark orb), the
 // sleep mist (a purple orb) and the stone gaze (a grey beam, then stone).
 import Phaser from 'phaser';
 import { ANIM, CLASSES, CONST, EFFECT, EFFECTS, KIND } from '../generated/defs';
@@ -19,6 +19,16 @@ const H = 15;
 const NOVA = CONST.LICH_NOVA_RADIUS;
 const NOVA_T = CONST.LICH_NOVA_WINDUP;
 const KNOCK = CONST.LICH_NOVA_KNOCK;
+const NOVA_STR = CONST.LICH_NOVA_STR;
+/** The heroes' weights by the names they go by in this scene. */
+const WEIGHT: Record<string, number> = { Wizard: CLASSES.Wizard.weight, Paladin: CLASSES.Paladin.weight, Ranger: CLASSES.ElvenRanger.weight, Barbarian: CLASSES.Barbarian.weight };
+/** The server's `push_dist`: nothing unless the pusher's STR is above the weight, the full push from 4 above. */
+function pushDist(base: number, str: number, weight: number): number {
+  const over = str - weight;
+  return over <= 0 ? 0 : base * Math.min(over / 4, 1);
+}
+/** How far the nova moves hero `name`. */
+const novaPush = (name: string): number => pushDist(KNOCK, NOVA_STR, WEIGHT[name] ?? 0);
 /** Left arena loop (s): volley wind-up at 0, bolts at 0.5; summon wind-up at 3, raise at 3.7; skeletons gone at 6.5. */
 const LOOP = 7;
 const BOLT_SPEED = 140;
@@ -70,7 +80,7 @@ interface Bolt {
 }
 
 export class LichDemoScene extends TerrainDemo {
-  protected title = 'lich: gloom bolt volley, summon 5 + 5 skeletons (left); nova: everyone inside the ring is pushed 64 px (middle); curse, sleep, gaze (right)';
+  protected title = `lich: gloom bolt volley, summon 5 + 5 skeletons (left); nova: only the Wizard moves, ${novaPush('Wizard')} px (middle); curse, sleep, gaze (right)`;
   protected rows = board();
   private caster!: EntityView;
   private casterAt: [number, number] = [0, 0];
@@ -97,7 +107,7 @@ export class LichDemoScene extends TerrainDemo {
     this.casterAt = this.px([3, 7]);
     this.caster = new EntityView(this, KIND.Lich, this.fx, 'Lich');
 
-    this.label(15.2, 13.3, `nova: radius ${NOVA} px, ${KNOCK} px push (ogre club: 28 px)`);
+    this.label(15.2, 13.3, `nova: radius ${NOVA} px, ${KNOCK} px base push at STR ${NOVA_STR}: pushed: ${Object.keys(WEIGHT).map((n) => `${n} ${novaPush(n)} px`).join(', ')}`);
     const hero = (kind: number, name: string, speed: number, at: [number, number]): void => this.actor(kind, name, speed, [{ to: at }, { wait: 3 }]);
     hero(KIND.Wizard, 'Wizard', CLASSES.Wizard.speed, [24, 8]);
     hero(KIND.Paladin, 'Paladin', CLASSES.Paladin.speed, [21.5, 5.6]);
@@ -113,7 +123,7 @@ export class LichDemoScene extends TerrainDemo {
       return { v: new EntityView(this, sp.kind, this.fx, sp.name), x, y, left: 0 };
     });
     this.beam = this.add.graphics().setDepth(DEPTH.fx);
-    this.actor(KIND.Lich, 'Lich 2', 34, [{ to: [21.5, 8] }, { wait: 1.5, face: 0 }, { slam: NOVA, dist: KNOCK, windup: NOVA_T, nova: true }, { wait: 2.5 }]);
+    this.actor(KIND.Lich, 'Lich 2', 34, [{ to: [21.5, 8] }, { wait: 1.5, face: 0 }, { slam: NOVA, dist: novaPush, windup: NOVA_T, nova: true }, { wait: 2.5 }]);
   }
 
   update(t: number, dms: number): void {

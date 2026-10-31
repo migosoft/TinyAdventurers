@@ -90,6 +90,7 @@ fn export_defs() {
         "MIMIC_WAKE_T": enemies::MIMIC_WAKE_T,
         "OGRE_SLAM_RADIUS": ogre_slam.radius,
         "OGRE_SLAM_WINDUP": ogre_slam.windup,
+        "OGRE_SLAM_KNOCK": ogre_slam.push,
         "DRAGON_CLAW_WINDUP": dragon_ability(AbilityId::Strike).windup,
         "DRAGON_BITE_WINDUP": dragon_ability(AbilityId::Bite).windup,
         // The client telegraph measures from the hero's centre: the kit range reaches the hero's edge.
@@ -108,6 +109,7 @@ fn export_defs() {
         "LICH_NOVA_RADIUS": lich_ability(AbilityId::Nova).radius,
         "LICH_NOVA_WINDUP": lich_ability(AbilityId::Nova).windup,
         "LICH_NOVA_KNOCK": lich_ability(AbilityId::Nova).push,
+        "LICH_NOVA_STR": lich_ability(AbilityId::Nova).push_str,
         "SHALLOW_SPEED": crate::dungeon::SHALLOW_SPEED,
         "LAVA_SPEED": crate::dungeon::LAVA_SPEED,
         "FALL_TIME": crate::dungeon::FALL_TIME,

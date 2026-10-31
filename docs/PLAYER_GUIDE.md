@@ -124,7 +124,7 @@ The two boxes at the bottom of the screen show your abilities. While an ability 
 Every dungeon has **one ogre**, roaming one of the deeper rooms like any other enemy. It is big, slow and tough, and always shows a **wide health bar** over its head. It is worth 60 XP and 30 coins.
 
 - **Spiked club:** a heavy swing that **knocks you back further than any other enemy** (28 px, almost two tiles).
-- **Ground Slam** (the same ability as the Barbarian's): when two heroes are close to it (or one, while its club is still recovering), it raises its club and a **red circle** appears on the floor around it. The circle fills up from the middle; when it is full the club comes down. **Everyone inside the circle** takes damage and is pushed straight away from the ogre (24 px). Step out of the circle before it fills.
+- **Ground Slam** (the same ability as the Barbarian's): when two heroes are close to it (or one, while its club is still recovering), it raises its club and a **red circle** appears on the floor around it. The circle fills up from the middle; when it is full the club comes down. **Everyone inside the circle** takes damage and is pushed straight away from the ogre (28 px). Step out of the circle before it fills.
 - Tip: fight it away from chasms and deep water, and don't crowd around it.
 
 Enemies **flash red and shake** just before they strike. That is your moment to step away. Enemies get tougher the deeper you go, and halls hold the biggest groups.
@@ -136,7 +136,7 @@ Some attacks **push you away** from the attacker. Every push is a **maximum** di
 | Attacker | Push |
 |---|---|
 | Orc warrior | about a tile (20 px) |
-| Ogre: club / ground slam | almost 2 tiles (28 px) / 1.5 tiles (24 px), everyone in the circle |
+| Ogre: club / ground slam | almost 2 tiles (28 px) for both; the slam hits everyone in the circle |
 | Chort (its claw) | a little less (14 px) |
 | Red Demon: cleave / swoop | a long way (about 3.5 / 4 tiles) |
 | Red Dragon: front claw / bite / tail whip | 2 / 1.5 / almost 3 tiles (32 / 24 / 44 px) |
