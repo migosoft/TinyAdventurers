@@ -80,10 +80,13 @@ impl Run {
         id
     }
 
-    /// A wall torch with its static light (lit).
+    /// A wall torch with its static light (lit unless `t.lit` is false).
     pub fn spawn_torch(&mut self, t: &crate::dungeon::TorchSpawn) -> u32 {
         let (fx, fy) = t.front();
         let light = self.add_light(crate::defs::lights::LightKind::Torch, crate::run::light::Anchor::Tile(fx, fy), None);
+        if !t.lit {
+            self.start_light_off(light);
+        }
         self.spawn_object(EntityKind::Torch, t.pos(), ObjState::Torch { wall: t.wall, side: t.side, light })
     }
 
@@ -884,7 +887,7 @@ mod tests {
         for x in tx - 6..=tx + 6 {
             run.layout.map.set(x, ty - 2, Tile::Wall);
         }
-        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face });
+        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: true });
         let oi = run.objects.len() - 1;
         (run, oi)
     }
@@ -902,6 +905,30 @@ mod tests {
         assert_eq!(snap(&run, &run.objects[oi]).5, 1);
         assert_eq!(snap(&run, &run.objects[oi]).9, TorchSide::Face as u32);
         assert!(run.objects[oi].owns_light() && !run.objects[oi].solid);
+    }
+
+    #[test]
+    fn torches_in_sunlit_rooms_start_unlit_and_can_be_lit() {
+        let mut run = clear_run(BossId::Lich);
+        run.lights = crate::run::light::Lights::new(run.layout.map.w, run.layout.map.h);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        for x in tx - 6..=tx + 6 {
+            run.layout.map.set(x, ty - 2, Tile::Wall);
+        }
+        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: false });
+        let oi = run.objects.len() - 1;
+        let sun = run.add_sun(tx + 3, ty);
+        assert_eq!(run.tick, 0);
+        assert!(run.events.iter().all(|(e, _)| !matches!(e, Ev::Light { .. })), "no switch event at build time");
+        let infos = run.light_infos();
+        let ObjState::Torch { light, .. } = run.objects[oi].state else { panic!() };
+        let on = |id: u32| infos.iter().find(|l| l.0 == id).unwrap().5;
+        assert!(!on(light), "the torch starts out");
+        assert!(on(sun), "the daylight is on");
+        assert!(!torch_lit(&run, oi));
+        hurt_object(&mut run, oi, Damage::new(5.0, DamageSplit::split(&[(DamageType::Heat, 0.3)])), None);
+        assert!(torch_lit(&run, oi), "heat lights it");
+        assert!(torch_on(&run, sun), "the daylight stays on");
     }
 
     #[test]

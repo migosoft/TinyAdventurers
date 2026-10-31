@@ -216,6 +216,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
         chests,
         barrels,
         torches: Vec::new(),
+        suns: Vec::new(),
         player_spawns: Vec::new(),
     };
 
@@ -227,6 +228,17 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     let mut torch_rng = rng.clone();
     torch_rng.set_stream(12);
     dungeon.torches = place_torches(&mut torch_rng, &dungeon.map, &dungeon.rooms);
+    // Suns (stream 13): their own stream, so nothing else generated moves.
+    let mut sun_rng = rng.clone();
+    sun_rng.set_stream(13);
+    dungeon.suns = place_suns(&mut sun_rng, &dungeon.map, &dungeon.rooms);
+    // The daylight is enough there: torches in a sunlit room start out.
+    for t in &mut dungeon.torches {
+        let (fx, fy) = t.front();
+        if dungeon.rooms.iter().any(|r| r.rect.contains_tile(fx, fy) && dungeon.suns.iter().any(|&(sx, sy)| r.rect.contains_tile(sx, sy))) {
+            t.lit = false;
+        }
+    }
     let c = dungeon.rooms[0].rect.center_px();
     dungeon.player_spawns = vec![
         c + Vec2::new(-12.0, -12.0),
@@ -734,11 +746,11 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
                 continue;
             }
             let t = if floor(x, y + 1) && !floor(x - 1, y) && !floor(x + 1, y) {
-                TorchSpawn { wall: (x, y), side: TorchSide::Face }
+                TorchSpawn { wall: (x, y), side: TorchSide::Face, lit: true }
             } else if wall(x, y - 1) && wall(x, y + 1) && floor(x + 1, y) && !floor(x - 1, y) {
-                TorchSpawn { wall: (x, y), side: TorchSide::West }
+                TorchSpawn { wall: (x, y), side: TorchSide::West, lit: true }
             } else if wall(x, y - 1) && wall(x, y + 1) && floor(x - 1, y) && !floor(x + 1, y) {
-                TorchSpawn { wall: (x, y), side: TorchSide::East }
+                TorchSpawn { wall: (x, y), side: TorchSide::East, lit: true }
             } else {
                 continue;
             };
@@ -769,7 +781,7 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
             for &a in run.iter().skip(offset).step_by(TORCH_SPACING as usize) {
                 let wall = if side == TorchSide::Face { (a, line) } else { (line, a) };
                 if out.iter().all(|o| (o.wall.0 - wall.0).abs() > 1 || (o.wall.1 - wall.1).abs() > 1) {
-                    out.push(TorchSpawn { wall, side });
+                    out.push(TorchSpawn { wall, side, lit: true });
                 }
             }
         }
@@ -809,12 +821,67 @@ fn place_torches(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<TorchSp
                 _ => ((line, a), TorchSide::East),
             };
             if out.iter().all(|o| (o.wall.0 - wall.0).abs() > 1 || (o.wall.1 - wall.1).abs() > 1) {
-                out.push(TorchSpawn { wall, side });
+                out.push(TorchSpawn { wall, side, lit: true });
                 break;
             }
         }
     }
     out
+}
+
+/// A sunlit room needs a floor at least this big (tiles), so the beam has room to fall.
+pub const SUN_MIN_ROOM_W: i32 = 6;
+pub const SUN_MIN_ROOM_H: i32 = 8;
+/// A sun is at least this many tiles from the left wall (the light comes from the left) ...
+pub const SUN_MARGIN_LEFT: i32 = 2;
+/// ... and this many rows below the room's first floor row (5 below the top wall row) ...
+pub const SUN_MARGIN_TOP: i32 = 4;
+/// ... and this many tiles from the right and bottom walls.
+pub const SUN_MARGIN_FAR: i32 = 1;
+/// Sunlit rooms per level: 0, 1 or 2 with these weights (percent).
+pub const SUN_ROOM_WEIGHTS: [u32; 3] = [25, 50, 25];
+/// Chance that a sunlit room gets a second sun.
+pub const SUN_SECOND_CHANCE: f64 = 1.0 / 3.0;
+/// A second sun is this far (tiles, Euclidean, inclusive) from the first.
+pub const SUN_SECOND_DIST: std::ops::RangeInclusive<f64> = 3.0..=5.0;
+
+/// Can a sun stand on this tile of the room: floor, with the margins above.
+pub fn sun_tile_ok(map: &Map, r: &Rect, x: i32, y: i32) -> bool {
+    x >= r.x + SUN_MARGIN_LEFT
+        && x <= r.x + r.w - 1 - SUN_MARGIN_FAR
+        && y >= r.y + SUN_MARGIN_TOP
+        && y <= r.y + r.h - 1 - SUN_MARGIN_FAR
+        && map.get(x, y) == Tile::Floor as u8
+}
+
+/// Sun spots: 0 to 2 sunlit rooms (never the boss hall, only rooms of at
+/// least `SUN_MIN_ROOM_W` x `SUN_MIN_ROOM_H` with a tile that `sun_tile_ok`),
+/// each with one sun and, with `SUN_SECOND_CHANCE`, a second one 3 to 5 tiles
+/// from the first. Fewer fitting rooms than rolled: place what fits.
+fn place_suns(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<(i32, i32)> {
+    let roll = rng.gen_range(0..SUN_ROOM_WEIGHTS.iter().sum::<u32>());
+    let wanted = if roll < SUN_ROOM_WEIGHTS[0] { 0 } else if roll < SUN_ROOM_WEIGHTS[0] + SUN_ROOM_WEIGHTS[1] { 1 } else { 2 };
+    let mut candidates: Vec<&Room> = rooms.iter().filter(|r| r.kind != RoomKind::Boss && r.rect.w >= SUN_MIN_ROOM_W && r.rect.h >= SUN_MIN_ROOM_H).collect();
+    candidates.shuffle(rng);
+    let mut suns = Vec::new();
+    let mut rooms_lit = 0;
+    for room in candidates {
+        if rooms_lit == wanted {
+            break;
+        }
+        let r = room.rect;
+        let spots: Vec<(i32, i32)> = (r.y..r.y + r.h).flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y))).filter(|&(x, y)| sun_tile_ok(map, &r, x, y)).collect();
+        let Some(&first) = spots.choose(rng) else { continue };
+        suns.push(first);
+        rooms_lit += 1;
+        if rng.gen_bool(SUN_SECOND_CHANCE) {
+            let near: Vec<(i32, i32)> = spots.iter().copied().filter(|&(x, y)| SUN_SECOND_DIST.contains(&(((x - first.0).pow(2) + (y - first.1).pow(2)) as f64).sqrt())).collect();
+            if let Some(&second) = near.choose(rng) {
+                suns.push(second);
+            }
+        }
+    }
+    suns
 }
 
 /// Rotate the whole dungeon 90 degrees clockwise (map is square).
@@ -953,6 +1020,128 @@ mod tests {
         assert!(dark_regions > 50, "dark pockets over 200 seeds: {dark_regions}");
     }
 
+    fn theme_of(seed: u64) -> Theme {
+        if seed % 2 == 0 { Theme::Water } else { Theme::Lava }
+    }
+
+    /// Rooms a sun could be in: not the boss hall, big enough, with a qualifying tile.
+    fn fitting_rooms(d: &Dungeon) -> usize {
+        d.rooms.iter().filter(|r| r.kind != RoomKind::Boss && r.rect.w >= SUN_MIN_ROOM_W && r.rect.h >= SUN_MIN_ROOM_H)
+            .filter(|r| (r.rect.y..r.rect.y + r.rect.h).any(|y| (r.rect.x..r.rect.x + r.rect.w).any(|x| sun_tile_ok(&d.map, &r.rect, x, y))))
+            .count()
+    }
+
+    /// The suns of each sunlit room.
+    fn suns_by_room(d: &Dungeon) -> Vec<Vec<(i32, i32)>> {
+        d.rooms.iter().map(|r| d.suns.iter().copied().filter(|&(x, y)| r.rect.contains_tile(x, y)).collect::<Vec<_>>()).filter(|v| !v.is_empty()).collect()
+    }
+
+    #[test]
+    fn sun_spots_are_on_qualifying_tiles_of_big_enough_non_boss_rooms() {
+        for seed in 0..200u64 {
+            let d = generate(seed, theme_of(seed));
+            let by_room = suns_by_room(&d);
+            assert!(by_room.len() <= 2, "seed {seed}: {} sunlit rooms", by_room.len());
+            assert_eq!(by_room.iter().map(Vec::len).sum::<usize>(), d.suns.len(), "seed {seed}: every sun is in a room");
+            for &(x, y) in &d.suns {
+                let room = d.rooms.iter().find(|r| r.rect.contains_tile(x, y)).unwrap_or_else(|| panic!("seed {seed}: sun {x},{y} in no room"));
+                assert_ne!(room.kind, RoomKind::Boss, "seed {seed}: sun in the boss hall");
+                assert!(room.rect.w >= SUN_MIN_ROOM_W && room.rect.h >= SUN_MIN_ROOM_H, "seed {seed}: room too small");
+                assert!(sun_tile_ok(&d.map, &room.rect, x, y), "seed {seed}: sun {x},{y} not on a qualifying tile");
+            }
+            for v in by_room {
+                assert!(v.len() <= 2, "seed {seed}: {} suns in a room", v.len());
+                if let [a, b] = v[..] {
+                    let dist = (((a.0 - b.0).pow(2) + (a.1 - b.1).pow(2)) as f64).sqrt();
+                    assert!(SUN_SECOND_DIST.contains(&dist), "seed {seed}: second sun {dist} away");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sunlit_room_counts_follow_the_weights() {
+        // Only seeds with at least 2 fitting rooms can show all three counts.
+        let mut counts = [0u32; 3];
+        for seed in 0..300u64 {
+            let d = generate(seed, theme_of(seed));
+            if fitting_rooms(&d) >= 2 {
+                counts[suns_by_room(&d).len()] += 1;
+            }
+        }
+        let n: u32 = counts.iter().sum();
+        assert!(n >= 200, "enough seeds with 2 fitting rooms: {n}");
+        let share = |c: u32| c as f64 / n as f64;
+        assert!((0.15..0.35).contains(&share(counts[0])), "no sunlit room: {counts:?}");
+        assert!((0.40..0.60).contains(&share(counts[1])), "one sunlit room: {counts:?}");
+        assert!((0.15..0.35).contains(&share(counts[2])), "two sunlit rooms: {counts:?}");
+    }
+
+    #[test]
+    fn about_a_third_of_sunlit_rooms_get_a_second_sun() {
+        let (mut rooms, mut doubled) = (0, 0);
+        for seed in 0..300u64 {
+            for v in suns_by_room(&generate(seed, theme_of(seed))) {
+                rooms += 1;
+                doubled += (v.len() == 2) as u32;
+            }
+        }
+        assert!(doubled > 0, "at least one second sun");
+        let share = doubled as f64 / rooms as f64;
+        // 1/3, less the rooms where no tile is 3 to 5 away from the first sun.
+        assert!((0.18..0.42).contains(&share), "second suns: {doubled} of {rooms} rooms");
+    }
+
+    #[test]
+    fn sun_spots_skip_rooms_without_a_fitting_inner_floor() {
+        let mut map = Map::new(64, 64);
+        let rooms_rects = [
+            (Rect { x: 2, y: 2, w: 10, h: 10 }, RoomKind::Room, Tile::ShallowWater), // no floor
+            (Rect { x: 20, y: 2, w: 10, h: 10 }, RoomKind::Boss, Tile::Floor),       // the boss hall
+            (Rect { x: 2, y: 20, w: 5, h: 8 }, RoomKind::Room, Tile::Floor),         // too narrow
+            (Rect { x: 20, y: 20, w: 6, h: 7 }, RoomKind::Room, Tile::Floor),        // too short
+        ];
+        let mut rooms = Vec::new();
+        for (rect, kind, tile) in rooms_rects {
+            for y in rect.y..rect.y + rect.h {
+                for x in rect.x..rect.x + rect.w {
+                    map.set(x, y, tile);
+                }
+            }
+            rooms.push(Room { rect, kind });
+        }
+        for s in 0..200u64 {
+            assert!(place_suns(&mut ChaCha8Rng::seed_from_u64(s), &map, &rooms).is_empty(), "seed {s}");
+        }
+        // A room of exactly the minimum size does get one, and only on a qualifying tile.
+        let fit = Rect { x: 40, y: 2, w: SUN_MIN_ROOM_W, h: SUN_MIN_ROOM_H };
+        carve_rect(&mut map, &fit);
+        rooms.push(Room { rect: fit, kind: RoomKind::Room });
+        let mut placed = 0;
+        for s in 0..200u64 {
+            for (x, y) in place_suns(&mut ChaCha8Rng::seed_from_u64(s), &map, &rooms) {
+                assert!(fit.contains_tile(x, y) && sun_tile_ok(&map, &fit, x, y), "seed {s}: {x},{y}");
+                placed += 1;
+            }
+        }
+        assert!(placed > 0);
+    }
+
+    #[test]
+    fn torches_in_sunlit_rooms_start_unlit_and_the_rest_are_lit() {
+        let (mut unlit, mut lit) = (0, 0);
+        for seed in 0..200u64 {
+            let d = generate(seed, theme_of(seed));
+            for t in &d.torches {
+                let (fx, fy) = t.front();
+                let sunny = d.rooms.iter().any(|r| r.rect.contains_tile(fx, fy) && d.suns.iter().any(|&(x, y)| r.rect.contains_tile(x, y)));
+                assert_eq!(t.lit, !sunny, "seed {seed}: torch at {:?}", t.wall);
+                if t.lit { lit += 1 } else { unlit += 1 }
+            }
+        }
+        assert!(unlit > 0 && lit > unlit, "unlit {unlit}, lit {lit}");
+    }
+
     #[test]
     fn torches_never_hang_on_doorway_jambs() {
         // A wall row y=1 with a doorway gap at x=4 (floor), floor row y=2 below.
@@ -991,12 +1180,13 @@ mod tests {
             let d = generate(seed, if seed % 2 == 0 { Theme::Water } else { Theme::Lava });
             let (hall, door, tiles) = (*d.boss_hall(), d.door.clone(), d.map.tiles.clone());
             let (n_sp, n_ch, ps, n_b) = (d.spawns.len(), d.chests.len(), d.player_spawns.clone(), d.barrels.len());
-            let n_t = d.torches.len();
+            let (n_t, suns) = (d.torches.len(), d.suns.clone());
             let (layout, parts) = d.split();
             assert_eq!(layout.map.tiles, tiles);
             assert_eq!((layout.spawns.len(), layout.chests.len(), layout.player_spawns.clone()), (n_sp, n_ch, ps));
             assert_eq!(layout.barrels.len(), n_b);
             assert_eq!(layout.torches.len(), n_t);
+            assert_eq!(layout.suns, suns);
             assert_eq!((*parts.boss_hall(), parts.door.clone()), (hall, door));
         }
     }

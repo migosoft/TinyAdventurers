@@ -1684,7 +1684,7 @@ mod tests {
         for x in tx - 2..=tx + 2 {
             run.layout.map.set(x, ty - 2, Tile::Wall);
         }
-        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face });
+        run.spawn_torch(&TorchSpawn { wall: (tx, ty - 2), side: TorchSide::Face, lit: true });
         let oi = run.objects.len() - 1;
         let at = run.objects[oi].pos;
         run.players[0].mv.x = at.x;

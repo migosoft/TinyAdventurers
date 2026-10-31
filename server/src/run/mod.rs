@@ -271,6 +271,9 @@ impl Run {
         }
         // Lava glows from the start (light ids are separate from entity ids).
         run.add_lava_lights();
+        for (x, y) in run.layout.suns.clone() {
+            run.add_sun(x, y);
+        }
         run
     }
 
