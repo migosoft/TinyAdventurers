@@ -173,7 +173,8 @@ impl Base {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum What {
     Ability(AbilityId),
-    /// A monster's or the wolf's melee.
+    /// A generic hit of the tests' fixtures; nothing in a run deals one any more (every attacker casts an ability).
+    #[cfg(test)]
     Attack,
     /// An enemy projectile.
     Shot(EntityKind),

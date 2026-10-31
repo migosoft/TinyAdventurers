@@ -455,7 +455,7 @@ fn barrel_near(run: &Run, mi: usize, hero: Vec2, range: f64) -> Option<u32> {
 const ATTACK_GAP: f64 = 0.4;
 
 /// A swing starts this far (px) inside its reach, so it still lands on a foe who steps back during the wind-up.
-const SWING_SLACK: f64 = 4.0;
+pub(crate) const SWING_SLACK: f64 = 4.0;
 
 /// The AI waits up to this share of a shot's cooldown on top of it, so a group never fires in step and
 /// the AI is never faster than the ability.

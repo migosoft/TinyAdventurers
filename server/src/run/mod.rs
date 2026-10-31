@@ -310,6 +310,7 @@ impl Run {
             kit: crate::sheet::enemy_kit(t),
             cds: Default::default(),
             slam: None,
+            dash: None,
             wolf_bit: 0.0,
             ai: Ai::new(pos),
             owner,
@@ -611,8 +612,8 @@ impl Run {
         if !m.alive || m.is_boss || m.airborne || m.sinking.is_some() || dist <= 0.0 {
             return;
         }
-        if m.ally.as_ref().is_some_and(|a| a.dash.is_some()) {
-            return; // a dashing wolf is in the air, like a dashing hero
+        if m.dash.is_some() {
+            return; // a dashing monster is in the air, like a dashing hero
         }
         let dist = dist * m.effects.knock_taken();
         let d = m.pos - from;
@@ -637,11 +638,11 @@ impl Run {
 
     /// The ground under a monster's centre, like `terrain_player`: chasms and
     /// deep water take it (kill credit to the last hero who hurt it), lava
-    /// burns monsters that are not lava walkers. The wolf is in the air while it
-    /// dashes, and over a chasm with its dash ready it dashes back to safe ground.
+    /// burns monsters that are not lava walkers. A dashing monster is in the air,
+    /// and the wolf over a chasm with its Pounce ready dashes back to safe ground.
     fn terrain_monster(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
-        if !m.alive || m.is_boss || m.airborne || m.ally.as_ref().is_some_and(|a| a.dash.is_some()) {
+        if !m.alive || m.is_boss || m.airborne || m.dash.is_some() {
             return;
         }
         if let Some((t, how)) = m.sinking {
@@ -659,8 +660,9 @@ impl Run {
         let pos = m.pos;
         let (tx, ty) = dungeon::Map::tile_of(pos);
         let tile = self.layout.map.get(tx, ty);
+        let pounce_ready = m.cds.ready(crate::defs::abilities::AbilityId::Pounce);
         if let Some(a) = m.ally.as_mut() {
-            if tile == Tile::Chasm as u8 && a.dash_cd <= 0.0 {
+            if tile == Tile::Chasm as u8 && pounce_ready {
                 m.knock = Vec2::ZERO;
                 companion::dash_back(self, mi);
                 return;

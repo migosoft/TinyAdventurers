@@ -1127,13 +1127,8 @@ export const ITEMS = {
     "sprite": ""
   },
   "BeastBite": {
-    "base": "10 damage · every 0.9 s · arc 1",
-    "classes": [
-      "Wizard",
-      "Paladin",
-      "Barbarian",
-      "ElvenRanger"
-    ],
+    "base": "10 damage · every 0.9 s · arc 1 · push 8 · wind-up 0.2 s",
+    "classes": [],
     "grants": [],
     "hero": false,
     "kind": "Bite",
@@ -2068,7 +2063,7 @@ export const ABILITY_INFO = {
     "req": [
       "a weapon of kind Bite"
     ],
-    "text": "A strike with a bite.",
+    "text": "A snap of the jaws, a strike with a natural bite weapon.",
     "tint": "Physical",
     "uses": "Melee"
   },
@@ -2208,6 +2203,13 @@ export const ABILITY_INFO = {
     "text": "For a while your weapon attacks add poison and poison what they hit.",
     "tint": null,
     "uses": "Nothing"
+  },
+  "Pounce": {
+    "category": "Technique",
+    "req": [],
+    "text": "A leap that crosses chasms and hits the first enemy it reaches, hard.",
+    "tint": "Physical",
+    "uses": "Melee"
   },
   "Purify": {
     "category": "Innate",

@@ -1,9 +1,10 @@
 //! Player abilities (one executor per AbilityId) and projectile simulation.
 
-use super::entities::{HazardPulse, HazardSide, Pierce, Projectile};
+use super::entities::{HazardPulse, HazardSide, MonsterDash, Pierce, Projectile};
 use super::targets::{self, side, Side};
 use super::{Run, TICK_HZ};
-use crate::collision::line_of_sight;
+use crate::collision::{line_of_sight, move_box};
+use crate::dungeon::Mover;
 use crate::defs::abilities::{self as ab, AbilityId, Shape, Uses};
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::damage::{kind_split, overkill_rest, Damage, Mult, What};
@@ -71,11 +72,24 @@ fn hero_of(c: Creature) -> Option<usize> {
     }
 }
 
-/// A hit of `by` on `target`: a hero's goes through `hurt_monster` with the hero as its source (credit,
-/// keystones, crit), anything else through `hurt_creature`.
+/// The hero a hit pays (XP, damage, kills): the caster if it is a hero, the ranger of an ally (the wolf).
+/// Keystones read the hit's `by`, so only a hero's own hits count for them.
+fn credit_of(run: &Run, c: Creature) -> Option<usize> {
+    match c {
+        Creature::Player(pi) => Some(pi),
+        Creature::Monster(mi) => run.monsters[mi].ally.as_ref().and_then(|a| run.player_idx(a.owner)),
+    }
+}
+
+/// A hit of `by` on `target`: one by a hero or an ally goes through `hurt_monster` with the hero it pays as
+/// its source (credit, keystones for a hero's own, crit), anything else through `hurt_creature`. The wolf's
+/// bite marks its target for Pack Hunter.
 pub fn hurt(run: &mut Run, target: Creature, dmg: Damage, crit: bool, by: Creature) {
-    match (target, hero_of(by)) {
+    match (target, credit_of(run, by)) {
         (Creature::Monster(mi), Some(pi)) => {
+            if hero_of(by).is_none() && dmg.why.what == What::Ability(AbilityId::Bite) {
+                super::keystones::bite(&mut run.monsters[mi]);
+            }
             run.hurt_monster(mi, dmg, crit, Some(pi));
         }
         _ => run.hurt_creature(target, dmg),
@@ -298,7 +312,7 @@ fn use_projectile(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) ->
                 spawn_shot(run, c, a, kind_of(a.projectile), ab::volley_shot(shot, i), Vec2::from_angle(angle), None, 0.0);
             }
         }
-        AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite => {
+        AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::Pounce => {
             unreachable!("{:?} is not a projectile", a.id)
         }
     }
@@ -315,7 +329,7 @@ fn use_blast(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim
             let target = pos + dir * aim_dist.clamp(24.0, a.range);
             spawn_shot(run, c, a, EntityKind::Fireball, shot, dir, Some(target), a.radius);
         }
-        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt => {
+        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce => {
             unreachable!("{:?} is not a blast", a.id)
         }
     }
@@ -336,7 +350,7 @@ fn use_swing(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Ani
                 run.add_tinted_flash(look.light.expect("Smite flashes"), look.tint, at, ab::SMITE_FLASH);
             }
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::ShadowBolt | AbilityId::FireBolt => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce => {
             unreachable!("{:?} is not a swing", a.id)
         }
     }
@@ -383,7 +397,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             Creature::Player(pi) => run.players[pi].slam = Some(a.windup),
             Creature::Monster(mi) => run.monsters[mi].slam = Some(a.windup),
         },
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce => {
             unreachable!("{:?} is not a ring", a.id)
         }
     }
@@ -453,19 +467,35 @@ pub fn land_slam(run: &mut Run, c: Creature) {
     }
 }
 
-/// A dash that hurts what it touches (`dash_contact`): Charge.
+/// How long (s) a monster's dash `a` lasts when aimed `aim_dist` px away: its own duration, else the time
+/// to cross that distance and a little more, so it reaches its mark.
+pub fn monster_dash_secs(a: &ResolvedAbility, aim_dist: f64) -> f64 {
+    if a.duration > 0.0 {
+        a.duration
+    } else {
+        aim_dist / a.speed + 0.05
+    }
+}
+
+/// A dash that hurts what it touches (`dash_contact`, `tick_monster_dash`): Charge, Pounce.
 fn use_dash(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Dash);
     let dir = Vec2::from_angle(aim_of(run, c));
     match a.id {
-        AbilityId::Charge => {
-            let Creature::Player(pi) = c else { unreachable!("a monster's dash has no state yet (Task 4)") };
-            let p = &mut run.players[pi];
-            p.mv.dash_t = a.duration;
-            p.mv.dash_dx = dir.x;
-            p.mv.dash_dy = dir.y;
-            p.dash_hit.clear();
-        }
+        AbilityId::Charge | AbilityId::Pounce => match c {
+            Creature::Player(pi) => {
+                debug_assert!(a.id == AbilityId::Charge, "a hero has no Pounce");
+                let p = &mut run.players[pi];
+                p.mv.dash_t = a.duration;
+                p.mv.dash_dx = dir.x;
+                p.mv.dash_dy = dir.y;
+                p.dash_hit.clear();
+            }
+            Creature::Monster(mi) => {
+                let left = monster_dash_secs(a, run.monsters[mi].aim_dist);
+                run.monsters[mi].dash = Some(MonsterDash { id: a.id, dir, left, hit: Vec::new(), attack: true });
+            }
+        },
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt => {
             unreachable!("{:?} is not a dash", a.id)
         }
@@ -526,7 +556,7 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
                 run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
             }
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce => {
             unreachable!("{:?} is not a self area", a.id)
         }
     }
@@ -559,7 +589,7 @@ fn use_ground_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) 
             let bind = OnHit { secs: ab::ENTANGLE_PULSE_SECS, ..own };
             run.spawn_hazard(kind_of(a.projectile), at, a.radius, a.duration, side, HazardPulse::Bind(bind));
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce => {
             unreachable!("{:?} is not a ground area", a.id)
         }
     }
@@ -574,7 +604,7 @@ fn use_buff(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             let own = a.effect.expect("Poison Coat has its own effect");
             run.apply(c, Apply::from_hit(own));
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce => {
             unreachable!("{:?} is not a buff", a.id)
         }
     }
@@ -589,7 +619,7 @@ fn use_summon(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> An
             let Creature::Player(pi) = c else { unreachable!("only a hero summons the wolf") };
             super::companion::use_ability(run, pi)
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce => {
             unreachable!("{:?} is not a summon", a.id)
         }
     }
@@ -620,11 +650,13 @@ fn melee_arc(run: &mut Run, c: Creature, a: &ResolvedAbility, crit: bool) -> Opt
             run.knock_creature(t, pos, aim, a.push, a.push_str);
         }
     }
+    // The wolf bites its prey, not the chests and barrels around it.
+    let ally = side(run, c) == Side::Heroes && hero_of(c).is_none();
     let objs: Vec<usize> = (0..run.objects.len())
         .filter(|&i| {
             let o = &run.objects[i];
             let d = o.pos.dist(pos);
-            if o.gone || d > range + o.radius {
+            if ally || o.gone || d > range + o.radius {
                 return false;
             }
             let in_arc = angle_diff(pos.angle_to(o.pos), aim).abs() <= arc / 2.0 || d < o.radius + run.creature_radius(c);
@@ -640,7 +672,7 @@ fn melee_arc(run: &mut Run, c: Creature, a: &ResolvedAbility, crit: bool) -> Opt
 
 /// Barbarian Charge: damage each monster touched once per dash, with the secondary's damage, split, on-hit and power.
 pub fn dash_contact(run: &mut Run, c: Creature) {
-    let Creature::Player(pi) = c else { unreachable!("a monster's dash has no state yet (Task 4)") };
+    let Creature::Player(pi) = c else { unreachable!("a monster's dash is ticked by `tick_monster_dash`") };
     let rw = rewind_ticks(run, c);
     let pos = run.players[pi].pos();
     let (aim, ab) = (run.players[pi].aim, run.players[pi].sheet.secondary);
@@ -671,6 +703,62 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
         run.players[pi].dash_hit.push(id);
         crate::run::objects::hurt_object(run, oi, dmg, Some(by));
     }
+}
+
+/// One tick of monster `mi`'s dash: it moves through the air (over chasms) and hurts each foe it touches
+/// once, with the dash's ability and for the side it fights for. A Pounce ends at the first foe it hurts.
+/// Returns the dash when it ended this tick.
+pub fn tick_monster_dash(run: &mut Run, mi: usize, dt: f64) -> Option<MonsterDash> {
+    let dash = run.monsters[mi].dash.clone()?;
+    let a = *run.monsters[mi].kit.get(dash.id).expect("a dash is an ability of its kit");
+    let solids = run.solids(None);
+    let m = &run.monsters[mi];
+    let v = dash.dir * (a.speed * dt.min(dash.left));
+    let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, Mover::Dash, &solids);
+    let m = &mut run.monsters[mi];
+    m.pos = Vec2::new(x, y);
+    m.aim = dash.dir.y.atan2(dash.dir.x);
+    if m.anim != Anim::Dash {
+        m.anim = Anim::Dash;
+        m.anim_start = run.time;
+    }
+    let mut dash = MonsterDash { left: dash.left - dt, ..dash };
+    let mut done = dash.left <= 1e-9;
+    if dash.attack {
+        let touched = monster_dash_contact(run, mi, &a, &mut dash.hit);
+        done |= touched && dash.id == AbilityId::Pounce;
+    }
+    if done {
+        run.monsters[mi].dash = None;
+        Some(dash)
+    } else {
+        run.monsters[mi].dash = Some(dash);
+        None
+    }
+}
+
+/// The foes monster `mi` touches in its dash and has not hurt yet (`hit`): each is hurt with `a`'s damage
+/// and pushed away. True if there was one.
+fn monster_dash_contact(run: &mut Run, mi: usize, a: &ResolvedAbility, hit: &mut Vec<u32>) -> bool {
+    let c = Creature::Monster(mi);
+    let (pos, aim) = (run.monsters[mi].pos, run.monsters[mi].aim);
+    let rule = targets::Rule { at: pos, reach: run.monsters[mi].radius + 4.0, plus_radius: true, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: true };
+    let (touched, _) = targets::select(run, side(run, c), &rule, &[], false, |t| run.creature_pos(t));
+    let dmg = weapon_damage(run, c, a);
+    let mut any = false;
+    for t in touched {
+        let id = run.creature_id(t);
+        if hit.contains(&id) {
+            continue;
+        }
+        hit.push(id);
+        any = true;
+        hurt(run, t, dmg, false, c);
+        if a.push > 0.0 {
+            run.knock_creature(t, pos, aim, a.push, a.push_str);
+        }
+    }
+    any
 }
 
 /// The radius of a shot that bursts at its target point (Fireball); other shots use their ability's radius.

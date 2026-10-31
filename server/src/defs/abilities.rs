@@ -64,6 +64,8 @@ super::enum_list::listed_enum! {
         ShadowBolt = 24,
         /// The bolt of fire of imps, chorts and summoners.
         FireBolt = 25,
+        /// The wolf's leap: a dash that crosses chasms, stops at the first foe it hits and hurts it hard.
+        Pounce = 26,
     }
 }
 
@@ -267,9 +269,10 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::Purify => "Clears bad effects from you and the allies close to you and wards you against curses for a moment.",
         AbilityId::Consecrate => "Holy ground under your feet that hurts enemies standing in it.",
         AbilityId::Entangle => "Vines grow where you aim and root the enemies in them.",
-        AbilityId::Bite => "A strike with a bite.",
+        AbilityId::Bite => "A snap of the jaws, a strike with a natural bite weapon.",
         AbilityId::ShadowBolt => "A slow bolt of shadow.",
         AbilityId::FireBolt => "A bolt of fire.",
+        AbilityId::Pounce => "A leap that crosses chasms and hits the first enemy it reaches, hard.",
     }
 }
 
@@ -395,6 +398,10 @@ pub fn def(id: AbilityId) -> AbilityDef {
         FireBolt => AbilityDef {
             own: OwnStats { windup: FIRE_BOLT_WINDUP, ..own(7.0, 2.0, 150.0, 130.0, 3.0, 0.0, Some(EntityKind::FireBolt), 14) },
             ..base("Fire Bolt", Primary, C::Innate, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        Pounce => AbilityDef {
+            weapon_mult: WeaponMult { damage: 2.0, ..WeaponMult::ONE },
+            ..base("Pounce", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, OwnStats { push: 12.0, ..own(0.0, 5.0, 64.0, DASH_SPEED, 0.0, 0.0, None, 0) }, &[])
         },
         SummonWolf => base("Summon Wolf", Secondary, C::Innate, Uses::Nothing, false, Shape::Summon, own(0.0, 8.0, 0.0, 0.0, 0.0, 0.0, None, 13), &[K::ElvenRanger]),
     }

@@ -8,7 +8,7 @@ use crate::defs::abilities::{self as ab, AbilityCategory, AbilityDef, AbilityId,
 use crate::defs::attributes::{self, Attr, Attributes, Scaled, CON_MOVE};
 use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
-use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT};
+use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_RADIUS, WOLF_SPEED, WOLF_WEIGHT};
 use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, Resistances};
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
@@ -110,16 +110,16 @@ pub struct Sheet {
     pub wolf: WolfMods,
 }
 
-/// The wolf's numbers from the Summon Wolf version: its max HP is multiplied by `hp_mul`,
-/// and `dash_cooldown_add` is added to its dash cooldown.
+/// The wolf's numbers from the Summon Wolf version: its max HP is multiplied by `hp_mul`, and `pounce`
+/// (a `CooldownAdd`) is applied to its Pounce through `apply_mods` (`wolf_kit`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WolfMods {
     pub hp_mul: f64,
-    pub dash_cooldown_add: f64,
+    pub pounce: Option<AbilityMod>,
 }
 
 impl WolfMods {
-    pub const NONE: WolfMods = WolfMods { hp_mul: 1.0, dash_cooldown_add: 0.0 };
+    pub const NONE: WolfMods = WolfMods { hp_mul: 1.0, pounce: None };
 }
 
 /// The companion mods of a version; the others do nothing to the wolf.
@@ -137,7 +137,7 @@ pub fn wolf_mods(mods: &[AbilityMod]) -> WolfMods {
     // A fixed order, so the order of the mods never matters.
     hp.sort_by(f64::total_cmp);
     dash.sort_by(f64::total_cmp);
-    WolfMods { hp_mul: hp.into_iter().product(), dash_cooldown_add: dash.into_iter().sum() }
+    WolfMods { hp_mul: hp.into_iter().product(), pounce: (!dash.is_empty()).then(|| AbilityMod::CooldownAdd(dash.into_iter().sum())) }
 }
 
 /// Movement speed: `base` is the value at `ref_con`; CON moves it by `CON_MOVE` per point.
@@ -213,7 +213,8 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
                 cooldown: cooldown(melee),
                 damage: base.amount(),
                 base,
-                range: melee.reach + body.radius,
+                // A dash's own range is how far it leaps; any other melee ability reaches as far as its weapon.
+                range: if own.range > 0.0 { own.range } else { melee.reach + body.radius },
                 arc: mult.arc.unwrap_or(melee.arc),
                 speed: own.speed,
                 radius: own.radius,
@@ -281,6 +282,14 @@ impl Kit {
     pub fn get(&self, id: AbilityId) -> Option<&ResolvedAbility> {
         self.0.iter().find(|a| a.id == id)
     }
+
+    /// The kit with `mods` applied to ability `id` (nothing changes if it has none such).
+    pub fn modded(mut self, id: AbilityId, mods: &[AbilityMod]) -> Kit {
+        if let Some(a) = self.0.iter_mut().find(|a| a.id == id) {
+            *a = apply_mods(*a, mods);
+        }
+        self
+    }
 }
 
 /// The kit of a monster with `attrs`, wielding `weapons` (in the order the abilities look for them:
@@ -301,6 +310,12 @@ pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], bo
         })
         .collect();
     Kit(kit)
+}
+
+/// The Ranger's wolf: Bite and Pounce from its Attributes and Beast Bite, Pounce changed by its version.
+pub fn wolf_kit(mods: &WolfMods) -> Kit {
+    let kit = monster_kit(&[AbilityId::Bite, AbilityId::Pounce], &WOLF_ATTRS, &[ItemId::BeastBite], Body { radius: WOLF_RADIUS });
+    kit.modded(AbilityId::Pounce, mods.pounce.as_slice())
 }
 
 /// The kit of enemy type `t`, from its stat block.

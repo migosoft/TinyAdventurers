@@ -373,7 +373,7 @@ pub fn def(id: ItemId) -> ItemDef {
         I::UnarmedStrike => item("Unarmed Strike", "", winding(melee(K::Unarmed, 3.0, 1.0, 1.4, 0.0, phys(), At::BASE), 16.0, 0.25), ALL, &[], &[]),
         I::Bite => item("Bite", "", melee(K::Bite, 8.0, 1.0, 1.0, 0.0, phys(), At::BASE), ALL, &[], &[]),
         I::Claws => item("Claws", "", melee(K::Claws, 6.0, 0.8, 1.6, 0.0, heat(), At::BASE), ALL, &[], &[]),
-        I::BeastBite => item("Beast Bite", "", melee(K::Bite, 10.0, 0.9, 1.0, 0.0, DamageSplit::split(&[(DamageType::Magical, 0.2)]), At::BASE), ALL, &[], &[]),
+        I::BeastBite => item("Beast Bite", "", winding(melee(K::Bite, 10.0, 0.9, 1.0, 8.0, DamageSplit::split(&[(DamageType::Magical, 0.2)]), at(17, 15)), 18.0, 0.2), NONE, &[], &[]),
         I::Tail => item("Tail", "", melee(K::Tail, 10.0, 1.25, 2.4, 10.0, phys(), At::BASE), ALL, &[], &[]),
         I::GoblinShortbow => item("Goblin Shortbow", "weapon_bow", drawing(ranged(K::Bow, 6.0, 1.4, 140.0, 170.0, 3.0, EntityKind::Arrow, at(8, 15)), 0.3), NONE, &[], &[]),
         I::SkeletonSword => item("Skeleton Sword", "weapon_rusty_sword", winding(melee(K::Sword, 9.0, 1.0, 1.6, 0.0, phys(), at(12, 12)), 18.0, 0.3), NONE, &[], &[]),

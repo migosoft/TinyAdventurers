@@ -177,11 +177,15 @@ impl Ai {
     }
 }
 
-/// A wolf's dash: toward `dir` for `left` seconds; `attack` is false for the dash back from a chasm.
-#[derive(Debug, Clone, Copy)]
-pub struct WolfDash {
+/// A monster's dash in progress (`Monster.dash`): ability `id` toward `dir` for `left` seconds, in the air
+/// (it crosses chasms). `attack` is false for a dash that hurts nobody (the wolf's way back from a chasm);
+/// `hit` are the ids of the foes it has hurt, each once.
+#[derive(Debug, Clone)]
+pub struct MonsterDash {
+    pub id: crate::defs::abilities::AbilityId,
     pub dir: Vec2,
     pub left: f64,
+    pub hit: Vec<u32>,
     pub attack: bool,
 }
 
@@ -199,8 +203,6 @@ pub struct Ally {
     pub prey: Option<u32>,
     pub following: bool,
     pub reach_t: f64,
-    pub dash: Option<WolfDash>,
-    pub dash_cd: f64,
     /// Centre of the last safe tile it stood on (a dash back from a chasm goes there).
     pub last_safe: Vec2,
 }
@@ -226,11 +228,13 @@ pub struct Monster {
     pub anim: Anim,
     pub anim_start: f64,
     pub hurt_t: f64,
-    /// The abilities it casts, resolved at spawn (empty for bosses and the wolf), and their cooldowns.
+    /// The abilities it casts, resolved at spawn (empty for bosses), and their cooldowns.
     pub kit: crate::sheet::Kit,
     pub cds: super::abilities::Cooldowns,
     /// Ground Slam: seconds until it lands; lost when it dies, sinks, is pushed or frightened.
     pub slam: Option<f64>,
+    /// A dash in progress: it is in the air, so it is neither pushed nor sinking meanwhile.
+    pub dash: Option<MonsterDash>,
     /// Seconds left of the wolf-bite mark (Pack Hunter).
     pub wolf_bit: f64,
     pub ai: Ai,

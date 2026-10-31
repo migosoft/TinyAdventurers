@@ -3,4 +3,4 @@
 /**
  * Every ability any creature can have. `classes` empty: not for heroes.
  */
-export type AbilityId = "MagicMissile" | "Fireball" | "Strike" | "HolyLight" | "Charge" | "Shoot" | "SummonWolf" | "FrostShard" | "ChainSpark" | "Judgement" | "Hurl" | "Volley" | "Smite" | "Whirl" | "FlankingThrust" | "PoisonCoat" | "FrostNova" | "WarCry" | "GroundSlam" | "Haste" | "Purify" | "Consecrate" | "Entangle" | "Bite" | "ShadowBolt" | "FireBolt";
+export type AbilityId = "MagicMissile" | "Fireball" | "Strike" | "HolyLight" | "Charge" | "Shoot" | "SummonWolf" | "FrostShard" | "ChainSpark" | "Judgement" | "Hurl" | "Volley" | "Smite" | "Whirl" | "FlankingThrust" | "PoisonCoat" | "FrostNova" | "WarCry" | "GroundSlam" | "Haste" | "Purify" | "Consecrate" | "Entangle" | "Bite" | "ShadowBolt" | "FireBolt" | "Pounce";

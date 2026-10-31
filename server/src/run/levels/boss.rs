@@ -66,6 +66,7 @@ pub fn spawn(run: &mut Run) {
         kit: Default::default(),
         cds: Default::default(),
         slam: None,
+        dash: None,
         wolf_bit: 0.0,
         ai: Ai::new(pos),
         owner: None,

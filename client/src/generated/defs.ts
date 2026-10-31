@@ -429,6 +429,14 @@ export const ABILITIES = {
     "shape": "Buff",
     "slot": "Secondary"
   },
+  "Pounce": {
+    "classes": [],
+    "hero": false,
+    "name": "Pounce",
+    "ranged": false,
+    "shape": "Dash",
+    "slot": "Secondary"
+  },
   "Purify": {
     "classes": [
       "Paladin"
