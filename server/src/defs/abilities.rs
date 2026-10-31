@@ -463,7 +463,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         },
         Pounce => AbilityDef {
             weapon_mult: WeaponMult { damage: 2.0, ..WeaponMult::ONE },
-            ..base("Pounce", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, OwnStats { push: 12.0, ..own(0.0, 5.0, 64.0, DASH_SPEED, 0.0, 0.0, None, 0) }, &[])
+            ..base("Pounce", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, OwnStats { push: 12.0, ..own(0.0, 5.0, 64.0, DASH_SPEED, 4.0, 0.0, None, 0) }, &[])
         },
         TailWhip => AbilityDef {
             req: &[Requirement::WeaponKind(&[WeaponKind::Tail])],

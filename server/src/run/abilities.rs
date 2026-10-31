@@ -828,12 +828,12 @@ pub fn tick_monster_dash(run: &mut Run, mi: usize, dt: f64) -> Option<MonsterDas
     }
 }
 
-/// The foes monster `mi` touches in its dash and has not hurt yet (`hit`): each is hurt with `a`'s damage
-/// and pushed away. True if there was one.
+/// The foes monster `mi` touches in its dash (within its body plus `a.radius` of the foe's edge) and has not
+/// hurt yet (`hit`): each is hurt with `a`'s damage and pushed away. True if there was one.
 fn monster_dash_contact(run: &mut Run, mi: usize, a: &ResolvedAbility, hit: &mut Vec<u32>) -> bool {
     let c = Creature::Monster(mi);
     let (pos, aim) = (run.monsters[mi].pos, run.monsters[mi].aim);
-    let rule = targets::Rule { at: pos, reach: run.monsters[mi].radius + 4.0, plus_radius: true, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: true };
+    let rule = targets::Rule { at: pos, reach: run.monsters[mi].radius + a.radius, plus_radius: true, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: true };
     let (touched, _) = targets::select(run, side(run, c), &rule, &[], false, |t| run.creature_pos(t));
     let dmg = weapon_damage(run, c, a);
     let mut any = false;
@@ -1373,6 +1373,32 @@ mod tests {
         assert!((r[2].1 - 16.0).abs() < 1e-9, "24 - (18 - 5 - 5) = 16: {r:?}");
         let r = goblins([24.0, 5.0, 24.0]);
         assert!((r[0].1 - 6.0).abs() < 1e-9 && r[1].1 == 5.0 && r[2].1 == 24.0, "{r:?}");
+    }
+
+    #[test]
+    fn a_dash_touches_within_the_ability_radius_of_the_casters_edge() {
+        // Swoop: body radius + 8 (+ the hero's radius); Pounce: body radius + 4.
+        for (id, radius, caster_kit) in [
+            (AbilityId::Swoop, 8.0, crate::sheet::boss_kit(BossId::Demon)),
+            (AbilityId::Pounce, 4.0, crate::sheet::wolf_kit(&crate::sheet::WolfMods::NONE)),
+        ] {
+            assert_eq!(caster_kit.get(id).unwrap().radius, radius, "{id:?}");
+            for (gap, hits) in [(radius, true), (radius + 1.0, false)] {
+                let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+                let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+                run.monsters[bi].dormant = false;
+                run.monsters[bi].kit = caster_kit.clone();
+                run.players[0].debug = false;
+                let (pos, r) = (run.monsters[bi].pos, run.monsters[bi].radius);
+                // Edge to edge: the hero's centre sits r + PLAYER_RADIUS + gap from the caster's centre.
+                run.players[0].mv.x = pos.x + r + PLAYER_RADIUS + gap;
+                run.players[0].mv.y = pos.y;
+                let hp = run.players[0].hp;
+                let mut hit = Vec::new();
+                monster_dash_contact(&mut run, bi, &caster_kit.get(id).copied().unwrap(), &mut hit);
+                assert_eq!(run.players[0].hp < hp, hits, "{id:?} at a gap of {gap}");
+            }
+        }
     }
 
     #[test]
