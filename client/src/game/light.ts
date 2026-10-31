@@ -32,6 +32,11 @@ export function falloff(d: number, r: number): number {
   return 1 - (1 - EDGE) * k * k * (3 - 2 * k);
 }
 
+/** Dims a falloff value by `k` (1 = none) towards `EDGE` only: the rim stays at `EDGE`, so the lit area never shrinks. */
+export function cloudy(fall: number, k: number): number {
+  return EDGE + (fall - EDGE) * k;
+}
+
 /** Adds `colour` (0xRRGGBB) times `k` to tile `i` of an rgb buffer (no cap: the drawer caps at 255). */
 export function addColour(rgb: Float32Array, i: number, colour: number, k: number): void {
   rgb[i * 3] += ((colour >> 16) & 255) * k;
@@ -109,20 +114,21 @@ export class LightField {
     return x >= 0 && y >= 0 && x < this.map.w && y < this.map.h && this.lit[y * this.map.w + x] === 1;
   }
 
-  /** Adds every lit static light's colour into `rgb` (w*h*3) inside the tile window [x0,x1)×[y0,y1). */
-  accumulate(rgb: Float32Array, x0: number, y0: number, x1: number, y1: number, scale: (l: StaticLight) => number): void {
+  /** Adds every lit static light's colour into `rgb` (`dim` 0..1 dims a light's centre, never its rim) (w*h*3) inside the tile window [x0,x1)×[y0,y1). */
+  accumulate(rgb: Float32Array, x0: number, y0: number, x1: number, y1: number, scale: (l: StaticLight) => number, dim: (l: StaticLight) => number = () => 1): void {
     const w = this.map.w;
     for (const l of this.lights.values()) {
       if (!l.on) continue;
       const r = LIGHT[l.kind].radius;
       if (l.x + r < x0 || l.x - r >= x1 || l.y + r < y0 || l.y - r >= y1) continue;
       const k = LIGHT[l.kind].intensity * scale(l);
+      const d = dim(l);
       const c = this.cellsOf(l);
       for (let j = 0; j < c.idx.length; j++) {
         const i = c.idx[j];
         const x = i % w;
         const y = (i - x) / w;
-        if (x >= x0 && x < x1 && y >= y0 && y < y1) addColour(rgb, i, l.colour, k * c.fall[j]);
+        if (x >= x0 && x < x1 && y >= y0 && y < y1) addColour(rgb, i, l.colour, k * cloudy(c.fall[j], d));
       }
     }
   }
