@@ -451,10 +451,6 @@ pub fn land_slam(run: &mut Run, c: Creature) {
         hurt(run, t, dmg, false, c);
         run.knock_creature(t, pos, aim, a.push, a.push_str);
     }
-    // A monster's slam also smashes what is in reach (barrels, chests).
-    if side(run, c) == Side::Monsters {
-        crate::run::objects::hurt_objects_in(run, pos, a.radius, None, dmg);
-    }
 }
 
 /// A dash that hurts what it touches (`dash_contact`): Charge.
@@ -1258,6 +1254,25 @@ mod tests {
             tick_projectiles(&mut run, 1.0 / TICK_HZ);
         }
         assert!(run.players[0].hp < hp, "it hurt all the same");
+        let hit = run.last_hit.expect("the hero was hit");
+        assert_eq!((hit.amount, hit.power), (bolt.damage, power), "with the damage and power it was spawned with");
+    }
+
+    #[test]
+    fn a_pushing_shot_keeps_its_push_and_strength_after_the_caster_dies() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos() + Vec2::new(60.0, 0.0);
+        let owner = run.spawn_enemy(EnemyType::OrcWarrior, at + Vec2::new(80.0, 0.0), None);
+        let mi = run.monster_idx(owner).unwrap();
+        let push_str = run.push_str(mi);
+        spawn_monster_projectile(&mut run, owner, EntityKind::FireBolt, at, Vec2::new(-1.0, 0.0), 100.0, 7.0, 3.0, 12.0, 4, 20.0);
+        // The caster is gone before the shot lands.
+        run.monsters.retain(|m| m.id != owner);
+        for _ in 0..120 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        assert_eq!(run.players[0].mv.knock_vx, -crate::collision::knock_speed(20.0, super::super::DT), "pushed west by the spawn-time push at the orc's STR {push_str}");
     }
 
     #[test]

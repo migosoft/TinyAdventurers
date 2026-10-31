@@ -166,6 +166,7 @@ impl AbilityDef {
     }
 }
 
+#[cfg(test)]
 /// Whether two names are the same once case, spaces, hyphens and apostrophes are ignored.
 pub fn same_name(a: &str, b: &str) -> bool {
     let norm = |s: &str| s.chars().filter(|c| !matches!(c, ' ' | '-' | '\'' | '\u{2019}')).flat_map(char::to_lowercase).collect::<String>();

@@ -235,7 +235,6 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
         set_anim(run, mi, if run.monsters[mi].ai.windup.is_some() { Anim::Windup } else { Anim::Channel });
     }
 
-    // Finish a wind-up: the attack lands only if the target is still seen.
     // A Ground Slam winding up: it stands still until the blow lands.
     if run.monsters[mi].slam.is_some() {
         tick_monster_slam(run, mi, dt);
@@ -245,6 +244,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
 
+    // Finish a wind-up: the attack lands only if the target is still seen.
     if let Some(w) = run.monsters[mi].ai.windup {
         let t = w.t - dt;
         if t > 0.0 {
@@ -867,7 +867,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn ogre_slam_lights_barrels_in_its_radius() {
+    fn ogre_slam_leaves_barrels_alone() {
         use crate::run::objects::{Barrel, ObjState};
         let r = slam_radius();
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0)]);
@@ -880,7 +880,7 @@ pub(crate) mod tests {
             tick_monster_slam(&mut run, mi, crate::run::DT);
         }
         let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
-        assert_eq!(lit, vec![true, false], "the one in reach is lit, the one outside is not");
+        assert_eq!(lit, vec![false, false], "a slam hits no objects, whoever casts it (the club's swing does)");
     }
 
     #[test]
