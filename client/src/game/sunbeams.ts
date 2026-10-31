@@ -14,7 +14,7 @@ const PATCH_TEX = 'sun-patch';
 /** Phaser's `FilterMode.LINEAR` and blend mode ADD (a runtime import of Phaser would not load in unit tests). */
 const LINEAR = 0;
 const ADD = 1;
-/** Tiles beyond the view in which a beam is still kept, on top of the tallest beam (HEIGHT_RANGE, 7 tiles) and the slant, so a beam whose sun tile is just off-screen still draws its visible part. */
+/** Tiles beyond the view in which a beam is still kept, on top of the tallest beam (HEIGHT_RANGE, 7 tiles) and the slant, so a beam whose sun tile is just off-screen can still draw its visible part. A sun further out is dropped; and `seenLit` is only updated within about 3 tiles of the view, so for a sun beyond that it is stale and must not be relied on. */
 const MARGIN = 1;
 const MOTES = 24;
 /** Beam alpha at the top (0), at BEAM_PEAK_AT of the way down to the floor, and where it ends (0): the top edge of the patch. */
