@@ -1,12 +1,13 @@
 // Dev page ?sunlight (no server): sunlight through a ceiling crack, to judge the look (#156).
-// One room with a pillar and one Daylight light in its middle (a pale beam from above onto a soft
-// bright floor patch, dust motes in the beam). Two knights stand in the patch, a corner is left dark,
-// the room's wall torch is out, and through a doorway a small second room has a lit torch, so warm
-// and daylight can be compared. Mood is on (dust, haze), so beam dust can be judged against normal dust.
+// One tall room with a pillar and one Daylight light in its middle (a pale beam from above onto a soft
+// bright floor patch, dust motes in the beam). One knight stands in the patch and one beside it, the
+// south-west corner is left dark, the room's wall torch is out, and an open alcove on the east side has
+// a lit torch, so warm and daylight can be compared. The viewer sees the whole scene. Mood is on (dust, haze), so beam dust can be judged against normal dust.
 // Buttons at the bottom (tap or click) cycle: Shape (widening / straight), Patch (1.5 / 2 / 3 tiles),
 // Slant (0 / 1 / 1.5 / 2 tiles), From (left / right), Clouds (off / soft / medium / strong),
-// Often (normal / often: a cloud every 2-4 s instead of 8-25 s), and switch Beam and Dust on / off.
-// URL: ?shape=straight&patch=3&slant=2&from=right&clouds=0.3&often=1 (clouds is 0..0.6, the dip).
+// Often (normal / often: a cloud every 2-4 s instead of 8-25 s), Glow (x1 / x1.5 / x2: brightness of beam
+// and patch) and switch Beam and Dust on / off.
+// URL: ?shape=straight&patch=3&slant=2&from=right&clouds=0.3&often=1&glow=1.5&beam=0&dust=0 (clouds is 0..0.6, the dip).
 // Zoomed to fit the rooms to the screen, so it reads on a phone.
 import Phaser from 'phaser';
 import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
@@ -23,21 +24,24 @@ import { TorchView } from './torch';
 import { VisionMask } from './visionmask';
 
 const W = 15;
-const H = 15;
+const H = 17;
 const WARM = 0xffaa5a;
-const SUN = { x: 5, y: 7 };
+const SUN = { x: 5, y: 8 };
 
 const PATCHES = [1.5, 2, 3];
 const SLANTS = [0, 1, 1.5, 2];
 const CLOUDS: [string, number][] = [['off', 0], ['soft', 0.3], ['medium', 0.45], ['strong', 0.6]];
+const GLOWS = [1, 1.5, 2];
 const OFTEN: [number, number][] = [[8, 25], [2, 4]];
 
 function buildMap(): TileMap {
   const tiles = new Uint8Array(W * H).fill(TILE_ID.Wall);
-  for (let y = 3; y <= 13; y++) for (let x = 1; x <= 9; x++) tiles[y * W + x] = TILE_ID.Floor;
-  for (let y = 6; y <= 10; y++) for (let x = 11; x <= 13; x++) tiles[y * W + x] = TILE_ID.Floor;
-  tiles[8 * W + 10] = TILE_ID.Floor; // the doorway
-  tiles[10 * W + 7] = TILE_ID.Wall; // a pillar, for a shadow
+  for (let y = 2; y <= 14; y++) for (let x = 1; x <= 9; x++) tiles[y * W + x] = TILE_ID.Floor;
+  // An open alcove on the east side (wall stubs above and below it), seen from the room.
+  for (let y = 6; y <= 10; y++) for (let x = 10; x <= 13; x++) tiles[y * W + x] = TILE_ID.Floor;
+  tiles[6 * W + 10] = TILE_ID.Wall;
+  tiles[10 * W + 10] = TILE_ID.Wall;
+  tiles[12 * W + 8] = TILE_ID.Wall; // a pillar, for a shadow
   return new TileMap(W, H, tiles);
 }
 
@@ -75,26 +79,28 @@ export class SunlightDemoScene extends Phaser.Scene {
     let id = 1;
     field.add({ id: id++, kind: LIGHT_KIND.Daylight, colour: LIGHT[LIGHT_KIND.Daylight].colour, x: SUN.x, y: SUN.y, on: true });
     // The sunlit room's torch is out; the small room's torch is lit.
-    this.torches.push({ view: new TorchView(this), x: 5.5 * TILE, y: 3 * TILE + 0.5, side: 0, lit: false });
-    this.torches.push({ view: new TorchView(this), x: 12.5 * TILE, y: 6 * TILE + 0.5, side: 0, lit: true });
-    field.add({ id: id++, kind: LIGHT_KIND.Torch, colour: WARM, x: 12, y: 6, on: true });
+    this.torches.push({ view: new TorchView(this), x: 1 * TILE + 0.5, y: 8.5 * TILE, side: 1, lit: false });
+    this.torches.push({ view: new TorchView(this), x: 14 * TILE - 0.5, y: 8.5 * TILE, side: 2, lit: true });
+    field.add({ id: id++, kind: LIGHT_KIND.Torch, colour: WARM, x: 13, y: 8, on: true });
     this.view = new LightView(this, map, field);
     this.mask = new VisionMask(this, map);
     this.sun = new Sunbeams(this, field, this.view);
     this.mood = new Mood(this, map, this.view);
+    this.sun.on.beam = q.get('beam') !== '0';
+    this.sun.on.dust = q.get('dust') !== '0';
     for (const k of ['smoke', 'embers', 'drips'] as const) this.mood.on[k] = false;
 
     const put = (frame: string, x: number, y: number, flip = false) =>
       this.add.image(x * TILE, y * TILE, 'atlas', frame).setOrigin(0.5, 1).setFlipX(flip).setDepth(DEPTH.entityBase + y * TILE);
-    put('knight_m_idle_anim_f0', 5.2, 7.9);
-    put('knight_m_idle_anim_f0', 6.4, 8.4, true);
+    put('knight_m_idle_anim_f0', 5.5, 8.9);
+    put('knight_m_idle_anim_f0', 7.4, 9.3, true);
     put('crate', 8.5, 4.8);
-    put('skull', 2.5, 12.6);
+    put('skull', 2.5, 13.6);
 
     const cam = this.cameras.main;
     const barH = 110;
     cam.setZoom(Math.min(cam.width / ((W - 0.5) * TILE), (cam.height - barH) / ((H - 1) * TILE)));
-    cam.centerOn((W * TILE) / 2, 8.2 * TILE + barH / 2 / cam.zoom);
+    cam.centerOn((W * TILE) / 2, 8.8 * TILE + barH / 2 / cam.zoom);
     this.buttons();
     this.events.once('shutdown', () => {
       this.bar?.remove();
@@ -103,7 +109,7 @@ export class SunlightDemoScene extends Phaser.Scene {
     });
   }
 
-  /** ?shape=straight|widening, ?patch=1.5|2|3, ?slant=0..2, ?from=left|right, ?clouds=0..0.6, ?often=1. */
+  /** ?shape=straight|widening, ?patch=1.5|2|3, ?slant=0..2, ?from=left|right, ?clouds=0..0.6, ?often=1, ?glow=1..2, ?beam=0, ?dust=0. */
   private readParams(q: URLSearchParams): void {
     const num = (k: string) => (q.get(k) !== null && Number.isFinite(Number(q.get(k))) ? Number(q.get(k)) : null);
     if (q.get('shape') !== null) sunLook.widen = q.get('shape') !== 'straight';
@@ -111,7 +117,8 @@ export class SunlightDemoScene extends Phaser.Scene {
     sunLook.slant = num('slant') ?? sunLook.slant;
     if (q.get('from') !== null) sunLook.dir = q.get('from') === 'right' ? 1 : -1;
     sunLook.clouds = num('clouds') ?? sunLook.clouds;
-    if (q.get('often') !== null) sunLook.gap = q.get('often') === '0' ? OFTEN[0] : OFTEN[1];
+    sunLook.glow = num('glow') ?? sunLook.glow;
+    if (q.get('often') !== null) sunLook.gap = q.get('often') === '1' ? OFTEN[1] : OFTEN[0];
   }
 
   /** Big buttons along the bottom of the page, for a phone. */
@@ -138,6 +145,7 @@ export class SunlightDemoScene extends Phaser.Scene {
     const cv = CLOUDS.map((c) => c[1]);
     add(() => `Clouds: ${CLOUDS[near(cv, sunLook.clouds)][0]}`, () => (sunLook.clouds = next(cv, sunLook.clouds)));
     add(() => `Often: ${sunLook.gap[0] === OFTEN[1][0] ? 'often' : 'normal'}`, () => (sunLook.gap = sunLook.gap[0] === OFTEN[1][0] ? OFTEN[0] : OFTEN[1]));
+    add(() => `Glow: x${sunLook.glow}`, () => (sunLook.glow = next(GLOWS, sunLook.glow)));
     add(() => `Beam: ${this.sun.on.beam ? 'on' : 'off'}`, () => (this.sun.on.beam = !this.sun.on.beam));
     add(() => `Dust: ${this.sun.on.dust ? 'on' : 'off'}`, () => (this.sun.on.dust = !this.sun.on.dust));
     document.body.appendChild(bar);

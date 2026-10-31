@@ -14,9 +14,11 @@ export interface SunLook {
   clouds: number;
   /** Seconds of full sun between clouds. */
   gap: [number, number];
+  /** Brightness of the beam and the patch (their alphas are multiplied by it, capped at 1). */
+  glow: number;
 }
 
-export const sunLook: SunLook = { widen: true, patch: 2, slant: 1.5, dir: -1, clouds: 0.45, gap: [8, 25] };
+export const sunLook: SunLook = { widen: true, patch: 2, slant: 1.5, dir: -1, clouds: 0.45, gap: [8, 25], glow: 1 };
 
 /** Uniform [0,1) from a hash of (id, cloud index, salt). */
 function rnd(id: number, n: number, salt: number): number {

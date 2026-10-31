@@ -20,8 +20,8 @@ const MOTES = 24;
 /** Beam alpha at the top, at BEAM_PEAK_AT of the way down, and at the floor. */
 const BEAM_PEAK = 0.22;
 const BEAM_PEAK_AT = 2 / 3;
-const BEAM_FLOOR = 0.16;
-const PATCH_ALPHA = 0.35;
+const BEAM_FLOOR = 0.2;
+const PATCH_ALPHA = 0.6;
 const MOTE_ALPHA = 0.8;
 /** Mote drift speed range along the beam (px/s). */
 const DRIFT: [number, number] = [1, 3];
@@ -57,7 +57,7 @@ function ensureTexture(scene: Phaser.Scene): void {
   const ctx = c.getContext();
   const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.55, 'rgba(255,255,255,0.5)');
+  g.addColorStop(0.6, 'rgba(255,255,255,0.65)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
@@ -136,16 +136,16 @@ export class Sunbeams {
 
   private place(b: Beam, tx: number, ty: number, colour: number, cloud: number, dt: number, t: number): void {
     const look = sunLook;
-    const key = `${tx},${ty},${colour},${look.widen},${look.patch},${look.slant},${look.dir}`;
+    const key = `${tx},${ty},${colour},${look.widen},${look.patch},${look.slant},${look.dir},${look.glow}`;
     if (key !== b.key) {
       b.key = key;
       b.shape = beamShape(tx, ty, look);
-      this.draw(b, colour);
+      this.draw(b, colour, look.glow);
       for (const m of b.motes) this.respawn(m, b.shape);
     }
     const p = b.shape.patch;
     b.beam.setVisible(this.on.beam).setAlpha(cloud);
-    b.patch.setVisible(this.on.beam).setPosition(p.x, p.y).setDisplaySize(p.w, p.h).setTint(colour).setAlpha(PATCH_ALPHA * cloud);
+    b.patch.setVisible(this.on.beam).setPosition(p.x, p.y).setDisplaySize(p.w, p.h).setTint(colour).setAlpha(Math.min(1, PATCH_ALPHA * look.glow) * cloud);
     for (const m of b.motes) {
       if (!this.on.dust) {
         m.img.setVisible(false);
@@ -161,7 +161,7 @@ export class Sunbeams {
   }
 
   /** The beam as two gradient trapezoids (top to the peak, peak to the floor); vertex alpha makes the fade. */
-  private draw(b: Beam, colour: number): void {
+  private draw(b: Beam, colour: number, glow: number): void {
     const { top, bottom } = b.shape;
     const at = (k: number): [Pt, Pt] => [
       [lerp(top[0][0], bottom[0][0], k), lerp(top[0][1], bottom[0][1], k)],
@@ -169,6 +169,8 @@ export class Sunbeams {
     ];
     const g = b.beam.clear();
     const band = (a: [Pt, Pt], c: [Pt, Pt], a0: number, a1: number) => {
+      a0 = Math.min(1, a0 * glow);
+      a1 = Math.min(1, a1 * glow);
       // A triangle takes its three vertex alphas from the TL, TR and BL slots, in order.
       g.fillGradientStyle(colour, colour, colour, colour, a0, a0, a1, a1);
       g.fillTriangle(a[0][0], a[0][1], a[1][0], a[1][1], c[0][0], c[0][1]);
