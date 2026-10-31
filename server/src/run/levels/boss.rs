@@ -66,6 +66,7 @@ pub fn spawn(run: &mut Run) {
         kit: crate::sheet::boss_kit(boss_id),
         cds: Default::default(),
         slam: None,
+        channel: None,
         dash: None,
         wolf_bit: 0.0,
         ai: Ai::new(pos),

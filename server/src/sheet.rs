@@ -1286,10 +1286,10 @@ mod tests {
             near(a.damage, damage, &format!("{id:?} damage"));
             near(a.push, push, &format!("{id:?} push"));
         };
-        check(&dragon, AbilityId::Bite, DRAGON_BITE_DAMAGE, DRAGON_BITE_KNOCK);
-        check(&dragon, AbilityId::Strike, 20.0, DRAGON_CLAW_KNOCK);
-        check(&dragon, AbilityId::TailWhip, 25.0, DRAGON_TAIL_KNOCK);
-        check(&dragon, AbilityId::Smash, DRAGON_SMASH_DAMAGE, DRAGON_SMASH_KNOCK);
+        check(&dragon, AbilityId::Bite, 28.0, 24.0);
+        check(&dragon, AbilityId::Strike, 20.0, 32.0);
+        check(&dragon, AbilityId::TailWhip, 25.0, 44.0);
+        check(&dragon, AbilityId::Smash, 22.0, 36.0);
         check(&demon, AbilityId::Strike, 25.0, DEMON_CLEAVE_KNOCK);
         check(&demon, AbilityId::Swoop, 30.0, DEMON_SWOOP_KNOCK);
         check(&lich, AbilityId::Nova, LICH_NOVA_DAMAGE, LICH_NOVA_KNOCK);

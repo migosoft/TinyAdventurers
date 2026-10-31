@@ -310,6 +310,7 @@ impl Run {
             kit: crate::sheet::enemy_kit(t),
             cds: Default::default(),
             slam: None,
+            channel: None,
             dash: None,
             wolf_bit: 0.0,
             ai: Ai::new(pos),
@@ -480,6 +481,9 @@ impl Run {
             }
         }
         Level::tick(self, DT);
+        for mi in 0..self.monsters.len() {
+            abilities::tick_channel(self, mi, DT);
+        }
         ai::separate_monsters(self);
         for mi in 0..self.monsters.len() {
             if self.monsters[mi].alive && !self.monsters[mi].is_boss {

@@ -24,14 +24,14 @@ pub fn default_look(id: AbilityId) -> Look {
     let look = |boom, light, tint| Look { projectile: None, boom, light, tint };
     match id {
         HolyLight => look(1, Some(LightKind::Holy), None),
-        GroundSlam => look(5, None, None),
+        GroundSlam | Smash => look(5, None, None),
         FrostNova => look(10, Some(LightKind::Magic), Some(super::abilities::NOVA_TINT)),
         WarCry => look(11, None, None),
         Haste => look(12, None, None),
         Purify => look(13, Some(LightKind::Holy), None),
         Smite => look(0, Some(LightKind::Holy), None),
         MagicMissile | Fireball | Strike | Charge | Shoot | SummonWolf | FrostShard | ChainSpark | Judgement | Hurl | Volley | Whirl | FlankingThrust | PoisonCoat | Consecrate
-        | Entangle | Bite | ShadowBolt | FireBolt | Pounce | TailWhip | FireBreath | Smash | Swoop | RingOfFire | Nova | GloomBolts | BlindingCurse | SleepMist | StoneGaze => look(0, None, None),
+        | Entangle | Bite | ShadowBolt | FireBolt | Pounce | TailWhip | FireBreath | Swoop | RingOfFire | Nova | GloomBolts | BlindingCurse | SleepMist | StoneGaze => look(0, None, None),
     }
 }
 
@@ -40,6 +40,8 @@ pub fn look(figure: EntityKind, id: AbilityId) -> Look {
     match (figure, id) {
         // The ogre's slam kicks up dust, not a hero's flash.
         (EntityKind::Ogre, AbilityId::GroundSlam) => Look { tint: Some(0x8b6b4a), ..default_look(id) },
+        // The dragon's fireball is its own ball, bursting with the boss shockwave of the old volley.
+        (EntityKind::Dragon, AbilityId::Fireball) => Look { projectile: Some(EntityKind::DragonFireball), boom: 4, ..default_look(id) },
         _ => default_look(id),
     }
 }

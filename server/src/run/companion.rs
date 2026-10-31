@@ -66,6 +66,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         kit: crate::sheet::wolf_kit(&run.players[pi].sheet.wolf),
         cds: Default::default(),
         slam: None,
+        channel: None,
         dash: None,
         wolf_bit: 0.0,
         ai: Ai::new(spot),

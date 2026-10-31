@@ -19,6 +19,7 @@ use super::effects::{Apply, Creature};
 use crate::math::{angle_diff, Vec2};
 use crate::protocol::Ev;
 use crate::sheet::ResolvedAbility;
+use rand::Rng;
 
 /// Cooldowns tick per processed input on both client and server; a small
 /// tolerance absorbs rounding differences.
@@ -275,8 +276,8 @@ fn cast(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim {
         Shape::GroundArea => use_ground_area(run, c, a, shot),
         Shape::Buff => use_buff(run, c, a, shot),
         Shape::Summon => use_summon(run, c, a, shot),
-        // No monster casts these shapes yet: the dragon's breath is Task 7, the lich's gaze Task 9.
-        Shape::Breath => unreachable!("{:?}: the Breath executor comes in Task 7", a.id),
+        Shape::Breath => use_breath(run, c, a, shot),
+        // No monster casts this shape yet: the lich's gaze is Task 9.
         Shape::Gaze => unreachable!("{:?}: the Gaze executor comes in Task 9", a.id),
     }
 }
@@ -341,12 +342,12 @@ fn use_blast(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim
     Anim::Cast
 }
 
-/// A swing of the melee weapon: Strike, Smite (a holy flash where it first hits), Whirl (all around)
-/// and Flanking Thrust (double from behind).
+/// A swing of the melee weapon: Strike, Bite, Smite (a holy flash where it first hits), Whirl (all around),
+/// Flanking Thrust (double from behind) and Tail Whip (aimed behind the caster).
 fn use_swing(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Swing);
     match a.id {
-        AbilityId::Strike | AbilityId::Bite | AbilityId::Whirl | AbilityId::FlankingThrust => {
+        AbilityId::Strike | AbilityId::Bite | AbilityId::TailWhip | AbilityId::Whirl | AbilityId::FlankingThrust => {
             melee_arc(run, c, a, false);
         }
         AbilityId::Smite => {
@@ -355,8 +356,6 @@ fn use_swing(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Ani
                 run.add_tinted_flash(look.light.expect("Smite flashes"), look.tint, at, ab::SMITE_FLASH);
             }
         }
-        // Their data is in place; the boss scripts cast them from Task 7 (dragon), 8 (demon) and 9 (lich) on.
-        AbilityId::TailWhip => unreachable!("{:?} is cast by a boss script (Task 7-9), which does not exist yet", a.id),
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze => {
             unreachable!("{:?} is not a swing", a.id)
         }
@@ -404,13 +403,87 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             Creature::Player(pi) => run.players[pi].slam = Some(a.windup),
             Creature::Monster(mi) => run.monsters[mi].slam = Some(a.windup),
         },
-        // Their data is in place; the boss scripts cast them from Task 7 (dragon), 8 (demon) and 9 (lich) on.
-        AbilityId::Smash | AbilityId::Nova => unreachable!("{:?} is cast by a boss script (Task 7-9), which does not exist yet", a.id),
+        // The dragon's landing: the weapon's blow on everything around, objects too, pushed away from the caster.
+        AbilityId::Smash => {
+            let look = looks::look(figure_of(run, c), a.id);
+            run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
+            let dmg = weapon_damage(run, c, a);
+            let aim = aim_of(run, c);
+            for oi in crate::run::objects::objects_in(run, pos, a.radius, None) {
+                crate::run::objects::hurt_object(run, oi, dmg, None);
+            }
+            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: true };
+            let log = super::rules_log::on(run);
+            let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
+            super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
+            for t in hit {
+                hurt(run, t, dmg, false, c);
+                run.knock_creature(t, pos, aim, a.push, a.push_str);
+            }
+        }
+        // Its data is in place; the lich's script casts it in Task 9.
+        AbilityId::Nova => unreachable!("{:?} is cast by a boss script (Task 9), which does not exist yet", a.id),
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze => {
             unreachable!("{:?} is not a ring", a.id)
         }
     }
     Anim::Cast
+}
+
+/// A channelled cone: Fire Breath starts its channel on the caster; `tick_channel` pulses it. Only a monster
+/// channels.
+fn use_breath(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
+    debug_assert!(ab::def(a.id).shape == Shape::Breath);
+    match a.id {
+        AbilityId::FireBreath => {
+            let Creature::Monster(mi) = c else { unreachable!("only a monster breathes fire") };
+            // The first pulse comes with the first tick.
+            run.monsters[mi].channel = Some((a.id, a.duration, 0.0));
+        }
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze => {
+            unreachable!("{:?} is not a breath", a.id)
+        }
+    }
+    Anim::Breath
+}
+
+/// Counts down monster `mi`'s channel (it ends with its time, its death or sleep). Fire Breath pulses every `BREATH_PULSE` s: its damage on every foe in
+/// the cone and every object in it (with a line of sight), and sometimes a burning patch on the ground.
+pub fn tick_channel(run: &mut Run, mi: usize, dt: f64) {
+    let Some((id, left, pulse)) = run.monsters[mi].channel else { return };
+    let (left, pulse) = (left - dt, pulse - dt);
+    if left <= 0.0 || !run.monsters[mi].alive || run.monsters[mi].effects.no_act() {
+        run.monsters[mi].channel = None;
+        return;
+    }
+    if pulse > 0.0 {
+        run.monsters[mi].channel = Some((id, left, pulse));
+        return;
+    }
+    run.monsters[mi].channel = Some((id, left, ab::BREATH_PULSE));
+    let a = *run.monsters[mi].kit.get(id).expect("a monster that channels has the ability in its kit");
+    let c = Creature::Monster(mi);
+    let (pos, aim) = (run.monsters[mi].pos, run.monsters[mi].aim);
+    let half = a.arc / 2.0;
+    let dmg = damage_of(run.monsters[mi].id, &a);
+    let rule = targets::Rule { at: pos, reach: a.range, plus_radius: false, arc: Some(targets::Arc { aim, width: a.arc, user_radius: 0.0 }), los: true, skip_hiding: false, skip_dormant: false, skip_airborne: false };
+    let log = super::rules_log::on(run);
+    let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
+    super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
+    for t in hit {
+        hurt(run, t, dmg, false, c);
+    }
+    for oi in crate::run::objects::objects_in(run, pos, a.range, Some((aim, half))) {
+        if line_of_sight(&run.layout.map, pos, run.objects[oi].pos) {
+            crate::run::objects::hurt_object(run, oi, dmg, None);
+        }
+    }
+    if run.rng.gen_bool(ab::BREATH_PATCH_CHANCE) {
+        let at = pos + Vec2::from_angle(aim + run.rng.gen_range(-half..half)) * run.rng.gen_range(ab::BREATH_PATCH_NEAREST..a.range);
+        if !run.layout.map.opaque_at(at) {
+            super::spawn_fire_patch(run, at, ab::BREATH_PATCH_RADIUS, ab::BREATH_PATCH_SECS, ab::BREATH_PATCH_DAMAGE);
+        }
+    }
 }
 
 /// Every living hero and ally (the wolf) within `radius` of `pos`, the user included.
@@ -637,12 +710,13 @@ fn use_summon(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> An
     Anim::Cast
 }
 
-/// A swing of the melee ability `a` (its reach, arc, damage, split, on-hit and power). A hit from
+/// A swing of the melee ability `a`, aimed behind the caster if it is `backward` (its reach, arc, damage, split, on-hit and power). A hit from
 /// behind its target (`a.behind`) does `BEHIND_MULT` times the damage and counts as a crit.
 /// Returns where it first hit a monster.
 fn melee_arc(run: &mut Run, c: Creature, a: &ResolvedAbility, crit: bool) -> Option<Vec2> {
     let rw = rewind_ticks(run, c);
-    let (pos, aim) = (run.creature_pos(c), aim_of(run, c));
+    let pos = run.creature_pos(c);
+    let aim = aim_of(run, c) + if ab::def(a.id).backward { std::f64::consts::PI } else { 0.0 };
     let (range, arc, dmg) = (a.range, a.arc, weapon_damage(run, c, a));
     // Flying monsters are out of reach of melee; a foe touching the caster is hit whatever the arc.
     let rule = targets::Rule { at: pos, reach: range, plus_radius: true, arc: Some(targets::Arc { aim, width: arc, user_radius: run.creature_radius(c) }), los: true, skip_hiding: false, skip_dormant: false, skip_airborne: true };
@@ -784,7 +858,8 @@ fn spawn_shot(run: &mut Run, c: Creature, a: &ResolvedAbility, kind: EntityKind,
         Creature::Player(pi) => (run.players[pi].rtt / 2.0).min(0.15),
         Creature::Monster(_) => 0.0,
     };
-    let kind = looks::look(figure_of(run, c), a.id).projectile.unwrap_or(kind);
+    let look = looks::look(figure_of(run, c), a.id);
+    let kind = look.projectile.unwrap_or(kind);
     let radius = if explode_r > 0.0 { SHELL_RADIUS } else { a.radius };
     // A point it bursts at stops it, so it outlives its range a little.
     let life = a.range / a.speed + if target.is_some() { 0.1 } else { 0.0 };
@@ -806,7 +881,7 @@ fn spawn_shot(run: &mut Run, c: Creature, a: &ResolvedAbility, kind: EntityKind,
         life: (life - ff).max(0.05),
         crit: false,
         explode_r,
-        explode_k: 0,
+        explode_k: look.boom,
         push: a.push,
         push_str: a.push_str,
         target,
@@ -1074,22 +1149,27 @@ fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
 
 #[allow(clippy::too_many_arguments)]
 /// An explosion of a shot of `side`; `push` moves the foes it hits straight away from it (px), with STR
-/// `push_str` against their weight. Hero explosions never push (for now).
+/// `push_str` against their weight, whoever shot it. It never moves a boss, an ally of the shooter's side or
+/// a mimic still hiding.
 pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src: Option<usize>, k: u8, crit: bool, push: f64, push_str: i32) {
     let heroes = side == Side::Heroes;
     // The heroes see their own explosions even out of view.
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, (!heroes).then_some(pos));
     run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
     if heroes {
-        let hits: Vec<usize> = run
+        let hits: Vec<(usize, bool)> = run
             .monsters
             .iter()
             .enumerate()
             .filter(|(_, m)| m.alive && !m.is_ally() && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos))
-            .map(|(i, _)| i)
+            .map(|(i, m)| (i, m.hiding))
             .collect();
-        for mi in hits {
+        for (mi, hiding) in hits {
             run.hurt_monster(mi, damage, crit, src);
+            // A mimic that was still hiding stays where it is (the hit wakes it); a boss is never pushed (`knock_monster`).
+            if !hiding {
+                run.knock_creature(Creature::Monster(mi), pos, 0.0, push, push_str);
+            }
         }
     } else {
         for c in run.foes_touching(pos, r, true) {
@@ -1410,6 +1490,63 @@ mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
         explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Monsters, None, 4, false, 0.0, 0);
         assert!(!run.players[0].mv.knocked(), "no knock: no push");
+    }
+
+    #[test]
+    fn a_wizards_fireball_pushes_a_light_monster() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
+        let start = run.monsters[mi].pos;
+        assert_eq!(run.monsters[mi].weight, 6.0);
+        let (p, a) = (&mut run.players[0], 0.0);
+        (p.aim, p.aim_dist) = (a, 40.0);
+        try_use(&mut run, 0, false, 1);
+        for _ in 0..60 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        assert!(run.monsters[mi].hp < 1000.0, "the blast hurts it");
+        // STR 8 against weight 6: half of the 20 px.
+        let speed = run.monsters[mi].knock.len();
+        assert!((speed - crate::collision::knock_speed(10.0, crate::run::DT)).abs() < 1e-9, "pushed 10 px: {speed}");
+        assert!(run.monsters[mi].knock.x > 0.0 || run.monsters[mi].pos.x > start.x, "away from the blast");
+    }
+
+    #[test]
+    fn a_fireball_never_pushes_a_boss_or_a_hiding_mimic() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Dragon);
+        let at = run.players[0].pos() + Vec2::new(60.0, 0.0);
+        run.monsters.retain(|m| m.is_boss);
+        let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+        run.monsters[bi].pos = at;
+        run.monsters[bi].dormant = false;
+        let id = run.spawn_enemy(EnemyType::Mimic, at + Vec2::new(10.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        // So light that only the "hiding" rule keeps it still.
+        run.monsters[mi].weight = 1.0;
+        run.monsters[mi].hiding = true;
+        let boom = |run: &mut Run| explode(run, at, 38.0, Damage::physical(5.0), Side::Heroes, Some(0), 0, false, 20.0, 30);
+        boom(&mut run);
+        assert_eq!(run.monsters[bi].knock, Vec2::ZERO, "a boss is never pushed, even by STR 30");
+        assert_eq!(run.monsters[mi].knock, Vec2::ZERO, "a mimic still hiding is not moved");
+        run.monsters[mi].hiding = false;
+        boom(&mut run);
+        assert!(run.monsters[mi].knock != Vec2::ZERO, "awake, the same blast pushes it");
+        assert_eq!(run.monsters[bi].knock, Vec2::ZERO);
+    }
+
+    #[test]
+    fn a_fireball_never_pushes_an_ally_of_its_casters_side() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(wolf).unwrap();
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        run.monsters[wi].pos = at + Vec2::new(8.0, 0.0);
+        run.monsters[wi].weight = 1.0;
+        let hp = run.monsters[wi].hp;
+        explode(&mut run, at, 38.0, Damage::physical(5.0), Side::Heroes, Some(0), 0, false, 20.0, 30);
+        assert_eq!((run.monsters[wi].knock, run.monsters[wi].hp), (Vec2::ZERO, hp), "the wolf is neither hurt nor pushed");
     }
 
     /// A player missile placed `dy` px north of the monster's feet, flying east past it.

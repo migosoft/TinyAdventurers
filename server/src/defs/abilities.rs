@@ -214,8 +214,7 @@ pub struct AbilityDef {
     pub weapon_mult: WeaponMult,
     /// The half-angle (rad) of the cone "from behind" its target in which it does more; 0 = none.
     pub behind: f64,
-    /// A swing aimed behind the caster (read from Task 8 on).
-    #[allow(dead_code)]
+    /// A swing aimed behind the caster.
     pub backward: bool,
     /// The classes whose own pool can hold it: the class start now, the tree in plan 4.
     pub classes: &'static [ClassId],
@@ -244,22 +243,18 @@ pub const SLAM_PUSH: f64 = 24.0;
 /// The wind-up (s) of the monsters' bolts, before the shot leaves (balancing).
 pub const SHADOW_BOLT_WINDUP: f64 = 0.5;
 pub const FIRE_BOLT_WINDUP: f64 = 0.35;
+/// Fireball: the push (px) of its explosion, for every caster. A boss is never pushed.
+pub const FIREBALL_PUSH: f64 = 20.0;
+/// Fire Breath's half-angle (rad): the cone reaches this far to each side of the aim.
+pub const BREATH_HALF_ARC: f64 = 0.38;
 /// Fire Breath: the seconds between pulses, and the burning patches each pulse may leave (the
 /// chance, the radius in px, the seconds they burn, the damage of a patch's pulse, and how far
 /// from the caster a patch lands at the nearest).
-/// Fire Breath's half-angle (rad): the cone reaches this far to each side of the aim.
-pub const BREATH_HALF_ARC: f64 = 0.38;
-#[allow(dead_code)] // read by the breath executor (Task 7)
 pub const BREATH_PULSE: f64 = 0.2;
-#[allow(dead_code)]
 pub const BREATH_PATCH_CHANCE: f64 = 0.5;
-#[allow(dead_code)]
 pub const BREATH_PATCH_RADIUS: f64 = 10.0;
-#[allow(dead_code)]
 pub const BREATH_PATCH_SECS: f64 = 3.0;
-#[allow(dead_code)]
 pub const BREATH_PATCH_DAMAGE: f64 = 8.0;
-#[allow(dead_code)]
 pub const BREATH_PATCH_NEAREST: f64 = 30.0;
 /// How long (s) Frost Nova's and Purify's flashes last.
 pub const NOVA_FLASH: f64 = 0.3;
@@ -304,7 +299,7 @@ const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, spee
 pub fn text(id: AbilityId) -> &'static str {
     match id {
         AbilityId::MagicMissile => "Fast arcane bolts.",
-        AbilityId::Fireball => "Explodes where it lands, hurting everything nearby.",
+        AbilityId::Fireball => "Explodes where it lands, hurting everything nearby and pushing the light ones back.",
         AbilityId::Strike => "A sweeping blow with your melee weapon.",
         AbilityId::HolyLight => "Heals you and the allies close to you.",
         AbilityId::Charge => "Dash toward the cursor, hitting everything in the way.",
@@ -369,7 +364,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
     };
     match id {
         MagicMissile => base("Magic Missile", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, own(12.0, 0.35, 220.0, 230.0, 3.0, 0.0, Some(EntityKind::Missile), 15), &[K::Wizard]),
-        Fireball => base("Fireball", Secondary, C::Spell, Uses::Nothing, true, Shape::Blast, own(45.0, 6.0, 260.0, 140.0, 38.0, 0.0, Some(EntityKind::Fireball), 15), &[K::Wizard]),
+        Fireball => base("Fireball", Secondary, C::Spell, Uses::Nothing, true, Shape::Blast, OwnStats { push: FIREBALL_PUSH, ..own(45.0, 6.0, 260.0, 140.0, 38.0, 0.0, Some(EntityKind::Fireball), 15) }, &[K::Wizard]),
         Strike => base("Strike", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[K::Paladin, K::Barbarian]),
         HolyLight => base("Holy Light", Secondary, C::Innate, Uses::Nothing, false, Shape::SelfArea, own(35.0, 10.0, 64.0, 0.0, 64.0, 0.0, None, 14), &[K::Paladin]),
         Charge => AbilityDef {

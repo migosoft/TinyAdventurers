@@ -1,4 +1,5 @@
 use crate::collision::MoveState;
+use crate::defs::abilities::AbilityId;
 use crate::defs::damage::{Damage, DamageSplit, Resistances};
 use crate::defs::effects::OnHit;
 use crate::defs::attributes::Attributes;
@@ -233,6 +234,9 @@ pub struct Monster {
     pub cds: super::abilities::Cooldowns,
     /// Ground Slam: seconds until it lands; lost when it dies, sinks, is pushed or frightened.
     pub slam: Option<f64>,
+    /// A channelled ability in progress (Fire Breath): which, the seconds left and the seconds to its next pulse.
+    /// It ends when it runs out, or when the caster dies.
+    pub channel: Option<(AbilityId, f64, f64)>,
     /// A dash in progress: it is in the air, so it is neither pushed nor sinking meanwhile.
     pub dash: Option<MonsterDash>,
     /// Seconds left of the wolf-bite mark (Pack Hunter).

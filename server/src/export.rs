@@ -67,6 +67,9 @@ fn export_defs() {
         .collect();
     // The ogre's slam telegraph: the radius and wind-up of its Ground Slam.
     let ogre_slam = *crate::sheet::enemy_kit(enemies::EnemyType::Ogre).get(ab::AbilityId::GroundSlam).expect("the ogre slams");
+    // The dragon's telegraphs: the numbers of the abilities in its kit.
+    let dragon_kit = crate::sheet::boss_kit(crate::protocol::BossId::Dragon);
+    let dragon_ability = |id: AbilityId| *dragon_kit.get(id).expect("the dragon casts it");
     let mut consts = json!({
         "TILE": TILE,
         "TICK_HZ": TICK_HZ,
@@ -83,20 +86,20 @@ fn export_defs() {
         "MIMIC_WAKE_T": enemies::MIMIC_WAKE_T,
         "OGRE_SLAM_RADIUS": ogre_slam.radius,
         "OGRE_SLAM_WINDUP": ogre_slam.windup,
-        "DRAGON_CLAW_WINDUP": bosses::DRAGON_CLAW_WINDUP,
-        "DRAGON_BITE_WINDUP": bosses::DRAGON_BITE_WINDUP,
-        "DRAGON_BITE_RANGE": bosses::DRAGON_BITE_RANGE,
-        "DRAGON_BITE_KNOCK": bosses::DRAGON_BITE_KNOCK,
-        "DRAGON_TAIL_WINDUP": bosses::DRAGON_TAIL_WINDUP,
-        "DRAGON_BREATH_WINDUP": bosses::DRAGON_BREATH_WINDUP,
-        "DRAGON_BREATH_TIME": bosses::DRAGON_BREATH_TIME,
+        "DRAGON_CLAW_WINDUP": dragon_ability(AbilityId::Strike).windup,
+        "DRAGON_BITE_WINDUP": dragon_ability(AbilityId::Bite).windup,
+        "DRAGON_BITE_RANGE": dragon_ability(AbilityId::Bite).range,
+        "DRAGON_BITE_KNOCK": dragon_ability(AbilityId::Bite).push,
+        "DRAGON_TAIL_WINDUP": dragon_ability(AbilityId::TailWhip).windup,
+        "DRAGON_BREATH_WINDUP": dragon_ability(AbilityId::FireBreath).windup,
+        "DRAGON_BREATH_TIME": dragon_ability(AbilityId::FireBreath).duration,
         "DRAGON_TAKEOFF": bosses::DRAGON_TAKEOFF,
         "DRAGON_LAND": bosses::DRAGON_LAND,
-        "DRAGON_SMASH_RADIUS": bosses::DRAGON_SMASH_RADIUS,
-        "DRAGON_SMASH_KNOCK": bosses::DRAGON_SMASH_KNOCK,
-        "DRAGON_CLAW_KNOCK": bosses::DRAGON_CLAW_KNOCK,
-        "DRAGON_TAIL_KNOCK": bosses::DRAGON_TAIL_KNOCK,
-        "DRAGON_FIREBALL_KNOCK": bosses::DRAGON_FIREBALL_KNOCK,
+        "DRAGON_SMASH_RADIUS": dragon_ability(AbilityId::Smash).radius,
+        "DRAGON_SMASH_KNOCK": dragon_ability(AbilityId::Smash).push,
+        "DRAGON_CLAW_KNOCK": dragon_ability(AbilityId::Strike).push,
+        "DRAGON_TAIL_KNOCK": dragon_ability(AbilityId::TailWhip).push,
+        "DRAGON_FIREBALL_KNOCK": dragon_ability(AbilityId::Fireball).push,
         "LICH_NOVA_RADIUS": bosses::LICH_NOVA_RADIUS,
         "LICH_NOVA_WINDUP": bosses::LICH_NOVA_WINDUP,
         "LICH_NOVA_KNOCK": bosses::LICH_NOVA_KNOCK,

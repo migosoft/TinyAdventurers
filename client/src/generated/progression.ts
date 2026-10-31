@@ -2177,7 +2177,7 @@ export const ABILITY_INFO = {
   "Fireball": {
     "category": "Spell",
     "req": [],
-    "text": "Explodes where it lands, hurting everything nearby.",
+    "text": "Explodes where it lands, hurting everything nearby and pushing the light ones back.",
     "tint": "Heat",
     "uses": "Nothing"
   },
