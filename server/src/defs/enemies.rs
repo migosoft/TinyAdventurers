@@ -67,7 +67,7 @@ pub struct EnemyDef {
     pub weight: f64,
     /// Vision (tiles); overrides the race's. Enemies only notice players inside it with line of sight.
     pub vision: f64,
-    /// The abilities it casts: the main one first, then the alt (own cooldown). The alt is used when
+    /// The abilities it uses: the main one first, then the alt (own cooldown). The alt is used when
     /// the target is in reach for a melee one, from afar for a bolt (imps claw, chorts throw fire bolts).
     pub abilities: &'static [AbilityId],
     /// What the abilities use: the melee weapon (else the race's natural one), then the bow.
@@ -493,7 +493,7 @@ mod kit_pins {
 
     /// Each enemy's kit as the resolver gives it today, recorded with the move to shared abilities (#177):
     /// Strike and Bite reach is the weapon's reach plus the body (the old range plus 4), shots fly their
-    /// range, the bolts' numbers are Fire Bolt's and Shadow Bolt's at the caster's Attribute.
+    /// range, the bolts' numbers are Fire Bolt's and Shadow Bolt's at the user's Attribute.
     #[test]
     fn enemy_kits_are_pinned() {
         use AbilityId::*;

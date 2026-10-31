@@ -342,7 +342,7 @@ mod tests {
         run.monsters[mi].wolf_bit = 2.0;
         let at = run.monsters[mi].pos;
         run.monsters[wi].pos = at - Vec2::new(10.0, 0.0);
-        assert!(crate::run::abilities::monster_cast(&mut run, wi, AbilityId::Bite, at));
+        assert!(crate::run::abilities::monster_use(&mut run, wi, AbilityId::Bite, at));
         let h = run.last_hit.unwrap();
         assert_eq!((h.why.what, h.amount), (What::Ability(AbilityId::Bite), 10.0));
         assert!(h.why.mults.iter().all(|m| m.is_none()));

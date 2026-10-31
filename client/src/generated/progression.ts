@@ -2331,7 +2331,7 @@ export const ABILITY_INFO = {
   "Smash": {
     "category": "Technique",
     "req": [],
-    "text": "A blow all around the caster that pushes everything away.",
+    "text": "A blow all around the user that pushes everything away.",
     "tint": "Physical",
     "uses": "Melee"
   },
@@ -2378,7 +2378,7 @@ export const ABILITY_INFO = {
     "req": [
       "a weapon of kind Tail"
     ],
-    "text": "A lash of the tail behind the caster.",
+    "text": "A lash of the tail behind the user.",
     "tint": "Physical",
     "uses": "Melee"
   },

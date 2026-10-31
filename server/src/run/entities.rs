@@ -212,7 +212,7 @@ pub struct Monster {
     pub id: u32,
     /// Resistances (races plus adjustments) and the split of its melee hits.
     pub res: Resistances,
-    #[allow(dead_code)] // no reader since the demon casts its Strike; the weapon's split is used
+    #[allow(dead_code)] // no reader since the demon uses its Strike; the weapon's split is used
     pub melee: DamageSplit,
     /// None for bosses (driven by their BossBehaviour).
     pub etype: Option<EnemyType>,
@@ -225,18 +225,18 @@ pub struct Monster {
     pub sight: Sight,
     pub alive: bool,
     pub aim: f64,
-    /// How far it aims an aimed ability (blasts and ground areas land there), set by `monster_cast`.
+    /// How far it aims an aimed ability (blasts and ground areas land there), set by `monster_use`.
     pub aim_dist: f64,
     pub anim: Anim,
     pub anim_start: f64,
     pub hurt_t: f64,
-    /// The abilities it casts, resolved at spawn (empty for bosses), and their cooldowns.
+    /// The abilities it uses, resolved at spawn (empty for bosses), and their cooldowns.
     pub kit: crate::sheet::Kit,
     pub cds: super::abilities::Cooldowns,
     /// Ground Slam: seconds until it lands; lost when it dies, sinks, is pushed or frightened.
     pub slam: Option<f64>,
     /// A channelled ability in progress (Fire Breath): which, the seconds left and the seconds to its next pulse.
-    /// It ends when it runs out, or when the caster dies.
+    /// It ends when it runs out, or when the user dies.
     pub channel: Option<(AbilityId, f64, f64)>,
     /// A dash in progress: it is in the air, so it is neither pushed nor sinking meanwhile.
     pub dash: Option<MonsterDash>,
@@ -328,8 +328,8 @@ pub struct Projectile {
     /// Explosion radius on impact (0 = none) and its effect kind.
     pub explode_r: f64,
     pub explode_k: u8,
-    /// Push (px) of the explosion on the foes it hits, and the STR it pushes with: the caster's, taken at
-    /// spawn so a shot that outlives its caster still pushes.
+    /// Push (px) of the explosion on the foes it hits, and the STR it pushes with: the user's, taken at
+    /// spawn so a shot that outlives its user still pushes.
     pub push: f64,
     pub push_str: i32,
     /// Explode when reaching this point (fireball at cursor).

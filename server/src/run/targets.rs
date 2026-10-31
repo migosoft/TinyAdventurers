@@ -7,7 +7,7 @@ use crate::collision::line_of_sight;
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::math::{angle_diff, Vec2};
 
-/// Which team a caster fights for. A hero or an ally (the wolf) is `Heroes`; every other monster is `Monsters`.
+/// Which team a user fights for. A hero or an ally (the wolf) is `Heroes`; every other monster is `Monsters`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     Heroes,
@@ -48,7 +48,7 @@ pub struct Arc {
 }
 
 #[derive(Clone, Copy)]
-/// What an ability needs of a creature. One that is dead, on the caster's side, already hit or out of reach is
+/// What an ability needs of a creature. One that is dead, on the user's side, already hit or out of reach is
 /// never a target; the other filters are switched on by the rule.
 pub struct Rule {
     /// Where the ability reaches from.
@@ -65,10 +65,10 @@ pub struct Rule {
     pub skip_airborne: bool,
 }
 
-/// Is `c`, standing at `pos`, a target of `rule` for a caster of `side`? `hit` are those already hit. The
+/// Is `c`, standing at `pos`, a target of `rule` for a user of `side`? `hit` are those already hit. The
 /// checks are a plain conjunction; the line of sight, which costs most, comes last.
 pub fn check(run: &Run, side: Side, c: Creature, pos: Vec2, rule: &Rule, hit: &[Creature]) -> Result<(), Skip> {
-    // `ally`: on the caster's own side, so never a foe.
+    // `ally`: on the user's own side, so never a foe.
     let (alive, radius, ally, hiding, dormant, airborne) = match c {
         Creature::Player(i) => (run.players[i].alive, PLAYER_RADIUS, side == Side::Heroes, false, false, false),
         Creature::Monster(i) => {
@@ -112,7 +112,7 @@ pub fn check(run: &Run, side: Side, c: Creature, pos: Vec2, rule: &Rule, hit: &[
     Ok(())
 }
 
-/// Who a caster of `side` may look at: the monsters (the heroes' side also meets its own allies here, to
+/// Who a user of `side` may look at: the monsters (the heroes' side also meets its own allies here, to
 /// tell why they are passed over), or, for the monsters, the heroes and then the allies. Monsters first
 /// by index for the heroes' side, as before.
 fn candidates(run: &Run, side: Side) -> Vec<Creature> {

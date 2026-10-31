@@ -56,17 +56,17 @@ pub(crate) fn target(run: &Run, bi: usize) -> Option<(usize, Vec2, f64)> {
     })
 }
 
-/// A point straight ahead of boss `bi`: a cast "at" it keeps the aim.
+/// A point straight ahead of boss `bi`: a use "at" it keeps the aim.
 pub(crate) fn ahead(run: &Run, bi: usize) -> Vec2 {
     let m = &run.monsters[bi];
     m.pos + Vec2::from_angle(m.aim) * 30.0
 }
 
-/// Boss `bi` casts `id` at `at`; the animation its wind-up began with plays on (the script sets the pose, the
-/// cast only does the effect).
-pub(crate) fn cast_in_pose(run: &mut Run, bi: usize, id: crate::defs::abilities::AbilityId, at: Vec2) {
+/// Boss `bi` uses `id` at `at`; the animation its wind-up began with plays on (the script sets the pose, the
+/// use only does the effect).
+pub(crate) fn use_in_pose(run: &mut Run, bi: usize, id: crate::defs::abilities::AbilityId, at: Vec2) {
     let (anim, since) = (run.monsters[bi].anim, run.monsters[bi].anim_start);
-    super::abilities::monster_cast(run, bi, id, at);
+    super::abilities::monster_use(run, bi, id, at);
     run.monsters[bi].anim = anim;
     run.monsters[bi].anim_start = since;
 }

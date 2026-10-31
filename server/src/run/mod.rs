@@ -1336,17 +1336,17 @@ pub mod tests {
         test_run_with(&with, boss)
     }
 
-    /// A real shot for a test: an enemy of `etype` spawns at `from` and casts `id` toward `to` through
-    /// `monster_cast`. If its kit lacks `id`, the kit is replaced by a kit of just `id` (made from its
+    /// A real shot for a test: an enemy of `etype` spawns at `from` and uses `id` toward `to` through
+    /// `monster_use`. If its kit lacks `id`, the kit is replaced by a kit of just `id` (made from its
     /// Attributes: a spell needs no weapon). It stays dormant afterwards, so it does nothing more. Returns its id.
-    pub fn enemy_cast(run: &mut Run, etype: EnemyType, from: Vec2, id: AbilityId, to: Vec2) -> u32 {
+    pub fn enemy_use(run: &mut Run, etype: EnemyType, from: Vec2, id: AbilityId, to: Vec2) -> u32 {
         let owner = run.spawn_enemy(etype, from, None);
         let mi = run.monster_idx(owner).unwrap();
         if run.monsters[mi].kit.get(id).is_none() {
             let m = &run.monsters[mi];
             run.monsters[mi].kit = crate::sheet::monster_kit(&[id], &m.attrs, &[], crate::sheet::Body { radius: m.radius });
         }
-        assert!(abilities::monster_cast(run, mi, id, to), "{id:?} is cast");
+        assert!(abilities::monster_use(run, mi, id, to), "{id:?} is used");
         run.monsters[mi].dormant = true;
         owner
     }

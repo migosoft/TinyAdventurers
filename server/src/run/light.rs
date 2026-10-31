@@ -374,7 +374,7 @@ mod tests {
     use crate::protocol::{BossId, ClassId};
     use crate::defs::abilities::AbilityId;
     use crate::defs::enemies::EnemyType;
-    use crate::run::tests::{enemy_cast, test_run};
+    use crate::run::tests::{enemy_use, test_run};
 
     /// An open 15x9 floor patch around the hero, no lights at all.
     fn dark_run() -> (Run, i32, i32) {
@@ -516,8 +516,8 @@ mod tests {
         let (mut run, tx, ty) = dark_run();
         let from = at(tx - 6, ty);
         let to = from + Vec2::new(100.0, 0.0);
-        enemy_cast(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, to);
-        enemy_cast(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, to);
+        enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, to);
+        enemy_use(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, to);
         assert_eq!(run.moving_lights().len(), 1);
         assert_eq!(run.moving_lights()[0].kind, LightKind::Fire);
         assert!(run.is_lit(from));
@@ -528,7 +528,7 @@ mod tests {
         let (mut run, tx, ty) = dark_run();
         run.layout.map.set(tx + 1, ty, Tile::Wall);
         let from = at(tx, ty);
-        enemy_cast(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(100.0, 0.0));
+        enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(100.0, 0.0));
         run.step();
         run.step();
         assert!(run.lights.sources.iter().all(|s| !matches!(s.anchor, Anchor::Entity(_))));
@@ -599,7 +599,7 @@ mod tests {
         // Three tiles from where the shot meets the wall: dark before and after the flash.
         let near = at(tx + 4, ty + 3);
         assert!(!run.is_lit(near));
-        enemy_cast(&mut run, EnemyType::Imp, at(tx + 3, ty), AbilityId::Fireball, at(tx + 7, ty));
+        enemy_use(&mut run, EnemyType::Imp, at(tx + 3, ty), AbilityId::Fireball, at(tx + 7, ty));
         let mut n = 0;
         while !run.projectiles.is_empty() {
             run.step();

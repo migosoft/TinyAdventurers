@@ -1,18 +1,18 @@
-//! Red dragon: it casts the abilities of its kit and decides which, when and where to aim. Strike with its
+//! Red dragon: it uses the abilities of its kit and decides which, when and where to aim. Strike with its
 //! claws, Bite straight ahead, Tail Whip against heroes behind it, Fire Breath, Fireball and, on landing,
 //! Smash. Every 10-12 s it takes off and hovers after the party: melee cannot reach it then, and its
 //! only attack is the breath. The numbers (damage, reach, push, wind-up, cooldown) are the kit's.
 //!
 //! An attack's animation starts with its wind-up (the client shows the wind-up pose, then the strike); the
-//! script waits the ability's own wind-up (`kit.get(id).windup`) and casts it when that ends.
+//! script waits the ability's own wind-up (`kit.get(id).windup`) and uses it when that ends.
 
-use super::{ahead, boss_idx, cast_in_pose, set_anim, target, BossBehaviour};
+use super::{ahead, boss_idx, use_in_pose, set_anim, target, BossBehaviour};
 use crate::defs::abilities::AbilityId;
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::bosses::*;
 use crate::defs::kinds::Anim;
 use crate::math::angle_diff;
-use crate::run::abilities::monster_cast;
+use crate::run::abilities::monster_use;
 use crate::run::ai::path_toward;
 use crate::run::Run;
 use rand::Rng;
@@ -43,7 +43,7 @@ pub struct Dragon {
     flight: Flight,
     action: Option<(Action, f64)>,
     /// Seconds before the script may first choose each ability: when it opens, not how an ability works. It
-    /// only gates the script's decision; the kit's cooldowns (`cds`) are the casts' alone.
+    /// only gates the script's decision; the kit's cooldowns (`cds`) are the uses' alone.
     opening: Vec<(AbilityId, f64)>,
 }
 
@@ -53,7 +53,7 @@ impl Default for Dragon {
     }
 }
 
-/// How long (s) after the fight starts each ability may first be cast: the dragon does not open with all of
+/// How long (s) after the fight starts each ability may first be used: the dragon does not open with all of
 /// them at once.
 const OPENING: [(AbilityId, f64); 5] = [(AbilityId::FireBreath, 3.0), (AbilityId::TailWhip, 2.0), (AbilityId::Strike, 1.5), (AbilityId::Bite, 2.0), (AbilityId::Fireball, 6.0)];
 /// Strike frames after the hit (s): claw and bite, tail whip, fireball.
@@ -121,7 +121,7 @@ impl Dragon {
             Flight::Land => {
                 if self.flight_t <= 0.0 {
                     let at = ahead(run, bi);
-                    monster_cast(run, bi, AbilityId::Smash, at);
+                    monster_use(run, bi, AbilityId::Smash, at);
                     run.monsters[bi].airborne = false;
                     self.flight = Flight::Ground;
                     self.flight_t = run.rng.gen_range(DRAGON_FLIGHT_EVERY.0..DRAGON_FLIGHT_EVERY.1);
@@ -158,28 +158,28 @@ impl BossBehaviour for Dragon {
             }
             self.action = None;
             match action {
-                // The Breath animation already runs since the wind-up began; the cast starts the channel.
+                // The Breath animation already runs since the wind-up began; the use starts the channel.
                 Action::BreathWindup => {
                     let at = ahead(run, bi);
-                    monster_cast(run, bi, AbilityId::FireBreath, at);
+                    monster_use(run, bi, AbilityId::FireBreath, at);
                     self.action = Some((Action::Breath, kit(run, bi, AbilityId::FireBreath).duration));
                 }
                 Action::Breath | Action::Recover => set_anim(run, bi, Anim::Idle),
                 Action::Tail => {
-                    cast_in_pose(run, bi, AbilityId::TailWhip, ahead(run, bi));
+                    use_in_pose(run, bi, AbilityId::TailWhip, ahead(run, bi));
                     self.action = Some((Action::Recover, RECOVER_TAIL));
                 }
                 Action::Claw => {
-                    cast_in_pose(run, bi, AbilityId::Strike, ahead(run, bi));
+                    use_in_pose(run, bi, AbilityId::Strike, ahead(run, bi));
                     self.action = Some((Action::Recover, RECOVER_CLAW));
                 }
                 Action::Bite => {
-                    cast_in_pose(run, bi, AbilityId::Bite, ahead(run, bi));
+                    use_in_pose(run, bi, AbilityId::Bite, ahead(run, bi));
                     self.action = Some((Action::Recover, RECOVER_CLAW));
                 }
                 Action::Fireball => {
                     let at = target(run, bi).map_or_else(|| ahead(run, bi), |(_, ppos, _)| ppos);
-                    monster_cast(run, bi, AbilityId::Fireball, at);
+                    monster_use(run, bi, AbilityId::Fireball, at);
                     self.action = Some((Action::Recover, RECOVER_FIREBALL));
                 }
             }
@@ -315,7 +315,7 @@ mod tests {
         let (mut run, _, bi) = dragon_with_ready(&[Vec2::new(46.0, 0.0), Vec2::new(47.0, 0.0)], &[AbilityId::Bite]);
         let hp: Vec<f64> = run.players.iter().map(|p| p.hp).collect();
         let at = ahead(&run, bi);
-        assert!(monster_cast(&mut run, bi, AbilityId::Bite, at));
+        assert!(monster_use(&mut run, bi, AbilityId::Bite, at));
         assert!(run.players[0].hp < hp[0] && run.players[1].hp == hp[1], "reaches 46, not 47");
     }
 
@@ -436,7 +436,7 @@ mod tests {
             run.players[0].res = res;
             let hp = run.players[0].hp;
             let at = ahead(&run, bi);
-            assert!(monster_cast(&mut run, bi, AbilityId::FireBreath, at));
+            assert!(monster_use(&mut run, bi, AbilityId::FireBreath, at));
             tick_channel(&mut run, bi, DT);
             hp - run.players[0].hp
         };
@@ -456,7 +456,7 @@ mod tests {
         ticks(&mut run, &mut d, w - 3.0 * DT);
         assert_eq!(run.players[0].hp, hp[0], "nothing burns during the wind-up");
         assert!(run.monsters[bi].channel.is_none());
-        // The cast starts the channel; the run ticks it each step, as `Run::step` does.
+        // The use starts the channel; the run ticks it each step, as `Run::step` does.
         let mut steps = 0;
         let step = |run: &mut Run, d: &mut Dragon| {
             d.tick(run, DT);
@@ -498,7 +498,7 @@ mod tests {
     /// The dragon breathes once at its aim, and the first pulse lands.
     fn breathe_once(run: &mut Run, bi: usize) {
         let at = ahead(run, bi);
-        assert!(monster_cast(run, bi, AbilityId::FireBreath, at));
+        assert!(monster_use(run, bi, AbilityId::FireBreath, at));
         tick_channel(run, bi, DT);
     }
 
@@ -523,7 +523,7 @@ mod tests {
         let (mut run, _, bi) = dragon_with(&[Vec2::new(0.0, 60.0)]);
         let oi = barrel_near(&mut run, bi, Vec2::new(-20.0, 0.0));
         let at = ahead(&run, bi);
-        assert!(monster_cast(&mut run, bi, AbilityId::Smash, at));
+        assert!(monster_use(&mut run, bi, AbilityId::Smash, at));
         assert!(barrel_lit(&run, oi), "the smash");
 
         let (mut run, mut d, bi) = dragon_with(&[Vec2::new(0.0, 60.0)]);
@@ -539,7 +539,7 @@ mod tests {
         let (mut run, _, bi) = dragon_with(&[Vec2::new(radius + 8.0, 0.0)]);
         let hp = run.players[0].hp;
         let at = ahead(&run, bi);
-        assert!(monster_cast(&mut run, bi, AbilityId::Smash, at));
+        assert!(monster_use(&mut run, bi, AbilityId::Smash, at));
         assert_eq!(run.players[0].hp, hp);
         assert!(!run.players[0].mv.knocked());
     }

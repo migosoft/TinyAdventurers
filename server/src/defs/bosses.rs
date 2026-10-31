@@ -18,7 +18,7 @@ pub struct BossDef {
     pub attrs: Attributes,
     /// Never pushed.
     pub weight: f64,
-    /// The abilities it casts, as the scripts choose them.
+    /// The abilities it uses, as the scripts choose them.
     pub abilities: &'static [AbilityId],
     /// What the abilities use: the first melee weapon is the one Strike and Smash take.
     pub weapons: &'static [ItemId],
@@ -48,7 +48,7 @@ pub const LICH_NOVA_EXTRA_WAIT: f64 = 2.0;
 pub const LICH_SKELETONS: usize = 5;
 pub const LICH_ARCHERS: usize = 5;
 
-/// Flight (s), shared with the client: lifting off, hovering after the party, landing (the landing casts
+/// Flight (s), shared with the client: lifting off, hovering after the party, landing (the landing uses
 /// Smash). The dragon's attacks are its kit's abilities: their numbers come from there.
 pub const DRAGON_TAKEOFF: f64 = 0.5;
 pub const DRAGON_FLIGHT: f64 = 3.5;

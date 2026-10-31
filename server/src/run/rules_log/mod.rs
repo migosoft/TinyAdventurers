@@ -312,7 +312,7 @@ pub fn death(run: &mut Run, f: DeathFacts) {
     }
 }
 
-/// Ability `what` of caster `by` passed over monsters: one record each, for the reasons worth telling.
+/// Ability `what` of user `by` passed over monsters: one record each, for the reasons worth telling.
 /// `chain_stop` is the nearest monster a Chain Spark stopped short of, and how far it was.
 pub fn skipped(run: &mut Run, by: u32, what: What, skips: &[(Creature, Skip)], chain_stop: Option<(Creature, f64)>) {
     if !on(run) {

@@ -1,7 +1,7 @@
 //! Enemy AI: perception (sight radius + line of sight), chase/attack,
 //! search last known position, return home, and A* pathfinding.
 
-use super::abilities::{monster_cast, tick_monster_slam};
+use super::abilities::{monster_use, tick_monster_slam};
 use super::effects::Creature;
 use super::entities::{AiState, Target, Windup};
 use super::Run;
@@ -311,7 +311,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                 };
                 if usable && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {
                     if ab::def(alt_id).shape == Shape::Ring {
-                        // The slam's own wind-up runs in `monster_cast`.
+                        // The slam's own wind-up runs in `monster_use`.
                         set_anim(run, mi, Anim::Slam);
                         perform_attack(run, mi, foe, true, None);
                     } else {
@@ -461,16 +461,16 @@ pub(crate) const SWING_SLACK: f64 = 4.0;
 /// the AI is never faster than the ability.
 const SHOT_PACE_JITTER: f64 = 0.3;
 
-/// Casts the enemy's main ability, or its alt one (`alt`) with its own cooldown, at the foe (or at `at`,
+/// Uses the enemy's main ability, or its alt one (`alt`) with its own cooldown, at the foe (or at `at`,
 /// a barrel). Either one also keeps the other back for a moment, so they never land at once.
 pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool, at: Option<Vec2>) {
     let etype = run.monsters[mi].etype.expect("only enemies attack through the AI");
     let id = enemies::def(etype).abilities[alt as usize];
     let target = at.unwrap_or_else(|| run.creature_pos(foe));
-    if !monster_cast(run, mi, id, target) {
+    if !monster_use(run, mi, id, target) {
         return;
     }
-    let a = *run.monsters[mi].kit.get(id).expect("monster_cast found it");
+    let a = *run.monsters[mi].kit.get(id).expect("monster_use found it");
     let pace = if ab::def(id).shape == Shape::Projectile { a.cooldown * (1.0 + run.rng.gen_range(0.0..SHOT_PACE_JITTER)) } else { a.cooldown };
     let ai = &mut run.monsters[mi].ai;
     if alt {
@@ -834,7 +834,7 @@ pub(crate) mod tests {
     fn ogre_slams_a_crowd_and_clubs_a_lone_hero() {
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0), Vec2::new(-16.0, 8.0)]);
         tick_monster(&mut run, mi, 1.0 / 60.0);
-        assert!(run.monsters[mi].slam.is_some() && run.monsters[mi].ai.windup.is_none(), "two heroes near: slam (its wind-up runs in the cast)");
+        assert!(run.monsters[mi].slam.is_some() && run.monsters[mi].ai.windup.is_none(), "two heroes near: slam (its wind-up runs in the use)");
         assert_eq!(run.monsters[mi].anim, Anim::Slam, "the slam has its own telegraph");
 
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0)]);
@@ -881,7 +881,7 @@ pub(crate) mod tests {
             tick_monster_slam(&mut run, mi, crate::run::DT);
         }
         let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
-        assert_eq!(lit, vec![false, false], "a slam hits no objects, whoever casts it (the club's swing does)");
+        assert_eq!(lit, vec![false, false], "a slam hits no objects, whoever uses it (the club's swing does)");
     }
 
     #[test]
@@ -1059,7 +1059,7 @@ pub(crate) mod tests {
         assert_eq!(run.monsters[mi].ai.target, None, "dark: not seen");
         // A fire shot (moving light) beside the hero lights them within this very step.
         let from = ppos + Vec2::new(TILE, 0.0);
-        crate::run::tests::enemy_cast(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(0.0, 100.0));
+        crate::run::tests::enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(0.0, 100.0));
         run.step();
         assert_eq!(run.monsters[mi].ai.target, Some(Target::Player(run.players[0].id)));
     }

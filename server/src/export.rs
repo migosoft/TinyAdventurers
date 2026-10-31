@@ -69,9 +69,9 @@ fn export_defs() {
     let ogre_slam = *crate::sheet::enemy_kit(enemies::EnemyType::Ogre).get(ab::AbilityId::GroundSlam).expect("the ogre slams");
     // The dragon's telegraphs: the numbers of the abilities in its kit.
     let dragon_kit = crate::sheet::boss_kit(crate::protocol::BossId::Dragon);
-    let dragon_ability = |id: AbilityId| *dragon_kit.get(id).expect("the dragon casts it");
+    let dragon_ability = |id: AbilityId| *dragon_kit.get(id).expect("the dragon uses it");
     let demon_kit = crate::sheet::boss_kit(crate::protocol::BossId::Demon);
-    let demon_ability = |id: AbilityId| *demon_kit.get(id).expect("the demon casts it");
+    let demon_ability = |id: AbilityId| *demon_kit.get(id).expect("the demon uses it");
     let lich_kit = crate::sheet::boss_kit(crate::protocol::BossId::Lich);
     let lich_ability = |id: AbilityId| *lich_kit.get(id).expect("the lich casts it");
     let mut consts = json!({

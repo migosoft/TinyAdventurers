@@ -1,4 +1,4 @@
-//! How an ability looks when a figure casts it: the projectile, the burst, the flash. A look never
+//! How an ability looks when a figure uses it: the projectile, the burst, the flash. A look never
 //! changes a number: the rules read the ability's numbers and only the spawn and event code reads a
 //! `Look`. An ability has one look for every figure unless the table below says otherwise.
 
@@ -37,7 +37,7 @@ pub fn default_look(id: AbilityId) -> Look {
     }
 }
 
-/// The look of `id` when `figure` casts it.
+/// The look of `id` when `figure` uses it.
 pub fn look(figure: EntityKind, id: AbilityId) -> Look {
     match (figure, id) {
         // The ogre's slam kicks up dust, not a hero's flash.

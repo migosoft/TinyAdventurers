@@ -1,9 +1,9 @@
-//! Horned red demon: it casts the abilities of its kit and decides which, when and where to aim. Strike
+//! Horned red demon: it uses the abilities of its kit and decides which, when and where to aim. Strike
 //! with its claws (the cleave), Swoop (a charge on foot) and Ring of Fire. The numbers (damage, reach, push,
 //! wind-up, cooldown) are the kit's. Each attack's animation starts with its wind-up and runs on through a
 //! short recovery, so the client plays wind-up, strike and recovery frames.
 
-use super::{ahead, boss_idx, cast_in_pose, set_anim, target, BossBehaviour};
+use super::{ahead, boss_idx, use_in_pose, set_anim, target, BossBehaviour};
 use crate::defs::abilities::AbilityId;
 use crate::defs::bosses::{DEMON_CLEAVE_RECOVER, DEMON_RING_RECOVER, DEMON_SWOOP_RECOVER};
 use crate::defs::classes::PLAYER_RADIUS;
@@ -28,7 +28,7 @@ pub struct Demon {
     action: Option<(Action, f64)>,
     swoop_dir: Vec2,
     /// Seconds before the script may first choose each ability: when it opens, not how an ability works. It
-    /// only gates the script's decision; the kit's cooldowns (`cds`) are the casts' alone.
+    /// only gates the script's decision; the kit's cooldowns (`cds`) are the uses' alone.
     opening: Vec<(AbilityId, f64)>,
 }
 
@@ -38,7 +38,7 @@ impl Default for Demon {
     }
 }
 
-/// How long (s) after the fight starts each ability may first be cast.
+/// How long (s) after the fight starts each ability may first be used.
 const OPENING: [(AbilityId, f64); 3] = [(AbilityId::Strike, 1.0), (AbilityId::Swoop, 4.0), (AbilityId::RingOfFire, 7.0)];
 /// How far (px, centre distance) a hero must be for the swoop to start.
 const SWOOP_FROM: f64 = 50.0;
@@ -86,15 +86,15 @@ impl BossBehaviour for Demon {
             self.action = None;
             match action {
                 Action::Cleave => {
-                    cast_in_pose(run, bi, AbilityId::Strike, ahead(run, bi));
+                    use_in_pose(run, bi, AbilityId::Strike, ahead(run, bi));
                     self.action = Some((Action::Recover, DEMON_CLEAVE_RECOVER));
                 }
                 Action::SwoopWindup => {
-                    cast_in_pose(run, bi, AbilityId::Swoop, pos + self.swoop_dir * 30.0);
+                    use_in_pose(run, bi, AbilityId::Swoop, pos + self.swoop_dir * 30.0);
                     self.action = Some((Action::Swoop, 0.0));
                 }
                 Action::Ring => {
-                    cast_in_pose(run, bi, AbilityId::RingOfFire, ahead(run, bi));
+                    use_in_pose(run, bi, AbilityId::RingOfFire, ahead(run, bi));
                     self.action = Some((Action::Recover, DEMON_RING_RECOVER));
                 }
                 Action::Swoop => {}
@@ -236,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn the_ring_of_fire_bursts_at_the_end_of_its_cast_wind_up() {
+    fn the_ring_of_fire_bursts_at_the_end_of_its_use_wind_up() {
         let (mut run, mut d, bi) = demon_with(Vec2::new(60.0, 0.0), &[AbilityId::RingOfFire]);
         let orbs = |run: &Run| run.projectiles.iter().filter(|p| p.kind == EntityKind::FireOrb).count();
         d.tick(&mut run, DT);

@@ -1,6 +1,6 @@
 //! The Elven Ranger's wolf: an ally monster. Spawn, behaviour and death here.
 
-use super::abilities::{monster_cast, monster_dash_secs, tick_monster_dash};
+use super::abilities::{monster_use, monster_dash_secs, tick_monster_dash};
 use super::entities::{Ai, Ally, Monster, MonsterDash, Windup, HISTORY_LEN};
 use super::{ai, perception, Run};
 use crate::collision::{line_of_sight, walk_line};
@@ -220,11 +220,11 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
                 let (pos, d) = (run.monsters[mi].pos, run.monsters[mi].pos.dist(at));
                 let dir = (at - pos).norm();
                 if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
-                    monster_cast(run, mi, AbilityId::Pounce, at);
+                    monster_use(run, mi, AbilityId::Pounce, at);
                     return;
                 }
             } else {
-                monster_cast(run, mi, AbilityId::Bite, at);
+                monster_use(run, mi, AbilityId::Bite, at);
             }
         }
         // A bite that missed its prey swings on; a pounce cancelled (unsafe landing, prey gone) just stops.
@@ -250,7 +250,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             let dir = (epos - pos).norm();
             // Never a jump to its death: the pounce must end on walkable ground.
             if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
-                // It winds up first, like any cast; the leap itself starts when that is over (step 4).
+                // It winds up first, like any use; the leap itself starts when that is over (step 4).
                 run.monsters[mi].ai.windup = Some(Windup { t: pounce.windup, aim, alt: true, at: None });
                 run.monsters[mi].ai.path.clear();
                 set_anim(run, mi, Anim::Windup);
@@ -787,7 +787,7 @@ mod tests {
         let at = run.players[0].pos() + Vec2::new(6.0 * crate::dungeon::TILE, 0.0);
         run.monsters[mi].pos = at;
         let from = at - Vec2::new(30.0, 0.0);
-        crate::run::tests::enemy_cast(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, at);
+        crate::run::tests::enemy_use(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, at);
         let arrow = run.projectiles.last().unwrap().damage.amount;
         for _ in 0..40 {
             tick_projectiles(&mut run, DT);
@@ -994,9 +994,9 @@ mod tests {
         move_ranger(&mut run, w + Vec2::new(8.0, 0.0));
         let hp = run.players[0].hp;
         let at = run.monsters[oi].pos;
-        assert!(monster_cast(&mut run, wi, AbilityId::Bite, at));
+        assert!(monster_use(&mut run, wi, AbilityId::Bite, at));
         assert!(run.monsters[oi].hp < run.monsters[oi].max_hp, "the bite hurt the orc");
-        assert!(monster_cast(&mut run, wi, AbilityId::Pounce, at));
+        assert!(monster_use(&mut run, wi, AbilityId::Pounce, at));
         for _ in 0..30 {
             tick_monster_dash(&mut run, wi, DT);
         }
@@ -1018,7 +1018,7 @@ mod tests {
             run.monsters[oi].hp = 500.0;
         }
         let at = run.monsters[run.monster_idx(far).unwrap()].pos;
-        assert!(monster_cast(&mut run, wi, AbilityId::Pounce, at));
+        assert!(monster_use(&mut run, wi, AbilityId::Pounce, at));
         let mut ended = None;
         for _ in 0..60 {
             if let Some(done) = tick_monster_dash(&mut run, wi, DT) {

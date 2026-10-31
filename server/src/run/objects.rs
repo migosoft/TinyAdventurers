@@ -974,7 +974,7 @@ mod tests {
         let (mut run, oi) = torch_run();
         let (tx, ty) = Map::tile_of(run.players[0].pos());
         let from = Map::center_of(tx, ty - 1); // between the hero and the wall, flying away from the hero
-        crate::run::tests::enemy_cast(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, from + Vec2::new(0.0, -100.0));
+        crate::run::tests::enemy_use(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, from + Vec2::new(0.0, -100.0));
         step_for(&mut run, 0.3);
         assert!(!torch_lit(&run, oi), "an arrow puts it out");
     }

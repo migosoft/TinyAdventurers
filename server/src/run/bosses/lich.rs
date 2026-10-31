@@ -13,7 +13,7 @@ use crate::defs::kinds::Anim;
 use crate::dungeon::Mover;
 use crate::math::Vec2;
 use crate::protocol::Ev;
-use crate::run::abilities::monster_cast;
+use crate::run::abilities::monster_use;
 use crate::run::ai::{move_toward, path_toward};
 use crate::run::effects::Creature;
 use crate::run::Run;
@@ -104,9 +104,9 @@ impl Lich {
 
     /// Casts `id` at `at`; the lich's cast pose plays whatever the ability's own animation is.
     fn cast(run: &mut Run, bi: usize, id: AbilityId, at: Vec2) {
-        let cast = monster_cast(run, bi, id, at);
-        debug_assert!(cast, "the lich's script only picks what its kit has, off cooldown");
-        // Unlike `cast_in_pose`, the pose is forced: every lich ability plays the same cast pose.
+        let used = monster_use(run, bi, id, at);
+        debug_assert!(used, "the lich's script only picks what its kit has, off cooldown");
+        // Unlike `use_in_pose`, the pose is forced: every lich ability plays the same cast pose.
         set_anim(run, bi, Anim::Cast);
     }
 
@@ -321,7 +321,7 @@ pub(crate) mod tests {
     pub(crate) fn nova(run: &mut Run, bi: usize) {
         run.monsters[bi].cds = Default::default();
         let pos = run.monsters[bi].pos;
-        assert!(monster_cast(run, bi, AbilityId::Nova, pos));
+        assert!(monster_use(run, bi, AbilityId::Nova, pos));
     }
 
     #[test]

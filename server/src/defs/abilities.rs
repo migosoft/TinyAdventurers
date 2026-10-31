@@ -66,7 +66,7 @@ super::enum_list::listed_enum! {
         FireBolt = 25,
         /// The wolf's leap: a dash that crosses chasms, stops at the first foe it hits and hurts it hard.
         Pounce = 26,
-        /// A swing behind the caster with a tail weapon: the dragon's tail whip.
+        /// A swing behind the user with a tail weapon: the dragon's tail whip.
         TailWhip = 27,
         /// The dragon's channelled cone of fire, which leaves burning patches.
         FireBreath = 28,
@@ -128,7 +128,7 @@ pub enum Shape {
     Summon,
     /// A channelled cone: damage pulses and burning patches over its duration.
     Breath,
-    /// An effect on the target the caster has locked, if it still sees it.
+    /// An effect on the target the user has locked, if it still sees it.
     Gaze,
 }
 
@@ -163,9 +163,9 @@ pub struct OwnStats {
     pub push: f64,
     /// The wind-up (s) before it lands, on top of its weapon's.
     pub windup: f64,
-    /// How many shots one cast makes; 0 means 1.
+    /// How many shots one use makes; 0 means 1.
     pub count: u8,
-    /// The angle (rad) between the outer two shots of a cast of several.
+    /// The angle (rad) between the outer two shots of a use of several.
     pub spread: f64,
 }
 
@@ -214,7 +214,7 @@ pub struct AbilityDef {
     pub weapon_mult: WeaponMult,
     /// The half-angle (rad) of the cone "from behind" its target in which it does more; 0 = none.
     pub behind: f64,
-    /// A swing aimed behind the caster.
+    /// A swing aimed behind the user.
     pub backward: bool,
     /// The classes whose own pool can hold it: the class start now, the tree in plan 4.
     pub classes: &'static [ClassId],
@@ -249,7 +249,7 @@ pub const FIREBALL_PUSH: f64 = 20.0;
 pub const BREATH_HALF_ARC: f64 = 0.38;
 /// Fire Breath: the seconds between pulses, and the burning patches each pulse may leave (the
 /// chance, the radius in px, the seconds they burn, the damage of a patch's pulse, and how far
-/// from the caster a patch lands at the nearest).
+/// from the user a patch lands at the nearest).
 pub const BREATH_PULSE: f64 = 0.2;
 pub const BREATH_PATCH_CHANCE: f64 = 0.5;
 pub const BREATH_PATCH_RADIUS: f64 = 10.0;
@@ -264,7 +264,7 @@ pub const PURIFY_FLASH: f64 = 0.3;
 /// Entangle: the seconds of Entangled each pulse of the roots (every 0.5 s) renews.
 pub const ENTANGLE_PULSE_SECS: f64 = 1.0;
 
-/// The angles (rad), relative to the aim, of the shots of one cast of `count` (0 means 1) over
+/// The angles (rad), relative to the aim, of the shots of one use of `count` (0 means 1) over
 /// `spread`: a single shot flies straight ahead; a `spread` of a full circle or more spaces them
 /// evenly all around (`TAU / count`); otherwise they fan out symmetrically, the outer two `spread` apart.
 pub fn shot_offsets(count: u8, spread: f64) -> Vec<f64> {
@@ -325,9 +325,9 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::ShadowBolt => "A slow bolt of shadow.",
         AbilityId::FireBolt => "A bolt of fire.",
         AbilityId::Pounce => "A leap that crosses chasms and hits the first enemy it reaches, hard.",
-        AbilityId::TailWhip => "A lash of the tail behind the caster.",
+        AbilityId::TailWhip => "A lash of the tail behind the user.",
         AbilityId::FireBreath => "A cone of fire held for a moment, leaving burning patches on the ground.",
-        AbilityId::Smash => "A blow all around the caster that pushes everything away.",
+        AbilityId::Smash => "A blow all around the user that pushes everything away.",
         AbilityId::Swoop => "A long rush that hurts each enemy it passes once and pushes it hard.",
         AbilityId::RingOfFire => "Sixteen fire orbs flung out in a ring.",
         AbilityId::Nova => "A burst of dark power that hurts and pushes everything around the caster.",

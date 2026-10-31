@@ -73,7 +73,7 @@ pub struct ResolvedAbility {
     #[serde(skip)]
     #[ts(skip)]
     pub push: f64,
-    /// The STR it pushes with: the caster's.
+    /// The STR it pushes with: the user's.
     #[serde(skip)]
     #[ts(skip)]
     pub push_str: i32,
@@ -150,7 +150,7 @@ fn with_share(split: DamageSplit, share: Option<(DamageType, f64)>) -> DamageSpl
     share.map_or(split, |s| split.with_shares(&[s]))
 }
 
-/// The body of whoever casts: what a melee reach is measured from.
+/// The body of whoever uses it: what a melee reach is measured from.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Body {
     pub radius: f64,
@@ -174,8 +174,8 @@ fn weapon_for<'a>(d: &AbilityDef, weapons: &'a [ResolvedWeapon]) -> Option<&'a R
     sort.find(|w| meets_weapon_kind(d, w)).or(first)
 }
 
-/// One ability for any caster with `attrs`, its `weapons` and its `body`. `None` if it uses a
-/// weapon the caster has none of.
+/// One ability for any user with `attrs`, its `weapons` and its `body`. `None` if it uses a
+/// weapon the user has none of.
 pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWeapon], body: Body) -> Option<ResolvedAbility> {
     let own = d.own;
     let mult = d.weapon_mult;
@@ -1268,7 +1268,7 @@ mod tests {
         }
     }
 
-    /// Every monster's kit entry is what `resolve_ability` gives that caster for that ability, nothing more:
+    /// Every monster's kit entry is what `resolve_ability` gives that user for that ability, nothing more:
     /// the one resolver every ability goes through (a kit is built once, using an ability only reads it).
     #[test]
     fn every_monster_ability_equals_the_resolver() {

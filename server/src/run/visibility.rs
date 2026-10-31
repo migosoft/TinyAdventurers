@@ -338,7 +338,7 @@ mod tests {
         run.set_light(torch, false);
         assert!(!sees(&mut run, p, 6.0), "dark again");
         let from = Map::center_of(tx + 3, ty);
-        crate::run::tests::enemy_cast(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(0.0, 100.0));
+        crate::run::tests::enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(0.0, 100.0));
         assert!(sees(&mut run, p, 6.0), "a fire bolt lights it");
     }
 

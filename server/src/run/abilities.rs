@@ -25,7 +25,7 @@ use rand::Rng;
 /// tolerance absorbs rounding differences.
 const COOLDOWN_LEEWAY: f64 = 0.05;
 
-/// How many ticks to rewind monsters for a hero's hit checks (the lag compensation); none for a monster caster.
+/// How many ticks to rewind monsters for a hero's hit checks (the lag compensation); none for a monster user.
 fn rewind_ticks(run: &Run, c: Creature) -> usize {
     match c {
         Creature::Player(pi) => ((run.players[pi].view_lag * TICK_HZ).round() as usize).min(super::entities::HISTORY_LEN - 1),
@@ -49,7 +49,7 @@ fn aim_of(run: &Run, c: Creature) -> f64 {
     }
 }
 
-/// How far the caster aims an aimed ability: a hero's cursor distance, a monster's `monster_cast` target.
+/// How far the user aims an aimed ability: a hero's cursor distance, a monster's `monster_use` target.
 fn aim_dist_of(run: &Run, c: Creature) -> f64 {
     match c {
         Creature::Player(pi) => run.players[pi].aim_dist,
@@ -57,7 +57,7 @@ fn aim_dist_of(run: &Run, c: Creature) -> f64 {
     }
 }
 
-/// The figure that casts: what its abilities look like depends on it (`defs::looks`).
+/// The figure that uses it: what its abilities look like depends on it (`defs::looks`).
 fn figure_of(run: &Run, c: Creature) -> EntityKind {
     match c {
         Creature::Player(pi) => run.players[pi].kind(),
@@ -65,7 +65,7 @@ fn figure_of(run: &Run, c: Creature) -> EntityKind {
     }
 }
 
-/// The hero a hit credits (its damage, last hit by, keystones): the caster if it is a hero.
+/// The hero a hit credits (its damage, last hit by, keystones): the user if it is a hero.
 fn hero_of(c: Creature) -> Option<usize> {
     match c {
         Creature::Player(pi) => Some(pi),
@@ -73,7 +73,7 @@ fn hero_of(c: Creature) -> Option<usize> {
     }
 }
 
-/// The hero a hit pays (XP, damage, kills): the caster if it is a hero, the ranger of an ally (the wolf).
+/// The hero a hit pays (XP, damage, kills): the user if it is a hero, the ranger of an ally (the wolf).
 /// Keystones read the hit's `by`, so only a hero's own hits count for them.
 fn credit_of(run: &Run, c: Creature) -> Option<usize> {
     match c {
@@ -166,7 +166,7 @@ fn melee_strike(run: &mut Run, pi: usize, targets: &[MeleeTarget], strike: &Reso
 /// How far (px) from the point a gaze is aimed at a creature's edge may be: it stares at who stands there.
 const GAZE_AIM_SLACK: f64 = 2.0;
 
-/// The radius (px) of the burst the Ring of Fire shows where its caster stands.
+/// The radius (px) of the burst the Ring of Fire shows where its user stands.
 const RING_BURST_RADIUS: f64 = 30.0;
 
 /// The projectile of a shooting ability.
@@ -175,12 +175,12 @@ fn kind_of(projectile: Option<EntityKind>) -> EntityKind {
 }
 
 /// The damage of one hit of `a`: its split, on-hit and power.
-fn damage_of(caster: u32, a: &ResolvedAbility) -> Damage {
-    Damage { on_hit: a.on_hit, ..Damage::new(a.damage, a.split).with_power(a.power) }.by(caster, What::Ability(a.id)).with_base(a.base)
+fn damage_of(user: u32, a: &ResolvedAbility) -> Damage {
+    Damage { on_hit: a.on_hit, ..Damage::new(a.damage, a.split).with_power(a.power) }.by(user, What::Ability(a.id)).with_base(a.base)
 }
 
 /// The damage of one hit of the weapon attack `a` (or of an ability that uses none: `damage_of`).
-/// While the caster is coated (Poison Coat) every weapon attack adds a poison share and applies
+/// While the user is coated (Poison Coat) every weapon attack adds a poison share and applies
 /// Poisoned instead of its weapon's own on-hit.
 fn weapon_damage(run: &Run, c: Creature, a: &ResolvedAbility) -> Damage {
     let dmg = damage_of(run.creature_id(c), a);
@@ -216,7 +216,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             return;
         }
     }
-    let anim = cast(run, Creature::Player(pi), &def, shot);
+    let anim = use_ability(run, Creature::Player(pi), &def, shot);
     let p = &mut run.players[pi];
     let cooldown = super::keystones::cooldown(p, cooldown);
     if primary {
@@ -248,10 +248,10 @@ impl Cooldowns {
     }
 }
 
-/// Monster `mi` casts ability `id` of its kit at the point `at` (a blast or a ground area lands there, like
+/// Monster `mi` uses ability `id` of its kit at the point `at` (a blast or a ground area lands there, like
 /// a hero's cursor). False if it has no such ability or it is on cooldown. The numbers are the kit's:
 /// nothing is passed in.
-pub fn monster_cast(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
+pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
     let Some(a) = run.monsters[mi].kit.get(id).copied() else { return false };
     if !run.monsters[mi].cds.ready(id) {
         return false;
@@ -260,7 +260,7 @@ pub fn monster_cast(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
     m.aim = m.pos.angle_to(at);
     m.aim_dist = m.pos.dist(at);
     m.cds.start(id, a.cooldown);
-    let anim = cast(run, Creature::Monster(mi), &a, 0);
+    let anim = use_ability(run, Creature::Monster(mi), &a, 0);
     // A slam keeps the pose of its wind-up until it lands.
     if id != AbilityId::GroundSlam && run.monsters[mi].anim != anim {
         run.monsters[mi].anim = anim;
@@ -269,9 +269,9 @@ pub fn monster_cast(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
     true
 }
 
-/// Casts ability `a` for caster `c`: the executor of its shape does the effect and returns the caster's
+/// Uses ability `a` for user `c`: the executor of its shape does the effect and returns the user's
 /// animation. Cooldowns, the ranged-in-melee fallback and keystones are the caller's.
-fn cast(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim {
+fn use_ability(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim {
     match ab::def(a.id).shape {
         Shape::Projectile => use_projectile(run, c, a, shot),
         Shape::Blast => use_blast(run, c, a, shot),
@@ -287,10 +287,10 @@ fn cast(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim {
     }
 }
 
-/// `cast` for a test that hands in a resolved ability it has changed.
+/// `use_ability` for a test that hands in a resolved ability it has changed.
 #[cfg(test)]
-pub(crate) fn cast_for_tests(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim {
-    cast(run, c, a, shot)
+pub(crate) fn use_for_tests(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim {
+    use_ability(run, c, a, shot)
 }
 
 // One function per ability shape: it does the ability's effect and returns the hero's animation.
@@ -355,7 +355,7 @@ fn use_blast(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim
 }
 
 /// A swing of the melee weapon: Strike, Bite, Smite (a holy flash where it first hits), Whirl (all around),
-/// Flanking Thrust (double from behind) and Tail Whip (aimed behind the caster).
+/// Flanking Thrust (double from behind) and Tail Whip (aimed behind the user).
 fn use_swing(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Swing);
     match a.id {
@@ -415,7 +415,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             Creature::Player(pi) => run.players[pi].slam = Some(a.windup),
             Creature::Monster(mi) => run.monsters[mi].slam = Some(a.windup),
         },
-        // The dragon's landing: the weapon's blow on everything around, objects too, pushed away from the caster.
+        // The dragon's landing: the weapon's blow on everything around, objects too, pushed away from the user.
         AbilityId::Smash => {
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
@@ -433,8 +433,8 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
                 run.knock_creature(t, pos, aim, a.push, a.push_str);
             }
         }
-        // A burst around the caster: it hurts every foe within the radius and the objects too, and pushes the
-        // foes straight away with the caster's own STR.
+        // A burst around the user: it hurts every foe within the radius and the objects too, and pushes the
+        // foes straight away with the user's own STR.
         AbilityId::Nova => {
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
@@ -457,7 +457,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
     Anim::Cast
 }
 
-/// A channelled cone: Fire Breath starts its channel on the caster; `tick_channel` pulses it. Only a monster
+/// A channelled cone: Fire Breath starts its channel on the user; `tick_channel` pulses it. Only a monster
 /// channels.
 fn use_breath(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Breath);
@@ -549,7 +549,7 @@ pub fn tick_monster_slam(run: &mut Run, mi: usize, dt: f64) {
     }
 }
 
-/// Ground Slam lands: the weapon's damage on every enemy within its radius, pushed away from the caster.
+/// Ground Slam lands: the weapon's damage on every enemy within its radius, pushed away from the user.
 pub fn land_slam(run: &mut Run, c: Creature) {
     let a = match c {
         Creature::Player(pi) => {
@@ -612,7 +612,7 @@ fn use_dash(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
     Anim::Dash
 }
 
-/// A stare: hurts nothing, applies its own effect to the foe standing at the aimed point if the caster still
+/// A stare: hurts nothing, applies its own effect to the foe standing at the aimed point if the user still
 /// sees it. Only a monster gazes (Stone Gaze).
 fn use_gaze(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Gaze);
@@ -692,7 +692,7 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
     Anim::Cast
 }
 
-/// A hazard of the caster's side, placed at the user's feet (Consecrate hurts) or at an aimed spot
+/// A hazard of the user's side, placed at the user's feet (Consecrate hurts) or at an aimed spot
 /// (Entangle binds).
 fn use_ground_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::GroundArea);
@@ -755,7 +755,7 @@ fn use_summon(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> An
     Anim::Cast
 }
 
-/// A swing of the melee ability `a`, aimed behind the caster if it is `backward` (its reach, arc, damage, split, on-hit and power). A hit from
+/// A swing of the melee ability `a`, aimed behind the user if it is `backward` (its reach, arc, damage, split, on-hit and power). A hit from
 /// behind its target (`a.behind`) does `BEHIND_MULT` times the damage and counts as a crit.
 /// Returns where it first hit a monster.
 fn melee_arc(run: &mut Run, c: Creature, a: &ResolvedAbility, crit: bool) -> Option<Vec2> {
@@ -763,7 +763,7 @@ fn melee_arc(run: &mut Run, c: Creature, a: &ResolvedAbility, crit: bool) -> Opt
     let pos = run.creature_pos(c);
     let aim = aim_of(run, c) + if ab::def(a.id).backward { std::f64::consts::PI } else { 0.0 };
     let (range, arc, dmg) = (a.range, a.arc, weapon_damage(run, c, a));
-    // Flying monsters are out of reach of melee; a foe touching the caster is hit whatever the arc.
+    // Flying monsters are out of reach of melee; a foe touching the user is hit whatever the arc.
     let rule = targets::Rule { at: pos, reach: range, plus_radius: true, arc: Some(targets::Arc { aim, width: arc, user_radius: run.creature_radius(c) }), los: true, skip_hiding: false, skip_dormant: false, skip_airborne: true };
     let log = super::rules_log::on(run);
     let (hits, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| pos_ago(run, t, rw));
@@ -892,8 +892,8 @@ fn monster_dash_contact(run: &mut Run, mi: usize, a: &ResolvedAbility, hit: &mut
 /// The radius of a shot that bursts at its target point (Fireball); other shots use their ability's radius.
 const SHELL_RADIUS: f64 = 4.0;
 
-/// Fires one shot of ability `a` for caster `c` in direction `dir`. Its damage, power, speed, range and push
-/// come from `a` and the caster, and are stored on the projectile: it outlives its caster unchanged.
+/// Fires one shot of ability `a` for user `c` in direction `dir`. Its damage, power, speed, range and push
+/// come from `a` and the user, and are stored on the projectile: it outlives its user unchanged.
 /// A `target` point makes it burst there, with `explode_r`.
 #[allow(clippy::too_many_arguments)]
 fn spawn_shot(run: &mut Run, c: Creature, a: &ResolvedAbility, kind: EntityKind, shot: u16, dir: Vec2, target: Option<Vec2>, explode_r: f64) {
@@ -1190,7 +1190,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{enemy_cast, test_run};
+    use super::super::tests::{enemy_use, test_run};
     use super::*;
     use crate::defs::damage::kind_split;
     use crate::defs::enemies::EnemyType;
@@ -1368,26 +1368,26 @@ mod tests {
     }
 
     #[test]
-    fn a_dash_touches_within_the_ability_radius_of_the_casters_edge() {
+    fn a_dash_touches_within_the_ability_radius_of_the_users_edge() {
         // Swoop: body radius + 8 (+ the hero's radius); Pounce: body radius + 4.
-        for (id, radius, caster_kit) in [
+        for (id, radius, user_kit) in [
             (AbilityId::Swoop, 8.0, crate::sheet::boss_kit(BossId::Demon)),
             (AbilityId::Pounce, 4.0, crate::sheet::wolf_kit(&crate::sheet::WolfMods::NONE)),
         ] {
-            assert_eq!(caster_kit.get(id).unwrap().radius, radius, "{id:?}");
+            assert_eq!(user_kit.get(id).unwrap().radius, radius, "{id:?}");
             for (gap, hits) in [(radius, true), (radius + 1.0, false)] {
                 let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
                 let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
                 run.monsters[bi].dormant = false;
-                run.monsters[bi].kit = caster_kit.clone();
+                run.monsters[bi].kit = user_kit.clone();
                 run.players[0].debug = false;
                 let (pos, r) = (run.monsters[bi].pos, run.monsters[bi].radius);
-                // Edge to edge: the hero's centre sits r + PLAYER_RADIUS + gap from the caster's centre.
+                // Edge to edge: the hero's centre sits r + PLAYER_RADIUS + gap from the user's centre.
                 run.players[0].mv.x = pos.x + r + PLAYER_RADIUS + gap;
                 run.players[0].mv.y = pos.y;
                 let hp = run.players[0].hp;
                 let mut hit = Vec::new();
-                monster_dash_contact(&mut run, bi, &caster_kit.get(id).copied().unwrap(), &mut hit);
+                monster_dash_contact(&mut run, bi, &user_kit.get(id).copied().unwrap(), &mut hit);
                 assert_eq!(run.players[0].hp < hp, hits, "{id:?} at a gap of {gap}");
             }
         }
@@ -1449,7 +1449,7 @@ mod tests {
     }
 
     #[test]
-    fn a_shot_keeps_its_casters_numbers_after_the_caster_dies() {
+    fn a_shot_keeps_its_users_numbers_after_the_user_dies() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
         run.monsters.retain(|m| m.is_boss);
         let at = run.players[0].pos() + Vec2::new(60.0, 0.0);
@@ -1459,10 +1459,10 @@ mod tests {
         let (power, push_str) = (run.monsters[mi].attrs.get(Attr::Cha), run.monsters[mi].attrs.get(Attr::Str));
         assert!(power > 0 && push_str > 0 && bolt.damage > 0.0, "numbers worth keeping");
         let target = run.players[0].pos();
-        assert!(monster_cast(&mut run, mi, AbilityId::FireBolt, target));
+        assert!(monster_use(&mut run, mi, AbilityId::FireBolt, target));
         let spawned = &run.projectiles[0];
         assert_eq!((spawned.damage.amount, spawned.damage.power, spawned.push, spawned.push_str), (bolt.damage, power, bolt.push, push_str));
-        // The caster is gone before the shot lands.
+        // The user is gone before the shot lands.
         run.monsters.retain(|m| m.id != owner);
         assert!(run.monster_idx(owner).is_none());
         let hp = run.players[0].hp;
@@ -1475,7 +1475,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pushing_shot_keeps_its_push_and_strength_after_the_caster_dies() {
+    fn a_pushing_shot_keeps_its_push_and_strength_after_the_user_dies() {
         use crate::defs::attributes::push_dist;
         // The dragon's Fireball pushes with the dragon's STR (24), not the 30 a scripted boss push once had.
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
@@ -1494,9 +1494,9 @@ mod tests {
         let (pushed, boss_push) = (push_dist(ball.push, str, run.players[0].sheet.weight), push_dist(ball.push, 30, run.players[0].sheet.weight));
         assert!(pushed > 0.0 && pushed < boss_push, "{pushed} < {boss_push}");
         // It bursts a little east of the hero, so the push is west.
-        assert!(monster_cast(&mut run, bi, AbilityId::Fireball, hero + Vec2::new(12.0, 0.0)));
+        assert!(monster_use(&mut run, bi, AbilityId::Fireball, hero + Vec2::new(12.0, 0.0)));
         assert_eq!((run.projectiles[0].push, run.projectiles[0].push_str), (ball.push, str));
-        // The caster is gone before the shot lands.
+        // The user is gone before the shot lands.
         run.monsters.retain(|m| m.id != owner);
         for _ in 0..120 {
             tick_projectiles(&mut run, 1.0 / TICK_HZ);
@@ -1589,7 +1589,7 @@ mod tests {
     }
 
     #[test]
-    fn a_fireball_never_pushes_an_ally_of_its_casters_side() {
+    fn a_fireball_never_pushes_an_ally_of_its_users_side() {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
@@ -1930,7 +1930,7 @@ mod tests {
                 try_use(&mut run, 0, true, 1);
             } else {
                 let from = p + Vec2::new(10.0, 0.0);
-                enemy_cast(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, from + Vec2::new(100.0, 0.0));
+                enemy_use(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, from + Vec2::new(100.0, 0.0));
             }
             for _ in 0..30 {
                 tick_projectiles(&mut run, 1.0 / TICK_HZ);
@@ -2056,7 +2056,7 @@ mod tests {
             let d = crate::defs::enemies::def(t);
             run.monsters[mi].kit = crate::sheet::monster_kit(d.abilities, &run.monsters[mi].attrs, d.weapons, crate::sheet::Body { radius: d.radius });
         }
-        assert!(monster_cast(&mut run, mi, AbilityId::FireBolt, p));
+        assert!(monster_use(&mut run, mi, AbilityId::FireBolt, p));
         for _ in 0..60 {
             tick_projectiles(&mut run, 1.0 / TICK_HZ);
         }
@@ -2064,7 +2064,7 @@ mod tests {
     }
 
     #[test]
-    fn a_fire_bolt_burns_at_its_casters_governing_attribute() {
+    fn a_fire_bolt_burns_at_its_users_governing_attribute() {
         let con = crate::defs::classes::def(ClassId::Paladin).attrs.get(crate::defs::attributes::Attr::Con);
         assert_eq!(con, 13);
         assert_eq!(fire_bolt_burn(EnemyType::Imp, None), Some(burn_secs(14, con)), "the imp's innate fire: CHA 14");
@@ -3351,9 +3351,9 @@ mod tests {
     }
 }
 
-/// Enemies cast the shared abilities through `monster_cast` (#177).
+/// Enemies use the shared abilities through `monster_use` (#177).
 #[cfg(test)]
-mod monster_casts {
+mod monster_uses {
     use super::super::ai::tests::{ogre_among, open_floor};
     use super::super::tests::test_run;
     use super::*;
@@ -3378,7 +3378,7 @@ mod monster_casts {
         let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at - Vec2::new(14.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         let hp: Vec<f64> = run.players.iter().map(|p| p.hp).collect();
-        assert!(monster_cast(&mut run, mi, AbilityId::Strike, at));
+        assert!(monster_use(&mut run, mi, AbilityId::Strike, at));
         assert!(run.players[0].hp < hp[0] && run.players[1].hp < hp[1], "both heroes lose HP");
         let hit = run.last_hit.expect("a hit");
         assert_eq!((hit.why.by, hit.why.what), (Some(id), What::Ability(AbilityId::Strike)));
@@ -3391,18 +3391,18 @@ mod monster_casts {
         let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at - Vec2::new(14.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         let wizard = run.players[1].hp;
-        assert!(monster_cast(&mut run, mi, AbilityId::Strike, at));
+        assert!(monster_use(&mut run, mi, AbilityId::Strike, at));
         assert_eq!(run.players[1].hp, wizard, "out of reach");
     }
 
     #[test]
-    fn a_foe_touching_a_wide_caster_is_hit_whatever_the_arc() {
+    fn a_foe_touching_a_wide_user_is_hit_whatever_the_arc() {
         // The ogre (radius 10) aims east; a hero just behind it touches it, which the hero's own radius alone would not tell.
         let (mut run, at) = arena(&[ClassId::Paladin]);
         let id = run.spawn_enemy(EnemyType::Ogre, at + Vec2::new(13.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         let hp = run.players[0].hp;
-        assert!(monster_cast(&mut run, mi, AbilityId::Strike, at + Vec2::new(100.0, 0.0)));
+        assert!(monster_use(&mut run, mi, AbilityId::Strike, at + Vec2::new(100.0, 0.0)));
         assert!(run.players[0].hp < hp, "touching the ogre: hit from behind");
     }
 
@@ -3412,21 +3412,21 @@ mod monster_casts {
         let a = run.spawn_enemy(EnemyType::Imp, at + Vec2::new(60.0, 0.0), None);
         let b = run.spawn_enemy(EnemyType::Imp, at + Vec2::new(60.0, 12.0), None);
         let (ai, bi) = (run.monster_idx(a).unwrap(), run.monster_idx(b).unwrap());
-        assert!(monster_cast(&mut run, ai, AbilityId::FireBolt, at));
-        assert!(!monster_cast(&mut run, ai, AbilityId::FireBolt, at), "the first one is cooling down");
-        assert!(monster_cast(&mut run, bi, AbilityId::FireBolt, at), "the second one is not");
+        assert!(monster_use(&mut run, ai, AbilityId::FireBolt, at));
+        assert!(!monster_use(&mut run, ai, AbilityId::FireBolt, at), "the first one is cooling down");
+        assert!(monster_use(&mut run, bi, AbilityId::FireBolt, at), "the second one is not");
         let cooldown = run.monsters[ai].kit.get(AbilityId::FireBolt).unwrap().cooldown;
         run.monsters[ai].cds.tick(cooldown + 0.01);
-        assert!(monster_cast(&mut run, ai, AbilityId::FireBolt, at), "ready again after its cooldown");
+        assert!(monster_use(&mut run, ai, AbilityId::FireBolt, at), "ready again after its cooldown");
     }
 
     #[test]
-    fn a_monster_casts_only_what_is_in_its_kit() {
+    fn a_monster_uses_only_what_is_in_its_kit() {
         let (mut run, at) = arena(&[ClassId::Paladin]);
         let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at + Vec2::new(14.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
-        assert!(!monster_cast(&mut run, mi, AbilityId::FireBolt, at));
-        assert!(!monster_cast(&mut run, mi, AbilityId::Shoot, at));
+        assert!(!monster_use(&mut run, mi, AbilityId::FireBolt, at));
+        assert!(!monster_use(&mut run, mi, AbilityId::Shoot, at));
         assert!(run.projectiles.is_empty());
     }
 
@@ -3435,7 +3435,7 @@ mod monster_casts {
         let (mut run, at) = arena(&[ClassId::Paladin]);
         let id = run.spawn_enemy(EnemyType::SkeletonArcher, at + Vec2::new(60.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
-        assert!(monster_cast(&mut run, mi, AbilityId::Shoot, at));
+        assert!(monster_use(&mut run, mi, AbilityId::Shoot, at));
         let shot = &run.projectiles[0];
         assert_eq!(shot.damage.why.what, What::Ability(AbilityId::Shoot));
         assert_eq!(shot.side, Side::Monsters);
@@ -3452,7 +3452,7 @@ mod monster_casts {
         let hp: Vec<f64> = run.players.iter().map(|p| p.hp).collect();
         run.events.clear();
         let target = run.players[0].pos();
-        assert!(monster_cast(&mut run, mi, AbilityId::GroundSlam, target));
+        assert!(monster_use(&mut run, mi, AbilityId::GroundSlam, target));
         assert_eq!(run.monsters[mi].slam, Some(slam.windup));
         tick_monster_slam(&mut run, mi, slam.windup / 2.0);
         assert!(run.players.iter().zip(&hp).all(|(p, &h)| p.hp == h), "nothing lands during the wind-up");
@@ -3469,7 +3469,7 @@ mod monster_casts {
     fn a_pushed_ogre_loses_its_slam() {
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0), Vec2::new(-16.0, 8.0)]);
         let target = run.players[0].pos();
-        assert!(monster_cast(&mut run, mi, AbilityId::GroundSlam, target));
+        assert!(monster_use(&mut run, mi, AbilityId::GroundSlam, target));
         run.monsters[mi].knock = Vec2::new(10.0, 0.0);
         run.step();
         assert_eq!(run.monsters[mi].slam, None);
