@@ -369,11 +369,12 @@ impl Run {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defs::kinds::EntityKind;
     use crate::defs::lights::LightKind;
     use crate::dungeon::{Map, Tile, TILE};
     use crate::protocol::{BossId, ClassId};
-    use crate::run::tests::test_run;
+    use crate::defs::abilities::AbilityId;
+    use crate::defs::enemies::EnemyType;
+    use crate::run::tests::{enemy_cast, test_run};
 
     /// An open 15x9 floor patch around the hero, no lights at all.
     fn dark_run() -> (Run, i32, i32) {
@@ -514,8 +515,9 @@ mod tests {
     fn a_fire_bolt_carries_a_light_and_an_arrow_does_not() {
         let (mut run, tx, ty) = dark_run();
         let from = at(tx - 6, ty);
-        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, from, Vec2::new(1.0, 0.0), 60.0, 5.0, 3.0, 0.0, 0, 0.0);
-        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::Arrow, from, Vec2::new(1.0, 0.0), 60.0, 5.0, 3.0, 0.0, 0, 0.0);
+        let to = from + Vec2::new(100.0, 0.0);
+        enemy_cast(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, to);
+        enemy_cast(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, to);
         assert_eq!(run.moving_lights().len(), 1);
         assert_eq!(run.moving_lights()[0].kind, LightKind::Fire);
         assert!(run.is_lit(from));
@@ -526,7 +528,7 @@ mod tests {
         let (mut run, tx, ty) = dark_run();
         run.layout.map.set(tx + 1, ty, Tile::Wall);
         let from = at(tx, ty);
-        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, from, Vec2::new(1.0, 0.0), 600.0, 5.0, 3.0, 0.0, 0, 0.0);
+        enemy_cast(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(100.0, 0.0));
         run.step();
         run.step();
         assert!(run.lights.sources.iter().all(|s| !matches!(s.anchor, Anchor::Entity(_))));
@@ -597,7 +599,7 @@ mod tests {
         // Three tiles from where the shot meets the wall: dark before and after the flash.
         let near = at(tx + 4, ty + 3);
         assert!(!run.is_lit(near));
-        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::DragonFireball, at(tx + 3, ty), Vec2::new(1.0, 0.0), 300.0, 1.0, 2.0, 20.0, 4, 0.0);
+        enemy_cast(&mut run, EnemyType::Imp, at(tx + 3, ty), AbilityId::Fireball, at(tx + 7, ty));
         let mut n = 0;
         while !run.projectiles.is_empty() {
             run.step();

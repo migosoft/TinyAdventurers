@@ -293,6 +293,7 @@ mod tests {
     use crate::fov::PLAYER_FOV_RADIUS;
     use crate::defs::enemies::EnemyType;
     use crate::protocol::{BossId, ClassId};
+    use crate::defs::abilities::AbilityId;
     use crate::run::tests::test_run;
     use crate::defs::lights::LightKind;
     use crate::run::light::{Anchor, Lights};
@@ -336,7 +337,8 @@ mod tests {
         assert!(sees(&mut run, p, 6.0), "lit by the torch");
         run.set_light(torch, false);
         assert!(!sees(&mut run, p, 6.0), "dark again");
-        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, Map::center_of(tx + 3, ty), Vec2::new(0.0, 1.0), 1.0, 1.0, 3.0, 0.0, 0, 0.0);
+        let from = Map::center_of(tx + 3, ty);
+        crate::run::tests::enemy_cast(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(0.0, 100.0));
         assert!(sees(&mut run, p, 6.0), "a fire bolt lights it");
     }
 

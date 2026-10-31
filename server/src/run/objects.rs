@@ -405,6 +405,8 @@ mod tests {
     use super::*;
     use crate::defs::damage::{DamageSplit, DamageType};
     use crate::protocol::{BossId, ClassId};
+    use crate::defs::abilities::AbilityId;
+    use crate::defs::enemies::EnemyType;
     use crate::run::tests::test_run;
 
     /// Weight 6 + 4: pushes a barrel the full `BARREL_PUSH`.
@@ -972,7 +974,7 @@ mod tests {
         let (mut run, oi) = torch_run();
         let (tx, ty) = Map::tile_of(run.players[0].pos());
         let from = Map::center_of(tx, ty - 1); // between the hero and the wall, flying away from the hero
-        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::Arrow, from, Vec2::new(0.0, -1.0), 200.0, 5.0, 2.0, 0.0, 0, 0.0);
+        crate::run::tests::enemy_cast(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, from + Vec2::new(0.0, -100.0));
         step_for(&mut run, 0.3);
         assert!(!torch_lit(&run, oi), "an arrow puts it out");
     }

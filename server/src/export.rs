@@ -72,6 +72,8 @@ fn export_defs() {
     let dragon_ability = |id: AbilityId| *dragon_kit.get(id).expect("the dragon casts it");
     let demon_kit = crate::sheet::boss_kit(crate::protocol::BossId::Demon);
     let demon_ability = |id: AbilityId| *demon_kit.get(id).expect("the demon casts it");
+    let lich_kit = crate::sheet::boss_kit(crate::protocol::BossId::Lich);
+    let lich_ability = |id: AbilityId| *lich_kit.get(id).expect("the lich casts it");
     let mut consts = json!({
         "TILE": TILE,
         "TICK_HZ": TICK_HZ,
@@ -103,9 +105,9 @@ fn export_defs() {
         "DRAGON_CLAW_KNOCK": dragon_ability(AbilityId::Strike).push,
         "DRAGON_TAIL_KNOCK": dragon_ability(AbilityId::TailWhip).push,
         "DRAGON_FIREBALL_KNOCK": dragon_ability(AbilityId::Fireball).push,
-        "LICH_NOVA_RADIUS": bosses::LICH_NOVA_RADIUS,
-        "LICH_NOVA_WINDUP": bosses::LICH_NOVA_WINDUP,
-        "LICH_NOVA_KNOCK": bosses::LICH_NOVA_KNOCK,
+        "LICH_NOVA_RADIUS": lich_ability(AbilityId::Nova).radius,
+        "LICH_NOVA_WINDUP": lich_ability(AbilityId::Nova).windup,
+        "LICH_NOVA_KNOCK": lich_ability(AbilityId::Nova).push,
         "SHALLOW_SPEED": crate::dungeon::SHALLOW_SPEED,
         "LAVA_SPEED": crate::dungeon::LAVA_SPEED,
         "FALL_TIME": crate::dungeon::FALL_TIME,
@@ -126,10 +128,10 @@ fn export_defs() {
     });
     consts.as_object_mut().unwrap().extend(demon.as_object().unwrap().clone());
     let lich = json!({
-        "LICH_ORB_SPEED": bosses::LICH_ORB_SPEED,
-        "LICH_GAZE_WINDUP": bosses::LICH_GAZE_WINDUP,
-        "LICH_BLIND_WINDUP": bosses::LICH_BLIND_WINDUP,
-        "LICH_SLEEP_WINDUP": bosses::LICH_SLEEP_WINDUP,
+        "LICH_ORB_SPEED": lich_ability(AbilityId::BlindingCurse).speed,
+        "LICH_GAZE_WINDUP": lich_ability(AbilityId::StoneGaze).windup,
+        "LICH_BLIND_WINDUP": lich_ability(AbilityId::BlindingCurse).windup,
+        "LICH_SLEEP_WINDUP": lich_ability(AbilityId::SleepMist).windup,
     });
     consts.as_object_mut().unwrap().extend(lich.as_object().unwrap().clone());
     let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });

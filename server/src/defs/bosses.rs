@@ -34,37 +34,16 @@ pub fn def(id: BossId) -> BossDef {
     }
 }
 
-/// The Attribute that governs a boss's scripted shot of kind `kind` (spec §7):
-/// the power of the damage-type effects it applies. The demon's fire is innate (CHA),
-/// the lich's are spells (INT). (The dragon casts abilities: theirs come from the kit.)
-pub fn governing(kind: EntityKind) -> super::attributes::Attr {
-    use super::attributes::Attr;
-    match kind {
-        EntityKind::FireOrb => Attr::Cha,
-        _ => Attr::Int,
-    }
-}
-
 /// The recovery after each demon attack (s), shared with the client: the animation starts with the ability's
 /// wind-up (from its kit) and the strike frames play out in this short recovery. The abilities' own numbers are the kit's.
 pub const DEMON_CLEAVE_RECOVER: f64 = 0.3;
 pub const DEMON_SWOOP_RECOVER: f64 = 0.25;
 pub const DEMON_RING_RECOVER: f64 = 0.35;
-/// The STR every boss push carries: above every hero's weight + 4, so
-/// scripted boss pushes keep their full distance.
-pub const BOSS_KNOCK_STR: i32 = 30;
 
 pub const LICH_DISCIPLES: usize = 6;
-/// HP per second the lich drains from each living disciple.
-pub const LICH_DRAIN_PER_DISCIPLE: f64 = 6.0;
-/// Lich nova: every LICH_NOVA_EVERY s (random in the range) it stands still for
-/// LICH_NOVA_WINDUP s (a ring telegraph fills up), then a dark burst hits every
-/// hero within LICH_NOVA_RADIUS (px, hero centres) and pushes them straight away.
-pub const LICH_NOVA_EVERY: (f64, f64) = (10.0, 12.0);
-pub const LICH_NOVA_WINDUP: f64 = 1.2;
-pub const LICH_NOVA_RADIUS: f64 = 56.0;
-pub const LICH_NOVA_DAMAGE: f64 = 24.0;
-pub const LICH_NOVA_KNOCK: f64 = 64.0;
+/// After a nova the lich waits up to this many seconds (random) on top of the Nova's cooldown, so the
+/// next one is not on the beat.
+pub const LICH_NOVA_EXTRA_WAIT: f64 = 2.0;
 /// Each summon tops the lich's raised skeletons up to this many of each kind.
 pub const LICH_SKELETONS: usize = 5;
 pub const LICH_ARCHERS: usize = 5;
@@ -98,23 +77,11 @@ pub fn profile(id: BossId) -> Profile {
     races::profile(&[ty], adj)
 }
 
-/// Lich effect spells (user, 2026-10-15; tune in the balancing pass). Wind-up,
-/// cooldown and when the first one may come after the fight starts (s, staggered).
-pub const LICH_BLIND_WINDUP: f64 = 0.6;
-pub const LICH_BLIND_COOLDOWN: f64 = 10.0;
+/// When the lich's effect spells may first come after the fight starts (s, staggered; user, 2026-10-15; tune in
+/// the balancing pass). When, not how: the spells' wind-ups, cooldowns and numbers are their kit's.
 pub const LICH_BLIND_FIRST: f64 = 4.0;
-pub const LICH_BLIND_DAMAGE: f64 = 6.0;
-pub const LICH_BLIND_SECS: f64 = 3.0;
-pub const LICH_SLEEP_WINDUP: f64 = 0.8;
-pub const LICH_SLEEP_COOLDOWN: f64 = 14.0;
 pub const LICH_SLEEP_FIRST: f64 = 7.0;
-pub const LICH_SLEEP_SECS: f64 = 4.0;
-pub const LICH_GAZE_WINDUP: f64 = 1.0;
-pub const LICH_GAZE_COOLDOWN: f64 = 18.0;
 pub const LICH_GAZE_FIRST: f64 = 9.0;
-pub const LICH_GAZE_SECS: f64 = 3.0;
-/// Speed of the blinding and sleep orbs (px/s): slow enough to dodge.
-pub const LICH_ORB_SPEED: f64 = 90.0;
 
 #[cfg(test)]
 mod tests {

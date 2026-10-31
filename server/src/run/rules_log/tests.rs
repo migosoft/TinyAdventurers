@@ -134,7 +134,7 @@ fn rules_log_is_reached_only_through_its_hooks() {
     walk(&root, &root, &mut found);
     // Lines naming `rules_log` outside the module, per file. Each task updates this with its hooks.
     let hooks: BTreeMap<String, usize> =
-        [("defs/effects.rs", 1), ("run/mod.rs", 18), ("run/effects.rs", 5), ("run/abilities.rs", 16), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        [("defs/effects.rs", 1), ("run/mod.rs", 18), ("run/effects.rs", 5), ("run/abilities.rs", 18), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     assert_eq!(found, hooks);
 }
 
@@ -490,16 +490,16 @@ fn an_immune_hit_says_so() {
     let hero = run.players[0].id;
     let goblin = tag_of(&run, run.monsters[mi].id);
     let name = run.players[0].name.clone();
-    run.hurt_monster(mi, Damage::physical(5.0).by(hero, What::Attack), false, Some(0));
+    run.hurt_monster(mi, Damage::physical(5.0).by(hero, What::Ability(AbilityId::Strike)), false, Some(0));
     let rec = only_rec(&mut run);
-    assert_eq!(rec.head, format!("{name} ▸ attack ▸ {goblin}: no damage (immune)"));
+    assert_eq!(rec.head, format!("{name} ▸ Strike ▸ {goblin}: no damage (immune)"));
     assert_eq!(rec.dealt, Some(0.0));
     // Over 100 %: it heals.
     run.monsters[mi].res.set(DamageType::Physical, 1.5);
     run.monsters[mi].hp = 40.0;
-    run.hurt_monster(mi, Damage::physical(10.0).by(hero, What::Attack), false, Some(0));
+    run.hurt_monster(mi, Damage::physical(10.0).by(hero, What::Ability(AbilityId::Strike)), false, Some(0));
     let rec = only_rec(&mut run);
-    assert_eq!(rec.head, format!("{name} ▸ attack ▸ {goblin}: healed 5 (resistance over 100 %)"));
+    assert_eq!(rec.head, format!("{name} ▸ Strike ▸ {goblin}: healed 5 (resistance over 100 %)"));
     assert_eq!(rec.kind, LineKind::Heal);
 }
 
@@ -513,9 +513,9 @@ fn the_shielded_boss_says_so() {
     let name = run.players[0].name.clone();
     let hp = run.monsters[bi].hp;
     let _ = take(&mut run);
-    assert!(!run.hurt_monster(bi, Damage::physical(100.0).by(hero, What::Attack), false, Some(0)));
+    assert!(!run.hurt_monster(bi, Damage::physical(100.0).by(hero, What::Ability(AbilityId::Strike)), false, Some(0)));
     let rec = only_rec(&mut run);
-    assert_eq!(rec.head, format!("{name} ▸ attack ▸ {boss}: no damage ({boss} cannot be hurt now)"));
+    assert_eq!(rec.head, format!("{name} ▸ Strike ▸ {boss}: no damage ({boss} cannot be hurt now)"));
     assert_eq!(run.monsters[bi].hp, hp);
 }
 
@@ -529,7 +529,7 @@ fn damage_from_an_unseen_attacker_gives_the_short_line() {
     let (h0, h1) = (run.players[0].id, run.players[1].id);
     let _ = take(&mut run);
     let hp = run.players[0].hp;
-    run.hurt_player(0, Damage::physical(6.0).by(archer, What::Attack));
+    run.hurt_player(0, Damage::physical(6.0).by(archer, What::Ability(AbilityId::Strike)));
     let recs = take(&mut run);
     assert_eq!(recs.len(), 1);
     let dealt = hp - run.players[0].hp;
@@ -539,7 +539,7 @@ fn damage_from_an_unseen_attacker_gives_the_short_line() {
     let name = run.players[0].name.clone();
     assert_eq!(got.1[0].2, format!("{name} took {} from something unseen", n1(dealt)));
     let shown: Vec<&String> = std::iter::once(&got.1[0].2).chain(got.1[0].3.iter()).collect();
-    assert!(shown.iter().all(|l| !l.contains("Goblin") && !l.contains("attack")), "{shown:?}");
+    assert!(shown.iter().all(|l| !l.contains("Goblin") && !l.contains("Strike")), "{shown:?}");
     assert_eq!(got.1[0].3.len(), recs[0].unseen.as_ref().unwrap().details.len());
     assert!(got.1[0].3[0].starts_with("physical 100 %"), "{:?}", got.1[0].3);
     let got = for_viewer(&run, 1, h1, &view, &dark, &[], &recs).unwrap();
@@ -555,7 +555,7 @@ fn a_hit_that_sets_off_another_files_both_in_order() {
     let (mi, mj) = (goblin_near(&mut run, Some(100.0)), goblin_near(&mut run, Some(100.0)));
     let res = run.monsters[mi].res;
     let facts = |run: &Run, mi: usize, amount: f64| {
-        let dmg = Damage::physical(amount).by(hero, What::Attack);
+        let dmg = Damage::physical(amount).by(hero, What::Ability(AbilityId::Strike));
         let parts = crate::defs::damage::resolve_parts(&dmg, &res);
         let hp = run.monsters[mi].hp;
         HitFacts { target: Creature::Monster(mi), dmg, res, parts, hp_before: hp, hp_after: hp - amount, dealt: amount, taken: amount, outcome: HitOutcome::Dealt }
@@ -914,7 +914,7 @@ fn a_kill_names_the_killer() {
     let (hero, name) = (run.players[0].id, run.players[0].name.clone());
     let goblin = tag_of(&run, run.monsters[mi].id);
     let _ = take(&mut run);
-    run.hurt_monster(mi, Damage::physical(50.0).by(hero, What::Attack), false, Some(0));
+    run.hurt_monster(mi, Damage::physical(50.0).by(hero, What::Ability(AbilityId::Strike)), false, Some(0));
     let recs = take(&mut run);
     assert_eq!(recs.iter().map(|r| r.kind).collect::<Vec<_>>(), vec![LineKind::Hit, LineKind::Death]);
     assert_eq!(recs[1].head, format!("{goblin} died (killed by {name})"));
@@ -931,7 +931,7 @@ fn a_death_follows_its_own_hit_even_when_hits_nest() {
     let (mi, mj) = (goblin_near(&mut run, Some(100.0)), goblin_near(&mut run, Some(100.0)));
     let res = run.monsters[mi].res;
     let facts = |run: &Run, mi: usize| {
-        let dmg = Damage::physical(1.0).by(hero, What::Attack);
+        let dmg = Damage::physical(1.0).by(hero, What::Ability(AbilityId::Strike));
         let parts = crate::defs::damage::resolve_parts(&dmg, &res);
         let hp = run.monsters[mi].hp;
         HitFacts { target: Creature::Monster(mi), dmg, res, parts, hp_before: hp, hp_after: 0.0, dealt: 1.0, taken: 1.0, outcome: HitOutcome::Dealt }
@@ -982,7 +982,7 @@ fn a_hero_death_names_the_killer_or_says_unseen() {
     let goblin = tag_of(&run, goblin_id);
     run.players[0].hp = 1.0;
     let _ = take(&mut run);
-    run.hurt_player(0, Damage::physical(50.0).by(goblin_id, What::Attack));
+    run.hurt_player(0, Damage::physical(50.0).by(goblin_id, What::Ability(AbilityId::Strike)));
     let recs = take(&mut run);
     let deaths = kinds_of(&recs, LineKind::Death);
     assert_eq!(deaths.len(), 1);
@@ -1310,7 +1310,7 @@ fn fight(class: ClassId, primary: AbilityId, secondary: AbilityId, spectate: boo
         }
         if tick % 40 == 20 {
             // The goblin in the dark hits hero 0.
-            run.hurt_player(0, Damage::physical(6.0).by(dark, What::Attack));
+            run.hurt_player(0, Damage::physical(6.0).by(dark, What::Ability(AbilityId::Strike)));
         }
         if tick % 40 == 30 {
             // Hits with a multiplier and with another type: their steps are the attacker's, not hero 0's.
@@ -1488,7 +1488,7 @@ fn a_kill_line_reaches_who_saw_it_die() {
         let hi = run.monster_idx(healed).unwrap();
         run.monsters[hi].hp = 10.0;
         let _ = take(&mut run);
-        run.heal_monster(hi, 20.0, Some((healer, What::Attack)));
+        run.heal_monster(hi, 20.0, Some((healer, What::Ability(AbilityId::Strike))));
         assert!(run.log.records.iter().any(|r| r.kind == LineKind::Heal), "the game wrote a heal line");
         for s in sent_to_all(&mut run) {
             assert!(s.log.1.is_empty(), "{:?}", s.log.1.iter().map(|l| &l.2).collect::<Vec<_>>());
@@ -1583,7 +1583,7 @@ fn an_effect_on_a_hit_from_something_unseen_adds_only_its_name_to_the_short_line
     let archer = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
     let chill = OnHit { kind: EffectKind::Chilled, secs: 4.0, magical: true, power: 33, look: EffectLook::Plain };
     let _ = take(&mut run);
-    run.hurt_player(0, Damage::physical(6.0).by(archer, What::Attack).with_effect(chill));
+    run.hurt_player(0, Damage::physical(6.0).by(archer, What::Ability(AbilityId::Strike)).with_effect(chill));
     assert!(run.has_effect(Creature::Player(0), EffectKind::Chilled));
     let recs = take(&mut run);
     assert_eq!(recs.len(), 1);
@@ -1603,7 +1603,7 @@ fn a_pure_effect_hit_from_something_unseen_does_not_reach_the_hero_with_its_powe
     let h0 = run.players[0].id;
     let sleep = OnHit { kind: EffectKind::Sleep, secs: 2.0, magical: true, power: 77, look: EffectLook::Plain };
     let _ = take(&mut run);
-    run.hurt_player(0, Damage::physical(0.0).by(archer, What::Shot(EntityKind::SleepOrb)).with_effect(sleep));
+    run.hurt_player(0, Damage::physical(0.0).by(archer, What::Ability(AbilityId::SleepMist)).with_effect(sleep));
     let recs = take(&mut run);
     assert_eq!(recs.len(), 1);
     assert!(recs[0].who.iter().any(|w| w.id == archer), "the record names the attacker: {:?}", recs[0].who);

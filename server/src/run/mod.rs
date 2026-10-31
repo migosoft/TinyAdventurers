@@ -18,7 +18,7 @@ pub mod visibility;
 
 use crate::collision::MoveState;
 use crate::defs::damage::{kind_split, resolve_parts, Damage, DamageSplit, DamageType, What, Why};
-use crate::defs::attributes::{push_dist, Attr};
+use crate::defs::attributes::push_dist;
 use crate::defs::progression;
 use crate::defs::{classes, enemies};
 use crate::defs::enemies::EnemyType;
@@ -1036,16 +1036,6 @@ impl Run {
         }
     }
 
-    /// The STR monster `mi` pushes with: its own, or `BOSS_KNOCK_STR` for a boss's scripted pushes.
-    pub fn push_str(&self, mi: usize) -> i32 {
-        let m = &self.monsters[mi];
-        if m.is_boss {
-            crate::defs::bosses::BOSS_KNOCK_STR
-        } else {
-            m.attrs.get(Attr::Str)
-        }
-    }
-
     /// Heals monster `mi` up to its maximum; returns what it gained. Shown like a hero's heal for an ally.
     pub fn heal_monster(&mut self, mi: usize, amount: f64, by: Option<(u32, What)>) -> f64 {
         let m = &mut self.monsters[mi];
@@ -1335,13 +1325,30 @@ pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: Sh
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::defs::bosses::BOSS_KNOCK_STR;
+    /// A pusher's STR above every hero's weight + 4: its pushes keep their full distance.
+    pub const PUSH_STR: i32 = 30;
+    use crate::defs::abilities::AbilityId;
     use crate::defs::items::{EquipSlot, Equipment, ItemId};
     use tokio::sync::mpsc::unbounded_channel;
 
     pub fn test_run(classes: &[ClassId], boss: BossId) -> Run {
         let with: Vec<(ClassId, Build)> = classes.iter().map(|&c| (c, Build::start(c))).collect();
         test_run_with(&with, boss)
+    }
+
+    /// A real shot for a test: an enemy of `etype` spawns at `from` and casts `id` toward `to` through
+    /// `monster_cast` (an ability its kit lacks is added from its Attributes: a spell needs no weapon). It
+    /// stays dormant afterwards, so it casts nothing more. Returns its id.
+    pub fn enemy_cast(run: &mut Run, etype: EnemyType, from: Vec2, id: AbilityId, to: Vec2) -> u32 {
+        let owner = run.spawn_enemy(etype, from, None);
+        let mi = run.monster_idx(owner).unwrap();
+        if run.monsters[mi].kit.get(id).is_none() {
+            let m = &run.monsters[mi];
+            run.monsters[mi].kit = crate::sheet::monster_kit(&[id], &m.attrs, &[], crate::sheet::Body { radius: m.radius });
+        }
+        assert!(abilities::monster_cast(run, mi, id, to), "{id:?} is cast");
+        run.monsters[mi].dormant = true;
+        owner
     }
 
     /// The class start with `item` in `slot`.
@@ -1534,7 +1541,7 @@ pub mod tests {
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
-    // boss scripts push with BOSS_KNOCK_STR above every hero weight + 4.
+    // pushes by weight need a pusher above every hero weight + 4 (PUSH_STR).
     #[test]
     fn simulation_is_unchanged_after_waking_the_boss() {
         let mut got = Vec::new();
@@ -1802,7 +1809,7 @@ pub mod tests {
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].last_hit_by = Some(0);
         let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
-        run.knock_monster(mi, from, 40.0, BOSS_KNOCK_STR);
+        run.knock_monster(mi, from, 40.0, PUSH_STR);
         for _ in 0..30 {
             run.step();
         }
@@ -1824,7 +1831,7 @@ pub mod tests {
         let (mut run, id, _) = orc_by(Tile::DeepWater);
         let mi = run.monster_idx(id).unwrap();
         let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
-        run.knock_monster(mi, from, 40.0, BOSS_KNOCK_STR);
+        run.knock_monster(mi, from, 40.0, PUSH_STR);
         for _ in 0..30 + (dungeon::DROWN_TIME / DT) as usize {
             run.step();
         }
@@ -1868,7 +1875,7 @@ pub mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
         let from = run.monsters[bi].pos - Vec2::new(10.0, 0.0);
-        run.knock_monster(bi, from, 40.0, BOSS_KNOCK_STR);
+        run.knock_monster(bi, from, 40.0, PUSH_STR);
         assert_eq!(run.monsters[bi].knock, Vec2::ZERO);
     }
 
@@ -1943,11 +1950,11 @@ pub mod tests {
         let start = run.players[0].pos();
         // Mid-dash heroes are in the air: no push.
         run.players[0].mv.dash_t = 0.1;
-        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, BOSS_KNOCK_STR);
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, PUSH_STR);
         assert!(!run.players[0].mv.knocked());
         run.players[0].mv.dash_t = 0.0;
         // 36 px away from a hit on the left, while walking left and attacking: slides right into the chasm.
-        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, BOSS_KNOCK_STR);
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, PUSH_STR);
         assert!(run.players[0].mv.knocked());
         walk(&mut run, -1, Some(1));
         assert_eq!(run.players[0].cd1, 0.0, "no attack while pushed");
@@ -1968,7 +1975,7 @@ pub mod tests {
         stand_at(&mut run, at - Vec2::new(32.0, 0.0));
         let start = run.players[0].pos();
         // 14 px (a chort): stops short of the chasm 24 px away.
-        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 14.0, BOSS_KNOCK_STR);
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 14.0, PUSH_STR);
         for _ in 0..30 {
             walk(&mut run, 0, None);
         }

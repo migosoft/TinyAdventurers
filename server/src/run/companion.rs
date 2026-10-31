@@ -786,12 +786,14 @@ mod tests {
         let mi = wolf_idx(&run, id);
         let at = run.players[0].pos() + Vec2::new(6.0 * crate::dungeon::TILE, 0.0);
         run.monsters[mi].pos = at;
-        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::Arrow, at - Vec2::new(30.0, 0.0), Vec2::new(1.0, 0.0), 180.0, 7.0, 2.0, 0.0, 0, 0.0);
+        let from = at - Vec2::new(30.0, 0.0);
+        crate::run::tests::enemy_cast(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, at);
+        let arrow = run.projectiles.last().unwrap().damage.amount;
         for _ in 0..40 {
             tick_projectiles(&mut run, DT);
         }
         let hp = run.monsters[wolf_idx(&run, id)].hp;
-        assert!((hp - 73.0).abs() < 1e-9, "the arrow's 7 damage, got hp {hp}");
+        assert!((hp - (80.0 - arrow)).abs() < 1e-9, "the arrow's {arrow} damage, got hp {hp}");
         assert!(run.projectiles.iter().all(|p| p.dead), "and it stopped there");
     }
 
@@ -842,15 +844,15 @@ mod tests {
 
     #[test]
     fn a_bosses_area_attack_hits_the_wolf_but_the_boss_targets_heroes() {
-        use crate::defs::bosses::{LICH_NOVA_DAMAGE, LICH_NOVA_RADIUS};
         let (mut run, bi) = crate::run::bosses::lich::tests::lich_with(&[Vec2::new(0.0, 4.0 * crate::dungeon::TILE)]);
         let boss_pos = run.monsters[bi].pos;
         let id = spawn_wolf(&mut run, 0);
         let wi = wolf_idx(&run, id);
-        run.monsters[wi].pos = boss_pos + Vec2::new(LICH_NOVA_RADIUS - 10.0, 0.0);
-        crate::run::bosses::lich::Lich::nova(&mut run, bi, boss_pos);
+        let nova = *run.monsters[bi].kit.get(AbilityId::Nova).expect("the lich casts a nova");
+        run.monsters[wi].pos = boss_pos + Vec2::new(nova.radius - 10.0, 0.0);
+        crate::run::bosses::lich::tests::nova(&mut run, bi);
         let hp = run.monsters[wolf_idx(&run, id)].hp;
-        assert!((hp - (80.0 - LICH_NOVA_DAMAGE * 0.9)).abs() < 1e-9, "magical resistance 10 %: hp {hp}");
+        assert!((hp - (80.0 - nova.damage * 0.9)).abs() < 1e-9, "magical resistance 10 %: hp {hp}");
         // The boss sees the wolf (it is nearer than the hero) but targets the hero.
         let seen = crate::run::bosses::target(&run, bi);
         assert_eq!(seen.map(|t| t.0), Some(0));

@@ -591,6 +591,7 @@ fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::super::tests::{test_run, test_run_seed};
+    use crate::defs::abilities::AbilityId;
     use super::*;
     use crate::defs::damage::Damage;
     use crate::defs::kinds::EntityKind;
@@ -1057,8 +1058,8 @@ pub(crate) mod tests {
         run.step();
         assert_eq!(run.monsters[mi].ai.target, None, "dark: not seen");
         // A fire shot (moving light) beside the hero lights them within this very step.
-        // Owner 999 is no real entity: only the kind's light matters here.
-        super::super::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, ppos + Vec2::new(TILE, 0.0), Vec2::new(0.0, 1.0), 1.0, 1.0, 3.0, 0.0, 0, 0.0);
+        let from = ppos + Vec2::new(TILE, 0.0);
+        crate::run::tests::enemy_cast(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(0.0, 100.0));
         run.step();
         assert_eq!(run.monsters[mi].ai.target, Some(Target::Player(run.players[0].id)));
     }

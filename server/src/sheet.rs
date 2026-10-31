@@ -1292,7 +1292,7 @@ mod tests {
         check(&dragon, AbilityId::Smash, 22.0, 36.0);
         check(&demon, AbilityId::Strike, 25.0, 56.0);
         check(&demon, AbilityId::Swoop, 30.0, 64.0);
-        check(&lich, AbilityId::Nova, LICH_NOVA_DAMAGE, LICH_NOVA_KNOCK);
+        check(&lich, AbilityId::Nova, 24.0, 64.0);
         // The rest of today's numbers: the breath pulse, the orbs and bolts.
         near(dragon.get(AbilityId::FireBreath).unwrap().damage, 6.0, "breath pulse");
         near(demon.get(AbilityId::RingOfFire).unwrap().damage, 12.0, "ring of fire");

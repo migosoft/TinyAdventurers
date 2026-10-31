@@ -27,10 +27,6 @@ pub fn pct(fraction: f64) -> String {
 pub fn what(w: What) -> String {
     match w {
         What::Ability(id) => abilities::def(id).name.to_string(),
-        #[cfg(test)]
-        What::Attack => "attack".to_string(),
-        What::Shot(_) => "shot".to_string(),
-        What::Move(n) => n.to_string(),
         What::Tick(k) => effect_name(k).to_string(),
         What::Lava => "lava".to_string(),
         What::Blast => "blast".to_string(),
