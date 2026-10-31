@@ -18,7 +18,7 @@ pub mod visibility;
 
 use crate::collision::MoveState;
 use crate::defs::damage::{kind_split, resolve_parts, Damage, DamageSplit, DamageType, What, Why};
-use crate::defs::attributes::{push_dist, Attr};
+use crate::defs::attributes::push_dist;
 use crate::defs::progression;
 use crate::defs::{classes, enemies};
 use crate::defs::enemies::EnemyType;
@@ -303,9 +303,15 @@ impl Run {
             sight: prof.sight,
             alive: true,
             aim: 0.0,
+            aim_dist: 0.0,
             anim: Anim::Idle,
             anim_start: self.time,
             hurt_t: 0.0,
+            kit: crate::sheet::enemy_kit(t),
+            cds: Default::default(),
+            slam: None,
+            channel: None,
+            dash: None,
             wolf_bit: 0.0,
             ai: Ai::new(pos),
             owner,
@@ -442,12 +448,14 @@ impl Run {
                 continue;
             }
             if m.sinking.is_some() || m.knock != Vec2::ZERO {
+                self.monsters[mi].slam = None;
                 continue; // slid and sunk below
             }
             if m.effects.no_act() {
                 // Asleep or stone: no thinking, attacks or wind-ups.
                 let m = &mut self.monsters[mi];
                 m.ai.windup = None;
+                m.slam = None;
                 if m.anim != Anim::Idle {
                     m.anim = Anim::Idle;
                     m.anim_start = self.time;
@@ -455,6 +463,7 @@ impl Run {
                 continue;
             }
             if m.effects.fear_from().is_some() && !m.hiding && !m.dormant {
+                self.monsters[mi].slam = None;
                 ai::flee(self, mi, DT);
                 continue;
             }
@@ -472,6 +481,9 @@ impl Run {
             }
         }
         Level::tick(self, DT);
+        for mi in 0..self.monsters.len() {
+            abilities::tick_channel(self, mi, DT);
+        }
         ai::separate_monsters(self);
         for mi in 0..self.monsters.len() {
             if self.monsters[mi].alive && !self.monsters[mi].is_boss {
@@ -490,6 +502,7 @@ impl Run {
             }
             m.history.push_back(m.pos);
             m.hurt_t = (m.hurt_t - DT).max(0.0);
+            m.cds.tick(DT);
             keystones::cool(m, DT);
         }
         self.monsters.retain(|m| m.alive);
@@ -574,7 +587,7 @@ impl Run {
         );
         p.moving = !knocked && fx.0 > 0.0 && (input.mx != 0 || input.my != 0);
         if dashing {
-            abilities::dash_contact(self, pi);
+            abilities::dash_contact(self, effects::Creature::Player(pi));
         }
         if knocked {
             return;
@@ -603,8 +616,8 @@ impl Run {
         if !m.alive || m.is_boss || m.airborne || m.sinking.is_some() || dist <= 0.0 {
             return;
         }
-        if m.ally.as_ref().is_some_and(|a| a.dash.is_some()) {
-            return; // a dashing wolf is in the air, like a dashing hero
+        if m.dash.is_some() {
+            return; // a dashing monster is in the air, like a dashing hero
         }
         let dist = dist * m.effects.knock_taken();
         let d = m.pos - from;
@@ -629,11 +642,11 @@ impl Run {
 
     /// The ground under a monster's centre, like `terrain_player`: chasms and
     /// deep water take it (kill credit to the last hero who hurt it), lava
-    /// burns monsters that are not lava walkers. The wolf is in the air while it
-    /// dashes, and over a chasm with its dash ready it dashes back to safe ground.
+    /// burns monsters that are not lava walkers. A dashing monster is in the air,
+    /// and the wolf over a chasm with its Pounce ready dashes back to safe ground.
     fn terrain_monster(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
-        if !m.alive || m.is_boss || m.airborne || m.ally.as_ref().is_some_and(|a| a.dash.is_some()) {
+        if !m.alive || m.is_boss || m.airborne || m.dash.is_some() {
             return;
         }
         if let Some((t, how)) = m.sinking {
@@ -651,8 +664,9 @@ impl Run {
         let pos = m.pos;
         let (tx, ty) = dungeon::Map::tile_of(pos);
         let tile = self.layout.map.get(tx, ty);
+        let pounce_ready = m.cds.ready(crate::defs::abilities::AbilityId::Pounce);
         if let Some(a) = m.ally.as_mut() {
-            if tile == Tile::Chasm as u8 && a.dash_cd <= 0.0 {
+            if tile == Tile::Chasm as u8 && pounce_ready {
                 m.knock = Vec2::ZERO;
                 companion::dash_back(self, mi);
                 return;
@@ -1022,16 +1036,6 @@ impl Run {
         }
     }
 
-    /// The STR monster `mi` pushes with: its own, or `BOSS_KNOCK_STR` for a boss's scripted pushes.
-    pub fn push_str(&self, mi: usize) -> i32 {
-        let m = &self.monsters[mi];
-        if m.is_boss {
-            crate::defs::bosses::BOSS_KNOCK_STR
-        } else {
-            m.attrs.get(Attr::Str)
-        }
-    }
-
     /// Heals monster `mi` up to its maximum; returns what it gained. Shown like a hero's heal for an ally.
     pub fn heal_monster(&mut self, mi: usize, amount: f64, by: Option<(u32, What)>) -> f64 {
         let m = &mut self.monsters[mi];
@@ -1321,13 +1325,30 @@ pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: Sh
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::defs::bosses::BOSS_KNOCK_STR;
+    /// A pusher's STR above every hero's weight + 4: its pushes keep their full distance.
+    pub const PUSH_STR: i32 = 30;
+    use crate::defs::abilities::AbilityId;
     use crate::defs::items::{EquipSlot, Equipment, ItemId};
     use tokio::sync::mpsc::unbounded_channel;
 
     pub fn test_run(classes: &[ClassId], boss: BossId) -> Run {
         let with: Vec<(ClassId, Build)> = classes.iter().map(|&c| (c, Build::start(c))).collect();
         test_run_with(&with, boss)
+    }
+
+    /// A real shot for a test: an enemy of `etype` spawns at `from` and uses `id` toward `to` through
+    /// `monster_use`. If its kit lacks `id`, the kit is replaced by a kit of just `id` (made from its
+    /// Attributes: a spell needs no weapon). It stays dormant afterwards, so it does nothing more. Returns its id.
+    pub fn enemy_use(run: &mut Run, etype: EnemyType, from: Vec2, id: AbilityId, to: Vec2) -> u32 {
+        let owner = run.spawn_enemy(etype, from, None);
+        let mi = run.monster_idx(owner).unwrap();
+        if run.monsters[mi].kit.get(id).is_none() {
+            let m = &run.monsters[mi];
+            run.monsters[mi].kit = crate::sheet::monster_kit(&[id], &m.attrs, &[], crate::sheet::Body { radius: m.radius });
+        }
+        assert!(abilities::monster_use(run, mi, id, to), "{id:?} is used");
+        run.monsters[mi].dormant = true;
+        owner
     }
 
     /// The class start with `item` in `slot`.
@@ -1520,7 +1541,7 @@ pub mod tests {
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
-    // boss scripts push with BOSS_KNOCK_STR above every hero weight + 4.
+    // pushes by weight need a pusher above every hero weight + 4 (PUSH_STR).
     #[test]
     fn simulation_is_unchanged_after_waking_the_boss() {
         let mut got = Vec::new();
@@ -1550,7 +1571,9 @@ pub mod tests {
         // halls differ. Part A (effect resistances) left all three values unchanged before this.
         // 2026-10-21, plan 3a (Charge 25.6, reach 22, staffs and punches in melee, overkill piercing): checked
         // again, values unchanged by plan 3a. `plan_3a_fight_is_pinned` pins a fight that does exercise it.
-        assert_eq!(got, vec![11853672065832131168, 7100769620128759448, 1468820053114872194]);
+        // 2026-10-31, #177 (one name, one ability): monsters and bosses use shared abilities with their own
+        // cooldowns, so the Demon and Lich fights (the first two values) play out differently; the Dragon's is unchanged. Re-recorded once, on purpose.
+        assert_eq!(got, vec![6511878345562000907, 15469823654463399686, 1468820053114872194]);
     }
 
     #[test]
@@ -1569,7 +1592,7 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![11853672065832131168, 7100769620128759448, 1468820053114872194]);
+        assert_eq!(got, vec![6511878345562000907, 15469823654463399686, 1468820053114872194]);
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
@@ -1788,7 +1811,7 @@ pub mod tests {
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].last_hit_by = Some(0);
         let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
-        run.knock_monster(mi, from, 40.0, BOSS_KNOCK_STR);
+        run.knock_monster(mi, from, 40.0, PUSH_STR);
         for _ in 0..30 {
             run.step();
         }
@@ -1810,7 +1833,7 @@ pub mod tests {
         let (mut run, id, _) = orc_by(Tile::DeepWater);
         let mi = run.monster_idx(id).unwrap();
         let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
-        run.knock_monster(mi, from, 40.0, BOSS_KNOCK_STR);
+        run.knock_monster(mi, from, 40.0, PUSH_STR);
         for _ in 0..30 + (dungeon::DROWN_TIME / DT) as usize {
             run.step();
         }
@@ -1841,10 +1864,10 @@ pub mod tests {
         run.players[1].mv.y = at.y;
         let id = run.spawn_enemy(EnemyType::OrcWarrior, at - Vec2::new(16.0, 0.0), None);
         let oi = run.monster_idx(id).unwrap();
-        let attack = crate::defs::enemies::def(EnemyType::OrcWarrior).attack;
         // STR 16: the Wizard (weight 9) the full 20 px, the Barbarian (weight 13) 20 x 3/4 = 15 px.
-        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(0), attack, false, None);
-        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(1), attack, false, None);
+        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(0), false, None);
+        run.monsters[oi].cds = Default::default();
+        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(1), false, None);
         assert_eq!(run.players[0].mv.knock_vx, crate::collision::knock_speed(20.0, DT));
         assert_eq!(run.players[1].mv.knock_vx, crate::collision::knock_speed(15.0, DT));
     }
@@ -1854,7 +1877,7 @@ pub mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
         let from = run.monsters[bi].pos - Vec2::new(10.0, 0.0);
-        run.knock_monster(bi, from, 40.0, BOSS_KNOCK_STR);
+        run.knock_monster(bi, from, 40.0, PUSH_STR);
         assert_eq!(run.monsters[bi].knock, Vec2::ZERO);
     }
 
@@ -1929,11 +1952,11 @@ pub mod tests {
         let start = run.players[0].pos();
         // Mid-dash heroes are in the air: no push.
         run.players[0].mv.dash_t = 0.1;
-        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, BOSS_KNOCK_STR);
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, PUSH_STR);
         assert!(!run.players[0].mv.knocked());
         run.players[0].mv.dash_t = 0.0;
         // 36 px away from a hit on the left, while walking left and attacking: slides right into the chasm.
-        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, BOSS_KNOCK_STR);
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 36.0, PUSH_STR);
         assert!(run.players[0].mv.knocked());
         walk(&mut run, -1, Some(1));
         assert_eq!(run.players[0].cd1, 0.0, "no attack while pushed");
@@ -1954,7 +1977,7 @@ pub mod tests {
         stand_at(&mut run, at - Vec2::new(32.0, 0.0));
         let start = run.players[0].pos();
         // 14 px (a chort): stops short of the chasm 24 px away.
-        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 14.0, BOSS_KNOCK_STR);
+        run.knock_player(0, start - Vec2::new(10.0, 0.0), 0.0, 14.0, PUSH_STR);
         for _ in 0..30 {
             walk(&mut run, 0, None);
         }

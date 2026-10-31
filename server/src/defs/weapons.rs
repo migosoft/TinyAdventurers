@@ -81,6 +81,10 @@ pub struct MeleeStats {
     pub cooldown: f64,
     pub arc: f64,
     pub push: f64,
+    /// How far the blow reaches beyond the wielder's body (px).
+    pub reach: f64,
+    /// The seconds the wielder winds up before the blow lands, on top of the ability's own.
+    pub windup: f64,
     pub split: DamageSplit,
     pub at: At,
 }
@@ -93,6 +97,8 @@ pub struct RangedStats {
     pub projectile_speed: f64,
     pub radius: f64,
     pub projectile: EntityKind,
+    /// The seconds the wielder winds up before the shot leaves, on top of the ability's own.
+    pub windup: f64,
     pub split: DamageSplit,
     pub at: At,
 }
@@ -107,6 +113,10 @@ pub struct ResolvedWeapon {
     pub cooldown: f64,
     pub arc: f64,
     pub push: f64,
+    /// Melee: how far it reaches beyond the wielder's body (px); not scaled.
+    pub reach: f64,
+    /// The wind-up (s) before the blow lands or the shot leaves; not scaled.
+    pub windup: f64,
     pub range: f64,
     pub projectile_speed: f64,
     pub radius: f64,
@@ -144,6 +154,8 @@ pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> Re
         cooldown,
         arc: Scaled { value: s.arc, attr: Attr::Dex, pct: DEX_ARC, at: s.at.dex }.get(attrs),
         push: s.push,
+        reach: s.reach,
+        windup: s.windup,
         range: 0.0,
         projectile_speed: 0.0,
         radius: 0.0,
@@ -166,6 +178,8 @@ pub fn resolve_ranged(kind: WeaponKind, s: &RangedStats, attrs: &Attributes) -> 
         cooldown,
         arc: 0.0,
         push: 0.0,
+        reach: 0.0,
+        windup: s.windup,
         range: Scaled { value: s.range, attr: Attr::Str, pct: STR_RANGE, at: s.at.str }.get(attrs),
         projectile_speed: Scaled { value: s.projectile_speed, attr: Attr::Str, pct: STR_RANGE, at: s.at.str }.get(attrs),
         radius: s.radius,
@@ -184,7 +198,7 @@ mod tests {
     use super::*;
 
     fn sword() -> MeleeStats {
-        MeleeStats { damage: 20.0, cooldown: 0.45, arc: 1.75, push: 0.0, split: DamageSplit::physical(), at: At { str: 15, dex: 8 } }
+        MeleeStats { damage: 20.0, cooldown: 0.45, arc: 1.75, push: 0.0, reach: 17.0, windup: 0.0, split: DamageSplit::physical(), at: At { str: 15, dex: 8 } }
     }
 
     #[test]
@@ -250,6 +264,7 @@ mod tests {
             projectile_speed: 290.0,
             radius: 5.0,
             projectile: EntityKind::Arrow,
+            windup: 0.0,
             split: DamageSplit::physical(),
             at: At { str: 10, dex: 15 },
         };

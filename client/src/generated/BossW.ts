@@ -2,6 +2,6 @@
 import type { BossId } from "./BossId";
 
 /**
- * `[kind, hp, max_hp, immune, enraged]`
+ * `[kind, hp, max_hp, immune]`
  */
-export type BossW = [BossId, number, number, boolean, boolean];
+export type BossW = [BossId, number, number, boolean];

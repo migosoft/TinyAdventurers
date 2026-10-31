@@ -238,7 +238,7 @@ export class Hud {
     }
     if (s.boss) {
       this.boss.classList.remove('hidden');
-      const tags = `${s.boss.immune ? '<b class="chip immune">Immune</b>' : ''}${s.boss.enraged ? '<b class="chip enraged">Enraged</b>' : ''}`;
+      const tags = `${s.boss.immune ? '<b class="chip immune">Immune</b>' : ''}`;
       this.boss.innerHTML = `<div class="bname">${BOSS_TEXT[s.boss.kind].name} ${tags}</div><div class="bbar"><div class="fill" style="width:${(s.boss.hp / s.boss.max_hp) * 100}%"></div></div>`;
     }
     if (!s.me.alive) {

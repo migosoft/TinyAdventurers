@@ -1127,13 +1127,8 @@ export const ITEMS = {
     "sprite": ""
   },
   "BeastBite": {
-    "base": "10 damage · every 0.9 s · arc 1",
-    "classes": [
-      "Wizard",
-      "Paladin",
-      "Barbarian",
-      "ElvenRanger"
-    ],
+    "base": "10 damage · every 0.9 s · arc 1 · push 8 · wind-up 0.2 s",
+    "classes": [],
     "grants": [],
     "hero": false,
     "kind": "Bite",
@@ -1226,7 +1221,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "ChortClaws": {
-    "base": "9 damage · every 1 s · arc 1.6 · push 14",
+    "base": "9 damage · every 1 s · arc 1.6 · push 14 · wind-up 0.3 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1278,6 +1273,58 @@ export const ITEMS = {
     "req": [],
     "slot": "Melee",
     "sprite": "weapon_cleaver"
+  },
+  "DemonClaws": {
+    "base": "25 damage · every 1.6 s · arc 2.1 · push 56 · wind-up 0.45 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Claws",
+    "name": "Demon Claws",
+    "prof": "Claws",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
+  "DragonBite": {
+    "base": "28 damage · every 3 s · arc 0.7 · push 24 · wind-up 0.45 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Bite",
+    "name": "Dragon Bite",
+    "prof": "Bite",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
+  "DragonClaws": {
+    "base": "20 damage · every 2.5 s · arc 1.6 · push 32 · wind-up 0.4 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Claws",
+    "name": "Dragon Claws",
+    "prof": "Claws",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
+  "DragonTail": {
+    "base": "25 damage · every 3 s · arc 2.4 · push 44 · wind-up 0.4 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Tail",
+    "name": "Dragon Tail",
+    "prof": "Tail",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
   },
   "ElvenBow": {
     "base": "16 damage · every 0.7 s · range 260",
@@ -1388,6 +1435,19 @@ export const ITEMS = {
     "slot": "Ranged",
     "sprite": "weapon_bow"
   },
+  "GoblinShortbow": {
+    "base": "6 damage · every 1.4 s · range 140 · wind-up 0.3 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Bow",
+    "name": "Goblin Shortbow",
+    "prof": "Bow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow"
+  },
   "GoldenSword": {
     "base": "22 damage · every 0.5 s · arc 1.8",
     "classes": [
@@ -1450,7 +1510,7 @@ export const ITEMS = {
     "sprite": "weapon_bow"
   },
   "ImpClaws": {
-    "base": "6 damage · every 0.9 s · arc 1.6",
+    "base": "6 damage · every 0.9 s · arc 1.6 · wind-up 0.25 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1549,7 +1609,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "MimicBite": {
-    "base": "13 damage · every 1 s · arc 1",
+    "base": "13 damage · every 1 s · arc 1 · wind-up 0.25 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1565,6 +1625,19 @@ export const ITEMS = {
     "req": [],
     "slot": "Melee",
     "sprite": ""
+  },
+  "NecromancerRod": {
+    "base": "5 damage · every 1.2 s · arc 1.6 · wind-up 0.25 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Staff",
+    "name": "Necromancer Rod",
+    "prof": "Staff",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_green_magic_staff"
   },
   "NecromancerStaff": {
     "base": "5 damage · every 1.2 s · arc 1.6",
@@ -1584,6 +1657,19 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": "weapon_green_magic_staff"
   },
+  "OgreClub": {
+    "base": "18 damage · every 1.6 s · arc 2 · push 28 · wind-up 0.5 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Club",
+    "name": "Ogre Club",
+    "prof": "Club",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_baton_with_spikes"
+  },
   "OrcBow": {
     "base": "10 damage · every 1.7 s · range 150",
     "classes": [
@@ -1596,6 +1682,32 @@ export const ITEMS = {
     "hero": true,
     "kind": "Bow",
     "name": "Orc Bow",
+    "prof": "Bow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow"
+  },
+  "OrcCleaver": {
+    "base": "14 damage · every 1.2 s · arc 1.8 · push 20 · wind-up 0.35 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Axe",
+    "name": "Orc Cleaver",
+    "prof": "Axe",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_cleaver"
+  },
+  "OrcWarbow": {
+    "base": "10 damage · every 1.7 s · range 150 · wind-up 0.35 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Bow",
+    "name": "Orc Warbow",
     "prof": "Bow",
     "props": [],
     "req": [],
@@ -1808,6 +1920,19 @@ export const ITEMS = {
     "slot": "Armor",
     "sprite": ""
   },
+  "SkeletonBow": {
+    "base": "7 damage · every 1.6 s · range 150 · wind-up 0.35 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Longbow",
+    "name": "Skeleton Bow",
+    "prof": "Longbow",
+    "props": [],
+    "req": [],
+    "slot": "Ranged",
+    "sprite": "weapon_bow_2"
+  },
   "SkeletonLongbow": {
     "base": "7 damage · every 1.6 s · range 150",
     "classes": [
@@ -1825,6 +1950,19 @@ export const ITEMS = {
     "req": [],
     "slot": "Ranged",
     "sprite": "weapon_bow_2"
+  },
+  "SkeletonSword": {
+    "base": "9 damage · every 1 s · arc 1.6 · wind-up 0.3 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Sword",
+    "name": "Skeleton Sword",
+    "prof": "Sword",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_rusty_sword"
   },
   "SpikedClub": {
     "base": "18 damage · every 1.6 s · arc 2 · push 28",
@@ -1866,6 +2004,19 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": "weapon_green_magic_staff"
   },
+  "SummonerRod": {
+    "base": "5 damage · every 1.2 s · arc 1.6 · wind-up 0.25 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Staff",
+    "name": "Summoner Rod",
+    "prof": "Staff",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_red_magic_staff"
+  },
   "SummonerStaff": {
     "base": "5 damage · every 1.2 s · arc 1.6",
     "classes": [
@@ -1886,12 +2037,7 @@ export const ITEMS = {
   },
   "Tail": {
     "base": "10 damage · every 1.25 s · arc 2.4 · push 10",
-    "classes": [
-      "Wizard",
-      "Paladin",
-      "Barbarian",
-      "ElvenRanger"
-    ],
+    "classes": [],
     "grants": [],
     "hero": false,
     "kind": "Tail",
@@ -1921,7 +2067,7 @@ export const ITEMS = {
     "sprite": "weapon_throwing_axe"
   },
   "UnarmedStrike": {
-    "base": "3 damage · every 1 s · arc 1.4",
+    "base": "3 damage · every 1 s · arc 1.4 · wind-up 0.25 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1959,6 +2105,22 @@ export const ITEMS = {
 } as const;
 
 export const ABILITY_INFO = {
+  "Bite": {
+    "category": "WeaponAttack",
+    "req": [
+      "a weapon of kind Bite"
+    ],
+    "text": "A snap of the jaws, a strike with a natural bite weapon.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
+  "BlindingCurse": {
+    "category": "Spell",
+    "req": [],
+    "text": "A slow orb that blinds what it hits.",
+    "tint": "Magical",
+    "uses": "Nothing"
+  },
   "ChainSpark": {
     "category": "Spell",
     "req": [
@@ -1993,10 +2155,24 @@ export const ABILITY_INFO = {
     "tint": null,
     "uses": "Nothing"
   },
+  "FireBolt": {
+    "category": "Innate",
+    "req": [],
+    "text": "A bolt of fire.",
+    "tint": "Heat",
+    "uses": "Nothing"
+  },
+  "FireBreath": {
+    "category": "Innate",
+    "req": [],
+    "text": "A cone of fire held for a moment, leaving burning patches on the ground.",
+    "tint": "Heat",
+    "uses": "Nothing"
+  },
   "Fireball": {
     "category": "Spell",
     "req": [],
-    "text": "Explodes where it lands, hurting everything nearby.",
+    "text": "Explodes where it lands, hurting everything nearby and pushing the light ones back.",
     "tint": "Heat",
     "uses": "Nothing"
   },
@@ -2026,6 +2202,13 @@ export const ABILITY_INFO = {
     ],
     "text": "A quick bolt, mostly cold, that chills what it hits.",
     "tint": "Cold",
+    "uses": "Nothing"
+  },
+  "GloomBolts": {
+    "category": "Spell",
+    "req": [],
+    "text": "Five bolts of gloom in a fan.",
+    "tint": "Magical",
     "uses": "Nothing"
   },
   "GroundSlam": {
@@ -2080,6 +2263,13 @@ export const ABILITY_INFO = {
     "tint": "Magical",
     "uses": "Nothing"
   },
+  "Nova": {
+    "category": "Spell",
+    "req": [],
+    "text": "A burst of dark power that hurts and pushes everything around the caster.",
+    "tint": "Magical",
+    "uses": "Nothing"
+  },
   "PoisonCoat": {
     "category": "Technique",
     "req": [
@@ -2088,6 +2278,13 @@ export const ABILITY_INFO = {
     "text": "For a while your weapon attacks add poison and poison what they hit.",
     "tint": null,
     "uses": "Nothing"
+  },
+  "Pounce": {
+    "category": "Technique",
+    "req": [],
+    "text": "A leap that crosses chasms and hits the first enemy it reaches, hard.",
+    "tint": "Physical",
+    "uses": "Melee"
   },
   "Purify": {
     "category": "Innate",
@@ -2098,12 +2295,40 @@ export const ABILITY_INFO = {
     "tint": null,
     "uses": "Nothing"
   },
+  "RingOfFire": {
+    "category": "Innate",
+    "req": [],
+    "text": "Sixteen fire orbs flung out in a ring.",
+    "tint": "Heat",
+    "uses": "Nothing"
+  },
+  "ShadowBolt": {
+    "category": "Spell",
+    "req": [],
+    "text": "A slow bolt of shadow.",
+    "tint": "Magical",
+    "uses": "Nothing"
+  },
   "Shoot": {
     "category": "WeaponAttack",
     "req": [],
     "text": "Shoot your ranged weapon. In melee you strike with your melee weapon instead.",
     "tint": "Physical",
     "uses": "Ranged"
+  },
+  "SleepMist": {
+    "category": "Spell",
+    "req": [],
+    "text": "A slow orb that puts what it hits to sleep.",
+    "tint": null,
+    "uses": "Nothing"
+  },
+  "Smash": {
+    "category": "Technique",
+    "req": [],
+    "text": "A blow all around the user that pushes everything away.",
+    "tint": "Physical",
+    "uses": "Melee"
   },
   "Smite": {
     "category": "WeaponAttack",
@@ -2114,6 +2339,13 @@ export const ABILITY_INFO = {
     "text": "A slow, hard swing with a holy part.",
     "tint": "Physical",
     "uses": "Melee"
+  },
+  "StoneGaze": {
+    "category": "Spell",
+    "req": [],
+    "text": "A stare that turns the target to stone, if it still sees it when the gaze lands.",
+    "tint": null,
+    "uses": "Nothing"
   },
   "Strike": {
     "category": "WeaponAttack",
@@ -2128,6 +2360,22 @@ export const ABILITY_INFO = {
     "text": "Calls your Dire Wolf, or heals it while it lives.",
     "tint": null,
     "uses": "Nothing"
+  },
+  "Swoop": {
+    "category": "Technique",
+    "req": [],
+    "text": "A long rush that hurts each enemy it passes once and pushes it hard.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
+  "TailWhip": {
+    "category": "WeaponAttack",
+    "req": [
+      "a weapon of kind Tail"
+    ],
+    "text": "A lash of the tail behind the user.",
+    "tint": "Physical",
+    "uses": "Melee"
   },
   "Volley": {
     "category": "WeaponAttack",

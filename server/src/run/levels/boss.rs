@@ -59,9 +59,15 @@ pub fn spawn(run: &mut Run) {
         sight: prof.sight,
         alive: true,
         aim: std::f64::consts::FRAC_PI_2,
+        aim_dist: 0.0,
         anim: Anim::Idle,
         anim_start: 0.0,
         hurt_t: 0.0,
+        kit: crate::sheet::boss_kit(boss_id),
+        cds: Default::default(),
+        slam: None,
+        channel: None,
+        dash: None,
         wolf_bit: 0.0,
         ai: Ai::new(pos),
         owner: None,
@@ -156,7 +162,6 @@ pub fn bar(run: &Run) -> Option<BossBar> {
         return None;
     }
     let immune = e.behaviour.as_ref().map_or(false, |b| !b.can_be_damaged(run));
-    let enraged = e.behaviour.as_ref().map_or(false, |b| b.enraged());
     let (hp, max) = run.monsters.iter().find(|m| m.id == e.boss_ent).map_or((0.0, 1.0), |m| (m.hp, m.max_hp));
-    Some(BossBar { kind: e.boss_id, hp: hp as f32, max_hp: max as f32, immune, enraged })
+    Some(BossBar { kind: e.boss_id, hp: hp as f32, max_hp: max as f32, immune })
 }

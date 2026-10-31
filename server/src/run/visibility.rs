@@ -125,7 +125,7 @@ fn hp_byte(hp: f64, max: f64) -> u8 {
 }
 
 /// One monster's entry. An ally's `extra` is its owner (the ranger's id).
-fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, boss_enraged: bool, gaze: u32) -> EntSnap {
+fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, gaze: u32) -> EntSnap {
     let mut f = 0;
     if m.hurt_t > 0.0 {
         f |= flags::HURT;
@@ -142,9 +142,6 @@ fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, boss
     if m.is_boss && boss_immune {
         f |= flags::IMMUNE;
     }
-    if m.is_boss && boss_enraged {
-        f |= flags::ENRAGED;
-    }
     let extra = match &m.ally {
         Some(a) => a.owner,
         None if m.anim == Anim::Gaze => gaze,
@@ -158,7 +155,6 @@ fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, boss
 pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> Vec<EntSnap> {
     let behaviour = run.level.boss().and_then(|b| b.behaviour.as_ref());
     let boss_immune = behaviour.map_or(false, |b| !b.can_be_damaged(run));
-    let boss_enraged = behaviour.map_or(false, |b| b.enraged());
     let gaze = behaviour.and_then(|b| b.gaze_target()).unwrap_or(0);
 
     // Players and their allies are always visible to their party.
@@ -176,18 +172,18 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
             EntSnap(p.id, p.kind() as u8, p.mv.x as f32, p.mv.y as f32, hp_byte(p.hp, p.max_hp), p.anim as u8, p.aim as f32, ms_since(run, p.anim_start), f, 0, p.effects.bits())
         })
         .collect();
-    ents.extend(run.monsters.iter().filter(|m| m.alive && m.is_ally()).map(|m| monster_snap(run, m, boss_immune, boss_enraged, gaze)));
+    ents.extend(run.monsters.iter().filter(|m| m.alive && m.is_ally()).map(|m| monster_snap(run, m, boss_immune, gaze)));
 
     let lights = &run.lights;
     for m in &run.monsters {
         if !m.alive || m.is_ally() || !seen(view, lights, dark, m.pos, m.radius) {
             continue;
         }
-        ents.push(monster_snap(run, m, boss_immune, boss_enraged, gaze));
+        ents.push(monster_snap(run, m, boss_immune, gaze));
     }
     for pr in &run.projectiles {
         // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
-        if pr.dead || !(pr.from_player || seen(view, lights, dark, pr.pos, 0.0)) {
+        if pr.dead || !(pr.side == super::targets::Side::Heroes || seen(view, lights, dark, pr.pos, 0.0)) {
             continue;
         }
         let extra = (pr.owner << 16) | pr.shot as u32;
@@ -297,6 +293,7 @@ mod tests {
     use crate::fov::PLAYER_FOV_RADIUS;
     use crate::defs::enemies::EnemyType;
     use crate::protocol::{BossId, ClassId};
+    use crate::defs::abilities::AbilityId;
     use crate::run::tests::test_run;
     use crate::defs::lights::LightKind;
     use crate::run::light::{Anchor, Lights};
@@ -340,7 +337,8 @@ mod tests {
         assert!(sees(&mut run, p, 6.0), "lit by the torch");
         run.set_light(torch, false);
         assert!(!sees(&mut run, p, 6.0), "dark again");
-        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::FireBolt, Map::center_of(tx + 3, ty), Vec2::new(0.0, 1.0), 1.0, 1.0, 3.0, 0.0, 0, 0.0);
+        let from = Map::center_of(tx + 3, ty);
+        crate::run::tests::enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(0.0, 100.0));
         assert!(sees(&mut run, p, 6.0), "a fire bolt lights it");
     }
 

@@ -75,12 +75,6 @@ describe('demon frames', () => {
     expect(at(ANIM.Melee, w + CONST.DEMON_CLEAVE_RECOVER).frame).toBe('demon_cleave_anim_f4');
   });
 
-  it('enraged, the wind-up is shorter', () => {
-    const w = CONST.DEMON_CLEAVE_WINDUP * CONST.DEMON_ENRAGED_PACE;
-    expect(at(ANIM.Melee, w + 0.01, FLAG.ENRAGED).frame).toBe('demon_cleave_anim_f2');
-    expect(at(ANIM.Melee, w + 0.01).frame).toBe('demon_cleave_anim_f0');
-  });
-
   it('charges: crouch, two looping frames, the stop', () => {
     const w = CONST.DEMON_SWOOP_WINDUP;
     expect(at(ANIM.Dash, 0.1)).toEqual({ frame: 'demon_charge_anim_f0', lift: 0, windup: true });

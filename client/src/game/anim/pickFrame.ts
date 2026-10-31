@@ -23,9 +23,9 @@ const SWING_T = 0.08;
 /** The demon's charging frames loop at this rate (frames per second). */
 const CHARGE_FPS = 10;
 
-/** Wind-up of an attack anim (s) as the client sees it: shorter while enraged, where the figure has a `pace`. */
-export function windupOf(d: FigureDef, anim: number, flags: number): number {
-  return (d.windups?.[anim] ?? 0) * (flags & FLAG.ENRAGED ? (d.pace ?? 1) : 1);
+/** Wind-up of an attack anim (s) as the client sees it. */
+export function windupOf(d: FigureDef, anim: number): number {
+  return d.windups?.[anim] ?? 0;
 }
 
 const smooth = (k: number) => {
@@ -38,8 +38,7 @@ export function pickFrame(d: FigureDef, s: { anim: number; animT: number; flags:
   const F = d.frames!;
   const at = (a: FigureAnim, i: number) => `${F[a]!.prefix}${Math.max(0, Math.min(F[a]!.n - 1, Math.floor(i)))}`;
   const loop = (a: FigureAnim, t: number) => at(a, Math.floor(t * F[a]!.fps) % F[a]!.n);
-  // Enraged figures with a `pace` run every timer faster: measure in calm seconds.
-  const t = s.flags & FLAG.ENRAGED ? s.animT / (d.pace ?? 1) : s.animT;
+  const t = s.animT;
   const windup = t < (d.windups?.[s.anim] ?? 0);
   const ground = (frame: string, w = false): Picked => ({ frame, lift: 0, windup: w });
 

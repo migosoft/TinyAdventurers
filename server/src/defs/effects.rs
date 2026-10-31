@@ -476,4 +476,15 @@ mod tests {
         assert_eq!((EffectLook::Plain as u8, EffectLook::Vines as u8), (0, 1));
         assert_eq!(serde_json::to_string(&EffectLook::Vines).unwrap(), "1");
     }
+
+    #[test]
+    fn effect_names_are_unique() {
+        use crate::defs::abilities::same_name;
+        let name = crate::run::rules_log::text::effect_name;
+        for (i, a) in EffectKind::ALL.iter().enumerate() {
+            for b in &EffectKind::ALL[i + 1..] {
+                assert!(!same_name(name(*a), name(*b)), "{a:?} and {b:?} share a name");
+            }
+        }
+    }
 }

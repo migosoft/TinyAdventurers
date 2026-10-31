@@ -130,7 +130,7 @@ export function unpackSnap(w: SnapW): Snapshot {
       no_act: me[16],
       cd_mul: me[17],
     },
-    boss: boss && { kind: boss[0], hp: boss[1], max_hp: boss[2], immune: boss[3], enraged: boss[4] },
+    boss: boss && { kind: boss[0], hp: boss[1], max_hp: boss[2], immune: boss[3] },
     ev: ev.map(unpackEv),
     drain: drain && Array.from({ length: drain.length / 2 }, (_, i): [number, number] => [pos(drain[2 * i]), pos(drain[2 * i + 1])]),
     lights: lights.map((l): MovingLight => [pos(l[0]), pos(l[1]), l[2], l[3]]),

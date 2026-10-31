@@ -8,7 +8,7 @@ use crate::defs::abilities::{self as ab, AbilityCategory, AbilityDef, AbilityId,
 use crate::defs::attributes::{self, Attr, Attributes, Scaled, CON_MOVE};
 use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
-use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_SPEED, WOLF_WEIGHT};
+use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_RADIUS, WOLF_SPEED, WOLF_WEIGHT};
 use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, Resistances};
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
@@ -19,6 +19,7 @@ use crate::defs::items::Equipment;
 use crate::defs::lights::{self, LightKind};
 use crate::defs::loadout::{apply_mods, check_pick, pick_version, AbilityMod, Build, Loadout, LoadoutError, Pick, Source};
 use crate::defs::races::Sight;
+use crate::defs::requirements::Requirement;
 use crate::defs::trees::{self, Keystone, KeystoneSet, NodeId, Prof};
 use crate::defs::weapons::{resolve_melee, resolve_ranged, ResolvedWeapon};
 use crate::protocol::{BossId, ClassId};
@@ -56,6 +57,8 @@ pub struct ResolvedAbility {
     #[serde(skip)]
     #[ts(skip)]
     pub on_hit: Option<OnHit>,
+    /// The wind-up (s) before it lands: its own plus its weapon's.
+    pub windup: f64,
     /// The half-angle (rad) of the "from behind" cone; 0 = none.
     pub behind: f64,
     /// The effect it applies by itself (an `OwnEffect` resolved for this hero).
@@ -66,11 +69,11 @@ pub struct ResolvedAbility {
     #[serde(skip)]
     #[ts(skip)]
     pub power: i32,
-    /// The push of its weapon (px).
+    /// The push (px): the larger of its own and its weapon's.
     #[serde(skip)]
     #[ts(skip)]
     pub push: f64,
-    /// The STR it pushes with.
+    /// The STR it pushes with: the user's.
     #[serde(skip)]
     #[ts(skip)]
     pub push_str: i32,
@@ -101,22 +104,22 @@ pub struct Sheet {
     pub secondary: ResolvedAbility,
     /// Strike with the melee weapon: what a ranged primary does in melee.
     pub fallback: ResolvedAbility,
-    /// How far the hero's melee reaches (px): `HERO_REACH + PLAYER_RADIUS`.
+    /// How far the hero's melee reaches (px): its weapon's reach plus `PLAYER_RADIUS`.
     pub reach: f64,
     /// What the Summon Wolf version's mods do to the wolf.
     pub wolf: WolfMods,
 }
 
-/// The wolf's numbers from the Summon Wolf version: its max HP is multiplied by `hp_mul`,
-/// and `dash_cooldown_add` is added to its dash cooldown.
+/// The wolf's numbers from the Summon Wolf version: its max HP is multiplied by `hp_mul`, and `pounce`
+/// (a `CooldownAdd`) is applied to its Pounce through `apply_mods` (`wolf_kit`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WolfMods {
     pub hp_mul: f64,
-    pub dash_cooldown_add: f64,
+    pub pounce: Option<AbilityMod>,
 }
 
 impl WolfMods {
-    pub const NONE: WolfMods = WolfMods { hp_mul: 1.0, dash_cooldown_add: 0.0 };
+    pub const NONE: WolfMods = WolfMods { hp_mul: 1.0, pounce: None };
 }
 
 /// The companion mods of a version; the others do nothing to the wolf.
@@ -134,7 +137,7 @@ pub fn wolf_mods(mods: &[AbilityMod]) -> WolfMods {
     // A fixed order, so the order of the mods never matters.
     hp.sort_by(f64::total_cmp);
     dash.sort_by(f64::total_cmp);
-    WolfMods { hp_mul: hp.into_iter().product(), dash_cooldown_add: dash.into_iter().sum() }
+    WolfMods { hp_mul: hp.into_iter().product(), pounce: (!dash.is_empty()).then(|| AbilityMod::CooldownAdd(dash.into_iter().sum())) }
 }
 
 /// Movement speed: `base` is the value at `ref_con`; CON moves it by `CON_MOVE` per point.
@@ -147,9 +150,33 @@ fn with_share(split: DamageSplit, share: Option<(DamageType, f64)>) -> DamageSpl
     share.map_or(split, |s| split.with_shares(&[s]))
 }
 
-/// One ability for a hero with `attrs`, its weapons and its melee `reach`. `None` if it
-/// shoots the ranged weapon and the hero has none.
-fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, ranged: Option<&ResolvedWeapon>, reach: f64) -> Option<ResolvedAbility> {
+/// The body of whoever uses it: what a melee reach is measured from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Body {
+    pub radius: f64,
+}
+
+/// Whether weapon `w` meets the weapon-kind requirement of `d` (true if it has none).
+fn meets_weapon_kind(d: &AbilityDef, w: &ResolvedWeapon) -> bool {
+    d.req.iter().all(|r| match r {
+        Requirement::WeaponKind(kinds) => kinds.contains(&w.kind),
+        Requirement::Attr(..) => true,
+    })
+}
+
+/// The weapon an ability uses: the first melee (or, for a ranged ability, ranged) one that meets
+/// the def's weapon-kind requirement, else the first of that sort (a pool card shows the numbers
+/// even when the requirement fails).
+fn weapon_for<'a>(d: &AbilityDef, weapons: &'a [ResolvedWeapon]) -> Option<&'a ResolvedWeapon> {
+    let ranged = d.uses == Uses::Ranged;
+    let mut sort = weapons.iter().filter(|w| w.projectile.is_some() == ranged);
+    let first = sort.clone().next();
+    sort.find(|w| meets_weapon_kind(d, w)).or(first)
+}
+
+/// One ability for any user with `attrs`, its `weapons` and its `body`. `None` if it uses a
+/// weapon the user has none of.
+pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWeapon], body: Body) -> Option<ResolvedAbility> {
     let own = d.own;
     let mult = d.weapon_mult;
     // A technique or weapon attack: its own cooldown, else the weapon's interval.
@@ -167,6 +194,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
         duration: 0.0,
         pierce: 0,
         pierce_through: 0,
+        windup: own.windup,
         ranged: d.ranged,
         projectile: None,
         split: DamageSplit::physical(),
@@ -174,17 +202,19 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
         behind: d.behind,
         effect: own.effect.map(|e| OnHit { kind: e.kind, secs: own.duration, magical: matches!(d.category, AbilityCategory::Spell | AbilityCategory::Innate), power: attrs.get(e.power), look: e.look }),
         power: 0,
-        push: 0.0,
+        push: own.push,
         push_str: attrs.get(Attr::Str),
     };
     Some(match d.uses {
         Uses::Melee => {
+            let melee = weapon_for(d, weapons)?;
             let base = Base { ability_mult: mult.damage, ..melee.base };
             ResolvedAbility {
                 cooldown: cooldown(melee),
                 damage: base.amount(),
                 base,
-                range: reach,
+                // A dash's own range is how far it leaps; any other melee ability reaches as far as its weapon.
+                range: if own.range > 0.0 { own.range } else { melee.reach + body.radius },
                 arc: mult.arc.unwrap_or(melee.arc),
                 speed: own.speed,
                 radius: own.radius,
@@ -192,12 +222,13 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
                 split: with_share(melee.split, mult.share),
                 on_hit: melee.on_hit,
                 power: melee.power,
-                push: melee.push,
+                push: own.push.max(melee.push),
+                windup: own.windup + melee.windup,
                 ..blank
             }
         }
         Uses::Ranged => {
-            let w = ranged?;
+            let w = weapon_for(d, weapons)?;
             let base = Base { ability_mult: mult.damage, ..w.base };
             ResolvedAbility {
                 cooldown: cooldown(w),
@@ -213,6 +244,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
                 split: with_share(w.split, mult.share),
                 on_hit: w.on_hit,
                 power: w.power,
+                windup: own.windup + w.windup,
                 ..blank
             }
         }
@@ -233,6 +265,7 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
                 speed: own.speed,
                 radius: own.radius,
                 duration: own.duration,
+                arc: mult.arc.unwrap_or(0.0),
                 projectile: own.kind,
                 split: own.split.unwrap_or_else(|| own.kind.map_or(DamageSplit::physical(), kind_split)),
                 power: if own.damage > 0.0 { gov.map_or(0, |(a, _)| attrs.get(a)) } else { 0 },
@@ -240,6 +273,62 @@ fn resolve_ability(d: &AbilityDef, attrs: &Attributes, melee: &ResolvedWeapon, r
             }
         }
     })
+}
+
+/// The abilities of a monster, resolved at spawn from its Attributes, weapons and body.
+#[derive(Debug, Clone, Default)]
+pub struct Kit(Vec<ResolvedAbility>);
+
+impl Kit {
+    pub fn get(&self, id: AbilityId) -> Option<&ResolvedAbility> {
+        self.0.iter().find(|a| a.id == id)
+    }
+
+    /// The kit with `mods` applied to ability `id` (nothing changes if it has none such).
+    pub fn modded(mut self, id: AbilityId, mods: &[AbilityMod]) -> Kit {
+        if let Some(a) = self.0.iter_mut().find(|a| a.id == id) {
+            *a = apply_mods(*a, mods);
+        }
+        self
+    }
+}
+
+/// The kit of a monster with `attrs`, wielding `weapons` (in the order the abilities look for them:
+/// the first melee one, the first ranged one) and standing in `body`. A monster whose ability has no
+/// weapon that meets its requirement, or which can't be resolved, is a data bug: this panics.
+pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], body: Body) -> Kit {
+    let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&id| arm(id, attrs, &[], None, 0)).collect();
+    let kit = ids
+        .iter()
+        .map(|&id| {
+            let d = ab::def(id);
+            if d.uses != Uses::Nothing {
+                let ranged = d.uses == Uses::Ranged;
+                let met = armed.iter().any(|w| w.projectile.is_some() == ranged && meets_weapon_kind(&d, w));
+                assert!(met, "{id:?}: none of the weapons {weapons:?} meets its requirement");
+            }
+            resolve_ability(&d, attrs, &armed, body).unwrap_or_else(|| panic!("{id:?} cannot be resolved from {weapons:?}"))
+        })
+        .collect();
+    Kit(kit)
+}
+
+/// The kit of boss `b`, from its stat block.
+pub fn boss_kit(b: BossId) -> Kit {
+    let d = bosses::def(b);
+    monster_kit(d.abilities, &d.attrs, d.weapons, Body { radius: d.radius })
+}
+
+/// The Ranger's wolf: Bite and Pounce from its Attributes and Beast Bite, Pounce changed by its version.
+pub fn wolf_kit(mods: &WolfMods) -> Kit {
+    let kit = monster_kit(&[AbilityId::Bite, AbilityId::Pounce], &WOLF_ATTRS, &[ItemId::BeastBite], Body { radius: WOLF_RADIUS });
+    kit.modded(AbilityId::Pounce, mods.pounce.as_slice())
+}
+
+/// The kit of enemy type `t`, from its stat block.
+pub fn enemy_kit(t: EnemyType) -> Kit {
+    let d = enemies::def(t);
+    monster_kit(d.abilities, &d.attrs, d.weapons, Body { radius: d.radius })
 }
 
 /// A weapon item for one wielder, with the shares and on-hit its own properties gave it.
@@ -315,7 +404,13 @@ struct PickCx {
     ranged: Option<ResolvedWeapon>,
     improves: Vec<(AbilityId, AbilityMod)>,
     ks: KeystoneSet,
-    reach: f64,
+}
+
+impl PickCx {
+    fn resolve(&self, d: &AbilityDef) -> Option<ResolvedAbility> {
+        let weapons: Vec<ResolvedWeapon> = std::iter::once(self.melee).chain(self.ranged).collect();
+        resolve_ability(d, &self.attrs, &weapons, Body { radius: PLAYER_RADIUS })
+    }
 }
 
 /// A pick's version, requirements, weapon and mods (the version's, then the tree's improvements
@@ -329,7 +424,7 @@ fn resolve_pick(class: ClassId, b: &Build, slot: AbilitySlot, p: Pick, cx: &Pick
         Uses::Nothing => None,
     };
     check_pick(&d, waive_attrs, &cx.attrs, weapon)?;
-    let r = resolve_ability(&d, &cx.attrs, &cx.melee, cx.ranged.as_ref(), cx.reach).ok_or(LoadoutError::NoWeapon(p.ability, EquipSlot::Ranged))?;
+    let r = cx.resolve(&d).ok_or(LoadoutError::NoWeapon(p.ability, EquipSlot::Ranged))?;
     let mods: Vec<AbilityMod> = version.iter().copied().chain(cx.improves.iter().filter(|(a, _)| *a == p.ability).map(|&(_, m)| m)).collect();
     Ok((keystone_ability(apply_mods(r, &mods), &d, &cx.ks), mods))
 }
@@ -427,15 +522,16 @@ fn sheet_core(class: ClassId, b: &Build) -> Result<(Sheet, PickCx), LoadoutError
     let melee = arm(melee_id, &attrs, &shares[0], on_hits[0], pierce[0]);
     let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], on_hits[1], pierce[1]));
 
-    let reach = classes::HERO_REACH + PLAYER_RADIUS;
+    let reach = melee.reach + PLAYER_RADIUS;
     let strike_def = ab::def(AbilityId::Strike);
-    let strike = resolve_ability(&strike_def, &attrs, &melee, ranged.as_ref(), reach).expect("Strike uses the melee weapon");
+    let weapons: Vec<ResolvedWeapon> = std::iter::once(melee).chain(ranged).collect();
+    let strike = resolve_ability(&strike_def, &attrs, &weapons, Body { radius: PLAYER_RADIUS }).expect("Strike uses the melee weapon");
     let strike = keystone_ability(strike, &strike_def, &ks);
     // Radiant lights two tiles, unless a worn light reaches further.
     if ks.has(Keystone::Radiant) && light.is_none_or(|l| lights::def(LightKind::Radiant).radius > lights::def(l).radius) {
         light = Some(LightKind::Radiant);
     }
-    let cx = PickCx { attrs, melee, ranged, improves: tree.improves.clone(), ks, reach };
+    let cx = PickCx { attrs, melee, ranged, improves: tree.improves.clone(), ks };
     let sheet = Sheet {
         attrs,
         max_hp: attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp,
@@ -593,12 +689,12 @@ pub fn pool_cards(class: ClassId, b: &Build) -> Vec<PoolCard> {
             let d = ab::def(pick.ability);
             let error = resolve_pick(class, b, d.slot, pick, &cx).err().map(|e| e.message());
             let ability = if locked {
-                resolve_ability(&d, &cx.attrs, &cx.melee, cx.ranged.as_ref(), cx.reach).map(|r| keystone_ability(r, &d, &cx.ks))
+                cx.resolve(&d).map(|r| keystone_ability(r, &d, &cx.ks))
             } else {
                 // Numbers even when a requirement fails: the version's mods and the tree's improvements.
                 let version = pick_version(class, b, d.slot, pick).map(|v| v.0).unwrap_or(&[]);
                 let mods: Vec<AbilityMod> = version.iter().copied().chain(cx.improves.iter().filter(|(a, _)| *a == pick.ability).map(|&(_, m)| m)).collect();
-                resolve_ability(&d, &cx.attrs, &cx.melee, cx.ranged.as_ref(), cx.reach).map(|r| keystone_ability(apply_mods(r, &mods), &d, &cx.ks))
+                cx.resolve(&d).map(|r| keystone_ability(apply_mods(r, &mods), &d, &cx.ks))
             };
             PoolCard { pick, ability, error, locked }
         })
@@ -726,6 +822,40 @@ mod tests {
     use crate::defs::companions::WOLF_HP;
 
     #[test]
+    fn hero_reach_comes_from_the_weapon() {
+        for id in ItemId::ALL {
+            if let ItemBase::Melee(_, m) = items::def(id).base {
+                if items::hero_can_hold(&items::def(id)) {
+                    assert_eq!((m.reach, m.windup), (classes::HERO_REACH, 0.0), "{id:?}");
+                }
+            }
+            if let ItemBase::Ranged(_, r) = items::def(id).base {
+                if items::hero_can_hold(&items::def(id)) {
+                    assert_eq!(r.windup, 0.0, "{id:?}");
+                }
+            }
+        }
+        for c in ClassId::ALL {
+            let s = hero_sheet(c, &Build::start(c)).unwrap();
+            assert_eq!(s.melee.reach, classes::HERO_REACH, "{c:?}");
+            assert_eq!(s.reach, classes::HERO_REACH + PLAYER_RADIUS, "{c:?}");
+        }
+    }
+
+    #[test]
+    fn ground_slam_push_is_the_larger_of_own_and_weapon() {
+        let d = ab::def(AbilityId::GroundSlam);
+        assert_eq!(d.own.push, ab::SLAM_PUSH);
+        let attrs = classes::start_attrs(ClassId::Barbarian);
+        let soft = ResolvedWeapon { push: 0.0, ..arm(ItemId::WarHammer, &attrs, &[], None, 0) };
+        let club = arm(ItemId::SpikedClub, &attrs, &[], None, 0);
+        let body = Body { radius: PLAYER_RADIUS };
+        let a = resolve_ability(&d, &attrs, &[soft], body).unwrap();
+        assert_eq!((a.push, a.windup), (24.0, ab::SLAM_WINDUP));
+        assert_eq!(resolve_ability(&d, &attrs, &[club], body).unwrap().push, 28.0);
+    }
+
+    #[test]
     fn item_prof_names_the_needed_proficiency() {
         assert_eq!(item_prof(&items::def(ItemId::Rapier).base).as_deref(), Some("Duelling Sword"));
         assert_eq!(item_prof(&items::def(ItemId::SilkRobe).base).as_deref(), Some("Cloth armor"));
@@ -743,7 +873,7 @@ mod tests {
         use crate::defs::abilities::{OwnEffect, WeaponMult};
         use crate::defs::effects::EffectLook;
         let sheet = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap();
-        let resolve = |d: &AbilityDef| resolve_ability(d, &sheet.attrs, &sheet.melee, sheet.ranged.as_ref(), sheet.reach).unwrap();
+        let resolve = |d: &AbilityDef| resolve_ability(d, &sheet.attrs, &[sheet.melee], Body { radius: PLAYER_RADIUS }).unwrap();
         // An own split wins over the projectile's.
         let mm = ab::def(AbilityId::MagicMissile);
         let cold = DamageSplit::pure(DamageType::Cold);
@@ -795,7 +925,7 @@ mod tests {
         let today: [(ClassId, Row, Row); 4] = [
             (ClassId::Wizard, (MagicMissile, 0.35, 12.0, 220.0, 0.0, 230.0, 3.0, 0.0), (Fireball, 6.0, 45.0, 260.0, 0.0, 140.0, 38.0, 0.0)),
             (ClassId::Paladin, (Strike, 0.45, 20.0, 22.0, 1.75, 0.0, 0.0, 0.0), (HolyLight, 10.0, 35.0, 64.0, 0.0, 0.0, 64.0, 0.0)),
-            (ClassId::Barbarian, (Strike, 0.8, 32.0, 22.0, 2.45, 0.0, 0.0, 0.0), (Charge, 5.0, 32.0 * 0.8, 22.0, 2.45, ab::DASH_SPEED, 10.0, 0.18)),
+            (ClassId::Barbarian, (Strike, 0.8, 32.0, 22.0, 2.45, 0.0, 0.0, 0.0), (Charge, 5.0, 32.0 * 0.8, 22.0, 2.45, ab::DASH_SPEED, 4.0, 0.18)),
             (ClassId::ElvenRanger, (Shoot, 0.7, 16.0, 260.0, 0.0, 290.0, 2.0, 0.0), (SummonWolf, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
         ];
         for (c, primary, secondary) in today {
@@ -1136,6 +1266,67 @@ mod tests {
             assert_eq!(s.speed, d.speed, "{b:?}");
             assert_eq!(s.weight, 40.0);
         }
+    }
+
+    /// Every monster's kit entry is what `resolve_ability` gives that user for that ability, nothing more:
+    /// the one resolver every ability goes through (a kit is built once, using an ability only reads it).
+    #[test]
+    fn every_monster_ability_equals_the_resolver() {
+        let check = |what: &str, kit: &Kit, ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], radius: f64| {
+            let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&w| arm(w, attrs, &[], None, 0)).collect();
+            for &id in ids {
+                let want = resolve_ability(&ab::def(id), attrs, &armed, Body { radius }).expect("resolves");
+                assert_eq!(kit.get(id), Some(&want), "{what} {id:?}");
+            }
+        };
+        for t in EnemyType::ALL {
+            let d = enemies::def(t);
+            check(&format!("{t:?}"), &enemy_kit(t), d.abilities, &d.attrs, d.weapons, d.radius);
+        }
+        for b in BossId::ALL {
+            let d = bosses::def(b);
+            check(&format!("{b:?}"), &boss_kit(b), d.abilities, &d.attrs, d.weapons, d.radius);
+        }
+        let ids = [AbilityId::Bite, AbilityId::Pounce];
+        check("wolf", &wolf_kit(&WolfMods::NONE), &ids, &WOLF_ATTRS, &[ItemId::BeastBite], WOLF_RADIUS);
+        // A version's mod goes through `apply_mods`, on the Pounce alone.
+        let faster = AbilityMod::CooldownAdd(-0.5);
+        let kit = wolf_kit(&WolfMods { hp_mul: 1.0, pounce: Some(faster) });
+        let plain = wolf_kit(&WolfMods::NONE);
+        assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(*plain.get(AbilityId::Pounce).unwrap(), &[faster])));
+        assert_eq!(kit.get(AbilityId::Bite), plain.get(AbilityId::Bite));
+    }
+
+    #[test]
+    fn boss_kits_resolve_to_todays_numbers() {
+        use crate::defs::bosses::*;
+        let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-9, "{what}: {a} vs {b}");
+        for b in BossId::ALL {
+            let k = boss_kit(b);
+            for &id in def(b).abilities {
+                assert!(k.get(id).is_some(), "{b:?} {id:?}");
+            }
+        }
+        let dragon = boss_kit(BossId::Dragon);
+        let demon = boss_kit(BossId::Demon);
+        let lich = boss_kit(BossId::Lich);
+        let check = |k: &Kit, id: AbilityId, damage: f64, push: f64| {
+            let a = k.get(id).unwrap_or_else(|| panic!("{id:?}"));
+            near(a.damage, damage, &format!("{id:?} damage"));
+            near(a.push, push, &format!("{id:?} push"));
+        };
+        check(&dragon, AbilityId::Bite, 28.0, 24.0);
+        check(&dragon, AbilityId::Strike, 20.0, 32.0);
+        check(&dragon, AbilityId::TailWhip, 25.0, 44.0);
+        check(&dragon, AbilityId::Smash, 22.0, 36.0);
+        check(&demon, AbilityId::Strike, 25.0, 56.0);
+        check(&demon, AbilityId::Swoop, 30.0, 64.0);
+        check(&lich, AbilityId::Nova, 24.0, 64.0);
+        // The rest of today's numbers: the breath pulse, the orbs and bolts.
+        near(dragon.get(AbilityId::FireBreath).unwrap().damage, 6.0, "breath pulse");
+        near(demon.get(AbilityId::RingOfFire).unwrap().damage, 12.0, "ring of fire");
+        near(lich.get(AbilityId::GloomBolts).unwrap().damage, 10.0, "gloom bolts");
+        near(lich.get(AbilityId::BlindingCurse).unwrap().damage, 6.0, "blinding curse");
     }
 
     #[test]

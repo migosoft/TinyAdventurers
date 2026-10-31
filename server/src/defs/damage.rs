@@ -173,12 +173,6 @@ impl Base {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum What {
     Ability(AbilityId),
-    /// A monster's or the wolf's melee.
-    Attack,
-    /// An enemy projectile.
-    Shot(EntityKind),
-    /// A boss script's named move ("Bite", "Smash", "Tail", "Claw", "Breath", "Cleave", "Swoop", "Nova").
-    Move(&'static str),
     Tick(EffectKind),
     Lava,
     /// A barrel.
@@ -246,6 +240,7 @@ impl Damage {
         self.power = power;
         self
     }
+    #[cfg(test)]
     pub fn with_effect(mut self, h: super::effects::OnHit) -> Self {
         self.on_hit = Some(h);
         self
@@ -253,6 +248,7 @@ impl Damage {
     pub fn effect_tick(amount: f64, t: DamageType) -> Self {
         Damage { from_effect: true, ..Damage::new(amount, DamageSplit::pure(t)) }
     }
+    #[cfg(test)]
     pub fn physical(amount: f64) -> Self {
         Damage::new(amount, DamageSplit::physical())
     }

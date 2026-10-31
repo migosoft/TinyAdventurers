@@ -38,14 +38,14 @@ const OY = 3;
  * `dist` px straight away from the striker (0: no push); `tail` swipes behind.
  * `swoop` winds up, then charges to `to` and knocks the target away on
  * contact. `slam` winds up (the ground telegraph), then hits every figure
- * within `r` px and knocks it `dist` px straight away (`nova`: the lich's dark burst). A pushed figure has
+ * within `r` px and knocks it `dist` px (or `dist(name)` px) straight away (`nova`: the lich's dark burst). A pushed figure has
  * no control until the slide ends.
  */
 type Step =
   | { to: [number, number]; dash?: boolean }
   | { wait: number; face?: number }
   | { hit: string; push?: [number, number]; dist?: number; reach?: number; tail?: boolean; windup?: number }
-  | { slam: number; dist: number; windup: number; nova?: boolean }
+  | { slam: number; dist: number | ((name: string) => number); windup: number; nova?: boolean }
   | { swoop: string; to: [number, number]; dist: number };
 
 interface Actor {
@@ -190,7 +190,7 @@ export abstract class TerrainDemo extends Phaser.Scene {
         if (s.nova) this.fx.nova(a.x, a.y, s.slam);
         else this.fx.shockwave(a.x, a.y, s.slam);
         for (const o of this.actors)
-          if (o !== a && !o.doom && !o.push && Math.hypot(o.x - a.x, o.y - a.y) <= s.slam) this.strike(a, o, s.dist);
+          if (o !== a && !o.doom && !o.push && Math.hypot(o.x - a.x, o.y - a.y) <= s.slam) this.strike(a, o, typeof s.dist === 'function' ? s.dist(o.name) : s.dist);
         anim = ANIM.Idle;
         this.next(a);
       }

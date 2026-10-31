@@ -37,10 +37,10 @@ pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u
 #[ts(export)]
 pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32)>, pub f32, pub bool, pub f32);
 
-/// `[kind, hp, max_hp, immune, enraged]`
+/// `[kind, hp, max_hp, immune]`
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct BossW(pub BossId, pub f32, pub f32, pub bool, pub bool);
+pub struct BossW(pub BossId, pub f32, pub f32, pub bool);
 
 /// `[code, ...fields of the Ev variant]`, positions scaled (not `Tile`).
 #[derive(Debug, Clone, Serialize, TS)]
@@ -138,7 +138,7 @@ pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
     let ents = s.ents.iter().map(|e| EntW(e.0, e.1, q_pos(e.2 as f64), q_pos(e.3 as f64), e.4, e.5, q_aim(e.6 as f64), e.7, e.8, e.9, e.10)).collect();
     let m = &s.me;
     let me = SelfW(m.alive, m.hp, m.max_hp, m.x, m.y, m.dash_t, m.dash_dx, m.dash_dy, m.cd1, m.cd2, m.spectating, (m.knock_vx != 0.0 || m.knock_vy != 0.0).then_some((m.knock_vx, m.knock_vy)), m.darkvision, m.vision, m.effects.clone(), m.speed_mul, m.no_act, m.cd_mul);
-    let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune, b.enraged));
+    let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune));
     let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
     let lights = s.lights.iter().map(|l| LightW(q_pos(l.0 as f64), q_pos(l.1 as f64), l.2, l.3)).collect();
     let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain, lights, s.looks.clone(), s.log.clone());
@@ -182,7 +182,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             no_act: true,
             cd_mul: 0.8,
         },
-        boss: Some(BossBar { kind: BossId::Demon, hp: 1234.5, max_hp: 2000.0, immune: true, enraged: false }),
+        boss: Some(BossBar { kind: BossId::Demon, hp: 1234.5, max_hp: 2000.0, immune: true }),
         ev: vec![
             Ev::Dmg { x: 10.3, y: 20.7, v: 12.5, crit: true, p: false, ty: 2, imm: false },
             Ev::Heal { x: 11.0, y: 21.0, v: 4.25, p: true },

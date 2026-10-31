@@ -254,7 +254,6 @@ export class EntityView {
     else if (slowed) this.body.setTint(0xa0c8ff);
     else if (chilled) this.body.setTint(0xd8ecff);
     else if (tainted) this.body.setTint(shade(1, 0x9be37a, 0.3 * (0.5 + 0.5 * Math.sin(this.clock * Math.PI * 2))));
-    else if (s.flags & FLAG.ENRAGED) this.body.setTint(Math.floor(this.clock * 4) % 2 ? 0xff6060 : 0xff9090);
     else if (d.tint) this.body.setTint(d.tint);
     else this.body.clearTint();
     // Into the dark (chasm) or the deep (water): the figure darkens as it goes.
@@ -310,7 +309,7 @@ export class EntityView {
       case ANIM.Tail: {
         const tail = s.anim === ANIM.Tail;
         // Own frames: the strike comes after the wind-up, drawn by the frames.
-        const w = windupOf(d, s.anim, s.flags);
+        const w = windupOf(d, s.anim);
         if (t < w) break;
         if (!own) {
           const k = Math.min(t / MELEE_T, 1);

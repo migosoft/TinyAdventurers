@@ -1,8 +1,8 @@
+use super::abilities::AbilityId;
 use super::attributes::{Attr, Attributes};
 use super::races::{self, Adjust, Race, Profile};
 use super::items::{self, ItemBase, ItemId};
 use super::kinds::EntityKind;
-use super::weapons::{resolve_melee, resolve_ranged};
 use super::damage::DamageSplit;
 use crate::protocol::BossId;
 
@@ -55,16 +55,6 @@ impl EnemyType {
     ];
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AttackStyle {
-    /// `knock`: knockback (px) on a hit; only strong melee pushes, ranged attacks never do.
-    Melee { range: f64, damage: f64, cooldown: f64, windup: f64, knock: f64 },
-    Ranged { projectile: EntityKind, speed: f64, damage: f64, cooldown: f64, range: f64, preferred: f64, windup: f64, pierce: bool },
-    /// Ground slam: hits and pushes every hero whose centre is within `radius`
-    /// (px from the attacker's centre) when the wind-up ends.
-    Slam { radius: f64, damage: f64, cooldown: f64, windup: f64, knock: f64 },
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct EnemyDef {
     pub kind: EntityKind,
@@ -77,46 +67,28 @@ pub struct EnemyDef {
     pub weight: f64,
     /// Vision (tiles); overrides the race's. Enemies only notice players inside it with line of sight.
     pub vision: f64,
-    pub attack: AttackStyle,
-    /// Second attack with its own cooldown. Melee is used when the target is
-    /// in claw range, ranged otherwise (imps claw, chorts throw fire bolts).
-    pub alt: Option<AttackStyle>,
-    /// The weapons `attack` and `alt` are built from (`weapon_melee`, `weapon_ranged`).
-    pub melee_weapon: Option<ItemId>,
-    /// A record only: the defs name the bow again in their `weapon_ranged` call.
-    #[allow(dead_code)]
-    pub ranged_weapon: Option<ItemId>,
+    /// The abilities it uses: the main one first, then the alt (own cooldown). The alt is used when
+    /// the target is in reach for a melee one, from afar for a bolt (imps claw, chorts throw fire bolts).
+    pub abilities: &'static [AbilityId],
+    /// What the abilities use: the melee weapon (else the race's natural one), then the bow.
+    pub weapons: &'static [ItemId],
+    /// The distance (px) a shooter keeps from its target; 0 for those who close in.
+    pub preferred: f64,
 }
 
 /// The weapon an enemy strikes with: its melee weapon, else its race's first natural weapon.
-#[cfg(test)]
 pub fn melee_item(t: EnemyType) -> ItemId {
-    def(t).melee_weapon.unwrap_or_else(|| natural_melee(t))
+    def(t).weapons[0]
 }
 
 /// The race's first natural weapon (what an enemy without a melee weapon punches with).
+#[cfg(test)]
 fn natural_melee(t: EnemyType) -> ItemId {
     races::race_def(race(t)).natural[0]
 }
 
-/// A melee attack from a weapon, resolved at the wielder's Attributes. `range` and `windup`
-/// are body values from the stat block.
-pub fn weapon_melee(id: ItemId, attrs: &Attributes, range: f64, windup: f64) -> AttackStyle {
-    let ItemBase::Melee(kind, stats) = items::def(id).base else { panic!("{id:?} is not a melee weapon") };
-    let w = resolve_melee(kind, &stats, attrs);
-    AttackStyle::Melee { range, damage: w.damage, cooldown: w.cooldown, windup, knock: w.push }
-}
-
-/// A ranged attack from a weapon, resolved at the wielder's Attributes.
-pub fn weapon_ranged(id: ItemId, attrs: &Attributes, preferred: f64, windup: f64) -> AttackStyle {
-    let ItemBase::Ranged(kind, stats) = items::def(id).base else { panic!("{id:?} is not a ranged weapon") };
-    let w = resolve_ranged(kind, &stats, attrs);
-    let projectile = w.projectile.expect("a ranged weapon has a projectile");
-    AttackStyle::Ranged { projectile, speed: w.projectile_speed, damage: w.damage, cooldown: w.cooldown, range: w.range, preferred, windup, pierce: true }
-}
-
 pub fn def(t: EnemyType) -> EnemyDef {
-    use AttackStyle::*;
+    use AbilityId::{Bite, FireBolt, GroundSlam, ShadowBolt, Shoot, Strike};
     use EnemyType::*;
     use ItemId::*;
     match t {
@@ -130,10 +102,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 8.125,
                 attrs,
                 weight: 6.0,
-                attack: weapon_ranged(GoblinBow, &attrs, 90.0, 0.3),
-                alt: Some(weapon_melee(natural_melee(t), &attrs, 12.0, 0.25)),
-                melee_weapon: None,
-                ranged_weapon: Some(GoblinBow),
+                abilities: &[Shoot, Strike],
+                weapons: &[UnarmedStrike, GoblinShortbow],
+                preferred: 90.0,
             }
         }
         SkeletonWarrior | RaisedSkeleton => {
@@ -146,10 +117,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 7.5,
                 attrs,
                 weight: 9.0,
-                attack: weapon_melee(RustySword, &attrs, 14.0, 0.3),
-                alt: None,
-                melee_weapon: Some(RustySword),
-                ranged_weapon: None,
+                abilities: &[Strike],
+                weapons: &[SkeletonSword],
+                preferred: 0.0,
             }
         }
         SkeletonArcher | RaisedArcher => {
@@ -162,10 +132,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 8.75,
                 attrs,
                 weight: 9.0,
-                attack: weapon_ranged(SkeletonLongbow, &attrs, 100.0, 0.35),
-                alt: Some(weapon_melee(natural_melee(t), &attrs, 12.0, 0.25)),
-                melee_weapon: None,
-                ranged_weapon: Some(SkeletonLongbow),
+                abilities: &[Shoot, Strike],
+                weapons: &[UnarmedStrike, SkeletonBow],
+                preferred: 100.0,
             }
         }
         OrcWarrior => {
@@ -178,10 +147,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 7.8125,
                 attrs,
                 weight: 13.0,
-                attack: weapon_melee(Cleaver, &attrs, 16.0, 0.35),
-                alt: None,
-                melee_weapon: Some(Cleaver),
-                ranged_weapon: None,
+                abilities: &[Strike],
+                weapons: &[OrcCleaver],
+                preferred: 0.0,
             }
         }
         OrcArcher => {
@@ -194,15 +162,13 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 8.75,
                 attrs,
                 weight: 13.0,
-                attack: weapon_ranged(OrcBow, &attrs, 100.0, 0.35),
-                alt: Some(weapon_melee(natural_melee(t), &attrs, 12.0, 0.25)),
-                melee_weapon: None,
-                ranged_weapon: Some(OrcBow),
+                abilities: &[Shoot, Strike],
+                weapons: &[UnarmedStrike, OrcWarbow],
+                preferred: 100.0,
             }
         }
         Necromancer | Summoner => {
             let attrs = if t == Summoner { Attributes::new(9, 14, 12, 15, 12, 16) } else { Attributes::new(9, 14, 12, 17, 12, 11) };
-            let staff = if t == Summoner { SummonerStaff } else { NecromancerStaff };
             EnemyDef {
                 kind: if t == Summoner { EntityKind::Summoner } else { EntityKind::Necromancer },
                 hp: 60.0,
@@ -211,19 +177,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 9.375,
                 attrs,
                 weight: 10.0,
-                attack: Ranged {
-                    projectile: if t == Summoner { EntityKind::FireBolt } else { EntityKind::ShadowBolt },
-                    speed: 130.0,
-                    damage: 12.0,
-                    cooldown: 2.0,
-                    range: 160.0,
-                    preferred: 110.0,
-                    windup: 0.5,
-                    pierce: false,
-                },
-                alt: Some(weapon_melee(staff, &attrs, 12.0, 0.25)),
-                melee_weapon: Some(staff),
-                ranged_weapon: None,
+                abilities: if t == Summoner { &[FireBolt, Strike] } else { &[ShadowBolt, Strike] },
+                weapons: if t == Summoner { &[SummonerRod] } else { &[NecromancerRod] },
+                preferred: 110.0,
             }
         }
         Disciple => {
@@ -236,19 +192,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 12.5,
                 attrs,
                 weight: 10.0,
-                attack: Ranged {
-                    projectile: EntityKind::ShadowBolt,
-                    speed: 120.0,
-                    damage: 8.0,
-                    cooldown: 3.0,
-                    range: 200.0,
-                    preferred: 0.0,
-                    windup: 0.5,
-                    pierce: false,
-                },
-                alt: Some(weapon_melee(natural_melee(t), &attrs, 12.0, 0.25)),
-                melee_weapon: None,
-                ranged_weapon: None,
+                abilities: &[ShadowBolt, Strike],
+                weapons: &[UnarmedStrike],
+                preferred: 0.0,
             }
         }
         Mimic => {
@@ -262,10 +208,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 8.75,
                 attrs,
                 weight: 14.0,
-                attack: weapon_melee(MimicBite, &attrs, 12.0, 0.25),
-                alt: None,
-                melee_weapon: Some(MimicBite),
-                ranged_weapon: None,
+                abilities: &[Bite],
+                weapons: &[MimicBite],
+                preferred: 0.0,
             }
         }
         Imp | SummonedImp => {
@@ -278,10 +223,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 8.75,
                 attrs,
                 weight: 4.0,
-                attack: Ranged { projectile: EntityKind::FireBolt, speed: 130.0, damage: 7.0, cooldown: 1.6, range: 150.0, preferred: 90.0, windup: 0.3, pierce: false },
-                alt: Some(weapon_melee(ImpClaws, &attrs, 12.0, 0.25)),
-                melee_weapon: Some(ImpClaws),
-                ranged_weapon: None,
+                abilities: &[FireBolt, Strike],
+                weapons: &[ImpClaws],
+                preferred: 90.0,
             }
         }
         Chort => {
@@ -294,10 +238,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 7.5,
                 attrs,
                 weight: 10.0,
-                attack: weapon_melee(ChortClaws, &attrs, 14.0, 0.3),
-                alt: Some(Ranged { projectile: EntityKind::FireBolt, speed: 130.0, damage: 6.0, cooldown: 3.2, range: 130.0, preferred: 0.0, windup: 0.35, pierce: false }),
-                melee_weapon: Some(ChortClaws),
-                ranged_weapon: None,
+                abilities: &[Strike, FireBolt],
+                weapons: &[ChortClaws],
+                preferred: 0.0,
             }
         }
         Ogre => {
@@ -311,10 +254,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 9.375,
                 attrs,
                 weight: 20.0,
-                attack: weapon_melee(SpikedClub, &attrs, 18.0, 0.5),
-                alt: Some(Slam { radius: OGRE_SLAM_RADIUS, damage: 14.0, cooldown: 5.0, windup: OGRE_SLAM_WINDUP, knock: 24.0 }),
-                melee_weapon: Some(SpikedClub),
-                ranged_weapon: None,
+                abilities: &[Strike, GroundSlam],
+                weapons: &[OgreClub],
+                preferred: 0.0,
             }
         }
     }
@@ -337,11 +279,6 @@ pub fn for_boss(t: EnemyType, boss: BossId) -> EnemyType {
 pub fn is_demon(t: EnemyType) -> bool {
     matches!(t, EnemyType::Imp | EnemyType::Chort | EnemyType::Summoner | EnemyType::SummonedImp)
 }
-
-/// The ogre's ground slam: radius (px, hero centres) and wind-up (s). The
-/// client draws the telegraph ring from these.
-pub const OGRE_SLAM_RADIUS: f64 = 34.0;
-pub const OGRE_SLAM_WINDUP: f64 = 0.9;
 
 /// A second (alt) ranged attack is only used from at least this far away
 /// (center distance, px): chorts throw fire bolts at heroes out of reach.
@@ -367,11 +304,11 @@ pub fn base_hp(t: EnemyType) -> f64 {
     d.hp - 5.0 * (d.attrs.get(Attr::Con) - 10) as f64
 }
 
-/// The split of an enemy's melee hits: its melee weapon's, else its race's.
+/// The split of an enemy's melee hits: its melee weapon's.
 pub fn melee_split(t: EnemyType) -> DamageSplit {
-    match def(t).melee_weapon.map(|id| items::def(id).base) {
-        Some(ItemBase::Melee(_, s)) => s.split,
-        _ => profile(t).melee,
+    match items::def(melee_item(t)).base {
+        ItemBase::Melee(_, s) => s.split,
+        b => panic!("{t:?}: {b:?} is not a melee weapon"),
     }
 }
 
@@ -393,31 +330,10 @@ pub fn profile(t: EnemyType) -> Profile {
     races::profile(&[race(t)], Adjust { vision: Some(def(t).vision), ..Adjust::NONE })
 }
 
-/// The Attribute that governs an enemy's attack (spec §7), `shot` its projectile
-/// (None: a melee attack or slam): the power of the damage-type effects it applies.
-pub fn governing(t: EnemyType, shot: Option<EntityKind>) -> Attr {
-    use EntityKind as K;
-    match shot {
-        None => Attr::Str, // weapons, claws, the ogre's slam
-        Some(K::Arrow) => Attr::Dex, // bows
-        Some(K::FireBolt) if t != EnemyType::Summoner => Attr::Cha, // imps' and chorts' innate fire
-        Some(_) => Attr::Int, // spells: shadow bolts, the summoner's fire bolt
-    }
-}
-
-/// An effect an enemy's attack (`alt`: its second attack) applies on a hit. None yet:
-/// e.g. `(EnemyType::GoblinArcher, false) => Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false,
-/// power: def(t).attrs.get(Attr::Dex) })` (a bow: the wielder's DEX; a spell would be INT and magical).
-pub fn on_hit(t: EnemyType, alt: bool) -> Option<super::effects::OnHit> {
-    let _ = (t, alt);
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::defs::attributes::{self, Attr, Attributes};
-    use crate::defs::damage::kind_split;
     use crate::defs::items::ItemBase;
 
     #[test]
@@ -455,89 +371,45 @@ mod tests {
         }
     }
 
-    /// Today's attacks, as literals (the `attack` ones and the pre-existing alts are the old values;
-    /// the melee alts of the archers, the Disciple and the casters are the melee rule's).
-    fn pinned_attacks(t: EnemyType) -> (AttackStyle, Option<AttackStyle>) {
-        use AttackStyle::*;
-        use EnemyType::*;
-        let punch = |damage, cooldown| Some(Melee { range: 12.0, damage, cooldown, windup: 0.25, knock: 0.0 });
-        match t {
-            GoblinArcher => (Ranged { projectile: EntityKind::Arrow, speed: 170.0, damage: 6.0, cooldown: 1.4, range: 140.0, preferred: 90.0, windup: 0.3, pierce: true }, punch(2.7, 0.9090909090909091)),
-            SkeletonWarrior | RaisedSkeleton => (Melee { range: 14.0, damage: 9.0, cooldown: 1.0, windup: 0.3, knock: 0.0 }, None),
-            SkeletonArcher | RaisedArcher => (Ranged { projectile: EntityKind::Arrow, speed: 180.0, damage: 7.0, cooldown: 1.6, range: 150.0, preferred: 100.0, windup: 0.35, pierce: true }, punch(3.0, 0.9090909090909091)),
-            OrcWarrior => (Melee { range: 16.0, damage: 14.0, cooldown: 1.2, windup: 0.35, knock: 20.0 }, None),
-            OrcArcher => (Ranged { projectile: EntityKind::Arrow, speed: 190.0, damage: 10.0, cooldown: 1.7, range: 150.0, preferred: 100.0, windup: 0.35, pierce: true }, punch(3.5999999999999996, 0.9259259259259258)),
-            Necromancer | Summoner => (
-                Ranged {
-                    projectile: if t == Summoner { EntityKind::FireBolt } else { EntityKind::ShadowBolt },
-                    speed: 130.0,
-                    damage: 12.0,
-                    cooldown: 2.0,
-                    range: 160.0,
-                    preferred: 110.0,
-                    windup: 0.5,
-                    pierce: false,
-                },
-                punch(5.0, 1.2),
-            ),
-            Disciple => (Ranged { projectile: EntityKind::ShadowBolt, speed: 120.0, damage: 8.0, cooldown: 3.0, range: 200.0, preferred: 0.0, windup: 0.5, pierce: false }, punch(3.0, 0.9615384615384615)),
-            Mimic => (Melee { range: 12.0, damage: 13.0, cooldown: 1.0, windup: 0.25, knock: 0.0 }, None),
-            Imp | SummonedImp => (
-                Ranged { projectile: EntityKind::FireBolt, speed: 130.0, damage: 7.0, cooldown: 1.6, range: 150.0, preferred: 90.0, windup: 0.3, pierce: false },
-                Some(Melee { range: 12.0, damage: 6.0, cooldown: 0.9, windup: 0.25, knock: 0.0 }),
-            ),
-            Chort => (
-                Melee { range: 14.0, damage: 9.0, cooldown: 1.0, windup: 0.3, knock: 14.0 },
-                Some(Ranged { projectile: EntityKind::FireBolt, speed: 130.0, damage: 6.0, cooldown: 3.2, range: 130.0, preferred: 0.0, windup: 0.35, pierce: false }),
-            ),
-            Ogre => (
-                Melee { range: 18.0, damage: 18.0, cooldown: 1.6, windup: 0.5, knock: 28.0 },
-                Some(Slam { radius: OGRE_SLAM_RADIUS, damage: 14.0, cooldown: 5.0, windup: OGRE_SLAM_WINDUP, knock: 24.0 }),
-            ),
-        }
-    }
-
+    /// Every ability of every enemy resolves with its weapons, and the first weapon is a melee one.
     #[test]
-    fn enemy_attacks_are_pinned() {
-        for t in EnemyType::ALL {
-            let (attack, alt) = pinned_attacks(t);
-            assert_eq!(def(t).attack, attack, "{t:?} attack");
-            assert_eq!(def(t).alt, alt, "{t:?} alt");
-        }
-    }
-
-    #[test]
-    fn enemy_attacks_rebuild_from_their_weapons() {
+    fn every_enemy_kit_resolves() {
         for t in EnemyType::ALL {
             let d = def(t);
-            for a in [Some(d.attack), d.alt].into_iter().flatten() {
-                match a {
-                    AttackStyle::Melee { range, windup, .. } => {
-                        assert_eq!(a, weapon_melee(melee_item(t), &d.attrs, range, windup), "{t:?} melee");
-                    }
-                    AttackStyle::Ranged { preferred, windup, pierce: true, .. } => {
-                        let id = d.ranged_weapon.expect("a piercing shot comes from a ranged weapon");
-                        assert_eq!(a, weapon_ranged(id, &d.attrs, preferred, windup), "{t:?} ranged");
-                        let ItemBase::Ranged(_, s) = items::def(id).base else { panic!("{id:?} is not ranged") };
-                        assert_eq!(s.split, kind_split(s.projectile), "{t:?}: enemy shots take kind_split");
-                    }
-                    AttackStyle::Ranged { .. } | AttackStyle::Slam { .. } => {}
-                }
+            let kit = crate::sheet::enemy_kit(t);
+            for &id in d.abilities {
+                assert!(kit.get(id).is_some(), "{t:?} {id:?}");
+            }
+            assert!(matches!(items::def(d.weapons[0]).base, ItemBase::Melee(..)), "{t:?}: its first weapon is a melee one");
+        }
+    }
+
+    /// A bow goes with Shoot; every enemy has a melee ability.
+    #[test]
+    fn enemy_abilities_fit_their_weapons() {
+        for t in EnemyType::ALL {
+            let d = def(t);
+            let ranged = d.weapons.iter().any(|&w| matches!(items::def(w).base, ItemBase::Ranged(..)));
+            assert_eq!(ranged, d.abilities.contains(&AbilityId::Shoot), "{t:?}: a bow goes with Shoot");
+            assert!(d.abilities.iter().any(|a| matches!(a, AbilityId::Strike | AbilityId::Bite)), "{t:?} has no melee ability");
+            assert!(d.abilities.len() <= 2 && !d.abilities.is_empty(), "{t:?}");
+            // The AI (`run/ai.rs`) uses an alt ability only if it swings, shoots or slams.
+            if let Some(&alt) = d.abilities.get(1) {
+                assert!(matches!(crate::defs::abilities::def(alt).shape, crate::defs::abilities::Shape::Swing | crate::defs::abilities::Shape::Projectile | crate::defs::abilities::Shape::Ring), "{t:?}: the alt {alt:?} has a shape the AI does not handle");
             }
         }
     }
 
+    /// An enemy with no melee weapon of its own punches with its race's natural one.
     #[test]
-    fn every_enemy_has_a_melee_attack() {
+    fn enemies_without_a_melee_weapon_use_their_races_natural_one() {
         for t in EnemyType::ALL {
-            if t == EnemyType::Ogre {
-                continue; // its main attack is melee
-            }
-            let d = def(t);
-            assert!(
-                [Some(d.attack), d.alt].into_iter().flatten().any(|a| matches!(a, AttackStyle::Melee { .. })),
-                "{t:?} has no melee attack"
-            );
+            let w = def(t).weapons[0];
+            let species = matches!(t, EnemyType::Mimic | EnemyType::Imp | EnemyType::SummonedImp | EnemyType::Chort);
+            let ItemBase::Melee(k, _) = items::def(w).base else { panic!("{t:?}") };
+            let natural_kind = crate::defs::weapons::category(k) == crate::defs::weapons::WeaponCategory::Natural;
+            // Mimic, imps and chorts have a species weapon of their own; a weapon-less enemy its race's.
+            assert!(species || !natural_kind || w == natural_melee(t), "{t:?}");
         }
     }
 
@@ -562,27 +434,13 @@ mod tests {
         for t in EnemyType::ALL {
             let allowed: &[K] = table.iter().find(|(e, _)| *e == t).map_or(&[], |(_, k)| k);
             let d = def(t);
-            for id in [d.melee_weapon, d.ranged_weapon].into_iter().flatten() {
+            for &id in d.weapons {
                 let kind = match items::def(id).base {
                     ItemBase::Melee(k, _) | ItemBase::Ranged(k, _) => k,
                     _ => panic!("{t:?}: {id:?} is not a weapon"),
                 };
                 assert!(allowed.contains(&kind) || natural.contains(&kind), "{t:?} wields {kind:?}");
             }
-        }
-    }
-
-    #[test]
-    fn melee_split_is_the_weapons_else_the_races() {
-        for t in EnemyType::ALL {
-            let expect = match def(t).melee_weapon {
-                Some(id) => match items::def(id).base {
-                    ItemBase::Melee(_, s) => s.split,
-                    _ => panic!(),
-                },
-                None => profile(t).melee,
-            };
-            assert_eq!(melee_split(t), expect, "{t:?}");
         }
     }
 
@@ -619,5 +477,70 @@ mod tests {
         for (t, r) in expect {
             assert_eq!(race(t), r, "{t:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod kit_pins {
+    use super::*;
+
+    /// The numbers an ability resolves to for one enemy.
+    struct Pin {
+        damage: f64,
+        cooldown: f64,
+        range: f64,
+        speed: f64,
+        radius: f64,
+        windup: f64,
+        push: f64,
+    }
+
+    /// Each enemy's kit as the resolver gives it today, recorded with the move to shared abilities (#177):
+    /// Strike and Bite reach is the weapon's reach plus the body (the old range plus 4), shots fly their
+    /// range, the bolts' numbers are Fire Bolt's and Shadow Bolt's at the user's Attribute.
+    #[test]
+    fn enemy_kits_are_pinned() {
+        use AbilityId::*;
+        use EnemyType::*;
+        let pins = [
+            (GoblinArcher, Shoot, Pin { damage: 6.0, cooldown: 1.4, range: 140.0, speed: 170.0, radius: 3.0, windup: 0.3, push: 0.0 }),
+            (GoblinArcher, Strike, Pin { damage: 2.7, cooldown: 0.9090909090909091, range: 20.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (SkeletonWarrior, Strike, Pin { damage: 9.0, cooldown: 1.0, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
+            (SkeletonArcher, Shoot, Pin { damage: 7.0, cooldown: 1.6, range: 150.0, speed: 180.0, radius: 3.0, windup: 0.35, push: 0.0 }),
+            (SkeletonArcher, Strike, Pin { damage: 3.0, cooldown: 0.9090909090909091, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (OrcWarrior, Strike, Pin { damage: 14.0, cooldown: 1.2, range: 26.0, speed: 0.0, radius: 0.0, windup: 0.35, push: 20.0 }),
+            (OrcArcher, Shoot, Pin { damage: 10.0, cooldown: 1.7, range: 150.0, speed: 190.0, radius: 3.0, windup: 0.35, push: 0.0 }),
+            (OrcArcher, Strike, Pin { damage: 3.5999999999999996, cooldown: 0.9259259259259258, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Necromancer, ShadowBolt, Pin { damage: 12.0, cooldown: 2.0, range: 180.0, speed: 130.0, radius: 3.0, windup: 0.5, push: 0.0 }),
+            (Necromancer, Strike, Pin { damage: 5.0, cooldown: 1.2, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (RaisedSkeleton, Strike, Pin { damage: 9.0, cooldown: 1.0, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
+            (RaisedArcher, Shoot, Pin { damage: 7.0, cooldown: 1.6, range: 150.0, speed: 180.0, radius: 3.0, windup: 0.35, push: 0.0 }),
+            (RaisedArcher, Strike, Pin { damage: 3.0, cooldown: 0.9090909090909091, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Disciple, ShadowBolt, Pin { damage: 10.222222222222221, cooldown: 2.0, range: 180.0, speed: 130.0, radius: 3.0, windup: 0.5, push: 0.0 }),
+            (Disciple, Strike, Pin { damage: 3.0, cooldown: 0.9615384615384615, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Mimic, Bite, Pin { damage: 13.0, cooldown: 1.0, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Imp, FireBolt, Pin { damage: 7.0, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
+            (Imp, Strike, Pin { damage: 6.0, cooldown: 0.9, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Chort, Strike, Pin { damage: 9.0, cooldown: 1.0, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 14.0 }),
+            (Chort, FireBolt, Pin { damage: 5.541666666666666, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
+            (Summoner, FireBolt, Pin { damage: 7.583333333333334, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
+            (Summoner, Strike, Pin { damage: 5.0, cooldown: 1.2, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (SummonedImp, FireBolt, Pin { damage: 7.0, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
+            (SummonedImp, Strike, Pin { damage: 6.0, cooldown: 0.9, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Ogre, Strike, Pin { damage: 18.0, cooldown: 1.6, range: 32.0, speed: 0.0, radius: 0.0, windup: 0.5, push: 28.0 }),
+            (Ogre, GroundSlam, Pin { damage: 21.599999999999998, cooldown: 6.0, range: 32.0, speed: 0.0, radius: 34.0, windup: 1.0, push: 28.0 }),
+        ];
+        let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        for t in EnemyType::ALL {
+            let kit = crate::sheet::enemy_kit(t);
+            for &id in def(t).abilities {
+                let (_, _, p) = pins.iter().find(|(pt, pid, _)| *pt == t && *pid == id).unwrap_or_else(|| panic!("{t:?} {id:?} is not pinned"));
+                let a = kit.get(id).unwrap();
+                let got = [a.damage, a.cooldown, a.range, a.speed, a.radius, a.windup, a.push];
+                let want = [p.damage, p.cooldown, p.range, p.speed, p.radius, p.windup, p.push];
+                assert!(got.iter().zip(want).all(|(&g, w)| near(g, w)), "{t:?} {id:?}: {got:?} against {want:?}");
+            }
+        }
+        assert_eq!(pins.len(), EnemyType::ALL.iter().map(|&t| def(t).abilities.len()).sum::<usize>(), "no stale pin");
     }
 }

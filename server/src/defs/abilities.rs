@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 super::enum_list::listed_enum! {
-    /// Every ability a hero can have: one primary (LMB) and one secondary (RMB).
+    /// Every ability any creature can have. `classes` empty: not for heroes.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
     pub enum AbilityId: u8 {
         MagicMissile = 0,
@@ -58,6 +58,34 @@ super::enum_list::listed_enum! {
         Consecrate = 21,
         /// Roots at an aimed spot that entangle enemies standing in them.
         Entangle = 22,
+        /// A strike that needs a bite weapon: the monsters' bite.
+        Bite = 23,
+        /// The necromancer's and the disciple's bolt of shadow.
+        ShadowBolt = 24,
+        /// The bolt of fire of imps, chorts and summoners.
+        FireBolt = 25,
+        /// The wolf's leap: a dash that crosses chasms, stops at the first foe it hits and hurts it hard.
+        Pounce = 26,
+        /// A swing behind the user with a tail weapon: the dragon's tail whip.
+        TailWhip = 27,
+        /// The dragon's channelled cone of fire, which leaves burning patches.
+        FireBreath = 28,
+        /// The dragon's landing: an instant blow all around.
+        Smash = 29,
+        /// The demon's long dash that hurts each foe it passes once.
+        Swoop = 30,
+        /// The demon's ring of fire orbs.
+        RingOfFire = 31,
+        /// The lich's burst of dark power, pushing everything away.
+        Nova = 32,
+        /// The lich's fan of five gloom bolts.
+        GloomBolts = 33,
+        /// A slow orb that blinds.
+        BlindingCurse = 34,
+        /// A slow orb that puts to sleep.
+        SleepMist = 35,
+        /// The lich's gaze that turns its target to stone.
+        StoneGaze = 36,
     }
 }
 
@@ -98,6 +126,10 @@ pub enum Shape {
     /// An effect on the user only.
     Buff,
     Summon,
+    /// A channelled cone: damage pulses and burning patches over its duration.
+    Breath,
+    /// An effect on the target the user has locked, if it still sees it.
+    Gaze,
 }
 
 /// The effect an ability applies by itself (to the user, the allies around, or the enemies a
@@ -127,6 +159,14 @@ pub struct OwnStats {
     pub effect: Option<OwnEffect>,
     /// The governing Attribute's value at which `damage` is given.
     pub at: i32,
+    /// A push (px) it gives at least; a weapon's push counts too, the larger wins.
+    pub push: f64,
+    /// The wind-up (s) before it lands, on top of its weapon's.
+    pub windup: f64,
+    /// How many shots one use makes; 0 means 1.
+    pub count: u8,
+    /// The angle (rad) between the outer two shots of a use of several.
+    pub spread: f64,
 }
 
 /// How a weapon ability changes its weapon's numbers.
@@ -145,6 +185,20 @@ impl WeaponMult {
     pub const ONE: WeaponMult = WeaponMult { damage: 1.0, time: 1.0, arc: None, share: None };
 }
 
+impl AbilityDef {
+    /// Heroes can have it (some class pool lists it); the rest belong to monsters.
+    pub fn for_heroes(&self) -> bool {
+        !self.classes.is_empty()
+    }
+}
+
+#[cfg(test)]
+/// Whether two names are the same once case, spaces, hyphens and apostrophes are ignored.
+pub fn same_name(a: &str, b: &str) -> bool {
+    let norm = |s: &str| s.chars().filter(|c| !matches!(c, ' ' | '-' | '\'' | '\u{2019}')).flat_map(char::to_lowercase).collect::<String>();
+    norm(a) == norm(b)
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct AbilityDef {
     pub id: AbilityId,
@@ -160,6 +214,8 @@ pub struct AbilityDef {
     pub weapon_mult: WeaponMult,
     /// The half-angle (rad) of the cone "from behind" its target in which it does more; 0 = none.
     pub behind: f64,
+    /// A swing aimed behind the user.
+    pub backward: bool,
     /// The classes whose own pool can hold it: the class start now, the tree in plan 4.
     pub classes: &'static [ClassId],
 }
@@ -184,6 +240,22 @@ pub const SMITE_FLASH: f64 = 0.3;
 /// Ground Slam: the wind-up (s) before it lands, and the push (px) it gives at least.
 pub const SLAM_WINDUP: f64 = 0.5;
 pub const SLAM_PUSH: f64 = 24.0;
+/// The wind-up (s) of the monsters' bolts, before the shot leaves (balancing).
+pub const SHADOW_BOLT_WINDUP: f64 = 0.5;
+pub const FIRE_BOLT_WINDUP: f64 = 0.35;
+/// Fireball: the push (px) of its explosion, for every caster. A boss is never pushed.
+pub const FIREBALL_PUSH: f64 = 20.0;
+/// Fire Breath's half-angle (rad): the cone reaches this far to each side of the aim.
+pub const BREATH_HALF_ARC: f64 = 0.38;
+/// Fire Breath: the seconds between pulses, and the burning patches each pulse may leave (the
+/// chance, the radius in px, the seconds they burn, the damage of a patch's pulse, and how far
+/// from the user a patch lands at the nearest).
+pub const BREATH_PULSE: f64 = 0.2;
+pub const BREATH_PATCH_CHANCE: f64 = 0.5;
+pub const BREATH_PATCH_RADIUS: f64 = 10.0;
+pub const BREATH_PATCH_SECS: f64 = 3.0;
+pub const BREATH_PATCH_DAMAGE: f64 = 8.0;
+pub const BREATH_PATCH_NEAREST: f64 = 30.0;
 /// How long (s) Frost Nova's and Purify's flashes last.
 pub const NOVA_FLASH: f64 = 0.3;
 /// The Magic flash's colour: icy blue, like the Frost Shard's light.
@@ -191,6 +263,22 @@ pub const NOVA_TINT: u32 = 0x78c8ff;
 pub const PURIFY_FLASH: f64 = 0.3;
 /// Entangle: the seconds of Entangled each pulse of the roots (every 0.5 s) renews.
 pub const ENTANGLE_PULSE_SECS: f64 = 1.0;
+
+/// The angles (rad), relative to the aim, of the shots of one use of `count` (0 means 1) over
+/// `spread`: a single shot flies straight ahead; a `spread` of a full circle or more spaces them
+/// evenly all around (`TAU / count`); otherwise they fan out symmetrically, the outer two `spread` apart.
+pub fn shot_offsets(count: u8, spread: f64) -> Vec<f64> {
+    let n = count.max(1) as usize;
+    if n == 1 {
+        return vec![0.0];
+    }
+    if spread >= std::f64::consts::TAU {
+        let step = std::f64::consts::TAU / n as f64;
+        return (0..n).map(|i| i as f64 * step).collect();
+    }
+    let step = spread / (n - 1) as f64;
+    (0..n).map(|i| (i as f64 - (n - 1) as f64 / 2.0) * step).collect()
+}
 
 /// The id of arrow `i` of a Volley that starts at `shot`: the server's rule; the client
 /// reserves ids so that none is 0.
@@ -204,14 +292,14 @@ pub const KNOCK_DECAY: f64 = 0.7788007830714049;
 pub const KNOCK_MIN_SPEED: f64 = 8.0;
 
 /// No own numbers: a weapon ability takes them all from its weapon.
-const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, split: None, effect: None, at: 0 };
+const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, split: None, effect: None, at: 0, push: 0.0, windup: 0.0, count: 0, spread: 0.0 };
 
 /// One sentence on what the ability does, for the character screens.
 #[allow(dead_code)] // read by the progression.ts export (a test) only
 pub fn text(id: AbilityId) -> &'static str {
     match id {
         AbilityId::MagicMissile => "Fast arcane bolts.",
-        AbilityId::Fireball => "Explodes where it lands, hurting everything nearby.",
+        AbilityId::Fireball => "Explodes where it lands, hurting everything nearby and pushing the light ones back.",
         AbilityId::Strike => "A sweeping blow with your melee weapon.",
         AbilityId::HolyLight => "Heals you and the allies close to you.",
         AbilityId::Charge => "Dash toward the cursor, hitting everything in the way.",
@@ -233,6 +321,20 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::Purify => "Clears bad effects from you and the allies close to you and wards you against curses for a moment.",
         AbilityId::Consecrate => "Holy ground under your feet that hurts enemies standing in it.",
         AbilityId::Entangle => "Vines grow where you aim and root the enemies in them.",
+        AbilityId::Bite => "A snap of the jaws, a strike with a natural bite weapon.",
+        AbilityId::ShadowBolt => "A slow bolt of shadow.",
+        AbilityId::FireBolt => "A bolt of fire.",
+        AbilityId::Pounce => "A leap that crosses chasms and hits the first enemy it reaches, hard.",
+        AbilityId::TailWhip => "A lash of the tail behind the user.",
+        AbilityId::FireBreath => "A cone of fire held for a moment, leaving burning patches on the ground.",
+        AbilityId::Smash => "A blow all around the user that pushes everything away.",
+        AbilityId::Swoop => "A long rush that hurts each enemy it passes once and pushes it hard.",
+        AbilityId::RingOfFire => "Sixteen fire orbs flung out in a ring.",
+        AbilityId::Nova => "A burst of dark power that hurts and pushes everything around the caster.",
+        AbilityId::GloomBolts => "Five bolts of gloom in a fan.",
+        AbilityId::BlindingCurse => "A slow orb that blinds what it hits.",
+        AbilityId::SleepMist => "A slow orb that puts what it hits to sleep.",
+        AbilityId::StoneGaze => "A stare that turns the target to stone, if it still sees it when the gaze lands.",
     }
 }
 
@@ -243,7 +345,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
     use ClassId as K;
     #[allow(clippy::too_many_arguments)]
     const fn own(damage: f64, cooldown: f64, range: f64, speed: f64, radius: f64, duration: f64, kind: Option<EntityKind>, at: i32) -> OwnStats {
-        OwnStats { damage, cooldown, range, speed, radius, duration, kind, split: None, effect: None, at }
+        OwnStats { damage, cooldown, range, speed, radius, duration, kind, split: None, effect: None, at, push: 0.0, windup: 0.0, count: 0, spread: 0.0 }
     }
     let base = |name: &'static str, slot, category, uses, ranged, shape, own, classes: &'static [ClassId]| AbilityDef {
         id,
@@ -257,16 +359,17 @@ pub fn def(id: AbilityId) -> AbilityDef {
         own,
         weapon_mult: WeaponMult::ONE,
         behind: 0.0,
+        backward: false,
         classes,
     };
     match id {
         MagicMissile => base("Magic Missile", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, own(12.0, 0.35, 220.0, 230.0, 3.0, 0.0, Some(EntityKind::Missile), 15), &[K::Wizard]),
-        Fireball => base("Fireball", Secondary, C::Spell, Uses::Nothing, true, Shape::Blast, own(45.0, 6.0, 260.0, 140.0, 38.0, 0.0, Some(EntityKind::Fireball), 15), &[K::Wizard]),
+        Fireball => base("Fireball", Secondary, C::Spell, Uses::Nothing, true, Shape::Blast, OwnStats { push: FIREBALL_PUSH, ..own(45.0, 6.0, 260.0, 140.0, 38.0, 0.0, Some(EntityKind::Fireball), 15) }, &[K::Wizard]),
         Strike => base("Strike", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[K::Paladin, K::Barbarian]),
         HolyLight => base("Holy Light", Secondary, C::Innate, Uses::Nothing, false, Shape::SelfArea, own(35.0, 10.0, 64.0, 0.0, 64.0, 0.0, None, 14), &[K::Paladin]),
         Charge => AbilityDef {
             weapon_mult: WeaponMult { damage: 0.8, ..WeaponMult::ONE },
-            ..base("Charge", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, own(0.0, 5.0, 0.0, DASH_SPEED, 10.0, 0.18, None, 0), &[K::Barbarian])
+            ..base("Charge", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, own(0.0, 5.0, 0.0, DASH_SPEED, 4.0, 0.18, None, 0), &[K::Barbarian])
         },
         Shoot => base("Shoot", Primary, C::WeaponAttack, Uses::Ranged, true, Shape::Projectile, NO_OWN, &[K::ElvenRanger]),
         FrostShard => AbilityDef {
@@ -289,6 +392,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         Volley => AbilityDef {
             req: &[Requirement::Attr(Attr::Dex, 15), Requirement::WeaponKind(&[WeaponKind::Bow, WeaponKind::Longbow])],
             weapon_mult: WeaponMult { damage: 0.6, time: 1.4, ..WeaponMult::ONE },
+            own: OwnStats { count: VOLLEY_ARROWS, spread: VOLLEY_SPREAD, ..NO_OWN },
             ..base("Volley", Primary, C::WeaponAttack, Uses::Ranged, true, Shape::Projectile, NO_OWN, &[K::ElvenRanger])
         },
         Smite => AbilityDef {
@@ -324,7 +428,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         GroundSlam => AbilityDef {
             req: &[Requirement::Attr(Attr::Str, 17), Requirement::WeaponKind(&[WeaponKind::Hammer, WeaponKind::Club])],
             weapon_mult: WeaponMult { damage: 1.2, ..WeaponMult::ONE },
-            ..base("Ground Slam", Secondary, C::Technique, Uses::Melee, false, Shape::Ring, own(0.0, 6.0, 0.0, 0.0, 34.0, 0.0, None, 0), &[K::Barbarian])
+            ..base("Ground Slam", Secondary, C::Technique, Uses::Melee, false, Shape::Ring, OwnStats { push: SLAM_PUSH, windup: SLAM_WINDUP, ..own(0.0, 6.0, 0.0, 0.0, 34.0, 0.0, None, 0) }, &[K::Barbarian])
         },
         Haste => AbilityDef {
             req: &[Requirement::Attr(Attr::Int, 15), Requirement::Attr(Attr::Wil, 14)],
@@ -344,6 +448,64 @@ pub fn def(id: AbilityId) -> AbilityDef {
             req: &[Requirement::Attr(Attr::Cha, 14)],
             own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Entangled, power: Attr::Cha, look: EffectLook::Vines }), ..own(0.0, 14.0, 120.0, 0.0, 36.0, 4.0, Some(EntityKind::Roots), 0) },
             ..base("Entangle", Secondary, C::Innate, Uses::Nothing, true, Shape::GroundArea, NO_OWN, &[K::ElvenRanger])
+        },
+        Bite => AbilityDef {
+            req: &[Requirement::WeaponKind(&[WeaponKind::Bite])],
+            ..base("Bite", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
+        },
+        ShadowBolt => AbilityDef {
+            own: OwnStats { windup: SHADOW_BOLT_WINDUP, ..own(12.0, 2.0, 180.0, 130.0, 3.0, 0.0, Some(EntityKind::ShadowBolt), 17) },
+            ..base("Shadow Bolt", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        FireBolt => AbilityDef {
+            own: OwnStats { windup: FIRE_BOLT_WINDUP, ..own(7.0, 2.0, 150.0, 130.0, 3.0, 0.0, Some(EntityKind::FireBolt), 14) },
+            ..base("Fire Bolt", Primary, C::Innate, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        Pounce => AbilityDef {
+            weapon_mult: WeaponMult { damage: 2.0, ..WeaponMult::ONE },
+            ..base("Pounce", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, OwnStats { push: 12.0, ..own(0.0, 5.0, 64.0, DASH_SPEED, 4.0, 0.0, None, 0) }, &[])
+        },
+        TailWhip => AbilityDef {
+            req: &[Requirement::WeaponKind(&[WeaponKind::Tail])],
+            backward: true,
+            ..base("Tail Whip", Secondary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
+        },
+        FireBreath => AbilityDef {
+            weapon_mult: WeaponMult { arc: Some(2.0 * BREATH_HALF_ARC), ..WeaponMult::ONE },
+            own: OwnStats { windup: 0.8, ..own(6.0, 6.5, 115.0, 0.0, 0.0, 1.4, Some(EntityKind::FireBreath), 20) },
+            ..base("Fire Breath", Secondary, C::Innate, Uses::Nothing, false, Shape::Breath, NO_OWN, &[])
+        },
+        Smash => AbilityDef {
+            weapon_mult: WeaponMult { damage: 1.1, ..WeaponMult::ONE },
+            ..base("Smash", Secondary, C::Technique, Uses::Melee, false, Shape::Ring, OwnStats { push: 36.0, ..own(0.0, 0.0, 0.0, 0.0, 40.0, 0.0, None, 0) }, &[])
+        },
+        Swoop => AbilityDef {
+            weapon_mult: WeaponMult { damage: 1.2, ..WeaponMult::ONE },
+            ..base("Swoop", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, OwnStats { push: 64.0, windup: 0.15, ..own(0.0, 6.0, 0.0, 260.0, 8.0, 0.55, None, 0) }, &[])
+        },
+        RingOfFire => AbilityDef {
+            own: OwnStats { windup: 0.5, count: 16, spread: std::f64::consts::TAU, ..own(12.0, 9.0, 231.0, 105.0, 3.0, 0.0, Some(EntityKind::FireOrb), 20) },
+            ..base("Ring of Fire", Secondary, C::Innate, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        Nova => AbilityDef {
+            own: OwnStats { split: Some(DamageSplit::pure(DamageType::Magical)), push: 64.0, windup: 1.2, ..own(24.0, 10.0, 0.0, 0.0, 56.0, 0.0, None, 22) },
+            ..base("Nova", Secondary, C::Spell, Uses::Nothing, false, Shape::Ring, NO_OWN, &[])
+        },
+        GloomBolts => AbilityDef {
+            own: OwnStats { windup: 0.5, count: 5, spread: 0.8, ..own(10.0, 2.5, 280.0, 140.0, 3.0, 0.0, Some(EntityKind::GloomBolt), 22) },
+            ..base("Gloom Bolts", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        BlindingCurse => AbilityDef {
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Blind, power: Attr::Int, look: EffectLook::Plain }), windup: 0.6, ..own(6.0, 10.0, 270.0, 90.0, 3.0, 3.0, Some(EntityKind::BlindOrb), 22) },
+            ..base("Blinding Curse", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        SleepMist => AbilityDef {
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Sleep, power: Attr::Int, look: EffectLook::Plain }), windup: 0.8, ..own(0.0, 14.0, 270.0, 90.0, 3.0, 4.0, Some(EntityKind::SleepOrb), 22) },
+            ..base("Sleep Mist", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        StoneGaze => AbilityDef {
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Petrified, power: Attr::Int, look: EffectLook::Plain }), windup: 1.0, ..own(0.0, 18.0, 0.0, 0.0, 0.0, 3.0, None, 0) },
+            ..base("Stone Gaze", Secondary, C::Spell, Uses::Nothing, false, Shape::Gaze, NO_OWN, &[])
         },
         SummonWolf => base("Summon Wolf", Secondary, C::Innate, Uses::Nothing, false, Shape::Summon, own(0.0, 8.0, 0.0, 0.0, 0.0, 0.0, None, 13), &[K::ElvenRanger]),
     }
@@ -378,7 +540,6 @@ mod tests {
         for id in AbilityId::ALL {
             let d = def(id);
             assert_eq!(d.id, id);
-            assert!(!d.classes.is_empty(), "{id:?}");
             let magic = matches!(d.category, AbilityCategory::Spell | AbilityCategory::Innate);
             if magic {
                 assert_eq!(d.uses, Uses::Nothing, "{id:?}: a spell or innate ability uses nothing");
@@ -392,7 +553,7 @@ mod tests {
                 assert!(d.own.range > 0.0, "{id:?}: an aimed area needs a range");
             }
             if d.own.effect.is_some() {
-                assert!(matches!(d.shape, Shape::Ring | Shape::SelfArea | Shape::GroundArea | Shape::Buff), "{id:?}: an own effect needs an area or a buff");
+                assert!(matches!(d.shape, Shape::Ring | Shape::SelfArea | Shape::GroundArea | Shape::Buff | Shape::Projectile | Shape::Gaze), "{id:?}: an own effect needs an area, a buff, a shot or a gaze");
             }
             if magic && d.own.damage > 0.0 {
                 assert!(d.own.at > 0, "{id:?}: a spell's damage is given at an Attribute value");
@@ -409,5 +570,33 @@ mod tests {
                 assert!(def(id).classes.contains(&c), "{c:?} {id:?}");
             }
         }
+    }
+
+    #[test]
+    fn ability_names_are_unique() {
+        for (i, a) in AbilityId::ALL.iter().enumerate() {
+            for b in &AbilityId::ALL[i + 1..] {
+                assert!(!same_name(def(*a).name, def(*b).name), "{a:?} and {b:?} share a name");
+            }
+        }
+    }
+
+    #[test]
+    fn shot_offsets_handle_one_shot_a_fan_and_a_full_circle() {
+        assert_eq!(shot_offsets(0, 0.5), vec![0.0], "0 means 1");
+        assert_eq!(shot_offsets(1, 0.5), vec![0.0], "a single shot flies straight ahead");
+        let fan = shot_offsets(3, 0.6);
+        assert!(fan.iter().zip([-0.3, 0.0, 0.3]).all(|(a, b)| (a - b).abs() < 1e-12), "{fan:?}");
+        let ring = shot_offsets(16, std::f64::consts::TAU);
+        assert_eq!(ring.len(), 16);
+        assert!(ring.windows(2).all(|w| (w[1] - w[0] - std::f64::consts::TAU / 16.0).abs() < 1e-12));
+        assert_eq!(ring[0], 0.0);
+    }
+
+    #[test]
+    fn same_name_ignores_case_spaces_hyphens_and_apostrophes() {
+        assert!(same_name("Frost Nova", "frost-nova"));
+        assert!(same_name("Ogre's Slam", "ogres slam"));
+        assert!(!same_name("Nova", "Frost Nova"));
     }
 }

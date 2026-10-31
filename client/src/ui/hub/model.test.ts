@@ -71,7 +71,7 @@ describe('itemProblem', () => {
 });
 
 describe('abilityNumbers', () => {
-  const base = { id: 'MagicMissile', cooldown: 0, damage: 0, range: 0, arc: 0, speed: 0, radius: 0, duration: 0, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: {}, behind: 0 };
+  const base = { id: 'MagicMissile', cooldown: 0, damage: 0, range: 0, arc: 0, speed: 0, radius: 0, duration: 0, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: {}, windup: 0, behind: 0 };
   const ab = (o: object) => ({ ...base, ...o }) as unknown as ResolvedAbility;
   test('a single-type ability', () => {
     expect(abilityNumbers(ab({ damage: 12, cooldown: 0.35, range: 220, ranged: true, radius: 3, split: { Magical: 1 } }), 'Ranged')).toBe('12 magical · cd 0.35 s · range 220 · radius 3');

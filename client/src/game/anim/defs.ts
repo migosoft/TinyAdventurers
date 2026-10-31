@@ -62,8 +62,6 @@ export interface FigureDef {
   frames?: Partial<Record<FigureAnim, { prefix: string; n: number; fps: number }>>;
   /** Attack anims that start with their wind-up (s): the wind-up frame shows first, then the strike frames. */
   windups?: Partial<Record<number, number>>;
-  /** Enraged, the figure's action timers run this much faster (wind-ups last `pace` times as long; the demon). */
-  pace?: number;
   /** Hover height while airborne (px, unscaled). */
   lift?: number;
   /** Row of the feet in the body frames (the origin), when space is left below them (the dragon's hanging legs in flight). */
@@ -126,7 +124,6 @@ export const FIGURES: Record<number, FigureDef> = {
     run: demonFrames.walk.prefix,
     frames: demonFrames,
     windups: { [ANIM.Melee]: CONST.DEMON_CLEAVE_WINDUP, [ANIM.Dash]: CONST.DEMON_SWOOP_WINDUP, [ANIM.Cast]: CONST.DEMON_RING_WINDUP },
-    pace: CONST.DEMON_ENRAGED_PACE,
     footY: DEMON_FRAME.footY,
     hipX: DEMON_FRAME.hipX,
     swing: { reach: 40, arc: 2.1, color: 0xffa080 },

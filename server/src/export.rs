@@ -49,7 +49,7 @@ fn export_defs() {
         .iter()
         .map(|&a| {
             let d = ab::def(a);
-            (format!("{a:?}"), json!({ "name": d.name, "slot": d.slot, "ranged": d.ranged, "shape": d.shape, "classes": d.classes }))
+            (format!("{a:?}"), json!({ "name": d.name, "slot": d.slot, "ranged": d.ranged, "shape": d.shape, "classes": d.classes, "hero": d.for_heroes() }))
         })
         .collect();
     // The weapon items (the client's debug weapon selects): slot, kind and the classes that can hold them.
@@ -65,6 +65,15 @@ fn export_defs() {
             Some((format!("{i:?}"), json!({ "name": d.name, "slot": slot, "kind": format!("{kind:?}"), "classes": d.classes })))
         })
         .collect();
+    // The ogre's slam telegraph: the radius and wind-up of its Ground Slam.
+    let ogre_slam = *crate::sheet::enemy_kit(enemies::EnemyType::Ogre).get(ab::AbilityId::GroundSlam).expect("the ogre slams");
+    // The dragon's telegraphs: the numbers of the abilities in its kit.
+    let dragon_kit = crate::sheet::boss_kit(crate::protocol::BossId::Dragon);
+    let dragon_ability = |id: AbilityId| *dragon_kit.get(id).expect("the dragon uses it");
+    let demon_kit = crate::sheet::boss_kit(crate::protocol::BossId::Demon);
+    let demon_ability = |id: AbilityId| *demon_kit.get(id).expect("the demon uses it");
+    let lich_kit = crate::sheet::boss_kit(crate::protocol::BossId::Lich);
+    let lich_ability = |id: AbilityId| *lich_kit.get(id).expect("the lich casts it");
     let mut consts = json!({
         "TILE": TILE,
         "TICK_HZ": TICK_HZ,
@@ -79,25 +88,28 @@ fn export_defs() {
         "MIMIC_HOP_AIR_START": enemies::MIMIC_HOP_AIR.0,
         "MIMIC_HOP_AIR_END": enemies::MIMIC_HOP_AIR.1,
         "MIMIC_WAKE_T": enemies::MIMIC_WAKE_T,
-        "OGRE_SLAM_RADIUS": enemies::OGRE_SLAM_RADIUS,
-        "OGRE_SLAM_WINDUP": enemies::OGRE_SLAM_WINDUP,
-        "DRAGON_CLAW_WINDUP": bosses::DRAGON_CLAW_WINDUP,
-        "DRAGON_BITE_WINDUP": bosses::DRAGON_BITE_WINDUP,
-        "DRAGON_BITE_RANGE": bosses::DRAGON_BITE_RANGE,
-        "DRAGON_BITE_KNOCK": bosses::DRAGON_BITE_KNOCK,
-        "DRAGON_TAIL_WINDUP": bosses::DRAGON_TAIL_WINDUP,
-        "DRAGON_BREATH_WINDUP": bosses::DRAGON_BREATH_WINDUP,
-        "DRAGON_BREATH_TIME": bosses::DRAGON_BREATH_TIME,
+        "OGRE_SLAM_RADIUS": ogre_slam.radius,
+        "OGRE_SLAM_WINDUP": ogre_slam.windup,
+        "OGRE_SLAM_KNOCK": ogre_slam.push,
+        "DRAGON_CLAW_WINDUP": dragon_ability(AbilityId::Strike).windup,
+        "DRAGON_BITE_WINDUP": dragon_ability(AbilityId::Bite).windup,
+        // The client telegraph measures from the hero's centre: the kit range reaches the hero's edge.
+        "DRAGON_BITE_RANGE": dragon_ability(AbilityId::Bite).range + PLAYER_RADIUS,
+        "DRAGON_BITE_KNOCK": dragon_ability(AbilityId::Bite).push,
+        "DRAGON_TAIL_WINDUP": dragon_ability(AbilityId::TailWhip).windup,
+        "DRAGON_BREATH_WINDUP": dragon_ability(AbilityId::FireBreath).windup,
+        "DRAGON_BREATH_TIME": dragon_ability(AbilityId::FireBreath).duration,
         "DRAGON_TAKEOFF": bosses::DRAGON_TAKEOFF,
         "DRAGON_LAND": bosses::DRAGON_LAND,
-        "DRAGON_SMASH_RADIUS": bosses::DRAGON_SMASH_RADIUS,
-        "DRAGON_SMASH_KNOCK": bosses::DRAGON_SMASH_KNOCK,
-        "DRAGON_CLAW_KNOCK": bosses::DRAGON_CLAW_KNOCK,
-        "DRAGON_TAIL_KNOCK": bosses::DRAGON_TAIL_KNOCK,
-        "DRAGON_FIREBALL_KNOCK": bosses::DRAGON_FIREBALL_KNOCK,
-        "LICH_NOVA_RADIUS": bosses::LICH_NOVA_RADIUS,
-        "LICH_NOVA_WINDUP": bosses::LICH_NOVA_WINDUP,
-        "LICH_NOVA_KNOCK": bosses::LICH_NOVA_KNOCK,
+        "DRAGON_SMASH_RADIUS": dragon_ability(AbilityId::Smash).radius,
+        "DRAGON_SMASH_KNOCK": dragon_ability(AbilityId::Smash).push,
+        "DRAGON_CLAW_KNOCK": dragon_ability(AbilityId::Strike).push,
+        "DRAGON_TAIL_KNOCK": dragon_ability(AbilityId::TailWhip).push,
+        "DRAGON_FIREBALL_KNOCK": dragon_ability(AbilityId::Fireball).push,
+        "LICH_NOVA_RADIUS": lich_ability(AbilityId::Nova).radius,
+        "LICH_NOVA_WINDUP": lich_ability(AbilityId::Nova).windup,
+        "LICH_NOVA_KNOCK": lich_ability(AbilityId::Nova).push,
+        "LICH_NOVA_STR": lich_ability(AbilityId::Nova).push_str,
         "SHALLOW_SPEED": crate::dungeon::SHALLOW_SPEED,
         "LAVA_SPEED": crate::dungeon::LAVA_SPEED,
         "FALL_TIME": crate::dungeon::FALL_TIME,
@@ -106,23 +118,22 @@ fn export_defs() {
     });
     // A second object: one json! with all of them hits the macro recursion limit.
     let demon = json!({
-        "DEMON_CLEAVE_WINDUP": bosses::DEMON_CLEAVE_WINDUP,
-        "DEMON_SWOOP_WINDUP": bosses::DEMON_SWOOP_WINDUP,
-        "DEMON_SWOOP_TIME": bosses::DEMON_SWOOP_TIME,
-        "DEMON_RING_WINDUP": bosses::DEMON_RING_WINDUP,
+        "DEMON_CLEAVE_WINDUP": demon_ability(AbilityId::Strike).windup,
+        "DEMON_SWOOP_WINDUP": demon_ability(AbilityId::Swoop).windup,
+        "DEMON_SWOOP_TIME": demon_ability(AbilityId::Swoop).duration,
+        "DEMON_RING_WINDUP": demon_ability(AbilityId::RingOfFire).windup,
         "DEMON_CLEAVE_RECOVER": bosses::DEMON_CLEAVE_RECOVER,
         "DEMON_SWOOP_RECOVER": bosses::DEMON_SWOOP_RECOVER,
         "DEMON_RING_RECOVER": bosses::DEMON_RING_RECOVER,
-        "DEMON_ENRAGED_PACE": bosses::DEMON_ENRAGED_PACE,
-        "DEMON_CLEAVE_KNOCK": bosses::DEMON_CLEAVE_KNOCK,
-        "DEMON_SWOOP_KNOCK": bosses::DEMON_SWOOP_KNOCK,
+        "DEMON_CLEAVE_KNOCK": demon_ability(AbilityId::Strike).push,
+        "DEMON_SWOOP_KNOCK": demon_ability(AbilityId::Swoop).push,
     });
     consts.as_object_mut().unwrap().extend(demon.as_object().unwrap().clone());
     let lich = json!({
-        "LICH_ORB_SPEED": bosses::LICH_ORB_SPEED,
-        "LICH_GAZE_WINDUP": bosses::LICH_GAZE_WINDUP,
-        "LICH_BLIND_WINDUP": bosses::LICH_BLIND_WINDUP,
-        "LICH_SLEEP_WINDUP": bosses::LICH_SLEEP_WINDUP,
+        "LICH_ORB_SPEED": lich_ability(AbilityId::BlindingCurse).speed,
+        "LICH_GAZE_WINDUP": lich_ability(AbilityId::StoneGaze).windup,
+        "LICH_BLIND_WINDUP": lich_ability(AbilityId::BlindingCurse).windup,
+        "LICH_SLEEP_WINDUP": lich_ability(AbilityId::SleepMist).windup,
     });
     consts.as_object_mut().unwrap().extend(lich.as_object().unwrap().clone());
     let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
@@ -136,7 +147,7 @@ fn export_defs() {
     });
     consts.as_object_mut().unwrap().extend(objs.as_object().unwrap().clone());
     let fl = json!({
-        "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,
+        "IMMUNE": flags::IMMUNE,
         "HIDING": flags::HIDING, "DORMANT": flags::DORMANT, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE,
     });
     let tiles = json!({

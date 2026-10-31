@@ -260,6 +260,7 @@ pub fn pick_version(class: ClassId, b: &Build, slot: AbilitySlot, p: Pick) -> Re
         Source::Item(s) => b
             .equipment
             .get(s)
+            .filter(|_| d.for_heroes()) // no item can give a hero a monster-only ability
             .and_then(|item| {
                 items::def(item).props.iter().find_map(|prop| match prop.kind {
                     PropKind::GrantAbility { id: granted, mods, waive_attrs } if granted == id => Some((mods, waive_attrs)),
@@ -421,6 +422,14 @@ mod tests {
     }
 
     #[test]
+    fn a_pick_of_an_ability_outside_the_class_pool_is_refused() {
+        let c = ClassId::Paladin;
+        let mut b = Build::start(c);
+        b.loadout.secondary = Pick { ability: Fireball, source: Source::Own };
+        assert_eq!(hero_sheet(c, &b).err(), Some(LoadoutError::NotInPool(Fireball)));
+    }
+
+    #[test]
     fn an_item_version_leaves_with_its_item() {
         let c = ClassId::Paladin;
         let pick = Pick { ability: MagicMissile, source: Source::Item(EquipSlot::Ring1) };
@@ -430,6 +439,23 @@ mod tests {
         let mut other = empty.clone();
         other.equipment = Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor);
         assert_eq!(hero_sheet(c, &other).err(), Some(LoadoutError::NotInPool(MagicMissile)));
+    }
+
+    #[test]
+    fn no_item_gives_a_hero_a_monster_only_ability() {
+        // The version path refuses a monster-only ability (`for_heroes`), and no item grants one anyway.
+        for item in ItemId::ALL {
+            for prop in items::def(item).props {
+                if let PropKind::GrantAbility { id, .. } = prop.kind {
+                    assert!(ab::def(id).for_heroes(), "{item:?} grants {id:?}");
+                }
+            }
+        }
+        let c = ClassId::Paladin;
+        let mut b = Build::start(c);
+        b.equipment = Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor);
+        let pick = Pick { ability: AbilityId::FireBolt, source: Source::Item(EquipSlot::Ring1) };
+        assert_eq!(pick_version(c, &b, AbilitySlot::Primary, pick), Err(LoadoutError::NotInPool(AbilityId::FireBolt)));
     }
 
     #[test]

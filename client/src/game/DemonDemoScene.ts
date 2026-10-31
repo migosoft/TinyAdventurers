@@ -1,9 +1,9 @@
 // Dev page (?demon): the red demon without a server, looping through every
 // action so its animations can be judged: idle, walking, cleave, the swoop (a
-// charge on foot), the ring of fire, and an enraged cleave (shorter wind-up).
+// charge on foot), and the ring of fire.
 // The cleave and the charge push the heroes they hit, with the game's distances.
 //
-// Keys: Space pauses, S toggles slow motion (1/4), 1-7 jump to an action.
+// Keys: Space pauses, S toggles slow motion (1/4), 1-6 jump to an action.
 // `?demon&slow=3` starts slowed down.
 import Phaser from 'phaser';
 import { ANIM, CLASSES, CONST, FLAG, KIND } from '../generated/defs';
@@ -75,7 +75,7 @@ export class DemonDemoScene extends Phaser.Scene {
     for (let y = 2; y < H + 2; y++)
       for (let x = 0; x < W; x++) this.add.image(x * TILE, y * TILE, 'atlas', (x * 7 + y * 3) % 8 === 0 ? 'floor_2' : 'floor_1').setOrigin(0);
     const style = { fontFamily: 'monospace', fontSize: '8px', color: '#fff' };
-    this.add.text(4, 4, 'demon: every action in a loop. Space pause, S slow motion, 1-7 jump to an action', style).setResolution(4).setDepth(1e6);
+    this.add.text(4, 4, 'demon: every action in a loop. Space pause, S slow motion, 1-6 jump to an action', style).setResolution(4).setDepth(1e6);
     this.caption = this.add.text(4, 16, '', { ...style, color: '#ffe080' }).setResolution(4).setDepth(1e6);
 
     this.demon = new EntityView(this, KIND.Demon, this.fx, 'Demon');
@@ -101,25 +101,24 @@ export class DemonDemoScene extends Phaser.Scene {
   /** The demon's actions, in loop order. */
   private script(): Phase[] {
     const [hx, hy] = HOME;
-    const set = (anim: number, flags = 0) => {
+    const set = (anim: number) => {
       if (anim !== this.d.anim) this.d.animT = 0;
       this.d.anim = anim;
-      this.d.flags = flags;
+      this.d.flags = 0;
     };
     const at = (t: number, prevT: number, when: number) => prevT < when && t >= when;
     const cleave = CONST.DEMON_CLEAVE_WINDUP;
     const sw = CONST.DEMON_SWOOP_WINDUP;
     const ring = CONST.DEMON_RING_WINDUP;
-    const rage = CONST.DEMON_ENRAGED_PACE;
-    const cleavePhase = (name: string, aim: number, target: string, flags: number): Phase => {
-      const w = cleave * (flags ? rage : 1);
-      const end = w + CONST.DEMON_CLEAVE_RECOVER * (flags ? rage : 1);
+    const cleavePhase = (name: string, aim: number, target: string): Phase => {
+      const w = cleave;
+      const end = w + CONST.DEMON_CLEAVE_RECOVER;
       return {
         name,
         dur: 2,
         run: (t, p) => {
           this.d.aim = aim;
-          set(t < end ? ANIM.Melee : ANIM.Idle, flags);
+          set(t < end ? ANIM.Melee : ANIM.Idle);
           if (at(t, p, w)) this.hit(target, CLEAVE_KNOCK);
         },
       };
@@ -137,8 +136,8 @@ export class DemonDemoScene extends Phaser.Scene {
           set(t < 3.95 ? ANIM.Move : ANIM.Idle);
         },
       },
-      cleavePhase(`cleave: ${CLEAVE_KNOCK} px push`, 0, 'Paladin', 0),
-      cleavePhase('cleave facing left', Math.PI, 'Barbarian', 0),
+      cleavePhase(`cleave: ${CLEAVE_KNOCK} px push`, 0, 'Paladin'),
+      cleavePhase('cleave facing left', Math.PI, 'Barbarian'),
       {
         name: `swoop (charge on foot): ${SWOOP_KNOCK} px push`,
         dur: 3,
@@ -171,7 +170,6 @@ export class DemonDemoScene extends Phaser.Scene {
           if (at(t, p, ring)) this.ringOfFire();
         },
       },
-      cleavePhase('enraged cleave (faster wind-up)', 0, 'Paladin', FLAG.ENRAGED),
     ];
   }
 

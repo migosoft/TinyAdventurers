@@ -109,6 +109,21 @@ super::enum_list::listed_enum! {
         HuntersBow = 40,
         ThrowingAxes = 41,
         WarHammer = 42,
+        // Monster-only copies of the weapons above: the same numbers with a wind-up (and a reach), so
+        // a hero's weapon never winds up. No class can hold them.
+        GoblinShortbow = 43,
+        SkeletonSword = 44,
+        SkeletonBow = 45,
+        OrcCleaver = 46,
+        OrcWarbow = 47,
+        OgreClub = 48,
+        NecromancerRod = 49,
+        SummonerRod = 50,
+        // The bosses' natural weapons: the numbers of their old attacks, as items.
+        DragonBite = 51,
+        DragonClaws = 52,
+        DragonTail = 53,
+        DemonClaws = 54,
     }
 }
 
@@ -198,9 +213,18 @@ pub fn base_text(b: &ItemBase) -> String {
             if m.push > 0.0 {
                 t.push_str(&format!(" · push {}", m.push));
             }
+            if m.windup > 0.0 {
+                t.push_str(&format!(" · wind-up {} s", m.windup));
+            }
             t
         }
-        ItemBase::Ranged(_, r) => format!("{} damage · every {} s · range {}", r.damage, r.cooldown, r.range),
+        ItemBase::Ranged(_, r) => {
+            let mut t = format!("{} damage · every {} s · range {}", r.damage, r.cooldown, r.range);
+            if r.windup > 0.0 {
+                t.push_str(&format!(" · wind-up {} s", r.windup));
+            }
+            t
+        }
         ItemBase::Armor(a) => {
             let class = match a.class {
                 ArmorClass::Cloth => "Cloth",
@@ -234,9 +258,10 @@ pub fn prop_text(p: &ItemProperty) -> String {
     }
 }
 
-/// Whether a hero may own the item at all: natural weapons (bites, claws) belong to enemies.
+/// Whether a hero may own the item at all: natural weapons (bites, claws) and the monster-only copies
+/// (no class) belong to enemies.
 pub fn hero_can_hold(d: &ItemDef) -> bool {
-    !matches!(d.base, ItemBase::Melee(k, _) if category(k) == WeaponCategory::Natural)
+    !d.classes.is_empty() && !matches!(d.base, ItemBase::Melee(k, _) if category(k) == WeaponCategory::Natural)
 }
 
 // Macros, not `const fn`s: only struct literals are promoted to `'static`.
@@ -253,12 +278,25 @@ macro_rules! plain {
 }
 
 fn melee(kind: WeaponKind, damage: f64, cooldown: f64, arc: f64, push: f64, split: DamageSplit, at: At) -> ItemBase {
-    ItemBase::Melee(kind, MeleeStats { damage, cooldown, arc, push, split, at })
+    ItemBase::Melee(kind, MeleeStats { damage, cooldown, arc, push, reach: super::classes::HERO_REACH, windup: 0.0, split, at })
+}
+
+/// A melee weapon a monster winds up with (`windup`, s), reaching `reach` px beyond its body
+/// (a weapon a hero can hold keeps `HERO_REACH`).
+fn winding(base: ItemBase, reach: f64, windup: f64) -> ItemBase {
+    let ItemBase::Melee(kind, m) = base else { panic!("only a melee weapon has a reach") };
+    ItemBase::Melee(kind, MeleeStats { reach, windup, ..m })
+}
+
+/// A ranged weapon a monster winds up with before the shot leaves.
+fn drawing(base: ItemBase, windup: f64) -> ItemBase {
+    let ItemBase::Ranged(kind, r) = base else { panic!("only a ranged weapon draws") };
+    ItemBase::Ranged(kind, RangedStats { windup, ..r })
 }
 
 #[allow(clippy::too_many_arguments)]
 fn ranged(kind: WeaponKind, damage: f64, cooldown: f64, range: f64, projectile_speed: f64, radius: f64, projectile: EntityKind, at: At) -> ItemBase {
-    ItemBase::Ranged(kind, RangedStats { damage, cooldown, range, projectile_speed, radius, projectile, split: DamageSplit::physical(), at })
+    ItemBase::Ranged(kind, RangedStats { damage, cooldown, range, projectile_speed, radius, projectile, windup: 0.0, split: DamageSplit::physical(), at })
 }
 
 fn armor(class: ArmorClass, physical: f64, weight: f64) -> ItemBase {
@@ -266,6 +304,8 @@ fn armor(class: ArmorClass, physical: f64, weight: f64) -> ItemBase {
 }
 
 const ALL: &[ClassId] = &ClassId::ALL;
+/// No class: a monster-only item.
+const NONE: &[ClassId] = &[];
 const WIZARD: &[ClassId] = &[ClassId::Wizard];
 const RANGER: &[ClassId] = &[ClassId::ElvenRanger];
 
@@ -332,14 +372,27 @@ pub fn def(id: ItemId) -> ItemDef {
         I::Cleaver => item("Cleaver", "weapon_cleaver", melee(K::Axe, 14.0, 1.2, 1.8, 20.0, phys(), at(16, 12)), ALL, &[], &[]),
         I::OrcBow => item("Orc Bow", "weapon_bow", ranged(K::Bow, 10.0, 1.7, 150.0, 190.0, 3.0, EntityKind::Arrow, at(14, 14)), ALL, &[], &[]),
         I::SpikedClub => item("Spiked Club", "weapon_baton_with_spikes", melee(K::Club, 18.0, 1.6, 2.0, 28.0, phys(), at(19, 8)), ALL, &[], &[]),
-        I::MimicBite => item("Mimic Bite", "", melee(K::Bite, 13.0, 1.0, 1.0, 0.0, phys(), at(17, 12)), ALL, &[], &[]),
-        I::ImpClaws => item("Imp Claws", "", melee(K::Claws, 6.0, 0.9, 1.6, 0.0, heat(), at(6, 17)), ALL, &[], &[]),
-        I::ChortClaws => item("Chort Claws", "", melee(K::Claws, 9.0, 1.0, 1.6, 14.0, heat(), at(14, 13)), ALL, &[], &[]),
-        I::UnarmedStrike => item("Unarmed Strike", "", melee(K::Unarmed, 3.0, 1.0, 1.4, 0.0, phys(), At::BASE), ALL, &[], &[]),
+        I::MimicBite => item("Mimic Bite", "", winding(melee(K::Bite, 13.0, 1.0, 1.0, 0.0, phys(), at(17, 12)), 16.0, 0.25), ALL, &[], &[]),
+        I::ImpClaws => item("Imp Claws", "", winding(melee(K::Claws, 6.0, 0.9, 1.6, 0.0, heat(), at(6, 17)), 16.0, 0.25), ALL, &[], &[]),
+        I::ChortClaws => item("Chort Claws", "", winding(melee(K::Claws, 9.0, 1.0, 1.6, 14.0, heat(), at(14, 13)), 18.0, 0.3), ALL, &[], &[]),
+        I::UnarmedStrike => item("Unarmed Strike", "", winding(melee(K::Unarmed, 3.0, 1.0, 1.4, 0.0, phys(), At::BASE), 16.0, 0.25), ALL, &[], &[]),
         I::Bite => item("Bite", "", melee(K::Bite, 8.0, 1.0, 1.0, 0.0, phys(), At::BASE), ALL, &[], &[]),
         I::Claws => item("Claws", "", melee(K::Claws, 6.0, 0.8, 1.6, 0.0, heat(), At::BASE), ALL, &[], &[]),
-        I::BeastBite => item("Beast Bite", "", melee(K::Bite, 10.0, 0.9, 1.0, 0.0, DamageSplit::split(&[(DamageType::Magical, 0.2)]), At::BASE), ALL, &[], &[]),
-        I::Tail => item("Tail", "", melee(K::Tail, 10.0, 1.25, 2.4, 10.0, phys(), At::BASE), ALL, &[], &[]),
+        I::BeastBite => item("Beast Bite", "", winding(melee(K::Bite, 10.0, 0.9, 1.0, 8.0, DamageSplit::split(&[(DamageType::Magical, 0.2)]), at(17, 15)), 18.0, 0.2), NONE, &[], &[]),
+        // The dragon's own tail: no hero holds it (the id stays so the ids stay contiguous).
+        I::Tail => item("Tail", "", melee(K::Tail, 10.0, 1.25, 2.4, 10.0, phys(), At::BASE), NONE, &[], &[]),
+        I::GoblinShortbow => item("Goblin Shortbow", "weapon_bow", drawing(ranged(K::Bow, 6.0, 1.4, 140.0, 170.0, 3.0, EntityKind::Arrow, at(8, 15)), 0.3), NONE, &[], &[]),
+        I::SkeletonSword => item("Skeleton Sword", "weapon_rusty_sword", winding(melee(K::Sword, 9.0, 1.0, 1.6, 0.0, phys(), at(12, 12)), 18.0, 0.3), NONE, &[], &[]),
+        I::SkeletonBow => item("Skeleton Bow", "weapon_bow_2", drawing(ranged(K::Longbow, 7.0, 1.6, 150.0, 180.0, 3.0, EntityKind::Arrow, at(10, 15)), 0.35), NONE, &[], &[]),
+        I::OrcCleaver => item("Orc Cleaver", "weapon_cleaver", winding(melee(K::Axe, 14.0, 1.2, 1.8, 20.0, phys(), at(16, 12)), 20.0, 0.35), NONE, &[], &[]),
+        I::OrcWarbow => item("Orc Warbow", "weapon_bow", drawing(ranged(K::Bow, 10.0, 1.7, 150.0, 190.0, 3.0, EntityKind::Arrow, at(14, 14)), 0.35), NONE, &[], &[]),
+        I::OgreClub => item("Ogre Club", "weapon_baton_with_spikes", winding(melee(K::Club, 18.0, 1.6, 2.0, 28.0, phys(), at(19, 8)), 22.0, 0.5), NONE, &[], &[]),
+        I::NecromancerRod => item("Necromancer Rod", "weapon_green_magic_staff", winding(melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), 16.0, 0.25), NONE, &[], &[]),
+        I::SummonerRod => item("Summoner Rod", "weapon_red_magic_staff", winding(melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), 16.0, 0.25), NONE, &[], &[]),
+        I::DragonBite => item("Dragon Bite", "", winding(melee(K::Bite, 28.0, 3.0, 0.70, 24.0, heat(), at(24, 10)), 24.0, 0.45), NONE, &[], &[]),
+        I::DragonClaws => item("Dragon Claws", "", winding(melee(K::Claws, 20.0, 2.5, 1.60, 32.0, heat(), at(24, 10)), 18.0, 0.40), NONE, &[], &[]),
+        I::DragonTail => item("Dragon Tail", "", winding(melee(K::Tail, 25.0, 3.0, 2.40, 44.0, phys(), at(24, 10)), 24.0, 0.40), NONE, &[], &[]),
+        I::DemonClaws => item("Demon Claws", "", winding(melee(K::Claws, 25.0, 1.6, 2.10, 56.0, heat(), at(22, 14)), 24.0, 0.45), NONE, &[], &[]),
         I::NecromancerStaff => item("Necromancer Staff", "weapon_green_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::SummonerStaff => item("Summoner Staff", "weapon_red_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::HuntersBow => item(
@@ -458,7 +511,6 @@ mod tests {
         for id in ItemId::ALL {
             let d = def(id);
             assert_eq!(d.id, id);
-            assert!(!d.classes.is_empty(), "{id:?}");
             let weapon = matches!(d.base, ItemBase::Melee(..) | ItemBase::Ranged(..));
             if matches!(d.base, ItemBase::Ring | ItemBase::Shoes | ItemBase::Belt) {
                 assert!(d.props.iter().all(|p| p.magical), "{id:?}");
@@ -487,6 +539,23 @@ mod tests {
             let natural = matches!(d.base, ItemBase::Melee(k, _) | ItemBase::Ranged(k, _) if category(k) == C::Natural);
             if weapon && !natural {
                 assert!(!d.sprite.is_empty(), "{id:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn only_weapons_are_monster_only_and_a_hero_weapon_never_winds_up() {
+        for id in ItemId::ALL {
+            let d = def(id);
+            if d.classes.is_empty() {
+                assert!(matches!(d.base, ItemBase::Melee(..) | ItemBase::Ranged(..)), "{id:?}: only a weapon is monster-only");
+            }
+            if hero_can_hold(&d) {
+                match d.base {
+                    ItemBase::Melee(_, m) => assert_eq!((m.reach, m.windup), (super::classes::HERO_REACH, 0.0), "{id:?}"),
+                    ItemBase::Ranged(_, r) => assert_eq!(r.windup, 0.0, "{id:?}"),
+                    _ => {}
+                }
             }
         }
     }

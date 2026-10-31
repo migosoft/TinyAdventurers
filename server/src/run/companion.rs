@@ -1,11 +1,12 @@
 //! The Elven Ranger's wolf: an ally monster. Spawn, behaviour and death here.
 
-use super::entities::{Ai, Ally, Monster, Windup, WolfDash, HISTORY_LEN};
-use super::{ai, keystones, perception, Run};
-use crate::collision::{line_of_sight, move_box, walk_line};
-use crate::defs::attributes::Attr;
+use super::abilities::{monster_use, monster_dash_to, monster_dash_secs, tick_monster_dash};
+use super::entities::{Ai, Ally, Monster, Windup, HISTORY_LEN};
+use super::{ai, perception, Run};
+use crate::collision::{line_of_sight, walk_line};
+use crate::defs::abilities::AbilityId;
 use crate::defs::companions::*;
-use crate::defs::damage::{Damage, What};
+use crate::defs::damage::What;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::{self, Map, Mover};
 use crate::math::Vec2;
@@ -58,9 +59,15 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         sight: prof.sight,
         alive: true,
         aim: 0.0,
+        aim_dist: 0.0,
         anim: Anim::Idle,
         anim_start: run.time,
         hurt_t: 0.0,
+        kit: crate::sheet::wolf_kit(&run.players[pi].sheet.wolf),
+        cds: Default::default(),
+        slam: None,
+        channel: None,
+        dash: None,
         wolf_bit: 0.0,
         ai: Ai::new(spot),
         owner: None,
@@ -84,11 +91,10 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
             growl_cd: 0.0,
             growl_to: None,
             hold: 0.0,
+            bite_hold: 0.0,
             prey: None,
             following: false,
             reach_t: 0.0,
-            dash: None,
-            dash_cd: 0.0,
             last_safe: Map::center_of(tx, ty),
         }),
     });
@@ -140,7 +146,7 @@ fn set_anim(run: &mut Run, mi: usize, a: Anim) {
     }
 }
 
-/// The wolf `mi` this tick: reappear, dash, bite, guard, (growl,) follow. Not called
+/// The wolf `mi` this tick: reappear, pounce, bite, guard, (growl,) follow. Not called
 /// while it is pushed, sinking, asleep or frozen (`Run::step`).
 pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
     // 1. The ranger.
@@ -151,7 +157,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
     // 2. Reappear beside the ranger when far, or every 0.5 s when it cannot reach them.
     //    Mid-dash it may be over a chasm, where no path starts: no reach check then.
     let pos = run.monsters[mi].pos;
-    let dashing = run.monsters[mi].ally.as_ref().is_some_and(|a| a.dash.is_some());
+    let dashing = run.monsters[mi].dash.is_some();
     let mut lost = pos.dist(ranger) > WOLF_REAPPEAR;
     let a = ally_mut(run, mi);
     a.reach_t -= dt;
@@ -168,11 +174,10 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
     // 3. Timers.
     {
         let m = &mut run.monsters[mi];
-        m.ai.cd -= dt;
         let a = m.ally.as_mut().expect("an ally");
-        a.dash_cd -= dt;
         a.growl_cd -= dt;
         a.hold = (a.hold - dt).max(0.0);
+        a.bite_hold = (a.bite_hold - dt).max(0.0);
     }
     // Enemies that died may be growled at again as new ones: drop their ids.
     let mut growled = std::mem::take(&mut ally_mut(run, mi).growled);
@@ -180,8 +185,17 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
     ally_mut(run, mi).growled = growled;
 
     // 3a. A dash in progress.
-    if let Some(dash) = run.monsters[mi].ally.as_ref().and_then(|a| a.dash) {
-        tick_dash(run, mi, pi, dash, dt);
+    if run.monsters[mi].dash.is_some() {
+        if let Some(done) = tick_monster_dash(run, mi, dt) {
+            // A pounce that hurt its prey leaves the next bite a cooldown away.
+            if !done.hit.is_empty() {
+                let bite = *run.monsters[mi].kit.get(AbilityId::Bite).expect("the wolf bites");
+                ally_mut(run, mi).bite_hold = bite.cooldown;
+            }
+            if done.attack && run.layout.map.blocks_at(run.monsters[mi].pos, Mover::Enemy) {
+                overrun(run, mi, done.dir);
+            }
+        }
         return;
     }
 
@@ -191,7 +205,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
 
-    // 4. A bite wind-up.
+    // 4. A wind-up: a bite, or (`alt`) a pounce.
     if let Some(w) = run.monsters[mi].ai.windup {
         let t = w.t - dt;
         if t > 0.0 {
@@ -201,17 +215,22 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         run.monsters[mi].ai.windup = None;
         let prey = run.monsters[mi].ally.as_ref().and_then(|a| a.prey).and_then(|id| run.monster_idx(id));
         if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive) {
-            let (w, e) = (&run.monsters[mi], &run.monsters[ei]);
-            if w.pos.dist(e.pos) <= WOLF_BITE_RANGE + w.radius + e.radius + 4.0 {
-                let (from, melee, wolf_id) = (w.pos, w.melee, w.id);
-                run.monsters[mi].aim = from.angle_to(e.pos);
-                run.hurt_monster(ei, Damage::new(WOLF_BITE_DAMAGE, melee).with_power(WOLF_ATTRS.get(Attr::Str)).by(wolf_id, What::Attack), false, Some(pi));
-                keystones::bite(&mut run.monsters[ei]);
-                run.knock_monster(ei, from, WOLF_BITE_KNOCK, WOLF_ATTRS.get(Attr::Str));
+            let at = run.monsters[ei].pos;
+            if w.alt {
+                // The pounce's wind-up is over: it leaps if its landing is still safe.
+                let pounce = *run.monsters[mi].kit.get(AbilityId::Pounce).expect("the wolf pounces");
+                let (pos, d) = (run.monsters[mi].pos, run.monsters[mi].pos.dist(at));
+                let dir = (at - pos).norm();
+                if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
+                    monster_use(run, mi, AbilityId::Pounce, at);
+                    return;
+                }
+            } else {
+                monster_use(run, mi, AbilityId::Bite, at);
             }
         }
-        run.monsters[mi].ai.cd = WOLF_BITE_COOLDOWN;
-        set_anim(run, mi, Anim::Melee);
+        // A bite that missed its prey swings on; a pounce cancelled (unsafe landing, prey gone) just stops.
+        set_anim(run, mi, if w.alt { Anim::Idle } else { Anim::Melee });
         return;
     }
 
@@ -223,27 +242,26 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         let (pos, epos) = (w.pos, e.pos);
         let radii = w.radius + e.radius;
         let d = pos.dist(epos);
-        let reach = WOLF_BITE_RANGE + radii;
-        let dash_ready = w.ally.as_ref().is_some_and(|a| a.dash_cd <= 0.0);
+        let (bite, pounce) = (*w.kit.get(AbilityId::Bite).expect("the wolf bites"), *w.kit.get(AbilityId::Pounce).expect("the wolf pounces"));
+        // A bite starts a little inside its real reach, like the enemies' swings.
+        let reach = bite.range + e.radius - ai::SWING_SLACK;
+        let pounce_ready = w.cds.ready(AbilityId::Pounce);
         let aim = pos.angle_to(epos);
         run.monsters[mi].aim = aim;
-        if d > reach + 8.0 && d <= WOLF_DASH_RANGE + radii && dash_ready && line_of_sight(&run.layout.map, pos, epos) {
+        if d > reach + 8.0 && d <= pounce.range + radii && pounce_ready && line_of_sight(&run.layout.map, pos, epos) {
             let dir = (epos - pos).norm();
-            let left = d / WOLF_DASH_SPEED + 0.05;
-            // Never a jump to its death: the dash must end on walkable ground.
-            if !run.layout.map.blocks_at(pos + dir * (WOLF_DASH_SPEED * left), Mover::Enemy) {
-                let cooldown = dash_cooldown(run, mi);
-                let a = ally_mut(run, mi);
-                a.dash = Some(WolfDash { dir, left, attack: true });
-                a.dash_cd = cooldown;
+            // Never a jump to its death: the pounce must end on walkable ground.
+            if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
+                // It winds up first, like any use; the leap itself starts when that is over (step 4).
+                run.monsters[mi].ai.windup = Some(Windup { t: pounce.windup, aim, alt: true, at: None });
                 run.monsters[mi].ai.path.clear();
-                set_anim(run, mi, Anim::Dash);
+                set_anim(run, mi, Anim::Windup);
                 return;
             }
         }
         if d <= reach {
-            if run.monsters[mi].ai.cd <= 0.0 {
-                run.monsters[mi].ai.windup = Some(Windup { t: WOLF_BITE_WINDUP, aim, alt: false, at: None });
+            if run.monsters[mi].cds.ready(AbilityId::Bite) && run.monsters[mi].ally.as_ref().is_some_and(|a| a.bite_hold <= 0.0) {
+                run.monsters[mi].ai.windup = Some(Windup { t: bite.windup, aim, alt: false, at: None });
                 set_anim(run, mi, Anim::Windup);
             } else {
                 set_anim(run, mi, Anim::Idle); // in reach: wait for the next bite
@@ -325,46 +343,13 @@ fn tick_growl(run: &mut Run, mi: usize, ranger: Vec2, dt: f64) -> bool {
     false
 }
 
-/// One tick of the wolf's dash: through the air (it crosses chasms), an attack dash hits its prey once.
-fn tick_dash(run: &mut Run, mi: usize, pi: usize, dash: WolfDash, dt: f64) {
-    let solids = run.solids(None);
-    let m = &run.monsters[mi];
-    let v = dash.dir * (WOLF_DASH_SPEED * dt.min(dash.left));
-    let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, Mover::Dash, &solids);
-    run.monsters[mi].pos = Vec2::new(x, y);
-    run.monsters[mi].aim = dash.dir.y.atan2(dash.dir.x);
-    set_anim(run, mi, Anim::Dash);
-    let left = dash.left - dt;
-    let mut done = left <= 1e-9;
-    if dash.attack {
-        let prey = run.monsters[mi].ally.as_ref().and_then(|a| a.prey).and_then(|id| run.monster_idx(id));
-        if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive) {
-            let (w, e) = (&run.monsters[mi], &run.monsters[ei]);
-            if w.pos.dist(e.pos) < w.radius + e.radius + 4.0 {
-                let (from, melee, wolf_id) = (w.pos, w.melee, w.id);
-                run.hurt_monster(ei, Damage::new(WOLF_DASH_DAMAGE, melee).with_power(WOLF_ATTRS.get(Attr::Str)).by(wolf_id, What::Attack), false, Some(pi));
-                run.knock_monster(ei, from, WOLF_DASH_KNOCK, WOLF_ATTRS.get(Attr::Str));
-                run.monsters[mi].ai.cd = WOLF_BITE_COOLDOWN;
-                done = true;
-            }
-        }
-    }
-    if !done {
-        ally_mut(run, mi).dash = Some(WolfDash { left, ..dash });
-        return;
-    }
-    ally_mut(run, mi).dash = None;
-    if dash.attack && run.layout.map.blocks_at(run.monsters[mi].pos, Mover::Enemy) {
-        overrun(run, mi, dash.dir);
-    }
-}
-
-/// An attack dash that ended over ground the wolf cannot stand on (it touched its prey above a
-/// chasm): it carries on along `dir`, without more damage, to the first walkable ground within
-/// `WOLF_DASH_RANGE`. With none before a wall or that far, it dashes back to its last safe tile.
+/// A pounce that ended over ground the wolf cannot stand on (it touched its prey above a chasm): it
+/// carries on along `dir`, without more damage, to the first walkable ground within the Pounce's range.
+/// With none before a wall or that far, it dashes back to its last safe tile.
 fn overrun(run: &mut Run, mi: usize, dir: Vec2) {
+    let pounce = *run.monsters[mi].kit.get(AbilityId::Pounce).expect("the wolf pounces");
     let (map, pos, r) = (&run.layout.map, run.monsters[mi].pos, run.monsters[mi].radius);
-    let land = (1..=(WOLF_DASH_RANGE / 2.0) as usize)
+    let land = (1..=(pounce.range / 2.0) as usize)
         .map(|i| pos + dir * (i as f64 * 2.0))
         .take_while(|&p| !map.blocks_at(p, Mover::Dash))
         .find(|&p| !map.blocks_at(p, Mover::Enemy))
@@ -372,8 +357,7 @@ fn overrun(run: &mut Run, mi: usize, dir: Vec2) {
         .filter(|&p| !map.blocks_at(p, Mover::Enemy));
     match land {
         Some(to) => {
-            let left = pos.dist(to) / WOLF_DASH_SPEED;
-            ally_mut(run, mi).dash = Some(WolfDash { dir, left, attack: false });
+            monster_dash_to(run, mi, AbilityId::Pounce, to, false);
             set_anim(run, mi, Anim::Dash);
         }
         None => dash_back(run, mi),
@@ -408,36 +392,24 @@ fn reappear(run: &mut Run, mi: usize, ranger: Vec2) -> bool {
     m.knock = Vec2::ZERO;
     m.ai.path.clear();
     m.ai.windup = None;
+    m.dash = None;
     let a = m.ally.as_mut().expect("an ally");
     a.prey = None;
     a.growl_to = None;
-    a.dash = None;
     a.following = false;
     set_anim(run, mi, Anim::Idle);
     run.event(Ev::Boom { x: spot.x as f32, y: spot.y as f32, r: 10.0, k: 9 }, None);
     true
 }
 
-/// The dash cooldown of wolf `mi`: its ranger's Summon Wolf version may change it.
-fn dash_cooldown(run: &Run, mi: usize) -> f64 {
-    let owner = run.monsters[mi].ally.as_ref().and_then(|a| run.player_idx(a.owner));
-    WOLF_DASH_COOLDOWN + owner.map_or(0.0, |pi| run.players[pi].sheet.wolf.dash_cooldown_add)
-}
-
-/// Pushed over a chasm with the dash ready: the wolf dashes straight back to the last
-/// safe tile it stood on. That uses the dash (its cooldown starts).
+/// Pushed over a chasm with its Pounce ready: the wolf pounces straight back to the last
+/// safe tile it stood on. That uses the Pounce (its cooldown starts).
 pub fn dash_back(run: &mut Run, mi: usize) {
-    let cooldown = dash_cooldown(run, mi);
     let m = &mut run.monsters[mi];
-    let pos = m.pos;
     m.ai.windup = None;
     m.ai.path.clear();
-    let a = m.ally.as_mut().expect("an ally");
-    let to = a.last_safe;
-    let d = pos.dist(to);
-    let dir = if d > 1e-6 { (to - pos).norm() } else { Vec2::new(1.0, 0.0) };
-    a.dash = Some(WolfDash { dir, left: d / WOLF_DASH_SPEED, attack: false });
-    a.dash_cd = cooldown;
+    let to = m.ally.as_ref().expect("an ally").last_safe;
+    monster_dash_to(run, mi, AbilityId::Pounce, to, true);
     set_anim(run, mi, Anim::Dash);
 }
 
@@ -642,7 +614,7 @@ mod tests {
         use crate::defs::loadout::AbilityMod::{CompanionDashCooldownAdd, CompanionHpMul};
         use crate::sheet::{wolf_mods, WolfMods};
         let mods = wolf_mods(&[CompanionHpMul(1.25), CompanionDashCooldownAdd(-2.0)]);
-        assert_eq!(mods, WolfMods { hp_mul: 1.25, dash_cooldown_add: -2.0 });
+        assert_eq!(mods, WolfMods { hp_mul: 1.25, pounce: Some(crate::defs::loadout::AbilityMod::CooldownAdd(-2.0)) });
         assert_eq!(wolf_mods(&[]), WolfMods::NONE);
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         run.monsters.retain(|m| m.is_boss);
@@ -652,7 +624,23 @@ mod tests {
         let mi = wolf_idx(&run, id);
         assert_eq!((run.monsters[mi].hp, run.monsters[mi].max_hp), (WOLF_HP * 1.25, WOLF_HP * 1.25));
         dash_back(&mut run, mi);
-        assert_eq!(run.monsters[mi].ally.as_ref().unwrap().dash_cd, 3.0);
+        assert!(!run.monsters[mi].cds.ready(AbilityId::Pounce));
+        assert_eq!(run.monsters[mi].kit.get(AbilityId::Pounce).unwrap().cooldown, 3.0);
+    }
+
+    #[test]
+    fn a_pounce_cooldown_mod_lengthens_only_the_wolfs_pounce() {
+        use crate::defs::loadout::AbilityMod::CooldownAdd;
+        let mods = crate::sheet::WolfMods { hp_mul: 1.0, pounce: Some(CooldownAdd(1.5)) };
+        let (plain, modded) = (crate::sheet::wolf_kit(&crate::sheet::WolfMods::NONE), crate::sheet::wolf_kit(&mods));
+        let (p, m) = (plain.get(AbilityId::Pounce).unwrap(), modded.get(AbilityId::Pounce).unwrap());
+        assert_eq!((p.cooldown, m.cooldown), (5.0, 6.5));
+        assert_eq!(plain.get(AbilityId::Bite), modded.get(AbilityId::Bite), "the bite is the same");
+        let (mut run, _) = ranger_with_wolf();
+        run.players[0].sheet.wolf = mods;
+        let id = spawn_wolf(&mut run, 0);
+        assert_eq!(run.monsters[wolf_idx(&run, id)].kit.get(AbilityId::Pounce).unwrap().cooldown, 6.5);
+        assert_eq!(run.monsters[wolf_idx(&run, id)].kit.get(AbilityId::Bite).unwrap().cooldown, 0.9);
     }
 
     #[test]
@@ -681,7 +669,7 @@ mod tests {
 
         // The Barbarian's dash.
         try_use(&mut run, 2, false, 1);
-        dash_contact(&mut run, 2);
+        dash_contact(&mut run, Creature::Player(2));
         untouched(&run, id, "dash");
 
         // A fireball that goes off on it.
@@ -794,27 +782,30 @@ mod tests {
         let mi = wolf_idx(&run, id);
         let at = run.players[0].pos() + Vec2::new(6.0 * crate::dungeon::TILE, 0.0);
         run.monsters[mi].pos = at;
-        crate::run::abilities::spawn_monster_projectile(&mut run, 999, EntityKind::Arrow, at - Vec2::new(30.0, 0.0), Vec2::new(1.0, 0.0), 180.0, 7.0, 2.0, 0.0, 0, 0.0);
+        let from = at - Vec2::new(30.0, 0.0);
+        crate::run::tests::enemy_use(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, at);
+        let arrow = run.projectiles.last().unwrap().damage.amount;
         for _ in 0..40 {
             tick_projectiles(&mut run, DT);
         }
         let hp = run.monsters[wolf_idx(&run, id)].hp;
-        assert!((hp - 73.0).abs() < 1e-9, "the arrow's 7 damage, got hp {hp}");
+        assert!((hp - (80.0 - arrow)).abs() < 1e-9, "the arrow's {arrow} damage, got hp {hp}");
         assert!(run.projectiles.iter().all(|p| p.dead), "and it stopped there");
     }
 
     #[test]
     fn area_attacks_hit_the_wolf() {
-        use crate::defs::enemies::{self, EnemyType};
         use crate::run::objects::{explode_barrel, Barrel, ObjState};
         // The ogre's slam.
         let (mut run, oi) = crate::run::ai::tests::ogre_among(&[Vec2::new(200.0, 0.0)]);
         let id = spawn_wolf(&mut run, 0);
         let wi = wolf_idx(&run, id);
         run.players[0].debug = true;
-        run.monsters[wi].pos = run.monsters[oi].pos + Vec2::new(enemies::OGRE_SLAM_RADIUS - 4.0, 0.0);
-        let slam = enemies::def(EnemyType::Ogre).alt.unwrap();
-        crate::run::ai::perform_attack(&mut run, oi, Creature::Monster(wi), slam, true, None);
+        run.monsters[wi].pos = run.monsters[oi].pos + Vec2::new(crate::run::ai::tests::slam_radius() - 4.0, 0.0);
+        crate::run::ai::perform_attack(&mut run, oi, Creature::Monster(wi), true, None);
+        while run.monsters[oi].slam.is_some() {
+            crate::run::abilities::tick_monster_slam(&mut run, oi, crate::run::DT);
+        }
         let w = &run.monsters[wolf_idx(&run, id)];
         assert!(w.hp < 80.0, "the slam hurt the wolf");
         assert!(w.knock.x > 0.0, "and pushed it away from the ogre");
@@ -849,15 +840,15 @@ mod tests {
 
     #[test]
     fn a_bosses_area_attack_hits_the_wolf_but_the_boss_targets_heroes() {
-        use crate::defs::bosses::{LICH_NOVA_DAMAGE, LICH_NOVA_RADIUS};
         let (mut run, bi) = crate::run::bosses::lich::tests::lich_with(&[Vec2::new(0.0, 4.0 * crate::dungeon::TILE)]);
         let boss_pos = run.monsters[bi].pos;
         let id = spawn_wolf(&mut run, 0);
         let wi = wolf_idx(&run, id);
-        run.monsters[wi].pos = boss_pos + Vec2::new(LICH_NOVA_RADIUS - 10.0, 0.0);
-        crate::run::bosses::lich::Lich::nova(&mut run, bi, boss_pos);
+        let nova = *run.monsters[bi].kit.get(AbilityId::Nova).expect("the lich casts a nova");
+        run.monsters[wi].pos = boss_pos + Vec2::new(nova.radius - 10.0, 0.0);
+        crate::run::bosses::lich::tests::nova(&mut run, bi);
         let hp = run.monsters[wolf_idx(&run, id)].hp;
-        assert!((hp - (80.0 - LICH_NOVA_DAMAGE * 0.9)).abs() < 1e-9, "magical resistance 10 %: hp {hp}");
+        assert!((hp - (80.0 - nova.damage * 0.9)).abs() < 1e-9, "magical resistance 10 %: hp {hp}");
         // The boss sees the wolf (it is nearer than the hero) but targets the hero.
         let seen = crate::run::bosses::target(&run, bi);
         assert_eq!(seen.map(|t| t.0), Some(0));
@@ -963,8 +954,104 @@ mod tests {
     #[test]
     fn wolf_bite_pushes_an_orc_not_an_ogre() {
         // STR 17: the orc (weight 13) the full bite push, the ogre (weight 20) not at all.
-        assert_eq!(bite_knock(EnemyType::OrcWarrior), Vec2::new(crate::collision::knock_speed(WOLF_BITE_KNOCK, DT), 0.0));
+        assert_eq!(bite_knock(EnemyType::OrcWarrior), Vec2::new(crate::collision::knock_speed(8.0, DT), 0.0));
         assert_eq!(bite_knock(EnemyType::Ogre), Vec2::ZERO);
+    }
+
+    #[test]
+    fn the_wolf_bites_with_bite_for_ten() {
+        let (mut run, id) = guard_run();
+        let wi = wolf_idx(&run, id);
+        let w = run.monsters[wi].pos;
+        let orc = orc_at(&mut run, w + Vec2::new(14.0, 0.0));
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].ai.hold = 99.0;
+        ally_mut(&mut run, wi).prey = Some(orc);
+        run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None });
+        tick_wolf(&mut run, wi, DT);
+        let hit = run.last_hit.expect("the bite landed");
+        assert_eq!(hit.why.what, What::Ability(AbilityId::Bite));
+        assert_eq!(hit.why.by, Some(id));
+        assert_eq!(hit.amount, 10.0, "at the wolf's start stat block");
+        assert!(run.monsters[oi].hp < run.monsters[oi].max_hp);
+        assert!(run.monsters[oi].wolf_bit > 0.0, "and the prey is marked for Pack Hunter");
+    }
+
+    #[test]
+    fn the_wolf_never_hurts_heroes() {
+        let (mut run, id) = guard_run();
+        run.players[0].debug = false;
+        let wi = wolf_idx(&run, id);
+        let w = run.monsters[wi].pos;
+        // The ranger stands on the wolf's bite and in the way of its pounce, beside the orc.
+        let orc = orc_at(&mut run, w + Vec2::new(14.0, 0.0));
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].ai.hold = 99.0;
+        move_ranger(&mut run, w + Vec2::new(8.0, 0.0));
+        let hp = run.players[0].hp;
+        let at = run.monsters[oi].pos;
+        assert!(monster_use(&mut run, wi, AbilityId::Bite, at));
+        assert!(run.monsters[oi].hp < run.monsters[oi].max_hp, "the bite hurt the orc");
+        assert!(monster_use(&mut run, wi, AbilityId::Pounce, at));
+        for _ in 0..30 {
+            tick_monster_dash(&mut run, wi, DT);
+        }
+        assert_eq!(run.players[0].hp, hp, "no hero was hurt");
+        assert_eq!(run.players[0].mv.knocked(), false, "or pushed");
+        assert_eq!((run.players[0].kills, run.players[0].damage > 0.0), (0, true), "the ranger is paid for the wolf's damage");
+    }
+
+    #[test]
+    fn a_pounce_hits_each_foe_once_and_stops_at_the_first() {
+        let (mut run, id) = guard_run();
+        let wi = wolf_idx(&run, id);
+        let w = run.monsters[wi].pos;
+        let near = orc_at(&mut run, w + Vec2::new(30.0, 0.0));
+        let far = orc_at(&mut run, w + Vec2::new(44.0, 0.0));
+        for o in [near, far] {
+            let oi = run.monster_idx(o).unwrap();
+            run.monsters[oi].ai.hold = 99.0;
+            run.monsters[oi].hp = 500.0;
+        }
+        let at = run.monsters[run.monster_idx(far).unwrap()].pos;
+        assert!(monster_use(&mut run, wi, AbilityId::Pounce, at));
+        let mut ended = None;
+        for _ in 0..60 {
+            if let Some(done) = tick_monster_dash(&mut run, wi, DT) {
+                ended = Some(done);
+                break;
+            }
+        }
+        let done = ended.expect("the pounce ended");
+        assert_eq!(done.hit, vec![near], "it stopped at the first foe, which it hit once");
+        assert_eq!(hp_of(&run, near), Some(480.0));
+        assert_eq!(hp_of(&run, far), Some(500.0));
+    }
+
+    #[test]
+    fn the_wolf_winds_up_for_its_pounce_with_the_kits_windup() {
+        let (mut run, id) = guard_run();
+        let r = run.players[0].pos();
+        set_wolf_pos(&mut run, id, r + Vec2::new(10.0, 0.0));
+        let orc = orc_at(&mut run, r - Vec2::new(40.0, 0.0));
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].ai.hold = 99.0;
+        run.monsters[oi].hp = 500.0;
+        let windup = wolf(&run, id).kit.get(AbilityId::Pounce).unwrap().windup;
+        assert!((windup - 0.2).abs() < 1e-9, "own 0 + Beast Bite's 0.2: {windup}");
+        let (mut wound, mut leapt) = (None, None);
+        for t in 0..40 {
+            run.step();
+            let w = wolf(&run, id);
+            if wound.is_none() && w.ai.windup.is_some_and(|u| u.alt) {
+                wound = Some(t);
+            }
+            if leapt.is_none() && w.dash.is_some() {
+                leapt = Some(t);
+            }
+        }
+        let (wound, leapt) = (wound.expect("it wound up"), leapt.expect("it leapt"));
+        assert!(leapt - wound >= (windup * 60.0) as i32 - 1, "the leap waited for the wind-up: {wound} {leapt}");
     }
 
     #[test]
@@ -1031,15 +1118,36 @@ mod tests {
         assert!(dashed, "the wolf dashed");
         assert!(hits.len() >= 2, "hits {hits:?}");
         let (t0, first) = hits[0];
-        assert!(t0 < 30 && (first - WOLF_DASH_DAMAGE).abs() < 1e-9, "the dash hit for 20 within 0.5 s: {hits:?}");
+        assert!(t0 < 30 && (first - 20.0).abs() < 1e-9, "the pounce hit for 20 within 0.5 s: {hits:?}");
         let (t1, second) = hits[1];
-        assert!((second - WOLF_BITE_DAMAGE).abs() < 1e-9 && t1 - t0 <= 90, "a bite of 10 followed within 1.5 s: {hits:?}");
-        let dashes = hits.iter().filter(|(_, v)| (v - WOLF_DASH_DAMAGE).abs() < 1e-9).count();
-        assert_eq!(dashes, 1, "no second dash hit within 5 s: {hits:?}");
+        assert!((second - 10.0).abs() < 1e-9 && t1 - t0 <= 90, "a bite of 10 followed within 1.5 s: {hits:?}");
+        let pounces = hits.iter().filter(|(_, v)| (v - 20.0).abs() < 1e-9).count();
+        assert_eq!(pounces, 1, "no second pounce hit within 5 s: {hits:?}");
     }
 
     #[test]
-    fn the_wolf_dash_jumps_a_chasm() {
+    fn a_pounce_that_hurts_holds_the_bite_in_the_script_not_the_kit() {
+        let (mut run, id) = guard_run();
+        let r = run.players[0].pos();
+        set_wolf_pos(&mut run, id, r + Vec2::new(10.0, 0.0));
+        let orc = orc_at(&mut run, r - Vec2::new(40.0, 0.0));
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].ai.hold = 99.0;
+        run.monsters[oi].hp = 500.0;
+        for _ in 0..30 {
+            run.step();
+            if run.monsters[oi].hp < 500.0 {
+                break;
+            }
+        }
+        assert!(run.monsters[oi].hp < 500.0, "the pounce hurt the orc");
+        let w = wolf(&run, id);
+        assert!(w.cds.ready(AbilityId::Bite), "the kit's Bite cooldown is not started by the script");
+        assert!(w.ally.as_ref().unwrap().bite_hold > 0.0, "the script holds the next bite back");
+    }
+
+    #[test]
+    fn pounce_crosses_a_chasm_and_hits_its_prey_once() {
         let (mut run, id) = guard_run();
         let (tx, ty) = Map::tile_of(run.players[0].pos());
         move_ranger(&mut run, Map::center_of(tx, ty));
@@ -1061,7 +1169,7 @@ mod tests {
         assert!(dashed && w.alive && w.sinking.is_none());
         assert!(w.pos.x > Map::center_of(tx - 2, ty).x + 8.0, "it crossed the chasm: {:?}", w.pos);
         assert_eq!(run.layout.map.tile_at(w.pos), Tile::Floor as u8, "and ended on floor");
-        assert!(hp_of(&run, orc).unwrap() < 500.0, "and hit the orc");
+        assert_eq!(hp_of(&run, orc), Some(500.0 - 20.0), "and hit the orc once, for 20");
     }
 
     #[test]
@@ -1089,9 +1197,9 @@ mod tests {
         for _ in 0..60 {
             run.step();
             assert!(wolf(&run, id).sinking.is_none(), "never sinking");
-            if !started && ally(&run, id).dash.is_some() {
+            if !started && wolf(&run, id).dash.is_some() {
                 started = true;
-                assert!((ally(&run, id).dash_cd - WOLF_DASH_COOLDOWN).abs() < 1e-9, "the escape uses the dash: {}", ally(&run, id).dash_cd);
+                assert!(!wolf(&run, id).cds.ready(AbilityId::Pounce), "the escape uses the pounce");
             }
         }
         assert!(started, "it dashed back");
@@ -1100,8 +1208,7 @@ mod tests {
         assert!(w.alive && run.layout.map.safe(wx, wy), "on a safe tile at {:?}", w.pos);
         assert!(!sank(&run, id), "no Sink event");
         assert_eq!(run.players[0].wolf, Some(id));
-        let cd = ally(&run, id).dash_cd;
-        assert!(cd > 3.9 && cd < WOLF_DASH_COOLDOWN, "the dash cooldown runs: {cd}");
+        assert!(!wolf(&run, id).cds.ready(AbilityId::Pounce), "the pounce cooldown runs");
 
         // Dash on cooldown: it falls.
         run.events.clear();
@@ -1216,7 +1323,7 @@ mod tests {
         let w = wolf(&run, id);
         assert!(w.alive && w.sinking.is_none());
         assert_eq!(run.layout.map.tile_at(w.pos), Tile::Floor as u8, "it ended on floor at {:?}", w.pos);
-        assert!(hp_of(&run, orc).unwrap() <= 500.0 - WOLF_DASH_DAMAGE + 1e-9, "the dash hit the orc");
+        assert!(hp_of(&run, orc).unwrap() <= 500.0 - 20.0 + 1e-9, "the pounce hit the orc");
     }
 
     #[test]

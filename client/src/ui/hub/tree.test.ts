@@ -32,7 +32,7 @@ const open = (cls: ClassId, o: Parameters<typeof fixtureInfo>[1] = {}) => {
 const node = (id: string) => host.querySelector<HTMLElement>(`[data-node="${id}"]`)!;
 const nova: PoolCard = {
   pick: { ability: 'FrostNova', source: 'Own' },
-  ability: { id: 'FrostNova', cooldown: 4, damage: 22, split: { Cold: 1 }, range: 0, arc: 0, speed: 0, radius: 3, duration: 0, pierce: 0, pierce_through: 0, ranged: false, projectile: null, behind: 0 },
+  ability: { id: 'FrostNova', cooldown: 4, damage: 22, split: { Cold: 1 }, range: 0, arc: 0, speed: 0, radius: 3, duration: 0, pierce: 0, pierce_through: 0, ranged: false, projectile: null, windup: 0, behind: 0 },
   error: null,
   locked: true,
 };

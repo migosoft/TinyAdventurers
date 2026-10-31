@@ -1,84 +1,48 @@
-//! Lich: guarded by disciples. Immune and drawing life from them until every
-//! disciple is dead. Casts gloom bolt volleys, raises skeletons (melee and
-//! archers) and now and then unleashes a nova that hurts and pushes every hero
-//! around it. Three effect spells (see `SPELLS`): a blinding curse (dark orb),
-//! a sleep mist (purple orb) and a stone gaze (a beam that petrifies a hero the
-//! lich still sees when the wind-up ends).
+//! Lich: guarded by disciples. Immune until every disciple is dead. It casts the abilities of its kit and
+//! decides which, when and where to aim: Gloom Bolts (a fan), now and then a Nova that hurts and pushes every
+//! hero around it, and three effect spells (see `SPELLS`): Blinding Curse (dark orb), Sleep Mist (purple orb)
+//! and Stone Gaze (a beam that petrifies a hero the lich still sees when the wind-up ends). It also raises
+//! skeletons (melee and archers). The numbers (damage, radius, push, wind-up, cooldown) are the kit's.
 
-use super::{boss_idx, set_anim, target, BossBehaviour};
-use crate::defs::bosses::{
-    LICH_ARCHERS, LICH_BLIND_COOLDOWN, LICH_BLIND_DAMAGE, LICH_BLIND_FIRST, LICH_BLIND_SECS, LICH_BLIND_WINDUP, LICH_DISCIPLES, LICH_DRAIN_PER_DISCIPLE, LICH_GAZE_COOLDOWN,
-    LICH_GAZE_FIRST, LICH_GAZE_SECS, LICH_GAZE_WINDUP, LICH_NOVA_DAMAGE, LICH_NOVA_EVERY, LICH_NOVA_KNOCK, LICH_NOVA_RADIUS, LICH_NOVA_WINDUP, LICH_ORB_SPEED,
-    LICH_SKELETONS, LICH_SLEEP_COOLDOWN, LICH_SLEEP_FIRST, LICH_SLEEP_SECS, LICH_SLEEP_WINDUP, BOSS_KNOCK_STR,
-};
-use crate::defs::damage::{Damage, DamageSplit, DamageType, What};
+use super::{ahead, boss_idx, set_anim, target, BossBehaviour};
+use crate::defs::abilities::AbilityId;
+use crate::defs::bosses::{LICH_ARCHERS, LICH_BLIND_FIRST, LICH_DISCIPLES, LICH_GAZE_FIRST, LICH_GLOOM_FIRST, LICH_NOVA_EXTRA_WAIT, LICH_NOVA_FIRST, LICH_SKELETONS, LICH_SLEEP_FIRST};
 use crate::defs::effects::EffectKind;
 use crate::defs::enemies::EnemyType;
-use crate::defs::kinds::{Anim, EntityKind};
+use crate::defs::kinds::Anim;
 use crate::dungeon::Mover;
 use crate::math::Vec2;
 use crate::protocol::Ev;
-use crate::run::abilities::spawn_monster_projectile;
+use crate::run::abilities::monster_use;
 use crate::run::ai::{move_toward, path_toward};
-use crate::run::effects::{Creature, OnHit};
+use crate::run::effects::Creature;
 use crate::run::Run;
 use rand::Rng;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Action {
-    Volley,
     Summon,
-    Nova,
-    Spell(Spell),
+    /// The wind-up of the ability, then its cast.
+    Cast(AbilityId),
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub(crate) enum Spell {
-    Blind,
-    Sleep,
-    Gaze,
-}
+/// The lich's effect spells, tried in this order when ready. Take one out for balancing by deleting its entry.
+pub(crate) const SPELLS: [AbilityId; 3] = [AbilityId::StoneGaze, AbilityId::SleepMist, AbilityId::BlindingCurse];
 
-/// The lich's effect spells, tried in this order when their cooldown is up.
-/// Take one out for balancing by deleting its entry.
-pub(crate) const SPELLS: [Spell; 3] = [Spell::Gaze, Spell::Sleep, Spell::Blind];
-
-impl Spell {
-    fn effect(self) -> EffectKind {
-        match self {
-            Spell::Blind => EffectKind::Blind,
-            Spell::Sleep => EffectKind::Sleep,
-            Spell::Gaze => EffectKind::Petrified,
-        }
-    }
-    fn windup(self) -> f64 {
-        match self {
-            Spell::Blind => LICH_BLIND_WINDUP,
-            Spell::Sleep => LICH_SLEEP_WINDUP,
-            Spell::Gaze => LICH_GAZE_WINDUP,
-        }
-    }
-    fn cooldown(self) -> f64 {
-        match self {
-            Spell::Blind => LICH_BLIND_COOLDOWN,
-            Spell::Sleep => LICH_SLEEP_COOLDOWN,
-            Spell::Gaze => LICH_GAZE_COOLDOWN,
-        }
-    }
-    fn first(self) -> f64 {
-        match self {
-            Spell::Blind => LICH_BLIND_FIRST,
-            Spell::Sleep => LICH_SLEEP_FIRST,
-            Spell::Gaze => LICH_GAZE_FIRST,
-        }
-    }
-}
+/// How long (s) after the fight starts each ability may first be cast: when it opens, not how an ability works.
+const OPENING: [(AbilityId, f64); 5] = [
+    (AbilityId::GloomBolts, LICH_GLOOM_FIRST),
+    (AbilityId::Nova, LICH_NOVA_FIRST),
+    (AbilityId::StoneGaze, LICH_GAZE_FIRST),
+    (AbilityId::SleepMist, LICH_SLEEP_FIRST),
+    (AbilityId::BlindingCurse, LICH_BLIND_FIRST),
+];
 
 pub struct Lich {
-    volley_cd: f64,
     summon_cd: f64,
-    nova_cd: f64,
-    spell_cd: [f64; SPELLS.len()],
+    /// Seconds before the script may choose each ability (first casts, and the Nova's random extra wait). It
+    /// only gates the script's decision; the kit's cooldowns (`cds`) are the casts' alone.
+    not_before: Vec<(AbilityId, f64)>,
     action: Option<(Action, f64)>,
     announced: bool,
     /// The hero the gaze is locked on while it winds up.
@@ -89,7 +53,7 @@ pub struct Lich {
 
 impl Default for Lich {
     fn default() -> Self {
-        Lich { volley_cd: 2.0, summon_cd: 8.0, nova_cd: 6.0, spell_cd: SPELLS.map(|s| s.first()), action: None, announced: false, gaze: None, aim_at: None }
+        Lich { summon_cd: 8.0, not_before: OPENING.to_vec(), action: None, announced: false, gaze: None, aim_at: None }
     }
 }
 
@@ -97,46 +61,53 @@ pub fn living_disciples(run: &Run) -> usize {
     run.monsters.iter().filter(|m| m.alive && m.etype == Some(EnemyType::Disciple)).count()
 }
 
+/// Its kit's ability `id`.
+fn kit(run: &Run, bi: usize, id: AbilityId) -> crate::sheet::ResolvedAbility {
+    *run.monsters[bi].kit.get(id).expect("the lich's kit has it")
+}
+
+/// The effect the spell `id` applies.
+fn effect_of(run: &Run, bi: usize, id: AbilityId) -> EffectKind {
+    kit(run, bi, id).effect.expect("a lich spell has its own effect").kind
+}
+
 impl Lich {
-    /// The first spell (in `SPELLS` order) that is off cooldown and has a target: the nearest living,
+    /// Is `id` off its not-before delay and off cooldown?
+    fn ready(&self, run: &Run, bi: usize, id: AbilityId) -> bool {
+        run.monsters[bi].cds.ready(id) && self.not_before.iter().all(|&(i, left)| i != id || left <= 0.0)
+    }
+
+    /// The script may not choose `id` for another `secs`.
+    fn hold(&mut self, id: AbilityId, secs: f64) {
+        self.not_before.retain(|&(i, _)| i != id);
+        self.not_before.push((id, secs));
+    }
+
+    /// The first spell (in `SPELLS` order) that is ready and has a target: the nearest living,
     /// visible hero the lich sees and who does not already suffer its effect. Returns (spell, hero index).
-    fn ready_spell(&self, run: &Run, bi: usize) -> Option<(usize, usize)> {
+    fn ready_spell(&self, run: &Run, bi: usize) -> Option<(AbilityId, usize)> {
         let m = &run.monsters[bi];
         let (sight, at) = (m.sight_now(), m.pos);
-        SPELLS.iter().enumerate().find_map(|(k, s)| {
-            if self.spell_cd[k] > 0.0 {
+        SPELLS.iter().find_map(|&s| {
+            if !self.ready(run, bi, s) {
                 return None;
             }
+            let effect = effect_of(run, bi, s);
             run.players
                 .iter()
                 .enumerate()
-                .filter(|(pi, p)| p.alive && !run.has_effect(Creature::Player(*pi), s.effect()) && crate::run::perception::sees(run, sight, at, p.pos()))
+                .filter(|(pi, p)| p.alive && !run.has_effect(Creature::Player(*pi), effect) && crate::run::perception::sees(run, sight, at, p.pos()))
                 .min_by(|a, b| at.dist(a.1.pos()).total_cmp(&at.dist(b.1.pos())))
-                .map(|(pi, _)| (k, pi))
+                .map(|(pi, _)| (s, pi))
         })
     }
 
-    /// Its spells' power: its INT (stat block: defs/bosses.rs, 22), saved against with WIL.
-    fn power(run: &Run, bi: usize) -> i32 {
-        run.monsters[bi].attrs.get(crate::defs::attributes::Attr::Int)
-    }
-
-    /// The effect a lich spell carries: magical, so heroes save with WIL, at the lich's INT.
-    fn spell_hit(run: &Run, bi: usize, kind: EffectKind, secs: f64) -> OnHit {
-        OnHit { kind, secs, magical: true, power: Self::power(run, bi), look: crate::defs::effects::EffectLook::Plain }
-    }
-
-    /// The nova: a dark burst that hurts every hero and ally within the radius and pushes them straight away.
-    pub(crate) fn nova(run: &mut Run, bi: usize, pos: Vec2) {
-        let r = LICH_NOVA_RADIUS;
-        run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: 6 }, Some(pos));
-        let dmg = Damage::new(LICH_NOVA_DAMAGE, DamageSplit::pure(DamageType::Magical)).by(run.monsters[bi].id, What::Move("Nova"));
-        crate::run::objects::hurt_objects_in(run, pos, r, None, dmg);
-        for c in run.foes_in(pos, r, None) {
-            let away = pos.angle_to(run.creature_pos(c));
-            run.hurt_creature(c, dmg);
-            run.knock_creature(c, pos, away, LICH_NOVA_KNOCK, BOSS_KNOCK_STR);
-        }
+    /// Casts `id` at `at`; the lich's cast pose plays whatever the ability's own animation is.
+    fn cast(run: &mut Run, bi: usize, id: AbilityId, at: Vec2) {
+        let used = monster_use(run, bi, id, at);
+        debug_assert!(used, "the lich's script only picks what its kit has, off cooldown");
+        // Unlike `use_in_pose`, the pose is forced: every lich ability plays the same cast pose.
+        set_anim(run, bi, Anim::Cast);
     }
 
     /// Tops the lich's raised skeletons up to LICH_SKELETONS melee and LICH_ARCHERS archers, in a ring around it.
@@ -187,19 +158,13 @@ impl BossBehaviour for Lich {
 
     fn tick(&mut self, run: &mut Run, dt: f64) {
         let Some(bi) = boss_idx(run) else { return };
-        let disciples = living_disciples(run);
-        if disciples > 0 {
-            let m = &mut run.monsters[bi];
-            m.hp = (m.hp + LICH_DRAIN_PER_DISCIPLE * disciples as f64 * dt).min(m.max_hp);
-        } else if !self.announced {
+        if living_disciples(run) == 0 && !self.announced {
             self.announced = true;
             run.event(Ev::Msg { text: "The lich's protection is broken!".into() }, None);
         }
-        self.volley_cd -= dt;
         self.summon_cd -= dt;
-        self.nova_cd -= dt;
-        for c in &mut self.spell_cd {
-            *c -= dt;
+        for (_, left) in &mut self.not_before {
+            *left -= dt;
         }
         let pos = run.monsters[bi].pos;
 
@@ -210,51 +175,26 @@ impl BossBehaviour for Lich {
                 return;
             }
             self.action = None;
-            let id = run.monsters[bi].id;
             match action {
-                Action::Volley => {
-                    set_anim(run, bi, Anim::Cast);
-                    let aim = run.monsters[bi].aim;
-                    for k in -2..=2 {
-                        let dir = Vec2::from_angle(aim + k as f64 * 0.2);
-                        spawn_monster_projectile(run, id, EntityKind::GloomBolt, pos + dir * 8.0, dir, 140.0, 10.0, 2.0, 0.0, 0, 0.0);
-                    }
-                }
                 Action::Summon => {
                     set_anim(run, bi, Anim::Cast);
                     Self::summon(run, bi);
                 }
-                Action::Nova => {
-                    set_anim(run, bi, Anim::Cast);
-                    Self::nova(run, bi, pos);
+                Action::Cast(AbilityId::StoneGaze) => {
+                    // The hero it stared at; one that has left is not gazed at.
+                    if let Some(pi) = self.gaze.take().and_then(|t| run.player_idx(t)) {
+                        Self::cast(run, bi, AbilityId::StoneGaze, run.players[pi].pos());
+                    }
                 }
-                Action::Spell(s) => {
-                    set_anim(run, bi, Anim::Cast);
-                    match s {
-                        Spell::Gaze => {
-                            let target = self.gaze.take().and_then(|t| run.player_idx(t));
-                            if let Some(pi) = target {
-                                let sight = run.monsters[bi].sight_now();
-                                let p = &run.players[pi];
-                                if p.alive && crate::run::perception::sees(run, sight, pos, p.pos()) {
-                                    let h = Self::spell_hit(run, bi, EffectKind::Petrified, LICH_GAZE_SECS);
-                                    run.hurt_player(pi, Damage::physical(0.0).with_effect(h));
-                                }
-                            }
-                        }
-                        Spell::Blind | Spell::Sleep => {
-                            let Some(pi) = self.aim_at.take().and_then(|t| run.player_idx(t)) else { return };
-                            let dir = (run.players[pi].pos() - pos).norm();
-                            let (kind, dmg, secs) = if s == Spell::Blind {
-                                (EntityKind::BlindOrb, LICH_BLIND_DAMAGE, LICH_BLIND_SECS)
-                            } else {
-                                (EntityKind::SleepOrb, 0.0, LICH_SLEEP_SECS)
-                            };
-                            spawn_monster_projectile(run, id, kind, pos + dir * 8.0, dir, LICH_ORB_SPEED, dmg, 3.0, 0.0, 0, 0.0);
-                            // The orb just spawned carries the effect.
-                            let hit = Self::spell_hit(run, bi, s.effect(), secs);
-                            run.projectiles.last_mut().unwrap().damage.on_hit = Some(hit);
-                        }
+                Action::Cast(id @ (AbilityId::SleepMist | AbilityId::BlindingCurse)) => {
+                    if let Some(pi) = self.aim_at.take().and_then(|t| run.player_idx(t)) {
+                        Self::cast(run, bi, id, run.players[pi].pos());
+                    }
+                }
+                Action::Cast(id) => {
+                    Self::cast(run, bi, id, ahead(run, bi));
+                    if id == AbilityId::Nova {
+                        self.hold(id, run.rng.gen_range(0.0..LICH_NOVA_EXTRA_WAIT));
                     }
                 }
             }
@@ -270,17 +210,14 @@ impl BossBehaviour for Lich {
             self.summon_cd = 12.0;
             self.action = Some((Action::Summon, 0.7));
             set_anim(run, bi, Anim::Windup);
-        } else if self.nova_cd <= 0.0 {
+        } else if self.ready(run, bi, AbilityId::Nova) {
             // The anim starts with the wind-up; the client fills the telegraph ring over it.
-            self.nova_cd = run.rng.gen_range(LICH_NOVA_EVERY.0..LICH_NOVA_EVERY.1);
-            self.action = Some((Action::Nova, LICH_NOVA_WINDUP));
+            self.action = Some((Action::Cast(AbilityId::Nova), kit(run, bi, AbilityId::Nova).windup));
             set_anim(run, bi, Anim::Slam);
-        } else if let Some((k, pi)) = self.ready_spell(run, bi) {
-            let s = SPELLS[k];
+        } else if let Some((s, pi)) = self.ready_spell(run, bi) {
             run.monsters[bi].aim = pos.angle_to(run.players[pi].pos());
-            self.spell_cd[k] = s.cooldown();
-            self.action = Some((Action::Spell(s), s.windup()));
-            if s == Spell::Gaze {
+            self.action = Some((Action::Cast(s), kit(run, bi, s).windup));
+            if s == AbilityId::StoneGaze {
                 self.gaze = Some(run.players[pi].id);
                 set_anim(run, bi, Anim::Gaze);
             } else {
@@ -288,9 +225,8 @@ impl BossBehaviour for Lich {
                 self.aim_at = Some(run.players[pi].id);
                 set_anim(run, bi, Anim::Windup);
             }
-        } else if self.volley_cd <= 0.0 {
-            self.volley_cd = 2.5;
-            self.action = Some((Action::Volley, 0.5));
+        } else if self.ready(run, bi, AbilityId::GloomBolts) {
+            self.action = Some((Action::Cast(AbilityId::GloomBolts), kit(run, bi, AbilityId::GloomBolts).windup));
             set_anim(run, bi, Anim::Windup);
         } else {
             let speed = run.monsters[bi].speed;
@@ -312,9 +248,15 @@ impl BossBehaviour for Lich {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::defs::attributes::push_dist;
+    use crate::defs::damage::{Damage, DamageType};
+    use crate::defs::kinds::EntityKind;
     use crate::protocol::{BossId, ClassId};
     use crate::run::tests::test_run;
     use crate::run::DT;
+
+    /// The lich's own abilities, apart from the spells.
+    const OTHERS: [AbilityId; 2] = [AbilityId::Nova, AbilityId::GloomBolts];
 
     #[test]
     fn lich_spawns_with_at_least_five_disciples_and_is_immune_until_they_die() {
@@ -325,30 +267,31 @@ pub(crate) mod tests {
         assert!(!run.hurt_monster(bi, Damage::physical(100.0), false, Some(0)));
         assert_eq!(run.monsters[bi].hp, hp, "immune while disciples live");
 
-        // Damaged lich heals from its disciples.
-        run.monsters[bi].hp = hp - 200.0;
-        run.level.boss_mut().unwrap().awake = true;
-        for _ in 0..60 {
-            run.step();
-        }
-        let bi = boss_idx(&run).unwrap();
-        assert!(run.monsters[bi].hp > hp - 200.0, "drains life from disciples");
-
-        let disciples: Vec<u32> = run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Disciple)).map(|m| m.id).collect();
-        for id in disciples {
-            let i = run.monster_idx(id).unwrap();
-            run.kill_monster(i);
-        }
+        kill_disciples(&mut run);
         let bi = boss_idx(&run).unwrap();
         let before = run.monsters[bi].hp;
         assert!(run.hurt_monster(bi, Damage::physical(100.0), false, Some(0)));
         assert_eq!(run.monsters[bi].hp, before - 50.0, "the lich resists physical damage by half");
     }
 
-    /// A lich with its heroes placed at `offs` from it, awake and facing right.
-    pub(crate) fn lich_with(offs: &[Vec2]) -> (Run, usize) {
-        let classes = vec![ClassId::Paladin; offs.len()];
-        let mut run = test_run(&classes, BossId::Lich);
+    #[test]
+    fn the_lich_no_longer_heals_from_disciples() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        assert!(living_disciples(&run) >= 5);
+        let bi = boss_idx(&run).unwrap();
+        let hurt = run.monsters[bi].hp - 200.0;
+        run.monsters[bi].hp = hurt;
+        run.level.boss_mut().unwrap().awake = true;
+        for _ in 0..120 {
+            run.step();
+        }
+        let bi = boss_idx(&run).unwrap();
+        assert_eq!(run.monsters[bi].hp, hurt, "no drain from the living disciples");
+    }
+
+    /// A lich with its heroes (of `classes`) placed at `offs` from it, awake and facing right.
+    pub(crate) fn lich_with_classes(classes: &[ClassId], offs: &[Vec2]) -> (Run, usize) {
+        let mut run = test_run(classes, BossId::Lich);
         let bi = boss_idx(&run).unwrap();
         run.monsters[bi].dormant = false;
         let at = run.monsters[bi].pos;
@@ -359,10 +302,26 @@ pub(crate) mod tests {
         (run, bi)
     }
 
+    /// A lich with Paladins placed at `offs` from it, awake and facing right.
+    pub(crate) fn lich_with(offs: &[Vec2]) -> (Run, usize) {
+        lich_with_classes(&vec![ClassId::Paladin; offs.len()], offs)
+    }
+
     fn ticks(run: &mut Run, l: &mut Lich, secs: f64) {
         for _ in 0..(secs / DT).round() as usize {
             l.tick(run, DT);
         }
+    }
+
+    fn nova_of(run: &Run, bi: usize) -> crate::sheet::ResolvedAbility {
+        kit(run, bi, AbilityId::Nova)
+    }
+
+    /// The lich casts its Nova now, whatever its cooldown.
+    pub(crate) fn nova(run: &mut Run, bi: usize) {
+        run.monsters[bi].cds = Default::default();
+        let pos = run.monsters[bi].pos;
+        assert!(monster_use(run, bi, AbilityId::Nova, pos));
     }
 
     #[test]
@@ -371,9 +330,10 @@ pub(crate) mod tests {
         let (mut run, bi) = lich_with(&[Vec2::new(0.0, 30.0)]);
         run.objects.retain(|o| o.kind != EntityKind::Barrel);
         let pos = run.monsters[bi].pos;
-        run.spawn_object(EntityKind::Barrel, pos + Vec2::new(LICH_NOVA_RADIUS, 0.0), ObjState::Barrel(Barrel::new()));
-        run.spawn_object(EntityKind::Barrel, pos + Vec2::new(-(LICH_NOVA_RADIUS + 10.0), 0.0), ObjState::Barrel(Barrel::new()));
-        Lich::nova(&mut run, bi, pos);
+        let radius = nova_of(&run, bi).radius;
+        run.spawn_object(EntityKind::Barrel, pos + Vec2::new(radius, 0.0), ObjState::Barrel(Barrel::new()));
+        run.spawn_object(EntityKind::Barrel, pos + Vec2::new(-(radius + 10.0), 0.0), ObjState::Barrel(Barrel::new()));
+        nova(&mut run, bi);
         let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
         assert_eq!(lit, vec![true, false]);
     }
@@ -384,40 +344,67 @@ pub(crate) mod tests {
         let (mut run, bi) = lich_with(&[Vec2::new(30.0, 0.0)]);
         run.players[0].res = Resistances::of(&[(DamageType::Magical, 1.0)]);
         let hp = run.players[0].hp;
-        let pos = run.monsters[bi].pos;
-        Lich::nova(&mut run, bi, pos);
+        nova(&mut run, bi);
         assert_eq!(run.players[0].hp, hp, "magic resistance blocks the nova");
         run.players[0].res = Resistances::of(&[(DamageType::Heat, 1.0), (DamageType::Physical, 1.0)]);
-        Lich::nova(&mut run, bi, pos);
-        assert_eq!(run.players[0].hp, hp - LICH_NOVA_DAMAGE, "heat and physical resistance do not");
+        nova(&mut run, bi);
+        assert_eq!(run.players[0].hp, hp - nova_of(&run, bi).damage, "heat and physical resistance do not");
     }
 
     #[test]
-    fn the_nova_winds_up_then_hurts_and_pushes_heroes_far() {
+    fn the_nova_winds_up_then_hurts_every_hero_around() {
         let (mut run, bi) = lich_with(&[Vec2::new(30.0, 0.0)]);
-        let mut l = Lich { volley_cd: 99.0, summon_cd: 99.0, nova_cd: 0.0, ..Lich::default() };
-        let hp = run.players[0].hp;
+        for id in SPELLS.into_iter().chain([AbilityId::GloomBolts]) {
+            run.monsters[bi].cds.start(id, 99.0);
+        }
+        let mut l = Lich { summon_cd: 99.0, not_before: Vec::new(), ..Lich::default() };
+        let (hp, nova) = (run.players[0].hp, nova_of(&run, bi));
+        assert_eq!((nova.damage, nova.windup, nova.radius), (24.0, 1.2, 56.0), "today's nova");
         l.tick(&mut run, DT);
         assert_eq!(run.monsters[bi].anim, Anim::Slam, "the wind-up shows the telegraph");
-        ticks(&mut run, &mut l, LICH_NOVA_WINDUP - 0.1);
+        ticks(&mut run, &mut l, nova.windup - 0.1);
         assert_eq!(run.players[0].hp, hp, "nothing before the wind-up ends");
         run.events.clear();
-        ticks(&mut run, &mut l, 0.2);
-        assert_eq!(run.players[0].hp, hp - LICH_NOVA_DAMAGE);
-        assert!(run.players[0].mv.knock_vx > 0.0, "pushed straight away from the lich");
+        // Up to the tick the wind-up ends on.
+        while l.action.is_some() {
+            l.tick(&mut run, DT);
+        }
         assert!(run.events.iter().any(|e| matches!(e.0, Ev::Boom { k: 6, .. })), "nova event");
-        assert!(l.nova_cd >= LICH_NOVA_EVERY.0 - 1.0, "next nova in 10-12 s");
+        assert_eq!(run.players[0].hp, hp - nova.damage);
+        assert_eq!(run.monsters[bi].anim, Anim::Cast, "the lich casts it");
+        assert!(!run.monsters[bi].cds.ready(AbilityId::Nova), "its cooldown runs from the cast");
+        let (_, extra) = *l.not_before.iter().find(|&&(i, _)| i == AbilityId::Nova).expect("a random extra wait");
+        assert!((0.0..LICH_NOVA_EXTRA_WAIT).contains(&extra), "{extra}");
     }
 
     #[test]
-    fn the_nova_pushes_further_than_any_normal_enemy_and_spares_heroes_outside() {
-        assert!(LICH_NOVA_KNOCK > 28.0, "the ogre's club pushes 28 px");
-        let (mut run, bi) = lich_with(&[Vec2::new(LICH_NOVA_RADIUS + 8.0, 0.0)]);
+    fn the_nova_pushes_with_the_lichs_own_str() {
+        // The lich keeps STR 10 (user's ruling): only a hero lighter than that is pushed, and a Wizard
+        // (weight 9) barely.
+        let (mut run, bi) = lich_with_classes(&[ClassId::Wizard, ClassId::Paladin], &[Vec2::new(30.0, 0.0), Vec2::new(0.0, 30.0)]);
+        let ability = nova_of(&run, bi);
+        assert_eq!(ability.push_str, 10, "the lich's own STR");
+        let (wizard, paladin) = (run.players[0].sheet.weight, run.players[1].sheet.weight);
+        assert!(wizard < 10.0 && paladin >= 10.0, "{wizard} {paladin}");
+        nova(&mut run, bi);
+        let pushed = push_dist(ability.push, 10, wizard);
+        assert!(pushed > 0.0 && pushed < ability.push, "{pushed}");
+        assert_eq!(run.players[0].mv.knock_vx, crate::collision::knock_speed(pushed, DT), "pushed straight away at STR 10");
+        assert!(run.players[0].mv.knock_vx > 0.0);
+        assert!(!run.players[1].mv.knocked(), "a hero as heavy as the lich is not moved");
+    }
+
+    #[test]
+    fn the_nova_spares_heroes_outside() {
+        let (mut run, bi) = lich_with(&[Vec2::new(nova_radius() + 8.0, 0.0)]);
         let hp = run.players[0].hp;
-        let pos = run.monsters[bi].pos;
-        Lich::nova(&mut run, bi, pos);
+        nova(&mut run, bi);
         assert_eq!(run.players[0].hp, hp);
         assert!(!run.players[0].mv.knocked());
+    }
+
+    fn nova_radius() -> f64 {
+        crate::sheet::boss_kit(BossId::Lich).get(AbilityId::Nova).unwrap().radius
     }
 
     #[test]
@@ -439,16 +426,21 @@ pub(crate) mod tests {
 
     #[test]
     fn the_volley_is_gloom_bolts() {
-        let (mut run, _) = lich_with(&[Vec2::new(100.0, 0.0)]);
-        let mut l = Lich { volley_cd: 0.0, summon_cd: 99.0, nova_cd: 99.0, ..Lich::default() };
-        ticks(&mut run, &mut l, 0.6);
+        let (mut run, bi) = lich_with(&[Vec2::new(100.0, 0.0)]);
+        let mut l = Lich { summon_cd: 99.0, not_before: vec![(AbilityId::Nova, 99.0)], ..Lich::default() };
+        l.not_before.retain(|&(i, _)| i != AbilityId::GloomBolts);
+        for s in SPELLS {
+            run.monsters[bi].cds.start(s, 99.0);
+        }
+        let gloom = kit(&run, bi, AbilityId::GloomBolts);
+        ticks(&mut run, &mut l, gloom.windup + 0.1);
         let bolts: Vec<_> = run.projectiles.iter().filter(|p| !p.dead).collect();
         assert_eq!(bolts.len(), 5);
-        assert!(bolts.iter().all(|p| p.kind == EntityKind::GloomBolt));
+        assert!(bolts.iter().all(|p| p.kind == EntityKind::GloomBolt && p.damage.amount == 10.0));
+        assert!(!run.monsters[bi].cds.ready(AbilityId::GloomBolts), "its cooldown runs from the cast");
     }
 
     use crate::defs::effects::EffectKind;
-    use crate::run::effects::Creature;
 
     fn kill_disciples(run: &mut Run) {
         let ids: Vec<u32> = run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Disciple)).map(|m| m.id).collect();
@@ -458,14 +450,18 @@ pub(crate) mod tests {
         }
     }
 
-    /// A lich whose only ready action is `spell` (everything else on cooldown).
-    fn only(spell: Spell, off: Vec2) -> (Run, Lich) {
-        let (mut run, _) = lich_with(&[off]);
+    /// A lich whose only ready ability is `ready` (everything else on cooldown, nothing waiting).
+    fn only(ready: AbilityId, off: Vec2) -> (Run, Lich) {
+        let (mut run, bi) = lich_with(&[off]);
         kill_disciples(&mut run);
         run.monsters.retain(|m| m.is_boss);
-        let mut l = Lich { volley_cd: 99.0, summon_cd: 99.0, nova_cd: 99.0, spell_cd: [99.0; SPELLS.len()], ..Lich::default() };
-        l.spell_cd[SPELLS.iter().position(|&s| s == spell).unwrap()] = 0.0;
-        (run, l)
+        let bi = boss_idx(&run).unwrap_or(bi);
+        for id in OTHERS.into_iter().chain(SPELLS) {
+            if id != ready {
+                run.monsters[bi].cds.start(id, 99.0);
+            }
+        }
+        (run, Lich { summon_cd: 99.0, not_before: Vec::new(), ..Lich::default() })
     }
 
     fn fly(run: &mut Run, l: &mut Lich, secs: f64) {
@@ -476,59 +472,96 @@ pub(crate) mod tests {
         }
     }
 
+    fn windup(run: &Run, id: AbilityId) -> f64 {
+        kit(run, boss_idx(run).unwrap(), id).windup
+    }
+
+    #[test]
+    fn the_spells_are_the_shared_abilities_in_their_order() {
+        assert_eq!(SPELLS, [AbilityId::StoneGaze, AbilityId::SleepMist, AbilityId::BlindingCurse]);
+    }
+
+    #[test]
+    fn the_spells_wait_for_their_first_cast_delays() {
+        // No hero in sight: the script only counts its delays down.
+        let (mut run, bi) = lich_with(&[Vec2::new(60.0, 0.0)]);
+        run.players[0].mv.x = 4.0;
+        run.players[0].mv.y = 4.0;
+        let mut l = Lich::default();
+        ticks(&mut run, &mut l, LICH_BLIND_FIRST - 0.1);
+        assert!(!l.ready(&run, bi, AbilityId::BlindingCurse));
+        ticks(&mut run, &mut l, 0.2);
+        assert!(l.ready(&run, bi, AbilityId::BlindingCurse), "off its delay after {LICH_BLIND_FIRST} s");
+        assert!(!l.ready(&run, bi, AbilityId::SleepMist) && !l.ready(&run, bi, AbilityId::StoneGaze));
+        ticks(&mut run, &mut l, LICH_GAZE_FIRST - LICH_BLIND_FIRST);
+        assert!(l.ready(&run, bi, AbilityId::SleepMist) && l.ready(&run, bi, AbilityId::StoneGaze));
+        // The kit's own cooldown still gates it.
+        run.monsters[bi].cds.start(AbilityId::StoneGaze, 5.0);
+        assert!(!l.ready(&run, bi, AbilityId::StoneGaze));
+    }
+
     #[test]
     fn the_blinding_curse_blinds_and_hurts() {
-        let (mut run, mut l) = only(Spell::Blind, Vec2::new(60.0, 0.0));
+        let (mut run, mut l) = only(AbilityId::BlindingCurse, Vec2::new(60.0, 0.0));
         let hp = run.players[0].hp;
-        fly(&mut run, &mut l, LICH_BLIND_WINDUP + 1.0);
+        let w = windup(&run, AbilityId::BlindingCurse);
+        assert_eq!(w, 0.6);
+        fly(&mut run, &mut l, w + 1.0);
         assert!(run.has_effect(Creature::Player(0), EffectKind::Blind));
         assert!(run.players[0].hp < hp);
     }
 
     #[test]
     fn the_sleep_mist_puts_a_hero_to_sleep_without_damage() {
-        let (mut run, mut l) = only(Spell::Sleep, Vec2::new(60.0, 0.0));
+        let (mut run, mut l) = only(AbilityId::SleepMist, Vec2::new(60.0, 0.0));
         let hp = run.players[0].hp;
-        fly(&mut run, &mut l, LICH_SLEEP_WINDUP + 1.0);
+        let w = windup(&run, AbilityId::SleepMist);
+        assert_eq!(w, 0.8);
+        fly(&mut run, &mut l, w + 1.0);
         assert!(run.has_effect(Creature::Player(0), EffectKind::Sleep));
         assert_eq!(run.players[0].hp, hp);
     }
 
     #[test]
     fn the_stone_gaze_petrifies_a_seen_hero_and_marks_its_target() {
-        let (mut run, mut l) = only(Spell::Gaze, Vec2::new(60.0, 0.0));
+        let (mut run, mut l) = only(AbilityId::StoneGaze, Vec2::new(60.0, 0.0));
         ticks(&mut run, &mut l, 0.1);
         let bi = boss_idx(&run).unwrap();
         assert_eq!(run.monsters[bi].anim, Anim::Gaze);
         assert_eq!(l.gaze_target(), Some(run.players[0].id));
-        ticks(&mut run, &mut l, LICH_GAZE_WINDUP);
+        let w = windup(&run, AbilityId::StoneGaze);
+        assert_eq!(w, 1.0);
+        ticks(&mut run, &mut l, w);
         assert!(run.has_effect(Creature::Player(0), EffectKind::Petrified));
+        assert_eq!(l.gaze_target(), None, "the lock ends with the gaze");
+        assert!(!run.monsters[bi].cds.ready(AbilityId::StoneGaze), "its cooldown runs from the cast");
     }
 
     #[test]
     fn the_gaze_is_a_magical_hit_at_the_lich_int() {
         use crate::defs::attributes::Attr;
         use crate::defs::effects::scaled_secs;
-        let (mut run, mut l) = only(Spell::Gaze, Vec2::new(60.0, 0.0));
+        let (mut run, mut l) = only(AbilityId::StoneGaze, Vec2::new(60.0, 0.0));
         let bi = boss_idx(&run).unwrap();
         assert_eq!(run.monsters[bi].attrs.get(Attr::Int), 22, "the lich's INT from its stat block");
-        let h = Lich::spell_hit(&run, bi, EffectKind::Petrified, LICH_GAZE_SECS);
+        let gaze = kit(&run, bi, AbilityId::StoneGaze);
+        let h = gaze.effect.expect("its own effect");
         assert!(h.magical);
-        assert_eq!(h.power, 22);
+        assert_eq!((h.power, h.secs), (22, 3.0));
         // The real gaze: the Paladin (WIL 12) is petrified for the scaled time, not the base 3 s.
-        ticks(&mut run, &mut l, LICH_GAZE_WINDUP + 0.1);
+        ticks(&mut run, &mut l, gaze.windup + 0.1);
         let left = run.players[0].effects.list().iter().find(|e| e.kind == EffectKind::Petrified).expect("petrified").left;
         let wil = run.players[0].sheet.attrs.get(Attr::Wil);
-        assert!((left - scaled_secs(LICH_GAZE_SECS, 22, wil)).abs() < 1e-9, "left {left}");
-        assert!(left > LICH_GAZE_SECS);
+        assert!((left - scaled_secs(3.0, 22, wil)).abs() < 1e-9, "left {left}");
+        assert!(left > 3.0);
     }
 
     #[test]
     fn the_orbs_carry_a_magical_hit_at_the_lich_int() {
-        for spell in [Spell::Blind, Spell::Sleep] {
+        for (spell, kind) in [(AbilityId::BlindingCurse, EffectKind::Blind), (AbilityId::SleepMist, EffectKind::Sleep)] {
             let (mut run, mut l) = only(spell, Vec2::new(60.0, 0.0));
             let mut hit = None;
-            for _ in 0..((LICH_SLEEP_WINDUP.max(LICH_BLIND_WINDUP) + 1.0) / DT) as usize {
+            for _ in 0..((windup(&run, spell) + 1.0) / DT) as usize {
                 l.tick(&mut run, DT);
                 if let Some(p) = run.projectiles.iter().find(|p| !p.dead) {
                     hit = p.damage.on_hit;
@@ -536,7 +569,7 @@ pub(crate) mod tests {
                 }
             }
             let h = hit.unwrap_or_else(|| panic!("{spell:?} orb carries an effect"));
-            assert_eq!(h.kind, spell.effect());
+            assert_eq!(h.kind, kind);
             assert!(h.magical, "{spell:?}");
             assert_eq!(h.power, 22, "{spell:?}");
         }
@@ -544,7 +577,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_hero_behind_a_wall_escapes_the_gaze() {
-        let (mut run, mut l) = only(Spell::Gaze, Vec2::new(60.0, 0.0));
+        let (mut run, mut l) = only(AbilityId::StoneGaze, Vec2::new(60.0, 0.0));
         ticks(&mut run, &mut l, 0.1);
         // Break line of sight: put the hero far outside the hall.
         run.players[0].mv.x = 4.0;
@@ -552,13 +585,14 @@ pub(crate) mod tests {
         let bi = boss_idx(&run).unwrap();
         let (sight, at) = (run.monsters[bi].sight_now(), run.monsters[bi].pos);
         assert!(!crate::run::perception::sees(&run, sight, at, run.players[0].pos()), "precondition: out of sight");
-        ticks(&mut run, &mut l, LICH_GAZE_WINDUP);
+        let w = windup(&run, AbilityId::StoneGaze);
+        ticks(&mut run, &mut l, w);
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Petrified));
     }
 
     #[test]
     fn blind_and_sleep_skip_a_hero_who_already_has_it() {
-        let (mut run, mut l) = only(Spell::Blind, Vec2::new(60.0, 0.0));
+        let (mut run, mut l) = only(AbilityId::BlindingCurse, Vec2::new(60.0, 0.0));
         run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(10.0));
         ticks(&mut run, &mut l, 0.1);
         let bi = boss_idx(&run).unwrap();
@@ -573,8 +607,12 @@ pub(crate) mod tests {
         run.monsters.retain(|m| m.is_boss);
         let bi = boss_idx(&run).unwrap_or(bi);
         run.apply_effect(Creature::Player(0), EffectKind::Blind, Some(10.0));
-        let mut l = Lich { volley_cd: 99.0, summon_cd: 99.0, nova_cd: 99.0, spell_cd: [99.0; SPELLS.len()], ..Lich::default() };
-        l.spell_cd[SPELLS.iter().position(|&s| s == Spell::Blind).unwrap()] = 0.0;
+        for id in OTHERS.into_iter().chain(SPELLS) {
+            if id != AbilityId::BlindingCurse {
+                run.monsters[bi].cds.start(id, 99.0);
+            }
+        }
+        let mut l = Lich { summon_cd: 99.0, not_before: Vec::new(), ..Lich::default() };
         l.tick(&mut run, DT);
         assert_eq!(run.monsters[bi].anim, Anim::Windup);
         let (pos, to) = (run.monsters[bi].pos, run.players[1].pos());

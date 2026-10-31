@@ -1,4 +1,5 @@
 use crate::collision::MoveState;
+use crate::defs::abilities::AbilityId;
 use crate::defs::damage::{Damage, DamageSplit, Resistances};
 use crate::defs::effects::OnHit;
 use crate::defs::attributes::Attributes;
@@ -6,6 +7,7 @@ use crate::defs::enemies::EnemyType;
 use crate::defs::races::Sight;
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
+use super::targets::Side;
 use crate::vispoly::View;
 use crate::math::Vec2;
 use crate::protocol::{ClassId, InputMsg};
@@ -176,11 +178,15 @@ impl Ai {
     }
 }
 
-/// A wolf's dash: toward `dir` for `left` seconds; `attack` is false for the dash back from a chasm.
-#[derive(Debug, Clone, Copy)]
-pub struct WolfDash {
+/// A monster's dash in progress (`Monster.dash`): ability `id` toward `dir` for `left` seconds, in the air
+/// (it crosses chasms). `attack` is false for a dash that hurts nobody (the wolf's way back from a chasm);
+/// `hit` are the ids of the foes it has hurt, each once.
+#[derive(Debug, Clone)]
+pub struct MonsterDash {
+    pub id: crate::defs::abilities::AbilityId,
     pub dir: Vec2,
     pub left: f64,
+    pub hit: Vec<u32>,
     pub attack: bool,
 }
 
@@ -195,11 +201,12 @@ pub struct Ally {
     pub growl_to: Option<Vec2>,
     /// Seconds it does nothing (a growl).
     pub hold: f64,
+    /// Seconds before it may bite again after a pounce that hurt its prey (the script's own wait; the
+    /// kit's cooldowns are `cds`, started only by using the ability).
+    pub bite_hold: f64,
     pub prey: Option<u32>,
     pub following: bool,
     pub reach_t: f64,
-    pub dash: Option<WolfDash>,
-    pub dash_cd: f64,
     /// Centre of the last safe tile it stood on (a dash back from a chasm goes there).
     pub last_safe: Vec2,
 }
@@ -208,6 +215,7 @@ pub struct Monster {
     pub id: u32,
     /// Resistances (races plus adjustments) and the split of its melee hits.
     pub res: Resistances,
+    #[allow(dead_code)] // no reader since the demon uses its Strike; the weapon's split is used
     pub melee: DamageSplit,
     /// None for bosses (driven by their BossBehaviour).
     pub etype: Option<EnemyType>,
@@ -220,9 +228,21 @@ pub struct Monster {
     pub sight: Sight,
     pub alive: bool,
     pub aim: f64,
+    /// How far it aims an aimed ability (blasts and ground areas land there), set by `monster_use`.
+    pub aim_dist: f64,
     pub anim: Anim,
     pub anim_start: f64,
     pub hurt_t: f64,
+    /// The abilities it uses, resolved at spawn (empty for bosses), and their cooldowns.
+    pub kit: crate::sheet::Kit,
+    pub cds: super::abilities::Cooldowns,
+    /// Ground Slam: seconds until it lands; lost when it dies, sinks, is pushed or frightened.
+    pub slam: Option<f64>,
+    /// A channelled ability in progress (Fire Breath): which, the seconds left and the seconds to its next pulse.
+    /// It ends when it runs out, or when the user dies.
+    pub channel: Option<(AbilityId, f64, f64)>,
+    /// A dash in progress: it is in the air, so it is neither pushed nor sinking meanwhile.
+    pub dash: Option<MonsterDash>,
     /// Seconds left of the wolf-bite mark (Pack Hunter).
     pub wolf_bit: f64,
     pub ai: Ai,
@@ -299,7 +319,8 @@ pub struct Projectile {
     pub id: u32,
     pub kind: EntityKind,
     pub owner: u32,
-    pub from_player: bool,
+    /// The side it hurts the foes of.
+    pub side: Side,
     pub shot: u16,
     pub pos: Vec2,
     pub vel: Vec2,
@@ -310,8 +331,10 @@ pub struct Projectile {
     /// Explosion radius on impact (0 = none) and its effect kind.
     pub explode_r: f64,
     pub explode_k: u8,
-    /// Knockback (px) of the explosion on the heroes it hits (dragon fireballs).
-    pub knock: f64,
+    /// Push (px) of the explosion on the foes it hits, and the STR it pushes with: the user's, taken at
+    /// spawn so a shot that outlives its user still pushes.
+    pub push: f64,
+    pub push_str: i32,
     /// Explode when reaching this point (fireball at cursor).
     pub target: Option<Vec2>,
     pub dead: bool,

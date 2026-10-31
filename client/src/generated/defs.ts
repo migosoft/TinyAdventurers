@@ -68,7 +68,6 @@ export const FLAG = {
   "AIRBORNE": 64,
   "DEAD": 32,
   "DORMANT": 8,
-  "ENRAGED": 4,
   "HIDING": 1,
   "HURT": 16,
   "IMMUNE": 2
@@ -95,7 +94,6 @@ export const CONST = {
   "DEMON_CLEAVE_KNOCK": 56.0,
   "DEMON_CLEAVE_RECOVER": 0.3,
   "DEMON_CLEAVE_WINDUP": 0.45,
-  "DEMON_ENRAGED_PACE": 0.6,
   "DEMON_RING_RECOVER": 0.35,
   "DEMON_RING_WINDUP": 0.5,
   "DEMON_SWOOP_KNOCK": 64.0,
@@ -129,6 +127,7 @@ export const CONST = {
   "LICH_GAZE_WINDUP": 1.0,
   "LICH_NOVA_KNOCK": 64.0,
   "LICH_NOVA_RADIUS": 56.0,
+  "LICH_NOVA_STR": 10,
   "LICH_NOVA_WINDUP": 1.2,
   "LICH_ORB_SPEED": 90.0,
   "LICH_SLEEP_WINDUP": 0.8,
@@ -136,8 +135,9 @@ export const CONST = {
   "MIMIC_HOP_AIR_START": 0.2,
   "MIMIC_HOP_CYCLE": 0.6,
   "MIMIC_WAKE_T": 0.6,
+  "OGRE_SLAM_KNOCK": 28.0,
   "OGRE_SLAM_RADIUS": 34.0,
-  "OGRE_SLAM_WINDUP": 0.9,
+  "OGRE_SLAM_WINDUP": 1.0,
   "PLAYER_RADIUS": 5.0,
   "POS_SCALE": 16.0,
   "SHALLOW_SPEED": 0.7,
@@ -263,10 +263,27 @@ export const CLASSES = {
 } as const;
 
 export const ABILITIES = {
+  "Bite": {
+    "classes": [],
+    "hero": false,
+    "name": "Bite",
+    "ranged": false,
+    "shape": "Swing",
+    "slot": "Primary"
+  },
+  "BlindingCurse": {
+    "classes": [],
+    "hero": false,
+    "name": "Blinding Curse",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Secondary"
+  },
   "ChainSpark": {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Chain Spark",
     "ranged": true,
     "shape": "Projectile",
@@ -276,6 +293,7 @@ export const ABILITIES = {
     "classes": [
       "Barbarian"
     ],
+    "hero": true,
     "name": "Charge",
     "ranged": false,
     "shape": "Dash",
@@ -285,6 +303,7 @@ export const ABILITIES = {
     "classes": [
       "Paladin"
     ],
+    "hero": true,
     "name": "Consecrate",
     "ranged": false,
     "shape": "GroundArea",
@@ -294,15 +313,33 @@ export const ABILITIES = {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Entangle",
     "ranged": true,
     "shape": "GroundArea",
+    "slot": "Secondary"
+  },
+  "FireBolt": {
+    "classes": [],
+    "hero": false,
+    "name": "Fire Bolt",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
+  },
+  "FireBreath": {
+    "classes": [],
+    "hero": false,
+    "name": "Fire Breath",
+    "ranged": false,
+    "shape": "Breath",
     "slot": "Secondary"
   },
   "Fireball": {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Fireball",
     "ranged": true,
     "shape": "Blast",
@@ -312,6 +349,7 @@ export const ABILITIES = {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Flanking Thrust",
     "ranged": false,
     "shape": "Swing",
@@ -321,6 +359,7 @@ export const ABILITIES = {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Frost Nova",
     "ranged": false,
     "shape": "Ring",
@@ -330,7 +369,16 @@ export const ABILITIES = {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Frost Shard",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
+  },
+  "GloomBolts": {
+    "classes": [],
+    "hero": false,
+    "name": "Gloom Bolts",
     "ranged": true,
     "shape": "Projectile",
     "slot": "Primary"
@@ -339,6 +387,7 @@ export const ABILITIES = {
     "classes": [
       "Barbarian"
     ],
+    "hero": true,
     "name": "Ground Slam",
     "ranged": false,
     "shape": "Ring",
@@ -348,6 +397,7 @@ export const ABILITIES = {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Haste",
     "ranged": false,
     "shape": "SelfArea",
@@ -357,6 +407,7 @@ export const ABILITIES = {
     "classes": [
       "Paladin"
     ],
+    "hero": true,
     "name": "Holy Light",
     "ranged": false,
     "shape": "SelfArea",
@@ -366,6 +417,7 @@ export const ABILITIES = {
     "classes": [
       "Barbarian"
     ],
+    "hero": true,
     "name": "Hurl",
     "ranged": true,
     "shape": "Projectile",
@@ -375,6 +427,7 @@ export const ABILITIES = {
     "classes": [
       "Paladin"
     ],
+    "hero": true,
     "name": "Judgement",
     "ranged": true,
     "shape": "Projectile",
@@ -384,52 +437,114 @@ export const ABILITIES = {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Magic Missile",
     "ranged": true,
     "shape": "Projectile",
     "slot": "Primary"
   },
+  "Nova": {
+    "classes": [],
+    "hero": false,
+    "name": "Nova",
+    "ranged": false,
+    "shape": "Ring",
+    "slot": "Secondary"
+  },
   "PoisonCoat": {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Poison Coat",
     "ranged": false,
     "shape": "Buff",
+    "slot": "Secondary"
+  },
+  "Pounce": {
+    "classes": [],
+    "hero": false,
+    "name": "Pounce",
+    "ranged": false,
+    "shape": "Dash",
     "slot": "Secondary"
   },
   "Purify": {
     "classes": [
       "Paladin"
     ],
+    "hero": true,
     "name": "Purify",
     "ranged": false,
     "shape": "SelfArea",
     "slot": "Secondary"
   },
+  "RingOfFire": {
+    "classes": [],
+    "hero": false,
+    "name": "Ring of Fire",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Secondary"
+  },
+  "ShadowBolt": {
+    "classes": [],
+    "hero": false,
+    "name": "Shadow Bolt",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
+  },
   "Shoot": {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Shoot",
     "ranged": true,
     "shape": "Projectile",
     "slot": "Primary"
   },
+  "SleepMist": {
+    "classes": [],
+    "hero": false,
+    "name": "Sleep Mist",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Secondary"
+  },
+  "Smash": {
+    "classes": [],
+    "hero": false,
+    "name": "Smash",
+    "ranged": false,
+    "shape": "Ring",
+    "slot": "Secondary"
+  },
   "Smite": {
     "classes": [
       "Paladin"
     ],
+    "hero": true,
     "name": "Smite",
     "ranged": false,
     "shape": "Swing",
     "slot": "Primary"
+  },
+  "StoneGaze": {
+    "classes": [],
+    "hero": false,
+    "name": "Stone Gaze",
+    "ranged": false,
+    "shape": "Gaze",
+    "slot": "Secondary"
   },
   "Strike": {
     "classes": [
       "Paladin",
       "Barbarian"
     ],
+    "hero": true,
     "name": "Strike",
     "ranged": false,
     "shape": "Swing",
@@ -439,15 +554,33 @@ export const ABILITIES = {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Summon Wolf",
     "ranged": false,
     "shape": "Summon",
+    "slot": "Secondary"
+  },
+  "Swoop": {
+    "classes": [],
+    "hero": false,
+    "name": "Swoop",
+    "ranged": false,
+    "shape": "Dash",
+    "slot": "Secondary"
+  },
+  "TailWhip": {
+    "classes": [],
+    "hero": false,
+    "name": "Tail Whip",
+    "ranged": false,
+    "shape": "Swing",
     "slot": "Secondary"
   },
   "Volley": {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Volley",
     "ranged": true,
     "shape": "Projectile",
@@ -457,6 +590,7 @@ export const ABILITIES = {
     "classes": [
       "Barbarian"
     ],
+    "hero": true,
     "name": "War Cry",
     "ranged": false,
     "shape": "Ring",
@@ -466,6 +600,7 @@ export const ABILITIES = {
     "classes": [
       "Barbarian"
     ],
+    "hero": true,
     "name": "Whirl",
     "ranged": false,
     "shape": "Swing",
@@ -531,6 +666,12 @@ export const ITEMS = {
     "name": "Goblin Bow",
     "slot": "Ranged"
   },
+  "GoblinShortbow": {
+    "classes": [],
+    "kind": "Bow",
+    "name": "Goblin Shortbow",
+    "slot": "Ranged"
+  },
   "GoldenSword": {
     "classes": [
       "Wizard",
@@ -583,6 +724,12 @@ export const ITEMS = {
     "name": "Knight Sword",
     "slot": "Melee"
   },
+  "NecromancerRod": {
+    "classes": [],
+    "kind": "Staff",
+    "name": "Necromancer Rod",
+    "slot": "Melee"
+  },
   "NecromancerStaff": {
     "classes": [
       "Wizard",
@@ -594,6 +741,12 @@ export const ITEMS = {
     "name": "Necromancer Staff",
     "slot": "Melee"
   },
+  "OgreClub": {
+    "classes": [],
+    "kind": "Club",
+    "name": "Ogre Club",
+    "slot": "Melee"
+  },
   "OrcBow": {
     "classes": [
       "Wizard",
@@ -603,6 +756,18 @@ export const ITEMS = {
     ],
     "kind": "Bow",
     "name": "Orc Bow",
+    "slot": "Ranged"
+  },
+  "OrcCleaver": {
+    "classes": [],
+    "kind": "Axe",
+    "name": "Orc Cleaver",
+    "slot": "Melee"
+  },
+  "OrcWarbow": {
+    "classes": [],
+    "kind": "Bow",
+    "name": "Orc Warbow",
     "slot": "Ranged"
   },
   "Rapier": {
@@ -646,6 +811,12 @@ export const ITEMS = {
     "name": "Short Bow",
     "slot": "Ranged"
   },
+  "SkeletonBow": {
+    "classes": [],
+    "kind": "Longbow",
+    "name": "Skeleton Bow",
+    "slot": "Ranged"
+  },
   "SkeletonLongbow": {
     "classes": [
       "Wizard",
@@ -656,6 +827,12 @@ export const ITEMS = {
     "kind": "Longbow",
     "name": "Skeleton Longbow",
     "slot": "Ranged"
+  },
+  "SkeletonSword": {
+    "classes": [],
+    "kind": "Sword",
+    "name": "Skeleton Sword",
+    "slot": "Melee"
   },
   "SpikedClub": {
     "classes": [
@@ -674,6 +851,12 @@ export const ITEMS = {
     ],
     "kind": "Staff",
     "name": "Staff of Rot",
+    "slot": "Melee"
+  },
+  "SummonerRod": {
+    "classes": [],
+    "kind": "Staff",
+    "name": "Summoner Rod",
     "slot": "Melee"
   },
   "SummonerStaff": {

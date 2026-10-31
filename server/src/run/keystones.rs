@@ -171,10 +171,6 @@ mod tests {
         run.hurt_monster(mi, d, false, Some(0));
         run.last_hit.unwrap()
     }
-    fn applied(run: &mut Run, mi: usize, d: Damage) -> Damage {
-        run.hurt_monster(mi, d, false, Some(0));
-        run.last_hit.unwrap()
-    }
 
     fn has(d: &Damage, k: Keystone, f: f64) -> bool {
         d.why.mults.iter().flatten().any(|m| matches!(m, Mult::Keystone(kk, ff) if *kk == k && (ff - f).abs() < 1e-12))
@@ -341,9 +337,14 @@ mod tests {
         let tick = Damage { why: crate::defs::damage::Why { by: Some(hero), what: What::Tick(EffectKind::Poisoned), ..crate::defs::damage::Why::NONE }, ..Damage::effect_tick(4.0, DamageType::Poison) };
         run.hurt_monster(mi, tick, false, None);
         assert!(run.last_hit.unwrap().why.mults.iter().all(|m| m.is_none()) && run.last_hit.unwrap().amount == 4.0);
-        let bite = Damage::physical(10.0).by(wolf, What::Attack);
-        let h = applied(&mut run, mi, bite);
-        assert_eq!(h.amount, 10.0);
+        // A real bite of the wolf's: Pack Hunter's mark (set by the bite itself) never boosts it.
+        let wi = run.monster_idx(wolf).unwrap();
+        run.monsters[mi].wolf_bit = 2.0;
+        let at = run.monsters[mi].pos;
+        run.monsters[wi].pos = at - Vec2::new(10.0, 0.0);
+        assert!(crate::run::abilities::monster_use(&mut run, wi, AbilityId::Bite, at));
+        let h = run.last_hit.unwrap();
+        assert_eq!((h.why.what, h.amount), (What::Ability(AbilityId::Bite), 10.0));
         assert!(h.why.mults.iter().all(|m| m.is_none()));
         let _: &Monster = &run.monsters[mi];
     }

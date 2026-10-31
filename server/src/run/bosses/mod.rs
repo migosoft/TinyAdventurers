@@ -18,9 +18,6 @@ pub trait BossBehaviour: Send {
     fn can_be_damaged(&self, _run: &Run) -> bool {
         true
     }
-    fn enraged(&self) -> bool {
-        false
-    }
     /// The hero the boss currently locks its gaze on (lich), sent as the boss's `EntSnap.extra`.
     fn gaze_target(&self) -> Option<u32> {
         None
@@ -57,4 +54,19 @@ pub(crate) fn target(run: &Run, bi: usize) -> Option<(usize, Vec2, f64)> {
         let p = run.players[pi].pos();
         (pi, p, p.dist(m.pos))
     })
+}
+
+/// A point straight ahead of boss `bi`: a use "at" it keeps the aim.
+pub(crate) fn ahead(run: &Run, bi: usize) -> Vec2 {
+    let m = &run.monsters[bi];
+    m.pos + Vec2::from_angle(m.aim) * 30.0
+}
+
+/// Boss `bi` uses `id` at `at`; the animation its wind-up began with plays on (the script sets the pose, the
+/// use only does the effect).
+pub(crate) fn use_in_pose(run: &mut Run, bi: usize, id: crate::defs::abilities::AbilityId, at: Vec2) {
+    let (anim, since) = (run.monsters[bi].anim, run.monsters[bi].anim_start);
+    super::abilities::monster_use(run, bi, id, at);
+    run.monsters[bi].anim = anim;
+    run.monsters[bi].anim_start = since;
 }
