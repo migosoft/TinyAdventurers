@@ -16,6 +16,10 @@ export interface SunLook {
   gap: [number, number];
   /** Tiles from ceiling to floor. */
   height: number;
+  /** How the rays of one crack are laid out: 'fan' (tops near one spot, widening apart) or 'parallel' (narrow shafts parallel to the beam's edges). */
+  style: 'fan' | 'parallel';
+  /** Draw the whole beam as a faint wide main ray under the rays. */
+  main: boolean;
   /** Sub-beams side by side, as if the crack had several parts. */
   rays: 1 | 2 | 3;
   /** Range of a ray's width as a share of the beam's (rays > 1). */
@@ -26,7 +30,7 @@ export interface SunLook {
   glow: number;
 }
 
-export const sunLook: SunLook = { widen: true, patch: 2, slant: 2, dir: -1, clouds: 0.3, gap: [8, 25], glow: 1, height: 4, rays: 2, rayWidth: [0.5, 0.8], vary: true };
+export const sunLook: SunLook = { widen: true, patch: 2, slant: 2, dir: -1, clouds: 0.3, gap: [8, 25], glow: 1, height: 6, rays: 2, rayWidth: [0.5, 0.8], style: 'fan', main: false, vary: true };
 
 /** Uniform [0,1) from a hash of (id, cloud index, salt). */
 function rnd(id: number, n: number, salt: number): number {
@@ -118,6 +122,7 @@ export function rayShapes(shape: { top: [number, number][]; bottom: [number, num
   const [bl, br] = [shape.bottom[0][0], shape.bottom[1][0]];
   const topW = tr - tl;
   const botW = br - bl;
+  if (look.style === 'parallel') return parallelRays(shape, id, n, look);
   // Floor spans as shares of the beam's width.
   const spans = Array.from({ length: n }, (_, i) => {
     const w = look.rayWidth[0] + (look.rayWidth[1] - look.rayWidth[0]) * rnd(id, i, 5);
@@ -147,13 +152,31 @@ export function rayShapes(shape: { top: [number, number][]; bottom: [number, num
   return rays;
 }
 
+/** Narrow shafts parallel to the beam's edges: one per equal slot of the width, placed at random in its slot (top and floor at the same share u). */
+function parallelRays(shape: { top: [number, number][]; bottom: [number, number][] }, id: number, n: number, look: SunLook): Ray[] {
+  void look;
+  const [tl, tr] = [shape.top[0][0], shape.top[1][0]];
+  const [bl, br] = [shape.bottom[0][0], shape.bottom[1][0]];
+  const rays: Ray[] = [];
+  for (let i = 0; i < n; i++) {
+    const w = Math.min(1 / n, 0.15 + 0.25 * rnd(id, i, 8));
+    const u0 = i / n + rnd(id, i, 9) * (1 / n - w);
+    const u1 = u0 + w;
+    rays.push({
+      top: [[tl + u0 * (tr - tl), shape.top[0][1]], [tl + u1 * (tr - tl), shape.top[0][1]]],
+      bottom: [[bl + u0 * (br - bl), shape.bottom[0][1]], [bl + u1 * (br - bl), shape.bottom[0][1]]],
+    });
+  }
+  return rays;
+}
+
 /** Brightness factor of each of `rays` overlapping rays, so that together they stay near one beam's brightness. */
 export function rayGlow(glow: number, rays: number): number {
   return glow / Math.sqrt(Math.max(1, rays));
 }
 
 /** Tallest and shortest beam of a random sun spot, in tiles. */
-export const HEIGHT_RANGE: [number, number] = [3, 6];
+export const HEIGHT_RANGE: [number, number] = [5, 7];
 
 /** The look of sun spot `id`: random but the same for everyone (a hash of the id). Slant, direction and cloud gap stay those of `base`. */
 export function sunVariant(id: number, base: SunLook): SunLook {
@@ -164,7 +187,9 @@ export function sunVariant(id: number, base: SunLook): SunLook {
     widen: r(0) < 0.65,
     patch: 1.5 + 1.5 * r(1),
     height: HEIGHT_RANGE[0] + (HEIGHT_RANGE[1] - HEIGHT_RANGE[0]) * r(2),
-    rays: rays < 0.3 ? 1 : rays < 0.75 ? 2 : 3,
+    rays: rays < 0.55 ? 2 : 3,
+    style: r(7) < 0.5 ? 'fan' : 'parallel',
+    main: true,
     rayWidth: [0.25, 0.9],
     glow: 0.8 + 0.5 * r(5),
     clouds: 0.45 * r(6),

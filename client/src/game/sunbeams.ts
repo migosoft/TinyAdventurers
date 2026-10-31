@@ -20,6 +20,8 @@ const MOTES = 24;
 /** Beam alpha at the top (0), at BEAM_PEAK_AT of the way down to the floor, and where it ends (0): the top edge of the patch. */
 const BEAM_PEAK = 0.22;
 const BEAM_PEAK_AT = 0.45;
+/** How bright the faint main ray (the whole beam) is next to a ray. */
+const MAIN_ALPHA = 0.45;
 const PATCH_ALPHA = 0.25;
 const MOTE_ALPHA = 0.8;
 /** Mote drift speed range along the beam (px/s). */
@@ -45,6 +47,7 @@ interface Beam {
   key: string;
   shape: Shape;
   rays: Ray[];
+  main: boolean;
 }
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
@@ -124,7 +127,7 @@ export class Sunbeams {
       const img = s.add.image(0, 0, 'dot').setScale(0.5).setBlendMode(ADD).setDepth(DEPTH.airDust);
       motes.push({ img, x: 0, y: 0, vx: 0, vy: 0, phase: rnd(0, Math.PI * 2) });
     }
-    const b: Beam = { beam, patch, motes, key: '', shape: beamShape(0, 0, sunLook), rays: [] };
+    const b: Beam = { beam, patch, motes, key: '', shape: beamShape(0, 0, sunLook), rays: [], main: false };
     this.all.push(b);
     return b;
   }
@@ -136,11 +139,12 @@ export class Sunbeams {
   }
 
   private place(b: Beam, id: number, look: SunLook, tx: number, ty: number, colour: number, cloud: number, dt: number, t: number): void {
-    const key = `${tx},${ty},${colour},${look.widen},${look.patch},${look.slant},${look.dir},${look.glow},${look.height},${look.rays},${look.rayWidth[0]},${look.rayWidth[1]},${id}`;
+    const key = `${tx},${ty},${colour},${look.widen},${look.patch},${look.slant},${look.dir},${look.glow},${look.height},${look.rays},${look.rayWidth[0]},${look.rayWidth[1]},${look.style},${look.main},${id}`;
     if (key !== b.key) {
       b.key = key;
       b.shape = beamShape(tx, ty, look);
       b.rays = rayShapes(b.shape, id, look);
+      b.main = look.main;
       this.draw(b, colour, look.glow);
       for (const m of b.motes) this.respawn(m, b.rays);
     }
@@ -165,6 +169,7 @@ export class Sunbeams {
   private draw(b: Beam, colour: number, glow: number): void {
     const g = b.beam.clear();
     // Rays overlap, so each is dimmer: the total stays near one beam's brightness.
+    if (b.main) this.drawRay(g, b.shape, colour, glow * MAIN_ALPHA, b.shape.patch.w);
     for (const r of b.rays) this.drawRay(g, r, colour, rayGlow(glow, b.rays.length), b.shape.patch.w);
   }
 

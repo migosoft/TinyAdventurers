@@ -9,8 +9,8 @@
 // with uneven rays" with "two cracks in one room"), then Slant (0 / 1 / 1.5 / 2 tiles), From (left / right),
 // Often (normal / often: a cloud every 2-4 s instead of 8-25 s), Beam and Dust on / off, and, shown only with
 // Vary off: Shape (widening / straight), Patch (1.5 / 2 / 3 tiles), Clouds (off / soft / medium / strong),
-// Height (3 / 4 / 5 / 6 tiles, ceiling to floor), Rays (1 / 2 / 3) and Glow (x1 / x1.5 / x2).
-// URL: ?vary=0&second=1&shape=straight&patch=3&slant=2&from=right&clouds=0.3&often=1&height=5&rays=2&glow=1.5&beam=0&dust=0
+// Height (4 / 5 / 6 / 7 tiles, ceiling to floor), Rays (1 / 2 / 3), Style (fan / parallel) and Glow (x1 / x1.5 / x2).
+// URL: ?vary=0&second=1&shape=straight&patch=3&slant=2&from=right&clouds=0.3&often=1&height=5&style=parallel&rays=2&glow=1.5&beam=0&dust=0
 // (clouds is 0..0.6, the dip; the fixed-look parameters apply with vary=0).
 // Zoomed to fit the rooms to the screen, so it reads on a phone.
 import Phaser from 'phaser';
@@ -30,14 +30,15 @@ import { VisionMask } from './visionmask';
 const W = 15;
 const H = 17;
 const WARM = 0xffaa5a;
-const SUN = { x: 5, y: 8 };
+const SUN = { x: 5, y: 9 };
 /** The second crack: 3 to 4 tiles from the first, on open floor. */
-const SECOND = { x: 4, y: 11 };
+const SECOND = { x: 3, y: 12 };
 
 const PATCHES = [1.5, 2, 3];
 const SLANTS = [0, 1, 1.5, 2];
 const CLOUDS: [string, number][] = [['off', 0], ['soft', 0.3], ['medium', 0.45], ['strong', 0.6]];
-const HEIGHTS = [3, 4, 5, 6];
+const HEIGHTS = [4, 5, 6, 7];
+const STYLES = ['fan', 'parallel'] as const;
 const GLOWS = [1, 1.5, 2];
 const OFTEN: [number, number][] = [[8, 25], [2, 4]];
 
@@ -88,7 +89,7 @@ export class SunlightDemoScene extends Phaser.Scene {
     const field = (this.field = new LightField(map));
     this.placeSuns();
     // The sunlit room's torch is out; the small room's torch is lit.
-    this.torches.push({ view: new TorchView(this), x: 1 * TILE + 0.5, y: 8.5 * TILE, side: 1, lit: false });
+    this.torches.push({ view: new TorchView(this), x: 1 * TILE + 0.5, y: 9.5 * TILE, side: 1, lit: false });
     this.torches.push({ view: new TorchView(this), x: 14 * TILE - 0.5, y: 8.5 * TILE, side: 2, lit: true });
     field.add({ id: 2, kind: LIGHT_KIND.Torch, colour: WARM, x: 13, y: 8, on: true });
     this.view = new LightView(this, map, field);
@@ -101,8 +102,8 @@ export class SunlightDemoScene extends Phaser.Scene {
 
     const put = (frame: string, x: number, y: number, flip = false) =>
       this.add.image(x * TILE, y * TILE, 'atlas', frame).setOrigin(0.5, 1).setFlipX(flip).setDepth(DEPTH.entityBase + y * TILE);
-    put('knight_m_idle_anim_f0', 5.5, 8.9);
-    put('knight_m_idle_anim_f0', 7.4, 9.3, true);
+    put('knight_m_idle_anim_f0', 5.5, 9.9);
+    put('knight_m_idle_anim_f0', 7.4, 10.3, true);
     put('crate', 8.5, 4.8);
     put('skull', 2.5, 13.6);
 
@@ -130,7 +131,7 @@ export class SunlightDemoScene extends Phaser.Scene {
     if (this.second) at(3 + 1000 * this.roll, SECOND.x, SECOND.y);
   }
 
-  /** ?shape=straight|widening, ?patch=1.5|2|3, ?slant=0..2, ?from=left|right, ?clouds=0..0.6, ?often=1, ?height=3..6, ?rays=1..3, ?glow=1..2, ?beam=0, ?dust=0, ?vary=0 (the fixed look of the buttons), ?second=1. */
+  /** ?shape=straight|widening, ?patch=1.5|2|3, ?slant=0..2, ?from=left|right, ?clouds=0..0.6, ?often=1, ?height=4..7, ?style=fan|parallel, ?rays=1..3, ?glow=1..2, ?beam=0, ?dust=0, ?vary=0 (the fixed look of the buttons), ?second=1. */
   private readParams(q: URLSearchParams): void {
     const num = (k: string) => (q.get(k) !== null && Number.isFinite(Number(q.get(k))) ? Number(q.get(k)) : null);
     if (q.get('shape') !== null) sunLook.widen = q.get('shape') !== 'straight';
@@ -143,6 +144,7 @@ export class SunlightDemoScene extends Phaser.Scene {
     const rays = num('rays');
     if (rays === 1 || rays === 2 || rays === 3) sunLook.rays = rays;
     sunLook.glow = num('glow') ?? sunLook.glow;
+    if (q.get('style') === 'fan' || q.get('style') === 'parallel') sunLook.style = q.get('style') as 'fan' | 'parallel';
     if (q.get('vary') === '0') sunLook.vary = false;
     this.second = q.get('second') === '1';
     if (q.get('often') !== null) sunLook.gap = q.get('often') === '1' ? OFTEN[1] : OFTEN[0];
@@ -195,6 +197,7 @@ export class SunlightDemoScene extends Phaser.Scene {
     add(() => `Often: ${sunLook.gap[0] === OFTEN[1][0] ? 'often' : 'normal'}`, () => (sunLook.gap = sunLook.gap[0] === OFTEN[1][0] ? OFTEN[0] : OFTEN[1]));
     add(() => `Height: ${sunLook.height} tiles`, () => (sunLook.height = next(HEIGHTS, sunLook.height)), 'fixed');
     add(() => `Rays: ${sunLook.rays}`, () => (sunLook.rays = (sunLook.rays % 3 + 1) as 1 | 2 | 3), 'fixed');
+    add(() => `Style: ${sunLook.style}`, () => (sunLook.style = STYLES[(STYLES.indexOf(sunLook.style) + 1) % 2]), 'fixed');
     add(() => `Glow: x${sunLook.glow}`, () => (sunLook.glow = next(GLOWS, sunLook.glow)), 'fixed');
     add(() => `Beam: ${this.sun.on.beam ? 'on' : 'off'}`, () => (this.sun.on.beam = !this.sun.on.beam));
     add(() => `Dust: ${this.sun.on.dust ? 'on' : 'off'}`, () => (this.sun.on.dust = !this.sun.on.dust));

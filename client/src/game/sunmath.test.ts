@@ -107,8 +107,8 @@ describe('sunVariant', () => {
       const v = sunVariant(id, base);
       expect(v.patch).toBeGreaterThanOrEqual(1.5);
       expect(v.patch).toBeLessThanOrEqual(3);
-      expect(v.height).toBeGreaterThanOrEqual(3);
-      expect(v.height).toBeLessThanOrEqual(6);
+      expect(v.height).toBeGreaterThanOrEqual(5);
+      expect(v.height).toBeLessThanOrEqual(7);
       expect(v.glow).toBeGreaterThanOrEqual(0.8);
       expect(v.glow).toBeLessThanOrEqual(1.3);
       expect(v.clouds).toBeGreaterThanOrEqual(0);
@@ -116,11 +116,13 @@ describe('sunVariant', () => {
       expect([1, 2, 3]).toContain(v.rays);
     }
   });
-  it('mixes the looks: rays about 30 / 45 / 25 %, widening about 65 %', () => {
+  it('mixes the looks: rays 55 / 45 %, never 1, style 50 / 50, widening about 65 %', () => {
     const count = (f: (l: ReturnType<typeof sunVariant>) => boolean) => ids.filter((id) => f(sunVariant(id, base))).length / ids.length;
-    expect(count((l) => l.rays === 1)).toBeCloseTo(0.3, 1);
-    expect(count((l) => l.rays === 2)).toBeCloseTo(0.45, 1);
-    expect(count((l) => l.rays === 3)).toBeCloseTo(0.25, 1);
+    expect(count((l) => l.rays === 1)).toBe(0);
+    expect(count((l) => l.rays === 2)).toBeCloseTo(0.55, 1);
+    expect(count((l) => l.rays === 3)).toBeCloseTo(0.45, 1);
+    expect(count((l) => l.style === 'parallel')).toBeCloseTo(0.5, 1);
+    expect(count((l) => l.main)).toBe(1);
     expect(count((l) => l.widen)).toBeCloseTo(0.65, 1);
   });
   it('lookFor uses the base itself unless vary, and caches per id', () => {
@@ -129,12 +131,12 @@ describe('sunVariant', () => {
     expect(lookFor(5, on)).toBe(lookFor(5, on));
     expect(lookFor(5, { ...on, slant: 2 }).slant).toBe(2);
   });
-  it('rays of a variant can differ a lot in width but still span the beam', () => {
+  it('fan rays of a variant can differ a lot in width but still span the beam', () => {
     const shape = beamShape(5, 8, { ...sunLook, widen: true });
     let thin = 0;
     for (const id of ids.slice(0, 300)) {
       const v = sunVariant(id, base);
-      const rays = rayShapes(shape, id, v);
+      const rays = rayShapes(shape, id, { ...v, style: 'fan' });
       if (rays.length < 2) continue;
       const ws = rays.map((r) => r.bottom[1][0] - r.bottom[0][0]);
       if (Math.max(...ws) / Math.min(...ws) > 2) thin++;
@@ -150,7 +152,7 @@ describe('rays of random suns have no gaps', () => {
     for (const widen of [true, false]) {
       const shape = beamShape(5, 8, { ...sunLook, widen });
       for (let id = 1; id <= 1000; id++) {
-        const rays = rayShapes(shape, id, sunVariant(id, { ...sunLook, widen }));
+        const rays = rayShapes(shape, id, { ...sunVariant(id, { ...sunLook, widen }), style: 'fan' });
         for (const edge of ['top', 'bottom'] as const) {
           const sorted = rays.map((r) => r[edge]).sort((a, b) => a[0][0] - b[0][0]);
           let right = sorted[0][1][0];
@@ -158,6 +160,34 @@ describe('rays of random suns have no gaps', () => {
             expect(e[0][0]).toBeLessThanOrEqual(right + 1e-6);
             right = Math.max(right, e[1][0]);
           }
+        }
+      }
+    }
+  });
+});
+
+describe('parallel rays', () => {
+  it('are narrow shafts inside the beam, with the same share at the top and the floor', () => {
+    for (const widen of [true, false]) {
+      const shape = beamShape(5, 8, { ...sunLook, widen });
+      const tw = shape.top[1][0] - shape.top[0][0];
+      const bw = shape.bottom[1][0] - shape.bottom[0][0];
+      for (let id = 1; id <= 300; id++) {
+        for (const n of [2, 3] as const) {
+          const rays = rayShapes(shape, id, { ...sunLook, rays: n, style: 'parallel' });
+          expect(rays).toHaveLength(n);
+          for (const r of rays) {
+            const ub = [(r.bottom[0][0] - shape.bottom[0][0]) / bw, (r.bottom[1][0] - shape.bottom[0][0]) / bw];
+            const ut = [(r.top[0][0] - shape.top[0][0]) / tw, (r.top[1][0] - shape.top[0][0]) / tw];
+            expect(ut[0]).toBeCloseTo(ub[0]);
+            expect(ut[1]).toBeCloseTo(ub[1]);
+            expect(ub[0]).toBeGreaterThanOrEqual(-1e-9);
+            expect(ub[1]).toBeLessThanOrEqual(1 + 1e-9);
+            expect(ub[1] - ub[0]).toBeGreaterThanOrEqual(0.15 - 1e-9);
+            expect(ub[1] - ub[0]).toBeLessThanOrEqual(0.4 + 1e-9);
+          }
+          const sorted = rays.map((r) => r.bottom[0][0]).sort((a, b) => a - b);
+          for (const [k, x] of sorted.entries()) expect(x).toBeGreaterThanOrEqual(shape.bottom[0][0] + (k / n) * bw - 1e-6);
         }
       }
     }
