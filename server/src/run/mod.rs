@@ -303,9 +303,13 @@ impl Run {
             sight: prof.sight,
             alive: true,
             aim: 0.0,
+            aim_dist: 0.0,
             anim: Anim::Idle,
             anim_start: self.time,
             hurt_t: 0.0,
+            kit: crate::sheet::enemy_kit(t),
+            cds: Default::default(),
+            slam: None,
             wolf_bit: 0.0,
             ai: Ai::new(pos),
             owner,
@@ -442,12 +446,14 @@ impl Run {
                 continue;
             }
             if m.sinking.is_some() || m.knock != Vec2::ZERO {
+                self.monsters[mi].slam = None;
                 continue; // slid and sunk below
             }
             if m.effects.no_act() {
                 // Asleep or stone: no thinking, attacks or wind-ups.
                 let m = &mut self.monsters[mi];
                 m.ai.windup = None;
+                m.slam = None;
                 if m.anim != Anim::Idle {
                     m.anim = Anim::Idle;
                     m.anim_start = self.time;
@@ -455,6 +461,7 @@ impl Run {
                 continue;
             }
             if m.effects.fear_from().is_some() && !m.hiding && !m.dormant {
+                self.monsters[mi].slam = None;
                 ai::flee(self, mi, DT);
                 continue;
             }
@@ -490,6 +497,7 @@ impl Run {
             }
             m.history.push_back(m.pos);
             m.hurt_t = (m.hurt_t - DT).max(0.0);
+            m.cds.tick(DT);
             keystones::cool(m, DT);
         }
         self.monsters.retain(|m| m.alive);
@@ -1841,10 +1849,10 @@ pub mod tests {
         run.players[1].mv.y = at.y;
         let id = run.spawn_enemy(EnemyType::OrcWarrior, at - Vec2::new(16.0, 0.0), None);
         let oi = run.monster_idx(id).unwrap();
-        let attack = crate::defs::enemies::def(EnemyType::OrcWarrior).attack;
         // STR 16: the Wizard (weight 9) the full 20 px, the Barbarian (weight 13) 20 x 3/4 = 15 px.
-        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(0), attack, false, None);
-        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(1), attack, false, None);
+        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(0), false, None);
+        run.monsters[oi].cds = Default::default();
+        crate::run::ai::perform_attack(&mut run, oi, Creature::Player(1), false, None);
         assert_eq!(run.players[0].mv.knock_vx, crate::collision::knock_speed(20.0, DT));
         assert_eq!(run.players[1].mv.knock_vx, crate::collision::knock_speed(15.0, DT));
     }

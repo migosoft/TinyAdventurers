@@ -37,6 +37,16 @@ pub enum Skip {
     AlreadyHit,
 }
 
+/// The cone of a swing.
+#[derive(Clone, Copy)]
+pub struct Arc {
+    pub aim: f64,
+    /// The whole angle (rad).
+    pub width: f64,
+    /// The user's body radius: a creature closer than that and its own radius touches the user.
+    pub user_radius: f64,
+}
+
 #[derive(Clone, Copy)]
 /// What an ability needs of a creature. One that is dead, on the caster's side, already hit or out of reach is
 /// never a target; the other filters are switched on by the rule.
@@ -46,8 +56,8 @@ pub struct Rule {
     pub reach: f64,
     /// The creature's body radius is added to `reach`.
     pub plus_radius: bool,
-    /// (aim, whole arc): only inside it, or touching the user.
-    pub arc: Option<(f64, f64)>,
+    /// Only inside it, or touching the user.
+    pub arc: Option<Arc>,
     /// Needs a clear line from `at`.
     pub los: bool,
     pub skip_hiding: bool,
@@ -75,8 +85,8 @@ pub fn check(run: &Run, side: Side, c: Creature, pos: Vec2, rule: &Rule, hit: &[
     if !(d <= limit) {
         return Err(Skip::OutOfReach);
     }
-    if let Some((aim, arc)) = rule.arc {
-        let in_arc = angle_diff(rule.at.angle_to(pos), aim).abs() <= arc / 2.0 || d < radius + PLAYER_RADIUS;
+    if let Some(arc) = rule.arc {
+        let in_arc = angle_diff(rule.at.angle_to(pos), arc.aim).abs() <= arc.width / 2.0 || d < radius + arc.user_radius;
         if !in_arc {
             return Err(Skip::OutsideArc);
         }

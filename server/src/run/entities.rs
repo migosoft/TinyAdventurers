@@ -221,9 +221,16 @@ pub struct Monster {
     pub sight: Sight,
     pub alive: bool,
     pub aim: f64,
+    /// How far it aims an aimed ability (blasts and ground areas land there), set by `monster_cast`.
+    pub aim_dist: f64,
     pub anim: Anim,
     pub anim_start: f64,
     pub hurt_t: f64,
+    /// The abilities it casts, resolved at spawn (empty for bosses and the wolf), and their cooldowns.
+    pub kit: crate::sheet::Kit,
+    pub cds: super::abilities::Cooldowns,
+    /// Ground Slam: seconds until it lands; lost when it dies, sinks, is pushed or frightened.
+    pub slam: Option<f64>,
     /// Seconds left of the wolf-bite mark (Pack Hunter).
     pub wolf_bit: f64,
     pub ai: Ai,

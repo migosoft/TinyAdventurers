@@ -58,6 +58,12 @@ super::enum_list::listed_enum! {
         Consecrate = 21,
         /// Roots at an aimed spot that entangle enemies standing in them.
         Entangle = 22,
+        /// A strike that needs a bite weapon: the monsters' bite.
+        Bite = 23,
+        /// The necromancer's and the disciple's bolt of shadow.
+        ShadowBolt = 24,
+        /// The bolt of fire of imps, chorts and summoners.
+        FireBolt = 25,
     }
 }
 
@@ -208,6 +214,9 @@ pub const SMITE_FLASH: f64 = 0.3;
 /// Ground Slam: the wind-up (s) before it lands, and the push (px) it gives at least.
 pub const SLAM_WINDUP: f64 = 0.5;
 pub const SLAM_PUSH: f64 = 24.0;
+/// The wind-up (s) of the monsters' bolts, before the shot leaves (balancing).
+pub const SHADOW_BOLT_WINDUP: f64 = 0.5;
+pub const FIRE_BOLT_WINDUP: f64 = 0.35;
 /// How long (s) Frost Nova's and Purify's flashes last.
 pub const NOVA_FLASH: f64 = 0.3;
 /// The Magic flash's colour: icy blue, like the Frost Shard's light.
@@ -257,6 +266,9 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::Purify => "Clears bad effects from you and the allies close to you and wards you against curses for a moment.",
         AbilityId::Consecrate => "Holy ground under your feet that hurts enemies standing in it.",
         AbilityId::Entangle => "Vines grow where you aim and root the enemies in them.",
+        AbilityId::Bite => "A strike with a bite.",
+        AbilityId::ShadowBolt => "A slow bolt of shadow.",
+        AbilityId::FireBolt => "A bolt of fire.",
     }
 }
 
@@ -370,6 +382,18 @@ pub fn def(id: AbilityId) -> AbilityDef {
             req: &[Requirement::Attr(Attr::Cha, 14)],
             own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Entangled, power: Attr::Cha, look: EffectLook::Vines }), ..own(0.0, 14.0, 120.0, 0.0, 36.0, 4.0, Some(EntityKind::Roots), 0) },
             ..base("Entangle", Secondary, C::Innate, Uses::Nothing, true, Shape::GroundArea, NO_OWN, &[K::ElvenRanger])
+        },
+        Bite => AbilityDef {
+            req: &[Requirement::WeaponKind(&[WeaponKind::Bite])],
+            ..base("Bite", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
+        },
+        ShadowBolt => AbilityDef {
+            own: OwnStats { windup: SHADOW_BOLT_WINDUP, ..own(12.0, 2.0, 180.0, 130.0, 3.0, 0.0, Some(EntityKind::ShadowBolt), 17) },
+            ..base("Shadow Bolt", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
+        },
+        FireBolt => AbilityDef {
+            own: OwnStats { windup: FIRE_BOLT_WINDUP, ..own(7.0, 2.0, 150.0, 130.0, 3.0, 0.0, Some(EntityKind::FireBolt), 14) },
+            ..base("Fire Bolt", Primary, C::Innate, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
         },
         SummonWolf => base("Summon Wolf", Secondary, C::Innate, Uses::Nothing, false, Shape::Summon, own(0.0, 8.0, 0.0, 0.0, 0.0, 0.0, None, 13), &[K::ElvenRanger]),
     }

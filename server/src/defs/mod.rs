@@ -12,6 +12,7 @@ pub mod kinds;
 pub mod items;
 pub mod loadout;
 pub mod lights;
+pub mod looks;
 pub mod objects;
 pub mod progression;
 pub mod requirements;

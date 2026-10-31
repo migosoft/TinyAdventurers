@@ -65,6 +65,8 @@ fn export_defs() {
             Some((format!("{i:?}"), json!({ "name": d.name, "slot": slot, "kind": format!("{kind:?}"), "classes": d.classes })))
         })
         .collect();
+    // The ogre's slam telegraph: the radius and wind-up of its Ground Slam.
+    let ogre_slam = *crate::sheet::enemy_kit(enemies::EnemyType::Ogre).get(ab::AbilityId::GroundSlam).expect("the ogre slams");
     let mut consts = json!({
         "TILE": TILE,
         "TICK_HZ": TICK_HZ,
@@ -79,8 +81,8 @@ fn export_defs() {
         "MIMIC_HOP_AIR_START": enemies::MIMIC_HOP_AIR.0,
         "MIMIC_HOP_AIR_END": enemies::MIMIC_HOP_AIR.1,
         "MIMIC_WAKE_T": enemies::MIMIC_WAKE_T,
-        "OGRE_SLAM_RADIUS": enemies::OGRE_SLAM_RADIUS,
-        "OGRE_SLAM_WINDUP": enemies::OGRE_SLAM_WINDUP,
+        "OGRE_SLAM_RADIUS": ogre_slam.radius,
+        "OGRE_SLAM_WINDUP": ogre_slam.windup,
         "DRAGON_CLAW_WINDUP": bosses::DRAGON_CLAW_WINDUP,
         "DRAGON_BITE_WINDUP": bosses::DRAGON_BITE_WINDUP,
         "DRAGON_BITE_RANGE": bosses::DRAGON_BITE_RANGE,

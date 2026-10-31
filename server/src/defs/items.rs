@@ -198,9 +198,18 @@ pub fn base_text(b: &ItemBase) -> String {
             if m.push > 0.0 {
                 t.push_str(&format!(" · push {}", m.push));
             }
+            if m.windup > 0.0 {
+                t.push_str(&format!(" · wind-up {} s", m.windup));
+            }
             t
         }
-        ItemBase::Ranged(_, r) => format!("{} damage · every {} s · range {}", r.damage, r.cooldown, r.range),
+        ItemBase::Ranged(_, r) => {
+            let mut t = format!("{} damage · every {} s · range {}", r.damage, r.cooldown, r.range);
+            if r.windup > 0.0 {
+                t.push_str(&format!(" · wind-up {} s", r.windup));
+            }
+            t
+        }
         ItemBase::Armor(a) => {
             let class = match a.class {
                 ArmorClass::Cloth => "Cloth",
@@ -256,9 +265,22 @@ fn melee(kind: WeaponKind, damage: f64, cooldown: f64, arc: f64, push: f64, spli
     ItemBase::Melee(kind, MeleeStats { damage, cooldown, arc, push, reach: super::classes::HERO_REACH, windup: 0.0, split, at })
 }
 
+/// A melee weapon a monster winds up with (`windup`, s), reaching `reach` px beyond its body
+/// (a weapon a hero can hold keeps `HERO_REACH`).
+fn winding(base: ItemBase, reach: f64, windup: f64) -> ItemBase {
+    let ItemBase::Melee(kind, m) = base else { panic!("only a melee weapon has a reach") };
+    ItemBase::Melee(kind, MeleeStats { reach, windup, ..m })
+}
+
+/// A ranged weapon a monster winds up with before the shot leaves.
+fn drawing(base: ItemBase, windup: f64) -> ItemBase {
+    let ItemBase::Ranged(kind, r) = base else { panic!("only a ranged weapon draws") };
+    ItemBase::Ranged(kind, RangedStats { windup, ..r })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn ranged(kind: WeaponKind, damage: f64, cooldown: f64, range: f64, projectile_speed: f64, radius: f64, projectile: EntityKind, at: At) -> ItemBase {
-    ItemBase::Ranged(kind, RangedStats { damage, cooldown, range, projectile_speed, radius, projectile, split: DamageSplit::physical(), at })
+    ItemBase::Ranged(kind, RangedStats { damage, cooldown, range, projectile_speed, radius, projectile, windup: 0.0, split: DamageSplit::physical(), at })
 }
 
 fn armor(class: ArmorClass, physical: f64, weight: f64) -> ItemBase {
@@ -326,22 +348,22 @@ pub fn def(id: ItemId) -> ItemDef {
         I::BootsOfHaste => item("Boots of Haste", "", ItemBase::Shoes, ALL, &[], &[mag!(PropKind::MoveSpeed(0.05))]),
         I::IronBoots => item("Iron Boots", "", ItemBase::Shoes, ALL, &[], &[mag!(PropKind::Weight(3.0)), mag!(PropKind::MoveSpeed(-0.05))]),
         I::GirdleOfWarding => item("Girdle of Warding", "", ItemBase::Belt, ALL, &[], &[mag!(PropKind::EffectResist(EffectKind::Blind, 1.0)), mag!(PropKind::MaxHp(10.0))]),
-        I::GoblinBow => item("Goblin Bow", "weapon_bow", ranged(K::Bow, 6.0, 1.4, 140.0, 170.0, 3.0, EntityKind::Arrow, at(8, 15)), ALL, &[], &[]),
-        I::RustySword => item("Rusty Sword", "weapon_rusty_sword", melee(K::Sword, 9.0, 1.0, 1.6, 0.0, phys(), at(12, 12)), ALL, &[], &[]),
-        I::SkeletonLongbow => item("Skeleton Longbow", "weapon_bow_2", ranged(K::Longbow, 7.0, 1.6, 150.0, 180.0, 3.0, EntityKind::Arrow, at(10, 15)), ALL, &[], &[]),
-        I::Cleaver => item("Cleaver", "weapon_cleaver", melee(K::Axe, 14.0, 1.2, 1.8, 20.0, phys(), at(16, 12)), ALL, &[], &[]),
-        I::OrcBow => item("Orc Bow", "weapon_bow", ranged(K::Bow, 10.0, 1.7, 150.0, 190.0, 3.0, EntityKind::Arrow, at(14, 14)), ALL, &[], &[]),
-        I::SpikedClub => item("Spiked Club", "weapon_baton_with_spikes", melee(K::Club, 18.0, 1.6, 2.0, 28.0, phys(), at(19, 8)), ALL, &[], &[]),
-        I::MimicBite => item("Mimic Bite", "", melee(K::Bite, 13.0, 1.0, 1.0, 0.0, phys(), at(17, 12)), ALL, &[], &[]),
-        I::ImpClaws => item("Imp Claws", "", melee(K::Claws, 6.0, 0.9, 1.6, 0.0, heat(), at(6, 17)), ALL, &[], &[]),
-        I::ChortClaws => item("Chort Claws", "", melee(K::Claws, 9.0, 1.0, 1.6, 14.0, heat(), at(14, 13)), ALL, &[], &[]),
-        I::UnarmedStrike => item("Unarmed Strike", "", melee(K::Unarmed, 3.0, 1.0, 1.4, 0.0, phys(), At::BASE), ALL, &[], &[]),
+        I::GoblinBow => item("Goblin Bow", "weapon_bow", drawing(ranged(K::Bow, 6.0, 1.4, 140.0, 170.0, 3.0, EntityKind::Arrow, at(8, 15)), 0.3), ALL, &[], &[]),
+        I::RustySword => item("Rusty Sword", "weapon_rusty_sword", winding(melee(K::Sword, 9.0, 1.0, 1.6, 0.0, phys(), at(12, 12)), super::classes::HERO_REACH, 0.3), ALL, &[], &[]),
+        I::SkeletonLongbow => item("Skeleton Longbow", "weapon_bow_2", drawing(ranged(K::Longbow, 7.0, 1.6, 150.0, 180.0, 3.0, EntityKind::Arrow, at(10, 15)), 0.35), ALL, &[], &[]),
+        I::Cleaver => item("Cleaver", "weapon_cleaver", winding(melee(K::Axe, 14.0, 1.2, 1.8, 20.0, phys(), at(16, 12)), super::classes::HERO_REACH, 0.35), ALL, &[], &[]),
+        I::OrcBow => item("Orc Bow", "weapon_bow", drawing(ranged(K::Bow, 10.0, 1.7, 150.0, 190.0, 3.0, EntityKind::Arrow, at(14, 14)), 0.35), ALL, &[], &[]),
+        I::SpikedClub => item("Spiked Club", "weapon_baton_with_spikes", winding(melee(K::Club, 18.0, 1.6, 2.0, 28.0, phys(), at(19, 8)), super::classes::HERO_REACH, 0.5), ALL, &[], &[]),
+        I::MimicBite => item("Mimic Bite", "", winding(melee(K::Bite, 13.0, 1.0, 1.0, 0.0, phys(), at(17, 12)), 16.0, 0.25), ALL, &[], &[]),
+        I::ImpClaws => item("Imp Claws", "", winding(melee(K::Claws, 6.0, 0.9, 1.6, 0.0, heat(), at(6, 17)), 16.0, 0.25), ALL, &[], &[]),
+        I::ChortClaws => item("Chort Claws", "", winding(melee(K::Claws, 9.0, 1.0, 1.6, 14.0, heat(), at(14, 13)), 18.0, 0.3), ALL, &[], &[]),
+        I::UnarmedStrike => item("Unarmed Strike", "", winding(melee(K::Unarmed, 3.0, 1.0, 1.4, 0.0, phys(), At::BASE), 16.0, 0.25), ALL, &[], &[]),
         I::Bite => item("Bite", "", melee(K::Bite, 8.0, 1.0, 1.0, 0.0, phys(), At::BASE), ALL, &[], &[]),
         I::Claws => item("Claws", "", melee(K::Claws, 6.0, 0.8, 1.6, 0.0, heat(), At::BASE), ALL, &[], &[]),
         I::BeastBite => item("Beast Bite", "", melee(K::Bite, 10.0, 0.9, 1.0, 0.0, DamageSplit::split(&[(DamageType::Magical, 0.2)]), At::BASE), ALL, &[], &[]),
         I::Tail => item("Tail", "", melee(K::Tail, 10.0, 1.25, 2.4, 10.0, phys(), At::BASE), ALL, &[], &[]),
-        I::NecromancerStaff => item("Necromancer Staff", "weapon_green_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
-        I::SummonerStaff => item("Summoner Staff", "weapon_red_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
+        I::NecromancerStaff => item("Necromancer Staff", "weapon_green_magic_staff", winding(melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), super::classes::HERO_REACH, 0.25), ALL, &[], &[]),
+        I::SummonerStaff => item("Summoner Staff", "weapon_red_magic_staff", winding(melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), super::classes::HERO_REACH, 0.25), ALL, &[], &[]),
         I::HuntersBow => item(
             "Hunter's Bow",
             "weapon_bow",

@@ -137,7 +137,7 @@ export const CONST = {
   "MIMIC_HOP_CYCLE": 0.6,
   "MIMIC_WAKE_T": 0.6,
   "OGRE_SLAM_RADIUS": 34.0,
-  "OGRE_SLAM_WINDUP": 0.9,
+  "OGRE_SLAM_WINDUP": 1.0,
   "PLAYER_RADIUS": 5.0,
   "POS_SCALE": 16.0,
   "SHALLOW_SPEED": 0.7,
@@ -263,6 +263,14 @@ export const CLASSES = {
 } as const;
 
 export const ABILITIES = {
+  "Bite": {
+    "classes": [],
+    "hero": false,
+    "name": "Bite",
+    "ranged": false,
+    "shape": "Swing",
+    "slot": "Primary"
+  },
   "ChainSpark": {
     "classes": [
       "Wizard"
@@ -302,6 +310,14 @@ export const ABILITIES = {
     "ranged": true,
     "shape": "GroundArea",
     "slot": "Secondary"
+  },
+  "FireBolt": {
+    "classes": [],
+    "hero": false,
+    "name": "Fire Bolt",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
   },
   "Fireball": {
     "classes": [
@@ -422,6 +438,14 @@ export const ABILITIES = {
     "ranged": false,
     "shape": "SelfArea",
     "slot": "Secondary"
+  },
+  "ShadowBolt": {
+    "classes": [],
+    "hero": false,
+    "name": "Shadow Bolt",
+    "ranged": true,
+    "shape": "Projectile",
+    "slot": "Primary"
   },
   "Shoot": {
     "classes": [

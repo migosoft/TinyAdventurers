@@ -1,18 +1,19 @@
 //! Enemy AI: perception (sight radius + line of sight), chase/attack,
 //! search last known position, return home, and A* pathfinding.
 
-use super::abilities::spawn_monster_projectile;
+use super::abilities::{monster_cast, tick_monster_slam};
 use super::effects::Creature;
-use super::entities::{AiState, Pierce, Target, Windup};
+use super::entities::{AiState, Target, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
 use crate::defs::classes::PLAYER_RADIUS;
-use crate::defs::damage::{Damage, What};
-use crate::defs::enemies::{self, AttackStyle, EnemyType};
+use crate::defs::abilities::{self as ab, Shape};
+use crate::defs::enemies::{self, EnemyType};
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
 use crate::protocol::Ev;
+use crate::sheet::ResolvedAbility;
 use crate::defs::races::Sight;
 use rand::Rng;
 use std::cmp::Reverse;
@@ -235,6 +236,15 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
     }
 
     // Finish a wind-up: the attack lands only if the target is still seen.
+    // A Ground Slam winding up: it stands still until the blow lands.
+    if run.monsters[mi].slam.is_some() {
+        tick_monster_slam(run, mi, dt);
+        if run.monsters[mi].slam.is_none() {
+            set_anim(run, mi, Anim::Idle);
+        }
+        return;
+    }
+
     if let Some(w) = run.monsters[mi].ai.windup {
         let t = w.t - dt;
         if t > 0.0 {
@@ -252,8 +262,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
             _ => None,
         };
         if let Some(foe) = seen {
-            let attack = if w.alt { def.alt.unwrap_or(def.attack) } else { def.attack };
-            perform_attack(run, mi, foe, attack, w.alt, barrel);
+            perform_attack(run, mi, foe, w.alt, barrel);
         }
         return;
     }
@@ -276,42 +285,52 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
             let d = pos.dist(ppos);
             let aim = pos.angle_to(ppos);
             run.monsters[mi].aim = aim;
-            // Reach and wind-up of an attack; movement follows the main attack.
-            let reach = |a: AttackStyle| match a {
-                AttackStyle::Melee { range, windup, .. } => (range + foe_radius + def.radius, 0.0, windup),
-                AttackStyle::Ranged { range, preferred, windup, .. } => (range, preferred, windup),
-                AttackStyle::Slam { radius, windup, .. } => (radius, 0.0, windup),
+            // The reach of an ability: a swing starts a little inside its real reach, a bolt from its
+            // range, a slam from its radius. Movement follows the main ability.
+            let reach = |a: &ResolvedAbility| match ab::def(a.id).shape {
+                Shape::Swing => a.range + foe_radius - SWING_SLACK,
+                Shape::Ring => a.radius,
+                _ => a.range,
             };
-            let (range, preferred, _) = reach(def.attack);
-            if let Some(alt) = def.alt {
-                // Second attack: a claw when the target is in reach, a bolt only from afar.
-                let (alt_range, _, windup) = reach(alt);
-                let usable = match alt {
-                    AttackStyle::Melee { .. } => d <= alt_range,
-                    AttackStyle::Ranged { .. } => d <= alt_range && d >= enemies::ALT_BOLT_MIN_DIST && d > range,
+            let main = *run.monsters[mi].kit.get(def.abilities[0]).expect("an enemy has its main ability");
+            let (range, preferred) = (reach(&main), def.preferred);
+            if let Some(&alt_id) = def.abilities.get(1) {
+                // Second ability: a claw when the target is in reach, a bolt only from afar, a slam
+                // when it is worth it.
+                let alt = *run.monsters[mi].kit.get(alt_id).expect("an enemy has its alt ability");
+                let alt_range = reach(&alt);
+                let usable = match ab::def(alt_id).shape {
+                    Shape::Swing => d <= alt_range,
+                    Shape::Projectile => d <= alt_range && d >= enemies::ALT_BOLT_MIN_DIST && d > range,
                     // A slam is worth it for two heroes in reach, or one while the club recovers.
-                    AttackStyle::Slam { radius, .. } => {
-                        let near = run.foes_in(pos, radius, None).len();
+                    Shape::Ring => {
+                        let near = run.foes_in(pos, alt.radius, None).len();
                         near >= 2 || near == 1 && run.monsters[mi].ai.cd > 0.0
                     }
+                    shape => unreachable!("{alt_id:?} is a {shape:?}: an alt ability swings, shoots or slams"),
                 };
-                if usable && run.monsters[mi].ai.alt_cd <= 0.0 {
-                    run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: true, at: None });
-                    set_anim(run, mi, if matches!(alt, AttackStyle::Slam { .. }) { Anim::Slam } else { Anim::Windup });
+                if usable && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {
+                    if ab::def(alt_id).shape == Shape::Ring {
+                        // The slam's own wind-up runs in `monster_cast`.
+                        set_anim(run, mi, Anim::Slam);
+                        perform_attack(run, mi, foe, true, None);
+                    } else {
+                        run.monsters[mi].ai.windup = Some(Windup { t: alt.windup, aim, alt: true, at: None });
+                        set_anim(run, mi, Anim::Windup);
+                    }
                     return;
                 }
             }
-            if d <= range && run.monsters[mi].ai.cd <= 0.0 {
-                let (_, _, windup) = reach(def.attack);
-                let at = match def.attack {
-                    AttackStyle::Ranged { range, .. } if !run.monsters[mi].is_boss => barrel_near(run, mi, ppos, range).map(Target::Object),
+            if d <= range && run.monsters[mi].ai.cd <= 0.0 && run.monsters[mi].cds.ready(main.id) {
+                let at = match ab::def(main.id).shape {
+                    Shape::Projectile if !run.monsters[mi].is_boss => barrel_near(run, mi, ppos, main.range).map(Target::Object),
                     _ => None,
                 };
                 let aim = match at {
                     Some(Target::Object(id)) => run.objects.iter().find(|o| o.id == id).map_or(aim, |o| pos.angle_to(o.pos)),
                     _ => aim,
                 };
-                run.monsters[mi].ai.windup = Some(Windup { t: windup, aim, alt: false, at });
+                run.monsters[mi].ai.windup = Some(Windup { t: main.windup, aim, alt: false, at });
                 set_anim(run, mi, Anim::Windup);
                 return;
             }
@@ -435,70 +454,31 @@ fn barrel_near(run: &Run, mi: usize, hero: Vec2, range: f64) -> Option<u32> {
 /// Minimum pause (s) between a monster's two different attacks.
 const ATTACK_GAP: f64 = 0.4;
 
-/// `alt`: the second attack, which has its own cooldown. Either attack also
-/// keeps the other one back for a moment, so they never land at once.
-pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, attack: AttackStyle, alt: bool, at: Option<Vec2>) {
-    let pos = run.monsters[mi].pos;
-    let ppos = run.creature_pos(foe);
-    let aim = pos.angle_to(at.unwrap_or(ppos));
-    run.monsters[mi].aim = aim;
-    let set_cd = |run: &mut Run, cd: f64| {
-        let ai = &mut run.monsters[mi].ai;
-        if alt {
-            ai.alt_cd = cd;
-            ai.cd = ai.cd.max(ATTACK_GAP);
-        } else {
-            ai.cd = cd;
-            ai.alt_cd = ai.alt_cd.max(ATTACK_GAP);
-        }
-    };
-    let on_hit = run.monsters[mi].etype.and_then(|t| enemies::on_hit(t, alt));
-    // Melee and slams; a shot takes its owner's power in `spawn_monster_projectile`.
-    let power = run.monsters[mi].etype.map_or(0, |t| run.monsters[mi].attrs.get(enemies::governing(t, None)));
-    let me = run.monsters[mi].id;
-    let with = |d: Damage| match on_hit {
-        Some(h) => d.with_power(power).with_effect(h).by(me, What::Attack),
-        None => d.with_power(power).by(me, What::Attack),
-    };
-    match attack {
-        AttackStyle::Melee { range, damage, cooldown, knock, .. } => {
-            set_cd(run, cooldown);
-            set_anim(run, mi, Anim::Melee);
-            let reach = range + run.creature_radius(foe) + run.monsters[mi].radius + 4.0;
-            if pos.dist(ppos) <= reach {
-                let dmg = with(Damage::new(damage, run.monsters[mi].melee));
-                run.hurt_creature(foe, dmg);
-                let str = run.push_str(mi);
-                run.knock_creature(foe, pos, aim, knock, str);
-            }
-        }
-        AttackStyle::Ranged { projectile, speed, damage, cooldown, range, pierce, .. } => {
-            let cd = cooldown * run.rng.gen_range(0.85..1.15);
-            set_cd(run, cd);
-            set_anim(run, mi, Anim::Shoot);
-            let id = run.monsters[mi].id;
-            let dir = Vec2::from_angle(aim);
-            spawn_monster_projectile(run, id, projectile, pos + dir * 5.0, dir, speed, damage, range * 1.3 / speed, 0.0, 0, 0.0);
-            if let Some(h) = on_hit {
-                run.projectiles.last_mut().unwrap().damage.on_hit = Some(h); // the shot just spawned
-            }
-            if pierce {
-                run.projectiles.last_mut().unwrap().pierce = Pierce::Overkill { left: u8::MAX }; // a weapon shot
-            }
-        }
-        AttackStyle::Slam { radius, damage, cooldown, knock, .. } => {
-            set_cd(run, cooldown);
-            set_anim(run, mi, Anim::Idle);
-            run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: radius as f32, k: 5 }, Some(pos));
-            let dmg = with(Damage::new(damage, run.monsters[mi].melee));
-            crate::run::objects::hurt_objects_in(run, pos, radius, None, dmg);
-            let str = run.push_str(mi);
-            for c in run.foes_in(pos, radius, None) {
-                let away = pos.angle_to(run.creature_pos(c));
-                run.hurt_creature(c, dmg);
-                run.knock_creature(c, pos, away, knock, str);
-            }
-        }
+/// A swing starts this far (px) inside its reach, so it still lands on a foe who steps back during the wind-up.
+const SWING_SLACK: f64 = 4.0;
+
+/// The AI waits up to this share of a shot's cooldown on top of it, so a group never fires in step and
+/// the AI is never faster than the ability.
+const SHOT_PACE_JITTER: f64 = 0.3;
+
+/// Casts the enemy's main ability, or its alt one (`alt`) with its own cooldown, at the foe (or at `at`,
+/// a barrel). Either one also keeps the other back for a moment, so they never land at once.
+pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool, at: Option<Vec2>) {
+    let etype = run.monsters[mi].etype.expect("only enemies attack through the AI");
+    let id = enemies::def(etype).abilities[alt as usize];
+    let target = at.unwrap_or_else(|| run.creature_pos(foe));
+    if !monster_cast(run, mi, id, target) {
+        return;
+    }
+    let a = *run.monsters[mi].kit.get(id).expect("monster_cast found it");
+    let pace = if ab::def(id).shape == Shape::Projectile { a.cooldown * (1.0 + run.rng.gen_range(0.0..SHOT_PACE_JITTER)) } else { a.cooldown };
+    let ai = &mut run.monsters[mi].ai;
+    if alt {
+        ai.alt_cd = pace;
+        ai.cd = ai.cd.max(ATTACK_GAP);
+    } else {
+        ai.cd = pace;
+        ai.alt_cd = ai.alt_cd.max(ATTACK_GAP);
     }
 }
 
@@ -612,6 +592,7 @@ fn astar_clear(map: &Map, from: Vec2, to: Vec2, max_nodes: usize, mover: Mover, 
 pub(crate) mod tests {
     use super::super::tests::{test_run, test_run_seed};
     use super::*;
+    use crate::defs::damage::Damage;
     use crate::defs::kinds::EntityKind;
     use crate::dungeon::Tile;
     use crate::protocol::{BossId, ClassId};
@@ -657,7 +638,7 @@ pub(crate) mod tests {
             let ppos = run.players[0].pos();
             let id = run.spawn_enemy(EnemyType::Chort, ppos - Vec2::new(12.0, 0.0), None);
             let mi = run.monster_idx(id).unwrap();
-            perform_attack(&mut run, mi, Creature::Player(0), enemies::def(EnemyType::Chort).attack, false, None);
+            perform_attack(&mut run, mi, Creature::Player(0), false, None);
             hp - run.players[0].hp
         };
         assert!((hit(Resistances::NONE) - 9.0).abs() < 1e-9);
@@ -697,9 +678,11 @@ pub(crate) mod tests {
             let ppos = run.players[0].pos();
             let id = run.spawn_enemy(t, ppos - Vec2::new(12.0, 0.0), None);
             let mi = run.monster_idx(id).unwrap();
-            let d = enemies::def(t);
-            let attack = if alt { d.alt.unwrap() } else { d.attack };
-            perform_attack(&mut run, mi, Creature::Player(0), attack, alt, None);
+            perform_attack(&mut run, mi, Creature::Player(0), alt, None);
+            // A slam lands after its wind-up.
+            while run.monsters[mi].slam.is_some() {
+                tick_monster_slam(&mut run, mi, crate::run::DT);
+            }
             run.players[0].mv.knocked()
         };
         assert!(pushes(EnemyType::OrcWarrior, false));
@@ -841,31 +824,40 @@ pub(crate) mod tests {
         (run, mi)
     }
 
+    /// The radius of the ogre's Ground Slam.
+    pub(crate) fn slam_radius() -> f64 {
+        crate::sheet::enemy_kit(EnemyType::Ogre).get(ab::AbilityId::GroundSlam).unwrap().radius
+    }
+
     #[test]
     fn ogre_slams_a_crowd_and_clubs_a_lone_hero() {
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0), Vec2::new(-16.0, 8.0)]);
         tick_monster(&mut run, mi, 1.0 / 60.0);
-        assert_eq!(run.monsters[mi].ai.windup.map(|w| w.alt), Some(true), "two heroes near: slam");
+        assert!(run.monsters[mi].slam.is_some() && run.monsters[mi].ai.windup.is_none(), "two heroes near: slam (its wind-up runs in the cast)");
         assert_eq!(run.monsters[mi].anim, Anim::Slam, "the slam has its own telegraph");
 
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0)]);
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert_eq!(run.monsters[mi].ai.windup.map(|w| w.alt), Some(false), "one hero, club ready: club");
+        assert!(run.monsters[mi].slam.is_none());
 
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0)]);
         run.monsters[mi].ai.cd = 1.0;
         tick_monster(&mut run, mi, 1.0 / 60.0);
-        assert_eq!(run.monsters[mi].ai.windup.map(|w| w.alt), Some(true), "one hero while the club recovers: slam");
+        assert!(run.monsters[mi].slam.is_some(), "one hero while the club recovers: slam");
     }
 
     #[test]
     fn ogre_slam_hits_and_pushes_every_hero_in_reach_away_from_it() {
-        let r = enemies::OGRE_SLAM_RADIUS;
+        let r = slam_radius();
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0), Vec2::new(0.0, -(r - 2.0)), Vec2::new(-(r + 6.0), 0.0)]);
         let hp: Vec<f64> = run.players.iter().map(|p| p.hp).collect();
-        let slam = enemies::def(EnemyType::Ogre).alt.unwrap();
         run.events.clear();
-        perform_attack(&mut run, mi, Creature::Player(0), slam, true, None);
+        perform_attack(&mut run, mi, Creature::Player(0), true, None);
+        assert!(run.players.iter().zip(&hp).all(|(p, &h)| p.hp == h), "nothing lands during the wind-up");
+        while run.monsters[mi].slam.is_some() {
+            tick_monster_slam(&mut run, mi, crate::run::DT);
+        }
         let p = &run.players;
         assert!(p[0].hp < hp[0] && p[0].mv.knock_vx > 0.0 && p[0].mv.knock_vy.abs() < 1e-9, "east hero pushed east");
         assert!(p[1].hp < hp[1] && p[1].mv.knock_vy < 0.0 && p[1].mv.knock_vx.abs() < 1e-9, "north hero pushed north");
@@ -877,14 +869,16 @@ pub(crate) mod tests {
     #[test]
     fn ogre_slam_lights_barrels_in_its_radius() {
         use crate::run::objects::{Barrel, ObjState};
-        let r = enemies::OGRE_SLAM_RADIUS;
+        let r = slam_radius();
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0)]);
         run.objects.retain(|o| o.kind != EntityKind::Barrel);
         let at = run.monsters[mi].pos;
         run.spawn_object(EntityKind::Barrel, at + Vec2::new(0.0, r), ObjState::Barrel(Barrel::new()));
         run.spawn_object(EntityKind::Barrel, at + Vec2::new(0.0, -(r + 10.0)), ObjState::Barrel(Barrel::new()));
-        let slam = enemies::def(EnemyType::Ogre).alt.unwrap();
-        perform_attack(&mut run, mi, Creature::Player(0), slam, true, None);
+        perform_attack(&mut run, mi, Creature::Player(0), true, None);
+        while run.monsters[mi].slam.is_some() {
+            tick_monster_slam(&mut run, mi, crate::run::DT);
+        }
         let lit: Vec<bool> = run.objects.iter().filter(|o| o.kind == EntityKind::Barrel).map(|o| matches!(&o.state, ObjState::Barrel(b) if b.fuse.is_some())).collect();
         assert_eq!(lit, vec![true, false], "the one in reach is lit, the one outside is not");
     }
@@ -907,7 +901,7 @@ pub(crate) mod tests {
         assert_eq!(run.projectiles.len(), 1);
         assert_eq!(run.projectiles[0].kind, EntityKind::FireBolt);
         let ai = &run.monsters[mi].ai;
-        assert!(ai.alt_cd > 2.0, "bolt cooldown started");
+        assert!(ai.alt_cd >= 2.0, "bolt cooldown started");
         assert!(ai.cd < 1.0, "claw cooldown untouched (only the short gap)");
     }
 

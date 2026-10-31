@@ -1226,7 +1226,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "ChortClaws": {
-    "base": "9 damage · every 1 s · arc 1.6 · push 14",
+    "base": "9 damage · every 1 s · arc 1.6 · push 14 · wind-up 0.3 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1262,7 +1262,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "Cleaver": {
-    "base": "14 damage · every 1.2 s · arc 1.8 · push 20",
+    "base": "14 damage · every 1.2 s · arc 1.8 · push 20 · wind-up 0.35 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1371,7 +1371,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "GoblinBow": {
-    "base": "6 damage · every 1.4 s · range 140",
+    "base": "6 damage · every 1.4 s · range 140 · wind-up 0.3 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1450,7 +1450,7 @@ export const ITEMS = {
     "sprite": "weapon_bow"
   },
   "ImpClaws": {
-    "base": "6 damage · every 0.9 s · arc 1.6",
+    "base": "6 damage · every 0.9 s · arc 1.6 · wind-up 0.25 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1549,7 +1549,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "MimicBite": {
-    "base": "13 damage · every 1 s · arc 1",
+    "base": "13 damage · every 1 s · arc 1 · wind-up 0.25 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1567,7 +1567,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "NecromancerStaff": {
-    "base": "5 damage · every 1.2 s · arc 1.6",
+    "base": "5 damage · every 1.2 s · arc 1.6 · wind-up 0.25 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1585,7 +1585,7 @@ export const ITEMS = {
     "sprite": "weapon_green_magic_staff"
   },
   "OrcBow": {
-    "base": "10 damage · every 1.7 s · range 150",
+    "base": "10 damage · every 1.7 s · range 150 · wind-up 0.35 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1725,7 +1725,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "RustySword": {
-    "base": "9 damage · every 1 s · arc 1.6",
+    "base": "9 damage · every 1 s · arc 1.6 · wind-up 0.3 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1809,7 +1809,7 @@ export const ITEMS = {
     "sprite": ""
   },
   "SkeletonLongbow": {
-    "base": "7 damage · every 1.6 s · range 150",
+    "base": "7 damage · every 1.6 s · range 150 · wind-up 0.35 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1827,7 +1827,7 @@ export const ITEMS = {
     "sprite": "weapon_bow_2"
   },
   "SpikedClub": {
-    "base": "18 damage · every 1.6 s · arc 2 · push 28",
+    "base": "18 damage · every 1.6 s · arc 2 · push 28 · wind-up 0.5 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1867,7 +1867,7 @@ export const ITEMS = {
     "sprite": "weapon_green_magic_staff"
   },
   "SummonerStaff": {
-    "base": "5 damage · every 1.2 s · arc 1.6",
+    "base": "5 damage · every 1.2 s · arc 1.6 · wind-up 0.25 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1921,7 +1921,7 @@ export const ITEMS = {
     "sprite": "weapon_throwing_axe"
   },
   "UnarmedStrike": {
-    "base": "3 damage · every 1 s · arc 1.4",
+    "base": "3 damage · every 1 s · arc 1.4 · wind-up 0.25 s",
     "classes": [
       "Wizard",
       "Paladin",
@@ -1959,6 +1959,15 @@ export const ITEMS = {
 } as const;
 
 export const ABILITY_INFO = {
+  "Bite": {
+    "category": "WeaponAttack",
+    "req": [
+      "a weapon of kind Bite"
+    ],
+    "text": "A strike with a bite.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
   "ChainSpark": {
     "category": "Spell",
     "req": [
@@ -1991,6 +2000,13 @@ export const ABILITY_INFO = {
     ],
     "text": "Vines grow where you aim and root the enemies in them.",
     "tint": null,
+    "uses": "Nothing"
+  },
+  "FireBolt": {
+    "category": "Innate",
+    "req": [],
+    "text": "A bolt of fire.",
+    "tint": "Heat",
     "uses": "Nothing"
   },
   "Fireball": {
@@ -2096,6 +2112,13 @@ export const ABILITY_INFO = {
     ],
     "text": "Clears bad effects from you and the allies close to you and wards you against curses for a moment.",
     "tint": null,
+    "uses": "Nothing"
+  },
+  "ShadowBolt": {
+    "category": "Spell",
+    "req": [],
+    "text": "A slow bolt of shadow.",
+    "tint": "Magical",
     "uses": "Nothing"
   },
   "Shoot": {

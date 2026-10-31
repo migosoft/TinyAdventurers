@@ -422,13 +422,13 @@ fn the_logged_damage_is_the_damage_dealt() {
     let at = run.players[0].pos();
     let id = run.spawn_enemy(EnemyType::OrcWarrior, at - crate::math::Vec2::new(16.0, 0.0), None);
     let gi = run.monster_idx(id).unwrap();
-    let attack = enemies::def(EnemyType::OrcWarrior).attack;
     let _ = take(&mut run);
     let hp = run.players[0].hp;
-    crate::run::ai::perform_attack(&mut run, gi, Creature::Player(0), attack, false, None);
+    crate::run::ai::perform_attack(&mut run, gi, Creature::Player(0), false, None);
     let rec = only_rec(&mut run);
     assert_eq!(rec.dealt, Some(hp - run.players[0].hp), "bit-equal to the HP lost");
     assert!(rec.head.contains(&n1(rec.dealt.unwrap())), "{}", rec.head);
+    assert!(rec.head.contains(" ▸ Strike ▸ "), "the line names the ability, not \"attack\": {}", rec.head);
     assert!(!rec.details.iter().any(|d| d.starts_with("armor ")), "{:?}", rec.details);
     assert_eq!(rec.unseen.as_ref().map(|u| u.viewer), Some(run.players[0].id));
 }
@@ -1543,8 +1543,7 @@ fn an_arrow_from_a_dead_archer_does_not_name_it() {
     let (tx, ty) = Map::tile_of(run.players[0].pos());
     let id = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 8, ty), 50.0);
     let (gi, tag) = (run.monster_idx(id).unwrap(), tag_of(&run, id));
-    let attack = enemies::def(EnemyType::GoblinArcher).attack;
-    crate::run::ai::perform_attack(&mut run, gi, Creature::Player(0), attack, false, None);
+    crate::run::ai::perform_attack(&mut run, gi, Creature::Player(0), false, None);
     assert!(sent_to_all(&mut run)[0].ents.contains(&id), "hero 0 sees the archer");
     // The archer dies while its arrow flies (no line for that: it is made dead by hand) and is removed by a step.
     run.monsters[gi].alive = false;
@@ -1637,7 +1636,7 @@ fn haste_and_purify_credit_the_caster_on_every_target() {
     let mut purify = run.players[0].sheet.secondary;
     purify.id = AbilityId::Purify;
     purify.effect = Some(crate::defs::effects::OnHit { kind: EffectKind::Warded, secs: 4.0, magical: true, power: 0, look: EffectLook::Plain });
-    crate::run::abilities::cast(&mut run, Creature::Player(0), &purify, 1);
+    crate::run::abilities::cast_for_tests(&mut run, Creature::Player(0), &purify, 1);
     let lines = leads(&mut run, "Purify");
     assert_eq!(lines.len(), 2, "one line per hero: {lines:?}");
     assert_eq!(lines[0], lines[1], "both name the caster");

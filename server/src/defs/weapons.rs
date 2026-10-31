@@ -97,6 +97,8 @@ pub struct RangedStats {
     pub projectile_speed: f64,
     pub radius: f64,
     pub projectile: EntityKind,
+    /// The seconds the wielder winds up before the shot leaves, on top of the ability's own.
+    pub windup: f64,
     pub split: DamageSplit,
     pub at: At,
 }
@@ -113,7 +115,7 @@ pub struct ResolvedWeapon {
     pub push: f64,
     /// Melee: how far it reaches beyond the wielder's body (px); not scaled.
     pub reach: f64,
-    /// Melee: the wind-up (s) before the blow lands; not scaled.
+    /// The wind-up (s) before the blow lands or the shot leaves; not scaled.
     pub windup: f64,
     pub range: f64,
     pub projectile_speed: f64,
@@ -177,7 +179,7 @@ pub fn resolve_ranged(kind: WeaponKind, s: &RangedStats, attrs: &Attributes) -> 
         arc: 0.0,
         push: 0.0,
         reach: 0.0,
-        windup: 0.0,
+        windup: s.windup,
         range: Scaled { value: s.range, attr: Attr::Str, pct: STR_RANGE, at: s.at.str }.get(attrs),
         projectile_speed: Scaled { value: s.projectile_speed, attr: Attr::Str, pct: STR_RANGE, at: s.at.str }.get(attrs),
         radius: s.radius,
@@ -262,6 +264,7 @@ mod tests {
             projectile_speed: 290.0,
             radius: 5.0,
             projectile: EntityKind::Arrow,
+            windup: 0.0,
             split: DamageSplit::physical(),
             at: At { str: 10, dex: 15 },
         };

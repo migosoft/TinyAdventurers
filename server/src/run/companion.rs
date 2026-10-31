@@ -58,9 +58,13 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         sight: prof.sight,
         alive: true,
         aim: 0.0,
+        aim_dist: 0.0,
         anim: Anim::Idle,
         anim_start: run.time,
         hurt_t: 0.0,
+        kit: Default::default(),
+        cds: Default::default(),
+        slam: None,
         wolf_bit: 0.0,
         ai: Ai::new(spot),
         owner: None,
@@ -805,16 +809,17 @@ mod tests {
 
     #[test]
     fn area_attacks_hit_the_wolf() {
-        use crate::defs::enemies::{self, EnemyType};
         use crate::run::objects::{explode_barrel, Barrel, ObjState};
         // The ogre's slam.
         let (mut run, oi) = crate::run::ai::tests::ogre_among(&[Vec2::new(200.0, 0.0)]);
         let id = spawn_wolf(&mut run, 0);
         let wi = wolf_idx(&run, id);
         run.players[0].debug = true;
-        run.monsters[wi].pos = run.monsters[oi].pos + Vec2::new(enemies::OGRE_SLAM_RADIUS - 4.0, 0.0);
-        let slam = enemies::def(EnemyType::Ogre).alt.unwrap();
-        crate::run::ai::perform_attack(&mut run, oi, Creature::Monster(wi), slam, true, None);
+        run.monsters[wi].pos = run.monsters[oi].pos + Vec2::new(crate::run::ai::tests::slam_radius() - 4.0, 0.0);
+        crate::run::ai::perform_attack(&mut run, oi, Creature::Monster(wi), true, None);
+        while run.monsters[oi].slam.is_some() {
+            crate::run::abilities::tick_monster_slam(&mut run, oi, crate::run::DT);
+        }
         let w = &run.monsters[wolf_idx(&run, id)];
         assert!(w.hp < 80.0, "the slam hurt the wolf");
         assert!(w.knock.x > 0.0, "and pushed it away from the ogre");

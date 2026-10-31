@@ -156,6 +156,14 @@ pub struct Body {
     pub radius: f64,
 }
 
+/// Whether weapon `w` meets the weapon-kind requirement of `d` (true if it has none).
+fn meets_weapon_kind(d: &AbilityDef, w: &ResolvedWeapon) -> bool {
+    d.req.iter().all(|r| match r {
+        Requirement::WeaponKind(kinds) => kinds.contains(&w.kind),
+        Requirement::Attr(..) => true,
+    })
+}
+
 /// The weapon an ability uses: the first melee (or, for a ranged ability, ranged) one that meets
 /// the def's weapon-kind requirement, else the first of that sort (a pool card shows the numbers
 /// even when the requirement fails).
@@ -163,11 +171,7 @@ fn weapon_for<'a>(d: &AbilityDef, weapons: &'a [ResolvedWeapon]) -> Option<&'a R
     let ranged = d.uses == Uses::Ranged;
     let mut sort = weapons.iter().filter(|w| w.projectile.is_some() == ranged);
     let first = sort.clone().next();
-    let meets = |w: &&ResolvedWeapon| d.req.iter().all(|r| match r {
-        Requirement::WeaponKind(kinds) => kinds.contains(&w.kind),
-        Requirement::Attr(..) => true,
-    });
-    sort.find(meets).or(first)
+    sort.find(|w| meets_weapon_kind(d, w)).or(first)
 }
 
 /// One ability for any caster with `attrs`, its `weapons` and its `body`. `None` if it uses a
@@ -239,6 +243,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
                 split: with_share(w.split, mult.share),
                 on_hit: w.on_hit,
                 power: w.power,
+                windup: own.windup + w.windup,
                 ..blank
             }
         }
@@ -266,6 +271,42 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
             }
         }
     })
+}
+
+/// The abilities of a monster, resolved at spawn from its Attributes, weapons and body.
+#[derive(Debug, Clone, Default)]
+pub struct Kit(Vec<ResolvedAbility>);
+
+impl Kit {
+    pub fn get(&self, id: AbilityId) -> Option<&ResolvedAbility> {
+        self.0.iter().find(|a| a.id == id)
+    }
+}
+
+/// The kit of a monster with `attrs`, wielding `weapons` (in the order the abilities look for them:
+/// the first melee one, the first ranged one) and standing in `body`. A monster whose ability has no
+/// weapon that meets its requirement, or which can't be resolved, is a data bug: this panics.
+pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], body: Body) -> Kit {
+    let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&id| arm(id, attrs, &[], None, 0)).collect();
+    let kit = ids
+        .iter()
+        .map(|&id| {
+            let d = ab::def(id);
+            if d.uses != Uses::Nothing {
+                let ranged = d.uses == Uses::Ranged;
+                let met = armed.iter().any(|w| w.projectile.is_some() == ranged && meets_weapon_kind(&d, w));
+                assert!(met, "{id:?}: none of the weapons {weapons:?} meets its requirement");
+            }
+            resolve_ability(&d, attrs, &armed, body).unwrap_or_else(|| panic!("{id:?} cannot be resolved from {weapons:?}"))
+        })
+        .collect();
+    Kit(kit)
+}
+
+/// The kit of enemy type `t`, from its stat block.
+pub fn enemy_kit(t: EnemyType) -> Kit {
+    let d = enemies::def(t);
+    monster_kit(d.abilities, &d.attrs, d.weapons, Body { radius: d.radius })
 }
 
 /// A weapon item for one wielder, with the shares and on-hit its own properties gave it.
@@ -763,7 +804,7 @@ mod tests {
         for id in ItemId::ALL {
             if let ItemBase::Melee(_, m) = items::def(id).base {
                 if items::hero_can_hold(&items::def(id)) {
-                    assert_eq!((m.reach, m.windup), (classes::HERO_REACH, 0.0), "{id:?}");
+                    assert_eq!(m.reach, classes::HERO_REACH, "{id:?}");
                 }
             }
         }
