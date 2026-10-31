@@ -42,13 +42,14 @@ pub struct Dragon {
     flight_t: f64,
     flight: Flight,
     action: Option<(Action, f64)>,
-    /// The opening cooldowns are set (on the first tick: the kit's cooldowns are the run's).
-    opened: bool,
+    /// Seconds before the script may first choose each ability: when it opens, not how an ability works. It
+    /// only gates the script's decision; the kit's cooldowns (`cds`) are the casts' alone.
+    opening: Vec<(AbilityId, f64)>,
 }
 
 impl Default for Dragon {
     fn default() -> Self {
-        Dragon { flight_t: DRAGON_FLIGHT_EVERY.0, flight: Flight::Ground, action: None, opened: false }
+        Dragon { flight_t: DRAGON_FLIGHT_EVERY.0, flight: Flight::Ground, action: None, opening: OPENING.to_vec() }
     }
 }
 
@@ -72,9 +73,6 @@ fn kit(run: &Run, bi: usize, id: AbilityId) -> crate::sheet::ResolvedAbility {
     *run.monsters[bi].kit.get(id).expect("the dragon's kit has it")
 }
 
-fn ready(run: &Run, bi: usize, id: AbilityId) -> bool {
-    run.monsters[bi].cds.ready(id)
-}
 
 /// A point straight ahead of it: a cast "at" it keeps the aim.
 fn ahead(run: &Run, bi: usize) -> Vec2 {
@@ -92,6 +90,11 @@ fn strike(run: &mut Run, bi: usize, id: AbilityId) {
 }
 
 impl Dragon {
+    /// Is `id` off its opening delay and off cooldown?
+    fn ready(&self, run: &Run, bi: usize, id: AbilityId) -> bool {
+        run.monsters[bi].cds.ready(id) && self.opening.iter().all(|&(i, left)| i != id || left <= 0.0)
+    }
+
     /// Starts an action whose animation (wind-up first) is `anim`.
     fn start(&mut self, run: &mut Run, bi: usize, action: Action, t: f64, anim: Anim) {
         self.action = Some((action, t));
@@ -148,11 +151,8 @@ impl Dragon {
 impl BossBehaviour for Dragon {
     fn tick(&mut self, run: &mut Run, dt: f64) {
         let Some(bi) = boss_idx(run) else { return };
-        if !self.opened {
-            self.opened = true;
-            for (id, secs) in OPENING {
-                run.monsters[bi].cds.start(id, secs);
-            }
+        for (_, left) in &mut self.opening {
+            *left -= dt;
         }
         if self.fly(run, bi, dt) {
             return;
@@ -162,7 +162,11 @@ impl BossBehaviour for Dragon {
         let air = self.flight == Flight::Air;
 
         if let Some((action, t)) = self.action {
-            let t = t - dt;
+            let mut t = t - dt;
+            // A breath whose channel ended early (the dragon was put to sleep) ends with it.
+            if action == Action::Breath && run.monsters[bi].channel.is_none() {
+                t = 0.0;
+            }
             if t > 0.0 {
                 self.action = Some((action, t));
                 return;
@@ -209,13 +213,13 @@ impl BossBehaviour for Dragon {
             .players
             .iter()
             .any(|p| p.alive && p.pos().dist(pos) < tail.range + PLAYER_RADIUS - TAIL_SLACK && angle_diff(pos.angle_to(p.pos()), aim).abs() > 2.0);
-        if !air && someone_behind && ready(run, bi, AbilityId::TailWhip) {
+        if !air && someone_behind && self.ready(run, bi, AbilityId::TailWhip) {
             self.start(run, bi, Action::Tail, tail.windup, Anim::Tail);
             return;
         }
         run.monsters[bi].aim = to_target;
         let (breath, bite, claw) = (kit(run, bi, AbilityId::FireBreath), kit(run, bi, AbilityId::Bite), kit(run, bi, AbilityId::Strike));
-        if ready(run, bi, AbilityId::FireBreath) && dist < breath.range {
+        if self.ready(run, bi, AbilityId::FireBreath) && dist < breath.range {
             self.start(run, bi, Action::BreathWindup, breath.windup, Anim::Breath);
         } else if air {
             // Flying: hover after the party.
@@ -226,11 +230,11 @@ impl BossBehaviour for Dragon {
             } else {
                 set_anim(run, bi, Anim::Idle);
             }
-        } else if ready(run, bi, AbilityId::Bite) && dist <= bite.range + PLAYER_RADIUS - STRIKE_SLACK {
+        } else if self.ready(run, bi, AbilityId::Bite) && dist <= bite.range + PLAYER_RADIUS - STRIKE_SLACK {
             self.start(run, bi, Action::Bite, bite.windup, Anim::Bite);
-        } else if ready(run, bi, AbilityId::Strike) && dist <= claw.range + PLAYER_RADIUS - STRIKE_SLACK {
+        } else if self.ready(run, bi, AbilityId::Strike) && dist <= claw.range + PLAYER_RADIUS - STRIKE_SLACK {
             self.start(run, bi, Action::Claw, claw.windup, Anim::Melee);
-        } else if ready(run, bi, AbilityId::Fireball) {
+        } else if self.ready(run, bi, AbilityId::Fireball) {
             self.start(run, bi, Action::Fireball, FIREBALL_POSE, Anim::Windup);
         } else if dist > 60.0 {
             let speed = run.monsters[bi].speed;
@@ -270,7 +274,7 @@ mod tests {
                 run.monsters[bi].cds.start(id, 99.0);
             }
         }
-        let d = Dragon { flight_t: 99.0, opened: true, ..Dragon::default() };
+        let d = Dragon { flight_t: 99.0, opening: Vec::new(), ..Dragon::default() };
         (run, d, bi)
     }
 
@@ -327,6 +331,22 @@ mod tests {
         let at = ahead(&run, bi);
         assert!(monster_cast(&mut run, bi, AbilityId::Bite, at));
         assert!(run.players[0].hp < hp[0] && run.players[1].hp == hp[1], "reaches 46, not 47");
+    }
+
+    #[test]
+    fn it_waits_its_opening_delay_without_touching_the_kits_cooldowns() {
+        let (mut run, _, bi) = dragon_with(&[Vec2::new(30.0, 0.0)]);
+        let all = [AbilityId::Strike, AbilityId::Bite, AbilityId::TailWhip, AbilityId::FireBreath, AbilityId::Fireball];
+        for id in all {
+            run.monsters[bi].cds.tick(100.0);
+            assert!(run.monsters[bi].cds.ready(id), "{id:?}: the kit's cooldowns start empty");
+        }
+        let mut d = Dragon { flight_t: 99.0, ..Dragon::default() };
+        ticks(&mut run, &mut d, 1.4);
+        assert!(d.action.is_none(), "nothing before the first opening delay");
+        assert!(all.iter().all(|&id| run.monsters[bi].cds.ready(id)), "the script left the cooldowns alone");
+        ticks(&mut run, &mut d, 0.3);
+        assert_eq!(d.action.map(|(a, _)| a), Some(Action::Claw), "the claw opens at 1.5 s, the bite only at 2 s");
     }
 
     #[test]
