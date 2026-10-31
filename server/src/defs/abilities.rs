@@ -127,6 +127,14 @@ pub struct OwnStats {
     pub effect: Option<OwnEffect>,
     /// The governing Attribute's value at which `damage` is given.
     pub at: i32,
+    /// A push (px) it gives at least; a weapon's push counts too, the larger wins.
+    pub push: f64,
+    /// The wind-up (s) before it lands, on top of its weapon's.
+    pub windup: f64,
+    /// How many shots one cast makes; 0 means 1.
+    pub count: u8,
+    /// The angle (rad) between the outer two shots of a cast of several.
+    pub spread: f64,
 }
 
 /// How a weapon ability changes its weapon's numbers.
@@ -173,6 +181,9 @@ pub struct AbilityDef {
     pub weapon_mult: WeaponMult,
     /// The half-angle (rad) of the cone "from behind" its target in which it does more; 0 = none.
     pub behind: f64,
+    /// A swing aimed behind the caster (read from Task 8 on).
+    #[allow(dead_code)]
+    pub backward: bool,
     /// The classes whose own pool can hold it: the class start now, the tree in plan 4.
     pub classes: &'static [ClassId],
 }
@@ -217,7 +228,7 @@ pub const KNOCK_DECAY: f64 = 0.7788007830714049;
 pub const KNOCK_MIN_SPEED: f64 = 8.0;
 
 /// No own numbers: a weapon ability takes them all from its weapon.
-const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, split: None, effect: None, at: 0 };
+const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, split: None, effect: None, at: 0, push: 0.0, windup: 0.0, count: 0, spread: 0.0 };
 
 /// One sentence on what the ability does, for the character screens.
 #[allow(dead_code)] // read by the progression.ts export (a test) only
@@ -256,7 +267,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
     use ClassId as K;
     #[allow(clippy::too_many_arguments)]
     const fn own(damage: f64, cooldown: f64, range: f64, speed: f64, radius: f64, duration: f64, kind: Option<EntityKind>, at: i32) -> OwnStats {
-        OwnStats { damage, cooldown, range, speed, radius, duration, kind, split: None, effect: None, at }
+        OwnStats { damage, cooldown, range, speed, radius, duration, kind, split: None, effect: None, at, push: 0.0, windup: 0.0, count: 0, spread: 0.0 }
     }
     let base = |name: &'static str, slot, category, uses, ranged, shape, own, classes: &'static [ClassId]| AbilityDef {
         id,
@@ -270,6 +281,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         own,
         weapon_mult: WeaponMult::ONE,
         behind: 0.0,
+        backward: false,
         classes,
     };
     match id {
@@ -302,6 +314,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         Volley => AbilityDef {
             req: &[Requirement::Attr(Attr::Dex, 15), Requirement::WeaponKind(&[WeaponKind::Bow, WeaponKind::Longbow])],
             weapon_mult: WeaponMult { damage: 0.6, time: 1.4, ..WeaponMult::ONE },
+            own: OwnStats { count: VOLLEY_ARROWS, spread: VOLLEY_SPREAD, ..NO_OWN },
             ..base("Volley", Primary, C::WeaponAttack, Uses::Ranged, true, Shape::Projectile, NO_OWN, &[K::ElvenRanger])
         },
         Smite => AbilityDef {
@@ -337,7 +350,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         GroundSlam => AbilityDef {
             req: &[Requirement::Attr(Attr::Str, 17), Requirement::WeaponKind(&[WeaponKind::Hammer, WeaponKind::Club])],
             weapon_mult: WeaponMult { damage: 1.2, ..WeaponMult::ONE },
-            ..base("Ground Slam", Secondary, C::Technique, Uses::Melee, false, Shape::Ring, own(0.0, 6.0, 0.0, 0.0, 34.0, 0.0, None, 0), &[K::Barbarian])
+            ..base("Ground Slam", Secondary, C::Technique, Uses::Melee, false, Shape::Ring, OwnStats { push: SLAM_PUSH, windup: SLAM_WINDUP, ..own(0.0, 6.0, 0.0, 0.0, 34.0, 0.0, None, 0) }, &[K::Barbarian])
         },
         Haste => AbilityDef {
             req: &[Requirement::Attr(Attr::Int, 15), Requirement::Attr(Attr::Wil, 14)],

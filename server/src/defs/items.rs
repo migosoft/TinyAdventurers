@@ -253,7 +253,7 @@ macro_rules! plain {
 }
 
 fn melee(kind: WeaponKind, damage: f64, cooldown: f64, arc: f64, push: f64, split: DamageSplit, at: At) -> ItemBase {
-    ItemBase::Melee(kind, MeleeStats { damage, cooldown, arc, push, split, at })
+    ItemBase::Melee(kind, MeleeStats { damage, cooldown, arc, push, reach: super::classes::HERO_REACH, windup: 0.0, split, at })
 }
 
 #[allow(clippy::too_many_arguments)]

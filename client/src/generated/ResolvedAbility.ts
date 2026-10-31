@@ -26,6 +26,10 @@ projectile: number | null,
  */
 split: Record<string, number>, 
 /**
+ * The wind-up (s) before it lands: its own plus its weapon's.
+ */
+windup: number, 
+/**
  * The half-angle (rad) of the "from behind" cone; 0 = none.
  */
 behind: number, };

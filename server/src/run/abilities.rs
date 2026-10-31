@@ -187,9 +187,10 @@ fn use_projectile(run: &mut Run, pi: usize, a: &ResolvedAbility, shot: u16) -> A
             spawn_player_projectile(run, pi, kind_of(a.projectile), shot, Vec2::from_angle(aim), a.speed, w, a.radius, life, 0.0, None, crit, Pierce::Never);
         }
         AbilityId::Volley => {
-            let step = ab::VOLLEY_SPREAD / (ab::VOLLEY_ARROWS - 1) as f64;
-            for i in 0..ab::VOLLEY_ARROWS {
-                let angle = aim + (i as f64 - (ab::VOLLEY_ARROWS - 1) as f64 / 2.0) * step;
+            let own = ab::def(a.id).own;
+            let step = own.spread / (own.count - 1) as f64;
+            for i in 0..own.count {
+                let angle = aim + (i as f64 - (own.count - 1) as f64 / 2.0) * step;
                 spawn_player_projectile(run, pi, kind_of(a.projectile), ab::volley_shot(shot, i), Vec2::from_angle(angle), a.speed, w, a.radius, life, 0.0, None, crit, pierce);
             }
         }
@@ -278,7 +279,7 @@ fn use_ring(run: &mut Run, pi: usize, a: &ResolvedAbility, _shot: u16) -> Anim {
             }
         }
         AbilityId::GroundSlam => {
-            run.players[pi].slam = Some(ab::SLAM_WINDUP);
+            run.players[pi].slam = Some(a.windup);
         }
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle => {
             unreachable!("{:?} is not a ring", a.id)
@@ -319,14 +320,13 @@ pub fn land_slam(run: &mut Run, pi: usize) {
     let (pos, aim) = (run.players[pi].pos(), run.players[pi].aim);
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 5 }, Some(pos));
     let dmg = weapon_damage(run, pi, &a);
-    let push = a.push.max(ab::SLAM_PUSH);
     let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: true, skip_hiding: false, skip_dormant: false, skip_airborne: true };
     let log = super::rules_log::on(run);
     let (hit, skips) = targets::select(run, &rule, &[], log, |mi| run.monsters[mi].pos);
     super::rules_log::skipped(run, run.players[pi].id, What::Ability(a.id), &skips, None);
     for mi in hit {
         run.hurt_monster(mi, dmg, false, Some(pi));
-        run.knock_creature(Creature::Monster(mi), pos, aim, push, a.push_str);
+        run.knock_creature(Creature::Monster(mi), pos, aim, a.push, a.push_str);
     }
 }
 
@@ -2444,14 +2444,13 @@ mod tests {
     #[test]
     fn ground_slam_pushes_at_least_slam_push() {
         let mut run = ground_slam();
-        assert_eq!(run.players[0].sheet.secondary.push, 24.0, "the hammer's own push");
-        run.players[0].sheet.secondary.push = 0.0;
+        assert_eq!(run.players[0].sheet.secondary.push, ab::SLAM_PUSH, "resolved from the def's own push");
         let g = goblins(&mut run, &[20.0]);
         try_use(&mut run, 0, false, 1);
         for _ in 0..40 {
             run.step_player(0);
         }
-        assert!(run.monsters[g[0]].knock.len() > 0.0, "pushed by SLAM_PUSH even when the weapon does not push");
+        assert!(run.monsters[g[0]].knock.len() > 0.0, "pushed by the resolved push");
     }
 
     #[test]
