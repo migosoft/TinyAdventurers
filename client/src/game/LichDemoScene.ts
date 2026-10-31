@@ -107,7 +107,7 @@ export class LichDemoScene extends TerrainDemo {
     this.casterAt = this.px([3, 7]);
     this.caster = new EntityView(this, KIND.Lich, this.fx, 'Lich');
 
-    this.label(15.2, 13.3, `nova: radius ${NOVA} px, ${KNOCK} px base push at STR ${NOVA_STR}: pushed: ${Object.keys(WEIGHT).map((n) => `${n} ${novaPush(n)} px`).join(', ')}`);
+    this.label(15.2, 13.3, `nova STR ${NOVA_STR}: ${Object.keys(WEIGHT).map((n) => `${n} ${novaPush(n)}`).join(', ')} px`);
     const hero = (kind: number, name: string, speed: number, at: [number, number]): void => this.actor(kind, name, speed, [{ to: at }, { wait: 3 }]);
     hero(KIND.Wizard, 'Wizard', CLASSES.Wizard.speed, [24, 8]);
     hero(KIND.Paladin, 'Paladin', CLASSES.Paladin.speed, [21.5, 5.6]);
