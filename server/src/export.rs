@@ -480,6 +480,8 @@ fn export_fixtures() {
     for (x, y) in [(3, 3), (8, 8), (15, 12)] {
         lights.push(LightKind::Torch, Anchor::Tile(x, y), None);
     }
+    // Daylight on open floor south of the lava, where no other light reaches fully.
+    lights.push(LightKind::Daylight, Anchor::Tile(12, 16), None);
     for y in 0..map.h {
         for x in 0..map.w {
             if map.get(x, y) == Tile::Lava as u8 {

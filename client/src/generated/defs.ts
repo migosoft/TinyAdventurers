@@ -815,6 +815,7 @@ export const DMG_TYPE = {
 
 export const LIGHT_KIND = {
   "Blast": 4,
+  "Daylight": 7,
   "Fire": 2,
   "Holy": 5,
   "Lava": 1,
@@ -865,6 +866,12 @@ export const LIGHT: Record<number, { radius: number; colour: number; intensity: 
     "flicker": 0.05,
     "intensity": 0.6,
     "radius": 2
+  },
+  "7": {
+    "colour": 14477567,
+    "flicker": 0.0,
+    "intensity": 0.9,
+    "radius": 7
   }
 };
 
