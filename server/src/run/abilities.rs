@@ -586,6 +586,23 @@ pub fn monster_dash_secs(a: &ResolvedAbility, aim_dist: f64) -> f64 {
     }
 }
 
+/// Monster `mi` dashes with its kit's ability `id` to the point `to`, hurting nothing (the wolf's way back
+/// from a chasm, and over ground it cannot stand on). It crosses the distance at the ability's speed, but
+/// never farther than its range from the body's edge. `uses_it` starts the ability's kit cooldown, as
+/// `monster_use` does. False if the kit has no such ability.
+pub fn monster_dash_to(run: &mut Run, mi: usize, id: AbilityId, to: Vec2, uses_it: bool) -> bool {
+    let Some(a) = run.monsters[mi].kit.get(id).copied() else { return false };
+    let m = &mut run.monsters[mi];
+    let d = m.pos.dist(to);
+    let dir = if d > 1e-6 { (to - m.pos).norm() } else { Vec2::new(1.0, 0.0) };
+    let left = d.min(a.range + m.radius) / a.speed;
+    if uses_it {
+        m.cds.start(id, a.cooldown);
+    }
+    m.dash = Some(MonsterDash { id, dir, left, hit: Vec::new(), attack: false });
+    true
+}
+
 /// A dash that hurts what it touches (`dash_contact`, `tick_monster_dash`): Charge, Pounce, Swoop.
 fn use_dash(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Dash);

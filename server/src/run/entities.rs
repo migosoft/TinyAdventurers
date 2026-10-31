@@ -201,6 +201,9 @@ pub struct Ally {
     pub growl_to: Option<Vec2>,
     /// Seconds it does nothing (a growl).
     pub hold: f64,
+    /// Seconds before it may bite again after a pounce that hurt its prey (the script's own wait; the
+    /// kit's cooldowns are `cds`, started only by using the ability).
+    pub bite_hold: f64,
     pub prey: Option<u32>,
     pub following: bool,
     pub reach_t: f64,

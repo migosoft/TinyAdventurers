@@ -1,7 +1,7 @@
 //! The Elven Ranger's wolf: an ally monster. Spawn, behaviour and death here.
 
-use super::abilities::{monster_use, monster_dash_secs, tick_monster_dash};
-use super::entities::{Ai, Ally, Monster, MonsterDash, Windup, HISTORY_LEN};
+use super::abilities::{monster_use, monster_dash_to, monster_dash_secs, tick_monster_dash};
+use super::entities::{Ai, Ally, Monster, Windup, HISTORY_LEN};
 use super::{ai, perception, Run};
 use crate::collision::{line_of_sight, walk_line};
 use crate::defs::abilities::AbilityId;
@@ -91,6 +91,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
             growl_cd: 0.0,
             growl_to: None,
             hold: 0.0,
+            bite_hold: 0.0,
             prey: None,
             following: false,
             reach_t: 0.0,
@@ -176,6 +177,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         let a = m.ally.as_mut().expect("an ally");
         a.growl_cd -= dt;
         a.hold = (a.hold - dt).max(0.0);
+        a.bite_hold = (a.bite_hold - dt).max(0.0);
     }
     // Enemies that died may be growled at again as new ones: drop their ids.
     let mut growled = std::mem::take(&mut ally_mut(run, mi).growled);
@@ -188,7 +190,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             // A pounce that hurt its prey leaves the next bite a cooldown away.
             if !done.hit.is_empty() {
                 let bite = *run.monsters[mi].kit.get(AbilityId::Bite).expect("the wolf bites");
-                run.monsters[mi].cds.start(AbilityId::Bite, bite.cooldown);
+                ally_mut(run, mi).bite_hold = bite.cooldown;
             }
             if done.attack && run.layout.map.blocks_at(run.monsters[mi].pos, Mover::Enemy) {
                 overrun(run, mi, done.dir);
@@ -258,7 +260,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             }
         }
         if d <= reach {
-            if run.monsters[mi].cds.ready(AbilityId::Bite) {
+            if run.monsters[mi].cds.ready(AbilityId::Bite) && run.monsters[mi].ally.as_ref().is_some_and(|a| a.bite_hold <= 0.0) {
                 run.monsters[mi].ai.windup = Some(Windup { t: bite.windup, aim, alt: false, at: None });
                 set_anim(run, mi, Anim::Windup);
             } else {
@@ -355,8 +357,7 @@ fn overrun(run: &mut Run, mi: usize, dir: Vec2) {
         .filter(|&p| !map.blocks_at(p, Mover::Enemy));
     match land {
         Some(to) => {
-            let left = pos.dist(to) / pounce.speed;
-            run.monsters[mi].dash = Some(MonsterDash { id: AbilityId::Pounce, dir, left, hit: Vec::new(), attack: false });
+            monster_dash_to(run, mi, AbilityId::Pounce, to, false);
             set_anim(run, mi, Anim::Dash);
         }
         None => dash_back(run, mi),
@@ -405,15 +406,10 @@ fn reappear(run: &mut Run, mi: usize, ranger: Vec2) -> bool {
 /// safe tile it stood on. That uses the Pounce (its cooldown starts).
 pub fn dash_back(run: &mut Run, mi: usize) {
     let m = &mut run.monsters[mi];
-    let pounce = *m.kit.get(AbilityId::Pounce).expect("the wolf pounces");
-    let pos = m.pos;
     m.ai.windup = None;
     m.ai.path.clear();
-    m.cds.start(AbilityId::Pounce, pounce.cooldown);
     let to = m.ally.as_ref().expect("an ally").last_safe;
-    let d = pos.dist(to);
-    let dir = if d > 1e-6 { (to - pos).norm() } else { Vec2::new(1.0, 0.0) };
-    m.dash = Some(MonsterDash { id: AbilityId::Pounce, dir, left: d / pounce.speed, hit: Vec::new(), attack: false });
+    monster_dash_to(run, mi, AbilityId::Pounce, to, true);
     set_anim(run, mi, Anim::Dash);
 }
 
@@ -1127,6 +1123,27 @@ mod tests {
         assert!((second - 10.0).abs() < 1e-9 && t1 - t0 <= 90, "a bite of 10 followed within 1.5 s: {hits:?}");
         let pounces = hits.iter().filter(|(_, v)| (v - 20.0).abs() < 1e-9).count();
         assert_eq!(pounces, 1, "no second pounce hit within 5 s: {hits:?}");
+    }
+
+    #[test]
+    fn a_pounce_that_hurts_holds_the_bite_in_the_script_not_the_kit() {
+        let (mut run, id) = guard_run();
+        let r = run.players[0].pos();
+        set_wolf_pos(&mut run, id, r + Vec2::new(10.0, 0.0));
+        let orc = orc_at(&mut run, r - Vec2::new(40.0, 0.0));
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].ai.hold = 99.0;
+        run.monsters[oi].hp = 500.0;
+        for _ in 0..30 {
+            run.step();
+            if run.monsters[oi].hp < 500.0 {
+                break;
+            }
+        }
+        assert!(run.monsters[oi].hp < 500.0, "the pounce hurt the orc");
+        let w = wolf(&run, id);
+        assert!(w.cds.ready(AbilityId::Bite), "the kit's Bite cooldown is not started by the script");
+        assert!(w.ally.as_ref().unwrap().bite_hold > 0.0, "the script holds the next bite back");
     }
 
     #[test]
