@@ -30,7 +30,7 @@ type Room = { run_id: number; name: string; host: number; players: RoomPlayer[];
 export function debugChoices(cls: ClassId, slot: 'Primary' | 'Secondary'): AbilityId[] {
   return (Object.keys(ABILITIES) as AbilityId[]).filter((id) => {
     const a = ABILITIES[id];
-    return a.slot === slot && (a.classes as readonly ClassId[]).includes(cls);
+    return a.hero && a.slot === slot && (a.classes as readonly ClassId[]).includes(cls);
   });
 }
 

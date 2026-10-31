@@ -267,6 +267,7 @@ export const ABILITIES = {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Chain Spark",
     "ranged": true,
     "shape": "Projectile",
@@ -276,6 +277,7 @@ export const ABILITIES = {
     "classes": [
       "Barbarian"
     ],
+    "hero": true,
     "name": "Charge",
     "ranged": false,
     "shape": "Dash",
@@ -285,6 +287,7 @@ export const ABILITIES = {
     "classes": [
       "Paladin"
     ],
+    "hero": true,
     "name": "Consecrate",
     "ranged": false,
     "shape": "GroundArea",
@@ -294,6 +297,7 @@ export const ABILITIES = {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Entangle",
     "ranged": true,
     "shape": "GroundArea",
@@ -303,6 +307,7 @@ export const ABILITIES = {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Fireball",
     "ranged": true,
     "shape": "Blast",
@@ -312,6 +317,7 @@ export const ABILITIES = {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Flanking Thrust",
     "ranged": false,
     "shape": "Swing",
@@ -321,6 +327,7 @@ export const ABILITIES = {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Frost Nova",
     "ranged": false,
     "shape": "Ring",
@@ -330,6 +337,7 @@ export const ABILITIES = {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Frost Shard",
     "ranged": true,
     "shape": "Projectile",
@@ -339,6 +347,7 @@ export const ABILITIES = {
     "classes": [
       "Barbarian"
     ],
+    "hero": true,
     "name": "Ground Slam",
     "ranged": false,
     "shape": "Ring",
@@ -348,6 +357,7 @@ export const ABILITIES = {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Haste",
     "ranged": false,
     "shape": "SelfArea",
@@ -357,6 +367,7 @@ export const ABILITIES = {
     "classes": [
       "Paladin"
     ],
+    "hero": true,
     "name": "Holy Light",
     "ranged": false,
     "shape": "SelfArea",
@@ -366,6 +377,7 @@ export const ABILITIES = {
     "classes": [
       "Barbarian"
     ],
+    "hero": true,
     "name": "Hurl",
     "ranged": true,
     "shape": "Projectile",
@@ -375,6 +387,7 @@ export const ABILITIES = {
     "classes": [
       "Paladin"
     ],
+    "hero": true,
     "name": "Judgement",
     "ranged": true,
     "shape": "Projectile",
@@ -384,6 +397,7 @@ export const ABILITIES = {
     "classes": [
       "Wizard"
     ],
+    "hero": true,
     "name": "Magic Missile",
     "ranged": true,
     "shape": "Projectile",
@@ -393,6 +407,7 @@ export const ABILITIES = {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Poison Coat",
     "ranged": false,
     "shape": "Buff",
@@ -402,6 +417,7 @@ export const ABILITIES = {
     "classes": [
       "Paladin"
     ],
+    "hero": true,
     "name": "Purify",
     "ranged": false,
     "shape": "SelfArea",
@@ -411,6 +427,7 @@ export const ABILITIES = {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Shoot",
     "ranged": true,
     "shape": "Projectile",
@@ -420,6 +437,7 @@ export const ABILITIES = {
     "classes": [
       "Paladin"
     ],
+    "hero": true,
     "name": "Smite",
     "ranged": false,
     "shape": "Swing",
@@ -430,6 +448,7 @@ export const ABILITIES = {
       "Paladin",
       "Barbarian"
     ],
+    "hero": true,
     "name": "Strike",
     "ranged": false,
     "shape": "Swing",
@@ -439,6 +458,7 @@ export const ABILITIES = {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Summon Wolf",
     "ranged": false,
     "shape": "Summon",
@@ -448,6 +468,7 @@ export const ABILITIES = {
     "classes": [
       "ElvenRanger"
     ],
+    "hero": true,
     "name": "Volley",
     "ranged": true,
     "shape": "Projectile",
@@ -457,6 +478,7 @@ export const ABILITIES = {
     "classes": [
       "Barbarian"
     ],
+    "hero": true,
     "name": "War Cry",
     "ranged": false,
     "shape": "Ring",
@@ -466,6 +488,7 @@ export const ABILITIES = {
     "classes": [
       "Barbarian"
     ],
+    "hero": true,
     "name": "Whirl",
     "ranged": false,
     "shape": "Swing",

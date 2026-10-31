@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 super::enum_list::listed_enum! {
-    /// Every ability a hero can have: one primary (LMB) and one secondary (RMB).
+    /// Every ability any creature can have. `classes` empty: not for heroes.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
     pub enum AbilityId: u8 {
         MagicMissile = 0,
@@ -143,6 +143,19 @@ pub struct WeaponMult {
 
 impl WeaponMult {
     pub const ONE: WeaponMult = WeaponMult { damage: 1.0, time: 1.0, arc: None, share: None };
+}
+
+impl AbilityDef {
+    /// Heroes can have it (some class pool lists it); the rest belong to monsters.
+    pub fn for_heroes(&self) -> bool {
+        !self.classes.is_empty()
+    }
+}
+
+/// Whether two names are the same once case, spaces, hyphens and apostrophes are ignored.
+pub fn same_name(a: &str, b: &str) -> bool {
+    let norm = |s: &str| s.chars().filter(|c| !matches!(c, ' ' | '-' | '\'' | '\u{2019}')).flat_map(char::to_lowercase).collect::<String>();
+    norm(a) == norm(b)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -378,7 +391,6 @@ mod tests {
         for id in AbilityId::ALL {
             let d = def(id);
             assert_eq!(d.id, id);
-            assert!(!d.classes.is_empty(), "{id:?}");
             let magic = matches!(d.category, AbilityCategory::Spell | AbilityCategory::Innate);
             if magic {
                 assert_eq!(d.uses, Uses::Nothing, "{id:?}: a spell or innate ability uses nothing");
@@ -409,5 +421,21 @@ mod tests {
                 assert!(def(id).classes.contains(&c), "{c:?} {id:?}");
             }
         }
+    }
+
+    #[test]
+    fn ability_names_are_unique() {
+        for (i, a) in AbilityId::ALL.iter().enumerate() {
+            for b in &AbilityId::ALL[i + 1..] {
+                assert!(!same_name(def(*a).name, def(*b).name), "{a:?} and {b:?} share a name");
+            }
+        }
+    }
+
+    #[test]
+    fn same_name_ignores_case_spaces_hyphens_and_apostrophes() {
+        assert!(same_name("Frost Nova", "frost-nova"));
+        assert!(same_name("Ogre's Slam", "ogres slam"));
+        assert!(!same_name("Nova", "Frost Nova"));
     }
 }

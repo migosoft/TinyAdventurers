@@ -474,7 +474,7 @@ impl Lobby {
             build.loadout = l;
         }
         if c.debug_loadout {
-            build.own = AbilityId::ALL.iter().copied().filter(|a| abilities::def(*a).classes.contains(&ch.class)).collect();
+            build.own = AbilityId::ALL.iter().copied().filter(|a| abilities::def(*a).for_heroes() && abilities::def(*a).classes.contains(&ch.class)).collect();
             // Only the weapon slots `DebugEquip` touched change; the rest stays as saved.
             for s in [EquipSlot::Melee, EquipSlot::Ranged] {
                 if c.debug_touched[s as usize] {

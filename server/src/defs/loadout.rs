@@ -421,6 +421,14 @@ mod tests {
     }
 
     #[test]
+    fn a_pick_of_an_ability_outside_the_class_pool_is_refused() {
+        let c = ClassId::Paladin;
+        let mut b = Build::start(c);
+        b.loadout.secondary = Pick { ability: Fireball, source: Source::Own };
+        assert_eq!(hero_sheet(c, &b).err(), Some(LoadoutError::NotInPool(Fireball)));
+    }
+
+    #[test]
     fn an_item_version_leaves_with_its_item() {
         let c = ClassId::Paladin;
         let pick = Pick { ability: MagicMissile, source: Source::Item(EquipSlot::Ring1) };
