@@ -5,9 +5,9 @@
 // a lit torch, so warm and daylight can be compared. The viewer sees the whole scene. Mood is on (dust, haze), so beam dust can be judged against normal dust.
 // Buttons at the bottom (tap or click) cycle: Shape (widening / straight), Patch (1.5 / 2 / 3 tiles),
 // Slant (0 / 1 / 1.5 / 2 tiles; starts on the picked 2), From (left / right), Clouds (off / soft / medium / strong),
-// Often (normal / often: a cloud every 2-4 s instead of 8-25 s), Height (3 / 4 / 5 / 6 tiles, ceiling to floor), Glow (x1 / x1.5 / x2: brightness of beam
+// Often (normal / often: a cloud every 2-4 s instead of 8-25 s), Height (3 / 4 / 5 / 6 tiles, ceiling to floor), Rays (1 / 2 / 3 narrower rays per crack), Glow (x1 / x1.5 / x2: brightness of beam
 // and patch) and switch Beam and Dust on / off.
-// URL: ?shape=straight&patch=3&slant=2&from=right&clouds=0.3&often=1&height=5&glow=1.5&beam=0&dust=0 (clouds is 0..0.6, the dip).
+// URL: ?shape=straight&patch=3&slant=2&from=right&clouds=0.3&often=1&height=5&rays=2&glow=1.5&beam=0&dust=0 (clouds is 0..0.6, the dip).
 // Zoomed to fit the rooms to the screen, so it reads on a phone.
 import Phaser from 'phaser';
 import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
@@ -109,7 +109,7 @@ export class SunlightDemoScene extends Phaser.Scene {
     });
   }
 
-  /** ?shape=straight|widening, ?patch=1.5|2|3, ?slant=0..2, ?from=left|right, ?clouds=0..0.6, ?often=1, ?height=3..6, ?glow=1..2, ?beam=0, ?dust=0. */
+  /** ?shape=straight|widening, ?patch=1.5|2|3, ?slant=0..2, ?from=left|right, ?clouds=0..0.6, ?often=1, ?height=3..6, ?rays=1..3, ?glow=1..2, ?beam=0, ?dust=0. */
   private readParams(q: URLSearchParams): void {
     const num = (k: string) => (q.get(k) !== null && Number.isFinite(Number(q.get(k))) ? Number(q.get(k)) : null);
     if (q.get('shape') !== null) sunLook.widen = q.get('shape') !== 'straight';
@@ -118,6 +118,8 @@ export class SunlightDemoScene extends Phaser.Scene {
     if (q.get('from') !== null) sunLook.dir = q.get('from') === 'right' ? 1 : -1;
     sunLook.clouds = num('clouds') ?? sunLook.clouds;
     sunLook.height = num('height') ?? sunLook.height;
+    const rays = num('rays');
+    if (rays === 1 || rays === 2 || rays === 3) sunLook.rays = rays;
     sunLook.glow = num('glow') ?? sunLook.glow;
     if (q.get('often') !== null) sunLook.gap = q.get('often') === '1' ? OFTEN[1] : OFTEN[0];
   }
@@ -147,6 +149,7 @@ export class SunlightDemoScene extends Phaser.Scene {
     add(() => `Clouds: ${CLOUDS[near(cv, sunLook.clouds)][0]}`, () => (sunLook.clouds = next(cv, sunLook.clouds)));
     add(() => `Often: ${sunLook.gap[0] === OFTEN[1][0] ? 'often' : 'normal'}`, () => (sunLook.gap = sunLook.gap[0] === OFTEN[1][0] ? OFTEN[0] : OFTEN[1]));
     add(() => `Height: ${sunLook.height} tiles`, () => (sunLook.height = next(HEIGHTS, sunLook.height)));
+    add(() => `Rays: ${sunLook.rays}`, () => (sunLook.rays = (sunLook.rays % 3 + 1) as 1 | 2 | 3));
     add(() => `Glow: x${sunLook.glow}`, () => (sunLook.glow = next(GLOWS, sunLook.glow)));
     add(() => `Beam: ${this.sun.on.beam ? 'on' : 'off'}`, () => (this.sun.on.beam = !this.sun.on.beam));
     add(() => `Dust: ${this.sun.on.dust ? 'on' : 'off'}`, () => (this.sun.on.dust = !this.sun.on.dust));

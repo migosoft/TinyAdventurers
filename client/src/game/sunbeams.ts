@@ -8,7 +8,7 @@ import { TILE } from '../sim/map';
 import { DEPTH } from './effects';
 import type { LightField } from './light';
 import type { LightView } from './lightview';
-import { beamShape, cloudAt, sunLook } from './sunmath';
+import { beamShape, cloudAt, rayShapes, sunLook, type Ray } from './sunmath';
 
 const PATCH_TEX = 'sun-patch';
 /** Phaser's `FilterMode.LINEAR` and blend mode ADD (a runtime import of Phaser would not load in unit tests). */
@@ -47,6 +47,7 @@ interface Beam {
   /** What the beam geometry was drawn for; redrawn when it changes. */
   key: string;
   shape: Shape;
+  rays: Ray[];
 }
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
@@ -95,7 +96,7 @@ export class Sunbeams {
         this.active.set(l.id, b);
         b.key = '';
       }
-      this.place(b, l.x, l.y, l.colour ?? LIGHT[LIGHT_KIND.Daylight].colour, cloudAt(l.id, t, sunLook), dt, t);
+      this.place(b, l.id, l.x, l.y, l.colour ?? LIGHT[LIGHT_KIND.Daylight].colour, cloudAt(l.id, t, sunLook), dt, t);
     }
     for (const [id, b] of this.active) {
       if (seen.has(id)) continue;
@@ -125,7 +126,7 @@ export class Sunbeams {
       const img = s.add.image(0, 0, 'dot').setScale(0.5).setBlendMode(ADD).setDepth(DEPTH.airDust);
       motes.push({ img, x: 0, y: 0, vx: 0, vy: 0, phase: rnd(0, Math.PI * 2) });
     }
-    const b: Beam = { beam, patch, motes, key: '', shape: beamShape(0, 0, sunLook) };
+    const b: Beam = { beam, patch, motes, key: '', shape: beamShape(0, 0, sunLook), rays: [] };
     this.all.push(b);
     return b;
   }
@@ -136,14 +137,15 @@ export class Sunbeams {
     for (const m of b.motes) m.img.setVisible(false);
   }
 
-  private place(b: Beam, tx: number, ty: number, colour: number, cloud: number, dt: number, t: number): void {
+  private place(b: Beam, id: number, tx: number, ty: number, colour: number, cloud: number, dt: number, t: number): void {
     const look = sunLook;
-    const key = `${tx},${ty},${colour},${look.widen},${look.patch},${look.slant},${look.dir},${look.glow},${look.height}`;
+    const key = `${tx},${ty},${colour},${look.widen},${look.patch},${look.slant},${look.dir},${look.glow},${look.height},${look.rays},${id}`;
     if (key !== b.key) {
       b.key = key;
       b.shape = beamShape(tx, ty, look);
+      b.rays = rayShapes(b.shape, id, look);
       this.draw(b, colour, look.glow);
-      for (const m of b.motes) this.respawn(m, b.shape);
+      for (const m of b.motes) this.respawn(m, b.rays);
     }
     const p = b.shape.patch;
     b.beam.setVisible(this.on.beam).setAlpha(cloud);
@@ -155,21 +157,25 @@ export class Sunbeams {
       }
       m.x += m.vx * dt;
       m.y += m.vy * dt;
-      if (!this.inside(b.shape, m.x, m.y)) this.respawn(m, b.shape);
+      if (!b.rays.some((r) => this.inside(r, m.x, m.y))) this.respawn(m, b.rays);
       const lit = this.light.seenLit[Math.floor(m.y / TILE) * this.light.w + Math.floor(m.x / TILE)] === 1;
       const twinkle = 0.6 + 0.4 * Math.sin(t * 2 + m.phase);
       m.img.setVisible(lit).setPosition(m.x, m.y).setTint(colour).setAlpha(MOTE_ALPHA * twinkle * cloud);
     }
   }
 
-  /** The beam as three gradient trapezoids (top to the peak, peak to the floor, floor to its faded foot); vertex alpha makes the fade. */
+  /** Each ray as three gradient trapezoids (top to the peak, peak to the floor, floor to its faded foot); vertex alpha makes the fade. */
   private draw(b: Beam, colour: number, glow: number): void {
-    const { top, bottom } = b.shape;
+    const g = b.beam.clear();
+    // Rays overlap, so each is dimmer: the total stays near one beam's brightness.
+    for (const r of b.rays) this.drawRay(g, r, colour, glow / Math.sqrt(b.rays.length));
+  }
+
+  private drawRay(g: Phaser.GameObjects.Graphics, { top, bottom }: Ray, colour: number, glow: number): void {
     const at = (k: number): [Pt, Pt] => [
       [lerp(top[0][0], bottom[0][0], k), lerp(top[0][1], bottom[0][1], k)],
       [lerp(top[1][0], bottom[1][0], k), lerp(top[1][1], bottom[1][1], k)],
     ];
-    const g = b.beam.clear();
     const band = (a: [Pt, Pt], c: [Pt, Pt], a0: number, a1: number) => {
       a0 = Math.min(1, a0 * glow);
       a1 = Math.min(1, a1 * glow);
@@ -188,7 +194,7 @@ export class Sunbeams {
   }
 
   /** Is (x, y) inside the beam trapezoid? */
-  private inside(s: Shape, x: number, y: number): boolean {
+  private inside(s: Ray, x: number, y: number): boolean {
     const y0 = s.top[0][1];
     const y1 = s.bottom[0][1];
     if (y < y0 || y > y1) return false;
@@ -197,7 +203,8 @@ export class Sunbeams {
   }
 
   /** A random point inside the beam, drifting slowly down along it. */
-  private respawn(m: Mote, s: Shape): void {
+  private respawn(m: Mote, rays: Ray[]): void {
+    const s = rays[Math.floor(Math.random() * rays.length)];
     const k = Math.random();
     const l = lerp(s.top[0][0], s.bottom[0][0], k);
     const r = lerp(s.top[1][0], s.bottom[1][0], k);

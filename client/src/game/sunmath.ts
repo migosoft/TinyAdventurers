@@ -16,11 +16,13 @@ export interface SunLook {
   gap: [number, number];
   /** Tiles from ceiling to floor. */
   height: number;
+  /** Sub-beams side by side, as if the crack had several parts. */
+  rays: 1 | 2 | 3;
   /** Brightness of the beam and the patch (their alphas are multiplied by it, capped at 1). */
   glow: number;
 }
 
-export const sunLook: SunLook = { widen: true, patch: 2, slant: 2, dir: -1, clouds: 0.3, gap: [8, 25], glow: 1, height: 4 };
+export const sunLook: SunLook = { widen: true, patch: 2, slant: 2, dir: -1, clouds: 0.3, gap: [8, 25], glow: 1, height: 4, rays: 1 };
 
 /** Uniform [0,1) from a hash of (id, cloud index, salt). */
 function rnd(id: number, n: number, salt: number): number {
@@ -89,4 +91,36 @@ export function beamShape(
     bottom: [[cx - w / 2, cy], [cx + w / 2, cy]],
     patch: { x: cx, y: cy, w, h: 0.6 * w },
   };
+}
+
+export interface Ray {
+  top: [number, number][];
+  bottom: [number, number][];
+}
+
+/**
+ * The beam of light `id` as `look.rays` narrower rays that start near the same spot and fan out a little:
+ * each ray's top centre is within +-0.3 of the beam's top width of its centre, and each ray's bottom lies
+ * inside the beam's bottom span; widths are 0.4..0.8 of the beam's. All hashed from (id, ray index), so they
+ * never change; they overlap, mostly near the top. One ray is the whole beam.
+ */
+export function rayShapes(shape: { top: [number, number][]; bottom: [number, number][] }, id: number, look: SunLook): Ray[] {
+  const n = look.rays;
+  if (n <= 1) return [{ top: shape.top, bottom: shape.bottom }];
+  const [tl, tr] = [shape.top[0][0], shape.top[1][0]];
+  const [bl, br] = [shape.bottom[0][0], shape.bottom[1][0]];
+  const topW = tr - tl;
+  const botW = br - bl;
+  const rays: Ray[] = [];
+  for (let i = 0; i < n; i++) {
+    const tc = (tl + tr) / 2 + (rnd(id, i, 3) - 0.5) * 0.6 * topW;
+    const th = 0.5 * topW * (0.4 + 0.4 * rnd(id, i, 4));
+    const bw = botW * (0.4 + 0.4 * rnd(id, i, 5));
+    const bc = (bl + br) / 2 + (rnd(id, i, 6) * 2 - 1) * 0.5 * (botW - bw);
+    rays.push({
+      top: [[tc - th, shape.top[0][1]], [tc + th, shape.top[0][1]]],
+      bottom: [[bc - bw / 2, shape.bottom[0][1]], [bc + bw / 2, shape.bottom[0][1]]],
+    });
+  }
+  return rays;
 }

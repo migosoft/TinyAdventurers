@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TILE } from '../sim/map';
-import { beamShape, cloudAt, sunLook } from './sunmath';
+import { beamShape, cloudAt, rayShapes, sunLook } from './sunmath';
 
 const look = { ...sunLook };
 
@@ -47,5 +47,33 @@ describe('beamShape', () => {
     expect(beamShape(5, 8, { ...sunLook, height: 6 }).top[0][1]).toBeCloseTo(8.5 * TILE - 6 * TILE);
     const straight = beamShape(5, 8, { ...sunLook, widen: false });
     expect(Math.abs(straight.top[1][0] - straight.top[0][0])).toBeCloseTo(Math.abs(straight.bottom[1][0] - straight.bottom[0][0]));
+  });
+});
+
+describe('rayShapes', () => {
+  const shape = beamShape(5, 8, { ...sunLook, widen: true });
+  const widths = (id: number, n: 1 | 2 | 3) => rayShapes(shape, id, { ...sunLook, rays: n }).map((r) => r.bottom[1][0] - r.bottom[0][0]);
+  it('gives one ray per setting, the whole beam for one', () => {
+    for (const n of [1, 2, 3] as const) expect(rayShapes(shape, 4, { ...sunLook, rays: n })).toHaveLength(n);
+    expect(rayShapes(shape, 4, { ...sunLook, rays: 1 })[0]).toEqual({ top: shape.top, bottom: shape.bottom });
+  });
+  it('is deterministic per id, and differs between ids', () => {
+    expect(widths(4, 3)).toEqual(widths(4, 3));
+    expect(widths(4, 3)).not.toEqual(widths(5, 3));
+    const w = widths(4, 3);
+    expect(new Set(w.map((x) => x.toFixed(3))).size).toBeGreaterThan(1);
+  });
+  it('starts every ray near the beam top centre and keeps its foot inside the beam', () => {
+    const topC = (shape.top[0][0] + shape.top[1][0]) / 2;
+    const topW = shape.top[1][0] - shape.top[0][0];
+    for (const id of [1, 2, 3, 99]) {
+      for (const r of rayShapes(shape, id, { ...sunLook, rays: 3 })) {
+        expect(Math.abs((r.top[0][0] + r.top[1][0]) / 2 - topC)).toBeLessThanOrEqual(0.3 * topW + 0.01);
+        expect(r.bottom[0][0]).toBeGreaterThanOrEqual(shape.bottom[0][0] - 0.01);
+        expect(r.bottom[1][0]).toBeLessThanOrEqual(shape.bottom[1][0] + 0.01);
+        expect(r.top[0][1]).toBe(shape.top[0][1]);
+        expect(r.bottom[0][1]).toBe(shape.bottom[0][1]);
+      }
+    }
   });
 });
