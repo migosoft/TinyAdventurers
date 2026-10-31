@@ -1337,8 +1337,8 @@ pub mod tests {
     }
 
     /// A real shot for a test: an enemy of `etype` spawns at `from` and casts `id` toward `to` through
-    /// `monster_cast` (an ability its kit lacks is added from its Attributes: a spell needs no weapon). It
-    /// stays dormant afterwards, so it casts nothing more. Returns its id.
+    /// `monster_cast`. If its kit lacks `id`, the kit is replaced by a kit of just `id` (made from its
+    /// Attributes: a spell needs no weapon). It stays dormant afterwards, so it does nothing more. Returns its id.
     pub fn enemy_cast(run: &mut Run, etype: EnemyType, from: Vec2, id: AbilityId, to: Vec2) -> u32 {
         let owner = run.spawn_enemy(etype, from, None);
         let mi = run.monster_idx(owner).unwrap();
@@ -1571,7 +1571,9 @@ pub mod tests {
         // halls differ. Part A (effect resistances) left all three values unchanged before this.
         // 2026-10-21, plan 3a (Charge 25.6, reach 22, staffs and punches in melee, overkill piercing): checked
         // again, values unchanged by plan 3a. `plan_3a_fight_is_pinned` pins a fight that does exercise it.
-        assert_eq!(got, vec![11853672065832131168, 7100769620128759448, 1468820053114872194]);
+        // 2026-10-31, #177 (one name, one ability): monsters and bosses use shared abilities with their own
+        // cooldowns, so the boss fight (first two seeds) plays out differently. Re-recorded once, on purpose.
+        assert_eq!(got, vec![6511878345562000907, 15469823654463399686, 1468820053114872194]);
     }
 
     #[test]
@@ -1590,7 +1592,7 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![11853672065832131168, 7100769620128759448, 1468820053114872194]);
+        assert_eq!(got, vec![6511878345562000907, 15469823654463399686, 1468820053114872194]);
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies

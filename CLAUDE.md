@@ -66,7 +66,6 @@ Lasting rules that are not one issue's business. Feature-specific decisions live
 - **Minions are never tinted:** raised skeletons and summoned imps look like the ordinary ones.
 - **Demon dungeon:** imps (ranged, claw up close) and chorts (melee, a bolt from afar) replace skeletons; summoners (red robe, summon imps) replace necromancers.
 - **Mimics hop after the players**, and their reveal animation stays.
-- **Knockback:** only strong melee pushes (orc warrior 20 px, chort claw 14, demon cleave 56 / swoop 64, dragon front claw 32 / bite 24 / tail 44 / landing smash 36). Imps, skeletons, mimics and ranged attacks never push, except the dragon's fireball explosions (20 px). No control during the slide; a dash can't escape it.
 - **Boss halls** have chasms, and no door: a shimmering, semi-transparent blue force field appears when the party is inside.
 - **Ogre mini-boss:** one per run in every dungeon, roaming a deeper room; a wide HP bar instead of a boss bar; a blue debug path to it.
 - **Coins** are a second currency.

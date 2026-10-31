@@ -6,7 +6,7 @@
 
 use super::{ahead, boss_idx, set_anim, target, BossBehaviour};
 use crate::defs::abilities::AbilityId;
-use crate::defs::bosses::{LICH_ARCHERS, LICH_BLIND_FIRST, LICH_DISCIPLES, LICH_GAZE_FIRST, LICH_NOVA_EXTRA_WAIT, LICH_SKELETONS, LICH_SLEEP_FIRST};
+use crate::defs::bosses::{LICH_ARCHERS, LICH_BLIND_FIRST, LICH_DISCIPLES, LICH_GAZE_FIRST, LICH_GLOOM_FIRST, LICH_NOVA_EXTRA_WAIT, LICH_NOVA_FIRST, LICH_SKELETONS, LICH_SLEEP_FIRST};
 use crate::defs::effects::EffectKind;
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::Anim;
@@ -31,8 +31,8 @@ pub(crate) const SPELLS: [AbilityId; 3] = [AbilityId::StoneGaze, AbilityId::Slee
 
 /// How long (s) after the fight starts each ability may first be cast: when it opens, not how an ability works.
 const OPENING: [(AbilityId, f64); 5] = [
-    (AbilityId::GloomBolts, 2.0),
-    (AbilityId::Nova, 6.0),
+    (AbilityId::GloomBolts, LICH_GLOOM_FIRST),
+    (AbilityId::Nova, LICH_NOVA_FIRST),
     (AbilityId::StoneGaze, LICH_GAZE_FIRST),
     (AbilityId::SleepMist, LICH_SLEEP_FIRST),
     (AbilityId::BlindingCurse, LICH_BLIND_FIRST),
@@ -104,7 +104,9 @@ impl Lich {
 
     /// Casts `id` at `at`; the lich's cast pose plays whatever the ability's own animation is.
     fn cast(run: &mut Run, bi: usize, id: AbilityId, at: Vec2) {
-        monster_cast(run, bi, id, at);
+        let cast = monster_cast(run, bi, id, at);
+        debug_assert!(cast, "the lich's script only picks what its kit has, off cooldown");
+        // Unlike `cast_in_pose`, the pose is forced: every lich ability plays the same cast pose.
         set_anim(run, bi, Anim::Cast);
     }
 

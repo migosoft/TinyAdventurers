@@ -79,6 +79,8 @@ pub fn profile(id: BossId) -> Profile {
 
 /// When the lich's effect spells may first come after the fight starts (s, staggered; user, 2026-10-15; tune in
 /// the balancing pass). When, not how: the spells' wind-ups, cooldowns and numbers are their kit's.
+pub const LICH_GLOOM_FIRST: f64 = 2.0;
+pub const LICH_NOVA_FIRST: f64 = 6.0;
 pub const LICH_BLIND_FIRST: f64 = 4.0;
 pub const LICH_SLEEP_FIRST: f64 = 7.0;
 pub const LICH_GAZE_FIRST: f64 = 9.0;

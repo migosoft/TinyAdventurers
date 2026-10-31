@@ -1268,6 +1268,35 @@ mod tests {
         }
     }
 
+    /// Every monster's kit entry is what `resolve_ability` gives that caster for that ability, nothing more:
+    /// the one resolver every ability goes through (a kit is built once, using an ability only reads it).
+    #[test]
+    fn every_monster_ability_equals_the_resolver() {
+        let check = |what: &str, kit: &Kit, ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], radius: f64| {
+            let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&w| arm(w, attrs, &[], None, 0)).collect();
+            for &id in ids {
+                let want = resolve_ability(&ab::def(id), attrs, &armed, Body { radius }).expect("resolves");
+                assert_eq!(kit.get(id), Some(&want), "{what} {id:?}");
+            }
+        };
+        for t in EnemyType::ALL {
+            let d = enemies::def(t);
+            check(&format!("{t:?}"), &enemy_kit(t), d.abilities, &d.attrs, d.weapons, d.radius);
+        }
+        for b in BossId::ALL {
+            let d = bosses::def(b);
+            check(&format!("{b:?}"), &boss_kit(b), d.abilities, &d.attrs, d.weapons, d.radius);
+        }
+        let ids = [AbilityId::Bite, AbilityId::Pounce];
+        check("wolf", &wolf_kit(&WolfMods::NONE), &ids, &WOLF_ATTRS, &[ItemId::BeastBite], WOLF_RADIUS);
+        // A version's mod goes through `apply_mods`, on the Pounce alone.
+        let slower = AbilityMod::CooldownAdd(-0.5);
+        let kit = wolf_kit(&WolfMods { hp_mul: 1.0, pounce: Some(slower) });
+        let plain = wolf_kit(&WolfMods::NONE);
+        assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(*plain.get(AbilityId::Pounce).unwrap(), &[slower])));
+        assert_eq!(kit.get(AbilityId::Bite), plain.get(AbilityId::Bite));
+    }
+
     #[test]
     fn boss_kits_resolve_to_todays_numbers() {
         use crate::defs::bosses::*;
