@@ -925,7 +925,7 @@ mod tests {
         let today: [(ClassId, Row, Row); 4] = [
             (ClassId::Wizard, (MagicMissile, 0.35, 12.0, 220.0, 0.0, 230.0, 3.0, 0.0), (Fireball, 6.0, 45.0, 260.0, 0.0, 140.0, 38.0, 0.0)),
             (ClassId::Paladin, (Strike, 0.45, 20.0, 22.0, 1.75, 0.0, 0.0, 0.0), (HolyLight, 10.0, 35.0, 64.0, 0.0, 0.0, 64.0, 0.0)),
-            (ClassId::Barbarian, (Strike, 0.8, 32.0, 22.0, 2.45, 0.0, 0.0, 0.0), (Charge, 5.0, 32.0 * 0.8, 22.0, 2.45, ab::DASH_SPEED, 10.0, 0.18)),
+            (ClassId::Barbarian, (Strike, 0.8, 32.0, 22.0, 2.45, 0.0, 0.0, 0.0), (Charge, 5.0, 32.0 * 0.8, 22.0, 2.45, ab::DASH_SPEED, 4.0, 0.18)),
             (ClassId::ElvenRanger, (Shoot, 0.7, 16.0, 260.0, 0.0, 290.0, 2.0, 0.0), (SummonWolf, 8.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
         ];
         for (c, primary, secondary) in today {

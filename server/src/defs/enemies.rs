@@ -393,6 +393,10 @@ mod tests {
             assert_eq!(ranged, d.abilities.contains(&AbilityId::Shoot), "{t:?}: a bow goes with Shoot");
             assert!(d.abilities.iter().any(|a| matches!(a, AbilityId::Strike | AbilityId::Bite)), "{t:?} has no melee ability");
             assert!(d.abilities.len() <= 2 && !d.abilities.is_empty(), "{t:?}");
+            // The AI (`run/ai.rs`) uses an alt ability only if it swings, shoots or slams.
+            if let Some(&alt) = d.abilities.get(1) {
+                assert!(matches!(crate::defs::abilities::def(alt).shape, crate::defs::abilities::Shape::Swing | crate::defs::abilities::Shape::Projectile | crate::defs::abilities::Shape::Ring), "{t:?}: the alt {alt:?} has a shape the AI does not handle");
+            }
         }
     }
 

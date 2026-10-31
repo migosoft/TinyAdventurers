@@ -369,7 +369,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         HolyLight => base("Holy Light", Secondary, C::Innate, Uses::Nothing, false, Shape::SelfArea, own(35.0, 10.0, 64.0, 0.0, 64.0, 0.0, None, 14), &[K::Paladin]),
         Charge => AbilityDef {
             weapon_mult: WeaponMult { damage: 0.8, ..WeaponMult::ONE },
-            ..base("Charge", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, own(0.0, 5.0, 0.0, DASH_SPEED, 10.0, 0.18, None, 0), &[K::Barbarian])
+            ..base("Charge", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, own(0.0, 5.0, 0.0, DASH_SPEED, 4.0, 0.18, None, 0), &[K::Barbarian])
         },
         Shoot => base("Shoot", Primary, C::WeaponAttack, Uses::Ranged, true, Shape::Projectile, NO_OWN, &[K::ElvenRanger]),
         FrostShard => AbilityDef {

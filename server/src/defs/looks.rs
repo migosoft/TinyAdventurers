@@ -40,8 +40,6 @@ pub fn default_look(id: AbilityId) -> Look {
 /// The look of `id` when `figure` uses it.
 pub fn look(figure: EntityKind, id: AbilityId) -> Look {
     match (figure, id) {
-        // The ogre's slam kicks up dust, not a hero's flash.
-        (EntityKind::Ogre, AbilityId::GroundSlam) => Look { tint: Some(0x8b6b4a), ..default_look(id) },
         // The dragon's fireball is its own ball, bursting with the boss shockwave of the old volley.
         (EntityKind::Dragon, AbilityId::Fireball) => Look { projectile: Some(EntityKind::DragonFireball), boom: 4, ..default_look(id) },
         _ => default_look(id),

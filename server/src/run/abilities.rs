@@ -826,7 +826,7 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
         .monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive && !m.airborne && !m.is_ally() && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + 4.0)
+        .filter(|(_, m)| m.alive && !m.airborne && !m.is_ally() && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + ab.radius)
         .map(|(i, m)| (i, m.id))
         .collect();
     for (mi, id) in hits {
@@ -840,7 +840,7 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
         .objects
         .iter()
         .enumerate()
-        .filter(|(_, o)| !o.gone && !run.players[pi].dash_hit.contains(&o.id) && o.pos.dist(pos) < PLAYER_RADIUS + o.radius + 4.0)
+        .filter(|(_, o)| !o.gone && !run.players[pi].dash_hit.contains(&o.id) && o.pos.dist(pos) < PLAYER_RADIUS + o.radius + ab.radius)
         .map(|(i, o)| (i, o.id))
         .collect();
     let by = run.players[pi].id;
@@ -1046,7 +1046,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
 fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
-    let (side, owner, damage, crit, explode_r, k, push, push_str, pierce, kind) = (pr.side, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str, pr.pierce, pr.kind);
+    let (side, owner, damage, crit, explode_r, k, push, push_str, pierce) = (pr.side, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str, pr.pierce);
     let src = if side == Side::Heroes { run.player_idx(owner) } else { None };
     if explode_r > 0.0 {
         explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str);
@@ -1067,7 +1067,7 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
         },
         (Creature::Player(_), Side::Heroes) => {}
     }
-    if let (EntityKind::ChainSpark, Creature::Monster(_), Some(by @ Creature::Player(_)), Side::Heroes) = (kind, c, by, side) {
+    if let (What::Ability(AbilityId::ChainSpark), Creature::Monster(_), Some(by @ Creature::Player(_)), Side::Heroes) = (damage.why.what, c, by, side) {
         chain_jumps(run, by, c, damage);
     }
     let (id, alive) = match c {
@@ -1473,7 +1473,7 @@ mod tests {
         let owner = run.spawn_enemy(EnemyType::Imp, at, None);
         let mi = run.monster_idx(owner).unwrap();
         let bolt = *run.monsters[mi].kit.get(AbilityId::FireBolt).unwrap();
-        let (power, push_str) = (run.monsters[mi].attrs.get(Attr::Cha), run.monsters[mi].attrs.get(Attr::Str));
+        let (power, push_str) = (run.monsters[mi].attrs.get(Attr::Cha), run.monsters[mi].attrs.get(crate::defs::attributes::Attr::Str));
         assert!(power > 0 && push_str > 0 && bolt.damage > 0.0, "numbers worth keeping");
         let target = run.players[0].pos();
         assert!(monster_use(&mut run, mi, AbilityId::FireBolt, target));
@@ -3115,7 +3115,7 @@ mod tests {
         // The roots end 3.7 s from now; the last pulse's Entangled (1 s before the save) runs out
         // `scaled_secs` later, and nothing renews it.
         let power = a.effect.unwrap().power;
-        let last = scaled_secs(ab::ENTANGLE_PULSE_SECS, power, run.monsters[g].attrs.get(Attr::Str));
+        let last = scaled_secs(ab::ENTANGLE_PULSE_SECS, power, run.monsters[g].attrs.get(crate::defs::attributes::Attr::Str));
         for _ in 0..((3.7 + last) * 60.0) as usize + 5 {
             run.step();
         }
@@ -3508,16 +3508,24 @@ mod monster_uses {
 
     #[test]
     fn look_never_changes_damage() {
-        use crate::defs::classes::PLAYER_RADIUS;
-        use crate::defs::weapons::resolve_melee;
-        let d = ab::def(AbilityId::GroundSlam);
-        let attrs = crate::defs::attributes::Attributes::new(19, 8, 16, 5, 7, 7);
-        let crate::defs::items::ItemBase::Melee(kind, stats) = crate::defs::items::def(crate::defs::items::ItemId::OgreClub).base else { panic!() };
-        let club = resolve_melee(kind, &stats, &attrs);
-        let resolved = |radius| crate::sheet::resolve_ability(&d, &attrs, &[club], crate::sheet::Body { radius }).unwrap();
-        let (hero, ogre) = (resolved(PLAYER_RADIUS), resolved(10.0));
-        assert_eq!((hero.damage, hero.split, hero.push, hero.windup), (ogre.damage, ogre.split, ogre.push, ogre.windup));
-        let (a, b) = (looks::look(EntityKind::Barbarian, d.id), looks::look(EntityKind::Ogre, d.id));
-        assert_ne!(a, b, "the two figures look different");
+        use crate::sheet::{monster_kit, Body};
+        // The Wizard's Fireball and the dragon's, the dragon given the Wizard's Attributes: the same
+        // damage, push and push STR, only the projectile drawn (the look) differs.
+        let mut run = test_run(&[ClassId::Wizard], BossId::Dragon);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos();
+        run.players[0].aim = 0.0;
+        try_use(&mut run, 0, false, 1);
+        let hero_ball = run.projectiles.pop().expect("the Wizard's Fireball");
+        let attrs = run.players[0].sheet.attrs;
+        let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+        run.monsters[bi].kit = monster_kit(&[AbilityId::Fireball], &attrs, &[], Body { radius: run.monsters[bi].radius });
+        assert!(monster_use(&mut run, bi, AbilityId::Fireball, at + Vec2::new(60.0, 0.0)));
+        let dragon_ball = run.projectiles.pop().expect("the dragon's Fireball");
+        assert_eq!(hero_ball.damage.why.what, What::Ability(AbilityId::Fireball));
+        assert_eq!((hero_ball.damage.amount, hero_ball.push, hero_ball.push_str), (dragon_ball.damage.amount, dragon_ball.push, dragon_ball.push_str));
+        assert_eq!(hero_ball.push_str, attrs.get(crate::defs::attributes::Attr::Str));
+        assert_ne!(hero_ball.kind, dragon_ball.kind, "the two balls look different");
     }
 }
