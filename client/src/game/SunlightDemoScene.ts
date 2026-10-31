@@ -37,11 +37,10 @@ const OFTEN: [number, number][] = [[8, 25], [2, 4]];
 function buildMap(): TileMap {
   const tiles = new Uint8Array(W * H).fill(TILE_ID.Wall);
   for (let y = 2; y <= 14; y++) for (let x = 1; x <= 9; x++) tiles[y * W + x] = TILE_ID.Floor;
-  // An open alcove on the east side (wall stubs above and below it), seen from the room.
+  // An open alcove on the east side. No wall stubs and the pillar stands in a corner, so the viewer's
+  // line of sight casts no black wedge over the floor (it would read as a daylight shadow).
   for (let y = 6; y <= 10; y++) for (let x = 10; x <= 13; x++) tiles[y * W + x] = TILE_ID.Floor;
-  tiles[6 * W + 10] = TILE_ID.Wall;
-  tiles[10 * W + 10] = TILE_ID.Wall;
-  tiles[12 * W + 8] = TILE_ID.Wall; // a pillar, for a shadow
+  tiles[13 * W + 9] = TILE_ID.Wall; // a pillar by the south-east corner
   return new TileMap(W, H, tiles);
 }
 
