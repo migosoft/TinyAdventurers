@@ -200,6 +200,22 @@ impl Run {
         id
     }
 
+    /// A sun spot: daylight on a floor tile. Designed rooms call this too.
+    pub fn add_sun(&mut self, x: i32, y: i32) -> u32 {
+        self.add_light(LightKind::Daylight, Anchor::Tile(x, y), None)
+    }
+
+    /// Switches a light just added off. While the run is built it goes out in
+    /// `RunStartInfo.lights` as off, with no event; later it is an ordinary switch.
+    pub fn start_light_off(&mut self, id: u32) {
+        if self.tick > 0 {
+            self.set_light(id, false);
+        } else if let Some(s) = self.lights.sources.iter_mut().find(|s| s.id == id) {
+            s.on = false;
+            self.lights.mark_dirty();
+        }
+    }
+
     /// A short flash of light on a spot (an explosion): a moving light that
     /// the sweep removes after `secs`. No event: it goes out in snapshots.
     pub fn add_flash(&mut self, kind: LightKind, pos: Vec2, secs: f64) -> u32 {
@@ -390,6 +406,20 @@ mod tests {
         assert!(!run.is_lit(at(tx - 8, ty)), "beyond it");
         assert!(run.is_lit(at(tx + 3, ty)), "the wall itself is lit");
         assert!(!run.is_lit(at(tx + 4, ty)), "behind the wall is dark");
+    }
+
+    #[test]
+    fn add_sun_lights_the_floor_around_it() {
+        let (mut run, tx, ty) = dark_run();
+        for y in ty - 4..=ty + 4 {
+            run.layout.map.set(tx + 3, y, Tile::Wall);
+        }
+        let id = run.add_sun(tx, ty);
+        assert_eq!(run.lights.get(id).unwrap().kind, LightKind::Daylight);
+        assert!(run.is_lit(at(tx, ty)));
+        assert!(run.is_lit(at(tx - 5, ty + 2)), "in line of sight, within the radius");
+        assert!(!run.is_lit(at(tx - 8, ty)), "beyond the radius");
+        assert!(!run.is_lit(at(tx + 4, ty)), "behind the wall");
     }
 
     #[test]

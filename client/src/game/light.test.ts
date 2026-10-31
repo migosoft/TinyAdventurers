@@ -4,7 +4,7 @@ import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { View } from '../sim/view';
 import { TileMap } from '../sim/map';
 import { darkReach } from './lightview';
-import { addColour, falloff, LightField } from './light';
+import { addColour, cloudy, EDGE, falloff, LightField } from './light';
 import type { LightInfo } from '../generated/LightInfo';
 
 const fmap = () => new TileMap(fixtures.w, fixtures.h, Uint8Array.from(fixtures.tiles));
@@ -102,5 +102,36 @@ describe('light field', () => {
         prev = f;
       }
     }
+  });
+
+  it('cloudy_keeps_the_rim_at_edge', () => {
+    expect(cloudy(EDGE, 0.4)).toBeCloseTo(EDGE);
+    expect(cloudy(1, 0.55)).toBeCloseTo(EDGE + (1 - EDGE) * 0.55);
+    expect(cloudy(0.5, 1)).toBeCloseTo(0.5);
+  });
+
+  it('accumulate with a dim keeps the lit tiles and the rim, and darkens the centre', () => {
+    const sources = fixtures.lights.sources as LightInfo[];
+    const sun = sources.find((s) => s[1] === LIGHT_KIND.Daylight)!;
+    const [sx, sy] = [sun[3], sun[4]];
+    const f = new LightField(fmap());
+    f.load([sun]);
+    const n = fixtures.w * fixtures.h * 3;
+    const full = new Float32Array(n);
+    const dim = new Float32Array(n);
+    f.accumulate(full, 0, 0, fixtures.w, fixtures.h, () => 1);
+    f.accumulate(dim, 0, 0, fixtures.w, fixtures.h, () => 1, () => 0.5);
+    let rimTile = -1;
+    let rimD = 0;
+    for (let i = 0; i < full.length / 3; i++) {
+      const a = full[i * 3] + full[i * 3 + 1] + full[i * 3 + 2];
+      const b = dim[i * 3] + dim[i * 3 + 1] + dim[i * 3 + 2];
+      expect(b > 0).toBe(a > 0);
+      const d = Math.hypot((i % fixtures.w) - sx, Math.floor(i / fixtures.w) - sy);
+      if (a > 0 && d > rimD) [rimD, rimTile] = [d, i];
+    }
+    const own = sy * fixtures.w + sx;
+    expect(dim[own * 3]).toBeLessThan(full[own * 3]);
+    expect(Math.abs(dim[rimTile * 3] - full[rimTile * 3])).toBeLessThan(0.02 * full[rimTile * 3]);
   });
 });

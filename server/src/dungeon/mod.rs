@@ -202,6 +202,8 @@ pub struct TorchSpawn {
     /// The wall cell it hangs on.
     pub wall: (i32, i32),
     pub side: TorchSide,
+    /// Starts burning. False in a sunlit room (the daylight is enough); heat lights it.
+    pub lit: bool,
 }
 
 impl TorchSpawn {
@@ -239,6 +241,8 @@ pub struct Dungeon {
     pub barrels: Vec<Vec2>,
     /// Wall torches (placed after rotation).
     pub torches: Vec<TorchSpawn>,
+    /// Sun spots (tiles): each becomes a Daylight light (`Run::add_sun`).
+    pub suns: Vec<(i32, i32)>,
     pub player_spawns: Vec<Vec2>,
 }
 
@@ -259,6 +263,8 @@ pub struct Layout {
     pub barrels: Vec<Vec2>,
     /// Wall torches (placed after rotation).
     pub torches: Vec<TorchSpawn>,
+    /// Sun spots (tiles): each becomes a Daylight light (`Run::add_sun`).
+    pub suns: Vec<(i32, i32)>,
     pub player_spawns: Vec<Vec2>,
 }
 
@@ -280,7 +286,7 @@ impl DungeonParts {
 
 impl Dungeon {
     pub fn split(self) -> (Layout, DungeonParts) {
-        let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, player_spawns } = self;
-        (Layout { map, spawns, chests, barrels, torches, player_spawns }, DungeonParts { rooms, start, boss, door })
+        let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, suns, player_spawns } = self;
+        (Layout { map, spawns, chests, barrels, torches, suns, player_spawns }, DungeonParts { rooms, start, boss, door })
     }
 }

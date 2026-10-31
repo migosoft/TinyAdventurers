@@ -7,11 +7,12 @@
 // is its View (sim/view.ts: the tiles the visibility polygon covers, the same
 // rule as the server's); the vision mask (visionmask.ts) draws its straight edge.
 import type Phaser from 'phaser';
-import { LIGHT } from '../generated/defs';
+import { LIGHT, LIGHT_KIND } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
 import { View } from '../sim/view';
 import { TILE, type TileMap } from '../sim/map';
 import { DEPTH } from './effects';
+import { cloudAt, lookFor, sunLook } from './sunmath';
 import type { LightField } from './light';
 
 // Phaser's FilterMode.LINEAR and BlendModes.MULTIPLY as numbers: a value import of
@@ -187,6 +188,8 @@ export class LightView {
   get light(): Float32Array { return this.rgb; }
   /** Per tile: 1 where it is seen and lit this frame. */
   readonly seenLit: Uint8Array;
+  /** Map width in tiles (the row length of `seenLit` and `light`). */
+  get w(): number { return this.map.w; }
   /** Light what the view covers (false: the tile FOV only, the old tile edges, ?lights E). */
   wide = true;
   private inView = (x: number, y: number) => this.view.isVisible(x, y);
@@ -249,7 +252,7 @@ export class LightView {
       this.rgb.fill(0, (y * w + x0) * 3, (y * w + x1) * 3);
       this.movingLit.fill(0, y * w + x0, y * w + x1);
     }
-    this.field.accumulate(this.rgb, x0, y0, x1, y1, (l) => flicker(l.kind, l.id, t));
+    this.field.accumulate(this.rgb, x0, y0, x1, y1, (l) => flicker(l.kind, l.id, t), (l) => (l.kind === LIGHT_KIND.Daylight ? cloudAt(l.id, t, lookFor(l.id, sunLook)) : 1));
     moving.forEach(([mx, my, kind, colour], n) =>
       this.field.addMoving(this.rgb, this.movingLit, mx, my, kind, colour ?? LIGHT[kind].colour, flicker(kind, 1000 + n, t), TILE));
     const dt = this.darkTile;

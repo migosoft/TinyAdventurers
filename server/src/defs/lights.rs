@@ -8,24 +8,23 @@ use serde::Serialize;
 /// 0xRRGGBB.
 pub type Colour = u32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum LightKind {
-    Torch = 0,
-    Lava = 1,
-    Fire = 2,
-    Magic = 3,
-    /// The flash of an explosion (`Run::add_flash`).
-    Blast = 4,
-    /// The flash of a healing wave (`Run::add_flash`).
-    Holy = 5,
-    /// The Radiant keystone's glow around the hero.
-    Radiant = 6,
-}
-
-impl LightKind {
-    #[cfg(test)]
-    pub const ALL: [LightKind; 7] = [LightKind::Torch, LightKind::Lava, LightKind::Fire, LightKind::Magic, LightKind::Blast, LightKind::Holy, LightKind::Radiant];
+super::enum_list::listed_enum! {
+    /// `ALL` and `COUNT` grow with a new variant (`listed_enum!`).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum LightKind: u8 {
+        Torch = 0,
+        Lava = 1,
+        Fire = 2,
+        Magic = 3,
+        /// The flash of an explosion (`Run::add_flash`).
+        Blast = 4,
+        /// The flash of a healing wave (`Run::add_flash`).
+        Holy = 5,
+        /// The Radiant keystone's glow around the hero.
+        Radiant = 6,
+        /// Sunlight through a crack in the ceiling (`Run::add_sun`).
+        Daylight = 7,
+    }
 }
 
 /// How long an explosion lights its surroundings (s).
@@ -55,6 +54,7 @@ pub fn def(k: LightKind) -> LightDef {
         LightKind::Blast => LightDef { radius: 4, colour: 0xffb060, intensity: 1.0, flicker: 0.3 },
         LightKind::Holy => LightDef { radius: 4, colour: 0xffe890, intensity: 0.9, flicker: 0.1 },
         LightKind::Radiant => LightDef { radius: 2, colour: 0xffe890, intensity: 0.6, flicker: 0.05 },
+        LightKind::Daylight => LightDef { radius: 7, colour: 0xdce8ff, intensity: 0.9, flicker: 0.0 },
     }
 }
 
@@ -77,6 +77,14 @@ pub fn kind_light(k: EntityKind) -> Option<(LightKind, Option<Colour>)> {
 mod tests {
     use super::*;
     use EntityKind as K;
+
+    #[test]
+    fn daylight_is_cool_white_and_steady() {
+        let d = def(LightKind::Daylight);
+        assert_eq!((d.radius, d.colour, d.flicker), (7, 0xdce8ff, 0.0));
+        assert!((d.intensity - 0.9).abs() < 1e-9);
+        assert!(LightKind::ALL.contains(&LightKind::Daylight));
+    }
 
     #[test]
     fn every_kind_has_a_sane_def() {

@@ -7,10 +7,14 @@ import { popScale, smoothText, TEXT_RESOLUTION, WORLD_TEXT, type WorldTextKind }
 export const DEPTH = {
   map: 0,
   decal: 1,
+  /** Sunlight patch on the floor under a skylight (sunbeams.ts): over the decals, under figures. */
+  sunPatch: 1.5,
   hazard: 2,
   entityBase: 10,
   projectile: 5000,
   fx: 6000,
+  /** Sunbeam from a skylight (sunbeams.ts): over figures and effects, just under the dungeon air; the darkness hides it where unseen. Its dust uses airDust. */
+  sunBeam: 6489,
   /** The dungeon air (mood.ts), over figures, shots and effects, under enemy HP bars and numbers, the tint and the darkness. Lowest first: haze, dust, smoke, drips, embers. */
   airHaze: 6490,
   airDust: 6491,
