@@ -212,6 +212,7 @@ pub struct Monster {
     pub id: u32,
     /// Resistances (races plus adjustments) and the split of its melee hits.
     pub res: Resistances,
+    #[allow(dead_code)] // no reader since the demon casts its Strike; the weapon's split is used
     pub melee: DamageSplit,
     /// None for bosses (driven by their BossBehaviour).
     pub etype: Option<EnemyType>,

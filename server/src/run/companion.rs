@@ -227,7 +227,8 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
                 monster_cast(run, mi, AbilityId::Bite, at);
             }
         }
-        set_anim(run, mi, Anim::Melee);
+        // A bite that missed its prey swings on; a pounce cancelled (unsafe landing, prey gone) just stops.
+        set_anim(run, mi, if w.alt { Anim::Idle } else { Anim::Melee });
         return;
     }
 

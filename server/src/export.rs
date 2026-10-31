@@ -70,6 +70,8 @@ fn export_defs() {
     // The dragon's telegraphs: the numbers of the abilities in its kit.
     let dragon_kit = crate::sheet::boss_kit(crate::protocol::BossId::Dragon);
     let dragon_ability = |id: AbilityId| *dragon_kit.get(id).expect("the dragon casts it");
+    let demon_kit = crate::sheet::boss_kit(crate::protocol::BossId::Demon);
+    let demon_ability = |id: AbilityId| *demon_kit.get(id).expect("the demon casts it");
     let mut consts = json!({
         "TILE": TILE,
         "TICK_HZ": TICK_HZ,
@@ -112,16 +114,15 @@ fn export_defs() {
     });
     // A second object: one json! with all of them hits the macro recursion limit.
     let demon = json!({
-        "DEMON_CLEAVE_WINDUP": bosses::DEMON_CLEAVE_WINDUP,
-        "DEMON_SWOOP_WINDUP": bosses::DEMON_SWOOP_WINDUP,
-        "DEMON_SWOOP_TIME": bosses::DEMON_SWOOP_TIME,
-        "DEMON_RING_WINDUP": bosses::DEMON_RING_WINDUP,
+        "DEMON_CLEAVE_WINDUP": demon_ability(AbilityId::Strike).windup,
+        "DEMON_SWOOP_WINDUP": demon_ability(AbilityId::Swoop).windup,
+        "DEMON_SWOOP_TIME": demon_ability(AbilityId::Swoop).duration,
+        "DEMON_RING_WINDUP": demon_ability(AbilityId::RingOfFire).windup,
         "DEMON_CLEAVE_RECOVER": bosses::DEMON_CLEAVE_RECOVER,
         "DEMON_SWOOP_RECOVER": bosses::DEMON_SWOOP_RECOVER,
         "DEMON_RING_RECOVER": bosses::DEMON_RING_RECOVER,
-        "DEMON_ENRAGED_PACE": bosses::DEMON_ENRAGED_PACE,
-        "DEMON_CLEAVE_KNOCK": bosses::DEMON_CLEAVE_KNOCK,
-        "DEMON_SWOOP_KNOCK": bosses::DEMON_SWOOP_KNOCK,
+        "DEMON_CLEAVE_KNOCK": demon_ability(AbilityId::Strike).push,
+        "DEMON_SWOOP_KNOCK": demon_ability(AbilityId::Swoop).push,
     });
     consts.as_object_mut().unwrap().extend(demon.as_object().unwrap().clone());
     let lich = json!({
@@ -142,7 +143,7 @@ fn export_defs() {
     });
     consts.as_object_mut().unwrap().extend(objs.as_object().unwrap().clone());
     let fl = json!({
-        "IMMUNE": flags::IMMUNE, "ENRAGED": flags::ENRAGED,
+        "IMMUNE": flags::IMMUNE,
         "HIDING": flags::HIDING, "DORMANT": flags::DORMANT, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE,
     });
     let tiles = json!({

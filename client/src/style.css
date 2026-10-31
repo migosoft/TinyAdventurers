@@ -651,11 +651,6 @@ kbd {
   color: #cfe8ff;
   box-shadow: 0 0 0 1px #5a8ad8;
 }
-.boss .enraged {
-  background: #7a1a1a;
-  color: #ffd0d0;
-  box-shadow: 0 0 0 1px #c04040;
-}
 
 .messages {
   position: absolute;

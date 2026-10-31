@@ -6,12 +6,12 @@
 //! An attack's animation starts with its wind-up (the client shows the wind-up pose, then the strike); the
 //! script waits the ability's own wind-up (`kit.get(id).windup`) and casts it when that ends.
 
-use super::{boss_idx, set_anim, target, BossBehaviour};
+use super::{ahead, boss_idx, cast_in_pose, set_anim, target, BossBehaviour};
 use crate::defs::abilities::AbilityId;
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::bosses::*;
 use crate::defs::kinds::Anim;
-use crate::math::{angle_diff, Vec2};
+use crate::math::angle_diff;
 use crate::run::abilities::monster_cast;
 use crate::run::ai::path_toward;
 use crate::run::Run;
@@ -73,21 +73,6 @@ fn kit(run: &Run, bi: usize, id: AbilityId) -> crate::sheet::ResolvedAbility {
     *run.monsters[bi].kit.get(id).expect("the dragon's kit has it")
 }
 
-
-/// A point straight ahead of it: a cast "at" it keeps the aim.
-fn ahead(run: &Run, bi: usize) -> Vec2 {
-    let m = &run.monsters[bi];
-    m.pos + Vec2::from_angle(m.aim) * 30.0
-}
-
-/// Casts a strike of its kit ahead; the animation the wind-up began with plays on.
-fn strike(run: &mut Run, bi: usize, id: AbilityId) {
-    let (anim, since) = (run.monsters[bi].anim, run.monsters[bi].anim_start);
-    let at = ahead(run, bi);
-    monster_cast(run, bi, id, at);
-    run.monsters[bi].anim = anim;
-    run.monsters[bi].anim_start = since;
-}
 
 impl Dragon {
     /// Is `id` off its opening delay and off cooldown?
@@ -181,15 +166,15 @@ impl BossBehaviour for Dragon {
                 }
                 Action::Breath | Action::Recover => set_anim(run, bi, Anim::Idle),
                 Action::Tail => {
-                    strike(run, bi, AbilityId::TailWhip);
+                    cast_in_pose(run, bi, AbilityId::TailWhip, ahead(run, bi));
                     self.action = Some((Action::Recover, RECOVER_TAIL));
                 }
                 Action::Claw => {
-                    strike(run, bi, AbilityId::Strike);
+                    cast_in_pose(run, bi, AbilityId::Strike, ahead(run, bi));
                     self.action = Some((Action::Recover, RECOVER_CLAW));
                 }
                 Action::Bite => {
-                    strike(run, bi, AbilityId::Bite);
+                    cast_in_pose(run, bi, AbilityId::Bite, ahead(run, bi));
                     self.action = Some((Action::Recover, RECOVER_CLAW));
                 }
                 Action::Fireball => {
@@ -252,6 +237,7 @@ mod tests {
     use crate::defs::abilities::{self as ab, Shape};
     use crate::defs::damage::What;
     use crate::defs::kinds::EntityKind;
+    use crate::math::Vec2;
     use crate::protocol::{BossId, ClassId, Ev};
     use crate::run::abilities::tick_channel;
     use crate::run::tests::test_run;

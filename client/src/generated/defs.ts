@@ -68,7 +68,6 @@ export const FLAG = {
   "AIRBORNE": 64,
   "DEAD": 32,
   "DORMANT": 8,
-  "ENRAGED": 4,
   "HIDING": 1,
   "HURT": 16,
   "IMMUNE": 2
@@ -95,7 +94,6 @@ export const CONST = {
   "DEMON_CLEAVE_KNOCK": 56.0,
   "DEMON_CLEAVE_RECOVER": 0.3,
   "DEMON_CLEAVE_WINDUP": 0.45,
-  "DEMON_ENRAGED_PACE": 0.6,
   "DEMON_RING_RECOVER": 0.35,
   "DEMON_RING_WINDUP": 0.5,
   "DEMON_SWOOP_KNOCK": 64.0,

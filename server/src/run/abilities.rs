@@ -314,9 +314,19 @@ fn use_projectile(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) ->
                 spawn_shot(run, c, a, kind_of(a.projectile), ab::volley_shot(shot, i as u8), Vec2::from_angle(aim + off), None, 0.0);
             }
         }
-        // Their data is in place; the boss scripts cast them from Task 7 (dragon), 8 (demon) and 9 (lich) on.
-        AbilityId::RingOfFire | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist => {
-            unreachable!("{:?} is cast by a boss script (Task 7-9), which does not exist yet", a.id)
+        // The demon's ring: `count` orbs spread over the full circle, starting at the aim, and a burst where it stands.
+        AbilityId::RingOfFire => {
+            let pos = run.creature_pos(c);
+            let own = ab::def(a.id).own;
+            for (i, off) in ab::shot_offsets(own.count, own.spread).into_iter().enumerate() {
+                spawn_shot(run, c, a, kind_of(a.projectile), ab::volley_shot(shot, i as u8), Vec2::from_angle(aim + off), None, 0.0);
+            }
+            let look = looks::look(figure_of(run, c), a.id);
+            run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: 30.0, k: look.boom }, Some(pos));
+        }
+        // Their data is in place; the lich's script casts them in Task 9.
+        AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist => {
+            unreachable!("{:?} is cast by a boss script (Task 9), which does not exist yet", a.id)
         }
         AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::SummonWolf | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::Nova | AbilityId::StoneGaze => {
             unreachable!("{:?} is not a projectile", a.id)
@@ -550,12 +560,12 @@ pub fn land_slam(run: &mut Run, c: Creature) {
 }
 
 /// How long (s) a monster's dash `a` lasts when aimed `aim_dist` px away: its own duration, else the time
-/// to cross that distance and a little more, so it reaches its mark.
+/// to cross that distance and a little more, so it reaches its mark, but never farther than its range.
 pub fn monster_dash_secs(a: &ResolvedAbility, aim_dist: f64) -> f64 {
     if a.duration > 0.0 {
         a.duration
     } else {
-        aim_dist / a.speed + 0.05
+        (aim_dist / a.speed + 0.05).min(a.range / a.speed)
     }
 }
 
@@ -564,7 +574,7 @@ fn use_dash(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
     debug_assert!(ab::def(a.id).shape == Shape::Dash);
     let dir = Vec2::from_angle(aim_of(run, c));
     match a.id {
-        AbilityId::Charge | AbilityId::Pounce => match c {
+        AbilityId::Charge | AbilityId::Pounce | AbilityId::Swoop => match c {
             Creature::Player(pi) => {
                 debug_assert!(a.id == AbilityId::Charge, "a hero has no Pounce");
                 let p = &mut run.players[pi];
@@ -578,8 +588,6 @@ fn use_dash(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
                 run.monsters[mi].dash = Some(MonsterDash { id: a.id, dir, left, hit: Vec::new(), attack: true });
             }
         },
-        // Their data is in place; the boss scripts cast them from Task 7 (dragon), 8 (demon) and 9 (lich) on.
-        AbilityId::Swoop => unreachable!("{:?} is cast by a boss script (Task 7-9), which does not exist yet", a.id),
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze => {
             unreachable!("{:?} is not a dash", a.id)
         }
@@ -1365,6 +1373,19 @@ mod tests {
         assert!((r[2].1 - 16.0).abs() < 1e-9, "24 - (18 - 5 - 5) = 16: {r:?}");
         let r = goblins([24.0, 5.0, 24.0]);
         assert!((r[0].1 - 6.0).abs() < 1e-9 && r[1].1 == 5.0 && r[2].1 == 24.0, "{r:?}");
+    }
+
+    #[test]
+    fn a_monster_dash_never_runs_farther_than_its_range() {
+        let kit = crate::sheet::wolf_kit(&crate::sheet::WolfMods::NONE);
+        let pounce = *kit.get(AbilityId::Pounce).unwrap();
+        assert!(pounce.duration == 0.0 && pounce.range > 0.0);
+        let reach = |aim_dist: f64| pounce.speed * monster_dash_secs(&pounce, aim_dist);
+        assert!(reach(pounce.range / 2.0) > pounce.range / 2.0, "it still reaches a near mark");
+        assert!(reach(pounce.range * 3.0) <= pounce.range + 1e-9, "re-aimed far away it stops at its range: {}", reach(pounce.range * 3.0));
+        // An ability with its own duration lasts that long.
+        let swoop = *crate::sheet::boss_kit(BossId::Demon).get(AbilityId::Swoop).unwrap();
+        assert_eq!(monster_dash_secs(&swoop, 1000.0), swoop.duration);
     }
 
     #[test]

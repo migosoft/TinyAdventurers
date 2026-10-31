@@ -45,25 +45,14 @@ pub fn governing(kind: EntityKind) -> super::attributes::Attr {
     }
 }
 
-/// Demon timings (s), shared with the client: each attack's animation starts
-/// with its wind-up (the hit lands at the end of it), then the strike frames
-/// play out in a short recovery. Enraged, every timer runs at
-/// 1 / DEMON_ENRAGED_PACE speed, so these last DEMON_ENRAGED_PACE times as long.
-pub const DEMON_CLEAVE_WINDUP: f64 = 0.45;
-pub const DEMON_SWOOP_WINDUP: f64 = 0.6;
-pub const DEMON_SWOOP_TIME: f64 = 0.55;
-pub const DEMON_RING_WINDUP: f64 = 0.5;
+/// The recovery after each demon attack (s), shared with the client: the animation starts with the ability's
+/// wind-up (from its kit) and the strike frames play out in this short recovery. The abilities' own numbers are the kit's.
 pub const DEMON_CLEAVE_RECOVER: f64 = 0.3;
 pub const DEMON_SWOOP_RECOVER: f64 = 0.25;
 pub const DEMON_RING_RECOVER: f64 = 0.35;
-pub const DEMON_ENRAGED_PACE: f64 = 0.6;
 /// The STR every boss push carries: above every hero's weight + 4, so
 /// scripted boss pushes keep their full distance.
 pub const BOSS_KNOCK_STR: i32 = 30;
-/// Knockback (px): heroes hit by the cleave or the swoop slide this far away from the
-/// demon. Its melee hits push hard (the user asked for "significant knockback").
-pub const DEMON_CLEAVE_KNOCK: f64 = 56.0;
-pub const DEMON_SWOOP_KNOCK: f64 = 64.0;
 
 pub const LICH_DISCIPLES: usize = 6;
 /// HP per second the lich drains from each living disciple.

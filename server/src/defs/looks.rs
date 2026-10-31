@@ -27,11 +27,12 @@ pub fn default_look(id: AbilityId) -> Look {
         GroundSlam | Smash => look(5, None, None),
         FrostNova => look(10, Some(LightKind::Magic), Some(super::abilities::NOVA_TINT)),
         WarCry => look(11, None, None),
+        RingOfFire => look(2, None, None),
         Haste => look(12, None, None),
         Purify => look(13, Some(LightKind::Holy), None),
         Smite => look(0, Some(LightKind::Holy), None),
         MagicMissile | Fireball | Strike | Charge | Shoot | SummonWolf | FrostShard | ChainSpark | Judgement | Hurl | Volley | Whirl | FlankingThrust | PoisonCoat | Consecrate
-        | Entangle | Bite | ShadowBolt | FireBolt | Pounce | TailWhip | FireBreath | Swoop | RingOfFire | Nova | GloomBolts | BlindingCurse | SleepMist | StoneGaze => look(0, None, None),
+        | Entangle | Bite | ShadowBolt | FireBolt | Pounce | TailWhip | FireBreath | Swoop | Nova | GloomBolts | BlindingCurse | SleepMist | StoneGaze => look(0, None, None),
     }
 }
 
