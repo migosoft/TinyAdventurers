@@ -17,13 +17,10 @@ const ADD = 1;
 /** Tiles beyond the view in which a beam is still kept, on top of its own height and slant. */
 const MARGIN = 1;
 const MOTES = 24;
-/** Beam alpha at the top, at BEAM_PEAK_AT of the way down, and at the floor. */
+/** Beam alpha at the top (0), at BEAM_PEAK_AT of the way down to the floor, and where it ends (0): the top edge of the patch. */
 const BEAM_PEAK = 0.22;
-const BEAM_PEAK_AT = 2 / 3;
-const BEAM_FLOOR = 0.2;
-/** How far the beam runs on past the floor edge, in patch widths, fading to 0 (the patch reaches 0.3 below its centre). */
-const BEAM_FOOT = 0.25;
-const PATCH_ALPHA = 0.6;
+const BEAM_PEAK_AT = 0.45;
+const PATCH_ALPHA = 0.25;
 const MOTE_ALPHA = 0.8;
 /** Mote drift speed range along the beam (px/s). */
 const DRIFT: [number, number] = [1, 3];
@@ -60,7 +57,7 @@ function ensureTexture(scene: Phaser.Scene): void {
   const ctx = c.getContext();
   const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.6, 'rgba(255,255,255,0.65)');
+  g.addColorStop(0.55, 'rgba(255,255,255,0.5)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
@@ -164,7 +161,7 @@ export class Sunbeams {
     }
   }
 
-  /** Each ray as three gradient trapezoids (top to the peak, peak to the floor, floor to its faded foot); vertex alpha makes the fade. */
+  /** Each ray as two gradient trapezoids (fading in to the peak, fading out to nothing at the patch's top edge); vertex alpha makes the fade. */
   private draw(b: Beam, colour: number, glow: number): void {
     const g = b.beam.clear();
     // Rays overlap, so each is dimmer: the total stays near one beam's brightness.
@@ -186,11 +183,10 @@ export class Sunbeams {
       g.fillTriangle(a[1][0], a[1][1], c[1][0], c[1][1], c[0][0], c[0][1]);
     };
     const mid = at(BEAM_PEAK_AT);
-    const foot = at(1 + (BEAM_FOOT * patchW) / (bottom[0][1] - top[0][1]));
+    // The beam is gone by the patch's top edge (0.3 patch widths above its centre).
+    const end = at(1 - (0.3 * patchW) / (bottom[0][1] - top[0][1]));
     band(top as [Pt, Pt], mid, 0, BEAM_PEAK);
-    band(mid, bottom as [Pt, Pt], BEAM_PEAK, BEAM_FLOOR);
-    // The beam runs on past the floor edge and fades to nothing, so it melts into the patch with no hard line.
-    band(bottom as [Pt, Pt], foot, BEAM_FLOOR, 0);
+    band(mid, end, BEAM_PEAK, 0);
   }
 
   private insideAny(rays: Ray[], x: number, y: number): boolean {
