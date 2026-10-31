@@ -14,11 +14,13 @@ export interface SunLook {
   clouds: number;
   /** Seconds of full sun between clouds. */
   gap: [number, number];
+  /** Tiles from ceiling to floor. */
+  height: number;
   /** Brightness of the beam and the patch (their alphas are multiplied by it, capped at 1). */
   glow: number;
 }
 
-export const sunLook: SunLook = { widen: true, patch: 2, slant: 1.5, dir: -1, clouds: 0.45, gap: [8, 25], glow: 1 };
+export const sunLook: SunLook = { widen: true, patch: 2, slant: 2, dir: -1, clouds: 0.3, gap: [8, 25], glow: 1, height: 4 };
 
 /** Uniform [0,1) from a hash of (id, cloud index, salt). */
 function rnd(id: number, n: number, salt: number): number {
@@ -70,9 +72,6 @@ export function cloudAt(id: number, t: number, look: SunLook): number {
   return 1 - look.clouds * c.depth * 0.5 * (1 - Math.cos(2 * Math.PI * u));
 }
 
-/** Height of a beam above its patch centre. */
-export const BEAM_HEIGHT = 3 * TILE;
-
 /** The beam of a skylight at tile (tx, ty) and its floor patch, in px. Edges run [left, right]; the top is on the side the light comes from. */
 export function beamShape(
   tx: number,
@@ -84,7 +83,7 @@ export function beamShape(
   const w = look.patch * TILE;
   const topHalf = (look.widen ? 0.25 : 0.5) * w;
   const topX = cx + look.dir * look.slant * TILE;
-  const topY = cy - BEAM_HEIGHT;
+  const topY = cy - look.height * TILE;
   return {
     top: [[topX - topHalf, topY], [topX + topHalf, topY]],
     bottom: [[cx - w / 2, cy], [cx + w / 2, cy]],

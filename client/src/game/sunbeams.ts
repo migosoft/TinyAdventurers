@@ -21,6 +21,8 @@ const MOTES = 24;
 const BEAM_PEAK = 0.22;
 const BEAM_PEAK_AT = 2 / 3;
 const BEAM_FLOOR = 0.2;
+/** How far the beam runs on past the floor edge, in patch widths, fading to 0. */
+const BEAM_FOOT = 0.4;
 const PATCH_ALPHA = 0.6;
 const MOTE_ALPHA = 0.8;
 /** Mote drift speed range along the beam (px/s). */
@@ -136,7 +138,7 @@ export class Sunbeams {
 
   private place(b: Beam, tx: number, ty: number, colour: number, cloud: number, dt: number, t: number): void {
     const look = sunLook;
-    const key = `${tx},${ty},${colour},${look.widen},${look.patch},${look.slant},${look.dir},${look.glow}`;
+    const key = `${tx},${ty},${colour},${look.widen},${look.patch},${look.slant},${look.dir},${look.glow},${look.height}`;
     if (key !== b.key) {
       b.key = key;
       b.shape = beamShape(tx, ty, look);
@@ -160,7 +162,7 @@ export class Sunbeams {
     }
   }
 
-  /** The beam as two gradient trapezoids (top to the peak, peak to the floor); vertex alpha makes the fade. */
+  /** The beam as three gradient trapezoids (top to the peak, peak to the floor, floor to its faded foot); vertex alpha makes the fade. */
   private draw(b: Beam, colour: number, glow: number): void {
     const { top, bottom } = b.shape;
     const at = (k: number): [Pt, Pt] => [
@@ -178,8 +180,11 @@ export class Sunbeams {
       g.fillTriangle(a[1][0], a[1][1], c[1][0], c[1][1], c[0][0], c[0][1]);
     };
     const mid = at(BEAM_PEAK_AT);
+    const foot = at(1 + (BEAM_FOOT * (bottom[1][0] - bottom[0][0])) / (bottom[0][1] - top[0][1]));
     band(top as [Pt, Pt], mid, 0, BEAM_PEAK);
     band(mid, bottom as [Pt, Pt], BEAM_PEAK, BEAM_FLOOR);
+    // The beam runs on past the floor edge and fades to nothing, so it melts into the patch with no hard line.
+    band(bottom as [Pt, Pt], foot, BEAM_FLOOR, 0);
   }
 
   /** Is (x, y) inside the beam trapezoid? */
