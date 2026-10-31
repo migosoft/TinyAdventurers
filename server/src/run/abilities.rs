@@ -650,13 +650,11 @@ fn melee_arc(run: &mut Run, c: Creature, a: &ResolvedAbility, crit: bool) -> Opt
             run.knock_creature(t, pos, aim, a.push, a.push_str);
         }
     }
-    // The wolf bites its prey, not the chests and barrels around it.
-    let ally = side(run, c) == Side::Heroes && hero_of(c).is_none();
     let objs: Vec<usize> = (0..run.objects.len())
         .filter(|&i| {
             let o = &run.objects[i];
             let d = o.pos.dist(pos);
-            if ally || o.gone || d > range + o.radius {
+            if o.gone || d > range + o.radius {
                 return false;
             }
             let in_arc = angle_diff(pos.angle_to(o.pos), aim).abs() <= arc / 2.0 || d < o.radius + run.creature_radius(c);

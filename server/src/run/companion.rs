@@ -202,7 +202,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
 
-    // 4. A bite wind-up.
+    // 4. A wind-up: a bite, or (`alt`) a pounce.
     if let Some(w) = run.monsters[mi].ai.windup {
         let t = w.t - dt;
         if t > 0.0 {
@@ -213,7 +213,18 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         let prey = run.monsters[mi].ally.as_ref().and_then(|a| a.prey).and_then(|id| run.monster_idx(id));
         if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive) {
             let at = run.monsters[ei].pos;
-            monster_cast(run, mi, AbilityId::Bite, at);
+            if w.alt {
+                // The pounce's wind-up is over: it leaps if its landing is still safe.
+                let pounce = *run.monsters[mi].kit.get(AbilityId::Pounce).expect("the wolf pounces");
+                let (pos, d) = (run.monsters[mi].pos, run.monsters[mi].pos.dist(at));
+                let dir = (at - pos).norm();
+                if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
+                    monster_cast(run, mi, AbilityId::Pounce, at);
+                    return;
+                }
+            } else {
+                monster_cast(run, mi, AbilityId::Bite, at);
+            }
         }
         set_anim(run, mi, Anim::Melee);
         return;
@@ -237,8 +248,10 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             let dir = (epos - pos).norm();
             // Never a jump to its death: the pounce must end on walkable ground.
             if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
-                monster_cast(run, mi, AbilityId::Pounce, epos);
+                // It winds up first, like any cast; the leap itself starts when that is over (step 4).
+                run.monsters[mi].ai.windup = Some(Windup { t: pounce.windup, aim, alt: true, at: None });
                 run.monsters[mi].ai.path.clear();
+                set_anim(run, mi, Anim::Windup);
                 return;
             }
         }
@@ -1013,6 +1026,32 @@ mod tests {
         assert_eq!(done.hit, vec![near], "it stopped at the first foe, which it hit once");
         assert_eq!(hp_of(&run, near), Some(480.0));
         assert_eq!(hp_of(&run, far), Some(500.0));
+    }
+
+    #[test]
+    fn the_wolf_winds_up_for_its_pounce_with_the_kits_windup() {
+        let (mut run, id) = guard_run();
+        let r = run.players[0].pos();
+        set_wolf_pos(&mut run, id, r + Vec2::new(10.0, 0.0));
+        let orc = orc_at(&mut run, r - Vec2::new(40.0, 0.0));
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].ai.hold = 99.0;
+        run.monsters[oi].hp = 500.0;
+        let windup = wolf(&run, id).kit.get(AbilityId::Pounce).unwrap().windup;
+        assert!((windup - 0.2).abs() < 1e-9, "own 0 + Beast Bite's 0.2: {windup}");
+        let (mut wound, mut leapt) = (None, None);
+        for t in 0..40 {
+            run.step();
+            let w = wolf(&run, id);
+            if wound.is_none() && w.ai.windup.is_some_and(|u| u.alt) {
+                wound = Some(t);
+            }
+            if leapt.is_none() && w.dash.is_some() {
+                leapt = Some(t);
+            }
+        }
+        let (wound, leapt) = (wound.expect("it wound up"), leapt.expect("it leapt"));
+        assert!(leapt - wound >= (windup * 60.0) as i32 - 1, "the leap waited for the wind-up: {wound} {leapt}");
     }
 
     #[test]
