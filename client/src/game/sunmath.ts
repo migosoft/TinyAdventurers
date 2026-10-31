@@ -113,16 +113,17 @@ export interface Ray {
  * is moved back, and the last ray is widened to reach the edge). At the top they all start near one spot:
  * each top centre is within +-0.2 of the beam's top width of its centre and each top is 0.45..0.58 of it
  * wide, so any two overlap and all stay inside the top span (the rays fan out from one crack). Hashed from
- * (id, ray index), so they never change. One ray is the whole beam.
+ * (id, ray index), so they never change. One ray is the whole beam. With `look.style === 'parallel'` the
+ * rays are instead narrow shafts parallel to the beam's edges (see `parallelRays`; the fan rules above do not apply).
  */
 export function rayShapes(shape: { top: [number, number][]; bottom: [number, number][] }, id: number, look: SunLook): Ray[] {
   const n = look.rays;
   if (n <= 1) return [{ top: shape.top, bottom: shape.bottom }];
+  if (look.style === 'parallel') return parallelRays(shape, id, n);
   const [tl, tr] = [shape.top[0][0], shape.top[1][0]];
   const [bl, br] = [shape.bottom[0][0], shape.bottom[1][0]];
   const topW = tr - tl;
   const botW = br - bl;
-  if (look.style === 'parallel') return parallelRays(shape, id, n, look);
   // Floor spans as shares of the beam's width.
   const spans = Array.from({ length: n }, (_, i) => {
     const w = look.rayWidth[0] + (look.rayWidth[1] - look.rayWidth[0]) * rnd(id, i, 5);
@@ -153,8 +154,7 @@ export function rayShapes(shape: { top: [number, number][]; bottom: [number, num
 }
 
 /** Narrow shafts parallel to the beam's edges: one per equal slot of the width, placed at random in its slot (top and floor at the same share u). */
-function parallelRays(shape: { top: [number, number][]; bottom: [number, number][] }, id: number, n: number, look: SunLook): Ray[] {
-  void look;
+function parallelRays(shape: { top: [number, number][]; bottom: [number, number][] }, id: number, n: number): Ray[] {
   const [tl, tr] = [shape.top[0][0], shape.top[1][0]];
   const [bl, br] = [shape.bottom[0][0], shape.bottom[1][0]];
   const rays: Ray[] = [];

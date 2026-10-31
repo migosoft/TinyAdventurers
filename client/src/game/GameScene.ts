@@ -23,6 +23,7 @@ import { lookOf } from './looks';
 import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
 import { LightView, nextDarkvision } from './lightview';
+import { Sunbeams } from './sunbeams';
 import { Mood, type AirTorch, type AirShot, type AirMover } from './mood';
 import { MoverTracker } from './airmovers';
 import { projectileAir } from './airshots';
@@ -131,6 +132,7 @@ export class GameScene extends Phaser.Scene {
   private light!: LightField;
   private lightView!: LightView;
   private mood!: Mood;
+  private sunbeams!: Sunbeams;
   private movers = new MoverTracker(); // replaced in init() for every run
   private airMovers: AirMover[] = [];
   private visionMask!: VisionMask;
@@ -195,6 +197,7 @@ export class GameScene extends Phaser.Scene {
     this.drawBoard();
     this.lightView = new LightView(this, this.map, this.light);
     this.mood = new Mood(this, this.map, this.lightView);
+    this.sunbeams = new Sunbeams(this, this.light, this.lightView);
     this.visionMask = new VisionMask(this, this.map);
     this.useHint = new KeyCap(this);
     this.bars = this.add.graphics().setDepth(DEPTH.enemyBars);
@@ -264,6 +267,7 @@ export class GameScene extends Phaser.Scene {
   private cleanup(): void {
     this.unsub?.();
     this.mood.destroy();
+    this.sunbeams.destroy();
     this.rulesLog.destroy();
     this.useHint.destroy();
     for (const v of this.views.values()) v.destroy();
@@ -759,6 +763,7 @@ export class GameScene extends Phaser.Scene {
     for (const e of this.ents.values()) if (e.kind === KIND.Torch) torches.push({ x: e.x, y: e.y, side: e.extra, lit: e.anim === 1 });
     const shots: AirShot[] = (this.lastSnap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
     this.mood.update(dt, this.cameras.main.worldView, torches, shots, this.collectMovers(dt, px, py));
+    this.sunbeams.update(dt, this.cameras.main.worldView, now);
     this.visionMask.update(this.cameras.main.worldView, this.lightView.view);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 

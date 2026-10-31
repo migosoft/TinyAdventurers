@@ -188,6 +188,8 @@ describe('parallel rays', () => {
           }
           const sorted = rays.map((r) => r.bottom[0][0]).sort((a, b) => a - b);
           for (const [k, x] of sorted.entries()) expect(x).toBeGreaterThanOrEqual(shape.bottom[0][0] + (k / n) * bw - 1e-6);
+          const rights = rays.map((r) => r.bottom[1][0]).sort((a, b) => a - b);
+          for (const [k, x] of rights.entries()) expect(x).toBeLessThanOrEqual(shape.bottom[0][0] + ((k + 1) / n) * bw + 1e-6);
         }
       }
     }
