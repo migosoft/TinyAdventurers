@@ -1613,3 +1613,32 @@ fn a_pure_effect_hit_from_something_unseen_does_not_reach_the_hero_with_its_powe
     let lines = got.map(|g| g.1).unwrap_or_default();
     assert!(lines.is_empty(), "{lines:?}");
 }
+
+#[test]
+fn haste_and_purify_credit_the_caster_on_every_target() {
+    let wiz = ClassId::Wizard;
+    let pick = Pick { ability: AbilityId::Haste, source: Source::Own };
+    let mk = || Build { own: vec![AbilityId::Haste], loadout: Loadout { secondary: pick, ..Loadout::start(wiz) }, extra: Attributes::new(0, 0, 0, 5, 2, 0), ..Build::start(wiz) };
+    let mut run = crate::run::tests::test_run_with(&[(wiz, mk()), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::Demon);
+    run.log.forced = true;
+    let here = run.players[0].pos();
+    run.players[1].mv.x = here.x + 30.0;
+    run.players[1].mv.y = here.y;
+    // The cause named in each effect line is the caster, whoever the target is.
+    let leads = |run: &mut Run, what: &str| -> Vec<String> {
+        let mark = format!(" ▸ {what} ▸ ");
+        take(run).iter().filter_map(|r| r.head.split_once(&mark).map(|(lead, _)| lead.to_string())).collect()
+    };
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    let haste = leads(&mut run, "Haste");
+    assert_eq!(haste.len(), 2, "one line per hero: {haste:?}");
+    assert_eq!(haste[0], haste[1], "both name the caster");
+
+    let mut purify = run.players[0].sheet.secondary;
+    purify.id = AbilityId::Purify;
+    purify.effect = Some(crate::defs::effects::OnHit { kind: EffectKind::Warded, secs: 4.0, magical: true, power: 0, look: EffectLook::Plain });
+    crate::run::abilities::cast(&mut run, Creature::Player(0), &purify, 1);
+    let lines = leads(&mut run, "Purify");
+    assert_eq!(lines.len(), 2, "one line per hero: {lines:?}");
+    assert_eq!(lines[0], lines[1], "both name the caster");
+}

@@ -423,23 +423,25 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
         AbilityId::Haste => {
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 12 }, Some(pos));
             let own = a.effect.expect("Haste has its own effect");
-            for c in party_around(run, pos, a.radius) {
-                run.apply(c, Apply { origin: Some((run.creature_id(c), What::Ability(a.id))), ..Apply::plain(own.kind, Some(own.secs)) });
+            let origin = Some((run.creature_id(c), What::Ability(a.id)));
+            for t in party_around(run, pos, a.radius) {
+                run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
             }
         }
         AbilityId::Purify => {
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: 13 }, Some(pos));
             run.add_flash(LightKind::Holy, pos, ab::PURIFY_FLASH);
             let own = a.effect.expect("Purify has its own effect");
-            for c in party_around(run, pos, a.radius) {
-                let held = match c {
+            let origin = Some((run.creature_id(c), What::Ability(a.id)));
+            for t in party_around(run, pos, a.radius) {
+                let held = match t {
                     Creature::Player(i) => run.players[i].effects.kinds(),
                     Creature::Monster(i) => run.monsters[i].effects.kinds(),
                 };
                 for k in held.into_iter().filter(|&k| !crate::defs::effects::def(k).positive) {
-                    run.remove_effect_why(c, k, super::rules_log::EndReason::Purify);
+                    run.remove_effect_why(t, k, super::rules_log::EndReason::Purify);
                 }
-                run.apply(c, Apply { origin: Some((run.creature_id(c), What::Ability(a.id))), ..Apply::plain(own.kind, Some(own.secs)) });
+                run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
             }
         }
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Consecrate | AbilityId::Entangle => {
