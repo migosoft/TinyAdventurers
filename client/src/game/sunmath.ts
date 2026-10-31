@@ -103,10 +103,13 @@ export interface Ray {
 }
 
 /**
- * The beam of light `id` as `look.rays` narrower rays of differing widths (`look.rayWidth`, 0.5..0.8 of the beam's by default) that overlap
- * partly. The first ray starts at the beam's left edge and the last ends at its right edge at the floor, so
- * together they span the beam's width; the top edges follow the same layout, nudged slightly, and are kept
- * inside the beam's top span. Hashed from (id, ray index), so they never change. One ray is the whole beam.
+ * The beam of light `id` as `look.rays` narrower rays of differing widths (`look.rayWidth`, shares of the
+ * beam's width). At the floor they lie left to right, the first starting at the beam's left edge and the last
+ * ending at its right edge, and neighbours always touch or overlap (a ray whose hashed spot would leave a gap
+ * is moved back, and the last ray is widened to reach the edge). At the top they all start near one spot:
+ * each top centre is within +-0.2 of the beam's top width of its centre and each top is 0.45..0.58 of it
+ * wide, so any two overlap and all stay inside the top span (the rays fan out from one crack). Hashed from
+ * (id, ray index), so they never change. One ray is the whole beam.
  */
 export function rayShapes(shape: { top: [number, number][]; bottom: [number, number][] }, id: number, look: SunLook): Ray[] {
   const n = look.rays;
@@ -115,16 +118,30 @@ export function rayShapes(shape: { top: [number, number][]; bottom: [number, num
   const [bl, br] = [shape.bottom[0][0], shape.bottom[1][0]];
   const topW = tr - tl;
   const botW = br - bl;
-  const rays: Ray[] = [];
-  for (let i = 0; i < n; i++) {
+  // Floor spans as shares of the beam's width.
+  const spans = Array.from({ length: n }, (_, i) => {
     const w = look.rayWidth[0] + (look.rayWidth[1] - look.rayWidth[0]) * rnd(id, i, 5);
-    // Left edge, as a share of the beam's width: the first ray at 0, the last at 1 - w, the others between.
-    const u0 = i === 0 ? 0 : i === n - 1 ? 1 - w : (1 - w) * (0.25 + 0.5 * rnd(id, i, 6));
-    const tw = w * topW;
-    const tLeft = Math.min(tr - tw, Math.max(tl, tl + u0 * topW + (rnd(id, i, 3) - 0.5) * 0.2 * topW));
+    const left = i === 0 ? 0 : i === n - 1 ? 1 - w : (1 - w) * (0.25 + 0.5 * rnd(id, i, 6));
+    return { left, w, i };
+  }).sort((a, b) => a.left - b.left);
+  spans[0].left = 0;
+  let right = spans[0].w;
+  for (let k = 1; k < n; k++) {
+    spans[k].left = Math.min(spans[k].left, right);
+    right = Math.max(right, spans[k].left + spans[k].w);
+  }
+  // The last (rightmost) end reaches the beam's edge.
+  if (right < 1) {
+    const last = spans.reduce((a, b) => (b.left + b.w > a.left + a.w ? b : a));
+    last.w += 1 - right;
+  }
+  const rays: Ray[] = [];
+  for (const { left, w, i } of spans.sort((a, b) => a.i - b.i)) {
+    const tc = (tl + tr) / 2 + (rnd(id, i, 3) - 0.5) * 0.4 * topW;
+    const th = 0.5 * topW * (0.45 + 0.13 * rnd(id, i, 4)) * 2;
     rays.push({
-      top: [[tLeft, shape.top[0][1]], [tLeft + tw, shape.top[0][1]]],
-      bottom: [[bl + u0 * botW, shape.bottom[0][1]], [bl + (u0 + w) * botW, shape.bottom[0][1]]],
+      top: [[tc - th / 2, shape.top[0][1]], [tc + th / 2, shape.top[0][1]]],
+      bottom: [[bl + left * botW, shape.bottom[0][1]], [bl + (left + w) * botW, shape.bottom[0][1]]],
     });
   }
   return rays;
@@ -135,6 +152,9 @@ export function rayGlow(glow: number, rays: number): number {
   return glow / Math.sqrt(Math.max(1, rays));
 }
 
+/** Tallest and shortest beam of a random sun spot, in tiles. */
+export const HEIGHT_RANGE: [number, number] = [3, 6];
+
 /** The look of sun spot `id`: random but the same for everyone (a hash of the id). Slant, direction and cloud gap stay those of `base`. */
 export function sunVariant(id: number, base: SunLook): SunLook {
   const r = (salt: number) => rnd(id, 0, 20 + salt);
@@ -143,7 +163,7 @@ export function sunVariant(id: number, base: SunLook): SunLook {
     ...base,
     widen: r(0) < 0.65,
     patch: 1.5 + 1.5 * r(1),
-    height: 3 + 3 * r(2),
+    height: HEIGHT_RANGE[0] + (HEIGHT_RANGE[1] - HEIGHT_RANGE[0]) * r(2),
     rays: rays < 0.3 ? 1 : rays < 0.75 ? 2 : 3,
     rayWidth: [0.25, 0.9],
     glow: 0.8 + 0.5 * r(5),

@@ -153,8 +153,13 @@ export class SunlightDemoScene extends Phaser.Scene {
     const bar = (this.bar = document.createElement('div'));
     bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:8px;background:rgba(0,0,0,.75);z-index:10;font:600 15px system-ui,sans-serif';
     const fixed: HTMLButtonElement[] = [];
-    const show = () => fixed.forEach((b) => (b.style.display = sunLook.vary ? 'none' : ''));
-    const add = (label: () => string, act: () => void, fixedLook = false) => {
+    const varied: HTMLButtonElement[] = [];
+    const show = () => {
+      fixed.forEach((b) => (b.style.display = sunLook.vary ? 'none' : ''));
+      varied.forEach((b) => (b.style.display = sunLook.vary ? '' : 'none'));
+    };
+    /** `only`: shown only with Vary off ('fixed') or on ('varied'). */
+    const add = (label: () => string, act: () => void, only?: 'fixed' | 'varied') => {
       const b = document.createElement('button');
       b.style.cssText = 'padding:10px 12px;border-radius:8px;border:1px solid #777;background:#222;color:#fff;font:inherit;min-width:84px';
       b.textContent = label();
@@ -163,7 +168,8 @@ export class SunlightDemoScene extends Phaser.Scene {
         b.textContent = label();
       };
       bar.appendChild(b);
-      if (fixedLook) fixed.push(b);
+      if (only === 'fixed') fixed.push(b);
+      if (only === 'varied') varied.push(b);
     };
     /** Index of the value nearest to `v` (so a URL value that is not on the list still cycles on). */
     const near = (list: number[], v: number) => list.reduce((best, x, i) => (Math.abs(x - v) < Math.abs(list[best] - v) ? i : best), 0);
@@ -175,21 +181,21 @@ export class SunlightDemoScene extends Phaser.Scene {
     add(() => `Reroll #${this.roll}`, () => {
       this.roll++;
       this.placeSuns();
-    });
+    }, 'varied');
     add(() => `Second crack: ${this.second ? 'on' : 'off'}`, () => {
       this.second = !this.second;
       this.placeSuns();
     });
-    add(() => `Shape: ${sunLook.widen ? 'widening' : 'straight'}`, () => (sunLook.widen = !sunLook.widen), true);
-    add(() => `Patch: ${sunLook.patch} tiles`, () => (sunLook.patch = next(PATCHES, sunLook.patch)), true);
+    add(() => `Shape: ${sunLook.widen ? 'widening' : 'straight'}`, () => (sunLook.widen = !sunLook.widen), 'fixed');
+    add(() => `Patch: ${sunLook.patch} tiles`, () => (sunLook.patch = next(PATCHES, sunLook.patch)), 'fixed');
     add(() => `Slant: ${sunLook.slant} tiles`, () => (sunLook.slant = next(SLANTS, sunLook.slant)));
     add(() => `From: ${sunLook.dir < 0 ? 'left' : 'right'}`, () => (sunLook.dir = sunLook.dir < 0 ? 1 : -1));
     const cv = CLOUDS.map((c) => c[1]);
-    add(() => `Clouds: ${CLOUDS[near(cv, sunLook.clouds)][0]}`, () => (sunLook.clouds = next(cv, sunLook.clouds)), true);
+    add(() => `Clouds: ${CLOUDS[near(cv, sunLook.clouds)][0]}`, () => (sunLook.clouds = next(cv, sunLook.clouds)), 'fixed');
     add(() => `Often: ${sunLook.gap[0] === OFTEN[1][0] ? 'often' : 'normal'}`, () => (sunLook.gap = sunLook.gap[0] === OFTEN[1][0] ? OFTEN[0] : OFTEN[1]));
-    add(() => `Height: ${sunLook.height} tiles`, () => (sunLook.height = next(HEIGHTS, sunLook.height)), true);
-    add(() => `Rays: ${sunLook.rays}`, () => (sunLook.rays = (sunLook.rays % 3 + 1) as 1 | 2 | 3), true);
-    add(() => `Glow: x${sunLook.glow}`, () => (sunLook.glow = next(GLOWS, sunLook.glow)), true);
+    add(() => `Height: ${sunLook.height} tiles`, () => (sunLook.height = next(HEIGHTS, sunLook.height)), 'fixed');
+    add(() => `Rays: ${sunLook.rays}`, () => (sunLook.rays = (sunLook.rays % 3 + 1) as 1 | 2 | 3), 'fixed');
+    add(() => `Glow: x${sunLook.glow}`, () => (sunLook.glow = next(GLOWS, sunLook.glow)), 'fixed');
     add(() => `Beam: ${this.sun.on.beam ? 'on' : 'off'}`, () => (this.sun.on.beam = !this.sun.on.beam));
     add(() => `Dust: ${this.sun.on.dust ? 'on' : 'off'}`, () => (this.sun.on.dust = !this.sun.on.dust));
     show();

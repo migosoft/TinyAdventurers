@@ -63,21 +63,17 @@ describe('rayShapes', () => {
     const w = widths(4, 3);
     expect(new Set(w.map((x) => x.toFixed(3))).size).toBeGreaterThan(1);
   });
-  it('spans about the beam width at the floor and the top, never beyond the beam', () => {
+  it('spans the beam at the floor, and every ray starts within 0.25 of the top width of the top centre', () => {
     const bw = shape.bottom[1][0] - shape.bottom[0][0];
+    const topC = (shape.top[0][0] + shape.top[1][0]) / 2;
     const tw = shape.top[1][0] - shape.top[0][0];
     for (const n of [2, 3] as const) {
       for (const id of [1, 2, 3, 4, 5, 99, 1234]) {
         const rays = rayShapes(shape, id, { ...sunLook, rays: n });
-        const bl = Math.min(...rays.map((r) => r.bottom[0][0]));
-        const br = Math.max(...rays.map((r) => r.bottom[1][0]));
-        expect((br - bl) / bw).toBeGreaterThanOrEqual(0.85);
-        expect(bl).toBeGreaterThanOrEqual(shape.bottom[0][0] - 0.01);
-        expect(br).toBeLessThanOrEqual(shape.bottom[1][0] + 0.01);
-        const tl = Math.min(...rays.map((r) => r.top[0][0]));
-        const tr = Math.max(...rays.map((r) => r.top[1][0]));
-        expect((tr - tl) / tw).toBeGreaterThanOrEqual(0.7);
+        expect(Math.min(...rays.map((r) => r.bottom[0][0]))).toBeCloseTo(shape.bottom[0][0]);
+        expect(Math.max(...rays.map((r) => r.bottom[1][0]))).toBeCloseTo(shape.bottom[0][0] + bw);
         for (const r of rays) {
+          expect(Math.abs((r.top[0][0] + r.top[1][0]) / 2 - topC)).toBeLessThanOrEqual(0.25 * tw);
           expect(r.top[0][0]).toBeGreaterThanOrEqual(shape.top[0][0] - 0.01);
           expect(r.top[1][0]).toBeLessThanOrEqual(shape.top[1][0] + 0.01);
           expect(r.top[0][1]).toBe(shape.top[0][1]);
@@ -146,5 +142,24 @@ describe('sunVariant', () => {
       expect(Math.max(...rays.map((r) => r.bottom[1][0]))).toBeCloseTo(shape.bottom[1][0]);
     }
     expect(thin).toBeGreaterThan(20);
+  });
+});
+
+describe('rays of random suns have no gaps', () => {
+  it('neighbours touch or overlap at the floor and at the top, for widening and straight beams', () => {
+    for (const widen of [true, false]) {
+      const shape = beamShape(5, 8, { ...sunLook, widen });
+      for (let id = 1; id <= 1000; id++) {
+        const rays = rayShapes(shape, id, sunVariant(id, { ...sunLook, widen }));
+        for (const edge of ['top', 'bottom'] as const) {
+          const sorted = rays.map((r) => r[edge]).sort((a, b) => a[0][0] - b[0][0]);
+          let right = sorted[0][1][0];
+          for (const e of sorted.slice(1)) {
+            expect(e[0][0]).toBeLessThanOrEqual(right + 1e-6);
+            right = Math.max(right, e[1][0]);
+          }
+        }
+      }
+    }
   });
 });

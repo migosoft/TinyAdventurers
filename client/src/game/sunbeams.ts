@@ -8,7 +8,7 @@ import { TILE } from '../sim/map';
 import { DEPTH } from './effects';
 import type { LightField } from './light';
 import type { LightView } from './lightview';
-import { beamShape, cloudAt, lookFor, rayGlow, rayShapes, sunLook, type Ray, type SunLook } from './sunmath';
+import { HEIGHT_RANGE, beamShape, cloudAt, lookFor, rayGlow, rayShapes, sunLook, type Ray, type SunLook } from './sunmath';
 
 const PATCH_TEX = 'sun-patch';
 /** Phaser's `FilterMode.LINEAR` and blend mode ADD (a runtime import of Phaser would not load in unit tests). */
@@ -78,7 +78,7 @@ export class Sunbeams {
   }
 
   update(dt: number, view: Phaser.Geom.Rectangle, t: number): void {
-    const m = (MARGIN + 6 + Math.abs(sunLook.slant)) * TILE;
+    const m = (MARGIN + HEIGHT_RANGE[1] + Math.abs(sunLook.slant)) * TILE;
     const seen = new Set<number>();
     for (const l of this.field.lights.values()) {
       if (l.kind !== LIGHT_KIND.Daylight || !l.on) continue;
