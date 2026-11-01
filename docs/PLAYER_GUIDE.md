@@ -186,7 +186,7 @@ Every attack has one or more **damage types**: physical (blades, arrows, claws),
 | Light blue | Cold |
 | Green | Poison |
 
-Heroes, enemies and barrels can **resist** a type: that part of the hit is reduced. An attack with several types (the fireball is mostly heat, partly magical and physical) is reduced part by part, so an enemy immune to fire still takes the rest. When a hit does nothing at all, the number says **immune**. Some resist so strongly that the hit **heals** them, and a **weakness** adds damage, at most double.
+Heroes, enemies and barrels can **resist** a type: that part of the hit is reduced. An attack with several types (the fireball is mostly heat, partly magical and physical) is reduced part by part, so an enemy immune to fire still takes the rest. When a hit does nothing at all, the number says **immune**. Resisting tops out at full immunity (nothing heals by resisting), and a **weakness** adds damage, at most double.
 
 | Enemy | Resists | Weak to |
 |---|---|---|
@@ -195,7 +195,7 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 | Red Dragon | **heat completely**, magical half, physical 10 % | |
 | Barrels and chests | physical half, poison completely | |
 
-- **Incorporeal creatures** (ghosts and shades, coming with their own dungeons) have no solid body. Weapons, arrows, fire, ice and poison pass through them without harm, and **only magic hurts them, and a little extra** (10 % more). Some heroes have no magic yet, and cannot hurt them at all. They float through walls and solid objects, but never stop inside one, and hover over chasms, deep water and lava without harm. You cannot push them, roots cannot hold them, and they always look see-through. They can also **vanish**: you see nothing of them, and enemies cannot target them either. Anything that hits them shows them again, even a hit that does no damage, so you know what you hit. A creature that is both, such as a ghost, takes the stronger resistance of each type; no resistance goes above 100 %, so nothing heals by resisting.
+- **Incorporeal creatures** (ghosts and shades, coming with their own dungeons) have no solid body. Weapons, arrows, fire, ice and poison pass through them without harm, and **only magic hurts them, and a little extra** (10 % more). Some heroes have no magic yet, and cannot hurt them at all. They float through walls and solid objects, but never stop inside one, and hover over chasms, deep water and lava without harm. You cannot push them, roots cannot hold them, and they always look see-through. They can also **vanish**: you see nothing of them, your wolf and abilities that pick their own target (Chain Spark's jumps, War Cry) ignore them, and monsters cannot see an invisible hero either. Anything that hits them shows them again, even a hit that does no damage, so you know what you hit. A creature that is both, such as a ghost, takes the stronger resistance of each type; no resistance goes above 100 %, so nothing heals by resisting.
 - Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
 - The Red Demon's claws and the Red Dragon's claws are partly fire.
 - Fire also sets things **burning** and poison **poisons** (see Status effects), and a smaller share of a type has a weaker effect: a creature that resists the type completely never takes the effect.

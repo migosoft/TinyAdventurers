@@ -68,7 +68,8 @@ impl Run {
         m.mover = Mover::Incorporeal;
         m.invis_cd = 0.0;
         let name = self.players[pi].name.clone();
-        self.go_invisible(mi, 3.0, 5.0);
+        let vanished = self.go_invisible(mi, 3.0, 5.0);
+        debug_assert!(vanished, "it has the trait, no cooldown and is not invisible yet");
         self.event(Ev::Msg { text: format!("{name}: nearest enemy is now incorporeal") }, None);
     }
 
