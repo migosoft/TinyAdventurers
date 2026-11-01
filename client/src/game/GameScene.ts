@@ -95,6 +95,8 @@ export class GameScene extends Phaser.Scene {
   private interp = new Interpolator();
   private ents = new Map<number, EntState>();
   private views = new Map<number, EntityView>();
+  /** Entities that just reappeared from Invisible: their view fades in when it is created. */
+  private reappearing = new Set<number>();
   private projViews = new Map<number, Phaser.GameObjects.Image>();
   private hazardViews = new Map<number, Phaser.GameObjects.Image>();
   private mimicViews = new Map<number, MimicView>();
@@ -272,6 +274,7 @@ export class GameScene extends Phaser.Scene {
     this.useHint.destroy();
     for (const v of this.views.values()) v.destroy();
     this.views.clear();
+    this.reappearing.clear();
     for (const v of this.mimicViews.values()) v.destroy();
     this.mimicViews.clear();
     for (const v of this.chestViews.values()) v.destroy();
@@ -468,7 +471,13 @@ export class GameScene extends Phaser.Scene {
         this.light.remove(ev.id);
         break;
       case 'Effect':
-        // Drawn from the snapshot bitmask and its looks (status.ts).
+        // Drawn from the snapshot bitmask and its looks (status.ts). Invisible has a default fade:
+        // the entity leaves the snapshot at once, so a ghost image fades out; on return it fades in.
+        if (ev.kind === EFFECT.Invisible) {
+          const v = this.views.get(ev.id);
+          if (ev.on) v?.ghost();
+          else this.reappearing.add(ev.id);
+        }
         break;
       case 'Msg':
         this.hud.message(ev.text, 'game');
@@ -858,6 +867,7 @@ export class GameScene extends Phaser.Scene {
       view = new EntityView(this, e.kind, this.fx, me ? undefined : pi?.name, weapons);
       this.views.set(e.id, view);
     }
+    if (this.reappearing.delete(e.id) && !isPlayerKind(e.kind)) view.fadeIn();
     let s: ViewState;
     if (me && this.alive) {
       // Petrified or asleep: the weapon keeps the facing from before the effect.
@@ -871,9 +881,9 @@ export class GameScene extends Phaser.Scene {
       }
       const flags = this.myFlags;
       // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
-      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects(), entangled: e.entangled, swingArc: anim === ANIM.Melee ? this.localAnim.arc : undefined };
+      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects(), entangled: e.entangled, party: isPlayerKind(e.kind), swingArc: anim === ANIM.Melee ? this.localAnim.arc : undefined };
     } else {
-      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled };
+      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled, party: isPlayerKind(e.kind) };
     }
     this.terrainState(e, s, me && this.alive, dt);
     view.update(s, dt);

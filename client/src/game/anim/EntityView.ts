@@ -11,6 +11,7 @@ import { TagEffects } from '../tagEffects';
 import { frameBounds, has, lieLayout, lyingPose, StatusView } from '../status';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
 import { pickFrame, windupOf } from './pickFrame';
+import { appearFactor, entityAlpha, VANISH_SECS } from './entityAlpha';
 
 export interface ViewState {
   x: number;
@@ -24,6 +25,8 @@ export interface ViewState {
   swingArc?: number;
   /** Bitmask of `EffectKind` ids on the creature. */
   effects?: number;
+  /** A party hero (drawn faintly, not hidden, while Invisible). */
+  party?: boolean;
   /** The look of its Entangled effect (`lookOf`); Plain when absent. */
   entangled?: number;
   /** Pixels the figure stands below a surface (wading in water or lava). */
@@ -102,6 +105,8 @@ export class EntityView {
   /** Seconds of horizontal jitter left (the growl). */
   private shakeT = 0;
   speed = 0;
+  /** Seconds left of the fade-in after reappearing. */
+  private appearLeft = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -295,7 +300,8 @@ export class EntityView {
     this.status.update(fxBits, dt, s.entangled);
     if (asleep) this.weapon?.setVisible(false);
 
-    this.root.setAlpha(1);
+    this.appearLeft = Math.max(0, this.appearLeft - dt);
+    this.root.setAlpha(entityAlpha(s.flags, fxBits, s.party ?? false) * appearFactor(this.appearLeft, VANISH_SECS));
 
     const ax = Math.cos(s.aim);
     const ay = Math.sin(s.aim);
@@ -564,6 +570,25 @@ export class EntityView {
       const dark = Math.random() < 0.6;
       this.fx.particle(ex, ey, (s.x - ex) * 2, (s.y - 10 - ey) * 2, 0.45, dark ? GLOOM.dark : GLOOM.spark, { frame: dark ? 'dot' : 'spark', scale: dark ? 1.6 : 1, depth: DEPTH.hazard + 1 });
     }
+  }
+
+  /** Fade in from nothing (the entity reappears). */
+  fadeIn(): void {
+    this.appearLeft = VANISH_SECS;
+    this.root.setAlpha(0);
+  }
+
+  /** A ghost image of the figure at its spot, fading out over `VANISH_SECS` (the entity went invisible). */
+  ghost(): void {
+    const b = this.body;
+    const g = this.root.scene.add
+      .image(this.root.x, this.root.y, b.texture.key, b.frame.name)
+      .setOrigin(b.originX, b.originY)
+      .setScale(this.figure.scaleX * (b.flipX ? -1 : 1), this.figure.scaleY)
+      .setDepth(this.root.depth)
+      .setAlpha(this.root.alpha);
+    g.y += b.y * this.figure.scaleY;
+    this.root.scene.tweens.add({ targets: g, alpha: 0, duration: VANISH_SECS * 1000, onComplete: () => g.destroy() });
   }
 
   destroy(): void {

@@ -139,6 +139,9 @@ fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, gaze
     if m.airborne {
         f |= flags::AIRBORNE;
     }
+    if m.traits.phasing {
+        f |= flags::INCORPOREAL;
+    }
     if m.is_boss && boss_immune {
         f |= flags::IMMUNE;
     }
@@ -466,6 +469,22 @@ mod tests {
         let lights = snap[8].as_array().unwrap();
         assert_eq!(lights.len(), 1);
         assert_eq!((lights[0][2].as_u64(), lights[0][3].as_u64()), (Some(LightKind::Fire as u64), Some(0x3060ff)));
+    }
+
+    #[test]
+    fn phasing_monster_is_flagged_incorporeal_in_the_snapshot() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 1.0);
+        let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 3, ty), None);
+        let mi = run.monster_idx(id).unwrap();
+        let flag_of = |run: &mut Run| {
+            run.lights.refresh(&run.layout.map);
+            let dark = dark_of(run);
+            snapshot_ents(run, 0, &run.players[0].view, &dark).iter().find(|e| e.0 == id).unwrap().8
+        };
+        assert_eq!(flag_of(&mut run) & flags::INCORPOREAL, 0);
+        run.monsters[mi].traits.phasing = true;
+        assert_ne!(flag_of(&mut run) & flags::INCORPOREAL, 0);
     }
 
     #[test]
