@@ -66,6 +66,9 @@ pub fn effect_name(k: EffectKind) -> &'static str {
         EffectKind::Warded => "Warded",
         EffectKind::Coated => "Coated",
         EffectKind::Invisible => "Invisible",
+        EffectKind::Weakened => "Weakened",
+        EffectKind::Clumsy => "Clumsy",
+        EffectKind::Frail => "Frail",
     }
 }
 
@@ -164,7 +167,7 @@ pub(super) fn part_lines(f: &HitFacts) -> Vec<String> {
 }
 
 /// The kinds in a bit set, named and joined.
-fn kind_names(bits: u16) -> Vec<&'static str> {
+fn kind_names(bits: u32) -> Vec<&'static str> {
     EffectKind::ALL.into_iter().filter(|k| bits & k.bit() != 0).map(effect_name).collect()
 }
 

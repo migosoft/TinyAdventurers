@@ -51,7 +51,7 @@ pub enum EffectOutcome {
     Added,
     Refreshed,
     /// The effect cancelled others (fire and ice) and was not applied: the kinds removed, as `EffectKind::bit`s.
-    Cancelled { removed: u16 },
+    Cancelled { removed: u32 },
     /// A stronger tier is on.
     StrongerOn(EffectKind),
     SavedToZero,
@@ -98,7 +98,7 @@ impl Effects {
     pub fn kinds(&self) -> Vec<EffectKind> {
         self.0.iter().map(|a| a.kind).collect()
     }
-    pub fn bits(&self) -> u16 {
+    pub fn bits(&self) -> u32 {
         self.0.iter().fold(0, |b, a| b | a.kind.bit())
     }
     /// Refresh: the longer of the remaining and the new time. True when newly added.
@@ -266,7 +266,7 @@ impl Run {
     }
 
     /// The body of `apply`: what happened, the numbers on the way, and the weaker tiers it removed (bits).
-    pub fn apply_traced(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u16) {
+    pub fn apply_traced(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u32) {
         let r = self.apply_untold(c, a);
         if !def(a.kind).positive && matches!(r.0, EffectOutcome::Added | EffectOutcome::Refreshed) {
             // The landing effect's own Ev::Effect start event is suppressed for a creature that was still invisible
@@ -276,7 +276,7 @@ impl Run {
         r
     }
 
-    fn apply_untold(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u16) {
+    fn apply_untold(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u32) {
         let kind = a.kind;
         let mut d = Duration::default();
         let Some((_, _, pos, ok)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
@@ -622,7 +622,7 @@ mod tests {
     fn invisible_is_a_positive_effect_that_a_hit_or_an_attack_ends() {
         let d = def(EffectKind::Invisible);
         assert!(d.positive && d.ends_when_hit && d.ends_when_attacking && d.duration == 30.0);
-        assert_eq!(EffectKind::Invisible as u8, 15, "the last bit of the u16 mask");
+        assert_eq!(EffectKind::Invisible as u8, 15, "the last bit of the former u16 mask");
         assert!(EffectKind::ALL.iter().filter(|&&k| k != EffectKind::Invisible).all(|&k| !def(k).ends_when_hit && !def(k).ends_when_attacking));
     }
 

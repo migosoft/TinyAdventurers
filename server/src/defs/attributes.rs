@@ -54,6 +54,16 @@ impl Attributes {
         }
         r
     }
+    /// `self` with a signed delta applied; a lowered Attribute stops at 1 (or stays where it
+    /// already was below that).
+    pub fn with_delta(self, d: Attributes) -> Attributes {
+        let mut r = self;
+        for a in Attr::ALL {
+            let (base, dv) = (self.get(a), d.get(a));
+            r.0[a as usize] = if dv >= 0 { base + dv } else { (base + dv).max(base.min(1)) };
+        }
+        r
+    }
 }
 
 /// The Attribute value at which every factor is 1.
@@ -127,6 +137,14 @@ pub fn attr_price(a: Attr, current: i32) -> u32 {
 mod tests {
     use super::Attr::*;
     use super::*;
+
+    #[test]
+    fn with_delta_floors_a_lowered_attribute_at_one() {
+        let d = |s| Attributes::new(s, 0, 0, 0, 0, 0);
+        assert_eq!(Attributes::new(14, 1, 0, 10, 10, 10).with_delta(Attributes::new(-3, -2, -1, 2, 0, 0)), Attributes::new(11, 1, 0, 12, 10, 10));
+        assert_eq!(d(3).with_delta(d(-5)), d(1));
+        assert_eq!(d(7).with_delta(Attributes::default()), d(7));
+    }
 
     #[test]
     fn push_needs_str_above_weight() {

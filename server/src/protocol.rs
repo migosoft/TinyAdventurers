@@ -209,7 +209,7 @@ pub struct MovingLight(pub f32, pub f32, pub u8, pub Option<u32>);
 /// `effects`: bitmask of `EffectKind` ids (creatures only).
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct EntSnap(pub u32, pub u8, pub f32, pub f32, pub u8, pub u8, pub f32, pub u16, pub u8, pub u32, pub u16);
+pub struct EntSnap(pub u32, pub u8, pub f32, pub f32, pub u8, pub u8, pub f32, pub u16, pub u8, pub u32, pub u32);
 
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]

@@ -208,7 +208,7 @@ pub struct EffectFacts {
     pub outcome: EffectOutcome,
     pub duration: Duration,
     /// The weaker tiers it removed (`EffectKind::bit`s).
-    pub replaced: u16,
+    pub replaced: u32,
     /// The creature's timer for `kind` after the call.
     pub left: f64,
     pub origin: Option<(u32, What)>,

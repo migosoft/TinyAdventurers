@@ -29,7 +29,7 @@ pub fn q_aim(a: f64) -> u8 {
 /// `[id, kind, x, y, hp, anim, aim, anim_ms, flags, extra, effects]`, see `EntSnap`.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u16, pub u8, pub u32, pub u16);
+pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u16, pub u8, pub u32, pub u32);
 
 /// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act]`, exact values;
 /// `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
