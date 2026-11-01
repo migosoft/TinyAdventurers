@@ -2,6 +2,7 @@
 
 pub mod abilities;
 pub mod ai;
+pub mod ambush;
 pub mod bosses;
 pub mod companion;
 pub mod debug;
@@ -1555,9 +1556,13 @@ pub mod tests {
         let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
         // The original values: barrels are left out of the fingerprint, so
         // this proves the rest of the setup is unchanged by them.
-        assert_eq!(got, vec![15034865796308420847, 11583993820610399499, 14176587140014399478, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
+        assert_eq!(got, vec![15034865796308420847, 3240435755681813295, 17335387983249213355, 8272529450485156440, 14190501604173934686, 9245005910822957255]);
         assert_ne!(got[0], got[1]);
         // 2026-10-21, plan 3a: checked again, unchanged.
+        // 2026-11-01, the Ghost (#169): seeds 1 and 2 (lich dungeons) changed, the others did not; the lich's
+        // dungeon now spawns Ghosts at its haunts (extra monsters, so extra ids and rows in the hash). The map
+        // tiles are unchanged (`haunts_leave_the_map_unchanged`).
+        // 2026-11-01, the Shade (#170): seeds 4 and 5 (demon dungeons) changed, the others did not, for the same reason.
     }
 
     #[test]
@@ -1569,7 +1574,7 @@ pub mod tests {
                 fingerprint(&run)
             })
             .collect();
-        assert_eq!(got, vec![15034865796308420847, 11583993820610399499, 14176587140014399478, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
+        assert_eq!(got, vec![15034865796308420847, 3240435755681813295, 17335387983249213355, 8272529450485156440, 14190501604173934686, 9245005910822957255]);
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
@@ -1605,7 +1610,9 @@ pub mod tests {
         // again, values unchanged by plan 3a. `plan_3a_fight_is_pinned` pins a fight that does exercise it.
         // 2026-10-31, #177 (one name, one ability): monsters and bosses use shared abilities with their own
         // cooldowns, so the Demon and Lich fights (the first two values) play out differently; the Dragon's is unchanged. Re-recorded once, on purpose.
-        assert_eq!(got, vec![6511878345562000907, 15469823654463399686, 1468820053114872194]);
+        // 2026-11-01, the Ghost (#169): the lich's value (the middle one) changed: its dungeon now has Ghosts. Demon and dragon unchanged.
+        // 2026-11-01, the Shade (#170): the demon's value (the first one) changed: its dungeon now has Shades. Lich and dragon unchanged.
+        assert_eq!(got, vec![13107944446375755914, 9463768407691502442, 1468820053114872194]);
     }
 
     #[test]
@@ -1624,7 +1631,7 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![6511878345562000907, 15469823654463399686, 1468820053114872194]);
+        assert_eq!(got, vec![13107944446375755914, 9463768407691502442, 1468820053114872194]);
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
@@ -1653,6 +1660,8 @@ pub mod tests {
         run
     }
 
+    // 2026-11-01, the Shade (#170): re-recorded because these fights run in a demon dungeon, whose Shades take monster ids
+    // before the fight's enemies are spawned, so every id in the hash shifted; the outcomes (the asserts above) are the same.
     // 2026-10-21: pins plan 3a's behaviour in a real fight: a ranger's bolts piercing a line of goblins
     // on overkill, a Wizard's staff on an orc in melee, a goblin archer punching a hero beside it.
     #[test]
@@ -1666,7 +1675,7 @@ pub mod tests {
         assert!(matches!(enemies(&wizard)[..], [(true, hp)] if hp < 60.0) && wizard.projectiles.is_empty(), "the staff, not missiles");
         assert!(paladin.players[0].hp < paladin.players[0].max_hp, "the archer punches");
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [12818716789722319080, 10046494661674442087, 18070867878348641130]);
+        assert_eq!(got, [1068918936915535691, 15502121462386010969, 16171886227855821682]);
     }
 
     #[test]
@@ -1676,7 +1685,7 @@ pub mod tests {
         let wizard = fight_with_log(ClassId::Wizard, E::OrcWarrior, &[12.0], &[60.0], true, true);
         let paladin = fight_with_log(ClassId::Paladin, E::GoblinArcher, &[12.0], &[24.0], false, true);
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [12818716789722319080, 10046494661674442087, 18070867878348641130]);
+        assert_eq!(got, [1068918936915535691, 15502121462386010969, 16171886227855821682]);
     }
 
     #[test]
@@ -2094,7 +2103,7 @@ pub mod tests {
         assert_eq!(boss.mover, Mover::Demon);
         assert!(demon.monsters.iter().filter(|m| m.etype == Some(EnemyType::Imp)).all(|m| m.mover == Mover::Demon));
         let lich = test_run(&[ClassId::Paladin], BossId::Lich);
-        assert!(lich.monsters.iter().all(|m| m.mover == Mover::Enemy));
+        assert!(lich.monsters.iter().filter(|m| m.etype != Some(EnemyType::Ghost)).all(|m| m.mover == Mover::Enemy));
     }
 
     #[test]
@@ -2148,6 +2157,7 @@ pub mod tests {
             let m = run.monsters.iter().find(|m| m.id == id).unwrap();
             let today = match t {
                 EnemyType::Imp | EnemyType::SummonedImp | EnemyType::Chort => DamageSplit::split(&[(DamageType::Heat, 0.2)]),
+                EnemyType::Ghost | EnemyType::Shade => DamageSplit::split(&[(DamageType::Magical, 0.9), (DamageType::Cold, 0.1)]),
                 _ => DamageSplit::physical(),
             };
             assert_eq!(m.melee, today, "{t:?}");

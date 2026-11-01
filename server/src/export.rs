@@ -13,7 +13,7 @@ use crate::defs::attributes::Attr;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::effects::{self, EffectKind};
 use crate::defs::items::{self, EquipSlot, ItemBase, ItemId};
-use crate::defs::weapons::{category, WeaponCategory};
+use crate::defs::weapons::{category, is_natural_like};
 use crate::defs::{bosses, enemies};
 use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::dungeon::{Map, Tile, TILE};
@@ -58,7 +58,7 @@ fn export_defs() {
         .filter_map(|&i| {
             let d = items::def(i);
             let (slot, kind) = match d.base {
-                ItemBase::Melee(k, _) if category(k) != WeaponCategory::Natural => (EquipSlot::Melee, k),
+                ItemBase::Melee(k, _) if !is_natural_like(category(k)) => (EquipSlot::Melee, k),
                 ItemBase::Ranged(k, _) => (EquipSlot::Ranged, k),
                 ItemBase::Melee(..) | ItemBase::Armor(_) | ItemBase::Ring | ItemBase::Shoes | ItemBase::Belt | ItemBase::Shield => return None,
             };
@@ -136,6 +136,7 @@ fn export_defs() {
         "LICH_SLEEP_WINDUP": lich_ability(AbilityId::SleepMist).windup,
     });
     consts.as_object_mut().unwrap().extend(lich.as_object().unwrap().clone());
+    consts.as_object_mut().unwrap().insert("AMBUSH_WARNING".into(), json!(crate::run::ambush::AMBUSH_WARNING));
     let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
     consts.as_object_mut().unwrap().extend(shots.as_object().unwrap().clone());
     let hero = json!({ "VOLLEY_ARROWS": ab::VOLLEY_ARROWS, "VOLLEY_SPREAD": ab::VOLLEY_SPREAD, "HERO_REACH": classes::HERO_REACH });

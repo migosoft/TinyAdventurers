@@ -37,7 +37,20 @@ impl Theme {
     }
 }
 
+/// Mixed into the seed for the haunts' own random stream.
+const HAUNT_SALT: u64 = 0x4841_554e_5453;
+/// From this depth (0 at the start, 1 the deepest) a room or hall may be haunted, with this chance.
+const HAUNT_MIN_DEPTH: f64 = 0.35;
+const HAUNT_CHANCE: f64 = 0.25;
+
 pub fn generate(seed: u64, theme: Theme) -> Dungeon {
+    let mut dungeon = generate_without_haunts(seed, theme);
+    // Haunts come last, from a stream of their own: the map and the usual spawns do not move.
+    dungeon.haunts = place_haunts(&mut ChaCha8Rng::seed_from_u64(seed ^ HAUNT_SALT), &dungeon);
+    dungeon
+}
+
+fn generate_without_haunts(seed: u64, theme: Theme) -> Dungeon {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     // Retry until all guarantees hold (deterministic: same rng stream).
     for _ in 0..50 {
@@ -46,6 +59,33 @@ pub fn generate(seed: u64, theme: Theme) -> Dungeon {
         }
     }
     panic!("dungeon generation failed for seed {seed}");
+}
+
+/// Each room or hall from `HAUNT_MIN_DEPTH` on gets a haunt with `HAUNT_CHANCE`, on a random
+/// inner tile of safe floor (the tiles `populate` picks from).
+fn place_haunts(rng: &mut ChaCha8Rng, d: &Dungeon) -> Vec<Vec2> {
+    let (sx, sy) = d.rooms[d.start].rect.center();
+    let dists = bfs(&d.map, sx, sy);
+    let depth_of = |r: &Rect| {
+        let (cx, cy) = r.center();
+        dists[(cy * d.map.w + cx) as usize]
+    };
+    let max_d = d.rooms.iter().enumerate().filter(|&(i, _)| i != d.boss).map(|(_, r)| depth_of(&r.rect)).max().unwrap_or(1).max(1);
+    let mut out = Vec::new();
+    for room in &d.rooms {
+        if room.kind == RoomKind::Start || room.kind == RoomKind::Boss || (depth_of(&room.rect) as f64 / max_d as f64) < HAUNT_MIN_DEPTH {
+            continue;
+        }
+        if !rng.gen_bool(HAUNT_CHANCE) {
+            continue;
+        }
+        let r = &room.rect;
+        let tiles: Vec<(i32, i32)> = (r.y + 1..r.y + r.h - 1).flat_map(|y| (r.x + 1..r.x + r.w - 1).map(move |x| (x, y))).filter(|&(x, y)| d.map.safe(x, y)).collect();
+        if let Some(&(x, y)) = tiles.choose(rng) {
+            out.push(Map::center_of(x, y));
+        }
+    }
+    out
 }
 
 fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
@@ -218,6 +258,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
         torches: Vec::new(),
         suns: Vec::new(),
         player_spawns: Vec::new(),
+        haunts: Vec::new(),
     };
 
     let turns = rng.gen_range(0..4);
@@ -1222,6 +1263,38 @@ mod tests {
             }
         }
         assert!(total > 40 * 4, "barrels in normal rooms too ({total})");
+    }
+
+    /// The haunts have a stream of their own: a seed's map, usual spawns, chests and barrels are
+    /// those of `generate_without_haunts` (the generator before haunts, which `level_setup_is_unchanged`
+    /// also pins to its recorded values for the map), and the haunts themselves repeat per seed.
+    #[test]
+    fn haunts_leave_the_map_unchanged() {
+        let mut total = 0;
+        for seed in 0..20u64 {
+            for theme in [Theme::Water, Theme::Lava] {
+                let (with, without) = (generate(seed, theme), generate_without_haunts(seed, theme));
+                assert!(without.haunts.is_empty());
+                assert_eq!(with.map.tiles, without.map.tiles, "seed {seed}");
+                assert_eq!(with.spawns.iter().map(|s| (s.enemy, s.pos)).collect::<Vec<_>>(), without.spawns.iter().map(|s| (s.enemy, s.pos)).collect::<Vec<_>>());
+                assert_eq!(with.chests.iter().map(|c| c.pos).collect::<Vec<_>>(), without.chests.iter().map(|c| c.pos).collect::<Vec<_>>());
+                assert_eq!((with.barrels.clone(), with.player_spawns.clone()), (without.barrels.clone(), without.player_spawns.clone()));
+                assert_eq!(generate(seed, theme).haunts, with.haunts, "deterministic");
+                // A haunt stands on safe floor inside a room that is neither the start nor the boss hall.
+                for h in &with.haunts {
+                    let (x, y) = Map::tile_of(*h);
+                    assert!(with.map.safe(x, y), "seed {seed}: haunt on {x},{y}");
+                    assert!(with.rooms.iter().enumerate().any(|(i, r)| i != with.start && i != with.boss && r.rect.contains_tile(x, y)));
+                }
+                total += with.haunts.len();
+            }
+        }
+        assert!(total > 0, "some seeds have haunts ({total})");
+        // The separate stream: with a different haunt stream the rest of the seed stays the same.
+        let d = generate_without_haunts(3, Theme::Water);
+        let other = place_haunts(&mut ChaCha8Rng::seed_from_u64(99), &d);
+        assert_eq!(d.map.tiles, generate(3, Theme::Water).map.tiles);
+        assert_ne!(other, generate(3, Theme::Water).haunts, "the haunts come from their own stream");
     }
 
     #[test]

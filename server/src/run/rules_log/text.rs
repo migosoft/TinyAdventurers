@@ -43,7 +43,7 @@ fn hazard_name(k: EntityKind) -> &'static str {
         Roots => "Roots",
         FirePatch => "fire",
         Wizard | Paladin | Barbarian | ElvenRanger | GoblinArcher | SkeletonWarrior | SkeletonArcher | OrcWarrior | OrcArcher | Necromancer
-        | RaisedSkeleton | Disciple | Mimic | Imp | Chort | Summoner | Ogre | DireWolf | Demon | Lich | Dragon | Missile | Fireball | Bolt
+        | RaisedSkeleton | Disciple | Mimic | Imp | Chort | Summoner | Ogre | Ghost | Shade | DireWolf | Demon | Lich | Dragon | Missile | Fireball | Bolt
         | Arrow | ShadowBolt | FrostBolt | FireBreath | FireOrb | DragonFireball | FireBolt | GloomBolt | BlindOrb | SleepOrb | ChainSpark
         | Judgement | ThrownAxe | Chest | Barrel | Torch => "hazard",
     }

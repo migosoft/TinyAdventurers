@@ -1390,6 +1390,24 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": "weapon_red_gem_sword"
   },
+  "GhostTouch": {
+    "base": "6 damage · every 1 s · arc 1.4 · wind-up 0.25 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Touch",
+    "name": "Ghost Touch",
+    "prof": "Touch",
+    "props": [
+      {
+        "magical": true,
+        "text": "On hit: Weakened"
+      }
+    ],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
   "GirdleOfWarding": {
     "base": "",
     "classes": [
@@ -1877,6 +1895,24 @@ export const ITEMS = {
     ],
     "req": [],
     "slot": "Ring",
+    "sprite": ""
+  },
+  "ShadeTouch": {
+    "base": "7 damage · every 1 s · arc 1.4 · wind-up 0.25 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Touch",
+    "name": "Shade Touch",
+    "prof": "Touch",
+    "props": [
+      {
+        "magical": true,
+        "text": "On hit: Frail"
+      }
+    ],
+    "req": [],
+    "slot": "Melee",
     "sprite": ""
   },
   "ShortBow": {
@@ -2376,6 +2412,22 @@ export const ABILITY_INFO = {
     "text": "A lash of the tail behind the user.",
     "tint": "Physical",
     "uses": "Melee"
+  },
+  "Touch": {
+    "category": "WeaponAttack",
+    "req": [
+      "a weapon of kind Touch"
+    ],
+    "text": "A chilling touch that drains the living.",
+    "tint": "Physical",
+    "uses": "Melee"
+  },
+  "Vanish": {
+    "category": "Innate",
+    "req": [],
+    "text": "Fades from sight until it strikes.",
+    "tint": null,
+    "uses": "Nothing"
   },
   "Volley": {
     "category": "WeaponAttack",

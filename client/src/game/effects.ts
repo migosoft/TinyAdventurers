@@ -2,6 +2,7 @@
 // Everything is pooled so combat does not allocate per frame.
 import type Phaser from 'phaser';
 import { FONT_TEXT } from '../fonts';
+import { deathCloud, HAZE_COLOR } from './shadeHaze';
 import { popScale, smoothText, TEXT_RESOLUTION, WORLD_TEXT, type WorldTextKind } from './worldText';
 
 export const DEPTH = {
@@ -161,6 +162,21 @@ export class Effects {
     t.setText(s).setColor(color).setFontStyle(w.style).setFontSize(w.size).setStroke(stroke, 2).setOrigin(0.5, 1);
     t.setPosition(Math.round(x + (Math.random() * 6 - 3)), Math.round(y)).setAlpha(1).setVisible(true).setDepth(depth).setScale(big ? popScale(0) : 1);
     this.texts.push({ t, age: 0, pop: big, vy: big ? -34 : -26, life: big ? 0.9 : 0.7, max: big ? 0.9 : 0.7 });
+  }
+
+  /** A Ghost dies: about 24 pale sparks rising and fading over 0.6 s. */
+  disintegrate(x: number, y: number): void {
+    for (let i = 0; i < 24; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.random() * 7;
+      this.particle(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.8, (Math.random() - 0.5) * 16, -16 - Math.random() * 26, 0.6, 0xd8ecff, { frame: 'spark', fade: true });
+    }
+  }
+
+  /** A Shade dies: no skull, a dark cloud of about 20 haze particles that spread to 18 px and fade over 0.8 s. */
+  darkCloud(x: number, y: number): void {
+    const { life, particles } = deathCloud();
+    for (const p of particles) this.particle(x, y, p.vx, p.vy, life, HAZE_COLOR, { frame: 'glow', fade: true, alpha: 0.5, scale: p.scale });
   }
 
   /** The wolf's summon, reappear and vanish: about 18 clear-green sparks rising and fading over 0.6 s (not the poison tint). */

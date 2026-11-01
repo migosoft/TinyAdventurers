@@ -7,7 +7,7 @@ use super::entities::{AiState, Target, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
 use crate::defs::classes::PLAYER_RADIUS;
-use crate::defs::abilities::{self as ab, Shape};
+use crate::defs::abilities::{self as ab, AbilityId, Shape};
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Map, Mover, TILE};
@@ -45,7 +45,7 @@ pub fn find_visible_foe(run: &Run, from: Vec2, sight: Sight) -> Option<Creature>
         .map(|(c, _)| c)
 }
 
-fn set_anim(run: &mut Run, mi: usize, a: Anim) {
+pub(crate) fn set_anim(run: &mut Run, mi: usize, a: Anim) {
     let m = &mut run.monsters[mi];
     if m.anim != a {
         m.anim = a;
@@ -196,7 +196,7 @@ fn object_free_line(run: &Run, a: Vec2, b: Vec2, radius: f64) -> bool {
 
 /// May this monster rest here (idle, wait, attack)? Ordinary monsters always may; a phantom may not
 /// inside a wall, a closed door or a solid object, which it can only pass through.
-fn can_rest(run: &Run, mi: usize, p: Vec2) -> bool {
+pub(crate) fn can_rest(run: &Run, mi: usize, p: Vec2) -> bool {
     let m = &run.monsters[mi];
     m.mover != Mover::Incorporeal
         || run.layout.map.can_stop_at(p, m.mover) && !run.objects.iter().any(|o| o.blocks() && (p.x - o.pos.x).abs() < o.radius && (p.y - o.pos.y).abs() < o.radius)
@@ -267,6 +267,11 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         ai.windup = None;
         ai.state = AiState::Search;
         ai.search_t = 2.0;
+    }
+
+    // The incorporeal ambushers (their kit holds Vanish) vanish, drift to the straggler and warn first.
+    if run.monsters[mi].kit.get(AbilityId::Vanish).is_some() && super::ambush::tick(run, mi, dt, seen) {
+        return;
     }
 
     // Disciples channel the lich and otherwise only shoot.
@@ -347,6 +352,8 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                         let near = run.foes_in(pos, alt.radius, None).len();
                         near >= 2 || near == 1 && run.monsters[mi].ai.cd > 0.0
                     }
+                    // Vanish: the ambush module uses it, not the chase.
+                    Shape::Buff => false,
                     shape => unreachable!("{alt_id:?} is a {shape:?}: an alt ability swings, shoots or slams"),
                 };
                 if usable && rest && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {

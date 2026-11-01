@@ -5,7 +5,7 @@
 // the generated terrain tiles (water, lava, chasm; see terrain-tiles.ts), plus
 // the dragon frames built from its base sprite (see dragon-frames.ts), plus
 // the lich's own frames (see lich-frames.ts), plus the demon's frames
-// (see demon-frames.ts), plus the barrels (see barrel-frames.ts), plus the torch (see torch-frames.ts), plus the dire wolf (see wolf-frames.ts).
+// (see demon-frames.ts), plus the barrels (see barrel-frames.ts), plus the torch (see torch-frames.ts), plus the dire wolf (see wolf-frames.ts), plus the Ghost and the Shade (see spectre-frames.ts).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,7 @@ import { buildDemon } from './demon-frames';
 import { buildBarrels } from './barrel-frames';
 import { buildTorches } from './torch-frames';
 import { buildWolf } from './wolf-frames';
+import { buildSpectres } from './spectre-frames';
 import { DRAGON_SHEETS, type DragonSheet } from '../src/game/anim/dragonRig';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -74,7 +75,9 @@ const torches = buildTorches(path.join(root, 'assets-src', 'torch'), src.w);
 const torchY = barrelY + barrels.img.h;
 const wolf = buildWolf(path.join(root, 'assets-src', 'enchanted-forest', 'frames', 'Wolf'), src.w);
 const wolfY = torchY + torches.img.h;
-const outH = wolfY + wolf.img.h;
+const spectres = buildSpectres(path.join(root, 'assets-src'), src.w);
+const spectreY = wolfY + wolf.img.h;
+const outH = spectreY + spectres.img.h;
 const out: Image = { w: src.w, h: outH, data: new Uint8Array(src.w * outH * 4) };
 out.data.set(src.data);
 RECOLORS.forEach((r, row) => {
@@ -137,7 +140,13 @@ for (let y = 0; y < wolf.img.h; y++)
 for (const [name, f] of Object.entries(wolf.frames))
   frames[name] = { frame: { x: f.x, y: wolfY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
 
+// Ghost and Shade frames below the wolf.
+for (let y = 0; y < spectres.img.h; y++)
+  out.data.set(spectres.img.data.subarray(y * spectres.img.w * 4, (y + 1) * spectres.img.w * 4), ((spectreY + y) * out.w) * 4);
+for (const [name, f] of Object.entries(spectres.frames))
+  frames[name] = { frame: { x: f.x, y: spectreY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
+
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'atlas.png'), encodePng(out));
 fs.writeFileSync(path.join(outDir, 'atlas.json'), JSON.stringify({ frames, meta: { image: 'atlas.png', scale: 1 } }));
-console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon, ${Object.keys(lich.frames).length} lich, ${Object.keys(demon.frames).length} demon, ${Object.keys(barrels.frames).length} barrel, ${Object.keys(torches.frames).length} torch, ${Object.keys(wolf.frames).length} wolf) -> public/assets/atlas.{png,json}`);
+console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon, ${Object.keys(lich.frames).length} lich, ${Object.keys(demon.frames).length} demon, ${Object.keys(barrels.frames).length} barrel, ${Object.keys(torches.frames).length} torch, ${Object.keys(wolf.frames).length} wolf, ${Object.keys(spectres.frames).length} ghost and shade) -> public/assets/atlas.{png,json}`);

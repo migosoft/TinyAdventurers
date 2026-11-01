@@ -261,7 +261,10 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
                 None => Base::plain(own.damage),
             };
             ResolvedAbility {
-                cooldown: own.cooldown,
+                cooldown: match d.cooldown_by {
+                    Some((attr, pct)) => Scaled { value: own.cooldown, attr, pct, at: own.at }.per(attrs),
+                    None => own.cooldown,
+                },
                 damage: base.amount(),
                 base,
                 range: own.range,
@@ -296,11 +299,19 @@ impl Kit {
     }
 }
 
+/// The on-hit a monster's weapon carries by itself (Ghost Touch drains STR, Shade Touch CON); `arm` fills in the power.
+fn own_on_hit(id: ItemId) -> Option<OnHit> {
+    items::def(id).props.iter().find_map(|p| match p.kind {
+        PropKind::OnHit(h) => Some(OnHit { magical: p.magical, ..h }),
+        _ => None,
+    })
+}
+
 /// The kit of a monster with `attrs`, wielding `weapons` (in the order the abilities look for them:
 /// the first melee one, the first ranged one) and standing in `body`. A monster whose ability has no
 /// weapon that meets its requirement, or which can't be resolved, is a data bug: this panics.
 pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], body: Body) -> Kit {
-    let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&id| arm(id, attrs, &[], None, 0)).collect();
+    let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&id| arm(id, attrs, &[], own_on_hit(id), 0)).collect();
     let kit = ids
         .iter()
         .map(|&id| {
@@ -908,6 +919,31 @@ mod tests {
     use crate::defs::companions::WOLF_HP;
 
     #[test]
+    fn vanish_cooldown_shortens_with_cha() {
+        use crate::defs::attributes::{Attributes, CHA_DMG};
+        let vanish = |cha| resolve_ability(&ab::def(AbilityId::Vanish), &Attributes::new(10, 10, 10, 10, 10, cha), &[], Body { radius: 8.0 }).expect("Vanish needs no weapon").cooldown;
+        assert_eq!(vanish(10), 20.0);
+        assert_eq!(vanish(14), 20.0 / (factor(14, CHA_DMG) / factor(10, CHA_DMG)));
+        assert!(vanish(14) < 20.0);
+    }
+
+    #[test]
+    fn abilities_without_cooldown_by_are_unchanged() {
+        use crate::defs::attributes::Attributes;
+        let weapons = |a: &Attributes| -> Vec<ResolvedWeapon> {
+            ItemId::ALL.iter().filter(|&&id| matches!(items::def(id).base, ItemBase::Melee(..) | ItemBase::Ranged(..))).map(|&id| arm(id, a, &[], None, 0)).collect()
+        };
+        let (low, high) = (Attributes::new(10, 10, 10, 10, 10, 10), Attributes::new(10, 10, 10, 10, 10, 20));
+        let body = Body { radius: 8.0 };
+        for &id in AbilityId::ALL.iter().filter(|&&id| ab::def(id).cooldown_by.is_none()) {
+            let d = ab::def(id);
+            let (a, b) = (resolve_ability(&d, &low, &weapons(&low), body), resolve_ability(&d, &high, &weapons(&high), body));
+            assert_eq!(a.map(|r| r.cooldown), b.map(|r| r.cooldown), "{id:?}");
+        }
+        assert!(ab::def(AbilityId::Vanish).cooldown_by.is_some());
+    }
+
+    #[test]
     fn hero_reach_comes_from_the_weapon() {
         for id in ItemId::ALL {
             if let ItemBase::Melee(_, m) = items::def(id).base {
@@ -1359,7 +1395,7 @@ mod tests {
     #[test]
     fn every_monster_ability_equals_the_resolver() {
         let check = |what: &str, kit: &Kit, ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], radius: f64| {
-            let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&w| arm(w, attrs, &[], None, 0)).collect();
+            let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&w| arm(w, attrs, &[], own_on_hit(w), 0)).collect();
             for &id in ids {
                 let want = resolve_ability(&ab::def(id), attrs, &armed, Body { radius }).expect("resolves");
                 assert_eq!(kit.get(id), Some(&want), "{what} {id:?}");

@@ -5,13 +5,13 @@ use super::abilities::AbilityId;
 use super::attributes::{Attr, Attributes};
 use super::classes;
 use super::damage::{DamageSplit, DamageType};
-use super::effects::{EffectKind, OnHit};
+use super::effects::{EffectKind, EffectLook, OnHit};
 use super::kinds::EntityKind;
 use super::lights::LightKind;
 use super::loadout::AbilityMod;
 use super::requirements::Requirement;
 use super::trees::Prof;
-use super::weapons::{category, At, MeleeStats, RangedStats, WeaponCategory, WeaponKind};
+use super::weapons::{category, is_natural_like, At, MeleeStats, RangedStats, WeaponKind};
 use crate::protocol::ClassId;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -124,6 +124,10 @@ super::enum_list::listed_enum! {
         DragonClaws = 52,
         DragonTail = 53,
         DemonClaws = 54,
+        // The ghost's natural weapon (#169).
+        GhostTouch = 55,
+        // The shade's natural weapon (#170).
+        ShadeTouch = 56,
     }
 }
 
@@ -261,7 +265,7 @@ pub fn prop_text(p: &ItemProperty) -> String {
 /// Whether a hero may own the item at all: natural weapons (bites, claws) and the monster-only copies
 /// (no class) belong to enemies.
 pub fn hero_can_hold(d: &ItemDef) -> bool {
-    !d.classes.is_empty() && !matches!(d.base, ItemBase::Melee(k, _) if category(k) == WeaponCategory::Natural)
+    !d.classes.is_empty() && !matches!(d.base, ItemBase::Melee(k, _) if is_natural_like(category(k)))
 }
 
 // Macros, not `const fn`s: only struct literals are promoted to `'static`.
@@ -313,7 +317,7 @@ pub fn def(id: ItemId) -> ItemDef {
     use ItemId as I;
     use WeaponKind as K;
     let phys = DamageSplit::physical;
-    let at = |str, dex| At { str, dex };
+    let at = |str, dex| At { str, dex, cha: 10 };
     let item = |name, sprite, base, classes, req, props| ItemDef { id, name, sprite, base, classes, req, props };
     match id {
         I::RedStaff => item("Red Staff", "weapon_red_magic_staff", melee(K::Staff, 6.0, 1.0, 1.6, 0.0, phys(), at(8, 14)), WIZARD, &[], &[]),
@@ -393,6 +397,10 @@ pub fn def(id: ItemId) -> ItemDef {
         I::DragonClaws => item("Dragon Claws", "", winding(melee(K::Claws, 20.0, 2.5, 1.60, 32.0, heat(), at(24, 10)), 18.0, 0.40), NONE, &[], &[]),
         I::DragonTail => item("Dragon Tail", "", winding(melee(K::Tail, 25.0, 3.0, 2.40, 44.0, phys(), at(24, 10)), 24.0, 0.40), NONE, &[], &[]),
         I::DemonClaws => item("Demon Claws", "", winding(melee(K::Claws, 25.0, 1.6, 2.10, 56.0, heat(), at(22, 14)), 24.0, 0.45), NONE, &[], &[]),
+        // Drains STR (Weakened) for as long as its wielder's CHA gives; no hero holds it (natural weapons never equip).
+        I::GhostTouch => item("Ghost Touch", "", winding(melee(K::Touch, 6.0, 1.0, 1.4, 0.0, spectral(), At::BASE), 16.0, 0.25), NONE, &[], &[mag!(PropKind::OnHit(OnHit { kind: EffectKind::Weakened, secs: 20.0, magical: true, power: 0, look: EffectLook::Plain }))]),
+        // Drains CON (Frail) for as long as its wielder's CHA gives; like Ghost Touch no hero holds it.
+        I::ShadeTouch => item("Shade Touch", "", winding(melee(K::Touch, 7.0, 1.0, 1.4, 0.0, spectral(), At::BASE), 16.0, 0.25), NONE, &[], &[mag!(PropKind::OnHit(OnHit { kind: EffectKind::Frail, secs: 20.0, magical: true, power: 0, look: EffectLook::Plain }))]),
         I::NecromancerStaff => item("Necromancer Staff", "weapon_green_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::SummonerStaff => item("Summoner Staff", "weapon_red_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::HuntersBow => item(
@@ -438,7 +446,7 @@ pub enum EquipError {
 pub fn check_equip(class: ClassId, profs: &[Prof], slot: EquipSlot, item: ItemId, attrs: &Attributes) -> Result<(), EquipError> {
     let d = def(item);
     let fits = match d.base {
-        ItemBase::Melee(k, _) => slot == EquipSlot::Melee && category(k) != WeaponCategory::Natural,
+        ItemBase::Melee(k, _) => slot == EquipSlot::Melee && !is_natural_like(category(k)),
         ItemBase::Ranged(..) => slot == EquipSlot::Ranged,
         ItemBase::Armor(_) => slot == EquipSlot::Armor,
         ItemBase::Ring => matches!(slot, EquipSlot::Ring1 | EquipSlot::Ring2),
@@ -476,12 +484,25 @@ pub fn check_equipment(class: ClassId, profs: &[Prof], e: &Equipment, attrs: &At
     Ok(())
 }
 
+/// A ghost's or shade's touch: mostly magical, a little cold.
+fn spectral() -> DamageSplit {
+    DamageSplit::split(&[(DamageType::Magical, 0.9), (DamageType::Cold, 0.1)])
+}
+
 fn heat() -> DamageSplit {
     DamageSplit::split(&[(DamageType::Heat, 0.2)])
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_spectral_weapon_is_never_equippable_by_heroes() {
+        let mut d = def(ItemId::DragonBite);
+        d.classes = ALL;
+        d.base = melee(WeaponKind::Touch, 6.0, 1.0, 1.0, 0.0, DamageSplit::physical(), At::BASE);
+        assert!(!hero_can_hold(&d));
+    }
+
     use super::*;
     use crate::defs::classes::start_attrs;
     use crate::defs::weapons::{WeaponCategory as C, WeaponKind as K};
@@ -531,12 +552,12 @@ mod tests {
                 }
             }
             match d.base {
-                ItemBase::Melee(k, _) => assert!(matches!(category(k), C::Melee | C::Finesse | C::Natural), "{id:?}"),
+                ItemBase::Melee(k, _) => assert!(matches!(category(k), C::Melee | C::Finesse | C::Natural | C::Spectral), "{id:?}"),
                 ItemBase::Ranged(k, _) => assert!(matches!(category(k), C::Ranged | C::Thrown), "{id:?}"),
                 ItemBase::Shield => panic!("{id:?} uses Shield"),
                 _ => {}
             }
-            let natural = matches!(d.base, ItemBase::Melee(k, _) | ItemBase::Ranged(k, _) if category(k) == C::Natural);
+            let natural = matches!(d.base, ItemBase::Melee(k, _) | ItemBase::Ranged(k, _) if is_natural_like(category(k)));
             if weapon && !natural {
                 assert!(!d.sprite.is_empty(), "{id:?}");
             }
@@ -578,7 +599,7 @@ mod tests {
                 assert_eq!(k, K::Axe);
                 assert_eq!((s.damage, s.cooldown, s.arc, s.push), (32.0, 0.8, 2.45, 0.0));
                 assert_eq!(s.split, DamageSplit::physical());
-                assert_eq!(s.at, At { str: 15, dex: 13 });
+                assert_eq!(s.at, At { str: 15, dex: 13, cha: 10 });
             }
             _ => panic!(),
         }

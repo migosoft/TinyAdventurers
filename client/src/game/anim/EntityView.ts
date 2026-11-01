@@ -10,8 +10,9 @@ import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from '../worldText';
 import { TagEffects } from '../tagEffects';
 import { frameBounds, has, lieLayout, lyingPose, StatusView } from '../status';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
+import { ShadeHaze, SILHOUETTE_FILL, silhouetteAlpha } from '../shadeHaze';
 import { pickFrame, windupOf } from './pickFrame';
-import { appearFactor, entityAlpha, VANISH_SECS } from './entityAlpha';
+import { appearFactor, entityAlpha, ghostPhase, VANISH_SECS } from './entityAlpha';
 
 export interface ViewState {
   x: number;
@@ -25,6 +26,8 @@ export interface ViewState {
   swingArc?: number;
   /** Bitmask of `EffectKind` ids on the creature. */
   effects?: number;
+  /** The entity id: figures that pulse (`FigureDef.pulse`) take their phase from it. */
+  id?: number;
   /** A party hero (drawn faintly, not hidden, while Invisible). */
   party?: boolean;
   /** The look of its Entangled effect (`lookOf`); Plain when absent. */
@@ -107,6 +110,8 @@ export class EntityView {
   speed = 0;
   /** Seconds left of the fade-in after reappearing. */
   private appearLeft = 0;
+  /** The Shade's lingering haze (`FigureDef.haze`). */
+  private haze?: ShadeHaze;
 
   constructor(
     scene: Phaser.Scene,
@@ -131,6 +136,7 @@ export class EntityView {
       this.figure.add(this.weapon);
     }
     this.root.add(this.figure);
+    if (d.haze) this.haze = new ShadeHaze(scene);
     if (name) {
       this.label = scene.add
         .text(0, -(d.footY ?? this.body.height) * scale - 3, name, { fontFamily: FONT_TEXT, fontStyle: WORLD_TEXT.tag.style, fontSize: `${WORLD_TEXT.tag.size}px`, resolution: TEXT_RESOLUTION, color: '#ffffff' })
@@ -183,6 +189,7 @@ export class EntityView {
     const dead = (s.flags & FLAG.DEAD) !== 0;
     this.root.setVisible(!dead);
     if (dead) {
+      this.haze?.update(null, 0, dt);
       this.status.update(0, dt);
       return;
     }
@@ -249,7 +256,10 @@ export class EntityView {
     if (this.label && this.tagFx) this.tagFx.set(tagShown ? fxBits : 0, this.label.x + this.label.displayWidth / 2, this.label.y - this.label.displayHeight / 2);
     this.shakeT = Math.max(0, this.shakeT - dt);
 
+    // The ambush wind-up of a silhouette figure (the Shade): a flat dark shape, no eyes, fainter than the real thing.
+    const silhouette = !!d.silhouette && s.anim === ANIM.Ambush;
     if (hurt && !d.hit && Math.floor(this.clock * 30) % 2 === 0) this.body.setTintFill(0xffffff);
+    else if (silhouette) this.body.setTintFill(SILHOUETTE_FILL);
     else if (!stone && !iced && (s.anim === ANIM.Windup || s.anim === ANIM.Slam || own?.windup)) {
       // Telegraph: flashing red (the lich: pale purple gloom) and a shiver before the blow lands.
       this.body.setTint(Math.floor(this.clock * 16) % 2 ? (d.slam?.gloom ? 0xc890ff : 0xff8080) : (d.tint ?? 0xffffff));
@@ -301,7 +311,11 @@ export class EntityView {
     if (asleep) this.weapon?.setVisible(false);
 
     this.appearLeft = Math.max(0, this.appearLeft - dt);
-    this.root.setAlpha(entityAlpha(s.flags, fxBits, s.party ?? false) * appearFactor(this.appearLeft, VANISH_SECS));
+    // A pulsing figure (the Ghost) blinks during its ambush wind-up (GameScene skips the fade-in then).
+    const ghost = d.pulse ? { t: this.clock, phase: ghostPhase(s.id ?? 0), ambushT: s.anim === ANIM.Ambush ? s.animT : null } : undefined;
+    this.root.setAlpha((silhouette ? silhouetteAlpha(s.animT) : entityAlpha(s.flags, fxBits, s.party ?? false, ghost)) * appearFactor(this.appearLeft, VANISH_SECS));
+    // The haze stays where it was while it eases toward the Shade (so it trails); it sits just under the figure.
+    this.haze?.update({ x: s.x, y: s.y - 8 }, this.root.depth - 0.5, dt);
 
     const ax = Math.cos(s.aim);
     const ay = Math.sin(s.aim);
@@ -592,6 +606,7 @@ export class EntityView {
   }
 
   destroy(): void {
+    this.haze?.destroy();
     this.tele?.destroy();
     this.status.destroy();
     this.tagFx?.destroy();

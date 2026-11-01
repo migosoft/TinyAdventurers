@@ -24,6 +24,10 @@ pub enum EntityKind {
     Ogre = 22,
     /// The Elven Ranger's wolf: an ally monster.
     DireWolf = 23,
+    /// The ghost haunting the lich's dungeon.
+    Ghost = 24,
+    /// The shade haunting the demon's dungeon.
+    Shade = 25,
     // Bosses
     Demon = 30,
     Lich = 31,
@@ -72,7 +76,7 @@ impl serde::Serialize for EntityKind {
 
 impl EntityKind {
     #[cfg(test)]
-    pub const ALL: [EntityKind; 43] = [
+    pub const ALL: [EntityKind; 45] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -91,6 +95,8 @@ impl EntityKind {
         EntityKind::Summoner,
         EntityKind::Ogre,
         EntityKind::DireWolf,
+        EntityKind::Ghost,
+        EntityKind::Shade,
         EntityKind::Demon,
         EntityKind::Lich,
         EntityKind::Dragon,
@@ -135,6 +141,9 @@ impl EntityKind {
             // 43 px frames drawn at 1.2x.
             Dragon => 51.0,
             Demon => 58.0,
+            // The opaque rows of the cut frames (client/scripts/spectre-frames.ts).
+            Ghost => 22.0,
+            Shade => 23.0,
             _ => 0.0,
         }
     }
@@ -165,11 +174,13 @@ pub enum Anim {
     Bite = 13,
     /// The lich's stone gaze: a beam locked on a hero (EntSnap.extra = its id).
     Gaze = 14,
+    /// The wind-up of a strike out of invisibility (Ghost, Shade): the client draws the warning.
+    Ambush = 15,
 }
 
 impl Anim {
     #[cfg(test)]
-    pub const ALL: [Anim; 15] = [
+    pub const ALL: [Anim; 16] = [
         Anim::Idle,
         Anim::Move,
         Anim::Melee,
@@ -185,6 +196,7 @@ impl Anim {
         Anim::Land,
         Anim::Bite,
         Anim::Gaze,
+        Anim::Ambush,
     ];
 }
 
@@ -199,4 +211,17 @@ pub mod flags {
     pub const AIRBORNE: u8 = 64;
     /// Incorporeal (a phasing monster): always drawn semi-transparent. The last free bit.
     pub const INCORPOREAL: u8 = 128;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EntityKind;
+
+    /// A shot flies SHOT_HEIGHT up: the floating spectres need their drawn height (the opaque 22 and 23 rows
+    /// of the cut frames) or shots pass over their feet-sized hitbox and miss the body.
+    #[test]
+    fn spectres_have_a_body_height() {
+        assert_eq!(EntityKind::Ghost.body_height(), 22.0);
+        assert_eq!(EntityKind::Shade.body_height(), 23.0);
+    }
 }

@@ -111,6 +111,17 @@ The two boxes at the bottom of the screen show your abilities. While an ability 
 | Necromancer | Casts **Shadow Bolts** (green) and **raises skeletons**. Kill the necromancer and all of its skeletons crumble. |
 | Mimic | Looks exactly like a treasure chest. Walk up to it (or hit it) and its lid flies open: it **hops after you** and bites. It stops chasing when you get out of sight and waits where it was found. Worth 25 coins. |
 
+**Ghosts and Shades** are rare extras that haunt the deeper rooms and halls (about one room in four, from about a third of the way in). The lich's dungeon has **Ghosts**, the demon's dungeon has **Shades**; the dragon's dungeon has neither. They are the ghostly dead and no ordinary weapon scratches them (see Damage types and resistances): only magic hurts them.
+
+| Enemy | What to expect |
+|---|---|
+| Ghost | Pale and see-through, its body pulses faintly. Its **Touch** is mostly magical with a little cold, and leaves you **Weakened** (your Strength drains, see Status effects). Worth 10 XP. |
+| Shade | A dark figure trailing a lingering haze that smears behind it when it moves. Its **Touch** leaves you **Frail** (your Constitution drains). A little tougher than the Ghost. Worth 12 XP. |
+
+Both fight by ambush. When they notice you they **vanish**, then drift through the walls toward the hero who has strayed furthest from the rest of the party (a lone hero is always the target). When they are close enough they **appear for half a second** before they strike. The warning tells you where: the Ghost **flickers rapidly** at the spot, the Shade shows a **dark silhouette** that darkens in. That half second is your chance to **dash away** or to stand with your party. If they have not reached you within about five seconds, they show themselves and simply fight. Hitting one while it is invisible shows it at once. Each touch stacks another drain, so stay out of reach once they are visible, and kill them with magic before the drains pile up. After their invisibility has been used, they vanish and come again every 15 to 20 seconds.
+
+*All their numbers (health, damage, XP, cooldowns) are first guesses and may change while the game is balanced.*
+
 **The demon's dungeon** (when the demon is the end boss) has demons instead of skeletons:
 
 | Enemy | What to expect |
@@ -195,7 +206,7 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 | Red Dragon | **heat completely**, magical half, physical 10 % | |
 | Barrels and chests | physical half, poison completely | |
 
-- **Incorporeal creatures** (ghosts and shades, coming with their own dungeons) have no solid body: an attack they fully resist goes right through them, with no damage, no side effect and no push, and arrows fly on. **Only magic hurts them, and a little extra** (10 % more). A mixed attack does only its magic part. Some heroes have no magic yet, and cannot hurt them at all. They float through walls and solid objects, but never stop inside one, and hover over chasms, deep water and lava without harm. You cannot push them, roots cannot hold them, and they always look see-through. They can also **vanish**: you see nothing of them, your wolf, gazes and Chain Spark's jumps ignore them, and monsters cannot see an invisible hero either. Being invisible gives them no protection of its own: an area attack or War Cry that could hurt or frighten them still does. A hit shows them again, even a hit that does no damage, and so does a harmful effect that takes hold. An effect they shrug off does not. They also show themselves when they attack; healing and buffs do not. A creature that is both, such as a ghost, takes the stronger resistance of each type; no resistance goes above 100 %, so nothing heals by resisting.
+- **Incorporeal creatures** (Ghosts and Shades) have no solid body: an attack they fully resist goes right through them, with no damage, no side effect and no push, and arrows fly on. **Only magic hurts them, and a little extra** (10 % more). A mixed attack does only its magic part. Some heroes have no magic yet, and cannot hurt them at all. They float through walls and solid objects, but never stop inside one, and hover over chasms, deep water and lava without harm. You cannot push them, roots cannot hold them, and they always look see-through. They can also **vanish**: you see nothing of them, your wolf, gazes and Chain Spark's jumps ignore them, and monsters cannot see an invisible hero either. Being invisible gives them no protection of its own: an area attack or War Cry that could hurt or frighten them still does. A hit shows them again, even a hit that does no damage, and so does a harmful effect that takes hold. An effect they shrug off does not. They also show themselves when they attack; healing and buffs do not. A creature that is both, such as a ghost, takes the stronger resistance of each type; no resistance goes above 100 %, so nothing heals by resisting.
 - Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
 - The Red Demon's claws and the Red Dragon's claws are partly fire.
 - Fire also sets things **burning** and poison **poisons** (see Status effects), and a smaller share of a type has a weaker effect: a creature that resists the type completely never takes the effect.
@@ -284,7 +295,7 @@ Some attacks do more than damage. Your own effects show as small symbols with th
 | Skull | Fear | You run away from whoever scared you and cannot attack (enemies only, for now) |
 | Shield | Warded | Gold: nothing can blind, sleep or petrify you (Purify) |
 | Blade | Coated | Green: your weapon attacks add poison and poison what they hit (Poison Coat) |
-| Eye | Invisible | Nobody can see you (enemies cannot target you) and you look faint to your party. A hit on you, or attacking yourself, ends it. No hero can do this yet; incorporeal creatures vanish this way |
+| Eye | Invisible | Nobody can see you (enemies cannot target you) and you look faint to your party. A hit on you, or attacking yourself, ends it. No hero can do this yet; Ghosts and Shades vanish this way |
 | Down arrow (coloured by Attribute) | Weakened | Your **Strength** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
 | Down arrow (coloured by Attribute) | Clumsy | Your **Dexterity** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
 | Down arrow (coloured by Attribute) | Frail | Your **Constitution** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |

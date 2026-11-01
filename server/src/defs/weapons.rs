@@ -2,7 +2,7 @@
 //! their values at the Attributes of a reference wielder (`At`), so the
 //! weapon resolves bit-exactly to them there and moves with STR and DEX around it.
 
-use super::attributes::{Attr, Attributes, Scaled, DEX_ARC, DEX_DMG, DEX_SPEED, STR_DMG, STR_RANGE};
+use super::attributes::{Attr, Attributes, Scaled, CHA_DMG, DEX_ARC, DEX_DMG, DEX_SPEED, STR_DMG, STR_RANGE};
 use super::damage::{Base, BaseScale, DamageSplit};
 use super::effects::OnHit;
 use super::kinds::EntityKind;
@@ -29,6 +29,7 @@ super::enum_list::listed_enum! {
         Bite = 16,
         Claws = 17,
         Tail = 18,
+        Touch = 19,
     }
 }
 
@@ -39,6 +40,8 @@ pub enum WeaponCategory {
     Ranged,
     Thrown,
     Natural,
+    /// An incorporeal creature's own touch: it scales with CHA.
+    Spectral,
 }
 
 /// A new kind without a category does not compile.
@@ -51,6 +54,7 @@ pub fn category(k: WeaponKind) -> WeaponCategory {
         K::Bow | K::Longbow | K::Crossbow => C::Ranged,
         K::ThrowingAxe => C::Thrown,
         K::Unarmed | K::Bite | K::Claws | K::Tail => C::Natural,
+        K::Touch => C::Spectral,
     }
 }
 
@@ -59,19 +63,26 @@ pub fn key_attr(c: WeaponCategory) -> Attr {
     match c {
         WeaponCategory::Melee | WeaponCategory::Thrown | WeaponCategory::Natural => Attr::Str,
         WeaponCategory::Finesse | WeaponCategory::Ranged => Attr::Dex,
+        WeaponCategory::Spectral => Attr::Cha,
     }
 }
 
-/// The STR and DEX at which a weapon's stored numbers hold.
+/// Whether the category is a creature's own weapon (natural or spectral): heroes never equip it.
+pub fn is_natural_like(c: WeaponCategory) -> bool {
+    matches!(c, WeaponCategory::Natural | WeaponCategory::Spectral)
+}
+
+/// The STR, DEX and CHA at which a weapon's stored numbers hold.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct At {
     pub str: i32,
     pub dex: i32,
+    pub cha: i32,
 }
 
 impl At {
     /// Sample items.
-    pub const BASE: At = At { str: 10, dex: 10 };
+    pub const BASE: At = At { str: 10, dex: 10, cha: 10 };
 }
 
 /// `cooldown` is the time between attacks in seconds.
@@ -134,6 +145,7 @@ fn damage_and_cooldown(kind: WeaponKind, damage: f64, cooldown: f64, at: At, a: 
     let (attr, pct, at_key) = match key_attr(category(kind)) {
         Attr::Str => (Attr::Str, STR_DMG, at.str),
         Attr::Dex => (Attr::Dex, DEX_DMG, at.dex),
+        Attr::Cha => (Attr::Cha, CHA_DMG, at.cha),
         other => unreachable!("key_attr returned {other:?}"),
     };
     let scaled = Scaled { value: damage, attr, pct, at: at_key };
@@ -198,7 +210,7 @@ mod tests {
     use super::*;
 
     fn sword() -> MeleeStats {
-        MeleeStats { damage: 20.0, cooldown: 0.45, arc: 1.75, push: 0.0, reach: 17.0, windup: 0.0, split: DamageSplit::physical(), at: At { str: 15, dex: 8 } }
+        MeleeStats { damage: 20.0, cooldown: 0.45, arc: 1.75, push: 0.0, reach: 17.0, windup: 0.0, split: DamageSplit::physical(), at: At { str: 15, dex: 8, cha: 10 } }
     }
 
     #[test]
@@ -223,6 +235,7 @@ mod tests {
             (K::Bite, C::Natural),
             (K::Claws, C::Natural),
             (K::Tail, C::Natural),
+            (K::Touch, C::Spectral),
         ];
         assert_eq!(table.len(), WeaponKind::COUNT);
         for (k, c) in table {
@@ -234,6 +247,19 @@ mod tests {
         for c in [C::Finesse, C::Ranged] {
             assert_eq!(key_attr(c), Attr::Dex);
         }
+        assert_eq!(key_attr(C::Spectral), Attr::Cha);
+        assert!(is_natural_like(C::Natural) && is_natural_like(C::Spectral) && !is_natural_like(C::Melee));
+    }
+
+    #[test]
+    fn spectral_weapons_scale_with_cha() {
+        let touch = MeleeStats { damage: 6.0, cooldown: 1.0, arc: 1.0, push: 0.0, reach: 0.0, windup: 0.0, split: DamageSplit::physical(), at: At { str: 10, dex: 10, cha: 10 } };
+        let base = resolve_melee(K::Touch, &touch, &Attributes::new(10, 10, 10, 10, 10, 10));
+        assert_eq!(base.damage, 6.0);
+        let charming = resolve_melee(K::Touch, &touch, &Attributes::new(10, 10, 10, 10, 10, 14));
+        let f = |v| Scaled { value: 1.0, attr: Attr::Cha, pct: CHA_DMG, at: v }.ratio(&Attributes::new(10, 10, 10, 10, 10, 14));
+        assert!((charming.damage - 6.0 * f(10)).abs() < 1e-12);
+        assert_eq!(charming.power, 14);
     }
 
     #[test]
@@ -266,7 +292,7 @@ mod tests {
             projectile: EntityKind::Arrow,
             windup: 0.0,
             split: DamageSplit::physical(),
-            at: At { str: 10, dex: 15 },
+            at: At { str: 10, dex: 15, cha: 10 },
         };
         let w = resolve_ranged(K::Bow, &bow, &Attributes::new(12, 15, 10, 10, 10, 10));
         assert!((w.range - 260.0 * 1.04).abs() < 1e-9);

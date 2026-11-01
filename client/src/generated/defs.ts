@@ -21,6 +21,7 @@ export const KIND = {
   "FirePatch": 70,
   "Fireball": 51,
   "FrostBolt": 55,
+  "Ghost": 24,
   "GloomBolt": 60,
   "GoblinArcher": 10,
   "HolyGround": 71,
@@ -36,6 +37,7 @@ export const KIND = {
   "Paladin": 1,
   "RaisedSkeleton": 16,
   "Roots": 72,
+  "Shade": 25,
   "ShadowBolt": 54,
   "SkeletonArcher": 12,
   "SkeletonWarrior": 11,
@@ -47,6 +49,7 @@ export const KIND = {
 } as const;
 
 export const ANIM = {
+  "Ambush": 15,
   "Bite": 13,
   "Breath": 8,
   "Cast": 4,
@@ -87,6 +90,7 @@ export const TILE_ID = {
 } as const;
 
 export const CONST = {
+  "AMBUSH_WARNING": 0.5,
   "BARREL_BLAST_R": 40.0,
   "BARREL_FUSE": 0.3,
   "BARREL_RADIUS": 6.0,
@@ -577,6 +581,22 @@ export const ABILITIES = {
     "shape": "Swing",
     "slot": "Secondary"
   },
+  "Touch": {
+    "classes": [],
+    "hero": false,
+    "name": "Touch",
+    "ranged": false,
+    "shape": "Swing",
+    "slot": "Primary"
+  },
+  "Vanish": {
+    "classes": [],
+    "hero": false,
+    "name": "Vanish",
+    "ranged": false,
+    "shape": "Buff",
+    "slot": "Secondary"
+  },
   "Volley": {
     "classes": [
       "ElvenRanger"
@@ -948,6 +968,14 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
     "h": 26.0,
     "r": 10.0
   },
+  "24": {
+    "h": 22.0,
+    "r": 6.0
+  },
+  "25": {
+    "h": 23.0,
+    "r": 6.0
+  },
   "30": {
     "h": 58.0,
     "r": 11.0
@@ -1243,6 +1271,16 @@ export const ENEMY_KINDS = {
       "Poison": 0.0
     }
   },
+  "Ghost": {
+    "max_hp": 32.0,
+    "res": {
+      "Cold": 1.0,
+      "Heat": 1.0,
+      "Magical": -0.1,
+      "Physical": 1.0,
+      "Poison": 1.0
+    }
+  },
   "GoblinArcher": {
     "max_hp": 24.0,
     "res": {
@@ -1323,6 +1361,16 @@ export const ENEMY_KINDS = {
       "Poison": 1.0
     }
   },
+  "Shade": {
+    "max_hp": 40.0,
+    "res": {
+      "Cold": 1.0,
+      "Heat": 1.0,
+      "Magical": -0.1,
+      "Physical": 1.0,
+      "Poison": 1.0
+    }
+  },
   "SkeletonArcher": {
     "max_hp": 30.0,
     "res": {
@@ -1370,6 +1418,8 @@ export const TAG_NAME: Record<number, string> = {
   21: "Summoner",
   22: "Ogre",
   23: "Dire Wolf",
+  24: "Ghost",
+  25: "Shade",
   30: "Demon",
   31: "Lich",
   32: "Dragon",

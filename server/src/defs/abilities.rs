@@ -86,6 +86,10 @@ super::enum_list::listed_enum! {
         SleepMist = 35,
         /// The lich's gaze that turns its target to stone.
         StoneGaze = 36,
+        /// A chilling touch with a spectral weapon: the ghost's and the shade's.
+        Touch = 37,
+        /// The ambusher's fade from sight: Invisibility as a kit ability.
+        Vanish = 38,
     }
 }
 
@@ -218,9 +222,13 @@ pub struct AbilityDef {
     pub backward: bool,
     /// The classes whose own pool can hold it: the class start now, the tree in plan 4.
     pub classes: &'static [ClassId],
+    /// The Attribute (and its percentage per point) that shortens `own.cooldown`, which is given at `own.at`.
+    pub cooldown_by: Option<(Attr, f64)>,
 }
 
 pub const DASH_SPEED: f64 = 300.0;
+/// Vanish: the longest (s) an ambusher stays Invisible.
+pub const AMBUSH_MAX_INVISIBLE: f64 = 5.0;
 /// Volley: the arrows of one shot, and the angle between the outer two (30 degrees).
 pub const VOLLEY_ARROWS: u8 = 3;
 pub const VOLLEY_SPREAD: f64 = 30.0 * std::f64::consts::PI / 180.0;
@@ -334,6 +342,8 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::GloomBolts => "Five bolts of gloom in a fan.",
         AbilityId::BlindingCurse => "A slow orb that blinds what it hits.",
         AbilityId::SleepMist => "A slow orb that puts what it hits to sleep.",
+        AbilityId::Touch => "A chilling touch that drains the living.",
+        AbilityId::Vanish => "Fades from sight until it strikes.",
         AbilityId::StoneGaze => "A stare that turns the target to stone, if it still sees it when the gaze lands.",
     }
 }
@@ -367,6 +377,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         behind: 0.0,
         backward: false,
         classes,
+        cooldown_by: None,
     };
     match id {
         MagicMissile => base("Magic Missile", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, own(12.0, 0.35, 220.0, 230.0, 3.0, 0.0, Some(EntityKind::Missile), 15), &[K::Wizard]),
@@ -509,6 +520,15 @@ pub fn def(id: AbilityId) -> AbilityDef {
             own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Sleep, power: Attr::Int, look: EffectLook::Plain }), windup: 0.8, ..own(0.0, 14.0, 270.0, 90.0, 3.0, 4.0, Some(EntityKind::SleepOrb), 22) },
             ..base("Sleep Mist", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
         },
+        Touch => AbilityDef {
+            req: &[Requirement::WeaponKind(&[WeaponKind::Touch])],
+            ..base("Touch", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
+        },
+        Vanish => AbilityDef {
+            cooldown_by: Some((Attr::Cha, CHA_DMG)),
+            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Invisible, power: Attr::Cha, look: EffectLook::Plain }), ..own(0.0, 20.0, 0.0, 0.0, 0.0, AMBUSH_MAX_INVISIBLE, None, 10) },
+            ..base("Vanish", Secondary, C::Innate, Uses::Nothing, false, Shape::Buff, NO_OWN, &[])
+        },
         StoneGaze => AbilityDef {
             own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Petrified, power: Attr::Int, look: EffectLook::Plain }), windup: 1.0, ..own(0.0, 18.0, 0.0, 0.0, 0.0, 3.0, None, 0) },
             ..base("Stone Gaze", Secondary, C::Spell, Uses::Nothing, false, Shape::Gaze, NO_OWN, &[])
@@ -533,6 +553,15 @@ pub fn governing(c: AbilityCategory) -> Option<(Attr, f64)> {
 mod tests {
     use super::*;
     use crate::defs::classes;
+
+    #[test]
+    fn touch_needs_a_touch_weapon() {
+        let d = def(AbilityId::Touch);
+        assert_eq!(d.req, &[Requirement::WeaponKind(&[WeaponKind::Touch])]);
+        assert_eq!(d.slot, AbilitySlot::Primary);
+        assert_eq!(d.shape, Shape::Swing);
+        assert!(!d.for_heroes());
+    }
 
     #[test]
     fn every_ability_has_a_text() {
