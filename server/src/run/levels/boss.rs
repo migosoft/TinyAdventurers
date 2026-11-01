@@ -77,7 +77,7 @@ pub fn spawn(run: &mut Run) {
         is_boss: true,
         dormant: true,
         hiding: false,
-        mover: if boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
+        mover: if prof.traits.phasing { Mover::Incorporeal } else if boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
         airborne: false,
         knock: Vec2::ZERO,
         sinking: None,

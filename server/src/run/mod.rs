@@ -321,7 +321,7 @@ impl Run {
             is_boss: false,
             dormant: false,
             hiding: false,
-            mover: if enemies::is_demon(t) { Mover::Demon } else { Mover::Enemy },
+            mover: if prof.traits.phasing { Mover::Incorporeal } else if enemies::is_demon(t) { Mover::Demon } else { Mover::Enemy },
             airborne: false,
             knock: Vec2::ZERO,
             sinking: None,
@@ -648,8 +648,8 @@ impl Run {
     /// and the wolf over a chasm with its Pounce ready dashes back to safe ground.
     fn terrain_monster(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
-        if !m.alive || m.is_boss || m.airborne || m.dash.is_some() {
-            return;
+        if !m.alive || m.is_boss || m.airborne || m.dash.is_some() || m.mover == Mover::Incorporeal {
+            return; // a phantom floats over chasms, deep water and lava
         }
         if let Some((t, how)) = m.sinking {
             if t - DT > 0.0 {
@@ -1818,6 +1818,28 @@ pub mod tests {
         run.monsters[mi].traits.knock_immune = false;
         run.knock_monster(mi, from, 400.0, 30);
         assert_ne!(run.monsters[mi].knock, Vec2::ZERO, "control: an orc is pushed");
+    }
+
+    #[test]
+    fn phasing_monster_hovers_over_terrain_unharmed() {
+        for t in [Tile::Chasm, Tile::DeepWater, Tile::Lava] {
+            let (mut run, id, at) = orc_by(t);
+            let mi = run.monster_idx(id).unwrap();
+            run.monsters[mi].traits.phasing = true;
+            run.monsters[mi].mover = Mover::Incorporeal;
+            run.monsters[mi].dormant = true; // held on the spot: terrain is the only thing at work
+            let hp = run.monsters[mi].hp;
+            for _ in 0..180 {
+                let mi = run.monster_idx(id).expect("still there");
+                run.monsters[mi].pos = at;
+                run.step();
+                let m = &run.monsters[run.monster_idx(id).expect("still there")];
+                assert!(m.sinking.is_none(), "{t:?}: sinking");
+            }
+            let m = &run.monsters[run.monster_idx(id).unwrap()];
+            assert_eq!(m.hp, hp, "{t:?}: full HP");
+            assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. } | Ev::Sink { .. })), "{t:?}: no damage or sinking event");
+        }
     }
 
     #[test]
