@@ -79,7 +79,7 @@ pub struct ResolvedAbility {
     pub push_str: i32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sheet {
     /// Class + race + `extra` + item points.
     pub attrs: Attributes,
@@ -108,6 +108,9 @@ pub struct Sheet {
     pub reach: f64,
     /// What the Summon Wolf version's mods do to the wolf.
     pub wolf: WolfMods,
+    /// Primary and secondary: the pick's requirement fails during a run (`run_sheet`), so it
+    /// does nothing but fall back to the plain ability. Always false from `hero_sheet`.
+    pub disabled: [bool; 2],
 }
 
 /// The wolf's numbers from the Summon Wolf version: its max HP is multiplied by `hp_mul`, and `pounce`
@@ -388,13 +391,52 @@ pub fn attrs_with_items(class: ClassId, b: &Build) -> Attributes {
 /// and the tree's improvements for that ability). An empty Melee slot uses the class's starter;
 /// an empty Ranged slot is no ranged weapon.
 pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
-    let (mut sheet, cx) = sheet_core(class, b)?;
+    let (mut sheet, cx) = sheet_core(class, b, Attributes::default())?;
     let (primary, _) = resolve_pick(class, b, AbilitySlot::Primary, b.loadout.primary, &cx)?;
     let (secondary, secondary_mods) = resolve_pick(class, b, AbilitySlot::Secondary, b.loadout.secondary, &cx)?;
     sheet.wolf = if secondary.id == AbilityId::SummonWolf { wolf_mods(&secondary_mods) } else { WolfMods::NONE };
     sheet.primary = primary;
     sheet.secondary = secondary;
     Ok(sheet)
+}
+
+/// The sheet of a hero during a run, with a signed Attribute `delta` (the drain effects). Never
+/// fails: `b` is a build `hero_sheet` accepted. Requirements are checked against the Attributes
+/// without items plus `delta`: an item that fails gives nothing (an unusable melee weapon is the
+/// class starter), and a pick that fails is disabled and holds the plain ability, without mods.
+pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
+    let req = attrs_without_items(class, b).with_delta(delta);
+    let mut usable = b.clone();
+    for s in EquipSlot::ALL {
+        if usable.equipment.get(s).is_some_and(|id| !items::def(id).req.iter().all(|r| r.met(&req, None))) {
+            usable.equipment.set(s, None);
+        }
+    }
+    let (mut sheet, cx) = sheet_core(class, &usable, delta).expect("the usable items of an accepted build pass the equipment check");
+    let strike = sheet.fallback;
+    let mut wolf = WolfMods::NONE;
+    for (i, (slot, p)) in [(AbilitySlot::Primary, b.loadout.primary), (AbilitySlot::Secondary, b.loadout.secondary)].into_iter().enumerate() {
+        let r = match resolve_pick(class, &usable, slot, p, &cx) {
+            Ok((r, mods)) => {
+                if slot == AbilitySlot::Secondary && r.id == AbilityId::SummonWolf {
+                    wolf = wolf_mods(&mods);
+                }
+                r
+            }
+            Err(_) => {
+                sheet.disabled[i] = true;
+                let d = ab::def(p.ability);
+                cx.resolve(&d).unwrap_or(ResolvedAbility { id: p.ability, ranged: d.ranged, ..strike })
+            }
+        };
+        if slot == AbilitySlot::Primary {
+            sheet.primary = r;
+        } else {
+            sheet.secondary = r;
+        }
+    }
+    sheet.wolf = wolf;
+    sheet
 }
 
 /// What resolving a pick needs: the numbers of the hero without the picks.
@@ -430,14 +472,16 @@ fn resolve_pick(class: ClassId, b: &Build, slot: AbilitySlot, p: Pick, cx: &Pick
 }
 
 /// The sheet without its two picks (they hold the Strike until `hero_sheet` resolves them), and
-/// what resolving any pick needs.
-fn sheet_core(class: ClassId, b: &Build) -> Result<(Sheet, PickCx), LoadoutError> {
+/// what resolving any pick needs. `delta` is an Attribute change during a run (none for
+/// `hero_sheet`): the equipment is checked against the Attributes without items plus `delta`, and
+/// every derived number uses the Attributes with items plus `delta`.
+fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, PickCx), LoadoutError> {
     let def = classes::def(class);
     let start = classes::start_attrs(class);
     let unequipped = attrs_without_items(class, b);
     let equip = &b.equipment;
     let tree = trees::gains(&b.nodes);
-    items::check_equipment(class, &profs(class, &b.nodes), equip, &unequipped).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
+    items::check_equipment(class, &profs(class, &b.nodes), equip, &unequipped.with_delta(delta)).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
     let prof = classes::profile(class);
 
     let worn = worn_items(class, b);
@@ -518,6 +562,7 @@ fn sheet_core(class: ClassId, b: &Build) -> Result<(Sheet, PickCx), LoadoutError
             }
         }
     }
+    let attrs = attrs.with_delta(delta);
     let melee_id = worn.iter().find(|w| w.0 == EquipSlot::Melee).map(|w| w.1).expect("a hero always has a melee weapon");
     let melee = arm(melee_id, &attrs, &shares[0], on_hits[0], pierce[0]);
     let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], on_hits[1], pierce[1]));
@@ -534,7 +579,7 @@ fn sheet_core(class: ClassId, b: &Build) -> Result<(Sheet, PickCx), LoadoutError
     let cx = PickCx { attrs, melee, ranged, improves: tree.improves.clone(), ks };
     let sheet = Sheet {
         attrs,
-        max_hp: attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp,
+        max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp).max(1.0),
         speed: move_speed(def.speed, start.get(Attr::Con), &attrs) * (1.0 + move_frac),
         weight,
         res,
@@ -549,6 +594,7 @@ fn sheet_core(class: ClassId, b: &Build) -> Result<(Sheet, PickCx), LoadoutError
         fallback: strike,
         reach,
         wolf: WolfMods::NONE,
+        disabled: [false, false],
     };
     Ok((sheet, cx))
 }
@@ -647,7 +693,7 @@ pub struct PoolCard {
 /// start primary and secondary, `b.own`, owned tree unlocks (node order), item versions (slot
 /// order), then the locked tree unlocks (node order). Never empty: `summary` passes the starter equipment when the equipment fails.
 pub fn pool_cards(class: ClassId, b: &Build) -> Vec<PoolCard> {
-    let Ok((_, cx)) = sheet_core(class, b) else { return Vec::new() };
+    let Ok((_, cx)) = sheet_core(class, b, Attributes::default()) else { return Vec::new() };
     let cd = classes::def(class);
     let nodes = trees::tree(class);
     let unlock_of = |n: &trees::NodeDef| match n.kind {
@@ -1510,5 +1556,77 @@ mod tests {
     fn the_summary_carries_the_pool() {
         let c = ClassId::Wizard;
         assert_eq!(summary(c, &Build::start(c)).pool, pool_cards(c, &Build::start(c)));
+    }
+
+    fn frost_shard_wizard() -> Build {
+        use crate::defs::trees::NodeId;
+        let mut b = Build::start(ClassId::Wizard);
+        b.nodes = vec![NodeId::WF1];
+        b.loadout.primary = Pick { ability: AbilityId::FrostShard, source: Source::Own };
+        b
+    }
+
+    fn flame_tongue_barbarian() -> Build {
+        let c = ClassId::Barbarian;
+        Build { equipment: Equipment::starter(c).with(EquipSlot::Melee, ItemId::FlameTongue), ..Build::start(c) }
+    }
+
+    fn drain(s: i32, d: i32, c: i32) -> Attributes {
+        Attributes::new(s, d, c, 0, 0, 0)
+    }
+
+    #[test]
+    fn run_sheet_without_a_delta_is_the_hero_sheet() {
+        for c in ClassId::ALL {
+            let b = Build::start(c);
+            assert_eq!(run_sheet(c, &b, Attributes::default()), hero_sheet(c, &b).unwrap(), "{c:?}");
+        }
+        for (c, b) in [(ClassId::Wizard, frost_shard_wizard()), (ClassId::Barbarian, flame_tongue_barbarian())] {
+            assert_eq!(run_sheet(c, &b, Attributes::default()), hero_sheet(c, &b).unwrap(), "{c:?}");
+        }
+    }
+
+    #[test]
+    fn a_drain_lowers_the_numbers() {
+        let c = ClassId::Barbarian;
+        let b = Build::start(c);
+        let base = hero_sheet(c, &b).unwrap();
+        let s = run_sheet(c, &b, drain(-2, 0, -3));
+        assert_eq!((s.attrs.get(Attr::Str), s.attrs.get(Attr::Con)), (13, 11));
+        assert_eq!(s.max_hp, attributes::hp(classes::def(c).base_hp, 11));
+        assert!(s.primary.damage < base.primary.damage);
+        assert!(s.speed < base.speed);
+        assert_eq!(s.disabled, [false, false]);
+    }
+
+    #[test]
+    fn the_floor_holds() {
+        let c = ClassId::Wizard;
+        let s = run_sheet(c, &Build::start(c), drain(0, 0, -50));
+        assert_eq!(s.attrs.get(Attr::Con), 1);
+        assert!(s.max_hp >= 1.0);
+    }
+
+    #[test]
+    fn a_drained_requirement_disables_the_pick() {
+        let c = ClassId::Wizard;
+        let b = frost_shard_wizard();
+        let int = |n| Attributes::new(0, 0, 0, n, 0, 0);
+        assert_eq!(run_sheet(c, &b, int(-1)).disabled, [false, false]);
+        let s = run_sheet(c, &b, int(-2));
+        assert_eq!(s.disabled, [true, false]);
+        assert_eq!(s.primary.id, AbilityId::FrostShard);
+        assert!(s.primary.ranged);
+    }
+
+    #[test]
+    fn an_unusable_weapon_falls_back_to_the_starter() {
+        let c = ClassId::Barbarian;
+        let b = flame_tongue_barbarian();
+        assert!(run_sheet(c, &b, drain(-2, 0, 0)).melee.split.share(DamageType::Heat) > 0.0);
+        let s = run_sheet(c, &b, drain(-3, 0, 0));
+        assert_eq!(s.melee.split.share(DamageType::Heat), 0.0);
+        assert_eq!(s.melee, run_sheet(c, &Build::start(c), drain(-3, 0, 0)).melee);
+        assert_eq!(s.disabled, [false, false]);
     }
 }
