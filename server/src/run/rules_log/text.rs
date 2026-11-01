@@ -5,6 +5,7 @@ use crate::defs::abilities::AbilityId;
 use crate::run::targets::Skip;
 use crate::defs::abilities;
 use crate::defs::damage::{DamageType, Mult, What};
+use crate::defs::attributes::Attr;
 use crate::defs::effects::EffectKind;
 use crate::defs::races::{race_def, Race};
 use crate::run::effects::EffectOutcome;
@@ -276,6 +277,11 @@ pub(super) fn ended_head(run: &Run, target: u32, kind: EffectKind, why: EndReaso
         EndReason::Attacked => " (it attacked)",
     };
     format!("{} on {} ended{tail}", effect_name(kind), tag_of(run, target))
+}
+
+/// "Orc Warrior 1: STR 14 → 13".
+pub(super) fn attr_head(run: &Run, target: u32, attr: Attr, old: i32, new: i32) -> String {
+    format!("{}: {} {} → {}", tag_of(run, target), attr.short(), old, new)
 }
 
 /// "Ayla ▸ Holy Light ▸ Ayla's wolf: healed 8 (HP 12 → 20)", or without a source "Goblin Archer 1: healed 3 (HP 1 → 4)".

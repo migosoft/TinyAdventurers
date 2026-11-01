@@ -215,6 +215,9 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             return;
         }
     }
+    if run.players[pi].sheet.disabled[if primary { 0 } else { 1 }] {
+        return;
+    }
     let anim = use_ability(run, Creature::Player(pi), &def, shot);
     let p = &mut run.players[pi];
     let cooldown = super::keystones::cooldown(p, cooldown);
@@ -2412,6 +2415,34 @@ mod tests {
                 break;
             }
         }
+    }
+
+    /// The wizard of `wizard_with(FrostShard)` with INT drained by 2, as `refresh_attrs` would leave it
+    /// (no effect drains INT yet): Frost Shard needs INT 14 and the wizard has 15.
+    fn int_drained_wizard() -> Run {
+        let mut run = wizard_with(AbilityId::FrostShard, 0);
+        let delta = Attributes::new(0, 0, 0, -2, 0, 0);
+        let p = &mut run.players[0];
+        p.sheet = crate::sheet::run_sheet(p.class, &p.build, delta);
+        assert!(p.sheet.disabled[0] && !p.sheet.disabled[1]);
+        run
+    }
+
+    #[test]
+    fn a_disabled_primary_is_not_cast() {
+        let mut run = int_drained_wizard();
+        try_use(&mut run, 0, true, 1);
+        assert!(run.projectiles.is_empty(), "no bolt");
+        assert_eq!(run.players[0].cd1, 0.0);
+    }
+
+    #[test]
+    fn a_disabled_ranged_primary_still_falls_back_in_melee() {
+        let mut run = int_drained_wizard();
+        let mi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 10.0, 1000.0);
+        try_use(&mut run, 0, true, 1);
+        assert!(run.monsters[mi].hp < 1000.0, "the fallback Strike hit");
+        assert_eq!(run.players[0].cd1, run.players[0].sheet.fallback.cooldown);
     }
 
     fn lost(run: &Run, mi: usize, before: f64) -> f64 {

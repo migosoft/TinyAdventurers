@@ -35,7 +35,7 @@ pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u
 /// `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32)>, pub f32, pub bool, pub f32);
+pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32, i16)>, pub f32, pub bool, pub f32);
 
 /// `[kind, hp, max_hp, immune]`
 #[derive(Debug, Clone, Serialize, TS)]
@@ -177,7 +177,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             spectating: None,
             darkvision: 0,
             vision: 9.0,
-            effects: vec![(1, 2.5), (3, 0.75)],
+            effects: vec![(1, 2.5, 0), (3, 0.75, 0), (16, 12.0, -2)],
             speed_mul: 0.0,
             no_act: true,
             cd_mul: 0.8,

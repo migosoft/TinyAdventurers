@@ -378,7 +378,7 @@ mod tests {
         let p = def(EffectKind::Petrified);
         assert!(p.no_move && p.no_act && p.no_turn && !p.wakes_on_use);
         assert!(def(EffectKind::Accelerated).positive);
-        assert!(EffectKind::ALL.iter().filter(|&&k| !matches!(k, EffectKind::Accelerated | EffectKind::Warded | EffectKind::Coated | EffectKind::Invisible | EffectKind::Weakened | EffectKind::Clumsy | EffectKind::Frail)).all(|&k| !def(k).positive));
+        assert!(EffectKind::ALL.iter().filter(|&&k| !matches!(k, EffectKind::Accelerated | EffectKind::Warded | EffectKind::Coated | EffectKind::Invisible)).all(|&k| !def(k).positive));
         for k in EffectKind::ALL {
             assert_eq!(EffectKind::from_u8(k as u8), Some(k));
             assert_eq!(k.bit(), 1 << k as u8);

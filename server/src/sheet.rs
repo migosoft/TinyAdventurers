@@ -279,7 +279,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
 }
 
 /// The abilities of a monster, resolved at spawn from its Attributes, weapons and body.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Kit(Vec<ResolvedAbility>);
 
 impl Kit {

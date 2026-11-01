@@ -6,6 +6,7 @@ use crate::run::abilities::MeleeTarget;
 use crate::run::targets::Skip;
 use crate::defs::abilities::AbilityId;
 use crate::defs::damage::{Damage, DamageType, Resistances, What};
+use crate::defs::attributes::Attr;
 use crate::defs::effects::EffectKind;
 use crate::defs::kinds::EntityKind;
 use crate::protocol::EntSnap;
@@ -261,6 +262,19 @@ pub fn ended(run: &mut Run, c: Creature, kind: EffectKind, why: EndReason) {
     let head = text::ended_head(run, creature_id(run, c), kind, why);
     let who = vec![record::seen_creature(run, c)];
     record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+}
+
+/// A creature's Attributes changed through its effects: one line per changed Attribute, `(Attribute, before, after)`.
+pub fn attrs_changed(run: &mut Run, c: Creature, changes: &[(Attr, i32, i32)]) {
+    if !on(run) {
+        return;
+    }
+    let target = creature_id(run, c);
+    for &(attr, old, new) in changes {
+        let head = text::attr_head(run, target, attr, old, new);
+        let who = vec![record::seen_creature(run, c)];
+        record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+    }
 }
 
 /// What a heal hands over. `healed` is what the creature gained (0 when it was full).

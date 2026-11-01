@@ -199,6 +199,7 @@ impl Run {
                 tx: Some(m.tx),
                 name: m.name,
                 class: m.class,
+                build: m.build.clone(),
                 weapons: (m.build.equipment.get(crate::defs::items::EquipSlot::Melee).unwrap_or(classes::def(m.class).starter.0), m.build.equipment.get(crate::defs::items::EquipSlot::Ranged)),
                 kind: classes::def(m.class).kind,
                 mv: MoveState::at(p.x, p.y),

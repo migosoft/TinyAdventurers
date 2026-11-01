@@ -134,7 +134,7 @@ fn rules_log_is_reached_only_through_its_hooks() {
     walk(&root, &root, &mut found);
     // Lines naming `rules_log` outside the module, per file. Each task updates this with its hooks.
     let hooks: BTreeMap<String, usize> =
-        [("defs/effects.rs", 1), ("run/mod.rs", 20), ("run/effects.rs", 9), ("run/abilities.rs", 21), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        [("defs/effects.rs", 1), ("run/mod.rs", 20), ("run/effects.rs", 10), ("run/abilities.rs", 21), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     assert_eq!(found, hooks);
 }
 
@@ -153,7 +153,7 @@ fn n1_rounds_to_one_decimal_and_drops_dot_zero() {
 struct Legacy(u32, u32, Vec<EntW>, SelfW, Option<BossW>, Vec<EvW>, f32, Option<Vec<u32>>, Vec<LightW>, Vec<(u32, u8, u8)>);
 
 fn a_snapw(log: Option<LogW>) -> SnapW {
-    let me = SelfW(true, 10.0, 20.0, 1.5, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0, None, None, 0, 9.0, vec![(1, 2.0)], 1.0, false, 1.0);
+    let me = SelfW(true, 10.0, 20.0, 1.5, 2.5, 0.0, 0.0, 0.0, 0.0, 0.0, None, None, 0, 9.0, vec![(1, 2.0, 0)], 1.0, false, 1.0);
     SnapW(7, 3, vec![EntW(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)], me, None, vec![], 0.25, None, vec![LightW(1, 2, 3, None)], vec![(1, 2, 3)], log)
 }
 
@@ -1673,4 +1673,18 @@ fn a_skip_line_naming_an_invisible_monster_is_held_back() {
     let recs = take(&mut run);
     let skip = recs.iter().find(|r| r.kind == LineKind::Skip).expect("the skip is recorded");
     assert!(skip.who[0].gone && skip.unseen.is_none(), "but no player is sent it while the monster is invisible");
+}
+
+#[test]
+fn a_drain_logs_a_line_per_changed_attribute() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let mi = enemy_near(&mut run, EnemyType::OrcWarrior);
+    let c = Creature::Monster(mi);
+    let str0 = run.monsters[mi].attrs.get(crate::defs::attributes::Attr::Str);
+    let _ = take(&mut run);
+    assert!(run.apply(c, Apply::plain(EffectKind::Weakened, None)));
+    let recs = take(&mut run);
+    let heads: Vec<&str> = recs.iter().map(|r| r.head.as_str()).collect();
+    assert!(heads.iter().any(|h| h.ends_with(&format!(": STR {} → {}", str0, str0 - 1))), "{heads:?}");
+    assert_eq!(heads.iter().filter(|h| h.contains("STR")).count(), 1, "{heads:?}");
 }

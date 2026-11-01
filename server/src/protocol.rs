@@ -235,8 +235,8 @@ pub struct SelfState {
     pub darkvision: u8,
     /// The viewed hero's vision (tiles) through its effects (blind 0, asleep dimmed).
     pub vision: f32,
-    /// The own hero's effects: (`EffectKind` id, seconds left).
-    pub effects: Vec<(u8, f32)>,
+    /// The own hero's effects: (`EffectKind` id, seconds left, amount of an Attribute effect, else 0).
+    pub effects: Vec<(u8, f32, i16)>,
     /// Factor on the own hero's move speed (0 while it cannot move); prediction uses it.
     pub speed_mul: f32,
     /// The own hero cannot act (asleep, stone): no predicted abilities.
@@ -348,6 +348,9 @@ pub enum ServerMsg {
     /// `boss`: the level's end boss, if it has one.
     RunEnded { victory: bool, level: LevelId, boss: Option<BossId>, time: f32, stats: Vec<PlayerStats> },
     Pong { time: f64 },
+    /// The hero's speed or abilities changed (an Attribute effect started or ended): the numbers the client
+    /// predicts with, as in `RunStartInfo`. `disabled`: the pick's requirement fails, so it does nothing.
+    HeroChanged { speed: f64, abilities: [crate::sheet::ResolvedAbility; 2], fallback: crate::sheet::ResolvedAbility, disabled: [bool; 2] },
     Error { msg: String },
     /// Debug mode: shortest walkable path from the player to the boss (pixel waypoints).
     /// `ogre`: the path to the ogre mini-boss while it lives (else empty). `immortal`: false after `DebugImmortal { on: false }`.
