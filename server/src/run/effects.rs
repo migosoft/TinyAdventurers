@@ -269,6 +269,8 @@ impl Run {
     pub fn apply_traced(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u16) {
         let r = self.apply_untold(c, a);
         if !def(a.kind).positive && matches!(r.0, EffectOutcome::Added | EffectOutcome::Refreshed) {
+            // The landing effect's own Ev::Effect start event is suppressed for a creature that was still invisible
+            // (the client draws from the snapshot mask).
             self.reveal(c, super::rules_log::EndReason::RevealedByEffect); // only an effect that takes hold
         }
         r

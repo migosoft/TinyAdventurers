@@ -1079,6 +1079,10 @@ impl Run {
 
     /// Returns true if the monster took damage.
     pub fn hurt_monster(&mut self, mi: usize, dmg: Damage, crit: bool, src_player: Option<usize>) -> bool {
+        // One central guard: a hit a bodiless monster fully resists is no hit at all (no keystone, reveal, number or effect).
+        if self.monsters[mi].alive && !dmg.from_effect && self.passes_through(effects::Creature::Monster(mi), &dmg.split) {
+            return false;
+        }
         let dmg = keystones::on_hit(self, mi, dmg);
         #[cfg(test)]
         {
