@@ -26,9 +26,9 @@ darkvision: number,
  */
 vision: number, 
 /**
- * The own hero's effects: (`EffectKind` id, seconds left).
+ * The own hero's effects: (`EffectKind` id, seconds left, amount of an Attribute effect, else 0).
  */
-effects: Array<[number, number]>, 
+effects: Array<[number, number, number]>, 
 /**
  * Factor on the own hero's move speed (0 while it cannot move); prediction uses it.
  */
