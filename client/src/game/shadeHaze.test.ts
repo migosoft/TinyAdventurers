@@ -75,7 +75,7 @@ describe('shade veil', () => {
     expect(px.some((p) => p.x === 6 && p.y === 1)).toBe(false);
     expect(px.at(-1)?.f).toBe(1);
   });
-  it('veilPixels fills the cloth between back strands, fainter than the strands, and keeps the wrapping strands apart', () => {
+  it('veilPixels fills a solid core and the cloth between back strands, fainter than the strands, and keeps the wrapping strands apart', () => {
     const v = new VeilStrands(lcg());
     settle(v, { x: 100, y: 100 }, 1);
     const { back, front } = veilPixels(v.lines);
@@ -83,6 +83,8 @@ describe('shade veil', () => {
     expect(sheet.length).toBeGreaterThan(20);
     expect(Math.max(...sheet)).toBeLessThanOrEqual(sheetAlpha(0, 0, 0));
     expect([...back.values()]).toContain(1);
+    // No hole in the middle: every pixel round the body's centre is solid.
+    for (let y = 92; y <= 95; y++) for (let x = 99; x <= 101; x++) expect(back.get(`${x},${y}`)).toBe(1);
     expect(front.size).toBeGreaterThan(0);
     for (const a of [...back.values(), ...front.values()]) expect(a).toBeLessThanOrEqual(1);
   });

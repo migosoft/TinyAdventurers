@@ -188,7 +188,8 @@ function inside(poly: readonly Pt[], x: number, y: number): boolean {
 
 /**
  * The veil as whole pixels and their alpha, one map per layer (`x,y` keys; a pixel covered twice keeps the darker):
- * behind the figure the cloth between neighbouring back strands (a closed ring) and the strands over it, in front the wrapping strands.
+ * behind the figure a solid core between the back strands' roots, the cloth between neighbouring back strands (a closed ring)
+ * and the strands over it; in front the wrapping strands.
  */
 export function veilPixels(lines: readonly VeilStrand[]): { back: Map<string, number>; front: Map<string, number> } {
   const back = new Map<string, number>();
@@ -199,6 +200,14 @@ export function veilPixels(lines: readonly VeilStrand[]): { back: Map<string, nu
     if ((m.get(key) ?? 0) < a) m.set(key, a);
   };
   const backs = lines.filter((l) => !l.front);
+  // The core between the roots: solid, so there is no hole where the body is (it shows when the body goes at death).
+  const core = backs.map((l) => l.pts[0]);
+  if (core.length > 2) {
+    const xs = core.map((p) => p.x);
+    const ys = core.map((p) => p.y);
+    for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
+      for (let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++) if (inside(core, x + 0.5, y + 0.5)) put(back, x, y, 1);
+  }
   for (let s = 0; s < backs.length; s++) {
     const [A, B] = [backs[s].pts, backs[(s + 1) % backs.length].pts];
     const n = Math.min(A.length, B.length) - 1;
