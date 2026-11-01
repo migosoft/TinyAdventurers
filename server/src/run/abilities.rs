@@ -3025,7 +3025,7 @@ mod tests {
         let mut run = wizard_secondary(AbilityId::Haste, Attributes::new(0, 0, 0, 5, 2, 0));
         run.players[0].effects.add(EffectKind::Invisible, 30.0);
         try_use(&mut run, 0, false, 1);
-        assert_eq!(run.players[0].cd2, 14.0, "it was cast");
+        assert_eq!(run.players[0].cd2, ab::def(AbilityId::Haste).own.cooldown, "it was cast");
         assert!(run.has_effect(Creature::Player(0), EffectKind::Invisible), "a support ability is no attack");
     }
 
@@ -3034,7 +3034,7 @@ mod tests {
         for id in [AbilityId::Strike, AbilityId::MagicMissile, AbilityId::WarCry] {
             assert!(ab::is_attack(&ab::def(id)), "{id:?}");
         }
-        for id in [AbilityId::Haste, AbilityId::Purify] {
+        for id in [AbilityId::Haste, AbilityId::Purify, AbilityId::HolyLight, AbilityId::SummonWolf, AbilityId::PoisonCoat] {
             assert!(!ab::is_attack(&ab::def(id)), "{id:?}");
         }
     }
@@ -3046,6 +3046,8 @@ mod tests {
         run.monsters[goblin].effect_res.set(EffectKind::Fear, 1.0);
         run.monsters[goblin].effects.add(EffectKind::Invisible, 30.0);
         try_use(&mut run, 0, false, 1);
+        let (outcome, _, _) = run.apply_traced(Creature::Monster(goblin), Apply::plain(EffectKind::Fear, Some(2.0)));
+        assert!(matches!(outcome, crate::run::effects::EffectOutcome::Resisted | crate::run::effects::EffectOutcome::TypeImmune(_)), "{outcome:?}");
         assert!(!run.has_effect(Creature::Monster(goblin), EffectKind::Fear), "it shrugs the shout off");
         assert!(run.has_effect(Creature::Monster(goblin), EffectKind::Invisible), "and stays invisible");
     }

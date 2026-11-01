@@ -130,7 +130,7 @@ pub struct EffectDef {
     pub flees: bool,
     /// Any direct hit or harmful application from outside ends it (Invisible).
     pub ends_when_hit: bool,
-    /// Starting an attack or ability ends it (Invisible).
+    /// Starting an attack ends it (Invisible).
     pub ends_when_attacking: bool,
 }
 

@@ -360,7 +360,7 @@ impl Run {
         self.end_effects(c, why, |d| d.ends_when_hit);
     }
 
-    /// `c` starts an attack or an ability: every effect that `ends_when_attacking` (Invisible) ends. Not for Haste or Purify (`is_attack`).
+    /// `c` starts an attack: every effect that `ends_when_attacking` (Invisible) ends. Not for Haste or Purify (`is_attack`).
     pub fn act(&mut self, c: Creature) {
         self.end_effects(c, super::rules_log::EndReason::Attacked, |d| d.ends_when_attacking);
     }
