@@ -658,6 +658,18 @@ mod tests {
     }
 
     #[test]
+    fn an_invisible_undead_cannot_be_put_to_sleep_and_stays_invisible() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = ghostly(&mut run);
+        let c = Creature::Monster(mi);
+        assert!(run.go_invisible(mi, 5.0, 3.0));
+        let (outcome, _, _) = run.apply_traced(c, Apply::plain(EffectKind::Sleep, Some(4.0)));
+        assert!(matches!(outcome, EffectOutcome::Resisted | EffectOutcome::TypeImmune(_)), "{outcome:?}");
+        assert!(!run.has_effect(c, EffectKind::Sleep));
+        assert!(run.has_effect(c, EffectKind::Invisible));
+    }
+
+    #[test]
     fn shrugged_off_effect_does_not_reveal() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let c = invisible_ogre(&mut run);
@@ -883,7 +895,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         open(&mut run);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
-        let id = run.spawn_enemy(EnemyType::SkeletonArcher, at, None);
+        let id = run.spawn_enemy(EnemyType::OrcArcher, at, None);
         let mi = run.monster_idx(id).unwrap();
         run.apply_effect(Creature::Monster(mi), EffectKind::Blind, Some(5.0));
         crate::run::ai::tick_monster(&mut run, mi, DT);

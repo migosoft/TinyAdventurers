@@ -94,7 +94,7 @@ pub fn race_def(r: Race) -> RaceDef {
         Race::Human => plain(Resistances::NONE, &[UnarmedStrike], 9.0, 0.0),
         Race::Goblin | Race::Orc | Race::Ogre => plain(Resistances::NONE, &[UnarmedStrike], 8.0, 1.0 / 3.0),
         Race::Mimic => plain(Resistances::NONE, &[Bite], 8.0, 1.0 / 3.0),
-        Race::Undead => RaceDef { effect_res: fear(1.0), ..plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), &[UnarmedStrike], 8.0, 1.0) },
+        Race::Undead => RaceDef { effect_res: never_sleeps.strongest(fear(1.0)), ..plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), &[UnarmedStrike], 8.0, 1.0) },
         Race::Demon => RaceDef { effect_res: fear(0.5), ..plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), &[Claws], 9.0, 1.0) },
         Race::Dragon => plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), &[DragonClaws, DragonBite, DragonTail], 25.0, 1.0),
         Race::Object => plain(Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), &[], 0.0, 0.0),
@@ -247,6 +247,13 @@ mod tests {
         assert!((b.melee.share(Magical) - 0.2).abs() < 1e-12 && (b.melee.share(Physical) - 0.8).abs() < 1e-12);
         assert_eq!(b.sight, Sight { vision: 18.0, darkvision: 1.0 });
         assert_eq!(profile(&[Race::Human, Race::MagicalBeast], Adjust::NONE).effect_res.get(EffectKind::Sleep), 1.0);
+    }
+
+    #[test]
+    fn undead_are_immune_to_sleep_and_fear() {
+        use crate::defs::effects::EffectKind;
+        let u = profile(&[Race::Undead], Adjust::NONE);
+        assert_eq!((u.effect_res.get(EffectKind::Sleep), u.effect_res.get(EffectKind::Fear)), (1.0, 1.0));
     }
 
     #[test]
