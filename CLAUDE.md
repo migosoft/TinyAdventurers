@@ -1,6 +1,6 @@
 # Tiny Adventurers: notes for coding agents
 
-Read [README.md](README.md) (what the game is, how to run it), [docs/TECHNICAL.md](docs/TECHNICAL.md) (architecture, protocol, simulation, netcode, rendering, how to extend, known limitations) and [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md) (the game as players see it; keep it in sync when gameplay changes). There is no HANDOFF file: the state of the work is on the board below.
+Read [README.md](README.md) (what the game is, how to run it), [docs/TECHNICAL.md](docs/TECHNICAL.md) (§2a "Where to find things" maps topics to files; architecture, protocol, simulation, netcode, rendering, how to extend, known limitations) and [docs/PLAYER_GUIDE.md](docs/PLAYER_GUIDE.md) (the game as players see it; keep it in sync when gameplay changes). There is no HANDOFF file: the state of the work is on the board below.
 
 ## Which work to do
 

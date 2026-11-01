@@ -116,6 +116,40 @@ docs/                                this file, player guide (open work: GitHub 
 CLAUDE.md                            workflow, standing decisions, environment for the next agent
 ```
 
+## 2a. Where to find things
+
+A lookup by topic: where the code for a topic lives, and which section explains it. It only points; the numbers and rules are in the code and in the sections. When a file, type or function named here moves or is renamed, update this list along with it. Server paths are relative to `server/src/`, client paths to `client/src/`.
+
+**Creatures and their numbers**
+- **Attributes** (STR, DEX, CON, INT, WIL, CHA): `defs/attributes.rs` (`Attr`, `Attributes`, `factor`, `hp`, `Scaled`, `attr_price`). §11a "The character sheet and Attributes".
+- **A hero's derived numbers:** `sheet.rs` `hero_sheet(class, &Build)` gives a `Sheet`, and `run_sheet(class, &Build, delta)` resolves it again during a run when effects change Attributes. Points: `classes::start_attrs`, `sheet::attrs_without_items` / `attrs_with_items`. At run time it is `Player.sheet` and `Player.build` (`run/entities.rs`). §11a.
+- **A monster's derived numbers:** `sheet.rs` `enemy_stats`, `boss_stats`, `wolf_stats` (`MonsterStats`); `monster_numbers(&MonsterBase, delta)` does the run-time version. At run time it is `Monster.attrs`, `Monster.base`, `max_hp`, `speed`, `kit` (`run/entities.rs`). Stat blocks: `defs/enemies.rs`, `defs/bosses.rs`, `defs/companions.rs`. §11a.
+- **Attribute changes during a run** (drain effects): `defs/effects.rs` (`EffectDef.attr`, `attr_amount`); `run/effects.rs` (`Effects::attr_delta`, `Run::refresh_attrs`).
+- **Races, resistances, Attribute bonus:** `defs/races.rs` (`Adjust`, `profile`); each class, enemy and boss has its own `profile` in its defs file. §5 "Damage model".
+- **The build** (shop points, tree nodes, equipment, loadout): `defs/loadout.rs` `Build`; stored as `progress.rs` `Progress`. §11a "Characters".
+
+**Combat**
+- **Damage and resistances:** `defs/damage.rs` (`Damage`, `DamageSplit`, `Resistances`, `resolve`); applying a hit: `run/mod.rs` `hurt_player`, `hurt_monster`. §5 "Damage model".
+- **Abilities:** the data is `defs/abilities.rs` (`AbilityDef`, `Shape`, `Uses`); resolving against Attributes and weapons is `sheet.rs` `resolve_ability`, `monster_kit`, `kit_for`; running them is `run/abilities.rs` (`try_use` for heroes, `monster_use` for monsters, `Cooldowns`). §11a "Abilities", "Shapes".
+- **Weapons and items:** `defs/weapons.rs` (`key_attr`, `resolve_melee`, `resolve_ranged`); `defs/items.rs` (`ItemDef`, `check_equip`); requirements `defs/requirements.rs`. §11a "Weapons, items and equipment".
+- **Status effects:** the data is `defs/effects.rs` (`EffectKind`, `EffectDef`, `scaled_secs`); at run time `run/effects.rs` (`Effects`, `apply_effect_from`). §5 "Status effects", §11 "How to add an effect".
+- **Skill trees and keystones:** `defs/trees.rs` (`NodeDef`, `gains`, `check_buy`); the keystones that act during a run are in `run/keystones.rs`. §11a "Attribute shop, skill trees and keystones".
+- **Monster AI and bosses:** `run/ai.rs`; `run/perception.rs` (`sees`); `run/bosses/` (`BossBehaviour`, one file per boss); `run/companion.rs` (the wolf). §5 "AI", "Bosses", "Companions".
+
+**The run and the world**
+- **The tick and inputs:** `run/mod.rs` (`Run::step`, `apply_input`). §5 "Tick".
+- **Levels:** `run/levels/` (`LevelRules`, `BossEncounter`, `DungeonLevel`); generation is `dungeon/generate.rs`. §5 "Levels", §6.
+- **World objects, light, sight:** `run/objects.rs`; `run/light.rs` + `defs/lights.rs`; `fov.rs`, `vispoly.rs`, `run/visibility.rs`. §5, §7.
+- **Rewards and banking:** `defs/progression.rs` (XP and coin rewards), `progress.rs` `Progress::bank`, `db.rs` `bank_awards`. §11a.
+
+**Network and client**
+- **Messages:** `protocol.rs` (`ClientMsg`, `ServerMsg`); wire forms `wire.rs` ↔ client `wire.ts`; generated TS types in `client/src/generated/` (written by `export.rs`). §4.
+- **Lobby, rooms, character selection:** `lobby.rs`. Accounts and sessions: `api.rs`, `auth.rs`, `db.rs`. §11a.
+- **Prediction and interpolation:** client `game/world.ts` (`Predictor`, `Interpolator`), `sim/` (ports of collision and FOV that must match the server). §8.
+- **Drawing:** `game/GameScene.ts`; how a figure looks is `game/anim/defs.ts` → `EntityView.ts`; effects `game/effects.ts`. §9.
+- **Character screens:** `ui/hub/` (`hub.ts`, `sheet.ts`, `tree.ts`, `equipment.ts`, `loadout.ts`, `model.ts`); the in-run HUD is `ui/hud.ts`. §9 "UI", §11a "The character screens".
+- **Rules log:** server `run/rules_log/`, client `rulesLog/`. §11d.
+
 ## 3. Build, run, test
 
 | Task | Command |
