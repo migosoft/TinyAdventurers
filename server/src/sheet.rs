@@ -747,7 +747,7 @@ pub fn summary(class: ClassId, b: &Build) -> SheetSummary {
         push: sheet.attrs.get(Attr::Str),
         save_con: sheet.save(Attr::Con),
         save_wil: sheet.save(Attr::Wil),
-        res: DamageType::ALL.iter().map(|&t| (t, sheet.res.get(t))).filter(|r| r.1 != 0.0).collect(),
+        res: DamageType::ALL.iter().map(|&t| (t, sheet.res.capped(t))).filter(|r| r.1 != 0.0).collect(),
         effect_res: EffectKind::ALL.iter().map(|&k| (k, sheet.effect_res.get(k))).filter(|r| r.1 != 0.0).collect(),
         profs,
         keystones: sheet.keystones.iter().collect(),

@@ -4,7 +4,7 @@ use super::{tag_of, DeathFacts, EffectFacts, EndReason, HealFacts, HitFacts, Hit
 use crate::defs::abilities::AbilityId;
 use crate::run::targets::Skip;
 use crate::defs::abilities;
-use crate::defs::damage::{DamageType, Mult, What, MIN_RESISTANCE};
+use crate::defs::damage::{DamageType, Mult, What};
 use crate::defs::effects::EffectKind;
 use crate::defs::races::{race_def, Race};
 use crate::run::effects::EffectOutcome;
@@ -154,7 +154,7 @@ pub(super) fn part_lines(f: &HitFacts) -> Vec<String> {
                 type_name(t),
                 pct(share),
                 n1(f.dmg.amount * share),
-                pct(f.res.get(t).max(MIN_RESISTANCE)),
+                pct(f.res.capped(t)),
                 n1(f.parts[t as usize])
             ));
         }

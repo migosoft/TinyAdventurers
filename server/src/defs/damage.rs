@@ -88,12 +88,18 @@ impl DamageSplit {
 }
 
 /// Resistance per type as a fraction (0.5 = 50 %). A missing type is 0. A
-/// negative value is a weakness, floored at `MIN_RESISTANCE` in `resolve`;
-/// above 1 the hit heals.
+/// negative value is a weakness. Every final value is read through `capped`:
+/// within [`MIN_RESISTANCE`, `MAX_RESISTANCE`], so no resistance ever heals.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Resistances([f64; DamageType::COUNT]);
 
 pub const MIN_RESISTANCE: f64 = -1.0;
+pub const MAX_RESISTANCE: f64 = 1.0;
+
+/// The larger absolute value; on an exact tie between opposite signs, the positive one.
+pub fn strongest_of(a: f64, b: f64) -> f64 {
+    if a.abs() > b.abs() || (a.abs() == b.abs() && a >= b) { a } else { b }
+}
 
 impl Resistances {
     pub const NONE: Resistances = Resistances([0.0; DamageType::COUNT]);
@@ -109,6 +115,18 @@ impl Resistances {
     }
     pub fn set(&mut self, t: DamageType, v: f64) {
         self.0[t as usize] = v;
+    }
+    /// The final value, within [`MIN_RESISTANCE`, `MAX_RESISTANCE`]: what `resolve` and every display use.
+    pub fn capped(&self, t: DamageType) -> f64 {
+        self.get(t).clamp(MIN_RESISTANCE, MAX_RESISTANCE)
+    }
+    /// Per type, the value with the larger absolute value (a tie: the positive one); how races combine.
+    pub fn strongest(self, o: Resistances) -> Self {
+        let mut r = self.0;
+        for (a, b) in r.iter_mut().zip(o.0) {
+            *a = strongest_of(*a, b);
+        }
+        Resistances(r)
     }
     pub fn plus(self, o: Resistances) -> Self {
         let mut r = self.0;
@@ -268,9 +286,9 @@ pub fn resolve_parts(d: &Damage, r: &Resistances) -> [f64; DamageType::COUNT] {
     parts
 }
 
-/// What a resistance leaves of a type's part: `1 − resistance`, with the weakness floor.
+/// What a resistance leaves of a type's part: `1 − resistance`, capped at both ends.
 fn kept(r: &Resistances, t: DamageType) -> f64 {
-    1.0 - r.get(t).max(MIN_RESISTANCE)
+    1.0 - r.capped(t)
 }
 
 /// The per-type multiplier `resolve` uses: `Σ share × kept`.
@@ -328,6 +346,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn strongest_takes_the_larger_absolute_value() {
+        let a = Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Cold, -0.5), (Poison, 0.3)]);
+        let b = Resistances::of(&[(Physical, 1.0), (Heat, 1.0), (Cold, -0.2), (Poison, -0.3), (Magical, -0.1)]);
+        let s = a.strongest(b);
+        assert_eq!((s.get(Physical), s.get(Heat), s.get(Cold), s.get(Magical)), (1.0, 1.0, -0.5, -0.1));
+        assert_eq!(s.get(Poison), 0.3, "a tie: the resistance wins");
+        assert_eq!(b.strongest(a), s, "order does not matter");
+    }
+
+    #[test]
+    fn resistance_is_capped_at_100_percent() {
+        let r = Resistances::of(&[(Physical, 1.0)]).plus(Resistances::of(&[(Physical, 0.1)]));
+        let d = Damage::new(10.0, DamageSplit::physical());
+        assert_eq!(resolve(&d, &r), 0.0, "110 % never heals");
+        assert_eq!(r.capped(Physical), 1.0);
+    }
+
+    #[test]
     fn overkill_after_resistances() {
         let phys = DamageSplit::physical();
         assert_eq!(overkill_rest(30.0, &phys, 10.0, &Resistances::NONE), Some(20.0));
@@ -379,10 +415,10 @@ mod tests {
     }
 
     #[test]
-    fn full_resistance_is_immunity_and_more_heals() {
+    fn full_resistance_is_immunity_and_more_is_capped() {
         let d = Damage::new(10.0, DamageSplit::pure(Poison));
         assert_eq!(resolve(&d, &Resistances::of(&[(Poison, 1.0)])), 0.0);
-        assert!((resolve(&d, &Resistances::of(&[(Poison, 1.5)])) + 5.0).abs() < 1e-9, "150 %: a 10-point part heals 5");
+        assert_eq!(resolve(&d, &Resistances::of(&[(Poison, 1.5)])), 0.0, "150 % is capped at 100 %: immune, never healing");
     }
 
     #[test]

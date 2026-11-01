@@ -115,10 +115,10 @@ pub struct Profile {
     pub sight: Sight,
 }
 
-/// Resistances (damage and effect) of all its races plus the adjustment; melee split: that of the first race's first natural weapon. Sight: the best of the races, else the adjustment's.
+/// Resistances (damage and effect): per type the strongest (largest absolute value) of its races, then the adjustment added on top; melee split: that of the first race's first natural weapon. Sight: the best of the races, else the adjustment's.
 pub fn profile(races: &[Race], adj: Adjust) -> Profile {
-    let res = races.iter().fold(Resistances::NONE, |r, &t| r.plus(race_def(t).res)).plus(adj.res);
-    let effect_res = races.iter().fold(EffectResistances::NONE, |r, &t| r.plus(race_def(t).effect_res)).plus(adj.effect_res);
+    let res = races.iter().fold(Resistances::NONE, |r, &t| r.strongest(race_def(t).res)).plus(adj.res);
+    let effect_res = races.iter().fold(EffectResistances::NONE, |r, &t| r.strongest(race_def(t).effect_res)).plus(adj.effect_res);
     let melee = races.first().and_then(|&t| race_def(t).natural.first().copied()).map_or(DamageSplit::physical(), natural_split);
     let best = |f: fn(&RaceDef) -> f64| races.iter().map(|&t| f(&race_def(t))).fold(0.0, f64::max);
     let sight = Sight { vision: adj.vision.unwrap_or_else(|| best(|d| d.vision)), darkvision: adj.darkvision.unwrap_or_else(|| best(|d| d.darkvision)) };
@@ -159,6 +159,15 @@ mod tests {
         let demon = bosses::profile(BossId::Demon);
         assert!((demon.res.get(Magical) - 0.4).abs() < 1e-12);
         assert!((demon.res.get(Cold) + 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn stacking_on_top_of_races_still_adds() {
+        let lich = bosses::profile(BossId::Lich);
+        assert!((lich.res.get(Physical) - 0.5).abs() < 1e-12);
+        let adj = Adjust { res: Resistances::of(&[(Magical, 0.1)]), ..Adjust::NONE };
+        let p = profile(&[Race::Human], adj);
+        assert!((p.res.plus(Resistances::of(&[(Magical, 0.2)])).get(Magical) - 0.3).abs() < 1e-12, "Silk Robe + Warded");
     }
 
     #[test]

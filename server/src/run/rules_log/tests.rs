@@ -336,7 +336,7 @@ fn leaving_forgets_the_player() {
 
 use crate::defs::abilities::AbilityId;
 use crate::defs::attributes::Attributes;
-use crate::defs::damage::{resolve, Damage, DamageSplit, DamageType, Mult, What, MIN_RESISTANCE};
+use crate::defs::damage::{resolve, Damage, DamageSplit, DamageType, Mult, What};
 use crate::defs::items::Equipment;
 use crate::defs::loadout::{Build, Loadout, Pick, Source};
 
@@ -472,7 +472,7 @@ fn a_frost_shard_line_reads_like_the_spec() {
     for t in DamageType::ALL {
         let share = a.split.share(t);
         if share > 0.0 {
-            let r = res.get(t).max(MIN_RESISTANCE);
+            let r = res.capped(t);
             want.push(format!("{} {}  {} × (1 − {} resist) = {}", type_name(t), pct(share), n1(a.damage * share), pct(r), n1(a.damage * share * (1.0 - r))));
         }
     }
@@ -494,13 +494,13 @@ fn an_immune_hit_says_so() {
     let rec = only_rec(&mut run);
     assert_eq!(rec.head, format!("{name} ▸ Strike ▸ {goblin}: no damage (immune)"));
     assert_eq!(rec.dealt, Some(0.0));
-    // Over 100 %: it heals.
+    // Over 100 % is capped at 100 %: still immune, never a heal.
     run.monsters[mi].res.set(DamageType::Physical, 1.5);
     run.monsters[mi].hp = 40.0;
     run.hurt_monster(mi, Damage::physical(10.0).by(hero, What::Ability(AbilityId::Strike)), false, Some(0));
     let rec = only_rec(&mut run);
-    assert_eq!(rec.head, format!("{name} ▸ Strike ▸ {goblin}: healed 5 (resistance over 100 %)"));
-    assert_eq!(rec.kind, LineKind::Heal);
+    assert_eq!(rec.head, format!("{name} ▸ Strike ▸ {goblin}: no damage (immune)"));
+    assert_eq!(run.monsters[mi].hp, 40.0);
 }
 
 #[test]
@@ -894,8 +894,8 @@ fn a_full_hero_gets_no_heal_line() {
 }
 
 #[test]
-fn a_resistance_heal_gets_only_its_hit_record() {
-    // Resistance over 100 %: the Healed hit already says it, the heal adds no line of its own.
+fn a_resistance_over_100_percent_heals_nothing() {
+    // Resistance over 100 % is capped: the hit is immune, nothing heals and no heal line appears.
     let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
     run.log.forced = true;
     run.players[0].hp = 1.0;
@@ -903,8 +903,8 @@ fn a_resistance_heal_gets_only_its_hit_record() {
     let _ = take(&mut run);
     run.hurt_player(0, Damage::new(4.0, DamageSplit::pure(DamageType::Heat)));
     let recs = take(&mut run);
-    assert_eq!(recs.len(), 1, "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
-    assert_eq!(recs[0].kind, LineKind::Heal);
+    assert!(recs.iter().all(|r| r.kind != LineKind::Heal), "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    assert_eq!(run.players[0].hp, 1.0);
 }
 
 #[test]

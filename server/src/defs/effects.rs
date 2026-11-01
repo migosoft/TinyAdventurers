@@ -229,6 +229,14 @@ impl EffectResistances {
     pub fn set(&mut self, k: EffectKind, v: f64) {
         self.0[k as usize] = v;
     }
+    /// Per effect, the value with the larger absolute value (a tie: the positive one); how races combine.
+    pub fn strongest(self, o: EffectResistances) -> Self {
+        let mut r = self.0;
+        for (a, b) in r.iter_mut().zip(o.0) {
+            *a = super::damage::strongest_of(*a, b);
+        }
+        EffectResistances(r)
+    }
     pub fn plus(self, o: EffectResistances) -> Self {
         let mut r = self.0;
         for (a, b) in r.iter_mut().zip(o.0) {

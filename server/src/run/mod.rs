@@ -1415,7 +1415,7 @@ pub mod tests {
     }
 
     #[test]
-    fn a_resisted_hit_is_shown_as_immune_and_over_100_percent_heals() {
+    fn a_resisted_hit_is_shown_as_immune_and_over_100_percent_is_capped() {
         use crate::defs::damage::Resistances;
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         run.monsters.retain(|m| m.is_boss);
@@ -1427,13 +1427,13 @@ pub mod tests {
         run.hurt_monster(mi, Damage::new(10.0, DamageSplit::pure(DamageType::Poison)), false, Some(0));
         assert_eq!(run.monsters[mi].hp, hp, "undead resist poison fully");
         assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { imm: true, .. })));
-        // Above 100 %: the hit heals.
+        // Above 100 %: capped, so still immune and no heal.
         run.monsters[mi].hp = hp - 20.0;
         run.monsters[mi].res = Resistances::of(&[(DamageType::Poison, 1.5)]);
         run.events.clear();
         run.hurt_monster(mi, Damage::new(10.0, DamageSplit::pure(DamageType::Poison)), false, Some(0));
-        assert!((run.monsters[mi].hp - (hp - 15.0)).abs() < 1e-9);
-        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Heal { .. })));
+        assert_eq!(run.monsters[mi].hp, hp - 20.0);
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Heal { .. })));
         // The number carries the main type.
         run.events.clear();
         run.hurt_monster(mi, Damage::new(10.0, DamageSplit::split(&[(DamageType::Heat, 0.7)])), false, Some(0));
