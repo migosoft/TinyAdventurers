@@ -30,7 +30,7 @@ pub enum Skip {
     Dead,
     Ally,
     Hiding,
-    /// Under the Invisible effect; skipped by the same rule as hiding (`skip_hiding`).
+    /// Under the Invisible effect; skipped where a target is picked (`skip_invisible`).
     Invisible,
     Dormant,
     Airborne,
@@ -63,12 +63,13 @@ pub struct Rule {
     pub arc: Option<Arc>,
     /// Needs a clear line from `at`.
     pub los: bool,
-    /// Skips a hiding mimic and an invisible creature (an area or a swing that covers one still hits it).
+    /// Skips a hiding mimic.
     pub skip_hiding: bool,
     pub skip_dormant: bool,
     pub skip_airborne: bool,
-    /// With `skip_hiding`: still hits an invisible creature, skipping only hiding mimics (a dash that runs over its spot).
-    pub hit_invisible: bool,
+    /// Skips an invisible creature: only where a target is picked (a jump, a gaze); an area, a swing or a dash
+    /// that covers one still hits it.
+    pub skip_invisible: bool,
 }
 
 /// Is `c`, standing at `pos`, a target of `rule` for a user of `side`? `hit` are those already hit. The
@@ -103,7 +104,7 @@ pub fn check(run: &Run, side: Side, c: Creature, pos: Vec2, rule: &Rule, hit: &[
     if rule.skip_hiding && hiding {
         return Err(Skip::Hiding);
     }
-    if rule.skip_hiding && !rule.hit_invisible && run.has_effect(c, EffectKind::Invisible) {
+    if rule.skip_invisible && run.has_effect(c, EffectKind::Invisible) {
         return Err(Skip::Invisible);
     }
     if rule.skip_dormant && dormant {

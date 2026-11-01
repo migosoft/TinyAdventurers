@@ -338,6 +338,11 @@ pub fn text(id: AbilityId) -> &'static str {
     }
 }
 
+/// Does using it count as an attack (it ends Invisible)? Damage, a weapon, or a harmful own effect.
+pub fn is_attack(d: &AbilityDef) -> bool {
+    d.own.damage > 0.0 || d.uses != Uses::Nothing || d.own.effect.is_some_and(|e| !super::effects::def(e.kind).positive)
+}
+
 pub fn def(id: AbilityId) -> AbilityDef {
     use AbilityCategory as C;
     use AbilityId::*;

@@ -267,14 +267,19 @@ impl Run {
 
     /// The body of `apply`: what happened, the numbers on the way, and the weaker tiers it removed (bits).
     pub fn apply_traced(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u16) {
+        let r = self.apply_untold(c, a);
+        if !def(a.kind).positive && matches!(r.0, EffectOutcome::Added | EffectOutcome::Refreshed) {
+            self.reveal(c, super::rules_log::EndReason::RevealedByEffect); // only an effect that takes hold
+        }
+        r
+    }
+
+    fn apply_untold(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u16) {
         let kind = a.kind;
         let mut d = Duration::default();
         let Some((_, _, pos, ok)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
         if !ok {
             return (EffectOutcome::NotThere, d, 0);
-        }
-        if !def(kind).positive {
-            self.reveal(c, super::rules_log::EndReason::RevealedByEffect); // even a shrugged-off one
         }
         let cancelled: Vec<EffectKind> = def(kind).cancels.iter().copied().filter(|&k| self.has_effect(c, k)).collect();
         if !cancelled.is_empty() {
@@ -355,9 +360,9 @@ impl Run {
         self.end_effects(c, why, |d| d.ends_when_hit);
     }
 
-    /// `c` starts an attack or an ability: every effect that `ends_when_acting` (Invisible) ends.
+    /// `c` starts an attack or an ability: every effect that `ends_when_attacking` (Invisible) ends. Not for Haste or Purify (`is_attack`).
     pub fn act(&mut self, c: Creature) {
-        self.end_effects(c, super::rules_log::EndReason::Attacked, |d| d.ends_when_acting);
+        self.end_effects(c, super::rules_log::EndReason::Attacked, |d| d.ends_when_attacking);
     }
 
     fn end_effects(&mut self, c: Creature, why: super::rules_log::EndReason, f: impl Fn(&crate::defs::effects::EffectDef) -> bool) {
@@ -614,9 +619,9 @@ mod tests {
     #[test]
     fn invisible_is_a_positive_effect_that_a_hit_or_an_attack_ends() {
         let d = def(EffectKind::Invisible);
-        assert!(d.positive && d.ends_when_hit && d.ends_when_acting && d.duration == 30.0);
+        assert!(d.positive && d.ends_when_hit && d.ends_when_attacking && d.duration == 30.0);
         assert_eq!(EffectKind::Invisible as u8, 15, "the last bit of the u16 mask");
-        assert!(EffectKind::ALL.iter().filter(|&&k| k != EffectKind::Invisible).all(|&k| !def(k).ends_when_hit && !def(k).ends_when_acting));
+        assert!(EffectKind::ALL.iter().filter(|&&k| k != EffectKind::Invisible).all(|&k| !def(k).ends_when_hit && !def(k).ends_when_attacking));
     }
 
     #[test]
@@ -651,13 +656,16 @@ mod tests {
     }
 
     #[test]
-    fn shrugged_off_effect_reveals() {
+    fn shrugged_off_effect_does_not_reveal() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let c = invisible_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
         run.monsters[mi].effect_res.set(EffectKind::Fear, 1.0);
         let (outcome, _, _) = run.apply_traced(c, Apply::plain(EffectKind::Fear, Some(2.0)));
         assert_eq!(outcome, EffectOutcome::Resisted);
+        assert!(run.has_effect(c, EffectKind::Invisible), "only an effect that takes hold reveals");
+        let (outcome, _, _) = run.apply_traced(c, Apply::plain(EffectKind::Slowed, Some(2.0)));
+        assert_eq!(outcome, EffectOutcome::Added);
         assert!(!run.has_effect(c, EffectKind::Invisible));
     }
 
