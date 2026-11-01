@@ -2,6 +2,7 @@
 //! rules log share this one decision.
 
 use super::effects::Creature;
+use crate::defs::effects::EffectKind;
 use super::Run;
 use crate::collision::line_of_sight;
 use crate::defs::classes::PLAYER_RADIUS;
@@ -29,6 +30,8 @@ pub enum Skip {
     Dead,
     Ally,
     Hiding,
+    /// Under the Invisible effect; skipped by the same rule as hiding (`skip_hiding`).
+    Invisible,
     Dormant,
     Airborne,
     OutOfReach,
@@ -60,6 +63,7 @@ pub struct Rule {
     pub arc: Option<Arc>,
     /// Needs a clear line from `at`.
     pub los: bool,
+    /// Skips a hiding mimic and an invisible creature (an area or a swing that covers one still hits it).
     pub skip_hiding: bool,
     pub skip_dormant: bool,
     pub skip_airborne: bool,
@@ -96,6 +100,9 @@ pub fn check(run: &Run, side: Side, c: Creature, pos: Vec2, rule: &Rule, hit: &[
     }
     if rule.skip_hiding && hiding {
         return Err(Skip::Hiding);
+    }
+    if rule.skip_hiding && run.has_effect(c, EffectKind::Invisible) {
+        return Err(Skip::Invisible);
     }
     if rule.skip_dormant && dormant {
         return Err(Skip::Dormant);

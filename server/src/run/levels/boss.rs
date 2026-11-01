@@ -49,6 +49,7 @@ pub fn spawn(run: &mut Run) {
         id,
         res: prof.res,
         traits: prof.traits,
+        invis_cd: 0.0,
         races: boss_defs::races(boss_id),
         melee: prof.melee,
         etype: None,

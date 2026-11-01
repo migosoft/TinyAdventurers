@@ -315,6 +315,7 @@ pub(super) fn skip_reason(s: Skip) -> Option<&'static str> {
         Skip::Ally => Some("an ally"),
         Skip::Dormant => Some("it is dormant"),
         Skip::Airborne => Some("it is flying"),
+        Skip::Invisible => Some("it is invisible"),
         Skip::NoLineOfSight => Some("no line of sight"),
         Skip::AlreadyHit => Some("already hit"),
         Skip::Dead | Skip::Hiding | Skip::OutOfReach | Skip::OutsideArc => None,

@@ -219,6 +219,8 @@ pub struct Monster {
     pub races: &'static [Race],
     /// Its race traits (phasing, invisibility, knockback immunity).
     pub traits: Traits,
+    /// Seconds until the Invisibility trait may be used again; counts down only while Invisible is off.
+    pub invis_cd: f64,
     #[allow(dead_code)] // no reader since the demon uses its Strike; the weapon's split is used
     pub melee: DamageSplit,
     /// None for bosses (driven by their BossBehaviour).

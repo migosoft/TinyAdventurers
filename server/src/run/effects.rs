@@ -450,8 +450,27 @@ impl Run {
         }
     }
 
+    /// A monster with the Invisibility trait vanishes for `secs` and may do so again `cooldown` seconds after
+    /// it is visible again (a reveal, its own attack, or running out). False, and nothing happens, without the
+    /// trait, while the cooldown runs or while already Invisible.
+    pub fn go_invisible(&mut self, mi: usize, secs: f64, cooldown: f64) -> bool {
+        let m = &self.monsters[mi];
+        if !m.alive || !m.traits.invisibility || m.invis_cd > 0.0 || m.effects.has(EffectKind::Invisible) {
+            return false;
+        }
+        if !self.apply_effect(Creature::Monster(mi), EffectKind::Invisible, Some(secs)) {
+            return false;
+        }
+        self.monsters[mi].invis_cd = cooldown;
+        true
+    }
+
     /// Once per step: timers count down; the dead and sinking lose everything.
     pub fn tick_effects(&mut self) {
+        // The Invisibility cooldown runs only while visible.
+        for m in self.monsters.iter_mut().filter(|m| m.invis_cd > 0.0 && !m.effects.has(EffectKind::Invisible)) {
+            m.invis_cd = (m.invis_cd - DT).max(0.0);
+        }
         let n = (self.players.len(), self.monsters.len());
         let all = (0..n.0).map(Creature::Player).chain((0..n.1).map(Creature::Monster));
         for c in all.collect::<Vec<_>>() {
@@ -531,6 +550,63 @@ mod tests {
         run.monsters[mi].res = Resistances::NONE;
         run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
         c
+    }
+
+    /// A skeleton given the Invisibility trait, and the steps `n` seconds take.
+    fn ghostly(run: &mut crate::run::Run) -> usize {
+        use crate::defs::enemies::EnemyType;
+        open(run);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos() + Vec2::new(30.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].traits.invisibility = true;
+        mi
+    }
+
+    fn secs(run: &mut crate::run::Run, s: f64) {
+        for _ in 0..(s / DT).round() as usize {
+            run.tick_effects();
+        }
+    }
+
+    #[test]
+    fn go_invisible_needs_the_trait() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = ghostly(&mut run);
+        run.monsters[mi].traits.invisibility = false;
+        assert!(!run.go_invisible(mi, 2.0, 3.0));
+        assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Invisible));
+        assert_eq!(run.monsters[mi].invis_cd, 0.0);
+    }
+
+    #[test]
+    fn invisibility_cooldown_starts_when_visible() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = ghostly(&mut run);
+        let c = Creature::Monster(mi);
+        assert!(run.go_invisible(mi, 2.0, 3.0));
+        assert!(run.has_effect(c, EffectKind::Invisible));
+        assert!(!run.go_invisible(mi, 2.0, 3.0), "not again at once");
+        secs(&mut run, 2.0);
+        assert!(!run.has_effect(c, EffectKind::Invisible), "it has run out");
+        secs(&mut run, 2.0);
+        assert!(!run.go_invisible(mi, 2.0, 3.0), "only 2 s of cooldown have passed");
+        secs(&mut run, 1.01);
+        assert!(run.go_invisible(mi, 2.0, 3.0), "5 s: ready");
+        // Revealed by a hit at 1 s: the cooldown starts then.
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = ghostly(&mut run);
+        run.monsters[mi].res = Resistances::NONE;
+        assert!(run.go_invisible(mi, 2.0, 3.0));
+        secs(&mut run, 1.0);
+        assert!(run.has_effect(c, EffectKind::Invisible), "still invisible, no cooldown yet");
+        run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
+        assert!(!run.has_effect(c, EffectKind::Invisible));
+        secs(&mut run, 2.9);
+        assert!(!run.go_invisible(mi, 2.0, 3.0));
+        secs(&mut run, 1.11);
+        assert!(run.go_invisible(mi, 2.0, 3.0), "4.01 s: ready");
     }
 
     #[test]

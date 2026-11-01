@@ -2494,6 +2494,27 @@ mod tests {
     }
 
     #[test]
+    fn chain_spark_skips_invisible_monsters() {
+        let mut run = wizard_with(AbilityId::ChainSpark, 3);
+        let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+        let near = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
+        let far = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 100.0, 1000.0);
+        run.monsters[near].effects.add(EffectKind::Invisible, 30.0);
+        let (near_hp, far_hp) = (run.monsters[near].hp, run.monsters[far].hp);
+        // The rules say why.
+        let rule = targets::Rule { at: run.monsters[first].pos, reach: CHAIN_REACH, plus_radius: false, arc: None, los: true, skip_hiding: true, skip_dormant: true, skip_airborne: false };
+        let (chosen, skips) = targets::select(&run, side(&run, Creature::Player(0)), &rule, &[], true, |t| run.creature_pos(t));
+        assert!(!chosen.contains(&Creature::Monster(near)) && chosen.contains(&Creature::Monster(far)));
+        assert!(skips.contains(&(Creature::Monster(near), targets::Skip::Invisible)));
+        try_use(&mut run, 0, true, 1);
+        fly(&mut run);
+        assert!(run.monsters[first].hp < 1000.0, "the first target is hit");
+        assert_eq!(run.monsters[near].hp, near_hp, "the invisible one is passed over");
+        assert!(run.monsters[far].hp < far_hp, "the spark jumps on to the next");
+        assert!(run.has_effect(Creature::Monster(near), EffectKind::Invisible), "and it stays invisible");
+    }
+
+    #[test]
     fn chain_spark_never_returns() {
         let mut run = wizard_with(AbilityId::ChainSpark, 3);
         let g = goblins(&mut run, &[60.0, 90.0]);
@@ -3188,6 +3209,35 @@ mod tests {
         try_use(&mut run, 0, false, 1);
         run.tick_hazards(0.3);
         assert!(!run.has_effect(Creature::Monster(mimic), EffectKind::Entangled) && !run.has_effect(Creature::Monster(sleeper), EffectKind::Entangled));
+    }
+
+    #[test]
+    fn war_cry_skips_invisible_monsters() {
+        let mut run = barbarian_war_cry();
+        let seen = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
+        let ghost = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 44.0, 1000.0);
+        run.monsters[ghost].effects.add(EffectKind::Invisible, 30.0);
+        try_use(&mut run, 0, false, 1);
+        for _ in 0..30 {
+            run.step();
+        }
+        assert!(run.has_effect(Creature::Monster(seen), EffectKind::Fear), "the visible one is frightened");
+        assert!(!run.has_effect(Creature::Monster(ghost), EffectKind::Fear), "the invisible one is not");
+        assert!(run.has_effect(Creature::Monster(ghost), EffectKind::Invisible), "and stays invisible");
+    }
+
+    #[test]
+    fn a_swing_over_an_invisible_monster_hits_it() {
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 20.0, 1000.0);
+        run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
+        run.players[0].aim = 0.0;
+        try_use(&mut run, 0, true, 0);
+        for _ in 0..30 {
+            run.step();
+        }
+        assert!(run.monsters[mi].hp < 1000.0, "the swing hits it");
+        assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Invisible), "and reveals it");
     }
 
     #[test]

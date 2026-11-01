@@ -14,6 +14,7 @@ use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
 use crate::protocol::Ev;
 use crate::sheet::ResolvedAbility;
+use crate::defs::effects::EffectKind;
 use crate::defs::races::Sight;
 use rand::Rng;
 use std::cmp::Reverse;
@@ -24,7 +25,7 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
     run.players
         .iter()
         .enumerate()
-        .filter(|(_, p)| p.alive)
+        .filter(|(_, p)| p.alive && !p.effects.has(EffectKind::Invisible))
         .filter(|(_, p)| super::perception::sees(run, sight, from, p.pos()))
         .map(|(i, p)| (i, p.pos().dist(from)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -33,8 +34,8 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
 
 /// Nearest living hero or ally (not sinking) the monster can see right now; a hero wins a tie.
 pub fn find_visible_foe(run: &Run, from: Vec2, sight: Sight) -> Option<Creature> {
-    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive).map(Creature::Player);
-    let allies = (0..run.monsters.len()).filter(|&i| run.monsters[i].is_ally() && run.monsters[i].alive && run.monsters[i].sinking.is_none()).map(Creature::Monster);
+    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive && !run.players[i].effects.has(EffectKind::Invisible)).map(Creature::Player);
+    let allies = (0..run.monsters.len()).filter(|&i| run.monsters[i].is_ally() && run.monsters[i].alive && run.monsters[i].sinking.is_none() && !run.monsters[i].effects.has(EffectKind::Invisible)).map(Creature::Monster);
     heroes
         .chain(allies)
         .map(|c| (c, run.creature_pos(c)))
@@ -1134,6 +1135,34 @@ pub(crate) mod tests {
         let (mut run, mi, _) = archer_and_barrel(Vec2::new(0.0, 60.0));
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert_eq!(run.monsters[mi].ai.windup.and_then(|w| w.at), None);
+    }
+
+    #[test]
+    fn monsters_ignore_invisible_heroes() {
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        run.lights.fill();
+        let ppos = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::SkeletonWarrior, ppos + Vec2::new(4.0 * TILE, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert!(run.monsters[mi].ai.target.is_some(), "a hero in clear sight is seen");
+        // Invisible: the chase becomes a search of the last known spot.
+        run.players[0].effects.add(EffectKind::Invisible, 30.0);
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.target, None);
+        assert_eq!(run.monsters[mi].ai.state, AiState::Search);
+        assert_eq!(run.monsters[mi].ai.last_known, ppos);
+        assert_eq!(find_visible_foe(&run, run.monsters[mi].pos, run.monsters[mi].sight_now()), None);
+        // And never targeted afresh while it lasts.
+        run.monsters[mi].ai.state = AiState::Idle;
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.target, None);
+        run.players[0].effects.remove(EffectKind::Invisible);
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert!(run.monsters[mi].ai.target.is_some(), "seen again once it ends");
     }
 
     /// Open floor around hero 0 with no lights at all, only the boss left.

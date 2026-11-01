@@ -5,6 +5,7 @@ use super::entities::{Ai, Ally, Monster, Windup, HISTORY_LEN};
 use super::{ai, perception, Run};
 use crate::collision::{line_of_sight, walk_line};
 use crate::defs::abilities::AbilityId;
+use crate::defs::effects::EffectKind;
 use crate::defs::companions::*;
 use crate::defs::damage::What;
 use crate::defs::kinds::{Anim, EntityKind};
@@ -50,6 +51,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         id,
         res: prof.res,
         traits: prof.traits,
+        invis_cd: 0.0,
         races: &[Race::MagicalBeast],
         melee: prof.melee,
         etype: None,
@@ -327,7 +329,7 @@ fn tick_growl(run: &mut Run, mi: usize, ranger: Vec2, dt: f64) -> bool {
     let seen = run
         .monsters
         .iter()
-        .filter(|e| e.alive && !e.is_ally() && !e.dormant && !growled.contains(&e.id))
+        .filter(|e| e.alive && !e.is_ally() && !e.dormant && !e.effects.has(EffectKind::Invisible) && !growled.contains(&e.id))
         .filter(|e| perception::sees(run, sight, pos, e.pos))
         .min_by(|a, b| a.pos.dist(pos).total_cmp(&b.pos.dist(pos)))
         .map(|e| (e.id, e.pos));
@@ -376,7 +378,7 @@ fn find_prey(run: &Run, mi: usize, ranger: Vec2) -> Option<usize> {
     run.monsters
         .iter()
         .enumerate()
-        .filter(|(_, e)| e.alive && !e.is_ally() && !e.dormant && !e.hiding && !e.airborne && e.sinking.is_none())
+        .filter(|(_, e)| e.alive && !e.is_ally() && !e.dormant && !e.hiding && !e.effects.has(EffectKind::Invisible) && !e.airborne && e.sinking.is_none())
         .filter(|(_, e)| {
             let (to_r, to_w) = (e.pos.dist(ranger), e.pos.dist(w.pos));
             (to_r <= WOLF_GUARD + e.radius || to_w <= WOLF_DEFEND + e.radius) && to_r <= WOLF_LEASH
@@ -1286,6 +1288,23 @@ mod tests {
         let m = |i: u32| &run.monsters[run.monster_idx(i).unwrap()];
         assert!(m(boss).dormant && m(disciple).dormant && m(mimic).hiding, "and they keep their state");
         assert!(ally(&run, id).prey.is_none());
+    }
+
+    #[test]
+    fn the_wolf_ignores_invisible_monsters() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let id = spawn_wolf(&mut run, 0);
+        lit_arena(&mut run);
+        let r = run.players[0].pos();
+        let oid = run.spawn_enemy(EnemyType::SkeletonWarrior, r + Vec2::new(30.0, 0.0), None);
+        let oi = run.monster_idx(oid).unwrap();
+        let wi = run.monster_idx(id).unwrap();
+        assert_eq!(find_prey(&run, wi, r), Some(oi), "the wolf goes for a visible enemy");
+        run.monsters[oi].effects.add(EffectKind::Invisible, 30.0);
+        assert_eq!(find_prey(&run, wi, r), None, "but not an invisible one");
+        assert!(!tick_growl(&mut run, wi, r, 1.0 / 60.0), "and does not growl at it");
+        assert!(ally(&run, id).growl_to.is_none());
     }
 
     /// The boss hall, a floor spot 3 tiles inside its door and one 2 tiles outside it.

@@ -293,6 +293,7 @@ impl Run {
             id,
             res: prof.res,
             traits: prof.traits,
+            invis_cd: 0.0,
             races: enemies::races(t),
             melee: enemies::melee_split(t),
             etype: Some(t),
