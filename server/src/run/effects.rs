@@ -230,8 +230,9 @@ impl Run {
         match c {
             Creature::Player(_) => self.event_on_hero(ev, pos),
             Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.is_ally()) => self.event_on_hero(ev, pos),
-            // An invisible monster tells the clients nothing: not its Invisible, nor any effect at its spot.
-            Creature::Monster(i) if k == EffectKind::Invisible || self.monsters.get(i).is_some_and(|m| m.effects.has(EffectKind::Invisible)) => {}
+            // Invisible's own start and end are told (the client plays the vanish and the appear); no other
+            // effect of an invisible monster is, as it would show where it stands.
+            Creature::Monster(i) if k != EffectKind::Invisible && self.monsters.get(i).is_some_and(|m| m.effects.has(EffectKind::Invisible)) => {}
             Creature::Monster(_) => self.event(ev, Some(pos)),
         }
     }
@@ -624,12 +625,18 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let c = fresh_ogre(&mut run);
         let Creature::Monster(mi) = c else { unreachable!() };
+        let inv = EffectKind::Invisible as u8;
         run.events.clear();
         run.apply_effect(c, EffectKind::Invisible, None);
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Effect { kind, on: true, .. } if *kind == inv)), "going invisible is told");
+        run.events.clear();
         run.hurt_monster(mi, Damage::effect_tick(1.0, DamageType::Heat), false, None);
-        assert!(run.events.iter().all(|(e, _)| !matches!(e, Ev::Effect { .. } | Ev::Dmg { .. })), "{:?}", run.events);
+        run.monsters[mi].effects.add(EffectKind::Slowed, 2.0);
+        run.remove_effect(c, EffectKind::Slowed);
+        assert!(run.events.iter().all(|(e, _)| !matches!(e, Ev::Effect { .. } | Ev::Dmg { .. })), "no tick number or other effect: {:?}", run.events);
         run.events.clear();
         run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Effect { kind, on: false, .. } if *kind == inv)), "the reveal is told");
         assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "revealed: the hit shows");
     }
 

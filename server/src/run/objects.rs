@@ -619,6 +619,16 @@ mod tests {
     }
 
     #[test]
+    fn a_barrel_blast_reveals_an_invisible_monster() {
+        let mut run = clear_run(BossId::Lich);
+        let (_, oi) = barrel_at(&mut run, Vec2::new(16.0, 0.0));
+        let mi = monster_at(&mut run, Vec2::new(40.0, 0.0));
+        run.monsters[mi].effects.add(crate::defs::effects::EffectKind::Invisible, 30.0);
+        explode_barrel(&mut run, oi);
+        assert!(!run.monsters[mi].effects.has(crate::defs::effects::EffectKind::Invisible));
+    }
+
+    #[test]
     fn the_blast_hurts_a_boss_but_does_not_push_it() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         run.objects.retain(|o| o.kind != EntityKind::Barrel);
