@@ -12,7 +12,7 @@ export const SPECTRE_SIZE = 16;
 // K outline, W body, L body shade, S hem shadow, E eyes.
 export const PALETTES: Record<string, Record<string, string>> = {
   ghost: { K: '222030', W: 'f0f3fa', L: 'ced8ee', S: '96a6ce', E: '343a60' },
-  shade: { K: '100a18', W: '4e3e6c', L: '3e305a', S: '2e2246', E: 'd65cff' },
+  shade: { K: '000000', W: '2a2136', L: '1f1829', S: '140f1c', E: 'd65cff' },
 };
 
 // Facing right (the client mirrors it). Head and body; the hem rows below come from

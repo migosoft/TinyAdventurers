@@ -10,7 +10,7 @@ import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from '../worldText';
 import { TagEffects } from '../tagEffects';
 import { frameBounds, has, lieLayout, lyingPose, StatusView } from '../status';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
-import { ShadeHaze, SILHOUETTE_FILL, silhouetteAlpha } from '../shadeHaze';
+import { ShadeVeil, SILHOUETTE_FILL, silhouetteAlpha } from '../shadeHaze';
 import { pickFrame, windupOf } from './pickFrame';
 import { appearFactor, entityAlpha, ghostPhase, VANISH_SECS } from './entityAlpha';
 
@@ -110,8 +110,8 @@ export class EntityView {
   speed = 0;
   /** Seconds left of the fade-in after reappearing. */
   private appearLeft = 0;
-  /** The Shade's lingering haze (`FigureDef.haze`). */
-  private haze?: ShadeHaze;
+  /** The Shade's veil of strands (`FigureDef.veil`). */
+  private veil?: ShadeVeil;
 
   constructor(
     scene: Phaser.Scene,
@@ -136,7 +136,7 @@ export class EntityView {
       this.figure.add(this.weapon);
     }
     this.root.add(this.figure);
-    if (d.haze) this.haze = new ShadeHaze(scene);
+    if (d.veil) this.veil = new ShadeVeil(scene);
     if (name) {
       this.label = scene.add
         .text(0, -(d.footY ?? this.body.height) * scale - 3, name, { fontFamily: FONT_TEXT, fontStyle: WORLD_TEXT.tag.style, fontSize: `${WORLD_TEXT.tag.size}px`, resolution: TEXT_RESOLUTION, color: '#ffffff' })
@@ -189,7 +189,7 @@ export class EntityView {
     const dead = (s.flags & FLAG.DEAD) !== 0;
     this.root.setVisible(!dead);
     if (dead) {
-      this.haze?.update(null, 0, dt);
+      this.veil?.update(null, 1, 0, 0, dt);
       this.status.update(0, dt);
       return;
     }
@@ -313,9 +313,10 @@ export class EntityView {
     this.appearLeft = Math.max(0, this.appearLeft - dt);
     // A pulsing figure (the Ghost) blinks during its ambush wind-up (GameScene skips the fade-in then).
     const ghost = d.pulse ? { t: this.clock, phase: ghostPhase(s.id ?? 0), ambushT: s.anim === ANIM.Ambush ? s.animT : null } : undefined;
-    this.root.setAlpha((silhouette ? silhouetteAlpha(s.animT) : entityAlpha(s.flags, fxBits, s.party ?? false, ghost)) * appearFactor(this.appearLeft, VANISH_SECS));
-    // The haze stays where it was while it eases toward the Shade (so it trails); it sits just under the figure.
-    this.haze?.update({ x: s.x, y: s.y - 6 }, this.root.depth - 0.5, dt);
+    const appear = appearFactor(this.appearLeft, VANISH_SECS);
+    this.root.setAlpha((silhouette ? silhouetteAlpha(s.animT) : entityAlpha(s.flags, fxBits, s.party ?? false, ghost, d.incorporealAlpha)) * appear);
+    // The veil trails behind as the Shade moves; it fades in with it and rises with the ambush warning.
+    this.veil?.update({ x: Math.round(s.x), y: Math.round(s.y) }, this.body.flipX ? -1 : 1, this.root.depth, (silhouette ? silhouetteAlpha(s.animT) : 1) * appear, dt);
 
     const ax = Math.cos(s.aim);
     const ay = Math.sin(s.aim);
@@ -606,7 +607,7 @@ export class EntityView {
   }
 
   destroy(): void {
-    this.haze?.destroy();
+    this.veil?.destroy();
     this.tele?.destroy();
     this.status.destroy();
     this.tagFx?.destroy();

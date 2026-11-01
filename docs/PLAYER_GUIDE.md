@@ -116,7 +116,7 @@ The two boxes at the bottom of the screen show your abilities. While an ability 
 | Enemy | What to expect |
 |---|---|
 | Ghost | Pale and see-through, its body pulses faintly. Its **Touch** is mostly magical with a little cold, and leaves you **Weakened** (your Strength drains, see Status effects). Worth 10 XP. |
-| Shade | A dark figure trailing a lingering haze that smears behind it when it moves. Its **Touch** leaves you **Frail** (your Constitution drains). A little tougher than the Ghost. Worth 12 XP. |
+| Shade | A near-black figure wrapped in a veil of dark strands that streams behind it when it moves. Its **Touch** leaves you **Frail** (your Constitution drains). A little tougher than the Ghost. Worth 12 XP. |
 
 Both fight by ambush. When they notice you they **vanish**, then drift through the walls toward the hero who has strayed furthest from the rest of the party (a lone hero is always the target). When they are close enough they **appear for half a second** before they strike. The warning tells you where: the Ghost **flickers rapidly** at the spot, the Shade shows a **dark silhouette** that darkens in. That half second is your chance to **dash away** or to stand with your party. If they have not reached you within about five seconds, they show themselves and simply fight. Hitting one while it is invisible shows it at once. Each touch stacks another drain, so stay out of reach once they are visible, and kill them with magic before the drains pile up. After their invisibility has been used, they vanish and come again every 15 to 20 seconds.
 
