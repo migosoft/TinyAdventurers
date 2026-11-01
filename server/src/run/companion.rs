@@ -376,10 +376,13 @@ fn overrun(run: &mut Run, mi: usize, dir: Vec2) {
 fn find_prey(run: &Run, mi: usize, ranger: Vec2) -> Option<usize> {
     let w = &run.monsters[mi];
     let sight = w.sight_now();
+    let bite = w.kit.get(AbilityId::Bite).expect("the wolf bites").split;
     run.monsters
         .iter()
         .enumerate()
         .filter(|(_, e)| e.alive && !e.is_ally() && !e.dormant && !e.hiding && !e.effects.has(EffectKind::Invisible) && !e.airborne && e.sinking.is_none())
+        // A bite that passes through the foe cannot hurt it: not worth chasing.
+        .filter(|&(i, _)| !run.passes_through(super::effects::Creature::Monster(i), &bite))
         .filter(|(_, e)| {
             let (to_r, to_w) = (e.pos.dist(ranger), e.pos.dist(w.pos));
             (to_r <= WOLF_GUARD + e.radius || to_w <= WOLF_DEFEND + e.radius) && to_r <= WOLF_LEASH
@@ -1641,5 +1644,24 @@ mod tests {
         }
         assert_eq!(at.len(), 2, "two enemies, two growls: {at:?}");
         assert!(at[1] - at[0] >= 240 && at[1] - at[0] <= 245, "4 s apart: {at:?}");
+    }
+
+    #[test]
+    fn wolf_ignores_foe_it_cannot_hurt() {
+        let (mut run, id) = guard_run();
+        let wi = wolf_idx(&run, id);
+        let w = run.monsters[wi].pos;
+        let ghost = orc_at(&mut run, w + Vec2::new(30.0, 0.0));
+        let gi = run.monster_idx(ghost).unwrap();
+        let prof = crate::defs::races::profile(&[crate::defs::races::Race::Incorporeal], crate::defs::races::Adjust::NONE);
+        run.monsters[gi].res = prof.res;
+        run.monsters[gi].traits = prof.traits;
+        let ranger = run.players[0].pos();
+        // The wolf's bite is 20 % Magical, which a ghost does not resist: the bite hurts it, so it is prey.
+        assert_eq!(find_prey(&run, wi, ranger), Some(gi), "the Magical share hits");
+        run.monsters[gi].res.set(DamageType::Magical, 1.0);
+        assert_eq!(find_prey(&run, wi, ranger), None, "its whole bite would pass through");
+        run.monsters[gi].traits = Default::default();
+        assert_eq!(find_prey(&run, wi, ranger), Some(gi), "control: with a body it is prey");
     }
 }

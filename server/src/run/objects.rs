@@ -98,6 +98,15 @@ impl Run {
             .map(|o| crate::collision::Solid { x: o.pos.x, y: o.pos.y, half: o.radius })
             .collect()
     }
+
+    /// The solids `mover` collides with. A phasing mover passes every obstacle, so a new kind of
+    /// obstacle needs no handling for it.
+    pub fn solids_for(&self, mover: crate::dungeon::Mover, except: Option<u32>) -> Vec<crate::collision::Solid> {
+        if mover == crate::dungeon::Mover::Incorporeal {
+            return Vec::new();
+        }
+        self.solids(except)
+    }
 }
 
 /// Lights or puts out a torch (its light).
@@ -352,6 +361,9 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
         run.knock_creature(c, pos, 0.0, knock, BARREL_BLAST_STR);
     }
     for mi in monsters {
+        if run.passes_through(crate::run::effects::Creature::Monster(mi), &dmg.split) {
+            continue; // the blast goes through a ghost: no hit, no knock
+        }
         run.hurt_monster(mi, dmg, false, src);
         run.knock_monster(mi, pos, knock, BARREL_BLAST_STR);
     }
@@ -398,6 +410,14 @@ impl Run {
         }
         out
     }
+
+    /// The object tiles `mover` must path around: none for a phasing mover.
+    pub fn object_tiles_for(&self, mover: crate::dungeon::Mover) -> std::collections::HashSet<(i32, i32)> {
+        if mover == crate::dungeon::Mover::Incorporeal {
+            return std::collections::HashSet::new();
+        }
+        self.object_tiles()
+    }
 }
 
 #[cfg(test)]
@@ -434,6 +454,44 @@ mod tests {
         let ObjState::Barrel(b) = &run.objects[oi].state else { panic!() };
         assert_eq!((b.fuse, b.igniter), (Some(BARREL_FUSE), Some(pid)));
         assert_eq!(snap(&run, &run.objects[oi]).5, 1, "anim 1 while the fuse burns");
+    }
+
+    fn bodiless_invisible(run: &mut Run, off: f64) -> usize {
+        use crate::defs::races::{profile, Adjust, Race};
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let pos = run.players[0].pos() + Vec2::new(off, 0.0);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, pos, None);
+        let mi = run.monster_idx(id).unwrap();
+        let prof = profile(&[Race::Incorporeal], Adjust::NONE);
+        let m = &mut run.monsters[mi];
+        m.res = prof.res;
+        m.effect_res = prof.effect_res;
+        m.traits = prof.traits;
+        m.hp = 100.0;
+        m.max_hp = 100.0;
+        m.effects.add(crate::defs::effects::EffectKind::Invisible, 30.0);
+        mi
+    }
+
+    #[test]
+    fn barrel_blast_and_hazard_pass_a_bodiless_monster() {
+        use crate::run::entities::{HazardPulse, HazardSide};
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        let mi = bodiless_invisible(&mut run, 60.0);
+        let at = run.monsters[mi].pos;
+        let (_, oi) = barrel_at(&mut run, Vec2::new(50.0, 0.0));
+        explode_barrel(&mut run, oi);
+        let m = &run.monsters[mi];
+        assert_eq!((m.hp, m.knock), (100.0, Vec2::ZERO));
+        assert!(m.effects.has(crate::defs::effects::EffectKind::Invisible), "not revealed by the blast");
+        for ty in [DamageType::Physical, DamageType::Heat] {
+            let pid = run.players[0].id;
+            run.spawn_hazard(EntityKind::Barrel, at, 40.0, 5.0, HazardSide::Heroes { owner: pid }, HazardPulse::Hurt(Damage::new(10.0, DamageSplit::pure(ty))));
+            run.tick_hazards(0.5);
+        }
+        let m = &run.monsters[mi];
+        assert_eq!(m.hp, 100.0);
+        assert!(m.effects.has(crate::defs::effects::EffectKind::Invisible), "not revealed by the hazard");
     }
 
     fn booms(run: &Run) -> usize {

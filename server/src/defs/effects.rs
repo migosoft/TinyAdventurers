@@ -130,11 +130,11 @@ pub struct EffectDef {
     pub flees: bool,
     /// Any direct hit or harmful application from outside ends it (Invisible).
     pub ends_when_hit: bool,
-    /// Starting an attack or ability ends it (Invisible).
-    pub ends_when_acting: bool,
+    /// Starting an attack ends it (Invisible).
+    pub ends_when_attacking: bool,
 }
 
-const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, resisted_by: None, replaces: &[], cancels: &[], ends_in_water: false, save: None, flees: false, ends_when_hit: false, ends_when_acting: false };
+const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, resisted_by: None, replaces: &[], cancels: &[], ends_in_water: false, save: None, flees: false, ends_when_hit: false, ends_when_attacking: false };
 
 use DamageType::*;
 use Op::*;
@@ -177,7 +177,7 @@ pub fn def(k: EffectKind) -> EffectDef {
         EffectKind::Fear => EffectDef { save: Some(Attr::Wil), flees: true, ..NONE },
         EffectKind::Warded => EffectDef { positive: true, mods: WARDED_MODS, ..NONE },
         EffectKind::Coated => EffectDef { positive: true, ..NONE },
-        EffectKind::Invisible => EffectDef { positive: true, duration: 30.0, ends_when_hit: true, ends_when_acting: true, ..NONE },
+        EffectKind::Invisible => EffectDef { positive: true, duration: 30.0, ends_when_hit: true, ends_when_attacking: true, ..NONE },
     }
 }
 

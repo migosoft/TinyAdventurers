@@ -7,10 +7,8 @@ use crate::collision::{line_of_sight, move_box};
 use crate::dungeon::Mover;
 use crate::defs::abilities::{self as ab, AbilityId, Shape, Uses};
 use crate::defs::classes::PLAYER_RADIUS;
-use crate::defs::damage::{overkill_rest, Damage, Mult, What};
+use crate::defs::damage::{overkill_rest, Damage, DamageSplit, Mult, What};
 use crate::defs::damage::DamageType;
-#[cfg(test)]
-use crate::defs::damage::DamageSplit;
 use crate::defs::effects::{EffectKind, EffectLook, OnHit};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::defs::lights::{self, LightKind};
@@ -104,8 +102,9 @@ pub enum MeleeTarget {
     Object(usize),
 }
 
-/// Every monster on the ground (not an ally) or closed chest within the hero's reach, nearest first.
-pub fn melee_targets(run: &Run, pi: usize) -> Vec<MeleeTarget> {
+/// Every monster on the ground (not an ally) or closed chest within the hero's reach, nearest first. A
+/// bodiless creature that the strike's damage `split` passes through is none.
+pub fn melee_targets(run: &Run, pi: usize, split: &DamageSplit) -> Vec<MeleeTarget> {
     let rw = rewind_ticks(run, Creature::Player(pi));
     let pos = run.players[pi].pos();
     let reach = run.players[pi].sheet.reach;
@@ -113,7 +112,7 @@ pub fn melee_targets(run: &Run, pi: usize) -> Vec<MeleeTarget> {
         .monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive && !m.airborne && !m.is_ally())
+        .filter(|&(i, m)| m.alive && !m.airborne && !m.is_ally() && !run.passes_through(Creature::Monster(i), split))
         .map(|(i, m)| (MeleeTarget::Monster(i), m.pos_ago(rw).dist(pos) - m.radius));
     let chests = run
         .objects
@@ -129,7 +128,7 @@ pub fn melee_targets(run: &Run, pi: usize) -> Vec<MeleeTarget> {
 /// The nearest thing in melee reach: where a ranged primary strikes instead of shooting, and what blocks a ranged secondary.
 #[cfg(test)]
 pub fn melee_target(run: &Run, pi: usize) -> Option<MeleeTarget> {
-    melee_targets(run, pi).first().copied()
+    melee_targets(run, pi, &run.players[pi].sheet.fallback.split).first().copied()
 }
 
 /// The melee-rule strike: `strike` hits the nearest of `targets`; a kill carries the rest of its damage on to the next.
@@ -201,7 +200,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     let crit = false;
     let cooldown = def.cooldown;
     if def.ranged {
-        let targets = melee_targets(run, pi);
+        let targets = melee_targets(run, pi, &run.players[pi].sheet.fallback.split);
         if !targets.is_empty() {
             super::rules_log::too_close(run, pi, primary, targets[0]);
             if !primary {
@@ -272,7 +271,9 @@ pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
 /// Uses ability `a` for user `c`: the executor of its shape does the effect and returns the user's
 /// animation. Cooldowns, the ranged-in-melee fallback and keystones are the caller's.
 fn use_ability(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim {
-    run.act(c); // starting an ability ends Invisible
+    if ab::is_attack(&ab::def(a.id)) {
+        run.act(c); // an attack ends Invisible; Haste or Purify do not
+    }
     match ab::def(a.id).shape {
         Shape::Projectile => use_projectile(run, c, a, shot),
         Shape::Blast => use_blast(run, c, a, shot),
@@ -386,7 +387,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
             run.add_tinted_flash(look.light.expect("Frost Nova flashes"), look.tint, pos, ab::NOVA_FLASH);
-            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: true, skip_hiding: false, skip_dormant: false, skip_airborne: false, hit_invisible: false };
+            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: true, skip_hiding: false, skip_dormant: false, skip_airborne: false, skip_invisible: false, passes: Some(a.split) };
             let log = super::rules_log::on(run);
             let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
             let by = run.creature_id(c);
@@ -401,7 +402,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             let own = a.effect.expect("War Cry has its own effect");
             let source = Some((run.creature_id(c), pos));
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
-            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: false, hit_invisible: false };
+            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: false, skip_invisible: false, passes: None };
             let log = super::rules_log::on(run);
             let (afraid, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
             super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
@@ -425,7 +426,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             for oi in crate::run::objects::objects_in(run, pos, a.radius, None) {
                 crate::run::objects::hurt_object(run, oi, dmg, None);
             }
-            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: true, hit_invisible: false };
+            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: true, skip_invisible: false, passes: Some(dmg.split) };
             let log = super::rules_log::on(run);
             let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
             super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
@@ -441,7 +442,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
             let dmg = damage_of(run.creature_id(c), a);
             crate::run::objects::hurt_objects_in(run, pos, a.radius, None, dmg);
-            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: false, hit_invisible: false };
+            let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: false, skip_invisible: false, passes: Some(dmg.split) };
             let log = super::rules_log::on(run);
             let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
             super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
@@ -494,7 +495,7 @@ pub fn tick_channel(run: &mut Run, mi: usize, dt: f64) {
     let (pos, aim) = (run.monsters[mi].pos, run.monsters[mi].aim);
     let half = a.arc / 2.0;
     let dmg = damage_of(run.monsters[mi].id, &a);
-    let rule = targets::Rule { at: pos, reach: a.range, plus_radius: false, arc: Some(targets::Arc { aim, width: a.arc, user_radius: 0.0 }), los: true, skip_hiding: false, skip_dormant: false, skip_airborne: false, hit_invisible: false };
+    let rule = targets::Rule { at: pos, reach: a.range, plus_radius: false, arc: Some(targets::Arc { aim, width: a.arc, user_radius: 0.0 }), los: true, skip_hiding: false, skip_dormant: false, skip_airborne: false, skip_invisible: false, passes: Some(dmg.split) };
     let log = super::rules_log::on(run);
     let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
     super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
@@ -567,7 +568,7 @@ pub fn land_slam(run: &mut Run, c: Creature) {
     let look = looks::look(figure_of(run, c), a.id);
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
     let dmg = weapon_damage(run, c, &a);
-    let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: true, skip_hiding: false, skip_dormant: false, skip_airborne: true, hit_invisible: false };
+    let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: true, skip_hiding: false, skip_dormant: false, skip_airborne: true, skip_invisible: false, passes: Some(dmg.split) };
     let log = super::rules_log::on(run);
     let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
     super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
@@ -640,7 +641,7 @@ fn use_gaze(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
     let own = a.effect.expect("a gaze has its own effect");
     let source = Some((run.creature_id(c), pos));
     let origin = Some((run.creature_id(c), What::Ability(a.id)));
-    let rule = targets::Rule { at, reach: GAZE_AIM_SLACK, plus_radius: true, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: false, hit_invisible: false };
+    let rule = targets::Rule { at, reach: GAZE_AIM_SLACK, plus_radius: true, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: false, skip_invisible: true, passes: None };
     let (stared_at, _) = targets::select(run, side(run, c), &rule, &[], false, |t| run.creature_pos(t));
     for t in stared_at {
         if super::perception::sees(run, sight, pos, run.creature_pos(t)) {
@@ -782,7 +783,7 @@ fn melee_arc(run: &mut Run, c: Creature, a: &ResolvedAbility, crit: bool) -> Opt
     let aim = aim_of(run, c) + if ab::def(a.id).backward { std::f64::consts::PI } else { 0.0 };
     let (range, arc, dmg) = (a.range, a.arc, weapon_damage(run, c, a));
     // Flying monsters are out of reach of melee; a foe touching the user is hit whatever the arc.
-    let rule = targets::Rule { at: pos, reach: range, plus_radius: true, arc: Some(targets::Arc { aim, width: arc, user_radius: run.creature_radius(c) }), los: true, skip_hiding: false, skip_dormant: false, skip_airborne: true, hit_invisible: false };
+    let rule = targets::Rule { at: pos, reach: range, plus_radius: true, arc: Some(targets::Arc { aim, width: arc, user_radius: run.creature_radius(c) }), los: true, skip_hiding: false, skip_dormant: false, skip_airborne: true, skip_invisible: false, passes: Some(dmg.split) };
     let log = super::rules_log::on(run);
     let (hits, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| pos_ago(run, t, rw));
     super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
@@ -827,7 +828,7 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
         .monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive && !m.airborne && !m.is_ally() && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + ab.radius)
+        .filter(|(i, m)| m.alive && !m.airborne && !m.is_ally() && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + ab.radius && !run.passes_through(Creature::Monster(*i), &dmg.split))
         .map(|(i, m)| (i, m.id))
         .collect();
     for (mi, id) in hits {
@@ -857,7 +858,7 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
 pub fn tick_monster_dash(run: &mut Run, mi: usize, dt: f64) -> Option<MonsterDash> {
     let dash = run.monsters[mi].dash.clone()?;
     let a = *run.monsters[mi].kit.get(dash.id).expect("a dash is an ability of its kit");
-    let solids = run.solids(None);
+    let solids = run.solids_for(run.monsters[mi].mover, None);
     let m = &run.monsters[mi];
     let v = dash.dir * (a.speed * dt.min(dash.left));
     let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, Mover::Dash, &solids);
@@ -888,9 +889,9 @@ pub fn tick_monster_dash(run: &mut Run, mi: usize, dt: f64) -> Option<MonsterDas
 fn monster_dash_contact(run: &mut Run, mi: usize, a: &ResolvedAbility, hit: &mut Vec<u32>) -> bool {
     let c = Creature::Monster(mi);
     let (pos, aim) = (run.monsters[mi].pos, run.monsters[mi].aim);
-    let rule = targets::Rule { at: pos, reach: run.monsters[mi].radius + a.radius, plus_radius: true, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: true, hit_invisible: true };
-    let (touched, _) = targets::select(run, side(run, c), &rule, &[], false, |t| run.creature_pos(t));
     let dmg = weapon_damage(run, c, a);
+    let rule = targets::Rule { at: pos, reach: run.monsters[mi].radius + a.radius, plus_radius: true, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: true, skip_invisible: false, passes: Some(dmg.split) };
+    let (touched, _) = targets::select(run, side(run, c), &rule, &[], false, |t| run.creature_pos(t));
     let mut any = false;
     for t in touched {
         let id = run.creature_id(t);
@@ -1019,7 +1020,12 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         }
         let pr = &run.projectiles[i];
         let target = if pr.side == Side::Heroes {
-            run.monsters.iter().position(|m| m.alive && !m.is_ally() && !pr.hit.contains(&m.id) && m.shot_dist(pos) < m.radius + pr.radius).map(Creature::Monster)
+            // A bodiless creature that resists the shot fully is flown through.
+            run.monsters
+                .iter()
+                .enumerate()
+                .position(|(mi, m)| m.alive && !m.is_ally() && !pr.hit.contains(&m.id) && m.shot_dist(pos) < m.radius + pr.radius && !run.passes_through(Creature::Monster(mi), &pr.damage.split))
+                .map(Creature::Monster)
         } else {
             // Heroes first, then allies.
             let hero = run.players.iter().position(|p| p.alive && !pr.hit.contains(&p.id) && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius).map(Creature::Player);
@@ -1112,7 +1118,7 @@ fn chain_jumps(run: &mut Run, c: Creature, first: Creature, damage: Damage) {
     let (mut skips, mut stop) = (Vec::new(), None);
     for jump in 1..=ab::CHAIN_JUMPS {
         let from = run.creature_pos(last);
-        let rule = targets::Rule { at: from, reach: ab::CHAIN_REACH, plus_radius: false, arc: None, los: true, skip_hiding: true, skip_dormant: true, skip_airborne: false, hit_invisible: false };
+        let rule = targets::Rule { at: from, reach: ab::CHAIN_REACH, plus_radius: false, arc: None, los: true, skip_hiding: true, skip_dormant: true, skip_airborne: false, skip_invisible: true, passes: Some(damage.split) };
         let (near, more) = targets::select(run, side, &rule, &hit, log, |t| run.creature_pos(t));
         // The target the spark stands on is not a candidate to log.
         targets::merge(&mut skips, more.into_iter().filter(|&(t, _)| t != last).collect());
@@ -1178,7 +1184,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src
             .monsters
             .iter()
             .enumerate()
-            .filter(|(_, m)| m.alive && !m.is_ally() && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos))
+            .filter(|(i, m)| m.alive && !m.is_ally() && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos) && !run.passes_through(Creature::Monster(*i), &damage.split))
             .map(|(i, m)| (i, m.hiding))
             .collect();
         for (mi, hiding) in hits {
@@ -1189,7 +1195,8 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src
             }
         }
     } else {
-        for c in run.foes_touching(pos, r, true) {
+        let touched: Vec<Creature> = run.foes_touching(pos, r, true).into_iter().filter(|&c| !run.passes_through(c, &damage.split)).collect();
+        for c in touched {
             run.hurt_creature(c, damage);
             run.knock_creature(c, pos, 0.0, push, push_str);
         }
@@ -1534,7 +1541,7 @@ mod tests {
         run.players[1].mv.y = spot.y;
         let id = run.spawn_enemy(EnemyType::OrcWarrior, spot + Vec2::new(0.0, 12.0), None);
         let orc = Creature::Monster(run.monster_idx(id).unwrap());
-        let rule = targets::Rule { at: spot, reach: 40.0, plus_radius: true, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: false, hit_invisible: false };
+        let rule = targets::Rule { at: spot, reach: 40.0, plus_radius: true, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: false, skip_invisible: false, passes: None };
         let at = |c: Creature| run.creature_pos(c);
 
         assert_eq!(side(&run, Creature::Player(0)), Side::Heroes);
@@ -2502,7 +2509,7 @@ mod tests {
         run.monsters[near].effects.add(EffectKind::Invisible, 30.0);
         let (near_hp, far_hp) = (run.monsters[near].hp, run.monsters[far].hp);
         // The rules say why.
-        let rule = targets::Rule { at: run.monsters[first].pos, reach: CHAIN_REACH, plus_radius: false, arc: None, los: true, skip_hiding: true, skip_dormant: true, skip_airborne: false, hit_invisible: false };
+        let rule = targets::Rule { at: run.monsters[first].pos, reach: CHAIN_REACH, plus_radius: false, arc: None, los: true, skip_hiding: true, skip_dormant: true, skip_airborne: false, skip_invisible: true, passes: None };
         let (chosen, skips) = targets::select(&run, side(&run, Creature::Player(0)), &rule, &[], true, |t| run.creature_pos(t));
         assert!(!chosen.contains(&Creature::Monster(near)) && chosen.contains(&Creature::Monster(far)));
         assert!(skips.contains(&(Creature::Monster(near), targets::Skip::Invisible)));
@@ -3019,6 +3026,64 @@ mod tests {
     }
 
     #[test]
+    fn haste_keeps_invisible() {
+        let mut run = wizard_secondary(AbilityId::Haste, Attributes::new(0, 0, 0, 5, 2, 0));
+        run.players[0].effects.add(EffectKind::Invisible, 30.0);
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(run.players[0].cd2, ab::def(AbilityId::Haste).own.cooldown, "it was cast");
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Invisible), "a support ability is no attack");
+    }
+
+    #[test]
+    fn is_attack_by_def() {
+        for id in [AbilityId::Strike, AbilityId::MagicMissile, AbilityId::WarCry] {
+            assert!(ab::is_attack(&ab::def(id)), "{id:?}");
+        }
+        for id in [AbilityId::Haste, AbilityId::Purify, AbilityId::HolyLight, AbilityId::SummonWolf, AbilityId::PoisonCoat] {
+            assert!(!ab::is_attack(&ab::def(id)), "{id:?}");
+        }
+    }
+
+    #[test]
+    fn immune_effect_does_not_reveal() {
+        let mut run = barbarian_war_cry();
+        let goblin = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
+        run.monsters[goblin].effect_res.set(EffectKind::Fear, 1.0);
+        run.monsters[goblin].effects.add(EffectKind::Invisible, 30.0);
+        try_use(&mut run, 0, false, 1);
+        let (outcome, _, _) = run.apply_traced(Creature::Monster(goblin), Apply::plain(EffectKind::Fear, Some(2.0)));
+        assert!(matches!(outcome, crate::run::effects::EffectOutcome::Resisted | crate::run::effects::EffectOutcome::TypeImmune(_)), "{outcome:?}");
+        assert!(!run.has_effect(Creature::Monster(goblin), EffectKind::Fear), "it shrugs the shout off");
+        assert!(run.has_effect(Creature::Monster(goblin), EffectKind::Invisible), "and stays invisible");
+    }
+
+    #[test]
+    fn war_cry_frightens_and_reveals_invisible() {
+        let mut run = barbarian_war_cry();
+        let goblin = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
+        run.monsters[goblin].effects.add(EffectKind::Invisible, 30.0);
+        try_use(&mut run, 0, false, 1);
+        assert!(run.has_effect(Creature::Monster(goblin), EffectKind::Fear), "the ring covers it");
+        assert!(!run.has_effect(Creature::Monster(goblin), EffectKind::Invisible), "and it is revealed");
+    }
+
+    #[test]
+    fn fireball_reaches_invisible() {
+        use crate::defs::damage::kind_split;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].hp = 1000.0;
+        run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
+        explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Heroes, Some(0), 0, false, 0.0, 0);
+        let mi = run.monster_idx(id).unwrap();
+        assert!(run.monsters[mi].hp < 1000.0, "hurt");
+        assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Invisible), "and revealed");
+    }
+
+    #[test]
     fn haste_hastens_the_party_in_range() {
         let wiz = ClassId::Wizard;
         let pick = Pick { ability: AbilityId::Haste, source: Source::Own };
@@ -3212,21 +3277,6 @@ mod tests {
     }
 
     #[test]
-    fn war_cry_skips_invisible_monsters() {
-        let mut run = barbarian_war_cry();
-        let seen = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
-        let ghost = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 44.0, 1000.0);
-        run.monsters[ghost].effects.add(EffectKind::Invisible, 30.0);
-        try_use(&mut run, 0, false, 1);
-        for _ in 0..30 {
-            run.step();
-        }
-        assert!(run.has_effect(Creature::Monster(seen), EffectKind::Fear), "the visible one is frightened");
-        assert!(!run.has_effect(Creature::Monster(ghost), EffectKind::Fear), "the invisible one is not");
-        assert!(run.has_effect(Creature::Monster(ghost), EffectKind::Invisible), "and stays invisible");
-    }
-
-    #[test]
     fn a_swing_over_an_invisible_monster_hits_it() {
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
         let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 20.0, 1000.0);
@@ -3416,6 +3466,184 @@ mod tests {
             try_use(&mut run, 0, true, 1);
             assert_eq!(run.monsters[gi].hp < 1000.0, !walled, "Strike, walled: {walled}");
         }
+    }
+
+    // ---- Bodiless: attacks pass through a creature that fully resists them ----
+
+    /// Gives monster `mi` the Incorporeal race's resistances and traits.
+    fn make_bodiless(run: &mut Run, mi: usize) {
+        use crate::defs::races::{profile, Adjust, Race};
+        let prof = profile(&[Race::Incorporeal], Adjust::NONE);
+        let m = &mut run.monsters[mi];
+        m.res = prof.res;
+        m.effect_res = prof.effect_res;
+        m.traits = prof.traits;
+        m.mover = Mover::Incorporeal;
+    }
+
+    #[test]
+    fn passes_through_rules() {
+        use crate::defs::damage::{DamageSplit, DamageType::*};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = put_monster_near(&mut run, 0, 40.0);
+        let c = Creature::Monster(mi);
+        assert!(!run.passes_through(c, &DamageSplit::physical()), "a plain orc has a body");
+        make_bodiless(&mut run, mi);
+        assert!(run.passes_through(c, &DamageSplit::physical()));
+        assert!(run.passes_through(c, &DamageSplit::pure(Heat)));
+        assert!(!run.passes_through(c, &DamageSplit::pure(Magical)), "magic reaches it");
+        assert!(!run.passes_through(c, &DamageSplit::split(&[(Magical, 0.5)])), "physical + magical: the magic part hits");
+        // A body with full Physical resistance but no trait is hit all the same.
+        let other = put_enemy(&mut run, 0, EnemyType::SkeletonWarrior, 80.0, 100.0);
+        run.monsters[other].res.set(Physical, 1.0);
+        assert!(!run.passes_through(Creature::Monster(other), &DamageSplit::physical()));
+        assert!(!run.passes_through(Creature::Player(0), &DamageSplit::physical()), "no hero is bodiless");
+    }
+
+    #[test]
+    fn passes_through_reads_the_final_resistance() {
+        use crate::defs::damage::{DamageSplit, DamageType::*};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = put_monster_near(&mut run, 0, 40.0);
+        make_bodiless(&mut run, mi);
+        run.monsters[mi].res.set(Physical, 0.5);
+        assert!(!run.passes_through(Creature::Monster(mi), &DamageSplit::physical()), "not a full resistance");
+        run.monsters[mi].res.set(Physical, 1.7);
+        assert!(run.passes_through(Creature::Monster(mi), &DamageSplit::physical()), "capped at 100 %");
+    }
+
+    /// A ranger aimed east with a ghost 60 px away; the ghost is invisible and has 100 HP.
+    fn ranger_and_ghost() -> (Run, usize) {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        run.objects.clear();
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
+        for x in tx..tx + 14 {
+            run.layout.map.set(x, ty, crate::dungeon::Tile::Floor);
+        }
+        let gi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 60.0, 100.0);
+        make_bodiless(&mut run, gi);
+        run.monsters[gi].effects.add(EffectKind::Invisible, 30.0);
+        run.players[0].aim = 0.0;
+        (run, gi)
+    }
+
+    fn shots_fly(run: &mut Run, ticks: usize) {
+        for _ in 0..ticks {
+            tick_projectiles(run, 1.0 / TICK_HZ);
+        }
+    }
+
+    #[test]
+    fn arrow_flies_through_bodiless() {
+        let (mut run, gi) = ranger_and_ghost();
+        try_use(&mut run, 0, true, 1);
+        shots_fly(&mut run, 20);
+        assert_eq!(run.monsters[gi].hp, 100.0, "no damage");
+        assert!(run.monsters[gi].effects.has(EffectKind::Invisible), "not revealed");
+        assert!(run.projectiles.iter().any(|p| !p.dead), "the arrow flies on");
+        assert!(run.monsters[gi].pos.x < run.projectiles[0].pos.x, "past the ghost");
+    }
+
+    #[test]
+    fn shot_flies_through_bodiless_to_next() {
+        let (mut run, gi) = ranger_and_ghost();
+        let si = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 110.0, 1000.0);
+        try_use(&mut run, 0, true, 1);
+        shots_fly(&mut run, 40);
+        assert_eq!(run.monsters[gi].hp, 100.0);
+        assert!(run.monsters[si].hp < 1000.0, "the orc behind is hurt");
+    }
+
+    #[test]
+    fn magic_missile_hits_bodiless() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let gi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 60.0, 100.0);
+        make_bodiless(&mut run, gi);
+        run.players[0].aim = 0.0;
+        try_use(&mut run, 0, true, 1);
+        shots_fly(&mut run, 40);
+        assert!(run.monsters[gi].hp < 100.0, "a Magical missile hurts it");
+        assert!(run.projectiles.iter().all(|p| p.dead), "and stops");
+    }
+
+    #[test]
+    fn swing_passes_bodiless() {
+        use crate::run::rules_log::record::LineKind;
+        let mut run = armed(ClassId::Paladin, EquipSlot::Melee, ItemId::GoldenSword);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let gi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 12.0, 100.0);
+        make_bodiless(&mut run, gi);
+        run.log.forced = true;
+        run.players[0].aim = 0.0;
+        let strike = ResolvedAbility { range: 30.0, arc: 1.6, damage: 6.0, push: 20.0, ..run.players[0].sheet.fallback };
+        let _ = crate::run::rules_log::take(&mut run);
+        melee_arc(&mut run, Creature::Player(0), &strike, false);
+        let m = &run.monsters[gi];
+        assert_eq!((m.hp, m.knock), (100.0, Vec2::ZERO), "no damage, no push");
+        assert!(!has_effects(&run, gi));
+        let recs = crate::run::rules_log::take(&mut run);
+        assert!(recs.iter().all(|r| r.kind != LineKind::Hit), "no hit line");
+        assert!(recs.iter().any(|r| r.kind == LineKind::Skip && r.head.contains("it has no body")), "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn explosion_passes_bodiless() {
+        use crate::defs::damage::{DamageSplit, DamageType};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let gi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 40.0, 100.0);
+        make_bodiless(&mut run, gi);
+        run.monsters[gi].effects.add(EffectKind::Invisible, 30.0);
+        let at = run.monsters[gi].pos;
+        let heat = Damage::new(20.0, DamageSplit::pure(DamageType::Heat));
+        explode(&mut run, at, 30.0, heat, Side::Heroes, Some(0), 0, false, 20.0, 10);
+        assert_eq!((run.monsters[gi].hp, run.monsters[gi].knock), (100.0, Vec2::ZERO));
+        assert!(run.monsters[gi].effects.has(EffectKind::Invisible), "not revealed");
+        let magic = Damage::new(20.0, DamageSplit::pure(DamageType::Magical));
+        explode(&mut run, at, 30.0, magic, Side::Heroes, Some(0), 0, false, 0.0, 10);
+        assert!(run.monsters[gi].hp < 100.0, "a Magical blast still hits it");
+    }
+
+    #[test]
+    fn dash_contact_passes_bodiless() {
+        // The wolf's Pounce through an incorporeal enemy: nothing happens, and it does not end the leap.
+        let kit = crate::sheet::wolf_kit(&crate::sheet::WolfMods::NONE);
+        let pounce = *kit.get(AbilityId::Pounce).unwrap();
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(wolf).unwrap();
+        let gi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 0.0, 100.0);
+        make_bodiless(&mut run, gi);
+        // The wolf's bite and leap are 20 % Magical, which a ghost does not resist: it must resist that too.
+        run.monsters[gi].res.set(DamageType::Magical, 1.0);
+        run.monsters[gi].pos = run.monsters[wi].pos;
+        let mut hit = Vec::new();
+        assert!(!monster_dash_contact(&mut run, wi, &pounce, &mut hit), "nothing touched, so the pounce goes on");
+        assert!(hit.is_empty());
+        assert_eq!((run.monsters[gi].hp, run.monsters[gi].knock), (100.0, Vec2::ZERO));
+    }
+
+    #[test]
+    fn hero_dash_passes_bodiless() {
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let mi = put_monster_near(&mut run, 0, 6.0);
+        run.monsters[mi].hp = 1000.0;
+        make_bodiless(&mut run, mi);
+        dash_contact(&mut run, Creature::Player(0));
+        assert_eq!((run.monsters[mi].hp, run.monsters[mi].knock), (1000.0, Vec2::ZERO));
+        assert!(run.players[0].dash_hit.is_empty(), "it is not even counted as touched");
+    }
+
+    #[test]
+    fn a_ranged_hero_shoots_past_a_bodiless_creature_in_reach() {
+        // A bow's strike in melee passes through a ghost, so nothing is "too close": the bow fires.
+        let (mut run, gi) = ranger_and_ghost();
+        run.monsters[gi].pos = run.players[0].pos() + Vec2::new(10.0, 0.0);
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.projectiles.len(), 1, "an arrow, not a thrust");
     }
 }
 

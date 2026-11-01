@@ -109,7 +109,9 @@ impl Map {
     /// For everyone else it is the same as not being blocked.
     pub fn can_stop(&self, x: i32, y: i32, mover: Mover) -> bool {
         if mover == Mover::Incorporeal {
-            return !self.opaque(x, y) && self.get(x, y) != Tile::Void as u8;
+            // Whatever a dash may cross is passable for a phaser too, so a solid tile added later
+            // (columns) is passed but never a resting place.
+            return !self.blocks(x, y, Mover::Dash) && self.get(x, y) != Tile::Void as u8;
         }
         !self.blocks(x, y, mover)
     }
@@ -314,6 +316,27 @@ impl Dungeon {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn can_stop_follows_dash_blocking() {
+        // `Tile` has no list of its own: this match stops compiling when a variant is added, and the
+        // array below must then get it too.
+        fn listed(t: Tile) {
+            match t {
+                Tile::Void | Tile::Floor | Tile::Wall | Tile::DoorOpen | Tile::DoorClosed | Tile::ShallowWater | Tile::DeepWater | Tile::Chasm | Tile::Lava => {}
+            }
+        }
+        let all = [Tile::Void, Tile::Floor, Tile::Wall, Tile::DoorOpen, Tile::DoorClosed, Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava];
+        all.iter().for_each(|&t| listed(t));
+        let mut m = Map::new(all.len() as i32, 3);
+        for (x, t) in all.into_iter().enumerate() {
+            m.set(x as i32, 1, t);
+        }
+        for (x, t) in all.into_iter().enumerate() {
+            let x = x as i32;
+            assert_eq!(m.can_stop(x, 1, Mover::Incorporeal), !m.blocks(x, 1, Mover::Dash) && t != Tile::Void, "{t:?}");
+        }
+    }
 
     #[test]
     fn incorporeal_moves_through_walls_and_over_terrain() {

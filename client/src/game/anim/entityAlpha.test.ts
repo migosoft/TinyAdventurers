@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EFFECT, FLAG } from '../../generated/defs';
-import { appearFactor, entityAlpha, skimsTerrain, INCORPOREAL_ALPHA, INVISIBLE_PARTY_ALPHA, Marks } from './entityAlpha';
+import { appearFactor, entityAlpha, skimsTerrain, splashes, INCORPOREAL_ALPHA, INVISIBLE_PARTY_ALPHA, Marks } from './entityAlpha';
 
 describe('entityAlpha', () => {
   it('is opaque for an ordinary figure', () => {
@@ -57,5 +57,13 @@ describe('skimsTerrain', () => {
     expect(skimsTerrain(FLAG.HURT, false)).toBe(false);
     expect(skimsTerrain(0, true)).toBe(true);
     expect(skimsTerrain(FLAG.INCORPOREAL, false)).toBe(true);
+  });
+});
+
+describe('splashes', () => {
+  it('is false only for an incorporeal figure', () => {
+    expect(splashes(0)).toBe(true);
+    expect(splashes(FLAG.HURT)).toBe(true);
+    expect(splashes(FLAG.INCORPOREAL)).toBe(false);
   });
 });
