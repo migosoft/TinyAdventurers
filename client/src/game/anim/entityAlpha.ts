@@ -20,3 +20,34 @@ export function appearFactor(left: number, total: number): number {
   if (total <= 0 || left <= 0) return 1;
   return Math.max(0, 1 - left / total);
 }
+
+/** Ids waiting for a visual hand-off (events arrive ~the interpolation delay before the view changes). Entries expire. */
+export class Marks {
+  private at = new Map<number, number>();
+  constructor(private ttl: number) {}
+  add(id: number, now: number): void {
+    this.at.set(id, now);
+  }
+  delete(id: number): void {
+    this.at.delete(id);
+  }
+  /** True once if the id was marked and the mark has not expired; always clears it. */
+  take(id: number, now: number): boolean {
+    const t = this.at.get(id);
+    this.at.delete(id);
+    return t !== undefined && now - t <= this.ttl;
+  }
+  /** Drop expired marks. */
+  prune(now: number): void {
+    for (const [id, t] of this.at) if (now - t > this.ttl) this.at.delete(id);
+  }
+  clear(): void {
+    this.at.clear();
+  }
+  get size(): number {
+    return this.at.size;
+  }
+}
+
+/** Longest a mark is honoured: the fade plus the interpolation delay cap (0.3 s) and some jitter. */
+export const MARK_TTL = VANISH_SECS + 0.6;

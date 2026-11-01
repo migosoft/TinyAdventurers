@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EFFECT, FLAG } from '../../generated/defs';
-import { appearFactor, entityAlpha, INCORPOREAL_ALPHA, INVISIBLE_PARTY_ALPHA } from './entityAlpha';
+import { appearFactor, entityAlpha, INCORPOREAL_ALPHA, INVISIBLE_PARTY_ALPHA, Marks } from './entityAlpha';
 
 describe('entityAlpha', () => {
   it('is opaque for an ordinary figure', () => {
@@ -28,5 +28,25 @@ describe('appearFactor', () => {
     expect(appearFactor(0, 0.3)).toBe(1);
     expect(appearFactor(-1, 0.3)).toBe(1);
     expect(appearFactor(0, 0)).toBe(1);
+  });
+});
+
+describe('Marks', () => {
+  it('is taken once, and only while fresh', () => {
+    const m = new Marks(1);
+    m.add(7, 10);
+    expect(m.take(7, 10.5)).toBe(true);
+    expect(m.take(7, 10.6)).toBe(false);
+    m.add(8, 10);
+    expect(m.take(8, 12)).toBe(false);
+  });
+  it('prunes stale marks and forgets deleted ones', () => {
+    const m = new Marks(1);
+    m.add(1, 0);
+    m.add(2, 5);
+    m.add(3, 5);
+    m.delete(3);
+    m.prune(5.5);
+    expect(m.size).toBe(1);
   });
 });

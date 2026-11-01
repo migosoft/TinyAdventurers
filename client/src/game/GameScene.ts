@@ -11,6 +11,7 @@ import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Hud } from '../ui/hud';
+import { MARK_TTL, Marks } from './anim/entityAlpha';
 import { FIGURES, PROJECTILES, heroWeapons, isAllyKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
@@ -96,7 +97,9 @@ export class GameScene extends Phaser.Scene {
   private ents = new Map<number, EntState>();
   private views = new Map<number, EntityView>();
   /** Entities that just reappeared from Invisible: their view fades in when it is created. */
-  private reappearing = new Set<number>();
+  private reappearing = new Marks(MARK_TTL);
+  /** Enemies that went invisible: a ghost is left where the view is last drawn, when it is culled. */
+  private vanishing = new Marks(MARK_TTL);
   private projViews = new Map<number, Phaser.GameObjects.Image>();
   private hazardViews = new Map<number, Phaser.GameObjects.Image>();
   private mimicViews = new Map<number, MimicView>();
@@ -275,6 +278,7 @@ export class GameScene extends Phaser.Scene {
     for (const v of this.views.values()) v.destroy();
     this.views.clear();
     this.reappearing.clear();
+    this.vanishing.clear();
     for (const v of this.mimicViews.values()) v.destroy();
     this.mimicViews.clear();
     for (const v of this.chestViews.values()) v.destroy();
@@ -474,9 +478,9 @@ export class GameScene extends Phaser.Scene {
         // Drawn from the snapshot bitmask and its looks (status.ts). Invisible has a default fade:
         // the entity leaves the snapshot at once, so a ghost image fades out; on return it fades in.
         if (ev.kind === EFFECT.Invisible) {
-          const v = this.views.get(ev.id);
-          if (ev.on) v?.ghost();
-          else this.reappearing.add(ev.id);
+          const t = performance.now() / 1000;
+          if (ev.on) (this.vanishing.add(ev.id, t), this.reappearing.delete(ev.id));
+          else (this.reappearing.add(ev.id, t), this.vanishing.delete(ev.id));
         }
         break;
       case 'Msg':
@@ -802,7 +806,15 @@ export class GameScene extends Phaser.Scene {
       seen.add(this.info.you);
       this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: this.myEffects(), entangled: lookOf(this.lastSnap?.looks ?? [], this.info.you, EFFECT.Entangled) }, dt, px, py, now);
     }
-    for (const [id, v] of this.views) if (!seen.has(id)) (v.destroy(), this.views.delete(id), this.wade.delete(id));
+    this.reappearing.prune(now);
+    this.vanishing.prune(now);
+    for (const [id, v] of this.views) {
+      if (seen.has(id)) continue;
+      if (this.vanishing.take(id, now)) v.ghost();
+      v.destroy();
+      this.views.delete(id);
+      this.wade.delete(id);
+    }
     for (const [id, v] of this.projViews) if (!seen.has(id)) (v.destroy(), this.projViews.delete(id));
     for (const [id, v] of this.hazardViews) if (!seen.has(id)) (v.destroy(), this.hazardViews.delete(id));
     for (const [id, v] of this.mimicViews) if (!seen.has(id)) (v.destroy(), this.mimicViews.delete(id));
@@ -867,7 +879,7 @@ export class GameScene extends Phaser.Scene {
       view = new EntityView(this, e.kind, this.fx, me ? undefined : pi?.name, weapons);
       this.views.set(e.id, view);
     }
-    if (this.reappearing.delete(e.id) && !isPlayerKind(e.kind)) view.fadeIn();
+    if (this.reappearing.take(e.id, now) && !isPlayerKind(e.kind)) view.fadeIn();
     let s: ViewState;
     if (me && this.alive) {
       // Petrified or asleep: the weapon keeps the facing from before the effect.
