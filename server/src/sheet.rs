@@ -13,11 +13,9 @@ use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, 
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::kinds::EntityKind;
-use crate::defs::items::{self, ArmorClass, EquipSlot, ItemBase, ItemId, PropKind};
-#[cfg(test)]
-use crate::defs::items::Equipment;
+use crate::defs::items::{self, ArmorClass, EquipSlot, Equipment, ItemBase, ItemId, PropKind};
 use crate::defs::lights::{self, LightKind};
-use crate::defs::loadout::{apply_mods, check_pick, pick_version, AbilityMod, Build, Loadout, LoadoutError, Pick, Source};
+use crate::defs::loadout::{apply_mods, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source};
 use crate::defs::races::Sight;
 use crate::defs::requirements::Requirement;
 use crate::defs::trees::{self, Keystone, KeystoneSet, NodeId, Prof};
@@ -393,14 +391,18 @@ fn worn_items(class: ClassId, b: &Build) -> Vec<(EquipSlot, ItemId)> {
         .collect()
 }
 
-/// `attrs_without_items` plus the worn items' Attribute points, whatever the loadout.
+/// `attrs_without_items` plus the Attribute points of the usable worn items (`usable_items`), whatever the loadout.
 pub fn attrs_with_items(class: ClassId, b: &Build) -> Attributes {
-    let mut attrs = attrs_without_items(class, b);
-    for (_, id) in worn_items(class, b) {
-        for p in items::def(id).props {
-            if let PropKind::Attr(a, n) = p.kind {
-                attrs.add(a, n);
-            }
+    let (usable, _) = usable_items(class, b, Attributes::default());
+    worn_items(class, &usable).iter().fold(attrs_without_items(class, b), |a, &(_, id)| a.plus(item_points(id)))
+}
+
+/// The Attribute points of item `id`.
+fn item_points(id: ItemId) -> Attributes {
+    let mut attrs = Attributes::default();
+    for p in items::def(id).props {
+        if let PropKind::Attr(a, n) = p.kind {
+            attrs.add(a, n);
         }
     }
     attrs
@@ -408,14 +410,14 @@ pub fn attrs_with_items(class: ClassId, b: &Build) -> Attributes {
 
 /// The sheet of a hero with build `b`, in the spec's order (§10): class, race, shop (`extra`),
 /// tree nodes (Attributes, resistances, proficiencies), items; then the derived numbers, the
-/// weapons and the two picks. The equipment is checked first, against the Attributes without
-/// items; then each pick: its version, its requirements, its weapon, its mods (the version's
-/// and the tree's improvements for that ability). An empty Melee slot uses the class's starter;
-/// an empty Ranged slot is no ranged weapon.
+/// weapons and the two picks. The equipment is checked first (slot, class, proficiency); a worn
+/// item whose requirement fails gives nothing (`usable_items`); then each pick: its version, its
+/// requirements, its weapon, its mods (the version's and the tree's improvements for that
+/// ability). An empty Melee slot uses the class's starter; an empty Ranged slot is no ranged weapon.
 pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
     let (mut sheet, cx) = sheet_core(class, b, Attributes::default())?;
-    let (primary, _) = resolve_pick(class, b, AbilitySlot::Primary, b.loadout.primary, &cx)?;
-    let (secondary, secondary_mods) = resolve_pick(class, b, AbilitySlot::Secondary, b.loadout.secondary, &cx)?;
+    let (primary, _) = resolve_pick(class, AbilitySlot::Primary, b.loadout.primary, &cx)?;
+    let (secondary, secondary_mods) = resolve_pick(class, AbilitySlot::Secondary, b.loadout.secondary, &cx)?;
     sheet.wolf = if secondary.id == AbilityId::SummonWolf { wolf_mods(&secondary_mods) } else { WolfMods::NONE };
     sheet.primary = primary;
     sheet.secondary = secondary;
@@ -423,18 +425,17 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
 }
 
 /// The sheet of a hero during a run, with a signed Attribute `delta` (the drain effects). Never
-/// fails: `b` is a build `hero_sheet` accepted. Requirements are checked against the Attributes
-/// without items plus `delta`: an item that fails gives nothing (an unusable melee weapon is the
-/// class starter), and a pick that fails is disabled and holds the plain ability, without mods;
-/// `disabled` names the Attribute requirement that fails, the pick's own or that of the weapon it lost.
+/// fails: `b` is a build `hero_sheet` accepted. Item requirements are met from the Attributes
+/// without items plus `delta` (`usable_items`): an item that fails gives nothing (an unusable
+/// melee weapon is the class starter), and a pick that fails is disabled and holds the plain
+/// ability, without mods; `disabled` names the Attribute requirement that fails, the pick's own or
+/// that of the item it lost its weapon or version to.
 pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
-    let req = attrs_without_items(class, b).with_delta(delta);
-    let (usable, dropped) = usable_items(&req, b);
-    let (mut sheet, cx) = sheet_core(class, &usable, delta).expect("the usable items of an accepted build pass the equipment check");
+    let (mut sheet, cx) = sheet_core(class, b, delta).expect("an accepted build passes the equipment check");
     let strike = sheet.fallback;
     let mut wolf = WolfMods::NONE;
     for (i, (slot, p)) in [(AbilitySlot::Primary, b.loadout.primary), (AbilitySlot::Secondary, b.loadout.secondary)].into_iter().enumerate() {
-        let r = match resolve_pick(class, &usable, slot, p, &cx) {
+        let r = match resolve_pick(class, slot, p, &cx) {
             Ok((r, mods)) => {
                 if slot == AbilitySlot::Secondary && r.id == AbilityId::SummonWolf {
                     wolf = wolf_mods(&mods);
@@ -443,7 +444,10 @@ pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
             }
             Err(e) => {
                 let d = ab::def(p.ability);
-                let by = disabled_by(&e, p, &d, &dropped);
+                let by = match e {
+                    LoadoutError::Requirement(_, Requirement::Attr(a, n)) => Some((a, n)),
+                    _ => None,
+                };
                 debug_assert!(by.is_some(), "a disabled pick has an unmet Attribute requirement: {e:?}");
                 sheet.disabled[i] = Some(by.unwrap_or((Attr::Str, 1)));
                 cx.resolve(&d).unwrap_or(ResolvedAbility { id: p.ability, ranged: d.ranged, ..strike })
@@ -459,27 +463,51 @@ pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
     sheet
 }
 
-/// `b` without the items whose requirement fails against `req` (the Attributes without items plus
-/// the drain), and each dropped item's slot with its first unmet Attribute requirement.
-fn usable_items(req: &Attributes, b: &Build) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
+/// The worn items of `b` that can be used (#196), built up from the Attributes without items plus
+/// `delta`: every item whose requirements are met turns on and adds its Attribute points, until
+/// nothing changes. An item's own points never meet its own requirement, and two items that only
+/// meet each other's stay off. Returns `b` without the unusable items (an unusable melee weapon is
+/// the class starter), and each unusable item's slot with its first unmet Attribute requirement.
+pub fn usable_items(class: ClassId, b: &Build, delta: Attributes) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
+    let worn: Vec<(EquipSlot, ItemId)> = EquipSlot::ALL.iter().filter_map(|&s| b.equipment.get(s).map(|id| (s, id))).collect();
+    let items: Vec<(&[Requirement], Attributes)> = worn.iter().map(|&(_, id)| (items::def(id).req, item_points(id))).collect();
+    let (on, attrs) = build_up(&items, attrs_without_items(class, b), delta);
     let mut usable = b.clone();
     let mut dropped = Vec::new();
-    for s in EquipSlot::ALL {
-        if let Some(id) = usable.equipment.get(s) {
-            if let Some(r) = items::def(id).req.iter().find(|r| !r.met(req, None)) {
-                if let Requirement::Attr(a, n) = *r {
-                    dropped.push((s, (a, n)));
-                }
-                usable.equipment.set(s, None);
+    for (&(s, _), (&(req, _), on)) in worn.iter().zip(items.iter().zip(on)) {
+        if !on {
+            usable.equipment.set(s, None);
+            if let Some(&Requirement::Attr(a, n)) = req.iter().find(|r| !r.met(&attrs, None)) {
+                dropped.push((s, (a, n)));
             }
         }
     }
     (usable, dropped)
 }
 
+/// The fixpoint of `usable_items`: `items` are each worn item's requirements and Attribute points.
+/// Returns which items are on and the Attributes with their points, plus `delta`.
+fn build_up(items: &[(&[Requirement], Attributes)], bare: Attributes, delta: Attributes) -> (Vec<bool>, Attributes) {
+    let mut on = vec![false; items.len()];
+    loop {
+        // Item points are never negative (a data test), so turning an item on keeps the others on.
+        let attrs = items.iter().zip(&on).filter(|(_, on)| **on).fold(bare, |a, ((_, p), _)| a.plus(*p)).with_delta(delta);
+        let mut changed = false;
+        for (i, (req, _)) in items.iter().enumerate() {
+            if !on[i] && req.iter().all(|r| r.met(&attrs, None)) {
+                on[i] = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            return (on, attrs);
+        }
+    }
+}
+
 /// The Attribute requirement that disables pick `p`, which failed with `e`. A pick fails in a run
-/// only because an Attribute fell below a requirement: its own, or that of the item `run_sheet`
-/// dropped (`dropped`, see `usable_items`) that gave it its weapon or its version. The slot comes
+/// only because an Attribute fell below a requirement: its own, or that of an unusable item
+/// (`dropped`, see `usable_items`) that gave it its weapon or its version. The slot comes
 /// from the error: the weapon slot the ability uses, the slot named by `NoWeapon`, or the slot of
 /// the item that grants the version. `None` when the error has no such cause.
 fn disabled_by(e: &LoadoutError, p: Pick, d: &AbilityDef, dropped: &[(EquipSlot, (Attr, i32))]) -> Option<(Attr, i32)> {
@@ -500,8 +528,11 @@ fn disabled_by(e: &LoadoutError, p: Pick, d: &AbilityDef, dropped: &[(EquipSlot,
     dropped.iter().find(|(s, _)| *s == slot).map(|&(_, r)| r)
 }
 
-/// What resolving a pick needs: the numbers of the hero without the picks.
+/// What resolving a pick needs: the numbers of the hero without the picks, the build with only its
+/// usable items, and the unusable ones (`usable_items`).
 struct PickCx {
+    usable: Build,
+    dropped: Vec<(EquipSlot, (Attr, i32))>,
     attrs: Attributes,
     melee: ResolvedWeapon,
     ranged: Option<ResolvedWeapon>,
@@ -517,35 +548,44 @@ impl PickCx {
 }
 
 /// A pick's version, requirements, weapon and mods (the version's, then the tree's improvements
-/// for that ability), resolved; and the mods, for the wolf.
-fn resolve_pick(class: ClassId, b: &Build, slot: AbilitySlot, p: Pick, cx: &PickCx) -> Result<(ResolvedAbility, Vec<AbilityMod>), LoadoutError> {
-    let (version, waive_attrs) = pick_version(class, b, slot, p)?;
+/// for that ability), resolved with the usable items only; and the mods, for the wolf. A pick that
+/// fails because an unusable item held its weapon or its version fails with that item's Attribute
+/// requirement (`disabled_by`).
+fn resolve_pick(class: ClassId, slot: AbilitySlot, p: Pick, cx: &PickCx) -> Result<(ResolvedAbility, Vec<AbilityMod>), LoadoutError> {
     let d = ab::def(p.ability);
+    resolve_usable(class, slot, p, &d, cx).map_err(|e| match disabled_by(&e, p, &d, &cx.dropped) {
+        Some(r) => LoadoutError::Requirement(p.ability, Requirement::Attr(r.0, r.1)),
+        None => e,
+    })
+}
+
+fn resolve_usable(class: ClassId, slot: AbilitySlot, p: Pick, d: &AbilityDef, cx: &PickCx) -> Result<(ResolvedAbility, Vec<AbilityMod>), LoadoutError> {
+    let (version, waive_attrs) = pick_version(class, &cx.usable, slot, p)?;
     let weapon = match d.uses {
         Uses::Melee => Some(cx.melee.kind),
         Uses::Ranged => cx.ranged.map(|w| w.kind),
         Uses::Nothing => None,
     };
-    check_pick(&d, waive_attrs, &cx.attrs, weapon)?;
-    let r = cx.resolve(&d).ok_or(LoadoutError::NoWeapon(p.ability, EquipSlot::Ranged))?;
+    check_pick(d, waive_attrs, &cx.attrs, weapon)?;
+    let r = cx.resolve(d).ok_or(LoadoutError::NoWeapon(p.ability, EquipSlot::Ranged))?;
     let mods: Vec<AbilityMod> = version.iter().copied().chain(cx.improves.iter().filter(|(a, _)| *a == p.ability).map(|&(_, m)| m)).collect();
-    Ok((keystone_ability(apply_mods(r, &mods), &d, &cx.ks), mods))
+    Ok((keystone_ability(apply_mods(r, &mods), d, &cx.ks), mods))
 }
 
 /// The sheet without its two picks (they hold the Strike until `hero_sheet` resolves them), and
 /// what resolving any pick needs. `delta` is an Attribute change during a run (none for
-/// `hero_sheet`): the equipment is checked against the Attributes without items plus `delta`, and
-/// every derived number uses the Attributes with items plus `delta`.
+/// `hero_sheet`). The equipment is checked for slot, class and proficiency; every derived number
+/// uses the Attributes with the usable items (`usable_items`, with `delta`) plus `delta`.
 fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, PickCx), LoadoutError> {
     let def = classes::def(class);
     let start = classes::start_attrs(class);
     let unequipped = attrs_without_items(class, b);
-    let equip = &b.equipment;
     let tree = trees::gains(&b.nodes);
-    items::check_equipment(class, &profs(class, &b.nodes), equip, &unequipped.with_delta(delta)).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
+    items::check_equipment(class, &profs(class, &b.nodes), &b.equipment).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
+    let (usable, dropped) = usable_items(class, b, delta);
     let prof = classes::profile(class);
 
-    let worn = worn_items(class, b);
+    let worn = worn_items(class, &usable);
 
     // Armor bases first, then the properties (spec §10).
     let mut res = prof.res;
@@ -637,7 +677,7 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, Pi
     if ks.has(Keystone::Radiant) && light.is_none_or(|l| lights::def(LightKind::Radiant).radius > lights::def(l).radius) {
         light = Some(LightKind::Radiant);
     }
-    let cx = PickCx { attrs, melee, ranged, improves: tree.improves.clone(), ks };
+    let cx = PickCx { usable, dropped, attrs, melee, ranged, improves: tree.improves.clone(), ks };
     let sheet = Sheet {
         attrs,
         max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp).max(1.0),
@@ -699,6 +739,17 @@ pub struct SheetSummary {
     pub loadout_error: Option<String>,
     /// Every ability the hero could slot, with its numbers and why it cannot play yet.
     pub pool: Vec<PoolCard>,
+    /// The worn items that give nothing because a requirement is not met (#196), in slot order.
+    pub unusable: Vec<UnusableItem>,
+}
+
+/// A worn item whose requirement the other usable items do not meet either.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct UnusableItem {
+    pub slot: EquipSlot,
+    /// "INT 15": its first unmet requirement.
+    pub needs: String,
 }
 
 pub fn spaced(name: &str) -> String {
@@ -794,12 +845,12 @@ pub fn pool_cards(class: ClassId, b: &Build) -> Vec<PoolCard> {
         .into_iter()
         .map(|(pick, locked)| {
             let d = ab::def(pick.ability);
-            let error = resolve_pick(class, b, d.slot, pick, &cx).err().map(|e| e.message());
+            let error = resolve_pick(class, d.slot, pick, &cx).err().map(|e| e.message());
             let ability = if locked {
                 cx.resolve(&d).map(|r| keystone_ability(r, &d, &cx.ks))
             } else {
                 // Numbers even when a requirement fails: the version's mods and the tree's improvements.
-                let version = pick_version(class, b, d.slot, pick).map(|v| v.0).unwrap_or(&[]);
+                let version = pick_version(class, &cx.usable, d.slot, pick).map(|v| v.0).unwrap_or(&[]);
                 let mods: Vec<AbilityMod> = version.iter().copied().chain(cx.improves.iter().filter(|(a, _)| *a == pick.ability).map(|&(_, m)| m)).collect();
                 cx.resolve(&d).map(|r| keystone_ability(apply_mods(r, &mods), &d, &cx.ks))
             };
@@ -860,6 +911,11 @@ pub fn summary(class: ClassId, b: &Build) -> SheetSummary {
         keystones: sheet.keystones.iter().collect(),
         loadout_error,
         pool: pool_cards(class, &used),
+        unusable: usable_items(class, &used, Attributes::default())
+            .1
+            .into_iter()
+            .map(|(slot, (a, n))| UnusableItem { slot, needs: requirement_text(&Requirement::Attr(a, n)) })
+            .collect(),
     }
 }
 
@@ -1350,13 +1406,71 @@ mod tests {
         assert_eq!(none.err(), Some(LoadoutError::NoWeapon(AbilityId::Shoot, EquipSlot::Ranged)));
     }
 
-    #[test]
-    fn equipment_is_checked_without_item_points() {
+    /// A wizard with INT 13 (start 15, `extra` −2) and the Staff of Rot (needs INT 14).
+    fn rot_wizard(ring: bool) -> Build {
         let c = ClassId::Wizard;
-        let low = Attributes::new(0, 0, 0, -2, 0, 0);
-        let e = Equipment::starter(c).with(EquipSlot::Melee, ItemId::StaffOfRot).with(EquipSlot::Ring1, ItemId::RingOfInsight);
-        let err = hero_sheet(c, &Build { extra: low, equipment: e, ..Build::start(c) }).err();
-        assert_eq!(err, Some(LoadoutError::Equip(EquipSlot::Melee, items::EquipError::Requirement(crate::defs::requirements::Requirement::Attr(Attr::Int, 14)))));
+        let e = Equipment::starter(c).with(EquipSlot::Melee, ItemId::StaffOfRot);
+        let e = if ring { e.with(EquipSlot::Ring1, ItemId::RingOfInsight) } else { e };
+        Build { extra: Attributes::new(0, 0, 0, -2, 0, 0), equipment: e, ..Build::start(c) }
+    }
+
+    #[test]
+    fn item_points_meet_other_items_requirements() {
+        let c = ClassId::Wizard;
+        assert_eq!(attrs_without_items(c, &rot_wizard(true)).get(Attr::Int), 13);
+        let (usable, dropped) = usable_items(c, &rot_wizard(true), Attributes::default());
+        assert_eq!((usable, dropped), (rot_wizard(true), vec![]), "the ring's +1 INT meets the staff's INT 14");
+        let s = hero_sheet(c, &rot_wizard(true)).unwrap();
+        assert_eq!(s.attrs.get(Attr::Int), 14);
+        let int14 = Build { extra: Attributes::new(0, 0, 0, -1, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Melee, ItemId::StaffOfRot), ..Build::start(c) };
+        assert_eq!(s.melee, hero_sheet(c, &int14).unwrap().melee, "the staff is the weapon");
+    }
+
+    #[test]
+    fn a_drain_turns_off_the_item_another_item_enabled() {
+        let c = ClassId::Wizard;
+        let b = rot_wizard(true);
+        let int = |n| Attributes::new(0, 0, 0, n, 0, 0);
+        let ring_only = Build { equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::RingOfInsight), ..b.clone() };
+        let drained = run_sheet(c, &b, int(-1));
+        assert_eq!(drained.attrs.get(Attr::Int), 13, "13 + 1 from the ring − 1 drained: below the staff's 14");
+        assert_eq!(drained, run_sheet(c, &ring_only, int(-1)), "the staff is off, the ring still counts");
+        assert_eq!(run_sheet(c, &b, Attributes::default()), hero_sheet(c, &b).unwrap(), "and on again when the drain ends");
+        assert_ne!(hero_sheet(c, &b).unwrap().melee, hero_sheet(c, &ring_only).unwrap().melee);
+    }
+
+    #[test]
+    fn an_unusable_item_is_worn_and_gives_nothing() {
+        let c = ClassId::Wizard;
+        let b = rot_wizard(false);
+        let (usable, dropped) = usable_items(c, &b, Attributes::default());
+        assert_eq!(dropped, vec![(EquipSlot::Melee, (Attr::Int, 14))]);
+        assert_eq!(usable.equipment.get(EquipSlot::Melee), None);
+        // Not a loadout error: the starter staff stands in.
+        let s = hero_sheet(c, &b).unwrap();
+        let starter = Build { equipment: Equipment::starter(c), ..b.clone() };
+        assert_eq!(s, hero_sheet(c, &starter).unwrap());
+        let sum = summary(c, &b);
+        assert_eq!(sum.loadout_error, None);
+        assert_eq!(sum.unusable, vec![UnusableItem { slot: EquipSlot::Melee, needs: "INT 14".into() }]);
+        assert_eq!(summary(c, &rot_wizard(true)).unusable, vec![]);
+    }
+
+    #[test]
+    fn build_up_turns_items_on_from_the_bare_attributes() {
+        let bare = Attributes::new(10, 10, 10, 13, 10, 10);
+        let int = |n| Attributes::new(0, 0, 0, n, 0, 0);
+        let (r14, r15) = ([Requirement::Attr(Attr::Int, 14)], [Requirement::Attr(Attr::Int, 15)]);
+        let none = Attributes::default();
+        // A chain: the free item lifts INT to 14, which turns on the INT 14 item, whose +1 turns on the INT 15 one.
+        let chain = [(&r15[..], int(0)), (&r14[..], int(1)), (&[][..], int(1))];
+        assert_eq!(build_up(&chain, bare, none), (vec![true, true, true], bare.plus(int(2))));
+        // An item's own points never meet its own requirement.
+        assert_eq!(build_up(&[(&r14[..], int(1))], bare, none), (vec![false], bare));
+        // Two items that only meet each other's requirements stay off.
+        assert_eq!(build_up(&[(&r14[..], int(1)), (&r14[..], int(1))], bare, none), (vec![false, false], bare));
+        // A drain turns the chain off past its first link, and the delta is in the result.
+        assert_eq!(build_up(&chain, bare, int(-1)), (vec![false, false, true], bare));
     }
 
     #[test]
@@ -1817,10 +1931,9 @@ mod tests {
     fn usable_items_records_what_it_drops() {
         let c = ClassId::Barbarian;
         let b = flame_tongue_barbarian();
-        let req = attrs_without_items(c, &b);
-        let (kept, dropped) = usable_items(&req, &b);
+        let (kept, dropped) = usable_items(c, &b, Attributes::default());
         assert_eq!((kept, dropped), (b.clone(), vec![]));
-        let (kept, dropped) = usable_items(&req.with_delta(drain(-3, 0, 0)), &b);
+        let (kept, dropped) = usable_items(c, &b, drain(-3, 0, 0));
         assert_eq!(dropped, vec![(EquipSlot::Melee, (Attr::Str, 13))]);
         assert_eq!(kept.equipment.get(EquipSlot::Melee), None);
     }

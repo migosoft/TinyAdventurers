@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { PoolCard } from '../../generated/PoolCard';
 import type { ResolvedAbility } from '../../generated/ResolvedAbility';
 import { fixtureInfo } from './fixture';
-import { abilityNumbers, fitsSlot, itemProblem, monogram, nodeState, pickLabel, poolFor, samePick, slotForItem, unmetRequirements, blockReason } from './model';
+import { abilityNumbers, fitsSlot, itemPoints, itemProblem, itemRequirements, monogram, requirementStatus, unusableNeeds, nodeState, pickLabel, poolFor, samePick, slotForItem, unmetRequirements, blockReason } from './model';
 
 describe('nodeState', () => {
   test('the start node is owned, its neighbours buyable with XP', () => {
@@ -67,6 +67,26 @@ describe('itemProblem', () => {
   });
   test('a class that is not listed', () => {
     expect(itemProblem(fixtureInfo('Paladin'), 'ElvenBow')).toBe('Your class cannot use it.');
+  });
+  test('the other usable worn items count (#196)', () => {
+    // INT 17 bought and +1 from a worn ring: 18 meets the Bone Staff.
+    const info = fixtureInfo('Wizard', { slots: { Ring1: 'RingOfInsight' }, attrs: { Int: { total: 18, items: 1 } } });
+    expect(itemProblem(info, 'BoneStaff')).toBeNull();
+    // A ring in the inventory would replace that ring: its +1 does not count.
+    expect(itemProblem(info, 'RingOfInsight')).toBeNull();
+    expect(itemRequirements(info, 'RingOfInsight', null)).toEqual([]);
+  });
+  test("a worn item's own points do not meet its requirement", () => {
+    const info = fixtureInfo('Wizard', { slots: { Ring1: 'RingOfInsight' }, attrs: { Int: { total: 18, items: 1 } } });
+    expect(requirementStatus(info, ['INT 18'], true, 'RingOfInsight')).toEqual([{ text: 'INT 18', have: 17, ok: false }]);
+    expect(itemPoints('RingOfInsight', 'Int')).toBe(1);
+    expect(itemPoints('RingOfInsight', 'Con')).toBe(0);
+  });
+  test('a worn unusable item counts nothing of its own', () => {
+    const info = fixtureInfo('Wizard', { slots: { Melee: 'BoneStaff' }, attrs: { Int: { total: 17, items: 0 } }, unusable: [{ slot: 'Melee', needs: 'INT 18' }] });
+    expect(unusableNeeds(info, 'Melee')).toBe('INT 18');
+    expect(unusableNeeds(info, 'Ring1')).toBeNull();
+    expect(itemProblem(info, 'BoneStaff', 'Melee')).toBe('Needs INT 18 (you have 17).');
   });
 });
 

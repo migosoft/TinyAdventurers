@@ -28,6 +28,7 @@ export interface FixtureOptions {
   profs?: string[];
   attrs?: Partial<Record<Attr, { total: number; items: number }>>;
   loadout_error?: string | null;
+  unusable?: { slot: EquipSlot; needs: string }[];
 }
 
 export function fixtureInfo(cls: ClassId, o: FixtureOptions = {}): CharacterInfo {
@@ -55,7 +56,7 @@ export function fixtureInfo(cls: ClassId, o: FixtureOptions = {}): CharacterInfo
         return { attr, total: a?.total ?? cl, class: cl, shop: 0, items: a?.items ?? 0 };
       }),
       hp: 10, speed: 70, weight: 0, push: 10, save_con: 0, save_wil: 0, res: [], effect_res: [],
-      profs: o.profs ?? DEFAULT_PROFS, keystones: [], loadout_error: o.loadout_error ?? null, pool: o.pool ?? [],
+      profs: o.profs ?? DEFAULT_PROFS, keystones: [], loadout_error: o.loadout_error ?? null, pool: o.pool ?? [], unusable: o.unusable ?? [],
     },
   } as unknown as CharacterInfo;
 }

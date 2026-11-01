@@ -10,11 +10,11 @@
 
 use crate::defs::abilities::{self, AbilitySlot};
 use crate::defs::attributes::{attr_price, Attr, Attributes};
-use crate::defs::items::{self, check_equip, EquipError, EquipSlot, Equipment, ItemId};
+use crate::defs::items::{self, check_equip, check_wear, EquipError, EquipSlot, Equipment, ItemId};
 use crate::defs::loadout::{Build, Loadout};
 use crate::defs::trees::{self, NodeId};
 use crate::protocol::{CharacterInfo, ClassId};
-use crate::sheet::{attrs_with_items, attrs_without_items, profs};
+use crate::sheet::{attrs_with_items, attrs_without_items, profs, usable_items};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -272,7 +272,7 @@ impl Progress {
     }
 
     /// Refunds all XP spent on the shop and the tree for coins, and resets both and the
-    /// loadout. Items stay, except those the build can no longer wear (they go to the
+    /// loadout. Items stay, except those the build can no longer wear or use (they go to the
     /// inventory). `free` (debug): no coins are taken.
     pub fn respec(&mut self, class: ClassId, free: bool) -> Result<(), &'static str> {
         let price = if free { 0 } else { self.respec_price() };
@@ -285,14 +285,18 @@ impl Progress {
         self.bought = Attributes::default();
         self.nodes.clear();
         self.loadout = Loadout::start(class);
-        let attrs = attrs_without_items(class, &self.build(class));
         let profs = profs(class, &self.nodes);
+        let mut wearable = self.build(class);
         for slot in EquipSlot::ALL {
-            if let Some(item) = self.equipment.get(slot) {
-                if check_equip(class, &profs, slot, item, &attrs).is_err() {
-                    self.equipment.set(slot, None);
-                    self.inventory.push(item);
-                }
+            if wearable.equipment.get(slot).is_some_and(|item| check_wear(class, &profs, slot, item).is_err()) {
+                wearable.equipment.set(slot, None);
+            }
+        }
+        let (usable, _) = usable_items(class, &wearable, Attributes::default());
+        for slot in EquipSlot::ALL {
+            if let Some(item) = self.equipment.get(slot).filter(|_| usable.equipment.get(slot).is_none()) {
+                self.equipment.set(slot, None);
+                self.inventory.push(item);
             }
         }
         Ok(())
@@ -305,8 +309,10 @@ impl Progress {
             let Some(at) = self.inventory.iter().position(|&i| i == item) else {
                 return Err("That item is not in your inventory.");
             };
-            let attrs = attrs_without_items(class, &self.build(class));
-            check_equip(class, &profs(class, &self.nodes), slot, item, &attrs).map_err(equip_message)?;
+            // The requirement counts the other usable items, not the one this replaces (#196).
+            let mut others = self.build(class);
+            others.equipment.set(slot, None);
+            check_equip(class, &profs(class, &self.nodes), slot, item, &attrs_with_items(class, &others)).map_err(equip_message)?;
             self.inventory.remove(at);
         }
         if let Some(old) = self.equipment.get(slot) {
@@ -611,6 +617,30 @@ mod tests {
         // An empty slot, emptied again: nothing happens.
         p.equip(W, EquipSlot::Ring2, None).unwrap();
         assert_eq!(p, before);
+    }
+
+    #[test]
+    fn item_points_count_toward_other_items_requirements() {
+        // INT 17 (15 + 2 bought); the Bone Staff needs INT 18, the Ring of Insight gives +1.
+        let mut p = Progress::new(W);
+        p.buy_attr(W, Attr::Int, true).unwrap();
+        p.buy_attr(W, Attr::Int, true).unwrap();
+        p.grant_item(W, ItemId::BoneStaff).unwrap();
+        p.grant_item(W, ItemId::RingOfInsight).unwrap();
+        assert_eq!(p.equip(W, EquipSlot::Melee, Some(ItemId::BoneStaff)), Err("You do not meet that item's requirements."));
+        p.equip(W, EquipSlot::Ring1, Some(ItemId::RingOfInsight)).unwrap();
+        p.equip(W, EquipSlot::Melee, Some(ItemId::BoneStaff)).unwrap();
+        assert_eq!(usable_items(W, &p.build(W), Attributes::default()).1, vec![]);
+        // Taking the ring off is allowed: the staff stays worn and gives nothing (#196, decision A).
+        p.equip(W, EquipSlot::Ring1, None).unwrap();
+        assert_eq!(p.equipment.get(EquipSlot::Melee), Some(ItemId::BoneStaff));
+        assert_eq!(usable_items(W, &p.build(W), Attributes::default()).1, vec![(EquipSlot::Melee, (Attr::Int, 18))]);
+        assert!(hero_sheet(W, &p.build(W)).is_ok());
+        // A respec unequips what the build can no longer use: INT 15 + 1 is not 18.
+        p.equip(W, EquipSlot::Ring1, Some(ItemId::RingOfInsight)).unwrap();
+        p.respec(W, true).unwrap();
+        assert_eq!((p.equipment.get(EquipSlot::Melee), p.equipment.get(EquipSlot::Ring1)), (None, Some(ItemId::RingOfInsight)));
+        assert!(p.inventory.contains(&ItemId::BoneStaff));
     }
 
     #[test]

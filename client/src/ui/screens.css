@@ -831,6 +831,14 @@
     inset 0 0 0 2px var(--gold),
     0 0 10px rgba(232, 192, 64, 0.5);
 }
+.ui-slot.unusable .box {
+  box-shadow: inset 0 0 0 2px #a03030;
+  background: #2a1214;
+}
+.ui-slot.unusable .box > * {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
 .ui-slot.reserved .box {
   background: repeating-linear-gradient(45deg, #1a1218 0 6px, #140c12 6px 12px);
 }

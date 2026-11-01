@@ -2,6 +2,7 @@
 import type { AttrLine } from "./AttrLine";
 import type { Keystone } from "./Keystone";
 import type { PoolCard } from "./PoolCard";
+import type { UnusableItem } from "./UnusableItem";
 
 /**
  * What the character screen shows of a build: the sheet's numbers and why the loadout may not play.
@@ -31,4 +32,8 @@ loadout_error: string | null,
 /**
  * Every ability the hero could slot, with its numbers and why it cannot play yet.
  */
-pool: Array<PoolCard>, };
+pool: Array<PoolCard>, 
+/**
+ * The worn items that give nothing because a requirement is not met (#196), in slot order.
+ */
+unusable: Array<UnusableItem>, };

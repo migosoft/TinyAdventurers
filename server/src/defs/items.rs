@@ -441,9 +441,20 @@ pub enum EquipError {
     Requirement(Requirement),
 }
 
-/// Whether `item` can be worn by `class` in `slot`. `attrs` are the Attributes
-/// without item points; `profs` are the class's plus the tree's. Order: slot, class, proficiency, requirements.
+/// Whether `item` can be worn by `class` in `slot`. `attrs` are the Attributes its requirements
+/// are checked against: without the item itself, with the other usable worn items (#196, see
+/// `sheet::usable_items`); `profs` are the class's plus the tree's. Order: slot, class,
+/// proficiency, requirements.
 pub fn check_equip(class: ClassId, profs: &[Prof], slot: EquipSlot, item: ItemId, attrs: &Attributes) -> Result<(), EquipError> {
+    check_wear(class, profs, slot, item)?;
+    match def(item).req.iter().find(|r| !r.met(attrs, None)) {
+        Some(r) => Err(EquipError::Requirement(*r)),
+        None => Ok(()),
+    }
+}
+
+/// `check_equip` without the requirements: slot, class, proficiency.
+pub fn check_wear(class: ClassId, profs: &[Prof], slot: EquipSlot, item: ItemId) -> Result<(), EquipError> {
     let d = def(item);
     let fits = match d.base {
         ItemBase::Melee(k, _) => slot == EquipSlot::Melee && !is_natural_like(category(k)),
@@ -465,20 +476,19 @@ pub fn check_equip(class: ClassId, profs: &[Prof], slot: EquipSlot, item: ItemId
         ItemBase::Armor(a) => profs.iter().any(|p| matches!(p, Prof::Armor(c) if a.class <= *c)),
         _ => true,
     };
-    if !proficient {
-        return Err(EquipError::NotProficient);
-    }
-    match d.req.iter().find(|r| !r.met(attrs, None)) {
-        Some(r) => Err(EquipError::Requirement(*r)),
-        None => Ok(()),
+    if proficient {
+        Ok(())
+    } else {
+        Err(EquipError::NotProficient)
     }
 }
 
-/// Checks every filled slot, in slot order.
-pub fn check_equipment(class: ClassId, profs: &[Prof], e: &Equipment, attrs: &Attributes) -> Result<(), (EquipSlot, EquipError)> {
+/// `check_wear` for every filled slot, in slot order. An unmet requirement is no error: the item
+/// stays worn and gives nothing (`sheet::usable_items`).
+pub fn check_equipment(class: ClassId, profs: &[Prof], e: &Equipment) -> Result<(), (EquipSlot, EquipError)> {
     for slot in EquipSlot::ALL {
         if let Some(item) = e.get(slot) {
-            check_equip(class, profs, slot, item, attrs).map_err(|err| (slot, err))?;
+            check_wear(class, profs, slot, item).map_err(|err| (slot, err))?;
         }
     }
     Ok(())
@@ -621,7 +631,7 @@ mod tests {
     #[test]
     fn starters_are_valid() {
         for c in ClassId::ALL {
-            assert_eq!(check_equipment(c, &classes::prof_base(c), &Equipment::starter(c), &start_attrs(c)), Ok(()), "{c:?}");
+            assert_eq!(check_equipment(c, &classes::prof_base(c), &Equipment::starter(c)), Ok(()), "{c:?}");
         }
         assert_eq!(Equipment::starter(ClassId::ElvenRanger).get(S::Ranged), Some(I::ElvenBow));
         assert_eq!(Equipment::starter(ClassId::Wizard).get(S::Ranged), None);
@@ -663,14 +673,25 @@ mod tests {
     }
 
     #[test]
-    fn item_requirements_ignore_item_points() {
+    fn requirements_are_checked_against_the_given_attributes() {
         let c = ClassId::Wizard;
         let low = start_attrs(c).plus(Attributes::new(0, 0, 0, -2, 0, 0));
         let want = EquipError::Requirement(Requirement::Attr(Attr::Int, 14));
         assert_eq!(check_equip(c, &classes::prof_base(c), S::Melee, I::StaffOfRot, &low), Err(want));
+        assert_eq!(check_wear(c, &classes::prof_base(c), S::Melee, I::StaffOfRot), Ok(()));
         let e = Equipment::default().with(S::Melee, I::StaffOfRot).with(S::Ring1, I::RingOfInsight);
-        assert_eq!(check_equipment(c, &classes::prof_base(c), &e, &low), Err((S::Melee, want)));
-        let ok14 = start_attrs(c).plus(Attributes::new(0, 0, 0, -1, 0, 0));
-        assert_eq!(check_equipment(c, &classes::prof_base(c), &e, &ok14), Ok(()));
+        assert_eq!(check_equipment(c, &classes::prof_base(c), &e), Ok(()), "an unmet requirement is not a wear error");
+    }
+
+    #[test]
+    fn attribute_bonuses_are_positive() {
+        // `sheet::usable_items` builds up from the bare Attributes: an item never lowers another's.
+        for id in ItemId::ALL {
+            for p in def(id).props {
+                if let PropKind::Attr(a, n) = p.kind {
+                    assert!(n > 0, "{id:?} {a:?} {n}");
+                }
+            }
+        }
     }
 }

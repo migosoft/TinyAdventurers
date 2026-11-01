@@ -14,7 +14,7 @@ import type { ResolvedAbility } from '../../generated/ResolvedAbility';
 export type TreeKind = 'Start' | 'Unlock' | 'Improve' | 'Proficiency' | 'Resist' | 'Keystone';
 /** One tree node as the generated `TREES` data has it (that file types the fields loosely). */
 export type TreeNode = { cost: number; kind: TreeKind; links: readonly string[]; name: string; pos: readonly [number, number]; req: readonly string[]; text: string; ability?: AbilityId };
-type ItemDef = { name: string; slot: string; classes: readonly string[]; prof: string | null; req: readonly string[] };
+type ItemDef = { name: string; slot: string; classes: readonly string[]; prof: string | null; req: readonly string[]; props: readonly { text: string }[] };
 export type NodeState = 'owned' | 'buyable' | 'blocked' | 'locked';
 
 export const EQUIP_SLOTS: EquipSlot[] = ['Melee', 'Ranged', 'OffHand', 'Armor', 'Ring1', 'Ring2', 'Shoes', 'Belt'];
@@ -25,15 +25,16 @@ export const nodesOf = (info: CharacterInfo) => (TREES as unknown as Record<stri
 const owned = (info: CharacterInfo): Set<string> => new Set<string>([nodesOf(info).start, ...info.nodes]);
 const attrOf = (info: CharacterInfo, a: Attr) => info.sheet.attrs.find((l) => l.attr === a);
 
-/** Each Attribute requirement ("INT 18") with the points the hero has and whether that is enough; other requirement texts are skipped. */
-export function requirementStatus(info: CharacterInfo, req: readonly string[], withItems: boolean): { text: string; have: number; ok: boolean }[] {
+/** Each Attribute requirement ("INT 18") with the points the hero has and whether that is enough; other requirement texts are skipped.
+ * `withItems` counts the usable worn items, except the points of `minus` (an item's own points never meet its own requirement, #196). */
+export function requirementStatus(info: CharacterInfo, req: readonly string[], withItems: boolean, minus: ItemId | null = null): { text: string; have: number; ok: boolean }[] {
   const out: { text: string; have: number; ok: boolean }[] = [];
   for (const r of req) {
     const m = /^([A-Z]{3}) (\d+)$/.exec(r);
     const attr = m && ATTR_KEYS.find((a) => ATTRS[a].short === m[1]);
     if (!m || !attr) continue;
     const l = attrOf(info, attr);
-    const have = l ? (withItems ? l.total : l.total - l.items) : 0;
+    const have = l ? (withItems ? l.total - (minus ? itemPoints(minus, attr) : 0) : l.total - l.items) : 0;
     out.push({ text: r, have, ok: have >= Number(m[2]) });
   }
   return out;
@@ -93,12 +94,33 @@ export function slotForItem(info: CharacterInfo, item: ItemId): EquipSlot | null
   return EQUIP_SLOTS.includes(s as EquipSlot) && s !== 'OffHand' ? (s as EquipSlot) : null;
 }
 
-/** The first reason this hero cannot use the item, or null. */
-export function itemProblem(info: CharacterInfo, item: ItemId): string | null {
+/** The Attribute points item `id` gives ("+1 INT" in its properties). */
+export function itemPoints(id: string, attr: Attr): number {
+  const short = ATTRS[attr].short;
+  return itemDef(id).props.reduce((sum, p) => {
+    const m = /^\+(\d+) ([A-Z]{3})$/.exec(p.text);
+    return m && m[2] === short ? sum + Number(m[1]) : sum;
+  }, 0);
+}
+
+/** What the worn item in `slot` needs ("INT 18") when it gives nothing because a requirement is not met (#196), else null. */
+export const unusableNeeds = (info: CharacterInfo, slot: EquipSlot): string | null => info.sheet.unusable.find((u) => u.slot === slot)?.needs ?? null;
+
+/** The item requirements of `item` against the Attributes with the other usable worn items (#196): without the item itself
+ * when it is worn in `slot`, or without the usable item it would replace when it is in the inventory (`slot` null). */
+export function itemRequirements(info: CharacterInfo, item: ItemId, slot: EquipSlot | null): { text: string; have: number; ok: boolean }[] {
+  const s = slot ?? slotForItem(info, item);
+  const worn = s ? info.equipment.slots[EQUIP_SLOTS.indexOf(s)] : null;
+  const minus = worn && s && !unusableNeeds(info, s) ? worn : null;
+  return requirementStatus(info, itemDef(item).req, true, minus);
+}
+
+/** The first reason this hero cannot use the item, or null. `slot`: where it is worn (null for the inventory). */
+export function itemProblem(info: CharacterInfo, item: ItemId, slot: EquipSlot | null = null): string | null {
   const d = itemDef(item);
   if (!d.classes.includes(info.class)) return 'Your class cannot use it.';
   if (d.prof && !info.sheet.profs.includes(d.prof)) return `Not trained in ${d.prof}.`;
-  const miss = unmetRequirements(info, d.req, false)[0];
+  const miss = itemRequirements(info, item, slot).find((r) => !r.ok);
   return miss ? `Needs ${miss.text} (you have ${miss.have}).` : null;
 }
 

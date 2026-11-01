@@ -126,6 +126,15 @@ test('hovering a worn slot shows its tooltip', () => {
   $('[data-slot="Melee"]').dispatchEvent(new Event('mouseenter'));
   expect(document.querySelector('.ui-tip')!.textContent).toContain('Staff of Rot');
 });
+test('a worn item whose requirement is not met is greyed and says why (#196)', () => {
+  draw(wiz({ slots: { Melee: 'BoneStaff', Ring1: 'RingOfInsight' }, unusable: [{ slot: 'Melee', needs: 'INT 18' }] }));
+  expect($('[data-slot="Melee"]').classList.contains('unusable')).toBe(true);
+  expect($('[data-slot="Ring1"]').classList.contains('unusable')).toBe(false);
+  $('[data-slot="Melee"]').dispatchEvent(new Event('mouseenter'));
+  const tip = document.querySelector('.ui-tip')!.textContent!;
+  expect(tip).toContain('Needs INT 18');
+  expect(tip).toContain('Worn but unusable');
+});
 test('clicking a cell whose item has no slot sends nothing', () => {
   const d = (ITEMS as unknown as Record<string, { slot: string }>).BoneStaff;
   const was = d.slot;

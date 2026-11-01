@@ -5,7 +5,7 @@ import type { ItemId } from '../../generated/ItemId';
 import { classFigure, figureWeapon } from '../classes';
 import { esc } from '../hud';
 import { itemIcon } from '../icons';
-import { EQUIP_SLOTS, itemProblem, requirementStatus, slotForItem } from './model';
+import { EQUIP_SLOTS, itemProblem, itemRequirements, slotForItem, unusableNeeds } from './model';
 import { clearTips, showTip } from './tip';
 import type { TabCtx } from './hub';
 
@@ -23,15 +23,17 @@ const el = (tag: string, cls: string, html = ''): HTMLElement => {
   return e;
 };
 
-function tipHtml(ctx: TabCtx, id: ItemId): string {
+/** `slot`: where the item is worn (null for the inventory). */
+function tipHtml(ctx: TabCtx, id: ItemId, slot: EquipSlot | null): string {
   const { info } = ctx;
   const d = defs[id];
-  const problem = itemProblem(info, id);
+  const problem = itemProblem(info, id, slot);
   const kind = problem ? `${esc(d.kind)} · <span class="bad">${esc(problem)}</span>` : `${esc(d.kind)}${d.prof ? ' · proficient' : ''}`;
   const props = d.props.map((p) => `<li class="prop">${esc(p.text)} <span class="${p.magical ? 'mag' : 'non'}">${p.magical ? 'magical' : 'non-magical'}</span></li>`);
-  const reqs = requirementStatus(info, d.req, false).map((r) => `<li class="${r.ok ? 'ok' : 'bad'}">Needs ${esc(r.text)} <span>(you have ${r.have})</span></li>`);
+  const reqs = itemRequirements(info, id, slot).map((r) => `<li class="${r.ok ? 'ok' : 'bad'}">Needs ${esc(r.text)} <span>(you have ${r.have})</span></li>`);
+  const unusable = slot && unusableNeeds(info, slot) ? '<p class="bad">Worn but unusable: it gives nothing until you meet its requirement.</p>' : '';
   const note = isWeapon(d) && d.props.length ? '<p class="muted">Weapon effects ride only on attacks that use the weapon.</p>' : '';
-  return `<b>${esc(d.name)}</b><small>${kind}</small>${d.base ? `<p>${esc(d.base)}</p>` : ''}<ul>${props.join('')}${reqs.join('')}</ul>${note}`;
+  return `<b>${esc(d.name)}</b><small>${kind}</small>${d.base ? `<p>${esc(d.base)}</p>` : ''}<ul>${props.join('')}${reqs.join('')}</ul>${unusable}${note}`;
 }
 
 /** "From items: +1 CON · …": the AttrLine item points, then the props of each worn non-weapon item (its Attribute grants are already in the points). */
@@ -58,7 +60,7 @@ export function renderEquipment(ctx: TabCtx): HTMLElement {
   EQUIP_SLOTS.forEach((slot, i) => {
     const id = info.equipment.slots[i];
     const reserved = slot === 'OffHand';
-    const s = el('div', `ui-slot s-${slot.toLowerCase()}${reserved ? ' reserved' : ''}`);
+    const s = el('div', `ui-slot s-${slot.toLowerCase()}${reserved ? ' reserved' : ''}${id && unusableNeeds(info, slot) ? ' unusable' : ''}`);
     s.dataset.slot = slot;
     const box = el('div', 'box');
     if (id) box.append(itemIcon(atlas, id, 40));
@@ -68,7 +70,7 @@ export function renderEquipment(ctx: TabCtx): HTMLElement {
       s.draggable = true;
       s.ondragstart = (e) => e.dataTransfer?.setData('text/plain', `slot:${slot}`);
       s.onclick = () => send({ t: 'Equip', slot, item: null });
-      s.onmouseenter = () => showTip(s, tipHtml(ctx, id), 'right');
+      s.onmouseenter = () => showTip(s, tipHtml(ctx, id, slot), 'right');
       s.onmouseleave = () => clearTips();
     }
     if (!reserved) {
@@ -107,7 +109,7 @@ export function renderEquipment(ctx: TabCtx): HTMLElement {
         const slot = slotForItem(info, id);
         if (slot) send({ t: 'Equip', slot, item: id });
       };
-      cell.onmouseenter = () => showTip(cell, tipHtml(ctx, id), 'below');
+      cell.onmouseenter = () => showTip(cell, tipHtml(ctx, id, null), 'below');
       cell.onmouseleave = () => clearTips();
     }
     cellsEl.append(cell);
