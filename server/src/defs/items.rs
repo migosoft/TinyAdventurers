@@ -11,7 +11,7 @@ use super::lights::LightKind;
 use super::loadout::AbilityMod;
 use super::requirements::Requirement;
 use super::trees::Prof;
-use super::weapons::{category, At, MeleeStats, RangedStats, WeaponCategory, WeaponKind};
+use super::weapons::{category, is_natural_like, At, MeleeStats, RangedStats, WeaponKind};
 use crate::protocol::ClassId;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -261,7 +261,7 @@ pub fn prop_text(p: &ItemProperty) -> String {
 /// Whether a hero may own the item at all: natural weapons (bites, claws) and the monster-only copies
 /// (no class) belong to enemies.
 pub fn hero_can_hold(d: &ItemDef) -> bool {
-    !d.classes.is_empty() && !matches!(d.base, ItemBase::Melee(k, _) if category(k) == WeaponCategory::Natural)
+    !d.classes.is_empty() && !matches!(d.base, ItemBase::Melee(k, _) if is_natural_like(category(k)))
 }
 
 // Macros, not `const fn`s: only struct literals are promoted to `'static`.
@@ -313,7 +313,7 @@ pub fn def(id: ItemId) -> ItemDef {
     use ItemId as I;
     use WeaponKind as K;
     let phys = DamageSplit::physical;
-    let at = |str, dex| At { str, dex };
+    let at = |str, dex| At { str, dex, cha: 10 };
     let item = |name, sprite, base, classes, req, props| ItemDef { id, name, sprite, base, classes, req, props };
     match id {
         I::RedStaff => item("Red Staff", "weapon_red_magic_staff", melee(K::Staff, 6.0, 1.0, 1.6, 0.0, phys(), at(8, 14)), WIZARD, &[], &[]),
@@ -438,7 +438,7 @@ pub enum EquipError {
 pub fn check_equip(class: ClassId, profs: &[Prof], slot: EquipSlot, item: ItemId, attrs: &Attributes) -> Result<(), EquipError> {
     let d = def(item);
     let fits = match d.base {
-        ItemBase::Melee(k, _) => slot == EquipSlot::Melee && category(k) != WeaponCategory::Natural,
+        ItemBase::Melee(k, _) => slot == EquipSlot::Melee && !is_natural_like(category(k)),
         ItemBase::Ranged(..) => slot == EquipSlot::Ranged,
         ItemBase::Armor(_) => slot == EquipSlot::Armor,
         ItemBase::Ring => matches!(slot, EquipSlot::Ring1 | EquipSlot::Ring2),
@@ -482,6 +482,14 @@ fn heat() -> DamageSplit {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_spectral_weapon_is_never_equippable_by_heroes() {
+        let mut d = def(ItemId::DragonBite);
+        d.classes = ALL;
+        d.base = melee(WeaponKind::Touch, 6.0, 1.0, 1.0, 0.0, DamageSplit::physical(), At::BASE);
+        assert!(!hero_can_hold(&d));
+    }
+
     use super::*;
     use crate::defs::classes::start_attrs;
     use crate::defs::weapons::{WeaponCategory as C, WeaponKind as K};
@@ -578,7 +586,7 @@ mod tests {
                 assert_eq!(k, K::Axe);
                 assert_eq!((s.damage, s.cooldown, s.arc, s.push), (32.0, 0.8, 2.45, 0.0));
                 assert_eq!(s.split, DamageSplit::physical());
-                assert_eq!(s.at, At { str: 15, dex: 13 });
+                assert_eq!(s.at, At { str: 15, dex: 13, cha: 10 });
             }
             _ => panic!(),
         }

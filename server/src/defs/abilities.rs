@@ -86,6 +86,8 @@ super::enum_list::listed_enum! {
         SleepMist = 35,
         /// The lich's gaze that turns its target to stone.
         StoneGaze = 36,
+        /// A chilling touch with a spectral weapon: the ghost's and the shade's.
+        Touch = 37,
     }
 }
 
@@ -334,6 +336,7 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::GloomBolts => "Five bolts of gloom in a fan.",
         AbilityId::BlindingCurse => "A slow orb that blinds what it hits.",
         AbilityId::SleepMist => "A slow orb that puts what it hits to sleep.",
+        AbilityId::Touch => "A chilling touch that drains strength from the living.",
         AbilityId::StoneGaze => "A stare that turns the target to stone, if it still sees it when the gaze lands.",
     }
 }
@@ -509,6 +512,10 @@ pub fn def(id: AbilityId) -> AbilityDef {
             own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Sleep, power: Attr::Int, look: EffectLook::Plain }), windup: 0.8, ..own(0.0, 14.0, 270.0, 90.0, 3.0, 4.0, Some(EntityKind::SleepOrb), 22) },
             ..base("Sleep Mist", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
         },
+        Touch => AbilityDef {
+            req: &[Requirement::WeaponKind(&[WeaponKind::Touch])],
+            ..base("Touch", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
+        },
         StoneGaze => AbilityDef {
             own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Petrified, power: Attr::Int, look: EffectLook::Plain }), windup: 1.0, ..own(0.0, 18.0, 0.0, 0.0, 0.0, 3.0, None, 0) },
             ..base("Stone Gaze", Secondary, C::Spell, Uses::Nothing, false, Shape::Gaze, NO_OWN, &[])
@@ -533,6 +540,15 @@ pub fn governing(c: AbilityCategory) -> Option<(Attr, f64)> {
 mod tests {
     use super::*;
     use crate::defs::classes;
+
+    #[test]
+    fn touch_needs_a_touch_weapon() {
+        let d = def(AbilityId::Touch);
+        assert_eq!(d.req, &[Requirement::WeaponKind(&[WeaponKind::Touch])]);
+        assert_eq!(d.slot, AbilitySlot::Primary);
+        assert_eq!(d.shape, Shape::Swing);
+        assert!(!d.for_heroes());
+    }
 
     #[test]
     fn every_ability_has_a_text() {

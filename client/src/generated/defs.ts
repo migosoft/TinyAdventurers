@@ -577,6 +577,14 @@ export const ABILITIES = {
     "shape": "Swing",
     "slot": "Secondary"
   },
+  "Touch": {
+    "classes": [],
+    "hero": false,
+    "name": "Touch",
+    "ranged": false,
+    "shape": "Swing",
+    "slot": "Primary"
+  },
   "Volley": {
     "classes": [
       "ElvenRanger"
