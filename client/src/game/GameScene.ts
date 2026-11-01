@@ -10,7 +10,7 @@ import type { Net } from '../net';
 import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
-import type { Hud } from '../ui/hud';
+import type { Disabled, Hud } from '../ui/hud';
 import { MARK_TTL, Marks, skimsTerrain, splashes } from './anim/entityAlpha';
 import { FIGURES, PROJECTILES, heroWeapons, isAllyKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
@@ -156,7 +156,7 @@ export class GameScene extends Phaser.Scene {
   private debugEffect = -1;
   private lastAim = 0;
   /** Which picks an Attribute drain disabled (from `HeroChanged`). */
-  private disabled: [boolean, boolean] = [false, false];
+  private disabled: Disabled = [null, null];
   private debugPath: [number, number][] = [];
   private debugOgre: [number, number][] = [];
   private debugGfx!: Phaser.GameObjects.Graphics;
@@ -189,7 +189,7 @@ export class GameScene extends Phaser.Scene {
     this.acc = 0;
     this.myFlags = 0;
     this.lastSnap = undefined;
-    this.disabled = [false, false];
+    this.disabled = [null, null];
     const tiles = this.info.tiles instanceof Uint8Array ? this.info.tiles : Uint8Array.from(this.info.tiles as ArrayLike<number>);
     this.map = new TileMap(this.info.width, this.info.height, new Uint8Array(tiles));
     this.myKind = CLASSES[data.myClass].kind;
@@ -550,12 +550,15 @@ export class GameScene extends Phaser.Scene {
     let secondary: number | null = null;
     let dash: [number, number] | null = null;
     const used: [number | null, number | null] = [null, null];
-    if (wantPrimary && this.pred.cd1 <= 0 && this.slotUsable(0)) {
+    const usable = [this.slotUsable(0), this.slotUsable(1)] as const;
+    if (wantPrimary && !usable[0]) this.hud.needs(0, this.disabled[0]!);
+    if (wantSecondary && !usable[1]) this.hud.needs(1, this.disabled[1]!);
+    if (wantPrimary && this.pred.cd1 <= 0 && usable[0]) {
       const ids = this.reserveShots(0);
       primary = ids[0];
       used[0] = this.predictAbility(0, ids, aim, dist);
     }
-    if (wantSecondary && this.pred.cd2 <= 0 && this.slotUsable(1)) {
+    if (wantSecondary && this.pred.cd2 <= 0 && usable[1]) {
       const ids = this.reserveShots(1);
       secondary = ids[0];
       used[1] = this.predictAbility(1, ids, aim, dist);

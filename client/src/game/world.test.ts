@@ -231,11 +231,11 @@ describe('Volley', () => {
 
 describe('slotUsable', () => {
   it('blocks a disabled pick, except a ranged primary in melee (it strikes)', () => {
-    expect(slotUsable([false, false], 0, false, false)).toBe(true);
-    expect(slotUsable([true, false], 0, false, false)).toBe(false);
-    expect(slotUsable([true, false], 0, true, true)).toBe(true);
-    expect(slotUsable([true, false], 0, false, true)).toBe(false);
-    expect(slotUsable([false, true], 1, true, true)).toBe(false);
+    expect(slotUsable([null, null], 0, false, false)).toBe(true);
+    expect(slotUsable([['Dex', 14], null], 0, false, false)).toBe(false);
+    expect(slotUsable([['Dex', 14], null], 0, true, true)).toBe(true);
+    expect(slotUsable([['Dex', 14], null], 0, false, true)).toBe(false);
+    expect(slotUsable([null, ['Int', 14]], 1, true, true)).toBe(false);
   });
 });
 

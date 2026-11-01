@@ -1,14 +1,16 @@
 import { ABILITIES, EFFECT, EFFECTS, FLAG } from '../generated/defs';
+import type { Attr } from '../generated/Attr';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
 import type { PlayerStats } from '../generated/PlayerStats';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { RunStartInfo } from '../generated/RunStartInfo';
+import type { ServerMsg } from '../generated/ServerMsg';
 import type { Snapshot } from '../generated/Snapshot';
 import { CooldownTracker } from './cooldown';
 import { endText } from './endText';
-import { BOSS_TEXT, className } from './text';
+import { BOSS_TEXT, className, needsText } from './text';
 import { DRAIN_TEXT, effectIconSvg } from './effectIcons';
 import { SettingsView, type Toggle } from './settings';
 
@@ -76,6 +78,9 @@ const el = (tag: string, cls?: string, html?: string) => {
   return e;
 };
 
+/** Per slot, the Attribute requirement that disables the pick during a run (`HeroChanged`), or null. */
+export type Disabled = Extract<ServerMsg, { t: 'HeroChanged' }>['disabled'];
+
 export class Hud {
   private root = el('div', 'hud hidden');
   private hp = el('div', 'hp-bar');
@@ -86,9 +91,9 @@ export class Hud {
   private coins = el('div', 'coins');
   private coinCount = 0;
   private slots: HTMLElement[] = [];
-  /** The equipped abilities' names, and until when (ms) each slot reads "Too close". */
+  /** The equipped abilities' names, and each slot's hint (it replaces the name until `until`, ms). */
   private slotNames = ['', ''];
-  private tooCloseUntil = [0, 0];
+  private hint = [{ text: '', until: 0 }, { text: '', until: 0 }];
   private party = el('div', 'party');
   private boss = el('div', 'boss hidden');
   private msgs = el('div', 'messages');
@@ -179,7 +184,8 @@ export class Hud {
     this.showCoins();
     [0, 1].forEach((i) => {
       this.slotNames[i] = ABILITIES[info.abilities[i].id].name;
-      this.tooCloseUntil[i] = 0;
+      this.hint[i].until = 0;
+      this.slots[i].removeAttribute('title');
       this.slots[i].querySelector('.name')!.textContent = this.slotNames[i];
       this.trackers[i] = new CooldownTracker(info.abilities[i].cooldown);
       this.slotIds[i] = info.abilities[i].id;
@@ -263,7 +269,7 @@ export class Hud {
   }
 
   /** The equipped abilities changed (an Attribute drain started or ended): names, cooldowns, greyed slots. */
-  setAbilities(abilities: readonly ResolvedAbility[], disabled: [boolean, boolean]): void {
+  setAbilities(abilities: readonly ResolvedAbility[], disabled: Disabled): void {
     [0, 1].forEach((i) => {
       this.slotNames[i] = ABILITIES[abilities[i].id].name;
       this.slots[i].querySelector('.name')!.textContent = this.slotNames[i];
@@ -271,13 +277,25 @@ export class Hud {
         this.trackers[i] = new CooldownTracker(abilities[i].cooldown);
         this.slotIds[i] = abilities[i].id;
       }
-      this.slots[i].classList.toggle('disabled', disabled[i]);
+      const need = disabled[i];
+      this.slots[i].classList.toggle('disabled', need !== null);
+      if (need) this.slots[i].title = needsText(need);
+      else this.slots[i].removeAttribute('title');
     });
   }
 
   /** A ranged ability used in melee: the slot reads "Too close" for 0.8 s. */
   tooClose(slot: 0 | 1): void {
-    this.tooCloseUntil[slot] = performance.now() + 800;
+    this.showHint(slot, 'Too close');
+  }
+
+  /** A press on a slot an Attribute drain disabled: the slot reads what it needs ("Needs DEX 14") for 0.8 s. */
+  needs(slot: 0 | 1, req: [Attr, number]): void {
+    this.showHint(slot, needsText(req));
+  }
+
+  private showHint(slot: 0 | 1, text: string): void {
+    this.hint[slot] = { text, until: performance.now() + 800 };
   }
 
   frame(f: FrameStats): void {
@@ -285,9 +303,10 @@ export class Hud {
     const now = performance.now();
     [0, 1].forEach((i) => {
       const name = this.slots[i].querySelector('.name')!;
-      const label = now < this.tooCloseUntil[i] ? 'Too close' : i === 1 ? secondaryLabel(f.wolf, this.slotNames[1]) : this.slotNames[0];
+      const hint = now < this.hint[i].until;
+      const label = hint ? this.hint[i].text : i === 1 ? secondaryLabel(f.wolf, this.slotNames[1]) : this.slotNames[0];
       if (name.textContent !== label) name.textContent = label;
-      this.slots[i].classList.toggle('too-close', now < this.tooCloseUntil[i]);
+      this.slots[i].classList.toggle('hint', hint);
     });
     [f.cd1, f.cd2].forEach((cd, i) => {
       const { view, flash } = this.trackers[i].update(cd);

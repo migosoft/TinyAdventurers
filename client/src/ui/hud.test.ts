@@ -173,23 +173,43 @@ describe('Hud.setAbilities', () => {
   it('renames the slots and greys the disabled ones', () => {
     document.body.innerHTML = '';
     const hud = new Hud(document.body, () => {}, () => {});
-    hud.setAbilities([ab('Strike'), ab('Charge')], [false, true]);
+    hud.setAbilities([ab('Strike'), ab('Charge')], [null, ['Dex', 14]]);
     const slots = [...document.querySelectorAll('.slot')];
     expect(slots.map((s) => s.classList.contains('disabled'))).toEqual([false, true]);
     expect(slots[1].querySelector('.name')!.textContent).toBe('Charge');
-    hud.setAbilities([ab('Strike'), ab('Charge')], [false, false]);
+    expect(slots[1].getAttribute('title')).toBe('Needs DEX 14');
+    expect(slots[0].hasAttribute('title')).toBe(false);
+    hud.setAbilities([ab('Strike'), ab('Charge')], [null, null]);
     expect(document.querySelectorAll('.slot.disabled').length).toBe(0);
+    expect(slots[1].hasAttribute('title')).toBe(false);
+  });
+  it('shows what a pressed disabled slot needs, or that the target is too close, for a moment', () => {
+    document.body.innerHTML = '';
+    const hud = new Hud(document.body, () => {}, () => {});
+    hud.setAbilities([ab('Strike'), ab('Charge')], [null, ['Dex', 14]]);
+    const f = { fps: 60, frameMs: 1, rtt: 0, jitter: 0, interp: 0, snapBytes: 0, correction: 0, srvMs: 0, cd1: 0, cd2: 0, ents: 0, darkvision: 0, wolf: null } as unknown as Parameters<Hud['frame']>[0];
+    const slots = [...document.querySelectorAll('.slot')];
+    const name = (i: number) => slots[i].querySelector('.name')!.textContent;
+    hud.needs(1, ['Dex', 14]);
+    hud.frame(f);
+    expect(name(1)).toBe('Needs DEX 14');
+    expect(slots[1].classList.contains('hint')).toBe(true);
+    expect(name(0)).toBe('Strike');
+    hud.tooClose(0);
+    hud.frame(f);
+    expect(name(0)).toBe('Too close');
+    expect(slots[0].classList.contains('hint')).toBe(true);
   });
   it('keeps a running cooldown ring across a setAbilities with the same ids', () => {
     document.body.innerHTML = '';
     const hud = new Hud(document.body, () => {}, () => {});
-    hud.setAbilities([ab('Strike'), ab('Charge')], [false, false]);
+    hud.setAbilities([ab('Strike'), ab('Charge')], [null, null]);
     const f = (cd1: number) => ({ fps: 60, frameMs: 1, rtt: 0, jitter: 0, interp: 0, snapBytes: 0, correction: 0, srvMs: 0, cd1, cd2: 0, ents: 0, darkvision: 0, wolf: null }) as unknown as Parameters<Hud['frame']>[0];
     const p = () => (document.querySelector('.slot') as HTMLElement).style.getPropertyValue('--p');
     hud.frame(f(10));
     hud.frame(f(5));
     expect(p()).toBe('50%');
-    hud.setAbilities([ab('Strike'), ab('Charge')], [false, false]);
+    hud.setAbilities([ab('Strike'), ab('Charge')], [null, null]);
     hud.frame(f(5));
     expect(p()).toBe('50%');
   });
