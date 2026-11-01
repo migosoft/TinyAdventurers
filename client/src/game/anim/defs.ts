@@ -50,8 +50,10 @@ export interface FigureDef {
   lunge?: number;
   /** The alpha pulses (the Ghost): `entityAlpha` swaps the incorporeal alpha for `ghostPulse`, and blinks it in the ambush wind-up. */
   pulse?: boolean;
-  /** A dark haze lingers around it and trails when it moves (the Shade, `shadeHaze.ts`). */
-  haze?: boolean;
+  /** A veil of black strands wraps it and streams behind when it moves (the Shade, `shadeHaze.ts`). */
+  veil?: boolean;
+  /** Its alpha while incorporeal, instead of `INCORPOREAL_ALPHA` (the Shade is a little more solid). */
+  incorporealAlpha?: number;
   /** In the ambush wind-up it is drawn as a flat dark silhouette whose alpha rises (the Shade). */
   silhouette?: boolean;
   /** Hand height above the feet (px, unscaled). */
@@ -144,8 +146,8 @@ export const FIGURES: Record<number, FigureDef> = {
     base: 0x7a1010,
     baseR: 13,
   },
-  [KIND.Ghost]: { ...mob('ghost'), swing: GHOST_TOUCH, lunge: 3, pulse: true, handY: 10, attack: 'melee', base: 0xb8e0ff, baseR: 6, label: 'Ghost' },
-  [KIND.Shade]: { ...mob('shade'), swing: SHADE_TOUCH, lunge: 3, haze: true, silhouette: true, handY: 10, attack: 'melee', base: 0x2a2433, baseR: 6, label: 'Shade' },
+  [KIND.Ghost]: { ...mob('ghost'), swing: GHOST_TOUCH, lunge: 3, pulse: true, handY: 6, attack: 'melee', base: 0xb8e0ff, baseR: 6, label: 'Ghost' },
+  [KIND.Shade]: { ...mob('shade'), swing: SHADE_TOUCH, lunge: 3, veil: true, incorporealAlpha: 0.75, silhouette: true, handY: 6, attack: 'melee', base: 0x2a2433, baseR: 6, label: 'Shade' },
   [KIND.Lich]: { ...mob('lich'), weapon: 'weapon_lich_staff', mount: 'staff', weaponScale: 1.3, handX: 7, handY: 11, attack: 'caster', base: GLOOM.light, baseR: 7, slam: { r: CONST.LICH_NOVA_RADIUS, anim: ANIM.Slam, t: CONST.LICH_NOVA_WINDUP, color: GLOOM.light, gloom: true } },
   [KIND.Dragon]: {
     idle: dragonFrames.idle.prefix,

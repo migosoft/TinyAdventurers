@@ -43,10 +43,10 @@ export interface GhostLook {
   ambushT: number | null;
 }
 
-export function entityAlpha(flags: number, effects: number, isParty: boolean, ghost?: GhostLook): number {
+export function entityAlpha(flags: number, effects: number, isParty: boolean, ghost?: GhostLook, incorporealAlpha = INCORPOREAL_ALPHA): number {
   if (ghost) return ghostAlpha(ghost.t, ghost.phase, ghost.ambushT);
   if (isParty && has(effects, EFFECT.Invisible)) return INVISIBLE_PARTY_ALPHA;
-  if ((flags & FLAG.INCORPOREAL) !== 0) return INCORPOREAL_ALPHA;
+  if ((flags & FLAG.INCORPOREAL) !== 0) return incorporealAlpha;
   return 1;
 }
 

@@ -1,5 +1,5 @@
-// The Shade's looks that are not a sprite (#170): a lingering dark haze that trails it, the flat silhouette
-// that warns of an ambush, and the cloud it dies in. The maths is pure (tested); `ShadeHaze` only draws it.
+// The Shade's looks that are not a sprite (#170, #200): a veil of black strands that wraps it and streams behind, the flat silhouette
+// that warns of an ambush, and the veil drifting apart when it dies. The maths is pure (tested); `ShadeVeil` only draws it.
 import type Phaser from 'phaser';
 import { CONST } from '../generated/defs';
 
@@ -16,117 +16,284 @@ export function silhouetteAlpha(t: number): number {
   return SILHOUETTE_ALPHA_FROM + (SILHOUETTE_ALPHA_TO - SILHOUETTE_ALPHA_FROM) * k;
 }
 
-/** Haze and cloud colour: dark grey with a hint of violet, light enough to read on a dark floor. */
-export const HAZE_COLOR = 0x2a2433;
-const HAZE_MIN = 10;
-const HAZE_MAX = 14;
-/** The haze circles within this many px of the Shade. */
-const ORBIT_MIN = 3;
-const ORBIT_MAX = 8;
-/** Seconds a particle takes to ease most of the way (1/e) toward its spot beside the Shade. */
-const TAU_MIN = 0.15;
-const TAU_MAX = 0.35;
-/** Squash of the orbit: a ring seen from a little above. */
-const ORBIT_FLAT = 0.75;
+/** The veil's colour: pure darkness. */
+export const VEIL_COLOR = 0x000000;
+/** Strand px per segment: short while the Shade stands (a cloud), long while it moves (streaming). */
+const SEG_IDLE = 1.6;
+const SEG_MOVE = 3;
+/** Speed (px/s) at which the veil fully streams behind, and how fast (s) it changes between cloud and stream. */
+const STREAM_SPEED = 25;
+const STREAM_TAU = 0.25;
+/** How far a segment may stretch past its length. */
+const MAX_STRETCH = 1.3;
 
-export interface HazePoint {
-  x: number;
-  y: number;
-  alpha: number;
-  /** Display scale of the soft blob. */
-  size: number;
+/**
+ * One strand of the veil, facing right (mirrored when the Shade faces left): its root on the body (px from the feet),
+ * the way it hangs when the Shade stands (`idle`, out from the body, so together they make a cloud around it) and
+ * when it moves (`move`, behind it), how many segments, and whether it is drawn in front of the figure (wrapping it).
+ */
+interface StrandDef { root: [number, number]; idle: [number, number]; move: [number, number]; segs: number; front: boolean }
+
+/** A strand rooted inside the body toward `deg` (0 = front, 90 = down), so it grows out of it; it puffs straight out when idle. */
+const around = (deg: number, move: [number, number], segs = 4, front = false): StrandDef => {
+  const a = (deg * Math.PI) / 180;
+  return { root: [Math.round(Math.cos(a) * 2.5), Math.round(-6 + Math.sin(a) * 3.5)], idle: [Math.cos(a), Math.sin(a) * 0.8], move, segs, front };
+};
+
+// The back strands go round the body in order (the cloth fills between neighbours, closing the ring), so keep them so.
+const STRANDS: StrandDef[] = [
+  around(-90, [-1, -0.3], 5), // top
+  around(-140, [-1, -0.1], 6), // back of the head
+  around(180, [-1, 0.15], 6), // back
+  around(140, [-1, 0.4], 5), // back of the hem
+  around(90, [-1, 0.7], 4), // under it
+  around(40, [-0.6, 0.8], 3), // front of the hem
+  around(0, [-0.3, 0.5], 3), // front
+  around(-40, [-0.5, -0.4], 4), // front of the head
+  // Wrapping across the lower body and the hem (below the eyes, so they keep glowing).
+  around(120, [-1, 0.2], 4, true),
+  around(60, [-0.8, 0.5], 3, true),
+];
+
+export interface VeilStrand {
+  /** Points from the root (on the body) to the tip, in world px. */
+  pts: { x: number; y: number }[];
+  front: boolean;
 }
 
-interface Mote extends HazePoint {
-  angle: number;
-  /** rad/s, either way round. */
-  spin: number;
-  radius: number;
-  tau: number;
-}
+interface StrandState extends VeilStrand { def: StrandDef; phase: number }
 
 type Rng = () => number;
 
-/** The haze's state: 10 to 14 motes circling the Shade, each easing toward it at its own rate so a move leaves a short trail. */
-export class HazeCloud {
-  private motes: Mote[] = [];
+/**
+ * The veil's state: strands rooted round the Shade's body. Standing, they puff out round it like a cloud; moving, they
+ * turn to stream behind. Each point eases toward where it would hang off the one before it, slower toward the tip, so
+ * a move (or the attack dash) drags them along; a slow wave runs down each one.
+ */
+export class VeilStrands {
+  private strands: StrandState[] = [];
+  private t = 0;
+  private last: { x: number; y: number } | null = null;
+  /** 0 standing (cloud) to 1 moving (streaming), eased. */
+  private stream = 0;
 
   constructor(private rnd: Rng = Math.random) {}
 
-  /** Where the motes are now; empty while there is nothing to follow. */
-  get points(): readonly HazePoint[] {
-    return this.motes;
+  get lines(): readonly VeilStrand[] {
+    return this.strands;
   }
 
-  /** Moves the haze `dt` seconds on. A null target (invisible, culled) clears it, so none is left behind. */
-  step(target: { x: number; y: number } | null, dt: number): void {
-    if (!target) {
-      this.motes = [];
+  /** Moves the veil `dt` seconds on. `feet` is the Shade's body at its feet; null (dead, invisible) clears it. */
+  step(feet: { x: number; y: number } | null, face: 1 | -1, dt: number): void {
+    if (!feet) {
+      this.strands = [];
+      this.last = null;
+      this.stream = 0;
       return;
     }
-    const r = this.rnd;
-    if (this.motes.length === 0) {
-      const n = HAZE_MIN + Math.floor(r() * (HAZE_MAX - HAZE_MIN + 1));
-      for (let i = 0; i < n; i++) {
-        this.motes.push({
-          x: target.x,
-          y: target.y,
-          alpha: 0.35 + r() * 0.15,
-          size: 1.5 + r() * 0.9,
-          angle: r() * Math.PI * 2,
-          spin: (0.6 + r() * 1.0) * (r() < 0.5 ? -1 : 1),
-          radius: ORBIT_MIN + r() * (ORBIT_MAX - ORBIT_MIN),
-          tau: TAU_MIN + r() * (TAU_MAX - TAU_MIN),
-        });
+    this.t += dt;
+    const speed = this.last && dt > 0 ? Math.hypot(feet.x - this.last.x, feet.y - this.last.y) / dt : 0;
+    this.last = { ...feet };
+    this.stream += (Math.min(speed / STREAM_SPEED, 1) - this.stream) * (1 - Math.exp(-dt / STREAM_TAU));
+    const m = this.stream;
+    const seg = SEG_IDLE + (SEG_MOVE - SEG_IDLE) * m;
+    if (this.strands.length === 0)
+      this.strands = STRANDS.map((def) => {
+        const root = { x: feet.x + def.root[0] * face, y: feet.y + def.root[1] };
+        const [dx, dy] = [def.idle[0] * face, def.idle[1]];
+        const pts = Array.from({ length: def.segs + 1 }, (_, i) => ({ x: root.x + dx * seg * i, y: root.y + dy * seg * i }));
+        return { def, pts, front: def.front, phase: this.rnd() * Math.PI * 2 };
+      });
+    for (const s of this.strands) {
+      const { def, pts } = s;
+      let [dx, dy] = [def.idle[0] + (def.move[0] - def.idle[0]) * m, def.idle[1] + (def.move[1] - def.idle[1]) * m];
+      const len = Math.hypot(dx, dy) || 1;
+      [dx, dy] = [(dx * face) / len, dy / len];
+      pts[0] = { x: feet.x + def.root[0] * face, y: feet.y + def.root[1] };
+      for (let i = 1; i < pts.length; i++) {
+        // Standing, the wave billows (slower, wider); moving, it ripples.
+        const wave = Math.sin(this.t * (1.6 + 0.8 * m) + s.phase - i * 0.9) * (0.7 - 0.2 * m) * i;
+        const gx = pts[i - 1].x + dx * seg - dy * wave;
+        const gy = pts[i - 1].y + dy * seg + dx * wave;
+        const k = 1 - Math.exp(-dt / (0.02 + 0.012 * i));
+        let { x, y } = pts[i];
+        x += (gx - x) * k;
+        y += (gy - y) * k;
+        // Never stretched past 1.3 times its length: a fast move drags the strand along instead of thinning it out.
+        const ox = x - pts[i - 1].x;
+        const oy = y - pts[i - 1].y;
+        const d = Math.hypot(ox, oy);
+        const max = seg * MAX_STRETCH;
+        if (d > max) [x, y] = [pts[i - 1].x + (ox / d) * max, pts[i - 1].y + (oy / d) * max];
+        pts[i] = { x, y };
       }
     }
-    for (const m of this.motes) {
-      m.angle += m.spin * dt;
-      const gx = target.x + Math.cos(m.angle) * m.radius;
-      const gy = target.y + Math.sin(m.angle) * m.radius * ORBIT_FLAT;
-      const k = 1 - Math.exp(-dt / m.tau);
-      m.x += (gx - m.x) * k;
-      m.y += (gy - m.y) * k;
+  }
+}
+
+/** A strand pixel's alpha `f` of the way from root to tip: solid, then two see-through steps; 0 where the dither leaves a gap. */
+export function veilAlpha(f: number, x: number, y: number): number {
+  if (f < 0.45) return 1;
+  if (f < 0.75) return 0.6;
+  return (x + y) % 2 === 0 ? 0.3 : 0;
+}
+
+/** The cloth between two back strands: dark at the body, thinning out to a dithered edge. */
+export function sheetAlpha(f: number, x: number, y: number): number {
+  if (f < 0.4) return 0.55;
+  if (f < 0.7) return 0.35;
+  return (x + y) % 2 === 0 ? 0.2 : 0;
+}
+
+type Pt = { x: number; y: number };
+
+/** Every whole pixel of a strand, root to tip, with how far along it lies (0 to 1). About 3 px wide at the root, 1 at the tip. */
+export function strandPixels(pts: readonly Pt[]): { x: number; y: number; f: number }[] {
+  const out: { x: number; y: number; f: number }[] = [];
+  const seen = new Set<string>();
+  const add = (x: number, y: number, f: number) => {
+    const key = `${x},${y}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ x, y, f });
+  };
+  const n = pts.length - 1;
+  for (let i = 0; i < n; i++) {
+    const [a, b] = [pts[i], pts[i + 1]];
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y))));
+    for (let k = 0; k < steps; k++) {
+      const u = k / steps;
+      const f = (i + u) / n;
+      const x = Math.round(a.x + (b.x - a.x) * u);
+      const y = Math.round(a.y + (b.y - a.y) * u);
+      add(x, y, f);
+      if (f < 0.6) add(x, y + 1, f);
+      if (f < 0.3) add(x, y - 1, f);
     }
   }
+  const tip = pts[n];
+  add(Math.round(tip.x), Math.round(tip.y), 1);
+  return out;
 }
 
-const CLOUD_COUNT = 20;
-const CLOUD_SPREAD = 18;
-const CLOUD_LIFE = 0.8;
-
-/** The dark cloud a Shade dies in: about 20 particles (velocities in px/s) that spread to at most 18 px and fade over 0.8 s. */
-export function deathCloud(rnd: Rng = Math.random): { life: number; particles: { vx: number; vy: number; scale: number }[] } {
-  const particles = [];
-  for (let i = 0; i < CLOUD_COUNT; i++) {
-    const a = rnd() * Math.PI * 2;
-    const speed = (CLOUD_SPREAD / CLOUD_LIFE) * (0.3 + rnd() * 0.7);
-    particles.push({ vx: Math.cos(a) * speed, vy: Math.sin(a) * speed * ORBIT_FLAT, scale: 1.6 + rnd() * 0.9 });
+/** Is (x, y) inside the polygon (even-odd)? */
+function inside(poly: readonly Pt[], x: number, y: number): boolean {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [a, b] = [poly[i], poly[j]];
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) c = !c;
   }
-  return { life: CLOUD_LIFE, particles };
+  return c;
 }
 
-/** Draws a `HazeCloud` as soft dark blobs in the world, just under the figure; they stay where the Shade left them while they ease. */
-export class ShadeHaze {
-  private cloud = new HazeCloud();
-  private imgs: Phaser.GameObjects.Image[] = [];
+/**
+ * The veil as whole pixels and their alpha, one map per layer (`x,y` keys; a pixel covered twice keeps the darker):
+ * behind the figure a solid core between the back strands' roots, the cloth between neighbouring back strands (a closed ring)
+ * and the strands over it; in front the wrapping strands.
+ */
+export function veilPixels(lines: readonly VeilStrand[]): { back: Map<string, number>; front: Map<string, number> } {
+  const back = new Map<string, number>();
+  const front = new Map<string, number>();
+  const put = (m: Map<string, number>, x: number, y: number, a: number) => {
+    if (a <= 0) return;
+    const key = `${x},${y}`;
+    if ((m.get(key) ?? 0) < a) m.set(key, a);
+  };
+  const backs = lines.filter((l) => !l.front);
+  // The core between the roots: solid, so there is no hole where the body is (it shows when the body goes at death).
+  const core = backs.map((l) => l.pts[0]);
+  if (core.length > 2) {
+    const xs = core.map((p) => p.x);
+    const ys = core.map((p) => p.y);
+    for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
+      for (let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++) if (inside(core, x + 0.5, y + 0.5)) put(back, x, y, 1);
+  }
+  for (let s = 0; s < backs.length; s++) {
+    const [A, B] = [backs[s].pts, backs[(s + 1) % backs.length].pts];
+    const n = Math.min(A.length, B.length) - 1;
+    for (let i = 0; i < n; i++) {
+      const quad = [A[i], A[i + 1], B[i + 1], B[i]];
+      const xs = quad.map((p) => p.x);
+      const ys = quad.map((p) => p.y);
+      for (let y = Math.floor(Math.min(...ys)); y <= Math.ceil(Math.max(...ys)); y++)
+        for (let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++)
+          if (inside(quad, x + 0.5, y + 0.5)) put(back, x, y, sheetAlpha((i + 0.5) / n, x, y));
+    }
+  }
+  for (const l of lines) for (const p of strandPixels(l.pts)) put(l.front ? front : back, p.x, p.y, veilAlpha(p.f, p.x, p.y));
+  return { back, front };
+}
 
-  constructor(private scene: Phaser.Scene) {}
+/** Seconds the veil takes to drift apart after the Shade dies, and how much it spreads (1 = twice its size). */
+export const VEIL_DEATH_LIFE = 1;
+const VEIL_DEATH_SPREAD = 0.7;
+/** Px it rises while it drifts apart. */
+const VEIL_DEATH_RISE = 4;
 
-  /** Follows `target` (the Shade's centre), or clears the haze when it is null. */
-  update(target: { x: number; y: number } | null, depth: number, dt: number): void {
-    this.cloud.step(target, dt);
-    const pts = this.cloud.points;
-    while (this.imgs.length < pts.length) this.imgs.push(this.scene.add.image(0, 0, 'glow').setTint(HAZE_COLOR));
-    this.imgs.forEach((img, i) => {
-      const p = pts[i];
-      if (!p) return img.setVisible(false);
-      img.setVisible(true).setPosition(p.x, p.y).setAlpha(p.alpha).setScale(p.size).setDepth(depth);
-    });
+/**
+ * The veil `k` (0 to 1) of the way through the Shade's death: nothing holds it together any more, so every point
+ * moves out from `centre` (fast at first, then slowing) and rises a little, while the whole veil fades to nothing.
+ */
+export function dissolveVeil(lines: readonly VeilStrand[], centre: Pt, k: number): { lines: VeilStrand[]; alpha: number } {
+  const t = Math.min(Math.max(k, 0), 1);
+  const ease = 1 - (1 - t) * (1 - t);
+  const grow = 1 + VEIL_DEATH_SPREAD * ease;
+  const rise = VEIL_DEATH_RISE * ease;
+  return {
+    lines: lines.map((l) => ({ front: l.front, pts: l.pts.map((p) => ({ x: centre.x + (p.x - centre.x) * grow, y: centre.y + (p.y - centre.y) * grow - rise })) })),
+    alpha: Math.pow(1 - t, 1.5),
+  };
+}
+
+/** A veil at rest round `feet` (a cloud), for a Shade that died where its own veil was not drawn. */
+export function restingVeil(feet: Pt, face: 1 | -1, rnd: Rng = Math.random): VeilStrand[] {
+  const v = new VeilStrands(rnd);
+  for (let i = 0; i < 60; i++) v.step(feet, face, 1 / 30);
+  return [...v.lines];
+}
+
+/** Front strands are a little fainter where they wrap across the (black) body. */
+const FRONT_ALPHA = 0.8;
+
+/** Draws the veil's pixels at `alpha` into the graphics behind the figure and the one in front of it (may be the same). */
+export function drawVeil(lines: readonly VeilStrand[], back: Phaser.GameObjects.Graphics, front: Phaser.GameObjects.Graphics, alpha: number): void {
+  const px = veilPixels(lines);
+  for (const [g, m, k] of [[back, px.back, alpha], [front, px.front, alpha * FRONT_ALPHA]] as const)
+    for (const [key, a] of m) {
+      const [x, y] = key.split(',').map(Number);
+      g.fillStyle(VEIL_COLOR, a * k).fillRect(x, y, 1, 1);
+    }
+}
+
+/** Draws the `VeilStrands` as black pixels (`veilPixels`): cloth and back strands just under the figure, the wrapping ones just over it. */
+export class ShadeVeil {
+  private veil = new VeilStrands();
+  /** The veil and the feet it was last drawn round, kept after it is cleared (the Shade's death starts from it). */
+  private last: { lines: readonly VeilStrand[]; feet: Pt } | null = null;
+  private back: Phaser.GameObjects.Graphics;
+  private front: Phaser.GameObjects.Graphics;
+
+  constructor(scene: Phaser.Scene) {
+    this.back = scene.add.graphics();
+    this.front = scene.add.graphics();
+  }
+
+  /** Follows the Shade's `feet`, or clears the veil when null. `alpha` scales it (fading in, the ambush warning). */
+  update(feet: { x: number; y: number } | null, face: 1 | -1, depth: number, alpha: number, dt: number): void {
+    this.veil.step(feet, face, dt);
+    if (feet) this.last = { lines: this.veil.lines, feet: { ...feet } };
+    this.back.clear().setDepth(depth - 0.5);
+    this.front.clear().setDepth(depth + 0.5);
+    drawVeil(this.veil.lines, this.back, this.front, alpha);
+  }
+
+  /** The veil as it was last drawn, and round which feet; null if it never was. */
+  remains(): { lines: readonly VeilStrand[]; feet: Pt } | null {
+    return this.last;
   }
 
   destroy(): void {
-    for (const img of this.imgs) img.destroy();
-    this.imgs = [];
+    this.back.destroy();
+    this.front.destroy();
   }
 }

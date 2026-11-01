@@ -9,6 +9,7 @@ describe('entityAlpha', () => {
   });
   it('draws an incorporeal figure semi-transparent', () => {
     expect(entityAlpha(FLAG.INCORPOREAL, 0, false)).toBe(INCORPOREAL_ALPHA);
+    expect(entityAlpha(FLAG.INCORPOREAL, 0, false, undefined, 0.75)).toBe(0.75); // the Shade's own
     expect(INCORPOREAL_ALPHA).toBe(0.6);
   });
   it('draws an invisible party hero fainter still', () => {

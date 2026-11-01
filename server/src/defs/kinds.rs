@@ -141,9 +141,8 @@ impl EntityKind {
             // 43 px frames drawn at 1.2x.
             Dragon => 51.0,
             Demon => 58.0,
-            // The opaque rows of the cut frames (client/scripts/spectre-frames.ts).
-            Ghost => 22.0,
-            Shade => 23.0,
+            // 12 opaque rows plus the 1-px idle bob (client/scripts/spectre-frames.ts).
+            Ghost | Shade => 13.0,
             _ => 0.0,
         }
     }
@@ -217,11 +216,11 @@ pub mod flags {
 mod tests {
     use super::EntityKind;
 
-    /// A shot flies SHOT_HEIGHT up: the floating spectres need their drawn height (the opaque 22 and 23 rows
-    /// of the cut frames) or shots pass over their feet-sized hitbox and miss the body.
+    /// A shot flies SHOT_HEIGHT up: the floating spectres need their drawn height (12 rows plus the bob
+    /// of the 16x16 frames) or shots pass over their feet-sized hitbox and miss the body.
     #[test]
     fn spectres_have_a_body_height() {
-        assert_eq!(EntityKind::Ghost.body_height(), 22.0);
-        assert_eq!(EntityKind::Shade.body_height(), 23.0);
+        assert_eq!(EntityKind::Ghost.body_height(), 13.0);
+        assert_eq!(EntityKind::Shade.body_height(), 13.0);
     }
 }
