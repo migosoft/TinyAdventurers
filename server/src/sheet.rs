@@ -261,7 +261,10 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
                 None => Base::plain(own.damage),
             };
             ResolvedAbility {
-                cooldown: own.cooldown,
+                cooldown: match d.cooldown_by {
+                    Some((attr, pct)) => Scaled { value: own.cooldown, attr, pct, at: own.at }.per(attrs),
+                    None => own.cooldown,
+                },
                 damage: base.amount(),
                 base,
                 range: own.range,
@@ -906,6 +909,31 @@ mod tests {
     use super::*;
     use crate::defs::attributes::{factor, STR_DMG};
     use crate::defs::companions::WOLF_HP;
+
+    #[test]
+    fn vanish_cooldown_shortens_with_cha() {
+        use crate::defs::attributes::{Attributes, CHA_DMG};
+        let vanish = |cha| resolve_ability(&ab::def(AbilityId::Vanish), &Attributes::new(10, 10, 10, 10, 10, cha), &[], Body { radius: 8.0 }).expect("Vanish needs no weapon").cooldown;
+        assert_eq!(vanish(10), 20.0);
+        assert_eq!(vanish(14), 20.0 / (factor(14, CHA_DMG) / factor(10, CHA_DMG)));
+        assert!(vanish(14) < 20.0);
+    }
+
+    #[test]
+    fn abilities_without_cooldown_by_are_unchanged() {
+        use crate::defs::attributes::Attributes;
+        let weapons = |a: &Attributes| -> Vec<ResolvedWeapon> {
+            ItemId::ALL.iter().filter(|&&id| matches!(items::def(id).base, ItemBase::Melee(..) | ItemBase::Ranged(..))).map(|&id| arm(id, a, &[], None, 0)).collect()
+        };
+        let (low, high) = (Attributes::new(10, 10, 10, 10, 10, 10), Attributes::new(10, 10, 10, 10, 10, 20));
+        let body = Body { radius: 8.0 };
+        for &id in AbilityId::ALL.iter().filter(|&&id| ab::def(id).cooldown_by.is_none()) {
+            let d = ab::def(id);
+            let (a, b) = (resolve_ability(&d, &low, &weapons(&low), body), resolve_ability(&d, &high, &weapons(&high), body));
+            assert_eq!(a.map(|r| r.cooldown), b.map(|r| r.cooldown), "{id:?}");
+        }
+        assert!(ab::def(AbilityId::Vanish).cooldown_by.is_some());
+    }
 
     #[test]
     fn hero_reach_comes_from_the_weapon() {

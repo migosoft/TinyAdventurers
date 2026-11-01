@@ -33,7 +33,7 @@ pub fn default_look(id: AbilityId) -> Look {
         Purify => look(13, Some(LightKind::Holy), None),
         Smite => look(0, Some(LightKind::Holy), None),
         MagicMissile | Fireball | Strike | Charge | Shoot | SummonWolf | FrostShard | ChainSpark | Judgement | Hurl | Volley | Whirl | FlankingThrust | PoisonCoat | Consecrate
-        | Entangle | Bite | ShadowBolt | FireBolt | Pounce | TailWhip | FireBreath | Swoop | GloomBolts | BlindingCurse | SleepMist | StoneGaze | Touch => look(0, None, None),
+        | Entangle | Bite | ShadowBolt | FireBolt | Pounce | TailWhip | FireBreath | Swoop | GloomBolts | BlindingCurse | SleepMist | StoneGaze | Touch | Vanish => look(0, None, None),
     }
 }
 

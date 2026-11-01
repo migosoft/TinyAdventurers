@@ -585,6 +585,14 @@ export const ABILITIES = {
     "shape": "Swing",
     "slot": "Primary"
   },
+  "Vanish": {
+    "classes": [],
+    "hero": false,
+    "name": "Vanish",
+    "ranged": false,
+    "shape": "Buff",
+    "slot": "Secondary"
+  },
   "Volley": {
     "classes": [
       "ElvenRanger"

@@ -347,6 +347,8 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                         let near = run.foes_in(pos, alt.radius, None).len();
                         near >= 2 || near == 1 && run.monsters[mi].ai.cd > 0.0
                     }
+                    // Vanish: the ambush module uses it, not the chase.
+                    Shape::Buff => false,
                     shape => unreachable!("{alt_id:?} is a {shape:?}: an alt ability swings, shoots or slams"),
                 };
                 if usable && rest && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {

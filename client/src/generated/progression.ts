@@ -2386,6 +2386,13 @@ export const ABILITY_INFO = {
     "tint": "Physical",
     "uses": "Melee"
   },
+  "Vanish": {
+    "category": "Innate",
+    "req": [],
+    "text": "Fades from sight until it strikes.",
+    "tint": null,
+    "uses": "Nothing"
+  },
   "Volley": {
     "category": "WeaponAttack",
     "req": [

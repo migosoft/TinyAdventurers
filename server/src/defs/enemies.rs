@@ -395,7 +395,8 @@ mod tests {
             assert!(d.abilities.len() <= 2 && !d.abilities.is_empty(), "{t:?}");
             // The AI (`run/ai.rs`) uses an alt ability only if it swings, shoots or slams.
             if let Some(&alt) = d.abilities.get(1) {
-                assert!(matches!(crate::defs::abilities::def(alt).shape, crate::defs::abilities::Shape::Swing | crate::defs::abilities::Shape::Projectile | crate::defs::abilities::Shape::Ring), "{t:?}: the alt {alt:?} has a shape the AI does not handle");
+                // Vanish (a buff) is the ambush module's, not the chase's.
+                assert!(matches!(crate::defs::abilities::def(alt).shape, crate::defs::abilities::Shape::Swing | crate::defs::abilities::Shape::Projectile | crate::defs::abilities::Shape::Ring) || alt == AbilityId::Vanish, "{t:?}: the alt {alt:?} has a shape the AI does not handle");
             }
         }
     }
