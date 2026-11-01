@@ -20,6 +20,11 @@ export function skimsTerrain(flags: number, dashing: boolean): boolean {
   return dashing || (flags & FLAG.INCORPOREAL) !== 0;
 }
 
+/** Does this figure wade, splash and spray over water and lava? Incorporeal figures do not. */
+export function splashes(flags: number): boolean {
+  return (flags & FLAG.INCORPOREAL) === 0;
+}
+
 /** Fade-in factor 0..1 given the seconds left of the fade. */
 export function appearFactor(left: number, total: number): number {
   if (total <= 0 || left <= 0) return 1;
