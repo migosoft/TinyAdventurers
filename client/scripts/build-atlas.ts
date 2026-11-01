@@ -5,7 +5,7 @@
 // the generated terrain tiles (water, lava, chasm; see terrain-tiles.ts), plus
 // the dragon frames built from its base sprite (see dragon-frames.ts), plus
 // the lich's own frames (see lich-frames.ts), plus the demon's frames
-// (see demon-frames.ts), plus the barrels (see barrel-frames.ts), plus the torch (see torch-frames.ts), plus the dire wolf (see wolf-frames.ts), plus the Ghost and the Shade (see spectre-frames.ts), plus the explosions (see explosion-frames.ts).
+// (see demon-frames.ts), plus the barrels (see barrel-frames.ts), plus the torch (see torch-frames.ts), plus the dire wolf (see wolf-frames.ts), plus the Ghost and the Shade (see spectre-frames.ts), plus the explosions (see explosion-frames.ts), plus the cove's tree and plants (see cove-frames.ts).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +19,7 @@ import { buildTorches } from './torch-frames';
 import { buildWolf } from './wolf-frames';
 import { buildSpectres } from './spectre-frames';
 import { buildExplosions } from './explosion-frames';
+import { buildCove } from './cove-frames';
 import { DRAGON_SHEETS, type DragonSheet } from '../src/game/anim/dragonRig';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -80,7 +81,9 @@ const spectres = buildSpectres(src.w);
 const spectreY = wolfY + wolf.img.h;
 const explosions = buildExplosions(path.join(root, 'assets-src', 'explosion'), src.w);
 const explosionY = spectreY + spectres.img.h;
-const outH = explosionY + explosions.img.h;
+const cove = buildCove(src.w);
+const coveY = explosionY + explosions.img.h;
+const outH = coveY + cove.img.h;
 const out: Image = { w: src.w, h: outH, data: new Uint8Array(src.w * outH * 4) };
 out.data.set(src.data);
 RECOLORS.forEach((r, row) => {
@@ -155,7 +158,13 @@ for (let y = 0; y < explosions.img.h; y++)
 for (const [name, f] of Object.entries(explosions.frames))
   frames[name] = { frame: { x: f.x, y: explosionY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
 
+// Cove tree and plants below the explosions.
+for (let y = 0; y < cove.img.h; y++)
+  out.data.set(cove.img.data.subarray(y * cove.img.w * 4, (y + 1) * cove.img.w * 4), ((coveY + y) * out.w) * 4);
+for (const [name, f] of Object.entries(cove.frames))
+  frames[name] = { frame: { x: f.x, y: coveY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
+
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'atlas.png'), encodePng(out));
 fs.writeFileSync(path.join(outDir, 'atlas.json'), JSON.stringify({ frames, meta: { image: 'atlas.png', scale: 1 } }));
-console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon, ${Object.keys(lich.frames).length} lich, ${Object.keys(demon.frames).length} demon, ${Object.keys(barrels.frames).length} barrel, ${Object.keys(torches.frames).length} torch, ${Object.keys(wolf.frames).length} wolf, ${Object.keys(spectres.frames).length} ghost and shade) -> public/assets/atlas.{png,json}`);
+console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon, ${Object.keys(lich.frames).length} lich, ${Object.keys(demon.frames).length} demon, ${Object.keys(barrels.frames).length} barrel, ${Object.keys(torches.frames).length} torch, ${Object.keys(wolf.frames).length} wolf, ${Object.keys(spectres.frames).length} ghost and shade, ${Object.keys(cove.frames).length} cove) -> public/assets/atlas.{png,json}`);
