@@ -14,6 +14,7 @@ use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
 use crate::protocol::Ev;
 use crate::sheet::ResolvedAbility;
+use crate::defs::effects::EffectKind;
 use crate::defs::races::Sight;
 use rand::Rng;
 use std::cmp::Reverse;
@@ -24,7 +25,7 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
     run.players
         .iter()
         .enumerate()
-        .filter(|(_, p)| p.alive)
+        .filter(|(_, p)| p.alive && !p.effects.has(EffectKind::Invisible))
         .filter(|(_, p)| super::perception::sees(run, sight, from, p.pos()))
         .map(|(i, p)| (i, p.pos().dist(from)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -33,8 +34,8 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
 
 /// Nearest living hero or ally (not sinking) the monster can see right now; a hero wins a tie.
 pub fn find_visible_foe(run: &Run, from: Vec2, sight: Sight) -> Option<Creature> {
-    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive).map(Creature::Player);
-    let allies = (0..run.monsters.len()).filter(|&i| run.monsters[i].is_ally() && run.monsters[i].alive && run.monsters[i].sinking.is_none()).map(Creature::Monster);
+    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive && !run.players[i].effects.has(EffectKind::Invisible)).map(Creature::Player);
+    let allies = (0..run.monsters.len()).filter(|&i| run.monsters[i].is_ally() && run.monsters[i].alive && run.monsters[i].sinking.is_none() && !run.monsters[i].effects.has(EffectKind::Invisible)).map(Creature::Monster);
     heroes
         .chain(allies)
         .map(|c| (c, run.creature_pos(c)))
@@ -130,7 +131,8 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     }
     let step = (speed * dt).min(dist);
     let v = d.norm() * step;
-    let solids = run.solids(None);
+    // A phantom drifts through solid objects too.
+    let solids = if m.mover == Mover::Incorporeal { Vec::new() } else { run.solids(None) };
     let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, m.mover, &solids);
     let m = &mut run.monsters[mi];
     m.pos = Vec2::new(x, y);
@@ -155,12 +157,12 @@ pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) ->
     let wide = radius > TILE / 2.0;
     let side = (goal - pos).norm().perp() * radius;
     let map = &run.layout.map;
-    if walk_line(map, pos, goal, mover) && object_free_line(run, pos, goal, radius) && (!wide || terrain_line(map, pos + side, goal + side, mover) && terrain_line(map, pos - side, goal - side, mover)) {
+    if walk_line(map, pos, goal, mover) && (mover == Mover::Incorporeal || object_free_line(run, pos, goal, radius)) && (!wide || terrain_line(map, pos + side, goal + side, mover) && terrain_line(map, pos - side, goal - side, mover)) {
         run.monsters[mi].ai.path.clear();
         return move_toward(run, mi, goal, speed, dt);
     }
     if need_repath {
-        let blocked = run.object_tiles();
+        let blocked = if mover == Mover::Incorporeal { HashSet::new() } else { run.object_tiles() };
         let path = astar_clear(&run.layout.map, pos, goal, 2500, mover, wide, &blocked).unwrap_or_default();
         let m = &mut run.monsters[mi];
         m.ai.path = path;
@@ -192,7 +194,44 @@ fn object_free_line(run: &Run, a: Vec2, b: Vec2, radius: f64) -> bool {
     })
 }
 
+/// May this monster rest here (idle, wait, attack)? Ordinary monsters always may; a phantom may not
+/// inside a wall, a closed door or a solid object, which it can only pass through.
+fn can_rest(run: &Run, mi: usize, p: Vec2) -> bool {
+    let m = &run.monsters[mi];
+    m.mover != Mover::Incorporeal
+        || run.layout.map.can_stop_at(p, m.mover) && !run.objects.iter().any(|o| o.blocks() && (p.x - o.pos.x).abs() < o.radius && (p.y - o.pos.y).abs() < o.radius)
+}
+
+/// A phantom that is somewhere it may not rest walks straight to the nearest spot it may.
+fn leave_wall(run: &mut Run, mi: usize, dt: f64) {
+    let (pos, speed) = (run.monsters[mi].pos, run.monsters[mi].speed);
+    let (tx, ty) = Map::tile_of(pos);
+    let to = (-6..=6)
+        .flat_map(|dy| (-6..=6).map(move |dx| Map::center_of(tx + dx, ty + dy)))
+        .filter(|&c| can_rest(run, mi, c))
+        .min_by(|a, b| a.dist(pos).total_cmp(&b.dist(pos)));
+    if let Some(to) = to {
+        // `move_toward` applies the slow once.
+        move_toward(run, mi, to, speed.max(20.0), dt);
+        set_anim(run, mi, Anim::Move);
+    }
+}
+
+/// One AI tick. A phantom never starts an attack or a wind-up inside a wall or a solid object, and
+/// when its tick leaves it standing in one, it moves out to the nearest open spot.
 pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
+    let stuck = !can_rest(run, mi, run.monsters[mi].pos);
+    if stuck {
+        run.monsters[mi].ai.windup = None;
+    }
+    let before = run.monsters[mi].pos;
+    tick_monster_inner(run, mi, dt);
+    if stuck && run.monsters[mi].alive && run.monsters[mi].pos.dist2(before) < 1e-6 && run.monsters[mi].slam.is_none() {
+        leave_wall(run, mi, dt);
+    }
+}
+
+fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     let Some(etype) = run.monsters[mi].etype else { return };
     if run.monsters[mi].dormant || run.monsters[mi].hiding {
         return;
@@ -284,6 +323,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
             let foe_radius = run.creature_radius(foe);
             let d = pos.dist(ppos);
             let aim = pos.angle_to(ppos);
+            let rest = can_rest(run, mi, pos);
             run.monsters[mi].aim = aim;
             // The reach of an ability: a swing starts a little inside its real reach, a bolt from its
             // range, a slam from its radius. Movement follows the main ability.
@@ -309,19 +349,19 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                     }
                     shape => unreachable!("{alt_id:?} is a {shape:?}: an alt ability swings, shoots or slams"),
                 };
-                if usable && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {
+                if usable && rest && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {
                     if ab::def(alt_id).shape == Shape::Ring {
                         // The slam's own wind-up runs in `monster_use`.
                         set_anim(run, mi, Anim::Slam);
                         perform_attack(run, mi, foe, true, None);
                     } else {
-                        run.monsters[mi].ai.windup = Some(Windup { t: alt.windup, aim, alt: true, at: None });
+                        run.start_windup(mi, Windup { t: alt.windup, aim, alt: true, at: None });
                         set_anim(run, mi, Anim::Windup);
                     }
                     return;
                 }
             }
-            if d <= range && run.monsters[mi].ai.cd <= 0.0 && run.monsters[mi].cds.ready(main.id) {
+            if d <= range && rest && run.monsters[mi].ai.cd <= 0.0 && run.monsters[mi].cds.ready(main.id) {
                 let at = match ab::def(main.id).shape {
                     Shape::Projectile if !run.monsters[mi].is_boss => barrel_near(run, mi, ppos, main.range).map(Target::Object),
                     _ => None,
@@ -330,7 +370,7 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                     Some(Target::Object(id)) => run.objects.iter().find(|o| o.id == id).map_or(aim, |o| pos.angle_to(o.pos)),
                     _ => aim,
                 };
-                run.monsters[mi].ai.windup = Some(Windup { t: main.windup, aim, alt: false, at });
+                run.start_windup(mi, Windup { t: main.windup, aim, alt: false, at });
                 set_anim(run, mi, Anim::Windup);
                 return;
             }
@@ -397,6 +437,9 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
                 let ai = &mut run.monsters[mi].ai;
                 ai.wander_t = 3.0 + (off.x.abs() / 8.0);
                 ai.wander_to = Some(home + off);
+                if !can_rest(run, mi, home + off) {
+                    run.monsters[mi].ai.wander_to = None; // a phantom does not wander into a wall
+                }
             }
             if let Some(to) = run.monsters[mi].ai.wander_to {
                 let before = run.monsters[mi].pos;
@@ -982,6 +1025,100 @@ pub(crate) mod tests {
         assert!(p.iter().any(|w| Map::tile_of(*w).1 >= 10));
     }
 
+    /// An orc turned into a phantom: the phasing trait and mover a ghost gets from its race.
+    pub(crate) fn make_phantom(run: &mut Run, mi: usize) {
+        run.monsters[mi].traits.phasing = true;
+        run.monsters[mi].mover = Mover::Incorporeal;
+    }
+
+    #[test]
+    fn phasing_path_goes_straight_through_a_wall() {
+        let mut m = Map::new(12, 7);
+        for y in 1..6 {
+            for x in 1..11 {
+                m.set(x, y, if x == 5 { Tile::Wall } else { Tile::Floor });
+            }
+        }
+        let (from, to) = (Map::center_of(2, 3), Map::center_of(8, 3));
+        assert!(m.blocks(5, 3, Mover::Enemy));
+        let p = astar(&m, from, to, 1000, Mover::Incorporeal).unwrap();
+        assert!(p.iter().all(|w| Map::tile_of(*w).1 == 3), "a straight run: {p:?}");
+        assert_eq!(p.len(), 6);
+    }
+
+    #[test]
+    fn phasing_monster_passes_through_a_barrel() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let p = run.players[0].pos();
+        // The barrel sits right in the orc's way to the hero.
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, p - Vec2::new(120.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        make_phantom(&mut run, mi);
+        let barrel = p - Vec2::new(70.0, 0.0);
+        run.spawn_object(EntityKind::Barrel, barrel, crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
+        let mut passed = false;
+        for _ in 0..600 {
+            tick_monster(&mut run, mi, 1.0 / 60.0);
+            passed |= run.monsters[mi].pos.x > barrel.x + 10.0;
+        }
+        assert!(passed, "x {} barrel {}", run.monsters[mi].pos.x, barrel.x);
+    }
+
+    #[test]
+    fn phasing_monster_never_attacks_from_a_wall() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let ppos = run.players[0].pos();
+        let (tx, ty) = Map::tile_of(ppos);
+        for dy in -2..=2 {
+            run.layout.map.set(tx + 1, ty + dy, Tile::Wall);
+        }
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, Vec2::new((tx + 1) as f64 * TILE + 2.0, ppos.y), None);
+        let mi = run.monster_idx(id).unwrap();
+        make_phantom(&mut run, mi);
+        run.monsters[mi].ai.cd = 0.0;
+        let mut attacked = false;
+        for tick in 0..120 {
+            tick_monster(&mut run, mi, 1.0 / 60.0);
+            let m = &run.monsters[mi];
+            let in_wall = !run.layout.map.can_stop_at(m.pos, m.mover);
+            assert!(!(in_wall && m.ai.windup.is_some()), "tick {tick}: wind-up inside the wall");
+            if tick == 60 {
+                assert!(!in_wall, "out of the wall within a second");
+            }
+            attacked |= m.ai.windup.is_some();
+        }
+        assert!(attacked, "then it attacks");
+    }
+
+    #[test]
+    fn a_slowed_phaser_leaves_a_wall_at_the_slowed_speed_once() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let ppos = run.players[0].pos();
+        let (tx, ty) = Map::tile_of(ppos);
+        for dy in -3..=3 {
+            for dx in 1..=4 {
+                run.layout.map.set(tx + dx, ty + dy, Tile::Wall);
+            }
+        }
+        let at = Vec2::new((tx + 3) as f64 * TILE + 8.0, ppos.y);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        make_phantom(&mut run, mi);
+        run.monsters[mi].effects.add(EffectKind::Slowed, 30.0);
+        let (mul, speed) = (run.monsters[mi].effects.speed_mul(), run.monsters[mi].speed.max(20.0));
+        assert!(mul < 1.0);
+        let before = run.monsters[mi].pos;
+        leave_wall(&mut run, mi, 1.0 / 60.0);
+        let moved = run.monsters[mi].pos.dist(before);
+        assert!((moved - speed * mul / 60.0).abs() < 1e-6, "moved {moved}, want {}", speed * mul / 60.0);
+    }
+
     /// An orc archer 100 px west of the hero, a barrel `barrel_off` from the hero.
     fn archer_and_barrel(barrel_off: Vec2) -> (Run, usize, u32) {
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
@@ -1024,6 +1161,34 @@ pub(crate) mod tests {
         let (mut run, mi, _) = archer_and_barrel(Vec2::new(0.0, 60.0));
         tick_monster(&mut run, mi, 1.0 / 60.0);
         assert_eq!(run.monsters[mi].ai.windup.and_then(|w| w.at), None);
+    }
+
+    #[test]
+    fn monsters_ignore_invisible_heroes() {
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        run.lights.fill();
+        let ppos = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::SkeletonWarrior, ppos + Vec2::new(4.0 * TILE, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert!(run.monsters[mi].ai.target.is_some(), "a hero in clear sight is seen");
+        // Invisible: the chase becomes a search of the last known spot.
+        run.players[0].effects.add(EffectKind::Invisible, 30.0);
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.target, None);
+        assert_eq!(run.monsters[mi].ai.state, AiState::Search);
+        assert_eq!(run.monsters[mi].ai.last_known, ppos);
+        assert_eq!(find_visible_foe(&run, run.monsters[mi].pos, run.monsters[mi].sight_now()), None);
+        // And never targeted afresh while it lasts.
+        run.monsters[mi].ai.state = AiState::Idle;
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert_eq!(run.monsters[mi].ai.target, None);
+        run.players[0].effects.remove(EffectKind::Invisible);
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert!(run.monsters[mi].ai.target.is_some(), "seen again once it ends");
     }
 
     /// Open floor around hero 0 with no lights at all, only the boss left.

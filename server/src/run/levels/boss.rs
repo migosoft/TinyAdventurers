@@ -48,6 +48,9 @@ pub fn spawn(run: &mut Run) {
     run.monsters.push(Monster {
         id,
         res: prof.res,
+        traits: prof.traits,
+        invis_cd: 0.0,
+        races: boss_defs::races(boss_id),
         melee: prof.melee,
         etype: None,
         kind: d.kind,
@@ -75,7 +78,7 @@ pub fn spawn(run: &mut Run) {
         is_boss: true,
         dormant: true,
         hiding: false,
-        mover: if boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
+        mover: if prof.traits.phasing { Mover::Incorporeal } else if boss_id == BossId::Demon { Mover::Demon } else { Mover::Enemy },
         airborne: false,
         knock: Vec2::ZERO,
         sinking: None,

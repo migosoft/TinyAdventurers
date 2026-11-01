@@ -29,6 +29,7 @@ super::enum_list::listed_enum! {
         Fear = 12,
         Warded = 13,
         Coated = 14,
+        Invisible = 15,
     }
 }
 
@@ -127,9 +128,13 @@ pub struct EffectDef {
     pub save: Option<Attr>,
     /// The creature runs away from the effect's source and cannot attack (Fear).
     pub flees: bool,
+    /// Any direct hit or harmful application from outside ends it (Invisible).
+    pub ends_when_hit: bool,
+    /// Starting an attack or ability ends it (Invisible).
+    pub ends_when_acting: bool,
 }
 
-const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, resisted_by: None, replaces: &[], cancels: &[], ends_in_water: false, save: None, flees: false };
+const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, resisted_by: None, replaces: &[], cancels: &[], ends_in_water: false, save: None, flees: false, ends_when_hit: false, ends_when_acting: false };
 
 use DamageType::*;
 use Op::*;
@@ -172,6 +177,7 @@ pub fn def(k: EffectKind) -> EffectDef {
         EffectKind::Fear => EffectDef { save: Some(Attr::Wil), flees: true, ..NONE },
         EffectKind::Warded => EffectDef { positive: true, mods: WARDED_MODS, ..NONE },
         EffectKind::Coated => EffectDef { positive: true, ..NONE },
+        EffectKind::Invisible => EffectDef { positive: true, duration: 30.0, ends_when_hit: true, ends_when_acting: true, ..NONE },
     }
 }
 
@@ -228,6 +234,14 @@ impl EffectResistances {
     }
     pub fn set(&mut self, k: EffectKind, v: f64) {
         self.0[k as usize] = v;
+    }
+    /// Per effect, the value with the larger absolute value (a tie: the positive one); how races combine.
+    pub fn strongest(self, o: EffectResistances) -> Self {
+        let mut r = self.0;
+        for (a, b) in r.iter_mut().zip(o.0) {
+            *a = super::damage::strongest_of(*a, b);
+        }
+        EffectResistances(r)
     }
     pub fn plus(self, o: EffectResistances) -> Self {
         let mut r = self.0;
@@ -316,7 +330,7 @@ mod tests {
         let p = def(EffectKind::Petrified);
         assert!(p.no_move && p.no_act && p.no_turn && !p.wakes_on_use);
         assert!(def(EffectKind::Accelerated).positive);
-        assert!(EffectKind::ALL.iter().filter(|&&k| !matches!(k, EffectKind::Accelerated | EffectKind::Warded | EffectKind::Coated)).all(|&k| !def(k).positive));
+        assert!(EffectKind::ALL.iter().filter(|&&k| !matches!(k, EffectKind::Accelerated | EffectKind::Warded | EffectKind::Coated | EffectKind::Invisible)).all(|&k| !def(k).positive));
         for k in EffectKind::ALL {
             assert_eq!(EffectKind::from_u8(k as u8), Some(k));
             assert_eq!(k.bit(), 1 << k as u8);
@@ -352,8 +366,7 @@ mod tests {
         use crate::defs::races::{self, Adjust, Race};
         use crate::defs::{bosses, classes, companions, enemies};
         use crate::protocol::{BossId, ClassId};
-        let races = [Race::Human, Race::Goblin, Race::Orc, Race::Ogre, Race::Mimic, Race::Undead, Race::Demon, Race::Dragon, Race::Elf, Race::MagicalBeast, Race::Object];
-        let mut tables: Vec<(String, EffectResistances)> = races.iter().map(|&r| (format!("{r:?}"), races::profile(&[r], Adjust::NONE).effect_res)).collect();
+        let mut tables: Vec<(String, EffectResistances)> = Race::ALL.iter().map(|&r| (format!("{r:?}"), races::profile(&[r], Adjust::NONE).effect_res)).collect();
         tables.extend(BossId::ALL.iter().map(|&b| (format!("{b:?}"), bosses::profile(b).effect_res)));
         tables.extend(ClassId::ALL.iter().map(|&c| (format!("{c:?}"), classes::profile(c).effect_res)));
         tables.extend(enemies::EnemyType::ALL.iter().map(|&t| (format!("{t:?}"), enemies::profile(t).effect_res)));
@@ -397,7 +410,7 @@ mod tests {
             assert!(def(k).dot.is_none() && def(k).cancels.is_empty() && !def(k).ends_in_water, "{k:?}");
         }
         assert_eq!((EffectKind::Burning as u8, EffectKind::Frozen as u8, EffectKind::Poisoned as u8), (5, 6, 7));
-        assert_eq!(EffectKind::COUNT, 15);
+        assert_eq!(EffectKind::COUNT, 16);
     }
 
     #[test]
@@ -468,7 +481,7 @@ mod tests {
         let c = def(EffectKind::Coated);
         assert!(c.positive && c.mods.is_empty());
         assert_eq!((EffectKind::Entangled as u8, EffectKind::Fear as u8, EffectKind::Warded as u8, EffectKind::Coated as u8), (11, 12, 13, 14));
-        assert_eq!(EffectKind::COUNT, 15);
+        assert_eq!(EffectKind::COUNT, 16);
         for k in EffectKind::ALL.into_iter().filter(|k| !matches!(k, EffectKind::Entangled | EffectKind::Fear)) {
             assert_eq!(def(k).save, None, "{k:?} keeps the rule of section 5");
         }

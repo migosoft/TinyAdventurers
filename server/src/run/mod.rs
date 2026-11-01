@@ -292,6 +292,9 @@ impl Run {
         self.monsters.push(Monster {
             id,
             res: prof.res,
+            traits: prof.traits,
+            invis_cd: 0.0,
+            races: enemies::races(t),
             melee: enemies::melee_split(t),
             etype: Some(t),
             kind: d.kind,
@@ -319,7 +322,7 @@ impl Run {
             is_boss: false,
             dormant: false,
             hiding: false,
-            mover: if enemies::is_demon(t) { Mover::Demon } else { Mover::Enemy },
+            mover: if prof.traits.phasing { Mover::Incorporeal } else if enemies::is_demon(t) { Mover::Demon } else { Mover::Enemy },
             airborne: false,
             knock: Vec2::ZERO,
             sinking: None,
@@ -393,6 +396,7 @@ impl Run {
                     ClientMsg::DebugImmortal { on } => self.set_immortal(pi, on),
                     ClientMsg::DebugDarkvision { ratio } => self.set_darkvision(pi, ratio),
                     ClientMsg::DebugEffect { kind } => self.debug_effect(pi, kind),
+                    ClientMsg::DebugIncorporeal => self.debug_incorporeal(pi),
                     ClientMsg::RulesLog { on, details } => rules_log::set_prefs(self, pi, on, details),
                     _ => {}
                 }
@@ -607,13 +611,13 @@ impl Run {
     }
 
     /// A blast pushes a monster straight away from `from`: `dist` px by a pusher
-    /// of STR `str`, less or not at all against its weight (`push_dist`). Bosses
-    /// and flying monsters are never pushed; only walls and solids stop the
+    /// of STR `str`, less or not at all against its weight (`push_dist`). Bosses,
+    /// knockback-immune (incorporeal) and flying monsters are never pushed; only walls and solids stop the
     /// slide, so it can end in a chasm, deep water or lava.
     pub fn knock_monster(&mut self, mi: usize, from: Vec2, dist: f64, str: i32) {
         let m = &mut self.monsters[mi];
         let dist = push_dist(dist, str, m.weight);
-        if !m.alive || m.is_boss || m.airborne || m.sinking.is_some() || dist <= 0.0 {
+        if !m.alive || m.is_boss || m.traits.knock_immune || m.airborne || m.sinking.is_some() || dist <= 0.0 {
             return;
         }
         if m.dash.is_some() {
@@ -646,8 +650,8 @@ impl Run {
     /// and the wolf over a chasm with its Pounce ready dashes back to safe ground.
     fn terrain_monster(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
-        if !m.alive || m.is_boss || m.airborne || m.dash.is_some() {
-            return;
+        if !m.alive || m.is_boss || m.airborne || m.dash.is_some() || m.mover == Mover::Incorporeal {
+            return; // a phantom floats over chasms, deep water and lava
         }
         if let Some((t, how)) = m.sinking {
             if t - DT > 0.0 {
@@ -887,6 +891,9 @@ impl Run {
         if !self.players[pi].alive {
             return;
         }
+        if !dmg.from_effect {
+            self.reveal(effects::Creature::Player(pi), rules_log::EndReason::RevealedByHit);
+        }
         if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit, dmg.from_effect) {
             self.hit_effect_by(effects::Creature::Player(pi), h, dmg.why); // a pure effect hit: no number, no flash
             return;
@@ -1073,6 +1080,10 @@ impl Run {
         if ally && src_player.is_some() {
             return false; // no hero attack hurts an ally
         }
+        if !dmg.from_effect {
+            // Any direct hit shows an invisible monster, even one it resists or a shield absorbs.
+            self.reveal(effects::Creature::Monster(mi), rules_log::EndReason::RevealedByHit);
+        }
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             let (hp, res) = (self.monsters[mi].hp, self.monsters[mi].res);
             rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts: [0.0; DamageType::COUNT], hp_before: hp, hp_after: hp, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Shielded }); rules_log::hit_end(self);
@@ -1088,6 +1099,8 @@ impl Run {
         let ty = dmg.split.main_type() as u8;
         // Hits by heroes go to the whole party, even out of view: the shot was seen leaving.
         let seen_by = src_player.is_none().then_some(pos);
+        // Only a tick of an effect can reach an invisible enemy now (a hit revealed it): no number at its spot.
+        let hidden = !ally && self.monsters[mi].effects.has(crate::defs::effects::EffectKind::Invisible);
         if raw < 0.0 {
             let m = &mut self.monsters[mi];
             let hp_before = m.hp;
@@ -1095,7 +1108,7 @@ impl Run {
             m.hp += healed;
             let hp_after = m.hp;
             rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
-            if healed > 0.0 {
+            if healed > 0.0 && !hidden {
                 let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
                 if ally {
                     self.event_on_hero(ev, pos);
@@ -1118,7 +1131,7 @@ impl Run {
         let ev = Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: ally, ty, imm };
         if ally {
             self.event_on_hero(ev, pos); // shown like damage on a hero
-        } else {
+        } else if !hidden {
             self.event(ev, seen_by);
         }
         if src_player.is_none() && dmg.from_effect {
@@ -1414,7 +1427,7 @@ pub mod tests {
     }
 
     #[test]
-    fn a_resisted_hit_is_shown_as_immune_and_over_100_percent_heals() {
+    fn a_resisted_hit_is_shown_as_immune_and_over_100_percent_is_capped() {
         use crate::defs::damage::Resistances;
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         run.monsters.retain(|m| m.is_boss);
@@ -1426,13 +1439,13 @@ pub mod tests {
         run.hurt_monster(mi, Damage::new(10.0, DamageSplit::pure(DamageType::Poison)), false, Some(0));
         assert_eq!(run.monsters[mi].hp, hp, "undead resist poison fully");
         assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { imm: true, .. })));
-        // Above 100 %: the hit heals.
+        // Above 100 %: capped, so still immune and no heal.
         run.monsters[mi].hp = hp - 20.0;
         run.monsters[mi].res = Resistances::of(&[(DamageType::Poison, 1.5)]);
         run.events.clear();
         run.hurt_monster(mi, Damage::new(10.0, DamageSplit::pure(DamageType::Poison)), false, Some(0));
-        assert!((run.monsters[mi].hp - (hp - 15.0)).abs() < 1e-9);
-        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Heal { .. })));
+        assert_eq!(run.monsters[mi].hp, hp - 20.0);
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Heal { .. })));
         // The number carries the main type.
         run.events.clear();
         run.hurt_monster(mi, Damage::new(10.0, DamageSplit::split(&[(DamageType::Heat, 0.7)])), false, Some(0));
@@ -1803,6 +1816,41 @@ pub mod tests {
         let id = run.spawn_enemy(EnemyType::OrcWarrior, orc, None);
         run.players[0].debug = true;
         (run, id, at)
+    }
+
+    #[test]
+    fn incorporeal_monsters_are_never_knocked_back() {
+        let (mut run, id, _) = orc_by(Tile::Floor);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].traits.knock_immune = true;
+        let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
+        run.knock_monster(mi, from, 400.0, 30);
+        assert_eq!(run.monsters[mi].knock, Vec2::ZERO);
+        run.monsters[mi].traits.knock_immune = false;
+        run.knock_monster(mi, from, 400.0, 30);
+        assert_ne!(run.monsters[mi].knock, Vec2::ZERO, "control: an orc is pushed");
+    }
+
+    #[test]
+    fn phasing_monster_hovers_over_terrain_unharmed() {
+        for t in [Tile::Chasm, Tile::DeepWater, Tile::Lava] {
+            let (mut run, id, at) = orc_by(t);
+            let mi = run.monster_idx(id).unwrap();
+            run.monsters[mi].traits.phasing = true;
+            run.monsters[mi].mover = Mover::Incorporeal;
+            run.monsters[mi].dormant = true; // held on the spot: terrain is the only thing at work
+            let hp = run.monsters[mi].hp;
+            for _ in 0..180 {
+                let mi = run.monster_idx(id).expect("still there");
+                run.monsters[mi].pos = at;
+                run.step();
+                let m = &run.monsters[run.monster_idx(id).expect("still there")];
+                assert!(m.sinking.is_none(), "{t:?}: sinking");
+            }
+            let m = &run.monsters[run.monster_idx(id).unwrap()];
+            assert_eq!(m.hp, hp, "{t:?}: full HP");
+            assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. } | Ev::Sink { .. })), "{t:?}: no damage or sinking event");
+        }
     }
 
     #[test]

@@ -110,6 +110,8 @@ pub enum ClientMsg {
     DebugDarkvision { ratio: f32 },
     /// Debug: put an effect (EffectKind id) on your hero, in a debug run.
     DebugEffect { kind: u8 },
+    /// Debug runs only: the nearest enemy within 8 tiles becomes incorporeal.
+    DebugIncorporeal,
     /// Debug, waiting room: set any ability of your class in the two slots (for a debug account, in a debug room).
     DebugLoadout { primary: Pick, secondary: Pick },
     /// Debug, waiting room: put a weapon in your Melee or Ranged slot (`None` = an empty slot; for a debug account, in a debug room).
@@ -186,7 +188,7 @@ pub struct RunStartInfo {
     pub fallback: crate::sheet::ResolvedAbility,
     /// Every static light (torches, lava) and its state.
     pub lights: Vec<LightInfo>,
-    /// A debug run: every hero is in debug mode (badge, F4/F8/F9).
+    /// A debug run: every hero is in debug mode (badge, F4/F7/F8/F9).
     pub debug: bool,
 }
 

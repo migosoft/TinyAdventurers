@@ -219,6 +219,12 @@ pub enum EndReason {
     RanOut,
     Water,
     Purify,
+    /// Invisible: a direct hit on the creature.
+    RevealedByHit,
+    /// Invisible: a harmful effect applied to the creature.
+    RevealedByEffect,
+    /// Invisible: the creature started an attack or an ability.
+    Attacked,
 }
 
 /// An effect application has an outcome. During a hit on the same creature its line becomes a detail of

@@ -10,6 +10,7 @@ const DROP = '<path d="M8 1.5S3 7.4 3 10.4a5 5 0 0 0 10 0C13 7.4 8 1.5 8 1.5z"/>
 const FROST = '<path d="M8 1v14M1.9 4.5l12.2 7M1.9 11.5l12.2-7M6 2.2 8 4l2-1.8M6 13.8 8 12l2 1.8"/>';
 const MOON = '<path d="M10.5 1.5a6.5 6.5 0 1 0 4 11.2A5.3 5.3 0 0 1 10.5 1.5z"/>';
 const BLIND = '<path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM2.5 13.5l11-11"/>';
+const EYE = '<path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>';
 const STONE = '<path d="M3 13.5 1.6 8.2 4.6 3l6-1.2 3.6 4-1 6.4-5.4 2.2z"/><path d="m6 6 2.2 2.4-1 3" fill="none" stroke="#140c12" stroke-width="1.1"/>';
 const HOURGLASS = '<path d="M3.5 1h9v2.2c0 2.2-2.2 3.6-3.2 4.8 1 1.2 3.2 2.6 3.2 4.8V15h-9v-2.2c0-2.2 2.2-3.6 3.2-4.8-1-1.2-3.2-2.6-3.2-4.8z"/>';
 const HASTE = '<path d="m2.5 3 5 5-5 5M8.5 3l5 5-5 5"/>';
@@ -28,6 +29,7 @@ export const EFFECT_ICON: Record<(typeof EFFECT)[keyof typeof EFFECT], IconDef> 
   [EFFECT.Poisoned]: def(DROP, 'fill', '#6ad04a'),
   [EFFECT.Tainted]: def(DROP, 'fill', '#6ad04a', true),
   [EFFECT.Sleep]: def(MOON, 'fill', '#c8b8ff'),
+  [EFFECT.Invisible]: def(EYE, 'line', '#b8c8ff'),
   [EFFECT.Blind]: def(BLIND, 'line', '#d8d0d0'),
   [EFFECT.Petrified]: def(STONE, 'fill', '#b8a890'),
   [EFFECT.Slowed]: def(HOURGLASS, 'fill', '#d8b060'),

@@ -67,7 +67,10 @@ pub(crate) fn seen_creature(run: &Run, c: Creature) -> Seen {
         }
         Creature::Monster(i) => {
             let m = &run.monsters[i];
-            Seen { id: m.id, pos: m.pos, radius: m.radius, party: m.is_ally(), object: false, gone: false }
+            // An invisible enemy is nobody's to see (like it is not in the snapshot): its records stay unsent
+            // until a hit or an attack reveals it (and the record of that is made after the reveal).
+            let hidden = !m.is_ally() && m.effects.has(crate::defs::effects::EffectKind::Invisible);
+            Seen { id: m.id, pos: m.pos, radius: m.radius, party: m.is_ally(), object: false, gone: hidden }
         }
     }
 }

@@ -56,25 +56,31 @@ pub const DRAGON_LAND: f64 = 0.6;
 /// Seconds on the ground between flights (random in this range).
 pub const DRAGON_FLIGHT_EVERY: (f64, f64) = (10.0, 12.0);
 
-/// Race plus each boss's own adjustments.
+/// The races of each boss.
+pub fn races(id: BossId) -> &'static [Race] {
+    match id {
+        BossId::Demon => &[Race::Demon],
+        BossId::Lich => &[Race::Undead],
+        BossId::Dragon => &[Race::Dragon],
+    }
+}
+
+/// Races plus each boss's own adjustments.
 pub fn profile(id: BossId) -> Profile {
     use super::damage::{DamageType::*, Resistances};
     use super::effects::{EffectKind::*, EffectResistances as Fx};
     // Effect resistances: the user, 2026-10-15 (then immune = 1, reduced = 0.5).
-    let (ty, adj) = match id {
-        BossId::Demon => (Race::Demon, Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0), (Fear, 0.5)]), vision: Some(25.0), darkvision: None }),
-        BossId::Lich => (Race::Undead, Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5)]), vision: Some(25.0), darkvision: None }),
-        BossId::Dragon => (
-            Race::Dragon,
-            Adjust {
-                res: Resistances::of(&[(Heat, 1.0)]),
-                effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5), (Fear, 1.0)]),
-                vision: Some(25.0),
-                darkvision: None,
-            },
-        ),
+    let adj = match id {
+        BossId::Demon => Adjust { res: Resistances::of(&[(Magical, 0.2)]), effect_res: Fx::of(&[(Sleep, 1.0), (Fear, 0.5)]), vision: Some(25.0), darkvision: None },
+        BossId::Lich => Adjust { res: Resistances::of(&[(Physical, 0.4), (Magical, 0.4)]), effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5)]), vision: Some(25.0), darkvision: None },
+        BossId::Dragon => Adjust {
+            res: Resistances::of(&[(Heat, 1.0)]),
+            effect_res: Fx::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5), (Fear, 1.0)]),
+            vision: Some(25.0),
+            darkvision: None,
+        },
     };
-    races::profile(&[ty], adj)
+    races::profile(races(id), adj)
 }
 
 /// When the lich's effect spells may first come after the fight starts (s, staggered; user, 2026-10-15; tune in

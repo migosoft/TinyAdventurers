@@ -84,7 +84,7 @@ pub fn melee_item(t: EnemyType) -> ItemId {
 /// The race's first natural weapon (what an enemy without a melee weapon punches with).
 #[cfg(test)]
 fn natural_melee(t: EnemyType) -> ItemId {
-    races::race_def(race(t)).natural[0]
+    races::race_def(races(t)[0]).natural[0]
 }
 
 pub fn def(t: EnemyType) -> EnemyDef {
@@ -312,22 +312,22 @@ pub fn melee_split(t: EnemyType) -> DamageSplit {
     }
 }
 
-/// Race of each enemy (see `races`).
-pub fn race(t: EnemyType) -> Race {
+/// The races of each enemy (see `races`).
+pub fn races(t: EnemyType) -> &'static [Race] {
     use EnemyType::*;
     match t {
-        Necromancer | Summoner | Disciple => Race::Human,
-        SkeletonWarrior | SkeletonArcher | RaisedSkeleton | RaisedArcher => Race::Undead,
-        GoblinArcher => Race::Goblin,
-        OrcWarrior | OrcArcher => Race::Orc,
-        Ogre => Race::Ogre,
-        Mimic => Race::Mimic,
-        Imp | Chort | SummonedImp => Race::Demon,
+        Necromancer | Summoner | Disciple => &[Race::Human],
+        SkeletonWarrior | SkeletonArcher | RaisedSkeleton | RaisedArcher => &[Race::Undead],
+        GoblinArcher => &[Race::Goblin],
+        OrcWarrior | OrcArcher => &[Race::Orc],
+        Ogre => &[Race::Ogre],
+        Mimic => &[Race::Mimic],
+        Imp | Chort | SummonedImp => &[Race::Demon],
     }
 }
 
 pub fn profile(t: EnemyType) -> Profile {
-    races::profile(&[race(t)], Adjust { vision: Some(def(t).vision), ..Adjust::NONE })
+    races::profile(races(t), Adjust { vision: Some(def(t).vision), ..Adjust::NONE })
 }
 
 #[cfg(test)]
@@ -475,7 +475,7 @@ mod tests {
         ];
         assert_eq!(expect.len(), EnemyType::ALL.len());
         for (t, r) in expect {
-            assert_eq!(race(t), r, "{t:?}");
+            assert_eq!(races(t), &[r], "{t:?}");
         }
     }
 }

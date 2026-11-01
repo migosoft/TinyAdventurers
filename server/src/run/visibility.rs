@@ -139,6 +139,9 @@ fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, gaze
     if m.airborne {
         f |= flags::AIRBORNE;
     }
+    if m.traits.phasing {
+        f |= flags::INCORPOREAL;
+    }
     if m.is_boss && boss_immune {
         f |= flags::IMMUNE;
     }
@@ -176,7 +179,8 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
 
     let lights = &run.lights;
     for m in &run.monsters {
-        if !m.alive || m.is_ally() || !seen(view, lights, dark, m.pos, m.radius) {
+        // An invisible enemy is not sent at all (and so has no entry in the rules log's tags or looks).
+        if !m.alive || m.is_ally() || m.effects.has(crate::defs::effects::EffectKind::Invisible) || !seen(view, lights, dark, m.pos, m.radius) {
             continue;
         }
         ents.push(monster_snap(run, m, boss_immune, gaze));
@@ -465,6 +469,56 @@ mod tests {
         let lights = snap[8].as_array().unwrap();
         assert_eq!(lights.len(), 1);
         assert_eq!((lights[0][2].as_u64(), lights[0][3].as_u64()), (Some(LightKind::Fire as u64), Some(0x3060ff)));
+    }
+
+    #[test]
+    fn phasing_monster_is_flagged_incorporeal_in_the_snapshot() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 1.0);
+        let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 3, ty), None);
+        let mi = run.monster_idx(id).unwrap();
+        let flag_of = |run: &mut Run| {
+            run.lights.refresh(&run.layout.map);
+            let dark = dark_of(run);
+            snapshot_ents(run, 0, &run.players[0].view, &dark).iter().find(|e| e.0 == id).unwrap().8
+        };
+        assert_eq!(flag_of(&mut run) & flags::INCORPOREAL, 0);
+        run.monsters[mi].traits.phasing = true;
+        assert_ne!(flag_of(&mut run) & flags::INCORPOREAL, 0);
+    }
+
+    #[test]
+    fn invisible_monster_is_not_in_any_snapshot() {
+        use crate::defs::effects::{EffectKind, EffectLook};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 1.0);
+        let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 3, ty), None);
+        let mi = run.monster_idx(id).unwrap();
+        let ents = |run: &mut Run| {
+            run.lights.refresh(&run.layout.map);
+            let dark = dark_of(run);
+            snapshot_ents(run, 0, &run.players[0].view, &dark)
+        };
+        assert!(ents(&mut run).iter().any(|e| e.0 == id), "visible first");
+        run.monsters[mi].effects.add_with(EffectKind::Invisible, 30.0, EffectLook::Plain, None);
+        run.monsters[mi].effects.add_with(EffectKind::Entangled, 5.0, EffectLook::Vines, None);
+        let sent = ents(&mut run);
+        assert!(sent.iter().all(|e| e.0 != id), "an invisible monster is not sent");
+        assert!(looks_of(&run, &sent).iter().all(|l| l.0 != id), "nor its looks");
+        run.hurt_monster(mi, crate::defs::damage::Damage::physical(1.0), false, Some(0));
+        assert!(ents(&mut run).iter().any(|e| e.0 == id), "a hit brings it back");
+    }
+
+    #[test]
+    fn invisible_ally_hero_is_still_sent_to_the_party() {
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+        let (_tx, _ty) = dark_view(&mut run, 1.0);
+        run.players[1].effects.add(EffectKind::Invisible, 30.0);
+        let dark = dark_of(&run);
+        let sent = snapshot_ents(&run, 0, &run.players[0].view, &dark);
+        let e = sent.iter().find(|e| e.0 == run.players[1].id).expect("the party hero is sent");
+        assert!(e.10 & EffectKind::Invisible.bit() != 0, "with the Invisible bit");
     }
 
     #[test]

@@ -47,6 +47,9 @@ pub enum Mover {
     Demon,
     /// A hero mid-dash: jumps deep water, chasms and lava.
     Dash,
+    /// Ghosts and shades (the phasing trait): drift through walls and solid objects and float over
+    /// terrain. Only Void and the edge of the map stop them; they may not rest inside a wall (`can_stop`).
+    Incorporeal,
 }
 
 #[derive(Debug, Clone)]
@@ -84,18 +87,35 @@ impl Map {
         let (x, y) = Map::tile_of(p);
         self.opaque(x, y)
     }
-    /// Blocks walking for this mover. Mirrored in `client/src/sim/map.ts`.
+    /// Blocks walking for this mover. Mirrored in `client/src/sim/map.ts`, except `Mover::Incorporeal`, which is
+    /// server-only (client prediction uses movers for heroes only).
     pub fn blocks(&self, x: i32, y: i32, mover: Mover) -> bool {
+        if mover == Mover::Incorporeal {
+            return self.get(x, y) == Tile::Void as u8;
+        }
         if self.opaque(x, y) {
             return true;
         }
         let t = self.get(x, y);
         match mover {
-            Mover::Dash => false,
+            Mover::Dash | Mover::Incorporeal => false,
             Mover::Hero => t == Tile::DeepWater as u8,
             Mover::Demon => t == Tile::DeepWater as u8 || t == Tile::Chasm as u8,
             Mover::Enemy => t == Tile::DeepWater as u8 || t == Tile::Chasm as u8 || t == Tile::Lava as u8,
         }
+    }
+    /// May this mover stop (rest, wait, attack) on this tile? A phasing mover may pass through walls
+    /// and closed doors but not stay in them; it may hover over a chasm, deep water or lava.
+    /// For everyone else it is the same as not being blocked.
+    pub fn can_stop(&self, x: i32, y: i32, mover: Mover) -> bool {
+        if mover == Mover::Incorporeal {
+            return !self.opaque(x, y) && self.get(x, y) != Tile::Void as u8;
+        }
+        !self.blocks(x, y, mover)
+    }
+    pub fn can_stop_at(&self, p: Vec2, mover: Mover) -> bool {
+        let (x, y) = Map::tile_of(p);
+        self.can_stop(x, y, mover)
     }
     pub fn blocks_at(&self, p: Vec2, mover: Mover) -> bool {
         let (x, y) = Map::tile_of(p);
@@ -110,10 +130,10 @@ impl Map {
         let (x, y) = Map::tile_of(p);
         self.get(x, y)
     }
-    /// Walking speed multiplier on this tile (a dash ignores terrain).
+    /// Walking speed multiplier on this tile (a dash and a phantom ignore terrain).
     pub fn speed_factor(&self, p: Vec2, mover: Mover) -> f64 {
         let t = self.tile_at(p);
-        if mover == Mover::Dash {
+        if mover == Mover::Dash || mover == Mover::Incorporeal {
             1.0
         } else if t == Tile::ShallowWater as u8 {
             SHALLOW_SPEED
@@ -288,5 +308,33 @@ impl Dungeon {
     pub fn split(self) -> (Layout, DungeonParts) {
         let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, suns, player_spawns } = self;
         (Layout { map, spawns, chests, barrels, torches, suns, player_spawns }, DungeonParts { rooms, start, boss, door })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn incorporeal_moves_through_walls_and_over_terrain() {
+        let mut m = Map::new(8, 3);
+        let row = [Tile::Wall, Tile::DoorClosed, Tile::DeepWater, Tile::Chasm, Tile::Lava, Tile::ShallowWater, Tile::Floor];
+        for (x, t) in row.into_iter().enumerate() {
+            m.set(x as i32, 1, t);
+        }
+        for x in 0..7 {
+            assert!(!m.blocks(x, 1, Mover::Incorporeal), "tile {x}");
+        }
+        assert!(m.blocks(7, 1, Mover::Incorporeal), "Void blocks");
+        assert!(m.blocks(-1, 1, Mover::Incorporeal), "outside the map blocks");
+        assert_eq!(m.speed_factor(Map::center_of(5, 1), Mover::Incorporeal), 1.0);
+        assert_eq!(m.speed_factor(Map::center_of(4, 1), Mover::Incorporeal), 1.0);
+        assert!(!m.can_stop(0, 1, Mover::Incorporeal));
+        assert!(!m.can_stop(1, 1, Mover::Incorporeal));
+        assert!(!m.can_stop(7, 1, Mover::Incorporeal));
+        for x in 2..7 {
+            assert!(m.can_stop(x, 1, Mover::Incorporeal), "tile {x}");
+        }
+        assert!(m.can_stop(6, 1, Mover::Enemy) && !m.can_stop(0, 1, Mover::Enemy) && !m.can_stop(4, 1, Mover::Enemy));
     }
 }

@@ -197,4 +197,6 @@ pub mod flags {
     pub const DEAD: u8 = 32;
     /// Flying (the dragon): melee cannot reach it.
     pub const AIRBORNE: u8 = 64;
+    /// Incorporeal (a phasing monster): always drawn semi-transparent. The last free bit.
+    pub const INCORPOREAL: u8 = 128;
 }

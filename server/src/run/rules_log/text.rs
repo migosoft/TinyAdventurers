@@ -4,7 +4,7 @@ use super::{tag_of, DeathFacts, EffectFacts, EndReason, HealFacts, HitFacts, Hit
 use crate::defs::abilities::AbilityId;
 use crate::run::targets::Skip;
 use crate::defs::abilities;
-use crate::defs::damage::{DamageType, Mult, What, MIN_RESISTANCE};
+use crate::defs::damage::{DamageType, Mult, What};
 use crate::defs::effects::EffectKind;
 use crate::defs::races::{race_def, Race};
 use crate::run::effects::EffectOutcome;
@@ -65,6 +65,7 @@ pub fn effect_name(k: EffectKind) -> &'static str {
         EffectKind::Fear => "Fear",
         EffectKind::Warded => "Warded",
         EffectKind::Coated => "Coated",
+        EffectKind::Invisible => "Invisible",
     }
 }
 
@@ -154,7 +155,7 @@ pub(super) fn part_lines(f: &HitFacts) -> Vec<String> {
                 type_name(t),
                 pct(share),
                 n1(f.dmg.amount * share),
-                pct(f.res.get(t).max(MIN_RESISTANCE)),
+                pct(f.res.capped(t)),
                 n1(f.parts[t as usize])
             ));
         }
@@ -180,16 +181,17 @@ fn race_name(r: Race) -> &'static str {
         Race::Elf => "elf",
         Race::MagicalBeast => "magical beast",
         Race::Object => "object",
+        Race::Incorporeal => "incorporeal",
     }
 }
 
 /// The race a creature's resistance to `kind` comes from, if it is its race's own value.
 fn resisting_race(run: &Run, c: Creature, kind: EffectKind, r: f64) -> Option<Race> {
-    let race = match c {
-        Creature::Player(i) => *crate::defs::classes::races(run.players[i].class).first()?,
-        Creature::Monster(i) => crate::defs::enemies::race(run.monsters[i].etype?),
+    let races = match c {
+        Creature::Player(i) => crate::defs::classes::races(run.players[i].class),
+        Creature::Monster(i) => run.monsters[i].races,
     };
-    (race_def(race).effect_res.get(kind) == r).then_some(race)
+    races.iter().copied().find(|&race| race_def(race).effect_res.get(kind) == r)
 }
 
 /// How an application ended, in a word: "applied", "refused", "cancelled Frozen".
@@ -266,6 +268,9 @@ pub(super) fn ended_head(run: &Run, target: u32, kind: EffectKind, why: EndReaso
         EndReason::RanOut => "",
         EndReason::Water => " (water)",
         EndReason::Purify => " (Purify)",
+        EndReason::RevealedByHit => " (revealed by a hit)",
+        EndReason::RevealedByEffect => " (revealed by an effect)",
+        EndReason::Attacked => " (it attacked)",
     };
     format!("{} on {} ended{tail}", effect_name(kind), tag_of(run, target))
 }
@@ -310,6 +315,7 @@ pub(super) fn skip_reason(s: Skip) -> Option<&'static str> {
         Skip::Ally => Some("an ally"),
         Skip::Dormant => Some("it is dormant"),
         Skip::Airborne => Some("it is flying"),
+        Skip::Invisible => Some("it is invisible"),
         Skip::NoLineOfSight => Some("no line of sight"),
         Skip::AlreadyHit => Some("already hit"),
         Skip::Dead | Skip::Hiding | Skip::OutOfReach | Skip::OutsideArc => None,

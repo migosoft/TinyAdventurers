@@ -134,7 +134,7 @@ fn rules_log_is_reached_only_through_its_hooks() {
     walk(&root, &root, &mut found);
     // Lines naming `rules_log` outside the module, per file. Each task updates this with its hooks.
     let hooks: BTreeMap<String, usize> =
-        [("defs/effects.rs", 1), ("run/mod.rs", 18), ("run/effects.rs", 5), ("run/abilities.rs", 18), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        [("defs/effects.rs", 1), ("run/mod.rs", 20), ("run/effects.rs", 9), ("run/abilities.rs", 18), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     assert_eq!(found, hooks);
 }
 
@@ -336,7 +336,7 @@ fn leaving_forgets_the_player() {
 
 use crate::defs::abilities::AbilityId;
 use crate::defs::attributes::Attributes;
-use crate::defs::damage::{resolve, Damage, DamageSplit, DamageType, Mult, What, MIN_RESISTANCE};
+use crate::defs::damage::{resolve, Damage, DamageSplit, DamageType, Mult, What};
 use crate::defs::items::Equipment;
 use crate::defs::loadout::{Build, Loadout, Pick, Source};
 
@@ -472,7 +472,7 @@ fn a_frost_shard_line_reads_like_the_spec() {
     for t in DamageType::ALL {
         let share = a.split.share(t);
         if share > 0.0 {
-            let r = res.get(t).max(MIN_RESISTANCE);
+            let r = res.capped(t);
             want.push(format!("{} {}  {} × (1 − {} resist) = {}", type_name(t), pct(share), n1(a.damage * share), pct(r), n1(a.damage * share * (1.0 - r))));
         }
     }
@@ -494,13 +494,13 @@ fn an_immune_hit_says_so() {
     let rec = only_rec(&mut run);
     assert_eq!(rec.head, format!("{name} ▸ Strike ▸ {goblin}: no damage (immune)"));
     assert_eq!(rec.dealt, Some(0.0));
-    // Over 100 %: it heals.
+    // Over 100 % is capped at 100 %: still immune, never a heal.
     run.monsters[mi].res.set(DamageType::Physical, 1.5);
     run.monsters[mi].hp = 40.0;
     run.hurt_monster(mi, Damage::physical(10.0).by(hero, What::Ability(AbilityId::Strike)), false, Some(0));
     let rec = only_rec(&mut run);
-    assert_eq!(rec.head, format!("{name} ▸ Strike ▸ {goblin}: healed 5 (resistance over 100 %)"));
-    assert_eq!(rec.kind, LineKind::Heal);
+    assert_eq!(rec.head, format!("{name} ▸ Strike ▸ {goblin}: no damage (immune)"));
+    assert_eq!(run.monsters[mi].hp, 40.0);
 }
 
 #[test]
@@ -894,8 +894,8 @@ fn a_full_hero_gets_no_heal_line() {
 }
 
 #[test]
-fn a_resistance_heal_gets_only_its_hit_record() {
-    // Resistance over 100 %: the Healed hit already says it, the heal adds no line of its own.
+fn a_resistance_over_100_percent_heals_nothing() {
+    // Resistance over 100 % is capped: the hit is immune, nothing heals and no heal line appears.
     let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
     run.log.forced = true;
     run.players[0].hp = 1.0;
@@ -903,8 +903,8 @@ fn a_resistance_heal_gets_only_its_hit_record() {
     let _ = take(&mut run);
     run.hurt_player(0, Damage::new(4.0, DamageSplit::pure(DamageType::Heat)));
     let recs = take(&mut run);
-    assert_eq!(recs.len(), 1, "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
-    assert_eq!(recs[0].kind, LineKind::Heal);
+    assert!(recs.iter().all(|r| r.kind != LineKind::Heal), "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
+    assert_eq!(run.players[0].hp, 1.0);
 }
 
 #[test]
@@ -1640,4 +1640,37 @@ fn haste_and_purify_credit_the_user_on_every_target() {
     let lines = leads(&mut run, "Purify");
     assert_eq!(lines.len(), 2, "one line per hero: {lines:?}");
     assert_eq!(lines[0], lines[1], "both name the user");
+}
+
+#[test]
+fn an_invisible_monsters_records_are_seen_by_nobody_until_it_is_revealed() {
+    use crate::defs::effects::EffectKind;
+    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    run.log.forced = true;
+    let mi = enemy_near(&mut run, EnemyType::GoblinArcher);
+    assert!(!record::seen_creature(&run, Creature::Monster(mi)).gone);
+    run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
+    assert!(record::seen_creature(&run, Creature::Monster(mi)).gone, "hidden like a gone entity");
+    let _ = take(&mut run);
+    run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
+    let recs = take(&mut run);
+    let ended = recs.iter().find(|r| r.head.contains("Invisible on") && r.head.contains("revealed by a hit")).expect("the reveal is logged");
+    assert!(!ended.who[0].gone, "it is shown: the monster is visible now");
+    assert!(recs.iter().filter(|r| r.kind == LineKind::Hit).all(|r| !r.who[0].gone));
+}
+
+#[test]
+fn a_skip_line_naming_an_invisible_monster_is_held_back() {
+    use crate::defs::effects::EffectKind;
+    use crate::run::targets::Skip;
+    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    run.log.forced = true;
+    let mi = enemy_near(&mut run, EnemyType::GoblinArcher);
+    run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
+    let _ = take(&mut run);
+    let by = run.players[0].id;
+    super::skipped(&mut run, by, What::Ability(AbilityId::ChainSpark), &[(Creature::Monster(mi), Skip::Invisible)], None);
+    let recs = take(&mut run);
+    let skip = recs.iter().find(|r| r.kind == LineKind::Skip).expect("the skip is recorded");
+    assert!(skip.who[0].gone && skip.unseen.is_none(), "but no player is sent it while the monster is invisible");
 }

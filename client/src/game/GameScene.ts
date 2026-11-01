@@ -11,6 +11,7 @@ import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Hud } from '../ui/hud';
+import { MARK_TTL, Marks, skimsTerrain } from './anim/entityAlpha';
 import { FIGURES, PROJECTILES, heroWeapons, isAllyKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
@@ -95,6 +96,10 @@ export class GameScene extends Phaser.Scene {
   private interp = new Interpolator();
   private ents = new Map<number, EntState>();
   private views = new Map<number, EntityView>();
+  /** Entities that just reappeared from Invisible: their view fades in when it is created. */
+  private reappearing = new Marks(MARK_TTL);
+  /** Enemies that went invisible: a ghost is left where the view is last drawn, when it is culled. */
+  private vanishing = new Marks(MARK_TTL);
   private projViews = new Map<number, Phaser.GameObjects.Image>();
   private hazardViews = new Map<number, Phaser.GameObjects.Image>();
   private mimicViews = new Map<number, MimicView>();
@@ -205,7 +210,7 @@ export class GameScene extends Phaser.Scene {
     this.beams = this.add.graphics().setDepth(DEPTH.beam);
     this.gaze = this.add.graphics().setDepth(DEPTH.fx);
     this.debugGfx = this.add.graphics().setDepth(DEPTH.fog + 1);
-    // A debug run (from a debug room): the server puts every hero in debug mode, so the badge and F4/F8/F9 work from the first frame.
+    // A debug run (from a debug room): the server puts every hero in debug mode, so the badge and F4/F7/F8/F9 work from the first frame.
     this.debugOn = this.info.debug;
     this.debugImmortal = true;
     this.debugPath = [];
@@ -235,6 +240,12 @@ export class GameScene extends Phaser.Scene {
       if (e.repeat || !this.debugOn || !this.alive) return;
       // The server announces the change to the party.
       this.net.send({ t: 'DebugDarkvision', ratio: nextDarkvision((this.lastSnap?.me.darkvision ?? 0) / 100) });
+    });
+    // Debug runs only (debug accounts): the nearest enemy within 8 tiles becomes incorporeal (and vanishes for 3 s).
+    kb.on('keydown-F7', (e: KeyboardEvent) => {
+      e.preventDefault();
+      if (e.repeat || !this.debugOn || !this.alive) return;
+      this.net.send({ t: 'DebugIncorporeal' });
     });
     // Debug runs only (debug accounts): put the next effect on your own hero (Blind, Sleep, Petrified, Slowed, Accelerated).
     kb.on('keydown-F8', (e: KeyboardEvent) => {
@@ -272,6 +283,8 @@ export class GameScene extends Phaser.Scene {
     this.useHint.destroy();
     for (const v of this.views.values()) v.destroy();
     this.views.clear();
+    this.reappearing.clear();
+    this.vanishing.clear();
     for (const v of this.mimicViews.values()) v.destroy();
     this.mimicViews.clear();
     for (const v of this.chestViews.values()) v.destroy();
@@ -468,7 +481,13 @@ export class GameScene extends Phaser.Scene {
         this.light.remove(ev.id);
         break;
       case 'Effect':
-        // Drawn from the snapshot bitmask and its looks (status.ts).
+        // Drawn from the snapshot bitmask and its looks (status.ts). Invisible has a default fade:
+        // the entity leaves the snapshot at once, so a ghost image fades out; on return it fades in.
+        if (ev.kind === EFFECT.Invisible) {
+          const t = performance.now() / 1000;
+          if (ev.on) (this.vanishing.add(ev.id, t), this.reappearing.delete(ev.id));
+          else (this.reappearing.add(ev.id, t), this.vanishing.delete(ev.id));
+        }
         break;
       case 'Msg':
         this.hud.message(ev.text, 'game');
@@ -793,7 +812,15 @@ export class GameScene extends Phaser.Scene {
       seen.add(this.info.you);
       this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: this.myEffects(), entangled: lookOf(this.lastSnap?.looks ?? [], this.info.you, EFFECT.Entangled) }, dt, px, py, now);
     }
-    for (const [id, v] of this.views) if (!seen.has(id)) (v.destroy(), this.views.delete(id), this.wade.delete(id));
+    this.reappearing.prune(now);
+    this.vanishing.prune(now);
+    for (const [id, v] of this.views) {
+      if (seen.has(id)) continue;
+      if (this.vanishing.take(id, now)) v.ghost();
+      v.destroy();
+      this.views.delete(id);
+      this.wade.delete(id);
+    }
     for (const [id, v] of this.projViews) if (!seen.has(id)) (v.destroy(), this.projViews.delete(id));
     for (const [id, v] of this.hazardViews) if (!seen.has(id)) (v.destroy(), this.hazardViews.delete(id));
     for (const [id, v] of this.mimicViews) if (!seen.has(id)) (v.destroy(), this.mimicViews.delete(id));
@@ -858,6 +885,7 @@ export class GameScene extends Phaser.Scene {
       view = new EntityView(this, e.kind, this.fx, me ? undefined : pi?.name, weapons);
       this.views.set(e.id, view);
     }
+    if (this.reappearing.take(e.id, now) && !isPlayerKind(e.kind)) view.fadeIn();
     let s: ViewState;
     if (me && this.alive) {
       // Petrified or asleep: the weapon keeps the facing from before the effect.
@@ -871,9 +899,9 @@ export class GameScene extends Phaser.Scene {
       }
       const flags = this.myFlags;
       // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
-      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects(), entangled: e.entangled, swingArc: anim === ANIM.Melee ? this.localAnim.arc : undefined };
+      s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects(), entangled: e.entangled, party: isPlayerKind(e.kind), swingArc: anim === ANIM.Melee ? this.localAnim.arc : undefined };
     } else {
-      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled };
+      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled, party: isPlayerKind(e.kind) };
     }
     this.terrainState(e, s, me && this.alive, dt);
     view.update(s, dt);
@@ -892,7 +920,7 @@ export class GameScene extends Phaser.Scene {
       if (sk.drown) bubbleFx(this.fx, sk.x, sk.y, dt);
       return;
     }
-    const dashing = predicted ? this.pred.state.dashT > 0 : e.anim === ANIM.Dash;
+    const dashing = skimsTerrain(e.flags, predicted ? this.pred.state.dashT > 0 : e.anim === ANIM.Dash);
     s.sink = dashing ? 0 : sinkDepth(tile);
     let wade = this.wade.get(e.id);
     if (!wade) this.wade.set(e.id, (wade = new WadeFx()));

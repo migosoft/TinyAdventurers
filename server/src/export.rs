@@ -148,7 +148,7 @@ fn export_defs() {
     consts.as_object_mut().unwrap().extend(objs.as_object().unwrap().clone());
     let fl = json!({
         "IMMUNE": flags::IMMUNE,
-        "HIDING": flags::HIDING, "DORMANT": flags::DORMANT, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE,
+        "HIDING": flags::HIDING, "DORMANT": flags::DORMANT, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE, "INCORPOREAL": flags::INCORPOREAL,
     });
     let tiles = json!({
         "Void": Tile::Void as u8, "Floor": Tile::Floor as u8, "Wall": Tile::Wall as u8,
@@ -355,7 +355,7 @@ fn enemy_kinds() -> serde_json::Map<String, serde_json::Value> {
             continue;
         }
         let res = enemies::profile(t).res;
-        let res: serde_json::Map<_, _> = crate::defs::damage::DamageType::ALL.iter().map(|&dt| (dt.name().to_string(), json!(res.get(dt)))).collect();
+        let res: serde_json::Map<_, _> = crate::defs::damage::DamageType::ALL.iter().map(|&dt| (dt.name().to_string(), json!(res.capped(dt)))).collect();
         out.insert(key, json!({ "max_hp": crate::sheet::enemy_stats(t).max_hp, "res": res }));
     }
     out

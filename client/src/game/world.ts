@@ -151,7 +151,7 @@ export function cosmeticPierce(
   if (state.pierce <= 0 || maxHp === undefined || res === undefined) return 'stop';
   const hp = (hpShare / 255) * maxHp;
   let eff = 0;
-  for (const [t, share] of Object.entries(split)) eff += share * (1 - Math.max(res[t] ?? 0, MIN_RESISTANCE));
+  for (const [t, share] of Object.entries(split)) eff += share * (1 - Math.min(Math.max(res[t] ?? 0, MIN_RESISTANCE), 1));
   if (eff <= 0) return 'stop';
   const rest = state.damage - hp / eff;
   if (rest <= OVERKILL_EPS) return 'stop';

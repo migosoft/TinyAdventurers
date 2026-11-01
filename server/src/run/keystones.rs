@@ -6,8 +6,6 @@ use super::Run;
 use crate::defs::abilities::{self as ab, AbilityCategory};
 use crate::defs::damage::{Damage, DamageType, Mult, Resistances, What};
 use crate::defs::effects::EffectKind;
-use crate::defs::enemies;
-use crate::defs::kinds::EntityKind;
 use crate::defs::races::Race;
 use crate::defs::trees::Keystone;
 
@@ -72,16 +70,6 @@ pub fn cool(m: &mut Monster, dt: f64) {
     m.wolf_bit = (m.wolf_bit - dt).max(0.0);
 }
 
-fn races(m: &Monster) -> Option<Race> {
-    match (m.etype, m.kind) {
-        (Some(t), _) => Some(enemies::race(t)),
-        (None, EntityKind::Demon) => Some(Race::Demon),
-        (None, EntityKind::Lich) => Some(Race::Undead),
-        (None, EntityKind::Dragon) => Some(Race::Dragon),
-        _ => None,
-    }
-}
-
 /// The factors of hero `pi` hitting monster `mi`, in `Keystone` order.
 pub fn outgoing(run: &Run, pi: usize, mi: usize, dmg: &Damage) -> Vec<(Keystone, f64)> {
     let (p, m) = (&run.players[pi], &run.monsters[mi]);
@@ -91,7 +79,7 @@ pub fn outgoing(run: &Run, pi: usize, mi: usize, dmg: &Damage) -> Vec<(Keystone,
     if ks.has(Keystone::DeepWinter) && (m.effects.has(EffectKind::Chilled) || m.effects.has(EffectKind::Frozen)) {
         out.push((Keystone::DeepWinter, 1.0 + 0.2 * dmg.split.share(DamageType::Cold)));
     }
-    if ks.has(Keystone::Radiant) && ability.is_some_and(|d| d.category == AbilityCategory::Innate) && matches!(races(m), Some(Race::Undead | Race::Demon)) {
+    if ks.has(Keystone::Radiant) && ability.is_some_and(|d| d.category == AbilityCategory::Innate) && m.races.iter().any(|r| matches!(r, Race::Undead | Race::Demon)) {
         out.push((Keystone::Radiant, 1.2));
     }
     if berserk(p) {

@@ -5,6 +5,7 @@ use super::effects::Creature;
 use super::Run;
 use crate::collision::line_of_sight;
 use crate::defs::classes::PLAYER_RADIUS;
+use crate::defs::effects::EffectKind;
 use crate::math::{angle_diff, Vec2};
 
 /// Which team a user fights for. A hero or an ally (the wolf) is `Heroes`; every other monster is `Monsters`.
@@ -29,6 +30,8 @@ pub enum Skip {
     Dead,
     Ally,
     Hiding,
+    /// Under the Invisible effect; skipped by the same rule as hiding (`skip_hiding`).
+    Invisible,
     Dormant,
     Airborne,
     OutOfReach,
@@ -60,9 +63,12 @@ pub struct Rule {
     pub arc: Option<Arc>,
     /// Needs a clear line from `at`.
     pub los: bool,
+    /// Skips a hiding mimic and an invisible creature (an area or a swing that covers one still hits it).
     pub skip_hiding: bool,
     pub skip_dormant: bool,
     pub skip_airborne: bool,
+    /// With `skip_hiding`: still hits an invisible creature, skipping only hiding mimics (a dash that runs over its spot).
+    pub hit_invisible: bool,
 }
 
 /// Is `c`, standing at `pos`, a target of `rule` for a user of `side`? `hit` are those already hit. The
@@ -96,6 +102,9 @@ pub fn check(run: &Run, side: Side, c: Creature, pos: Vec2, rule: &Rule, hit: &[
     }
     if rule.skip_hiding && hiding {
         return Err(Skip::Hiding);
+    }
+    if rule.skip_hiding && !rule.hit_invisible && run.has_effect(c, EffectKind::Invisible) {
+        return Err(Skip::Invisible);
     }
     if rule.skip_dormant && dormant {
         return Err(Skip::Dormant);

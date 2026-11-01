@@ -5,9 +5,11 @@ use super::entities::{Ai, Ally, Monster, Windup, HISTORY_LEN};
 use super::{ai, perception, Run};
 use crate::collision::{line_of_sight, walk_line};
 use crate::defs::abilities::AbilityId;
+use crate::defs::effects::EffectKind;
 use crate::defs::companions::*;
 use crate::defs::damage::What;
 use crate::defs::kinds::{Anim, EntityKind};
+use crate::defs::races::Race;
 use crate::dungeon::{self, Map, Mover};
 use crate::math::Vec2;
 use crate::protocol::Ev;
@@ -48,6 +50,9 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
     run.monsters.push(Monster {
         id,
         res: prof.res,
+        traits: prof.traits,
+        invis_cd: 0.0,
+        races: &[Race::MagicalBeast],
         melee: prof.melee,
         etype: None,
         kind: EntityKind::DireWolf,
@@ -214,7 +219,8 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         }
         run.monsters[mi].ai.windup = None;
         let prey = run.monsters[mi].ally.as_ref().and_then(|a| a.prey).and_then(|id| run.monster_idx(id));
-        if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive) {
+        // Prey that has since gone invisible is dropped: the wind-up ends without a bite or a leap.
+        if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive && !run.monsters[ei].effects.has(EffectKind::Invisible)) {
             let at = run.monsters[ei].pos;
             if w.alt {
                 // The pounce's wind-up is over: it leaps if its landing is still safe.
@@ -253,7 +259,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             // Never a jump to its death: the pounce must end on walkable ground.
             if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
                 // It winds up first, like any use; the leap itself starts when that is over (step 4).
-                run.monsters[mi].ai.windup = Some(Windup { t: pounce.windup, aim, alt: true, at: None });
+                run.start_windup(mi, Windup { t: pounce.windup, aim, alt: true, at: None });
                 run.monsters[mi].ai.path.clear();
                 set_anim(run, mi, Anim::Windup);
                 return;
@@ -261,7 +267,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         }
         if d <= reach {
             if run.monsters[mi].cds.ready(AbilityId::Bite) && run.monsters[mi].ally.as_ref().is_some_and(|a| a.bite_hold <= 0.0) {
-                run.monsters[mi].ai.windup = Some(Windup { t: bite.windup, aim, alt: false, at: None });
+                run.start_windup(mi, Windup { t: bite.windup, aim, alt: false, at: None });
                 set_anim(run, mi, Anim::Windup);
             } else {
                 set_anim(run, mi, Anim::Idle); // in reach: wait for the next bite
@@ -324,7 +330,7 @@ fn tick_growl(run: &mut Run, mi: usize, ranger: Vec2, dt: f64) -> bool {
     let seen = run
         .monsters
         .iter()
-        .filter(|e| e.alive && !e.is_ally() && !e.dormant && !growled.contains(&e.id))
+        .filter(|e| e.alive && !e.is_ally() && !e.dormant && !e.effects.has(EffectKind::Invisible) && !growled.contains(&e.id))
         .filter(|e| perception::sees(run, sight, pos, e.pos))
         .min_by(|a, b| a.pos.dist(pos).total_cmp(&b.pos.dist(pos)))
         .map(|e| (e.id, e.pos));
@@ -373,7 +379,7 @@ fn find_prey(run: &Run, mi: usize, ranger: Vec2) -> Option<usize> {
     run.monsters
         .iter()
         .enumerate()
-        .filter(|(_, e)| e.alive && !e.is_ally() && !e.dormant && !e.hiding && !e.airborne && e.sinking.is_none())
+        .filter(|(_, e)| e.alive && !e.is_ally() && !e.dormant && !e.hiding && !e.effects.has(EffectKind::Invisible) && !e.airborne && e.sinking.is_none())
         .filter(|(_, e)| {
             let (to_r, to_w) = (e.pos.dist(ranger), e.pos.dist(w.pos));
             (to_r <= WOLF_GUARD + e.radius || to_w <= WOLF_DEFEND + e.radius) && to_r <= WOLF_LEASH
@@ -1002,6 +1008,47 @@ mod tests {
     }
 
     #[test]
+    fn a_pounce_through_an_invisible_monsters_spot_hits_and_reveals_it() {
+        let (mut run, id) = guard_run();
+        let wi = wolf_idx(&run, id);
+        let w = run.monsters[wi].pos;
+        let ghost = orc_at(&mut run, w + Vec2::new(30.0, 0.0));
+        let gi = run.monster_idx(ghost).unwrap();
+        run.monsters[gi].ai.hold = 99.0;
+        run.monsters[gi].hp = 500.0;
+        run.monsters[gi].effects.add(EffectKind::Invisible, 30.0);
+        let at = w + Vec2::new(44.0, 0.0);
+        assert!(monster_use(&mut run, wi, AbilityId::Pounce, at));
+        for _ in 0..60 {
+            if tick_monster_dash(&mut run, wi, DT).is_some() {
+                break;
+            }
+        }
+        assert_eq!(hp_of(&run, ghost), Some(480.0), "the leap hits what it passes over");
+        assert!(!run.has_effect(Creature::Monster(gi), EffectKind::Invisible), "and shows it");
+    }
+
+    #[test]
+    fn a_wind_up_on_prey_that_went_invisible_is_dropped() {
+        for alt in [false, true] {
+            let (mut run, id) = guard_run();
+            let wi = wolf_idx(&run, id);
+            let w = run.monsters[wi].pos;
+            let orc = orc_at(&mut run, w + Vec2::new(14.0, 0.0));
+            let oi = run.monster_idx(orc).unwrap();
+            run.monsters[oi].ai.hold = 99.0;
+            run.monsters[oi].hp = 500.0;
+            ally_mut(&mut run, wi).prey = Some(orc);
+            run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt, at: None });
+            run.monsters[oi].effects.add(EffectKind::Invisible, 30.0);
+            tick_wolf(&mut run, wi, DT);
+            assert_eq!(hp_of(&run, orc), Some(500.0), "alt {alt}: no bite");
+            assert!(run.monsters[wi].dash.is_none(), "alt {alt}: no leap");
+            assert!(run.monsters[wi].ai.windup.is_none(), "alt {alt}: the wind-up is over");
+        }
+    }
+
+    #[test]
     fn a_pounce_hits_each_foe_once_and_stops_at_the_first() {
         let (mut run, id) = guard_run();
         let wi = wolf_idx(&run, id);
@@ -1283,6 +1330,23 @@ mod tests {
         let m = |i: u32| &run.monsters[run.monster_idx(i).unwrap()];
         assert!(m(boss).dormant && m(disciple).dormant && m(mimic).hiding, "and they keep their state");
         assert!(ally(&run, id).prey.is_none());
+    }
+
+    #[test]
+    fn the_wolf_ignores_invisible_monsters() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        let id = spawn_wolf(&mut run, 0);
+        lit_arena(&mut run);
+        let r = run.players[0].pos();
+        let oid = run.spawn_enemy(EnemyType::SkeletonWarrior, r + Vec2::new(30.0, 0.0), None);
+        let oi = run.monster_idx(oid).unwrap();
+        let wi = run.monster_idx(id).unwrap();
+        assert_eq!(find_prey(&run, wi, r), Some(oi), "the wolf goes for a visible enemy");
+        run.monsters[oi].effects.add(EffectKind::Invisible, 30.0);
+        assert_eq!(find_prey(&run, wi, r), None, "but not an invisible one");
+        assert!(!tick_growl(&mut run, wi, r, 1.0 / 60.0), "and does not growl at it");
+        assert!(ally(&run, id).growl_to.is_none());
     }
 
     /// The boss hall, a floor spot 3 tiles inside its door and one 2 tiles outside it.

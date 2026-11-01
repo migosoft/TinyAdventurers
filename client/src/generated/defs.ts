@@ -70,7 +70,8 @@ export const FLAG = {
   "DORMANT": 8,
   "HIDING": 1,
   "HURT": 16,
-  "IMMUNE": 2
+  "IMMUNE": 2,
+  "INCORPOREAL": 128
 } as const;
 
 export const TILE_ID = {
@@ -1067,6 +1068,7 @@ export const EFFECT = {
   "Entangled": 11,
   "Fear": 12,
   "Frozen": 6,
+  "Invisible": 15,
   "Petrified": 2,
   "Poisoned": 7,
   "Singed": 9,
@@ -1121,6 +1123,13 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
   },
   "14": {
     "duration": 3.0,
+    "flees": false,
+    "no_turn": false,
+    "positive": true,
+    "prone": false
+  },
+  "15": {
+    "duration": 30.0,
     "flees": false,
     "no_turn": false,
     "positive": true,
