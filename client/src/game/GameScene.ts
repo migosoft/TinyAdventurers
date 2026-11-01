@@ -453,8 +453,9 @@ export class GameScene extends Phaser.Scene {
           // A Ghost leaves no skull: it comes apart.
           this.fx.disintegrate(ev.x, ev.y - 6);
         } else if (ev.kind === KIND.Shade) {
-          // A Shade leaves no skull either: a dark cloud.
-          this.fx.darkCloud(ev.x, ev.y - 6);
+          // A Shade leaves no skull either: its body goes and the veil that wrapped it drifts apart.
+          const rem = this.views.get(ev.id)?.veilRemains();
+          this.fx.shadeDeath(ev.x, ev.y, rem?.veil ?? null, rem?.body);
         } else if (!isProjectileKind(ev.kind)) {
           // A skull token marks where a figure fell.
           this.add.image(ev.x, ev.y - 2, "atlas", "skull").setDepth(DEPTH.decal).setAlpha(0.85).setFlipX(Math.random() < 0.5);

@@ -1,5 +1,5 @@
 // The Shade's looks that are not a sprite (#170, #200): a veil of black strands that wraps it and streams behind, the flat silhouette
-// that warns of an ambush, and the cloud it dies in. The maths is pure (tested); `ShadeVeil` only draws it.
+// that warns of an ambush, and the veil drifting apart when it dies. The maths is pure (tested); `ShadeVeil` only draws it.
 import type Phaser from 'phaser';
 import { CONST } from '../generated/defs';
 
@@ -15,11 +15,6 @@ export function silhouetteAlpha(t: number): number {
   const k = Math.min(Math.max(t / AMBUSH_WARNING, 0), 1);
   return SILHOUETTE_ALPHA_FROM + (SILHOUETTE_ALPHA_TO - SILHOUETTE_ALPHA_FROM) * k;
 }
-
-/** Death cloud colour: dark grey with a hint of violet, light enough to read on a dark floor. */
-export const HAZE_COLOR = 0x2a2433;
-/** Squash of the death cloud: a ring seen from a little above. */
-const ORBIT_FLAT = 0.75;
 
 /** The veil's colour: pure darkness. */
 export const VEIL_COLOR = 0x000000;
@@ -220,27 +215,52 @@ export function veilPixels(lines: readonly VeilStrand[]): { back: Map<string, nu
   return { back, front };
 }
 
-const CLOUD_COUNT = 20;
-const CLOUD_SPREAD = 14;
-const CLOUD_LIFE = 0.8;
+/** Seconds the veil takes to drift apart after the Shade dies, and how much it spreads (1 = twice its size). */
+export const VEIL_DEATH_LIFE = 1;
+const VEIL_DEATH_SPREAD = 0.7;
+/** Px it rises while it drifts apart. */
+const VEIL_DEATH_RISE = 4;
 
-/** The dark cloud a Shade dies in: about 20 particles (velocities in px/s) that spread to at most 14 px and fade over 0.8 s. */
-export function deathCloud(rnd: Rng = Math.random): { life: number; particles: { vx: number; vy: number; scale: number }[] } {
-  const particles = [];
-  for (let i = 0; i < CLOUD_COUNT; i++) {
-    const a = rnd() * Math.PI * 2;
-    const speed = (CLOUD_SPREAD / CLOUD_LIFE) * (0.3 + rnd() * 0.7);
-    particles.push({ vx: Math.cos(a) * speed, vy: Math.sin(a) * speed * ORBIT_FLAT, scale: 1.6 + rnd() * 0.9 });
-  }
-  return { life: CLOUD_LIFE, particles };
+/**
+ * The veil `k` (0 to 1) of the way through the Shade's death: nothing holds it together any more, so every point
+ * moves out from `centre` (fast at first, then slowing) and rises a little, while the whole veil fades to nothing.
+ */
+export function dissolveVeil(lines: readonly VeilStrand[], centre: Pt, k: number): { lines: VeilStrand[]; alpha: number } {
+  const t = Math.min(Math.max(k, 0), 1);
+  const ease = 1 - (1 - t) * (1 - t);
+  const grow = 1 + VEIL_DEATH_SPREAD * ease;
+  const rise = VEIL_DEATH_RISE * ease;
+  return {
+    lines: lines.map((l) => ({ front: l.front, pts: l.pts.map((p) => ({ x: centre.x + (p.x - centre.x) * grow, y: centre.y + (p.y - centre.y) * grow - rise })) })),
+    alpha: Math.pow(1 - t, 1.5),
+  };
+}
+
+/** A veil at rest round `feet` (a cloud), for a Shade that died where its own veil was not drawn. */
+export function restingVeil(feet: Pt, face: 1 | -1, rnd: Rng = Math.random): VeilStrand[] {
+  const v = new VeilStrands(rnd);
+  for (let i = 0; i < 60; i++) v.step(feet, face, 1 / 30);
+  return [...v.lines];
 }
 
 /** Front strands are a little fainter where they wrap across the (black) body. */
 const FRONT_ALPHA = 0.8;
 
+/** Draws the veil's pixels at `alpha` into the graphics behind the figure and the one in front of it (may be the same). */
+export function drawVeil(lines: readonly VeilStrand[], back: Phaser.GameObjects.Graphics, front: Phaser.GameObjects.Graphics, alpha: number): void {
+  const px = veilPixels(lines);
+  for (const [g, m, k] of [[back, px.back, alpha], [front, px.front, alpha * FRONT_ALPHA]] as const)
+    for (const [key, a] of m) {
+      const [x, y] = key.split(',').map(Number);
+      g.fillStyle(VEIL_COLOR, a * k).fillRect(x, y, 1, 1);
+    }
+}
+
 /** Draws the `VeilStrands` as black pixels (`veilPixels`): cloth and back strands just under the figure, the wrapping ones just over it. */
 export class ShadeVeil {
   private veil = new VeilStrands();
+  /** The veil and the feet it was last drawn round, kept after it is cleared (the Shade's death starts from it). */
+  private last: { lines: readonly VeilStrand[]; feet: Pt } | null = null;
   private back: Phaser.GameObjects.Graphics;
   private front: Phaser.GameObjects.Graphics;
 
@@ -252,14 +272,15 @@ export class ShadeVeil {
   /** Follows the Shade's `feet`, or clears the veil when null. `alpha` scales it (fading in, the ambush warning). */
   update(feet: { x: number; y: number } | null, face: 1 | -1, depth: number, alpha: number, dt: number): void {
     this.veil.step(feet, face, dt);
+    if (feet) this.last = { lines: this.veil.lines, feet: { ...feet } };
     this.back.clear().setDepth(depth - 0.5);
     this.front.clear().setDepth(depth + 0.5);
-    const { back, front } = veilPixels(this.veil.lines);
-    for (const [g, px, k] of [[this.back, back, alpha], [this.front, front, alpha * FRONT_ALPHA]] as const)
-      for (const [key, a] of px) {
-        const [x, y] = key.split(',').map(Number);
-        g.fillStyle(VEIL_COLOR, a * k).fillRect(x, y, 1, 1);
-      }
+    drawVeil(this.veil.lines, this.back, this.front, alpha);
+  }
+
+  /** The veil as it was last drawn, and round which feet; null if it never was. */
+  remains(): { lines: readonly VeilStrand[]; feet: Pt } | null {
+    return this.last;
   }
 
   destroy(): void {

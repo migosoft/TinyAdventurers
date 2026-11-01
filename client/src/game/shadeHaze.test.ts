@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AMBUSH_WARNING, deathCloud, sheetAlpha, silhouetteAlpha, strandPixels, veilAlpha, veilPixels, VeilStrands } from './shadeHaze';
+import { AMBUSH_WARNING, dissolveVeil, restingVeil, sheetAlpha, silhouetteAlpha, strandPixels, veilAlpha, veilPixels, VEIL_DEATH_LIFE, VeilStrands } from './shadeHaze';
 
 /** A steady pseudo-random source, so the tests do not flake. */
 function lcg(seed = 7): () => number {
@@ -99,12 +99,28 @@ describe('silhouette warning', () => {
   });
 });
 
-describe('death cloud', () => {
-  it('is about 20 particles that spread to at most 14 px over 0.8 s', () => {
-    const cloud = deathCloud(lcg());
-    expect(cloud.particles.length).toBeGreaterThanOrEqual(18);
-    expect(cloud.particles.length).toBeLessThanOrEqual(22);
-    for (const p of cloud.particles) expect(Math.hypot(p.vx, p.vy) * cloud.life).toBeLessThanOrEqual(14 + 1e-9);
-    expect(cloud.life).toBe(0.8);
+describe('veil death', () => {
+  const centre = { x: 100, y: 94 };
+  const lines = restingVeil({ x: 100, y: 100 }, 1, lcg());
+  /** How far it reaches sideways (the rise does not count). */
+  const reach = (ls: { pts: { x: number; y: number }[] }[]) => Math.max(...ls.flatMap((l) => l.pts.map((p) => Math.abs(p.x - centre.x))));
+
+  it('starts as the veil was, fully dark', () => {
+    const d = dissolveVeil(lines, centre, 0);
+    expect(d.alpha).toBe(1);
+    expect(d.lines).toEqual(lines.map((l) => ({ front: l.front, pts: l.pts })));
+  });
+  it('spreads out a little (to 1.7 times its size), fast at first, rising, while it fades to nothing', () => {
+    const r0 = reach(lines);
+    expect(reach(dissolveVeil(lines, centre, 0.5).lines)).toBeGreaterThan(r0 * 1.45);
+    expect(reach(dissolveVeil(lines, centre, 1).lines)).toBeCloseTo(r0 * 1.7, 6);
+    const a = [0, 0.25, 0.5, 0.75, 1].map((k) => dissolveVeil(lines, centre, k).alpha);
+    for (let i = 1; i < a.length; i++) expect(a[i]).toBeLessThan(a[i - 1]);
+    expect(a.at(-1)).toBe(0);
+    expect(VEIL_DEATH_LIFE).toBe(1);
+  });
+  it('restingVeil is a settled cloud with every strand', () => {
+    expect(lines.length).toBe(10);
+    expect(lines.some((l) => l.pts.at(-1)!.x > 103)).toBe(true);
   });
 });

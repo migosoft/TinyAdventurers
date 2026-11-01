@@ -607,6 +607,12 @@ export class EntityView {
     this.root.scene.tweens.add({ targets: g, alpha: 0, duration: VANISH_SECS * 1000, onComplete: () => g.destroy() });
   }
 
+  /** The Shade's veil and body as they were last drawn, for its death (`Effects.shadeDeath`); null without a veil. */
+  veilRemains(): { veil: ReturnType<ShadeVeil['remains']>; body: { frame: string; flipX: boolean } } | null {
+    if (!this.veil) return null;
+    return { veil: this.veil.remains(), body: { frame: this.body.frame.name, flipX: this.body.flipX } };
+  }
+
   destroy(): void {
     this.veil?.destroy();
     this.tele?.destroy();

@@ -2,7 +2,7 @@
 // Everything is pooled so combat does not allocate per frame.
 import type Phaser from 'phaser';
 import { FONT_TEXT } from '../fonts';
-import { deathCloud, HAZE_COLOR } from './shadeHaze';
+import { dissolveVeil, drawVeil, restingVeil, VEIL_DEATH_LIFE, type VeilStrand } from './shadeHaze';
 import { popScale, smoothText, TEXT_RESOLUTION, WORLD_TEXT, type WorldTextKind } from './worldText';
 
 export const DEPTH = {
@@ -112,6 +112,7 @@ export class Effects {
   private freeRings: Phaser.GameObjects.Graphics[] = [];
   private swooshes: Swoosh[] = [];
   private zaps: Zap[] = [];
+  private veils: { g: Phaser.GameObjects.Graphics; lines: readonly VeilStrand[]; centre: { x: number; y: number }; t: number }[] = [];
   private texts: FloatText[] = [];
   private freeTexts: Phaser.GameObjects.Text[] = [];
 
@@ -173,10 +174,17 @@ export class Effects {
     }
   }
 
-  /** A Shade dies: no skull, a dark cloud of about 20 haze particles that spread to 14 px and fade over 0.8 s. */
-  darkCloud(x: number, y: number): void {
-    const { life, particles } = deathCloud();
-    for (const p of particles) this.particle(x, y, p.vx, p.vy, life, HAZE_COLOR, { frame: 'glow', fade: true, alpha: 0.5, scale: p.scale });
+  /**
+   * A Shade dies at its feet (`x`, `y`): no skull. Its black body fades in 0.3 s and its veil (`remains`, as last drawn;
+   * a resting cloud if there is none) drifts apart and fades to nothing over `VEIL_DEATH_LIFE` (`dissolveVeil`).
+   */
+  shadeDeath(x: number, y: number, remains: { lines: readonly VeilStrand[]; feet: { x: number; y: number } } | null, body?: { frame: string; flipX: boolean }): void {
+    const feet = remains?.feet ?? { x, y };
+    const lines = remains?.lines.length ? remains.lines : restingVeil(feet, 1);
+    const depth = DEPTH.entityBase + feet.y;
+    if (body) this.particle(feet.x, feet.y - 7, 0, 0, 0.3, 0xffffff, { frame: body.frame, flipX: body.flipX, fade: true, alpha: 0.75, depth });
+    const g = this.scene.add.graphics().setDepth(depth);
+    this.veils.push({ g, lines: lines.map((l) => ({ front: l.front, pts: l.pts.map((p) => ({ ...p })) })), centre: { x: feet.x, y: feet.y - 6 }, t: 0 });
   }
 
   /** The wolf's summon, reappear and vanish: about 18 clear-green sparks rising and fading over 0.6 s (not the poison tint). */
@@ -224,6 +232,17 @@ export class Effects {
       }
       r.g.lineStyle(2, r.color, 1 - k);
       r.g.strokeCircle(r.x, r.y, rad);
+    }
+    for (let i = this.veils.length - 1; i >= 0; i--) {
+      const v = this.veils[i];
+      v.t += dt;
+      if (v.t >= VEIL_DEATH_LIFE) {
+        v.g.destroy();
+        this.veils.splice(i, 1);
+        continue;
+      }
+      const { lines, alpha } = dissolveVeil(v.lines, v.centre, v.t / VEIL_DEATH_LIFE);
+      drawVeil(lines, v.g.clear(), v.g, alpha);
     }
     for (let i = this.zaps.length - 1; i >= 0; i--) {
       const z = this.zaps[i];
