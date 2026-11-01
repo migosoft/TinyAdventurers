@@ -5,7 +5,7 @@ use super::damage::{DamageType::Cold, Resistances};
 use super::races::{self, Adjust, Race, Profile};
 
 pub const WOLF_HP: f64 = 80.0;
-/// The stat block (spec section 7): saves and push power. HP and speed keep the `WOLF_*` numbers; its Bite and Pounce are abilities (`sheet::wolf_kit`).
+/// The stat block (spec section 7): saves and push power. HP and speed keep the `WOLF_*` numbers; its Bite and Pounce are abilities (`sheet::kit_for`).
 pub const WOLF_ATTRS: Attributes = Attributes::new(17, 15, 15, 3, 12, 7);
 pub const WOLF_WEIGHT: f64 = 10.0;
 pub const WOLF_SPEED: f64 = 88.0;

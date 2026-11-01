@@ -230,6 +230,8 @@ pub struct Monster {
     pub hp: f64,
     pub max_hp: f64,
     pub speed: f64,
+    /// Its numbers at spawn, before any Attribute effect (crate::sheet::monster_numbers).
+    pub base: crate::sheet::MonsterBase,
     pub radius: f64,
     pub sight: Sight,
     pub alive: bool,

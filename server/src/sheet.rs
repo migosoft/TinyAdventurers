@@ -114,7 +114,7 @@ pub struct Sheet {
 }
 
 /// The wolf's numbers from the Summon Wolf version: its max HP is multiplied by `hp_mul`, and `pounce`
-/// (a `CooldownAdd`) is applied to its Pounce through `apply_mods` (`wolf_kit`).
+/// (a `CooldownAdd`) is applied to its Pounce through `apply_mods` (`kit_for`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WolfMods {
     pub hp_mul: f64,
@@ -316,22 +316,32 @@ pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], bo
     Kit(kit)
 }
 
-/// The kit of boss `b`, from its stat block.
-pub fn boss_kit(b: BossId) -> Kit {
-    let d = bosses::def(b);
-    monster_kit(d.abilities, &d.attrs, d.weapons, Body { radius: d.radius })
+/// Whose stat block a monster's kit comes from.
+#[derive(Debug, Clone, Copy)]
+pub enum KitSource {
+    Enemy(EnemyType),
+    Boss(BossId),
+    /// The Ranger's wolf: Bite and Pounce from Beast Bite, Pounce changed by its version.
+    Wolf(WolfMods),
 }
 
-/// The Ranger's wolf: Bite and Pounce from its Attributes and Beast Bite, Pounce changed by its version.
-pub fn wolf_kit(mods: &WolfMods) -> Kit {
-    let kit = monster_kit(&[AbilityId::Bite, AbilityId::Pounce], &WOLF_ATTRS, &[ItemId::BeastBite], Body { radius: WOLF_RADIUS });
-    kit.modded(AbilityId::Pounce, mods.pounce.as_slice())
-}
-
-/// The kit of enemy type `t`, from its stat block.
-pub fn enemy_kit(t: EnemyType) -> Kit {
-    let d = enemies::def(t);
-    monster_kit(d.abilities, &d.attrs, d.weapons, Body { radius: d.radius })
+/// The kit of a monster from `src`'s abilities, weapons and body, with `attrs` as its Attributes
+/// (the stat block's at spawn, drained during a run).
+pub fn kit_for(src: KitSource, attrs: &Attributes) -> Kit {
+    match src {
+        KitSource::Enemy(t) => {
+            let d = enemies::def(t);
+            monster_kit(d.abilities, attrs, d.weapons, Body { radius: d.radius })
+        }
+        KitSource::Boss(b) => {
+            let d = bosses::def(b);
+            monster_kit(d.abilities, attrs, d.weapons, Body { radius: d.radius })
+        }
+        KitSource::Wolf(mods) => {
+            let kit = monster_kit(&[AbilityId::Bite, AbilityId::Pounce], attrs, &[ItemId::BeastBite], Body { radius: WOLF_RADIUS });
+            kit.modded(AbilityId::Pounce, mods.pounce.as_slice())
+        }
+    }
 }
 
 /// A weapon item for one wielder, with the shares and on-hit its own properties gave it.
@@ -861,6 +871,36 @@ pub fn wolf_stats() -> MonsterStats {
     MonsterStats { attrs: WOLF_ATTRS, weight: WOLF_WEIGHT, max_hp: attributes::hp(wolf_base_hp(), con), speed: move_speed(WOLF_SPEED, con, &WOLF_ATTRS) }
 }
 
+/// What a monster is made of at spawn: the numbers its Attributes gave it. `monster_numbers` moves
+/// them by an Attribute delta.
+#[derive(Debug, Clone, Copy)]
+pub struct MonsterBase {
+    pub attrs: Attributes,
+    pub max_hp: f64,
+    pub speed: f64,
+    pub kit: KitSource,
+}
+
+/// A monster's Attributes and the numbers they give.
+#[derive(Debug, Clone)]
+pub struct MonsterNumbers {
+    pub attrs: Attributes,
+    pub max_hp: f64,
+    pub speed: f64,
+    pub kit: Kit,
+}
+
+/// `base` with `delta` added to its Attributes (a lowered one stops at 1): max HP moves by `CON_HP`
+/// per CON point and stays at least 1, speed by `CON_MOVE`, the kit is resolved again. At a zero
+/// delta every number is the spawn's.
+pub fn monster_numbers(base: &MonsterBase, delta: Attributes) -> MonsterNumbers {
+    let attrs = base.attrs.with_delta(delta);
+    let con0 = base.attrs.get(Attr::Con);
+    let max_hp = (base.max_hp + attributes::CON_HP * (attrs.get(Attr::Con) - con0) as f64).max(1.0);
+    let speed = move_speed(base.speed, con0, &attrs);
+    MonsterNumbers { attrs, max_hp, speed, kit: kit_for(base.kit, &attrs) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1327,18 +1367,18 @@ mod tests {
         };
         for t in EnemyType::ALL {
             let d = enemies::def(t);
-            check(&format!("{t:?}"), &enemy_kit(t), d.abilities, &d.attrs, d.weapons, d.radius);
+            check(&format!("{t:?}"), &kit_for(KitSource::Enemy(t), &crate::defs::enemies::def(t).attrs), d.abilities, &d.attrs, d.weapons, d.radius);
         }
         for b in BossId::ALL {
             let d = bosses::def(b);
-            check(&format!("{b:?}"), &boss_kit(b), d.abilities, &d.attrs, d.weapons, d.radius);
+            check(&format!("{b:?}"), &kit_for(KitSource::Boss(b), &crate::defs::bosses::def(b).attrs), d.abilities, &d.attrs, d.weapons, d.radius);
         }
         let ids = [AbilityId::Bite, AbilityId::Pounce];
-        check("wolf", &wolf_kit(&WolfMods::NONE), &ids, &WOLF_ATTRS, &[ItemId::BeastBite], WOLF_RADIUS);
+        check("wolf", &kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS), &ids, &WOLF_ATTRS, &[ItemId::BeastBite], WOLF_RADIUS);
         // A version's mod goes through `apply_mods`, on the Pounce alone.
         let faster = AbilityMod::CooldownAdd(-0.5);
-        let kit = wolf_kit(&WolfMods { hp_mul: 1.0, pounce: Some(faster) });
-        let plain = wolf_kit(&WolfMods::NONE);
+        let kit = kit_for(KitSource::Wolf(WolfMods { hp_mul: 1.0, pounce: Some(faster) }), &crate::defs::companions::WOLF_ATTRS);
+        let plain = kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS);
         assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(*plain.get(AbilityId::Pounce).unwrap(), &[faster])));
         assert_eq!(kit.get(AbilityId::Bite), plain.get(AbilityId::Bite));
     }
@@ -1348,14 +1388,14 @@ mod tests {
         use crate::defs::bosses::*;
         let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-9, "{what}: {a} vs {b}");
         for b in BossId::ALL {
-            let k = boss_kit(b);
+            let k = kit_for(KitSource::Boss(b), &crate::defs::bosses::def(b).attrs);
             for &id in def(b).abilities {
                 assert!(k.get(id).is_some(), "{b:?} {id:?}");
             }
         }
-        let dragon = boss_kit(BossId::Dragon);
-        let demon = boss_kit(BossId::Demon);
-        let lich = boss_kit(BossId::Lich);
+        let dragon = kit_for(KitSource::Boss(BossId::Dragon), &crate::defs::bosses::def(BossId::Dragon).attrs);
+        let demon = kit_for(KitSource::Boss(BossId::Demon), &crate::defs::bosses::def(BossId::Demon).attrs);
+        let lich = kit_for(KitSource::Boss(BossId::Lich), &crate::defs::bosses::def(BossId::Lich).attrs);
         let check = |k: &Kit, id: AbilityId, damage: f64, push: f64| {
             let a = k.get(id).unwrap_or_else(|| panic!("{id:?}"));
             near(a.damage, damage, &format!("{id:?} damage"));
@@ -1381,6 +1421,65 @@ mod tests {
         assert_eq!(s.max_hp, WOLF_HP);
         assert_eq!(s.speed, WOLF_SPEED);
         assert_eq!(s.weight, 10.0);
+    }
+
+    /// What each spawn stores as `Monster.base`.
+    fn bases() -> Vec<(String, MonsterBase, Vec<AbilityId>)> {
+        let mut v = vec![];
+        for t in EnemyType::ALL {
+            let (s, d) = (enemy_stats(t), enemies::def(t));
+            v.push((format!("{t:?}"), MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(t) }, d.abilities.to_vec()));
+        }
+        for b in BossId::ALL {
+            let (s, d) = (boss_stats(b), bosses::def(b));
+            v.push((format!("{b:?}"), MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Boss(b) }, d.abilities.to_vec()));
+        }
+        let s = wolf_stats();
+        v.push(("wolf".into(), MonsterBase { attrs: s.attrs, max_hp: WOLF_HP, speed: WOLF_SPEED, kit: KitSource::Wolf(WolfMods::NONE) }, vec![AbilityId::Bite, AbilityId::Pounce]));
+        v
+    }
+
+    #[test]
+    fn monster_numbers_at_zero_delta_are_the_base() {
+        for (what, base, ids) in bases() {
+            let n = monster_numbers(&base, Attributes::default());
+            assert_eq!(n.attrs, base.attrs, "{what}");
+            assert_eq!(n.max_hp.to_bits(), base.max_hp.to_bits(), "{what} max HP");
+            assert_eq!(n.speed.to_bits(), base.speed.to_bits(), "{what} speed");
+            let spawn = kit_for(base.kit, &base.attrs);
+            for id in ids {
+                assert_eq!(n.kit.get(id), spawn.get(id), "{what} {id:?}");
+                assert!(n.kit.get(id).is_some(), "{what} {id:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn monster_numbers_follow_a_drain() {
+        let s = enemy_stats(EnemyType::OrcWarrior);
+        let base = MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::OrcWarrior) };
+        let at0 = monster_numbers(&base, Attributes::default());
+        let weak = monster_numbers(&base, Attributes::new(-3, 0, 0, 0, 0, 0));
+        assert!(weak.kit.get(AbilityId::Strike).unwrap().damage < at0.kit.get(AbilityId::Strike).unwrap().damage);
+        assert_eq!(weak.attrs.get(Attr::Str), s.attrs.get(Attr::Str) - 3);
+        let frail = monster_numbers(&base, Attributes::new(0, 0, -2, 0, 0, 0));
+        assert_eq!(frail.max_hp, at0.max_hp - 10.0);
+        assert!(frail.speed < at0.speed);
+    }
+
+    #[test]
+    fn monster_max_hp_never_reaches_zero() {
+        let drain = Attributes::new(-100, -100, -100, -100, -100, -100);
+        for (what, base, _) in bases() {
+            let n = monster_numbers(&base, drain);
+            assert!(n.max_hp >= 1.0, "{what}");
+            assert_eq!(n.attrs.get(Attr::Con), base.attrs.get(Attr::Con).min(1), "{what}");
+            assert!(n.speed.is_finite() && n.speed >= 0.0 && (n.speed > 0.0) == (base.speed > 0.0), "{what}");
+        }
+        // A frail one: the drain empties it to the floor.
+        let s = enemy_stats(EnemyType::GoblinArcher);
+        let archer = MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::GoblinArcher) };
+        assert_eq!(monster_numbers(&archer, drain).max_hp, 1.0);
     }
 
     #[test]

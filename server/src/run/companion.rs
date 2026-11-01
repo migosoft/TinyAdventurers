@@ -44,6 +44,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
     let stats = crate::sheet::wolf_stats();
     let owner = run.players[pi].id;
     let max_hp = WOLF_HP * run.players[pi].sheet.wolf.hp_mul;
+    let base = crate::sheet::MonsterBase { attrs: stats.attrs, max_hp, speed: WOLF_SPEED, kit: crate::sheet::KitSource::Wolf(run.players[pi].sheet.wolf) };
     let spot = summon_spot(run, run.players[pi].pos());
     let (tx, ty) = Map::tile_of(spot);
     let id = run.alloc_id();
@@ -60,6 +61,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         hp: max_hp,
         max_hp,
         speed: WOLF_SPEED,
+        base,
         radius: WOLF_RADIUS,
         sight: prof.sight,
         alive: true,
@@ -68,7 +70,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         anim: Anim::Idle,
         anim_start: run.time,
         hurt_t: 0.0,
-        kit: crate::sheet::wolf_kit(&run.players[pi].sheet.wolf),
+        kit: crate::sheet::kit_for(base.kit, &base.attrs),
         cds: Default::default(),
         slam: None,
         channel: None,
@@ -641,7 +643,7 @@ mod tests {
     fn a_pounce_cooldown_mod_lengthens_only_the_wolfs_pounce() {
         use crate::defs::loadout::AbilityMod::CooldownAdd;
         let mods = crate::sheet::WolfMods { hp_mul: 1.0, pounce: Some(CooldownAdd(1.5)) };
-        let (plain, modded) = (crate::sheet::wolf_kit(&crate::sheet::WolfMods::NONE), crate::sheet::wolf_kit(&mods));
+        let (plain, modded) = (crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS), crate::sheet::kit_for(crate::sheet::KitSource::Wolf(mods), &crate::defs::companions::WOLF_ATTRS));
         let (p, m) = (plain.get(AbilityId::Pounce).unwrap(), modded.get(AbilityId::Pounce).unwrap());
         assert_eq!((p.cooldown, m.cooldown), (5.0, 6.5));
         assert_eq!(plain.get(AbilityId::Bite), modded.get(AbilityId::Bite), "the bite is the same");
