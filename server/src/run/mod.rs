@@ -292,6 +292,7 @@ impl Run {
         self.monsters.push(Monster {
             id,
             res: prof.res,
+            traits: prof.traits,
             races: enemies::races(t),
             melee: enemies::melee_split(t),
             etype: Some(t),
@@ -614,7 +615,7 @@ impl Run {
     pub fn knock_monster(&mut self, mi: usize, from: Vec2, dist: f64, str: i32) {
         let m = &mut self.monsters[mi];
         let dist = push_dist(dist, str, m.weight);
-        if !m.alive || m.is_boss || m.airborne || m.sinking.is_some() || dist <= 0.0 {
+        if !m.alive || m.is_boss || m.traits.knock_immune || m.airborne || m.sinking.is_some() || dist <= 0.0 {
             return;
         }
         if m.dash.is_some() {
@@ -1804,6 +1805,19 @@ pub mod tests {
         let id = run.spawn_enemy(EnemyType::OrcWarrior, orc, None);
         run.players[0].debug = true;
         (run, id, at)
+    }
+
+    #[test]
+    fn incorporeal_monsters_are_never_knocked_back() {
+        let (mut run, id, _) = orc_by(Tile::Floor);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].traits.knock_immune = true;
+        let from = run.monsters[mi].pos - Vec2::new(10.0, 0.0);
+        run.knock_monster(mi, from, 400.0, 30);
+        assert_eq!(run.monsters[mi].knock, Vec2::ZERO);
+        run.monsters[mi].traits.knock_immune = false;
+        run.knock_monster(mi, from, 400.0, 30);
+        assert_ne!(run.monsters[mi].knock, Vec2::ZERO, "control: an orc is pushed");
     }
 
     #[test]

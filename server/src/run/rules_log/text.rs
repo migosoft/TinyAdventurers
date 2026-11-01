@@ -180,6 +180,7 @@ fn race_name(r: Race) -> &'static str {
         Race::Elf => "elf",
         Race::MagicalBeast => "magical beast",
         Race::Object => "object",
+        Race::Incorporeal => "incorporeal",
     }
 }
 

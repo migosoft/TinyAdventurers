@@ -48,6 +48,7 @@ pub fn spawn(run: &mut Run) {
     run.monsters.push(Monster {
         id,
         res: prof.res,
+        traits: prof.traits,
         races: boss_defs::races(boss_id),
         melee: prof.melee,
         etype: None,

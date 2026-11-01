@@ -4,7 +4,7 @@
 //! adjustments (`Adjust`). Balancing edits only this data.
 
 use super::attributes::Attributes;
-use super::damage::{DamageSplit, DamageType::*, Resistances};
+use super::damage::{DamageSplit, DamageType, DamageType::*, Resistances};
 use super::effects::{EffectKind, EffectResistances};
 use super::items::{self, ItemBase, ItemId};
 
@@ -26,6 +26,8 @@ super::enum_list::listed_enum! {
         MagicalBeast = 9,
         /// Inanimate objects (chests, barrels): every one resists poison fully.
         Object = 10,
+        /// Beings without a solid body (ghosts, shades).
+        Incorporeal = 11,
     }
 }
 
@@ -47,6 +49,24 @@ impl Sight {
     }
 }
 
+/// Yes/no traits a race gives (not abilities: in this game an ability is only a mouse-button attack).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Traits {
+    /// Passes through walls and solids.
+    pub phasing: bool,
+    /// Cannot be seen.
+    pub invisibility: bool,
+    /// Never pushed back by a hit.
+    pub knock_immune: bool,
+}
+
+impl Traits {
+    /// Field-wise OR: a trait of any race is the entity's.
+    pub fn merge(self, o: Traits) -> Traits {
+        Traits { phasing: self.phasing || o.phasing, invisibility: self.invisibility || o.invisibility, knock_immune: self.knock_immune || o.knock_immune }
+    }
+}
+
 pub struct RaceDef {
     pub res: Resistances,
     /// Its natural weapons (part of the body, never equipped).
@@ -58,13 +78,15 @@ pub struct RaceDef {
     pub attrs: Attributes,
     /// Its effect resistances (elves and magical beasts never fall asleep).
     pub effect_res: EffectResistances,
+    /// Its traits (only the Incorporeal have any).
+    pub traits: Traits,
 }
 
 pub fn race_def(r: Race) -> RaceDef {
     let none = Attributes::default();
     let never_sleeps = EffectResistances::of(&[(EffectKind::Sleep, 1.0)]);
     let fear = |r| EffectResistances::of(&[(EffectKind::Fear, r)]);
-    let plain = |res, natural: &'static [ItemId], vision, darkvision| RaceDef { res, natural, vision, darkvision, attrs: none, effect_res: EffectResistances::NONE };
+    let plain = |res, natural: &'static [ItemId], vision, darkvision| RaceDef { res, natural, vision, darkvision, attrs: none, effect_res: EffectResistances::NONE, traits: Traits::default() };
     use ItemId::*;
     match r {
         Race::Human => plain(Resistances::NONE, &[UnarmedStrike], 9.0, 0.0),
@@ -75,6 +97,14 @@ pub fn race_def(r: Race) -> RaceDef {
         Race::Dragon => plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), &[DragonClaws, DragonBite, DragonTail], 25.0, 1.0),
         Race::Object => plain(Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), &[], 0.0, 0.0),
         Race::Elf => RaceDef { attrs: Attributes::new(0, 2, 0, 0, 0, 0), effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1)]), &[UnarmedStrike], 18.0, 1.0 / 3.0) },
+        Race::Incorporeal => {
+            // No `_` arm: a new damage type must be decided here before it compiles.
+            let res = Resistances::of(&DamageType::ALL.map(|t| (t, match t {
+                Physical | Cold | Heat | Poison => 1.0,
+                Magical => -0.1,
+            })));
+            RaceDef { effect_res: EffectResistances::of(&[(EffectKind::Entangled, 1.0)]), traits: Traits { phasing: true, invisibility: true, knock_immune: true }, ..plain(res, &[], 0.0, 0.0) }
+        }
         Race::MagicalBeast => RaceDef { effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1), (Magical, 0.1)]), &[BeastBite], 18.0, 1.0) },
     }
 }
@@ -113,16 +143,18 @@ pub struct Profile {
     pub effect_res: EffectResistances,
     pub melee: DamageSplit,
     pub sight: Sight,
+    pub traits: Traits,
 }
 
-/// Resistances (damage and effect): per type the strongest (largest absolute value) of its races, then the adjustment added on top; melee split: that of the first race's first natural weapon. Sight: the best of the races, else the adjustment's.
+/// Resistances (damage and effect): per type the strongest (largest absolute value) of its races, then the adjustment added on top; melee split: that of the first race's first natural weapon. Sight: the best of the races, else the adjustment's. Traits: merged over the races.
 pub fn profile(races: &[Race], adj: Adjust) -> Profile {
     let res = races.iter().fold(Resistances::NONE, |r, &t| r.strongest(race_def(t).res)).plus(adj.res);
     let effect_res = races.iter().fold(EffectResistances::NONE, |r, &t| r.strongest(race_def(t).effect_res)).plus(adj.effect_res);
     let melee = races.first().and_then(|&t| race_def(t).natural.first().copied()).map_or(DamageSplit::physical(), natural_split);
     let best = |f: fn(&RaceDef) -> f64| races.iter().map(|&t| f(&race_def(t))).fold(0.0, f64::max);
     let sight = Sight { vision: adj.vision.unwrap_or_else(|| best(|d| d.vision)), darkvision: adj.darkvision.unwrap_or_else(|| best(|d| d.darkvision)) };
-    Profile { res, effect_res, melee, sight }
+    let traits = races.iter().fold(Traits::default(), |t, &r| t.merge(race_def(r).traits));
+    Profile { res, effect_res, melee, sight, traits }
 }
 
 #[cfg(test)]
@@ -251,6 +283,30 @@ mod tests {
         for b in BossId::ALL {
             assert_eq!(bosses::profile(b).sight.vision, 25.0, "{b:?}");
         }
+    }
+
+    #[test]
+    fn a_ghost_is_undead_and_incorporeal() {
+        let p = profile(&[Race::Undead, Race::Incorporeal], Adjust::NONE);
+        for t in [Physical, Cold, Heat, Poison] {
+            assert_eq!(p.res.get(t), 1.0, "{t:?}");
+        }
+        assert!((p.res.get(Magical) + 0.1).abs() < 1e-12);
+        assert_eq!(p.effect_res.get(EffectKind::Entangled), 1.0);
+        assert_eq!(p.effect_res.get(EffectKind::Fear), 1.0, "from Undead");
+        assert_eq!(p.sight, Sight { vision: 8.0, darkvision: 1.0 }, "Undead's sight");
+        assert_eq!(p.traits, Traits { phasing: true, invisibility: true, knock_immune: true });
+        assert_eq!(profile(&[Race::Undead], Adjust::NONE).traits, Traits::default());
+    }
+
+    #[test]
+    fn incorporeal_resists_every_damage_type_but_magic() {
+        // When #147 adds Holy, it is 0.0 here (the user, 2026-10-31).
+        let r = race_def(Race::Incorporeal).res;
+        for t in super::super::damage::DamageType::ALL {
+            assert_eq!(r.get(t), if t == Magical { -0.1 } else { 1.0 }, "{t:?}");
+        }
+        assert!(race_def(Race::Incorporeal).natural.is_empty());
     }
 
     #[test]

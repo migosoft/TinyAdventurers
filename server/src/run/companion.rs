@@ -49,6 +49,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
     run.monsters.push(Monster {
         id,
         res: prof.res,
+        traits: prof.traits,
         races: &[Race::MagicalBeast],
         melee: prof.melee,
         etype: None,

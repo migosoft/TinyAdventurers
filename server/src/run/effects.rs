@@ -1135,6 +1135,20 @@ mod tests {
     }
 
     #[test]
+    fn an_incorporeal_monster_refuses_entangled() {
+        use crate::defs::races::{profile, Adjust, Race};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].effect_res = profile(&[Race::Incorporeal], Adjust::NONE).effect_res;
+        let c = Creature::Monster(mi);
+        assert_eq!(run.apply_effect(c, EffectKind::Entangled, Some(2.0)), false);
+        assert!(!run.has_effect(c, EffectKind::Entangled));
+    }
+
+    #[test]
     fn an_effect_names_its_own_save() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         open(&mut run);
