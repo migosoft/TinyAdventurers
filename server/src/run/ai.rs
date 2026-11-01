@@ -204,13 +204,14 @@ fn can_rest(run: &Run, mi: usize, p: Vec2) -> bool {
 
 /// A phantom that is somewhere it may not rest walks straight to the nearest spot it may.
 fn leave_wall(run: &mut Run, mi: usize, dt: f64) {
-    let (pos, speed) = (run.monsters[mi].pos, run.monsters[mi].speed * run.monsters[mi].effects.speed_mul());
+    let (pos, speed) = (run.monsters[mi].pos, run.monsters[mi].speed);
     let (tx, ty) = Map::tile_of(pos);
     let to = (-6..=6)
         .flat_map(|dy| (-6..=6).map(move |dx| Map::center_of(tx + dx, ty + dy)))
         .filter(|&c| can_rest(run, mi, c))
         .min_by(|a, b| a.dist(pos).total_cmp(&b.dist(pos)));
     if let Some(to) = to {
+        // `move_toward` applies the slow once.
         move_toward(run, mi, to, speed.max(20.0), dt);
         set_anim(run, mi, Anim::Move);
     }
@@ -1091,6 +1092,31 @@ pub(crate) mod tests {
             attacked |= m.ai.windup.is_some();
         }
         assert!(attacked, "then it attacks");
+    }
+
+    #[test]
+    fn a_slowed_phaser_leaves_a_wall_at_the_slowed_speed_once() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let ppos = run.players[0].pos();
+        let (tx, ty) = Map::tile_of(ppos);
+        for dy in -3..=3 {
+            for dx in 1..=4 {
+                run.layout.map.set(tx + dx, ty + dy, Tile::Wall);
+            }
+        }
+        let at = Vec2::new((tx + 3) as f64 * TILE + 8.0, ppos.y);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        make_phantom(&mut run, mi);
+        run.monsters[mi].effects.add(EffectKind::Slowed, 30.0);
+        let (mul, speed) = (run.monsters[mi].effects.speed_mul(), run.monsters[mi].speed.max(20.0));
+        assert!(mul < 1.0);
+        let before = run.monsters[mi].pos;
+        leave_wall(&mut run, mi, 1.0 / 60.0);
+        let moved = run.monsters[mi].pos.dist(before);
+        assert!((moved - speed * mul / 60.0).abs() < 1e-6, "moved {moved}, want {}", speed * mul / 60.0);
     }
 
     /// An orc archer 100 px west of the hero, a barrel `barrel_off` from the hero.

@@ -200,6 +200,10 @@ mod tests {
         let adj = Adjust { res: Resistances::of(&[(Magical, 0.1)]), ..Adjust::NONE };
         let p = profile(&[Race::Human], adj);
         assert!((p.res.plus(Resistances::of(&[(Magical, 0.2)])).get(Magical) - 0.3).abs() < 1e-12, "Silk Robe + Warded");
+        // The adjustment adds on top of the combined race value (Incorporeal -0.1 wins over Undead).
+        let adj = Adjust { res: Resistances::of(&[(Magical, 0.4)]), ..Adjust::NONE };
+        let p = profile(&[Race::Undead, Race::Incorporeal], adj);
+        assert!((p.res.get(Magical) - 0.3).abs() < 1e-12);
     }
 
     #[test]

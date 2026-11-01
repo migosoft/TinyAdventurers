@@ -11,7 +11,7 @@ import { lineOfSight } from '../sim/collision';
 import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Hud } from '../ui/hud';
-import { MARK_TTL, Marks } from './anim/entityAlpha';
+import { MARK_TTL, Marks, skimsTerrain } from './anim/entityAlpha';
 import { FIGURES, PROJECTILES, heroWeapons, isAllyKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
@@ -920,7 +920,7 @@ export class GameScene extends Phaser.Scene {
       if (sk.drown) bubbleFx(this.fx, sk.x, sk.y, dt);
       return;
     }
-    const dashing = predicted ? this.pred.state.dashT > 0 : e.anim === ANIM.Dash;
+    const dashing = skimsTerrain(e.flags, predicted ? this.pred.state.dashT > 0 : e.anim === ANIM.Dash);
     s.sink = dashing ? 0 : sinkDepth(tile);
     let wade = this.wade.get(e.id);
     if (!wade) this.wade.set(e.id, (wade = new WadeFx()));

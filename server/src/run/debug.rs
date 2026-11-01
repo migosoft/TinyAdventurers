@@ -52,7 +52,7 @@ impl Run {
         let found = (0..self.monsters.len())
             .filter(|&i| {
                 let m = &self.monsters[i];
-                m.alive && !m.is_boss && !m.traits.phasing && m.pos.dist(from) <= reach
+                m.alive && !m.is_ally() && m.sinking.is_none() && !m.is_boss && !m.traits.phasing && m.pos.dist(from) <= reach
             })
             .min_by(|&a, &b| self.monsters[a].pos.dist(from).total_cmp(&self.monsters[b].pos.dist(from)));
         let Some(mi) = found else { return };
@@ -295,10 +295,20 @@ mod tests {
         assert!(m.races.contains(&crate::defs::races::Race::Undead), "keeps its own race");
         assert!(m.effects.has(EffectKind::Invisible));
         assert!((m.invis_cd - 5.0).abs() < 1e-9);
+        // The Ranger's wolf is never picked, even when it is the nearest creature.
+        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(wolf).unwrap();
+        run.monsters[wi].pos = here + Vec2::new(5.0, 0.0);
         let far_mi = run.monster_idx(far).unwrap();
         assert!(!run.monsters[far_mi].traits.phasing, "only the nearest");
         // The one in reach is done; the other is 12 tiles away: the next press does nothing.
         run.debug_incorporeal(0);
         assert!(!run.monsters[far_mi].traits.phasing, "8 tiles only");
+        assert!(!run.monsters[wi].traits.phasing, "never the ally");
+        let sid = run.spawn_enemy(EnemyType::SkeletonWarrior, here + Vec2::new(20.0, 0.0), None);
+        let sink = run.monster_idx(sid).unwrap();
+        run.monsters[sink].sinking = Some((1.0, crate::run::entities::Sink::Fall));
+        run.debug_incorporeal(0);
+        assert!(!run.monsters[sink].traits.phasing, "never a sinking one");
     }
 }

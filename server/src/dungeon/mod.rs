@@ -87,7 +87,8 @@ impl Map {
         let (x, y) = Map::tile_of(p);
         self.opaque(x, y)
     }
-    /// Blocks walking for this mover. Mirrored in `client/src/sim/map.ts`.
+    /// Blocks walking for this mover. Mirrored in `client/src/sim/map.ts`, except `Mover::Incorporeal`, which is
+    /// server-only (client prediction uses movers for heroes only).
     pub fn blocks(&self, x: i32, y: i32, mover: Mover) -> bool {
         if mover == Mover::Incorporeal {
             return self.get(x, y) == Tile::Void as u8;

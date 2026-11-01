@@ -611,8 +611,8 @@ impl Run {
     }
 
     /// A blast pushes a monster straight away from `from`: `dist` px by a pusher
-    /// of STR `str`, less or not at all against its weight (`push_dist`). Bosses
-    /// and flying monsters are never pushed; only walls and solids stop the
+    /// of STR `str`, less or not at all against its weight (`push_dist`). Bosses,
+    /// knockback-immune (incorporeal) and flying monsters are never pushed; only walls and solids stop the
     /// slide, so it can end in a chasm, deep water or lava.
     pub fn knock_monster(&mut self, mi: usize, from: Vec2, dist: f64, str: i32) {
         let m = &mut self.monsters[mi];

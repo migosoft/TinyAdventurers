@@ -219,7 +219,8 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         }
         run.monsters[mi].ai.windup = None;
         let prey = run.monsters[mi].ally.as_ref().and_then(|a| a.prey).and_then(|id| run.monster_idx(id));
-        if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive) {
+        // Prey that has since gone invisible is dropped: the wind-up ends without a bite or a leap.
+        if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive && !run.monsters[ei].effects.has(EffectKind::Invisible)) {
             let at = run.monsters[ei].pos;
             if w.alt {
                 // The pounce's wind-up is over: it leaps if its landing is still safe.
@@ -1004,6 +1005,47 @@ mod tests {
         assert_eq!(run.players[0].hp, hp, "no hero was hurt");
         assert_eq!(run.players[0].mv.knocked(), false, "or pushed");
         assert_eq!((run.players[0].kills, run.players[0].damage > 0.0), (0, true), "the ranger is paid for the wolf's damage");
+    }
+
+    #[test]
+    fn a_pounce_through_an_invisible_monsters_spot_hits_and_reveals_it() {
+        let (mut run, id) = guard_run();
+        let wi = wolf_idx(&run, id);
+        let w = run.monsters[wi].pos;
+        let ghost = orc_at(&mut run, w + Vec2::new(30.0, 0.0));
+        let gi = run.monster_idx(ghost).unwrap();
+        run.monsters[gi].ai.hold = 99.0;
+        run.monsters[gi].hp = 500.0;
+        run.monsters[gi].effects.add(EffectKind::Invisible, 30.0);
+        let at = w + Vec2::new(44.0, 0.0);
+        assert!(monster_use(&mut run, wi, AbilityId::Pounce, at));
+        for _ in 0..60 {
+            if tick_monster_dash(&mut run, wi, DT).is_some() {
+                break;
+            }
+        }
+        assert_eq!(hp_of(&run, ghost), Some(480.0), "the leap hits what it passes over");
+        assert!(!run.has_effect(Creature::Monster(gi), EffectKind::Invisible), "and shows it");
+    }
+
+    #[test]
+    fn a_wind_up_on_prey_that_went_invisible_is_dropped() {
+        for alt in [false, true] {
+            let (mut run, id) = guard_run();
+            let wi = wolf_idx(&run, id);
+            let w = run.monsters[wi].pos;
+            let orc = orc_at(&mut run, w + Vec2::new(14.0, 0.0));
+            let oi = run.monster_idx(orc).unwrap();
+            run.monsters[oi].ai.hold = 99.0;
+            run.monsters[oi].hp = 500.0;
+            ally_mut(&mut run, wi).prey = Some(orc);
+            run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt, at: None });
+            run.monsters[oi].effects.add(EffectKind::Invisible, 30.0);
+            tick_wolf(&mut run, wi, DT);
+            assert_eq!(hp_of(&run, orc), Some(500.0), "alt {alt}: no bite");
+            assert!(run.monsters[wi].dash.is_none(), "alt {alt}: no leap");
+            assert!(run.monsters[wi].ai.windup.is_none(), "alt {alt}: the wind-up is over");
+        }
     }
 
     #[test]

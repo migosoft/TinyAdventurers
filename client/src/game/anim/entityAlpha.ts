@@ -15,6 +15,11 @@ export function entityAlpha(flags: number, effects: number, isParty: boolean): n
   return 1;
 }
 
+/** Does this figure skim over terrain (no wading, sinking, splash or ripple)? A dash does; so does an incorporeal figure. */
+export function skimsTerrain(flags: number, dashing: boolean): boolean {
+  return dashing || (flags & FLAG.INCORPOREAL) !== 0;
+}
+
 /** Fade-in factor 0..1 given the seconds left of the fade. */
 export function appearFactor(left: number, total: number): number {
   if (total <= 0 || left <= 0) return 1;

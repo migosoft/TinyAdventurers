@@ -355,7 +355,7 @@ fn enemy_kinds() -> serde_json::Map<String, serde_json::Value> {
             continue;
         }
         let res = enemies::profile(t).res;
-        let res: serde_json::Map<_, _> = crate::defs::damage::DamageType::ALL.iter().map(|&dt| (dt.name().to_string(), json!(res.get(dt)))).collect();
+        let res: serde_json::Map<_, _> = crate::defs::damage::DamageType::ALL.iter().map(|&dt| (dt.name().to_string(), json!(res.capped(dt)))).collect();
         out.insert(key, json!({ "max_hp": crate::sheet::enemy_stats(t).max_hp, "res": res }));
     }
     out
