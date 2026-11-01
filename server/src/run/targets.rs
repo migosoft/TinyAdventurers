@@ -2,10 +2,10 @@
 //! rules log share this one decision.
 
 use super::effects::Creature;
-use crate::defs::effects::EffectKind;
 use super::Run;
 use crate::collision::line_of_sight;
 use crate::defs::classes::PLAYER_RADIUS;
+use crate::defs::effects::EffectKind;
 use crate::math::{angle_diff, Vec2};
 
 /// Which team a user fights for. A hero or an ally (the wolf) is `Heroes`; every other monster is `Monsters`.

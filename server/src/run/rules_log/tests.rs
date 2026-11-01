@@ -1658,3 +1658,19 @@ fn an_invisible_monsters_records_are_seen_by_nobody_until_it_is_revealed() {
     assert!(!ended.who[0].gone, "it is shown: the monster is visible now");
     assert!(recs.iter().filter(|r| r.kind == LineKind::Hit).all(|r| !r.who[0].gone));
 }
+
+#[test]
+fn a_skip_line_naming_an_invisible_monster_is_held_back() {
+    use crate::defs::effects::EffectKind;
+    use crate::run::targets::Skip;
+    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    run.log.forced = true;
+    let mi = enemy_near(&mut run, EnemyType::GoblinArcher);
+    run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
+    let _ = take(&mut run);
+    let by = run.players[0].id;
+    super::skipped(&mut run, by, What::Ability(AbilityId::ChainSpark), &[(Creature::Monster(mi), Skip::Invisible)], None);
+    let recs = take(&mut run);
+    let skip = recs.iter().find(|r| r.kind == LineKind::Skip).expect("the skip is recorded");
+    assert!(skip.who[0].gone && skip.unseen.is_none(), "but no player is sent it while the monster is invisible");
+}

@@ -552,7 +552,7 @@ mod tests {
         c
     }
 
-    /// A skeleton given the Invisibility trait, and the steps `n` seconds take.
+    /// A skeleton given the Invisibility trait.
     fn ghostly(run: &mut crate::run::Run) -> usize {
         use crate::defs::enemies::EnemyType;
         open(run);
@@ -564,6 +564,7 @@ mod tests {
         mi
     }
 
+    /// The effect steps `s` seconds take.
     fn secs(run: &mut crate::run::Run, s: f64) {
         for _ in 0..(s / DT).round() as usize {
             run.tick_effects();
@@ -597,6 +598,7 @@ mod tests {
         // Revealed by a hit at 1 s: the cooldown starts then.
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let mi = ghostly(&mut run);
+        let c = Creature::Monster(mi);
         run.monsters[mi].res = Resistances::NONE;
         assert!(run.go_invisible(mi, 2.0, 3.0));
         secs(&mut run, 1.0);
@@ -604,9 +606,9 @@ mod tests {
         run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
         assert!(!run.has_effect(c, EffectKind::Invisible));
         secs(&mut run, 2.9);
-        assert!(!run.go_invisible(mi, 2.0, 3.0));
-        secs(&mut run, 1.11);
-        assert!(run.go_invisible(mi, 2.0, 3.0), "4.01 s: ready");
+        assert!(!run.go_invisible(mi, 2.0, 3.0), "3.9 s: 2.9 s of cooldown since the reveal");
+        secs(&mut run, 0.11);
+        assert!(run.go_invisible(mi, 2.0, 3.0), "4.01 s: ready, 3 s after the reveal (not after the 2 s expiry)");
     }
 
     #[test]
