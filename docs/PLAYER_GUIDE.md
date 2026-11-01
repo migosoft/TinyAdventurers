@@ -195,6 +195,7 @@ Heroes, enemies and barrels can **resist** a type: that part of the hit is reduc
 | Red Dragon | **heat completely**, magical half, physical 10 % | |
 | Barrels and chests | physical half, poison completely | |
 
+- **Incorporeal creatures** (ghosts and shades, coming with their own dungeons) have no solid body. Weapons, arrows, fire, ice and poison pass through them without harm, and **only magic hurts them, and a little extra** (10 % more). Some heroes have no magic yet, and cannot hurt them at all. They float through walls and solid objects, but never stop inside one, and hover over chasms, deep water and lava without harm. You cannot push them, roots cannot hold them, and they always look see-through. They can also **vanish**: you see nothing of them, and enemies cannot target them either. Anything that hits them shows them again, even a hit that does no damage, so you know what you hit. A creature that is both, such as a ghost, takes the stronger resistance of each type; no resistance goes above 100 %, so nothing heals by resisting.
 - Fire does nothing to demons or the dragon; use arrows, blades and bolts there. Fire hurts skeletons a little more.
 - The Red Demon's claws and the Red Dragon's claws are partly fire.
 - Fire also sets things **burning** and poison **poisons** (see Status effects), and a smaller share of a type has a weaker effect: a creature that resists the type completely never takes the effect.
@@ -283,6 +284,7 @@ Some attacks do more than damage. Your own effects show as small symbols with th
 | Skull | Fear | You run away from whoever scared you and cannot attack (enemies only, for now) |
 | Shield | Warded | Gold: nothing can blind, sleep or petrify you (Purify) |
 | Blade | Coated | Green: your weapon attacks add poison and poison what they hit (Poison Coat) |
+| Eye | Invisible | Nobody can see you (enemies cannot target you) and you look faint to your party. A hit on you, or using an ability yourself, ends it. No hero can do this yet; incorporeal creatures vanish this way |
 
 A sleeping or petrified hero cannot dodge, and a blind one cannot see what is coming, so the party's job is to keep the enemies off them. The final bosses resist some effects: all of them resist sleep completely, and some shorten other effects. The effects end by themselves after a few seconds.
 

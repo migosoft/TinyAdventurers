@@ -396,6 +396,7 @@ impl Run {
                     ClientMsg::DebugImmortal { on } => self.set_immortal(pi, on),
                     ClientMsg::DebugDarkvision { ratio } => self.set_darkvision(pi, ratio),
                     ClientMsg::DebugEffect { kind } => self.debug_effect(pi, kind),
+                    ClientMsg::DebugIncorporeal => self.debug_incorporeal(pi),
                     ClientMsg::RulesLog { on, details } => rules_log::set_prefs(self, pi, on, details),
                     _ => {}
                 }

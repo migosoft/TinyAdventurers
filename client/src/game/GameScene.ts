@@ -210,7 +210,7 @@ export class GameScene extends Phaser.Scene {
     this.beams = this.add.graphics().setDepth(DEPTH.beam);
     this.gaze = this.add.graphics().setDepth(DEPTH.fx);
     this.debugGfx = this.add.graphics().setDepth(DEPTH.fog + 1);
-    // A debug run (from a debug room): the server puts every hero in debug mode, so the badge and F4/F8/F9 work from the first frame.
+    // A debug run (from a debug room): the server puts every hero in debug mode, so the badge and F4/F7/F8/F9 work from the first frame.
     this.debugOn = this.info.debug;
     this.debugImmortal = true;
     this.debugPath = [];
@@ -240,6 +240,12 @@ export class GameScene extends Phaser.Scene {
       if (e.repeat || !this.debugOn || !this.alive) return;
       // The server announces the change to the party.
       this.net.send({ t: 'DebugDarkvision', ratio: nextDarkvision((this.lastSnap?.me.darkvision ?? 0) / 100) });
+    });
+    // Debug runs only (debug accounts): the nearest enemy within 8 tiles becomes incorporeal (and vanishes for 3 s).
+    kb.on('keydown-F7', (e: KeyboardEvent) => {
+      e.preventDefault();
+      if (e.repeat || !this.debugOn || !this.alive) return;
+      this.net.send({ t: 'DebugIncorporeal' });
     });
     // Debug runs only (debug accounts): put the next effect on your own hero (Blind, Sleep, Petrified, Slowed, Accelerated).
     kb.on('keydown-F8', (e: KeyboardEvent) => {

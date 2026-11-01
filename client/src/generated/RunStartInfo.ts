@@ -34,6 +34,6 @@ fallback: ResolvedAbility,
  */
 lights: Array<LightInfo>, 
 /**
- * A debug run: every hero is in debug mode (badge, F4/F8/F9).
+ * A debug run: every hero is in debug mode (badge, F4/F7/F8/F9).
  */
 debug: boolean, };

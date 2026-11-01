@@ -44,6 +44,7 @@ describe('Hud', () => {
     const rows = [...badge.querySelectorAll('.db-row')].map((r) => [r.querySelector('kbd, .db-swatch')!.textContent, r.textContent]);
     expect(rows).toEqual([
       ['F4', 'F4darkvision 0/50/100 %'],
+      ['F7', 'F7nearest enemy incorporeal'],
       ['F8', 'F8next effect on you'],
       ['F9', 'F9immortal on/off'],
       ['', 'path to the boss'],

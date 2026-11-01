@@ -38,6 +38,40 @@ impl Run {
         self.event(Ev::Msg { text: format!("{name}: {k:?}") }, None);
     }
 
+    /// Debug cheat: the nearest living, not yet incorporeal, non-boss enemy within 8 tiles of your hero gains the
+    /// Incorporeal race on top of its own (resistances, traits and mover re-derived) and goes invisible for 3 s
+    /// (cooldown 5 s), so the rules can be tried on any enemy. The extended race list is leaked: a few words
+    /// per press, debug runs only.
+    pub fn debug_incorporeal(&mut self, pi: usize) {
+        use crate::defs::races::{self, Adjust, Race};
+        if !self.debug {
+            return;
+        }
+        let from = self.players[pi].pos();
+        let reach = 8.0 * crate::dungeon::TILE;
+        let found = (0..self.monsters.len())
+            .filter(|&i| {
+                let m = &self.monsters[i];
+                m.alive && !m.is_boss && !m.traits.phasing && m.pos.dist(from) <= reach
+            })
+            .min_by(|&a, &b| self.monsters[a].pos.dist(from).total_cmp(&self.monsters[b].pos.dist(from)));
+        let Some(mi) = found else { return };
+        let m = &mut self.monsters[mi];
+        let mut list = m.races.to_vec();
+        list.push(Race::Incorporeal);
+        let list: &'static [Race] = Box::leak(list.into_boxed_slice());
+        let prof = races::profile(list, Adjust::NONE);
+        m.races = list;
+        m.res = prof.res;
+        m.effect_res = prof.effect_res;
+        m.traits = prof.traits;
+        m.mover = Mover::Incorporeal;
+        m.invis_cd = 0.0;
+        let name = self.players[pi].name.clone();
+        self.go_invisible(mi, 3.0, 5.0);
+        self.event(Ev::Msg { text: format!("{name}: nearest enemy is now incorporeal") }, None);
+    }
+
     /// Debug mode on or off for a hero; never on in a normal run.
     pub fn set_debug(&mut self, pi: usize, on: bool) {
         let on = on && self.debug;
@@ -118,6 +152,7 @@ pub fn send_paths(run: &Run) {
 mod tests {
     use super::*;
     use crate::defs::damage::Damage;
+    use crate::defs::enemies::EnemyType;
     use crate::protocol::{BossId, ClassId};
     use crate::run::tests::test_run;
 
@@ -235,5 +270,34 @@ mod tests {
         assert!(run.players[0].effects.has(EffectKind::Sleep));
         run.debug_effect(0, 200);
         assert_eq!(run.players[0].effects.list().len(), 1, "an unknown id is ignored");
+    }
+
+    #[test]
+    fn debug_incorporeal_only_in_debug_runs() {
+        use crate::defs::damage::DamageType;
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let here = run.players[0].pos();
+        let far = run.spawn_enemy(EnemyType::SkeletonWarrior, here + Vec2::new(200.0, 0.0), None);
+        let near = run.spawn_enemy(EnemyType::SkeletonWarrior, here + Vec2::new(30.0, 0.0), None);
+        let near = run.monster_idx(near).unwrap();
+        run.debug_incorporeal(0);
+        assert!(!run.monsters[near].traits.phasing, "nothing in a normal run");
+        run.debug = true;
+        run.debug_incorporeal(0);
+        let m = &run.monsters[near];
+        assert!(m.traits.phasing && m.traits.invisibility && m.traits.knock_immune);
+        assert_eq!(m.mover, Mover::Incorporeal);
+        assert!((m.res.get(DamageType::Physical) - 1.0).abs() < 1e-9);
+        assert!(m.races.contains(&crate::defs::races::Race::Incorporeal));
+        assert!(m.races.contains(&crate::defs::races::Race::Undead), "keeps its own race");
+        assert!(m.effects.has(EffectKind::Invisible));
+        assert!((m.invis_cd - 5.0).abs() < 1e-9);
+        let far_mi = run.monster_idx(far).unwrap();
+        assert!(!run.monsters[far_mi].traits.phasing, "only the nearest");
+        // The one in reach is done; the other is 12 tiles away: the next press does nothing.
+        run.debug_incorporeal(0);
+        assert!(!run.monsters[far_mi].traits.phasing, "8 tiles only");
     }
 }
