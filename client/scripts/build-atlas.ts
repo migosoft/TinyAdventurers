@@ -5,7 +5,7 @@
 // the generated terrain tiles (water, lava, chasm; see terrain-tiles.ts), plus
 // the dragon frames built from its base sprite (see dragon-frames.ts), plus
 // the lich's own frames (see lich-frames.ts), plus the demon's frames
-// (see demon-frames.ts), plus the barrels (see barrel-frames.ts), plus the torch (see torch-frames.ts), plus the dire wolf (see wolf-frames.ts), plus the Ghost and the Shade (see spectre-frames.ts).
+// (see demon-frames.ts), plus the barrels (see barrel-frames.ts), plus the torch (see torch-frames.ts), plus the dire wolf (see wolf-frames.ts), plus the Ghost and the Shade (see spectre-frames.ts), plus the explosions (see explosion-frames.ts).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,7 @@ import { buildBarrels } from './barrel-frames';
 import { buildTorches } from './torch-frames';
 import { buildWolf } from './wolf-frames';
 import { buildSpectres } from './spectre-frames';
+import { buildExplosions } from './explosion-frames';
 import { DRAGON_SHEETS, type DragonSheet } from '../src/game/anim/dragonRig';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -77,7 +78,9 @@ const wolf = buildWolf(path.join(root, 'assets-src', 'enchanted-forest', 'frames
 const wolfY = torchY + torches.img.h;
 const spectres = buildSpectres(src.w);
 const spectreY = wolfY + wolf.img.h;
-const outH = spectreY + spectres.img.h;
+const explosions = buildExplosions(path.join(root, 'assets-src', 'explosion'), src.w);
+const explosionY = spectreY + spectres.img.h;
+const outH = explosionY + explosions.img.h;
 const out: Image = { w: src.w, h: outH, data: new Uint8Array(src.w * outH * 4) };
 out.data.set(src.data);
 RECOLORS.forEach((r, row) => {
@@ -145,6 +148,12 @@ for (let y = 0; y < spectres.img.h; y++)
   out.data.set(spectres.img.data.subarray(y * spectres.img.w * 4, (y + 1) * spectres.img.w * 4), ((spectreY + y) * out.w) * 4);
 for (const [name, f] of Object.entries(spectres.frames))
   frames[name] = { frame: { x: f.x, y: spectreY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
+
+// Explosion frames below the Ghost and the Shade.
+for (let y = 0; y < explosions.img.h; y++)
+  out.data.set(explosions.img.data.subarray(y * explosions.img.w * 4, (y + 1) * explosions.img.w * 4), ((explosionY + y) * out.w) * 4);
+for (const [name, f] of Object.entries(explosions.frames))
+  frames[name] = { frame: { x: f.x, y: explosionY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
 
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'atlas.png'), encodePng(out));

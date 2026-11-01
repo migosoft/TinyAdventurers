@@ -2,6 +2,7 @@
 // Everything is pooled so combat does not allocate per frame.
 import type Phaser from 'phaser';
 import { FONT_TEXT } from '../fonts';
+import { EXPLOSION_ART_R, EXPLOSION_STAGES, explosionFrameName, type ExplosionSheet } from './anim/explosionFrames';
 import { dissolveVeil, drawVeil, restingVeil, VEIL_DEATH_LIFE, type VeilStrand } from './shadeHaze';
 import { popScale, smoothText, TEXT_RESOLUTION, WORLD_TEXT, type WorldTextKind } from './worldText';
 
@@ -95,6 +96,16 @@ interface Zap {
   max: number;
 }
 
+/** Seconds each explosion stage shows (flash, grows, peak, cooling, smoke, dissipates); the last one fades out. */
+const BLAST_STAGE_SECS = [0.05, 0.07, 0.09, 0.1, 0.12, 0.14];
+const BLAST_SECS = BLAST_STAGE_SECS.reduce((a, b) => a + b, 0);
+
+interface Blast {
+  img: Phaser.GameObjects.Image;
+  sheet: ExplosionSheet;
+  t: number;
+}
+
 interface FloatText {
   t: Phaser.GameObjects.Text;
   /** Seconds since it appeared; only a crit pops. */
@@ -112,6 +123,8 @@ export class Effects {
   private freeRings: Phaser.GameObjects.Graphics[] = [];
   private swooshes: Swoosh[] = [];
   private zaps: Zap[] = [];
+  private blasts: Blast[] = [];
+  private freeBlasts: Phaser.GameObjects.Image[] = [];
   private veils: { g: Phaser.GameObjects.Graphics; lines: readonly VeilStrand[]; centre: { x: number; y: number }; t: number }[] = [];
   private texts: FloatText[] = [];
   private freeTexts: Phaser.GameObjects.Text[] = [];
@@ -233,6 +246,17 @@ export class Effects {
       r.g.lineStyle(2, r.color, 1 - k);
       r.g.strokeCircle(r.x, r.y, rad);
     }
+    for (let i = this.blasts.length - 1; i >= 0; i--) {
+      const b = this.blasts[i];
+      b.t += dt;
+      if (b.t >= BLAST_SECS) {
+        b.img.setVisible(false);
+        this.freeBlasts.push(b.img);
+        this.blasts.splice(i, 1);
+        continue;
+      }
+      this.drawBlast(b);
+    }
     for (let i = this.veils.length - 1; i >= 0; i--) {
       const v = this.veils[i];
       v.t += dt;
@@ -327,6 +351,24 @@ export class Effects {
     this.burst(x, y, 26, 0xffb040, r * 3, 0.45);
     this.burst(x, y, 12, 0x5a3a30, r * 1.5, 0.8, -20);
     this.scene.cameras.main.shake(120, 0.004);
+  }
+
+  /** The sprite explosion of `sheet` (AI art, anim/explosionFrames.ts), scaled so its peak cloud fills `r`, with a jolt. */
+  blast(x: number, y: number, r: number, sheet: ExplosionSheet = 'fireball'): void {
+    const img = this.freeBlasts.pop() ?? this.scene.add.image(0, 0, 'atlas', explosionFrameName(sheet, 0));
+    img.setPosition(x, y).setScale(r / EXPLOSION_ART_R).setVisible(true).setDepth(DEPTH.fx);
+    const b = { img, sheet, t: 0 };
+    this.drawBlast(b);
+    this.blasts.push(b);
+    this.scene.cameras.main.shake(120, 0.004);
+  }
+
+  private drawBlast(b: Blast): void {
+    let i = 0;
+    let start = 0;
+    while (i < EXPLOSION_STAGES - 1 && b.t >= start + BLAST_STAGE_SECS[i]) start += BLAST_STAGE_SECS[i++];
+    b.img.setFrame(explosionFrameName(b.sheet, i));
+    b.img.setAlpha(i === EXPLOSION_STAGES - 1 ? 1 - (b.t - start) / BLAST_STAGE_SECS[i] : 1);
   }
 
   /** Ground slam: a dust shockwave out to the hit radius, debris and a jolt. */

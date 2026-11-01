@@ -178,7 +178,7 @@ export class LightsDemoScene extends Phaser.Scene {
     // An explosion in the dark room's doorway (in the viewer's sight) while the fireball is at its far end, out of sight.
     const sinceBoom = (this.t % LOOP) - LOOP / 2;
     const boomX = 15.5 * TILE;
-    if (sinceBoom >= 0 && prev % LOOP < LOOP / 2) this.fx.explosion(boomX, fy, 20);
+    if (sinceBoom >= 0 && prev % LOOP < LOOP / 2) this.fx.blast(boomX, fy, 20);
     // Frost bolt: a circle of 2.5 tiles in the north of room 1.
     const a = p * Math.PI * 2;
     const cx = (6.5 + 2.5 * Math.cos(a)) * TILE;

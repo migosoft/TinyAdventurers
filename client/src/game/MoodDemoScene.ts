@@ -253,7 +253,7 @@ export class MoodDemoScene extends Phaser.Scene {
       this.fireball.setVisible(false);
       this.prev.delete('fireball');
     }
-    if (p >= 2 && p - dt < 2) this.fx.explosion(12.5 * TILE, fy, 20);
+    if (p >= 2 && p - dt < 2) this.fx.blast(12.5 * TILE, fy, 20);
     if (p >= 2 && p < 2.4) moving.push([12.5 * TILE, fy, LIGHT_KIND.Blast, null]);
     this.view.update(cam.worldView, this.viewer.x, this.viewer.y, moving, this.t, 0, CONST.FOV_RADIUS);
     this.mask.update(cam.worldView, this.view.view);

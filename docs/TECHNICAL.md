@@ -68,12 +68,13 @@ client/                              Vite + TypeScript + Phaser 3.90
   scripts/lich-frames.ts             the lich's own pixel frames + staff (pixel grids in pack colours)
   scripts/barrel-frames.ts           plain and explosive barrel (pixel grids in pack colours, from AI art)
   scripts/torch-frames.ts            torch frames cut from the CC0 sheet, plus the burnt-out one
+  scripts/explosion-frames.ts        explosion frames cut from the AI sheets (checkerboard keyed out, scaled to `EXPLOSION_ART_R`)
   scripts/build-logo.ts              title logo -> public/assets/{logo,logo-emblem,favicon}.png
   scripts/png.ts                     minimal PNG decode/encode (zlib only) for the atlas recolors
   assets-src/0x72/                   0x72 DungeonTileset II v1.7 (CC0): sheet, tile_list, README, LICENSE
   assets-src/logo/logo.png           title logo, made with Google's image generation AI
   assets-src/barrel/                 the barrel's AI-generated source image (ChatGPT)
-  assets-src/explosion/              AI-generated explosion sheets (ChatGPT): barrel blast, Fireball; not built in yet (TODO)
+  assets-src/explosion/              AI-generated explosion sheets (ChatGPT): Fireball (built in, `fireball_boom_f0-5`), barrel blast (not built in yet, #102)
   assets-src/torch/                  "Simple Torch Animation 16x16" (CC0) with its licence note
   src/main.ts                        boot: login -> character screen -> WebSocket, Phaser game, Lobby/Hud/GameScene; demo pages
   src/api.ts                         fetch wrapper for /api/* (the session cookie is HttpOnly; JS never sees it)
@@ -90,7 +91,7 @@ client/                              Vite + TypeScript + Phaser 3.90
   src/game/barrel.ts, damage.ts      barrel view (fuse flash, fall, sink); damage number colours per type
   src/game/light.ts, lightview.ts    `LightField` (static light map and colour mixing, same rule as the server) and `LightView` (darkness and tint canvases)
   src/game/torch.ts                  wall torch view (flame, burnt out, side sconces)
-  src/game/effects.ts                pooled particles, rings, swooshes, floating numbers
+  src/game/effects.ts                pooled particles, rings, swooshes, floating numbers, sprite explosions (`blast`)
   src/rulesLog/                      the rules log (removable; see 11d): panel, keys, buffer, tags above figures
   src/game/GalleryScene.ts           dev page ?gallery
   src/game/MimicDemoScene.ts         dev page ?mimic (chaser mimic, chest, reveal; no server)
@@ -269,7 +270,7 @@ The data lives on the `ta-db` volume. `docker compose down -v` deletes all accou
 **Events (`Ev`)** are collected during the ticks between snapshots. Positional events are FOV-filtered per player (except hits and explosions by heroes, see §7):
 - `Dmg{x, y, v, crit, p, ty, imm}`: `ty` is the `DamageType` with the largest share of the hit (the client picks the number's colour from it, `game/damage.ts`); `imm` is set when the resistances reduced a non-zero hit to 0 (the client shows "immune"). On the wire: `[code, x, y, v, crit, p, ty, imm]`.
 - `Zap{x, y, x2, y2}` (wire code 15): one jump of Chain Spark, sent to the whole party; the client draws a jagged violet line for 0.18 s.
-- `Heal{x, y, v, p}` (`p`: on a hero or an ally, like `Dmg.p`), `Growl{id}` (wire code 14: the wolf `id` growls; sent to the whole party with no position, see "Companions" in §5), `Boom{k}`: `k` 13 is Purify's white-gold ring, 12 Haste's yellow ring, 11 War Cry's red-orange ring (with a shake for the own hero), 10 Frost Nova's blue ring (the codes 10 to 13 are plan 3b's; Ground Slam lands with the dust shockwave 5), 9 is the wolf's green nature puff (summon, reappear, vanish), 8 is a chest smashed (wood splinters, `Effects.splinters`), 7 a barrel explosion (6 is the lich's nova, 5 a dust shockwave).
+- `Heal{x, y, v, p}` (`p`: on a hero or an ally, like `Dmg.p`), `Growl{id}` (wire code 14: the wolf `id` growls; sent to the whole party with no position, see "Companions" in §5), `Boom{k}`: `k` 13 is Purify's white-gold ring, 12 Haste's yellow ring, 11 War Cry's red-orange ring (with a shake for the own hero), 10 Frost Nova's blue ring (the codes 10 to 13 are plan 3b's; Ground Slam lands with the dust shockwave 5), 9 is the wolf's green nature puff (summon, reappear, vanish), 8 is a chest smashed (wood splinters, `Effects.splinters`), 7 a barrel explosion (6 is the lich's nova, 5 a dust shockwave). `k` 0 is the hero Fireball's explosion (the dragon's fireball bursts with 4): `Effects.blast` plays the six stages of the AI sheet (`anim/explosionFrames.ts`; flash, grows, peak, cooling, smoke, dissipates, 0.57 s, the last stage fading out) at scale `r / EXPLOSION_ART_R`, so the peak cloud fills the blast radius (38 px is scale 1), with a camera jolt. It replaces the procedural `Effects.explosion` for Fireball; that one stays for barrels and boss deaths.
 - `Died`, `Raise`, `Immune`
 - `Effect{id, kind, on}` (wire code 13): an effect started (`on`) or ended on an entity (§5 "Status effects"). For a hero it follows the `on_hero` rule, for a monster it needs sight and light. The client ignores it (the marks are drawn from the snapshot bitmask); it is the hook for effect sounds later.
 - `Light{id, on, colour}` (wire code 10), `LightAdd{id, kind, colour, x, y, on}` (11), `LightRemove{id}` (12): a static light was switched or recoloured, created or removed. Sent to everyone without a position (not filtered), so every client's light map stays in step; `Light` carries the current state. A light added while the run is built goes out in `RunStartInfo.lights` instead.

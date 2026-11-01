@@ -435,7 +435,8 @@ export class GameScene extends Phaser.Scene {
           if (Math.hypot(ev.x - this.pred.state.x, ev.y - this.pred.state.y) < CONST.PLAYER_RADIUS * 2) this.cameras.main.shake(100, 0.003);
         } else if (ev.k === 12) this.fx.ring(ev.x, ev.y, ev.r, 0xffe040, 0.5, true);
         else if (ev.k === 13) this.fx.healRing(ev.x, ev.y, ev.r, 0xfff0b0);
-        else this.fx.explosion(ev.x, ev.y, ev.r);
+        // k 0: the hero Fireball's explosion (the dragon's is k 4).
+        else this.fx.blast(ev.x, ev.y, ev.r);
         break;
       case 'Zap':
         this.fx.zap(ev.x, ev.y, ev.x2, ev.y2);
