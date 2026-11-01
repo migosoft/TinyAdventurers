@@ -15,7 +15,8 @@ const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
 const out = process.argv[4] ?? '.';
 const classes = (process.argv[5] ?? 'Wizard,Barbarian').split(',');
-const browser = await chromium.launch({ executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const launch = () => chromium.launch({ executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const browser = await launch();
 const errors = [];
 const PASSWORD = 'smoke-test-password';
 const tag = () => Math.random().toString(16).slice(2, 8);
@@ -46,8 +47,8 @@ async function markDebug(account) {
   }
 }
 
-async function open(name) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+async function open(name, b = browser) {
+  const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(`${name} pageerror: ${e.message}`));
   // The first /api/me before logging in is an expected 401.
@@ -203,7 +204,10 @@ if (query.includes('debug')) {
 } else console.log('F4 darkvision step skipped (no debug in the query)');
 
 // A second login to Alice's account closes her first window.
-const p3 = await open('Alice2');
+// Its own browser: in the shared one, its WebGL start queues behind the two running
+// software-rendered games and blocks its page for ~30 s (#175).
+const browser2 = await launch();
+const p3 = await open('Alice2', browser2);
 await login(p3, a1.account, false);
 await p3.click('[data-open]');
 await p3.waitForSelector('[data-attr]');
@@ -299,3 +303,4 @@ for (const [page, account] of [
 }
 console.log(errors.length ? errors.join('\n') : 'no browser errors');
 await browser.close();
+await browser2.close();

@@ -1288,7 +1288,7 @@ The log reads these; they stay useful without it. `Damage.why` (`Why`, `What`, `
 
 **Browser smoke test (`tools/e2e/smoke.mjs`):**
 - two headless browser contexts register throwaway accounts (`e2e_<hex>`) and create a character each of the given classes, then create and join a run, start, move and attack
-- a third context logs into the first account, which must close the first window ("another window")
+- a third context logs into the first account, which must close the first window ("another window"). It runs in a second browser process: in the shared one its WebGL start queues behind the two running SwiftShader games and blocks its page for about 30 s (#175)
 - both accounts are deleted at the end
 - with `ADMIN_USER` and `ADMIN_PASSWORD` set (the same as the server's), an admin pass follows:
   1. log in at `/admin` and find the online account on the dashboard;
