@@ -11,7 +11,7 @@ import { TagEffects } from '../tagEffects';
 import { frameBounds, has, lieLayout, lyingPose, StatusView } from '../status';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
 import { pickFrame, windupOf } from './pickFrame';
-import { appearFactor, entityAlpha, VANISH_SECS } from './entityAlpha';
+import { appearFactor, entityAlpha, ghostPhase, VANISH_SECS } from './entityAlpha';
 
 export interface ViewState {
   x: number;
@@ -25,6 +25,8 @@ export interface ViewState {
   swingArc?: number;
   /** Bitmask of `EffectKind` ids on the creature. */
   effects?: number;
+  /** The entity id: figures that pulse (`FigureDef.pulse`) take their phase from it. */
+  id?: number;
   /** A party hero (drawn faintly, not hidden, while Invisible). */
   party?: boolean;
   /** The look of its Entangled effect (`lookOf`); Plain when absent. */
@@ -301,7 +303,9 @@ export class EntityView {
     if (asleep) this.weapon?.setVisible(false);
 
     this.appearLeft = Math.max(0, this.appearLeft - dt);
-    this.root.setAlpha(entityAlpha(s.flags, fxBits, s.party ?? false) * appearFactor(this.appearLeft, VANISH_SECS));
+    // A pulsing figure (the Ghost) blinks during its ambush wind-up (GameScene skips the fade-in then).
+    const ghost = d.pulse ? { t: this.clock, phase: ghostPhase(s.id ?? 0), ambushT: s.anim === ANIM.Ambush ? s.animT : null } : undefined;
+    this.root.setAlpha(entityAlpha(s.flags, fxBits, s.party ?? false, ghost) * appearFactor(this.appearLeft, VANISH_SECS));
 
     const ax = Math.cos(s.aim);
     const ay = Math.sin(s.aim);

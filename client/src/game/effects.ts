@@ -163,6 +163,15 @@ export class Effects {
     this.texts.push({ t, age: 0, pop: big, vy: big ? -34 : -26, life: big ? 0.9 : 0.7, max: big ? 0.9 : 0.7 });
   }
 
+  /** A Ghost dies: about 24 pale sparks rising and fading over 0.6 s. */
+  disintegrate(x: number, y: number): void {
+    for (let i = 0; i < 24; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.random() * 7;
+      this.particle(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.8, (Math.random() - 0.5) * 16, -16 - Math.random() * 26, 0.6, 0xd8ecff, { frame: 'spark', fade: true });
+    }
+  }
+
   /** The wolf's summon, reappear and vanish: about 18 clear-green sparks rising and fading over 0.6 s (not the poison tint). */
   natureSparkles(x: number, y: number, r: number): void {
     for (let i = 0; i < 18; i++) {

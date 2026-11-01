@@ -449,7 +449,10 @@ export class GameScene extends Phaser.Scene {
       case 'Died': {
         // Lost to a chasm or deep water: nothing is left behind.
         if (this.sinks.delete(ev.id)) break;
-                if (!isProjectileKind(ev.kind)) {
+        if (ev.kind === KIND.Ghost) {
+          // A Ghost leaves no skull: it comes apart.
+          this.fx.disintegrate(ev.x, ev.y - 8);
+        } else if (!isProjectileKind(ev.kind)) {
           // A skull token marks where a figure fell.
           this.add.image(ev.x, ev.y - 2, "atlas", "skull").setDepth(DEPTH.decal).setAlpha(0.85).setFlipX(Math.random() < 0.5);
           this.fx.burst(ev.x, ev.y - 6, 14, SKELETAL.has(ev.kind) ? 0xe8e4d0 : 0x9a2020, 50, 0.5, 60);
@@ -900,7 +903,8 @@ export class GameScene extends Phaser.Scene {
       view = new EntityView(this, e.kind, this.fx, me ? undefined : pi?.name, weapons);
       this.views.set(e.id, view);
     }
-    if (this.reappearing.take(e.id, now) && !isPlayerKind(e.kind)) view.fadeIn();
+    // Reappearing in the ambush wind-up: the flicker is the entrance, the default fade-in would blur it.
+    if (this.reappearing.take(e.id, now) && !isPlayerKind(e.kind) && e.anim !== ANIM.Ambush) view.fadeIn();
     let s: ViewState;
     if (me && this.alive) {
       // Petrified or asleep: the weapon keeps the facing from before the effect.
@@ -916,7 +920,7 @@ export class GameScene extends Phaser.Scene {
       // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
       s = { x: px, y: py, anim, animT: tLocal, aim, flags, effects: this.myEffects(), entangled: e.entangled, party: isPlayerKind(e.kind), swingArc: anim === ANIM.Melee ? this.localAnim.arc : undefined };
     } else {
-      s = { x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled, party: isPlayerKind(e.kind) };
+      s = { id: e.id, x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled, party: isPlayerKind(e.kind) };
     }
     this.terrainState(e, s, me && this.alive, dt);
     view.update(s, dt);
