@@ -166,6 +166,28 @@ mod tests {
         assert!(lich_with_ghosts >= 15, "{lich_with_ghosts} of {lich_runs} lich runs have a Ghost");
     }
 
+    /// The demon's dungeon spawns a Shade at each haunt; the lich's and the dragon's none.
+    #[test]
+    fn demon_dungeons_get_shades() {
+        use crate::defs::enemies::EnemyType;
+        let mut demon_with_shades = 0;
+        for seed in 0..20u64 {
+            let shades = |boss: BossId| -> Vec<Vec2> {
+                let run = crate::run::tests::test_run_seed(&[ClassId::Paladin], boss, seed);
+                let found: Vec<Vec2> = run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Shade)).map(|m| m.pos).collect();
+                assert!(run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Shade)).all(|m| m.mover == crate::dungeon::Mover::Incorporeal && m.traits.phasing));
+                found
+            };
+            let found = shades(BossId::Demon);
+            assert_eq!(found, generate(seed, Theme::for_boss(BossId::Demon)).haunts, "seed {seed}: a Shade at each haunt, in order");
+            demon_with_shades += usize::from(!found.is_empty());
+            for boss in [BossId::Dragon, BossId::Lich] {
+                assert!(shades(boss).is_empty(), "seed {seed}: {boss:?} has no Shades");
+            }
+        }
+        assert!(demon_with_shades >= 15, "{demon_with_shades} of 20 demon runs have a Shade");
+    }
+
     #[test]
     fn random_boss_uses_the_run_rng_like_before() {
         for seed in 0..12u64 {

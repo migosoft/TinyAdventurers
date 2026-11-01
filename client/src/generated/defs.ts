@@ -37,6 +37,7 @@ export const KIND = {
   "Paladin": 1,
   "RaisedSkeleton": 16,
   "Roots": 72,
+  "Shade": 25,
   "ShadowBolt": 54,
   "SkeletonArcher": 12,
   "SkeletonWarrior": 11,
@@ -970,6 +971,10 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
     "h": 0.0,
     "r": 6.0
   },
+  "25": {
+    "h": 0.0,
+    "r": 6.0
+  },
   "30": {
     "h": 58.0,
     "r": 11.0
@@ -1355,6 +1360,16 @@ export const ENEMY_KINDS = {
       "Poison": 1.0
     }
   },
+  "Shade": {
+    "max_hp": 40.0,
+    "res": {
+      "Cold": 1.0,
+      "Heat": 1.0,
+      "Magical": -0.1,
+      "Physical": 1.0,
+      "Poison": 1.0
+    }
+  },
   "SkeletonArcher": {
     "max_hp": 30.0,
     "res": {
@@ -1403,6 +1418,7 @@ export const TAG_NAME: Record<number, string> = {
   22: "Ogre",
   23: "Dire Wolf",
   24: "Ghost",
+  25: "Shade",
   30: "Demon",
   31: "Lich",
   32: "Dragon",

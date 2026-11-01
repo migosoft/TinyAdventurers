@@ -166,6 +166,25 @@ mod tests {
     }
 
     #[test]
+    fn shade_touch_drains_con() {
+        use crate::defs::attributes::Attr;
+        use crate::defs::effects::{EffectLook, OnHit};
+        let mut run = field(1);
+        let hero = run.players[0].pos();
+        let con0 = run.players[0].sheet.attrs.get(Attr::Con);
+        let shade_cha = enemies::def(EnemyType::Shade).attrs.get(Attr::Cha);
+        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::Shade), &enemies::def(EnemyType::Shade).attrs);
+        let want = OnHit { kind: EffectKind::Frail, secs: 20.0, magical: true, power: shade_cha, look: EffectLook::Plain };
+        assert_eq!(kit.get(AbilityId::Touch).unwrap().on_hit, Some(want));
+        crate::run::tests::enemy_use(&mut run, EnemyType::Shade, hero + Vec2::new(12.0, 0.0), AbilityId::Touch, hero);
+        for _ in 0..60 {
+            run.step();
+        }
+        assert!(run.players[0].effects.has(EffectKind::Frail), "the touch drains CON");
+        assert!(run.players[0].sheet.attrs.get(Attr::Con) < con0);
+    }
+
+    #[test]
     fn straggler_is_furthest_from_the_centre() {
         let mut run = field(3);
         let p = run.players[0].pos();

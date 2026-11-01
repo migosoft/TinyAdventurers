@@ -1897,6 +1897,24 @@ export const ITEMS = {
     "slot": "Ring",
     "sprite": ""
   },
+  "ShadeTouch": {
+    "base": "7 damage · every 1 s · arc 1.4 · wind-up 0.25 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Touch",
+    "name": "Shade Touch",
+    "prof": "Touch",
+    "props": [
+      {
+        "magical": true,
+        "text": "On hit: Frail"
+      }
+    ],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
   "ShortBow": {
     "base": "12 damage · every 0.77 s · range 220",
     "classes": [
