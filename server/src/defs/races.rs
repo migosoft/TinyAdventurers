@@ -58,12 +58,14 @@ pub struct Traits {
     pub invisibility: bool,
     /// Never pushed back by a hit.
     pub knock_immune: bool,
+    /// No physical body: attacks it fully resists pass through it.
+    pub bodiless: bool,
 }
 
 impl Traits {
     /// Field-wise OR: a trait of any race is the entity's.
     pub fn merge(self, o: Traits) -> Traits {
-        Traits { phasing: self.phasing || o.phasing, invisibility: self.invisibility || o.invisibility, knock_immune: self.knock_immune || o.knock_immune }
+        Traits { phasing: self.phasing || o.phasing, invisibility: self.invisibility || o.invisibility, knock_immune: self.knock_immune || o.knock_immune, bodiless: self.bodiless || o.bodiless }
     }
 }
 
@@ -103,7 +105,7 @@ pub fn race_def(r: Race) -> RaceDef {
                 Physical | Cold | Heat | Poison => 1.0,
                 Magical => -0.1,
             })));
-            RaceDef { effect_res: EffectResistances::of(&[(EffectKind::Entangled, 1.0)]), traits: Traits { phasing: true, invisibility: true, knock_immune: true }, ..plain(res, &[], 0.0, 0.0) }
+            RaceDef { effect_res: EffectResistances::of(&[(EffectKind::Entangled, 1.0)]), traits: Traits { phasing: true, invisibility: true, knock_immune: true, bodiless: true }, ..plain(res, &[], 0.0, 0.0) }
         }
         Race::MagicalBeast => RaceDef { effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1), (Magical, 0.1)]), &[BeastBite], 18.0, 1.0) },
     }
@@ -299,8 +301,15 @@ mod tests {
         assert_eq!(p.effect_res.get(EffectKind::Entangled), 1.0);
         assert_eq!(p.effect_res.get(EffectKind::Fear), 1.0, "from Undead");
         assert_eq!(p.sight, Sight { vision: 8.0, darkvision: 1.0 }, "Undead's sight");
-        assert_eq!(p.traits, Traits { phasing: true, invisibility: true, knock_immune: true });
+        assert_eq!(p.traits, Traits { phasing: true, invisibility: true, knock_immune: true, bodiless: true });
         assert_eq!(profile(&[Race::Undead], Adjust::NONE).traits, Traits::default());
+    }
+
+    #[test]
+    fn incorporeal_is_bodiless() {
+        assert!(profile(&[Race::Incorporeal], Adjust::NONE).traits.bodiless);
+        assert!(profile(&[Race::Undead, Race::Incorporeal], Adjust::NONE).traits.bodiless, "folded over the races");
+        assert!(!profile(&[Race::Undead], Adjust::NONE).traits.bodiless);
     }
 
     #[test]

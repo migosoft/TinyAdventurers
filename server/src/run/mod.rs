@@ -1004,6 +1004,18 @@ impl Run {
         heroes.chain(allies).collect()
     }
 
+    /// Does an attack of damage `split` pass through `c`? Only a bodiless monster is passed through, and only when
+    /// its final resistance (gear and effects included, as `hurt_monster` takes it) to every type of the attack
+    /// is 100 %: a share it resists less hits it. No hero is bodiless.
+    pub fn passes_through(&self, c: effects::Creature, split: &DamageSplit) -> bool {
+        let effects::Creature::Monster(mi) = c else { return false };
+        let m = &self.monsters[mi];
+        m.traits.bodiless && {
+            let res = m.effects.res(m.res);
+            DamageType::ALL.into_iter().all(|t| split.share(t) <= 0.0 || res.capped(t) >= 1.0)
+        }
+    }
+
     pub fn creature_pos(&self, c: effects::Creature) -> Vec2 {
         match c {
             effects::Creature::Player(i) => self.players[i].pos(),

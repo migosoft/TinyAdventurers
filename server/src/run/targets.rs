@@ -5,6 +5,7 @@ use super::effects::Creature;
 use super::Run;
 use crate::collision::line_of_sight;
 use crate::defs::classes::PLAYER_RADIUS;
+use crate::defs::damage::DamageSplit;
 use crate::defs::effects::EffectKind;
 use crate::math::{angle_diff, Vec2};
 
@@ -34,6 +35,8 @@ pub enum Skip {
     Invisible,
     Dormant,
     Airborne,
+    /// The attack passes through it: it has no body and resists every type of the attack fully.
+    Bodiless,
     OutOfReach,
     OutsideArc,
     NoLineOfSight,
@@ -70,6 +73,9 @@ pub struct Rule {
     /// Skips an invisible creature: only where a target is picked (a jump, a gaze); an area, a swing or a dash
     /// that covers one still hits it.
     pub skip_invisible: bool,
+    /// The damage split of the attack, if it deals damage: a bodiless creature that fully resists it is passed
+    /// through (`Skip::Bodiless`) and gets nothing from it. `None` for a rule that only applies effects.
+    pub passes: Option<DamageSplit>,
 }
 
 /// Is `c`, standing at `pos`, a target of `rule` for a user of `side`? `hit` are those already hit. The
@@ -100,6 +106,11 @@ pub fn check(run: &Run, side: Side, c: Creature, pos: Vec2, rule: &Rule, hit: &[
     }
     if ally {
         return Err(Skip::Ally);
+    }
+    if let Some(split) = &rule.passes {
+        if run.passes_through(c, split) {
+            return Err(Skip::Bodiless);
+        }
     }
     if rule.skip_hiding && hiding {
         return Err(Skip::Hiding);
