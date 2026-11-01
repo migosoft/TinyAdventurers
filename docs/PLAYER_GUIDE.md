@@ -292,7 +292,7 @@ The effects from damage types work in two tiers. A hit that is **at least half h
 - **Burning and Singed:** water puts them out, in a pool or in the shallows. Fire and ice cancel each other, weak and strong: a fire hit on a frozen or chilled creature thaws it instead of burning it, and a cold hit on a burning or singed one puts the fire out. **Demons and the Red Dragon never burn** (they resist heat completely), so use something else on them. A hero who burns a monster to death still gets the kill.
 - **Frozen and Chilled:** Frozen roots a creature and stops it from acting or turning until the ice ends, so a frozen hero needs the party to cover them. Fire thaws it at once. Frost Shard chills, and Frost Nova freezes. The Ember Staff now singes.
 - **Poisoned and Tainted:** just the damage. **Undead are never poisoned** (they resist poison completely). The Staff of Rot poisons, and Poison Coat poisons what your weapon hits.
-- **Entangled** (Entangle) and **Fear** (War Cry): your **Strength** shortens roots and your **Willpower** shortens fear, on you and on enemies alike, so a strong monster breaks out sooner. A rooted enemy can still attack you, and an enemy that runs away comes back when the fear ends. **Undead and bosses cannot be frightened**, and demons only half as long.
+- **Entangled** (Entangle) and **Fear** (War Cry): your **Strength** shortens roots and your **Willpower** shortens fear, on you and on enemies alike, so a strong monster breaks out sooner. A rooted enemy can still attack you, and an enemy that runs away comes back when the fear ends. **Undead and bosses cannot be frightened** (and undead cannot be put to sleep either), and demons only half as long.
 
 ## Death, victory and defeat
 
