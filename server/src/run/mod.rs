@@ -292,6 +292,7 @@ impl Run {
         self.monsters.push(Monster {
             id,
             res: prof.res,
+            races: enemies::races(t),
             melee: enemies::melee_split(t),
             etype: Some(t),
             kind: d.kind,

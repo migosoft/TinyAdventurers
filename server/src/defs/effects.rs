@@ -352,8 +352,7 @@ mod tests {
         use crate::defs::races::{self, Adjust, Race};
         use crate::defs::{bosses, classes, companions, enemies};
         use crate::protocol::{BossId, ClassId};
-        let races = [Race::Human, Race::Goblin, Race::Orc, Race::Ogre, Race::Mimic, Race::Undead, Race::Demon, Race::Dragon, Race::Elf, Race::MagicalBeast, Race::Object];
-        let mut tables: Vec<(String, EffectResistances)> = races.iter().map(|&r| (format!("{r:?}"), races::profile(&[r], Adjust::NONE).effect_res)).collect();
+        let mut tables: Vec<(String, EffectResistances)> = Race::ALL.iter().map(|&r| (format!("{r:?}"), races::profile(&[r], Adjust::NONE).effect_res)).collect();
         tables.extend(BossId::ALL.iter().map(|&b| (format!("{b:?}"), bosses::profile(b).effect_res)));
         tables.extend(ClassId::ALL.iter().map(|&c| (format!("{c:?}"), classes::profile(c).effect_res)));
         tables.extend(enemies::EnemyType::ALL.iter().map(|&t| (format!("{t:?}"), enemies::profile(t).effect_res)));

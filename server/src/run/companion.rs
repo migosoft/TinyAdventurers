@@ -8,6 +8,7 @@ use crate::defs::abilities::AbilityId;
 use crate::defs::companions::*;
 use crate::defs::damage::What;
 use crate::defs::kinds::{Anim, EntityKind};
+use crate::defs::races::Race;
 use crate::dungeon::{self, Map, Mover};
 use crate::math::Vec2;
 use crate::protocol::Ev;
@@ -48,6 +49,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
     run.monsters.push(Monster {
         id,
         res: prof.res,
+        races: &[Race::MagicalBeast],
         melee: prof.melee,
         etype: None,
         kind: EntityKind::DireWolf,

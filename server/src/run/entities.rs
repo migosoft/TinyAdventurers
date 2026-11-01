@@ -4,7 +4,7 @@ use crate::defs::damage::{Damage, DamageSplit, Resistances};
 use crate::defs::effects::OnHit;
 use crate::defs::attributes::Attributes;
 use crate::defs::enemies::EnemyType;
-use crate::defs::races::Sight;
+use crate::defs::races::{Race, Sight};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
 use super::targets::Side;
@@ -215,6 +215,8 @@ pub struct Monster {
     pub id: u32,
     /// Resistances (races plus adjustments) and the split of its melee hits.
     pub res: Resistances,
+    /// Its races (see defs/races.rs).
+    pub races: &'static [Race],
     #[allow(dead_code)] // no reader since the demon uses its Strike; the weapon's split is used
     pub melee: DamageSplit,
     /// None for bosses (driven by their BossBehaviour).

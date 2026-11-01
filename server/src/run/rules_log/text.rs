@@ -185,11 +185,11 @@ fn race_name(r: Race) -> &'static str {
 
 /// The race a creature's resistance to `kind` comes from, if it is its race's own value.
 fn resisting_race(run: &Run, c: Creature, kind: EffectKind, r: f64) -> Option<Race> {
-    let race = match c {
-        Creature::Player(i) => *crate::defs::classes::races(run.players[i].class).first()?,
-        Creature::Monster(i) => crate::defs::enemies::race(run.monsters[i].etype?),
+    let races = match c {
+        Creature::Player(i) => crate::defs::classes::races(run.players[i].class),
+        Creature::Monster(i) => run.monsters[i].races,
     };
-    (race_def(race).effect_res.get(kind) == r).then_some(race)
+    races.iter().copied().find(|&race| race_def(race).effect_res.get(kind) == r)
 }
 
 /// How an application ended, in a word: "applied", "refused", "cancelled Frozen".

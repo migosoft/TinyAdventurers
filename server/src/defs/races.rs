@@ -8,23 +8,25 @@ use super::damage::{DamageSplit, DamageType::*, Resistances};
 use super::effects::{EffectKind, EffectResistances};
 use super::items::{self, ItemBase, ItemId};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Race {
-    Human,
-    Goblin,
-    Orc,
-    Ogre,
-    /// Mimics: hide as treasure chests.
-    Mimic,
-    Undead,
-    Demon,
-    Dragon,
-    /// Elves: the Elven Ranger.
-    Elf,
-    /// Magical beasts: the Ranger's wolf.
-    MagicalBeast,
-    /// Inanimate objects (chests, barrels): every one resists poison fully.
-    Object,
+super::enum_list::listed_enum! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Race: u8 {
+        Human = 0,
+        Goblin = 1,
+        Orc = 2,
+        Ogre = 3,
+        /// Mimics: hide as treasure chests.
+        Mimic = 4,
+        Undead = 5,
+        Demon = 6,
+        Dragon = 7,
+        /// Elves: the Elven Ranger.
+        Elf = 8,
+        /// Magical beasts: the Ranger's wolf.
+        MagicalBeast = 9,
+        /// Inanimate objects (chests, barrels): every one resists poison fully.
+        Object = 10,
+    }
 }
 
 /// How far an entity sees, in tiles (fractions allowed): `vision` in the
@@ -245,7 +247,7 @@ mod tests {
     #[test]
     fn only_the_elf_has_an_attribute_bonus() {
         assert_eq!(race_def(Race::Elf).attrs, Attributes::new(0, 2, 0, 0, 0, 0));
-        for r in [Race::Human, Race::Goblin, Race::Orc, Race::Ogre, Race::Mimic, Race::Undead, Race::Demon, Race::Dragon, Race::MagicalBeast, Race::Object] {
+        for r in Race::ALL.into_iter().filter(|&r| r != Race::Elf) {
             assert_eq!(race_def(r).attrs, Attributes::default(), "{r:?}");
         }
         assert_eq!(race_attrs(&[Race::Human, Race::Elf]), Attributes::new(0, 2, 0, 0, 0, 0));
