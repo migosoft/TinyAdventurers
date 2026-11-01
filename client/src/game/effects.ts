@@ -173,7 +173,7 @@ export class Effects {
     }
   }
 
-  /** A Shade dies: no skull, a dark cloud of about 20 haze particles that spread to 18 px and fade over 0.8 s. */
+  /** A Shade dies: no skull, a dark cloud of about 20 haze particles that spread to 14 px and fade over 0.8 s. */
   darkCloud(x: number, y: number): void {
     const { life, particles } = deathCloud();
     for (const p of particles) this.particle(x, y, p.vx, p.vy, life, HAZE_COLOR, { frame: 'glow', fade: true, alpha: 0.5, scale: p.scale });

@@ -969,11 +969,11 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
     "r": 10.0
   },
   "24": {
-    "h": 22.0,
+    "h": 13.0,
     "r": 6.0
   },
   "25": {
-    "h": 23.0,
+    "h": 13.0,
     "r": 6.0
   },
   "30": {

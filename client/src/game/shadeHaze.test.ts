@@ -65,11 +65,11 @@ describe('silhouette warning', () => {
 });
 
 describe('death cloud', () => {
-  it('is about 20 particles that spread to at most 18 px over 0.8 s', () => {
+  it('is about 20 particles that spread to at most 14 px over 0.8 s', () => {
     const cloud = deathCloud(lcg());
     expect(cloud.particles.length).toBeGreaterThanOrEqual(18);
     expect(cloud.particles.length).toBeLessThanOrEqual(22);
-    for (const p of cloud.particles) expect(Math.hypot(p.vx, p.vy) * cloud.life).toBeLessThanOrEqual(18 + 1e-9);
+    for (const p of cloud.particles) expect(Math.hypot(p.vx, p.vy) * cloud.life).toBeLessThanOrEqual(14 + 1e-9);
     expect(cloud.life).toBe(0.8);
   });
 });

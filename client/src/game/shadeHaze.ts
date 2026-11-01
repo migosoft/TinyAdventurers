@@ -21,8 +21,8 @@ export const HAZE_COLOR = 0x2a2433;
 const HAZE_MIN = 10;
 const HAZE_MAX = 14;
 /** The haze circles within this many px of the Shade. */
-const ORBIT_MIN = 3;
-const ORBIT_MAX = 8;
+const ORBIT_MIN = 2;
+const ORBIT_MAX = 6;
 /** Seconds a particle takes to ease most of the way (1/e) toward its spot beside the Shade. */
 const TAU_MIN = 0.15;
 const TAU_MAX = 0.35;
@@ -92,10 +92,10 @@ export class HazeCloud {
 }
 
 const CLOUD_COUNT = 20;
-const CLOUD_SPREAD = 18;
+const CLOUD_SPREAD = 14;
 const CLOUD_LIFE = 0.8;
 
-/** The dark cloud a Shade dies in: about 20 particles (velocities in px/s) that spread to at most 18 px and fade over 0.8 s. */
+/** The dark cloud a Shade dies in: about 20 particles (velocities in px/s) that spread to at most 14 px and fade over 0.8 s. */
 export function deathCloud(rnd: Rng = Math.random): { life: number; particles: { vx: number; vy: number; scale: number }[] } {
   const particles = [];
   for (let i = 0; i < CLOUD_COUNT; i++) {

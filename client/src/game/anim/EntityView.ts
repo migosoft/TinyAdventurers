@@ -315,7 +315,7 @@ export class EntityView {
     const ghost = d.pulse ? { t: this.clock, phase: ghostPhase(s.id ?? 0), ambushT: s.anim === ANIM.Ambush ? s.animT : null } : undefined;
     this.root.setAlpha((silhouette ? silhouetteAlpha(s.animT) : entityAlpha(s.flags, fxBits, s.party ?? false, ghost)) * appearFactor(this.appearLeft, VANISH_SECS));
     // The haze stays where it was while it eases toward the Shade (so it trails); it sits just under the figure.
-    this.haze?.update({ x: s.x, y: s.y - 8 }, this.root.depth - 0.5, dt);
+    this.haze?.update({ x: s.x, y: s.y - 6 }, this.root.depth - 0.5, dt);
 
     const ax = Math.cos(s.aim);
     const ay = Math.sin(s.aim);

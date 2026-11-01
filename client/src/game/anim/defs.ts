@@ -144,8 +144,8 @@ export const FIGURES: Record<number, FigureDef> = {
     base: 0x7a1010,
     baseR: 13,
   },
-  [KIND.Ghost]: { ...mob('ghost'), swing: GHOST_TOUCH, lunge: 3, pulse: true, handY: 10, attack: 'melee', base: 0xb8e0ff, baseR: 6, label: 'Ghost' },
-  [KIND.Shade]: { ...mob('shade'), swing: SHADE_TOUCH, lunge: 3, haze: true, silhouette: true, handY: 10, attack: 'melee', base: 0x2a2433, baseR: 6, label: 'Shade' },
+  [KIND.Ghost]: { ...mob('ghost'), swing: GHOST_TOUCH, lunge: 3, pulse: true, handY: 6, attack: 'melee', base: 0xb8e0ff, baseR: 6, label: 'Ghost' },
+  [KIND.Shade]: { ...mob('shade'), swing: SHADE_TOUCH, lunge: 3, haze: true, silhouette: true, handY: 6, attack: 'melee', base: 0x2a2433, baseR: 6, label: 'Shade' },
   [KIND.Lich]: { ...mob('lich'), weapon: 'weapon_lich_staff', mount: 'staff', weaponScale: 1.3, handX: 7, handY: 11, attack: 'caster', base: GLOOM.light, baseR: 7, slam: { r: CONST.LICH_NOVA_RADIUS, anim: ANIM.Slam, t: CONST.LICH_NOVA_WINDUP, color: GLOOM.light, gloom: true } },
   [KIND.Dragon]: {
     idle: dragonFrames.idle.prefix,
