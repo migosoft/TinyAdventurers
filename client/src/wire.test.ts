@@ -59,6 +59,12 @@ describe('wire', () => {
     expect(snap.ents[0][6]).toBe(Math.PI);
   });
 
+  it('keeps the Attribute amount of an own effect', () => {
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [[16, 12.5, -2], [4, 3, 0]], 1, false, 1];
+    const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [], [], null]);
+    expect(snap.me.effects).toEqual([[16, 12.5, -2], [4, 3, 0]]);
+  });
+
   it('unpacks moving lights with an optional colour', () => {
     const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1];
     const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [[160, 320, 2, null], [16, 32, 3, 0x78c8ff]], [], null]);

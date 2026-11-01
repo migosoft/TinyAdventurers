@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Hud, debugBadgeHtml, helpHtml, secondaryLabel } from './hud';
+import { Hud, debugBadgeHtml, effectChipHtml, helpHtml, secondaryLabel } from './hud';
+import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import { EFFECT } from '../generated/defs';
 import { EFFECT_ICON } from './effectIcons';
 
@@ -150,5 +151,33 @@ describe('Hud', () => {
       const svg = document.querySelector('.status-hint svg.ic')!;
       expect(svg.querySelector('path')!.getAttribute('d')).toBe(/d="([^"]+)"/.exec(EFFECT_ICON[EFFECT.Sleep].body)![1]);
     });
+  });
+});
+
+describe('effectChipHtml', () => {
+  it('shows the amount as minus N beside the glyph, with a tooltip', () => {
+    const html = effectChipHtml(EFFECT.Weakened, 12.5, -2);
+    expect(html).toContain('<b>\u22122</b>');
+    expect(html).toContain('title="Weakened (STR \u22122)"');
+    expect(html).toContain('<i>13</i>');
+  });
+  it('shows no number for an amount of 0', () => {
+    const html = effectChipHtml(EFFECT.Burning, 3, 0);
+    expect(html).not.toContain('<b>');
+    expect(html).not.toContain('title=');
+  });
+});
+
+describe('Hud.setAbilities', () => {
+  const ab = (id: ResolvedAbility['id']): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, windup: 0, behind: 0 });
+  it('renames the slots and greys the disabled ones', () => {
+    document.body.innerHTML = '';
+    const hud = new Hud(document.body, () => {}, () => {});
+    hud.setAbilities([ab('Strike'), ab('Charge')], [false, true]);
+    const slots = [...document.querySelectorAll('.slot')];
+    expect(slots.map((s) => s.classList.contains('disabled'))).toEqual([false, true]);
+    expect(slots[1].querySelector('.name')!.textContent).toBe('Charge');
+    hud.setAbilities([ab('Strike'), ab('Charge')], [false, false]);
+    expect(document.querySelectorAll('.slot.disabled').length).toBe(0);
   });
 });

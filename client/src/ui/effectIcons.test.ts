@@ -14,12 +14,19 @@ describe('effect icons', () => {
     }
   });
   it('gives every other effect its own symbol', () => {
-    const strong = Object.values(EFFECT).filter((id) => !EFFECT_ICON[id].weak).map((id) => EFFECT_ICON[id].body);
+    const drains: number[] = [EFFECT.Weakened, EFFECT.Clumsy, EFFECT.Frail];
+    const strong = Object.values(EFFECT).filter((id) => !EFFECT_ICON[id].weak && !drains.includes(id)).map((id) => EFFECT_ICON[id].body);
     expect(new Set(strong).size).toBe(strong.length);
   });
   it('renders an outline for a weak fill symbol', () => {
     expect(effectIconSvg(EFFECT.Tainted, 14)).toContain('fill="none"');
     expect(effectIconSvg(EFFECT.Poisoned, 14)).toContain('fill="#6ad04a"');
+  });
+  it('draws the three Attribute drains as one down-arrow in their own colours', () => {
+    const ids = [EFFECT.Weakened, EFFECT.Clumsy, EFFECT.Frail];
+    expect(new Set(ids.map((id) => EFFECT_ICON[id].body)).size).toBe(1);
+    expect(ids.map((id) => EFFECT_ICON[id].color)).toEqual(['#e07a5f', '#e0c060', '#90c890']);
+    for (const id of ids) expect(effectIconSvg(id, 14)).toContain('<svg');
   });
   it('makes a data URI Phaser can load', () => expect(effectIconDataUri(EFFECT.Sleep, 32)).toMatch(/^data:image\/svg\+xml;base64,/));
 });

@@ -125,6 +125,14 @@ export function abilityChoice(a: ResolvedAbility, slot: 0 | 1, inMelee: boolean)
   return slot === 0 ? 'fallback' : 'blocked';
 }
 
+/**
+ * Whether a use of the slot is sent: not disabled by an Attribute drain, except a ranged
+ * primary in melee, which strikes with the melee weapon (the fallback) anyway.
+ */
+export function slotUsable(disabled: boolean[], slot: 0 | 1, primaryRanged: boolean, inMelee: boolean): boolean {
+  return !disabled[slot] || (slot === 0 && primaryRanged && inMelee);
+}
+
 /** The weakness floor of the server's damage formula (`MIN_RESISTANCE` in defs/damage.rs). */
 const MIN_RESISTANCE = -1;
 /** `pierce` and `through` value for "no limit" (`u8::MAX`). */
@@ -183,6 +191,12 @@ interface Pending {
 
 type Used = [number | null, number | null];
 
+/** Seconds a dash lasts: the secondary's, when that is Charge. */
+function dashDurationOf(abilities: ResolvedAbility[]): number {
+  const sec = abilities[1];
+  return sec.id === 'Charge' ? sec.duration : 0;
+}
+
 export class Predictor {
   state: MoveState;
   /** Visual smoothing of small corrections (decays to 0). */
@@ -201,7 +215,7 @@ export class Predictor {
   noTurn = false;
   private pending: Pending[] = [];
   private seq = 0;
-  readonly speed: number;
+  speed: number;
   /** Seconds a dash lasts: the secondary's, when that is Charge. */
   private dashDuration: number;
 
@@ -214,9 +228,16 @@ export class Predictor {
     y: number,
   ) {
     this.speed = speed;
-    const sec = abilities[1];
-    this.dashDuration = sec.id === 'Charge' ? sec.duration : 0;
+    this.dashDuration = dashDurationOf(abilities);
     this.state = { x, y, dashT: 0, dashDx: 0, dashDy: 0, knockVx: 0, knockVy: 0 };
+  }
+
+  /** The hero's numbers changed (an Attribute drain started or ended): speed, abilities, melee fallback. */
+  setNumbers(speed: number, abilities: ResolvedAbility[], fallback: ResolvedAbility): void {
+    this.speed = speed;
+    this.abilities = abilities;
+    this.fallback = fallback;
+    this.dashDuration = dashDurationOf(abilities);
   }
 
   /** Pushed by a strong hit: no moves or abilities until the slide ends (the server ignores them). */
