@@ -101,6 +101,8 @@ export class Hud {
   private end = el("div", "end hidden");
   private debugBadge = el("div", "debug-badge hidden", debugBadgeHtml(true));
   private trackers = [new CooldownTracker(), new CooldownTracker()];
+  /** The ability id in each slot, so a running cooldown survives a HeroChanged that did not change it. */
+  private slotIds: (string | null)[] = [null, null];
   private debugT = 0;
   menuOpen = false;
   private toggles: Toggle[] = [];
@@ -180,6 +182,7 @@ export class Hud {
       this.tooCloseUntil[i] = 0;
       this.slots[i].querySelector('.name')!.textContent = this.slotNames[i];
       this.trackers[i] = new CooldownTracker(info.abilities[i].cooldown);
+      this.slotIds[i] = info.abilities[i].id;
       this.slots[i].classList.remove('flash', 'disabled');
     });
     this.party.innerHTML = '';
@@ -264,7 +267,10 @@ export class Hud {
     [0, 1].forEach((i) => {
       this.slotNames[i] = ABILITIES[abilities[i].id].name;
       this.slots[i].querySelector('.name')!.textContent = this.slotNames[i];
-      this.trackers[i] = new CooldownTracker(abilities[i].cooldown);
+      if (this.slotIds[i] !== abilities[i].id) {
+        this.trackers[i] = new CooldownTracker(abilities[i].cooldown);
+        this.slotIds[i] = abilities[i].id;
+      }
       this.slots[i].classList.toggle('disabled', disabled[i]);
     });
   }

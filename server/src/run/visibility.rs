@@ -272,7 +272,7 @@ pub fn send_snapshots(run: &mut Run) {
                 spectating: if me.alive { None } else { me.spectating },
                 darkvision: darkvision_pct(&sight),
                 vision: sight.vision as f32,
-                effects: me.effects.list().iter().map(|a| (a.kind as u8, a.left as f32, me.effects.amount(a.kind) as i16)).collect(),
+                effects: me.effects.list().iter().map(|a| (a.kind as u8, a.left as f32, a.amount.clamp(i16::MIN as i32, i16::MAX as i32) as i16)).collect(),
                 speed_mul: me.effects.speed_mul() as f32,
                 no_act: me.effects.no_act(),
                 cd_mul: super::keystones::cd_mul(me),

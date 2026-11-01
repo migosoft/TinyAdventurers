@@ -180,4 +180,17 @@ describe('Hud.setAbilities', () => {
     hud.setAbilities([ab('Strike'), ab('Charge')], [false, false]);
     expect(document.querySelectorAll('.slot.disabled').length).toBe(0);
   });
+  it('keeps a running cooldown ring across a setAbilities with the same ids', () => {
+    document.body.innerHTML = '';
+    const hud = new Hud(document.body, () => {}, () => {});
+    hud.setAbilities([ab('Strike'), ab('Charge')], [false, false]);
+    const f = (cd1: number) => ({ fps: 60, frameMs: 1, rtt: 0, jitter: 0, interp: 0, snapBytes: 0, correction: 0, srvMs: 0, cd1, cd2: 0, ents: 0, darkvision: 0, wolf: null }) as unknown as Parameters<Hud['frame']>[0];
+    const p = () => (document.querySelector('.slot') as HTMLElement).style.getPropertyValue('--p');
+    hud.frame(f(10));
+    hud.frame(f(5));
+    expect(p()).toBe('50%');
+    hud.setAbilities([ab('Strike'), ab('Charge')], [false, false]);
+    hud.frame(f(5));
+    expect(p()).toBe('50%');
+  });
 });

@@ -285,9 +285,9 @@ Some attacks do more than damage. Your own effects show as small symbols with th
 | Shield | Warded | Gold: nothing can blind, sleep or petrify you (Purify) |
 | Blade | Coated | Green: your weapon attacks add poison and poison what they hit (Poison Coat) |
 | Eye | Invisible | Nobody can see you (enemies cannot target you) and you look faint to your party. A hit on you, or attacking yourself, ends it. No hero can do this yet; incorporeal creatures vanish this way |
-| Down arrow, STR | Weakened | Your **Strength** drops by 1 or more for 20 seconds |
-| Down arrow, DEX | Clumsy | Your **Dexterity** drops by 1 or more for 20 seconds |
-| Down arrow, CON | Frail | Your **Constitution** drops by 1 or more for 20 seconds |
+| Down arrow (coloured by Attribute) | Weakened | Your **Strength** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
+| Down arrow (coloured by Attribute) | Clumsy | Your **Dexterity** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
+| Down arrow (coloured by Attribute) | Frail | Your **Constitution** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
 
 A sleeping or petrified hero cannot dodge, and a blind one cannot see what is coming, so the party's job is to keep the enemies off them. The final bosses resist some effects: all of them resist sleep completely, and some shorten other effects. The effects end by themselves after a few seconds.
 
@@ -297,7 +297,7 @@ The effects from damage types work in two tiers. A hit that is **at least half h
 - **Poisoned and Tainted:** just the damage. **Undead are never poisoned** (they resist poison completely). The Staff of Rot poisons, and Poison Coat poisons what your weapon hits.
 - **Entangled** (Entangle) and **Fear** (War Cry): your **Strength** shortens roots and your **Willpower** shortens fear, on you and on enemies alike, so a strong monster breaks out sooner. A rooted enemy can still attack you, and an enemy that runs away comes back when the fear ends. **Undead and bosses cannot be frightened** (and undead cannot be put to sleep either), and demons only half as long.
 
-**Attribute drains (Weakened, Clumsy, Frail).** These lower one of your Attributes while they last, and everything that depends on it follows: damage, health, speed, saves. The chip shows how much (for example -2), and hovering it names the Attribute. Touching you again **stacks** another -1 (a stronger source drains more per touch) and renews the time; there is no limit, but an Attribute never drops below 1. Your **Willpower** (against magical sources) or **Constitution** (otherwise) only shortens the time, and a creature that resists the effect completely drains nothing.
+**Attribute drains (Weakened, Clumsy, Frail).** These lower one of your Attributes while they last, and everything that depends on it follows: damage, health, speed, saves. The chip shows how much (for example -2), and hovering it names the Attribute. The number counts every touch, so it can be larger than the real drop once the Attribute is at its floor of 1. Touching you again **stacks** another -1 (a stronger source drains more per touch) and renews the time; there is no limit, but an Attribute never drops below 1. Your **Willpower** (against magical sources) or **Constitution** (otherwise) only shortens the time, and a creature that resists the effect completely drains nothing.
 - **Health:** a drain on Constitution lowers your maximum health. Your current health is only cut down to the new maximum and never below 1, so a drain cannot kill you. When it ends, your maximum comes back but your health does not, so heal up.
 - **Gear and abilities:** an item's requirement is checked against your Attributes without items, drain included. If a drain leaves you below it, the item gives you nothing until it ends (a melee weapon you cannot use is replaced by your class's starter weapon). An ability's requirement counts your usable items like anywhere else; one you can no longer use (also because its weapon stopped working) is greyed out and does nothing, though a ranged primary (left button) ability still falls back to Strike in melee. Your light, keystones and sight do not change.
 - Enemies can be drained too, and get weaker the same way.

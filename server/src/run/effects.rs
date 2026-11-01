@@ -1677,14 +1677,17 @@ mod tests {
     #[test]
     fn monster_hp_floor() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-        let c = fresh_ogre(&mut run);
+        let at = run.players[0].pos();
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::GoblinArcher, at, None);
+        let c = Creature::Monster(run.monster_idx(id).unwrap());
         let Creature::Monster(mi) = c else { unreachable!() };
-        run.monsters[mi].hp = 1.0;
-        for _ in 0..3 {
+        for _ in 0..40 {
             drain(&mut run, c, EffectKind::Frail, 20.0, Some(400));
         }
         let m = &run.monsters[mi];
-        assert!(m.alive && m.max_hp >= 1.0 && m.hp >= 1.0 && m.hp <= m.max_hp, "{} / {}", m.hp, m.max_hp);
+        assert!(m.alive, "a drain never kills");
+        assert_eq!(m.max_hp, 1.0, "max HP sits on the floor");
+        assert_eq!(m.hp, 1.0);
     }
 
     #[test]
