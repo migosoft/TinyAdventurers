@@ -47,6 +47,7 @@ export const KIND = {
 } as const;
 
 export const ANIM = {
+  "Ambush": 15,
   "Bite": 13,
   "Breath": 8,
   "Cast": 4,

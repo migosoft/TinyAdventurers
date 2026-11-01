@@ -2,6 +2,7 @@
 
 pub mod abilities;
 pub mod ai;
+pub mod ambush;
 pub mod bosses;
 pub mod companion;
 pub mod debug;

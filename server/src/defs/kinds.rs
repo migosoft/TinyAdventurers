@@ -165,11 +165,13 @@ pub enum Anim {
     Bite = 13,
     /// The lich's stone gaze: a beam locked on a hero (EntSnap.extra = its id).
     Gaze = 14,
+    /// The wind-up of a strike out of invisibility (Ghost, Shade): the client draws the warning.
+    Ambush = 15,
 }
 
 impl Anim {
     #[cfg(test)]
-    pub const ALL: [Anim; 15] = [
+    pub const ALL: [Anim; 16] = [
         Anim::Idle,
         Anim::Move,
         Anim::Melee,
@@ -185,6 +187,7 @@ impl Anim {
         Anim::Land,
         Anim::Bite,
         Anim::Gaze,
+        Anim::Ambush,
     ];
 }
 
