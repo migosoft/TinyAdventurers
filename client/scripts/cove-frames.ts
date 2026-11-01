@@ -27,7 +27,7 @@ export function drawTree(seed: number): Image {
   const set = (x: number, y: number, c: string) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < W && y < H) px[y * W + x] = c; };
   const get = (x: number, y: number) => (x >= 0 && y >= 0 && x < W && y < H ? px[y * W + x] : null);
   const LX = -0.62, LY = -0.78; // light from the top left
-  
+
   // ---- roots and trunk (drawn first; the canopy covers the trunk top) ----
   const cx = 48, base = 86, trunkTop = 46;
   type Seg = { x: number; y: number; w: number }[];
@@ -59,7 +59,7 @@ export function drawTree(seed: number): Image {
       set(x, y, edge && d > p.w - 1 && lit < -0.2 ? 'a' : lit > 0.55 ? 'd' : lit > 0 ? 'c' : lit > -0.5 ? 'b' : 'a');
     }
   };
-  // back roots (pointing inward, short) first, then branches and trunk, then the outer roots on top
+  // branches first, then the trunk, then the roots on top
   for (const sg of branches) paint(sg, false);
   paint(trunk, false, base - 7);
   // roots after the trunk, the ones reaching lowest (closest to the viewer) last
@@ -68,7 +68,7 @@ export function drawTree(seed: number): Image {
   for (let k = 0; k < 7; k++) { const x0 = cx - 6 + r() * 12, y0 = trunkTop + 6 + r() * 26, len = 4 + r() * 8; for (let i = 0; i < len; i++) if (get(x0 + Math.sin(i * 0.4) * 0.6, y0 + i) !== null) set(x0 + Math.sin(i * 0.4) * 0.6, y0 + i, 'a'); }
   // moss on roots and trunk foot
   for (let k = 0; k < 40; k++) { const x = cx - 26 + r() * 52, y = base - 14 + r() * 10; const c = get(x, y); if (c && 'cd'.includes(c) && get(x, y - 1) !== null) set(x, y, r() < 0.5 ? '2' : '3'); }
-  
+
   // ---- canopy: clumps in a dome, back (top) first, each with its own outline ring ----
   const clumps: { x: number; y: number; rx: number; ry: number; ph: number; ph2: number }[] = [
     [0, 14, 21, 13], [17, 9, 9, 6], [-25, 24, 16, 11], [25, 23, 17, 11], [-30, 38, 14, 9], [30, 38, 14, 9], [0, 36, 18, 11], [-13, 45, 9, 6],
@@ -106,7 +106,7 @@ export function drawTree(seed: number): Image {
   // ---- outer outline for the whole silhouette ----
   const solid = px.map((c) => c !== null);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!solid[y * W + x] && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => solid[(y + dy) * W + x + dx] && x + dx >= 0 && x + dx < W && y + dy >= 0 && y + dy < H)) px[y * W + x] = 'k';
-  
+
   const img: Image = { w: W, h: H, data: new Uint8Array(W * H * 4) };
   px.forEach((c, i) => { if (c) img.data.set([...P[c], 255], i * 4); });
   return img;

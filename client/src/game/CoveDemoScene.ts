@@ -3,7 +3,7 @@
 // tufts and ferns, several sunbeams (Daylight lights), pixies around the canopy, and a knight walking a loop
 // around the trunk. When the knight is behind the tree, a pale silhouette of it shows through the leaves.
 // The viewer sees the whole room. Mood is on (dust, haze).
-// Buttons at the bottom (tap or click): Walk on / off (off: tap the room to send the knight there),
+// Buttons at the bottom (tap or click): Walk on / off; tap the room to send the knight there (stops the loop),
 // Silhouette, Pixies and Beams on / off, Suns 1 / 3 / 5, Reroll #n (a new seed: new grass, flowers and plants).
 // URL: ?cove&seed=3&suns=3&pixies=0&silhouette=0&walk=0&beam=0
 // Zoomed to fit the room to the screen, so it reads on a phone.
@@ -131,7 +131,11 @@ export class CoveDemoScene extends Phaser.Scene {
 
     // taps from the Phaser input only: the button bar is a DOM element above the canvas
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      this.target = { x: p.worldX, y: p.worldY };
+      const half = TILE / 2;
+      this.target = {
+        x: Math.min(Math.max(p.worldX, FLOOR.x * TILE + half), (FLOOR.x + FLOOR.w) * TILE - half),
+        y: Math.min(Math.max(p.worldY, FLOOR.y * TILE + half), (FLOOR.y + FLOOR.h) * TILE - half),
+      };
       this.walk = false;
       this.refreshBar?.();
     });
@@ -203,6 +207,10 @@ export class CoveDemoScene extends Phaser.Scene {
     this.refreshBar = () => all.forEach((f) => f());
     const onOff = (v: boolean) => (v ? 'on' : 'off');
     add(() => `Walk: ${onOff(this.walk)}`, () => {
+      if (!this.walk) {
+        // resume at the nearest point of the loop, not at the old angle
+        this.angle = Math.atan2((this.knight.y - this.foot.y) / LOOP.ry, (this.knight.x - this.foot.x) / LOOP.rx);
+      }
       this.walk = !this.walk;
       this.target = null;
     });

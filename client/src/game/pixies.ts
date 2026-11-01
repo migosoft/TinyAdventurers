@@ -6,7 +6,7 @@ import { DEPTH } from './effects';
 
 const GLOW_TEX = 'pixie-glow';
 const GLOW_SIZE = 9;
-const ADD = 1;
+const ADD = 1; // Phaser.BlendModes.ADD
 /** Half-axes of the ellipse a pixie wanders in (px). */
 const RX = 56;
 const RY = 32;
