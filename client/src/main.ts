@@ -12,6 +12,7 @@ import { SpectreDemoScene } from './game/SpectreDemoScene';
 import { LightsDemoScene } from './game/LightsDemoScene';
 import { MoodDemoScene } from './game/MoodDemoScene';
 import { SunlightDemoScene } from './game/SunlightDemoScene';
+import { CoveDemoScene } from './game/CoveDemoScene';
 import { DARKVISION_FX, DarkvisionFX } from './game/darkvisionfx';
 import { GameScene, type GameInit } from './game/GameScene';
 import type { RunStartInfo } from './generated/RunStartInfo';
@@ -73,7 +74,7 @@ function viewSize(): { w: number; h: number; zoom: number } {
  */
 function applyView(sc: Phaser.Scene): void {
   const key = sc.sys.settings.key;
-  if (key === 'lights-demo' || key === 'mood-demo' || key === 'sunlight-demo' || key === 'spectre-demo') return;
+  if (key === 'lights-demo' || key === 'mood-demo' || key === 'sunlight-demo' || key === 'cove-demo' || key === 'spectre-demo') return;
   const cam = sc.cameras?.main;
   if (!cam) return;
   if (key !== 'game') cam.setOrigin(0, 0);
@@ -88,8 +89,8 @@ function watchViews(game: Phaser.Game): () => void {
   return () => game.scene.getScenes(true).forEach(applyView);
 }
 
-/** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich, ?demon, ?lights, ?mood, ?sunlight, ?spectres). */
-const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-demo', water: 'water-demo', chasm: 'chasm-demo', lava: 'lava-demo', knockback: 'knockback-demo', ogre: 'ogre-demo', dragon: 'dragon-demo', lich: 'lich-demo', demon: 'demon-demo', lights: 'lights-demo', mood: 'mood-demo', sunlight: 'sunlight-demo', spectres: 'spectre-demo' };
+/** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich, ?demon, ?lights, ?mood, ?sunlight, ?cove, ?spectres). */
+const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-demo', water: 'water-demo', chasm: 'chasm-demo', lava: 'lava-demo', knockback: 'knockback-demo', ogre: 'ogre-demo', dragon: 'dragon-demo', lich: 'lich-demo', demon: 'demon-demo', lights: 'lights-demo', mood: 'mood-demo', sunlight: 'sunlight-demo', cove: 'cove-demo', spectres: 'spectre-demo' };
 
 async function gallery(): Promise<void> {
   const q = new URLSearchParams(location.search);
@@ -101,7 +102,7 @@ async function gallery(): Promise<void> {
     parent: 'game',
     pixelArt: true,
     scale: { mode: Phaser.Scale.NONE, width: v.w * v.zoom, height: v.h * v.zoom, zoom: 1 },
-    scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene, WaterDemoScene, ChasmDemoScene, LavaDemoScene, KnockbackDemoScene, OgreDemoScene, DragonDemoScene, LichDemoScene, DemonDemoScene, LightsDemoScene, MoodDemoScene, SunlightDemoScene, SpectreDemoScene],
+    scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene, WaterDemoScene, ChasmDemoScene, LavaDemoScene, KnockbackDemoScene, OgreDemoScene, DragonDemoScene, LichDemoScene, DemonDemoScene, LightsDemoScene, MoodDemoScene, SunlightDemoScene, CoveDemoScene, SpectreDemoScene],
   });
   watchViews(game);
   game.events.once('assets-ready', () => game.scene.start(start));
