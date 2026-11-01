@@ -5,6 +5,7 @@ use crate::defs::abilities::AbilityId;
 use crate::run::targets::Skip;
 use crate::defs::abilities;
 use crate::defs::damage::{DamageType, Mult, What};
+use crate::defs::attributes::Attr;
 use crate::defs::effects::EffectKind;
 use crate::defs::races::{race_def, Race};
 use crate::run::effects::EffectOutcome;
@@ -66,6 +67,9 @@ pub fn effect_name(k: EffectKind) -> &'static str {
         EffectKind::Warded => "Warded",
         EffectKind::Coated => "Coated",
         EffectKind::Invisible => "Invisible",
+        EffectKind::Weakened => "Weakened",
+        EffectKind::Clumsy => "Clumsy",
+        EffectKind::Frail => "Frail",
     }
 }
 
@@ -164,7 +168,7 @@ pub(super) fn part_lines(f: &HitFacts) -> Vec<String> {
 }
 
 /// The kinds in a bit set, named and joined.
-fn kind_names(bits: u16) -> Vec<&'static str> {
+fn kind_names(bits: u32) -> Vec<&'static str> {
     EffectKind::ALL.into_iter().filter(|k| bits & k.bit() != 0).map(effect_name).collect()
 }
 
@@ -273,6 +277,11 @@ pub(super) fn ended_head(run: &Run, target: u32, kind: EffectKind, why: EndReaso
         EndReason::Attacked => " (it attacked)",
     };
     format!("{} on {} ended{tail}", effect_name(kind), tag_of(run, target))
+}
+
+/// "Orc Warrior 1: STR 14 → 13".
+pub(super) fn attr_head(run: &Run, target: u32, attr: Attr, old: i32, new: i32) -> String {
+    format!("{}: {} {} → {}", tag_of(run, target), attr.short(), old, new)
 }
 
 /// "Ayla ▸ Holy Light ▸ Ayla's wolf: healed 8 (HP 12 → 20)", or without a source "Goblin Archer 1: healed 3 (HP 1 → 4)".

@@ -3,9 +3,10 @@ import type { BossId } from "./BossId";
 import type { CharacterInfo } from "./CharacterInfo";
 import type { LevelId } from "./LevelId";
 import type { PlayerStats } from "./PlayerStats";
+import type { ResolvedAbility } from "./ResolvedAbility";
 import type { RoomPlayer } from "./RoomPlayer";
 import type { RunStartInfo } from "./RunStartInfo";
 import type { RunSummary } from "./RunSummary";
 import type { Snapshot } from "./Snapshot";
 
-export type ServerMsg = { "t": "Welcome", id: number, debug: boolean, } | { "t": "Lobby", runs: Array<RunSummary>, } | { "t": "Room", run_id: number, name: string, host: number, players: Array<RoomPlayer>, level: LevelId, boss: BossId | null, } | { "t": "Character" } & CharacterInfo | { "t": "RunStarted" } & RunStartInfo | { "t": "Snap" } & Snapshot | { "t": "RunEnded", victory: boolean, level: LevelId, boss: BossId | null, time: number, stats: Array<PlayerStats>, } | { "t": "Pong", time: number, } | { "t": "Error", msg: string, } | { "t": "DebugPath", on: boolean, immortal: boolean, points: Array<[number, number]>, ogre: Array<[number, number]>, };
+export type ServerMsg = { "t": "Welcome", id: number, debug: boolean, } | { "t": "Lobby", runs: Array<RunSummary>, } | { "t": "Room", run_id: number, name: string, host: number, players: Array<RoomPlayer>, level: LevelId, boss: BossId | null, } | { "t": "Character" } & CharacterInfo | { "t": "RunStarted" } & RunStartInfo | { "t": "Snap" } & Snapshot | { "t": "RunEnded", victory: boolean, level: LevelId, boss: BossId | null, time: number, stats: Array<PlayerStats>, } | { "t": "Pong", time: number, } | { "t": "HeroChanged", speed: number, abilities: [ResolvedAbility, ResolvedAbility], fallback: ResolvedAbility, disabled: [boolean, boolean], } | { "t": "Error", msg: string, } | { "t": "DebugPath", on: boolean, immortal: boolean, points: Array<[number, number]>, ogre: Array<[number, number]>, };

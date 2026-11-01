@@ -45,6 +45,7 @@ pub fn spawn(run: &mut Run) {
     let stats = crate::sheet::boss_stats(boss_id);
     let id = run.alloc_id();
     let hp = stats.max_hp;
+    let base = crate::sheet::MonsterBase { attrs: stats.attrs, max_hp: hp, speed: stats.speed, kit: crate::sheet::KitSource::Boss(boss_id) };
     run.monsters.push(Monster {
         id,
         res: prof.res,
@@ -58,6 +59,7 @@ pub fn spawn(run: &mut Run) {
         hp,
         max_hp: hp,
         speed: stats.speed,
+        base,
         radius: d.radius,
         sight: prof.sight,
         alive: true,
@@ -66,7 +68,7 @@ pub fn spawn(run: &mut Run) {
         anim: Anim::Idle,
         anim_start: 0.0,
         hurt_t: 0.0,
-        kit: crate::sheet::boss_kit(boss_id),
+        kit: crate::sheet::kit_for(base.kit, &base.attrs),
         cds: Default::default(),
         slam: None,
         channel: None,

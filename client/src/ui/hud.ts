@@ -3,12 +3,13 @@ import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
 import type { PlayerStats } from '../generated/PlayerStats';
+import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Snapshot } from '../generated/Snapshot';
 import { CooldownTracker } from './cooldown';
 import { endText } from './endText';
 import { BOSS_TEXT, className } from './text';
-import { effectIconSvg } from './effectIcons';
+import { DRAIN_TEXT, effectIconSvg } from './effectIcons';
 import { SettingsView, type Toggle } from './settings';
 
 export interface FrameStats {
@@ -100,6 +101,8 @@ export class Hud {
   private end = el("div", "end hidden");
   private debugBadge = el("div", "debug-badge hidden", debugBadgeHtml(true));
   private trackers = [new CooldownTracker(), new CooldownTracker()];
+  /** The ability id in each slot, so a running cooldown survives a HeroChanged that did not change it. */
+  private slotIds: (string | null)[] = [null, null];
   private debugT = 0;
   menuOpen = false;
   private toggles: Toggle[] = [];
@@ -179,7 +182,8 @@ export class Hud {
       this.tooCloseUntil[i] = 0;
       this.slots[i].querySelector('.name')!.textContent = this.slotNames[i];
       this.trackers[i] = new CooldownTracker(info.abilities[i].cooldown);
-      this.slots[i].classList.remove('flash');
+      this.slotIds[i] = info.abilities[i].id;
+      this.slots[i].classList.remove('flash', 'disabled');
     });
     this.party.innerHTML = '';
     for (const p of info.players) {
@@ -250,14 +254,25 @@ export class Hud {
   }
 
   /** Own effect icons with the whole seconds left; rebuilt only when kinds or seconds change. */
-  private showEffects(list: [number, number][]): void {
-    const rows = list.map(([k, left]) => [k, Math.ceil(left)] as const);
+  private showEffects(list: [number, number, number][]): void {
+    const rows = list.map(([k, left, amount]) => [k, Math.ceil(left), amount] as const);
     const key = rows.map((r) => r.join(':')).join(',');
     if (key === this.fxKey) return;
     this.fxKey = key;
-    this.fx.innerHTML = rows
-      .map(([k, t]) => `<span class="fx ${EFFECTS[k]?.positive ? 'pos' : 'neg'}">${effectIconSvg(k, 14)}<i>${t}</i></span>`)
-      .join('');
+    this.fx.innerHTML = rows.map(([k, t, amount]) => effectChipHtml(k, t, amount)).join('');
+  }
+
+  /** The equipped abilities changed (an Attribute drain started or ended): names, cooldowns, greyed slots. */
+  setAbilities(abilities: readonly ResolvedAbility[], disabled: [boolean, boolean]): void {
+    [0, 1].forEach((i) => {
+      this.slotNames[i] = ABILITIES[abilities[i].id].name;
+      this.slots[i].querySelector('.name')!.textContent = this.slotNames[i];
+      if (this.slotIds[i] !== abilities[i].id) {
+        this.trackers[i] = new CooldownTracker(abilities[i].cooldown);
+        this.slotIds[i] = abilities[i].id;
+      }
+      this.slots[i].classList.toggle('disabled', disabled[i]);
+    });
   }
 
   /** A ranged ability used in melee: the slot reads "Too close" for 0.8 s. */
@@ -367,3 +382,11 @@ export function esc(s: string): string {
 }
 
 export type { ClassId };
+
+/** One own-effect chip: the glyph, the whole seconds left, and for an Attribute drain the amount (`−2`) with a tooltip. */
+export function effectChipHtml(k: number, left: number, amount: number): string {
+  const drain = DRAIN_TEXT[k];
+  const tip = drain && amount !== 0 ? ` title="${drain.name} (${drain.attr} \u2212${Math.abs(amount)})"` : '';
+  const num = amount !== 0 ? `<b>\u2212${Math.abs(amount)}</b>` : '';
+  return `<span class="fx ${EFFECTS[k]?.positive ? 'pos' : 'neg'}"${tip}>${effectIconSvg(k, 14)}${num}<i>${Math.ceil(left)}</i></span>`;
+}

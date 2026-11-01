@@ -29,13 +29,13 @@ pub fn q_aim(a: f64) -> u8 {
 /// `[id, kind, x, y, hp, anim, aim, anim_ms, flags, extra, effects]`, see `EntSnap`.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u16, pub u8, pub u32, pub u16);
+pub struct EntW(pub u32, pub u8, pub u32, pub u32, pub u8, pub u8, pub u8, pub u16, pub u8, pub u32, pub u32);
 
 /// `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act]`, exact values;
 /// `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32)>, pub f32, pub bool, pub f32);
+pub struct SelfW(pub bool, pub f32, pub f32, pub f64, pub f64, pub f64, pub f64, pub f64, pub f32, pub f32, pub Option<u32>, pub Option<(f64, f64)>, pub u8, pub f32, pub Vec<(u8, f32, i16)>, pub f32, pub bool, pub f32);
 
 /// `[kind, hp, max_hp, immune]`
 #[derive(Debug, Clone, Serialize, TS)]
@@ -156,7 +156,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         ents: vec![
             EntSnap(1, 0, 123.47, 456.03, 200, 2, -1.2, 350, 0, 0, 0),
             EntSnap(2, 1, 130.0, 460.5, 255, 0, 3.1, 0, 0, 0, 0b101),
-            EntSnap(3, 1, 141.5, 470.25, 255, 0, 0.5, 0, 0, 0, 1 << 11),
+            EntSnap(3, 1, 141.5, 470.25, 255, 0, 0.5, 0, 0, 0, (1 << 11) | (1 << 18)),
             EntSnap(300, 5, 2000.5, 1800.27, 128, 1, -3.1406, 1200, 8, 1, 0),
             EntSnap(70000, 12, 50.1, 60.9, 255, 0, 0.7854, 0, 0, (1 << 16) | 42, 0),
             EntSnap(70001, 12, 5000.25, 4100.0, 255, 0, 3.1416, 0, 0, 0, 0),
@@ -177,7 +177,7 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             spectating: None,
             darkvision: 0,
             vision: 9.0,
-            effects: vec![(1, 2.5), (3, 0.75)],
+            effects: vec![(1, 2.5, 0), (3, 0.75, 0), (16, 12.0, -2)],
             speed_mul: 0.0,
             no_act: true,
             cd_mul: 0.8,

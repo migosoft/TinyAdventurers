@@ -10,7 +10,7 @@ use super::damage::DamageType;
 use serde::Serialize;
 
 super::enum_list::listed_enum! {
-    /// Open set. The id is the effect's bit in the snapshot's `u16` bitmask.
+    /// Open set. The id is the effect's bit in the snapshot's `u32` bitmask.
     /// `ALL` and `COUNT` grow with a new variant (`listed_enum!`).
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
     pub enum EffectKind: u8 {
@@ -30,6 +30,9 @@ super::enum_list::listed_enum! {
         Warded = 13,
         Coated = 14,
         Invisible = 15,
+        Weakened = 16,
+        Clumsy = 17,
+        Frail = 18,
     }
 }
 
@@ -49,11 +52,11 @@ impl Serialize for EffectLook {
     }
 }
 
-const _: () = assert!(EffectKind::COUNT <= 16, "an effect's id is its bit in the snapshot's u16 mask");
+const _: () = assert!(EffectKind::COUNT <= 32, "an effect's id is its bit in the snapshot's u32 mask");
 
 impl EffectKind {
-    pub fn bit(self) -> u16 {
-        1 << self as u8
+    pub fn bit(self) -> u32 {
+        1 << self as u32
     }
     pub fn from_u8(v: u8) -> Option<EffectKind> {
         EffectKind::ALL.get(v as usize).copied()
@@ -132,9 +135,15 @@ pub struct EffectDef {
     pub ends_when_hit: bool,
     /// Starting an attack ends it (Invisible).
     pub ends_when_attacking: bool,
+    /// The Attribute it changes (Weakened, Clumsy, Frail).
+    pub attr: Option<Attr>,
+    /// Signed amount per application before scaling; 0 for every other effect.
+    pub amount: i32,
+    /// Amounts add up per application; otherwise a refresh replaces the amount.
+    pub stacks: bool,
 }
 
-const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, resisted_by: None, replaces: &[], cancels: &[], ends_in_water: false, save: None, flees: false, ends_when_hit: false, ends_when_attacking: false };
+const NONE: EffectDef = EffectDef { duration: 3.0, positive: false, mods: &[], no_move: false, no_act: false, no_turn: false, prone: false, wakes_on_damage: false, wakes_on_use: false, dot: None, resisted_by: None, replaces: &[], cancels: &[], ends_in_water: false, save: None, flees: false, ends_when_hit: false, ends_when_attacking: false, attr: None, amount: 0, stacks: false };
 
 use DamageType::*;
 use Op::*;
@@ -178,7 +187,25 @@ pub fn def(k: EffectKind) -> EffectDef {
         EffectKind::Warded => EffectDef { positive: true, mods: WARDED_MODS, ..NONE },
         EffectKind::Coated => EffectDef { positive: true, ..NONE },
         EffectKind::Invisible => EffectDef { positive: true, duration: 30.0, ends_when_hit: true, ends_when_attacking: true, ..NONE },
+        EffectKind::Weakened => EffectDef { duration: 20.0, attr: Some(Attr::Str), amount: -1, stacks: true, ..NONE },
+        EffectKind::Clumsy => EffectDef { duration: 20.0, attr: Some(Attr::Dex), amount: -1, stacks: true, ..NONE },
+        EffectKind::Frail => EffectDef { duration: 20.0, attr: Some(Attr::Con), amount: -1, stacks: true, ..NONE },
     }
+}
+
+/// Per point of the source's power above the baseline, the share an Attribute effect's amount grows.
+pub const ATTR_EFFECT_PCT: f64 = 0.05;
+
+/// The signed amount one application of an Attribute effect changes its Attribute by: the
+/// def's amount scaled by the source's power (none counts as the baseline), at least 1 in size.
+/// 0 for an effect without an Attribute.
+pub fn attr_amount(k: EffectKind, power: Option<i32>) -> i32 {
+    let d = def(k);
+    if d.attr.is_none() {
+        return 0;
+    }
+    let scaled = (d.amount.unsigned_abs() as f64 * super::attributes::factor(power.unwrap_or(super::attributes::BASELINE), ATTR_EFFECT_PCT)).floor() as i32;
+    d.amount.signum() * scaled.max(1)
 }
 
 /// Damage over time ticks this often (s).
@@ -304,6 +331,27 @@ mod tests {
     use crate::defs::damage::DamageType::*;
 
     #[test]
+    fn attribute_effects_have_their_numbers() {
+        for (k, a) in [(EffectKind::Weakened, Attr::Str), (EffectKind::Clumsy, Attr::Dex), (EffectKind::Frail, Attr::Con)] {
+            let d = def(k);
+            assert_eq!((d.attr, d.amount, d.stacks, d.duration, d.positive, d.save), (Some(a), -1, true, 20.0, false, None), "{k:?}");
+        }
+        assert_eq!((EffectKind::Weakened as u8, EffectKind::Clumsy as u8, EffectKind::Frail as u8), (16, 17, 18));
+        assert_eq!(EffectKind::COUNT, 19);
+        assert!(EffectKind::ALL.iter().filter(|&&k| def(k).attr.is_none()).all(|&k| def(k).amount == 0 && !def(k).stacks));
+    }
+
+    #[test]
+    fn attr_amount_scales_with_power() {
+        assert_eq!(attr_amount(EffectKind::Weakened, Some(10)), -1);
+        assert_eq!(attr_amount(EffectKind::Weakened, Some(29)), -1);
+        assert_eq!(attr_amount(EffectKind::Weakened, Some(30)), -2);
+        assert_eq!(attr_amount(EffectKind::Frail, Some(0)), -1, "at least 1");
+        assert_eq!(attr_amount(EffectKind::Clumsy, None), -1, "no power counts as 10");
+        assert_eq!(attr_amount(EffectKind::Blind, Some(30)), 0);
+    }
+
+    #[test]
     fn add_then_mul_then_lowest_set() {
         assert_eq!(resolve_stat(100.0, Stat::MoveSpeed, &[]), 100.0);
         assert!((resolve_stat(1.0, Stat::MoveSpeed, &[EffectKind::Slowed, EffectKind::Accelerated]) - 0.75).abs() < 1e-12);
@@ -410,7 +458,7 @@ mod tests {
             assert!(def(k).dot.is_none() && def(k).cancels.is_empty() && !def(k).ends_in_water, "{k:?}");
         }
         assert_eq!((EffectKind::Burning as u8, EffectKind::Frozen as u8, EffectKind::Poisoned as u8), (5, 6, 7));
-        assert_eq!(EffectKind::COUNT, 16);
+        assert_eq!(EffectKind::COUNT, 19);
     }
 
     #[test]
@@ -481,7 +529,7 @@ mod tests {
         let c = def(EffectKind::Coated);
         assert!(c.positive && c.mods.is_empty());
         assert_eq!((EffectKind::Entangled as u8, EffectKind::Fear as u8, EffectKind::Warded as u8, EffectKind::Coated as u8), (11, 12, 13, 14));
-        assert_eq!(EffectKind::COUNT, 16);
+        assert_eq!(EffectKind::COUNT, 19);
         for k in EffectKind::ALL.into_iter().filter(|k| !matches!(k, EffectKind::Entangled | EffectKind::Fear)) {
             assert_eq!(def(k).save, None, "{k:?} keeps the rule of section 5");
         }

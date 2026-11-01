@@ -36,7 +36,7 @@ import { RulesLog } from '../rulesLog';
 import { KeyCap } from './keycap';
 import { critLabel, WORLD_TEXT } from './worldText';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
-import { abilityChoice, cosmeticCount, cosmeticPierce, Interpolator, Predictor, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
+import { abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, Interpolator, Predictor, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
 
 export interface GameInit {
   info: RunStartInfo;
@@ -155,6 +155,8 @@ export class GameScene extends Phaser.Scene {
   private debugImmortal = true;
   private debugEffect = -1;
   private lastAim = 0;
+  /** Which picks an Attribute drain disabled (from `HeroChanged`). */
+  private disabled: [boolean, boolean] = [false, false];
   private debugPath: [number, number][] = [];
   private debugOgre: [number, number][] = [];
   private debugGfx!: Phaser.GameObjects.Graphics;
@@ -187,6 +189,7 @@ export class GameScene extends Phaser.Scene {
     this.acc = 0;
     this.myFlags = 0;
     this.lastSnap = undefined;
+    this.disabled = [false, false];
     const tiles = this.info.tiles instanceof Uint8Array ? this.info.tiles : Uint8Array.from(this.info.tiles as ArrayLike<number>);
     this.map = new TileMap(this.info.width, this.info.height, new Uint8Array(tiles));
     this.myKind = CLASSES[data.myClass].kind;
@@ -372,6 +375,12 @@ export class GameScene extends Phaser.Scene {
       this.debugPath = m.points;
       this.debugOgre = m.ogre;
     }
+    else if (m.t === 'HeroChanged') {
+      this.info = { ...this.info, speed: m.speed, abilities: m.abilities, fallback: m.fallback };
+      this.disabled = m.disabled;
+      this.pred.setNumbers(m.speed, m.abilities, m.fallback);
+      this.hud.setAbilities(m.abilities, m.disabled);
+    }
     else if (m.t === 'RunEnded') this.hud.showEnd(m);
   }
 
@@ -534,12 +543,12 @@ export class GameScene extends Phaser.Scene {
     let secondary: number | null = null;
     let dash: [number, number] | null = null;
     const used: [number | null, number | null] = [null, null];
-    if (wantPrimary && this.pred.cd1 <= 0) {
+    if (wantPrimary && this.pred.cd1 <= 0 && this.slotUsable(0)) {
       const ids = this.reserveShots(0);
       primary = ids[0];
       used[0] = this.predictAbility(0, ids, aim, dist);
     }
-    if (wantSecondary && this.pred.cd2 <= 0) {
+    if (wantSecondary && this.pred.cd2 <= 0 && this.slotUsable(1)) {
       const ids = this.reserveShots(1);
       secondary = ids[0];
       used[1] = this.predictAbility(1, ids, aim, dist);
@@ -575,6 +584,12 @@ export class GameScene extends Phaser.Scene {
       // A flying dragon is out of reach.
       return !isPlayerKind(e.kind) && !isAllyKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
     });
+  }
+
+  /** False for a pick an Attribute drain disabled (a ranged primary in melee still strikes). */
+  private slotUsable(slot: 0 | 1): boolean {
+    const { x, y } = this.pred.state;
+    return slotUsable(this.disabled, slot, this.info.abilities[0].ranged, this.inMelee(x, y));
   }
 
   /** The shot ids of the next use of the ability in `slot` (a Volley takes a run of them, none 0); the first is sent. */

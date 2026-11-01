@@ -870,7 +870,7 @@ pub(crate) mod tests {
 
     /// The radius of the ogre's Ground Slam.
     pub(crate) fn slam_radius() -> f64 {
-        crate::sheet::enemy_kit(EnemyType::Ogre).get(ab::AbilityId::GroundSlam).unwrap().radius
+        crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::Ogre), &crate::defs::enemies::def(EnemyType::Ogre).attrs).get(ab::AbilityId::GroundSlam).unwrap().radius
     }
 
     #[test]

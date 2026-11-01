@@ -156,6 +156,10 @@ const EMBER_RISE = 12;
 const GLINT_EVERY = 0.45;
 const GLINT_LIFE = 0.25;
 const GLINT_COLOR = 0x7fe060;
+const DRAIN_EVERY = 0.4;
+const DRAIN_LIFE = 0.9;
+const DRAIN_FALL = 8;
+const DRAIN_COLOR = 0x9a8cb8;
 const WARD_COLOR = 0xffd24a;
 
 /** A burning figure's flame: its spot on the body, re-seeded now and then. */
@@ -244,6 +248,7 @@ export class StatusView {
   private chillT = 0;
   private emberT = 0;
   private glintT = 0;
+  private drainT = 0;
   private seeds = 0;
   private fearMark?: Phaser.GameObjects.Text;
   /** Entangled bands and the Warded outline, redrawn each frame. */
@@ -267,6 +272,7 @@ export class StatusView {
     this.chilled(has(bits, EFFECT.Chilled), a, dt);
     this.singed(has(bits, EFFECT.Singed), a, dt);
     this.fear(has(bits, EFFECT.Fear), a);
+    this.drained(has(bits, EFFECT.Weakened) || has(bits, EFFECT.Clumsy) || has(bits, EFFECT.Frail), a, dt);
     this.coated(has(bits, EFFECT.Coated), a, dt);
     this.drawings(has(bits, EFFECT.Entangled) ? entangled : undefined, has(bits, EFFECT.Warded), a);
     if (has(bits, EFFECT.Accelerated)) {
@@ -432,6 +438,24 @@ export class StatusView {
     const x = a.x + a.cx + (Math.random() - 0.5) * (a.w + 6);
     const y = a.y - a.head * (0.4 + Math.random() * 0.7);
     this.fx.particle(Math.round(x), Math.round(y), 0, 6 / CHILL_LIFE, CHILL_LIFE, Math.random() < 0.5 ? 0xffffff : 0xd8f0ff, {
+      frame: 'spark',
+      depth: DEPTH.entityBase + a.y + 1,
+      alpha: 0.8 * a.alpha,
+    });
+  }
+
+  /** Weakened, Clumsy or Frail: a small grey-violet mote drifting down from the figure every 0.4 s. */
+  private drained(on: boolean, a: StatusAnchor, dt: number): void {
+    if (!on) {
+      this.drainT = 0;
+      return;
+    }
+    this.drainT -= dt;
+    if (this.drainT > 0) return;
+    this.drainT = DRAIN_EVERY;
+    const x = a.x + a.cx + (Math.random() - 0.5) * a.w;
+    const y = a.y - a.head * 0.6;
+    this.fx.particle(Math.round(x), Math.round(y), 0, DRAIN_FALL / DRAIN_LIFE, DRAIN_LIFE, DRAIN_COLOR, {
       frame: 'spark',
       depth: DEPTH.entityBase + a.y + 1,
       alpha: 0.8 * a.alpha,

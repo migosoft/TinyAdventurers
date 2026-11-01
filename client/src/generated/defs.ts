@@ -1064,9 +1064,11 @@ export const EFFECT = {
   "Blind": 0,
   "Burning": 5,
   "Chilled": 8,
+  "Clumsy": 17,
   "Coated": 14,
   "Entangled": 11,
   "Fear": 12,
+  "Frail": 18,
   "Frozen": 6,
   "Invisible": 15,
   "Petrified": 2,
@@ -1075,7 +1077,8 @@ export const EFFECT = {
   "Sleep": 1,
   "Slowed": 3,
   "Tainted": 10,
-  "Warded": 13
+  "Warded": 13,
+  "Weakened": 16
 } as const;
 
 export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_turn: boolean; flees: boolean; duration: number }> = {
@@ -1133,6 +1136,27 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "flees": false,
     "no_turn": false,
     "positive": true,
+    "prone": false
+  },
+  "16": {
+    "duration": 20.0,
+    "flees": false,
+    "no_turn": false,
+    "positive": false,
+    "prone": false
+  },
+  "17": {
+    "duration": 20.0,
+    "flees": false,
+    "no_turn": false,
+    "positive": false,
+    "prone": false
+  },
+  "18": {
+    "duration": 20.0,
+    "flees": false,
+    "no_turn": false,
+    "positive": false,
     "prone": false
   },
   "2": {

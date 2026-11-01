@@ -801,6 +801,14 @@ kbd {
 .fx .ic {
   display: block;
 }
+.fx b {
+  position: absolute;
+  left: -2px;
+  top: -4px;
+  font: 700 10px/1 var(--font-text);
+  color: #ffd0c0;
+  text-shadow: 0 0 2px #000, 1px 1px 0 #000;
+}
 .fx i {
   position: absolute;
   right: -2px;
@@ -844,6 +852,10 @@ kbd {
   justify-content: center;
   gap: 4px;
   overflow: hidden;
+}
+.slot.disabled {
+  opacity: 0.45;
+  filter: grayscale(1);
 }
 .slot.ready {
   box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.55), 0 0 16px rgba(232, 192, 64, 0.45), inset 0 1px 0 rgba(255, 235, 200, 0.1);

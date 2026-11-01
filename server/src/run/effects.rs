@@ -3,8 +3,8 @@
 
 use crate::defs::damage::{Damage, DamageType, Resistances, What, Why, MIN_RESISTANCE};
 use crate::dungeon::Tile;
-use crate::defs::attributes::Attr;
-use crate::defs::effects::{def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectLook, EffectResistances, Stat, DOT_TICK, TYPE_EFFECT_POWER};
+use crate::defs::attributes::{Attr, Attributes};
+use crate::defs::effects::{attr_amount, def, effect_secs, resolve_stat, scaled_secs, EffectKind, EffectLook, EffectResistances, Stat, DOT_TICK, TYPE_EFFECT_POWER};
 use crate::math::Vec2;
 use crate::defs::races::Sight;
 use crate::protocol::Ev;
@@ -25,6 +25,8 @@ pub struct ActiveEffect {
     pub source: Option<u32>,
     /// Where the source was last seen; `Vec2::ZERO` when there is no source.
     pub from: Vec2,
+    /// The signed amount an Attribute effect changes its Attribute by (summed over its stacks); 0 for every other effect.
+    pub amount: i32,
 }
 
 /// One application of an effect: the single description every source builds (a hit's
@@ -51,7 +53,7 @@ pub enum EffectOutcome {
     Added,
     Refreshed,
     /// The effect cancelled others (fire and ice) and was not applied: the kinds removed, as `EffectKind::bit`s.
-    Cancelled { removed: u16 },
+    Cancelled { removed: u32 },
     /// A stronger tier is on.
     StrongerOn(EffectKind),
     SavedToZero,
@@ -98,24 +100,41 @@ impl Effects {
     pub fn kinds(&self) -> Vec<EffectKind> {
         self.0.iter().map(|a| a.kind).collect()
     }
-    pub fn bits(&self) -> u16 {
+    pub fn bits(&self) -> u32 {
         self.0.iter().fold(0, |b, a| b | a.kind.bit())
     }
     /// Refresh: the longer of the remaining and the new time. True when newly added.
     #[cfg(test)]
     pub fn add(&mut self, k: EffectKind, secs: f64) -> bool {
-        self.add_with(k, secs, EffectLook::Plain, None)
+        self.add_with(k, secs, EffectLook::Plain, None, 0)
     }
-    /// `add` with a look and a source; a refresh takes the new look, source and position too.
-    pub fn add_with(&mut self, k: EffectKind, secs: f64, look: EffectLook, source: Option<(u32, Vec2)>) -> bool {
+    /// `add` with a look, a source and the `amount` of an Attribute effect (0 for the others); a refresh
+    /// takes the new look, source and position too, and adds the amount when the effect stacks,
+    /// else replaces it.
+    pub fn add_with(&mut self, k: EffectKind, secs: f64, look: EffectLook, source: Option<(u32, Vec2)>, amount: i32) -> bool {
         let (source, from) = source.map_or((None, Vec2::ZERO), |(id, at)| (Some(id), at));
         if let Some(a) = self.0.iter_mut().find(|a| a.kind == k) {
             a.left = a.left.max(secs);
             (a.look, a.source, a.from) = (look, source, from);
+            a.amount = if def(k).stacks { a.amount + amount } else { amount };
             return false;
         }
-        self.0.push(ActiveEffect { kind: k, left: secs, dot_t: 0.0, look, source, from });
+        self.0.push(ActiveEffect { kind: k, left: secs, dot_t: 0.0, look, source, from, amount });
         true
+    }
+    /// The signed amount of `k` (0 when it is not on, or has none).
+    pub fn amount(&self, k: EffectKind) -> i32 {
+        self.0.iter().find(|a| a.kind == k).map_or(0, |a| a.amount)
+    }
+    /// What the active effects add to each Attribute (summed, not yet floored: see `Attributes::with_delta`).
+    pub fn attr_delta(&self) -> Attributes {
+        let mut d = Attributes::default();
+        for a in &self.0 {
+            if let Some(attr) = def(a.kind).attr {
+                d.add(attr, a.amount);
+            }
+        }
+        d
     }
     /// The non-`Plain` looks (the client draws them).
     pub fn looks(&self) -> impl Iterator<Item = (EffectKind, EffectLook)> + '_ {
@@ -266,7 +285,7 @@ impl Run {
     }
 
     /// The body of `apply`: what happened, the numbers on the way, and the weaker tiers it removed (bits).
-    pub fn apply_traced(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u16) {
+    pub fn apply_traced(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u32) {
         let r = self.apply_untold(c, a);
         if !def(a.kind).positive && matches!(r.0, EffectOutcome::Added | EffectOutcome::Refreshed) {
             // The landing effect's own Ev::Effect start event is suppressed for a creature that was still invisible
@@ -276,7 +295,7 @@ impl Run {
         r
     }
 
-    fn apply_untold(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u16) {
+    fn apply_untold(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u32) {
         let kind = a.kind;
         let mut d = Duration::default();
         let Some((_, _, pos, ok)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
@@ -342,9 +361,12 @@ impl Run {
             }
         }
         let Some((fx, id, pos, _)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
-        let added = fx.add_with(kind, secs, a.look, a.source);
+        let added = fx.add_with(kind, secs, a.look, a.source, attr_amount(kind, a.power));
         if added {
             self.effect_event(c, id, pos, kind, true, a.look);
+        }
+        if def(kind).attr.is_some() {
+            self.refresh_attrs(c);
         }
         let mut replaced = 0;
         for &weaker in def(kind).replaces {
@@ -403,6 +425,9 @@ impl Run {
         let removed = fx.remove(kind);
         if removed {
             self.effect_event(c, id, pos, kind, false, EffectLook::Plain);
+            if def(kind).attr.is_some() {
+                self.refresh_attrs(c);
+            }
         }
         removed
     }
@@ -472,6 +497,43 @@ impl Run {
         true
     }
 
+    /// The creature's Attributes changed through its effects (a drain was added, grew, ended or was wiped): resolve its
+    /// numbers again from the base and the delta. A hero gets its sheet (it keeps the light and the wolf mods it
+    /// started with), a monster its `monster_numbers`. Current HP is clamped to the new maximum and never goes
+    /// below 1, so a drain does not kill; when the drain ends the maximum comes back and HP does not. Nothing for
+    /// the dead. The rules log gets a line per changed Attribute, and a hero whose speed or abilities changed is told.
+    pub fn refresh_attrs(&mut self, c: Creature) {
+        let changes: Vec<(Attr, i32, i32)> = match c {
+            Creature::Player(i) => {
+                let Some(p) = self.players.get_mut(i).filter(|p| p.alive) else { return };
+                let old = p.sheet;
+                let mut sheet = crate::sheet::run_sheet(p.class, &p.build, p.effects.attr_delta());
+                (sheet.light, sheet.wolf) = (old.light, old.wolf);
+                p.res = sheet.res;
+                p.max_hp = sheet.max_hp;
+                p.hp = p.hp.min(p.max_hp);
+                p.sheet = sheet;
+                let changed = (old.speed, old.primary, old.secondary, old.fallback, old.disabled) != (sheet.speed, sheet.primary, sheet.secondary, sheet.fallback, sheet.disabled);
+                if changed {
+                    let msg = crate::protocol::ServerMsg::HeroChanged { speed: sheet.speed, abilities: [sheet.primary, sheet.secondary], fallback: sheet.fallback, disabled: sheet.disabled };
+                    self.send(&self.players[i], &msg);
+                }
+                Attr::ALL.into_iter().map(|a| (a, old.attrs.get(a), sheet.attrs.get(a))).collect()
+            }
+            Creature::Monster(i) => {
+                let delta = self.monsters.get(i).map(|m| m.effects.attr_delta());
+                let Some(m) = self.monsters.get_mut(i).filter(|m| m.alive) else { return };
+                let old = m.attrs;
+                let n = crate::sheet::monster_numbers(&m.base, delta.unwrap_or_default());
+                (m.attrs, m.max_hp, m.speed, m.kit) = (n.attrs, n.max_hp, n.speed, n.kit);
+                m.hp = m.hp.min(m.max_hp);
+                Attr::ALL.into_iter().map(|a| (a, old.get(a), n.attrs.get(a))).collect()
+            }
+        };
+        let changes: Vec<(Attr, i32, i32)> = changes.into_iter().filter(|&(_, old, new)| old != new).collect();
+        super::rules_log::attrs_changed(self, c, &changes);
+    }
+
     /// Once per step: timers count down; the dead and sinking lose everything.
     pub fn tick_effects(&mut self) {
         // The Invisibility cooldown runs only while visible.
@@ -486,8 +548,13 @@ impl Run {
                 continue;
             }
             if !ok {
+                let mut drained = false;
                 for k in fx.take_all() {
                     self.effect_event(c, id, pos, k, false, EffectLook::Plain);
+                    drained |= def(k).attr.is_some();
+                }
+                if drained {
+                    self.refresh_attrs(c);
                 }
                 continue;
             }
@@ -500,9 +567,14 @@ impl Run {
             }
             let Some((fx, ..)) = self.creature(c) else { continue };
             let (gone, hits) = fx.tick(DT);
+            let mut drained = false;
             for k in gone {
                 self.effect_event(c, id, pos, k, false, EffectLook::Plain);
                 super::rules_log::ended(self, c, k, super::rules_log::EndReason::RanOut);
+                drained |= def(k).attr.is_some();
+            }
+            if drained {
+                self.refresh_attrs(c);
             }
             for (t, amount, kind, source) in hits {
                 let tick = Damage { why: Why { by: source, what: What::Tick(kind), ..Why::NONE }, ..Damage::effect_tick(amount, t) };
@@ -622,7 +694,7 @@ mod tests {
     fn invisible_is_a_positive_effect_that_a_hit_or_an_attack_ends() {
         let d = def(EffectKind::Invisible);
         assert!(d.positive && d.ends_when_hit && d.ends_when_attacking && d.duration == 30.0);
-        assert_eq!(EffectKind::Invisible as u8, 15, "the last bit of the u16 mask");
+        assert_eq!(EffectKind::Invisible as u8, 15, "the id the client draws Invisible by");
         assert!(EffectKind::ALL.iter().filter(|&&k| k != EffectKind::Invisible).all(|&k| !def(k).ends_when_hit && !def(k).ends_when_attacking));
     }
 
@@ -1445,7 +1517,7 @@ mod tests {
     fn fear_remembers_its_source() {
         let mut e = Effects::default();
         assert_eq!(e.fear_from(), None);
-        e.add_with(EffectKind::Fear, 3.0, EffectLook::Plain, Some((5, Vec2::new(1.0, 2.0))));
+        e.add_with(EffectKind::Fear, 3.0, EffectLook::Plain, Some((5, Vec2::new(1.0, 2.0))), 0);
         assert_eq!(e.fear_from(), Some((Some(5), Vec2::new(1.0, 2.0))));
         e.set_fear_from(Vec2::new(3.0, 4.0));
         assert_eq!(e.fear_from(), Some((Some(5), Vec2::new(3.0, 4.0))));
@@ -1493,5 +1565,194 @@ mod tests {
         assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Effect { kind: 11, on: true, look: 1, .. })));
         run.remove_effect(c, EffectKind::Entangled);
         assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Effect { kind: 11, on: false, look: 0, .. })));
+    }
+
+    // ---- Attribute drains (Weakened, Clumsy, Frail) ----
+
+    fn drain(run: &mut crate::run::Run, c: Creature, k: EffectKind, secs: f64, power: Option<i32>) -> EffectOutcome {
+        run.apply_traced(c, Apply { power, ..Apply::plain(k, Some(secs)) }).0
+    }
+
+    fn fx_of(run: &crate::run::Run, c: Creature) -> &Effects {
+        match c {
+            Creature::Player(i) => &run.players[i].effects,
+            Creature::Monster(i) => &run.monsters[i].effects,
+        }
+    }
+
+    #[test]
+    fn drains_stack_and_refresh() {
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let h = Creature::Player(0);
+        let str0 = run.players[0].sheet.attrs.get(Attr::Str);
+        assert_eq!(drain(&mut run, h, EffectKind::Weakened, 20.0, None), EffectOutcome::Added);
+        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -1);
+        assert_eq!(drain(&mut run, h, EffectKind::Weakened, 30.0, None), EffectOutcome::Refreshed);
+        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -2);
+        assert_eq!(left_of(&run, h, EffectKind::Weakened), Some(30.0), "the longer time");
+        assert_eq!(drain(&mut run, h, EffectKind::Weakened, 5.0, None), EffectOutcome::Refreshed);
+        assert_eq!(left_of(&run, h, EffectKind::Weakened), Some(30.0), "a shorter touch does not shorten it");
+        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -3);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -3);
+        assert_eq!(fx_of(&run, h).amount(EffectKind::Sleep), 0);
+        assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), str0 - 3);
+        // Power 30 adds -2 in one touch.
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        drain(&mut run, h, EffectKind::Weakened, 20.0, Some(30));
+        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -2);
+        assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), str0 - 2);
+    }
+
+    #[test]
+    fn the_save_reads_the_current_attribute() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let h = Creature::Player(0);
+        let wil = run.players[0].sheet.attrs.get(Attr::Wil);
+        let power = 22;
+        let magical = |run: &mut crate::run::Run| run.apply_traced(h, Apply { power: Some(power), magical: true, ..Apply::plain(EffectKind::Frail, None) });
+        for _ in 0..2 {
+            let (outcome, d, _) = magical(&mut run);
+            assert!(matches!(outcome, EffectOutcome::Added | EffectOutcome::Refreshed));
+            let (p, a, v, secs) = d.save.expect("a save");
+            assert_eq!((p, a, v), (power, Attr::Wil, wil), "Frail leaves WIL alone");
+            assert!((secs - scaled_secs(20.0, power, wil)).abs() < 1e-12);
+        }
+        assert_eq!(fx_of(&run, h).amount(EffectKind::Frail), -2);
+    }
+
+    #[test]
+    fn a_drain_ending_restores_the_numbers_but_not_hp() {
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let h = Creature::Player(0);
+        let before = run.players[0].sheet;
+        for _ in 0..3 {
+            drain(&mut run, h, EffectKind::Frail, 20.0, None);
+        }
+        let want = before.max_hp - 3.0 * crate::defs::attributes::CON_HP;
+        assert_eq!(run.players[0].max_hp, want);
+        assert_eq!(run.players[0].sheet.max_hp, want);
+        assert_eq!(run.players[0].hp, want, "clamped to the new maximum");
+        assert!(run.players[0].sheet.speed < before.speed);
+        for _ in 0..(20.0 / DT).round() as usize + 1 {
+            run.tick_effects();
+        }
+        assert!(!run.has_effect(h, EffectKind::Frail));
+        assert_eq!(run.players[0].sheet, before);
+        assert_eq!(run.players[0].max_hp, before.max_hp);
+        assert_eq!(run.players[0].hp, want, "hp is not given back");
+    }
+
+    #[test]
+    fn a_drain_never_kills() {
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let h = Creature::Player(0);
+        run.players[0].hp = 3.0;
+        assert!(matches!(drain(&mut run, h, EffectKind::Frail, 20.0, Some(300)), EffectOutcome::Added));
+        let p = &run.players[0];
+        assert!(p.alive && p.max_hp >= 1.0);
+        assert_eq!(p.hp, 3.0f64.min(p.max_hp));
+        assert!(p.hp >= 1.0);
+    }
+
+    #[test]
+    fn monster_drain_rebuilds_its_kit() {
+        use crate::defs::abilities::AbilityId;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let at = run.players[0].pos();
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        let c = Creature::Monster(mi);
+        let (str0, dmg0) = (run.monsters[mi].attrs.get(Attr::Str), run.monsters[mi].kit.get(AbilityId::Strike).unwrap().damage);
+        drain(&mut run, c, EffectKind::Weakened, 20.0, None);
+        assert_eq!(run.monsters[mi].attrs.get(Attr::Str), str0 - 1);
+        assert!(run.monsters[mi].kit.get(AbilityId::Strike).unwrap().damage < dmg0);
+        run.remove_effect(c, EffectKind::Weakened);
+        let m = &run.monsters[mi];
+        let want = crate::sheet::monster_numbers(&m.base, crate::defs::attributes::Attributes::default());
+        assert_eq!((m.attrs, m.max_hp, m.speed), (m.base.attrs, m.base.max_hp, m.base.speed));
+        assert_eq!(m.kit, want.kit);
+        assert_eq!(m.kit.get(AbilityId::Strike).unwrap().damage, dmg0);
+    }
+
+    #[test]
+    fn monster_hp_floor() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let at = run.players[0].pos();
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::GoblinArcher, at, None);
+        let c = Creature::Monster(run.monster_idx(id).unwrap());
+        let Creature::Monster(mi) = c else { unreachable!() };
+        for _ in 0..40 {
+            drain(&mut run, c, EffectKind::Frail, 20.0, Some(400));
+        }
+        let m = &run.monsters[mi];
+        assert!(m.alive, "a drain never kills");
+        assert_eq!(m.max_hp, 1.0, "max HP sits on the floor");
+        assert_eq!(m.hp, 1.0);
+    }
+
+    #[test]
+    fn full_resistance_refuses_the_drain() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.monsters[mi].effect_res.set(EffectKind::Weakened, 1.0);
+        let str0 = run.monsters[mi].attrs.get(Attr::Str);
+        assert_eq!(drain(&mut run, c, EffectKind::Weakened, 20.0, Some(10)), EffectOutcome::Resisted);
+        assert_eq!(fx_of(&run, c).attr_delta(), crate::defs::attributes::Attributes::default());
+        assert_eq!(run.monsters[mi].attrs.get(Attr::Str), str0);
+    }
+
+    #[test]
+    fn death_wipes_drains_without_panic() {
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let h = Creature::Player(0);
+        drain(&mut run, h, EffectKind::Frail, 20.0, None);
+        drain(&mut run, h, EffectKind::Weakened, 20.0, None);
+        run.players[0].alive = false;
+        run.tick_effects();
+        assert!(fx_of(&run, h).list().is_empty());
+    }
+
+    #[test]
+    fn hero_changed_is_sent_on_a_change() {
+        use crate::protocol::{encode, ServerMsg};
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(tx);
+        let h = Creature::Player(0);
+        drain(&mut run, h, EffectKind::Weakened, 20.0, None);
+        let s = run.players[0].sheet;
+        let want = encode(&ServerMsg::HeroChanged { speed: s.speed, abilities: [s.primary, s.secondary], fallback: s.fallback, disabled: s.disabled });
+        let Ok(axum::extract::ws::Message::Binary(got)) = rx.try_recv() else { panic!("a HeroChanged") };
+        assert_eq!(got.to_vec(), want);
+        assert!(rx.try_recv().is_err(), "one message");
+        // Nothing the hero's numbers do not show: no message.
+        let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(tx);
+        run.refresh_attrs(h);
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn spawned_monsters_base_reproduces_their_numbers() {
+        use crate::defs::attributes::Attributes;
+        use crate::defs::enemies::EnemyType;
+        use crate::sheet::{monster_numbers, WolfMods};
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let at = run.players[0].pos();
+        for t in EnemyType::ALL {
+            run.spawn_enemy(t, at, None);
+        }
+        run.players[0].sheet.wolf = WolfMods { hp_mul: 1.5, ..WolfMods::NONE };
+        crate::run::companion::spawn_wolf(&mut run, 0);
+        assert!(run.monsters.iter().any(|m| m.is_boss));
+        for m in &run.monsters {
+            let n = monster_numbers(&m.base, Attributes::default());
+            assert_eq!(n.attrs, m.attrs, "{:?}", m.kind);
+            assert_eq!(n.max_hp, m.max_hp, "{:?}", m.kind);
+            assert_eq!(n.speed.to_bits(), m.speed.to_bits(), "{:?}", m.kind);
+            assert_eq!(n.kit, m.kit, "{:?}", m.kind);
+        }
     }
 }

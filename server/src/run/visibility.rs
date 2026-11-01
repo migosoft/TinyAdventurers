@@ -272,7 +272,7 @@ pub fn send_snapshots(run: &mut Run) {
                 spectating: if me.alive { None } else { me.spectating },
                 darkvision: darkvision_pct(&sight),
                 vision: sight.vision as f32,
-                effects: me.effects.list().iter().map(|a| (a.kind as u8, a.left as f32)).collect(),
+                effects: me.effects.list().iter().map(|a| (a.kind as u8, a.left as f32, a.amount.clamp(i16::MIN as i32, i16::MAX as i32) as i16)).collect(),
                 speed_mul: me.effects.speed_mul() as f32,
                 no_act: me.effects.no_act(),
                 cd_mul: super::keystones::cd_mul(me),
@@ -500,8 +500,8 @@ mod tests {
             snapshot_ents(run, 0, &run.players[0].view, &dark)
         };
         assert!(ents(&mut run).iter().any(|e| e.0 == id), "visible first");
-        run.monsters[mi].effects.add_with(EffectKind::Invisible, 30.0, EffectLook::Plain, None);
-        run.monsters[mi].effects.add_with(EffectKind::Entangled, 5.0, EffectLook::Vines, None);
+        run.monsters[mi].effects.add_with(EffectKind::Invisible, 30.0, EffectLook::Plain, None, 0);
+        run.monsters[mi].effects.add_with(EffectKind::Entangled, 5.0, EffectLook::Vines, None, 0);
         let sent = ents(&mut run);
         assert!(sent.iter().all(|e| e.0 != id), "an invisible monster is not sent");
         assert!(looks_of(&run, &sent).iter().all(|l| l.0 != id), "nor its looks");

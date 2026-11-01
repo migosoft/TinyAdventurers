@@ -79,7 +79,7 @@ pub struct ResolvedAbility {
     pub push_str: i32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sheet {
     /// Class + race + `extra` + item points.
     pub attrs: Attributes,
@@ -108,10 +108,13 @@ pub struct Sheet {
     pub reach: f64,
     /// What the Summon Wolf version's mods do to the wolf.
     pub wolf: WolfMods,
+    /// Primary and secondary: the pick's requirement fails during a run (`run_sheet`), so it
+    /// does nothing but fall back to the plain ability. Always false from `hero_sheet`.
+    pub disabled: [bool; 2],
 }
 
 /// The wolf's numbers from the Summon Wolf version: its max HP is multiplied by `hp_mul`, and `pounce`
-/// (a `CooldownAdd`) is applied to its Pounce through `apply_mods` (`wolf_kit`).
+/// (a `CooldownAdd`) is applied to its Pounce through `apply_mods` (`kit_for`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WolfMods {
     pub hp_mul: f64,
@@ -276,7 +279,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
 }
 
 /// The abilities of a monster, resolved at spawn from its Attributes, weapons and body.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Kit(Vec<ResolvedAbility>);
 
 impl Kit {
@@ -313,22 +316,32 @@ pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], bo
     Kit(kit)
 }
 
-/// The kit of boss `b`, from its stat block.
-pub fn boss_kit(b: BossId) -> Kit {
-    let d = bosses::def(b);
-    monster_kit(d.abilities, &d.attrs, d.weapons, Body { radius: d.radius })
+/// Whose stat block a monster's kit comes from.
+#[derive(Debug, Clone, Copy)]
+pub enum KitSource {
+    Enemy(EnemyType),
+    Boss(BossId),
+    /// The Ranger's wolf: Bite and Pounce from Beast Bite, Pounce changed by its version.
+    Wolf(WolfMods),
 }
 
-/// The Ranger's wolf: Bite and Pounce from its Attributes and Beast Bite, Pounce changed by its version.
-pub fn wolf_kit(mods: &WolfMods) -> Kit {
-    let kit = monster_kit(&[AbilityId::Bite, AbilityId::Pounce], &WOLF_ATTRS, &[ItemId::BeastBite], Body { radius: WOLF_RADIUS });
-    kit.modded(AbilityId::Pounce, mods.pounce.as_slice())
-}
-
-/// The kit of enemy type `t`, from its stat block.
-pub fn enemy_kit(t: EnemyType) -> Kit {
-    let d = enemies::def(t);
-    monster_kit(d.abilities, &d.attrs, d.weapons, Body { radius: d.radius })
+/// The kit of a monster from `src`'s abilities, weapons and body, with `attrs` as its Attributes
+/// (the stat block's at spawn, drained during a run).
+pub fn kit_for(src: KitSource, attrs: &Attributes) -> Kit {
+    match src {
+        KitSource::Enemy(t) => {
+            let d = enemies::def(t);
+            monster_kit(d.abilities, attrs, d.weapons, Body { radius: d.radius })
+        }
+        KitSource::Boss(b) => {
+            let d = bosses::def(b);
+            monster_kit(d.abilities, attrs, d.weapons, Body { radius: d.radius })
+        }
+        KitSource::Wolf(mods) => {
+            let kit = monster_kit(&[AbilityId::Bite, AbilityId::Pounce], attrs, &[ItemId::BeastBite], Body { radius: WOLF_RADIUS });
+            kit.modded(AbilityId::Pounce, mods.pounce.as_slice())
+        }
+    }
 }
 
 /// A weapon item for one wielder, with the shares and on-hit its own properties gave it.
@@ -388,13 +401,52 @@ pub fn attrs_with_items(class: ClassId, b: &Build) -> Attributes {
 /// and the tree's improvements for that ability). An empty Melee slot uses the class's starter;
 /// an empty Ranged slot is no ranged weapon.
 pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
-    let (mut sheet, cx) = sheet_core(class, b)?;
+    let (mut sheet, cx) = sheet_core(class, b, Attributes::default())?;
     let (primary, _) = resolve_pick(class, b, AbilitySlot::Primary, b.loadout.primary, &cx)?;
     let (secondary, secondary_mods) = resolve_pick(class, b, AbilitySlot::Secondary, b.loadout.secondary, &cx)?;
     sheet.wolf = if secondary.id == AbilityId::SummonWolf { wolf_mods(&secondary_mods) } else { WolfMods::NONE };
     sheet.primary = primary;
     sheet.secondary = secondary;
     Ok(sheet)
+}
+
+/// The sheet of a hero during a run, with a signed Attribute `delta` (the drain effects). Never
+/// fails: `b` is a build `hero_sheet` accepted. Requirements are checked against the Attributes
+/// without items plus `delta`: an item that fails gives nothing (an unusable melee weapon is the
+/// class starter), and a pick that fails is disabled and holds the plain ability, without mods.
+pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
+    let req = attrs_without_items(class, b).with_delta(delta);
+    let mut usable = b.clone();
+    for s in EquipSlot::ALL {
+        if usable.equipment.get(s).is_some_and(|id| !items::def(id).req.iter().all(|r| r.met(&req, None))) {
+            usable.equipment.set(s, None);
+        }
+    }
+    let (mut sheet, cx) = sheet_core(class, &usable, delta).expect("the usable items of an accepted build pass the equipment check");
+    let strike = sheet.fallback;
+    let mut wolf = WolfMods::NONE;
+    for (i, (slot, p)) in [(AbilitySlot::Primary, b.loadout.primary), (AbilitySlot::Secondary, b.loadout.secondary)].into_iter().enumerate() {
+        let r = match resolve_pick(class, &usable, slot, p, &cx) {
+            Ok((r, mods)) => {
+                if slot == AbilitySlot::Secondary && r.id == AbilityId::SummonWolf {
+                    wolf = wolf_mods(&mods);
+                }
+                r
+            }
+            Err(_) => {
+                sheet.disabled[i] = true;
+                let d = ab::def(p.ability);
+                cx.resolve(&d).unwrap_or(ResolvedAbility { id: p.ability, ranged: d.ranged, ..strike })
+            }
+        };
+        if slot == AbilitySlot::Primary {
+            sheet.primary = r;
+        } else {
+            sheet.secondary = r;
+        }
+    }
+    sheet.wolf = wolf;
+    sheet
 }
 
 /// What resolving a pick needs: the numbers of the hero without the picks.
@@ -430,14 +482,16 @@ fn resolve_pick(class: ClassId, b: &Build, slot: AbilitySlot, p: Pick, cx: &Pick
 }
 
 /// The sheet without its two picks (they hold the Strike until `hero_sheet` resolves them), and
-/// what resolving any pick needs.
-fn sheet_core(class: ClassId, b: &Build) -> Result<(Sheet, PickCx), LoadoutError> {
+/// what resolving any pick needs. `delta` is an Attribute change during a run (none for
+/// `hero_sheet`): the equipment is checked against the Attributes without items plus `delta`, and
+/// every derived number uses the Attributes with items plus `delta`.
+fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, PickCx), LoadoutError> {
     let def = classes::def(class);
     let start = classes::start_attrs(class);
     let unequipped = attrs_without_items(class, b);
     let equip = &b.equipment;
     let tree = trees::gains(&b.nodes);
-    items::check_equipment(class, &profs(class, &b.nodes), equip, &unequipped).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
+    items::check_equipment(class, &profs(class, &b.nodes), equip, &unequipped.with_delta(delta)).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
     let prof = classes::profile(class);
 
     let worn = worn_items(class, b);
@@ -518,6 +572,7 @@ fn sheet_core(class: ClassId, b: &Build) -> Result<(Sheet, PickCx), LoadoutError
             }
         }
     }
+    let attrs = attrs.with_delta(delta);
     let melee_id = worn.iter().find(|w| w.0 == EquipSlot::Melee).map(|w| w.1).expect("a hero always has a melee weapon");
     let melee = arm(melee_id, &attrs, &shares[0], on_hits[0], pierce[0]);
     let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], on_hits[1], pierce[1]));
@@ -534,7 +589,7 @@ fn sheet_core(class: ClassId, b: &Build) -> Result<(Sheet, PickCx), LoadoutError
     let cx = PickCx { attrs, melee, ranged, improves: tree.improves.clone(), ks };
     let sheet = Sheet {
         attrs,
-        max_hp: attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp,
+        max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp).max(1.0),
         speed: move_speed(def.speed, start.get(Attr::Con), &attrs) * (1.0 + move_frac),
         weight,
         res,
@@ -549,6 +604,7 @@ fn sheet_core(class: ClassId, b: &Build) -> Result<(Sheet, PickCx), LoadoutError
         fallback: strike,
         reach,
         wolf: WolfMods::NONE,
+        disabled: [false, false],
     };
     Ok((sheet, cx))
 }
@@ -647,7 +703,7 @@ pub struct PoolCard {
 /// start primary and secondary, `b.own`, owned tree unlocks (node order), item versions (slot
 /// order), then the locked tree unlocks (node order). Never empty: `summary` passes the starter equipment when the equipment fails.
 pub fn pool_cards(class: ClassId, b: &Build) -> Vec<PoolCard> {
-    let Ok((_, cx)) = sheet_core(class, b) else { return Vec::new() };
+    let Ok((_, cx)) = sheet_core(class, b, Attributes::default()) else { return Vec::new() };
     let cd = classes::def(class);
     let nodes = trees::tree(class);
     let unlock_of = |n: &trees::NodeDef| match n.kind {
@@ -813,6 +869,36 @@ pub fn boss_stats(b: BossId) -> MonsterStats {
 pub fn wolf_stats() -> MonsterStats {
     let con = WOLF_ATTRS.get(Attr::Con);
     MonsterStats { attrs: WOLF_ATTRS, weight: WOLF_WEIGHT, max_hp: attributes::hp(wolf_base_hp(), con), speed: move_speed(WOLF_SPEED, con, &WOLF_ATTRS) }
+}
+
+/// What a monster is made of at spawn: the numbers its Attributes gave it. `monster_numbers` moves
+/// them by an Attribute delta.
+#[derive(Debug, Clone, Copy)]
+pub struct MonsterBase {
+    pub attrs: Attributes,
+    pub max_hp: f64,
+    pub speed: f64,
+    pub kit: KitSource,
+}
+
+/// A monster's Attributes and the numbers they give.
+#[derive(Debug, Clone)]
+pub struct MonsterNumbers {
+    pub attrs: Attributes,
+    pub max_hp: f64,
+    pub speed: f64,
+    pub kit: Kit,
+}
+
+/// `base` with `delta` added to its Attributes (a lowered one stops at 1): max HP moves by `CON_HP`
+/// per CON point and stays at least 1, speed by `CON_MOVE`, the kit is resolved again. At a zero
+/// delta every number is the spawn's.
+pub fn monster_numbers(base: &MonsterBase, delta: Attributes) -> MonsterNumbers {
+    let attrs = base.attrs.with_delta(delta);
+    let con0 = base.attrs.get(Attr::Con);
+    let max_hp = (base.max_hp + attributes::CON_HP * (attrs.get(Attr::Con) - con0) as f64).max(1.0);
+    let speed = move_speed(base.speed, con0, &attrs);
+    MonsterNumbers { attrs, max_hp, speed, kit: kit_for(base.kit, &attrs) }
 }
 
 #[cfg(test)]
@@ -1281,18 +1367,18 @@ mod tests {
         };
         for t in EnemyType::ALL {
             let d = enemies::def(t);
-            check(&format!("{t:?}"), &enemy_kit(t), d.abilities, &d.attrs, d.weapons, d.radius);
+            check(&format!("{t:?}"), &kit_for(KitSource::Enemy(t), &crate::defs::enemies::def(t).attrs), d.abilities, &d.attrs, d.weapons, d.radius);
         }
         for b in BossId::ALL {
             let d = bosses::def(b);
-            check(&format!("{b:?}"), &boss_kit(b), d.abilities, &d.attrs, d.weapons, d.radius);
+            check(&format!("{b:?}"), &kit_for(KitSource::Boss(b), &crate::defs::bosses::def(b).attrs), d.abilities, &d.attrs, d.weapons, d.radius);
         }
         let ids = [AbilityId::Bite, AbilityId::Pounce];
-        check("wolf", &wolf_kit(&WolfMods::NONE), &ids, &WOLF_ATTRS, &[ItemId::BeastBite], WOLF_RADIUS);
+        check("wolf", &kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS), &ids, &WOLF_ATTRS, &[ItemId::BeastBite], WOLF_RADIUS);
         // A version's mod goes through `apply_mods`, on the Pounce alone.
         let faster = AbilityMod::CooldownAdd(-0.5);
-        let kit = wolf_kit(&WolfMods { hp_mul: 1.0, pounce: Some(faster) });
-        let plain = wolf_kit(&WolfMods::NONE);
+        let kit = kit_for(KitSource::Wolf(WolfMods { hp_mul: 1.0, pounce: Some(faster) }), &crate::defs::companions::WOLF_ATTRS);
+        let plain = kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS);
         assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(*plain.get(AbilityId::Pounce).unwrap(), &[faster])));
         assert_eq!(kit.get(AbilityId::Bite), plain.get(AbilityId::Bite));
     }
@@ -1302,14 +1388,14 @@ mod tests {
         use crate::defs::bosses::*;
         let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-9, "{what}: {a} vs {b}");
         for b in BossId::ALL {
-            let k = boss_kit(b);
+            let k = kit_for(KitSource::Boss(b), &crate::defs::bosses::def(b).attrs);
             for &id in def(b).abilities {
                 assert!(k.get(id).is_some(), "{b:?} {id:?}");
             }
         }
-        let dragon = boss_kit(BossId::Dragon);
-        let demon = boss_kit(BossId::Demon);
-        let lich = boss_kit(BossId::Lich);
+        let dragon = kit_for(KitSource::Boss(BossId::Dragon), &crate::defs::bosses::def(BossId::Dragon).attrs);
+        let demon = kit_for(KitSource::Boss(BossId::Demon), &crate::defs::bosses::def(BossId::Demon).attrs);
+        let lich = kit_for(KitSource::Boss(BossId::Lich), &crate::defs::bosses::def(BossId::Lich).attrs);
         let check = |k: &Kit, id: AbilityId, damage: f64, push: f64| {
             let a = k.get(id).unwrap_or_else(|| panic!("{id:?}"));
             near(a.damage, damage, &format!("{id:?} damage"));
@@ -1335,6 +1421,65 @@ mod tests {
         assert_eq!(s.max_hp, WOLF_HP);
         assert_eq!(s.speed, WOLF_SPEED);
         assert_eq!(s.weight, 10.0);
+    }
+
+    /// What each spawn stores as `Monster.base`.
+    fn bases() -> Vec<(String, MonsterBase, Vec<AbilityId>)> {
+        let mut v = vec![];
+        for t in EnemyType::ALL {
+            let (s, d) = (enemy_stats(t), enemies::def(t));
+            v.push((format!("{t:?}"), MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(t) }, d.abilities.to_vec()));
+        }
+        for b in BossId::ALL {
+            let (s, d) = (boss_stats(b), bosses::def(b));
+            v.push((format!("{b:?}"), MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Boss(b) }, d.abilities.to_vec()));
+        }
+        let s = wolf_stats();
+        v.push(("wolf".into(), MonsterBase { attrs: s.attrs, max_hp: WOLF_HP, speed: WOLF_SPEED, kit: KitSource::Wolf(WolfMods::NONE) }, vec![AbilityId::Bite, AbilityId::Pounce]));
+        v
+    }
+
+    #[test]
+    fn monster_numbers_at_zero_delta_are_the_base() {
+        for (what, base, ids) in bases() {
+            let n = monster_numbers(&base, Attributes::default());
+            assert_eq!(n.attrs, base.attrs, "{what}");
+            assert_eq!(n.max_hp.to_bits(), base.max_hp.to_bits(), "{what} max HP");
+            assert_eq!(n.speed.to_bits(), base.speed.to_bits(), "{what} speed");
+            let spawn = kit_for(base.kit, &base.attrs);
+            for id in ids {
+                assert_eq!(n.kit.get(id), spawn.get(id), "{what} {id:?}");
+                assert!(n.kit.get(id).is_some(), "{what} {id:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn monster_numbers_follow_a_drain() {
+        let s = enemy_stats(EnemyType::OrcWarrior);
+        let base = MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::OrcWarrior) };
+        let at0 = monster_numbers(&base, Attributes::default());
+        let weak = monster_numbers(&base, Attributes::new(-3, 0, 0, 0, 0, 0));
+        assert!(weak.kit.get(AbilityId::Strike).unwrap().damage < at0.kit.get(AbilityId::Strike).unwrap().damage);
+        assert_eq!(weak.attrs.get(Attr::Str), s.attrs.get(Attr::Str) - 3);
+        let frail = monster_numbers(&base, Attributes::new(0, 0, -2, 0, 0, 0));
+        assert_eq!(frail.max_hp, at0.max_hp - 10.0);
+        assert!(frail.speed < at0.speed);
+    }
+
+    #[test]
+    fn monster_max_hp_never_reaches_zero() {
+        let drain = Attributes::new(-100, -100, -100, -100, -100, -100);
+        for (what, base, _) in bases() {
+            let n = monster_numbers(&base, drain);
+            assert!(n.max_hp >= 1.0, "{what}");
+            assert_eq!(n.attrs.get(Attr::Con), base.attrs.get(Attr::Con).min(1), "{what}");
+            assert!(n.speed.is_finite() && n.speed >= 0.0 && (n.speed > 0.0) == (base.speed > 0.0), "{what}");
+        }
+        // A frail one: the drain empties it to the floor.
+        let s = enemy_stats(EnemyType::GoblinArcher);
+        let archer = MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::GoblinArcher) };
+        assert_eq!(monster_numbers(&archer, drain).max_hp, 1.0);
     }
 
     #[test]
@@ -1510,5 +1655,77 @@ mod tests {
     fn the_summary_carries_the_pool() {
         let c = ClassId::Wizard;
         assert_eq!(summary(c, &Build::start(c)).pool, pool_cards(c, &Build::start(c)));
+    }
+
+    fn frost_shard_wizard() -> Build {
+        use crate::defs::trees::NodeId;
+        let mut b = Build::start(ClassId::Wizard);
+        b.nodes = vec![NodeId::WF1];
+        b.loadout.primary = Pick { ability: AbilityId::FrostShard, source: Source::Own };
+        b
+    }
+
+    fn flame_tongue_barbarian() -> Build {
+        let c = ClassId::Barbarian;
+        Build { equipment: Equipment::starter(c).with(EquipSlot::Melee, ItemId::FlameTongue), ..Build::start(c) }
+    }
+
+    fn drain(s: i32, d: i32, c: i32) -> Attributes {
+        Attributes::new(s, d, c, 0, 0, 0)
+    }
+
+    #[test]
+    fn run_sheet_without_a_delta_is_the_hero_sheet() {
+        for c in ClassId::ALL {
+            let b = Build::start(c);
+            assert_eq!(run_sheet(c, &b, Attributes::default()), hero_sheet(c, &b).unwrap(), "{c:?}");
+        }
+        for (c, b) in [(ClassId::Wizard, frost_shard_wizard()), (ClassId::Barbarian, flame_tongue_barbarian())] {
+            assert_eq!(run_sheet(c, &b, Attributes::default()), hero_sheet(c, &b).unwrap(), "{c:?}");
+        }
+    }
+
+    #[test]
+    fn a_drain_lowers_the_numbers() {
+        let c = ClassId::Barbarian;
+        let b = Build::start(c);
+        let base = hero_sheet(c, &b).unwrap();
+        let s = run_sheet(c, &b, drain(-2, 0, -3));
+        assert_eq!((s.attrs.get(Attr::Str), s.attrs.get(Attr::Con)), (13, 11));
+        assert_eq!(s.max_hp, attributes::hp(classes::def(c).base_hp, 11));
+        assert!(s.primary.damage < base.primary.damage);
+        assert!(s.speed < base.speed);
+        assert_eq!(s.disabled, [false, false]);
+    }
+
+    #[test]
+    fn the_floor_holds() {
+        let c = ClassId::Wizard;
+        let s = run_sheet(c, &Build::start(c), drain(0, 0, -50));
+        assert_eq!(s.attrs.get(Attr::Con), 1);
+        assert!(s.max_hp >= 1.0);
+    }
+
+    #[test]
+    fn a_drained_requirement_disables_the_pick() {
+        let c = ClassId::Wizard;
+        let b = frost_shard_wizard();
+        let int = |n| Attributes::new(0, 0, 0, n, 0, 0);
+        assert_eq!(run_sheet(c, &b, int(-1)).disabled, [false, false]);
+        let s = run_sheet(c, &b, int(-2));
+        assert_eq!(s.disabled, [true, false]);
+        assert_eq!(s.primary.id, AbilityId::FrostShard);
+        assert!(s.primary.ranged);
+    }
+
+    #[test]
+    fn an_unusable_weapon_falls_back_to_the_starter() {
+        let c = ClassId::Barbarian;
+        let b = flame_tongue_barbarian();
+        assert!(run_sheet(c, &b, drain(-2, 0, 0)).melee.split.share(DamageType::Heat) > 0.0);
+        let s = run_sheet(c, &b, drain(-3, 0, 0));
+        assert_eq!(s.melee.split.share(DamageType::Heat), 0.0);
+        assert_eq!(s.melee, run_sheet(c, &Build::start(c), drain(-3, 0, 0)).melee);
+        assert_eq!(s.disabled, [false, false]);
     }
 }

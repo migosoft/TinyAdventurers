@@ -19,6 +19,8 @@ const SKULL = '<path d="M8 1.2A5.8 5.8 0 0 0 2.2 7c0 2.1 1 3.4 2.1 4.1V14h7.4v-2
 const SHIELD = '<path d="M8 1 14 3.4V8c0 3.6-3 6.1-6 7-3-.9-6-3.4-6-7V3.4z"/>';
 const BLADE = '<path d="M2.5 13.5 11.5 4.5M9.5 2.5l4 4M3.8 9.8l2.4 2.4"/>';
 
+const DOWN = '<path d="M8 2v11M3.5 8.5 8 13l4.5-4.5"/>';
+
 const def = (body: string, mode: IconMode, color: string, weak = false): IconDef => ({ body, mode, weak, color });
 
 export const EFFECT_ICON: Record<(typeof EFFECT)[keyof typeof EFFECT], IconDef> = {
@@ -38,6 +40,16 @@ export const EFFECT_ICON: Record<(typeof EFFECT)[keyof typeof EFFECT], IconDef> 
   [EFFECT.Accelerated]: def(HASTE, 'line', '#70e080'),
   [EFFECT.Warded]: def(SHIELD, 'fill', '#e8c040'),
   [EFFECT.Coated]: def(BLADE, 'line', '#a0e070'),
+  [EFFECT.Weakened]: def(DOWN, 'line', '#e07a5f'),
+  [EFFECT.Clumsy]: def(DOWN, 'line', '#e0c060'),
+  [EFFECT.Frail]: def(DOWN, 'line', '#90c890'),
+};
+
+/** The Attribute drains: effect name and the Attribute they lower. */
+export const DRAIN_TEXT: Record<number, { name: string; attr: string }> = {
+  [EFFECT.Weakened]: { name: 'Weakened', attr: 'STR' },
+  [EFFECT.Clumsy]: { name: 'Clumsy', attr: 'DEX' },
+  [EFFECT.Frail]: { name: 'Frail', attr: 'CON' },
 };
 
 /** The symbol as a standalone `<svg>` string of `px` x `px`. */

@@ -215,6 +215,9 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             return;
         }
     }
+    if run.players[pi].sheet.disabled[if primary { 0 } else { 1 }] {
+        return;
+    }
     let anim = use_ability(run, Creature::Player(pi), &def, shot);
     let p = &mut run.players[pi];
     let cooldown = super::keystones::cooldown(p, cooldown);
@@ -1396,8 +1399,8 @@ mod tests {
     fn a_dash_touches_within_the_ability_radius_of_the_users_edge() {
         // Swoop: body radius + 8 (+ the hero's radius); Pounce: body radius + 4.
         for (id, radius, user_kit) in [
-            (AbilityId::Swoop, 8.0, crate::sheet::boss_kit(BossId::Demon)),
-            (AbilityId::Pounce, 4.0, crate::sheet::wolf_kit(&crate::sheet::WolfMods::NONE)),
+            (AbilityId::Swoop, 8.0, crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Demon), &crate::defs::bosses::def(BossId::Demon).attrs)),
+            (AbilityId::Pounce, 4.0, crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS)),
         ] {
             assert_eq!(user_kit.get(id).unwrap().radius, radius, "{id:?}");
             for (gap, hits) in [(radius, true), (radius + 1.0, false)] {
@@ -1420,14 +1423,14 @@ mod tests {
 
     #[test]
     fn a_monster_dash_never_runs_farther_than_its_range() {
-        let kit = crate::sheet::wolf_kit(&crate::sheet::WolfMods::NONE);
+        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS);
         let pounce = *kit.get(AbilityId::Pounce).unwrap();
         assert!(pounce.duration == 0.0 && pounce.range > 0.0);
         let reach = |aim_dist: f64| pounce.speed * monster_dash_secs(&pounce, aim_dist);
         assert!(reach(pounce.range / 2.0) > pounce.range / 2.0, "it still reaches a near mark");
         assert!(reach(pounce.range * 3.0) <= pounce.range + 1e-9, "re-aimed far away it stops at its range: {}", reach(pounce.range * 3.0));
         // An ability with its own duration lasts that long.
-        let swoop = *crate::sheet::boss_kit(BossId::Demon).get(AbilityId::Swoop).unwrap();
+        let swoop = *crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Demon), &crate::defs::bosses::def(BossId::Demon).attrs).get(AbilityId::Swoop).unwrap();
         assert_eq!(monster_dash_secs(&swoop, 1000.0), swoop.duration);
     }
 
@@ -2412,6 +2415,34 @@ mod tests {
                 break;
             }
         }
+    }
+
+    /// The wizard of `wizard_with(FrostShard)` with INT drained by 2, as `refresh_attrs` would leave it
+    /// (no effect drains INT yet): Frost Shard needs INT 14 and the wizard has 15.
+    fn int_drained_wizard() -> Run {
+        let mut run = wizard_with(AbilityId::FrostShard, 0);
+        let delta = Attributes::new(0, 0, 0, -2, 0, 0);
+        let p = &mut run.players[0];
+        p.sheet = crate::sheet::run_sheet(p.class, &p.build, delta);
+        assert!(p.sheet.disabled[0] && !p.sheet.disabled[1]);
+        run
+    }
+
+    #[test]
+    fn a_disabled_primary_is_not_cast() {
+        let mut run = int_drained_wizard();
+        try_use(&mut run, 0, true, 1);
+        assert!(run.projectiles.is_empty(), "no bolt");
+        assert_eq!(run.players[0].cd1, 0.0);
+    }
+
+    #[test]
+    fn a_disabled_ranged_primary_still_falls_back_in_melee() {
+        let mut run = int_drained_wizard();
+        let mi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 10.0, 1000.0);
+        try_use(&mut run, 0, true, 1);
+        assert!(run.monsters[mi].hp < 1000.0, "the fallback Strike hit");
+        assert_eq!(run.players[0].cd1, run.players[0].sheet.fallback.cooldown);
     }
 
     fn lost(run: &Run, mi: usize, before: f64) -> f64 {
@@ -3609,7 +3640,7 @@ mod tests {
     #[test]
     fn dash_contact_passes_bodiless() {
         // The wolf's Pounce through an incorporeal enemy: nothing happens, and it does not end the leap.
-        let kit = crate::sheet::wolf_kit(&crate::sheet::WolfMods::NONE);
+        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS);
         let pounce = *kit.get(AbilityId::Pounce).unwrap();
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());

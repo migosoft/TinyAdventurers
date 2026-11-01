@@ -4,7 +4,7 @@ import type { EntSnap } from '../generated/EntSnap';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
-import { Interpolator, Predictor, abilityChoice, cosmeticCount, cosmeticPierce, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
+import { Interpolator, Predictor, abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
 
 const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, windup: 0, behind: 0, ...over });
 /** Predictor for tests: the class only picks which ids the abilities carry. */
@@ -64,7 +64,7 @@ describe('Predictor', () => {
   it('cannot act or turn while the server says so', () => {
     const pred = mk(chasmMap(), 'Wizard', 3 * TILE + 8, 2 * TILE + 8);
     const s = snap(0, pred.state.x, pred.state.y);
-    pred.reconcile({ ...s, me: { ...s.me, no_act: true, effects: [[2, 1.0]] } });
+    pred.reconcile({ ...s, me: { ...s.me, no_act: true, effects: [[2, 1.0, 0]] } });
     expect(pred.noAct).toBe(true);
     expect(pred.noTurn).toBe(true);
   });
@@ -226,5 +226,29 @@ describe('Volley', () => {
   it('only Volley fires more than one cosmetic', () => {
     expect(cosmeticCount('Volley')).toBe(3);
     expect(cosmeticCount('Shoot')).toBe(1);
+  });
+});
+
+describe('slotUsable', () => {
+  it('blocks a disabled pick, except a ranged primary in melee (it strikes)', () => {
+    expect(slotUsable([false, false], 0, false, false)).toBe(true);
+    expect(slotUsable([true, false], 0, false, false)).toBe(false);
+    expect(slotUsable([true, false], 0, true, true)).toBe(true);
+    expect(slotUsable([true, false], 0, false, true)).toBe(false);
+    expect(slotUsable([false, true], 1, true, true)).toBe(false);
+  });
+});
+
+describe('Predictor.setNumbers', () => {
+  it('changes the speed used by step and the dash duration', () => {
+    const map = chasmMap();
+    const x0 = 3 * TILE + 8, y0 = 2 * TILE + 8;
+    const pred = mk(map, 'Barbarian', x0, y0);
+    pred.setNumbers(30, [ab('Strike'), ab('Charge', { duration: 0.5 })], ab('Strike', { cooldown: 0.7 }));
+    pred.step(1, 0, null);
+    expect(pred.state.x - x0).toBeCloseTo(30 * CONST.DT, 6);
+    expect(pred.cooldownOf(0, true)).toBeCloseTo(0.7, 6);
+    pred.step(1, 0, [1, 0]);
+    expect(pred.state.dashT).toBeCloseTo(0.5, 6);
   });
 });

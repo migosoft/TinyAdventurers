@@ -26,6 +26,8 @@ pub struct Player {
     pub tx: Option<UnboundedSender<Message>>,
     pub name: String,
     pub class: ClassId,
+    /// The build the hero brought, kept for the run (`run_sheet` resolves it again when its Attributes change).
+    pub build: crate::defs::loadout::Build,
     /// The worn melee and ranged weapons (the melee falls back to the class starter), for `PlayerInfo`.
     pub weapons: (crate::defs::items::ItemId, Option<crate::defs::items::ItemId>),
     pub kind: EntityKind,
@@ -230,6 +232,8 @@ pub struct Monster {
     pub hp: f64,
     pub max_hp: f64,
     pub speed: f64,
+    /// Its numbers at spawn, before any Attribute effect (crate::sheet::monster_numbers).
+    pub base: crate::sheet::MonsterBase,
     pub radius: f64,
     pub sight: Sight,
     pub alive: bool,

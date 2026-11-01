@@ -199,6 +199,7 @@ impl Run {
                 tx: Some(m.tx),
                 name: m.name,
                 class: m.class,
+                build: m.build.clone(),
                 weapons: (m.build.equipment.get(crate::defs::items::EquipSlot::Melee).unwrap_or(classes::def(m.class).starter.0), m.build.equipment.get(crate::defs::items::EquipSlot::Ranged)),
                 kind: classes::def(m.class).kind,
                 mv: MoveState::at(p.x, p.y),
@@ -289,6 +290,7 @@ impl Run {
         let stats = crate::sheet::enemy_stats(t);
         let id = self.alloc_id();
         let hp = stats.max_hp;
+        let base = crate::sheet::MonsterBase { attrs: stats.attrs, max_hp: hp, speed: stats.speed, kit: crate::sheet::KitSource::Enemy(t) };
         self.monsters.push(Monster {
             id,
             res: prof.res,
@@ -302,6 +304,7 @@ impl Run {
             hp,
             max_hp: hp,
             speed: stats.speed,
+            base,
             radius: d.radius,
             sight: prof.sight,
             alive: true,
@@ -310,7 +313,7 @@ impl Run {
             anim: Anim::Idle,
             anim_start: self.time,
             hurt_t: 0.0,
-            kit: crate::sheet::enemy_kit(t),
+            kit: crate::sheet::kit_for(base.kit, &base.attrs),
             cds: Default::default(),
             slam: None,
             channel: None,
