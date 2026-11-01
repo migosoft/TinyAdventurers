@@ -3,6 +3,7 @@
 import { CONST, EFFECT, EFFECTS } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import type { AbilityId } from '../generated/AbilityId';
+import type { Disabled } from '../ui/hud';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { Snapshot } from '../generated/Snapshot';
 import { knocked, sinking, stepMove, type MoveState, type Solid } from '../sim/collision';
@@ -127,10 +128,11 @@ export function abilityChoice(a: ResolvedAbility, slot: 0 | 1, inMelee: boolean)
 
 /**
  * Whether a use of the slot is sent: not disabled by an Attribute drain, except a ranged
- * primary in melee, which strikes with the melee weapon (the fallback) anyway.
+ * primary in melee, which strikes with the melee weapon (the fallback) anyway. `disabled[slot]` is
+ * the Attribute requirement that fails, or null for a usable pick.
  */
-export function slotUsable(disabled: boolean[], slot: 0 | 1, primaryRanged: boolean, inMelee: boolean): boolean {
-  return !disabled[slot] || (slot === 0 && primaryRanged && inMelee);
+export function slotUsable(disabled: Disabled, slot: 0 | 1, primaryRanged: boolean, inMelee: boolean): boolean {
+  return disabled[slot] === null || (slot === 0 && primaryRanged && inMelee);
 }
 
 /** The weakness floor of the server's damage formula (`MIN_RESISTANCE` in defs/damage.rs). */

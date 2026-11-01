@@ -1075,7 +1075,7 @@ kbd {
   height: 4px;
   border-radius: 2px;
 }
-.slot.too-close .name {
+.slot.hint .name {
   color: #ff8060;
 }
 .debug-loadout {

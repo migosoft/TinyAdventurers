@@ -349,8 +349,8 @@ pub enum ServerMsg {
     RunEnded { victory: bool, level: LevelId, boss: Option<BossId>, time: f32, stats: Vec<PlayerStats> },
     Pong { time: f64 },
     /// The hero's speed or abilities changed (an Attribute effect started or ended): the numbers the client
-    /// predicts with, as in `RunStartInfo`. `disabled`: the pick's requirement fails, so it does nothing.
-    HeroChanged { speed: f64, abilities: [crate::sheet::ResolvedAbility; 2], fallback: crate::sheet::ResolvedAbility, disabled: [bool; 2] },
+    /// predicts with, as in `RunStartInfo`. `disabled`: the pick's requirement fails, so it does nothing; it names the Attribute requirement that fails.
+    HeroChanged { speed: f64, abilities: [crate::sheet::ResolvedAbility; 2], fallback: crate::sheet::ResolvedAbility, disabled: [Option<(Attr, i32)>; 2] },
     Error { msg: String },
     /// Debug mode: shortest walkable path from the player to the boss (pixel waypoints).
     /// `ogre`: the path to the ogre mini-boss while it lives (else empty). `immortal`: false after `DebugImmortal { on: false }`.

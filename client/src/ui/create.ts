@@ -13,7 +13,7 @@ import { abilityIcon, itemIcon } from './icons';
 import { CLASS_TEXT, className } from './text';
 
 const ATTR_ORDER: Attr[] = ['Str', 'Dex', 'Con', 'Int', 'Wil', 'Cha'];
-const SHORT: Record<Attr, string> = { Str: 'STR', Dex: 'DEX', Con: 'CON', Int: 'INT', Wil: 'WIL', Cha: 'CHA' };
+export const ATTR_SHORT: Record<Attr, string> = { Str: 'STR', Dex: 'DEX', Con: 'CON', Int: 'INT', Wil: 'WIL', Cha: 'CHA' };
 const itemName = (id: string) => (ITEMS as unknown as Record<string, { name: string }>)[id].name;
 
 export class Create {
@@ -52,7 +52,7 @@ export class Create {
     head.append(classFigure(this.atlas, c, 4), title);
     const attrs = document.createElement('div');
     attrs.className = 'ui-attrs';
-    attrs.innerHTML = ATTR_ORDER.map((a, i) => `<span class="${values[i] === max ? 'hi' : values[i] === min ? 'lo' : ''}"><i>${SHORT[a]}</i>${values[i]}</span>`).join('');
+    attrs.innerHTML = ATTR_ORDER.map((a, i) => `<span class="${values[i] === max ? 'hi' : values[i] === min ? 'lo' : ''}"><i>${ATTR_SHORT[a]}</i>${values[i]}</span>`).join('');
     const kv = document.createElement('div');
     kv.className = 'ui-kv';
     kv.innerHTML = `<span>HP</span><b>${d.hp}</b><span>Weight</span><b>${d.weight}</b><span>Speed</span><b>${d.speed}</b>`;

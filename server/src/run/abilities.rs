@@ -215,7 +215,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             return;
         }
     }
-    if run.players[pi].sheet.disabled[if primary { 0 } else { 1 }] {
+    if run.players[pi].sheet.disabled[if primary { 0 } else { 1 }].is_some() {
         return;
     }
     let anim = use_ability(run, Creature::Player(pi), &def, shot);
@@ -2454,7 +2454,7 @@ mod tests {
         let delta = Attributes::new(0, 0, 0, -2, 0, 0);
         let p = &mut run.players[0];
         p.sheet = crate::sheet::run_sheet(p.class, &p.build, delta);
-        assert!(p.sheet.disabled[0] && !p.sheet.disabled[1]);
+        assert!(p.sheet.disabled[0].is_some() && p.sheet.disabled[1].is_none());
         run
     }
 

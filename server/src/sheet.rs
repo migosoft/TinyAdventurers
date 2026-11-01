@@ -108,9 +108,10 @@ pub struct Sheet {
     pub reach: f64,
     /// What the Summon Wolf version's mods do to the wolf.
     pub wolf: WolfMods,
-    /// Primary and secondary: the pick's requirement fails during a run (`run_sheet`), so it
-    /// does nothing but fall back to the plain ability. Always false from `hero_sheet`.
-    pub disabled: [bool; 2],
+    /// Primary and secondary: `Some((attr, n))` when the pick's requirement fails during a run
+    /// (`run_sheet`), so it does nothing but fall back to the plain ability; `attr`, `n` is the
+    /// Attribute requirement that fails (see `disabled_by`). Always `None` from `hero_sheet`.
+    pub disabled: [Option<(Attr, i32)>; 2],
 }
 
 /// The wolf's numbers from the Summon Wolf version: its max HP is multiplied by `hp_mul`, and `pounce`
@@ -424,13 +425,20 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
 /// The sheet of a hero during a run, with a signed Attribute `delta` (the drain effects). Never
 /// fails: `b` is a build `hero_sheet` accepted. Requirements are checked against the Attributes
 /// without items plus `delta`: an item that fails gives nothing (an unusable melee weapon is the
-/// class starter), and a pick that fails is disabled and holds the plain ability, without mods.
+/// class starter), and a pick that fails is disabled and holds the plain ability, without mods;
+/// `disabled` names the Attribute requirement that fails, the pick's own or that of the weapon it lost.
 pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
     let req = attrs_without_items(class, b).with_delta(delta);
     let mut usable = b.clone();
+    let mut dropped = Vec::new();
     for s in EquipSlot::ALL {
-        if usable.equipment.get(s).is_some_and(|id| !items::def(id).req.iter().all(|r| r.met(&req, None))) {
-            usable.equipment.set(s, None);
+        if let Some(id) = usable.equipment.get(s) {
+            if let Some(r) = items::def(id).req.iter().find(|r| !r.met(&req, None)) {
+                if let Requirement::Attr(a, n) = *r {
+                    dropped.push((s, (a, n)));
+                }
+                usable.equipment.set(s, None);
+            }
         }
     }
     let (mut sheet, cx) = sheet_core(class, &usable, delta).expect("the usable items of an accepted build pass the equipment check");
@@ -444,9 +452,11 @@ pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
                 }
                 r
             }
-            Err(_) => {
-                sheet.disabled[i] = true;
+            Err(e) => {
                 let d = ab::def(p.ability);
+                let by = disabled_by(&e, &d, &dropped);
+                debug_assert!(by.is_some(), "a disabled pick has an unmet Attribute requirement: {e:?}");
+                sheet.disabled[i] = Some(by.unwrap_or((Attr::Str, 1)));
                 cx.resolve(&d).unwrap_or(ResolvedAbility { id: p.ability, ranged: d.ranged, ..strike })
             }
         };
@@ -458,6 +468,27 @@ pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
     }
     sheet.wolf = wolf;
     sheet
+}
+
+/// The Attribute requirement that disables a pick, which failed with `e`. A pick fails in a run
+/// only because an Attribute fell below a requirement: its own, or that of the weapon it uses,
+/// which `run_sheet` dropped (`dropped`: the slot and the first unmet Attribute requirement of
+/// each dropped item). In the weapon case that dropped weapon's requirement is named.
+fn disabled_by(e: &LoadoutError, d: &AbilityDef, dropped: &[(EquipSlot, (Attr, i32))]) -> Option<(Attr, i32)> {
+    if let LoadoutError::Requirement(_, Requirement::Attr(a, n)) = *e {
+        return Some((a, n));
+    }
+    let slot = match d.uses {
+        Uses::Melee => Some(EquipSlot::Melee),
+        Uses::Ranged => Some(EquipSlot::Ranged),
+        Uses::Nothing => None,
+    };
+    dropped
+        .iter()
+        .find(|(s, _)| Some(*s) == slot)
+        .or(dropped.first())
+        .map(|&(_, r)| r)
+        .or_else(|| d.req.iter().find_map(|r| if let Requirement::Attr(a, n) = *r { Some((a, n)) } else { None }))
 }
 
 /// What resolving a pick needs: the numbers of the hero without the picks.
@@ -615,7 +646,7 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, Pi
         fallback: strike,
         reach,
         wolf: WolfMods::NONE,
-        disabled: [false, false],
+        disabled: [None, None],
     };
     Ok((sheet, cx))
 }
@@ -1731,7 +1762,7 @@ mod tests {
         assert_eq!(s.max_hp, attributes::hp(classes::def(c).base_hp, 11));
         assert!(s.primary.damage < base.primary.damage);
         assert!(s.speed < base.speed);
-        assert_eq!(s.disabled, [false, false]);
+        assert_eq!(s.disabled, [None, None]);
     }
 
     #[test]
@@ -1747,11 +1778,25 @@ mod tests {
         let c = ClassId::Wizard;
         let b = frost_shard_wizard();
         let int = |n| Attributes::new(0, 0, 0, n, 0, 0);
-        assert_eq!(run_sheet(c, &b, int(-1)).disabled, [false, false]);
+        assert_eq!(run_sheet(c, &b, int(-1)).disabled, [None, None]);
         let s = run_sheet(c, &b, int(-2));
-        assert_eq!(s.disabled, [true, false]);
+        assert_eq!(s.disabled, [Some((Attr::Int, 14)), None]);
         assert_eq!(s.primary.id, AbilityId::FrostShard);
         assert!(s.primary.ranged);
+    }
+
+    #[test]
+    fn a_pick_that_lost_its_weapon_names_the_weapons_requirement() {
+        // No ability needs a weapon kind that an item with an Attribute requirement provides, so the
+        // case is built by hand: Smite (CHA 15, a melee weapon) lost a melee weapon that needs STR 13.
+        let d = ab::def(AbilityId::Smite);
+        let weapon = LoadoutError::Requirement(AbilityId::Smite, Requirement::WeaponKind(&[]));
+        let dropped = [(EquipSlot::Ranged, (Attr::Dex, 9)), (EquipSlot::Melee, (Attr::Str, 13))];
+        assert_eq!(disabled_by(&weapon, &d, &dropped), Some((Attr::Str, 13)));
+        assert_eq!(disabled_by(&LoadoutError::NoWeapon(AbilityId::Smite, EquipSlot::Melee), &d, &dropped[..1]), Some((Attr::Dex, 9)));
+        assert_eq!(disabled_by(&weapon, &d, &[]), Some((Attr::Cha, 15)));
+        let own = LoadoutError::Requirement(AbilityId::Smite, Requirement::Attr(Attr::Cha, 15));
+        assert_eq!(disabled_by(&own, &d, &dropped), Some((Attr::Cha, 15)));
     }
 
     #[test]
@@ -1762,6 +1807,6 @@ mod tests {
         let s = run_sheet(c, &b, drain(-3, 0, 0));
         assert_eq!(s.melee.split.share(DamageType::Heat), 0.0);
         assert_eq!(s.melee, run_sheet(c, &Build::start(c), drain(-3, 0, 0)).melee);
-        assert_eq!(s.disabled, [false, false]);
+        assert_eq!(s.disabled, [None, None]);
     }
 }
