@@ -12,7 +12,8 @@ export const SPECTRE_SIZE = 16;
 // K outline, W body, L body shade, S hem shadow, E eyes.
 export const PALETTES: Record<string, Record<string, string>> = {
   ghost: { K: '222030', W: 'f0f3fa', L: 'ced8ee', S: '96a6ce', E: '343a60' },
-  shade: { K: '000000', W: '2a2136', L: '1f1829', S: '140f1c', E: 'd65cff' },
+  // All black but the glowing red eyes: the outline and shading are lost on purpose, the veil gives it its shape.
+  shade: { K: '000000', W: '000000', L: '000000', S: '000000', E: 'ff2a2a' },
 };
 
 // Facing right (the client mirrors it). Head and body; the hem rows below come from

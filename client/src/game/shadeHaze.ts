@@ -23,23 +23,41 @@ const ORBIT_FLAT = 0.75;
 
 /** The veil's colour: pure darkness. */
 export const VEIL_COLOR = 0x000000;
-/** Strand px per segment. */
-const VEIL_SEG = 3;
+/** Strand px per segment: short while the Shade stands (a cloud), long while it moves (streaming). */
+const SEG_IDLE = 1.6;
+const SEG_MOVE = 3;
+/** Speed (px/s) at which the veil fully streams behind, and how fast (s) it changes between cloud and stream. */
+const STREAM_SPEED = 25;
+const STREAM_TAU = 0.25;
+/** How far a segment may stretch past its length. */
+const MAX_STRETCH = 1.3;
 
 /**
  * One strand of the veil, facing right (mirrored when the Shade faces left): its root on the body (px from the feet),
- * the way it hangs at rest, how many segments, and whether it is drawn in front of the figure (wrapping it).
+ * the way it hangs when the Shade stands (`idle`, out from the body, so together they make a cloud around it) and
+ * when it moves (`move`, behind it), how many segments, and whether it is drawn in front of the figure (wrapping it).
  */
-interface StrandDef { root: [number, number]; dir: [number, number]; segs: number; front: boolean }
+interface StrandDef { root: [number, number]; idle: [number, number]; move: [number, number]; segs: number; front: boolean }
 
-// The back strands fan out top to bottom (the cloth fills between neighbours), so keep them in that order.
+/** A strand rooted inside the body toward `deg` (0 = front, 90 = down), so it grows out of it; it puffs straight out when idle. */
+const around = (deg: number, move: [number, number], segs = 4, front = false): StrandDef => {
+  const a = (deg * Math.PI) / 180;
+  return { root: [Math.round(Math.cos(a) * 2.5), Math.round(-6 + Math.sin(a) * 3.5)], idle: [Math.cos(a), Math.sin(a) * 0.8], move, segs, front };
+};
+
+// The back strands go round the body in order (the cloth fills between neighbours, closing the ring), so keep them so.
 const STRANDS: StrandDef[] = [
-  { root: [-2, -11], dir: [-1, -0.15], segs: 6, front: false }, // over the head, the top of the cape
-  { root: [-4, -8], dir: [-1, 0.15], segs: 7, front: false }, // back shoulder, the longest
-  { root: [-5, -5], dir: [-1, 0.4], segs: 6, front: false }, // back side
-  { root: [-4, -1], dir: [-1, 0.7], segs: 5, front: false }, // hem, low to the floor
-  { root: [2, -10], dir: [-1, 0.9], segs: 4, front: true }, // across the body, wrapping it
-  { root: [3, -2], dir: [-0.8, 0.3], segs: 3, front: true }, // across the hem
+  around(-90, [-1, -0.3], 5), // top
+  around(-140, [-1, -0.1], 6), // back of the head
+  around(180, [-1, 0.15], 6), // back
+  around(140, [-1, 0.4], 5), // back of the hem
+  around(90, [-1, 0.7], 4), // under it
+  around(40, [-0.6, 0.8], 3), // front of the hem
+  around(0, [-0.3, 0.5], 3), // front
+  around(-40, [-0.5, -0.4], 4), // front of the head
+  // Wrapping across the lower body and the hem (below the eyes, so they keep glowing).
+  around(120, [-1, 0.2], 4, true),
+  around(60, [-0.8, 0.5], 3, true),
 ];
 
 export interface VeilStrand {
@@ -53,12 +71,16 @@ interface StrandState extends VeilStrand { def: StrandDef; phase: number }
 type Rng = () => number;
 
 /**
- * The veil's state: strands rooted on the Shade's body. Each point eases toward where it would hang behind the one
- * before it, slower toward the tip, so a move leaves the strands streaming behind; a slow wave runs down each one.
+ * The veil's state: strands rooted round the Shade's body. Standing, they puff out round it like a cloud; moving, they
+ * turn to stream behind. Each point eases toward where it would hang off the one before it, slower toward the tip, so
+ * a move (or the attack dash) drags them along; a slow wave runs down each one.
  */
 export class VeilStrands {
   private strands: StrandState[] = [];
   private t = 0;
+  private last: { x: number; y: number } | null = null;
+  /** 0 standing (cloud) to 1 moving (streaming), eased. */
+  private stream = 0;
 
   constructor(private rnd: Rng = Math.random) {}
 
@@ -66,37 +88,48 @@ export class VeilStrands {
     return this.strands;
   }
 
-  /** Moves the veil `dt` seconds on. `feet` is the Shade's feet; null (dead, invisible) clears it. */
+  /** Moves the veil `dt` seconds on. `feet` is the Shade's body at its feet; null (dead, invisible) clears it. */
   step(feet: { x: number; y: number } | null, face: 1 | -1, dt: number): void {
     if (!feet) {
       this.strands = [];
+      this.last = null;
+      this.stream = 0;
       return;
     }
     this.t += dt;
+    const speed = this.last && dt > 0 ? Math.hypot(feet.x - this.last.x, feet.y - this.last.y) / dt : 0;
+    this.last = { ...feet };
+    this.stream += (Math.min(speed / STREAM_SPEED, 1) - this.stream) * (1 - Math.exp(-dt / STREAM_TAU));
+    const m = this.stream;
+    const seg = SEG_IDLE + (SEG_MOVE - SEG_IDLE) * m;
     if (this.strands.length === 0)
       this.strands = STRANDS.map((def) => {
         const root = { x: feet.x + def.root[0] * face, y: feet.y + def.root[1] };
-        const pts = Array.from({ length: def.segs + 1 }, (_, i) => ({ x: root.x + def.dir[0] * face * VEIL_SEG * i, y: root.y + def.dir[1] * VEIL_SEG * i }));
+        const [dx, dy] = [def.idle[0] * face, def.idle[1]];
+        const pts = Array.from({ length: def.segs + 1 }, (_, i) => ({ x: root.x + dx * seg * i, y: root.y + dy * seg * i }));
         return { def, pts, front: def.front, phase: this.rnd() * Math.PI * 2 };
       });
     for (const s of this.strands) {
       const { def, pts } = s;
-      const len = Math.hypot(def.dir[0], def.dir[1]);
-      const [dx, dy] = [(def.dir[0] * face) / len, def.dir[1] / len];
+      let [dx, dy] = [def.idle[0] + (def.move[0] - def.idle[0]) * m, def.idle[1] + (def.move[1] - def.idle[1]) * m];
+      const len = Math.hypot(dx, dy) || 1;
+      [dx, dy] = [(dx * face) / len, dy / len];
       pts[0] = { x: feet.x + def.root[0] * face, y: feet.y + def.root[1] };
       for (let i = 1; i < pts.length; i++) {
-        const wave = Math.sin(this.t * 2.4 + s.phase - i * 0.9) * 0.5 * i;
-        const gx = pts[i - 1].x + dx * VEIL_SEG - dy * wave;
-        const gy = pts[i - 1].y + dy * VEIL_SEG + dx * wave;
-        const k = 1 - Math.exp(-dt / (0.03 + 0.035 * i));
+        // Standing, the wave billows (slower, wider); moving, it ripples.
+        const wave = Math.sin(this.t * (1.6 + 0.8 * m) + s.phase - i * 0.9) * (0.7 - 0.2 * m) * i;
+        const gx = pts[i - 1].x + dx * seg - dy * wave;
+        const gy = pts[i - 1].y + dy * seg + dx * wave;
+        const k = 1 - Math.exp(-dt / (0.02 + 0.012 * i));
         let { x, y } = pts[i];
         x += (gx - x) * k;
         y += (gy - y) * k;
-        // Never stretched past twice its length: a fast move drags the strand along.
+        // Never stretched past 1.3 times its length: a fast move drags the strand along instead of thinning it out.
         const ox = x - pts[i - 1].x;
         const oy = y - pts[i - 1].y;
         const d = Math.hypot(ox, oy);
-        if (d > VEIL_SEG * 2) [x, y] = [pts[i - 1].x + (ox / d) * VEIL_SEG * 2, pts[i - 1].y + (oy / d) * VEIL_SEG * 2];
+        const max = seg * MAX_STRETCH;
+        if (d > max) [x, y] = [pts[i - 1].x + (ox / d) * max, pts[i - 1].y + (oy / d) * max];
         pts[i] = { x, y };
       }
     }
@@ -160,7 +193,7 @@ function inside(poly: readonly Pt[], x: number, y: number): boolean {
 
 /**
  * The veil as whole pixels and their alpha, one map per layer (`x,y` keys; a pixel covered twice keeps the darker):
- * behind the figure the cloth between neighbouring back strands and the strands over it, in front the wrapping strands.
+ * behind the figure the cloth between neighbouring back strands (a closed ring) and the strands over it, in front the wrapping strands.
  */
 export function veilPixels(lines: readonly VeilStrand[]): { back: Map<string, number>; front: Map<string, number> } {
   const back = new Map<string, number>();
@@ -171,8 +204,8 @@ export function veilPixels(lines: readonly VeilStrand[]): { back: Map<string, nu
     if ((m.get(key) ?? 0) < a) m.set(key, a);
   };
   const backs = lines.filter((l) => !l.front);
-  for (let s = 0; s + 1 < backs.length; s++) {
-    const [A, B] = [backs[s].pts, backs[s + 1].pts];
+  for (let s = 0; s < backs.length; s++) {
+    const [A, B] = [backs[s].pts, backs[(s + 1) % backs.length].pts];
     const n = Math.min(A.length, B.length) - 1;
     for (let i = 0; i < n; i++) {
       const quad = [A[i], A[i + 1], B[i + 1], B[i]];
@@ -202,8 +235,8 @@ export function deathCloud(rnd: Rng = Math.random): { life: number; particles: {
   return { life: CLOUD_LIFE, particles };
 }
 
-/** Front strands are fainter, so the Shade shows through where the veil wraps across it. */
-const FRONT_ALPHA = 0.55;
+/** Front strands are a little fainter where they wrap across the (black) body. */
+const FRONT_ALPHA = 0.8;
 
 /** Draws the `VeilStrands` as black pixels (`veilPixels`): cloth and back strands just under the figure, the wrapping ones just over it. */
 export class ShadeVeil {

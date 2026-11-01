@@ -315,8 +315,6 @@ export class EntityView {
     const ghost = d.pulse ? { t: this.clock, phase: ghostPhase(s.id ?? 0), ambushT: s.anim === ANIM.Ambush ? s.animT : null } : undefined;
     const appear = appearFactor(this.appearLeft, VANISH_SECS);
     this.root.setAlpha((silhouette ? silhouetteAlpha(s.animT) : entityAlpha(s.flags, fxBits, s.party ?? false, ghost, d.incorporealAlpha)) * appear);
-    // The veil trails behind as the Shade moves; it fades in with it and rises with the ambush warning.
-    this.veil?.update({ x: Math.round(s.x), y: Math.round(s.y) }, this.body.flipX ? -1 : 1, this.root.depth, (silhouette ? silhouetteAlpha(s.animT) : 1) * appear, dt);
 
     const ax = Math.cos(s.aim);
     const ay = Math.sin(s.aim);
@@ -397,6 +395,9 @@ export class EntityView {
         }
         break;
     }
+
+    // The veil clings to the body (so it follows the attack dash), fades in with it and rises with the ambush warning.
+    this.veil?.update({ x: Math.round(s.x) + this.body.x, y: Math.round(s.y) + this.body.y - 1 }, this.body.flipX ? -1 : 1, this.root.depth, (silhouette ? silhouetteAlpha(s.animT) : 1) * appear, dt);
 
     if (d.mouth && !still) this.breathFx(s);
     if (d.slam) this.slamFx(s, d.slam, still);

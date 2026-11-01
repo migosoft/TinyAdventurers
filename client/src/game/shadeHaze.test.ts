@@ -13,17 +13,20 @@ const settle = (v: VeilStrands, feet: { x: number; y: number }, face: 1 | -1, n 
 };
 
 describe('shade veil', () => {
-  it('roots every strand on the body and lets most of them hang behind, mirrored with the facing', () => {
+  it('roots every strand inside the body and, standing, puffs them out all round it like a cloud', () => {
     for (const face of [1, -1] as const) {
       const v = new VeilStrands(lcg());
       settle(v, { x: 100, y: 100 }, face);
       for (const l of v.lines) {
-        expect(Math.abs(l.pts[0].x - 100)).toBeLessThanOrEqual(6);
-        expect(l.pts[0].y).toBeGreaterThanOrEqual(100 - 12);
-        expect(l.pts[0].y).toBeLessThanOrEqual(100);
+        expect(Math.abs(l.pts[0].x - 100)).toBeLessThanOrEqual(3);
+        expect(l.pts[0].y).toBeGreaterThanOrEqual(100 - 10);
+        expect(l.pts[0].y).toBeLessThanOrEqual(100 - 2);
       }
-      const behind = tips(v).filter((p) => (p.x - 100) * face < -4).length;
-      expect(behind).toBeGreaterThanOrEqual(4);
+      const t = tips(v);
+      expect(t.some((p) => (p.x - 100) * face > 3)).toBe(true); // in front
+      expect(t.some((p) => (p.x - 100) * face < -3)).toBe(true); // behind
+      expect(t.some((p) => p.y < 100 - 12)).toBe(true); // above
+      expect(t.some((p) => p.y > 100 - 2)).toBe(true); // below
     }
   });
   it('wraps the figure: some strands are drawn in front of it, most behind', () => {
@@ -33,21 +36,22 @@ describe('shade veil', () => {
     expect(front).toBeGreaterThan(0);
     expect(front).toBeLessThan(v.lines.length / 2);
   });
-  it('veilTrailsWhenMoving: the tips stream behind a move, then hang at rest again', () => {
+  it('veilTrailsWhenMoving: moving, the tips stream behind; standing again, the cloud comes back', () => {
     const v = new VeilStrands(lcg());
     settle(v, { x: 100, y: 100 }, 1);
-    const rest = tips(v).map((p) => p.x - 100);
-    for (let i = 0; i < 6; i++) v.step({ x: 100 + 5 * (i + 1), y: 100 }, 1, 1 / 30);
-    tips(v).forEach((p, i) => expect(p.x - 130).toBeLessThan(rest[i] - 2));
-    settle(v, { x: 130, y: 100 }, 1);
-    tips(v).forEach((p, i) => expect(Math.abs(p.x - 130 - rest[i])).toBeLessThan(3));
+    let x = 100;
+    for (let i = 0; i < 30; i++) v.step({ x: (x += 40 / 30), y: 100 }, 1, 1 / 30);
+    const behind = tips(v).filter((p) => p.x < x - 3).length;
+    expect(behind).toBeGreaterThanOrEqual(v.lines.length - 2);
+    settle(v, { x, y: 100 }, 1);
+    expect(tips(v).some((p) => p.x > x + 3)).toBe(true);
   });
-  it('never stretches a segment past twice its length', () => {
+  it('never stretches a segment past 1.3 times its length', () => {
     const v = new VeilStrands(lcg());
     settle(v, { x: 0, y: 0 }, 1);
     v.step({ x: 200, y: 0 }, 1, 1 / 30);
     for (const l of v.lines)
-      for (let i = 1; i < l.pts.length; i++) expect(Math.hypot(l.pts[i].x - l.pts[i - 1].x, l.pts[i].y - l.pts[i - 1].y)).toBeLessThanOrEqual(6 + 1e-9);
+      for (let i = 1; i < l.pts.length; i++) expect(Math.hypot(l.pts[i].x - l.pts[i - 1].x, l.pts[i].y - l.pts[i - 1].y)).toBeLessThanOrEqual(3 * 1.3 + 1e-9);
   });
   it('veilIsEmptyWhileInvisible, and starts again on the Shade when it reappears', () => {
     const v = new VeilStrands(lcg());
