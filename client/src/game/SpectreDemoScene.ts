@@ -5,7 +5,7 @@
 // 0.5 s wind-up, then touches; no fade-in over the flicker), Hurt, Die (the Ghost comes apart, no skull).
 // To add a spectre: put its kind in SPECTRES and give it a figure def; nothing else here changes.
 import Phaser from 'phaser';
-import { ANIM, FLAG, KIND } from '../generated/defs';
+import { ANIM, CONST, FLAG, KIND } from '../generated/defs';
 import { EntityView } from './anim/EntityView';
 import { FIGURES } from './anim/defs';
 import { Effects } from './effects';
@@ -19,8 +19,8 @@ const SPECTRES = [
   { kind: KIND.Shade, name: 'Shade', id: 12, x: 9, y: 5 },
 ].filter((s) => FIGURES[s.kind]);
 const HERO: [number, number] = [6 * TILE, 5 * TILE];
-/** Server wind-up of the ambush (`AMBUSH_WARNING`). */
-const AMBUSH_SECS = 0.5;
+/** Server wind-up of the ambush. */
+const AMBUSH_SECS = CONST.AMBUSH_WARNING;
 const MELEE_SECS = 0.4;
 
 type Mode = 'idle' | 'move' | 'attack' | 'vanish' | 'ambush' | 'hurt' | 'die';

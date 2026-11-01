@@ -141,6 +141,9 @@ impl EntityKind {
             // 43 px frames drawn at 1.2x.
             Dragon => 51.0,
             Demon => 58.0,
+            // The opaque rows of the cut frames (client/scripts/spectre-frames.ts).
+            Ghost => 22.0,
+            Shade => 23.0,
             _ => 0.0,
         }
     }
@@ -208,4 +211,17 @@ pub mod flags {
     pub const AIRBORNE: u8 = 64;
     /// Incorporeal (a phasing monster): always drawn semi-transparent. The last free bit.
     pub const INCORPOREAL: u8 = 128;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EntityKind;
+
+    /// A shot flies SHOT_HEIGHT up: the floating spectres need their drawn height (the opaque 22 and 23 rows
+    /// of the cut frames) or shots pass over their feet-sized hitbox and miss the body.
+    #[test]
+    fn spectres_have_a_body_height() {
+        assert_eq!(EntityKind::Ghost.body_height(), 22.0);
+        assert_eq!(EntityKind::Shade.body_height(), 23.0);
+    }
 }

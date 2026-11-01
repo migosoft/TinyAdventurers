@@ -1,9 +1,10 @@
 // The Shade's looks that are not a sprite (#170): a lingering dark haze that trails it, the flat silhouette
 // that warns of an ambush, and the cloud it dies in. The maths is pure (tested); `ShadeHaze` only draws it.
 import type Phaser from 'phaser';
+import { CONST } from '../generated/defs';
 
 /** Server wind-up of the ambush (`AMBUSH_WARNING` in run/ambush.rs). */
-export const AMBUSH_WARNING = 0.5;
+export const AMBUSH_WARNING = CONST.AMBUSH_WARNING;
 /** The flat fill of the silhouette during the wind-up. */
 export const SILHOUETTE_FILL = 0x120c18;
 const SILHOUETTE_ALPHA_FROM = 0.2;

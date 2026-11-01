@@ -90,6 +90,7 @@ export const TILE_ID = {
 } as const;
 
 export const CONST = {
+  "AMBUSH_WARNING": 0.5,
   "BARREL_BLAST_R": 40.0,
   "BARREL_FUSE": 0.3,
   "BARREL_RADIUS": 6.0,
@@ -968,11 +969,11 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
     "r": 10.0
   },
   "24": {
-    "h": 0.0,
+    "h": 22.0,
     "r": 6.0
   },
   "25": {
-    "h": 0.0,
+    "h": 23.0,
     "r": 6.0
   },
   "30": {

@@ -2418,7 +2418,7 @@ export const ABILITY_INFO = {
     "req": [
       "a weapon of kind Touch"
     ],
-    "text": "A chilling touch that drains strength from the living.",
+    "text": "A chilling touch that drains the living.",
     "tint": "Physical",
     "uses": "Melee"
   },

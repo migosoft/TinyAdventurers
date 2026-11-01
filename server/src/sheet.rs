@@ -299,7 +299,7 @@ impl Kit {
     }
 }
 
-/// The on-hit a monster's weapon carries by itself (Ghost Touch drains STR); `arm` fills in the power.
+/// The on-hit a monster's weapon carries by itself (Ghost Touch drains STR, Shade Touch CON); `arm` fills in the power.
 fn own_on_hit(id: ItemId) -> Option<OnHit> {
     items::def(id).props.iter().find_map(|p| match p.kind {
         PropKind::OnHit(h) => Some(OnHit { magical: p.magical, ..h }),

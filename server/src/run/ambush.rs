@@ -48,7 +48,7 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
     }
     let (pos, sight) = (m.pos, m.sight_now());
     if !m.effects.has(EffectKind::Invisible) {
-        if seen.is_some() && m.invis_cd <= 0.0 && super::abilities::monster_use(run, mi, AbilityId::Vanish, pos) {
+        if seen.is_some() && m.invis_cd <= 0.0 && straggler(run, pos, sight).is_some() && super::abilities::monster_use(run, mi, AbilityId::Vanish, pos) {
             set_anim(run, mi, Anim::Move);
             return true;
         }
@@ -71,7 +71,8 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
         run.start_windup(mi, Windup { t: AMBUSH_WARNING, aim, alt: false, at: None });
         set_anim(run, mi, Anim::Ambush);
     } else {
-        move_toward(run, mi, hpos, def.speed, dt);
+        let speed = run.monsters[mi].speed;
+        move_toward(run, mi, hpos, speed, dt);
         set_anim(run, mi, Anim::Move);
     }
     true
@@ -221,6 +222,22 @@ mod tests {
         assert!(!invisible(&run, mi));
         step(&mut run, mi);
         assert!(invisible(&run, mi));
+    }
+
+    /// What the phantom sees may be an ally (the ranger's wolf): no hero to haunt, so no Vanish to waste.
+    #[test]
+    fn sight_of_only_a_companion_does_not_vanish() {
+        let mut run = field(1);
+        let hero = run.players[0].pos();
+        let mi = phantom(&mut run, hero + Vec2::new(5.0 * TILE, 0.0));
+        // A wall between them: the hero is out of sight, something else (a companion) is not.
+        let (tx, ty) = Map::tile_of(hero + Vec2::new(2.0 * TILE, 0.0));
+        for y in ty - 3..=ty + 3 {
+            run.layout.map.set(tx, y, Tile::Wall);
+        }
+        assert!(!tick(&mut run, mi, DT, Some(Creature::Monster(mi))));
+        assert!(!invisible(&run, mi));
+        assert_eq!(run.monsters[mi].invis_cd, 0.0, "Vanish was not spent");
     }
 
     #[test]

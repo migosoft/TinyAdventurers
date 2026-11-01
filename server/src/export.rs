@@ -136,6 +136,7 @@ fn export_defs() {
         "LICH_SLEEP_WINDUP": lich_ability(AbilityId::SleepMist).windup,
     });
     consts.as_object_mut().unwrap().extend(lich.as_object().unwrap().clone());
+    consts.as_object_mut().unwrap().insert("AMBUSH_WARNING".into(), json!(crate::run::ambush::AMBUSH_WARNING));
     let shots = json!({ "SHOT_HEIGHT": crate::run::entities::SHOT_HEIGHT, "DRAGON_LIFT": crate::run::entities::DRAGON_LIFT });
     consts.as_object_mut().unwrap().extend(shots.as_object().unwrap().clone());
     let hero = json!({ "VOLLEY_ARROWS": ab::VOLLEY_ARROWS, "VOLLEY_SPREAD": ab::VOLLEY_SPREAD, "HERO_REACH": classes::HERO_REACH });
