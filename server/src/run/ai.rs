@@ -71,7 +71,7 @@ pub fn escape_terrain(run: &mut Run, mi: usize, dt: f64) {
         }
     }
     if let Some((_, to)) = best {
-        let solids = run.solids(None);
+        let solids = run.solids_for(run.monsters[mi].mover, None);
         let m = &run.monsters[mi];
         let v = (to - pos).norm() * (speed.max(20.0) * dt).min(to.dist(pos));
         // Out of the lava: the Dash mover lets it cross the blocked tiles it stands on.
@@ -132,7 +132,7 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     let step = (speed * dt).min(dist);
     let v = d.norm() * step;
     // A phantom drifts through solid objects too.
-    let solids = if m.mover == Mover::Incorporeal { Vec::new() } else { run.solids(None) };
+    let solids = run.solids_for(m.mover, None);
     let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, m.mover, &solids);
     let m = &mut run.monsters[mi];
     m.pos = Vec2::new(x, y);
@@ -162,7 +162,7 @@ pub fn path_toward(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) ->
         return move_toward(run, mi, goal, speed, dt);
     }
     if need_repath {
-        let blocked = if mover == Mover::Incorporeal { HashSet::new() } else { run.object_tiles() };
+        let blocked = run.object_tiles_for(mover);
         let path = astar_clear(&run.layout.map, pos, goal, 2500, mover, wide, &blocked).unwrap_or_default();
         let m = &mut run.monsters[mi];
         m.ai.path = path;
@@ -549,7 +549,6 @@ fn raise_minions(run: &mut Run, mi: usize, fire: bool) {
 /// Push overlapping monsters apart so groups don't stack on one spot.
 pub fn separate_monsters(run: &mut Run) {
     let n = run.monsters.len();
-    let solids = run.solids(None);
     for i in 0..n {
         if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].dormant || run.monsters[i].hiding {
             continue;
@@ -565,6 +564,7 @@ pub fn separate_monsters(run: &mut Run) {
                 let d = d2.sqrt();
                 let push = (a - b) * ((min - d) / d * 0.5);
                 let (r, mover) = (run.monsters[i].radius, run.monsters[i].mover);
+                let solids = run.solids_for(mover, None);
                 let (x, y) = move_box(&run.layout.map, a.x, a.y, push.x.clamp(-2.0, 2.0), push.y.clamp(-2.0, 2.0), r, mover, &solids);
                 run.monsters[i].pos = Vec2::new(x, y);
             }
@@ -1064,6 +1064,55 @@ pub(crate) mod tests {
             passed |= run.monsters[mi].pos.x > barrel.x + 10.0;
         }
         assert!(passed, "x {} barrel {}", run.monsters[mi].pos.x, barrel.x);
+    }
+
+    /// The solid object kinds the run can spawn: every `EntityKind` with a solid object definition, so a new
+    /// obstacle is covered without touching the test (a new solid kind needs a state here).
+    fn solid_object_kinds() -> Vec<(EntityKind, crate::run::objects::ObjState)> {
+        use crate::run::objects::{Barrel, ObjState};
+        let mut out = Vec::new();
+        for &k in EntityKind::ALL.iter() {
+            // `def` panics for kinds that are not objects.
+            let Ok(d) = std::panic::catch_unwind(|| crate::defs::objects::def(k)) else { continue };
+            if !d.solid {
+                continue;
+            }
+            let state = match k {
+                EntityKind::Barrel => ObjState::Barrel(Barrel::new()),
+                _ => panic!("{k:?} is a solid object: give it a state in this test"),
+            };
+            out.push((k, state));
+        }
+        assert!(!out.is_empty());
+        out
+    }
+
+    #[test]
+    fn phaser_passes_every_blocking_object() {
+        for (kind, state) in solid_object_kinds() {
+            let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+            open_floor(&mut run);
+            run.monsters.retain(|m| m.is_boss);
+            let p = run.players[0].pos();
+            let id = run.spawn_enemy(EnemyType::OrcWarrior, p - Vec2::new(120.0, 0.0), None);
+            let mi = run.monster_idx(id).unwrap();
+            make_phantom(&mut run, mi);
+            let at = p - Vec2::new(70.0, 0.0);
+            let oi = run.objects.len();
+            run.spawn_object(kind, at, state);
+            assert!(run.objects[oi].blocks(), "{kind:?} blocks");
+            // Solid to a walker, nothing to a phaser.
+            assert!(!run.solids_for(Mover::Enemy, None).is_empty(), "{kind:?}");
+            assert!(!run.object_tiles_for(Mover::Enemy).is_empty(), "{kind:?}");
+            assert!(run.solids_for(Mover::Incorporeal, None).is_empty(), "{kind:?}");
+            assert!(run.object_tiles_for(Mover::Incorporeal).is_empty(), "{kind:?}");
+            let mut passed = false;
+            for _ in 0..600 {
+                tick_monster(&mut run, mi, 1.0 / 60.0);
+                passed |= run.monsters[mi].pos.x > at.x + 10.0;
+            }
+            assert!(passed, "{kind:?}: x {} object {}", run.monsters[mi].pos.x, at.x);
+        }
     }
 
     #[test]

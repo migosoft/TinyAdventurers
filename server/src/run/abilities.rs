@@ -858,7 +858,7 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
 pub fn tick_monster_dash(run: &mut Run, mi: usize, dt: f64) -> Option<MonsterDash> {
     let dash = run.monsters[mi].dash.clone()?;
     let a = *run.monsters[mi].kit.get(dash.id).expect("a dash is an ability of its kit");
-    let solids = run.solids(None);
+    let solids = run.solids_for(run.monsters[mi].mover, None);
     let m = &run.monsters[mi];
     let v = dash.dir * (a.speed * dt.min(dash.left));
     let (x, y) = move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, Mover::Dash, &solids);

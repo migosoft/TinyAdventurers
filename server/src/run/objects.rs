@@ -98,6 +98,15 @@ impl Run {
             .map(|o| crate::collision::Solid { x: o.pos.x, y: o.pos.y, half: o.radius })
             .collect()
     }
+
+    /// The solids `mover` collides with. A phasing mover passes every obstacle, so a new kind of
+    /// obstacle needs no handling for it.
+    pub fn solids_for(&self, mover: crate::dungeon::Mover, except: Option<u32>) -> Vec<crate::collision::Solid> {
+        if mover == crate::dungeon::Mover::Incorporeal {
+            return Vec::new();
+        }
+        self.solids(except)
+    }
 }
 
 /// Lights or puts out a torch (its light).
@@ -397,6 +406,14 @@ impl Run {
             }
         }
         out
+    }
+
+    /// The object tiles `mover` must path around: none for a phasing mover.
+    pub fn object_tiles_for(&self, mover: crate::dungeon::Mover) -> std::collections::HashSet<(i32, i32)> {
+        if mover == crate::dungeon::Mover::Incorporeal {
+            return std::collections::HashSet::new();
+        }
+        self.object_tiles()
     }
 }
 
