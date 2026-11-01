@@ -65,6 +65,7 @@ pub fn effect_name(k: EffectKind) -> &'static str {
         EffectKind::Fear => "Fear",
         EffectKind::Warded => "Warded",
         EffectKind::Coated => "Coated",
+        EffectKind::Invisible => "Invisible",
     }
 }
 
@@ -267,6 +268,9 @@ pub(super) fn ended_head(run: &Run, target: u32, kind: EffectKind, why: EndReaso
         EndReason::RanOut => "",
         EndReason::Water => " (water)",
         EndReason::Purify => " (Purify)",
+        EndReason::RevealedByHit => " (revealed by a hit)",
+        EndReason::RevealedByEffect => " (revealed by an effect)",
+        EndReason::Attacked => " (it attacked)",
     };
     format!("{} on {} ended{tail}", effect_name(kind), tag_of(run, target))
 }

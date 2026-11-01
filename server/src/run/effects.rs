@@ -230,6 +230,8 @@ impl Run {
         match c {
             Creature::Player(_) => self.event_on_hero(ev, pos),
             Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.is_ally()) => self.event_on_hero(ev, pos),
+            // An invisible monster tells the clients nothing: not its Invisible, nor any effect at its spot.
+            Creature::Monster(i) if k == EffectKind::Invisible || self.monsters.get(i).is_some_and(|m| m.effects.has(EffectKind::Invisible)) => {}
             Creature::Monster(_) => self.event(ev, Some(pos)),
         }
     }
@@ -269,6 +271,9 @@ impl Run {
         let Some((_, _, pos, ok)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
         if !ok {
             return (EffectOutcome::NotThere, d, 0);
+        }
+        if !def(kind).positive {
+            self.reveal(c, super::rules_log::EndReason::RevealedByEffect); // even a shrugged-off one
         }
         let cancelled: Vec<EffectKind> = def(kind).cancels.iter().copied().filter(|&k| self.has_effect(c, k)).collect();
         if !cancelled.is_empty() {
@@ -340,6 +345,34 @@ impl Run {
             }
         }
         (if added { EffectOutcome::Added } else { EffectOutcome::Refreshed }, d, replaced)
+    }
+
+    /// A direct hit or harmful effect from outside reached `c`: every effect that `ends_when_hit`
+    /// (Invisible) ends, and the client is told like for any ending. Never from a tick of an
+    /// effect already on the creature, and never from terrain (those paths do not call it).
+    pub fn reveal(&mut self, c: Creature, why: super::rules_log::EndReason) {
+        self.end_effects(c, why, |d| d.ends_when_hit);
+    }
+
+    /// `c` starts an attack or an ability: every effect that `ends_when_acting` (Invisible) ends.
+    pub fn act(&mut self, c: Creature) {
+        self.end_effects(c, super::rules_log::EndReason::Attacked, |d| d.ends_when_acting);
+    }
+
+    fn end_effects(&mut self, c: Creature, why: super::rules_log::EndReason, f: impl Fn(&crate::defs::effects::EffectDef) -> bool) {
+        let kinds = match c {
+            Creature::Player(i) => self.players.get(i).map(|p| p.effects.kinds()),
+            Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.kinds()),
+        };
+        for k in kinds.unwrap_or_default().into_iter().filter(|&k| f(&def(k))) {
+            self.remove_effect_why(c, k, why);
+        }
+    }
+
+    /// A monster starts a wind-up (an attack): it ends its Invisible.
+    pub fn start_windup(&mut self, mi: usize, w: super::entities::Windup) {
+        self.act(Creature::Monster(mi));
+        self.monsters[mi].ai.windup = Some(w);
     }
 
     /// `apply` of `kind` for `secs` (default: its def's duration), unscaled and `Plain`.
@@ -488,6 +521,116 @@ mod tests {
 
     fn boss(run: &crate::run::Run) -> usize {
         run.monsters.iter().position(|m| m.is_boss).unwrap()
+    }
+
+    /// An ogre beside the hero, made invisible (the effect added directly: no event, no reveal).
+    fn invisible_ogre(run: &mut crate::run::Run) -> Creature {
+        let c = fresh_ogre(run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.monsters[mi].res = Resistances::NONE;
+        run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
+        c
+    }
+
+    #[test]
+    fn invisible_is_a_positive_effect_that_a_hit_or_an_attack_ends() {
+        let d = def(EffectKind::Invisible);
+        assert!(d.positive && d.ends_when_hit && d.ends_when_acting && d.duration == 30.0);
+        assert_eq!(EffectKind::Invisible as u8, 15, "the last bit of the u16 mask");
+        assert!(EffectKind::ALL.iter().filter(|&&k| k != EffectKind::Invisible).all(|&k| !def(k).ends_when_hit && !def(k).ends_when_acting));
+    }
+
+    #[test]
+    fn zero_damage_hit_reveals() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        // Fully resisted Physical hit.
+        let c = invisible_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.monsters[mi].res = Resistances::of(&[(DamageType::Physical, 1.0)]);
+        run.hurt_monster(mi, Damage::physical(10.0), false, Some(0));
+        assert_eq!(run.monsters[mi].hp, run.monsters[mi].max_hp, "no damage went through");
+        assert!(!run.has_effect(c, EffectKind::Invisible), "still revealed");
+        // An on-hit-only hit (no damage at all).
+        let c = invisible_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.hurt_monster(mi, Damage::physical(0.0).with_effect(sleepy()), false, Some(0));
+        assert!(!run.has_effect(c, EffectKind::Invisible));
+        // A hit the shielded boss absorbs.
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+        run.monsters[bi].effects.add(EffectKind::Invisible, 30.0);
+        assert!(!run.hurt_monster(bi, Damage::physical(100.0), false, Some(0)), "the shield absorbs it");
+        assert!(!run.has_effect(Creature::Monster(bi), EffectKind::Invisible));
+    }
+
+    #[test]
+    fn a_hit_on_an_invisible_hero_reveals_it_too() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.players[0].effects.add(EffectKind::Invisible, 30.0);
+        run.hurt_player(0, Damage::physical(1.0));
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Invisible));
+    }
+
+    #[test]
+    fn shrugged_off_effect_reveals() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = invisible_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.monsters[mi].effect_res.set(EffectKind::Fear, 1.0);
+        let (outcome, _, _) = run.apply_traced(c, Apply::plain(EffectKind::Fear, Some(2.0)));
+        assert_eq!(outcome, EffectOutcome::Resisted);
+        assert!(!run.has_effect(c, EffectKind::Invisible));
+    }
+
+    #[test]
+    fn effect_ticks_do_not_reveal() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = invisible_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.hurt_monster(mi, Damage::effect_tick(1.0, DamageType::Heat), false, None);
+        assert!(run.monsters[mi].hp < run.monsters[mi].max_hp);
+        assert!(run.has_effect(c, EffectKind::Invisible));
+    }
+
+    #[test]
+    fn positive_effects_do_not_reveal() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = invisible_ogre(&mut run);
+        assert!(run.apply_effect(c, EffectKind::Warded, Some(2.0)));
+        assert!(run.has_effect(c, EffectKind::Invisible));
+    }
+
+    #[test]
+    fn attacking_reveals() {
+        use crate::defs::enemies::EnemyType;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos() + Vec2::new(30.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::SkeletonArcher, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
+        run.start_windup(mi, crate::run::entities::Windup { t: 0.5, aim: 0.0, alt: false, at: None });
+        assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Invisible));
+        assert!(run.monsters[mi].ai.windup.is_some());
+        // A hero who fires an ability.
+        run.players[0].effects.add(EffectKind::Invisible, 30.0);
+        crate::run::abilities::try_use(&mut run, 0, true, 0);
+        assert!(!run.has_effect(Creature::Player(0), EffectKind::Invisible));
+    }
+
+    #[test]
+    fn an_invisible_monster_tells_no_event_to_the_clients() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.events.clear();
+        run.apply_effect(c, EffectKind::Invisible, None);
+        run.hurt_monster(mi, Damage::effect_tick(1.0, DamageType::Heat), false, None);
+        assert!(run.events.iter().all(|(e, _)| !matches!(e, Ev::Effect { .. } | Ev::Dmg { .. })), "{:?}", run.events);
+        run.events.clear();
+        run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "revealed: the hit shows");
     }
 
     #[test]

@@ -256,7 +256,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             // Never a jump to its death: the pounce must end on walkable ground.
             if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
                 // It winds up first, like any use; the leap itself starts when that is over (step 4).
-                run.monsters[mi].ai.windup = Some(Windup { t: pounce.windup, aim, alt: true, at: None });
+                run.start_windup(mi, Windup { t: pounce.windup, aim, alt: true, at: None });
                 run.monsters[mi].ai.path.clear();
                 set_anim(run, mi, Anim::Windup);
                 return;
@@ -264,7 +264,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         }
         if d <= reach {
             if run.monsters[mi].cds.ready(AbilityId::Bite) && run.monsters[mi].ally.as_ref().is_some_and(|a| a.bite_hold <= 0.0) {
-                run.monsters[mi].ai.windup = Some(Windup { t: bite.windup, aim, alt: false, at: None });
+                run.start_windup(mi, Windup { t: bite.windup, aim, alt: false, at: None });
                 set_anim(run, mi, Anim::Windup);
             } else {
                 set_anim(run, mi, Anim::Idle); // in reach: wait for the next bite

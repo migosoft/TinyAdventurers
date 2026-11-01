@@ -134,7 +134,7 @@ fn rules_log_is_reached_only_through_its_hooks() {
     walk(&root, &root, &mut found);
     // Lines naming `rules_log` outside the module, per file. Each task updates this with its hooks.
     let hooks: BTreeMap<String, usize> =
-        [("defs/effects.rs", 1), ("run/mod.rs", 18), ("run/effects.rs", 5), ("run/abilities.rs", 18), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        [("defs/effects.rs", 1), ("run/mod.rs", 20), ("run/effects.rs", 9), ("run/abilities.rs", 18), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     assert_eq!(found, hooks);
 }
 
@@ -1640,4 +1640,21 @@ fn haste_and_purify_credit_the_user_on_every_target() {
     let lines = leads(&mut run, "Purify");
     assert_eq!(lines.len(), 2, "one line per hero: {lines:?}");
     assert_eq!(lines[0], lines[1], "both name the user");
+}
+
+#[test]
+fn an_invisible_monsters_records_are_seen_by_nobody_until_it_is_revealed() {
+    use crate::defs::effects::EffectKind;
+    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    run.log.forced = true;
+    let mi = enemy_near(&mut run, EnemyType::GoblinArcher);
+    assert!(!record::seen_creature(&run, Creature::Monster(mi)).gone);
+    run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
+    assert!(record::seen_creature(&run, Creature::Monster(mi)).gone, "hidden like a gone entity");
+    let _ = take(&mut run);
+    run.hurt_monster(mi, Damage::physical(1.0), false, Some(0));
+    let recs = take(&mut run);
+    let ended = recs.iter().find(|r| r.head.contains("Invisible on") && r.head.contains("revealed by a hit")).expect("the reveal is logged");
+    assert!(!ended.who[0].gone, "it is shown: the monster is visible now");
+    assert!(recs.iter().filter(|r| r.kind == LineKind::Hit).all(|r| !r.who[0].gone));
 }

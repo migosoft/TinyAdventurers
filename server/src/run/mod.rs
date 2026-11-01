@@ -889,6 +889,9 @@ impl Run {
         if !self.players[pi].alive {
             return;
         }
+        if !dmg.from_effect {
+            self.reveal(effects::Creature::Player(pi), rules_log::EndReason::RevealedByHit);
+        }
         if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit, dmg.from_effect) {
             self.hit_effect_by(effects::Creature::Player(pi), h, dmg.why); // a pure effect hit: no number, no flash
             return;
@@ -1075,6 +1078,10 @@ impl Run {
         if ally && src_player.is_some() {
             return false; // no hero attack hurts an ally
         }
+        if !dmg.from_effect {
+            // Any direct hit shows an invisible monster, even one it resists or a shield absorbs.
+            self.reveal(effects::Creature::Monster(mi), rules_log::EndReason::RevealedByHit);
+        }
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             let (hp, res) = (self.monsters[mi].hp, self.monsters[mi].res);
             rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts: [0.0; DamageType::COUNT], hp_before: hp, hp_after: hp, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Shielded }); rules_log::hit_end(self);
@@ -1090,6 +1097,8 @@ impl Run {
         let ty = dmg.split.main_type() as u8;
         // Hits by heroes go to the whole party, even out of view: the shot was seen leaving.
         let seen_by = src_player.is_none().then_some(pos);
+        // Only a tick of an effect can reach an invisible enemy now (a hit revealed it): no number at its spot.
+        let hidden = !ally && self.monsters[mi].effects.has(crate::defs::effects::EffectKind::Invisible);
         if raw < 0.0 {
             let m = &mut self.monsters[mi];
             let hp_before = m.hp;
@@ -1097,7 +1106,7 @@ impl Run {
             m.hp += healed;
             let hp_after = m.hp;
             rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
-            if healed > 0.0 {
+            if healed > 0.0 && !hidden {
                 let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
                 if ally {
                     self.event_on_hero(ev, pos);
@@ -1120,7 +1129,7 @@ impl Run {
         let ev = Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: ally, ty, imm };
         if ally {
             self.event_on_hero(ev, pos); // shown like damage on a hero
-        } else {
+        } else if !hidden {
             self.event(ev, seen_by);
         }
         if src_player.is_none() && dmg.from_effect {

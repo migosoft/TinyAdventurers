@@ -272,6 +272,7 @@ pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
 /// Uses ability `a` for user `c`: the executor of its shape does the effect and returns the user's
 /// animation. Cooldowns, the ranged-in-melee fallback and keystones are the caller's.
 fn use_ability(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim {
+    run.act(c); // starting an ability ends Invisible
     match ab::def(a.id).shape {
         Shape::Projectile => use_projectile(run, c, a, shot),
         Shape::Blast => use_blast(run, c, a, shot),

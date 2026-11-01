@@ -353,7 +353,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                         set_anim(run, mi, Anim::Slam);
                         perform_attack(run, mi, foe, true, None);
                     } else {
-                        run.monsters[mi].ai.windup = Some(Windup { t: alt.windup, aim, alt: true, at: None });
+                        run.start_windup(mi, Windup { t: alt.windup, aim, alt: true, at: None });
                         set_anim(run, mi, Anim::Windup);
                     }
                     return;
@@ -368,7 +368,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                     Some(Target::Object(id)) => run.objects.iter().find(|o| o.id == id).map_or(aim, |o| pos.angle_to(o.pos)),
                     _ => aim,
                 };
-                run.monsters[mi].ai.windup = Some(Windup { t: main.windup, aim, alt: false, at });
+                run.start_windup(mi, Windup { t: main.windup, aim, alt: false, at });
                 set_anim(run, mi, Anim::Windup);
                 return;
             }
