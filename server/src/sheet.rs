@@ -429,18 +429,7 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
 /// `disabled` names the Attribute requirement that fails, the pick's own or that of the weapon it lost.
 pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
     let req = attrs_without_items(class, b).with_delta(delta);
-    let mut usable = b.clone();
-    let mut dropped = Vec::new();
-    for s in EquipSlot::ALL {
-        if let Some(id) = usable.equipment.get(s) {
-            if let Some(r) = items::def(id).req.iter().find(|r| !r.met(&req, None)) {
-                if let Requirement::Attr(a, n) = *r {
-                    dropped.push((s, (a, n)));
-                }
-                usable.equipment.set(s, None);
-            }
-        }
-    }
+    let (usable, dropped) = usable_items(&req, b);
     let (mut sheet, cx) = sheet_core(class, &usable, delta).expect("the usable items of an accepted build pass the equipment check");
     let strike = sheet.fallback;
     let mut wolf = WolfMods::NONE;
@@ -454,7 +443,7 @@ pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
             }
             Err(e) => {
                 let d = ab::def(p.ability);
-                let by = disabled_by(&e, &d, &dropped);
+                let by = disabled_by(&e, p, &d, &dropped);
                 debug_assert!(by.is_some(), "a disabled pick has an unmet Attribute requirement: {e:?}");
                 sheet.disabled[i] = Some(by.unwrap_or((Attr::Str, 1)));
                 cx.resolve(&d).unwrap_or(ResolvedAbility { id: p.ability, ranged: d.ranged, ..strike })
@@ -470,25 +459,45 @@ pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
     sheet
 }
 
-/// The Attribute requirement that disables a pick, which failed with `e`. A pick fails in a run
-/// only because an Attribute fell below a requirement: its own, or that of the weapon it uses,
-/// which `run_sheet` dropped (`dropped`: the slot and the first unmet Attribute requirement of
-/// each dropped item). In the weapon case that dropped weapon's requirement is named.
-fn disabled_by(e: &LoadoutError, d: &AbilityDef, dropped: &[(EquipSlot, (Attr, i32))]) -> Option<(Attr, i32)> {
-    if let LoadoutError::Requirement(_, Requirement::Attr(a, n)) = *e {
-        return Some((a, n));
+/// `b` without the items whose requirement fails against `req` (the Attributes without items plus
+/// the drain), and each dropped item's slot with its first unmet Attribute requirement.
+fn usable_items(req: &Attributes, b: &Build) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
+    let mut usable = b.clone();
+    let mut dropped = Vec::new();
+    for s in EquipSlot::ALL {
+        if let Some(id) = usable.equipment.get(s) {
+            if let Some(r) = items::def(id).req.iter().find(|r| !r.met(req, None)) {
+                if let Requirement::Attr(a, n) = *r {
+                    dropped.push((s, (a, n)));
+                }
+                usable.equipment.set(s, None);
+            }
+        }
     }
-    let slot = match d.uses {
-        Uses::Melee => Some(EquipSlot::Melee),
-        Uses::Ranged => Some(EquipSlot::Ranged),
-        Uses::Nothing => None,
+    (usable, dropped)
+}
+
+/// The Attribute requirement that disables pick `p`, which failed with `e`. A pick fails in a run
+/// only because an Attribute fell below a requirement: its own, or that of the item `run_sheet`
+/// dropped (`dropped`, see `usable_items`) that gave it its weapon or its version. The slot comes
+/// from the error: the weapon slot the ability uses, the slot named by `NoWeapon`, or the slot of
+/// the item that grants the version. `None` when the error has no such cause.
+fn disabled_by(e: &LoadoutError, p: Pick, d: &AbilityDef, dropped: &[(EquipSlot, (Attr, i32))]) -> Option<(Attr, i32)> {
+    let slot = match *e {
+        LoadoutError::Requirement(_, Requirement::Attr(a, n)) => return Some((a, n)),
+        LoadoutError::Requirement(_, Requirement::WeaponKind(_)) => match d.uses {
+            Uses::Melee => EquipSlot::Melee,
+            Uses::Ranged => EquipSlot::Ranged,
+            Uses::Nothing => return None,
+        },
+        LoadoutError::NoWeapon(_, s) => s,
+        LoadoutError::NotInPool(_) => match p.source {
+            Source::Item(s) => s,
+            Source::Own => return None,
+        },
+        LoadoutError::Equip(..) | LoadoutError::WrongSlot(_) => return None,
     };
-    dropped
-        .iter()
-        .find(|(s, _)| Some(*s) == slot)
-        .or(dropped.first())
-        .map(|&(_, r)| r)
-        .or_else(|| d.req.iter().find_map(|r| if let Requirement::Attr(a, n) = *r { Some((a, n)) } else { None }))
+    dropped.iter().find(|(s, _)| *s == slot).map(|&(_, r)| r)
 }
 
 /// What resolving a pick needs: the numbers of the hero without the picks.
@@ -1786,17 +1795,34 @@ mod tests {
     }
 
     #[test]
-    fn a_pick_that_lost_its_weapon_names_the_weapons_requirement() {
-        // No ability needs a weapon kind that an item with an Attribute requirement provides, so the
-        // case is built by hand: Smite (CHA 15, a melee weapon) lost a melee weapon that needs STR 13.
+    fn disabled_by_follows_the_error() {
         let d = ab::def(AbilityId::Smite);
+        let own = Pick { ability: AbilityId::Smite, source: Source::Own };
+        let dropped = [(EquipSlot::Melee, (Attr::Str, 13)), (EquipSlot::Ranged, (Attr::Dex, 9))];
         let weapon = LoadoutError::Requirement(AbilityId::Smite, Requirement::WeaponKind(&[]));
-        let dropped = [(EquipSlot::Ranged, (Attr::Dex, 9)), (EquipSlot::Melee, (Attr::Str, 13))];
-        assert_eq!(disabled_by(&weapon, &d, &dropped), Some((Attr::Str, 13)));
-        assert_eq!(disabled_by(&LoadoutError::NoWeapon(AbilityId::Smite, EquipSlot::Melee), &d, &dropped[..1]), Some((Attr::Dex, 9)));
-        assert_eq!(disabled_by(&weapon, &d, &[]), Some((Attr::Cha, 15)));
-        let own = LoadoutError::Requirement(AbilityId::Smite, Requirement::Attr(Attr::Cha, 15));
-        assert_eq!(disabled_by(&own, &d, &dropped), Some((Attr::Cha, 15)));
+        assert_eq!(disabled_by(&weapon, own, &d, &dropped), Some((Attr::Str, 13)));
+        assert_eq!(disabled_by(&weapon, own, &d, &dropped[1..]), None);
+        let no_weapon = LoadoutError::NoWeapon(AbilityId::Smite, EquipSlot::Ranged);
+        assert_eq!(disabled_by(&no_weapon, own, &d, &dropped), Some((Attr::Dex, 9)));
+        let not_in_pool = LoadoutError::NotInPool(AbilityId::Smite);
+        let item = Pick { ability: AbilityId::Smite, source: Source::Item(EquipSlot::Ranged) };
+        assert_eq!(disabled_by(&not_in_pool, item, &d, &dropped), Some((Attr::Dex, 9)));
+        assert_eq!(disabled_by(&not_in_pool, own, &d, &dropped), None);
+        let attr = LoadoutError::Requirement(AbilityId::Smite, Requirement::Attr(Attr::Cha, 15));
+        assert_eq!(disabled_by(&attr, own, &d, &[]), Some((Attr::Cha, 15)));
+        assert_eq!(disabled_by(&weapon, own, &d, &[]), None);
+    }
+
+    #[test]
+    fn usable_items_records_what_it_drops() {
+        let c = ClassId::Barbarian;
+        let b = flame_tongue_barbarian();
+        let req = attrs_without_items(c, &b);
+        let (kept, dropped) = usable_items(&req, &b);
+        assert_eq!((kept, dropped), (b.clone(), vec![]));
+        let (kept, dropped) = usable_items(&req.with_delta(drain(-3, 0, 0)), &b);
+        assert_eq!(dropped, vec![(EquipSlot::Melee, (Attr::Str, 13))]);
+        assert_eq!(kept.equipment.get(EquipSlot::Melee), None);
     }
 
     #[test]

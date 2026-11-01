@@ -1,4 +1,5 @@
 import { ABILITIES, EFFECT, EFFECTS, FLAG } from '../generated/defs';
+import type { Attr } from '../generated/Attr';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
@@ -6,12 +7,10 @@ import type { PlayerStats } from '../generated/PlayerStats';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { ServerMsg } from '../generated/ServerMsg';
-import type { Attr } from '../generated/Attr';
 import type { Snapshot } from '../generated/Snapshot';
 import { CooldownTracker } from './cooldown';
-import { ATTR_SHORT } from './create';
 import { endText } from './endText';
-import { BOSS_TEXT, className } from './text';
+import { BOSS_TEXT, className, needsText } from './text';
 import { DRAIN_TEXT, effectIconSvg } from './effectIcons';
 import { SettingsView, type Toggle } from './settings';
 
@@ -81,8 +80,6 @@ const el = (tag: string, cls?: string, html?: string) => {
 
 /** Per slot, the Attribute requirement that disables the pick during a run (`HeroChanged`), or null. */
 export type Disabled = Extract<ServerMsg, { t: 'HeroChanged' }>['disabled'];
-
-const needsText = ([attr, n]: [Attr, number]): string => `Needs ${ATTR_SHORT[attr]} ${n}`;
 
 export class Hud {
   private root = el('div', 'hud hidden');

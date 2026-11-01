@@ -550,14 +550,15 @@ export class GameScene extends Phaser.Scene {
     let secondary: number | null = null;
     let dash: [number, number] | null = null;
     const used: [number | null, number | null] = [null, null];
-    if (wantPrimary && !this.slotUsable(0)) this.hud.needs(0, this.disabled[0]!);
-    if (wantSecondary && !this.slotUsable(1)) this.hud.needs(1, this.disabled[1]!);
-    if (wantPrimary && this.pred.cd1 <= 0 && this.slotUsable(0)) {
+    const usable = [this.slotUsable(0), this.slotUsable(1)] as const;
+    if (wantPrimary && !usable[0]) this.hud.needs(0, this.disabled[0]!);
+    if (wantSecondary && !usable[1]) this.hud.needs(1, this.disabled[1]!);
+    if (wantPrimary && this.pred.cd1 <= 0 && usable[0]) {
       const ids = this.reserveShots(0);
       primary = ids[0];
       used[0] = this.predictAbility(0, ids, aim, dist);
     }
-    if (wantSecondary && this.pred.cd2 <= 0 && this.slotUsable(1)) {
+    if (wantSecondary && this.pred.cd2 <= 0 && usable[1]) {
       const ids = this.reserveShots(1);
       secondary = ids[0];
       used[1] = this.predictAbility(1, ids, aim, dist);

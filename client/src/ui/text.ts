@@ -1,6 +1,12 @@
+import type { Attr } from '../generated/Attr';
 import type { BossId } from '../generated/BossId';
 import type { ClassId } from '../generated/ClassId';
 import type { LevelId } from '../generated/LevelId';
+
+export const ATTR_SHORT: Record<Attr, string> = { Str: 'STR', Dex: 'DEX', Con: 'CON', Int: 'INT', Wil: 'WIL', Cha: 'CHA' };
+
+/** What a slot disabled by an Attribute drain reads: "Needs DEX 14". */
+export const needsText = ([attr, n]: [Attr, number]): string => `Needs ${ATTR_SHORT[attr]} ${n}`;
 
 export const CLASS_TEXT: Record<ClassId, { title: string; blurb: string }> = {
   Wizard: {

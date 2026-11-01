@@ -10,10 +10,9 @@ import { CLASSES, classFigure } from './classes';
 import { spaced } from './hub/model';
 import { esc } from './hud';
 import { abilityIcon, itemIcon } from './icons';
-import { CLASS_TEXT, className } from './text';
+import { ATTR_SHORT, CLASS_TEXT, className } from './text';
 
 const ATTR_ORDER: Attr[] = ['Str', 'Dex', 'Con', 'Int', 'Wil', 'Cha'];
-export const ATTR_SHORT: Record<Attr, string> = { Str: 'STR', Dex: 'DEX', Con: 'CON', Int: 'INT', Wil: 'WIL', Cha: 'CHA' };
 const itemName = (id: string) => (ITEMS as unknown as Record<string, { name: string }>)[id].name;
 
 export class Create {
