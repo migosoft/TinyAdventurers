@@ -25,6 +25,9 @@ const CLAW = { reach: 20, arc: 1.6, color: 0xffb080 };
 // Ghosts touch with a pale blue swoosh.
 const GHOST_TOUCH = { reach: 20, arc: 1.6, color: 0xb8e0ff };
 
+// Shades touch with a dark violet swoosh.
+const SHADE_TOUCH = { reach: 20, arc: 1.6, color: 0x7a4aa8 };
+
 export type AttackStyle = 'melee' | 'ranged' | 'caster' | 'none';
 /** How a weapon sprite is held: blades/staffs point up in the pack, bows are vertical. */
 export type Mount = 'blade' | 'bow' | 'staff';
@@ -47,6 +50,10 @@ export interface FigureDef {
   lunge?: number;
   /** The alpha pulses (the Ghost): `entityAlpha` swaps the incorporeal alpha for `ghostPulse`, and blinks it in the ambush wind-up. */
   pulse?: boolean;
+  /** A dark haze lingers around it and trails when it moves (the Shade, `shadeHaze.ts`). */
+  haze?: boolean;
+  /** In the ambush wind-up it is drawn as a flat dark silhouette whose alpha rises (the Shade). */
+  silhouette?: boolean;
   /** Hand height above the feet (px, unscaled). */
   handY: number;
   /** Hand offset towards the facing side (px, unscaled; default 3). The ogre holds its club out at its side. */
@@ -138,6 +145,7 @@ export const FIGURES: Record<number, FigureDef> = {
     baseR: 13,
   },
   [KIND.Ghost]: { ...mob('ghost'), swing: GHOST_TOUCH, lunge: 3, pulse: true, handY: 10, attack: 'melee', base: 0xb8e0ff, baseR: 6, label: 'Ghost' },
+  [KIND.Shade]: { ...mob('shade'), swing: SHADE_TOUCH, lunge: 3, haze: true, silhouette: true, handY: 10, attack: 'melee', base: 0x2a2433, baseR: 6, label: 'Shade' },
   [KIND.Lich]: { ...mob('lich'), weapon: 'weapon_lich_staff', mount: 'staff', weaponScale: 1.3, handX: 7, handY: 11, attack: 'caster', base: GLOOM.light, baseR: 7, slam: { r: CONST.LICH_NOVA_RADIUS, anim: ANIM.Slam, t: CONST.LICH_NOVA_WINDUP, color: GLOOM.light, gloom: true } },
   [KIND.Dragon]: {
     idle: dragonFrames.idle.prefix,

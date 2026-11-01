@@ -105,6 +105,7 @@ export class SpectreDemoScene extends Phaser.Scene {
         s.view.destroy();
         s.view = null;
         if (s.def.kind === KIND.Ghost) this.fx.disintegrate(s.x, s.y - 8);
+        else if (s.def.kind === KIND.Shade) this.fx.darkCloud(s.x, s.y - 8);
         else this.fx.burst(s.x, s.y - 6, 14, 0x9a2020, 50, 0.5, 60);
       }
     }
