@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { behindOccluder, copyProps } from './silhouette';
+import { behindOccluder, heroBox } from './silhouette';
 
 // canopy box: x 100-196, top 20, trunk foot y 99
 const OCC = { left: 100, right: 196, top: 20, footY: 99 };
@@ -19,9 +19,11 @@ describe('behindOccluder', () => {
   });
 });
 
-describe('copyProps', () => {
-  it('copies flipX, origin, position and scale of the hero', () => {
-    const hero = { x: 5, y: 9, flipX: true, originX: 0.5, originY: 0.8, scaleX: 2, scaleY: 3 };
-    expect(copyProps(hero)).toEqual(hero);
+describe('heroBox', () => {
+  it('judges "behind" by the sprite y, not the bounds bottom (untrimmed frame, bottom 14 px below y)', () => {
+    const bounds = { left: 140, right: 156, top: 70 };
+    const box = heroBox(bounds, 90); // y 90 < 99, bounds.bottom 104 > 99
+    expect(box.footY).toBe(90);
+    expect(behindOccluder(box, OCC)).toBe(true);
   });
 });

@@ -17,9 +17,13 @@ export function behindOccluder(hero: Box, occ: Box): boolean {
   return hero.left < occ.right && hero.right > occ.left && hero.footY > occ.top && hero.top < occ.footY;
 }
 
-/** What the copy takes from the hero every update; flipX and origin keep a mirrored hero from showing mirrored or shifted. */
-export function copyProps(h: { x: number; y: number; flipX: boolean; originX: number; originY: number; scaleX: number; scaleY: number }) {
-  return { x: h.x, y: h.y, flipX: h.flipX, originX: h.originX, originY: h.originY, scaleX: h.scaleX, scaleY: h.scaleY };
+/**
+ * The hero box for behindOccluder: left/right/top from the sprite's bounds, but footY is the sprite's y, the
+ * same quantity depth sorting uses (depth = entityBase + y). Callers place figures by their foot (y = foot);
+ * bounds.bottom would be wrong for untrimmed frames (the knight's is 14 px below y).
+ */
+export function heroBox(b: { left: number; right: number; top: number }, y: number): Box {
+  return { left: b.left, right: b.right, top: b.top, footY: y };
 }
 
 export class Silhouette {
@@ -43,12 +47,13 @@ export class Silhouette {
     const hb = hero.getBounds();
     const ob = this.occluder.getBounds();
     const behind = behindOccluder(
-      { left: hb.left, right: hb.right, top: hb.top, footY: hb.bottom },
+      heroBox(hb, hero.y),
       { left: ob.left, right: ob.right, top: ob.top, footY: this.occluderFootY },
     );
     if (!behind) { c.setVisible(false); return; }
-    const p = copyProps(hero);
-    c.setTexture(hero.texture.key, hero.frame.name).setPosition(p.x, p.y).setOrigin(p.originX, p.originY).setScale(p.scaleX, p.scaleY).setFlipX(p.flipX).setVisible(true);
+    // same frame, flipX (else mirrored), origin (else shifted), position and scale as the hero
+    c.setTexture(hero.texture.key, hero.frame.name).setPosition(hero.x, hero.y).setOrigin(hero.originX, hero.originY)
+      .setScale(hero.scaleX, hero.scaleY).setFlipX(hero.flipX).setDepth(this.occluder.depth + 0.01).setVisible(true);
   }
 
   destroy(): void {
