@@ -24,6 +24,8 @@ pub enum EntityKind {
     Ogre = 22,
     /// The Elven Ranger's wolf: an ally monster.
     DireWolf = 23,
+    /// The ghost haunting the lich's dungeon.
+    Ghost = 24,
     // Bosses
     Demon = 30,
     Lich = 31,
@@ -72,7 +74,7 @@ impl serde::Serialize for EntityKind {
 
 impl EntityKind {
     #[cfg(test)]
-    pub const ALL: [EntityKind; 43] = [
+    pub const ALL: [EntityKind; 44] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -91,6 +93,7 @@ impl EntityKind {
         EntityKind::Summoner,
         EntityKind::Ogre,
         EntityKind::DireWolf,
+        EntityKind::Ghost,
         EntityKind::Demon,
         EntityKind::Lich,
         EntityKind::Dragon,

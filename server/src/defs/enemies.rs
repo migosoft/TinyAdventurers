@@ -32,11 +32,13 @@ pub enum EnemyType {
     /// Mini-boss, one per run: a spiked club that pushes hard and a ground
     /// slam that hits and pushes every hero around it.
     Ogre,
+    /// Incorporeal ambusher haunting the lich's dungeon (see `haunt_for`): vanishes, appears next to a hero and touches.
+    Ghost,
 }
 
 impl EnemyType {
     #[cfg(test)]
-    pub const ALL: [EnemyType; 15] = [
+    pub const ALL: [EnemyType; 16] = [
         EnemyType::GoblinArcher,
         EnemyType::SkeletonWarrior,
         EnemyType::SkeletonArcher,
@@ -52,6 +54,7 @@ impl EnemyType {
         EnemyType::Summoner,
         EnemyType::SummonedImp,
         EnemyType::Ogre,
+        EnemyType::Ghost,
     ];
 }
 
@@ -88,7 +91,7 @@ fn natural_melee(t: EnemyType) -> ItemId {
 }
 
 pub fn def(t: EnemyType) -> EnemyDef {
-    use AbilityId::{Bite, FireBolt, GroundSlam, ShadowBolt, Shoot, Strike};
+    use AbilityId::{Bite, FireBolt, GroundSlam, ShadowBolt, Shoot, Strike, Touch, Vanish};
     use EnemyType::*;
     use ItemId::*;
     match t {
@@ -243,6 +246,22 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 preferred: 0.0,
             }
         }
+        // Ghost (#169): a first guess (label `balancing`). It floats through walls; Vanish and the ambush (`run/ambush.rs`) are its tactics.
+        Ghost => {
+            let attrs = Attributes::new(6, 14, 10, 10, 12, 14);
+            EnemyDef {
+                kind: EntityKind::Ghost,
+                hp: 32.0,
+                speed: 50.0,
+                radius: 6.0,
+                vision: 8.75,
+                attrs,
+                weight: 3.0,
+                abilities: &[Touch, Vanish],
+                weapons: &[GhostTouch],
+                preferred: 0.0,
+            }
+        }
         Ogre => {
             let attrs = Attributes::new(19, 8, 16, 5, 7, 7);
             EnemyDef {
@@ -272,6 +291,15 @@ pub fn for_boss(t: EnemyType, boss: BossId) -> EnemyType {
         (BossId::Demon, SkeletonWarrior) => Chort,
         (BossId::Demon, Necromancer) => Summoner,
         _ => t,
+    }
+}
+
+/// The extra enemy that haunts a dungeon of this boss (rare, on top of the usual ones; see
+/// `Dungeon::haunts`): the lich has ghosts. The demon's Shade follows with #170; the dragon has none.
+pub fn haunt_for(boss: BossId) -> Option<EnemyType> {
+    match boss {
+        BossId::Lich => Some(EnemyType::Ghost),
+        BossId::Demon | BossId::Dragon => None,
     }
 }
 
@@ -323,6 +351,7 @@ pub fn races(t: EnemyType) -> &'static [Race] {
         Ogre => &[Race::Ogre],
         Mimic => &[Race::Mimic],
         Imp | Chort | SummonedImp => &[Race::Demon],
+        Ghost => &[Race::Undead, Race::Incorporeal],
     }
 }
 
@@ -360,10 +389,14 @@ mod tests {
         assert_eq!(def(Disciple).attrs, Attributes::new(10, 12, 10, 13, 11, 10));
         assert_eq!(def(Mimic).attrs, Attributes::new(17, 12, 15, 5, 13, 8));
         assert_eq!(def(Chort).attrs, Attributes::new(14, 13, 13, 8, 10, 9));
+        assert_eq!(def(Ghost).attrs, Attributes::new(6, 14, 10, 10, 12, 14));
+        let ghost = def(Ghost);
+        assert_eq!((ghost.hp, ghost.speed, ghost.radius, ghost.vision, ghost.preferred), (32.0, 50.0, 6.0, 8.75, 0.0));
+        assert_eq!((ghost.abilities, ghost.weapons), (&[AbilityId::Touch, AbilityId::Vanish][..], &[ItemId::GhostTouch][..]));
         let weights = [
             (GoblinArcher, 6.0), (SkeletonWarrior, 9.0), (SkeletonArcher, 9.0), (RaisedSkeleton, 9.0), (RaisedArcher, 9.0),
             (OrcWarrior, 13.0), (OrcArcher, 13.0), (Necromancer, 10.0), (Summoner, 10.0), (Disciple, 10.0),
-            (Mimic, 14.0), (Imp, 4.0), (SummonedImp, 4.0), (Chort, 10.0), (Ogre, 20.0),
+            (Mimic, 14.0), (Imp, 4.0), (SummonedImp, 4.0), (Chort, 10.0), (Ogre, 20.0), (Ghost, 3.0),
         ];
         assert_eq!(weights.len(), EnemyType::ALL.len());
         for (t, w) in weights {
@@ -391,7 +424,7 @@ mod tests {
             let d = def(t);
             let ranged = d.weapons.iter().any(|&w| matches!(items::def(w).base, ItemBase::Ranged(..)));
             assert_eq!(ranged, d.abilities.contains(&AbilityId::Shoot), "{t:?}: a bow goes with Shoot");
-            assert!(d.abilities.iter().any(|a| matches!(a, AbilityId::Strike | AbilityId::Bite)), "{t:?} has no melee ability");
+            assert!(d.abilities.iter().any(|a| matches!(a, AbilityId::Strike | AbilityId::Bite | AbilityId::Touch)), "{t:?} has no melee ability");
             assert!(d.abilities.len() <= 2 && !d.abilities.is_empty(), "{t:?}");
             // The AI (`run/ai.rs`) uses an alt ability only if it swings, shoots or slams.
             if let Some(&alt) = d.abilities.get(1) {
@@ -406,9 +439,9 @@ mod tests {
     fn enemies_without_a_melee_weapon_use_their_races_natural_one() {
         for t in EnemyType::ALL {
             let w = def(t).weapons[0];
-            let species = matches!(t, EnemyType::Mimic | EnemyType::Imp | EnemyType::SummonedImp | EnemyType::Chort);
+            let species = matches!(t, EnemyType::Mimic | EnemyType::Imp | EnemyType::SummonedImp | EnemyType::Chort | EnemyType::Ghost);
             let ItemBase::Melee(k, _) = items::def(w).base else { panic!("{t:?}") };
-            let natural_kind = crate::defs::weapons::category(k) == crate::defs::weapons::WeaponCategory::Natural;
+            let natural_kind = crate::defs::weapons::is_natural_like(crate::defs::weapons::category(k));
             // Mimic, imps and chorts have a species weapon of their own; a weapon-less enemy its race's.
             assert!(species || !natural_kind || w == natural_melee(t), "{t:?}");
         }
@@ -431,7 +464,7 @@ mod tests {
             (Necromancer, &[K::Staff]),
             (Summoner, &[K::Staff]),
         ];
-        let natural = [K::Unarmed, K::Bite, K::Claws, K::Tail];
+        let natural = [K::Unarmed, K::Bite, K::Claws, K::Tail, K::Touch];
         for t in EnemyType::ALL {
             let allowed: &[K] = table.iter().find(|(e, _)| *e == t).map_or(&[], |(_, k)| k);
             let d = def(t);
@@ -455,28 +488,36 @@ mod tests {
     }
 
     #[test]
+    fn only_the_lich_has_a_haunt() {
+        assert_eq!(haunt_for(BossId::Lich), Some(EnemyType::Ghost));
+        assert_eq!(haunt_for(BossId::Demon), None, "the Shade comes with #170");
+        assert_eq!(haunt_for(BossId::Dragon), None);
+    }
+
+    #[test]
     fn enemy_races() {
         use EnemyType::*;
-        let expect = [
-            (GoblinArcher, Race::Goblin),
-            (SkeletonWarrior, Race::Undead),
-            (SkeletonArcher, Race::Undead),
-            (RaisedSkeleton, Race::Undead),
-            (RaisedArcher, Race::Undead),
-            (OrcWarrior, Race::Orc),
-            (OrcArcher, Race::Orc),
-            (Necromancer, Race::Human),
-            (Summoner, Race::Human),
-            (Disciple, Race::Human),
-            (Mimic, Race::Mimic),
-            (Imp, Race::Demon),
-            (SummonedImp, Race::Demon),
-            (Chort, Race::Demon),
-            (Ogre, Race::Ogre),
+        let expect: [(EnemyType, &[Race]); 16] = [
+            (GoblinArcher, &[Race::Goblin]),
+            (SkeletonWarrior, &[Race::Undead]),
+            (SkeletonArcher, &[Race::Undead]),
+            (RaisedSkeleton, &[Race::Undead]),
+            (RaisedArcher, &[Race::Undead]),
+            (OrcWarrior, &[Race::Orc]),
+            (OrcArcher, &[Race::Orc]),
+            (Necromancer, &[Race::Human]),
+            (Summoner, &[Race::Human]),
+            (Disciple, &[Race::Human]),
+            (Mimic, &[Race::Mimic]),
+            (Imp, &[Race::Demon]),
+            (SummonedImp, &[Race::Demon]),
+            (Chort, &[Race::Demon]),
+            (Ogre, &[Race::Ogre]),
+            (Ghost, &[Race::Undead, Race::Incorporeal]),
         ];
         assert_eq!(expect.len(), EnemyType::ALL.len());
         for (t, r) in expect {
-            assert_eq!(races(t), &[r], "{t:?}");
+            assert_eq!(races(t), r, "{t:?}");
         }
     }
 }
@@ -528,6 +569,8 @@ mod kit_pins {
             (Summoner, Strike, Pin { damage: 5.0, cooldown: 1.2, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (SummonedImp, FireBolt, Pin { damage: 7.0, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (SummonedImp, Strike, Pin { damage: 6.0, cooldown: 0.9, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Ghost, Touch, Pin { damage: 7.2, cooldown: 0.9259259259259258, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Ghost, Vanish, Pin { damage: 0.0, cooldown: 16.666666666666668, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.0, push: 0.0 }),
             (Ogre, Strike, Pin { damage: 18.0, cooldown: 1.6, range: 32.0, speed: 0.0, radius: 0.0, windup: 0.5, push: 28.0 }),
             (Ogre, GroundSlam, Pin { damage: 21.599999999999998, cooldown: 6.0, range: 32.0, speed: 0.0, radius: 34.0, windup: 1.0, push: 28.0 }),
         ];

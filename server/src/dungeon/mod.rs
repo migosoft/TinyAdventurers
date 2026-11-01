@@ -266,6 +266,9 @@ pub struct Dungeon {
     /// Sun spots (tiles): each becomes a Daylight light (`Run::add_sun`).
     pub suns: Vec<(i32, i32)>,
     pub player_spawns: Vec<Vec2>,
+    /// Where a boss's haunt (`enemies::haunt_for`) appears: rare extra spawns on their own random
+    /// stream, so the map and the usual spawns of a seed stay as they are.
+    pub haunts: Vec<Vec2>,
 }
 
 impl Dungeon {
@@ -298,6 +301,8 @@ pub struct DungeonParts {
     pub boss: usize,
     /// Door tiles between the boss hall and its corridor.
     pub door: Vec<(i32, i32)>,
+    /// See `Dungeon::haunts`.
+    pub haunts: Vec<Vec2>,
 }
 
 impl DungeonParts {
@@ -308,8 +313,8 @@ impl DungeonParts {
 
 impl Dungeon {
     pub fn split(self) -> (Layout, DungeonParts) {
-        let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, suns, player_spawns } = self;
-        (Layout { map, spawns, chests, barrels, torches, suns, player_spawns }, DungeonParts { rooms, start, boss, door })
+        let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, suns, player_spawns, haunts } = self;
+        (Layout { map, spawns, chests, barrels, torches, suns, player_spawns }, DungeonParts { rooms, start, boss, door, haunts })
     }
 }
 

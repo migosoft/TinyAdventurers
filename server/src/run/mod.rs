@@ -1556,9 +1556,12 @@ pub mod tests {
         let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
         // The original values: barrels are left out of the fingerprint, so
         // this proves the rest of the setup is unchanged by them.
-        assert_eq!(got, vec![15034865796308420847, 11583993820610399499, 14176587140014399478, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
+        assert_eq!(got, vec![15034865796308420847, 3240435755681813295, 17335387983249213355, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
         assert_ne!(got[0], got[1]);
         // 2026-10-21, plan 3a: checked again, unchanged.
+        // 2026-11-01, the Ghost (#169): seeds 1 and 2 (lich dungeons) changed, the others did not; the lich's
+        // dungeon now spawns Ghosts at its haunts (extra monsters, so extra ids and rows in the hash). The map
+        // tiles are unchanged (`haunts_leave_the_map_unchanged`).
     }
 
     #[test]
@@ -1570,7 +1573,7 @@ pub mod tests {
                 fingerprint(&run)
             })
             .collect();
-        assert_eq!(got, vec![15034865796308420847, 11583993820610399499, 14176587140014399478, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
+        assert_eq!(got, vec![15034865796308420847, 3240435755681813295, 17335387983249213355, 8272529450485156440, 13502237337016626428, 4475734371267647701]);
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
@@ -1606,7 +1609,8 @@ pub mod tests {
         // again, values unchanged by plan 3a. `plan_3a_fight_is_pinned` pins a fight that does exercise it.
         // 2026-10-31, #177 (one name, one ability): monsters and bosses use shared abilities with their own
         // cooldowns, so the Demon and Lich fights (the first two values) play out differently; the Dragon's is unchanged. Re-recorded once, on purpose.
-        assert_eq!(got, vec![6511878345562000907, 15469823654463399686, 1468820053114872194]);
+        // 2026-11-01, the Ghost (#169): the lich's value (the middle one) changed: its dungeon now has Ghosts. Demon and dragon unchanged.
+        assert_eq!(got, vec![6511878345562000907, 9463768407691502442, 1468820053114872194]);
     }
 
     #[test]
@@ -1625,7 +1629,7 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![6511878345562000907, 15469823654463399686, 1468820053114872194]);
+        assert_eq!(got, vec![6511878345562000907, 9463768407691502442, 1468820053114872194]);
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
@@ -2095,7 +2099,7 @@ pub mod tests {
         assert_eq!(boss.mover, Mover::Demon);
         assert!(demon.monsters.iter().filter(|m| m.etype == Some(EnemyType::Imp)).all(|m| m.mover == Mover::Demon));
         let lich = test_run(&[ClassId::Paladin], BossId::Lich);
-        assert!(lich.monsters.iter().all(|m| m.mover == Mover::Enemy));
+        assert!(lich.monsters.iter().filter(|m| m.etype != Some(EnemyType::Ghost)).all(|m| m.mover == Mover::Enemy));
     }
 
     #[test]
@@ -2149,6 +2153,7 @@ pub mod tests {
             let m = run.monsters.iter().find(|m| m.id == id).unwrap();
             let today = match t {
                 EnemyType::Imp | EnemyType::SummonedImp | EnemyType::Chort => DamageSplit::split(&[(DamageType::Heat, 0.2)]),
+                EnemyType::Ghost => DamageSplit::split(&[(DamageType::Magical, 0.9), (DamageType::Cold, 0.1)]),
                 _ => DamageSplit::physical(),
             };
             assert_eq!(m.melee, today, "{t:?}");

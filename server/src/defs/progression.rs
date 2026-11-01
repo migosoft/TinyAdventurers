@@ -18,6 +18,8 @@ pub fn xp_for_kill(enemy: Option<EnemyType>) -> u32 {
         Some(SummonedImp) => 2,
         Some(Summoner) => 25,
         Some(Ogre) => 60,
+        // A first guess: a rare ambusher, worth more than an imp, less than an orc.
+        Some(Ghost) => 10,
         None => 300, // boss
     }
 }

@@ -1390,6 +1390,24 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": "weapon_red_gem_sword"
   },
+  "GhostTouch": {
+    "base": "6 damage · every 1 s · arc 1.4 · wind-up 0.25 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Touch",
+    "name": "Ghost Touch",
+    "prof": "Touch",
+    "props": [
+      {
+        "magical": true,
+        "text": "On hit: Weakened"
+      }
+    ],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
   "GirdleOfWarding": {
     "base": "",
     "classes": [

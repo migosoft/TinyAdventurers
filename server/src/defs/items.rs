@@ -5,7 +5,7 @@ use super::abilities::AbilityId;
 use super::attributes::{Attr, Attributes};
 use super::classes;
 use super::damage::{DamageSplit, DamageType};
-use super::effects::{EffectKind, OnHit};
+use super::effects::{EffectKind, EffectLook, OnHit};
 use super::kinds::EntityKind;
 use super::lights::LightKind;
 use super::loadout::AbilityMod;
@@ -124,6 +124,8 @@ super::enum_list::listed_enum! {
         DragonClaws = 52,
         DragonTail = 53,
         DemonClaws = 54,
+        // The ghost's natural weapon (#169).
+        GhostTouch = 55,
     }
 }
 
@@ -393,6 +395,8 @@ pub fn def(id: ItemId) -> ItemDef {
         I::DragonClaws => item("Dragon Claws", "", winding(melee(K::Claws, 20.0, 2.5, 1.60, 32.0, heat(), at(24, 10)), 18.0, 0.40), NONE, &[], &[]),
         I::DragonTail => item("Dragon Tail", "", winding(melee(K::Tail, 25.0, 3.0, 2.40, 44.0, phys(), at(24, 10)), 24.0, 0.40), NONE, &[], &[]),
         I::DemonClaws => item("Demon Claws", "", winding(melee(K::Claws, 25.0, 1.6, 2.10, 56.0, heat(), at(22, 14)), 24.0, 0.45), NONE, &[], &[]),
+        // Drains STR (Weakened) for as long as its wielder's CHA gives; no hero holds it (natural weapons never equip).
+        I::GhostTouch => item("Ghost Touch", "", winding(melee(K::Touch, 6.0, 1.0, 1.4, 0.0, spectral(), At::BASE), 16.0, 0.25), NONE, &[], &[mag!(PropKind::OnHit(OnHit { kind: EffectKind::Weakened, secs: 20.0, magical: true, power: 0, look: EffectLook::Plain }))]),
         I::NecromancerStaff => item("Necromancer Staff", "weapon_green_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::SummonerStaff => item("Summoner Staff", "weapon_red_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::HuntersBow => item(
@@ -476,6 +480,11 @@ pub fn check_equipment(class: ClassId, profs: &[Prof], e: &Equipment, attrs: &At
     Ok(())
 }
 
+/// A ghost's or shade's touch: mostly magical, a little cold.
+fn spectral() -> DamageSplit {
+    DamageSplit::split(&[(DamageType::Magical, 0.9), (DamageType::Cold, 0.1)])
+}
+
 fn heat() -> DamageSplit {
     DamageSplit::split(&[(DamageType::Heat, 0.2)])
 }
@@ -539,12 +548,12 @@ mod tests {
                 }
             }
             match d.base {
-                ItemBase::Melee(k, _) => assert!(matches!(category(k), C::Melee | C::Finesse | C::Natural), "{id:?}"),
+                ItemBase::Melee(k, _) => assert!(matches!(category(k), C::Melee | C::Finesse | C::Natural | C::Spectral), "{id:?}"),
                 ItemBase::Ranged(k, _) => assert!(matches!(category(k), C::Ranged | C::Thrown), "{id:?}"),
                 ItemBase::Shield => panic!("{id:?} uses Shield"),
                 _ => {}
             }
-            let natural = matches!(d.base, ItemBase::Melee(k, _) | ItemBase::Ranged(k, _) if category(k) == C::Natural);
+            let natural = matches!(d.base, ItemBase::Melee(k, _) | ItemBase::Ranged(k, _) if is_natural_like(category(k)));
             if weapon && !natural {
                 assert!(!d.sprite.is_empty(), "{id:?}");
             }

@@ -21,6 +21,7 @@ export const KIND = {
   "FirePatch": 70,
   "Fireball": 51,
   "FrostBolt": 55,
+  "Ghost": 24,
   "GloomBolt": 60,
   "GoblinArcher": 10,
   "HolyGround": 71,
@@ -965,6 +966,10 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
     "h": 26.0,
     "r": 10.0
   },
+  "24": {
+    "h": 0.0,
+    "r": 6.0
+  },
   "30": {
     "h": 58.0,
     "r": 11.0
@@ -1260,6 +1265,16 @@ export const ENEMY_KINDS = {
       "Poison": 0.0
     }
   },
+  "Ghost": {
+    "max_hp": 32.0,
+    "res": {
+      "Cold": 1.0,
+      "Heat": 1.0,
+      "Magical": -0.1,
+      "Physical": 1.0,
+      "Poison": 1.0
+    }
+  },
   "GoblinArcher": {
     "max_hp": 24.0,
     "res": {
@@ -1387,6 +1402,7 @@ export const TAG_NAME: Record<number, string> = {
   21: "Summoner",
   22: "Ogre",
   23: "Dire Wolf",
+  24: "Ghost",
   30: "Demon",
   31: "Lich",
   32: "Dragon",

@@ -363,12 +363,12 @@ fn use_blast(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim
     Anim::Cast
 }
 
-/// A swing of the melee weapon: Strike, Bite, Smite (a holy flash where it first hits), Whirl (all around),
+/// A swing of the melee weapon: Strike, Bite, Touch, Smite (a holy flash where it first hits), Whirl (all around),
 /// Flanking Thrust (double from behind) and Tail Whip (aimed behind the user).
 fn use_swing(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::Swing);
     match a.id {
-        AbilityId::Strike | AbilityId::Bite | AbilityId::TailWhip | AbilityId::Whirl | AbilityId::FlankingThrust => {
+        AbilityId::Strike | AbilityId::Bite | AbilityId::Touch | AbilityId::TailWhip | AbilityId::Whirl | AbilityId::FlankingThrust => {
             melee_arc(run, c, a, false);
         }
         AbilityId::Smite => {
@@ -377,7 +377,7 @@ fn use_swing(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Ani
                 run.add_tinted_flash(look.light.expect("Smite flashes"), look.tint, at, ab::SMITE_FLASH);
             }
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze | AbilityId::Vanish => {
             unreachable!("{:?} is not a swing", a.id)
         }
     }

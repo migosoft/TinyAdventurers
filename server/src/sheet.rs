@@ -299,11 +299,19 @@ impl Kit {
     }
 }
 
+/// The on-hit a monster's weapon carries by itself (Ghost Touch drains STR); `arm` fills in the power.
+fn own_on_hit(id: ItemId) -> Option<OnHit> {
+    items::def(id).props.iter().find_map(|p| match p.kind {
+        PropKind::OnHit(h) => Some(OnHit { magical: p.magical, ..h }),
+        _ => None,
+    })
+}
+
 /// The kit of a monster with `attrs`, wielding `weapons` (in the order the abilities look for them:
 /// the first melee one, the first ranged one) and standing in `body`. A monster whose ability has no
 /// weapon that meets its requirement, or which can't be resolved, is a data bug: this panics.
 pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], body: Body) -> Kit {
-    let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&id| arm(id, attrs, &[], None, 0)).collect();
+    let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&id| arm(id, attrs, &[], own_on_hit(id), 0)).collect();
     let kit = ids
         .iter()
         .map(|&id| {
@@ -1387,7 +1395,7 @@ mod tests {
     #[test]
     fn every_monster_ability_equals_the_resolver() {
         let check = |what: &str, kit: &Kit, ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], radius: f64| {
-            let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&w| arm(w, attrs, &[], None, 0)).collect();
+            let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&w| arm(w, attrs, &[], own_on_hit(w), 0)).collect();
             for &id in ids {
                 let want = resolve_ability(&ab::def(id), attrs, &armed, Body { radius }).expect("resolves");
                 assert_eq!(kit.get(id), Some(&want), "{what} {id:?}");

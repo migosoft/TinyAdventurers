@@ -125,6 +125,7 @@ mod tests {
     use crate::dungeon::generate::{generate, Theme};
     use crate::protocol::{BossId, ClassId, ServerMsg};
     use crate::run::tests::test_run;
+    use crate::run::Run;
     use rand::{Rng, SeedableRng};
 
     #[test]
@@ -140,6 +141,29 @@ mod tests {
                 assert_eq!(level.boss_id(), Some(boss));
             }
         }
+    }
+
+    /// The lich's dungeon spawns a Ghost at each haunt; the dragon's and the demon's none.
+    #[test]
+    fn lich_dungeons_get_ghosts_and_dragon_dungeons_none() {
+        use crate::defs::enemies::EnemyType;
+        let (mut lich_with_ghosts, mut lich_runs) = (0, 0);
+        for seed in 0..20u64 {
+            let ghosts = |boss: BossId| -> (Vec<Vec2>, Run) {
+                let run = crate::run::tests::test_run_seed(&[ClassId::Paladin], boss, seed);
+                (run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Ghost)).map(|m| m.pos).collect(), run)
+            };
+            let haunts = generate(seed, Theme::for_boss(BossId::Lich)).haunts;
+            let (found, run) = ghosts(BossId::Lich);
+            assert_eq!(found, haunts, "seed {seed}: a Ghost at each haunt, in order");
+            assert!(run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Ghost)).all(|m| m.mover == crate::dungeon::Mover::Incorporeal && m.traits.phasing));
+            lich_runs += 1;
+            lich_with_ghosts += usize::from(!found.is_empty());
+            for boss in [BossId::Dragon, BossId::Demon] {
+                assert!(ghosts(boss).0.is_empty(), "seed {seed}: {boss:?} has no Ghosts");
+            }
+        }
+        assert!(lich_with_ghosts >= 15, "{lich_with_ghosts} of {lich_runs} lich runs have a Ghost");
     }
 
     #[test]
