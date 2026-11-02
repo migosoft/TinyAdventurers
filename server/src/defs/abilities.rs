@@ -4,6 +4,7 @@
 use super::attributes::{Attr, CHA_DMG, INT_DMG};
 use super::damage::{DamageSplit, DamageType};
 use super::effects::{EffectKind, EffectLook};
+use super::enemies::EnemyType;
 use super::kinds::EntityKind;
 use super::requirements::Requirement;
 use super::weapons::WeaponKind;
@@ -90,6 +91,10 @@ super::enum_list::listed_enum! {
         Touch = 37,
         /// The ambusher's fade from sight: Invisibility as a kit ability.
         Vanish = 38,
+        /// Raises skeletons and skeleton archers to fight for the caster.
+        RaiseDead = 39,
+        /// Summons imps to fight for the caster.
+        SummonImps = 40,
     }
 }
 
@@ -171,6 +176,34 @@ pub struct OwnStats {
     pub count: u8,
     /// The angle (rad) between the outer two shots of a use of several.
     pub spread: f64,
+    /// The minions it raises, if it is a minion summon.
+    pub minions: Option<OwnMinions>,
+}
+
+/// Which minions a summon raises.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Minions {
+    Undead,
+    Imps,
+}
+
+impl Minions {
+    /// The enemy types it raises, the melee one first.
+    pub fn raises(self) -> &'static [EnemyType] {
+        match self {
+            Minions::Undead => &[EnemyType::RaisedSkeleton, EnemyType::RaisedArcher],
+            Minions::Imps => &[EnemyType::SummonedImp],
+        }
+    }
+}
+
+/// A minion summon's own numbers: how many one cast raises and how many it keeps alive, each
+/// given at the governing Attribute value `OwnStats.at`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OwnMinions {
+    pub kind: Minions,
+    pub per_cast: f64,
+    pub alive: f64,
 }
 
 /// How a weapon ability changes its weapon's numbers.
@@ -271,6 +304,12 @@ pub const NOVA_TINT: u32 = 0x78c8ff;
 pub const PURIFY_FLASH: f64 = 0.3;
 /// Entangle: the seconds of Entangled each pulse of the roots (every 0.5 s) renews.
 pub const ENTANGLE_PULSE_SECS: f64 = 1.0;
+/// Raise Dead and Summon Imps (balancing): the minions one cast raises and the most it keeps alive
+/// (both at INT 10), its cooldown and wind-up (s).
+pub const MINION_PER_CAST: f64 = 1.2;
+pub const MINION_ALIVE: f64 = 2.4;
+pub const MINION_COOLDOWN: f64 = 12.0;
+pub const MINION_WINDUP: f64 = 0.7;
 
 /// The angles (rad), relative to the aim, of the shots of one use of `count` (0 means 1) over
 /// `spread`: a single shot flies straight ahead; a `spread` of a full circle or more spaces them
@@ -300,7 +339,7 @@ pub const KNOCK_DECAY: f64 = 0.7788007830714049;
 pub const KNOCK_MIN_SPEED: f64 = 8.0;
 
 /// No own numbers: a weapon ability takes them all from its weapon.
-const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, split: None, effect: None, at: 0, push: 0.0, windup: 0.0, count: 0, spread: 0.0 };
+const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, split: None, effect: None, at: 0, push: 0.0, windup: 0.0, count: 0, spread: 0.0, minions: None };
 
 /// One sentence on what the ability does, for the character screens.
 #[allow(dead_code)] // read by the progression.ts export (a test) only
@@ -344,6 +383,8 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::SleepMist => "A slow orb that puts what it hits to sleep.",
         AbilityId::Touch => "A chilling touch that drains the living.",
         AbilityId::Vanish => "Fades from sight until it strikes.",
+        AbilityId::RaiseDead => "Raises skeletons and skeleton archers to fight for you; the number grows with Intelligence.",
+        AbilityId::SummonImps => "Summons imps to fight for you; the number grows with Intelligence.",
         AbilityId::StoneGaze => "A stare that turns the target to stone, if it still sees it when the gaze lands.",
     }
 }
@@ -361,7 +402,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
     use ClassId as K;
     #[allow(clippy::too_many_arguments)]
     const fn own(damage: f64, cooldown: f64, range: f64, speed: f64, radius: f64, duration: f64, kind: Option<EntityKind>, at: i32) -> OwnStats {
-        OwnStats { damage, cooldown, range, speed, radius, duration, kind, split: None, effect: None, at, push: 0.0, windup: 0.0, count: 0, spread: 0.0 }
+        OwnStats { damage, cooldown, range, speed, radius, duration, kind, split: None, effect: None, at, push: 0.0, windup: 0.0, count: 0, spread: 0.0, minions: None }
     }
     let base = |name: &'static str, slot, category, uses, ranged, shape, own, classes: &'static [ClassId]| AbilityDef {
         id,
@@ -533,6 +574,13 @@ pub fn def(id: AbilityId) -> AbilityDef {
             own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Petrified, power: Attr::Int, look: EffectLook::Plain }), windup: 1.0, ..own(0.0, 18.0, 0.0, 0.0, 0.0, 3.0, None, 0) },
             ..base("Stone Gaze", Secondary, C::Spell, Uses::Nothing, false, Shape::Gaze, NO_OWN, &[])
         },
+        RaiseDead | SummonImps => {
+            let kind = if id == RaiseDead { Minions::Undead } else { Minions::Imps };
+            AbilityDef {
+                own: OwnStats { windup: MINION_WINDUP, minions: Some(OwnMinions { kind, per_cast: MINION_PER_CAST, alive: MINION_ALIVE }), ..own(0.0, MINION_COOLDOWN, 0.0, 0.0, 0.0, 0.0, None, 10) },
+                ..base(if id == RaiseDead { "Raise Dead" } else { "Summon Imps" }, Secondary, C::Spell, Uses::Nothing, false, Shape::Summon, NO_OWN, &[])
+            }
+        }
         SummonWolf => base("Summon Wolf", Secondary, C::Innate, Uses::Nothing, false, Shape::Summon, own(0.0, 8.0, 0.0, 0.0, 0.0, 0.0, None, 13), &[K::ElvenRanger]),
     }
 }
@@ -593,6 +641,7 @@ mod tests {
             if magic && d.own.damage > 0.0 {
                 assert!(d.own.at > 0, "{id:?}: a spell's damage is given at an Attribute value");
             }
+            assert_eq!(d.own.minions.is_some(), d.shape == Shape::Summon && d.id != AbilityId::SummonWolf, "{id:?}: minions belong to the minion summons");
             let nothing = d.uses == Uses::Nothing;
             if d.req.iter().any(|r| matches!(r, Requirement::WeaponKind(_))) {
                 assert!(!nothing, "{id:?}: a weapon-kind requirement needs a weapon");
@@ -605,6 +654,19 @@ mod tests {
                 assert!(def(id).classes.contains(&c), "{c:?} {id:?}");
             }
         }
+    }
+
+    #[test]
+    fn the_minion_abilities_are_int_spells_with_the_same_numbers() {
+        for (id, kind) in [(AbilityId::RaiseDead, Minions::Undead), (AbilityId::SummonImps, Minions::Imps)] {
+            let d = def(id);
+            assert_eq!((d.category, d.slot, d.uses, d.shape, d.ranged), (AbilityCategory::Spell, AbilitySlot::Secondary, Uses::Nothing, Shape::Summon, false));
+            assert!(d.classes.is_empty() && d.cooldown_by.is_none());
+            assert_eq!((d.own.cooldown, d.own.windup, d.own.at), (12.0, 0.7, 10));
+            assert_eq!(d.own.minions, Some(OwnMinions { kind, per_cast: 1.2, alive: 2.4 }));
+        }
+        assert_eq!(Minions::Undead.raises(), &[EnemyType::RaisedSkeleton, EnemyType::RaisedArcher]);
+        assert_eq!(Minions::Imps.raises(), &[EnemyType::SummonedImp]);
     }
 
     #[test]

@@ -2331,6 +2331,13 @@ export const ABILITY_INFO = {
     "tint": null,
     "uses": "Nothing"
   },
+  "RaiseDead": {
+    "category": "Spell",
+    "req": [],
+    "text": "Raises skeletons and skeleton archers to fight for you; the number grows with Intelligence.",
+    "tint": null,
+    "uses": "Nothing"
+  },
   "RingOfFire": {
     "category": "Innate",
     "req": [],
@@ -2389,6 +2396,13 @@ export const ABILITY_INFO = {
     "text": "A sweeping blow with your melee weapon.",
     "tint": "Physical",
     "uses": "Melee"
+  },
+  "SummonImps": {
+    "category": "Spell",
+    "req": [],
+    "text": "Summons imps to fight for you; the number grows with Intelligence.",
+    "tint": null,
+    "uses": "Nothing"
   },
   "SummonWolf": {
     "category": "Innate",

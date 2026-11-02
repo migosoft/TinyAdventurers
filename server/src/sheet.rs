@@ -75,6 +75,10 @@ pub struct ResolvedAbility {
     #[serde(skip)]
     #[ts(skip)]
     pub push_str: i32,
+    /// Minions one cast raises.
+    pub per_cast: u8,
+    /// Minions it keeps alive at once.
+    pub alive: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -133,7 +137,7 @@ pub fn wolf_mods(mods: &[AbilityMod]) -> WolfMods {
         match m {
             CompanionHpMul(f) => hp.push(f),
             CompanionDashCooldownAdd(s) => dash.push(s),
-            Pierce(_) | PierceThrough(_) | RadiusMul(_) | RangeMul(_) | DurationAdd(_) | CooldownAdd(_) | DamageMul(_) | ArcMul(_) | AddShare(..) | PushStr(_) | AddOnHit(_) | BehindArc(_) => {}
+            Pierce(_) | PierceThrough(_) | RadiusMul(_) | RangeMul(_) | DurationAdd(_) | CooldownAdd(_) | DamageMul(_) | ArcMul(_) | AddShare(..) | PushStr(_) | AddOnHit(_) | BehindArc(_) | PerCastAdd(_) | AliveAdd(_) => {}
         }
     }
     // A fixed order, so the order of the mods never matters.
@@ -206,6 +210,8 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
         power: 0,
         push: own.push,
         push_str: attrs.get(Attr::Str),
+        per_cast: 0,
+        alive: 0,
     };
     Some(match d.uses {
         Uses::Melee => {
@@ -259,7 +265,14 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
                 }
                 None => Base::plain(own.damage),
             };
+            // A minion count scales with the governing Attribute like damage does, rounded.
+            let count = |x: f64| match (own.minions, gov) {
+                (Some(_), Some((attr, _))) => (x * attrs.get(attr) as f64 / own.at as f64).round().max(0.0) as u8,
+                _ => 0,
+            };
             ResolvedAbility {
+                per_cast: own.minions.map_or(0, |m| count(m.per_cast)),
+                alive: own.minions.map_or(0, |m| count(m.alive)),
                 cooldown: match d.cooldown_by {
                     Some((attr, pct)) => Scaled { value: own.cooldown, attr, pct, at: own.at }.per(attrs),
                     None => own.cooldown,
@@ -1013,6 +1026,21 @@ mod tests {
     use super::*;
     use crate::defs::attributes::{factor, STR_DMG};
     use crate::defs::companions::WOLF_HP;
+
+    #[test]
+    fn minion_counts_scale_with_int_and_round() {
+        use crate::defs::attributes::Attributes;
+        let at = |id, int| resolve_ability(&ab::def(id), &Attributes::new(10, 10, 10, int, 10, 10), &[], Body { radius: 6.0 }).expect("a minion summon needs no weapon");
+        for id in [AbilityId::RaiseDead, AbilityId::SummonImps] {
+            for (int, per_cast, alive) in [(10, 1, 2), (12, 1, 3), (15, 2, 4), (17, 2, 4), (22, 3, 5)] {
+                let a = at(id, int);
+                assert_eq!((a.per_cast, a.alive), (per_cast, alive), "{id:?} at INT {int}");
+                assert_eq!(a.cooldown, 12.0, "fixed until #198");
+            }
+        }
+        let nova = at(AbilityId::Nova, 22);
+        assert_eq!((nova.per_cast, nova.alive), (0, 0));
+    }
 
     #[test]
     fn vanish_cooldown_shortens_with_cha() {

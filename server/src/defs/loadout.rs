@@ -60,6 +60,12 @@ pub enum AbilityMod {
     /// No item or node uses it yet.
     #[allow(dead_code)]
     CooldownAdd(f64),
+    /// Minions one cast raises, added after the INT step. No item or node uses it yet.
+    #[allow(dead_code)]
+    PerCastAdd(i8),
+    /// Minions it keeps alive at once, added after the INT step. No item or node uses it yet.
+    #[allow(dead_code)]
+    AliveAdd(i8),
     DamageMul(f64),
     ArcMul(f64),
     /// A non-physical share added to the split. No item or node uses it yet.
@@ -100,6 +106,7 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
     let mut on_hit = r.on_hit;
     let mut shares: Vec<(DamageType, f64)> = vec![];
     let (mut pierce, mut through, mut push_str) = (r.pierce, r.pierce_through, r.push_str);
+    let (mut per_cast, mut alive) = (r.per_cast as i32, r.alive as i32);
     for &m in mods {
         match m {
             Pierce(n) => pierce = pierce.saturating_add(n),
@@ -108,6 +115,8 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
             RangeMul(f) => range.push(f),
             DurationAdd(s) => duration.push(s),
             CooldownAdd(s) => cooldown.push(s),
+            PerCastAdd(n) => per_cast += n as i32,
+            AliveAdd(n) => alive += n as i32,
             DamageMul(f) => damage.push(f),
             ArcMul(f) => arc.push(f),
             AddShare(t, v) => {
@@ -142,6 +151,8 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
         pierce,
         pierce_through: through,
         push_str,
+        per_cast: per_cast.clamp(0, u8::MAX as i32) as u8,
+        alive: alive.clamp(0, u8::MAX as i32) as u8,
         ..r
     }
 }
@@ -338,6 +349,20 @@ mod tests {
         assert!((a.split.share(DamageType::Heat) - 0.25).abs() < 1e-12 && (a.split.share(DamageType::Physical) - 0.75).abs() < 1e-12);
         let c = apply_mods(r, &[CompanionHpMul(2.0), CompanionDashCooldownAdd(-1.0)]);
         assert_eq!(c, r, "the companion mods leave the ability alone");
+    }
+
+    #[test]
+    fn the_count_mods_act_after_the_int_step_and_never_go_below_zero() {
+        use AbilityMod::*;
+        let b = crate::sheet::Body { radius: 6.0 };
+        let a = crate::sheet::resolve_ability(&def(RaiseDead), &Attributes::new(10, 10, 10, 22, 10, 10), &[], b).unwrap();
+        assert_eq!((a.per_cast, a.alive), (3, 5));
+        let m = apply_mods(a, &[PerCastAdd(1), AliveAdd(3)]);
+        assert_eq!((m.per_cast, m.alive), (4, 8));
+        let m = apply_mods(a, &[PerCastAdd(-1), PerCastAdd(-1)]);
+        assert_eq!(m.per_cast, 1, "additions sum");
+        let m = apply_mods(a, &[AliveAdd(-9)]);
+        assert_eq!(m.alive, 0, "clamped");
     }
 
     #[test]

@@ -485,6 +485,14 @@ export const ABILITIES = {
     "shape": "SelfArea",
     "slot": "Secondary"
   },
+  "RaiseDead": {
+    "classes": [],
+    "hero": false,
+    "name": "Raise Dead",
+    "ranged": false,
+    "shape": "Summon",
+    "slot": "Secondary"
+  },
   "RingOfFire": {
     "classes": [],
     "hero": false,
@@ -555,6 +563,14 @@ export const ABILITIES = {
     "ranged": false,
     "shape": "Swing",
     "slot": "Primary"
+  },
+  "SummonImps": {
+    "classes": [],
+    "hero": false,
+    "name": "Summon Imps",
+    "ranged": false,
+    "shape": "Summon",
+    "slot": "Secondary"
   },
   "SummonWolf": {
     "classes": [
