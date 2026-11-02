@@ -14,8 +14,8 @@ use rand_chacha::ChaCha8Rng;
 use std::collections::VecDeque;
 
 pub const SIZE: i32 = 140;
-const BOSS_W: i32 = 26;
-const BOSS_H: i32 = 20;
+pub(super) const BOSS_W: i32 = 26;
+pub(super) const BOSS_H: i32 = 20;
 const START_SIZE: i32 = 8;
 const TARGET_ROOMS: usize = 24;
 
@@ -73,7 +73,7 @@ fn place_haunts(rng: &mut ChaCha8Rng, d: &Dungeon) -> Vec<Vec2> {
     let max_d = d.rooms.iter().enumerate().filter(|&(i, _)| i != d.boss).map(|(_, r)| depth_of(&r.rect)).max().unwrap_or(1).max(1);
     let mut out = Vec::new();
     for room in &d.rooms {
-        if room.kind == RoomKind::Start || room.kind == RoomKind::Boss || (depth_of(&room.rect) as f64 / max_d as f64) < HAUNT_MIN_DEPTH {
+        if matches!(room.kind, RoomKind::Start | RoomKind::Boss | RoomKind::Cove) || (depth_of(&room.rect) as f64 / max_d as f64) < HAUNT_MIN_DEPTH {
             continue;
         }
         if !rng.gen_bool(HAUNT_CHANCE) {
@@ -99,6 +99,16 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     // Rooms and halls stay out of the band around the boss hall, so only the
     // boss corridor ever reaches it.
     let min_y = boss.y + boss.h + 5;
+    // The nymph's cove (stream 14): placed first, so the other rooms keep clear of it. Its own
+    // stream, so the main one makes no extra draws for it.
+    let mut cove_rng = rng.clone();
+    cove_rng.set_stream(14);
+    let cove_rect = (0..100).find_map(|_| {
+        let r = Rect { x: cove_rng.gen_range(3..SIZE - BOSS_W - 3), y: cove_rng.gen_range(min_y..SIZE - BOSS_H - 3), w: BOSS_W, h: BOSS_H };
+        (!start.intersects(&r, 3)).then_some(r)
+    })?;
+    rooms.push(Room { rect: cove_rect, kind: RoomKind::Cove });
+    let cove_seed: u32 = cove_rng.gen_range(1..=1_000_000);
     let mut attempts = 0;
     while rooms.len() < TARGET_ROOMS && attempts < 600 {
         attempts += 1;
@@ -212,7 +222,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     let max_d = rooms.iter().take(boss_idx).map(|r| room_dist(&r.rect)).max().unwrap_or(1).max(1);
     let mut spawns = Vec::new();
     for (i, room) in rooms.iter().enumerate() {
-        if room.kind == RoomKind::Start || room.kind == RoomKind::Boss {
+        if matches!(room.kind, RoomKind::Start | RoomKind::Boss | RoomKind::Cove) {
             continue;
         }
         let depth = room_dist(&room.rect) as f64 / max_d as f64;
@@ -259,6 +269,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
         suns: Vec::new(),
         player_spawns: Vec::new(),
         haunts: Vec::new(),
+        cove: None,
     };
 
     let turns = rng.gen_range(0..4);
@@ -273,6 +284,7 @@ fn try_generate(rng: &mut ChaCha8Rng, theme: Theme) -> Option<Dungeon> {
     let mut sun_rng = rng.clone();
     sun_rng.set_stream(13);
     dungeon.suns = place_suns(&mut sun_rng, &dungeon.map, &dungeon.rooms);
+    super::cove::finish_cove(&mut dungeon, cove_seed);
     // The daylight is enough there: torches in a sunlit room start out.
     for t in &mut dungeon.torches {
         let (fx, fy) = t.front();
@@ -888,11 +900,12 @@ pub const SUN_SECOND_DIST: std::ops::RangeInclusive<f64> = 3.0..=5.0;
 
 /// Can a sun stand on this tile of the room: floor, with the margins above.
 pub fn sun_tile_ok(map: &Map, r: &Rect, x: i32, y: i32) -> bool {
-    x >= r.x + SUN_MARGIN_LEFT
-        && x <= r.x + r.w - 1 - SUN_MARGIN_FAR
-        && y >= r.y + SUN_MARGIN_TOP
-        && y <= r.y + r.h - 1 - SUN_MARGIN_FAR
-        && map.get(x, y) == Tile::Floor as u8
+    sun_margins_ok(r, x, y) && map.get(x, y) == Tile::Floor as u8
+}
+
+/// `sun_tile_ok` apart from the tile type (the cove's sun stands on its trunk).
+pub fn sun_margins_ok(r: &Rect, x: i32, y: i32) -> bool {
+    x >= r.x + SUN_MARGIN_LEFT && x <= r.x + r.w - 1 - SUN_MARGIN_FAR && y >= r.y + SUN_MARGIN_TOP && y <= r.y + r.h - 1 - SUN_MARGIN_FAR
 }
 
 /// Sun spots: 0 to 2 sunlit rooms (never the boss hall, only rooms of at
@@ -902,7 +915,7 @@ pub fn sun_tile_ok(map: &Map, r: &Rect, x: i32, y: i32) -> bool {
 fn place_suns(rng: &mut ChaCha8Rng, map: &Map, rooms: &[Room]) -> Vec<(i32, i32)> {
     let roll = rng.gen_range(0..SUN_ROOM_WEIGHTS.iter().sum::<u32>());
     let wanted = if roll < SUN_ROOM_WEIGHTS[0] { 0 } else if roll < SUN_ROOM_WEIGHTS[0] + SUN_ROOM_WEIGHTS[1] { 1 } else { 2 };
-    let mut candidates: Vec<&Room> = rooms.iter().filter(|r| r.kind != RoomKind::Boss && r.rect.w >= SUN_MIN_ROOM_W && r.rect.h >= SUN_MIN_ROOM_H).collect();
+    let mut candidates: Vec<&Room> = rooms.iter().filter(|r| !matches!(r.kind, RoomKind::Boss | RoomKind::Cove) && r.rect.w >= SUN_MIN_ROOM_W && r.rect.h >= SUN_MIN_ROOM_H).collect();
     candidates.shuffle(rng);
     let mut suns = Vec::new();
     let mut rooms_lit = 0;
@@ -1067,14 +1080,14 @@ mod tests {
 
     /// Rooms a sun could be in: not the boss hall, big enough, with a qualifying tile.
     fn fitting_rooms(d: &Dungeon) -> usize {
-        d.rooms.iter().filter(|r| r.kind != RoomKind::Boss && r.rect.w >= SUN_MIN_ROOM_W && r.rect.h >= SUN_MIN_ROOM_H)
+        d.rooms.iter().filter(|r| !matches!(r.kind, RoomKind::Boss | RoomKind::Cove) && r.rect.w >= SUN_MIN_ROOM_W && r.rect.h >= SUN_MIN_ROOM_H)
             .filter(|r| (r.rect.y..r.rect.y + r.rect.h).any(|y| (r.rect.x..r.rect.x + r.rect.w).any(|x| sun_tile_ok(&d.map, &r.rect, x, y))))
             .count()
     }
 
     /// The suns of each sunlit room.
     fn suns_by_room(d: &Dungeon) -> Vec<Vec<(i32, i32)>> {
-        d.rooms.iter().map(|r| d.suns.iter().copied().filter(|&(x, y)| r.rect.contains_tile(x, y)).collect::<Vec<_>>()).filter(|v| !v.is_empty()).collect()
+        d.rooms.iter().filter(|r| r.kind != RoomKind::Cove).map(|r| d.suns.iter().copied().filter(|&(x, y)| r.rect.contains_tile(x, y)).collect::<Vec<_>>()).filter(|v| !v.is_empty()).collect()
     }
 
     #[test]
@@ -1083,8 +1096,10 @@ mod tests {
             let d = generate(seed, theme_of(seed));
             let by_room = suns_by_room(&d);
             assert!(by_room.len() <= 2, "seed {seed}: {} sunlit rooms", by_room.len());
-            assert_eq!(by_room.iter().map(Vec::len).sum::<usize>(), d.suns.len(), "seed {seed}: every sun is in a room");
-            for &(x, y) in &d.suns {
+            let cove = d.cove.unwrap().rect;
+            let suns: Vec<(i32, i32)> = d.suns.iter().copied().filter(|&(x, y)| !cove.contains_tile(x, y)).collect();
+            assert_eq!(by_room.iter().map(Vec::len).sum::<usize>(), suns.len(), "seed {seed}: every sun is in a room");
+            for &(x, y) in &suns {
                 let room = d.rooms.iter().find(|r| r.rect.contains_tile(x, y)).unwrap_or_else(|| panic!("seed {seed}: sun {x},{y} in no room"));
                 assert_ne!(room.kind, RoomKind::Boss, "seed {seed}: sun in the boss hall");
                 assert!(room.rect.w >= SUN_MIN_ROOM_W && room.rect.h >= SUN_MIN_ROOM_H, "seed {seed}: room too small");
@@ -1318,7 +1333,7 @@ mod tests {
     fn guarantees_hold_over_many_seeds() {
         let (mut chests, mut mimics) = (0, 0);
         let (mut terrain, mut open) = (0usize, 0usize);
-        let mut seen = [0usize; 9];
+        let mut seen = [0usize; 10];
         for seed in 0..200u64 {
             let theme = if seed % 2 == 0 { Theme::Water } else { Theme::Lava };
             let d = generate(seed, theme);
@@ -1406,10 +1421,10 @@ mod tests {
             for p in &d.player_spawns {
                 assert_eq!(d.map.tile_at(*p), Tile::Floor as u8, "seed {seed}: player spawn not on floor");
             }
-            // No one-tile wall stubs (they would draw as T junctions).
+            // No one-tile wall stubs (they would draw as T junctions); the cove's trunk is no wall.
             for y in 1..d.map.h - 1 {
                 for x in 1..d.map.w - 1 {
-                    assert!(!(d.map.opaque(x, y) && is_stub(&d.map, x, y)), "seed {seed}: wall stub at {x},{y}");
+                    assert!(!(d.map.opaque(x, y) && d.map.get(x, y) != Tile::Trunk as u8 && is_stub(&d.map, x, y)), "seed {seed}: wall stub at {x},{y}");
                 }
             }
             // The only way into the boss hall is through the door.

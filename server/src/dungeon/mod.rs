@@ -1,3 +1,4 @@
+pub mod cove;
 pub mod generate;
 
 use crate::defs::enemies::EnemyType;
@@ -36,6 +37,8 @@ pub enum Tile {
     Chasm = 7,
     /// Slows and burns heroes; only demon types walk it unharmed.
     Lava = 8,
+    /// The big tree's trunk in the nymph's cove (rules: see the cove task).
+    Trunk = 9,
 }
 
 /// Who is moving. The walking rules (`Map::blocks`) differ per mover.
@@ -186,6 +189,17 @@ pub enum RoomKind {
     Room,
     Hall,
     Boss,
+    /// The nymph's cove: a sunlit room with a big tree (`cove.rs`).
+    Cove,
+}
+
+/// The nymph's cove (#202): the room's floor rect (after rotation), the trunk tile, and the seed
+/// the client's `covemath` plants and pixies grow from (1..=1_000_000).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cove {
+    pub rect: Rect,
+    pub tree: (i32, i32),
+    pub seed: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -269,6 +283,8 @@ pub struct Dungeon {
     /// Where a boss's haunt (`enemies::haunt_for`) appears: rare extra spawns on their own random
     /// stream, so the map and the usual spawns of a seed stay as they are.
     pub haunts: Vec<Vec2>,
+    /// The nymph's cove (always `Some` from `generate`).
+    pub cove: Option<Cove>,
 }
 
 impl Dungeon {
@@ -291,6 +307,8 @@ pub struct Layout {
     /// Sun spots (tiles): each becomes a Daylight light (`Run::add_sun`).
     pub suns: Vec<(i32, i32)>,
     pub player_spawns: Vec<Vec2>,
+    /// The nymph's cove; other level types have none.
+    pub cove: Option<Cove>,
 }
 
 /// What only the room-and-corridor dungeon has.
@@ -313,8 +331,8 @@ impl DungeonParts {
 
 impl Dungeon {
     pub fn split(self) -> (Layout, DungeonParts) {
-        let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, suns, player_spawns, haunts } = self;
-        (Layout { map, spawns, chests, barrels, torches, suns, player_spawns }, DungeonParts { rooms, start, boss, door, haunts })
+        let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, suns, player_spawns, haunts, cove } = self;
+        (Layout { map, spawns, chests, barrels, torches, suns, player_spawns, cove }, DungeonParts { rooms, start, boss, door, haunts })
     }
 }
 
@@ -328,10 +346,10 @@ mod tests {
         // array below must then get it too.
         fn listed(t: Tile) {
             match t {
-                Tile::Void | Tile::Floor | Tile::Wall | Tile::DoorOpen | Tile::DoorClosed | Tile::ShallowWater | Tile::DeepWater | Tile::Chasm | Tile::Lava => {}
+                Tile::Void | Tile::Floor | Tile::Wall | Tile::DoorOpen | Tile::DoorClosed | Tile::ShallowWater | Tile::DeepWater | Tile::Chasm | Tile::Lava | Tile::Trunk => {}
             }
         }
-        let all = [Tile::Void, Tile::Floor, Tile::Wall, Tile::DoorOpen, Tile::DoorClosed, Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava];
+        let all = [Tile::Void, Tile::Floor, Tile::Wall, Tile::DoorOpen, Tile::DoorClosed, Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava, Tile::Trunk];
         all.iter().for_each(|&t| listed(t));
         let mut m = Map::new(all.len() as i32, 3);
         for (x, t) in all.into_iter().enumerate() {
