@@ -22,8 +22,6 @@ pub const WOLF_LEASH: f64 = 96.0;
 pub const WOLF_REAPPEAR: f64 = 192.0;
 /// How often (s) it checks that it can still reach the ranger (a sealed door: it reappears).
 pub const WOLF_REACH_EVERY: f64 = 0.5;
-pub const WOLF_GROWL_EVERY: f64 = 4.0;
-pub const WOLF_GROWL_STEP: f64 = 24.0;
 pub const WOLF_HEAL_SHARE: f64 = 0.2;
 pub const WOLF_DEAD_COOLDOWN: f64 = 60.0;
 

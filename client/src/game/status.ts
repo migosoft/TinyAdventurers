@@ -479,7 +479,7 @@ export class StatusView {
     });
   }
 
-  /** Fear: a small "!" above the head, bobbing (the wolf's growl text style). */
+  /** Fear: a small "!" above the head, bobbing (the sound text style). */
   private fear(on: boolean, a: StatusAnchor): void {
     if (!on) {
       this.fearMark?.setVisible(false);

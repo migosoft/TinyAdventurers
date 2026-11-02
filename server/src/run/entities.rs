@@ -198,12 +198,6 @@ pub struct MonsterDash {
 pub struct Ally {
     /// The ranger's player id.
     pub owner: u32,
-    /// Monsters (ids) it has growled at.
-    pub growled: Vec<u32>,
-    pub growl_cd: f64,
-    pub growl_to: Option<Vec2>,
-    /// Seconds it does nothing (a growl).
-    pub hold: f64,
     /// Seconds before it may bite again after a pounce that hurt its prey (the script's own wait; the
     /// kit's cooldowns are `cds`, started only by using the ability).
     pub bite_hold: f64,
@@ -266,7 +260,7 @@ pub struct Monster {
     /// `effects` (run/effects.rs).
     pub dormant: bool,
     /// Concealed from the heroes (a mimic disguised as a chest); ends as the mimic's
-    /// dormant did. The wolf growls at hiding things, never at dormant ones.
+    /// dormant did.
     pub hiding: bool,
     /// Walking rules: demons cross lava, other enemies avoid it.
     pub mover: Mover,

@@ -169,7 +169,7 @@ describe('effectChipHtml', () => {
 });
 
 describe('Hud.setAbilities', () => {
-  const ab = (id: ResolvedAbility['id']): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, windup: 0, behind: 0 });
+  const ab = (id: ResolvedAbility['id']): ResolvedAbility => ({ id, cooldown: 1, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, windup: 0, behind: 0, per_cast: 0, alive: 0 });
   it('renames the slots and greys the disabled ones', () => {
     document.body.innerHTML = '';
     const hud = new Hud(document.body, () => {}, () => {});

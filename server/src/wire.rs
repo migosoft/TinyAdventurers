@@ -15,7 +15,7 @@ pub const POS_SCALE: f64 = 16.0;
 
 /// Event codes on the wire, by index. Exported to the client as `EV`.
 #[cfg(test)]
-pub const EV_CODES: [&str; 16] = ["Dmg", "Heal", "Boom", "Died", "Raise", "Immune", "Tile", "Msg", "Coins", "Sink", "Light", "LightAdd", "LightRemove", "Effect", "Growl", "Zap"];
+pub const EV_CODES: [&str; 15] = ["Dmg", "Heal", "Boom", "Died", "Raise", "Immune", "Tile", "Msg", "Coins", "Sink", "Light", "LightAdd", "LightRemove", "Effect", "Zap"];
 
 pub fn q_pos(v: f64) -> u32 {
     (v * POS_SCALE).round().max(0.0) as u32
@@ -61,7 +61,6 @@ pub enum EvW {
     LightAdd(u8, u32, u8, u32, u16, u16, bool),
     LightRemove(u8, u32),
     Effect(u8, u32, u8, bool, u8),
-    Growl(u8, u32),
     Zap(u8, u32, u32, u32, u32),
 }
 
@@ -129,8 +128,7 @@ fn ev_w(e: &Ev) -> EvW {
         Ev::LightAdd { id, kind, colour, x, y, on } => EvW::LightAdd(11, *id, *kind, *colour, *x, *y, *on),
         Ev::LightRemove { id } => EvW::LightRemove(12, *id),
         Ev::Effect { id, kind, on, look } => EvW::Effect(13, *id, *kind, *on, *look),
-        Ev::Growl { id } => EvW::Growl(14, *id),
-        Ev::Zap { x, y, x2, y2 } => EvW::Zap(15, q(*x), q(*y), q(*x2), q(*y2)),
+        Ev::Zap { x, y, x2, y2 } => EvW::Zap(14, q(*x), q(*y), q(*x2), q(*y2)),
     }
 }
 
@@ -198,7 +196,6 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
             Ev::LightAdd { id: 400, kind: 1, colour: 0xff461e, x: 33, y: 71, on: true },
             Ev::LightRemove { id: 12 },
             Ev::Effect { id: 3, kind: 11, on: true, look: 1 },
-            Ev::Growl { id: 2 },
             Ev::Zap { x: 100.03, y: 200.97, x2: 130.5, y2: 190.25 },
         ],
         drain: Some(vec![(400.25, 300.5), (480.0, 300.0), (330.06, 260.7)]),

@@ -48,7 +48,7 @@ export function numberDepth(onHero: boolean): number {
   return onHero ? DEPTH.numbers : DEPTH.enemyNumbers;
 }
 
-/** Sound text (growl, the sleeper's Z): a dark fill with a light outline, readable on black and on lit floors. */
+/** Sound text (the sleeper's Z): a dark fill with a light outline, readable on black and on lit floors. */
 export const SOUND_TEXT = { fill: '#1a1020', stroke: '#d8d0e0' };
 
 /** The lich's magic: dark purple, gloomy, shimmering. */

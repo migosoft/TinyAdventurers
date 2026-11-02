@@ -29,7 +29,6 @@ type LightEvW = [number, number, boolean, number];
 type LightAddW = [number, number, number, number, number, number, boolean];
 type LightRemoveW = [number, number];
 type EffectW = [number, number, number, boolean, number];
-type GrowlW = [number, number];
 type ZapW = [number, number, number, number, number];
 
 function unpackEv(e: EvW): Ev {
@@ -89,10 +88,6 @@ function unpackEv(e: EvW): Ev {
     case EV.Effect: {
       const [, id, kind, on, look] = e as EffectW;
       return { t: 'Effect', id, kind, on, look };
-    }
-    case EV.Growl: {
-      const [, id] = e as GrowlW;
-      return { t: 'Growl', id };
     }
     case EV.Zap: {
       const [, x, y, x2, y2] = e as ZapW;

@@ -19,7 +19,7 @@ import { BarrelView } from './barrel';
 import { TorchView } from './torch';
 import { ChestView } from './chest';
 import { dmgColor } from './damage';
-import { DEPTH, Effects, numberDepth, SOUND_TEXT } from './effects';
+import { DEPTH, Effects, numberDepth } from './effects';
 import { lookOf } from './looks';
 import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
@@ -446,12 +446,6 @@ export class GameScene extends Phaser.Scene {
       case 'Zap':
         this.fx.zap(ev.x, ev.y, ev.x2, ev.y2);
         break;
-      case 'Growl': {
-        const wolf = this.ents.get(ev.id);
-        if (wolf) this.fx.text(wolf.x, wolf.y - 14, 'grrrr', SOUND_TEXT.fill, { depth: DEPTH.sound, stroke: SOUND_TEXT.stroke, kind: 'sound' });
-        this.views.get(ev.id)?.shake(0.4);
-        break;
-      }
       case 'Died': {
         // Lost to a chasm or deep water: nothing is left behind.
         if (this.sinks.delete(ev.id)) break;

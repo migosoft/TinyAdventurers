@@ -32,4 +32,12 @@ windup: number,
 /**
  * The half-angle (rad) of the "from behind" cone; 0 = none.
  */
-behind: number, };
+behind: number, 
+/**
+ * Minions one cast raises.
+ */
+per_cast: number, 
+/**
+ * Minions it keeps alive at once.
+ */
+alive: number, };

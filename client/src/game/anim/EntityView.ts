@@ -106,8 +106,6 @@ export class EntityView {
   private weaponHeld = false;
   /** Set after the first update (a figure that appears asleep or as stone still takes its facing once). */
   private faced = false;
-  /** Seconds of horizontal jitter left (the growl). */
-  private shakeT = 0;
   speed = 0;
   /** Seconds left of the fade-in after reappearing. */
   private appearLeft = 0;
@@ -175,11 +173,6 @@ export class EntityView {
 
   get height(): number {
     return this.body.height * (this.def.scale ?? 1);
-  }
-
-  /** A ±1 px horizontal jitter of the figure at 30 Hz for `secs`. */
-  shake(secs: number): void {
-    this.shakeT = secs;
   }
 
   update(s: ViewState, dt: number): void {
@@ -254,13 +247,12 @@ export class EntityView {
     this.weapon?.setVisible(drown < 0.4);
     this.shadow.setVisible(sink === 0 && fall === 0).setScale(1 - 0.3 * lift);
     this.figure
-      .setPosition(this.shakeT > 0 ? (Math.floor(this.clock * 30) % 2 === 0 ? 1 : -1) : 0, sink + Math.round(fall * 6))
+      .setPosition(0, sink + Math.round(fall * 6))
       .setScale((d.scale ?? 1) * (1 - fall * 0.2))
       .setAlpha(fall > 0.7 ? 1 - (fall - 0.7) / 0.3 : 1);
     const tagShown = fall === 0 && drown === 0;
     this.label?.setVisible(tagShown);
     if (this.label && this.tagFx) this.tagFx.set(tagShown ? fxBits : 0, this.label.x + this.label.displayWidth / 2, this.label.y - this.label.displayHeight / 2);
-    this.shakeT = Math.max(0, this.shakeT - dt);
 
     // The ambush wind-up of a silhouette figure (the Shade): a flat dark shape, no eyes, fainter than the real thing.
     const silhouette = !!d.silhouette && s.anim === ANIM.Ambush;
