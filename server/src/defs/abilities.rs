@@ -383,8 +383,8 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::SleepMist => "A slow orb that puts what it hits to sleep.",
         AbilityId::Touch => "A chilling touch that drains the living.",
         AbilityId::Vanish => "Fades from sight until it strikes.",
-        AbilityId::RaiseDead => "Raises skeletons and skeleton archers to fight for you; the number grows with Intelligence.",
-        AbilityId::SummonImps => "Summons imps to fight for you; the number grows with Intelligence.",
+        AbilityId::RaiseDead => "Raises skeletons, half of them archers, that fight for the caster.",
+        AbilityId::SummonImps => "Summons imps that fight for the caster.",
         AbilityId::StoneGaze => "A stare that turns the target to stone, if it still sees it when the gaze lands.",
     }
 }

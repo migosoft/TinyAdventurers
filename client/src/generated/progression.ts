@@ -2334,7 +2334,7 @@ export const ABILITY_INFO = {
   "RaiseDead": {
     "category": "Spell",
     "req": [],
-    "text": "Raises skeletons and skeleton archers to fight for you; the number grows with Intelligence.",
+    "text": "Raises skeletons, half of them archers, that fight for the caster.",
     "tint": null,
     "uses": "Nothing"
   },
@@ -2400,7 +2400,7 @@ export const ABILITY_INFO = {
   "SummonImps": {
     "category": "Spell",
     "req": [],
-    "text": "Summons imps to fight for you; the number grows with Intelligence.",
+    "text": "Summons imps that fight for the caster.",
     "tint": null,
     "uses": "Nothing"
   },
