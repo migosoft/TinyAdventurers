@@ -1,6 +1,6 @@
 // Dev page (?lich): the lich's magic without a server, all of it dark purple
-// gloom. Left: the gloom bolt volley (5 bolts) and the summon (5 raised
-// skeletons and 5 raised archers in a ring). Right: the nova; the ring on the
+// gloom. Left: the gloom bolt volley (5 bolts) and a Raise Dead cast (3 raised
+// minions in a ring: 2 skeletons and an archer). Right: the nova; the ring on the
 // floor shows the real radius and fills up during the wind-up, then every
 // hero inside is hurt and pushed as the rules say: the lich's STR is 10, so
 // only the Wizard (weight 9) moves, 16 px; the others are too heavy.
@@ -29,7 +29,7 @@ function pushDist(base: number, str: number, weight: number): number {
 }
 /** How far the nova moves hero `name`. */
 const novaPush = (name: string): number => pushDist(KNOCK, NOVA_STR, WEIGHT[name] ?? 0);
-/** Left arena loop (s): volley wind-up at 0, bolts at 0.5; summon wind-up at 3, raise at 3.7; skeletons gone at 6.5. */
+/** Left arena loop (s): volley wind-up at 0, bolts at 0.5; Raise Dead wind-up at 3, raise at 3.7; skeletons gone at 6.5. */
 const LOOP = 7;
 const BOLT_SPEED = 140;
 /** The server's orb speed (LICH_ORB_SPEED, px/s). */
@@ -80,7 +80,7 @@ interface Bolt {
 }
 
 export class LichDemoScene extends TerrainDemo {
-  protected title = `lich: gloom bolt volley, summon 5 + 5 skeletons (left); nova: only the Wizard moves, ${novaPush('Wizard')} px (middle); curse, sleep, gaze (right)`;
+  protected title = `lich: gloom bolt volley, Raise Dead: 3 minions (left); nova: only the Wizard moves, ${novaPush('Wizard')} px (middle); curse, sleep, gaze (right)`;
   protected rows = board();
   private caster!: EntityView;
   private casterAt: [number, number] = [0, 0];
@@ -103,7 +103,7 @@ export class LichDemoScene extends TerrainDemo {
     this.bolts = [];
     this.raised = [];
     this.label(0.2, 12.6, 'volley: 5 gloom bolts');
-    this.label(0.2, 13.3, 'summon: 5 skeletons + 5 archers');
+    this.label(0.2, 13.3, 'Raise Dead: 2 skeletons + 1 archer');
     this.casterAt = this.px([3, 7]);
     this.caster = new EntityView(this, KIND.Lich, this.fx, 'Lich');
 
@@ -144,12 +144,12 @@ export class LichDemoScene extends TerrainDemo {
       }
     }
     if (crossed(3.7)) {
-      const n = 10;
+      const n = 3;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
         const x = cx + Math.cos(a) * 22, y = cy + Math.sin(a) * 22;
         this.fx.raise(x, y, 2);
-        this.raised.push(new EntityView(this, i % 2 ? KIND.SkeletonArcher : KIND.RaisedSkeleton, this.fx));
+        this.raised.push(new EntityView(this, i === 2 ? KIND.SkeletonArcher : KIND.RaisedSkeleton, this.fx));
         this.raisedAt.push([x, y]);
       }
     }
