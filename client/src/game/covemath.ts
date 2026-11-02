@@ -166,7 +166,9 @@ export function placeCovePlants(spec: CoveSpec): CovePlant[] {
     const ang = rp() * Math.PI * 2, d = 0.8 + rp() * 0.5;
     if (tryPlace(Math.round(cx + Math.cos(ang) * 62 * d), Math.round(cy - 4 + Math.sin(ang) * 30 * d), ring[n % 4])) n++;
   }
-  for (let k = 0; k < 3000 && placed.length < 30; k++) {
+  // 30 plants per 320x256 px of floor (the demo's room), the try budget grows with it
+  const scale = (W * H) / (320 * 256), cap = Math.round(30 * scale);
+  for (let k = 0; k < Math.round(3000 * scale) && placed.length < cap; k++) {
     const x = Math.floor(rp() * W), y = Math.floor(rp() * H);
     const nearEdge = !grass(x - 26, y) || !grass(x + 26, y) || !grass(x, y - 30) || !grass(x, y + 24);
     tryPlace(x, y, pick(nearEdge));

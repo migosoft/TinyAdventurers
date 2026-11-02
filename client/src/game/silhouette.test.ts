@@ -41,6 +41,7 @@ describe('bodyLookFrom', () => {
     const look = bodyLookFrom(root, fig, fakeBody({ flipX: true, originX: 0.4, x: 3, y: -2 }));
     expect(look.x).toBe(106);
     expect(look.y).toBe(196);
+    expect(look.footY).toBe(200); // the root's y, not the body's draw y
     expect(look.scaleX).toBe(2);
     expect(look.scaleY).toBe(2);
     expect(look.flipX).toBe(true);
@@ -57,6 +58,7 @@ describe('bodyLookFrom', () => {
     expect(r.flipX).toBe(false);
     expect(r.y).toBe(l.y);
     expect(r.y).toBe(202);
+    expect(r.footY).toBe(200);
   });
 });
 
@@ -67,6 +69,6 @@ describe('lookOf', () => {
       texture: { key: 'k' }, frame: { name: 'f' }, getBounds: () => ({ left: 40, right: 60, top: 50, bottom: 80 }),
     };
     const look = lookOf(sprite as never);
-    expect(look).toMatchObject({ key: 'k', frame: 'f', x: 50, y: 80, flipX: true, bounds: { left: 40, right: 60, top: 50 } });
+    expect(look).toMatchObject({ key: 'k', frame: 'f', x: 50, y: 80, footY: 80, flipX: true, bounds: { left: 40, right: 60, top: 50 } });
   });
 });

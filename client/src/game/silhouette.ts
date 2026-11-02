@@ -7,8 +7,11 @@ import type Phaser from 'phaser';
 /** The body sprite as the silhouette copies it, all in world px (a figure's sprite sits inside scaled containers). */
 export interface BodyLook {
   key: string; frame: string;
-  /** Position and origin of the sprite; y is the feet, the quantity depth sorting uses. */
-  x: number; y: number; originX: number; originY: number;
+  /** Position and origin of the sprite (where the copy is drawn). */
+  x: number; y: number;
+  /** The depth-sort foot (the figure root's y, depth = entityBase + footY), which can differ from y by a few px. */
+  footY: number;
+  originX: number; originY: number;
   /** Includes the scale of the containers the sprite sits in. */
   scaleX: number; scaleY: number; flipX: boolean;
   bounds: { left: number; right: number; top: number };
@@ -18,7 +21,7 @@ export interface BodyLook {
 export function lookOf(s: Phaser.GameObjects.Sprite): BodyLook {
   const b = s.getBounds();
   return {
-    key: s.texture.key, frame: s.frame.name, x: s.x, y: s.y, originX: s.originX, originY: s.originY,
+    key: s.texture.key, frame: s.frame.name, x: s.x, y: s.y, footY: s.y, originX: s.originX, originY: s.originY,
     scaleX: s.scaleX, scaleY: s.scaleY, flipX: s.flipX, bounds: { left: b.left, right: b.right, top: b.top },
   };
 }
@@ -47,7 +50,7 @@ export function bodyLookFrom(
   const h = body.height * Math.abs(scaleY);
   const left = x - body.originX * w;
   return {
-    key: body.texture.key, frame: body.frame.name, x, y, originX: body.originX, originY: body.originY,
+    key: body.texture.key, frame: body.frame.name, x, y, footY: root.y, originX: body.originX, originY: body.originY,
     scaleX, scaleY, flipX: body.flipX,
     bounds: { left, right: left + w, top: y - body.originY * h },
   };
@@ -67,9 +70,8 @@ export function behindOccluder(hero: Box, occ: Box): boolean {
 }
 
 /**
- * The hero box for behindOccluder: left/right/top from the sprite's bounds, but footY is the sprite's y, the
- * same quantity depth sorting uses (depth = entityBase + y). Callers place figures by their foot (y = foot);
- * bounds.bottom would be wrong for untrimmed frames (the knight's is 14 px below y).
+ * The hero box for behindOccluder: left/right/top from the sprite's bounds, but footY is the given foot, the
+ * same quantity depth sorting uses (depth = entityBase + y; BodyLook.footY). bounds.bottom would be wrong for untrimmed frames (the knight's is 14 px below y).
  */
 export function heroBox(b: { left: number; right: number; top: number }, y: number): Box {
   return { left: b.left, right: b.right, top: b.top, footY: y };
@@ -95,7 +97,7 @@ export class Silhouette {
     // world-px boxes: the hero's from its BodyLook, the occluder's from getBounds() (origin, scale and flip folded in)
     const ob = this.occluder.getBounds();
     const behind = behindOccluder(
-      heroBox(hero.bounds, hero.y),
+      heroBox(hero.bounds, hero.footY),
       { left: ob.left, right: ob.right, top: ob.top, footY: this.occluderFootY },
     );
     if (!behind) { c.setVisible(false); return; }

@@ -25,6 +25,7 @@ import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
 import { LightView, nextDarkvision } from './lightview';
 import { Sunbeams } from './sunbeams';
+import { CoveView } from './cove';
 import { Mood, type AirTorch, type AirShot, type AirMover } from './mood';
 import { MoverTracker } from './airmovers';
 import { projectileAir } from './airshots';
@@ -138,6 +139,7 @@ export class GameScene extends Phaser.Scene {
   private lightView!: LightView;
   private mood!: Mood;
   private sunbeams!: Sunbeams;
+  private cove: CoveView | null = null;
   private movers = new MoverTracker(); // replaced in init() for every run
   private airMovers: AirMover[] = [];
   private visionMask!: VisionMask;
@@ -206,6 +208,7 @@ export class GameScene extends Phaser.Scene {
     this.lightView = new LightView(this, this.map, this.light);
     this.mood = new Mood(this, this.map, this.lightView);
     this.sunbeams = new Sunbeams(this, this.light, this.lightView);
+    this.cove = this.info.cove ? new CoveView(this, this.info.cove) : null;
     this.visionMask = new VisionMask(this, this.map);
     this.useHint = new KeyCap(this);
     this.bars = this.add.graphics().setDepth(DEPTH.enemyBars);
@@ -282,6 +285,8 @@ export class GameScene extends Phaser.Scene {
     this.unsub?.();
     this.mood.destroy();
     this.sunbeams.destroy();
+    this.cove?.destroy();
+    this.cove = null;
     this.rulesLog.destroy();
     this.useHint.destroy();
     for (const v of this.views.values()) v.destroy();
@@ -812,6 +817,8 @@ export class GameScene extends Phaser.Scene {
     const shots: AirShot[] = (this.lastSnap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
     this.mood.update(dt, this.cameras.main.worldView, torches, shots, this.collectMovers(dt, px, py));
     this.sunbeams.update(dt, this.cameras.main.worldView, now);
+    // only the own hero, and only while it plays (not dead or spectating); teammates get no silhouette
+    this.cove?.update(now, this.alive && this.spectating === null ? this.views.get(this.info.you)?.bodyLook() ?? null : null);
     this.visionMask.update(this.cameras.main.worldView, this.lightView.view);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 

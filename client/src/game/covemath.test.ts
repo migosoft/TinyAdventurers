@@ -152,3 +152,23 @@ describe.skipIf(!existsSync(atlasPath))('atlas', () => {
     for (const f of COVE_PLANTS) expect(frames[f]).toBeDefined();
   });
 });
+
+describe('placeCovePlants by area', () => {
+  const demo = { w: 320, h: 256, tree: { x: 160, y: 144 }, seed: 1 };
+  const big = { w: 416, h: 320, tree: { x: 216, y: 176 }, seed: 1 };
+  it('the demo spec keeps its 30 plants plus the fringe', () => {
+    const p = placeCovePlants(demo);
+    expect(p.length - ROOT_FRINGE.count).toBeLessThanOrEqual(30);
+    expect(p.length - ROOT_FRINGE.count).toBeGreaterThanOrEqual(25);
+  });
+  it('a 416x320 spec scales the cap to 49 and stays inside the floor', () => {
+    const p = placeCovePlants(big);
+    const rest = p.slice(0, -ROOT_FRINGE.count);
+    expect(rest.length).toBeLessThanOrEqual(49);
+    expect(rest.length).toBeGreaterThan(30);
+    for (const q of p) {
+      expect(q.x).toBeGreaterThanOrEqual(0); expect(q.x).toBeLessThan(big.w);
+      expect(q.y).toBeGreaterThanOrEqual(0); expect(q.y).toBeLessThan(big.h);
+    }
+  });
+});
