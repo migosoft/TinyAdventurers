@@ -14,8 +14,8 @@ use rand_chacha::ChaCha8Rng;
 use std::collections::VecDeque;
 
 pub const SIZE: i32 = 140;
-pub(super) const BOSS_W: i32 = 26;
-pub(super) const BOSS_H: i32 = 20;
+const BOSS_W: i32 = 26;
+const BOSS_H: i32 = 20;
 const START_SIZE: i32 = 8;
 const TARGET_ROOMS: usize = 24;
 

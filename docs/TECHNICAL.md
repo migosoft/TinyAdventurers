@@ -493,7 +493,7 @@ The map is 140×140 tiles of 16 px. Tile ids: Void 0, Floor 1, Wall 2, DoorOpen 
 - `opaque`: Void, Wall and DoorClosed. Blocks sight (FOV, `line_of_sight`) and projectiles. Terrain is never opaque.
 - `blocks(x, y, mover)`: opaque tiles block everyone. Deep water blocks every mover but `Dash`; chasms block `Enemy` and `Demon` (heroes may step in, and fall); lava blocks only `Enemy`.
 - `speed_factor(pos, mover)`: `SHALLOW_SPEED` 0.7, `LAVA_SPEED` 0.4 (1 for demons), 1 for a dash. `step_move` takes it from the tile under the hero's centre at the start of the step.
-- `Trunk` (#202, the big tree's trunk in the nymph's cove): not opaque, so sight and shots pass it, and it is not terrain. It blocks every mover but `Incorporeal` (walking and dashing; the user's decision), and an Incorporeal mover can pass it but not stop on it (`can_stop`). It is not `safe`, so the generator keeps all 8 neighbours of the trunk safe.
+- `Trunk` (#202, the big tree's trunk in the nymph's cove): not opaque, so sight and shots pass it, and it is not terrain. It blocks every mover but `Incorporeal` (walking and dashing; the user's decision), and an Incorporeal mover can pass it but not stop on it (`can_stop`). It is not `safe`; its 8 neighbours are always plain floor (the cove gets no terrain), checked by `cove_trunk_cuts_nothing_off`.
 - `safe`: Floor, DoorOpen and ShallowWater, the ground a hero can stand on unharmed. Generator reachability (`bfs`) and `last_safe` use it.
 
 The generator is seeded (ChaCha8) and deterministic:

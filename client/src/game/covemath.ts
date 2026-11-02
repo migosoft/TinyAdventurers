@@ -142,7 +142,7 @@ export function paintCove(spec: CoveSpec): { w: number; h: number; data: Uint8Cl
 /** A plant's foot (bottom centre) in floor-area px. */
 export interface CovePlant { frame: CovePlantFrame; x: number; y: number }
 
-/** Bushes near the grass edge, tufts and ferns scattered, a few around the tree, none on the trunk; at most 30. */
+/** Bushes near the grass edge, tufts and ferns scattered, a few around the tree, none on the trunk; about 30 per 320×256 px of floor. */
 export function placeCovePlants(spec: CoveSpec): CovePlant[] {
   const { w: W, h: H } = spec;
   const cx = spec.tree.x, cy = spec.tree.y;

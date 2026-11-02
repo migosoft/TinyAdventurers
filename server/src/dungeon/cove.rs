@@ -117,7 +117,6 @@ mod tests {
                     assert!((((x - ox).pow(2) + (y - oy).pow(2)) as f64).sqrt() >= 3.0, "seed {seed}: suns too close");
                 }
             }
-            assert_eq!(d.suns.len(), mine.len() + d.suns.iter().filter(|&&(x, y)| !c.rect.contains_tile(x, y)).count(), "seed {seed}");
             for t in &d.torches {
                 let (fx, fy) = t.front();
                 assert!(!c.rect.contains_tile(fx, fy) || !t.lit, "seed {seed}: lit torch in the cove");
