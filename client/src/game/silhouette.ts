@@ -4,6 +4,55 @@
 // part. No weapon; teammates and enemies get none. Without WebGL (no BitmapMask) there is no silhouette.
 import type Phaser from 'phaser';
 
+/** The body sprite as the silhouette copies it, all in world px (a figure's sprite sits inside scaled containers). */
+export interface BodyLook {
+  key: string; frame: string;
+  /** Position and origin of the sprite; y is the feet, the quantity depth sorting uses. */
+  x: number; y: number; originX: number; originY: number;
+  /** Includes the scale of the containers the sprite sits in. */
+  scaleX: number; scaleY: number; flipX: boolean;
+  bounds: { left: number; right: number; top: number };
+}
+
+/** A sprite directly on the scene root (the ?cove demo): its own getBounds() are world coordinates. */
+export function lookOf(s: Phaser.GameObjects.Sprite): BodyLook {
+  const b = s.getBounds();
+  return {
+    key: s.texture.key, frame: s.frame.name, x: s.x, y: s.y, originX: s.originX, originY: s.originY,
+    scaleX: s.scaleX, scaleY: s.scaleY, flipX: s.flipX, bounds: { left: b.left, right: b.right, top: b.top },
+  };
+}
+
+/** The slice of a sprite that bodyLookFrom reads (so it can be tested without Phaser). */
+export interface BodyParts {
+  x: number; y: number; originX: number; originY: number; scaleX: number; scaleY: number; flipX: boolean;
+  width: number; height: number; texture: { key: string }; frame: { name: string };
+}
+
+/**
+ * A figure's body sprite in world space: it sits at (body.x, body.y) in a figure container (position fx/fy,
+ * scale fsx/fsy) which sits in a root container at (rootX, rootY). Rotation is ignored (the body is upright
+ * while standing). Bounds follow the origin, which EntityView already mirrors when facing left.
+ */
+export function bodyLookFrom(
+  root: { x: number; y: number },
+  figure: { x: number; y: number; scaleX: number; scaleY: number },
+  body: BodyParts,
+): BodyLook {
+  const scaleX = figure.scaleX * body.scaleX;
+  const scaleY = figure.scaleY * body.scaleY;
+  const x = root.x + figure.x + body.x * figure.scaleX;
+  const y = root.y + figure.y + body.y * figure.scaleY;
+  const w = body.width * Math.abs(scaleX);
+  const h = body.height * Math.abs(scaleY);
+  const left = x - body.originX * w;
+  return {
+    key: body.texture.key, frame: body.frame.name, x, y, originX: body.originX, originY: body.originY,
+    scaleX, scaleY, flipX: body.flipX,
+    bounds: { left, right: left + w, top: y - body.originY * h },
+  };
+}
+
 interface Box { left: number; right: number; top: number; footY: number }
 
 const FILL = 0xcae6f5;
@@ -40,19 +89,18 @@ export class Silhouette {
     }
   }
 
-  update(hero: Phaser.GameObjects.Sprite | Phaser.GameObjects.Image | null): void {
+  update(hero: BodyLook | null): void {
     const c = this.copy;
     if (!this.on || !hero || !this.mask) { c.setVisible(false); return; }
-    // world-px boxes from getBounds(), which already folds in origin, scale and flip
-    const hb = hero.getBounds();
+    // world-px boxes: the hero's from its BodyLook, the occluder's from getBounds() (origin, scale and flip folded in)
     const ob = this.occluder.getBounds();
     const behind = behindOccluder(
-      heroBox(hb, hero.y),
+      heroBox(hero.bounds, hero.y),
       { left: ob.left, right: ob.right, top: ob.top, footY: this.occluderFootY },
     );
     if (!behind) { c.setVisible(false); return; }
     // same frame, flipX (else mirrored), origin (else shifted), position and scale as the hero
-    c.setTexture(hero.texture.key, hero.frame.name).setPosition(hero.x, hero.y).setOrigin(hero.originX, hero.originY)
+    c.setTexture(hero.key, hero.frame).setPosition(hero.x, hero.y).setOrigin(hero.originX, hero.originY)
       .setScale(hero.scaleX, hero.scaleY).setFlipX(hero.flipX).setDepth(this.occluder.depth + 0.01).setVisible(true);
   }
 

@@ -17,7 +17,7 @@ import { LightField } from './light';
 import { LightView } from './lightview';
 import { Mood } from './mood';
 import { Pixies } from './pixies';
-import { Silhouette } from './silhouette';
+import { lookOf, Silhouette } from './silhouette';
 import { Sunbeams } from './sunbeams';
 import { TerrainLayer } from './terrain';
 import { VisionMask } from './visionmask';
@@ -273,6 +273,6 @@ export class CoveDemoScene extends Phaser.Scene {
     this.sun.update(dt, cam.worldView, this.t);
     this.mood.update(dt, cam.worldView, [], [], []);
     this.pixies.update(this.t, Math.floor(this.t * 60));
-    this.silhouette.update(this.knight);
+    this.silhouette.update(lookOf(this.knight));
   }
 }

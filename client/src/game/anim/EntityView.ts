@@ -10,6 +10,7 @@ import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from '../worldText';
 import { TagEffects } from '../tagEffects';
 import { frameBounds, has, lieLayout, lyingPose, StatusView } from '../status';
 import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
+import { bodyLookFrom, type BodyLook } from '../silhouette';
 import { ShadeVeil, SILHOUETTE_FILL, silhouetteAlpha } from '../shadeHaze';
 import { pickFrame, windupOf } from './pickFrame';
 import { appearFactor, entityAlpha, ghostPhase, VANISH_SECS } from './entityAlpha';
@@ -165,6 +166,11 @@ export class EntityView {
         alpha: this.root.alpha,
       };
     });
+  }
+
+  /** The body sprite in world space, for the silhouette (#202): root + figure scale + the body's local offset. */
+  bodyLook(): BodyLook {
+    return bodyLookFrom(this.root, this.figure, this.body);
   }
 
   get height(): number {
