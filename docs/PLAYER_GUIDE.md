@@ -77,7 +77,6 @@ The fastest hero, and the only one who fights with a companion. An elf: she sees
 - **It guards you.** It stays close, bites any enemy that comes within about three tiles of you, and fights back when something attacks it. It does not run off after what you shoot at, and it turns back when it has strayed about six tiles from you.
 - **It opens a fight with a leap:** from up to four tiles away it dashes at its prey for 20 damage (every 5 seconds), and this is its **Pounce**, and it crosses chasms. A push into a chasm is escaped the same way, with the dash. With the dash resting it falls and dies, like any monster. It drowns in deep water and burns in lava.
 - **Nobody gets locked out.** If it falls far behind, or you are in the sealed boss hall without it, it appears next to you again in green sparkles.
-- **It growls.** When it notices an enemy, it steps a tile or two toward it, shakes and shows "grrrr" above its head (at most every four seconds). The growl shows even in total darkness: it is an early warning. It also **growls at hiding mimics**, so a wolf that growls at a chest is a hint (it does not bite them). It ignores enemies that merely wait, such as the boss before the fight.
 - **Enemies fight it.** They attack it and their area attacks hit it. Your own arrows, fireballs and swords, and those of your friends, **never** hurt it. The Paladin's Holy Light heals it.
 - **Its figure shows only where there is light**, but its small health bar, like a hero's, shows even in the dark. Its kills count as yours; its death gives no XP or coins, shows a message and starts the 60 seconds.
 - **If you fall, the wolf vanishes**, also when you leave the dungeon. Debug mode does not make it immortal.
@@ -109,7 +108,7 @@ The two boxes at the bottom of the screen show your abilities. While an ability 
 | Skeleton archer | Shoots arrows and keeps its distance. |
 | Orc warrior | Tough melee fighter, hits hard and **knocks you back**. |
 | Orc archer | Tough archer. |
-| Necromancer | Casts **Shadow Bolts** (green) and **raises skeletons**. Kill the necromancer and all of its skeletons crumble. |
+| Necromancer | Casts **Shadow Bolts** (green) and casts **Raise Dead**: after a short wind-up (0.7 s) it raises **two** skeletons or skeleton archers around itself, every 12 seconds, up to **four alive** at a time. Kill the necromancer and all of its minions crumble. |
 | Mimic | Looks exactly like a treasure chest. Walk up to it (or hit it) and its lid flies open: it **hops after you** and bites. It stops chasing when you get out of sight and waits where it was found. Worth 25 coins. |
 
 **Ghosts and Shades** are rare extras that haunt the deeper rooms and halls (about one room in four, from about a third of the way in). The lich's dungeon has **Ghosts**, the demon's dungeon has **Shades**; the dragon's dungeon has neither. They are the ghostly dead and no ordinary weapon scratches them (see Damage types and resistances): only magic hurts them.
@@ -129,7 +128,7 @@ Both fight by ambush. When they notice you they **vanish**, then drift through t
 |---|---|
 | Imp | Small demon in place of the skeleton archer. Keeps its distance and uses **Fire Bolt**, but uses **Strike** (its claws) on you if you get close. |
 | Chort | Horned demon in place of the skeleton warrior. Closes in and claws (a **small knockback**), and uses a **Fire Bolt** now and then while you are out of reach. |
-| Summoner | Red-robed caster in place of the necromancer. Uses **Fire Bolt** and **summons imps**. Kill the summoner and its imps vanish. |
+| Summoner | Red-robed caster in place of the necromancer. Uses **Fire Bolt** and casts **Summon Imps**: after a short wind-up (0.7 s) it summons **two** imps every 12 seconds, up to **four alive** at a time. Kill the summoner and its imps vanish. |
 
 ### The ogre (mini-boss)
 
@@ -167,7 +166,7 @@ Some attacks **push you away** from the attacker. Every push is a **maximum** di
 
 Some rooms have a **treasure chest** against a wall. Walk into it to open it: **every living hero in the party** gets 8 to 15 coins.
 
-About one chest in four is a **mimic**. A mimic stays a closed chest until someone comes close or hits it. Then it jumps open and attacks. A chest that rattles when you come near is a bad sign, and so is a wolf that growls at one.
+About one chest in four is a **mimic**. A mimic stays a closed chest until someone comes close or hits it. Then it jumps open and attacks. A chest that rattles when you come near is a bad sign.
 
 **Hitting a chest smashes it.** Any blow, arrow, spell or explosion breaks a closed chest, and most of the coins are lost in the cracks: the party gets only a third. So testing chests for mimics with a shot from afar costs you gold, and so does fighting carelessly next to a chest (enemy area attacks and barrel blasts break chests too). A closed chest stops shots, just as a mimic does. Poison does not hurt chests.
 
@@ -253,7 +252,7 @@ Tip: stay mobile, and don't stand between the demon and a chasm.
 - The red shimmering streams flowing to it show its protection: while they flow, it cannot be harmed.
 - All its magic is **dark purple gloom**.
 - Casts **Gloom Bolts**: a fan of five.
-- **Summons skeletons:** every 12 seconds it raises its army back up to **five skeletons and five skeleton archers** around it.
+- **Raise Dead:** every 12 seconds, after a short wind-up, it raises **three** skeletons or skeleton archers around it (half and half), up to **five alive** at a time. It starts with this about eight seconds into the fight. The disciples do not count towards the five.
 - **Nova:** about every 10 seconds it stops, raises its staff and a **purple circle** fills up on the floor around it. When it is full, a dark blast hurts **everyone inside** and pushes them. The lich is weak (STR 10): only the Wizard (weight 9) is pushed, a little (16 px); every other hero stands firm. Step out of the circle in time.
 - **Three curses**, each aimed at one hero it can see (it sees only what you would see: it cannot curse you from behind a wall. A hero who already suffers *that* curse is passed over, and the lich picks the nearest hero it sees):
   - **Blinding Curse:** about every 10 seconds the lich flings a **dark orb**. It is slow, so **step aside**. A hit does a little damage and **blinds** you for 3 seconds: you see almost nothing, not even with darkvision.
