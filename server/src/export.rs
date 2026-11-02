@@ -155,7 +155,7 @@ fn export_defs() {
         "Void": Tile::Void as u8, "Floor": Tile::Floor as u8, "Wall": Tile::Wall as u8,
         "DoorOpen": Tile::DoorOpen as u8, "DoorClosed": Tile::DoorClosed as u8,
         "ShallowWater": Tile::ShallowWater as u8, "DeepWater": Tile::DeepWater as u8,
-        "Chasm": Tile::Chasm as u8, "Lava": Tile::Lava as u8,
+        "Chasm": Tile::Chasm as u8, "Lava": Tile::Lava as u8, "Trunk": Tile::Trunk as u8,
     });
     // Shot hitboxes per monster kind (`Monster::shot_dist`): footprint radius and drawn height.
     let mut hitbox = serde_json::Map::new();
@@ -419,6 +419,8 @@ fn fixture_map() -> Map {
             m.set(x, y, Tile::Lava);
         }
     }
+    // A tree trunk: sight passes, walking and dashing do not.
+    m.set(3, 10, Tile::Trunk);
     m
 }
 

@@ -37,7 +37,7 @@ pub enum Tile {
     Chasm = 7,
     /// Slows and burns heroes; only demon types walk it unharmed.
     Lava = 8,
-    /// The big tree's trunk in the nymph's cove (rules: see the cove task).
+    /// The big tree's trunk in the nymph's cove: blocks walking and dashing (ghosts pass), sight and shots pass.
     Trunk = 9,
 }
 
@@ -81,10 +81,10 @@ impl Map {
             self.tiles[(y * self.w + x) as usize] = t as u8;
         }
     }
-    /// Blocks sight and projectiles. Terrain does not.
+    /// Blocks sight and projectiles. Terrain and the cove's trunk do not.
     pub fn opaque(&self, x: i32, y: i32) -> bool {
         let t = self.get(x, y);
-        !(t == Tile::Floor as u8 || t == Tile::DoorOpen as u8 || is_terrain(t))
+        !(t == Tile::Floor as u8 || t == Tile::DoorOpen as u8 || t == Tile::Trunk as u8 || is_terrain(t))
     }
     pub fn opaque_at(&self, p: Vec2) -> bool {
         let (x, y) = Map::tile_of(p);
@@ -100,6 +100,9 @@ impl Map {
             return true;
         }
         let t = self.get(x, y);
+        if t == Tile::Trunk as u8 {
+            return true;
+        }
         match mover {
             Mover::Dash | Mover::Incorporeal => false,
             Mover::Hero => t == Tile::DeepWater as u8,
@@ -359,6 +362,21 @@ mod tests {
             let x = x as i32;
             assert_eq!(m.can_stop(x, 1, Mover::Incorporeal), !m.blocks(x, 1, Mover::Dash) && t != Tile::Void, "{t:?}");
         }
+    }
+
+    #[test]
+    fn trunk_blocks_heroes_dashes_and_enemies_but_not_ghosts() {
+        let mut m = Map::new(3, 3);
+        m.set(1, 1, Tile::Trunk);
+        assert!(!m.opaque(1, 1), "sight, light and shots pass");
+        for mover in [Mover::Hero, Mover::Enemy, Mover::Demon, Mover::Dash] {
+            assert!(m.blocks(1, 1, mover), "{mover:?}");
+            assert!(!m.can_stop(1, 1, mover), "{mover:?}");
+        }
+        assert!(!m.blocks(1, 1, Mover::Incorporeal));
+        assert!(!m.can_stop(1, 1, Mover::Incorporeal), "a ghost may not rest in the trunk");
+        assert!(!m.safe(1, 1));
+        assert!(!is_terrain(Tile::Trunk as u8));
     }
 
     #[test]

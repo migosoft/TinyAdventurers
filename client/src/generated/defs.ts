@@ -85,6 +85,7 @@ export const TILE_ID = {
   "Floor": 1,
   "Lava": 8,
   "ShallowWater": 5,
+  "Trunk": 9,
   "Void": 0,
   "Wall": 2
 } as const;

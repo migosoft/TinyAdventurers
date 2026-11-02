@@ -190,6 +190,21 @@ pub struct RunStartInfo {
     pub lights: Vec<LightInfo>,
     /// A debug run: every hero is in debug mode (badge, F4/F7/F8/F9).
     pub debug: bool,
+    /// The nymph's cove (dungeon runs), for the client to dress.
+    pub cove: Option<CoveInfo>,
+}
+
+/// The nymph's cove in tiles: its room, the tree's trunk tile and the seed the client's plants grow from.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct CoveInfo {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    pub tree_x: i32,
+    pub tree_y: i32,
+    pub seed: u32,
 }
 
 /// A static light at run start, as an array: `[id, kind, colour, x, y, on]`

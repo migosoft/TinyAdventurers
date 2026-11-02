@@ -1421,10 +1421,10 @@ mod tests {
             for p in &d.player_spawns {
                 assert_eq!(d.map.tile_at(*p), Tile::Floor as u8, "seed {seed}: player spawn not on floor");
             }
-            // No one-tile wall stubs (they would draw as T junctions); the cove's trunk is no wall.
+            // No one-tile wall stubs (they would draw as T junctions).
             for y in 1..d.map.h - 1 {
                 for x in 1..d.map.w - 1 {
-                    assert!(!(d.map.opaque(x, y) && d.map.get(x, y) != Tile::Trunk as u8 && is_stub(&d.map, x, y)), "seed {seed}: wall stub at {x},{y}");
+                    assert!(!(d.map.opaque(x, y) && is_stub(&d.map, x, y)), "seed {seed}: wall stub at {x},{y}");
                 }
             }
             // The only way into the boss hall is through the door.

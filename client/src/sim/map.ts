@@ -31,10 +31,10 @@ export class TileMap {
     return this.get(Math.floor(px / TILE), Math.floor(py / TILE));
   }
 
-  /** Blocks sight and projectiles. Terrain does not. */
+  /** Blocks sight and projectiles. Terrain and the cove's trunk do not. */
   opaque(x: number, y: number): boolean {
     const t = this.get(x, y);
-    return !(t === TILE_ID.Floor || t === TILE_ID.DoorOpen || isTerrain(t));
+    return !(t === TILE_ID.Floor || t === TILE_ID.DoorOpen || t === TILE_ID.Trunk || isTerrain(t));
   }
 
   opaqueAt(px: number, py: number): boolean {
@@ -45,6 +45,7 @@ export class TileMap {
   blocks(x: number, y: number, mover: Mover): boolean {
     if (this.opaque(x, y)) return true;
     const t = this.get(x, y);
+    if (t === TILE_ID.Trunk) return true;
     switch (mover) {
       case 'dash':
         return false;

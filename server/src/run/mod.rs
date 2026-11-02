@@ -30,7 +30,7 @@ use crate::vispoly::View;
 use crate::lobby::SharedLobby;
 use crate::math::Vec2;
 use crate::telemetry;
-use crate::protocol::{encode, BossId, ClassId, ClientMsg, Ev, InputMsg, LevelChoice, LevelId, PlayerInfo, PlayerStats, RunStartInfo, ServerMsg};
+use crate::protocol::{encode, BossId, ClassId, ClientMsg, CoveInfo, Ev, InputMsg, LevelChoice, LevelId, PlayerInfo, PlayerStats, RunStartInfo, ServerMsg};
 use axum::extract::ws::Message;
 use levels::Level;
 use entities::*;
@@ -358,6 +358,7 @@ impl Run {
             fallback: p.sheet.fallback,
             lights: self.light_infos(),
             debug: self.debug,
+            cove: self.layout.cove.map(|c| CoveInfo { x: c.rect.x, y: c.rect.y, w: c.rect.w, h: c.rect.h, tree_x: c.tree.0, tree_y: c.tree.1, seed: c.seed }),
         })
     }
 
@@ -1540,6 +1541,17 @@ pub mod tests {
         let ServerMsg::RunStarted(info) = run.start_info(&run.players[0]) else { panic!() };
         assert_eq!((info.players[0].melee, info.players[0].ranged), (ItemId::WarHammer, None));
         assert_eq!((info.players[1].melee, info.players[1].ranged), (ItemId::Rapier, Some(ItemId::ElvenBow)));
+    }
+
+    #[test]
+    fn start_info_sends_the_cove() {
+        let run = test_run(&[ClassId::Wizard], BossId::Lich);
+        let ServerMsg::RunStarted(info) = run.start_info(&run.players[0]) else { panic!() };
+        let c = run.layout.cove.expect("a dungeon has a cove");
+        let got = info.cove.expect("the cove is sent");
+        assert_eq!((got.x, got.y, got.w, got.h), (c.rect.x, c.rect.y, c.rect.w, c.rect.h));
+        assert_eq!((got.tree_x, got.tree_y, got.seed), (c.tree.0, c.tree.1, c.seed));
+        assert_eq!(run.layout.map.get(got.tree_x, got.tree_y), crate::dungeon::Tile::Trunk as u8);
     }
 
     #[test]

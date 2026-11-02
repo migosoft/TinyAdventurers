@@ -18,10 +18,11 @@ export interface TileDraw {
 /**
  * The boss hall entrance looks like floor even when sealed (a force field is
  * drawn over it). Terrain lies on floor (its layer is drawn on top), so walls
- * next to water, lava or a chasm get their faces and rims as usual.
+ * next to water, lava or a chasm get their faces and rims as usual. A tree trunk is floor
+ * underneath (the tree sprite covers it).
  */
 function floorLike(t: number): boolean {
-  return t === TILE_ID.Floor || t === TILE_ID.DoorOpen || t === TILE_ID.DoorClosed || isTerrain(t);
+  return t === TILE_ID.Floor || t === TILE_ID.DoorOpen || t === TILE_ID.DoorClosed || t === TILE_ID.Trunk || isTerrain(t);
 }
 
 function hash(x: number, y: number): number {

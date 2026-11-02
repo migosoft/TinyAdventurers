@@ -2,9 +2,10 @@
 // Fixtures are written by `cargo test` (server/src/export.rs).
 import { describe, expect, it } from 'vitest';
 import fixtures from '../generated/fixtures.json';
-import { stepMove, type MoveState } from './collision';
+import { moveBox, stepMove, type MoveState } from './collision';
 import { Fov } from './fov';
-import { TileMap } from './map';
+import { TILE, TileMap, type Mover } from './map';
+import { TILE_ID } from '../generated/defs';
 
 const map = new TileMap(fixtures.w, fixtures.h, Uint8Array.from(fixtures.tiles));
 
@@ -33,6 +34,23 @@ describe('fov port', () => {
       const vis: number[] = [];
       for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) if (fov.isVisible(x, y)) vis.push(y * map.w + x);
       expect(vis).toEqual(c.visible);
+    }
+  });
+});
+
+describe('trunk tile', () => {
+  const m = new TileMap(5, 3, new Uint8Array(15).fill(TILE_ID.Floor));
+  m.set(2, 1, TILE_ID.Trunk);
+
+  it('lets sight pass but blocks every walker, a dash too', () => {
+    expect(m.opaque(2, 1)).toBe(false);
+    for (const mover of ['hero', 'enemy', 'demon', 'dash'] as Mover[]) expect(m.blocks(2, 1, mover)).toBe(true);
+  });
+
+  it('stops a hero and a dash at its edge', () => {
+    for (const mover of ['hero', 'dash'] as Mover[]) {
+      const [x] = moveBox(m, 1.5 * TILE, 1.5 * TILE, 12, 0, 5, mover);
+      expect(x).toBe(2 * TILE - 5);
     }
   });
 });
