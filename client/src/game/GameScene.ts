@@ -817,8 +817,6 @@ export class GameScene extends Phaser.Scene {
     const shots: AirShot[] = (this.lastSnap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
     this.mood.update(dt, this.cameras.main.worldView, torches, shots, this.collectMovers(dt, px, py));
     this.sunbeams.update(dt, this.cameras.main.worldView, now);
-    // only the own hero, and only while it plays (not dead or spectating); teammates get no silhouette
-    this.cove?.update(now, this.alive && this.spectating === null ? this.views.get(this.info.you)?.bodyLook() ?? null : null);
     this.visionMask.update(this.cameras.main.worldView, this.lightView.view);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 
@@ -860,6 +858,9 @@ export class GameScene extends Phaser.Scene {
     for (const [id, v] of this.chestViews) if (!seen.has(id)) (v.destroy(), this.chestViews.delete(id));
     for (const [id, v] of this.barrelViews) if (!seen.has(id)) (v.destroy(), this.barrelViews.delete(id));
     for (const [id, v] of this.torchViews) if (!seen.has(id)) (v.destroy(), this.torchViews.delete(id));
+    // after the views moved this frame, so the copy is not a frame behind the hero
+    // only the own hero, and only while it plays (not dead or spectating); teammates get no silhouette
+    this.cove?.update(now, this.alive && this.spectating === null ? this.views.get(this.info.you)?.bodyLook() ?? null : null);
 
     let hint: EntState | null = null;
     let wake = false;
