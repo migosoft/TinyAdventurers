@@ -29,7 +29,7 @@ pub fn def(id: BossId) -> BossDef {
     use ItemId::*;
     match id {
         BossId::Demon => BossDef { id, kind: EntityKind::Demon, hp: 1300.0, radius: 11.0, speed: 50.0, attrs: Attributes::new(22, 14, 20, 14, 16, 20), weight: 40.0, abilities: &[Strike, Swoop, RingOfFire], weapons: &[DemonClaws] },
-        BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0, attrs: Attributes::new(10, 14, 14, 22, 18, 16), weight: 40.0, abilities: &[Nova, GloomBolts, BlindingCurse, SleepMist, StoneGaze], weapons: &[] },
+        BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0, attrs: Attributes::new(10, 14, 14, 22, 18, 16), weight: 40.0, abilities: &[Nova, GloomBolts, BlindingCurse, SleepMist, StoneGaze, RaiseDead], weapons: &[] },
         BossId::Dragon => BossDef { id, kind: EntityKind::Dragon, hp: 2000.0, radius: 17.0, speed: 34.0, attrs: Attributes::new(24, 10, 22, 16, 14, 20), weight: 40.0, abilities: &[Strike, AbilityId::Bite, TailWhip, FireBreath, Smash, Fireball], weapons: &[DragonClaws, DragonBite, DragonTail] },
     }
 }
@@ -44,9 +44,6 @@ pub const LICH_DISCIPLES: usize = 6;
 /// After a nova the lich waits up to this many seconds (random) on top of the Nova's cooldown, so the
 /// next one is not on the beat.
 pub const LICH_NOVA_EXTRA_WAIT: f64 = 2.0;
-/// Each summon tops the lich's raised skeletons up to this many of each kind.
-pub const LICH_SKELETONS: usize = 5;
-pub const LICH_ARCHERS: usize = 5;
 
 /// Flight (s), shared with the client: lifting off, hovering after the party, landing (the landing uses
 /// Smash). The dragon's attacks are its kit's abilities: their numbers come from there.
@@ -90,6 +87,7 @@ pub const LICH_NOVA_FIRST: f64 = 6.0;
 pub const LICH_BLIND_FIRST: f64 = 4.0;
 pub const LICH_SLEEP_FIRST: f64 = 7.0;
 pub const LICH_GAZE_FIRST: f64 = 9.0;
+pub const LICH_RAISE_FIRST: f64 = 8.0;
 
 #[cfg(test)]
 mod tests {

@@ -1,12 +1,12 @@
 //! Lich: guarded by disciples. Immune until every disciple is dead. It casts the abilities of its kit and
 //! decides which, when and where to aim: Gloom Bolts (a fan), now and then a Nova that hurts and pushes every
 //! hero around it, and three effect spells (see `SPELLS`): Blinding Curse (dark orb), Sleep Mist (purple orb)
-//! and Stone Gaze (a beam that petrifies a hero the lich still sees when the wind-up ends). It also raises
-//! skeletons (melee and archers). The numbers (damage, radius, push, wind-up, cooldown) are the kit's.
+//! and Stone Gaze (a beam that petrifies a hero the lich still sees when the wind-up ends). It also casts Raise Dead
+//! (skeletons, half of them archers). The numbers (damage, radius, push, wind-up, cooldown) are the kit's.
 
 use super::{ahead, boss_idx, set_anim, target, BossBehaviour};
 use crate::defs::abilities::AbilityId;
-use crate::defs::bosses::{LICH_ARCHERS, LICH_BLIND_FIRST, LICH_DISCIPLES, LICH_GAZE_FIRST, LICH_GLOOM_FIRST, LICH_NOVA_EXTRA_WAIT, LICH_NOVA_FIRST, LICH_SKELETONS, LICH_SLEEP_FIRST};
+use crate::defs::bosses::{LICH_BLIND_FIRST, LICH_DISCIPLES, LICH_GAZE_FIRST, LICH_GLOOM_FIRST, LICH_NOVA_EXTRA_WAIT, LICH_NOVA_FIRST, LICH_RAISE_FIRST, LICH_SLEEP_FIRST};
 use crate::defs::effects::EffectKind;
 use crate::defs::enemies::EnemyType;
 use crate::defs::kinds::Anim;
@@ -16,12 +16,12 @@ use crate::protocol::Ev;
 use crate::run::abilities::monster_use;
 use crate::run::ai::{move_toward, path_toward};
 use crate::run::effects::Creature;
+use crate::run::minions;
 use crate::run::Run;
 use rand::Rng;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Action {
-    Summon,
     /// The wind-up of the ability, then its cast.
     Cast(AbilityId),
 }
@@ -30,16 +30,16 @@ enum Action {
 pub(crate) const SPELLS: [AbilityId; 3] = [AbilityId::StoneGaze, AbilityId::SleepMist, AbilityId::BlindingCurse];
 
 /// How long (s) after the fight starts each ability may first be cast: when it opens, not how an ability works.
-const OPENING: [(AbilityId, f64); 5] = [
+const OPENING: [(AbilityId, f64); 6] = [
     (AbilityId::GloomBolts, LICH_GLOOM_FIRST),
     (AbilityId::Nova, LICH_NOVA_FIRST),
     (AbilityId::StoneGaze, LICH_GAZE_FIRST),
     (AbilityId::SleepMist, LICH_SLEEP_FIRST),
     (AbilityId::BlindingCurse, LICH_BLIND_FIRST),
+    (AbilityId::RaiseDead, LICH_RAISE_FIRST),
 ];
 
 pub struct Lich {
-    summon_cd: f64,
     /// Seconds before the script may choose each ability (first casts, and the Nova's random extra wait). It
     /// only gates the script's decision; the kit's cooldowns (`cds`) are the casts' alone.
     not_before: Vec<(AbilityId, f64)>,
@@ -53,7 +53,7 @@ pub struct Lich {
 
 impl Default for Lich {
     fn default() -> Self {
-        Lich { summon_cd: 8.0, not_before: OPENING.to_vec(), action: None, announced: false, gaze: None, aim_at: None }
+        Lich { not_before: OPENING.to_vec(), action: None, announced: false, gaze: None, aim_at: None }
     }
 }
 
@@ -102,31 +102,13 @@ impl Lich {
         })
     }
 
-    /// Casts `id` at `at`; the lich's cast pose plays whatever the ability's own animation is.
-    fn cast(run: &mut Run, bi: usize, id: AbilityId, at: Vec2) {
+    /// Casts `id` at `at`; the lich's cast pose plays whatever the ability's own animation is. False if the
+    /// kit refuses it (on cooldown, or no room for minions).
+    fn cast(run: &mut Run, bi: usize, id: AbilityId, at: Vec2) -> bool {
         let used = monster_use(run, bi, id, at);
-        debug_assert!(used, "the lich's script only picks what its kit has, off cooldown");
         // Unlike `use_in_pose`, the pose is forced: every lich ability plays the same cast pose.
         set_anim(run, bi, Anim::Cast);
-    }
-
-    /// Tops the lich's raised skeletons up to LICH_SKELETONS melee and LICH_ARCHERS archers, in a ring around it.
-    fn summon(run: &mut Run, bi: usize) {
-        let (id, pos) = (run.monsters[bi].id, run.monsters[bi].pos);
-        let alive = |run: &Run, t: EnemyType| run.monsters.iter().filter(|m| m.alive && m.owner == Some(id) && m.etype == Some(t)).count();
-        let mut raise: Vec<EnemyType> = Vec::new();
-        raise.extend(std::iter::repeat(EnemyType::RaisedSkeleton).take(LICH_SKELETONS.saturating_sub(alive(run, EnemyType::RaisedSkeleton))));
-        raise.extend(std::iter::repeat(EnemyType::RaisedArcher).take(LICH_ARCHERS.saturating_sub(alive(run, EnemyType::RaisedArcher))));
-        let n = raise.len();
-        let a0 = run.rng.gen_range(0.0..std::f64::consts::TAU);
-        for (k, t) in raise.into_iter().enumerate() {
-            // Alternate melee and archers around the ring.
-            let slot = if k % 2 == 0 { k / 2 } else { n - 1 - k / 2 };
-            let spot = pos + Vec2::from_angle(a0 + slot as f64 * std::f64::consts::TAU / n as f64) * 22.0;
-            let spot = if run.layout.map.blocks_at(spot, Mover::Enemy) { pos } else { spot };
-            run.spawn_enemy(t, spot, Some(id));
-            run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, k: 2 }, Some(spot));
-        }
+        used
     }
 }
 
@@ -162,7 +144,6 @@ impl BossBehaviour for Lich {
             self.announced = true;
             run.event(Ev::Msg { text: "The lich's protection is broken!".into() }, None);
         }
-        self.summon_cd -= dt;
         for (_, left) in &mut self.not_before {
             *left -= dt;
         }
@@ -176,10 +157,6 @@ impl BossBehaviour for Lich {
             }
             self.action = None;
             match action {
-                Action::Summon => {
-                    set_anim(run, bi, Anim::Cast);
-                    Self::summon(run, bi);
-                }
                 Action::Cast(AbilityId::StoneGaze) => {
                     // The hero it stared at; one that has left is not gazed at.
                     if let Some(pi) = self.gaze.take().and_then(|t| run.player_idx(t)) {
@@ -192,7 +169,8 @@ impl BossBehaviour for Lich {
                     }
                 }
                 Action::Cast(id) => {
-                    Self::cast(run, bi, id, ahead(run, bi));
+                    let used = Self::cast(run, bi, id, ahead(run, bi));
+                    debug_assert!(used, "the lich's script only picks what its kit has, off cooldown, with room");
                     if id == AbilityId::Nova {
                         self.hold(id, run.rng.gen_range(0.0..LICH_NOVA_EXTRA_WAIT));
                     }
@@ -206,9 +184,9 @@ impl BossBehaviour for Lich {
             return;
         };
         run.monsters[bi].aim = pos.angle_to(ppos);
-        if self.summon_cd <= 0.0 {
-            self.summon_cd = 12.0;
-            self.action = Some((Action::Summon, 0.7));
+        let raise = kit(run, bi, AbilityId::RaiseDead);
+        if self.ready(run, bi, AbilityId::RaiseDead) && minions::room(run, bi, &raise) > 0 {
+            self.action = Some((Action::Cast(AbilityId::RaiseDead), raise.windup));
             set_anim(run, bi, Anim::Windup);
         } else if self.ready(run, bi, AbilityId::Nova) {
             // The anim starts with the wind-up; the client fills the telegraph ring over it.
@@ -256,7 +234,7 @@ pub(crate) mod tests {
     use crate::run::DT;
 
     /// The lich's own abilities, apart from the spells.
-    const OTHERS: [AbilityId; 2] = [AbilityId::Nova, AbilityId::GloomBolts];
+    const OTHERS: [AbilityId; 3] = [AbilityId::Nova, AbilityId::GloomBolts, AbilityId::RaiseDead];
 
     #[test]
     fn lich_spawns_with_at_least_five_disciples_and_is_immune_until_they_die() {
@@ -357,7 +335,7 @@ pub(crate) mod tests {
         for id in SPELLS.into_iter().chain([AbilityId::GloomBolts]) {
             run.monsters[bi].cds.start(id, 99.0);
         }
-        let mut l = Lich { summon_cd: 99.0, not_before: Vec::new(), ..Lich::default() };
+        let mut l = Lich { not_before: vec![(AbilityId::RaiseDead, 99.0)], ..Lich::default() };
         let (hp, nova) = (run.players[0].hp, nova_of(&run, bi));
         assert_eq!((nova.damage, nova.windup, nova.radius), (24.0, 1.2, 56.0), "today's nova");
         l.tick(&mut run, DT);
@@ -408,26 +386,59 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_summon_raises_five_skeletons_and_five_archers_and_tops_them_up() {
+    fn a_raise_dead_raises_three_and_tops_up_to_five() {
         let (mut run, bi) = lich_with(&[Vec2::new(100.0, 0.0)]);
         let id = run.monsters[bi].id;
         let count = |run: &Run, t: EnemyType| run.monsters.iter().filter(|m| m.alive && m.owner == Some(id) && m.etype == Some(t)).count();
-        Lich::summon(&mut run, bi);
-        assert_eq!(count(&run, EnemyType::RaisedSkeleton), LICH_SKELETONS);
-        assert_eq!(count(&run, EnemyType::RaisedArcher), LICH_ARCHERS);
+        let pos = run.monsters[bi].pos;
+        assert!(Lich::cast(&mut run, bi, AbilityId::RaiseDead, pos));
+        assert_eq!((count(&run, EnemyType::RaisedSkeleton), count(&run, EnemyType::RaisedArcher)), (2, 1));
         assert!(run.events.iter().any(|e| matches!(e.0, Ev::Raise { k: 2, .. })), "dark purple raise");
+        run.monsters[bi].cds = Default::default();
+        assert!(Lich::cast(&mut run, bi, AbilityId::RaiseDead, pos));
+        assert_eq!((count(&run, EnemyType::RaisedSkeleton), count(&run, EnemyType::RaisedArcher)), (3, 2), "room for two");
         let archer = run.monsters.iter().position(|m| m.alive && m.etype == Some(EnemyType::RaisedArcher)).unwrap();
         assert_eq!(run.monsters[archer].kind, EntityKind::SkeletonArcher, "raised archers look like skeleton archers");
         run.kill_monster(archer);
-        Lich::summon(&mut run, bi);
-        assert_eq!(count(&run, EnemyType::RaisedSkeleton), LICH_SKELETONS, "no stacking beyond five");
-        assert_eq!(count(&run, EnemyType::RaisedArcher), LICH_ARCHERS, "the fallen archer is replaced");
+        run.monsters[bi].cds = Default::default();
+        assert!(Lich::cast(&mut run, bi, AbilityId::RaiseDead, pos));
+        assert_eq!((count(&run, EnemyType::RaisedSkeleton), count(&run, EnemyType::RaisedArcher)), (3, 2), "the fallen archer is replaced");
+        run.monsters[bi].cds = Default::default();
+        assert!(!Lich::cast(&mut run, bi, AbilityId::RaiseDead, pos), "no room at five");
+        assert!(run.monsters[bi].cds.ready(AbilityId::RaiseDead));
+    }
+
+    #[test]
+    fn the_disciples_do_not_block_raise_dead() {
+        let (run, bi) = lich_with(&[Vec2::new(100.0, 0.0)]);
+        assert!(living_disciples(&run) >= 5);
+        assert_eq!(minions::room(&run, bi, &kit(&run, bi, AbilityId::RaiseDead)), 3);
+    }
+
+    #[test]
+    fn raise_dead_waits_for_its_opening_delay_then_comes_first() {
+        let (mut run, bi) = lich_with(&[Vec2::new(100.0, 0.0)]);
+        assert!(living_disciples(&run) >= 5);
+        for id in SPELLS.into_iter().chain([AbilityId::Nova, AbilityId::GloomBolts]) {
+            run.monsters[bi].cds.start(id, 99.0);
+        }
+        let mut l = Lich::default();
+        l.not_before.retain(|&(i, _)| matches!(i, AbilityId::RaiseDead));
+        for _ in 0..((LICH_RAISE_FIRST - 0.1) / DT) as usize {
+            l.tick(&mut run, DT);
+            assert_ne!(l.action.map(|a| a.0), Some(Action::Cast(AbilityId::RaiseDead)), "not before its delay");
+        }
+        ticks(&mut run, &mut l, 0.2);
+        l.action = None;
+        run.monsters[bi].cds.start(AbilityId::GloomBolts, 0.0);
+        l.tick(&mut run, DT);
+        assert_eq!(l.action.map(|a| a.0), Some(Action::Cast(AbilityId::RaiseDead)), "ahead of the ready Gloom Bolts");
     }
 
     #[test]
     fn the_volley_is_gloom_bolts() {
         let (mut run, bi) = lich_with(&[Vec2::new(100.0, 0.0)]);
-        let mut l = Lich { summon_cd: 99.0, not_before: vec![(AbilityId::Nova, 99.0)], ..Lich::default() };
+        let mut l = Lich { not_before: vec![(AbilityId::Nova, 99.0), (AbilityId::RaiseDead, 99.0)], ..Lich::default() };
         l.not_before.retain(|&(i, _)| i != AbilityId::GloomBolts);
         for s in SPELLS {
             run.monsters[bi].cds.start(s, 99.0);
@@ -461,7 +472,7 @@ pub(crate) mod tests {
                 run.monsters[bi].cds.start(id, 99.0);
             }
         }
-        (run, Lich { summon_cd: 99.0, not_before: Vec::new(), ..Lich::default() })
+        (run, Lich { not_before: vec![(AbilityId::RaiseDead, 99.0)], ..Lich::default() })
     }
 
     fn fly(run: &mut Run, l: &mut Lich, secs: f64) {
@@ -612,7 +623,7 @@ pub(crate) mod tests {
                 run.monsters[bi].cds.start(id, 99.0);
             }
         }
-        let mut l = Lich { summon_cd: 99.0, not_before: Vec::new(), ..Lich::default() };
+        let mut l = Lich { not_before: vec![(AbilityId::RaiseDead, 99.0)], ..Lich::default() };
         l.tick(&mut run, DT);
         assert_eq!(run.monsters[bi].anim, Anim::Windup);
         let (pos, to) = (run.monsters[bi].pos, run.players[1].pos());
