@@ -436,6 +436,22 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn the_lich_raises_the_dead_end_to_end() {
+        let (mut run, bi) = lich_with(&[Vec2::new(100.0, 0.0)]);
+        assert!(living_disciples(&run) >= 5);
+        for id in SPELLS.into_iter().chain([AbilityId::Nova, AbilityId::GloomBolts]) {
+            run.monsters[bi].cds.start(id, 99.0);
+        }
+        let mut l = Lich { not_before: vec![(AbilityId::RaiseDead, LICH_RAISE_FIRST)], ..Lich::default() };
+        let id = run.monsters[bi].id;
+        let mine = |run: &Run| run.monsters.iter().filter(|m| m.alive && m.owner == Some(id) && m.etype != Some(EnemyType::Disciple)).count();
+        let windup = kit(&run, bi, AbilityId::RaiseDead).windup;
+        ticks(&mut run, &mut l, LICH_RAISE_FIRST + windup + 0.1);
+        assert_eq!(mine(&run), 3, "one Raise Dead cast");
+        assert!(!run.monsters[bi].cds.ready(AbilityId::RaiseDead), "its cooldown runs from the cast");
+    }
+
+    #[test]
     fn the_volley_is_gloom_bolts() {
         let (mut run, bi) = lich_with(&[Vec2::new(100.0, 0.0)]);
         let mut l = Lich { not_before: vec![(AbilityId::Nova, 99.0), (AbilityId::RaiseDead, 99.0)], ..Lich::default() };
