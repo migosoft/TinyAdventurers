@@ -246,7 +246,6 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         let ai = &mut run.monsters[mi].ai;
         ai.cd -= dt;
         ai.alt_cd -= dt;
-        ai.raise_cd -= dt;
     }
 
     // Perception: only players in sight radius with line of sight count.
@@ -311,13 +310,25 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
 
-    if matches!(etype, EnemyType::Necromancer | EnemyType::Summoner) {
-        if seen.is_some() {
-            let minions = run.monsters.iter().filter(|o| o.alive && o.owner == Some(run.monsters[mi].id)).count();
-            if run.monsters[mi].ai.raise_cd <= 0.0 && minions < enemies::NECRO_MAX_MINIONS {
-                raise_minions(run, mi, etype == EnemyType::Summoner);
-                return;
-            }
+    // A minion ability winding up: it lands whether or not a foe is still seen.
+    if let Some((id, t)) = run.monsters[mi].ai.cast {
+        if t > dt {
+            run.monsters[mi].ai.cast = Some((id, t - dt));
+        } else {
+            run.monsters[mi].ai.cast = None;
+            monster_use(run, mi, id, pos);
+        }
+        return;
+    }
+    // A foe in sight and room for more minions: start raising them.
+    if seen.is_some() {
+        let raise = def.abilities.iter().filter_map(|&id| run.monsters[mi].kit.get(id)).copied().find(|a| {
+            ab::def(a.id).own.minions.is_some() && run.monsters[mi].cds.ready(a.id) && super::minions::room(run, mi, a) > 0
+        });
+        if let Some(a) = raise {
+            run.monsters[mi].ai.cast = Some((a.id, a.windup));
+            set_anim(run, mi, Anim::Windup);
+            return;
         }
     }
 
@@ -529,27 +540,6 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool,
     } else {
         ai.cd = pace;
         ai.alt_cd = ai.alt_cd.max(ATTACK_GAP);
-    }
-}
-
-/// Necromancers raise skeletons; summoners (`fire`) summon imps.
-fn raise_minions(run: &mut Run, mi: usize, fire: bool) {
-    let (pos, id) = (run.monsters[mi].pos, run.monsters[mi].id);
-    run.monsters[mi].ai.raise_cd = enemies::NECRO_RAISE_COOLDOWN;
-    set_anim(run, mi, Anim::Cast);
-    for k in 0..2 {
-        let a = run.rng.gen_range(0.0..std::f64::consts::TAU);
-        let mut spot = pos + Vec2::from_angle(a) * 14.0;
-        if run.layout.map.blocks_at(spot, run.monsters[mi].mover) {
-            spot = pos;
-        }
-        let minions = run.monsters.iter().filter(|o| o.alive && o.owner == Some(id)).count();
-        if minions >= enemies::NECRO_MAX_MINIONS || k > 0 && run.rng.gen_bool(0.5) {
-            break;
-        }
-        let t = if fire { EnemyType::SummonedImp } else { EnemyType::RaisedSkeleton };
-        run.spawn_enemy(t, spot, Some(id));
-        run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, k: fire as u8 }, Some(spot));
     }
 }
 
@@ -783,23 +773,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn necromancer_death_kills_raised_skeletons() {
-        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-        let ppos = run.players[0].pos();
-        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        let necro = run.spawn_enemy(EnemyType::Necromancer, ppos + Vec2::new(60.0, 0.0), None);
-        let ni = run.monster_idx(necro).unwrap();
-        raise_minions(&mut run, ni, false);
-        run.monsters[ni].ai.raise_cd = 0.0;
-        raise_minions(&mut run, ni, false);
-        let minions = run.monsters.iter().filter(|m| m.owner == Some(necro) && m.alive).count();
-        assert!(minions >= 1);
-        run.kill_monster(ni);
-        let minions = run.monsters.iter().filter(|m| m.owner == Some(necro) && m.alive).count();
-        assert_eq!(minions, 0);
-    }
-
-    #[test]
     fn demon_dungeon_has_demons_instead_of_skeletons() {
         let count = |run: &Run, t: EnemyType| run.monsters.iter().filter(|m| m.etype == Some(t)).count();
         let lich = test_run(&[ClassId::Wizard], BossId::Lich);
@@ -956,21 +929,63 @@ pub(crate) mod tests {
         assert!(ai.cd < 1.0, "claw cooldown untouched (only the short gap)");
     }
 
-    #[test]
-    fn summoner_summons_imps_that_die_with_it() {
+    /// A run with a necromancer 60 px from the hero and nothing else but the boss.
+    fn necro_in_sight() -> (Run, u32, usize) {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open_floor(&mut run);
         let ppos = run.players[0].pos();
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        let s = run.spawn_enemy(EnemyType::Summoner, ppos + Vec2::new(60.0, 0.0), None);
-        let si = run.monster_idx(s).unwrap();
-        run.events.clear();
-        raise_minions(&mut run, si, true);
-        let imps: Vec<_> = run.monsters.iter().filter(|m| m.owner == Some(s) && m.alive).collect();
-        assert!(!imps.is_empty());
-        assert!(imps.iter().all(|m| m.etype == Some(EnemyType::SummonedImp) && m.kind == EntityKind::Imp), "summoned imps look like imps");
-        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Raise { k: 1, .. })));
-        run.kill_monster(si);
-        assert_eq!(run.monsters.iter().filter(|m| m.owner == Some(s) && m.alive).count(), 0);
+        let id = run.spawn_enemy(EnemyType::Necromancer, ppos + Vec2::new(60.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        (run, id, mi)
+    }
+
+    fn raised(run: &Run, id: u32) -> usize {
+        run.monsters.iter().filter(|m| m.owner == Some(id) && m.alive).count()
+    }
+
+    #[test]
+    fn a_necromancer_that_sees_a_hero_winds_up_then_raises() {
+        let (mut run, id, mi) = necro_in_sight();
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert!(matches!(run.monsters[mi].ai.cast, Some((AbilityId::RaiseDead, _))));
+        assert_eq!(run.monsters[mi].anim, Anim::Windup);
+        assert_eq!(raised(&run, id), 0);
+        let mut ticks = 0;
+        while run.monsters[mi].ai.cast.is_some() {
+            tick_monster(&mut run, mi, 1.0 / 60.0);
+            ticks += 1;
+        }
+        assert!((41..=43).contains(&ticks), "0.7 s of wind-up: {ticks} ticks");
+        assert_eq!(raised(&run, id), 2);
+        assert_eq!(run.monsters[mi].anim, Anim::Cast);
+    }
+
+    #[test]
+    fn a_necromancer_at_its_limit_does_not_wind_up_a_raise() {
+        let (mut run, id, mi) = necro_in_sight();
+        let pos = run.monsters[mi].pos;
+        for t in [EnemyType::RaisedSkeleton, EnemyType::RaisedArcher, EnemyType::RaisedSkeleton, EnemyType::RaisedArcher] {
+            run.spawn_enemy(t, pos, Some(id));
+        }
+        for _ in 0..30 {
+            tick_monster(&mut run, mi, 1.0 / 60.0);
+            assert_eq!(run.monsters[mi].ai.cast, None);
+        }
+        assert_eq!(raised(&run, id), 4);
+        assert!(run.monsters[mi].ai.windup.is_some() || run.monsters[mi].ai.cd < 1.0, "it fights instead");
+    }
+
+    #[test]
+    fn a_necromancer_killed_during_the_wind_up_raises_nothing() {
+        let (mut run, id, mi) = necro_in_sight();
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        assert!(run.monsters[mi].ai.cast.is_some());
+        run.kill_monster(mi);
+        for _ in 0..60 {
+            run.step();
+        }
+        assert_eq!(raised(&run, id), 0);
     }
 
     #[test]

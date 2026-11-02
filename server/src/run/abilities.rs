@@ -262,6 +262,10 @@ pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
     if !run.monsters[mi].cds.ready(id) {
         return false;
     }
+    // A cast with no room left raises nothing and spends no cooldown.
+    if ab::def(id).own.minions.is_some() && super::minions::room(run, mi, &a) == 0 {
+        return false;
+    }
     let m = &mut run.monsters[mi];
     m.aim = m.pos.angle_to(at);
     m.aim_dist = m.pos.dist(at);
@@ -775,7 +779,10 @@ fn use_summon(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> An
             let Creature::Player(pi) = c else { unreachable!("only a hero summons the wolf") };
             super::companion::use_ability(run, pi)
         }
-        AbilityId::RaiseDead | AbilityId::SummonImps => todo!("#204 Task 2"),
+        AbilityId::RaiseDead | AbilityId::SummonImps => {
+            let Creature::Monster(mi) = c else { unreachable!("only monsters raise minions") };
+            super::minions::raise(run, mi, a);
+        }
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish => {
             unreachable!("{:?} is not a summon", a.id)
         }

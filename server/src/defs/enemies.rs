@@ -94,7 +94,7 @@ fn natural_melee(t: EnemyType) -> ItemId {
 }
 
 pub fn def(t: EnemyType) -> EnemyDef {
-    use AbilityId::{Bite, FireBolt, GroundSlam, ShadowBolt, Shoot, Strike, Touch, Vanish};
+    use AbilityId::{Bite, FireBolt, GroundSlam, RaiseDead, ShadowBolt, Shoot, Strike, SummonImps, Touch, Vanish};
     use EnemyType::*;
     use ItemId::*;
     match t {
@@ -183,7 +183,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 vision: 9.375,
                 attrs,
                 weight: 10.0,
-                abilities: if t == Summoner { &[FireBolt, Strike] } else { &[ShadowBolt, Strike] },
+                abilities: if t == Summoner { &[FireBolt, Strike, SummonImps] } else { &[ShadowBolt, Strike, RaiseDead] },
                 weapons: if t == Summoner { &[SummonerRod] } else { &[NecromancerRod] },
                 preferred: 110.0,
             }
@@ -342,10 +342,6 @@ pub const MIMIC_WAKE_T: f64 = 0.6;
 /// A player this close (center distance, px) opens a chest or wakes a mimic.
 pub const CHEST_TOUCH: f64 = 12.0;
 
-/// Necromancers raise skeletons (summoners summon imps) on this cooldown, up to this many alive.
-pub const NECRO_RAISE_COOLDOWN: f64 = 7.0;
-pub const NECRO_MAX_MINIONS: usize = 3;
-
 /// HP before the CON bonus: today's HP minus 5 per CON point above 10, so the total stays.
 pub fn base_hp(t: EnemyType) -> f64 {
     let d = def(t);
@@ -449,7 +445,11 @@ mod tests {
             let ranged = d.weapons.iter().any(|&w| matches!(items::def(w).base, ItemBase::Ranged(..)));
             assert_eq!(ranged, d.abilities.contains(&AbilityId::Shoot), "{t:?}: a bow goes with Shoot");
             assert!(d.abilities.iter().any(|a| matches!(a, AbilityId::Strike | AbilityId::Bite | AbilityId::Touch)), "{t:?} has no melee ability");
-            assert!(d.abilities.len() <= 2 && !d.abilities.is_empty(), "{t:?}");
+            assert!(d.abilities.len() <= 3 && !d.abilities.is_empty(), "{t:?}");
+            // A third ability is a minion summon, cast by its own wind-up (`run/ai.rs`), not the chase.
+            if let Some(&third) = d.abilities.get(2) {
+                assert!(crate::defs::abilities::def(third).own.minions.is_some(), "{t:?}: the third {third:?} is not a minion summon");
+            }
             // The AI (`run/ai.rs`) uses an alt ability only if it swings, shoots or slams.
             if let Some(&alt) = d.abilities.get(1) {
                 // Vanish (a buff) is the ambush module's, not the chase's.
@@ -580,6 +580,7 @@ mod kit_pins {
             (OrcArcher, Strike, Pin { damage: 3.5999999999999996, cooldown: 0.9259259259259258, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Necromancer, ShadowBolt, Pin { damage: 12.0, cooldown: 2.0, range: 180.0, speed: 130.0, radius: 3.0, windup: 0.5, push: 0.0 }),
             (Necromancer, Strike, Pin { damage: 5.0, cooldown: 1.2, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Necromancer, RaiseDead, Pin { damage: 0.0, cooldown: 12.0, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.7, push: 0.0 }),
             (RaisedSkeleton, Strike, Pin { damage: 9.0, cooldown: 1.0, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
             (RaisedArcher, Shoot, Pin { damage: 7.0, cooldown: 1.6, range: 150.0, speed: 180.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (RaisedArcher, Strike, Pin { damage: 3.0, cooldown: 0.9090909090909091, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
@@ -592,6 +593,7 @@ mod kit_pins {
             (Chort, FireBolt, Pin { damage: 5.541666666666666, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (Summoner, FireBolt, Pin { damage: 7.583333333333334, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (Summoner, Strike, Pin { damage: 5.0, cooldown: 1.2, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
+            (Summoner, SummonImps, Pin { damage: 0.0, cooldown: 12.0, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.7, push: 0.0 }),
             (SummonedImp, FireBolt, Pin { damage: 7.0, cooldown: 2.0, range: 150.0, speed: 130.0, radius: 3.0, windup: 0.35, push: 0.0 }),
             (SummonedImp, Strike, Pin { damage: 6.0, cooldown: 0.9, range: 21.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Ghost, Touch, Pin { damage: 7.2, cooldown: 0.9259259259259258, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),

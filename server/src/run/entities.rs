@@ -152,7 +152,8 @@ pub struct Ai {
     pub path: Vec<Vec2>,
     pub repath_t: f64,
     pub search_t: f64,
-    pub raise_cd: f64,
+    /// A minion ability winding up and the seconds left; it is cast whether or not a foe is still seen.
+    pub cast: Option<(AbilityId, f64)>,
     pub wander_t: f64,
     pub wander_to: Option<Vec2>,
     /// Seconds the monster does nothing (mimic reveal).
@@ -172,7 +173,7 @@ impl Ai {
             path: Vec::new(),
             repath_t: 0.0,
             search_t: 0.0,
-            raise_cd: 2.0,
+            cast: None,
             wander_t: 2.0,
             wander_to: None,
             hold: 0.0,

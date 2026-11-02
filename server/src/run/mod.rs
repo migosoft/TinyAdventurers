@@ -11,6 +11,7 @@ pub mod entities;
 pub mod keystones;
 pub mod levels;
 pub mod light;
+pub mod minions;
 pub mod objects;
 pub mod perception;
 pub mod rules_log;
