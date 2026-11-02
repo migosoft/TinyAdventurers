@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { COVE_TREE_FOOT as FRAMES_TREE_FOOT } from '../../scripts/cove-frames';
-import { COVE_PLANTS, COVE_TREE_FOOT, TRUNK_CLEAR, coveGrass, paintCove, placeCovePlants } from './covemath';
+import { COVE_PLANTS, COVE_TREE_FOOT, ROOT_FRINGE, TRUNK_CLEAR, coveGrass, paintCove, placeCovePlants } from './covemath';
 
 const spec = { w: 18 * 16, h: 15 * 16, tree: { x: 144, y: 144 }, seed: 1 };
 const MARGIN = 32;
@@ -107,19 +107,32 @@ describe('placeCovePlants', () => {
     expect(placeCovePlants({ ...spec, seed: 2 })).not.toEqual(plants);
   });
 
-  it('places at most 30, some near the tree', () => {
-    expect(plants.length).toBeLessThanOrEqual(30);
-    expect(plants.filter((p) => Math.hypot(p.x - spec.tree.x, p.y - spec.tree.y) < 70).length).toBeGreaterThanOrEqual(4);
+  const inTrunk = (p: { x: number; y: number }) =>
+    Math.abs(p.x - spec.tree.x) < TRUNK_CLEAR.dx && p.y > spec.tree.y - TRUNK_CLEAR.up && p.y < spec.tree.y + TRUNK_CLEAR.down;
+  // the root fringe is placed last
+  const roots = plants.slice(-ROOT_FRINGE.count), rest = plants.slice(0, -ROOT_FRINGE.count);
+
+  it('places at most 30 plus the root fringe, some near the tree', () => {
+    expect(rest.length).toBeLessThanOrEqual(30);
+    expect(rest.filter((p) => Math.hypot(p.x - spec.tree.x, p.y - spec.tree.y) < 70).length).toBeGreaterThanOrEqual(4);
   });
 
-  it('keeps off the trunk, off each other and on grass', () => {
-    for (const p of plants) {
-      const inTrunk = Math.abs(p.x - spec.tree.x) < TRUNK_CLEAR.dx && p.y > spec.tree.y - TRUNK_CLEAR.up && p.y < spec.tree.y + TRUNK_CLEAR.down;
-      expect(inTrunk).toBe(false);
+  it('puts tufts and ferns among the roots, never on the trunk base or a bush', () => {
+    expect(roots.filter(inTrunk).length).toBeGreaterThanOrEqual(6);
+    for (const p of roots) {
+      expect(Math.hypot((p.x - spec.tree.x) / 40, (p.y - spec.tree.y - 2) / 15)).toBeLessThanOrEqual(1.15); // band out to 1.1x, plus rounding
+      expect(isBush(p.frame)).toBe(false);
+      expect(Math.abs(p.x - spec.tree.x) < ROOT_FRINGE.trunkDx && p.y < spec.tree.y + ROOT_FRINGE.trunkDown).toBe(false);
       expect(grass(p.x, p.y)).toBe(true);
-      expect(COVE_PLANTS).toContain(p.frame);
     }
-    for (const a of plants) for (const b of plants) {
+    for (const a of roots) for (const b of plants) if (a !== b) expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(9);
+  });
+
+  it('keeps the other plants off the trunk, off each other and on grass', () => {
+    for (const p of plants) expect(COVE_PLANTS).toContain(p.frame);
+    for (const p of rest) expect(grass(p.x, p.y)).toBe(true);
+    expect(rest.every((p) => !inTrunk(p))).toBe(true);
+    for (const a of rest) for (const b of rest) {
       if (a === b) continue;
       // a bush keeps 24 px from what is already placed, a tuft only 15 px from a bush placed before it
       expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(isBush(a.frame) && isBush(b.frame) ? 24 : 15);

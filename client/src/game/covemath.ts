@@ -13,6 +13,9 @@ export type CovePlantFrame = typeof COVE_PLANTS[number];
 /** No plant stands here around the trunk foot: |dx| < dx, and from `up` above to `down` below. */
 export const TRUNK_CLEAR = { dx: 36, up: 30, down: 14 };
 
+/** Tufts and ferns among the roots (they may stand inside TRUNK_CLEAR), never on the trunk's base: |dx| < trunkDx above `trunkDown`. */
+export const ROOT_FRINGE = { count: 10, trunkDx: 12, trunkDown: 8 };
+
 /** Transparent margin around the floor area, so blades and shadows over the wall line are kept. */
 const MARGIN = 32;
 
@@ -167,6 +170,19 @@ export function placeCovePlants(spec: CoveSpec): CovePlant[] {
     const x = Math.floor(rp() * W), y = Math.floor(rp() * H);
     const nearEdge = !grass(x - 26, y) || !grass(x + 26, y) || !grass(x, y - 30) || !grass(x, y + 24);
     tryPlace(x, y, pick(nearEdge));
+  }
+  // tufts and ferns around the root tips and between the front roots, so the roots blend into the grass;
+  // their own rng stream, after the others, so the plants above keep their spots
+  const rf = rng(seeded(71, spec));
+  const fringe = ['cove_tuft_a', 'cove_tuft_b', 'cove_fern', 'cove_tuft_b', 'cove_fern'] as const;
+  for (let k = 0, n = 0; k < 600 && n < ROOT_FRINGE.count; k++) {
+    // a band around the root tips: sideways out to ~40 px, in front down to ~16 px, a little behind at the sides
+    const ang = -0.35 + rf() * (Math.PI + 0.7), d = 0.65 + rf() * 0.45;
+    const x = Math.round(cx + Math.cos(ang) * 40 * d), y = Math.round(cy + 2 + Math.sin(ang) * 15 * d);
+    if (Math.abs(x - cx) < ROOT_FRINGE.trunkDx && y < cy + ROOT_FRINGE.trunkDown) continue;
+    if (!grass(x, y) || !free(x, y, 9)) continue;
+    placed.push({ frame: fringe[n % fringe.length], x, y });
+    n++;
   }
   return placed;
 }
