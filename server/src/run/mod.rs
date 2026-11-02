@@ -459,12 +459,14 @@ impl Run {
             }
             if m.sinking.is_some() || m.knock != Vec2::ZERO {
                 self.monsters[mi].slam = None;
+                self.monsters[mi].ai.cast = None;
                 continue; // slid and sunk below
             }
             if m.effects.no_act() {
                 // Asleep or stone: no thinking, attacks or wind-ups.
                 let m = &mut self.monsters[mi];
                 m.ai.windup = None;
+                m.ai.cast = None;
                 m.slam = None;
                 if m.anim != Anim::Idle {
                     m.anim = Anim::Idle;
@@ -696,6 +698,7 @@ impl Run {
             m.sinking = Some((t, how));
             m.knock = Vec2::ZERO;
             m.ai.windup = None;
+            m.ai.cast = None;
             m.anim = Anim::Idle;
             m.anim_start = self.time;
             let id = m.id;

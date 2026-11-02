@@ -86,6 +86,7 @@ pub fn escape_terrain(run: &mut Run, mi: usize, dt: f64) {
 /// where it was last seen). Its normal movement, so walls slide it and chasms stop it.
 pub fn flee(run: &mut Run, mi: usize, dt: f64) {
     run.monsters[mi].ai.windup = None;
+    run.monsters[mi].ai.cast = None;
     let Some((source, last)) = run.monsters[mi].effects.fear_from() else { return };
     let now = source.and_then(|id| {
         let alive = |p: &crate::run::entities::Player| p.alive && p.id == id;
@@ -992,6 +993,37 @@ pub(crate) mod tests {
             run.step();
         }
         assert_eq!(raised(&run, id), 0);
+    }
+
+    /// A necromancer 0.5 s into its wind-up (0.2 s left), then `kind` applied for a second. Once the
+    /// effect has lapsed the wind-up must start over (or not be running), never resume where it was.
+    fn crowd_control_cancels_the_raise(kind: EffectKind, still: fn(&crate::run::entities::Monster) -> bool) {
+        let (mut run, id, mi) = necro_in_sight();
+        tick_monster(&mut run, mi, 1.0 / 60.0);
+        for _ in 0..30 {
+            tick_monster(&mut run, mi, 1.0 / 60.0);
+        }
+        assert!(run.monsters[mi].ai.cast.is_some());
+        run.monsters[mi].effects.add(kind, 1.0);
+        let mut steps = 0;
+        while still(&run.monsters[mi]) {
+            run.step();
+            steps += 1;
+            assert!(steps < 200);
+        }
+        assert_eq!(raised(&run, id), 0, "nothing raised by the old wind-up");
+        let left = run.monsters[mi].ai.cast.map(|(_, t)| t);
+        assert!(left.map_or(true, |t| t > 0.6), "no wind-up resumed: {left:?}");
+    }
+
+    #[test]
+    fn a_frozen_necromancer_loses_its_wind_up() {
+        crowd_control_cancels_the_raise(EffectKind::Frozen, |m| m.effects.no_act());
+    }
+
+    #[test]
+    fn a_frightened_necromancer_loses_its_wind_up() {
+        crowd_control_cancels_the_raise(EffectKind::Fear, |m| m.effects.fear_from().is_some());
     }
 
     #[test]
