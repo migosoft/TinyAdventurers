@@ -251,7 +251,7 @@ impl Cooldowns {
 }
 
 /// Monster `mi` uses ability `id` of its kit at the point `at` (a blast or a ground area lands there, like
-/// a hero's cursor). False if it has no such ability or it is on cooldown. The numbers are the kit's:
+/// a hero's cursor). False if it has no such ability, it is on cooldown, or it is a minion ability with no room. The numbers are the kit's:
 /// nothing is passed in.
 pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
     let Some(a) = run.monsters[mi].kit.get(id).copied() else { return false };

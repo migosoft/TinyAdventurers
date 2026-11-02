@@ -88,6 +88,7 @@ mod tests {
         let (mut run, id, ni, ppos) = caster(EnemyType::Necromancer);
         assert!(monster_use(&mut run, ni, AbilityId::RaiseDead, ppos));
         assert_eq!((living_of(&run, id), owned(&run, id, EnemyType::RaisedSkeleton), owned(&run, id, EnemyType::RaisedArcher)), (2, 1, 1));
+        assert!(run.events.iter().any(|e| matches!(e.0, Ev::Raise { k: 0, .. })), "a necromancer's raise is the plain look");
         run.monsters[ni].cds = Default::default();
         assert!(monster_use(&mut run, ni, AbilityId::RaiseDead, ppos));
         assert_eq!(living_of(&run, id), 4);

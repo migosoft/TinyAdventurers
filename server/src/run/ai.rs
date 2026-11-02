@@ -316,7 +316,9 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             run.monsters[mi].ai.cast = Some((id, t - dt));
         } else {
             run.monsters[mi].ai.cast = None;
-            monster_use(run, mi, id, pos);
+            // At the foe's last known spot, so the caster keeps facing it.
+            let at = run.monsters[mi].ai.last_known;
+            monster_use(run, mi, id, at);
         }
         return;
     }
@@ -959,6 +961,7 @@ pub(crate) mod tests {
         assert!((41..=43).contains(&ticks), "0.7 s of wind-up: {ticks} ticks");
         assert_eq!(raised(&run, id), 2);
         assert_eq!(run.monsters[mi].anim, Anim::Cast);
+        assert!(run.monsters[mi].aim.cos() < 0.0, "still facing the hero, to its west: {}", run.monsters[mi].aim);
     }
 
     #[test]
@@ -968,12 +971,15 @@ pub(crate) mod tests {
         for t in [EnemyType::RaisedSkeleton, EnemyType::RaisedArcher, EnemyType::RaisedSkeleton, EnemyType::RaisedArcher] {
             run.spawn_enemy(t, pos, Some(id));
         }
-        for _ in 0..30 {
+        let mut aimed = false;
+        // Past its short opening gap, so it has time to start a shot.
+        for _ in 0..120 {
             tick_monster(&mut run, mi, 1.0 / 60.0);
             assert_eq!(run.monsters[mi].ai.cast, None);
+            aimed |= run.monsters[mi].ai.windup.is_some();
         }
+        assert!(aimed, "it winds up a shot instead");
         assert_eq!(raised(&run, id), 4);
-        assert!(run.monsters[mi].ai.windup.is_some() || run.monsters[mi].ai.cd < 1.0, "it fights instead");
     }
 
     #[test]
