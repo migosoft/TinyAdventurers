@@ -89,7 +89,6 @@ impl At {
 #[derive(Debug, Clone, Copy)]
 pub struct MeleeStats {
     pub damage: f64,
-    /// The weapon's base interval (s), unscaled: `sheet::resolve_ability` applies the Attribute step.
     pub cooldown: f64,
     pub arc: f64,
     pub push: f64,
@@ -122,6 +121,7 @@ pub struct ResolvedWeapon {
     pub damage: f64,
     /// `damage` as its breakdown: `damage == base.amount()`.
     pub base: Base,
+    /// The weapon's base interval (s), unscaled: `sheet::resolve_ability` applies the Attribute step.
     pub cooldown: f64,
     pub arc: f64,
     pub push: f64,

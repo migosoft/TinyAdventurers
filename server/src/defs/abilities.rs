@@ -592,9 +592,9 @@ pub fn cooldown_attr(c: AbilityCategory) -> Attr {
 }
 
 /// The Attribute that governs an ability's category (spec §5, §6.3): it scales a spell's or
-/// innate ability's damage (not its cooldown, see `cooldown_attr`) and is the power of its damage-type effects, with the percentage
-/// each point moves that damage by. Weapon attacks and techniques have none: their numbers and
-/// power are the weapon's.
+/// innate ability's damage (not its cooldown, see `cooldown_attr`) and is the power of its
+/// damage-type effects, with the percentage each point moves that damage by. Weapon attacks and
+/// techniques have none: their numbers and power are the weapon's.
 pub fn governing(c: AbilityCategory) -> Option<(Attr, f64)> {
     match c {
         AbilityCategory::Spell => Some((Attr::Int, INT_DMG)),

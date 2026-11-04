@@ -15,7 +15,7 @@ use crate::defs::enemies::{self, EnemyType};
 use crate::defs::kinds::EntityKind;
 use crate::defs::items::{self, ArmorClass, EquipSlot, Equipment, ItemBase, ItemId, PropKind};
 use crate::defs::lights::{self, LightKind};
-use crate::defs::loadout::{apply_mods, MIN_COOLDOWN, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source};
+use crate::defs::loadout::{apply_mods, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source, MIN_COOLDOWN};
 use crate::defs::races::Sight;
 use crate::defs::requirements::Requirement;
 use crate::defs::trees::{self, Keystone, KeystoneSet, NodeId, Prof};
@@ -186,6 +186,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
     let own = d.own;
     let mult = d.weapon_mult;
     // Base (its own cooldown, else the weapon's interval), then the Attribute step, then the floor.
+    // A `Uses::Nothing` ability with no own cooldown has base 0, which the floor lifts to MIN_COOLDOWN.
     let cooldown = |weapon: Option<&ResolvedWeapon>| {
         let base = if own.cooldown > 0.0 { own.cooldown } else { weapon.map_or(0.0, |w| w.cooldown) * mult.time };
         Scaled { value: base, attr: ab::cooldown_attr(d.category), pct: CD_PCT, at: attributes::BASELINE }.per(attrs).max(MIN_COOLDOWN)
