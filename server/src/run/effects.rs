@@ -474,10 +474,12 @@ impl Run {
         self.apply(c, Apply::from_hit(h));
     }
 
-    /// A pure effect hit (no damage): the same, with the hit's cause for the rules log.
-    pub fn hit_effect_by(&mut self, c: Creature, h: OnHit, why: Why) {
-        let origin = why.by.map(|by| (by, why.what));
-        self.apply(c, Apply { origin, ..Apply::from_hit(h) });
+    /// Every effect a hit lists, in order, each with the hit's cause for the rules log.
+    pub fn hit_effects(&mut self, c: Creature, dmg: &Damage) {
+        let origin = dmg.why.by.map(|by| (by, dmg.why.what));
+        for &h in &dmg.on_hit {
+            self.apply(c, Apply { origin, ..Apply::from_hit(h) });
+        }
     }
 
     /// Damage ends effects that break on it (none yet).
@@ -1109,6 +1111,72 @@ mod tests {
         assert_eq!(run.players[0].hp, hp);
         assert!(run.has_effect(Creature::Player(0), EffectKind::Blind));
         assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "a pure effect hit shows no number");
+    }
+
+    fn plain_hit(kind: EffectKind) -> OnHit {
+        OnHit { kind, secs: 2.0, magical: false, power: 10, look: EffectLook::Plain }
+    }
+
+    #[test]
+    fn a_hit_applies_every_listed_effect() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.hurt_player(0, Damage::physical(1.0).with_effect(plain_hit(EffectKind::Chilled)).with_effect(plain_hit(EffectKind::Weakened)));
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Chilled));
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Weakened));
+    }
+
+    #[test]
+    fn a_pure_effect_hit_applies_every_listed_effect() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        let hp = run.monsters[mi].hp;
+        run.events.clear();
+        run.hurt_monster(mi, Damage::physical(0.0).with_effect(plain_hit(EffectKind::Chilled)).with_effect(plain_hit(EffectKind::Weakened)), false, Some(0));
+        assert!(run.has_effect(c, EffectKind::Chilled) && run.has_effect(c, EffectKind::Weakened));
+        assert_eq!(run.monsters[mi].hp, hp);
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "a pure effect hit shows no number");
+    }
+
+    #[test]
+    fn the_later_effect_on_one_hit_decides_a_cancel() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.hurt_monster(mi, Damage::physical(0.0).with_effect(plain_hit(EffectKind::Burning)).with_effect(plain_hit(EffectKind::Frozen)), false, Some(0));
+        assert!(!run.has_effect(c, EffectKind::Burning) && !run.has_effect(c, EffectKind::Frozen), "Frozen cancels Burning and is not applied");
+        let d = fresh_ogre(&mut run);
+        let Creature::Monster(di) = d else { unreachable!() };
+        run.hurt_monster(di, Damage::physical(0.0).with_effect(plain_hit(EffectKind::Frozen)), false, Some(0));
+        assert!(run.has_effect(d, EffectKind::Frozen));
+    }
+
+    #[test]
+    fn a_killing_hit_applies_no_listed_effects() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.hurt_monster(mi, Damage::physical(10_000.0).with_effect(plain_hit(EffectKind::Chilled)).with_effect(plain_hit(EffectKind::Weakened)), false, Some(0));
+        assert!(!run.monsters[mi].alive);
+        assert!(!run.has_effect(c, EffectKind::Chilled) && !run.has_effect(c, EffectKind::Weakened));
+    }
+
+    #[test]
+    fn an_effect_tick_applies_no_listed_effects() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(plain_hit(EffectKind::Slowed)).with_effect(plain_hit(EffectKind::Blind)));
+        assert!(run.players[0].effects.list().is_empty());
+    }
+
+    #[test]
+    fn a_bodiless_pass_through_applies_no_listed_effects() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        let at = run.players[0].pos();
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ghost, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        let c = Creature::Monster(mi);
+        run.hurt_monster(mi, Damage::physical(1.0).with_effect(plain_hit(EffectKind::Slowed)).with_effect(plain_hit(EffectKind::Blind)), false, Some(0));
+        assert!(!run.has_effect(c, EffectKind::Slowed) && !run.has_effect(c, EffectKind::Blind));
     }
 
     #[test]

@@ -908,8 +908,8 @@ impl Run {
         if !dmg.from_effect {
             self.reveal(effects::Creature::Player(pi), rules_log::EndReason::RevealedByHit);
         }
-        if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit.first().copied(), dmg.from_effect) {
-            self.hit_effect_by(effects::Creature::Player(pi), h, dmg.why); // a pure effect hit: no number, no flash
+        if dmg.amount == 0.0 && !dmg.on_hit.is_empty() && !dmg.from_effect {
+            self.hit_effects(effects::Creature::Player(pi), &dmg); // a pure effect hit: no number, no flash
             return;
         }
         let res = keystones::hurt_res(&self.players[pi], self.players[pi].effects.res(self.players[pi].res));
@@ -953,9 +953,7 @@ impl Run {
                 self.damage_wakes(effects::Creature::Player(pi));
             }
             self.type_effect_hit(effects::Creature::Player(pi), &dmg);
-            if let Some(h) = dmg.on_hit.first().copied() {
-                self.hit_effect(effects::Creature::Player(pi), h);
-            }
+            self.hit_effects(effects::Creature::Player(pi), &dmg);
         }
         rules_log::hit_end(self);
     }
@@ -1119,8 +1117,8 @@ impl Run {
             rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg: dmg.clone(), res, parts: [0.0; DamageType::COUNT], hp_before: hp, hp_after: hp, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Shielded }); rules_log::hit_end(self);
             return false;
         }
-        if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit.first().copied(), dmg.from_effect) {
-            self.hit_effect_by(effects::Creature::Monster(mi), h, dmg.why);
+        if dmg.amount == 0.0 && !dmg.on_hit.is_empty() && !dmg.from_effect {
+            self.hit_effects(effects::Creature::Monster(mi), &dmg);
             return true;
         }
         let res = self.monsters[mi].effects.res(self.monsters[mi].res);
@@ -1200,9 +1198,7 @@ impl Run {
                 self.damage_wakes(effects::Creature::Monster(mi));
             }
             self.type_effect_hit(effects::Creature::Monster(mi), &dmg);
-            if let Some(h) = dmg.on_hit.first().copied() {
-                self.hit_effect(effects::Creature::Monster(mi), h);
-            }
+            self.hit_effects(effects::Creature::Monster(mi), &dmg);
         }
         rules_log::hit_end(self);
         true
