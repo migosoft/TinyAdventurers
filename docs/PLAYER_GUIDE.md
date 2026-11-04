@@ -37,6 +37,8 @@ Your teammates' names float above their heroes, and the party list (top left) sh
 
 **Abilities.** Every hero has two: left mouse button (primary) and right (secondary). The four starting names are **Strike** (hit with your melee weapon), **Shoot** (fire your ranged weapon), **Charge** (a dash that hurts everything you run through) and **Holy Light** (a heal for you and your friends). Spells such as Magic Missile and Fireball are abilities too. **Enemies and bosses use the same abilities, with the same rules and their own Attributes**: an ability's name always means the same thing, whoever uses it. A melee **Strike** or **Bite** hits everything in the weapon's arc, barrels and chests included; **Ground Slam** hits no barrels or chests; **Swoop** and **Pounce** hit creatures only. Every class has four more, two for the left button and two for the right, listed under its heading below. You learn them in the skill tree (see "XP, coins and the character"). Each needs Attribute values (INT, CHA, STR, DEX, WIL; items count) and some a kind of weapon, shown after its name.
 
+**Cooldowns and Attributes.** Every ability recharges faster with the right Attribute, **10 % per point** above 10 (and slower below 10). **Spells** (Fireball, Frost Nova, Haste) follow **INT**, **innate** abilities (Holy Light, Dire Wolf, Consecrate) follow **CHA**, and **techniques and weapon attacks** (Charge, Strike, Shoot, Volley) follow **DEX**. A cooldown never falls below 0.05 seconds. Status effects change the speed too: Slowed and Chilled make cooldowns run 25 % slower, Accelerated 25 % faster. **The cooldowns listed for the hero abilities below are at Attribute 10**; your own are shorter with more, and the character screen and the ability cards show the steps. Enemies and bosses follow the same rule with their own Attributes.
+
 **Fighting up close.** A ranged ability does not work with an enemy (or a closed chest) right next to you, about a body's width and a bit more.
 - Your **left button then strikes with your melee weapon** instead: the Wizard hits with his staff (weakly, so step back), the Elven Ranger thrusts her rapier. It hits the nearest target. If the blow kills it with damage to spare, the rest of the blow carries on to the next target in reach.
 - Your **right button** does nothing if it is a ranged ability (the Wizard's Fireball) and shows "Too close"; it costs no cooldown. Holy Light, Charge and the Dire Wolf still work up close.
@@ -68,14 +70,14 @@ The toughest hero.
 ### Elven Ranger, 90 HP
 The fastest hero, and the only one who fights with a companion. An elf: she sees **twice as far** as the others (18 tiles, still only where there is light and no wall), she sees a third of that range into the dark, she shrugs off a tenth of poison and she **cannot be put to sleep**.
 - **Left – Shoot (Bow) / Strike (Rapier):** shoots arrows, which pierce enemies they kill. When an enemy is right next to you, you thrust with the rapier automatically instead, which is quicker.
-- **Right – Dire Wolf (8 s cooldown):** with no wolf, **summons** one beside you in a puff of green sparkles. With the wolf alive, it **heals** the wolf for 20 % of its health (also at full health; the cooldown starts anyway). When the wolf falls, the box waits **60 seconds** before you can summon a new one. There is only ever one wolf per ranger.
+- **Right – Dire Wolf (8 s cooldown):** with no wolf, **summons** one beside you in a puff of green sparkles. With the wolf alive, it **heals** the wolf for 20 % of its health (also at full health; the cooldown starts anyway). When the wolf falls, the box waits **60 seconds** (shortened by the same CHA step as the Dire Wolf's own cooldown, so about 46 seconds at CHA 13) before you can summon a new one. There is only ever one wolf per ranger.
 - **More, left button:** **Volley** (DEX 15, needs a bow or longbow): three arrows in a fan, each weaker, and it takes longer to nock. **Flanking Thrust** (DEX 16, needs a dagger, duelling sword, katana or machete): a thrust that does **double damage** to an enemy you hit from behind.
 - **More, right button:** **Poison Coat** (WIL 15, 16 s): for 6 seconds your weapon attacks add poison and poison what they hit. **Entangle** (CHA 14, 14 s): vines grow where you aim, up to 120 pixels away and not through walls, and root the enemies in them for 4 seconds (a strong enemy breaks free sooner). You cannot aim it with an enemy right next to you. A rooted enemy still attacks.
 
 **Your wolf**
 - It has 80 HP, runs a little faster than you and uses **Bite** for 10 about once a second, with a small push.
 - **It guards you.** It stays close, bites any enemy that comes within about three tiles of you, and fights back when something attacks it. It does not run off after what you shoot at, and it turns back when it has strayed about six tiles from you.
-- **It opens a fight with a leap:** from up to four tiles away it dashes at its prey for 20 damage (every 5 seconds), and this is its **Pounce**, and it crosses chasms. A push into a chasm is escaped the same way, with the dash. With the dash resting it falls and dies, like any monster. It drowns in deep water and burns in lava.
+- **It opens a fight with a leap:** from up to four tiles away it dashes at its prey for 20 damage (about every 3.3 seconds), and this is its **Pounce**, and it crosses chasms. A push into a chasm is escaped the same way, with the dash. With the dash resting it falls and dies, like any monster. It drowns in deep water and burns in lava.
 - **Nobody gets locked out.** If it falls far behind, or you are in the sealed boss hall without it, it appears next to you again in green sparkles.
 - **Enemies fight it.** They attack it and their area attacks hit it. Your own arrows, fireballs and swords, and those of your friends, **never** hurt it. The Paladin's Holy Light heals it.
 - **Its figure shows only where there is light**, but its small health bar, like a hero's, shows even in the dark. Its kills count as yours; its death gives no XP or coins, shows a message and starts the 60 seconds.
@@ -108,7 +110,7 @@ The two boxes at the bottom of the screen show your abilities. While an ability 
 | Skeleton archer | Shoots arrows and keeps its distance. |
 | Orc warrior | Tough melee fighter, hits hard and **knocks you back**. |
 | Orc archer | Tough archer. |
-| Necromancer | Casts **Shadow Bolts** (green) and casts **Raise Dead**: after a short wind-up (0.7 s) it raises **two** skeletons or skeleton archers around itself, every 12 seconds, up to **four alive** at a time. Kill the necromancer and all of its minions crumble. |
+| Necromancer | Casts **Shadow Bolts** (green) and casts **Raise Dead**: after a short wind-up (0.7 s) it raises **two** skeletons or skeleton archers around itself, about every 7 seconds, up to **four alive** at a time. Kill the necromancer and all of its minions crumble. |
 | Mimic | Looks exactly like a treasure chest. Walk up to it (or hit it) and its lid flies open: it **hops after you** and bites. It stops chasing when you get out of sight and waits where it was found. Worth 25 coins. |
 
 **Ghosts and Shades** are rare extras that haunt the deeper rooms and halls (about one room in four, from about a third of the way in). The lich's dungeon has **Ghosts**, the demon's dungeon has **Shades**; the dragon's dungeon has neither. They are the ghostly dead and no ordinary weapon scratches them (see Damage types and resistances): only magic hurts them.
@@ -118,7 +120,7 @@ The two boxes at the bottom of the screen show your abilities. While an ability 
 | Ghost | Pale and see-through, its body pulses faintly. Its **Touch** is mostly magical with a little cold, and leaves you **Weakened** (your Strength drains, see Status effects). Worth 10 XP. |
 | Shade | A pitch-black figure with red eyes in a cloud of dark strands that streams behind it when it moves. Its **Touch** leaves you **Frail** (your Constitution drains). A little tougher than the Ghost. Worth 12 XP. |
 
-Both fight by ambush. When they notice you they **vanish**, then drift through the walls toward the hero who has strayed furthest from the rest of the party (a lone hero is always the target). When they are close enough they **appear for half a second** before they strike. The warning tells you where: the Ghost **flickers rapidly** at the spot, the Shade shows a **dark silhouette** that darkens in. That half second is your chance to **dash away** or to stand with your party. If they have not reached you within about five seconds, they show themselves and simply fight. Hitting one while it is invisible shows it at once. Each touch stacks another drain, so stay out of reach once they are visible, and kill them with magic before the drains pile up. After their invisibility has been used, they vanish and come again every 15 to 20 seconds.
+Both fight by ambush. When they notice you they **vanish**, then drift through the walls toward the hero who has strayed furthest from the rest of the party (a lone hero is always the target). When they are close enough they **appear for half a second** before they strike. The warning tells you where: the Ghost **flickers rapidly** at the spot, the Shade shows a **dark silhouette** that darkens in. That half second is your chance to **dash away** or to stand with your party. If they have not reached you within about five seconds, they show themselves and simply fight. Hitting one while it is invisible shows it at once. Each touch stacks another drain, so stay out of reach once they are visible, and kill them with magic before the drains pile up. After their invisibility has been used, they vanish and come again every 13 to 15 seconds.
 
 *All their numbers (health, damage, XP, cooldowns) are first guesses and may change while the game is balanced.*
 
@@ -128,7 +130,7 @@ Both fight by ambush. When they notice you they **vanish**, then drift through t
 |---|---|
 | Imp | Small demon in place of the skeleton archer. Keeps its distance and uses **Fire Bolt**, but uses **Strike** (its claws) on you if you get close. |
 | Chort | Horned demon in place of the skeleton warrior. Closes in and claws (a **small knockback**), and uses a **Fire Bolt** now and then while you are out of reach. |
-| Summoner | Red-robed caster in place of the necromancer. Uses **Fire Bolt** and casts **Summon Imps**: after a short wind-up (0.7 s) it summons **two** imps every 12 seconds, up to **four alive** at a time. Kill the summoner and its imps vanish. |
+| Summoner | Red-robed caster in place of the necromancer. Uses **Fire Bolt** and casts **Summon Imps**: after a short wind-up (0.7 s) it summons **two** imps every 8 seconds, up to **four alive** at a time. Kill the summoner and its imps vanish. |
 
 ### The ogre (mini-boss)
 
@@ -252,12 +254,12 @@ Tip: stay mobile, and don't stand between the demon and a chasm.
 - The red shimmering streams flowing to it show its protection: while they flow, it cannot be harmed.
 - All its magic is **dark purple gloom**.
 - Casts **Gloom Bolts**: a fan of five.
-- **Raise Dead:** every 12 seconds, after a short wind-up, it raises **three** skeletons or skeleton archers around it (half and half), up to **five alive** at a time. It starts with this about eight seconds into the fight. The disciples do not count towards the five.
-- **Nova:** about every 10 seconds it stops, raises its staff and a **purple circle** fills up on the floor around it. When it is full, a dark blast hurts **everyone inside** and pushes them. The lich is weak (STR 10): only the Wizard (weight 9) is pushed, a little (16 px); every other hero stands firm. Step out of the circle in time.
+- **Raise Dead:** about every 5.5 seconds, after a short wind-up, it raises **three** skeletons or skeleton archers around it (half and half), up to **five alive** at a time. It starts with this about eight seconds into the fight. The disciples do not count towards the five.
+- **Nova:** about every 5 to 6 seconds it stops, raises its staff and a **purple circle** fills up on the floor around it. When it is full, a dark blast hurts **everyone inside** and pushes them. The lich is weak (STR 10): only the Wizard (weight 9) is pushed, a little (16 px); every other hero stands firm. Step out of the circle in time.
 - **Three curses**, each aimed at one hero it can see (it sees only what you would see: it cannot curse you from behind a wall. A hero who already suffers *that* curse is passed over, and the lich picks the nearest hero it sees):
-  - **Blinding Curse:** about every 10 seconds the lich flings a **dark orb**. It is slow, so **step aside**. A hit does a little damage and **blinds** you for 3 seconds: you see almost nothing, not even with darkvision.
-  - **Sleep Mist:** about every 14 seconds, a **purple orb**. A hit puts you to **sleep** for 4 seconds: you lie on the floor and cannot move, attack or use abilities, and you see only a little around you. **Step aside** from the orb, and **wake a sleeping teammate** by standing next to them and pressing **E**.
-  - **Stone Gaze:** about every 18 seconds the lich stares at one hero and a **thin grey beam** links them for a second. When it ends, that hero **turns to stone** for 3 seconds: you cannot move, attack or turn, but you take much less damage and are hard to push. **Break the line of sight** (duck behind a pillar or a wall) before the beam ends and nothing happens.
+  - **Blinding Curse:** about every 4.5 seconds the lich flings a **dark orb**. It is slow, so **step aside**. A hit does a little damage and **blinds** you for 3 seconds: you see almost nothing, not even with darkvision.
+  - **Sleep Mist:** about every 6.5 seconds, a **purple orb**. A hit puts you to **sleep** for 4 seconds: you lie on the floor and cannot move, attack or use abilities, and you see only a little around you. **Step aside** from the orb, and **wake a sleeping teammate** by standing next to them and pressing **E**.
+  - **Stone Gaze:** about every 8 seconds the lich stares at one hero and a **thin grey beam** links them for a second. When it ends, that hero **turns to stone** for 3 seconds: you cannot move, attack or turn, but you take much less damage and are hard to push. **Break the line of sight** (duck behind a pillar or a wall) before the beam ends and nothing happens.
 - Those streams show even when the lich or a disciple is out of your sight, so they point the way to both.
 
 Tip: kill the disciples first. Once the last one falls, the lich's protection breaks.
@@ -283,12 +285,12 @@ Some attacks do more than damage. Your own effects show as small symbols with th
 | Crossed-out eye | Blind | You see nothing around you (darkvision does not help) |
 | Moon | Asleep | You lie down: no moving, attacking or abilities, and a very short view. A teammate's **E** wakes you at once |
 | Cracked stone | Petrified | Stone: no moving, attacking or turning, but you take far less damage and are hard to push |
-| Hourglass | Slowed | You walk at half speed |
-| Double arrow | Accelerated | You walk half as fast again (Haste and War Cry give it to heroes) |
+| Hourglass | Slowed | You walk at half speed, and your cooldowns run 25 % slower |
+| Double arrow | Accelerated | You walk half as fast again, and your cooldowns run 25 % faster (Haste and War Cry give it to heroes) |
 | Flame | Burning | Fire eats at you: heat damage for 3 seconds. Water puts it out |
 | Snowflake | Frozen | Ice: you cannot move, act or turn for 2 seconds, and the cold hurts a little |
 | Drop | Poisoned | Poison eats at you for 4 seconds |
-| Thin snowflake | Chilled | Cold slows you to 70 % speed for 3 seconds |
+| Thin snowflake | Chilled | Cold slows you to 70 % speed for 3 seconds, and your cooldowns run 25 % slower |
 | Thin flame | Singed | A weaker burn: a little heat damage for 3 seconds. Water puts it out |
 | Thin drop | Tainted | A weaker poison: a little poison damage for 3 seconds |
 | Vine | Entangled | Roots hold you: you cannot move for a few seconds, but you can still turn and attack |
