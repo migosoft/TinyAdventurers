@@ -480,9 +480,10 @@ impl Run {
     }
 
     /// The creature that made the hit, and where it is: what the effects the hit applies remember.
-    /// `None` for terrain, barrels and other sourceless damage.
+    /// `None` for terrain and for damage whose `by` is not a hero or monster (a barrel's blast).
     fn bestower(&self, dmg: &Damage) -> Option<(u32, Vec2)> {
-        dmg.why.by.map(|by| (by, self.entity_pos(by).unwrap_or(Vec2::ZERO)))
+        let by = dmg.why.by.filter(|&id| self.player_idx(id).is_some() || self.monster_idx(id).is_some())?;
+        Some((by, self.entity_pos(by).unwrap_or(Vec2::ZERO)))
     }
 
     /// Every effect a hit lists, in order, each with the hit's cause for the rules log.
@@ -1652,6 +1653,20 @@ mod tests {
         let other = run.players[0].id + 1000;
         run.apply(c, Apply { source: Some((other, Vec2::new(1.0, 1.0))), ..Apply::plain(EffectKind::Burning, Some(5.0)) });
         assert_eq!(source_of(&run, c, EffectKind::Burning), Some(Some(other)));
+    }
+
+    #[test]
+    fn a_barrel_blast_keeps_the_hero_bestower() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        let hero = run.players[0].id;
+        let hit = Damage::new(10.0, DamageSplit::split(&[(DamageType::Heat, 0.5)])).by(hero, What::Ability(crate::defs::abilities::AbilityId::MagicMissile));
+        run.hurt_monster(mi, hit, false, Some(0));
+        assert_eq!(source_of(&run, c, EffectKind::Burning), Some(Some(hero)));
+        let barrel = Damage::new(10.0, DamageSplit::split(&[(DamageType::Heat, 0.5)])).by(999_999, What::Blast);
+        run.hurt_monster(mi, barrel, false, None);
+        assert_eq!(source_of(&run, c, EffectKind::Burning), Some(Some(hero)));
     }
 
     #[test]
