@@ -450,7 +450,7 @@ mod tests {
         run.monsters.retain(|m| m.is_boss);
         press(&mut run, 0, true);
         assert_eq!(wolves(&run).len(), 1);
-        assert!((run.players[0].cd2 - 8.0).abs() < 0.1, "cd2 {}", run.players[0].cd2);
+        assert!((run.players[0].cd2 - 8.0 * 10.0 / 13.0).abs() < 0.1, "Summon Wolf is an Innate (CHA 13): cd2 {}", run.players[0].cd2);
         press(&mut run, 0, true);
         assert_eq!(wolves(&run).len(), 1, "the cooldown refuses a second wolf");
         let id = run.players[0].wolf.unwrap();
@@ -463,7 +463,7 @@ mod tests {
         run.players[0].cd2 = 0.0;
         press(&mut run, 0, true);
         assert_eq!(run.monsters[wolf_idx(&run, id)].hp, 80.0, "the heal stops at the maximum");
-        assert!((run.players[0].cd2 - 8.0).abs() < 0.1, "a heal at full HP still costs the cooldown: {}", run.players[0].cd2);
+        assert!((run.players[0].cd2 - 8.0 * 10.0 / 13.0).abs() < 0.1, "a heal at full HP still costs the cooldown: {}", run.players[0].cd2);
     }
 
     #[test]
@@ -509,7 +509,7 @@ mod tests {
         press(&mut run, 1, true);
         assert_eq!(run.monsters[wolf_idx(&run, a)].hp, 30.0, "ranger B does not heal wolf A");
         assert_eq!(run.monsters[wolf_idx(&run, b)].hp, 80.0);
-        assert!((run.players[1].cd2 - 8.0).abs() < 0.1);
+        assert!((run.players[1].cd2 - 8.0 * 10.0 / 13.0).abs() < 0.1);
     }
 
     #[test]
@@ -576,7 +576,7 @@ mod tests {
         assert_eq!((run.monsters[mi].hp, run.monsters[mi].max_hp), (WOLF_HP * 1.25, WOLF_HP * 1.25));
         dash_back(&mut run, mi);
         assert!(!run.monsters[mi].cds.ready(AbilityId::Pounce));
-        assert_eq!(run.monsters[mi].kit.get(AbilityId::Pounce).unwrap().cooldown, 3.0);
+        assert!((run.monsters[mi].kit.get(AbilityId::Pounce).unwrap().cooldown - (5.0 * 10.0 / 15.0 - 2.0)).abs() < 1e-12, "the wolf's DEX 15, then the mod");
     }
 
     #[test]
@@ -585,13 +585,13 @@ mod tests {
         let mods = crate::sheet::WolfMods { hp_mul: 1.0, pounce: Some(CooldownAdd(1.5)) };
         let (plain, modded) = (crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS), crate::sheet::kit_for(crate::sheet::KitSource::Wolf(mods), &crate::defs::companions::WOLF_ATTRS));
         let (p, m) = (plain.get(AbilityId::Pounce).unwrap(), modded.get(AbilityId::Pounce).unwrap());
-        assert_eq!((p.cooldown, m.cooldown), (5.0, 6.5));
+        assert!((p.cooldown - 5.0 * 10.0 / 15.0).abs() < 1e-12 && (m.cooldown - (5.0 * 10.0 / 15.0 + 1.5)).abs() < 1e-12, "the wolf's DEX 15, then the mod: {} {}", p.cooldown, m.cooldown);
         assert_eq!(plain.get(AbilityId::Bite), modded.get(AbilityId::Bite), "the bite is the same");
         let (mut run, _) = ranger_with_wolf();
         run.players[0].sheet.wolf = mods;
         let id = spawn_wolf(&mut run, 0);
-        assert_eq!(run.monsters[wolf_idx(&run, id)].kit.get(AbilityId::Pounce).unwrap().cooldown, 6.5);
-        assert_eq!(run.monsters[wolf_idx(&run, id)].kit.get(AbilityId::Bite).unwrap().cooldown, 0.9);
+        assert!((run.monsters[wolf_idx(&run, id)].kit.get(AbilityId::Pounce).unwrap().cooldown - (5.0 * 10.0 / 15.0 + 1.5)).abs() < 1e-12);
+        assert!((run.monsters[wolf_idx(&run, id)].kit.get(AbilityId::Bite).unwrap().cooldown - 0.9 * 10.0 / 15.0).abs() < 1e-12, "the bite: its 0.9 at DEX 15");
     }
 
     #[test]
@@ -648,7 +648,7 @@ mod tests {
         let p = &run.players[0];
         assert!(p.xp == 0 && p.coins == 0 && p.kills == 0);
         assert_eq!(p.wolf, None);
-        assert!((p.cd2 - 60.0).abs() < 1e-9);
+        assert!((p.cd2 - 60.0 * 10.0 / 13.0).abs() < 1e-9, "the wait is shortened by the same CHA 13 step as Summon Wolf: {}", p.cd2);
         assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Msg { text } if text == "p0's wolf has fallen")));
         assert!(run.events.iter().any(|(e, at)| matches!(e, Ev::Died { id: i, .. } if *i == id) && at.is_none()));
         assert!(run.ended.is_none(), "the run goes on");
@@ -844,7 +844,7 @@ mod tests {
         let p = &run.players[0];
         assert!(p.xp == 0 && p.coins == 0 && p.kills == 0);
         assert_eq!(p.wolf, None);
-        assert!(p.cd2 > 55.0 && p.cd2 <= 60.0, "the wait for the next wolf started: {}", p.cd2);
+        assert!(p.cd2 > 55.0 * 10.0 / 13.0 && p.cd2 <= 60.0 * 10.0 / 13.0, "the wait for the next wolf started: {}", p.cd2);
     }
 
     // ---- Behaviour: follow, guard, dash, bite, leash, reappear, chasm escape ----
@@ -1218,7 +1218,7 @@ mod tests {
         assert!(run.monster_idx(id).is_none(), "the wolf is gone");
         let p = &run.players[0];
         assert!(p.xp == 0 && p.coins == 0 && p.kills == 0);
-        assert!((p.cd2 - WOLF_DEAD_COOLDOWN).abs() < 0.1, "cd2 {}", p.cd2);
+        assert!((p.cd2 - WOLF_DEAD_COOLDOWN * 10.0 / 13.0).abs() < 0.1, "cd2 {}", p.cd2);
         assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Msg { text } if text == "p0's wolf has fallen")));
     }
 

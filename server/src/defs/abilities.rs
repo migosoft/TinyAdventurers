@@ -255,8 +255,6 @@ pub struct AbilityDef {
     pub backward: bool,
     /// The classes whose own pool can hold it: the class start now, the tree in plan 4.
     pub classes: &'static [ClassId],
-    /// The Attribute (and its percentage per point) that shortens `own.cooldown`, which is given at `own.at`.
-    pub cooldown_by: Option<(Attr, f64)>,
 }
 
 pub const DASH_SPEED: f64 = 300.0;
@@ -418,7 +416,6 @@ pub fn def(id: AbilityId) -> AbilityDef {
         behind: 0.0,
         backward: false,
         classes,
-        cooldown_by: None,
     };
     match id {
         MagicMissile => base("Magic Missile", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, own(12.0, 0.35, 220.0, 230.0, 3.0, 0.0, Some(EntityKind::Missile), 15), &[K::Wizard]),
@@ -566,7 +563,6 @@ pub fn def(id: AbilityId) -> AbilityDef {
             ..base("Touch", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
         },
         Vanish => AbilityDef {
-            cooldown_by: Some((Attr::Cha, CHA_DMG)),
             own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Invisible, power: Attr::Cha, look: EffectLook::Plain }), ..own(0.0, 20.0, 0.0, 0.0, 0.0, AMBUSH_MAX_INVISIBLE, None, 10) },
             ..base("Vanish", Secondary, C::Innate, Uses::Nothing, false, Shape::Buff, NO_OWN, &[])
         },
@@ -585,8 +581,18 @@ pub fn def(id: AbilityId) -> AbilityDef {
     }
 }
 
+/// The Attribute that shortens an ability's cooldown (`CD_PCT` per point from `BASELINE`):
+/// INT for a spell, CHA for an innate ability, DEX for a technique and a weapon attack.
+pub fn cooldown_attr(c: AbilityCategory) -> Attr {
+    match c {
+        AbilityCategory::Spell => Attr::Int,
+        AbilityCategory::Innate => Attr::Cha,
+        AbilityCategory::Technique | AbilityCategory::WeaponAttack => Attr::Dex,
+    }
+}
+
 /// The Attribute that governs an ability's category (spec §5, §6.3): it scales a spell's or
-/// innate ability's damage and is the power of its damage-type effects, with the percentage
+/// innate ability's damage (not its cooldown, see `cooldown_attr`) and is the power of its damage-type effects, with the percentage
 /// each point moves that damage by. Weapon attacks and techniques have none: their numbers and
 /// power are the weapon's.
 pub fn governing(c: AbilityCategory) -> Option<(Attr, f64)> {
@@ -601,6 +607,12 @@ pub fn governing(c: AbilityCategory) -> Option<(Attr, f64)> {
 mod tests {
     use super::*;
     use crate::defs::classes;
+
+    #[test]
+    fn each_category_has_a_cooldown_attribute() {
+        use AbilityCategory::*;
+        assert_eq!([Spell, Innate, Technique, WeaponAttack].map(cooldown_attr), [Attr::Int, Attr::Cha, Attr::Dex, Attr::Dex]);
+    }
 
     #[test]
     fn touch_needs_a_touch_weapon() {
@@ -661,7 +673,7 @@ mod tests {
         for (id, kind) in [(AbilityId::RaiseDead, Minions::Undead), (AbilityId::SummonImps, Minions::Imps)] {
             let d = def(id);
             assert_eq!((d.category, d.slot, d.uses, d.shape, d.ranged), (AbilityCategory::Spell, AbilitySlot::Secondary, Uses::Nothing, Shape::Summon, false));
-            assert!(d.classes.is_empty() && d.cooldown_by.is_none());
+            assert!(d.classes.is_empty());
             assert_eq!((d.own.cooldown, d.own.windup, d.own.at), (12.0, 0.7, 10));
             assert_eq!(d.own.minions, Some(OwnMinions { kind, per_cast: 1.2, alive: 2.4 }));
         }

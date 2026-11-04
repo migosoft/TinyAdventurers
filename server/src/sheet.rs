@@ -5,7 +5,7 @@
 //! and monsters from here.
 
 use crate::defs::abilities::{self as ab, AbilityCategory, AbilityDef, AbilityId, AbilitySlot, Uses};
-use crate::defs::attributes::{self, Attr, Attributes, Scaled, CON_MOVE};
+use crate::defs::attributes::{self, Attr, Attributes, Scaled, CD_PCT, CON_MOVE};
 use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_RADIUS, WOLF_SPEED, WOLF_WEIGHT};
@@ -15,7 +15,7 @@ use crate::defs::enemies::{self, EnemyType};
 use crate::defs::kinds::EntityKind;
 use crate::defs::items::{self, ArmorClass, EquipSlot, Equipment, ItemBase, ItemId, PropKind};
 use crate::defs::lights::{self, LightKind};
-use crate::defs::loadout::{apply_mods, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source};
+use crate::defs::loadout::{apply_mods, MIN_COOLDOWN, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source};
 use crate::defs::races::Sight;
 use crate::defs::requirements::Requirement;
 use crate::defs::trees::{self, Keystone, KeystoneSet, NodeId, Prof};
@@ -185,8 +185,11 @@ fn weapon_for<'a>(d: &AbilityDef, weapons: &'a [ResolvedWeapon]) -> Option<&'a R
 pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWeapon], body: Body) -> Option<ResolvedAbility> {
     let own = d.own;
     let mult = d.weapon_mult;
-    // A technique or weapon attack: its own cooldown, else the weapon's interval.
-    let cooldown = |w: &ResolvedWeapon| if own.cooldown > 0.0 { own.cooldown } else { w.cooldown * mult.time };
+    // Base (its own cooldown, else the weapon's interval), then the Attribute step, then the floor.
+    let cooldown = |weapon: Option<&ResolvedWeapon>| {
+        let base = if own.cooldown > 0.0 { own.cooldown } else { weapon.map_or(0.0, |w| w.cooldown) * mult.time };
+        Scaled { value: base, attr: ab::cooldown_attr(d.category), pct: CD_PCT, at: attributes::BASELINE }.per(attrs).max(MIN_COOLDOWN)
+    };
     // What every rule fills in the same way; the numbers it does not set stay 0.
     let blank = ResolvedAbility {
         id: d.id,
@@ -218,7 +221,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
             let melee = weapon_for(d, weapons)?;
             let base = Base { ability_mult: mult.damage, ..melee.base };
             ResolvedAbility {
-                cooldown: cooldown(melee),
+                cooldown: cooldown(Some(melee)),
                 damage: base.amount(),
                 base,
                 // A dash's own range is how far it leaps; any other melee ability reaches as far as its weapon.
@@ -239,7 +242,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
             let w = weapon_for(d, weapons)?;
             let base = Base { ability_mult: mult.damage, ..w.base };
             ResolvedAbility {
-                cooldown: cooldown(w),
+                cooldown: cooldown(Some(w)),
                 damage: base.amount(),
                 base,
                 range: w.range,
@@ -273,10 +276,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
             ResolvedAbility {
                 per_cast: own.minions.map_or(0, |m| count(m.per_cast)),
                 alive: own.minions.map_or(0, |m| count(m.alive)),
-                cooldown: match d.cooldown_by {
-                    Some((attr, pct)) => Scaled { value: own.cooldown, attr, pct, at: own.at }.per(attrs),
-                    None => own.cooldown,
-                },
+                cooldown: cooldown(None),
                 damage: base.amount(),
                 base,
                 range: own.range,
@@ -1035,36 +1035,91 @@ mod tests {
             for (int, per_cast, alive) in [(10, 1, 2), (12, 1, 3), (15, 2, 4), (17, 2, 4), (22, 3, 5)] {
                 let a = at(id, int);
                 assert_eq!((a.per_cast, a.alive), (per_cast, alive), "{id:?} at INT {int}");
-                assert_eq!(a.cooldown, 12.0, "fixed until #198");
+                assert!((a.cooldown - 12.0 * 10.0 / int as f64).abs() < 1e-12, "{id:?} at INT {int}: the INT step");
             }
         }
         let nova = at(AbilityId::Nova, 22);
         assert_eq!((nova.per_cast, nova.alive), (0, 0));
     }
 
-    #[test]
-    fn vanish_cooldown_shortens_with_cha() {
-        use crate::defs::attributes::{Attributes, CHA_DMG};
-        let vanish = |cha| resolve_ability(&ab::def(AbilityId::Vanish), &Attributes::new(10, 10, 10, 10, 10, cha), &[], Body { radius: 8.0 }).expect("Vanish needs no weapon").cooldown;
-        assert_eq!(vanish(10), 20.0);
-        assert_eq!(vanish(14), 20.0 / (factor(14, CHA_DMG) / factor(10, CHA_DMG)));
-        assert!(vanish(14) < 20.0);
+    /// All Attributes 10 except `attr` = `v`.
+    fn only(attr: Attr, v: i32) -> Attributes {
+        let mut a = Attributes::new(10, 10, 10, 10, 10, 10);
+        a.add(attr, v - 10);
+        a
     }
 
     #[test]
-    fn abilities_without_cooldown_by_are_unchanged() {
-        use crate::defs::attributes::Attributes;
-        let weapons = |a: &Attributes| -> Vec<ResolvedWeapon> {
-            ItemId::ALL.iter().filter(|&&id| matches!(items::def(id).base, ItemBase::Melee(..) | ItemBase::Ranged(..))).map(|&id| arm(id, a, &[], None, 0)).collect()
-        };
-        let (low, high) = (Attributes::new(10, 10, 10, 10, 10, 10), Attributes::new(10, 10, 10, 10, 10, 20));
-        let body = Body { radius: 8.0 };
-        for &id in AbilityId::ALL.iter().filter(|&&id| ab::def(id).cooldown_by.is_none()) {
-            let d = ab::def(id);
-            let (a, b) = (resolve_ability(&d, &low, &weapons(&low), body), resolve_ability(&d, &high, &weapons(&high), body));
-            assert_eq!(a.map(|r| r.cooldown), b.map(|r| r.cooldown), "{id:?}");
+    fn every_category_halves_at_twenty_and_doubles_at_five() {
+        // spell INT, innate CHA, technique DEX (own cooldown), weapon attack DEX (weapon interval)
+        for (id, attr) in [(AbilityId::Fireball, Attr::Int), (AbilityId::HolyLight, Attr::Cha), (AbilityId::Charge, Attr::Dex), (AbilityId::Strike, Attr::Dex)] {
+            let cd = |v: i32| {
+                let a = only(attr, v);
+                let weapons = [arm(ItemId::KnightSword, &a, &[], None, 0)];
+                let w: &[ResolvedWeapon] = if matches!(id, AbilityId::Charge | AbilityId::Strike) { &weapons } else { &[] };
+                resolve_ability(&ab::def(id), &a, w, Body { radius: 8.0 }).expect("resolves").cooldown
+            };
+            assert!((cd(20) - cd(10) / 2.0).abs() < 1e-12, "{id:?} at 20");
+            assert!((cd(5) - cd(10) * 2.0).abs() < 1e-12, "{id:?} at 5");
         }
-        assert!(ab::def(AbilityId::Vanish).cooldown_by.is_some());
+    }
+
+    #[test]
+    fn at_attribute_ten_the_written_cooldown_holds() {
+        let a = Attributes::new(10, 10, 10, 10, 10, 10);
+        let weapons: Vec<ResolvedWeapon> =
+            ItemId::ALL.iter().filter(|&&id| matches!(items::def(id).base, ItemBase::Melee(..) | ItemBase::Ranged(..))).map(|&id| arm(id, &a, &[], None, 0)).collect();
+        for &id in AbilityId::ALL.iter() {
+            let d = ab::def(id);
+            let Some(r) = resolve_ability(&d, &a, &weapons, Body { radius: 8.0 }) else { continue };
+            let expected = if d.own.cooldown > 0.0 {
+                d.own.cooldown
+            } else {
+                weapon_for(&d, &weapons).expect("a weapon ability has a weapon").cooldown * d.weapon_mult.time
+            };
+            assert_eq!(r.cooldown.to_bits(), expected.max(MIN_COOLDOWN).to_bits(), "{id:?}");
+        }
+    }
+
+    #[test]
+    fn skills_act_after_the_attribute() {
+        let r = resolve_ability(&ab::def(AbilityId::Fireball), &Attributes::new(10, 10, 10, 20, 10, 10), &[], Body { radius: 8.0 }).unwrap();
+        assert_eq!(apply_mods(r, &[AbilityMod::CooldownAdd(-0.5)]).cooldown, 2.5);
+    }
+
+    #[test]
+    fn boss_kit_cooldowns_follow_the_attribute() {
+        let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-12, "{what}: {a} vs {b}");
+        let kit = |src: KitSource, attrs: Attributes| kit_for(src, &attrs);
+        let cd = |k: &Kit, id| k.get(id).unwrap_or_else(|| panic!("{id:?} in kit")).cooldown;
+        let lich = bosses::def(BossId::Lich);
+        let k = kit(KitSource::Boss(BossId::Lich), lich.attrs);
+        assert_eq!(lich.attrs.get(Attr::Int), 22);
+        for (id, base) in [(AbilityId::GloomBolts, 2.5), (AbilityId::Nova, 10.0), (AbilityId::StoneGaze, 18.0), (AbilityId::RaiseDead, 12.0)] {
+            near(cd(&k, id), base * 10.0 / 22.0, &format!("{id:?}"));
+        }
+        let n = enemies::def(EnemyType::Necromancer);
+        near(cd(&kit(KitSource::Enemy(EnemyType::Necromancer), n.attrs), AbilityId::RaiseDead), 12.0 * 10.0 / 17.0, "Necromancer Raise Dead");
+        let s = enemies::def(EnemyType::Summoner);
+        near(cd(&kit(KitSource::Enemy(EnemyType::Summoner), s.attrs), AbilityId::SummonImps), 12.0 * 10.0 / 15.0, "Summoner Summon Imps");
+        let demon = bosses::def(BossId::Demon);
+        let k = kit(KitSource::Boss(BossId::Demon), demon.attrs);
+        assert_eq!((demon.attrs.get(Attr::Cha), demon.attrs.get(Attr::Dex)), (20, 14));
+        near(cd(&k, AbilityId::RingOfFire), 4.5, "Ring of Fire");
+        near(cd(&k, AbilityId::Swoop), 6.0 * 10.0 / 14.0, "Swoop");
+    }
+
+    #[test]
+    fn the_floor_holds_after_attribute_and_berserker() {
+        let r = resolve_ability(&ab::def(AbilityId::MagicMissile), &Attributes::new(10, 10, 10, 200, 10, 10), &[], Body { radius: 8.0 }).unwrap();
+        assert_eq!(r.cooldown, MIN_COOLDOWN, "not 0.0175");
+    }
+
+    #[test]
+    fn vanish_follows_the_general_innate_rule() {
+        let vanish = |cha| resolve_ability(&ab::def(AbilityId::Vanish), &only(Attr::Cha, cha), &[], Body { radius: 8.0 }).expect("Vanish needs no weapon").cooldown;
+        assert_eq!(vanish(20), 10.0);
+        assert_eq!(vanish(10), 20.0);
     }
 
     #[test]
@@ -1149,10 +1204,12 @@ mod tests {
     /// Today's numbers of an ability at the class start: id, cooldown, damage, range, arc, speed, radius, duration.
     type Row = (AbilityId, f64, f64, f64, f64, f64, f64, f64);
 
-    fn same(r: &ResolvedAbility, want: Row) {
+    fn same(r: &ResolvedAbility, want: Row, attrs: &Attributes) {
         let (id, cooldown, damage, range, arc, speed, radius, duration) = want;
         assert_eq!(r.id, id);
-        assert_eq!(r.cooldown, cooldown, "{id:?} cooldown");
+        // The written cooldown, then the Attribute step: base x 10 / Attribute.
+        let attr = attrs.get(ab::cooldown_attr(ab::def(id).category)) as f64;
+        assert!((r.cooldown - cooldown * 10.0 / attr).abs() < 1e-12, "{id:?} cooldown {} vs {cooldown} x 10 / {attr}", r.cooldown);
         assert_eq!(r.damage, damage, "{id:?} damage");
         assert_eq!(r.range, range, "{id:?} range");
         assert_eq!(r.arc, arc, "{id:?} arc");
@@ -1180,12 +1237,13 @@ mod tests {
             assert_eq!(s.max_hp, d.hp, "{c:?}");
             assert_eq!(s.speed, d.speed, "{c:?}");
             assert_eq!(s.weight, d.weight, "{c:?}");
-            same(&s.primary, primary);
-            same(&s.secondary, secondary);
+            same(&s.primary, primary, &s.attrs);
+            same(&s.secondary, secondary, &s.attrs);
             assert_eq!(s.reach, 22.0, "{c:?}");
             assert_eq!(s.fallback.id, Strike, "{c:?}");
             assert_eq!(s.fallback.range, 22.0, "{c:?}");
-            assert_eq!((s.fallback.damage, s.fallback.cooldown), (s.melee.damage, s.melee.cooldown), "{c:?}");
+            assert_eq!(s.fallback.damage, s.melee.damage, "{c:?}");
+            assert!((s.fallback.cooldown - s.melee.cooldown * 10.0 / s.attrs.get(Attr::Dex) as f64).abs() < 1e-12, "{c:?}");
             assert_eq!(s.melee.split, DamageSplit::physical(), "{c:?}");
             assert_eq!(s.light, None, "{c:?}");
             assert_eq!(s.res, classes::profile(c).res, "{c:?}");
@@ -1193,7 +1251,8 @@ mod tests {
         let sheet = |c| sheet_of(c, Attributes::default(), &Equipment::starter(c));
         let r = sheet(ClassId::ElvenRanger);
         assert_eq!(r.attrs.get(Attr::Dex), 15);
-        assert_eq!((r.fallback.damage, r.fallback.cooldown), (18.0, 0.35));
+        assert_eq!(r.fallback.damage, 18.0);
+        assert!((r.fallback.cooldown - 0.35 * 10.0 / 15.0).abs() < 1e-12, "the rapier's 0.35 at DEX 15");
         assert_eq!(r.ranged.unwrap().projectile, Some(EntityKind::Bolt));
         assert_eq!(r.primary.projectile, Some(EntityKind::Bolt));
         assert_eq!(r.primary.pierce, u8::MAX);
@@ -1310,7 +1369,7 @@ mod tests {
         let w = sheet_of(ClassId::Wizard, plus(Attr::Int, 2), &Equipment::starter(ClassId::Wizard));
         assert!((w.primary.damage - 12.0 * 1.35 / 1.25).abs() < 1e-12);
         let b = sheet_of(ClassId::Barbarian, plus(Attr::Dex, 2), &Equipment::starter(ClassId::Barbarian));
-        assert!((b.primary.cooldown - 0.8 / (1.10 / 1.06)).abs() < 1e-12);
+        assert!((b.primary.cooldown - 0.8 * 10.0 / b.attrs.get(Attr::Dex) as f64).abs() < 1e-12);
         assert!((b.primary.arc - 2.45 * 1.15 / 1.09).abs() < 1e-12);
         let p = sheet_of(ClassId::Paladin, plus(Attr::Con, 2), &Equipment::starter(ClassId::Paladin));
         assert_eq!(p.max_hp, 130.0);
@@ -1323,16 +1382,17 @@ mod tests {
         let dex = sheet_of(ClassId::ElvenRanger, plus(Attr::Dex, 2), &Equipment::starter(ClassId::ElvenRanger));
         let bow = dex.primary;
         assert!((bow.damage - 16.0 * 1.35 / 1.25).abs() < 1e-12, "bow damage by DEX");
-        assert!((bow.cooldown - 0.7 / (1.14 / 1.10)).abs() < 1e-12, "firing speed by DEX");
+        assert!((bow.cooldown - 0.7 * 10.0 / dex.attrs.get(Attr::Dex) as f64).abs() < 1e-12, "firing speed by DEX");
         assert_eq!((bow.range, bow.speed), (260.0, 290.0), "DEX does not move the reach");
         let thrust = dex.fallback;
         assert!((thrust.damage - 18.0 * 1.35 / 1.25).abs() < 1e-12, "rapier damage by DEX");
-        assert!((thrust.cooldown - 0.35 / (1.14 / 1.10)).abs() < 1e-12, "rapier speed by DEX");
+        assert!((thrust.cooldown - 0.35 * 10.0 / dex.attrs.get(Attr::Dex) as f64).abs() < 1e-12, "rapier speed by DEX");
         assert_eq!(thrust.range, 22.0);
         let str2 = sheet_of(ClassId::ElvenRanger, plus(Attr::Str, 2), &Equipment::starter(ClassId::ElvenRanger)).primary;
         assert!((str2.range - 260.0 * 1.04 / 1.00).abs() < 1e-12, "range by STR");
         assert!((str2.speed - 290.0 * 1.04 / 1.00).abs() < 1e-12, "projectile speed by STR");
-        assert_eq!((str2.damage, str2.cooldown), (16.0, 0.7), "STR does not move damage or speed");
+        assert_eq!(str2.damage, 16.0, "STR does not move damage");
+        assert!((str2.cooldown - 0.7 * 10.0 / 15.0).abs() < 1e-12, "STR does not move speed: DEX 15 does");
     }
 
     /// Every (class, ability) the class's loadout allows, with the sheet built around it.
@@ -1506,13 +1566,13 @@ mod tests {
         let p = with(ClassId::Paladin, Attributes::default(), &[(EquipSlot::Melee, ItemId::GoldenSword)]);
         let want = 22.0 * factor(15, STR_DMG) / factor(10, STR_DMG);
         assert!((p.primary.damage - want).abs() < 1e-12 && (want - 27.5).abs() < 1e-12, "{}", p.primary.damage);
-        assert!((p.primary.cooldown - 0.5 / (0.96 / 1.0)).abs() < 1e-12);
+        assert!((p.primary.cooldown - 0.5 * 10.0 / p.attrs.get(Attr::Dex) as f64).abs() < 1e-12);
         assert!((p.primary.arc - 1.8 * 0.94).abs() < 1e-12);
         assert_eq!(p.primary.range, p.reach);
         assert_eq!(p.light, Some(LightKind::Holy));
         let b = with(ClassId::Barbarian, Attributes::default(), &[(EquipSlot::Melee, ItemId::KnightSword)]);
         assert_eq!(b.primary.damage, 20.0);
-        assert!((b.primary.cooldown - 0.45 / (1.06 / 0.96)).abs() < 1e-12);
+        assert!((b.primary.cooldown - 0.45 * 10.0 / b.attrs.get(Attr::Dex) as f64).abs() < 1e-12);
     }
 
     #[test]

@@ -1237,6 +1237,16 @@ mod tests {
     use crate::defs::enemies::EnemyType;
     use crate::protocol::{BossId, ClassId};
 
+    /// The cooldown of ability `id` for hero `pi` whose written base is `base`: the Attribute step, `base * 10 / Attribute`.
+    fn written(run: &Run, pi: usize, id: AbilityId, base: f64) -> f64 {
+        base * 10.0 / run.players[pi].sheet.attrs.get(ab::cooldown_attr(ab::def(id).category)) as f64
+    }
+
+    fn assert_cd(got: f64, run: &Run, pi: usize, id: AbilityId, base: f64) {
+        let want = written(run, pi, id, base);
+        assert!((got - want).abs() < 1e-9, "{id:?}: {got} vs {base} x 10 / Attribute = {want}");
+    }
+
     fn put_monster_near(run: &mut Run, pi: usize, dist: f64) -> usize {
         let pos = run.players[pi].pos() + Vec2::new(dist, 0.0);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
@@ -1288,7 +1298,7 @@ mod tests {
         try_use(&mut run, 0, true, 1);
         assert!(run.monsters[mi].hp < hp, "the thrust hit immediately");
         assert!(run.projectiles.is_empty(), "no bolt fired");
-        assert_eq!(run.players[0].cd1, 0.35, "the rapier's interval");
+        assert_cd(run.players[0].cd1, &run, 0, AbilityId::Strike, 0.35);
 
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let mi = put_monster_near(&mut run, 0, 10.0);
@@ -1297,7 +1307,7 @@ mod tests {
         try_use(&mut run, 0, true, 1);
         assert!((hp - run.monsters[mi].hp - 6.0 * (1.0 - res)).abs() < 1e-9, "the Red Staff at STR 8");
         assert!(run.projectiles.iter().all(|p| p.dead), "the shot is spent");
-        assert_eq!(run.players[0].cd1, 1.0);
+        assert_cd(run.players[0].cd1, &run, 0, AbilityId::Strike, 1.0);
 
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         put_monster_near(&mut run, 0, 60.0);
@@ -1322,7 +1332,7 @@ mod tests {
         try_use(&mut run, 0, false, 1);
         assert_eq!(run.projectiles.len(), 1);
         assert_eq!(run.projectiles[0].kind, EntityKind::Fireball);
-        assert_eq!(run.players[0].cd2, 6.0);
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::Fireball, 6.0);
     }
 
     #[test]
@@ -1330,7 +1340,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
         put_monster_near(&mut run, 0, 10.0);
         try_use(&mut run, 0, false, 1);
-        assert_eq!(run.players[0].cd2, 10.0);
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::HolyLight, 10.0);
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
         put_monster_near(&mut run, 0, 10.0);
         try_use(&mut run, 0, false, 1);
@@ -2332,10 +2342,15 @@ mod tests {
             let a = if primary { sheet.primary } else { sheet.secondary };
             assert_eq!(a.id, id);
             assert_eq!(ab::def(id).shape, shape, "{id:?}");
-            let want = if cooldown > 0.0 { cooldown } else { a.cooldown };
             try_use(&mut run, 0, primary, 1);
             let p = &run.players[0];
-            assert_eq!(if primary { p.cd1 } else { p.cd2 }, want, "{id:?} cooldown");
+            let got = if primary { p.cd1 } else { p.cd2 };
+            // 0 = the weapon's interval, already through the Attribute step on the sheet.
+            if cooldown > 0.0 {
+                assert_cd(got, &run, 0, id, cooldown);
+            } else {
+                assert_eq!(got, a.cooldown, "{id:?} cooldown");
+            }
             assert_eq!(p.anim, anim, "{id:?} anim");
             if let Some(k) = kind {
                 assert_eq!(run.projectiles.len(), 1, "{id:?}");
@@ -2500,7 +2515,7 @@ mod tests {
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles.len(), 1);
         assert_eq!(run.projectiles[0].kind, EntityKind::FrostBolt);
-        assert_eq!(run.players[0].cd1, 0.5);
+        assert_cd(run.players[0].cd1, &run, 0, AbilityId::FrostShard, 0.5);
         fly(&mut run);
         let res = run.monsters[mi].effects.res(run.monsters[mi].res);
         let expect = resolve(&Damage::new(a.damage, a.split), &res);
@@ -2522,7 +2537,7 @@ mod tests {
         assert_eq!(a.id, AbilityId::ChainSpark);
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles[0].kind, EntityKind::ChainSpark);
-        assert_eq!(run.players[0].cd1, 0.8);
+        assert_cd(run.players[0].cd1, &run, 0, AbilityId::ChainSpark, 0.8);
         run.events.clear();
         fly(&mut run);
         for (n, &mi) in g[..3].iter().enumerate() {
@@ -2659,7 +2674,7 @@ mod tests {
             assert!((p.damage.amount - bow.damage * 0.6).abs() < 1e-9);
             assert_eq!(p.pierce, Pierce::Overkill { left: u8::MAX });
         }
-        assert!((run.players[0].cd1 - bow.cooldown * 1.4).abs() < 1e-9);
+        assert_cd(run.players[0].cd1, &run, 0, AbilityId::Volley, bow.cooldown * 1.4);
     }
 
     #[test]
@@ -2700,7 +2715,7 @@ mod tests {
         let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 20.0, 1000.0);
         let at = run.monsters[mi].pos;
         try_use(&mut run, 0, true, 1);
-        assert!((run.players[0].cd1 - 0.45 * 1.6).abs() < 1e-9);
+        assert_cd(run.players[0].cd1, &run, 0, AbilityId::Smite, 0.45 * 1.6);
         let expect = dealt(&run, mi, 28.0, a.split);
         assert!((lost(&run, mi, 1000.0) - expect).abs() < 1e-9, "{} vs {expect}", lost(&run, mi, 1000.0));
         let flash = run.lights.sources.iter().find(|s| s.kind == LightKind::Holy).expect("a Holy flash");
@@ -2751,7 +2766,7 @@ mod tests {
             })
             .collect();
         try_use(&mut run, 0, true, 1);
-        assert!((run.players[0].cd1 - axe.cooldown * 1.3).abs() < 1e-9, "0.8 x 1.3");
+        assert_cd(run.players[0].cd1, &run, 0, AbilityId::Whirl, axe.cooldown * 1.3);
         for &mi in &ids {
             let expect = dealt(&run, mi, axe.damage * 0.75, axe.split);
             assert!((lost(&run, mi, 1000.0) - expect).abs() < 1e-9, "{} vs {expect}", lost(&run, mi, 1000.0));
@@ -2815,7 +2830,7 @@ mod tests {
         let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
         let bow = run.players[0].sheet.primary;
         try_use(&mut run, 0, false, 1);
-        assert_eq!(run.players[0].cd2, 16.0);
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::PoisonCoat, 16.0);
         let held = run.players[0].effects.list().iter().find(|e| e.kind == EffectKind::Coated).expect("coated");
         assert!((held.left - 6.0).abs() < 1e-9);
         // A bow shot carries the share and the on-hit.
@@ -2896,8 +2911,8 @@ mod tests {
         let g = goblins(&mut run, &[30.0, 60.0]);
         // Works with an enemy in melee reach: it is not a ranged ability.
         try_use(&mut run, 0, false, 1);
-        assert_eq!(a.cooldown, 9.0);
-        assert_eq!(run.players[0].cd2, 9.0);
+        assert_cd(a.cooldown, &run, 0, AbilityId::FrostNova, 9.0);
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::FrostNova, 9.0);
         assert_eq!(run.players[0].anim, Anim::Cast);
         let expect = dealt(&run, g[0], a.damage, a.split);
         assert!((lost(&run, g[0], 1000.0) - expect).abs() < 1e-9, "{} vs {expect}", lost(&run, g[0], 1000.0));
@@ -2945,7 +2960,7 @@ mod tests {
         let hero_id = run.players[0].id;
         let hero_pos = run.players[0].pos();
         try_use(&mut run, 0, false, 1);
-        assert_eq!(run.players[0].cd2, 12.0);
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::WarCry, 12.0);
         let wil = run.monsters[goblin].attrs.get(Attr::Wil);
         let want = scaled_secs(3.0, 16, wil);
         let got = left(&run, Creature::Monster(goblin), EffectKind::Fear).expect("frightened");
@@ -3005,7 +3020,7 @@ mod tests {
         try_use(&mut run, 0, false, 1);
         assert_eq!(run.players[0].slam, Some(SLAM_WINDUP));
         assert_eq!(run.players[0].anim, Anim::Cast);
-        assert_eq!(run.players[0].cd2, 6.0);
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::GroundSlam, 6.0);
         assert!(g.iter().all(|&i| run.monsters[i].hp == 1000.0), "nothing yet");
         assert!(booms(&run, 5).is_empty());
         let mut steps = 0;
@@ -3099,7 +3114,7 @@ mod tests {
         let mut run = wizard_secondary(AbilityId::Haste, Attributes::new(0, 0, 0, 5, 2, 0));
         run.players[0].effects.add(EffectKind::Invisible, 30.0);
         try_use(&mut run, 0, false, 1);
-        assert_eq!(run.players[0].cd2, ab::def(AbilityId::Haste).own.cooldown, "it was cast");
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::Haste, ab::def(AbilityId::Haste).own.cooldown);
         assert!(run.has_effect(Creature::Player(0), EffectKind::Invisible), "a support ability is no attack");
     }
 
@@ -3167,7 +3182,7 @@ mod tests {
         let wi = run.monster_idx(wolf).unwrap();
         run.monsters[wi].pos = here + Vec2::new(0.0, 40.0);
         try_use(&mut run, 0, false, 1);
-        assert_eq!(run.players[0].cd2, 14.0);
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::Haste, 14.0);
         assert_eq!(run.players[0].anim, Anim::Cast);
         assert_eq!(left(&run, Creature::Player(0), EffectKind::Accelerated), Some(4.0));
         assert_eq!(left(&run, Creature::Player(1), EffectKind::Accelerated), Some(4.0));
@@ -3187,7 +3202,7 @@ mod tests {
         run.apply_effect(me, EffectKind::Accelerated, Some(5.0));
         assert!(run.has_effect(me, EffectKind::Burning) && run.has_effect(me, EffectKind::Slowed));
         try_use(&mut run, 0, false, 1);
-        assert_eq!(run.players[0].cd2, 15.0);
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::Purify, 15.0);
         assert!(!run.has_effect(me, EffectKind::Burning));
         assert!(!run.has_effect(me, EffectKind::Slowed));
         assert!(run.has_effect(me, EffectKind::Accelerated), "a positive effect stays");
@@ -3220,7 +3235,7 @@ mod tests {
         run.monsters[wi].pos = run.players[0].pos() + Vec2::new(0.0, 15.0);
         let (wolf_hp, hero_hp, kills) = (run.monsters[wi].hp, run.players[0].hp, run.players[0].kills);
         try_use(&mut run, 0, false, 1);
-        assert_eq!(run.players[0].cd2, 12.0);
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::Consecrate, 12.0);
         assert_eq!(run.hazards.len(), 1);
         let h = &run.hazards[0];
         assert_eq!((h.kind, h.radius, h.life), (EntityKind::HolyGround, 40.0, 5.0));
@@ -3257,7 +3272,7 @@ mod tests {
         let far = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 140.0, 1000.0);
         let here = run.players[0].pos();
         try_use(&mut run, 0, false, 1);
-        assert_eq!(run.players[0].cd2, 14.0);
+        assert_cd(run.players[0].cd2, &run, 0, AbilityId::Entangle, 14.0);
         let h = &run.hazards[0];
         assert_eq!((h.kind, h.radius, h.life), (EntityKind::Roots, 36.0, 4.0));
         assert!((h.pos.x - (here.x + 80.0)).abs() < 1e-9 && (h.pos.y - here.y).abs() < 1e-9);

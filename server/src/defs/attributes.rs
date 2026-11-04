@@ -74,11 +74,12 @@ pub const STR_DMG: f64 = 0.05;
 pub const STR_RANGE: f64 = 0.02;
 pub const DEX_DMG: f64 = 0.05;
 pub const DEX_ARC: f64 = 0.03;
-pub const DEX_SPEED: f64 = 0.02;
 pub const CON_HP: f64 = 5.0;
 pub const CON_MOVE: f64 = 0.01;
 pub const INT_DMG: f64 = 0.05;
 pub const CHA_DMG: f64 = 0.05;
+/// Cooldowns: every Attribute's per-point steepness; the reference is `BASELINE`.
+pub const CD_PCT: f64 = 0.10;
 
 /// Linear around `BASELINE`, never below a tenth.
 pub fn factor(v: i32, pct: f64) -> f64 {
@@ -182,14 +183,14 @@ mod tests {
         smarter.add(Int, 2);
         assert!((s.get(&smarter) - 12.0 * 1.35 / 1.25).abs() < 1e-12);
 
-        let t = Scaled { value: 3.0, attr: Dex, pct: 0.02, at: 13 };
-        assert_eq!(t.per(&wizard), 3.0 / (factor(14, 0.02) / factor(13, 0.02)));
+        let t = Scaled { value: 3.0, attr: Dex, pct: CD_PCT, at: 13 };
+        assert_eq!(t.per(&wizard), 3.0 / (factor(14, CD_PCT) / factor(13, CD_PCT)));
         let mut d13 = wizard;
         d13.add(Dex, -1);
         assert_eq!(t.per(&d13), 3.0);
         let mut d15 = wizard;
         d15.add(Dex, 1);
-        assert!((t.per(&d15) - 3.0 / (1.10 / 1.06)).abs() < 1e-12);
+        assert!((t.per(&d15) - 3.0 / (1.5 / 1.3)).abs() < 1e-12);
     }
 
     #[test]

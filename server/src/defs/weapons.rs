@@ -2,7 +2,7 @@
 //! their values at the Attributes of a reference wielder (`At`), so the
 //! weapon resolves bit-exactly to them there and moves with STR and DEX around it.
 
-use super::attributes::{Attr, Attributes, Scaled, CHA_DMG, DEX_ARC, DEX_DMG, DEX_SPEED, STR_DMG, STR_RANGE};
+use super::attributes::{Attr, Attributes, Scaled, CHA_DMG, DEX_ARC, DEX_DMG, STR_DMG, STR_RANGE};
 use super::damage::{Base, BaseScale, DamageSplit};
 use super::effects::OnHit;
 use super::kinds::EntityKind;
@@ -89,6 +89,7 @@ impl At {
 #[derive(Debug, Clone, Copy)]
 pub struct MeleeStats {
     pub damage: f64,
+    /// The weapon's base interval (s), unscaled: `sheet::resolve_ability` applies the Attribute step.
     pub cooldown: f64,
     pub arc: f64,
     pub push: f64,
@@ -140,8 +141,8 @@ pub struct ResolvedWeapon {
     pub pierce_through: u8,
 }
 
-/// Damage by the category's key Attribute, cooldown by DEX.
-fn damage_and_cooldown(kind: WeaponKind, damage: f64, cooldown: f64, at: At, a: &Attributes) -> (f64, f64, BaseScale) {
+/// Damage by the category's key Attribute.
+fn damage_of(kind: WeaponKind, damage: f64, at: At, a: &Attributes) -> (f64, BaseScale) {
     let (attr, pct, at_key) = match key_attr(category(kind)) {
         Attr::Str => (Attr::Str, STR_DMG, at.str),
         Attr::Dex => (Attr::Dex, DEX_DMG, at.dex),
@@ -151,19 +152,18 @@ fn damage_and_cooldown(kind: WeaponKind, damage: f64, cooldown: f64, at: At, a: 
     let scaled = Scaled { value: damage, attr, pct, at: at_key };
     let ratio = scaled.ratio(a);
     let dmg = scaled.value * ratio;
-    let cd = Scaled { value: cooldown, attr: Attr::Dex, pct: DEX_SPEED, at: at.dex }.per(a);
-    (dmg, cd, BaseScale { attr, at: at_key, have: a.get(attr), ratio })
+    (dmg, BaseScale { attr, at: at_key, have: a.get(attr), ratio })
 }
 
 pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> ResolvedWeapon {
-    let (damage, cooldown, scale) = damage_and_cooldown(kind, s.damage, s.cooldown, s.at, attrs);
+    let (damage, scale) = damage_of(kind, s.damage, s.at, attrs);
     let base = Base { given: s.damage, scale: Some(scale), ability_mult: 1.0, mods_mult: 1.0, keystone_mult: 1.0 };
     debug_assert_eq!(damage.to_bits(), base.amount().to_bits());
     ResolvedWeapon {
         kind,
         damage: base.amount(),
         base,
-        cooldown,
+        cooldown: s.cooldown,
         arc: Scaled { value: s.arc, attr: Attr::Dex, pct: DEX_ARC, at: s.at.dex }.get(attrs),
         push: s.push,
         reach: s.reach,
@@ -180,14 +180,14 @@ pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> Re
 }
 
 pub fn resolve_ranged(kind: WeaponKind, s: &RangedStats, attrs: &Attributes) -> ResolvedWeapon {
-    let (damage, cooldown, scale) = damage_and_cooldown(kind, s.damage, s.cooldown, s.at, attrs);
+    let (damage, scale) = damage_of(kind, s.damage, s.at, attrs);
     let base = Base { given: s.damage, scale: Some(scale), ability_mult: 1.0, mods_mult: 1.0, keystone_mult: 1.0 };
     debug_assert_eq!(damage.to_bits(), base.amount().to_bits());
     ResolvedWeapon {
         kind,
         damage: base.amount(),
         base,
-        cooldown,
+        cooldown: s.cooldown,
         arc: 0.0,
         push: 0.0,
         reach: 0.0,
@@ -275,7 +275,7 @@ mod tests {
         let strong = resolve_melee(K::Sword, &sword(), &Attributes::new(17, 8, 10, 10, 10, 10));
         assert!((strong.damage - 20.0 * 1.35 / 1.25).abs() < 1e-12);
         let nimble = resolve_melee(K::Sword, &sword(), &Attributes::new(15, 10, 10, 10, 10, 10));
-        assert!((nimble.cooldown - 0.45 / (1.00 / 0.96)).abs() < 1e-12);
+        assert_eq!(nimble.cooldown, 0.45, "the interval is the base; resolve_ability scales it");
         assert!((nimble.arc - 1.75 * 1.00 / 0.94).abs() < 1e-12);
 
         let rapier = resolve_melee(K::DuellingSword, &sword(), &Attributes::new(15, 10, 10, 10, 10, 10));

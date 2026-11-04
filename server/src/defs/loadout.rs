@@ -144,7 +144,7 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
         duration: new_duration,
         // The ability's own effect lasts as long as the ability does.
         effect: if longer { r.effect.map(|e| OnHit { secs: new_duration, ..e }) } else { r.effect },
-        cooldown: if cooldown.is_empty() { r.cooldown } else { (r.cooldown + sum(cooldown)).max(MIN_COOLDOWN) },
+        cooldown: (r.cooldown + sum(cooldown)).max(MIN_COOLDOWN),
         split: if shares.is_empty() { r.split } else { r.split.with_shares(&shares) },
         behind: (r.behind + sum(behind)).max(0.0),
         on_hit,
@@ -372,7 +372,9 @@ mod tests {
         let a = apply_mods(r, &[CooldownAdd(-100.0), DurationAdd(-100.0), DamageMul(-1.0), RadiusMul(-1.0), RangeMul(-1.0), ArcMul(-1.0)]);
         assert_eq!(a.cooldown, MIN_COOLDOWN, "a cooldown never reaches 0");
         assert_eq!((a.duration, a.damage, a.radius, a.range, a.arc), (0.0, 0.0, 0.0, 0.0, 0.0), "no negative numbers");
-        assert_eq!(apply_mods(r, &[]).cooldown, r.cooldown, "no mods, no floor");
+        assert_eq!(apply_mods(r, &[]).cooldown, r.cooldown.max(MIN_COOLDOWN), "the floor holds with no mods");
+        let tiny = ResolvedAbility { cooldown: 0.01, ..r };
+        assert_eq!(apply_mods(tiny, &[]).cooldown, MIN_COOLDOWN, "a resolved cooldown below the floor is lifted with no mods");
     }
 
     #[test]

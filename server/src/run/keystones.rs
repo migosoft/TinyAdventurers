@@ -6,6 +6,7 @@ use super::Run;
 use crate::defs::abilities::{self as ab, AbilityCategory};
 use crate::defs::damage::{Damage, DamageType, Mult, Resistances, What};
 use crate::defs::effects::EffectKind;
+use crate::defs::loadout::MIN_COOLDOWN;
 use crate::defs::races::Race;
 use crate::defs::trees::Keystone;
 
@@ -45,7 +46,7 @@ pub fn cd_mul(p: &Player) -> f32 {
 
 /// A cooldown the hero starts now.
 pub fn cooldown(p: &Player, cd: f64) -> f64 {
-    if berserk(p) { cd / BERSERK_DAMAGE } else { cd }
+    (if berserk(p) { cd / BERSERK_DAMAGE } else { cd }).max(MIN_COOLDOWN)
 }
 
 /// The hero's resistances against a hit: Berserker takes 10 points off every one.
@@ -267,6 +268,18 @@ mod tests {
         run.monsters[w].ally.as_mut().unwrap().prey = Some(id);
         crate::run::companion::tick_wolf(&mut run, wi, 1.0 / 60.0);
         assert!(run.monsters[mi].wolf_bit > 1.9, "bitten: {}", run.monsters[mi].wolf_bit);
+    }
+
+    #[test]
+    fn a_berserk_cooldown_never_goes_below_the_floor() {
+        let mut run = run_of(ClassId::Barbarian, &[NodeId::BU5]);
+        run.monsters.retain(|m| m.is_boss);
+        run.players[0].hp = 0.25 * run.players[0].sheet.max_hp;
+        assert!(berserk(&run.players[0]));
+        run.players[0].sheet.primary.cooldown = MIN_COOLDOWN;
+        run.players[0].cd1 = 0.0;
+        crate::run::abilities::try_use(&mut run, 0, true, 1);
+        assert_eq!(run.players[0].cd1, MIN_COOLDOWN, "MIN_COOLDOWN / 1.25 is lifted back to the floor");
     }
 
     #[test]
