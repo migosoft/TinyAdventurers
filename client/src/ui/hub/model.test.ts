@@ -150,5 +150,6 @@ describe('attrEffect cooldowns', () => {
     expect(attrEffect('Dex', 20)).toContain('cooldowns ÷2');
     expect(attrEffect('Int', 15)).toContain('spell cooldowns ÷1.5');
     expect(attrEffect('Cha', 5)).toContain('innate cooldowns ÷0.5');
+    expect(attrEffect('Dex', 0)).toContain('cooldowns ÷0.1');
   });
 });

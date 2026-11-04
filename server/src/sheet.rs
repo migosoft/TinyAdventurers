@@ -1130,6 +1130,10 @@ mod tests {
         assert_eq!((demon.attrs.get(Attr::Cha), demon.attrs.get(Attr::Dex)), (20, 14));
         near(cd(&k, AbilityId::RingOfFire), 4.5, "Ring of Fire");
         near(cd(&k, AbilityId::Swoop), 6.0 * 10.0 / 14.0, "Swoop");
+        let dragon = bosses::def(BossId::Dragon);
+        let k = kit(KitSource::Boss(BossId::Dragon), dragon.attrs);
+        assert_eq!(dragon.attrs.get(Attr::Cha), 20);
+        near(cd(&k, AbilityId::FireBreath), 6.5 * 10.0 / 20.0, "Fire Breath");
     }
 
     #[test]

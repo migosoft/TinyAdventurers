@@ -2,6 +2,7 @@
 
 use super::{tag_of, DeathFacts, EffectFacts, EndReason, HealFacts, HitFacts, HitOutcome};
 use crate::defs::abilities::AbilityId;
+use crate::run::keystones::BERSERK_DAMAGE;
 use crate::run::targets::Skip;
 use crate::defs::abilities;
 use crate::defs::damage::{DamageType, Mult, What};
@@ -385,7 +386,7 @@ pub(super) fn cast_details(c: &crate::sheet::CdSteps, final_cd: f64, started: f6
     step(final_cd, "keystone".to_string());
     let mut line = out.join(" → ");
     if berserk {
-        line.push_str(&format!(" → Berserker ÷1.25 → {} s", n2(started)));
+        line.push_str(&format!(" → Berserker ÷{} → {} s", n2(BERSERK_DAMAGE), n2(started)));
     }
     vec![line]
 }

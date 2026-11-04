@@ -133,15 +133,15 @@ export function attrEffect(attr: Attr, v: number): string {
     case 'Str':
       return `melee/thrown dmg ${pct(5 * d)} · push power ${v}`;
     case 'Dex':
-      return `finesse/ranged dmg ${pct(5 * d)} · arc ${pct(3 * d)} · cooldowns ÷${v / 10}`;
+      return `finesse/ranged dmg ${pct(5 * d)} · arc ${pct(3 * d)} · cooldowns ÷${Math.max(v, 1) / 10}`;
     case 'Con':
       return `HP ${sign(5 * d)} · move speed ${pct(d)} · non-magical save ${v}`;
     case 'Int':
-      return `spell dmg and power ${pct(5 * d)} · spell cooldowns ÷${v / 10}`;
+      return `spell dmg and power ${pct(5 * d)} · spell cooldowns ÷${Math.max(v, 1) / 10}`;
     case 'Wil':
       return `magical save ${v}`;
     case 'Cha':
-      return `innate dmg, heals, power ${pct(5 * d)} · innate cooldowns ÷${v / 10}`;
+      return `innate dmg, heals, power ${pct(5 * d)} · innate cooldowns ÷${Math.max(v, 1) / 10}`;
   }
 }
 

@@ -11,7 +11,7 @@ use crate::defs::races::Race;
 use crate::defs::trees::Keystone;
 
 /// Berserker: damage, cooldown speed and (the other way) resistances change below half HP.
-const BERSERK_DAMAGE: f64 = 1.25;
+pub(crate) const BERSERK_DAMAGE: f64 = 1.25;
 const BERSERK_RESIST: f64 = 0.10;
 /// How long a wolf bite marks its prey for Pack Hunter (s).
 pub const BITE_MARK_SECS: f64 = 2.0;
