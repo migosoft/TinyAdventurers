@@ -423,6 +423,7 @@ impl Run {
     }
 
     /// `apply` from a source of `power`: the time is scaled by the target's save (see `apply`).
+    #[cfg(test)]
     pub fn apply_effect_from(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>, power: i32, magical: bool) -> bool {
         self.apply(c, Apply { power: Some(power), magical, ..Apply::plain(kind, secs) })
     }
@@ -475,6 +476,7 @@ impl Run {
     }
 
     /// A hit's effect: always applied (no roll); the target's save and resistance only shorten or refuse it.
+    #[cfg(test)]
     pub fn hit_effect(&mut self, c: Creature, h: OnHit) {
         self.apply(c, Apply::from_hit(h));
     }

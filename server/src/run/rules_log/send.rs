@@ -42,8 +42,13 @@ pub fn for_viewer(run: &Run, pi: usize, viewed: u32, view: &View, dark: &Dark, e
     let mut lines: Vec<LineW> = Vec::new();
     let (mut bytes, mut omitted) = (0, 0);
     for r in records {
-        let (head, details) = if r.who.iter().all(|s| sees(run, view, dark, s)) {
-            (&r.head, &r.details)
+        // The creature that `plain` makes optional does not decide whether the record is sent.
+        let optional = r.plain.as_ref().map(|p| p.0);
+        let (head, details) = if r.who.iter().filter(|s| Some(s.id) != optional).all(|s| sees(run, view, dark, s)) {
+            match &r.plain {
+                Some((by, plain)) if !r.who.iter().any(|s| s.id == *by && sees(run, view, dark, s)) => (plain, &r.details),
+                _ => (&r.head, &r.details),
+            }
         } else {
             match &r.unseen {
                 Some(u) if u.viewer == viewed => (&u.head, &u.details),

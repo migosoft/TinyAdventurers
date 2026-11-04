@@ -162,6 +162,12 @@ pub fn hit_begin(run: &mut Run, f: HitFacts) {
     let target = creature_id(run, f.target);
     let mut who = vec![record::seen_creature(run, f.target)];
     who.extend(f.dmg.why.by.map(|by| seen_by_id(run, by)));
+    // A tick's bestower is named only to a viewer who sees it; the rest read the line without it (`plain`).
+    let plain = f.dmg.why.by.filter(|_| matches!(f.dmg.why.what, What::Tick(_))).map(|by| {
+        let mut anon = f.clone();
+        anon.dmg.why.by = None;
+        (by, text::hit_head(run, &anon, target))
+    });
     // The line also names where an overkill came from.
     who.extend(f.dmg.why.mults.iter().flatten().filter_map(|m| match *m {
         crate::defs::damage::Mult::Overkill { from } => Some(seen_by_id(run, from)),
@@ -186,6 +192,7 @@ pub fn hit_begin(run: &mut Run, f: HitFacts) {
         details: text::hit_details(run, &f),
         who,
         unseen,
+        plain,
         dealt: Some(f.dealt),
         secs: None,
     };
@@ -251,7 +258,7 @@ pub fn effect(run: &mut Run, f: EffectFacts) {
     let mut who = vec![record::seen_creature(run, f.target)];
     who.extend(f.origin.map(|(by, _)| seen_by_id(run, by)));
     let head = text::effect_head(run, &f, target);
-    record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: lines, who, unseen: None, dealt: None, secs: left });
+    record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: lines, who, unseen: None, plain: None, dealt: None, secs: left });
 }
 
 /// An effect ended on its own (it ran out, water, Purify).
@@ -261,7 +268,7 @@ pub fn ended(run: &mut Run, c: Creature, kind: EffectKind, why: EndReason) {
     }
     let head = text::ended_head(run, creature_id(run, c), kind, why);
     let who = vec![record::seen_creature(run, c)];
-    record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+    record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
 }
 
 /// A creature's Attributes changed through its effects: one line per changed Attribute, `(Attribute, before, after)`.
@@ -273,7 +280,7 @@ pub fn attrs_changed(run: &mut Run, c: Creature, changes: &[(Attr, i32, i32)]) {
     for &(attr, old, new) in changes {
         let head = text::attr_head(run, target, attr, old, new);
         let who = vec![record::seen_creature(run, c)];
-        record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+        record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
     }
 }
 
@@ -299,7 +306,7 @@ pub fn heal(run: &mut Run, f: HealFacts) {
     let mut who = vec![record::seen_creature(run, f.target)];
     who.extend(f.by.map(|(by, _)| seen_by_id(run, by)));
     let head = text::heal_head(run, &f, target, hp_after);
-    record::push(run, LogRec { t: run.time, kind: LineKind::Heal, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+    record::push(run, LogRec { t: run.time, kind: LineKind::Heal, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
 }
 
 /// What a death hands over: who got the kill, or the effect that ticked it down and who it is credited to.
@@ -319,13 +326,16 @@ pub fn death(run: &mut Run, f: DeathFacts) {
     }
     let target = creature_id(run, f.target);
     let mut who = vec![record::seen_creature(run, f.target)];
-    who.extend(f.by.map(|by| seen_by_id(run, by)));
+    // A tick's line names no bestower, so an unseen one must not hide it.
+    if f.tick.is_none() {
+        who.extend(f.by.map(|by| seen_by_id(run, by)));
+    }
     let viewer = match f.target {
         Creature::Player(i) => Some(run.players[i].id),
         Creature::Monster(i) => run.monsters[i].ally.as_ref().map(|a| a.owner),
     };
     let unseen = viewer.map(|viewer| Unseen { viewer, head: text::death_unseen_head(run, f.target, target), details: vec![] });
-    let rec = LogRec { t: run.time, kind: LineKind::Death, head: text::death_head(run, &f, target), details: vec![], who, unseen, dealt: None, secs: None };
+    let rec = LogRec { t: run.time, kind: LineKind::Death, head: text::death_head(run, &f, target), details: vec![], who, unseen, plain: None, dealt: None, secs: None };
     match run.log.open.last_mut() {
         Some((_, _, after)) => after.push(rec),
         None => record::push(run, rec),
@@ -351,14 +361,14 @@ pub fn skipped(run: &mut Run, by: u32, what: What, skips: &[(Creature, Skip)], c
         let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
         who.push(seen_by_id(run, by));
         let head = text::skip_head(run, what, chain, id, reason);
-        record::push(run, LogRec { t: run.time, kind: LineKind::Skip, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+        record::push(run, LogRec { t: run.time, kind: LineKind::Skip, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
     }
     if let Some((Creature::Monster(mi), d)) = chain_stop {
         let id = run.monsters[mi].id;
         let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
         who.push(seen_by_id(run, by));
         let head = text::chain_stop_head(run, id, d);
-        record::push(run, LogRec { t: run.time, kind: LineKind::Skip, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+        record::push(run, LogRec { t: run.time, kind: LineKind::Skip, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
     }
 }
 
@@ -372,7 +382,7 @@ pub fn cast(run: &mut Run, pi: usize, ability: &crate::sheet::ResolvedAbility, s
     let head = text::cast_head(run, hero, ability.id, started);
     let details = text::cast_details(&ability.cd_steps, ability.cooldown, started, berserk);
     let who = vec![record::seen_creature(run, Creature::Player(pi))];
-    record::push(run, LogRec { t: run.time, kind: LineKind::Note, head, details, who, unseen: None, dealt: None, secs: None });
+    record::push(run, LogRec { t: run.time, kind: LineKind::Note, head, details, who, unseen: None, plain: None, dealt: None, secs: None });
 }
 
 /// "Too close" is told at most this often (seconds) per hero and slot.
@@ -397,5 +407,5 @@ pub fn too_close(run: &mut Run, pi: usize, primary: bool, target: MeleeTarget) {
     let ability = if primary { run.players[pi].sheet.primary.id } else { run.players[pi].sheet.secondary.id };
     let head = text::too_close_head(run, hero, ability, primary, target_id);
     let who = vec![record::seen_creature(run, Creature::Player(pi)), seen];
-    record::push(run, LogRec { t: run.time, kind: LineKind::Note, head, details: vec![], who, unseen: None, dealt: None, secs: None });
+    record::push(run, LogRec { t: run.time, kind: LineKind::Note, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
 }

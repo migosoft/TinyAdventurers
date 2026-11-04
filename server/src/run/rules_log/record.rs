@@ -44,6 +44,8 @@ pub struct LogRec {
     pub details: Vec<String>,
     pub who: Vec<Seen>,
     pub unseen: Option<Unseen>,
+    /// A creature in `who` that the head names only for a viewer who sees it (any other viewer is sent the second part, which does not name it).
+    pub plain: Option<(u32, String)>,
     #[allow(dead_code)] // Only tests read it.
     /// HP lost, as the record states it (kept for tests, not sent).
     pub dealt: Option<f64>,
