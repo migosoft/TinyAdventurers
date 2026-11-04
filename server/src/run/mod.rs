@@ -1631,7 +1631,8 @@ pub mod tests {
         // 2026-11-01, the Ghost (#169): the lich's value (the middle one) changed: its dungeon now has Ghosts. Demon and dragon unchanged.
         // 2026-11-01, the Shade (#170): the demon's value (the first one) changed: its dungeon now has Shades. Lich and dragon unchanged.
         // 2026-11-02, the cove (#202): every dungeon has a dedicated 26×20 cove room, so the other rooms, the maps and everything placed in them changed for every seed. Re-recorded once, on purpose.
-        assert_eq!(got, vec![11744901799721327844, 16078847530090638387, 10110616174490758187]);
+        // 2026-11-04, the cooldown chain (#198): every ability cooldown now scales with its Attribute and effects change how fast cooldowns count down, so the Demon and Lich fights (the first two values) play out differently; the Dragon's is unchanged. Re-recorded once, on purpose.
+        assert_eq!(got, vec![1229364848726880143, 16682054294362604453, 10110616174490758187]);
     }
 
     #[test]
@@ -1650,7 +1651,7 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![11744901799721327844, 16078847530090638387, 10110616174490758187]);
+        assert_eq!(got, vec![1229364848726880143, 16682054294362604453, 10110616174490758187]);
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
@@ -1684,6 +1685,7 @@ pub mod tests {
     // 2026-11-02, the cove (#202): every dungeon has a dedicated 26×20 cove room, so the other rooms, the maps and everything placed in them changed for every seed. Re-recorded once, on purpose. (Same cause: the demon dungeon's map changed; the asserts on the outcomes are unchanged.)
     // 2026-10-21: pins plan 3a's behaviour in a real fight: a ranger's bolts piercing a line of goblins
     // on overkill, a Wizard's staff on an orc in melee, a goblin archer punching a hero beside it.
+    // 2026-11-04, the cooldown chain (#198): cooldowns scale with Attributes, so the ranger and wizard fights (the first two values) differ; the paladin's is unchanged. Re-recorded once, on purpose.
     #[test]
     fn plan_3a_fight_is_pinned() {
         use crate::defs::enemies::EnemyType as E;
@@ -1695,7 +1697,7 @@ pub mod tests {
         assert!(matches!(enemies(&wizard)[..], [(true, hp)] if hp < 60.0) && wizard.projectiles.is_empty(), "the staff, not missiles");
         assert!(paladin.players[0].hp < paladin.players[0].max_hp, "the archer punches");
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [8658629781408894835, 14627706316024779892, 7358529758221409173]);
+        assert_eq!(got, [6426314374441305426, 5968181214702343889, 7358529758221409173]);
     }
 
     #[test]
@@ -1705,7 +1707,7 @@ pub mod tests {
         let wizard = fight_with_log(ClassId::Wizard, E::OrcWarrior, &[12.0], &[60.0], true, true);
         let paladin = fight_with_log(ClassId::Paladin, E::GoblinArcher, &[12.0], &[24.0], false, true);
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [8658629781408894835, 14627706316024779892, 7358529758221409173]);
+        assert_eq!(got, [6426314374441305426, 5968181214702343889, 7358529758221409173]);
     }
 
     #[test]
