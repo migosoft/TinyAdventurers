@@ -957,6 +957,28 @@ fn death_of(run: &mut Run, f: DeathFacts) {
 }
 
 #[test]
+fn a_tick_names_its_bestower() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let mi = goblin_near(&mut run, Some(1000.0));
+    let (hero, name) = (run.players[0].id, run.players[0].name.clone());
+    let goblin = tag_of(&run, run.monsters[mi].id);
+    let poison = OnHit { kind: EffectKind::Poisoned, secs: 3.0, magical: false, power: 10, look: EffectLook::Plain };
+    run.hurt_monster(mi, Damage::physical(1.0).by(hero, What::Ability(AbilityId::MagicMissile)).with_effect(poison), false, Some(0));
+    let _ = take(&mut run);
+    let mut tick = None;
+    for _ in 0..200 {
+        run.tick_effects();
+        tick = take(&mut run).into_iter().find(|r| r.head.contains("Poisoned"));
+        if tick.is_some() {
+            break;
+        }
+    }
+    let tick = tick.expect("a Poisoned tick landed");
+    assert!(tick.head.starts_with(&format!("{name} ▸ Poisoned ▸ {goblin}")), "{}", tick.head);
+    assert!(tick.who.iter().any(|s| s.id == hero), "the hero's log gets the line");
+}
+
+#[test]
 fn a_burn_kill_credits_the_hero() {
     let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
     let mi = goblin_near(&mut run, Some(1.0));
