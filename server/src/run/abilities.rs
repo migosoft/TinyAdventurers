@@ -212,6 +212,8 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             p.cd1 = super::keystones::cooldown(p, fallback.cooldown);
             p.anim = Anim::Melee;
             p.anim_start = run.time;
+            let started = p.cd1;
+            super::rules_log::cast(run, pi, &fallback, started);
             return;
         }
     }
@@ -228,6 +230,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     }
     p.anim = anim;
     p.anim_start = run.time;
+    super::rules_log::cast(run, pi, &def, cooldown);
 }
 
 /// The cooldowns running on one monster, per ability: two monsters of one ability never share one.

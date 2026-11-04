@@ -20,6 +20,13 @@ pub fn n1(v: f64) -> String {
     if s == "-0" { "0".to_string() } else { s.to_string() }
 }
 
+/// Two decimals, trailing zeros dropped: 3.0 is "3", 3.08 is "3.08", 2.8049 is "2.8".
+pub fn n2(v: f64) -> String {
+    let s = format!("{:.2}", (v * 100.0).round() / 100.0);
+    let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.') } else { &s };
+    if s == "-0" { "0".to_string() } else { s.to_string() }
+}
+
 /// A fraction as a whole percentage: 0.2 is "20 %".
 pub fn pct(fraction: f64) -> String {
     format!("{} %", (fraction * 100.0).round() as i64)
@@ -354,4 +361,31 @@ pub(super) fn too_close_head(run: &Run, hero: u32, ability: AbilityId, primary: 
     } else {
         format!("{hero} ▸ {name}: blocked, {target} is in melee reach (Too close)")
     }
+}
+
+/// The head of a cast's cooldown line.
+pub(super) fn cast_head(run: &Run, hero: u32, ability: AbilityId, started: f64) -> String {
+    format!("{} ▸ {}: cooldown {} s", tag_of(run, hero), abilities::def(ability).name, n2(started))
+}
+
+/// How the cooldown was reached, in the wording of the client's `cooldownSteps`: unchanged steps are left out.
+/// A hero under Berserker ends with its own step.
+pub(super) fn cast_details(c: &crate::sheet::CdSteps, final_cd: f64, started: f64, berserk: bool) -> Vec<String> {
+    let r = |v: f64| (v * 100.0).round() / 100.0;
+    let mut out = vec![format!("{} s base", n2(c.base))];
+    let mut last = r(c.base);
+    let mut step = |v: f64, label: String| {
+        if r(v) != last {
+            out.push(format!("{} s ({label})", n2(v)));
+        }
+        last = r(v);
+    };
+    step(c.scaled, format!("{} {}", c.attr.short(), c.have));
+    step(c.mods, "skills".to_string());
+    step(final_cd, "keystone".to_string());
+    let mut line = out.join(" → ");
+    if berserk {
+        line.push_str(&format!(" → Berserker ÷1.25 → {} s", n2(started)));
+    }
+    vec![line]
 }

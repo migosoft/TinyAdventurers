@@ -362,6 +362,19 @@ pub fn skipped(run: &mut Run, by: u32, what: What, skips: &[(Creature, Skip)], c
     }
 }
 
+/// Hero `pi` cast `ability`, which started a cooldown of `started` seconds (Berserker included).
+pub fn cast(run: &mut Run, pi: usize, ability: &crate::sheet::ResolvedAbility, started: f64) {
+    if !on(run) {
+        return;
+    }
+    let hero = run.players[pi].id;
+    let berserk = crate::run::keystones::berserk(&run.players[pi]);
+    let head = text::cast_head(run, hero, ability.id, started);
+    let details = text::cast_details(&ability.cd_steps, ability.cooldown, started, berserk);
+    let who = vec![record::seen_creature(run, Creature::Player(pi))];
+    record::push(run, LogRec { t: run.time, kind: LineKind::Note, head, details, who, unseen: None, dealt: None, secs: None });
+}
+
 /// "Too close" is told at most this often (seconds) per hero and slot.
 pub const TOO_CLOSE_EVERY: f64 = 1.0;
 

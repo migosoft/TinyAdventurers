@@ -134,7 +134,7 @@ fn rules_log_is_reached_only_through_its_hooks() {
     walk(&root, &root, &mut found);
     // Lines naming `rules_log` outside the module, per file. Each task updates this with its hooks.
     let hooks: BTreeMap<String, usize> =
-        [("defs/effects.rs", 1), ("run/mod.rs", 20), ("run/effects.rs", 10), ("run/abilities.rs", 21), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        [("defs/effects.rs", 1), ("run/mod.rs", 20), ("run/effects.rs", 10), ("run/abilities.rs", 23), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     assert_eq!(found, hooks);
 }
 
@@ -890,7 +890,7 @@ fn a_full_hero_gets_no_heal_line() {
     assert_eq!(run.players[0].hp, run.players[0].max_hp);
     let _ = take(&mut run);
     crate::run::abilities::try_use(&mut run, 0, false, 1);
-    assert!(take(&mut run).is_empty());
+    assert!(kinds_of(&take(&mut run), LineKind::Heal).is_empty());
 }
 
 #[test]
@@ -1125,7 +1125,7 @@ fn too_close_is_logged_once_a_second() {
         crate::run::abilities::try_use(&mut run, 0, true, 1);
     }
     let recs = take(&mut run);
-    let notes = kinds_of(&recs, LineKind::Note);
+    let notes: Vec<_> = kinds_of(&recs, LineKind::Note).into_iter().filter(|r| !r.head.contains(": cooldown ")).collect();
     assert_eq!(notes.len(), 2, "{:?}", recs.iter().map(|r| &r.head).collect::<Vec<_>>());
     assert_eq!(notes[0].head, format!("{name} ▸ Volley: {goblin} is in melee reach, strikes instead"));
 }
@@ -1153,7 +1153,7 @@ fn a_primary_that_strikes_instead_says_so() {
     let _ = take(&mut run);
     crate::run::abilities::try_use(&mut run, 0, true, 1);
     let recs = take(&mut run);
-    let notes = kinds_of(&recs, LineKind::Note);
+    let notes: Vec<_> = kinds_of(&recs, LineKind::Note).into_iter().filter(|r| !r.head.contains(": cooldown ")).collect();
     assert_eq!(notes.len(), 1);
     assert_eq!(notes[0].head, format!("{name} ▸ Magic Missile: {goblin} is in melee reach, strikes instead"));
 }
@@ -1687,4 +1687,44 @@ fn a_drain_logs_a_line_per_changed_attribute() {
     let heads: Vec<&str> = recs.iter().map(|r| r.head.as_str()).collect();
     assert!(heads.iter().any(|h| h.ends_with(&format!(": STR {} → {}", str0, str0 - 1))), "{heads:?}");
     assert_eq!(heads.iter().filter(|h| h.contains("STR")).count(), 1, "{heads:?}");
+}
+
+#[test]
+fn a_cast_logs_the_cooldown_it_started() {
+    let mut run = hero_secondary(ClassId::Wizard, AbilityId::Fireball, Attributes::default());
+    let a = run.players[0].sheet.secondary;
+    let have = a.cd_steps.have;
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    let recs = take(&mut run);
+    let rec = recs.iter().find(|r| r.head.contains("cooldown")).expect("a cooldown line");
+    assert!(matches!(rec.kind, LineKind::Note));
+    let cd = run.players[0].cd2;
+    let hero = tag_of(&run, run.players[0].id);
+    assert_eq!(rec.head, format!("{hero} ▸ Fireball: cooldown {} s", text::n2(cd)));
+    let want = format!("6 s base → {} s (INT {have})", text::n2(6.0 * 10.0 / have as f64));
+    assert_eq!(rec.details, vec![want]);
+}
+
+#[test]
+fn a_berserk_cast_names_berserker() {
+    let mut run = hero_secondary(ClassId::Wizard, AbilityId::Fireball, Attributes::default());
+    run.players[0].sheet.keystones.insert(crate::defs::trees::Keystone::Berserker);
+    run.players[0].hp = 0.4 * run.players[0].sheet.max_hp;
+    let _ = take(&mut run);
+    crate::run::abilities::try_use(&mut run, 0, false, 1);
+    let recs = take(&mut run);
+    let rec = recs.iter().find(|r| r.head.contains("cooldown")).expect("a cooldown line");
+    let cd = run.players[0].cd2;
+    assert!(rec.head.ends_with(&format!("cooldown {} s", text::n2(cd))), "{}", rec.head);
+    let last = rec.details.last().unwrap();
+    assert!(last.ends_with(&format!("Berserker ÷1.25 → {} s", text::n2(cd))), "{last}");
+}
+
+#[test]
+fn n2_rounds_to_two_decimals_and_drops_trailing_zeros() {
+    assert_eq!(text::n2(3.0), "3");
+    assert_eq!(text::n2(3.08), "3.08");
+    assert_eq!(text::n2(2.8), "2.8");
+    assert_eq!(text::n2(2.8049), "2.8");
 }

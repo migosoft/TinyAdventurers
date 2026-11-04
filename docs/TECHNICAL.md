@@ -1171,7 +1171,7 @@ Every line outside `run/rules_log/` that contains `rules_log` or `RulesLog` (`gr
 | `run/levels/boss.rs` | 1 | `spawned` for the boss |
 | `run/objects.rs` | 1 | `spawned` for barrels and chests |
 | `run/effects.rs` | 5 | `effect` after `apply` decided the outcome; `EndReason` in `remove_effect_why`'s signature and its `ended` call; the Water and RanOut `ended` calls |
-| `run/abilities.rs` | 12 | `too_close` for the melee-blocked secondary; five `rules_log::on(run)` guards and five `skipped` calls (area abilities, Chain Spark); `EndReason::Purify` in Purify |
+| `run/abilities.rs` | 12 | `too_close` for the melee-blocked secondary; `cast` after the cooldown is set (the fallback Strike and the normal use, heroes only); five `rules_log::on(run)` guards and five `skipped` calls (area abilities, Chain Spark); `EndReason::Purify` in Purify |
 
 (45 lines in all. The counts are the ones the test pins; the test and `grep` are the authority if they differ.)
 
