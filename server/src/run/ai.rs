@@ -244,9 +244,10 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     let def = enemies::def(etype);
     let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
     {
+        let cdt = run.monsters[mi].effects.cooldown_dt(dt);
         let ai = &mut run.monsters[mi].ai;
-        ai.cd -= dt;
-        ai.alt_cd -= dt;
+        ai.cd -= cdt;
+        ai.alt_cd -= cdt;
     }
 
     // Perception: only players in sight radius with line of sight count.
@@ -1430,5 +1431,39 @@ pub(crate) mod tests {
         let mi = run.monster_idx(id).unwrap();
         assert_eq!(run.monsters[mi].pos, pos, "rooted");
         assert!(run.projectiles.iter().any(|p| p.owner == id), "but the arrow flies");
+    }
+
+    #[test]
+    fn a_hasted_monster_attacks_sooner() {
+        use crate::defs::effects::EffectKind;
+        use crate::defs::enemies::EnemyType;
+        use crate::run::effects::Creature;
+        // Ticks between a skeleton's first and second hit on the hero.
+        let gap = |hasted: bool| {
+            let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+            run.monsters.retain(|m| m.is_boss);
+            let ppos = run.players[0].pos();
+            let id = run.spawn_enemy(EnemyType::SkeletonWarrior, ppos + Vec2::new(14.0, 0.0), None);
+            let mi = run.monster_idx(id).unwrap();
+            if hasted {
+                run.apply_effect(Creature::Monster(mi), EffectKind::Accelerated, Some(30.0));
+            }
+            let mut hp = run.players[0].hp;
+            let mut hits = Vec::new();
+            for t in 0..600 {
+                run.step();
+                if run.players[0].hp < hp {
+                    hits.push(t);
+                }
+                hp = run.players[0].hp;
+                if hits.len() == 2 {
+                    break;
+                }
+            }
+            assert_eq!(hits.len(), 2, "two hits within 10 s");
+            hits[1] - hits[0]
+        };
+        let (plain, fast) = (gap(false), gap(true));
+        assert!(fast < plain, "hasted {fast} ticks, plain {plain} ticks");
     }
 }

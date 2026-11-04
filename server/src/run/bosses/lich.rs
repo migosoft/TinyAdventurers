@@ -144,8 +144,9 @@ impl BossBehaviour for Lich {
             self.announced = true;
             run.event(Ev::Msg { text: "The lich's protection is broken!".into() }, None);
         }
+        let cdt = run.monsters[bi].effects.cooldown_dt(dt);
         for (_, left) in &mut self.not_before {
-            *left -= dt;
+            *left -= cdt;
         }
         let pos = run.monsters[bi].pos;
 
@@ -644,5 +645,22 @@ pub(crate) mod tests {
         assert_eq!(run.monsters[bi].anim, Anim::Windup);
         let (pos, to) = (run.monsters[bi].pos, run.players[1].pos());
         assert!((run.monsters[bi].aim - pos.angle_to(to)).abs() < 1e-9, "faces the hero the orb is aimed at");
+    }
+
+    #[test]
+    fn the_lichs_timers_run_on_its_clock() {
+        let (mut run, bi) = lich_with(&[Vec2::new(300.0, 0.0)]);
+        run.apply_effect(crate::run::effects::Creature::Monster(bi), crate::defs::effects::EffectKind::Slowed, Some(30.0));
+        run.monsters[bi].cds.start(AbilityId::Nova, 50.0);
+        let mut l = Lich { not_before: vec![(AbilityId::RaiseDead, LICH_RAISE_FIRST), (AbilityId::Nova, 50.0)], ..Lich::default() };
+        let n = 30;
+        for _ in 0..n {
+            run.step();
+            l.tick(&mut run, DT);
+        }
+        let fall = n as f64 * 0.75 * DT;
+        assert!((l.not_before[0].1 - (LICH_RAISE_FIRST - fall)).abs() < 1e-9, "{:?}", l.not_before);
+        assert!((l.not_before[1].1 - (50.0 - fall)).abs() < 1e-9);
+        assert!((run.monsters[bi].cds.left(AbilityId::Nova) - (50.0 - fall)).abs() < 1e-9);
     }
 }

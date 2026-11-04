@@ -136,8 +136,9 @@ impl Dragon {
 impl BossBehaviour for Dragon {
     fn tick(&mut self, run: &mut Run, dt: f64) {
         let Some(bi) = boss_idx(run) else { return };
+        let cdt = run.monsters[bi].effects.cooldown_dt(dt);
         for (_, left) in &mut self.opening {
-            *left -= dt;
+            *left -= cdt;
         }
         if self.fly(run, bi, dt) {
             return;

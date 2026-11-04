@@ -174,4 +174,27 @@ mod tests {
         assert!(monster_use(&mut run, ni, AbilityId::RaiseDead, ppos));
         assert!(run.events.iter().any(|e| matches!(e.0, Ev::Raise { k: 2, .. })));
     }
+
+    #[test]
+    fn a_slowed_necromancer_raises_later() {
+        use crate::defs::effects::EffectKind;
+        use crate::run::effects::Creature;
+        // Ticks from a Raise Dead until the ability is ready again.
+        let wait = |slowed: bool| {
+            let (mut run, _, ni, ppos) = caster(EnemyType::Necromancer);
+            if slowed {
+                run.apply_effect(Creature::Monster(ni), EffectKind::Slowed, Some(120.0));
+            }
+            assert!(monster_use(&mut run, ni, AbilityId::RaiseDead, ppos));
+            let mut t = 0;
+            while !run.monsters[ni].cds.ready(AbilityId::RaiseDead) {
+                run.step();
+                t += 1;
+                assert!(t < 3000, "never ready again");
+            }
+            t as f64
+        };
+        let (plain, slow) = (wait(false), wait(true));
+        assert!((slow - plain / 0.75).abs() <= 2.0, "plain {plain} ticks, slowed {slow} ticks");
+    }
 }

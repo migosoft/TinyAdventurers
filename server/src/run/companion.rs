@@ -178,7 +178,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
     {
         let m = &mut run.monsters[mi];
         let a = m.ally.as_mut().expect("an ally");
-        a.bite_hold = (a.bite_hold - dt).max(0.0);
+        a.bite_hold = (a.bite_hold - m.effects.cooldown_dt(dt)).max(0.0);
     }
 
     // 3a. A dash in progress.
@@ -1486,5 +1486,16 @@ mod tests {
         assert_eq!(find_prey(&run, wi, ranger), None, "its whole bite would pass through");
         run.monsters[gi].traits = Default::default();
         assert_eq!(find_prey(&run, wi, ranger), Some(gi), "control: with a body it is prey");
+    }
+
+    #[test]
+    fn the_wolfs_bite_hold_runs_on_its_clock() {
+        let (mut run, id) = guard_run();
+        let wi = wolf_idx(&run, id);
+        run.apply_effect(Creature::Monster(wi), EffectKind::Accelerated, Some(30.0));
+        run.monsters[wi].ally.as_mut().unwrap().bite_hold = 1.0;
+        tick_wolf(&mut run, wi, DT);
+        let left = ally(&run, id).bite_hold;
+        assert!((left - (1.0 - 1.25 * DT)).abs() < 1e-9, "{left}");
     }
 }

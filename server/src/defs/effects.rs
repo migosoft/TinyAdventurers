@@ -76,6 +76,8 @@ pub enum Stat {
     ResistEffect(EffectKind),
     /// Factor on knockback distances taken (base 1).
     KnockTaken,
+    /// Factor on how fast the creature's cooldowns count down (base 1).
+    CooldownRate,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -162,9 +164,9 @@ const PETRIFIED_MODS: &[StatMod] = &[
 /// The effects hostile sources apply magically today (the lich's spells); Fear is saved with
 /// WIL but is not magic, so it is left out.
 const WARDED_MODS: &[StatMod] = &[m(ResistEffect(EffectKind::Blind), Add, 1.0), m(ResistEffect(EffectKind::Sleep), Add, 1.0), m(ResistEffect(EffectKind::Petrified), Add, 1.0)];
-const SLOWED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 0.5)];
-const ACCELERATED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 1.5)];
-const CHILLED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 0.7)];
+const SLOWED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 0.5), m(CooldownRate, Mul, 0.75)];
+const ACCELERATED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 1.5), m(CooldownRate, Mul, 1.25)];
+const CHILLED_MODS: &[StatMod] = &[m(MoveSpeed, Mul, 0.7), m(CooldownRate, Mul, 0.75)];
 /// Any heat effect ends any cold effect and the other way round.
 const HEAT_CANCELS: &[EffectKind] = &[EffectKind::Frozen, EffectKind::Chilled];
 const COLD_CANCELS: &[EffectKind] = &[EffectKind::Burning, EffectKind::Singed];
@@ -490,9 +492,18 @@ mod tests {
     }
 
     #[test]
+    fn cooldown_rate_comes_from_the_effects() {
+        assert_eq!(resolve_stat(1.0, Stat::CooldownRate, &[]), 1.0);
+        assert_eq!(resolve_stat(1.0, Stat::CooldownRate, &[EffectKind::Accelerated]), 1.25);
+        assert_eq!(resolve_stat(1.0, Stat::CooldownRate, &[EffectKind::Slowed]), 0.75);
+        assert_eq!(resolve_stat(1.0, Stat::CooldownRate, &[EffectKind::Chilled]), 0.75);
+        assert_eq!(resolve_stat(1.0, Stat::CooldownRate, &[EffectKind::Accelerated, EffectKind::Chilled]), 0.9375);
+    }
+
+    #[test]
     fn tier_effects_have_their_numbers() {
         let c = def(EffectKind::Chilled);
-        assert_eq!((c.resisted_by, c.mods), (Some(Cold), &[m(MoveSpeed, Mul, 0.7)][..]));
+        assert_eq!((c.resisted_by, c.mods), (Some(Cold), &[m(MoveSpeed, Mul, 0.7), m(CooldownRate, Mul, 0.75)][..]));
         assert_eq!((def(EffectKind::Singed).dot, def(EffectKind::Singed).duration), (Some((Heat, 3.0)), 3.0));
         assert!(def(EffectKind::Singed).ends_in_water);
         assert_eq!((def(EffectKind::Tainted).dot, def(EffectKind::Tainted).duration), (Some((Poison, 2.0)), 3.0));

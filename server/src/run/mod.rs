@@ -514,7 +514,7 @@ impl Run {
             }
             m.history.push_back(m.pos);
             m.hurt_t = (m.hurt_t - DT).max(0.0);
-            m.cds.tick(DT);
+            m.cds.tick(m.effects.cooldown_dt(DT));
             keystones::cool(m, DT);
         }
         self.monsters.retain(|m| m.alive);
@@ -577,8 +577,9 @@ impl Run {
         }
         p.view_lag = (input.view_lag as f64 / 1000.0).clamp(0.0, 0.45);
         p.rtt = (input.rtt as f64 / 1000.0).clamp(0.0, 0.5);
-        p.cd1 = (p.cd1 - DT).max(0.0);
-        p.cd2 = (p.cd2 - DT).max(0.0);
+        let cdt = p.effects.cooldown_dt(DT);
+        p.cd1 = (p.cd1 - cdt).max(0.0);
+        p.cd2 = (p.cd2 - cdt).max(0.0);
         if p.sinking.is_some() {
             p.moving = false;
             return; // falling or drowning: no more moves or attacks (the client predicts this too)
@@ -2195,5 +2196,42 @@ pub mod tests {
         let after = run.players[0].hp;
         run.tick_hazards(0.3);
         assert_eq!(run.players[0].hp, after, "the next is 0.5 s later");
+    }
+
+    #[test]
+    fn a_running_cooldown_ends_sooner_when_hasted_and_later_when_slowed() {
+        use crate::defs::effects::EffectKind;
+        use crate::run::effects::Creature;
+        let left = |effect: Option<EffectKind>| {
+            let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+            if let Some(k) = effect {
+                run.apply_effect(Creature::Player(0), k, Some(10.0));
+            }
+            run.players[0].cd1 = 1.0;
+            for _ in 0..30 {
+                walk(&mut run, 0, None);
+            }
+            run.players[0].cd1
+        };
+        assert!((left(None) - (1.0 - 30.0 * DT)).abs() < 1e-9);
+        assert!((left(Some(EffectKind::Accelerated)) - (1.0 - 30.0 * 1.25 * DT)).abs() < 1e-9);
+        assert!((left(Some(EffectKind::Slowed)) - (1.0 - 30.0 * 0.75 * DT)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_running_cooldown_is_not_rescaled_when_haste_starts() {
+        use crate::defs::effects::EffectKind;
+        use crate::run::effects::Creature;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.players[0].cd1 = 1.0;
+        for _ in 0..10 {
+            walk(&mut run, 0, None);
+        }
+        run.apply_effect(Creature::Player(0), EffectKind::Accelerated, Some(10.0));
+        assert!((run.players[0].cd1 - (1.0 - 10.0 * DT)).abs() < 1e-9, "starting haste leaves the remaining time alone");
+        for _ in 0..10 {
+            walk(&mut run, 0, None);
+        }
+        assert!((run.players[0].cd1 - 0.625).abs() < 1e-9, "{}", run.players[0].cd1);
     }
 }

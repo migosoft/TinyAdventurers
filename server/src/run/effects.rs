@@ -195,6 +195,15 @@ impl Effects {
         }
         resolve_stat(1.0, Stat::MoveSpeed, &self.kinds())
     }
+    /// Factor on how fast the creature's cooldowns count down.
+    pub fn cooldown_rate(&self) -> f64 {
+        resolve_stat(1.0, Stat::CooldownRate, &self.kinds())
+    }
+    /// `dt` as the creature's cooldowns see it: every cooldown-like timer of a creature ticks with this,
+    /// never with plain `dt`. Durations that are not cooldowns (effects, hazards, wind-ups, dashes) do not.
+    pub fn cooldown_dt(&self, dt: f64) -> f64 {
+        dt * self.cooldown_rate()
+    }
     pub fn sight(&self, base: Sight) -> Sight {
         let k = self.kinds();
         Sight { vision: resolve_stat(base.vision, Stat::Vision, &k), darkvision: resolve_stat(base.darkvision, Stat::Darkvision, &k) }
@@ -538,7 +547,7 @@ impl Run {
     pub fn tick_effects(&mut self) {
         // The Invisibility cooldown runs only while visible.
         for m in self.monsters.iter_mut().filter(|m| m.invis_cd > 0.0 && !m.effects.has(EffectKind::Invisible)) {
-            m.invis_cd = (m.invis_cd - DT).max(0.0);
+            m.invis_cd = (m.invis_cd - m.effects.cooldown_dt(DT)).max(0.0);
         }
         let n = (self.players.len(), self.monsters.len());
         let all = (0..n.0).map(Creature::Player).chain((0..n.1).map(Creature::Monster));
@@ -1754,5 +1763,23 @@ mod tests {
             assert_eq!(n.speed.to_bits(), m.speed.to_bits(), "{:?}", m.kind);
             assert_eq!(n.kit, m.kit, "{:?}", m.kind);
         }
+    }
+
+    #[test]
+    fn vanish_cooldown_pauses_while_invisible_and_runs_on_the_clock() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = ghostly(&mut run);
+        run.monsters[mi].invis_cd = 2.0;
+        run.apply_effect(Creature::Monster(mi), EffectKind::Invisible, Some(60.0));
+        for _ in 0..30 {
+            run.tick_effects();
+        }
+        assert_eq!(run.monsters[mi].invis_cd, 2.0, "paused while Invisible");
+        run.monsters[mi].effects.remove(EffectKind::Invisible);
+        run.apply_effect(Creature::Monster(mi), EffectKind::Slowed, Some(60.0));
+        for _ in 0..30 {
+            run.tick_effects();
+        }
+        assert!((run.monsters[mi].invis_cd - (2.0 - 30.0 * 0.75 * DT)).abs() < 1e-9, "{}", run.monsters[mi].invis_cd);
     }
 }

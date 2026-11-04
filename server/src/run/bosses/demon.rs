@@ -65,8 +65,9 @@ impl Demon {
 impl BossBehaviour for Demon {
     fn tick(&mut self, run: &mut Run, dt: f64) {
         let Some(bi) = boss_idx(run) else { return };
+        let cdt = run.monsters[bi].effects.cooldown_dt(dt);
         for (_, left) in &mut self.opening {
-            *left -= dt;
+            *left -= cdt;
         }
         let pos = run.monsters[bi].pos;
 
@@ -260,7 +261,8 @@ mod tests {
             let mut hits = Vec::new();
             let mut hp = run.players[0].hp;
             for tick in 0..(5.0 / DT) as usize {
-                run.monsters[bi].cds.tick(DT);
+                let cdt = run.monsters[bi].effects.cooldown_dt(DT);
+                run.monsters[bi].cds.tick(cdt);
                 d.tick(&mut run, DT);
                 if run.players[0].hp < hp {
                     hits.push(tick);

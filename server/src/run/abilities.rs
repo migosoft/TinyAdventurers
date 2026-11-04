@@ -238,6 +238,10 @@ impl Cooldowns {
     pub fn ready(&self, id: AbilityId) -> bool {
         !self.0.iter().any(|&(i, left)| i == id && left > 0.0)
     }
+    #[cfg(test)]
+    pub fn left(&self, id: AbilityId) -> f64 {
+        self.0.iter().find(|&&(i, _)| i == id).map_or(0.0, |&(_, left)| left)
+    }
     pub fn start(&mut self, id: AbilityId, secs: f64) {
         self.0.retain(|&(i, _)| i != id);
         self.0.push((id, secs));
