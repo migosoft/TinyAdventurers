@@ -25,7 +25,7 @@ function chasmMap(): TileMap {
 }
 
 function snap(ack: number, x: number, y: number): Snapshot {
-  const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false, cd_mul: 1 };
+  const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false, cd_mul: 1, cd_rate: 1 };
   return { tick: ack, ack, ents: [], me, boss: null, ev: [], drain: null, lights: [], looks: [], srv_ms: 0, log: null };
 }
 
@@ -59,6 +59,29 @@ describe('Predictor', () => {
     expect(pred.cooldownOf(0, true)).toBeCloseTo(0.32, 9);
     pred.reconcile(s);
     expect(pred.cooldownOf(0)).toBeCloseTo(0.6, 9);
+  });
+
+  it('cooldowns_tick_at_the_snapshot_rate_in_step_and_replay', () => {
+    const pred = mk(chasmMap(), 'Wizard', 3 * TILE + 8, 2 * TILE + 8);
+    const s = snap(0, pred.state.x, pred.state.y);
+    pred.cd1 = 1.0;
+    for (let i = 0; i < 10; i++) pred.step(0, 0, null);
+    pred.reconcile({ ...s, ack: 10, me: { ...s.me, cd1: pred.cd1, cd_rate: 1.25 } });
+    for (let i = 0; i < 10; i++) pred.step(0, 0, null);
+    expect(pred.cd1).toBeCloseTo(0.625, 9);
+    // Five pending inputs replay at DT x rate.
+    const p2 = mk(chasmMap(), 'Wizard', 3 * TILE + 8, 2 * TILE + 8);
+    for (let i = 0; i < 5; i++) p2.step(0, 0, null);
+    p2.reconcile({ ...s, ack: 0, me: { ...s.me, cd1: 1.0, cd_rate: 1.25 } });
+    expect(p2.cd1).toBeCloseTo(1.0 - 5 * 1.25 * CONST.DT, 9);
+  });
+
+  it('cooldownOf never goes below MIN_COOLDOWN', () => {
+    const pred = new Predictor(chasmMap(), 60, [ab('Strike', { cooldown: 0.05 }), ab('Charge')], ab('Strike', { cooldown: 0.05 }), 3 * TILE + 8, 2 * TILE + 8);
+    const s = snap(0, pred.state.x, pred.state.y);
+    pred.reconcile({ ...s, me: { ...s.me, cd_mul: 0.8 } });
+    expect(pred.cooldownOf(0)).toBe(CONST.MIN_COOLDOWN);
+    expect(pred.cooldownOf(0, true)).toBe(CONST.MIN_COOLDOWN);
   });
 
   it('cannot act or turn while the server says so', () => {

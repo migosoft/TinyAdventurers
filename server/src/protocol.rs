@@ -258,6 +258,8 @@ pub struct SelfState {
     pub no_act: bool,
     /// Factor on the own hero's cooldowns: 0.8 while Berserker is active, else 1. Prediction multiplies by it.
     pub cd_mul: f32,
+    /// How fast the own hero's cooldowns count down: 1 normally, 1.25 Accelerated, 0.75 Slowed or Chilled. Prediction ticks by `DT` times it.
+    pub cd_rate: f32,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

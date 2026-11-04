@@ -40,4 +40,8 @@ no_act: boolean,
 /**
  * Factor on the own hero's cooldowns: 0.8 while Berserker is active, else 1. Prediction multiplies by it.
  */
-cd_mul: number, };
+cd_mul: number, 
+/**
+ * How fast the own hero's cooldowns count down: 1 normally, 1.25 Accelerated, 0.75 Slowed or Chilled. Prediction ticks by `DT` times it.
+ */
+cd_rate: number, };

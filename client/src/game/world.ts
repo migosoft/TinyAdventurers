@@ -214,6 +214,8 @@ export class Predictor {
   noAct = false;
   /** From the snapshot: the factor on cooldowns (0.8 while Berserker is active). */
   cdMul = 1;
+  /** From the snapshot: how fast cooldowns count down (1.25 Accelerated, 0.75 Slowed or Chilled). */
+  cdRate = 1;
   noTurn = false;
   private pending: Pending[] = [];
   private seq = 0;
@@ -254,7 +256,7 @@ export class Predictor {
 
   /** Cooldown the server resolved for the slot (or for the melee fallback). */
   cooldownOf(slot: 0 | 1, fallback = false): number {
-    return (fallback ? this.fallback : this.abilities[slot]).cooldown * this.cdMul;
+    return Math.max((fallback ? this.fallback : this.abilities[slot]).cooldown * this.cdMul, CONST.MIN_COOLDOWN);
   }
 
   /**
@@ -264,8 +266,8 @@ export class Predictor {
   step(mx: number, my: number, dash: [number, number] | null, used: Used = [null, null]): number {
     this.seq++;
     // Like the server: cooldowns tick, then the abilities of this input start theirs.
-    this.cd1 = used[0] ?? Math.max(this.cd1 - CONST.DT, 0);
-    this.cd2 = used[1] ?? Math.max(this.cd2 - CONST.DT, 0);
+    this.cd1 = used[0] ?? Math.max(this.cd1 - CONST.DT * this.cdRate, 0);
+    this.cd2 = used[1] ?? Math.max(this.cd2 - CONST.DT * this.cdRate, 0);
     // Falling or drowning: the server ignores moves and attacks from now on.
     // Pushed: it ignores them until the slide ends.
     // The move is kept as sent, not as predicted: if the server sees no sinking
@@ -287,6 +289,7 @@ export class Predictor {
     this.speedMul = me.speed_mul;
     this.noAct = me.no_act;
     this.cdMul = me.cd_mul;
+    this.cdRate = me.cd_rate;
     this.noTurn = me.effects.some(([k]) => EFFECTS[k]?.no_turn);
     this.pending = this.pending.filter((p) => p.seq > snap.ack);
     let s: MoveState = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy };
@@ -318,8 +321,8 @@ export class Predictor {
     let s1 = me.cd1;
     let s2 = me.cd2;
     for (const p of this.pending) {
-      s1 = p.used[0] ?? Math.max(s1 - CONST.DT, 0);
-      s2 = p.used[1] ?? Math.max(s2 - CONST.DT, 0);
+      s1 = p.used[0] ?? Math.max(s1 - CONST.DT * this.cdRate, 0);
+      s2 = p.used[1] ?? Math.max(s2 - CONST.DT * this.cdRate, 0);
     }
     if (Math.abs(s1 - this.cd1) > 0.15) this.cd1 = s1;
     if (Math.abs(s2 - this.cd2) > 0.15) this.cd2 = s2;

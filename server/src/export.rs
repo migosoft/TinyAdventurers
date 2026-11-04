@@ -78,6 +78,7 @@ fn export_defs() {
         "TILE": TILE,
         "TICK_HZ": TICK_HZ,
         "DT": DT,
+        "MIN_COOLDOWN": crate::defs::loadout::MIN_COOLDOWN,
         "SNAPSHOT_HZ": TICK_HZ / SNAPSHOT_EVERY as f64,
         "PLAYER_RADIUS": PLAYER_RADIUS,
         "FOV_RADIUS": PLAYER_FOV_RADIUS,

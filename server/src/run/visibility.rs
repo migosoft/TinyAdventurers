@@ -276,6 +276,7 @@ pub fn send_snapshots(run: &mut Run) {
                 speed_mul: me.effects.speed_mul() as f32,
                 no_act: me.effects.no_act(),
                 cd_mul: super::keystones::cd_mul(me),
+                cd_rate: me.effects.cooldown_rate() as f32,
             },
             boss: boss_bar.clone(),
             ev,
