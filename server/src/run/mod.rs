@@ -1660,11 +1660,17 @@ pub mod tests {
         fight_with_log(class, t, dists, hps, fire, false)
     }
 
+    /// Where `fight`'s ids start: above every id the dungeon setup takes.
+    const FIGHT_IDS: u32 = 10_000;
+
     /// `fight`, with the rules log forced on or not.
     fn fight_with_log(class: ClassId, t: crate::defs::enemies::EnemyType, dists: &[f64], hps: &[f64], fire: bool, log: bool) -> Run {
         let mut run = test_run(&[class], BossId::Demon);
         run.log.forced = log;
         run.monsters.retain(|m| m.is_boss);
+        // The fight's ids from a fixed base, so the haunts removed above (how many, #199) leave no trace in the hash.
+        assert!(run.next_id <= FIGHT_IDS, "the setup's ids stay below the fight's");
+        run.next_id = FIGHT_IDS;
         let p = run.players[0].pos();
         for (&d, &hp) in dists.iter().zip(hps) {
             let id = run.spawn_enemy(t, p + Vec2::new(d, 0.0), None);
@@ -1686,6 +1692,7 @@ pub mod tests {
     // 2026-10-21: pins plan 3a's behaviour in a real fight: a ranger's bolts piercing a line of goblins
     // on overkill, a Wizard's staff on an orc in melee, a goblin archer punching a hero beside it.
     // 2026-11-04, the cooldown chain (#198): cooldowns scale with Attributes, so the ranger and wizard fights (the first two values) differ; the paladin's is unchanged. Re-recorded once, on purpose.
+    // 2026-11-04, haunts out of the hash (#199): `fight` numbers its enemies from `FIGHT_IDS`, so the haunt tuning no longer moves these values. Re-recorded once, on purpose; the outcomes are unchanged.
     #[test]
     fn plan_3a_fight_is_pinned() {
         use crate::defs::enemies::EnemyType as E;
@@ -1697,7 +1704,7 @@ pub mod tests {
         assert!(matches!(enemies(&wizard)[..], [(true, hp)] if hp < 60.0) && wizard.projectiles.is_empty(), "the staff, not missiles");
         assert!(paladin.players[0].hp < paladin.players[0].max_hp, "the archer punches");
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [6426314374441305426, 5968181214702343889, 7358529758221409173]);
+        assert_eq!(got, [15748663038908748737, 7896150550252767994, 14063248820283652292]);
     }
 
     #[test]
@@ -1707,7 +1714,7 @@ pub mod tests {
         let wizard = fight_with_log(ClassId::Wizard, E::OrcWarrior, &[12.0], &[60.0], true, true);
         let paladin = fight_with_log(ClassId::Paladin, E::GoblinArcher, &[12.0], &[24.0], false, true);
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [6426314374441305426, 5968181214702343889, 7358529758221409173]);
+        assert_eq!(got, [15748663038908748737, 7896150550252767994, 14063248820283652292]);
     }
 
     #[test]
