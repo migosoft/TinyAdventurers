@@ -856,8 +856,8 @@ impl Run {
                     objects::hurt_objects_in(self, pos, r, None, dmg);
                 }
                 (HazardSide::Monsters, HazardPulse::Bind(on)) => {
-                    if let Some(&on) = on.first() {
-                        for c in self.foes_touching(pos, r, false) {
+                    for c in self.foes_touching(pos, r, false) {
+                        for &on in &on {
                             self.apply(c, Apply::from_hit(on));
                         }
                     }
@@ -870,8 +870,8 @@ impl Run {
                 }
                 (HazardSide::Heroes { owner }, HazardPulse::Bind(on)) => {
                     let from = self.players.iter().find(|p| p.id == owner).map_or(pos, |p| p.pos());
-                    if let Some(&on) = on.first() {
-                        for mi in self.enemies_touching(pos, r) {
+                    for mi in self.enemies_touching(pos, r) {
+                        for &on in &on {
                             self.apply(effects::Creature::Monster(mi), Apply { source: Some((owner, from)), origin: Some((owner, What::Ability(crate::defs::abilities::AbilityId::Entangle))), ..Apply::from_hit(on) });
                         }
                     }

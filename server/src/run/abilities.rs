@@ -175,19 +175,30 @@ fn kind_of(projectile: Option<EntityKind>) -> EntityKind {
 
 /// The damage of one hit of `a`: its split, on-hit and power.
 fn damage_of(user: u32, a: &ResolvedAbility) -> Damage {
-    Damage { on_hit: a.on_hit.clone(), ..Damage::new(a.damage, a.split).with_power(a.power) }.by(user, What::Ability(a.id)).with_base(a.base)
+    hit_damage(user, a, false)
+}
+
+/// `damage_of`, with the ability's own effects on the hit too if it `carries_own` (a shot does).
+fn hit_damage(user: u32, a: &ResolvedAbility, carries_own: bool) -> Damage {
+    Damage { on_hit: a.hit_effects(carries_own), ..Damage::new(a.damage, a.split).with_power(a.power) }.by(user, What::Ability(a.id)).with_base(a.base)
 }
 
 /// The damage of one hit of the weapon attack `a` (or of an ability that uses none: `damage_of`).
 /// While the user is coated (Poison Coat) every weapon attack adds a poison share and applies
-/// Poisoned instead of its weapon's own on-hit.
+/// Poisoned after its weapon's own on-hit.
 fn weapon_damage(run: &Run, c: Creature, a: &ResolvedAbility) -> Damage {
-    let dmg = damage_of(run.creature_id(c), a);
+    weapon_hit_damage(run, c, a, false)
+}
+
+/// `weapon_damage`, with the ability's own effects on the hit too if it `carries_own`.
+fn weapon_hit_damage(run: &Run, c: Creature, a: &ResolvedAbility, carries_own: bool) -> Damage {
+    let dmg = hit_damage(run.creature_id(c), a, carries_own);
     if ab::def(a.id).uses == Uses::Nothing || !run.has_effect(c, EffectKind::Coated) {
         return dmg;
     }
     let on_hit = OnHit { kind: EffectKind::Poisoned, secs: ab::COAT_POISON_SECS, magical: false, power: a.power, look: EffectLook::Plain };
-    Damage { split: a.split.with_shares(&[(DamageType::Poison, ab::COAT_SHARE)]), on_hit: vec![on_hit], ..dmg }.with_mult(Mult::Coat(ab::COAT_SHARE))
+    let on_hit = dmg.on_hit.iter().copied().chain([on_hit]).collect();
+    Damage { split: a.split.with_shares(&[(DamageType::Poison, ab::COAT_SHARE)]), on_hit, ..dmg }.with_mult(Mult::Coat(ab::COAT_SHARE))
 }
 
 /// Uses the hero's primary or secondary ability, with its numbers from the hero's sheet.
@@ -417,7 +428,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
         AbilityId::WarCry => {
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
-            let own = a.effect.first().copied().expect("War Cry has its own effect");
+            debug_assert!(!a.effect.is_empty(), "War Cry has its own effects");
             let source = Some((run.creature_id(c), pos));
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
             let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: false, skip_invisible: false, passes: None };
@@ -425,7 +436,9 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             let (afraid, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
             super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
             for t in afraid {
-                run.apply(t, Apply { source, origin, ..Apply::from_hit(own) });
+                for &own in &a.effect {
+                    run.apply(t, Apply { source, origin, ..Apply::from_hit(own) });
+                }
             }
             for c in party_around(run, pos, a.radius) {
                 run.apply(c, Apply { origin, ..Apply::plain(EffectKind::Accelerated, Some(a.duration)) });
@@ -656,14 +669,16 @@ fn use_gaze(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
     let Creature::Monster(mi) = c else { unreachable!("only a monster gazes") };
     let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
     let at = pos + Vec2::from_angle(aim_of(run, c)) * aim_dist_of(run, c);
-    let own = a.effect.first().copied().expect("a gaze has its own effect");
+    debug_assert!(!a.effect.is_empty(), "a gaze has its own effects");
     let source = Some((run.creature_id(c), pos));
     let origin = Some((run.creature_id(c), What::Ability(a.id)));
     let rule = targets::Rule { at, reach: GAZE_AIM_SLACK, plus_radius: true, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: false, skip_invisible: true, passes: None };
     let (stared_at, _) = targets::select(run, side(run, c), &rule, &[], false, |t| run.creature_pos(t));
     for t in stared_at {
         if super::perception::sees(run, sight, pos, run.creature_pos(t)) {
-            run.apply(t, Apply { source, origin, ..Apply::from_hit(own) });
+            for &own in &a.effect {
+                run.apply(t, Apply { source, origin, ..Apply::from_hit(own) });
+            }
         }
     }
     Anim::Gaze
@@ -699,17 +714,19 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
         AbilityId::Haste => {
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
-            let own = a.effect.first().copied().expect("Haste has its own effect");
+            debug_assert!(!a.effect.is_empty(), "Haste has its own effects");
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
             for t in party_around(run, pos, a.radius) {
-                run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
+                for own in &a.effect {
+                    run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
+                }
             }
         }
         AbilityId::Purify => {
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
             run.add_tinted_flash(look.light.expect("Purify flashes"), look.tint, pos, ab::PURIFY_FLASH);
-            let own = a.effect.first().copied().expect("Purify has its own effect");
+            debug_assert!(!a.effect.is_empty(), "Purify has its own effects");
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
             for t in party_around(run, pos, a.radius) {
                 let held = match t {
@@ -719,7 +736,9 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
                 for k in held.into_iter().filter(|&k| !crate::defs::effects::def(k).positive) {
                     run.remove_effect_why(t, k, super::rules_log::EndReason::Purify);
                 }
-                run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
+                for own in &a.effect {
+                    run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
+                }
             }
         }
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
@@ -751,9 +770,9 @@ fn use_ground_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) 
                 d += 2.0;
             }
             let at = pos + dir * if d + 2.0 > want && !run.layout.map.opaque_at(pos + dir * want) { want } else { d };
-            let own = a.effect.first().copied().expect("Entangle has its own effect");
-            let bind = OnHit { secs: ab::ENTANGLE_PULSE_SECS, ..own };
-            run.spawn_hazard(kind_of(a.projectile), at, a.radius, a.duration, side, HazardPulse::Bind(vec![bind]));
+            debug_assert!(!a.effect.is_empty(), "Entangle has its own effects");
+            let binds = a.effect.iter().map(|&own| OnHit { secs: ab::ENTANGLE_PULSE_SECS, ..own }).collect();
+            run.spawn_hazard(kind_of(a.projectile), at, a.radius, a.duration, side, HazardPulse::Bind(binds));
         }
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a ground area", a.id)
@@ -767,8 +786,10 @@ fn use_buff(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
     debug_assert!(ab::def(a.id).shape == Shape::Buff);
     match a.id {
         AbilityId::PoisonCoat => {
-            let own = a.effect.first().copied().expect("Poison Coat has its own effect");
-            run.apply(c, Apply::from_hit(own));
+            debug_assert!(!a.effect.is_empty(), "Poison Coat has its own effects");
+            for &own in &a.effect {
+                run.apply(c, Apply::from_hit(own));
+            }
         }
         AbilityId::Vanish => unreachable!("Vanish goes through go_invisible"),
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::RaiseDead | AbilityId::SummonImps => {
@@ -952,9 +973,8 @@ fn spawn_shot(run: &mut Run, c: Creature, a: &ResolvedAbility, kind: EntityKind,
     let life = a.range / a.speed + if target.is_some() { 0.1 } else { 0.0 };
     // A Chain Spark stops at the first foe; the jumps are made there (`chain_jumps`).
     let pierce = if a.id == AbilityId::ChainSpark { Pierce::Never } else { Pierce::new(a.pierce, a.pierce_through) };
-    let damage = weapon_damage(run, c, a);
-    // A shot's own effect (Blinding Curse, Sleep Mist) is its on-hit.
-    let damage = Damage { on_hit: if damage.on_hit.is_empty() { a.effect.clone() } else { damage.on_hit }, ..damage };
+    // A shot carries its weapon's effects and its own (Blinding Curse, Sleep Mist).
+    let damage = weapon_hit_damage(run, c, a, true);
     let owner = run.creature_id(c);
     let id = run.alloc_id();
     run.projectiles.push(Projectile {
@@ -2845,7 +2865,7 @@ mod tests {
         let shot = run.projectiles[0].damage.clone();
         assert!((shot.split.share(DamageType::Poison) - COAT_SHARE).abs() < 1e-12);
         assert!((shot.split.share(DamageType::Physical) - (1.0 - COAT_SHARE)).abs() < 1e-12);
-        let on_hit = shot.on_hit.first().copied().expect("the coat's on-hit");
+        let on_hit = shot.on_hit.last().copied().expect("the coat's on-hit, after the weapon's");
         assert_eq!((on_hit.kind, on_hit.secs, on_hit.magical, on_hit.power), (EffectKind::Poisoned, COAT_POISON_SECS, false, bow.power));
         fly(&mut run);
         let m = Creature::Monster(mi);
@@ -2865,7 +2885,7 @@ mod tests {
     }
 
     #[test]
-    fn the_coat_replaces_a_weapon_on_hit_while_it_lasts() {
+    fn the_coat_adds_to_a_weapon_on_hit_while_it_lasts() {
         let slowed = OnHit { kind: EffectKind::Slowed, secs: 3.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain };
         let strike = |coated: bool| {
             let mut run = run_with_ability(ClassId::Barbarian, AbilitySlot::Primary, AbilityId::Strike, Attributes::default(), Equipment::starter(ClassId::Barbarian));
@@ -2878,8 +2898,64 @@ mod tests {
             let m = Creature::Monster(mi);
             (run.has_effect(m, EffectKind::Poisoned), run.has_effect(m, EffectKind::Slowed))
         };
-        assert_eq!(strike(true), (true, false), "the coat's Poisoned wins");
-        assert_eq!(strike(false), (false, true), "the weapon's own effect comes back");
+        assert_eq!(strike(true), (true, true), "the coat adds its poison to the weapon's effect");
+        assert_eq!(strike(false), (false, true), "uncoated, the weapon's effect alone");
+    }
+
+    fn eff(kind: EffectKind) -> OnHit {
+        OnHit { kind, secs: 3.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain }
+    }
+
+    #[test]
+    fn a_shot_carries_its_weapon_and_own_effects() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.players[0].sheet.primary.on_hit = vec![eff(EffectKind::Slowed)];
+        run.players[0].sheet.primary.effect = vec![eff(EffectKind::Blind)];
+        try_use(&mut run, 0, true, 1);
+        let kinds: Vec<_> = run.projectiles[0].damage.on_hit.iter().map(|h| h.kind).collect();
+        assert_eq!(kinds, vec![EffectKind::Slowed, EffectKind::Blind]);
+    }
+
+    #[test]
+    fn one_hit_orders_weapon_own_mod_then_coat() {
+        use crate::defs::loadout::{apply_mods, AbilityMod};
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut bow = run.players[0].sheet.primary.clone();
+        bow.on_hit = vec![eff(EffectKind::Slowed)];
+        bow.effect = vec![eff(EffectKind::Blind)];
+        run.players[0].sheet.primary = apply_mods(bow, &[AbilityMod::AddOnHit(eff(EffectKind::Weakened))]);
+        let order = |run: &Run| run.projectiles.last().unwrap().damage.on_hit.iter().map(|h| h.kind).collect::<Vec<_>>();
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(order(&run), vec![EffectKind::Slowed, EffectKind::Blind, EffectKind::Weakened]);
+        run.apply_effect(Creature::Player(0), EffectKind::Coated, Some(6.0));
+        run.players[0].cd1 = 0.0;
+        try_use(&mut run, 0, true, 2);
+        assert_eq!(order(&run), vec![EffectKind::Slowed, EffectKind::Blind, EffectKind::Weakened, EffectKind::Poisoned]);
+    }
+
+    #[test]
+    fn an_area_ability_applies_every_own_effect() {
+        let mut run = barbarian_war_cry();
+        run.players[0].sheet.secondary.effect = vec![eff(EffectKind::Fear), eff(EffectKind::Weakened)];
+        let a = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
+        let b = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 1000.0);
+        try_use(&mut run, 0, false, 1);
+        for mi in [a, b] {
+            let m = Creature::Monster(mi);
+            assert!(run.has_effect(m, EffectKind::Fear) && run.has_effect(m, EffectKind::Weakened));
+        }
+    }
+
+    #[test]
+    fn entangle_binds_with_every_own_effect() {
+        let mut run = entangle_run();
+        run.players[0].sheet.secondary.effect = vec![eff(EffectKind::Entangled), eff(EffectKind::Slowed)];
+        let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
+        try_use(&mut run, 0, false, 1);
+        assert!(matches!(run.hazards[0].pulse, HazardPulse::Bind(ref on) if on.len() == 2 && on.iter().all(|h| h.secs == ab::ENTANGLE_PULSE_SECS)));
+        run.tick_hazards(0.3);
+        let m = Creature::Monster(g);
+        assert!(run.has_effect(m, EffectKind::Entangled) && run.has_effect(m, EffectKind::Slowed));
     }
 
     // ---- Plan 3b: rings and party effects ----

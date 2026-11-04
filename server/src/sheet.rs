@@ -71,6 +71,10 @@ pub struct ResolvedAbility {
     #[serde(skip)]
     #[ts(skip)]
     pub on_hit: Vec<OnHit>,
+    /// The effects mods added to its hits (`AddOnHit`), after the weapon's and its own.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub mod_on_hit: Vec<OnHit>,
     /// The wind-up (s) before it lands: its own plus its weapon's.
     pub windup: f64,
     /// The half-angle (rad) of the "from behind" cone; 0 = none.
@@ -228,6 +232,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
         projectile: None,
         split: DamageSplit::physical(),
         on_hit: Vec::new(),
+        mod_on_hit: Vec::new(),
         behind: d.behind,
         effect: own.effects.iter().map(|e| OnHit { kind: e.kind, secs: own.duration, magical: matches!(d.category, AbilityCategory::Spell | AbilityCategory::Innate), power: attrs.get(e.power), look: e.look }).collect(),
         power: 0,
@@ -331,6 +336,16 @@ impl Kit {
             *a = apply_mods(a.clone(), mods);
         }
         self
+    }
+}
+
+impl ResolvedAbility {
+    /// The effects one hit of this ability applies, in the one order: the weapon's enchantments, the
+    /// ability's own effects (when the hit `carries_own`, as a shot does), then the ones mods added.
+    /// The coat's poison goes after these (`weapon_damage`).
+    pub fn hit_effects(&self, carries_own: bool) -> Vec<OnHit> {
+        let own: &[OnHit] = if carries_own { &self.effect } else { &[] };
+        self.on_hit.iter().chain(own).chain(&self.mod_on_hit).copied().collect()
     }
 }
 

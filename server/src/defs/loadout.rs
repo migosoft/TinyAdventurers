@@ -103,7 +103,7 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
     use AbilityMod::*;
     let (mut radius, mut range, mut damage, mut arc) = (vec![], vec![], vec![], vec![]);
     let (mut duration, mut cooldown, mut behind) = (vec![], vec![], vec![]);
-    let mut on_hit = r.on_hit.clone();
+    let mut mod_on_hit = r.mod_on_hit.clone();
     let mut shares: Vec<(DamageType, f64)> = vec![];
     let (mut pierce, mut through, mut push_str) = (r.pierce, r.pierce_through, r.push_str);
     let (mut per_cast, mut alive) = (r.per_cast as i32, r.alive as i32);
@@ -125,7 +125,7 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
             }
             PushStr(n) => push_str += n,
             AddOnHit(h) => {
-                on_hit.push(OnHit { power: if h.power == 0 { r.power } else { h.power }, ..h });
+                mod_on_hit.push(OnHit { power: if h.power == 0 { r.power } else { h.power }, ..h });
             }
             BehindArc(a) => behind.push(a),
             CompanionHpMul(_) | CompanionDashCooldownAdd(_) => {}
@@ -151,7 +151,7 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
         cd_steps: CdSteps { mods: mods_cooldown, ..r.cd_steps },
         split: if shares.is_empty() { r.split } else { r.split.with_shares(&shares) },
         behind: (r.behind + sum(behind)).max(0.0),
-        on_hit,
+        mod_on_hit,
         pierce,
         pierce_through: through,
         push_str,
@@ -398,9 +398,11 @@ mod tests {
         let r = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap().primary;
         let a = OnHit { kind: EffectKind::Poisoned, secs: 2.0, magical: true, power: 0, look: EffectLook::Plain };
         let b = OnHit { kind: EffectKind::Weakened, secs: 3.0, magical: false, power: 4, look: EffectLook::Plain };
-        let mut expected = r.on_hit.clone();
+        let mut expected = r.mod_on_hit.clone();
         expected.extend([OnHit { power: r.power, ..a }, b]);
-        assert_eq!(apply_mods(r.clone(), &[AbilityMod::AddOnHit(a), AbilityMod::AddOnHit(b)]).on_hit, expected);
+        let got = apply_mods(r.clone(), &[AbilityMod::AddOnHit(a), AbilityMod::AddOnHit(b)]);
+        assert_eq!(got.mod_on_hit, expected);
+        assert_eq!(got.on_hit, r.on_hit, "the weapon's list is left alone");
     }
 
     #[test]
@@ -420,11 +422,11 @@ mod tests {
         assert_eq!(r.id, Strike);
         let hit = OnHit { kind: EffectKind::Poisoned, secs: 2.0, magical: true, power: 0, look: EffectLook::Plain };
         let a = apply_mods(r.clone(), &[AbilityMod::AddOnHit(hit)]);
-        assert_eq!(a.on_hit, vec![OnHit { power: r.power, ..hit }], "a power of 0 takes the ability's");
+        assert_eq!(a.mod_on_hit, vec![OnHit { power: r.power, ..hit }], "a power of 0 takes the ability's");
         let own = OnHit { power: 17, ..hit };
-        let mut expected = r.on_hit.clone();
+        let mut expected = r.mod_on_hit.clone();
         expected.push(own);
-        assert_eq!(apply_mods(r.clone(), &[AbilityMod::AddOnHit(own)]).on_hit, expected);
+        assert_eq!(apply_mods(r.clone(), &[AbilityMod::AddOnHit(own)]).mod_on_hit, expected);
         let b = ResolvedAbility { behind: 1.0, ..r.clone() };
         assert_eq!(apply_mods(b.clone(), &[AbilityMod::BehindArc(0.5), AbilityMod::BehindArc(0.5)]).behind, 2.0);
         assert_eq!(apply_mods(b.clone(), &[AbilityMod::BehindArc(-5.0)]).behind, 0.0);
