@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { PoolCard } from '../../generated/PoolCard';
 import type { ResolvedAbility } from '../../generated/ResolvedAbility';
 import { fixtureInfo } from './fixture';
-import { abilityNumbers, fitsSlot, itemPoints, itemProblem, itemRequirements, monogram, requirementStatus, unusableNeeds, nodeState, pickLabel, poolFor, samePick, slotForItem, unmetRequirements, blockReason } from './model';
+import { abilityNumbers, attrEffect, cooldownSteps, fitsSlot, itemPoints, itemProblem, itemRequirements, monogram, requirementStatus, unusableNeeds, nodeState, pickLabel, poolFor, samePick, slotForItem, unmetRequirements, blockReason } from './model';
 
 describe('nodeState', () => {
   test('the start node is owned, its neighbours buyable with XP', () => {
@@ -129,5 +129,26 @@ describe('picks and the pool', () => {
     const info = fixtureInfo('Paladin', { pool: [card('Strike'), card('Purify'), card('MagicMissile')] });
     expect(poolFor(info, 'Primary').map((c) => c.pick.ability)).toEqual(['Strike', 'MagicMissile']);
     expect(poolFor(info, 'Secondary').map((c) => c.pick.ability)).toEqual(['Purify']);
+  });
+});
+
+describe('cooldownSteps', () => {
+  const ab = (o: object) => ({ id: 'Fireball', damage: 0, ...o }) as unknown as ResolvedAbility;
+  test('names each step that changed the cooldown', () => {
+    expect(cooldownSteps(ab({ cooldown: 0.8, cd_steps: { base: 2, attr: 'Int', have: 20, scaled: 1, mods: 0.8 } }))).toBe('2 s base → 1 s (INT 20) → 0.8 s (skills)');
+  });
+  test('an unchanged cooldown is just the base', () => {
+    expect(cooldownSteps(ab({ cooldown: 2, cd_steps: { base: 2, attr: 'Int', have: 10, scaled: 2, mods: 2 } }))).toBe('2 s base');
+  });
+  test('the keystone is the last step', () => {
+    expect(cooldownSteps(ab({ cooldown: 3.08, cd_steps: { base: 6, attr: 'Int', have: 20, scaled: 3, mods: 2.8 } }))).toBe('6 s base → 3 s (INT 20) → 2.8 s (skills) → 3.08 s (keystone)');
+  });
+});
+
+describe('attrEffect cooldowns', () => {
+  test('DEX, INT and CHA divide cooldowns', () => {
+    expect(attrEffect('Dex', 20)).toContain('cooldowns ÷2');
+    expect(attrEffect('Int', 15)).toContain('spell cooldowns ÷1.5');
+    expect(attrEffect('Cha', 5)).toContain('innate cooldowns ÷0.5');
   });
 });

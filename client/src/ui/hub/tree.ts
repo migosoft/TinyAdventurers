@@ -6,7 +6,7 @@ import type { NodeId } from '../../generated/NodeId';
 import { classFigure, figureWeapon } from '../classes';
 import { esc } from '../hud';
 import { abilityIcon } from '../icons';
-import { abilityNumbers, monogram, nodeState, nodesOf, requirementStatus, spaced, unmetRequirements, type NodeState, type TreeKind, type TreeNode } from './model';
+import { abilityNumbers, cooldownSteps, monogram, nodeState, nodesOf, requirementStatus, spaced, unmetRequirements, type NodeState, type TreeKind, type TreeNode } from './model';
 import { clearTips, showTip } from './tip';
 import type { TabCtx } from './hub';
 
@@ -48,8 +48,9 @@ function tipHtml(n: TreeNode, state: NodeState, ctx: TabCtx): string {
   let body: string;
   if (n.kind === 'Unlock') {
     const card = info.sheet.pool.find((c) => c.pick.ability === n.ability && c.pick.source === 'Own');
+    const steps = card?.ability ? cooldownSteps(card.ability) : '';
     const nums = card?.ability ? abilityNumbers(card.ability, ABILITY_INFO[n.ability!].uses) : '';
-    body = `<p>${abilityIcon(n.ability!, true)}${esc(ABILITY_INFO[n.ability!].text)}</p>${nums ? `<p class="muted">${esc(nums)}</p>` : ''}`;
+    body = `<p>${abilityIcon(n.ability!, true)}${esc(ABILITY_INFO[n.ability!].text)}</p>${nums ? `<p class="muted">${esc(nums)}</p>` : ''}${steps.includes('→') ? `<p class="muted">${esc(steps)}</p>` : ''}`;
   } else body = `<p>${esc(n.text)}</p>`;
   const reqs = requirementStatus(info, n.req, true)
     .map((r) => `<li class="${r.ok ? 'ok' : 'bad'}">Needs ${esc(r.text)} <span>(you have ${r.have})</span></li>`)

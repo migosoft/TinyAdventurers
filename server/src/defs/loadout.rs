@@ -11,7 +11,7 @@ use super::requirements::Requirement;
 use super::trees::{self, NodeId};
 use super::weapons::WeaponKind;
 use crate::protocol::ClassId;
-use crate::sheet::ResolvedAbility;
+use crate::sheet::{CdSteps, ResolvedAbility};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -134,6 +134,7 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
     let longer = !duration.is_empty();
     let new_duration = (r.duration + sum(duration)).max(0.0);
     let base = Base { mods_mult: r.base.mods_mult * product(damage), ..r.base };
+    let mods_cooldown = (r.cooldown + sum(cooldown)).max(MIN_COOLDOWN);
     ResolvedAbility {
         // Clamped: a negative factor or a large negative add never makes a number negative.
         radius: (r.radius * product(radius)).max(0.0),
@@ -144,7 +145,8 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
         duration: new_duration,
         // The ability's own effect lasts as long as the ability does.
         effect: if longer { r.effect.map(|e| OnHit { secs: new_duration, ..e }) } else { r.effect },
-        cooldown: (r.cooldown + sum(cooldown)).max(MIN_COOLDOWN),
+        cooldown: mods_cooldown,
+        cd_steps: CdSteps { mods: mods_cooldown, ..r.cd_steps },
         split: if shares.is_empty() { r.split } else { r.split.with_shares(&shares) },
         behind: (r.behind + sum(behind)).max(0.0),
         on_hit,

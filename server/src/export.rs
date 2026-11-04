@@ -182,7 +182,7 @@ fn export_defs() {
         .iter()
         .map(|k| {
             let d = effects::def(*k);
-            ((*k as u8).to_string(), json!({ "positive": d.positive, "prone": d.prone, "no_turn": d.no_turn, "flees": d.flees, "duration": d.duration }))
+            ((*k as u8).to_string(), json!({ "positive": d.positive, "prone": d.prone, "no_turn": d.no_turn, "flees": d.flees, "duration": d.duration, "cd_rate": effects::resolve_stat(1.0, effects::Stat::CooldownRate, &[*k]) }))
         })
         .collect();
     let effect_look: serde_json::Map<_, _> = effects::EffectLook::ALL.iter().map(|l| (format!("{l:?}"), json!(*l as u8))).collect();
@@ -203,7 +203,7 @@ fn export_defs() {
          export const LIGHT_KIND = {} as const;\n\n\
          export const LIGHT: Record<number, {{ radius: number; colour: number; intensity: number; flicker: number }}> = {};\n\n\
          export const EFFECT = {} as const;\n\n\
-         export const EFFECTS: Record<number, {{ positive: boolean; prone: boolean; no_turn: boolean; flees: boolean; duration: number }}> = {};\n\n\
+         export const EFFECTS: Record<number, {{ positive: boolean; prone: boolean; no_turn: boolean; flees: boolean; duration: number; cd_rate: number }}> = {};\n\n\
          export const EFFECT_LOOK = {} as const;\n\n\
          export const ENEMY_KINDS = {} as const;\n\n{}",
         p(&json!(kinds)),
@@ -233,11 +233,11 @@ fn export_defs() {
 fn attr_text(a: Attr) -> &'static str {
     match a {
         Attr::Str => "Melee, thrown and natural-attack damage ±5 %. Push power. Range and projectile speed of ranged weapons ±2 % each.",
-        Attr::Dex => "Finesse and ranged weapon damage ±5 %. The arc of every melee attack ±3 %. Melee attack speed and ranged firing speed ±2 %. Sets how far shots pierce.",
+        Attr::Dex => "Finesse and ranged weapon damage ±5 %. The arc of every melee attack ±3 %. Weapon attack and technique cooldowns ÷ DEX/10. Sets how far shots pierce.",
         Attr::Con => "HP ±5. Move speed ±1 %. The save against non-magical effects.",
-        Attr::Int => "Spell damage ±5 %. Spell effect power.",
+        Attr::Int => "Spell damage ±5 %. Spell effect power. Spell cooldowns ÷ INT/10.",
         Attr::Wil => "The save against hostile magical effects: shorter duration only, never less damage.",
-        Attr::Cha => "Innate magic: damage and heals ±5 %, effect power, auras.",
+        Attr::Cha => "Innate magic: damage and heals ±5 %, effect power, auras. Innate cooldowns ÷ CHA/10.",
     }
 }
 

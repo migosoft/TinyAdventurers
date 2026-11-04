@@ -1072,7 +1072,7 @@ export const TREES = {
 export const ATTRS = {
   "Cha": {
     "short": "CHA",
-    "text": "Innate magic: damage and heals ±5 %, effect power, auras.",
+    "text": "Innate magic: damage and heals ±5 %, effect power, auras. Innate cooldowns ÷ CHA/10.",
     "weight": 1.0
   },
   "Con": {
@@ -1082,12 +1082,12 @@ export const ATTRS = {
   },
   "Dex": {
     "short": "DEX",
-    "text": "Finesse and ranged weapon damage ±5 %. The arc of every melee attack ±3 %. Melee attack speed and ranged firing speed ±2 %. Sets how far shots pierce.",
+    "text": "Finesse and ranged weapon damage ±5 %. The arc of every melee attack ±3 %. Weapon attack and technique cooldowns ÷ DEX/10. Sets how far shots pierce.",
     "weight": 1.25
   },
   "Int": {
     "short": "INT",
-    "text": "Spell damage ±5 %. Spell effect power.",
+    "text": "Spell damage ±5 %. Spell effect power. Spell cooldowns ÷ INT/10.",
     "weight": 1.0
   },
   "Str": {

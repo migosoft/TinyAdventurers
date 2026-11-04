@@ -1126,8 +1126,9 @@ export const EFFECT = {
   "Weakened": 16
 } as const;
 
-export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_turn: boolean; flees: boolean; duration: number }> = {
+export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_turn: boolean; flees: boolean; duration: number; cd_rate: number }> = {
   "0": {
+    "cd_rate": 1.0,
     "duration": 3.0,
     "flees": false,
     "no_turn": false,
@@ -1135,6 +1136,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "1": {
+    "cd_rate": 1.0,
     "duration": 4.0,
     "flees": false,
     "no_turn": false,
@@ -1142,6 +1144,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": true
   },
   "10": {
+    "cd_rate": 1.0,
     "duration": 3.0,
     "flees": false,
     "no_turn": false,
@@ -1149,6 +1152,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "11": {
+    "cd_rate": 1.0,
     "duration": 3.0,
     "flees": false,
     "no_turn": false,
@@ -1156,6 +1160,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "12": {
+    "cd_rate": 1.0,
     "duration": 3.0,
     "flees": true,
     "no_turn": false,
@@ -1163,6 +1168,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "13": {
+    "cd_rate": 1.0,
     "duration": 3.0,
     "flees": false,
     "no_turn": false,
@@ -1170,6 +1176,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "14": {
+    "cd_rate": 1.0,
     "duration": 3.0,
     "flees": false,
     "no_turn": false,
@@ -1177,6 +1184,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "15": {
+    "cd_rate": 1.0,
     "duration": 30.0,
     "flees": false,
     "no_turn": false,
@@ -1184,6 +1192,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "16": {
+    "cd_rate": 1.0,
     "duration": 20.0,
     "flees": false,
     "no_turn": false,
@@ -1191,6 +1200,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "17": {
+    "cd_rate": 1.0,
     "duration": 20.0,
     "flees": false,
     "no_turn": false,
@@ -1198,6 +1208,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "18": {
+    "cd_rate": 1.0,
     "duration": 20.0,
     "flees": false,
     "no_turn": false,
@@ -1205,6 +1216,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "2": {
+    "cd_rate": 1.0,
     "duration": 3.0,
     "flees": false,
     "no_turn": true,
@@ -1212,6 +1224,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "3": {
+    "cd_rate": 0.75,
     "duration": 3.0,
     "flees": false,
     "no_turn": false,
@@ -1219,6 +1232,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "4": {
+    "cd_rate": 1.25,
     "duration": 3.0,
     "flees": false,
     "no_turn": false,
@@ -1226,6 +1240,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "5": {
+    "cd_rate": 1.0,
     "duration": 3.0,
     "flees": false,
     "no_turn": false,
@@ -1233,6 +1248,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "6": {
+    "cd_rate": 1.0,
     "duration": 2.0,
     "flees": false,
     "no_turn": true,
@@ -1240,6 +1256,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "7": {
+    "cd_rate": 1.0,
     "duration": 4.0,
     "flees": false,
     "no_turn": false,
@@ -1247,6 +1264,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "8": {
+    "cd_rate": 0.75,
     "duration": 3.0,
     "flees": false,
     "no_turn": false,
@@ -1254,6 +1272,7 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
     "prone": false
   },
   "9": {
+    "cd_rate": 1.0,
     "duration": 3.0,
     "flees": false,
     "no_turn": false,

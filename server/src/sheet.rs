@@ -24,12 +24,28 @@ use crate::protocol::{BossId, ClassId};
 use serde::Serialize;
 use ts_rs::TS;
 
+/// A cooldown's way through the chain, for the character screens and the rules log.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct CdSteps {
+    /// Step 1: the ability's own cooldown or its weapon's interval × the ability's time factor.
+    pub base: f64,
+    /// Step 2: the Attribute and the hero's value; `scaled` is the cooldown after it (floored).
+    pub attr: Attr,
+    pub have: i32,
+    pub scaled: f64,
+    /// Step 3a: after tree nodes and item versions (`apply_mods`), floored. Equal to `scaled` without mods.
+    pub mods: f64,
+}
+
 /// An ability with its numbers resolved for one hero.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ResolvedAbility {
     pub id: AbilityId,
+    /// The final cooldown (s): `cd_steps.mods` plus any keystone.
     pub cooldown: f64,
+    pub cd_steps: CdSteps,
     pub damage: f64,
     /// `damage` as its breakdown for the rules log: `damage == base.amount()`.
     #[serde(skip)]
@@ -189,12 +205,15 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
     // A `Uses::Nothing` ability with no own cooldown has base 0, which the floor lifts to MIN_COOLDOWN.
     let cooldown = |weapon: Option<&ResolvedWeapon>| {
         let base = if own.cooldown > 0.0 { own.cooldown } else { weapon.map_or(0.0, |w| w.cooldown) * mult.time };
-        Scaled { value: base, attr: ab::cooldown_attr(d.category), pct: CD_PCT, at: attributes::BASELINE }.per(attrs).max(MIN_COOLDOWN)
+        let attr = ab::cooldown_attr(d.category);
+        let scaled = Scaled { value: base, attr, pct: CD_PCT, at: attributes::BASELINE }.per(attrs).max(MIN_COOLDOWN);
+        CdSteps { base, attr, have: attrs.get(attr), scaled, mods: scaled }
     };
     // What every rule fills in the same way; the numbers it does not set stay 0.
     let blank = ResolvedAbility {
         id: d.id,
         cooldown: 0.0,
+        cd_steps: cooldown(None),
         damage: 0.0,
         base: Base::plain(0.0),
         range: 0.0,
@@ -222,7 +241,8 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
             let melee = weapon_for(d, weapons)?;
             let base = Base { ability_mult: mult.damage, ..melee.base };
             ResolvedAbility {
-                cooldown: cooldown(Some(melee)),
+                cooldown: cooldown(Some(melee)).scaled,
+                cd_steps: cooldown(Some(melee)),
                 damage: base.amount(),
                 base,
                 // A dash's own range is how far it leaps; any other melee ability reaches as far as its weapon.
@@ -243,7 +263,8 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
             let w = weapon_for(d, weapons)?;
             let base = Base { ability_mult: mult.damage, ..w.base };
             ResolvedAbility {
-                cooldown: cooldown(Some(w)),
+                cooldown: cooldown(Some(w)).scaled,
+                cd_steps: cooldown(Some(w)),
                 damage: base.amount(),
                 base,
                 range: w.range,
@@ -277,7 +298,8 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
             ResolvedAbility {
                 per_cast: own.minions.map_or(0, |m| count(m.per_cast)),
                 alive: own.minions.map_or(0, |m| count(m.alive)),
-                cooldown: cooldown(None),
+                cooldown: cooldown(None).scaled,
+                cd_steps: cooldown(None),
                 damage: base.amount(),
                 base,
                 range: own.range,
@@ -1769,6 +1791,21 @@ mod tests {
 
     fn with_nodes(c: ClassId, nodes: &[NodeId]) -> Sheet {
         hero_sheet(c, &Build { nodes: nodes.to_vec(), extra: Attributes::new(5, 5, 5, 5, 5, 5), ..Build::start(c) }).unwrap()
+    }
+
+    #[test]
+    fn cd_steps_record_each_step() {
+        let d = ab::def(AbilityId::Fireball);
+        let r = resolve_ability(&d, &only(Attr::Int, 20), &[], Body { radius: 8.0 }).expect("Fireball needs no weapon");
+        assert_eq!(r.cd_steps, CdSteps { base: 6.0, attr: Attr::Int, have: 20, scaled: 3.0, mods: 3.0 });
+        let r = apply_mods(r, &[AbilityMod::CooldownAdd(-0.2)]);
+        let mut ks = KeystoneSet::default();
+        ks.insert(Keystone::ArcaneOverflow);
+        let r = keystone_ability(r, &d, &ks);
+        let c = r.cd_steps;
+        assert_eq!((c.base, c.attr, c.have, c.scaled), (6.0, Attr::Int, 20, 3.0));
+        assert!((c.mods - 2.8).abs() < 1e-12, "mods {}", c.mods);
+        assert!((r.cooldown - 3.08).abs() < 1e-12, "cooldown {}", r.cooldown);
     }
 
     #[test]

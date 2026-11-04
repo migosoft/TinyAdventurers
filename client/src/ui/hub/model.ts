@@ -133,16 +133,32 @@ export function attrEffect(attr: Attr, v: number): string {
     case 'Str':
       return `melee/thrown dmg ${pct(5 * d)} · push power ${v}`;
     case 'Dex':
-      return `finesse/ranged dmg ${pct(5 * d)} · arc ${pct(3 * d)} · speed ${pct(2 * d)}`;
+      return `finesse/ranged dmg ${pct(5 * d)} · arc ${pct(3 * d)} · cooldowns ÷${v / 10}`;
     case 'Con':
       return `HP ${sign(5 * d)} · move speed ${pct(d)} · non-magical save ${v}`;
     case 'Int':
-      return `spell dmg and power ${pct(5 * d)}`;
+      return `spell dmg and power ${pct(5 * d)} · spell cooldowns ÷${v / 10}`;
     case 'Wil':
       return `magical save ${v}`;
     case 'Cha':
-      return `innate dmg, heals, power ${pct(5 * d)}`;
+      return `innate dmg, heals, power ${pct(5 * d)} · innate cooldowns ÷${v / 10}`;
   }
+}
+
+/** A cooldown's way through the chain ("6 s base → 3 s (INT 20) → 2.8 s (skills) → 3.08 s (keystone)"); a step that changed nothing is left out. */
+export function cooldownSteps(r: ResolvedAbility): string {
+  const n = (v: number) => Math.round(v * 100) / 100;
+  const c = r.cd_steps;
+  const out = [`${n(c.base)} s base`];
+  let last = n(c.base);
+  const step = (v: number, label: string) => {
+    if (n(v) !== last) out.push(`${n(v)} s (${label})`);
+    last = n(v);
+  };
+  step(c.scaled, `${c.attr.toUpperCase()} ${c.have}`);
+  step(c.mods, 'skills');
+  step(r.cooldown, 'keystone');
+  return out.join(' → ');
 }
 
 /** The numbers line of an ability card. `uses` is accepted for callers; the numbers do not depend on it. */

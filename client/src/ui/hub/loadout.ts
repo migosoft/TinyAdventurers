@@ -6,7 +6,7 @@ import type { PoolCard } from '../../generated/PoolCard';
 import { esc } from '../hud';
 import { abilityIcon } from '../icons';
 import type { TabCtx } from './hub';
-import { abilityNumbers, pickLabel, poolFor, samePick, spaced } from './model';
+import { abilityNumbers, cooldownSteps, pickLabel, poolFor, samePick, spaced } from './model';
 
 type Slot = 'Primary' | 'Secondary';
 type Info = { category: string; uses: string; req: readonly string[]; text: string };
@@ -17,6 +17,7 @@ function cardHtml(c: PoolCard, info: CharacterInfo, unavailable: boolean): strin
   const a = ABILITY_INFO[id] as unknown as Info;
   const ranged = c.ability?.ranged ? ' · ranged' : '';
   const numbers = c.ability ? abilityNumbers(c.ability, a.uses) : '—';
+  const steps = c.ability ? cooldownSteps(c.ability) : '';
   const last = unavailable
     ? '<em class="bad">Not available any more.</em>'
     : c.locked
@@ -25,7 +26,7 @@ function cardHtml(c: PoolCard, info: CharacterInfo, unavailable: boolean): strin
         ? `<em class="bad">${esc(c.error)}</em>`
         : `<small class="muted">Requires: ${a.req.length ? esc(a.req.join(', ')) : 'none'}</small>`;
   return `${abilityIcon(id, true)}<div><b>${esc(pickLabel(c.pick, info))}${unavailable ? ' (unavailable)' : ''}</b><small>${spaced(a.category)} · ${USES[a.uses] ?? 'no weapon'}${ranged}</small>
-    <span>${esc(a.text)}</span><small class="muted">${esc(numbers)}</small>${last}</div>`;
+    <span>${esc(a.text)}</span><small class="muted">${esc(numbers)}</small>${steps.includes('→') ? `<small class="muted">${esc(steps)}</small>` : ''}${last}</div>`;
 }
 
 function hint(error: string): string {

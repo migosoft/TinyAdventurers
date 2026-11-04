@@ -405,7 +405,12 @@ export type { ClassId };
 /** One own-effect chip: the glyph, the whole seconds left, and for an Attribute drain the amount (`−2`) with a tooltip. */
 export function effectChipHtml(k: number, left: number, amount: number): string {
   const drain = DRAIN_TEXT[k];
-  const tip = drain && amount !== 0 ? ` title="${drain.name} (${drain.attr} \u2212${Math.abs(amount)})"` : '';
+  const rate = EFFECTS[k]?.cd_rate ?? 1;
+  const tip = drain && amount !== 0
+    ? ` title="${drain.name} (${drain.attr} \u2212${Math.abs(amount)})"`
+    : rate !== 1
+      ? ` title="cooldowns ${Math.round(Math.abs(rate - 1) * 100)} % ${rate > 1 ? 'faster' : 'slower'}"`
+      : '';
   const num = amount !== 0 ? `<b>\u2212${Math.abs(amount)}</b>` : '';
   return `<span class="fx ${EFFECTS[k]?.positive ? 'pos' : 'neg'}"${tip}>${effectIconSvg(k, 14)}${num}<i>${Math.ceil(left)}</i></span>`;
 }
