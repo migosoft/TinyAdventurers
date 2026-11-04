@@ -547,8 +547,6 @@ mod tests {
                 assert!(d.props.iter().all(|p| p.magical), "{id:?}");
             }
             assert!(!d.req.iter().any(|r| matches!(r, Requirement::WeaponKind(_))), "{id:?}: an item cannot require a weapon kind");
-            let on_hits = d.props.iter().filter(|p| matches!(p.kind, PropKind::OnHit(_))).count();
-            assert!(on_hits <= 1, "{id:?}");
             for p in d.props {
                 if matches!(p.kind, PropKind::DamageShare(..) | PropKind::OnHit(_)) {
                     assert!(weapon, "{id:?}");

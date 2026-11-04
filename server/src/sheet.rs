@@ -13,7 +13,7 @@ use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, 
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::kinds::EntityKind;
-use crate::defs::items::{self, ArmorClass, EquipSlot, Equipment, ItemBase, ItemId, PropKind};
+use crate::defs::items::{self, ArmorClass, EquipSlot, Equipment, ItemBase, ItemId, ItemProperty, PropKind};
 use crate::defs::lights::{self, LightKind};
 use crate::defs::loadout::{apply_mods, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source, MIN_COOLDOWN};
 use crate::defs::races::Sight;
@@ -336,7 +336,12 @@ impl Kit {
 
 /// The on-hit a monster's weapon carries by itself (Ghost Touch drains STR, Shade Touch CON); `arm` fills in the power.
 fn own_on_hits(id: ItemId) -> Vec<OnHit> {
-    items::def(id).props.iter().filter_map(|p| match p.kind {
+    on_hits_of(items::def(id).props)
+}
+
+/// Every on-hit among `props`, in property order, each as magical as its property.
+fn on_hits_of(props: &[ItemProperty]) -> Vec<OnHit> {
+    props.iter().filter_map(|p| match p.kind {
         PropKind::OnHit(h) => Some(OnHit { magical: p.magical, ..h }),
         _ => None,
     }).collect()
@@ -665,7 +670,11 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, Pi
             EquipSlot::Ranged => Some(1),
             EquipSlot::OffHand | EquipSlot::Armor | EquipSlot::Ring1 | EquipSlot::Ring2 | EquipSlot::Shoes | EquipSlot::Belt => None,
         };
-        for p in items::def(id).props {
+        let props = items::def(id).props;
+        if let Some(i) = weapon {
+            on_hits[i].extend(on_hits_of(props));
+        }
+        for p in props {
             match p.kind {
                 PropKind::Attr(a, n) => attrs.add(a, n),
                 PropKind::Resist(t, v) => res.set(t, res.get(t) + v),
@@ -684,13 +693,8 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, Pi
                         shares[i].push((t, v));
                     }
                 }
-                PropKind::OnHit(h) => {
-                    if let Some(i) = weapon {
-                        // Only the last one counts for now.
-                        on_hits[i].clear();
-                        on_hits[i].push(OnHit { magical: p.magical, ..h });
-                    }
-                }
+                // Weapon-only too, collected by `on_hits_of` above.
+                PropKind::OnHit(_) => {}
                 PropKind::Pierce(n) => {
                     if let Some(i) = weapon {
                         pierce[i] = pierce[i].saturating_add(n);
@@ -1051,6 +1055,18 @@ mod tests {
     use super::*;
     use crate::defs::attributes::{factor, STR_DMG};
     use crate::defs::companions::WOLF_HP;
+
+    #[test]
+    fn a_weapon_keeps_every_on_hit_property() {
+        use crate::defs::effects::EffectLook;
+        let hit = |kind| OnHit { kind, secs: 5.0, magical: false, power: 0, look: EffectLook::Plain };
+        let props = [
+            ItemProperty { kind: PropKind::OnHit(hit(EffectKind::Poisoned)), magical: false },
+            ItemProperty { kind: PropKind::Weight(1.0), magical: false },
+            ItemProperty { kind: PropKind::OnHit(hit(EffectKind::Weakened)), magical: true },
+        ];
+        assert_eq!(on_hits_of(&props), vec![hit(EffectKind::Poisoned), OnHit { magical: true, ..hit(EffectKind::Weakened) }]);
+    }
 
     #[test]
     fn minion_counts_scale_with_int_and_round() {

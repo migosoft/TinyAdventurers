@@ -125,8 +125,6 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
             }
             PushStr(n) => push_str += n,
             AddOnHit(h) => {
-                // Only the last one counts for now.
-                on_hit.clear();
                 on_hit.push(OnHit { power: if h.power == 0 { r.power } else { h.power }, ..h });
             }
             BehindArc(a) => behind.push(a),
@@ -395,6 +393,27 @@ mod tests {
     }
 
     #[test]
+    fn add_on_hit_mods_add_up() {
+        use crate::defs::effects::{EffectKind, EffectLook, OnHit};
+        let r = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap().primary;
+        let a = OnHit { kind: EffectKind::Poisoned, secs: 2.0, magical: true, power: 0, look: EffectLook::Plain };
+        let b = OnHit { kind: EffectKind::Weakened, secs: 3.0, magical: false, power: 4, look: EffectLook::Plain };
+        let mut expected = r.on_hit.clone();
+        expected.extend([OnHit { power: r.power, ..a }, b]);
+        assert_eq!(apply_mods(r.clone(), &[AbilityMod::AddOnHit(a), AbilityMod::AddOnHit(b)]).on_hit, expected);
+    }
+
+    #[test]
+    fn a_longer_duration_lengthens_every_own_effect() {
+        use crate::defs::effects::{EffectKind, EffectLook, OnHit};
+        let mut r = hero_sheet(ClassId::Wizard, &Build::start(ClassId::Wizard)).unwrap().secondary;
+        let e = |kind| OnHit { kind, secs: r.duration, magical: true, power: 5, look: EffectLook::Plain };
+        r.effect = vec![e(EffectKind::Accelerated), e(EffectKind::Weakened)];
+        let a = apply_mods(r.clone(), &[AbilityMod::DurationAdd(1.0)]);
+        assert!(a.effect.len() == 2 && a.effect.iter().all(|x| x.secs == r.duration + 1.0));
+    }
+
+    #[test]
     fn add_on_hit_and_behind_arc_mods() {
         use crate::defs::effects::{EffectKind, EffectLook, OnHit};
         let r = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap().primary;
@@ -403,7 +422,9 @@ mod tests {
         let a = apply_mods(r.clone(), &[AbilityMod::AddOnHit(hit)]);
         assert_eq!(a.on_hit, vec![OnHit { power: r.power, ..hit }], "a power of 0 takes the ability's");
         let own = OnHit { power: 17, ..hit };
-        assert_eq!(apply_mods(r.clone(), &[AbilityMod::AddOnHit(own)]).on_hit, vec![own]);
+        let mut expected = r.on_hit.clone();
+        expected.push(own);
+        assert_eq!(apply_mods(r.clone(), &[AbilityMod::AddOnHit(own)]).on_hit, expected);
         let b = ResolvedAbility { behind: 1.0, ..r.clone() };
         assert_eq!(apply_mods(b.clone(), &[AbilityMod::BehindArc(0.5), AbilityMod::BehindArc(0.5)]).behind, 2.0);
         assert_eq!(apply_mods(b.clone(), &[AbilityMod::BehindArc(-5.0)]).behind, 0.0);
