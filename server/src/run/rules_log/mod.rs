@@ -118,7 +118,7 @@ pub enum HitOutcome {
 }
 
 /// What a hurt function hands over: the values it used.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct HitFacts {
     pub target: Creature,
     pub dmg: Damage,

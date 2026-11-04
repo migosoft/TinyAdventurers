@@ -355,8 +355,8 @@ impl Run {
             spawn_x: p.mv.x,
             spawn_y: p.mv.y,
             speed: p.sheet.speed,
-            abilities: [p.sheet.primary, p.sheet.secondary],
-            fallback: p.sheet.fallback,
+            abilities: [p.sheet.primary.clone(), p.sheet.secondary.clone()],
+            fallback: p.sheet.fallback.clone(),
             lights: self.light_infos(),
             debug: self.debug,
             cove: self.layout.cove.map(|c| CoveInfo { x: c.rect.x, y: c.rect.y, w: c.rect.w, h: c.rect.h, tree_x: c.tree.0, tree_y: c.tree.1, seed: c.seed }),
@@ -847,29 +847,33 @@ impl Run {
                 continue;
             }
             h.pulse_t = 0.5;
-            let (pos, r, side, pulse) = (h.pos, h.radius, h.side, h.pulse);
+            let (pos, r, side, pulse) = (h.pos, h.radius, h.side, h.pulse.clone());
             match (side, pulse) {
                 (HazardSide::Monsters, HazardPulse::Hurt(dmg)) => {
                     for c in self.foes_touching(pos, r, false) {
-                        self.hurt_creature(c, dmg);
+                        self.hurt_creature(c, dmg.clone());
                     }
                     objects::hurt_objects_in(self, pos, r, None, dmg);
                 }
                 (HazardSide::Monsters, HazardPulse::Bind(on)) => {
-                    for c in self.foes_touching(pos, r, false) {
-                        self.apply(c, Apply::from_hit(on));
+                    if let Some(&on) = on.first() {
+                        for c in self.foes_touching(pos, r, false) {
+                            self.apply(c, Apply::from_hit(on));
+                        }
                     }
                 }
                 (HazardSide::Heroes { owner }, HazardPulse::Hurt(dmg)) => {
                     let credit = self.players.iter().position(|p| p.id == owner);
                     for mi in self.enemies_touching(pos, r) {
-                        self.hurt_monster(mi, dmg, false, credit);
+                        self.hurt_monster(mi, dmg.clone(), false, credit);
                     }
                 }
                 (HazardSide::Heroes { owner }, HazardPulse::Bind(on)) => {
                     let from = self.players.iter().find(|p| p.id == owner).map_or(pos, |p| p.pos());
-                    for mi in self.enemies_touching(pos, r) {
-                        self.apply(effects::Creature::Monster(mi), Apply { source: Some((owner, from)), origin: Some((owner, What::Ability(crate::defs::abilities::AbilityId::Entangle))), ..Apply::from_hit(on) });
+                    if let Some(&on) = on.first() {
+                        for mi in self.enemies_touching(pos, r) {
+                            self.apply(effects::Creature::Monster(mi), Apply { source: Some((owner, from)), origin: Some((owner, What::Ability(crate::defs::abilities::AbilityId::Entangle))), ..Apply::from_hit(on) });
+                        }
                     }
                 }
             }
@@ -896,7 +900,7 @@ impl Run {
     pub fn hurt_player(&mut self, pi: usize, dmg: Damage) {
         #[cfg(test)]
         {
-            self.last_hit = Some(dmg);
+            self.last_hit = Some(dmg.clone());
         }
         if !self.players[pi].alive {
             return;
@@ -904,7 +908,7 @@ impl Run {
         if !dmg.from_effect {
             self.reveal(effects::Creature::Player(pi), rules_log::EndReason::RevealedByHit);
         }
-        if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit, dmg.from_effect) {
+        if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit.first().copied(), dmg.from_effect) {
             self.hit_effect_by(effects::Creature::Player(pi), h, dmg.why); // a pure effect hit: no number, no flash
             return;
         }
@@ -915,7 +919,7 @@ impl Run {
             let hp_before = self.players[pi].hp;
             let healed = self.mend_player(pi, -raw);
             let hp_after = self.players[pi].hp;
-            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
+            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg: dmg.clone(), res, parts, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
             return;
         }
         let p = &mut self.players[pi];
@@ -931,7 +935,7 @@ impl Run {
         }
         let (hp_after, debug) = (p.hp.max(0.0), p.immortal());
         let pos = p.pos();
-        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg, res, parts, hp_before, hp_after, dealt: hp_before - hp_after, taken: v, outcome: if imm { rules_log::HitOutcome::Immune } else if debug { rules_log::HitOutcome::DebugNoLoss } else { rules_log::HitOutcome::Dealt } });
+        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg: dmg.clone(), res, parts, hp_before, hp_after, dealt: hp_before - hp_after, taken: v, outcome: if imm { rules_log::HitOutcome::Immune } else if debug { rules_log::HitOutcome::DebugNoLoss } else { rules_log::HitOutcome::Dealt } });
         let ty = dmg.split.main_type() as u8;
         self.event_on_hero(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: v as f32, crit: false, p: true, ty, imm }, pos);
         let p = &mut self.players[pi];
@@ -949,7 +953,7 @@ impl Run {
                 self.damage_wakes(effects::Creature::Player(pi));
             }
             self.type_effect_hit(effects::Creature::Player(pi), &dmg);
-            if let Some(h) = dmg.on_hit {
+            if let Some(h) = dmg.on_hit.first().copied() {
                 self.hit_effect(effects::Creature::Player(pi), h);
             }
         }
@@ -1096,7 +1100,7 @@ impl Run {
         let dmg = keystones::on_hit(self, mi, dmg);
         #[cfg(test)]
         {
-            self.last_hit = Some(dmg);
+            self.last_hit = Some(dmg.clone());
         }
         if !self.monsters[mi].alive {
             return false;
@@ -1112,10 +1116,10 @@ impl Run {
         }
         if self.monsters[mi].is_boss && !Level::on_boss_hurt(self, mi) {
             let (hp, res) = (self.monsters[mi].hp, self.monsters[mi].res);
-            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts: [0.0; DamageType::COUNT], hp_before: hp, hp_after: hp, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Shielded }); rules_log::hit_end(self);
+            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg: dmg.clone(), res, parts: [0.0; DamageType::COUNT], hp_before: hp, hp_after: hp, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Shielded }); rules_log::hit_end(self);
             return false;
         }
-        if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit, dmg.from_effect) {
+        if let (0.0, Some(h), false) = (dmg.amount, dmg.on_hit.first().copied(), dmg.from_effect) {
             self.hit_effect_by(effects::Creature::Monster(mi), h, dmg.why);
             return true;
         }
@@ -1133,7 +1137,7 @@ impl Run {
             let healed = (-raw).min(m.max_hp - m.hp);
             m.hp += healed;
             let hp_after = m.hp;
-            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
+            rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg: dmg.clone(), res, parts, hp_before, hp_after, dealt: 0.0, taken: 0.0, outcome: rules_log::HitOutcome::Healed(healed) }); rules_log::hit_end(self);
             if healed > 0.0 && !hidden {
                 let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
                 if ally {
@@ -1153,7 +1157,7 @@ impl Run {
         }
         let applied = raw.min(m.hp + raw);
         let hp_after = m.hp.max(0.0);
-        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg, res, parts, hp_before, hp_after, dealt: applied, taken: raw, outcome: if imm { rules_log::HitOutcome::Immune } else { rules_log::HitOutcome::Dealt } });
+        rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Monster(mi), dmg: dmg.clone(), res, parts, hp_before, hp_after, dealt: applied, taken: raw, outcome: if imm { rules_log::HitOutcome::Immune } else { rules_log::HitOutcome::Dealt } });
         let ev = Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: raw as f32, crit, p: ally, ty, imm };
         if ally {
             self.event_on_hero(ev, pos); // shown like damage on a hero
@@ -1196,7 +1200,7 @@ impl Run {
                 self.damage_wakes(effects::Creature::Monster(mi));
             }
             self.type_effect_hit(effects::Creature::Monster(mi), &dmg);
-            if let Some(h) = dmg.on_hit {
+            if let Some(h) = dmg.on_hit.first().copied() {
                 self.hit_effect(effects::Creature::Monster(mi), h);
             }
         }

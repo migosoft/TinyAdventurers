@@ -63,12 +63,12 @@ pub fn living_disciples(run: &Run) -> usize {
 
 /// Its kit's ability `id`.
 fn kit(run: &Run, bi: usize, id: AbilityId) -> crate::sheet::ResolvedAbility {
-    *run.monsters[bi].kit.get(id).expect("the lich's kit has it")
+    run.monsters[bi].kit.get(id).expect("the lich's kit has it").clone()
 }
 
 /// The effect the spell `id` applies.
 fn effect_of(run: &Run, bi: usize, id: AbilityId) -> EffectKind {
-    kit(run, bi, id).effect.expect("a lich spell has its own effect").kind
+    kit(run, bi, id).effect.first().copied().expect("a lich spell has its own effect").kind
 }
 
 impl Lich {
@@ -573,7 +573,7 @@ pub(crate) mod tests {
         let bi = boss_idx(&run).unwrap();
         assert_eq!(run.monsters[bi].attrs.get(Attr::Int), 22, "the lich's INT from its stat block");
         let gaze = kit(&run, bi, AbilityId::StoneGaze);
-        let h = gaze.effect.expect("its own effect");
+        let h = gaze.effect.first().copied().expect("its own effect");
         assert!(h.magical);
         assert_eq!((h.power, h.secs), (22, 3.0));
         // The real gaze: the Paladin (WIL 12) is petrified for the scaled time, not the base 3 s.
@@ -592,7 +592,7 @@ pub(crate) mod tests {
             for _ in 0..((windup(&run, spell) + 1.0) / DT) as usize {
                 l.tick(&mut run, DT);
                 if let Some(p) = run.projectiles.iter().find(|p| !p.dead) {
-                    hit = p.damage.on_hit;
+                    hit = p.damage.on_hit.first().copied();
                     break;
                 }
             }

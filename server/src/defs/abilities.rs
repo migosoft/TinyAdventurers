@@ -165,7 +165,7 @@ pub struct OwnStats {
     /// The split, instead of `kind_split(kind)`.
     pub split: Option<DamageSplit>,
     /// The effect it applies by itself.
-    pub effect: Option<OwnEffect>,
+    pub effects: &'static [OwnEffect],
     /// The governing Attribute's value at which `damage` is given.
     pub at: i32,
     /// A push (px) it gives at least; a weapon's push counts too, the larger wins.
@@ -337,7 +337,7 @@ pub const KNOCK_DECAY: f64 = 0.7788007830714049;
 pub const KNOCK_MIN_SPEED: f64 = 8.0;
 
 /// No own numbers: a weapon ability takes them all from its weapon.
-const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, split: None, effect: None, at: 0, push: 0.0, windup: 0.0, count: 0, spread: 0.0, minions: None };
+const NO_OWN: OwnStats = OwnStats { damage: 0.0, cooldown: 0.0, range: 0.0, speed: 0.0, radius: 0.0, duration: 0.0, kind: None, split: None, effects: &[], at: 0, push: 0.0, windup: 0.0, count: 0, spread: 0.0, minions: None };
 
 /// One sentence on what the ability does, for the character screens.
 #[allow(dead_code)] // read by the progression.ts export (a test) only
@@ -390,7 +390,7 @@ pub fn text(id: AbilityId) -> &'static str {
 /// Does using it count as an attack (it ends Invisible)? Damage, a weapon, or a harmful own effect.
 /// A self area's `damage` is the amount it heals (Holy Light), so that is no attack.
 pub fn is_attack(d: &AbilityDef) -> bool {
-    (d.own.damage > 0.0 && d.shape != Shape::SelfArea) || d.uses != Uses::Nothing || d.own.effect.is_some_and(|e| !super::effects::def(e.kind).positive)
+    (d.own.damage > 0.0 && d.shape != Shape::SelfArea) || d.uses != Uses::Nothing || d.own.effects.iter().any(|e| !super::effects::def(e.kind).positive)
 }
 
 pub fn def(id: AbilityId) -> AbilityDef {
@@ -400,7 +400,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
     use ClassId as K;
     #[allow(clippy::too_many_arguments)]
     const fn own(damage: f64, cooldown: f64, range: f64, speed: f64, radius: f64, duration: f64, kind: Option<EntityKind>, at: i32) -> OwnStats {
-        OwnStats { damage, cooldown, range, speed, radius, duration, kind, split: None, effect: None, at, push: 0.0, windup: 0.0, count: 0, spread: 0.0, minions: None }
+        OwnStats { damage, cooldown, range, speed, radius, duration, kind, split: None, effects: &[], at, push: 0.0, windup: 0.0, count: 0, spread: 0.0, minions: None }
     }
     let base = |name: &'static str, slot, category, uses, ranged, shape, own, classes: &'static [ClassId]| AbilityDef {
         id,
@@ -467,7 +467,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         },
         PoisonCoat => AbilityDef {
             req: &[Requirement::Attr(Attr::Wil, 15)],
-            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Coated, power: Attr::Wil, look: EffectLook::Plain }), ..own(0.0, 16.0, 0.0, 0.0, 0.0, 6.0, None, 0) },
+            own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Coated, power: Attr::Wil, look: EffectLook::Plain }], ..own(0.0, 16.0, 0.0, 0.0, 0.0, 6.0, None, 0) },
             ..base("Poison Coat", Secondary, C::Technique, Uses::Nothing, false, Shape::Buff, NO_OWN, &[K::ElvenRanger])
         },
         FrostNova => AbilityDef {
@@ -477,7 +477,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         },
         WarCry => AbilityDef {
             req: &[Requirement::Attr(Attr::Str, 16)],
-            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Fear, power: Attr::Str, look: EffectLook::Plain }), ..own(0.0, 12.0, 0.0, 0.0, 56.0, 3.0, None, 0) },
+            own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Fear, power: Attr::Str, look: EffectLook::Plain }], ..own(0.0, 12.0, 0.0, 0.0, 56.0, 3.0, None, 0) },
             ..base("War Cry", Secondary, C::Technique, Uses::Nothing, false, Shape::Ring, NO_OWN, &[K::Barbarian])
         },
         GroundSlam => AbilityDef {
@@ -487,12 +487,12 @@ pub fn def(id: AbilityId) -> AbilityDef {
         },
         Haste => AbilityDef {
             req: &[Requirement::Attr(Attr::Int, 15), Requirement::Attr(Attr::Wil, 14)],
-            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Accelerated, power: Attr::Int, look: EffectLook::Plain }), ..own(0.0, 14.0, 64.0, 0.0, 64.0, 4.0, None, 0) },
+            own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Accelerated, power: Attr::Int, look: EffectLook::Plain }], ..own(0.0, 14.0, 64.0, 0.0, 64.0, 4.0, None, 0) },
             ..base("Haste", Secondary, C::Spell, Uses::Nothing, false, Shape::SelfArea, NO_OWN, &[K::Wizard])
         },
         Purify => AbilityDef {
             req: &[Requirement::Attr(Attr::Wil, 14)],
-            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Warded, power: Attr::Cha, look: EffectLook::Plain }), ..own(0.0, 15.0, 64.0, 0.0, 64.0, 3.0, None, 0) },
+            own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Warded, power: Attr::Cha, look: EffectLook::Plain }], ..own(0.0, 15.0, 64.0, 0.0, 64.0, 3.0, None, 0) },
             ..base("Purify", Secondary, C::Innate, Uses::Nothing, false, Shape::SelfArea, NO_OWN, &[K::Paladin])
         },
         Consecrate => AbilityDef {
@@ -501,7 +501,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         },
         Entangle => AbilityDef {
             req: &[Requirement::Attr(Attr::Cha, 14)],
-            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Entangled, power: Attr::Cha, look: EffectLook::Vines }), ..own(0.0, 14.0, 120.0, 0.0, 36.0, 4.0, Some(EntityKind::Roots), 0) },
+            own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Entangled, power: Attr::Cha, look: EffectLook::Vines }], ..own(0.0, 14.0, 120.0, 0.0, 36.0, 4.0, Some(EntityKind::Roots), 0) },
             ..base("Entangle", Secondary, C::Innate, Uses::Nothing, true, Shape::GroundArea, NO_OWN, &[K::ElvenRanger])
         },
         Bite => AbilityDef {
@@ -551,11 +551,11 @@ pub fn def(id: AbilityId) -> AbilityDef {
             ..base("Gloom Bolts", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
         },
         BlindingCurse => AbilityDef {
-            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Blind, power: Attr::Int, look: EffectLook::Plain }), windup: 0.6, ..own(6.0, 10.0, 270.0, 90.0, 3.0, 3.0, Some(EntityKind::BlindOrb), 22) },
+            own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Blind, power: Attr::Int, look: EffectLook::Plain }], windup: 0.6, ..own(6.0, 10.0, 270.0, 90.0, 3.0, 3.0, Some(EntityKind::BlindOrb), 22) },
             ..base("Blinding Curse", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
         },
         SleepMist => AbilityDef {
-            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Sleep, power: Attr::Int, look: EffectLook::Plain }), windup: 0.8, ..own(0.0, 14.0, 270.0, 90.0, 3.0, 4.0, Some(EntityKind::SleepOrb), 22) },
+            own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Sleep, power: Attr::Int, look: EffectLook::Plain }], windup: 0.8, ..own(0.0, 14.0, 270.0, 90.0, 3.0, 4.0, Some(EntityKind::SleepOrb), 22) },
             ..base("Sleep Mist", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
         },
         Touch => AbilityDef {
@@ -563,11 +563,11 @@ pub fn def(id: AbilityId) -> AbilityDef {
             ..base("Touch", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
         },
         Vanish => AbilityDef {
-            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Invisible, power: Attr::Cha, look: EffectLook::Plain }), ..own(0.0, 20.0, 0.0, 0.0, 0.0, AMBUSH_MAX_INVISIBLE, None, 10) },
+            own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Invisible, power: Attr::Cha, look: EffectLook::Plain }], ..own(0.0, 20.0, 0.0, 0.0, 0.0, AMBUSH_MAX_INVISIBLE, None, 10) },
             ..base("Vanish", Secondary, C::Innate, Uses::Nothing, false, Shape::Buff, NO_OWN, &[])
         },
         StoneGaze => AbilityDef {
-            own: OwnStats { effect: Some(OwnEffect { kind: EffectKind::Petrified, power: Attr::Int, look: EffectLook::Plain }), windup: 1.0, ..own(0.0, 18.0, 0.0, 0.0, 0.0, 3.0, None, 0) },
+            own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Petrified, power: Attr::Int, look: EffectLook::Plain }], windup: 1.0, ..own(0.0, 18.0, 0.0, 0.0, 0.0, 3.0, None, 0) },
             ..base("Stone Gaze", Secondary, C::Spell, Uses::Nothing, false, Shape::Gaze, NO_OWN, &[])
         },
         RaiseDead | SummonImps => {
@@ -647,7 +647,7 @@ mod tests {
             if matches!(d.shape, Shape::Blast | Shape::GroundArea) && d.ranged {
                 assert!(d.own.range > 0.0, "{id:?}: an aimed area needs a range");
             }
-            if d.own.effect.is_some() {
+            if !d.own.effects.is_empty() {
                 assert!(matches!(d.shape, Shape::Ring | Shape::SelfArea | Shape::GroundArea | Shape::Buff | Shape::Projectile | Shape::Gaze), "{id:?}: an own effect needs an area, a buff, a shot or a gaze");
             }
             if magic && d.own.damage > 0.0 {

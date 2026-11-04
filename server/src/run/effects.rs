@@ -515,19 +515,20 @@ impl Run {
         let changes: Vec<(Attr, i32, i32)> = match c {
             Creature::Player(i) => {
                 let Some(p) = self.players.get_mut(i).filter(|p| p.alive) else { return };
-                let old = p.sheet;
                 let mut sheet = crate::sheet::run_sheet(p.class, &p.build, p.effects.attr_delta());
-                (sheet.light, sheet.wolf) = (old.light, old.wolf);
+                (sheet.light, sheet.wolf) = (p.sheet.light, p.sheet.wolf);
                 p.res = sheet.res;
                 p.max_hp = sheet.max_hp;
                 p.hp = p.hp.min(p.max_hp);
-                p.sheet = sheet;
-                let changed = (old.speed, old.primary, old.secondary, old.fallback, old.disabled) != (sheet.speed, sheet.primary, sheet.secondary, sheet.fallback, sheet.disabled);
+                let old = std::mem::replace(&mut p.sheet, sheet);
+                let sheet = &p.sheet;
+                let changed = (old.speed, &old.primary, &old.secondary, &old.fallback, old.disabled) != (sheet.speed, &sheet.primary, &sheet.secondary, &sheet.fallback, sheet.disabled);
+                let new_attrs = sheet.attrs;
                 if changed {
-                    let msg = crate::protocol::ServerMsg::HeroChanged { speed: sheet.speed, abilities: [sheet.primary, sheet.secondary], fallback: sheet.fallback, disabled: sheet.disabled };
+                    let msg = crate::protocol::ServerMsg::HeroChanged { speed: sheet.speed, abilities: [sheet.primary.clone(), sheet.secondary.clone()], fallback: sheet.fallback.clone(), disabled: sheet.disabled };
                     self.send(&self.players[i], &msg);
                 }
-                Attr::ALL.into_iter().map(|a| (a, old.attrs.get(a), sheet.attrs.get(a))).collect()
+                Attr::ALL.into_iter().map(|a| (a, old.attrs.get(a), new_attrs.get(a))).collect()
             }
             Creature::Monster(i) => {
                 let delta = self.monsters.get(i).map(|m| m.effects.attr_delta());
@@ -1633,7 +1634,7 @@ mod tests {
     fn a_drain_ending_restores_the_numbers_but_not_hp() {
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
         let h = Creature::Player(0);
-        let before = run.players[0].sheet;
+        let before = run.players[0].sheet.clone();
         for _ in 0..3 {
             drain(&mut run, h, EffectKind::Frail, 20.0, None);
         }
@@ -1730,7 +1731,7 @@ mod tests {
         run.players[0].tx = Some(tx);
         let h = Creature::Player(0);
         drain(&mut run, h, EffectKind::Weakened, 20.0, None);
-        let s = run.players[0].sheet;
+        let s = run.players[0].sheet.clone();
         let want = encode(&ServerMsg::HeroChanged { speed: s.speed, abilities: [s.primary, s.secondary], fallback: s.fallback, disabled: s.disabled });
         let Ok(axum::extract::ws::Message::Binary(got)) = rx.try_recv() else { panic!("a HeroChanged") };
         assert_eq!(got.to_vec(), want);

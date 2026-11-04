@@ -186,7 +186,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         if let Some(done) = tick_monster_dash(run, mi, dt) {
             // A pounce that hurt its prey leaves the next bite a cooldown away.
             if !done.hit.is_empty() {
-                let bite = *run.monsters[mi].kit.get(AbilityId::Bite).expect("the wolf bites");
+                let bite = run.monsters[mi].kit.get(AbilityId::Bite).expect("the wolf bites").clone();
                 ally_mut(run, mi).bite_hold = bite.cooldown;
             }
             if done.attack && run.layout.map.blocks_at(run.monsters[mi].pos, Mover::Enemy) {
@@ -216,7 +216,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             let at = run.monsters[ei].pos;
             if w.alt {
                 // The pounce's wind-up is over: it leaps if its landing is still safe.
-                let pounce = *run.monsters[mi].kit.get(AbilityId::Pounce).expect("the wolf pounces");
+                let pounce = run.monsters[mi].kit.get(AbilityId::Pounce).expect("the wolf pounces").clone();
                 let (pos, d) = (run.monsters[mi].pos, run.monsters[mi].pos.dist(at));
                 let dir = (at - pos).norm();
                 if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
@@ -240,7 +240,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         let (pos, epos) = (w.pos, e.pos);
         let radii = w.radius + e.radius;
         let d = pos.dist(epos);
-        let (bite, pounce) = (*w.kit.get(AbilityId::Bite).expect("the wolf bites"), *w.kit.get(AbilityId::Pounce).expect("the wolf pounces"));
+        let (bite, pounce) = (w.kit.get(AbilityId::Bite).expect("the wolf bites").clone(), w.kit.get(AbilityId::Pounce).expect("the wolf pounces").clone());
         // A bite starts a little inside its real reach, like the enemies' swings.
         let reach = bite.range + e.radius - ai::SWING_SLACK;
         let pounce_ready = w.cds.ready(AbilityId::Pounce);
@@ -296,7 +296,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
 /// carries on along `dir`, without more damage, to the first walkable ground within the Pounce's range.
 /// With none before a wall or that far, it dashes back to its last safe tile.
 fn overrun(run: &mut Run, mi: usize, dir: Vec2) {
-    let pounce = *run.monsters[mi].kit.get(AbilityId::Pounce).expect("the wolf pounces");
+    let pounce = run.monsters[mi].kit.get(AbilityId::Pounce).expect("the wolf pounces").clone();
     let (map, pos, r) = (&run.layout.map, run.monsters[mi].pos, run.monsters[mi].radius);
     let land = (1..=(pounce.range / 2.0) as usize)
         .map(|i| pos + dir * (i as f64 * 2.0))
@@ -795,7 +795,7 @@ mod tests {
         let boss_pos = run.monsters[bi].pos;
         let id = spawn_wolf(&mut run, 0);
         let wi = wolf_idx(&run, id);
-        let nova = *run.monsters[bi].kit.get(AbilityId::Nova).expect("the lich casts a nova");
+        let nova = run.monsters[bi].kit.get(AbilityId::Nova).expect("the lich casts a nova").clone();
         run.monsters[wi].pos = boss_pos + Vec2::new(nova.radius - 10.0, 0.0);
         crate::run::bosses::lich::tests::nova(&mut run, bi);
         let hp = run.monsters[wolf_idx(&run, id)].hp;
@@ -920,7 +920,7 @@ mod tests {
         ally_mut(&mut run, wi).prey = Some(orc);
         run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None });
         tick_wolf(&mut run, wi, DT);
-        let hit = run.last_hit.expect("the bite landed");
+        let hit = run.last_hit.clone().expect("the bite landed");
         assert_eq!(hit.why.what, What::Ability(AbilityId::Bite));
         assert_eq!(hit.why.by, Some(id));
         assert_eq!(hit.amount, 10.0, "at the wolf's start stat block");

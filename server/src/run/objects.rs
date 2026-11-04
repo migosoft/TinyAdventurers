@@ -179,7 +179,7 @@ pub fn objects_in(run: &Run, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<
 /// An enemy's or boss's area attack hits the objects in it (no igniter).
 pub fn hurt_objects_in(run: &mut Run, at: Vec2, r: f64, cone: Option<(f64, f64)>, dmg: Damage) {
     for oi in objects_in(run, at, r, cone) {
-        hurt_object(run, oi, dmg, None);
+        hurt_object(run, oi, dmg.clone(), None);
     }
 }
 
@@ -357,18 +357,18 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
         })
         .collect();
     for c in foes {
-        run.hurt_creature(c, dmg);
+        run.hurt_creature(c, dmg.clone());
         run.knock_creature(c, pos, 0.0, knock, BARREL_BLAST_STR);
     }
     for mi in monsters {
         if run.passes_through(crate::run::effects::Creature::Monster(mi), &dmg.split) {
             continue; // the blast goes through a ghost: no hit, no knock
         }
-        run.hurt_monster(mi, dmg, false, src);
+        run.hurt_monster(mi, dmg.clone(), false, src);
         run.knock_monster(mi, pos, knock, BARREL_BLAST_STR);
     }
     for qi in barrels {
-        hurt_object(run, qi, dmg, by);
+        hurt_object(run, qi, dmg.clone(), by);
     }
 }
 
@@ -896,7 +896,7 @@ mod tests {
     fn use_ability(run: &mut Run, id: crate::defs::abilities::AbilityId, aim: f64) {
         let owner = crate::defs::abilities::def(id).classes[0];
         let sheet = crate::sheet::hero_sheet(owner, &crate::defs::loadout::Build::start(owner)).unwrap();
-        run.players[0].sheet = sheet;
+        run.players[0].sheet = sheet.clone();
         run.players[0].aim = aim;
         crate::run::abilities::try_use(run, 0, sheet.primary.id == id, 1);
     }

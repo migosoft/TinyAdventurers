@@ -443,7 +443,7 @@ fn a_frost_shard_line_reads_like_the_spec() {
     let goblin = tag_of(&run, run.monsters[mi].id);
     let hp0 = run.monsters[mi].hp;
     let res = run.monsters[mi].effects.res(run.monsters[mi].res);
-    let a = run.players[0].sheet.primary;
+    let a = run.players[0].sheet.primary.clone();
     let b = a.base;
     let s = b.scale.unwrap();
     assert_eq!(s.have, 16);
@@ -1428,7 +1428,7 @@ fn a_hidden_mimic_is_a_chest_in_every_line() {
     run.monsters[mi].max_hp = 1000.0;
     let _ = take(&mut run);
     // The revealing hit, with an effect on it: every line says Chest.
-    let burn = Damage { on_hit: Some(OnHit { kind: EffectKind::Burning, secs: 2.0, magical: true, power: 5, look: EffectLook::Plain }), ..Damage::physical(5.0).by(hero, What::Ability(AbilityId::MagicMissile)) };
+    let burn = Damage { on_hit: vec![OnHit { kind: EffectKind::Burning, secs: 2.0, magical: true, power: 5, look: EffectLook::Plain }], ..Damage::physical(5.0).by(hero, What::Ability(AbilityId::MagicMissile)) };
     run.hurt_monster(mi, burn, false, Some(0));
     assert!(!run.monsters[mi].hiding, "the hit woke it");
     let first = take(&mut run);
@@ -1633,9 +1633,9 @@ fn haste_and_purify_credit_the_user_on_every_target() {
     assert_eq!(haste.len(), 2, "one line per hero: {haste:?}");
     assert_eq!(haste[0], haste[1], "both name the user");
 
-    let mut purify = run.players[0].sheet.secondary;
+    let mut purify = run.players[0].sheet.secondary.clone();
     purify.id = AbilityId::Purify;
-    purify.effect = Some(crate::defs::effects::OnHit { kind: EffectKind::Warded, secs: 4.0, magical: true, power: 0, look: EffectLook::Plain });
+    purify.effect = vec![crate::defs::effects::OnHit { kind: EffectKind::Warded, secs: 4.0, magical: true, power: 0, look: EffectLook::Plain }];
     crate::run::abilities::use_for_tests(&mut run, Creature::Player(0), &purify, 1);
     let lines = leads(&mut run, "Purify");
     assert_eq!(lines.len(), 2, "one line per hero: {lines:?}");
@@ -1692,7 +1692,7 @@ fn a_drain_logs_a_line_per_changed_attribute() {
 #[test]
 fn a_cast_logs_the_cooldown_it_started() {
     let mut run = hero_secondary(ClassId::Wizard, AbilityId::Fireball, Attributes::default());
-    let a = run.players[0].sheet.secondary;
+    let a = run.players[0].sheet.secondary.clone();
     let have = a.cd_steps.have;
     let _ = take(&mut run);
     crate::run::abilities::try_use(&mut run, 0, false, 1);
