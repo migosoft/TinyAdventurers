@@ -1298,7 +1298,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let mi = put_enemy(&mut run, 0, EnemyType::SkeletonWarrior, 30.0, 10.0);
         let d = crate::defs::enemies::def(EnemyType::SkeletonWarrior);
-        run.monsters[mi].kit = monster_kit(&[AbilityId::Strike, AbilityId::Vanish], &run.monsters[mi].attrs, d.weapons, Body { radius: d.radius });
+        run.monsters[mi].kit = monster_kit(&[AbilityId::Strike, AbilityId::Vanish], &run.monsters[mi].attrs, d.weapons, Body { radius: d.radius }, &[]);
         run.monsters[mi].traits.invisibility = true;
         let kit_cd = run.monsters[mi].kit.get(AbilityId::Vanish).expect("Vanish in the kit").cooldown;
         let c = Creature::Monster(mi);
@@ -2157,7 +2157,7 @@ mod tests {
             run.monsters[mi].attrs.add(Attr::Cha, cha - now);
             // The kit is resolved at spawn: resolve it again with the changed Attribute.
             let d = crate::defs::enemies::def(t);
-            run.monsters[mi].kit = crate::sheet::monster_kit(d.abilities, &run.monsters[mi].attrs, d.weapons, crate::sheet::Body { radius: d.radius });
+            run.monsters[mi].kit = crate::sheet::monster_kit(d.abilities, &run.monsters[mi].attrs, d.weapons, crate::sheet::Body { radius: d.radius }, &[]);
         }
         assert!(monster_use(&mut run, mi, AbilityId::FireBolt, p));
         for _ in 0..60 {
@@ -3983,10 +3983,10 @@ mod monster_uses {
         let body = crate::sheet::Body { radius: 5.0 };
         // Bite needs a bite weapon, Shoot a bow.
         for (id, weapon) in [(AbilityId::Bite, ItemId::SkeletonSword), (AbilityId::Shoot, ItemId::SkeletonSword)] {
-            let r = std::panic::catch_unwind(|| crate::sheet::monster_kit(&[id], &attrs, &[weapon], body));
+            let r = std::panic::catch_unwind(|| crate::sheet::monster_kit(&[id], &attrs, &[weapon], body, &[]));
             assert!(r.is_err(), "{id:?} with {weapon:?}");
         }
-        assert!(crate::sheet::monster_kit(&[AbilityId::Bite], &attrs, &[ItemId::MimicBite], body).get(AbilityId::Bite).is_some());
+        assert!(crate::sheet::monster_kit(&[AbilityId::Bite], &attrs, &[ItemId::MimicBite], body, &[]).get(AbilityId::Bite).is_some());
     }
 
     #[test]
@@ -4003,7 +4003,7 @@ mod monster_uses {
         let hero_ball = run.projectiles.pop().expect("the Wizard's Fireball");
         let attrs = run.players[0].sheet.attrs;
         let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
-        run.monsters[bi].kit = monster_kit(&[AbilityId::Fireball], &attrs, &[], Body { radius: run.monsters[bi].radius });
+        run.monsters[bi].kit = monster_kit(&[AbilityId::Fireball], &attrs, &[], Body { radius: run.monsters[bi].radius }, &[]);
         assert!(monster_use(&mut run, bi, AbilityId::Fireball, at + Vec2::new(60.0, 0.0)));
         let dragon_ball = run.projectiles.pop().expect("the dragon's Fireball");
         assert_eq!(hero_ball.damage.why.what, What::Ability(AbilityId::Fireball));

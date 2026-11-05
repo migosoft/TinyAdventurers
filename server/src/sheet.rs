@@ -380,12 +380,8 @@ fn on_hits_of<'a>(props: impl IntoIterator<Item = &'a ItemProperty>) -> Vec<OnHi
 /// The kit of a monster with `attrs`, wielding `weapons` (in the order the abilities look for them:
 /// the first melee one, the first ranged one) and standing in `body`. A monster whose ability has no
 /// weapon that meets its requirement, or which can't be resolved, is a data bug: this panics.
-pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], body: Body) -> Kit {
-    monster_kit_muted(ids, attrs, weapons, body, &[])
-}
-
-/// `monster_kit` with some weapons muted (`live_props`): a muted weapon keeps its base but not its magic on-hits.
-fn monster_kit_muted(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], body: Body, muted: &[Lasting]) -> Kit {
+/// Also with some weapons muted (`live_props`): a muted weapon keeps its base but not its magic on-hits.
+pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], body: Body, muted: &[Lasting]) -> Kit {
     let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&id| arm(id, attrs, &[], own_on_hits(id, muted), 0)).collect();
     let kit = ids
         .iter()
@@ -417,14 +413,14 @@ pub fn kit_for(src: KitSource, attrs: &Attributes, muted: &[Lasting]) -> Kit {
     match src {
         KitSource::Enemy(t) => {
             let d = enemies::def(t);
-            monster_kit_muted(d.abilities, attrs, d.weapons, Body { radius: d.radius }, muted)
+            monster_kit(d.abilities, attrs, d.weapons, Body { radius: d.radius }, muted)
         }
         KitSource::Boss(b) => {
             let d = bosses::def(b);
-            monster_kit_muted(d.abilities, attrs, d.weapons, Body { radius: d.radius }, muted)
+            monster_kit(d.abilities, attrs, d.weapons, Body { radius: d.radius }, muted)
         }
         KitSource::Wolf(mods) => {
-            let kit = monster_kit_muted(&[AbilityId::Bite, AbilityId::Pounce], attrs, &[ItemId::BeastBite], Body { radius: WOLF_RADIUS }, muted);
+            let kit = monster_kit(&[AbilityId::Bite, AbilityId::Pounce], attrs, &[ItemId::BeastBite], Body { radius: WOLF_RADIUS }, muted);
             kit.modded(AbilityId::Pounce, mods.pounce.as_slice())
         }
     }
@@ -1098,11 +1094,11 @@ pub fn monster_numbers(base: &MonsterBase, delta: Attributes, muted: &[Lasting])
 }
 
 /// The lasting magic a hero wears or has bought, sorted: usable worn items with a magical property
-/// (once per item id) and the magic tree nodes.
+/// (once per item id; a grant alone is not one, muting keeps it) and the magic tree nodes.
 #[allow(dead_code)] // the pause (a later task of #187) reads it
 pub fn magic_sources_hero(class: ClassId, b: &Build) -> Vec<Lasting> {
     let (usable, _) = usable_items(class, b, Attributes::default());
-    let mut v: Vec<Lasting> = worn_items(class, &usable).into_iter().filter(|&(_, id)| items::def(id).props.iter().any(|p| p.magical)).map(|(_, id)| Lasting::Item(id)).collect();
+    let mut v: Vec<Lasting> = worn_items(class, &usable).into_iter().filter(|&(_, id)| items::def(id).props.iter().any(|p| p.magical && !matches!(p.kind, PropKind::GrantAbility { .. }))).map(|(_, id)| Lasting::Item(id)).collect();
     v.extend(b.nodes.iter().filter(|&&n| trees::def(n).magical).map(|&n| Lasting::Node(n)));
     v.sort();
     v.dedup();
@@ -2217,7 +2213,9 @@ mod tests {
         let c = ClassId::Paladin;
         let mut b = wearing(c, EquipSlot::Ring1, ItemId::RingOfTheMagus);
         b.loadout.primary = Pick { ability: AbilityId::MagicMissile, source: crate::defs::loadout::Source::Item(EquipSlot::Ring1) };
-        let s = run_sheet(c, &b, Attributes::default(), &[Lasting::Item(ItemId::RingOfTheMagus)]);
+        let muted = [Lasting::Item(ItemId::RingOfTheMagus)];
+        assert!(live_props(ItemId::RingOfTheMagus, &muted).any(|p| matches!(p.kind, PropKind::GrantAbility { .. })), "the grant survives the mute");
+        let s = run_sheet(c, &b, Attributes::default(), &muted);
         assert_eq!(s.disabled, [None, None]);
         assert_eq!(s.primary.id, AbilityId::MagicMissile);
         assert_eq!(s, run_sheet(c, &b, Attributes::default(), &[]));
@@ -2237,6 +2235,8 @@ mod tests {
         let b = Build { equipment: Equipment::starter(w).with(EquipSlot::Melee, ItemId::StaffOfRot).with(EquipSlot::Ring1, ItemId::BandOfVigor), ..Build::start(w) };
         assert_eq!(magic_sources_hero(w, &b), vec![Lasting::Item(ItemId::BandOfVigor)], "the staff's poison is not magic");
         let p = ClassId::Paladin;
+        let magus = wearing(p, EquipSlot::Ring1, ItemId::RingOfTheMagus);
+        assert_eq!(magic_sources_hero(p, &magus), vec![], "a grant alone gives nothing to pause");
         let b = Build { nodes: vec![NodeId::PU5], equipment: Equipment::starter(p).with(EquipSlot::Melee, ItemId::GoldenSword), ..Build::start(p) };
         assert_eq!(magic_sources_hero(p, &b), vec![Lasting::Item(ItemId::GoldenSword), Lasting::Node(NodeId::PU5)]);
         let twins = Build { equipment: Equipment::starter(p).with(EquipSlot::Ring1, ItemId::BandOfVigor).with(EquipSlot::Ring2, ItemId::BandOfVigor), ..Build::start(p) };

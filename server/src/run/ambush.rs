@@ -121,7 +121,7 @@ mod tests {
         let list: &'static [Race] = Box::leak(list.into_boxed_slice());
         let prof = races::profile(list, Adjust::NONE);
         (m.races, m.res, m.effect_res, m.traits, m.mover) = (list, prof.res, prof.effect_res, prof.traits, Mover::Incorporeal);
-        m.kit = crate::sheet::monster_kit(&[AbilityId::Strike, AbilityId::Vanish], &m.attrs, d.weapons, crate::sheet::Body { radius: d.radius });
+        m.kit = crate::sheet::monster_kit(&[AbilityId::Strike, AbilityId::Vanish], &m.attrs, d.weapons, crate::sheet::Body { radius: d.radius }, &[]);
         m.invis_cd = 0.0;
         mi
     }

@@ -1383,7 +1383,7 @@ pub mod tests {
         let mi = run.monster_idx(owner).unwrap();
         if run.monsters[mi].kit.get(id).is_none() {
             let m = &run.monsters[mi];
-            run.monsters[mi].kit = crate::sheet::monster_kit(&[id], &m.attrs, &[], crate::sheet::Body { radius: m.radius });
+            run.monsters[mi].kit = crate::sheet::monster_kit(&[id], &m.attrs, &[], crate::sheet::Body { radius: m.radius }, &[]);
         }
         assert!(abilities::monster_use(run, mi, id, to), "{id:?} is used");
         run.monsters[mi].dormant = true;
