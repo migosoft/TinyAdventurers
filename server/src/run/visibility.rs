@@ -501,8 +501,8 @@ mod tests {
             snapshot_ents(run, 0, &run.players[0].view, &dark)
         };
         assert!(ents(&mut run).iter().any(|e| e.0 == id), "visible first");
-        run.monsters[mi].effects.add_with(EffectKind::Invisible, 30.0, EffectLook::Plain, None, 0);
-        run.monsters[mi].effects.add_with(EffectKind::Entangled, 5.0, EffectLook::Vines, None, 0);
+        run.monsters[mi].effects.add_with(EffectKind::Invisible, 30.0, EffectLook::Plain, None, 0, false);
+        run.monsters[mi].effects.add_with(EffectKind::Entangled, 5.0, EffectLook::Vines, None, 0, false);
         let sent = ents(&mut run);
         assert!(sent.iter().all(|e| e.0 != id), "an invisible monster is not sent");
         assert!(looks_of(&run, &sent).iter().all(|l| l.0 != id), "nor its looks");

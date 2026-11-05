@@ -27,6 +27,17 @@ pub struct ActiveEffect {
     pub from: Vec2,
     /// The signed amount an Attribute effect changes its Attribute by (summed over its stacks); 0 for every other effect.
     pub amount: i32,
+    /// Applied by magic: anti-magic and Dispel pause it.
+    pub magical: bool,
+    /// Seconds of Dispel pause left.
+    pub dispel: f64,
+}
+
+impl ActiveEffect {
+    /// A magical entry is paused by anti-magic or a Dispel pause; it counts for nothing meanwhile (its timer still runs).
+    pub fn paused(&self, anti_magic: bool) -> bool {
+        self.magical && (anti_magic || self.dispel > 0.0)
+    }
 }
 
 /// One application of an effect: the single description every source builds (a hit's
@@ -86,34 +97,53 @@ impl Apply {
     }
 }
 
-/// The effects on one creature (a handful at most) and its stats through them.
+/// The effects on one creature (a handful at most) and its stats through them. A magical and a
+/// non-magical application of one kind are separate entries; paused entries count for nothing.
 #[derive(Debug, Clone, Default)]
-pub struct Effects(Vec<ActiveEffect>);
+pub struct Effects {
+    list: Vec<ActiveEffect>,
+    /// An anti-magic zone is on the creature: its magical entries are paused.
+    pub anti_magic: bool,
+}
 
 impl Effects {
     pub fn list(&self) -> &[ActiveEffect] {
-        &self.0
+        &self.list
     }
+    /// The entries that count (not paused).
+    fn on(&self) -> impl Iterator<Item = &ActiveEffect> + '_ {
+        self.list.iter().filter(|a| !a.paused(self.anti_magic))
+    }
+    /// Some unpaused entry of `k`.
     pub fn has(&self, k: EffectKind) -> bool {
-        self.0.iter().any(|a| a.kind == k)
+        self.on().any(|a| a.kind == k)
     }
+    /// The distinct kinds with an unpaused entry.
     pub fn kinds(&self) -> Vec<EffectKind> {
-        self.0.iter().map(|a| a.kind).collect()
+        let mut v: Vec<EffectKind> = Vec::new();
+        for a in self.on() {
+            if !v.contains(&a.kind) {
+                v.push(a.kind);
+            }
+        }
+        v
     }
+    /// The bits of the kinds with an unpaused entry.
     pub fn bits(&self) -> u32 {
-        self.0.iter().fold(0, |b, a| b | a.kind.bit())
+        self.on().fold(0, |b, a| b | a.kind.bit())
     }
     /// Refresh: the longer of the remaining and the new time. True when newly added.
     #[cfg(test)]
     pub fn add(&mut self, k: EffectKind, secs: f64) -> bool {
-        self.add_with(k, secs, EffectLook::Plain, None, 0)
+        self.add_with(k, secs, EffectLook::Plain, None, 0, false)
     }
-    /// `add` with a look, a source and the `amount` of an Attribute effect (0 for the others); a refresh
-    /// takes the new look, and the new source and position when it has one (a sourceless refresh keeps
-    /// the recorded bestower), and adds the amount when the effect stacks, else replaces it.
-    pub fn add_with(&mut self, k: EffectKind, secs: f64, look: EffectLook, source: Option<(u32, Vec2)>, amount: i32) -> bool {
+    /// `add` with a look, a source, the `amount` of an Attribute effect (0 for the others) and whether it is
+    /// magical; the entry is found by (kind, magical). A refresh takes the new look, and the new source and
+    /// position when it has one (a sourceless refresh keeps the recorded bestower), and adds the amount when
+    /// the effect stacks, else replaces it.
+    pub fn add_with(&mut self, k: EffectKind, secs: f64, look: EffectLook, source: Option<(u32, Vec2)>, amount: i32, magical: bool) -> bool {
         let (source, from) = source.map_or((None, Vec2::ZERO), |(id, at)| (Some(id), at));
-        if let Some(a) = self.0.iter_mut().find(|a| a.kind == k) {
+        if let Some(a) = self.list.iter_mut().find(|a| a.kind == k && a.magical == magical) {
             a.left = a.left.max(secs);
             a.look = look;
             if source.is_some() {
@@ -122,17 +152,17 @@ impl Effects {
             a.amount = if def(k).stacks { a.amount + amount } else { amount };
             return false;
         }
-        self.0.push(ActiveEffect { kind: k, left: secs, dot_t: 0.0, look, source, from, amount });
+        self.list.push(ActiveEffect { kind: k, left: secs, dot_t: 0.0, look, source, from, amount, magical, dispel: 0.0 });
         true
     }
-    /// The signed amount of `k` (0 when it is not on, or has none).
+    /// The signed amount of `k`, summed over its unpaused entries (0 when it is not on, or has none).
     pub fn amount(&self, k: EffectKind) -> i32 {
-        self.0.iter().find(|a| a.kind == k).map_or(0, |a| a.amount)
+        self.on().filter(|a| a.kind == k).map(|a| a.amount).sum()
     }
     /// What the active effects add to each Attribute (summed, not yet floored: see `Attributes::with_delta`).
     pub fn attr_delta(&self) -> Attributes {
         let mut d = Attributes::default();
-        for a in &self.0 {
+        for a in self.on() {
             if let Some(attr) = def(a.kind).attr {
                 d.add(attr, a.amount);
             }
@@ -141,46 +171,68 @@ impl Effects {
     }
     /// The non-`Plain` looks (the client draws them).
     pub fn looks(&self) -> impl Iterator<Item = (EffectKind, EffectLook)> + '_ {
-        self.0.iter().filter(|a| a.look != EffectLook::Plain).map(|a| (a.kind, a.look))
+        self.list.iter().filter(|a| a.look != EffectLook::Plain).map(|a| (a.kind, a.look))
     }
     /// The source and last known position of the effect that makes the creature flee.
     pub fn fear_from(&self) -> Option<(Option<u32>, Vec2)> {
-        self.0.iter().find(|a| def(a.kind).flees).map(|a| (a.source, a.from))
+        self.on().find(|a| def(a.kind).flees).map(|a| (a.source, a.from))
     }
     /// The frightening source was seen at `at`.
     pub fn set_fear_from(&mut self, at: Vec2) {
-        for a in self.0.iter_mut().filter(|a| def(a.kind).flees) {
+        for a in self.list.iter_mut().filter(|a| def(a.kind).flees) {
             a.from = at;
         }
     }
+    /// Removes every entry of `k`.
     pub fn remove(&mut self, k: EffectKind) -> bool {
-        let n = self.0.len();
-        self.0.retain(|a| a.kind != k);
-        self.0.len() != n
+        let n = self.list.len();
+        self.list.retain(|a| a.kind != k);
+        self.list.len() != n
     }
-    /// Counts down; returns the kinds that ran out (removed) and the
-    /// damage-over-time ticks due this step.
+    /// Counts down (paused entries too); returns the kinds whose last entry ran out (removed) and the
+    /// damage-over-time ticks due this step: one per kind, from its longest unpaused entry.
     fn tick(&mut self, dt: f64) -> (Vec<EffectKind>, Vec<(DamageType, f64, EffectKind, Option<u32>)>) {
         let mut hits = Vec::new();
-        for a in &mut self.0 {
-            if let Some((t, dps)) = def(a.kind).dot {
-                a.dot_t += dt;
-                if a.dot_t >= DOT_TICK - 1e-9 {
-                    a.dot_t -= DOT_TICK;
-                    hits.push((t, dps * DOT_TICK, a.kind, a.source));
-                }
-            }
-            a.left -= dt;
+        let anti = self.anti_magic;
+        for a in &mut self.list {
+            a.dot_t += dt;
         }
-        let gone: Vec<EffectKind> = self.0.iter().filter(|a| a.left <= 1e-9).map(|a| a.kind).collect();
-        self.0.retain(|a| a.left > 1e-9);
+        for k in EffectKind::ALL {
+            let Some((t, dps)) = def(k).dot else { continue };
+            let longest = self.list.iter().filter(|a| a.kind == k && !a.paused(anti)).max_by(|x, y| x.left.total_cmp(&y.left));
+            if let Some(a) = longest.filter(|a| a.dot_t >= DOT_TICK - 1e-9) {
+                hits.push((t, dps * DOT_TICK, k, a.source));
+            }
+            // The entries of a kind stay in step: each that reached the tick takes it off.
+            for a in self.list.iter_mut().filter(|a| a.kind == k && a.dot_t >= DOT_TICK - 1e-9) {
+                a.dot_t -= DOT_TICK;
+            }
+        }
+        for a in &mut self.list {
+            a.left -= dt;
+            a.dispel = if a.dispel - dt <= 1e-9 { 0.0 } else { a.dispel - dt };
+        }
+        let mut gone: Vec<EffectKind> = Vec::new();
+        for a in self.list.iter().filter(|a| a.left <= 1e-9) {
+            if !gone.contains(&a.kind) {
+                gone.push(a.kind);
+            }
+        }
+        self.list.retain(|a| a.left > 1e-9);
+        gone.retain(|&k| !self.list.iter().any(|a| a.kind == k));
         (gone, hits)
     }
     fn take_all(&mut self) -> Vec<EffectKind> {
-        std::mem::take(&mut self.0).into_iter().map(|a| a.kind).collect()
+        let mut kinds: Vec<EffectKind> = Vec::new();
+        for a in std::mem::take(&mut self.list) {
+            if !kinds.contains(&a.kind) {
+                kinds.push(a.kind);
+            }
+        }
+        kinds
     }
     fn any(&self, f: impl Fn(&crate::defs::effects::EffectDef) -> bool) -> bool {
-        self.0.iter().any(|a| f(&def(a.kind)))
+        self.on().any(|a| f(&def(a.kind)))
     }
     pub fn no_move(&self) -> bool {
         self.any(|d| d.no_move)
@@ -293,7 +345,7 @@ impl Run {
             Creature::Player(i) => self.players.get(i).map(|p| &p.effects),
             Creature::Monster(i) => self.monsters.get(i).map(|m| &m.effects),
         };
-        fx.and_then(|fx| fx.list().iter().find(|e| e.kind == kind)).map_or(0.0, |e| e.left)
+        fx.and_then(|fx| fx.list().iter().filter(|e| e.kind == kind).map(|e| e.left).reduce(f64::max)).unwrap_or(0.0)
     }
 
     /// The body of `apply`: what happened, the numbers on the way, and the weaker tiers it removed (bits).
@@ -373,7 +425,7 @@ impl Run {
             }
         }
         let Some((fx, id, pos, _)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
-        let added = fx.add_with(kind, secs, a.look, a.source, attr_amount(kind, a.power));
+        let added = fx.add_with(kind, secs, a.look, a.source, attr_amount(kind, a.power), a.magical);
         if added {
             self.effect_event(c, id, pos, kind, true, a.look);
         }
@@ -624,7 +676,7 @@ impl Run {
             .players
             .iter()
             .enumerate()
-            .filter(|&(qi, q)| qi != pi && q.alive && q.effects.list().iter().any(|a| def(a.kind).wakes_on_use))
+            .filter(|&(qi, q)| qi != pi && q.alive && q.effects.kinds().into_iter().any(|k| def(k).wakes_on_use))
             .map(|(qi, q)| (qi, q.pos().dist(at) - 2.0 * PLAYER_RADIUS))
             .filter(|&(_, gap)| gap <= USE_REACH)
             .min_by(|a, b| a.1.total_cmp(&b.1));
@@ -1689,11 +1741,106 @@ mod tests {
         assert!(run.players[0].hp < hp, "the ticks landed");
     }
 
+    fn put(e: &mut Effects, k: EffectKind, secs: f64, amount: i32, magical: bool) {
+        e.add_with(k, secs, EffectLook::Plain, None, amount, magical);
+    }
+
+    #[test]
+    fn magic_and_plain_entries_are_separate() {
+        let mut e = Effects::default();
+        assert!(e.add_with(EffectKind::Slowed, 2.0, EffectLook::Plain, None, 0, false));
+        assert!(e.add_with(EffectKind::Slowed, 3.0, EffectLook::Plain, None, 0, true));
+        assert_eq!(e.list().len(), 2);
+        assert!(!e.add_with(EffectKind::Slowed, 5.0, EffectLook::Plain, None, 0, false));
+        assert_eq!(e.list().len(), 2);
+        let plain = e.list().iter().find(|a| !a.magical).unwrap();
+        assert_eq!(plain.left, 5.0, "the longer timer is kept");
+    }
+
+    #[test]
+    fn mods_count_once_over_two_entries() {
+        let mut e = Effects::default();
+        put(&mut e, EffectKind::Slowed, 5.0, 0, false);
+        put(&mut e, EffectKind::Slowed, 5.0, 0, true);
+        assert_eq!(e.speed_mul(), 0.5);
+    }
+
+    #[test]
+    fn a_paused_entry_counts_for_nothing() {
+        let mut e = Effects::default();
+        put(&mut e, EffectKind::Slowed, 5.0, 0, true);
+        put(&mut e, EffectKind::Sleep, 5.0, 0, true);
+        put(&mut e, EffectKind::Fear, 5.0, 0, true);
+        e.anti_magic = true;
+        assert_eq!(e.speed_mul(), 1.0);
+        assert_eq!(e.bits(), 0);
+        assert!(!e.has(EffectKind::Slowed));
+        assert!(!e.no_move());
+        assert_eq!(e.fear_from(), None);
+    }
+
+    #[test]
+    fn attr_amounts_add_over_unpaused_entries() {
+        let mut e = Effects::default();
+        put(&mut e, EffectKind::Weakened, 5.0, -1, false);
+        put(&mut e, EffectKind::Weakened, 5.0, -2, true);
+        assert_eq!(e.attr_delta().get(Attr::Str), -3);
+        e.anti_magic = true;
+        assert_eq!(e.attr_delta().get(Attr::Str), -1);
+    }
+
+    #[test]
+    fn dot_ticks_once_per_kind_from_the_longest_unpaused() {
+        let burn = |anti: bool| {
+            let mut e = Effects::default();
+            e.add_with(EffectKind::Burning, 2.0, EffectLook::Plain, Some((1, Vec2::ZERO)), 0, false);
+            e.add_with(EffectKind::Burning, 5.0, EffectLook::Plain, Some((2, Vec2::ZERO)), 0, true);
+            e.anti_magic = anti;
+            let mut hits = Vec::new();
+            let mut t = 0.0;
+            while t < DOT_TICK - 1e-9 {
+                hits.extend(e.tick(DT).1);
+                t += DT;
+            }
+            hits
+        };
+        let hits = burn(false);
+        assert_eq!(hits.len(), 1);
+        assert_eq!((hits[0].0, hits[0].2, hits[0].3), (DamageType::Heat, EffectKind::Burning, Some(2)));
+        let hits = burn(true);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].3, Some(1), "the paused entry does not tick");
+    }
+
+    #[test]
+    fn timers_run_while_paused() {
+        let mut e = Effects::default();
+        put(&mut e, EffectKind::Slowed, 1.0, 0, true);
+        e.anti_magic = true;
+        let (gone, _) = e.tick(1.0);
+        assert_eq!(gone, vec![EffectKind::Slowed]);
+        assert!(e.list().is_empty());
+    }
+
+    #[test]
+    fn dispel_timer_counts_down() {
+        let mut e = Effects::default();
+        put(&mut e, EffectKind::Slowed, 5.0, 0, true);
+        e.list[0].dispel = 0.5;
+        assert!(e.list()[0].paused(false));
+        assert!(!e.has(EffectKind::Slowed));
+        for _ in 0..(0.5 / DT).round() as usize {
+            e.tick(DT);
+        }
+        assert!(!e.list()[0].paused(false));
+        assert!(e.has(EffectKind::Slowed));
+    }
+
     #[test]
     fn fear_remembers_its_source() {
         let mut e = Effects::default();
         assert_eq!(e.fear_from(), None);
-        e.add_with(EffectKind::Fear, 3.0, EffectLook::Plain, Some((5, Vec2::new(1.0, 2.0))), 0);
+        e.add_with(EffectKind::Fear, 3.0, EffectLook::Plain, Some((5, Vec2::new(1.0, 2.0))), 0, false);
         assert_eq!(e.fear_from(), Some((Some(5), Vec2::new(1.0, 2.0))));
         e.set_fear_from(Vec2::new(3.0, 4.0));
         assert_eq!(e.fear_from(), Some((Some(5), Vec2::new(3.0, 4.0))));
