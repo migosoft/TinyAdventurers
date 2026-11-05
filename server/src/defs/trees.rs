@@ -153,11 +153,13 @@ pub struct NodeDef {
     pub req: &'static [Requirement],
     /// Undirected: a link also joins the other node back to this one.
     pub links: &'static [NodeId],
+    /// Whether its bonus is magic and so paused by anti-magic (only Radiant; every other node is trained skill).
+    pub magical: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
 fn nd(id: NodeId, class: ClassId, pos: (i8, i8), kind: NodeKind, name: &'static str, text: &'static str, cost: u32, req: &'static [Requirement], links: &'static [NodeId]) -> NodeDef {
-    NodeDef { id, class, pos, kind, name, text, cost, req, links }
+    NodeDef { id, class, pos, kind, name, text, cost, req, links, magical: false }
 }
 
 /// A new node without a definition does not compile.
@@ -183,7 +185,7 @@ pub fn def(id: NodeId) -> NodeDef {
         NodeId::P0 => nd(NodeId::P0, ClassId::Paladin, (0, 0), NodeKind::Start, "Paladin", "Where the tree starts. Always owned.", 0, &[], &[NodeId::PU2, NodeId::PL1, NodeId::PR1, NodeId::PD2, NodeId::PD3]),
         NodeId::PU2 => nd(NodeId::PU2, ClassId::Paladin, (0, -1), NodeKind::Improve(AbilityId::HolyLight, AbilityMod::DamageMul(1.25)), "Greater Light", "Holy Light: heal +25 %.", 350, &[], &[NodeId::PU3]),
         NodeId::PU3 => nd(NodeId::PU3, ClassId::Paladin, (0, -2), NodeKind::Unlock(AbilityId::Judgement), "Judgement", "Unlocks Judgement (primary).", 600, &[Requirement::Attr(Attr::Cha, 16)], &[NodeId::PU5]),
-        NodeId::PU5 => nd(NodeId::PU5, ClassId::Paladin, (0, -3), NodeKind::Keystone(Keystone::Radiant), "Radiant", "Your innate abilities deal +20 % damage to Undead and Demons; you shed light 2 tiles.", 1200, &[Requirement::Attr(Attr::Cha, 17)], &[]),
+        NodeId::PU5 => NodeDef { magical: true, ..nd(NodeId::PU5, ClassId::Paladin, (0, -3), NodeKind::Keystone(Keystone::Radiant), "Radiant", "Your innate abilities deal +20 % damage to Undead and Demons; you shed light 2 tiles.", 1200, &[Requirement::Attr(Attr::Cha, 17)], &[]) },
         NodeId::PL1 => nd(NodeId::PL1, ClassId::Paladin, (-1, 0), NodeKind::Unlock(AbilityId::Purify), "Purify", "Unlocks Purify (secondary).", 500, &[Requirement::Attr(Attr::Wil, 14)], &[NodeId::PL3]),
         NodeId::PL3 => nd(NodeId::PL3, ClassId::Paladin, (-2, 0), NodeKind::Resist(DamageType::Magical, 0.2), "Warded", "+20 % magical resistance.", 300, &[], &[NodeId::PL4]),
         NodeId::PL4 => nd(NodeId::PL4, ClassId::Paladin, (-3, 0), NodeKind::Improve(AbilityId::Purify, AbilityMod::DurationAdd(2.0)), "Lasting Ward", "Purify: ward 3 s → 5 s.", 400, &[], &[NodeId::PL5]),
@@ -303,6 +305,13 @@ pub fn check_buy(class: ClassId, owned: &[NodeId], node: NodeId, attrs_with_item
 mod tests {
     use super::*;
     use crate::defs::abilities as ab;
+
+    #[test]
+    fn only_radiant_is_a_magic_node() {
+        for id in NodeId::ALL {
+            assert_eq!(def(id).magical, id == NodeId::PU5, "{id:?}");
+        }
+    }
 
     #[test]
     fn trees_have_the_spec_sizes_and_totals() {

@@ -718,7 +718,7 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
             for t in party_around(run, pos, a.radius) {
                 for own in &a.effect {
-                    run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
+                    run.apply(t, Apply { origin, magical: own.magical, ..Apply::plain(own.kind, Some(own.secs)) });
                 }
             }
         }
@@ -737,7 +737,7 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
                     run.remove_effect_why(t, k, super::rules_log::EndReason::Purify);
                 }
                 for own in &a.effect {
-                    run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
+                    run.apply(t, Apply { origin, magical: own.magical, ..Apply::plain(own.kind, Some(own.secs)) });
                 }
             }
         }
@@ -3190,6 +3190,31 @@ mod tests {
             run.step_player(0);
         }
         assert!(run.has_effect(Creature::Monster(g[0]), EffectKind::Poisoned), "a weapon attack: the coat applies");
+    }
+
+    fn entry_magic(run: &Run, c: Creature, kind: EffectKind) -> Option<bool> {
+        let fx = match c {
+            Creature::Player(i) => run.players[i].effects.list(),
+            Creature::Monster(i) => run.monsters[i].effects.list(),
+        };
+        fx.iter().find(|a| a.kind == kind).map(|a| a.magical)
+    }
+
+    #[test]
+    fn haste_and_purify_effects_are_magic() {
+        let mut run = wizard_secondary(AbilityId::Haste, Attributes::new(0, 0, 0, 5, 2, 0));
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(entry_magic(&run, Creature::Player(0), EffectKind::Accelerated), Some(true));
+        let mut run = run_with_ability(ClassId::Paladin, AbilitySlot::Secondary, AbilityId::Purify, Attributes::new(0, 0, 0, 0, 2, 0), Equipment::starter(ClassId::Paladin));
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(entry_magic(&run, Creature::Player(0), EffectKind::Warded), Some(true));
+    }
+
+    #[test]
+    fn war_cry_haste_stays_plain() {
+        let mut run = barbarian_war_cry();
+        try_use(&mut run, 0, false, 1);
+        assert_eq!(entry_magic(&run, Creature::Player(0), EffectKind::Accelerated), Some(false));
     }
 
     #[test]

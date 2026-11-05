@@ -598,7 +598,7 @@ impl Run {
         if !m.alive || !m.traits.invisibility || m.invis_cd > 0.0 || m.effects.has(EffectKind::Invisible) {
             return false;
         }
-        if !self.apply_effect(Creature::Monster(mi), EffectKind::Invisible, Some(secs)) {
+        if !self.apply(Creature::Monster(mi), Apply { magical: true, ..Apply::plain(EffectKind::Invisible, Some(secs)) }) {
             return false;
         }
         self.monsters[mi].invis_cd = cooldown;
@@ -767,6 +767,15 @@ mod tests {
         assert!(!run.go_invisible(mi, 2.0, 3.0));
         assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Invisible));
         assert_eq!(run.monsters[mi].invis_cd, 0.0);
+    }
+
+    #[test]
+    fn vanish_makes_magic_invisibility() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let mi = ghostly(&mut run);
+        assert!(run.go_invisible(mi, 2.0, 3.0));
+        let e = run.monsters[mi].effects.list().iter().find(|a| a.kind == EffectKind::Invisible).expect("invisible");
+        assert!(e.magical);
     }
 
     #[test]

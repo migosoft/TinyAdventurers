@@ -33,7 +33,7 @@ impl Run {
             return;
         }
         let Some(k) = crate::defs::effects::EffectKind::from_u8(kind) else { return };
-        self.apply_effect(crate::run::effects::Creature::Player(pi), k, None);
+        self.apply(crate::run::effects::Creature::Player(pi), crate::run::effects::Apply { magical: true, ..crate::run::effects::Apply::plain(k, None) });
         let name = self.players[pi].name.clone();
         self.event(Ev::Msg { text: format!("{name}: {k:?}") }, None);
     }
@@ -271,6 +271,15 @@ mod tests {
         assert!(run.players[0].effects.has(EffectKind::Sleep));
         run.debug_effect(0, 200);
         assert_eq!(run.players[0].effects.list().len(), 1, "an unknown id is ignored");
+    }
+
+    #[test]
+    fn debug_effect_is_magic() {
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.debug = true;
+        run.debug_effect(0, EffectKind::Sleep as u8);
+        assert!(run.players[0].effects.list().iter().all(|a| a.magical) && !run.players[0].effects.list().is_empty());
     }
 
     #[test]
