@@ -243,6 +243,7 @@ pub struct AbilityDef {
     pub slot: AbilitySlot,
     pub category: AbilityCategory,
     /// Whether the ability is magic (Spell and Innate today): what an anti-magic effect or a Dispel pauses (#187).
+    #[allow(dead_code)] // read by #216 (anti-magic areas)
     pub magical: bool,
     pub uses: Uses,
     /// A ranged ability: in melee a primary falls back to Strike and a secondary is blocked.

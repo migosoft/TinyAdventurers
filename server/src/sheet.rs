@@ -654,10 +654,12 @@ fn resolve_usable(class: ClassId, slot: AbilitySlot, p: Pick, d: &AbilityDef, cx
 /// `hero_sheet`). The equipment is checked for slot, class and proficiency; every derived number
 /// uses the Attributes with the usable items (`usable_items`, with `delta`) plus `delta`.
 fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -> Result<(Sheet, PickCx), LoadoutError> {
-    // A muted node counts as not bought.
+    // A muted magic node counts as not bought. A non-magic node passed by mistake stays bought: muting a Proficiency
+    // would make `run_sheet`'s equipment check fail.
+    let muted_node = |n: NodeId| muted.contains(&Lasting::Node(n)) && trees::def(n).magical;
     let unmuted;
-    let b = if b.nodes.iter().any(|&n| muted.contains(&Lasting::Node(n))) {
-        unmuted = Build { nodes: b.nodes.iter().copied().filter(|&n| !muted.contains(&Lasting::Node(n))).collect(), ..b.clone() };
+    let b = if b.nodes.iter().any(|&n| muted_node(n)) {
+        unmuted = Build { nodes: b.nodes.iter().copied().filter(|&n| !muted_node(n)).collect(), ..b.clone() };
         &unmuted
     } else {
         b
@@ -2250,6 +2252,25 @@ mod tests {
         assert!(on.keystones.has(Keystone::Radiant));
         assert_eq!(off.light, None);
         assert!(!off.keystones.has(Keystone::Radiant));
+    }
+
+    #[test]
+    fn a_muted_non_magic_node_stays_bought() {
+        let c = ClassId::Paladin;
+        let b = Build { nodes: vec![NodeId::PL3], ..Build::start(c) };
+        assert!(!trees::def(NodeId::PL3).magical);
+        let bare = run_sheet(c, &Build::start(c), Attributes::default(), &[]);
+        let kept = run_sheet(c, &b, Attributes::default(), &[Lasting::Node(NodeId::PL3)]);
+        assert_eq!(kept, run_sheet(c, &b, Attributes::default(), &[]), "muting it changes nothing");
+        assert!(kept.res.get(DamageType::Magical) > bare.res.get(DamageType::Magical));
+    }
+
+    #[test]
+    fn no_magic_node_grants_a_proficiency() {
+        for id in NodeId::ALL {
+            let d = trees::def(id);
+            assert!(!(d.magical && matches!(d.kind, trees::NodeKind::Proficiency(_))), "{id:?}");
+        }
     }
 
     #[test]

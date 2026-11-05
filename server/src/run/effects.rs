@@ -519,6 +519,7 @@ impl Run {
     }
 
     /// `apply` of `kind` for `secs` (default: its def's duration), unscaled and `Plain`.
+    #[cfg(test)]
     pub fn apply_effect(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>) -> bool {
         self.apply(c, Apply::plain(kind, secs))
     }
@@ -636,17 +637,19 @@ impl Run {
     }
 
     /// The creature's Attributes changed through its effects (a drain was added, grew, ended or was wiped): resolve its
-    /// numbers again from the base and the delta. A hero gets its sheet (it keeps the light and the wolf mods it
+    /// numbers again from the base and the delta. A hero gets its sheet (it keeps the wolf mods it
     /// started with), a monster its `monster_numbers`. Current HP is clamped to the new maximum and never goes
     /// below 1, so a drain does not kill; when the drain ends the maximum comes back and HP does not. Nothing for
     /// the dead. The rules log gets a line per changed Attribute, and a hero whose speed or abilities changed is told.
+    /// The hero's light follows pauses (muted sources) but not drains: an Attribute drain that makes a light item
+    /// unusable leaves the light on (#192), so `hero_sheet_with_light` takes the light from the build with no delta.
     pub fn refresh_attrs(&mut self, c: Creature) {
         let muted = self.muted_list(c);
         let mut light_swap = None;
         let changes: Vec<(Attr, i32, i32)> = match c {
             Creature::Player(i) => {
                 let Some(p) = self.players.get_mut(i).filter(|p| p.alive) else { return };
-                let mut sheet = crate::sheet::run_sheet(p.class, &p.build, p.effects.attr_delta(), &muted);
+                let mut sheet = hero_sheet_with_light(p.class, &p.build, p.effects.attr_delta(), &muted);
                 sheet.wolf = p.sheet.wolf;
                 if sheet.light != p.sheet.light {
                     light_swap = Some((p.id, p.sheet.light, sheet.light));
@@ -760,6 +763,16 @@ impl Run {
         }
         true
     }
+}
+
+/// The hero's sheet for `delta` and `muted`, with the light of the same build under `muted` alone: pauses change the
+/// light, drains do not. The second sheet is resolved only while a drain is on (without one both agree).
+fn hero_sheet_with_light(class: crate::protocol::ClassId, build: &crate::defs::loadout::Build, delta: Attributes, muted: &[crate::sheet::Lasting]) -> crate::sheet::Sheet {
+    let mut sheet = crate::sheet::run_sheet(class, build, delta, muted);
+    if delta != Attributes::default() {
+        sheet.light = crate::sheet::run_sheet(class, build, Attributes::default(), muted).light;
+    }
+    sheet
 }
 
 #[cfg(test)]
@@ -2048,6 +2061,23 @@ mod tests {
     }
 
     #[test]
+    fn a_drain_that_unequips_a_light_item_leaves_the_light() {
+        use crate::defs::lights::LightKind;
+        use crate::defs::loadout::Build;
+        use crate::defs::items::{EquipSlot, Equipment, ItemId};
+        let c = ClassId::Wizard;
+        let mut b = Build { equipment: Equipment::starter(c).with(EquipSlot::Melee, ItemId::BoneStaff), ..Build::start(c) };
+        b.extra.add(Attr::Int, 18 - crate::defs::classes::start_attrs(c).get(Attr::Int));
+        let mut drain = Attributes::default();
+        drain.add(Attr::Int, -1);
+        assert_eq!(crate::sheet::run_sheet(c, &b, Attributes::default(), &[]).light, Some(LightKind::Magic), "lit at 18");
+        assert_eq!(crate::sheet::run_sheet(c, &b, drain, &[]).light, None, "the full sheet loses the staff");
+        assert_eq!(hero_sheet_with_light(c, &b, drain, &[]).light, Some(LightKind::Magic), "the light stays");
+        let muted = [crate::sheet::Lasting::Item(ItemId::BoneStaff)];
+        assert_eq!(hero_sheet_with_light(c, &b, drain, &muted).light, None, "a pause still puts it out");
+    }
+
+    #[test]
     fn drains_stack_and_refresh() {
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
         let h = Creature::Player(0);
@@ -2135,7 +2165,7 @@ mod tests {
         assert!(run.monsters[mi].kit.get(AbilityId::Strike).unwrap().damage < dmg0);
         run.remove_effect(c, EffectKind::Weakened);
         let m = &run.monsters[mi];
-        let want = crate::sheet::monster_numbers(&m.base, crate::defs::attributes::Attributes::default(), &[]);
+        let want = crate::sheet::monster_numbers(&m.base, Attributes::default(), &[]);
         assert_eq!((m.attrs, m.max_hp, m.speed), (m.base.attrs, m.base.max_hp, m.base.speed));
         assert_eq!(m.kit, want.kit);
         assert_eq!(m.kit.get(AbilityId::Strike).unwrap().damage, dmg0);
@@ -2165,7 +2195,7 @@ mod tests {
         run.monsters[mi].effect_res.set(EffectKind::Weakened, 1.0);
         let str0 = run.monsters[mi].attrs.get(Attr::Str);
         assert_eq!(drain(&mut run, c, EffectKind::Weakened, 20.0, Some(10)), EffectOutcome::Resisted);
-        assert_eq!(fx_of(&run, c).attr_delta(), crate::defs::attributes::Attributes::default());
+        assert_eq!(fx_of(&run, c).attr_delta(), Attributes::default());
         assert_eq!(run.monsters[mi].attrs.get(Attr::Str), str0);
     }
 
