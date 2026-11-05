@@ -27,6 +27,7 @@ export const KIND = {
   "HolyGround": 71,
   "Imp": 19,
   "Judgement": 64,
+  "Knight": 26,
   "Lich": 31,
   "Mimic": 18,
   "Missile": 50,
@@ -873,6 +874,12 @@ export const ITEMS = {
     "name": "Skeleton Sword",
     "slot": "Melee"
   },
+  "SoldierSword": {
+    "classes": [],
+    "kind": "Sword",
+    "name": "Soldier Sword",
+    "slot": "Melee"
+  },
   "SpikedClub": {
     "classes": [
       "Wizard",
@@ -993,6 +1000,10 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   "25": {
     "h": 13.0,
     "r": 6.0
+  },
+  "26": {
+    "h": 12.0,
+    "r": 5.0
   },
   "30": {
     "h": 58.0,
@@ -1337,6 +1348,16 @@ export const ENEMY_KINDS = {
       "Poison": 0.0
     }
   },
+  "Knight": {
+    "max_hp": 60.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
   "Mimic": {
     "max_hp": 90.0,
     "res": {
@@ -1456,6 +1477,7 @@ export const TAG_NAME: Record<number, string> = {
   23: "Dire Wolf",
   24: "Ghost",
   25: "Shade",
+  26: "Knight",
   30: "Demon",
   31: "Lich",
   32: "Dragon",

@@ -2000,6 +2000,19 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": "weapon_rusty_sword"
   },
+  "SoldierSword": {
+    "base": "12 damage · every 1 s · arc 1.6 · wind-up 0.3 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Sword",
+    "name": "Soldier Sword",
+    "prof": "Sword",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": "weapon_knight_sword"
+  },
   "SpikedClub": {
     "base": "18 damage · every 1.6 s · arc 2 · push 28",
     "classes": [
