@@ -730,8 +730,8 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
             for t in party_around(run, pos, a.radius) {
                 let held = match t {
-                    Creature::Player(i) => run.players[i].effects.kinds(),
-                    Creature::Monster(i) => run.monsters[i].effects.kinds(),
+                    Creature::Player(i) => run.players[i].effects.present_kinds(),
+                    Creature::Monster(i) => run.monsters[i].effects.present_kinds(),
                 };
                 for k in held.into_iter().filter(|&k| !crate::defs::effects::def(k).positive) {
                     run.remove_effect_why(t, k, super::rules_log::EndReason::Purify);
@@ -3295,6 +3295,18 @@ mod tests {
         assert!(!run.has_effect(me, EffectKind::Sleep));
     }
 
+    #[test]
+    fn purify_removes_a_paused_magic_effect() {
+        let mut run = run_with_ability(ClassId::Paladin, AbilitySlot::Secondary, AbilityId::Purify, Attributes::new(0, 0, 0, 0, 2, 0), Equipment::starter(ClassId::Paladin));
+        let me = Creature::Player(0);
+        run.players[0].effects.anti_magic = true;
+        run.players[0].effects.add_with(EffectKind::Slowed, 10.0, crate::defs::effects::EffectLook::Plain, None, 0, true);
+        try_use(&mut run, 0, false, 1);
+        run.players[0].effects.anti_magic = false;
+        assert!(!run.has_effect(me, EffectKind::Slowed), "it does not come back");
+        assert!(run.players[0].effects.list().iter().all(|e| e.kind != EffectKind::Slowed));
+    }
+
     fn consecrate_run() -> Run {
         run_with_ability(ClassId::Paladin, AbilitySlot::Secondary, AbilityId::Consecrate, Attributes::new(0, 0, 0, 0, 0, 8), Equipment::starter(ClassId::Paladin))
     }
@@ -3364,7 +3376,7 @@ mod tests {
         let m = Creature::Monster(g);
         assert!(run.has_effect(m, EffectKind::Entangled));
         assert!(run.monsters[g].effects.no_move() && !run.monsters[g].effects.no_act(), "it cannot move but still acts");
-        assert!(run.monsters[g].effects.looks().any(|(k, l)| k == EffectKind::Entangled && l == EffectLook::Vines));
+        assert!(run.monsters[g].effects.looks().into_iter().any(|(k, l)| k == EffectKind::Entangled && l == EffectLook::Vines));
         assert!(!run.has_effect(Creature::Monster(far), EffectKind::Entangled), "out of the roots");
         // The roots end 3.7 s from now; the last pulse's Entangled (1 s before the save) runs out
         // `scaled_secs` later, and nothing renews it.

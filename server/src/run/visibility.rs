@@ -213,7 +213,7 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
 fn looks_of(run: &Run, ents: &[EntSnap]) -> Vec<(u32, u8, u8)> {
     let sent = |id: u32| ents.iter().any(|e| e.0 == id);
     let fx = run.players.iter().map(|p| (p.id, &p.effects)).chain(run.monsters.iter().filter(|m| m.alive).map(|m| (m.id, &m.effects)));
-    fx.filter(|&(id, _)| sent(id)).flat_map(|(id, e)| e.looks().map(move |(k, l)| (id, k as u8, l as u8))).collect()
+    fx.filter(|&(id, _)| sent(id)).flat_map(|(id, e)| e.looks().into_iter().map(move |(k, l)| (id, k as u8, l as u8))).collect()
 }
 
 pub fn send_snapshots(run: &mut Run) {

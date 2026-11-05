@@ -128,6 +128,16 @@ impl Effects {
         }
         v
     }
+    /// The distinct kinds with any entry, paused or not: what removal and tier checks see.
+    pub fn present_kinds(&self) -> Vec<EffectKind> {
+        let mut v: Vec<EffectKind> = Vec::new();
+        for a in &self.list {
+            if !v.contains(&a.kind) {
+                v.push(a.kind);
+            }
+        }
+        v
+    }
     /// The bits of the kinds with an unpaused entry.
     pub fn bits(&self) -> u32 {
         self.on().fold(0, |b, a| b | a.kind.bit())
@@ -169,9 +179,15 @@ impl Effects {
         }
         d
     }
-    /// The non-`Plain` looks (the client draws them).
-    pub fn looks(&self) -> impl Iterator<Item = (EffectKind, EffectLook)> + '_ {
-        self.list.iter().filter(|a| a.look != EffectLook::Plain).map(|a| (a.kind, a.look))
+    /// The non-`Plain` looks of the unpaused entries, each (kind, look) once (the client draws them).
+    pub fn looks(&self) -> Vec<(EffectKind, EffectLook)> {
+        let mut v: Vec<(EffectKind, EffectLook)> = Vec::new();
+        for a in self.on().filter(|a| a.look != EffectLook::Plain) {
+            if !v.contains(&(a.kind, a.look)) {
+                v.push((a.kind, a.look));
+            }
+        }
+        v
     }
     /// The source and last known position of the effect that makes the creature flee.
     pub fn fear_from(&self) -> Option<(Option<u32>, Vec2)> {
@@ -366,7 +382,7 @@ impl Run {
         if !ok {
             return (EffectOutcome::NotThere, d, 0);
         }
-        let cancelled: Vec<EffectKind> = def(kind).cancels.iter().copied().filter(|&k| self.has_effect(c, k)).collect();
+        let cancelled: Vec<EffectKind> = def(kind).cancels.iter().copied().filter(|&k| self.has_present(c, k)).collect();
         if !cancelled.is_empty() {
             let mut removed = 0;
             for k in cancelled {
@@ -376,8 +392,8 @@ impl Run {
             return (EffectOutcome::Cancelled { removed }, d, 0); // fire thaws ice / ice puts out fire
         }
         let held = match c {
-            Creature::Player(i) => self.players.get(i).map(|p| p.effects.kinds()),
-            Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.kinds()),
+            Creature::Player(i) => self.players.get(i).map(|p| p.effects.present_kinds()),
+            Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.present_kinds()),
         };
         if let Some(k) = held.and_then(|h| h.into_iter().find(|&k| def(k).replaces.contains(&kind))) {
             return (EffectOutcome::StrongerOn(k), d, 0); // the stronger tier is on
@@ -425,7 +441,10 @@ impl Run {
             }
         }
         let Some((fx, id, pos, _)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
-        let added = fx.add_with(kind, secs, a.look, a.source, attr_amount(kind, a.power), a.magical);
+        let was_on = fx.has(kind);
+        fx.add_with(kind, secs, a.look, a.source, attr_amount(kind, a.power), a.magical);
+        // Told and logged as added only when the kind turns on (not for a second entry, nor one that starts paused).
+        let added = !was_on && fx.has(kind);
         if added {
             self.effect_event(c, id, pos, kind, true, a.look);
         }
@@ -455,8 +474,8 @@ impl Run {
 
     fn end_effects(&mut self, c: Creature, why: super::rules_log::EndReason, f: impl Fn(&crate::defs::effects::EffectDef) -> bool) {
         let kinds = match c {
-            Creature::Player(i) => self.players.get(i).map(|p| p.effects.kinds()),
-            Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.kinds()),
+            Creature::Player(i) => self.players.get(i).map(|p| p.effects.present_kinds()),
+            Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.present_kinds()),
         };
         for k in kinds.unwrap_or_default().into_iter().filter(|&k| f(&def(k))) {
             self.remove_effect_why(c, k, why);
@@ -487,9 +506,12 @@ impl Run {
 
     pub fn remove_effect(&mut self, c: Creature, kind: EffectKind) -> bool {
         let Some((fx, id, pos, _)) = self.creature(c) else { return false };
+        let was_on = fx.has(kind);
         let removed = fx.remove(kind);
         if removed {
-            self.effect_event(c, id, pos, kind, false, EffectLook::Plain);
+            if was_on {
+                self.effect_event(c, id, pos, kind, false, EffectLook::Plain);
+            }
             if def(kind).attr.is_some() {
                 self.refresh_attrs(c);
             }
@@ -504,6 +526,14 @@ impl Run {
             super::rules_log::ended(self, c, kind, why);
         }
         removed
+    }
+
+    /// Some entry of `kind` is on `c`, paused or not (what removal sees).
+    fn has_present(&self, c: Creature, kind: EffectKind) -> bool {
+        match c {
+            Creature::Player(i) => self.players.get(i).is_some_and(|p| p.effects.present_kinds().contains(&kind)),
+            Creature::Monster(i) => self.monsters.get(i).is_some_and(|m| m.effects.present_kinds().contains(&kind)),
+        }
     }
 
     pub fn has_effect(&self, c: Creature, kind: EffectKind) -> bool {
@@ -552,8 +582,8 @@ impl Run {
     /// Damage ends effects that break on it (none yet).
     pub fn damage_wakes(&mut self, c: Creature) {
         let kinds = match c {
-            Creature::Player(i) => self.players[i].effects.kinds(),
-            Creature::Monster(i) => self.monsters[i].effects.kinds(),
+            Creature::Player(i) => self.players[i].effects.present_kinds(),
+            Creature::Monster(i) => self.monsters[i].effects.present_kinds(),
         };
         for k in kinds.into_iter().filter(|&k| def(k).wakes_on_damage) {
             self.remove_effect(c, k);
@@ -637,7 +667,7 @@ impl Run {
                 }
                 continue;
             }
-            let kinds = fx.kinds();
+            let kinds = fx.present_kinds();
             // Water puts out fire.
             if self.in_water(pos) {
                 for k in kinds.into_iter().filter(|&k| def(k).ends_in_water) {
@@ -676,12 +706,12 @@ impl Run {
             .players
             .iter()
             .enumerate()
-            .filter(|&(qi, q)| qi != pi && q.alive && q.effects.kinds().into_iter().any(|k| def(k).wakes_on_use))
+            .filter(|&(qi, q)| qi != pi && q.alive && q.effects.present_kinds().into_iter().any(|k| def(k).wakes_on_use))
             .map(|(qi, q)| (qi, q.pos().dist(at) - 2.0 * PLAYER_RADIUS))
             .filter(|&(_, gap)| gap <= USE_REACH)
             .min_by(|a, b| a.1.total_cmp(&b.1));
         let Some((qi, _)) = near else { return false };
-        for k in self.players[qi].effects.kinds().into_iter().filter(|&k| def(k).wakes_on_use) {
+        for k in self.players[qi].effects.present_kinds().into_iter().filter(|&k| def(k).wakes_on_use) {
             self.remove_effect(Creature::Player(qi), k);
         }
         true
@@ -1648,12 +1678,12 @@ mod tests {
         assert!(run.apply(c, vines));
         let Creature::Monster(mi) = c else { unreachable!() };
         let fx = &run.monsters[mi].effects;
-        assert_eq!(fx.looks().collect::<Vec<_>>(), vec![(EffectKind::Entangled, EffectLook::Vines)]);
+        assert_eq!(fx.looks(), vec![(EffectKind::Entangled, EffectLook::Vines)]);
         let a = fx.list().iter().find(|a| a.kind == EffectKind::Entangled).unwrap();
         assert_eq!((a.source, a.from), (Some(hid), hpos));
         assert!(run.apply(c, Apply::plain(EffectKind::Entangled, Some(1.0))));
         let fx = &run.monsters[mi].effects;
-        assert_eq!(fx.looks().count(), 0, "a refresh takes the new look");
+        assert_eq!(fx.looks().len(), 0, "a refresh takes the new look");
         let a = fx.list().iter().find(|a| a.kind == EffectKind::Entangled).unwrap();
         assert_eq!((a.left, a.source, a.from), (2.0, Some(hid), hpos), "and keeps the longer time and the bestower");
     }
@@ -1834,6 +1864,67 @@ mod tests {
         }
         assert!(!e.list()[0].paused(false));
         assert!(e.has(EffectKind::Slowed));
+    }
+
+    /// A magical entry on `me` that starts paused (anti-magic on), added directly.
+    fn paused_magic(run: &mut crate::run::Run, k: EffectKind) {
+        let fx = &mut run.players[0].effects;
+        fx.anti_magic = true;
+        fx.add_with(k, 10.0, EffectLook::Plain, None, 0, true);
+    }
+
+    #[test]
+    fn a_paused_stronger_tier_still_blocks_its_weaker_tier() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        paused_magic(&mut run, EffectKind::Burning);
+        let (outcome, ..) = run.apply_traced(Creature::Player(0), Apply::plain(EffectKind::Singed, Some(3.0)));
+        assert_eq!(outcome, EffectOutcome::StrongerOn(EffectKind::Burning));
+    }
+
+    #[test]
+    fn the_start_event_fires_only_when_the_kind_turns_on() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let me = Creature::Player(0);
+        let starts = |run: &crate::run::Run| run.events.iter().filter(|(e, _)| matches!(e, Ev::Effect { kind: 3, on: true, .. })).count();
+        run.events.clear();
+        run.apply(me, Apply::plain(EffectKind::Slowed, Some(2.0)));
+        run.apply(me, Apply { magical: true, ..Apply::plain(EffectKind::Slowed, Some(2.0)) });
+        assert_eq!(starts(&run), 1, "the second entry of an on kind is no start");
+        assert_eq!(run.players[0].effects.list().len(), 2);
+        run.players[0].effects = Effects::default();
+        run.players[0].effects.anti_magic = true;
+        run.events.clear();
+        run.apply(me, Apply { magical: true, ..Apply::plain(EffectKind::Slowed, Some(2.0)) });
+        assert_eq!(starts(&run), 0, "an entry that starts paused is no start");
+        assert_eq!(run.players[0].effects.list().len(), 1);
+    }
+
+    #[test]
+    fn a_paused_magic_effect_is_still_removed_by_the_removal_paths() {
+        let mut run = test_run(&[ClassId::Paladin, ClassId::Wizard], BossId::Demon);
+        // Cancelling: cold thaws a paused magic Burning.
+        paused_magic(&mut run, EffectKind::Burning);
+        let (outcome, ..) = run.apply_traced(Creature::Player(0), Apply::plain(EffectKind::Chilled, Some(3.0)));
+        assert!(matches!(outcome, EffectOutcome::Cancelled { .. }), "{outcome:?}");
+        assert!(run.players[0].effects.list().is_empty());
+        // Waking: a teammate wakes a paused magic Sleep.
+        paused_magic(&mut run, EffectKind::Sleep);
+        let at = run.players[0].pos();
+        (run.players[1].mv.x, run.players[1].mv.y) = (at.x, at.y);
+        assert!(run.wake_teammate(1), "the sleeper is woken");
+        assert!(run.players[0].effects.list().is_empty(), "so it does not come back");
+    }
+
+    #[test]
+    fn looks_skip_paused_entries_and_repeat_nothing() {
+        let mut e = Effects::default();
+        e.add_with(EffectKind::Entangled, 5.0, EffectLook::Vines, None, 0, false);
+        e.add_with(EffectKind::Entangled, 5.0, EffectLook::Vines, None, 0, true);
+        assert_eq!(e.looks(), vec![(EffectKind::Entangled, EffectLook::Vines)]);
+        e.anti_magic = true;
+        assert_eq!(e.looks().len(), 1, "the plain entry's look stays");
+        e.list.retain(|a| a.magical);
+        assert_eq!(e.looks().len(), 0);
     }
 
     #[test]
