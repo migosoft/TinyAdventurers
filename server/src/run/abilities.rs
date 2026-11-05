@@ -806,7 +806,7 @@ fn use_summon(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> An
     match a.id {
         AbilityId::SummonWolf => {
             let Creature::Player(pi) = c else { unreachable!("only a hero summons the wolf") };
-            super::companion::use_ability(run, pi)
+            super::wolf::use_ability(run, pi)
         }
         AbilityId::RaiseDead | AbilityId::SummonImps => {
             let Creature::Monster(mi) = c else { unreachable!("only monsters raise minions") };
@@ -1612,7 +1612,7 @@ mod tests {
     fn targets_of_either_side() {
         let mut run = test_run(&[ClassId::ElvenRanger, ClassId::Paladin], BossId::Demon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         let spot = run.players[0].pos();
         run.monsters[wi].pos = spot + Vec2::new(10.0, 0.0);
@@ -1696,7 +1696,7 @@ mod tests {
     fn a_fireball_never_pushes_an_ally_of_its_users_side() {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         run.monsters[wi].pos = at + Vec2::new(8.0, 0.0);
@@ -2585,7 +2585,7 @@ mod tests {
         let mut run = wizard_with(AbilityId::ChainSpark, 3);
         let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
         // A wolf and a chest beside the first target.
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         let at = run.monsters[first].pos;
         run.monsters[wi].pos = at + Vec2::new(0.0, 20.0);
@@ -3012,7 +3012,7 @@ mod tests {
     fn frost_nova_does_not_reach_through_walls_or_the_wolf() {
         let mut run = wizard_secondary(AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0));
         let near = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 1000.0);
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         run.monsters[wi].pos = run.players[0].pos() + Vec2::new(0.0, 20.0);
         let wolf_hp = run.monsters[wi].hp;
@@ -3038,7 +3038,7 @@ mod tests {
         // The wolf beside the hero.
         let goblin = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
         let far = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 90.0, 1000.0);
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         run.monsters[wi].pos = run.players[0].pos() + Vec2::new(0.0, 30.0);
         let hero_id = run.players[0].id;
@@ -3287,7 +3287,7 @@ mod tests {
         run.players[1].mv.y = here.y;
         run.players[2].mv.x = here.x + 100.0;
         run.players[2].mv.y = here.y;
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         run.monsters[wi].pos = here + Vec2::new(0.0, 40.0);
         try_use(&mut run, 0, false, 1);
@@ -3351,7 +3351,7 @@ mod tests {
         assert_eq!(a.split, DamageSplit::pure(DamageType::Magical));
         let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 20.0, 1000.0);
         let doomed = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 25.0, 1.0);
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         run.monsters[wi].pos = run.players[0].pos() + Vec2::new(0.0, 15.0);
         let (wolf_hp, hero_hp, kills) = (run.monsters[wi].hp, run.players[0].hp, run.players[0].kills);
@@ -3612,7 +3612,7 @@ mod tests {
         run.monsters[wall].hp = 1000.0;
         run.monsters[wall].max_hp = 1000.0;
         assert!(!line_of_sight(&run.layout.map, run.players[0].pos(), run.monsters[wall].pos), "walled off");
-        let wolf_id = crate::run::companion::spawn_wolf(run, 0);
+        let wolf_id = crate::run::wolf::spawn_wolf(run, 0);
         let wolf = run.monster_idx(wolf_id).unwrap();
         run.monsters[wolf].pos = run.players[0].pos() + Vec2::new(-10.0, -18.0);
         vec![ok, ("wall", wall), dormant, air, hide, back, touch, air_near, dormant_near, far, ("wolf", wolf)]
@@ -3818,7 +3818,7 @@ mod tests {
         let pounce = kit.get(AbilityId::Pounce).unwrap().clone();
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         let gi = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 0.0, 100.0);
         make_bodiless(&mut run, gi);

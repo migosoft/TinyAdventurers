@@ -89,7 +89,7 @@ fn heroes_and_the_wolf_go_by_name() {
     let hero = run.players[0].id;
     let name = run.players[0].name.clone();
     assert_eq!(tag_of(&run, hero), name);
-    let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+    let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
     assert_eq!(tag_of(&run, wolf), format!("{name}'s wolf"));
     assert!(snapshot_tags(&run, &[ent(wolf, EntityKind::DireWolf), ent(hero, EntityKind::ElvenRanger)]).is_empty());
     assert_eq!(tag_of(&run, 999_999), "something");
@@ -865,7 +865,7 @@ fn kinds_of(recs: &[LogRec], kind: LineKind) -> Vec<&LogRec> {
 #[test]
 fn holy_light_logs_each_heal_with_its_source() {
     let mut run = hero_secondary(ClassId::Paladin, AbilityId::HolyLight, Attributes::default());
-    let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+    let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
     let wi = run.monster_idx(wolf).unwrap();
     run.players[0].hp = run.players[0].max_hp - 3.0;
     run.monsters[wi].hp = 1.0;
@@ -1018,7 +1018,7 @@ fn a_hero_death_names_the_killer_or_says_unseen() {
 fn chain_spark_logs_why_it_did_not_jump() {
     let mut run = wizard_with(AbilityId::ChainSpark, Attributes::new(0, 0, 0, 3, 0, 0));
     let first = goblin_near(&mut run, Some(1000.0));
-    let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+    let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
     let at = run.monsters[first].pos;
     let wi = run.monster_idx(wolf).unwrap();
     run.monsters[wi].pos = at + crate::math::Vec2::new(0.0, 20.0);
@@ -1115,7 +1115,7 @@ fn leaving_forgets_the_too_close_throttle() {
 #[test]
 fn a_ring_logs_the_ally_it_passed_over() {
     let mut run = hero_secondary(ClassId::Wizard, AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0));
-    let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+    let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
     let wi = run.monster_idx(wolf).unwrap();
     run.monsters[wi].pos = run.players[0].pos() + crate::math::Vec2::new(0.0, 20.0);
     let wolf_tag = tag_of(&run, wolf);

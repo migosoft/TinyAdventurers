@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn the_wolfs_bite_marks_the_prey() {
         let mut run = run_of(ClassId::ElvenRanger, &[]);
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         let mi = enemy(&mut run, EnemyType::OrcWarrior);
         run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None });
@@ -266,7 +266,7 @@ mod tests {
         run.monsters[w].pos = e - Vec2::new(10.0, 0.0);
         let id = run.monsters[mi].id;
         run.monsters[w].ally.as_mut().unwrap().prey = Some(id);
-        crate::run::companion::tick_wolf(&mut run, wi, 1.0 / 60.0);
+        crate::run::wolf::tick_wolf(&mut run, wi, 1.0 / 60.0);
         assert!(run.monsters[mi].wolf_bit > 1.9, "bitten: {}", run.monsters[mi].wolf_bit);
     }
 
@@ -331,7 +331,7 @@ mod tests {
     #[test]
     fn effect_ticks_and_the_wolf_get_no_keystone() {
         let mut run = run_of(ClassId::ElvenRanger, &[NodeId::ED4]);
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let mi = enemy(&mut run, EnemyType::OrcWarrior);
         run.monsters[mi].effects.add(EffectKind::Poisoned, 4.0);
         let hero = run.players[0].id;

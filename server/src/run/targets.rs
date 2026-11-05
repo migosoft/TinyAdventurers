@@ -205,7 +205,7 @@ mod tests {
     fn fixture() -> (Run, usize, usize, usize) {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         let spot = run.players[0].pos();
         run.monsters[wi].pos = spot + Vec2::new(-30.0, 0.0);

@@ -95,7 +95,7 @@ fn sum(mut xs: Vec<f64>) -> f64 {
 }
 
 /// The shortest cooldown mods can give an ability (three ticks at 60 Hz), so `CooldownAdd` never
-/// drives it to 0 or below (`companion::wolf_died` divides by it, too).
+/// drives it to 0 or below (`wolf::wolf_died` divides by it, too).
 pub const MIN_COOLDOWN: f64 = 0.05;
 
 /// `r` with a version's mods.

@@ -340,7 +340,7 @@ mod tests {
         assert!(m.effects.has(EffectKind::Invisible));
         assert!((m.invis_cd - 5.0).abs() < 1e-9);
         // The Ranger's wolf is never picked, even when it is the nearest creature.
-        let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         run.monsters[wi].pos = here + Vec2::new(5.0, 0.0);
         let far_mi = run.monster_idx(far).unwrap();

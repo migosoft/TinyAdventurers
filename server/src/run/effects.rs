@@ -1622,7 +1622,7 @@ mod tests {
     fn elves_and_the_wolf_stay_immune_to_sleep() {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         run.monsters.retain(|m| m.is_boss);
-        let id = crate::run::companion::spawn_wolf(&mut run, 0);
+        let id = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(id).unwrap();
         run.hurt_player(0, Damage::physical(0.0).with_effect(lich_sleep()));
         assert!(!run.has_effect(Creature::Player(0), EffectKind::Sleep), "the elf");
@@ -2247,7 +2247,7 @@ mod tests {
             run.spawn_enemy(t, at, None);
         }
         run.players[0].sheet.wolf = WolfMods { hp_mul: 1.5, ..WolfMods::NONE };
-        crate::run::companion::spawn_wolf(&mut run, 0);
+        crate::run::wolf::spawn_wolf(&mut run, 0);
         assert!(run.monsters.iter().any(|m| m.is_boss));
         for m in &run.monsters {
             let n = monster_numbers(&m.base, Attributes::default(), &[]);

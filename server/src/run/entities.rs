@@ -195,7 +195,7 @@ pub struct MonsterDash {
     pub attack: bool,
 }
 
-/// What makes a monster an ally of the heroes (the Ranger's wolf; run/companion.rs).
+/// What makes a monster an ally of the heroes (the Ranger's wolf; run/wolf.rs).
 #[derive(Debug, Clone)]
 pub struct Ally {
     /// The ranger's player id.

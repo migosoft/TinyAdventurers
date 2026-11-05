@@ -1,4 +1,4 @@
-//! The Elven Ranger's wolf: the numbers of an ally monster (run/companion.rs).
+//! The Elven Ranger's wolf: the numbers of an ally monster (run/wolf.rs).
 
 use super::attributes::Attributes;
 use super::damage::{DamageType::Cold, Resistances};

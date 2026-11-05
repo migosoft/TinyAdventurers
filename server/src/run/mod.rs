@@ -4,7 +4,6 @@ pub mod abilities;
 pub mod ai;
 pub mod ambush;
 pub mod bosses;
-pub mod companion;
 pub mod debug;
 pub mod effects;
 pub mod entities;
@@ -18,6 +17,7 @@ pub mod perception;
 pub mod rules_log;
 pub mod targets;
 pub mod visibility;
+pub mod wolf;
 
 use crate::collision::MoveState;
 use crate::defs::damage::{kind_split, resolve_parts, Damage, DamageSplit, DamageType, What, Why};
@@ -452,7 +452,7 @@ impl Run {
         for pi in 0..self.players.len() {
             self.step_player(pi);
         }
-        companion::vanish_orphans(self);
+        wolf::vanish_orphans(self);
         self.touch_chests();
         self.refresh_lights(); // the AI perceives by the lights of this tick
 
@@ -489,7 +489,7 @@ impl Run {
                 continue;
             }
             if m.ally.is_some() {
-                companion::tick_wolf(self, mi, DT);
+                wolf::tick_wolf(self, mi, DT);
                 continue;
             }
             if self.layout.map.blocks_at(m.pos, m.mover) {
@@ -693,7 +693,7 @@ impl Run {
         if let Some(a) = m.ally.as_mut() {
             if tile == Tile::Chasm as u8 && pounce_ready {
                 m.knock = Vec2::ZERO;
-                companion::dash_back(self, mi);
+                wolf::dash_back(self, mi);
                 return;
             }
             if self.layout.map.safe(tx, ty) {
@@ -1226,7 +1226,7 @@ impl Run {
             return;
         }
         if m.ally.is_some() {
-            companion::wolf_died(self, mi);
+            wolf::wolf_died(self, mi);
             return;
         }
         m.alive = false;
@@ -1462,7 +1462,7 @@ pub mod tests {
             assert_eq!(m.attrs, block.attrs, "{:?}", m.kind);
         }
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
-        let id = companion::spawn_wolf(&mut run, 0);
+        let id = wolf::spawn_wolf(&mut run, 0);
         let w = run.monsters.iter().find(|m| m.id == id).unwrap();
         assert_eq!(w.weight, WOLF_WEIGHT);
         assert_eq!(w.attrs, WOLF_ATTRS);
