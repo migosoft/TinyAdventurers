@@ -601,8 +601,8 @@ mod kit_pins {
             (Shade, Touch, Pin { damage: 8.75, cooldown: 0.8333333333333334, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Shade, Vanish, Pin { damage: 0.0, cooldown: 13.333333333333334, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.0, push: 0.0 }),
             (Ogre, Strike, Pin { damage: 18.0, cooldown: 2.0, range: 32.0, speed: 0.0, radius: 0.0, windup: 0.5, push: 28.0 }),
-            (Knight, Strike, Pin { damage: 13.09090909090909, cooldown: 0.8333333333333334, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
             (Ogre, GroundSlam, Pin { damage: 21.599999999999998, cooldown: 7.5, range: 32.0, speed: 0.0, radius: 34.0, windup: 1.0, push: 28.0 }),
+            (Knight, Strike, Pin { damage: 13.09090909090909, cooldown: 0.8333333333333334, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
         ];
         let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
         for t in EnemyType::ALL {
