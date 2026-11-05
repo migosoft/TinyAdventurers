@@ -103,7 +103,7 @@ export function unpackSnap(w: SnapW): Snapshot {
   return {
     tick,
     ack,
-    ents: ents.map((e): EntSnap => [e[0], e[1], pos(e[2]), pos(e[3]), e[4], e[5], angle(e[6]), e[7], e[8], e[9], e[10]]),
+    ents: ents.map((e): EntSnap => [e[0], e[1], pos(e[2]), pos(e[3]), e[4], e[5], angle(e[6]), e[7], e[8], e[9], e[10], e[11]]),
     me: {
       alive: me[0],
       hp: me[1],

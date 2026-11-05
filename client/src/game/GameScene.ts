@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ABILITIES, ANIM, CLASSES, CONST, EFFECT, ENEMY_KINDS, FLAG, HITBOX, KIND, TILE_ID } from '../generated/defs';
+import { ABILITIES, ANIM, CLASSES, CONST, EFFECT, ENEMY_KINDS, FLAG, HITBOX, KIND, SIDE, TILE_ID } from '../generated/defs';
 import type { ClassId } from '../generated/ClassId';
 import type { Ev } from '../generated/Ev';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
@@ -12,7 +12,7 @@ import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Disabled, Hud } from '../ui/hud';
 import { MARK_TTL, Marks, skimsTerrain, splashes } from './anim/entityAlpha';
-import { FIGURES, PROJECTILES, heroWeapons, isAllyKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
+import { FIGURES, PROJECTILES, heroWeapons, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
 import { BarrelView } from './barrel';
@@ -35,7 +35,9 @@ import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { RulesLog } from '../rulesLog';
 import { KeyCap } from './keycap';
-import { critLabel, WORLD_TEXT } from './worldText';
+import { pickUseHint } from './useHint';
+import { FONT_TEXT } from '../fonts';
+import { critLabel, smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
 import { abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, Interpolator, Predictor, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
 
@@ -121,6 +123,8 @@ export class GameScene extends Phaser.Scene {
   private bars!: Phaser.GameObjects.Graphics;
   /** HP bars over heroes: under the darkness, so they vanish with their hero. */
   private heroBars!: Phaser.GameObjects.Graphics;
+  /** The names over the bars of neutral and recruited monsters, by entity id. */
+  private barLabels = new Map<number, Phaser.GameObjects.Text>();
   private beams!: Phaser.GameObjects.Graphics;
   /** The lich's stone gaze: a grey line from its eyes to the target hero. */
   private gaze!: Phaser.GameObjects.Graphics;
@@ -295,6 +299,8 @@ export class GameScene extends Phaser.Scene {
     this.cove = null;
     this.rulesLog.destroy();
     this.useHint.destroy();
+    for (const t of this.barLabels.values()) t.destroy();
+    this.barLabels.clear();
     for (const v of this.views.values()) v.destroy();
     this.views.clear();
     this.reappearing.clear();
@@ -598,7 +604,7 @@ export class GameScene extends Phaser.Scene {
       // A closed chest is struck like the hidden mimic it may be.
       if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= reach;
       // A flying dragon is out of reach.
-      return !isPlayerKind(e.kind) && !isAllyKind(e.kind) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
+      return !isPlayerKind(e.kind) && e.side === SIDE.Hostile && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
     });
   }
 
@@ -841,7 +847,7 @@ export class GameScene extends Phaser.Scene {
     // Own figure is always drawn from prediction.
     if (!seen.has(this.info.you) && this.alive) {
       seen.add(this.info.you);
-      this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: this.myEffects(), entangled: lookOf(this.lastSnap?.looks ?? [], this.info.you, EFFECT.Entangled) }, dt, px, py, now);
+      this.drawFigure({ id: this.info.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: this.myEffects(), side: SIDE.Friendly, entangled: lookOf(this.lastSnap?.looks ?? [], this.info.you, EFFECT.Entangled) }, dt, px, py, now);
     }
     this.reappearing.prune(now);
     this.vanishing.prune(now);
@@ -862,25 +868,9 @@ export class GameScene extends Phaser.Scene {
     // only the own hero, and only while it plays (not dead or spectating); teammates get no silhouette
     this.cove?.update(now, this.alive && this.spectating === null ? this.views.get(this.info.you)?.bodyLook() ?? null : null);
 
-    let hint: EntState | null = null;
-    let wake = false;
-    if (this.alive && !this.pred.noAct && !this.pred.sinking) {
-      let best = Infinity;
-      // A sleeping teammate in reach is woken first (like the server), the nearest one.
-      for (const e of this.ents.values()) {
-        if (e.id === this.info.you || !isPlayerKind(e.kind) || e.flags & FLAG.DEAD || !has(e.effects, EFFECT.Sleep)) continue;
-        const gap = Math.hypot(e.x - px, e.y - py) - 2 * CONST.PLAYER_RADIUS;
-        if (gap <= CONST.USE_REACH && gap < best) (best = gap), (hint = e), (wake = true);
-      }
-      for (const e of this.ents.values()) {
-        if (wake) break;
-        if (!((e.kind === KIND.Barrel && e.anim < 2) || e.kind === KIND.Torch)) continue;
-        const gap = Math.hypot(e.x - px, e.y - py) - (e.kind === KIND.Torch ? CONST.TORCH_RADIUS : CONST.BARREL_RADIUS) - CONST.PLAYER_RADIUS;
-        if (gap <= CONST.USE_REACH && gap < best) (best = gap), (hint = e);
-      }
-    }
+    const hint = this.alive && !this.pred.noAct && !this.pred.sinking ? pickUseHint(this.ents.values(), this.info.you, px, py) : null;
     this.hud.setAsleep(this.alive && has(this.myEffects(), EFFECT.Sleep));
-    if (hint) this.useHint.set(wake ? 'Wake' : null, Math.round(hint.x), Math.round(hint.y - 26));
+    if (hint) this.useHint.set(hint.label, Math.round(hint.ent.x), Math.round(hint.ent.y - 26));
     else this.useHint.hide();
 
     this.updateCosmetics(dt, myShots, now);
@@ -1171,21 +1161,35 @@ export class GameScene extends Phaser.Scene {
   private drawBarsAndBeams(now: number): void {
     this.bars.clear();
     this.heroBars.clear();
+    const labelled = new Set<number>();
     for (const e of this.ents.values()) {
       if (isProjectileKind(e.kind) || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
-      // The ogre (mini-boss) always shows a wide bar; others only once hurt.
+      // Neutral and recruited creatures (not the wolf) always show their bar and name; the ogre (mini-boss)
+      // always shows a wide bar; others only once hurt.
       const ogre = e.kind === KIND.Ogre;
-      if (e.hp >= 1 && !ogre) continue;
+      const named = e.side !== SIDE.Hostile && e.kind !== KIND.DireWolf && !isPlayerKind(e.kind);
+      if (e.hp >= 1 && !ogre && !named) continue;
       const v = this.views.get(e.id) ?? this.mimicViews.get(e.id);
       if (!v) continue;
       const w = ogre ? 28 : 12;
       const x = Math.round(e.x - w / 2);
       const y = Math.round(e.y - v.height - 3);
-      const hero = isPlayerKind(e.kind) || isAllyKind(e.kind);
+      const hero = isPlayerKind(e.kind) || e.side === SIDE.Friendly;
       const g = hero ? this.heroBars : this.bars;
       g.fillStyle(0x140c1a, 1).fillRect(x - 1, y - 1, w + 2, 4);
-      g.fillStyle(hero ? 0x40d060 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);
+      g.fillStyle(hero ? 0x40d060 : e.side === SIDE.Neutral ? 0x8a9ab8 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);
+      const name = named ? FIGURES[e.kind]?.label : undefined;
+      if (name) {
+        let t = this.barLabels.get(e.id);
+        if (!t) {
+          t = smoothText(this.add.text(0, 0, name, { fontFamily: FONT_TEXT, fontStyle: WORLD_TEXT.tag.style, fontSize: `${WORLD_TEXT.tag.size}px`, resolution: TEXT_RESOLUTION }).setOrigin(0.5, 1));
+          this.barLabels.set(e.id, t);
+        }
+        t.setColor(hero ? '#7fe08a' : '#b8c4d8').setDepth(hero ? DEPTH.heroBars : DEPTH.enemyBars).setPosition(Math.round(e.x), y - 2);
+        labelled.add(e.id);
+      }
     }
+    for (const [id, t] of this.barLabels) if (!labelled.has(id)) (t.destroy(), this.barLabels.delete(id));
     // Lich draining its disciples: red shimmering energy flowing to the lich.
     // The server sends both ends even when they are out of view (`drain`), and
     // the beams are drawn above the fog; a lich in view uses its smooth position.

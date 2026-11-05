@@ -78,6 +78,12 @@ export const FLAG = {
   "INCORPOREAL": 128
 } as const;
 
+export const SIDE = {
+  "Friendly": 2,
+  "Hostile": 1,
+  "Neutral": 0
+} as const;
+
 export const TILE_ID = {
   "Chasm": 7,
   "DeepWater": 6,

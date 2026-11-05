@@ -2,8 +2,9 @@
 
 /**
  * Compact entity state, serialized as an array:
- * `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra, effects]`.
+ * `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra, effects, side]`.
  * `extra` for projectiles is `(owner_id << 16) | shot_id`.
  * `effects`: bitmask of `EffectKind` ids (creatures only).
+ * `side`: a `Side` (0 Neutral, 1 Hostile, 2 Friendly) for creatures, 0 for everything else.
  */
-export type EntSnap = [number, number, number, number, number, number, number, number, number, number, number];
+export type EntSnap = [number, number, number, number, number, number, number, number, number, number, number, number];

@@ -223,12 +223,13 @@ pub struct LightInfo(pub u32, pub u8, pub u32, pub u16, pub u16, pub bool);
 pub struct MovingLight(pub f32, pub f32, pub u8, pub Option<u32>);
 
 /// Compact entity state, serialized as an array:
-/// `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra, effects]`.
+/// `[id, kind, x, y, hp(0-255), anim, aim, anim_ms, flags, extra, effects, side]`.
 /// `extra` for projectiles is `(owner_id << 16) | shot_id`.
 /// `effects`: bitmask of `EffectKind` ids (creatures only).
+/// `side`: a `Side` (0 Neutral, 1 Hostile, 2 Friendly) for creatures, 0 for everything else.
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
-pub struct EntSnap(pub u32, pub u8, pub f32, pub f32, pub u8, pub u8, pub f32, pub u16, pub u8, pub u32, pub u32);
+pub struct EntSnap(pub u32, pub u8, pub f32, pub f32, pub u8, pub u8, pub f32, pub u16, pub u8, pub u32, pub u32, pub u8);
 
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]

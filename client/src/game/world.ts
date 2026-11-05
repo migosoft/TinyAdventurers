@@ -22,6 +22,8 @@ export interface EntState {
   flags: number;
   extra: number;
   effects: number;
+  /** A `SIDE` value: Neutral (recruitable), Hostile or Friendly. */
+  side: number;
   /** The look of its Entangled effect in the same snapshot as `effects`. */
   entangled: number;
 }
@@ -111,7 +113,7 @@ export class Interpolator {
 }
 
 function toState(e: EntSnap, x: number, y: number, aim: number, looks: Snapshot['looks']): EntState {
-  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9], effects: e[10], entangled: lookOf(looks, e[0], EFFECT.Entangled) };
+  return { id: e[0], kind: e[1], x, y, hp: e[4] / 255, anim: e[5], aim, animMs: e[7], flags: e[8], extra: e[9], effects: e[10], side: e[11], entangled: lookOf(looks, e[0], EFFECT.Entangled) };
 }
 
 // ------------------------------------------------------------ abilities

@@ -1,13 +1,13 @@
-import { TAG_NAME } from '../generated/defs';
-import { isAllyKind, isPlayerKind } from '../game/anim/defs';
+import { KIND, SIDE, TAG_NAME } from '../generated/defs';
+import { FIGURES, isPlayerKind } from '../game/anim/defs';
 
 /**
  * The tag text over a figure while the log is on. A tagged entity reads "{kind} {n}" (the kind the
- * server sent, so a hidden mimic reads "Chest n"); the own hero its name; an ally "{owner}'s wolf"
+ * server sent, so a hidden mimic reads "Chest n"); the own hero its name; a Friendly creature "{owner}'s wolf"
  * (its `extra` is the owner's entity id). Teammates already show their name, so they get null.
  */
 export function tagText(
-  e: { id: number; kind: number; extra: number },
+  e: { id: number; kind: number; extra: number; side: number },
   tags: Map<number, [number, number]>,
   names: Map<number, string>,
   you?: number,
@@ -15,9 +15,9 @@ export function tagText(
   const t = tags.get(e.id);
   if (t) return `${TAG_NAME[t[0]] ?? '?'} ${t[1]}`;
   if (isPlayerKind(e.kind)) return e.id === you ? (names.get(e.id) ?? null) : null;
-  if (isAllyKind(e.kind)) {
+  if (e.side === SIDE.Friendly) {
     const owner = names.get(e.extra);
-    return owner ? `${owner}'s wolf` : null;
+    return owner ? `${owner}'s ${e.kind === KIND.DireWolf ? 'wolf' : (FIGURES[e.kind]?.label ?? 'companion').toLowerCase()}` : null;
   }
   return null;
 }

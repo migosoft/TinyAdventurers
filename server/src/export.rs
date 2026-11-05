@@ -19,6 +19,7 @@ use crate::defs::kinds::{flags, Anim, EntityKind};
 use crate::dungeon::{Map, Tile, TILE};
 use crate::fov::{Fov, PLAYER_FOV_RADIUS};
 use crate::protocol::ClassId;
+use crate::run::targets::Side;
 use crate::run::{DT, SNAPSHOT_EVERY, TICK_HZ};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -152,6 +153,7 @@ fn export_defs() {
         "IMMUNE": flags::IMMUNE,
         "HIDING": flags::HIDING, "DORMANT": flags::DORMANT, "HURT": flags::HURT, "DEAD": flags::DEAD, "AIRBORNE": flags::AIRBORNE, "INCORPOREAL": flags::INCORPOREAL,
     });
+    let side = json!({ "Neutral": Side::Neutral as u8, "Hostile": Side::Hostile as u8, "Friendly": Side::Friendly as u8 });
     let tiles = json!({
         "Void": Tile::Void as u8, "Floor": Tile::Floor as u8, "Wall": Tile::Wall as u8,
         "DoorOpen": Tile::DoorOpen as u8, "DoorClosed": Tile::DoorClosed as u8,
@@ -192,6 +194,7 @@ fn export_defs() {
          export const KIND = {} as const;\n\n\
          export const ANIM = {} as const;\n\n\
          export const FLAG = {} as const;\n\n\
+         export const SIDE = {} as const;\n\n\
          export const TILE_ID = {} as const;\n\n\
          export const CONST = {} as const;\n\n\
          export const CLASSES = {} as const;\n\n\
@@ -209,6 +212,7 @@ fn export_defs() {
         p(&json!(kinds)),
         p(&json!(anims)),
         p(&fl),
+        p(&side),
         p(&tiles),
         p(&consts),
         p(&json!(class_defs)),

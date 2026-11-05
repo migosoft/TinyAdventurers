@@ -113,7 +113,7 @@ Thanks to the artists whose work this game uses. None of them asks for credit; t
 - **0x72**: "16x16 DungeonTileset II" (CC0), https://0x72.itch.io/dungeontileset-ii. The tiles, heroes and most enemies.
 - **Natural_Privateer**: "Simple Torch Animation 16x16" (CC0), https://opengameart.org/content/simple-torch-animation-16x16. The wall torches.
 - **Superdark**: "16x16 Enchanted Forest Characters" (CC0), https://superdark.itch.io/enchanted-forest-characters. Stored in `client/assets-src/enchanted-forest/`; its wolf frames (Wolf_Idle, Wolf_Walk) are built into the atlas as the Elven Ranger's Dire Wolf (trimmed only). The other figures (gnolls, bandit, elves) are not built in yet.
-- **Superdark**: "16x16 Fantasy RPG Characters" (free for any use), https://superdark.itch.io/16x16-free-npc-pack. Stored in `client/assets-src/fantasy-npcs/` for coming figures, not built in yet.
+- **Superdark**: "16x16 Fantasy RPG Characters" (free for any use), https://superdark.itch.io/16x16-free-npc-pack. Stored in `client/assets-src/fantasy-npcs/` with its licence note; its "Knight - Standard" frames (Knight_Idle, Knight_Walk) are built into the atlas as the recruitable Knight (trimmed only). The other figures are not built in yet.
 - **LYASeeK**: "Forest creatures" (free use, no resale), https://lyaseek.itch.io/miniffanimals. Stored in `client/assets-src/forest-animals/`, not built in yet.
 
 Fonts: Inter by Rasmus Andersson and IM Fell English SC by Igino Marini, both SIL Open Font License 1.1 (files and licences in `client/public/fonts/`).

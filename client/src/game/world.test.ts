@@ -219,7 +219,7 @@ describe('cosmeticPierce', () => {
 
 describe('Interpolator looks', () => {
   it('the look follows the sampled snapshot, not the newest', () => {
-    const ent = [7, 1, 10, 10, 255, 0, 0, 0, 0, 0, 1 << EFFECT.Entangled] as EntSnap;
+    const ent = [7, 1, 10, 10, 255, 0, 0, 0, 0, 0, 1 << EFFECT.Entangled, 1] as EntSnap;
     const it = new Interpolator();
     it.push({ ...snap(1, 0, 0), ents: [ent], looks: [[7, EFFECT.Entangled, EFFECT_LOOK.Vines]] }, 0);
     // The newest snapshot no longer has the look (the entangle ended there).

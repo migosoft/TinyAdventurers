@@ -152,7 +152,7 @@ fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, gaze
         None if m.anim == Anim::Gaze => gaze,
         None => m.owner.unwrap_or(0),
     };
-    EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits())
+    EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits(), m.side as u8)
 }
 
 /// The entities hero `pi` is sent: the party and its allies always, the rest as seen
@@ -174,7 +174,7 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
             if !p.alive {
                 f |= flags::DEAD;
             }
-            EntSnap(p.id, p.kind() as u8, p.mv.x as f32, p.mv.y as f32, hp_byte(p.hp, p.max_hp), p.anim as u8, p.aim as f32, ms_since(run, p.anim_start), f, 0, p.effects.bits())
+            EntSnap(p.id, p.kind() as u8, p.mv.x as f32, p.mv.y as f32, hp_byte(p.hp, p.max_hp), p.anim as u8, p.aim as f32, ms_since(run, p.anim_start), f, 0, p.effects.bits(), p.side as u8)
         })
         .collect();
     ents.extend(run.monsters.iter().filter(|m| m.alive && m.side == Side::Friendly).map(|m| monster_snap(run, m, boss_immune, gaze)));
@@ -193,7 +193,7 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
             continue;
         }
         let extra = (pr.owner << 16) | pr.shot as u32;
-        ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra, 0));
+        ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra, 0, 0));
     }
     for o in &run.objects {
         if !object_sent(view, lights, dark, o) {
@@ -206,7 +206,7 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
             continue;
         }
         let extra = (h.life * 1000.0) as u32;
-        ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, h.radius as f32, 0, 0, extra, 0));
+        ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, h.radius as f32, 0, 0, extra, 0, 0));
     }
     ents
 }
@@ -380,6 +380,33 @@ mod tests {
         let has = |id: u32| s[2].as_array().unwrap().iter().any(|e| e[0] == id as u64);
         assert!(has(near), "a monster lit 16 tiles east is sent");
         assert!(!has(far), "one 20 tiles east is beyond the 18-tile view");
+    }
+
+    #[test]
+    fn friendly_always_sent_neutral_only_in_view() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 0.0);
+        run.lights.fill();
+        let near = Map::center_of(tx + 2, ty);
+        let far = near + Vec2::new(900.0, 0.0);
+        let knight = |run: &mut Run, at: Vec2, side: Side| {
+            let id = run.spawn_enemy(EnemyType::Knight, at, None);
+            let mi = run.monster_idx(id).unwrap();
+            run.monsters[mi].side = side;
+            id
+        };
+        let friend_far = knight(&mut run, far, Side::Friendly);
+        let neutral_far = knight(&mut run, far + Vec2::new(0.0, 40.0), Side::Neutral);
+        let neutral_near = knight(&mut run, near, Side::Neutral);
+        let orc = run.spawn_enemy(EnemyType::OrcWarrior, near + Vec2::new(0.0, 16.0), None);
+        let dark = dark_of(&run);
+        let ents = snapshot_ents(&run, 0, &run.players[0].view, &dark);
+        let side_of = |id: u32| ents.iter().find(|e| e.0 == id).map(|e| e.11);
+        assert_eq!(side_of(friend_far), Some(2), "a Friendly knight is sent from afar");
+        assert_eq!(side_of(neutral_far), None, "a Neutral one out of view is not");
+        assert_eq!(side_of(neutral_near), Some(0), "in view it is, with side 0");
+        assert_eq!(side_of(orc), Some(1), "an orc is Hostile");
+        assert_eq!(ents[0].11, run.players[0].side as u8, "a hero carries its side too");
     }
 
     #[test]
