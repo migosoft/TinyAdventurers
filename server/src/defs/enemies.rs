@@ -429,7 +429,7 @@ mod tests {
     fn every_enemy_kit_resolves() {
         for t in EnemyType::ALL {
             let d = def(t);
-            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::def(t).attrs);
+            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::def(t).attrs, &[]);
             for &id in d.abilities {
                 assert!(kit.get(id).is_some(), "{t:?} {id:?}");
             }
@@ -605,7 +605,7 @@ mod kit_pins {
         ];
         let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
         for t in EnemyType::ALL {
-            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::def(t).attrs);
+            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::def(t).attrs, &[]);
             for &id in def(t).abilities {
                 let (_, _, p) = pins.iter().find(|(pt, pid, _)| *pt == t && *pid == id).unwrap_or_else(|| panic!("{t:?} {id:?} is not pinned"));
                 let a = kit.get(id).unwrap();

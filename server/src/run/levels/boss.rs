@@ -68,7 +68,7 @@ pub fn spawn(run: &mut Run) {
         anim: Anim::Idle,
         anim_start: 0.0,
         hurt_t: 0.0,
-        kit: crate::sheet::kit_for(base.kit, &base.attrs),
+        kit: crate::sheet::kit_for(base.kit, &base.attrs, &[]),
         cds: Default::default(),
         slam: None,
         channel: None,

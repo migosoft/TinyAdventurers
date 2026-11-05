@@ -614,7 +614,7 @@ impl Run {
         let changes: Vec<(Attr, i32, i32)> = match c {
             Creature::Player(i) => {
                 let Some(p) = self.players.get_mut(i).filter(|p| p.alive) else { return };
-                let mut sheet = crate::sheet::run_sheet(p.class, &p.build, p.effects.attr_delta());
+                let mut sheet = crate::sheet::run_sheet(p.class, &p.build, p.effects.attr_delta(), &[]);
                 (sheet.light, sheet.wolf) = (p.sheet.light, p.sheet.wolf);
                 p.res = sheet.res;
                 p.max_hp = sheet.max_hp;
@@ -633,7 +633,7 @@ impl Run {
                 let delta = self.monsters.get(i).map(|m| m.effects.attr_delta());
                 let Some(m) = self.monsters.get_mut(i).filter(|m| m.alive) else { return };
                 let old = m.attrs;
-                let n = crate::sheet::monster_numbers(&m.base, delta.unwrap_or_default());
+                let n = crate::sheet::monster_numbers(&m.base, delta.unwrap_or_default(), &[]);
                 (m.attrs, m.max_hp, m.speed, m.kit) = (n.attrs, n.max_hp, n.speed, n.kit);
                 m.hp = m.hp.min(m.max_hp);
                 Attr::ALL.into_iter().map(|a| (a, old.get(a), n.attrs.get(a))).collect()
@@ -2091,7 +2091,7 @@ mod tests {
         assert!(run.monsters[mi].kit.get(AbilityId::Strike).unwrap().damage < dmg0);
         run.remove_effect(c, EffectKind::Weakened);
         let m = &run.monsters[mi];
-        let want = crate::sheet::monster_numbers(&m.base, crate::defs::attributes::Attributes::default());
+        let want = crate::sheet::monster_numbers(&m.base, crate::defs::attributes::Attributes::default(), &[]);
         assert_eq!((m.attrs, m.max_hp, m.speed), (m.base.attrs, m.base.max_hp, m.base.speed));
         assert_eq!(m.kit, want.kit);
         assert_eq!(m.kit.get(AbilityId::Strike).unwrap().damage, dmg0);
@@ -2171,7 +2171,7 @@ mod tests {
         crate::run::companion::spawn_wolf(&mut run, 0);
         assert!(run.monsters.iter().any(|m| m.is_boss));
         for m in &run.monsters {
-            let n = monster_numbers(&m.base, Attributes::default());
+            let n = monster_numbers(&m.base, Attributes::default(), &[]);
             assert_eq!(n.attrs, m.attrs, "{:?}", m.kind);
             assert_eq!(n.max_hp, m.max_hp, "{:?}", m.kind);
             assert_eq!(n.speed.to_bits(), m.speed.to_bits(), "{:?}", m.kind);

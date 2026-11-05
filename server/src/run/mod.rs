@@ -315,7 +315,7 @@ impl Run {
             anim: Anim::Idle,
             anim_start: self.time,
             hurt_t: 0.0,
-            kit: crate::sheet::kit_for(base.kit, &base.attrs),
+            kit: crate::sheet::kit_for(base.kit, &base.attrs, &[]),
             cds: Default::default(),
             slam: None,
             channel: None,

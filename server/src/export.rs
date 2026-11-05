@@ -66,13 +66,13 @@ fn export_defs() {
         })
         .collect();
     // The ogre's slam telegraph: the radius and wind-up of its Ground Slam.
-    let ogre_slam = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(enemies::EnemyType::Ogre), &crate::defs::enemies::def(enemies::EnemyType::Ogre).attrs).get(ab::AbilityId::GroundSlam).expect("the ogre slams").clone();
+    let ogre_slam = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(enemies::EnemyType::Ogre), &crate::defs::enemies::def(enemies::EnemyType::Ogre).attrs, &[]).get(ab::AbilityId::GroundSlam).expect("the ogre slams").clone();
     // The dragon's telegraphs: the numbers of the abilities in its kit.
-    let dragon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Dragon), &crate::defs::bosses::def(crate::protocol::BossId::Dragon).attrs);
+    let dragon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Dragon), &crate::defs::bosses::def(crate::protocol::BossId::Dragon).attrs, &[]);
     let dragon_ability = |id: AbilityId| dragon_kit.get(id).expect("the dragon uses it").clone();
-    let demon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Demon), &crate::defs::bosses::def(crate::protocol::BossId::Demon).attrs);
+    let demon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Demon), &crate::defs::bosses::def(crate::protocol::BossId::Demon).attrs, &[]);
     let demon_ability = |id: AbilityId| demon_kit.get(id).expect("the demon uses it").clone();
-    let lich_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Lich), &crate::defs::bosses::def(crate::protocol::BossId::Lich).attrs);
+    let lich_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Lich), &crate::defs::bosses::def(crate::protocol::BossId::Lich).attrs, &[]);
     let lich_ability = |id: AbilityId| lich_kit.get(id).expect("the lich casts it").clone();
     let mut consts = json!({
         "TILE": TILE,
