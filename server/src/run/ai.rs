@@ -556,8 +556,8 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool,
 pub fn separate_monsters(run: &mut Run) {
     let n = run.monsters.len();
     for i in 0..n {
-        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].dormant || run.monsters[i].hiding {
-            continue;
+        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].dormant || run.monsters[i].hiding || run.monsters[i].side == Side::Neutral {
+            continue; // a Neutral creature stands where it was placed
         }
         for j in 0..n {
             if i == j || !run.monsters[j].alive {

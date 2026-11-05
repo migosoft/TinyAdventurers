@@ -177,6 +177,11 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64) {
     if lost(run, mi, at, &KNIGHT_ESCORT, dt) && reappear(run, mi, at) {
         return;
     }
+    // Blown into lava: walk out first, like any monster (the enemy movers cannot move inside a pool).
+    if run.layout.map.blocks_at(run.monsters[mi].pos, run.monsters[mi].mover) {
+        ai::escape_terrain(run, mi, dt);
+        return;
+    }
     let prey = find_prey(run, mi, at, &KNIGHT_ESCORT);
     run.monsters[mi].companion.as_mut().expect("a companion").prey = prey.map(|pi| run.monsters[pi].id);
     if prey.is_some() {
@@ -646,6 +651,66 @@ mod tests {
             targeted |= run.monsters[oi].ai.target == Some(Target::Monster(kid));
         }
         assert!(targeted, "the orc attacks the recruited knight");
+    }
+
+    #[test]
+    fn a_knight_pushed_into_lava_walks_out() {
+        use crate::dungeon::Tile;
+        let mut run = knight_run();
+        let mi = knight_with(&mut run, 0);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        // A 2x2 pool: A* from inside it finds the floor around it, so `lost` does not rescue the knight.
+        for y in ty..=ty + 1 {
+            for x in tx + 2..=tx + 3 {
+                run.layout.map.set(x, y, Tile::Lava);
+            }
+        }
+        run.monsters[mi].pos = Map::center_of(tx + 2, ty);
+        let id = run.monsters[mi].id;
+        for _ in 0..180 {
+            run.step();
+        }
+        let k = run.monsters.iter().find(|m| m.id == id).filter(|m| m.alive).expect("it did not burn to death");
+        assert!(!run.layout.map.blocks_at(k.pos, k.mover), "it stands on ground again: {:?}", k.pos);
+    }
+
+    #[test]
+    fn heal_reaches_a_recruited_knight_and_fireball_spares_it() {
+        let mut run = knight_run();
+        let mi = knight_with(&mut run, 0);
+        let hp = run.monsters[mi].max_hp;
+        run.monsters[mi].hp = hp / 2.0;
+        // Hero 1 (Paladin) casts Holy Light beside the knight.
+        let at = run.players[0].pos();
+        run.players[1].mv.x = at.x;
+        run.players[1].mv.y = at.y;
+        let seq = run.players[1].ack + 1;
+        run.players[1].inputs.push_back(crate::protocol::InputMsg { seq, secondary: Some(1), ..Default::default() });
+        run.step();
+        assert!(run.monsters[mi].hp > hp / 2.0, "Holy Light healed the knight: {}", run.monsters[mi].hp);
+        // Hero 0 (Wizard) fireballs at the knight.
+        let full = run.monsters[mi].max_hp;
+        run.monsters[mi].hp = full;
+        let kp = run.monsters[mi].pos;
+        let d = kp.dist(run.players[0].pos());
+        let seq = run.players[0].ack + 1;
+        run.players[0].inputs.push_back(crate::protocol::InputMsg { seq, aim: 0.0, aim_dist: d as f32, secondary: Some(1), ..Default::default() });
+        for _ in 0..60 {
+            run.step();
+        }
+        assert!(run.monsters[mi].hp >= full, "the Fireball did not hurt the knight");
+    }
+
+    #[test]
+    fn the_neutral_knight_is_not_nudged_by_a_hostile_overlap() {
+        let mut run = knight_run();
+        let ki = neutral_knight(&mut run, 40.0);
+        let pos = run.monsters[ki].pos;
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, pos + Vec2::new(3.0, 0.0), None);
+        let oi = run.monster_idx(id).unwrap();
+        run.monsters[oi].ai.hold = 1e9;
+        run.step();
+        assert_eq!(run.monsters[ki].pos, pos, "a Neutral creature stands where it was placed");
     }
 
     #[test]
