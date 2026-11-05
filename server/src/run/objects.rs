@@ -2,6 +2,7 @@
 //! monsters (chests, barrels; later torches, levers, the carriage). One list,
 //! one snapshot encoding, one damage path (`hurt_object`) and one use path.
 
+use super::targets::Side;
 use super::Run;
 use crate::defs::damage::{resolve, Damage, Resistances};
 use crate::defs::kinds::EntityKind;
@@ -347,7 +348,7 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
     let monsters: Vec<usize> = (0..run.monsters.len())
         .filter(|&i| {
             let m = &run.monsters[i];
-            m.alive && !m.is_ally() && m.pos.dist(pos) < r + m.radius && line_of_sight(map, pos, m.pos)
+            m.alive && m.side == Side::Hostile && m.pos.dist(pos) < r + m.radius && line_of_sight(map, pos, m.pos)
         })
         .collect();
     let barrels: Vec<usize> = (0..run.objects.len())

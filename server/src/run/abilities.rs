@@ -112,7 +112,7 @@ pub fn melee_targets(run: &Run, pi: usize, split: &DamageSplit) -> Vec<MeleeTarg
         .monsters
         .iter()
         .enumerate()
-        .filter(|&(i, m)| m.alive && !m.airborne && !m.is_ally() && !run.passes_through(Creature::Monster(i), split))
+        .filter(|&(i, m)| m.alive && !m.airborne && m.side == Side::Hostile && !run.passes_through(Creature::Monster(i), split))
         .map(|(i, m)| (MeleeTarget::Monster(i), m.pos_ago(rw).dist(pos) - m.radius));
     let chests = run
         .objects
@@ -549,7 +549,7 @@ pub fn tick_channel(run: &mut Run, mi: usize, dt: f64) {
 /// Every living hero and ally (the wolf) within `radius` of `pos`, the user included.
 fn party_around(run: &Run, pos: Vec2, radius: f64) -> Vec<Creature> {
     let heroes = run.players.iter().enumerate().filter(|(_, q)| q.alive && q.pos().dist(pos) <= radius).map(|(qi, _)| Creature::Player(qi));
-    let allies = run.monsters.iter().enumerate().filter(|(_, m)| m.is_ally() && m.alive && m.pos.dist(pos) <= radius).map(|(mi, _)| Creature::Monster(mi));
+    let allies = run.monsters.iter().enumerate().filter(|(_, m)| m.side == Side::Friendly && m.alive && m.pos.dist(pos) <= radius).map(|(mi, _)| Creature::Monster(mi));
     heroes.chain(allies).collect()
 }
 
@@ -703,7 +703,7 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
             }
             for mi in 0..run.monsters.len() {
                 let m = &run.monsters[mi];
-                if m.is_ally() && m.alive && m.pos.dist(pos) <= a.radius {
+                if m.side == Side::Friendly && m.alive && m.pos.dist(pos) <= a.radius {
                     total += run.heal_monster(mi, a.damage, by);
                 }
             }
@@ -754,8 +754,9 @@ fn use_ground_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) 
     debug_assert!(ab::def(a.id).shape == Shape::GroundArea);
     let (id, pos, aim, aim_dist) = (run.creature_id(c), run.creature_pos(c), aim_of(run, c), aim_dist_of(run, c));
     let side = match side(run, c) {
-        Side::Heroes => HazardSide::Heroes { owner: id },
-        Side::Monsters => HazardSide::Monsters,
+        Side::Friendly => HazardSide::Heroes { owner: id },
+        Side::Hostile => HazardSide::Monsters,
+        Side::Neutral => unreachable!("a neutral creature acts no ability"),
     };
     match a.id {
         AbilityId::Consecrate => {
@@ -872,7 +873,7 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
         .monsters
         .iter()
         .enumerate()
-        .filter(|(i, m)| m.alive && !m.airborne && !m.is_ally() && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + ab.radius && !run.passes_through(Creature::Monster(*i), &dmg.split))
+        .filter(|(i, m)| m.alive && !m.airborne && m.side == Side::Hostile && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + ab.radius && !run.passes_through(Creature::Monster(*i), &dmg.split))
         .map(|(i, m)| (i, m.id))
         .collect();
     for (mi, id) in hits {
@@ -1049,7 +1050,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             let tile = crate::dungeon::Map::tile_of(pos);
             if run.projectiles[i].explode_r == 0.0 {
                 if let Some(oi) = run.objects.iter().position(|o| matches!(o.state, crate::run::objects::ObjState::Torch { wall, .. } if wall == tile)) {
-                    let (dmg, by) = (run.projectiles[i].damage.clone(), (run.projectiles[i].side == Side::Heroes).then_some(run.projectiles[i].owner));
+                    let (dmg, by) = (run.projectiles[i].damage.clone(), (run.projectiles[i].side == Side::Friendly).then_some(run.projectiles[i].owner));
                     crate::run::objects::hurt_object(run, oi, dmg, by);
                 }
             }
@@ -1062,12 +1063,12 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             break;
         }
         let pr = &run.projectiles[i];
-        let target = if pr.side == Side::Heroes {
+        let target = if pr.side == Side::Friendly {
             // A bodiless creature that resists the shot fully is flown through.
             run.monsters
                 .iter()
                 .enumerate()
-                .position(|(mi, m)| m.alive && !m.is_ally() && !pr.hit.contains(&m.id) && m.shot_dist(pos) < m.radius + pr.radius && !run.passes_through(Creature::Monster(mi), &pr.damage.split))
+                .position(|(mi, m)| m.alive && m.side == Side::Hostile && !pr.hit.contains(&m.id) && m.shot_dist(pos) < m.radius + pr.radius && !run.passes_through(Creature::Monster(mi), &pr.damage.split))
                 .map(Creature::Monster)
         } else {
             // Heroes first, then allies.
@@ -1075,7 +1076,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             let ally = || {
                 run.monsters
                     .iter()
-                    .position(|m| m.is_ally() && m.alive && m.sinking.is_none() && !pr.hit.contains(&m.id) && m.shot_dist(pos) < m.radius + pr.radius)
+                    .position(|m| m.side == Side::Friendly && m.alive && m.sinking.is_none() && !pr.hit.contains(&m.id) && m.shot_dist(pos) < m.radius + pr.radius)
                     .map(Creature::Monster)
             };
             hero.or_else(ally)
@@ -1097,7 +1098,7 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
     let (side, owner, damage, crit, explode_r, k, push, push_str, pierce) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str, pr.pierce);
-    let src = if side == Side::Heroes { run.player_idx(owner) } else { None };
+    let src = if side == Side::Friendly { run.player_idx(owner) } else { None };
     if explode_r > 0.0 {
         explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str);
         return;
@@ -1111,13 +1112,13 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     // The owner may be gone by now: the shot hurts all the same, with the numbers it was spawned with.
     let by = run.player_idx(owner).map(Creature::Player).or_else(|| run.monster_idx(owner).map(Creature::Monster));
     match (c, side) {
-        (Creature::Monster(_), Side::Heroes) | (_, Side::Monsters) => match by {
+        (Creature::Monster(_), Side::Friendly) | (_, Side::Hostile) => match by {
             Some(by) => hurt(run, c, damage.clone(), crit, by),
             None => run.hurt_creature(c, damage.clone()),
         },
-        (Creature::Player(_), Side::Heroes) => {}
+        (Creature::Player(_), Side::Friendly) | (_, Side::Neutral) => {}
     }
-    if let (What::Ability(AbilityId::ChainSpark), Creature::Monster(_), Some(by @ Creature::Player(_)), Side::Heroes) = (damage.why.what, c, by, side) {
+    if let (What::Ability(AbilityId::ChainSpark), Creature::Monster(_), Some(by @ Creature::Player(_)), Side::Friendly) = (damage.why.what, c, by, side) {
         chain_jumps(run, by, c, damage);
     }
     let (id, alive) = match c {
@@ -1206,10 +1207,10 @@ fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
     pr.dead = true;
     let (side, owner, damage, crit, explode_r, k, push, push_str) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str);
     if explode_r > 0.0 {
-        let src = if side == Side::Heroes { run.player_idx(owner) } else { None };
+        let src = if side == Side::Friendly { run.player_idx(owner) } else { None };
         explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str);
     } else {
-        crate::run::objects::hurt_object(run, oi, damage, (side == Side::Heroes).then_some(owner));
+        crate::run::objects::hurt_object(run, oi, damage, (side == Side::Friendly).then_some(owner));
     }
 }
 
@@ -1218,7 +1219,7 @@ fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
 /// `push_str` against their weight, whoever shot it. It never moves a boss, an ally of the shooter's side or
 /// a mimic still hiding.
 pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src: Option<usize>, k: u8, crit: bool, push: f64, push_str: i32) {
-    let heroes = side == Side::Heroes;
+    let heroes = side == Side::Friendly;
     // The heroes see their own explosions even out of view.
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, (!heroes).then_some(pos));
     run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
@@ -1227,7 +1228,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src
             .monsters
             .iter()
             .enumerate()
-            .filter(|(i, m)| m.alive && !m.is_ally() && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos) && !run.passes_through(Creature::Monster(*i), &damage.split))
+            .filter(|(i, m)| m.alive && m.side == Side::Hostile && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos) && !run.passes_through(Creature::Monster(*i), &damage.split))
             .map(|(i, m)| (i, m.hiding))
             .collect();
         for (mi, hiding) in hits {
@@ -1622,18 +1623,18 @@ mod tests {
         let rule = targets::Rule { at: spot, reach: 40.0, plus_radius: true, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: false, skip_invisible: false, passes: None };
         let at = |c: Creature| run.creature_pos(c);
 
-        assert_eq!(side(&run, Creature::Player(0)), Side::Heroes);
-        assert_eq!(side(&run, Creature::Monster(wi)), Side::Heroes, "an ally is on the heroes' side");
-        assert_eq!(side(&run, orc), Side::Monsters);
+        assert_eq!(side(&run, Creature::Player(0)), Side::Friendly);
+        assert_eq!(side(&run, Creature::Monster(wi)), Side::Friendly, "an ally is on the heroes' side");
+        assert_eq!(side(&run, orc), Side::Hostile);
 
-        let (foes, _) = targets::select(&run, Side::Heroes, &rule, &[], false, at);
+        let (foes, _) = targets::select(&run, Side::Friendly, &rule, &[], false, at);
         assert!(foes.contains(&orc), "the heroes' foe is the enemy");
-        assert!(foes.iter().all(|&c| side(&run, c) == Side::Monsters), "never a hero or an ally: {foes:?}");
+        assert!(foes.iter().all(|&c| side(&run, c) == Side::Hostile), "never a hero or an ally: {foes:?}");
 
-        let (foes, _) = targets::select(&run, Side::Monsters, &rule, &[], false, at);
+        let (foes, _) = targets::select(&run, Side::Hostile, &rule, &[], false, at);
         assert!(foes.contains(&Creature::Player(0)) && foes.contains(&Creature::Player(1)), "both heroes");
         assert!(foes.contains(&Creature::Monster(wi)), "and the wolf");
-        assert!(!foes.contains(&orc) && foes.iter().all(|&c| side(&run, c) == Side::Heroes), "never an enemy: {foes:?}");
+        assert!(!foes.contains(&orc) && foes.iter().all(|&c| side(&run, c) == Side::Friendly), "never an enemy: {foes:?}");
     }
 
     #[test]
@@ -1641,10 +1642,10 @@ mod tests {
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
         let at = run.players[0].pos() - Vec2::new(10.0, 0.0);
         let pusher_str = 30; // above every hero's weight + 4
-        explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Monsters, None, 4, false, 20.0, pusher_str);
+        explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Hostile, None, 4, false, 20.0, pusher_str);
         assert!(run.players[0].mv.knock_vx > 0.0, "pushed east, away from the blast");
         let mut run = test_run(&[ClassId::Paladin], BossId::Dragon);
-        explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Monsters, None, 4, false, 0.0, 0);
+        explode(&mut run, at, 30.0, Damage::physical(5.0), Side::Hostile, None, 4, false, 0.0, 0);
         assert!(!run.players[0].mv.knocked(), "no knock: no push");
     }
 
@@ -1681,7 +1682,7 @@ mod tests {
         // So light that only the "hiding" rule keeps it still.
         run.monsters[mi].weight = 1.0;
         run.monsters[mi].hiding = true;
-        let boom = |run: &mut Run| explode(run, at, 38.0, Damage::physical(5.0), Side::Heroes, Some(0), 0, false, 20.0, 30);
+        let boom = |run: &mut Run| explode(run, at, 38.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 20.0, 30);
         boom(&mut run);
         assert_eq!(run.monsters[bi].knock, Vec2::ZERO, "a boss is never pushed, even by STR 30");
         assert_eq!(run.monsters[mi].knock, Vec2::ZERO, "a mimic still hiding is not moved");
@@ -1701,7 +1702,7 @@ mod tests {
         run.monsters[wi].pos = at + Vec2::new(8.0, 0.0);
         run.monsters[wi].weight = 1.0;
         let hp = run.monsters[wi].hp;
-        explode(&mut run, at, 38.0, Damage::physical(5.0), Side::Heroes, Some(0), 0, false, 20.0, 30);
+        explode(&mut run, at, 38.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 20.0, 30);
         assert_eq!((run.monsters[wi].knock, run.monsters[wi].hp), (Vec2::ZERO, hp), "the wolf is neither hurt nor pushed");
     }
 
@@ -1755,7 +1756,7 @@ mod tests {
             let id = run.spawn_enemy(t, at, None);
             let mi = run.monster_idx(id).unwrap();
             run.monsters[mi].hp = 1000.0;
-            explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Heroes, Some(0), 0, false, 0.0, 0);
+            explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Friendly, Some(0), 0, false, 0.0, 0);
             1000.0 - run.monsters[run.monster_idx(id).unwrap()].hp
         };
         // 70 % heat (demons: immune), 20 % magical (demons: 20 %), 10 % physical.
@@ -1781,7 +1782,7 @@ mod tests {
         assert!(matches!(run.events[..], [(Ev::Dmg { .. }, None)]), "damage number sent to the whole party");
         run.events.clear();
         let at = run.monsters[mi].pos;
-        explode(&mut run, at, 20.0, Damage::physical(5.0), Side::Heroes, Some(0), 0, false, 0.0, 0);
+        explode(&mut run, at, 20.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 0.0, 0);
         assert!(matches!(run.events[0], (Ev::Boom { .. }, None)), "the hero's explosion too");
         run.events.clear();
         run.hurt_monster(mi, Damage::physical(5.0), false, None);
@@ -2075,7 +2076,7 @@ mod tests {
         let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
         let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
         let id2 = run.spawn_object(EntityKind::Barrel, at, crate::run::objects::ObjState::Barrel(crate::run::objects::Barrel::new()));
-        explode(&mut run, at + Vec2::new(10.0, 0.0), 20.0, Damage::physical(5.0), Side::Heroes, Some(0), 0, false, 0.0, 0);
+        explode(&mut run, at + Vec2::new(10.0, 0.0), 20.0, Damage::physical(5.0), Side::Friendly, Some(0), 0, false, 0.0, 0);
         assert!(matches!(&run.objects.iter().find(|o| o.id == id2).unwrap().state, crate::run::objects::ObjState::Barrel(b) if b.fuse.is_some()));
     }
 
@@ -3269,7 +3270,7 @@ mod tests {
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].hp = 1000.0;
         run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
-        explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Heroes, Some(0), 0, false, 0.0, 0);
+        explode(&mut run, at, 20.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Friendly, Some(0), 0, false, 0.0, 0);
         let mi = run.monster_idx(id).unwrap();
         assert!(run.monsters[mi].hp < 1000.0, "hurt");
         assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Invisible), "and revealed");
@@ -3802,11 +3803,11 @@ mod tests {
         run.monsters[gi].effects.add(EffectKind::Invisible, 30.0);
         let at = run.monsters[gi].pos;
         let heat = Damage::new(20.0, DamageSplit::pure(DamageType::Heat));
-        explode(&mut run, at, 30.0, heat, Side::Heroes, Some(0), 0, false, 20.0, 10);
+        explode(&mut run, at, 30.0, heat, Side::Friendly, Some(0), 0, false, 20.0, 10);
         assert_eq!((run.monsters[gi].hp, run.monsters[gi].knock), (100.0, Vec2::ZERO));
         assert!(run.monsters[gi].effects.has(EffectKind::Invisible), "not revealed");
         let magic = Damage::new(20.0, DamageSplit::pure(DamageType::Magical));
-        explode(&mut run, at, 30.0, magic, Side::Heroes, Some(0), 0, false, 0.0, 10);
+        explode(&mut run, at, 30.0, magic, Side::Friendly, Some(0), 0, false, 0.0, 10);
         assert!(run.monsters[gi].hp < 100.0, "a Magical blast still hits it");
     }
 
@@ -3938,7 +3939,7 @@ mod monster_uses {
         assert!(monster_use(&mut run, mi, AbilityId::Shoot, at));
         let shot = &run.projectiles[0];
         assert_eq!(shot.damage.why.what, What::Ability(AbilityId::Shoot));
-        assert_eq!(shot.side, Side::Monsters);
+        assert_eq!(shot.side, Side::Hostile);
         let range = run.monsters[mi].kit.get(AbilityId::Shoot).unwrap().range;
         let speed = run.monsters[mi].kit.get(AbilityId::Shoot).unwrap().speed;
         assert!((shot.life - range / speed).abs() < 1e-9, "it flies its range, no further");

@@ -5,6 +5,7 @@
 //! light) needs sight only: the client keeps light state from the start info
 //! and the light events, so a torch out of sight is not worth sending.
 
+use super::targets::Side;
 use super::levels::Level;
 use super::Run;
 use crate::defs::enemies::EnemyType;
@@ -176,19 +177,19 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
             EntSnap(p.id, p.kind() as u8, p.mv.x as f32, p.mv.y as f32, hp_byte(p.hp, p.max_hp), p.anim as u8, p.aim as f32, ms_since(run, p.anim_start), f, 0, p.effects.bits())
         })
         .collect();
-    ents.extend(run.monsters.iter().filter(|m| m.alive && m.is_ally()).map(|m| monster_snap(run, m, boss_immune, gaze)));
+    ents.extend(run.monsters.iter().filter(|m| m.alive && m.side == Side::Friendly).map(|m| monster_snap(run, m, boss_immune, gaze)));
 
     let lights = &run.lights;
     for m in &run.monsters {
         // An invisible enemy is not sent at all (and so has no entry in the rules log's tags or looks).
-        if !m.alive || m.is_ally() || m.effects.has(crate::defs::effects::EffectKind::Invisible) || !seen(view, lights, dark, m.pos, m.radius) {
+        if !m.alive || m.side == Side::Friendly || m.effects.has(crate::defs::effects::EffectKind::Invisible) || !seen(view, lights, dark, m.pos, m.radius) {
             continue;
         }
         ents.push(monster_snap(run, m, boss_immune, gaze));
     }
     for pr in &run.projectiles {
         // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
-        if pr.dead || !(pr.side == super::targets::Side::Heroes || seen(view, lights, dark, pr.pos, 0.0)) {
+        if pr.dead || !(pr.side == super::targets::Side::Friendly || seen(view, lights, dark, pr.pos, 0.0)) {
             continue;
         }
         let extra = (pr.owner << 16) | pr.shot as u32;

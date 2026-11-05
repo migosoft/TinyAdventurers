@@ -412,7 +412,7 @@ mod tests {
         let ball = &run.projectiles[0];
         assert_eq!(ball.damage.why.what, What::Ability(AbilityId::Fireball));
         assert_eq!(ball.kind, EntityKind::DragonFireball, "the dragon's own ball");
-        assert_eq!((ball.side, ball.explode_k), (crate::run::targets::Side::Monsters, 4));
+        assert_eq!((ball.side, ball.explode_k), (crate::run::targets::Side::Hostile, 4));
         let attrs = run.monsters[bi].attrs;
         let expected = resolve_ability(&ab::def(AbilityId::Fireball), &attrs, &[], Body { radius: 17.0 }).unwrap();
         assert!((ball.damage.amount - expected.damage).abs() < 1e-9);

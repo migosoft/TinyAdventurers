@@ -1,5 +1,6 @@
 //! What the game hands over, kept until the snapshot: log records with who they name.
 
+use crate::run::targets::Side;
 use super::{on, Run};
 use crate::math::Vec2;
 use crate::run::effects::Creature;
@@ -71,8 +72,8 @@ pub(crate) fn seen_creature(run: &Run, c: Creature) -> Seen {
             let m = &run.monsters[i];
             // An invisible enemy is nobody's to see (like it is not in the snapshot): its records stay unsent
             // until a hit or an attack reveals it (and the record of that is made after the reveal).
-            let hidden = !m.is_ally() && m.effects.has(crate::defs::effects::EffectKind::Invisible);
-            Seen { id: m.id, pos: m.pos, radius: m.radius, party: m.is_ally(), object: false, gone: hidden }
+            let hidden = m.side != Side::Friendly && m.effects.has(crate::defs::effects::EffectKind::Invisible);
+            Seen { id: m.id, pos: m.pos, radius: m.radius, party: m.side == Side::Friendly, object: false, gone: hidden }
         }
     }
 }

@@ -1,6 +1,7 @@
 //! Status effects at run time: the timers on each creature and the only
 //! API other code uses to touch them. Data: `defs/effects.rs`.
 
+use super::targets::Side;
 use crate::defs::damage::{Damage, DamageType, Resistances, What, Why, MIN_RESISTANCE};
 use crate::dungeon::Tile;
 use crate::defs::attributes::{Attr, Attributes};
@@ -358,7 +359,7 @@ impl Run {
         let ev = Ev::Effect { id, kind: k as u8, on, look: look as u8 };
         match c {
             Creature::Player(_) => self.event_on_hero(ev, pos),
-            Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.is_ally()) => self.event_on_hero(ev, pos),
+            Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.side == Side::Friendly) => self.event_on_hero(ev, pos),
             // Invisible's own start and end are told (the client plays the vanish and the appear); no other
             // effect of an invisible monster is, as it would show where it stands.
             Creature::Monster(i) if k != EffectKind::Invisible && self.monsters.get(i).is_some_and(|m| m.effects.has(EffectKind::Invisible)) => {}
@@ -379,6 +380,10 @@ impl Run {
     ///    (a refused Frozen leaves an existing Chilled alone).
     /// True when the effect is on afterwards.
     pub fn apply(&mut self, c: Creature, a: Apply) -> bool {
+        // A Neutral monster takes no effect.
+        if matches!(c, Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.side == super::targets::Side::Neutral)) {
+            return false;
+        }
         let (outcome, duration, replaced) = self.apply_traced(c, a);
         let left = self.effect_left(c, a.kind);
         super::rules_log::effect(self, super::rules_log::EffectFacts { target: c, kind: a.kind, outcome, duration, replaced, left, origin: a.origin });

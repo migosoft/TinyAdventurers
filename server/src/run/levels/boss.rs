@@ -7,6 +7,7 @@ use crate::math::Vec2;
 use crate::protocol::{BossBar, BossId, Ev};
 use crate::run::bosses::{self, BossBehaviour};
 use crate::run::entities::*;
+use crate::run::targets::Side;
 use crate::run::{Run, END_DELAY};
 use std::collections::VecDeque;
 
@@ -90,6 +91,7 @@ pub fn spawn(run: &mut Run) {
         attrs: stats.attrs,
         weight: stats.weight,
         ally: None,
+        side: Side::Hostile,
     });
     crate::run::rules_log::spawned(run, id, d.kind);
     enc_mut(run).boss_ent = id;

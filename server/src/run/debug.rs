@@ -3,6 +3,7 @@
 //! Only in a debug run (`Run::debug`, from a debug room): every hero starts in it, and the debug messages do
 //! nothing in a normal run.
 
+use super::targets::Side;
 use super::ai::astar;
 use super::levels::Level;
 use super::effects::Creature;
@@ -86,7 +87,7 @@ impl Run {
         let found = (0..self.monsters.len())
             .filter(|&i| {
                 let m = &self.monsters[i];
-                m.alive && !m.is_ally() && m.sinking.is_none() && !m.is_boss && !m.traits.phasing && m.pos.dist(from) <= reach
+                m.alive && m.side == Side::Hostile && m.sinking.is_none() && !m.is_boss && !m.traits.phasing && m.pos.dist(from) <= reach
             })
             .min_by(|&a, &b| self.monsters[a].pos.dist(from).total_cmp(&self.monsters[b].pos.dist(from)));
         let Some(mi) = found else { return };

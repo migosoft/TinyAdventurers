@@ -2,6 +2,7 @@
 
 use super::abilities::{monster_use, monster_dash_to, monster_dash_secs, tick_monster_dash};
 use super::entities::{Ai, Ally, Monster, Windup, HISTORY_LEN};
+use super::targets::Side;
 use super::{ai, perception, Run};
 use crate::collision::{line_of_sight, walk_line};
 use crate::defs::abilities::AbilityId;
@@ -91,6 +92,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         effect_res: prof.effect_res,
         attrs: stats.attrs,
         weight: stats.weight,
+        side: Side::Friendly,
         ally: Some(Ally {
             owner,
             bite_hold: 0.0,
@@ -322,7 +324,7 @@ fn find_prey(run: &Run, mi: usize, ranger: Vec2) -> Option<usize> {
     run.monsters
         .iter()
         .enumerate()
-        .filter(|(_, e)| e.alive && !e.is_ally() && !e.dormant && !e.hiding && !e.effects.has(EffectKind::Invisible) && !e.airborne && e.sinking.is_none())
+        .filter(|(_, e)| e.alive && e.side == Side::Hostile && !e.dormant && !e.hiding && !e.effects.has(EffectKind::Invisible) && !e.airborne && e.sinking.is_none())
         // A bite that passes through the foe cannot hurt it: not worth chasing.
         .filter(|&(i, _)| !run.passes_through(super::effects::Creature::Monster(i), &bite))
         .filter(|(_, e)| {
@@ -440,7 +442,7 @@ mod tests {
     }
 
     fn wolves(run: &Run) -> Vec<&crate::run::entities::Monster> {
-        run.monsters.iter().filter(|m| m.alive && m.is_ally()).collect()
+        run.monsters.iter().filter(|m| m.alive && m.ally.is_some()).collect()
     }
 
     #[test]

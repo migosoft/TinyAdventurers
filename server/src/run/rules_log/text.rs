@@ -330,6 +330,7 @@ pub(super) fn death_unseen_head(run: &Run, target: Creature, id: u32) -> String 
 pub(super) fn skip_reason(s: Skip) -> Option<&'static str> {
     match s {
         Skip::Ally => Some("an ally"),
+        Skip::Neutral => Some("it is neutral"),
         Skip::Dormant => Some("it is dormant"),
         Skip::Airborne => Some("it is flying"),
         Skip::Bodiless => Some("it has no body"),

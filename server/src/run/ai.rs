@@ -1,6 +1,7 @@
 //! Enemy AI: perception (sight radius + line of sight), chase/attack,
 //! search last known position, return home, and A* pathfinding.
 
+use super::targets::Side;
 use super::abilities::{monster_use, tick_monster_slam};
 use super::effects::Creature;
 use super::entities::{AiState, Target, Windup};
@@ -35,7 +36,7 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
 /// Nearest living hero or ally (not sinking) the monster can see right now; a hero wins a tie.
 pub fn find_visible_foe(run: &Run, from: Vec2, sight: Sight) -> Option<Creature> {
     let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive && !run.players[i].effects.has(EffectKind::Invisible)).map(Creature::Player);
-    let allies = (0..run.monsters.len()).filter(|&i| run.monsters[i].is_ally() && run.monsters[i].alive && run.monsters[i].sinking.is_none() && !run.monsters[i].effects.has(EffectKind::Invisible)).map(Creature::Monster);
+    let allies = (0..run.monsters.len()).filter(|&i| run.monsters[i].side == Side::Friendly && run.monsters[i].alive && run.monsters[i].sinking.is_none() && !run.monsters[i].effects.has(EffectKind::Invisible)).map(Creature::Monster);
     heroes
         .chain(allies)
         .map(|c| (c, run.creature_pos(c)))

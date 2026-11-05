@@ -36,6 +36,7 @@ use crate::protocol::{encode, BossId, ClassId, ClientMsg, CoveInfo, Ev, InputMsg
 use axum::extract::ws::Message;
 use levels::Level;
 use entities::*;
+use targets::Side;
 use effects::Apply;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -197,6 +198,7 @@ impl Run {
             let id = run.alloc_id();
             run.players.push(Player {
                 id,
+                side: Side::Friendly,
                 res: sheet.res,
                 conn: m.conn,
                 tx: Some(m.tx),
@@ -338,6 +340,7 @@ impl Run {
             attrs: stats.attrs,
             weight: stats.weight,
             ally: None,
+            side: Side::Hostile,
         });
         rules_log::spawned(self, id, d.kind);
         id
@@ -481,7 +484,11 @@ impl Run {
                 ai::flee(self, mi, DT);
                 continue;
             }
-            if m.is_ally() {
+            // A Neutral monster does nothing: no AI, it stays Idle.
+            if m.side == Side::Neutral {
+                continue;
+            }
+            if m.ally.is_some() {
                 companion::tick_wolf(self, mi, DT);
                 continue;
             }
@@ -627,6 +634,9 @@ impl Run {
     /// slide, so it can end in a chasm, deep water or lava.
     pub fn knock_monster(&mut self, mi: usize, from: Vec2, dist: f64, str: i32) {
         let m = &mut self.monsters[mi];
+        if m.side == Side::Neutral {
+            return;
+        }
         let dist = push_dist(dist, str, m.weight);
         if !m.alive || m.is_boss || m.traits.knock_immune || m.airborne || m.sinking.is_some() || dist <= 0.0 {
             return;
@@ -888,7 +898,7 @@ impl Run {
         (0..self.monsters.len())
             .filter(|&mi| {
                 let m = &self.monsters[mi];
-                m.alive && !m.is_ally() && !m.hiding && !m.dormant && m.sinking.is_none() && m.pos.dist(at) < r + m.radius && crate::collision::line_of_sight(&self.layout.map, at, m.pos)
+                m.alive && m.side == Side::Hostile && !m.hiding && !m.dormant && m.sinking.is_none() && m.pos.dist(at) < r + m.radius && crate::collision::line_of_sight(&self.layout.map, at, m.pos)
             })
             .collect()
     }
@@ -1006,7 +1016,7 @@ impl Run {
     pub fn foes_in(&self, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<effects::Creature> {
         let inside = |p: Vec2| p.dist(at) <= r && cone.map_or(true, |(dir, half)| crate::math::angle_diff(at.angle_to(p), dir).abs() <= half);
         let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && inside(p.pos())).map(|(i, _)| effects::Creature::Player(i));
-        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.is_ally() && m.alive && m.sinking.is_none() && inside(m.pos)).map(|(i, _)| effects::Creature::Monster(i));
+        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.side == Side::Friendly && m.alive && m.sinking.is_none() && inside(m.pos)).map(|(i, _)| effects::Creature::Monster(i));
         heroes.chain(allies).collect()
     }
 
@@ -1014,7 +1024,7 @@ impl Run {
     pub fn foes_touching(&self, at: Vec2, r: f64, los: bool) -> Vec<effects::Creature> {
         let reach = |p: Vec2, radius: f64| p.dist(at) < r + radius && (!los || crate::collision::line_of_sight(&self.layout.map, at, p));
         let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && reach(p.pos(), classes::PLAYER_RADIUS)).map(|(i, _)| effects::Creature::Player(i));
-        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.is_ally() && m.alive && m.sinking.is_none() && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
+        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.side == Side::Friendly && m.alive && m.sinking.is_none() && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
         heroes.chain(allies).collect()
     }
 
@@ -1072,13 +1082,13 @@ impl Run {
     /// Heals monster `mi` up to its maximum; returns what it gained. Shown like a hero's heal for an ally.
     pub fn heal_monster(&mut self, mi: usize, amount: f64, by: Option<(u32, What)>) -> f64 {
         let m = &mut self.monsters[mi];
-        if !m.alive {
+        if !m.alive || m.side == Side::Neutral {
             return 0.0;
         }
         let hp_before = m.hp;
         let healed = amount.min(m.max_hp - m.hp).max(0.0);
         m.hp += healed;
-        let (pos, ally) = (m.pos, m.is_ally());
+        let (pos, ally) = (m.pos, m.side == Side::Friendly);
         if healed > 0.0 {
             let ev = Ev::Heal { x: pos.x as f32, y: pos.y as f32 - 10.0, v: healed as f32, p: ally };
             if ally {
@@ -1093,6 +1103,10 @@ impl Run {
 
     /// Returns true if the monster took damage.
     pub fn hurt_monster(&mut self, mi: usize, dmg: Damage, crit: bool, src_player: Option<usize>) -> bool {
+        // Nothing hurts a Neutral monster, not even a hit that would pass through it.
+        if self.monsters[mi].side == Side::Neutral {
+            return false;
+        }
         // One central guard: a hit a bodiless monster fully resists is no hit at all (no keystone, reveal, number or effect).
         if self.monsters[mi].alive && !dmg.from_effect && self.passes_through(effects::Creature::Monster(mi), &dmg.split) {
             return false;
@@ -1106,7 +1120,7 @@ impl Run {
             return false;
         }
         let pos = self.monsters[mi].pos;
-        let ally = self.monsters[mi].is_ally();
+        let ally = self.monsters[mi].side == Side::Friendly;
         if ally && src_player.is_some() {
             return false; // no hero attack hurts an ally
         }
@@ -1211,7 +1225,7 @@ impl Run {
         if !m.alive {
             return;
         }
-        if m.is_ally() {
+        if m.ally.is_some() {
             companion::wolf_died(self, mi);
             return;
         }

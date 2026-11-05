@@ -20,6 +20,8 @@ pub const HISTORY_LEN: usize = 32;
 
 pub struct Player {
     pub id: u32,
+    /// Always `Friendly`.
+    pub side: Side,
     pub conn: u32,
     /// Resistances (races plus adjustments; the split of its hits is its weapons', in `sheet`).
     pub res: Resistances,
@@ -281,12 +283,11 @@ pub struct Monster {
     pub weight: f64,
     /// Set for a hero's ally: no hero attack hurts it and enemies are its foes.
     pub ally: Option<Ally>,
+    /// Whom it fights for (`targets::foes`); every friend-or-foe question reads it.
+    pub side: Side,
 }
 
 impl Monster {
-    pub fn is_ally(&self) -> bool {
-        self.ally.is_some()
-    }
     /// What it sees now: its sight through its effects (blindness).
     pub fn sight_now(&self) -> Sight {
         self.effects.sight(self.sight)
