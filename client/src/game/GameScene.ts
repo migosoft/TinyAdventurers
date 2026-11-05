@@ -251,12 +251,18 @@ export class GameScene extends Phaser.Scene {
     kb.on('keydown-F7', (e: KeyboardEvent) => {
       e.preventDefault();
       if (e.repeat || !this.debugOn || !this.alive) return;
-      this.net.send({ t: 'DebugIncorporeal' });
+      // Shift+F7: your own hero's anti-magic on and off.
+      this.net.send(e.shiftKey ? { t: 'DebugAntiMagic' } : { t: 'DebugIncorporeal' });
     });
     // Debug runs only (debug accounts): put the next effect on your own hero (Blind, Sleep, Petrified, Slowed, Accelerated).
     kb.on('keydown-F8', (e: KeyboardEvent) => {
       e.preventDefault();
       if (e.repeat || !this.debugOn || !this.alive) return;
+      // Shift+F8: a Dispel on your own hero (pauses up to 3 positive effects, items or nodes for 5 s).
+      if (e.shiftKey) {
+        this.net.send({ t: 'DebugDispel' });
+        return;
+      }
       this.debugEffect = (this.debugEffect + 1) % Object.keys(EFFECT).length;
       this.net.send({ t: 'DebugEffect', kind: this.debugEffect });
     });

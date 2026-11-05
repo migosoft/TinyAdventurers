@@ -110,6 +110,10 @@ pub enum ClientMsg {
     DebugDarkvision { ratio: f32 },
     /// Debug: put an effect (EffectKind id) on your hero, in a debug run.
     DebugEffect { kind: u8 },
+    /// Debug runs only: your hero's anti-magic on or off.
+    DebugAntiMagic,
+    /// Debug runs only: a Dispel on your hero (3 positive things, 5 s).
+    DebugDispel,
     /// Debug runs only: the nearest enemy within 8 tiles becomes incorporeal.
     DebugIncorporeal,
     /// Debug, waiting room: set any ability of your class in the two slots (for a debug account, in a debug room).

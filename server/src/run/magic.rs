@@ -109,7 +109,6 @@ impl Run {
     }
 
     /// An anti-magic zone is on or off `c`: its magic is paused or back.
-    #[allow(dead_code)] // the anti-magic zones (a later task of #187) call it
     pub fn set_anti_magic(&mut self, c: Creature, on: bool) {
         self.repause(c, |fx| fx.anti_magic = on);
     }
@@ -129,7 +128,6 @@ impl Run {
     }
 
     /// A Dispel on `c`: pauses what `dispel_picks` picks for `secs`, all in one `repause`, so the events and the refresh happen once.
-    #[allow(dead_code)] // the Dispel spells (#217) call it
     pub fn dispel(&mut self, c: Creature, want: Want, n: usize, secs: f64) -> Vec<Pick> {
         let sources = self.magic_sources(c);
         let picks = match c {

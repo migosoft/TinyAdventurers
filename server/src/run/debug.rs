@@ -5,12 +5,16 @@
 
 use super::ai::astar;
 use super::levels::Level;
+use super::effects::Creature;
+use super::magic::{Pick, Want};
 use super::Run;
 use crate::collision::walk_line;
 use crate::defs::enemies::EnemyType;
+use crate::defs::{items, trees};
 use crate::dungeon::Mover;
 use crate::math::Vec2;
 use crate::protocol::{Ev, ServerMsg};
+use crate::sheet::Lasting;
 
 /// Path updates every 30 ticks (0.5 s).
 pub const PATH_EVERY: u32 = 30;
@@ -36,6 +40,36 @@ impl Run {
         self.apply(crate::run::effects::Creature::Player(pi), crate::run::effects::Apply { magical: true, ..crate::run::effects::Apply::plain(k, None) });
         let name = self.players[pi].name.clone();
         self.event(Ev::Msg { text: format!("{name}: {k:?}") }, None);
+    }
+
+    /// Debug cheat (Shift+F7): your hero's anti-magic on or off, as an anti-magic zone would do it.
+    pub fn debug_anti_magic(&mut self, pi: usize) {
+        if !self.debug || !self.players[pi].alive {
+            return;
+        }
+        let on = !self.players[pi].effects.anti_magic;
+        self.set_anti_magic(Creature::Player(pi), on);
+        let name = self.players[pi].name.clone();
+        self.event(Ev::Msg { text: format!("{name} anti-magic {}", if on { "on" } else { "off" }) }, None);
+    }
+
+    /// Debug cheat (Shift+F8): a Dispel on your hero as an enemy casts it (3 positive things, 5 s).
+    pub fn debug_dispel(&mut self, pi: usize) {
+        if !self.debug || !self.players[pi].alive {
+            return;
+        }
+        let picks = self.dispel(Creature::Player(pi), Want::Positive, 3, 5.0);
+        let names: Vec<String> = picks
+            .iter()
+            .map(|p| match p {
+                Pick::Effect(k) => format!("{k:?}"),
+                Pick::Lasting(Lasting::Item(i)) => items::def(*i).name.to_string(),
+                Pick::Lasting(Lasting::Node(n)) => trees::def(*n).name.to_string(),
+            })
+            .collect();
+        let name = self.players[pi].name.clone();
+        let what = if names.is_empty() { "nothing to pause".to_string() } else { format!("paused {}", names.join(", ")) };
+        self.event(Ev::Msg { text: format!("{name}: Dispel, {what}") }, None);
     }
 
     /// Debug cheat: the nearest living, not yet incorporeal, non-boss enemy within 8 tiles of your hero gains the
@@ -319,5 +353,46 @@ mod tests {
         run.monsters[sink].sinking = Some((1.0, crate::run::entities::Sink::Fall));
         run.debug_incorporeal(0);
         assert!(!run.monsters[sink].traits.phasing, "never a sinking one");
+    }
+    fn last_msg(run: &Run) -> String {
+        run.events.iter().rev().find_map(|(e, _)| if let Ev::Msg { text } = e { Some(text.clone()) } else { None }).unwrap_or_default()
+    }
+
+    #[test]
+    fn debug_anti_magic_only_in_debug_runs() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.debug_anti_magic(0);
+        assert!(!run.players[0].effects.anti_magic, "nothing in a normal run");
+        run.debug = true;
+        run.debug_anti_magic(0);
+        assert!(run.players[0].effects.anti_magic);
+        assert!(last_msg(&run).ends_with("anti-magic on"), "{}", last_msg(&run));
+        run.debug_anti_magic(0);
+        assert!(!run.players[0].effects.anti_magic);
+        assert!(last_msg(&run).ends_with("anti-magic off"), "{}", last_msg(&run));
+        run.players[0].alive = false;
+        run.debug_anti_magic(0);
+        assert!(!run.players[0].effects.anti_magic, "nothing while dead");
+    }
+
+    #[test]
+    fn debug_dispel_pauses_own_positive_magic() {
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.debug_effect(0, EffectKind::Accelerated as u8);
+        run.debug_dispel(0);
+        assert!(run.players[0].effects.list().iter().all(|a| a.dispel <= 0.0), "nothing in a normal run");
+        run.debug = true;
+        run.debug_effect(0, EffectKind::Accelerated as u8);
+        run.debug_dispel(0);
+        assert!(run.players[0].effects.list().iter().any(|a| a.kind == EffectKind::Accelerated && a.dispel > 0.0));
+        assert!(last_msg(&run).contains("Accelerated"), "{}", last_msg(&run));
+        run.players[0].effects = Default::default();
+        run.debug_dispel(0);
+        assert!(last_msg(&run).contains("nothing to pause"), "{}", last_msg(&run));
+        run.players[0].alive = false;
+        run.events.clear();
+        run.debug_dispel(0);
+        assert!(run.events.is_empty(), "nothing while dead");
     }
 }
