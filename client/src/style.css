@@ -798,6 +798,20 @@ kbd {
   background: linear-gradient(180deg, #1c3a24, #102016);
   box-shadow: 0 0 0 1px #48b060;
 }
+.fx.paused {
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+.effects .pchip {
+  align-self: center;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font: 600 10px/14px var(--font-text);
+  color: #b8b8b8;
+  background: #2a2a2e;
+  box-shadow: 0 0 0 1px #5a5a60;
+  text-shadow: none;
+}
 .fx .ic {
   display: block;
 }

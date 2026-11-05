@@ -8,6 +8,9 @@ import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { ServerMsg } from '../generated/ServerMsg';
 import type { Snapshot } from '../generated/Snapshot';
+import { ITEMS, TREES } from '../generated/progression';
+import type { ItemId } from '../generated/ItemId';
+import type { NodeId } from '../generated/NodeId';
 import { CooldownTracker } from './cooldown';
 import { endText } from './endText';
 import { BOSS_TEXT, className, needsText } from './text';
@@ -230,7 +233,7 @@ export class Hud {
     this.hpFill.style.width = `${pct * 100}%`;
     this.hpText.textContent = `${Math.ceil(s.me.hp)} / ${Math.round(s.me.max_hp)}`;
     this.hp.classList.toggle('low', pct < 0.3);
-    this.showEffects(s.me.effects);
+    this.showEffects(s.me.effects, s.me.paused_items, s.me.paused_nodes);
     for (const e of s.ents) {
       const row = this.party.querySelector<HTMLElement>(`[data-ent="${e[0]}"]`);
       if (!row) continue;
@@ -259,13 +262,12 @@ export class Hud {
     }
   }
 
-  /** Own effect icons with the whole seconds left; rebuilt only when kinds or seconds change. */
-  private showEffects(list: [number, number, number, boolean][]): void {
-    const rows = list.map(([k, left, amount]) => [k, Math.ceil(left), amount] as const);
-    const key = rows.map((r) => r.join(':')).join(',');
-    if (key === this.fxKey) return;
-    this.fxKey = key;
-    this.fx.innerHTML = rows.map(([k, t, amount]) => effectChipHtml(k, t, amount)).join('');
+  /** Own effect icons and paused-source chips; the DOM is rebuilt only when the markup would change. */
+  private showEffects(list: Snapshot['me']['effects'], items: ItemId[], nodes: NodeId[]): void {
+    const html = effectsHtml(list, items, nodes);
+    if (html === this.fxKey) return;
+    this.fxKey = html;
+    this.fx.innerHTML = html;
   }
 
   /** The equipped abilities changed (an Attribute drain started or ended): names, cooldowns, greyed slots. */
@@ -403,7 +405,7 @@ export function esc(s: string): string {
 export type { ClassId };
 
 /** One own-effect chip: the glyph, the whole seconds left, and for an Attribute drain the amount (`−2`) with a tooltip. */
-export function effectChipHtml(k: number, left: number, amount: number): string {
+export function effectChipHtml(k: number, left: number, amount: number, paused = false): string {
   const drain = DRAIN_TEXT[k];
   const rate = EFFECTS[k]?.cd_rate ?? 1;
   const tip = drain && amount !== 0
@@ -412,5 +414,23 @@ export function effectChipHtml(k: number, left: number, amount: number): string 
       ? ` title="cooldowns ${Math.round(Math.abs(rate - 1) * 100)} % ${rate > 1 ? 'faster' : 'slower'}"`
       : '';
   const num = amount !== 0 ? `<b>\u2212${Math.abs(amount)}</b>` : '';
-  return `<span class="fx ${EFFECTS[k]?.positive ? 'pos' : 'neg'}"${tip}>${effectIconSvg(k, 14)}${num}<i>${Math.ceil(left)}</i></span>`;
+  return `<span class="fx ${EFFECTS[k]?.positive ? 'pos' : 'neg'}${paused ? ' paused' : ''}"${tip}>${effectIconSvg(k, 14)}${num}<i>${Math.ceil(left)}</i></span>`;
+}
+
+const NODE_NAMES: Record<string, string> = {};
+for (const tree of Object.values(TREES)) for (const [id, n] of Object.entries(tree.nodes)) NODE_NAMES[id] = n.name;
+
+/**
+ * The own effect row: one icon per kind (an unpaused entry wins, with the longest time left; a kind whose entries
+ * are all paused shows greyed), then a small grey chip with the name of each paused item and node.
+ */
+export function effectsHtml(list: Snapshot['me']['effects'], items: readonly ItemId[], nodes: readonly NodeId[]): string {
+  const best = new Map<number, [number, number, boolean]>();
+  for (const [k, left, amount, paused] of list) {
+    const cur = best.get(k);
+    if (!cur || (cur[2] && !paused) || (cur[2] === paused && left > cur[0])) best.set(k, [left, amount, paused]);
+  }
+  const icons = [...best].map(([k, [left, amount, paused]]) => effectChipHtml(k, Math.ceil(left), amount, paused));
+  const chips = [...items.map((i) => ITEMS[i].name), ...nodes.map((n) => NODE_NAMES[n] ?? n)].map((n) => `<span class="pchip">${esc(n)}</span>`);
+  return icons.concat(chips).join('');
 }

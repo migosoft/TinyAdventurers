@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Hud, debugBadgeHtml, effectChipHtml, helpHtml, secondaryLabel } from './hud';
+import { Hud, debugBadgeHtml, effectChipHtml, effectsHtml, helpHtml, secondaryLabel } from './hud';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import { EFFECT } from '../generated/defs';
 import { EFFECT_ICON } from './effectIcons';
@@ -126,7 +126,7 @@ describe('Hud', () => {
     } as unknown as Parameters<Hud['startRun']>[0];
     const snap = (effects: [number, number][], bits: number) =>
       ({
-        me: { hp: 10, max_hp: 10, alive: true, effects },
+        me: { hp: 10, max_hp: 10, alive: true, effects, paused_items: [], paused_nodes: [] },
         ents: [[2, 0, 0, 0, 255, 0, 0, 0, 0, 0, bits]],
       }) as unknown as Parameters<Hud['snapshot']>[0];
     it('draws the own effect as a symbol with seconds and keeps the node while unchanged', () => {
@@ -169,6 +169,35 @@ describe('effectChipHtml', () => {
   it('names a cooldown change as a tooltip', () => {
     expect(effectChipHtml(EFFECT.Accelerated, 3, 0)).toContain('title="cooldowns 25 % faster"');
     expect(effectChipHtml(EFFECT.Slowed, 3, 0)).toContain('title="cooldowns 25 % slower"');
+  });
+});
+
+describe('effectsHtml', () => {
+  const host = (html: string) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    return d;
+  };
+  it('greys a paused entry and keeps its timer', () => {
+    const d = host(effectsHtml([[EFFECT.Accelerated, 4.2, 0, true]], [], []));
+    const fx = d.querySelectorAll('.fx');
+    expect(fx).toHaveLength(1);
+    expect(fx[0].classList.contains('paused')).toBe(true);
+    expect(fx[0].querySelector('i')!.textContent).toBe('5');
+  });
+  it('shows one unpaused icon for a kind with a paused and an unpaused entry, the longest unpaused timer', () => {
+    const d = host(effectsHtml([[EFFECT.Accelerated, 9, 0, true], [EFFECT.Accelerated, 3, 0, false], [EFFECT.Accelerated, 6, 0, false]], [], []));
+    const fx = d.querySelectorAll('.fx');
+    expect(fx).toHaveLength(1);
+    expect(fx[0].classList.contains('paused')).toBe(false);
+    expect(fx[0].querySelector('i')!.textContent).toBe('6');
+  });
+  it('shows a paused item and a paused node as grey chips with their names', () => {
+    const d = host(effectsHtml([], ['BandOfVigor'], ['PU5']));
+    expect([...d.querySelectorAll('.pchip')].map((c) => c.textContent)).toEqual(['Band of Vigor', 'Radiant']);
+  });
+  it('shows no chips when nothing is paused', () => {
+    expect(host(effectsHtml([], [], [])).querySelector('.pchip')).toBeNull();
   });
 });
 
