@@ -104,6 +104,8 @@ pub struct Effects {
     list: Vec<ActiveEffect>,
     /// An anti-magic zone is on the creature: its magical entries are paused.
     pub anti_magic: bool,
+    /// Dispel timers on lasting sources (worn items, tree nodes): each is paused for the seconds left.
+    lasting: Vec<(crate::sheet::Lasting, f64)>,
 }
 
 impl Effects {
@@ -199,6 +201,27 @@ impl Effects {
             a.from = at;
         }
     }
+    /// A Dispel pauses the lasting source `src` for `secs` (the longer of the time left and `secs`).
+    #[allow(dead_code)] // the anti-magic zones and Dispel (later tasks of #187) call it
+    pub fn dispel_lasting(&mut self, src: crate::sheet::Lasting, secs: f64) {
+        match self.lasting.iter_mut().find(|(l, _)| *l == src) {
+            Some(t) => t.1 = t.1.max(secs),
+            None => self.lasting.push((src, secs)),
+        }
+    }
+    /// A Dispel pauses the magical entry of `k` for `secs`. False when there is none.
+    #[allow(dead_code)] // the anti-magic zones and Dispel (later tasks of #187) call it
+    pub fn dispel_effect(&mut self, k: EffectKind, secs: f64) -> bool {
+        let Some(a) = self.list.iter_mut().find(|a| a.kind == k && a.magical) else { return false };
+        a.dispel = a.dispel.max(secs);
+        true
+    }
+    /// The lasting sources a Dispel pauses now.
+    pub fn dispelled(&self) -> Vec<crate::sheet::Lasting> {
+        let mut v: Vec<_> = self.lasting.iter().filter(|t| t.1 > 0.0).map(|t| t.0).collect();
+        v.sort();
+        v
+    }
     /// Removes every entry of `k`.
     pub fn remove(&mut self, k: EffectKind) -> bool {
         let n = self.list.len();
@@ -235,10 +258,15 @@ impl Effects {
             }
         }
         self.list.retain(|a| a.left > 1e-9);
+        for t in &mut self.lasting {
+            t.1 -= dt;
+        }
+        self.lasting.retain(|t| t.1 > 1e-9);
         gone.retain(|&k| !self.list.iter().any(|a| a.kind == k));
         (gone, hits)
     }
     fn take_all(&mut self) -> Vec<EffectKind> {
+        self.lasting.clear();
         let mut kinds: Vec<EffectKind> = Vec::new();
         for a in std::mem::take(&mut self.list) {
             if !kinds.contains(&a.kind) {
@@ -308,7 +336,7 @@ pub enum Creature {
 }
 
 impl Run {
-    fn creature(&mut self, c: Creature) -> Option<(&mut Effects, u32, crate::math::Vec2, bool)> {
+    pub(super) fn creature(&mut self, c: Creature) -> Option<(&mut Effects, u32, crate::math::Vec2, bool)> {
         match c {
             Creature::Player(i) => {
                 let p = self.players.get_mut(i)?;
@@ -324,7 +352,7 @@ impl Run {
         }
     }
 
-    fn effect_event(&mut self, c: Creature, id: u32, pos: crate::math::Vec2, k: EffectKind, on: bool, look: EffectLook) {
+    pub(super) fn effect_event(&mut self, c: Creature, id: u32, pos: crate::math::Vec2, k: EffectKind, on: bool, look: EffectLook) {
         let ev = Ev::Effect { id, kind: k as u8, on, look: look as u8 };
         match c {
             Creature::Player(_) => self.event_on_hero(ev, pos),
@@ -611,11 +639,16 @@ impl Run {
     /// below 1, so a drain does not kill; when the drain ends the maximum comes back and HP does not. Nothing for
     /// the dead. The rules log gets a line per changed Attribute, and a hero whose speed or abilities changed is told.
     pub fn refresh_attrs(&mut self, c: Creature) {
+        let muted = self.muted_list(c);
+        let mut light_swap = None;
         let changes: Vec<(Attr, i32, i32)> = match c {
             Creature::Player(i) => {
                 let Some(p) = self.players.get_mut(i).filter(|p| p.alive) else { return };
-                let mut sheet = crate::sheet::run_sheet(p.class, &p.build, p.effects.attr_delta(), &[]);
-                (sheet.light, sheet.wolf) = (p.sheet.light, p.sheet.wolf);
+                let mut sheet = crate::sheet::run_sheet(p.class, &p.build, p.effects.attr_delta(), &muted);
+                sheet.wolf = p.sheet.wolf;
+                if sheet.light != p.sheet.light {
+                    light_swap = Some((p.id, p.sheet.light, sheet.light));
+                }
                 p.res = sheet.res;
                 p.max_hp = sheet.max_hp;
                 p.hp = p.hp.min(p.max_hp);
@@ -633,12 +666,15 @@ impl Run {
                 let delta = self.monsters.get(i).map(|m| m.effects.attr_delta());
                 let Some(m) = self.monsters.get_mut(i).filter(|m| m.alive) else { return };
                 let old = m.attrs;
-                let n = crate::sheet::monster_numbers(&m.base, delta.unwrap_or_default(), &[]);
+                let n = crate::sheet::monster_numbers(&m.base, delta.unwrap_or_default(), &muted);
                 (m.attrs, m.max_hp, m.speed, m.kit) = (n.attrs, n.max_hp, n.speed, n.kit);
                 m.hp = m.hp.min(m.max_hp);
                 Attr::ALL.into_iter().map(|a| (a, old.get(a), n.attrs.get(a))).collect()
             }
         };
+        if let Some((id, old, new)) = light_swap {
+            self.swap_entity_light(id, old, new);
+        }
         let changes: Vec<(Attr, i32, i32)> = changes.into_iter().filter(|&(_, old, new)| old != new).collect();
         super::rules_log::attrs_changed(self, c, &changes);
     }
@@ -653,7 +689,7 @@ impl Run {
         let all = (0..n.0).map(Creature::Player).chain((0..n.1).map(Creature::Monster));
         for c in all.collect::<Vec<_>>() {
             let Some((fx, id, pos, ok)) = self.creature(c) else { continue };
-            if fx.list().is_empty() {
+            if fx.list().is_empty() && fx.dispelled().is_empty() {
                 continue;
             }
             if !ok {
@@ -674,9 +710,11 @@ impl Run {
                     self.remove_effect_why(c, k, super::rules_log::EndReason::Water);
                 }
             }
+            let before = self.pause_state(c);
             let Some((fx, ..)) = self.creature(c) else { continue };
             let (gone, hits) = fx.tick(DT);
             let mut drained = false;
+            let ran_out = gone.clone();
             for k in gone {
                 self.effect_event(c, id, pos, k, false, EffectLook::Plain);
                 super::rules_log::ended(self, c, k, super::rules_log::EndReason::RanOut);
@@ -684,6 +722,10 @@ impl Run {
             }
             if drained {
                 self.refresh_attrs(c);
+            }
+            // A Dispel pause that ran out turns its sources back on.
+            if let Some(before) = before {
+                self.settle_pause(c, before, &ran_out);
             }
             for (t, amount, kind, source) in hits {
                 let tick = Damage { why: Why { by: source, what: What::Tick(kind), ..Why::NONE }, ..Damage::effect_tick(amount, t) };

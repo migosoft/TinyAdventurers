@@ -1095,7 +1095,6 @@ pub fn monster_numbers(base: &MonsterBase, delta: Attributes, muted: &[Lasting])
 
 /// The lasting magic a hero wears or has bought, sorted: usable worn items with a magical property
 /// (once per item id; a grant alone is not one, muting keeps it) and the magic tree nodes.
-#[allow(dead_code)] // the pause (a later task of #187) reads it
 pub fn magic_sources_hero(class: ClassId, b: &Build) -> Vec<Lasting> {
     let (usable, _) = usable_items(class, b, Attributes::default());
     let mut v: Vec<Lasting> = worn_items(class, &usable).into_iter().filter(|&(_, id)| items::def(id).props.iter().any(|p| p.magical && !matches!(p.kind, PropKind::GrantAbility { .. }))).map(|(_, id)| Lasting::Item(id)).collect();
@@ -1107,7 +1106,6 @@ pub fn magic_sources_hero(class: ClassId, b: &Build) -> Vec<Lasting> {
 
 /// The lasting magic of a monster: its weapons with a magical property, sorted. A stat block's
 /// adjustment is what the creature is, never a source.
-#[allow(dead_code)] // the pause (a later task of #187) reads it
 pub fn magic_sources_monster(src: KitSource) -> Vec<Lasting> {
     let weapons: &[ItemId] = match src {
         KitSource::Enemy(t) => enemies::def(t).weapons,
