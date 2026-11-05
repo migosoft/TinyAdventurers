@@ -90,7 +90,7 @@ export class Hud {
   private hpFill = el('div', 'fill');
   private hpText = el('span');
   private fx = el('div', 'effects');
-  private fxKey = '';
+  private fxKey = '';  // the shown icons' kinds, seconds, amounts, paused flags and chip ids
   private coins = el('div', 'coins');
   private coinCount = 0;
   private slots: HTMLElement[] = [];
@@ -264,10 +264,11 @@ export class Hud {
 
   /** Own effect icons and paused-source chips; the DOM is rebuilt only when the markup would change. */
   private showEffects(list: Snapshot['me']['effects'], items: ItemId[], nodes: NodeId[]): void {
-    const html = effectsHtml(list, items, nodes);
-    if (html === this.fxKey) return;
-    this.fxKey = html;
-    this.fx.innerHTML = html;
+    const rows = effectRows(list);
+    const key = `${rows.map((r) => r.join(':')).join(',')}|${items.join(',')}|${nodes.join(',')}`;
+    if (key === this.fxKey) return;
+    this.fxKey = key;
+    this.fx.innerHTML = effectsRowHtml(rows, items, nodes);
   }
 
   /** The equipped abilities changed (an Attribute drain started or ended): names, cooldowns, greyed slots. */
@@ -425,12 +426,32 @@ for (const tree of Object.values(TREES)) for (const [id, n] of Object.entries(tr
  * are all paused shows greyed), then a small grey chip with the name of each paused item and node.
  */
 export function effectsHtml(list: Snapshot['me']['effects'], items: readonly ItemId[], nodes: readonly NodeId[]): string {
-  const best = new Map<number, [number, number, boolean]>();
+  return effectsRowHtml(effectRows(list), items, nodes);
+}
+
+type EffectRow = readonly [kind: number, left: number, amount: number, paused: boolean];
+
+/** One row per kind: timer from the unpaused entry with the longest time left; the amount sums the unpaused entries (all, if every entry is paused). */
+function effectRows(list: Snapshot['me']['effects']): EffectRow[] {
+  const best = new Map<number, { left: number; paused: boolean; unpaused: number; all: number }>();
   for (const [k, left, amount, paused] of list) {
     const cur = best.get(k);
-    if (!cur || (cur[2] && !paused) || (cur[2] === paused && left > cur[0])) best.set(k, [left, amount, paused]);
+    if (!cur) {
+      best.set(k, { left, paused, unpaused: paused ? 0 : amount, all: amount });
+      continue;
+    }
+    cur.all += amount;
+    if (!paused) cur.unpaused += amount;
+    if ((cur.paused && !paused) || (cur.paused === paused && left > cur.left)) {
+      cur.left = left;
+      cur.paused = paused;
+    }
   }
-  const icons = [...best].map(([k, [left, amount, paused]]) => effectChipHtml(k, Math.ceil(left), amount, paused));
+  return [...best].map(([k, c]) => [k, Math.ceil(c.left), c.paused ? c.all : c.unpaused, c.paused] as const);
+}
+
+function effectsRowHtml(rows: readonly EffectRow[], items: readonly ItemId[], nodes: readonly NodeId[]): string {
+  const icons = rows.map(([k, left, amount, paused]) => effectChipHtml(k, left, amount, paused));
   const chips = [...items.map((i) => ITEMS[i].name), ...nodes.map((n) => NODE_NAMES[n] ?? n)].map((n) => `<span class="pchip">${esc(n)}</span>`);
   return icons.concat(chips).join('');
 }

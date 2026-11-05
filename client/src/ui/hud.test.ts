@@ -196,6 +196,16 @@ describe('effectsHtml', () => {
     const d = host(effectsHtml([], ['BandOfVigor'], ['PU5']));
     expect([...d.querySelectorAll('.pchip')].map((c) => c.textContent)).toEqual(['Band of Vigor', 'Radiant']);
   });
+  it('adds up the amounts of the unpaused entries of a drain kind', () => {
+    const d = host(effectsHtml([[EFFECT.Weakened, 5, -1, false], [EFFECT.Weakened, 4, -2, false]], [], []));
+    expect(d.querySelector('.fx b')!.textContent).toBe('\u22123');
+  });
+  it('leaves a paused amount out when an unpaused entry exists, and sums all when every entry is paused', () => {
+    const mixed = host(effectsHtml([[EFFECT.Weakened, 5, -1, false], [EFFECT.Weakened, 9, -2, true]], [], []));
+    expect(mixed.querySelector('.fx b')!.textContent).toBe('\u22121');
+    const all = host(effectsHtml([[EFFECT.Weakened, 5, -1, true], [EFFECT.Weakened, 9, -2, true]], [], []));
+    expect(all.querySelector('.fx b')!.textContent).toBe('\u22123');
+  });
   it('shows no chips when nothing is paused', () => {
     expect(host(effectsHtml([], [], [])).querySelector('.pchip')).toBeNull();
   });
