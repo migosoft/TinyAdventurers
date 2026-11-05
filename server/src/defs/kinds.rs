@@ -28,6 +28,8 @@ pub enum EntityKind {
     Ghost = 24,
     /// The shade haunting the demon's dungeon.
     Shade = 25,
+    /// A soldier who can join the party (#149).
+    Knight = 26,
     // Bosses
     Demon = 30,
     Lich = 31,
@@ -76,7 +78,7 @@ impl serde::Serialize for EntityKind {
 
 impl EntityKind {
     #[cfg(test)]
-    pub const ALL: [EntityKind; 45] = [
+    pub const ALL: [EntityKind; 46] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -97,6 +99,7 @@ impl EntityKind {
         EntityKind::DireWolf,
         EntityKind::Ghost,
         EntityKind::Shade,
+        EntityKind::Knight,
         EntityKind::Demon,
         EntityKind::Lich,
         EntityKind::Dragon,
@@ -136,7 +139,7 @@ impl EntityKind {
             OrcWarrior | OrcArcher | Necromancer | Disciple | Summoner => 16.0,
             Chort => 18.0,
             Ogre => 26.0,
-            DireWolf => 12.0,
+            DireWolf | Knight => 12.0,
             Lich => 28.0,
             // 43 px frames drawn at 1.2x.
             Dragon => 51.0,

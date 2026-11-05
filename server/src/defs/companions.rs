@@ -42,6 +42,10 @@ pub struct Escort {
 
 pub const WOLF_ESCORT: Escort = Escort { follow: WOLF_FOLLOW, follow_stop: WOLF_FOLLOW_STOP, guard: WOLF_GUARD, defend: WOLF_DEFEND, leash: WOLF_LEASH, reappear: WOLF_REAPPEAR };
 
+/// The knight (#149): a first guess (label `balancing`), a little wider than the wolf's since it fights in melee.
+#[allow(dead_code)] // used by the companion script (#149, a later task)
+pub const KNIGHT_ESCORT: Escort = Escort { follow: 40.0, follow_stop: 24.0, guard: 64.0, defend: 28.0, leash: 128.0, reappear: 192.0 };
+
 /// HP before the CON bonus (55): `WOLF_HP` minus 5 per CON point above 10.
 pub fn wolf_base_hp() -> f64 {
     WOLF_HP - 5.0 * (15 - 10) as f64

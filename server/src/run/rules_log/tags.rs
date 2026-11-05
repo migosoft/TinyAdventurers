@@ -61,6 +61,7 @@ pub fn tag_name(kind: EntityKind) -> Option<&'static str> {
         Ogre => Some("Ogre"),
         Ghost => Some("Ghost"),
         Shade => Some("Shade"),
+        Knight => Some("Knight"),
         Demon => Some("Demon"),
         Lich => Some("Lich"),
         Dragon => Some("Dragon"),

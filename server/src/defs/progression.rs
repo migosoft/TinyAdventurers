@@ -22,6 +22,8 @@ pub fn xp_for_kill(enemy: Option<EnemyType>) -> u32 {
         Some(Ghost) => 10,
         // A first guess: the Ghost's twin, a little sturdier.
         Some(Shade) => 12,
+        // A companion: its death pays nothing.
+        Some(Knight) => 0,
         None => 300, // boss
     }
 }

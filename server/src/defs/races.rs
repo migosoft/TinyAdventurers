@@ -256,7 +256,7 @@ mod tests {
             (EnemyType::SkeletonArcher, 140.0), (EnemyType::RaisedArcher, 140.0), (EnemyType::OrcWarrior, 125.0),
             (EnemyType::OrcArcher, 140.0), (EnemyType::Necromancer, 150.0), (EnemyType::Summoner, 150.0),
             (EnemyType::Disciple, 200.0), (EnemyType::Mimic, 140.0), (EnemyType::Imp, 140.0),
-            (EnemyType::SummonedImp, 140.0), (EnemyType::Chort, 120.0), (EnemyType::Ogre, 150.0), (EnemyType::Ghost, 140.0), (EnemyType::Shade, 140.0)];
+            (EnemyType::SummonedImp, 140.0), (EnemyType::Chort, 120.0), (EnemyType::Ogre, 150.0), (EnemyType::Ghost, 140.0), (EnemyType::Shade, 140.0), (EnemyType::Knight, 128.0)];
         assert_eq!(old.len(), EnemyType::ALL.len());
         for (t, px) in old {
             assert_eq!(enemies::profile(t).sight.vision * 16.0, px, "{t:?}");

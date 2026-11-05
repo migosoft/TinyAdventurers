@@ -35,11 +35,13 @@ pub enum EnemyType {
     Ghost,
     /// Incorporeal ambusher haunting the demon's dungeon (see `haunt_for`): the Ghost's twin, draining CON.
     Shade,
+    /// A soldier who can join the party (#149): never placed by level generation, only by the start room.
+    Knight,
 }
 
 impl EnemyType {
     #[cfg(test)]
-    pub const ALL: [EnemyType; 17] = [
+    pub const ALL: [EnemyType; 18] = [
         EnemyType::GoblinArcher,
         EnemyType::SkeletonWarrior,
         EnemyType::SkeletonArcher,
@@ -57,6 +59,7 @@ impl EnemyType {
         EnemyType::Ogre,
         EnemyType::Ghost,
         EnemyType::Shade,
+        EnemyType::Knight,
     ];
 }
 
@@ -269,6 +272,22 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 preferred: 0.0,
             }
         }
+        // Knight (#149): a first guess (label `balancing`); its speed keeps up with the heroes (66-72).
+        Knight => {
+            let attrs = Attributes::new(14, 12, 14, 8, 10, 12);
+            EnemyDef {
+                kind: EntityKind::Knight,
+                hp: 60.0,
+                speed: 68.0,
+                radius: 5.0,
+                vision: 8.0,
+                attrs,
+                weight: 12.0,
+                abilities: &[Strike],
+                weapons: &[SoldierSword],
+                preferred: 0.0,
+            }
+        }
         Ogre => {
             let attrs = Attributes::new(19, 8, 16, 5, 7, 7);
             EnemyDef {
@@ -340,7 +359,7 @@ pub fn base_hp(t: EnemyType) -> f64 {
 pub fn races(t: EnemyType) -> &'static [Race] {
     use EnemyType::*;
     match t {
-        Necromancer | Summoner | Disciple => &[Race::Human],
+        Necromancer | Summoner | Disciple | Knight => &[Race::Human],
         SkeletonWarrior | SkeletonArcher | RaisedSkeleton | RaisedArcher => &[Race::Undead],
         GoblinArcher => &[Race::Goblin],
         OrcWarrior | OrcArcher => &[Race::Orc],
@@ -397,6 +416,7 @@ mod tests {
             (GoblinArcher, 6.0), (SkeletonWarrior, 9.0), (SkeletonArcher, 9.0), (RaisedSkeleton, 9.0), (RaisedArcher, 9.0),
             (OrcWarrior, 13.0), (OrcArcher, 13.0), (Necromancer, 10.0), (Summoner, 10.0), (Disciple, 10.0),
             (Mimic, 14.0), (Imp, 4.0), (SummonedImp, 4.0), (Chort, 10.0), (Ogre, 20.0), (Ghost, 3.0), (Shade, 3.0),
+            (Knight, 12.0),
         ];
         assert_eq!(weights.len(), EnemyType::ALL.len());
         for (t, w) in weights {
@@ -443,7 +463,7 @@ mod tests {
         use super::super::weapons::WeaponKind as K;
         use EnemyType::*;
         // Spec §7. The skeleton archer's weapon is a Longbow, which the spec's "Bow" stands for.
-        let table: [(EnemyType, &[K]); 10] = [
+        let table: [(EnemyType, &[K]); 11] = [
             (GoblinArcher, &[K::Bow, K::Dagger]),
             (SkeletonWarrior, &[K::Sword]),
             (RaisedSkeleton, &[K::Sword]),
@@ -454,6 +474,7 @@ mod tests {
             (Ogre, &[K::Club, K::Hammer]),
             (Necromancer, &[K::Staff]),
             (Summoner, &[K::Staff]),
+            (Knight, &[K::Sword]),
         ];
         let natural = [K::Unarmed, K::Bite, K::Claws, K::Tail, K::Touch];
         for t in EnemyType::ALL {
@@ -479,6 +500,17 @@ mod tests {
     }
 
     #[test]
+    fn knight_stat_block() {
+        use EnemyType::Knight;
+        let k = def(Knight);
+        assert_eq!(k.attrs, Attributes::new(14, 12, 14, 8, 10, 12));
+        assert_eq!((k.hp, k.speed, k.radius, k.vision, k.preferred), (60.0, 68.0, 5.0, 8.0, 0.0));
+        assert_eq!((k.abilities, k.weapons), (&[AbilityId::Strike][..], &[ItemId::SoldierSword][..]));
+        assert_eq!(races(Knight), &[Race::Human]);
+        assert_eq!(crate::defs::progression::xp_for_kill(Some(Knight)), 0);
+    }
+
+    #[test]
     fn only_the_dragon_has_no_haunt() {
         assert_eq!(haunt_for(BossId::Lich), Some(EnemyType::Ghost));
         assert_eq!(haunt_for(BossId::Demon), Some(EnemyType::Shade));
@@ -488,7 +520,7 @@ mod tests {
     #[test]
     fn enemy_races() {
         use EnemyType::*;
-        let expect: [(EnemyType, &[Race]); 17] = [
+        let expect: [(EnemyType, &[Race]); 18] = [
             (GoblinArcher, &[Race::Goblin]),
             (SkeletonWarrior, &[Race::Undead]),
             (SkeletonArcher, &[Race::Undead]),
@@ -506,6 +538,7 @@ mod tests {
             (Ogre, &[Race::Ogre]),
             (Ghost, &[Race::Undead, Race::Incorporeal]),
             (Shade, &[Race::Undead, Race::Incorporeal]),
+            (Knight, &[Race::Human]),
         ];
         assert_eq!(expect.len(), EnemyType::ALL.len());
         for (t, r) in expect {
@@ -568,6 +601,7 @@ mod kit_pins {
             (Shade, Touch, Pin { damage: 8.75, cooldown: 0.8333333333333334, range: 22.0, speed: 0.0, radius: 0.0, windup: 0.25, push: 0.0 }),
             (Shade, Vanish, Pin { damage: 0.0, cooldown: 13.333333333333334, range: 0.0, speed: 0.0, radius: 0.0, windup: 0.0, push: 0.0 }),
             (Ogre, Strike, Pin { damage: 18.0, cooldown: 2.0, range: 32.0, speed: 0.0, radius: 0.0, windup: 0.5, push: 28.0 }),
+            (Knight, Strike, Pin { damage: 13.09090909090909, cooldown: 0.8333333333333334, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
             (Ogre, GroundSlam, Pin { damage: 21.599999999999998, cooldown: 7.5, range: 32.0, speed: 0.0, radius: 34.0, windup: 1.0, push: 28.0 }),
         ];
         let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
