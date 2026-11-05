@@ -250,8 +250,13 @@ pub struct SelfState {
     pub darkvision: u8,
     /// The viewed hero's vision (tiles) through its effects (blind 0, asleep dimmed).
     pub vision: f32,
-    /// The own hero's effects: (`EffectKind` id, seconds left, amount of an Attribute effect, else 0).
-    pub effects: Vec<(u8, f32, i16)>,
+    /// The own hero's effects, one per entry: (`EffectKind` id, seconds left, amount of an Attribute effect else 0, paused).
+    /// A kind can have a magic and a plain entry; both are sent.
+    pub effects: Vec<(u8, f32, i16, bool)>,
+    /// The own hero's worn magic items that are muted now (anti-magic or a Dispel); empty almost always.
+    pub paused_items: Vec<ItemId>,
+    /// The own hero's bought magic nodes that are muted now.
+    pub paused_nodes: Vec<NodeId>,
     /// Factor on the own hero's move speed (0 while it cannot move); prediction uses it.
     pub speed_mul: f32,
     /// The own hero cannot act (asleep, stone): no predicted abilities.

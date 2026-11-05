@@ -25,7 +25,7 @@ function chasmMap(): TileMap {
 }
 
 function snap(ack: number, x: number, y: number): Snapshot {
-  const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false, cd_mul: 1, cd_rate: 1 };
+  const me = { alive: true, hp: 100, max_hp: 100, x, y, dash_t: 0, dash_dx: 0, dash_dy: 0, knock_vx: 0, knock_vy: 0, cd1: 0, cd2: 0, spectating: null, darkvision: 0, vision: 9, effects: [], speed_mul: 1, no_act: false, cd_mul: 1, cd_rate: 1, paused_items: [], paused_nodes: [] };
   return { tick: ack, ack, ents: [], me, boss: null, ev: [], drain: null, lights: [], looks: [], srv_ms: 0, log: null };
 }
 
@@ -87,7 +87,7 @@ describe('Predictor', () => {
   it('cannot act or turn while the server says so', () => {
     const pred = mk(chasmMap(), 'Wizard', 3 * TILE + 8, 2 * TILE + 8);
     const s = snap(0, pred.state.x, pred.state.y);
-    pred.reconcile({ ...s, me: { ...s.me, no_act: true, effects: [[2, 1.0, 0]] } });
+    pred.reconcile({ ...s, me: { ...s.me, no_act: true, effects: [[2, 1.0, 0, false]] } });
     expect(pred.noAct).toBe(true);
     expect(pred.noTurn).toBe(true);
   });

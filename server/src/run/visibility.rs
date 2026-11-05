@@ -14,6 +14,7 @@ use crate::dungeon::{Map, TILE};
 use crate::vispoly::View;
 use crate::math::Vec2;
 use crate::protocol::{EntSnap, Ev, MovingLight, SelfState, Snapshot};
+use crate::sheet::Lasting;
 use crate::run::light::{Lights, Lit};
 use crate::run::perception::dark_reach;
 use crate::wire::encode_snap;
@@ -250,6 +251,7 @@ pub fn send_snapshots(run: &mut Run) {
             .collect();
         let drain = drain_for(&view, run.level.boss().map_or(false, |b| b.awake), &drain);
 
+        let muted = run.muted_list(super::effects::Creature::Player(pi));
         let me = &run.players[pi];
         let snap = Snapshot {
             log: super::rules_log::for_viewer(run, pi, viewed_id, &view, &dark, &ents, &records),
@@ -272,7 +274,9 @@ pub fn send_snapshots(run: &mut Run) {
                 spectating: if me.alive { None } else { me.spectating },
                 darkvision: darkvision_pct(&sight),
                 vision: sight.vision as f32,
-                effects: me.effects.list().iter().map(|a| (a.kind as u8, a.left as f32, a.amount.clamp(i16::MIN as i32, i16::MAX as i32) as i16)).collect(),
+                effects: me.effects.list().iter().map(|a| (a.kind as u8, a.left as f32, a.amount.clamp(i16::MIN as i32, i16::MAX as i32) as i16, a.paused(me.effects.anti_magic))).collect(),
+                paused_items: muted.iter().filter_map(|l| if let Lasting::Item(i) = l { Some(*i) } else { None }).collect(),
+                paused_nodes: muted.iter().filter_map(|l| if let Lasting::Node(n) = l { Some(*n) } else { None }).collect(),
                 speed_mul: me.effects.speed_mul() as f32,
                 no_act: me.effects.no_act(),
                 cd_mul: super::keystones::cd_mul(me),
@@ -652,6 +656,54 @@ mod tests {
         assert_eq!(s[3][14].as_array().unwrap().len(), 2);
         assert_eq!(s[3][15], 0.5);
         assert_eq!(s[3][16], false);
+    }
+
+    #[test]
+    fn a_paused_magic_effect_is_sent_paused_and_leaves_the_entity_bit_off() {
+        use crate::defs::effects::{EffectKind, EffectLook};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(tx);
+        run.players[0].effects.anti_magic = true;
+        run.players[0].effects.add_with(EffectKind::Slowed, 10.0, EffectLook::Plain, None, 0, true);
+        send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = rx.try_recv().unwrap() else { panic!() };
+        let s: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        let me_ent = s[2].as_array().unwrap().iter().find(|e| e[0] == run.players[0].id).unwrap();
+        assert_eq!(me_ent[10], 0, "a paused kind is off in the bitmask");
+        let fx = s[3][14].as_array().unwrap();
+        assert_eq!(fx.len(), 1);
+        assert_eq!(fx[0][0], EffectKind::Slowed as u64);
+        assert_eq!(fx[0][3], true, "the entry is sent paused");
+    }
+
+    #[test]
+    fn an_unpaused_effect_is_sent_unpaused_with_no_paused_sources() {
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(tx);
+        run.players[0].effects.add(EffectKind::Slowed, 10.0);
+        send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = rx.try_recv().unwrap() else { panic!() };
+        let s: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(s[3][14][0][3], false);
+        assert!(s[3][19].as_array().unwrap().is_empty() && s[3][20].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_hero_under_anti_magic_sends_its_magic_sources_as_paused() {
+        use crate::run::effects::Creature;
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(tx);
+        run.players[0].build.nodes.push(crate::defs::trees::NodeId::PU5);
+        run.set_anti_magic(Creature::Player(0), true);
+        send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = rx.try_recv().unwrap() else { panic!() };
+        let s: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        assert!(s[3][19].as_array().unwrap().is_empty());
+        assert_eq!(s[3][20], serde_json::json!(["PU5"]));
     }
 
     #[test]

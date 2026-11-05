@@ -260,7 +260,7 @@ export class Hud {
   }
 
   /** Own effect icons with the whole seconds left; rebuilt only when kinds or seconds change. */
-  private showEffects(list: [number, number, number][]): void {
+  private showEffects(list: [number, number, number, boolean][]): void {
     const rows = list.map(([k, left, amount]) => [k, Math.ceil(left), amount] as const);
     const key = rows.map((r) => r.join(':')).join(',');
     if (key === this.fxKey) return;

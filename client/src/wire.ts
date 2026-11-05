@@ -125,6 +125,8 @@ export function unpackSnap(w: SnapW): Snapshot {
       no_act: me[16],
       cd_mul: me[17],
       cd_rate: me[18],
+      paused_items: me[19],
+      paused_nodes: me[20],
     },
     boss: boss && { kind: boss[0], hp: boss[1], max_hp: boss[2], immune: boss[3] },
     ev: ev.map(unpackEv),

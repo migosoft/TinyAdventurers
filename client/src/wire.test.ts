@@ -54,19 +54,21 @@ describe('wire', () => {
   });
 
   it('keeps an exactly-left aim at +pi (the staff swing uses the raw angle)', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], []];
     const snap = unpackSnap([1, 0, [[5, 1, 16, 16, 255, 0, 128, 0, 0, 0, 0]], me, null, [], 0, null, [], [], null]);
     expect(snap.ents[0][6]).toBe(Math.PI);
   });
 
   it('keeps the Attribute amount of an own effect', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [[16, 12.5, -2], [4, 3, 0]], 1, false, 1, 1];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [[16, 12.5, -2, false], [4, 3, 0, true]], 1, false, 1, 1, ['BandOfVigor'], ['PU5']];
     const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [], [], null]);
-    expect(snap.me.effects).toEqual([[16, 12.5, -2], [4, 3, 0]]);
+    expect(snap.me.effects).toEqual([[16, 12.5, -2, false], [4, 3, 0, true]]);
+    expect(snap.me.paused_items).toEqual(['BandOfVigor']);
+    expect(snap.me.paused_nodes).toEqual(['PU5']);
   });
 
   it('unpacks moving lights with an optional colour', () => {
-    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1];
+    const me: SelfW = [true, 1, 1, 0, 0, 0, 0, 0, 0, 0, null, null, 0, 9, [], 1, false, 1, 1, [], []];
     const snap = unpackSnap([1, 0, [], me, null, [], 0, null, [[160, 320, 2, null], [16, 32, 3, 0x78c8ff]], [], null]);
     expect(snap.lights).toEqual([[10, 20, 2, null], [1, 2, 3, 0x78c8ff]]);
   });
