@@ -1,7 +1,7 @@
 //! The Elven Ranger's wolf: a summoned companion (run/companion.rs). Spawn, behaviour and death here.
 
 use super::abilities::{monster_use, monster_dash_to, monster_dash_secs, tick_monster_dash};
-use super::companion::{find_prey, follow, lost, reappear, set_anim};
+use super::companion::{find_prey, follow, lost, reappear, set_anim, summon_spot};
 use super::entities::{Ai, Companion, Monster, WolfState, Windup, HISTORY_LEN};
 use super::targets::Side;
 use super::{ai, Run};
@@ -16,29 +16,6 @@ use crate::dungeon::{self, Map, Mover};
 use crate::math::Vec2;
 use crate::protocol::Ev;
 use std::collections::VecDeque;
-
-/// The first of 8 points 12 px around `pos` (east first, then clockwise) where the
-/// wolf can stand: walkable ground, clear of solid objects. None when there is no such point.
-pub fn spot_beside(run: &Run, pos: Vec2) -> Option<Vec2> {
-    let solids = run.solids(None);
-    (0..8)
-        .map(|i| pos + Vec2::from_angle(i as f64 * std::f64::consts::FRAC_PI_4) * 12.0)
-        .find(|&p| !run.layout.map.blocks_at(p, Mover::Enemy) && !solids.iter().any(|s| (p.x - s.x).abs() < s.half + WOLF_RADIUS && (p.y - s.y).abs() < s.half + WOLF_RADIUS))
-}
-
-/// Where a summoned wolf appears: beside `pos`, else the nearest walkable tile centre within
-/// 2 tiles, else `pos` itself (a summon is never refused).
-fn summon_spot(run: &Run, pos: Vec2) -> Vec2 {
-    spot_beside(run, pos).unwrap_or_else(|| {
-        let (tx, ty) = Map::tile_of(pos);
-        (-2i32..=2)
-            .flat_map(|dy| (-2i32..=2).map(move |dx| (tx + dx, ty + dy)))
-            .map(|(x, y)| Map::center_of(x, y))
-            .filter(|&c| !run.layout.map.blocks_at(c, Mover::Enemy))
-            .min_by(|a, b| a.dist(pos).total_cmp(&b.dist(pos)))
-            .unwrap_or(pos)
-    })
-}
 
 /// Summons the wolf of hero `pi` beside them and returns its id.
 pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
@@ -635,7 +612,7 @@ mod tests {
         }
         assert!(run.monsters[wolf_idx(&run, id)].hp < 80.0, "the orc hurt the wolf");
         let oi = run.monster_idx(orc).unwrap();
-        assert_eq!(run.monsters[oi].ai.target, Some(crate::run::entities::Target::Ally(id)));
+        assert_eq!(run.monsters[oi].ai.target, Some(crate::run::entities::Target::Monster(id)));
     }
 
     #[test]

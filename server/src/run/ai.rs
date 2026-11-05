@@ -251,14 +251,18 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         ai.alt_cd -= cdt;
     }
 
-    // Perception: only players in sight radius with line of sight count.
-    let seen = find_visible_foe(run, pos, sight);
+    // Perception: only players in sight radius with line of sight count. A companion sees only the prey
+    // its escort script picked (run/companion.rs).
+    let seen = match &run.monsters[mi].companion {
+        Some(c) => c.prey.and_then(|id| run.monster_idx(id)).filter(|&pm| run.monsters[pm].alive && super::perception::sees(run, sight, pos, run.monsters[pm].pos)).map(Creature::Monster),
+        None => find_visible_foe(run, pos, sight),
+    };
     if let Some(foe) = seen {
         let (fid, fpos) = (run.creature_id(foe), run.creature_pos(foe));
         let ai = &mut run.monsters[mi].ai;
         ai.target = Some(match foe {
             Creature::Player(_) => Target::Player(fid),
-            Creature::Monster(_) => Target::Ally(fid),
+            Creature::Monster(_) => Target::Monster(fid),
         });
         ai.last_known = fpos;
         ai.state = AiState::Chase;

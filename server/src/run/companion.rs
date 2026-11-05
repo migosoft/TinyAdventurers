@@ -1,14 +1,15 @@
 //! Companions: monsters that fight for the heroes. Who each follows (the leader hierarchy) and the
 //! pieces of a follower's script that any companion shares. The Ranger's wolf is in run/wolf.rs.
 
-use super::entities::Companion;
+use super::entities::{AiState, Companion};
 use super::targets::Side;
 use super::{ai, perception, Run};
 use crate::collision::walk_line;
-use crate::defs::companions::{Escort, WOLF_REACH_EVERY};
+use crate::defs::companions::{Escort, KNIGHT_ESCORT, COMPANION_REACH_EVERY, WOLF_RADIUS};
 use crate::defs::effects::EffectKind;
+use crate::defs::enemies;
 use crate::defs::kinds::Anim;
-use crate::dungeon::Mover;
+use crate::dungeon::{Map, Mover};
 use crate::math::Vec2;
 use crate::protocol::Ev;
 
@@ -51,6 +52,29 @@ pub fn update_leaders(run: &mut Run) {
     }
 }
 
+/// The first of 8 points 12 px around `pos` (east first, then clockwise) where the
+/// companion can stand: walkable ground, clear of solid objects. None when there is no such point.
+pub fn spot_beside(run: &Run, pos: Vec2) -> Option<Vec2> {
+    let solids = run.solids(None);
+    (0..8)
+        .map(|i| pos + Vec2::from_angle(i as f64 * std::f64::consts::FRAC_PI_4) * 12.0)
+        .find(|&p| !run.layout.map.blocks_at(p, Mover::Enemy) && !solids.iter().any(|s| (p.x - s.x).abs() < s.half + WOLF_RADIUS && (p.y - s.y).abs() < s.half + WOLF_RADIUS))
+}
+
+/// Where a summoned companion appears: beside `pos`, else the nearest walkable tile centre within
+/// 2 tiles, else `pos` itself (a summon is never refused).
+pub fn summon_spot(run: &Run, pos: Vec2) -> Vec2 {
+    spot_beside(run, pos).unwrap_or_else(|| {
+        let (tx, ty) = Map::tile_of(pos);
+        (-2i32..=2)
+            .flat_map(|dy| (-2i32..=2).map(move |dx| (tx + dx, ty + dy)))
+            .map(|(x, y)| Map::center_of(x, y))
+            .filter(|&c| !run.layout.map.blocks_at(c, Mover::Enemy))
+            .min_by(|a, b| a.dist(pos).total_cmp(&b.dist(pos)))
+            .unwrap_or(pos)
+    })
+}
+
 pub(super) fn set_anim(run: &mut Run, mi: usize, a: Anim) {
     let m = &mut run.monsters[mi];
     if m.anim != a {
@@ -60,7 +84,7 @@ pub(super) fn set_anim(run: &mut Run, mi: usize, a: Anim) {
 }
 
 /// Whether companion `mi` must reappear beside its leader: far from them, or (checked every
-/// `WOLF_REACH_EVERY` s) unable to reach them, as behind a sealed door. Mid-dash it may be over a chasm,
+/// `COMPANION_REACH_EVERY` s) unable to reach them, as behind a sealed door. Mid-dash it may be over a chasm,
 /// where no path starts: no reach check then.
 pub fn lost(run: &mut Run, mi: usize, leader: Vec2, e: &Escort, dt: f64) -> bool {
     let pos = run.monsters[mi].pos;
@@ -69,7 +93,7 @@ pub fn lost(run: &mut Run, mi: usize, leader: Vec2, e: &Escort, dt: f64) -> bool
     let c = run.monsters[mi].companion.as_mut().expect("a companion");
     c.reach_t -= dt;
     if c.reach_t <= 0.0 && !dashing {
-        c.reach_t = WOLF_REACH_EVERY;
+        c.reach_t = COMPANION_REACH_EVERY;
         let map = &run.layout.map;
         // A leader on lava or over a chasm cannot be reached on foot, and no spot beside them is safe.
         lost |= !map.blocks_at(leader, Mover::Enemy) && !(walk_line(map, pos, leader, Mover::Enemy) || ai::astar(map, pos, leader, 2500, Mover::Enemy).is_some());
@@ -80,7 +104,7 @@ pub fn lost(run: &mut Run, mi: usize, leader: Vec2, e: &Escort, dt: f64) -> bool
 /// The companion appears beside its leader with the green puff, dropping whatever it was doing.
 /// With no free spot beside them it stays where it is (false).
 pub fn reappear(run: &mut Run, mi: usize, leader: Vec2) -> bool {
-    let Some(spot) = super::wolf::spot_beside(run, leader) else { return false };
+    let Some(spot) = spot_beside(run, leader) else { return false };
     let m = &mut run.monsters[mi];
     m.pos = spot;
     m.knock = Vec2::ZERO;
@@ -140,9 +164,45 @@ pub fn follow(run: &mut Run, mi: usize, pi: usize, e: &Escort, speed: f64, dt: f
     }
 }
 
+/// The companion `mi` this tick: reappear beside its leader when lost, else fight its prey through the
+/// enemy AI, else follow. Not called while it is pushed, sinking, asleep or frozen (`Run::step`).
+pub fn tick(run: &mut Run, mi: usize, dt: f64) {
+    let Some(leader) = run.monsters[mi].companion.as_ref().and_then(|c| run.player_idx(c.leader)).filter(|&pi| run.players[pi].alive) else {
+        run.monsters[mi].ai.state = AiState::Idle;
+        return;
+    };
+    let at = run.players[leader].pos();
+    if lost(run, mi, at, &KNIGHT_ESCORT, dt) && reappear(run, mi, at) {
+        return;
+    }
+    let prey = find_prey(run, mi, at, &KNIGHT_ESCORT);
+    run.monsters[mi].companion.as_mut().expect("a companion").prey = prey.map(|pi| run.monsters[pi].id);
+    if prey.is_some() {
+        ai::tick_monster(run, mi, dt);
+    } else {
+        let m = &mut run.monsters[mi];
+        m.ai.windup = None;
+        m.ai.state = AiState::Idle;
+        let speed = enemies::def(m.etype.expect("a companion enemy")).speed;
+        follow(run, mi, leader, &KNIGHT_ESCORT, speed, dt);
+    }
+}
+
+/// Companion `mi` has fallen: no XP, no coins, no kill.
+pub fn died(run: &mut Run, mi: usize) {
+    let m = &mut run.monsters[mi];
+    m.alive = false;
+    m.hp = 0.0;
+    let (id, pos, kind) = (m.id, m.pos, m.kind);
+    let name = super::rules_log::tags::tag_name(kind).unwrap_or("companion");
+    run.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind: kind as u8 }, None);
+    run.event(Ev::Msg { text: format!("The {name} has fallen") }, None);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::defs::companions::KNIGHT_ESCORT;
     use crate::defs::enemies::EnemyType;
     use crate::math::Vec2;
     use crate::protocol::{BossId, ClassId, Ev};
@@ -219,5 +279,148 @@ mod tests {
         update_leaders(&mut run);
         assert!(run.monsters[mi].alive);
         assert_eq!(run.monsters[mi].companion.as_ref().unwrap().leader, run.players[0].id);
+    }
+
+    // ---- The knight: follow, guard and fight through the enemy AI ----
+
+    /// Open lit floor around the heroes; two heroes (host first).
+    fn knight_run() -> Run {
+        let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        crate::run::ai::tests::open_floor(&mut run);
+        run.lights.fill();
+        run
+    }
+
+    /// A Friendly knight recruited by hero `recruiter`, 20 px east of them.
+    fn knight_with(run: &mut Run, recruiter: usize) -> usize {
+        let at = run.players[recruiter].pos() + Vec2::new(20.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::Knight, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        let hero = run.players[recruiter].id;
+        let m = &mut run.monsters[mi];
+        m.side = Side::Friendly;
+        m.companion = Some(Companion { leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: at });
+        mi
+    }
+
+    /// Moves every hero to `to`.
+    fn move_heroes(run: &mut Run, to: Vec2) {
+        for p in run.players.iter_mut() {
+            p.mv.x = to.x;
+            p.mv.y = to.y;
+        }
+    }
+
+    /// An orc `dx` px east of hero 0 that stands still (held) with plenty of HP, so only the knight's blows count.
+    fn dummy_orc(run: &mut Run, dx: f64) -> usize {
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, run.players[0].pos() + Vec2::new(dx, 0.0), None);
+        let oi = run.monster_idx(id).unwrap();
+        run.monsters[oi].ai.hold = 1e9;
+        run.monsters[oi].hp = 1000.0;
+        run.monsters[oi].max_hp = 1000.0;
+        oi
+    }
+
+    #[test]
+    fn knight_follows_its_leader() {
+        let mut run = knight_run();
+        let mi = knight_with(&mut run, 0);
+        let to = run.players[0].pos() + Vec2::new(100.0, 0.0);
+        move_heroes(&mut run, to);
+        for _ in 0..60 {
+            run.step();
+        }
+        let d = run.monsters[mi].pos.dist(run.players[0].pos());
+        assert!(d <= KNIGHT_ESCORT.follow, "the knight caught up: {d}");
+    }
+
+    #[test]
+    fn knight_fights_the_enemy_nearest_its_leader() {
+        let mut run = knight_run();
+        let mi = knight_with(&mut run, 0);
+        let (near, far) = (dummy_orc(&mut run, 30.0), dummy_orc(&mut run, 60.0));
+        let (max0, max1) = (run.players[0].max_hp, run.players[1].max_hp);
+        let mut first_hurt = None;
+        for _ in 0..240 {
+            run.step();
+            if first_hurt.is_none() {
+                first_hurt = [near, far].into_iter().find(|&o| run.monsters[o].hp < 1000.0);
+            }
+        }
+        assert_eq!(first_hurt, Some(near), "the nearer orc was hit first");
+        // The orcs are held, so any damage to a hero or the knight's own side would come from the knight.
+        assert!(run.players[0].hp == max0 && run.players[1].hp == max1, "no hero was hurt");
+        assert!(run.monsters[mi].hp == run.monsters[mi].max_hp, "the knight was not hurt");
+    }
+
+    #[test]
+    fn knight_keeps_its_leash() {
+        let mut run = knight_run();
+        let mi = knight_with(&mut run, 0);
+        let orc = dummy_orc(&mut run, 200.0);
+        for _ in 0..120 {
+            run.step();
+        }
+        let d = run.monsters[mi].pos.dist(run.players[0].pos());
+        assert!(d <= KNIGHT_ESCORT.leash, "the knight stayed within its leash: {d}");
+        assert_eq!(run.monsters[orc].hp, 1000.0, "the orc beyond the leash was left alone");
+    }
+
+    #[test]
+    fn knight_reappears_when_lost() {
+        let mut run = knight_run();
+        let mi = knight_with(&mut run, 0);
+        let to = run.players[0].pos() + Vec2::new(300.0, 0.0);
+        move_heroes(&mut run, to);
+        run.step();
+        let d = run.monsters[mi].pos.dist(run.players[0].pos());
+        assert!(d <= 20.0, "the knight is beside the hero: {d}");
+    }
+
+    #[test]
+    fn knight_kill_pays_the_party() {
+        let mut run = knight_run();
+        let mi = knight_with(&mut run, 0);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, run.players[0].pos() + Vec2::new(30.0, 0.0), None);
+        let oi = run.monster_idx(id).unwrap();
+        run.monsters[oi].ai.hold = 1e9;
+        let xp = crate::defs::progression::xp_for_kill(Some(EnemyType::OrcWarrior));
+        let before: Vec<u32> = run.players.iter().map(|p| p.xp).collect();
+        let kid = run.monsters[mi].id;
+        let gone = |run: &Run| run.monsters.iter().all(|m| m.id != id || !m.alive);
+        for _ in 0..1200 {
+            run.step();
+            if gone(&run) {
+                break;
+            }
+        }
+        assert!(gone(&run), "the knight killed the orc");
+        assert!(run.monsters.iter().any(|m| m.id == kid && m.alive), "the knight lives");
+        for (p, b) in run.players.iter().zip(before) {
+            assert_eq!(p.xp, b + xp, "every hero gained the XP");
+        }
+        assert_eq!(run.players[0].kills, 1, "the leader is credited");
+        assert_eq!(run.players[1].kills, 0);
+    }
+
+    #[test]
+    fn companion_falling_gives_nothing() {
+        use crate::run::entities::Sink;
+        let mut run = knight_run();
+        let mi = knight_with(&mut run, 0);
+        let kid = run.monsters[mi].id;
+        run.monsters[mi].sinking = Some((0.05, Sink::Fall));
+        run.events.clear();
+        let before: Vec<(u32, u32, u32)> = run.players.iter().map(|p| (p.xp, p.kills, p.coins)).collect();
+        for _ in 0..10 {
+            run.step();
+        }
+        assert!(run.monsters.iter().all(|m| m.id != kid || (!m.alive && m.hp == 0.0)), "the knight is dead");
+        let after: Vec<(u32, u32, u32)> = run.players.iter().map(|p| (p.xp, p.kills, p.coins)).collect();
+        assert_eq!(before, after, "no XP, kills or coins");
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Coins { .. })));
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Msg { text } if text == "The Knight has fallen")), "the message");
+        assert!(run.events.iter().any(|(e, _)| matches!(e, Ev::Died { .. })));
     }
 }

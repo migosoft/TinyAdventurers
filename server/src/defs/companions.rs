@@ -20,8 +20,8 @@ pub const WOLF_DEFEND: f64 = 24.0;
 /// It never chases farther than this from the ranger.
 pub const WOLF_LEASH: f64 = 96.0;
 pub const WOLF_REAPPEAR: f64 = 192.0;
-/// How often (s) it checks that it can still reach the ranger (a sealed door: it reappears).
-pub const WOLF_REACH_EVERY: f64 = 0.5;
+/// How often (s) a companion checks that it can still reach its leader (a sealed door: it reappears).
+pub const COMPANION_REACH_EVERY: f64 = 0.5;
 pub const WOLF_HEAL_SHARE: f64 = 0.2;
 pub const WOLF_DEAD_COOLDOWN: f64 = 60.0;
 
@@ -43,7 +43,6 @@ pub struct Escort {
 pub const WOLF_ESCORT: Escort = Escort { follow: WOLF_FOLLOW, follow_stop: WOLF_FOLLOW_STOP, guard: WOLF_GUARD, defend: WOLF_DEFEND, leash: WOLF_LEASH, reappear: WOLF_REAPPEAR };
 
 /// The knight (#149): a first guess (label `balancing`), a little wider than the wolf's since it fights in melee.
-#[allow(dead_code)] // used by the companion script (#149, a later task)
 pub const KNIGHT_ESCORT: Escort = Escort { follow: 40.0, follow_stop: 24.0, guard: 64.0, defend: 28.0, leash: 128.0, reappear: 192.0 };
 
 /// HP before the CON bonus (55): `WOLF_HP` minus 5 per CON point above 10.

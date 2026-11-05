@@ -494,6 +494,10 @@ impl Run {
                 wolf::tick_wolf(self, mi, DT);
                 continue;
             }
+            if m.companion.is_some() {
+                companion::tick(self, mi, DT);
+                continue;
+            }
             if self.layout.map.blocks_at(m.pos, m.mover) {
                 ai::escape_terrain(self, mi, DT);
                 continue;
@@ -1229,6 +1233,10 @@ impl Run {
         }
         if m.wolf.is_some() {
             wolf::wolf_died(self, mi);
+            return;
+        }
+        if m.companion.is_some() {
+            companion::died(self, mi);
             return;
         }
         m.alive = false;
