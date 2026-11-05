@@ -5,7 +5,8 @@ use crate::dungeon::generate::{generate, Theme};
 use crate::dungeon::{Layout, Room};
 use crate::math::Vec2;
 use crate::protocol::{BossBar, BossId};
-use crate::run::Run;
+use crate::run::targets::Side;
+use crate::run::{companion, Run};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 
@@ -34,8 +35,8 @@ impl LevelRules for DungeonLevel {
     fn populate(run: &mut Run) {
         boss::spawn(run);
         // The haunts after the boss, so every earlier entity keeps its id.
-        let (haunts, boss) = match &run.level {
-            Level::Dungeon(d) => (d.haunts.clone(), d.boss.boss_id),
+        let (haunts, boss, knight) = match &run.level {
+            Level::Dungeon(d) => (d.haunts.clone(), d.boss.boss_id, companion::knight_spot(&run.layout, &d.rooms[d.start].rect)),
             #[cfg(test)]
             Level::Test => return,
         };
@@ -43,6 +44,12 @@ impl LevelRules for DungeonLevel {
             for pos in haunts {
                 run.spawn_enemy(t, pos, None);
             }
+        }
+        // The knight last, so every earlier entity keeps its id: Neutral until a hero recruits it.
+        if let Some(pos) = knight {
+            let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Knight, pos, None);
+            let mi = run.monster_idx(id).expect("the knight just spawned");
+            run.monsters[mi].side = Side::Neutral;
         }
     }
     fn tick(run: &mut Run, dt: f64) {

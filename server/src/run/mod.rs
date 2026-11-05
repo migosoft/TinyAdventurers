@@ -1390,6 +1390,11 @@ pub async fn run_task(mut run: Run, mut rx: UnboundedReceiver<RunCmd>, lobby: Sh
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    /// Removes the Neutral monsters (the start room's knight) so a test sees only what it set up.
+    pub fn without_neutrals(run: &mut Run) {
+        run.monsters.retain(|m| m.side != Side::Neutral);
+    }
+
     /// A pusher's STR above every hero's weight + 4: its pushes keep their full distance.
     pub const PUSH_STR: i32 = 30;
     use crate::defs::abilities::AbilityId;
@@ -1599,7 +1604,7 @@ pub mod tests {
         let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
         // The original values: barrels are left out of the fingerprint, so
         // this proves the rest of the setup is unchanged by them.
-        assert_eq!(got, vec![6729794134623248901, 5768488541671900947, 8807764747807079490, 17230033334560559947, 8941819038684612668, 9354067473540881468]);
+        assert_eq!(got, vec![11600266960163159417, 1435920588664842867, 10466106782931188740, 12014582218921590883, 11564344529328277746, 15459709860221633430]);
         assert_ne!(got[0], got[1]);
         // 2026-10-21, plan 3a: checked again, unchanged.
         // 2026-11-01, the Ghost (#169): seeds 1 and 2 (lich dungeons) changed, the others did not; the lich's
@@ -1607,6 +1612,7 @@ pub mod tests {
         // tiles are unchanged (`haunts_leave_the_map_unchanged`).
         // 2026-11-01, the Shade (#170): seeds 4 and 5 (demon dungeons) changed, the others did not, for the same reason.
         // 2026-11-02, the cove (#202): every dungeon has a dedicated 26×20 cove room, so the other rooms, the maps and everything placed in them changed for every seed. Re-recorded once, on purpose.
+        // 2026-11-05, the start room's knight (#149): every dungeon has a Neutral knight, an extra monster (and the ids of everything spawned after the monsters shift by one). Re-recorded once, on purpose.
     }
 
     #[test]
@@ -1618,7 +1624,7 @@ pub mod tests {
                 fingerprint(&run)
             })
             .collect();
-        assert_eq!(got, vec![6729794134623248901, 5768488541671900947, 8807764747807079490, 17230033334560559947, 8941819038684612668, 9354067473540881468]);
+        assert_eq!(got, vec![11600266960163159417, 1435920588664842867, 10466106782931188740, 12014582218921590883, 11564344529328277746, 15459709860221633430]);
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
@@ -1658,7 +1664,8 @@ pub mod tests {
         // 2026-11-01, the Shade (#170): the demon's value (the first one) changed: its dungeon now has Shades. Lich and dragon unchanged.
         // 2026-11-02, the cove (#202): every dungeon has a dedicated 26×20 cove room, so the other rooms, the maps and everything placed in them changed for every seed. Re-recorded once, on purpose.
         // 2026-11-04, the cooldown chain (#198): every ability cooldown now scales with its Attribute and effects change how fast cooldowns count down, so the Demon and Lich fights (the first two values) play out differently; the Dragon's is unchanged. Re-recorded once, on purpose.
-        assert_eq!(got, vec![1229364848726880143, 16682054294362604453, 10110616174490758187]);
+        // 2026-11-05, the start room's knight (#149): every dungeon has a Neutral knight, an extra monster, and the chests' ids after it shift by one, so all three halls differ. Re-recorded once, on purpose.
+        assert_eq!(got, vec![14224501561412542724, 8092357809574246265, 1079301549377026740]);
     }
 
     #[test]
@@ -1677,7 +1684,7 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![1229364848726880143, 16682054294362604453, 10110616174490758187]);
+        assert_eq!(got, vec![14224501561412542724, 8092357809574246265, 1079301549377026740]);
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies

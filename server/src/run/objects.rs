@@ -228,7 +228,7 @@ pub fn use_object(run: &mut Run, pi: usize) {
     if !p.alive || p.sinking.is_some() {
         return;
     }
-    if run.wake_teammate(pi) {
+    if run.wake_teammate(pi) || super::companion::recruit(run, pi) {
         return;
     }
     let at = run.players[pi].pos();

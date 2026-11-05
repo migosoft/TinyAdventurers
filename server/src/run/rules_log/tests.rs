@@ -134,7 +134,7 @@ fn rules_log_is_reached_only_through_its_hooks() {
     walk(&root, &root, &mut found);
     // Lines naming `rules_log` outside the module, per file. Each task updates this with its hooks.
     let hooks: BTreeMap<String, usize> =
-        [("defs/effects.rs", 1), ("run/mod.rs", 20), ("run/effects.rs", 10), ("run/magic.rs", 2), ("run/abilities.rs", 23), ("run/companion.rs", 1), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+        [("defs/effects.rs", 1), ("run/mod.rs", 20), ("run/effects.rs", 10), ("run/magic.rs", 2), ("run/abilities.rs", 23), ("run/companion.rs", 3), ("run/levels/boss.rs", 1), ("run/objects.rs", 1), ("run/visibility.rs", 2), ("protocol.rs", 2), ("main.rs", 1), ("wire.rs", 1), ("export.rs", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
     assert_eq!(found, hooks);
 }
 
@@ -1186,6 +1186,7 @@ fn a_hidden_mimic_behind_a_wall_is_no_slam_skip_line() {
     let equipment = Equipment::starter(ClassId::Barbarian).with(crate::defs::items::EquipSlot::Melee, crate::defs::items::ItemId::WarHammer);
     let build = Build { own: vec![AbilityId::GroundSlam], loadout: Loadout { secondary: pick, ..Loadout::start(ClassId::Barbarian) }, extra: Attributes::new(2, 0, 0, 0, 0, 0), equipment, ..Build::start(ClassId::Barbarian) };
     let mut run = crate::run::tests::test_run_with(&[(ClassId::Barbarian, build)], BossId::Demon);
+    crate::run::tests::without_neutrals(&mut run);
     run.log.forced = true;
     let (tx, ty) = Map::tile_of(run.players[0].pos());
     for y in ty - 3..=ty + 3 {
