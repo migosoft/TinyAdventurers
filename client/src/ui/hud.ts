@@ -54,6 +54,8 @@ export const DEBUG_KEYS: [key: string, label: string][] = [
   ['F4', 'darkvision 0/50/100 %'],
   ['F7', 'nearest enemy incorporeal'],
   ['F8', 'next effect on you'],
+  ['Shift+F7', 'anti-magic on/off'],
+  ['Shift+F8', 'dispel on you'],
   ['F9', 'immortal on/off'],
 ];
 

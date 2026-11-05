@@ -47,6 +47,8 @@ describe('Hud', () => {
       ['F4', 'F4darkvision 0/50/100 %'],
       ['F7', 'F7nearest enemy incorporeal'],
       ['F8', 'F8next effect on you'],
+      ['Shift+F7', 'Shift+F7anti-magic on/off'],
+      ['Shift+F8', 'Shift+F8dispel on you'],
       ['F9', 'F9immortal on/off'],
       ['', 'path to the boss'],
       ['', 'path to the ogre'],
