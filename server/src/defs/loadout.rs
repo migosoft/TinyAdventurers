@@ -103,7 +103,7 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
     use AbilityMod::*;
     let (mut radius, mut range, mut damage, mut arc) = (vec![], vec![], vec![], vec![]);
     let (mut duration, mut cooldown, mut behind) = (vec![], vec![], vec![]);
-    let mut on_hit = r.on_hit;
+    let mut mod_on_hit = r.mod_on_hit.clone();
     let mut shares: Vec<(DamageType, f64)> = vec![];
     let (mut pierce, mut through, mut push_str) = (r.pierce, r.pierce_through, r.push_str);
     let (mut per_cast, mut alive) = (r.per_cast as i32, r.alive as i32);
@@ -124,7 +124,9 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
                 shares.push((t, v));
             }
             PushStr(n) => push_str += n,
-            AddOnHit(h) => on_hit = Some(OnHit { power: if h.power == 0 { r.power } else { h.power }, ..h }),
+            AddOnHit(h) => {
+                mod_on_hit.push(OnHit { power: if h.power == 0 { r.power } else { h.power }, ..h });
+            }
             BehindArc(a) => behind.push(a),
             CompanionHpMul(_) | CompanionDashCooldownAdd(_) => {}
         }
@@ -144,12 +146,12 @@ pub fn apply_mods(r: ResolvedAbility, mods: &[AbilityMod]) -> ResolvedAbility {
         arc: (r.arc * product(arc)).max(0.0),
         duration: new_duration,
         // The ability's own effect lasts as long as the ability does.
-        effect: if longer { r.effect.map(|e| OnHit { secs: new_duration, ..e }) } else { r.effect },
+        effect: if longer { r.effect.iter().map(|e| OnHit { secs: new_duration, ..*e }).collect() } else { r.effect.clone() },
         cooldown: mods_cooldown,
         cd_steps: CdSteps { mods: mods_cooldown, ..r.cd_steps },
         split: if shares.is_empty() { r.split } else { r.split.with_shares(&shares) },
         behind: (r.behind + sum(behind)).max(0.0),
-        on_hit,
+        mod_on_hit,
         pierce,
         pierce_through: through,
         push_str,
@@ -332,8 +334,8 @@ mod tests {
         let mods = [DamageMul(1.1), DamageMul(0.5), CooldownAdd(-1.0), RadiusMul(1.2), CooldownAdd(0.5)];
         let mut rev = mods;
         rev.reverse();
-        let a = apply_mods(r, &mods);
-        assert_eq!(a, apply_mods(r, &rev));
+        let a = apply_mods(r.clone(), &mods);
+        assert_eq!(a, apply_mods(r.clone(), &rev));
         assert!((a.damage - r.damage * 0.55).abs() < 1e-9, "{}", a.damage);
         assert!((a.cooldown - (r.cooldown - 0.5)).abs() < 1e-12);
         assert!((a.radius - r.radius * 1.2).abs() < 1e-12);
@@ -345,11 +347,11 @@ mod tests {
         use crate::defs::damage::DamageType;
         use AbilityMod::*;
         let r = hero_sheet(ClassId::Barbarian, &Build::start(ClassId::Barbarian)).unwrap().secondary;
-        let a = apply_mods(r, &[RangeMul(2.0), DurationAdd(0.1), ArcMul(0.5), AddShare(DamageType::Heat, 0.25), PushStr(3), PierceThrough(2)]);
+        let a = apply_mods(r.clone(), &[RangeMul(2.0), DurationAdd(0.1), ArcMul(0.5), AddShare(DamageType::Heat, 0.25), PushStr(3), PierceThrough(2)]);
         assert_eq!((a.range, a.arc, a.push_str, a.pierce_through), (r.range * 2.0, r.arc * 0.5, r.push_str + 3, 2));
         assert!((a.duration - (r.duration + 0.1)).abs() < 1e-12);
         assert!((a.split.share(DamageType::Heat) - 0.25).abs() < 1e-12 && (a.split.share(DamageType::Physical) - 0.75).abs() < 1e-12);
-        let c = apply_mods(r, &[CompanionHpMul(2.0), CompanionDashCooldownAdd(-1.0)]);
+        let c = apply_mods(r.clone(), &[CompanionHpMul(2.0), CompanionDashCooldownAdd(-1.0)]);
         assert_eq!(c, r, "the companion mods leave the ability alone");
     }
 
@@ -359,11 +361,11 @@ mod tests {
         let b = crate::sheet::Body { radius: 6.0 };
         let a = crate::sheet::resolve_ability(&def(RaiseDead), &Attributes::new(10, 10, 10, 22, 10, 10), &[], b).unwrap();
         assert_eq!((a.per_cast, a.alive), (3, 5));
-        let m = apply_mods(a, &[PerCastAdd(1), AliveAdd(3)]);
+        let m = apply_mods(a.clone(), &[PerCastAdd(1), AliveAdd(3)]);
         assert_eq!((m.per_cast, m.alive), (4, 8));
-        let m = apply_mods(a, &[PerCastAdd(-1), PerCastAdd(-1)]);
+        let m = apply_mods(a.clone(), &[PerCastAdd(-1), PerCastAdd(-1)]);
         assert_eq!(m.per_cast, 1, "additions sum");
-        let m = apply_mods(a, &[AliveAdd(-9)]);
+        let m = apply_mods(a.clone(), &[AliveAdd(-9)]);
         assert_eq!(m.alive, 0, "clamped");
     }
 
@@ -371,23 +373,46 @@ mod tests {
     fn mods_never_drive_a_number_below_its_floor() {
         use AbilityMod::*;
         let r = hero_sheet(ClassId::Wizard, &Build::start(ClassId::Wizard)).unwrap().secondary;
-        let a = apply_mods(r, &[CooldownAdd(-100.0), DurationAdd(-100.0), DamageMul(-1.0), RadiusMul(-1.0), RangeMul(-1.0), ArcMul(-1.0)]);
+        let a = apply_mods(r.clone(), &[CooldownAdd(-100.0), DurationAdd(-100.0), DamageMul(-1.0), RadiusMul(-1.0), RangeMul(-1.0), ArcMul(-1.0)]);
         assert_eq!(a.cooldown, MIN_COOLDOWN, "a cooldown never reaches 0");
         assert_eq!((a.duration, a.damage, a.radius, a.range, a.arc), (0.0, 0.0, 0.0, 0.0, 0.0), "no negative numbers");
-        assert_eq!(apply_mods(r, &[]).cooldown, r.cooldown.max(MIN_COOLDOWN), "the floor holds with no mods");
-        let tiny = ResolvedAbility { cooldown: 0.01, ..r };
-        assert_eq!(apply_mods(tiny, &[]).cooldown, MIN_COOLDOWN, "a resolved cooldown below the floor is lifted with no mods");
+        assert_eq!(apply_mods(r.clone(), &[]).cooldown, r.cooldown.max(MIN_COOLDOWN), "the floor holds with no mods");
+        let tiny = ResolvedAbility { cooldown: 0.01, ..r.clone() };
+        assert_eq!(apply_mods(tiny.clone(), &[]).cooldown, MIN_COOLDOWN, "a resolved cooldown below the floor is lifted with no mods");
     }
 
     #[test]
     fn a_duration_mod_lengthens_the_own_effect() {
         let r = hero_sheet(ClassId::Wizard, &Build::start(ClassId::Wizard)).unwrap().secondary;
         let mut r = r;
-        r.effect = Some(OnHit { kind: crate::defs::effects::EffectKind::Accelerated, secs: r.duration, magical: true, power: 5, look: crate::defs::effects::EffectLook::Plain });
-        let a = apply_mods(r, &[AbilityMod::DurationAdd(2.0)]);
+        r.effect = vec![OnHit { kind: crate::defs::effects::EffectKind::Accelerated, secs: r.duration, magical: true, power: 5, look: crate::defs::effects::EffectLook::Plain }];
+        let a = apply_mods(r.clone(), &[AbilityMod::DurationAdd(2.0)]);
         assert_eq!(a.duration, r.duration + 2.0);
-        assert_eq!(a.effect.unwrap().secs, a.duration, "the effect follows the duration");
-        assert_eq!(apply_mods(r, &[]).effect, r.effect, "no mod, no change");
+        assert_eq!(a.effect[0].secs, a.duration, "the effect follows the duration");
+        assert_eq!(apply_mods(r.clone(), &[]).effect, r.effect, "no mod, no change");
+    }
+
+    #[test]
+    fn add_on_hit_mods_add_up() {
+        use crate::defs::effects::{EffectKind, EffectLook, OnHit};
+        let r = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap().primary;
+        let a = OnHit { kind: EffectKind::Poisoned, secs: 2.0, magical: true, power: 0, look: EffectLook::Plain };
+        let b = OnHit { kind: EffectKind::Weakened, secs: 3.0, magical: false, power: 4, look: EffectLook::Plain };
+        let mut expected = r.mod_on_hit.clone();
+        expected.extend([OnHit { power: r.power, ..a }, b]);
+        let got = apply_mods(r.clone(), &[AbilityMod::AddOnHit(a), AbilityMod::AddOnHit(b)]);
+        assert_eq!(got.mod_on_hit, expected);
+        assert_eq!(got.on_hit, r.on_hit, "the weapon's list is left alone");
+    }
+
+    #[test]
+    fn a_longer_duration_lengthens_every_own_effect() {
+        use crate::defs::effects::{EffectKind, EffectLook, OnHit};
+        let mut r = hero_sheet(ClassId::Wizard, &Build::start(ClassId::Wizard)).unwrap().secondary;
+        let e = |kind| OnHit { kind, secs: r.duration, magical: true, power: 5, look: EffectLook::Plain };
+        r.effect = vec![e(EffectKind::Accelerated), e(EffectKind::Weakened)];
+        let a = apply_mods(r.clone(), &[AbilityMod::DurationAdd(1.0)]);
+        assert!(a.effect.len() == 2 && a.effect.iter().all(|x| x.secs == r.duration + 1.0));
     }
 
     #[test]
@@ -396,14 +421,16 @@ mod tests {
         let r = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap().primary;
         assert_eq!(r.id, Strike);
         let hit = OnHit { kind: EffectKind::Poisoned, secs: 2.0, magical: true, power: 0, look: EffectLook::Plain };
-        let a = apply_mods(r, &[AbilityMod::AddOnHit(hit)]);
-        assert_eq!(a.on_hit, Some(OnHit { power: r.power, ..hit }), "a power of 0 takes the ability's");
+        let a = apply_mods(r.clone(), &[AbilityMod::AddOnHit(hit)]);
+        assert_eq!(a.mod_on_hit, vec![OnHit { power: r.power, ..hit }], "a power of 0 takes the ability's");
         let own = OnHit { power: 17, ..hit };
-        assert_eq!(apply_mods(r, &[AbilityMod::AddOnHit(own)]).on_hit, Some(own));
-        let b = ResolvedAbility { behind: 1.0, ..r };
-        assert_eq!(apply_mods(b, &[AbilityMod::BehindArc(0.5), AbilityMod::BehindArc(0.5)]).behind, 2.0);
-        assert_eq!(apply_mods(b, &[AbilityMod::BehindArc(-5.0)]).behind, 0.0);
-        assert_eq!(apply_mods(r, &[]).behind, 0.0);
+        let mut expected = r.mod_on_hit.clone();
+        expected.push(own);
+        assert_eq!(apply_mods(r.clone(), &[AbilityMod::AddOnHit(own)]).mod_on_hit, expected);
+        let b = ResolvedAbility { behind: 1.0, ..r.clone() };
+        assert_eq!(apply_mods(b.clone(), &[AbilityMod::BehindArc(0.5), AbilityMod::BehindArc(0.5)]).behind, 2.0);
+        assert_eq!(apply_mods(b.clone(), &[AbilityMod::BehindArc(-5.0)]).behind, 0.0);
+        assert_eq!(apply_mods(r.clone(), &[]).behind, 0.0);
     }
 
     #[test]

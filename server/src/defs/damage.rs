@@ -138,12 +138,12 @@ impl Resistances {
 }
 
 /// One hit: an amount and how it splits by type.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Damage {
     pub amount: f64,
     pub split: DamageSplit,
     /// An effect the hit applies after its damage, if the target lives (sleep poison arrow).
-    pub on_hit: Option<super::effects::OnHit>,
+    pub on_hit: Vec<super::effects::OnHit>,
     /// Dealt by an effect over time: applies no effects (no loops).
     pub from_effect: bool,
     /// The source's governing Attribute (spell INT, innate CHA, weapon STR or DEX):
@@ -239,7 +239,7 @@ impl Why {
 
 impl Damage {
     pub fn new(amount: f64, split: DamageSplit) -> Self {
-        Damage { amount, split, on_hit: None, from_effect: false, power: 0, why: Why::NONE }
+        Damage { amount, split, on_hit: Vec::new(), from_effect: false, power: 0, why: Why::NONE }
     }
     pub fn by(mut self, id: u32, what: What) -> Self {
         self.why.by = Some(id);
@@ -260,7 +260,7 @@ impl Damage {
     }
     #[cfg(test)]
     pub fn with_effect(mut self, h: super::effects::OnHit) -> Self {
-        self.on_hit = Some(h);
+        self.on_hit.push(h);
         self
     }
     pub fn effect_tick(amount: f64, t: DamageType) -> Self {

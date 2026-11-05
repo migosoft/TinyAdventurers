@@ -109,13 +109,16 @@ impl Effects {
         self.add_with(k, secs, EffectLook::Plain, None, 0)
     }
     /// `add` with a look, a source and the `amount` of an Attribute effect (0 for the others); a refresh
-    /// takes the new look, source and position too, and adds the amount when the effect stacks,
-    /// else replaces it.
+    /// takes the new look, and the new source and position when it has one (a sourceless refresh keeps
+    /// the recorded bestower), and adds the amount when the effect stacks, else replaces it.
     pub fn add_with(&mut self, k: EffectKind, secs: f64, look: EffectLook, source: Option<(u32, Vec2)>, amount: i32) -> bool {
         let (source, from) = source.map_or((None, Vec2::ZERO), |(id, at)| (Some(id), at));
         if let Some(a) = self.0.iter_mut().find(|a| a.kind == k) {
             a.left = a.left.max(secs);
-            (a.look, a.source, a.from) = (look, source, from);
+            a.look = look;
+            if source.is_some() {
+                (a.source, a.from) = (source, from);
+            }
             a.amount = if def(k).stacks { a.amount + amount } else { amount };
             return false;
         }
@@ -420,6 +423,7 @@ impl Run {
     }
 
     /// `apply` from a source of `power`: the time is scaled by the target's save (see `apply`).
+    #[cfg(test)]
     pub fn apply_effect_from(&mut self, c: Creature, kind: EffectKind, secs: Option<f64>, power: i32, magical: bool) -> bool {
         self.apply(c, Apply { power: Some(power), magical, ..Apply::plain(kind, secs) })
     }
@@ -464,20 +468,33 @@ impl Run {
         if dmg.from_effect {
             return;
         }
+        let source = self.bestower(dmg);
         for k in crate::defs::effects::type_effects(&dmg.split) {
-            self.apply_effect_from(c, k, None, dmg.power.max(TYPE_EFFECT_POWER), false);
+            let power = dmg.power.max(TYPE_EFFECT_POWER);
+            self.apply(c, Apply { kind: k, secs: None, power: Some(power), magical: false, look: EffectLook::Plain, source, origin: None });
         }
     }
 
     /// A hit's effect: always applied (no roll); the target's save and resistance only shorten or refuse it.
+    #[cfg(test)]
     pub fn hit_effect(&mut self, c: Creature, h: OnHit) {
         self.apply(c, Apply::from_hit(h));
     }
 
-    /// A pure effect hit (no damage): the same, with the hit's cause for the rules log.
-    pub fn hit_effect_by(&mut self, c: Creature, h: OnHit, why: Why) {
-        let origin = why.by.map(|by| (by, why.what));
-        self.apply(c, Apply { origin, ..Apply::from_hit(h) });
+    /// The creature that made the hit, and where it is: what the effects the hit applies remember.
+    /// `None` for terrain and for damage whose `by` is not a hero or monster (a barrel's blast).
+    fn bestower(&self, dmg: &Damage) -> Option<(u32, Vec2)> {
+        let by = dmg.why.by.filter(|&id| self.player_idx(id).is_some() || self.monster_idx(id).is_some())?;
+        Some((by, self.entity_pos(by).unwrap_or(Vec2::ZERO)))
+    }
+
+    /// Every effect a hit lists, in order, each with the hit's cause for the rules log.
+    pub fn hit_effects(&mut self, c: Creature, dmg: &Damage) {
+        let origin = dmg.why.by.map(|by| (by, dmg.why.what));
+        let source = self.bestower(dmg);
+        for &h in &dmg.on_hit {
+            self.apply(c, Apply { origin, source, ..Apply::from_hit(h) });
+        }
     }
 
     /// Damage ends effects that break on it (none yet).
@@ -515,19 +532,20 @@ impl Run {
         let changes: Vec<(Attr, i32, i32)> = match c {
             Creature::Player(i) => {
                 let Some(p) = self.players.get_mut(i).filter(|p| p.alive) else { return };
-                let old = p.sheet;
                 let mut sheet = crate::sheet::run_sheet(p.class, &p.build, p.effects.attr_delta());
-                (sheet.light, sheet.wolf) = (old.light, old.wolf);
+                (sheet.light, sheet.wolf) = (p.sheet.light, p.sheet.wolf);
                 p.res = sheet.res;
                 p.max_hp = sheet.max_hp;
                 p.hp = p.hp.min(p.max_hp);
-                p.sheet = sheet;
-                let changed = (old.speed, old.primary, old.secondary, old.fallback, old.disabled) != (sheet.speed, sheet.primary, sheet.secondary, sheet.fallback, sheet.disabled);
+                let old = std::mem::replace(&mut p.sheet, sheet);
+                let sheet = &p.sheet;
+                let changed = (old.speed, &old.primary, &old.secondary, &old.fallback, old.disabled) != (sheet.speed, &sheet.primary, &sheet.secondary, &sheet.fallback, sheet.disabled);
+                let new_attrs = sheet.attrs;
                 if changed {
-                    let msg = crate::protocol::ServerMsg::HeroChanged { speed: sheet.speed, abilities: [sheet.primary, sheet.secondary], fallback: sheet.fallback, disabled: sheet.disabled };
+                    let msg = crate::protocol::ServerMsg::HeroChanged { speed: sheet.speed, abilities: [sheet.primary.clone(), sheet.secondary.clone()], fallback: sheet.fallback.clone(), disabled: sheet.disabled };
                     self.send(&self.players[i], &msg);
                 }
-                Attr::ALL.into_iter().map(|a| (a, old.attrs.get(a), sheet.attrs.get(a))).collect()
+                Attr::ALL.into_iter().map(|a| (a, old.attrs.get(a), new_attrs.get(a))).collect()
             }
             Creature::Monster(i) => {
                 let delta = self.monsters.get(i).map(|m| m.effects.attr_delta());
@@ -1110,6 +1128,72 @@ mod tests {
         assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "a pure effect hit shows no number");
     }
 
+    fn plain_hit(kind: EffectKind) -> OnHit {
+        OnHit { kind, secs: 2.0, magical: false, power: 10, look: EffectLook::Plain }
+    }
+
+    #[test]
+    fn a_hit_applies_every_listed_effect() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.hurt_player(0, Damage::physical(1.0).with_effect(plain_hit(EffectKind::Chilled)).with_effect(plain_hit(EffectKind::Weakened)));
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Chilled));
+        assert!(run.has_effect(Creature::Player(0), EffectKind::Weakened));
+    }
+
+    #[test]
+    fn a_pure_effect_hit_applies_every_listed_effect() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        let hp = run.monsters[mi].hp;
+        run.events.clear();
+        run.hurt_monster(mi, Damage::physical(0.0).with_effect(plain_hit(EffectKind::Chilled)).with_effect(plain_hit(EffectKind::Weakened)), false, Some(0));
+        assert!(run.has_effect(c, EffectKind::Chilled) && run.has_effect(c, EffectKind::Weakened));
+        assert_eq!(run.monsters[mi].hp, hp);
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, Ev::Dmg { .. })), "a pure effect hit shows no number");
+    }
+
+    #[test]
+    fn the_later_effect_on_one_hit_decides_a_cancel() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.hurt_monster(mi, Damage::physical(0.0).with_effect(plain_hit(EffectKind::Burning)).with_effect(plain_hit(EffectKind::Frozen)), false, Some(0));
+        assert!(!run.has_effect(c, EffectKind::Burning) && !run.has_effect(c, EffectKind::Frozen), "Frozen cancels Burning and is not applied");
+        let d = fresh_ogre(&mut run);
+        let Creature::Monster(di) = d else { unreachable!() };
+        run.hurt_monster(di, Damage::physical(0.0).with_effect(plain_hit(EffectKind::Frozen)), false, Some(0));
+        assert!(run.has_effect(d, EffectKind::Frozen));
+    }
+
+    #[test]
+    fn a_killing_hit_applies_no_listed_effects() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        run.hurt_monster(mi, Damage::physical(10_000.0).with_effect(plain_hit(EffectKind::Chilled)).with_effect(plain_hit(EffectKind::Weakened)), false, Some(0));
+        assert!(!run.monsters[mi].alive);
+        assert!(!run.has_effect(c, EffectKind::Chilled) && !run.has_effect(c, EffectKind::Weakened));
+    }
+
+    #[test]
+    fn an_effect_tick_applies_no_listed_effects() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        run.hurt_player(0, Damage::effect_tick(5.0, DamageType::Heat).with_effect(plain_hit(EffectKind::Slowed)).with_effect(plain_hit(EffectKind::Blind)));
+        assert!(run.players[0].effects.list().is_empty());
+    }
+
+    #[test]
+    fn a_bodiless_pass_through_applies_no_listed_effects() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Lich);
+        let at = run.players[0].pos();
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Ghost, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        let c = Creature::Monster(mi);
+        run.hurt_monster(mi, Damage::physical(1.0).with_effect(plain_hit(EffectKind::Slowed)).with_effect(plain_hit(EffectKind::Blind)), false, Some(0));
+        assert!(!run.has_effect(c, EffectKind::Slowed) && !run.has_effect(c, EffectKind::Blind));
+    }
+
     #[test]
     fn a_killing_hit_applies_no_effect_and_sleep_survives_damage() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
@@ -1519,7 +1603,90 @@ mod tests {
         let fx = &run.monsters[mi].effects;
         assert_eq!(fx.looks().count(), 0, "a refresh takes the new look");
         let a = fx.list().iter().find(|a| a.kind == EffectKind::Entangled).unwrap();
-        assert_eq!((a.left, a.source, a.from), (2.0, None, Vec2::ZERO), "and keeps the longer time");
+        assert_eq!((a.left, a.source, a.from), (2.0, Some(hid), hpos), "and keeps the longer time and the bestower");
+    }
+
+    fn poison() -> OnHit {
+        OnHit { kind: EffectKind::Poisoned, secs: 3.0, magical: false, power: 10, look: EffectLook::Plain }
+    }
+
+    fn source_of(run: &crate::run::Run, c: Creature, k: EffectKind) -> Option<Option<u32>> {
+        let fx = match c {
+            Creature::Player(i) => &run.players[i].effects,
+            Creature::Monster(i) => &run.monsters[i].effects,
+        };
+        fx.list().iter().find(|a| a.kind == k).map(|a| a.source)
+    }
+
+    #[test]
+    fn an_on_hit_effect_remembers_its_bestower() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        let hero = run.players[0].id;
+        run.hurt_monster(mi, Damage::physical(1.0).by(hero, What::Ability(crate::defs::abilities::AbilityId::MagicMissile)).with_effect(poison()), false, Some(0));
+        assert_eq!(source_of(&run, c, EffectKind::Poisoned), Some(Some(hero)));
+    }
+
+    #[test]
+    fn a_split_effect_remembers_its_bestower() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        let hero = run.players[0].id;
+        let hit = Damage::new(10.0, DamageSplit::split(&[(DamageType::Heat, 0.5)])).by(hero, What::Ability(crate::defs::abilities::AbilityId::MagicMissile));
+        run.hurt_monster(mi, hit, false, Some(0));
+        assert_eq!(source_of(&run, c, EffectKind::Burning), Some(Some(hero)));
+    }
+
+    #[test]
+    fn a_sourceless_refresh_keeps_the_bestower() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        let hero = run.players[0].id;
+        let hit = Damage::new(10.0, DamageSplit::split(&[(DamageType::Heat, 0.5)])).by(hero, What::Ability(crate::defs::abilities::AbilityId::MagicMissile));
+        run.hurt_monster(mi, hit, false, Some(0));
+        run.apply_effect(c, EffectKind::Burning, Some(5.0));
+        assert_eq!(source_of(&run, c, EffectKind::Burning), Some(Some(hero)));
+        let a = run.monsters[mi].effects.list().iter().find(|a| a.kind == EffectKind::Burning).unwrap();
+        assert_ne!(a.from, Vec2::ZERO, "and where it was seen");
+        // A refresh by another bestower takes the new one.
+        let other = run.players[0].id + 1000;
+        run.apply(c, Apply { source: Some((other, Vec2::new(1.0, 1.0))), ..Apply::plain(EffectKind::Burning, Some(5.0)) });
+        assert_eq!(source_of(&run, c, EffectKind::Burning), Some(Some(other)));
+    }
+
+    #[test]
+    fn a_barrel_blast_keeps_the_hero_bestower() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let c = fresh_ogre(&mut run);
+        let Creature::Monster(mi) = c else { unreachable!() };
+        let hero = run.players[0].id;
+        let hit = Damage::new(10.0, DamageSplit::split(&[(DamageType::Heat, 0.5)])).by(hero, What::Ability(crate::defs::abilities::AbilityId::MagicMissile));
+        run.hurt_monster(mi, hit, false, Some(0));
+        assert_eq!(source_of(&run, c, EffectKind::Burning), Some(Some(hero)));
+        let barrel = Damage::new(10.0, DamageSplit::split(&[(DamageType::Heat, 0.5)])).by(999_999, What::Blast);
+        run.hurt_monster(mi, barrel, false, None);
+        assert_eq!(source_of(&run, c, EffectKind::Burning), Some(Some(hero)));
+    }
+
+    #[test]
+    fn a_tick_from_a_gone_bestower_does_not_panic() {
+        use crate::defs::enemies::EnemyType;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.log.forced = true;
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let gid = run.spawn_enemy(EnemyType::GoblinArcher, at, None);
+        run.hurt_player(0, Damage::physical(1.0).by(gid, What::Ability(crate::defs::abilities::AbilityId::MagicMissile)).with_effect(poison()));
+        assert_eq!(source_of(&run, Creature::Player(0), EffectKind::Poisoned), Some(Some(gid)));
+        run.monsters.retain(|m| m.id != gid);
+        assert!(run.monster_idx(gid).is_none());
+        let hp = run.players[0].hp;
+        for _ in 0..200 {
+            run.tick_effects();
+        }
+        assert!(run.players[0].hp < hp, "the ticks landed");
     }
 
     #[test]
@@ -1633,7 +1800,7 @@ mod tests {
     fn a_drain_ending_restores_the_numbers_but_not_hp() {
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
         let h = Creature::Player(0);
-        let before = run.players[0].sheet;
+        let before = run.players[0].sheet.clone();
         for _ in 0..3 {
             drain(&mut run, h, EffectKind::Frail, 20.0, None);
         }
@@ -1730,7 +1897,7 @@ mod tests {
         run.players[0].tx = Some(tx);
         let h = Creature::Player(0);
         drain(&mut run, h, EffectKind::Weakened, 20.0, None);
-        let s = run.players[0].sheet;
+        let s = run.players[0].sheet.clone();
         let want = encode(&ServerMsg::HeroChanged { speed: s.speed, abilities: [s.primary, s.secondary], fallback: s.fallback, disabled: s.disabled });
         let Ok(axum::extract::ws::Message::Binary(got)) = rx.try_recv() else { panic!("a HeroChanged") };
         assert_eq!(got.to_vec(), want);

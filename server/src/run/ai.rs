@@ -326,7 +326,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     }
     // A foe in sight and room for more minions: start raising them.
     if seen.is_some() {
-        let raise = def.abilities.iter().filter_map(|&id| run.monsters[mi].kit.get(id)).copied().find(|a| {
+        let raise = def.abilities.iter().filter_map(|&id| run.monsters[mi].kit.get(id)).cloned().find(|a| {
             ab::def(a.id).own.minions.is_some() && run.monsters[mi].cds.ready(a.id) && super::minions::room(run, mi, a) > 0
         });
         if let Some(a) = raise {
@@ -352,12 +352,12 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 Shape::Ring => a.radius,
                 _ => a.range,
             };
-            let main = *run.monsters[mi].kit.get(def.abilities[0]).expect("an enemy has its main ability");
+            let main = run.monsters[mi].kit.get(def.abilities[0]).expect("an enemy has its main ability").clone();
             let (range, preferred) = (reach(&main), def.preferred);
             if let Some(&alt_id) = def.abilities.get(1) {
                 // Second ability: a claw when the target is in reach, a bolt only from afar, a slam
                 // when it is worth it.
-                let alt = *run.monsters[mi].kit.get(alt_id).expect("an enemy has its alt ability");
+                let alt = run.monsters[mi].kit.get(alt_id).expect("an enemy has its alt ability").clone();
                 let alt_range = reach(&alt);
                 let usable = match ab::def(alt_id).shape {
                     Shape::Swing => d <= alt_range,
@@ -535,7 +535,7 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool,
     if !monster_use(run, mi, id, target) {
         return;
     }
-    let a = *run.monsters[mi].kit.get(id).expect("monster_use found it");
+    let a = run.monsters[mi].kit.get(id).expect("monster_use found it").clone();
     let pace = if ab::def(id).shape == Shape::Projectile { a.cooldown * (1.0 + run.rng.gen_range(0.0..SHOT_PACE_JITTER)) } else { a.cooldown };
     let ai = &mut run.monsters[mi].ai;
     if alt {

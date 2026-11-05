@@ -184,7 +184,7 @@ fn nothing_is_recorded_or_sent_while_off() {
 }
 
 fn rec(kind: LineKind, head: &str, who: Vec<Seen>) -> LogRec {
-    LogRec { t: 1.0, kind, head: head.to_string(), details: vec![], who, unseen: None, dealt: None, secs: None }
+    LogRec { t: 1.0, kind, head: head.to_string(), details: vec![], who, unseen: None, plain: None, dealt: None, secs: None }
 }
 
 /// Open floor around hero 0 with a wall two tiles east; darkvision makes lit-ness moot.
@@ -443,7 +443,7 @@ fn a_frost_shard_line_reads_like_the_spec() {
     let goblin = tag_of(&run, run.monsters[mi].id);
     let hp0 = run.monsters[mi].hp;
     let res = run.monsters[mi].effects.res(run.monsters[mi].res);
-    let a = run.players[0].sheet.primary;
+    let a = run.players[0].sheet.primary.clone();
     let b = a.base;
     let s = b.scale.unwrap();
     assert_eq!(s.have, 16);
@@ -957,6 +957,28 @@ fn death_of(run: &mut Run, f: DeathFacts) {
 }
 
 #[test]
+fn a_tick_names_its_bestower() {
+    let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
+    let mi = goblin_near(&mut run, Some(1000.0));
+    let (hero, name) = (run.players[0].id, run.players[0].name.clone());
+    let goblin = tag_of(&run, run.monsters[mi].id);
+    let poison = OnHit { kind: EffectKind::Poisoned, secs: 3.0, magical: false, power: 10, look: EffectLook::Plain };
+    run.hurt_monster(mi, Damage::physical(1.0).by(hero, What::Ability(AbilityId::MagicMissile)).with_effect(poison), false, Some(0));
+    let _ = take(&mut run);
+    let mut tick = None;
+    for _ in 0..200 {
+        run.tick_effects();
+        tick = take(&mut run).into_iter().find(|r| r.head.contains("Poisoned"));
+        if tick.is_some() {
+            break;
+        }
+    }
+    let tick = tick.expect("a Poisoned tick landed");
+    assert!(tick.head.starts_with(&format!("{name} ▸ Poisoned ▸ {goblin}")), "{}", tick.head);
+    assert!(tick.who.iter().any(|s| s.id == hero), "the hero's log gets the line");
+}
+
+#[test]
 fn a_burn_kill_credits_the_hero() {
     let mut run = wizard_with(AbilityId::MagicMissile, Attributes::default());
     let mi = goblin_near(&mut run, Some(1.0));
@@ -1428,7 +1450,7 @@ fn a_hidden_mimic_is_a_chest_in_every_line() {
     run.monsters[mi].max_hp = 1000.0;
     let _ = take(&mut run);
     // The revealing hit, with an effect on it: every line says Chest.
-    let burn = Damage { on_hit: Some(OnHit { kind: EffectKind::Burning, secs: 2.0, magical: true, power: 5, look: EffectLook::Plain }), ..Damage::physical(5.0).by(hero, What::Ability(AbilityId::MagicMissile)) };
+    let burn = Damage { on_hit: vec![OnHit { kind: EffectKind::Burning, secs: 2.0, magical: true, power: 5, look: EffectLook::Plain }], ..Damage::physical(5.0).by(hero, What::Ability(AbilityId::MagicMissile)) };
     run.hurt_monster(mi, burn, false, Some(0));
     assert!(!run.monsters[mi].hiding, "the hit woke it");
     let first = take(&mut run);
@@ -1633,9 +1655,9 @@ fn haste_and_purify_credit_the_user_on_every_target() {
     assert_eq!(haste.len(), 2, "one line per hero: {haste:?}");
     assert_eq!(haste[0], haste[1], "both name the user");
 
-    let mut purify = run.players[0].sheet.secondary;
+    let mut purify = run.players[0].sheet.secondary.clone();
     purify.id = AbilityId::Purify;
-    purify.effect = Some(crate::defs::effects::OnHit { kind: EffectKind::Warded, secs: 4.0, magical: true, power: 0, look: EffectLook::Plain });
+    purify.effect = vec![crate::defs::effects::OnHit { kind: EffectKind::Warded, secs: 4.0, magical: true, power: 0, look: EffectLook::Plain }];
     crate::run::abilities::use_for_tests(&mut run, Creature::Player(0), &purify, 1);
     let lines = leads(&mut run, "Purify");
     assert_eq!(lines.len(), 2, "one line per hero: {lines:?}");
@@ -1692,7 +1714,7 @@ fn a_drain_logs_a_line_per_changed_attribute() {
 #[test]
 fn a_cast_logs_the_cooldown_it_started() {
     let mut run = hero_secondary(ClassId::Wizard, AbilityId::Fireball, Attributes::default());
-    let a = run.players[0].sheet.secondary;
+    let a = run.players[0].sheet.secondary.clone();
     let have = a.cd_steps.have;
     let _ = take(&mut run);
     crate::run::abilities::try_use(&mut run, 0, false, 1);
@@ -1727,4 +1749,69 @@ fn n2_rounds_to_two_decimals_and_drops_trailing_zeros() {
     assert_eq!(text::n2(3.08), "3.08");
     assert_eq!(text::n2(2.8), "2.8");
     assert_eq!(text::n2(2.8049), "2.8");
+}
+
+/// A hero poisoned by an archer behind a wall; the poison's ticks, as every hero's log gets them.
+fn poisoned_by_an_unseen_archer(hp: Option<f64>) -> (Run, Vec<LogRec>, String) {
+    let mut run = test_run(&[ClassId::Wizard, ClassId::Paladin], BossId::Demon);
+    let (tx, ty) = walled(&mut run);
+    set_prefs(&mut run, 0, true, true);
+    set_prefs(&mut run, 1, true, true);
+    let archer = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
+    let poison = OnHit { kind: EffectKind::Poisoned, secs: 3.0, magical: false, power: 10, look: EffectLook::Plain };
+    run.hurt_player(0, Damage::physical(1.0).by(archer, What::Ability(AbilityId::Strike)).with_effect(poison));
+    if let Some(hp) = hp {
+        run.players[0].hp = hp;
+    }
+    let _ = take(&mut run);
+    let mut recs = vec![];
+    for _ in 0..400 {
+        run.tick_effects();
+        recs = take(&mut run);
+        if recs.iter().any(|r| r.head.contains("Poisoned") || r.kind == LineKind::Death) {
+            break;
+        }
+    }
+    let name = run.players[0].name.clone();
+    (run, recs, name)
+}
+
+#[test]
+fn a_tick_from_an_unseen_bestower_reads_as_before() {
+    let (mut run, recs, name) = poisoned_by_an_unseen_archer(None);
+    let (h0, h1) = (run.players[0].id, run.players[1].id);
+    let (view, dark) = view_of(&mut run, 0);
+    for (pi, viewed) in [(0, h0), (1, h1)] {
+        let got = for_viewer(&run, pi, viewed, &view, &dark, &[], &recs).unwrap();
+        let tick = got.1.iter().find(|l| l.2.contains("Poisoned")).unwrap_or_else(|| panic!("hero {pi} gets the tick: {:?}", got.1));
+        assert!(tick.2.starts_with(&format!("Poisoned ▸ {name}")), "{}", tick.2);
+        assert!(!tick.2.contains("unseen") && !tick.2.contains("Goblin"), "{}", tick.2);
+    }
+    // Once the bestower is in view, the next tick names it again.
+    let archer = run.monsters.iter().position(|m| m.etype == Some(EnemyType::GoblinArcher)).unwrap();
+    let (px, py) = Map::tile_of(run.players[0].pos());
+    run.monsters[archer].pos = Map::center_of(px + 1, py);
+    let tag = tag_of(&run, run.monsters[archer].id);
+    let mut recs = vec![];
+    for _ in 0..400 {
+        run.tick_effects();
+        recs = take(&mut run);
+        if recs.iter().any(|r| r.head.contains("Poisoned")) {
+            break;
+        }
+    }
+    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &recs).unwrap();
+    assert!(got.1.iter().any(|l| l.2.starts_with(&format!("{tag} ▸ Poisoned ▸ {name}"))), "{:?}", got.1);
+}
+
+#[test]
+fn a_death_by_a_tick_from_an_unseen_bestower_reads_the_anonymous_form() {
+    let (mut run, recs, name) = poisoned_by_an_unseen_archer(Some(0.001));
+    let h0 = run.players[0].id;
+    let (view, dark) = view_of(&mut run, 0);
+    let got = for_viewer(&run, 1, run.players[1].id, &view, &dark, &[], &recs).unwrap();
+    let death = got.1.iter().find(|l| l.1 == LineKind::Death as u8).unwrap_or_else(|| panic!("{:?}", got.1));
+    assert!(death.2.starts_with(&format!("{name} fell (Poisoned")) && !death.2.contains("unseen"), "{}", death.2);
+    let own = for_viewer(&run, 0, h0, &view, &dark, &[], &recs).unwrap();
+    assert!(own.1.iter().any(|l| l.1 == LineKind::Death as u8 && !l.2.contains("unseen")), "{:?}", own.1);
 }

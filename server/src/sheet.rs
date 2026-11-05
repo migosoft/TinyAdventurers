@@ -13,7 +13,7 @@ use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, 
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::kinds::EntityKind;
-use crate::defs::items::{self, ArmorClass, EquipSlot, Equipment, ItemBase, ItemId, PropKind};
+use crate::defs::items::{self, ArmorClass, EquipSlot, Equipment, ItemBase, ItemId, ItemProperty, PropKind};
 use crate::defs::lights::{self, LightKind};
 use crate::defs::loadout::{apply_mods, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source, MIN_COOLDOWN};
 use crate::defs::races::Sight;
@@ -39,7 +39,7 @@ pub struct CdSteps {
 }
 
 /// An ability with its numbers resolved for one hero.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ResolvedAbility {
     pub id: AbilityId,
@@ -70,7 +70,11 @@ pub struct ResolvedAbility {
     pub split: DamageSplit,
     #[serde(skip)]
     #[ts(skip)]
-    pub on_hit: Option<OnHit>,
+    pub on_hit: Vec<OnHit>,
+    /// The effects mods added to its hits (`AddOnHit`), after the weapon's and its own.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub mod_on_hit: Vec<OnHit>,
     /// The wind-up (s) before it lands: its own plus its weapon's.
     pub windup: f64,
     /// The half-angle (rad) of the "from behind" cone; 0 = none.
@@ -78,7 +82,7 @@ pub struct ResolvedAbility {
     /// The effect it applies by itself (an `OwnEffect` resolved for this hero).
     #[serde(skip)]
     #[ts(skip)]
-    pub effect: Option<OnHit>,
+    pub effect: Vec<OnHit>,
     /// The power of its damage-type effects.
     #[serde(skip)]
     #[ts(skip)]
@@ -97,7 +101,7 @@ pub struct ResolvedAbility {
     pub alive: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Sheet {
     /// Class + race + `extra` + item points.
     pub attrs: Attributes,
@@ -227,9 +231,10 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
         ranged: d.ranged,
         projectile: None,
         split: DamageSplit::physical(),
-        on_hit: None,
+        on_hit: Vec::new(),
+        mod_on_hit: Vec::new(),
         behind: d.behind,
-        effect: own.effect.map(|e| OnHit { kind: e.kind, secs: own.duration, magical: matches!(d.category, AbilityCategory::Spell | AbilityCategory::Innate), power: attrs.get(e.power), look: e.look }),
+        effect: own.effects.iter().map(|e| OnHit { kind: e.kind, secs: own.duration, magical: matches!(d.category, AbilityCategory::Spell | AbilityCategory::Innate), power: attrs.get(e.power), look: e.look }).collect(),
         power: 0,
         push: own.push,
         push_str: attrs.get(Attr::Str),
@@ -252,7 +257,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
                 radius: own.radius,
                 duration: own.duration,
                 split: with_share(melee.split, mult.share),
-                on_hit: melee.on_hit,
+                on_hit: melee.on_hit.clone(),
                 power: melee.power,
                 push: own.push.max(melee.push),
                 windup: own.windup + melee.windup,
@@ -275,7 +280,7 @@ pub fn resolve_ability(d: &AbilityDef, attrs: &Attributes, weapons: &[ResolvedWe
                 pierce_through: w.pierce_through,
                 projectile: w.projectile,
                 split: with_share(w.split, mult.share),
-                on_hit: w.on_hit,
+                on_hit: w.on_hit.clone(),
                 power: w.power,
                 windup: own.windup + w.windup,
                 ..blank
@@ -328,25 +333,40 @@ impl Kit {
     /// The kit with `mods` applied to ability `id` (nothing changes if it has none such).
     pub fn modded(mut self, id: AbilityId, mods: &[AbilityMod]) -> Kit {
         if let Some(a) = self.0.iter_mut().find(|a| a.id == id) {
-            *a = apply_mods(*a, mods);
+            *a = apply_mods(a.clone(), mods);
         }
         self
     }
 }
 
+impl ResolvedAbility {
+    /// The effects one hit of this ability applies, in the one order: the weapon's enchantments, the
+    /// ability's own effects (when the hit `carries_own`, as a shot does), then the ones mods added.
+    /// The coat's poison goes after these (`weapon_damage`).
+    pub fn hit_effects(&self, carries_own: bool) -> Vec<OnHit> {
+        let own: &[OnHit] = if carries_own { &self.effect } else { &[] };
+        self.on_hit.iter().chain(own).chain(&self.mod_on_hit).copied().collect()
+    }
+}
+
 /// The on-hit a monster's weapon carries by itself (Ghost Touch drains STR, Shade Touch CON); `arm` fills in the power.
-fn own_on_hit(id: ItemId) -> Option<OnHit> {
-    items::def(id).props.iter().find_map(|p| match p.kind {
+fn own_on_hits(id: ItemId) -> Vec<OnHit> {
+    on_hits_of(items::def(id).props)
+}
+
+/// Every on-hit among `props`, in property order, each as magical as its property.
+fn on_hits_of(props: &[ItemProperty]) -> Vec<OnHit> {
+    props.iter().filter_map(|p| match p.kind {
         PropKind::OnHit(h) => Some(OnHit { magical: p.magical, ..h }),
         _ => None,
-    })
+    }).collect()
 }
 
 /// The kit of a monster with `attrs`, wielding `weapons` (in the order the abilities look for them:
 /// the first melee one, the first ranged one) and standing in `body`. A monster whose ability has no
 /// weapon that meets its requirement, or which can't be resolved, is a data bug: this panics.
 pub fn monster_kit(ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], body: Body) -> Kit {
-    let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&id| arm(id, attrs, &[], own_on_hit(id), 0)).collect();
+    let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&id| arm(id, attrs, &[], own_on_hits(id), 0)).collect();
     let kit = ids
         .iter()
         .map(|&id| {
@@ -391,13 +411,13 @@ pub fn kit_for(src: KitSource, attrs: &Attributes) -> Kit {
 }
 
 /// A weapon item for one wielder, with the shares and on-hit its own properties gave it.
-fn arm(id: ItemId, attrs: &Attributes, shares: &[(DamageType, f64)], on_hit: Option<OnHit>, pierce_through: u8) -> ResolvedWeapon {
+fn arm(id: ItemId, attrs: &Attributes, shares: &[(DamageType, f64)], on_hit: Vec<OnHit>, pierce_through: u8) -> ResolvedWeapon {
     let w = match items::def(id).base {
         ItemBase::Melee(k, s) => resolve_melee(k, &s, attrs),
         ItemBase::Ranged(k, s) => resolve_ranged(k, &s, attrs),
         b => panic!("{id:?} is not a weapon: {b:?}"),
     };
-    ResolvedWeapon { split: w.split.with_shares(shares), on_hit: on_hit.map(|h| OnHit { power: w.power, ..h }), pierce_through, ..w }
+    ResolvedWeapon { split: w.split.with_shares(shares), on_hit: on_hit.into_iter().map(|h| OnHit { power: w.power, ..h }).collect(), pierce_through, ..w }
 }
 
 /// The proficiencies of a hero: the class's own plus what the owned `nodes` teach.
@@ -468,7 +488,7 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
 /// that of the item it lost its weapon or version to.
 pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
     let (mut sheet, cx) = sheet_core(class, b, delta).expect("an accepted build passes the equipment check");
-    let strike = sheet.fallback;
+    let strike = sheet.fallback.clone();
     let mut wolf = WolfMods::NONE;
     for (i, (slot, p)) in [(AbilitySlot::Primary, b.loadout.primary), (AbilitySlot::Secondary, b.loadout.secondary)].into_iter().enumerate() {
         let r = match resolve_pick(class, slot, p, &cx) {
@@ -486,7 +506,7 @@ pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes) -> Sheet {
                 };
                 debug_assert!(by.is_some(), "a disabled pick has an unmet Attribute requirement: {e:?}");
                 sheet.disabled[i] = Some(by.unwrap_or((Attr::Str, 1)));
-                cx.resolve(&d).unwrap_or(ResolvedAbility { id: p.ability, ranged: d.ranged, ..strike })
+                cx.resolve(&d).unwrap_or(ResolvedAbility { id: p.ability, ranged: d.ranged, ..strike.clone() })
             }
         };
         if slot == AbilitySlot::Primary {
@@ -578,7 +598,7 @@ struct PickCx {
 
 impl PickCx {
     fn resolve(&self, d: &AbilityDef) -> Option<ResolvedAbility> {
-        let weapons: Vec<ResolvedWeapon> = std::iter::once(self.melee).chain(self.ranged).collect();
+        let weapons: Vec<ResolvedWeapon> = std::iter::once(self.melee.clone()).chain(self.ranged.clone()).collect();
         resolve_ability(d, &self.attrs, &weapons, Body { radius: PLAYER_RADIUS })
     }
 }
@@ -599,7 +619,7 @@ fn resolve_usable(class: ClassId, slot: AbilitySlot, p: Pick, d: &AbilityDef, cx
     let (version, waive_attrs) = pick_version(class, &cx.usable, slot, p)?;
     let weapon = match d.uses {
         Uses::Melee => Some(cx.melee.kind),
-        Uses::Ranged => cx.ranged.map(|w| w.kind),
+        Uses::Ranged => cx.ranged.as_ref().map(|w| w.kind),
         Uses::Nothing => None,
     };
     check_pick(d, waive_attrs, &cx.attrs, weapon)?;
@@ -657,7 +677,7 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, Pi
     let mut light: Option<LightKind> = None;
     // Index 0: the melee weapon, 1: the ranged one.
     let mut shares: [Vec<(DamageType, f64)>; 2] = Default::default();
-    let mut on_hits: [Option<OnHit>; 2] = [None, None];
+    let mut on_hits: [Vec<OnHit>; 2] = Default::default();
     let mut pierce: [u8; 2] = [0, 0];
     for &(slot, id) in &worn {
         let weapon = match slot {
@@ -665,7 +685,11 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, Pi
             EquipSlot::Ranged => Some(1),
             EquipSlot::OffHand | EquipSlot::Armor | EquipSlot::Ring1 | EquipSlot::Ring2 | EquipSlot::Shoes | EquipSlot::Belt => None,
         };
-        for p in items::def(id).props {
+        let props = items::def(id).props;
+        if let Some(i) = weapon {
+            on_hits[i].extend(on_hits_of(props));
+        }
+        for p in props {
             match p.kind {
                 PropKind::Attr(a, n) => attrs.add(a, n),
                 PropKind::Resist(t, v) => res.set(t, res.get(t) + v),
@@ -684,11 +708,8 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, Pi
                         shares[i].push((t, v));
                     }
                 }
-                PropKind::OnHit(h) => {
-                    if let Some(i) = weapon {
-                        on_hits[i] = Some(OnHit { magical: p.magical, ..h });
-                    }
-                }
+                // Weapon-only too, collected by `on_hits_of` above.
+                PropKind::OnHit(_) => {}
                 PropKind::Pierce(n) => {
                     if let Some(i) = weapon {
                         pierce[i] = pierce[i].saturating_add(n);
@@ -701,19 +722,19 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, Pi
     }
     let attrs = attrs.with_delta(delta);
     let melee_id = worn.iter().find(|w| w.0 == EquipSlot::Melee).map(|w| w.1).expect("a hero always has a melee weapon");
-    let melee = arm(melee_id, &attrs, &shares[0], on_hits[0], pierce[0]);
-    let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], on_hits[1], pierce[1]));
+    let melee = arm(melee_id, &attrs, &shares[0], std::mem::take(&mut on_hits[0]), pierce[0]);
+    let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], std::mem::take(&mut on_hits[1]), pierce[1]));
 
     let reach = melee.reach + PLAYER_RADIUS;
     let strike_def = ab::def(AbilityId::Strike);
-    let weapons: Vec<ResolvedWeapon> = std::iter::once(melee).chain(ranged).collect();
+    let weapons: Vec<ResolvedWeapon> = std::iter::once(melee.clone()).chain(ranged.clone()).collect();
     let strike = resolve_ability(&strike_def, &attrs, &weapons, Body { radius: PLAYER_RADIUS }).expect("Strike uses the melee weapon");
     let strike = keystone_ability(strike, &strike_def, &ks);
     // Radiant lights two tiles, unless a worn light reaches further.
     if ks.has(Keystone::Radiant) && light.is_none_or(|l| lights::def(LightKind::Radiant).radius > lights::def(l).radius) {
         light = Some(LightKind::Radiant);
     }
-    let cx = PickCx { usable, dropped, attrs, melee, ranged, improves: tree.improves.clone(), ks };
+    let cx = PickCx { usable, dropped, attrs, melee: melee.clone(), ranged: ranged.clone(), improves: tree.improves.clone(), ks };
     let sheet = Sheet {
         attrs,
         max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp).max(1.0),
@@ -726,8 +747,8 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes) -> Result<(Sheet, Pi
         light,
         keystones: ks,
         sight: prof.sight,
-        primary: strike,
-        secondary: strike,
+        primary: strike.clone(),
+        secondary: strike.clone(),
         fallback: strike,
         reach,
         wolf: WolfMods::NONE,
@@ -1051,6 +1072,18 @@ mod tests {
     use crate::defs::companions::WOLF_HP;
 
     #[test]
+    fn a_weapon_keeps_every_on_hit_property() {
+        use crate::defs::effects::EffectLook;
+        let hit = |kind| OnHit { kind, secs: 5.0, magical: false, power: 0, look: EffectLook::Plain };
+        let props = [
+            ItemProperty { kind: PropKind::OnHit(hit(EffectKind::Poisoned)), magical: false },
+            ItemProperty { kind: PropKind::Weight(1.0), magical: false },
+            ItemProperty { kind: PropKind::OnHit(hit(EffectKind::Weakened)), magical: true },
+        ];
+        assert_eq!(on_hits_of(&props), vec![hit(EffectKind::Poisoned), OnHit { magical: true, ..hit(EffectKind::Weakened) }]);
+    }
+
+    #[test]
     fn minion_counts_scale_with_int_and_round() {
         use crate::defs::attributes::Attributes;
         let at = |id, int| resolve_ability(&ab::def(id), &Attributes::new(10, 10, 10, int, 10, 10), &[], Body { radius: 6.0 }).expect("a minion summon needs no weapon");
@@ -1078,7 +1111,7 @@ mod tests {
         for (id, attr) in [(AbilityId::Fireball, Attr::Int), (AbilityId::HolyLight, Attr::Cha), (AbilityId::Charge, Attr::Dex), (AbilityId::Strike, Attr::Dex)] {
             let cd = |v: i32| {
                 let a = only(attr, v);
-                let weapons = [arm(ItemId::KnightSword, &a, &[], None, 0)];
+                let weapons = [arm(ItemId::KnightSword, &a, &[], vec![], 0)];
                 let w: &[ResolvedWeapon] = if matches!(id, AbilityId::Charge | AbilityId::Strike) { &weapons } else { &[] };
                 resolve_ability(&ab::def(id), &a, w, Body { radius: 8.0 }).expect("resolves").cooldown
             };
@@ -1091,7 +1124,7 @@ mod tests {
     fn at_attribute_ten_the_written_cooldown_holds() {
         let a = Attributes::new(10, 10, 10, 10, 10, 10);
         let weapons: Vec<ResolvedWeapon> =
-            ItemId::ALL.iter().filter(|&&id| matches!(items::def(id).base, ItemBase::Melee(..) | ItemBase::Ranged(..))).map(|&id| arm(id, &a, &[], None, 0)).collect();
+            ItemId::ALL.iter().filter(|&&id| matches!(items::def(id).base, ItemBase::Melee(..) | ItemBase::Ranged(..))).map(|&id| arm(id, &a, &[], vec![], 0)).collect();
         for &id in AbilityId::ALL.iter() {
             let d = ab::def(id);
             let Some(r) = resolve_ability(&d, &a, &weapons, Body { radius: 8.0 }) else { continue };
@@ -1175,8 +1208,8 @@ mod tests {
         let d = ab::def(AbilityId::GroundSlam);
         assert_eq!(d.own.push, ab::SLAM_PUSH);
         let attrs = classes::start_attrs(ClassId::Barbarian);
-        let soft = ResolvedWeapon { push: 0.0, ..arm(ItemId::WarHammer, &attrs, &[], None, 0) };
-        let club = arm(ItemId::SpikedClub, &attrs, &[], None, 0);
+        let soft = ResolvedWeapon { push: 0.0, ..arm(ItemId::WarHammer, &attrs, &[], vec![], 0) };
+        let club = arm(ItemId::SpikedClub, &attrs, &[], vec![], 0);
         let body = Body { radius: PLAYER_RADIUS };
         let a = resolve_ability(&d, &attrs, &[soft], body).unwrap();
         assert_eq!((a.push, a.windup), (24.0, ab::SLAM_WINDUP));
@@ -1201,7 +1234,7 @@ mod tests {
         use crate::defs::abilities::{OwnEffect, WeaponMult};
         use crate::defs::effects::EffectLook;
         let sheet = hero_sheet(ClassId::Paladin, &Build::start(ClassId::Paladin)).unwrap();
-        let resolve = |d: &AbilityDef| resolve_ability(d, &sheet.attrs, &[sheet.melee], Body { radius: PLAYER_RADIUS }).unwrap();
+        let resolve = |d: &AbilityDef| resolve_ability(d, &sheet.attrs, &[sheet.melee.clone()], Body { radius: PLAYER_RADIUS }).unwrap();
         // An own split wins over the projectile's.
         let mm = ab::def(AbilityId::MagicMissile);
         let cold = DamageSplit::pure(DamageType::Cold);
@@ -1216,9 +1249,9 @@ mod tests {
         assert!((r.split.share(DamageType::Magical) - 0.3).abs() < 1e-12 && (r.split.share(DamageType::Physical) - 0.7).abs() < 1e-12, "{:?}", r.split);
         // An own effect: power from its Attribute, secs from the duration.
         let hl = ab::def(AbilityId::HolyLight);
-        assert_eq!(resolve(&hl).effect, None);
-        let own = ab::OwnStats { duration: 4.0, effect: Some(OwnEffect { kind: EffectKind::Warded, power: Attr::Cha, look: EffectLook::Plain }), ..hl.own };
-        let e = resolve(&AbilityDef { own, ..hl }).effect.expect("an own effect");
+        assert_eq!(resolve(&hl).effect, Vec::<OnHit>::new());
+        let own = ab::OwnStats { duration: 4.0, effects: &[OwnEffect { kind: EffectKind::Warded, power: Attr::Cha, look: EffectLook::Plain }], ..hl.own };
+        let e = resolve(&AbilityDef { own, ..hl }).effect[0];
         assert_eq!((e.kind, e.secs, e.power, e.magical, e.look), (EffectKind::Warded, 4.0, sheet.attrs.get(Attr::Cha), true, EffectLook::Plain));
     }
 
@@ -1632,7 +1665,7 @@ mod tests {
         assert_eq!(ember.light, Some(LightKind::Fire));
         assert_eq!(ember.primary, start.primary, "Magic Missile ignores the staff");
         let rot = with(ClassId::Wizard, plus(Attr::Int, 0), &[(EquipSlot::Melee, ItemId::StaffOfRot)]);
-        assert_eq!(rot.melee.on_hit, None, "the Staff of Rot poisons by its share, not an on-hit");
+        assert_eq!(rot.melee.on_hit, Vec::<OnHit>::new(), "the Staff of Rot poisons by its share, not an on-hit");
         assert!((rot.melee.split.share(DamageType::Poison) - 0.5).abs() < 1e-12);
         assert_eq!(rot.primary, start.primary, "Magic Missile ignores the staff");
     }
@@ -1664,7 +1697,7 @@ mod tests {
     #[test]
     fn every_monster_ability_equals_the_resolver() {
         let check = |what: &str, kit: &Kit, ids: &[AbilityId], attrs: &Attributes, weapons: &[ItemId], radius: f64| {
-            let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&w| arm(w, attrs, &[], own_on_hit(w), 0)).collect();
+            let armed: Vec<ResolvedWeapon> = weapons.iter().map(|&w| arm(w, attrs, &[], own_on_hits(w), 0)).collect();
             for &id in ids {
                 let want = resolve_ability(&ab::def(id), attrs, &armed, Body { radius }).expect("resolves");
                 assert_eq!(kit.get(id), Some(&want), "{what} {id:?}");
@@ -1684,7 +1717,7 @@ mod tests {
         let faster = AbilityMod::CooldownAdd(-0.5);
         let kit = kit_for(KitSource::Wolf(WolfMods { hp_mul: 1.0, pounce: Some(faster) }), &crate::defs::companions::WOLF_ATTRS);
         let plain = kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS);
-        assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(*plain.get(AbilityId::Pounce).unwrap(), &[faster])));
+        assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(plain.get(AbilityId::Pounce).unwrap().clone(), &[faster])));
         assert_eq!(kit.get(AbilityId::Bite), plain.get(AbilityId::Bite));
     }
 
@@ -1933,7 +1966,7 @@ mod tests {
         let own: Vec<_> = cards.iter().filter(|c| !c.locked).map(|c| c.pick.ability).collect();
         assert_eq!(own, [AbilityId::MagicMissile, AbilityId::Fireball]);
         assert!(cards.iter().filter(|c| !c.locked).all(|c| c.error.is_none() && c.ability.is_some()));
-        let mm = cards[0].ability.unwrap();
+        let mm = cards[0].ability.clone().unwrap();
         assert_eq!(mm, hero_sheet(ClassId::Wizard, &Build::start(ClassId::Wizard)).unwrap().primary);
     }
 

@@ -47,7 +47,7 @@ const CLEAVE_SLACK: f64 = 6.0;
 
 /// Its kit's ability `id`.
 fn kit(run: &Run, bi: usize, id: AbilityId) -> crate::sheet::ResolvedAbility {
-    *run.monsters[bi].kit.get(id).expect("the demon's kit has it")
+    run.monsters[bi].kit.get(id).expect("the demon's kit has it").clone()
 }
 
 impl Demon {
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(w, 0.45);
         ticks(&mut run, &mut d, w + DT);
         assert!(run.players[0].hp < hp, "hit at the end of the wind-up");
-        assert_eq!(run.last_hit.expect("a hit").why.what, What::Ability(AbilityId::Strike));
+        assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::Strike));
         assert!(run.players[0].mv.knock_vx > 0.0, "pushed away");
         assert_eq!(run.monsters[bi].anim, Anim::Melee, "the strike frames play out");
         ticks(&mut run, &mut d, DEMON_CLEAVE_RECOVER + 3.0 * DT);
@@ -228,7 +228,7 @@ mod tests {
         assert_eq!(run.monsters[bi].anim, Anim::Dash);
         assert_eq!(run.monsters[bi].anim_start, start, "one animation, not restarted");
         assert!(run.monsters[bi].pos.dist(start_pos) > 50.0, "it rushed forward");
-        assert_eq!(run.last_hit.expect("a hit").why.what, What::Ability(AbilityId::Swoop));
+        assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::Swoop));
         let once = hp - run.players[0].hp;
         assert!(once > 0.0 && once < 40.0, "hurt once: {once}");
         ticks(&mut run, &mut d, 8.0 * DT);

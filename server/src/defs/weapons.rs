@@ -115,7 +115,7 @@ pub struct RangedStats {
 }
 
 /// A weapon's numbers for one wielder. Fields that do not apply are 0 or `None`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedWeapon {
     pub kind: WeaponKind,
     pub damage: f64,
@@ -134,7 +134,7 @@ pub struct ResolvedWeapon {
     pub radius: f64,
     pub projectile: Option<EntityKind>,
     pub split: DamageSplit,
-    pub on_hit: Option<OnHit>,
+    pub on_hit: Vec<OnHit>,
     /// The wielder's key Attribute: the power of the weapon's effects.
     pub power: i32,
     /// Enemies its shots pass with full damage (the sum of its `PropKind::Pierce`).
@@ -173,7 +173,7 @@ pub fn resolve_melee(kind: WeaponKind, s: &MeleeStats, attrs: &Attributes) -> Re
         radius: 0.0,
         projectile: None,
         split: s.split,
-        on_hit: None,
+        on_hit: Vec::new(),
         power: attrs.get(key_attr(category(kind))),
         pierce_through: 0,
     }
@@ -197,7 +197,7 @@ pub fn resolve_ranged(kind: WeaponKind, s: &RangedStats, attrs: &Attributes) -> 
         radius: s.radius,
         projectile: Some(s.projectile),
         split: s.split,
-        on_hit: None,
+        on_hit: Vec::new(),
         power: attrs.get(key_attr(category(kind))),
         pierce_through: 0,
     }

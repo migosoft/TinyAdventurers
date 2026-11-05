@@ -141,7 +141,7 @@ fn melee_strike(run: &mut Run, pi: usize, targets: &[MeleeTarget], strike: &Reso
             MeleeTarget::Monster(mi) => {
                 let m = &run.monsters[mi];
                 let rest = overkill_rest(dmg.amount, &dmg.split, m.hp, &m.effects.res(m.res));
-                run.hurt_monster(mi, dmg, crit, Some(pi));
+                run.hurt_monster(mi, dmg.clone(), crit, Some(pi));
                 if strike.push > 0.0 {
                     run.knock_creature(Creature::Monster(mi), pos, aim, strike.push, strike.push_str);
                 }
@@ -175,19 +175,30 @@ fn kind_of(projectile: Option<EntityKind>) -> EntityKind {
 
 /// The damage of one hit of `a`: its split, on-hit and power.
 fn damage_of(user: u32, a: &ResolvedAbility) -> Damage {
-    Damage { on_hit: a.on_hit, ..Damage::new(a.damage, a.split).with_power(a.power) }.by(user, What::Ability(a.id)).with_base(a.base)
+    hit_damage(user, a, false)
+}
+
+/// `damage_of`, with the ability's own effects on the hit too if it `carries_own` (a shot does).
+fn hit_damage(user: u32, a: &ResolvedAbility, carries_own: bool) -> Damage {
+    Damage { on_hit: a.hit_effects(carries_own), ..Damage::new(a.damage, a.split).with_power(a.power) }.by(user, What::Ability(a.id)).with_base(a.base)
 }
 
 /// The damage of one hit of the weapon attack `a` (or of an ability that uses none: `damage_of`).
 /// While the user is coated (Poison Coat) every weapon attack adds a poison share and applies
-/// Poisoned instead of its weapon's own on-hit.
+/// Poisoned after its weapon's own on-hit.
 fn weapon_damage(run: &Run, c: Creature, a: &ResolvedAbility) -> Damage {
-    let dmg = damage_of(run.creature_id(c), a);
+    weapon_hit_damage(run, c, a, false)
+}
+
+/// `weapon_damage`, with the ability's own effects on the hit too if it `carries_own`.
+fn weapon_hit_damage(run: &Run, c: Creature, a: &ResolvedAbility, carries_own: bool) -> Damage {
+    let dmg = hit_damage(run.creature_id(c), a, carries_own);
     if ab::def(a.id).uses == Uses::Nothing || !run.has_effect(c, EffectKind::Coated) {
         return dmg;
     }
     let on_hit = OnHit { kind: EffectKind::Poisoned, secs: ab::COAT_POISON_SECS, magical: false, power: a.power, look: EffectLook::Plain };
-    Damage { split: a.split.with_shares(&[(DamageType::Poison, ab::COAT_SHARE)]), on_hit: Some(on_hit), ..dmg }.with_mult(Mult::Coat(ab::COAT_SHARE))
+    let on_hit = dmg.on_hit.iter().copied().chain([on_hit]).collect();
+    Damage { split: a.split.with_shares(&[(DamageType::Poison, ab::COAT_SHARE)]), on_hit, ..dmg }.with_mult(Mult::Coat(ab::COAT_SHARE))
 }
 
 /// Uses the hero's primary or secondary ability, with its numbers from the hero's sheet.
@@ -196,7 +207,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
     if cd > COOLDOWN_LEEWAY || !run.players[pi].alive {
         return;
     }
-    let def = if primary { run.players[pi].sheet.primary } else { run.players[pi].sheet.secondary };
+    let def = if primary { run.players[pi].sheet.primary.clone() } else { run.players[pi].sheet.secondary.clone() };
     let crit = false;
     let cooldown = def.cooldown;
     if def.ranged {
@@ -206,7 +217,7 @@ pub fn try_use(run: &mut Run, pi: usize, primary: bool, shot: u16) {
             if !primary {
                 return;
             }
-            let fallback = run.players[pi].sheet.fallback;
+            let fallback = run.players[pi].sheet.fallback.clone();
             melee_strike(run, pi, &targets, &fallback, crit);
             let p = &mut run.players[pi];
             p.cd1 = super::keystones::cooldown(p, fallback.cooldown);
@@ -261,7 +272,7 @@ impl Cooldowns {
 /// a hero's cursor). False if it has no such ability, it is on cooldown, or it is a minion ability with no room. The numbers are the kit's:
 /// nothing is passed in.
 pub fn monster_use(run: &mut Run, mi: usize, id: AbilityId, at: Vec2) -> bool {
-    let Some(a) = run.monsters[mi].kit.get(id).copied() else { return false };
+    let Some(a) = run.monsters[mi].kit.get(id).cloned() else { return false };
     if id == AbilityId::Vanish {
         // Its cooldown is `invis_cd`, which pauses while Invisible, not the ability cooldowns.
         return run.go_invisible(mi, a.duration, a.cooldown);
@@ -417,7 +428,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
         AbilityId::WarCry => {
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
-            let own = a.effect.expect("War Cry has its own effect");
+            debug_assert!(!a.effect.is_empty(), "War Cry has its own effects");
             let source = Some((run.creature_id(c), pos));
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
             let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: false, skip_invisible: false, passes: None };
@@ -425,7 +436,9 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             let (afraid, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
             super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
             for t in afraid {
-                run.apply(t, Apply { source, origin, ..Apply::from_hit(own) });
+                for &own in &a.effect {
+                    run.apply(t, Apply { source, origin, ..Apply::from_hit(own) });
+                }
             }
             for c in party_around(run, pos, a.radius) {
                 run.apply(c, Apply { origin, ..Apply::plain(EffectKind::Accelerated, Some(a.duration)) });
@@ -442,14 +455,14 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             let dmg = weapon_damage(run, c, a);
             let aim = aim_of(run, c);
             for oi in crate::run::objects::objects_in(run, pos, a.radius, None) {
-                crate::run::objects::hurt_object(run, oi, dmg, None);
+                crate::run::objects::hurt_object(run, oi, dmg.clone(), None);
             }
             let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: true, skip_invisible: false, passes: Some(dmg.split) };
             let log = super::rules_log::on(run);
             let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
             super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
             for t in hit {
-                hurt(run, t, dmg, false, c);
+                hurt(run, t, dmg.clone(), false, c);
                 run.knock_creature(t, pos, aim, a.push, a.push_str);
             }
         }
@@ -459,14 +472,14 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
             let dmg = damage_of(run.creature_id(c), a);
-            crate::run::objects::hurt_objects_in(run, pos, a.radius, None, dmg);
+            crate::run::objects::hurt_objects_in(run, pos, a.radius, None, dmg.clone());
             let rule = targets::Rule { at: pos, reach: a.radius, plus_radius: false, arc: None, los: false, skip_hiding: false, skip_dormant: false, skip_airborne: false, skip_invisible: false, passes: Some(dmg.split) };
             let log = super::rules_log::on(run);
             let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
             super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
             for t in hit {
                 let away = pos.angle_to(run.creature_pos(t));
-                hurt(run, t, dmg, false, c);
+                hurt(run, t, dmg.clone(), false, c);
                 run.knock_creature(t, pos, away, a.push, a.push_str);
             }
         }
@@ -508,7 +521,7 @@ pub fn tick_channel(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
     run.monsters[mi].channel = Some((id, left, ab::BREATH_PULSE));
-    let a = *run.monsters[mi].kit.get(id).expect("a monster that channels has the ability in its kit");
+    let a = run.monsters[mi].kit.get(id).expect("a monster that channels has the ability in its kit").clone();
     let c = Creature::Monster(mi);
     let (pos, aim) = (run.monsters[mi].pos, run.monsters[mi].aim);
     let half = a.arc / 2.0;
@@ -518,11 +531,11 @@ pub fn tick_channel(run: &mut Run, mi: usize, dt: f64) {
     let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
     super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
     for t in hit {
-        hurt(run, t, dmg, false, c);
+        hurt(run, t, dmg.clone(), false, c);
     }
     for oi in crate::run::objects::objects_in(run, pos, a.range, Some((aim, half))) {
         if line_of_sight(&run.layout.map, pos, run.objects[oi].pos) {
-            crate::run::objects::hurt_object(run, oi, dmg, None);
+            crate::run::objects::hurt_object(run, oi, dmg.clone(), None);
         }
     }
     if run.rng.gen_bool(ab::BREATH_PATCH_CHANCE) {
@@ -574,11 +587,11 @@ pub fn land_slam(run: &mut Run, c: Creature) {
     let a = match c {
         Creature::Player(pi) => {
             run.players[pi].slam = None;
-            run.players[pi].sheet.secondary
+            run.players[pi].sheet.secondary.clone()
         }
         Creature::Monster(mi) => {
             run.monsters[mi].slam = None;
-            *run.monsters[mi].kit.get(AbilityId::GroundSlam).expect("a monster that slams has Ground Slam in its kit")
+            run.monsters[mi].kit.get(AbilityId::GroundSlam).expect("a monster that slams has Ground Slam in its kit").clone()
         }
     };
     debug_assert!(a.id == AbilityId::GroundSlam);
@@ -591,7 +604,7 @@ pub fn land_slam(run: &mut Run, c: Creature) {
     let (hit, skips) = targets::select(run, side(run, c), &rule, &[], log, |t| run.creature_pos(t));
     super::rules_log::skipped(run, run.creature_id(c), What::Ability(a.id), &skips, None);
     for t in hit {
-        hurt(run, t, dmg, false, c);
+        hurt(run, t, dmg.clone(), false, c);
         run.knock_creature(t, pos, aim, a.push, a.push_str);
     }
 }
@@ -611,7 +624,7 @@ pub fn monster_dash_secs(a: &ResolvedAbility, aim_dist: f64) -> f64 {
 /// never farther than its range from the body's edge. `uses_it` starts the ability's kit cooldown, as
 /// `monster_use` does. False if the kit has no such ability.
 pub fn monster_dash_to(run: &mut Run, mi: usize, id: AbilityId, to: Vec2, uses_it: bool) -> bool {
-    let Some(a) = run.monsters[mi].kit.get(id).copied() else { return false };
+    let Some(a) = run.monsters[mi].kit.get(id).cloned() else { return false };
     let m = &mut run.monsters[mi];
     let d = m.pos.dist(to);
     let dir = if d > 1e-6 { (to - m.pos).norm() } else { Vec2::new(1.0, 0.0) };
@@ -656,14 +669,16 @@ fn use_gaze(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
     let Creature::Monster(mi) = c else { unreachable!("only a monster gazes") };
     let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
     let at = pos + Vec2::from_angle(aim_of(run, c)) * aim_dist_of(run, c);
-    let own = a.effect.expect("a gaze has its own effect");
+    debug_assert!(!a.effect.is_empty(), "a gaze has its own effects");
     let source = Some((run.creature_id(c), pos));
     let origin = Some((run.creature_id(c), What::Ability(a.id)));
     let rule = targets::Rule { at, reach: GAZE_AIM_SLACK, plus_radius: true, arc: None, los: false, skip_hiding: true, skip_dormant: true, skip_airborne: false, skip_invisible: true, passes: None };
     let (stared_at, _) = targets::select(run, side(run, c), &rule, &[], false, |t| run.creature_pos(t));
     for t in stared_at {
         if super::perception::sees(run, sight, pos, run.creature_pos(t)) {
-            run.apply(t, Apply { source, origin, ..Apply::from_hit(own) });
+            for &own in &a.effect {
+                run.apply(t, Apply { source, origin, ..Apply::from_hit(own) });
+            }
         }
     }
     Anim::Gaze
@@ -699,17 +714,19 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
         AbilityId::Haste => {
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
-            let own = a.effect.expect("Haste has its own effect");
+            debug_assert!(!a.effect.is_empty(), "Haste has its own effects");
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
             for t in party_around(run, pos, a.radius) {
-                run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
+                for own in &a.effect {
+                    run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
+                }
             }
         }
         AbilityId::Purify => {
             let look = looks::look(figure_of(run, c), a.id);
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
             run.add_tinted_flash(look.light.expect("Purify flashes"), look.tint, pos, ab::PURIFY_FLASH);
-            let own = a.effect.expect("Purify has its own effect");
+            debug_assert!(!a.effect.is_empty(), "Purify has its own effects");
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
             for t in party_around(run, pos, a.radius) {
                 let held = match t {
@@ -719,7 +736,9 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
                 for k in held.into_iter().filter(|&k| !crate::defs::effects::def(k).positive) {
                     run.remove_effect_why(t, k, super::rules_log::EndReason::Purify);
                 }
-                run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
+                for own in &a.effect {
+                    run.apply(t, Apply { origin, ..Apply::plain(own.kind, Some(own.secs)) });
+                }
             }
         }
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
@@ -751,9 +770,9 @@ fn use_ground_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) 
                 d += 2.0;
             }
             let at = pos + dir * if d + 2.0 > want && !run.layout.map.opaque_at(pos + dir * want) { want } else { d };
-            let own = a.effect.expect("Entangle has its own effect");
-            let bind = OnHit { secs: ab::ENTANGLE_PULSE_SECS, ..own };
-            run.spawn_hazard(kind_of(a.projectile), at, a.radius, a.duration, side, HazardPulse::Bind(bind));
+            debug_assert!(!a.effect.is_empty(), "Entangle has its own effects");
+            let binds = a.effect.iter().map(|&own| OnHit { secs: ab::ENTANGLE_PULSE_SECS, ..own }).collect();
+            run.spawn_hazard(kind_of(a.projectile), at, a.radius, a.duration, side, HazardPulse::Bind(binds));
         }
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a ground area", a.id)
@@ -767,8 +786,10 @@ fn use_buff(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
     debug_assert!(ab::def(a.id).shape == Shape::Buff);
     match a.id {
         AbilityId::PoisonCoat => {
-            let own = a.effect.expect("Poison Coat has its own effect");
-            run.apply(c, Apply::from_hit(own));
+            debug_assert!(!a.effect.is_empty(), "Poison Coat has its own effects");
+            for &own in &a.effect {
+                run.apply(c, Apply::from_hit(own));
+            }
         }
         AbilityId::Vanish => unreachable!("Vanish goes through go_invisible"),
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::RaiseDead | AbilityId::SummonImps => {
@@ -814,9 +835,9 @@ fn melee_arc(run: &mut Run, c: Creature, a: &ResolvedAbility, crit: bool) -> Opt
     for t in hits {
         let behind = a.behind > 0.0 && angle_diff(pos_ago(run, t, rw).angle_to(pos), aim_of(run, t) + std::f64::consts::PI).abs() <= a.behind;
         if behind {
-            hurt(run, t, Damage { amount: dmg.amount * ab::BEHIND_MULT, ..dmg }.with_mult(Mult::Behind(ab::BEHIND_MULT)), true, c);
+            hurt(run, t, Damage { amount: dmg.amount * ab::BEHIND_MULT, ..dmg.clone() }.with_mult(Mult::Behind(ab::BEHIND_MULT)), true, c);
         } else {
-            hurt(run, t, dmg, crit, c);
+            hurt(run, t, dmg.clone(), crit, c);
         }
         if a.push > 0.0 {
             run.knock_creature(t, pos, aim, a.push, a.push_str);
@@ -835,7 +856,7 @@ fn melee_arc(run: &mut Run, c: Creature, a: &ResolvedAbility, crit: bool) -> Opt
         .collect();
     let by = hero_of(c).map(|pi| run.players[pi].id);
     for oi in objs {
-        crate::run::objects::hurt_object(run, oi, dmg, by);
+        crate::run::objects::hurt_object(run, oi, dmg.clone(), by);
     }
     first
 }
@@ -845,7 +866,7 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
     let Creature::Player(pi) = c else { unreachable!("a monster's dash is ticked by `tick_monster_dash`") };
     let rw = rewind_ticks(run, c);
     let pos = run.players[pi].pos();
-    let (aim, ab) = (run.players[pi].aim, run.players[pi].sheet.secondary);
+    let (aim, ab) = (run.players[pi].aim, run.players[pi].sheet.secondary.clone());
     let dmg = weapon_damage(run, c, &ab);
     let hits: Vec<(usize, u32)> = run
         .monsters
@@ -856,7 +877,7 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
         .collect();
     for (mi, id) in hits {
         run.players[pi].dash_hit.push(id);
-        run.hurt_monster(mi, dmg, false, Some(pi));
+        run.hurt_monster(mi, dmg.clone(), false, Some(pi));
         if ab.push > 0.0 {
             run.knock_creature(Creature::Monster(mi), pos, aim, ab.push, ab.push_str);
         }
@@ -871,7 +892,7 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
     let by = run.players[pi].id;
     for (oi, id) in objs {
         run.players[pi].dash_hit.push(id);
-        crate::run::objects::hurt_object(run, oi, dmg, Some(by));
+        crate::run::objects::hurt_object(run, oi, dmg.clone(), Some(by));
     }
 }
 
@@ -880,7 +901,7 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
 /// Returns the dash when it ended this tick.
 pub fn tick_monster_dash(run: &mut Run, mi: usize, dt: f64) -> Option<MonsterDash> {
     let dash = run.monsters[mi].dash.clone()?;
-    let a = *run.monsters[mi].kit.get(dash.id).expect("a dash is an ability of its kit");
+    let a = run.monsters[mi].kit.get(dash.id).expect("a dash is an ability of its kit").clone();
     let solids = run.solids_for(run.monsters[mi].mover, None);
     let m = &run.monsters[mi];
     let v = dash.dir * (a.speed * dt.min(dash.left));
@@ -923,7 +944,7 @@ fn monster_dash_contact(run: &mut Run, mi: usize, a: &ResolvedAbility, hit: &mut
         }
         hit.push(id);
         any = true;
-        hurt(run, t, dmg, false, c);
+        hurt(run, t, dmg.clone(), false, c);
         if a.push > 0.0 {
             run.knock_creature(t, pos, aim, a.push, a.push_str);
         }
@@ -952,9 +973,8 @@ fn spawn_shot(run: &mut Run, c: Creature, a: &ResolvedAbility, kind: EntityKind,
     let life = a.range / a.speed + if target.is_some() { 0.1 } else { 0.0 };
     // A Chain Spark stops at the first foe; the jumps are made there (`chain_jumps`).
     let pierce = if a.id == AbilityId::ChainSpark { Pierce::Never } else { Pierce::new(a.pierce, a.pierce_through) };
-    let damage = weapon_damage(run, c, a);
-    // A shot's own effect (Blinding Curse, Sleep Mist) is its on-hit.
-    let damage = Damage { on_hit: damage.on_hit.or(a.effect), ..damage };
+    // A shot carries its weapon's effects and its own (Blinding Curse, Sleep Mist).
+    let damage = weapon_hit_damage(run, c, a, true);
     let owner = run.creature_id(c);
     let id = run.alloc_id();
     run.projectiles.push(Projectile {
@@ -1029,7 +1049,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             let tile = crate::dungeon::Map::tile_of(pos);
             if run.projectiles[i].explode_r == 0.0 {
                 if let Some(oi) = run.objects.iter().position(|o| matches!(o.state, crate::run::objects::ObjState::Torch { wall, .. } if wall == tile)) {
-                    let (dmg, by) = (run.projectiles[i].damage, (run.projectiles[i].side == Side::Heroes).then_some(run.projectiles[i].owner));
+                    let (dmg, by) = (run.projectiles[i].damage.clone(), (run.projectiles[i].side == Side::Heroes).then_some(run.projectiles[i].owner));
                     crate::run::objects::hurt_object(run, oi, dmg, by);
                 }
             }
@@ -1076,7 +1096,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
 fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
-    let (side, owner, damage, crit, explode_r, k, push, push_str, pierce) = (pr.side, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str, pr.pierce);
+    let (side, owner, damage, crit, explode_r, k, push, push_str, pierce) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str, pr.pierce);
     let src = if side == Side::Heroes { run.player_idx(owner) } else { None };
     if explode_r > 0.0 {
         explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str);
@@ -1092,8 +1112,8 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let by = run.player_idx(owner).map(Creature::Player).or_else(|| run.monster_idx(owner).map(Creature::Monster));
     match (c, side) {
         (Creature::Monster(_), Side::Heroes) | (_, Side::Monsters) => match by {
-            Some(by) => hurt(run, c, damage, crit, by),
-            None => run.hurt_creature(c, damage),
+            Some(by) => hurt(run, c, damage.clone(), crit, by),
+            None => run.hurt_creature(c, damage.clone()),
         },
         (Creature::Player(_), Side::Heroes) => {}
     }
@@ -1114,7 +1134,7 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
         Pierce::Overkill { left } => match rest {
             Some(rest) if !alive => {
                 pr.damage.amount = rest;
-                pr.damage = pr.damage.with_mult(Mult::Overkill { from: id });
+                pr.damage = pr.damage.clone().with_mult(Mult::Overkill { from: id });
                 Some(if left == u8::MAX { pr.pierce } else { Pierce::from_u8(left - 1) })
             }
             Some(_) | None => None,
@@ -1156,7 +1176,7 @@ fn chain_jumps(run: &mut Run, c: Creature, first: Creature, damage: Damage) {
         let jump = jump as u8;
         let to = run.creature_pos(t);
         run.event(Ev::Zap { x: from.x as f32, y: from.y as f32, x2: to.x as f32, y2: to.y as f32 }, None);
-        hurt(run, t, Damage { amount, ..damage }.with_mult(Mult::Chain { jump, factor: ab::CHAIN_FALLOFF.powi(jump as i32) }), false, c);
+        hurt(run, t, Damage { amount, ..damage.clone() }.with_mult(Mult::Chain { jump, factor: ab::CHAIN_FALLOFF.powi(jump as i32) }), false, c);
         hit.push(t);
         last = t;
     }
@@ -1184,7 +1204,7 @@ fn overkill_left(run: &Run, c: Creature, damage: &Damage) -> Option<f64> {
 fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
-    let (side, owner, damage, crit, explode_r, k, push, push_str) = (pr.side, pr.owner, pr.damage, pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str);
+    let (side, owner, damage, crit, explode_r, k, push, push_str) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str);
     if explode_r > 0.0 {
         let src = if side == Side::Heroes { run.player_idx(owner) } else { None };
         explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str);
@@ -1211,7 +1231,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src
             .map(|(i, m)| (i, m.hiding))
             .collect();
         for (mi, hiding) in hits {
-            run.hurt_monster(mi, damage, crit, src);
+            run.hurt_monster(mi, damage.clone(), crit, src);
             // A mimic that was still hiding stays where it is (the hit wakes it); a boss is never pushed (`knock_monster`).
             if !hiding {
                 run.knock_creature(Creature::Monster(mi), pos, 0.0, push, push_str);
@@ -1220,7 +1240,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src
     } else {
         let touched: Vec<Creature> = run.foes_touching(pos, r, true).into_iter().filter(|&c| !run.passes_through(c, &damage.split)).collect();
         for c in touched {
-            run.hurt_creature(c, damage);
+            run.hurt_creature(c, damage.clone());
             run.knock_creature(c, pos, 0.0, push, push_str);
         }
     }
@@ -1232,7 +1252,7 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src
         })
         .collect();
     for oi in objs {
-        crate::run::objects::hurt_object(run, oi, damage, by);
+        crate::run::objects::hurt_object(run, oi, damage.clone(), by);
     }
 }
 
@@ -1382,7 +1402,7 @@ mod tests {
 
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
         let hit = OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain };
-        run.players[0].sheet.secondary.on_hit = Some(hit);
+        run.players[0].sheet.secondary.on_hit = vec![hit];
         let mi = put_monster_near(&mut run, 0, 6.0);
         run.monsters[mi].hp = 1000.0;
         dash_contact(&mut run, Creature::Player(0));
@@ -1417,7 +1437,7 @@ mod tests {
         let equipment = crate::defs::items::Equipment::starter(barb).with(EquipSlot::Melee, crate::defs::items::ItemId::Cleaver);
         let build = Build { equipment, ..Build::start(barb) };
         let mut run = super::super::tests::test_run_with(&[(barb, build)], BossId::Demon);
-        let ab = run.players[0].sheet.secondary;
+        let ab = run.players[0].sheet.secondary.clone();
         assert_eq!(ab.id, AbilityId::Charge);
         assert!(ab.push > 0.0, "the Cleaver pushes");
         let mi = put_monster_near(&mut run, 0, 6.0);
@@ -1470,7 +1490,7 @@ mod tests {
                 run.players[0].mv.y = pos.y;
                 let hp = run.players[0].hp;
                 let mut hit = Vec::new();
-                monster_dash_contact(&mut run, bi, &user_kit.get(id).copied().unwrap(), &mut hit);
+                monster_dash_contact(&mut run, bi, &user_kit.get(id).cloned().unwrap(), &mut hit);
                 assert_eq!(run.players[0].hp < hp, hits, "{id:?} at a gap of {gap}");
             }
         }
@@ -1479,13 +1499,13 @@ mod tests {
     #[test]
     fn a_monster_dash_never_runs_farther_than_its_range() {
         let kit = crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS);
-        let pounce = *kit.get(AbilityId::Pounce).unwrap();
+        let pounce = kit.get(AbilityId::Pounce).unwrap().clone();
         assert!(pounce.duration == 0.0 && pounce.range > 0.0);
         let reach = |aim_dist: f64| pounce.speed * monster_dash_secs(&pounce, aim_dist);
         assert!(reach(pounce.range / 2.0) > pounce.range / 2.0, "it still reaches a near mark");
         assert!(reach(pounce.range * 3.0) <= pounce.range + 1e-9, "re-aimed far away it stops at its range: {}", reach(pounce.range * 3.0));
         // An ability with its own duration lasts that long.
-        let swoop = *crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Demon), &crate::defs::bosses::def(BossId::Demon).attrs).get(AbilityId::Swoop).unwrap();
+        let swoop = crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Demon), &crate::defs::bosses::def(BossId::Demon).attrs).get(AbilityId::Swoop).unwrap().clone();
         assert_eq!(monster_dash_secs(&swoop, 1000.0), swoop.duration);
     }
 
@@ -1538,7 +1558,7 @@ mod tests {
         let at = run.players[0].pos() + Vec2::new(60.0, 0.0);
         let owner = run.spawn_enemy(EnemyType::Imp, at, None);
         let mi = run.monster_idx(owner).unwrap();
-        let bolt = *run.monsters[mi].kit.get(AbilityId::FireBolt).unwrap();
+        let bolt = run.monsters[mi].kit.get(AbilityId::FireBolt).unwrap().clone();
         let (power, push_str) = (run.monsters[mi].attrs.get(Attr::Cha), run.monsters[mi].attrs.get(crate::defs::attributes::Attr::Str));
         assert!(power > 0 && push_str > 0 && bolt.damage > 0.0, "numbers worth keeping");
         let target = run.players[0].pos();
@@ -1553,7 +1573,7 @@ mod tests {
             tick_projectiles(&mut run, 1.0 / TICK_HZ);
         }
         assert!(run.players[0].hp < hp, "it hurt all the same");
-        let hit = run.last_hit.expect("the hero was hit");
+        let hit = run.last_hit.clone().expect("the hero was hit");
         assert_eq!((hit.amount, hit.power), (bolt.damage, power), "with the damage and power it was spawned with");
     }
 
@@ -1571,7 +1591,7 @@ mod tests {
         run.players[0].mv.x = hero.x;
         run.players[0].mv.y = hero.y;
         run.monsters[bi].pos = hall + Vec2::new(30.0, 0.0);
-        let (str, ball) = (run.monsters[bi].attrs.get(Attr::Str), *run.monsters[bi].kit.get(AbilityId::Fireball).unwrap());
+        let (str, ball) = (run.monsters[bi].attrs.get(Attr::Str), run.monsters[bi].kit.get(AbilityId::Fireball).unwrap().clone());
         // A target so heavy that the dragon's STR and STR 30 push it different distances.
         run.players[0].sheet.weight = str as f64 - 2.0;
         let (pushed, boss_push) = (push_dist(ball.push, str, run.players[0].sheet.weight), push_dist(ball.push, 30, run.players[0].sheet.weight));
@@ -1689,7 +1709,7 @@ mod tests {
     fn missile_past(run: &mut Run, mi: usize, dy: f64) {
         let at = run.monsters[mi].pos + Vec2::new(-6.0, -dy);
         assert!(!run.layout.map.opaque_at(at) && !run.layout.map.opaque_at(at + Vec2::new(12.0, 0.0)), "open floor for the test shot");
-        let a = ResolvedAbility { damage: 5.0, speed: 230.0, range: 230.0, radius: 3.0, pierce: 0, pierce_through: 0, split: kind_split(EntityKind::Missile), ..run.players[0].sheet.primary };
+        let a = ResolvedAbility { damage: 5.0, speed: 230.0, range: 230.0, radius: 3.0, pierce: 0, pierce_through: 0, split: kind_split(EntityKind::Missile), ..run.players[0].sheet.primary.clone() };
         spawn_shot(run, Creature::Player(0), &a, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), None, 0.0);
         run.projectiles[0].pos = at;
         for _ in 0..3 {
@@ -1827,7 +1847,7 @@ mod tests {
         use crate::defs::effects::{EffectKind, OnHit};
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         assert_eq!(run.players[0].sheet.primary.damage, 16.0);
-        run.players[0].sheet.primary.on_hit = Some(OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain });
+        run.players[0].sheet.primary.on_hit = vec![OnHit { kind: EffectKind::Slowed, secs: 2.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain }];
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         run.players[0].aim = 0.0;
         let first = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 16.0);
@@ -1933,7 +1953,7 @@ mod tests {
     fn a_through_mod_works_on_a_spell() {
         use crate::defs::loadout::{apply_mods, AbilityMod};
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-        run.players[0].sheet.primary = apply_mods(run.players[0].sheet.primary, &[AbilityMod::PierceThrough(1)]);
+        run.players[0].sheet.primary = apply_mods(run.players[0].sheet.primary.clone(), &[AbilityMod::PierceThrough(1)]);
         let dmg = run.players[0].sheet.primary.damage;
         let r = shoot_line(run, EnemyType::OrcWarrior, &[30.0, 40.0, 50.0], &[70.0, 70.0, 70.0]);
         assert_eq!(r, [(true, dmg), (true, dmg), (true, 0.0)]);
@@ -1943,11 +1963,11 @@ mod tests {
     fn an_unlimited_through_mod_passes_every_enemy() {
         use crate::defs::loadout::{apply_mods, AbilityMod};
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
-        run.players[0].sheet.primary = apply_mods(run.players[0].sheet.primary, &[AbilityMod::PierceThrough(200), AbilityMod::PierceThrough(200)]);
+        run.players[0].sheet.primary = apply_mods(run.players[0].sheet.primary.clone(), &[AbilityMod::PierceThrough(200), AbilityMod::PierceThrough(200)]);
         assert_eq!(run.players[0].sheet.primary.pierce_through, u8::MAX);
         let dmg = run.players[0].sheet.primary.damage;
         let mut one = test_run(&[ClassId::Wizard], BossId::Demon);
-        one.players[0].sheet.primary = run.players[0].sheet.primary;
+        one.players[0].sheet.primary = run.players[0].sheet.primary.clone();
         one.monsters.retain(|m| m.is_boss || m.owner.is_some());
         one.players[0].aim = 0.0;
         let mi = put_enemy(&mut one, 0, EnemyType::OrcWarrior, 30.0, 70.0);
@@ -2073,7 +2093,7 @@ mod tests {
         // The aim point lies a hair inside the wall: the shot passes it on the step that enters the wall.
         let at = run.players[0].pos();
         let target = Vec2::new((tx + 3) as f64 * TILE + 0.01, at.y);
-        let a = ResolvedAbility { damage: 1.0, speed: 300.0, range: 570.0, pierce: 0, pierce_through: 0, split: kind_split(EntityKind::Fireball), ..run.players[0].sheet.primary };
+        let a = ResolvedAbility { damage: 1.0, speed: 300.0, range: 570.0, pierce: 0, pierce_through: 0, split: kind_split(EntityKind::Fireball), ..run.players[0].sheet.primary.clone() };
         spawn_shot(&mut run, Creature::Player(0), &a, EntityKind::Fireball, 1, Vec2::new(1.0, 0.0), Some(target), 20.0);
         for _ in 0..30 {
             if run.projectiles.is_empty() {
@@ -2287,7 +2307,7 @@ mod tests {
         assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), 8);
         let con = run.monsters[mi].attrs.get(Attr::Con);
         assert_eq!(con, 10);
-        let strike = ResolvedAbility { range: 20.0, arc: 1.6, damage: 6.0, ..run.players[0].sheet.fallback };
+        let strike = ResolvedAbility { range: 20.0, arc: 1.6, damage: 6.0, ..run.players[0].sheet.fallback.clone() };
         melee_arc(&mut run, Creature::Player(0), &strike, false);
         let poison = run.monsters[mi].effects.list().iter().find(|a| a.kind == EffectKind::Poisoned).map(|a| a.left);
         // A 50 % poison share is the higher tier: Poisoned (4 s) at power max(10, STR 8) = 10.
@@ -2345,7 +2365,7 @@ mod tests {
         ];
         for (class, primary, id, shape, anim, cooldown, kind) in rows {
             let mut run = test_run(&[class], BossId::Demon);
-            let sheet = run.players[0].sheet;
+            let sheet = run.players[0].sheet.clone();
             let a = if primary { sheet.primary } else { sheet.secondary };
             assert_eq!(a.id, id);
             assert_eq!(ab::def(id).shape, shape, "{id:?}");
@@ -2384,7 +2404,7 @@ mod tests {
             for primary in [true, false] {
                 let mut run = test_run(&[class], BossId::Demon);
                 run.monsters.retain(|m| m.is_boss || m.owner.is_some());
-                let a = if primary { run.players[0].sheet.primary } else { run.players[0].sheet.secondary };
+                let a = if primary { run.players[0].sheet.primary.clone() } else { run.players[0].sheet.secondary.clone() };
                 let hero = run.players[0].id;
                 let near = a.id == AbilityId::Strike || a.id == AbilityId::Charge;
                 let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, if near { 10.0 } else { 60.0 }, 1000.0);
@@ -2417,7 +2437,7 @@ mod tests {
         let id = run.spawn_enemy(EnemyType::OrcWarrior, at - Vec2::new(16.0, 0.0), None);
         let oi = run.monster_idx(id).unwrap();
         crate::run::ai::perform_attack(&mut run, oi, Creature::Player(0), false, None);
-        let hit = run.last_hit.expect("the orc hit the hero");
+        let hit = run.last_hit.clone().expect("the orc hit the hero");
         assert_eq!((hit.why.by, hit.why.what), (Some(id), What::Ability(AbilityId::Strike)));
         let gid = run.spawn_enemy(EnemyType::GoblinArcher, at + Vec2::new(40.0, 0.0), None);
         let gi = run.monster_idx(gid).unwrap();
@@ -2426,7 +2446,7 @@ mod tests {
         for _ in 0..60 {
             tick_projectiles(&mut run, 1.0 / TICK_HZ);
         }
-        let hit = run.last_hit.expect("the arrow hit the hero");
+        let hit = run.last_hit.clone().expect("the arrow hit the hero");
         assert_eq!((hit.why.by, hit.why.what), (Some(gid), What::Ability(AbilityId::Shoot)));
     }
 
@@ -2513,7 +2533,7 @@ mod tests {
     fn frost_shard_chills_and_never_freezes() {
         let mut run = wizard_with(AbilityId::FrostShard, 0);
         let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
-        let a = run.players[0].sheet.primary;
+        let a = run.players[0].sheet.primary.clone();
         assert_eq!(a.id, AbilityId::FrostShard);
         assert_eq!(a.projectile, Some(EntityKind::FrostBolt));
         assert!((a.split.share(DamageType::Cold) - 0.4).abs() < 1e-12);
@@ -2540,7 +2560,7 @@ mod tests {
     fn chain_spark_jumps_twice_with_falloff() {
         let mut run = wizard_with(AbilityId::ChainSpark, 3);
         let g = goblins(&mut run, &[60.0, 90.0, 120.0, 200.0]);
-        let a = run.players[0].sheet.primary;
+        let a = run.players[0].sheet.primary.clone();
         assert_eq!(a.id, AbilityId::ChainSpark);
         try_use(&mut run, 0, true, 1);
         assert_eq!(run.projectiles[0].kind, EntityKind::ChainSpark);
@@ -2616,7 +2636,7 @@ mod tests {
     fn chain_spark_never_returns() {
         let mut run = wizard_with(AbilityId::ChainSpark, 3);
         let g = goblins(&mut run, &[60.0, 90.0]);
-        let a = run.players[0].sheet.primary;
+        let a = run.players[0].sheet.primary.clone();
         try_use(&mut run, 0, true, 1);
         run.events.clear();
         fly(&mut run);
@@ -2631,7 +2651,7 @@ mod tests {
     fn judgement_is_holy_and_magical() {
         use crate::defs::lights::LightKind;
         let mut run = run_with_ability(ClassId::Paladin, AbilitySlot::Primary, AbilityId::Judgement, Attributes::new(0, 0, 0, 0, 0, 6), Equipment::starter(ClassId::Paladin));
-        let a = run.players[0].sheet.primary;
+        let a = run.players[0].sheet.primary.clone();
         assert_eq!(a.id, AbilityId::Judgement);
         assert_eq!(a.split, DamageSplit::pure(DamageType::Magical));
         put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
@@ -2670,7 +2690,7 @@ mod tests {
     fn volley_spawns_three_shots_with_consecutive_ids() {
         let mut run = ranger_volley();
         run.players[0].aim = 0.4;
-        let bow = run.players[0].sheet.ranged.unwrap();
+        let bow = run.players[0].sheet.ranged.clone().unwrap();
         try_use(&mut run, 0, true, 0xfffe);
         assert_eq!(run.projectiles.len(), VOLLEY_ARROWS as usize);
         let shots: Vec<u16> = run.projectiles.iter().map(|p| p.shot).collect();
@@ -2713,9 +2733,9 @@ mod tests {
     #[test]
     fn smite_adds_holy_and_flashes() {
         let mut run = paladin_smite();
-        let a = run.players[0].sheet.primary;
+        let a = run.players[0].sheet.primary.clone();
         assert_eq!(a.id, AbilityId::Smite);
-        let sword = run.players[0].sheet.melee;
+        let sword = run.players[0].sheet.melee.clone();
         assert!((a.damage - 20.0 * 1.4).abs() < 1e-9 && (sword.damage - 20.0).abs() < 1e-9);
         assert!((a.split.share(DamageType::Magical) - 0.3).abs() < 1e-12);
         assert!((a.split.share(DamageType::Physical) - 0.7).abs() < 1e-12);
@@ -2758,10 +2778,10 @@ mod tests {
     #[test]
     fn whirl_hits_all_around() {
         let mut run = run_with_ability(ClassId::Barbarian, AbilitySlot::Primary, AbilityId::Whirl, Attributes::new(0, 1, 0, 0, 0, 0), Equipment::starter(ClassId::Barbarian));
-        let a = run.players[0].sheet.primary;
+        let a = run.players[0].sheet.primary.clone();
         assert_eq!(a.id, AbilityId::Whirl);
         assert!((a.arc - TAU).abs() < 1e-12);
-        let axe = run.players[0].sheet.melee;
+        let axe = run.players[0].sheet.melee.clone();
         let here = run.players[0].pos();
         let ids: Vec<usize> = [Vec2::new(20.0, 0.0), Vec2::new(-20.0, 0.0), Vec2::new(0.0, 20.0), Vec2::new(0.0, -20.0)]
             .into_iter()
@@ -2803,7 +2823,7 @@ mod tests {
     #[test]
     fn flanking_thrust_doubles_from_behind() {
         let (mut run, mi) = ranger_thrust();
-        let blade = run.players[0].sheet.melee;
+        let blade = run.players[0].sheet.melee.clone();
         let one = dealt(&run, mi, blade.damage, blade.split);
         let (v, crit) = thrust_at(&mut run, mi, 0.0);
         assert!((v - one * BEHIND_MULT).abs() < 1e-9 && crit, "from behind: {v} vs {}", one * BEHIND_MULT);
@@ -2819,7 +2839,7 @@ mod tests {
     #[test]
     fn find_the_gap_widens_behind() {
         let (mut run, mi) = ranger_thrust();
-        let blade = run.players[0].sheet.melee;
+        let blade = run.players[0].sheet.melee.clone();
         let one = dealt(&run, mi, blade.damage, blade.split);
         let (v, _) = thrust_at(&mut run, mi, 80.0_f64.to_radians());
         assert!((v - one).abs() < 1e-9, "80 degrees is outside the plain arc");
@@ -2831,21 +2851,21 @@ mod tests {
     #[test]
     fn poison_coat_poisons_weapon_attacks_only() {
         let mut run = run_with_ability(ClassId::ElvenRanger, AbilitySlot::Secondary, AbilityId::PoisonCoat, Attributes::new(0, 0, 0, 0, 1, 0), Equipment::starter(ClassId::ElvenRanger));
-        let coat = run.players[0].sheet.secondary;
+        let coat = run.players[0].sheet.secondary.clone();
         assert_eq!(coat.id, AbilityId::PoisonCoat);
         assert_eq!(run.players[0].sheet.primary.id, AbilityId::Shoot);
         let mi = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
-        let bow = run.players[0].sheet.primary;
+        let bow = run.players[0].sheet.primary.clone();
         try_use(&mut run, 0, false, 1);
         assert_cd(run.players[0].cd2, &run, 0, AbilityId::PoisonCoat, 16.0);
         let held = run.players[0].effects.list().iter().find(|e| e.kind == EffectKind::Coated).expect("coated");
         assert!((held.left - 6.0).abs() < 1e-9);
         // A bow shot carries the share and the on-hit.
         try_use(&mut run, 0, true, 2);
-        let shot = run.projectiles[0].damage;
+        let shot = run.projectiles[0].damage.clone();
         assert!((shot.split.share(DamageType::Poison) - COAT_SHARE).abs() < 1e-12);
         assert!((shot.split.share(DamageType::Physical) - (1.0 - COAT_SHARE)).abs() < 1e-12);
-        let on_hit = shot.on_hit.expect("the coat's on-hit");
+        let on_hit = shot.on_hit.last().copied().expect("the coat's on-hit, after the weapon's");
         assert_eq!((on_hit.kind, on_hit.secs, on_hit.magical, on_hit.power), (EffectKind::Poisoned, COAT_POISON_SECS, false, bow.power));
         fly(&mut run);
         let m = Creature::Monster(mi);
@@ -2859,17 +2879,17 @@ mod tests {
         assert!(!run.players[0].effects.has(EffectKind::Coated));
         run.players[0].cd1 = 0.0;
         try_use(&mut run, 0, true, 3);
-        let plain = run.projectiles.last().unwrap().damage;
+        let plain = run.projectiles.last().unwrap().damage.clone();
         assert_eq!(plain.split, bow.split);
         assert_eq!(plain.on_hit, bow.on_hit);
     }
 
     #[test]
-    fn the_coat_replaces_a_weapon_on_hit_while_it_lasts() {
+    fn the_coat_adds_to_a_weapon_on_hit_while_it_lasts() {
         let slowed = OnHit { kind: EffectKind::Slowed, secs: 3.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain };
         let strike = |coated: bool| {
             let mut run = run_with_ability(ClassId::Barbarian, AbilitySlot::Primary, AbilityId::Strike, Attributes::default(), Equipment::starter(ClassId::Barbarian));
-            run.players[0].sheet.primary.on_hit = Some(slowed);
+            run.players[0].sheet.primary.on_hit = vec![slowed];
             if coated {
                 run.apply_effect(Creature::Player(0), EffectKind::Coated, Some(6.0));
             }
@@ -2878,8 +2898,64 @@ mod tests {
             let m = Creature::Monster(mi);
             (run.has_effect(m, EffectKind::Poisoned), run.has_effect(m, EffectKind::Slowed))
         };
-        assert_eq!(strike(true), (true, false), "the coat's Poisoned wins");
-        assert_eq!(strike(false), (false, true), "the weapon's own effect comes back");
+        assert_eq!(strike(true), (true, true), "the coat adds its poison to the weapon's effect");
+        assert_eq!(strike(false), (false, true), "uncoated, the weapon's effect alone");
+    }
+
+    fn eff(kind: EffectKind) -> OnHit {
+        OnHit { kind, secs: 3.0, magical: false, power: 10, look: crate::defs::effects::EffectLook::Plain }
+    }
+
+    #[test]
+    fn a_shot_carries_its_weapon_and_own_effects() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.players[0].sheet.primary.on_hit = vec![eff(EffectKind::Slowed)];
+        run.players[0].sheet.primary.effect = vec![eff(EffectKind::Blind)];
+        try_use(&mut run, 0, true, 1);
+        let kinds: Vec<_> = run.projectiles[0].damage.on_hit.iter().map(|h| h.kind).collect();
+        assert_eq!(kinds, vec![EffectKind::Slowed, EffectKind::Blind]);
+    }
+
+    #[test]
+    fn one_hit_orders_weapon_own_mod_then_coat() {
+        use crate::defs::loadout::{apply_mods, AbilityMod};
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        let mut bow = run.players[0].sheet.primary.clone();
+        bow.on_hit = vec![eff(EffectKind::Slowed)];
+        bow.effect = vec![eff(EffectKind::Blind)];
+        run.players[0].sheet.primary = apply_mods(bow, &[AbilityMod::AddOnHit(eff(EffectKind::Weakened))]);
+        let order = |run: &Run| run.projectiles.last().unwrap().damage.on_hit.iter().map(|h| h.kind).collect::<Vec<_>>();
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(order(&run), vec![EffectKind::Slowed, EffectKind::Blind, EffectKind::Weakened]);
+        run.apply_effect(Creature::Player(0), EffectKind::Coated, Some(6.0));
+        run.players[0].cd1 = 0.0;
+        try_use(&mut run, 0, true, 2);
+        assert_eq!(order(&run), vec![EffectKind::Slowed, EffectKind::Blind, EffectKind::Weakened, EffectKind::Poisoned]);
+    }
+
+    #[test]
+    fn an_area_ability_applies_every_own_effect() {
+        let mut run = barbarian_war_cry();
+        run.players[0].sheet.secondary.effect = vec![eff(EffectKind::Fear), eff(EffectKind::Weakened)];
+        let a = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 40.0, 1000.0);
+        let b = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 30.0, 1000.0);
+        try_use(&mut run, 0, false, 1);
+        for mi in [a, b] {
+            let m = Creature::Monster(mi);
+            assert!(run.has_effect(m, EffectKind::Fear) && run.has_effect(m, EffectKind::Weakened));
+        }
+    }
+
+    #[test]
+    fn entangle_binds_with_every_own_effect() {
+        let mut run = entangle_run();
+        run.players[0].sheet.secondary.effect = vec![eff(EffectKind::Entangled), eff(EffectKind::Slowed)];
+        let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
+        try_use(&mut run, 0, false, 1);
+        assert!(matches!(run.hazards[0].pulse, HazardPulse::Bind(ref on) if on.len() == 2 && on.iter().all(|h| h.secs == ab::ENTANGLE_PULSE_SECS)));
+        run.tick_hazards(0.3);
+        let m = Creature::Monster(g);
+        assert!(run.has_effect(m, EffectKind::Entangled) && run.has_effect(m, EffectKind::Slowed));
     }
 
     // ---- Plan 3b: rings and party effects ----
@@ -2912,7 +2988,7 @@ mod tests {
     #[test]
     fn frost_nova_freezes_around_the_wizard() {
         let mut run = wizard_secondary(AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0));
-        let a = run.players[0].sheet.secondary;
+        let a = run.players[0].sheet.secondary.clone();
         assert_eq!(a.id, AbilityId::FrostNova);
         assert_eq!(a.split, DamageSplit::pure(DamageType::Cold));
         let g = goblins(&mut run, &[30.0, 60.0]);
@@ -2955,7 +3031,7 @@ mod tests {
     #[test]
     fn war_cry_frightens_enemies_and_hastens_allies() {
         let mut run = barbarian_war_cry();
-        let a = run.players[0].sheet.secondary;
+        let a = run.players[0].sheet.secondary.clone();
         assert_eq!(a.id, AbilityId::WarCry);
         assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), 16);
         // The wolf beside the hero.
@@ -3018,9 +3094,9 @@ mod tests {
     #[test]
     fn ground_slam_lands_after_its_windup() {
         let mut run = ground_slam();
-        let a = run.players[0].sheet.secondary;
+        let a = run.players[0].sheet.secondary.clone();
         assert_eq!(a.id, AbilityId::GroundSlam);
-        let hammer = run.players[0].sheet.melee;
+        let hammer = run.players[0].sheet.melee.clone();
         assert!((a.damage - hammer.damage * 1.2).abs() < 1e-9);
         assert_eq!(a.radius, 34.0);
         let g = goblins(&mut run, &[20.0, 30.0, 90.0]);
@@ -3201,7 +3277,7 @@ mod tests {
     #[test]
     fn purify_cleanses_and_wards() {
         let mut run = run_with_ability(ClassId::Paladin, AbilitySlot::Secondary, AbilityId::Purify, Attributes::new(0, 0, 0, 0, 2, 0), Equipment::starter(ClassId::Paladin));
-        let a = run.players[0].sheet.secondary;
+        let a = run.players[0].sheet.secondary.clone();
         assert_eq!(a.id, AbilityId::Purify);
         let me = Creature::Player(0);
         run.apply_effect(me, EffectKind::Burning, Some(5.0));
@@ -3232,7 +3308,7 @@ mod tests {
     #[test]
     fn consecrate_hurts_enemies_only() {
         let mut run = consecrate_run();
-        let a = run.players[0].sheet.secondary;
+        let a = run.players[0].sheet.secondary.clone();
         assert_eq!(a.id, AbilityId::Consecrate);
         assert_eq!(a.split, DamageSplit::pure(DamageType::Magical));
         let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 20.0, 1000.0);
@@ -3273,7 +3349,7 @@ mod tests {
     #[test]
     fn entangle_binds_enemies_at_the_aimed_spot() {
         let mut run = entangle_run();
-        let a = run.players[0].sheet.secondary;
+        let a = run.players[0].sheet.secondary.clone();
         assert_eq!(a.id, AbilityId::Entangle);
         let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
         let far = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 140.0, 1000.0);
@@ -3283,7 +3359,7 @@ mod tests {
         let h = &run.hazards[0];
         assert_eq!((h.kind, h.radius, h.life), (EntityKind::Roots, 36.0, 4.0));
         assert!((h.pos.x - (here.x + 80.0)).abs() < 1e-9 && (h.pos.y - here.y).abs() < 1e-9);
-        assert!(matches!(h.pulse, HazardPulse::Bind(on) if on.kind == EffectKind::Entangled && on.look == EffectLook::Vines && on.secs == ab::ENTANGLE_PULSE_SECS));
+        assert!(matches!(h.pulse, HazardPulse::Bind(ref on) if on.len() == 1 && on[0].kind == EffectKind::Entangled && on[0].look == EffectLook::Vines && on[0].secs == ab::ENTANGLE_PULSE_SECS));
         run.tick_hazards(0.3);
         let m = Creature::Monster(g);
         assert!(run.has_effect(m, EffectKind::Entangled));
@@ -3292,7 +3368,7 @@ mod tests {
         assert!(!run.has_effect(Creature::Monster(far), EffectKind::Entangled), "out of the roots");
         // The roots end 3.7 s from now; the last pulse's Entangled (1 s before the save) runs out
         // `scaled_secs` later, and nothing renews it.
-        let power = a.effect.unwrap().power;
+        let power = a.effect[0].power;
         let last = scaled_secs(ab::ENTANGLE_PULSE_SECS, power, run.monsters[g].attrs.get(crate::defs::attributes::Attr::Str));
         for _ in 0..((3.7 + last) * 60.0) as usize + 5 {
             run.step();
@@ -3313,8 +3389,8 @@ mod tests {
     #[test]
     fn strong_creatures_break_free_sooner() {
         let mut run = entangle_run();
-        let a = run.players[0].sheet.secondary;
-        let power = a.effect.unwrap().power;
+        let a = run.players[0].sheet.secondary.clone();
+        let power = a.effect[0].power;
         let goblin = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 80.0, 1000.0);
         let ogre = put_enemy(&mut run, 0, EnemyType::Ogre, 85.0, 1000.0);
         try_use(&mut run, 0, false, 1);
@@ -3668,7 +3744,7 @@ mod tests {
         make_bodiless(&mut run, gi);
         run.log.forced = true;
         run.players[0].aim = 0.0;
-        let strike = ResolvedAbility { range: 30.0, arc: 1.6, damage: 6.0, push: 20.0, ..run.players[0].sheet.fallback };
+        let strike = ResolvedAbility { range: 30.0, arc: 1.6, damage: 6.0, push: 20.0, ..run.players[0].sheet.fallback.clone() };
         let _ = crate::run::rules_log::take(&mut run);
         melee_arc(&mut run, Creature::Player(0), &strike, false);
         let m = &run.monsters[gi];
@@ -3701,7 +3777,7 @@ mod tests {
     fn dash_contact_passes_bodiless() {
         // The wolf's Pounce through an incorporeal enemy: nothing happens, and it does not end the leap.
         let kit = crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS);
-        let pounce = *kit.get(AbilityId::Pounce).unwrap();
+        let pounce = kit.get(AbilityId::Pounce).unwrap().clone();
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
         let wolf = crate::run::companion::spawn_wolf(&mut run, 0);
@@ -3767,7 +3843,7 @@ mod monster_uses {
         let hp: Vec<f64> = run.players.iter().map(|p| p.hp).collect();
         assert!(monster_use(&mut run, mi, AbilityId::Strike, at));
         assert!(run.players[0].hp < hp[0] && run.players[1].hp < hp[1], "both heroes lose HP");
-        let hit = run.last_hit.expect("a hit");
+        let hit = run.last_hit.clone().expect("a hit");
         assert_eq!((hit.why.by, hit.why.what), (Some(id), What::Ability(AbilityId::Strike)));
     }
 
@@ -3834,7 +3910,7 @@ mod monster_uses {
     #[test]
     fn the_ogre_slams_with_ground_slam() {
         let (mut run, mi) = ogre_among(&[Vec2::new(20.0, 0.0), Vec2::new(-16.0, 8.0)]);
-        let slam = *run.monsters[mi].kit.get(AbilityId::GroundSlam).unwrap();
+        let slam = run.monsters[mi].kit.get(AbilityId::GroundSlam).unwrap().clone();
         assert_eq!(slam.windup, 1.0, "its own 0.5 s and the club's 0.5 s");
         let hp: Vec<f64> = run.players.iter().map(|p| p.hp).collect();
         run.events.clear();
@@ -3848,7 +3924,7 @@ mod monster_uses {
         for (p, h) in run.players.iter().zip(&hp) {
             assert!(p.hp < *h && p.mv.knocked(), "every hero in reach is hurt and pushed");
         }
-        assert_eq!(run.last_hit.expect("a hit").why.what, What::Ability(AbilityId::GroundSlam));
+        assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::GroundSlam));
         assert!(run.events.iter().any(|e| matches!(e.0, Ev::Boom { k: 5, .. })));
     }
 

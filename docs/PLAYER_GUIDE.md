@@ -72,7 +72,7 @@ The fastest hero, and the only one who fights with a companion. An elf: she sees
 - **Left – Shoot (Bow) / Strike (Rapier):** shoots arrows, which pierce enemies they kill. When an enemy is right next to you, you thrust with the rapier automatically instead, which is quicker.
 - **Right – Dire Wolf (8 s cooldown):** with no wolf, **summons** one beside you in a puff of green sparkles. With the wolf alive, it **heals** the wolf for 20 % of its health (also at full health; the cooldown starts anyway). When the wolf falls, the box waits **60 seconds** (shortened by the same CHA step as the Dire Wolf's own cooldown, so about 46 seconds at CHA 13) before you can summon a new one. There is only ever one wolf per ranger.
 - **More, left button:** **Volley** (DEX 15, needs a bow or longbow): three arrows in a fan, each weaker, and it takes longer to nock. **Flanking Thrust** (DEX 16, needs a dagger, duelling sword, katana or machete): a thrust that does **double damage** to an enemy you hit from behind.
-- **More, right button:** **Poison Coat** (WIL 15, 16 s): for 6 seconds your weapon attacks add poison and poison what they hit. **Entangle** (CHA 14, 14 s): vines grow where you aim, up to 120 pixels away and not through walls, and root the enemies in them for 4 seconds (a strong enemy breaks free sooner). You cannot aim it with an enemy right next to you. A rooted enemy still attacks.
+- **More, right button:** **Poison Coat** (WIL 15, 16 s): for 6 seconds your weapon attacks add poison and poison what they hit, on top of the weapon's own effects. **Entangle** (CHA 14, 14 s): vines grow where you aim, up to 120 pixels away and not through walls, and root the enemies in them for 4 seconds (a strong enemy breaks free sooner). You cannot aim it with an enemy right next to you. A rooted enemy still attacks.
 
 **Your wolf**
 - It has 80 HP, runs a little faster than you and uses **Bite** for 10 about once a second, with a small push.
@@ -296,11 +296,13 @@ Some attacks do more than damage. Your own effects show as small symbols with th
 | Vine | Entangled | Roots hold you: you cannot move for a few seconds, but you can still turn and attack |
 | Skull | Fear | You run away from whoever scared you and cannot attack (enemies only, for now) |
 | Shield | Warded | Gold: nothing can blind, sleep or petrify you (Purify) |
-| Blade | Coated | Green: your weapon attacks add poison and poison what they hit (Poison Coat) |
+| Blade | Coated | Green: your weapon attacks add poison and poison what they hit, on top of the weapon's own effects (Poison Coat) |
 | Eye | Invisible | Nobody can see you (enemies cannot target you) and you look faint to your party. A hit on you, or attacking yourself, ends it. No hero can do this yet; Ghosts and Shades vanish this way |
 | Down arrow (coloured by Attribute) | Weakened | Your **Strength** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
 | Down arrow (coloured by Attribute) | Clumsy | Your **Dexterity** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
 | Down arrow (coloured by Attribute) | Frail | Your **Constitution** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
+
+**One hit can apply several effects at once.** A weapon or a spell may poison and weaken in the same blow, and each effect keeps its own strength and is shortened by its own save. If two of them cancel each other (fire and cold), the later one wins.
 
 A sleeping or petrified hero cannot dodge, and a blind one cannot see what is coming, so the party's job is to keep the enemies off them. The final bosses resist some effects: all of them resist sleep completely, and some shorten other effects. The effects end by themselves after a few seconds.
 

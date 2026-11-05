@@ -61,7 +61,7 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
         return true;
     };
     let def = enemies::def(run.monsters[mi].etype.expect("only enemies ambush"));
-    let main = *run.monsters[mi].kit.get(def.abilities[0]).expect("an enemy has its main ability");
+    let main = run.monsters[mi].kit.get(def.abilities[0]).expect("an enemy has its main ability").clone();
     let hpos = run.players[h].pos();
     let reach = main.range + run.creature_radius(Creature::Player(h)) - SWING_SLACK;
     let aim = pos.angle_to(hpos);
@@ -156,7 +156,7 @@ mod tests {
         // The kit's Touch carries the drain: magical, its power the Ghost's CHA.
         let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::Ghost), &enemies::def(EnemyType::Ghost).attrs);
         let want = OnHit { kind: EffectKind::Weakened, secs: 20.0, magical: true, power: ghost_cha, look: EffectLook::Plain };
-        assert_eq!(kit.get(AbilityId::Touch).unwrap().on_hit, Some(want));
+        assert_eq!(kit.get(AbilityId::Touch).unwrap().on_hit, vec![want]);
         // And a Touch that lands on a hero weakens them.
         crate::run::tests::enemy_use(&mut run, EnemyType::Ghost, hero + Vec2::new(12.0, 0.0), AbilityId::Touch, hero);
         for _ in 0..60 {
@@ -176,7 +176,7 @@ mod tests {
         let shade_cha = enemies::def(EnemyType::Shade).attrs.get(Attr::Cha);
         let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::Shade), &enemies::def(EnemyType::Shade).attrs);
         let want = OnHit { kind: EffectKind::Frail, secs: 20.0, magical: true, power: shade_cha, look: EffectLook::Plain };
-        assert_eq!(kit.get(AbilityId::Touch).unwrap().on_hit, Some(want));
+        assert_eq!(kit.get(AbilityId::Touch).unwrap().on_hit, vec![want]);
         crate::run::tests::enemy_use(&mut run, EnemyType::Shade, hero + Vec2::new(12.0, 0.0), AbilityId::Touch, hero);
         for _ in 0..60 {
             run.step();

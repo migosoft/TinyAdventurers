@@ -389,10 +389,10 @@ pub enum HazardSide {
 }
 
 /// What a hazard does every 0.5 s to those it acts on.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum HazardPulse {
     Hurt(Damage),
-    Bind(OnHit),
+    Bind(Vec<OnHit>),
 }
 
 pub struct Hazard {

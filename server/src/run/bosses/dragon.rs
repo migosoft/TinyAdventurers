@@ -70,7 +70,7 @@ const HOVER_KEEP: f64 = 30.0;
 
 /// Its kit's ability `id`.
 fn kit(run: &Run, bi: usize, id: AbilityId) -> crate::sheet::ResolvedAbility {
-    *run.monsters[bi].kit.get(id).expect("the dragon's kit has it")
+    run.monsters[bi].kit.get(id).expect("the dragon's kit has it").clone()
 }
 
 
@@ -289,7 +289,7 @@ mod tests {
         let w = windup(&run, bi, AbilityId::Bite);
         ticks(&mut run, &mut d, w + DT);
         assert!(run.players[0].hp < hp, "bitten");
-        assert_eq!(run.last_hit.expect("a hit").why.what, What::Ability(AbilityId::Bite));
+        assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::Bite));
         assert!(run.players[0].mv.knock_vx > 0.0, "pushed away");
         assert_eq!(run.monsters[bi].anim, Anim::Bite, "the strike frames play out");
 
@@ -343,7 +343,7 @@ mod tests {
         let w = windup(&run, bi, AbilityId::Strike);
         ticks(&mut run, &mut d, w + 2.0 * DT);
         assert!(run.players[0].hp < hp);
-        assert_eq!(run.last_hit.expect("a hit").why.what, What::Ability(AbilityId::Strike));
+        assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::Strike));
     }
 
     #[test]
@@ -366,7 +366,7 @@ mod tests {
         let w = windup(&run, bi, AbilityId::TailWhip);
         ticks(&mut run, &mut d, w + DT);
         assert!(run.players[0].hp < hp[0], "the hero behind is lashed");
-        assert_eq!(run.last_hit.expect("a hit").why.what, What::Ability(AbilityId::TailWhip));
+        assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::TailWhip));
         assert!(run.players[0].mv.knock_vx < 0.0, "and pushed away from the dragon");
         assert_eq!(run.players[1].hp, hp[1], "the hero in front is spared");
         assert_eq!(run.monsters[bi].aim, 0.0, "the dragon still faces east");
@@ -393,7 +393,7 @@ mod tests {
         ticks(&mut run, &mut d, DRAGON_LAND + DT);
         assert!(!run.monsters[bi].airborne, "landed");
         assert!(run.players[0].hp < hp, "the landing smash hits");
-        assert_eq!(run.last_hit.expect("a hit").why.what, What::Ability(AbilityId::Smash));
+        assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::Smash));
         assert!(run.players[0].mv.knock_vx > 0.0, "and pushes away");
         assert!(run.events.iter().any(|e| matches!(e.0, Ev::Boom { k: 5, .. })), "shockwave event");
         assert!(d.flight_t >= DRAGON_FLIGHT_EVERY.0, "next flight in 10-12 s");
@@ -474,7 +474,7 @@ mod tests {
         let duration = kit(&run, bi, AbilityId::FireBreath).duration;
         assert!((steps as f64 * DT - duration).abs() < 0.1, "it lasts its {duration} s: {steps} steps");
         assert!(run.players[0].hp < hp[0], "the hero in the cone burns");
-        assert_eq!(run.last_hit.expect("a hit").why.what, What::Ability(AbilityId::FireBreath));
+        assert_eq!(run.last_hit.clone().expect("a hit").why.what, What::Ability(AbilityId::FireBreath));
         assert_eq!(run.players[1].hp, hp[1], "outside the angle");
         assert_eq!(run.players[2].hp, hp[2], "beyond the range");
         // It ended: the dragon stands idle again and the cooldown runs.
