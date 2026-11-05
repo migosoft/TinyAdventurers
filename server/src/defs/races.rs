@@ -1,6 +1,6 @@
 //! Races: the base forms of things in the game (templates). Each has
-//! resistances, a melee damage split, sight, an Attribute bonus and how it
-//! takes status effects; an entity can have several races, plus its own
+//! resistances, sight, an Attribute bonus, traits and how it takes status
+//! effects; an entity can have several races, plus its own
 //! adjustments (`Adjust`). Balancing edits only this data.
 
 use super::attributes::Attributes;
