@@ -36,6 +36,7 @@ import { MimicView } from './mimic';
 import { RulesLog } from '../rulesLog';
 import { KeyCap } from './keycap';
 import { pickUseHint } from './useHint';
+import { shotPassesThrough } from './shotTargets';
 import { FONT_TEXT } from '../fonts';
 import { critLabel, smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
@@ -717,6 +718,8 @@ export class GameScene extends Phaser.Scene {
       if (e.flags & FLAG.DEAD || c.hit.has(e.id)) continue;
       // An opened chest lets shots pass; a closed one stops them (server `stops_shots`).
       if (e.kind === KIND.Chest && e.anim !== 0) continue;
+      // Neutral and recruited creatures are not targets of a hero's shot.
+      if (shotPassesThrough(e)) continue;
       const air = (e.flags & FLAG.AIRBORNE) !== 0;
       for (let k = 1; k <= steps; k++) {
         if (shotHits(e.kind, e.x, e.y, air, c.x + ((nx - c.x) * k) / steps, c.y + ((ny - c.y) * k) / steps, c.r)) return e;

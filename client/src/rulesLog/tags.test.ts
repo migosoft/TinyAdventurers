@@ -3,8 +3,8 @@ import { KIND } from '../generated/defs';
 import { tagText } from './tags';
 
 const names = new Map([[1, 'Ayla'], [2, 'Bo']]);
-const tags = new Map<number, [number, number]>([[50, [KIND.GoblinArcher, 3]], [51, [KIND.Chest, 2]]]);
-const ent = (id: number, kind: number, extra = 0, side = 1) => ({ id, kind, extra, side });
+const tags = new Map<number, [number, number]>([[50, [KIND.GoblinArcher, 3]], [51, [KIND.Chest, 2]], [52, [KIND.Knight, 1]]]);
+const ent = (id: number, kind: number, extra = 0, side = kind <= KIND.ElvenRanger ? 2 : 1) => ({ id, kind, extra, side });
 
 describe('tagText', () => {
   it('a monster reads its kind name and number', () => {
@@ -20,8 +20,11 @@ describe('tagText', () => {
     expect(tagText(ent(60, KIND.DireWolf, 1, 2), tags, names, 1)).toBe("Ayla's wolf");
     expect(tagText(ent(61, KIND.DireWolf, 2, 2), tags, names, 1)).toBe("Bo's wolf");
   });
-  it("a recruited knight reads its recruiter's name", () => {
+  it("a recruited knight reads its leader's name", () => {
     expect(tagText(ent(62, KIND.Knight, 2, 2), tags, names, 1)).toBe("Bo's knight");
+  });
+  it('a server tag wins over the owner text', () => {
+    expect(tagText(ent(52, KIND.Knight, 2, 2), tags, names, 1)).toBe('Knight 1');
   });
   it('a teammate and an untagged entity read null', () => {
     expect(tagText(ent(2, KIND.ElvenRanger), tags, names, 1)).toBeNull();

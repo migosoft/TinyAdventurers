@@ -4,7 +4,7 @@ import { FIGURES, isPlayerKind } from '../game/anim/defs';
 /**
  * The tag text over a figure while the log is on. A tagged entity reads "{kind} {n}" (the kind the
  * server sent, so a hidden mimic reads "Chest n"); the own hero its name; a Friendly creature "{owner}'s wolf"
- * (its `extra` is the owner's entity id). Teammates already show their name, so they get null.
+ * (its `extra` is its leader's entity id). A server tag wins over that, so a tagged knight reads "Knight 1". Teammates already show their name, so they get null.
  */
 export function tagText(
   e: { id: number; kind: number; extra: number; side: number },
