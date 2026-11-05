@@ -202,7 +202,6 @@ impl Effects {
         }
     }
     /// A Dispel pauses the lasting source `src` for `secs` (the longer of the time left and `secs`).
-    #[allow(dead_code)] // the anti-magic zones and Dispel (later tasks of #187) call it
     pub fn dispel_lasting(&mut self, src: crate::sheet::Lasting, secs: f64) {
         match self.lasting.iter_mut().find(|(l, _)| *l == src) {
             Some(t) => t.1 = t.1.max(secs),
@@ -210,11 +209,14 @@ impl Effects {
         }
     }
     /// A Dispel pauses the magical entry of `k` for `secs`. False when there is none.
-    #[allow(dead_code)] // the anti-magic zones and Dispel (later tasks of #187) call it
     pub fn dispel_effect(&mut self, k: EffectKind, secs: f64) -> bool {
         let Some(a) = self.list.iter_mut().find(|a| a.kind == k && a.magical) else { return false };
         a.dispel = a.dispel.max(secs);
         true
+    }
+    /// Seconds a Dispel still pauses the lasting source `src` (0 when none does).
+    pub fn lasting_left(&self, src: crate::sheet::Lasting) -> f64 {
+        self.lasting.iter().find(|(l, _)| *l == src).map_or(0.0, |t| t.1.max(0.0))
     }
     /// The lasting sources a Dispel pauses now.
     pub fn dispelled(&self) -> Vec<crate::sheet::Lasting> {

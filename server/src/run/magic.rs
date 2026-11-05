@@ -6,9 +6,42 @@ use super::effects::{Creature, Effects};
 use super::light::Anchor;
 use super::Run;
 use crate::defs::attributes::Attributes;
-use crate::defs::effects::{EffectKind, EffectLook};
+use crate::defs::effects::{def, EffectKind, EffectLook};
 use crate::defs::lights::LightKind;
 use crate::sheet::Lasting;
+
+/// Which side of a creature's magic a Dispel goes for: on an enemy `Positive`, on an ally `Negative`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // the Dispel spells (#217) build `Negative`
+pub enum Want {
+    Positive,
+    Negative,
+}
+
+/// One thing a Dispel pauses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pick {
+    Effect(EffectKind),
+    Lasting(Lasting),
+}
+
+/// What a Dispel on a creature with effects `fx` and magic lasting `sources` picks, at most `n`: magic that is not already
+/// under a Dispel, of the wanted side (lasting sources count as positive). Lasting sources first (they never run out),
+/// in `Lasting` order; then effects by time left, longest first, ties by effect id.
+pub fn dispel_picks(fx: &Effects, sources: &[Lasting], want: Want, n: usize) -> Vec<Pick> {
+    let mut lasting: Vec<Lasting> = if want == Want::Positive { sources.iter().copied().filter(|s| fx.lasting_left(*s) <= 0.0).collect() } else { Vec::new() };
+    lasting.sort();
+    lasting.dedup();
+    let mut effects: Vec<(EffectKind, f64)> = Vec::new();
+    for a in fx.list() {
+        // `dispel_effect` pauses the first magical entry of a kind, so that is the one that must be free.
+        if a.magical && a.dispel <= 0.0 && (def(a.kind).positive == (want == Want::Positive)) && !effects.iter().any(|e| e.0 == a.kind) && fx.list().iter().find(|b| b.kind == a.kind && b.magical).is_some_and(|b| b.dispel <= 0.0) {
+            effects.push((a.kind, a.left));
+        }
+    }
+    effects.sort_by(|a, b| b.1.total_cmp(&a.1).then((a.0 as u8).cmp(&(b.0 as u8))));
+    lasting.into_iter().map(Pick::Lasting).chain(effects.into_iter().map(|e| Pick::Effect(e.0))).take(n).collect()
+}
 
 /// What the pause changes, as it stood at one moment: the kinds that count, the muted sources and the Attribute delta.
 pub(super) struct PauseState {
@@ -67,7 +100,6 @@ impl Run {
     }
 
     /// Applies `f` to `c`'s effects and settles the pause (see `settle_pause`).
-    #[allow(dead_code)] // the anti-magic zones and Dispel (later tasks of #187) call it
     fn repause(&mut self, c: Creature, f: impl FnOnce(&mut Effects)) {
         let Some(before) = self.pause_state(c) else { return };
         if let Some((fx, ..)) = self.creature(c) {
@@ -77,23 +109,46 @@ impl Run {
     }
 
     /// An anti-magic zone is on or off `c`: its magic is paused or back.
-    #[allow(dead_code)] // the anti-magic zones and Dispel (later tasks of #187) call it
+    #[allow(dead_code)] // the anti-magic zones (a later task of #187) call it
     pub fn set_anti_magic(&mut self, c: Creature, on: bool) {
         self.repause(c, |fx| fx.anti_magic = on);
     }
 
     /// A Dispel pauses the lasting source `src` of `c` for `secs`.
-    #[allow(dead_code)] // the anti-magic zones and Dispel (later tasks of #187) call it
+    #[allow(dead_code)] // single pauses; `dispel` pauses through `repause` itself
     pub fn pause_lasting(&mut self, c: Creature, src: Lasting, secs: f64) {
         self.repause(c, |fx| fx.dispel_lasting(src, secs));
     }
 
     /// A Dispel pauses the magic entry of `kind` on `c` for `secs`.
-    #[allow(dead_code)] // the anti-magic zones and Dispel (later tasks of #187) call it
+    #[allow(dead_code)] // single pauses; `dispel` pauses through `repause` itself
     pub fn pause_effect(&mut self, c: Creature, kind: EffectKind, secs: f64) {
         self.repause(c, |fx| {
             fx.dispel_effect(kind, secs);
         });
+    }
+
+    /// A Dispel on `c`: pauses what `dispel_picks` picks for `secs`, all in one `repause`, so the events and the refresh happen once.
+    #[allow(dead_code)] // the Dispel spells (#217) call it
+    pub fn dispel(&mut self, c: Creature, want: Want, n: usize, secs: f64) -> Vec<Pick> {
+        let sources = self.magic_sources(c);
+        let picks = match c {
+            Creature::Player(i) => self.players.get(i).map(|p| dispel_picks(&p.effects, &sources, want, n)),
+            Creature::Monster(i) => self.monsters.get(i).map(|m| dispel_picks(&m.effects, &sources, want, n)),
+        }
+        .unwrap_or_default();
+        let todo = picks.clone();
+        self.repause(c, move |fx| {
+            for p in todo {
+                match p {
+                    Pick::Effect(k) => {
+                        fx.dispel_effect(k, secs);
+                    }
+                    Pick::Lasting(l) => fx.dispel_lasting(l, secs),
+                }
+            }
+        });
+        picks
     }
 
     /// A hero's item light changed (its source was muted or came back): the entity-anchored light is swapped.
@@ -282,5 +337,108 @@ mod tests {
         run.pause_effect(me, EffectKind::Slowed, 5.0);
         assert!(run.has_effect(me, EffectKind::Slowed), "a Dispel finds no magic entry of it");
         assert!(run.events.iter().all(|(e, _)| !matches!(e, Ev::Effect { .. })));
+    }
+
+    fn lasting_pair() -> Vec<(ClassId, Build)> {
+        vec![(ClassId::Wizard, Build { equipment: Equipment::starter(ClassId::Wizard).with(EquipSlot::Melee, ItemId::EmberStaff).with(EquipSlot::Ring1, ItemId::BandOfVigor), ..Build::start(ClassId::Wizard) })]
+    }
+
+    #[test]
+    fn picks_only_the_wanted_side() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let me = Creature::Player(0);
+        run.apply(me, magic(EffectKind::Accelerated, 20.0));
+        run.apply(me, magic(EffectKind::Slowed, 20.0));
+        let fx = &run.players[0].effects;
+        assert_eq!(dispel_picks(fx, &[], Want::Positive, 5), vec![Pick::Effect(EffectKind::Accelerated)]);
+        assert_eq!(dispel_picks(fx, &[], Want::Negative, 5), vec![Pick::Effect(EffectKind::Slowed)]);
+        let src = [Lasting::Item(ItemId::EmberStaff)];
+        assert!(dispel_picks(fx, &src, Want::Negative, 5).iter().all(|p| matches!(p, Pick::Effect(_))), "lasting is positive");
+    }
+
+    #[test]
+    fn lasting_sources_go_first() {
+        let mut run = test_run_with(&lasting_pair(), BossId::Demon);
+        let me = Creature::Player(0);
+        run.apply(me, magic(EffectKind::Accelerated, 20.0));
+        let src = run.magic_sources(me);
+        assert_eq!(src.len(), 2);
+        let picks = dispel_picks(&run.players[0].effects, &src, Want::Positive, 5);
+        let want: Vec<Pick> = src.iter().map(|s| Pick::Lasting(*s)).chain([Pick::Effect(EffectKind::Accelerated)]).collect();
+        assert_eq!(picks, want);
+    }
+
+    #[test]
+    fn then_the_most_time_left() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let me = Creature::Player(0);
+        run.apply(me, magic(EffectKind::Warded, 5.0));
+        run.apply(me, magic(EffectKind::Accelerated, 20.0));
+        run.apply(me, magic(EffectKind::Coated, 9.0));
+        let picks = dispel_picks(&run.players[0].effects, &[], Want::Positive, 2);
+        assert_eq!(picks, vec![Pick::Effect(EffectKind::Accelerated), Pick::Effect(EffectKind::Coated)]);
+    }
+
+    #[test]
+    fn ties_break_by_effect_id() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let me = Creature::Player(0);
+        run.apply(me, magic(EffectKind::Warded, 10.0));
+        run.apply(me, magic(EffectKind::Coated, 10.0));
+        run.apply(me, magic(EffectKind::Accelerated, 10.0));
+        let mut kinds = vec![EffectKind::Warded, EffectKind::Coated, EffectKind::Accelerated];
+        kinds.sort_by_key(|k| *k as u8);
+        let want: Vec<Pick> = kinds.into_iter().map(Pick::Effect).collect();
+        assert_eq!(dispel_picks(&run.players[0].effects, &[], Want::Positive, 5), want);
+    }
+
+    #[test]
+    fn already_dispelled_is_skipped() {
+        let mut run = test_run_with(&lasting_pair(), BossId::Demon);
+        let me = Creature::Player(0);
+        run.apply(me, magic(EffectKind::Accelerated, 20.0));
+        run.apply(me, magic(EffectKind::Warded, 10.0));
+        let src = run.magic_sources(me);
+        run.pause_effect(me, EffectKind::Accelerated, 5.0);
+        run.pause_lasting(me, src[0], 5.0);
+        let picks = dispel_picks(&run.players[0].effects, &src, Want::Positive, 5);
+        assert_eq!(picks, vec![Pick::Lasting(src[1]), Pick::Effect(EffectKind::Warded)]);
+    }
+
+    #[test]
+    fn plain_is_never_picked() {
+        let mut run = test_run_with(&lasting_pair(), BossId::Demon);
+        let me = Creature::Player(0);
+        run.apply(me, Apply::plain(EffectKind::Accelerated, Some(20.0)));
+        run.apply(me, Apply::plain(EffectKind::Slowed, Some(20.0)));
+        let fx = &run.players[0].effects;
+        assert!(dispel_picks(fx, &[], Want::Positive, 5).is_empty());
+        assert!(dispel_picks(fx, &[], Want::Negative, 5).is_empty());
+    }
+
+    #[test]
+    fn n_zero_picks_nothing() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.apply(Creature::Player(0), magic(EffectKind::Accelerated, 20.0));
+        assert!(dispel_picks(&run.players[0].effects, &[Lasting::Item(ItemId::EmberStaff)], Want::Positive, 0).is_empty());
+    }
+
+    #[test]
+    fn dispel_pauses_what_it_picks() {
+        let mut run = test_run_with(&lasting_pair(), BossId::Demon);
+        let me = Creature::Player(0);
+        run.apply(me, magic(EffectKind::Accelerated, 20.0));
+        run.apply(me, magic(EffectKind::Slowed, 20.0));
+        let src = run.magic_sources(me);
+        run.events.clear();
+        let picks = run.dispel(me, Want::Positive, 2, 4.0);
+        assert_eq!(picks, vec![Pick::Lasting(src[0]), Pick::Lasting(src[1])]);
+        assert_eq!(run.players[0].effects.dispelled(), src);
+        assert!(run.players[0].effects.speed_mul() < 1.0, "the Slowed stays, Accelerated was not picked");
+        let picks = run.dispel(me, Want::Positive, 2, 4.0);
+        assert_eq!(picks, vec![Pick::Effect(EffectKind::Accelerated)]);
+        assert!(told(&run, EffectKind::Accelerated, false));
+        assert!(!run.players[0].effects.has(EffectKind::Accelerated));
+        assert!(run.dispel(me, Want::Positive, 2, 4.0).is_empty(), "nothing left");
     }
 }
