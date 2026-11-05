@@ -25,6 +25,23 @@ pub const WOLF_REACH_EVERY: f64 = 0.5;
 pub const WOLF_HEAL_SHARE: f64 = 0.2;
 pub const WOLF_DEAD_COOLDOWN: f64 = 60.0;
 
+/// How a companion behaves around its leader: the numbers of the shared follow script (run/companion.rs).
+pub struct Escort {
+    /// Starts following beyond this distance, stops inside `follow_stop`.
+    pub follow: f64,
+    pub follow_stop: f64,
+    /// Enemies this close to the leader are attacked...
+    pub guard: f64,
+    /// ...and enemies this close to the companion (it fights back).
+    pub defend: f64,
+    /// It never chases farther than this from the leader.
+    pub leash: f64,
+    /// Beyond this distance from the leader it reappears beside them.
+    pub reappear: f64,
+}
+
+pub const WOLF_ESCORT: Escort = Escort { follow: WOLF_FOLLOW, follow_stop: WOLF_FOLLOW_STOP, guard: WOLF_GUARD, defend: WOLF_DEFEND, leash: WOLF_LEASH, reappear: WOLF_REAPPEAR };
+
 /// HP before the CON bonus (55): `WOLF_HP` minus 5 per CON point above 10.
 pub fn wolf_base_hp() -> f64 {
     WOLF_HP - 5.0 * (15 - 10) as f64

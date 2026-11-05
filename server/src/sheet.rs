@@ -330,6 +330,11 @@ impl Kit {
         self.0.iter().find(|a| a.id == id)
     }
 
+    /// The first ability: a companion's attack (the wolf's Bite).
+    pub fn first(&self) -> Option<&ResolvedAbility> {
+        self.0.first()
+    }
+
     /// The kit with `mods` applied to ability `id` (nothing changes if it has none such).
     pub fn modded(mut self, id: AbilityId, mods: &[AbilityMod]) -> Kit {
         if let Some(a) = self.0.iter_mut().find(|a| a.id == id) {

@@ -126,7 +126,7 @@ fn hp_byte(hp: f64, max: f64) -> u8 {
     ((hp / max).clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-/// One monster's entry. An ally's `extra` is its owner (the ranger's id).
+/// One monster's entry. A companion's `extra` is its leader (a hero's id).
 fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, gaze: u32) -> EntSnap {
     let mut f = 0;
     if m.hurt_t > 0.0 {
@@ -147,8 +147,8 @@ fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, gaze
     if m.is_boss && boss_immune {
         f |= flags::IMMUNE;
     }
-    let extra = match &m.ally {
-        Some(a) => a.owner,
+    let extra = match &m.companion {
+        Some(c) => c.leader,
         None if m.anim == Anim::Gaze => gaze,
         None => m.owner.unwrap_or(0),
     };

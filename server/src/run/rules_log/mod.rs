@@ -175,7 +175,7 @@ pub fn hit_begin(run: &mut Run, f: HitFacts) {
     }));
     let viewer = match f.target {
         Creature::Player(i) => Some(run.players[i].id),
-        Creature::Monster(i) => run.monsters[i].ally.as_ref().map(|a| a.owner),
+        Creature::Monster(i) => run.monsters[i].companion.as_ref().map(|c| c.leader),
     };
     let unseen = viewer.and_then(|viewer| {
         let shown = match f.outcome {
@@ -332,7 +332,7 @@ pub fn death(run: &mut Run, f: DeathFacts) {
     }
     let viewer = match f.target {
         Creature::Player(i) => Some(run.players[i].id),
-        Creature::Monster(i) => run.monsters[i].ally.as_ref().map(|a| a.owner),
+        Creature::Monster(i) => run.monsters[i].companion.as_ref().map(|c| c.leader),
     };
     let unseen = viewer.map(|viewer| Unseen { viewer, head: text::death_unseen_head(run, f.target, target), details: vec![] });
     let rec = LogRec { t: run.time, kind: LineKind::Death, head: text::death_head(run, &f, target), details: vec![], who, unseen, plain: None, dealt: None, secs: None };

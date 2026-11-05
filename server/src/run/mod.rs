@@ -4,6 +4,7 @@ pub mod abilities;
 pub mod ai;
 pub mod ambush;
 pub mod bosses;
+pub mod companion;
 pub mod debug;
 pub mod effects;
 pub mod entities;
@@ -339,7 +340,8 @@ impl Run {
             effect_res: prof.effect_res,
             attrs: stats.attrs,
             weight: stats.weight,
-            ally: None,
+            companion: None,
+            wolf: None,
             side: Side::Hostile,
         });
         rules_log::spawned(self, id, d.kind);
@@ -452,7 +454,7 @@ impl Run {
         for pi in 0..self.players.len() {
             self.step_player(pi);
         }
-        wolf::vanish_orphans(self);
+        companion::update_leaders(self);
         self.touch_chests();
         self.refresh_lights(); // the AI perceives by the lights of this tick
 
@@ -488,7 +490,7 @@ impl Run {
             if m.side == Side::Neutral {
                 continue;
             }
-            if m.ally.is_some() {
+            if m.wolf.is_some() {
                 wolf::tick_wolf(self, mi, DT);
                 continue;
             }
@@ -690,8 +692,8 @@ impl Run {
         let (tx, ty) = dungeon::Map::tile_of(pos);
         let tile = self.layout.map.get(tx, ty);
         let pounce_ready = m.cds.ready(crate::defs::abilities::AbilityId::Pounce);
-        if let Some(a) = m.ally.as_mut() {
-            if tile == Tile::Chasm as u8 && pounce_ready {
+        if let Some(a) = m.companion.as_mut() {
+            if m.wolf.is_some() && tile == Tile::Chasm as u8 && pounce_ready {
                 m.knock = Vec2::ZERO;
                 wolf::dash_back(self, mi);
                 return;
@@ -1225,7 +1227,7 @@ impl Run {
         if !m.alive {
             return;
         }
-        if m.ally.is_some() {
+        if m.wolf.is_some() {
             wolf::wolf_died(self, mi);
             return;
         }

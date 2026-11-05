@@ -1,10 +1,11 @@
-//! The Elven Ranger's wolf: an ally monster. Spawn, behaviour and death here.
+//! The Elven Ranger's wolf: a summoned companion (run/companion.rs). Spawn, behaviour and death here.
 
 use super::abilities::{monster_use, monster_dash_to, monster_dash_secs, tick_monster_dash};
-use super::entities::{Ai, Ally, Monster, Windup, HISTORY_LEN};
+use super::companion::{find_prey, follow, lost, reappear, set_anim};
+use super::entities::{Ai, Companion, Monster, WolfState, Windup, HISTORY_LEN};
 use super::targets::Side;
-use super::{ai, perception, Run};
-use crate::collision::{line_of_sight, walk_line};
+use super::{ai, Run};
+use crate::collision::line_of_sight;
 use crate::defs::abilities::AbilityId;
 use crate::defs::effects::EffectKind;
 use crate::defs::companions::*;
@@ -93,9 +94,11 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         attrs: stats.attrs,
         weight: stats.weight,
         side: Side::Friendly,
-        ally: Some(Ally {
-            owner,
-            bite_hold: 0.0,
+        wolf: Some(WolfState { bite_hold: 0.0 }),
+        companion: Some(Companion {
+            leader: owner,
+            recruiter: owner,
+            summoned: true,
             prey: None,
             following: false,
             reach_t: 0.0,
@@ -119,67 +122,32 @@ pub fn use_ability(run: &mut Run, pi: usize) {
     }
 }
 
-/// Allies whose owner is no longer a living hero (fallen or left) vanish at once, with a puff:
-/// no death event, no message, no cooldown.
-pub fn vanish_orphans(run: &mut Run) {
-    for mi in 0..run.monsters.len() {
-        let m = &run.monsters[mi];
-        let Some(owner) = m.ally.as_ref().map(|a| a.owner).filter(|_| m.alive) else { continue };
-        let pi = run.player_idx(owner);
-        if pi.is_some_and(|pi| run.players[pi].alive) {
-            continue;
-        }
-        let pos = m.pos;
-        run.monsters[mi].alive = false;
-        if let Some(pi) = pi {
-            run.players[pi].wolf = None;
-        }
-        run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: 10.0, k: 9 }, None);
-    }
+fn companion_mut(run: &mut Run, mi: usize) -> &mut Companion {
+    run.monsters[mi].companion.as_mut().expect("a companion")
 }
 
-fn ally_mut(run: &mut Run, mi: usize) -> &mut Ally {
-    run.monsters[mi].ally.as_mut().expect("an ally")
-}
-
-fn set_anim(run: &mut Run, mi: usize, a: Anim) {
-    let m = &mut run.monsters[mi];
-    if m.anim != a {
-        m.anim = a;
-        m.anim_start = run.time;
-    }
+fn wolf_mut(run: &mut Run, mi: usize) -> &mut WolfState {
+    run.monsters[mi].wolf.as_mut().expect("the wolf")
 }
 
 /// The wolf `mi` this tick: reappear, pounce, bite, guard, follow. Not called
 /// while it is pushed, sinking, asleep or frozen (`Run::step`).
 pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
     // 1. The ranger.
-    let Some(owner) = run.monsters[mi].ally.as_ref().map(|a| a.owner) else { return };
+    let Some(owner) = run.monsters[mi].companion.as_ref().map(|c| c.leader) else { return };
     let Some(pi) = run.player_idx(owner).filter(|&pi| run.players[pi].alive) else { return };
     let ranger = run.players[pi].pos();
 
     // 2. Reappear beside the ranger when far, or every 0.5 s when it cannot reach them.
-    //    Mid-dash it may be over a chasm, where no path starts: no reach check then.
-    let pos = run.monsters[mi].pos;
-    let dashing = run.monsters[mi].dash.is_some();
-    let mut lost = pos.dist(ranger) > WOLF_REAPPEAR;
-    let a = ally_mut(run, mi);
-    a.reach_t -= dt;
-    if a.reach_t <= 0.0 && !dashing {
-        a.reach_t = WOLF_REACH_EVERY;
-        let map = &run.layout.map;
-        // A ranger on lava or over a chasm cannot be reached on foot, and no spot beside her is safe.
-        lost |= !map.blocks_at(ranger, Mover::Enemy) && !(walk_line(map, pos, ranger, Mover::Enemy) || ai::astar(map, pos, ranger, 2500, Mover::Enemy).is_some());
-    }
-    if lost && reappear(run, mi, ranger) {
+    if lost(run, mi, ranger, &WOLF_ESCORT, dt) && reappear(run, mi, ranger) {
         return;
     }
 
     // 3. Timers.
     {
         let m = &mut run.monsters[mi];
-        let a = m.ally.as_mut().expect("an ally");
-        a.bite_hold = (a.bite_hold - m.effects.cooldown_dt(dt)).max(0.0);
+        let w = m.wolf.as_mut().expect("the wolf");
+        w.bite_hold = (w.bite_hold - m.effects.cooldown_dt(dt)).max(0.0);
     }
 
     // 3a. A dash in progress.
@@ -188,7 +156,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             // A pounce that hurt its prey leaves the next bite a cooldown away.
             if !done.hit.is_empty() {
                 let bite = run.monsters[mi].kit.get(AbilityId::Bite).expect("the wolf bites").clone();
-                ally_mut(run, mi).bite_hold = bite.cooldown;
+                wolf_mut(run, mi).bite_hold = bite.cooldown;
             }
             if done.attack && run.layout.map.blocks_at(run.monsters[mi].pos, Mover::Enemy) {
                 overrun(run, mi, done.dir);
@@ -211,7 +179,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             return;
         }
         run.monsters[mi].ai.windup = None;
-        let prey = run.monsters[mi].ally.as_ref().and_then(|a| a.prey).and_then(|id| run.monster_idx(id));
+        let prey = run.monsters[mi].companion.as_ref().and_then(|c| c.prey).and_then(|id| run.monster_idx(id));
         // Prey that has since gone invisible is dropped: the wind-up ends without a bite or a leap.
         if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive && !run.monsters[ei].effects.has(EffectKind::Invisible)) {
             let at = run.monsters[ei].pos;
@@ -234,8 +202,8 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
     }
 
     // 5. Prey: the enemy nearest the ranger among those near the ranger or the wolf itself.
-    let prey = find_prey(run, mi, ranger);
-    ally_mut(run, mi).prey = prey.map(|ei| run.monsters[ei].id);
+    let prey = find_prey(run, mi, ranger, &WOLF_ESCORT);
+    companion_mut(run, mi).prey = prey.map(|ei| run.monsters[ei].id);
     if let Some(ei) = prey {
         let (w, e) = (&run.monsters[mi], &run.monsters[ei]);
         let (pos, epos) = (w.pos, e.pos);
@@ -259,7 +227,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             }
         }
         if d <= reach {
-            if run.monsters[mi].cds.ready(AbilityId::Bite) && run.monsters[mi].ally.as_ref().is_some_and(|a| a.bite_hold <= 0.0) {
+            if run.monsters[mi].cds.ready(AbilityId::Bite) && run.monsters[mi].wolf.as_ref().is_some_and(|w| w.bite_hold <= 0.0) {
                 run.start_windup(mi, Windup { t: bite.windup, aim, alt: false, at: None });
                 set_anim(run, mi, Anim::Windup);
             } else {
@@ -273,24 +241,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
     }
 
     // 6. Follow.
-    let pos = run.monsters[mi].pos;
-    let d = pos.dist(ranger);
-    let a = ally_mut(run, mi);
-    if a.following && d < WOLF_FOLLOW_STOP {
-        a.following = false;
-    } else if d > WOLF_FOLLOW {
-        a.following = true;
-    }
-    if a.following {
-        run.monsters[mi].aim = pos.angle_to(ranger);
-        ai::path_toward(run, mi, ranger, WOLF_SPEED, dt);
-        set_anim(run, mi, Anim::Move);
-    } else {
-        run.monsters[mi].ai.path.clear();
-        // Faces the side the ranger aims at.
-        run.monsters[mi].aim = if run.players[pi].aim.cos() >= 0.0 { 0.0 } else { std::f64::consts::PI };
-        set_anim(run, mi, Anim::Idle);
-    }
+    follow(run, mi, pi, &WOLF_ESCORT, WOLF_SPEED, dt);
 }
 
 /// A pounce that ended over ground the wolf cannot stand on (it touched its prey above a chasm): it
@@ -314,53 +265,13 @@ fn overrun(run: &mut Run, mi: usize, dir: Vec2) {
     }
 }
 
-/// The enemy the wolf goes for: alive, awake and visible to the heroes (not dormant, hiding or flying),
-/// seen by the wolf, near the ranger (guard) or the wolf (it fights back), within the leash. The one
-/// nearest the ranger.
-fn find_prey(run: &Run, mi: usize, ranger: Vec2) -> Option<usize> {
-    let w = &run.monsters[mi];
-    let sight = w.sight_now();
-    let bite = w.kit.get(AbilityId::Bite).expect("the wolf bites").split;
-    run.monsters
-        .iter()
-        .enumerate()
-        .filter(|(_, e)| e.alive && e.side == Side::Hostile && !e.dormant && !e.hiding && !e.effects.has(EffectKind::Invisible) && !e.airborne && e.sinking.is_none())
-        // A bite that passes through the foe cannot hurt it: not worth chasing.
-        .filter(|&(i, _)| !run.passes_through(super::effects::Creature::Monster(i), &bite))
-        .filter(|(_, e)| {
-            let (to_r, to_w) = (e.pos.dist(ranger), e.pos.dist(w.pos));
-            (to_r <= WOLF_GUARD + e.radius || to_w <= WOLF_DEFEND + e.radius) && to_r <= WOLF_LEASH
-        })
-        .filter(|(_, e)| perception::sees(run, sight, w.pos, e.pos))
-        .min_by(|a, b| a.1.pos.dist(ranger).total_cmp(&b.1.pos.dist(ranger)))
-        .map(|(i, _)| i)
-}
-
-/// The wolf appears beside the ranger with the green puff, dropping whatever it was doing.
-/// With no free spot beside her it stays where it is (false).
-fn reappear(run: &mut Run, mi: usize, ranger: Vec2) -> bool {
-    let Some(spot) = spot_beside(run, ranger) else { return false };
-    let m = &mut run.monsters[mi];
-    m.pos = spot;
-    m.knock = Vec2::ZERO;
-    m.ai.path.clear();
-    m.ai.windup = None;
-    m.dash = None;
-    let a = m.ally.as_mut().expect("an ally");
-    a.prey = None;
-    a.following = false;
-    set_anim(run, mi, Anim::Idle);
-    run.event(Ev::Boom { x: spot.x as f32, y: spot.y as f32, r: 10.0, k: 9 }, None);
-    true
-}
-
 /// Pushed over a chasm with its Pounce ready: the wolf pounces straight back to the last
 /// safe tile it stood on. That uses the Pounce (its cooldown starts).
 pub fn dash_back(run: &mut Run, mi: usize) {
     let m = &mut run.monsters[mi];
     m.ai.windup = None;
     m.ai.path.clear();
-    let to = m.ally.as_ref().expect("an ally").last_safe;
+    let to = m.companion.as_ref().expect("a companion").last_safe;
     monster_dash_to(run, mi, AbilityId::Pounce, to, true);
     set_anim(run, mi, Anim::Dash);
 }
@@ -371,7 +282,7 @@ pub fn wolf_died(run: &mut Run, mi: usize) {
     m.alive = false;
     m.hp = 0.0;
     let (id, pos, kind) = (m.id, m.pos, m.kind as u8);
-    let owner = m.ally.as_ref().map(|a| a.owner);
+    let owner = m.companion.as_ref().map(|c| c.leader);
     run.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
     if let Some(pi) = owner.and_then(|o| run.player_idx(o)) {
         let p = &mut run.players[pi];
@@ -442,7 +353,7 @@ mod tests {
     }
 
     fn wolves(run: &Run) -> Vec<&crate::run::entities::Monster> {
-        run.monsters.iter().filter(|m| m.alive && m.ally.is_some()).collect()
+        run.monsters.iter().filter(|m| m.alive && m.wolf.is_some()).collect()
     }
 
     #[test]
@@ -502,8 +413,8 @@ mod tests {
         press(&mut run, 1, true);
         assert_eq!(wolves(&run).len(), 2);
         let (a, b) = (run.players[0].wolf.unwrap(), run.players[1].wolf.unwrap());
-        assert_eq!(run.monsters[wolf_idx(&run, a)].ally.as_ref().unwrap().owner, run.players[0].id);
-        assert_eq!(run.monsters[wolf_idx(&run, b)].ally.as_ref().unwrap().owner, run.players[1].id);
+        assert_eq!(run.monsters[wolf_idx(&run, a)].companion.as_ref().unwrap().leader, run.players[0].id);
+        assert_eq!(run.monsters[wolf_idx(&run, b)].companion.as_ref().unwrap().leader, run.players[1].id);
         let ai = wolf_idx(&run, a);
         run.monsters[ai].hp = 30.0;
         run.players[1].cd2 = 0.0;
@@ -556,7 +467,7 @@ mod tests {
         assert!((m.res.get(DamageType::Magical) - 0.1).abs() < 1e-12);
         assert_eq!(m.effect_res.get(EffectKind::Sleep), 1.0);
         assert_eq!(m.kind, EntityKind::DireWolf);
-        assert_eq!(m.ally.as_ref().unwrap().owner, run.players[0].id);
+        assert_eq!(m.companion.as_ref().unwrap().leader, run.players[0].id);
         assert_eq!(run.players[0].wolf, Some(id));
         assert!(run.events.iter().any(|(e, at)| matches!(e, Ev::Boom { k: 9, .. }) && at.is_none()), "the green puff goes to the whole party");
     }
@@ -863,8 +774,8 @@ mod tests {
         &run.monsters[wolf_idx(run, id)]
     }
 
-    fn ally(run: &Run, id: u32) -> &crate::run::entities::Ally {
-        wolf(run, id).ally.as_ref().unwrap()
+    fn ally(run: &Run, id: u32) -> &crate::run::entities::Companion {
+        wolf(run, id).companion.as_ref().unwrap()
     }
 
     fn set_wolf_pos(run: &mut Run, id: u32, p: Vec2) {
@@ -897,7 +808,7 @@ mod tests {
         let gap = run.monsters[wi].radius + run.monsters[ei].radius + 2.0;
         run.monsters[ei].pos = w + Vec2::new(gap, 0.0);
         let eid = run.monsters[ei].id;
-        ally_mut(&mut run, wi).prey = Some(eid);
+        companion_mut(&mut run, wi).prey = Some(eid);
         run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None });
         tick_wolf(&mut run, wi, DT);
         run.monsters[run.monster_idx(eid).unwrap()].knock
@@ -918,7 +829,7 @@ mod tests {
         let orc = orc_at(&mut run, w + Vec2::new(14.0, 0.0));
         let oi = run.monster_idx(orc).unwrap();
         run.monsters[oi].ai.hold = 99.0;
-        ally_mut(&mut run, wi).prey = Some(orc);
+        companion_mut(&mut run, wi).prey = Some(orc);
         run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None });
         tick_wolf(&mut run, wi, DT);
         let hit = run.last_hit.clone().expect("the bite landed");
@@ -984,7 +895,7 @@ mod tests {
             let oi = run.monster_idx(orc).unwrap();
             run.monsters[oi].ai.hold = 99.0;
             run.monsters[oi].hp = 500.0;
-            ally_mut(&mut run, wi).prey = Some(orc);
+            companion_mut(&mut run, wi).prey = Some(orc);
             run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt, at: None });
             run.monsters[oi].effects.add(EffectKind::Invisible, 30.0);
             tick_wolf(&mut run, wi, DT);
@@ -1136,7 +1047,7 @@ mod tests {
         assert!(run.monsters[oi].hp < 500.0, "the pounce hurt the orc");
         let w = wolf(&run, id);
         assert!(w.cds.ready(AbilityId::Bite), "the kit's Bite cooldown is not started by the script");
-        assert!(w.ally.as_ref().unwrap().bite_hold > 0.0, "the script holds the next bite back");
+        assert!(w.wolf.as_ref().unwrap().bite_hold > 0.0, "the script holds the next bite back");
     }
 
     #[test]
@@ -1288,9 +1199,9 @@ mod tests {
         let oid = run.spawn_enemy(EnemyType::SkeletonWarrior, r + Vec2::new(30.0, 0.0), None);
         let oi = run.monster_idx(oid).unwrap();
         let wi = run.monster_idx(id).unwrap();
-        assert_eq!(find_prey(&run, wi, r), Some(oi), "the wolf goes for a visible enemy");
+        assert_eq!(find_prey(&run, wi, r, &WOLF_ESCORT), Some(oi), "the wolf goes for a visible enemy");
         run.monsters[oi].effects.add(EffectKind::Invisible, 30.0);
-        assert_eq!(find_prey(&run, wi, r), None, "but not an invisible one");
+        assert_eq!(find_prey(&run, wi, r, &WOLF_ESCORT), None, "but not an invisible one");
     }
 
     /// The boss hall, a floor spot 3 tiles inside its door and one 2 tiles outside it.
@@ -1482,11 +1393,11 @@ mod tests {
         run.monsters[gi].traits = prof.traits;
         let ranger = run.players[0].pos();
         // The wolf's bite is 20 % Magical, which a ghost does not resist: the bite hurts it, so it is prey.
-        assert_eq!(find_prey(&run, wi, ranger), Some(gi), "the Magical share hits");
+        assert_eq!(find_prey(&run, wi, ranger, &WOLF_ESCORT), Some(gi), "the Magical share hits");
         run.monsters[gi].res.set(DamageType::Magical, 1.0);
-        assert_eq!(find_prey(&run, wi, ranger), None, "its whole bite would pass through");
+        assert_eq!(find_prey(&run, wi, ranger, &WOLF_ESCORT), None, "its whole bite would pass through");
         run.monsters[gi].traits = Default::default();
-        assert_eq!(find_prey(&run, wi, ranger), Some(gi), "control: with a body it is prey");
+        assert_eq!(find_prey(&run, wi, ranger, &WOLF_ESCORT), Some(gi), "control: with a body it is prey");
     }
 
     #[test]
@@ -1494,9 +1405,9 @@ mod tests {
         let (mut run, id) = guard_run();
         let wi = wolf_idx(&run, id);
         run.apply_effect(Creature::Monster(wi), EffectKind::Accelerated, Some(30.0));
-        run.monsters[wi].ally.as_mut().unwrap().bite_hold = 1.0;
+        run.monsters[wi].wolf.as_mut().unwrap().bite_hold = 1.0;
         tick_wolf(&mut run, wi, DT);
-        let left = ally(&run, id).bite_hold;
+        let left = wolf(&run, id).wolf.as_ref().unwrap().bite_hold;
         assert!((left - (1.0 - 1.25 * DT)).abs() < 1e-9, "{left}");
     }
 }

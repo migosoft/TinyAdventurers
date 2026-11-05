@@ -195,19 +195,28 @@ pub struct MonsterDash {
     pub attack: bool,
 }
 
-/// What makes a monster an ally of the heroes (the Ranger's wolf; run/wolf.rs).
+/// What makes a monster a companion of the heroes (run/companion.rs): it follows a hero and fights for the party.
 #[derive(Debug, Clone)]
-pub struct Ally {
-    /// The ranger's player id.
-    pub owner: u32,
-    /// Seconds before it may bite again after a pounce that hurt its prey (the script's own wait; the
-    /// kit's cooldowns are `cds`, started only by using the ability).
-    pub bite_hold: f64,
+pub struct Companion {
+    /// The player id of the hero it follows now (`companion::update_leaders` keeps it current).
+    pub leader: u32,
+    /// The player id of the hero that summoned or recruited it. For the wolf, the ranger.
+    pub recruiter: u32,
+    /// Summoned (the wolf) rather than recruited: it vanishes with its recruiter instead of changing leader.
+    pub summoned: bool,
     pub prey: Option<u32>,
     pub following: bool,
     pub reach_t: f64,
     /// Centre of the last safe tile it stood on (a dash back from a chasm goes there).
     pub last_safe: Vec2,
+}
+
+/// What only the Ranger's wolf has (the wolf script in run/wolf.rs).
+#[derive(Debug, Clone)]
+pub struct WolfState {
+    /// Seconds before it may bite again after a pounce that hurt its prey (the script's own wait; the
+    /// kit's cooldowns are `cds`, started only by using the ability).
+    pub bite_hold: f64,
 }
 
 pub struct Monster {
@@ -281,8 +290,10 @@ pub struct Monster {
     /// Its Attributes and weight (crate::sheet::MonsterStats).
     pub attrs: Attributes,
     pub weight: f64,
-    /// Set for a hero's ally: no hero attack hurts it and enemies are its foes.
-    pub ally: Option<Ally>,
+    /// Set for a companion of the heroes (run/companion.rs).
+    pub companion: Option<Companion>,
+    /// Set for the Ranger's wolf: it runs the wolf script.
+    pub wolf: Option<WolfState>,
     /// Whom it fights for (`targets::foes`); every friend-or-foe question reads it.
     pub side: Side,
 }

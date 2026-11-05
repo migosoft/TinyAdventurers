@@ -76,7 +76,7 @@ fn hero_of(c: Creature) -> Option<usize> {
 fn credit_of(run: &Run, c: Creature) -> Option<usize> {
     match c {
         Creature::Player(pi) => Some(pi),
-        Creature::Monster(mi) => run.monsters[mi].ally.as_ref().and_then(|a| run.player_idx(a.owner)),
+        Creature::Monster(mi) => run.monsters[mi].companion.as_ref().and_then(|c| run.player_idx(c.leader)),
     }
 }
 
