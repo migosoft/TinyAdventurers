@@ -20,7 +20,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 | **Mouse** | Aim |
 | **Left mouse button** | Primary attack, toward the mouse pointer. Hold it to keep attacking. |
 | **Right mouse button** | Secondary ability |
-| **E** (while alive) | Wake a sleeping teammate next to you (see Status effects), push the barrel right next to you (see Explosive barrels), or light or put out the torch next to you (see Seeing in the dark) |
+| **E** (while alive) | Wake a sleeping teammate next to you (see Status effects), recruit the neutral knight next to you (see Sides and companions), push the barrel right next to you (see Explosive barrels), or light or put out the torch next to you (see Seeing in the dark) |
 | **Q / E** | After you die, switch which teammate you watch |
 | **Esc** | Menu: resume, Settings or leave the dungeon |
 | **L** | Turn the rules log on or off (see The rules log) |
@@ -29,7 +29,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 
 The **Settings** view of the Esc menu has a checkbox for each switch: the rules log (L), its calculation lines (Shift+L) and the network stats (F3). The keys and the checkboxes always agree.
 
-On the screen, the **E** hint is a small gold key cap that floats over the thing you can use (a chest, a door, a sleeping teammate with the word "Wake"). A **critical hit** shows as a big gold number. Messages come in two kinds: story messages in the middle of the screen (a force field, a teammate leaving the dungeon) and small notices (such as "You have fallen").
+On the screen, the **E** hint is a small gold key cap that floats over the thing you can use (a chest, a door, a sleeping teammate with the word "Wake", the neutral knight with the word "Recruit"). A **critical hit** shows as a big gold number. Messages come in two kinds: story messages in the middle of the screen (a force field, a teammate leaving the dungeon) and small notices (such as "You have fallen").
 
 ## The heroes
 
@@ -84,6 +84,20 @@ The fastest hero, and the only one who fights with a companion. An elf: she sees
 - **If you fall, the wolf vanishes**, also when you leave the dungeon. Debug mode does not make it immortal.
 
 The two boxes at the bottom of the screen show your abilities. While an ability recharges, the gold rim around its box fills up clockwise and the seconds left show inside; the box flashes once when the ability is ready again.
+
+## Sides and companions
+
+Every creature fights for a side: the monsters against you, you and your friends for you. Some creatures stand on neither side until you ask them.
+
+- **The knight.** In the start room of every dungeon stands a **knight**, a human soldier with a sword, a little north of where the party begins. He shows a **blue-grey health bar and his name**, and a small **Recruit** key cap appears over him when you are within reach. He does nothing and nothing hurts him: your attacks, enemies and traps all pass him by, and no effect lands on him.
+- **Press E next to him to recruit him.** If a sleeping teammate is also in reach, E wakes the teammate first. The knight then joins you in green sparkles: his bar turns green like a hero's, and a message names who recruited him.
+- **Whom he follows.** The hero who recruited him. If that hero falls, he follows the host, or the next living hero if the host has fallen too, and goes on fighting.
+- **He fights near his hero.** He stays close, attacks the enemies that come near you (or him) and does not chase far from you. If he falls far behind or you are in a sealed boss hall without him, he appears beside you again.
+- **Your side cannot hurt him.** No hero's attack hurts him, not your arrows, spells or swords nor your friends'; your shots fly past him. Enemies and their area attacks, however, do hurt him.
+- **Your help reaches him.** The Paladin's **Holy Light** heals him, and **Haste**, **Purify** and **War Cry** reach him like they reach a teammate.
+- **His death costs nothing** but the knight himself: no XP, coins or penalty, and nobody else is harmed. A message tells you he has fallen.
+
+The Elven Ranger's wolf is a companion of its own kind, summoned with the right button; see "Your wolf" above.
 
 ## Seeing in the dark
 
