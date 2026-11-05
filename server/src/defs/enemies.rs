@@ -1,9 +1,8 @@
 use super::abilities::AbilityId;
 use super::attributes::{Attr, Attributes};
 use super::races::{self, Adjust, Race, Profile};
-use super::items::{self, ItemBase, ItemId};
+use super::items::ItemId;
 use super::kinds::EntityKind;
-use super::damage::DamageSplit;
 use crate::protocol::BossId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -76,21 +75,10 @@ pub struct EnemyDef {
     /// The abilities it uses: the main one first, then the alt (own cooldown). The alt is used when
     /// the target is in reach for a melee one, from afar for a bolt (imps claw, chorts throw fire bolts).
     pub abilities: &'static [AbilityId],
-    /// What the abilities use: the melee weapon (else the race's natural one), then the bow.
+    /// What the abilities use: the melee weapon (or natural one: fists, claws, bite), then the bow.
     pub weapons: &'static [ItemId],
     /// The distance (px) a shooter keeps from its target; 0 for those who close in.
     pub preferred: f64,
-}
-
-/// The weapon an enemy strikes with: its melee weapon, else its race's first natural weapon.
-pub fn melee_item(t: EnemyType) -> ItemId {
-    def(t).weapons[0]
-}
-
-/// The race's first natural weapon (what an enemy without a melee weapon punches with).
-#[cfg(test)]
-fn natural_melee(t: EnemyType) -> ItemId {
-    races::race_def(races(t)[0]).natural[0]
 }
 
 pub fn def(t: EnemyType) -> EnemyDef {
@@ -348,14 +336,6 @@ pub fn base_hp(t: EnemyType) -> f64 {
     d.hp - 5.0 * (d.attrs.get(Attr::Con) - 10) as f64
 }
 
-/// The split of an enemy's melee hits: its melee weapon's.
-pub fn melee_split(t: EnemyType) -> DamageSplit {
-    match items::def(melee_item(t)).base {
-        ItemBase::Melee(_, s) => s.split,
-        b => panic!("{t:?}: {b:?} is not a melee weapon"),
-    }
-}
-
 /// The races of each enemy (see `races`).
 pub fn races(t: EnemyType) -> &'static [Race] {
     use EnemyType::*;
@@ -379,7 +359,7 @@ pub fn profile(t: EnemyType) -> Profile {
 mod tests {
     use super::*;
     use crate::defs::attributes::{self, Attr, Attributes};
-    use crate::defs::items::ItemBase;
+    use crate::defs::items::{self, ItemBase};
 
     #[test]
     fn enemy_stat_blocks_match_the_spec() {
@@ -455,19 +435,6 @@ mod tests {
                 // Vanish (a buff) is the ambush module's, not the chase's.
                 assert!(matches!(crate::defs::abilities::def(alt).shape, crate::defs::abilities::Shape::Swing | crate::defs::abilities::Shape::Projectile | crate::defs::abilities::Shape::Ring) || alt == AbilityId::Vanish, "{t:?}: the alt {alt:?} has a shape the AI does not handle");
             }
-        }
-    }
-
-    /// An enemy with no melee weapon of its own punches with its race's natural one.
-    #[test]
-    fn enemies_without_a_melee_weapon_use_their_races_natural_one() {
-        for t in EnemyType::ALL {
-            let w = def(t).weapons[0];
-            let species = matches!(t, EnemyType::Mimic | EnemyType::Imp | EnemyType::SummonedImp | EnemyType::Chort | EnemyType::Ghost | EnemyType::Shade);
-            let ItemBase::Melee(k, _) = items::def(w).base else { panic!("{t:?}") };
-            let natural_kind = crate::defs::weapons::is_natural_like(crate::defs::weapons::category(k));
-            // Mimic, imps and chorts have a species weapon of their own; a weapon-less enemy its race's.
-            assert!(species || !natural_kind || w == natural_melee(t), "{t:?}");
         }
     }
 

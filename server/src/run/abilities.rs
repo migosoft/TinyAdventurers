@@ -2247,7 +2247,7 @@ mod tests {
         assert_eq!(run.players[0].sheet.secondary.id, AbilityId::SummonWolf);
         try_use(&mut run, 0, false, 1);
         let wolf = run.players[0].wolf.and_then(|id| run.monster_idx(id)).expect("a wolf");
-        let bite = run.monsters[wolf].melee;
+        let bite = run.monsters[wolf].kit.get(AbilityId::Bite).expect("the wolf bites").split;
         assert!((bite.share(DamageType::Magical) - 0.2).abs() < 1e-12, "{bite:?}");
         assert_eq!(bite.share(DamageType::Heat), 0.0);
     }

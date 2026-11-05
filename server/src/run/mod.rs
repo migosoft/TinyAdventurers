@@ -300,7 +300,6 @@ impl Run {
             traits: prof.traits,
             invis_cd: 0.0,
             races: enemies::races(t),
-            melee: enemies::melee_split(t),
             etype: Some(t),
             kind: d.kind,
             pos,
@@ -2192,7 +2191,8 @@ pub mod tests {
                 EnemyType::Ghost | EnemyType::Shade => DamageSplit::split(&[(DamageType::Magical, 0.9), (DamageType::Cold, 0.1)]),
                 _ => DamageSplit::physical(),
             };
-            assert_eq!(m.melee, today, "{t:?}");
+            let melee = [AbilityId::Strike, AbilityId::Bite, AbilityId::Touch].into_iter().find_map(|a| m.kit.get(a)).expect("a melee ability");
+            assert_eq!(melee.split, today, "{t:?}");
         }
     }
 

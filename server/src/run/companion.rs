@@ -54,7 +54,6 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         traits: prof.traits,
         invis_cd: 0.0,
         races: &[Race::MagicalBeast],
-        melee: prof.melee,
         etype: None,
         kind: EntityKind::DireWolf,
         pos: spot,

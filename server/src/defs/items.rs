@@ -611,9 +611,11 @@ mod tests {
             }
             _ => panic!(),
         }
-        match def(ItemId::ImpClaws).base {
-            ItemBase::Melee(_, s) => assert_eq!(s.split.share(DamageType::Heat), 0.2),
-            _ => panic!(),
+        for claws in [ItemId::ImpClaws, ItemId::ChortClaws, ItemId::Claws, ItemId::DragonClaws] {
+            match def(claws).base {
+                ItemBase::Melee(_, s) => assert_eq!(s.split.share(DamageType::Heat), 0.2, "{claws:?} burn"),
+                _ => panic!(),
+            }
         }
         match def(ItemId::BeastBite).base {
             ItemBase::Melee(_, s) => assert_eq!(s.split.share(DamageType::Magical), 0.2),

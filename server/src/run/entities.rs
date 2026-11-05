@@ -1,6 +1,6 @@
 use crate::collision::MoveState;
 use crate::defs::abilities::AbilityId;
-use crate::defs::damage::{Damage, DamageSplit, Resistances};
+use crate::defs::damage::{Damage, Resistances};
 use crate::defs::effects::OnHit;
 use crate::defs::attributes::Attributes;
 use crate::defs::enemies::EnemyType;
@@ -218,8 +218,6 @@ pub struct Monster {
     pub traits: Traits,
     /// Seconds until the Invisibility trait may be used again; counts down only while Invisible is off.
     pub invis_cd: f64,
-    #[allow(dead_code)] // no reader since the demon uses its Strike; the weapon's split is used
-    pub melee: DamageSplit,
     /// None for bosses (driven by their BossBehaviour).
     pub etype: Option<EnemyType>,
     pub kind: EntityKind,
