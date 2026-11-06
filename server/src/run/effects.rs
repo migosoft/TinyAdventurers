@@ -963,7 +963,7 @@ mod tests {
         let id = run.spawn_enemy(EnemyType::SkeletonArcher, at, None);
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
-        run.start_windup(mi, crate::run::entities::Windup { t: 0.5, aim: 0.0, alt: false, at: None });
+        run.start_windup(mi, crate::run::entities::Windup { t: 0.5, aim: 0.0, alt: false, at: None, id: None });
         assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Invisible));
         assert!(run.monsters[mi].ai.windup.is_some());
         // A hero who fires an ability.
@@ -1155,7 +1155,7 @@ mod tests {
         run.remove_effect(Creature::Monster(mi), EffectKind::Blind);
         crate::run::ai::tick_monster(&mut run, mi, DT);
         assert_eq!(run.monsters[mi].ai.state, AiState::Chase);
-        run.monsters[mi].ai.windup = Some(crate::run::entities::Windup { t: 0.2, aim: 0.0, alt: false, at: None });
+        run.monsters[mi].ai.windup = Some(crate::run::entities::Windup { t: 0.2, aim: 0.0, alt: false, at: None, id: None });
         run.apply_effect(Creature::Monster(mi), EffectKind::Sleep, Some(5.0));
         let pos = run.monsters[mi].pos;
         for _ in 0..30 {

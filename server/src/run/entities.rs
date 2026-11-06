@@ -3,7 +3,7 @@ use crate::defs::abilities::AbilityId;
 use crate::defs::damage::{Damage, Resistances};
 use crate::defs::effects::OnHit;
 use crate::defs::attributes::Attributes;
-use crate::defs::enemies::EnemyType;
+use crate::defs::enemies::{BaseAi, EnemyType};
 use crate::defs::races::{Race, Sight, Traits};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
@@ -127,6 +127,8 @@ pub struct Windup {
     pub alt: bool,
     /// What the attack aims at when that is not the seen hero.
     pub at: Option<Target>,
+    /// The ability whose module winds up (`modules::on_windup_end`); None for the base AI's own attacks.
+    pub id: Option<AbilityId>,
 }
 
 /// What a monster is after: a hero, an object (a barrel to shoot; later a
@@ -260,6 +262,8 @@ pub struct Monster {
     /// Seconds left of the wolf-bite mark (Pack Hunter).
     pub wolf_bit: f64,
     pub ai: Ai,
+    /// How it moves and when it uses its main attack (run/behaviour.rs).
+    pub base_ai: BaseAi,
     /// Necromancer / lich that raised or binds this monster.
     pub owner: Option<u32>,
     pub history: VecDeque<Vec2>,

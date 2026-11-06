@@ -80,8 +80,22 @@ pub struct EnemyDef {
     pub abilities: &'static [AbilityId],
     /// What the abilities use: the melee weapon (or natural one: fists, claws, bite), then the bow.
     pub weapons: &'static [ItemId],
-    /// The distance (px) a shooter keeps from its target; 0 for those who close in.
-    pub preferred: f64,
+    /// How it moves and when it uses its main attack (the base AI layer, run/behaviour.rs).
+    pub base_ai: BaseAi,
+    /// Whether it wanders around its home when it has nothing to do. The Disciple and the awake Mimic stay put.
+    pub wanders: bool,
+}
+
+/// How a creature moves and fights: the base AI under its role and over its ability modules. The
+/// bosses' scripts (run/bosses/) are a base of their own and read none of this.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BaseAi {
+    /// Closes in on its foe and swings.
+    Melee,
+    /// Keeps `preferred` px from its foe, backing off when closer, and shoots.
+    Ranged { preferred: f64 },
+    /// Never moves: it only attacks what is in reach or in sight (the Disciple, speed 0).
+    Stationary,
 }
 
 pub fn def(t: EnemyType) -> EnemyDef {
@@ -101,7 +115,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 6.0,
                 abilities: &[Shoot, Strike],
                 weapons: &[UnarmedStrike, GoblinShortbow],
-                preferred: 90.0,
+                base_ai: BaseAi::Ranged { preferred: 90.0 },
+                wanders: true,
             }
         }
         SkeletonWarrior | RaisedSkeleton => {
@@ -116,7 +131,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 9.0,
                 abilities: &[Strike],
                 weapons: &[SkeletonSword],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
             }
         }
         SkeletonArcher | RaisedArcher => {
@@ -131,7 +147,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 9.0,
                 abilities: &[Shoot, Strike],
                 weapons: &[UnarmedStrike, SkeletonBow],
-                preferred: 100.0,
+                base_ai: BaseAi::Ranged { preferred: 100.0 },
+                wanders: true,
             }
         }
         OrcWarrior => {
@@ -146,7 +163,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 13.0,
                 abilities: &[Strike],
                 weapons: &[OrcCleaver],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
             }
         }
         OrcArcher => {
@@ -161,7 +179,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 13.0,
                 abilities: &[Shoot, Strike],
                 weapons: &[UnarmedStrike, OrcWarbow],
-                preferred: 100.0,
+                base_ai: BaseAi::Ranged { preferred: 100.0 },
+                wanders: true,
             }
         }
         Necromancer | Summoner => {
@@ -176,7 +195,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 10.0,
                 abilities: if t == Summoner { &[FireBolt, Strike, SummonImps] } else { &[ShadowBolt, Strike, RaiseDead] },
                 weapons: if t == Summoner { &[SummonerRod] } else { &[NecromancerRod] },
-                preferred: 110.0,
+                base_ai: BaseAi::Ranged { preferred: 110.0 },
+                wanders: true,
             }
         }
         Disciple => {
@@ -191,7 +211,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 10.0,
                 abilities: &[ShadowBolt, Strike],
                 weapons: &[UnarmedStrike],
-                preferred: 0.0,
+                base_ai: BaseAi::Stationary,
+                wanders: false,
             }
         }
         Mimic => {
@@ -207,7 +228,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 14.0,
                 abilities: &[Bite],
                 weapons: &[MimicBite],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: false,
             }
         }
         Imp | SummonedImp => {
@@ -222,7 +244,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 4.0,
                 abilities: &[FireBolt, Strike],
                 weapons: &[ImpClaws],
-                preferred: 90.0,
+                base_ai: BaseAi::Ranged { preferred: 90.0 },
+                wanders: true,
             }
         }
         Chort => {
@@ -237,7 +260,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 10.0,
                 abilities: &[Strike, FireBolt],
                 weapons: &[ChortClaws],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
             }
         }
         // Ghost (#169): a first guess (label `balancing`). It floats through walls; Vanish and the ambush (`run/ambush.rs`) are its tactics.
@@ -253,7 +277,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 3.0,
                 abilities: &[Touch, Vanish],
                 weapons: &[GhostTouch],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
             }
         }
         // Shade (#170): a first guess (label `balancing`), the Ghost's twin: a little sturdier and slower, it drains CON.
@@ -269,7 +294,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 3.0,
                 abilities: &[Touch, Vanish],
                 weapons: &[ShadeTouch],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
             }
         }
         // Knight (#149): a first guess (label `balancing`); its speed keeps up with the heroes (66-72).
@@ -285,7 +311,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 12.0,
                 abilities: &[Strike],
                 weapons: &[SoldierSword],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
             }
         }
         Ogre => {
@@ -301,7 +328,8 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 20.0,
                 abilities: &[Strike, GroundSlam],
                 weapons: &[OgreClub],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
             }
         }
     }
@@ -407,10 +435,10 @@ mod tests {
         assert_eq!(def(Ghost).attrs, Attributes::new(6, 14, 10, 10, 12, 14));
         assert_eq!(def(Shade).attrs, Attributes::new(8, 12, 12, 10, 14, 15));
         let shade = def(Shade);
-        assert_eq!((shade.hp, shade.speed, shade.radius, shade.vision, shade.preferred), (40.0, 44.0, 6.0, 8.75, 0.0));
+        assert_eq!((shade.hp, shade.speed, shade.radius, shade.vision, shade.base_ai), (40.0, 44.0, 6.0, 8.75, BaseAi::Melee));
         assert_eq!((shade.abilities, shade.weapons), (&[AbilityId::Touch, AbilityId::Vanish][..], &[ItemId::ShadeTouch][..]));
         let ghost = def(Ghost);
-        assert_eq!((ghost.hp, ghost.speed, ghost.radius, ghost.vision, ghost.preferred), (32.0, 50.0, 6.0, 8.75, 0.0));
+        assert_eq!((ghost.hp, ghost.speed, ghost.radius, ghost.vision, ghost.base_ai), (32.0, 50.0, 6.0, 8.75, BaseAi::Melee));
         assert_eq!((ghost.abilities, ghost.weapons), (&[AbilityId::Touch, AbilityId::Vanish][..], &[ItemId::GhostTouch][..]));
         let weights = [
             (GoblinArcher, 6.0), (SkeletonWarrior, 9.0), (SkeletonArcher, 9.0), (RaisedSkeleton, 9.0), (RaisedArcher, 9.0),
@@ -421,6 +449,21 @@ mod tests {
         assert_eq!(weights.len(), EnemyType::ALL.len());
         for (t, w) in weights {
             assert_eq!(def(t).weight, w, "{t:?}");
+        }
+    }
+
+    #[test]
+    fn every_enemy_has_its_base_ai() {
+        for t in EnemyType::ALL {
+            let want = match t {
+                EnemyType::Disciple => BaseAi::Stationary,
+                EnemyType::GoblinArcher | EnemyType::Imp | EnemyType::SummonedImp => BaseAi::Ranged { preferred: 90.0 },
+                EnemyType::SkeletonArcher | EnemyType::RaisedArcher | EnemyType::OrcArcher => BaseAi::Ranged { preferred: 100.0 },
+                EnemyType::Necromancer | EnemyType::Summoner => BaseAi::Ranged { preferred: 110.0 },
+                _ => BaseAi::Melee,
+            };
+            assert_eq!(def(t).base_ai, want, "{t:?}");
+            assert_eq!(def(t).wanders, !matches!(t, EnemyType::Disciple | EnemyType::Mimic), "{t:?}");
         }
     }
 
@@ -504,7 +547,7 @@ mod tests {
         use EnemyType::Knight;
         let k = def(Knight);
         assert_eq!(k.attrs, Attributes::new(14, 12, 14, 8, 10, 12));
-        assert_eq!((k.hp, k.speed, k.radius, k.vision, k.preferred), (60.0, 68.0, 5.0, 8.0, 0.0));
+        assert_eq!((k.hp, k.speed, k.radius, k.vision, k.base_ai), (60.0, 68.0, 5.0, 8.0, BaseAi::Melee));
         assert_eq!((k.abilities, k.weapons), (&[AbilityId::Strike][..], &[ItemId::SoldierSword][..]));
         assert_eq!(races(Knight), &[Race::Human]);
         assert_eq!(crate::defs::progression::xp_for_kill(Some(Knight)), 0);

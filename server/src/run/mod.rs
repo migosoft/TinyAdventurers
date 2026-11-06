@@ -3,6 +3,7 @@
 pub mod abilities;
 pub mod ai;
 pub mod ambush;
+pub mod behaviour;
 pub mod bosses;
 pub mod companion;
 pub mod debug;
@@ -13,6 +14,7 @@ pub mod levels;
 pub mod light;
 pub mod magic;
 pub mod minions;
+pub mod modules;
 pub mod objects;
 pub mod perception;
 pub mod rules_log;
@@ -325,6 +327,7 @@ impl Run {
             dash: None,
             wolf_bit: 0.0,
             ai: Ai::new(pos),
+            base_ai: d.base_ai,
             owner,
             history: VecDeque::with_capacity(HISTORY_LEN),
             is_boss: false,
@@ -486,26 +489,8 @@ impl Run {
                 ai::flee(self, mi, DT);
                 continue;
             }
-            // A Neutral monster does nothing: no AI, it stays Idle.
-            if m.side == Side::Neutral {
-                continue;
-            }
-            if m.wolf.is_some() {
-                wolf::tick_wolf(self, mi, DT);
-                continue;
-            }
-            if m.companion.is_some() {
-                companion::tick(self, mi, DT);
-                continue;
-            }
-            if self.layout.map.blocks_at(m.pos, m.mover) {
-                ai::escape_terrain(self, mi, DT);
-                continue;
-            }
             let active = player_pos.iter().any(|pp| pp.dist2(m.pos) < ACTIVE_RANGE * ACTIVE_RANGE);
-            if active {
-                ai::tick_monster(self, mi, DT);
-            }
+            behaviour::tick(self, mi, DT, active);
         }
         Level::tick(self, DT);
         for mi in 0..self.monsters.len() {

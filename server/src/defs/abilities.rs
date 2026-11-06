@@ -236,6 +236,18 @@ pub fn same_name(a: &str, b: &str) -> bool {
     norm(a) == norm(b)
 }
 
+/// The behaviour that comes with an ability (run/modules.rs): giving a creature the ability gives it the
+/// behaviour. The base AI asks the kit's modules at fixed points.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Module {
+    /// Pounce: leaps at prey (used from Task 4 of #227 on).
+    Leap,
+    /// Vanish: vanish on sight, drift unseen to the straggler, warn, strike (run/ambush.rs).
+    Ambush,
+    /// Raise Dead, Summon Imps: raise minions when a foe is in sight (run/minions.rs).
+    Minions,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct AbilityDef {
     pub id: AbilityId,
@@ -258,6 +270,8 @@ pub struct AbilityDef {
     pub backward: bool,
     /// The classes whose own pool can hold it: the class start now, the tree in plan 4.
     pub classes: &'static [ClassId],
+    /// The behaviour that comes with the ability, if any.
+    pub module: Option<Module>,
 }
 
 pub const DASH_SPEED: f64 = 300.0;
@@ -420,6 +434,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         behind: 0.0,
         backward: false,
         classes,
+        module: None,
     };
     match id {
         MagicMissile => base("Magic Missile", Primary, C::Spell, Uses::Nothing, true, Shape::Projectile, own(12.0, 0.35, 220.0, 230.0, 3.0, 0.0, Some(EntityKind::Missile), 15), &[K::Wizard]),
@@ -521,6 +536,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
             ..base("Fire Bolt", Primary, C::Innate, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
         },
         Pounce => AbilityDef {
+            module: Some(Module::Leap),
             weapon_mult: WeaponMult { damage: 2.0, ..WeaponMult::ONE },
             ..base("Pounce", Secondary, C::Technique, Uses::Melee, false, Shape::Dash, OwnStats { push: 12.0, ..own(0.0, 5.0, 64.0, DASH_SPEED, 4.0, 0.0, None, 0) }, &[])
         },
@@ -567,6 +583,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
             ..base("Touch", Primary, C::WeaponAttack, Uses::Melee, false, Shape::Swing, NO_OWN, &[])
         },
         Vanish => AbilityDef {
+            module: Some(Module::Ambush),
             own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Invisible, power: Attr::Cha, look: EffectLook::Plain }], ..own(0.0, 20.0, 0.0, 0.0, 0.0, AMBUSH_MAX_INVISIBLE, None, 10) },
             ..base("Vanish", Secondary, C::Innate, Uses::Nothing, false, Shape::Buff, NO_OWN, &[])
         },
@@ -577,6 +594,7 @@ pub fn def(id: AbilityId) -> AbilityDef {
         RaiseDead | SummonImps => {
             let kind = if id == RaiseDead { Minions::Undead } else { Minions::Imps };
             AbilityDef {
+                module: Some(Module::Minions),
                 own: OwnStats { windup: MINION_WINDUP, minions: Some(OwnMinions { kind, per_cast: MINION_PER_CAST, alive: MINION_ALIVE }), ..own(0.0, MINION_COOLDOWN, 0.0, 0.0, 0.0, 0.0, None, 10) },
                 ..base(if id == RaiseDead { "Raise Dead" } else { "Summon Imps" }, Secondary, C::Spell, Uses::Nothing, false, Shape::Summon, NO_OWN, &[])
             }
@@ -610,6 +628,19 @@ pub fn governing(c: AbilityCategory) -> Option<(Attr, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn modules_come_with_their_ability() {
+        for id in AbilityId::ALL {
+            let want = match id {
+                AbilityId::Pounce => Some(Module::Leap),
+                AbilityId::Vanish => Some(Module::Ambush),
+                AbilityId::RaiseDead | AbilityId::SummonImps => Some(Module::Minions),
+                _ => None,
+            };
+            assert_eq!(def(id).module, want, "{id:?}");
+        }
+    }
     use crate::defs::classes;
 
     #[test]

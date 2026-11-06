@@ -68,7 +68,7 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
     run.monsters[mi].aim = aim;
     // The warning starts only where it may rest, never inside a wall.
     if pos.dist(hpos) <= reach && can_rest(run, mi, pos) {
-        run.start_windup(mi, Windup { t: AMBUSH_WARNING, aim, alt: false, at: None });
+        run.start_windup(mi, Windup { t: AMBUSH_WARNING, aim, alt: false, at: None, id: None });
         set_anim(run, mi, Anim::Ambush);
     } else {
         let speed = run.monsters[mi].speed;
@@ -330,7 +330,7 @@ mod tests {
         let mut run = field(1);
         let at = run.players[0].pos() + Vec2::new(12.0, 0.0);
         let mi = phantom(&mut run, at);
-        run.monsters[mi].ai.windup = Some(Windup { t: 0.4, aim: 0.0, alt: false, at: None });
+        run.monsters[mi].ai.windup = Some(Windup { t: 0.4, aim: 0.0, alt: false, at: None, id: None });
         assert!(!tick(&mut run, mi, DT, Some(Creature::Player(0))));
         assert!(!invisible(&run, mi));
         run.monsters[mi].ai.windup = None;

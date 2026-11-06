@@ -7,6 +7,7 @@ use super::targets::Side;
 use super::{ai, Run};
 use crate::collision::line_of_sight;
 use crate::defs::abilities::AbilityId;
+use crate::defs::enemies::BaseAi;
 use crate::defs::effects::EffectKind;
 use crate::defs::companions::*;
 use crate::defs::damage::What;
@@ -55,6 +56,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         dash: None,
         wolf_bit: 0.0,
         ai: Ai::new(spot),
+        base_ai: BaseAi::Melee,
         owner: None,
         history: VecDeque::with_capacity(HISTORY_LEN),
         is_boss: false,
@@ -197,7 +199,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             // Never a jump to its death: the pounce must end on walkable ground.
             if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
                 // It winds up first, like any use; the leap itself starts when that is over (step 4).
-                run.start_windup(mi, Windup { t: pounce.windup, aim, alt: true, at: None });
+                run.start_windup(mi, Windup { t: pounce.windup, aim, alt: true, at: None, id: None });
                 run.monsters[mi].ai.path.clear();
                 set_anim(run, mi, Anim::Windup);
                 return;
@@ -205,7 +207,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         }
         if d <= reach {
             if run.monsters[mi].cds.ready(AbilityId::Bite) && run.monsters[mi].wolf.as_ref().is_some_and(|w| w.bite_hold <= 0.0) {
-                run.start_windup(mi, Windup { t: bite.windup, aim, alt: false, at: None });
+                run.start_windup(mi, Windup { t: bite.windup, aim, alt: false, at: None, id: None });
                 set_anim(run, mi, Anim::Windup);
             } else {
                 set_anim(run, mi, Anim::Idle); // in reach: wait for the next bite
@@ -786,7 +788,7 @@ mod tests {
         run.monsters[ei].pos = w + Vec2::new(gap, 0.0);
         let eid = run.monsters[ei].id;
         companion_mut(&mut run, wi).prey = Some(eid);
-        run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None });
+        run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None, id: None });
         tick_wolf(&mut run, wi, DT);
         run.monsters[run.monster_idx(eid).unwrap()].knock
     }
@@ -807,7 +809,7 @@ mod tests {
         let oi = run.monster_idx(orc).unwrap();
         run.monsters[oi].ai.hold = 99.0;
         companion_mut(&mut run, wi).prey = Some(orc);
-        run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None });
+        run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None, id: None });
         tick_wolf(&mut run, wi, DT);
         let hit = run.last_hit.clone().expect("the bite landed");
         assert_eq!(hit.why.what, What::Ability(AbilityId::Bite));
@@ -873,7 +875,7 @@ mod tests {
             run.monsters[oi].ai.hold = 99.0;
             run.monsters[oi].hp = 500.0;
             companion_mut(&mut run, wi).prey = Some(orc);
-            run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt, at: None });
+            run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt, at: None, id: None });
             run.monsters[oi].effects.add(EffectKind::Invisible, 30.0);
             tick_wolf(&mut run, wi, DT);
             assert_eq!(hp_of(&run, orc), Some(500.0), "alt {alt}: no bite");

@@ -8,8 +8,8 @@ use super::entities::{AiState, Target, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
 use crate::defs::classes::PLAYER_RADIUS;
-use crate::defs::abilities::{self as ab, AbilityId, Shape};
-use crate::defs::enemies::{self, EnemyType};
+use crate::defs::abilities::{self as ab, Shape};
+use crate::defs::enemies::{self, BaseAi, EnemyType};
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
@@ -243,6 +243,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
     let def = enemies::def(etype);
+    let base_ai = run.monsters[mi].base_ai;
     let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
     {
         let cdt = run.monsters[mi].effects.cooldown_dt(dt);
@@ -276,12 +277,12 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     }
 
     // The incorporeal ambushers (their kit holds Vanish) vanish, drift to the straggler and warn first.
-    if run.monsters[mi].kit.get(AbilityId::Vanish).is_some() && super::ambush::tick(run, mi, dt, seen) {
+    if super::modules::on_sight(run, mi, dt, seen) {
         return;
     }
 
-    // Disciples channel the lich and otherwise only shoot.
-    if etype == EnemyType::Disciple {
+    // The stationary (the Disciple) channel the lich and otherwise only shoot.
+    if base_ai == BaseAi::Stationary {
         set_anim(run, mi, if run.monsters[mi].ai.windup.is_some() { Anim::Windup } else { Anim::Channel });
     }
 
@@ -298,7 +299,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     if let Some(w) = run.monsters[mi].ai.windup {
         let t = w.t - dt;
         if t > 0.0 {
-            run.monsters[mi].ai.windup = Some(Windup { t, aim: w.aim, alt: w.alt, at: w.at });
+            run.monsters[mi].ai.windup = Some(Windup { t, aim: w.aim, alt: w.alt, at: w.at, id: w.id });
             return;
         }
         run.monsters[mi].ai.windup = None;
@@ -311,34 +312,20 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 .map(|o| o.pos),
             _ => None,
         };
+        if let Some(id) = w.id {
+            if super::modules::on_windup_end(run, mi, id, seen) {
+                return;
+            }
+        }
         if let Some(foe) = seen {
             perform_attack(run, mi, foe, w.alt, barrel);
         }
         return;
     }
 
-    // A minion ability winding up: it lands whether or not a foe is still seen.
-    if let Some((id, t)) = run.monsters[mi].ai.cast {
-        if t > dt {
-            run.monsters[mi].ai.cast = Some((id, t - dt));
-        } else {
-            run.monsters[mi].ai.cast = None;
-            // At the foe's last known spot, so the caster keeps facing it.
-            let at = run.monsters[mi].ai.last_known;
-            monster_use(run, mi, id, at);
-        }
+    // The kit's modules act: a minion ability winding up or starting.
+    if super::modules::on_act(run, mi, dt, seen) {
         return;
-    }
-    // A foe in sight and room for more minions: start raising them.
-    if seen.is_some() {
-        let raise = def.abilities.iter().filter_map(|&id| run.monsters[mi].kit.get(id)).cloned().find(|a| {
-            ab::def(a.id).own.minions.is_some() && run.monsters[mi].cds.ready(a.id) && super::minions::room(run, mi, a) > 0
-        });
-        if let Some(a) = raise {
-            run.monsters[mi].ai.cast = Some((a.id, a.windup));
-            set_anim(run, mi, Anim::Windup);
-            return;
-        }
     }
 
     match run.monsters[mi].ai.state {
@@ -358,13 +345,18 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 _ => a.range,
             };
             let main = run.monsters[mi].kit.get(def.abilities[0]).expect("an enemy has its main ability").clone();
-            let (range, preferred) = (reach(&main), def.preferred);
+            let range = reach(&main);
+            let preferred = match base_ai {
+                BaseAi::Ranged { preferred } => preferred,
+                BaseAi::Melee | BaseAi::Stationary => 0.0,
+            };
             if let Some(&alt_id) = def.abilities.get(1) {
                 // Second ability: a claw when the target is in reach, a bolt only from afar, a slam
                 // when it is worth it.
                 let alt = run.monsters[mi].kit.get(alt_id).expect("an enemy has its alt ability").clone();
                 let alt_range = reach(&alt);
-                let usable = match ab::def(alt_id).shape {
+                // An ability with a module is used by the module, not by the chase.
+                let usable = ab::def(alt_id).module.is_none() && match ab::def(alt_id).shape {
                     Shape::Swing => d <= alt_range,
                     Shape::Projectile => d <= alt_range && d >= enemies::ALT_BOLT_MIN_DIST && d > range,
                     // A slam is worth it for two heroes in reach, or one while the club recovers.
@@ -372,8 +364,6 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                         let near = run.foes_in(pos, alt.radius, None).len();
                         near >= 2 || near == 1 && run.monsters[mi].ai.cd > 0.0
                     }
-                    // Vanish: the ambush module uses it, not the chase.
-                    Shape::Buff => false,
                     shape => unreachable!("{alt_id:?} is a {shape:?}: an alt ability swings, shoots or slams"),
                 };
                 if usable && rest && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {
@@ -382,7 +372,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                         set_anim(run, mi, Anim::Slam);
                         perform_attack(run, mi, foe, true, None);
                     } else {
-                        run.start_windup(mi, Windup { t: alt.windup, aim, alt: true, at: None });
+                        run.start_windup(mi, Windup { t: alt.windup, aim, alt: true, at: None, id: None });
                         set_anim(run, mi, Anim::Windup);
                     }
                     return;
@@ -397,11 +387,11 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                     Some(Target::Object(id)) => run.objects.iter().find(|o| o.id == id).map_or(aim, |o| pos.angle_to(o.pos)),
                     _ => aim,
                 };
-                run.start_windup(mi, Windup { t: main.windup, aim, alt: false, at });
+                run.start_windup(mi, Windup { t: main.windup, aim, alt: false, at, id: None });
                 set_anim(run, mi, Anim::Windup);
                 return;
             }
-            if def.speed <= 0.0 {
+            if base_ai == BaseAi::Stationary {
                 return;
             }
             let speed = gait(run, mi, def.speed);
@@ -423,7 +413,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             }
         }
         AiState::Search => {
-            if def.speed <= 0.0 {
+            if base_ai == BaseAi::Stationary {
                 run.monsters[mi].ai.state = AiState::Idle;
                 return;
             }
@@ -453,8 +443,8 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             }
         }
         AiState::Idle => {
-            // Disciples stand still; an awake mimic waits where it was found.
-            if def.speed <= 0.0 || etype == EnemyType::Disciple || etype == EnemyType::Mimic {
+            // The Disciple stands still; an awake mimic waits where it was found.
+            if base_ai == BaseAi::Stationary || !def.wanders {
                 return;
             }
             let home = run.monsters[mi].ai.home;
@@ -556,8 +546,8 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool,
 pub fn separate_monsters(run: &mut Run) {
     let n = run.monsters.len();
     for i in 0..n {
-        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].dormant || run.monsters[i].hiding || run.monsters[i].side == Side::Neutral {
-            continue; // a Neutral creature stands where it was placed
+        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].dormant || run.monsters[i].hiding || super::behaviour::role(&run.monsters[i]) == super::behaviour::Role::Waiting {
+            continue; // a creature waiting where it was placed stays there
         }
         for j in 0..n {
             if i == j || !run.monsters[j].alive {
