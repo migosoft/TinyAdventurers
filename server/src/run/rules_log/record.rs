@@ -13,6 +13,8 @@ pub enum LineKind {
     Death,
     Skip,
     Note,
+    /// A monster switched sides under a charm, or back.
+    Charm,
 }
 
 /// A creature or object a record names, with what the visibility rule needs.

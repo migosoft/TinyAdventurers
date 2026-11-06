@@ -281,7 +281,7 @@ pub fn charm(run: &mut Run, mi: usize, charmed: bool) {
     let head = text::charm_head(run, run.monsters[mi].id, caster, charmed);
     let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
     who.extend(run.player_idx(caster).map(|pi| record::seen_creature(run, Creature::Player(pi))));
-    record::push(run, LogRec { t: run.time, kind: LineKind::Note, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
+    record::push(run, LogRec { t: run.time, kind: LineKind::Charm, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
 }
 
 /// A creature's Attributes changed through its effects: one line per changed Attribute, `(Attribute, before, after)`.

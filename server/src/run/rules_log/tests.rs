@@ -1559,6 +1559,41 @@ fn a_spectator_gets_what_the_spectated_hero_gets() {
 }
 
 #[test]
+fn charm_lines_name_only_what_the_viewer_may_see() {
+    // A charmed monster is Friendly, so it is a party member and its switch lines go to every hero; the
+    // line about an enemy that stays Hostile (a refused charm, a neighbour) is never made.
+    let mut run = leak_run(ClassId::Wizard, AbilityId::ChainSpark, AbilityId::FrostNova);
+    let (tx, ty) = Map::tile_of(run.players[0].pos());
+    let id = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 10, ty + 3), 5000.0);
+    let other = spawn_at(&mut run, EnemyType::GoblinArcher, (tx + 9, ty + 3), 5000.0);
+    let (mi, tag, other_tag) = (run.monster_idx(id).unwrap(), tag_of(&run, id), tag_of(&run, other));
+    let hero = run.players[0].id;
+    let at = run.players[0].pos();
+    let _ = take(&mut run);
+    run.apply(Creature::Monster(mi), Apply { power: None, magical: true, source: Some((hero, at)), ..Apply::plain(EffectKind::Charmed, Some(0.5)) });
+    for _ in 0..2 {
+        run.step();
+    }
+    let sent = sent_to_all(&mut run);
+    for (pi, s) in sent.iter().enumerate() {
+        let lines: Vec<&LineW> = s.log.1.iter().filter(|l| l.1 == LineKind::Charm as u8).collect();
+        assert_eq!(lines.len(), 1, "hero {pi}: {:?}", s.log.1.iter().map(|l| &l.2).collect::<Vec<_>>());
+        assert!(names(&lines[0].2, &tag) && lines[0].2.contains("is charmed and follows"), "{}", lines[0].2);
+        assert!(s.log.1.iter().all(|l| !names(&text_of(l), &other_tag)));
+    }
+    for _ in 0..60 {
+        run.step();
+    }
+    let sent = sent_to_all(&mut run);
+    for (pi, s) in sent.iter().enumerate() {
+        let lines: Vec<&LineW> = s.log.1.iter().filter(|l| l.1 == LineKind::Charm as u8).collect();
+        assert_eq!(lines.len(), 1, "hero {pi}");
+        assert!(lines[0].2.contains("turns back") && names(&lines[0].2, &tag), "{}", lines[0].2);
+        assert!(s.log.1.iter().all(|l| !names(&text_of(l), &other_tag)));
+    }
+}
+
+#[test]
 fn an_arrow_from_a_dead_archer_does_not_name_it() {
     for lethal in [false, true] {
     let mut run = leak_run(ClassId::Wizard, AbilityId::ChainSpark, AbilityId::FrostNova);

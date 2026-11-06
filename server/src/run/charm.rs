@@ -304,23 +304,24 @@ mod tests {
 
     #[test]
     fn a_charm_outlives_its_caster_leaving() {
-        let mut run = arena(&[ClassId::Wizard, ClassId::Paladin]);
-        let (h0, h1) = (run.players[0].id, run.players[1].id);
-        let a = spawn(&mut run, EnemyType::OrcWarrior, 80.0);
-        let b = spawn(&mut run, EnemyType::OrcWarrior, 90.0);
-        charm(&mut run, a, 1, 5.0);
-        charm(&mut run, b, 1, 5.0);
-        run.step();
-        run.monsters[a].companion.as_mut().unwrap().recruiter = 9999;
-        run.players[1].alive = false;
-        steps(&mut run, 2);
-        for mi in [a, b] {
-            let m = &run.monsters[mi];
-            assert!(m.alive);
-            assert_eq!(m.side, Side::Friendly);
-            assert_eq!(m.companion.as_ref().unwrap().leader, h0);
+        // (a) the recruiter is no player (the caster left) while hero 1 is alive; (b) hero 1 is dead.
+        for dead in [false, true] {
+            let mut run = arena(&[ClassId::Wizard, ClassId::Paladin]);
+            let h0 = run.players[0].id;
+            let oi = spawn(&mut run, EnemyType::OrcWarrior, 80.0);
+            charm(&mut run, oi, 1, 5.0);
+            run.step();
+            if dead {
+                run.players[1].alive = false;
+            } else {
+                run.monsters[oi].companion.as_mut().unwrap().recruiter = 9999;
+            }
+            steps(&mut run, 2);
+            let m = &run.monsters[oi];
+            assert!(m.alive, "dead {dead}");
+            assert_eq!(m.side, Side::Friendly, "dead {dead}");
+            assert_eq!(m.companion.as_ref().unwrap().leader, h0, "dead {dead}");
         }
-        let _ = h1;
     }
 
     #[test]

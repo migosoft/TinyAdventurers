@@ -74,9 +74,11 @@
 .rules-log .k3 { color: #ff7070; }
 .rules-log .k4,
 .rules-log .k5 { color: #a0a0a0; }
+.rules-log .k6 { color: #e0a0d0; }
 .rules-log .rl-row.detail.k0,
 .rules-log .rl-row.detail.k1,
 .rules-log .rl-row.detail.k2,
 .rules-log .rl-row.detail.k3,
 .rules-log .rl-row.detail.k4,
-.rules-log .rl-row.detail.k5 { color: #b8aca0; }
+.rules-log .rl-row.detail.k5,
+.rules-log .rl-row.detail.k6 { color: #b8aca0; }
