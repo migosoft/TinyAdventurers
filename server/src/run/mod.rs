@@ -1650,6 +1650,19 @@ pub mod tests {
     }
 
     #[test]
+    fn the_cove_spawns_its_animals_after_the_knight() {
+        use EntityKind as E;
+        for seed in 0..6 {
+            let run = random_boss_run(seed);
+            let kinds: Vec<EntityKind> = run.monsters.iter().filter(|m| m.wild.is_some()).map(|m| m.kind).collect();
+            let want: Vec<EntityKind> = [E::Boar, E::Stag, E::Deer, E::Deer, E::Deer].into_iter().chain([E::Bunny; 10]).collect();
+            assert_eq!(kinds, want, "seed {seed}");
+            let knight = run.monsters.iter().find(|m| m.kind == E::Knight).expect("a knight");
+            assert!(run.monsters.iter().filter(|m| m.wild.is_some()).all(|m| m.id > knight.id && m.side == Side::Neutral), "seed {seed}");
+        }
+    }
+
+    #[test]
     fn level_setup_is_unchanged_with_the_log_on() {
         let got: Vec<u64> = (0..6)
             .map(|s| {

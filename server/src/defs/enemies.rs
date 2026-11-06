@@ -38,17 +38,13 @@ pub enum EnemyType {
     Shade,
     /// A soldier who can join the party (#149): never placed by level generation, only by the start room.
     Knight,
-    /// Wildlife (#227): runs from whoever hit it. No animal is spawned before the cove gets them.
-    #[allow(dead_code)]
+    /// Wildlife (#227): runs from whoever hit it. Spawned in the nymph's cove.
     Bunny,
     /// Wildlife (#227): runs from whoever hit it; the spotted deer.
-    #[allow(dead_code)]
     Deer,
     /// Wildlife (#227): the deer's twin with antlers, its own type with the deer's numbers.
-    #[allow(dead_code)]
     Stag,
     /// Wildlife (#227): fights back against the side that hit it.
-    #[allow(dead_code)]
     Boar,
 }
 
