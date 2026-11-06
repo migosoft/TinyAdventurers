@@ -852,6 +852,7 @@ export const TREES = {
         "kind": "Proficiency",
         "links": [
           "WB4",
+          "WC1",
           "W0"
         ],
         "name": "Light Armor",
@@ -895,6 +896,24 @@ export const TREES = {
         ],
         "req": [],
         "text": "Haste: +2 s."
+      },
+      "WC1": {
+        "ability": "CharmMonster",
+        "cost": 700,
+        "kind": "Unlock",
+        "links": [
+          "WB3"
+        ],
+        "name": "Charm Monster",
+        "pos": [
+          1,
+          2
+        ],
+        "req": [
+          "INT 15",
+          "CHA 14"
+        ],
+        "text": "Unlocks Charm Monster (secondary)."
       },
       "WF1": {
         "ability": "FrostShard",
@@ -2198,6 +2217,16 @@ export const ABILITY_INFO = {
     "text": "Dash toward the cursor, hitting everything in the way.",
     "tint": "Physical",
     "uses": "Melee"
+  },
+  "CharmMonster": {
+    "category": "Spell",
+    "req": [
+      "INT 15",
+      "CHA 14"
+    ],
+    "text": "Charms a monster: it fights for you for a while, then turns back.",
+    "tint": null,
+    "uses": "Nothing"
   },
   "Consecrate": {
     "category": "Innate",

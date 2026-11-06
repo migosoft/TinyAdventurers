@@ -9,6 +9,7 @@ export const KIND = {
   "Bolt": 52,
   "Bunny": 27,
   "ChainSpark": 63,
+  "CharmOrb": 66,
   "Chest": 80,
   "Chort": 20,
   "Deer": 28,
@@ -316,6 +317,16 @@ export const ABILITIES = {
     "name": "Charge",
     "ranged": false,
     "shape": "Dash",
+    "slot": "Secondary"
+  },
+  "CharmMonster": {
+    "classes": [
+      "Wizard"
+    ],
+    "hero": true,
+    "name": "Charm Monster",
+    "ranged": true,
+    "shape": "Projectile",
     "slot": "Secondary"
   },
   "Consecrate": {
@@ -1146,6 +1157,7 @@ export const EFFECT = {
   "Accelerated": 4,
   "Blind": 0,
   "Burning": 5,
+  "Charmed": 19,
   "Chilled": 8,
   "Clumsy": 17,
   "Coated": 14,
@@ -1248,6 +1260,14 @@ export const EFFECTS: Record<number, { positive: boolean; prone: boolean; no_tur
   "18": {
     "cd_rate": 1.0,
     "duration": 20.0,
+    "flees": false,
+    "no_turn": false,
+    "positive": false,
+    "prone": false
+  },
+  "19": {
+    "cd_rate": 1.0,
+    "duration": 8.0,
     "flees": false,
     "no_turn": false,
     "positive": false,
