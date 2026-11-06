@@ -46,7 +46,7 @@ GitHub links them by the issue number, so every piece of work names its issue:
 
 - **One feature per session.** When it is done: update the docs (TECHNICAL, PLAYER_GUIDE), run the verification below, then commit.
 - **Branches:** `main` holds finished work. Ask before merging into `main` or pushing. Never delete remote branches without asking.
-- **Bigger features, in two sessions:** session 1 reads the issue, brainstorms, writes the design and the plan (superpowers skills; draft them in the scratchpad, not in the repo), and posts both to the issue once the user approves. Session 2 reads the issue with those comments and implements the plan, subagent-driven: implementers and fixers on **Sonnet**, task reviews and the final whole-branch review on **Opus** (small re-reviews of a fix may use Sonnet). Merges, pushes and the finishing step stay in the main session.
+- **Bigger features, in three sessions** (the user, 2026-11-06): session 1 reads the issue, brainstorms, writes the design and posts it to the issue once the user approves, then stops. Session 2 reads the issue with the design and writes the implementation plan, then posts it. Draft both in the scratchpad, not in the repo (superpowers skills). Session 3 reads the issue with those comments and implements the plan, subagent-driven: implementers and fixers on **Sonnet**, task reviews and the final whole-branch review on **Opus** (small re-reviews of a fix may use Sonnet). Merges, pushes and the finishing step stay in the main session.
 - **Remote:** `origin` = https://github.com/migosoft/TinyAdventurers.git; `main` tracks `origin/main`. `.gitattributes` keeps LF line endings.
 
 ## Standing decisions
