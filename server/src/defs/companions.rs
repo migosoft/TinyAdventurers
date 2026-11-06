@@ -26,6 +26,7 @@ pub const WOLF_HEAL_SHARE: f64 = 0.2;
 pub const WOLF_DEAD_COOLDOWN: f64 = 60.0;
 
 /// How a companion behaves around its leader: the numbers of the shared follow script (run/companion.rs).
+#[derive(Debug)]
 pub struct Escort {
     /// Starts following beyond this distance, stops inside `follow_stop`.
     pub follow: f64,

@@ -57,6 +57,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         wolf_bit: 0.0,
         ai: Ai::new(spot),
         base_ai: BaseAi::Melee,
+        wanders: true,
         owner: None,
         history: VecDeque::with_capacity(HISTORY_LEN),
         is_boss: false,
@@ -75,6 +76,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         side: Side::Friendly,
         wolf: Some(WolfState { bite_hold: 0.0 }),
         companion: Some(Companion {
+            escort: &WOLF_ESCORT,
             leader: owner,
             recruiter: owner,
             summoned: true,
@@ -214,7 +216,7 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
             }
             return;
         }
-        ai::path_toward(run, mi, epos, WOLF_SPEED, dt);
+        ai::chase_step(run, mi, epos, WOLF_SPEED, dt);
         set_anim(run, mi, Anim::Move);
         return;
     }

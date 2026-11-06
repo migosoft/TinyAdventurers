@@ -76,7 +76,7 @@ mod tests {
         let hero = run.players[0].id;
         let m = &mut run.monsters[ki];
         m.side = Side::Friendly;
-        m.companion = Some(Companion { leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: m.pos });
+        m.companion = Some(Companion { escort: &crate::defs::companions::KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: m.pos });
         assert_eq!(role(&run.monsters[ki]), Role::Escort);
 
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);

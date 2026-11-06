@@ -8,7 +8,6 @@ use crate::collision::walk_line;
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::companions::{Escort, KNIGHT_ESCORT, COMPANION_REACH_EVERY, WOLF_RADIUS};
 use crate::defs::effects::EffectKind;
-use crate::defs::enemies;
 use crate::defs::kinds::Anim;
 use crate::defs::objects::USE_REACH;
 use crate::dungeon::{Layout, Map, Mover, Rect};
@@ -174,7 +173,8 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64) {
         return;
     };
     let at = run.players[leader].pos();
-    if lost(run, mi, at, &KNIGHT_ESCORT, dt) && reappear(run, mi, at) {
+    let escort = run.monsters[mi].companion.as_ref().expect("a companion").escort;
+    if lost(run, mi, at, escort, dt) && reappear(run, mi, at) {
         return;
     }
     // Blown into lava: walk out first, like any monster (the enemy movers cannot move inside a pool).
@@ -182,7 +182,7 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64) {
         ai::escape_terrain(run, mi, dt);
         return;
     }
-    let prey = find_prey(run, mi, at, &KNIGHT_ESCORT);
+    let prey = find_prey(run, mi, at, escort);
     run.monsters[mi].companion.as_mut().expect("a companion").prey = prey.map(|pi| run.monsters[pi].id);
     if prey.is_some() {
         ai::tick_monster(run, mi, dt);
@@ -190,8 +190,8 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64) {
         let m = &mut run.monsters[mi];
         m.ai.windup = None;
         m.ai.state = AiState::Idle;
-        let speed = enemies::def(m.etype.expect("a companion enemy")).speed;
-        follow(run, mi, leader, &KNIGHT_ESCORT, speed, dt);
+        let speed = m.base.speed;
+        follow(run, mi, leader, escort, speed, dt);
     }
 }
 
@@ -230,7 +230,7 @@ pub fn recruit(run: &mut Run, pi: usize) -> bool {
     let m = &mut run.monsters[mi];
     m.side = Side::Friendly;
     let (tx, ty) = Map::tile_of(m.pos);
-    m.companion = Some(Companion { leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: Map::center_of(tx, ty) });
+    m.companion = Some(Companion { escort: &KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: Map::center_of(tx, ty) });
     m.ai = Ai::new(m.pos);
     let pos = m.pos;
     run.event(Ev::Msg { text: format!("{hero_name} recruited the {name}") }, None);
@@ -271,6 +271,7 @@ mod tests {
         let m = &mut run.monsters[mi];
         m.side = Side::Friendly;
         m.companion = Some(Companion {
+            escort: &KNIGHT_ESCORT,
             leader: run.players[1].id,
             recruiter: run.players[1].id,
             summoned: false,
@@ -351,7 +352,7 @@ mod tests {
         let hero = run.players[recruiter].id;
         let m = &mut run.monsters[mi];
         m.side = Side::Friendly;
-        m.companion = Some(Companion { leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: at });
+        m.companion = Some(Companion { escort: &KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: at });
         mi
     }
 
@@ -409,6 +410,30 @@ mod tests {
         // The orcs are held, so any damage to a hero or the knight's own side would come from the knight.
         assert!(run.players[0].hp == max0 && run.players[1].hp == max1, "no hero was hurt");
         assert!(run.monsters[mi].hp == run.monsters[mi].max_hp, "the knight was not hurt");
+    }
+
+    #[test]
+    fn a_recruited_knight_paths_around_a_chasm_to_its_prey() {
+        use crate::dungeon::Tile;
+        let mut run = knight_run();
+        let mi = knight_with(&mut run, 0);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        // A chasm wall two tiles east of the heroes, open at its north end; the orc stands behind it.
+        for y in ty - 2..=ty + 3 {
+            run.layout.map.set(tx + 2, y, Tile::Chasm);
+        }
+        run.layout.map.set(tx + 2, ty - 3, Tile::Floor);
+        let orc = dummy_orc(&mut run, 56.0);
+        run.monsters[mi].pos = Map::center_of(tx + 1, ty);
+        let reach = run.monsters[mi].radius + run.monsters[orc].radius + 14.0;
+        let mut reached = None;
+        for i in 0..360 {
+            run.step();
+            if reached.is_none() && run.monsters[mi].pos.dist(run.monsters[orc].pos) <= reach {
+                reached = Some(i);
+            }
+        }
+        assert!(reached.is_some(), "the knight walked around the chasm; it stands at {:?}", run.monsters[mi].pos);
     }
 
     #[test]

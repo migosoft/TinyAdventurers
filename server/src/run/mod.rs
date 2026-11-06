@@ -328,6 +328,7 @@ impl Run {
             wolf_bit: 0.0,
             ai: Ai::new(pos),
             base_ai: d.base_ai,
+            wanders: d.wanders,
             owner,
             history: VecDeque::with_capacity(HISTORY_LEN),
             is_boss: false,

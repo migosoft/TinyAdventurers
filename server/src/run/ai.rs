@@ -141,6 +141,35 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     false
 }
 
+/// How a creature walks to its foe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Chase {
+    /// A straight walk that slides along walls.
+    Straight,
+    /// A* around walls, chasms, water, lava and barrels.
+    Pathfind,
+}
+
+/// How this creature chases. The escorts (the wolf, a recruited knight) and the figures wider than a
+/// tile (the ogre) find their way; the rest walk straight. Giving another creature the smart chase is a
+/// change here.
+pub(crate) fn chase_of(run: &Run, mi: usize) -> Chase {
+    let m = &run.monsters[mi];
+    if super::behaviour::role(m) == super::behaviour::Role::Escort || m.radius > TILE / 2.0 {
+        Chase::Pathfind
+    } else {
+        Chase::Straight
+    }
+}
+
+/// One step of a chase toward `goal`, the way `chase_of` says. True when arrived.
+pub(crate) fn chase_step(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) -> bool {
+    match chase_of(run, mi) {
+        Chase::Straight => move_toward(run, mi, goal, speed, dt),
+        Chase::Pathfind => path_toward(run, mi, goal, speed, dt),
+    }
+}
+
 /// Follow an A* path to `goal`, recomputing it periodically. Figures wider
 /// than a tile (the demon, the dragon) prefer paths a tile clear of walls and
 /// terrain, so they rarely wedge into a pit corner, and skip a waypoint they
@@ -234,7 +263,6 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
 }
 
 fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
-    let Some(etype) = run.monsters[mi].etype else { return };
     if run.monsters[mi].dormant || run.monsters[mi].hiding {
         return;
     }
@@ -242,8 +270,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         run.monsters[mi].ai.hold -= dt;
         return;
     }
-    let def = enemies::def(etype);
-    let base_ai = run.monsters[mi].base_ai;
+    let (base_ai, base_speed, wanders) = (run.monsters[mi].base_ai, run.monsters[mi].base.speed, run.monsters[mi].wanders);
     let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
     {
         let cdt = run.monsters[mi].effects.cooldown_dt(dt);
@@ -344,16 +371,17 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 Shape::Ring => a.radius,
                 _ => a.range,
             };
-            let main = run.monsters[mi].kit.get(def.abilities[0]).expect("an enemy has its main ability").clone();
+            let main = run.monsters[mi].kit.iter().next().expect("a creature has its main ability").clone();
             let range = reach(&main);
             let preferred = match base_ai {
                 BaseAi::Ranged { preferred } => preferred,
                 BaseAi::Melee | BaseAi::Stationary => 0.0,
             };
-            if let Some(&alt_id) = def.abilities.get(1) {
+            let alt = run.monsters[mi].kit.iter().nth(1).cloned();
+            if let Some(alt) = alt {
+                let alt_id = alt.id;
                 // Second ability: a claw when the target is in reach, a bolt only from afar, a slam
                 // when it is worth it.
-                let alt = run.monsters[mi].kit.get(alt_id).expect("an enemy has its alt ability").clone();
                 let alt_range = reach(&alt);
                 // An ability with a module is used by the module, not by the chase.
                 let usable = ab::def(alt_id).module.is_none() && match ab::def(alt_id).shape {
@@ -394,19 +422,14 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             if base_ai == BaseAi::Stationary {
                 return;
             }
-            let speed = gait(run, mi, def.speed);
+            let speed = gait(run, mi, base_speed);
             if preferred > 0.0 && d < preferred - 25.0 {
                 // Ranged enemies back off to their preferred distance.
                 let away = pos + (pos - ppos).norm() * 16.0;
                 move_toward(run, mi, away, speed * 0.8, dt);
                 set_anim(run, mi, Anim::Move);
             } else if d > range * 0.85 || preferred == 0.0 && d > range * 0.7 {
-                // Wide figures (the ogre) path around corners and terrain edges.
-                if def.radius > TILE / 2.0 {
-                    path_toward(run, mi, ppos, speed, dt);
-                } else {
-                    move_toward(run, mi, ppos, speed, dt);
-                }
+                chase_step(run, mi, ppos, speed, dt);
                 set_anim(run, mi, Anim::Move);
             } else {
                 set_anim(run, mi, Anim::Idle);
@@ -418,7 +441,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 return;
             }
             let goal = run.monsters[mi].ai.last_known;
-            let speed = gait(run, mi, def.speed);
+            let speed = gait(run, mi, base_speed);
             let arrived = path_toward(run, mi, goal, speed, dt);
             if arrived {
                 set_anim(run, mi, Anim::Idle);
@@ -434,7 +457,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         }
         AiState::Return => {
             let home = run.monsters[mi].ai.home;
-            let speed = gait(run, mi, def.speed * 0.7);
+            let speed = gait(run, mi, base_speed * 0.7);
             if path_toward(run, mi, home, speed, dt) {
                 run.monsters[mi].ai.state = AiState::Idle;
                 set_anim(run, mi, Anim::Idle);
@@ -444,7 +467,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         }
         AiState::Idle => {
             // The Disciple stands still; an awake mimic waits where it was found.
-            if base_ai == BaseAi::Stationary || !def.wanders {
+            if base_ai == BaseAi::Stationary || !wanders {
                 return;
             }
             let home = run.monsters[mi].ai.home;
@@ -460,7 +483,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             }
             if let Some(to) = run.monsters[mi].ai.wander_to {
                 let before = run.monsters[mi].pos;
-                if move_toward(run, mi, to, def.speed * 0.4, dt) || run.monsters[mi].pos.dist2(before) < 1e-6 {
+                if move_toward(run, mi, to, base_speed * 0.4, dt) || run.monsters[mi].pos.dist2(before) < 1e-6 {
                     run.monsters[mi].ai.wander_to = None;
                     set_anim(run, mi, Anim::Idle);
                 } else {
@@ -524,8 +547,7 @@ const SHOT_PACE_JITTER: f64 = 0.3;
 /// Uses the enemy's main ability, or its alt one (`alt`) with its own cooldown, at the foe (or at `at`,
 /// a barrel). Either one also keeps the other back for a moment, so they never land at once.
 pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool, at: Option<Vec2>) {
-    let etype = run.monsters[mi].etype.expect("only enemies attack through the AI");
-    let id = enemies::def(etype).abilities[alt as usize];
+    let id = run.monsters[mi].kit.iter().nth(alt as usize).expect("the kit holds the main and the alt ability").id;
     let target = at.unwrap_or_else(|| run.creature_pos(foe));
     if !monster_use(run, mi, id, target) {
         return;
@@ -1040,6 +1062,59 @@ pub(crate) mod tests {
         assert!(!around(&astar(&m, from, to, 1000, Mover::Demon).unwrap()), "demons walk through lava");
         let past = Map::center_of(9, 2);
         assert!(around(&astar(&m, from, past, 1000, Mover::Demon).unwrap()), "demons go around chasms");
+    }
+
+    #[test]
+    fn a_monster_without_an_enemy_type_fights_with_its_kit() {
+        use crate::defs::items::ItemId;
+        use crate::sheet::{monster_kit, Body};
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let hero = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(30.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        // The wolf's kit with Pounce taken out.
+        let (attrs, radius) = (run.monsters[mi].base.attrs.clone(), run.monsters[mi].radius);
+        let m = &mut run.monsters[mi];
+        m.etype = None;
+        m.base_ai = BaseAi::Melee;
+        m.kit = monster_kit(&[ab::AbilityId::Bite], &attrs, &[ItemId::BeastBite], Body { radius }, &[]);
+        let (hp, before, speed) = (run.players[0].hp, run.monsters[mi].pos, run.monsters[mi].base.speed);
+        let dt = crate::run::DT;
+        tick_monster(&mut run, mi, dt);
+        let moved = run.monsters[mi].pos.dist(before);
+        assert!((moved - speed * dt).abs() < 1e-6, "it walked at base.speed: {moved} vs {}", speed * dt);
+        for _ in 0..(3.0 / dt) as usize {
+            tick_monster(&mut run, mi, dt);
+        }
+        assert!(run.players[0].hp < hp, "the bite landed");
+    }
+
+    #[test]
+    fn chase_picks_pathfind_for_escorts_and_wide_figures() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos();
+        let spawn = |run: &mut Run, t: EnemyType| {
+            let id = run.spawn_enemy(t, at + Vec2::new(40.0, 0.0), None);
+            run.monster_idx(id).unwrap()
+        };
+        let (orc, archer, ogre, knight) = (spawn(&mut run, EnemyType::OrcWarrior), spawn(&mut run, EnemyType::GoblinArcher), spawn(&mut run, EnemyType::Ogre), spawn(&mut run, EnemyType::Knight));
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
+        let wolf = run.monster_idx(wolf).unwrap();
+        run.monsters[knight].side = Side::Neutral;
+        assert_eq!(chase_of(&run, knight), Chase::Straight, "the unrecruited knight");
+        let hero = run.players[0].id;
+        let m = &mut run.monsters[knight];
+        m.side = Side::Friendly;
+        m.companion = Some(crate::run::entities::Companion { escort: &crate::defs::companions::KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: m.pos });
+        assert_eq!(chase_of(&run, knight), Chase::Pathfind, "the recruited knight");
+        assert_eq!(chase_of(&run, wolf), Chase::Pathfind, "the wolf");
+        assert_eq!(chase_of(&run, ogre), Chase::Pathfind, "a wide figure");
+        assert_eq!(chase_of(&run, orc), Chase::Straight);
+        assert_eq!(chase_of(&run, archer), Chase::Straight);
     }
 
     #[test]

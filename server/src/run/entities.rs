@@ -200,6 +200,8 @@ pub struct MonsterDash {
 /// What makes a monster a companion of the heroes (run/companion.rs): it follows a hero and fights for the party.
 #[derive(Debug, Clone)]
 pub struct Companion {
+    /// Its escort script's distances: the wolf's or the knight's.
+    pub escort: &'static crate::defs::companions::Escort,
     /// The player id of the hero it follows now (`companion::update_leaders` keeps it current).
     pub leader: u32,
     /// The player id of the hero that summoned or recruited it. For the wolf, the ranger.
@@ -264,6 +266,8 @@ pub struct Monster {
     pub ai: Ai,
     /// How it moves and when it uses its main attack (run/behaviour.rs).
     pub base_ai: BaseAi,
+    /// Whether it wanders around its home when it has nothing to do (no, for the Disciple and the awake Mimic).
+    pub wanders: bool,
     /// Necromancer / lich that raised or binds this monster.
     pub owner: Option<u32>,
     pub history: VecDeque<Vec2>,

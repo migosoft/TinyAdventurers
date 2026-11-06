@@ -77,6 +77,7 @@ pub fn spawn(run: &mut Run) {
         wolf_bit: 0.0,
         ai: Ai::new(pos),
         base_ai: BaseAi::Melee, // the boss's script never reads it
+        wanders: true,
         owner: None,
         history: VecDeque::with_capacity(HISTORY_LEN),
         is_boss: true,
