@@ -266,7 +266,7 @@ mod tests {
         run.monsters[w].pos = e - Vec2::new(10.0, 0.0);
         let id = run.monsters[mi].id;
         run.monsters[w].companion.as_mut().unwrap().prey = Some(id);
-        crate::run::wolf::tick_wolf(&mut run, wi, 1.0 / 60.0);
+        crate::run::behaviour::tick(&mut run, wi, 1.0 / 60.0, true);
         assert!(run.monsters[mi].wolf_bit > 1.9, "bitten: {}", run.monsters[mi].wolf_bit);
     }
 

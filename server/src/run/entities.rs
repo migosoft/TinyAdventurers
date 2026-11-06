@@ -213,10 +213,6 @@ pub struct Companion {
     pub reach_t: f64,
 }
 
-/// Marks the Ranger's wolf: it runs the wolf script (run/wolf.rs). The script keeps no state of its own.
-#[derive(Debug, Clone)]
-pub struct WolfState;
-
 pub struct Monster {
     pub id: u32,
     /// Resistances (races plus adjustments) and the split of its melee hits.
@@ -296,8 +292,6 @@ pub struct Monster {
     pub weight: f64,
     /// Set for a companion of the heroes (run/companion.rs).
     pub companion: Option<Companion>,
-    /// Set for the Ranger's wolf: it runs the wolf script.
-    pub wolf: Option<WolfState>,
     /// Whom it fights for (`targets::foes`); every friend-or-foe question reads it.
     pub side: Side,
 }

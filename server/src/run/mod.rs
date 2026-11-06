@@ -346,7 +346,6 @@ impl Run {
             attrs: stats.attrs,
             weight: stats.weight,
             companion: None,
-            wolf: None,
             side: Side::Hostile,
         });
         rules_log::spawned(self, id, d.kind);
@@ -1214,7 +1213,7 @@ impl Run {
         if !m.alive {
             return;
         }
-        if m.wolf.is_some() {
+        if m.companion.as_ref().is_some_and(|c| c.summoned) {
             wolf::wolf_died(self, mi);
             return;
         }

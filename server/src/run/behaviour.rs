@@ -4,14 +4,14 @@
 
 use super::entities::Monster;
 use super::targets::Side;
-use super::{ai, companion, modules, wolf, Run};
+use super::{ai, companion, modules, Run};
 
 /// What a creature does with no orders: derived from its fields, never stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
     /// Hostile enemies: see heroes and Friendly creatures, chase, search, return home, wander.
     Hunter,
-    /// Companions: follow the leader, pick prey, fight it (run/companion.rs, the wolf's run/wolf.rs).
+    /// Companions: follow the leader, pick prey, fight it (run/companion.rs).
     Escort,
     /// Animals: calm, wander near home, ignore everyone. Nothing is Wildlife yet (#227, wildlife comes with `Monster.wild`).
     #[allow(dead_code)]
@@ -23,7 +23,7 @@ pub enum Role {
 pub fn role(m: &Monster) -> Role {
     if m.side == Side::Neutral {
         Role::Waiting
-    } else if m.wolf.is_some() || m.companion.is_some() {
+    } else if m.companion.is_some() {
         Role::Escort
     } else {
         Role::Hunter
@@ -33,20 +33,24 @@ pub fn role(m: &Monster) -> Role {
 /// One tick of monster `mi`'s role, after the fear and no-act checks of `Run::step`. `active`: a hero
 /// is near enough for a Hunter to think.
 pub fn tick(run: &mut Run, mi: usize, dt: f64, active: bool) {
-    // A dash in progress carries on whatever the role (the wolf's script ticks its own).
-    if run.monsters[mi].dash.is_some() && run.monsters[mi].wolf.is_none() {
+    let role = role(&run.monsters[mi]);
+    // An escort first rejoins its leader (a lost one reappears, even mid-dash).
+    let leader = if role == Role::Escort {
+        match companion::regroup(run, mi, dt) {
+            Some(pi) => Some(pi),
+            None => return,
+        }
+    } else {
+        None
+    };
+    // A dash in progress carries on whatever the role.
+    if run.monsters[mi].dash.is_some() {
         modules::dash_step(run, mi, dt);
         return;
     }
-    match role(&run.monsters[mi]) {
+    match role {
         Role::Waiting | Role::Wildlife => {}
-        Role::Escort => {
-            if run.monsters[mi].wolf.is_some() {
-                wolf::tick_wolf(run, mi, dt);
-            } else {
-                companion::tick(run, mi, dt);
-            }
-        }
+        Role::Escort => companion::act(run, mi, leader.expect("regroup found the leader"), dt),
         Role::Hunter => {
             if run.layout.map.blocks_at(run.monsters[mi].pos, run.monsters[mi].mover) {
                 ai::escape_terrain(run, mi, dt);

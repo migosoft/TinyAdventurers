@@ -95,7 +95,6 @@ pub fn spawn(run: &mut Run) {
         attrs: stats.attrs,
         weight: stats.weight,
         companion: None,
-        wolf: None,
         side: Side::Hostile,
     });
     crate::run::rules_log::spawned(run, id, d.kind);

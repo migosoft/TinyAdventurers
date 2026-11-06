@@ -77,7 +77,7 @@ pub(crate) fn tag_of(run: &Run, id: u32) -> String {
     if let Some(p) = run.players.iter().find(|p| p.id == id) {
         return p.name.clone();
     }
-    if let Some(a) = run.monsters.iter().find(|m| m.id == id && m.wolf.is_some()).and_then(|m| m.companion.as_ref()) {
+    if let Some(a) = run.monsters.iter().find(|m| m.id == id && m.companion.as_ref().is_some_and(|c| c.summoned)).and_then(|m| m.companion.as_ref()) {
         if let Some(owner) = run.players.iter().find(|p| p.id == a.leader) {
             return format!("{}'s wolf", owner.name);
         }

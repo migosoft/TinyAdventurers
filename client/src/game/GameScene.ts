@@ -34,6 +34,7 @@ import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { RulesLog } from '../rulesLog';
+import { barName } from './barName';
 import { KeyCap } from './keycap';
 import { pickUseHint } from './useHint';
 import { shotPassesThrough } from './shotTargets';
@@ -124,6 +125,8 @@ export class GameScene extends Phaser.Scene {
   private bars!: Phaser.GameObjects.Graphics;
   /** HP bars over heroes: under the darkness, so they vanish with their hero. */
   private heroBars!: Phaser.GameObjects.Graphics;
+  /** The heroes' names by entity id (the wolf's label reads its leader's). */
+  private heroNames = new Map<number, string>();
   /** The names over the bars of neutral and recruited monsters, by entity id. */
   private barLabels = new Map<number, Phaser.GameObjects.Text>();
   private beams!: Phaser.GameObjects.Graphics;
@@ -288,6 +291,7 @@ export class GameScene extends Phaser.Scene {
     this.events.once('shutdown', () => this.cleanup());
     this.hud.startRun(this.info);
     if (this.info.debug) this.hud.setDebug(true, true, true);
+    for (const p of this.info.players) this.heroNames.set(p.ent, p.name);
     this.rulesLog = new RulesLog(this, this.net, this.info);
     this.hud.setToggles(this.rulesLog.settings());
   }
@@ -1167,10 +1171,10 @@ export class GameScene extends Phaser.Scene {
     const labelled = new Set<number>();
     for (const e of this.ents.values()) {
       if (isProjectileKind(e.kind) || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
-      // Neutral and recruited creatures (not the wolf) always show their bar and name; the ogre (mini-boss)
+      // Neutral and Friendly creatures (the recruited knight, the wolf) always show their bar and name; the ogre (mini-boss)
       // always shows a wide bar; others only once hurt.
       const ogre = e.kind === KIND.Ogre;
-      const named = e.side !== SIDE.Hostile && e.kind !== KIND.DireWolf && !isPlayerKind(e.kind);
+      const named = e.side !== SIDE.Hostile && !isPlayerKind(e.kind);
       if (e.hp >= 1 && !ogre && !named) continue;
       const v = this.views.get(e.id) ?? this.mimicViews.get(e.id);
       if (!v) continue;
@@ -1181,7 +1185,7 @@ export class GameScene extends Phaser.Scene {
       const g = hero ? this.heroBars : this.bars;
       g.fillStyle(0x140c1a, 1).fillRect(x - 1, y - 1, w + 2, 4);
       g.fillStyle(hero ? 0x40d060 : e.side === SIDE.Neutral ? 0x8a9ab8 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);
-      const name = named ? FIGURES[e.kind]?.label : undefined;
+      const name = named ? barName(e, this.heroNames) : undefined;
       if (name) {
         let t = this.barLabels.get(e.id);
         if (!t) {

@@ -1,14 +1,11 @@
-//! The Elven Ranger's wolf: a summoned companion (run/companion.rs). Spawn, behaviour and death here.
+//! The Elven Ranger's wolf: a summoned companion (run/companion.rs) that fights through the melee base AI.
+//! Spawn, the Ranger's button and death here.
 
-use super::abilities::monster_use;
-use super::companion::{find_prey, follow, lost, reappear, set_anim, summon_spot};
-use super::entities::{Ai, Companion, Monster, WolfState, Windup, HISTORY_LEN};
+use super::companion::summon_spot;
+use super::entities::{Ai, Companion, Monster, HISTORY_LEN};
 use super::targets::Side;
-use super::effects::Creature;
-use super::{ai, modules, Run};
-use crate::defs::abilities::AbilityId;
+use super::Run;
 use crate::defs::enemies::BaseAi;
-use crate::defs::effects::EffectKind;
 use crate::defs::companions::*;
 use crate::defs::damage::What;
 use crate::defs::kinds::{Anim, EntityKind};
@@ -76,7 +73,6 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         attrs: stats.attrs,
         weight: stats.weight,
         side: Side::Friendly,
-        wolf: Some(WolfState),
         companion: Some(Companion {
             escort: &WOLF_ESCORT,
             leader: owner,
@@ -104,98 +100,6 @@ pub fn use_ability(run: &mut Run, pi: usize) {
     }
 }
 
-fn companion_mut(run: &mut Run, mi: usize) -> &mut Companion {
-    run.monsters[mi].companion.as_mut().expect("a companion")
-}
-
-/// The wolf `mi` this tick: reappear, pounce, bite, guard, follow. Not called
-/// while it is pushed, sinking, asleep or frozen (`Run::step`).
-pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
-    // 1. The ranger.
-    let Some(owner) = run.monsters[mi].companion.as_ref().map(|c| c.leader) else { return };
-    let Some(pi) = run.player_idx(owner).filter(|&pi| run.players[pi].alive) else { return };
-    let ranger = run.players[pi].pos();
-
-    // 2. Reappear beside the ranger when far, or every 0.5 s when it cannot reach them.
-    if lost(run, mi, ranger, &WOLF_ESCORT, dt) && reappear(run, mi, ranger) {
-        return;
-    }
-
-    // 3. Timers: the wait a pounce that hurt its prey leaves before the next bite (`modules::on_dash_end`).
-    {
-        let m = &mut run.monsters[mi];
-        m.ai.cd = (m.ai.cd - m.effects.cooldown_dt(dt)).max(0.0);
-    }
-
-    // 3a. A dash in progress.
-    if run.monsters[mi].dash.is_some() {
-        modules::dash_step(run, mi, dt);
-        return;
-    }
-
-    // Blown into lava: walk out first, like any monster.
-    if run.layout.map.blocks_at(run.monsters[mi].pos, Mover::Enemy) {
-        ai::escape_terrain(run, mi, dt);
-        return;
-    }
-
-    // 4. A wind-up: a bite, or (`alt`) a pounce.
-    if let Some(w) = run.monsters[mi].ai.windup {
-        let t = w.t - dt;
-        if t > 0.0 {
-            run.monsters[mi].ai.windup = Some(Windup { t, ..w });
-            return;
-        }
-        run.monsters[mi].ai.windup = None;
-        let prey = run.monsters[mi].companion.as_ref().and_then(|c| c.prey).and_then(|id| run.monster_idx(id));
-        // Prey that has since gone invisible is dropped: the wind-up ends without a bite or a leap.
-        let prey = prey.filter(|&ei| run.monsters[ei].alive && !run.monsters[ei].effects.has(EffectKind::Invisible));
-        if let Some(id) = w.id {
-            // A leap's wind-up is over: the Leap module leaps if its landing is still safe, else it stops.
-            modules::on_windup_end(run, mi, id, prey.map(Creature::Monster));
-            return;
-        }
-        if let Some(ei) = prey {
-            monster_use(run, mi, AbilityId::Bite, run.monsters[ei].pos);
-        }
-        // A bite that missed its prey swings on.
-        set_anim(run, mi, Anim::Melee);
-        return;
-    }
-
-    // 5. Prey: the enemy nearest the ranger among those near the ranger or the wolf itself.
-    let prey = find_prey(run, mi, ranger, &WOLF_ESCORT);
-    companion_mut(run, mi).prey = prey.map(|ei| run.monsters[ei].id);
-    if let Some(ei) = prey {
-        let (w, e) = (&run.monsters[mi], &run.monsters[ei]);
-        let (pos, epos) = (w.pos, e.pos);
-        let d = pos.dist(epos);
-        let bite = w.kit.get(AbilityId::Bite).expect("the wolf bites").clone();
-        // A bite starts a little inside its real reach, like the enemies' swings.
-        let reach = bite.range + e.radius - ai::SWING_SLACK;
-        let aim = pos.angle_to(epos);
-        run.monsters[mi].aim = aim;
-        if modules::leap_start(run, mi, Creature::Monster(ei)) {
-            return;
-        }
-        if d <= reach {
-            if run.monsters[mi].cds.ready(AbilityId::Bite) && run.monsters[mi].ai.cd <= 0.0 {
-                run.start_windup(mi, Windup { t: bite.windup, aim, alt: false, at: None, id: None });
-                set_anim(run, mi, Anim::Windup);
-            } else {
-                set_anim(run, mi, Anim::Idle); // in reach: wait for the next bite
-            }
-            return;
-        }
-        ai::chase_step(run, mi, epos, WOLF_SPEED, dt);
-        set_anim(run, mi, Anim::Move);
-        return;
-    }
-
-    // 6. Follow.
-    follow(run, mi, pi, &WOLF_ESCORT, WOLF_SPEED, dt);
-}
-
 /// The wolf `mi` has fallen: no XP, no coins, no kill; the ranger waits for the next one.
 pub fn wolf_died(run: &mut Run, mi: usize) {
     let m = &mut run.monsters[mi];
@@ -219,6 +123,10 @@ pub fn wolf_died(run: &mut Run, mi: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::defs::abilities::AbilityId;
+    use crate::defs::enemies::BaseAi;
+    use crate::run::abilities::monster_use;
+    use crate::run::companion::find_prey;
     use crate::defs::damage::{Damage, DamageType};
     use crate::defs::effects::EffectKind;
     use crate::defs::kinds::EntityKind;
@@ -237,6 +145,10 @@ mod tests {
         run.monsters.retain(|m| m.is_boss);
         let id = spawn_wolf(&mut run, 0);
         (run, id)
+    }
+
+    fn companion_mut(run: &mut Run, mi: usize) -> &mut Companion {
+        run.monsters[mi].companion.as_mut().expect("a companion")
     }
 
     fn wolf_idx(run: &Run, id: u32) -> usize {
@@ -274,7 +186,7 @@ mod tests {
     }
 
     fn wolves(run: &Run) -> Vec<&crate::run::entities::Monster> {
-        run.monsters.iter().filter(|m| m.alive && m.wolf.is_some()).collect()
+        run.monsters.iter().filter(|m| m.alive && m.companion.as_ref().is_some_and(|c| c.summoned)).collect()
     }
 
     #[test]
@@ -733,7 +645,7 @@ mod tests {
         let eid = run.monsters[ei].id;
         companion_mut(&mut run, wi).prey = Some(eid);
         run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None, id: None });
-        tick_wolf(&mut run, wi, DT);
+        crate::run::behaviour::tick(&mut run, wi, DT, true);
         run.monsters[run.monster_idx(eid).unwrap()].knock
     }
 
@@ -754,7 +666,7 @@ mod tests {
         run.monsters[oi].ai.hold = 99.0;
         companion_mut(&mut run, wi).prey = Some(orc);
         run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None, id: None });
-        tick_wolf(&mut run, wi, DT);
+        crate::run::behaviour::tick(&mut run, wi, DT, true);
         let hit = run.last_hit.clone().expect("the bite landed");
         assert_eq!(hit.why.what, What::Ability(AbilityId::Bite));
         assert_eq!(hit.why.by, Some(id));
@@ -821,7 +733,7 @@ mod tests {
             companion_mut(&mut run, wi).prey = Some(orc);
             run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt, at: None, id: None });
             run.monsters[oi].effects.add(EffectKind::Invisible, 30.0);
-            tick_wolf(&mut run, wi, DT);
+            crate::run::behaviour::tick(&mut run, wi, DT, true);
             assert_eq!(hp_of(&run, orc), Some(500.0), "alt {alt}: no bite");
             assert!(run.monsters[wi].dash.is_none(), "alt {alt}: no leap");
             assert!(run.monsters[wi].ai.windup.is_none(), "alt {alt}: the wind-up is over");
@@ -1324,12 +1236,43 @@ mod tests {
     }
 
     #[test]
+    fn the_wolf_has_no_script_of_its_own() {
+        // `tick_wolf` and `WolfState` are gone (this module compiles without them); a wolf beside an orc bites
+        // through the shared melee AI: perception, wind-up, and the AI's own bite pacing.
+        let (mut run, id) = guard_run();
+        let wi = wolf_idx(&run, id);
+        let w = run.monsters[wi].pos;
+        let orc = orc_at(&mut run, w + Vec2::new(14.0, 0.0));
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].ai.hold = 99.0;
+        run.monsters[oi].hp = 500.0;
+        let mut bites = vec![];
+        for t in 0..120 {
+            run.step();
+            if run.monsters[oi].hp < 500.0 && bites.last().map_or(true, |&(_, hp)| hp > run.monsters[oi].hp) {
+                bites.push((t, run.monsters[oi].hp));
+            }
+        }
+        assert!(bites.len() >= 2, "it bit more than once: {bites:?}");
+        let gap = (bites[1].0 - bites[0].0) as f64 * DT;
+        let bite = wolf(&run, id).kit.get(AbilityId::Bite).unwrap();
+        assert!(gap >= bite.cooldown - 0.1, "paced by the bite's cooldown ({}): gap {gap}", bite.cooldown);
+        assert_eq!(wolf(&run, id).base_ai, BaseAi::Melee);
+        assert!(wolf(&run, id).etype.is_none());
+    }
+
+    #[test]
     fn the_wolfs_bite_wait_runs_on_its_clock() {
         let (mut run, id) = guard_run();
         let wi = wolf_idx(&run, id);
+        // The base AI keeps the wait while the wolf has prey (a wolf at heel does not count it down).
+        let w = run.monsters[wi].pos;
+        let orc = orc_at(&mut run, w + Vec2::new(14.0, 0.0));
+        let oi = run.monster_idx(orc).unwrap();
+        run.monsters[oi].ai.hold = 99.0;
         run.apply_effect(Creature::Monster(wi), EffectKind::Accelerated, Some(30.0));
         run.monsters[wi].ai.cd = 1.0;
-        tick_wolf(&mut run, wi, DT);
+        crate::run::behaviour::tick(&mut run, wi, DT, true);
         let left = wolf(&run, id).ai.cd;
         assert!((left - (1.0 - 1.25 * DT)).abs() < 1e-9, "{left}");
     }

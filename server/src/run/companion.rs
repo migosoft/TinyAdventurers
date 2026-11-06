@@ -1,5 +1,5 @@
 //! Companions: monsters that fight for the heroes. Who each follows (the leader hierarchy) and the
-//! pieces of a follower's script that any companion shares. The Ranger's wolf is in run/wolf.rs.
+//! pieces of a follower's script that any companion shares. The Ranger's wolf is one of them: its spawn and death are in run/wolf.rs.
 
 use super::entities::{Ai, AiState, Companion};
 use super::targets::Side;
@@ -165,18 +165,26 @@ pub fn follow(run: &mut Run, mi: usize, pi: usize, e: &Escort, speed: f64, dt: f
     }
 }
 
-/// The companion `mi` this tick: reappear beside its leader when lost, else fight its prey through the
-/// enemy AI, else follow. Not called while it is pushed, sinking, asleep or frozen (`Run::step`).
-pub fn tick(run: &mut Run, mi: usize, dt: f64) {
+/// The first part of a companion's tick: the hero it follows, or `None` when the tick is over. With no
+/// living leader it idles; lost, it reappears beside them (even mid-dash, which it drops).
+/// Not called while it is pushed, sinking, asleep or frozen (`Run::step`).
+pub fn regroup(run: &mut Run, mi: usize, dt: f64) -> Option<usize> {
     let Some(leader) = run.monsters[mi].companion.as_ref().and_then(|c| run.player_idx(c.leader)).filter(|&pi| run.players[pi].alive) else {
         run.monsters[mi].ai.state = AiState::Idle;
-        return;
+        return None;
     };
     let at = run.players[leader].pos();
     let escort = run.monsters[mi].companion.as_ref().expect("a companion").escort;
     if lost(run, mi, at, escort, dt) && reappear(run, mi, at) {
-        return;
+        return None;
     }
+    Some(leader)
+}
+
+/// The rest of a companion's tick, after its dash: fight its prey through the enemy AI, else follow `leader`.
+pub fn act(run: &mut Run, mi: usize, leader: usize, dt: f64) {
+    let at = run.players[leader].pos();
+    let escort = run.monsters[mi].companion.as_ref().expect("a companion").escort;
     // Blown into lava: walk out first, like any monster (the enemy movers cannot move inside a pool).
     if run.layout.map.blocks_at(run.monsters[mi].pos, run.monsters[mi].mover) {
         ai::escape_terrain(run, mi, dt);

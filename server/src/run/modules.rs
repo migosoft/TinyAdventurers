@@ -87,8 +87,13 @@ pub fn on_dash_end(run: &mut Run, mi: usize, done: &DashDone) {
 
 /// The creature stands on `tile`. On a chasm, deep water or (unless it walks lava) lava, with its Leap
 /// ready, it leaps back to the last safe tile it stood on, and the Leap's cooldown starts. True if it did.
+/// A creature that cannot act (asleep, stoned, or fleeing in fear: `Run::step` skips its tick) does not: its
+/// dash would never tick, so it falls, drowns or burns like any creature.
 pub fn on_danger(run: &mut Run, mi: usize, tile: u8) -> bool {
     let m = &run.monsters[mi];
+    if m.effects.no_act() || m.effects.fear_from().is_some() && !m.hiding && !m.dormant {
+        return false;
+    }
     let deadly = tile == Tile::Chasm as u8 || tile == Tile::DeepWater as u8 || tile == Tile::Lava as u8 && m.mover != Mover::Demon;
     let Some(id) = leap_ability(run, mi) else { return false };
     if !deadly || !m.cds.ready(id) {
@@ -188,6 +193,7 @@ pub fn dash_back(run: &mut Run, mi: usize, id: AbilityId) {
 mod tests {
     use super::*;
     use crate::defs::abilities::AbilityId;
+    use crate::defs::effects::EffectKind;
     use crate::defs::enemies::{self, EnemyType};
     use crate::dungeon::{Map, LAVA_DAMAGE};
     use crate::run::entities::Sink;
@@ -271,6 +277,29 @@ mod tests {
             run.step();
         }
         assert!(run.monsters.iter().all(|m| m.id != id), "it fell and is gone");
+    }
+
+    /// A leaper that cannot act does not leap: with Pounce ready it still falls (a dash it could never tick would hang it in the air).
+    #[test]
+    fn a_sleeping_or_petrified_or_frightened_leaper_on_a_chasm_falls() {
+        for fx in [EffectKind::Sleep, EffectKind::Petrified, EffectKind::Fear] {
+            let (mut run, mi) = leaper(5);
+            make(&mut run, mi, Tile::Chasm);
+            let id = run.monsters[mi].id;
+            assert!(run.monsters[mi].cds.ready(AbilityId::Pounce));
+            run.monsters[mi].effects.add(fx, 30.0);
+            if fx == EffectKind::Fear {
+                run.monsters[mi].effects.set_fear_from(run.players[0].pos());
+            }
+            run.step();
+            assert!(run.monsters[mi].dash.is_none(), "{fx:?}: no leap");
+            assert!(run.monsters[mi].sinking.is_some_and(|(_, how)| how == Sink::Fall), "{fx:?}: it falls");
+            assert!(run.monsters[mi].cds.ready(AbilityId::Pounce), "{fx:?}: the cooldown did not start");
+            for _ in 0..60 {
+                run.step();
+            }
+            assert!(run.monsters.iter().all(|m| m.id != id), "{fx:?}: it fell and is gone");
+        }
     }
 
     #[test]
