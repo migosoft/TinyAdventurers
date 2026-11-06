@@ -33,6 +33,7 @@ super::enum_list::listed_enum! {
         Weakened = 16,
         Clumsy = 17,
         Frail = 18,
+        Charmed = 19,
     }
 }
 
@@ -192,6 +193,7 @@ pub fn def(k: EffectKind) -> EffectDef {
         EffectKind::Weakened => EffectDef { duration: 20.0, attr: Some(Attr::Str), amount: -1, stacks: true, ..NONE },
         EffectKind::Clumsy => EffectDef { duration: 20.0, attr: Some(Attr::Dex), amount: -1, stacks: true, ..NONE },
         EffectKind::Frail => EffectDef { duration: 20.0, attr: Some(Attr::Con), amount: -1, stacks: true, ..NONE },
+        EffectKind::Charmed => EffectDef { duration: 8.0, save: Some(Attr::Wil), ..NONE },
     }
 }
 
@@ -333,13 +335,22 @@ mod tests {
     use crate::defs::damage::DamageType::*;
 
     #[test]
+    fn charmed_is_a_harmful_wil_effect() {
+        use crate::defs::attributes::Attr;
+        assert_eq!(EffectKind::Charmed as u8, 19);
+        let c = def(EffectKind::Charmed);
+        assert_eq!((c.duration, c.save, c.positive), (8.0, Some(Attr::Wil), false));
+        assert!(!c.no_move && !c.no_act && !c.flees && c.dot.is_none());
+    }
+
+    #[test]
     fn attribute_effects_have_their_numbers() {
         for (k, a) in [(EffectKind::Weakened, Attr::Str), (EffectKind::Clumsy, Attr::Dex), (EffectKind::Frail, Attr::Con)] {
             let d = def(k);
             assert_eq!((d.attr, d.amount, d.stacks, d.duration, d.positive, d.save), (Some(a), -1, true, 20.0, false, None), "{k:?}");
         }
         assert_eq!((EffectKind::Weakened as u8, EffectKind::Clumsy as u8, EffectKind::Frail as u8), (16, 17, 18));
-        assert_eq!(EffectKind::COUNT, 19);
+        assert_eq!(EffectKind::COUNT, 20);
         assert!(EffectKind::ALL.iter().filter(|&&k| def(k).attr.is_none()).all(|&k| def(k).amount == 0 && !def(k).stacks));
     }
 
@@ -434,9 +445,9 @@ mod tests {
         use crate::protocol::BossId;
         use EffectKind::*;
         let want = |b| match b {
-            BossId::Lich => EffectResistances::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5), (Fear, 1.0)]),
-            BossId::Dragon => EffectResistances::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5), (Fear, 1.0)]),
-            BossId::Demon => EffectResistances::of(&[(Sleep, 1.0), (Fear, 1.0)]),
+            BossId::Lich => EffectResistances::of(&[(Sleep, 1.0), (Blind, 1.0), (Petrified, 0.5), (Fear, 1.0), (Charmed, 1.0)]),
+            BossId::Dragon => EffectResistances::of(&[(Sleep, 1.0), (Blind, 0.5), (Petrified, 0.5), (Slowed, 0.5), (Accelerated, 0.5), (Fear, 1.0), (Charmed, 0.5)]),
+            BossId::Demon => EffectResistances::of(&[(Sleep, 1.0), (Fear, 1.0), (Charmed, 0.5)]),
         };
         for b in BossId::ALL {
             assert_eq!(bosses::profile(b).effect_res, want(b), "{b:?}");
@@ -460,7 +471,7 @@ mod tests {
             assert!(def(k).dot.is_none() && def(k).cancels.is_empty() && !def(k).ends_in_water, "{k:?}");
         }
         assert_eq!((EffectKind::Burning as u8, EffectKind::Frozen as u8, EffectKind::Poisoned as u8), (5, 6, 7));
-        assert_eq!(EffectKind::COUNT, 19);
+        assert_eq!(EffectKind::COUNT, 20);
     }
 
     #[test]
@@ -540,8 +551,8 @@ mod tests {
         let c = def(EffectKind::Coated);
         assert!(c.positive && c.mods.is_empty());
         assert_eq!((EffectKind::Entangled as u8, EffectKind::Fear as u8, EffectKind::Warded as u8, EffectKind::Coated as u8), (11, 12, 13, 14));
-        assert_eq!(EffectKind::COUNT, 19);
-        for k in EffectKind::ALL.into_iter().filter(|k| !matches!(k, EffectKind::Entangled | EffectKind::Fear)) {
+        assert_eq!(EffectKind::COUNT, 20);
+        for k in EffectKind::ALL.into_iter().filter(|k| !matches!(k, EffectKind::Entangled | EffectKind::Fear | EffectKind::Charmed)) {
             assert_eq!(def(k).save, None, "{k:?} keeps the rule of section 5");
         }
         assert_eq!(EffectKind::ALL.iter().filter(|&&k| def(k).flees).count(), 1);

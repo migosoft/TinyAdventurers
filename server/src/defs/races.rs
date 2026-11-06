@@ -87,15 +87,16 @@ pub fn race_def(r: Race) -> RaceDef {
     let none = Attributes::default();
     let never_sleeps = EffectResistances::of(&[(EffectKind::Sleep, 1.0)]);
     let fear = |r| EffectResistances::of(&[(EffectKind::Fear, r)]);
+    let charm = |r| EffectResistances::of(&[(EffectKind::Charmed, r)]);
     let plain = |res, vision, darkvision| RaceDef { res, vision, darkvision, attrs: none, effect_res: EffectResistances::NONE, traits: Traits::default() };
     match r {
         Race::Human => plain(Resistances::NONE, 9.0, 0.0),
         Race::Goblin | Race::Orc | Race::Ogre => plain(Resistances::NONE, 8.0, 1.0 / 3.0),
         Race::Mimic => plain(Resistances::NONE, 8.0, 1.0 / 3.0),
         Race::Animal => plain(Resistances::NONE, 8.0, 1.0 / 3.0),
-        Race::Undead => RaceDef { effect_res: never_sleeps.strongest(fear(1.0)), ..plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), 8.0, 1.0) },
-        Race::Demon => RaceDef { effect_res: fear(0.5), ..plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), 9.0, 1.0) },
-        Race::Dragon => plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), 25.0, 1.0),
+        Race::Undead => RaceDef { effect_res: never_sleeps.strongest(fear(1.0)).strongest(charm(1.0)), ..plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), 8.0, 1.0) },
+        Race::Demon => RaceDef { effect_res: fear(0.5).strongest(charm(0.5)), ..plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), 9.0, 1.0) },
+        Race::Dragon => RaceDef { effect_res: charm(0.5), ..plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), 25.0, 1.0) },
         Race::Object => plain(Resistances::of(&[(Physical, 0.5), (Poison, 1.0)]), 0.0, 0.0),
         Race::Elf => RaceDef { attrs: Attributes::new(0, 2, 0, 0, 0, 0), effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1)]), 18.0, 1.0 / 3.0) },
         Race::Incorporeal => {
@@ -225,6 +226,19 @@ mod tests {
         use crate::defs::effects::EffectKind;
         let u = profile(&[Race::Undead], Adjust::NONE);
         assert_eq!((u.effect_res.get(EffectKind::Sleep), u.effect_res.get(EffectKind::Fear)), (1.0, 1.0));
+    }
+
+    #[test]
+    fn charm_resistance_by_race() {
+        use crate::defs::effects::EffectKind::Charmed;
+        for r in Race::ALL {
+            let want = match r {
+                Race::Undead => 1.0,
+                Race::Dragon | Race::Demon => 0.5,
+                _ => 0.0,
+            };
+            assert_eq!(profile(&[r], Adjust::NONE).effect_res.get(Charmed), want, "{r:?}");
+        }
     }
 
     #[test]

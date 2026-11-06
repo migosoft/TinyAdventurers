@@ -78,6 +78,7 @@ pub fn effect_name(k: EffectKind) -> &'static str {
         EffectKind::Weakened => "Weakened",
         EffectKind::Clumsy => "Clumsy",
         EffectKind::Frail => "Frail",
+        EffectKind::Charmed => "Charmed",
     }
 }
 

@@ -384,6 +384,10 @@ impl Run {
         if matches!(c, Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.side == super::targets::Side::Neutral && m.wild.is_none())) {
             return false;
         }
+        // A hero is never charmed in #223 (a charmed hero is #224's business).
+        if a.kind == EffectKind::Charmed && matches!(c, Creature::Player(_)) {
+            return false;
+        }
         let (outcome, duration, replaced) = self.apply_traced(c, a);
         let left = self.effect_left(c, a.kind);
         super::rules_log::effect(self, super::rules_log::EffectFacts { target: c, kind: a.kind, outcome, duration, replaced, left, origin: a.origin });
@@ -1041,6 +1045,33 @@ mod tests {
         for k in EffectKind::ALL {
             assert!(run.apply_effect(Creature::Monster(mi), k, Some(3.0)), "the ogre takes {k:?} in full");
             run.remove_effect(Creature::Monster(mi), k); // fire and ice cancel each other
+        }
+    }
+
+    #[test]
+    fn charm_never_lands_on_a_hero() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        assert!(!run.apply_effect(Creature::Player(0), EffectKind::Charmed, None));
+        assert!(run.players[0].effects.list().iter().all(|e| e.kind != EffectKind::Charmed));
+    }
+
+    #[test]
+    fn the_knight_cannot_be_charmed() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
+        let at = run.players[0].pos();
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::Knight, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].side = crate::run::targets::Side::Neutral; // the knight waits Neutral until recruited
+        assert!(!run.apply_effect(Creature::Monster(mi), EffectKind::Charmed, Some(3.0)));
+    }
+
+    #[test]
+    fn boss_charm_resistances_follow_the_table() {
+        for (b, want) in [(BossId::Lich, None), (BossId::Dragon, Some(1.5)), (BossId::Demon, Some(1.5))] {
+            let mut run = test_run(&[ClassId::Wizard], b);
+            run.apply_effect(Creature::Monster(boss(&run)), EffectKind::Charmed, Some(3.0));
+            let got = run.monsters[boss(&run)].effects.list().iter().find(|a| a.kind == EffectKind::Charmed).map(|a| a.left);
+            assert_eq!(got, want, "{b:?}");
         }
     }
 
