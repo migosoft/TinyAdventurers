@@ -31,4 +31,7 @@ describe('pickUseHint', () => {
   it('only a barrel: the barrel with no label', () => {
     expect(pickUseHint([barrel], ME, 0, 0)).toEqual({ ent: barrel, label: null });
   });
+  it('a calm animal is never recruited', () => {
+    for (const kind of [KIND.Bunny, KIND.Deer, KIND.Stag, KIND.Boar]) expect(pickUseHint([ent({ kind, flags: FLAG.WILD })], ME, 0, 0)).toBeNull();
+  });
 });

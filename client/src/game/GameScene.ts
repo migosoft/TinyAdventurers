@@ -12,7 +12,7 @@ import { shotHits } from '../sim/hitbox';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import type { Disabled, Hud } from '../ui/hud';
 import { MARK_TTL, Marks, skimsTerrain, splashes } from './anim/entityAlpha';
-import { FIGURES, PROJECTILES, heroWeapons, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
+import { FIGURES, PROJECTILES, heroWeapons, isAnimalKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { tileDraws } from './autotile';
 import { BarrelView } from './barrel';
@@ -34,7 +34,7 @@ import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { RulesLog } from '../rulesLog';
-import { barName } from './barName';
+import { barName, showsBar } from './barName';
 import { KeyCap } from './keycap';
 import { pickUseHint } from './useHint';
 import { shotPassesThrough } from './shotTargets';
@@ -608,8 +608,8 @@ export class GameScene extends Phaser.Scene {
     return [...this.ents.values()].some((e) => {
       // A closed chest is struck like the hidden mimic it may be.
       if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= reach;
-      // A flying dragon is out of reach.
-      return !isPlayerKind(e.kind) && e.side === SIDE.Hostile && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
+      // A flying dragon is out of reach. A wildlife animal can be struck like an enemy.
+      return !isPlayerKind(e.kind) && (e.side === SIDE.Hostile || isAnimalKind(e.kind)) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
     });
   }
 
@@ -1174,8 +1174,8 @@ export class GameScene extends Phaser.Scene {
       // Neutral and Friendly creatures (the recruited knight, the wolf) always show their bar and name; the ogre (mini-boss)
       // always shows a wide bar; others only once hurt.
       const ogre = e.kind === KIND.Ogre;
-      const named = e.side !== SIDE.Hostile && !isPlayerKind(e.kind);
-      if (e.hp >= 1 && !ogre && !named) continue;
+      const named = e.side !== SIDE.Hostile && !isPlayerKind(e.kind) && !isAnimalKind(e.kind);
+      if (!showsBar(e)) continue;
       const v = this.views.get(e.id) ?? this.mimicViews.get(e.id);
       if (!v) continue;
       const w = ogre ? 28 : 12;

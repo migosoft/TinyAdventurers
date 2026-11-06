@@ -29,7 +29,7 @@ export function pickUseHint(ents: Iterable<EntState>, me: number, px: number, py
     // A sleeping teammate in reach is woken first (like the server).
     nearest('Wake', (e) => (e.id !== me && isPlayerKind(e.kind) && !(e.flags & FLAG.DEAD) && has(e.effects, EFFECT.Sleep) ? CONST.PLAYER_RADIUS : null)) ??
     // Then a neutral creature is recruited (objects are sent with side 0 too, but have no figure).
-    nearest('Recruit', (e) => (FIGURES[e.kind] && !isPlayerKind(e.kind) && e.side === SIDE.Neutral && !(e.flags & FLAG.DEAD) ? (FIGURES[e.kind]?.baseR ?? 6) : null)) ??
+    nearest('Recruit', (e) => (FIGURES[e.kind] && !isPlayerKind(e.kind) && e.side === SIDE.Neutral && !(e.flags & (FLAG.DEAD | FLAG.WILD)) ? (FIGURES[e.kind]?.baseR ?? 6) : null)) ??
     nearest(null, (e) => (e.kind === KIND.Barrel && e.anim < 2 ? CONST.BARREL_RADIUS : e.kind === KIND.Torch ? CONST.TORCH_RADIUS : null))
   );
 }

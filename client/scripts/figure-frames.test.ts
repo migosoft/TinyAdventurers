@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildFigure } from './figure-frames';
+import { buildFigure, buildSheetFigure } from './figure-frames';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -23,6 +23,15 @@ describe('buildFigure', () => {
     expect(Object.keys(frames)).toEqual([0, 1, 2, 3].map((i) => `npc_knight_idle_anim_f${i}`).concat([0, 1, 2, 3].map((i) => `npc_knight_run_anim_f${i}`)));
     expect(new Set(Object.values(frames).map((g) => `${g.w}x${g.h}`)).size).toBe(1);
     const f = frames.npc_knight_idle_anim_f0;
+    expect([...Array(f.w).keys()].some((x) => img.data[((f.y + f.h - 1) * img.w + f.x + x) * 4 + 3] > 0)).toBe(true);
+  });
+
+  it('cuts the idle and move rows of an animal sheet into one box with the feet on the bottom row', () => {
+    const { img, frames } = buildSheetFigure(path.join(root, 'assets-src/forest-animals/Outline/MiniBoar.png'), 'boar', 512);
+    expect(Object.keys(frames)).toEqual([0, 1, 2, 3].map((i) => `boar_idle_anim_f${i}`).concat([0, 1, 2, 3].map((i) => `boar_run_anim_f${i}`)));
+    expect(new Set(Object.values(frames).map((g) => `${g.w}x${g.h}`)).size).toBe(1);
+    const f = frames.boar_idle_anim_f0;
+    expect(f.w).toBeLessThan(32);
     expect([...Array(f.w).keys()].some((x) => img.data[((f.y + f.h - 1) * img.w + f.x + x) * 4 + 3] > 0)).toBe(true);
   });
 });

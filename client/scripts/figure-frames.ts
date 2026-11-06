@@ -19,6 +19,26 @@ export function buildFigure(dir: string, filePrefix: string, frameName: string, 
   const srcs: { name: string; png: Image }[] = [];
   for (const [set, file] of SETS)
     for (let i = 0; i < 4; i++) srcs.push({ name: `${frameName}_${set}_anim_f${i}`, png: decodePng(fs.readFileSync(path.join(dir, `${filePrefix}_${file}_${i + 1}.png`))) });
+  return packFrames(srcs, frameName, width);
+}
+
+const CELL = 32;
+
+/** Like `buildFigure`, for a lyaseek animal sheet: 32x32 cells, row 0 the idle frames and row 1 the move frames (the first four of each). */
+export function buildSheetFigure(sheet: string, frameName: string, width: number): { img: Image; frames: Record<string, Frame> } {
+  const png = decodePng(fs.readFileSync(sheet));
+  const srcs: { name: string; png: Image }[] = [];
+  SETS.forEach(([set], row) => {
+    for (let i = 0; i < 4; i++) {
+      const cell: Image = { w: CELL, h: CELL, data: new Uint8Array(CELL * CELL * 4) };
+      for (let y = 0; y < CELL; y++) cell.data.set(png.data.subarray(((row * CELL + y) * png.w + i * CELL) * 4, ((row * CELL + y) * png.w + (i + 1) * CELL) * 4), y * CELL * 4);
+      srcs.push({ name: `${frameName}_${set}_anim_f${i}`, png: cell });
+    }
+  });
+  return packFrames(srcs, frameName, width);
+}
+
+function packFrames(srcs: { name: string; png: Image }[], frameName: string, width: number): { img: Image; frames: Record<string, Frame> } {
   let [x0, y0, x1, y1] = [Infinity, Infinity, -1, -1];
   for (const { png } of srcs)
     for (let y = 0; y < png.h; y++)
