@@ -404,7 +404,9 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                     Shape::Projectile => d <= alt_range && d >= enemies::ALT_BOLT_MIN_DIST && d > range,
                     // A slam is worth it for two heroes in reach, or one while the club recovers.
                     Shape::Ring => {
-                        let near = run.foes_in(pos, alt.radius, None).len();
+                        // Only creatures it fights count: a calm animal in the ring is no reason to slam.
+                        let me = targets::stance(run, Creature::Monster(mi));
+                        let near = run.foes_in(pos, alt.radius, None).into_iter().filter(|&c| targets::fights(&me, &targets::stance(run, c))).count();
                         near >= 2 || near == 1 && run.monsters[mi].ai.cd > 0.0
                     }
                     shape => unreachable!("{alt_id:?} is a {shape:?}: an alt ability swings, shoots or slams"),

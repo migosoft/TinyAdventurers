@@ -37,7 +37,7 @@ import { RulesLog } from '../rulesLog';
 import { barName, showsBar } from './barName';
 import { KeyCap } from './keycap';
 import { pickUseHint } from './useHint';
-import { shotPassesThrough } from './shotTargets';
+import { meleeFoe, shotPassesThrough } from './shotTargets';
 import { FONT_TEXT } from '../fonts';
 import { critLabel, smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
@@ -608,8 +608,8 @@ export class GameScene extends Phaser.Scene {
     return [...this.ents.values()].some((e) => {
       // A closed chest is struck like the hidden mimic it may be.
       if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= reach;
-      // A flying dragon is out of reach. A wildlife animal can be struck like an enemy.
-      return !isPlayerKind(e.kind) && (e.side === SIDE.Hostile || isAnimalKind(e.kind)) && !(e.flags & FLAG.AIRBORNE) && (FIGURES[e.kind] || e.kind === KIND.Mimic) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
+      // A flying dragon is out of reach, and a calm animal is no melee foe (a grudging boar is sent Hostile).
+      return meleeFoe(e) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
     });
   }
 

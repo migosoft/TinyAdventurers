@@ -102,7 +102,8 @@ pub enum MeleeTarget {
     Object(usize),
 }
 
-/// Every monster on the ground (not an ally) or closed chest within the hero's reach, nearest first. A
+/// Every monster on the ground that the heroes fight (an enemy, or a creature with a grudge against them; never a
+/// calm wild animal) or closed chest within the hero's reach, nearest first. A
 /// bodiless creature that the strike's damage `split` passes through is none.
 pub fn melee_targets(run: &Run, pi: usize, split: &DamageSplit) -> Vec<MeleeTarget> {
     let rw = rewind_ticks(run, Creature::Player(pi));
@@ -112,7 +113,7 @@ pub fn melee_targets(run: &Run, pi: usize, split: &DamageSplit) -> Vec<MeleeTarg
         .monsters
         .iter()
         .enumerate()
-        .filter(|&(i, m)| m.alive && !m.airborne && targets::heroes_may_hit(m) && !run.passes_through(Creature::Monster(i), split))
+        .filter(|&(i, m)| m.alive && !m.airborne && (m.side == Side::Hostile || m.grudge.heroes) && !run.passes_through(Creature::Monster(i), split))
         .map(|(i, m)| (MeleeTarget::Monster(i), m.pos_ago(rw).dist(pos) - m.radius));
     let chests = run
         .objects
@@ -1550,6 +1551,29 @@ mod tests {
         let hp = run.monsters[mi].hp;
         dash_contact(&mut run, Creature::Player(0));
         assert_eq!(run.monsters[mi].hp, hp, "the dash passes under it");
+    }
+
+    #[test]
+    fn a_calm_animal_in_reach_is_no_melee_target_but_a_grudging_boar_is() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let pos = run.players[0].pos() + Vec2::new(10.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::Bunny, pos, None);
+        let bunny = run.monster_idx(id).unwrap();
+        assert_eq!(melee_target(&run, 0), None, "a calm bunny is no melee target");
+        run.players[0].aim = 0.0;
+        try_use(&mut run, 0, true, 1);
+        assert!(!run.projectiles.is_empty(), "the ranger shoots instead of striking");
+        try_use(&mut run, 0, false, 2);
+        assert!(run.players[0].cd2 > 0.0, "the secondary is usable");
+
+        let id = run.spawn_enemy(EnemyType::Boar, pos, None);
+        let boar = run.monster_idx(id).unwrap();
+        run.monsters.retain(|m| m.id == id || m.is_boss);
+        let boar = run.monster_idx(id).unwrap_or(boar);
+        assert_eq!(melee_target(&run, 0), None, "a calm boar either");
+        run.monsters[boar].grudge.heroes = true;
+        assert_eq!(melee_target(&run, 0), Some(MeleeTarget::Monster(boar)), "a boar with a grudge is struck");
     }
 
     #[test]

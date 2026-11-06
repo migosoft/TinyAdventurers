@@ -1103,7 +1103,8 @@ impl Run {
         let by = dmg.why.by;
         // A fleeing animal runs from whoever hit it (a hit with no attacker, like lava, scares nothing).
         if wild.reaction == targets::Reaction::Flee {
-            let attacker = src_player.map(|pi| self.players[pi].id).or(by);
+            // The one it runs from: the creature that struck (the wolf, not the ranger it bites for), else the hero.
+            let attacker = by.filter(|&id| self.monster_idx(id).is_some_and(|bi| self.monsters[bi].alive)).or(src_player.map(|pi| self.players[pi].id)).or(by);
             let from = attacker.and_then(|id| ai::living_pos(self, id));
             if let (Some(id), Some(from)) = (attacker, from) {
                 let dist = from.dist(self.monsters[mi].pos);

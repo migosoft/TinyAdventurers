@@ -100,7 +100,12 @@ fn wildlife_flees(run: &mut Run, mi: usize, dt: f64) -> bool {
         ai::set_anim(run, mi, Anim::Idle);
         return false;
     }
-    ai::flee_from(run, mi, from, dt);
+    // A scarer standing on the animal gives no direction: keep the spot behind it, as `ai::flee` does.
+    if let Some(behind) = ai::flee_from(run, mi, from, dt) {
+        if let Some(w) = run.monsters[mi].wild.as_mut() {
+            w.scare_from = behind;
+        }
+    }
     true
 }
 
@@ -228,9 +233,40 @@ mod tests {
     }
 
     #[test]
+    fn a_bunny_bitten_by_the_wolf_flees_from_the_wolf_not_the_ranger() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
+        crate::run::ai::tests::open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos();
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(wolf).unwrap();
+        run.monsters[wi].pos = at + Vec2::new(60.0, 0.0);
+        let bunny = spawn(&mut run, EnemyType::Bunny, at + Vec2::new(80.0, 0.0));
+        let dmg = Damage::physical(1.0).by(wolf, What::Ability(AbilityId::Bite));
+        run.hurt_monster(bunny, dmg, false, Some(0));
+        let w = run.monsters[bunny].wild.unwrap();
+        assert_eq!(w.scare, Some(wolf), "it runs from the wolf");
+        assert_eq!(w.scare_from, run.monsters[wi].pos);
+        assert_eq!(run.monsters[bunny].grudge.heroes, false, "a bunny keeps no grudge");
+    }
+
+    #[test]
+    fn a_scared_animal_with_the_scarer_on_top_of_it_turns_and_keeps_a_spot_behind() {
+        let (mut run, at) = arena();
+        let bunny = spawn(&mut run, EnemyType::Bunny, at + Vec2::new(40.0, 0.0));
+        hero_hit(&mut run, bunny, 1.0);
+        // The hero stands on the animal: no direction to run from.
+        let pos = at;
+        run.monsters[bunny].pos = pos;
+        super::wildlife_flees(&mut run, bunny, 1.0 / 30.0);
+        let from = run.monsters[bunny].wild.unwrap().scare_from;
+        assert!(from.dist(pos) > 1.0, "the remembered spot moved off the animal");
+    }
+
+    #[test]
     fn a_deer_hit_from_afar_still_runs_for_the_minimum_time() {
         let (mut run, at) = arena();
-        // The hero stands 150 px away (the floor is 8 tiles = 128 px wide each way, so move the hero left).
+        // The hero stands 110 px away (the floor is 8 tiles = 128 px wide each way, so move the hero left).
         run.players[0].mv.x = at.x - 100.0;
         let hero = run.players[0].pos();
         let deer = spawn(&mut run, EnemyType::Deer, hero + Vec2::new(110.0, 0.0));

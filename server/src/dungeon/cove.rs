@@ -43,7 +43,7 @@ pub fn finish_cove(d: &mut Dungeon, seed: u32) {
 
 /// How many animals the cove holds: the boar, the stag, three deer and ten bunnies.
 pub const ANIMALS: usize = 15;
-/// Salt for the animals' own random stream, so it never shares the cove seed's sequence with the client.
+/// Salt for the animals' own random stream, so the animal spots stay apart from any other use of `cove.seed`.
 const ANIMAL_SALT: u64 = 0xA41_3A15;
 
 /// Where the cove's animals stand, in spawn order (the boar, the stag, the deer, then the bunnies): at

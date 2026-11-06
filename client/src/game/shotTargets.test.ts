@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FLAG, KIND, SIDE } from '../generated/defs';
-import { shotPassesThrough } from './shotTargets';
+import { meleeFoe, shotPassesThrough } from './shotTargets';
 
 describe('shotPassesThrough', () => {
   it('a neutral and a recruited knight let a shot fly on', () => {
@@ -20,5 +20,17 @@ describe('shotPassesThrough', () => {
     expect(shotPassesThrough({ kind: KIND.Boar, side: SIDE.Hostile, flags: 0 })).toBe(false);
     // Even if a grudge against enemies only leaves it Neutral without the flag, it is an animal by kind.
     expect(shotPassesThrough({ kind: KIND.Boar, side: SIDE.Neutral, flags: 0 })).toBe(false);
+  });
+});
+
+describe('meleeFoe', () => {
+  it('a calm animal is no melee foe, a boar with a grudge (sent Hostile) is', () => {
+    for (const kind of [KIND.Bunny, KIND.Deer, KIND.Stag, KIND.Boar]) expect(meleeFoe({ kind, side: SIDE.Neutral, flags: FLAG.WILD })).toBe(false);
+    expect(meleeFoe({ kind: KIND.Boar, side: SIDE.Hostile, flags: FLAG.WILD })).toBe(true);
+  });
+  it('an orc is, a flying one and a teammate are not', () => {
+    expect(meleeFoe({ kind: KIND.OrcWarrior, side: SIDE.Hostile, flags: 0 })).toBe(true);
+    expect(meleeFoe({ kind: KIND.OrcWarrior, side: SIDE.Hostile, flags: FLAG.AIRBORNE })).toBe(false);
+    expect(meleeFoe({ kind: KIND.Paladin, side: SIDE.Friendly, flags: 0 })).toBe(false);
   });
 });
