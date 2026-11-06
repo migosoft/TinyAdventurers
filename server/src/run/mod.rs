@@ -1638,7 +1638,7 @@ pub mod tests {
         let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
         // The original values: barrels are left out of the fingerprint, so
         // this proves the rest of the setup is unchanged by them.
-        assert_eq!(got, vec![11600266960163159417, 1435920588664842867, 10466106782931188740, 12014582218921590883, 11564344529328277746, 15459709860221633430]);
+        assert_eq!(got, vec![695190705853365220, 9378562978013154725, 18111976853352986814, 12425793697174330867, 8700733743784210261, 10267271134420389724]);
         assert_ne!(got[0], got[1]);
         // 2026-10-21, plan 3a: checked again, unchanged.
         // 2026-11-01, the Ghost (#169): seeds 1 and 2 (lich dungeons) changed, the others did not; the lich's
@@ -1647,6 +1647,7 @@ pub mod tests {
         // 2026-11-01, the Shade (#170): seeds 4 and 5 (demon dungeons) changed, the others did not, for the same reason.
         // 2026-11-02, the cove (#202): every dungeon has a dedicated 26×20 cove room, so the other rooms, the maps and everything placed in them changed for every seed. Re-recorded once, on purpose.
         // 2026-11-05, the start room's knight (#149): every dungeon has a Neutral knight, an extra monster (and the ids of everything spawned after the monsters shift by one). Re-recorded once, on purpose.
+        // 2026-11-06, the cove's animals (#227): every dungeon spawns 15 wild animals (boar, stag, three deer, ten bunnies) after the knight, so every seed gains 15 monsters and the ids after them shift. Proved before re-recording: with the wild monsters (and their 15 ids) left out of the hash, the old values come back. Re-recorded once, on purpose.
     }
 
     #[test]
@@ -1671,7 +1672,7 @@ pub mod tests {
                 fingerprint(&run)
             })
             .collect();
-        assert_eq!(got, vec![11600266960163159417, 1435920588664842867, 10466106782931188740, 12014582218921590883, 11564344529328277746, 15459709860221633430]);
+        assert_eq!(got, vec![695190705853365220, 9378562978013154725, 18111976853352986814, 12425793697174330867, 8700733743784210261, 10267271134420389724]);
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
@@ -1712,7 +1713,8 @@ pub mod tests {
         // 2026-11-02, the cove (#202): every dungeon has a dedicated 26×20 cove room, so the other rooms, the maps and everything placed in them changed for every seed. Re-recorded once, on purpose.
         // 2026-11-04, the cooldown chain (#198): every ability cooldown now scales with its Attribute and effects change how fast cooldowns count down, so the Demon and Lich fights (the first two values) play out differently; the Dragon's is unchanged. Re-recorded once, on purpose.
         // 2026-11-05, the start room's knight (#149): every dungeon has a Neutral knight, an extra monster, and the chests' ids after it shift by one, so all three halls differ. Re-recorded once, on purpose.
-        assert_eq!(got, vec![14224501561412542724, 8092357809574246265, 1079301549377026740]);
+        // 2026-11-06, the cove's animals (#227): every dungeon has 15 wild animals, extra monsters in the hash and in the next id, so all three halls differ. Proved before re-recording: with the wild monsters left out of the hash, the old values come back. Re-recorded once, on purpose.
+        assert_eq!(got, vec![1102558945640823980, 5858418345972872518, 9281230261363955240]);
     }
 
     #[test]
@@ -1731,7 +1733,7 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![14224501561412542724, 8092357809574246265, 1079301549377026740]);
+        assert_eq!(got, vec![1102558945640823980, 5858418345972872518, 9281230261363955240]);
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
