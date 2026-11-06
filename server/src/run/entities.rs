@@ -7,7 +7,7 @@ use crate::defs::enemies::{BaseAi, EnemyType};
 use crate::defs::races::{Race, Sight, Traits};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
-use super::targets::Side;
+use super::targets::{Grudge, Side, Wild};
 use crate::vispoly::View;
 use crate::math::Vec2;
 use crate::protocol::{ClassId, InputMsg};
@@ -294,6 +294,10 @@ pub struct Monster {
     pub companion: Option<Companion>,
     /// Whom it fights for (`targets::foes`); every friend-or-foe question reads it.
     pub side: Side,
+    /// The sides it holds a grudge against, set by hits (only a wild animal gets one).
+    pub grudge: Grudge,
+    /// Set for a wild animal: Neutral, but anything may hit it.
+    pub wild: Option<Wild>,
 }
 
 impl Monster {

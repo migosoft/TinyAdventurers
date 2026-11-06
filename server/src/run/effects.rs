@@ -380,8 +380,8 @@ impl Run {
     ///    (a refused Frozen leaves an existing Chilled alone).
     /// True when the effect is on afterwards.
     pub fn apply(&mut self, c: Creature, a: Apply) -> bool {
-        // A Neutral monster takes no effect.
-        if matches!(c, Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.side == super::targets::Side::Neutral)) {
+        // A Neutral monster takes no effect, unless it is a wild animal.
+        if matches!(c, Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.side == super::targets::Side::Neutral && m.wild.is_none())) {
             return false;
         }
         let (outcome, duration, replaced) = self.apply_traced(c, a);

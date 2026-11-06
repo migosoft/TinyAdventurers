@@ -1,7 +1,7 @@
 //! Enemy AI: perception (sight radius + line of sight), chase/attack,
 //! search last known position, return home, and A* pathfinding.
 
-use super::targets::Side;
+use super::targets::{self, Side};
 use super::abilities::{monster_use, tick_monster_slam};
 use super::effects::Creature;
 use super::entities::{AiState, Target, Windup};
@@ -33,12 +33,16 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
         .map(|(i, _)| i)
 }
 
-/// Nearest living hero or ally (not sinking) the monster can see right now; a hero wins a tie.
-pub fn find_visible_foe(run: &Run, from: Vec2, sight: Sight) -> Option<Creature> {
-    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive && !run.players[i].effects.has(EffectKind::Invisible)).map(Creature::Player);
-    let allies = (0..run.monsters.len()).filter(|&i| run.monsters[i].side == Side::Friendly && run.monsters[i].alive && run.monsters[i].sinking.is_none() && !run.monsters[i].effects.has(EffectKind::Invisible)).map(Creature::Monster);
+/// Nearest living creature that monster `mi` fights (`targets::fights`: the heroes and their allies for an
+/// enemy, plus its grudges) and can see right now; a hero wins a tie.
+pub fn find_visible_foe(run: &Run, mi: usize) -> Option<Creature> {
+    let (from, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
+    let me = targets::stance(run, Creature::Monster(mi));
+    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive).map(Creature::Player);
+    let others = (0..run.monsters.len()).filter(|&i| run.monsters[i].alive && run.monsters[i].sinking.is_none()).map(Creature::Monster);
     heroes
-        .chain(allies)
+        .chain(others)
+        .filter(|&c| targets::fights(&me, &targets::stance(run, c)) && !run.has_effect(c, EffectKind::Invisible))
         .map(|c| (c, run.creature_pos(c)))
         .filter(|&(_, p)| super::perception::sees(run, sight, from, p))
         .map(|(c, p)| (c, p.dist(from)))
@@ -283,7 +287,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     // its escort script picked (run/companion.rs).
     let seen = match &run.monsters[mi].companion {
         Some(c) => c.prey.and_then(|id| run.monster_idx(id)).filter(|&pm| run.monsters[pm].alive && super::perception::sees(run, sight, pos, run.monsters[pm].pos)).map(Creature::Monster),
-        None => find_visible_foe(run, pos, sight),
+        None => find_visible_foe(run, mi),
     };
     if let Some(foe) = seen {
         let (fid, fpos) = (run.creature_id(foe), run.creature_pos(foe));
@@ -1361,7 +1365,7 @@ pub(crate) mod tests {
         assert_eq!(run.monsters[mi].ai.target, None);
         assert_eq!(run.monsters[mi].ai.state, AiState::Search);
         assert_eq!(run.monsters[mi].ai.last_known, ppos);
-        assert_eq!(find_visible_foe(&run, run.monsters[mi].pos, run.monsters[mi].sight_now()), None);
+        assert_eq!(find_visible_foe(&run, mi), None);
         // And never targeted afresh while it lasts.
         run.monsters[mi].ai.state = AiState::Idle;
         tick_monster(&mut run, mi, 1.0 / 60.0);

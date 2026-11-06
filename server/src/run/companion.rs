@@ -130,7 +130,7 @@ pub fn find_prey(run: &Run, mi: usize, leader: Vec2, e: &Escort) -> Option<usize
     run.monsters
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.alive && f.side == Side::Hostile && !f.dormant && !f.hiding && !f.effects.has(EffectKind::Invisible) && !f.airborne && f.sinking.is_none())
+        .filter(|(_, f)| f.alive && (f.side == Side::Hostile || f.grudge.heroes) && !f.dormant && !f.hiding && !f.effects.has(EffectKind::Invisible) && !f.airborne && f.sinking.is_none())
         // An attack that passes through the foe cannot hurt it: not worth chasing.
         .filter(|&(i, _)| !run.passes_through(super::effects::Creature::Monster(i), &attack))
         .filter(|(_, f)| {
@@ -238,7 +238,7 @@ pub fn recruit(run: &mut Run, pi: usize) -> bool {
         .monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive && m.side == Side::Neutral)
+        .filter(|(_, m)| m.alive && m.side == Side::Neutral && m.wild.is_none())
         .map(|(i, m)| (i, m.pos.dist(at) - PLAYER_RADIUS - m.radius))
         .filter(|&(_, gap)| gap <= USE_REACH)
         .min_by(|a, b| a.1.total_cmp(&b.1));

@@ -347,6 +347,8 @@ impl Run {
             weight: stats.weight,
             companion: None,
             side: Side::Hostile,
+            grudge: Default::default(),
+            wild: None,
         });
         rules_log::spawned(self, id, d.kind);
         id
@@ -626,7 +628,7 @@ impl Run {
     /// slide, so it can end in a chasm, deep water or lava.
     pub fn knock_monster(&mut self, mi: usize, from: Vec2, dist: f64, str: i32) {
         let m = &mut self.monsters[mi];
-        if m.side == Side::Neutral {
+        if m.side == Side::Neutral && m.wild.is_none() {
             return;
         }
         let dist = push_dist(dist, str, m.weight);
@@ -671,7 +673,8 @@ impl Run {
                 m.sinking = Some((t - DT, how));
             } else {
                 m.sinking = None;
-                if let Some(pi) = m.last_hit_by {
+                // A wild animal is no kill.
+                if let Some(pi) = m.last_hit_by.filter(|_| m.side != Side::Neutral) {
                     self.players[pi].kills += 1;
                 }
                 self.kill_monster(mi);
@@ -886,7 +889,7 @@ impl Run {
         (0..self.monsters.len())
             .filter(|&mi| {
                 let m = &self.monsters[mi];
-                m.alive && m.side == Side::Hostile && !m.hiding && !m.dormant && m.sinking.is_none() && m.pos.dist(at) < r + m.radius && crate::collision::line_of_sight(&self.layout.map, at, m.pos)
+                m.alive && targets::heroes_may_hit(m) && !m.hiding && !m.dormant && m.sinking.is_none() && m.pos.dist(at) < r + m.radius && crate::collision::line_of_sight(&self.layout.map, at, m.pos)
             })
             .collect()
     }
@@ -1000,19 +1003,19 @@ impl Run {
         healed
     }
 
-    /// Living heroes and living allies (not sinking) whose centre is within `r` of `at`, optionally inside a cone (dir, half-angle). Heroes first.
+    /// Living heroes and living allies and wild animals (not sinking) whose centre is within `r` of `at`, optionally inside a cone (dir, half-angle). Heroes first.
     pub fn foes_in(&self, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<effects::Creature> {
         let inside = |p: Vec2| p.dist(at) <= r && cone.map_or(true, |(dir, half)| crate::math::angle_diff(at.angle_to(p), dir).abs() <= half);
         let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && inside(p.pos())).map(|(i, _)| effects::Creature::Player(i));
-        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.side == Side::Friendly && m.alive && m.sinking.is_none() && inside(m.pos)).map(|(i, _)| effects::Creature::Monster(i));
+        let allies = self.monsters.iter().enumerate().filter(|(_, m)| targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && inside(m.pos)).map(|(i, _)| effects::Creature::Monster(i));
         heroes.chain(allies).collect()
     }
 
-    /// Living heroes within r + PLAYER_RADIUS and allies within r + radius of `at`; with `los`, only those in line of sight.
+    /// Living heroes within r + PLAYER_RADIUS and allies and wild animals within r + radius of `at`; with `los`, only those in line of sight.
     pub fn foes_touching(&self, at: Vec2, r: f64, los: bool) -> Vec<effects::Creature> {
         let reach = |p: Vec2, radius: f64| p.dist(at) < r + radius && (!los || crate::collision::line_of_sight(&self.layout.map, at, p));
         let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && reach(p.pos(), classes::PLAYER_RADIUS)).map(|(i, _)| effects::Creature::Player(i));
-        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.side == Side::Friendly && m.alive && m.sinking.is_none() && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
+        let allies = self.monsters.iter().enumerate().filter(|(_, m)| targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
         heroes.chain(allies).collect()
     }
 
@@ -1089,16 +1092,37 @@ impl Run {
         healed
     }
 
+    /// A hit on a wild animal gives it a grudge against the side that caused the hit: the hero it comes from
+    /// (`src_player`), else the creature in `dmg.why.by` (a hero or an ally: the heroes; an enemy: the
+    /// enemies). Terrain has no `by` and gives none.
+    fn hit_gives_grudge(&mut self, mi: usize, dmg: &Damage, src_player: Option<usize>) {
+        if self.monsters[mi].wild.is_none() {
+            return;
+        }
+        let by = dmg.why.by;
+        let grudge = if src_player.is_some() || by.is_some_and(|id| self.player_idx(id).is_some()) {
+            Some(Side::Friendly)
+        } else {
+            by.and_then(|id| self.monster_idx(id)).map(|bi| self.monsters[bi].side)
+        };
+        match grudge {
+            Some(Side::Friendly) => self.monsters[mi].grudge.heroes = true,
+            Some(Side::Hostile) => self.monsters[mi].grudge.enemies = true,
+            Some(Side::Neutral) | None => {}
+        }
+    }
+
     /// Returns true if the monster took damage.
     pub fn hurt_monster(&mut self, mi: usize, dmg: Damage, crit: bool, src_player: Option<usize>) -> bool {
-        // Nothing hurts a Neutral monster, not even a hit that would pass through it.
-        if self.monsters[mi].side == Side::Neutral {
+        // Nothing hurts a Neutral monster that is not wild, not even a hit that would pass through it.
+        if self.monsters[mi].side == Side::Neutral && self.monsters[mi].wild.is_none() {
             return false;
         }
         // One central guard: a hit a bodiless monster fully resists is no hit at all (no keystone, reveal, number or effect).
         if self.monsters[mi].alive && !dmg.from_effect && self.passes_through(effects::Creature::Monster(mi), &dmg.split) {
             return false;
         }
+        self.hit_gives_grudge(mi, &dmg, src_player);
         let dmg = keystones::on_hit(self, mi, dmg);
         #[cfg(test)]
         {

@@ -2,7 +2,6 @@
 //! monsters (chests, barrels; later torches, levers, the carriage). One list,
 //! one snapshot encoding, one damage path (`hurt_object`) and one use path.
 
-use super::targets::Side;
 use super::Run;
 use crate::defs::damage::{resolve, Damage, Resistances};
 use crate::defs::kinds::EntityKind;
@@ -344,11 +343,12 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k: BOOM_BARREL }, Some(pos));
     run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
     let map = &run.layout.map;
-    let foes = run.foes_touching(pos, r, true);
+    // A wild animal is hurt with the monsters below, where the hero who lit the barrel is the source of the hit (its grudge).
+    let foes: Vec<_> = run.foes_touching(pos, r, true).into_iter().filter(|c| !matches!(c, crate::run::effects::Creature::Monster(i) if run.monsters[*i].wild.is_some())).collect();
     let monsters: Vec<usize> = (0..run.monsters.len())
         .filter(|&i| {
             let m = &run.monsters[i];
-            m.alive && m.side == Side::Hostile && m.pos.dist(pos) < r + m.radius && line_of_sight(map, pos, m.pos)
+            m.alive && crate::run::targets::heroes_may_hit(m) && m.pos.dist(pos) < r + m.radius && line_of_sight(map, pos, m.pos)
         })
         .collect();
     let barrels: Vec<usize> = (0..run.objects.len())
