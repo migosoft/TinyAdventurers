@@ -108,8 +108,9 @@ pub fn spawn(run: &mut Run) {
 }
 
 pub fn tick(run: &mut Run, dt: f64) {
-    let frozen = run.monsters.iter().any(|m| m.id == enc(run).boss_ent && m.effects.no_act());
-    if enc(run).awake && !frozen {
+    // Frozen or charmed (it then fights as the party's companion, `Run::step`): the pattern waits as it is.
+    let held = run.monsters.iter().any(|m| m.id == enc(run).boss_ent && (m.effects.no_act() || crate::run::charm::is_on(m)));
+    if enc(run).awake && !held {
         if let Some(mut b) = enc_mut(run).behaviour.take() {
             b.tick(run, dt);
             enc_mut(run).behaviour = Some(b);

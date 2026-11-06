@@ -175,6 +175,10 @@ pub fn regroup(run: &mut Run, mi: usize, dt: f64) -> Option<usize> {
     };
     let at = run.players[leader].pos();
     let escort = run.monsters[mi].companion.as_ref().expect("a companion").escort;
+    // A creature that cannot move (the Disciple) neither follows nor reappears: it stays and fights from there.
+    if run.monsters[mi].base.speed == 0.0 {
+        return Some(leader);
+    }
     if lost(run, mi, at, escort, dt) && reappear(run, mi, at) {
         return None;
     }
@@ -210,7 +214,11 @@ pub fn act(run: &mut Run, mi: usize, leader: usize, dt: f64) {
         m.ai.state = AiState::Idle;
         let speed = m.base.speed;
         count_waits(run, mi, dt);
-        follow(run, mi, leader, escort, speed, dt);
+        if speed == 0.0 {
+            set_anim(run, mi, Anim::Idle);
+        } else {
+            follow(run, mi, leader, escort, speed, dt);
+        }
     }
 }
 

@@ -241,7 +241,7 @@ pub struct Monster {
     pub anim: Anim,
     pub anim_start: f64,
     pub hurt_t: f64,
-    /// The abilities it uses, resolved at spawn (empty for bosses), and their cooldowns.
+    /// The abilities it uses, resolved at spawn (a boss's are its own), and their cooldowns.
     pub kit: crate::sheet::Kit,
     pub cds: super::abilities::Cooldowns,
     /// Ground Slam: seconds until it lands; lost when it dies, sinks, is pushed or frightened.

@@ -471,7 +471,8 @@ impl Run {
         let player_pos: Vec<Vec2> = self.players.iter().filter(|p| p.alive).map(|p| p.pos()).collect();
         for mi in 0..self.monsters.len() {
             let m = &self.monsters[mi];
-            if !m.alive || m.is_boss {
+            // A charmed boss acts as an Escort like any monster; its pattern waits (levels/boss.rs).
+            if !m.alive || (m.is_boss && !charm::is_on(m)) {
                 continue;
             }
             if m.sinking.is_some() || m.knock != Vec2::ZERO {
@@ -505,7 +506,7 @@ impl Run {
         }
         ai::separate_monsters(self);
         for mi in 0..self.monsters.len() {
-            if self.monsters[mi].alive && !self.monsters[mi].is_boss {
+            if self.monsters[mi].alive && (!self.monsters[mi].is_boss || charm::is_on(&self.monsters[mi])) {
                 self.slide_monster(mi);
                 self.terrain_monster(mi);
             }

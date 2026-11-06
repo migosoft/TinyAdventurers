@@ -559,4 +559,103 @@ mod tests {
         run.step();
         assert_eq!(crate::run::minions::room(&run, ni, &a), before);
     }
+
+    /// A boss run on open floor with the boss `dx` px from the hero, awake, the hero unhurtable.
+    fn boss_run(boss: BossId, dx: f64) -> (Run, usize) {
+        let mut run = test_run(&[ClassId::Wizard], boss);
+        crate::run::ai::tests::open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        run.players[0].debug = true;
+        let bi = run.monsters.iter().position(|m| m.is_boss).unwrap();
+        run.monsters[bi].pos = run.players[0].pos() + Vec2::new(dx, 0.0);
+        run.monsters[bi].dormant = false;
+        run.level.boss_mut().unwrap().awake = true;
+        (run, bi)
+    }
+
+    /// Counts the boss behaviour's ticks.
+    struct Counter(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+    impl crate::run::bosses::BossBehaviour for Counter {
+        fn tick(&mut self, _run: &mut Run, _dt: f64) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn a_charmed_boss_pauses_its_pattern() {
+        use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
+        let (mut run, bi) = boss_run(BossId::Demon, 100.0);
+        let ticks = Arc::new(AtomicUsize::new(0));
+        run.level.boss_mut().unwrap().behaviour = Some(Box::new(Counter(ticks.clone())));
+        steps(&mut run, 5);
+        assert_eq!(ticks.load(Ordering::SeqCst), 5);
+        // The Demon resists 50 %, which halves the 2 s: about 1 s (60 steps) of charm.
+        charm(&mut run, bi, 0, 2.0);
+        run.step();
+        assert!(is_on(&run.monsters[bi]));
+        let (n, from) = (ticks.load(Ordering::SeqCst), run.monsters[bi].pos.dist(run.players[0].pos()));
+        steps(&mut run, 30);
+        assert!(is_on(&run.monsters[bi]));
+        assert_eq!(ticks.load(Ordering::SeqCst), n, "the pattern waits");
+        assert!(run.monsters[bi].pos.dist(run.players[0].pos()) < from - 5.0, "it comes to the caster");
+        steps(&mut run, 80);
+        assert!(!is_on(&run.monsters[bi]));
+        assert!(ticks.load(Ordering::SeqCst) > n, "the pattern resumes");
+    }
+
+    #[test]
+    fn a_charmed_boss_fights_hostiles_with_its_kit() {
+        use crate::defs::damage::What;
+        for boss in [BossId::Demon, BossId::Dragon] {
+            let (mut run, bi) = boss_run(boss, 60.0);
+            let kit: Vec<_> = run.monsters[bi].kit.iter().map(|a| a.id).collect();
+            assert!(!kit.is_empty());
+            let oi = spawn(&mut run, EnemyType::OrcWarrior, 90.0);
+            let (orc, hp) = (run.monsters[oi].id, run.monsters[oi].hp);
+            charm(&mut run, bi, 0, 10.0);
+            let mut hit_by = None;
+            for _ in 0..60 {
+                run.step();
+                let Some(oi) = run.monster_idx(orc) else { break };
+                if run.monsters[oi].hp < hp {
+                    hit_by = run.last_hit.as_ref().map(|d| d.why.what);
+                    break;
+                }
+            }
+            let Some(What::Ability(a)) = hit_by else { panic!("{boss:?}: the orc was not hit by an ability: {hit_by:?}") };
+            assert!(kit.contains(&a), "{boss:?} hit with {a:?}, not from its kit {kit:?}");
+        }
+    }
+
+    #[test]
+    fn the_lich_cannot_be_charmed() {
+        let (mut run, bi) = boss_run(BossId::Lich, 100.0);
+        let src = Some((run.players[0].id, run.players[0].pos()));
+        assert!(!run.apply(Creature::Monster(bi), Apply { power: None, magical: true, source: src, ..Apply::plain(EffectKind::Charmed, Some(5.0)) }));
+        run.step();
+        assert!(!is_on(&run.monsters[bi]));
+    }
+
+    #[test]
+    fn killing_a_charmed_boss_wins() {
+        let (mut run, bi) = boss_run(BossId::Demon, 100.0);
+        charm(&mut run, bi, 0, 5.0);
+        run.step();
+        assert!(is_on(&run.monsters[bi]));
+        run.kill_monster_by(bi, false);
+        assert!(matches!(run.ended, Some((true, _))), "{:?}", run.ended);
+    }
+
+    #[test]
+    fn a_charmed_disciple_stays_put() {
+        let mut run = arena(&[ClassId::Wizard]);
+        let di = spawn(&mut run, EnemyType::Disciple, 400.0);
+        let pos = run.monsters[di].pos;
+        charm(&mut run, di, 0, 5.0);
+        run.events.clear();
+        steps(&mut run, 60);
+        assert!(is_on(&run.monsters[di]));
+        assert_eq!(run.monsters[di].pos, pos);
+        assert!(!run.events.iter().any(|(e, _)| matches!(e, crate::protocol::Ev::Boom { k: 9, .. })), "no reappear puff");
+    }
 }
