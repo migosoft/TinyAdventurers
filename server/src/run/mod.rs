@@ -339,6 +339,7 @@ impl Run {
             knock: Vec2::ZERO,
             sinking: None,
             burn_t: dungeon::LAVA_TICK,
+            last_safe: dungeon::Map::center_of(dungeon::Map::tile_of(pos).0, dungeon::Map::tile_of(pos).1),
             last_hit_by: None,
             effects: effects::Effects::default(),
             effect_res: prof.effect_res,
@@ -660,7 +661,7 @@ impl Run {
     /// The ground under a monster's centre, like `terrain_player`: chasms and
     /// deep water take it (kill credit to the last hero who hurt it), lava
     /// burns monsters that are not lava walkers. A dashing monster is in the air,
-    /// and the wolf over a chasm with its Pounce ready dashes back to safe ground.
+    /// and a creature with its Leap ready dashes back to safe ground (`modules::on_danger`).
     fn terrain_monster(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
         if !m.alive || m.is_boss || m.airborne || m.dash.is_some() || m.mover == Mover::Incorporeal {
@@ -681,17 +682,13 @@ impl Run {
         let pos = m.pos;
         let (tx, ty) = dungeon::Map::tile_of(pos);
         let tile = self.layout.map.get(tx, ty);
-        let pounce_ready = m.cds.ready(crate::defs::abilities::AbilityId::Pounce);
-        if let Some(a) = m.companion.as_mut() {
-            if m.wolf.is_some() && tile == Tile::Chasm as u8 && pounce_ready {
-                m.knock = Vec2::ZERO;
-                wolf::dash_back(self, mi);
-                return;
-            }
-            if self.layout.map.safe(tx, ty) {
-                a.last_safe = dungeon::Map::center_of(tx, ty);
-            }
+        if self.layout.map.safe(tx, ty) {
+            m.last_safe = dungeon::Map::center_of(tx, ty);
         }
+        if modules::on_danger(self, mi, tile) {
+            return;
+        }
+        let m = &mut self.monsters[mi];
         let how = if tile == Tile::Chasm as u8 {
             Some((dungeon::FALL_TIME, Sink::Fall))
         } else if tile == Tile::DeepWater as u8 {

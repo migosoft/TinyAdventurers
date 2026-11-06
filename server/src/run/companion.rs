@@ -229,8 +229,7 @@ pub fn recruit(run: &mut Run, pi: usize) -> bool {
     let name = super::rules_log::tags::tag_name(name).unwrap_or("companion");
     let m = &mut run.monsters[mi];
     m.side = Side::Friendly;
-    let (tx, ty) = Map::tile_of(m.pos);
-    m.companion = Some(Companion { escort: &KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: Map::center_of(tx, ty) });
+    m.companion = Some(Companion { escort: &KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0 });
     m.ai = Ai::new(m.pos);
     let pos = m.pos;
     run.event(Ev::Msg { text: format!("{hero_name} recruited the {name}") }, None);
@@ -278,7 +277,6 @@ mod tests {
             prey: None,
             following: false,
             reach_t: 0.0,
-            last_safe: Vec2::new(100.0, 100.0),
         });
         (run, mi)
     }
@@ -352,7 +350,7 @@ mod tests {
         let hero = run.players[recruiter].id;
         let m = &mut run.monsters[mi];
         m.side = Side::Friendly;
-        m.companion = Some(Companion { escort: &KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: at });
+        m.companion = Some(Companion { escort: &KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0 });
         mi
     }
 

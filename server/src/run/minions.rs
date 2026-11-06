@@ -5,7 +5,6 @@ use super::ai::set_anim;
 use super::effects::Creature;
 use super::Run;
 use crate::defs::abilities::{self as ab, Module};
-use crate::defs::enemies;
 use crate::defs::kinds::Anim;
 use crate::defs::enemies::EnemyType;
 use crate::dungeon::Mover;
@@ -48,8 +47,7 @@ pub fn act(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
         return true;
     }
     if seen.is_some() {
-        let def = enemies::def(run.monsters[mi].etype.expect("only enemies raise minions"));
-        let raise = def.abilities.iter().filter_map(|&id| run.monsters[mi].kit.get(id)).cloned().find(|a| {
+        let raise = run.monsters[mi].kit.iter().cloned().find(|a| {
             ab::def(a.id).module == Some(Module::Minions) && run.monsters[mi].cds.ready(a.id) && room(run, mi, a) > 0
         });
         if let Some(a) = raise {

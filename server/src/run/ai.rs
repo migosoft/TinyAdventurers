@@ -1109,7 +1109,7 @@ pub(crate) mod tests {
         let hero = run.players[0].id;
         let m = &mut run.monsters[knight];
         m.side = Side::Friendly;
-        m.companion = Some(crate::run::entities::Companion { escort: &crate::defs::companions::KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: m.pos });
+        m.companion = Some(crate::run::entities::Companion { escort: &crate::defs::companions::KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0 });
         assert_eq!(chase_of(&run, knight), Chase::Pathfind, "the recruited knight");
         assert_eq!(chase_of(&run, wolf), Chase::Pathfind, "the wolf");
         assert_eq!(chase_of(&run, ogre), Chase::Pathfind, "a wide figure");

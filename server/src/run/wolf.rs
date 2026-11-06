@@ -1,11 +1,11 @@
 //! The Elven Ranger's wolf: a summoned companion (run/companion.rs). Spawn, behaviour and death here.
 
-use super::abilities::{monster_use, monster_dash_to, monster_dash_secs, tick_monster_dash};
+use super::abilities::monster_use;
 use super::companion::{find_prey, follow, lost, reappear, set_anim, summon_spot};
 use super::entities::{Ai, Companion, Monster, WolfState, Windup, HISTORY_LEN};
 use super::targets::Side;
-use super::{ai, Run};
-use crate::collision::line_of_sight;
+use super::effects::Creature;
+use super::{ai, modules, Run};
 use crate::defs::abilities::AbilityId;
 use crate::defs::enemies::BaseAi;
 use crate::defs::effects::EffectKind;
@@ -55,7 +55,8 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         channel: None,
         dash: None,
         wolf_bit: 0.0,
-        ai: Ai::new(spot),
+        // No pause before the first bite (an enemy starts with half a second).
+        ai: Ai { cd: 0.0, ..Ai::new(spot) },
         base_ai: BaseAi::Melee,
         wanders: true,
         owner: None,
@@ -68,13 +69,14 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         knock: Vec2::ZERO,
         sinking: None,
         burn_t: dungeon::LAVA_TICK,
+        last_safe: Map::center_of(tx, ty),
         last_hit_by: None,
         effects: Default::default(),
         effect_res: prof.effect_res,
         attrs: stats.attrs,
         weight: stats.weight,
         side: Side::Friendly,
-        wolf: Some(WolfState { bite_hold: 0.0 }),
+        wolf: Some(WolfState),
         companion: Some(Companion {
             escort: &WOLF_ESCORT,
             leader: owner,
@@ -83,7 +85,6 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
             prey: None,
             following: false,
             reach_t: 0.0,
-            last_safe: Map::center_of(tx, ty),
         }),
     });
     run.players[pi].wolf = Some(id);
@@ -107,10 +108,6 @@ fn companion_mut(run: &mut Run, mi: usize) -> &mut Companion {
     run.monsters[mi].companion.as_mut().expect("a companion")
 }
 
-fn wolf_mut(run: &mut Run, mi: usize) -> &mut WolfState {
-    run.monsters[mi].wolf.as_mut().expect("the wolf")
-}
-
 /// The wolf `mi` this tick: reappear, pounce, bite, guard, follow. Not called
 /// while it is pushed, sinking, asleep or frozen (`Run::step`).
 pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
@@ -124,25 +121,15 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         return;
     }
 
-    // 3. Timers.
+    // 3. Timers: the wait a pounce that hurt its prey leaves before the next bite (`modules::on_dash_end`).
     {
         let m = &mut run.monsters[mi];
-        let w = m.wolf.as_mut().expect("the wolf");
-        w.bite_hold = (w.bite_hold - m.effects.cooldown_dt(dt)).max(0.0);
+        m.ai.cd = (m.ai.cd - m.effects.cooldown_dt(dt)).max(0.0);
     }
 
     // 3a. A dash in progress.
     if run.monsters[mi].dash.is_some() {
-        if let Some(done) = tick_monster_dash(run, mi, dt) {
-            // A pounce that hurt its prey leaves the next bite a cooldown away.
-            if !done.hit.is_empty() {
-                let bite = run.monsters[mi].kit.get(AbilityId::Bite).expect("the wolf bites").clone();
-                wolf_mut(run, mi).bite_hold = bite.cooldown;
-            }
-            if done.attack && run.layout.map.blocks_at(run.monsters[mi].pos, Mover::Enemy) {
-                overrun(run, mi, done.dir);
-            }
-        }
+        modules::dash_step(run, mi, dt);
         return;
     }
 
@@ -162,23 +149,17 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
         run.monsters[mi].ai.windup = None;
         let prey = run.monsters[mi].companion.as_ref().and_then(|c| c.prey).and_then(|id| run.monster_idx(id));
         // Prey that has since gone invisible is dropped: the wind-up ends without a bite or a leap.
-        if let Some(ei) = prey.filter(|&ei| run.monsters[ei].alive && !run.monsters[ei].effects.has(EffectKind::Invisible)) {
-            let at = run.monsters[ei].pos;
-            if w.alt {
-                // The pounce's wind-up is over: it leaps if its landing is still safe.
-                let pounce = run.monsters[mi].kit.get(AbilityId::Pounce).expect("the wolf pounces").clone();
-                let (pos, d) = (run.monsters[mi].pos, run.monsters[mi].pos.dist(at));
-                let dir = (at - pos).norm();
-                if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
-                    monster_use(run, mi, AbilityId::Pounce, at);
-                    return;
-                }
-            } else {
-                monster_use(run, mi, AbilityId::Bite, at);
-            }
+        let prey = prey.filter(|&ei| run.monsters[ei].alive && !run.monsters[ei].effects.has(EffectKind::Invisible));
+        if let Some(id) = w.id {
+            // A leap's wind-up is over: the Leap module leaps if its landing is still safe, else it stops.
+            modules::on_windup_end(run, mi, id, prey.map(Creature::Monster));
+            return;
         }
-        // A bite that missed its prey swings on; a pounce cancelled (unsafe landing, prey gone) just stops.
-        set_anim(run, mi, if w.alt { Anim::Idle } else { Anim::Melee });
+        if let Some(ei) = prey {
+            monster_use(run, mi, AbilityId::Bite, run.monsters[ei].pos);
+        }
+        // A bite that missed its prey swings on.
+        set_anim(run, mi, Anim::Melee);
         return;
     }
 
@@ -188,27 +169,17 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
     if let Some(ei) = prey {
         let (w, e) = (&run.monsters[mi], &run.monsters[ei]);
         let (pos, epos) = (w.pos, e.pos);
-        let radii = w.radius + e.radius;
         let d = pos.dist(epos);
-        let (bite, pounce) = (w.kit.get(AbilityId::Bite).expect("the wolf bites").clone(), w.kit.get(AbilityId::Pounce).expect("the wolf pounces").clone());
+        let bite = w.kit.get(AbilityId::Bite).expect("the wolf bites").clone();
         // A bite starts a little inside its real reach, like the enemies' swings.
         let reach = bite.range + e.radius - ai::SWING_SLACK;
-        let pounce_ready = w.cds.ready(AbilityId::Pounce);
         let aim = pos.angle_to(epos);
         run.monsters[mi].aim = aim;
-        if d > reach + 8.0 && d <= pounce.range + radii && pounce_ready && line_of_sight(&run.layout.map, pos, epos) {
-            let dir = (epos - pos).norm();
-            // Never a jump to its death: the pounce must end on walkable ground.
-            if !run.layout.map.blocks_at(pos + dir * (pounce.speed * monster_dash_secs(&pounce, d)), Mover::Enemy) {
-                // It winds up first, like any use; the leap itself starts when that is over (step 4).
-                run.start_windup(mi, Windup { t: pounce.windup, aim, alt: true, at: None, id: None });
-                run.monsters[mi].ai.path.clear();
-                set_anim(run, mi, Anim::Windup);
-                return;
-            }
+        if modules::leap_start(run, mi, Creature::Monster(ei)) {
+            return;
         }
         if d <= reach {
-            if run.monsters[mi].cds.ready(AbilityId::Bite) && run.monsters[mi].wolf.as_ref().is_some_and(|w| w.bite_hold <= 0.0) {
+            if run.monsters[mi].cds.ready(AbilityId::Bite) && run.monsters[mi].ai.cd <= 0.0 {
                 run.start_windup(mi, Windup { t: bite.windup, aim, alt: false, at: None, id: None });
                 set_anim(run, mi, Anim::Windup);
             } else {
@@ -223,38 +194,6 @@ pub fn tick_wolf(run: &mut Run, mi: usize, dt: f64) {
 
     // 6. Follow.
     follow(run, mi, pi, &WOLF_ESCORT, WOLF_SPEED, dt);
-}
-
-/// A pounce that ended over ground the wolf cannot stand on (it touched its prey above a chasm): it
-/// carries on along `dir`, without more damage, to the first walkable ground within the Pounce's range.
-/// With none before a wall or that far, it dashes back to its last safe tile.
-fn overrun(run: &mut Run, mi: usize, dir: Vec2) {
-    let pounce = run.monsters[mi].kit.get(AbilityId::Pounce).expect("the wolf pounces").clone();
-    let (map, pos, r) = (&run.layout.map, run.monsters[mi].pos, run.monsters[mi].radius);
-    let land = (1..=(pounce.range / 2.0) as usize)
-        .map(|i| pos + dir * (i as f64 * 2.0))
-        .take_while(|&p| !map.blocks_at(p, Mover::Dash))
-        .find(|&p| !map.blocks_at(p, Mover::Enemy))
-        .map(|p| p + dir * r) // a body's width onto the ground
-        .filter(|&p| !map.blocks_at(p, Mover::Enemy));
-    match land {
-        Some(to) => {
-            monster_dash_to(run, mi, AbilityId::Pounce, to, false);
-            set_anim(run, mi, Anim::Dash);
-        }
-        None => dash_back(run, mi),
-    }
-}
-
-/// Pushed over a chasm with its Pounce ready: the wolf pounces straight back to the last
-/// safe tile it stood on. That uses the Pounce (its cooldown starts).
-pub fn dash_back(run: &mut Run, mi: usize) {
-    let m = &mut run.monsters[mi];
-    m.ai.windup = None;
-    m.ai.path.clear();
-    let to = m.companion.as_ref().expect("a companion").last_safe;
-    monster_dash_to(run, mi, AbilityId::Pounce, to, true);
-    set_anim(run, mi, Anim::Dash);
 }
 
 /// The wolf `mi` has fallen: no XP, no coins, no kill; the ranger waits for the next one.
@@ -286,7 +225,8 @@ mod tests {
     use crate::dungeon::{Map, Tile};
     use crate::math::Vec2;
     use crate::protocol::{BossId, ClassId, Ev};
-    use crate::run::abilities::{melee_target, dash_contact, tick_projectiles, try_use};
+    use crate::run::abilities::{melee_target, dash_contact, tick_monster_dash, tick_projectiles, try_use};
+    use crate::run::modules::dash_back;
     use crate::run::effects::Creature;
     use crate::run::tests::test_run;
     use crate::run::visibility::{dark_range, snapshot_ents, Dark};
@@ -467,7 +407,7 @@ mod tests {
         let id = spawn_wolf(&mut run, 0);
         let mi = wolf_idx(&run, id);
         assert_eq!((run.monsters[mi].hp, run.monsters[mi].max_hp), (WOLF_HP * 1.25, WOLF_HP * 1.25));
-        dash_back(&mut run, mi);
+        dash_back(&mut run, mi, AbilityId::Pounce);
         assert!(!run.monsters[mi].cds.ready(AbilityId::Pounce));
         assert!((run.monsters[mi].kit.get(AbilityId::Pounce).unwrap().cooldown - (5.0 * 10.0 / 15.0 - 2.0)).abs() < 1e-12, "the wolf's DEX 15, then the mod");
     }
@@ -720,6 +660,8 @@ mod tests {
             run.layout.map.set(x, ty, Tile::DeepWater);
         }
         let wi = wolf_idx(&run, id);
+        // Pounce cooling down: with it ready the wolf would leap out (modules::on_danger).
+        run.monsters[wi].cds.start(AbilityId::Pounce, 99.0);
         let at = Map::center_of(tx + 6, ty);
         run.monsters[wi].pos = at;
         run.spawn_object(EntityKind::Barrel, at - Vec2::new(10.0, 0.0), ObjState::Barrel(Barrel::new()));
@@ -1011,7 +953,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pounce_that_hurts_holds_the_bite_in_the_script_not_the_kit() {
+    fn a_pounce_that_hurts_holds_the_next_bite_one_cooldown_in_the_ai() {
         let (mut run, id) = guard_run();
         let r = run.players[0].pos();
         set_wolf_pos(&mut run, id, r + Vec2::new(10.0, 0.0));
@@ -1027,8 +969,8 @@ mod tests {
         }
         assert!(run.monsters[oi].hp < 500.0, "the pounce hurt the orc");
         let w = wolf(&run, id);
-        assert!(w.cds.ready(AbilityId::Bite), "the kit's Bite cooldown is not started by the script");
-        assert!(w.wolf.as_ref().unwrap().bite_hold > 0.0, "the script holds the next bite back");
+        assert!(w.cds.ready(AbilityId::Bite), "the kit's Bite cooldown is not started by the leap");
+        assert!(w.ai.cd > 0.0, "the AI's wait holds the next bite back");
     }
 
     #[test]
@@ -1073,7 +1015,7 @@ mod tests {
         run.players[0].debug = true;
         set_wolf_pos(&mut run, id, Map::center_of(tx + 1, ty));
         run.step();
-        assert_eq!(ally(&run, id).last_safe, Map::center_of(tx + 1, ty));
+        assert_eq!(wolf(&run, id).last_safe, Map::center_of(tx + 1, ty));
 
         // Dash ready: it dashes back to the last safe tile.
         run.events.clear();
@@ -1382,13 +1324,13 @@ mod tests {
     }
 
     #[test]
-    fn the_wolfs_bite_hold_runs_on_its_clock() {
+    fn the_wolfs_bite_wait_runs_on_its_clock() {
         let (mut run, id) = guard_run();
         let wi = wolf_idx(&run, id);
         run.apply_effect(Creature::Monster(wi), EffectKind::Accelerated, Some(30.0));
-        run.monsters[wi].wolf.as_mut().unwrap().bite_hold = 1.0;
+        run.monsters[wi].ai.cd = 1.0;
         tick_wolf(&mut run, wi, DT);
-        let left = wolf(&run, id).wolf.as_ref().unwrap().bite_hold;
+        let left = wolf(&run, id).ai.cd;
         assert!((left - (1.0 - 1.25 * DT)).abs() < 1e-9, "{left}");
     }
 }

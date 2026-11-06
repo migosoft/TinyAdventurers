@@ -211,17 +211,11 @@ pub struct Companion {
     pub prey: Option<u32>,
     pub following: bool,
     pub reach_t: f64,
-    /// Centre of the last safe tile it stood on (a dash back from a chasm goes there).
-    pub last_safe: Vec2,
 }
 
-/// What only the Ranger's wolf has (the wolf script in run/wolf.rs).
+/// Marks the Ranger's wolf: it runs the wolf script (run/wolf.rs). The script keeps no state of its own.
 #[derive(Debug, Clone)]
-pub struct WolfState {
-    /// Seconds before it may bite again after a pounce that hurt its prey (the script's own wait; the
-    /// kit's cooldowns are `cds`, started only by using the ability).
-    pub bite_hold: f64,
-}
+pub struct WolfState;
 
 pub struct Monster {
     pub id: u32,
@@ -289,6 +283,8 @@ pub struct Monster {
     pub sinking: Option<(f64, Sink)>,
     /// Time since the last lava burn.
     pub burn_t: f64,
+    /// Centre of the last safe tile it stood on (a creature with a Leap leaps back there from danger).
+    pub last_safe: Vec2,
     /// Last hero who hurt it: credited for a death by terrain.
     pub last_hit_by: Option<usize>,
     /// Status effects (run/effects.rs).

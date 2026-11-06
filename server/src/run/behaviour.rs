@@ -4,7 +4,7 @@
 
 use super::entities::Monster;
 use super::targets::Side;
-use super::{ai, companion, wolf, Run};
+use super::{ai, companion, modules, wolf, Run};
 
 /// What a creature does with no orders: derived from its fields, never stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +33,11 @@ pub fn role(m: &Monster) -> Role {
 /// One tick of monster `mi`'s role, after the fear and no-act checks of `Run::step`. `active`: a hero
 /// is near enough for a Hunter to think.
 pub fn tick(run: &mut Run, mi: usize, dt: f64, active: bool) {
+    // A dash in progress carries on whatever the role (the wolf's script ticks its own).
+    if run.monsters[mi].dash.is_some() && run.monsters[mi].wolf.is_none() {
+        modules::dash_step(run, mi, dt);
+        return;
+    }
     match role(&run.monsters[mi]) {
         Role::Waiting | Role::Wildlife => {}
         Role::Escort => {
@@ -76,7 +81,7 @@ mod tests {
         let hero = run.players[0].id;
         let m = &mut run.monsters[ki];
         m.side = Side::Friendly;
-        m.companion = Some(Companion { escort: &crate::defs::companions::KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: m.pos });
+        m.companion = Some(Companion { escort: &crate::defs::companions::KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0 });
         assert_eq!(role(&run.monsters[ki]), Role::Escort);
 
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);

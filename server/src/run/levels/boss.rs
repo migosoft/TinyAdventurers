@@ -88,6 +88,7 @@ pub fn spawn(run: &mut Run) {
         knock: Vec2::ZERO,
         sinking: None,
         burn_t: crate::dungeon::LAVA_TICK,
+        last_safe: pos,
         last_hit_by: None,
         effects: Default::default(),
         effect_res: prof.effect_res,
