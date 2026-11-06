@@ -63,6 +63,8 @@ pub enum EntityKind {
     Judgement = 64,
     /// The Barbarian's Throwing Axes.
     ThrownAxe = 65,
+    /// Charm Monster: the Wizard's charm orb.
+    CharmOrb = 66,
     // Hazards
     FirePatch = 70,
     /// Consecrate: holy ground that hurts enemies.
@@ -85,7 +87,7 @@ impl serde::Serialize for EntityKind {
 
 impl EntityKind {
     #[cfg(test)]
-    pub const ALL: [EntityKind; 50] = [
+    pub const ALL: [EntityKind; 51] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -127,6 +129,7 @@ impl EntityKind {
         EntityKind::GloomBolt,
         EntityKind::BlindOrb,
         EntityKind::SleepOrb,
+        EntityKind::CharmOrb,
         EntityKind::ChainSpark,
         EntityKind::Judgement,
         EntityKind::ThrownAxe,

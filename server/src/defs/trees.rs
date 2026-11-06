@@ -82,6 +82,7 @@ super::enum_list::listed_enum! {
         ED2 = 60,
         ED3 = 61,
         ED4 = 62,
+        WC1 = 63,
     }
 }
 
@@ -179,7 +180,8 @@ pub fn def(id: NodeId) -> NodeDef {
         NodeId::WR2 => nd(NodeId::WR2, ClassId::Wizard, (2, -1), NodeKind::Resist(DamageType::Heat, 0.2), "Ember Skin", "+20 % heat resistance.", 250, &[], &[NodeId::WR5]),
         NodeId::WR3 => nd(NodeId::WR3, ClassId::Wizard, (2, 1), NodeKind::Improve(AbilityId::Fireball, AbilityMod::AddOnHit(OnHit { kind: EffectKind::Burning, secs: 3.0, magical: false, power: 0, look: EffectLook::Plain })), "Scorched Earth", "Fireball: the blast sets Burning (3 s) on everything it hits.", 500, &[Requirement::Attr(Attr::Int, 16)], &[NodeId::WR5]),
         NodeId::WR5 => nd(NodeId::WR5, ClassId::Wizard, (3, 0), NodeKind::Keystone(Keystone::Pyromancer), "Pyromancer", "+20 % heat damage, −20 % cold damage.", 1200, &[Requirement::Attr(Attr::Int, 17)], &[]),
-        NodeId::WB3 => nd(NodeId::WB3, ClassId::Wizard, (0, 1), NodeKind::Proficiency(Prof::Armor(ArmorClass::Light)), "Light Armor", "Proficiency: light armor.", 300, &[], &[NodeId::WB4]),
+        NodeId::WB3 => nd(NodeId::WB3, ClassId::Wizard, (0, 1), NodeKind::Proficiency(Prof::Armor(ArmorClass::Light)), "Light Armor", "Proficiency: light armor.", 300, &[], &[NodeId::WB4, NodeId::WC1]),
+        NodeId::WC1 => nd(NodeId::WC1, ClassId::Wizard, (1, 2), NodeKind::Unlock(AbilityId::CharmMonster), "Charm Monster", "Unlocks Charm Monster (secondary).", 700, &[Requirement::Attr(Attr::Int, 15), Requirement::Attr(Attr::Cha, 14)], &[]),
         NodeId::WB4 => nd(NodeId::WB4, ClassId::Wizard, (0, 2), NodeKind::Unlock(AbilityId::Haste), "Haste", "Unlocks Haste (secondary).", 600, &[Requirement::Attr(Attr::Int, 15), Requirement::Attr(Attr::Wil, 14)], &[NodeId::WB5]),
         NodeId::WB5 => nd(NodeId::WB5, ClassId::Wizard, (0, 3), NodeKind::Improve(AbilityId::Haste, AbilityMod::DurationAdd(2.0)), "Lasting Haste", "Haste: +2 s.", 350, &[], &[]),
         NodeId::P0 => nd(NodeId::P0, ClassId::Paladin, (0, 0), NodeKind::Start, "Paladin", "Where the tree starts. Always owned.", 0, &[], &[NodeId::PU2, NodeId::PL1, NodeId::PR1, NodeId::PD2, NodeId::PD3]),
@@ -315,7 +317,7 @@ mod tests {
 
     #[test]
     fn trees_have_the_spec_sizes_and_totals() {
-        for (c, n, xp) in [(ClassId::Wizard, 16, 8950), (ClassId::Paladin, 13, 7650), (ClassId::Barbarian, 15, 7950), (ClassId::ElvenRanger, 15, 7800)] {
+        for (c, n, xp) in [(ClassId::Wizard, 17, 9650), (ClassId::Paladin, 13, 7650), (ClassId::Barbarian, 15, 7950), (ClassId::ElvenRanger, 15, 7800)] {
             let t = tree(c);
             assert_eq!(t.iter().filter(|d| d.kind != NodeKind::Start).count(), n, "{c:?}");
             assert_eq!(t.iter().map(|d| d.cost).sum::<u32>(), xp, "{c:?}");
@@ -404,6 +406,18 @@ mod tests {
         assert_eq!(g.improves, vec![(AbilityId::MagicMissile, AbilityMod::Pierce(1))]);
         assert!(g.keystones.has(Keystone::ArcaneOverflow) && !g.keystones.has(Keystone::Pyromancer));
         assert_eq!(g.keystones.iter().collect::<Vec<_>>(), vec![Keystone::ArcaneOverflow]);
+    }
+
+    #[test]
+    fn charm_monster_hangs_off_light_armor() {
+        let n = def(NodeId::WC1);
+        assert_eq!((n.class, n.pos, n.cost), (ClassId::Wizard, (1, 2), 700));
+        assert_eq!(n.kind, NodeKind::Unlock(AbilityId::CharmMonster));
+        assert_eq!(n.req, &[Requirement::Attr(Attr::Int, 15), Requirement::Attr(Attr::Cha, 14)]);
+        let a = Attributes::new(8, 14, 12, 15, 13, 14);
+        assert!(check_buy(ClassId::Wizard, &[], NodeId::WC1, &a).is_err(), "needs Light Armor");
+        assert_eq!(check_buy(ClassId::Wizard, &[NodeId::WB3], NodeId::WC1, &a), Ok(()));
+        assert!(check_buy(ClassId::Wizard, &[NodeId::WB3], NodeId::WC1, &Attributes::new(8, 14, 12, 15, 13, 13)).is_err(), "CHA 14");
     }
 
     #[test]

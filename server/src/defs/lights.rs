@@ -69,6 +69,7 @@ pub fn kind_light(k: EntityKind) -> Option<(LightKind, Option<Colour>)> {
         K::ShadowBolt | K::GloomBolt => Some((LightKind::Magic, Some(0xaa3cdc))),
         K::BlindOrb => Some((LightKind::Magic, Some(0x6a3c8c))),
         K::SleepOrb => Some((LightKind::Magic, Some(0xc080ff))),
+        K::CharmOrb => Some((LightKind::Magic, Some(0xff80c0))),
         _ => None,
     }
 }
