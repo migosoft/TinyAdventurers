@@ -120,11 +120,11 @@ The Elven Ranger's wolf is a companion of its own kind, summoned with the right 
 Every nymph's cove is home to 15 wild animals: a boar, a stag, three deer and ten bunnies. They wander near where they live and take no side: enemies ignore them and they ignore you. Killing a calm animal pays nothing, and you cannot recruit them.
 
 - **Bunnies, deer and the stag run.** Hit one and it runs from whoever hit it, for at least a second and a half after every hit. It calms down again once you are out of its sight or far enough away. A bunny usually dies at once. They give no XP, coins or kills.
-- **The boar fights back.** Leave it alone and it wanders. Hit it, and it holds a grudge against your side: it charges and strikes, and it does not forget. If you lose it, it searches, goes home and wanders again. Killing an angered boar gives its XP, but no coins.
+- **The boar fights back.** Leave it alone and it wanders. Hit it, and it holds a grudge against your side: it charges and strikes, and it does not forget. If you lose it, it searches, goes home and wanders again. Killing a boar that holds a grudge against you gives its XP, but no coins.
 - **Enemies can anger it too.** An enemy that hits the boar makes it an enemy of the enemies, so a goblin lured into the cove ends up fighting the boar it hit.
 - **Only a hit counts.** Fear, roots and the like do not anger a boar: a War Cry frightens it without starting a fight. Lava does not anger it either.
 - **Chains and jumps** (Chain Spark and similar) skip calm animals, and arrows and spells can hit them like enemies. Area attacks and swings hit any animal in reach.
-- **They show no health bar until hurt**, and the boar shows its bar once it has a grudge against you.
+- **They show no health bar until hurt.**
 
 ## Enemies
 
