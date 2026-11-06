@@ -103,7 +103,6 @@ pub fn sync_one(run: &mut Run, mi: usize) {
 }
 
 /// Puts the charm back to the monster's old self at once (it died, or its charm is over) and forgets it. No log line.
-#[allow(dead_code)] // the death paths call it (#223)
 pub fn revert(run: &mut Run, mi: usize) {
     let m = &mut run.monsters[mi];
     if is_on(m) {
@@ -473,6 +472,81 @@ mod tests {
         assert_eq!(run.monsters[si].side, Side::Hostile);
         run.kill_monster(si);
         assert!(!run.monsters[imps[0]].alive, "it still dies with its master");
+    }
+
+    fn fallen_msg(run: &Run) -> bool {
+        run.events.iter().any(|(e, _)| matches!(e, crate::protocol::Ev::Msg { text } if text.contains("has fallen")))
+    }
+
+    fn died(run: &Run, id: u32) -> bool {
+        run.events.iter().any(|(e, _)| matches!(e, crate::protocol::Ev::Died { id: d, .. } if *d == id))
+    }
+
+    #[test]
+    fn a_charmed_monster_dies_as_an_enemy() {
+        use crate::defs::damage::Damage;
+        use crate::run::progression::{coins_for_kill, xp_for_kill};
+        // Twin runs: an uncharmed orc and a charmed one, each killed by a hit with no hero behind it.
+        let mut gains = Vec::new();
+        for charmed in [false, true] {
+            let mut run = arena(&[ClassId::Wizard]);
+            let oi = spawn(&mut run, EnemyType::OrcWarrior, 80.0);
+            let id = run.monsters[oi].id;
+            if charmed {
+                charm(&mut run, oi, 0, 5.0);
+                run.step();
+                assert!(is_on(&run.monsters[oi]));
+            }
+            let (xp, coins) = (run.players[0].xp, run.players[0].coins);
+            run.events.clear();
+            run.hurt_monster(oi, Damage::physical(1e6), false, None);
+            assert!(!run.monsters[oi].alive);
+            assert!(died(&run, id) && !fallen_msg(&run), "charmed {charmed}");
+            gains.push((run.players[0].xp - xp, run.players[0].coins - coins));
+        }
+        assert_eq!(gains[0], gains[1]);
+        assert_eq!(gains[1], (xp_for_kill(Some(EnemyType::OrcWarrior)), coins_for_kill(Some(EnemyType::OrcWarrior))));
+        assert!(gains[1].0 > 0);
+        // The same through kill_monster_by.
+        let mut run = arena(&[ClassId::Wizard]);
+        let oi = spawn(&mut run, EnemyType::OrcWarrior, 80.0);
+        charm(&mut run, oi, 0, 5.0);
+        run.step();
+        let xp = run.players[0].xp;
+        run.events.clear();
+        run.kill_monster_by(oi, false);
+        assert_eq!(run.players[0].xp - xp, xp_for_kill(Some(EnemyType::OrcWarrior)));
+        assert!(!fallen_msg(&run));
+    }
+
+    #[test]
+    fn a_charmed_masters_minions_die_with_it() {
+        let mut run = arena(&[ClassId::Wizard]);
+        let (ni, minions) = necro(&mut run);
+        charm(&mut run, ni, 0, 5.0);
+        run.step();
+        assert!(minions.iter().all(|&k| is_on(&run.monsters[k])));
+        run.events.clear();
+        run.kill_monster_by(ni, false);
+        for &k in &minions {
+            assert!(!run.monsters[k].alive);
+        }
+        assert!(!fallen_msg(&run), "no companion died");
+    }
+
+    #[test]
+    fn a_charmed_wild_animal_pays_as_before() {
+        let mut run = arena(&[ClassId::Wizard]);
+        let bi = spawn(&mut run, EnemyType::Boar, 80.0);
+        assert!(!run.monsters[bi].grudge.heroes);
+        charm(&mut run, bi, 0, 5.0);
+        run.step();
+        let (xp, coins) = (run.players[0].xp, run.players[0].coins);
+        run.events.clear();
+        run.kill_monster_by(bi, true);
+        assert!(!run.monsters[bi].alive);
+        assert_eq!((run.players[0].xp, run.players[0].coins), (xp, coins));
+        assert!(!fallen_msg(&run));
     }
 
     #[test]

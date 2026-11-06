@@ -1231,6 +1231,8 @@ impl Run {
             self.monsters[mi].dormant = false;
         }
         if self.monsters[mi].hp <= 0.0 {
+            // Back to its old self first: the kill counts, and pays, as the enemy's.
+            charm::revert(self, mi);
             // The kill goes to the hero who struck, or whose effect ticked it down.
             let credit = if src_player.is_some() { src_player } else if dmg.from_effect { self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) } else { None };
             // A calm wild animal is no kill; a boar with a grudge against the heroes is.
@@ -1262,10 +1264,12 @@ impl Run {
     /// after a hero's hit); only that makes a wild animal with a grudge against the heroes pay its XP. A
     /// wild animal pays no coins and gives no message, whoever killed it.
     pub fn kill_monster_by(&mut self, mi: usize, by_heroes: bool) {
-        let m = &mut self.monsters[mi];
-        if !m.alive {
+        if !self.monsters[mi].alive {
             return;
         }
+        // A charmed monster dies as the enemy it is, not as a fallen companion.
+        charm::revert(self, mi);
+        let m = &mut self.monsters[mi];
         if m.companion.as_ref().is_some_and(|c| c.summoned && self.players.iter().any(|p| p.wolf == Some(m.id))) {
             wolf::wolf_died(self, mi);
             return;
