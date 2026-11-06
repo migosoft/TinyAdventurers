@@ -2,6 +2,7 @@
 
 use super::abilities::monster_use;
 use super::ai::set_anim;
+use super::charm;
 use super::effects::Creature;
 use super::Run;
 use crate::defs::abilities::{self as ab, Module};
@@ -83,7 +84,11 @@ pub fn raise(run: &mut Run, mi: usize, a: &ResolvedAbility) {
         if run.layout.map.blocks_at(spot, Mover::Enemy) {
             spot = pos;
         }
-        run.spawn_enemy(kinds[slot], spot, Some(id));
+        let new = run.spawn_enemy(kinds[slot], spot, Some(id));
+        // A charmed master's minions fight for the party from the start.
+        if let Some(ni) = run.monster_idx(new) {
+            charm::sync_one(run, ni);
+        }
         run.event(Ev::Raise { x: spot.x as f32, y: spot.y as f32, k }, Some(spot));
     }
 }

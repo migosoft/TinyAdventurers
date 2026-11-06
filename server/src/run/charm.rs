@@ -41,14 +41,27 @@ pub fn is_on(m: &Monster) -> bool {
 }
 
 /// The hero a charmed effect that counts now (not paused) names, if any.
-fn wanted(m: &Monster) -> Option<u32> {
+fn own_caster(m: &Monster) -> Option<u32> {
     let fx = &m.effects;
     fx.list().iter().find(|a| a.kind == EffectKind::Charmed && !a.paused(fx.anti_magic)).and_then(|a| a.source)
 }
 
-/// Whether any Charmed entry is on the monster, paused or not.
-fn present(m: &Monster) -> bool {
-    m.effects.list().iter().any(|a| a.kind == EffectKind::Charmed)
+/// The caster of the charm that `mi`'s living master acts under now, if it has a master and is charmed.
+fn master_caster(run: &Run, mi: usize) -> Option<u32> {
+    let id = run.monsters[mi].owner?;
+    let master = run.monsters.iter().find(|o| o.id == id && o.alive)?;
+    master.charm.as_ref().filter(|c| c.on).map(|c| c.caster)
+}
+
+/// The hero `mi` is charmed by now, if any: through its own effect, else through its master's charm.
+fn wanted(run: &Run, mi: usize) -> Option<u32> {
+    own_caster(&run.monsters[mi]).or_else(|| master_caster(run, mi))
+}
+
+/// Whether anything keeps a charm on `mi`: a Charmed entry on it, paused or not, or its master's charm.
+fn present(run: &Run, mi: usize) -> bool {
+    let m = &run.monsters[mi];
+    m.effects.list().iter().any(|a| a.kind == EffectKind::Charmed) || master_caster(run, mi).is_some()
 }
 
 /// Switches every monster to or from its charm for this step: those without a master first, then the owned
@@ -69,7 +82,7 @@ pub fn sync_one(run: &mut Run, mi: usize) {
     if !m.alive || m.sinking.is_some() {
         return;
     }
-    let (wanted, present, state) = (wanted(m), present(m), m.charm.as_ref().map(|c| (c.on, c.caster)));
+    let (wanted, present, state) = (wanted(run, mi), present(run, mi), m.charm.as_ref().map(|c| (c.on, c.caster)));
     match (wanted, state) {
         (Some(caster), Some((true, now))) => {
             if caster != now {
@@ -366,5 +379,110 @@ mod tests {
         steps(&mut run, 70);
         let heads: Vec<String> = rules_log::take(&mut run).into_iter().map(|r| r.head).collect();
         assert!(heads.iter().any(|h| h.contains("turns back")), "{heads:?}");
+    }
+
+    /// A necromancer with two raised minions, as indices (master, minions).
+    fn necro(run: &mut Run) -> (usize, Vec<usize>) {
+        let ni = spawn(run, EnemyType::Necromancer, 120.0);
+        let id = run.monsters[ni].id;
+        let at = run.monsters[ni].pos;
+        let minions = [EnemyType::RaisedSkeleton, EnemyType::RaisedArcher]
+            .into_iter()
+            .map(|t| {
+                let k = run.spawn_enemy(t, at, Some(id));
+                run.monster_idx(k).unwrap()
+            })
+            .collect();
+        (ni, minions)
+    }
+
+    #[test]
+    fn a_charmed_necromancer_takes_its_skeletons() {
+        let mut run = arena(&[ClassId::Wizard]);
+        let (ni, minions) = necro(&mut run);
+        let hero = run.players[0].id;
+        charm(&mut run, ni, 0, 1.0);
+        run.step();
+        for &k in &minions {
+            let m = &run.monsters[k];
+            assert_eq!(m.side, Side::Friendly);
+            assert_eq!(role(m), Role::Escort);
+            let c = m.companion.as_ref().expect("a companion");
+            assert_eq!((c.leader, c.recruiter), (hero, hero));
+            assert!(is_on(m));
+        }
+        steps(&mut run, 70);
+        for &k in std::iter::once(&ni).chain(&minions) {
+            let m = &run.monsters[k];
+            assert_eq!(m.side, Side::Hostile);
+            assert!(m.companion.is_none() && m.charm.is_none());
+        }
+    }
+
+    #[test]
+    fn minions_raised_while_charmed_are_friendly_at_once() {
+        use crate::defs::abilities::AbilityId;
+        let mut run = arena(&[ClassId::Wizard]);
+        let ni = spawn(&mut run, EnemyType::Necromancer, 120.0);
+        let id = run.monsters[ni].id;
+        charm(&mut run, ni, 0, 1.0);
+        run.step();
+        let ppos = run.players[0].pos();
+        assert!(crate::run::abilities::monster_use(&mut run, ni, AbilityId::RaiseDead, ppos));
+        let new: Vec<_> = run.monsters.iter().filter(|m| m.owner == Some(id)).collect();
+        assert_eq!(new.len(), 2);
+        assert!(new.iter().all(|m| m.side == Side::Friendly && is_on(m) && m.companion.is_some()));
+        steps(&mut run, 70);
+        assert!(run.monsters.iter().filter(|m| m.owner == Some(id) && m.alive).all(|m| m.side == Side::Hostile));
+    }
+
+    #[test]
+    fn anti_magic_on_the_master_turns_the_minions_back() {
+        let mut run = arena(&[ClassId::Wizard]);
+        let (ni, minions) = necro(&mut run);
+        charm(&mut run, ni, 0, 5.0);
+        run.step();
+        run.set_anti_magic(Creature::Monster(ni), true);
+        run.step();
+        for &k in std::iter::once(&ni).chain(&minions) {
+            assert_eq!(run.monsters[k].side, Side::Hostile);
+        }
+        run.set_anti_magic(Creature::Monster(ni), false);
+        run.step();
+        for &k in std::iter::once(&ni).chain(&minions) {
+            assert_eq!(run.monsters[k].side, Side::Friendly);
+        }
+    }
+
+    #[test]
+    fn a_minion_charmed_alone() {
+        // Imps (skeletons are undead and immune).
+        let mut run = arena(&[ClassId::Wizard]);
+        let si = spawn(&mut run, EnemyType::Summoner, 120.0);
+        let (id, at) = (run.monsters[si].id, run.monsters[si].pos);
+        let imps: Vec<usize> = (0..2)
+            .map(|_| {
+                let k = run.spawn_enemy(EnemyType::SummonedImp, at, Some(id));
+                run.monster_idx(k).unwrap()
+            })
+            .collect();
+        charm(&mut run, imps[0], 0, 5.0);
+        run.step();
+        assert_eq!(run.monsters[imps[0]].side, Side::Friendly);
+        assert_eq!(run.monsters[imps[1]].side, Side::Hostile);
+        assert_eq!(run.monsters[si].side, Side::Hostile);
+        run.kill_monster(si);
+        assert!(!run.monsters[imps[0]].alive, "it still dies with its master");
+    }
+
+    #[test]
+    fn room_is_unchanged() {
+        let mut run = arena(&[ClassId::Wizard]);
+        let (ni, _) = necro(&mut run);
+        let a = run.monsters[ni].kit.iter().find(|a| crate::defs::abilities::def(a.id).own.minions.is_some()).cloned().unwrap();
+        let before = crate::run::minions::room(&run, ni, &a);
+        charm(&mut run, ni, 0, 5.0);
+        run.step();
+        assert_eq!(crate::run::minions::room(&run, ni, &a), before);
     }
 }
