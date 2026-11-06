@@ -75,6 +75,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         side: Side::Friendly,
         grudge: Default::default(),
         wild: None,
+        charm: None,
         companion: Some(Companion {
             escort: &WOLF_ESCORT,
             leader: owner,

@@ -289,6 +289,15 @@ pub(super) fn ended_head(run: &Run, target: u32, kind: EffectKind, why: EndReaso
     format!("{} on {} ended{tail}", effect_name(kind), tag_of(run, target))
 }
 
+/// "Orc Warrior 1 is charmed and follows Ayla" / "Orc Warrior 1 turns back".
+pub(super) fn charm_head(run: &Run, monster: u32, caster: u32, charmed: bool) -> String {
+    if charmed {
+        format!("{} is charmed and follows {}", tag_of(run, monster), tag_of(run, caster))
+    } else {
+        format!("{} turns back", tag_of(run, monster))
+    }
+}
+
 /// "Orc Warrior 1: STR 14 → 13".
 pub(super) fn attr_head(run: &Run, target: u32, attr: Attr, old: i32, new: i32) -> String {
     format!("{}: {} {} → {}", tag_of(run, target), attr.short(), old, new)

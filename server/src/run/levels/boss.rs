@@ -98,6 +98,7 @@ pub fn spawn(run: &mut Run) {
         side: Side::Hostile,
         grudge: Default::default(),
         wild: None,
+        charm: None,
     });
     crate::run::rules_log::spawned(run, id, d.kind);
     enc_mut(run).boss_ent = id;

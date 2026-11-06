@@ -5,6 +5,7 @@ pub mod ai;
 pub mod ambush;
 pub mod behaviour;
 pub mod bosses;
+pub mod charm;
 pub mod companion;
 pub mod debug;
 pub mod effects;
@@ -350,6 +351,7 @@ impl Run {
             side: if d.wild.is_some() { Side::Neutral } else { Side::Hostile },
             grudge: Default::default(),
             wild: d.wild.map(targets::Wild::new),
+            charm: None,
         });
         rules_log::spawned(self, id, d.kind);
         id
@@ -457,6 +459,7 @@ impl Run {
         self.tick += 1;
         self.time += DT;
         self.tick_effects();
+        charm::sync(self);
 
         for pi in 0..self.players.len() {
             self.step_player(pi);

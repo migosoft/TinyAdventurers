@@ -298,6 +298,8 @@ pub struct Monster {
     pub grudge: Grudge,
     /// Set for a wild animal: Neutral, but anything may hit it.
     pub wild: Option<Wild>,
+    /// Set while a Charmed effect is on it, or paused on it (run/charm.rs).
+    pub charm: Option<super::charm::Charm>,
 }
 
 impl Monster {

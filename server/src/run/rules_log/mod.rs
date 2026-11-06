@@ -271,6 +271,19 @@ pub fn ended(run: &mut Run, c: Creature, kind: EffectKind, why: EndReason) {
     record::push(run, LogRec { t: run.time, kind: LineKind::Effect, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
 }
 
+/// A monster switched sides under a charm (`on`), or turned back. The caster is read from `charm`, so call it
+/// while the monster still holds it.
+pub fn charm(run: &mut Run, mi: usize, charmed: bool) {
+    if !on(run) {
+        return;
+    }
+    let Some(caster) = run.monsters[mi].charm.as_ref().map(|c| c.caster) else { return };
+    let head = text::charm_head(run, run.monsters[mi].id, caster, charmed);
+    let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
+    who.extend(run.player_idx(caster).map(|pi| record::seen_creature(run, Creature::Player(pi))));
+    record::push(run, LogRec { t: run.time, kind: LineKind::Note, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
+}
+
 /// A creature's Attributes changed through its effects: one line per changed Attribute, `(Attribute, before, after)`.
 pub fn attrs_changed(run: &mut Run, c: Creature, changes: &[(Attr, i32, i32)]) {
     if !on(run) {
