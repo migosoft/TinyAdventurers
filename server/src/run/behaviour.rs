@@ -6,7 +6,6 @@ use super::entities::{AiState, Monster};
 use super::perception;
 use super::targets::Side;
 use super::{ai, companion, modules, Run};
-use crate::defs::enemies::WILD_CALM_DIST;
 use crate::defs::kinds::Anim;
 
 /// What a creature does with no orders: derived from its fields, never stored.
@@ -76,23 +75,31 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, active: bool) {
     }
 }
 
-/// A `Flee` animal that has been hit runs from its attacker; true while it does. It calms down (no
-/// fright, Idle again) when the attacker is gone, beyond `WILD_CALM_DIST` or out of sight.
+/// A `Flee` animal that has been hit runs from its attacker; true while it does. It runs at least
+/// `WILD_MIN_FLEE`; after that it calms down (no fright, Idle again) when the attacker is gone, out of
+/// its sight or beyond `calm_dist`. While the attacker is out of sight it runs from where it was last seen.
 fn wildlife_flees(run: &mut Run, mi: usize, dt: f64) -> bool {
-    let Some(from_id) = run.monsters[mi].wild.and_then(|w| w.scare) else { return false };
+    let Some(w) = run.monsters[mi].wild.filter(|w| w.scare.is_some()) else { return false };
     let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
-    let attacker = ai::living_pos(run, from_id).filter(|&p| p.dist(pos) <= WILD_CALM_DIST && perception::sees(run, sight, pos, p));
-    let Some(from) = attacker else {
-        if let Some(w) = run.monsters[mi].wild.as_mut() {
+    let attacker = ai::living_pos(run, w.scare.expect("filtered")).filter(|&p| perception::sees(run, sight, pos, p));
+    let from = attacker.unwrap_or(w.scare_from);
+    let min_flee = w.min_flee - dt;
+    let calm = min_flee <= 0.0 && (attacker.is_none() || pos.dist(from) > w.calm_dist);
+    if let Some(w) = run.monsters[mi].wild.as_mut() {
+        w.min_flee = min_flee;
+        w.scare_from = from;
+        if calm {
             w.scare = None;
         }
+    }
+    if calm {
         let m = &mut run.monsters[mi];
         m.ai.state = AiState::Idle;
         m.ai.target = None;
         m.ai.path.clear();
         ai::set_anim(run, mi, Anim::Idle);
         return false;
-    };
+    }
     ai::flee_from(run, mi, from, dt);
     true
 }
@@ -190,7 +197,8 @@ mod tests {
         for _ in 0..300 {
             run.step();
             moved |= run.monsters[boar].pos.dist(home) > 1.0;
-            assert!(run.monsters[boar].pos.dist(home) <= 32.0, "stays near home");
+            // The wander picks home +- 24 px per axis: up to 33.9 px on the diagonal.
+            assert!(run.monsters[boar].pos.dist(home) <= 34.0, "stays near home");
         }
         assert!(moved, "it wanders");
         assert_eq!((run.players[0].hp, run.monsters[orc].hp), (hero_hp, orc_hp), "it attacks no one");
@@ -217,6 +225,38 @@ mod tests {
         assert_eq!(run.monsters[bunny].wild.unwrap().scare, None, "calm again");
         assert!(run.monsters[bunny].pos.dist(at) > 60.0, "far from the hero");
         assert!(matches!(run.monsters[bunny].ai.state, AiState::Idle));
+    }
+
+    #[test]
+    fn a_deer_hit_from_afar_still_runs_for_the_minimum_time() {
+        let (mut run, at) = arena();
+        // The hero stands 150 px away (the floor is 8 tiles = 128 px wide each way, so move the hero left).
+        run.players[0].mv.x = at.x - 100.0;
+        let hero = run.players[0].pos();
+        let deer = spawn(&mut run, EnemyType::Deer, hero + Vec2::new(110.0, 0.0));
+        run.monsters[deer].sight = crate::defs::races::Sight { vision: 20.0, darkvision: 1.0 };
+        hero_hit(&mut run, deer, 5.0);
+        let d0 = run.monsters[deer].pos.dist(hero);
+        assert!(d0 > crate::defs::enemies::WILD_CALM_DIST);
+        steps(&mut run, 20);
+        assert!(run.monsters[deer].wild.unwrap().scare.is_some(), "not calmed at once");
+        assert!(run.monsters[deer].pos.dist(hero) > d0, "it moves away from the hero");
+        steps(&mut run, 60);
+        assert!(run.monsters[deer].wild.unwrap().scare.is_some(), "still running at 1.33 s");
+        steps(&mut run, 20);
+        assert_eq!(run.monsters[deer].wild.unwrap().scare, None, "calm after the minimum, far away");
+    }
+
+    #[test]
+    fn a_deer_hit_in_melee_calms_down_once_far_enough_after_the_minimum() {
+        let (mut run, at) = arena();
+        let deer = spawn(&mut run, EnemyType::Deer, at + Vec2::new(10.0, 0.0));
+        hero_hit(&mut run, deer, 5.0);
+        steps(&mut run, 85);
+        assert!(run.monsters[deer].wild.unwrap().scare.is_some(), "the minimum has not passed");
+        steps(&mut run, 120);
+        assert_eq!(run.monsters[deer].wild.unwrap().scare, None);
+        assert!(run.monsters[deer].pos.dist(at) > 48.0, "it is far enough");
     }
 
     #[test]

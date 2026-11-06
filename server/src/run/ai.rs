@@ -1,7 +1,7 @@
 //! Enemy AI: perception (sight radius + line of sight), chase/attack,
 //! search last known position, return home, and A* pathfinding.
 
-use super::targets::{self, Side};
+use super::targets;
 use super::abilities::{monster_use, tick_monster_slam};
 use super::effects::Creature;
 use super::entities::{AiState, Target, Windup};
@@ -669,6 +669,7 @@ pub(crate) mod tests {
     use super::super::tests::{test_run, test_run_seed};
     use crate::defs::abilities::AbilityId;
     use super::*;
+    use super::targets::Side;
     use crate::defs::damage::Damage;
     use crate::defs::kinds::EntityKind;
     use crate::dungeon::Tile;

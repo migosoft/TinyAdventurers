@@ -62,11 +62,24 @@ pub enum Reaction {
 }
 
 /// A wild animal: Neutral, calm until hit, and anything may hit it (unlike the unrecruited knight).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Wild {
     pub reaction: Reaction,
     /// The id of the creature a `Flee` animal runs from: set when it is hit by one, cleared when it calms down.
     pub scare: Option<u32>,
+    /// Seconds left of the least a `Flee` animal runs after a hit (`WILD_MIN_FLEE`).
+    pub min_flee: f64,
+    /// Where the attacker was last seen, to run from while it is out of reach of the eye.
+    pub scare_from: Vec2,
+    /// It calms down once the attacker is farther than this (px).
+    pub calm_dist: f64,
+}
+
+impl Wild {
+    /// A calm animal.
+    pub fn new(reaction: Reaction) -> Wild {
+        Wild { reaction, scare: None, min_flee: 0.0, scare_from: Vec2::ZERO, calm_dist: 0.0 }
+    }
 }
 
 /// Whom a creature fights for and holds a grudge against; `me` is the creature itself (a user never hits
@@ -80,6 +93,7 @@ pub struct Stance {
 
 impl Stance {
     /// A shot or a hazard of `side`: no grudge, nobody's body.
+    #[cfg(test)]
     pub fn of_side(side: Side) -> Stance {
         Stance { side, grudge: Grudge::default(), me: None }
     }
@@ -391,7 +405,7 @@ mod tests {
     /// Makes monster `mi` a calm wild animal.
     fn make_wild(run: &mut Run, mi: usize) {
         run.monsters[mi].side = Side::Neutral;
-        run.monsters[mi].wild = Some(Wild { reaction: Reaction::FightBack, scare: None });
+        run.monsters[mi].wild = Some(Wild::new(Reaction::FightBack));
     }
 
     /// The fixture with the Neutral orc beside the hero made wild.

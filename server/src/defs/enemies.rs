@@ -449,8 +449,11 @@ pub fn is_demon(t: EnemyType) -> bool {
     matches!(t, EnemyType::Imp | EnemyType::Chort | EnemyType::Summoner | EnemyType::SummonedImp)
 }
 
-/// A fleeing wild animal calms down once the one it runs from is this far away (px, centre distance), or out of sight (#227).
+/// A fleeing wild animal calms down, after `WILD_MIN_FLEE`, once the one it runs from is this far away (px, centre distance) or 48 px farther than at the hit, whichever is more; or out of sight (#227).
 pub const WILD_CALM_DIST: f64 = 96.0;
+
+/// A fleeing wild animal runs at least this long (s) after every hit, whoever hit it from wherever (#227, first guess).
+pub const WILD_MIN_FLEE: f64 = 1.5;
 
 /// A second (alt) ranged attack is only used from at least this far away
 /// (center distance, px): chorts throw fire bolts at heroes out of reach.

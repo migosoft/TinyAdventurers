@@ -349,7 +349,7 @@ impl Run {
             // A wild animal is Neutral, calm until hit (#227).
             side: if d.wild.is_some() { Side::Neutral } else { Side::Hostile },
             grudge: Default::default(),
-            wild: d.wild.map(|reaction| targets::Wild { reaction, scare: None }),
+            wild: d.wild.map(targets::Wild::new),
         });
         rules_log::spawned(self, id, d.kind);
         id
@@ -1104,8 +1104,13 @@ impl Run {
         // A fleeing animal runs from whoever hit it (a hit with no attacker, like lava, scares nothing).
         if wild.reaction == targets::Reaction::Flee {
             let attacker = src_player.map(|pi| self.players[pi].id).or(by);
-            if let (Some(id), Some(w)) = (attacker, self.monsters[mi].wild.as_mut()) {
-                w.scare = Some(id);
+            let from = attacker.and_then(|id| ai::living_pos(self, id));
+            if let (Some(id), Some(from)) = (attacker, from) {
+                let dist = from.dist(self.monsters[mi].pos);
+                if let Some(w) = self.monsters[mi].wild.as_mut() {
+                    // It runs at least `WILD_MIN_FLEE`, then until the attacker is 48 px farther than it was at the hit.
+                    *w = targets::Wild { scare: Some(id), min_flee: enemies::WILD_MIN_FLEE, scare_from: from, calm_dist: enemies::WILD_CALM_DIST.max(dist + 48.0), ..*w };
+                }
             }
             return;
         }
