@@ -3,11 +3,11 @@ use crate::defs::abilities::AbilityId;
 use crate::defs::damage::{Damage, Resistances};
 use crate::defs::effects::OnHit;
 use crate::defs::attributes::Attributes;
-use crate::defs::enemies::EnemyType;
+use crate::defs::enemies::{BaseAi, EnemyType};
 use crate::defs::races::{Race, Sight, Traits};
 use crate::defs::kinds::{Anim, EntityKind};
 use crate::dungeon::Mover;
-use super::targets::Side;
+use super::targets::{Grudge, Side, Wild};
 use crate::vispoly::View;
 use crate::math::Vec2;
 use crate::protocol::{ClassId, InputMsg};
@@ -127,6 +127,8 @@ pub struct Windup {
     pub alt: bool,
     /// What the attack aims at when that is not the seen hero.
     pub at: Option<Target>,
+    /// The ability whose module winds up (`modules::on_windup_end`); None for the base AI's own attacks.
+    pub id: Option<AbilityId>,
 }
 
 /// What a monster is after: a hero, an object (a barrel to shoot; later a
@@ -198,6 +200,8 @@ pub struct MonsterDash {
 /// What makes a monster a companion of the heroes (run/companion.rs): it follows a hero and fights for the party.
 #[derive(Debug, Clone)]
 pub struct Companion {
+    /// Its escort script's distances: the wolf's or the knight's.
+    pub escort: &'static crate::defs::companions::Escort,
     /// The player id of the hero it follows now (`companion::update_leaders` keeps it current).
     pub leader: u32,
     /// The player id of the hero that summoned or recruited it. For the wolf, the ranger.
@@ -207,16 +211,6 @@ pub struct Companion {
     pub prey: Option<u32>,
     pub following: bool,
     pub reach_t: f64,
-    /// Centre of the last safe tile it stood on (a dash back from a chasm goes there).
-    pub last_safe: Vec2,
-}
-
-/// What only the Ranger's wolf has (the wolf script in run/wolf.rs).
-#[derive(Debug, Clone)]
-pub struct WolfState {
-    /// Seconds before it may bite again after a pounce that hurt its prey (the script's own wait; the
-    /// kit's cooldowns are `cds`, started only by using the ability).
-    pub bite_hold: f64,
 }
 
 pub struct Monster {
@@ -260,6 +254,10 @@ pub struct Monster {
     /// Seconds left of the wolf-bite mark (Pack Hunter).
     pub wolf_bit: f64,
     pub ai: Ai,
+    /// How it moves and when it uses its main attack (run/behaviour.rs).
+    pub base_ai: BaseAi,
+    /// Whether it wanders around its home when it has nothing to do (no, for the Disciple and the awake Mimic).
+    pub wanders: bool,
     /// Necromancer / lich that raised or binds this monster.
     pub owner: Option<u32>,
     pub history: VecDeque<Vec2>,
@@ -281,6 +279,8 @@ pub struct Monster {
     pub sinking: Option<(f64, Sink)>,
     /// Time since the last lava burn.
     pub burn_t: f64,
+    /// Centre of the last safe tile it stood on (a creature with a Leap leaps back there from danger).
+    pub last_safe: Vec2,
     /// Last hero who hurt it: credited for a death by terrain.
     pub last_hit_by: Option<usize>,
     /// Status effects (run/effects.rs).
@@ -292,10 +292,12 @@ pub struct Monster {
     pub weight: f64,
     /// Set for a companion of the heroes (run/companion.rs).
     pub companion: Option<Companion>,
-    /// Set for the Ranger's wolf: it runs the wolf script.
-    pub wolf: Option<WolfState>,
     /// Whom it fights for (`targets::foes`); every friend-or-foe question reads it.
     pub side: Side,
+    /// The sides it holds a grudge against, set by hits (only a wild animal gets one).
+    pub grudge: Grudge,
+    /// Set for a wild animal: Neutral, but anything may hit it.
+    pub wild: Option<Wild>,
 }
 
 impl Monster {

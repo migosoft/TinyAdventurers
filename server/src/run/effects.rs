@@ -380,8 +380,8 @@ impl Run {
     ///    (a refused Frozen leaves an existing Chilled alone).
     /// True when the effect is on afterwards.
     pub fn apply(&mut self, c: Creature, a: Apply) -> bool {
-        // A Neutral monster takes no effect.
-        if matches!(c, Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.side == super::targets::Side::Neutral)) {
+        // A Neutral monster takes no effect, unless it is a wild animal.
+        if matches!(c, Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.side == super::targets::Side::Neutral && m.wild.is_none())) {
             return false;
         }
         let (outcome, duration, replaced) = self.apply_traced(c, a);
@@ -963,7 +963,7 @@ mod tests {
         let id = run.spawn_enemy(EnemyType::SkeletonArcher, at, None);
         let mi = run.monster_idx(id).unwrap();
         run.monsters[mi].effects.add(EffectKind::Invisible, 30.0);
-        run.start_windup(mi, crate::run::entities::Windup { t: 0.5, aim: 0.0, alt: false, at: None });
+        run.start_windup(mi, crate::run::entities::Windup { t: 0.5, aim: 0.0, alt: false, at: None, id: None });
         assert!(!run.has_effect(Creature::Monster(mi), EffectKind::Invisible));
         assert!(run.monsters[mi].ai.windup.is_some());
         // A hero who fires an ability.
@@ -1155,7 +1155,7 @@ mod tests {
         run.remove_effect(Creature::Monster(mi), EffectKind::Blind);
         crate::run::ai::tick_monster(&mut run, mi, DT);
         assert_eq!(run.monsters[mi].ai.state, AiState::Chase);
-        run.monsters[mi].ai.windup = Some(crate::run::entities::Windup { t: 0.2, aim: 0.0, alt: false, at: None });
+        run.monsters[mi].ai.windup = Some(crate::run::entities::Windup { t: 0.2, aim: 0.0, alt: false, at: None, id: None });
         run.apply_effect(Creature::Monster(mi), EffectKind::Sleep, Some(5.0));
         let pos = run.monsters[mi].pos;
         for _ in 0..30 {

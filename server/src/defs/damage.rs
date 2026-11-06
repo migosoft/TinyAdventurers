@@ -150,7 +150,7 @@ pub struct Damage {
     /// the power of the damage-type effects the hit applies, at least `TYPE_EFFECT_POWER`.
     /// 0 for sources without one (terrain, barrels, effect ticks).
     pub power: i32,
-    /// Where the hit came from, for the rules log. No rule reads it.
+    /// Where the hit came from, for the rules log. Only one rule reads it: a hit on a wild animal gives it a grudge against the side of `by` (`Run::hit_gives_grudge`).
     pub why: Why,
 }
 

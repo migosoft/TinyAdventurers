@@ -51,6 +51,15 @@ impl LevelRules for DungeonLevel {
             let mi = run.monster_idx(id).expect("the knight just spawned");
             run.monsters[mi].side = Side::Neutral;
         }
+        // The cove's animals after the knight, so every earlier id stays: the boar, the stag, three deer, ten
+        // bunnies. Their spots come from the cove's seed, not the run's rng.
+        if let Some(cove) = run.layout.cove {
+            use crate::defs::enemies::EnemyType as E;
+            let kinds = [E::Boar, E::Stag, E::Deer, E::Deer, E::Deer].into_iter().chain([E::Bunny; 10]);
+            for (t, pos) in kinds.zip(crate::dungeon::cove::animal_spots(&run.layout, &cove)) {
+                run.spawn_enemy(t, pos, None);
+            }
+        }
     }
     fn tick(run: &mut Run, dt: f64) {
         boss::tick(run, dt);

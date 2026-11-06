@@ -122,6 +122,10 @@ export const FIGURES: Record<number, FigureDef> = {
   [KIND.ElvenRanger]: { ...hero('elf_m'), weapon: 'weapon_bow', mount: 'bow', meleeWeapon: 'weapon_duel_sword', weaponScale: 0.8, meleeWeaponScale: 0.6, handY: 10, attack: 'ranged', base: 0x3aa060, baseR: 6, label: 'Elven Ranger' },
   [KIND.Knight]: { ...mob('npc_knight'), swing: MOB_SWING, handY: 6, attack: 'melee', base: 0x4a4a5a, baseR: 5, label: 'Knight' },
   [KIND.DireWolf]: { ...mob('dire_wolf'), swing: { reach: 18, arc: 1.4, color: 0xf0f0f0 }, lunge: 4, handY: 6, attack: 'melee', base: 0x6a6a7a, baseR: 6, label: 'Dire Wolf' },
+  [KIND.Bunny]: { ...mob('bunny'), handY: 4, attack: 'melee', base: 0x8a7a6a, baseR: 4, label: 'Bunny' },
+  [KIND.Deer]: { ...mob('deer'), handY: 8, attack: 'melee', base: 0x8a6a3a, baseR: 6, label: 'Deer' },
+  [KIND.Stag]: { ...mob('stag'), handY: 10, attack: 'melee', base: 0x6a4a2a, baseR: 7, label: 'Stag' },
+  [KIND.Boar]: { ...mob('boar'), swing: { reach: 16, arc: 1.2, color: 0xf0e8d0 }, lunge: 4, handY: 6, attack: 'melee', base: 0x5a3a2a, baseR: 6, label: 'Boar' },
   [KIND.GoblinArcher]: { ...mob('goblin'), weapon: 'weapon_bow', mount: 'bow', weaponScale: 0.6, handY: 6, attack: 'ranged', base: 0x4a3a2a, baseR: 5 },
   [KIND.SkeletonWarrior]: { ...mob('skelet'), swing: MOB_SWING, weapon: 'weapon_rusty_sword', mount: 'blade', weaponScale: 0.8, handY: 6, attack: 'melee', base: 0x4a3a2a, baseR: 5 },
   [KIND.SkeletonArcher]: { ...mob('skelet'), weapon: 'weapon_bow_2', mount: 'bow', weaponScale: 0.6, handY: 6, attack: 'ranged', base: 0x4a3a2a, baseR: 5 },
@@ -192,6 +196,10 @@ export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?:
   [KIND.ThrownAxe]: { frame: 'weapon_throwing_axe', scale: 0.8, spin: true },
 };
 
+/** The wildlife of the cove. A boar with a grudge is sent Hostile without the WILD flag, so the look rules key on the kind. */
+export function isAnimalKind(k: number): boolean {
+  return k === KIND.Bunny || k === KIND.Deer || k === KIND.Stag || k === KIND.Boar;
+}
 export function isPlayerKind(k: number): boolean {
   return k <= KIND.ElvenRanger;
 }

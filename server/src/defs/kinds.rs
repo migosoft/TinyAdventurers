@@ -30,10 +30,17 @@ pub enum EntityKind {
     Shade = 25,
     /// A soldier who can join the party (#149).
     Knight = 26,
+    /// Wildlife (#227): calm animals that run from a hit or fight back.
+    Bunny = 27,
+    Deer = 28,
+    /// The deer's twin with antlers: its own type, the deer's numbers.
+    Stag = 29,
     // Bosses
     Demon = 30,
     Lich = 31,
     Dragon = 32,
+    /// Wildlife (#227): fights back when hit (the next free monster id after the bosses).
+    Boar = 33,
     // Projectiles
     Missile = 50,
     Fireball = 51,
@@ -78,7 +85,7 @@ impl serde::Serialize for EntityKind {
 
 impl EntityKind {
     #[cfg(test)]
-    pub const ALL: [EntityKind; 46] = [
+    pub const ALL: [EntityKind; 50] = [
         EntityKind::Wizard,
         EntityKind::Paladin,
         EntityKind::Barbarian,
@@ -100,9 +107,13 @@ impl EntityKind {
         EntityKind::Ghost,
         EntityKind::Shade,
         EntityKind::Knight,
+        EntityKind::Bunny,
+        EntityKind::Deer,
+        EntityKind::Stag,
         EntityKind::Demon,
         EntityKind::Lich,
         EntityKind::Dragon,
+        EntityKind::Boar,
         EntityKind::Missile,
         EntityKind::Fireball,
         EntityKind::Bolt,
@@ -140,6 +151,10 @@ impl EntityKind {
             Chort => 18.0,
             Ogre => 26.0,
             DireWolf | Knight => 12.0,
+            // From the 32x32 frames of the forest animals (#227); a first guess until the art is drawn.
+            Bunny => 8.0,
+            Deer | Stag => 16.0,
+            Boar => 12.0,
             Lich => 28.0,
             // 43 px frames drawn at 1.2x.
             Dragon => 51.0,
@@ -211,8 +226,10 @@ pub mod flags {
     pub const DEAD: u8 = 32;
     /// Flying (the dragon): melee cannot reach it.
     pub const AIRBORNE: u8 = 64;
-    /// Incorporeal (a phasing monster): always drawn semi-transparent. The last free bit.
+    /// Incorporeal (a phasing monster): always drawn semi-transparent.
     pub const INCORPOREAL: u8 = 128;
+    /// A calm wild animal (#227). The last free bit.
+    pub const WILD: u8 = 4;
 }
 
 #[cfg(test)]

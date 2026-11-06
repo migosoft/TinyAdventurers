@@ -16,7 +16,7 @@ import { buildLich } from './lich-frames';
 import { buildDemon } from './demon-frames';
 import { buildBarrels } from './barrel-frames';
 import { buildTorches } from './torch-frames';
-import { buildFigure } from './figure-frames';
+import { buildFigure, buildSheetFigure } from './figure-frames';
 import { buildSpectres } from './spectre-frames';
 import { buildExplosions } from './explosion-frames';
 import { buildCove } from './cove-frames';
@@ -86,7 +86,13 @@ const coveY = explosionY + explosions.img.h;
 // The knight sits last, so nothing above it moves.
 const knight = buildFigure(path.join(root, 'assets-src', 'fantasy-npcs', 'frames', 'Knight - Standard'), 'Knight', 'npc_knight', src.w);
 const knightY = coveY + cove.img.h;
-const outH = knightY + knight.img.h;
+// The cove's animals (lyaseek, Outline variant) sit after the knight, one strip each.
+const animalDir = path.join(root, 'assets-src', 'forest-animals', 'Outline');
+const animals = [['MiniBunny', 'bunny'], ['MiniDeer1', 'deer'], ['MiniDeer2', 'stag'], ['MiniBoar', 'boar']].map(([sheet, name]) => buildSheetFigure(path.join(animalDir, `${sheet}.png`), name, src.w));
+const animalYs: number[] = [];
+let animalsEnd = knightY + knight.img.h;
+for (const a of animals) (animalYs.push(animalsEnd), (animalsEnd += a.img.h));
+const outH = animalsEnd;
 const out: Image = { w: src.w, h: outH, data: new Uint8Array(src.w * outH * 4) };
 out.data.set(src.data);
 RECOLORS.forEach((r, row) => {
@@ -173,7 +179,14 @@ for (let y = 0; y < knight.img.h; y++)
 for (const [name, f] of Object.entries(knight.frames))
   frames[name] = { frame: { x: f.x, y: knightY + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
 
+// Animal frames below the knight.
+animals.forEach((a, n) => {
+  for (let y = 0; y < a.img.h; y++) out.data.set(a.img.data.subarray(y * a.img.w * 4, (y + 1) * a.img.w * 4), ((animalYs[n] + y) * out.w) * 4);
+  for (const [name, f] of Object.entries(a.frames))
+    frames[name] = { frame: { x: f.x, y: animalYs[n] + f.y, w: f.w, h: f.h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w: f.w, h: f.h }, sourceSize: { w: f.w, h: f.h } };
+});
+
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, 'atlas.png'), encodePng(out));
 fs.writeFileSync(path.join(outDir, 'atlas.json'), JSON.stringify({ frames, meta: { image: 'atlas.png', scale: 1 } }));
-console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon, ${Object.keys(lich.frames).length} lich, ${Object.keys(demon.frames).length} demon, ${Object.keys(barrels.frames).length} barrel, ${Object.keys(torches.frames).length} torch, ${Object.keys(wolf.frames).length} wolf, ${Object.keys(spectres.frames).length} ghost and shade, ${Object.keys(cove.frames).length} cove, ${Object.keys(knight.frames).length} knight) -> public/assets/atlas.{png,json}`);
+console.log(`atlas: ${Object.keys(frames).length} frames from the 0x72 pack (${RECOLORS.length} recolored, ${Object.keys(terrain.frames).length} terrain, ${Object.keys(dragon.frames).length} dragon, ${Object.keys(lich.frames).length} lich, ${Object.keys(demon.frames).length} demon, ${Object.keys(barrels.frames).length} barrel, ${Object.keys(torches.frames).length} torch, ${Object.keys(wolf.frames).length} wolf, ${Object.keys(spectres.frames).length} ghost and shade, ${Object.keys(cove.frames).length} cove, ${Object.keys(knight.frames).length} knight, ${animals.reduce((n, a) => n + Object.keys(a.frames).length, 0)} animal) -> public/assets/atlas.{png,json}`);

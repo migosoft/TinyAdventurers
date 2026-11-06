@@ -62,6 +62,10 @@ pub fn tag_name(kind: EntityKind) -> Option<&'static str> {
         Ghost => Some("Ghost"),
         Shade => Some("Shade"),
         Knight => Some("Knight"),
+        Bunny => Some("Bunny"),
+        Deer => Some("Deer"),
+        Stag => Some("Stag"),
+        Boar => Some("Boar"),
         Demon => Some("Demon"),
         Lich => Some("Lich"),
         Dragon => Some("Dragon"),
@@ -77,7 +81,7 @@ pub(crate) fn tag_of(run: &Run, id: u32) -> String {
     if let Some(p) = run.players.iter().find(|p| p.id == id) {
         return p.name.clone();
     }
-    if let Some(a) = run.monsters.iter().find(|m| m.id == id && m.wolf.is_some()).and_then(|m| m.companion.as_ref()) {
+    if let Some(a) = run.monsters.iter().find(|m| m.id == id && m.companion.as_ref().is_some_and(|c| c.summoned)).and_then(|m| m.companion.as_ref()) {
         if let Some(owner) = run.players.iter().find(|p| p.id == a.leader) {
             return format!("{}'s wolf", owner.name);
         }

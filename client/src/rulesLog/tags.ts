@@ -1,5 +1,6 @@
-import { KIND, SIDE, TAG_NAME } from '../generated/defs';
-import { FIGURES, isPlayerKind } from '../game/anim/defs';
+import { SIDE, TAG_NAME } from '../generated/defs';
+import { isPlayerKind } from '../game/anim/defs';
+import { companionNoun } from '../game/barName';
 
 /**
  * The tag text over a figure while the log is on. A tagged entity reads "{kind} {n}" (the kind the
@@ -17,7 +18,7 @@ export function tagText(
   if (isPlayerKind(e.kind)) return e.id === you ? (names.get(e.id) ?? null) : null;
   if (e.side === SIDE.Friendly) {
     const owner = names.get(e.extra);
-    return owner ? `${owner}'s ${e.kind === KIND.DireWolf ? 'wolf' : (FIGURES[e.kind]?.label ?? 'companion').toLowerCase()}` : null;
+    return owner ? `${owner}'s ${companionNoun(e.kind)}` : null;
   }
   return null;
 }

@@ -77,10 +77,10 @@ The fastest hero, and the only one who fights with a companion. An elf: she sees
 **Your wolf**
 - It has 80 HP, runs a little faster than you and uses **Bite** for 10 about once a second, with a small push.
 - **It guards you.** It stays close, bites any enemy that comes within about three tiles of you, and fights back when something attacks it. It does not run off after what you shoot at, and it turns back when it has strayed about six tiles from you.
-- **It opens a fight with a leap:** from up to four tiles away it dashes at its prey for 20 damage (about every 3.3 seconds), and this is its **Pounce**, and it crosses chasms. A push into a chasm is escaped the same way, with the dash. With the dash resting it falls and dies, like any monster. It drowns in deep water and burns in lava.
+- **It opens a fight with a leap:** from up to four tiles away it dashes at its prey for 20 damage (about every 3.3 seconds), and this is its **Pounce**, and it crosses chasms. A push into a chasm, deep water or lava is escaped the same way, with the dash, if the dash is ready and the wolf can act. With the dash resting, or while the wolf is asleep, petrified or frightened, it falls, drowns or burns like any monster. After a leap that bites, it waits a moment before the next bite.
 - **Nobody gets locked out.** If it falls far behind, or you are in the sealed boss hall without it, it appears next to you again in green sparkles.
 - **Enemies fight it.** They attack it and their area attacks hit it. Your own arrows, fireballs and swords, and those of your friends, **never** hurt it. The Paladin's Holy Light heals it.
-- **Its figure shows only where there is light**, but its small health bar, like a hero's, shows even in the dark. Its kills count as yours; its death gives no XP or coins, shows a message and starts the 60 seconds.
+- **Its figure shows only where there is light**, but its small green health bar, like a hero's, shows even in the dark, with the name "<your name>'s wolf" above it. Its kills count as yours; its death gives no XP or coins, shows a message and starts the 60 seconds.
 - **If you fall, the wolf vanishes**, also when you leave the dungeon. Debug mode does not make it immortal.
 
 The two boxes at the bottom of the screen show your abilities. While an ability recharges, the gold rim around its box fills up clockwise and the seconds left show inside; the box flashes once when the ability is ready again.
@@ -108,12 +108,23 @@ The Elven Ranger's wolf is a companion of its own kind, summoned with the right 
 - **Explosions light up** their surroundings for a moment: a fireball, a dragon's fireball or an exploding barrel shows what stands around it. The paladin's healing wave lights up its surroundings in pale gold, too.
 - **The air is not clean.** Torches smoke, dust drifts in the light, lava smokes and throws sparks, and water pools drip. It is only for looks and changes nothing in play. Dust and smoke swirl around anything moving through them: a running hero, a monster, an arrow or a fireball stirs the air, and dust clouds a passer-by disturbs fade away, and new dust gathers at once somewhere else in the light. Torchlight is warm, and colours stay true near the flames.
 - **Some rooms are lit by sunlight** falling through cracks in the ceiling, with a pale beam and a bright patch on the floor. A level has at most two such rooms (never the boss hall), and their torches start out, but you can still light them with **E** or fire.
-- **Every dungeon has one nymph's cove:** a large, sunlit room (as big as the boss hall) with a **big tree** in the middle, a grass carpet with flowers and bushes, and pixies fluttering around the leaves. It is **quiet**: no monsters, no chests, no barrels, no pools or chasms. The torches there start out, since five sunbeams light it. The **trunk blocks the way** for you and your dash, but ghosts and shades slip through it, and **arrows and spells fly past it**, and you can see past it. When you walk behind the tree, a pale outline of your hero shows through the leaves. A calm place to catch your breath, but there is nothing to find.
+- **Every dungeon has one nymph's cove:** a large, sunlit room (as big as the boss hall) with a **big tree** in the middle, a grass carpet with flowers and bushes, and pixies fluttering around the leaves. It is **quiet**: no enemies, no chests, no barrels, no pools or chasms, but it is home to **wild animals** (see "Animals in the cove"). The torches there start out, since five sunbeams light it. The **trunk blocks the way** for you and your dash, but ghosts and shades slip through it, and **arrows and spells fly past it**, and you can see past it. When you walk behind the tree, a pale outline of your hero shows through the leaves. A calm place to catch your breath, but there is no treasure to find.
 - **Lava glows red** and lights the floor around it. Light of different colours mixes: a torch next to lava gives a deeper orange.
 - **Sounds show in the dark.** The wolf's "grrrr", spoken words and the sleeping "Z" are drawn above the darkness, in dark letters with a light outline, so you notice them even where you can see nothing else.
 - Numbers and health bars on heroes and the wolf show even in the dark; numbers and health bars on enemies show only where you can see the enemy.
 - **Enemies see in the dark only if they are built for it.** An enemy notices you when you are in its line of sight and either lit or very close. **Humans** (the necromancer, the summoner, the lich's disciples) do not see you in the dark at all, however close. **Monsters** (goblin and orc archers, orc warriors, mimics, the ogre) see you in the dark only from about three tiles away. **Undead** (skeletons, the lich), **demons** (imps, chorts, the Red Demon) and the **Red Dragon** see you in the dark as well as in the light.
 - **Slip past in the dark.** Put out a torch, or stay out of the light, to slip past humans and monsters. Anything you light up (a fireball, a torch you relight, an exploding barrel) can be seen too, so fire is loud. Skeletons and demons are not fooled by darkness.
+
+## Animals in the cove
+
+Every nymph's cove is home to 15 wild animals: a boar, a stag, three deer and ten bunnies. They wander near where they live and take no side: enemies ignore them and they ignore you. Killing a calm animal pays nothing, and you cannot recruit them.
+
+- **Bunnies, deer and the stag run.** Hit one and it runs from whoever hit it, for at least a second and a half after every hit. It calms down again once you are out of its sight or far enough away. A bunny usually dies at once. They give no XP, coins or kills.
+- **The boar fights back.** Leave it alone and it wanders. Hit it, and it holds a grudge against your side: it charges and strikes, and it does not forget. If you lose it, it searches, goes home and wanders again. Killing a boar that holds a grudge against you gives its XP, but no coins.
+- **Enemies can anger it too.** An enemy that hits the boar makes it an enemy of the enemies, so a goblin lured into the cove ends up fighting the boar it hit.
+- **Only a hit counts.** Fear, roots and the like do not anger a boar: a War Cry frightens it without starting a fight. Lava does not anger it either.
+- **Chains and jumps** (Chain Spark and similar) skip calm animals, and arrows and spells can hit them like enemies. Area attacks and swings hit any animal in reach.
+- **They show no health bar until hurt.**
 
 ## Enemies
 

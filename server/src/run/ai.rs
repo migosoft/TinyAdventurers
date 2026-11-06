@@ -1,15 +1,15 @@
 //! Enemy AI: perception (sight radius + line of sight), chase/attack,
 //! search last known position, return home, and A* pathfinding.
 
-use super::targets::Side;
+use super::targets;
 use super::abilities::{monster_use, tick_monster_slam};
 use super::effects::Creature;
 use super::entities::{AiState, Target, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
 use crate::defs::classes::PLAYER_RADIUS;
-use crate::defs::abilities::{self as ab, AbilityId, Shape};
-use crate::defs::enemies::{self, EnemyType};
+use crate::defs::abilities::{self as ab, Shape};
+use crate::defs::enemies::{self, BaseAi, EnemyType};
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
@@ -33,12 +33,16 @@ pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
         .map(|(i, _)| i)
 }
 
-/// Nearest living hero or ally (not sinking) the monster can see right now; a hero wins a tie.
-pub fn find_visible_foe(run: &Run, from: Vec2, sight: Sight) -> Option<Creature> {
-    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive && !run.players[i].effects.has(EffectKind::Invisible)).map(Creature::Player);
-    let allies = (0..run.monsters.len()).filter(|&i| run.monsters[i].side == Side::Friendly && run.monsters[i].alive && run.monsters[i].sinking.is_none() && !run.monsters[i].effects.has(EffectKind::Invisible)).map(Creature::Monster);
+/// Nearest living creature that monster `mi` fights (`targets::fights`: the heroes and their allies for an
+/// enemy, plus its grudges) and can see right now; a hero wins a tie.
+pub fn find_visible_foe(run: &Run, mi: usize) -> Option<Creature> {
+    let (from, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
+    let me = targets::stance(run, Creature::Monster(mi));
+    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive).map(Creature::Player);
+    let others = (0..run.monsters.len()).filter(|&i| run.monsters[i].alive && run.monsters[i].sinking.is_none()).map(Creature::Monster);
     heroes
-        .chain(allies)
+        .chain(others)
+        .filter(|&c| targets::fights(&me, &targets::stance(run, c)) && !run.has_effect(c, EffectKind::Invisible))
         .map(|c| (c, run.creature_pos(c)))
         .filter(|&(_, p)| super::perception::sees(run, sight, from, p))
         .map(|(c, p)| (c, p.dist(from)))
@@ -82,6 +86,11 @@ pub fn escape_terrain(run: &mut Run, mi: usize, dt: f64) {
     }
 }
 
+/// Where the living hero or monster `id` stands, if there is one.
+pub fn living_pos(run: &Run, id: u32) -> Option<Vec2> {
+    run.players.iter().find(|p| p.alive && p.id == id).map(|p| p.pos()).or_else(|| run.monsters.iter().find(|o| o.alive && o.id == id).map(|o| o.pos))
+}
+
 /// A frightened monster: no attacks, no wind-up; it walks straight away from the one who
 /// frightened it (the source's position is read each tick; once the source is gone, from
 /// where it was last seen). Its normal movement, so walls slide it and chasms stop it.
@@ -89,26 +98,31 @@ pub fn flee(run: &mut Run, mi: usize, dt: f64) {
     run.monsters[mi].ai.windup = None;
     run.monsters[mi].ai.cast = None;
     let Some((source, last)) = run.monsters[mi].effects.fear_from() else { return };
-    let now = source.and_then(|id| {
-        let alive = |p: &crate::run::entities::Player| p.alive && p.id == id;
-        run.players.iter().find(|p| alive(p)).map(|p| p.pos()).or_else(|| run.monsters.iter().find(|o| o.alive && o.id == id).map(|o| o.pos))
-    });
+    let now = source.and_then(|id| living_pos(run, id));
     // A source standing on the creature gives no direction: keep the remembered spot.
     let mut from = last;
     if let Some(p) = now.filter(|p| p.dist(run.monsters[mi].pos) >= 1.0) {
         from = p;
         run.monsters[mi].effects.set_fear_from(p);
     }
+    if let Some(behind) = flee_from(run, mi, from, dt) {
+        run.monsters[mi].effects.set_fear_from(behind);
+    }
+}
+
+/// One step of running away from the spot `from`: no attacks, no wind-up, the creature's normal movement
+/// (walls slide it, chasms stop it). Fear and the wild animals' fright both use it. When the creature
+/// stands on `from` it turns around once and returns a spot behind it, to flee from on the next tick.
+pub fn flee_from(run: &mut Run, mi: usize, from: Vec2, dt: f64) -> Option<Vec2> {
+    run.monsters[mi].ai.windup = None;
+    run.monsters[mi].ai.cast = None;
     let m = &run.monsters[mi];
     let away = m.pos - from;
-    let dir = if away.len() < 1.0 {
-        // On the spot: turn around once and remember a spot behind, so the next tick keeps going.
+    let (dir, behind) = if away.len() < 1.0 {
         let dir = Vec2::new(-m.aim.cos(), -m.aim.sin());
-        let behind = m.pos - dir * 2.0;
-        run.monsters[mi].effects.set_fear_from(behind);
-        dir
+        (dir, Some(m.pos - dir * 2.0))
     } else {
-        away.norm()
+        (away.norm(), None)
     };
     let m = &run.monsters[mi];
     let pos = m.pos;
@@ -117,6 +131,7 @@ pub fn flee(run: &mut Run, mi: usize, dt: f64) {
     let moved = run.monsters[mi].pos.dist(pos) > 1e-9;
     run.monsters[mi].aim = dir.angle();
     set_anim(run, mi, if moved { Anim::Move } else { Anim::Idle });
+    behind
 }
 
 /// Move a monster toward `to` with wall sliding. Returns true when arrived.
@@ -139,6 +154,35 @@ pub fn move_toward(run: &mut Run, mi: usize, to: Vec2, speed: f64, dt: f64) -> b
     let m = &mut run.monsters[mi];
     m.pos = Vec2::new(x, y);
     false
+}
+
+/// How a creature walks to its foe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Chase {
+    /// A straight walk that slides along walls.
+    Straight,
+    /// A* around walls, chasms, water, lava and barrels.
+    Pathfind,
+}
+
+/// How this creature chases. The escorts (the wolf, a recruited knight) and the figures wider than a
+/// tile (the ogre) find their way; the rest walk straight. Giving another creature the smart chase is a
+/// change here.
+pub(crate) fn chase_of(run: &Run, mi: usize) -> Chase {
+    let m = &run.monsters[mi];
+    if super::behaviour::role(m) == super::behaviour::Role::Escort || m.radius > TILE / 2.0 {
+        Chase::Pathfind
+    } else {
+        Chase::Straight
+    }
+}
+
+/// One step of a chase toward `goal`, the way `chase_of` says. True when arrived.
+pub(crate) fn chase_step(run: &mut Run, mi: usize, goal: Vec2, speed: f64, dt: f64) -> bool {
+    match chase_of(run, mi) {
+        Chase::Straight => move_toward(run, mi, goal, speed, dt),
+        Chase::Pathfind => path_toward(run, mi, goal, speed, dt),
+    }
 }
 
 /// Follow an A* path to `goal`, recomputing it periodically. Figures wider
@@ -234,7 +278,6 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
 }
 
 fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
-    let Some(etype) = run.monsters[mi].etype else { return };
     if run.monsters[mi].dormant || run.monsters[mi].hiding {
         return;
     }
@@ -242,7 +285,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         run.monsters[mi].ai.hold -= dt;
         return;
     }
-    let def = enemies::def(etype);
+    let (base_ai, base_speed, wanders) = (run.monsters[mi].base_ai, run.monsters[mi].base.speed, run.monsters[mi].wanders);
     let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
     {
         let cdt = run.monsters[mi].effects.cooldown_dt(dt);
@@ -255,7 +298,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     // its escort script picked (run/companion.rs).
     let seen = match &run.monsters[mi].companion {
         Some(c) => c.prey.and_then(|id| run.monster_idx(id)).filter(|&pm| run.monsters[pm].alive && super::perception::sees(run, sight, pos, run.monsters[pm].pos)).map(Creature::Monster),
-        None => find_visible_foe(run, pos, sight),
+        None => find_visible_foe(run, mi),
     };
     if let Some(foe) = seen {
         let (fid, fpos) = (run.creature_id(foe), run.creature_pos(foe));
@@ -276,12 +319,12 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     }
 
     // The incorporeal ambushers (their kit holds Vanish) vanish, drift to the straggler and warn first.
-    if run.monsters[mi].kit.get(AbilityId::Vanish).is_some() && super::ambush::tick(run, mi, dt, seen) {
+    if super::modules::on_sight(run, mi, dt, seen) {
         return;
     }
 
-    // Disciples channel the lich and otherwise only shoot.
-    if etype == EnemyType::Disciple {
+    // The stationary (the Disciple) channel the lich and otherwise only shoot.
+    if base_ai == BaseAi::Stationary {
         set_anim(run, mi, if run.monsters[mi].ai.windup.is_some() { Anim::Windup } else { Anim::Channel });
     }
 
@@ -298,7 +341,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     if let Some(w) = run.monsters[mi].ai.windup {
         let t = w.t - dt;
         if t > 0.0 {
-            run.monsters[mi].ai.windup = Some(Windup { t, aim: w.aim, alt: w.alt, at: w.at });
+            run.monsters[mi].ai.windup = Some(Windup { t, aim: w.aim, alt: w.alt, at: w.at, id: w.id });
             return;
         }
         run.monsters[mi].ai.windup = None;
@@ -311,34 +354,20 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 .map(|o| o.pos),
             _ => None,
         };
+        if let Some(id) = w.id {
+            if super::modules::on_windup_end(run, mi, id, seen) {
+                return;
+            }
+        }
         if let Some(foe) = seen {
             perform_attack(run, mi, foe, w.alt, barrel);
         }
         return;
     }
 
-    // A minion ability winding up: it lands whether or not a foe is still seen.
-    if let Some((id, t)) = run.monsters[mi].ai.cast {
-        if t > dt {
-            run.monsters[mi].ai.cast = Some((id, t - dt));
-        } else {
-            run.monsters[mi].ai.cast = None;
-            // At the foe's last known spot, so the caster keeps facing it.
-            let at = run.monsters[mi].ai.last_known;
-            monster_use(run, mi, id, at);
-        }
+    // The kit's modules act: a minion ability winding up or starting.
+    if super::modules::on_act(run, mi, dt, seen) {
         return;
-    }
-    // A foe in sight and room for more minions: start raising them.
-    if seen.is_some() {
-        let raise = def.abilities.iter().filter_map(|&id| run.monsters[mi].kit.get(id)).cloned().find(|a| {
-            ab::def(a.id).own.minions.is_some() && run.monsters[mi].cds.ready(a.id) && super::minions::room(run, mi, a) > 0
-        });
-        if let Some(a) = raise {
-            run.monsters[mi].ai.cast = Some((a.id, a.windup));
-            set_anim(run, mi, Anim::Windup);
-            return;
-        }
     }
 
     match run.monsters[mi].ai.state {
@@ -357,23 +386,29 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 Shape::Ring => a.radius,
                 _ => a.range,
             };
-            let main = run.monsters[mi].kit.get(def.abilities[0]).expect("an enemy has its main ability").clone();
-            let (range, preferred) = (reach(&main), def.preferred);
-            if let Some(&alt_id) = def.abilities.get(1) {
+            let main = run.monsters[mi].kit.first().expect("a creature has its main ability").clone();
+            let range = reach(&main);
+            let preferred = match base_ai {
+                BaseAi::Ranged { preferred } => preferred,
+                BaseAi::Melee | BaseAi::Stationary => 0.0,
+            };
+            let alt = run.monsters[mi].kit.iter().nth(1).cloned();
+            if let Some(alt) = alt {
+                let alt_id = alt.id;
                 // Second ability: a claw when the target is in reach, a bolt only from afar, a slam
                 // when it is worth it.
-                let alt = run.monsters[mi].kit.get(alt_id).expect("an enemy has its alt ability").clone();
                 let alt_range = reach(&alt);
-                let usable = match ab::def(alt_id).shape {
+                // An ability with a module is used by the module, not by the chase.
+                let usable = ab::def(alt_id).module.is_none() && match ab::def(alt_id).shape {
                     Shape::Swing => d <= alt_range,
                     Shape::Projectile => d <= alt_range && d >= enemies::ALT_BOLT_MIN_DIST && d > range,
                     // A slam is worth it for two heroes in reach, or one while the club recovers.
                     Shape::Ring => {
-                        let near = run.foes_in(pos, alt.radius, None).len();
+                        // Only creatures it fights count: a calm animal in the ring is no reason to slam.
+                        let me = targets::stance(run, Creature::Monster(mi));
+                        let near = run.foes_in(pos, alt.radius, None).into_iter().filter(|&c| targets::fights(&me, &targets::stance(run, c))).count();
                         near >= 2 || near == 1 && run.monsters[mi].ai.cd > 0.0
                     }
-                    // Vanish: the ambush module uses it, not the chase.
-                    Shape::Buff => false,
                     shape => unreachable!("{alt_id:?} is a {shape:?}: an alt ability swings, shoots or slams"),
                 };
                 if usable && rest && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {
@@ -382,7 +417,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                         set_anim(run, mi, Anim::Slam);
                         perform_attack(run, mi, foe, true, None);
                     } else {
-                        run.start_windup(mi, Windup { t: alt.windup, aim, alt: true, at: None });
+                        run.start_windup(mi, Windup { t: alt.windup, aim, alt: true, at: None, id: None });
                         set_anim(run, mi, Anim::Windup);
                     }
                     return;
@@ -397,38 +432,33 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                     Some(Target::Object(id)) => run.objects.iter().find(|o| o.id == id).map_or(aim, |o| pos.angle_to(o.pos)),
                     _ => aim,
                 };
-                run.start_windup(mi, Windup { t: main.windup, aim, alt: false, at });
+                run.start_windup(mi, Windup { t: main.windup, aim, alt: false, at, id: None });
                 set_anim(run, mi, Anim::Windup);
                 return;
             }
-            if def.speed <= 0.0 {
+            if base_ai == BaseAi::Stationary {
                 return;
             }
-            let speed = gait(run, mi, def.speed);
+            let speed = gait(run, mi, base_speed);
             if preferred > 0.0 && d < preferred - 25.0 {
                 // Ranged enemies back off to their preferred distance.
                 let away = pos + (pos - ppos).norm() * 16.0;
                 move_toward(run, mi, away, speed * 0.8, dt);
                 set_anim(run, mi, Anim::Move);
             } else if d > range * 0.85 || preferred == 0.0 && d > range * 0.7 {
-                // Wide figures (the ogre) path around corners and terrain edges.
-                if def.radius > TILE / 2.0 {
-                    path_toward(run, mi, ppos, speed, dt);
-                } else {
-                    move_toward(run, mi, ppos, speed, dt);
-                }
+                chase_step(run, mi, ppos, speed, dt);
                 set_anim(run, mi, Anim::Move);
             } else {
                 set_anim(run, mi, Anim::Idle);
             }
         }
         AiState::Search => {
-            if def.speed <= 0.0 {
+            if base_ai == BaseAi::Stationary {
                 run.monsters[mi].ai.state = AiState::Idle;
                 return;
             }
             let goal = run.monsters[mi].ai.last_known;
-            let speed = gait(run, mi, def.speed);
+            let speed = gait(run, mi, base_speed);
             let arrived = path_toward(run, mi, goal, speed, dt);
             if arrived {
                 set_anim(run, mi, Anim::Idle);
@@ -444,7 +474,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
         }
         AiState::Return => {
             let home = run.monsters[mi].ai.home;
-            let speed = gait(run, mi, def.speed * 0.7);
+            let speed = gait(run, mi, base_speed * 0.7);
             if path_toward(run, mi, home, speed, dt) {
                 run.monsters[mi].ai.state = AiState::Idle;
                 set_anim(run, mi, Anim::Idle);
@@ -453,8 +483,8 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             }
         }
         AiState::Idle => {
-            // Disciples stand still; an awake mimic waits where it was found.
-            if def.speed <= 0.0 || etype == EnemyType::Disciple || etype == EnemyType::Mimic {
+            // The Disciple stands still; an awake mimic waits where it was found.
+            if base_ai == BaseAi::Stationary || !wanders {
                 return;
             }
             let home = run.monsters[mi].ai.home;
@@ -470,7 +500,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             }
             if let Some(to) = run.monsters[mi].ai.wander_to {
                 let before = run.monsters[mi].pos;
-                if move_toward(run, mi, to, def.speed * 0.4, dt) || run.monsters[mi].pos.dist2(before) < 1e-6 {
+                if move_toward(run, mi, to, base_speed * 0.4, dt) || run.monsters[mi].pos.dist2(before) < 1e-6 {
                     run.monsters[mi].ai.wander_to = None;
                     set_anim(run, mi, Anim::Idle);
                 } else {
@@ -531,11 +561,10 @@ pub(crate) const SWING_SLACK: f64 = 4.0;
 /// the AI is never faster than the ability.
 const SHOT_PACE_JITTER: f64 = 0.3;
 
-/// Uses the enemy's main ability, or its alt one (`alt`) with its own cooldown, at the foe (or at `at`,
+/// Uses the creature's main ability (kit entry 0), or its alt one (`alt`, kit entry 1) with its own cooldown, at the foe (or at `at`,
 /// a barrel). Either one also keeps the other back for a moment, so they never land at once.
 pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool, at: Option<Vec2>) {
-    let etype = run.monsters[mi].etype.expect("only enemies attack through the AI");
-    let id = enemies::def(etype).abilities[alt as usize];
+    let id = run.monsters[mi].kit.iter().nth(alt as usize).expect("the kit holds the main and the alt ability").id;
     let target = at.unwrap_or_else(|| run.creature_pos(foe));
     if !monster_use(run, mi, id, target) {
         return;
@@ -556,8 +585,8 @@ pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool,
 pub fn separate_monsters(run: &mut Run) {
     let n = run.monsters.len();
     for i in 0..n {
-        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].dormant || run.monsters[i].hiding || run.monsters[i].side == Side::Neutral {
-            continue; // a Neutral creature stands where it was placed
+        if !run.monsters[i].alive || run.monsters[i].speed <= 0.0 || run.monsters[i].dormant || run.monsters[i].hiding || super::behaviour::role(&run.monsters[i]) == super::behaviour::Role::Waiting {
+            continue; // a creature waiting where it was placed stays there
         }
         for j in 0..n {
             if i == j || !run.monsters[j].alive {
@@ -642,6 +671,7 @@ pub(crate) mod tests {
     use super::super::tests::{test_run, test_run_seed};
     use crate::defs::abilities::AbilityId;
     use super::*;
+    use super::targets::Side;
     use crate::defs::damage::Damage;
     use crate::defs::kinds::EntityKind;
     use crate::dungeon::Tile;
@@ -1053,6 +1083,59 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_monster_without_an_enemy_type_fights_with_its_kit() {
+        use crate::defs::items::ItemId;
+        use crate::sheet::{monster_kit, Body};
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let hero = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(30.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        // The wolf's kit with Pounce taken out.
+        let (attrs, radius) = (run.monsters[mi].base.attrs.clone(), run.monsters[mi].radius);
+        let m = &mut run.monsters[mi];
+        m.etype = None;
+        m.base_ai = BaseAi::Melee;
+        m.kit = monster_kit(&[ab::AbilityId::Bite], &attrs, &[ItemId::BeastBite], Body { radius }, &[]);
+        let (hp, before, speed) = (run.players[0].hp, run.monsters[mi].pos, run.monsters[mi].base.speed);
+        let dt = crate::run::DT;
+        tick_monster(&mut run, mi, dt);
+        let moved = run.monsters[mi].pos.dist(before);
+        assert!((moved - speed * dt).abs() < 1e-6, "it walked at base.speed: {moved} vs {}", speed * dt);
+        for _ in 0..(3.0 / dt) as usize {
+            tick_monster(&mut run, mi, dt);
+        }
+        assert!(run.players[0].hp < hp, "the bite landed");
+    }
+
+    #[test]
+    fn chase_picks_pathfind_for_escorts_and_wide_figures() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos();
+        let spawn = |run: &mut Run, t: EnemyType| {
+            let id = run.spawn_enemy(t, at + Vec2::new(40.0, 0.0), None);
+            run.monster_idx(id).unwrap()
+        };
+        let (orc, archer, ogre, knight) = (spawn(&mut run, EnemyType::OrcWarrior), spawn(&mut run, EnemyType::GoblinArcher), spawn(&mut run, EnemyType::Ogre), spawn(&mut run, EnemyType::Knight));
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
+        let wolf = run.monster_idx(wolf).unwrap();
+        run.monsters[knight].side = Side::Neutral;
+        assert_eq!(chase_of(&run, knight), Chase::Straight, "the unrecruited knight");
+        let hero = run.players[0].id;
+        let m = &mut run.monsters[knight];
+        m.side = Side::Friendly;
+        m.companion = Some(crate::run::entities::Companion { escort: &crate::defs::companions::KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0 });
+        assert_eq!(chase_of(&run, knight), Chase::Pathfind, "the recruited knight");
+        assert_eq!(chase_of(&run, wolf), Chase::Pathfind, "the wolf");
+        assert_eq!(chase_of(&run, ogre), Chase::Pathfind, "a wide figure");
+        assert_eq!(chase_of(&run, orc), Chase::Straight);
+        assert_eq!(chase_of(&run, archer), Chase::Straight);
+    }
+
+    #[test]
     fn astar_finds_path_around_wall() {
         let mut m = Map::new(12, 12);
         for y in 1..11 {
@@ -1296,7 +1379,7 @@ pub(crate) mod tests {
         assert_eq!(run.monsters[mi].ai.target, None);
         assert_eq!(run.monsters[mi].ai.state, AiState::Search);
         assert_eq!(run.monsters[mi].ai.last_known, ppos);
-        assert_eq!(find_visible_foe(&run, run.monsters[mi].pos, run.monsters[mi].sight_now()), None);
+        assert_eq!(find_visible_foe(&run, mi), None);
         // And never targeted afresh while it lasts.
         run.monsters[mi].ai.state = AiState::Idle;
         tick_monster(&mut run, mi, 1.0 / 60.0);

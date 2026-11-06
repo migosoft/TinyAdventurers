@@ -130,6 +130,8 @@ super::enum_list::listed_enum! {
         ShadeTouch = 56,
         // The knight's sword (#149): the skeleton sword's numbers with damage 12.
         SoldierSword = 57,
+        // The boar's tusks (#227): a claw's reach, physical.
+        BoarTusks = 58,
     }
 }
 
@@ -404,6 +406,7 @@ pub fn def(id: ItemId) -> ItemDef {
         // Drains CON (Frail) for as long as its wielder's CHA gives; like Ghost Touch no hero holds it.
         I::ShadeTouch => item("Shade Touch", "", winding(melee(K::Touch, 7.0, 1.0, 1.4, 0.0, spectral(), At::BASE), 16.0, 0.25), NONE, &[], &[mag!(PropKind::OnHit(OnHit { kind: EffectKind::Frail, secs: 20.0, magical: true, power: 0, look: EffectLook::Plain }))]),
         I::SoldierSword => item("Soldier Sword", "weapon_knight_sword", winding(melee(K::Sword, 12.0, 1.0, 1.6, 0.0, phys(), at(12, 12)), 18.0, 0.3), NONE, &[], &[]),
+        I::BoarTusks => item("Boar Tusks", "", winding(melee(K::Claws, 8.0, 1.0, 1.6, 0.0, phys(), at(14, 10)), 18.0, 0.3), NONE, &[], &[]),
         I::NecromancerStaff => item("Necromancer Staff", "weapon_green_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::SummonerStaff => item("Summoner Staff", "weapon_red_magic_staff", melee(K::Staff, 5.0, 1.2, 1.6, 0.0, phys(), at(9, 14)), ALL, &[], &[]),
         I::HuntersBow => item(

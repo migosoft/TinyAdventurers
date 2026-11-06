@@ -2,7 +2,11 @@
 //! and five suns. `try_generate` places the room (stream 14); `finish_cove` runs after the rotation.
 
 use super::generate::{sun_margins_ok, sun_tile_ok};
-use super::{Cove, Dungeon, Rect, RoomKind, Tile};
+use super::{Cove, Dungeon, Layout, Map, Rect, RoomKind, Tile};
+use crate::math::Vec2;
+use rand::seq::SliceRandom;
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 /// Suns in the cove stay at least this far apart (tiles, Euclidean).
 const COVE_SUN_GAP: f64 = 3.0;
@@ -37,10 +41,43 @@ pub fn finish_cove(d: &mut Dungeon, seed: u32) {
     d.cove = Some(Cove { rect, tree, seed });
 }
 
+/// How many animals the cove holds: the boar, the stag, three deer and ten bunnies.
+pub const ANIMALS: usize = 15;
+/// Salt for the animals' own random stream, so the animal spots stay apart from any other use of `cove.seed`.
+const ANIMAL_SALT: u64 = 0xA41_3A15;
+
+/// Where the cove's animals stand, in spawn order (the boar, the stag, the deer, then the bunnies): at
+/// most `ANIMALS` tile centres of the cove that an enemy can stand on, 24 px from the trunk, 20 px from
+/// the player spawns and 16 px from props and from each other. Drawn from an rng seeded by `cove.seed`
+/// alone, never the run's, so the run's random stream is unchanged. Fewer spots: the last animals drop.
+pub fn animal_spots(layout: &Layout, cove: &Cove) -> Vec<Vec2> {
+    let mut rng = ChaCha8Rng::seed_from_u64(cove.seed as u64 ^ (ANIMAL_SALT << 32));
+    let trunk = Map::center_of(cove.tree.0, cove.tree.1);
+    let props: Vec<Vec2> = layout.barrels.iter().copied().chain(layout.chests.iter().map(|c| c.pos)).chain(layout.torches.iter().map(|t| t.pos())).collect();
+    let r = cove.rect;
+    let mut free: Vec<Vec2> = (r.y..r.y + r.h)
+        .flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y)))
+        .filter(|&(x, y)| layout.map.safe(x, y))
+        .map(|(x, y)| Map::center_of(x, y))
+        .filter(|&c| c.dist(trunk) >= 24.0 && layout.player_spawns.iter().all(|s| s.dist(c) > 20.0) && props.iter().all(|p| p.dist(c) > 16.0))
+        .collect();
+    free.shuffle(&mut rng);
+    let mut spots: Vec<Vec2> = Vec::new();
+    for c in free {
+        if spots.len() == ANIMALS {
+            break;
+        }
+        if spots.iter().all(|s| s.dist(c) >= 16.0) {
+            spots.push(c);
+        }
+    }
+    spots
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::generate::{bfs, generate, Theme, SIZE};
-    use super::super::{is_terrain, Dungeon, Rect, RoomKind, Tile};
+    use super::super::{is_terrain, Dungeon, Map, Rect, RoomKind, Tile};
     use super::*;
 
     fn each_dungeon(seeds: u64, mut f: impl FnMut(u64, &Dungeon)) {
@@ -122,6 +159,32 @@ mod tests {
                 assert!(!c.rect.contains_tile(fx, fy) || !t.lit, "seed {seed}: lit torch in the cove");
             }
         });
+    }
+
+    #[test]
+    fn every_cove_has_ten_bunnies_four_deer_and_a_boar() {
+        let (mut fewest, mut most) = (usize::MAX, 0);
+        for seed in 1..=50u64 {
+            let theme = if seed % 2 == 0 { Theme::Water } else { Theme::Lava };
+            let (layout, _) = generate(seed, theme).split();
+            let cove = layout.cove.expect("cove");
+            let spots = animal_spots(&layout, &cove);
+            assert_eq!(spots, animal_spots(&layout, &cove), "seed {seed}: not repeatable");
+            (fewest, most) = (fewest.min(spots.len()), most.max(spots.len()));
+            assert!(spots.len() <= ANIMALS, "seed {seed}");
+            let trunk = Map::center_of(cove.tree.0, cove.tree.1);
+            for (i, &p) in spots.iter().enumerate() {
+                let (tx, ty) = Map::tile_of(p);
+                assert!(cove.rect.contains(p) && layout.map.safe(tx, ty), "seed {seed}: spot {i} off the floor");
+                assert!(p.dist(trunk) >= 24.0, "seed {seed}: spot {i} at the trunk");
+                assert!(layout.player_spawns.iter().all(|s| s.dist(p) > 20.0), "seed {seed}: spot {i} on a spawn");
+                let props = layout.barrels.iter().copied().chain(layout.chests.iter().map(|c| c.pos)).chain(layout.torches.iter().map(|t| t.pos()));
+                assert!(props.into_iter().all(|q| q.dist(p) > 16.0), "seed {seed}: spot {i} on a prop");
+                assert!(spots[i + 1..].iter().all(|q| q.dist(p) >= 16.0), "seed {seed}: spot {i} crowded");
+            }
+        }
+        eprintln!("animal spots over seeds 1..=50: fewest {fewest}, most {most}");
+        assert_eq!(fewest, ANIMALS, "every cove has room for all fifteen");
     }
 
     #[test]

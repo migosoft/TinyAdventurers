@@ -27,6 +27,8 @@ super::enum_list::listed_enum! {
         Object = 10,
         /// Beings without a solid body (ghosts, shades).
         Incorporeal = 11,
+        /// Wild animals (#227): bunnies, deer, boars. `MagicalBeast` stays the wolf's.
+        Animal = 12,
     }
 }
 
@@ -90,6 +92,7 @@ pub fn race_def(r: Race) -> RaceDef {
         Race::Human => plain(Resistances::NONE, 9.0, 0.0),
         Race::Goblin | Race::Orc | Race::Ogre => plain(Resistances::NONE, 8.0, 1.0 / 3.0),
         Race::Mimic => plain(Resistances::NONE, 8.0, 1.0 / 3.0),
+        Race::Animal => plain(Resistances::NONE, 8.0, 1.0 / 3.0),
         Race::Undead => RaceDef { effect_res: never_sleeps.strongest(fear(1.0)), ..plain(Resistances::of(&[(Physical, 0.1), (Heat, -0.1), (Poison, 1.0)]), 8.0, 1.0) },
         Race::Demon => RaceDef { effect_res: fear(0.5), ..plain(Resistances::of(&[(Magical, 0.2), (Heat, 1.0), (Cold, -0.5)]), 9.0, 1.0) },
         Race::Dragon => plain(Resistances::of(&[(Magical, 0.5), (Physical, 0.1)]), 25.0, 1.0),
@@ -256,7 +259,9 @@ mod tests {
             (EnemyType::SkeletonArcher, 140.0), (EnemyType::RaisedArcher, 140.0), (EnemyType::OrcWarrior, 125.0),
             (EnemyType::OrcArcher, 140.0), (EnemyType::Necromancer, 150.0), (EnemyType::Summoner, 150.0),
             (EnemyType::Disciple, 200.0), (EnemyType::Mimic, 140.0), (EnemyType::Imp, 140.0),
-            (EnemyType::SummonedImp, 140.0), (EnemyType::Chort, 120.0), (EnemyType::Ogre, 150.0), (EnemyType::Ghost, 140.0), (EnemyType::Shade, 140.0), (EnemyType::Knight, 128.0)];
+            (EnemyType::SummonedImp, 140.0), (EnemyType::Chort, 120.0), (EnemyType::Ogre, 150.0), (EnemyType::Ghost, 140.0), (EnemyType::Shade, 140.0), (EnemyType::Knight, 128.0),
+            // Wildlife (#227): new, so no old value; 6 and 8 tiles.
+            (EnemyType::Bunny, 96.0), (EnemyType::Deer, 128.0), (EnemyType::Stag, 128.0), (EnemyType::Boar, 96.0)];
         assert_eq!(old.len(), EnemyType::ALL.len());
         for (t, px) in old {
             assert_eq!(enemies::profile(t).sight.vision * 16.0, px, "{t:?}");

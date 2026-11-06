@@ -13,6 +13,7 @@ import { LightsDemoScene } from './game/LightsDemoScene';
 import { MoodDemoScene } from './game/MoodDemoScene';
 import { SunlightDemoScene } from './game/SunlightDemoScene';
 import { CoveDemoScene } from './game/CoveDemoScene';
+import { AnimalsDemoScene } from './game/AnimalsDemoScene';
 import { DARKVISION_FX, DarkvisionFX } from './game/darkvisionfx';
 import { GameScene, type GameInit } from './game/GameScene';
 import type { RunStartInfo } from './generated/RunStartInfo';
@@ -89,8 +90,8 @@ function watchViews(game: Phaser.Game): () => void {
   return () => game.scene.getScenes(true).forEach(applyView);
 }
 
-/** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich, ?demon, ?lights, ?mood, ?sunlight, ?cove, ?spectres). */
-const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-demo', water: 'water-demo', chasm: 'chasm-demo', lava: 'lava-demo', knockback: 'knockback-demo', ogre: 'ogre-demo', dragon: 'dragon-demo', lich: 'lich-demo', demon: 'demon-demo', lights: 'lights-demo', mood: 'mood-demo', sunlight: 'sunlight-demo', cove: 'cove-demo', spectres: 'spectre-demo' };
+/** Dev pages, no server needed: sprite gallery (?gallery), demos (?mimic, ?daemons, ?water, ?chasm, ?lava, ?knockback, ?ogre, ?dragon, ?lich, ?demon, ?lights, ?mood, ?sunlight, ?cove, ?spectres, ?animals). */
+const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-demo', water: 'water-demo', chasm: 'chasm-demo', lava: 'lava-demo', knockback: 'knockback-demo', ogre: 'ogre-demo', dragon: 'dragon-demo', lich: 'lich-demo', demon: 'demon-demo', lights: 'lights-demo', mood: 'mood-demo', sunlight: 'sunlight-demo', cove: 'cove-demo', spectres: 'spectre-demo', animals: 'animals-demo' };
 
 async function gallery(): Promise<void> {
   const q = new URLSearchParams(location.search);
@@ -102,7 +103,7 @@ async function gallery(): Promise<void> {
     parent: 'game',
     pixelArt: true,
     scale: { mode: Phaser.Scale.NONE, width: v.w * v.zoom, height: v.h * v.zoom, zoom: 1 },
-    scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene, WaterDemoScene, ChasmDemoScene, LavaDemoScene, KnockbackDemoScene, OgreDemoScene, DragonDemoScene, LichDemoScene, DemonDemoScene, LightsDemoScene, MoodDemoScene, SunlightDemoScene, CoveDemoScene, SpectreDemoScene],
+    scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene, WaterDemoScene, ChasmDemoScene, LavaDemoScene, KnockbackDemoScene, OgreDemoScene, DragonDemoScene, LichDemoScene, DemonDemoScene, LightsDemoScene, MoodDemoScene, SunlightDemoScene, CoveDemoScene, SpectreDemoScene, AnimalsDemoScene],
   });
   watchViews(game);
   game.events.once('assets-ready', () => game.scene.start(start));

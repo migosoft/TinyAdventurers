@@ -3,6 +3,7 @@
 pub mod abilities;
 pub mod ai;
 pub mod ambush;
+pub mod behaviour;
 pub mod bosses;
 pub mod companion;
 pub mod debug;
@@ -13,6 +14,7 @@ pub mod levels;
 pub mod light;
 pub mod magic;
 pub mod minions;
+pub mod modules;
 pub mod objects;
 pub mod perception;
 pub mod rules_log;
@@ -325,6 +327,8 @@ impl Run {
             dash: None,
             wolf_bit: 0.0,
             ai: Ai::new(pos),
+            base_ai: d.base_ai,
+            wanders: d.wanders,
             owner,
             history: VecDeque::with_capacity(HISTORY_LEN),
             is_boss: false,
@@ -335,14 +339,17 @@ impl Run {
             knock: Vec2::ZERO,
             sinking: None,
             burn_t: dungeon::LAVA_TICK,
+            last_safe: dungeon::Map::center_of(dungeon::Map::tile_of(pos).0, dungeon::Map::tile_of(pos).1),
             last_hit_by: None,
             effects: effects::Effects::default(),
             effect_res: prof.effect_res,
             attrs: stats.attrs,
             weight: stats.weight,
             companion: None,
-            wolf: None,
-            side: Side::Hostile,
+            // A wild animal is Neutral, calm until hit (#227).
+            side: if d.wild.is_some() { Side::Neutral } else { Side::Hostile },
+            grudge: Default::default(),
+            wild: d.wild.map(targets::Wild::new),
         });
         rules_log::spawned(self, id, d.kind);
         id
@@ -486,26 +493,8 @@ impl Run {
                 ai::flee(self, mi, DT);
                 continue;
             }
-            // A Neutral monster does nothing: no AI, it stays Idle.
-            if m.side == Side::Neutral {
-                continue;
-            }
-            if m.wolf.is_some() {
-                wolf::tick_wolf(self, mi, DT);
-                continue;
-            }
-            if m.companion.is_some() {
-                companion::tick(self, mi, DT);
-                continue;
-            }
-            if self.layout.map.blocks_at(m.pos, m.mover) {
-                ai::escape_terrain(self, mi, DT);
-                continue;
-            }
             let active = player_pos.iter().any(|pp| pp.dist2(m.pos) < ACTIVE_RANGE * ACTIVE_RANGE);
-            if active {
-                ai::tick_monster(self, mi, DT);
-            }
+            behaviour::tick(self, mi, DT, active);
         }
         Level::tick(self, DT);
         for mi in 0..self.monsters.len() {
@@ -640,7 +629,7 @@ impl Run {
     /// slide, so it can end in a chasm, deep water or lava.
     pub fn knock_monster(&mut self, mi: usize, from: Vec2, dist: f64, str: i32) {
         let m = &mut self.monsters[mi];
-        if m.side == Side::Neutral {
+        if m.side == Side::Neutral && m.wild.is_none() {
             return;
         }
         let dist = push_dist(dist, str, m.weight);
@@ -674,7 +663,7 @@ impl Run {
     /// The ground under a monster's centre, like `terrain_player`: chasms and
     /// deep water take it (kill credit to the last hero who hurt it), lava
     /// burns monsters that are not lava walkers. A dashing monster is in the air,
-    /// and the wolf over a chasm with its Pounce ready dashes back to safe ground.
+    /// and a creature with its Leap ready dashes back to safe ground (`modules::on_danger`).
     fn terrain_monster(&mut self, mi: usize) {
         let m = &mut self.monsters[mi];
         if !m.alive || m.is_boss || m.airborne || m.dash.is_some() || m.mover == Mover::Incorporeal {
@@ -685,27 +674,26 @@ impl Run {
                 m.sinking = Some((t - DT, how));
             } else {
                 m.sinking = None;
-                if let Some(pi) = m.last_hit_by {
+                // The unrecruited knight and a calm wild animal are no kill; a boar with a grudge against the heroes is.
+                let by_hero = m.last_hit_by;
+                let counts = m.side != Side::Neutral || m.wild.is_some() && m.grudge.heroes;
+                if let Some(pi) = by_hero.filter(|_| counts) {
                     self.players[pi].kills += 1;
                 }
-                self.kill_monster(mi);
+                self.kill_monster_by(mi, by_hero.is_some());
             }
             return;
         }
         let pos = m.pos;
         let (tx, ty) = dungeon::Map::tile_of(pos);
         let tile = self.layout.map.get(tx, ty);
-        let pounce_ready = m.cds.ready(crate::defs::abilities::AbilityId::Pounce);
-        if let Some(a) = m.companion.as_mut() {
-            if m.wolf.is_some() && tile == Tile::Chasm as u8 && pounce_ready {
-                m.knock = Vec2::ZERO;
-                wolf::dash_back(self, mi);
-                return;
-            }
-            if self.layout.map.safe(tx, ty) {
-                a.last_safe = dungeon::Map::center_of(tx, ty);
-            }
+        if self.layout.map.safe(tx, ty) {
+            m.last_safe = dungeon::Map::center_of(tx, ty);
         }
+        if modules::on_danger(self, mi, tile) {
+            return;
+        }
+        let m = &mut self.monsters[mi];
         let how = if tile == Tile::Chasm as u8 {
             Some((dungeon::FALL_TIME, Sink::Fall))
         } else if tile == Tile::DeepWater as u8 {
@@ -904,7 +892,7 @@ impl Run {
         (0..self.monsters.len())
             .filter(|&mi| {
                 let m = &self.monsters[mi];
-                m.alive && m.side == Side::Hostile && !m.hiding && !m.dormant && m.sinking.is_none() && m.pos.dist(at) < r + m.radius && crate::collision::line_of_sight(&self.layout.map, at, m.pos)
+                m.alive && targets::heroes_may_hit(m) && !m.hiding && !m.dormant && m.sinking.is_none() && m.pos.dist(at) < r + m.radius && crate::collision::line_of_sight(&self.layout.map, at, m.pos)
             })
             .collect()
     }
@@ -1018,19 +1006,19 @@ impl Run {
         healed
     }
 
-    /// Living heroes and living allies (not sinking) whose centre is within `r` of `at`, optionally inside a cone (dir, half-angle). Heroes first.
+    /// Living heroes and living allies and wild animals (not sinking) whose centre is within `r` of `at`, optionally inside a cone (dir, half-angle). Heroes first.
     pub fn foes_in(&self, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<effects::Creature> {
         let inside = |p: Vec2| p.dist(at) <= r && cone.map_or(true, |(dir, half)| crate::math::angle_diff(at.angle_to(p), dir).abs() <= half);
         let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && inside(p.pos())).map(|(i, _)| effects::Creature::Player(i));
-        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.side == Side::Friendly && m.alive && m.sinking.is_none() && inside(m.pos)).map(|(i, _)| effects::Creature::Monster(i));
+        let allies = self.monsters.iter().enumerate().filter(|(_, m)| targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && inside(m.pos)).map(|(i, _)| effects::Creature::Monster(i));
         heroes.chain(allies).collect()
     }
 
-    /// Living heroes within r + PLAYER_RADIUS and allies within r + radius of `at`; with `los`, only those in line of sight.
+    /// Living heroes within r + PLAYER_RADIUS and allies and wild animals within r + radius of `at`; with `los`, only those in line of sight.
     pub fn foes_touching(&self, at: Vec2, r: f64, los: bool) -> Vec<effects::Creature> {
         let reach = |p: Vec2, radius: f64| p.dist(at) < r + radius && (!los || crate::collision::line_of_sight(&self.layout.map, at, p));
         let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && reach(p.pos(), classes::PLAYER_RADIUS)).map(|(i, _)| effects::Creature::Player(i));
-        let allies = self.monsters.iter().enumerate().filter(|(_, m)| m.side == Side::Friendly && m.alive && m.sinking.is_none() && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
+        let allies = self.monsters.iter().enumerate().filter(|(_, m)| targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
         heroes.chain(allies).collect()
     }
 
@@ -1107,16 +1095,49 @@ impl Run {
         healed
     }
 
+    /// A hit on a wild animal that fights back gives it a grudge against the side that caused the hit: the hero it comes from
+    /// (`src_player`), else the creature in `dmg.why.by` (a hero or an ally: the heroes; an enemy: the
+    /// enemies). Terrain has no `by` and gives none.
+    fn hit_gives_grudge(&mut self, mi: usize, dmg: &Damage, src_player: Option<usize>) {
+        let Some(wild) = self.monsters[mi].wild else { return };
+        let by = dmg.why.by;
+        // A fleeing animal runs from whoever hit it (a hit with no attacker, like lava, scares nothing).
+        if wild.reaction == targets::Reaction::Flee {
+            // The one it runs from: the creature that struck (the wolf, not the ranger it bites for), else the hero.
+            let attacker = by.filter(|&id| self.monster_idx(id).is_some_and(|bi| self.monsters[bi].alive)).or(src_player.map(|pi| self.players[pi].id)).or(by);
+            let from = attacker.and_then(|id| ai::living_pos(self, id));
+            if let (Some(id), Some(from)) = (attacker, from) {
+                let dist = from.dist(self.monsters[mi].pos);
+                if let Some(w) = self.monsters[mi].wild.as_mut() {
+                    // It runs at least `WILD_MIN_FLEE`, then until the attacker is 48 px farther than it was at the hit.
+                    *w = targets::Wild { scare: Some(id), min_flee: enemies::WILD_MIN_FLEE, scare_from: from, calm_dist: enemies::WILD_CALM_DIST.max(dist + 48.0), ..*w };
+                }
+            }
+            return;
+        }
+        let grudge = if src_player.is_some() || by.is_some_and(|id| self.player_idx(id).is_some()) {
+            Some(Side::Friendly)
+        } else {
+            by.and_then(|id| self.monster_idx(id)).map(|bi| self.monsters[bi].side)
+        };
+        match grudge {
+            Some(Side::Friendly) => self.monsters[mi].grudge.heroes = true,
+            Some(Side::Hostile) => self.monsters[mi].grudge.enemies = true,
+            Some(Side::Neutral) | None => {}
+        }
+    }
+
     /// Returns true if the monster took damage.
     pub fn hurt_monster(&mut self, mi: usize, dmg: Damage, crit: bool, src_player: Option<usize>) -> bool {
-        // Nothing hurts a Neutral monster, not even a hit that would pass through it.
-        if self.monsters[mi].side == Side::Neutral {
+        // Nothing hurts a Neutral monster that is not wild, not even a hit that would pass through it.
+        if self.monsters[mi].side == Side::Neutral && self.monsters[mi].wild.is_none() {
             return false;
         }
         // One central guard: a hit a bodiless monster fully resists is no hit at all (no keystone, reveal, number or effect).
         if self.monsters[mi].alive && !dmg.from_effect && self.passes_through(effects::Creature::Monster(mi), &dmg.split) {
             return false;
         }
+        self.hit_gives_grudge(mi, &dmg, src_player);
         let dmg = keystones::on_hit(self, mi, dmg);
         #[cfg(test)]
         {
@@ -1209,11 +1230,15 @@ impl Run {
         if self.monsters[mi].hp <= 0.0 {
             // The kill goes to the hero who struck, or whose effect ticked it down.
             let credit = if src_player.is_some() { src_player } else if dmg.from_effect { self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) } else { None };
-            if let Some(pi) = credit {
+            // A calm wild animal is no kill; a boar with a grudge against the heroes is.
+            let counts = self.monsters[mi].wild.is_none() || self.monsters[mi].grudge.heroes;
+            if let Some(pi) = credit.filter(|_| counts) {
                 self.players[pi].kills += 1;
             }
             rules_log::death(self, rules_log::DeathFacts { target: effects::Creature::Monster(mi), by: dmg.why.by, tick: if let What::Tick(k) = dmg.why.what { Some(k) } else { None }, credit });
-            self.kill_monster(mi);
+            // Killed on the heroes' side: a hero, or an ally of theirs (the wolf, a recruit).
+            let by_ally = dmg.why.by.and_then(|id| self.monster_idx(id)).is_some_and(|bi| self.monsters[bi].side == Side::Friendly);
+            self.kill_monster_by(mi, credit.is_some() || by_ally);
         }
         if self.monsters[mi].alive && !dmg.from_effect {
             if raw > 0.0 {
@@ -1227,11 +1252,18 @@ impl Run {
     }
 
     pub fn kill_monster(&mut self, mi: usize) {
+        self.kill_monster_by(mi, false);
+    }
+
+    /// Kills monster `mi`. `by_heroes`: it fell on the heroes' side (a hero, an ally of theirs, or a fall
+    /// after a hero's hit); only that makes a wild animal with a grudge against the heroes pay its XP. A
+    /// wild animal pays no coins and gives no message, whoever killed it.
+    pub fn kill_monster_by(&mut self, mi: usize, by_heroes: bool) {
         let m = &mut self.monsters[mi];
         if !m.alive {
             return;
         }
-        if m.wolf.is_some() {
+        if m.companion.as_ref().is_some_and(|c| c.summoned && self.players.iter().any(|p| p.wolf == Some(m.id))) {
             wolf::wolf_died(self, mi);
             return;
         }
@@ -1242,8 +1274,11 @@ impl Run {
         m.alive = false;
         m.hp = 0.0;
         let (id, pos, kind) = (m.id, m.pos, m.kind as u8);
-        let xp = progression::xp_for_kill(m.etype);
-        let coins = progression::coins_for_kill(m.etype);
+        let (xp, coins) = match m.wild {
+            Some(_) if !(by_heroes && m.grudge.heroes) => (0, 0),
+            Some(_) => (progression::xp_for_kill(m.etype), 0),
+            None => (progression::xp_for_kill(m.etype), progression::coins_for_kill(m.etype)),
+        };
         self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, Some(pos));
         // XP goes to every living party member (spent later via progression).
         for p in self.players.iter_mut().filter(|p| p.alive) {
@@ -1604,7 +1639,7 @@ pub mod tests {
         let got: Vec<u64> = (0..6).map(|s| fingerprint(&random_boss_run(s))).collect();
         // The original values: barrels are left out of the fingerprint, so
         // this proves the rest of the setup is unchanged by them.
-        assert_eq!(got, vec![11600266960163159417, 1435920588664842867, 10466106782931188740, 12014582218921590883, 11564344529328277746, 15459709860221633430]);
+        assert_eq!(got, vec![695190705853365220, 9378562978013154725, 18111976853352986814, 12425793697174330867, 8700733743784210261, 10267271134420389724]);
         assert_ne!(got[0], got[1]);
         // 2026-10-21, plan 3a: checked again, unchanged.
         // 2026-11-01, the Ghost (#169): seeds 1 and 2 (lich dungeons) changed, the others did not; the lich's
@@ -1613,6 +1648,20 @@ pub mod tests {
         // 2026-11-01, the Shade (#170): seeds 4 and 5 (demon dungeons) changed, the others did not, for the same reason.
         // 2026-11-02, the cove (#202): every dungeon has a dedicated 26×20 cove room, so the other rooms, the maps and everything placed in them changed for every seed. Re-recorded once, on purpose.
         // 2026-11-05, the start room's knight (#149): every dungeon has a Neutral knight, an extra monster (and the ids of everything spawned after the monsters shift by one). Re-recorded once, on purpose.
+        // 2026-11-06, the cove's animals (#227): every dungeon spawns 15 wild animals (boar, stag, three deer, ten bunnies) after the knight, so every seed gains 15 monsters and the ids after them shift. Proved before re-recording: with the wild monsters (and their 15 ids) left out of the hash, the old values come back. Re-recorded once, on purpose.
+    }
+
+    #[test]
+    fn the_cove_spawns_its_animals_after_the_knight() {
+        use EntityKind as E;
+        for seed in 0..6 {
+            let run = random_boss_run(seed);
+            let kinds: Vec<EntityKind> = run.monsters.iter().filter(|m| m.wild.is_some()).map(|m| m.kind).collect();
+            let want: Vec<EntityKind> = [E::Boar, E::Stag, E::Deer, E::Deer, E::Deer].into_iter().chain([E::Bunny; 10]).collect();
+            assert_eq!(kinds, want, "seed {seed}");
+            let knight = run.monsters.iter().find(|m| m.kind == E::Knight).expect("a knight");
+            assert!(run.monsters.iter().filter(|m| m.wild.is_some()).all(|m| m.id > knight.id && m.side == Side::Neutral), "seed {seed}");
+        }
     }
 
     #[test]
@@ -1624,7 +1673,7 @@ pub mod tests {
                 fingerprint(&run)
             })
             .collect();
-        assert_eq!(got, vec![11600266960163159417, 1435920588664842867, 10466106782931188740, 12014582218921590883, 11564344529328277746, 15459709860221633430]);
+        assert_eq!(got, vec![695190705853365220, 9378562978013154725, 18111976853352986814, 12425793697174330867, 8700733743784210261, 10267271134420389724]);
     }
 
     // Unchanged after pushes by weight and durations by save (2026-10-19); the
@@ -1665,7 +1714,8 @@ pub mod tests {
         // 2026-11-02, the cove (#202): every dungeon has a dedicated 26×20 cove room, so the other rooms, the maps and everything placed in them changed for every seed. Re-recorded once, on purpose.
         // 2026-11-04, the cooldown chain (#198): every ability cooldown now scales with its Attribute and effects change how fast cooldowns count down, so the Demon and Lich fights (the first two values) play out differently; the Dragon's is unchanged. Re-recorded once, on purpose.
         // 2026-11-05, the start room's knight (#149): every dungeon has a Neutral knight, an extra monster, and the chests' ids after it shift by one, so all three halls differ. Re-recorded once, on purpose.
-        assert_eq!(got, vec![14224501561412542724, 8092357809574246265, 1079301549377026740]);
+        // 2026-11-06, the cove's animals (#227): every dungeon has 15 wild animals, extra monsters in the hash and in the next id, so all three halls differ. Proved before re-recording: with the wild monsters left out of the hash, the old values come back. Re-recorded once, on purpose.
+        assert_eq!(got, vec![1102558945640823980, 5858418345972872518, 9281230261363955240]);
     }
 
     #[test]
@@ -1684,7 +1734,7 @@ pub mod tests {
             }
             got.push(fingerprint(&run));
         }
-        assert_eq!(got, vec![14224501561412542724, 8092357809574246265, 1079301549377026740]);
+        assert_eq!(got, vec![1102558945640823980, 5858418345972872518, 9281230261363955240]);
     }
 
     /// A short fight over `run.step()`: hero 0 aims east, holding its primary if `fire`, at enemies
@@ -2222,7 +2272,12 @@ pub mod tests {
                 EnemyType::Ghost | EnemyType::Shade => DamageSplit::split(&[(DamageType::Magical, 0.9), (DamageType::Cold, 0.1)]),
                 _ => DamageSplit::physical(),
             };
-            let melee = [AbilityId::Strike, AbilityId::Bite, AbilityId::Touch].into_iter().find_map(|a| m.kit.get(a)).expect("a melee ability");
+            let melee = [AbilityId::Strike, AbilityId::Bite, AbilityId::Touch].into_iter().find_map(|a| m.kit.get(a));
+            // The bunny, the deer and the stag have no attack (#227).
+            let Some(melee) = melee else {
+                assert!(matches!(t, EnemyType::Bunny | EnemyType::Deer | EnemyType::Stag), "{t:?}: a melee ability");
+                continue;
+            };
             assert_eq!(melee.split, today, "{t:?}");
         }
     }

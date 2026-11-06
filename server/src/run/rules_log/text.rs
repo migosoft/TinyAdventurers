@@ -51,7 +51,7 @@ fn hazard_name(k: EntityKind) -> &'static str {
         Roots => "Roots",
         FirePatch => "fire",
         Wizard | Paladin | Barbarian | ElvenRanger | GoblinArcher | SkeletonWarrior | SkeletonArcher | OrcWarrior | OrcArcher | Necromancer
-        | RaisedSkeleton | Disciple | Mimic | Imp | Chort | Summoner | Ogre | Ghost | Shade | Knight | DireWolf | Demon | Lich | Dragon | Missile | Fireball | Bolt
+        | RaisedSkeleton | Disciple | Mimic | Imp | Chort | Summoner | Ogre | Ghost | Shade | Knight | Bunny | Deer | Stag | Boar | DireWolf | Demon | Lich | Dragon | Missile | Fireball | Bolt
         | Arrow | ShadowBolt | FrostBolt | FireBreath | FireOrb | DragonFireball | FireBolt | GloomBolt | BlindOrb | SleepOrb | ChainSpark
         | Judgement | ThrownAxe | Chest | Barrel | Torch => "hazard",
     }
@@ -194,6 +194,7 @@ fn race_name(r: Race) -> &'static str {
         Race::MagicalBeast => "magical beast",
         Race::Object => "object",
         Race::Incorporeal => "incorporeal",
+        Race::Animal => "animal",
     }
 }
 

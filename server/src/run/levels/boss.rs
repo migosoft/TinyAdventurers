@@ -1,6 +1,7 @@
 //! A boss fight in a sealable arena. Any level can include one.
 
 use crate::defs::bosses as boss_defs;
+use crate::defs::enemies::BaseAi;
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Mover, Rect, Tile};
 use crate::math::Vec2;
@@ -75,6 +76,8 @@ pub fn spawn(run: &mut Run) {
         dash: None,
         wolf_bit: 0.0,
         ai: Ai::new(pos),
+        base_ai: BaseAi::Melee, // the boss's script never reads it
+        wanders: true,
         owner: None,
         history: VecDeque::with_capacity(HISTORY_LEN),
         is_boss: true,
@@ -85,14 +88,16 @@ pub fn spawn(run: &mut Run) {
         knock: Vec2::ZERO,
         sinking: None,
         burn_t: crate::dungeon::LAVA_TICK,
+        last_safe: pos,
         last_hit_by: None,
         effects: Default::default(),
         effect_res: prof.effect_res,
         attrs: stats.attrs,
         weight: stats.weight,
         companion: None,
-        wolf: None,
         side: Side::Hostile,
+        grudge: Default::default(),
+        wild: None,
     });
     crate::run::rules_log::spawned(run, id, d.kind);
     enc_mut(run).boss_ent = id;

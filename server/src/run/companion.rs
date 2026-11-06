@@ -1,5 +1,5 @@
 //! Companions: monsters that fight for the heroes. Who each follows (the leader hierarchy) and the
-//! pieces of a follower's script that any companion shares. The Ranger's wolf is in run/wolf.rs.
+//! pieces of a follower's script that any companion shares. The Ranger's wolf is one of them: its spawn and death are in run/wolf.rs.
 
 use super::entities::{Ai, AiState, Companion};
 use super::targets::Side;
@@ -8,7 +8,6 @@ use crate::collision::walk_line;
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::companions::{Escort, KNIGHT_ESCORT, COMPANION_REACH_EVERY, WOLF_RADIUS};
 use crate::defs::effects::EffectKind;
-use crate::defs::enemies;
 use crate::defs::kinds::Anim;
 use crate::defs::objects::USE_REACH;
 use crate::dungeon::{Layout, Map, Mover, Rect};
@@ -131,7 +130,7 @@ pub fn find_prey(run: &Run, mi: usize, leader: Vec2, e: &Escort) -> Option<usize
     run.monsters
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.alive && f.side == Side::Hostile && !f.dormant && !f.hiding && !f.effects.has(EffectKind::Invisible) && !f.airborne && f.sinking.is_none())
+        .filter(|(_, f)| f.alive && (f.side == Side::Hostile || f.grudge.heroes) && !f.dormant && !f.hiding && !f.effects.has(EffectKind::Invisible) && !f.airborne && f.sinking.is_none())
         // An attack that passes through the foe cannot hurt it: not worth chasing.
         .filter(|&(i, _)| !run.passes_through(super::effects::Creature::Monster(i), &attack))
         .filter(|(_, f)| {
@@ -166,23 +165,42 @@ pub fn follow(run: &mut Run, mi: usize, pi: usize, e: &Escort, speed: f64, dt: f
     }
 }
 
-/// The companion `mi` this tick: reappear beside its leader when lost, else fight its prey through the
-/// enemy AI, else follow. Not called while it is pushed, sinking, asleep or frozen (`Run::step`).
-pub fn tick(run: &mut Run, mi: usize, dt: f64) {
+/// The first part of a companion's tick: the hero it follows, or `None` when the tick is over. With no
+/// living leader it idles; lost, it reappears beside them (even mid-dash, which it drops).
+/// Not called while it is pushed, sinking, asleep or frozen (`Run::step`).
+pub fn regroup(run: &mut Run, mi: usize, dt: f64) -> Option<usize> {
     let Some(leader) = run.monsters[mi].companion.as_ref().and_then(|c| run.player_idx(c.leader)).filter(|&pi| run.players[pi].alive) else {
         run.monsters[mi].ai.state = AiState::Idle;
-        return;
+        return None;
     };
     let at = run.players[leader].pos();
-    if lost(run, mi, at, &KNIGHT_ESCORT, dt) && reappear(run, mi, at) {
-        return;
+    let escort = run.monsters[mi].companion.as_ref().expect("a companion").escort;
+    if lost(run, mi, at, escort, dt) && reappear(run, mi, at) {
+        return None;
     }
+    Some(leader)
+}
+
+/// Counts the AI's waits (`cd`, `alt_cd`) down by the creature's own clock, on a tick that does not run
+/// `ai::tick_monster` (which counts them itself): following, climbing out of lava, dashing.
+pub fn count_waits(run: &mut Run, mi: usize, dt: f64) {
+    let m = &mut run.monsters[mi];
+    let cdt = m.effects.cooldown_dt(dt);
+    m.ai.cd -= cdt;
+    m.ai.alt_cd -= cdt;
+}
+
+/// The rest of a companion's tick, after its dash: fight its prey through the enemy AI, else follow `leader`.
+pub fn act(run: &mut Run, mi: usize, leader: usize, dt: f64) {
+    let at = run.players[leader].pos();
+    let escort = run.monsters[mi].companion.as_ref().expect("a companion").escort;
     // Blown into lava: walk out first, like any monster (the enemy movers cannot move inside a pool).
     if run.layout.map.blocks_at(run.monsters[mi].pos, run.monsters[mi].mover) {
+        count_waits(run, mi, dt);
         ai::escape_terrain(run, mi, dt);
         return;
     }
-    let prey = find_prey(run, mi, at, &KNIGHT_ESCORT);
+    let prey = find_prey(run, mi, at, escort);
     run.monsters[mi].companion.as_mut().expect("a companion").prey = prey.map(|pi| run.monsters[pi].id);
     if prey.is_some() {
         ai::tick_monster(run, mi, dt);
@@ -190,8 +208,9 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64) {
         let m = &mut run.monsters[mi];
         m.ai.windup = None;
         m.ai.state = AiState::Idle;
-        let speed = enemies::def(m.etype.expect("a companion enemy")).speed;
-        follow(run, mi, leader, &KNIGHT_ESCORT, speed, dt);
+        let speed = m.base.speed;
+        count_waits(run, mi, dt);
+        follow(run, mi, leader, escort, speed, dt);
     }
 }
 
@@ -219,7 +238,7 @@ pub fn recruit(run: &mut Run, pi: usize) -> bool {
         .monsters
         .iter()
         .enumerate()
-        .filter(|(_, m)| m.alive && m.side == Side::Neutral)
+        .filter(|(_, m)| m.alive && m.side == Side::Neutral && m.wild.is_none())
         .map(|(i, m)| (i, m.pos.dist(at) - PLAYER_RADIUS - m.radius))
         .filter(|&(_, gap)| gap <= USE_REACH)
         .min_by(|a, b| a.1.total_cmp(&b.1));
@@ -229,8 +248,7 @@ pub fn recruit(run: &mut Run, pi: usize) -> bool {
     let name = super::rules_log::tags::tag_name(name).unwrap_or("companion");
     let m = &mut run.monsters[mi];
     m.side = Side::Friendly;
-    let (tx, ty) = Map::tile_of(m.pos);
-    m.companion = Some(Companion { leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: Map::center_of(tx, ty) });
+    m.companion = Some(Companion { escort: &KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0 });
     m.ai = Ai::new(m.pos);
     let pos = m.pos;
     run.event(Ev::Msg { text: format!("{hero_name} recruited the {name}") }, None);
@@ -271,13 +289,13 @@ mod tests {
         let m = &mut run.monsters[mi];
         m.side = Side::Friendly;
         m.companion = Some(Companion {
+            escort: &KNIGHT_ESCORT,
             leader: run.players[1].id,
             recruiter: run.players[1].id,
             summoned: false,
             prey: None,
             following: false,
             reach_t: 0.0,
-            last_safe: Vec2::new(100.0, 100.0),
         });
         (run, mi)
     }
@@ -351,7 +369,7 @@ mod tests {
         let hero = run.players[recruiter].id;
         let m = &mut run.monsters[mi];
         m.side = Side::Friendly;
-        m.companion = Some(Companion { leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0, last_safe: at });
+        m.companion = Some(Companion { escort: &KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0 });
         mi
     }
 
@@ -409,6 +427,30 @@ mod tests {
         // The orcs are held, so any damage to a hero or the knight's own side would come from the knight.
         assert!(run.players[0].hp == max0 && run.players[1].hp == max1, "no hero was hurt");
         assert!(run.monsters[mi].hp == run.monsters[mi].max_hp, "the knight was not hurt");
+    }
+
+    #[test]
+    fn a_recruited_knight_paths_around_a_chasm_to_its_prey() {
+        use crate::dungeon::Tile;
+        let mut run = knight_run();
+        let mi = knight_with(&mut run, 0);
+        let (tx, ty) = Map::tile_of(run.players[0].pos());
+        // A chasm wall two tiles east of the heroes, open at its north end; the orc stands behind it.
+        for y in ty - 2..=ty + 3 {
+            run.layout.map.set(tx + 2, y, Tile::Chasm);
+        }
+        run.layout.map.set(tx + 2, ty - 3, Tile::Floor);
+        let orc = dummy_orc(&mut run, 56.0);
+        run.monsters[mi].pos = Map::center_of(tx + 1, ty);
+        let reach = run.monsters[mi].radius + run.monsters[orc].radius + 14.0;
+        let mut reached = None;
+        for i in 0..360 {
+            run.step();
+            if reached.is_none() && run.monsters[mi].pos.dist(run.monsters[orc].pos) <= reach {
+                reached = Some(i);
+            }
+        }
+        assert!(reached.is_some(), "the knight walked around the chasm; it stands at {:?}", run.monsters[mi].pos);
     }
 
     #[test]
@@ -722,5 +764,18 @@ mod tests {
         let tag = crate::run::rules_log::tags::tag_of(&run, id);
         assert!(!tag.contains("wolf"), "{tag}");
         assert!(tag.starts_with("Knight"), "{tag}");
+    }
+
+    #[test]
+    fn a_knight_following_with_no_prey_counts_its_waits_down() {
+        let (mut run, mi) = recruited();
+        let leader = run.players[1].pos();
+        let m = &mut run.monsters[mi];
+        m.pos = leader + Vec2::new(10.0, 0.0);
+        m.ai.cd = 1.0;
+        m.ai.alt_cd = 1.0;
+        crate::run::behaviour::tick(&mut run, mi, 1.0 / 60.0, true);
+        let m = &run.monsters[mi];
+        assert!((m.ai.cd - (1.0 - 1.0 / 60.0)).abs() < 1e-9 && (m.ai.alt_cd - (1.0 - 1.0 / 60.0)).abs() < 1e-9, "{} {}", m.ai.cd, m.ai.alt_cd);
     }
 }

@@ -1,7 +1,11 @@
 //! Raising minions: what Raise Dead and Summon Imps do, for every caster.
 
+use super::abilities::monster_use;
+use super::ai::set_anim;
+use super::effects::Creature;
 use super::Run;
-use crate::defs::abilities as ab;
+use crate::defs::abilities::{self as ab, Module};
+use crate::defs::kinds::Anim;
 use crate::defs::enemies::EnemyType;
 use crate::dungeon::Mover;
 use crate::math::Vec2;
@@ -25,6 +29,34 @@ pub fn room(run: &Run, mi: usize, a: &ResolvedAbility) -> usize {
     let Some(own) = ab::def(a.id).own.minions else { return 0 };
     let alive = living(run, mi, own.kind.raises()).len();
     (a.per_cast as usize).min((a.alive as usize).saturating_sub(alive))
+}
+
+/// The Minions module's turn of monster `mi`: a cast winding up lands whether or not a foe is still
+/// seen; otherwise, with a foe in sight and room for more minions, the cast starts. True when it
+/// handled the tick.
+pub fn act(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
+    if let Some((id, t)) = run.monsters[mi].ai.cast {
+        if t > dt {
+            run.monsters[mi].ai.cast = Some((id, t - dt));
+        } else {
+            run.monsters[mi].ai.cast = None;
+            // At the foe's last known spot, so the caster keeps facing it.
+            let at = run.monsters[mi].ai.last_known;
+            monster_use(run, mi, id, at);
+        }
+        return true;
+    }
+    if seen.is_some() {
+        let raise = run.monsters[mi].kit.iter().cloned().find(|a| {
+            ab::def(a.id).module == Some(Module::Minions) && run.monsters[mi].cds.ready(a.id) && room(run, mi, a) > 0
+        });
+        if let Some(a) = raise {
+            run.monsters[mi].ai.cast = Some((a.id, a.windup));
+            set_anim(run, mi, Anim::Windup);
+            return true;
+        }
+    }
+    false
 }
 
 /// Monster `mi` raises `room` minions of ability `a` around it. Each is the type with fewer living (the

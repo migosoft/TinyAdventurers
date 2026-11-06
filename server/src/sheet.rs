@@ -330,7 +330,12 @@ impl Kit {
         self.0.iter().find(|a| a.id == id)
     }
 
-    /// The first ability: a companion's attack (the wolf's Bite).
+    /// The abilities in kit order.
+    pub fn iter(&self) -> impl Iterator<Item = &ResolvedAbility> {
+        self.0.iter()
+    }
+
+    /// The first ability: every creature's main ability (the wolf's Bite, an orc's swing).
     pub fn first(&self) -> Option<&ResolvedAbility> {
         self.0.first()
     }

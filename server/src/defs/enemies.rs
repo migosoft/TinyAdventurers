@@ -4,6 +4,7 @@ use super::races::{self, Adjust, Race, Profile};
 use super::items::ItemId;
 use super::kinds::EntityKind;
 use crate::protocol::BossId;
+use crate::run::targets::Reaction;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EnemyType {
@@ -37,11 +38,19 @@ pub enum EnemyType {
     Shade,
     /// A soldier who can join the party (#149): never placed by level generation, only by the start room.
     Knight,
+    /// Wildlife (#227): runs from whoever hit it. Spawned in the nymph's cove.
+    Bunny,
+    /// Wildlife (#227): runs from whoever hit it; the spotted deer.
+    Deer,
+    /// Wildlife (#227): the deer's twin with antlers, its own type with the deer's numbers.
+    Stag,
+    /// Wildlife (#227): fights back against the side that hit it.
+    Boar,
 }
 
 impl EnemyType {
     #[cfg(test)]
-    pub const ALL: [EnemyType; 18] = [
+    pub const ALL: [EnemyType; 22] = [
         EnemyType::GoblinArcher,
         EnemyType::SkeletonWarrior,
         EnemyType::SkeletonArcher,
@@ -60,6 +69,10 @@ impl EnemyType {
         EnemyType::Ghost,
         EnemyType::Shade,
         EnemyType::Knight,
+        EnemyType::Bunny,
+        EnemyType::Deer,
+        EnemyType::Stag,
+        EnemyType::Boar,
     ];
 }
 
@@ -80,8 +93,24 @@ pub struct EnemyDef {
     pub abilities: &'static [AbilityId],
     /// What the abilities use: the melee weapon (or natural one: fists, claws, bite), then the bow.
     pub weapons: &'static [ItemId],
-    /// The distance (px) a shooter keeps from its target; 0 for those who close in.
-    pub preferred: f64,
+    /// How it moves and when it uses its main attack (the base AI layer, run/behaviour.rs).
+    pub base_ai: BaseAi,
+    /// Whether it wanders around its home when it has nothing to do. The Disciple and the awake Mimic stay put.
+    pub wanders: bool,
+    /// Set for a wild animal (#227): it is Neutral, calm until hit, and reacts as this says.
+    pub wild: Option<Reaction>,
+}
+
+/// How a creature moves and fights: the base AI under its role and over its ability modules. The
+/// bosses' scripts (run/bosses/) are a base of their own and read none of this.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BaseAi {
+    /// Closes in on its foe and swings.
+    Melee,
+    /// Keeps `preferred` px from its foe, backing off when closer, and shoots.
+    Ranged { preferred: f64 },
+    /// Never moves: it only attacks what is in reach or in sight (the Disciple, speed 0).
+    Stationary,
 }
 
 pub fn def(t: EnemyType) -> EnemyDef {
@@ -101,7 +130,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 6.0,
                 abilities: &[Shoot, Strike],
                 weapons: &[UnarmedStrike, GoblinShortbow],
-                preferred: 90.0,
+                base_ai: BaseAi::Ranged { preferred: 90.0 },
+                wanders: true,
+                wild: None,
             }
         }
         SkeletonWarrior | RaisedSkeleton => {
@@ -116,7 +147,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 9.0,
                 abilities: &[Strike],
                 weapons: &[SkeletonSword],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
+                wild: None,
             }
         }
         SkeletonArcher | RaisedArcher => {
@@ -131,7 +164,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 9.0,
                 abilities: &[Shoot, Strike],
                 weapons: &[UnarmedStrike, SkeletonBow],
-                preferred: 100.0,
+                base_ai: BaseAi::Ranged { preferred: 100.0 },
+                wanders: true,
+                wild: None,
             }
         }
         OrcWarrior => {
@@ -146,7 +181,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 13.0,
                 abilities: &[Strike],
                 weapons: &[OrcCleaver],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
+                wild: None,
             }
         }
         OrcArcher => {
@@ -161,7 +198,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 13.0,
                 abilities: &[Shoot, Strike],
                 weapons: &[UnarmedStrike, OrcWarbow],
-                preferred: 100.0,
+                base_ai: BaseAi::Ranged { preferred: 100.0 },
+                wanders: true,
+                wild: None,
             }
         }
         Necromancer | Summoner => {
@@ -176,7 +215,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 10.0,
                 abilities: if t == Summoner { &[FireBolt, Strike, SummonImps] } else { &[ShadowBolt, Strike, RaiseDead] },
                 weapons: if t == Summoner { &[SummonerRod] } else { &[NecromancerRod] },
-                preferred: 110.0,
+                base_ai: BaseAi::Ranged { preferred: 110.0 },
+                wanders: true,
+                wild: None,
             }
         }
         Disciple => {
@@ -191,7 +232,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 10.0,
                 abilities: &[ShadowBolt, Strike],
                 weapons: &[UnarmedStrike],
-                preferred: 0.0,
+                base_ai: BaseAi::Stationary,
+                wanders: false,
+                wild: None,
             }
         }
         Mimic => {
@@ -207,7 +250,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 14.0,
                 abilities: &[Bite],
                 weapons: &[MimicBite],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: false,
+                wild: None,
             }
         }
         Imp | SummonedImp => {
@@ -222,7 +267,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 4.0,
                 abilities: &[FireBolt, Strike],
                 weapons: &[ImpClaws],
-                preferred: 90.0,
+                base_ai: BaseAi::Ranged { preferred: 90.0 },
+                wanders: true,
+                wild: None,
             }
         }
         Chort => {
@@ -237,7 +284,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 10.0,
                 abilities: &[Strike, FireBolt],
                 weapons: &[ChortClaws],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
+                wild: None,
             }
         }
         // Ghost (#169): a first guess (label `balancing`). It floats through walls; Vanish and the ambush (`run/ambush.rs`) are its tactics.
@@ -253,7 +302,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 3.0,
                 abilities: &[Touch, Vanish],
                 weapons: &[GhostTouch],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
+                wild: None,
             }
         }
         // Shade (#170): a first guess (label `balancing`), the Ghost's twin: a little sturdier and slower, it drains CON.
@@ -269,7 +320,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 3.0,
                 abilities: &[Touch, Vanish],
                 weapons: &[ShadeTouch],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
+                wild: None,
             }
         }
         // Knight (#149): a first guess (label `balancing`); its speed keeps up with the heroes (66-72).
@@ -285,7 +338,62 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 12.0,
                 abilities: &[Strike],
                 weapons: &[SoldierSword],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
+                wild: None,
+            }
+        }
+        // Wildlife (#227): first guesses (label `balancing`). A bunny is a bunny: it dies to almost any hit.
+        Bunny => {
+            let attrs = Attributes::new(4, 16, 6, 2, 8, 6);
+            EnemyDef {
+                kind: EntityKind::Bunny,
+                hp: 5.0,
+                speed: 80.0,
+                radius: 4.0,
+                vision: 6.0,
+                attrs,
+                weight: 2.0,
+                abilities: &[],
+                weapons: &[],
+                base_ai: BaseAi::Melee,
+                wanders: true,
+                wild: Some(Reaction::Flee),
+            }
+        }
+        // The deer lets the player see fleeing (the user, 2026-11-06); the stag is its twin with antlers.
+        Deer | Stag => {
+            let attrs = Attributes::new(8, 16, 12, 2, 10, 8);
+            EnemyDef {
+                kind: if t == Stag { EntityKind::Stag } else { EntityKind::Deer },
+                hp: 40.0,
+                speed: 90.0,
+                radius: 6.0,
+                vision: 8.0,
+                attrs,
+                weight: 12.0,
+                abilities: &[],
+                weapons: &[],
+                base_ai: BaseAi::Melee,
+                wanders: true,
+                wild: Some(Reaction::Flee),
+            }
+        }
+        Boar => {
+            let attrs = Attributes::new(14, 10, 14, 2, 8, 6);
+            EnemyDef {
+                kind: EntityKind::Boar,
+                hp: 40.0,
+                speed: 64.0,
+                radius: 6.0,
+                vision: 6.0,
+                attrs,
+                weight: 14.0,
+                abilities: &[Strike],
+                weapons: &[BoarTusks],
+                base_ai: BaseAi::Melee,
+                wanders: true,
+                wild: Some(Reaction::FightBack),
             }
         }
         Ogre => {
@@ -301,7 +409,9 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 weight: 20.0,
                 abilities: &[Strike, GroundSlam],
                 weapons: &[OgreClub],
-                preferred: 0.0,
+                base_ai: BaseAi::Melee,
+                wanders: true,
+                wild: None,
             }
         }
     }
@@ -335,6 +445,12 @@ pub fn is_demon(t: EnemyType) -> bool {
     matches!(t, EnemyType::Imp | EnemyType::Chort | EnemyType::Summoner | EnemyType::SummonedImp)
 }
 
+/// A fleeing wild animal calms down, after `WILD_MIN_FLEE`, once the one it runs from is this far away (px, centre distance) or 48 px farther than at the hit, whichever is more; or out of sight (#227).
+pub const WILD_CALM_DIST: f64 = 96.0;
+
+/// A fleeing wild animal runs at least this long (s) after every hit, whoever hit it from wherever (#227, first guess).
+pub const WILD_MIN_FLEE: f64 = 1.5;
+
 /// A second (alt) ranged attack is only used from at least this far away
 /// (center distance, px): chorts throw fire bolts at heroes out of reach.
 pub const ALT_BOLT_MIN_DIST: f64 = 40.0;
@@ -364,6 +480,7 @@ pub fn races(t: EnemyType) -> &'static [Race] {
         GoblinArcher => &[Race::Goblin],
         OrcWarrior | OrcArcher => &[Race::Orc],
         Ogre => &[Race::Ogre],
+        Bunny | Deer | Stag | Boar => &[Race::Animal],
         Mimic => &[Race::Mimic],
         Imp | Chort | SummonedImp => &[Race::Demon],
         Ghost | Shade => &[Race::Undead, Race::Incorporeal],
@@ -407,20 +524,51 @@ mod tests {
         assert_eq!(def(Ghost).attrs, Attributes::new(6, 14, 10, 10, 12, 14));
         assert_eq!(def(Shade).attrs, Attributes::new(8, 12, 12, 10, 14, 15));
         let shade = def(Shade);
-        assert_eq!((shade.hp, shade.speed, shade.radius, shade.vision, shade.preferred), (40.0, 44.0, 6.0, 8.75, 0.0));
+        assert_eq!((shade.hp, shade.speed, shade.radius, shade.vision, shade.base_ai), (40.0, 44.0, 6.0, 8.75, BaseAi::Melee));
         assert_eq!((shade.abilities, shade.weapons), (&[AbilityId::Touch, AbilityId::Vanish][..], &[ItemId::ShadeTouch][..]));
         let ghost = def(Ghost);
-        assert_eq!((ghost.hp, ghost.speed, ghost.radius, ghost.vision, ghost.preferred), (32.0, 50.0, 6.0, 8.75, 0.0));
+        assert_eq!((ghost.hp, ghost.speed, ghost.radius, ghost.vision, ghost.base_ai), (32.0, 50.0, 6.0, 8.75, BaseAi::Melee));
         assert_eq!((ghost.abilities, ghost.weapons), (&[AbilityId::Touch, AbilityId::Vanish][..], &[ItemId::GhostTouch][..]));
         let weights = [
             (GoblinArcher, 6.0), (SkeletonWarrior, 9.0), (SkeletonArcher, 9.0), (RaisedSkeleton, 9.0), (RaisedArcher, 9.0),
             (OrcWarrior, 13.0), (OrcArcher, 13.0), (Necromancer, 10.0), (Summoner, 10.0), (Disciple, 10.0),
             (Mimic, 14.0), (Imp, 4.0), (SummonedImp, 4.0), (Chort, 10.0), (Ogre, 20.0), (Ghost, 3.0), (Shade, 3.0),
-            (Knight, 12.0),
+            (Knight, 12.0), (Bunny, 2.0), (Deer, 12.0), (Stag, 12.0), (Boar, 14.0),
         ];
         assert_eq!(weights.len(), EnemyType::ALL.len());
         for (t, w) in weights {
             assert_eq!(def(t).weight, w, "{t:?}");
+        }
+    }
+
+    /// The animals that never fight (bunny, deer, stag): no abilities and no weapons, so the kit rules skip them.
+    fn is_unarmed_animal(t: EnemyType) -> bool {
+        matches!(t, EnemyType::Bunny | EnemyType::Deer | EnemyType::Stag)
+    }
+
+    #[test]
+    fn kit_for_keeps_the_defs_ability_order() {
+        // The AI reads kit entry 0 as the main ability and entry 1 as the alt one.
+        for t in EnemyType::ALL {
+            let d = def(t);
+            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &d.attrs, &[]);
+            let ids: Vec<_> = kit.iter().map(|a| a.id).collect();
+            assert_eq!(ids, d.abilities, "{t:?}");
+        }
+    }
+
+    #[test]
+    fn every_enemy_has_its_base_ai() {
+        for t in EnemyType::ALL {
+            let want = match t {
+                EnemyType::Disciple => BaseAi::Stationary,
+                EnemyType::GoblinArcher | EnemyType::Imp | EnemyType::SummonedImp => BaseAi::Ranged { preferred: 90.0 },
+                EnemyType::SkeletonArcher | EnemyType::RaisedArcher | EnemyType::OrcArcher => BaseAi::Ranged { preferred: 100.0 },
+                EnemyType::Necromancer | EnemyType::Summoner => BaseAi::Ranged { preferred: 110.0 },
+                _ => BaseAi::Melee,
+            };
+            assert_eq!(def(t).base_ai, want, "{t:?}");
+            assert_eq!(def(t).wanders, !matches!(t, EnemyType::Disciple | EnemyType::Mimic), "{t:?}");
         }
     }
 
@@ -433,6 +581,9 @@ mod tests {
             for &id in d.abilities {
                 assert!(kit.get(id).is_some(), "{t:?} {id:?}");
             }
+            if is_unarmed_animal(t) {
+                continue;
+            }
             assert!(matches!(items::def(d.weapons[0]).base, ItemBase::Melee(..)), "{t:?}: its first weapon is a melee one");
         }
     }
@@ -442,6 +593,10 @@ mod tests {
     fn enemy_abilities_fit_their_weapons() {
         for t in EnemyType::ALL {
             let d = def(t);
+            if is_unarmed_animal(t) {
+                assert!(d.abilities.is_empty() && d.weapons.is_empty(), "{t:?}");
+                continue;
+            }
             let ranged = d.weapons.iter().any(|&w| matches!(items::def(w).base, ItemBase::Ranged(..)));
             assert_eq!(ranged, d.abilities.contains(&AbilityId::Shoot), "{t:?}: a bow goes with Shoot");
             assert!(d.abilities.iter().any(|a| matches!(a, AbilityId::Strike | AbilityId::Bite | AbilityId::Touch)), "{t:?} has no melee ability");
@@ -504,10 +659,34 @@ mod tests {
         use EnemyType::Knight;
         let k = def(Knight);
         assert_eq!(k.attrs, Attributes::new(14, 12, 14, 8, 10, 12));
-        assert_eq!((k.hp, k.speed, k.radius, k.vision, k.preferred), (60.0, 68.0, 5.0, 8.0, 0.0));
+        assert_eq!((k.hp, k.speed, k.radius, k.vision, k.base_ai), (60.0, 68.0, 5.0, 8.0, BaseAi::Melee));
         assert_eq!((k.abilities, k.weapons), (&[AbilityId::Strike][..], &[ItemId::SoldierSword][..]));
         assert_eq!(races(Knight), &[Race::Human]);
         assert_eq!(crate::defs::progression::xp_for_kill(Some(Knight)), 0);
+    }
+
+    /// The wildlife of #227: first guesses (label `balancing`).
+    #[test]
+    fn wildlife_stat_blocks() {
+        use EnemyType::*;
+        let bunny = def(Bunny);
+        assert_eq!(bunny.attrs, Attributes::new(4, 16, 6, 2, 8, 6));
+        assert_eq!((bunny.hp, bunny.speed, bunny.radius, bunny.vision, bunny.wild), (5.0, 80.0, 4.0, 6.0, Some(Reaction::Flee)));
+        for t in [Deer, Stag] {
+            let d = def(t);
+            assert_eq!(d.attrs, Attributes::new(8, 16, 12, 2, 10, 8), "{t:?}");
+            assert_eq!((d.hp, d.speed, d.radius, d.vision, d.wild), (40.0, 90.0, 6.0, 8.0, Some(Reaction::Flee)), "{t:?}");
+        }
+        assert_eq!((def(Deer).kind, def(Stag).kind), (EntityKind::Deer, EntityKind::Stag));
+        let boar = def(Boar);
+        assert_eq!(boar.attrs, Attributes::new(14, 10, 14, 2, 8, 6));
+        assert_eq!((boar.hp, boar.speed, boar.radius, boar.vision, boar.wild), (40.0, 64.0, 6.0, 6.0, Some(Reaction::FightBack)));
+        assert_eq!((boar.abilities, boar.weapons), (&[AbilityId::Strike][..], &[ItemId::BoarTusks][..]));
+        for t in EnemyType::ALL {
+            assert_eq!(def(t).wild.is_some(), matches!(t, Bunny | Deer | Stag | Boar), "{t:?}");
+        }
+        use crate::defs::progression::{coins_for_kill, xp_for_kill};
+        assert_eq!([Bunny, Deer, Stag, Boar].map(|t| (xp_for_kill(Some(t)), coins_for_kill(Some(t)))), [(0, 0), (0, 0), (0, 0), (3, 0)]);
     }
 
     #[test]
@@ -520,7 +699,7 @@ mod tests {
     #[test]
     fn enemy_races() {
         use EnemyType::*;
-        let expect: [(EnemyType, &[Race]); 18] = [
+        let expect: [(EnemyType, &[Race]); 22] = [
             (GoblinArcher, &[Race::Goblin]),
             (SkeletonWarrior, &[Race::Undead]),
             (SkeletonArcher, &[Race::Undead]),
@@ -539,6 +718,10 @@ mod tests {
             (Ghost, &[Race::Undead, Race::Incorporeal]),
             (Shade, &[Race::Undead, Race::Incorporeal]),
             (Knight, &[Race::Human]),
+            (Bunny, &[Race::Animal]),
+            (Deer, &[Race::Animal]),
+            (Stag, &[Race::Animal]),
+            (Boar, &[Race::Animal]),
         ];
         assert_eq!(expect.len(), EnemyType::ALL.len());
         for (t, r) in expect {
@@ -603,6 +786,7 @@ mod kit_pins {
             (Ogre, Strike, Pin { damage: 18.0, cooldown: 2.0, range: 32.0, speed: 0.0, radius: 0.0, windup: 0.5, push: 28.0 }),
             (Ogre, GroundSlam, Pin { damage: 21.599999999999998, cooldown: 7.5, range: 32.0, speed: 0.0, radius: 34.0, windup: 1.0, push: 28.0 }),
             (Knight, Strike, Pin { damage: 13.09090909090909, cooldown: 0.8333333333333334, range: 23.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
+            (Boar, Strike, Pin { damage: 8.0, cooldown: 1.0, range: 24.0, speed: 0.0, radius: 0.0, windup: 0.3, push: 0.0 }),
         ];
         let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
         for t in EnemyType::ALL {

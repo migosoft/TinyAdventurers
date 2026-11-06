@@ -261,12 +261,12 @@ mod tests {
         let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
         let wi = run.monster_idx(wolf).unwrap();
         let mi = enemy(&mut run, EnemyType::OrcWarrior);
-        run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None });
+        run.monsters[wi].ai.windup = Some(crate::run::entities::Windup { t: 0.0, aim: 0.0, alt: false, at: None, id: None });
         let (e, w) = (run.monsters[mi].pos, wi);
         run.monsters[w].pos = e - Vec2::new(10.0, 0.0);
         let id = run.monsters[mi].id;
         run.monsters[w].companion.as_mut().unwrap().prey = Some(id);
-        crate::run::wolf::tick_wolf(&mut run, wi, 1.0 / 60.0);
+        crate::run::behaviour::tick(&mut run, wi, 1.0 / 60.0, true);
         assert!(run.monsters[mi].wolf_bit > 1.9, "bitten: {}", run.monsters[mi].wolf_bit);
     }
 
