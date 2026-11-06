@@ -12,7 +12,7 @@ use super::Run;
 use crate::collision::walk_line;
 use crate::defs::enemies::EnemyType;
 use crate::defs::{items, trees};
-use crate::dungeon::Mover;
+use crate::dungeon::{Map, Mover};
 use crate::math::Vec2;
 use crate::protocol::{Ev, ServerMsg};
 use crate::sheet::Lasting;
@@ -120,8 +120,8 @@ impl Run {
             let name = self.players[pi].name.clone();
             self.event(Ev::Msg { text: format!("{name} entered debug mode (immortal)") }, None);
         }
-        let (points, ogre) = if on { (boss_path(self, pi), ogre_path(self, pi)) } else { (Vec::new(), Vec::new()) };
-        self.send(&self.players[pi], &ServerMsg::DebugPath { on, immortal: on, points, ogre });
+        let (points, ogre, cove) = if on { (boss_path(self, pi), ogre_path(self, pi), cove_path(self, pi)) } else { (Vec::new(), Vec::new(), Vec::new()) };
+        self.send(&self.players[pi], &ServerMsg::DebugPath { on, immortal: on, points, ogre, cove });
     }
 
     /// Debug cheat (F9): immortality on or off. Only in debug mode; the run stays a debug run.
@@ -133,8 +133,8 @@ impl Run {
         p.mortal = !on;
         let name = p.name.clone();
         self.event(Ev::Msg { text: format!("{name} is {} (debug)", if on { "immortal" } else { "mortal" }) }, None);
-        let (points, ogre) = (boss_path(self, pi), ogre_path(self, pi));
-        self.send(&self.players[pi], &ServerMsg::DebugPath { on: true, immortal: on, points, ogre });
+        let (points, ogre, cove) = (boss_path(self, pi), ogre_path(self, pi), cove_path(self, pi));
+        self.send(&self.players[pi], &ServerMsg::DebugPath { on: true, immortal: on, points, ogre, cove });
     }
 }
 
@@ -150,6 +150,27 @@ pub fn boss_path(run: &Run, pi: usize) -> Vec<(f32, f32)> {
 /// Empty once the ogre is dead.
 pub fn ogre_path(run: &Run, pi: usize) -> Vec<(f32, f32)> {
     ogre_target(run).map_or_else(Vec::new, |to| shortest_path(run, pi, to))
+}
+
+/// The walkable tile in the nymph's cove nearest the room's centre (the trunk blocks walking).
+fn cove_target(run: &Run) -> Option<Vec2> {
+    let cove = run.layout.cove?;
+    let mid = cove.rect.center_px();
+    let r = cove.rect;
+    (r.y..r.y + r.h)
+        .flat_map(|y| (r.x..r.x + r.w).map(move |x| (x, y)))
+        .filter(|&(x, y)| run.layout.map.safe(x, y))
+        .map(|(x, y)| Map::center_of(x, y))
+        .min_by(|a, b| a.dist(mid).total_cmp(&b.dist(mid)))
+}
+
+/// Empty without a cove, and while the hero stands in it.
+pub fn cove_path(run: &Run, pi: usize) -> Vec<(f32, f32)> {
+    let inside = run.layout.cove.is_some_and(|c| c.rect.contains(run.players[pi].pos()));
+    if inside {
+        return Vec::new();
+    }
+    cove_target(run).map_or_else(Vec::new, |to| shortest_path(run, pi, to))
 }
 
 /// Shortest tile path (A*) from the player to `to`, shortened to straight
@@ -178,8 +199,8 @@ fn shortest_path(run: &Run, pi: usize, to: Vec2) -> Vec<(f32, f32)> {
 pub fn send_paths(run: &Run) {
     for (pi, p) in run.players.iter().enumerate() {
         if p.debug && p.alive && p.tx.is_some() {
-            let (points, ogre) = (boss_path(run, pi), ogre_path(run, pi));
-            run.send(p, &ServerMsg::DebugPath { on: true, immortal: p.immortal(), points, ogre });
+            let (points, ogre, cove) = (boss_path(run, pi), ogre_path(run, pi), cove_path(run, pi));
+            run.send(p, &ServerMsg::DebugPath { on: true, immortal: p.immortal(), points, ogre, cove });
         }
     }
 }
@@ -223,6 +244,23 @@ mod tests {
         run.set_debug(0, false);
         run.hurt_player(0, Damage::physical(10_000.0));
         assert!(!run.players[0].alive, "mortal again");
+    }
+
+    #[test]
+    fn a_debug_hero_gets_a_path_to_the_cove_until_standing_in_it() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Dragon);
+        let cove = run.layout.cove.expect("a dungeon has a cove");
+        assert!(!cove.rect.contains(run.players[0].pos()), "the heroes start outside the cove");
+        let path = cove_path(&run, 0);
+        assert!(path.len() >= 2, "path found");
+        let end = path.last().unwrap();
+        let end = Vec2::new(end.0 as f64, end.1 as f64);
+        assert!(cove.rect.contains(end), "ends inside the cove");
+        let (tx, ty) = Map::tile_of(end);
+        assert!(run.layout.map.safe(tx, ty), "ends on walkable ground, not the trunk");
+
+        (run.players[0].mv.x, run.players[0].mv.y) = (end.x, end.y);
+        assert!(cove_path(&run, 0).is_empty(), "no cove path while standing in the cove");
     }
 
     #[test]

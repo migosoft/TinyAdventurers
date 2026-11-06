@@ -1559,7 +1559,7 @@ mod tests {
         run.monsters.retain(|m| m.is_boss);
         let pos = run.players[0].pos() + Vec2::new(10.0, 0.0);
         let id = run.spawn_enemy(EnemyType::Bunny, pos, None);
-        let bunny = run.monster_idx(id).unwrap();
+        assert!(run.monster_idx(id).is_some(), "the bunny spawned");
         assert_eq!(melee_target(&run, 0), None, "a calm bunny is no melee target");
         run.players[0].aim = 0.0;
         try_use(&mut run, 0, true, 1);

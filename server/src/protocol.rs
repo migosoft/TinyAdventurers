@@ -378,8 +378,9 @@ pub enum ServerMsg {
     HeroChanged { speed: f64, abilities: [crate::sheet::ResolvedAbility; 2], fallback: crate::sheet::ResolvedAbility, disabled: [Option<(Attr, i32)>; 2] },
     Error { msg: String },
     /// Debug mode: shortest walkable path from the player to the boss (pixel waypoints).
-    /// `ogre`: the path to the ogre mini-boss while it lives (else empty). `immortal`: false after `DebugImmortal { on: false }`.
-    DebugPath { on: bool, immortal: bool, points: Vec<(f32, f32)>, ogre: Vec<(f32, f32)> },
+    /// `ogre`: the path to the ogre mini-boss while it lives (else empty). `cove`: the path to the nymph's cove while the
+    /// hero is outside it (else empty). `immortal`: false after `DebugImmortal { on: false }`.
+    DebugPath { on: bool, immortal: bool, points: Vec<(f32, f32)>, ogre: Vec<(f32, f32)>, cove: Vec<(f32, f32)> },
 }
 
 /// A character and its progress, as the client sees it (read only: the server

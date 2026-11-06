@@ -169,6 +169,7 @@ export class GameScene extends Phaser.Scene {
   private disabled: Disabled = [null, null];
   private debugPath: [number, number][] = [];
   private debugOgre: [number, number][] = [];
+  private debugCove: [number, number][] = [];
   private debugGfx!: Phaser.GameObjects.Graphics;
 
   constructor() {
@@ -229,6 +230,7 @@ export class GameScene extends Phaser.Scene {
     this.debugImmortal = true;
     this.debugPath = [];
     this.debugOgre = [];
+    this.debugCove = [];
 
     const kb = this.input.keyboard!;
     // No key capture: Phaser's capture calls preventDefault page-wide and outlives the
@@ -396,6 +398,7 @@ export class GameScene extends Phaser.Scene {
       this.debugImmortal = m.immortal;
       this.debugPath = m.points;
       this.debugOgre = m.ogre;
+      this.debugCove = m.cove;
     }
     else if (m.t === 'HeroChanged') {
       this.info = { ...this.info, speed: m.speed, abilities: m.abilities, fallback: m.fallback };
@@ -1030,10 +1033,11 @@ export class GameScene extends Phaser.Scene {
     else if (!mine && pd.trail && Math.random() < 0.5) this.fx.particle(e.x, e.y - 8, 0, 0, 0.25, pd.trail, { depth: DEPTH.projectile - 1 });
   }
 
-  /** Debug: marching dashed lines along the server's shortest paths to the boss (yellow) and the ogre (blue). */
+  /** Debug: marching dashed lines along the server's shortest paths to the boss (yellow), the ogre (blue) and the cove (green). */
   private drawDebugPath(px: number, py: number, now: number): void {
     const g = this.debugGfx.clear();
     if (!this.debugOn || !this.alive) return;
+    this.drawPathLine(g, px, py, now, this.debugCove, 0x40e070, 0x20a050);
     this.drawPathLine(g, px, py, now, this.debugOgre, 0x40a0ff, 0x4060ff);
     this.drawPathLine(g, px, py, now, this.debugPath, 0xffe040, 0xff4040);
   }

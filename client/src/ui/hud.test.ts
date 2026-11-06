@@ -52,6 +52,7 @@ describe('Hud', () => {
       ['F9', 'F9immortal on/off'],
       ['', 'path to the boss'],
       ['', 'path to the ogre'],
+      ['', 'path to the cove'],
     ]);
     expect(badge.querySelector('.db-title')!.textContent).toBe('DEBUG · immortal');
     expect(badge.querySelector('.db-title.mortal')).toBeNull();

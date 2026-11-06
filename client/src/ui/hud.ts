@@ -63,6 +63,7 @@ export const DEBUG_KEYS: [key: string, label: string][] = [
 const DEBUG_PATHS: [colour: string, label: string][] = [
   ['#ffe040', 'path to the boss'],
   ['#40a0ff', 'path to the ogre'],
+  ['#40e070', 'path to the cove'],
 ];
 
 /** The debug badge: the immortality state, then one row per debug key and per path colour. */
@@ -362,7 +363,7 @@ export class Hud {
   setDebug(on: boolean, immortal: boolean, announce: boolean): void {
     this.debugBadge.classList.toggle("hidden", !on);
     this.debugBadge.innerHTML = debugBadgeHtml(immortal);
-    if (announce) this.message(on ? "Debug mode on: immortal (F9 toggles), paths to the boss (yellow) and the ogre (blue) shown." : "Debug mode off.");
+    if (announce) this.message(on ? "Debug mode on: immortal (F9 toggles), paths to the boss (yellow), the ogre (blue) and the cove (green) shown." : "Debug mode off.");
   }
 
   toggleDebug(): void {
