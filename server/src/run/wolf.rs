@@ -1262,14 +1262,25 @@ mod tests {
     }
 
     #[test]
+    fn the_bite_wait_counts_down_while_following_and_while_dashing() {
+        // With no prey the wolf follows; mid-dash it flies. Either way ai.cd runs, once per tick.
+        let (mut run, id) = guard_run();
+        let wi = wolf_idx(&run, id);
+        run.monsters[wi].ai.cd = 1.0;
+        run.step();
+        assert!((wolf(&run, id).ai.cd - (1.0 - DT)).abs() < 1e-9, "following: {}", wolf(&run, id).ai.cd);
+        let far = run.monsters[wi].pos + Vec2::new(40.0, 0.0);
+        assert!(monster_use(&mut run, wi, AbilityId::Pounce, far));
+        run.monsters[wi].ai.cd = 1.0;
+        run.step();
+        assert!(wolf(&run, id).dash.is_some());
+        assert!((wolf(&run, id).ai.cd - (1.0 - DT)).abs() < 1e-9, "dashing: {}", wolf(&run, id).ai.cd);
+    }
+
+    #[test]
     fn the_wolfs_bite_wait_runs_on_its_clock() {
         let (mut run, id) = guard_run();
         let wi = wolf_idx(&run, id);
-        // The base AI keeps the wait while the wolf has prey (a wolf at heel does not count it down).
-        let w = run.monsters[wi].pos;
-        let orc = orc_at(&mut run, w + Vec2::new(14.0, 0.0));
-        let oi = run.monster_idx(orc).unwrap();
-        run.monsters[oi].ai.hold = 99.0;
         run.apply_effect(Creature::Monster(wi), EffectKind::Accelerated, Some(30.0));
         run.monsters[wi].ai.cd = 1.0;
         crate::run::behaviour::tick(&mut run, wi, DT, true);

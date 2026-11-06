@@ -181,12 +181,22 @@ pub fn regroup(run: &mut Run, mi: usize, dt: f64) -> Option<usize> {
     Some(leader)
 }
 
+/// Counts the AI's waits (`cd`, `alt_cd`) down by the creature's own clock, on a tick that does not run
+/// `ai::tick_monster` (which counts them itself): following, climbing out of lava, dashing.
+pub fn count_waits(run: &mut Run, mi: usize, dt: f64) {
+    let m = &mut run.monsters[mi];
+    let cdt = m.effects.cooldown_dt(dt);
+    m.ai.cd -= cdt;
+    m.ai.alt_cd -= cdt;
+}
+
 /// The rest of a companion's tick, after its dash: fight its prey through the enemy AI, else follow `leader`.
 pub fn act(run: &mut Run, mi: usize, leader: usize, dt: f64) {
     let at = run.players[leader].pos();
     let escort = run.monsters[mi].companion.as_ref().expect("a companion").escort;
     // Blown into lava: walk out first, like any monster (the enemy movers cannot move inside a pool).
     if run.layout.map.blocks_at(run.monsters[mi].pos, run.monsters[mi].mover) {
+        count_waits(run, mi, dt);
         ai::escape_terrain(run, mi, dt);
         return;
     }
@@ -199,6 +209,7 @@ pub fn act(run: &mut Run, mi: usize, leader: usize, dt: f64) {
         m.ai.windup = None;
         m.ai.state = AiState::Idle;
         let speed = m.base.speed;
+        count_waits(run, mi, dt);
         follow(run, mi, leader, escort, speed, dt);
     }
 }
@@ -753,5 +764,18 @@ mod tests {
         let tag = crate::run::rules_log::tags::tag_of(&run, id);
         assert!(!tag.contains("wolf"), "{tag}");
         assert!(tag.starts_with("Knight"), "{tag}");
+    }
+
+    #[test]
+    fn a_knight_following_with_no_prey_counts_its_waits_down() {
+        let (mut run, mi) = recruited();
+        let leader = run.players[1].pos();
+        let m = &mut run.monsters[mi];
+        m.pos = leader + Vec2::new(10.0, 0.0);
+        m.ai.cd = 1.0;
+        m.ai.alt_cd = 1.0;
+        crate::run::behaviour::tick(&mut run, mi, 1.0 / 60.0, true);
+        let m = &run.monsters[mi];
+        assert!((m.ai.cd - (1.0 - 1.0 / 60.0)).abs() < 1e-9 && (m.ai.alt_cd - (1.0 - 1.0 / 60.0)).abs() < 1e-9, "{} {}", m.ai.cd, m.ai.alt_cd);
     }
 }

@@ -125,7 +125,7 @@ export class GameScene extends Phaser.Scene {
   private bars!: Phaser.GameObjects.Graphics;
   /** HP bars over heroes: under the darkness, so they vanish with their hero. */
   private heroBars!: Phaser.GameObjects.Graphics;
-  /** The heroes' names by entity id (the wolf's label reads its leader's). */
+  /** The heroes' names by entity id (the wolf's label reads its leader's). Duplicates `RulesLog.names`: the boundary test forbids reaching into the log. */
   private heroNames = new Map<number, string>();
   /** The names over the bars of neutral and recruited monsters, by entity id. */
   private barLabels = new Map<number, Phaser.GameObjects.Text>();

@@ -45,6 +45,9 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, active: bool) {
     };
     // A dash in progress carries on whatever the role.
     if run.monsters[mi].dash.is_some() {
+        if role == Role::Escort {
+            companion::count_waits(run, mi, dt);
+        }
         modules::dash_step(run, mi, dt);
         return;
     }

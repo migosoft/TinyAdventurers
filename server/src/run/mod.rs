@@ -1213,7 +1213,7 @@ impl Run {
         if !m.alive {
             return;
         }
-        if m.companion.as_ref().is_some_and(|c| c.summoned) {
+        if m.companion.as_ref().is_some_and(|c| c.summoned && self.players.iter().any(|p| p.wolf == Some(m.id))) {
             wolf::wolf_died(self, mi);
             return;
         }
