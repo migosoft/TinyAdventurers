@@ -453,6 +453,17 @@ mod tests {
     }
 
     #[test]
+    fn kit_for_keeps_the_defs_ability_order() {
+        // The AI reads kit entry 0 as the main ability and entry 1 as the alt one.
+        for t in EnemyType::ALL {
+            let d = def(t);
+            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &d.attrs, &[]);
+            let ids: Vec<_> = kit.iter().map(|a| a.id).collect();
+            assert_eq!(ids, d.abilities, "{t:?}");
+        }
+    }
+
+    #[test]
     fn every_enemy_has_its_base_ai() {
         for t in EnemyType::ALL {
             let want = match t {

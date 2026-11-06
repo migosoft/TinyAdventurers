@@ -371,7 +371,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 Shape::Ring => a.radius,
                 _ => a.range,
             };
-            let main = run.monsters[mi].kit.iter().next().expect("a creature has its main ability").clone();
+            let main = run.monsters[mi].kit.first().expect("a creature has its main ability").clone();
             let range = reach(&main);
             let preferred = match base_ai {
                 BaseAi::Ranged { preferred } => preferred,
@@ -544,7 +544,7 @@ pub(crate) const SWING_SLACK: f64 = 4.0;
 /// the AI is never faster than the ability.
 const SHOT_PACE_JITTER: f64 = 0.3;
 
-/// Uses the enemy's main ability, or its alt one (`alt`) with its own cooldown, at the foe (or at `at`,
+/// Uses the creature's main ability (kit entry 0), or its alt one (`alt`, kit entry 1) with its own cooldown, at the foe (or at `at`,
 /// a barrel). Either one also keeps the other back for a moment, so they never land at once.
 pub(crate) fn perform_attack(run: &mut Run, mi: usize, foe: Creature, alt: bool, at: Option<Vec2>) {
     let id = run.monsters[mi].kit.iter().nth(alt as usize).expect("the kit holds the main and the alt ability").id;

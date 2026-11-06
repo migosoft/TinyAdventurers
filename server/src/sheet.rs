@@ -335,7 +335,7 @@ impl Kit {
         self.0.iter()
     }
 
-    /// The first ability: a companion's attack (the wolf's Bite).
+    /// The first ability: every creature's main ability (the wolf's Bite, an orc's swing).
     pub fn first(&self) -> Option<&ResolvedAbility> {
         self.0.first()
     }
