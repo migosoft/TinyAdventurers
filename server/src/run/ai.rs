@@ -409,9 +409,8 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                         let near = run.foes_in(pos, alt.radius, None).into_iter().filter(|&c| targets::fights(&me, &targets::stance(run, c))).count();
                         near >= 2 || near == 1 && run.monsters[mi].ai.cd > 0.0
                     }
-                    // A charmed boss's kit has abilities the enemy AI has no turn for (the demon's Swoop): they stay with its pattern.
-                    _ if run.monsters[mi].is_boss => false,
-                    shape => unreachable!("{alt_id:?} is a {shape:?}: an alt ability swings, shoots or slams"),
+                    // A shape the chase has no turn for (a charmed boss's Swoop) is not used by the chase.
+                    _ => false,
                 };
                 if usable && rest && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {
                     if ab::def(alt_id).shape == Shape::Ring {

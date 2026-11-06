@@ -3090,6 +3090,18 @@ mod tests {
     }
 
     #[test]
+    fn charm_orb_at_an_unarmed_animal_does_not_stop_the_server() {
+        let mut run = charm_wizard();
+        let deer = put_enemy(&mut run, 0, EnemyType::Deer, 60.0, 1000.0);
+        try_use(&mut run, 0, false, 1);
+        fly(&mut run);
+        assert!(run.has_effect(Creature::Monster(deer), EffectKind::Charmed));
+        for _ in 0..30 {
+            run.step();
+        }
+    }
+
+    #[test]
     fn charm_orb_does_not_charm_the_knight() {
         let mut run = charm_wizard();
         let k = put_enemy(&mut run, 0, EnemyType::Knight, 60.0, 1000.0);

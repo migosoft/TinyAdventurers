@@ -134,6 +134,7 @@ fn switch_on(run: &mut Run, mi: usize, caster: u32) {
     m.wild = None;
     m.grudge = Grudge::default();
     m.ai = Ai::new(m.pos);
+    m.channel = None;
     rules_log::charm(run, mi, true);
 }
 
@@ -151,17 +152,17 @@ fn restore(m: &mut Monster) {
     m.ai.home = b.home;
     m.slam = None;
     m.dash = None;
+    m.channel = None;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defs::effects::EffectKind;
     use crate::defs::enemies::EnemyType;
     use crate::protocol::{BossId, ClassId};
     use crate::run::behaviour::{role, Role};
     use crate::run::effects::{Apply, Creature};
-    use crate::run::targets::{heroes_may_hit, Reaction};
+    use crate::run::targets::heroes_may_hit;
     use crate::run::tests::test_run;
 
     /// An open floor with the hero(es) and no monsters but the boss.
@@ -247,7 +248,6 @@ mod tests {
         assert_eq!(m.side, side);
         assert_eq!(m.ai.home, Vec2::new(200.0, 90.0));
         assert_eq!(role(m), Role::Wildlife);
-        let _ = Reaction::Flee;
     }
 
     #[test]
@@ -338,19 +338,63 @@ mod tests {
 
     #[test]
     fn turning_back_drops_what_it_was_doing() {
+        use crate::run::entities::{Target, Windup};
         let mut run = arena(&[ClassId::Wizard]);
         let oi = spawn(&mut run, EnemyType::OrcWarrior, 80.0);
         charm(&mut run, oi, 0, 1.0);
         run.step();
         let foe = run.monsters.iter().find(|m| m.is_boss).unwrap().id;
         let m = &mut run.monsters[oi];
-        m.ai.windup = Some(crate::run::entities::Windup { t: 5.0, aim: 0.0, alt: false, at: None, id: None });
-        m.ai.target = Some(crate::run::entities::Target::Monster(foe));
+        m.ai.windup = Some(Windup { t: 5.0, aim: 0.0, alt: false, at: None, id: None });
+        m.ai.cast = Some((crate::defs::abilities::AbilityId::RaiseDead, 5.0));
+        m.ai.target = Some(Target::Monster(foe));
+        m.slam = Some(5.0);
+        m.dash = Some(crate::run::entities::MonsterDash { id: crate::defs::abilities::AbilityId::Pounce, dir: Vec2::new(1.0, 0.0), left: 50.0, hit: Vec::new(), attack: true });
+        m.channel = Some((crate::defs::abilities::AbilityId::FireBreath, 5.0, 0.1));
         m.companion.as_mut().unwrap().prey = Some(foe);
         run.remove_effect(Creature::Monster(oi), EffectKind::Charmed);
-        sync_one(&mut run, oi);
+        run.step();
         let m = &run.monsters[oi];
-        assert!(m.ai.windup.is_none() && m.ai.target.is_none() && m.companion.is_none());
+        assert!(m.ai.windup.is_none() && m.ai.cast.is_none() && m.slam.is_none() && m.dash.is_none() && m.channel.is_none());
+        assert!(m.companion.is_none() && m.charm.is_none());
+        assert_ne!(m.ai.target, Some(Target::Monster(foe)), "the former prey is not its target");
+    }
+
+    #[test]
+    fn every_charmable_creature_steps_charmed() {
+        // Creatures with no attack (the bunny, deer and stag) have no prey, and must not stop the server.
+        let mut tried = Vec::new();
+        for t in EnemyType::ALL {
+            let mut run = arena(&[ClassId::Wizard]);
+            let mi = spawn(&mut run, t, 80.0);
+            let src = Some((run.players[0].id, run.players[0].pos()));
+            if !run.apply(Creature::Monster(mi), Apply { power: None, magical: true, source: src, ..Apply::plain(EffectKind::Charmed, Some(30.0)) }) {
+                continue;
+            }
+            tried.push(t);
+            spawn(&mut run, EnemyType::OrcWarrior, 40.0);
+            steps(&mut run, 240);
+        }
+        for t in [EnemyType::Bunny, EnemyType::Deer, EnemyType::Stag, EnemyType::OrcWarrior] {
+            assert!(tried.contains(&t), "{t:?} accepts Charmed");
+        }
+    }
+
+    #[test]
+    fn a_charmed_calm_animal_sinking_pays_nothing() {
+        use crate::dungeon::Tile;
+        let mut run = arena(&[ClassId::Wizard]);
+        let bi = spawn(&mut run, EnemyType::Deer, 80.0);
+        charm(&mut run, bi, 0, 30.0);
+        run.step();
+        assert!(is_on(&run.monsters[bi]));
+        let (tx, ty) = crate::dungeon::Map::tile_of(run.monsters[bi].pos);
+        run.layout.map.set(tx, ty, Tile::Chasm);
+        run.monsters[bi].last_hit_by = Some(0);
+        let id = run.monsters[bi].id;
+        steps(&mut run, 200);
+        assert!(run.monster_idx(id).map_or(true, |i| !run.monsters[i].alive), "it sank");
+        assert_eq!(run.players[0].kills, 0, "a calm wild animal is no kill, charmed or not");
     }
 
     #[test]

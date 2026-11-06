@@ -126,7 +126,8 @@ pub fn reappear(run: &mut Run, mi: usize, leader: Vec2) -> bool {
 pub fn find_prey(run: &Run, mi: usize, leader: Vec2, e: &Escort) -> Option<usize> {
     let w = &run.monsters[mi];
     let sight = w.sight_now();
-    let attack = w.kit.first().expect("a companion attacks").split;
+    // A companion with no attack (a charmed deer) has no prey.
+    let attack = w.kit.first()?.split;
     run.monsters
         .iter()
         .enumerate()

@@ -678,6 +678,9 @@ impl Run {
                 m.sinking = Some((t - DT, how));
             } else {
                 m.sinking = None;
+                // Back to its old self first: a charmed calm animal is no kill either.
+                charm::revert(self, mi);
+                let m = &mut self.monsters[mi];
                 // The unrecruited knight and a calm wild animal are no kill; a boar with a grudge against the heroes is.
                 let by_hero = m.last_hit_by;
                 let counts = m.side != Side::Neutral || m.wild.is_some() && m.grudge.heroes;

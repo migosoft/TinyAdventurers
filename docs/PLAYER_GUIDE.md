@@ -102,7 +102,7 @@ Every creature fights for a side: the monsters against you, you and your friends
 - **A master takes its minions along:** charm a necromancer or a summoner and its skeletons or imps fight for you too, also the ones it raises while charmed. They turn back with it.
 - **Bosses can be charmed** (not the Lich): the boss stops its own pattern and follows the Wizard for a short while, then picks up where it left off.
 - **When the charm ends** it is its old self again, right where it stands: an enemy attacks you again, a wild animal goes back to its place. Magic that is paused also pauses the charm, which comes back if time is left.
-- **Killing it counts as killing an enemy**: XP and coins as usual, and a charmed boss that dies still wins the fight.
+- **Killing it counts as it would uncharmed**: an enemy gives XP and coins as usual, a calm wild animal nothing, and a charmed boss that dies still wins the fight.
 - **Who resists:** undead cannot be charmed at all; dragons and demons only half as long. The knight and other friends cannot be charmed, and no hero can be.
 
 The Elven Ranger's wolf is a companion of its own kind, summoned with the right button; see "Your wolf" above.
