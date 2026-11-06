@@ -17,6 +17,7 @@ const HASTE = '<path d="m2.5 3 5 5-5 5M8.5 3l5 5-5 5"/>';
 const VINE = '<path d="M2 14.5C5.5 11 3.5 7 7.5 5.5S11.5 2 14 1.5M4.6 9.6C3 8.6 1.8 9.2 1.8 9.2M8.4 5.2c-.3-1.8.6-3.4.6-3.4M10.6 8.2c1.6-.4 3 .4 3 .4"/>';
 const SKULL = '<path d="M8 1.2A5.8 5.8 0 0 0 2.2 7c0 2.1 1 3.4 2.1 4.1V14h7.4v-2.9c1.1-.7 2.1-2 2.1-4.1A5.8 5.8 0 0 0 8 1.2z"/><circle cx="5.6" cy="7.4" r="1.5" fill="#140c12"/><circle cx="10.4" cy="7.4" r="1.5" fill="#140c12"/><path d="M7 14v-2M9 14v-2" stroke="#140c12" stroke-width="1"/>';
 const SHIELD = '<path d="M8 1 14 3.4V8c0 3.6-3 6.1-6 7-3-.9-6-3.4-6-7V3.4z"/>';
+const HEART = '<path d="M8 14.5C3 10.8 1.5 8.4 1.5 5.6A3.6 3.6 0 0 1 8 3.6a3.6 3.6 0 0 1 6.5 2c0 2.8-1.5 5.2-6.5 8.9z"/>';
 const BLADE = '<path d="M2.5 13.5 11.5 4.5M9.5 2.5l4 4M3.8 9.8l2.4 2.4"/>';
 
 const DOWN = '<path d="M8 2v11M3.5 8.5 8 13l4.5-4.5"/>';
@@ -37,6 +38,7 @@ export const EFFECT_ICON: Record<(typeof EFFECT)[keyof typeof EFFECT], IconDef> 
   [EFFECT.Slowed]: def(HOURGLASS, 'fill', '#d8b060'),
   [EFFECT.Entangled]: def(VINE, 'line', '#70b040'),
   [EFFECT.Fear]: def(SKULL, 'fill', '#d8c0ff'),
+  [EFFECT.Charmed]: def(HEART, 'fill', '#ff80c0'),
   [EFFECT.Accelerated]: def(HASTE, 'line', '#70e080'),
   [EFFECT.Warded]: def(SHIELD, 'fill', '#e8c040'),
   [EFFECT.Coated]: def(BLADE, 'line', '#a0e070'),

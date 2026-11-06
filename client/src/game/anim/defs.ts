@@ -190,6 +190,7 @@ export const PROJECTILES: Record<number, { frame?: string; scale: number; glow?:
   [KIND.FireBolt]: { glow: 0xff7020, scale: 0.7, trail: 0xffb040 },
   [KIND.DragonFireball]: { glow: 0xff5010, scale: 2, trail: 0xffb040 },
   [KIND.BlindOrb]: { glow: 0x3a1a5a, scale: 1.4, trail: 0x1a0a2a, gloom: true },
+  [KIND.CharmOrb]: { glow: 0xff80c0, scale: 1.2, trail: 0xc04080 },
   [KIND.SleepOrb]: { glow: 0xc080ff, scale: 1.3, trail: 0x8040c0, gloom: true },
   [KIND.ChainSpark]: { glow: 0xa080ff, scale: 0.8, trail: 0x9a7aff },
   [KIND.Judgement]: { glow: 0xffd860, scale: 1, trail: 0xfff0a0 },

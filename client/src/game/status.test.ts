@@ -112,4 +112,32 @@ describe('sleep Z', () => {
     view.update(0, 0.1);
     expect(bang!.visible).toBe(false);
   });
+
+  it('shows a pink heart above the head for Charm, beside the "!" when afraid too, and hides it when the charm ends', () => {
+    const made: Array<{ s?: string; x?: number; visible: boolean }> = [];
+    const mk = (x?: number, _y?: number, s?: string) => {
+      const t: Record<string, unknown> = { s, x, visible: true };
+      const self = new Proxy(t, {
+        get: (o, k: string) => (k in o ? o[k] : (...a: unknown[]) => {
+          if (k === 'setVisible') o.visible = a[0];
+          if (k === 'setPosition') o.x = a[0];
+          return self;
+        }),
+      });
+      made.push(t as never);
+      return self;
+    };
+    const scene = { add: { text: mk, image: mk }, textures: { exists: () => true } } as never;
+    const body = { frame: { name: 'f', height: 16 }, x: 0, y: 0, originY: 1, flipX: false } as never;
+    const anchor = { x: 10, y: 20, head: 16, w: 10, cx: 0, hand: { x: 3, y: 10 }, body, scale: 1, alpha: 1 };
+    const view = new StatusView(scene, {} as never, () => anchor);
+    view.update(1 << EFFECT.Charmed, 0.1);
+    const heart = made.find((t) => t.s === '\u2665')!;
+    expect(heart.visible).toBe(true);
+    expect(heart.x).toBe(10);
+    view.update((1 << EFFECT.Charmed) | (1 << EFFECT.Fear), 0.1);
+    expect(heart.x).toBeGreaterThan(10);
+    view.update(0, 0.1);
+    expect(heart.visible).toBe(false);
+  });
 });

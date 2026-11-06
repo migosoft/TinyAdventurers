@@ -251,6 +251,7 @@ export class StatusView {
   private drainT = 0;
   private seeds = 0;
   private fearMark?: Phaser.GameObjects.Text;
+  private charmMark?: Phaser.GameObjects.Text;
   /** Entangled bands and the Warded outline, redrawn each frame. */
   private g?: Phaser.GameObjects.Graphics;
 
@@ -272,6 +273,7 @@ export class StatusView {
     this.chilled(has(bits, EFFECT.Chilled), a, dt);
     this.singed(has(bits, EFFECT.Singed), a, dt);
     this.fear(has(bits, EFFECT.Fear), a);
+    this.charm(has(bits, EFFECT.Charmed), has(bits, EFFECT.Fear), a);
     this.drained(has(bits, EFFECT.Weakened) || has(bits, EFFECT.Clumsy) || has(bits, EFFECT.Frail), a, dt);
     this.coated(has(bits, EFFECT.Coated), a, dt);
     this.drawings(has(bits, EFFECT.Entangled) ? entangled : undefined, has(bits, EFFECT.Warded), a);
@@ -499,6 +501,26 @@ export class StatusView {
       .setDepth(DEPTH.sound);
   }
 
+  /** Charm: a small pink "♥" above the head, bobbing like Fear's "!" (beside it when both are on). */
+  private charm(on: boolean, withFear: boolean, a: StatusAnchor): void {
+    if (!on) {
+      this.charmMark?.setVisible(false);
+      return;
+    }
+    this.charmMark ??= smoothText(
+      this.scene.add
+        .text(0, 0, '\u2665', { fontFamily: FONT_TEXT, fontStyle: WORLD_TEXT.mark.style, fontSize: `${WORLD_TEXT.mark.size}px`, resolution: TEXT_RESOLUTION, color: '#ff80c0' })
+        .setOrigin(0.5, 1)
+        .setStroke(SOUND_TEXT.stroke, 2)
+        .setPadding(1),
+    );
+    this.charmMark
+      .setVisible(true)
+      .setPosition(Math.round(a.x + a.cx + (withFear ? 7 : 0)), Math.round(a.y - a.head - 3 - Math.abs(Math.sin(this.clock * 9 + 1)) * 1.5))
+      .setAlpha(a.alpha)
+      .setDepth(DEPTH.sound);
+  }
+
   /** Coated: a green glint twinkling on the weapon hand (the weapon was dipped in poison). */
   private coated(on: boolean, a: StatusAnchor, dt: number): void {
     if (!on) {
@@ -555,8 +577,10 @@ export class StatusView {
   destroy(): void {
     this.g?.destroy();
     this.fearMark?.destroy();
+    this.charmMark?.destroy();
     this.g = undefined;
     this.fearMark = undefined;
+    this.charmMark = undefined;
     for (const f of this.flames) f.img.destroy();
     for (const f of this.flakes) f.img.destroy();
     this.haze?.destroy();
