@@ -86,6 +86,11 @@ pub fn escape_terrain(run: &mut Run, mi: usize, dt: f64) {
     }
 }
 
+/// Where the living hero or monster `id` stands, if there is one.
+pub fn living_pos(run: &Run, id: u32) -> Option<Vec2> {
+    run.players.iter().find(|p| p.alive && p.id == id).map(|p| p.pos()).or_else(|| run.monsters.iter().find(|o| o.alive && o.id == id).map(|o| o.pos))
+}
+
 /// A frightened monster: no attacks, no wind-up; it walks straight away from the one who
 /// frightened it (the source's position is read each tick; once the source is gone, from
 /// where it was last seen). Its normal movement, so walls slide it and chasms stop it.
@@ -93,26 +98,31 @@ pub fn flee(run: &mut Run, mi: usize, dt: f64) {
     run.monsters[mi].ai.windup = None;
     run.monsters[mi].ai.cast = None;
     let Some((source, last)) = run.monsters[mi].effects.fear_from() else { return };
-    let now = source.and_then(|id| {
-        let alive = |p: &crate::run::entities::Player| p.alive && p.id == id;
-        run.players.iter().find(|p| alive(p)).map(|p| p.pos()).or_else(|| run.monsters.iter().find(|o| o.alive && o.id == id).map(|o| o.pos))
-    });
+    let now = source.and_then(|id| living_pos(run, id));
     // A source standing on the creature gives no direction: keep the remembered spot.
     let mut from = last;
     if let Some(p) = now.filter(|p| p.dist(run.monsters[mi].pos) >= 1.0) {
         from = p;
         run.monsters[mi].effects.set_fear_from(p);
     }
+    if let Some(behind) = flee_from(run, mi, from, dt) {
+        run.monsters[mi].effects.set_fear_from(behind);
+    }
+}
+
+/// One step of running away from the spot `from`: no attacks, no wind-up, the creature's normal movement
+/// (walls slide it, chasms stop it). Fear and the wild animals' fright both use it. When the creature
+/// stands on `from` it turns around once and returns a spot behind it, to flee from on the next tick.
+pub fn flee_from(run: &mut Run, mi: usize, from: Vec2, dt: f64) -> Option<Vec2> {
+    run.monsters[mi].ai.windup = None;
+    run.monsters[mi].ai.cast = None;
     let m = &run.monsters[mi];
     let away = m.pos - from;
-    let dir = if away.len() < 1.0 {
-        // On the spot: turn around once and remember a spot behind, so the next tick keeps going.
+    let (dir, behind) = if away.len() < 1.0 {
         let dir = Vec2::new(-m.aim.cos(), -m.aim.sin());
-        let behind = m.pos - dir * 2.0;
-        run.monsters[mi].effects.set_fear_from(behind);
-        dir
+        (dir, Some(m.pos - dir * 2.0))
     } else {
-        away.norm()
+        (away.norm(), None)
     };
     let m = &run.monsters[mi];
     let pos = m.pos;
@@ -121,6 +131,7 @@ pub fn flee(run: &mut Run, mi: usize, dt: f64) {
     let moved = run.monsters[mi].pos.dist(pos) > 1e-9;
     run.monsters[mi].aim = dir.angle();
     set_anim(run, mi, if moved { Anim::Move } else { Anim::Idle });
+    behind
 }
 
 /// Move a monster toward `to` with wall sliding. Returns true when arrived.

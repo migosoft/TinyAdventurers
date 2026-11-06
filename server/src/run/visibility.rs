@@ -147,12 +147,22 @@ fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, gaze
     if m.is_boss && boss_immune {
         f |= flags::IMMUNE;
     }
+    // A wild animal with a grudge against the heroes is an enemy to the client (a red bar); a calm one is
+    // Neutral and flagged, so the client can tell it from the knight.
+    let mut side = m.side;
+    if m.wild.is_some() {
+        if m.grudge.heroes {
+            side = Side::Hostile;
+        } else {
+            f |= flags::WILD;
+        }
+    }
     let extra = match &m.companion {
         Some(c) => c.leader,
         None if m.anim == Anim::Gaze => gaze,
         None => m.owner.unwrap_or(0),
     };
-    EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits(), m.side as u8)
+    EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits(), side as u8)
 }
 
 /// The entities hero `pi` is sent: the party and its allies always, the rest as seen
@@ -518,6 +528,27 @@ mod tests {
         assert_eq!(flag_of(&mut run) & flags::INCORPOREAL, 0);
         run.monsters[mi].traits.phasing = true;
         assert_ne!(flag_of(&mut run) & flags::INCORPOREAL, 0);
+    }
+
+    #[test]
+    fn a_calm_animal_is_sent_neutral_with_the_wild_flag_a_grudging_boar_hostile() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 1.0);
+        let boar = run.spawn_enemy(EnemyType::Boar, Map::center_of(tx + 3, ty), None);
+        let knight = run.spawn_enemy(EnemyType::Knight, Map::center_of(tx + 3, ty + 1), None);
+        let ki = run.monster_idx(knight).unwrap();
+        run.monsters[ki].side = Side::Neutral;
+        let sent = |run: &mut Run, id: u32| {
+            run.lights.refresh(&run.layout.map);
+            let dark = dark_of(run);
+            let e = snapshot_ents(run, 0, &run.players[0].view, &dark).into_iter().find(|e| e.0 == id).unwrap();
+            (e.11, e.8 & flags::WILD)
+        };
+        assert_eq!(sent(&mut run, boar), (Side::Neutral as u8, flags::WILD));
+        assert_eq!(sent(&mut run, knight), (Side::Neutral as u8, 0), "the knight is not wild");
+        let bi = run.monster_idx(boar).unwrap();
+        run.hurt_monster(bi, crate::defs::damage::Damage::physical(1.0), false, Some(0));
+        assert_eq!(sent(&mut run, boar), (Side::Hostile as u8, 0), "a boar with a grudge is an enemy to the client");
     }
 
     #[test]

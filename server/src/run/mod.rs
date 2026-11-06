@@ -346,9 +346,10 @@ impl Run {
             attrs: stats.attrs,
             weight: stats.weight,
             companion: None,
-            side: Side::Hostile,
+            // A wild animal is Neutral, calm until hit (#227).
+            side: if d.wild.is_some() { Side::Neutral } else { Side::Hostile },
             grudge: Default::default(),
-            wild: None,
+            wild: d.wild.map(|reaction| targets::Wild { reaction, scare: None }),
         });
         rules_log::spawned(self, id, d.kind);
         id
@@ -673,11 +674,13 @@ impl Run {
                 m.sinking = Some((t - DT, how));
             } else {
                 m.sinking = None;
-                // A wild animal is no kill.
-                if let Some(pi) = m.last_hit_by.filter(|_| m.side != Side::Neutral) {
+                // The unrecruited knight and a calm wild animal are no kill; a boar with a grudge against the heroes is.
+                let by_hero = m.last_hit_by;
+                let counts = m.side != Side::Neutral || m.wild.is_some() && m.grudge.heroes;
+                if let Some(pi) = by_hero.filter(|_| counts) {
                     self.players[pi].kills += 1;
                 }
-                self.kill_monster(mi);
+                self.kill_monster_by(mi, by_hero.is_some());
             }
             return;
         }
@@ -1092,14 +1095,20 @@ impl Run {
         healed
     }
 
-    /// A hit on a wild animal gives it a grudge against the side that caused the hit: the hero it comes from
+    /// A hit on a wild animal that fights back gives it a grudge against the side that caused the hit: the hero it comes from
     /// (`src_player`), else the creature in `dmg.why.by` (a hero or an ally: the heroes; an enemy: the
     /// enemies). Terrain has no `by` and gives none.
     fn hit_gives_grudge(&mut self, mi: usize, dmg: &Damage, src_player: Option<usize>) {
-        if self.monsters[mi].wild.is_none() {
+        let Some(wild) = self.monsters[mi].wild else { return };
+        let by = dmg.why.by;
+        // A fleeing animal runs from whoever hit it (a hit with no attacker, like lava, scares nothing).
+        if wild.reaction == targets::Reaction::Flee {
+            let attacker = src_player.map(|pi| self.players[pi].id).or(by);
+            if let (Some(id), Some(w)) = (attacker, self.monsters[mi].wild.as_mut()) {
+                w.scare = Some(id);
+            }
             return;
         }
-        let by = dmg.why.by;
         let grudge = if src_player.is_some() || by.is_some_and(|id| self.player_idx(id).is_some()) {
             Some(Side::Friendly)
         } else {
@@ -1215,11 +1224,15 @@ impl Run {
         if self.monsters[mi].hp <= 0.0 {
             // The kill goes to the hero who struck, or whose effect ticked it down.
             let credit = if src_player.is_some() { src_player } else if dmg.from_effect { self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) } else { None };
-            if let Some(pi) = credit {
+            // A calm wild animal is no kill; a boar with a grudge against the heroes is.
+            let counts = self.monsters[mi].wild.is_none() || self.monsters[mi].grudge.heroes;
+            if let Some(pi) = credit.filter(|_| counts) {
                 self.players[pi].kills += 1;
             }
             rules_log::death(self, rules_log::DeathFacts { target: effects::Creature::Monster(mi), by: dmg.why.by, tick: if let What::Tick(k) = dmg.why.what { Some(k) } else { None }, credit });
-            self.kill_monster(mi);
+            // Killed on the heroes' side: a hero, or an ally of theirs (the wolf, a recruit).
+            let by_ally = dmg.why.by.and_then(|id| self.monster_idx(id)).is_some_and(|bi| self.monsters[bi].side == Side::Friendly);
+            self.kill_monster_by(mi, credit.is_some() || by_ally);
         }
         if self.monsters[mi].alive && !dmg.from_effect {
             if raw > 0.0 {
@@ -1233,6 +1246,13 @@ impl Run {
     }
 
     pub fn kill_monster(&mut self, mi: usize) {
+        self.kill_monster_by(mi, false);
+    }
+
+    /// Kills monster `mi`. `by_heroes`: it fell on the heroes' side (a hero, an ally of theirs, or a fall
+    /// after a hero's hit); only that makes a wild animal with a grudge against the heroes pay its XP. A
+    /// wild animal pays no coins and gives no message, whoever killed it.
+    pub fn kill_monster_by(&mut self, mi: usize, by_heroes: bool) {
         let m = &mut self.monsters[mi];
         if !m.alive {
             return;
@@ -1248,8 +1268,11 @@ impl Run {
         m.alive = false;
         m.hp = 0.0;
         let (id, pos, kind) = (m.id, m.pos, m.kind as u8);
-        let xp = progression::xp_for_kill(m.etype);
-        let coins = progression::coins_for_kill(m.etype);
+        let (xp, coins) = match m.wild {
+            Some(_) if !(by_heroes && m.grudge.heroes) => (0, 0),
+            Some(_) => (progression::xp_for_kill(m.etype), 0),
+            None => (progression::xp_for_kill(m.etype), progression::coins_for_kill(m.etype)),
+        };
         self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, Some(pos));
         // XP goes to every living party member (spent later via progression).
         for p in self.players.iter_mut().filter(|p| p.alive) {
@@ -2228,7 +2251,12 @@ pub mod tests {
                 EnemyType::Ghost | EnemyType::Shade => DamageSplit::split(&[(DamageType::Magical, 0.9), (DamageType::Cold, 0.1)]),
                 _ => DamageSplit::physical(),
             };
-            let melee = [AbilityId::Strike, AbilityId::Bite, AbilityId::Touch].into_iter().find_map(|a| m.kit.get(a)).expect("a melee ability");
+            let melee = [AbilityId::Strike, AbilityId::Bite, AbilityId::Touch].into_iter().find_map(|a| m.kit.get(a));
+            // The bunny, the deer and the stag have no attack (#227).
+            let Some(melee) = melee else {
+                assert!(matches!(t, EnemyType::Bunny | EnemyType::Deer | EnemyType::Stag), "{t:?}: a melee ability");
+                continue;
+            };
             assert_eq!(melee.split, today, "{t:?}");
         }
     }

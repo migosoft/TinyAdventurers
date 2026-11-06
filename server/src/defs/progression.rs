@@ -24,6 +24,9 @@ pub fn xp_for_kill(enemy: Option<EnemyType>) -> u32 {
         Some(Shade) => 12,
         // A companion: its death pays nothing.
         Some(Knight) => 0,
+        // Wildlife (#227), first guesses (label `balancing`): only a boar with a grudge pays (see `Run::kill_monster_by`).
+        Some(Bunny) | Some(Deer) | Some(Stag) => 0,
+        Some(Boar) => 3,
         None => 300, // boss
     }
 }

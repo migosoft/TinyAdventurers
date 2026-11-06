@@ -53,7 +53,6 @@ impl Grudge {
 }
 
 /// What a wild animal does when it is hit.
-#[allow(dead_code)] // no wild animal spawns before #227's animals do
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reaction {
     /// It keeps a grudge against the side that hit it.
@@ -66,7 +65,7 @@ pub enum Reaction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Wild {
     pub reaction: Reaction,
-    /// Seconds left of its fright; set when a `Flee` animal is hit (#227).
+    /// The id of the creature a `Flee` animal runs from: set when it is hit by one, cleared when it calms down.
     pub scare: Option<u32>,
 }
 
@@ -173,8 +172,9 @@ pub fn check(run: &Run, user: &Stance, c: Creature, pos: Vec2, rule: &Rule, hit:
         Creature::Player(i) => (run.players[i].alive, PLAYER_RADIUS, false, false, false),
         Creature::Monster(i) => {
             let m = &run.monsters[i];
-            // A Friendly monster that is sinking is no target of the Hostile.
-            (m.alive && (user.side != Side::Hostile || m.side != Side::Friendly || m.sinking.is_none()), m.radius, m.hiding, m.dormant, m.airborne)
+            // A sinking Friendly monster is no target of the Hostile, and a sinking wild animal is no one's.
+            let sinks_out = m.sinking.is_some() && (m.wild.is_some() || user.side == Side::Hostile && m.side == Side::Friendly);
+            (m.alive && !sinks_out, m.radius, m.hiding, m.dormant, m.airborne)
         }
     };
     if !alive {
