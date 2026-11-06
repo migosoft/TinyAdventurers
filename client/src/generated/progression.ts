@@ -1157,6 +1157,19 @@ export const ITEMS = {
     "slot": "Melee",
     "sprite": ""
   },
+  "BoarTusks": {
+    "base": "8 damage · every 1 s · arc 1.6 · wind-up 0.3 s",
+    "classes": [],
+    "grants": [],
+    "hero": false,
+    "kind": "Claws",
+    "name": "Boar Tusks",
+    "prof": "Claws",
+    "props": [],
+    "req": [],
+    "slot": "Melee",
+    "sprite": ""
+  },
   "BoneStaff": {
     "base": "7 damage · every 1 s · arc 1.6",
     "classes": [

@@ -5,10 +5,13 @@ export const KIND = {
   "Barbarian": 2,
   "Barrel": 81,
   "BlindOrb": 61,
+  "Boar": 33,
   "Bolt": 52,
+  "Bunny": 27,
   "ChainSpark": 63,
   "Chest": 80,
   "Chort": 20,
+  "Deer": 28,
   "Demon": 30,
   "DireWolf": 23,
   "Disciple": 17,
@@ -43,6 +46,7 @@ export const KIND = {
   "SkeletonArcher": 12,
   "SkeletonWarrior": 11,
   "SleepOrb": 62,
+  "Stag": 29,
   "Summoner": 21,
   "ThrownAxe": 65,
   "Torch": 82,
@@ -75,7 +79,8 @@ export const FLAG = {
   "HIDING": 1,
   "HURT": 16,
   "IMMUNE": 2,
-  "INCORPOREAL": 128
+  "INCORPOREAL": 128,
+  "WILD": 4
 } as const;
 
 export const SIDE = {
@@ -1011,6 +1016,18 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
     "h": 12.0,
     "r": 5.0
   },
+  "27": {
+    "h": 8.0,
+    "r": 4.0
+  },
+  "28": {
+    "h": 16.0,
+    "r": 6.0
+  },
+  "29": {
+    "h": 16.0,
+    "r": 6.0
+  },
   "30": {
     "h": 58.0,
     "r": 11.0
@@ -1022,6 +1039,10 @@ export const HITBOX: Record<number, { r: number; h: number }> = {
   "32": {
     "h": 51.0,
     "r": 17.0
+  },
+  "33": {
+    "h": 12.0,
+    "r": 6.0
   },
   "80": {
     "h": 0.0,
@@ -1304,12 +1325,42 @@ export const EFFECT_LOOK = {
 } as const;
 
 export const ENEMY_KINDS = {
+  "Boar": {
+    "max_hp": 40.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "Bunny": {
+    "max_hp": 5.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
   "Chort": {
     "max_hp": 40.0,
     "res": {
       "Cold": -0.5,
       "Heat": 1.0,
       "Magical": 0.2,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
+  "Deer": {
+    "max_hp": 40.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
       "Physical": 0.0,
       "Poison": 0.0
     }
@@ -1454,6 +1505,16 @@ export const ENEMY_KINDS = {
       "Poison": 1.0
     }
   },
+  "Stag": {
+    "max_hp": 40.0,
+    "res": {
+      "Cold": 0.0,
+      "Heat": 0.0,
+      "Magical": 0.0,
+      "Physical": 0.0,
+      "Poison": 0.0
+    }
+  },
   "Summoner": {
     "max_hp": 60.0,
     "res": {
@@ -1484,9 +1545,13 @@ export const TAG_NAME: Record<number, string> = {
   24: "Ghost",
   25: "Shade",
   26: "Knight",
+  27: "Bunny",
+  28: "Deer",
+  29: "Stag",
   30: "Demon",
   31: "Lich",
   32: "Dragon",
+  33: "Boar",
   80: "Chest",
   81: "Barrel",
 };
