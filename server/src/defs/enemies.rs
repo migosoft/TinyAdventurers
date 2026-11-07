@@ -1,5 +1,5 @@
 use super::abilities::AbilityId;
-use super::attributes::{Attr, Attributes};
+use super::attributes::Attributes;
 use super::races::{self, Adjust, Race, Profile};
 use super::items::ItemId;
 use super::kinds::EntityKind;
@@ -470,7 +470,7 @@ pub const CHEST_TOUCH: f64 = 12.0;
 /// HP at CON 10: `hp` minus `CON_HP` per point of the kind's own CON modifier.
 pub fn base_hp(t: EnemyType) -> f64 {
     let d = def(t);
-    d.hp - super::attributes::CON_HP * d.attr_mods.get(Attr::Con) as f64
+    d.hp - super::attributes::CON_HP * (races::own_con(d.attr_mods) - super::attributes::BASELINE) as f64
 }
 
 /// The enemy's Attributes: 10, its races' bonuses, its kind's modifier.
@@ -658,7 +658,7 @@ mod tests {
     #[test]
     fn enemy_base_hp_keeps_todays_hp() {
         for t in EnemyType::ALL {
-            let con = attributes::BASELINE + def(t).attr_mods.get(Attr::Con);
+            let con = races::own_con(def(t).attr_mods);
             assert_eq!(base_hp(t) + 5.0 * (con - 10) as f64, def(t).hp, "{t:?}");
             assert_eq!(attributes::hp(base_hp(t), con), def(t).hp, "{t:?}");
         }

@@ -1,4 +1,4 @@
-use super::attributes::{Attr, Attributes};
+use super::attributes::Attributes;
 use super::races::{self, Adjust, Race, Profile};
 use super::abilities::AbilityId;
 use super::items::ItemId;
@@ -70,7 +70,7 @@ pub fn attrs(id: BossId) -> Attributes {
 
 /// HP at CON 10: `hp` minus `CON_HP` per point of the boss's own CON modifier.
 pub fn base_hp(id: BossId) -> f64 {
-    def(id).hp - super::attributes::CON_HP * def(id).attr_mods.get(Attr::Con) as f64
+    def(id).hp - super::attributes::CON_HP * (races::own_con(def(id).attr_mods) - super::attributes::BASELINE) as f64
 }
 
 /// Races plus each boss's own adjustments.
@@ -103,6 +103,7 @@ pub const LICH_RAISE_FIRST: f64 = 8.0;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::defs::attributes::Attr;
 
     #[test]
     fn bosses_weigh_forty() {

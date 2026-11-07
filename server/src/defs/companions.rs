@@ -1,6 +1,6 @@
 //! The Elven Ranger's wolf: the numbers of an ally monster (run/wolf.rs).
 
-use super::attributes::{self, Attr, Attributes};
+use super::attributes::{self, Attributes};
 use super::damage::{DamageType::Cold, Resistances};
 use super::races::{self, Adjust, Race, Profile};
 
@@ -48,7 +48,7 @@ pub const KNIGHT_ESCORT: Escort = Escort { follow: 40.0, follow_stop: 24.0, guar
 
 /// HP at CON 10 (55): `WOLF_HP` minus `CON_HP` per point of the wolf's own CON modifier.
 pub fn wolf_base_hp() -> f64 {
-    WOLF_HP - attributes::CON_HP * WOLF_ATTR_MODS.get(Attr::Con) as f64
+    WOLF_HP - attributes::CON_HP * (races::own_con(WOLF_ATTR_MODS) - attributes::BASELINE) as f64
 }
 
 /// The wolf is a magical beast.
@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn wolf_stat_block_keeps_todays_hp() {
-        assert_eq!(attributes::hp(wolf_base_hp(), attributes::BASELINE + WOLF_ATTR_MODS.get(Attr::Con)), WOLF_HP);
+        assert_eq!(attributes::hp(wolf_base_hp(), races::own_con(WOLF_ATTR_MODS)), WOLF_HP);
         assert_eq!(WOLF_WEIGHT, 10.0);
     }
 }

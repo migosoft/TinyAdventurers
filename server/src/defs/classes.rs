@@ -88,7 +88,7 @@ mod tests {
     fn class_hp_comes_from_base_and_con() {
         for c in ClassId::ALL {
             let d = def(c);
-            assert_eq!(attributes::hp(d.base_hp, attributes::BASELINE + d.attr_mods.get(Attr::Con)), d.hp, "{c:?}");
+            assert_eq!(attributes::hp(d.base_hp, races::own_con(d.attr_mods)), d.hp, "{c:?}");
         }
     }
 

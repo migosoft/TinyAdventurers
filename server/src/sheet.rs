@@ -16,7 +16,7 @@ use crate::defs::kinds::EntityKind;
 use crate::defs::items::{self, ArmorClass, EquipSlot, Equipment, ItemBase, ItemId, ItemProperty, PropKind};
 use crate::defs::lights::{self, LightKind};
 use crate::defs::loadout::{apply_mods, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source, MIN_COOLDOWN};
-use crate::defs::races::Sight;
+use crate::defs::races::{self, Sight};
 use crate::defs::requirements::Requirement;
 use crate::defs::trees::{self, Keystone, KeystoneSet, NodeId, Prof};
 use crate::defs::weapons::{resolve_melee, resolve_ranged, ResolvedWeapon};
@@ -777,7 +777,7 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
     let sheet = Sheet {
         attrs,
         max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp).max(1.0),
-        speed: move_speed(def.speed, attributes::BASELINE + def.attr_mods.get(Attr::Con), &attrs) * (1.0 + move_frac),
+        speed: move_speed(def.speed, races::own_con(def.attr_mods), &attrs) * (1.0 + move_frac),
         weight,
         res,
         effect_res,
@@ -1056,18 +1056,18 @@ fn monster_stats(attrs: Attributes, own_con: i32, base_hp: f64, speed: f64, weig
 /// Enemy stats. HP does not depend on the party size (TODO 4b).
 pub fn enemy_stats(t: EnemyType) -> MonsterStats {
     let d = enemies::def(t);
-    monster_stats(enemies::attrs(t), attributes::BASELINE + d.attr_mods.get(Attr::Con), enemies::base_hp(t), d.speed, d.weight)
+    monster_stats(enemies::attrs(t), races::own_con(d.attr_mods), enemies::base_hp(t), d.speed, d.weight)
 }
 
 /// Boss stats. HP does not depend on the party size (TODO 4b).
 pub fn boss_stats(b: BossId) -> MonsterStats {
     let d = bosses::def(b);
-    monster_stats(bosses::attrs(b), attributes::BASELINE + d.attr_mods.get(Attr::Con), bosses::base_hp(b), d.speed, d.weight)
+    monster_stats(bosses::attrs(b), races::own_con(d.attr_mods), bosses::base_hp(b), d.speed, d.weight)
 }
 
 /// The Ranger's wolf.
 pub fn wolf_stats() -> MonsterStats {
-    monster_stats(wolf_attrs(), attributes::BASELINE + WOLF_ATTR_MODS.get(Attr::Con), wolf_base_hp(), WOLF_SPEED, WOLF_WEIGHT)
+    monster_stats(wolf_attrs(), races::own_con(WOLF_ATTR_MODS), wolf_base_hp(), WOLF_SPEED, WOLF_WEIGHT)
 }
 
 /// What a monster is made of at spawn: the numbers its Attributes gave it. `monster_numbers` moves
@@ -1838,7 +1838,7 @@ mod tests {
         // No race has CON today: feed the shared helper a made-up +2 CON on top of an Orc Warrior.
         let t = EnemyType::OrcWarrior;
         let d = enemies::def(t);
-        let own = attributes::BASELINE + d.attr_mods.get(Attr::Con);
+        let own = races::own_con(d.attr_mods);
         let plain = monster_stats(enemies::attrs(t), own, enemies::base_hp(t), d.speed, d.weight);
         let tough = monster_stats(enemies::attrs(t).plus(Attributes::new(0, 0, 2, 0, 0, 0)), own, enemies::base_hp(t), d.speed, d.weight);
         assert_eq!(plain, enemy_stats(t));

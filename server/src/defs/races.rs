@@ -3,7 +3,7 @@
 //! effects; an entity can have several races, plus its own
 //! adjustments (`Adjust`). Balancing edits only this data.
 
-use super::attributes::{Attributes, BASELINE};
+use super::attributes::{Attr, Attributes, BASELINE};
 use super::damage::{DamageType, DamageType::*, Resistances};
 use super::effects::{EffectKind, EffectResistances};
 
@@ -119,6 +119,11 @@ pub fn race_attrs(races: &[Race]) -> Attributes {
 /// Layers 1-3 of every creature's Attributes: `BASELINE` (10) for all six, plus the races' bonuses, plus its own modifier.
 pub fn creature_attrs(races: &[Race], mods: Attributes) -> Attributes {
     Attributes::new(BASELINE, BASELINE, BASELINE, BASELINE, BASELINE, BASELINE).plus(race_attrs(races)).plus(mods)
+}
+
+/// The CON a stat block's `hp`/`speed` are defined at: `BASELINE` (10) plus its own class/kind modifier, before races.
+pub fn own_con(mods: Attributes) -> i32 {
+    BASELINE + mods.get(Attr::Con)
 }
 
 /// One entity's own changes on top of its races.
@@ -334,5 +339,12 @@ mod tests {
     fn creature_attrs_is_ten_plus_races_plus_mods() {
         assert_eq!(creature_attrs(&[], Attributes::default()), Attributes::new(10, 10, 10, 10, 10, 10));
         assert_eq!(creature_attrs(&[Race::Elf, Race::MagicalBeast], Attributes::new(9, -1, 0, -9, 0, 1)), Attributes::new(19, 11, 10, 4, 10, 11));
+    }
+
+    #[test]
+    fn own_con_is_ten_plus_the_con_modifier() {
+        assert_eq!(own_con(Attributes::default()), 10);
+        assert_eq!(own_con(Attributes::new(0, 0, 5, 0, 0, 0)), 15);
+        assert_eq!(own_con(Attributes::new(3, 0, -2, 0, 0, 0)), 8);
     }
 }
