@@ -1,6 +1,6 @@
 //! The Elven Ranger's wolf: the numbers of an ally monster (run/wolf.rs).
 
-use super::attributes::{self, Attributes};
+use super::attributes::{self, AttrSources, Attributes};
 use super::damage::{DamageType::Cold, Resistances};
 use super::races::{self, Adjust, Race, Profile};
 
@@ -57,8 +57,12 @@ pub fn wolf_races() -> &'static [Race] {
 }
 
 /// The wolf's Attributes: 10, its race's bonuses, its modifier.
+pub fn wolf_attr_sources() -> AttrSources {
+    races::creature_sources(wolf_races(), WOLF_ATTR_MODS)
+}
+
 pub fn wolf_attrs() -> Attributes {
-    races::creature_attrs(wolf_races(), WOLF_ATTR_MODS)
+    wolf_attr_sources().total()
 }
 
 /// A magical beast with 20 % extra cold resistance.

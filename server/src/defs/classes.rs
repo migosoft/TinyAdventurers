@@ -1,5 +1,5 @@
 use super::abilities::AbilityId;
-use super::attributes::Attributes;
+use super::attributes::{AttrSources, Attributes};
 use super::races::{self, Adjust, Race, Profile};
 use super::items::{ArmorClass, ItemId};
 use super::kinds::EntityKind;
@@ -71,8 +71,12 @@ pub fn prof_base(class: ClassId) -> Vec<Prof> {
 }
 
 /// Layers 1-3: base 10 + race bonus + class modifier.
+pub fn attr_sources(class: ClassId) -> AttrSources {
+    races::creature_sources(races(class), def(class).attr_mods)
+}
+
 pub fn start_attrs(class: ClassId) -> Attributes {
-    races::creature_attrs(races(class), def(class).attr_mods)
+    attr_sources(class).total()
 }
 
 pub fn profile(class: ClassId) -> Profile {
@@ -98,7 +102,7 @@ mod tests {
             (ClassId::Barbarian, Attributes::new(15, 13, 14, 8, 12, 10)), (ClassId::ElvenRanger, Attributes::new(10, 15, 12, 8, 14, 13))];
         for (c, a) in today {
             assert_eq!(start_attrs(c), a, "{c:?}");
-            assert_eq!(start_attrs(c), races::creature_attrs(races(c), def(c).attr_mods), "{c:?}");
+            assert_eq!(start_attrs(c), races::creature_sources(races(c), def(c).attr_mods).total(), "{c:?}");
         }
     }
 

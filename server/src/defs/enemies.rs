@@ -1,5 +1,5 @@
 use super::abilities::AbilityId;
-use super::attributes::Attributes;
+use super::attributes::{AttrSources, Attributes};
 use super::races::{self, Adjust, Race, Profile};
 use super::items::ItemId;
 use super::kinds::EntityKind;
@@ -474,8 +474,12 @@ pub fn base_hp(t: EnemyType) -> f64 {
 }
 
 /// The enemy's Attributes: 10, its races' bonuses, its kind's modifier.
+pub fn attr_sources(t: EnemyType) -> AttrSources {
+    races::creature_sources(races(t), def(t).attr_mods)
+}
+
 pub fn attrs(t: EnemyType) -> Attributes {
-    races::creature_attrs(races(t), def(t).attr_mods)
+    attr_sources(t).total()
 }
 
 /// The races of each enemy (see `races`).

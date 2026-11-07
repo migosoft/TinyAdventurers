@@ -1,4 +1,4 @@
-use super::attributes::Attributes;
+use super::attributes::{AttrSources, Attributes};
 use super::races::{self, Adjust, Race, Profile};
 use super::abilities::AbilityId;
 use super::items::ItemId;
@@ -64,8 +64,12 @@ pub fn races(id: BossId) -> &'static [Race] {
 }
 
 /// The boss's Attributes: 10, its races' bonuses, its kind's modifier.
+pub fn attr_sources(id: BossId) -> AttrSources {
+    races::creature_sources(races(id), def(id).attr_mods)
+}
+
 pub fn attrs(id: BossId) -> Attributes {
-    races::creature_attrs(races(id), def(id).attr_mods)
+    attr_sources(id).total()
 }
 
 /// HP at CON 10: `hp` minus `CON_HP` per point of the boss's own CON modifier.

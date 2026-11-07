@@ -1811,15 +1811,45 @@ mod tests {
     }
 
     #[test]
+    fn every_stat_block_total_is_unchanged() {
+        let a = |v: [i32; 6]| Attributes::new(v[0], v[1], v[2], v[3], v[4], v[5]);
+        let enemies_today = [
+            (EnemyType::GoblinArcher, [8, 15, 10, 10, 8, 8]), (EnemyType::SkeletonWarrior, [12, 12, 15, 1, 8, 5]),
+            (EnemyType::SkeletonArcher, [10, 15, 13, 1, 8, 5]), (EnemyType::OrcWarrior, [16, 12, 16, 7, 11, 10]),
+            (EnemyType::OrcArcher, [14, 14, 14, 7, 11, 10]), (EnemyType::Necromancer, [9, 14, 12, 17, 12, 11]),
+            (EnemyType::RaisedSkeleton, [12, 12, 12, 1, 8, 5]), (EnemyType::RaisedArcher, [10, 15, 12, 1, 8, 5]),
+            (EnemyType::Disciple, [10, 12, 10, 13, 11, 10]), (EnemyType::Mimic, [17, 12, 15, 5, 13, 8]),
+            (EnemyType::Imp, [6, 17, 13, 11, 12, 14]), (EnemyType::Chort, [14, 13, 13, 8, 10, 9]),
+            (EnemyType::Summoner, [9, 14, 12, 15, 12, 16]), (EnemyType::SummonedImp, [6, 17, 10, 11, 12, 14]),
+            (EnemyType::Ogre, [19, 8, 16, 5, 7, 7]), (EnemyType::Ghost, [6, 14, 10, 10, 12, 14]),
+            (EnemyType::Shade, [8, 12, 12, 10, 14, 15]), (EnemyType::Knight, [14, 12, 14, 8, 10, 12]),
+            (EnemyType::Bunny, [4, 16, 6, 2, 8, 6]), (EnemyType::Deer, [8, 16, 12, 2, 10, 8]),
+            (EnemyType::Stag, [8, 16, 12, 2, 10, 8]), (EnemyType::Boar, [14, 10, 14, 2, 8, 6]),
+        ];
+        assert_eq!(enemies_today.len(), EnemyType::ALL.len());
+        for (t, v) in enemies_today {
+            assert_eq!(enemies::attr_sources(t).total(), a(v), "{t:?}");
+        }
+        for (b, v) in [(BossId::Demon, [22, 14, 20, 14, 16, 20]), (BossId::Lich, [10, 14, 14, 22, 18, 16]), (BossId::Dragon, [24, 10, 22, 16, 14, 20])] {
+            assert_eq!(bosses::attr_sources(b).total(), a(v), "{b:?}");
+        }
+        for (c, v) in [(ClassId::Wizard, [8, 14, 12, 15, 13, 10]), (ClassId::Paladin, [15, 8, 13, 10, 12, 14]),
+            (ClassId::Barbarian, [15, 13, 14, 8, 12, 10]), (ClassId::ElvenRanger, [10, 15, 12, 8, 14, 13])] {
+            assert_eq!(classes::attr_sources(c).total(), a(v), "{c:?}");
+        }
+        assert_eq!(crate::defs::companions::wolf_attr_sources().total(), a([17, 15, 15, 6, 12, 7]));
+    }
+
+    #[test]
     fn every_creature_is_ten_plus_races_plus_kind() {
-        use crate::defs::races::creature_attrs;
+        use crate::defs::races::creature_sources;
         for t in EnemyType::ALL {
-            assert_eq!(enemy_stats(t).attrs, creature_attrs(enemies::races(t), enemies::def(t).attr_mods), "{t:?}");
+            assert_eq!(enemy_stats(t).attrs, creature_sources(enemies::races(t), enemies::def(t).attr_mods).total(), "{t:?}");
         }
         for b in BossId::ALL {
-            assert_eq!(boss_stats(b).attrs, creature_attrs(bosses::races(b), bosses::def(b).attr_mods), "{b:?}");
+            assert_eq!(boss_stats(b).attrs, creature_sources(bosses::races(b), bosses::def(b).attr_mods).total(), "{b:?}");
         }
-        assert_eq!(wolf_stats().attrs, creature_attrs(crate::defs::companions::wolf_races(), WOLF_ATTR_MODS));
+        assert_eq!(wolf_stats().attrs, creature_sources(crate::defs::companions::wolf_races(), WOLF_ATTR_MODS).total());
     }
 
     #[test]
