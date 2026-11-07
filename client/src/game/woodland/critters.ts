@@ -1,6 +1,6 @@
 // Woodland critters (#203): bees looping around flower patches and butterflies wandering over the grass. Cosmetic and
-// client-only. Every position is a pure function of time and seed (no state), and the shapes are drawn into one
-// reused Graphics, only for the critters the viewer can see (seenLit) and the camera window shows.
+// client-only. Every position is a pure function of time and seed (no state). Each critter is a few reused pixel
+// images, depth-sorted like figures (canopies and trunks cover them), shown only where the viewer sees (seenLit).
 import type Phaser from 'phaser';
 import { TILE_ID } from '../../generated/defs';
 import { TILE, type TileMap } from '../../sim/map';
@@ -56,7 +56,10 @@ export function beeAt(i: number, t: number, flower: Pt, seed: number): Pt {
   return beePos(beeParams(i, seed), t, flower, { x: 0, y: 0 });
 }
 
-export interface Butterfly extends Pt { open: boolean; landed: boolean }
+/** `y` includes the flap lift; `ground` is the height without it (what it is sorted by). */
+export interface Butterfly extends Pt { open: boolean; landed: boolean; ground: number }
+/** A burst of this many flaps lifts it, then it glides down for GLIDE flap lengths. */
+const FLAPS_UP = 7, GLIDE = 3, CYCLE = FLAPS_UP + GLIDE;
 
 interface FlyParams { flapHz: number; flapPh: number; wx: number; wy: number; p1: number; p2: number; p3: number; p4: number; period: number; land: number; lph: number }
 function flyParams(i: number, seed: number, bounds: Rect): FlyParams {
@@ -81,37 +84,56 @@ function flyPos(q: FlyParams, t: number, bounds: Rect, out: Butterfly): Butterfl
   const ax = bounds.w / 2, ay = bounds.h / 2;
   const x = bounds.x + ax + ax * (0.7 * Math.sin(q.wx * tau + q.p1) + 0.3 * Math.sin(q.wx * 1.9 * tau + q.p2));
   const y = bounds.y + ay + ay * (0.7 * Math.sin(q.wy * tau + q.p3) + 0.3 * Math.sin(q.wy * 1.9 * tau + q.p4));
-  let phase = (t * q.flapHz + q.flapPh) % 1;
-  if (phase < 0) phase += 1;
-  // down-stroke 0..0.3 lifts 1.5 px, then it sinks 0.6 px gliding and settles the rest before the next flap
-  const lift = landed ? 0 : phase < 0.3 ? -1.5 * (phase / 0.3) : phase < 0.7 ? -1.5 + 0.6 * ((phase - 0.3) / 0.4) : -0.9 + 0.9 * ((phase - 0.7) / 0.3);
+  const ft = t * q.flapHz + q.flapPh;
+  const n = Math.floor(ft), phase = ft - n;
+  // Each down-stroke (phase 0..0.3) lifts 1.5 px, then it sinks 0.6 px before the next flap: +0.9 px per flap. After
+  // FLAPS_UP flaps it glides back down to the ground height over GLIDE flap lengths. Near a landing the lift fades out.
+  const k = ((n % CYCLE) + CYCLE) % CYCLE;
+  const peak = 0.9 * FLAPS_UP;
+  let air = k < FLAPS_UP ? 0.9 * k + (phase < 0.3 ? 1.5 * (phase / 0.3) : 1.5 - 0.6 * Math.min(1, (phase - 0.3) / 0.7)) : peak * (1 - (k - FLAPS_UP + phase) / GLIDE);
+  if (landed) air = 0;
+  else {
+    const into = s % q.period;
+    air *= Math.min(1, (into - q.land) / 0.3, (q.period - into) / 0.3);
+  }
   out.x = x;
-  out.y = y + lift;
-  out.open = !landed && phase < 0.5;
+  out.y = y - air;
+  out.ground = y;
+  // wings are shut at the bottom of the down-stroke and open on the up-stroke (and in the glide)
+  out.open = !landed && (k >= FLAPS_UP || phase >= 0.35);
   out.landed = landed;
   return out;
 }
 
 /** Butterfly `i` at time `t` (s) wandering inside `bounds` (px). */
 export function butterflyAt(i: number, t: number, seed: number, bounds: Rect): Butterfly {
-  return flyPos(flyParams(i, seed, bounds), t, bounds, { x: 0, y: 0, open: false, landed: false });
+  return flyPos(flyParams(i, seed, bounds), t, bounds, { x: 0, y: 0, open: false, landed: false, ground: 0 });
 }
 
-interface Flyer { bounds: Rect; colour: number; q: FlyParams }
-interface Bee { f: Pt; q: BeeParams }
+interface Flyer { bounds: Rect; colour: number; q: FlyParams; left: Phaser.GameObjects.Image; right: Phaser.GameObjects.Image; body: Phaser.GameObjects.Image }
+interface Bee { f: Pt; q: BeeParams; body: Phaser.GameObjects.Image; stripe: Phaser.GameObjects.Image }
+
+const PX_TEX = 'critter-px';
+type Px = Phaser.GameObjects.Image;
 
 export class Critters {
-  private g: Phaser.GameObjects.Graphics;
   private patches: Pt[];
   private flyers: Flyer[] = [];
   private bees: Bee[] = [];
-  private pos: Butterfly = { x: 0, y: 0, open: false, landed: false };
+  private pos: Butterfly = { x: 0, y: 0, open: false, landed: false, ground: 0 };
 
   /** `map`: the walkable tiles (floor and road) decide how many butterflies there are and where they live. */
-  constructor(scene: Phaser.Scene, flowers: Pt[], seed: number, map: TileMap) {
-    this.g = scene.add.graphics().setDepth(DEPTH.fx);
+  constructor(private scene: Phaser.Scene, flowers: Pt[], seed: number, map: TileMap) {
+    if (!scene.textures.exists(PX_TEX)) {
+      const c = scene.textures.createCanvas(PX_TEX, 1, 1)!;
+      c.getContext().fillStyle = '#fff';
+      c.getContext().fillRect(0, 0, 1, 1);
+      c.refresh();
+    }
     this.patches = flowerPatches(flowers);
-    this.patches.forEach((f, p) => { for (let b = 0; b < BEES_PER_PATCH; b++) this.bees.push({ f, q: beeParams(p * BEES_PER_PATCH + b, seed) }); });
+    this.patches.forEach((f, p) => {
+      for (let b = 0; b < BEES_PER_PATCH; b++) this.bees.push({ f, q: beeParams(p * BEES_PER_PATCH + b, seed), body: this.px(BEE_YELLOW), stripe: this.px(BEE_DARK) });
+    });
     const walk: number[] = [];
     for (let i = 0; i < map.tiles.length; i++) if (map.tiles[i] === TILE_ID.Floor || map.tiles[i] === TILE_ID.Road) walk.push(i);
     const n = Math.floor(walk.length / TILES_PER_BUTTERFLY);
@@ -122,39 +144,55 @@ export class Critters {
       const cx = (tile % map.w + 0.5) * TILE, cy = (Math.floor(tile / map.w) + 0.5) * TILE;
       const x = Math.max(0, Math.min(map.w * TILE - side, cx - side / 2)), y = Math.max(0, Math.min(map.h * TILE - side, cy - side / 2));
       const bounds = { x, y, w: Math.min(side, map.w * TILE), h: Math.min(side, map.h * TILE) };
-      this.flyers.push({ bounds, colour: WING_COLOURS[Math.floor(r() * WING_COLOURS.length)], q: flyParams(i, seed, bounds) });
+      const colour = WING_COLOURS[Math.floor(r() * WING_COLOURS.length)];
+      this.flyers.push({ bounds, colour, q: flyParams(i, seed, bounds), left: this.px(colour), right: this.px(colour), body: this.px(BODY) });
     }
   }
 
+  /** A 1x1 white pixel object, tinted and stretched into a shape; created once and reused. */
+  private px(tint: number): Px {
+    return this.scene.add.image(0, 0, PX_TEX).setOrigin(0).setTint(tint).setVisible(false);
+  }
+
   private seen(seenLit: Uint8Array, mapW: number, x: number, y: number): boolean {
-    return seenLit[Math.floor(y / TILE) * mapW + Math.floor(x / TILE)] === 1;
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+    return tx >= 0 && tx < mapW && ty >= 0 && ty * mapW + tx < seenLit.length && seenLit[ty * mapW + tx] === 1;
+  }
+
+  private static rect(o: Px, x: number, y: number, w: number, h: number, depth: number): void {
+    o.setPosition(x, y).setScale(w, h).setDepth(depth).setVisible(true);
   }
 
   /** `cam`: when given, critters outside it are skipped. */
   update(t: number, seenLit: Uint8Array, mapW: number, cam?: Phaser.Geom.Rectangle): void {
-    const g = this.g;
-    g.clear();
-    const inCam = (x: number, y: number) => !cam || (x > cam.x - 8 && x < cam.right + 8 && y > cam.y - 8 && y < cam.bottom + 8);
     const pos = this.pos;
     for (const bee of this.bees) {
-      if (!inCam(bee.f.x, bee.f.y)) continue;
+      bee.body.setVisible(false);
+      bee.stripe.setVisible(false);
+      if (cam && (bee.f.x < cam.x - 16 || bee.f.x > cam.right + 16 || bee.f.y < cam.y - 16 || bee.f.y > cam.bottom + 16)) continue;
       beePos(bee.q, t, bee.f, pos);
       if (!this.seen(seenLit, mapW, pos.x, pos.y)) continue;
-      const x = Math.round(pos.x), y = Math.round(pos.y);
-      g.fillStyle(BEE_YELLOW, 1).fillRect(x - 1, y - 1, 2, 2);
-      g.fillStyle(BEE_DARK, 1).fillRect(x, y - 1, 1, 2);
+      const x = Math.round(pos.x), y = Math.round(pos.y), d = DEPTH.entityBase + bee.f.y;
+      Critters.rect(bee.body, x - 1, y - 1, 2, 2, d);
+      Critters.rect(bee.stripe, x, y - 1, 1, 2, d + 0.01);
     }
     for (const fl of this.flyers) {
+      fl.left.setVisible(false);
+      fl.right.setVisible(false);
+      fl.body.setVisible(false);
       const b = flyPos(fl.q, t, fl.bounds, pos);
-      if (!inCam(b.x, b.y) || !this.seen(seenLit, mapW, b.x, b.y)) continue;
-      const x = Math.round(b.x), y = Math.round(b.y);
-      g.fillStyle(fl.colour, 1);
-      if (b.open) { g.fillRect(x - 3, y - 2, 2, 3); g.fillRect(x + 1, y - 2, 2, 3); } else { g.fillRect(x - 1, y - 2, 1, 3); g.fillRect(x, y - 2, 1, 3); }
-      g.fillStyle(BODY, 1).fillRect(x, y - 1, 1, 3);
+      if (cam && (b.x < cam.x - 16 || b.x > cam.right + 16 || b.y < cam.y - 16 || b.y > cam.bottom + 16)) continue;
+      if (!this.seen(seenLit, mapW, b.x, b.ground)) continue;
+      const x = Math.round(b.x), y = Math.round(b.y), d = DEPTH.entityBase + b.ground;
+      if (b.open) { Critters.rect(fl.left, x - 3, y - 2, 2, 3, d); Critters.rect(fl.right, x + 1, y - 2, 2, 3, d); }
+      else { Critters.rect(fl.left, x - 1, y - 2, 1, 3, d); Critters.rect(fl.right, x, y - 2, 1, 3, d); }
+      Critters.rect(fl.body, x, y - 1, 1, 3, d + 0.01);
     }
   }
 
   destroy(): void {
-    this.g.destroy();
+    for (const b of this.bees) { b.body.destroy(); b.stripe.destroy(); }
+    for (const f of this.flyers) { f.left.destroy(); f.right.destroy(); f.body.destroy(); }
+    if (this.scene.textures.exists(PX_TEX)) this.scene.textures.remove(PX_TEX);
   }
 }

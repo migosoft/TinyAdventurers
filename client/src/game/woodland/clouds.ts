@@ -23,6 +23,10 @@ const TEX = 'woodland-clouds';
 /** The drift's slight +y, as a share of the speed. */
 const DRIFT_Y = 0.2;
 
+/** The baked texture's side in px (quarter resolution) and the world distance after which the pattern repeats. */
+export const BAKE = 512;
+export const PERIOD = BAKE * CLOUD_SCALE;
+
 function hash(ix: number, iy: number): number {
   let h = Math.imul(ix, 0x27d4eb2d) ^ Math.imul(iy, 0x165667b1);
   h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
@@ -30,77 +34,86 @@ function hash(ix: number, iy: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-/** Smooth value noise in 0..1, one lattice cell per unit. */
-function vnoise(x: number, y: number): number {
+const mod = (a: number, n: number) => ((a % n) + n) % n;
+
+/** Smooth value noise in 0..1, one lattice cell per unit, repeating every `p` cells. */
+function vnoise(x: number, y: number, p: number): number {
   const ix = Math.floor(x), iy = Math.floor(y);
   let u = x - ix, v = y - iy;
   u = u * u * (3 - 2 * u);
   v = v * v * (3 - 2 * v);
-  const a = hash(ix, iy), b = hash(ix + 1, iy), c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1);
+  const x0 = mod(ix, p), x1 = mod(ix + 1, p), y0 = mod(iy, p), y1 = mod(iy + 1, p);
+  const a = hash(x0, y0), b = hash(x1, y0), c = hash(x0, y1), d = hash(x1, y1);
   const top = a + (b - a) * u, bot = c + (d - c) * u;
   return top + (bot - top) * v;
 }
 
-/** The shadow's alpha (0..look.dark) at world point (x, y) and time t (s): noise drifting along +x with a slight +y. */
-export function cloudAlpha(x: number, y: number, t: number, look: CloudLook): number {
-  const px = (x - look.speed * t) / look.size, py = (y - look.speed * DRIFT_Y * t) / look.size;
-  const n = 0.7 * vnoise(px, py) + 0.3 * vnoise(px * 2.3 + 17.1, py * 2.3 + 5.7);
+/** The cloud pattern's strength (0..1) at world point (x, y): periodic, repeating every PERIOD px, cells about `look.size` wide. */
+export function cloudField(x: number, y: number, look: CloudLook): number {
+  const p = Math.max(1, Math.round(PERIOD / look.size));
+  const px = (x / PERIOD) * p, py = (y / PERIOD) * p;
+  const n = 0.7 * vnoise(px, py, p) + 0.3 * vnoise(px * 3 + 17, py * 3 + 5, p * 3);
   const thr = 0.75 - 0.5 * look.cover;
   let k = (n - thr) / 0.2;
   k = k < 0 ? 0 : k > 1 ? 1 : k;
-  return look.dark * k * k * (3 - 2 * k);
+  return k * k * (3 - 2 * k);
 }
 
-/** Fills `buf` (w×h pixels, black with alpha) with the shadow over the world window whose top-left is (x0, y0). */
-export function fillCloud(buf: Uint32Array, w: number, h: number, x0: number, y0: number, t: number, look: CloudLook): void {
+/** The shadow's alpha (0..look.dark) at world point (x, y) and time t (s): the periodic pattern drifting along +x with a slight +y. */
+export function cloudAlpha(x: number, y: number, t: number, look: CloudLook): number {
+  return look.dark * cloudField(x - look.speed * t, y - look.speed * DRIFT_Y * t, look);
+}
+
+/** Bakes the pattern at full strength (black, alpha 0..255) into `buf` (BAKE x BAKE pixels, one per CLOUD_SCALE px). */
+export function bakeCloud(buf: Uint32Array, look: CloudLook): void {
   let i = 0;
-  for (let j = 0; j < h; j++) {
-    const y = y0 + (j + 0.5) * CLOUD_SCALE;
-    for (let k = 0; k < w; k++) buf[i++] = (Math.round(cloudAlpha(x0 + (k + 0.5) * CLOUD_SCALE, y, t, look) * 255) << 24) >>> 0;
+  for (let j = 0; j < BAKE; j++) {
+    const y = (j + 0.5) * CLOUD_SCALE;
+    for (let k = 0; k < BAKE; k++) buf[i++] = (Math.round(cloudField((k + 0.5) * CLOUD_SCALE, y, look) * 255) << 24) >>> 0;
   }
 }
 
 export class Clouds {
-  /** Tuned live (the demo's buttons change these). */
+  /** Tuned live (the demo's buttons change these): size and cover rebake the texture, speed and dark do not. */
   look: CloudLook = { ...DEFAULT_CLOUDS };
-  private img: Phaser.GameObjects.Image;
-  private tex: Phaser.Textures.CanvasTexture | null = null;
-  private data: ImageData | null = null;
-  private buf: Uint32Array | null = null;
-  private w = 0;
-  private h = 0;
+  private sprite: Phaser.GameObjects.TileSprite;
+  private baked: { size: number; cover: number } | null = null;
   /** This client's own start in the drift (s), so players do not see the same clouds. */
   private offset = Math.random() * 100000;
 
   constructor(private scene: Phaser.Scene) {
-    this.img = scene.add.image(0, 0, '__DEFAULT').setOrigin(0).setDepth(DEPTH.cloud).setVisible(false);
+    this.bake();
+    this.sprite = scene.add.tileSprite(0, 0, 16, 16, TEX).setOrigin(0).setScale(CLOUD_SCALE).setDepth(DEPTH.cloud);
   }
 
-  /** Redraws the shadow over the camera window `cam` at time `t` (s). */
+  private bake(): void {
+    const { size, cover } = this.look;
+    if (this.baked && this.baked.size === size && this.baked.cover === cover) return;
+    let tex = this.scene.textures.exists(TEX) ? (this.scene.textures.get(TEX) as Phaser.Textures.CanvasTexture) : null;
+    if (!tex) tex = this.scene.textures.createCanvas(TEX, BAKE, BAKE)!;
+    const data = new ImageData(BAKE, BAKE);
+    bakeCloud(new Uint32Array(data.data.buffer), this.look);
+    tex.getContext().putImageData(data, 0, 0);
+    tex.refresh();
+    tex.setFilter(LINEAR); // refresh() resets it to NEAREST under pixelArt
+    this.baked = { size, cover };
+  }
+
+  /** Scrolls the shadow over the camera window `cam` at time `t` (s). */
   update(t: number, cam: Phaser.Geom.Rectangle): void {
+    this.bake();
     const w = Math.ceil(cam.width / CLOUD_SCALE) + 3, h = Math.ceil(cam.height / CLOUD_SCALE) + 3;
-    if (!this.tex || w !== this.w || h !== this.h) this.resize(w, h);
-    // snapped to the canvas grid, so the shadow does not swim against the ground when the camera moves
+    // snapped to the texel grid, so the shadow does not swim against the ground when the camera moves
     const x0 = Math.floor(cam.x / CLOUD_SCALE) * CLOUD_SCALE - CLOUD_SCALE, y0 = Math.floor(cam.y / CLOUD_SCALE) * CLOUD_SCALE - CLOUD_SCALE;
-    fillCloud(this.buf!, w, h, x0, y0, t + this.offset, this.look);
-    this.tex!.getContext().putImageData(this.data!, 0, 0);
-    this.tex!.refresh();
-    this.tex!.setFilter(LINEAR); // refresh() resets it to NEAREST under pixelArt
-    this.img.setPosition(x0, y0).setScale(CLOUD_SCALE).setVisible(true);
-  }
-
-  private resize(w: number, h: number): void {
-    if (this.scene.textures.exists(TEX)) this.scene.textures.remove(TEX);
-    this.tex = this.scene.textures.createCanvas(TEX, w, h)!;
-    this.data = new ImageData(w, h);
-    this.buf = new Uint32Array(this.data.data.buffer);
-    this.w = w;
-    this.h = h;
-    this.img.setTexture(TEX);
+    const tt = t + this.offset, v = this.look.speed / CLOUD_SCALE;
+    if (this.sprite.width !== w || this.sprite.height !== h) this.sprite.setSize(w, h);
+    this.sprite.setPosition(x0, y0).setAlpha(this.look.dark);
+    this.sprite.tilePositionX = mod(x0 / CLOUD_SCALE - v * tt, BAKE);
+    this.sprite.tilePositionY = mod(y0 / CLOUD_SCALE - v * DRIFT_Y * tt, BAKE);
   }
 
   destroy(): void {
-    this.img.destroy();
+    this.sprite.destroy();
     if (this.scene.textures.exists(TEX)) this.scene.textures.remove(TEX);
   }
 }

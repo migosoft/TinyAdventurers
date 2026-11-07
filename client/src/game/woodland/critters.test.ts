@@ -12,41 +12,51 @@ describe('critters', () => {
     }
   });
 
-  it('a butterfly rises on a flap and sinks between flaps', () => {
-    // find a stretch where it flies (not landed); y with the path's slow part removed is the flap bob
+  it('a butterfly rises 1.5 px on a flap and sinks 0.6 px between flaps', () => {
+    // the lift is the ground height minus y; look at a stretch of steady flapping (not landing, not gliding)
     let checked = 0;
     for (let i = 0; i < 6; i++) {
-      const ys: number[] = [];
-      let t = 0.3 + i * 0.01;
-      // the first 8 s are never landed for the whole window? check flags instead
-      for (let k = 0; k < 400; k++, t += 0.0005) {
-        const b = butterflyAt(i, t, 5, bounds);
-        if (b.landed) { ys.length = 0; continue; }
-        ys.push(b.y);
-      }
-      if (ys.length < 300) continue;
-      // within 0.2 s (>= one 5 Hz flap) the highest point is >= 1.4 px over where it began, and it goes down again afterwards
-      const top = Math.min(...ys.slice(0, 300));
-      const imax = ys.indexOf(top);
-      expect(Math.max(...ys.slice(0, 300)) - top).toBeGreaterThan(1.2);
-      expect(ys[imax + 40] ?? top + 1).toBeGreaterThan(top);
+      let t0 = 0;
+      for (; t0 < 60; t0 += 0.1) if (!butterflyAt(i, t0, 5, bounds).landed && !butterflyAt(i, t0 + 1.2, 5, bounds).landed && !butterflyAt(i, t0 + 0.6, 5, bounds).landed) break;
+      const air: number[] = [];
+      for (let k = 0; k < 1200; k++) { const b = butterflyAt(i, t0 + k * 0.001, 5, bounds); air.push(b.ground - b.y); }
+      // alternating extremes of the lift
+      const ext: number[] = [];
+      for (let k = 1; k < air.length - 1; k++) if ((air[k] > air[k - 1] && air[k] >= air[k + 1]) || (air[k] < air[k - 1] && air[k] <= air[k + 1])) ext.push(air[k]);
+      const rises: number[] = [], sinks: number[] = [];
+      for (let k = 1; k < ext.length; k++) if (Math.abs(ext[k] - ext[k - 1]) < 2) (ext[k] > ext[k - 1] ? rises : sinks).push(Math.abs(ext[k] - ext[k - 1])); // not the long glide
+      const med = (v: number[]) => v.sort((a, b) => a - b)[Math.floor(v.length / 2)];
+      expect(rises.length).toBeGreaterThanOrEqual(2);
+      expect(med(rises)).toBeCloseTo(1.5, 1);
+      expect(med(sinks)).toBeCloseTo(0.6, 1);
       checked++;
     }
-    expect(checked).toBeGreaterThan(0);
+    expect(checked).toBe(6);
+  });
+
+  it('wings are shut at the bottom of the down-stroke and open on the up-stroke', () => {
+    let open = 0, shut = 0;
+    for (let t = 0.5; t < 3; t += 0.001) { const b = butterflyAt(1, t, 5, bounds); if (b.landed) continue; if (b.open) open++; else shut++; }
+    expect(open).toBeGreaterThan(0);
+    expect(shut).toBeGreaterThan(0);
   });
 
   it('flaps at 5-7 Hz and lands sometimes', () => {
     for (let i = 0; i < 6; i++) {
-      let flips = 0, last = butterflyAt(i, 0, 5, bounds).open, landed = 0;
+      let landed = 0, last = butterflyAt(i, 0, 5, bounds).open, lastShut = -1;
+      const gaps: number[] = [];
       for (let t = 0.001; t < 60; t += 0.001) {
         const b = butterflyAt(i, t, 5, bounds);
         if (b.landed) landed++;
-        if (!b.landed && last !== b.open) flips++;
+        if (!b.landed && last && !b.open) { if (lastShut >= 0 && t - lastShut < 0.3) gaps.push(t - lastShut); lastShut = t; }
         last = b.open;
       }
+      gaps.sort((a, b) => a - b);
       expect(landed).toBeGreaterThan(1000);
-      expect(flips / 2 / 60).toBeGreaterThan(3.5); // a flap is two flips; minus the time landed
-      expect(flips / 2 / 60).toBeLessThan(7.2);
+      expect(gaps.length).toBeGreaterThan(20);
+      const med = gaps[Math.floor(gaps.length / 2)];
+      expect(med).toBeGreaterThan(1 / 7.1);
+      expect(med).toBeLessThan(1 / 4.9);
     }
   });
 

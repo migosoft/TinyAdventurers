@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CLOUD_SCALE, cloudAlpha, DEFAULT_CLOUDS, fillCloud, type CloudLook } from './clouds';
+import { bakeCloud, BAKE, cloudAlpha, cloudField, DEFAULT_CLOUDS, PERIOD, type CloudLook } from './clouds';
 
 describe('cloudAlpha', () => {
   it('is within [0, dark], covers part of the map and moves with t', () => {
@@ -18,21 +18,28 @@ describe('cloudAlpha', () => {
     expect(moved).toBeGreaterThan(n / 20);
   });
 
-  it('drifts along +x at the look speed', () => {
+  it('drifts along +x with a slight +y at the look speed', () => {
     const look = { ...DEFAULT_CLOUDS };
     expect(cloudAlpha(500 + 14 * 10, 300 + 14 * 0.2 * 10, 10, look)).toBeCloseTo(cloudAlpha(500, 300, 0, look), 9);
   });
 
-  it('costs little for a full-screen quarter-resolution frame', () => {
-    const w = Math.ceil(1280 / CLOUD_SCALE) + 3, h = Math.ceil(720 / CLOUD_SCALE) + 3;
-    const buf = new Uint32Array(w * h);
-    fillCloud(buf, w, h, 0, 0, 0, DEFAULT_CLOUDS); // warm up
-    const t0 = performance.now();
-    const N = 20;
-    for (let k = 1; k <= N; k++) fillCloud(buf, w, h, 100, 100, k, DEFAULT_CLOUDS);
-    const ms = (performance.now() - t0) / N;
-    console.log(`cloudAlpha: ${w}x${h} = ${w * h} px, ${ms.toFixed(2)} ms per frame`);
-    expect(ms).toBeLessThan(15);
+  it('is periodic: F(x + period, y) == F(x, y), and so in y, for every size', () => {
+    for (const size of [200, 360, 700]) {
+      const look = { ...DEFAULT_CLOUDS, size };
+      for (let k = 0; k < 200; k++) {
+        const x = (k * 97) % 3000, y = (k * 53) % 3000;
+        expect(cloudField(x + PERIOD, y, look)).toBeCloseTo(cloudField(x, y, look), 9);
+        expect(cloudField(x, y + PERIOD, look)).toBeCloseTo(cloudField(x, y, look), 9);
+      }
+    }
+  });
+
+  it('bakes the same pattern the sampler describes', () => {
+    const buf = new Uint32Array(BAKE * BAKE);
+    bakeCloud(buf, DEFAULT_CLOUDS);
+    for (const [k, j] of [[3, 5], [100, 400], [511, 0], [250, 250]]) {
+      expect(buf[j * BAKE + k] >>> 24).toBe(Math.round(cloudField((k + 0.5) * 4, (j + 0.5) * 4, DEFAULT_CLOUDS) * 255));
+    }
     expect(buf.some((v) => v !== 0)).toBe(true);
   });
 });
