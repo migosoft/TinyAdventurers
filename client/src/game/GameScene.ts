@@ -30,6 +30,7 @@ import { Mood, type AirTorch, type AirShot, type AirMover } from './mood';
 import { MoverTracker } from './airmovers';
 import { projectileAir } from './airshots';
 import { VisionMask } from './visionmask';
+import { ShadeMask } from './shademask';
 import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
@@ -151,6 +152,7 @@ export class GameScene extends Phaser.Scene {
   private movers = new MoverTracker(); // replaced in init() for every run
   private airMovers: AirMover[] = [];
   private visionMask!: VisionMask;
+  private shadeMask!: ShadeMask;
   private unsub?: () => void;
   private frameMs = 0;
   private myKind = 0;
@@ -222,6 +224,7 @@ export class GameScene extends Phaser.Scene {
     this.sunbeams = new Sunbeams(this, this.light, this.lightView);
     this.cove = this.info.cove ? new CoveView(this, this.info.cove) : null;
     this.visionMask = new VisionMask(this, this.map);
+    this.shadeMask = new ShadeMask(this, this.map);
     this.useHint = new KeyCap(this);
     this.bars = this.add.graphics().setDepth(DEPTH.enemyBars);
     this.heroBars = this.add.graphics().setDepth(DEPTH.heroBars);
@@ -306,6 +309,7 @@ export class GameScene extends Phaser.Scene {
   private cleanup(): void {
     this.unsub?.();
     this.mood.destroy();
+    this.shadeMask.destroy();
     this.sunbeams.destroy();
     this.cove?.destroy();
     this.cove = null;
@@ -510,6 +514,7 @@ export class GameScene extends Phaser.Scene {
         this.lightView.mapChanged();
         this.mood.mapChanged();
         this.visionMask.mapChanged();
+        this.shadeMask.mapChanged();
         if (ev.v === TILE_ID.DoorClosed) {
           // The entrance tiles arrive one event each; only announce the first.
           if (!this.forceField) this.hud.message('A force field seals the hall behind you!', 'game');
@@ -843,6 +848,7 @@ export class GameScene extends Phaser.Scene {
     this.mood.update(dt, this.cameras.main.worldView, torches, shots, this.collectMovers(dt, px, py));
     this.sunbeams.update(dt, this.cameras.main.worldView, now);
     this.visionMask.update(this.cameras.main.worldView, this.lightView.view);
+    this.shadeMask.update(this.cameras.main.worldView, this.lightView.view, this.lightView.sight);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 
     const seen = new Set<number>();

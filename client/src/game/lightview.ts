@@ -166,8 +166,10 @@ export function seenForLight(inView: (x: number, y: number) => boolean, opaque: 
 }
 
 export class LightView {
-  /** What the viewer sees (polygon coverage, walls by FOV). */
+  /** What the viewer sees past walls only (trunks and thickets do not stop it): darkness, tint, `seenLit` and the vision mask. */
   readonly view: View;
+  /** What the server lets the viewer see (trunks stop it too): the soft shadow is the ground between the two. */
+  readonly sight: View;
   /** The viewer and vision the view was computed for; empty: recompute. */
   private viewKey = '';
   private dark: Phaser.Textures.CanvasTexture;
@@ -193,11 +195,12 @@ export class LightView {
   /** Light what the view covers (false: the tile FOV only, the old tile edges, ?lights E). */
   wide = true;
   private inView = (x: number, y: number) => this.view.isVisible(x, y);
-  private opaque = (x: number, y: number) => this.map.opaque(x, y);
+  private opaque = (x: number, y: number) => this.map.hardOpaque(x, y);
 
   constructor(scene: Phaser.Scene, private map: TileMap, private field: LightField) {
     const { w, h } = map;
     this.view = new View(w, h);
+    this.sight = new View(w, h);
     for (const k of ['dark', 'tint', 'dvmask']) if (scene.textures.exists(k)) scene.textures.remove(k);
     this.dark = scene.textures.createCanvas('dark', w * SUB, h * SUB)!;
     this.tint = scene.textures.createCanvas('tint', w * SUB, h * SUB)!;
@@ -242,7 +245,8 @@ export class LightView {
     const key = `${vx.toFixed(1)},${vy.toFixed(1)},${sight}`;
     if (key !== this.viewKey) {
       this.viewKey = key;
-      this.view.compute(this.map, vx, vy, sight);
+      this.view.compute(this.map, vx, vy, sight, 'hard');
+      this.sight.compute(this.map, vx, vy, sight, 'all');
     }
     const x0 = Math.max(0, Math.floor(view.x / TILE) - MARGIN);
     const y0 = Math.max(0, Math.floor(view.y / TILE) - MARGIN);
