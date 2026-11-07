@@ -17,13 +17,14 @@ pub struct ClassDef {
     pub class: ClassId,
     #[serde(skip)]
     pub kind: EntityKind,
-    /// Start HP and speed (at the class's own CON, 10 + modifier, before races): references for calibration and the client's demo scenes (removed in plan 5).
+    /// Start HP: references for calibration and the client's demo scenes (removed in plan 5). Defined at the class's own CON (10 + modifier, before races).
     pub hp: f64,
+    /// Start speed, defined at the class's own CON (10 + modifier, before races).
     pub speed: f64,
     /// The class's modifier from 10 (see `start_attrs`).
     #[serde(skip)]
     pub attr_mods: Attributes,
-    /// HP before the CON bonus: `hp(base_hp, start CON) == hp`.
+    /// HP at CON 10: `hp(base_hp, 10 + attr_mods.Con) == hp` (own CON, before races).
     #[serde(skip)]
     pub base_hp: f64,
     /// Body weight for pushes (armor adds later).
@@ -87,7 +88,7 @@ mod tests {
     fn class_hp_comes_from_base_and_con() {
         for c in ClassId::ALL {
             let d = def(c);
-            assert_eq!(attributes::hp(d.base_hp, start_attrs(c).get(Attr::Con)), d.hp, "{c:?}");
+            assert_eq!(attributes::hp(d.base_hp, attributes::BASELINE + d.attr_mods.get(Attr::Con)), d.hp, "{c:?}");
         }
     }
 

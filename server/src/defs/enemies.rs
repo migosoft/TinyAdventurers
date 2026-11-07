@@ -658,7 +658,7 @@ mod tests {
     #[test]
     fn enemy_base_hp_keeps_todays_hp() {
         for t in EnemyType::ALL {
-            let con = attrs(t).get(Attr::Con);
+            let con = attributes::BASELINE + def(t).attr_mods.get(Attr::Con);
             assert_eq!(base_hp(t) + 5.0 * (con - 10) as f64, def(t).hp, "{t:?}");
             assert_eq!(attributes::hp(base_hp(t), con), def(t).hp, "{t:?}");
         }

@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn wolf_stat_block_keeps_todays_hp() {
-        assert_eq!(attributes::hp(wolf_base_hp(), 15), WOLF_HP);
+        assert_eq!(attributes::hp(wolf_base_hp(), attributes::BASELINE + WOLF_ATTR_MODS.get(Attr::Con)), WOLF_HP);
         assert_eq!(WOLF_WEIGHT, 10.0);
     }
 }
