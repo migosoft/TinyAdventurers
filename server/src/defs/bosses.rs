@@ -63,11 +63,13 @@ pub fn races(id: BossId) -> &'static [Race] {
     }
 }
 
-/// The boss's Attributes: 10, its races' bonuses, its kind's modifier.
+/// The sources of the boss's Attributes: 10, its races' bonuses, its kind's modifier.
 pub fn attr_sources(id: BossId) -> AttrSources {
     races::creature_sources(races(id), def(id).attr_mods)
 }
 
+/// The total (`attr_sources(..).total()`).
+#[cfg(test)]
 pub fn attrs(id: BossId) -> Attributes {
     attr_sources(id).total()
 }

@@ -473,11 +473,13 @@ pub fn base_hp(t: EnemyType) -> f64 {
     d.hp - super::attributes::CON_HP * (races::own_con(d.attr_mods) - super::attributes::BASELINE) as f64
 }
 
-/// The enemy's Attributes: 10, its races' bonuses, its kind's modifier.
+/// The sources of the enemy's Attributes: 10, its races' bonuses, its kind's modifier.
 pub fn attr_sources(t: EnemyType) -> AttrSources {
     races::creature_sources(races(t), def(t).attr_mods)
 }
 
+/// The total (`attr_sources(..).total()`).
+#[cfg(test)]
 pub fn attrs(t: EnemyType) -> Attributes {
     attr_sources(t).total()
 }

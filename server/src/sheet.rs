@@ -1102,8 +1102,8 @@ pub struct MonsterNumbers {
 }
 
 /// `base` with the run-time `effects` in its sources (a lowered Attribute stops at 1): max HP moves by `CON_HP`
-/// per CON point and stays at least 1, speed by `CON_MOVE`, the kit is resolved again. At a zero
-/// zero `effects` every number is the spawn's.
+/// per CON point and stays at least 1, speed by `CON_MOVE`, the kit is resolved again. At zero
+/// `effects` every number is the spawn's.
 pub fn monster_numbers(base: &MonsterBase, effects: Attributes, muted: &[Lasting]) -> MonsterNumbers {
     let sources = AttrSources { effects, ..base.sources };
     let attrs = sources.total();
@@ -1678,7 +1678,7 @@ mod tests {
         let bare = AttrSources { base: bare_attrs, race: Attributes::default(), kind: Attributes::default(), buy: Attributes::default(), items: Attributes::default(), effects: Attributes::default() };
         let int = |n| Attributes::new(0, 0, 0, n, 0, 0);
         let (r14, r15) = ([Requirement::Attr(Attr::Int, 14)], [Requirement::Attr(Attr::Int, 15)]);
-                // A chain: the free item lifts INT to 14, which turns on the INT 14 item, whose +1 turns on the INT 15 one.
+        // A chain: the free item lifts INT to 14, which turns on the INT 14 item, whose +1 turns on the INT 15 one.
         let chain = [(&r15[..], int(0)), (&r14[..], int(1)), (&[][..], int(1))];
         assert_eq!(build_up(&chain, bare), (vec![true, true, true], bare_attrs.plus(int(2))));
         // An item's own points never meet its own requirement.

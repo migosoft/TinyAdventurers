@@ -70,11 +70,13 @@ pub fn prof_base(class: ClassId) -> Vec<Prof> {
     d.weapons.iter().map(|&k| Prof::Weapon(k)).chain(std::iter::once(Prof::Armor(d.max_armor))).collect()
 }
 
-/// Layers 1-3: base 10 + race bonus + class modifier.
+/// The sources of the class's Attributes, layers 1-3: base 10, race bonus, class modifier.
 pub fn attr_sources(class: ClassId) -> AttrSources {
     races::creature_sources(races(class), def(class).attr_mods)
 }
 
+/// The total (`attr_sources(..).total()`).
+#[cfg(test)]
 pub fn start_attrs(class: ClassId) -> Attributes {
     attr_sources(class).total()
 }

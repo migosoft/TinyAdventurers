@@ -56,11 +56,13 @@ pub fn wolf_races() -> &'static [Race] {
     &[Race::MagicalBeast]
 }
 
-/// The wolf's Attributes: 10, its race's bonuses, its modifier.
+/// The sources of the wolf's Attributes: 10, its race's bonuses, its modifier.
 pub fn wolf_attr_sources() -> AttrSources {
     races::creature_sources(wolf_races(), WOLF_ATTR_MODS)
 }
 
+/// The total (`wolf_attr_sources().total()`).
+#[cfg(test)]
 pub fn wolf_attrs() -> Attributes {
     wolf_attr_sources().total()
 }
