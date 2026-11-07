@@ -811,10 +811,13 @@ fn sheet_core(class: ClassId, b: &Build, effects: Attributes, muted: &[Lasting])
 pub struct AttrLine {
     pub attr: Attr,
     pub total: i32,
-    /// Class and race.
+    /// The baseline every creature starts from.
+    pub base: i32,
+    pub race: i32,
+    /// The class's own points.
     pub class: i32,
-    /// Points bought in the shop (and the debug lift).
-    pub shop: i32,
+    /// Points bought in the Attribute shop (and the debug lift).
+    pub buy: i32,
     pub items: i32,
 }
 
@@ -986,14 +989,10 @@ pub fn summary(class: ClassId, b: &Build) -> SheetSummary {
             }
         }
     };
-    let base = classes::start_attrs(class);
+    let src = &sheet.sources;
     let attrs = Attr::ALL
         .iter()
-        .map(|&a| {
-            let total = sheet.attrs.get(a);
-            let (class, shop) = (base.get(a), used.extra.get(a));
-            AttrLine { attr: a, total, class, shop, items: total - class - shop }
-        })
+        .map(|&a| AttrLine { attr: a, total: sheet.attrs.get(a), base: src.base.get(a), race: src.race.get(a), class: src.kind.get(a), buy: src.buy.get(a), items: src.items.get(a) })
         .collect();
     let mut profs: Vec<String> = Vec::new();
     for p in self::profs(class, &used.nodes) {
@@ -2073,13 +2072,20 @@ mod tests {
         assert_eq!(s.loadout_error, None);
         let line = |a: Attr| s.attrs.iter().find(|l| l.attr == a).unwrap();
         let cha = line(Attr::Cha);
-        assert_eq!((cha.class, cha.shop, cha.items, cha.total), (14, 0, 0, 14));
+        assert_eq!((cha.base, cha.race, cha.class, cha.buy, cha.items, cha.total), (10, 0, 4, 0, 0, 14));
         let str_ = line(Attr::Str);
-        assert_eq!((str_.shop, str_.items), (1, 0));
+        assert_eq!((str_.buy, str_.items), (1, 0));
         let con = line(Attr::Con);
-        assert_eq!((con.shop, con.items), (0, 1));
+        assert_eq!((con.buy, con.items), (0, 1));
         for l in &s.attrs {
-            assert_eq!(l.total, l.class + l.shop + l.items, "{:?}", l.attr);
+            assert_eq!(l.total, l.base + l.race + l.class + l.buy + l.items, "{:?}", l.attr);
+        }
+        let r = ClassId::ElvenRanger;
+        let ranger = summary(r, &Build::start(r));
+        let dex = ranger.attrs.iter().find(|l| l.attr == Attr::Dex).unwrap();
+        assert_eq!((dex.base, dex.race, dex.class, dex.buy), (10, 2, 3, 0), "the race bonus is its own column");
+        for l in &ranger.attrs {
+            assert_eq!(l.total, l.base + l.race + l.class + l.buy + l.items, "{:?}", l.attr);
         }
         let sheet = hero_sheet(c, &b).unwrap();
         assert_eq!(s.attrs.iter().map(|l| l.total).collect::<Vec<_>>(), Attr::ALL.map(|a| sheet.attrs.get(a)).to_vec());

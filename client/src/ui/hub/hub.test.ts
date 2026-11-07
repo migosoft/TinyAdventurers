@@ -139,3 +139,14 @@ test('resistances are shown as percent, from the server fractions', () => {
   expect(res).toContain('−25 %');
   expect(res).toContain('100 %');
 });
+test('the Attribute row breaks the total down by source, hiding the zero ones', () => {
+  hub.open(1);
+  const info = fixtureInfo('ElvenRanger');
+  const dex = info.sheet.attrs.find((l) => l.attr === 'Dex')!;
+  Object.assign(dex, { base: 10, race: 2, class: 3, buy: 1, items: -1, total: 15 });
+  const str = info.sheet.attrs.find((l) => l.attr === 'Str')!;
+  Object.assign(str, { base: 10, race: 0, class: 0, buy: 0, items: 0, total: 10 });
+  hub.setCharacter(info);
+  expect($('[data-row="Dex"] small')!.textContent).toBe('base 10 · race +2 · class +3 · bought +1 · items −1');
+  expect($('[data-row="Str"] small')!.textContent).toBe('base 10');
+});
