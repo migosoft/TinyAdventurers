@@ -7,6 +7,9 @@ import { TILE, type TileMap } from '../../sim/map';
 import type { Rgba } from '../vegetation';
 import { BASE, EDGE, FLOWERS, G1, noise, PATCH, rng, type Rgb } from '../covemath';
 
+/** The tiles the woodland paints itself (the dungeon tile art is skipped there). */
+export const GROUND_TILES = new Set<number>([TILE_ID.Floor, TILE_ID.Road, TILE_ID.Thicket, TILE_ID.Trunk]);
+
 export const NONE = 0, GRASS = 1, THICKET = 2, ROAD = 3;
 /** How far a stronger ground creeps into a weaker one (px). */
 const CREEP = 3;

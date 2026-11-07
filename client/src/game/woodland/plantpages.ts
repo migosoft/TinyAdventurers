@@ -38,6 +38,9 @@ export function drawOrder(plants: PlantInfo[], cam: { x: number; y: number }): n
   return plants.map((_, i) => i).sort((a, b) => d[a] - d[b] || a - b);
 }
 
+/** How much of the slowest job seen is remembered into the next frame. */
+const JOB_DECAY = 0.5;
+
 /** Jobs that run in order, within `budgetMs` of them per frame (a job starts only if the slowest job so far still fits). */
 export class DrawQueue {
   private jobs: (() => void)[] = [];
@@ -50,10 +53,11 @@ export class DrawQueue {
   /** Jobs not yet run. */
   get size(): number { return this.jobs.length - this.head; }
 
-  clear(): void { this.jobs = []; this.head = 0; }
+  clear(): void { this.jobs = []; this.head = 0; this.maxJob = 0; }
 
   /** Runs jobs in order; returns how many ran. The first job always runs; each next one only when the time spent plus the slowest job seen so far fits `budget` (default: the constructor's, in ms). */
   run(budget = this.budgetMs): number {
+    this.maxJob *= JOB_DECAY; // one slow outlier (GC, JIT, a new canvas) must not pin the queue to one job per frame
     const t0 = this.now();
     let n = 0;
     let last = t0;

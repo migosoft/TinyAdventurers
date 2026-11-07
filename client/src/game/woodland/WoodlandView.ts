@@ -5,15 +5,17 @@
 import type Phaser from 'phaser';
 import type { PlantInfo } from '../../generated/PlantInfo';
 import type { WoodlandInfo } from '../../generated/WoodlandInfo';
-import type { TileMap } from '../../sim/map';
+import { TILE, type TileMap } from '../../sim/map';
 import { DEPTH } from '../effects';
 import { behindOccluder, heroBox, Silhouette, type BodyLook } from '../silhouette';
 import { drawPlant, PLANT_KINDS } from '../vegetation';
 import { BASE } from '../covemath';
-import { GroundPainter } from './ground';
+import { GROUND_TILES, GroundPainter } from './ground';
 import { DrawQueue, drawOrder, PlantPages } from './plantpages';
 
-const GROUND_TEX = 'woodland-ground';
+const GROUND_TEX = 'woodland-ground-';
+/** The ground goes up in strips of this many px of height (~0.5 MB each), one strip per frame. */
+const STRIP = 64;
 const PAGE_TEX = 'woodland-page-';
 const PAGE_SIZE = 1024;
 /** Milliseconds of drawing per frame, uploads included. */
@@ -31,7 +33,9 @@ const bucketKey = (bx: number, by: number) => (by + 1) * 8192 + bx + 1;
 const keyOf = (p: PlantInfo) => `${p[0]}:${p[3]}:${p[4]}`;
 
 export class WoodlandView {
-  private ground: Phaser.GameObjects.Image;
+  private painter: GroundPainter;
+  private placeholders: Phaser.GameObjects.Graphics[] = [];
+  private strips: Phaser.GameObjects.Image[] = [];
   private pages = new PlantPages(PAGE_SIZE);
   private canvases: Phaser.Textures.CanvasTexture[] = [];
   private dirty = new Set<number>();
@@ -51,23 +55,24 @@ export class WoodlandView {
   private silhouette?: Silhouette;
 
   constructor(private scene: Phaser.Scene, private info: WoodlandInfo, map: TileMap, spawn: { x: number; y: number } = { x: 0, y: 0 }) {
-    const painter = new GroundPainter(map, info.seed);
-    if (scene.textures.exists(GROUND_TEX)) scene.textures.remove(GROUND_TEX);
-    const tex = scene.textures.createCanvas(GROUND_TEX, painter.w, painter.h)!;
-    // flat grass until the bands are painted
-    const ctx = tex.getContext();
-    ctx.fillStyle = `rgb(${BASE[0]},${BASE[1]},${BASE[2]})`;
-    ctx.fillRect(0, 0, painter.w, painter.h);
-    tex.refresh();
+    const painter = this.painter = new GroundPainter(map, info.seed);
+    // flat grass over the ground tiles until a strip's real ground is uploaded
+    const nStrips = Math.ceil(painter.h / STRIP);
+    for (let n = 0; n < nStrips; n++) {
+      const g = scene.add.graphics().setDepth(DEPTH.map + 0.5).fillStyle((BASE[0] << 16) | (BASE[1] << 8) | BASE[2], 1);
+      const ty0 = (n * STRIP) / TILE, ty1 = Math.min(map.h, ty0 + STRIP / TILE);
+      for (let ty = ty0; ty < ty1; ty++) for (let tx = 0; tx < map.w; tx++) {
+        if (!GROUND_TILES.has(map.get(tx, ty))) continue;
+        let end = tx;
+        while (end + 1 < map.w && GROUND_TILES.has(map.get(end + 1, ty))) end++;
+        g.fillRect(tx * TILE, ty * TILE, (end - tx + 1) * TILE, TILE);
+        tx = end;
+      }
+      this.placeholders.push(g);
+    }
     for (let ty = 0; ty < painter.rows; ty++) this.groundQueue.push(() => painter.band(ty));
     this.groundQueue.push(() => painter.blades());
     this.groundQueue.push(() => painter.flowers());
-    this.groundQueue.push(() => {
-      ctx.clearRect(0, 0, painter.w, painter.h);
-      ctx.putImageData(new ImageData(painter.data as Uint8ClampedArray<ArrayBuffer>, painter.w, painter.h), 0, 0);
-      tex.refresh(); // the one upload
-    });
-    this.ground = scene.add.image(0, 0, GROUND_TEX).setOrigin(0).setDepth(DEPTH.map + 0.5);
     info.plants.forEach((p, i) => {
       this.pending.add(i);
       if (p[0] !== BUSH) {
@@ -123,6 +128,21 @@ export class WoodlandView {
       .setOrigin(ox, f.foot.y / f.h).setFlipX(p[5]).setDepth(DEPTH.entityBase + p[2]));
   }
 
+  /** The next painted strip of ground as its own small texture (at most one per frame), replacing its flat placeholder. */
+  private uploadStrip(): void {
+    const n = this.strips.length;
+    const p = this.painter;
+    if (n * STRIP >= p.h) return;
+    const y0 = n * STRIP, h = Math.min(STRIP, p.h - y0);
+    const name = GROUND_TEX + n;
+    if (this.scene.textures.exists(name)) this.scene.textures.remove(name);
+    const tex = this.scene.textures.createCanvas(name, p.w, h)!;
+    tex.getContext().putImageData(new ImageData(p.data.subarray(y0 * p.w * 4, (y0 + h) * p.w * 4) as Uint8ClampedArray<ArrayBuffer>, p.w, h), 0, 0);
+    tex.refresh();
+    this.strips.push(this.scene.add.image(0, y0, name).setOrigin(0).setDepth(DEPTH.map + 0.5));
+    this.placeholders[n].destroy();
+  }
+
   /** `hero`: the own hero's body while it plays, else null. `cam`: the camera's world view. */
   update(_t: number, hero: BodyLook | null, cam: Phaser.Geom.Rectangle): void {
     const c = { x: cam.centerX, y: cam.centerY };
@@ -133,12 +153,11 @@ export class WoodlandView {
     const left = Math.max(0, BUDGET_MS - this.uploadMs);
     if (this.groundQueue.size > 0) this.groundQueue.run(left);
     else this.queue.run(left);
-    if (this.dirty.size > 0) {
-      const t0 = performance.now();
-      for (const page of this.dirty) this.canvases[page].refresh(); // one upload per page and frame
-      this.dirty.clear();
-      this.uploadMs = performance.now() - t0;
-    } else this.uploadMs = 0;
+    const t0 = performance.now();
+    for (const page of this.dirty) this.canvases[page].refresh(); // one upload per page and frame
+    this.dirty.clear();
+    if (this.groundQueue.size === 0) this.uploadStrip();
+    this.uploadMs = performance.now() - t0;
     for (const i of this.ready) this.show(i);
     this.ready.length = 0;
     this.shade(hero);
@@ -177,8 +196,8 @@ export class WoodlandView {
     this.silhouette?.destroy();
     for (const img of this.images.values()) img.destroy();
     this.images.clear();
-    this.ground.destroy();
-    if (this.scene.textures.exists(GROUND_TEX)) this.scene.textures.remove(GROUND_TEX);
+    for (const g of this.placeholders) g.destroy();
+    this.strips.forEach((img, n) => { img.destroy(); if (this.scene.textures.exists(GROUND_TEX + n)) this.scene.textures.remove(GROUND_TEX + n); });
     this.canvases.forEach((_, n) => { if (this.scene.textures.exists(PAGE_TEX + n)) this.scene.textures.remove(PAGE_TEX + n); });
     this.canvases = [];
   }

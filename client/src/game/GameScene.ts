@@ -27,6 +27,7 @@ import { LightView, nextDarkvision } from './lightview';
 import { Sunbeams } from './sunbeams';
 import { CoveView } from './cove';
 import { WoodlandView } from './woodland/WoodlandView';
+import { GROUND_TILES } from './woodland/ground';
 import { Mood, type AirTorch, type AirShot, type AirMover } from './mood';
 import { MoverTracker } from './airmovers';
 import { projectileAir } from './airshots';
@@ -91,9 +92,6 @@ const KIND_NAME: Record<number, string> = Object.fromEntries(Object.entries(KIND
 const ENEMY_KIND: Record<string, { max_hp: number; res: Record<string, number> } | undefined> = ENEMY_KINDS;
 
 const SKELETAL = new Set<number>([KIND.SkeletonWarrior, KIND.SkeletonArcher, KIND.RaisedSkeleton, KIND.Lich]);
-
-/** The tiles the woodland paints itself (no tile art, no grid lines). */
-const GROUND_TILES = new Set<number>([TILE_ID.Floor, TILE_ID.Road, TILE_ID.Thicket, TILE_ID.Trunk]);
 
 export class GameScene extends Phaser.Scene {
   private net!: Net;

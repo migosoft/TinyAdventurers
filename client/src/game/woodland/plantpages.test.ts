@@ -81,6 +81,28 @@ describe('DrawQueue', () => {
     while (q.size > 0) { const t0 = clock; q.run(); expect(clock - t0).toBeLessThanOrEqual(8); }
   });
 
+  it('one slow outlier does not pin the queue to one job per frame', () => {
+    let clock = 0;
+    const q = new DrawQueue(8, () => clock);
+    q.push(() => { clock += 20; });
+    for (let i = 0; i < 60; i++) q.push(() => { clock += 1; });
+    q.run();
+    const per: number[] = [];
+    for (let f = 0; f < 4; f++) per.push(q.run());
+    expect(per[3]).toBeGreaterThanOrEqual(4);
+    expect(per[0]).toBeLessThan(per[3]);
+  });
+
+  it('clear forgets the slowest job', () => {
+    let clock = 0;
+    const q = new DrawQueue(8, () => clock);
+    q.push(() => { clock += 20; });
+    q.run();
+    q.clear();
+    for (let i = 0; i < 20; i++) q.push(() => { clock += 1; });
+    expect(q.run()).toBeGreaterThan(4);
+  });
+
   it('run(budget) overrides the budget but always runs one job', () => {
     let clock = 0;
     const q = new DrawQueue(8, () => clock);
