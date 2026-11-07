@@ -1094,7 +1094,7 @@ pub(crate) mod tests {
         let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(30.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         // The wolf's kit with Pounce taken out.
-        let (attrs, radius) = (run.monsters[mi].base.attrs.clone(), run.monsters[mi].radius);
+        let (attrs, radius) = (run.monsters[mi].base.sources.total(), run.monsters[mi].radius);
         let m = &mut run.monsters[mi];
         m.etype = None;
         m.base_ai = BaseAi::Melee;

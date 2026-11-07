@@ -8,7 +8,7 @@ use crate::defs::abilities::{self as ab, AbilityCategory, AbilityDef, AbilityId,
 use crate::defs::attributes::{self, Attr, AttrSources, Attributes, Scaled, CD_PCT, CON_MOVE};
 use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
-use crate::defs::companions::{wolf_attrs, wolf_base_hp, WOLF_ATTR_MODS, WOLF_RADIUS, WOLF_SPEED, WOLF_WEIGHT};
+use crate::defs::companions::{wolf_attr_sources, wolf_base_hp, WOLF_ATTR_MODS, WOLF_RADIUS, WOLF_SPEED, WOLF_WEIGHT};
 use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, Resistances};
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
@@ -1050,6 +1050,8 @@ fn keystone_ability(mut r: ResolvedAbility, d: &AbilityDef, ks: &KeystoneSet) ->
 /// The numbers a monster's spawn reads.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MonsterStats {
+    /// All the sources of its Attributes (`effects` zero at spawn); `attrs` is their total.
+    pub sources: AttrSources,
     pub attrs: Attributes,
     pub weight: f64,
     pub max_hp: f64,
@@ -1058,32 +1060,33 @@ pub struct MonsterStats {
 
 /// A monster's numbers from its Attributes: HP and speed are stored at its own CON (`own_con`), so the
 /// races' and the kind's CON move them from there.
-fn monster_stats(attrs: Attributes, own_con: i32, base_hp: f64, speed: f64, weight: f64) -> MonsterStats {
-    MonsterStats { attrs, weight, max_hp: attributes::hp(base_hp, attrs.get(Attr::Con)), speed: move_speed(speed, own_con, &attrs) }
+fn monster_stats(sources: AttrSources, own_con: i32, base_hp: f64, speed: f64, weight: f64) -> MonsterStats {
+    let attrs = sources.total();
+    MonsterStats { sources, attrs, weight, max_hp: attributes::hp(base_hp, attrs.get(Attr::Con)), speed: move_speed(speed, own_con, &attrs) }
 }
 
 /// Enemy stats. HP does not depend on the party size (TODO 4b).
 pub fn enemy_stats(t: EnemyType) -> MonsterStats {
     let d = enemies::def(t);
-    monster_stats(enemies::attrs(t), races::own_con(d.attr_mods), enemies::base_hp(t), d.speed, d.weight)
+    monster_stats(enemies::attr_sources(t), races::own_con(d.attr_mods), enemies::base_hp(t), d.speed, d.weight)
 }
 
 /// Boss stats. HP does not depend on the party size (TODO 4b).
 pub fn boss_stats(b: BossId) -> MonsterStats {
     let d = bosses::def(b);
-    monster_stats(bosses::attrs(b), races::own_con(d.attr_mods), bosses::base_hp(b), d.speed, d.weight)
+    monster_stats(bosses::attr_sources(b), races::own_con(d.attr_mods), bosses::base_hp(b), d.speed, d.weight)
 }
 
 /// The Ranger's wolf.
 pub fn wolf_stats() -> MonsterStats {
-    monster_stats(wolf_attrs(), races::own_con(WOLF_ATTR_MODS), wolf_base_hp(), WOLF_SPEED, WOLF_WEIGHT)
+    monster_stats(wolf_attr_sources(), races::own_con(WOLF_ATTR_MODS), wolf_base_hp(), WOLF_SPEED, WOLF_WEIGHT)
 }
 
-/// What a monster is made of at spawn: the numbers its Attributes gave it. `monster_numbers` moves
-/// them by an Attribute delta.
+/// What a monster is made of at spawn: its Attribute sources (`effects` zero) and the numbers they gave
+/// it. `monster_numbers` moves them by the run-time effects.
 #[derive(Debug, Clone, Copy)]
 pub struct MonsterBase {
-    pub attrs: Attributes,
+    pub sources: AttrSources,
     pub max_hp: f64,
     pub speed: f64,
     pub kit: KitSource,
@@ -1092,21 +1095,23 @@ pub struct MonsterBase {
 /// A monster's Attributes and the numbers they give.
 #[derive(Debug, Clone)]
 pub struct MonsterNumbers {
+    pub sources: AttrSources,
     pub attrs: Attributes,
     pub max_hp: f64,
     pub speed: f64,
     pub kit: Kit,
 }
 
-/// `base` with `delta` added to its Attributes (a lowered one stops at 1): max HP moves by `CON_HP`
+/// `base` with the run-time `effects` in its sources (a lowered Attribute stops at 1): max HP moves by `CON_HP`
 /// per CON point and stays at least 1, speed by `CON_MOVE`, the kit is resolved again. At a zero
-/// delta every number is the spawn's.
-pub fn monster_numbers(base: &MonsterBase, delta: Attributes, muted: &[Lasting]) -> MonsterNumbers {
-    let attrs = base.attrs.with_delta(delta);
-    let con0 = base.attrs.get(Attr::Con);
+/// zero `effects` every number is the spawn's.
+pub fn monster_numbers(base: &MonsterBase, effects: Attributes, muted: &[Lasting]) -> MonsterNumbers {
+    let sources = AttrSources { effects, ..base.sources };
+    let attrs = sources.total();
+    let con0 = base.sources.total().get(Attr::Con);
     let max_hp = (base.max_hp + attributes::CON_HP * (attrs.get(Attr::Con) - con0) as f64).max(1.0);
     let speed = move_speed(base.speed, con0, &attrs);
-    MonsterNumbers { attrs, max_hp, speed, kit: kit_for(base.kit, &attrs, muted) }
+    MonsterNumbers { sources, attrs, max_hp, speed, kit: kit_for(base.kit, &attrs, muted) }
 }
 
 /// The lasting magic a hero wears or has bought, sorted: usable worn items with a magical property
@@ -1778,7 +1783,7 @@ mod tests {
             check(&format!("{b:?}"), &kit_for(KitSource::Boss(b), &attrs, &[]), d.abilities, &attrs, d.weapons, d.radius);
         }
         let ids = [AbilityId::Bite, AbilityId::Pounce];
-        check("wolf", &kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]), &ids, &wolf_attrs(), &[ItemId::BeastBite], WOLF_RADIUS);
+        check("wolf", &kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]), &ids, &crate::defs::companions::wolf_attrs(), &[ItemId::BeastBite], WOLF_RADIUS);
         // A version's mod goes through `apply_mods`, on the Pounce alone.
         let faster = AbilityMod::CooldownAdd(-0.5);
         let kit = kit_for(KitSource::Wolf(WolfMods { hp_mul: 1.0, pounce: Some(faster) }), &crate::defs::companions::wolf_attrs(), &[]);
@@ -1878,8 +1883,8 @@ mod tests {
         let t = EnemyType::OrcWarrior;
         let d = enemies::def(t);
         let own = races::own_con(d.attr_mods);
-        let plain = monster_stats(enemies::attrs(t), own, enemies::base_hp(t), d.speed, d.weight);
-        let tough = monster_stats(enemies::attrs(t).plus(Attributes::new(0, 0, 2, 0, 0, 0)), own, enemies::base_hp(t), d.speed, d.weight);
+        let plain = monster_stats(enemies::attr_sources(t), own, enemies::base_hp(t), d.speed, d.weight);
+        let tough = monster_stats(AttrSources { kind: enemies::attr_sources(t).kind.plus(Attributes::new(0, 0, 2, 0, 0, 0)), ..enemies::attr_sources(t) }, own, enemies::base_hp(t), d.speed, d.weight);
         assert_eq!(plain, enemy_stats(t));
         assert_eq!(tough.max_hp, plain.max_hp + 2.0 * attributes::CON_HP);
         assert_eq!(tough.speed, move_speed(d.speed, own, &tough.attrs));
@@ -1913,14 +1918,14 @@ mod tests {
         let mut v = vec![];
         for t in EnemyType::ALL {
             let (s, d) = (enemy_stats(t), enemies::def(t));
-            v.push((format!("{t:?}"), MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(t) }, d.abilities.to_vec()));
+            v.push((format!("{t:?}"), MonsterBase { sources: s.sources, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(t) }, d.abilities.to_vec()));
         }
         for b in BossId::ALL {
             let (s, d) = (boss_stats(b), bosses::def(b));
-            v.push((format!("{b:?}"), MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Boss(b) }, d.abilities.to_vec()));
+            v.push((format!("{b:?}"), MonsterBase { sources: s.sources, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Boss(b) }, d.abilities.to_vec()));
         }
         let s = wolf_stats();
-        v.push(("wolf".into(), MonsterBase { attrs: s.attrs, max_hp: WOLF_HP, speed: WOLF_SPEED, kit: KitSource::Wolf(WolfMods::NONE) }, vec![AbilityId::Bite, AbilityId::Pounce]));
+        v.push(("wolf".into(), MonsterBase { sources: s.sources, max_hp: WOLF_HP, speed: WOLF_SPEED, kit: KitSource::Wolf(WolfMods::NONE) }, vec![AbilityId::Bite, AbilityId::Pounce]));
         v
     }
 
@@ -1928,10 +1933,15 @@ mod tests {
     fn monster_numbers_at_zero_delta_are_the_base() {
         for (what, base, ids) in bases() {
             let n = monster_numbers(&base, Attributes::default(), &[]);
-            assert_eq!(n.attrs, base.attrs, "{what}");
+            assert_eq!(n.attrs, base.sources.total(), "{what}");
+            assert_eq!(n.sources.total(), n.attrs, "{what}");
+            let drain = Attributes::new(-3, 0, -20, 0, 0, 0);
+            let drained = monster_numbers(&base, drain, &[]);
+            assert_eq!(drained.attrs, base.sources.total().with_delta(drain), "{what} drained");
+            assert_eq!(drained.sources.total(), drained.attrs, "{what} drained sources");
             assert_eq!(n.max_hp.to_bits(), base.max_hp.to_bits(), "{what} max HP");
             assert_eq!(n.speed.to_bits(), base.speed.to_bits(), "{what} speed");
-            let spawn = kit_for(base.kit, &base.attrs, &[]);
+            let spawn = kit_for(base.kit, &base.sources.total(), &[]);
             for id in ids {
                 assert_eq!(n.kit.get(id), spawn.get(id), "{what} {id:?}");
                 assert!(n.kit.get(id).is_some(), "{what} {id:?}");
@@ -1942,7 +1952,7 @@ mod tests {
     #[test]
     fn monster_numbers_follow_a_drain() {
         let s = enemy_stats(EnemyType::OrcWarrior);
-        let base = MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::OrcWarrior) };
+        let base = MonsterBase { sources: s.sources, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::OrcWarrior) };
         let at0 = monster_numbers(&base, Attributes::default(), &[]);
         let weak = monster_numbers(&base, Attributes::new(-3, 0, 0, 0, 0, 0), &[]);
         assert!(weak.kit.get(AbilityId::Strike).unwrap().damage < at0.kit.get(AbilityId::Strike).unwrap().damage);
@@ -1958,12 +1968,12 @@ mod tests {
         for (what, base, _) in bases() {
             let n = monster_numbers(&base, drain, &[]);
             assert!(n.max_hp >= 1.0, "{what}");
-            assert_eq!(n.attrs.get(Attr::Con), base.attrs.get(Attr::Con).min(1), "{what}");
+            assert_eq!(n.attrs.get(Attr::Con), base.sources.total().get(Attr::Con).min(1), "{what}");
             assert!(n.speed.is_finite() && n.speed >= 0.0 && (n.speed > 0.0) == (base.speed > 0.0), "{what}");
         }
         // A frail one: the drain empties it to the floor.
         let s = enemy_stats(EnemyType::GoblinArcher);
-        let archer = MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::GoblinArcher) };
+        let archer = MonsterBase { sources: s.sources, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::GoblinArcher) };
         assert_eq!(monster_numbers(&archer, drain, &[]).max_hp, 1.0);
     }
 

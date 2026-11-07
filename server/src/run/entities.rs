@@ -287,7 +287,9 @@ pub struct Monster {
     pub effects: crate::run::effects::Effects,
     /// Its effect resistances (from its profile: races plus its `Adjust`).
     pub effect_res: crate::defs::effects::EffectResistances,
-    /// Its Attributes and weight (crate::sheet::MonsterStats).
+    /// Its Attributes and weight (crate::sheet::MonsterStats): `sources` holds every source, run-time effects
+    /// in `sources.effects`, and `attrs` is their total.
+    pub sources: crate::defs::attributes::AttrSources,
     pub attrs: Attributes,
     pub weight: f64,
     /// Set for a companion of the heroes (run/companion.rs).

@@ -299,7 +299,7 @@ impl Run {
         let stats = crate::sheet::enemy_stats(t);
         let id = self.alloc_id();
         let hp = stats.max_hp;
-        let base = crate::sheet::MonsterBase { attrs: stats.attrs, max_hp: hp, speed: stats.speed, kit: crate::sheet::KitSource::Enemy(t) };
+        let base = crate::sheet::MonsterBase { sources: stats.sources, max_hp: hp, speed: stats.speed, kit: crate::sheet::KitSource::Enemy(t) };
         self.monsters.push(Monster {
             id,
             res: prof.res,
@@ -321,7 +321,7 @@ impl Run {
             anim: Anim::Idle,
             anim_start: self.time,
             hurt_t: 0.0,
-            kit: crate::sheet::kit_for(base.kit, &base.attrs, &[]),
+            kit: crate::sheet::kit_for(base.kit, &stats.attrs, &[]),
             cds: Default::default(),
             slam: None,
             channel: None,
@@ -344,6 +344,7 @@ impl Run {
             last_hit_by: None,
             effects: effects::Effects::default(),
             effect_res: prof.effect_res,
+            sources: stats.sources,
             attrs: stats.attrs,
             weight: stats.weight,
             companion: None,

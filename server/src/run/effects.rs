@@ -681,7 +681,7 @@ impl Run {
                 let Some(m) = self.monsters.get_mut(i).filter(|m| m.alive) else { return };
                 let old = m.attrs;
                 let n = crate::sheet::monster_numbers(&m.base, delta.unwrap_or_default(), &muted);
-                (m.attrs, m.max_hp, m.speed, m.kit) = (n.attrs, n.max_hp, n.speed, n.kit);
+                (m.sources, m.attrs, m.max_hp, m.speed, m.kit) = (n.sources, n.attrs, n.max_hp, n.speed, n.kit);
                 m.hp = m.hp.min(m.max_hp);
                 Attr::ALL.into_iter().map(|a| (a, old.get(a), n.attrs.get(a))).collect()
             }
@@ -2202,9 +2202,31 @@ mod tests {
         run.remove_effect(c, EffectKind::Weakened);
         let m = &run.monsters[mi];
         let want = crate::sheet::monster_numbers(&m.base, Attributes::default(), &[]);
-        assert_eq!((m.attrs, m.max_hp, m.speed), (m.base.attrs, m.base.max_hp, m.base.speed));
+        assert_eq!((m.attrs, m.max_hp, m.speed), (m.base.sources.total(), m.base.max_hp, m.base.speed));
         assert_eq!(m.kit, want.kit);
         assert_eq!(m.kit.get(AbilityId::Strike).unwrap().damage, dmg0);
+    }
+
+    #[test]
+    fn a_drained_monster_tracks_its_sources() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let at = run.players[0].pos();
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        let c = Creature::Monster(mi);
+        let (sources0, attrs0) = (run.monsters[mi].sources, run.monsters[mi].attrs);
+        assert_eq!(sources0.effects, Attributes::default());
+        assert_eq!(attrs0, sources0.total());
+        drain(&mut run, c, EffectKind::Weakened, 20.0, None);
+        let m = &run.monsters[mi];
+        assert_eq!(m.sources.effects.get(Attr::Str), -1);
+        assert_eq!(m.sources.base, sources0.base);
+        assert_eq!(m.attrs, m.sources.total());
+        assert_ne!(m.attrs, attrs0);
+        run.remove_effect(c, EffectKind::Weakened);
+        let m = &run.monsters[mi];
+        assert_eq!((m.sources, m.attrs), (sources0, attrs0));
+        assert_eq!(m.sources.effects, Attributes::default());
     }
 
     #[test]
