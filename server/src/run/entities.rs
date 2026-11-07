@@ -324,10 +324,15 @@ impl Monster {
     /// `SHOT_HEIGHT` px above their ground point and figures stand up from their
     /// feet, so a tall figure is a capsule reaching north from `pos`, not a circle.
     pub fn shot_dist(&self, p: Vec2) -> f64 {
+        self.shot_dist_at(self.pos, p)
+    }
+
+    /// `shot_dist` as if this monster stood at `at`: the one hit capsule, shared by the real hit and the dodge.
+    pub fn shot_dist_at(&self, at: Vec2, p: Vec2) -> f64 {
         let lift = if self.airborne { DRAGON_LIFT } else { 0.0 };
         let reach = (self.kind.body_height() + lift - SHOT_HEIGHT - self.radius).max(0.0);
-        let y = p.y.clamp(self.pos.y - reach, self.pos.y);
-        p.dist(Vec2::new(self.pos.x, y))
+        let y = p.y.clamp(at.y - reach, at.y);
+        p.dist(Vec2::new(at.x, y))
     }
 }
 

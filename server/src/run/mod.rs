@@ -8,6 +8,7 @@ pub mod bosses;
 pub mod charm;
 pub mod companion;
 pub mod debug;
+pub mod dodge;
 pub mod effects;
 pub mod entities;
 pub mod keystones;
