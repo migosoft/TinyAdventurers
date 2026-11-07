@@ -7,6 +7,8 @@ use super::effects::Creature;
 use super::entities::{AiState, Target, Windup};
 use super::Run;
 use crate::collision::{line_of_sight, move_box, terrain_line, walk_line};
+use crate::defs::attributes::Attr;
+use crate::defs::smarts::Smart;
 use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::abilities::{self as ab, Shape};
 use crate::defs::enemies::{self, BaseAi, EnemyType};
@@ -440,8 +442,9 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 return;
             }
             let speed = gait(run, mi, base_speed);
-            if preferred > 0.0 && d < preferred - 25.0 {
-                // Ranged enemies back off to their preferred distance.
+            let int = run.monsters[mi].attrs.get(Attr::Int);
+            if preferred > 0.0 && d < preferred - 25.0 && run.smarts.can(int, Smart::KeepDistance) {
+                // Ranged enemies smart enough (INT tier) back off to their preferred distance.
                 let away = pos + (pos - ppos).norm() * 16.0;
                 move_toward(run, mi, away, speed * 0.8, dt);
                 set_anim(run, mi, Anim::Move);
@@ -676,6 +679,7 @@ pub(crate) mod tests {
     use crate::defs::kinds::EntityKind;
     use crate::dungeon::Tile;
     use crate::protocol::{BossId, ClassId, Ev};
+    use crate::defs::smarts::Smart;
 
     #[test]
     fn wide_bosses_reach_every_spot_of_their_hall_around_the_chasms() {
@@ -1315,6 +1319,39 @@ pub(crate) mod tests {
         leave_wall(&mut run, mi, 1.0 / 60.0);
         let moved = run.monsters[mi].pos.dist(before);
         assert!((moved - speed * mul / 60.0).abs() < 1e-6, "moved {moved}, want {}", speed * mul / 60.0);
+    }
+
+    /// A lone orc archer 30 px west of the hero (closer than `preferred - 25`), unable to shoot or punch.
+    /// Returns the distance to the hero after a few ticks, with `tweak` applied to the run first.
+    fn archer_distance_after_ticks(tweak: impl Fn(&mut Run)) -> (f64, f64) {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        tweak(&mut run);
+        let ppos = run.players[0].pos();
+        let id = run.spawn_enemy(EnemyType::OrcArcher, ppos - Vec2::new(30.0, 0.0), None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].ai.cd = 100.0;
+        run.monsters[mi].ai.alt_cd = 100.0;
+        let before = run.monsters[mi].pos.dist(ppos);
+        for _ in 0..20 {
+            tick_monster(&mut run, mi, 1.0 / 60.0);
+        }
+        (before, run.monsters[mi].pos.dist(ppos))
+    }
+
+    #[test]
+    fn a_ranged_enemy_below_int_11_holds_its_ground() {
+        let (before, after) = archer_distance_after_ticks(|_| {});
+        assert!((after - before).abs() < 0.5, "INT 7 does not back off: {before} -> {after}");
+    }
+
+    #[test]
+    fn a_ranged_enemy_at_int_11_backs_off() {
+        let (before, after) = archer_distance_after_ticks(|r| r.smarts.needs[Smart::KeepDistance as usize] = 0);
+        assert!(after > before + 0.5, "needs at tier 0: {before} -> {after}");
+        let (before, after) = archer_distance_after_ticks(|r| r.smarts.tier_int[1] = 7);
+        assert!(after > before + 0.5, "tier 1 at INT 7: {before} -> {after}");
     }
 
     /// An orc archer 100 px west of the hero, a barrel `barrel_off` from the hero.
