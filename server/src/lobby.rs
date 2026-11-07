@@ -516,6 +516,7 @@ impl Lobby {
         let members = self.members_of(rid)?;
         let choice = match room.level {
             LevelId::Dungeon => LevelChoice::Dungeon { boss: room.boss },
+            LevelId::Woodland => LevelChoice::Woodland {},
         };
         let mut run = Run::new(rid, members, seed, choice);
         run.debug = room.debug;

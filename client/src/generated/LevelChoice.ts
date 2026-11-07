@@ -4,4 +4,4 @@ import type { BossId } from "./BossId";
 /**
  * A level and its options, as the lobby starts it.
  */
-export type LevelChoice = { "level": "Dungeon", boss: BossId | null, };
+export type LevelChoice = { "level": "Dungeon", boss: BossId | null, } | { "level": "Woodland", };

@@ -595,3 +595,18 @@ fn export_wire_fixtures() {
     std::fs::create_dir_all(out_dir()).unwrap();
     std::fs::write(out_dir().join("wire-fixtures.json"), serde_json::to_string(&json!({ "cases": cases })).unwrap()).unwrap();
 }
+
+/// Three woodlands for the client's demo page: the tiles, the plants and every creature spot.
+#[test]
+fn export_woodland_demo() {
+    let maps: Vec<serde_json::Value> = (1..=3u64)
+        .map(|seed| {
+            let (layout, w) = crate::dungeon::woodland::generate(seed);
+            let spot = |t: enemies::EnemyType, p: crate::math::Vec2| json!([enemies::def(t).kind as u8, p.x.round() as i32, p.y.round() as i32]);
+            let spawns: Vec<serde_json::Value> = layout.spawns.iter().map(|s| spot(s.enemy, s.pos)).chain(w.animals.iter().map(|&(t, p)| spot(t, p))).collect();
+            json!({ "w": layout.map.w, "h": layout.map.h, "tiles": layout.map.tiles, "woodland": crate::protocol::WoodlandInfo::from(&w), "spawns": spawns })
+        })
+        .collect();
+    std::fs::create_dir_all(out_dir()).unwrap();
+    std::fs::write(out_dir().join("woodland-demo.json"), serde_json::to_string(&maps).unwrap()).unwrap();
+}

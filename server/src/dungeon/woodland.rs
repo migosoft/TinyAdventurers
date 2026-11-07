@@ -35,6 +35,8 @@ pub struct Plant {
     pub mirrored: bool,
 }
 
+// `start`, `clearings` and `ellipses` are read by the tests only.
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Woodland {
     pub plants: Vec<Plant>,

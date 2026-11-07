@@ -37,7 +37,7 @@ use crate::vispoly::View;
 use crate::lobby::SharedLobby;
 use crate::math::Vec2;
 use crate::telemetry;
-use crate::protocol::{encode, BossId, ClassId, ClientMsg, CoveInfo, Ev, InputMsg, LevelChoice, LevelId, PlayerInfo, PlayerStats, RunStartInfo, ServerMsg};
+use crate::protocol::{encode, BossId, ClassId, ClientMsg, CoveInfo, Ev, InputMsg, LevelChoice, LevelId, PlayerInfo, PlayerStats, RunStartInfo, ServerMsg, WoodlandInfo};
 use axum::extract::ws::Message;
 use levels::Level;
 use entities::*;
@@ -175,6 +175,7 @@ impl Run {
         let mut rng = ChaCha8Rng::seed_from_u64(seed ^ 0x5eed);
         let (layout, level) = Level::build(seed, &choice, &mut rng);
         let (w, h) = (layout.map.w, layout.map.h);
+        let daylight = layout.daylight;
         let mut run = Run {
             id,
             tick: 0,
@@ -274,6 +275,7 @@ impl Run {
                 run.spawn_object(EntityKind::Chest, c.pos, objects::ObjState::Chest { opened: None });
             }
         }
+        run.lights.daylight = daylight;
         Level::populate(&mut run);
         // Barrels last, so every other entity keeps its id.
         for b in run.layout.barrels.clone() {
@@ -379,6 +381,8 @@ impl Run {
             fallback: p.sheet.fallback.clone(),
             lights: self.light_infos(),
             debug: self.debug,
+            daylight: self.layout.daylight,
+            woodland: self.layout.woodland.as_ref().map(WoodlandInfo::from),
             cove: self.layout.cove.map(|c| CoveInfo { x: c.rect.x, y: c.rect.y, w: c.rect.w, h: c.rect.h, tree_x: c.tree.0, tree_y: c.tree.1, seed: c.seed }),
         })
     }

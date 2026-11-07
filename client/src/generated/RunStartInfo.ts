@@ -4,6 +4,7 @@ import type { LevelId } from "./LevelId";
 import type { LightInfo } from "./LightInfo";
 import type { PlayerInfo } from "./PlayerInfo";
 import type { ResolvedAbility } from "./ResolvedAbility";
+import type { WoodlandInfo } from "./WoodlandInfo";
 
 export type RunStartInfo = { 
 /**
@@ -41,4 +42,12 @@ debug: boolean,
 /**
  * The nymph's cove (dungeon runs), for the client to dress.
  */
-cove: CoveInfo | null, };
+cove: CoveInfo | null, 
+/**
+ * Open air by day: no dungeon darkness (the woodland).
+ */
+daylight: boolean, 
+/**
+ * The woodland's plants and end clearing (woodland runs), for the client to dress.
+ */
+woodland: WoodlandInfo | null, };

@@ -38,4 +38,5 @@ export const BOSS_TEXT: Record<BossId, { name: string; short: string; blurb: str
 
 export const LEVEL_TEXT: Record<LevelId, { name: string; victory: string; defeat: string }> = {
   Dungeon: { name: 'Dungeon', victory: 'The dungeon is cleared.', defeat: 'The dungeon claims another party.' },
+  Woodland: { name: 'Woodland', victory: 'The party walks out of the forest.', defeat: 'The forest keeps the party.' },
 };

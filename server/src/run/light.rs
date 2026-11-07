@@ -71,6 +71,8 @@ pub fn light_tile(pos: Vec2) -> (i32, i32) {
 
 pub struct Lights {
     pub sources: Vec<LightSource>,
+    /// Open air by day: every tile is lit (the woodland).
+    pub daylight: bool,
     next_id: u32,
     w: i32,
     h: i32,
@@ -87,7 +89,7 @@ pub struct Lights {
 impl Lights {
     pub fn new(w: i32, h: i32) -> Self {
         let n = (w * h) as usize;
-        Lights { sources: Vec::new(), next_id: 1, w, h, lit: vec![false; n], dirty: false, moving: vec![false; n], touched: Vec::new(), fov: Fov::new(w, h) }
+        Lights { sources: Vec::new(), daylight: false, next_id: 1, w, h, lit: vec![false; n], dirty: false, moving: vec![false; n], touched: Vec::new(), fov: Fov::new(w, h) }
     }
 
     /// Registers a light (on); light ids are separate from entity ids.
@@ -169,10 +171,10 @@ impl Lights {
 
     /// Lit by a static or a moving light (call `refresh` and `cast_moving` first).
     pub fn lit(&self, x: i32, y: i32) -> bool {
-        self.inside(x, y) && {
+        self.inside(x, y) && (self.daylight || {
             let i = (y * self.w + x) as usize;
             self.lit[i] || self.moving[i]
-        }
+        })
     }
 
     /// Tests: every tile counts as lit until a static light changes (enemy tests that are not about darkness).
