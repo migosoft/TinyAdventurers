@@ -376,18 +376,26 @@ impl Run {
     ///    (a refused Frozen leaves an existing Chilled alone).
     /// True when the effect is on afterwards.
     pub fn apply(&mut self, c: Creature, a: Apply) -> bool {
-        // A Neutral monster takes no effect, unless it is a wild animal.
-        if matches!(c, Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.side == super::targets::Side::Neutral && m.wild.is_none())) {
-            return false;
-        }
-        // A hero is never charmed in #223 (a charmed hero is #224's business).
-        if a.kind == EffectKind::Charmed && matches!(c, Creature::Player(_)) {
+        if self.refuses_effect(c, a.kind) {
             return false;
         }
         let (outcome, duration, replaced) = self.apply_traced(c, a);
         let left = self.effect_left(c, a.kind);
         super::rules_log::effect(self, super::rules_log::EffectFacts { target: c, kind: a.kind, outcome, duration, replaced, left, origin: a.origin });
         matches!(outcome, EffectOutcome::Added | EffectOutcome::Refreshed)
+    }
+
+    /// The two refusals of `apply` before any rule runs: a Neutral monster takes no effect unless it is a wild
+    /// animal, and a hero is never charmed in #223 (a charmed hero is #224's business).
+    fn refuses_effect(&self, c: Creature, kind: EffectKind) -> bool {
+        matches!(c, Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.side == super::targets::Side::Neutral && m.wild.is_none()))
+            || (kind == EffectKind::Charmed && matches!(c, Creature::Player(_)))
+    }
+
+    /// Whether the hit effect `h` would take hold on `c` now, by the same rules `apply` uses, changing nothing.
+    /// A `Cancelled` outcome counts as not taking hold.
+    pub fn would_take_hold(&self, c: Creature, h: OnHit) -> bool {
+        !self.refuses_effect(c, h.kind) && self.hold_check(c, &Apply::from_hit(h)).is_ok()
     }
 
     /// Seconds left of `kind` on `c` (0 when it is not on).
@@ -410,28 +418,30 @@ impl Run {
         r
     }
 
-    fn apply_untold(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u32) {
+    /// The read-only part of `apply_untold`: the outcome an `Apply` would have on `c` right now, without changing
+    /// anything. `Ok((secs, duration))` when it would be added or refreshed for `secs`; `Err((outcome, duration))` otherwise.
+    fn hold_check(&self, c: Creature, a: &Apply) -> Result<(f64, Duration), (EffectOutcome, Duration)> {
         let kind = a.kind;
         let mut d = Duration::default();
-        let Some((_, _, pos, ok)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
+        let (pos, ok) = match c {
+            Creature::Player(i) => self.players.get(i).map(|p| (p.pos(), p.alive && p.sinking.is_none())),
+            Creature::Monster(i) => self.monsters.get(i).map(|m| (m.pos, m.alive && m.sinking.is_none())),
+        }
+        .unwrap_or((Vec2::new(0.0, 0.0), false));
         if !ok {
-            return (EffectOutcome::NotThere, d, 0);
+            return Err((EffectOutcome::NotThere, d));
         }
         let cancelled: Vec<EffectKind> = def(kind).cancels.iter().copied().filter(|&k| self.has_present(c, k)).collect();
         if !cancelled.is_empty() {
-            let mut removed = 0;
-            for k in cancelled {
-                self.remove_effect(c, k);
-                removed |= k.bit();
-            }
-            return (EffectOutcome::Cancelled { removed }, d, 0); // fire thaws ice / ice puts out fire
+            let removed = cancelled.iter().fold(0, |bits, k| bits | k.bit());
+            return Err((EffectOutcome::Cancelled { removed }, d)); // fire thaws ice / ice puts out fire
         }
         let held = match c {
             Creature::Player(i) => self.players.get(i).map(|p| p.effects.present_kinds()),
             Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.present_kinds()),
         };
         if let Some(k) = held.and_then(|h| h.into_iter().find(|&k| def(k).replaces.contains(&kind))) {
-            return (EffectOutcome::StrongerOn(k), d, 0); // the stronger tier is on
+            return Err((EffectOutcome::StrongerOn(k), d)); // the stronger tier is on
         }
         let mut secs = a.secs.unwrap_or(def(kind).duration);
         d.base = secs;
@@ -442,7 +452,7 @@ impl Run {
                 Creature::Player(i) => self.players.get(i).map(|p| p.sheet.save(save_attr)),
                 Creature::Monster(i) => self.monsters.get(i).map(|m| m.attrs.get(save_attr)),
             };
-            let Some(save) = save else { return (EffectOutcome::NotThere, d, 0) };
+            let Some(save) = save else { return Err((EffectOutcome::NotThere, d)) };
             secs = scaled_secs(secs, power, save);
             d.save = Some((power, save_attr, save, secs));
             d.secs = secs;
@@ -453,18 +463,18 @@ impl Run {
                 Creature::Player(i) => self.players.get(i).map(|p| p.effects.effect_res(p.sheet.effect_res).get(kind)),
                 Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.effect_res(m.effect_res).get(kind)),
             };
-            let Some(r) = r else { return (EffectOutcome::NotThere, d, 0) };
+            let Some(r) = r else { return Err((EffectOutcome::NotThere, d)) };
             d.resist = Some((r.max(MIN_RESISTANCE), 0.0));
-            let Some(left) = effect_secs(secs, r) else { return (EffectOutcome::Resisted, d, 0) };
+            let Some(left) = effect_secs(secs, r) else { return Err((EffectOutcome::Resisted, d)) };
             secs = left;
             d.resist = Some((r.max(MIN_RESISTANCE), left));
             d.secs = secs;
         }
         if secs <= 0.0 {
-            return (EffectOutcome::SavedToZero, d, 0);
+            return Err((EffectOutcome::SavedToZero, d));
         }
         if def(kind).ends_in_water && self.in_water(pos) {
-            return (EffectOutcome::InWater, d, 0); // no flicker on and off in water
+            return Err((EffectOutcome::InWater, d)); // no flicker on and off in water
         }
         if let Some(t) = def(kind).resisted_by {
             let res = match c {
@@ -472,9 +482,24 @@ impl Run {
                 Creature::Monster(i) => self.monsters.get(i).map(|m| m.effects.res(m.res).get(t)),
             };
             if res.is_some_and(|r| r >= 1.0) {
-                return (EffectOutcome::TypeImmune(t), d, 0); // immune to its damage: no effect at all
+                return Err((EffectOutcome::TypeImmune(t), d)); // immune to its damage: no effect at all
             }
         }
+        Ok((secs, d))
+    }
+
+    fn apply_untold(&mut self, c: Creature, a: Apply) -> (EffectOutcome, Duration, u32) {
+        let kind = a.kind;
+        let (secs, d) = match self.hold_check(c, &a) {
+            Ok(ok) => ok,
+            Err((EffectOutcome::Cancelled { removed }, d)) => {
+                for k in def(kind).cancels.iter().copied().filter(|k| removed & k.bit() != 0) {
+                    self.remove_effect(c, k);
+                }
+                return (EffectOutcome::Cancelled { removed }, d, 0);
+            }
+            Err((outcome, d)) => return (outcome, d, 0),
+        };
         let Some((fx, id, pos, _)) = self.creature(c) else { return (EffectOutcome::NotThere, d, 0) };
         let was_on = fx.has(kind);
         fx.add_with(kind, secs, a.look, a.source, attr_amount(kind, a.power), a.magical);
@@ -2322,5 +2347,51 @@ mod tests {
             run.tick_effects();
         }
         assert!((run.monsters[mi].invis_cd - (2.0 - 30.0 * 0.75 * DT)).abs() < 1e-9, "{}", run.monsters[mi].invis_cd);
+    }
+
+    /// A fresh creature of each kind for `would_take_hold` cases: orc, skeleton, fire-immune orc, hero.
+    fn spawn_case(run: &mut crate::run::Run, which: usize) -> Creature {
+        use crate::defs::enemies::EnemyType;
+        if which == 3 {
+            return Creature::Player(0);
+        }
+        let at = run.players[0].pos() + Vec2::new(30.0, 0.0);
+        let ty = if which == 1 { EnemyType::SkeletonWarrior } else { EnemyType::OrcWarrior };
+        let id = run.spawn_enemy(ty, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        if which == 2 {
+            run.monsters[mi].res.set(DamageType::Heat, 1.0);
+        }
+        Creature::Monster(mi)
+    }
+
+    #[test]
+    fn would_take_hold_matches_apply() {
+        for which in 0..4 {
+            for kind in [EffectKind::Sleep, EffectKind::Charmed, EffectKind::Blind, EffectKind::Burning] {
+                let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+                open(&mut run);
+                let c = spawn_case(&mut run, which);
+                let h = plain_hit(kind);
+                let asked = run.would_take_hold(c, h);
+                let applied = run.apply(c, Apply::from_hit(h));
+                assert_eq!(asked, applied, "case {which}, {kind:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn would_take_hold_changes_nothing() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        open(&mut run);
+        let c = spawn_case(&mut run, 0);
+        run.apply_effect(c, EffectKind::Frozen, None);
+        run.events.clear();
+        let before = format!("{:?}", fx_of(&run, c).list());
+        // Burning would cancel Frozen when applied; asking must not remove it.
+        let _ = run.would_take_hold(c, plain_hit(EffectKind::Burning));
+        let _ = run.would_take_hold(c, plain_hit(EffectKind::Blind));
+        assert_eq!(format!("{:?}", fx_of(&run, c).list()), before);
+        assert!(run.events.is_empty());
     }
 }
