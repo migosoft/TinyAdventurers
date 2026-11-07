@@ -63,6 +63,9 @@ impl Demon {
 }
 
 impl BossBehaviour for Demon {
+    fn busy(&self) -> bool {
+        self.action.is_some()
+    }
     fn tick(&mut self, run: &mut Run, dt: f64) {
         let Some(bi) = boss_idx(run) else { return };
         let cdt = run.monsters[bi].effects.cooldown_dt(dt);

@@ -134,6 +134,10 @@ impl Dragon {
 }
 
 impl BossBehaviour for Dragon {
+    /// A wind-up or strike, or any part of the flight (take-off, flying, landing).
+    fn busy(&self) -> bool {
+        self.action.is_some() || self.flight != Flight::Ground
+    }
     fn tick(&mut self, run: &mut Run, dt: f64) {
         let Some(bi) = boss_idx(run) else { return };
         let cdt = run.monsters[bi].effects.cooldown_dt(dt);

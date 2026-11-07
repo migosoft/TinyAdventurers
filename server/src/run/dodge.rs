@@ -826,4 +826,119 @@ mod tests {
         let dt = super::super::DT;
         assert!((run.monsters[mi].ai.cd - (5.0 - dt)).abs() < 1e-9 && (run.monsters[mi].ai.alt_cd - (5.0 - dt)).abs() < 1e-9, "counted once: {}", run.monsters[mi].ai.cd);
     }
+
+    // ---- Bosses and companions (#220 task 6) ----
+
+    /// An awake Lich with its disciples dead, on open floor, a Ranger `dist` px west of it on its row; `hp` set.
+    fn lich_row(dist: f64, hp: f64) -> (Run, usize) {
+        let (mut run, bi) = crate::run::bosses::lich::tests::lich_with_classes(&[ClassId::ElvenRanger], &[Vec2::new(-dist, 0.0)]);
+        let ids: Vec<u32> = run.monsters.iter().filter(|m| m.etype == Some(EnemyType::Disciple)).map(|m| m.id).collect();
+        for id in ids {
+            let i = run.monster_idx(id).unwrap();
+            run.kill_monster(i);
+        }
+        let bi = crate::run::bosses::boss_idx(&run).unwrap_or(bi);
+        let at = run.monsters[bi].pos;
+        floor_around(&mut run, at, 14);
+        run.level.boss_mut().unwrap().awake = true;
+        run.monsters[bi].hp = hp;
+        run.smarts.notice.value = 300.0;
+        (run, bi)
+    }
+
+    #[test]
+    fn a_wounded_lich_dodges_an_arrow_by_the_same_rule() {
+        let (mut run, bi) = lich_row(150.0, 100.0);
+        assert!(run.smarts.can(run.monsters[bi].attrs.get(Attr::Int), Smart::Dodge), "the lich passes the Dodge tier");
+        fire(&mut run, AbilityId::Shoot, 0.0, 150.0);
+        run.step();
+        assert!(run.monsters[bi].dodge.is_some(), "it steps aside");
+        let (low, _) = play(&mut run, bi, 60);
+        assert_eq!(low, 100.0, "the arrow missed");
+        // Healthy, the same arrow is no threat to it and hits.
+        let (mut run, bi) = lich_row(150.0, 900.0);
+        fire(&mut run, AbilityId::Shoot, 0.0, 150.0);
+        let (low, _) = play(&mut run, bi, 60);
+        assert!(run.monsters[bi].dodge.is_none() && low < 900.0, "a small shot is no threat to a healthy lich: {low}");
+    }
+
+    #[test]
+    fn a_busy_boss_takes_the_hit() {
+        let (mut run, bi) = lich_row(150.0, 100.0);
+        // Let its script start a cast.
+        let busy_now = |run: &Run| run.level.boss().unwrap().behaviour.as_ref().unwrap().busy();
+        for _ in 0..600 {
+            if busy_now(&run) {
+                break;
+            }
+            run.step();
+        }
+        assert!(busy_now(&run), "the lich is mid-cast");
+        run.monsters[bi].hp = 100.0;
+        run.projectiles.clear();
+        fire(&mut run, AbilityId::Shoot, 0.0, 150.0);
+        run.step();
+        assert!(run.monsters[bi].dodge.is_none(), "a busy boss does not dodge");
+        let (low, _) = play(&mut run, bi, 40);
+        assert!(low < 100.0, "the arrow hit the casting lich: {low}");
+    }
+
+    #[test]
+    fn the_dragon_almost_never_dodges() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Dragon);
+        let bi = crate::run::bosses::boss_idx(&run).unwrap();
+        let at = run.monsters[bi].pos;
+        floor_around(&mut run, at, 14);
+        run.monsters[bi].dormant = false;
+        run.level.boss_mut().unwrap().awake = true;
+        run.monsters[bi].hp = 50.0; // a threat by the threat test; the reach test decides
+        run.players[0].mv.x = at.x - 120.0;
+        run.players[0].mv.y = at.y;
+        run.smarts.notice.value = 300.0;
+        assert!(run.smarts.can(run.monsters[bi].attrs.get(Attr::Int), Smart::Dodge), "the dragon passes the Dodge tier");
+        fire(&mut run, AbilityId::Shoot, 0.0, 120.0);
+        run.step();
+        assert!(run.monsters[bi].dodge.is_none(), "it cannot clear the arrow in time");
+        let (low, _) = play(&mut run, bi, 40);
+        assert!(low < 50.0, "the arrow hit the dragon: {low}");
+    }
+
+    #[test]
+    fn the_wolf_dodges_an_enemy_bolt() {
+        let mut run = test_run(&[ClassId::ElvenRanger], BossId::Lich);
+        crate::run::ai::tests::open_floor(&mut run);
+        run.monsters.clear();
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
+        let wi = run.monster_idx(wolf).unwrap();
+        let (tx, ty) = Map::tile_of(run.monsters[wi].pos);
+        let at = Map::center_of(tx, ty);
+        run.monsters[wi].pos = at;
+        floor_around(&mut run, at, 10);
+        run.smarts.notice.value = 300.0;
+        assert!(run.smarts.can(run.monsters[wi].attrs.get(Attr::Int), Smart::Dodge), "the wolf passes the Dodge tier");
+        run.monsters[wi].ai.cd = 1e9;
+        let hp = run.monsters[wi].hp;
+        let from = at + Vec2::new(70.0, 0.0);
+        let imp = enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, at);
+        let ii = run.monster_idx(imp).unwrap();
+        assert_eq!(threats(&run, wi).len(), 1, "an enemy's bolt threatens the wolf");
+        assert!(threats(&run, ii).is_empty(), "and is no threat to the imp's own side");
+        let (low, _) = play(&mut run, wi, 60);
+        assert_eq!(low, hp, "the wolf stepped out of the bolt's way");
+    }
+
+    #[test]
+    fn a_charmed_orc_dodges_by_its_new_side() {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
+        let src = Some((run.players[0].id, run.players[0].pos()));
+        assert!(run.apply(Creature::Monster(mi), crate::run::effects::Apply { power: None, magical: true, source: src, ..crate::run::effects::Apply::plain(crate::defs::effects::EffectKind::Charmed, Some(10.0)) }));
+        crate::run::charm::sync(&mut run);
+        assert!(crate::run::charm::is_on(&run.monsters[mi]));
+        fire(&mut run, AbilityId::Shoot, 0.0, 50.0);
+        assert!(threats(&run, mi).is_empty(), "its new side's arrow is no threat");
+        run.projectiles.clear();
+        let at = run.monsters[mi].pos;
+        enemy_use(&mut run, EnemyType::Imp, at + Vec2::new(60.0, 0.0), AbilityId::FireBolt, at);
+        assert_eq!(threats(&run, mi).len(), 1, "an enemy's bolt is");
+    }
 }
