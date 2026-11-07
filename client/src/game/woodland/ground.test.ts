@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TILE, TileMap } from '../../sim/map';
-import { flowerSpots, paintGround } from './ground';
+import { flowerSpots, GRASS, GroundPainter, groundKindAt, paintGround } from './ground';
 
 // 12 x 6 tiles: thicket top row, road in columns 4..7 of rows 1..4, grass elsewhere, a wall at the bottom right
 function mapOf(): TileMap {
@@ -30,7 +30,7 @@ describe('paintGround', () => {
       const i = ((ty * TILE + dy) * img.w + tx * TILE + dx) * 4;
       return [img.data[i], img.data[i + 1], img.data[i + 2], img.data[i + 3]];
     };
-    // tile centres of the road (6,2) and grass (1,3), thicket (1,0); and the transparent wall
+    // tile centres of the road (5,2) and grass (1,3), thicket (1,0); and the transparent wall
     const [rr, rg, rb, ra] = at(5, 2, 8, 8);
     expect(ra).toBe(255);
     expect(rr).toBeGreaterThan(rg);
@@ -55,12 +55,16 @@ describe('paintGround', () => {
       const t = m.get(Math.floor(s.x / TILE), Math.floor(s.y / TILE));
       expect(t).toBe(TILE_ID.Floor);
     }
-    // nor within the 3 px the road creeps into the grass
-    const img = paintGround(m, 5);
-    for (const s of spots) {
-      const i = (s.y * img.w + s.x) * 4;
-      const [r, g, b] = [img.data[i], img.data[i + 1], img.data[i + 2]];
-      expect(!(r > g && g > b && r < 200 && g < 120)).toBe(true); // not dirt-coloured
-    }
+    // the ground under every spot is grass, creeping edges included
+    for (const s of spots) expect(groundKindAt(m, 5, s.x, s.y)).toBe(GRASS);
+  });
+
+  it('the banded paint equals the one-shot paint', () => {
+    const m = mapOf();
+    const p = new GroundPainter(m, 9);
+    for (let ty = p.rows - 1; ty >= 0; ty--) p.band(ty); // any order
+    p.blades();
+    p.flowers();
+    expect(Buffer.from(p.data).equals(Buffer.from(paintGround(m, 9).data))).toBe(true);
   });
 });

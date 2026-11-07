@@ -12,7 +12,7 @@ export class PlantPages {
   private cx = 0;
   private cy = 0;
   private shelf = 0;
-  constructor(private maxPage = 2048) {}
+  constructor(private maxPage = 1024) {}
 
   /** The slot of `key` (packed on the first call, then the same slot). The image occupies [x, x+w) × [y, y+h) of its page. */
   add(key: string, img: { w: number; h: number }): Slot {
@@ -38,10 +38,11 @@ export function drawOrder(plants: PlantInfo[], cam: { x: number; y: number }): n
   return plants.map((_, i) => i).sort((a, b) => d[a] - d[b] || a - b);
 }
 
-/** Jobs that run in order, at most `budgetMs` of them per frame (a job that starts before the budget is spent finishes). */
+/** Jobs that run in order, within `budgetMs` of them per frame (a job starts only if the slowest job so far still fits). */
 export class DrawQueue {
   private jobs: (() => void)[] = [];
   private head = 0;
+  private maxJob = 0;
   constructor(private budgetMs = 8, private now: () => number = () => performance.now()) {}
 
   push(job: () => void): void { this.jobs.push(job); }
@@ -51,12 +52,16 @@ export class DrawQueue {
 
   clear(): void { this.jobs = []; this.head = 0; }
 
-  /** Runs jobs until the budget is spent; returns how many ran. At least one runs when any is waiting. */
-  run(): number {
+  /** Runs jobs in order; returns how many ran. The first job always runs; each next one only when the time spent plus the slowest job seen so far fits `budget` (default: the constructor's, in ms). */
+  run(budget = this.budgetMs): number {
     const t0 = this.now();
     let n = 0;
-    while (this.head < this.jobs.length && (n === 0 || this.now() - t0 < this.budgetMs)) {
+    let last = t0;
+    while (this.head < this.jobs.length && (n === 0 || last - t0 + this.maxJob <= budget)) {
       this.jobs[this.head++]();
+      const t = this.now();
+      this.maxJob = Math.max(this.maxJob, t - last);
+      last = t;
       n++;
     }
     if (this.head === this.jobs.length) this.clear();
