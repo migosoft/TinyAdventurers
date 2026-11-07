@@ -128,9 +128,9 @@ CLAUDE.md                            workflow, standing decisions, environment f
 A lookup by topic: where the code for a topic lives, and which section explains it. It only points; the numbers and rules are in the code and in the sections. When a file, type or function named here moves or is renamed, update this list along with it. Server paths are relative to `server/src/`, client paths to `client/src/`.
 
 **Creatures and their numbers**
-- **Attributes** (STR, DEX, CON, INT, WIL, CHA): `defs/attributes.rs` (`Attr`, `Attributes`, `factor`, `hp`, `Scaled`, `attr_price`). §11a "The character sheet and Attributes".
+- **Attributes** (STR, DEX, CON, INT, WIL, CHA): `defs/attributes.rs` (`Attr`, `Attributes`, `factor`, `hp`, `Scaled`, `attr_price`). Every creature's start Attributes are `races::creature_attrs(races, mods)` (10 + races + class/kind modifier): `classes::start_attrs`, `enemies::attrs`, `bosses::attrs`, `companions::wolf_attrs`; the stat blocks hold only the modifier (`attr_mods`). §11a "The character sheet and Attributes".
 - **A hero's derived numbers:** `sheet.rs` `hero_sheet(class, &Build)` gives a `Sheet`, and `run_sheet(class, &Build, delta)` resolves it again during a run when effects change Attributes. Points: `classes::start_attrs`, `sheet::attrs_without_items` / `attrs_with_items`; which worn items count: `sheet::usable_items` (#196). At run time it is `Player.sheet` and `Player.build` (`run/entities.rs`). §11a.
-- **A monster's derived numbers:** `sheet.rs` `enemy_stats`, `boss_stats`, `wolf_stats` (`MonsterStats`); `monster_numbers(&MonsterBase, delta)` does the run-time version. At run time it is `Monster.attrs`, `Monster.base`, `max_hp`, `speed`, `kit` (`run/entities.rs`). Stat blocks: `defs/enemies.rs`, `defs/bosses.rs`, `defs/companions.rs`. §11a.
+- **A monster's derived numbers:** `sheet.rs` `enemy_stats`, `boss_stats`, `wolf_stats` (`MonsterStats`); `monster_numbers(&MonsterBase, delta)` does the run-time version. At run time it is `Monster.attrs`, `Monster.base`, `max_hp`, `speed`, `kit` (`run/entities.rs`). Stat blocks (modifiers from 10, read through `enemies::attrs`, `bosses::attrs`, `companions::wolf_attrs`): `defs/enemies.rs`, `defs/bosses.rs`, `defs/companions.rs`. §11a.
 - **Attribute changes during a run** (drain effects): `defs/effects.rs` (`EffectDef.attr`, `attr_amount`); `run/effects.rs` (`Effects::attr_delta`, `Run::refresh_attrs`).
 - **Races, resistances, Attribute bonus:** `defs/races.rs` (`Adjust`, `profile`); each class, enemy and boss has its own `profile` in its defs file. §5 "Damage model".
 - **The build** (shop points, tree nodes, equipment, loadout): `defs/loadout.rs` `Build`; stored as `progress.rs` `Progress`. §11a "Characters".
@@ -922,7 +922,16 @@ The database, statistics, telemetry and the admin page take the level as text (`
 
 **The character sheet and Attributes (progression plan 1; spec [2026-10-18-progression-design.md](superpowers/specs/2026-10-18-progression-design.md)).** The shop and the tree are in "Attribute shop, skill trees and keystones" below.
 - **Where the numbers come from.** `sheet.rs` resolves every hero and monster number from a class or stat block plus its Attributes. `hero_sheet(class, &Build)` gives a hero's `Sheet`: max HP, speed, weight, resistances, effect resistances, melee split, sight, the two abilities (`ResolvedAbility`) and the Ranger's melee `fallback`. `enemy_stats`, `boss_stats` and `wolf_stats` do the same for monsters. The run reads `Player.sheet` and the monsters' stats; it no longer reads `defs` numbers for these directly.
-- **Attributes** (`defs/attributes.rs`): STR, DEX, CON, INT, WIL, CHA, as `Attributes`. A hero's Attributes are the class's points plus the race bonus (`classes::start_attrs`) plus `extra` (shop and item points; see "Attribute shop, skill trees and keystones"). Per point from 10:
+- **Attributes** (`defs/attributes.rs`): STR, DEX, CON, INT, WIL, CHA, as `Attributes`. One rule builds them for every creature (#236), in seven layers, in this order:
+  1. Base 10 for each Attribute.
+  2. The races' bonuses (`races::race_attrs`).
+  3. The class's or kind's modifier (`ClassDef.attr_mods`, `EnemyDef.attr_mods`, `BossDef.attr_mods`, `WOLF_ATTR_MODS`).
+  4. The Attribute shop's points (heroes).
+  5. Items' points (heroes).
+  6. Effects (drains and boosts, a delta).
+  7. The floor at 1, applied in `with_delta`.
+
+  Layers 1 to 3 are `races::creature_attrs(races, mods)`; the accessors are `classes::start_attrs`, `enemies::attrs`, `bosses::attrs` and `companions::wolf_attrs`. A stat block is the modifier from 10 (a Skeleton's INT −9 is its kind's, not the Undead race's). The stored HP and speed of an enemy, boss or wolf are the numbers at the creature's own CON (10 + its modifier); `sheet::monster_stats` moves them by the races' CON (`enemies::base_hp` etc. is the HP at CON 10). Tree nodes give no Attributes. Per point from 10:
   - STR: melee damage 5 %, ranged range and projectile speed 2 %.
   - DEX: finesse and ranged damage 5 %, arc 3 %, cooldown of techniques and weapon attacks 10 % (`CD_PCT`).
   - CON: 5 max HP and 1 % move speed.

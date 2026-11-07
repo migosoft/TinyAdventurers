@@ -1,12 +1,12 @@
 //! The Elven Ranger's wolf: the numbers of an ally monster (run/wolf.rs).
 
-use super::attributes::Attributes;
+use super::attributes::{self, Attr, Attributes};
 use super::damage::{DamageType::Cold, Resistances};
 use super::races::{self, Adjust, Race, Profile};
 
 pub const WOLF_HP: f64 = 80.0;
-/// The stat block (spec section 7): saves and push power. HP and speed keep the `WOLF_*` numbers; its Bite and Pounce are abilities (`sheet::kit_for`).
-pub const WOLF_ATTRS: Attributes = Attributes::new(17, 15, 15, 3, 12, 7);
+/// The wolf's modifier from 10; read the Attributes through `wolf_attrs()`. HP and speed (at its own CON) keep the `WOLF_*` numbers; its Bite and Pounce are abilities (`sheet::kit_for`).
+pub const WOLF_ATTR_MODS: Attributes = Attributes::new(7, 5, 5, -7, 2, -3);
 pub const WOLF_WEIGHT: f64 = 10.0;
 pub const WOLF_SPEED: f64 = 88.0;
 pub const WOLF_RADIUS: f64 = 5.0;
@@ -46,20 +46,34 @@ pub const WOLF_ESCORT: Escort = Escort { follow: WOLF_FOLLOW, follow_stop: WOLF_
 /// The knight (#149): a first guess (label `balancing`), a little wider than the wolf's since it fights in melee.
 pub const KNIGHT_ESCORT: Escort = Escort { follow: 40.0, follow_stop: 24.0, guard: 64.0, defend: 28.0, leash: 128.0, reappear: 192.0 };
 
-/// HP before the CON bonus (55): `WOLF_HP` minus 5 per CON point above 10.
+/// HP at CON 10 (55): `WOLF_HP` minus `CON_HP` per point of the wolf's own CON modifier.
 pub fn wolf_base_hp() -> f64 {
-    WOLF_HP - 5.0 * (15 - 10) as f64
+    WOLF_HP - attributes::CON_HP * WOLF_ATTR_MODS.get(Attr::Con) as f64
+}
+
+/// The wolf is a magical beast.
+pub fn wolf_races() -> &'static [Race] {
+    &[Race::MagicalBeast]
+}
+
+/// The wolf's Attributes: 10, its race's bonuses, its modifier.
+pub fn wolf_attrs() -> Attributes {
+    races::creature_attrs(wolf_races(), WOLF_ATTR_MODS)
 }
 
 /// A magical beast with 20 % extra cold resistance.
 pub fn wolf_profile() -> Profile {
-    races::profile(&[Race::MagicalBeast], Adjust { res: Resistances::of(&[(Cold, 0.2)]), ..Adjust::NONE })
+    races::profile(wolf_races(), Adjust { res: Resistances::of(&[(Cold, 0.2)]), ..Adjust::NONE })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::defs::attributes;
+
+    #[test]
+    fn the_wolf_is_a_magical_beast_with_int_6() {
+        assert_eq!(wolf_attrs(), Attributes::new(17, 15, 15, 6, 12, 7));
+    }
 
     #[test]
     fn wolf_stat_block_keeps_todays_hp() {

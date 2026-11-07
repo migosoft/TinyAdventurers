@@ -8,7 +8,7 @@ use crate::defs::abilities::{self as ab, AbilityCategory, AbilityDef, AbilityId,
 use crate::defs::attributes::{self, Attr, Attributes, Scaled, CD_PCT, CON_MOVE};
 use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
-use crate::defs::companions::{wolf_base_hp, WOLF_ATTRS, WOLF_RADIUS, WOLF_SPEED, WOLF_WEIGHT};
+use crate::defs::companions::{wolf_attrs, wolf_base_hp, WOLF_ATTR_MODS, WOLF_RADIUS, WOLF_SPEED, WOLF_WEIGHT};
 use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, Resistances};
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
@@ -1047,31 +1047,27 @@ pub struct MonsterStats {
     pub speed: f64,
 }
 
+/// A monster's numbers from its Attributes: HP and speed are stored at its own CON (`own_con`), so the
+/// races' and the kind's CON move them from there.
+fn monster_stats(attrs: Attributes, own_con: i32, base_hp: f64, speed: f64, weight: f64) -> MonsterStats {
+    MonsterStats { attrs, weight, max_hp: attributes::hp(base_hp, attrs.get(Attr::Con)), speed: move_speed(speed, own_con, &attrs) }
+}
+
 /// Enemy stats. HP does not depend on the party size (TODO 4b).
 pub fn enemy_stats(t: EnemyType) -> MonsterStats {
     let d = enemies::def(t);
-    let con = d.attrs.get(Attr::Con);
-    MonsterStats {
-        attrs: d.attrs,
-        weight: d.weight,
-        max_hp: attributes::hp(enemies::base_hp(t), con),
-        speed: move_speed(d.speed, con, &d.attrs),
-    }
+    monster_stats(enemies::attrs(t), attributes::BASELINE + d.attr_mods.get(Attr::Con), enemies::base_hp(t), d.speed, d.weight)
 }
 
 /// Boss stats. HP does not depend on the party size (TODO 4b).
 pub fn boss_stats(b: BossId) -> MonsterStats {
     let d = bosses::def(b);
-    let con = d.attrs.get(Attr::Con);
-    // The boss HP is the total; take the CON bonus out and put it back.
-    let base = d.hp - attributes::CON_HP * (con - attributes::BASELINE) as f64;
-    MonsterStats { attrs: d.attrs, weight: d.weight, max_hp: attributes::hp(base, con), speed: move_speed(d.speed, con, &d.attrs) }
+    monster_stats(bosses::attrs(b), attributes::BASELINE + d.attr_mods.get(Attr::Con), bosses::base_hp(b), d.speed, d.weight)
 }
 
 /// The Ranger's wolf.
 pub fn wolf_stats() -> MonsterStats {
-    let con = WOLF_ATTRS.get(Attr::Con);
-    MonsterStats { attrs: WOLF_ATTRS, weight: WOLF_WEIGHT, max_hp: attributes::hp(wolf_base_hp(), con), speed: move_speed(WOLF_SPEED, con, &WOLF_ATTRS) }
+    monster_stats(wolf_attrs(), attributes::BASELINE + WOLF_ATTR_MODS.get(Attr::Con), wolf_base_hp(), WOLF_SPEED, WOLF_WEIGHT)
 }
 
 /// What a monster is made of at spawn: the numbers its Attributes gave it. `monster_numbers` moves
@@ -1213,23 +1209,23 @@ mod tests {
         let kit = |src: KitSource, attrs: Attributes| kit_for(src, &attrs, &[]);
         let cd = |k: &Kit, id| k.get(id).unwrap_or_else(|| panic!("{id:?} in kit")).cooldown;
         let lich = bosses::def(BossId::Lich);
-        let k = kit(KitSource::Boss(BossId::Lich), lich.attrs);
-        assert_eq!(lich.attrs.get(Attr::Int), 22);
+        let k = kit(KitSource::Boss(BossId::Lich), bosses::attrs(BossId::Lich));
+        assert_eq!(bosses::attrs(BossId::Lich).get(Attr::Int), 22);
         for (id, base) in [(AbilityId::GloomBolts, 2.5), (AbilityId::Nova, 10.0), (AbilityId::StoneGaze, 18.0), (AbilityId::RaiseDead, 12.0)] {
             near(cd(&k, id), base * 10.0 / 22.0, &format!("{id:?}"));
         }
         let n = enemies::def(EnemyType::Necromancer);
-        near(cd(&kit(KitSource::Enemy(EnemyType::Necromancer), n.attrs), AbilityId::RaiseDead), 12.0 * 10.0 / 17.0, "Necromancer Raise Dead");
+        near(cd(&kit(KitSource::Enemy(EnemyType::Necromancer), enemies::attrs(EnemyType::Necromancer)), AbilityId::RaiseDead), 12.0 * 10.0 / 17.0, "Necromancer Raise Dead");
         let s = enemies::def(EnemyType::Summoner);
-        near(cd(&kit(KitSource::Enemy(EnemyType::Summoner), s.attrs), AbilityId::SummonImps), 12.0 * 10.0 / 15.0, "Summoner Summon Imps");
+        near(cd(&kit(KitSource::Enemy(EnemyType::Summoner), enemies::attrs(EnemyType::Summoner)), AbilityId::SummonImps), 12.0 * 10.0 / 15.0, "Summoner Summon Imps");
         let demon = bosses::def(BossId::Demon);
-        let k = kit(KitSource::Boss(BossId::Demon), demon.attrs);
-        assert_eq!((demon.attrs.get(Attr::Cha), demon.attrs.get(Attr::Dex)), (20, 14));
+        let k = kit(KitSource::Boss(BossId::Demon), bosses::attrs(BossId::Demon));
+        assert_eq!((bosses::attrs(BossId::Demon).get(Attr::Cha), bosses::attrs(BossId::Demon).get(Attr::Dex)), (20, 14));
         near(cd(&k, AbilityId::RingOfFire), 4.5, "Ring of Fire");
         near(cd(&k, AbilityId::Swoop), 6.0 * 10.0 / 14.0, "Swoop");
         let dragon = bosses::def(BossId::Dragon);
-        let k = kit(KitSource::Boss(BossId::Dragon), dragon.attrs);
-        assert_eq!(dragon.attrs.get(Attr::Cha), 20);
+        let k = kit(KitSource::Boss(BossId::Dragon), bosses::attrs(BossId::Dragon));
+        assert_eq!(bosses::attrs(BossId::Dragon).get(Attr::Cha), 20);
         near(cd(&k, AbilityId::FireBreath), 6.5 * 10.0 / 20.0, "Fire Breath");
     }
 
@@ -1769,18 +1765,20 @@ mod tests {
         };
         for t in EnemyType::ALL {
             let d = enemies::def(t);
-            check(&format!("{t:?}"), &kit_for(KitSource::Enemy(t), &crate::defs::enemies::def(t).attrs, &[]), d.abilities, &d.attrs, d.weapons, d.radius);
+            let attrs = enemies::attrs(t);
+            check(&format!("{t:?}"), &kit_for(KitSource::Enemy(t), &attrs, &[]), d.abilities, &attrs, d.weapons, d.radius);
         }
         for b in BossId::ALL {
             let d = bosses::def(b);
-            check(&format!("{b:?}"), &kit_for(KitSource::Boss(b), &crate::defs::bosses::def(b).attrs, &[]), d.abilities, &d.attrs, d.weapons, d.radius);
+            let attrs = bosses::attrs(b);
+            check(&format!("{b:?}"), &kit_for(KitSource::Boss(b), &attrs, &[]), d.abilities, &attrs, d.weapons, d.radius);
         }
         let ids = [AbilityId::Bite, AbilityId::Pounce];
-        check("wolf", &kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS, &[]), &ids, &WOLF_ATTRS, &[ItemId::BeastBite], WOLF_RADIUS);
+        check("wolf", &kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]), &ids, &wolf_attrs(), &[ItemId::BeastBite], WOLF_RADIUS);
         // A version's mod goes through `apply_mods`, on the Pounce alone.
         let faster = AbilityMod::CooldownAdd(-0.5);
-        let kit = kit_for(KitSource::Wolf(WolfMods { hp_mul: 1.0, pounce: Some(faster) }), &crate::defs::companions::WOLF_ATTRS, &[]);
-        let plain = kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::WOLF_ATTRS, &[]);
+        let kit = kit_for(KitSource::Wolf(WolfMods { hp_mul: 1.0, pounce: Some(faster) }), &crate::defs::companions::wolf_attrs(), &[]);
+        let plain = kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]);
         assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(plain.get(AbilityId::Pounce).unwrap().clone(), &[faster])));
         assert_eq!(kit.get(AbilityId::Bite), plain.get(AbilityId::Bite));
     }
@@ -1790,14 +1788,14 @@ mod tests {
         use crate::defs::bosses::*;
         let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-9, "{what}: {a} vs {b}");
         for b in BossId::ALL {
-            let k = kit_for(KitSource::Boss(b), &crate::defs::bosses::def(b).attrs, &[]);
+            let k = kit_for(KitSource::Boss(b), &crate::defs::bosses::attrs(b), &[]);
             for &id in def(b).abilities {
                 assert!(k.get(id).is_some(), "{b:?} {id:?}");
             }
         }
-        let dragon = kit_for(KitSource::Boss(BossId::Dragon), &crate::defs::bosses::def(BossId::Dragon).attrs, &[]);
-        let demon = kit_for(KitSource::Boss(BossId::Demon), &crate::defs::bosses::def(BossId::Demon).attrs, &[]);
-        let lich = kit_for(KitSource::Boss(BossId::Lich), &crate::defs::bosses::def(BossId::Lich).attrs, &[]);
+        let dragon = kit_for(KitSource::Boss(BossId::Dragon), &crate::defs::bosses::attrs(BossId::Dragon), &[]);
+        let demon = kit_for(KitSource::Boss(BossId::Demon), &crate::defs::bosses::attrs(BossId::Demon), &[]);
+        let lich = kit_for(KitSource::Boss(BossId::Lich), &crate::defs::bosses::attrs(BossId::Lich), &[]);
         let check = |k: &Kit, id: AbilityId, damage: f64, push: f64| {
             let a = k.get(id).unwrap_or_else(|| panic!("{id:?}"));
             near(a.damage, damage, &format!("{id:?} damage"));
@@ -1815,6 +1813,57 @@ mod tests {
         near(demon.get(AbilityId::RingOfFire).unwrap().damage, 12.0, "ring of fire");
         near(lich.get(AbilityId::GloomBolts).unwrap().damage, 10.0, "gloom bolts");
         near(lich.get(AbilityId::BlindingCurse).unwrap().damage, 6.0, "blinding curse");
+    }
+
+    #[test]
+    fn every_creature_is_ten_plus_races_plus_kind() {
+        use crate::defs::races::creature_attrs;
+        for t in EnemyType::ALL {
+            assert_eq!(enemy_stats(t).attrs, creature_attrs(enemies::races(t), enemies::def(t).attr_mods), "{t:?}");
+        }
+        for b in BossId::ALL {
+            assert_eq!(boss_stats(b).attrs, creature_attrs(bosses::races(b), bosses::def(b).attr_mods), "{b:?}");
+        }
+        assert_eq!(wolf_stats().attrs, creature_attrs(crate::defs::companions::wolf_races(), WOLF_ATTR_MODS));
+    }
+
+    #[test]
+    fn every_creature_starts_at_one_or_more() {
+        let all = EnemyType::ALL.map(|t| enemy_stats(t).attrs).into_iter()
+            .chain(BossId::ALL.map(|b| boss_stats(b).attrs))
+            .chain([wolf_stats().attrs])
+            .chain(ClassId::ALL.map(classes::start_attrs));
+        for a in all {
+            assert!(Attr::ALL.iter().all(|&x| a.get(x) >= 1), "{a:?}");
+        }
+    }
+
+    #[test]
+    fn a_race_con_bonus_moves_hp_and_speed() {
+        // No race has CON today: feed the shared helper a made-up +2 CON on top of an Orc Warrior.
+        let t = EnemyType::OrcWarrior;
+        let d = enemies::def(t);
+        let own = attributes::BASELINE + d.attr_mods.get(Attr::Con);
+        let plain = monster_stats(enemies::attrs(t), own, enemies::base_hp(t), d.speed, d.weight);
+        let tough = monster_stats(enemies::attrs(t).plus(Attributes::new(0, 0, 2, 0, 0, 0)), own, enemies::base_hp(t), d.speed, d.weight);
+        assert_eq!(plain, enemy_stats(t));
+        assert_eq!(tough.max_hp, plain.max_hp + 2.0 * attributes::CON_HP);
+        assert_eq!(tough.speed, move_speed(d.speed, own, &tough.attrs));
+        assert!(tough.speed > plain.speed);
+    }
+
+    #[test]
+    fn every_creature_keeps_todays_hp_and_speed() {
+        for t in EnemyType::ALL {
+            let (s, d) = (enemy_stats(t), enemies::def(t));
+            assert_eq!((s.max_hp, s.speed), (d.hp, d.speed), "{t:?}");
+        }
+        for b in BossId::ALL {
+            let (s, d) = (boss_stats(b), bosses::def(b));
+            assert_eq!((s.max_hp, s.speed), (d.hp, d.speed), "{b:?}");
+        }
+        let s = wolf_stats();
+        assert_eq!((s.max_hp, s.speed), (WOLF_HP, WOLF_SPEED));
     }
 
     #[test]
