@@ -901,7 +901,7 @@ export class GameScene extends Phaser.Scene {
     // only the own hero, and only while it plays (not dead or spectating); teammates get no silhouette
     const ownLook = this.alive && this.spectating === null ? this.views.get(this.info.you)?.bodyLook() ?? null : null;
     this.cove?.update(now, ownLook);
-    this.woodland?.update(now, ownLook, this.cameras.main.worldView);
+    this.woodland?.update(now, ownLook, this.cameras.main.worldView, this.lightView.seenLit);
 
     const hint = this.alive && !this.pred.noAct && !this.pred.sinking ? pickUseHint(this.ents.values(), this.info.you, px, py) : null;
     this.hud.setAsleep(this.alive && has(this.myEffects(), EFFECT.Sleep));

@@ -17,6 +17,8 @@ export const DEPTH = {
   entityBase: 10,
   projectile: 5000,
   fx: 6000,
+  /** Cloud shadows (woodland/clouds.ts): over figures and plants, under the air and the darkness. */
+  cloud: 6488,
   /** Sunbeam from a skylight (sunbeams.ts): over figures and effects, just under the dungeon air; the darkness hides it where unseen. Its dust uses airDust. */
   sunBeam: 6489,
   /** The dungeon air (mood.ts), over figures, shots and effects, under enemy HP bars and numbers, the tint and the darkness. Lowest first: haze, dust, smoke, drips, embers. */

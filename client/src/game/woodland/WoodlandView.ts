@@ -10,7 +10,9 @@ import { DEPTH } from '../effects';
 import { behindOccluder, heroBox, Silhouette, type BodyLook } from '../silhouette';
 import { drawPlant, PLANT_KINDS } from '../vegetation';
 import { BASE } from '../covemath';
-import { GROUND_TILES, GroundPainter } from './ground';
+import { Clouds } from './clouds';
+import { Critters } from './critters';
+import { flowerSpots, GROUND_TILES, GroundPainter } from './ground';
 import { DrawQueue, drawOrder, PlantPages } from './plantpages';
 
 const GROUND_TEX = 'woodland-ground-';
@@ -53,6 +55,10 @@ export class WoodlandView {
   /** Tree (not bush) indices by 4×4-tile bucket. */
   private buckets = new Map<number, number[]>();
   private silhouette?: Silhouette;
+  /** Drifting cloud shadows; `clouds.look` is tuned live. */
+  readonly clouds: Clouds;
+  private critters: Critters;
+  private mapW: number;
 
   constructor(private scene: Phaser.Scene, private info: WoodlandInfo, map: TileMap, spawn: { x: number; y: number } = { x: 0, y: 0 }) {
     const painter = this.painter = new GroundPainter(map, info.seed);
@@ -83,6 +89,9 @@ export class WoodlandView {
       }
     });
     this.sortedAt = { ...spawn };
+    this.mapW = map.w;
+    this.clouds = new Clouds(scene);
+    this.critters = new Critters(scene, flowerSpots(map, info.seed), info.seed, map);
     this.enqueue();
   }
 
@@ -144,7 +153,7 @@ export class WoodlandView {
   }
 
   /** `hero`: the own hero's body while it plays, else null. `cam`: the camera's world view. */
-  update(_t: number, hero: BodyLook | null, cam: Phaser.Geom.Rectangle): void {
+  update(t: number, hero: BodyLook | null, cam: Phaser.Geom.Rectangle, seenLit: Uint8Array): void {
     const c = { x: cam.centerX, y: cam.centerY };
     if (this.queue.size > 0 && Math.hypot(c.x - this.sortedAt.x, c.y - this.sortedAt.y) > RESORT) {
       this.sortedAt = c;
@@ -161,6 +170,8 @@ export class WoodlandView {
     for (const i of this.ready) this.show(i);
     this.ready.length = 0;
     this.shade(hero);
+    this.clouds.update(t, cam);
+    this.critters.update(t, seenLit, this.mapW, cam);
   }
 
   /** The front-most drawn tree whose canopy the hero stands behind, looking at the trees of the buckets around it. */
@@ -193,6 +204,8 @@ export class WoodlandView {
   }
 
   destroy(): void {
+    this.clouds.destroy();
+    this.critters.destroy();
     this.silhouette?.destroy();
     for (const img of this.images.values()) img.destroy();
     this.images.clear();
