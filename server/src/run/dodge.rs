@@ -234,8 +234,8 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, script_busy: bool) -> bool {
     }
     run.monsters[mi].dodge = cur;
     let Some(mut d) = cur else { return false };
-    super::ai::count_cooldowns(run, mi, dt);
     if d.wait > 0.0 {
+        super::ai::count_cooldowns(run, mi, dt);
         d.wait -= dt;
         run.monsters[mi].dodge = Some(d);
         super::ai::set_anim(run, mi, Anim::Idle);
@@ -253,6 +253,9 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, script_busy: bool) -> bool {
     m.pos = moved;
     m.dodge = if m.pos.dist(d.to) <= 0.01 || (!went && walk > 0.0) { None } else { Some(d) };
     let active = went || m.dodge.is_some();
+    if active {
+        super::ai::count_cooldowns(run, mi, dt); // a false return lets the normal behaviour count them
+    }
     super::ai::set_anim(run, mi, Anim::Move);
     active
 }
@@ -800,5 +803,27 @@ mod tests {
         }
         let dt = 3.0 * super::super::DT;
         assert!((run.monsters[mi].ai.cd - (5.0 - dt)).abs() < 1e-9 && (run.monsters[mi].ai.alt_cd - (5.0 - dt)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_blocked_step_counts_cooldowns_once() {
+        let (mut run, mi) = row(110.0);
+        fire(&mut run, AbilityId::Shoot, 0.0, 110.0);
+        run.step();
+        let d = run.monsters[mi].dodge.expect("dodging");
+        // A wall appears right against the orc on the side it steps to.
+        let m = &run.monsters[mi];
+        let sgn = (d.to.y - m.pos.y).signum();
+        let (tx, ty) = Map::tile_of(m.pos);
+        let ty = (ty as f64 + sgn) as i32;
+        run.layout.map.set(tx, ty, Tile::Wall);
+        let edge = if sgn > 0.0 { ty as f64 * crate::dungeon::TILE } else { (ty + 1) as f64 * crate::dungeon::TILE };
+        run.monsters[mi].pos.y = edge - sgn * run.monsters[mi].radius;
+        run.monsters[mi].ai.cd = 5.0;
+        run.monsters[mi].ai.alt_cd = 5.0;
+        run.step();
+        assert!(run.monsters[mi].dodge.is_none(), "the blocked step ends the dodge");
+        let dt = super::super::DT;
+        assert!((run.monsters[mi].ai.cd - (5.0 - dt)).abs() < 1e-9 && (run.monsters[mi].ai.alt_cd - (5.0 - dt)).abs() < 1e-9, "counted once: {}", run.monsters[mi].ai.cd);
     }
 }
