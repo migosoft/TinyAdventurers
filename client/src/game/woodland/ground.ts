@@ -18,6 +18,8 @@ const FLOWER_AREA = 40;
 
 // the vegetation palette's browns (d, c, b) and thicket greens (0, 1)
 const DIRT_D: Rgb = [176, 112, 74], DIRT_C: Rgb = [143, 64, 41], DIRT_B: Rgb = [98, 53, 43];
+/** The road's rim: a darker, greener brown, mixed in at low contrast. */
+const RIM: Rgb = [70, 56, 40], RIM_MIX = 0.4;
 const THICK_0: Rgb = [28, 58, 50], THICK_1: Rgb = [40, 100, 62];
 
 const kindOf = (t: number): number => (t === TILE_ID.Road ? ROAD : t === TILE_ID.Thicket ? THICKET : t === TILE_ID.Wall || t === TILE_ID.Void ? NONE : GRASS);
@@ -114,9 +116,17 @@ export class GroundPainter {
     this.k = kinds(map);
     this.kindAt = new Uint8Array(this.w * this.h);
     this.nGrass = noise(seed * 3 + 17, 26);
-    this.nDirt = noise(seed * 5 + 9, 9);
-    this.nDirtBig = noise(seed * 5 + 13, 30);
+    this.nDirt = noise(seed * 5 + 9, 14);
+    this.nDirtBig = noise(seed * 5 + 13, 40);
     this.nThick = noise(seed * 11 + 3, 5);
+  }
+
+  /** The ground kind pixel (x, y) shows (NONE off the map). */
+  private kindNear(x: number, y: number): number {
+    const { map } = this;
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+    if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return NONE;
+    return pixelKind(this.k, map.w, map.h, tx, ty, x, y, this.seed);
   }
 
   private put(x: number, y: number, c: Rgb): void {
@@ -134,8 +144,12 @@ export class GroundPainter {
         this.kindAt[y * w + x] = pk;
         if (pk === GRASS) this.put(x, y, this.nGrass(x, y) < 0.42 ? PATCH : BASE);
         else if (pk === ROAD) {
-          const m = this.nDirt(x, y) * 0.5 + this.nDirtBig(x, y) * 0.5;
-          this.put(x, y, hash(x, y, seed + 5) < 0.06 ? DIRT_B : m > 0.58 ? DIRT_D : m < 0.3 ? DIRT_B : DIRT_C);
+          // smooth, large patches (mostly the big noise), weighted towards the darker browns
+          const m = this.nDirt(x, y) * 0.25 + this.nDirtBig(x, y) * 0.75;
+          let c = hash(x, y, seed + 5) < 0.03 ? DIRT_B : m > 0.66 ? DIRT_D : m < 0.34 ? DIRT_B : DIRT_C;
+          // a faint rim where the road meets something else: its edge pixels blend towards a darker, greener brown
+          if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => this.kindNear(x + dx, y + dy) !== ROAD)) c = [0, 1, 2].map((i) => Math.round(c[i] + (RIM[i] - c[i]) * RIM_MIX)) as Rgb;
+          this.put(x, y, c);
         } else if (pk === THICKET) this.put(x, y, this.nThick(x, y) < 0.5 || hash(x, y, seed + 9) < 0.08 ? THICK_0 : THICK_1);
       }
     }
