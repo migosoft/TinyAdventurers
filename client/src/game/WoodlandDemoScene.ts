@@ -1,7 +1,7 @@
 // Dev page ?woodland (no server): the woodland level to judge on a phone (#203). Three server-made woodlands
 // (generated/woodland-demo.json, seeds 1-3) with the whole look: ground, trees and bushes, cloud shadows, bees,
 // butterflies, shade, and the knight's silhouette behind canopies. Tap the map to walk there (along the road,
-// through the grass; trees, trunks and thickets stop you). Zoomed so 20 tiles fit the screen's width.
+// through the grass; trees, trunks and thickets stop you). Zoomed so 32 tiles fit the screen's width; the tiles row changes it (16..48).
 // Buttons (tap): Clouds, Bees, Butterflies, Silhouette, Shade on / off; Next seed; cloud Size, Speed, Dark and
 // Cover with - and + (the values are shown, so they can be reported). URL: ?woodland&seed=2&clouds=0&bees=0&butterflies=0&silhouette=0&shade=0
 import Phaser from 'phaser';
@@ -17,13 +17,11 @@ import { lookOf } from './silhouette';
 import { SHADE, ShadeMask } from './shademask';
 import { VisionMask } from './visionmask';
 import { DEFAULT_CLOUDS } from './woodland/clouds';
-import { CLOUD_STEPS, nextSeed, stepCloud, stepToward, zoomForTiles, type CloudKey } from './woodland/demoMath';
+import { CLOUD_STEPS, nextSeed, stepCloud, stepTiles, stepToward, TILES, zoomForTiles, type CloudKey } from './woodland/demoMath';
 import { WoodlandView } from './woodland/WoodlandView';
 
 interface DemoMap { w: number; h: number; tiles: number[]; woodland: WoodlandInfo; spawns: [number, number, number][] }
 const MAPS = demo as unknown as DemoMap[];
-/** Tiles across the screen's width. */
-const TILES_ACROSS = 20;
 /** The knight's speed (px/s) and his collision half-width (px). */
 const SPEED = 4 * TILE;
 const HALF = 4;
@@ -32,6 +30,7 @@ const CLOUD_KEYS: CloudKey[] = ['size', 'speed', 'dark', 'cover'];
 /** Switches survive a next-seed restart. */
 const on = { clouds: true, bees: true, butterflies: true, silhouette: true, shade: true };
 let look = { ...DEFAULT_CLOUDS };
+let tiles: number = TILES.def;
 let urlRead = false;
 
 export class WoodlandDemoScene extends Phaser.Scene {
@@ -98,8 +97,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       this.target = { x: p.worldX, y: p.worldY };
     });
-    const cam = this.cameras.main;
-    cam.setZoom(zoomForTiles(cam.width, TILES_ACROSS, TILE));
+    this.zoom();
     this.buttons();
     this.applySwitches();
     this.events.once('shutdown', () => {
@@ -108,6 +106,12 @@ export class WoodlandDemoScene extends Phaser.Scene {
       this.woodland.destroy();
       this.shade.destroy();
     });
+  }
+
+  /** The camera zoom that shows `tiles` tiles across the width. */
+  private zoom(): void {
+    const cam = this.cameras.main;
+    cam.setZoom(zoomForTiles(cam.width, tiles, TILE));
   }
 
   /** The road's western end: the middle of its leftmost column, standing on the tile's lower half. */
@@ -163,6 +167,15 @@ export class WoodlandDemoScene extends Phaser.Scene {
       }));
     }
     r1.appendChild(btn(() => `Seed #${this.seed} next`, () => this.scene.restart({ seed: nextSeed(this.seed, MAPS.length) })));
+    const zr = row();
+    const zl = document.createElement('span');
+    zl.style.cssText = 'flex:1;text-align:center;min-width:140px';
+    all.push(() => (zl.textContent = `tiles ${tiles}`));
+    const zstep = (dir: 1 | -1) => () => {
+      tiles = stepTiles(tiles, dir);
+      this.zoom();
+    };
+    zr.append(btn(() => '-', zstep(-1), 56), zl, btn(() => '+', zstep(1), 56));
     for (const k of CLOUD_KEYS) {
       const r = row();
       const digits = CLOUD_STEPS[k].digits;

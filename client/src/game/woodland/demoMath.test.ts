@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CLOUDS } from './clouds';
-import { nextSeed, stepCloud, stepToward, zoomForTiles } from './demoMath';
+import { nextSeed, stepCloud, stepTiles, stepToward, TILES, zoomForTiles } from './demoMath';
 
 describe('woodland demo math', () => {
   it('steps each cloud value up and down without float drift', () => {
-    let l = DEFAULT_CLOUDS;
+    let l = { size: 360, speed: 14, dark: 0.22, cover: 0.35 };
     for (let i = 0; i < 3; i++) l = stepCloud(l, 'dark', 1);
     expect(l.dark).toBe(0.34);
     l = stepCloud(l, 'dark', -1);
@@ -21,6 +21,13 @@ describe('woodland demo math', () => {
   it('fits 20 tiles across the width', () => {
     expect(zoomForTiles(320, 20, 16)).toBe(1);
     expect(zoomForTiles(412, 20, 16) * 20 * 16).toBeCloseTo(412);
+  });
+  it('steps the zoom in 4 tiles within 16..48', () => {
+    expect(TILES.def).toBe(32);
+    expect(stepTiles(32, 1)).toBe(36);
+    expect(stepTiles(32, -1)).toBe(28);
+    expect(stepTiles(16, -1)).toBe(16);
+    expect(stepTiles(48, 1)).toBe(48);
   });
   it('wraps the seed', () => {
     expect([nextSeed(1, 3), nextSeed(2, 3), nextSeed(3, 3)]).toEqual([2, 3, 1]);

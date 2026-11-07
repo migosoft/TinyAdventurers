@@ -29,3 +29,7 @@ export function stepToward(x: number, y: number, tx: number, ty: number, dist: n
   if (d <= dist) return { x: tx, y: ty, arrived: true };
   return { x: x + (vx / d) * dist, y: y + (vy / d) * dist, arrived: false };
 }
+
+/** The zoom button: tiles across the screen's width, in steps of 4. */
+export const TILES = { def: 32, step: 4, min: 16, max: 48 };
+export const stepTiles = (n: number, dir: 1 | -1) => Math.min(TILES.max, Math.max(TILES.min, n + dir * TILES.step));
