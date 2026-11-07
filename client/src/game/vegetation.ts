@@ -1,6 +1,7 @@
 // Vegetation generator (#203): trees and bushes from shapes, in the cove tree's style (#202).
 // Geometry is written in "design units" of the 96 px cove tree (foot of the roots at y 86, x 48)
 // and scaled; shapes stretch it (wide, tall). Small sizes drop details that would turn to noise.
+// The trees are drawn for this game with Claude Code, in the 0x72 pack's palette and style.
 // Pure: no Phaser, no DOM, no Node; the atlas script and the game both import it.
 type Rgb = [number, number, number];
 export type PlantKind = Shape | 'bush';
@@ -29,18 +30,17 @@ class Canvas {
   constructor(public w: number, public h: number) { this.px = new Array(w * h).fill(null); }
   set(x: number, y: number, c: string) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < this.w && y < this.h) this.px[y * this.w + x] = c; }
   get(x: number, y: number) { x = Math.round(x); y = Math.round(y); return x >= 0 && y >= 0 && x < this.w && y < this.h ? this.px[y * this.w + x] : null; }
-  /** The cove tree's own lookup, kept as it was: no rounding, so a fractional index reads undefined (not null). */
-  getExact(x: number, y: number) { return x >= 0 && y >= 0 && x < this.w && y < this.h ? this.px[y * this.w + x] : null; }
+  clear(x: number, y: number) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < this.w && y < this.h) this.px[y * this.w + x] = null; }
   /** Outer outline, then crop to the drawing; returns the image and where `foot` lands in it. */
-  finish(foot: { x: number; y: number }, window?: { x: number; y: number; w: number; h: number }): Drawn {
+  finish(foot: { x: number; y: number }): Drawn {
     const { w, h } = this; const solid = this.px.map((c) => c !== null);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const i = y * w + x;
       if (!solid[i] && ((x + 1 < w && solid[i + 1]) || (x > 0 && solid[i - 1]) || (y + 1 < h && solid[i + w]) || (y > 0 && solid[i - w]))) this.px[i] = 'k';
     }
     let x0 = w, y0 = h, x1 = 0, y1 = 0;
-    if (window) { x0 = window.x; y0 = window.y; x1 = window.x + window.w - 1; y1 = window.y + window.h - 1; }
-    else this.px.forEach((c, i) => { if (c) { const x = i % w, y = Math.floor(i / w); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } });
+    this.px.forEach((c, i) => { if (c) { const x = i % w, y = Math.floor(i / w); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } });
+    if (x0 === 0 || y0 === 0 || x1 === w - 1 || y1 === h - 1) throw new Error('vegetation: the drawing reaches the canvas edge (scale too large)');
     const img: Rgba = { w: x1 - x0 + 1, h: y1 - y0 + 1, data: new Uint8ClampedArray((x1 - x0 + 1) * (y1 - y0 + 1) * 4) };
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const c = this.px[y * w + x]; if (c) img.data.set([...P[c], 255], ((y - y0) * img.w + x - x0) * 4); }
     return { img, foot: { x: Math.round(foot.x - x0), y: Math.round(foot.y - y0) } };
@@ -49,7 +49,7 @@ class Canvas {
 const isLeaf = (c: string | null) => c !== null && '0123456789'.includes(c);
 
 /** Leaf clumps: lumpy ovals, back to front, dark-green rim on the shadow side, lower clumps darker. */
-function clumps(cv: Canvas, r: () => number, list: { x: number; y: number; rx: number; ry: number; ph?: number; ph2?: number }[], topY: number, spanY: number, pal = '01234', fade = 0.7) {
+function clumps(cv: Canvas, r: () => number, list: { x: number; y: number; rx: number; ry: number; ph?: number; ph2?: number }[], topY: number, spanY: number, pal = '01234') {
   for (const c0 of list) {
     const c = { ...c0, ph: c0.ph ?? r() * 6, ph2: c0.ph2 ?? r() * 6 };
     for (let y = Math.floor(c.y - c.ry * 1.3 - 2); y <= c.y + c.ry * 1.3 + 2; y++) for (let x = Math.floor(c.x - c.rx * 1.3 - 2); x <= c.x + c.rx * 1.3 + 2; x++) {
@@ -59,7 +59,7 @@ function clumps(cv: Canvas, r: () => number, list: { x: number; y: number; rx: n
       if (d > 1) continue;
       const shadowSide = (x - c.x) * LX + (y - c.y) * LY < 0;
       if (d > 1 - 1.3 / Math.min(c.rx, c.ry) && shadowSide) { cv.set(x, y, pal[0]); continue; }
-      const l = ((x - c.x) / c.rx) * LX + ((y - c.y) / c.ry) * LY + (r() - 0.5) * 0.2 - ((c.y - topY) / spanY) * fade;
+      const l = ((x - c.x) / c.rx) * LX + ((y - c.y) / c.ry) * LY + (r() - 0.5) * 0.2 - ((c.y - topY) / spanY) * 0.7;
       cv.set(x, y, l > 0.62 ? pal[4] : l > 0.22 ? pal[3] : l > -0.3 ? pal[2] : l > -0.75 ? pal[1] : pal[0]);
     }
   }
@@ -67,12 +67,11 @@ function clumps(cv: Canvas, r: () => number, list: { x: number; y: number; rx: n
 
 export function drawTree(o: TreeOpts): Drawn {
   if (o.shape === 'conifer') return drawConifer(o.seed, o.scale);
-  return roundish({ ...o, shape: o.shape }, false);
+  return roundish({ ...o, shape: o.shape });
 }
 
-/** round/wide/tall. `cove` reproduces the cove tree exactly as #202 drew it (it differs from the other trees in a few
- *  random draws and details), and returns its 96x100 frame instead of a crop. */
-function roundish(o: TreeOpts & { shape: Exclude<Shape, 'conifer'> }, cove: boolean): Drawn {
+/** round/wide/tall. */
+function roundish(o: TreeOpts & { shape: Exclude<Shape, 'conifer'> }): Drawn {
   const r = rng(o.seed), sh = SHAPES[o.shape], s = o.scale;
   const cv = new Canvas(220, 220);
   const cx = 110, base = 190;
@@ -94,7 +93,7 @@ function roundish(o: TreeOpts & { shape: Exclude<Shape, 'conifer'> }, cove: bool
   // roots
   const roots: Seg[] = []; const detail = s >= 0.7;
   const root = (x0: number, y0: number, vx: number, vy: number, len: number, w0: number, wig: number, forks: boolean) => {
-    const seg: Seg = []; const n = Math.max(cove ? 10 : 6, Math.round(len * 1.5)); let x = x0, y = y0;
+    const seg: Seg = []; const n = Math.max(6, Math.round(len * 1.5)); let x = x0, y = y0;
     for (let i = 0; i <= n; i++) { const t = i / n; seg.push({ x: x + Math.sin(t * 8 + wig) * 0.7 * t * s, y, w: w0 * (1 - t) ** 1.2 + 0.5 });
       const fy = vy * (1 - 0.6 * t); const m = Math.hypot(vx, fy); x += (vx / m) * (len / n); y += (fy / m) * (len / n); }
     roots.push(seg);
@@ -106,45 +105,27 @@ function roundish(o: TreeOpts & { shape: Exclude<Shape, 'conifer'> }, cove: bool
   for (const sg of branches) paint(sg, false);
   paint(trunk, false, footY);
   roots.sort((A, B) => A[A.length - 1].y - B[B.length - 1].y).forEach((sg) => paint(sg, true));
-  if (cove) {
-    // the cove's bark and moss: fractional lookups (getExact), so the grooves are drawn wherever they fall and the moss never lands
-    for (let k = 0; k < 7; k++) { const x0 = cx - 6 + r() * 12, y0 = Y(52 + r() * 26), len = 4 + r() * 8; for (let i = 0; i < len; i++) if (cv.getExact(x0 + Math.sin(i * 0.4) * 0.6, y0 + i) !== null) cv.set(x0 + Math.sin(i * 0.4) * 0.6, y0 + i, 'a'); }
-    for (let k = 0; k < 40; k++) { const x = cx - 26 + r() * 52, y = footY - 7 + r() * 10; const c = cv.getExact(x, y); if (c && 'cd'.includes(c) && cv.getExact(x, y - 1) !== null) cv.set(x, y, r() < 0.5 ? '2' : '3'); }
-  } else {
-    if (detail) for (let k = 0; k < 7; k++) { const x0 = cx + (-6 + r() * 12) * tw, y0 = Y(52 + r() * 22), len = (4 + r() * 8) * s; for (let i = 0; i < len; i++) if (cv.get(x0, y0 + i) !== null) cv.set(x0, y0 + i, 'a'); }
-    for (let k = 0; k < 40 * s; k++) { const x = cx + (-26 + r() * 52) * s, y = footY - 4 * s + r() * 8 * s; const c = cv.get(x, y); if (c && 'cd'.includes(c) && cv.get(x, y - 1) !== null) cv.set(x, y, r() < 0.5 ? '2' : '3'); }
-  }
+  if (detail) for (let k = 0; k < 7; k++) { const x0 = cx + (-6 + r() * 12) * tw, y0 = Y(52 + r() * 22), len = (4 + r() * 8) * s; for (let i = 0; i < len; i++) if (cv.get(x0, y0 + i) !== null) cv.set(x0, y0 + i, 'a'); }
+  for (let k = 0; k < 40 * s; k++) { const x = cx + (-26 + r() * 52) * s, y = footY - 4 * s + r() * 8 * s; const c = cv.get(x, y); if (c && 'cd'.includes(c) && cv.get(x, y - 1) !== null) cv.set(x, y, r() < 0.5 ? '2' : '3'); }
   // canopy
-  // (the cove draws each clump's phases right after its size; the others when the clump is painted)
-  const list = CANOPY.map(([dx, y, rx, ry]) => ({ x: X(dx + (r() - 0.5) * 3), y: Y(y + (r() - 0.5) * 2), rx: (rx + (r() - 0.5) * 2) * s * sh.rx, ry: (ry + (r() - 0.5) * 1.5) * s * sh.rx * Math.min(1.1, sh.sy),
-    ...(cove ? { ph: r() * 6, ph2: r() * 6 } : {}) }));
-  clumps(cv, r, list, Y(13), 45 * s * sh.sy, '01234', cove ? 1 : 0.7);
-  // the cove's frame: its left edge and top are this canvas' (cx - 48, base - 86)
-  const fx = cx - 48, fy = base - 86;
-  for (let k = 0; k < 160 * s * s; k++) { const x = cove ? fx + Math.floor(r() * 96) : Math.floor(r() * cv.w), y = cove ? fy + Math.floor(r() * 62) : Math.floor(r() * cv.h); const c = cv.get(x, y);
+  const list = CANOPY.map(([dx, y, rx, ry]) => ({ x: X(dx + (r() - 0.5) * 3), y: Y(y + (r() - 0.5) * 2), rx: (rx + (r() - 0.5) * 2) * s * sh.rx, ry: (ry + (r() - 0.5) * 1.5) * s * sh.rx * Math.min(1.1, sh.sy),}));
+  clumps(cv, r, list, Y(13), 45 * s * sh.sy, '01234');
+  for (let k = 0; k < 160 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); const c = cv.get(x, y);
     if (c === '2' && cv.get(x + 1, y) === '2') { cv.set(x, y, '3'); if (r() < 0.5) cv.set(x + 1, y - 1, '3'); }
     if (c === '3' && cv.get(x + 1, y) === '3' && r() < 0.5) cv.set(x, y, '4'); }
-  if (cove) {
-    // a dark underside on the canopy, then up to 8 hanging vines with a lighter tip and sometimes a side leaf
-    for (let y = fy; y < fy + 64; y++) for (let x = fx; x < fx + 96; x++) { const c = cv.get(x, y); if (c !== null && c !== 'k' && '1234'.includes(c) && (cv.get(x, y + 1) === 'k' || cv.get(x, y + 1) === null) && cv.get(x, y + 2) !== null) cv.set(x, y, '0'); }
-    for (let k = 0, made = 0; k < 60 && made < 8; k++) { const x = Math.round(cx - 34 + r() * 68); let y = fy + 62; while (y > fy + 20 && !isLeaf(cv.get(x, y))) y--;
-      if (y <= fy + 20 || isLeaf(cv.get(x - 2, y + 2)) || isLeaf(cv.get(x + 2, y + 2))) continue;
-      const len = 3 + Math.floor(r() * 6); made++;
-      for (let i = 1; i <= len; i++) { cv.set(x, y + i, i === len ? '2' : '1'); if (i === len - 1 && r() < 0.6) cv.set(x + (r() < 0.5 ? -1 : 1), y + i, '2'); } }
-  }
   // vines (big trees only)
-  if (detail && !cove) for (let k = 0, made = 0; k < 60 && made < 8 * s; k++) { const x = Math.round(X(-34 + r() * 68)); let y = Math.round(Y(62)); while (y > Y(20) && !isLeaf(cv.get(x, y))) y--;
+  if (detail) for (let k = 0, made = 0; k < 60 && made < 8 * s; k++) { const x = Math.round(X(-34 + r() * 68)); let y = Math.round(Y(62)); while (y > Y(20) && !isLeaf(cv.get(x, y))) y--;
     if (y <= Y(20) || isLeaf(cv.get(x - 2, y + 2)) || isLeaf(cv.get(x + 2, y + 2))) continue; const len = (3 + Math.floor(r() * 6)) * s; made++;
     for (let i = 1; i <= len; i++) cv.set(x, y + i, i >= len - 0.5 ? '2' : '1'); }
   // the canopy's shadow on the trunk
   const darker: Record<string, string> = { d: 'c', c: 'b', b: 'a', a: 'a' };
   for (let x = 0; x < cv.w; x++) { let y = 0, seen = false; for (; y < cv.h; y++) { const c = cv.px[y * cv.w + x]; if (isLeaf(c)) seen = true; else if (seen && c && c in darker) break; }
     for (let i = 0; i < 7 * s && y + i < cv.h; i++) { const c = cv.get(x, y + i); if (c && c in darker) cv.set(x, y + i, darker[c]); } }
-  return cv.finish({ x: cx, y: footY }, cove ? { x: fx, y: fy, w: 96, h: 100 } : undefined);
+  return cv.finish({ x: cx, y: footY });
 }
 
 /** A conifer (fir/spruce): straight tapering trunk, stacked drooping tiers of leaf clumps narrowing to a spire, blue-green palette 5..9. */
-export function drawConifer(seed: number, s: number): Drawn {
+function drawConifer(seed: number, s: number): Drawn {
   const r = rng(seed), cv = new Canvas(220, 220), cx = 110, base = 190, detail = s >= 0.7;
   const bare = r() * 0.25 * 82; // bare trunk below the lowest tier, uniform 0-25 % of the height (design units)
   const X = (dx: number) => cx + dx * s, Y = (y: number) => base + (y - 86) * s;
@@ -191,9 +172,13 @@ export function drawConifer(seed: number, s: number): Drawn {
   return cv.finish({ x: cx, y: footY });
 }
 
-/** A bush: 3-6 leaf clumps on the ground, no trunk; width in px. */
+/** How much wider a bush is drawn than the width its clump layout is sized for (measured over many seeds and sizes). */
+const BUSH_SPREAD = 1.28;
+
+/** A bush: 3-6 leaf clumps on the ground, no trunk; `width` is the drawn width in px (about, to a few px). */
 export function drawBush(o: { seed: number; width: number }): Drawn {
-  const { seed, width } = o;
+  const { seed } = o;
+  const width = o.width / BUSH_SPREAD; // the clump layout below is sized by its centre spacing; the drawn bush spreads wider
   const r = rng(seed); const cv = new Canvas(120, 100); const cx = 60, ground = 85;
   const s = width / 32, n = width < 28 ? 3 : width < 40 ? 4 : 5;
   const list: { x: number; y: number; rx: number; ry: number }[] = [];
@@ -202,7 +187,7 @@ export function drawBush(o: { seed: number; width: number }): Drawn {
   clumps(cv, r, list, ground - 20 * s, 18 * s);
   for (let k = 0; k < 40 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); if (cv.get(x, y) === '2' && cv.get(x + 1, y) === '2') { cv.set(x, y, '3'); if (r() < 0.5) cv.set(x + 1, y - 1, '3'); } }
   // flat dark underside where the bush meets the ground
-  for (let x = 0; x < cv.w; x++) for (let y = ground; y < cv.h; y++) cv.set(x, y, null as unknown as string);
+  for (let x = 0; x < cv.w; x++) for (let y = ground; y < cv.h; y++) cv.clear(x, y);
   for (let x = 0; x < cv.w; x++) if (isLeaf(cv.get(x, ground - 1))) { cv.set(x, ground - 1, '0'); if (isLeaf(cv.get(x, ground - 2))) cv.set(x, ground - 2, '1'); }
   return cv.finish({ x: cx, y: ground });
 }
@@ -214,11 +199,14 @@ export function drawPlant(kind: PlantKind, seed: number, scalePct: number): Draw
 }
 
 /** The trunk foot inside the cove tree's frame (px): the sprite's origin and its depth. */
-export const COVE_TREE_FOOT = { x: 48, y: 79 };
+export const COVE_TREE_FOOT = { x: 48, y: 80 };
 
-/** The atlas frame cove_tree (96x100): seed 11, round, scale 1, with the cove's own details. */
+/** The atlas frame cove_tree (96x100): seed 11, round, scale 1, its foot at COVE_TREE_FOOT. */
 export function coveTree(): Rgba {
-  const d = roundish({ seed: 11, scale: 1, shape: 'round' }, true);
-  if (d.foot.x !== COVE_TREE_FOOT.x || d.foot.y !== COVE_TREE_FOOT.y) throw new Error('vegetation: the cove tree foot moved');
-  return d.img;
+  const { img, foot } = drawTree({ seed: 11, scale: 1, shape: 'round' });
+  const W = 96, H = 100, ox = COVE_TREE_FOOT.x - foot.x, oy = COVE_TREE_FOOT.y - foot.y;
+  if (ox < 0 || oy < 0 || ox + img.w > W || oy + img.h > H) throw new Error(`vegetation: the cove tree (${img.w}x${img.h}, foot ${foot.x},${foot.y}) does not fit its 96x100 frame`);
+  const out: Rgba = { w: W, h: H, data: new Uint8ClampedArray(W * H * 4) };
+  for (let y = 0; y < img.h; y++) out.data.set(img.data.subarray(y * img.w * 4, (y + 1) * img.w * 4), ((oy + y) * W + ox) * 4);
+  return out;
 }

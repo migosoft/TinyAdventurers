@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COVE_TREE_FOOT, PLANT_KINDS, type PlantKind, type Rgba, coveTree, drawPlant, drawTree } from './vegetation';
+import { COVE_TREE_FOOT, PLANT_KINDS, type Rgba, coveTree, drawPlant, drawTree } from './vegetation';
 
 /** FNV-1a over the RGBA bytes. */
 function fnv(img: Rgba): number {
@@ -12,13 +12,15 @@ const alpha = (img: Rgba, x: number, y: number) => img.data[(y * img.w + x) * 4 
 const isOutline = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 34 && img.data[i + 1] === 34 && img.data[i + 2] === 34; };
 const isDarkGreen = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 40 && img.data[i + 1] === 100 && img.data[i + 2] === 62 && img.data[i + 3] === 255; };
 
+const HASH = 2114400888;
+
 describe('vegetation', () => {
-  it('the cove tree is pixel-identical', () => {
-    // 1291632624 is FNV-1a of the 96x100 RGBA that scripts/cove-frames.ts drawTree(11) drew before this module existed.
+  it('the cove_tree frame is pinned (guards against drift)', () => {
+    // FNV-1a of the 96x100 RGBA of coveTree(): the general round tree, seed 11, scale 1, foot at (48, 80).
     const img = coveTree();
     expect([img.w, img.h]).toEqual([96, 100]);
-    expect(fnv(img)).toBe(1291632624);
-    expect(COVE_TREE_FOOT).toEqual({ x: 48, y: 79 });
+    expect(fnv(img)).toBe(HASH);
+    expect(COVE_TREE_FOOT).toEqual({ x: 48, y: 80 });
   });
 
   it('drawPlant is deterministic', () => {
@@ -45,9 +47,18 @@ describe('vegetation', () => {
   });
 
   it('bush width', () => {
-    // The approved bush draws about 1.3x its nominal width (lumpy clumps spread past the 20 px centre spacing): 38-44 px for 32.
-    for (const seed of [1, 2, 3, 4]) expect(Math.abs(drawPlant('bush', seed, 100).img.w - 41)).toBeLessThanOrEqual(5);
-    for (const seed of [1, 2, 3]) expect(drawPlant('bush', seed, 150).img.w).toBeGreaterThan(drawPlant('bush', seed, 75).img.w);
+    for (let seed = 1; seed <= 30; seed++) expect(Math.abs(drawPlant('bush', seed, 100).img.w - 32)).toBeLessThanOrEqual(6);
+    for (const seed of [1, 2, 3]) expect(drawPlant('bush', seed, 150).img.w).toBeGreaterThan(drawPlant('bush', seed, 100).img.w);
+  });
+
+  it('large trees are not clipped by the canvas', () => {
+    // drawing throws if it reaches the canvas edge; the plan's biggest sizes must pass
+    for (const shape of ['round', 'wide', 'tall', 'conifer'] as const) for (const seed of [1, 2, 3, 4, 5, 6]) {
+      expect(() => drawTree({ seed, scale: 1.2, shape })).not.toThrow();
+    }
+    const { img, foot } = drawTree({ seed: 1, scale: 1.2, shape: 'wide' });
+    expect(img.w).toBeGreaterThan(drawTree({ seed: 1, scale: 1, shape: 'wide' }).img.w);
+    expect(foot.x).toBeGreaterThan(0);
   });
 
   it('small trees drop details', () => {
@@ -72,8 +83,9 @@ describe('vegetation', () => {
   });
 
   it('cost', () => {
+    drawPlant('round', 99, 100); // warm-up: the first draw pays for JIT
     const t0 = performance.now();
-    for (let i = 0; i < 50; i++) drawPlant(PLANT_KINDS[i % PLANT_KINDS.length] as PlantKind, i, 50 + (i * 7) % 80);
+    for (let i = 0; i < 50; i++) drawPlant(PLANT_KINDS[i % PLANT_KINDS.length], i, 50 + (i * 7) % 80);
     const ms = performance.now() - t0;
     console.log(`vegetation cost: 50 mixed plants in ${ms.toFixed(1)} ms`);
     expect(ms).toBeLessThan(250);
