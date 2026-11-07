@@ -1208,22 +1208,17 @@ mod tests {
         let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-12, "{what}: {a} vs {b}");
         let kit = |src: KitSource, attrs: Attributes| kit_for(src, &attrs, &[]);
         let cd = |k: &Kit, id| k.get(id).unwrap_or_else(|| panic!("{id:?} in kit")).cooldown;
-        let lich = bosses::def(BossId::Lich);
         let k = kit(KitSource::Boss(BossId::Lich), bosses::attrs(BossId::Lich));
         assert_eq!(bosses::attrs(BossId::Lich).get(Attr::Int), 22);
         for (id, base) in [(AbilityId::GloomBolts, 2.5), (AbilityId::Nova, 10.0), (AbilityId::StoneGaze, 18.0), (AbilityId::RaiseDead, 12.0)] {
             near(cd(&k, id), base * 10.0 / 22.0, &format!("{id:?}"));
         }
-        let n = enemies::def(EnemyType::Necromancer);
         near(cd(&kit(KitSource::Enemy(EnemyType::Necromancer), enemies::attrs(EnemyType::Necromancer)), AbilityId::RaiseDead), 12.0 * 10.0 / 17.0, "Necromancer Raise Dead");
-        let s = enemies::def(EnemyType::Summoner);
         near(cd(&kit(KitSource::Enemy(EnemyType::Summoner), enemies::attrs(EnemyType::Summoner)), AbilityId::SummonImps), 12.0 * 10.0 / 15.0, "Summoner Summon Imps");
-        let demon = bosses::def(BossId::Demon);
         let k = kit(KitSource::Boss(BossId::Demon), bosses::attrs(BossId::Demon));
         assert_eq!((bosses::attrs(BossId::Demon).get(Attr::Cha), bosses::attrs(BossId::Demon).get(Attr::Dex)), (20, 14));
         near(cd(&k, AbilityId::RingOfFire), 4.5, "Ring of Fire");
         near(cd(&k, AbilityId::Swoop), 6.0 * 10.0 / 14.0, "Swoop");
-        let dragon = bosses::def(BossId::Dragon);
         let k = kit(KitSource::Boss(BossId::Dragon), bosses::attrs(BossId::Dragon));
         assert_eq!(bosses::attrs(BossId::Dragon).get(Attr::Cha), 20);
         near(cd(&k, AbilityId::FireBreath), 6.5 * 10.0 / 20.0, "Fire Breath");
