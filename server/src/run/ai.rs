@@ -278,6 +278,14 @@ pub fn tick_monster(run: &mut Run, mi: usize, dt: f64) {
     }
 }
 
+/// The attack cooldowns count down (a dodging creature's too: dodging does not pause them).
+pub(crate) fn count_cooldowns(run: &mut Run, mi: usize, dt: f64) {
+    let cdt = run.monsters[mi].effects.cooldown_dt(dt);
+    let ai = &mut run.monsters[mi].ai;
+    ai.cd -= cdt;
+    ai.alt_cd -= cdt;
+}
+
 fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     if run.monsters[mi].dormant || run.monsters[mi].hiding {
         return;
@@ -288,12 +296,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     }
     let (base_ai, base_speed, wanders) = (run.monsters[mi].base_ai, run.monsters[mi].base.speed, run.monsters[mi].wanders);
     let (pos, sight) = (run.monsters[mi].pos, run.monsters[mi].sight_now());
-    {
-        let cdt = run.monsters[mi].effects.cooldown_dt(dt);
-        let ai = &mut run.monsters[mi].ai;
-        ai.cd -= cdt;
-        ai.alt_cd -= cdt;
-    }
+    count_cooldowns(run, mi, dt);
 
     // Perception: only players in sight radius with line of sight count. A companion sees only the prey
     // its escort script picked (run/companion.rs).

@@ -170,7 +170,8 @@ pub fn plan(run: &Run, mi: usize, threats: &[Threat]) -> Option<Dodge> {
     let t = threats.first()?;
     let m = &run.monsters[mi];
     let pi = shot_index(run, t.shot)?;
-    let walk = super::ai::gait(run, mi, m.speed) * m.effects.speed_mul();
+    // The reach test uses the hop's average speed for the mimic, not the phase it is in.
+    let walk = m.speed * m.effects.speed_mul();
     if walk <= 0.0 {
         return None;
     }
@@ -233,6 +234,7 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, script_busy: bool) -> bool {
     }
     run.monsters[mi].dodge = cur;
     let Some(mut d) = cur else { return false };
+    super::ai::count_cooldowns(run, mi, dt);
     if d.wait > 0.0 {
         d.wait -= dt;
         run.monsters[mi].dodge = Some(d);
@@ -490,7 +492,6 @@ mod tests {
     // ---- the step and the hook ----
 
     use crate::defs::effects::EffectKind;
-    use crate::dungeon::TILE;
 
     /// Floor for `r` tiles around `c`.
     fn floor_around(run: &mut Run, c: Vec2, r: i32) {
@@ -541,19 +542,26 @@ mod tests {
 
     #[test]
     fn at_the_tier_an_orc_steps_aside_and_the_arrow_misses() {
+        // The stock numbers: notice 80 px at DEX 10 (84.8 at the orc's DEX 12), an orc of radius 6 and speed 52.
         let (mut run, mi) = fixture(ClassId::ElvenRanger, 80.0);
-        // The orc (radius 6, speed 52) needs 10 px = 0.19 s, so it must see the arrow 64+ px off: the stock notice
-        // distance (60 at DEX 10) is just short, so this test widens it.
-        run.smarts.notice.value = 80.0;
-        let hp = run.monsters[mi].hp;
+        assert_eq!(run.monsters[mi].attrs.get(crate::defs::attributes::Attr::Dex), 12);
+        let (hp, p0) = (run.monsters[mi].hp, run.monsters[mi].pos);
         fire(&mut run, AbilityId::Shoot, 0.0, 80.0);
-        run.step();
-        let d = run.monsters[mi].dodge.expect("it dodges");
-        assert!((d.to.x - run.monsters[mi].pos.x).abs() < 2.0, "straight sideways, not along the shot");
         let need = run.monsters[mi].radius + 2.0 + run.smarts.margin;
-        let (low, side) = play(&mut run, mi, 60);
+        run.step();
+        assert!(run.monsters[mi].dodge.is_some(), "it dodges");
+        for _ in 0..60 {
+            if run.monsters[mi].dodge.is_none() {
+                break;
+            }
+            run.step();
+        }
+        let p = run.monsters[mi].pos;
+        assert!(run.monsters[mi].dodge.is_none(), "the step is done");
+        assert!((p.y - p0.y).abs() >= need - 0.5, "it stepped {} px sideways (needed {need})", (p.y - p0.y).abs());
+        assert!((p.x - p0.x).abs() < 3.0, "and hardly along the shot: {}", p.x - p0.x);
+        let (low, _) = play(&mut run, mi, 60);
         assert_eq!(low, hp, "the arrow missed");
-        assert!(side >= need - 1.0, "it stepped {side} px sideways (needed about {need})");
     }
 
     #[test]
@@ -666,8 +674,7 @@ mod tests {
     /// An orc that has been chasing hero 1 for a while (east or west of it), hero 0 `up` px north of it shooting
     /// south across its path.
     fn chase(east: f64) -> (Run, usize) {
-        let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
-        run = crate::run::tests::test_run(&[ClassId::ElvenRanger, ClassId::ElvenRanger], BossId::Lich);
+        let mut run = crate::run::tests::test_run(&[ClassId::ElvenRanger, ClassId::ElvenRanger], BossId::Lich);
         run.monsters.clear();
         let at = run.players[0].pos() + Vec2::new(0.0, 100.0);
         floor_around(&mut run, at, 14);
@@ -684,7 +691,6 @@ mod tests {
         for _ in 0..12 {
             run.step();
         }
-        let _ = mi;
         assert!((run.monsters[mi2].pos.x - start.x) * east > 3.0, "it has been walking toward hero 1");
         (run, mi2)
     }
@@ -719,7 +725,6 @@ mod tests {
         let (tx, ty) = Map::tile_of(run.monsters[mi].pos);
         run.layout.map.set(tx, ty + 1, Tile::Wall);
         run.layout.map.set(tx, ty - 2, Tile::Wall);
-        let _ = TILE;
         fire(&mut run, AbilityId::Shoot, 0.0, 100.0);
         let d = plan(&run, mi, &threats(&run, mi)).expect("a dodge");
         assert!(d.to.y < run.monsters[mi].pos.y, "north");
@@ -749,14 +754,16 @@ mod tests {
         run.smarts.reaction = 0.1;
         let (hp, y0) = (run.monsters[mi].hp, run.monsters[mi].pos.y);
         fire(&mut run, AbilityId::Shoot, 0.0, 110.0);
-        let mut still = 0;
-        for _ in 0..6 {
+        for t in 1..=8 {
             run.step();
-            if (run.monsters[mi].pos.y - y0).abs() < 1e-9 {
-                still += 1;
+            let moved = (run.monsters[mi].pos.y - y0).abs() > 1e-9;
+            if t <= 5 {
+                assert!(!moved, "tick {t}: still waiting (0.1 s)");
+            }
+            if t == 8 {
+                assert!(moved, "and stepping by tick 8");
             }
         }
-        assert_eq!(still, 6, "it waits 0.1 s (6 ticks)");
         let (low, side) = play(&mut run, mi, 60);
         assert_eq!(low, hp, "cleared with the delay");
         assert!(side > 5.0);
@@ -768,5 +775,30 @@ mod tests {
             fire(&mut run, AbilityId::Shoot, 0.0, 80.0);
             assert_eq!(play(&mut run, mi, 60).0 < hp, hit, "reaction {reaction}");
         }
+    }
+
+    #[test]
+    fn a_knockback_ends_a_dodge() {
+        let (mut run, mi) = row(110.0);
+        fire(&mut run, AbilityId::Shoot, 0.0, 110.0);
+        run.step();
+        assert!(run.monsters[mi].dodge.is_some());
+        run.monsters[mi].knock = Vec2::new(0.0, 60.0);
+        run.step();
+        assert!(run.monsters[mi].dodge.is_none(), "no stale step after being knocked");
+    }
+
+    #[test]
+    fn cooldowns_keep_counting_while_dodging() {
+        let (mut run, mi) = row(110.0);
+        run.monsters[mi].ai.cd = 5.0;
+        run.monsters[mi].ai.alt_cd = 5.0;
+        fire(&mut run, AbilityId::Shoot, 0.0, 110.0);
+        for _ in 0..3 {
+            run.step();
+            assert!(run.monsters[mi].dodge.is_some(), "dodging");
+        }
+        let dt = 3.0 * super::super::DT;
+        assert!((run.monsters[mi].ai.cd - (5.0 - dt)).abs() < 1e-9 && (run.monsters[mi].ai.alt_cd - (5.0 - dt)).abs() < 1e-9);
     }
 }

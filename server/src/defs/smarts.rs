@@ -33,7 +33,7 @@ pub struct SmartsDef {
 pub const SMARTS: SmartsDef = SmartsDef {
     tier_int: [6, 11, 16, 21],
     needs: [0, 1, 1], // Dodge tier 0 (INT 6), AdvancedDodge tier 1 (INT 11), KeepDistance tier 1 (INT 11)
-    notice: Scaled { value: 60.0, attr: Attr::Dex, pct: 0.03, at: 10 },
+    notice: Scaled { value: 80.0, attr: Attr::Dex, pct: 0.03, at: 10 },
     reaction: 0.0,
     margin: 2.0,
     threat_share: 0.05,
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn notice_grows_with_dex() {
         let a = |dex| Attributes::new(10, dex, 10, 10, 10, 10);
-        assert_eq!(SMARTS.notice_px(&a(10)), 60.0);
-        assert!((SMARTS.notice_px(&a(15)) - 60.0 * 1.15 / 1.0).abs() < 1e-9);
+        assert_eq!(SMARTS.notice_px(&a(10)), 80.0);
+        assert!((SMARTS.notice_px(&a(15)) - 80.0 * 1.15).abs() < 1e-9);
     }
 }

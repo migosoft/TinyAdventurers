@@ -484,6 +484,7 @@ impl Run {
             if m.sinking.is_some() || m.knock != Vec2::ZERO {
                 self.monsters[mi].slam = None;
                 self.monsters[mi].ai.cast = None;
+                self.monsters[mi].dodge = None;
                 continue; // slid and sunk below
             }
             if m.effects.no_act() {
@@ -492,6 +493,7 @@ impl Run {
                 m.ai.windup = None;
                 m.ai.cast = None;
                 m.slam = None;
+                m.dodge = None;
                 if m.anim != Anim::Idle {
                     m.anim = Anim::Idle;
                     m.anim_start = self.time;
@@ -500,10 +502,13 @@ impl Run {
             }
             if m.effects.fear_from().is_some() && !m.hiding && !m.dormant {
                 self.monsters[mi].slam = None;
+                self.monsters[mi].dodge = None;
                 ai::flee(self, mi, DT);
                 continue;
             }
             let active = player_pos.iter().any(|pp| pp.dist2(m.pos) < ACTIVE_RANGE * ACTIVE_RANGE);
+            // A dodging tick skips the rest of the behaviour (regroup, escape_terrain, leave_wall) for that
+            // fraction of a second; the attack cooldowns still count (dodge::tick).
             if dodge::tick(self, mi, DT, false) {
                 continue;
             }
