@@ -226,11 +226,15 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, script_busy: bool) -> bool {
         let mine = ts.iter().find(|t| t.shot == d.shot).map_or(f64::INFINITY, |t| t.arrive);
         if ts.iter().any(|t| t.arrive < mine && t.shot != d.shot && !clears(run, mi, t, d.to)) {
             if let Some(new) = plan(run, mi, &ts) {
+                super::debug::send_dodge(run, m.pos, new.to);
                 cur = Some(new);
             }
         }
     } else if !ts.is_empty() {
         cur = plan(run, mi, &ts);
+        if let Some(d) = cur {
+            super::debug::send_dodge(run, m.pos, d.to);
+        }
     }
     run.monsters[mi].dodge = cur;
     let Some(mut d) = cur else { return false };
@@ -531,6 +535,32 @@ mod tests {
             side = side.max((m.pos.y - start.y).abs());
         }
         (low, side)
+    }
+
+    fn dodge_lines_sent(debug: bool) -> usize {
+        let (mut run, _) = fixture(ClassId::ElvenRanger, 80.0);
+        run.debug = debug;
+        run.players[0].debug = true;
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(tx);
+        fire(&mut run, AbilityId::Shoot, 0.0, 80.0);
+        for _ in 0..30 {
+            run.step();
+        }
+        let mut n = 0;
+        while let Ok(axum::extract::ws::Message::Binary(b)) = rx.try_recv() {
+            let v: serde_json::Value = rmp_serde::from_slice(&b).unwrap();
+            if v["t"] == "DebugDodge" {
+                n += 1;
+            }
+        }
+        n
+    }
+
+    #[test]
+    fn dodge_lines_only_in_debug_runs() {
+        assert_eq!(dodge_lines_sent(true), 1, "one line per plan in a debug run");
+        assert_eq!(dodge_lines_sent(false), 0);
     }
 
     #[test]

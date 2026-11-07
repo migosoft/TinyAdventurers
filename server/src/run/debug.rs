@@ -10,7 +10,9 @@ use super::effects::Creature;
 use super::magic::{Pick, Want};
 use super::Run;
 use crate::collision::walk_line;
+use crate::defs::attributes::Attr;
 use crate::defs::enemies::EnemyType;
+use crate::defs::smarts::Smart;
 use crate::defs::{items, trees};
 use crate::dungeon::{Map, Mover};
 use crate::math::Vec2;
@@ -120,8 +122,8 @@ impl Run {
             let name = self.players[pi].name.clone();
             self.event(Ev::Msg { text: format!("{name} entered debug mode (immortal)") }, None);
         }
-        let (points, ogre, cove) = if on { (boss_path(self, pi), ogre_path(self, pi), cove_path(self, pi)) } else { (Vec::new(), Vec::new(), Vec::new()) };
-        self.send(&self.players[pi], &ServerMsg::DebugPath { on, immortal: on, points, ogre, cove });
+        let (points, ogre, cove, notice) = if on { (boss_path(self, pi), ogre_path(self, pi), cove_path(self, pi), notice_circles(self)) } else { Default::default() };
+        self.send(&self.players[pi], &ServerMsg::DebugPath { on, immortal: on, points, ogre, cove, notice });
     }
 
     /// Debug cheat (F9): immortality on or off. Only in debug mode; the run stays a debug run.
@@ -133,14 +135,33 @@ impl Run {
         p.mortal = !on;
         let name = p.name.clone();
         self.event(Ev::Msg { text: format!("{name} is {} (debug)", if on { "immortal" } else { "mortal" }) }, None);
-        let (points, ogre, cove) = (boss_path(self, pi), ogre_path(self, pi), cove_path(self, pi));
-        self.send(&self.players[pi], &ServerMsg::DebugPath { on: true, immortal: on, points, ogre, cove });
+        let (points, ogre, cove, notice) = (boss_path(self, pi), ogre_path(self, pi), cove_path(self, pi), notice_circles(self));
+        self.send(&self.players[pi], &ServerMsg::DebugPath { on: true, immortal: on, points, ogre, cove, notice });
     }
 }
 
 /// The living ogre mini-boss, if any.
 fn ogre_target(run: &Run) -> Option<Vec2> {
     run.monsters.iter().find(|m| m.alive && m.etype == Some(EnemyType::Ogre)).map(|m| m.pos)
+}
+
+/// Every living creature that can dodge (INT at the Dodge tier): its id and notice distance in px (#220).
+pub fn notice_circles(run: &Run) -> Vec<(u32, f32)> {
+    run.monsters
+        .iter()
+        .filter(|m| m.alive && run.smarts.can(m.attrs.get(Attr::Int), Smart::Dodge))
+        .map(|m| (m.id, run.smarts.notice_px(&m.attrs) as f32))
+        .collect()
+}
+
+/// A dodge was planned: every debug hero of a debug run sees the line from `from` to `to`.
+pub fn send_dodge(run: &Run, from: Vec2, to: Vec2) {
+    if !run.debug {
+        return;
+    }
+    for p in run.players.iter().filter(|p| p.debug) {
+        run.send(p, &ServerMsg::DebugDodge { from: (from.x as f32, from.y as f32), to: (to.x as f32, to.y as f32) });
+    }
 }
 
 pub fn boss_path(run: &Run, pi: usize) -> Vec<(f32, f32)> {
@@ -199,8 +220,8 @@ fn shortest_path(run: &Run, pi: usize, to: Vec2) -> Vec<(f32, f32)> {
 pub fn send_paths(run: &Run) {
     for (pi, p) in run.players.iter().enumerate() {
         if p.debug && p.alive && p.tx.is_some() {
-            let (points, ogre, cove) = (boss_path(run, pi), ogre_path(run, pi), cove_path(run, pi));
-            run.send(p, &ServerMsg::DebugPath { on: true, immortal: p.immortal(), points, ogre, cove });
+            let (points, ogre, cove, notice) = (boss_path(run, pi), ogre_path(run, pi), cove_path(run, pi), notice_circles(run));
+            run.send(p, &ServerMsg::DebugPath { on: true, immortal: p.immortal(), points, ogre, cove, notice });
         }
     }
 }
@@ -292,6 +313,20 @@ mod tests {
         assert!(run.debug, "still a debug run");
         run.set_debug(1, true);
         assert!(!run.players[1].mortal, "debug on again starts immortal");
+    }
+
+    #[test]
+    fn notice_circles_list_only_creatures_at_the_dodge_tier() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        crate::run::ai::tests::open_floor(&mut run);
+        run.monsters.clear();
+        let at = run.players[0].pos() + Vec2::new(60.0, 0.0);
+        let orc = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
+        let skel = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None);
+        let list = notice_circles(&run);
+        let o = run.monsters[run.monster_idx(orc).unwrap()].attrs.clone();
+        assert_eq!(list, vec![(orc, run.smarts.notice_px(&o) as f32)]);
+        assert!(!list.iter().any(|&(id, _)| id == skel));
     }
 
     #[test]
