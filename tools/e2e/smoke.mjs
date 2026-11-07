@@ -1,7 +1,7 @@
 // Two-player smoke test: register two throwaway accounts, create a character each,
 // create/join a run, start, move, attack, screenshots; then a second login closes
 // the first window, and both accounts are deleted again.
-// Usage: node smoke.mjs [baseUrl] [query] [outDir] [Class1,Class2]
+// Usage: node smoke.mjs [baseUrl] [query] [outDir] [Class1,Class2] [dungeon|woodland]
 //   e.g. node smoke.mjs http://localhost:8080/ "?debug" shots Paladin,Wizard
 // Set BROWSER to a Chrome/Edge executable if Edge is not at the default Windows path.
 // Set LOG=1 to turn the rules log on in both windows (key L) and assert that a `.rules-log .rl-row` appears.
@@ -15,6 +15,7 @@ const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
 const out = process.argv[4] ?? '.';
 const classes = (process.argv[5] ?? 'Wizard,Barbarian').split(',');
+const level = (process.argv[6] ?? 'dungeon').toLowerCase();
 const launch = () => chromium.launch({ executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const browser = await launch();
 const errors = [];
@@ -102,7 +103,13 @@ const p1 = a1.page;
 await p1.fill('#runname', 'Test Crawl');
 await p1.click('#create');
 await p1.waitForSelector('.players li');
+if (level === 'woodland') {
+  await p1.click('.level-card.level-woodland');
+  await p1.waitForSelector('.level-card.level-woodland.selected');
+  if ((await p1.locator('.boss-list').count()) !== 0) throw new Error('boss panel must be hidden for woodland');
+}
 await p1.screenshot({ path: `${out}/1-room.png` });
+await p1.locator('.level-panel').screenshot({ path: `${out}/1-level-panel.png` });
 
 const a2 = await player('Bob', classes[1]);
 const p2 = a2.page;
@@ -116,6 +123,7 @@ await p2.click('#ready');
 await p2.waitForFunction(() => !document.querySelector('[data-own]'));
 console.log('waiting room: own loadout picker shown');
 await p1.waitForFunction(() => document.querySelectorAll('.players .ok').length === 2);
+if (level === 'woodland') await p2.waitForSelector('.level-card.level-woodland.selected'); // the guest sees the host's choice
 await p1.click('#start');
 await p1.waitForSelector('#game.active', { timeout: 10000 });
 await p2.waitForSelector('#game.active', { timeout: 10000 });
