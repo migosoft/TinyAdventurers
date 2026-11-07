@@ -4,8 +4,7 @@
 /** The room's floor area in px (origin = its top-left floor pixel) and the trunk foot in the same space. */
 export interface CoveSpec { w: number; h: number; tree: { x: number; y: number }; seed: number }
 
-/** Mirrors scripts/cove-frames.ts (the client cannot import from there): the trunk foot inside cove_tree, px. */
-export const COVE_TREE_FOOT = { x: 48, y: 79 };
+export { COVE_TREE_FOOT } from './vegetation';
 
 export const COVE_PLANTS = ['cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern'] as const;
 export type CovePlantFrame = typeof COVE_PLANTS[number];

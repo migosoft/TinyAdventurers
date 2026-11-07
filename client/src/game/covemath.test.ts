@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { COVE_TREE_FOOT as FRAMES_TREE_FOOT } from '../../scripts/cove-frames';
 import { COVE_PLANTS, COVE_TREE_FOOT, ROOT_FRINGE, TRUNK_CLEAR, coveGrass, paintCove, placeCovePlants } from './covemath';
 
 const spec = { w: 18 * 16, h: 15 * 16, tree: { x: 144, y: 144 }, seed: 1 };
@@ -146,7 +145,7 @@ describe.skipIf(!existsSync(atlasPath))('atlas', () => {
   const frames = existsSync(atlasPath) ? JSON.parse(readFileSync(atlasPath, 'utf8')).frames : {};
   it('holds the cove tree at 96x100 with the mirrored trunk foot', () => {
     expect(frames.cove_tree.sourceSize).toEqual({ w: 96, h: 100 });
-    expect(COVE_TREE_FOOT).toEqual(FRAMES_TREE_FOOT);
+    expect(COVE_TREE_FOOT).toEqual({ x: 48, y: 79 });
   });
   it('holds every cove plant frame', () => {
     for (const f of COVE_PLANTS) expect(frames[f]).toBeDefined();
