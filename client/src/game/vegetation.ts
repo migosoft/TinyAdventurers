@@ -108,7 +108,7 @@ function roundish(o: TreeOpts & { shape: Exclude<Shape, 'conifer'> }): Drawn {
   if (detail) for (let k = 0; k < 7; k++) { const x0 = cx + (-6 + r() * 12) * tw, y0 = Y(52 + r() * 22), len = (4 + r() * 8) * s; for (let i = 0; i < len; i++) if (cv.get(x0, y0 + i) !== null) cv.set(x0, y0 + i, 'a'); }
   for (let k = 0; k < 40 * s; k++) { const x = cx + (-26 + r() * 52) * s, y = footY - 4 * s + r() * 8 * s; const c = cv.get(x, y); if (c && 'cd'.includes(c) && cv.get(x, y - 1) !== null) cv.set(x, y, r() < 0.5 ? '2' : '3'); }
   // canopy
-  const list = CANOPY.map(([dx, y, rx, ry]) => ({ x: X(dx + (r() - 0.5) * 3), y: Y(y + (r() - 0.5) * 2), rx: (rx + (r() - 0.5) * 2) * s * sh.rx, ry: (ry + (r() - 0.5) * 1.5) * s * sh.rx * Math.min(1.1, sh.sy),}));
+  const list = CANOPY.map(([dx, y, rx, ry]) => ({ x: X(dx + (r() - 0.5) * 3), y: Y(y + (r() - 0.5) * 2), rx: (rx + (r() - 0.5) * 2) * s * sh.rx, ry: (ry + (r() - 0.5) * 1.5) * s * sh.rx * Math.min(1.1, sh.sy) }));
   clumps(cv, r, list, Y(13), 45 * s * sh.sy, '01234');
   for (let k = 0; k < 160 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); const c = cv.get(x, y);
     if (c === '2' && cv.get(x + 1, y) === '2') { cv.set(x, y, '3'); if (r() < 0.5) cv.set(x + 1, y - 1, '3'); }
@@ -180,7 +180,7 @@ export function drawBush(o: { seed: number; width: number }): Drawn {
   const { seed } = o;
   const width = o.width / BUSH_SPREAD; // the clump layout below is sized by its centre spacing; the drawn bush spreads wider
   const r = rng(seed); const cv = new Canvas(120, 100); const cx = 60, ground = 85;
-  const s = width / 32, n = width < 28 ? 3 : width < 40 ? 4 : 5;
+  const s = width / 32, n = o.width < 28 ? 3 : o.width < 40 ? 4 : 5; // clump count by the drawn size
   const list: { x: number; y: number; rx: number; ry: number }[] = [];
   list.push({ x: cx + (r() - 0.5) * 3 * s, y: ground - 13 * s, rx: (10 + r() * 2) * s, ry: (7 + r()) * s }); // back top
   for (let i = 0; i < n - 1; i++) { const t = i / (n - 2); list.push({ x: cx + (t - 0.5) * 20 * s + (r() - 0.5) * 3 * s, y: ground - (6 + r() * 2) * s, rx: (8 + r() * 3) * s, ry: (6 + r() * 1.5) * s }); }
