@@ -84,6 +84,17 @@ export class Clouds {
   constructor(private scene: Phaser.Scene) {
     this.bake();
     this.sprite = scene.add.tileSprite(0, 0, 16, 16, TEX).setOrigin(0).setScale(CLOUD_SCALE).setDepth(DEPTH.cloud);
+    this.smooth();
+  }
+
+  /**
+   * A TileSprite does not sample the canvas texture: it copies the frame into its own pattern texture (`fillPattern`,
+   * rebuilt by `setFrame`), which Phaser uploads as NEAREST under pixelArt. Make that one LINEAR, after every rebuild.
+   */
+  private smooth(): void {
+    const r = this.scene.renderer as Phaser.Renderer.WebGL.WebGLRenderer;
+    const pattern = this.sprite.fillPattern as unknown;
+    if (r.gl && pattern) r.setTextureFilter(pattern as Phaser.Renderer.WebGL.Wrappers.WebGLTextureWrapper, LINEAR);
   }
 
   private bake(): void {
@@ -95,8 +106,9 @@ export class Clouds {
     bakeCloud(new Uint32Array(data.data.buffer), this.look);
     tex.getContext().putImageData(data, 0, 0);
     tex.refresh();
-    tex.setFilter(LINEAR); // refresh() resets it to NEAREST under pixelArt
+    tex.setFilter(LINEAR); // for canvas rendering; under WebGL the sprite's own pattern matters (smooth)
     this.baked = { size, cover };
+    if (this.sprite) { this.sprite.setTexture(TEX); this.smooth(); } // the sprite rebuilds its pattern only from setFrame
   }
 
   /** Scrolls the shadow over the camera window `cam` at time `t` (s). */
