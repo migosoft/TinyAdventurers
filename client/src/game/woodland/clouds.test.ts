@@ -20,7 +20,7 @@ describe('cloudAlpha', () => {
 
   it('drifts along +x with a slight +y at the look speed', () => {
     const look = { ...DEFAULT_CLOUDS };
-    expect(cloudAlpha(500 + 14 * 10, 300 + 14 * 0.2 * 10, 10, look)).toBeCloseTo(cloudAlpha(500, 300, 0, look), 9);
+    expect(cloudAlpha(500 + look.speed * 10, 300 + look.speed * 0.2 * 10, 10, look)).toBeCloseTo(cloudAlpha(500, 300, 0, look), 9);
   });
 
   it('is periodic: F(x + period, y) == F(x, y), and so in y, for every size', () => {

@@ -14,7 +14,7 @@ export interface CloudLook {
   /** Share of the map under cloud (0..1). */
   cover: number;
 }
-export const DEFAULT_CLOUDS: CloudLook = { size: 360, speed: 14, dark: 0.22, cover: 0.35 };
+export const DEFAULT_CLOUDS: CloudLook = { size: 360, speed: 26, dark: 0.30, cover: 0.35 };
 /** The canvas pixel is this many screen pixels. */
 export const CLOUD_SCALE = 4;
 /** Phaser's `FilterMode.LINEAR` (a runtime import of Phaser would not load in unit tests). */

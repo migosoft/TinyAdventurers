@@ -65,6 +65,11 @@ function clumps(cv: Canvas, r: () => number, list: { x: number; y: number; rx: n
   }
 }
 
+/** Moss on the lit root pixels around the foot (leafy greens '2'/'3'), shared by the leafy trees and the conifer. */
+function rootMoss(cv: Canvas, r: () => number, cx: number, footY: number, s: number): void {
+  for (let k = 0; k < 40 * s; k++) { const x = cx + (-26 + r() * 52) * s, y = footY - 4 * s + r() * 8 * s; const c = cv.get(x, y); if (c && 'cd'.includes(c) && cv.get(x, y - 1) !== null) cv.set(x, y, r() < 0.5 ? '2' : '3'); }
+}
+
 export function drawTree(o: TreeOpts): Drawn {
   if (o.shape === 'conifer') return drawConifer(o.seed, o.scale);
   return roundish({ ...o, shape: o.shape });
@@ -106,7 +111,7 @@ function roundish(o: TreeOpts & { shape: Exclude<Shape, 'conifer'> }): Drawn {
   paint(trunk, false, footY);
   roots.sort((A, B) => A[A.length - 1].y - B[B.length - 1].y).forEach((sg) => paint(sg, true));
   if (detail) for (let k = 0; k < 7; k++) { const x0 = cx + (-6 + r() * 12) * tw, y0 = Y(52 + r() * 22), len = (4 + r() * 8) * s; for (let i = 0; i < len; i++) if (cv.get(x0, y0 + i) !== null) cv.set(x0, y0 + i, 'a'); }
-  for (let k = 0; k < 40 * s; k++) { const x = cx + (-26 + r() * 52) * s, y = footY - 4 * s + r() * 8 * s; const c = cv.get(x, y); if (c && 'cd'.includes(c) && cv.get(x, y - 1) !== null) cv.set(x, y, r() < 0.5 ? '2' : '3'); }
+  rootMoss(cv, r, cx, footY, s);
   // canopy
   const list = CANOPY.map(([dx, y, rx, ry]) => ({ x: X(dx + (r() - 0.5) * 3), y: Y(y + (r() - 0.5) * 2), rx: (rx + (r() - 0.5) * 2) * s * sh.rx, ry: (ry + (r() - 0.5) * 1.5) * s * sh.rx * Math.min(1.1, sh.sy) }));
   clumps(cv, r, list, Y(13), 45 * s * sh.sy, '01234');
@@ -143,6 +148,7 @@ function drawConifer(seed: number, s: number): Drawn {
   const R: [number, number][] = detail ? [[-1, 0.2], [-0.35, 0.6], [0.4, 0.55], [1, 0.2]] : [[-1, 0.25], [0, 0.6], [1, 0.25]];
   for (const [vx, vy] of R) { const len = (8 + r() * 3) * s, m = Math.hypot(vx, vy); const n = Math.max(6, Math.round(len * 1.5)); let x = cx + (vx / m) * 3 * s, y = footY - 1;
     for (let i = 0; i <= n; i++) { const t = i / n; paint(x, y, 2.6 * s * (1 - t) ** 1.2 + 0.5, true); const fy = vy * (1 - 0.6 * t), mm = Math.hypot(vx, fy); x += (vx / mm) * (len / n); y += (fy / mm) * (len / n); } }
+  rootMoss(cv, rng(seed ^ 0x6d6f7373), cx, footY, s); // its own stream, so the tiers below are drawn as before
   // tiers, bottom first so higher ones overlap; each is a centre clump, two side clumps and two drooping tips
   const span = 82 - bare - 29, nominal = s < 0.7 ? 10.5 : 8.4; // tier spacing stays near nominal: longer trunk, fewer tiers
   const n = Math.max(3, Math.round(span / nominal) + 1), step = span / (n - 1), NW = 0.67; // NW slims the silhouette
