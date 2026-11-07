@@ -286,6 +286,11 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
                 _ => (PlantKind::Wide, 3.2, 80, 120),
             }; // balancing
             let foot = jitter(&mut rng, x, y);
+            // from the foot's own position: none within 3 tiles of the road's centre line, half of those within 5
+            let d = (foot.y - line(x)).abs() / TILE;
+            if d < 3.0 || (d < 5.0 && !rng.gen_bool(0.5)) {
+                continue;
+            } // balancing
             if !placed.free(foot, spacing) {
                 continue;
             }
