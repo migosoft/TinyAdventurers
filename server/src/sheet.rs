@@ -675,7 +675,6 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
         b
     };
     let def = classes::def(class);
-    let start = classes::start_attrs(class);
     let unequipped = attrs_without_items(class, b);
     let tree = trees::gains(&b.nodes);
     items::check_equipment(class, &profs(class, &b.nodes), &b.equipment).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
@@ -778,7 +777,7 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
     let sheet = Sheet {
         attrs,
         max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp).max(1.0),
-        speed: move_speed(def.speed, start.get(Attr::Con), &attrs) * (1.0 + move_frac),
+        speed: move_speed(def.speed, attributes::BASELINE + def.attr_mods.get(Attr::Con), &attrs) * (1.0 + move_frac),
         weight,
         res,
         effect_res,

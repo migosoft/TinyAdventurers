@@ -3,7 +3,7 @@
 //! effects; an entity can have several races, plus its own
 //! adjustments (`Adjust`). Balancing edits only this data.
 
-use super::attributes::Attributes;
+use super::attributes::{Attributes, BASELINE};
 use super::damage::{DamageType, DamageType::*, Resistances};
 use super::effects::{EffectKind, EffectResistances};
 
@@ -75,7 +75,7 @@ pub struct RaceDef {
     /// Vision and darkvision (tiles).
     pub vision: f64,
     pub darkvision: f64,
-    /// Attribute bonus of the race (only the Elf has one).
+    /// Attribute bonus of the race (only the Elf and the Magical Beast have one).
     pub attrs: Attributes,
     /// Its effect resistances (elves and magical beasts never fall asleep).
     pub effect_res: EffectResistances,
@@ -107,13 +107,18 @@ pub fn race_def(r: Race) -> RaceDef {
             })));
             RaceDef { effect_res: EffectResistances::of(&[(EffectKind::Entangled, 1.0)]), traits: Traits { phasing: true, invisibility: true, knock_immune: true, bodiless: true }, ..plain(res, 0.0, 0.0) }
         }
-        Race::MagicalBeast => RaceDef { effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1), (Magical, 0.1)]), 18.0, 1.0) },
+        Race::MagicalBeast => RaceDef { attrs: Attributes::new(0, 0, 0, 3, 0, 0), effect_res: never_sleeps, ..plain(Resistances::of(&[(Poison, 0.1), (Magical, 0.1)]), 18.0, 1.0) },
     }
 }
 
 /// The summed Attribute bonuses of the races.
 pub fn race_attrs(races: &[Race]) -> Attributes {
     races.iter().fold(Attributes::default(), |a, &r| a.plus(race_def(r).attrs))
+}
+
+/// Layers 1-3 of every creature's Attributes: `BASELINE` (10) for all six, plus the races' bonuses, plus its own modifier.
+pub fn creature_attrs(races: &[Race], mods: Attributes) -> Attributes {
+    Attributes::new(BASELINE, BASELINE, BASELINE, BASELINE, BASELINE, BASELINE).plus(race_attrs(races)).plus(mods)
 }
 
 /// One entity's own changes on top of its races.
@@ -316,11 +321,18 @@ mod tests {
     }
 
     #[test]
-    fn only_the_elf_has_an_attribute_bonus() {
+    fn the_elf_and_the_magical_beast_have_attribute_bonuses() {
         assert_eq!(race_def(Race::Elf).attrs, Attributes::new(0, 2, 0, 0, 0, 0));
-        for r in Race::ALL.into_iter().filter(|&r| r != Race::Elf) {
+        assert_eq!(race_def(Race::MagicalBeast).attrs, Attributes::new(0, 0, 0, 3, 0, 0));
+        for r in Race::ALL.into_iter().filter(|r| ![Race::Elf, Race::MagicalBeast].contains(r)) {
             assert_eq!(race_def(r).attrs, Attributes::default(), "{r:?}");
         }
         assert_eq!(race_attrs(&[Race::Human, Race::Elf]), Attributes::new(0, 2, 0, 0, 0, 0));
+    }
+
+    #[test]
+    fn creature_attrs_is_ten_plus_races_plus_mods() {
+        assert_eq!(creature_attrs(&[], Attributes::default()), Attributes::new(10, 10, 10, 10, 10, 10));
+        assert_eq!(creature_attrs(&[Race::Elf, Race::MagicalBeast], Attributes::new(9, -1, 0, -9, 0, 1)), Attributes::new(19, 11, 10, 4, 10, 11));
     }
 }

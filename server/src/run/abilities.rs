@@ -2193,7 +2193,7 @@ mod tests {
 
     #[test]
     fn a_fire_bolt_burns_at_its_users_governing_attribute() {
-        let con = crate::defs::classes::def(ClassId::Paladin).attrs.get(crate::defs::attributes::Attr::Con);
+        let con = crate::defs::classes::start_attrs(ClassId::Paladin).get(crate::defs::attributes::Attr::Con);
         assert_eq!(con, 13);
         assert_eq!(fire_bolt_burn(EnemyType::Imp, None), Some(burn_secs(14, con)), "the imp's innate fire: CHA 14");
         assert_eq!(fire_bolt_burn(EnemyType::Chort, None), Some(burn_secs(10, con)), "the chort's CHA 9: at least 10");
