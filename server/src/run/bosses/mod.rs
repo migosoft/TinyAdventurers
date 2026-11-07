@@ -22,6 +22,10 @@ pub trait BossBehaviour: Send {
     fn gaze_target(&self) -> Option<u32> {
         None
     }
+    /// The script is in the middle of its own action (wind-up, cast, flight): the boss doesn't dodge.
+    fn busy(&self) -> bool {
+        false
+    }
     fn tick(&mut self, run: &mut Run, dt: f64);
 }
 

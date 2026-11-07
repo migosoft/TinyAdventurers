@@ -51,6 +51,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         slam: None,
         channel: None,
         dash: None,
+        dodge: None,
         wolf_bit: 0.0,
         // No pause before the first bite (an enemy starts with half a second).
         ai: Ai { cd: 0.0, ..Ai::new(spot) },

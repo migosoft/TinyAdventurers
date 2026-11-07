@@ -921,6 +921,8 @@ mod tests {
         run.objects[oi].state = ObjState::Chest { opened: Some(0.0) };
         let mi = monster_at(&mut run, Vec2::new(80.0, 0.0));
         let hp = run.monsters[mi].hp;
+        // This test is about the chest, not the target's wits: below the Dodge tier it stands still under fire.
+        run.smarts.tier_int[0] = 99;
         use_ability(&mut run, crate::defs::abilities::AbilityId::MagicMissile, 0.0);
         step_for(&mut run, 1.0);
         assert!(run.monsters[mi].hp < hp, "it hit the monster behind");

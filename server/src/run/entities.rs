@@ -213,6 +213,16 @@ pub struct Companion {
     pub reach_t: f64,
 }
 
+/// A dodge step in progress (run/dodge.rs): the shot it is stepping clear of, where it steps to, and the
+/// reaction delay left.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Dodge {
+    pub shot: u32,
+    pub to: Vec2,
+    /// Reaction delay left (s).
+    pub wait: f64,
+}
+
 pub struct Monster {
     pub id: u32,
     /// Resistances (races plus adjustments) and the split of its melee hits.
@@ -251,6 +261,8 @@ pub struct Monster {
     pub channel: Option<(AbilityId, f64, f64)>,
     /// A dash in progress: it is in the air, so it is neither pushed nor sinking meanwhile.
     pub dash: Option<MonsterDash>,
+    /// A dodge step in progress (run/dodge.rs).
+    pub dodge: Option<Dodge>,
     /// Seconds left of the wolf-bite mark (Pack Hunter).
     pub wolf_bit: f64,
     pub ai: Ai,
@@ -324,10 +336,15 @@ impl Monster {
     /// `SHOT_HEIGHT` px above their ground point and figures stand up from their
     /// feet, so a tall figure is a capsule reaching north from `pos`, not a circle.
     pub fn shot_dist(&self, p: Vec2) -> f64 {
+        self.shot_dist_at(self.pos, p)
+    }
+
+    /// `shot_dist` as if this monster stood at `at`: the one hit capsule, shared by the real hit and the dodge.
+    pub fn shot_dist_at(&self, at: Vec2, p: Vec2) -> f64 {
         let lift = if self.airborne { DRAGON_LIFT } else { 0.0 };
         let reach = (self.kind.body_height() + lift - SHOT_HEIGHT - self.radius).max(0.0);
-        let y = p.y.clamp(self.pos.y - reach, self.pos.y);
-        p.dist(Vec2::new(self.pos.x, y))
+        let y = p.y.clamp(at.y - reach, at.y);
+        p.dist(Vec2::new(at.x, y))
     }
 }
 

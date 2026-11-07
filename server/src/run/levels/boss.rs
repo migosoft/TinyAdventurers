@@ -74,6 +74,7 @@ pub fn spawn(run: &mut Run) {
         slam: None,
         channel: None,
         dash: None,
+        dodge: None,
         wolf_bit: 0.0,
         ai: Ai::new(pos),
         base_ai: BaseAi::Melee, // the boss's script never reads it
@@ -113,8 +114,17 @@ pub fn tick(run: &mut Run, dt: f64) {
     let held = run.monsters.iter().any(|m| m.id == enc(run).boss_ent && (m.effects.no_act() || crate::run::charm::is_on(m)));
     if enc(run).awake && !held {
         if let Some(mut b) = enc_mut(run).behaviour.take() {
-            b.tick(run, dt);
+            // The boss dodges by the same rule as any monster, unless its script is mid-action; the script's
+            // timers wait out the dodge (a fraction of a second).
+            let dodged = bosses::boss_idx(run).is_some_and(|bi| crate::run::dodge::tick(run, bi, dt, b.busy()));
+            if !dodged {
+                b.tick(run, dt);
+            }
             enc_mut(run).behaviour = Some(b);
+        }
+    } else if held {
+        if let Some(bi) = bosses::boss_idx(run) {
+            run.monsters[bi].dodge = None;
         }
     }
 }

@@ -8,6 +8,7 @@ pub mod bosses;
 pub mod charm;
 pub mod companion;
 pub mod debug;
+pub mod dodge;
 pub mod effects;
 pub mod entities;
 pub mod keystones;
@@ -154,6 +155,8 @@ pub struct Run {
     pub ended: Option<(bool, f64)>,
     /// A debug run (its room was a debug room): every hero is in debug mode and the debug messages work. Recorded as `runs.debug`.
     pub debug: bool,
+    /// The INT tier rule and the dodge knobs (`defs/smarts.rs`).
+    pub smarts: crate::defs::smarts::SmartsDef,
     pub srv_ms: f32,
     pub log: rules_log::RulesLog,
     /// Test-only capture of the last `Damage` that reached `hurt_monster` or `hurt_player`.
@@ -188,6 +191,7 @@ impl Run {
             rng,
             ended: None,
             debug: false,
+            smarts: crate::defs::smarts::SMARTS,
             srv_ms: 0.0,
             log: rules_log::RulesLog::default(),
             #[cfg(test)]
@@ -326,6 +330,7 @@ impl Run {
             slam: None,
             channel: None,
             dash: None,
+        dodge: None,
             wolf_bit: 0.0,
             ai: Ai::new(pos),
             base_ai: d.base_ai,
@@ -479,6 +484,7 @@ impl Run {
             if m.sinking.is_some() || m.knock != Vec2::ZERO {
                 self.monsters[mi].slam = None;
                 self.monsters[mi].ai.cast = None;
+                self.monsters[mi].dodge = None;
                 continue; // slid and sunk below
             }
             if m.effects.no_act() {
@@ -487,6 +493,7 @@ impl Run {
                 m.ai.windup = None;
                 m.ai.cast = None;
                 m.slam = None;
+                m.dodge = None;
                 if m.anim != Anim::Idle {
                     m.anim = Anim::Idle;
                     m.anim_start = self.time;
@@ -495,10 +502,16 @@ impl Run {
             }
             if m.effects.fear_from().is_some() && !m.hiding && !m.dormant {
                 self.monsters[mi].slam = None;
+                self.monsters[mi].dodge = None;
                 ai::flee(self, mi, DT);
                 continue;
             }
             let active = player_pos.iter().any(|pp| pp.dist2(m.pos) < ACTIVE_RANGE * ACTIVE_RANGE);
+            // A dodging tick skips the rest of the behaviour (regroup, escape_terrain, leave_wall) for that
+            // fraction of a second; the attack cooldowns still count (dodge::tick).
+            if dodge::tick(self, mi, DT, false) {
+                continue;
+            }
             behaviour::tick(self, mi, DT, active);
         }
         Level::tick(self, DT);
@@ -1788,6 +1801,7 @@ pub mod tests {
     // on overkill, a Wizard's staff on an orc in melee, a goblin archer punching a hero beside it.
     // 2026-11-04, the cooldown chain (#198): cooldowns scale with Attributes, so the ranger and wizard fights (the first two values) differ; the paladin's is unchanged. Re-recorded once, on purpose.
     // 2026-11-04, haunts out of the hash (#199): `fight` numbers its enemies from `FIGHT_IDS`, so the haunt tuning no longer moves these values. Re-recorded once, on purpose; the outcomes are unchanged.
+    // 2026-11-07, dodging and keeping distance (#220): the ranger's and the paladin's fights changed on purpose (goblin archers dodge and no longer back away); the wizard's is unchanged.
     #[test]
     fn plan_3a_fight_is_pinned() {
         use crate::defs::enemies::EnemyType as E;
@@ -1795,11 +1809,12 @@ pub mod tests {
         let ranger = fight(ClassId::ElvenRanger, E::GoblinArcher, &[40.0, 50.0, 60.0], &[5.0, 5.0, 24.0], true);
         let wizard = fight(ClassId::Wizard, E::OrcWarrior, &[12.0], &[60.0], true);
         let paladin = fight(ClassId::Paladin, E::GoblinArcher, &[12.0], &[24.0], false);
-        assert!(enemies(&ranger).is_empty(), "the three goblins fall");
+        // 2026-11-07, dodging (#220): goblin archers (INT 10) step aside from shots they see coming, so the third goblin survives hurt.
+        assert!(matches!(enemies(&ranger)[..], [(true, hp)] if hp < 24.0), "the two weak goblins fall, the third is hurt");
         assert!(matches!(enemies(&wizard)[..], [(true, hp)] if hp < 60.0) && wizard.projectiles.is_empty(), "the staff, not missiles");
         assert!(paladin.players[0].hp < paladin.players[0].max_hp, "the archer punches");
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [15748663038908748737, 7896150550252767994, 14063248820283652292]);
+        assert_eq!(got, [17891591712672026376, 7896150550252767994, 858296736700943210]);
     }
 
     #[test]
@@ -1809,7 +1824,7 @@ pub mod tests {
         let wizard = fight_with_log(ClassId::Wizard, E::OrcWarrior, &[12.0], &[60.0], true, true);
         let paladin = fight_with_log(ClassId::Paladin, E::GoblinArcher, &[12.0], &[24.0], false, true);
         let got = [fingerprint(&ranger), fingerprint(&wizard), fingerprint(&paladin)];
-        assert_eq!(got, [15748663038908748737, 7896150550252767994, 14063248820283652292]);
+        assert_eq!(got, [17891591712672026376, 7896150550252767994, 858296736700943210]);
     }
 
     #[test]

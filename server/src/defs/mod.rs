@@ -16,5 +16,6 @@ pub mod looks;
 pub mod objects;
 pub mod progression;
 pub mod requirements;
+pub mod smarts;
 pub mod trees;
 pub mod weapons;

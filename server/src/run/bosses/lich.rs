@@ -113,6 +113,9 @@ impl Lich {
 }
 
 impl BossBehaviour for Lich {
+    fn busy(&self) -> bool {
+        self.action.is_some()
+    }
     fn gaze_target(&self) -> Option<u32> {
         self.gaze
     }

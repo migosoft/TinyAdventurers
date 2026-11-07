@@ -380,7 +380,10 @@ pub enum ServerMsg {
     /// Debug mode: shortest walkable path from the player to the boss (pixel waypoints).
     /// `ogre`: the path to the ogre mini-boss while it lives (else empty). `cove`: the path to the nymph's cove while the
     /// hero is outside it (else empty). `immortal`: false after `DebugImmortal { on: false }`.
-    DebugPath { on: bool, immortal: bool, points: Vec<(f32, f32)>, ogre: Vec<(f32, f32)>, cove: Vec<(f32, f32)> },
+    /// `notice`: the dodge notice circles, (entity id, radius px) of every living creature smart enough to dodge (#220).
+    DebugPath { on: bool, immortal: bool, points: Vec<(f32, f32)>, ogre: Vec<(f32, f32)>, cove: Vec<(f32, f32)>, notice: Vec<(u32, f32)> },
+    /// Debug mode: a creature planned a dodge (#220), from where it stood to where it steps. Sent once per new plan.
+    DebugDodge { from: (f32, f32), to: (f32, f32) },
 }
 
 /// A character and its progress, as the client sees it (read only: the server

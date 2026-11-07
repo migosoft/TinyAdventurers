@@ -170,6 +170,9 @@ export class GameScene extends Phaser.Scene {
   private debugPath: [number, number][] = [];
   private debugOgre: [number, number][] = [];
   private debugCove: [number, number][] = [];
+  /** Dodge notice circles (entity id, radius px) and the recent dodge lines (#220). */
+  private debugNotice: [number, number][] = [];
+  private debugDodges: { x0: number; y0: number; x1: number; y1: number; at: number }[] = [];
   private debugGfx!: Phaser.GameObjects.Graphics;
 
   constructor() {
@@ -231,6 +234,8 @@ export class GameScene extends Phaser.Scene {
     this.debugPath = [];
     this.debugOgre = [];
     this.debugCove = [];
+    this.debugNotice = [];
+    this.debugDodges = [];
 
     const kb = this.input.keyboard!;
     // No key capture: Phaser's capture calls preventDefault page-wide and outlives the
@@ -399,6 +404,10 @@ export class GameScene extends Phaser.Scene {
       this.debugPath = m.points;
       this.debugOgre = m.ogre;
       this.debugCove = m.cove;
+      this.debugNotice = m.notice;
+    }
+    else if (m.t === 'DebugDodge') {
+      if (this.debugOn) this.debugDodges.push({ x0: m.from[0], y0: m.from[1], x1: m.to[0], y1: m.to[1], at: performance.now() / 1000 });
     }
     else if (m.t === 'HeroChanged') {
       this.info = { ...this.info, speed: m.speed, abilities: m.abilities, fallback: m.fallback };
@@ -1036,7 +1045,22 @@ export class GameScene extends Phaser.Scene {
   /** Debug: marching dashed lines along the server's shortest paths to the boss (yellow), the ogre (blue) and the cove (green). */
   private drawDebugPath(px: number, py: number, now: number): void {
     const g = this.debugGfx.clear();
-    if (!this.debugOn || !this.alive) return;
+    if (!this.debugOn || !this.alive) {
+      this.debugDodges.length = 0;
+      return;
+    }
+    // Dodge notice circles at the creatures' drawn positions, and the dodge lines, fading over 0.6 s.
+    g.lineStyle(1, 0xffffff, 0.3);
+    for (const [id, r] of this.debugNotice) {
+      const e = this.ents.get(id);
+      if (e && !(e.flags & FLAG.DEAD)) g.strokeCircle(e.x, e.y, r);
+    }
+    const t = performance.now() / 1000;
+    if (this.debugDodges.length) this.debugDodges = this.debugDodges.filter((d) => t - d.at < 0.6);
+    for (const d of this.debugDodges) {
+      g.lineStyle(2, 0xff40ff, 1 - (t - d.at) / 0.6);
+      g.lineBetween(d.x0, d.y0, d.x1, d.y1);
+    }
     this.drawPathLine(g, px, py, now, this.debugCove, 0x40e070, 0x20a050);
     this.drawPathLine(g, px, py, now, this.debugOgre, 0x40a0ff, 0x4060ff);
     this.drawPathLine(g, px, py, now, this.debugPath, 0xffe040, 0xff4040);

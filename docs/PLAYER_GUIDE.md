@@ -140,11 +140,13 @@ Every nymph's cove is home to 15 wild animals: a boar, a stag, three deer and te
 |---|---|
 | Goblin archer | Weak and fast. Shoots arrows from a distance, usually in groups. |
 | Skeleton warrior | Slow melee fighter. |
-| Skeleton archer | Shoots arrows and keeps its distance. |
+| Skeleton archer | Shoots arrows. Too simple to back away from you. |
 | Orc warrior | Tough melee fighter, hits hard and **knocks you back**. |
 | Orc archer | Tough archer. |
 | Necromancer | Casts **Shadow Bolts** (green) and casts **Raise Dead**: after a short wind-up (0.7 s) it raises **two** skeletons or skeleton archers around itself, about every 7 seconds, up to **four alive** at a time. Kill the necromancer and all of its minions crumble. |
 | Mimic | Looks exactly like a treasure chest. Walk up to it (or hit it) and its lid flies open: it **hops after you** and bites. It stops chasing when you get out of sight and waits where it was found. Worth 25 coins. |
+
+**Smart enemies step aside.** Clever enemies (the orcs and demons, for example, but not the skeletons) and your wolf **step out of the way of a shot they see coming**. No dice are rolled: they simply walk sideways, and whether it works depends on how early they notice the shot (nimble ones notice farther away), how big and slow they are, and how soon the shot arrives. Big, slow creatures such as the dragon almost never get out of the way. They ignore shots that would barely scratch them (until they are wounded), and the cleverest also step aside from shots that carry a dangerous effect such as sleep or charm. They are busy and take the hit while they **wind up an attack or cast**, when they cannot see the shot (an arrow from the dark), and when walls block the step. To land your shots: shoot from **close range**, hit them **while they wind up or cast**, shoot **from the dark** (most enemies see an arrow there only once it is close, demons and ghosts see it anyway, and everyone sees fire), and aim at **big, slow ones**.
 
 **Ghosts and Shades** are rare extras that haunt the deeper rooms and halls (about one room in four, from about a third of the way in). The lich's dungeon has **Ghosts**, the demon's dungeon has **Shades**; the dragon's dungeon has neither. They are the ghostly dead and no ordinary weapon scratches them (see Damage types and resistances): only magic hurts them.
 
@@ -161,7 +163,7 @@ Both fight by ambush. When they notice you they **vanish**, then drift through t
 
 | Enemy | What to expect |
 |---|---|
-| Imp | Small demon in place of the skeleton archer. Keeps its distance and uses **Fire Bolt**, but uses **Strike** (its claws) on you if you get close. |
+| Imp | Small demon in place of the skeleton archer. Uses **Fire Bolt** and, being clever, backs away from you, but uses **Strike** (its claws) on you if you get close. |
 | Chort | Horned demon in place of the skeleton warrior. Closes in and claws (a **small knockback**), and uses a **Fire Bolt** now and then while you are out of reach. |
 | Summoner | Red-robed caster in place of the necromancer. Uses **Fire Bolt** and casts **Summon Imps**: after a short wind-up (0.7 s) it summons **two** imps every 8 seconds, up to **four alive** at a time. Kill the summoner and its imps vanish. |
 
@@ -401,7 +403,7 @@ Press **L** to open a log that explains what the rules are doing. It answers two
 
 - Melee heroes hit a little farther than their weapon looks. The white swoosh shows the real reach.
 - The Paladin's heal only reaches allies close by, so stick together.
-- Archers keep their distance. Close in, or use the Wizard and the Elven Ranger to pick them off.
+- Only the clever archers back away from you; the simple ones stand and shoot. Close in, or use the Wizard and the Elven Ranger to pick them off. Clever enemies dodge shots they see coming, so shoot from close range or while they wind up.
 - Use corners: enemies can't attack what they can't see.
 - Skeletons, demons and the dragon see you in the dark, so a lit torch behind you helps you see them. Humans and most monsters lose you in the dark: put out a torch (any non-fire hit does it) to slip past them, and light it again with **E** or with fire when you fight.
 - Barrels are a weapon and a danger: light them from a distance, and keep your back free. Archers shoot barrels next to you.
