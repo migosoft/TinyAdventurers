@@ -159,7 +159,7 @@ pub fn send_dodge(run: &Run, from: Vec2, to: Vec2) {
     if !run.debug {
         return;
     }
-    for p in run.players.iter().filter(|p| p.debug) {
+    for p in run.players.iter().filter(|p| p.debug && p.alive && p.tx.is_some()) {
         run.send(p, &ServerMsg::DebugDodge { from: (from.x as f32, from.y as f32), to: (to.x as f32, to.y as f32) });
     }
 }
