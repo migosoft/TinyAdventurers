@@ -196,6 +196,7 @@ pub fn plan(run: &Run, mi: usize, threats: &[Threat]) -> Option<Dodge> {
             if s / walk + run.smarts.reaction < t.arrive
                 && course_hit(run, pi, mi, to, run.smarts.margin).is_none()
                 && walk_end(run, mi, to).dist(to) <= 0.5
+                && super::ai::can_rest(run, mi, to)
             {
                 passing.push((s, to));
                 break;
@@ -742,6 +743,35 @@ mod tests {
             let d = m.dodge.expect("it dodges");
             assert!((d.to.x - m.pos.x) * east > 0.0, "toward its heading ({east}): {:?} from {:?}", d.to, m.pos);
         }
+    }
+
+    #[test]
+    fn a_phaser_never_ends_a_dodge_in_a_wall() {
+        use crate::dungeon::Mover;
+        let wall = |run: &mut Run, mi: usize, dy: i32| {
+            let (tx, ty) = Map::tile_of(run.monsters[mi].pos);
+            run.layout.map.set(tx, ty + dy, Tile::Wall);
+        };
+        // A wall on the north side: it walks through walls, but steps south, where it may rest.
+        let (mut run, mi) = row(100.0);
+        run.monsters[mi].mover = Mover::Incorporeal;
+        wall(&mut run, mi, -1);
+        let y0 = run.monsters[mi].pos.y;
+        fire(&mut run, AbilityId::Shoot, 0.0, 100.0);
+        let d = plan(&run, mi, &threats(&run, mi)).expect("south is free");
+        assert!(d.to.y > y0, "south");
+        for _ in 0..60 {
+            run.step();
+            let m = &run.monsters[mi];
+            assert!(super::super::ai::can_rest(&run, mi, m.pos) || m.dodge.is_some(), "never rests in a wall");
+        }
+        // Walls on both sides: no dodge.
+        let (mut run, mi) = row(100.0);
+        run.monsters[mi].mover = Mover::Incorporeal;
+        wall(&mut run, mi, -1);
+        wall(&mut run, mi, 1);
+        fire(&mut run, AbilityId::Shoot, 0.0, 100.0);
+        assert!(plan(&run, mi, &threats(&run, mi)).is_none(), "walls both sides");
     }
 
     #[test]

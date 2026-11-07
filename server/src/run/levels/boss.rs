@@ -122,6 +122,10 @@ pub fn tick(run: &mut Run, dt: f64) {
             }
             enc_mut(run).behaviour = Some(b);
         }
+    } else if held {
+        if let Some(bi) = bosses::boss_idx(run) {
+            run.monsters[bi].dodge = None;
+        }
     }
 }
 
