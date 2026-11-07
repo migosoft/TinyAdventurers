@@ -1,5 +1,6 @@
 pub mod cove;
 pub mod generate;
+pub mod woodland;
 
 use crate::defs::enemies::EnemyType;
 use crate::math::Vec2;
@@ -336,6 +337,10 @@ pub struct Layout {
     pub player_spawns: Vec<Vec2>,
     /// The nymph's cove; other level types have none.
     pub cove: Option<Cove>,
+    /// Open-air level (the woodland): lit by day, no dungeon darkness.
+    pub daylight: bool,
+    /// The woodland's plants, start and end; other level types have none.
+    pub woodland: Option<woodland::Woodland>,
 }
 
 /// What only the room-and-corridor dungeon has.
@@ -359,7 +364,7 @@ impl DungeonParts {
 impl Dungeon {
     pub fn split(self) -> (Layout, DungeonParts) {
         let Dungeon { map, rooms, start, boss, door, spawns, chests, barrels, torches, suns, player_spawns, haunts, cove } = self;
-        (Layout { map, spawns, chests, barrels, torches, suns, player_spawns, cove }, DungeonParts { rooms, start, boss, door, haunts })
+        (Layout { map, spawns, chests, barrels, torches, suns, player_spawns, cove, daylight: false, woodland: None }, DungeonParts { rooms, start, boss, door, haunts })
     }
 }
 
