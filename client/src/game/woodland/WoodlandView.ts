@@ -57,7 +57,12 @@ export class WoodlandView {
   private silhouette?: Silhouette;
   /** Drifting cloud shadows; `clouds.look` is tuned live. */
   readonly clouds: Clouds;
-  private critters: Critters;
+  readonly critters: Critters;
+  /** The demo's silhouette switch. */
+  silhouetteOn = true;
+  private startMs = performance.now();
+  private groundDoneMs = 0;
+  private logged = false;
   private mapW: number;
 
   constructor(private scene: Phaser.Scene, private info: WoodlandInfo, map: TileMap, spawn: { x: number; y: number } = { x: 0, y: 0 }) {
@@ -169,6 +174,11 @@ export class WoodlandView {
     this.uploadMs = performance.now() - t0;
     for (const i of this.ready) this.show(i);
     this.ready.length = 0;
+    if (!this.groundDoneMs && this.groundQueue.size === 0) this.groundDoneMs = performance.now();
+    if (!this.logged && this.groundQueue.size === 0 && this.pending.size === 0) {
+      this.logged = true;
+      console.log(`woodland: ${this.info.plants.length} plants drawn (${this.frames.size} frames, ${this.pages.pages} pages) in ${Math.round(performance.now() - this.groundDoneMs)} ms after the ground (${Math.round(performance.now() - this.startMs)} ms in all)`);
+    }
     this.shade(hero);
     this.clouds.update(t, cam);
     this.critters.update(t, seenLit, this.mapW, cam);
@@ -200,6 +210,7 @@ export class WoodlandView {
       if (!this.silhouette) this.silhouette = new Silhouette(this.scene, occ.img, occ.footY);
       else this.silhouette.retarget(occ.img, occ.footY);
     }
+    if (this.silhouette) this.silhouette.on = this.silhouetteOn;
     this.silhouette?.update(occ ? hero : null);
   }
 
