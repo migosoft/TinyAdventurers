@@ -1006,6 +1006,32 @@ fn spawn_shot(run: &mut Run, c: Creature, a: &ResolvedAbility, kind: EntityKind,
     advance_projectile(run, i, ff);
 }
 
+/// Whether the shot at `p` has reached its aim point (it bursts there): the point is no longer ahead of it.
+pub(crate) fn aim_reached(pr: &Projectile, p: Vec2) -> bool {
+    pr.target.is_some_and(|t| (t - p).x * pr.vel.x + (t - p).y * pr.vel.y <= 0.0)
+}
+
+/// The object a shot of radius `r` at `p` runs into, if one stops shots there.
+pub(crate) fn stopping_object(run: &Run, p: Vec2, r: f64) -> Option<usize> {
+    run.objects.iter().position(|o| o.stops_shots() && o.pos.dist(p) < o.radius + r)
+}
+
+/// Whether shot `pr` hits creature `c` when it is close enough: everything but the distance (side, alive, not
+/// already hit, not flown through, not sinking). The real flight and the dodge's replay both ask this.
+pub(crate) fn shot_takes(run: &Run, pr: &Projectile, c: Creature) -> bool {
+    match c {
+        Creature::Player(pi) => pr.side != Side::Friendly && run.players[pi].alive && !pr.hit.contains(&run.players[pi].id),
+        Creature::Monster(mi) => {
+            let m = &run.monsters[mi];
+            if pr.side == Side::Friendly {
+                m.alive && targets::heroes_may_hit(m) && !pr.hit.contains(&m.id) && !run.passes_through(c, &pr.damage.split)
+            } else {
+                targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && !pr.hit.contains(&m.id)
+            }
+        }
+    }
+}
+
 pub fn tick_projectiles(run: &mut Run, dt: f64) {
     for i in 0..run.projectiles.len() {
         if run.projectiles[i].dead {
@@ -1038,13 +1064,11 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
         let prev = pr.pos;
         pr.pos = pr.pos + pr.vel * sdt;
         let pos = pr.pos;
-        if let Some(t) = pr.target {
-            if (t - pos).x * pr.vel.x + (t - pos).y * pr.vel.y <= 0.0 {
-                // An aim point inside a wall: it goes off in front of the wall, so its flash lights only that side.
-                let at = if run.layout.map.opaque_at(pos) { prev } else { pos };
-                impact(run, i, at, None);
-                break;
-            }
+        if aim_reached(pr, pos) {
+            // An aim point inside a wall: it goes off in front of the wall, so its flash lights only that side.
+            let at = if run.layout.map.opaque_at(pos) { prev } else { pos };
+            impact(run, i, at, None);
+            break;
         }
         if run.layout.map.opaque_at(pos) {
             // A plain shot into a torch's wall hits the torch (an explosion reaches it anyway).
@@ -1059,27 +1083,18 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             break;
         }
         let r = run.projectiles[i].radius;
-        if let Some(oi) = run.objects.iter().position(|o| o.stops_shots() && o.pos.dist(pos) < o.radius + r) {
+        if let Some(oi) = stopping_object(run, pos, r) {
             impact_object(run, i, pos, oi);
             break;
         }
         let pr = &run.projectiles[i];
         let target = if pr.side == Side::Friendly {
             // A bodiless creature that resists the shot fully is flown through.
-            run.monsters
-                .iter()
-                .enumerate()
-                .position(|(mi, m)| m.alive && targets::heroes_may_hit(m) && !pr.hit.contains(&m.id) && m.shot_dist(pos) < m.radius + pr.radius && !run.passes_through(Creature::Monster(mi), &pr.damage.split))
-                .map(Creature::Monster)
+            run.monsters.iter().enumerate().position(|(mi, m)| shot_takes(run, pr, Creature::Monster(mi)) && m.shot_dist(pos) < m.radius + pr.radius).map(Creature::Monster)
         } else {
             // Heroes first, then allies.
-            let hero = run.players.iter().position(|p| p.alive && !pr.hit.contains(&p.id) && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius).map(Creature::Player);
-            let ally = || {
-                run.monsters
-                    .iter()
-                    .position(|m| targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && !pr.hit.contains(&m.id) && m.shot_dist(pos) < m.radius + pr.radius)
-                    .map(Creature::Monster)
-            };
+            let hero = run.players.iter().enumerate().position(|(pi, p)| shot_takes(run, pr, Creature::Player(pi)) && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius).map(Creature::Player);
+            let ally = || run.monsters.iter().enumerate().position(|(mi, m)| shot_takes(run, pr, Creature::Monster(mi)) && m.shot_dist(pos) < m.radius + pr.radius).map(Creature::Monster);
             hero.or_else(ally)
         };
         if let Some(c) = target {

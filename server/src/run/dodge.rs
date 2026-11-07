@@ -3,6 +3,7 @@
 //! hit, so a dodge that clears `course_hit` is never hit anyway.
 
 use super::effects::Creature;
+use super::abilities::{aim_reached, shot_takes, stopping_object};
 use super::entities::Pierce;
 use super::targets::{self, Side};
 use super::{perception, Run};
@@ -10,9 +11,6 @@ use crate::defs::classes::PLAYER_RADIUS;
 use crate::defs::damage::resolve;
 use crate::defs::smarts::Smart;
 use crate::math::Vec2;
-
-/// Px between the sampled points of a flight: `advance_projectile`'s own largest step.
-const STEP: f64 = 4.0;
 
 /// A shot that would hit a monster as it flies now.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -28,9 +26,11 @@ pub struct Threat {
 /// Whether projectile `pi`, flying on as it is, would hit monster `mi` standing at `at`, and if so after how many
 /// px of flight. `extra` widens the hit test (0 = the real one; `margin` for "clear").
 ///
-/// It samples `pr.pos + pr.vel * t` every `STEP` px and stops where `advance_projectile` stops the shot: at the end
-/// of its life, at its aim point, at an opaque tile, at an object that stops shots, and at another creature it
-/// would hit first (unless it flies through, `Pierce::Through`).
+/// It replays the flight at the very points `advance_projectile` visits (its substeps, at most 4 px apart; it never
+/// tests the point it starts on, so neither does this) and applies the same stop rules, from the same helpers
+/// (`aim_reached`, `opaque_at`, `stopping_object`) and the same "would it hit this creature" test (`shot_takes`).
+/// It ends where the shot's life does, and where another creature would take the shot first, unless the shot flies
+/// through creatures (`Pierce::Through { left > 0 }`: treated as passing any number of them, an approximation).
 pub fn course_hit(run: &Run, pi: usize, mi: usize, at: Vec2, extra: f64) -> Option<f64> {
     let pr = &run.projectiles[pi];
     let m = &run.monsters[mi];
@@ -38,48 +38,31 @@ pub fn course_hit(run: &Run, pi: usize, mi: usize, at: Vec2, extra: f64) -> Opti
     if speed <= 0.0 {
         return None;
     }
-    // The shot's life runs out after a whole tick: it flies the tick it ends in.
-    let reach = speed * super::DT * (pr.life / super::DT).ceil().max(0.0);
-    let steps = (reach / STEP).ceil() as i32;
+    // Per tick the real flight takes `substeps` equal steps; its life runs out after a whole tick.
+    let substeps = ((speed * super::DT) / 4.0).ceil().max(1.0);
+    let step = speed * super::DT / substeps;
+    let steps = ((pr.life / super::DT).ceil().max(0.0) * substeps) as i32;
     let flies_through = matches!(pr.pierce, Pierce::Through { left, .. } if left > 0);
-    for k in 0..=steps {
-        let s = (k as f64 * STEP).min(reach);
+    for k in 1..=steps {
+        let s = k as f64 * step;
         let p = pr.pos + pr.vel * (s / speed);
-        if k > 0 {
-            if let Some(t) = pr.target {
-                if (t - p).x * pr.vel.x + (t - p).y * pr.vel.y <= 0.0 {
-                    return None;
-                }
-            }
-            if run.layout.map.opaque_at(p) {
-                return None;
-            }
-            if run.objects.iter().any(|o| o.stops_shots() && o.pos.dist(p) < o.radius + pr.radius) {
-                return None;
-            }
+        if aim_reached(pr, p) || run.layout.map.opaque_at(p) || stopping_object(run, p, pr.radius).is_some() {
+            return None;
         }
-        // Who the real flight would hit here: heroes first, then monsters in order (its own side's friends
-        // excepted). `at` stands in for this monster's position.
-        let me = m.shot_dist_at(at, p) < m.radius + pr.radius + extra;
-        let other = |j: usize, o: &super::entities::Monster| {
-            j != mi
-                && o.alive
-                && !pr.hit.contains(&o.id)
-                && o.shot_dist(p) < o.radius + pr.radius
-                && if pr.side == Side::Friendly { targets::heroes_may_hit(o) && !run.passes_through(Creature::Monster(j), &pr.damage.split) } else { targets::enemies_may_hit(o) && o.sinking.is_none() }
-        };
+        // Who the real flight takes here: heroes first, then monsters in order. `at` stands in for this monster.
+        let takes_other = |j: usize| j != mi && shot_takes(run, pr, Creature::Monster(j)) && run.monsters[j].shot_dist(p) < run.monsters[j].radius + pr.radius;
         if !flies_through {
-            if pr.side != Side::Friendly && run.players.iter().any(|h| h.alive && !pr.hit.contains(&h.id) && h.pos().dist(p) < PLAYER_RADIUS + pr.radius) {
+            if run.players.iter().enumerate().any(|(h, o)| shot_takes(run, pr, Creature::Player(h)) && o.pos().dist(p) < PLAYER_RADIUS + pr.radius) {
                 return None;
             }
-            if run.monsters.iter().enumerate().any(|(j, o)| j < mi && other(j, o)) {
+            if (0..mi).any(takes_other) {
                 return None;
             }
         }
-        if me {
+        if m.shot_dist_at(at, p) < m.radius + pr.radius + extra {
             return Some(s);
         }
-        if !flies_through && run.monsters.iter().enumerate().any(|(j, o)| j > mi && other(j, o)) {
+        if !flies_through && (mi + 1..run.monsters.len()).any(takes_other) {
             return None;
         }
     }
@@ -127,7 +110,6 @@ mod tests {
     use crate::defs::abilities::AbilityId;
     use crate::defs::enemies::EnemyType;
     use crate::defs::kinds::EntityKind;
-    use crate::defs::smarts::Smart;
     use crate::dungeon::{Map, Tile};
     use crate::protocol::{BossId, ClassId};
     use crate::run::ai::tests::open_floor;
@@ -177,10 +159,11 @@ mod tests {
         // The arrow is spawned 6 px from the hero's centre and fast-forwarded by half the hero's round trip
         // (spawn_shot), so it starts at `pr.pos`. It flies level with the orc, so the gap closes along x:
         // (orc.x - pr.pos.x) - s. The shot hits once that is under r_orc + r_arrow, so the first hitting point is
-        // s = (orc.x - pr.pos.x) - (r_orc + r_arrow). The samples are STEP px apart, so it is found up to STEP px late.
+        // s = (orc.x - pr.pos.x) - (r_orc + r_arrow). The replay visits the real flight's points (<= 2.5 px apart at
+        // this speed), so it is found at most one such step late.
         let exact = (run.monsters[mi].pos.x - pr.pos.x - r_orc - r_arrow) / speed;
         assert!(pr.pos.x - run.players[0].pos().x >= 6.0, "spawned 6 px out, then fast-forwarded");
-        assert!(t[0].arrive >= exact && t[0].arrive - exact <= STEP / speed + 1e-9, "arrive {} vs {exact}", t[0].arrive);
+        assert!(t[0].arrive >= exact && t[0].arrive - exact <= super::super::DT / (speed * super::super::DT / 4.0).ceil() + 1e-9, "arrive {} vs {exact}", t[0].arrive);
     }
 
     #[test]
@@ -191,7 +174,7 @@ mod tests {
         enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, to);
         assert!(threats(&run, mi).is_empty(), "an enemy's bolt does not threaten an enemy");
         run.projectiles.clear();
-        // Aimed to pass 15 px south of the orc's edge (the capsule only reaches north).
+        // Aimed to pass about 13 px south of the orc's edge (the capsule only reaches north).
         let r = run.monsters[mi].radius + 2.0 + 15.0;
         fire(&mut run, AbilityId::Shoot, r.atan2(50.0), 50.0);
         assert!(threats(&run, mi).is_empty(), "a near miss");
@@ -276,21 +259,39 @@ mod tests {
 
     #[test]
     fn advanced_dodge_counts_effects_it_would_suffer() {
-        // An allied orc, and an allied skeleton at the same spot, face an imp's Sleep Mist (0 damage).
+        // An allied orc faces an imp's Sleep Mist (0 damage).
         let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
         let at = run.monsters[mi].pos;
         run.monsters[mi].side = Side::Friendly;
-        let sid = run.spawn_enemy(EnemyType::SkeletonWarrior, at + Vec2::new(0.0, 0.0), None);
-        let si = run.monster_idx(sid).unwrap();
-        run.monsters[si].side = Side::Friendly;
-        run.monsters[si].ai.cd = 1e9;
-        let from = at - Vec2::new(40.0, 0.0);
-        enemy_use(&mut run, EnemyType::Imp, from, AbilityId::SleepMist, at);
+        enemy_use(&mut run, EnemyType::Imp, at + Vec2::new(60.0, 0.0), AbilityId::SleepMist, at);
         assert_eq!(run.projectiles[0].damage.amount, 0.0, "no damage");
         assert!(threats(&run, mi).is_empty(), "below the AdvancedDodge tier");
         run.smarts.needs[Smart::AdvancedDodge as usize] = 0;
         assert_eq!(threats(&run, mi).len(), 1, "with the knob at the orc's tier");
+
+        // A lone allied skeleton (immune to Sleep) in the same spot: the shot is on course, it just cannot take hold.
+        let (mut run, oi) = fixture(ClassId::ElvenRanger, 50.0);
+        let at = run.monsters[oi].pos;
+        run.monsters.clear();
+        let sid = run.spawn_enemy(EnemyType::SkeletonWarrior, at, None);
+        let si = run.monster_idx(sid).unwrap();
+        run.monsters[si].side = Side::Friendly;
+        run.monsters[si].ai.cd = 1e9;
+        run.smarts.needs[Smart::AdvancedDodge as usize] = 0;
+        enemy_use(&mut run, EnemyType::Imp, at + Vec2::new(60.0, 0.0), AbilityId::SleepMist, at);
+        let si = run.monster_idx(sid).unwrap();
+        assert!(course_hit(&run, 0, si, run.monsters[si].pos, 0.0).is_some(), "on course");
         assert!(threats(&run, si).is_empty(), "a skeleton is immune to Sleep");
+    }
+
+    #[test]
+    fn extra_widens_the_hit_test_for_a_near_miss() {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
+        let r = run.monsters[mi].radius + 2.0 + 1.0; // passes 1 px past the real hit (south side)
+        fire(&mut run, AbilityId::Shoot, r.atan2(50.0), 50.0);
+        let pos = run.monsters[mi].pos;
+        assert!(course_hit(&run, 0, mi, pos, 0.0).is_none(), "a near miss with the real test");
+        assert!(course_hit(&run, 0, mi, pos, run.smarts.margin + 2.0).is_some(), "a hit once widened");
     }
 
     #[test]
@@ -309,7 +310,6 @@ mod tests {
         // An orc fully resistant to Physical, a plain arrow.
         let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
         fire(&mut run, AbilityId::Shoot, 0.0, 50.0);
-        run.projectiles[0].damage.on_hit.clear();
         run.monsters[mi].res.set(DamageType::Physical, 1.0);
         assert!(threats(&run, mi).is_empty(), "no damage gets through");
     }
