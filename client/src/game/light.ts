@@ -8,6 +8,9 @@ import type { LightInfo } from '../generated/LightInfo';
 import { Fov } from '../sim/fov';
 import type { TileMap } from '../sim/map';
 
+/** The colour a daylight level fills every tile with (white: no tint). */
+export const DAYLIGHT = 0xffffff;
+
 export interface StaticLight {
   id: number;
   kind: number;
@@ -46,6 +49,8 @@ export function addColour(rgb: Float32Array, i: number, colour: number, k: numbe
 
 export class LightField {
   readonly lights = new Map<number, StaticLight>();
+  /** A level in daylight (the woodland): every tile is lit by the sun, whatever the lights say. */
+  daylight = false;
   private cells = new Map<number, Cells>();
   private fov: Fov;
   private lit: Uint8Array;
@@ -106,6 +111,7 @@ export class LightField {
 
   /** Lit by a static light (same set as the server's static layer). */
   isLit(x: number, y: number): boolean {
+    if (this.daylight) return true;
     if (this.litDirty) {
       this.lit.fill(0);
       for (const l of this.lights.values()) if (l.on) for (const i of this.cellsOf(l).idx) this.lit[i] = 1;
@@ -117,6 +123,10 @@ export class LightField {
   /** Adds every lit static light's colour into `rgb` (`dim` 0..1 dims a light's centre, never its rim) (w*h*3) inside the tile window [x0,x1)×[y0,y1). */
   accumulate(rgb: Float32Array, x0: number, y0: number, x1: number, y1: number, scale: (l: StaticLight) => number, dim: (l: StaticLight) => number = () => 1): void {
     const w = this.map.w;
+    if (this.daylight) {
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) addColour(rgb, y * w + x, DAYLIGHT, 1);
+      return;
+    }
     for (const l of this.lights.values()) {
       if (!l.on) continue;
       const r = LIGHT[l.kind].radius;

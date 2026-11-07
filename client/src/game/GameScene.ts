@@ -26,6 +26,7 @@ import { LightField } from './light';
 import { LightView, nextDarkvision } from './lightview';
 import { Sunbeams } from './sunbeams';
 import { CoveView } from './cove';
+import { WoodlandView } from './woodland/WoodlandView';
 import { Mood, type AirTorch, type AirShot, type AirMover } from './mood';
 import { MoverTracker } from './airmovers';
 import { projectileAir } from './airshots';
@@ -91,6 +92,9 @@ const ENEMY_KIND: Record<string, { max_hp: number; res: Record<string, number> }
 
 const SKELETAL = new Set<number>([KIND.SkeletonWarrior, KIND.SkeletonArcher, KIND.RaisedSkeleton, KIND.Lich]);
 
+/** The tiles the woodland paints itself (no tile art, no grid lines). */
+const GROUND_TILES = new Set<number>([TILE_ID.Floor, TILE_ID.Road, TILE_ID.Thicket, TILE_ID.Trunk]);
+
 export class GameScene extends Phaser.Scene {
   private net!: Net;
   private hud!: Hud;
@@ -146,9 +150,10 @@ export class GameScene extends Phaser.Scene {
   private lastSnap?: Snapshot;
   private light!: LightField;
   private lightView!: LightView;
-  private mood!: Mood;
+  private mood: Mood | null = null;
   private sunbeams!: Sunbeams;
   private cove: CoveView | null = null;
+  private woodland: WoodlandView | null = null;
   private movers = new MoverTracker(); // replaced in init() for every run
   private airMovers: AirMover[] = [];
   private visionMask!: VisionMask;
@@ -211,6 +216,7 @@ export class GameScene extends Phaser.Scene {
     this.myKind = CLASSES[data.myClass].kind;
     this.pred = new Predictor(this.map, this.info.speed, this.info.abilities, this.info.fallback, this.info.spawn_x, this.info.spawn_y);
     this.light = new LightField(this.map);
+    this.light.daylight = this.info.daylight;
     this.light.load(this.info.lights);
   }
 
@@ -220,9 +226,10 @@ export class GameScene extends Phaser.Scene {
     this.fx = new Effects(this);
     this.drawBoard();
     this.lightView = new LightView(this, this.map, this.light);
-    this.mood = new Mood(this, this.map, this.lightView);
+    this.mood = this.info.daylight ? null : new Mood(this, this.map, this.lightView);
     this.sunbeams = new Sunbeams(this, this.light, this.lightView);
     this.cove = this.info.cove ? new CoveView(this, this.info.cove) : null;
+    this.woodland = this.info.woodland ? new WoodlandView(this, this.info.woodland, this.map, { x: this.info.spawn_x, y: this.info.spawn_y }) : null;
     this.visionMask = new VisionMask(this, this.map);
     this.shadeMask = new ShadeMask(this, this.map);
     this.useHint = new KeyCap(this);
@@ -308,11 +315,13 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup(): void {
     this.unsub?.();
-    this.mood.destroy();
+    this.mood?.destroy();
     this.shadeMask.destroy();
     this.sunbeams.destroy();
     this.cove?.destroy();
     this.cove = null;
+    this.woodland?.destroy();
+    this.woodland = null;
     this.rulesLog.destroy();
     this.useHint.destroy();
     for (const t of this.barLabels.values()) t.destroy();
@@ -341,6 +350,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawTile(x: number, y: number, batch: boolean): void {
+    if (this.info.woodland && GROUND_TILES.has(this.map.get(x, y))) return; // the woodland paints its own ground
     for (const d of tileDraws(this.map, x, y)) {
       const tint = d.frame.startsWith('floor') ? this.tileTint(x, y) : 0xffffff;
       const py = y * TILE + (d.dy ?? 0);
@@ -372,7 +382,7 @@ export class GameScene extends Phaser.Scene {
     for (let y = 0; y < this.map.h; y++)
       for (let x = 0; x < this.map.w; x++) {
         const t = this.map.get(x, y);
-        if (t === TILE_ID.Wall || t === TILE_ID.Void || isTerrain(t)) continue; // the entrance tiles are floor too
+        if (t === TILE_ID.Wall || t === TILE_ID.Void || isTerrain(t) || (this.info.woodland && GROUND_TILES.has(t))) continue; // the entrance tiles are floor too
         grid.strokeRect(x * TILE + 0.5, y * TILE + 0.5, TILE, TILE);
       }
   }
@@ -512,7 +522,7 @@ export class GameScene extends Phaser.Scene {
         this.redrawTile(ev.x, ev.y);
         this.light.mapChanged();
         this.lightView.mapChanged();
-        this.mood.mapChanged();
+        this.mood?.mapChanged();
         this.visionMask.mapChanged();
         this.shadeMask.mapChanged(ev.y);
         if (ev.v === TILE_ID.DoorClosed) {
@@ -845,7 +855,7 @@ export class GameScene extends Phaser.Scene {
     const torches: AirTorch[] = [];
     for (const e of this.ents.values()) if (e.kind === KIND.Torch) torches.push({ x: e.x, y: e.y, side: e.extra, lit: e.anim === 1 });
     const shots: AirShot[] = (this.lastSnap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
-    this.mood.update(dt, this.cameras.main.worldView, torches, shots, this.collectMovers(dt, px, py));
+    this.mood?.update(dt, this.cameras.main.worldView, torches, shots, this.collectMovers(dt, px, py));
     this.sunbeams.update(dt, this.cameras.main.worldView, now);
     this.visionMask.update(this.cameras.main.worldView, this.lightView.view);
     this.shadeMask.update(this.cameras.main.worldView, this.lightView.view, this.lightView.sight);
@@ -891,7 +901,9 @@ export class GameScene extends Phaser.Scene {
     for (const [id, v] of this.torchViews) if (!seen.has(id)) (v.destroy(), this.torchViews.delete(id));
     // after the views moved this frame, so the copy is not a frame behind the hero
     // only the own hero, and only while it plays (not dead or spectating); teammates get no silhouette
-    this.cove?.update(now, this.alive && this.spectating === null ? this.views.get(this.info.you)?.bodyLook() ?? null : null);
+    const ownLook = this.alive && this.spectating === null ? this.views.get(this.info.you)?.bodyLook() ?? null : null;
+    this.cove?.update(now, ownLook);
+    this.woodland?.update(now, ownLook, this.cameras.main.worldView);
 
     const hint = this.alive && !this.pred.noAct && !this.pred.sinking ? pickUseHint(this.ents.values(), this.info.you, px, py) : null;
     this.hud.setAsleep(this.alive && has(this.myEffects(), EFFECT.Sleep));

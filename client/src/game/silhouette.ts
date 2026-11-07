@@ -91,6 +91,13 @@ export class Silhouette {
     }
   }
 
+  /** Aims the copy at another occluder (and its foot y): the mask follows it. */
+  retarget(occluder: Phaser.GameObjects.Image, footY: number): void {
+    this.occluder = occluder;
+    this.occluderFootY = footY;
+    if (this.mask) this.mask.bitmapMask = occluder;
+  }
+
   update(hero: BodyLook | null): void {
     const c = this.copy;
     if (!this.on || !hero || !this.mask) { c.setVisible(false); return; }

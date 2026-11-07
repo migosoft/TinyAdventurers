@@ -18,14 +18,14 @@ export const ROOT_FRINGE = { count: 10, trunkDx: 12, trunkDown: 8 };
 /** Transparent margin around the floor area, so blades and shadows over the wall line are kept. */
 const MARGIN = 32;
 
-type Rgb = [number, number, number];
+export type Rgb = [number, number, number];
 const hex = (s: string): Rgb => [0, 2, 4].map((k) => parseInt(s.slice(k, k + 2), 16)) as Rgb;
-const G1 = hex('28643e');
-const BASE = hex('3e8a43'), PATCH: Rgb = [58, 131, 64], EDGE: Rgb = [49, 116, 60];
-const FLOWERS: Rgb[] = [hex('fdf7ed'), hex('facb3e'), hex('e8a0c8'), hex('cae6f5'), hex('da4e38')];
+export const G1 = hex('28643e');
+export const BASE = hex('3e8a43'), PATCH: Rgb = [58, 131, 64], EDGE: Rgb = [49, 116, 60];
+export const FLOWERS: Rgb[] = [hex('fdf7ed'), hex('facb3e'), hex('e8a0c8'), hex('cae6f5'), hex('da4e38')];
 const SHADOW_ALPHA = 115; // black, about the prototype's x0.55 on stone
 
-function rng(seed: number) {
+export function rng(seed: number) {
   let s = seed >>> 0;
   return () => {
     s = (s + 0x6d2b79f5) >>> 0;
@@ -37,7 +37,7 @@ function rng(seed: number) {
 }
 
 /** Smooth value noise on a wrapping 64x64 lattice, one lattice cell every `step` px. */
-function noise(seed: number, step: number) {
+export function noise(seed: number, step: number) {
   const r = rng(seed);
   const N = 64;
   const g = Array.from({ length: N * N }, () => r());
