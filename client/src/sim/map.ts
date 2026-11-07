@@ -5,6 +5,9 @@ export const TILE = 16;
 /** Who is moving. The walking rules (`TileMap.blocks`) differ per mover. Mirrors `Mover` in server/src/dungeon/mod.rs. */
 export type Mover = 'hero' | 'enemy' | 'demon' | 'dash';
 
+/** Which tiles stop a sight line: every opaque tile, or only the hard ones (light passes trunks and thickets). Mirrors `Blocker`. */
+export type Blocker = 'all' | 'hard';
+
 /** Water, chasm or lava. */
 export function isTerrain(t: number): boolean {
   return t >= TILE_ID.ShallowWater && t <= TILE_ID.Lava;
@@ -31,10 +34,20 @@ export class TileMap {
     return this.get(Math.floor(px / TILE), Math.floor(py / TILE));
   }
 
-  /** Blocks sight and projectiles. Terrain and the cove's trunk do not. */
+  /** Blocks sight and projectiles (trunks and thickets too). Floor, roads, open doors and terrain do not. */
   opaque(x: number, y: number): boolean {
     const t = this.get(x, y);
-    return !(t === TILE_ID.Floor || t === TILE_ID.DoorOpen || t === TILE_ID.Trunk || isTerrain(t));
+    return !(t === TILE_ID.Floor || t === TILE_ID.DoorOpen || t === TILE_ID.Road || isTerrain(t));
+  }
+
+  /** Blocks light as well: opaque, except trunks and thickets. */
+  hardOpaque(x: number, y: number): boolean {
+    const t = this.get(x, y);
+    return this.opaque(x, y) && t !== TILE_ID.Trunk && t !== TILE_ID.Thicket;
+  }
+
+  blocksSight(x: number, y: number, b: Blocker): boolean {
+    return b === 'all' ? this.opaque(x, y) : this.hardOpaque(x, y);
   }
 
   opaqueAt(px: number, py: number): boolean {
@@ -45,7 +58,6 @@ export class TileMap {
   blocks(x: number, y: number, mover: Mover): boolean {
     if (this.opaque(x, y)) return true;
     const t = this.get(x, y);
-    if (t === TILE_ID.Trunk) return true;
     switch (mover) {
       case 'dash':
         return false;

@@ -1,7 +1,7 @@
 //! Field of vision via recursive shadowcasting. Mirrored by
 //! `client/src/sim/fov.ts` (checked with shared test fixtures).
 
-use crate::dungeon::Map;
+use crate::dungeon::{Blocker, Map};
 
 const MULT: [[i32; 8]; 4] = [
     [1, 0, 0, -1, -1, 0, 0, 1],
@@ -34,16 +34,16 @@ impl Fov {
         }
     }
 
-    pub fn compute(&mut self, map: &Map, cx: i32, cy: i32, radius: i32) {
+    pub fn compute(&mut self, map: &Map, cx: i32, cy: i32, radius: i32, b: Blocker) {
         self.gen = self.gen.wrapping_add(1).max(1);
         self.mark(cx, cy);
         for oct in 0..8 {
-            self.cast(map, cx, cy, 1, 1.0, 0.0, radius, MULT[0][oct], MULT[1][oct], MULT[2][oct], MULT[3][oct]);
+            self.cast(map, b, cx, cy, 1, 1.0, 0.0, radius, MULT[0][oct], MULT[1][oct], MULT[2][oct], MULT[3][oct]);
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn cast(&mut self, map: &Map, cx: i32, cy: i32, row: i32, mut start: f64, end: f64, radius: i32, xx: i32, xy: i32, yx: i32, yy: i32) {
+    fn cast(&mut self, map: &Map, b: Blocker, cx: i32, cy: i32, row: i32, mut start: f64, end: f64, radius: i32, xx: i32, xy: i32, yx: i32, yy: i32) {
         if start < end {
             return;
         }
@@ -67,7 +67,7 @@ impl Fov {
                 if dx * dx + dy * dy <= r2 {
                     self.mark(x, y);
                 }
-                let opaque = map.opaque(x, y);
+                let opaque = map.blocks_sight(x, y, b);
                 if blocked {
                     if opaque {
                         new_start = r_slope;
@@ -78,7 +78,7 @@ impl Fov {
                     }
                 } else if opaque && j < radius {
                     blocked = true;
-                    self.cast(map, cx, cy, j + 1, start, l_slope, radius, xx, xy, yx, yy);
+                    self.cast(map, b, cx, cy, j + 1, start, l_slope, radius, xx, xy, yx, yy);
                     new_start = r_slope;
                 }
             }
@@ -109,7 +109,7 @@ mod tests {
             m.set(10, y, Tile::Wall);
         }
         let mut f = Fov::new(20, 20);
-        f.compute(&m, 5, 10, 9);
+        f.compute(&m, 5, 10, 9, Blocker::All);
         assert!(f.is_visible(5, 10));
         assert!(f.is_visible(9, 10));
         assert!(f.is_visible(10, 10), "the wall itself is seen");
@@ -122,7 +122,7 @@ mod tests {
             }
         }
         let mut f2 = Fov::new(40, 40);
-        f2.compute(&open, 20, 20, 9);
+        f2.compute(&open, 20, 20, 9, Blocker::All);
         assert!(f2.is_visible(29, 20));
         assert!(!f2.is_visible(30, 20));
     }

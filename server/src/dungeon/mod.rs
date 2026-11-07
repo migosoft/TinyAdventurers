@@ -37,8 +37,20 @@ pub enum Tile {
     Chasm = 7,
     /// Slows and burns heroes; only demon types walk it unharmed.
     Lava = 8,
-    /// The big tree's trunk in the nymph's cove: blocks walking and dashing (ghosts pass), sight and shots pass.
+    /// A tree trunk (the nymph's cove, the woodland): blocks walking and dashing (ghosts pass), sight and
+    /// shots like a column. Light passes (`hard_opaque` is false; see #257).
     Trunk = 9,
+    /// A dirt road: open ground, like floor.
+    Road = 10,
+    /// A dense hedge of undergrowth: a wall that blocks sight and shots but not light.
+    Thicket = 11,
+}
+
+/// Which tiles stop a sight line: every opaque tile, or only the hard ones (light passes trunks and thickets).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Blocker {
+    All,
+    Hard,
 }
 
 /// Who is moving. The walking rules (`Map::blocks`) differ per mover.
@@ -81,10 +93,25 @@ impl Map {
             self.tiles[(y * self.w + x) as usize] = t as u8;
         }
     }
-    /// Blocks sight and projectiles. Terrain and the cove's trunk do not.
+    /// Blocks sight and projectiles (trunks and thickets too). Floor, roads, open doors and terrain do not.
     pub fn opaque(&self, x: i32, y: i32) -> bool {
         let t = self.get(x, y);
-        !(t == Tile::Floor as u8 || t == Tile::DoorOpen as u8 || t == Tile::Trunk as u8 || is_terrain(t))
+        !(t == Tile::Floor as u8 || t == Tile::DoorOpen as u8 || t == Tile::Road as u8 || is_terrain(t))
+    }
+    /// Blocks light as well: opaque, except trunks and thickets (light passes them).
+    pub fn hard_opaque(&self, x: i32, y: i32) -> bool {
+        let t = self.get(x, y);
+        self.opaque(x, y) && t != Tile::Trunk as u8 && t != Tile::Thicket as u8
+    }
+    /// Opaque but not hard: blocks sight and shots, passes light.
+    pub fn soft_opaque(&self, x: i32, y: i32) -> bool {
+        self.opaque(x, y) && !self.hard_opaque(x, y)
+    }
+    pub fn blocks_sight(&self, x: i32, y: i32, b: Blocker) -> bool {
+        match b {
+            Blocker::All => self.opaque(x, y),
+            Blocker::Hard => self.hard_opaque(x, y),
+        }
     }
     pub fn opaque_at(&self, p: Vec2) -> bool {
         let (x, y) = Map::tile_of(p);
@@ -100,9 +127,6 @@ impl Map {
             return true;
         }
         let t = self.get(x, y);
-        if t == Tile::Trunk as u8 {
-            return true;
-        }
         match mover {
             Mover::Dash | Mover::Incorporeal => false,
             Mover::Hero => t == Tile::DeepWater as u8,
@@ -129,10 +153,10 @@ impl Map {
         let (x, y) = Map::tile_of(p);
         self.blocks(x, y, mover)
     }
-    /// Ground a hero can stand on without harm: floor, open doors and shallow water.
+    /// Ground a hero can stand on without harm: floor, roads, open doors and shallow water.
     pub fn safe(&self, x: i32, y: i32) -> bool {
         let t = self.get(x, y);
-        t == Tile::Floor as u8 || t == Tile::DoorOpen as u8 || t == Tile::ShallowWater as u8
+        t == Tile::Floor as u8 || t == Tile::DoorOpen as u8 || t == Tile::Road as u8 || t == Tile::ShallowWater as u8
     }
     pub fn tile_at(&self, p: Vec2) -> u8 {
         let (x, y) = Map::tile_of(p);
@@ -349,10 +373,10 @@ mod tests {
         // array below must then get it too.
         fn listed(t: Tile) {
             match t {
-                Tile::Void | Tile::Floor | Tile::Wall | Tile::DoorOpen | Tile::DoorClosed | Tile::ShallowWater | Tile::DeepWater | Tile::Chasm | Tile::Lava | Tile::Trunk => {}
+                Tile::Void | Tile::Floor | Tile::Wall | Tile::DoorOpen | Tile::DoorClosed | Tile::ShallowWater | Tile::DeepWater | Tile::Chasm | Tile::Lava | Tile::Trunk | Tile::Road | Tile::Thicket => {}
             }
         }
-        let all = [Tile::Void, Tile::Floor, Tile::Wall, Tile::DoorOpen, Tile::DoorClosed, Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava, Tile::Trunk];
+        let all = [Tile::Void, Tile::Floor, Tile::Wall, Tile::DoorOpen, Tile::DoorClosed, Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava, Tile::Trunk, Tile::Road, Tile::Thicket];
         all.iter().for_each(|&t| listed(t));
         let mut m = Map::new(all.len() as i32, 3);
         for (x, t) in all.into_iter().enumerate() {
@@ -368,7 +392,7 @@ mod tests {
     fn trunk_blocks_heroes_dashes_and_enemies_but_not_ghosts() {
         let mut m = Map::new(3, 3);
         m.set(1, 1, Tile::Trunk);
-        assert!(!m.opaque(1, 1), "sight, light and shots pass");
+        assert!(m.opaque(1, 1) && !m.hard_opaque(1, 1) && m.soft_opaque(1, 1));
         for mover in [Mover::Hero, Mover::Enemy, Mover::Demon, Mover::Dash] {
             assert!(m.blocks(1, 1, mover), "{mover:?}");
             assert!(!m.can_stop(1, 1, mover), "{mover:?}");
@@ -377,6 +401,37 @@ mod tests {
         assert!(!m.can_stop(1, 1, Mover::Incorporeal), "a ghost may not rest in the trunk");
         assert!(!m.safe(1, 1));
         assert!(!is_terrain(Tile::Trunk as u8));
+    }
+
+    #[test]
+    fn road_is_ground_and_thicket_is_a_wall() {
+        let mut m = Map::new(3, 3);
+        m.set(0, 1, Tile::Road);
+        m.set(2, 1, Tile::Thicket);
+        assert!(!m.opaque(0, 1) && m.safe(0, 1));
+        assert_eq!(m.speed_factor(Map::center_of(0, 1), Mover::Hero), 1.0);
+        assert!(m.opaque(2, 1) && m.soft_opaque(2, 1) && !m.hard_opaque(2, 1) && !m.safe(2, 1));
+        for mover in [Mover::Hero, Mover::Enemy, Mover::Demon, Mover::Dash] {
+            assert!(!m.blocks(0, 1, mover), "road {mover:?}");
+            assert!(m.blocks(2, 1, mover), "thicket {mover:?}");
+        }
+    }
+
+    #[test]
+    fn hard_opaque_is_the_old_rule() {
+        let all = [Tile::Void, Tile::Floor, Tile::Wall, Tile::DoorOpen, Tile::DoorClosed, Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava, Tile::Trunk, Tile::Road, Tile::Thicket];
+        let mut m = Map::new(all.len() as i32, 1);
+        for (x, t) in all.into_iter().enumerate() {
+            m.set(x as i32, 0, t);
+        }
+        for (x, t) in all.into_iter().enumerate() {
+            let x = x as i32;
+            if t == Tile::Trunk || t == Tile::Thicket {
+                assert!(m.opaque(x, 0) && !m.hard_opaque(x, 0), "{t:?}");
+            } else {
+                assert_eq!(m.hard_opaque(x, 0), m.opaque(x, 0), "{t:?}");
+            }
+        }
     }
 
     #[test]

@@ -158,7 +158,7 @@ fn export_defs() {
         "Void": Tile::Void as u8, "Floor": Tile::Floor as u8, "Wall": Tile::Wall as u8,
         "DoorOpen": Tile::DoorOpen as u8, "DoorClosed": Tile::DoorClosed as u8,
         "ShallowWater": Tile::ShallowWater as u8, "DeepWater": Tile::DeepWater as u8,
-        "Chasm": Tile::Chasm as u8, "Lava": Tile::Lava as u8, "Trunk": Tile::Trunk as u8,
+        "Chasm": Tile::Chasm as u8, "Lava": Tile::Lava as u8, "Trunk": Tile::Trunk as u8, "Road": Tile::Road as u8, "Thicket": Tile::Thicket as u8,
     });
     // Shot hitboxes per monster kind (`Monster::shot_dist`): footprint radius and drawn height.
     let mut hitbox = serde_json::Map::new();
@@ -424,8 +424,15 @@ fn fixture_map() -> Map {
             m.set(x, y, Tile::Lava);
         }
     }
-    // A tree trunk: sight passes, walking and dashing do not.
+    // A tree trunk: it stops walking, dashing and sight, but not light.
     m.set(3, 10, Tile::Trunk);
+    // A thicket strip (a wall that lets light through) and a road strip (open ground).
+    for x in 5..8 {
+        m.set(x, 11, Tile::Thicket);
+    }
+    for x in 15..18 {
+        m.set(x, 16, Tile::Road);
+    }
     m
 }
 
@@ -481,8 +488,9 @@ fn export_fixtures() {
     }
     let mut fov = Fov::new(map.w, map.h);
     let mut fovs = Vec::new();
-    for (cx, cy) in [(3, 3), (8, 8), (15, 12), (11, 2), (20, 17)] {
-        fov.compute(&map, cx, cy, PLAYER_FOV_RADIUS);
+    use crate::dungeon::Blocker;
+    for (cx, cy, b) in [(3, 3, Blocker::All), (8, 8, Blocker::All), (15, 12, Blocker::All), (11, 2, Blocker::All), (20, 17, Blocker::All), (3, 7, Blocker::All), (3, 7, Blocker::Hard), (6, 8, Blocker::All), (6, 8, Blocker::Hard)] {
+        fov.compute(&map, cx, cy, PLAYER_FOV_RADIUS, b);
         let mut vis = Vec::new();
         for y in 0..map.h {
             for x in 0..map.w {
@@ -491,7 +499,7 @@ fn export_fixtures() {
                 }
             }
         }
-        fovs.push(json!({ "x": cx, "y": cy, "visible": vis }));
+        fovs.push(json!({ "x": cx, "y": cy, "hard": b == Blocker::Hard, "visible": vis }));
     }
     use crate::defs::lights::LightKind;
     use crate::run::light::{Anchor, Lights, Lit};
@@ -549,14 +557,15 @@ fn export_fixtures() {
     // The hero's view (vispoly.rs): polygon points and visible tiles from pixel positions beside
     // the long wall's end, the 3-tile pillar and the wall block, on a tile corner and in the open.
     let mut view_cases = Vec::new();
-    for (x, y) in [(150.5, 200.3), (90.7, 108.2), (186.4, 168.9), (176.0, 208.0), (60.0, 200.0)] {
+    // Also the trunk (3,10) and the thicket strip (5..7,11), under both blockers.
+    for (x, y, b) in [(150.5, 200.3, Blocker::All), (90.7, 108.2, Blocker::All), (186.4, 168.9, Blocker::All), (176.0, 208.0, Blocker::All), (60.0, 200.0, Blocker::All), (52.0, 120.0, Blocker::All), (52.0, 120.0, Blocker::Hard), (100.0, 136.0, Blocker::All), (100.0, 136.0, Blocker::Hard)] {
         let p = crate::math::Vec2::new(x, y);
         assert!(!map.opaque_at(p), "view viewer {x},{y} stands on open floor");
-        view.compute(&map, p, PLAYER_FOV_RADIUS);
-        let poly = crate::vispoly::sight_polygon(&map, x, y, crate::vispoly::sight_radius(PLAYER_FOV_RADIUS), 96);
+        view.compute_with(&map, p, PLAYER_FOV_RADIUS, b);
+        let poly = crate::vispoly::sight_polygon(&map, x, y, crate::vispoly::sight_radius(PLAYER_FOV_RADIUS), 96, b);
         let points: Vec<f64> = poly.points.iter().flat_map(|&(a, b)| [a, b]).collect();
         let visible: Vec<i32> = (0..map.w * map.h).filter(|i| view.is_visible(i % map.w, i / map.w)).collect();
-        view_cases.push(json!({ "x": x, "y": y, "vision": PLAYER_FOV_RADIUS, "points": points, "visible": visible }));
+        view_cases.push(json!({ "x": x, "y": y, "hard": b == Blocker::Hard, "vision": PLAYER_FOV_RADIUS, "points": points, "visible": visible }));
     }
     let light_case = json!({ "sources": srcs, "lit": lit, "moving": moving });
     let doc = json!({

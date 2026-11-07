@@ -586,6 +586,38 @@ mod tests {
     }
 
     #[test]
+    fn a_trunk_hides_a_monster_behind_it() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 1.0);
+        run.layout.map.set(tx + 2, ty, crate::dungeon::Tile::Trunk);
+        let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
+        let sent = |run: &mut Run| {
+            let ppos = run.players[0].pos();
+            run.players[0].view.compute(&run.layout.map, ppos, PLAYER_FOV_RADIUS);
+            run.lights.refresh(&run.layout.map);
+            let dark = dark_of(run);
+            snapshot_ents(run, 0, &run.players[0].view, &dark).iter().any(|e| e.0 == id)
+        };
+        assert!(!sent(&mut run), "behind the trunk");
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].pos = Map::center_of(tx + 4, ty + 3);
+        assert!(sent(&mut run), "beside it");
+    }
+
+    #[test]
+    fn a_creature_inside_a_trunk_tile_is_seen() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 1.0);
+        run.layout.map.set(tx + 3, ty, crate::dungeon::Tile::Trunk);
+        let id = run.spawn_enemy(EnemyType::Ghost, Map::center_of(tx + 3, ty), None);
+        let ppos = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, ppos, PLAYER_FOV_RADIUS);
+        run.lights.refresh(&run.layout.map);
+        let dark = dark_of(&run);
+        assert!(snapshot_ents(&run, 0, &run.players[0].view, &dark).iter().any(|e| e.0 == id), "the trunk tile itself is in the FOV");
+    }
+
+    #[test]
     fn monsters_outside_fov_are_not_sent() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let ppos = run.players[0].pos();

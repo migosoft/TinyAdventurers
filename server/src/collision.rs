@@ -252,6 +252,15 @@ mod tests {
     }
 
     #[test]
+    fn shots_and_line_of_sight_stop_at_trunks() {
+        let mut m = room();
+        m.set(4, 2, Tile::Trunk);
+        assert!(!line_of_sight(&m, Map::center_of(1, 2), Map::center_of(8, 2)), "no sight across a trunk");
+        assert!(line_of_sight(&m, Map::center_of(1, 3), Map::center_of(8, 3)), "beside it");
+        assert!(m.opaque_at(Map::center_of(4, 2)), "a shot is stopped where opaque_at holds");
+    }
+
+    #[test]
     fn terrain_rules_per_mover() {
         let mut m = room();
         m.set(2, 2, Tile::ShallowWater);

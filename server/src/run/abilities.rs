@@ -1759,6 +1759,21 @@ mod tests {
     }
 
     #[test]
+    fn a_shot_stops_at_a_trunk() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let start = run.players[0].pos();
+        let (tx, ty) = crate::dungeon::Map::tile_of(start + Vec2::new(40.0, 0.0));
+        run.layout.map.set(tx, ty, crate::dungeon::Tile::Trunk);
+        let a = ResolvedAbility { damage: 5.0, speed: 230.0, range: 230.0, radius: 3.0, pierce: 0, pierce_through: 0, split: kind_split(EntityKind::Missile), ..run.players[0].sheet.primary.clone() };
+        spawn_shot(&mut run, Creature::Player(0), &a, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), None, 0.0);
+        for _ in 0..30 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+        }
+        assert!(run.projectiles.iter().all(|p| p.dead) || run.projectiles.is_empty(), "the shot ended at the trunk");
+    }
+
+    #[test]
     fn shots_hit_the_upper_body_of_tall_figures() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let pos = run.players[0].pos() + Vec2::new(40.0, 0.0);

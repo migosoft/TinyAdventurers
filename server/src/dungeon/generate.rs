@@ -1424,7 +1424,7 @@ mod tests {
             // No one-tile wall stubs (they would draw as T junctions).
             for y in 1..d.map.h - 1 {
                 for x in 1..d.map.w - 1 {
-                    assert!(!(d.map.opaque(x, y) && is_stub(&d.map, x, y)), "seed {seed}: wall stub at {x},{y}");
+                    assert!(!(d.map.hard_opaque(x, y) && is_stub(&d.map, x, y)), "seed {seed}: wall stub at {x},{y}");
                 }
             }
             // The only way into the boss hall is through the door.

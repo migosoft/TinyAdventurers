@@ -1,5 +1,5 @@
 // Port of server/src/fov.rs (recursive shadowcasting), verified by fov.test.ts.
-import { TileMap } from './map';
+import { type Blocker, TileMap } from './map';
 
 const MULT = [
   [1, 0, 0, -1, -1, 0, 0, 1],
@@ -27,16 +27,17 @@ export class Fov {
     if (x >= 0 && y >= 0 && x < this.w && y < this.h) this.stamp[y * this.w + x] = this.gen;
   }
 
-  compute(map: TileMap, cx: number, cy: number, radius: number): void {
+  compute(map: TileMap, cx: number, cy: number, radius: number, b: Blocker = 'all'): void {
     this.gen = (this.gen + 1) >>> 0 || 1;
     this.mark(cx, cy);
     for (let oct = 0; oct < 8; oct++) {
-      this.cast(map, cx, cy, 1, 1.0, 0.0, radius, MULT[0][oct], MULT[1][oct], MULT[2][oct], MULT[3][oct]);
+      this.cast(map, b, cx, cy, 1, 1.0, 0.0, radius, MULT[0][oct], MULT[1][oct], MULT[2][oct], MULT[3][oct]);
     }
   }
 
   private cast(
     map: TileMap,
+    b: Blocker,
     cx: number,
     cy: number,
     row: number,
@@ -64,7 +65,7 @@ export class Fov {
         if (start < rSlope) continue;
         else if (end > lSlope) break;
         if (dx * dx + dy * dy <= r2) this.mark(x, y);
-        const opaque = map.opaque(x, y);
+        const opaque = map.blocksSight(x, y, b);
         if (blocked) {
           if (opaque) {
             newStart = rSlope;
@@ -75,7 +76,7 @@ export class Fov {
           }
         } else if (opaque && j < radius) {
           blocked = true;
-          this.cast(map, cx, cy, j + 1, start, lSlope, radius, xx, xy, yx, yy);
+          this.cast(map, b, cx, cy, j + 1, start, lSlope, radius, xx, xy, yx, yy);
           newStart = rSlope;
         }
       }

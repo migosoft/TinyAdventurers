@@ -83,10 +83,10 @@ describe('View on the shared fixture', () => {
     const map = new TileMap(fixtures.w, fixtures.h, Uint8Array.from(fixtures.tiles));
     const v = new View(map.w, map.h);
     for (const c of fixtures.view) {
-      v.compute(map, c.x, c.y, c.vision);
+      v.compute(map, c.x, c.y, c.vision, c.hard ? 'hard' : 'all');
       const visible: number[] = [];
       for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) if (v.isVisible(x, y)) visible.push(y * map.w + x);
-      expect(visible, `viewer ${c.x},${c.y}`).toEqual(c.visible);
+      expect(visible, `viewer ${c.x},${c.y} ${c.hard}`).toEqual(c.visible);
       expect(v.polygon.points.length, `viewer ${c.x},${c.y} points`).toBe(c.points.length);
       v.polygon.points.forEach((p, i) => expect(p, `viewer ${c.x},${c.y} point ${i}`).toBeCloseTo(c.points[i], 6));
     }

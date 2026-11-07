@@ -12,7 +12,7 @@
 
 use super::Run;
 use crate::defs::lights::{self, Colour, LightKind};
-use crate::dungeon::{Map, TILE};
+use crate::dungeon::{Blocker, Map, TILE};
 use crate::fov::Fov;
 use crate::math::Vec2;
 use crate::protocol::{Ev, LightInfo};
@@ -136,7 +136,7 @@ impl Lights {
     /// shadowcast of its radius, in the square window around it.
     fn cast(&mut self, map: &Map, x: i32, y: i32, kind: LightKind, mut mark: impl FnMut(&mut Self, usize)) {
         let r = lights::def(kind).radius;
-        self.fov.compute(map, x, y, r);
+        self.fov.compute(map, x, y, r, Blocker::Hard);
         for ty in (y - r).max(0)..=(y + r).min(self.h - 1) {
             for tx in (x - r).max(0)..=(x + r).min(self.w - 1) {
                 if self.fov.is_visible(tx, ty) {

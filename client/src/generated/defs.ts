@@ -97,7 +97,9 @@ export const TILE_ID = {
   "DoorOpen": 3,
   "Floor": 1,
   "Lava": 8,
+  "Road": 10,
   "ShallowWater": 5,
+  "Thicket": 11,
   "Trunk": 9,
   "Void": 0,
   "Wall": 2

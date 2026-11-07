@@ -90,7 +90,7 @@ export class LightField {
     let c = this.cells.get(l.id);
     if (c) return c;
     const r = LIGHT[l.kind].radius;
-    this.fov.compute(this.map, l.x, l.y, r);
+    this.fov.compute(this.map, l.x, l.y, r, 'hard');
     const idx: number[] = [];
     const fall: number[] = [];
     for (let y = Math.max(0, l.y - r); y <= Math.min(this.map.h - 1, l.y + r); y++)
@@ -138,7 +138,7 @@ export class LightField {
     const r = LIGHT[kind].radius;
     const cx = Math.floor(px / tile);
     const cy = Math.floor(py / tile);
-    this.fov.compute(this.map, cx, cy, r);
+    this.fov.compute(this.map, cx, cy, r, 'hard');
     for (let y = Math.max(0, cy - r); y <= Math.min(this.map.h - 1, cy + r); y++)
       for (let x = Math.max(0, cx - r); x <= Math.min(this.map.w - 1, cx + r); x++) {
         if (!this.fov.isVisible(x, y)) continue;
