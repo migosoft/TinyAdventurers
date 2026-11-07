@@ -4,11 +4,13 @@
 
 use super::effects::Creature;
 use super::abilities::{aim_reached, shot_takes, stopping_object};
-use super::entities::Pierce;
+use super::entities::{Dodge, Monster, Pierce};
 use super::targets::{self, Side};
 use super::{perception, Run};
 use crate::defs::classes::PLAYER_RADIUS;
+use crate::defs::attributes::Attr;
 use crate::defs::damage::resolve;
+use crate::defs::kinds::Anim;
 use crate::defs::smarts::Smart;
 use crate::math::Vec2;
 
@@ -104,6 +106,155 @@ pub fn threats(run: &Run, mi: usize) -> Vec<Threat> {
     out
 }
 
+/// The farthest sideways step searched (px). An internal search limit, not a knob.
+const MAX_STEP: f64 = 48.0;
+
+/// Busy creatures don't dodge: a wind-up, minion cast, dash, Ground Slam, channel, a mimic's reveal hold,
+/// dormant or hiding. `script_busy` is the boss script's own answer.
+pub fn busy(m: &Monster, script_busy: bool) -> bool {
+    script_busy
+        || m.ai.windup.is_some()
+        || m.ai.cast.is_some()
+        || m.dash.is_some()
+        || m.slam.is_some()
+        || m.channel.is_some()
+        || m.ai.hold > 0.0
+        || m.dormant
+        || m.hiding
+}
+
+/// Where monster `mi` ends up walking from its place toward `to` through the normal collision, in pieces of at
+/// most 2 px.
+fn walk_end(run: &Run, mi: usize, to: Vec2) -> Vec2 {
+    let m = &run.monsters[mi];
+    let solids = run.solids_for(m.mover, None);
+    let mut p = m.pos;
+    let total = p.dist(to);
+    let dir = (to - p).norm();
+    let mut done = 0.0;
+    while done < total {
+        let piece = (total - done).min(2.0);
+        let v = dir * piece;
+        let (x, y) = crate::collision::move_box(&run.layout.map, p.x, p.y, v.x, v.y, m.radius, m.mover, &solids);
+        p = Vec2::new(x, y);
+        done += piece;
+    }
+    p
+}
+
+/// How far (px, up to `MAX_STEP`) the monster walks along `dir` before something stops it.
+fn room(run: &Run, mi: usize, dir: Vec2) -> f64 {
+    let pos = run.monsters[mi].pos;
+    let mut best = 0.0;
+    for s in 1..=MAX_STEP as i32 {
+        let s = s as f64;
+        if walk_end(run, mi, pos + dir * s).dist(pos + dir * s) > 0.5 {
+            break;
+        }
+        best = s;
+    }
+    best
+}
+
+fn shot_index(run: &Run, id: u32) -> Option<usize> {
+    run.projectiles.iter().position(|p| p.id == id && !p.dead)
+}
+
+/// Whether the shot `t` misses monster `mi` standing at `at` by the safety margin (or is gone).
+fn clears(run: &Run, mi: usize, t: &Threat, at: Vec2) -> bool {
+    shot_index(run, t.shot).map_or(true, |pi| course_hit(run, pi, mi, at, run.smarts.margin).is_none())
+}
+
+/// The step for the soonest threat, or None when no side passes the reach test.
+pub fn plan(run: &Run, mi: usize, threats: &[Threat]) -> Option<Dodge> {
+    let t = threats.first()?;
+    let m = &run.monsters[mi];
+    let pi = shot_index(run, t.shot)?;
+    let walk = super::ai::gait(run, mi, m.speed) * m.effects.speed_mul();
+    if walk <= 0.0 {
+        return None;
+    }
+    let n = t.dir.perp();
+    let sides = [n, n * -1.0];
+    let heading = m.pos - m.history.get(m.history.len().saturating_sub(5)).copied().unwrap_or(m.pos);
+    let first = if heading.len() >= 0.5 {
+        if sides[0].x * heading.x + sides[0].y * heading.y > 0.0 { 0 } else { 1 }
+    } else if room(run, mi, sides[0]) >= room(run, mi, sides[1]) {
+        0
+    } else {
+        1
+    };
+    let order = [sides[first], sides[1 - first]];
+    let mut passing: Vec<(f64, Vec2)> = Vec::new();
+    for side in order {
+        // Reach: the longest step that still arrives in time.
+        let limit = (((t.arrive - run.smarts.reaction) * walk).ceil() - 1.0).min(MAX_STEP);
+        let mut s = 1.0;
+        while s <= limit {
+            let to = m.pos + side * s;
+            if s / walk + run.smarts.reaction < t.arrive
+                && course_hit(run, pi, mi, to, run.smarts.margin).is_none()
+                && walk_end(run, mi, to).dist(to) <= 0.5
+            {
+                passing.push((s, to));
+                break;
+            }
+            s += 1.0;
+        }
+    }
+    let (_, to) = passing
+        .iter()
+        .find(|(_, to)| threats[1..].iter().all(|o| clears(run, mi, o, *to)))
+        .or(passing.first())
+        .copied()?;
+    Some(Dodge { shot: t.shot, to, wait: run.smarts.reaction })
+}
+
+/// The hook. True when monster `mi` spent this tick dodging (the caller skips its normal behaviour).
+pub fn tick(run: &mut Run, mi: usize, dt: f64, script_busy: bool) -> bool {
+    let m = &run.monsters[mi];
+    if !run.smarts.can(m.attrs.get(Attr::Int), Smart::Dodge) || busy(m, script_busy) || m.effects.speed_mul() <= 0.0 {
+        run.monsters[mi].dodge = None;
+        return false;
+    }
+    let ts = threats(run, mi);
+    let m = &run.monsters[mi];
+    // A dodge in progress carries on while its shot flies and the spot is not reached.
+    let mut cur = m.dodge.filter(|d| shot_index(run, d.shot).is_some() && m.pos.dist(d.to) > 0.01);
+    if let Some(d) = cur {
+        let mine = ts.iter().find(|t| t.shot == d.shot).map_or(f64::INFINITY, |t| t.arrive);
+        if ts.iter().any(|t| t.arrive < mine && t.shot != d.shot && !clears(run, mi, t, d.to)) {
+            if let Some(new) = plan(run, mi, &ts) {
+                cur = Some(new);
+            }
+        }
+    } else if !ts.is_empty() {
+        cur = plan(run, mi, &ts);
+    }
+    run.monsters[mi].dodge = cur;
+    let Some(mut d) = cur else { return false };
+    if d.wait > 0.0 {
+        d.wait -= dt;
+        run.monsters[mi].dodge = Some(d);
+        super::ai::set_anim(run, mi, Anim::Idle);
+        return true;
+    }
+    let m = &run.monsters[mi];
+    let walk = super::ai::gait(run, mi, m.speed) * m.effects.speed_mul();
+    let remaining = m.pos.dist(d.to);
+    let v = (d.to - m.pos).norm() * (walk * dt).min(remaining);
+    let solids = run.solids_for(m.mover, None);
+    let (x, y) = crate::collision::move_box(&run.layout.map, m.pos.x, m.pos.y, v.x, v.y, m.radius, m.mover, &solids);
+    let moved = Vec2::new(x, y);
+    let m = &mut run.monsters[mi];
+    let went = moved.dist(m.pos) > 1e-9;
+    m.pos = moved;
+    m.dodge = if m.pos.dist(d.to) <= 0.01 || (!went && walk > 0.0) { None } else { Some(d) };
+    let active = went || m.dodge.is_some();
+    super::ai::set_anim(run, mi, Anim::Move);
+    active
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,6 +264,7 @@ mod tests {
     use crate::dungeon::{Map, Tile};
     use crate::protocol::{BossId, ClassId};
     use crate::run::ai::tests::open_floor;
+    use crate::run::entities::Monster;
     use crate::run::light::Lights;
     use crate::run::tests::{enemy_use, test_run};
 
@@ -333,5 +485,288 @@ mod tests {
             run.step();
         }
         assert!(run.monsters[mi].hp < hp, "and the arrow really hits it");
+    }
+
+    // ---- the step and the hook ----
+
+    use crate::defs::effects::EffectKind;
+    use crate::dungeon::TILE;
+
+    /// Floor for `r` tiles around `c`.
+    fn floor_around(run: &mut Run, c: Vec2, r: i32) {
+        let (tx, ty) = Map::tile_of(c);
+        for y in ty - r..=ty + r {
+            for x in tx - r..=tx + r {
+                run.layout.map.set(x, y, Tile::Floor);
+            }
+        }
+    }
+
+    /// Like `fixture`, but the orc stands on a tile centre and hero 0 `dist` px west of it on its row; the notice
+    /// distance is wide, so tests can pick how far the arrow starts.
+    fn row(dist: f64) -> (Run, usize) {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
+        let (tx, ty) = Map::tile_of(run.monsters[mi].pos);
+        let at = Map::center_of(tx, ty);
+        run.monsters[mi].pos = at;
+        floor_around(&mut run, at, 10);
+        run.players[0].mv.x = at.x - dist;
+        run.players[0].mv.y = at.y;
+        run.smarts.notice.value = 300.0;
+        (run, mi)
+    }
+
+    /// Steps the run `n` ticks; the orc's lowest HP and its farthest sideways move from where it began.
+    fn play(run: &mut Run, mi: usize, n: usize) -> (f64, f64) {
+        let id = run.monsters[mi].id;
+        let (start, mut low, mut side) = (run.monsters[mi].pos, run.monsters[mi].hp, 0.0f64);
+        for _ in 0..n {
+            run.step();
+            let m = &run.monsters[run.monster_idx(id).unwrap()];
+            low = low.min(m.hp);
+            side = side.max((m.pos.y - start.y).abs());
+        }
+        (low, side)
+    }
+
+    #[test]
+    fn below_the_dodge_tier_an_orc_takes_the_arrow() {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 80.0);
+        run.smarts.tier_int[0] = 99;
+        let hp = run.monsters[mi].hp;
+        fire(&mut run, AbilityId::Shoot, 0.0, 80.0);
+        let (low, _) = play(&mut run, mi, 60);
+        assert!(low < hp, "the arrow hit");
+    }
+
+    #[test]
+    fn at_the_tier_an_orc_steps_aside_and_the_arrow_misses() {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 80.0);
+        // The orc (radius 6, speed 52) needs 10 px = 0.19 s, so it must see the arrow 64+ px off: the stock notice
+        // distance (60 at DEX 10) is just short, so this test widens it.
+        run.smarts.notice.value = 80.0;
+        let hp = run.monsters[mi].hp;
+        fire(&mut run, AbilityId::Shoot, 0.0, 80.0);
+        run.step();
+        let d = run.monsters[mi].dodge.expect("it dodges");
+        assert!((d.to.x - run.monsters[mi].pos.x).abs() < 2.0, "straight sideways, not along the shot");
+        let need = run.monsters[mi].radius + 2.0 + run.smarts.margin;
+        let (low, side) = play(&mut run, mi, 60);
+        assert_eq!(low, hp, "the arrow missed");
+        assert!(side >= need - 1.0, "it stepped {side} px sideways (needed about {need})");
+    }
+
+    #[test]
+    fn a_shot_from_close_range_always_hits() {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 20.0);
+        let hp = run.monsters[mi].hp;
+        // The arrow is spawned 6 px out and fast-forwarded: at 20 px it may hit before it is ever in flight.
+        let sheet = crate::sheet::hero_sheet(ClassId::ElvenRanger, &crate::defs::loadout::Build::start(ClassId::ElvenRanger)).unwrap();
+        run.players[0].sheet = sheet.clone();
+        run.players[0].aim = 0.0;
+        run.players[0].aim_dist = 20.0;
+        crate::run::abilities::try_use(&mut run, 0, true, 1);
+        let (low, _) = play(&mut run, mi, 30);
+        assert!(low < hp);
+    }
+
+    #[test]
+    fn busy_creatures_take_the_hit() {
+        use crate::run::entities::{MonsterDash, Windup};
+        let states: Vec<(&str, Box<dyn Fn(&mut Monster)>)> = vec![
+            ("windup", Box::new(|m| m.ai.windup = Some(Windup { t: 9.0, aim: 0.0, alt: false, at: None, id: None }))),
+            ("cast", Box::new(|m| m.ai.cast = Some((AbilityId::Shoot, 9.0)))),
+            ("slam", Box::new(|m| m.slam = Some(9.0))),
+            ("channel", Box::new(|m| {
+                m.kit = crate::sheet::monster_kit(&[AbilityId::FireBreath], &m.attrs, &[], crate::sheet::Body { radius: m.radius }, &[]);
+                m.channel = Some((AbilityId::FireBreath, 9.0, 1.0));
+            })),
+            ("hold", Box::new(|m| m.ai.hold = 9.0)),
+        ];
+        for (name, set) in states {
+            let (mut run, mi) = fixture(ClassId::ElvenRanger, 80.0);
+            let hp = run.monsters[mi].hp;
+            set(&mut run.monsters[mi]);
+            assert!(busy(&run.monsters[mi], false), "{name} is busy");
+            fire(&mut run, AbilityId::Shoot, 0.0, 80.0);
+            assert!(play(&mut run, mi, 60).0 < hp, "{name}: hit");
+        }
+        // A dash in progress (its kit-driven step is not run here: only the hook's answer).
+        let (mut run, mi) = row(100.0);
+        run.monsters[mi].dash = Some(MonsterDash { id: AbilityId::Pounce, dir: Vec2::new(-1.0, 0.0), left: 50.0, hit: Vec::new(), attack: true });
+        fire(&mut run, AbilityId::Shoot, 0.0, 100.0);
+        assert!(busy(&run.monsters[mi], false), "a dash is busy");
+        assert!(!tick(&mut run, mi, super::super::DT, false) && run.monsters[mi].dodge.is_none(), "so no dodge");
+        run.monsters[mi].dash = None;
+        assert!(tick(&mut run, mi, super::super::DT, false), "and without the dash it dodges");
+        let (run, mi) = fixture(ClassId::ElvenRanger, 80.0);
+        assert!(!busy(&run.monsters[mi], false) && busy(&run.monsters[mi], true), "the boss script's answer counts");
+    }
+
+    #[test]
+    fn a_slow_creature_starts_no_dodge_it_cannot_finish() {
+        let (mut run, mi) = row(100.0);
+        run.monsters[mi].speed = 5.0;
+        let hp = run.monsters[mi].hp;
+        fire(&mut run, AbilityId::Shoot, 0.0, 100.0);
+        let ts = threats(&run, mi);
+        assert_eq!(ts.len(), 1);
+        assert!(plan(&run, mi, &ts).is_none());
+        let id = run.monsters[mi].id;
+        for _ in 0..60 {
+            run.step();
+            assert!(run.monsters[run.monster_idx(id).unwrap()].dodge.is_none());
+        }
+        assert!(run.monsters[mi].hp < hp);
+    }
+
+    #[test]
+    fn a_creature_that_cannot_move_never_dodges() {
+        let (mut run, mi) = row(100.0);
+        run.apply_effect(Creature::Monster(mi), EffectKind::Entangled, Some(5.0));
+        assert_eq!(run.monsters[mi].effects.speed_mul(), 0.0);
+        let hp = run.monsters[mi].hp;
+        fire(&mut run, AbilityId::Shoot, 0.0, 100.0);
+        let ts = threats(&run, mi);
+        assert_eq!(ts.len(), 1);
+        assert!(plan(&run, mi, &ts).is_none());
+        for _ in 0..60 {
+            run.step();
+            assert!(run.monsters[mi].dodge.is_none());
+        }
+        assert!(run.monsters[mi].hp < hp);
+    }
+
+    #[test]
+    fn walls_block_the_step() {
+        let wall = |run: &mut Run, mi: usize, dy: i32| {
+            let (tx, ty) = Map::tile_of(run.monsters[mi].pos);
+            run.layout.map.set(tx, ty + dy, Tile::Wall);
+        };
+        let (mut run, mi) = row(100.0);
+        wall(&mut run, mi, -1);
+        wall(&mut run, mi, 1);
+        let hp = run.monsters[mi].hp;
+        fire(&mut run, AbilityId::Shoot, 0.0, 100.0);
+        assert!(plan(&run, mi, &threats(&run, mi)).is_none(), "walls both sides");
+        let (low, _) = play(&mut run, mi, 60);
+        assert!(low < hp, "hit");
+        assert!(run.monsters[mi].dodge.is_none());
+
+        let (mut run, mi) = row(100.0);
+        wall(&mut run, mi, -1);
+        let (hp, y0) = (run.monsters[mi].hp, run.monsters[mi].pos.y);
+        fire(&mut run, AbilityId::Shoot, 0.0, 100.0);
+        let d = plan(&run, mi, &threats(&run, mi)).expect("south is free");
+        assert!(d.to.y > y0);
+        let (low, _) = play(&mut run, mi, 60);
+        assert_eq!(low, hp, "missed");
+    }
+
+    /// An orc that has been chasing hero 1 for a while (east or west of it), hero 0 `up` px north of it shooting
+    /// south across its path.
+    fn chase(east: f64) -> (Run, usize) {
+        let (mut run, mi) = fixture(ClassId::ElvenRanger, 50.0);
+        run = crate::run::tests::test_run(&[ClassId::ElvenRanger, ClassId::ElvenRanger], BossId::Lich);
+        run.monsters.clear();
+        let at = run.players[0].pos() + Vec2::new(0.0, 100.0);
+        floor_around(&mut run, at, 14);
+        run.lights.fill();
+        run.players[1].mv.x = at.x + east * 70.0;
+        run.players[1].mv.y = at.y;
+        run.players[0].mv.x = at.x;
+        run.players[0].mv.y = at.y - 100.0;
+        run.smarts.notice.value = 300.0;
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
+        let start = at;
+        let mi2 = run.monster_idx(id).unwrap();
+        run.monsters[mi2].ai.cd = 1e9;
+        for _ in 0..12 {
+            run.step();
+        }
+        let _ = mi;
+        assert!((run.monsters[mi2].pos.x - start.x) * east > 3.0, "it has been walking toward hero 1");
+        (run, mi2)
+    }
+
+    #[test]
+    fn a_chasing_orc_sidesteps_toward_its_heading() {
+        for east in [1.0, -1.0] {
+            let (mut run, mi) = chase(east);
+            let p = run.monsters[mi].pos;
+            let lead = p + Vec2::new(east * 3.0, 0.0);
+            let from = run.players[0].pos();
+            fire(&mut run, AbilityId::Shoot, from.angle_to(lead), from.dist(lead));
+            assert!(!threats(&run, mi).is_empty(), "a threat");
+            run.step();
+            let m = &run.monsters[mi];
+            let d = m.dodge.expect("it dodges");
+            assert!((d.to.x - m.pos.x) * east > 0.0, "toward its heading ({east}): {:?} from {:?}", d.to, m.pos);
+        }
+    }
+
+    #[test]
+    fn with_no_heading_it_steps_to_the_side_with_room() {
+        let (mut run, mi) = row(100.0);
+        let (tx, ty) = Map::tile_of(run.monsters[mi].pos);
+        run.layout.map.set(tx, ty - 1, Tile::Wall);
+        fire(&mut run, AbilityId::Shoot, 0.0, 100.0);
+        assert!(run.monsters[mi].history.is_empty());
+        let d = plan(&run, mi, &threats(&run, mi)).expect("a dodge");
+        assert!(d.to.y > run.monsters[mi].pos.y, "south, where the room is");
+        // The wall to the south instead.
+        let (mut run, mi) = row(100.0);
+        let (tx, ty) = Map::tile_of(run.monsters[mi].pos);
+        run.layout.map.set(tx, ty + 1, Tile::Wall);
+        run.layout.map.set(tx, ty - 2, Tile::Wall);
+        let _ = TILE;
+        fire(&mut run, AbilityId::Shoot, 0.0, 100.0);
+        let d = plan(&run, mi, &threats(&run, mi)).expect("a dodge");
+        assert!(d.to.y < run.monsters[mi].pos.y, "north");
+    }
+
+    #[test]
+    fn the_dodge_ends_when_the_shot_is_gone() {
+        let (mut run, mi) = row(110.0);
+        fire(&mut run, AbilityId::Shoot, 0.0, 110.0);
+        run.step();
+        assert!(run.monsters[mi].dodge.is_some(), "dodging");
+        let y = run.monsters[mi].pos.y;
+        run.projectiles[0].dead = true;
+        run.step();
+        assert!(run.monsters[mi].dodge.is_none());
+        assert!((run.monsters[mi].pos.y - y).abs() < 1.5, "the step was not carried on");
+        let x = run.monsters[mi].pos.x;
+        for _ in 0..10 {
+            run.step();
+        }
+        assert!(run.monsters[mi].pos.x < x, "the normal AI runs: it chases the hero again");
+    }
+
+    #[test]
+    fn reaction_delay_waits_before_stepping() {
+        let (mut run, mi) = row(110.0);
+        run.smarts.reaction = 0.1;
+        let (hp, y0) = (run.monsters[mi].hp, run.monsters[mi].pos.y);
+        fire(&mut run, AbilityId::Shoot, 0.0, 110.0);
+        let mut still = 0;
+        for _ in 0..6 {
+            run.step();
+            if (run.monsters[mi].pos.y - y0).abs() < 1e-9 {
+                still += 1;
+            }
+        }
+        assert_eq!(still, 6, "it waits 0.1 s (6 ticks)");
+        let (low, side) = play(&mut run, mi, 60);
+        assert_eq!(low, hp, "cleared with the delay");
+        assert!(side > 5.0);
+        // Close enough to clear without the delay, too close with it.
+        for (reaction, hit) in [(0.0, false), (0.1, true)] {
+            let (mut run, mi) = row(80.0);
+            run.smarts.reaction = reaction;
+            let hp = run.monsters[mi].hp;
+            fire(&mut run, AbilityId::Shoot, 0.0, 80.0);
+            assert_eq!(play(&mut run, mi, 60).0 < hp, hit, "reaction {reaction}");
+        }
     }
 }

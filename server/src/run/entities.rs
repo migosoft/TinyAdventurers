@@ -213,6 +213,16 @@ pub struct Companion {
     pub reach_t: f64,
 }
 
+/// A dodge step in progress (run/dodge.rs): the shot it is stepping clear of, where it steps to, and the
+/// reaction delay left.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Dodge {
+    pub shot: u32,
+    pub to: Vec2,
+    /// Reaction delay left (s).
+    pub wait: f64,
+}
+
 pub struct Monster {
     pub id: u32,
     /// Resistances (races plus adjustments) and the split of its melee hits.
@@ -251,6 +261,8 @@ pub struct Monster {
     pub channel: Option<(AbilityId, f64, f64)>,
     /// A dash in progress: it is in the air, so it is neither pushed nor sinking meanwhile.
     pub dash: Option<MonsterDash>,
+    /// A dodge step in progress (run/dodge.rs).
+    pub dodge: Option<Dodge>,
     /// Seconds left of the wolf-bite mark (Pack Hunter).
     pub wolf_bit: f64,
     pub ai: Ai,

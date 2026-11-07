@@ -520,7 +520,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
 /// (crouch, landing, rest), and the average speed packed into the airborne
 /// part of each cycle. The hop clock is the Move animation clock, so the
 /// client can draw the same phases.
-fn gait(run: &Run, mi: usize, speed: f64) -> f64 {
+pub(crate) fn gait(run: &Run, mi: usize, speed: f64) -> f64 {
     let m = &run.monsters[mi];
     if m.etype != Some(EnemyType::Mimic) {
         return speed;

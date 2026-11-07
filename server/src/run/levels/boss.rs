@@ -74,6 +74,7 @@ pub fn spawn(run: &mut Run) {
         slam: None,
         channel: None,
         dash: None,
+        dodge: None,
         wolf_bit: 0.0,
         ai: Ai::new(pos),
         base_ai: BaseAi::Melee, // the boss's script never reads it

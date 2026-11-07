@@ -330,6 +330,7 @@ impl Run {
             slam: None,
             channel: None,
             dash: None,
+        dodge: None,
             wolf_bit: 0.0,
             ai: Ai::new(pos),
             base_ai: d.base_ai,
@@ -503,6 +504,9 @@ impl Run {
                 continue;
             }
             let active = player_pos.iter().any(|pp| pp.dist2(m.pos) < ACTIVE_RANGE * ACTIVE_RANGE);
+            if dodge::tick(self, mi, DT, false) {
+                continue;
+            }
             behaviour::tick(self, mi, DT, active);
         }
         Level::tick(self, DT);
