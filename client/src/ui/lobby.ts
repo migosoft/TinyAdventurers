@@ -14,7 +14,7 @@ import { classFigure, figureWeapon } from './classes';
 import { abilityIcon, itemIcon } from './icons';
 import { pickLabel, poolFor, samePick } from './hub/model';
 import type { Pick } from '../generated/Pick';
-import { BOSS_TEXT, className } from './text';
+import { BOSS_TEXT, LEVEL_TEXT, className } from './text';
 
 const BOSSES: BossId[] = ['Demon', 'Lich', 'Dragon'];
 /** Figure (atlas frame prefix), CSS filter approximating the in-game tint (anim/defs.ts) and preview scale. */
@@ -24,6 +24,11 @@ const BOSS_FIG: Record<BossId, [string, string, number]> = {
   Dragon: ['dragon', '', 2],
 };
 
+const LEVELS: LevelId[] = ['Dungeon', 'Woodland'];
+const LEVEL_BLURB: Record<LevelId, string> = {
+  Dungeon: 'Rooms and corridors in the dark, ending in a boss hall.',
+  Woodland: 'A daylit forest road under the trees. No boss: walk out the far side.',
+};
 type Room = { run_id: number; name: string; host: number; players: RoomPlayer[]; level: LevelId; boss: BossId | null };
 
 /** The abilities of `slot` that class `cls` may use (the debug loadout's choices). */
@@ -249,11 +254,12 @@ export class Lobby {
     this.root.innerHTML = `
       <h1>${esc(room.name)}</h1>
       <div class="panel ui-party"><h2>Party (${room.players.length}/4)</h2><ul class="players">${players}</ul></div>
-      <div class="panel"><h2>End boss${isHost ? '' : ' (chosen by the host)'}</h2><div class="bosses"></div></div>
+      <div class="panel level-panel"><h2>Level${isHost ? '' : ' (chosen by the host)'}</h2><div class="bosses levels"></div></div>
+      ${room.level === 'Dungeon' ? `<div class="panel boss-panel"><h2>End boss${isHost ? '' : ' (chosen by the host)'}</h2><div class="bosses boss-list"></div></div>` : ''}
       ${me && this.debug && (isHost || !me.ready) ? this.debugLoadoutRow(room.run_id, me.class) : ''}
       <div class="row actions">
         <button id="leave" class="danger">Leave</button>
-        ${isHost ? `<button id="start" class="primary">Enter the dungeon</button>` : `<button id="ready" class="primary">${me?.ready ? 'Not ready' : 'Ready!'}</button>`}
+        ${isHost ? `<button id="start" class="primary">${room.level === 'Dungeon' ? 'Enter the dungeon' : 'Enter the woodland'}</button>` : `<button id="ready" class="primary">${me?.ready ? 'Not ready' : 'Ready!'}</button>`}
       </div>
       <div class="error"></div>`;
     for (const p of room.players) {
@@ -279,8 +285,19 @@ export class Lobby {
         }
       };
     });
-    const bosses = this.root.querySelector('.bosses')!;
-    for (const b of [null, ...BOSSES]) {
+    const levels = this.root.querySelector('.levels')!;
+    for (const lv of LEVELS) {
+      const card = document.createElement('button');
+      card.className = `boss-card level-card level-${lv.toLowerCase()}${room.level === lv ? ' selected' : ''}`;
+      card.disabled = !isHost;
+      const info = document.createElement('div');
+      info.innerHTML = `<b>${LEVEL_TEXT[lv].name}</b><small>${LEVEL_BLURB[lv]}</small>`;
+      card.append(info);
+      if (isHost) card.onclick = () => this.net.send({ t: 'SelectLevel', level: lv });
+      levels.append(card);
+    }
+    const bosses = this.root.querySelector('.boss-list');
+    if (bosses) for (const b of [null, ...BOSSES]) {
       const card = document.createElement('button');
       card.className = `boss-card${room.boss === b ? ' selected' : ''}`;
       card.disabled = !isHost;

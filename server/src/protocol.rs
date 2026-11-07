@@ -91,7 +91,9 @@ pub enum ClientMsg {
     SetReady { ready: bool },
     /// Host only, before the run starts. `None` = random end boss.
     SelectBoss { boss: Option<BossId> },
-    /// Host only. Uses the room's chosen boss.
+    /// Host only, before the run starts. Dungeon or Woodland.
+    SelectLevel { level: LevelId },
+    /// Host only. Uses the room's chosen level and boss.
     StartRun,
     Input(InputMsg),
     Ping { time: f64 },

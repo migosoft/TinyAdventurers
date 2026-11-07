@@ -384,6 +384,13 @@ impl Lobby {
                     self.send_room(rid);
                 }
             }
+            ClientMsg::SelectLevel { level } => {
+                let Some(rid) = self.conns.get(&id).and_then(|c| c.room) else { return };
+                if let Some(room) = self.rooms.get_mut(&rid).filter(|r| r.host == id && r.run_tx.is_none()) {
+                    room.level = level;
+                    self.send_room(rid);
+                }
+            }
             ClientMsg::StartRun => self.start(id),
             ClientMsg::DebugLoadout { primary, secondary } => self.debug_loadout_if(id, primary, secondary),
             ClientMsg::DebugEquip { slot, item } => self.debug_equip_if(id, slot, item),
@@ -750,6 +757,57 @@ mod tests {
         l.handle(host, ClientMsg::SelectBoss { boss: Some(BossId::Demon) });
         assert_eq!(l.rooms[&rid].boss, Some(BossId::Lich), "fixed once started");
         assert!(l.character_busy(10) && l.character_busy(20));
+    }
+
+    #[tokio::test]
+    async fn only_the_host_chooses_the_level_before_the_run() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let host = join(&mut l, 1, ClassId::Wizard);
+        let guest = join(&mut l, 2, ClassId::Paladin);
+        l.handle(host, ClientMsg::CreateRun { name: "r".into() });
+        let rid = l.conns[&host].room.unwrap();
+        l.handle(guest, ClientMsg::JoinRun { run_id: rid });
+        assert_eq!(l.rooms[&rid].level, LevelId::Dungeon, "dungeon by default");
+
+        l.handle(guest, ClientMsg::SelectLevel { level: LevelId::Woodland });
+        assert_eq!(l.rooms[&rid].level, LevelId::Dungeon, "guest cannot choose");
+        l.handle(host, ClientMsg::SelectLevel { level: LevelId::Woodland });
+        assert_eq!(l.rooms[&rid].level, LevelId::Woodland);
+
+        l.handle(guest, ClientMsg::SetReady { ready: true });
+        l.handle(host, ClientMsg::StartRun);
+        assert!(l.rooms[&rid].run_tx.is_some(), "run started");
+        l.handle(host, ClientMsg::SelectLevel { level: LevelId::Dungeon });
+        assert_eq!(l.rooms[&rid].level, LevelId::Woodland, "fixed once started");
+    }
+
+    #[tokio::test]
+    async fn a_woodland_room_starts_a_woodland_run() {
+        let shared = new_shared(None);
+        let mut l = shared.lock().unwrap();
+        let host = join(&mut l, 1, ClassId::Wizard);
+        let (tx, mut host_rx) = unbounded_channel();
+        l.conns.get_mut(&host).unwrap().tx = tx;
+        l.handle(host, ClientMsg::CreateRun { name: "r".into() });
+        let rid = l.conns[&host].room.unwrap();
+        l.handle(host, ClientMsg::SelectBoss { boss: Some(BossId::Lich) });
+        while host_rx.try_recv().is_ok() {}
+        l.handle(host, ClientMsg::SelectLevel { level: LevelId::Woodland });
+        let mut last = None;
+        while let Ok(Message::Binary(b)) = host_rx.try_recv() {
+            let v = rmp_serde::from_slice::<serde_json::Value>(&b).unwrap();
+            if v["t"] == "Room" {
+                last = Some(v);
+            }
+        }
+        assert_eq!(last.expect("a Room message")["level"], "Woodland", "the Room message carries the level");
+        let run = l.new_run(rid, 7).expect("run");
+        assert_eq!(run.level.id(), LevelId::Woodland);
+        let room = &l.rooms[&rid];
+        assert_eq!(room.boss, Some(BossId::Lich), "the boss choice stays stored, unused");
+        l.handle(host, ClientMsg::StartRun);
+        assert!(l.rooms[&rid].run_tx.is_some());
     }
 
     #[tokio::test]
