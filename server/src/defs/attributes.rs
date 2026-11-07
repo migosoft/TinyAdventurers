@@ -69,6 +69,33 @@ impl Attributes {
 /// The Attribute value at which every factor is 1.
 pub const BASELINE: i32 = 10;
 
+/// Layer 1 of every creature's Attributes: `BASELINE` for all six.
+pub const BASELINE_ATTRS: Attributes = Attributes::new(BASELINE, BASELINE, BASELINE, BASELINE, BASELINE, BASELINE);
+
+/// Every source of a creature's Attributes, kept apart: `base` (layer 1), `race` (2), `kind` (its class or
+/// stat-block modifier, 3), the Attribute Buy, the usable items' points and the run-time `effects`.
+/// No `Default`: the base is not zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AttrSources {
+    pub base: Attributes,
+    pub race: Attributes,
+    pub kind: Attributes,
+    pub buy: Attributes,
+    pub items: Attributes,
+    pub effects: Attributes,
+}
+
+impl AttrSources {
+    /// Everything but the items and the effects: the Attribute price, the debug lift and item requirements start here.
+    pub fn before_items(&self) -> Attributes {
+        self.base.plus(self.race).plus(self.kind).plus(self.buy)
+    }
+    /// The Attributes in play: every source, then the effects (the one place a lowered Attribute is floored at 1).
+    pub fn total(&self) -> Attributes {
+        self.before_items().plus(self.items).with_delta(self.effects)
+    }
+}
+
 /// Per-point effects.
 pub const STR_DMG: f64 = 0.05;
 pub const STR_RANGE: f64 = 0.02;
@@ -152,6 +179,43 @@ mod tests {
         assert_eq!(push_dist(20.0, 9, 9.0), 0.0);
         assert_eq!(push_dist(20.0, 16, 13.0), 15.0);
         assert_eq!(push_dist(20.0, 19, 13.0), 20.0);
+    }
+
+    #[test]
+    fn total_adds_every_source_and_floors_once() {
+        let src = AttrSources {
+            base: BASELINE_ATTRS,
+            race: Attributes::new(0, 2, 0, 0, 0, 0),
+            kind: Attributes::new(0, 0, 0, -9, 0, 0),
+            buy: Attributes::new(1, 0, 0, 0, 0, 0),
+            items: Attributes::new(0, 0, 1, 0, 0, 0),
+            effects: Attributes::new(-5, 0, 0, 0, 0, 0),
+        };
+        // STR is 11 before the effects; DEX 12, CON 11, INT 1 are untouched by them.
+        assert_eq!(src.total(), Attributes::new(6, 12, 11, 1, 10, 10));
+        let drained = AttrSources { effects: Attributes::new(-20, 0, 0, 0, 0, 0), ..src };
+        assert_eq!(drained.total().get(Str), 1);
+        // The floor applies once, to the sum: INT 1 stays 1 under a further drain.
+        let int_drained = AttrSources { effects: Attributes::new(0, 0, 0, -5, 0, 0), ..src };
+        assert_eq!(int_drained.total().get(Int), 1);
+        // An Attribute already at or below 1 stays where it is.
+        let zero = Attributes::default();
+        let low = AttrSources { base: Attributes::new(0, 10, 10, 10, 10, 10), race: zero, kind: zero, buy: zero, items: zero, effects: Attributes::new(-3, 0, 0, 0, 0, 0) };
+        assert_eq!(low.total().get(Str), 0);
+    }
+
+    #[test]
+    fn before_items_leaves_out_items_and_effects() {
+        let src = AttrSources {
+            base: BASELINE_ATTRS,
+            race: Attributes::new(0, 2, 0, 0, 0, 0),
+            kind: Attributes::new(5, 0, 0, 0, 0, 0),
+            buy: Attributes::new(0, 0, 1, 0, 0, 0),
+            items: Attributes::new(3, 3, 3, 3, 3, 3),
+            effects: Attributes::new(-4, -4, -4, -4, -4, -4),
+        };
+        assert_eq!(src.before_items(), Attributes::new(15, 12, 11, 10, 10, 10));
+        assert_eq!(src.total(), Attributes::new(14, 11, 10, 9, 9, 9));
     }
 
     #[test]

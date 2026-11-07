@@ -13,7 +13,6 @@ use crate::defs::enemies::{self, BaseAi, EnemyType};
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
-use crate::protocol::Ev;
 use crate::sheet::ResolvedAbility;
 use crate::defs::effects::EffectKind;
 use crate::defs::races::Sight;
@@ -676,7 +675,7 @@ pub(crate) mod tests {
     use crate::defs::damage::Damage;
     use crate::defs::kinds::EntityKind;
     use crate::dungeon::Tile;
-    use crate::protocol::{BossId, ClassId};
+    use crate::protocol::{BossId, ClassId, Ev};
 
     #[test]
     fn wide_bosses_reach_every_spot_of_their_hall_around_the_chasms() {
@@ -890,7 +889,7 @@ pub(crate) mod tests {
 
     /// The radius of the ogre's Ground Slam.
     pub(crate) fn slam_radius() -> f64 {
-        crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::Ogre), &crate::defs::enemies::attrs(EnemyType::Ogre), &[]).get(ab::AbilityId::GroundSlam).unwrap().radius
+        crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::Ogre), &crate::defs::enemies::attr_sources(EnemyType::Ogre).total(), &[]).get(ab::AbilityId::GroundSlam).unwrap().radius
     }
 
     #[test]
@@ -1094,7 +1093,7 @@ pub(crate) mod tests {
         let id = run.spawn_enemy(EnemyType::OrcWarrior, hero + Vec2::new(30.0, 0.0), None);
         let mi = run.monster_idx(id).unwrap();
         // The wolf's kit with Pounce taken out.
-        let (attrs, radius) = (run.monsters[mi].base.attrs.clone(), run.monsters[mi].radius);
+        let (attrs, radius) = (run.monsters[mi].base.sources.total(), run.monsters[mi].radius);
         let m = &mut run.monsters[mi];
         m.etype = None;
         m.base_ai = BaseAi::Melee;

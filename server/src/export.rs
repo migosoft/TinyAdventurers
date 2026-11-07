@@ -38,7 +38,7 @@ fn export_defs() {
         .iter()
         .map(|c| {
             let d = classes::def(*c);
-            let start = classes::start_attrs(*c);
+            let start = classes::attr_sources(*c).total();
             let attrs: serde_json::Map<String, serde_json::Value> = Attr::ALL.iter().map(|a| (format!("{a:?}"), json!(start.get(*a)))).collect();
             (
                 format!("{c:?}"),
@@ -67,13 +67,13 @@ fn export_defs() {
         })
         .collect();
     // The ogre's slam telegraph: the radius and wind-up of its Ground Slam.
-    let ogre_slam = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(enemies::EnemyType::Ogre), &crate::defs::enemies::attrs(enemies::EnemyType::Ogre), &[]).get(ab::AbilityId::GroundSlam).expect("the ogre slams").clone();
+    let ogre_slam = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(enemies::EnemyType::Ogre), &crate::defs::enemies::attr_sources(enemies::EnemyType::Ogre).total(), &[]).get(ab::AbilityId::GroundSlam).expect("the ogre slams").clone();
     // The dragon's telegraphs: the numbers of the abilities in its kit.
-    let dragon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Dragon), &crate::defs::bosses::attrs(crate::protocol::BossId::Dragon), &[]);
+    let dragon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Dragon), &crate::defs::bosses::attr_sources(crate::protocol::BossId::Dragon).total(), &[]);
     let dragon_ability = |id: AbilityId| dragon_kit.get(id).expect("the dragon uses it").clone();
-    let demon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Demon), &crate::defs::bosses::attrs(crate::protocol::BossId::Demon), &[]);
+    let demon_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Demon), &crate::defs::bosses::attr_sources(crate::protocol::BossId::Demon).total(), &[]);
     let demon_ability = |id: AbilityId| demon_kit.get(id).expect("the demon uses it").clone();
-    let lich_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Lich), &crate::defs::bosses::attrs(crate::protocol::BossId::Lich), &[]);
+    let lich_kit = crate::sheet::kit_for(crate::sheet::KitSource::Boss(crate::protocol::BossId::Lich), &crate::defs::bosses::attr_sources(crate::protocol::BossId::Lich).total(), &[]);
     let lich_ability = |id: AbilityId| lich_kit.get(id).expect("the lich casts it").clone();
     let mut consts = json!({
         "TILE": TILE,

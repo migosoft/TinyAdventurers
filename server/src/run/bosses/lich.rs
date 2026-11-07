@@ -383,7 +383,7 @@ pub(crate) mod tests {
     }
 
     fn nova_radius() -> f64 {
-        crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Lich), &crate::defs::bosses::attrs(BossId::Lich), &[]).get(AbilityId::Nova).unwrap().radius
+        crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Lich), &crate::defs::bosses::attr_sources(BossId::Lich).total(), &[]).get(AbilityId::Nova).unwrap().radius
     }
 
     #[test]

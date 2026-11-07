@@ -14,7 +14,7 @@ use crate::defs::items::{self, check_equip, check_wear, EquipError, EquipSlot, E
 use crate::defs::loadout::{Build, Loadout};
 use crate::defs::trees::{self, NodeId};
 use crate::protocol::{CharacterInfo, ClassId};
-use crate::sheet::{attrs_with_items, attrs_without_items, profs, usable_items};
+use crate::sheet::{hero_sources, profs, sources_with_items, usable_items};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -234,7 +234,7 @@ impl Progress {
 
     /// The XP price of the next point of each Attribute (items do not count).
     pub fn attr_prices(&self, class: ClassId) -> [u32; 6] {
-        let attrs = attrs_without_items(class, &self.build(class));
+        let attrs = hero_sources(class, &self.build(class)).before_items();
         Attr::ALL.map(|a| attr_price(a, attrs.get(a)))
     }
 
@@ -264,7 +264,7 @@ impl Progress {
     }
 
     pub fn buy_node(&mut self, class: ClassId, n: NodeId, free: bool) -> Result<(), &'static str> {
-        trees::check_buy(class, &self.nodes, n, &attrs_with_items(class, &self.build(class)))?;
+        trees::check_buy(class, &self.nodes, n, &sources_with_items(class, &self.build(class)).total())?;
         self.spend(trees::def(n).cost, free)?;
         self.nodes.push(n);
         self.nodes.sort();
@@ -312,7 +312,7 @@ impl Progress {
             // The requirement counts the other usable items, not the one this replaces (#196).
             let mut others = self.build(class);
             others.equipment.set(slot, None);
-            check_equip(class, &profs(class, &self.nodes), slot, item, &attrs_with_items(class, &others)).map_err(equip_message)?;
+            check_equip(class, &profs(class, &self.nodes), slot, item, &sources_with_items(class, &others).total()).map_err(equip_message)?;
             self.inventory.remove(at);
         }
         if let Some(old) = self.equipment.get(slot) {

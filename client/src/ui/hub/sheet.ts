@@ -23,7 +23,8 @@ export function renderSheet(ctx: TabCtx): HTMLElement {
 
   const rows = ORDER.map((attr, i) => {
     const l = s.attrs.find((x) => x.attr === attr)!;
-    const parts = [`class ${l.class}`, l.shop && `shop +${l.shop}`, l.items && `items +${l.items}`].filter(Boolean).join(' · ');
+    const signed = (v: number): string => `${v < 0 ? '−' : '+'}${Math.abs(v)}`;
+    const parts = [`base ${l.base}`, l.race && `race ${signed(l.race)}`, l.class && `class ${signed(l.class)}`, l.buy && `bought ${signed(l.buy)}`, l.items && `items ${signed(l.items)}`].filter(Boolean).join(' · ');
     const price = info.prices[i];
     return `<li data-row="${attr}"><span class="ab">${ATTRS[attr].short}</span><span class="nm">${NAME[attr]}<small>${parts}</small></span><b class="val">${l.total}</b>
       <span class="eff">${esc(attrEffect(attr, l.total))}</span>${debug ? `<button data-attr="${attr}">+1 · free</button>` : `<button data-attr="${attr}"${info.xp < price ? ' disabled' : ''}>+1 · ${price} XP</button>`}</li>`;
@@ -63,7 +64,7 @@ export function renderSheet(ctx: TabCtx): HTMLElement {
     <div class="panel ui-respec"><h2>Respec</h2>
       <p class="ui-small">Resets the skill tree <b>and</b> the bought Attributes and refunds all ${info.xp_spent} XP spent. Items stay. ${debug ? 'Debug: free (free buys refund nothing).' : `It costs ${COIN}${RESPEC.base} plus ${COIN}1 per ${RESPEC.per} XP spent.`}</p>
       ${debug
-        ? `<button id="respec" class="danger"${info.nodes.length === 0 && s.attrs.every((l) => !l.shop) ? ' disabled' : ''}>Respec for free (debug)</button>`
+        ? `<button id="respec" class="danger"${info.nodes.length === 0 && s.attrs.every((l) => !l.buy) ? ' disabled' : ''}>Respec for free (debug)</button>`
         : `<button id="respec" class="danger"${info.coins < info.respec_price || info.xp_spent === 0 ? ' disabled' : ''}>Respec for ${COIN}${info.respec_price}</button>`}</div>`;
   right.querySelector<HTMLButtonElement>('#respec')!.onclick = () => {
     if (confirm('Reset your skill tree and bought Attributes, and get all spent XP back?')) send(debug ? { t: 'DebugRespec' } : { t: 'Respec' });

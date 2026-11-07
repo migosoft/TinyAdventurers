@@ -47,7 +47,7 @@ pub fn spawn(run: &mut Run) {
     let stats = crate::sheet::boss_stats(boss_id);
     let id = run.alloc_id();
     let hp = stats.max_hp;
-    let base = crate::sheet::MonsterBase { attrs: stats.attrs, max_hp: hp, speed: stats.speed, kit: crate::sheet::KitSource::Boss(boss_id) };
+    let base = crate::sheet::MonsterBase { sources: stats.sources, max_hp: hp, speed: stats.speed, kit: crate::sheet::KitSource::Boss(boss_id) };
     run.monsters.push(Monster {
         id,
         res: prof.res,
@@ -69,7 +69,7 @@ pub fn spawn(run: &mut Run) {
         anim: Anim::Idle,
         anim_start: 0.0,
         hurt_t: 0.0,
-        kit: crate::sheet::kit_for(base.kit, &base.attrs, &[]),
+        kit: crate::sheet::kit_for(base.kit, &stats.attrs, &[]),
         cds: Default::default(),
         slam: None,
         channel: None,
@@ -92,6 +92,7 @@ pub fn spawn(run: &mut Run) {
         last_hit_by: None,
         effects: Default::default(),
         effect_res: prof.effect_res,
+        sources: stats.sources,
         attrs: stats.attrs,
         weight: stats.weight,
         companion: None,

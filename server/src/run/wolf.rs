@@ -21,7 +21,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
     let stats = crate::sheet::wolf_stats();
     let owner = run.players[pi].id;
     let max_hp = WOLF_HP * run.players[pi].sheet.wolf.hp_mul;
-    let base = crate::sheet::MonsterBase { attrs: stats.attrs, max_hp, speed: WOLF_SPEED, kit: crate::sheet::KitSource::Wolf(run.players[pi].sheet.wolf) };
+    let base = crate::sheet::MonsterBase { sources: stats.sources, max_hp, speed: WOLF_SPEED, kit: crate::sheet::KitSource::Wolf(run.players[pi].sheet.wolf) };
     let spot = summon_spot(run, run.players[pi].pos());
     let (tx, ty) = Map::tile_of(spot);
     let id = run.alloc_id();
@@ -46,7 +46,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         anim: Anim::Idle,
         anim_start: run.time,
         hurt_t: 0.0,
-        kit: crate::sheet::kit_for(base.kit, &base.attrs, &[]),
+        kit: crate::sheet::kit_for(base.kit, &stats.attrs, &[]),
         cds: Default::default(),
         slam: None,
         channel: None,
@@ -70,6 +70,7 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         last_hit_by: None,
         effects: Default::default(),
         effect_res: prof.effect_res,
+        sources: stats.sources,
         attrs: stats.attrs,
         weight: stats.weight,
         side: Side::Friendly,
@@ -331,7 +332,7 @@ mod tests {
     fn a_pounce_cooldown_mod_lengthens_only_the_wolfs_pounce() {
         use crate::defs::loadout::AbilityMod::CooldownAdd;
         let mods = crate::sheet::WolfMods { hp_mul: 1.0, pounce: Some(CooldownAdd(1.5)) };
-        let (plain, modded) = (crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]), crate::sheet::kit_for(crate::sheet::KitSource::Wolf(mods), &crate::defs::companions::wolf_attrs(), &[]));
+        let (plain, modded) = (crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[]), crate::sheet::kit_for(crate::sheet::KitSource::Wolf(mods), &crate::defs::companions::wolf_attr_sources().total(), &[]));
         let (p, m) = (plain.get(AbilityId::Pounce).unwrap(), modded.get(AbilityId::Pounce).unwrap());
         assert!((p.cooldown - 5.0 * 10.0 / 15.0).abs() < 1e-12 && (m.cooldown - (5.0 * 10.0 / 15.0 + 1.5)).abs() < 1e-12, "the wolf's DEX 15, then the mod: {} {}", p.cooldown, m.cooldown);
         assert_eq!(plain.get(AbilityId::Bite), modded.get(AbilityId::Bite), "the bite is the same");

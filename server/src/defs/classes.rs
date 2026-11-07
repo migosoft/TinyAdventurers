@@ -1,5 +1,5 @@
 use super::abilities::AbilityId;
-use super::attributes::Attributes;
+use super::attributes::{AttrSources, Attributes};
 use super::races::{self, Adjust, Race, Profile};
 use super::items::{ArmorClass, ItemId};
 use super::kinds::EntityKind;
@@ -21,7 +21,7 @@ pub struct ClassDef {
     pub hp: f64,
     /// Start speed, defined at the class's own CON (10 + modifier, before races).
     pub speed: f64,
-    /// The class's modifier from 10 (see `start_attrs`).
+    /// The class's modifier from 10 (see `attr_sources`).
     #[serde(skip)]
     pub attr_mods: Attributes,
     /// HP at CON 10: `hp(base_hp, 10 + attr_mods.Con) == hp` (own CON, before races).
@@ -70,10 +70,11 @@ pub fn prof_base(class: ClassId) -> Vec<Prof> {
     d.weapons.iter().map(|&k| Prof::Weapon(k)).chain(std::iter::once(Prof::Armor(d.max_armor))).collect()
 }
 
-/// Layers 1-3: base 10 + race bonus + class modifier.
-pub fn start_attrs(class: ClassId) -> Attributes {
-    races::creature_attrs(races(class), def(class).attr_mods)
+/// The sources of the class's Attributes, layers 1-3: base 10, race bonus, class modifier.
+pub fn attr_sources(class: ClassId) -> AttrSources {
+    races::creature_sources(races(class), def(class).attr_mods)
 }
+
 
 pub fn profile(class: ClassId) -> Profile {
     races::profile(races(class), Adjust::NONE)
@@ -97,20 +98,20 @@ mod tests {
         let today = [(ClassId::Wizard, Attributes::new(8, 14, 12, 15, 13, 10)), (ClassId::Paladin, Attributes::new(15, 8, 13, 10, 12, 14)),
             (ClassId::Barbarian, Attributes::new(15, 13, 14, 8, 12, 10)), (ClassId::ElvenRanger, Attributes::new(10, 15, 12, 8, 14, 13))];
         for (c, a) in today {
-            assert_eq!(start_attrs(c), a, "{c:?}");
-            assert_eq!(start_attrs(c), races::creature_attrs(races(c), def(c).attr_mods), "{c:?}");
+            assert_eq!(attr_sources(c).total(), a, "{c:?}");
+            assert_eq!(attr_sources(c).total(), races::creature_sources(races(c), def(c).attr_mods).total(), "{c:?}");
         }
     }
 
     #[test]
     fn classes_use_the_standard_array() {
         for c in ClassId::ALL {
-            let mut v: Vec<i32> = Attr::ALL.iter().map(|&a| start_attrs(c).get(a)).collect();
+            let mut v: Vec<i32> = Attr::ALL.iter().map(|&a| attr_sources(c).total().get(a)).collect();
             v.sort();
             assert_eq!(v, [8, 10, 12, 13, 14, 15], "{c:?}");
         }
         assert_eq!(def(ClassId::ElvenRanger).attr_mods.get(Attr::Dex), 3);
-        assert_eq!(start_attrs(ClassId::ElvenRanger).get(Attr::Dex), 15);
+        assert_eq!(attr_sources(ClassId::ElvenRanger).total().get(Attr::Dex), 15);
     }
 
     #[test]

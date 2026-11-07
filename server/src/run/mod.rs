@@ -299,7 +299,7 @@ impl Run {
         let stats = crate::sheet::enemy_stats(t);
         let id = self.alloc_id();
         let hp = stats.max_hp;
-        let base = crate::sheet::MonsterBase { attrs: stats.attrs, max_hp: hp, speed: stats.speed, kit: crate::sheet::KitSource::Enemy(t) };
+        let base = crate::sheet::MonsterBase { sources: stats.sources, max_hp: hp, speed: stats.speed, kit: crate::sheet::KitSource::Enemy(t) };
         self.monsters.push(Monster {
             id,
             res: prof.res,
@@ -321,7 +321,7 @@ impl Run {
             anim: Anim::Idle,
             anim_start: self.time,
             hurt_t: 0.0,
-            kit: crate::sheet::kit_for(base.kit, &base.attrs, &[]),
+            kit: crate::sheet::kit_for(base.kit, &stats.attrs, &[]),
             cds: Default::default(),
             slam: None,
             channel: None,
@@ -344,6 +344,7 @@ impl Run {
             last_hit_by: None,
             effects: effects::Effects::default(),
             effect_res: prof.effect_res,
+            sources: stats.sources,
             attrs: stats.attrs,
             weight: stats.weight,
             companion: None,
@@ -1501,7 +1502,7 @@ pub mod tests {
 
     #[test]
     fn players_carry_their_sheet() {
-        use crate::defs::companions::{wolf_attrs, WOLF_WEIGHT};
+        use crate::defs::companions::{wolf_attr_sources, WOLF_WEIGHT};
         use crate::sheet::{boss_stats, enemy_stats, hero_sheet};
         let run = test_run(&[ClassId::Barbarian], BossId::Lich);
         let want = hero_sheet(ClassId::Barbarian, &Build::start(ClassId::Barbarian)).unwrap();
@@ -1526,7 +1527,7 @@ pub mod tests {
         let id = wolf::spawn_wolf(&mut run, 0);
         let w = run.monsters.iter().find(|m| m.id == id).unwrap();
         assert_eq!(w.weight, WOLF_WEIGHT);
-        assert_eq!(w.attrs, wolf_attrs());
+        assert_eq!(w.attrs, wolf_attr_sources().total());
     }
 
     #[test]

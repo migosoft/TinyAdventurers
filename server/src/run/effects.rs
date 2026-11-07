@@ -168,10 +168,6 @@ impl Effects {
         self.list.push(ActiveEffect { kind: k, left: secs, dot_t: 0.0, look, source, from, amount, magical, dispel: 0.0 });
         true
     }
-    /// The signed amount of `k`, summed over its unpaused entries (0 when it is not on, or has none).
-    pub fn amount(&self, k: EffectKind) -> i32 {
-        self.on().filter(|a| a.kind == k).map(|a| a.amount).sum()
-    }
     /// What the active effects add to each Attribute (summed, not yet floored: see `Attributes::with_delta`).
     pub fn attr_delta(&self) -> Attributes {
         let mut d = Attributes::default();
@@ -681,7 +677,7 @@ impl Run {
                 let Some(m) = self.monsters.get_mut(i).filter(|m| m.alive) else { return };
                 let old = m.attrs;
                 let n = crate::sheet::monster_numbers(&m.base, delta.unwrap_or_default(), &muted);
-                (m.attrs, m.max_hp, m.speed, m.kit) = (n.attrs, n.max_hp, n.speed, n.kit);
+                (m.sources, m.attrs, m.max_hp, m.speed, m.kit) = (n.sources, n.attrs, n.max_hp, n.speed, n.kit);
                 m.hp = m.hp.min(m.max_hp);
                 Attr::ALL.into_iter().map(|a| (a, old.get(a), n.attrs.get(a))).collect()
             }
@@ -774,11 +770,11 @@ impl Run {
     }
 }
 
-/// The hero's sheet for `delta` and `muted`, with the light of the same build under `muted` alone: pauses change the
+/// The hero's sheet for `effects` and `muted`, with the light of the same build under `muted` alone: pauses change the
 /// light, drains do not. The second sheet is resolved only while a drain is on (without one both agree).
-fn hero_sheet_with_light(class: crate::protocol::ClassId, build: &crate::defs::loadout::Build, delta: Attributes, muted: &[crate::sheet::Lasting]) -> crate::sheet::Sheet {
-    let mut sheet = crate::sheet::run_sheet(class, build, delta, muted);
-    if delta != Attributes::default() {
+fn hero_sheet_with_light(class: crate::protocol::ClassId, build: &crate::defs::loadout::Build, effects: Attributes, muted: &[crate::sheet::Lasting]) -> crate::sheet::Sheet {
+    let mut sheet = crate::sheet::run_sheet(class, build, effects, muted);
+    if effects != Attributes::default() {
         sheet.light = crate::sheet::run_sheet(class, build, Attributes::default(), muted).light;
     }
     sheet
@@ -2103,7 +2099,7 @@ mod tests {
         use crate::defs::items::{EquipSlot, Equipment, ItemId};
         let c = ClassId::Wizard;
         let mut b = Build { equipment: Equipment::starter(c).with(EquipSlot::Melee, ItemId::BoneStaff), ..Build::start(c) };
-        b.extra.add(Attr::Int, 18 - crate::defs::classes::start_attrs(c).get(Attr::Int));
+        b.extra.add(Attr::Int, 18 - crate::defs::classes::attr_sources(c).total().get(Attr::Int));
         let mut drain = Attributes::default();
         drain.add(Attr::Int, -1);
         assert_eq!(crate::sheet::run_sheet(c, &b, Attributes::default(), &[]).light, Some(LightKind::Magic), "lit at 18");
@@ -2119,20 +2115,19 @@ mod tests {
         let h = Creature::Player(0);
         let str0 = run.players[0].sheet.attrs.get(Attr::Str);
         assert_eq!(drain(&mut run, h, EffectKind::Weakened, 20.0, None), EffectOutcome::Added);
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -1);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -1);
         assert_eq!(drain(&mut run, h, EffectKind::Weakened, 30.0, None), EffectOutcome::Refreshed);
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -2);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -2);
         assert_eq!(left_of(&run, h, EffectKind::Weakened), Some(30.0), "the longer time");
         assert_eq!(drain(&mut run, h, EffectKind::Weakened, 5.0, None), EffectOutcome::Refreshed);
         assert_eq!(left_of(&run, h, EffectKind::Weakened), Some(30.0), "a shorter touch does not shorten it");
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -3);
         assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -3);
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Sleep), 0);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -3);
         assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), str0 - 3);
         // Power 30 adds -2 in one touch.
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
         drain(&mut run, h, EffectKind::Weakened, 20.0, Some(30));
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -2);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -2);
         assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), str0 - 2);
     }
 
@@ -2150,7 +2145,7 @@ mod tests {
             assert_eq!((p, a, v), (power, Attr::Wil, wil), "Frail leaves WIL alone");
             assert!((secs - scaled_secs(20.0, power, wil)).abs() < 1e-12);
         }
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Frail), -2);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Con), -2);
     }
 
     #[test]
@@ -2202,9 +2197,31 @@ mod tests {
         run.remove_effect(c, EffectKind::Weakened);
         let m = &run.monsters[mi];
         let want = crate::sheet::monster_numbers(&m.base, Attributes::default(), &[]);
-        assert_eq!((m.attrs, m.max_hp, m.speed), (m.base.attrs, m.base.max_hp, m.base.speed));
+        assert_eq!((m.attrs, m.max_hp, m.speed), (m.base.sources.total(), m.base.max_hp, m.base.speed));
         assert_eq!(m.kit, want.kit);
         assert_eq!(m.kit.get(AbilityId::Strike).unwrap().damage, dmg0);
+    }
+
+    #[test]
+    fn a_drained_monster_tracks_its_sources() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let at = run.players[0].pos();
+        let id = run.spawn_enemy(crate::defs::enemies::EnemyType::OrcWarrior, at, None);
+        let mi = run.monster_idx(id).unwrap();
+        let c = Creature::Monster(mi);
+        let (sources0, attrs0) = (run.monsters[mi].sources, run.monsters[mi].attrs);
+        assert_eq!(sources0.effects, Attributes::default());
+        assert_eq!(attrs0, sources0.total());
+        drain(&mut run, c, EffectKind::Weakened, 20.0, None);
+        let m = &run.monsters[mi];
+        assert_eq!(m.sources.effects.get(Attr::Str), -1);
+        assert_eq!(m.sources.base, sources0.base);
+        assert_eq!(m.attrs, m.sources.total());
+        assert_ne!(m.attrs, attrs0);
+        run.remove_effect(c, EffectKind::Weakened);
+        let m = &run.monsters[mi];
+        assert_eq!((m.sources, m.attrs), (sources0, attrs0));
+        assert_eq!(m.sources.effects, Attributes::default());
     }
 
     #[test]

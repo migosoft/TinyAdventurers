@@ -50,7 +50,7 @@ pub struct Conn {
 /// The Attribute points that lift each Attribute of `class` to the highest Attribute requirement of
 /// the build's two picks and its equipped items (debug builds only; proficiency is not lifted).
 pub fn debug_lift(class: ClassId, b: &Build) -> Attributes {
-    let start = crate::sheet::attrs_without_items(class, b);
+    let start = crate::sheet::hero_sources(class, b).before_items();
     let mut need = [0i32; Attr::COUNT];
     let picks = [b.loadout.primary.ability, b.loadout.secondary.ability];
     let reqs = picks
@@ -1034,7 +1034,7 @@ mod tests {
     #[tokio::test]
     async fn debug_lift_only_for_debug_builds() {
         use crate::defs::attributes::Attr;
-        use crate::defs::classes::start_attrs;
+        use crate::defs::classes;
         use crate::defs::items::{EquipSlot, ItemId};
         let shared = new_shared(None);
         let mut l = shared.lock().unwrap();
@@ -1044,7 +1044,7 @@ mod tests {
         l.debug_equip_if(a, EquipSlot::Melee, Some(ItemId::WarHammer));
         l.debug_loadout_if(a, pick(AbilityId::Strike), pick(AbilityId::GroundSlam));
         let b = l.build_of(a).unwrap();
-        assert_eq!(start_attrs(ClassId::Barbarian).plus(b.extra).get(Attr::Str), 17);
+        assert_eq!(classes::attr_sources(ClassId::Barbarian).total().plus(b.extra).get(Attr::Str), 17);
         assert!(hero_sheet(ClassId::Barbarian, &b).is_ok());
         // A new character drops the debug picks and the lift with them.
         l.handle(a, ClientMsg::LeaveRun);
@@ -1057,11 +1057,11 @@ mod tests {
     #[test]
     fn the_lift_meets_both_picks() {
         use crate::defs::attributes::Attr;
-        use crate::defs::classes::start_attrs;
+        use crate::defs::classes;
         let mut b = Build::start(ClassId::Wizard);
         b.loadout = Loadout { primary: pick(AbilityId::ChainSpark), secondary: pick(AbilityId::Haste) };
-        let got = start_attrs(ClassId::Wizard).plus(debug_lift(ClassId::Wizard, &b));
-        let start = start_attrs(ClassId::Wizard);
+        let got = classes::attr_sources(ClassId::Wizard).total().plus(debug_lift(ClassId::Wizard, &b));
+        let start = classes::attr_sources(ClassId::Wizard).total();
         assert_eq!(got.get(Attr::Int), 18);
         assert_eq!(got.get(Attr::Wil), 14);
         for a in [Attr::Str, Attr::Dex, Attr::Con, Attr::Cha] {

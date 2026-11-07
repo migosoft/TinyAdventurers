@@ -5,15 +5,15 @@
 //! and monsters from here.
 
 use crate::defs::abilities::{self as ab, AbilityCategory, AbilityDef, AbilityId, AbilitySlot, Uses};
-use crate::defs::attributes::{self, Attr, Attributes, Scaled, CD_PCT, CON_MOVE};
+use crate::defs::attributes::{self, Attr, AttrSources, Attributes, Scaled, CD_PCT, CON_MOVE};
 use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
-use crate::defs::companions::{wolf_attrs, wolf_base_hp, WOLF_ATTR_MODS, WOLF_RADIUS, WOLF_SPEED, WOLF_WEIGHT};
+use crate::defs::companions::{wolf_attr_sources, wolf_base_hp, WOLF_ATTR_MODS, WOLF_RADIUS, WOLF_SPEED, WOLF_WEIGHT};
 use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, Resistances};
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::kinds::EntityKind;
-use crate::defs::items::{self, ArmorClass, EquipSlot, Equipment, ItemBase, ItemId, ItemProperty, PropKind};
+use crate::defs::items::{self, ArmorClass, EquipSlot, ItemBase, ItemId, ItemProperty, PropKind};
 use crate::defs::lights::{self, LightKind};
 use crate::defs::loadout::{apply_mods, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source, MIN_COOLDOWN};
 use crate::defs::races::{self, Sight};
@@ -103,8 +103,10 @@ pub struct ResolvedAbility {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sheet {
-    /// Class + race + `extra` + item points.
+    /// `sources.total()`.
     pub attrs: Attributes,
+    /// Every source of `attrs`: class, race, `extra` (as `buy`), the usable items' points, the run's effects.
+    pub sources: AttrSources,
     pub max_hp: f64,
     pub speed: f64,
     pub weight: f64,
@@ -453,9 +455,10 @@ pub fn profs(class: ClassId, nodes: &[NodeId]) -> Vec<Prof> {
     v
 }
 
-/// Start Attributes + the shop's `extra`; no item points (the tree no longer adds Attributes).
-pub fn attrs_without_items(class: ClassId, b: &Build) -> Attributes {
-    classes::start_attrs(class).plus(b.extra)
+/// The sources of a hero's Attributes without items: the class's own, the Attribute Buy (`extra`);
+/// `items` and `effects` stay zero (the tree no longer adds Attributes).
+pub fn hero_sources(class: ClassId, b: &Build) -> AttrSources {
+    AttrSources { buy: b.extra, ..classes::attr_sources(class) }
 }
 
 /// The worn items, with the starter in an empty Melee slot.
@@ -473,10 +476,15 @@ fn worn_items(class: ClassId, b: &Build) -> Vec<(EquipSlot, ItemId)> {
         .collect()
 }
 
-/// `attrs_without_items` plus the Attribute points of the usable worn items (`usable_items`), whatever the loadout.
-pub fn attrs_with_items(class: ClassId, b: &Build) -> Attributes {
+/// `hero_sources` with the Attribute points of the usable worn items (`usable_items`) in `items`, whatever the loadout.
+pub fn sources_with_items(class: ClassId, b: &Build) -> AttrSources {
     let (usable, _) = usable_items(class, b, Attributes::default());
-    worn_items(class, &usable).iter().fold(attrs_without_items(class, b), |a, &(_, id)| a.plus(item_points(id, &[])))
+    AttrSources { items: worn_points(&worn_items(class, &usable), &[]), ..hero_sources(class, b) }
+}
+
+/// The Attribute points of the `worn` items (none from a muted one).
+fn worn_points(worn: &[(EquipSlot, ItemId)], muted: &[Lasting]) -> Attributes {
+    worn.iter().fold(Attributes::default(), |a, &(_, id)| a.plus(item_points(id, muted)))
 }
 
 /// The Attribute points of item `id` (none from a muted item).
@@ -506,14 +514,14 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
     Ok(sheet)
 }
 
-/// The sheet of a hero during a run, with a signed Attribute `delta` (the drain effects). Never
+/// The sheet of a hero during a run, with the signed Attribute `effects` (the drains). Never
 /// fails: `b` is a build `hero_sheet` accepted. Item requirements are met from the Attributes
-/// without items plus `delta` (`usable_items`): an item that fails gives nothing (an unusable
+/// without items plus `effects` (`usable_items`): an item that fails gives nothing (an unusable
 /// melee weapon is the class starter), and a pick that fails is disabled and holds the plain
 /// ability, without mods; `disabled` names the Attribute requirement that fails, the pick's own or
 /// that of the item it lost its weapon or version to.
-pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -> Sheet {
-    let (mut sheet, cx) = sheet_core(class, b, delta, muted).expect("an accepted build passes the equipment check");
+pub fn run_sheet(class: ClassId, b: &Build, effects: Attributes, muted: &[Lasting]) -> Sheet {
+    let (mut sheet, cx) = sheet_core(class, b, effects, muted).expect("an accepted build passes the equipment check");
     let strike = sheet.fallback.clone();
     let mut wolf = WolfMods::NONE;
     for (i, (slot, p)) in [(AbilitySlot::Primary, b.loadout.primary), (AbilitySlot::Secondary, b.loadout.secondary)].into_iter().enumerate() {
@@ -546,19 +554,19 @@ pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]
 }
 
 /// The worn items of `b` that can be used (#196), built up from the Attributes without items plus
-/// `delta`: every item whose requirements are met turns on and adds its Attribute points, until
+/// `effects`: every item whose requirements are met turns on and adds its Attribute points, until
 /// nothing changes. An item's own points never meet its own requirement, and two items that only
 /// meet each other's stay off. Returns `b` without the unusable items (an unusable melee weapon is
 /// the class starter), and each unusable item's slot with its first unmet Attribute requirement.
-pub fn usable_items(class: ClassId, b: &Build, delta: Attributes) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
-    usable_items_muted(class, b, delta, &[])
+pub fn usable_items(class: ClassId, b: &Build, effects: Attributes) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
+    usable_items_muted(class, b, effects, &[])
 }
 
 /// `usable_items` with some items muted: a muted item adds no Attribute points, so it can stop meeting another item's requirement.
-fn usable_items_muted(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
+fn usable_items_muted(class: ClassId, b: &Build, effects: Attributes, muted: &[Lasting]) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
     let worn: Vec<(EquipSlot, ItemId)> = EquipSlot::ALL.iter().filter_map(|&s| b.equipment.get(s).map(|id| (s, id))).collect();
     let items: Vec<(&[Requirement], Attributes)> = worn.iter().map(|&(_, id)| (items::def(id).req, item_points(id, muted))).collect();
-    let (on, attrs) = build_up(&items, attrs_without_items(class, b), delta);
+    let (on, attrs) = build_up(&items, AttrSources { effects, ..hero_sources(class, b) });
     let mut usable = b.clone();
     let mut dropped = Vec::new();
     for (&(s, _), (&(req, _), on)) in worn.iter().zip(items.iter().zip(on)) {
@@ -573,12 +581,12 @@ fn usable_items_muted(class: ClassId, b: &Build, delta: Attributes, muted: &[Las
 }
 
 /// The fixpoint of `usable_items`: `items` are each worn item's requirements and Attribute points.
-/// Returns which items are on and the Attributes with their points, plus `delta`.
-fn build_up(items: &[(&[Requirement], Attributes)], bare: Attributes, delta: Attributes) -> (Vec<bool>, Attributes) {
+/// `bare` holds every source but the items. Returns which items are on and the total Attributes with their points.
+fn build_up(items: &[(&[Requirement], Attributes)], bare: AttrSources) -> (Vec<bool>, Attributes) {
     let mut on = vec![false; items.len()];
     loop {
         // Item points are never negative (a data test), so turning an item on keeps the others on.
-        let attrs = items.iter().zip(&on).filter(|(_, on)| **on).fold(bare, |a, ((_, p), _)| a.plus(*p)).with_delta(delta);
+        let attrs = AttrSources { items: items.iter().zip(&on).filter(|(_, on)| **on).fold(Attributes::default(), |a, ((_, p), _)| a.plus(*p)), ..bare }.total();
         let mut changed = false;
         for (i, (req, _)) in items.iter().enumerate() {
             if !on[i] && req.iter().all(|r| r.met(&attrs, None)) {
@@ -660,10 +668,10 @@ fn resolve_usable(class: ClassId, slot: AbilitySlot, p: Pick, d: &AbilityDef, cx
 }
 
 /// The sheet without its two picks (they hold the Strike until `hero_sheet` resolves them), and
-/// what resolving any pick needs. `delta` is an Attribute change during a run (none for
+/// what resolving any pick needs. `effects` is the Attribute change during a run (none for
 /// `hero_sheet`). The equipment is checked for slot, class and proficiency; every derived number
-/// uses the Attributes with the usable items (`usable_items`, with `delta`) plus `delta`.
-fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -> Result<(Sheet, PickCx), LoadoutError> {
+/// uses the Attributes with the usable items (`usable_items`, with `effects`) plus `effects`.
+fn sheet_core(class: ClassId, b: &Build, effects: Attributes, muted: &[Lasting]) -> Result<(Sheet, PickCx), LoadoutError> {
     // A muted magic node counts as not bought. A non-magic node passed by mistake stays bought: muting a Proficiency
     // would make `run_sheet`'s equipment check fail.
     let muted_node = |n: NodeId| muted.contains(&Lasting::Node(n)) && trees::def(n).magical;
@@ -675,13 +683,14 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
         b
     };
     let def = classes::def(class);
-    let unequipped = attrs_without_items(class, b);
     let tree = trees::gains(&b.nodes);
     items::check_equipment(class, &profs(class, &b.nodes), &b.equipment).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
-    let (usable, dropped) = usable_items_muted(class, b, delta, muted);
+    let (usable, dropped) = usable_items_muted(class, b, effects, muted);
     let prof = classes::profile(class);
 
     let worn = worn_items(class, &usable);
+    let sources = AttrSources { items: worn_points(&worn, muted), effects, ..hero_sources(class, b) };
+    let attrs = sources.total();
 
     // Armor bases first, then the properties (spec §10).
     let mut res = prof.res;
@@ -703,7 +712,6 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
     if ks.has(Keystone::Juggernaut) {
         weight += 4.0;
     }
-    let mut attrs = unequipped;
     let mut effect_res = prof.effect_res;
     if ks.has(Keystone::Unshaken) {
         effect_res.set(EffectKind::Sleep, effect_res.get(EffectKind::Sleep) + 1.0);
@@ -730,7 +738,8 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
         }
         for p in live_props(id, muted) {
             match p.kind {
-                PropKind::Attr(a, n) => attrs.add(a, n),
+                // Counted in `sources.items` (`item_points`).
+                PropKind::Attr(..) => {}
                 PropKind::Resist(t, v) => res.set(t, res.get(t) + v),
                 PropKind::EffectResist(k, v) => effect_res.set(k, effect_res.get(k) + v),
                 PropKind::Weight(w) => weight += w,
@@ -759,7 +768,6 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
             }
         }
     }
-    let attrs = attrs.with_delta(delta);
     let melee_id = worn.iter().find(|w| w.0 == EquipSlot::Melee).map(|w| w.1).expect("a hero always has a melee weapon");
     let melee = arm(melee_id, &attrs, &shares[0], std::mem::take(&mut on_hits[0]), pierce[0]);
     let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], std::mem::take(&mut on_hits[1]), pierce[1]));
@@ -776,6 +784,7 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
     let cx = PickCx { usable, dropped, attrs, melee: melee.clone(), ranged: ranged.clone(), improves: tree.improves.clone(), ks };
     let sheet = Sheet {
         attrs,
+        sources,
         max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp).max(1.0),
         speed: move_speed(def.speed, races::own_con(def.attr_mods), &attrs) * (1.0 + move_frac),
         weight,
@@ -802,10 +811,13 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
 pub struct AttrLine {
     pub attr: Attr,
     pub total: i32,
-    /// Class and race.
+    /// The baseline every creature starts from.
+    pub base: i32,
+    pub race: i32,
+    /// The class's own points.
     pub class: i32,
-    /// Points bought in the shop (and the debug lift).
-    pub shop: i32,
+    /// Points bought in the Attribute shop (and the debug lift).
+    pub buy: i32,
     pub items: i32,
 }
 
@@ -977,14 +989,10 @@ pub fn summary(class: ClassId, b: &Build) -> SheetSummary {
             }
         }
     };
-    let base = classes::start_attrs(class);
+    let src = &sheet.sources;
     let attrs = Attr::ALL
         .iter()
-        .map(|&a| {
-            let total = sheet.attrs.get(a);
-            let (class, shop) = (base.get(a), used.extra.get(a));
-            AttrLine { attr: a, total, class, shop, items: total - class - shop }
-        })
+        .map(|&a| AttrLine { attr: a, total: sheet.attrs.get(a), base: src.base.get(a), race: src.race.get(a), class: src.kind.get(a), buy: src.buy.get(a), items: src.items.get(a) })
         .collect();
     let mut profs: Vec<String> = Vec::new();
     for p in self::profs(class, &used.nodes) {
@@ -1041,6 +1049,8 @@ fn keystone_ability(mut r: ResolvedAbility, d: &AbilityDef, ks: &KeystoneSet) ->
 /// The numbers a monster's spawn reads.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MonsterStats {
+    /// All the sources of its Attributes (`effects` zero at spawn); `attrs` is their total.
+    pub sources: AttrSources,
     pub attrs: Attributes,
     pub weight: f64,
     pub max_hp: f64,
@@ -1049,32 +1059,33 @@ pub struct MonsterStats {
 
 /// A monster's numbers from its Attributes: HP and speed are stored at its own CON (`own_con`), so the
 /// races' and the kind's CON move them from there.
-fn monster_stats(attrs: Attributes, own_con: i32, base_hp: f64, speed: f64, weight: f64) -> MonsterStats {
-    MonsterStats { attrs, weight, max_hp: attributes::hp(base_hp, attrs.get(Attr::Con)), speed: move_speed(speed, own_con, &attrs) }
+fn monster_stats(sources: AttrSources, own_con: i32, base_hp: f64, speed: f64, weight: f64) -> MonsterStats {
+    let attrs = sources.total();
+    MonsterStats { sources, attrs, weight, max_hp: attributes::hp(base_hp, attrs.get(Attr::Con)), speed: move_speed(speed, own_con, &attrs) }
 }
 
 /// Enemy stats. HP does not depend on the party size (TODO 4b).
 pub fn enemy_stats(t: EnemyType) -> MonsterStats {
     let d = enemies::def(t);
-    monster_stats(enemies::attrs(t), races::own_con(d.attr_mods), enemies::base_hp(t), d.speed, d.weight)
+    monster_stats(enemies::attr_sources(t), races::own_con(d.attr_mods), enemies::base_hp(t), d.speed, d.weight)
 }
 
 /// Boss stats. HP does not depend on the party size (TODO 4b).
 pub fn boss_stats(b: BossId) -> MonsterStats {
     let d = bosses::def(b);
-    monster_stats(bosses::attrs(b), races::own_con(d.attr_mods), bosses::base_hp(b), d.speed, d.weight)
+    monster_stats(bosses::attr_sources(b), races::own_con(d.attr_mods), bosses::base_hp(b), d.speed, d.weight)
 }
 
 /// The Ranger's wolf.
 pub fn wolf_stats() -> MonsterStats {
-    monster_stats(wolf_attrs(), races::own_con(WOLF_ATTR_MODS), wolf_base_hp(), WOLF_SPEED, WOLF_WEIGHT)
+    monster_stats(wolf_attr_sources(), races::own_con(WOLF_ATTR_MODS), wolf_base_hp(), WOLF_SPEED, WOLF_WEIGHT)
 }
 
-/// What a monster is made of at spawn: the numbers its Attributes gave it. `monster_numbers` moves
-/// them by an Attribute delta.
+/// What a monster is made of at spawn: its Attribute sources (`effects` zero) and the numbers they gave
+/// it. `monster_numbers` moves them by the run-time effects.
 #[derive(Debug, Clone, Copy)]
 pub struct MonsterBase {
-    pub attrs: Attributes,
+    pub sources: AttrSources,
     pub max_hp: f64,
     pub speed: f64,
     pub kit: KitSource,
@@ -1083,21 +1094,23 @@ pub struct MonsterBase {
 /// A monster's Attributes and the numbers they give.
 #[derive(Debug, Clone)]
 pub struct MonsterNumbers {
+    pub sources: AttrSources,
     pub attrs: Attributes,
     pub max_hp: f64,
     pub speed: f64,
     pub kit: Kit,
 }
 
-/// `base` with `delta` added to its Attributes (a lowered one stops at 1): max HP moves by `CON_HP`
-/// per CON point and stays at least 1, speed by `CON_MOVE`, the kit is resolved again. At a zero
-/// delta every number is the spawn's.
-pub fn monster_numbers(base: &MonsterBase, delta: Attributes, muted: &[Lasting]) -> MonsterNumbers {
-    let attrs = base.attrs.with_delta(delta);
-    let con0 = base.attrs.get(Attr::Con);
+/// `base` with the run-time `effects` in its sources (a lowered Attribute stops at 1): max HP moves by `CON_HP`
+/// per CON point and stays at least 1, speed by `CON_MOVE`, the kit is resolved again. At zero
+/// `effects` every number is the spawn's.
+pub fn monster_numbers(base: &MonsterBase, effects: Attributes, muted: &[Lasting]) -> MonsterNumbers {
+    let sources = AttrSources { effects, ..base.sources };
+    let attrs = sources.total();
+    let con0 = base.sources.total().get(Attr::Con);
     let max_hp = (base.max_hp + attributes::CON_HP * (attrs.get(Attr::Con) - con0) as f64).max(1.0);
     let speed = move_speed(base.speed, con0, &attrs);
-    MonsterNumbers { attrs, max_hp, speed, kit: kit_for(base.kit, &attrs, muted) }
+    MonsterNumbers { sources, attrs, max_hp, speed, kit: kit_for(base.kit, &attrs, muted) }
 }
 
 /// The lasting magic a hero wears or has bought, sorted: usable worn items with a magical property
@@ -1129,6 +1142,7 @@ pub fn magic_sources_monster(src: KitSource) -> Vec<Lasting> {
 mod tests {
     use super::*;
     use crate::defs::attributes::{factor, STR_DMG};
+    use crate::defs::items::Equipment;
     use crate::defs::companions::WOLF_HP;
 
     #[test]
@@ -1208,19 +1222,19 @@ mod tests {
         let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-12, "{what}: {a} vs {b}");
         let kit = |src: KitSource, attrs: Attributes| kit_for(src, &attrs, &[]);
         let cd = |k: &Kit, id| k.get(id).unwrap_or_else(|| panic!("{id:?} in kit")).cooldown;
-        let k = kit(KitSource::Boss(BossId::Lich), bosses::attrs(BossId::Lich));
-        assert_eq!(bosses::attrs(BossId::Lich).get(Attr::Int), 22);
+        let k = kit(KitSource::Boss(BossId::Lich), bosses::attr_sources(BossId::Lich).total());
+        assert_eq!(bosses::attr_sources(BossId::Lich).total().get(Attr::Int), 22);
         for (id, base) in [(AbilityId::GloomBolts, 2.5), (AbilityId::Nova, 10.0), (AbilityId::StoneGaze, 18.0), (AbilityId::RaiseDead, 12.0)] {
             near(cd(&k, id), base * 10.0 / 22.0, &format!("{id:?}"));
         }
-        near(cd(&kit(KitSource::Enemy(EnemyType::Necromancer), enemies::attrs(EnemyType::Necromancer)), AbilityId::RaiseDead), 12.0 * 10.0 / 17.0, "Necromancer Raise Dead");
-        near(cd(&kit(KitSource::Enemy(EnemyType::Summoner), enemies::attrs(EnemyType::Summoner)), AbilityId::SummonImps), 12.0 * 10.0 / 15.0, "Summoner Summon Imps");
-        let k = kit(KitSource::Boss(BossId::Demon), bosses::attrs(BossId::Demon));
-        assert_eq!((bosses::attrs(BossId::Demon).get(Attr::Cha), bosses::attrs(BossId::Demon).get(Attr::Dex)), (20, 14));
+        near(cd(&kit(KitSource::Enemy(EnemyType::Necromancer), enemies::attr_sources(EnemyType::Necromancer).total()), AbilityId::RaiseDead), 12.0 * 10.0 / 17.0, "Necromancer Raise Dead");
+        near(cd(&kit(KitSource::Enemy(EnemyType::Summoner), enemies::attr_sources(EnemyType::Summoner).total()), AbilityId::SummonImps), 12.0 * 10.0 / 15.0, "Summoner Summon Imps");
+        let k = kit(KitSource::Boss(BossId::Demon), bosses::attr_sources(BossId::Demon).total());
+        assert_eq!((bosses::attr_sources(BossId::Demon).total().get(Attr::Cha), bosses::attr_sources(BossId::Demon).total().get(Attr::Dex)), (20, 14));
         near(cd(&k, AbilityId::RingOfFire), 4.5, "Ring of Fire");
         near(cd(&k, AbilityId::Swoop), 6.0 * 10.0 / 14.0, "Swoop");
-        let k = kit(KitSource::Boss(BossId::Dragon), bosses::attrs(BossId::Dragon));
-        assert_eq!(bosses::attrs(BossId::Dragon).get(Attr::Cha), 20);
+        let k = kit(KitSource::Boss(BossId::Dragon), bosses::attr_sources(BossId::Dragon).total());
+        assert_eq!(bosses::attr_sources(BossId::Dragon).total().get(Attr::Cha), 20);
         near(cd(&k, AbilityId::FireBreath), 6.5 * 10.0 / 20.0, "Fire Breath");
     }
 
@@ -1262,7 +1276,7 @@ mod tests {
     fn ground_slam_push_is_the_larger_of_own_and_weapon() {
         let d = ab::def(AbilityId::GroundSlam);
         assert_eq!(d.own.push, ab::SLAM_PUSH);
-        let attrs = classes::start_attrs(ClassId::Barbarian);
+        let attrs = classes::attr_sources(ClassId::Barbarian).total();
         let soft = ResolvedWeapon { push: 0.0, ..arm(ItemId::WarHammer, &attrs, &[], vec![], 0) };
         let club = arm(ItemId::SpikedClub, &attrs, &[], vec![], 0);
         let body = Body { radius: PLAYER_RADIUS };
@@ -1464,11 +1478,11 @@ mod tests {
     fn attrs_with_and_without_items() {
         let c = ClassId::Paladin;
         let b = Build { nodes: vec![], extra: Attributes::new(1, 0, 0, 0, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor), ..Build::start(c) };
-        let without = attrs_without_items(c, &b);
+        let without = hero_sources(c, &b).before_items();
         assert_eq!(without.get(Attr::Str), 16);
         assert_eq!(without.get(Attr::Cha), 14);
-        assert!(attrs_with_items(c, &b).get(Attr::Con) > without.get(Attr::Con), "the band's CON counts with items only");
-        assert_eq!(attrs_with_items(c, &b), hero_sheet(c, &b).unwrap().attrs, "the same numbers the sheet uses");
+        assert!(sources_with_items(c, &b).total().get(Attr::Con) > without.get(Attr::Con), "the band's CON counts with items only");
+        assert_eq!(sources_with_items(c, &b).total(), hero_sheet(c, &b).unwrap().attrs, "the same numbers the sheet uses");
     }
 
     #[test]
@@ -1620,7 +1634,7 @@ mod tests {
     #[test]
     fn item_points_meet_other_items_requirements() {
         let c = ClassId::Wizard;
-        assert_eq!(attrs_without_items(c, &rot_wizard(true)).get(Attr::Int), 13);
+        assert_eq!(hero_sources(c, &rot_wizard(true)).before_items().get(Attr::Int), 13);
         let (usable, dropped) = usable_items(c, &rot_wizard(true), Attributes::default());
         assert_eq!((usable, dropped), (rot_wizard(true), vec![]), "the ring's +1 INT meets the staff's INT 14");
         let s = hero_sheet(c, &rot_wizard(true)).unwrap();
@@ -1661,19 +1675,19 @@ mod tests {
 
     #[test]
     fn build_up_turns_items_on_from_the_bare_attributes() {
-        let bare = Attributes::new(10, 10, 10, 13, 10, 10);
+        let bare_attrs = Attributes::new(10, 10, 10, 13, 10, 10);
+        let bare = AttrSources { base: bare_attrs, race: Attributes::default(), kind: Attributes::default(), buy: Attributes::default(), items: Attributes::default(), effects: Attributes::default() };
         let int = |n| Attributes::new(0, 0, 0, n, 0, 0);
         let (r14, r15) = ([Requirement::Attr(Attr::Int, 14)], [Requirement::Attr(Attr::Int, 15)]);
-        let none = Attributes::default();
         // A chain: the free item lifts INT to 14, which turns on the INT 14 item, whose +1 turns on the INT 15 one.
         let chain = [(&r15[..], int(0)), (&r14[..], int(1)), (&[][..], int(1))];
-        assert_eq!(build_up(&chain, bare, none), (vec![true, true, true], bare.plus(int(2))));
+        assert_eq!(build_up(&chain, bare), (vec![true, true, true], bare_attrs.plus(int(2))));
         // An item's own points never meet its own requirement.
-        assert_eq!(build_up(&[(&r14[..], int(1))], bare, none), (vec![false], bare));
+        assert_eq!(build_up(&[(&r14[..], int(1))], bare), (vec![false], bare_attrs));
         // Two items that only meet each other's requirements stay off.
-        assert_eq!(build_up(&[(&r14[..], int(1)), (&r14[..], int(1))], bare, none), (vec![false, false], bare));
-        // A drain turns the chain off past its first link, and the delta is in the result.
-        assert_eq!(build_up(&chain, bare, int(-1)), (vec![false, false, true], bare));
+        assert_eq!(build_up(&[(&r14[..], int(1)), (&r14[..], int(1))], bare), (vec![false, false], bare_attrs));
+        // A drain turns the chain off past its first link, and the effects are in the result.
+        assert_eq!(build_up(&chain, AttrSources { effects: int(-1), ..bare }), (vec![false, false, true], bare_attrs));
     }
 
     #[test]
@@ -1760,20 +1774,20 @@ mod tests {
         };
         for t in EnemyType::ALL {
             let d = enemies::def(t);
-            let attrs = enemies::attrs(t);
+            let attrs = enemies::attr_sources(t).total();
             check(&format!("{t:?}"), &kit_for(KitSource::Enemy(t), &attrs, &[]), d.abilities, &attrs, d.weapons, d.radius);
         }
         for b in BossId::ALL {
             let d = bosses::def(b);
-            let attrs = bosses::attrs(b);
+            let attrs = bosses::attr_sources(b).total();
             check(&format!("{b:?}"), &kit_for(KitSource::Boss(b), &attrs, &[]), d.abilities, &attrs, d.weapons, d.radius);
         }
         let ids = [AbilityId::Bite, AbilityId::Pounce];
-        check("wolf", &kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]), &ids, &wolf_attrs(), &[ItemId::BeastBite], WOLF_RADIUS);
+        check("wolf", &kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[]), &ids, &crate::defs::companions::wolf_attr_sources().total(), &[ItemId::BeastBite], WOLF_RADIUS);
         // A version's mod goes through `apply_mods`, on the Pounce alone.
         let faster = AbilityMod::CooldownAdd(-0.5);
-        let kit = kit_for(KitSource::Wolf(WolfMods { hp_mul: 1.0, pounce: Some(faster) }), &crate::defs::companions::wolf_attrs(), &[]);
-        let plain = kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]);
+        let kit = kit_for(KitSource::Wolf(WolfMods { hp_mul: 1.0, pounce: Some(faster) }), &crate::defs::companions::wolf_attr_sources().total(), &[]);
+        let plain = kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[]);
         assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(plain.get(AbilityId::Pounce).unwrap().clone(), &[faster])));
         assert_eq!(kit.get(AbilityId::Bite), plain.get(AbilityId::Bite));
     }
@@ -1783,14 +1797,14 @@ mod tests {
         use crate::defs::bosses::*;
         let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-9, "{what}: {a} vs {b}");
         for b in BossId::ALL {
-            let k = kit_for(KitSource::Boss(b), &crate::defs::bosses::attrs(b), &[]);
+            let k = kit_for(KitSource::Boss(b), &crate::defs::bosses::attr_sources(b).total(), &[]);
             for &id in def(b).abilities {
                 assert!(k.get(id).is_some(), "{b:?} {id:?}");
             }
         }
-        let dragon = kit_for(KitSource::Boss(BossId::Dragon), &crate::defs::bosses::attrs(BossId::Dragon), &[]);
-        let demon = kit_for(KitSource::Boss(BossId::Demon), &crate::defs::bosses::attrs(BossId::Demon), &[]);
-        let lich = kit_for(KitSource::Boss(BossId::Lich), &crate::defs::bosses::attrs(BossId::Lich), &[]);
+        let dragon = kit_for(KitSource::Boss(BossId::Dragon), &crate::defs::bosses::attr_sources(BossId::Dragon).total(), &[]);
+        let demon = kit_for(KitSource::Boss(BossId::Demon), &crate::defs::bosses::attr_sources(BossId::Demon).total(), &[]);
+        let lich = kit_for(KitSource::Boss(BossId::Lich), &crate::defs::bosses::attr_sources(BossId::Lich).total(), &[]);
         let check = |k: &Kit, id: AbilityId, damage: f64, push: f64| {
             let a = k.get(id).unwrap_or_else(|| panic!("{id:?}"));
             near(a.damage, damage, &format!("{id:?} damage"));
@@ -1811,15 +1825,45 @@ mod tests {
     }
 
     #[test]
+    fn every_stat_block_total_is_unchanged() {
+        let a = |v: [i32; 6]| Attributes::new(v[0], v[1], v[2], v[3], v[4], v[5]);
+        let enemies_today = [
+            (EnemyType::GoblinArcher, [8, 15, 10, 10, 8, 8]), (EnemyType::SkeletonWarrior, [12, 12, 15, 1, 8, 5]),
+            (EnemyType::SkeletonArcher, [10, 15, 13, 1, 8, 5]), (EnemyType::OrcWarrior, [16, 12, 16, 7, 11, 10]),
+            (EnemyType::OrcArcher, [14, 14, 14, 7, 11, 10]), (EnemyType::Necromancer, [9, 14, 12, 17, 12, 11]),
+            (EnemyType::RaisedSkeleton, [12, 12, 12, 1, 8, 5]), (EnemyType::RaisedArcher, [10, 15, 12, 1, 8, 5]),
+            (EnemyType::Disciple, [10, 12, 10, 13, 11, 10]), (EnemyType::Mimic, [17, 12, 15, 5, 13, 8]),
+            (EnemyType::Imp, [6, 17, 13, 11, 12, 14]), (EnemyType::Chort, [14, 13, 13, 8, 10, 9]),
+            (EnemyType::Summoner, [9, 14, 12, 15, 12, 16]), (EnemyType::SummonedImp, [6, 17, 10, 11, 12, 14]),
+            (EnemyType::Ogre, [19, 8, 16, 5, 7, 7]), (EnemyType::Ghost, [6, 14, 10, 10, 12, 14]),
+            (EnemyType::Shade, [8, 12, 12, 10, 14, 15]), (EnemyType::Knight, [14, 12, 14, 8, 10, 12]),
+            (EnemyType::Bunny, [4, 16, 6, 2, 8, 6]), (EnemyType::Deer, [8, 16, 12, 2, 10, 8]),
+            (EnemyType::Stag, [8, 16, 12, 2, 10, 8]), (EnemyType::Boar, [14, 10, 14, 2, 8, 6]),
+        ];
+        assert_eq!(enemies_today.len(), EnemyType::ALL.len());
+        for (t, v) in enemies_today {
+            assert_eq!(enemies::attr_sources(t).total(), a(v), "{t:?}");
+        }
+        for (b, v) in [(BossId::Demon, [22, 14, 20, 14, 16, 20]), (BossId::Lich, [10, 14, 14, 22, 18, 16]), (BossId::Dragon, [24, 10, 22, 16, 14, 20])] {
+            assert_eq!(bosses::attr_sources(b).total(), a(v), "{b:?}");
+        }
+        for (c, v) in [(ClassId::Wizard, [8, 14, 12, 15, 13, 10]), (ClassId::Paladin, [15, 8, 13, 10, 12, 14]),
+            (ClassId::Barbarian, [15, 13, 14, 8, 12, 10]), (ClassId::ElvenRanger, [10, 15, 12, 8, 14, 13])] {
+            assert_eq!(classes::attr_sources(c).total(), a(v), "{c:?}");
+        }
+        assert_eq!(crate::defs::companions::wolf_attr_sources().total(), a([17, 15, 15, 6, 12, 7]));
+    }
+
+    #[test]
     fn every_creature_is_ten_plus_races_plus_kind() {
-        use crate::defs::races::creature_attrs;
+        use crate::defs::races::creature_sources;
         for t in EnemyType::ALL {
-            assert_eq!(enemy_stats(t).attrs, creature_attrs(enemies::races(t), enemies::def(t).attr_mods), "{t:?}");
+            assert_eq!(enemy_stats(t).attrs, creature_sources(enemies::races(t), enemies::def(t).attr_mods).total(), "{t:?}");
         }
         for b in BossId::ALL {
-            assert_eq!(boss_stats(b).attrs, creature_attrs(bosses::races(b), bosses::def(b).attr_mods), "{b:?}");
+            assert_eq!(boss_stats(b).attrs, creature_sources(bosses::races(b), bosses::def(b).attr_mods).total(), "{b:?}");
         }
-        assert_eq!(wolf_stats().attrs, creature_attrs(crate::defs::companions::wolf_races(), WOLF_ATTR_MODS));
+        assert_eq!(wolf_stats().attrs, creature_sources(crate::defs::companions::wolf_races(), WOLF_ATTR_MODS).total());
     }
 
     #[test]
@@ -1827,7 +1871,7 @@ mod tests {
         let all = EnemyType::ALL.map(|t| enemy_stats(t).attrs).into_iter()
             .chain(BossId::ALL.map(|b| boss_stats(b).attrs))
             .chain([wolf_stats().attrs])
-            .chain(ClassId::ALL.map(classes::start_attrs));
+            .chain(ClassId::ALL.map(|c| classes::attr_sources(c).total()));
         for a in all {
             assert!(Attr::ALL.iter().all(|&x| a.get(x) >= 1), "{a:?}");
         }
@@ -1839,8 +1883,8 @@ mod tests {
         let t = EnemyType::OrcWarrior;
         let d = enemies::def(t);
         let own = races::own_con(d.attr_mods);
-        let plain = monster_stats(enemies::attrs(t), own, enemies::base_hp(t), d.speed, d.weight);
-        let tough = monster_stats(enemies::attrs(t).plus(Attributes::new(0, 0, 2, 0, 0, 0)), own, enemies::base_hp(t), d.speed, d.weight);
+        let plain = monster_stats(enemies::attr_sources(t), own, enemies::base_hp(t), d.speed, d.weight);
+        let tough = monster_stats(AttrSources { kind: enemies::attr_sources(t).kind.plus(Attributes::new(0, 0, 2, 0, 0, 0)), ..enemies::attr_sources(t) }, own, enemies::base_hp(t), d.speed, d.weight);
         assert_eq!(plain, enemy_stats(t));
         assert_eq!(tough.max_hp, plain.max_hp + 2.0 * attributes::CON_HP);
         assert_eq!(tough.speed, move_speed(d.speed, own, &tough.attrs));
@@ -1874,14 +1918,14 @@ mod tests {
         let mut v = vec![];
         for t in EnemyType::ALL {
             let (s, d) = (enemy_stats(t), enemies::def(t));
-            v.push((format!("{t:?}"), MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(t) }, d.abilities.to_vec()));
+            v.push((format!("{t:?}"), MonsterBase { sources: s.sources, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(t) }, d.abilities.to_vec()));
         }
         for b in BossId::ALL {
             let (s, d) = (boss_stats(b), bosses::def(b));
-            v.push((format!("{b:?}"), MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Boss(b) }, d.abilities.to_vec()));
+            v.push((format!("{b:?}"), MonsterBase { sources: s.sources, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Boss(b) }, d.abilities.to_vec()));
         }
         let s = wolf_stats();
-        v.push(("wolf".into(), MonsterBase { attrs: s.attrs, max_hp: WOLF_HP, speed: WOLF_SPEED, kit: KitSource::Wolf(WolfMods::NONE) }, vec![AbilityId::Bite, AbilityId::Pounce]));
+        v.push(("wolf".into(), MonsterBase { sources: s.sources, max_hp: WOLF_HP, speed: WOLF_SPEED, kit: KitSource::Wolf(WolfMods::NONE) }, vec![AbilityId::Bite, AbilityId::Pounce]));
         v
     }
 
@@ -1889,10 +1933,15 @@ mod tests {
     fn monster_numbers_at_zero_delta_are_the_base() {
         for (what, base, ids) in bases() {
             let n = monster_numbers(&base, Attributes::default(), &[]);
-            assert_eq!(n.attrs, base.attrs, "{what}");
+            assert_eq!(n.attrs, base.sources.total(), "{what}");
+            assert_eq!(n.sources.total(), n.attrs, "{what}");
+            let drain = Attributes::new(-3, 0, -20, 0, 0, 0);
+            let drained = monster_numbers(&base, drain, &[]);
+            assert_eq!(drained.attrs, base.sources.total().with_delta(drain), "{what} drained");
+            assert_eq!(drained.sources.total(), drained.attrs, "{what} drained sources");
             assert_eq!(n.max_hp.to_bits(), base.max_hp.to_bits(), "{what} max HP");
             assert_eq!(n.speed.to_bits(), base.speed.to_bits(), "{what} speed");
-            let spawn = kit_for(base.kit, &base.attrs, &[]);
+            let spawn = kit_for(base.kit, &base.sources.total(), &[]);
             for id in ids {
                 assert_eq!(n.kit.get(id), spawn.get(id), "{what} {id:?}");
                 assert!(n.kit.get(id).is_some(), "{what} {id:?}");
@@ -1903,7 +1952,7 @@ mod tests {
     #[test]
     fn monster_numbers_follow_a_drain() {
         let s = enemy_stats(EnemyType::OrcWarrior);
-        let base = MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::OrcWarrior) };
+        let base = MonsterBase { sources: s.sources, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::OrcWarrior) };
         let at0 = monster_numbers(&base, Attributes::default(), &[]);
         let weak = monster_numbers(&base, Attributes::new(-3, 0, 0, 0, 0, 0), &[]);
         assert!(weak.kit.get(AbilityId::Strike).unwrap().damage < at0.kit.get(AbilityId::Strike).unwrap().damage);
@@ -1919,12 +1968,12 @@ mod tests {
         for (what, base, _) in bases() {
             let n = monster_numbers(&base, drain, &[]);
             assert!(n.max_hp >= 1.0, "{what}");
-            assert_eq!(n.attrs.get(Attr::Con), base.attrs.get(Attr::Con).min(1), "{what}");
+            assert_eq!(n.attrs.get(Attr::Con), base.sources.total().get(Attr::Con).min(1), "{what}");
             assert!(n.speed.is_finite() && n.speed >= 0.0 && (n.speed > 0.0) == (base.speed > 0.0), "{what}");
         }
         // A frail one: the drain empties it to the floor.
         let s = enemy_stats(EnemyType::GoblinArcher);
-        let archer = MonsterBase { attrs: s.attrs, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::GoblinArcher) };
+        let archer = MonsterBase { sources: s.sources, max_hp: s.max_hp, speed: s.speed, kit: KitSource::Enemy(EnemyType::GoblinArcher) };
         assert_eq!(monster_numbers(&archer, drain, &[]).max_hp, 1.0);
     }
 
@@ -2024,13 +2073,20 @@ mod tests {
         assert_eq!(s.loadout_error, None);
         let line = |a: Attr| s.attrs.iter().find(|l| l.attr == a).unwrap();
         let cha = line(Attr::Cha);
-        assert_eq!((cha.class, cha.shop, cha.items, cha.total), (14, 0, 0, 14));
+        assert_eq!((cha.base, cha.race, cha.class, cha.buy, cha.items, cha.total), (10, 0, 4, 0, 0, 14));
         let str_ = line(Attr::Str);
-        assert_eq!((str_.shop, str_.items), (1, 0));
+        assert_eq!((str_.buy, str_.items), (1, 0));
         let con = line(Attr::Con);
-        assert_eq!((con.shop, con.items), (0, 1));
+        assert_eq!((con.buy, con.items), (0, 1));
         for l in &s.attrs {
-            assert_eq!(l.total, l.class + l.shop + l.items, "{:?}", l.attr);
+            assert_eq!(l.total, l.base + l.race + l.class + l.buy + l.items, "{:?}", l.attr);
+        }
+        let r = ClassId::ElvenRanger;
+        let ranger = summary(r, &Build::start(r));
+        let dex = ranger.attrs.iter().find(|l| l.attr == Attr::Dex).unwrap();
+        assert_eq!((dex.base, dex.race, dex.class, dex.buy), (10, 2, 3, 0), "the race bonus is its own column");
+        for l in &ranger.attrs {
+            assert_eq!(l.total, l.base + l.race + l.class + l.buy + l.items, "{:?}", l.attr);
         }
         let sheet = hero_sheet(c, &b).unwrap();
         assert_eq!(s.attrs.iter().map(|l| l.total).collect::<Vec<_>>(), Attr::ALL.map(|a| sheet.attrs.get(a)).to_vec());
@@ -2133,6 +2189,38 @@ mod tests {
 
     fn drain(s: i32, d: i32, c: i32) -> Attributes {
         Attributes::new(s, d, c, 0, 0, 0)
+    }
+
+    fn paladin_build() -> Build {
+        let c = ClassId::Paladin;
+        Build { nodes: vec![], extra: Attributes::new(1, 0, 0, 0, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor).with(EquipSlot::Armor, ItemId::PlateArmor), ..Build::start(c) }
+    }
+
+    #[test]
+    fn sheet_sources_add_up_to_the_sheet() {
+        for c in ClassId::ALL {
+            let sheet = hero_sheet(c, &Build::start(c)).unwrap();
+            assert_eq!((sheet.sources.total(), sheet.sources.effects), (sheet.attrs, Attributes::default()), "{c:?}");
+        }
+        let p = paladin_build();
+        let sheet = hero_sheet(ClassId::Paladin, &p).unwrap();
+        assert_eq!(sheet.sources.total(), sheet.attrs);
+        assert_eq!((sheet.sources.buy, sheet.sources.items.get(Attr::Con)), (p.extra, 1), "the shop is buy, the band is items");
+        let muted = run_sheet(ClassId::Paladin, &p, Attributes::default(), &[Lasting::Item(ItemId::BandOfVigor)]);
+        assert_eq!((muted.sources.total(), muted.sources.items.get(Attr::Con)), (muted.attrs, 0), "a muted item adds no points");
+        let drained = [
+            (ClassId::Paladin, p, drain(-3, 0, 0)),
+            (ClassId::Barbarian, flame_tongue_barbarian(), drain(-3, 0, 0)),
+            (ClassId::Wizard, rot_wizard(true), Attributes::new(0, 0, 0, -3, 0, 0)),
+        ];
+        for (c, b, effects) in drained {
+            let sheet = run_sheet(c, &b, effects, &[]);
+            assert_eq!(sheet.sources.total(), sheet.attrs, "{c:?}");
+            assert_eq!(sheet.sources.effects, effects, "{c:?}");
+        }
+        let b = flame_tongue_barbarian();
+        let sheet = run_sheet(ClassId::Barbarian, &b, drain(-3, 0, 0), &[]);
+        assert_eq!(sheet.sources.items, Attributes::default(), "an unusable item adds no points; the starter is on");
     }
 
     #[test]

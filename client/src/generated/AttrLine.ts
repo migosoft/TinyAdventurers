@@ -6,10 +6,14 @@ import type { Attr } from "./Attr";
  */
 export type AttrLine = { attr: Attr, total: number, 
 /**
- * Class and race.
+ * The baseline every creature starts from.
+ */
+base: number, race: number, 
+/**
+ * The class's own points.
  */
 class: number, 
 /**
- * Points bought in the shop (and the debug lift).
+ * Points bought in the Attribute shop (and the debug lift).
  */
-shop: number, items: number, };
+buy: number, items: number, };

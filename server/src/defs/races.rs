@@ -3,7 +3,7 @@
 //! effects; an entity can have several races, plus its own
 //! adjustments (`Adjust`). Balancing edits only this data.
 
-use super::attributes::{Attr, Attributes, BASELINE};
+use super::attributes::{Attr, AttrSources, Attributes, BASELINE, BASELINE_ATTRS};
 use super::damage::{DamageType, DamageType::*, Resistances};
 use super::effects::{EffectKind, EffectResistances};
 
@@ -116,9 +116,11 @@ pub fn race_attrs(races: &[Race]) -> Attributes {
     races.iter().fold(Attributes::default(), |a, &r| a.plus(race_def(r).attrs))
 }
 
-/// Layers 1-3 of every creature's Attributes: `BASELINE` (10) for all six, plus the races' bonuses, plus its own modifier.
-pub fn creature_attrs(races: &[Race], mods: Attributes) -> Attributes {
-    Attributes::new(BASELINE, BASELINE, BASELINE, BASELINE, BASELINE, BASELINE).plus(race_attrs(races)).plus(mods)
+/// Layers 1-3 of every creature's Attributes: `BASELINE` (10) for all six, the races' bonuses, its own modifier; the
+/// Attribute Buy, items and effects start at zero.
+pub fn creature_sources(races: &[Race], mods: Attributes) -> AttrSources {
+    let zero = Attributes::default();
+    AttrSources { base: BASELINE_ATTRS, race: race_attrs(races), kind: mods, buy: zero, items: zero, effects: zero }
 }
 
 /// The CON a stat block's `hp`/`speed` are defined at: `BASELINE` (10) plus its own class/kind modifier, before races.
@@ -336,9 +338,14 @@ mod tests {
     }
 
     #[test]
-    fn creature_attrs_is_ten_plus_races_plus_mods() {
-        assert_eq!(creature_attrs(&[], Attributes::default()), Attributes::new(10, 10, 10, 10, 10, 10));
-        assert_eq!(creature_attrs(&[Race::Elf, Race::MagicalBeast], Attributes::new(9, -1, 0, -9, 0, 1)), Attributes::new(19, 11, 10, 4, 10, 11));
+    fn creature_sources_is_ten_plus_races_plus_mods() {
+        let empty = creature_sources(&[], Attributes::default());
+        assert_eq!(empty.total(), Attributes::new(10, 10, 10, 10, 10, 10));
+        let mods = Attributes::new(9, -1, 0, -9, 0, 1);
+        let s = creature_sources(&[Race::Elf, Race::MagicalBeast], mods);
+        let zero = Attributes::default();
+        assert_eq!(s, AttrSources { base: BASELINE_ATTRS, race: race_attrs(&[Race::Elf, Race::MagicalBeast]), kind: mods, buy: zero, items: zero, effects: zero });
+        assert_eq!(s.total(), Attributes::new(19, 11, 10, 4, 10, 11));
     }
 
     #[test]

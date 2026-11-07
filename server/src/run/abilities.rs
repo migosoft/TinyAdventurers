@@ -1476,8 +1476,8 @@ mod tests {
     fn a_dash_touches_within_the_ability_radius_of_the_users_edge() {
         // Swoop: body radius + 8 (+ the hero's radius); Pounce: body radius + 4.
         for (id, radius, user_kit) in [
-            (AbilityId::Swoop, 8.0, crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Demon), &crate::defs::bosses::attrs(BossId::Demon), &[])),
-            (AbilityId::Pounce, 4.0, crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[])),
+            (AbilityId::Swoop, 8.0, crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Demon), &crate::defs::bosses::attr_sources(BossId::Demon).total(), &[])),
+            (AbilityId::Pounce, 4.0, crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[])),
         ] {
             assert_eq!(user_kit.get(id).unwrap().radius, radius, "{id:?}");
             for (gap, hits) in [(radius, true), (radius + 1.0, false)] {
@@ -1500,14 +1500,14 @@ mod tests {
 
     #[test]
     fn a_monster_dash_never_runs_farther_than_its_range() {
-        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]);
+        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[]);
         let pounce = kit.get(AbilityId::Pounce).unwrap().clone();
         assert!(pounce.duration == 0.0 && pounce.range > 0.0);
         let reach = |aim_dist: f64| pounce.speed * monster_dash_secs(&pounce, aim_dist);
         assert!(reach(pounce.range / 2.0) > pounce.range / 2.0, "it still reaches a near mark");
         assert!(reach(pounce.range * 3.0) <= pounce.range + 1e-9, "re-aimed far away it stops at its range: {}", reach(pounce.range * 3.0));
         // An ability with its own duration lasts that long.
-        let swoop = crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Demon), &crate::defs::bosses::attrs(BossId::Demon), &[]).get(AbilityId::Swoop).unwrap().clone();
+        let swoop = crate::sheet::kit_for(crate::sheet::KitSource::Boss(BossId::Demon), &crate::defs::bosses::attr_sources(BossId::Demon).total(), &[]).get(AbilityId::Swoop).unwrap().clone();
         assert_eq!(monster_dash_secs(&swoop, 1000.0), swoop.duration);
     }
 
@@ -2193,7 +2193,7 @@ mod tests {
 
     #[test]
     fn a_fire_bolt_burns_at_its_users_governing_attribute() {
-        let con = crate::defs::classes::start_attrs(ClassId::Paladin).get(crate::defs::attributes::Attr::Con);
+        let con = crate::defs::classes::attr_sources(ClassId::Paladin).total().get(crate::defs::attributes::Attr::Con);
         assert_eq!(con, 13);
         assert_eq!(fire_bolt_burn(EnemyType::Imp, None), Some(burn_secs(14, con)), "the imp's innate fire: CHA 14");
         assert_eq!(fire_bolt_burn(EnemyType::Chort, None), Some(burn_secs(10, con)), "the chort's CHA 9: at least 10");
@@ -3901,7 +3901,7 @@ mod tests {
     #[test]
     fn dash_contact_passes_bodiless() {
         // The wolf's Pounce through an incorporeal enemy: nothing happens, and it does not end the leap.
-        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]);
+        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[]);
         let pounce = kit.get(AbilityId::Pounce).unwrap().clone();
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
