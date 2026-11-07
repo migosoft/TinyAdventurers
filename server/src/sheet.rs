@@ -5,7 +5,7 @@
 //! and monsters from here.
 
 use crate::defs::abilities::{self as ab, AbilityCategory, AbilityDef, AbilityId, AbilitySlot, Uses};
-use crate::defs::attributes::{self, Attr, Attributes, Scaled, CD_PCT, CON_MOVE};
+use crate::defs::attributes::{self, Attr, AttrSources, Attributes, Scaled, CD_PCT, CON_MOVE};
 use crate::defs::bosses;
 use crate::defs::classes::{self, PLAYER_RADIUS};
 use crate::defs::companions::{wolf_attrs, wolf_base_hp, WOLF_ATTR_MODS, WOLF_RADIUS, WOLF_SPEED, WOLF_WEIGHT};
@@ -103,8 +103,10 @@ pub struct ResolvedAbility {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sheet {
-    /// Class + race + `extra` + item points.
+    /// `sources.total()`.
     pub attrs: Attributes,
+    /// Every source of `attrs`: class, race, `extra` (as `buy`), the usable items' points, the run's effects.
+    pub sources: AttrSources,
     pub max_hp: f64,
     pub speed: f64,
     pub weight: f64,
@@ -453,9 +455,10 @@ pub fn profs(class: ClassId, nodes: &[NodeId]) -> Vec<Prof> {
     v
 }
 
-/// Start Attributes + the shop's `extra`; no item points (the tree no longer adds Attributes).
-pub fn attrs_without_items(class: ClassId, b: &Build) -> Attributes {
-    classes::start_attrs(class).plus(b.extra)
+/// The sources of a hero's Attributes without items: the class's own, the Attribute Buy (`extra`);
+/// `items` and `effects` stay zero (the tree no longer adds Attributes).
+pub fn hero_sources(class: ClassId, b: &Build) -> AttrSources {
+    AttrSources { buy: b.extra, ..classes::attr_sources(class) }
 }
 
 /// The worn items, with the starter in an empty Melee slot.
@@ -473,10 +476,15 @@ fn worn_items(class: ClassId, b: &Build) -> Vec<(EquipSlot, ItemId)> {
         .collect()
 }
 
-/// `attrs_without_items` plus the Attribute points of the usable worn items (`usable_items`), whatever the loadout.
-pub fn attrs_with_items(class: ClassId, b: &Build) -> Attributes {
+/// `hero_sources` with the Attribute points of the usable worn items (`usable_items`) in `items`, whatever the loadout.
+pub fn sources_with_items(class: ClassId, b: &Build) -> AttrSources {
     let (usable, _) = usable_items(class, b, Attributes::default());
-    worn_items(class, &usable).iter().fold(attrs_without_items(class, b), |a, &(_, id)| a.plus(item_points(id, &[])))
+    AttrSources { items: worn_points(&worn_items(class, &usable), &[]), ..hero_sources(class, b) }
+}
+
+/// The Attribute points of the `worn` items (none from a muted one).
+fn worn_points(worn: &[(EquipSlot, ItemId)], muted: &[Lasting]) -> Attributes {
+    worn.iter().fold(Attributes::default(), |a, &(_, id)| a.plus(item_points(id, muted)))
 }
 
 /// The Attribute points of item `id` (none from a muted item).
@@ -506,14 +514,14 @@ pub fn hero_sheet(class: ClassId, b: &Build) -> Result<Sheet, LoadoutError> {
     Ok(sheet)
 }
 
-/// The sheet of a hero during a run, with a signed Attribute `delta` (the drain effects). Never
+/// The sheet of a hero during a run, with the signed Attribute `effects` (the drains). Never
 /// fails: `b` is a build `hero_sheet` accepted. Item requirements are met from the Attributes
-/// without items plus `delta` (`usable_items`): an item that fails gives nothing (an unusable
+/// without items plus `effects` (`usable_items`): an item that fails gives nothing (an unusable
 /// melee weapon is the class starter), and a pick that fails is disabled and holds the plain
 /// ability, without mods; `disabled` names the Attribute requirement that fails, the pick's own or
 /// that of the item it lost its weapon or version to.
-pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -> Sheet {
-    let (mut sheet, cx) = sheet_core(class, b, delta, muted).expect("an accepted build passes the equipment check");
+pub fn run_sheet(class: ClassId, b: &Build, effects: Attributes, muted: &[Lasting]) -> Sheet {
+    let (mut sheet, cx) = sheet_core(class, b, effects, muted).expect("an accepted build passes the equipment check");
     let strike = sheet.fallback.clone();
     let mut wolf = WolfMods::NONE;
     for (i, (slot, p)) in [(AbilitySlot::Primary, b.loadout.primary), (AbilitySlot::Secondary, b.loadout.secondary)].into_iter().enumerate() {
@@ -546,19 +554,19 @@ pub fn run_sheet(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]
 }
 
 /// The worn items of `b` that can be used (#196), built up from the Attributes without items plus
-/// `delta`: every item whose requirements are met turns on and adds its Attribute points, until
+/// `effects`: every item whose requirements are met turns on and adds its Attribute points, until
 /// nothing changes. An item's own points never meet its own requirement, and two items that only
 /// meet each other's stay off. Returns `b` without the unusable items (an unusable melee weapon is
 /// the class starter), and each unusable item's slot with its first unmet Attribute requirement.
-pub fn usable_items(class: ClassId, b: &Build, delta: Attributes) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
-    usable_items_muted(class, b, delta, &[])
+pub fn usable_items(class: ClassId, b: &Build, effects: Attributes) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
+    usable_items_muted(class, b, effects, &[])
 }
 
 /// `usable_items` with some items muted: a muted item adds no Attribute points, so it can stop meeting another item's requirement.
-fn usable_items_muted(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
+fn usable_items_muted(class: ClassId, b: &Build, effects: Attributes, muted: &[Lasting]) -> (Build, Vec<(EquipSlot, (Attr, i32))>) {
     let worn: Vec<(EquipSlot, ItemId)> = EquipSlot::ALL.iter().filter_map(|&s| b.equipment.get(s).map(|id| (s, id))).collect();
     let items: Vec<(&[Requirement], Attributes)> = worn.iter().map(|&(_, id)| (items::def(id).req, item_points(id, muted))).collect();
-    let (on, attrs) = build_up(&items, attrs_without_items(class, b), delta);
+    let (on, attrs) = build_up(&items, AttrSources { effects, ..hero_sources(class, b) });
     let mut usable = b.clone();
     let mut dropped = Vec::new();
     for (&(s, _), (&(req, _), on)) in worn.iter().zip(items.iter().zip(on)) {
@@ -573,12 +581,12 @@ fn usable_items_muted(class: ClassId, b: &Build, delta: Attributes, muted: &[Las
 }
 
 /// The fixpoint of `usable_items`: `items` are each worn item's requirements and Attribute points.
-/// Returns which items are on and the Attributes with their points, plus `delta`.
-fn build_up(items: &[(&[Requirement], Attributes)], bare: Attributes, delta: Attributes) -> (Vec<bool>, Attributes) {
+/// `bare` holds every source but the items. Returns which items are on and the total Attributes with their points.
+fn build_up(items: &[(&[Requirement], Attributes)], bare: AttrSources) -> (Vec<bool>, Attributes) {
     let mut on = vec![false; items.len()];
     loop {
         // Item points are never negative (a data test), so turning an item on keeps the others on.
-        let attrs = items.iter().zip(&on).filter(|(_, on)| **on).fold(bare, |a, ((_, p), _)| a.plus(*p)).with_delta(delta);
+        let attrs = AttrSources { items: items.iter().zip(&on).filter(|(_, on)| **on).fold(Attributes::default(), |a, ((_, p), _)| a.plus(*p)), ..bare }.total();
         let mut changed = false;
         for (i, (req, _)) in items.iter().enumerate() {
             if !on[i] && req.iter().all(|r| r.met(&attrs, None)) {
@@ -660,10 +668,10 @@ fn resolve_usable(class: ClassId, slot: AbilitySlot, p: Pick, d: &AbilityDef, cx
 }
 
 /// The sheet without its two picks (they hold the Strike until `hero_sheet` resolves them), and
-/// what resolving any pick needs. `delta` is an Attribute change during a run (none for
+/// what resolving any pick needs. `effects` is the Attribute change during a run (none for
 /// `hero_sheet`). The equipment is checked for slot, class and proficiency; every derived number
-/// uses the Attributes with the usable items (`usable_items`, with `delta`) plus `delta`.
-fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -> Result<(Sheet, PickCx), LoadoutError> {
+/// uses the Attributes with the usable items (`usable_items`, with `effects`) plus `effects`.
+fn sheet_core(class: ClassId, b: &Build, effects: Attributes, muted: &[Lasting]) -> Result<(Sheet, PickCx), LoadoutError> {
     // A muted magic node counts as not bought. A non-magic node passed by mistake stays bought: muting a Proficiency
     // would make `run_sheet`'s equipment check fail.
     let muted_node = |n: NodeId| muted.contains(&Lasting::Node(n)) && trees::def(n).magical;
@@ -675,13 +683,14 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
         b
     };
     let def = classes::def(class);
-    let unequipped = attrs_without_items(class, b);
     let tree = trees::gains(&b.nodes);
     items::check_equipment(class, &profs(class, &b.nodes), &b.equipment).map_err(|(s, e)| LoadoutError::Equip(s, e))?;
-    let (usable, dropped) = usable_items_muted(class, b, delta, muted);
+    let (usable, dropped) = usable_items_muted(class, b, effects, muted);
     let prof = classes::profile(class);
 
     let worn = worn_items(class, &usable);
+    let sources = AttrSources { items: worn_points(&worn, muted), effects, ..hero_sources(class, b) };
+    let attrs = sources.total();
 
     // Armor bases first, then the properties (spec §10).
     let mut res = prof.res;
@@ -703,7 +712,6 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
     if ks.has(Keystone::Juggernaut) {
         weight += 4.0;
     }
-    let mut attrs = unequipped;
     let mut effect_res = prof.effect_res;
     if ks.has(Keystone::Unshaken) {
         effect_res.set(EffectKind::Sleep, effect_res.get(EffectKind::Sleep) + 1.0);
@@ -730,7 +738,8 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
         }
         for p in live_props(id, muted) {
             match p.kind {
-                PropKind::Attr(a, n) => attrs.add(a, n),
+                // Counted in `sources.items` (`item_points`).
+                PropKind::Attr(..) => {}
                 PropKind::Resist(t, v) => res.set(t, res.get(t) + v),
                 PropKind::EffectResist(k, v) => effect_res.set(k, effect_res.get(k) + v),
                 PropKind::Weight(w) => weight += w,
@@ -759,7 +768,6 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
             }
         }
     }
-    let attrs = attrs.with_delta(delta);
     let melee_id = worn.iter().find(|w| w.0 == EquipSlot::Melee).map(|w| w.1).expect("a hero always has a melee weapon");
     let melee = arm(melee_id, &attrs, &shares[0], std::mem::take(&mut on_hits[0]), pierce[0]);
     let ranged = worn.iter().find(|w| w.0 == EquipSlot::Ranged).map(|w| arm(w.1, &attrs, &shares[1], std::mem::take(&mut on_hits[1]), pierce[1]));
@@ -776,6 +784,7 @@ fn sheet_core(class: ClassId, b: &Build, delta: Attributes, muted: &[Lasting]) -
     let cx = PickCx { usable, dropped, attrs, melee: melee.clone(), ranged: ranged.clone(), improves: tree.improves.clone(), ks };
     let sheet = Sheet {
         attrs,
+        sources,
         max_hp: (attributes::hp(def.base_hp, attrs.get(Attr::Con)) + bonus_hp).max(1.0),
         speed: move_speed(def.speed, races::own_con(def.attr_mods), &attrs) * (1.0 + move_frac),
         weight,
@@ -1464,11 +1473,11 @@ mod tests {
     fn attrs_with_and_without_items() {
         let c = ClassId::Paladin;
         let b = Build { nodes: vec![], extra: Attributes::new(1, 0, 0, 0, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor), ..Build::start(c) };
-        let without = attrs_without_items(c, &b);
+        let without = hero_sources(c, &b).before_items();
         assert_eq!(without.get(Attr::Str), 16);
         assert_eq!(without.get(Attr::Cha), 14);
-        assert!(attrs_with_items(c, &b).get(Attr::Con) > without.get(Attr::Con), "the band's CON counts with items only");
-        assert_eq!(attrs_with_items(c, &b), hero_sheet(c, &b).unwrap().attrs, "the same numbers the sheet uses");
+        assert!(sources_with_items(c, &b).total().get(Attr::Con) > without.get(Attr::Con), "the band's CON counts with items only");
+        assert_eq!(sources_with_items(c, &b).total(), hero_sheet(c, &b).unwrap().attrs, "the same numbers the sheet uses");
     }
 
     #[test]
@@ -1620,7 +1629,7 @@ mod tests {
     #[test]
     fn item_points_meet_other_items_requirements() {
         let c = ClassId::Wizard;
-        assert_eq!(attrs_without_items(c, &rot_wizard(true)).get(Attr::Int), 13);
+        assert_eq!(hero_sources(c, &rot_wizard(true)).before_items().get(Attr::Int), 13);
         let (usable, dropped) = usable_items(c, &rot_wizard(true), Attributes::default());
         assert_eq!((usable, dropped), (rot_wizard(true), vec![]), "the ring's +1 INT meets the staff's INT 14");
         let s = hero_sheet(c, &rot_wizard(true)).unwrap();
@@ -1661,19 +1670,19 @@ mod tests {
 
     #[test]
     fn build_up_turns_items_on_from_the_bare_attributes() {
-        let bare = Attributes::new(10, 10, 10, 13, 10, 10);
+        let bare_attrs = Attributes::new(10, 10, 10, 13, 10, 10);
+        let bare = AttrSources { base: bare_attrs, race: Attributes::default(), kind: Attributes::default(), buy: Attributes::default(), items: Attributes::default(), effects: Attributes::default() };
         let int = |n| Attributes::new(0, 0, 0, n, 0, 0);
         let (r14, r15) = ([Requirement::Attr(Attr::Int, 14)], [Requirement::Attr(Attr::Int, 15)]);
-        let none = Attributes::default();
-        // A chain: the free item lifts INT to 14, which turns on the INT 14 item, whose +1 turns on the INT 15 one.
+                // A chain: the free item lifts INT to 14, which turns on the INT 14 item, whose +1 turns on the INT 15 one.
         let chain = [(&r15[..], int(0)), (&r14[..], int(1)), (&[][..], int(1))];
-        assert_eq!(build_up(&chain, bare, none), (vec![true, true, true], bare.plus(int(2))));
+        assert_eq!(build_up(&chain, bare), (vec![true, true, true], bare_attrs.plus(int(2))));
         // An item's own points never meet its own requirement.
-        assert_eq!(build_up(&[(&r14[..], int(1))], bare, none), (vec![false], bare));
+        assert_eq!(build_up(&[(&r14[..], int(1))], bare), (vec![false], bare_attrs));
         // Two items that only meet each other's requirements stay off.
-        assert_eq!(build_up(&[(&r14[..], int(1)), (&r14[..], int(1))], bare, none), (vec![false, false], bare));
-        // A drain turns the chain off past its first link, and the delta is in the result.
-        assert_eq!(build_up(&chain, bare, int(-1)), (vec![false, false, true], bare));
+        assert_eq!(build_up(&[(&r14[..], int(1)), (&r14[..], int(1))], bare), (vec![false, false], bare_attrs));
+        // A drain turns the chain off past its first link, and the effects are in the result.
+        assert_eq!(build_up(&chain, AttrSources { effects: int(-1), ..bare }), (vec![false, false, true], bare_attrs));
     }
 
     #[test]
@@ -2163,6 +2172,38 @@ mod tests {
 
     fn drain(s: i32, d: i32, c: i32) -> Attributes {
         Attributes::new(s, d, c, 0, 0, 0)
+    }
+
+    fn paladin_build() -> Build {
+        let c = ClassId::Paladin;
+        Build { nodes: vec![], extra: Attributes::new(1, 0, 0, 0, 0, 0), equipment: Equipment::starter(c).with(EquipSlot::Ring1, ItemId::BandOfVigor).with(EquipSlot::Armor, ItemId::PlateArmor), ..Build::start(c) }
+    }
+
+    #[test]
+    fn sheet_sources_add_up_to_the_sheet() {
+        for c in ClassId::ALL {
+            let sheet = hero_sheet(c, &Build::start(c)).unwrap();
+            assert_eq!((sheet.sources.total(), sheet.sources.effects), (sheet.attrs, Attributes::default()), "{c:?}");
+        }
+        let p = paladin_build();
+        let sheet = hero_sheet(ClassId::Paladin, &p).unwrap();
+        assert_eq!(sheet.sources.total(), sheet.attrs);
+        assert_eq!((sheet.sources.buy, sheet.sources.items.get(Attr::Con)), (p.extra, 1), "the shop is buy, the band is items");
+        let muted = run_sheet(ClassId::Paladin, &p, Attributes::default(), &[Lasting::Item(ItemId::BandOfVigor)]);
+        assert_eq!((muted.sources.total(), muted.sources.items.get(Attr::Con)), (muted.attrs, 0), "a muted item adds no points");
+        let drained = [
+            (ClassId::Paladin, p, drain(-3, 0, 0)),
+            (ClassId::Barbarian, flame_tongue_barbarian(), drain(-3, 0, 0)),
+            (ClassId::Wizard, rot_wizard(true), Attributes::new(0, 0, 0, -3, 0, 0)),
+        ];
+        for (c, b, effects) in drained {
+            let sheet = run_sheet(c, &b, effects, &[]);
+            assert_eq!(sheet.sources.total(), sheet.attrs, "{c:?}");
+            assert_eq!(sheet.sources.effects, effects, "{c:?}");
+        }
+        let b = flame_tongue_barbarian();
+        let sheet = run_sheet(ClassId::Barbarian, &b, drain(-3, 0, 0), &[]);
+        assert_eq!(sheet.sources.items, Attributes::default(), "an unusable item adds no points; the starter is on");
     }
 
     #[test]

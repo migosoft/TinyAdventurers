@@ -774,11 +774,11 @@ impl Run {
     }
 }
 
-/// The hero's sheet for `delta` and `muted`, with the light of the same build under `muted` alone: pauses change the
+/// The hero's sheet for `effects` and `muted`, with the light of the same build under `muted` alone: pauses change the
 /// light, drains do not. The second sheet is resolved only while a drain is on (without one both agree).
-fn hero_sheet_with_light(class: crate::protocol::ClassId, build: &crate::defs::loadout::Build, delta: Attributes, muted: &[crate::sheet::Lasting]) -> crate::sheet::Sheet {
-    let mut sheet = crate::sheet::run_sheet(class, build, delta, muted);
-    if delta != Attributes::default() {
+fn hero_sheet_with_light(class: crate::protocol::ClassId, build: &crate::defs::loadout::Build, effects: Attributes, muted: &[crate::sheet::Lasting]) -> crate::sheet::Sheet {
+    let mut sheet = crate::sheet::run_sheet(class, build, effects, muted);
+    if effects != Attributes::default() {
         sheet.light = crate::sheet::run_sheet(class, build, Attributes::default(), muted).light;
     }
     sheet

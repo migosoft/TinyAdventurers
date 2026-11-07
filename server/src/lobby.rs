@@ -50,7 +50,7 @@ pub struct Conn {
 /// The Attribute points that lift each Attribute of `class` to the highest Attribute requirement of
 /// the build's two picks and its equipped items (debug builds only; proficiency is not lifted).
 pub fn debug_lift(class: ClassId, b: &Build) -> Attributes {
-    let start = crate::sheet::attrs_without_items(class, b);
+    let start = crate::sheet::hero_sources(class, b).before_items();
     let mut need = [0i32; Attr::COUNT];
     let picks = [b.loadout.primary.ability, b.loadout.secondary.ability];
     let reqs = picks
