@@ -1,0 +1,12 @@
+Dark elves (issue #12): recoloured and edited pack sprites, built by make-frames.py.
+
+Sources (both CC0 1.0):
+- "16x16 DungeonTileset II" v1.7 by 0x72, https://0x72.itch.io/dungeontileset-ii
+  (elf_f and elf_m for the priestess; see ../0x72/LICENSE.txt)
+- "16x16 Enchanted Forest Characters" by Superdark, https://superdark.itch.io/enchanted-forest-characters
+  (Elf Male, Elven King, Elven Knight, Ranger; see ../enchanted-forest/LICENSE.txt)
+
+Edits drawn for this game with Claude Code (the user approved them, 2026-11-07): the
+priestess's splice of elf_f's head onto elf_m's body, her spider emblem and circlet, the
+removed hair ornament, and the Ranger's removed beard and raised shirt. Colours are all
+from the 0x72 pack.
