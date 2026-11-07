@@ -1502,7 +1502,7 @@ pub mod tests {
 
     #[test]
     fn players_carry_their_sheet() {
-        use crate::defs::companions::{wolf_attrs, WOLF_WEIGHT};
+        use crate::defs::companions::{wolf_attr_sources, WOLF_WEIGHT};
         use crate::sheet::{boss_stats, enemy_stats, hero_sheet};
         let run = test_run(&[ClassId::Barbarian], BossId::Lich);
         let want = hero_sheet(ClassId::Barbarian, &Build::start(ClassId::Barbarian)).unwrap();
@@ -1527,7 +1527,7 @@ pub mod tests {
         let id = wolf::spawn_wolf(&mut run, 0);
         let w = run.monsters.iter().find(|m| m.id == id).unwrap();
         assert_eq!(w.weight, WOLF_WEIGHT);
-        assert_eq!(w.attrs, wolf_attrs());
+        assert_eq!(w.attrs, wolf_attr_sources().total());
     }
 
     #[test]

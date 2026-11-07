@@ -13,7 +13,7 @@ use crate::defs::damage::{kind_split, Base, BaseScale, DamageSplit, DamageType, 
 use crate::defs::effects::{EffectKind, EffectResistances, OnHit};
 use crate::defs::enemies::{self, EnemyType};
 use crate::defs::kinds::EntityKind;
-use crate::defs::items::{self, ArmorClass, EquipSlot, Equipment, ItemBase, ItemId, ItemProperty, PropKind};
+use crate::defs::items::{self, ArmorClass, EquipSlot, ItemBase, ItemId, ItemProperty, PropKind};
 use crate::defs::lights::{self, LightKind};
 use crate::defs::loadout::{apply_mods, check_pick, pick_version, requirement_text, AbilityMod, Build, Loadout, LoadoutError, Pick, Source, MIN_COOLDOWN};
 use crate::defs::races::{self, Sight};
@@ -1142,6 +1142,7 @@ pub fn magic_sources_monster(src: KitSource) -> Vec<Lasting> {
 mod tests {
     use super::*;
     use crate::defs::attributes::{factor, STR_DMG};
+    use crate::defs::items::Equipment;
     use crate::defs::companions::WOLF_HP;
 
     #[test]
@@ -1221,19 +1222,19 @@ mod tests {
         let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-12, "{what}: {a} vs {b}");
         let kit = |src: KitSource, attrs: Attributes| kit_for(src, &attrs, &[]);
         let cd = |k: &Kit, id| k.get(id).unwrap_or_else(|| panic!("{id:?} in kit")).cooldown;
-        let k = kit(KitSource::Boss(BossId::Lich), bosses::attrs(BossId::Lich));
-        assert_eq!(bosses::attrs(BossId::Lich).get(Attr::Int), 22);
+        let k = kit(KitSource::Boss(BossId::Lich), bosses::attr_sources(BossId::Lich).total());
+        assert_eq!(bosses::attr_sources(BossId::Lich).total().get(Attr::Int), 22);
         for (id, base) in [(AbilityId::GloomBolts, 2.5), (AbilityId::Nova, 10.0), (AbilityId::StoneGaze, 18.0), (AbilityId::RaiseDead, 12.0)] {
             near(cd(&k, id), base * 10.0 / 22.0, &format!("{id:?}"));
         }
-        near(cd(&kit(KitSource::Enemy(EnemyType::Necromancer), enemies::attrs(EnemyType::Necromancer)), AbilityId::RaiseDead), 12.0 * 10.0 / 17.0, "Necromancer Raise Dead");
-        near(cd(&kit(KitSource::Enemy(EnemyType::Summoner), enemies::attrs(EnemyType::Summoner)), AbilityId::SummonImps), 12.0 * 10.0 / 15.0, "Summoner Summon Imps");
-        let k = kit(KitSource::Boss(BossId::Demon), bosses::attrs(BossId::Demon));
-        assert_eq!((bosses::attrs(BossId::Demon).get(Attr::Cha), bosses::attrs(BossId::Demon).get(Attr::Dex)), (20, 14));
+        near(cd(&kit(KitSource::Enemy(EnemyType::Necromancer), enemies::attr_sources(EnemyType::Necromancer).total()), AbilityId::RaiseDead), 12.0 * 10.0 / 17.0, "Necromancer Raise Dead");
+        near(cd(&kit(KitSource::Enemy(EnemyType::Summoner), enemies::attr_sources(EnemyType::Summoner).total()), AbilityId::SummonImps), 12.0 * 10.0 / 15.0, "Summoner Summon Imps");
+        let k = kit(KitSource::Boss(BossId::Demon), bosses::attr_sources(BossId::Demon).total());
+        assert_eq!((bosses::attr_sources(BossId::Demon).total().get(Attr::Cha), bosses::attr_sources(BossId::Demon).total().get(Attr::Dex)), (20, 14));
         near(cd(&k, AbilityId::RingOfFire), 4.5, "Ring of Fire");
         near(cd(&k, AbilityId::Swoop), 6.0 * 10.0 / 14.0, "Swoop");
-        let k = kit(KitSource::Boss(BossId::Dragon), bosses::attrs(BossId::Dragon));
-        assert_eq!(bosses::attrs(BossId::Dragon).get(Attr::Cha), 20);
+        let k = kit(KitSource::Boss(BossId::Dragon), bosses::attr_sources(BossId::Dragon).total());
+        assert_eq!(bosses::attr_sources(BossId::Dragon).total().get(Attr::Cha), 20);
         near(cd(&k, AbilityId::FireBreath), 6.5 * 10.0 / 20.0, "Fire Breath");
     }
 
@@ -1275,7 +1276,7 @@ mod tests {
     fn ground_slam_push_is_the_larger_of_own_and_weapon() {
         let d = ab::def(AbilityId::GroundSlam);
         assert_eq!(d.own.push, ab::SLAM_PUSH);
-        let attrs = classes::start_attrs(ClassId::Barbarian);
+        let attrs = classes::attr_sources(ClassId::Barbarian).total();
         let soft = ResolvedWeapon { push: 0.0, ..arm(ItemId::WarHammer, &attrs, &[], vec![], 0) };
         let club = arm(ItemId::SpikedClub, &attrs, &[], vec![], 0);
         let body = Body { radius: PLAYER_RADIUS };
@@ -1773,20 +1774,20 @@ mod tests {
         };
         for t in EnemyType::ALL {
             let d = enemies::def(t);
-            let attrs = enemies::attrs(t);
+            let attrs = enemies::attr_sources(t).total();
             check(&format!("{t:?}"), &kit_for(KitSource::Enemy(t), &attrs, &[]), d.abilities, &attrs, d.weapons, d.radius);
         }
         for b in BossId::ALL {
             let d = bosses::def(b);
-            let attrs = bosses::attrs(b);
+            let attrs = bosses::attr_sources(b).total();
             check(&format!("{b:?}"), &kit_for(KitSource::Boss(b), &attrs, &[]), d.abilities, &attrs, d.weapons, d.radius);
         }
         let ids = [AbilityId::Bite, AbilityId::Pounce];
-        check("wolf", &kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]), &ids, &crate::defs::companions::wolf_attrs(), &[ItemId::BeastBite], WOLF_RADIUS);
+        check("wolf", &kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[]), &ids, &crate::defs::companions::wolf_attr_sources().total(), &[ItemId::BeastBite], WOLF_RADIUS);
         // A version's mod goes through `apply_mods`, on the Pounce alone.
         let faster = AbilityMod::CooldownAdd(-0.5);
-        let kit = kit_for(KitSource::Wolf(WolfMods { hp_mul: 1.0, pounce: Some(faster) }), &crate::defs::companions::wolf_attrs(), &[]);
-        let plain = kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]);
+        let kit = kit_for(KitSource::Wolf(WolfMods { hp_mul: 1.0, pounce: Some(faster) }), &crate::defs::companions::wolf_attr_sources().total(), &[]);
+        let plain = kit_for(KitSource::Wolf(WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[]);
         assert_eq!(kit.get(AbilityId::Pounce), Some(&apply_mods(plain.get(AbilityId::Pounce).unwrap().clone(), &[faster])));
         assert_eq!(kit.get(AbilityId::Bite), plain.get(AbilityId::Bite));
     }
@@ -1796,14 +1797,14 @@ mod tests {
         use crate::defs::bosses::*;
         let near = |a: f64, b: f64, what: &str| assert!((a - b).abs() < 1e-9, "{what}: {a} vs {b}");
         for b in BossId::ALL {
-            let k = kit_for(KitSource::Boss(b), &crate::defs::bosses::attrs(b), &[]);
+            let k = kit_for(KitSource::Boss(b), &crate::defs::bosses::attr_sources(b).total(), &[]);
             for &id in def(b).abilities {
                 assert!(k.get(id).is_some(), "{b:?} {id:?}");
             }
         }
-        let dragon = kit_for(KitSource::Boss(BossId::Dragon), &crate::defs::bosses::attrs(BossId::Dragon), &[]);
-        let demon = kit_for(KitSource::Boss(BossId::Demon), &crate::defs::bosses::attrs(BossId::Demon), &[]);
-        let lich = kit_for(KitSource::Boss(BossId::Lich), &crate::defs::bosses::attrs(BossId::Lich), &[]);
+        let dragon = kit_for(KitSource::Boss(BossId::Dragon), &crate::defs::bosses::attr_sources(BossId::Dragon).total(), &[]);
+        let demon = kit_for(KitSource::Boss(BossId::Demon), &crate::defs::bosses::attr_sources(BossId::Demon).total(), &[]);
+        let lich = kit_for(KitSource::Boss(BossId::Lich), &crate::defs::bosses::attr_sources(BossId::Lich).total(), &[]);
         let check = |k: &Kit, id: AbilityId, damage: f64, push: f64| {
             let a = k.get(id).unwrap_or_else(|| panic!("{id:?}"));
             near(a.damage, damage, &format!("{id:?} damage"));
@@ -1870,7 +1871,7 @@ mod tests {
         let all = EnemyType::ALL.map(|t| enemy_stats(t).attrs).into_iter()
             .chain(BossId::ALL.map(|b| boss_stats(b).attrs))
             .chain([wolf_stats().attrs])
-            .chain(ClassId::ALL.map(classes::start_attrs));
+            .chain(ClassId::ALL.map(|c| classes::attr_sources(c).total()));
         for a in all {
             assert!(Attr::ALL.iter().all(|&x| a.get(x) >= 1), "{a:?}");
         }

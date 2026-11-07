@@ -168,10 +168,6 @@ impl Effects {
         self.list.push(ActiveEffect { kind: k, left: secs, dot_t: 0.0, look, source, from, amount, magical, dispel: 0.0 });
         true
     }
-    /// The signed amount of `k`, summed over its unpaused entries (0 when it is not on, or has none).
-    pub fn amount(&self, k: EffectKind) -> i32 {
-        self.on().filter(|a| a.kind == k).map(|a| a.amount).sum()
-    }
     /// What the active effects add to each Attribute (summed, not yet floored: see `Attributes::with_delta`).
     pub fn attr_delta(&self) -> Attributes {
         let mut d = Attributes::default();
@@ -2103,7 +2099,7 @@ mod tests {
         use crate::defs::items::{EquipSlot, Equipment, ItemId};
         let c = ClassId::Wizard;
         let mut b = Build { equipment: Equipment::starter(c).with(EquipSlot::Melee, ItemId::BoneStaff), ..Build::start(c) };
-        b.extra.add(Attr::Int, 18 - crate::defs::classes::start_attrs(c).get(Attr::Int));
+        b.extra.add(Attr::Int, 18 - crate::defs::classes::attr_sources(c).total().get(Attr::Int));
         let mut drain = Attributes::default();
         drain.add(Attr::Int, -1);
         assert_eq!(crate::sheet::run_sheet(c, &b, Attributes::default(), &[]).light, Some(LightKind::Magic), "lit at 18");
@@ -2119,20 +2115,19 @@ mod tests {
         let h = Creature::Player(0);
         let str0 = run.players[0].sheet.attrs.get(Attr::Str);
         assert_eq!(drain(&mut run, h, EffectKind::Weakened, 20.0, None), EffectOutcome::Added);
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -1);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -1);
         assert_eq!(drain(&mut run, h, EffectKind::Weakened, 30.0, None), EffectOutcome::Refreshed);
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -2);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -2);
         assert_eq!(left_of(&run, h, EffectKind::Weakened), Some(30.0), "the longer time");
         assert_eq!(drain(&mut run, h, EffectKind::Weakened, 5.0, None), EffectOutcome::Refreshed);
         assert_eq!(left_of(&run, h, EffectKind::Weakened), Some(30.0), "a shorter touch does not shorten it");
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -3);
         assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -3);
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Sleep), 0);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -3);
         assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), str0 - 3);
         // Power 30 adds -2 in one touch.
         let mut run = test_run(&[ClassId::Barbarian], BossId::Demon);
         drain(&mut run, h, EffectKind::Weakened, 20.0, Some(30));
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Weakened), -2);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Str), -2);
         assert_eq!(run.players[0].sheet.attrs.get(Attr::Str), str0 - 2);
     }
 
@@ -2150,7 +2145,7 @@ mod tests {
             assert_eq!((p, a, v), (power, Attr::Wil, wil), "Frail leaves WIL alone");
             assert!((secs - scaled_secs(20.0, power, wil)).abs() < 1e-12);
         }
-        assert_eq!(fx_of(&run, h).amount(EffectKind::Frail), -2);
+        assert_eq!(fx_of(&run, h).attr_delta().get(Attr::Con), -2);
     }
 
     #[test]

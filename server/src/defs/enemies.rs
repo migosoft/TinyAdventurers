@@ -84,7 +84,7 @@ pub struct EnemyDef {
     /// At the kind's own CON (10 + modifier), before races.
     pub speed: f64,
     pub radius: f64,
-    /// The kind's modifier from 10; read the Attributes through `attrs(…)`.
+    /// The kind's modifier from 10; read the Attributes through `attr_sources(…).total()`.
     pub attr_mods: Attributes,
     /// Weight for pushes (see the spec's section 4).
     pub weight: f64,
@@ -478,11 +478,6 @@ pub fn attr_sources(t: EnemyType) -> AttrSources {
     races::creature_sources(races(t), def(t).attr_mods)
 }
 
-/// The total (`attr_sources(..).total()`).
-#[cfg(test)]
-pub fn attrs(t: EnemyType) -> Attributes {
-    attr_sources(t).total()
-}
 
 /// The races of each enemy (see `races`).
 pub fn races(t: EnemyType) -> &'static [Race] {
@@ -513,32 +508,32 @@ mod tests {
     #[test]
     fn enemy_stat_blocks_match_the_spec() {
         use EnemyType::*;
-        assert_eq!(attrs(Ogre), Attributes::new(19, 8, 16, 5, 7, 7));
+        assert_eq!(attr_sources(Ogre).total(), Attributes::new(19, 8, 16, 5, 7, 7));
         assert_eq!(def(Ogre).weight, 20.0);
-        assert_eq!(attrs(Imp), Attributes::new(6, 17, 13, 11, 12, 14));
+        assert_eq!(attr_sources(Imp).total(), Attributes::new(6, 17, 13, 11, 12, 14));
         assert_eq!(def(Imp).weight, 4.0);
-        assert_eq!(attrs(RaisedSkeleton).get(Attr::Con), 12);
-        assert_eq!(attrs(RaisedSkeleton).get(Attr::Str), attrs(SkeletonWarrior).get(Attr::Str));
-        assert_eq!(attrs(RaisedArcher).get(Attr::Con), 12);
-        assert_eq!(attrs(RaisedArcher).get(Attr::Dex), 15);
-        assert_eq!(attrs(SummonedImp).get(Attr::Con), 10);
-        assert_eq!(attrs(SummonedImp).get(Attr::Dex), 17);
+        assert_eq!(attr_sources(RaisedSkeleton).total().get(Attr::Con), 12);
+        assert_eq!(attr_sources(RaisedSkeleton).total().get(Attr::Str), attr_sources(SkeletonWarrior).total().get(Attr::Str));
+        assert_eq!(attr_sources(RaisedArcher).total().get(Attr::Con), 12);
+        assert_eq!(attr_sources(RaisedArcher).total().get(Attr::Dex), 15);
+        assert_eq!(attr_sources(SummonedImp).total().get(Attr::Con), 10);
+        assert_eq!(attr_sources(SummonedImp).total().get(Attr::Dex), 17);
         assert_eq!(def(Disciple).weight, 10.0);
-        assert_eq!(attrs(GoblinArcher), Attributes::new(8, 15, 10, 10, 8, 8));
-        assert_eq!(attrs(SkeletonWarrior), Attributes::new(12, 12, 15, 1, 8, 5));
-        assert_eq!(attrs(SkeletonArcher), Attributes::new(10, 15, 13, 1, 8, 5));
-        assert_eq!(attrs(RaisedSkeleton).get(Attr::Int), 1);
-        assert_eq!(attrs(RaisedArcher).get(Attr::Int), 1);
-        assert_eq!((attrs(Ghost).get(Attr::Int), attrs(Shade).get(Attr::Int)), (10, 10), "INT −9 is the skeletons' kind, not Undead");
-        assert_eq!(attrs(OrcWarrior), Attributes::new(16, 12, 16, 7, 11, 10));
-        assert_eq!(attrs(OrcArcher), Attributes::new(14, 14, 14, 7, 11, 10));
-        assert_eq!(attrs(Necromancer), Attributes::new(9, 14, 12, 17, 12, 11));
-        assert_eq!(attrs(Summoner), Attributes::new(9, 14, 12, 15, 12, 16));
-        assert_eq!(attrs(Disciple), Attributes::new(10, 12, 10, 13, 11, 10));
-        assert_eq!(attrs(Mimic), Attributes::new(17, 12, 15, 5, 13, 8));
-        assert_eq!(attrs(Chort), Attributes::new(14, 13, 13, 8, 10, 9));
-        assert_eq!(attrs(Ghost), Attributes::new(6, 14, 10, 10, 12, 14));
-        assert_eq!(attrs(Shade), Attributes::new(8, 12, 12, 10, 14, 15));
+        assert_eq!(attr_sources(GoblinArcher).total(), Attributes::new(8, 15, 10, 10, 8, 8));
+        assert_eq!(attr_sources(SkeletonWarrior).total(), Attributes::new(12, 12, 15, 1, 8, 5));
+        assert_eq!(attr_sources(SkeletonArcher).total(), Attributes::new(10, 15, 13, 1, 8, 5));
+        assert_eq!(attr_sources(RaisedSkeleton).total().get(Attr::Int), 1);
+        assert_eq!(attr_sources(RaisedArcher).total().get(Attr::Int), 1);
+        assert_eq!((attr_sources(Ghost).total().get(Attr::Int), attr_sources(Shade).total().get(Attr::Int)), (10, 10), "INT −9 is the skeletons' kind, not Undead");
+        assert_eq!(attr_sources(OrcWarrior).total(), Attributes::new(16, 12, 16, 7, 11, 10));
+        assert_eq!(attr_sources(OrcArcher).total(), Attributes::new(14, 14, 14, 7, 11, 10));
+        assert_eq!(attr_sources(Necromancer).total(), Attributes::new(9, 14, 12, 17, 12, 11));
+        assert_eq!(attr_sources(Summoner).total(), Attributes::new(9, 14, 12, 15, 12, 16));
+        assert_eq!(attr_sources(Disciple).total(), Attributes::new(10, 12, 10, 13, 11, 10));
+        assert_eq!(attr_sources(Mimic).total(), Attributes::new(17, 12, 15, 5, 13, 8));
+        assert_eq!(attr_sources(Chort).total(), Attributes::new(14, 13, 13, 8, 10, 9));
+        assert_eq!(attr_sources(Ghost).total(), Attributes::new(6, 14, 10, 10, 12, 14));
+        assert_eq!(attr_sources(Shade).total(), Attributes::new(8, 12, 12, 10, 14, 15));
         let shade = def(Shade);
         assert_eq!((shade.hp, shade.speed, shade.radius, shade.vision, shade.base_ai), (40.0, 44.0, 6.0, 8.75, BaseAi::Melee));
         assert_eq!((shade.abilities, shade.weapons), (&[AbilityId::Touch, AbilityId::Vanish][..], &[ItemId::ShadeTouch][..]));
@@ -567,7 +562,7 @@ mod tests {
         // The AI reads kit entry 0 as the main ability and entry 1 as the alt one.
         for t in EnemyType::ALL {
             let d = def(t);
-            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &attrs(t), &[]);
+            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &attr_sources(t).total(), &[]);
             let ids: Vec<_> = kit.iter().map(|a| a.id).collect();
             assert_eq!(ids, d.abilities, "{t:?}");
         }
@@ -593,7 +588,7 @@ mod tests {
     fn every_enemy_kit_resolves() {
         for t in EnemyType::ALL {
             let d = def(t);
-            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::attrs(t), &[]);
+            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::attr_sources(t).total(), &[]);
             for &id in d.abilities {
                 assert!(kit.get(id).is_some(), "{t:?} {id:?}");
             }
@@ -674,7 +669,7 @@ mod tests {
     fn knight_stat_block() {
         use EnemyType::Knight;
         let k = def(Knight);
-        assert_eq!(attrs(Knight), Attributes::new(14, 12, 14, 8, 10, 12));
+        assert_eq!(attr_sources(Knight).total(), Attributes::new(14, 12, 14, 8, 10, 12));
         assert_eq!((k.hp, k.speed, k.radius, k.vision, k.base_ai), (60.0, 68.0, 5.0, 8.0, BaseAi::Melee));
         assert_eq!((k.abilities, k.weapons), (&[AbilityId::Strike][..], &[ItemId::SoldierSword][..]));
         assert_eq!(races(Knight), &[Race::Human]);
@@ -686,16 +681,16 @@ mod tests {
     fn wildlife_stat_blocks() {
         use EnemyType::*;
         let bunny = def(Bunny);
-        assert_eq!(attrs(Bunny), Attributes::new(4, 16, 6, 2, 8, 6));
+        assert_eq!(attr_sources(Bunny).total(), Attributes::new(4, 16, 6, 2, 8, 6));
         assert_eq!((bunny.hp, bunny.speed, bunny.radius, bunny.vision, bunny.wild), (5.0, 80.0, 4.0, 6.0, Some(Reaction::Flee)));
         for t in [Deer, Stag] {
             let d = def(t);
-            assert_eq!(attrs(t), Attributes::new(8, 16, 12, 2, 10, 8), "{t:?}");
+            assert_eq!(attr_sources(t).total(), Attributes::new(8, 16, 12, 2, 10, 8), "{t:?}");
             assert_eq!((d.hp, d.speed, d.radius, d.vision, d.wild), (40.0, 90.0, 6.0, 8.0, Some(Reaction::Flee)), "{t:?}");
         }
         assert_eq!((def(Deer).kind, def(Stag).kind), (EntityKind::Deer, EntityKind::Stag));
         let boar = def(Boar);
-        assert_eq!(attrs(Boar), Attributes::new(14, 10, 14, 2, 8, 6));
+        assert_eq!(attr_sources(Boar).total(), Attributes::new(14, 10, 14, 2, 8, 6));
         assert_eq!((boar.hp, boar.speed, boar.radius, boar.vision, boar.wild), (40.0, 64.0, 6.0, 6.0, Some(Reaction::FightBack)));
         assert_eq!((boar.abilities, boar.weapons), (&[AbilityId::Strike][..], &[ItemId::BoarTusks][..]));
         for t in EnemyType::ALL {
@@ -806,7 +801,7 @@ mod kit_pins {
         ];
         let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
         for t in EnemyType::ALL {
-            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::attrs(t), &[]);
+            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::attr_sources(t).total(), &[]);
             for &id in def(t).abilities {
                 let (_, _, p) = pins.iter().find(|(pt, pid, _)| *pt == t && *pid == id).unwrap_or_else(|| panic!("{t:?} {id:?} is not pinned"));
                 let a = kit.get(id).unwrap();

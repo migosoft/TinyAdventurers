@@ -15,7 +15,7 @@ pub struct BossDef {
     pub radius: f64,
     /// At the boss's own CON (10 + modifier).
     pub speed: f64,
-    /// The kind's modifier from 10; read the Attributes through `attrs(…)`.
+    /// The kind's modifier from 10; read the Attributes through `attr_sources(…).total()`.
     pub attr_mods: Attributes,
     /// Never pushed.
     pub weight: f64,
@@ -68,11 +68,6 @@ pub fn attr_sources(id: BossId) -> AttrSources {
     races::creature_sources(races(id), def(id).attr_mods)
 }
 
-/// The total (`attr_sources(..).total()`).
-#[cfg(test)]
-pub fn attrs(id: BossId) -> Attributes {
-    attr_sources(id).total()
-}
 
 /// HP at CON 10: `hp` minus `CON_HP` per point of the boss's own CON modifier.
 pub fn base_hp(id: BossId) -> f64 {
@@ -116,9 +111,9 @@ mod tests {
         for id in BossId::ALL {
             assert_eq!(def(id).weight, 40.0, "{id:?}");
         }
-        assert_eq!(attrs(BossId::Lich).get(Attr::Int), 22);
-        assert_eq!(attrs(BossId::Demon), Attributes::new(22, 14, 20, 14, 16, 20));
-        assert_eq!(attrs(BossId::Dragon), Attributes::new(24, 10, 22, 16, 14, 20));
-        assert_eq!(attrs(BossId::Lich), Attributes::new(10, 14, 14, 22, 18, 16));
+        assert_eq!(attr_sources(BossId::Lich).total().get(Attr::Int), 22);
+        assert_eq!(attr_sources(BossId::Demon).total(), Attributes::new(22, 14, 20, 14, 16, 20));
+        assert_eq!(attr_sources(BossId::Dragon).total(), Attributes::new(24, 10, 22, 16, 14, 20));
+        assert_eq!(attr_sources(BossId::Lich).total(), Attributes::new(10, 14, 14, 22, 18, 16));
     }
 }

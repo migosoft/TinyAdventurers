@@ -332,7 +332,7 @@ mod tests {
     fn a_pounce_cooldown_mod_lengthens_only_the_wolfs_pounce() {
         use crate::defs::loadout::AbilityMod::CooldownAdd;
         let mods = crate::sheet::WolfMods { hp_mul: 1.0, pounce: Some(CooldownAdd(1.5)) };
-        let (plain, modded) = (crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attrs(), &[]), crate::sheet::kit_for(crate::sheet::KitSource::Wolf(mods), &crate::defs::companions::wolf_attrs(), &[]));
+        let (plain, modded) = (crate::sheet::kit_for(crate::sheet::KitSource::Wolf(crate::sheet::WolfMods::NONE), &crate::defs::companions::wolf_attr_sources().total(), &[]), crate::sheet::kit_for(crate::sheet::KitSource::Wolf(mods), &crate::defs::companions::wolf_attr_sources().total(), &[]));
         let (p, m) = (plain.get(AbilityId::Pounce).unwrap(), modded.get(AbilityId::Pounce).unwrap());
         assert!((p.cooldown - 5.0 * 10.0 / 15.0).abs() < 1e-12 && (m.cooldown - (5.0 * 10.0 / 15.0 + 1.5)).abs() < 1e-12, "the wolf's DEX 15, then the mod: {} {}", p.cooldown, m.cooldown);
         assert_eq!(plain.get(AbilityId::Bite), modded.get(AbilityId::Bite), "the bite is the same");

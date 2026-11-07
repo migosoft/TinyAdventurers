@@ -520,7 +520,7 @@ mod tests {
     }
 
     use super::*;
-    use crate::defs::classes::start_attrs;
+    use crate::defs::classes;
     use crate::defs::weapons::{WeaponCategory as C, WeaponKind as K};
     use EquipSlot as S;
     use ItemId as I;
@@ -631,7 +631,7 @@ mod tests {
     }
 
     fn ok(c: ClassId, slot: EquipSlot, item: ItemId) -> Result<(), EquipError> {
-        check_equip(c, &classes::prof_base(c), slot, item, &start_attrs(c))
+        check_equip(c, &classes::prof_base(c), slot, item, &classes::attr_sources(c).total())
     }
 
     #[test]
@@ -681,7 +681,7 @@ mod tests {
     #[test]
     fn requirements_are_checked_against_the_given_attributes() {
         let c = ClassId::Wizard;
-        let low = start_attrs(c).plus(Attributes::new(0, 0, 0, -2, 0, 0));
+        let low = classes::attr_sources(c).total().plus(Attributes::new(0, 0, 0, -2, 0, 0));
         let want = EquipError::Requirement(Requirement::Attr(Attr::Int, 14));
         assert_eq!(check_equip(c, &classes::prof_base(c), S::Melee, I::StaffOfRot, &low), Err(want));
         assert_eq!(check_wear(c, &classes::prof_base(c), S::Melee, I::StaffOfRot), Ok(()));

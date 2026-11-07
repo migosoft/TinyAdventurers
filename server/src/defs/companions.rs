@@ -5,7 +5,7 @@ use super::damage::{DamageType::Cold, Resistances};
 use super::races::{self, Adjust, Race, Profile};
 
 pub const WOLF_HP: f64 = 80.0;
-/// The wolf's modifier from 10; read the Attributes through `wolf_attrs()`. HP and speed (at its own CON) keep the `WOLF_*` numbers; its Bite and Pounce are abilities (`sheet::kit_for`).
+/// The wolf's modifier from 10; its Attribute sources are `wolf_attr_sources()`. HP and speed (at its own CON) keep the `WOLF_*` numbers; its Bite and Pounce are abilities (`sheet::kit_for`).
 pub const WOLF_ATTR_MODS: Attributes = Attributes::new(7, 5, 5, -7, 2, -3);
 pub const WOLF_WEIGHT: f64 = 10.0;
 pub const WOLF_SPEED: f64 = 88.0;
@@ -61,11 +61,6 @@ pub fn wolf_attr_sources() -> AttrSources {
     races::creature_sources(wolf_races(), WOLF_ATTR_MODS)
 }
 
-/// The total (`wolf_attr_sources().total()`).
-#[cfg(test)]
-pub fn wolf_attrs() -> Attributes {
-    wolf_attr_sources().total()
-}
 
 /// A magical beast with 20 % extra cold resistance.
 pub fn wolf_profile() -> Profile {
@@ -78,7 +73,7 @@ mod tests {
 
     #[test]
     fn the_wolf_is_a_magical_beast_with_int_6() {
-        assert_eq!(wolf_attrs(), Attributes::new(17, 15, 15, 6, 12, 7));
+        assert_eq!(wolf_attr_sources().total(), Attributes::new(17, 15, 15, 6, 12, 7));
     }
 
     #[test]
