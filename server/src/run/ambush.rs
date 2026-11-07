@@ -152,9 +152,9 @@ mod tests {
         let mut run = field(1);
         let hero = run.players[0].pos();
         let str0 = run.players[0].sheet.attrs.get(Attr::Str);
-        let ghost_cha = enemies::def(EnemyType::Ghost).attrs.get(Attr::Cha);
+        let ghost_cha = enemies::attrs(EnemyType::Ghost).get(Attr::Cha);
         // The kit's Touch carries the drain: magical, its power the Ghost's CHA.
-        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::Ghost), &enemies::def(EnemyType::Ghost).attrs, &[]);
+        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::Ghost), &enemies::attrs(EnemyType::Ghost), &[]);
         let want = OnHit { kind: EffectKind::Weakened, secs: 20.0, magical: true, power: ghost_cha, look: EffectLook::Plain };
         assert_eq!(kit.get(AbilityId::Touch).unwrap().on_hit, vec![want]);
         // And a Touch that lands on a hero weakens them.
@@ -173,8 +173,8 @@ mod tests {
         let mut run = field(1);
         let hero = run.players[0].pos();
         let con0 = run.players[0].sheet.attrs.get(Attr::Con);
-        let shade_cha = enemies::def(EnemyType::Shade).attrs.get(Attr::Cha);
-        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::Shade), &enemies::def(EnemyType::Shade).attrs, &[]);
+        let shade_cha = enemies::attrs(EnemyType::Shade).get(Attr::Cha);
+        let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(EnemyType::Shade), &enemies::attrs(EnemyType::Shade), &[]);
         let want = OnHit { kind: EffectKind::Frail, secs: 20.0, magical: true, power: shade_cha, look: EffectLook::Plain };
         assert_eq!(kit.get(AbilityId::Touch).unwrap().on_hit, vec![want]);
         crate::run::tests::enemy_use(&mut run, EnemyType::Shade, hero + Vec2::new(12.0, 0.0), AbilityId::Touch, hero);

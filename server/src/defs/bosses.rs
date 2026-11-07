@@ -10,12 +10,13 @@ pub struct BossDef {
     #[allow(dead_code)]
     pub id: BossId,
     pub kind: EntityKind,
-    /// Base HP for one player; scaled by party size.
+    /// At the boss's own CON (10 + modifier); scaled by party size.
     pub hp: f64,
     pub radius: f64,
+    /// At the boss's own CON (10 + modifier).
     pub speed: f64,
-    /// For effect power and saves (the scripts keep their own constants).
-    pub attrs: Attributes,
+    /// The kind's modifier from 10; read the Attributes through `attrs(…)`.
+    pub attr_mods: Attributes,
     /// Never pushed.
     pub weight: f64,
     /// The abilities it uses, as the scripts choose them.
@@ -28,9 +29,9 @@ pub fn def(id: BossId) -> BossDef {
     use AbilityId::*;
     use ItemId::*;
     match id {
-        BossId::Demon => BossDef { id, kind: EntityKind::Demon, hp: 1300.0, radius: 11.0, speed: 50.0, attrs: Attributes::new(22, 14, 20, 14, 16, 20), weight: 40.0, abilities: &[Strike, Swoop, RingOfFire], weapons: &[DemonClaws] },
-        BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0, attrs: Attributes::new(10, 14, 14, 22, 18, 16), weight: 40.0, abilities: &[Nova, GloomBolts, BlindingCurse, SleepMist, StoneGaze, RaiseDead], weapons: &[] },
-        BossId::Dragon => BossDef { id, kind: EntityKind::Dragon, hp: 2000.0, radius: 17.0, speed: 34.0, attrs: Attributes::new(24, 10, 22, 16, 14, 20), weight: 40.0, abilities: &[Strike, AbilityId::Bite, TailWhip, FireBreath, Smash, Fireball], weapons: &[DragonClaws, DragonBite, DragonTail] },
+        BossId::Demon => BossDef { id, kind: EntityKind::Demon, hp: 1300.0, radius: 11.0, speed: 50.0, attr_mods: Attributes::new(12, 4, 10, 4, 6, 10), weight: 40.0, abilities: &[Strike, Swoop, RingOfFire], weapons: &[DemonClaws] },
+        BossId::Lich => BossDef { id, kind: EntityKind::Lich, hp: 900.0, radius: 8.0, speed: 34.0, attr_mods: Attributes::new(0, 4, 4, 12, 8, 6), weight: 40.0, abilities: &[Nova, GloomBolts, BlindingCurse, SleepMist, StoneGaze, RaiseDead], weapons: &[] },
+        BossId::Dragon => BossDef { id, kind: EntityKind::Dragon, hp: 2000.0, radius: 17.0, speed: 34.0, attr_mods: Attributes::new(14, 0, 12, 6, 4, 10), weight: 40.0, abilities: &[Strike, AbilityId::Bite, TailWhip, FireBreath, Smash, Fireball], weapons: &[DragonClaws, DragonBite, DragonTail] },
     }
 }
 
@@ -60,6 +61,16 @@ pub fn races(id: BossId) -> &'static [Race] {
         BossId::Lich => &[Race::Undead],
         BossId::Dragon => &[Race::Dragon],
     }
+}
+
+/// The boss's Attributes: 10, its races' bonuses, its kind's modifier.
+pub fn attrs(id: BossId) -> Attributes {
+    races::creature_attrs(races(id), def(id).attr_mods)
+}
+
+/// HP at CON 10: `hp` minus `CON_HP` per point of the boss's own CON modifier.
+pub fn base_hp(id: BossId) -> f64 {
+    def(id).hp - super::attributes::CON_HP * (races::own_con(def(id).attr_mods) - super::attributes::BASELINE) as f64
 }
 
 /// Races plus each boss's own adjustments.
@@ -99,9 +110,9 @@ mod tests {
         for id in BossId::ALL {
             assert_eq!(def(id).weight, 40.0, "{id:?}");
         }
-        assert_eq!(def(BossId::Lich).attrs.get(Attr::Int), 22);
-        assert_eq!(def(BossId::Demon).attrs, Attributes::new(22, 14, 20, 14, 16, 20));
-        assert_eq!(def(BossId::Dragon).attrs, Attributes::new(24, 10, 22, 16, 14, 20));
-        assert_eq!(def(BossId::Lich).attrs, Attributes::new(10, 14, 14, 22, 18, 16));
+        assert_eq!(attrs(BossId::Lich).get(Attr::Int), 22);
+        assert_eq!(attrs(BossId::Demon), Attributes::new(22, 14, 20, 14, 16, 20));
+        assert_eq!(attrs(BossId::Dragon), Attributes::new(24, 10, 22, 16, 14, 20));
+        assert_eq!(attrs(BossId::Lich), Attributes::new(10, 14, 14, 22, 18, 16));
     }
 }

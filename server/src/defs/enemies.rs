@@ -1,5 +1,5 @@
 use super::abilities::AbilityId;
-use super::attributes::{Attr, Attributes};
+use super::attributes::Attributes;
 use super::races::{self, Adjust, Race, Profile};
 use super::items::ItemId;
 use super::kinds::EntityKind;
@@ -79,11 +79,13 @@ impl EnemyType {
 #[derive(Debug, Clone, Copy)]
 pub struct EnemyDef {
     pub kind: EntityKind,
+    /// At the kind's own CON (10 + modifier), before races.
     pub hp: f64,
+    /// At the kind's own CON (10 + modifier), before races.
     pub speed: f64,
     pub radius: f64,
-    /// The stat block's Attributes (CON included: `hp` is the total, see `base_hp`).
-    pub attrs: Attributes,
+    /// The kind's modifier from 10; read the Attributes through `attrs(…)`.
+    pub attr_mods: Attributes,
     /// Weight for pushes (see the spec's section 4).
     pub weight: f64,
     /// Vision (tiles); overrides the race's. Enemies only notice players inside it with line of sight.
@@ -119,14 +121,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
     use ItemId::*;
     match t {
         GoblinArcher => {
-            let attrs = Attributes::new(8, 15, 10, 10, 8, 8);
+            let attr_mods = Attributes::new(-2, 5, 0, 0, -2, -2);
             EnemyDef {
                 kind: EntityKind::GoblinArcher,
                 hp: 24.0,
                 speed: 58.0,
                 radius: 4.0,
                 vision: 8.125,
-                attrs,
+                attr_mods,
                 weight: 6.0,
                 abilities: &[Shoot, Strike],
                 weapons: &[UnarmedStrike, GoblinShortbow],
@@ -136,14 +138,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         SkeletonWarrior | RaisedSkeleton => {
-            let attrs = Attributes::new(12, 12, if t == RaisedSkeleton { 12 } else { 15 }, 6, 8, 5);
+            let attr_mods = Attributes::new(2, 2, if t == RaisedSkeleton { 2 } else { 5 }, -9, -2, -5);
             EnemyDef {
                 kind: if t == RaisedSkeleton { EntityKind::RaisedSkeleton } else { EntityKind::SkeletonWarrior },
                 hp: if t == RaisedSkeleton { 26.0 } else { 40.0 },
                 speed: 46.0,
                 radius: 5.0,
                 vision: 7.5,
-                attrs,
+                attr_mods,
                 weight: 9.0,
                 abilities: &[Strike],
                 weapons: &[SkeletonSword],
@@ -153,14 +155,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         SkeletonArcher | RaisedArcher => {
-            let attrs = Attributes::new(10, 15, if t == RaisedArcher { 12 } else { 13 }, 6, 8, 5);
+            let attr_mods = Attributes::new(0, 5, if t == RaisedArcher { 2 } else { 3 }, -9, -2, -5);
             EnemyDef {
                 kind: EntityKind::SkeletonArcher,
                 hp: if t == RaisedArcher { 20.0 } else { 30.0 },
                 speed: 44.0,
                 radius: 5.0,
                 vision: 8.75,
-                attrs,
+                attr_mods,
                 weight: 9.0,
                 abilities: &[Shoot, Strike],
                 weapons: &[UnarmedStrike, SkeletonBow],
@@ -170,14 +172,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         OrcWarrior => {
-            let attrs = Attributes::new(16, 12, 16, 7, 11, 10);
+            let attr_mods = Attributes::new(6, 2, 6, -3, 1, 0);
             EnemyDef {
                 kind: EntityKind::OrcWarrior,
                 hp: 70.0,
                 speed: 52.0,
                 radius: 6.0,
                 vision: 7.8125,
-                attrs,
+                attr_mods,
                 weight: 13.0,
                 abilities: &[Strike],
                 weapons: &[OrcCleaver],
@@ -187,14 +189,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         OrcArcher => {
-            let attrs = Attributes::new(14, 14, 14, 7, 11, 10);
+            let attr_mods = Attributes::new(4, 4, 4, -3, 1, 0);
             EnemyDef {
                 kind: EntityKind::OrcArcher,
                 hp: 50.0,
                 speed: 48.0,
                 radius: 6.0,
                 vision: 8.75,
-                attrs,
+                attr_mods,
                 weight: 13.0,
                 abilities: &[Shoot, Strike],
                 weapons: &[UnarmedStrike, OrcWarbow],
@@ -204,14 +206,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         Necromancer | Summoner => {
-            let attrs = if t == Summoner { Attributes::new(9, 14, 12, 15, 12, 16) } else { Attributes::new(9, 14, 12, 17, 12, 11) };
+            let attr_mods = if t == Summoner { Attributes::new(-1, 4, 2, 5, 2, 6) } else { Attributes::new(-1, 4, 2, 7, 2, 1) };
             EnemyDef {
                 kind: if t == Summoner { EntityKind::Summoner } else { EntityKind::Necromancer },
                 hp: 60.0,
                 speed: 40.0,
                 radius: 5.0,
                 vision: 9.375,
-                attrs,
+                attr_mods,
                 weight: 10.0,
                 abilities: if t == Summoner { &[FireBolt, Strike, SummonImps] } else { &[ShadowBolt, Strike, RaiseDead] },
                 weapons: if t == Summoner { &[SummonerRod] } else { &[NecromancerRod] },
@@ -221,14 +223,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         Disciple => {
-            let attrs = Attributes::new(10, 12, 10, 13, 11, 10);
+            let attr_mods = Attributes::new(0, 2, 0, 3, 1, 0);
             EnemyDef {
                 kind: EntityKind::Disciple,
                 hp: 45.0,
                 speed: 0.0,
                 radius: 5.0,
                 vision: 12.5,
-                attrs,
+                attr_mods,
                 weight: 10.0,
                 abilities: &[ShadowBolt, Strike],
                 weapons: &[UnarmedStrike],
@@ -238,7 +240,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         Mimic => {
-            let attrs = Attributes::new(17, 12, 15, 5, 13, 8);
+            let attr_mods = Attributes::new(7, 2, 5, -5, 3, -2);
             EnemyDef {
                 kind: EntityKind::Mimic,
                 hp: 90.0,
@@ -246,7 +248,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 speed: 50.0,
                 radius: 6.0,
                 vision: 8.75,
-                attrs,
+                attr_mods,
                 weight: 14.0,
                 abilities: &[Bite],
                 weapons: &[MimicBite],
@@ -256,14 +258,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         Imp | SummonedImp => {
-            let attrs = Attributes::new(6, 17, if t == SummonedImp { 10 } else { 13 }, 11, 12, 14);
+            let attr_mods = Attributes::new(-4, 7, if t == SummonedImp { 0 } else { 3 }, 1, 2, 4);
             EnemyDef {
                 kind: EntityKind::Imp,
                 hp: if t == SummonedImp { 20.0 } else { 30.0 },
                 speed: 44.0,
                 radius: 5.0,
                 vision: 8.75,
-                attrs,
+                attr_mods,
                 weight: 4.0,
                 abilities: &[FireBolt, Strike],
                 weapons: &[ImpClaws],
@@ -273,14 +275,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         Chort => {
-            let attrs = Attributes::new(14, 13, 13, 8, 10, 9);
+            let attr_mods = Attributes::new(4, 3, 3, -2, 0, -1);
             EnemyDef {
                 kind: EntityKind::Chort,
                 hp: 40.0,
                 speed: 46.0,
                 radius: 5.0,
                 vision: 7.5,
-                attrs,
+                attr_mods,
                 weight: 10.0,
                 abilities: &[Strike, FireBolt],
                 weapons: &[ChortClaws],
@@ -291,14 +293,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
         }
         // Ghost (#169): a first guess (label `balancing`). It floats through walls; Vanish and the ambush (`run/ambush.rs`) are its tactics.
         Ghost => {
-            let attrs = Attributes::new(6, 14, 10, 10, 12, 14);
+            let attr_mods = Attributes::new(-4, 4, 0, 0, 2, 4);
             EnemyDef {
                 kind: EntityKind::Ghost,
                 hp: 32.0,
                 speed: 50.0,
                 radius: 6.0,
                 vision: 8.75,
-                attrs,
+                attr_mods,
                 weight: 3.0,
                 abilities: &[Touch, Vanish],
                 weapons: &[GhostTouch],
@@ -309,14 +311,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
         }
         // Shade (#170): a first guess (label `balancing`), the Ghost's twin: a little sturdier and slower, it drains CON.
         Shade => {
-            let attrs = Attributes::new(8, 12, 12, 10, 14, 15);
+            let attr_mods = Attributes::new(-2, 2, 2, 0, 4, 5);
             EnemyDef {
                 kind: EntityKind::Shade,
                 hp: 40.0,
                 speed: 44.0,
                 radius: 6.0,
                 vision: 8.75,
-                attrs,
+                attr_mods,
                 weight: 3.0,
                 abilities: &[Touch, Vanish],
                 weapons: &[ShadeTouch],
@@ -327,14 +329,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
         }
         // Knight (#149): a first guess (label `balancing`); its speed keeps up with the heroes (66-72).
         Knight => {
-            let attrs = Attributes::new(14, 12, 14, 8, 10, 12);
+            let attr_mods = Attributes::new(4, 2, 4, -2, 0, 2);
             EnemyDef {
                 kind: EntityKind::Knight,
                 hp: 60.0,
                 speed: 68.0,
                 radius: 5.0,
                 vision: 8.0,
-                attrs,
+                attr_mods,
                 weight: 12.0,
                 abilities: &[Strike],
                 weapons: &[SoldierSword],
@@ -345,14 +347,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
         }
         // Wildlife (#227): first guesses (label `balancing`). A bunny is a bunny: it dies to almost any hit.
         Bunny => {
-            let attrs = Attributes::new(4, 16, 6, 2, 8, 6);
+            let attr_mods = Attributes::new(-6, 6, -4, -8, -2, -4);
             EnemyDef {
                 kind: EntityKind::Bunny,
                 hp: 5.0,
                 speed: 80.0,
                 radius: 4.0,
                 vision: 6.0,
-                attrs,
+                attr_mods,
                 weight: 2.0,
                 abilities: &[],
                 weapons: &[],
@@ -363,14 +365,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
         }
         // The deer lets the player see fleeing (the user, 2026-11-06); the stag is its twin with antlers.
         Deer | Stag => {
-            let attrs = Attributes::new(8, 16, 12, 2, 10, 8);
+            let attr_mods = Attributes::new(-2, 6, 2, -8, 0, -2);
             EnemyDef {
                 kind: if t == Stag { EntityKind::Stag } else { EntityKind::Deer },
                 hp: 40.0,
                 speed: 90.0,
                 radius: 6.0,
                 vision: 8.0,
-                attrs,
+                attr_mods,
                 weight: 12.0,
                 abilities: &[],
                 weapons: &[],
@@ -380,14 +382,14 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         Boar => {
-            let attrs = Attributes::new(14, 10, 14, 2, 8, 6);
+            let attr_mods = Attributes::new(4, 0, 4, -8, -2, -4);
             EnemyDef {
                 kind: EntityKind::Boar,
                 hp: 40.0,
                 speed: 64.0,
                 radius: 6.0,
                 vision: 6.0,
-                attrs,
+                attr_mods,
                 weight: 14.0,
                 abilities: &[Strike],
                 weapons: &[BoarTusks],
@@ -397,7 +399,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
             }
         }
         Ogre => {
-            let attrs = Attributes::new(19, 8, 16, 5, 7, 7);
+            let attr_mods = Attributes::new(9, -2, 6, -5, -3, -3);
             EnemyDef {
                 kind: EntityKind::Ogre,
                 hp: 260.0,
@@ -405,7 +407,7 @@ pub fn def(t: EnemyType) -> EnemyDef {
                 // Wide: paths with clearance (see `ai::path_toward`); fits 3-tile corridors.
                 radius: 10.0,
                 vision: 9.375,
-                attrs,
+                attr_mods,
                 weight: 20.0,
                 abilities: &[Strike, GroundSlam],
                 weapons: &[OgreClub],
@@ -465,10 +467,15 @@ pub const MIMIC_WAKE_T: f64 = 0.6;
 /// A player this close (center distance, px) opens a chest or wakes a mimic.
 pub const CHEST_TOUCH: f64 = 12.0;
 
-/// HP before the CON bonus: today's HP minus 5 per CON point above 10, so the total stays.
+/// HP at CON 10: `hp` minus `CON_HP` per point of the kind's own CON modifier.
 pub fn base_hp(t: EnemyType) -> f64 {
     let d = def(t);
-    d.hp - 5.0 * (d.attrs.get(Attr::Con) - 10) as f64
+    d.hp - super::attributes::CON_HP * (races::own_con(d.attr_mods) - super::attributes::BASELINE) as f64
+}
+
+/// The enemy's Attributes: 10, its races' bonuses, its kind's modifier.
+pub fn attrs(t: EnemyType) -> Attributes {
+    races::creature_attrs(races(t), def(t).attr_mods)
 }
 
 /// The races of each enemy (see `races`).
@@ -500,29 +507,32 @@ mod tests {
     #[test]
     fn enemy_stat_blocks_match_the_spec() {
         use EnemyType::*;
-        assert_eq!(def(Ogre).attrs, Attributes::new(19, 8, 16, 5, 7, 7));
+        assert_eq!(attrs(Ogre), Attributes::new(19, 8, 16, 5, 7, 7));
         assert_eq!(def(Ogre).weight, 20.0);
-        assert_eq!(def(Imp).attrs, Attributes::new(6, 17, 13, 11, 12, 14));
+        assert_eq!(attrs(Imp), Attributes::new(6, 17, 13, 11, 12, 14));
         assert_eq!(def(Imp).weight, 4.0);
-        assert_eq!(def(RaisedSkeleton).attrs.get(Attr::Con), 12);
-        assert_eq!(def(RaisedSkeleton).attrs.get(Attr::Str), def(SkeletonWarrior).attrs.get(Attr::Str));
-        assert_eq!(def(RaisedArcher).attrs.get(Attr::Con), 12);
-        assert_eq!(def(RaisedArcher).attrs.get(Attr::Dex), 15);
-        assert_eq!(def(SummonedImp).attrs.get(Attr::Con), 10);
-        assert_eq!(def(SummonedImp).attrs.get(Attr::Dex), 17);
+        assert_eq!(attrs(RaisedSkeleton).get(Attr::Con), 12);
+        assert_eq!(attrs(RaisedSkeleton).get(Attr::Str), attrs(SkeletonWarrior).get(Attr::Str));
+        assert_eq!(attrs(RaisedArcher).get(Attr::Con), 12);
+        assert_eq!(attrs(RaisedArcher).get(Attr::Dex), 15);
+        assert_eq!(attrs(SummonedImp).get(Attr::Con), 10);
+        assert_eq!(attrs(SummonedImp).get(Attr::Dex), 17);
         assert_eq!(def(Disciple).weight, 10.0);
-        assert_eq!(def(GoblinArcher).attrs, Attributes::new(8, 15, 10, 10, 8, 8));
-        assert_eq!(def(SkeletonWarrior).attrs, Attributes::new(12, 12, 15, 6, 8, 5));
-        assert_eq!(def(SkeletonArcher).attrs, Attributes::new(10, 15, 13, 6, 8, 5));
-        assert_eq!(def(OrcWarrior).attrs, Attributes::new(16, 12, 16, 7, 11, 10));
-        assert_eq!(def(OrcArcher).attrs, Attributes::new(14, 14, 14, 7, 11, 10));
-        assert_eq!(def(Necromancer).attrs, Attributes::new(9, 14, 12, 17, 12, 11));
-        assert_eq!(def(Summoner).attrs, Attributes::new(9, 14, 12, 15, 12, 16));
-        assert_eq!(def(Disciple).attrs, Attributes::new(10, 12, 10, 13, 11, 10));
-        assert_eq!(def(Mimic).attrs, Attributes::new(17, 12, 15, 5, 13, 8));
-        assert_eq!(def(Chort).attrs, Attributes::new(14, 13, 13, 8, 10, 9));
-        assert_eq!(def(Ghost).attrs, Attributes::new(6, 14, 10, 10, 12, 14));
-        assert_eq!(def(Shade).attrs, Attributes::new(8, 12, 12, 10, 14, 15));
+        assert_eq!(attrs(GoblinArcher), Attributes::new(8, 15, 10, 10, 8, 8));
+        assert_eq!(attrs(SkeletonWarrior), Attributes::new(12, 12, 15, 1, 8, 5));
+        assert_eq!(attrs(SkeletonArcher), Attributes::new(10, 15, 13, 1, 8, 5));
+        assert_eq!(attrs(RaisedSkeleton).get(Attr::Int), 1);
+        assert_eq!(attrs(RaisedArcher).get(Attr::Int), 1);
+        assert_eq!((attrs(Ghost).get(Attr::Int), attrs(Shade).get(Attr::Int)), (10, 10), "INT −9 is the skeletons' kind, not Undead");
+        assert_eq!(attrs(OrcWarrior), Attributes::new(16, 12, 16, 7, 11, 10));
+        assert_eq!(attrs(OrcArcher), Attributes::new(14, 14, 14, 7, 11, 10));
+        assert_eq!(attrs(Necromancer), Attributes::new(9, 14, 12, 17, 12, 11));
+        assert_eq!(attrs(Summoner), Attributes::new(9, 14, 12, 15, 12, 16));
+        assert_eq!(attrs(Disciple), Attributes::new(10, 12, 10, 13, 11, 10));
+        assert_eq!(attrs(Mimic), Attributes::new(17, 12, 15, 5, 13, 8));
+        assert_eq!(attrs(Chort), Attributes::new(14, 13, 13, 8, 10, 9));
+        assert_eq!(attrs(Ghost), Attributes::new(6, 14, 10, 10, 12, 14));
+        assert_eq!(attrs(Shade), Attributes::new(8, 12, 12, 10, 14, 15));
         let shade = def(Shade);
         assert_eq!((shade.hp, shade.speed, shade.radius, shade.vision, shade.base_ai), (40.0, 44.0, 6.0, 8.75, BaseAi::Melee));
         assert_eq!((shade.abilities, shade.weapons), (&[AbilityId::Touch, AbilityId::Vanish][..], &[ItemId::ShadeTouch][..]));
@@ -551,7 +561,7 @@ mod tests {
         // The AI reads kit entry 0 as the main ability and entry 1 as the alt one.
         for t in EnemyType::ALL {
             let d = def(t);
-            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &d.attrs, &[]);
+            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &attrs(t), &[]);
             let ids: Vec<_> = kit.iter().map(|a| a.id).collect();
             assert_eq!(ids, d.abilities, "{t:?}");
         }
@@ -577,7 +587,7 @@ mod tests {
     fn every_enemy_kit_resolves() {
         for t in EnemyType::ALL {
             let d = def(t);
-            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::def(t).attrs, &[]);
+            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::attrs(t), &[]);
             for &id in d.abilities {
                 assert!(kit.get(id).is_some(), "{t:?} {id:?}");
             }
@@ -648,7 +658,7 @@ mod tests {
     #[test]
     fn enemy_base_hp_keeps_todays_hp() {
         for t in EnemyType::ALL {
-            let con = def(t).attrs.get(Attr::Con);
+            let con = races::own_con(def(t).attr_mods);
             assert_eq!(base_hp(t) + 5.0 * (con - 10) as f64, def(t).hp, "{t:?}");
             assert_eq!(attributes::hp(base_hp(t), con), def(t).hp, "{t:?}");
         }
@@ -658,7 +668,7 @@ mod tests {
     fn knight_stat_block() {
         use EnemyType::Knight;
         let k = def(Knight);
-        assert_eq!(k.attrs, Attributes::new(14, 12, 14, 8, 10, 12));
+        assert_eq!(attrs(Knight), Attributes::new(14, 12, 14, 8, 10, 12));
         assert_eq!((k.hp, k.speed, k.radius, k.vision, k.base_ai), (60.0, 68.0, 5.0, 8.0, BaseAi::Melee));
         assert_eq!((k.abilities, k.weapons), (&[AbilityId::Strike][..], &[ItemId::SoldierSword][..]));
         assert_eq!(races(Knight), &[Race::Human]);
@@ -670,16 +680,16 @@ mod tests {
     fn wildlife_stat_blocks() {
         use EnemyType::*;
         let bunny = def(Bunny);
-        assert_eq!(bunny.attrs, Attributes::new(4, 16, 6, 2, 8, 6));
+        assert_eq!(attrs(Bunny), Attributes::new(4, 16, 6, 2, 8, 6));
         assert_eq!((bunny.hp, bunny.speed, bunny.radius, bunny.vision, bunny.wild), (5.0, 80.0, 4.0, 6.0, Some(Reaction::Flee)));
         for t in [Deer, Stag] {
             let d = def(t);
-            assert_eq!(d.attrs, Attributes::new(8, 16, 12, 2, 10, 8), "{t:?}");
+            assert_eq!(attrs(t), Attributes::new(8, 16, 12, 2, 10, 8), "{t:?}");
             assert_eq!((d.hp, d.speed, d.radius, d.vision, d.wild), (40.0, 90.0, 6.0, 8.0, Some(Reaction::Flee)), "{t:?}");
         }
         assert_eq!((def(Deer).kind, def(Stag).kind), (EntityKind::Deer, EntityKind::Stag));
         let boar = def(Boar);
-        assert_eq!(boar.attrs, Attributes::new(14, 10, 14, 2, 8, 6));
+        assert_eq!(attrs(Boar), Attributes::new(14, 10, 14, 2, 8, 6));
         assert_eq!((boar.hp, boar.speed, boar.radius, boar.vision, boar.wild), (40.0, 64.0, 6.0, 6.0, Some(Reaction::FightBack)));
         assert_eq!((boar.abilities, boar.weapons), (&[AbilityId::Strike][..], &[ItemId::BoarTusks][..]));
         for t in EnemyType::ALL {
@@ -790,7 +800,7 @@ mod kit_pins {
         ];
         let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
         for t in EnemyType::ALL {
-            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::def(t).attrs, &[]);
+            let kit = crate::sheet::kit_for(crate::sheet::KitSource::Enemy(t), &crate::defs::enemies::attrs(t), &[]);
             for &id in def(t).abilities {
                 let (_, _, p) = pins.iter().find(|(pt, pid, _)| *pt == t && *pid == id).unwrap_or_else(|| panic!("{t:?} {id:?} is not pinned"));
                 let a = kit.get(id).unwrap();
