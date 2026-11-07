@@ -47,6 +47,8 @@ pub struct Woodland {
     pub animals: Vec<(EnemyType, Vec2)>,
     /// 1..=1_000_000, for the client's grass, flowers and critters.
     pub seed: u32,
+    /// The clearings' ellipses (centre x, centre y, radii; tiles), then the end's: roadside trees stay out of them.
+    ellipses: Vec<[f64; 4]>,
 }
 
 /// The edge's plants come from fixed (seed, scale_pct) pairs, 12 per kind (index = `PlantKind as usize`),
@@ -147,8 +149,7 @@ fn carve_ellipse(map: &mut Map, cx: f64, cy: f64, rx: f64, ry: f64) -> Rect {
     let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
     for y in 3..=WOODLAND_H - 4 {
         for x in 3..=WOODLAND_W - 4 {
-            let (dx, dy) = ((x as f64 - cx) / rx, (y as f64 - cy) / ry);
-            if dx * dx + dy * dy <= 1.0 {
+            if in_ellipse(&[cx, cy, rx, ry], x, y) {
                 if map.get(x, y) == Tile::Thicket as u8 {
                     map.set(x, y, Tile::Floor);
                 }
@@ -162,8 +163,9 @@ fn carve_ellipse(map: &mut Map, cx: f64, cy: f64, rx: f64, ry: f64) -> Rect {
     Rect { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }
 }
 
-fn rect_has(rs: &[Rect], x: i32, y: i32) -> bool {
-    rs.iter().any(|r| r.contains_tile(x, y))
+fn in_ellipse(e: &[f64; 4], x: i32, y: i32) -> bool {
+    let (dx, dy) = ((x as f64 - e[0]) / e[2], (y as f64 - e[1]) / e[3]);
+    dx * dx + dy * dy <= 1.0
 }
 
 fn jitter(rng: &mut ChaCha8Rng, x: i32, y: i32) -> Vec2 {
@@ -204,6 +206,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     }
     // 3. Clearings, the start and the end.
     let mut clearings: Vec<Rect> = vec![];
+    let mut ellipses: Vec<[f64; 4]> = vec![];
     let mut above = rng.gen_bool(0.5);
     for i in 0..6 {
         let x = (24.0 + i as f64 * (w - 48) as f64 / 5.0 + rng.gen_range(-5.0..=5.0)).round() as i32; // balancing
@@ -216,6 +219,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         }
         let cy = cy.clamp(3.0 + ry, (h - 4) as f64 - ry);
         clearings.push(carve_ellipse(&mut map, x as f64, cy, rx, ry));
+        ellipses.push([x as f64, cy, rx, ry]);
         above = !above;
     }
     let (lo, hi) = ((5..=7).map(centre).fold(f64::MAX, f64::min), (5..=7).map(centre).fold(f64::MIN, f64::max));
@@ -230,6 +234,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     }
     let ex = w - 9;
     let end_all = carve_ellipse(&mut map, ex as f64, centre(ex), 7.0, 6.0); // balancing
+    ellipses.push([ex as f64, centre(ex), 7.0, 6.0]);
     let end_x = end_all.x.max(w - 14);
     let end = Rect { x: end_x, y: end_all.y, w: end_all.x + end_all.w - end_x, h: end_all.h };
     for x in 3..=w - 4 {
@@ -254,16 +259,14 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     let mut plants: Vec<Plant> = vec![];
 
     // 4. Roadside trees.
-    let mut keep_out: Vec<Rect> = clearings.clone();
-    keep_out.push(start);
-    keep_out.push(end_all);
     let mut placed = Placed::new();
     let mut tiles: Vec<(i32, i32)> = (0..h)
         .flat_map(|y| (0..w).map(move |x| (x, y)))
         .filter(|&(x, y)| {
             map.get(x, y) == Tile::Floor as u8
                 && ((y as f64 + 0.5) - (centre(x) + 0.5)).abs() >= 2.0
-                && !rect_has(&keep_out, x, y)
+                && !start.contains_tile(x, y)
+                && !ellipses.iter().any(|e| in_ellipse(e, x, y))
                 && (-1..=1).all(|dy| (-1..=1).all(|dx| is_open(map.get(x + dx, y + dy))))
         })
         .collect();
@@ -484,7 +487,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     plants.extend(trees);
     plants.extend(bushes);
     plants.extend(edge);
-    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000) };
+    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), ellipses };
     let layout = Layout { map, spawns, chests: vec![], barrels: vec![], torches: vec![], suns: vec![], player_spawns, cove: None, daylight: true, woodland: Some(wl.clone()) };
     (layout, wl)
 }
@@ -562,8 +565,8 @@ mod tests {
             got.sort();
             assert_eq!(got, want, "seed {seed}");
             for &(x, y) in &got {
-                assert!(!w.start.contains_tile(x, y) && !w.end.contains_tile(x, y), "seed {seed}: trunk in start/end");
-                assert!(!rect_has(&w.clearings, x, y), "seed {seed}: trunk in a clearing");
+                assert!(!w.start.contains_tile(x, y), "seed {seed}: trunk in the start");
+                assert!(!w.ellipses.iter().any(|e| in_ellipse(e, x, y)), "seed {seed}: trunk in a clearing or the end ellipse");
             }
         });
     }
