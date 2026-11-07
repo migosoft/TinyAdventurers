@@ -154,6 +154,8 @@ pub struct Run {
     pub ended: Option<(bool, f64)>,
     /// A debug run (its room was a debug room): every hero is in debug mode and the debug messages work. Recorded as `runs.debug`.
     pub debug: bool,
+    /// The INT tier rule and the dodge knobs (`defs/smarts.rs`).
+    pub smarts: crate::defs::smarts::SmartsDef,
     pub srv_ms: f32,
     pub log: rules_log::RulesLog,
     /// Test-only capture of the last `Damage` that reached `hurt_monster` or `hurt_player`.
@@ -188,6 +190,7 @@ impl Run {
             rng,
             ended: None,
             debug: false,
+            smarts: crate::defs::smarts::SMARTS,
             srv_ms: 0.0,
             log: rules_log::RulesLog::default(),
             #[cfg(test)]
