@@ -12,6 +12,8 @@ import Phaser from 'phaser';
 import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
 import { tileDraws } from './autotile';
+import type { CoveInfo } from '../generated/CoveInfo';
+import { coveLayout } from './cove';
 import { COVE_TREE_FOOT, type CoveSpec, paintCove, placeCovePlants } from './covemath';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
@@ -43,11 +45,14 @@ const SUNS = [1, 3, 5];
 const SUN_SPOTS = [[10, 8], [5, 4], [15, 12], [15, 4], [5, 12]];
 const SUN_SETS: Record<number, number[]> = { 1: [0], 3: [1, 0, 2], 5: [0, 1, 2, 3, 4] };
 
+/** The cove as the server describes it: the room and its centre tile for the trunk (server/src/dungeon/cove.rs). */
+const COVE: CoveInfo = { x: FLOOR.x, y: FLOOR.y, w: FLOOR.w, h: FLOOR.h, tree_x: FLOOR.x + Math.floor(FLOOR.w / 2), tree_y: FLOOR.y + Math.floor(FLOOR.h / 2), seed: 1 };
+
 function buildMap(): TileMap {
   const tiles = new Uint8Array(W * H).fill(TILE_ID.Wall);
   for (let y = FLOOR.y; y < FLOOR.y + FLOOR.h; y++) for (let x = FLOOR.x; x < FLOOR.x + FLOOR.w; x++) tiles[y * W + x] = TILE_ID.Floor;
-  // The trunk: two soft tiles above the foot (they draw as floor; they stop the server's sight, not the light).
-  for (const x of [10, 11]) tiles[10 * W + x] = TILE_ID.Trunk;
+  // The trunk: one soft tile at the room centre, as the server places it (it draws as floor; it stops the server's sight, not the light).
+  tiles[COVE.tree_y * W + COVE.tree_x] = TILE_ID.Trunk;
   return new TileMap(W, H, tiles);
 }
 
@@ -108,7 +113,7 @@ export class CoveDemoScene extends Phaser.Scene {
     const fh = FLOOR.h * TILE;
     const fx0 = FLOOR.x * TILE;
     const fy0 = FLOOR.y * TILE;
-    this.foot = { x: fx0 + fw / 2, y: fy0 + fh / 2 + TILE };
+    this.foot = coveLayout(COVE).foot; // the game's own formula: the bottom centre of the trunk tile
     this.centre = { x: fx0 + fw / 2, y: fy0 + fh / 2 };
 
     this.grass = this.add.image(fx0 - MARGIN, fy0 - MARGIN, '__DEFAULT').setOrigin(0).setDepth(DEPTH.decal);
@@ -158,6 +163,7 @@ export class CoveDemoScene extends Phaser.Scene {
       this.sun.destroy();
       this.pixies.destroy();
       this.silhouette.destroy();
+      this.shade.destroy();
     });
   }
 

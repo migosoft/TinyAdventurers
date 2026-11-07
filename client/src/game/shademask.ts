@@ -47,14 +47,18 @@ export class ShadeMask {
     this.mapChanged();
   }
 
-  /** A tile changed: count the soft tiles again and redraw on the next update. */
-  mapChanged(): void {
-    const { w, h } = this.map;
-    for (let y = 0; y < h; y++) {
-      let n = 0;
-      for (let x = 0; x < w; x++) if (this.map.opaque(x, y) && !this.map.hardOpaque(x, y)) n++;
-      this.rowSoft[y] = n;
-    }
+  /** The soft tiles of row `y` again (a tile changed) and a redraw on the next update. */
+  private recount(y: number): void {
+    const { w } = this.map;
+    let n = 0;
+    for (let x = 0; x < w; x++) if (this.map.opaque(x, y) && !this.map.hardOpaque(x, y)) n++;
+    this.rowSoft[y] = n;
+  }
+
+  /** A tile changed (a door, a felled trunk): recount its row only, and redraw on the next update. Without a row: the whole map. */
+  mapChanged(y?: number): void {
+    if (y === undefined) for (let r = 0; r < this.map.h; r++) this.recount(r);
+    else if (y >= 0 && y < this.map.h) this.recount(y);
     this.last = '';
   }
 

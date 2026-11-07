@@ -514,7 +514,7 @@ export class GameScene extends Phaser.Scene {
         this.lightView.mapChanged();
         this.mood.mapChanged();
         this.visionMask.mapChanged();
-        this.shadeMask.mapChanged();
+        this.shadeMask.mapChanged(ev.y);
         if (ev.v === TILE_ID.DoorClosed) {
           // The entrance tiles arrive one event each; only announce the first.
           if (!this.forceField) this.hud.message('A force field seals the hall behind you!', 'game');
