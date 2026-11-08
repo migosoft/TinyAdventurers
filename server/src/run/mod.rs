@@ -56,6 +56,11 @@ pub const SNAPSHOT_EVERY: u32 = 2;
 /// Monsters farther than this from every player do not think.
 const ACTIVE_RANGE: f64 = 420.0;
 pub(crate) const END_DELAY: f64 = 3.0;
+/// The most inputs a hero can bank (ticks, 0.5 s): enough to catch up after a hitch or a retransmitted burst,
+/// while a client sending faster than the tick rate gains at most this many inputs, once (#273).
+pub(crate) const INPUT_BUDGET_MAX: u32 = 30;
+/// The most inputs queued per hero; later ones are dropped.
+const INPUT_QUEUE_MAX: usize = 120;
 
 /// What one character banks at the end of a run.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -234,6 +239,8 @@ impl Run {
                 hurt_t: 0.0,
                 inputs: VecDeque::new(),
                 ack: 0,
+                // Empty: steady play spends each tick's input, so only silent ticks bank budget for a burst.
+                input_budget: 0,
                 view_lag: 0.1,
                 rtt: 0.05,
                 spectating: None,
@@ -418,7 +425,9 @@ impl Run {
                 match msg {
                     ClientMsg::Input(input) => {
                         let p = &mut self.players[pi];
-                        if input.seq > p.ack && p.inputs.len() < 120 {
+                        // Only newer inputs: a repeated or replayed sequence number is dropped (#273).
+                        let last = p.inputs.back().map_or(p.ack, |i| i.seq);
+                        if input.seq > last && p.inputs.len() < INPUT_QUEUE_MAX {
                             p.inputs.push_back(input);
                         }
                     }
@@ -556,6 +565,7 @@ impl Run {
     fn step_player(&mut self, pi: usize) {
         let p = &mut self.players[pi];
         p.hurt_t = (p.hurt_t - DT).max(0.0);
+        p.input_budget = (p.input_budget + 1).min(INPUT_BUDGET_MAX);
         if !p.alive {
             p.slam = None;
             p.inputs.clear();
@@ -568,10 +578,16 @@ impl Run {
         }
         abilities::tick_slam(self, pi);
         let p = &mut self.players[pi];
-        // One input per step; catch up with two when the queue builds up.
+        // One input per step; catch up with two when the queue builds up, as far as the budget allows: a hitch's
+        // silent ticks banked the budget its burst spends, so a flooding client never runs faster (#273).
         let n = if p.inputs.len() > 3 { 2 } else { 1 };
         for _ in 0..n {
-            let Some(input) = self.players[pi].inputs.pop_front() else { break };
+            let p = &mut self.players[pi];
+            if p.input_budget == 0 {
+                break;
+            }
+            let Some(input) = p.inputs.pop_front() else { break };
+            p.input_budget -= 1;
             self.apply_input(pi, input);
         }
         self.terrain_player(pi);
@@ -2362,5 +2378,75 @@ pub mod tests {
             walk(&mut run, 0, None);
         }
         assert!((run.players[0].cd1 - 0.625).abs() < 1e-9, "{}", run.players[0].cd1);
+    }
+
+    /// Player 0 alone with the sleeping boss; `send` is called once per tick to hand the run that tick's inputs
+    /// through `Run::handle`, as the connection does. Returns the run after `ticks` ticks.
+    fn input_run(ticks: usize, mut send: impl FnMut(&mut Run, usize)) -> Run {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        run.monsters.retain(|m| m.is_boss);
+        run.players[0].cd1 = 10.0;
+        for tick in 0..ticks {
+            send(&mut run, tick);
+            run.step();
+        }
+        run
+    }
+
+    fn send_input(run: &mut Run, seq: u32, (mx, my): (i8, i8)) {
+        let conn = run.players[0].conn;
+        run.handle(RunCmd::Msg { conn, msg: ClientMsg::Input(InputMsg { seq, mx, my, ..Default::default() }) });
+    }
+
+    #[test]
+    fn a_client_sending_two_inputs_per_tick_runs_no_faster_than_one() {
+        let from = input_run(0, |_, _| {}).players[0].pos();
+        let walk_for = |ticks: usize, dir: (i8, i8), per_tick: u32| {
+            let run = input_run(ticks, |run, tick| {
+                for k in 1..=per_tick {
+                    send_input(run, per_tick * tick as u32 + k, dir);
+                }
+            });
+            (run.players[0].pos().dist(from), run.players[0].cd1)
+        };
+        // One second: the spawn room leaves a little more than a second's walk in its longest direction.
+        let walk = |dir, per_tick| walk_for(60, dir, per_tick);
+        // The direction with the most room from the spawn.
+        let dir = [(1, 0), (-1, 0), (0, 1), (0, -1)].into_iter().max_by(|&a, &b| walk(a, 1).0.total_cmp(&walk(b, 1).0)).unwrap();
+        let ((walked, cd), (flooded, cd_flood)) = (walk(dir, 1), walk(dir, 2));
+        let half = walk_for(30, dir, 1).0;
+        assert!(half > 20.0 && (walked - 2.0 * half).abs() < 1.0, "no wall stops the steady hero: {half} px, then {walked} px");
+        assert!((flooded - walked).abs() <= walked * 0.03, "flooding walks {flooded} px, steady play {walked} px");
+        assert!((cd_flood - cd).abs() <= (10.0 - cd) * 0.03, "flooding leaves {cd_flood} s of cooldown, steady play {cd} s");
+    }
+
+    #[test]
+    fn a_burst_after_silent_ticks_drains_at_two_per_tick() {
+        // 30 silent ticks bank the budget; the 30 inputs sent meanwhile then arrive at once.
+        let burst = |silent: usize| {
+            let mut run = input_run(silent, |_, _| {});
+            for seq in 1..=30 {
+                send_input(&mut run, seq, (1, 0));
+            }
+            let mut ticks = 0;
+            while !run.players[0].inputs.is_empty() {
+                run.step();
+                ticks += 1;
+            }
+            assert_eq!(run.players[0].ack, 30, "every input is processed");
+            ticks
+        };
+        assert_eq!(burst(30), 16, "two per tick while more than three are queued");
+        assert_eq!(burst(0), 30, "without the silence the same burst runs at one per tick");
+    }
+
+    #[test]
+    fn a_repeated_or_older_sequence_number_is_queued_once() {
+        let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
+        for seq in [1, 1, 2, 2, 1, 3] {
+            send_input(&mut run, seq, (1, 0));
+        }
+        let seqs: Vec<u32> = run.players[0].inputs.iter().map(|i| i.seq).collect();
+        assert_eq!(seqs, [1, 2, 3]);
     }
 }

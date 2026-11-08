@@ -48,6 +48,9 @@ pub struct Player {
     pub hurt_t: f64,
     pub inputs: VecDeque<InputMsg>,
     pub ack: u32,
+    /// Ticks not yet matched by a processed input, up to `INPUT_BUDGET_MAX`: grows by one per tick and costs one
+    /// per processed input, so the long-run rate never exceeds one input per tick (#273).
+    pub input_budget: u32,
     /// Seconds the client's view of other entities lags behind the server.
     pub view_lag: f64,
     pub rtt: f64,
