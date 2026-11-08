@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COVE_TREE_FOOT, PLANT_KINDS, type Rgba, coveTree, drawPlant, drawTree } from './vegetation';
+import { COVE_TREE_FOOT, DEFAULT_LIGHT, PLANT_KINDS, type Rgba, coveTree, drawPlant, drawTree, lightVector } from './vegetation';
 
 /** FNV-1a over the RGBA bytes. */
 function fnv(img: Rgba): number {
@@ -15,6 +15,19 @@ const isDarkGreen = (img: Rgba, x: number, y: number) => { const i = (y * img.w 
 const HASH = 2114400888;
 
 describe('vegetation', () => {
+  it('lightVector: left sun at ~51° is the old default, the right sun mirrors it', () => {
+    const l = lightVector({ side: -1, elevation: 51 });
+    expect(l.x).toBeCloseTo(-0.63, 1); expect(l.y).toBeCloseTo(-0.78, 1);
+    const r = lightVector({ side: 1, elevation: 51 });
+    expect(r.x).toBeCloseTo(-l.x, 5); expect(r.y).toBeCloseTo(l.y, 5);
+    expect(Math.hypot(r.x, r.y)).toBeCloseTo(1, 5);
+  });
+  it('the light changes a plant, the default does not', () => {
+    const a = drawPlant('round', 7, 100), b = drawPlant('round', 7, 100, DEFAULT_LIGHT), c = drawPlant('round', 7, 100, lightVector({ side: 1, elevation: 51 }));
+    expect(b.img.data).toEqual(a.img.data);
+    expect(c.img.data).not.toEqual(a.img.data);
+    expect(c.foot).toEqual(a.foot);
+  });
   it('the cove_tree frame is pinned (guards against drift)', () => {
     // FNV-1a of the 96x100 RGBA of coveTree(): the general round tree, seed 11, scale 1, foot at (48, 80).
     const img = coveTree();
