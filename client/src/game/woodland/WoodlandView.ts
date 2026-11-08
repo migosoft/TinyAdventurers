@@ -70,6 +70,8 @@ export class WoodlandView {
   private images = new Map<number, Phaser.GameObjects.Image>();
   /** Plants shown so far (the seen-plant painter's version; it also changes when the plants are cleared). */
   private shown = 0;
+  /** The image box (world px) and frame key of each shown plant, for the seen-plant painter's cull. */
+  private boxes = new Map<number, { key: string; left: number; top: number; w: number; h: number }>();
   /** White silhouettes by plant frame key. */
   private silhouetteCache = new Map<string, HTMLCanvasElement>();
   /** Drawn, waiting for their page to be uploaded. */
@@ -201,6 +203,7 @@ export class WoodlandView {
     const ox = (p[5] ? f.w - f.foot.x : f.foot.x) / f.w;
     this.images.set(i, this.scene.add.image(p[1], p[2], PAGE_TEX + f.page, f.name)
       .setOrigin(ox, f.foot.y / f.h).setFlipX(p[5]).setDepth(DEPTH.entityBase + p[2]));
+    this.boxes.set(i, { key: keyOf(p), left: p[1] - (p[5] ? f.w - f.foot.x : f.foot.x), top: p[2] - f.foot.y, w: f.w, h: f.h });
     this.shown++;
   }
 
@@ -236,12 +239,13 @@ export class WoodlandView {
     paint: (ctx, ox, oy, s, full) => {
       const x0 = ox * TILE, y0 = oy * TILE, x1 = x0 + ctx.canvas.width / s, y1 = y0 + ctx.canvas.height / s;
       for (const [i, img] of this.images) {
+        const b = this.boxes.get(i)!;
+        if (b.left >= x1 || b.left + b.w <= x0 || b.top >= y1 || b.top + b.h <= y0) continue;
         const p = this.info.plants[i];
-        const key = keyOf(p);
-        const f = this.frames.get(key)!;
-        const left = p[1] - (p[5] ? f.w - f.foot.x : f.foot.x), top = p[2] - f.foot.y;
-        if (left >= x1 || left + f.w <= x0 || top >= y1 || top + f.h <= y0) continue;
         if (!img.visible || !full.isVisible(Math.floor(p[1] / TILE), Math.floor(p[2] / TILE))) continue;
+        const { left, top } = b;
+        const f = this.frames.get(b.key)!;
+        const key = b.key;
         ctx.save();
         ctx.translate((left - x0) * s, (top - y0) * s);
         ctx.scale(s, s);
@@ -347,6 +351,7 @@ export class WoodlandView {
     this.silhouettes = [];
     for (const img of this.images.values()) img.destroy();
     this.images.clear();
+    this.boxes.clear();
     this.shown++;
     this.silhouetteCache.clear();
     for (const g of this.placeholders) g.destroy();

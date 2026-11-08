@@ -40,6 +40,14 @@ describe('blurGrey', () => {
     expect(at(15)[1]).toBe(at(15)[0]);
     expect(at(15)[2]).toBe(at(15)[0]);
   });
+  it('gives the same result with reused scratch buffers, also oversized ones', () => {
+    const f = (x: number, y: number) => ((x * 37 + y * 11) % 5) * 50;
+    const a = grey(16, 9, f), b = grey(16, 9, f);
+    blurGrey(a, 16, 9, 3);
+    const scratch = { a: new Float32Array(400), b: new Float32Array(400) };
+    blurGrey(b, 16, 9, 3, scratch);
+    expect(b).toEqual(a);
+  });
   it('radius 0 leaves the data unchanged', () => {
     const d = grey(10, 4, (x) => x * 20);
     const before = d.slice();

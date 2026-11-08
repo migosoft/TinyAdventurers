@@ -297,7 +297,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.view.update(cam.worldView, this.knight.x, this.knight.y - 6, [], this.t, 0, CONST.FOV_RADIUS + 5);
     this.mask.outside = haze.outside;
     this.mask.feather = haze.feather;
-    this.mask.soft = on.shade &&this.woodland.settled ? haze.soft : 0; // the haze behind trunks waits for them
+    this.mask.soft = on.shade && this.woodland.settled ? haze.soft : 0; // the haze behind trunks waits for them
     this.mask.update(cam.worldView, this.view.view, () => this.view.sight);
     syncUnseenFX(cam, on.haze, this.mask.texture, this.mask.rect, haze);
     this.woodland.update(this.t, lookOf(this.knight), cam.worldView, this.view.seenLit);

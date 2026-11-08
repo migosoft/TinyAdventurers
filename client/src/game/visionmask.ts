@@ -37,25 +37,29 @@ export function fillPlan(haze: boolean, lv: { outside: number; soft: number }): 
 
 /** One running-sum box pass (window 2r+1, edge pixels repeated) over `n` values at `stride` apart, `src` into `dst`. */
 function boxLine(src: Float32Array, dst: Float32Array, start: number, stride: number, n: number, r: number): void {
-  const at = (i: number) => src[start + Math.min(n - 1, Math.max(0, i)) * stride];
+  const last = n - 1, first = src[start], end = src[start + last * stride];
   let sum = 0;
-  for (let i = -r; i <= r; i++) sum += at(i);
+  for (let i = -r; i <= r; i++) sum += i < 0 ? first : i > last ? end : src[start + i * stride];
   const div = 2 * r + 1;
   for (let i = 0; i < n; i++) {
     dst[start + i * stride] = sum / div;
-    sum += at(i + r + 1) - at(i - r);
+    const add = i + r + 1, drop = i - r;
+    sum += (add > last ? end : src[start + add * stride]) - (drop < 0 ? first : src[start + drop * stride]);
   }
 }
+
+/** Float work buffers of `blurGrey`, kept by the caller so a redraw allocates nothing. */
+export interface BlurScratch { a: Float32Array; b: Float32Array }
 
 /**
  * Blurs the canvas's grey in place: three separable box passes (close to a gaussian) on the red channel of
  * RGBA `data` (`w`×`h`), copied into green and blue; alpha stays as it is. `radius` is in canvas px; 0 changes nothing.
  */
-export function blurGrey(data: Uint8ClampedArray, w: number, h: number, radius: number): void {
+export function blurGrey(data: Uint8ClampedArray, w: number, h: number, radius: number, scratch?: BlurScratch): void {
   const r = Math.floor(radius);
   if (r <= 0) return;
-  let a = new Float32Array(w * h);
-  let b = new Float32Array(w * h);
+  const a = scratch && scratch.a.length >= w * h ? scratch.a : new Float32Array(w * h);
+  const b = scratch && scratch.b.length >= w * h ? scratch.b : new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) a[i] = data[i * 4];
   for (let pass = 0; pass < 3; pass++) {
     for (let y = 0; y < h; y++) boxLine(a, b, y * w, 1, w, r);
@@ -97,6 +101,8 @@ export class VisionMask {
   soft = 0;
   /** Haze mode: the blur radius of the mask in world px (0: hard edges). */
   feather = 0;
+  /** Haze mode: the blur's float buffers, sized with the canvas. */
+  private scratch?: BlurScratch;
   /**
    * Haze mode: scenery that must never be hazed where the hero sees it (a tree's picture reaches over the
    * hazed ground behind it, and UnseenFX works in ground coordinates). `paint` runs after the blur, so the
@@ -129,7 +135,15 @@ export class VisionMask {
     this.shader?.destroy();
     this.shader = undefined;
     if (this.scene.textures.exists(KEY)) this.scene.textures.remove(KEY);
-    this.canvas = this.scene.textures.createCanvas(KEY, cols * RES, rows * RES)!;
+    if (this.haze) {
+      // the blur reads the canvas back every redraw: a CPU-backed canvas, not a GPU readback each time
+      const el = document.createElement('canvas');
+      el.width = cols * RES;
+      el.height = rows * RES;
+      el.getContext('2d', { willReadFrequently: true });
+      this.canvas = this.scene.textures.addCanvas(KEY, el)!;
+      this.scratch = { a: new Float32Array(cols * RES * rows * RES), b: new Float32Array(cols * RES * rows * RES) };
+    } else this.canvas = this.scene.textures.createCanvas(KEY, cols * RES, rows * RES)!;
     this.last = '';
     if (this.haze) return;
     const base = new Phaser.Display.BaseShader(KEY, FRAG);
@@ -179,7 +193,7 @@ export class VisionMask {
     if (full) {
       if (this.feather > 0) {
         const img = ctx.getImageData(0, 0, this.cols * RES, this.rows * RES);
-        blurGrey(img.data, img.width, img.height, Math.max(1, Math.round(this.feather * s)));
+        blurGrey(img.data, img.width, img.height, Math.max(1, Math.round(this.feather * s)), this.scratch);
         ctx.putImageData(img, 0, 0);
       }
       this.seen?.paint(ctx, ox, oy, s, full);
