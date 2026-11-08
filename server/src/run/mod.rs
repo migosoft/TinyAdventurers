@@ -2,6 +2,7 @@
 
 pub mod abilities;
 pub mod ai;
+pub mod ai_shapes;
 pub mod ambush;
 pub mod behaviour;
 pub mod bosses;

@@ -1,6 +1,7 @@
 //! Enemy AI: perception (sight radius + line of sight), chase/attack,
 //! search last known position, return home, and A* pathfinding.
 
+use super::ai_shapes::{reach_of, worth_using};
 use super::targets;
 use super::abilities::{monster_use, tick_monster_slam};
 use super::effects::Creature;
@@ -15,7 +16,6 @@ use crate::defs::enemies::{self, BaseAi, EnemyType};
 use crate::defs::kinds::Anim;
 use crate::dungeon::{Map, Mover, TILE};
 use crate::math::Vec2;
-use crate::sheet::ResolvedAbility;
 use crate::defs::effects::EffectKind;
 use crate::defs::races::Sight;
 use rand::Rng;
@@ -384,15 +384,9 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             let aim = pos.angle_to(ppos);
             let rest = can_rest(run, mi, pos);
             run.monsters[mi].aim = aim;
-            // The reach of an ability: a swing starts a little inside its real reach, a bolt from its
-            // range, a slam from its radius. Movement follows the main ability.
-            let reach = |a: &ResolvedAbility| match ab::def(a.id).shape {
-                Shape::Swing => a.range + foe_radius - SWING_SLACK,
-                Shape::Ring => a.radius,
-                _ => a.range,
-            };
+            // Movement follows the main ability's reach (`reach_of`).
             let main = run.monsters[mi].kit.first().expect("a creature has its main ability").clone();
-            let range = reach(&main);
+            let range = reach_of(&main, foe_radius);
             let preferred = match base_ai {
                 BaseAi::Ranged { preferred } => preferred,
                 BaseAi::Melee | BaseAi::Stationary => 0.0,
@@ -400,23 +394,14 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
             let alt = run.monsters[mi].kit.iter().nth(1).cloned();
             if let Some(alt) = alt {
                 let alt_id = alt.id;
-                // Second ability: a claw when the target is in reach, a bolt only from afar, a slam
-                // when it is worth it.
-                let alt_range = reach(&alt);
+                // Second ability: used when the shape's rule says it is worth it (`worth_using`); the chase
+                // keeps its own pacing on top: a bolt only from afar and beyond the main ability's reach.
                 // An ability with a module is used by the module, not by the chase.
-                let usable = ab::def(alt_id).module.is_none() && match ab::def(alt_id).shape {
-                    Shape::Swing => d <= alt_range,
-                    Shape::Projectile => d <= alt_range && d >= enemies::ALT_BOLT_MIN_DIST && d > range,
-                    // A slam is worth it for two heroes in reach, or one while the club recovers.
-                    Shape::Ring => {
-                        // Only creatures it fights count: a calm animal in the ring is no reason to slam.
-                        let me = targets::stance(run, Creature::Monster(mi));
-                        let near = run.foes_in(pos, alt.radius, None).into_iter().filter(|&c| targets::fights(&me, &targets::stance(run, c))).count();
-                        near >= 2 || near == 1 && run.monsters[mi].ai.cd > 0.0
-                    }
-                    // A shape the chase has no turn for (a charmed boss's Swoop) is not used by the chase.
-                    _ => false,
+                let extra = match ab::def(alt_id).shape {
+                    Shape::Projectile => d >= enemies::ALT_BOLT_MIN_DIST && d > range,
+                    _ => true,
                 };
+                let usable = ab::def(alt_id).module.is_none() && extra && worth_using(run, Creature::Monster(mi), &alt, foe, run.monsters[mi].ai.cd <= 0.0);
                 if usable && rest && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {
                     if ab::def(alt_id).shape == Shape::Ring {
                         // The slam's own wind-up runs in `monster_use`.
