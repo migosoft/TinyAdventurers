@@ -860,7 +860,7 @@ export class GameScene extends Phaser.Scene {
     this.interp.sample(now, this.ents);
     // Charmed: the server's hero, interpolated like any other entity, is the own figure and the camera's target.
     const charmedEnt = this.pred.charmed && this.alive ? this.ents.get(this.info.you) : undefined;
-    const [px, py] = charmedEnt ? [charmedEnt.x, charmedEnt.y] : this.pred.renderPos(dt);
+    const [px, py] = charmedEnt ? this.pred.charmedPos(charmedEnt.x, charmedEnt.y, dt) : this.pred.renderPos(dt);
 
     // Camera & fog follow the own figure, or the spectated teammate.
     let camX = px;

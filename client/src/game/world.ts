@@ -221,6 +221,9 @@ export class Predictor {
   noTurn = false;
   /** From the snapshot (`me.charmed_by`): the server drives the hero, so nothing is predicted and the inputs sent are empty. */
   charmed = false;
+  /** Visual offset (decays to 0) from the interpolated server hero back to where the figure was drawn when the charm began. */
+  private charmOffX = 0;
+  private charmOffY = 0;
   private pending: Pending[] = [];
   private seq = 0;
   speed: number;
@@ -309,6 +312,12 @@ export class Predictor {
     this.cdRate = me.cd_rate;
     this.noTurn = me.effects.some(([k]) => EFFECTS[k]?.no_turn);
     if (this.charmed) {
+      // The charm just began: the figure moves from where it was drawn (predicted) to the interpolated server hero
+      // by a decaying offset, not by a jump (`charmedPos`).
+      if (!wasCharmed && drawn !== undefined) {
+        this.charmOffX = this.state.x + this.offX - drawn[0];
+        this.charmOffY = this.state.y + this.offY - drawn[1];
+      }
       // The server's state as it is: no replay, no blending, its cooldowns.
       this.pending = [];
       this.state = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy };
@@ -358,6 +367,14 @@ export class Predictor {
     }
     if (Math.abs(s1 - this.cd1) > 0.15) this.cd1 = s1;
     if (Math.abs(s2 - this.cd2) > 0.15) this.cd2 = s2;
+  }
+
+  /** While charmed: the interpolated server hero (`x`, `y`) plus the decaying offset of the charm's start. */
+  charmedPos(x: number, y: number, dt: number): [number, number] {
+    const k = Math.exp(-dt / 0.1);
+    this.charmOffX *= k;
+    this.charmOffY *= k;
+    return [x + this.charmOffX, y + this.charmOffY];
   }
 
   /** Render position including decaying correction offset. */

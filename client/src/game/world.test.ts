@@ -318,6 +318,18 @@ describe('Predictor while charmed', () => {
     expect(pred.renderPos(5)[0]).toBeCloseTo(x0 + 26, 1);
   });
 
+  it('charm_starts_with_a_blend_not_a_jump', () => {
+    const x0 = 3 * TILE + 8, y0 = 2 * TILE + 8;
+    const pred = mk(chasmMap(), 'Wizard', x0, y0);
+    pred.reconcile(snap(0, x0, y0));
+    // Drawn from prediction at x0; the interpolated server hero lags 12 px behind.
+    pred.reconcile(charmed(snap(0, x0 - 6, y0)), [x0 - 12, y0]);
+    expect(pred.charmedPos(x0 - 12, y0, 0)[0]).toBeCloseTo(x0, 6);
+    expect(pred.charmedPos(x0 - 12, y0, 0.1)[0]).toBeLessThan(x0);
+    expect(pred.charmedPos(x0 - 12, y0, 0.1)[0]).toBeGreaterThan(x0 - 12);
+    expect(pred.charmedPos(x0 - 12, y0, 5)[0]).toBeCloseTo(x0 - 12, 1);
+  });
+
   it('a plain reconcile does not use the drawn position', () => {
     const x0 = 3 * TILE + 8, y0 = 2 * TILE + 8;
     const pred = mk(chasmMap(), 'Wizard', x0, y0);
