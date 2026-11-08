@@ -14,7 +14,7 @@ import { Clouds } from './clouds';
 import { Critters } from './critters';
 import { flowerSpots, GROUND_TILES, GroundPainter } from './ground';
 import { DrawQueue, drawOrder, PlantPages } from './plantpages';
-import { bandOrder, PendingGrid, windowSettled } from './settle';
+import { bandOrder, PendingGrid, sceneSettled } from './settle';
 
 const GROUND_TEX = 'woodland-ground-';
 /** The ground goes up in strips of this many px of height (~0.5 MB each), one strip per frame. */
@@ -32,6 +32,9 @@ const RESORT = 320;
 const SETTLE_MARGIN = 2 * TILE;
 
 interface Frame { page: number; name: string; w: number; h: number; foot: { x: number; y: number } }
+
+/** The camera window plus the settle margin. */
+const windowAround = (cam: Phaser.Geom.Rectangle) => ({ x0: cam.x - SETTLE_MARGIN, y0: cam.y - SETTLE_MARGIN, x1: cam.right + SETTLE_MARGIN, y1: cam.bottom + SETTLE_MARGIN });
 
 /** A bucket's map key; bx, by may be -1 (a neighbour off the map's edge) without clashing with a real bucket. */
 const bucketKey = (bx: number, by: number) => (by + 1) * 8192 + bx + 1;
@@ -70,8 +73,9 @@ export class WoodlandView {
   private startMs = performance.now();
   private groundDoneMs = 0;
   private logged = false;
-  /** True once the ground under the camera window (+ 2 tiles) is uploaded and no plant there waits to be drawn; stays true. The soft shade of the trunks waits for it. */
+  /** True while the ground under the camera window (+ 2 tiles) is uploaded and no plant there waits to be drawn, and always once everything is drawn. The soft shade of the trunks waits for it (it hides again if the camera runs ahead of the drawing). */
   settled = false;
+  private done = false;
   private mapW: number;
 
   /** `log`: print the plant-draw timing to the console once (the ?woodland demo). */
@@ -91,6 +95,7 @@ export class WoodlandView {
       }
       this.placeholders.push(g);
     }
+    // ordering only: the strips wait for the blades and flowers, so the order shows once the ground is whole (the last bands are then the far ones)
     for (const ty of bandOrder(painter.rows, spawn.y / TILE)) this.groundQueue.push(() => painter.band(ty));
     this.groundQueue.push(() => painter.blades());
     this.groundQueue.push(() => painter.flowers());
@@ -193,7 +198,8 @@ export class WoodlandView {
     for (const i of this.ready) this.show(i);
     this.ready.length = 0;
     if (!this.groundDoneMs && this.groundQueue.size === 0) this.groundDoneMs = performance.now();
-    if (!this.settled && this.groundQueue.size === 0 && windowSettled({ x0: cam.x - SETTLE_MARGIN, y0: cam.y - SETTLE_MARGIN, x1: cam.right + SETTLE_MARGIN, y1: cam.bottom + SETTLE_MARGIN }, STRIP, (n) => !!this.strips[n], this.painter.h, this.pendingGrid)) this.settled = true;
+    if (!this.done && this.groundQueue.size === 0 && this.pending.size === 0 && this.stripsUp === this.nStrips) this.done = true;
+    this.settled = sceneSettled(this.done, this.groundQueue.size === 0, windowAround(cam), STRIP, (n) => !!this.strips[n], this.painter.h, this.pendingGrid);
     if (!this.logged && this.groundQueue.size === 0 && this.pending.size === 0) {
       this.logged = true;
       if (this.log) console.log(`woodland: ${this.info.plants.length} plants drawn (${this.frames.size} frames, ${this.pages.pages} pages) in ${Math.round(performance.now() - this.groundDoneMs)} ms after the ground (${Math.round(performance.now() - this.startMs)} ms in all)`);

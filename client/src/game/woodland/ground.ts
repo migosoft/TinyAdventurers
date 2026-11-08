@@ -151,10 +151,10 @@ export class GroundPainter {
         if (pk === GRASS) this.put(x, y, this.nGrass(x, y) < 0.42 ? PATCH : BASE);
         else if (pk === ROAD) {
           // smooth, large patches (mostly the big noise), weighted towards the darker browns
-          // The big noise is sampled through a domain warp and joined by a second octave, so its contours are not lattice-aligned; the thresholds are dithered over ~2 px.
+          // The big noise is sampled through a domain warp and joined by a second octave, so its contours are not lattice-aligned; the thresholds are dithered over ~1-2 px.
           const wx = x + (this.nWarpX(x, y) - 0.5) * 28, wy = y + (this.nWarpY(x, y) - 0.5) * 28;
           const big = this.nDirtBig(wx, wy) * 0.7 + this.nDirtMid(wx, wy) * 0.3;
-          const m = this.nDirt(x, y) * 0.25 + big * 0.75 + (hash(x, y, seed + 7) - 0.5) * 0.05;
+          const m = this.nDirt(x, y) * 0.25 + big * 0.75 + (hash(x, y, seed + 7) - 0.5) * 0.025;
           let c = hash(x, y, seed + 5) < 0.03 ? DIRT_B : m > 0.66 ? DIRT_D : m < 0.34 ? DIRT_B : DIRT_C;
           // a faint rim where the road meets something else: its edge pixels blend towards a darker, greener brown
           if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => this.kindNear(x + dx, y + dy) !== ROAD)) c = [0, 1, 2].map((i) => Math.round(c[i] + (RIM[i] - c[i]) * RIM_MIX)) as Rgb;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bandOrder, PendingGrid, windowSettled } from './settle';
+import { bandOrder, PendingGrid, sceneSettled, windowSettled } from './settle';
 
 describe('bandOrder', () => {
   it('goes outward from the centre row, upper row first on a tie, and covers every row once', () => {
@@ -26,5 +26,17 @@ describe('windowSettled', () => {
     expect(windowSettled(win, 64, () => true, 1000, p)).toBe(false);
     p.remove(250, 150);
     expect(windowSettled(win, 64, () => true, 1000, p)).toBe(true);
+  });
+});
+
+describe('sceneSettled', () => {
+  const win = { x0: 100, y0: 100, x1: 400, y1: 300 };
+  it('hides again when the window is not drawn, until everything is drawn; then always settled', () => {
+    const p = new PendingGrid();
+    expect(sceneSettled(false, true, win, 64, () => true, 1000, p)).toBe(true);
+    p.add(250, 150); // the camera ran into undrawn trees
+    expect(sceneSettled(false, true, win, 64, () => true, 1000, p)).toBe(false);
+    expect(sceneSettled(false, false, win, 64, () => true, 1000, new PendingGrid())).toBe(false); // ground not painted
+    expect(sceneSettled(true, true, win, 64, () => false, 1000, p)).toBe(true);
   });
 });

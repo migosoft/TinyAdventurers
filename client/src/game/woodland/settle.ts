@@ -31,6 +31,11 @@ export class PendingGrid {
   }
 }
 
+/** The rule the shade follows: once everything is drawn (`done`) always settled; before that only while the ground is painted and the current window is complete (so a walk into undrawn trees hides the shade again). */
+export function sceneSettled(done: boolean, groundDone: boolean, w: Win, stripPx: number, stripUp: (n: number) => boolean, mapH: number, pending: PendingGrid): boolean {
+  return done || (groundDone && windowSettled(w, stripPx, stripUp, mapH, pending));
+}
+
 /** Is every ground strip (`stripPx` high) the window touches uploaded, and no plant pending inside the window? */
 export function windowSettled(w: Win, stripPx: number, stripUp: (n: number) => boolean, mapH: number, pending: PendingGrid): boolean {
   const a = Math.max(0, Math.floor(w.y0 / stripPx)), b = Math.min(Math.ceil(mapH / stripPx) - 1, Math.floor(w.y1 / stripPx));
