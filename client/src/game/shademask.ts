@@ -5,7 +5,8 @@
 // (RES px per tile) holds the hard polygon in translucent black with the full polygon cut out; an
 // Image at DEPTH.shade (over the ground, under figures and canopies) draws it. The layer costs
 // nothing when no soft tile lies in the window, and the canvas is redrawn only when a view or the
-// window changes.
+// window changes. Only dark maps use it (the dungeon's cove); daylight maps carry the soft wedge in the vision
+// mask's haze (#278).
 import type Phaser from 'phaser';
 import { TILE, type TileMap } from '../sim/map';
 import { inside } from '../sim/vispoly';

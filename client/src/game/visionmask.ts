@@ -16,8 +16,6 @@ import { TILE, type TileMap } from '../sim/map';
 import type { View } from '../sim/view';
 import { DEPTH } from './effects';
 
-/** How dark what lies outside sight is on a daylight map (#258): dimmed, not black (alpha of black). */
-export const DAYLIGHT_OUTSIDE = 0.3;
 /** The canvas grey values (0..255) for the unseen strengths `outside` and `soft` (0..1): strength 1 is black, 0 white. */
 export function levels(outside: number, soft: number): { outside: number; soft: number } {
   const g = (v: number) => Math.round(255 * (1 - Math.min(1, Math.max(0, v))));
@@ -62,7 +60,7 @@ export class VisionMask {
   private last = '';
   /** Off: no mask, the old tile edges (?lights E). */
   enabled = true;
-  /** How dark (alpha of black) the mask is outside sight: 1 on dark maps, DAYLIGHT_OUTSIDE on daylight maps. In haze mode: the unseen strength beyond sight. */
+  /** How dark (alpha of black) the mask is outside sight: 1 on dark maps. In haze mode: the unseen strength beyond sight. */
   outside = 1;
   /** Haze mode (set before the first update): the canvas feeds UnseenFX and no Shader is made. */
   haze = false;

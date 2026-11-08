@@ -31,7 +31,8 @@ import { GROUND_TILES } from './woodland/ground';
 import { Mood, type AirTorch, type AirShot, type AirMover } from './mood';
 import { MoverTracker } from './airmovers';
 import { projectileAir } from './airshots';
-import { DAYLIGHT_OUTSIDE, VisionMask } from './visionmask';
+import { VisionMask } from './visionmask';
+import { DEFAULT_HAZE, syncUnseenFX } from './unseenfx';
 import { ShadeMask } from './shademask';
 import { syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
@@ -155,6 +156,7 @@ export class GameScene extends Phaser.Scene {
   private movers = new MoverTracker(); // replaced in init() for every run
   private airMovers: AirMover[] = [];
   private visionMask!: VisionMask;
+  private mainCamera!: Phaser.Cameras.Scene2D.Camera;
   private shadeMask!: ShadeMask;
   private unsub?: () => void;
   private frameMs = 0;
@@ -231,9 +233,14 @@ export class GameScene extends Phaser.Scene {
     this.sunbeams = new Sunbeams(this, this.light, this.lightView);
     this.cove = this.info.cove ? new CoveView(this, this.info.cove) : null;
     this.woodland = this.info.woodland ? new WoodlandView(this, this.info.woodland, this.map, { x: this.info.spawn_x, y: this.info.spawn_y }) : null;
+    this.mainCamera = this.cameras.main;
     this.visionMask = new VisionMask(this, this.map);
-    // daylight maps dim what lies beyond sight instead of blacking it out (#258)
-    this.visionMask.outside = this.info.daylight ? DAYLIGHT_OUTSIDE : 1;
+    // daylight maps haze what lies beyond sight instead of blacking it out (#258, #278); dark maps stay black
+    this.visionMask.haze = this.info.daylight;
+    if (this.info.daylight) {
+      this.visionMask.outside = DEFAULT_HAZE.outside;
+      this.visionMask.soft = DEFAULT_HAZE.soft;
+    } else this.visionMask.outside = 1;
     this.shadeMask = new ShadeMask(this, this.map);
     this.useHint = new KeyCap(this);
     this.bars = this.add.graphics().setDepth(DEPTH.enemyBars);
@@ -320,6 +327,8 @@ export class GameScene extends Phaser.Scene {
     this.unsub?.();
     this.mood?.destroy();
     this.shadeMask.destroy();
+    // the camera manager is already shut down here (`cameras.main` is gone): use the reference kept at creation
+    syncUnseenFX(this.mainCamera, false, undefined, this.visionMask.rect, DEFAULT_HAZE);
     this.sunbeams.destroy();
     this.cove?.destroy();
     this.cove = null;
@@ -860,9 +869,12 @@ export class GameScene extends Phaser.Scene {
     const shots: AirShot[] = (this.lastSnap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
     this.mood?.update(dt, this.cameras.main.worldView, torches, shots, this.collectMovers(dt, px, py));
     this.sunbeams.update(dt, this.cameras.main.worldView, now);
-    this.visionMask.update(this.cameras.main.worldView, this.lightView.view);
-    // the soft shade waits for the scenery it belongs to (the woodland's trunks)
-    this.shadeMask.on = !this.woodland || this.woodland.settled;
+    this.visionMask.update(this.cameras.main.worldView, this.lightView.view, () => this.lightView.sight);
+    // the soft wedge waits for the scenery it belongs to (the woodland's trunks): on daylight maps it is the haze's
+    // soft level, on dark maps (the cove) the ShadeMask's black 0.3
+    const settled = !this.woodland || this.woodland.settled;
+    syncUnseenFX(this.cameras.main, this.info.daylight && settled, this.visionMask.texture, this.visionMask.rect, DEFAULT_HAZE);
+    this.shadeMask.on = !this.info.daylight && settled;
     this.shadeMask.update(this.cameras.main.worldView, this.lightView.view, () => this.lightView.sight);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 
