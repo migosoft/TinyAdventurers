@@ -1069,14 +1069,6 @@ impl Run {
         healed
     }
 
-    /// The enemies' foes: living heroes on another side than the enemies' (`targets::foes`: a hero an enemy's Charm turned is not one) and living allies and wild animals (not sinking) whose centre is within `r` of `at`, optionally inside a cone (dir, half-angle). Heroes first.
-    pub fn foes_in(&self, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<effects::Creature> {
-        let inside = |p: Vec2| p.dist(at) <= r && cone.map_or(true, |(dir, half)| crate::math::angle_diff(at.angle_to(p), dir).abs() <= half);
-        let heroes = self.players.iter().enumerate().filter(|(_, p)| targets::foes(Side::Hostile, p.side) && p.alive && inside(p.pos())).map(|(i, _)| effects::Creature::Player(i));
-        let allies = self.monsters.iter().enumerate().filter(|(_, m)| targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && inside(m.pos)).map(|(i, _)| effects::Creature::Monster(i));
-        heroes.chain(allies).collect()
-    }
-
     /// The enemies' foes: living heroes on another side than the enemies' within r + PLAYER_RADIUS and allies and wild animals within r + radius of `at`; with `los`, only those in line of sight.
     pub fn foes_touching(&self, at: Vec2, r: f64, los: bool) -> Vec<effects::Creature> {
         let reach = |p: Vec2, radius: f64| p.dist(at) < r + radius && (!los || crate::collision::line_of_sight(&self.layout.map, at, p));

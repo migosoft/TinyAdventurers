@@ -158,7 +158,7 @@ fn break_chest(run: &mut Run, oi: usize) {
 }
 
 /// Objects whose footprint an area attack at `at` with reach `r` touches,
-/// optionally within a cone `(direction, half angle)`; like `Run::foes_in`.
+/// optionally within a cone `(direction, half angle)`.
 pub fn objects_in(run: &Run, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<usize> {
     run.objects
         .iter()

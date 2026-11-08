@@ -9,7 +9,6 @@ use super::targets;
 use super::Run;
 use crate::collision::{line_of_sight, walk_line};
 use crate::defs::abilities::{self as ab, Shape};
-use crate::defs::classes::PLAYER_RADIUS;
 use crate::dungeon::Mover;
 use crate::math::Vec2;
 use crate::sheet::ResolvedAbility;
@@ -27,8 +26,9 @@ pub fn reach_of(a: &ResolvedAbility, foe_radius: f64) -> f64 {
     match ab::def(a.id).shape {
         Shape::Swing => a.range + foe_radius - SWING_SLACK,
         Shape::Ring => a.radius,
-        Shape::Dash if a.range == 0.0 => a.speed * a.duration + foe_radius,
-        _ => a.range,
+        // A dash starts from where its travel (plus the foe's body) reaches, or its range if that is longer.
+        Shape::Dash => a.range.max(a.speed * a.duration + foe_radius),
+        Shape::Projectile | Shape::Blast | Shape::SelfArea | Shape::GroundArea | Shape::Buff | Shape::Summon | Shape::Breath | Shape::Gaze => a.range,
     }
 }
 
@@ -113,6 +113,7 @@ pub fn worth_using(run: &Run, user: Creature, a: &ResolvedAbility, foe: Creature
 mod tests {
     use super::*;
     use crate::defs::abilities::AbilityId;
+    use crate::defs::classes::PLAYER_RADIUS;
     use crate::defs::effects::EffectKind;
     use crate::defs::enemies::EnemyType;
     use crate::dungeon::{Map, Tile};
@@ -220,6 +221,16 @@ mod tests {
         assert!(!worth_using(&run, user, &charge, foe, true), "the dash would cross a wall");
         let (run, user, foe) = scene(ClassId::Barbarian, 300.0);
         assert!(!worth_using(&run, user, &charge, foe, true), "too far");
+    }
+
+    #[test]
+    fn a_charge_starts_from_its_travel_not_its_weapon_reach() {
+        let (run, user, foe) = scene(ClassId::Barbarian, 45.0);
+        let charge = hero_ability(&run, AbilityId::Charge);
+        assert!(charge.range < 45.0, "the Charge range ({}) is shorter than its travel", charge.range);
+        assert!(worth_using(&run, user, &charge, foe, true), "a foe 45 px away, free line");
+        let (run, user, foe) = scene(ClassId::Barbarian, 80.0);
+        assert!(!worth_using(&run, user, &charge, foe, true), "a foe 80 px away");
     }
 
     #[test]

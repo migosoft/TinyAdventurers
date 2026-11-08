@@ -399,7 +399,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
                 // An ability with a module is used by the module, not by the chase.
                 let extra = match ab::def(alt_id).shape {
                     Shape::Projectile => d >= enemies::ALT_BOLT_MIN_DIST && d > range,
-                    _ => true,
+                    Shape::Swing | Shape::Blast | Shape::Ring | Shape::Dash | Shape::SelfArea | Shape::GroundArea | Shape::Buff | Shape::Summon | Shape::Breath | Shape::Gaze => true,
                 };
                 let usable = ab::def(alt_id).module.is_none() && extra && worth_using(run, Creature::Monster(mi), &alt, foe, run.monsters[mi].ai.cd <= 0.0);
                 if usable && rest && run.monsters[mi].ai.alt_cd <= 0.0 && run.monsters[mi].cds.ready(alt_id) {

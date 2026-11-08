@@ -4498,8 +4498,8 @@ mod hero_sides {
                 attack(&mut run);
                 let touched = run.players[1].hp < hp || run.players[1].effects.has(EffectKind::Blind);
                 assert_eq!(touched, hurt, "{name} on a {side:?} hero");
-                let (near, touching) = (run.foes_in(run.players[1].pos(), 5.0, None), run.foes_touching(run.players[1].pos(), 5.0, false));
-                assert_eq!((near.contains(&Creature::Player(1)), touching.contains(&Creature::Player(1))), (hurt, hurt), "{name}: the area helpers on a {side:?} hero");
+                let touching = run.foes_touching(run.players[1].pos(), 5.0, false);
+                assert_eq!(touching.contains(&Creature::Player(1)), hurt, "{name}: the area helper on a {side:?} hero");
             }
         }
     }
