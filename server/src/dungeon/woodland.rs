@@ -28,6 +28,18 @@ pub fn playable_x(x: i32) -> bool {
     x > WALL_W && x < WALL_E
 }
 const WOODLAND_SALT: u64 = 0x300D_1A4D;
+/// The sun rolls from its own stream, so a seed's map, plants and animals do not move.
+const SUN_SALT: u64 = 0x5355_4e5f_4c49;
+/// Degrees above the horizon.
+// balancing
+pub const SUN_ELEVATION: std::ops::RangeInclusive<u8> = 35..=70;
+
+/// The run's sun: which side it stands on (-1 west, +1 east) and how high.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Sun {
+    pub side: i8,
+    pub elevation_deg: u8,
+}
 
 /// Wire ids match the client's PLANT_KINDS order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -65,6 +77,7 @@ pub struct Woodland {
     pub animals: Vec<(EnemyType, Vec2)>,
     /// 1..=1_000_000, for the client's grass, flowers and critters.
     pub seed: u32,
+    pub sun: Sun,
     /// The clearings' ellipses (centre x, centre y, radii; tiles), then the end's: roadside trees stay out of them.
     #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     ellipses: Vec<[f64; 4]>,
@@ -527,7 +540,9 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     plants.extend(trees);
     plants.extend(bushes);
     plants.extend(edge);
-    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), ellipses };
+    let mut sun_rng = ChaCha8Rng::seed_from_u64(seed ^ SUN_SALT);
+    let sun = Sun { side: if sun_rng.gen_bool(0.5) { -1 } else { 1 }, elevation_deg: sun_rng.gen_range(SUN_ELEVATION) };
+    let wl = Woodland { plants, start, end, clearings, animals, seed: rng.gen_range(1..=1_000_000), sun, ellipses };
     let layout = Layout { map, spawns, chests: vec![], barrels: vec![], torches: vec![], suns: vec![], player_spawns, cove: None, daylight: true, woodland: Some(wl.clone()) };
     (layout, wl)
 }
@@ -720,5 +735,41 @@ mod tests {
                 assert!(l.map.safe(Map::tile_of(*p).0, Map::tile_of(*p).1), "seed {seed}");
             }
         });
+    }
+
+    /// FNV-1a over the map's tiles, the plants and the spawns of `generate(seed)`; the sun is not part of it.
+    fn map_fingerprint(seed: u64) -> u64 {
+        let (l, w) = generate(seed);
+        let mut h: u64 = 0xcbf29ce484222325;
+        let mut feed = |bytes: &[u8]| {
+            for b in bytes {
+                h = (h ^ *b as u64).wrapping_mul(0x100000001b3);
+            }
+        };
+        feed(&l.map.tiles);
+        feed(format!("{:?}", w.plants).as_bytes());
+        feed(format!("{:?}", l.spawns).as_bytes());
+        h
+    }
+
+    #[test]
+    fn the_map_is_unchanged_by_the_sun() {
+        let got: Vec<u64> = [1u64, 2, 3, 7, 42].iter().map(|s| map_fingerprint(*s)).collect();
+        // Pinned in #277, the commit that gave the woodland a sun: tiles, plants and spawns do not depend on it.
+        assert_eq!(got, vec![15964463446947852909, 14269433004639530539, 3843392799734633643, 12441823283910592039, 9934968307587744593]);
+    }
+
+    #[test]
+    fn the_sun_is_in_range_and_pinned_to_the_seed() {
+        for seed in 1..=20u64 {
+            let (_, w) = generate(seed);
+            assert!(w.sun.side == -1 || w.sun.side == 1);
+            assert!(SUN_ELEVATION.contains(&w.sun.elevation_deg));
+            assert_eq!(w.sun, generate(seed).1.sun);
+        }
+        // both sides and more than one height occur
+        let suns: Vec<_> = (1..=40u64).map(|s| generate(s).1.sun).collect();
+        assert!(suns.iter().any(|s| s.side == -1) && suns.iter().any(|s| s.side == 1));
+        assert!(suns.iter().map(|s| s.elevation_deg).collect::<std::collections::HashSet<_>>().len() > 3);
     }
 }

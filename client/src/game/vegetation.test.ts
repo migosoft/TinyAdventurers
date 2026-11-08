@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COVE_TREE_FOOT, PLANT_KINDS, type Rgba, coveTree, drawPlant, drawTree } from './vegetation';
+import { COVE_TREE_FOOT, DEFAULT_LIGHT, PLANT_KINDS, type Rgba, coveTree, drawPlant, drawTree, lightVector } from './vegetation';
 
 /** FNV-1a over the RGBA bytes. */
 function fnv(img: Rgba): number {
@@ -15,6 +15,32 @@ const isDarkGreen = (img: Rgba, x: number, y: number) => { const i = (y * img.w 
 const HASH = 2114400888;
 
 describe('vegetation', () => {
+  it('lightVector: left sun at ~51° is the old default, the right sun mirrors it', () => {
+    const l = lightVector({ side: -1, elevation: 51 });
+    expect(l.x).toBeCloseTo(-0.63, 1); expect(l.y).toBeCloseTo(-0.78, 1);
+    const r = lightVector({ side: 1, elevation: 51 });
+    expect(r.x).toBeCloseTo(-l.x, 5); expect(r.y).toBeCloseTo(l.y, 5);
+    expect(Math.hypot(r.x, r.y)).toBeCloseTo(1, 5);
+  });
+  it('the light changes only the shading: size, foot and silhouette stay the same', () => {
+    const lights = [lightVector({ side: 1, elevation: 51 }), lightVector({ side: -1, elevation: 35 })];
+    for (const kind of PLANT_KINDS) for (const seed of [1, 2, 3, 7]) for (const scale of [60, 100]) {
+      const a = drawPlant(kind, seed, scale, DEFAULT_LIGHT);
+      const mask = (d: typeof a) => Array.from({ length: d.img.w * d.img.h }, (_, i) => d.img.data[i * 4 + 3]);
+      for (const l of lights) {
+        const b = drawPlant(kind, seed, scale, l);
+        const what = `${kind} seed ${seed} @${scale}`;
+        expect([what, b.img.w, b.img.h, b.foot]).toEqual([what, a.img.w, a.img.h, a.foot]);
+        expect(mask(b)).toEqual(mask(a));
+      }
+    }
+  });
+  it('the light changes a plant, the default does not', () => {
+    const a = drawPlant('round', 7, 100), b = drawPlant('round', 7, 100, DEFAULT_LIGHT), c = drawPlant('round', 7, 100, lightVector({ side: 1, elevation: 51 }));
+    expect(b.img.data).toEqual(a.img.data);
+    expect(c.img.data).not.toEqual(a.img.data);
+    expect(c.foot).toEqual(a.foot);
+  });
   it('the cove_tree frame is pinned (guards against drift)', () => {
     // FNV-1a of the 96x100 RGBA of coveTree(): the general round tree, seed 11, scale 1, foot at (48, 80).
     const img = coveTree();

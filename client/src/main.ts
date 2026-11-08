@@ -16,6 +16,7 @@ import { CoveDemoScene } from './game/CoveDemoScene';
 import { WoodlandDemoScene } from './game/WoodlandDemoScene';
 import { AnimalsDemoScene } from './game/AnimalsDemoScene';
 import { DARKVISION_FX, DarkvisionFX } from './game/darkvisionfx';
+import { UNSEEN_FX, UnseenFX } from './game/unseenfx';
 import { GameScene, type GameInit } from './game/GameScene';
 import type { RunStartInfo } from './generated/RunStartInfo';
 import { api, ApiFail } from './api';
@@ -58,6 +59,7 @@ class BootScene extends Phaser.Scene {
     // The darkvision greyscale, a camera post pipeline set by name. (The game config's
     // `pipeline` option would do the same, but its typings expect a config constructor.)
     (this.renderer as Phaser.Renderer.WebGL.WebGLRenderer).pipelines.addPostPipeline(DARKVISION_FX, DarkvisionFX);
+    (this.renderer as Phaser.Renderer.WebGL.WebGLRenderer).pipelines.addPostPipeline(UNSEEN_FX, UnseenFX);
     this.game.events.emit('assets-ready');
   }
 }

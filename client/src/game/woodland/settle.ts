@@ -7,6 +7,14 @@ export function bandOrder(rows: number, centre: number): number[] {
   return Array.from({ length: rows }, (_, i) => i).sort((a, b) => Math.abs(a - c) - Math.abs(b - c) || a - b);
 }
 
+/**
+ * The tile a plant stands on: the one its foot (world px) lies in, which is the server's `trunk_tiles` (`Map::tile_of(foot)`).
+ * A tree's own ground tile is its trunk (or thicket) tile, a blocker; the seen-plant painter asks the view about this tile.
+ */
+export function plantTile(x: number, y: number, tile = 16): { tx: number; ty: number } {
+  return { tx: Math.floor(x / tile), ty: Math.floor(y / tile) };
+}
+
 export interface Win { x0: number; y0: number; x1: number; y1: number }
 
 /** The plants that have not been drawn yet, counted per square bucket, so a window is checked by its buckets, not by every plant. */

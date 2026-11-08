@@ -11,6 +11,8 @@ export const DEPTH = {
   decal: 1,
   /** Sunlight patch on the floor under a skylight (sunbeams.ts): over the decals, under figures. */
   sunPatch: 1.5,
+  /** Ground shadows of the woodland's plants (woodland/shadowlayer.ts): over the ground strips and the sun patch, under the trunk shade. */
+  plantShadow: 1.55,
   /** The soft shadow behind trunks (shademask.ts): over the ground and decals, under figures and canopies. */
   shade: 1.6,
   hazard: 2,

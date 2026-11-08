@@ -14,6 +14,8 @@ export class View {
   polygon: SightPolygon = { points: [], angles: [] };
   px = NaN;
   py = NaN;
+  /** The sight radius in world px of the last compute (the polygon's rays that reach it end on this circle). */
+  r = 0;
   /** Counts computes, so a drawer can tell when to redraw. */
   version = 0;
   private stamp: Uint32Array;
@@ -33,6 +35,7 @@ export class View {
     const r = sightRadius(v);
     this.px = px;
     this.py = py;
+    this.r = r;
     this.version++;
     this.gen = (this.gen + 1) >>> 0 || 1;
     this.fov.compute(map, Math.floor(px / TILE), Math.floor(py / TILE), v, b);
@@ -55,4 +58,26 @@ export class View {
   isVisible(x: number, y: number): boolean {
     return x >= 0 && y >= 0 && x < this.w && y < this.h && this.stamp[y * this.w + x] === this.gen;
   }
+}
+
+/**
+ * Whether a trunk or thicket tile counts as seen (the haze's blocker tiles and the seen-plant silhouettes, #278): the
+ * tile shadowcast says so (`isVisible`), or a point just outside its border lies inside the full polygon. The tile
+ * shadowcast starts at the hero's tile centre and the polygon at the exact pixel, so at a grazing angle the polygon
+ * can end on the lit face of a trunk that the tile test calls hidden. 12 points, 0.5 px outward at 2, 6, 10 and 14 px
+ * along each edge; corners are left out, so a diagonal neighbour's open ground cannot count. Not part of the shared
+ * server rule (`isVisible` is), only a client look.
+ */
+export function touches(v: View, x: number, y: number): boolean {
+  if (v.isVisible(x, y)) return true;
+  const x0 = x * TILE, y0 = y * TILE, x1 = x0 + TILE, y1 = y0 + TILE;
+  for (let o = 2; o < TILE; o += 4) {
+    if (
+      inside(v.polygon, v.px, v.py, x0 + o, y0 - 0.5) ||
+      inside(v.polygon, v.px, v.py, x0 + o, y1 + 0.5) ||
+      inside(v.polygon, v.px, v.py, x0 - 0.5, y0 + o) ||
+      inside(v.polygon, v.px, v.py, x1 + 0.5, y0 + o)
+    ) return true;
+  }
+  return false;
 }
