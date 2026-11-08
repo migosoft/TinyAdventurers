@@ -9,7 +9,7 @@ use crate::math::Vec2;
 use crate::run::{Run, END_DELAY};
 
 /// XP for every living hero when the party reaches the end.
-pub const WOODLAND_END_XP: u64 = 150; // balancing
+pub const WOODLAND_END_XP: u32 = 150; // balancing
 
 pub struct WoodlandLevel {
     /// Tiles; a living hero inside wins.
@@ -42,7 +42,7 @@ impl LevelRules for WoodlandLevel {
         }
         run.ended = Some((true, run.time + END_DELAY));
         for p in run.players.iter_mut().filter(|p| p.alive) {
-            p.xp += WOODLAND_END_XP as u32;
+            p.xp += WOODLAND_END_XP;
         }
     }
     fn debug_target(run: &Run) -> Option<Vec2> {
@@ -134,7 +134,7 @@ mod tests {
         assert!(matches!(run.ended, Some((true, _))));
         let after: Vec<u32> = run.players.iter().map(|p| p.xp).collect();
         for (b, a) in before.iter().zip(&after) {
-            assert_eq!(*a, b + WOODLAND_END_XP as u32);
+            assert_eq!(*a, b + WOODLAND_END_XP);
         }
         run.step();
         assert_eq!(run.players.iter().map(|p| p.xp).collect::<Vec<_>>(), after, "paid once");
@@ -151,6 +151,21 @@ mod tests {
         run.step();
         assert!(!matches!(run.ended, Some((true, _))));
         assert_eq!(run.players[0].xp, 0);
+    }
+
+    #[test]
+    fn only_the_living_hero_is_paid_when_another_has_died() {
+        let mut run = woodland_run(&[ClassId::Paladin, ClassId::Wizard], 4);
+        let (x, y) = end_of(&run).center();
+        let c = crate::dungeon::Map::center_of(x, y);
+        run.players[0].mv.x = c.x;
+        run.players[0].mv.y = c.y;
+        run.players[1].alive = false;
+        let before: Vec<u32> = run.players.iter().map(|p| p.xp).collect();
+        run.step();
+        assert!(matches!(run.ended, Some((true, _))), "one living hero in the end wins");
+        assert_eq!(run.players[0].xp, before[0] + WOODLAND_END_XP);
+        assert_eq!(run.players[1].xp, before[1], "the dead hero earns nothing");
     }
 
     #[test]

@@ -650,34 +650,4 @@ mod tests {
             }
         });
     }
-
-    #[test]
-    fn report_seed_0() {
-        let t = std::time::Instant::now();
-        let (l, w) = generate(0);
-        let dt = t.elapsed();
-        let on = |k: PlantKind| w.plants.iter().filter(|p| p.kind == k).count();
-        let edge = w.plants.iter().filter(|p| on_thicket(&l, p)).count();
-        eprintln!(
-            "seed 0: {} plants (round {} wide {} tall {} conifer {} bush {}), edge {}, spawns {}, animals {}, {:?}",
-            w.plants.len(), on(PlantKind::Round), on(PlantKind::Wide), on(PlantKind::Tall), on(PlantKind::Conifer), on(PlantKind::Bush), edge, l.spawns.len(), w.animals.len(), dt
-        );
-        if let Ok(path) = std::env::var("WOODLAND_DUMP") {
-            let mut s = String::new();
-            for y in 0..WOODLAND_H {
-                for x in 0..WOODLAND_W {
-                    s.push(match l.map.get(x, y) {
-                        t if t == Tile::Thicket as u8 => '#',
-                        t if t == Tile::Road as u8 => '=',
-                        t if t == Tile::Trunk as u8 => 'T',
-                        _ if w.end.contains_tile(x, y) => 'E',
-                        _ if w.start.contains_tile(x, y) => 'S',
-                        _ => '.',
-                    });
-                }
-                s.push('\n');
-            }
-            std::fs::write(path, s).unwrap();
-        }
-    }
 }
