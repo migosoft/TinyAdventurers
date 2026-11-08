@@ -22,7 +22,7 @@ import { lookOf } from './silhouette';
 import { syncUnseenFX, DEFAULT_HAZE } from './unseenfx';
 import { VisionMask } from './visionmask';
 import { DEFAULT_CLOUDS } from './woodland/clouds';
-import { CLOUD_STEPS, ELEV, HAZE_STEPS, nextSeed, stepAlpha, stepCloud, stepElev, stepHaze, stepTiles, stepToward, TILES, zoomForTiles, type CloudKey } from './woodland/demoMath';
+import { ALPHA, CLOUD_STEPS, ELEV, HAZE_STEPS, nextSeed, stepAlpha, stepCloud, stepElev, stepHaze, stepTiles, stepToward, TILES, zoomForTiles, type CloudKey } from './woodland/demoMath';
 import { SHADOW_ALPHA } from './woodland/shadows';
 import { WoodlandView } from './woodland/WoodlandView';
 
@@ -41,7 +41,9 @@ const on = { clouds: true, bees: true, butterflies: true, silhouette: true, shad
 let look = { ...DEFAULT_CLOUDS };
 let tiles: number = TILES.def;
 /** The sun replacing the map's own (Sun and elev buttons, `side`, `elev`); all seeds share it. */
-let sunOverride: SunInfo | undefined;
+let sunOverride: Partial<SunInfo> = {};
+/** The part of it that came from the URL: it stays across Seed next, the buttons' part does not. */
+const urlSun: Partial<SunInfo> = {};
 let shadowAlpha = SHADOW_ALPHA;
 let haze = { ...DEFAULT_HAZE };
 let urlRead = false;
@@ -74,15 +76,11 @@ export class WoodlandDemoScene extends Phaser.Scene {
       const num = (name: string) => (q.get(name) === null || q.get(name) === '' ? NaN : Number(q.get(name)));
       const side = q.get('side')?.toUpperCase();
       const elev = num('elev');
-      if (side === 'L' || side === 'R' || Number.isFinite(elev)) {
-        const base = MAPS[0].woodland.sun;
-        sunOverride = {
-          side: side === 'L' ? -1 : side === 'R' ? 1 : base.side,
-          elevation: Number.isFinite(elev) ? Math.min(ELEV.max, Math.max(ELEV.min, elev)) : base.elevation,
-        };
-      }
+      if (side === 'L' || side === 'R') urlSun.side = side === 'L' ? -1 : 1;
+      if (Number.isFinite(elev)) urlSun.elevation = Math.min(ELEV.max, Math.max(ELEV.min, elev));
+      sunOverride = { ...urlSun };
       const a = num('shadow');
-      if (Number.isFinite(a)) shadowAlpha = Math.min(1, Math.max(0, a));
+      if (Number.isFinite(a)) shadowAlpha = Math.min(ALPHA.max, Math.max(ALPHA.min, a));
       for (const k of HAZE_KEYS) {
         const v = num(HAZE_PARAMS[k]);
         if (Number.isFinite(v)) haze[k] = Math.min(HAZE_STEPS[k].max, Math.max(HAZE_STEPS[k].min, v));
@@ -109,7 +107,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.view = new LightView(this, map, this.field);
     // the start: the middle tile of the road's western end
     const start = this.startPoint(d);
-    const info: WoodlandInfo = { ...d.woodland, sun: sunOverride ?? d.woodland.sun };
+    const info: WoodlandInfo = { ...d.woodland, sun: { ...d.woodland.sun, ...sunOverride } };
     this.woodland = new WoodlandView(this, info, map, start, true);
     this.woodland.clouds.look = { ...look };
     this.mask = new VisionMask(this, map);
@@ -200,7 +198,10 @@ export class WoodlandDemoScene extends Phaser.Scene {
         this.applySwitches();
       }));
     }
-    r1.appendChild(btn(() => `Seed #${this.seed} next`, () => this.scene.restart({ seed: nextSeed(this.seed, MAPS.length) })));
+    r1.appendChild(btn(() => `Seed #${this.seed} next`, () => {
+      sunOverride = { ...urlSun }; // each seed shows its own sun again
+      this.scene.restart({ seed: nextSeed(this.seed, MAPS.length) });
+    }));
     const zr = row();
     const zl = document.createElement('span');
     zl.style.cssText = 'flex:1;text-align:center;min-width:140px';
@@ -211,7 +212,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     };
     zr.append(btn(() => '-', zstep(-1), 56), zl, btn(() => '+', zstep(1), 56));
     // sun: the side (restarts, so the plants redraw with the light) and its elevation
-    const sun = () => sunOverride ?? MAPS[this.seed - 1].woodland.sun;
+    const sun = (): SunInfo => ({ ...MAPS[this.seed - 1].woodland.sun, ...sunOverride });
     const resun = (next: SunInfo) => {
       sunOverride = next;
       this.scene.restart({ seed: this.seed });
@@ -294,9 +295,9 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.woodland.update(this.t, lookOf(this.knight), cam.worldView, this.view.seenLit);
     if (this.info) {
       const c = this.woodland.clouds.look;
-      const sun = sunOverride ?? MAPS[this.seed - 1].woodland.sun;
+      const sun = { ...MAPS[this.seed - 1].woodland.sun, ...sunOverride };
       const h = haze;
-      this.info.textContent = `seed ${this.seed}  tile ${Math.floor(this.knight.x / TILE)},${Math.floor(this.knight.y / TILE)}  sun ${sun.side < 0 ? 'L' : 'R'} ${sun.elevation}  shadow ${on.shadows ? shadowAlpha.toFixed(2) : 'off'}  haze ${on.haze ? `${h.outside.toFixed(1)}/${h.soft.toFixed(1)}/${h.blurPx.toFixed(1)}/${h.desat.toFixed(1)}/${h.mix.toFixed(2)}` : 'off'}  clouds ${on.clouds ? `${c.size}/${c.speed}/${c.dark}/${c.cover}` : 'off'}`;
+      this.info.textContent = `seed ${this.seed}  tile ${Math.floor(this.knight.x / TILE)},${Math.floor(this.knight.y / TILE)}  sun ${sun.side < 0 ? 'L' : 'R'} ${sun.elevation}  shadow ${on.shadows ? shadowAlpha.toFixed(2) : 'off'}  haze ${on.haze ? `${h.outside.toFixed(1)}/${on.shade ? h.soft.toFixed(1) : 'off'}/${h.blurPx.toFixed(1)}/${h.desat.toFixed(1)}/${h.mix.toFixed(2)}` : 'off'}  clouds ${on.clouds ? `${c.size}/${c.speed}/${c.dark}/${c.cover}` : 'off'}`;
     }
   }
 }

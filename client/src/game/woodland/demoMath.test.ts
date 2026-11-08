@@ -47,6 +47,11 @@ describe('woodland demo math', () => {
     expect(stepElev(20, -1)).toBe(20);
     expect(stepElev(85, 1)).toBe(85);
     expect(stepElev(83, 1)).toBe(85);
+    expect(stepElev(61, 1)).toBe(65);
+    expect(stepElev(61, -1)).toBe(60);
+    expect(stepElev(60, 1)).toBe(65);
+    expect(stepElev(60, -1)).toBe(55);
+    expect(stepElev(22, -1)).toBe(20);
   });
   it('steps each haze value without float drift and clamps', () => {
     let h = { ...DEFAULT_HAZE };

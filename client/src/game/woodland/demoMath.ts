@@ -39,7 +39,13 @@ const round = (v: number, digits: number) => Number(v.toFixed(digits));
 
 /** The sun's elevation knob (degrees), stepped by `step` within `min..max`. */
 export const ELEV = { step: 5, min: 20, max: 85 };
-export const stepElev = (n: number, dir: 1 | -1) => Math.min(ELEV.max, Math.max(ELEV.min, n + dir * ELEV.step));
+export const stepElev = (n: number, dir: 1 | -1) => {
+  const g = dir > 0 ? Math.floor(n / ELEV.step + 1) * ELEV.step : Math.ceil(n / ELEV.step - 1) * ELEV.step; // the next multiple of the step
+  return Math.min(ELEV.max, Math.max(ELEV.min, g));
+};
+
+/** The shadow alpha knob's range. */
+export const ALPHA = { step: 0.04, min: 0, max: 0.6 };
 
 /** Per haze knob (`colour` has none): the step, the range and the decimals shown. */
 export const HAZE_STEPS: Record<Exclude<keyof HazeLook, 'colour'>, { step: number; min: number; max: number; digits: number }> = {
@@ -57,4 +63,4 @@ export function stepHaze(look: HazeLook, key: keyof typeof HAZE_STEPS, dir: 1 | 
 }
 
 /** The shadow layer's alpha knob: 0.04 steps within 0..0.6. */
-export const stepAlpha = (a: number, dir: 1 | -1) => round(Math.min(0.6, Math.max(0, a + dir * 0.04)), 2);
+export const stepAlpha = (a: number, dir: 1 | -1) => round(Math.min(ALPHA.max, Math.max(ALPHA.min, a + dir * ALPHA.step)), 2);
