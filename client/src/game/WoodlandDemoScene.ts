@@ -128,7 +128,6 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.woodland.critters.bees_on = on.bees;
     this.woodland.critters.butterflies_on = on.butterflies;
     this.woodland.silhouetteOn = on.silhouette;
-    this.shade.on = on.shade;
   }
 
   /** Big buttons along the bottom of the page, for a phone, and a line of numbers above them. */
@@ -227,6 +226,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     cam.centerOn(this.knight.x, this.knight.y + (this.bar?.offsetHeight ?? 0) / 2 / cam.zoom);
     this.view.update(cam.worldView, this.knight.x, this.knight.y - 6, [], this.t, 0, CONST.FOV_RADIUS + 5);
     this.mask.update(cam.worldView, this.view.view);
+    this.shade.on = on.shade && this.woodland.settled; // the shade waits for the trunks
     this.shade.update(cam.worldView, this.view.view, this.view.sight);
     this.woodland.update(this.t, lookOf(this.knight), cam.worldView, this.view.seenLit);
     if (this.info) {

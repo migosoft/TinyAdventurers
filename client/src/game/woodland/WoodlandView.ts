@@ -14,6 +14,7 @@ import { Clouds } from './clouds';
 import { Critters } from './critters';
 import { flowerSpots, GROUND_TILES, GroundPainter } from './ground';
 import { DrawQueue, drawOrder, PlantPages } from './plantpages';
+import { bandOrder, PendingGrid, windowSettled } from './settle';
 
 const GROUND_TEX = 'woodland-ground-';
 /** The ground goes up in strips of this many px of height (~0.5 MB each), one strip per frame. */
@@ -27,6 +28,8 @@ const BUSH = PLANT_KINDS.indexOf('bush');
 const BUCKET = 64;
 /** The camera moves this far (px) before the waiting plants are sorted again. */
 const RESORT = 320;
+/** The scenery counts as settled when it is complete this far (px) beyond the camera window. */
+const SETTLE_MARGIN = 2 * TILE;
 
 interface Frame { page: number; name: string; w: number; h: number; foot: { x: number; y: number } }
 
@@ -37,7 +40,11 @@ const keyOf = (p: PlantInfo) => `${p[0]}:${p[3]}:${p[4]}`;
 export class WoodlandView {
   private painter: GroundPainter;
   private placeholders: Phaser.GameObjects.Graphics[] = [];
+  /** Uploaded ground strips by index (holes: not uploaded yet; strips go up nearest to the camera first). */
   private strips: Phaser.GameObjects.Image[] = [];
+  private stripsUp = 0;
+  private nStrips: number;
+  private pendingGrid = new PendingGrid(BUCKET);
   private pages = new PlantPages(PAGE_SIZE);
   private canvases: Phaser.Textures.CanvasTexture[] = [];
   private dirty = new Set<number>();
@@ -63,12 +70,14 @@ export class WoodlandView {
   private startMs = performance.now();
   private groundDoneMs = 0;
   private logged = false;
+  /** True once the ground under the camera window (+ 2 tiles) is uploaded and no plant there waits to be drawn; stays true. The soft shade of the trunks waits for it. */
+  settled = false;
   private mapW: number;
 
   constructor(private scene: Phaser.Scene, private info: WoodlandInfo, map: TileMap, spawn: { x: number; y: number } = { x: 0, y: 0 }) {
     const painter = this.painter = new GroundPainter(map, info.seed);
     // flat grass over the ground tiles until a strip's real ground is uploaded
-    const nStrips = Math.ceil(painter.h / STRIP);
+    const nStrips = this.nStrips = Math.ceil(painter.h / STRIP);
     for (let n = 0; n < nStrips; n++) {
       const g = scene.add.graphics().setDepth(DEPTH.map + 0.5).fillStyle((BASE[0] << 16) | (BASE[1] << 8) | BASE[2], 1);
       const ty0 = (n * STRIP) / TILE, ty1 = Math.min(map.h, ty0 + STRIP / TILE);
@@ -81,11 +90,12 @@ export class WoodlandView {
       }
       this.placeholders.push(g);
     }
-    for (let ty = 0; ty < painter.rows; ty++) this.groundQueue.push(() => painter.band(ty));
+    for (const ty of bandOrder(painter.rows, spawn.y / TILE)) this.groundQueue.push(() => painter.band(ty));
     this.groundQueue.push(() => painter.blades());
     this.groundQueue.push(() => painter.flowers());
     info.plants.forEach((p, i) => {
       this.pending.add(i);
+      this.pendingGrid.add(p[1], p[2]);
       if (p[0] !== BUSH) {
         const b = this.bucket(p[1], p[2]);
         let l = this.buckets.get(b);
@@ -130,6 +140,7 @@ export class WoodlandView {
       this.frames.set(key, { page: slot.page, name: key, w: img.w, h: img.h, foot });
     }
     this.pending.delete(i);
+    this.pendingGrid.remove(this.info.plants[i][1], this.info.plants[i][2]);
     this.ready.push(i);
   }
 
@@ -142,18 +153,24 @@ export class WoodlandView {
       .setOrigin(ox, f.foot.y / f.h).setFlipX(p[5]).setDepth(DEPTH.entityBase + p[2]));
   }
 
-  /** The next painted strip of ground as its own small texture (at most one per frame), replacing its flat placeholder. */
-  private uploadStrip(): void {
-    const n = this.strips.length;
+  /** The not-yet-uploaded strip of ground nearest to the camera as its own small texture (at most one per frame), replacing its flat placeholder. */
+  private uploadStrip(camY: number): void {
+    if (this.stripsUp >= this.nStrips) return;
     const p = this.painter;
-    if (n * STRIP >= p.h) return;
+    let n = -1, best = Infinity;
+    for (let i = 0; i < this.nStrips; i++) {
+      if (this.strips[i]) continue;
+      const d = Math.abs(i * STRIP + STRIP / 2 - camY);
+      if (d < best) { best = d; n = i; }
+    }
     const y0 = n * STRIP, h = Math.min(STRIP, p.h - y0);
     const name = GROUND_TEX + n;
     if (this.scene.textures.exists(name)) this.scene.textures.remove(name);
     const tex = this.scene.textures.createCanvas(name, p.w, h)!;
     tex.getContext().putImageData(new ImageData(p.data.subarray(y0 * p.w * 4, (y0 + h) * p.w * 4) as Uint8ClampedArray<ArrayBuffer>, p.w, h), 0, 0);
     tex.refresh();
-    this.strips.push(this.scene.add.image(0, y0, name).setOrigin(0).setDepth(DEPTH.map + 0.5));
+    this.strips[n] = this.scene.add.image(0, y0, name).setOrigin(0).setDepth(DEPTH.map + 0.5);
+    this.stripsUp++;
     this.placeholders[n].destroy();
   }
 
@@ -170,11 +187,12 @@ export class WoodlandView {
     const t0 = performance.now();
     for (const page of this.dirty) this.canvases[page].refresh(); // one upload per page and frame
     this.dirty.clear();
-    if (this.groundQueue.size === 0) this.uploadStrip();
+    if (this.groundQueue.size === 0) this.uploadStrip(c.y);
     this.uploadMs = performance.now() - t0;
     for (const i of this.ready) this.show(i);
     this.ready.length = 0;
     if (!this.groundDoneMs && this.groundQueue.size === 0) this.groundDoneMs = performance.now();
+    if (!this.settled && this.groundQueue.size === 0 && windowSettled({ x0: cam.x - SETTLE_MARGIN, y0: cam.y - SETTLE_MARGIN, x1: cam.right + SETTLE_MARGIN, y1: cam.bottom + SETTLE_MARGIN }, STRIP, (n) => !!this.strips[n], this.painter.h, this.pendingGrid)) this.settled = true;
     if (!this.logged && this.groundQueue.size === 0 && this.pending.size === 0) {
       this.logged = true;
       console.log(`woodland: ${this.info.plants.length} plants drawn (${this.frames.size} frames, ${this.pages.pages} pages) in ${Math.round(performance.now() - this.groundDoneMs)} ms after the ground (${Math.round(performance.now() - this.startMs)} ms in all)`);
