@@ -24,10 +24,12 @@ export interface HazeLook {
   blurPx: number;
   /** The blur radius of the vision mask in world pixels: how softly the edge of sight fades (read by VisionMask.feather). */
   feather: number;
+  /** World px behind a soft blocker over which the haze grows from nothing to `soft` (read by VisionMask.ramp); 0: crisp from the blocker's edge. */
+  ramp: number;
 }
 
 /** First guess, tuned on the phone. */
-export const DEFAULT_HAZE: HazeLook = { outside: 0.8, soft: 0.7, colour: 0xb8c4cc, mix: 0.45, desat: 0.6, blurPx: 1.5, feather: 24 };
+export const DEFAULT_HAZE: HazeLook = { outside: 0.8, soft: 0.7, colour: 0xb8c4cc, mix: 0.45, desat: 0.6, blurPx: 1.5, feather: 24, ramp: 24 };
 
 /** The shader uniforms for a look on a render target of `targetW`×`targetH` texels at camera `zoom`. */
 export function hazeUniforms(

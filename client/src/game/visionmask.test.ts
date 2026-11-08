@@ -3,7 +3,44 @@ import { describe, expect, it, vi } from 'vitest';
 // Phaser needs a browser (window) on import; the helpers tested here do not use it.
 vi.mock('phaser', () => ({ default: { Renderer: { WebGL: { Pipelines: { PostFXPipeline: class {} } } } } }));
 
-import { blurGrey, levels, maskSteps } from './visionmask';
+import { blurGrey, extendPoints, extendRim, levels, maskSteps, rampLayers } from './visionmask';
+
+describe('extendPoints', () => {
+  it('moves every point outward along its ray from the centre', () => {
+    const out = extendPoints([10, 0, 0, -20, -3, -4], 0, 0, 5);
+    expect(out[0]).toBeCloseTo(15);
+    expect(out[1]).toBeCloseTo(0);
+    expect(out[2]).toBeCloseTo(0);
+    expect(out[3]).toBeCloseTo(-25);
+    expect(out[4]).toBeCloseTo(-6);
+    expect(out[5]).toBeCloseTo(-8);
+  });
+  it('works around an off-origin centre and keeps a point at the centre where it is', () => {
+    expect(extendPoints([13, 4, 3, 4], 3, 4, 2)).toEqual([15, 4, 3, 4]);
+  });
+});
+
+describe('extendRim', () => {
+  it('moves only the points at the radius (within 1 px)', () => {
+    const out = extendRim([40, 0, 39.5, 0, 38, 0, 0, 40.9], 0, 0, 40, 10);
+    expect(out[0]).toBeCloseTo(50);
+    expect(out[2]).toBeCloseTo(49.5);
+    expect(out.slice(4, 6)).toEqual([38, 0]);
+    expect(out[6]).toBeCloseTo(0);
+    expect(out[7]).toBeCloseTo(50.9);
+  });
+});
+
+describe('rampLayers', () => {
+  it('four layers from depth 0 to three quarters of the ramp, lightest first, the last at the soft grey', () => {
+    const l = rampLayers(0, 24, 4);
+    expect(l.map((x) => x.depth)).toEqual([0, 6, 12, 18]);
+    expect(l.map((x) => x.grey)).toEqual([191, 128, 64, 0]);
+  });
+  it('ramp 0: one crisp layer at the full soft grey', () => {
+    expect(rampLayers(77, 0, 4)).toEqual([{ depth: 0, grey: 77 }]);
+  });
+});
 
 /** RGBA data of a w×h image whose grey (alpha 255) comes from `f(x, y)`. */
 const grey = (w: number, h: number, f: (x: number, y: number) => number) => {
@@ -57,13 +94,12 @@ describe('blurGrey', () => {
 });
 
 describe('maskSteps', () => {
-  it('haze: the sight edge is feathered, then the crisp wedge, the blockers and the seen plants', () => {
+  it('haze: the sight edge is feathered, then the wedge and the seen plants (no whole-tile blockers)', () => {
     expect(maskSteps(true, levels(0.8, 0.7))).toEqual([
       { step: 'sight' },
       { step: 'walls' },
       { step: 'feather' },
       { step: 'wedge', grey: 77 },
-      { step: 'blockers' },
       { step: 'seen' },
     ]);
   });

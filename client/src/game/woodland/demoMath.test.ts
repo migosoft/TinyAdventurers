@@ -66,7 +66,11 @@ describe('woodland demo math', () => {
     expect(stepHaze(h, 'blurPx', 1).blurPx).toBe(2);
     expect(stepHaze({ ...h, blurPx: 3.8 }, 'blurPx', 1).blurPx).toBe(4);
     expect(stepHaze(h, 'mix', 1).colour).toBe(DEFAULT_HAZE.colour);
-    expect(Object.keys(HAZE_STEPS)).toEqual(['outside', 'soft', 'mix', 'desat', 'blurPx', 'feather']);
+    expect(Object.keys(HAZE_STEPS)).toEqual(['outside', 'soft', 'mix', 'desat', 'blurPx', 'feather', 'ramp']);
+    expect(DEFAULT_HAZE.ramp).toBe(24);
+    expect(stepHaze(h, 'ramp', 1).ramp).toBe(32);
+    expect(stepHaze({ ...h, ramp: 60 }, 'ramp', 1).ramp).toBe(64);
+    expect(stepHaze({ ...h, ramp: 4 }, 'ramp', -1).ramp).toBe(0);
     expect(stepHaze(h, 'feather', 1).feather).toBe(32);
     expect(stepHaze({ ...h, feather: 60 }, 'feather', 1).feather).toBe(64);
     expect(stepHaze({ ...h, feather: 4 }, 'feather', -1).feather).toBe(0);

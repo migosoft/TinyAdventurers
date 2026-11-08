@@ -5,9 +5,9 @@
 // fit the screen's width; the tiles row changes it (16..48).
 // Buttons (tap): Clouds, Bees, Butterflies, Silhouette, Shade (the haze behind trunks), Shadows, Haze on / off; Next
 // seed; Sun L/R and its elevation (restarts the page's scene so the plants redraw); the shadow alpha; the haze's
-// outside, soft, blur, desat, mix and feather; cloud Size, Speed, Dark and Cover. All with - and + (the values are shown, so
+// outside, soft, blur, desat, mix, feather and ramp; cloud Size, Speed, Dark and Cover. All with - and + (the values are shown, so
 // they can be reported). URL: ?woodland&seed=2&clouds=0&bees=0&butterflies=0&silhouette=0&shade=0&shadows=0&haze=0
-// &side=L|R&elev=35&shadow=0.28&outside=1&soft=0.7&blur=1.5&desat=0.6&mix=0.45&feather=24
+// &side=L|R&elev=35&shadow=0.28&outside=1&soft=0.7&blur=1.5&desat=0.6&mix=0.45&feather=24&ramp=24
 import Phaser from 'phaser';
 import { CONST, TILE_ID } from '../generated/defs';
 import demo from '../generated/woodland-demo.json';
@@ -32,9 +32,9 @@ const MAPS = demo as unknown as DemoMap[];
 const SPEED = 4 * TILE;
 const HALF = 4;
 const CLOUD_KEYS: CloudKey[] = ['size', 'speed', 'dark', 'cover'];
-const HAZE_KEYS = ['outside', 'soft', 'blurPx', 'desat', 'mix', 'feather'] as const;
+const HAZE_KEYS = ['outside', 'soft', 'blurPx', 'desat', 'mix', 'feather', 'ramp'] as const;
 /** The URL names of the haze knobs. */
-const HAZE_PARAMS: Record<(typeof HAZE_KEYS)[number], string> = { outside: 'outside', soft: 'soft', blurPx: 'blur', desat: 'desat', mix: 'mix', feather: 'feather' };
+const HAZE_PARAMS: Record<(typeof HAZE_KEYS)[number], string> = { outside: 'outside', soft: 'soft', blurPx: 'blur', desat: 'desat', mix: 'mix', feather: 'feather', ramp: 'ramp' };
 
 /** Switches survive a next-seed restart. */
 const on = { clouds: true, bees: true, butterflies: true, silhouette: true, shade: true, shadows: true, haze: true };
@@ -118,11 +118,11 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.mask.outside = haze.outside;
     this.mask.soft = on.shade ? haze.soft : 0;
     this.mask.feather = haze.feather;
+    this.mask.ramp = haze.ramp;
     this.mask.seen = this.woodland.seenPainter;
 
     this.knight = this.add.sprite(start.x, start.y, 'atlas', 'knight_m_idle_anim_f0').setOrigin(0.5, 1);
-    this.knight.setDepth(DEPTH.entityBase + start.y);
-    for (const [kind, x, y] of d.spawns) {
+    this.knight.setDepth(DEPTH.entityBase + start.y);    for (const [kind, x, y] of d.spawns) {
       const f = FIGURES[kind];
       if (!f || !this.textures.get('atlas').has(`${f.idle}0`)) continue;
       const s = this.add.sprite(x, y, 'atlas', `${f.idle}0`).setOrigin(0.5, 1).setDepth(DEPTH.entityBase + y);
@@ -297,6 +297,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.view.update(cam.worldView, this.knight.x, this.knight.y - 6, [], this.t, 0, CONST.FOV_RADIUS + 5);
     this.mask.outside = haze.outside;
     this.mask.feather = haze.feather;
+    this.mask.ramp = haze.ramp;
     this.mask.soft = on.shade && this.woodland.settled ? haze.soft : 0; // the haze behind trunks waits for them
     this.mask.update(cam.worldView, this.view.view, () => this.view.sight);
     syncUnseenFX(cam, on.haze, this.mask.texture, this.mask.rect, haze);
@@ -305,7 +306,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
       const c = this.woodland.clouds.look;
       const sun = { ...MAPS[this.seed - 1].woodland.sun, ...sunOverride };
       const h = haze;
-      this.info.textContent = `seed ${this.seed}  tile ${Math.floor(this.knight.x / TILE)},${Math.floor(this.knight.y / TILE)}  sun ${sun.side < 0 ? 'L' : 'R'} ${sun.elevation}  shadow ${on.shadows ? shadowAlpha.toFixed(2) : 'off'}  haze ${on.haze ? `${h.outside.toFixed(1)}/${on.shade ? h.soft.toFixed(1) : 'off'}/${h.blurPx.toFixed(1)}/${h.desat.toFixed(1)}/${h.mix.toFixed(2)}/${h.feather.toFixed(0)}` : 'off'}  clouds ${on.clouds ? `${c.size}/${c.speed}/${c.dark}/${c.cover}` : 'off'}`;
+      this.info.textContent = `seed ${this.seed}  tile ${Math.floor(this.knight.x / TILE)},${Math.floor(this.knight.y / TILE)}  sun ${sun.side < 0 ? 'L' : 'R'} ${sun.elevation}  shadow ${on.shadows ? shadowAlpha.toFixed(2) : 'off'}  haze ${on.haze ? `${h.outside.toFixed(1)}/${on.shade ? h.soft.toFixed(1) : 'off'}/${h.blurPx.toFixed(1)}/${h.desat.toFixed(1)}/${h.mix.toFixed(2)}/${h.feather.toFixed(0)}/${h.ramp.toFixed(0)}` : 'off'}  clouds ${on.clouds ? `${c.size}/${c.speed}/${c.dark}/${c.cover}` : 'off'}`;
     }
   }
 }

@@ -14,6 +14,8 @@ export class View {
   polygon: SightPolygon = { points: [], angles: [] };
   px = NaN;
   py = NaN;
+  /** The sight radius in world px of the last compute (the polygon's rays that reach it end on this circle). */
+  r = 0;
   /** Counts computes, so a drawer can tell when to redraw. */
   version = 0;
   private stamp: Uint32Array;
@@ -33,6 +35,7 @@ export class View {
     const r = sightRadius(v);
     this.px = px;
     this.py = py;
+    this.r = r;
     this.version++;
     this.gen = (this.gen + 1) >>> 0 || 1;
     this.fov.compute(map, Math.floor(px / TILE), Math.floor(py / TILE), v, b);

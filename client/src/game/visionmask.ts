@@ -8,13 +8,51 @@
 // the darkness (numbers, the lich's drain beams) stays visible. The canvas is
 // redrawn only when the view or the window changes.
 //
-// Haze mode (#278, daylight maps): no Shader. The canvas holds the unseen strength (grey = 1 - strength)
-// in three levels: beyond the hard view `outside`, behind a soft blocker (inside the hard view, outside
-// the full one) `soft`, and 0 in the full view; UnseenFX (unseenfx.ts) reads it and hazes the world.
+// Haze mode (#278, daylight maps): no Shader. The canvas holds the unseen strength (grey = 1 - strength):
+// beyond the hard view `outside`, 0 in the full view, and behind a soft blocker (inside the hard view, outside
+// the full one) a wedge that grows from 0 at the blocker to `soft` over `ramp` px and, past the edge of sight,
+// follows the fog down to `outside`; UnseenFX (unseenfx.ts) reads it and hazes the world.
 import Phaser from 'phaser';
 import { TILE, type TileMap } from '../sim/map';
-import { touches, type View } from '../sim/view';
+import type { View } from '../sim/view';
 import { DEPTH } from './effects';
+
+/** Steps of the wedge's ramp from clear to `soft`. */
+const RAMP_LAYERS = 4;
+
+/** Every point of a polygon (flat x, y pairs) moved `d` world px outward along its ray from (px, py). */
+export function extendPoints(points: ArrayLike<number>, px: number, py: number, d: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < points.length; i += 2) {
+    const dx = points[i] - px, dy = points[i + 1] - py;
+    const len = Math.hypot(dx, dy);
+    const k = len > 0 ? (len + d) / len : 1;
+    out.push(px + dx * k, py + dy * k);
+  }
+  return out;
+}
+
+/** The points within 1 px of distance `r` from (px, py) (the rays that reached the radius) moved `ext` px outward; the others stay. */
+export function extendRim(points: ArrayLike<number>, px: number, py: number, r: number, ext: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < points.length; i += 2) {
+    const dx = points[i] - px, dy = points[i + 1] - py;
+    const len = Math.hypot(dx, dy);
+    if (Math.abs(len - r) <= 1 && len > 0) out.push(px + dx * ((len + ext) / len), py + dy * ((len + ext) / len));
+    else out.push(points[i], points[i + 1]);
+  }
+  return out;
+}
+
+/**
+ * The wedge's ramp as `n` layers, lightest first: layer k covers everything at least `depth` world px behind the
+ * full polygon and darkens it to `grey`, a step `(k + 1) / n` of the way from white to the `soft` grey. With `ramp` 0
+ * there is one layer at the full `soft` grey from depth 0 (crisp).
+ */
+export function rampLayers(soft: number, ramp: number, n: number): { depth: number; grey: number }[] {
+  if (ramp <= 0) return [{ depth: 0, grey: soft }];
+  return Array.from({ length: n }, (_, k) => ({ depth: (k * ramp) / n, grey: Math.round(255 - (255 - soft) * ((k + 1) / n)) }));
+}
 
 /** The canvas grey values (0..255) for the unseen strengths `outside` and `soft` (0..1): strength 1 is black, 0 white. */
 export function levels(outside: number, soft: number): { outside: number; soft: number } {
@@ -27,17 +65,16 @@ export type MaskStep =
   | { step: 'sight' } // the hard view's polygon in white over the outside grey
   | { step: 'walls' } // the visible hard walls, whole, in white
   | { step: 'feather' } // blur: the soft edge of sight
-  | { step: 'wedge'; grey: number } // inside the hard view, outside the full one, at the soft grey, never lightening; crisp
-  | { step: 'blockers' } // the visible trunk and thicket tiles, whole, in white (their own ground is never hazed)
+  | { step: 'wedge'; grey: number } // behind the full view, up to the soft grey over the ramp, never lightening; crisp sides, runs on into the fog
   | { step: 'seen' }; // the owner's seen-plant silhouettes, in white
 
 /**
  * The drawing steps over the `outside` grey, in order. Haze: only the edge of sight is feathered; the wedge behind
- * trunks is drawn after the blur, so it stays crisp, then the blockers' own tiles and the seen plants. Otherwise the view in white and its walls.
+ * trunks is drawn after the blur, so its sides stay crisp, then the seen plants. Otherwise the view in white and its walls.
  */
 export function maskSteps(haze: boolean, lv: { outside: number; soft: number }): MaskStep[] {
   return haze
-    ? [{ step: 'sight' }, { step: 'walls' }, { step: 'feather' }, { step: 'wedge', grey: lv.soft }, { step: 'blockers' }, { step: 'seen' }]
+    ? [{ step: 'sight' }, { step: 'walls' }, { step: 'feather' }, { step: 'wedge', grey: lv.soft }, { step: 'seen' }]
     : [{ step: 'sight' }, { step: 'walls' }];
 }
 
@@ -107,6 +144,8 @@ export class VisionMask {
   soft = 0;
   /** Haze mode: the blur radius of the mask in world px (0: hard edges). */
   feather = 0;
+  /** Haze mode: world px behind a soft blocker over which the wedge grows from clear to `soft` (0: full strength at once). */
+  ramp = 0;
   /** Haze mode: the blur's float buffers, sized with the canvas. */
   private scratch?: BlurScratch;
   /**
@@ -173,7 +212,7 @@ export class VisionMask {
     this.oy = oy;
     shader?.setPosition(ox * TILE, oy * TILE);
     const full = this.haze ? all!() : undefined;
-    const key = `${ox},${oy},${sight.version},${this.outside},${this.soft}${full ? `,${full.version},${this.feather},${this.seen?.version() ?? 0}` : ''}`;
+    const key = `${ox},${oy},${sight.version},${this.outside},${this.soft}${full ? `,${full.version},${this.feather},${this.ramp},${this.seen?.version() ?? 0}` : ''}`;
     if (key === this.last) return;
     this.last = key;
 
@@ -184,8 +223,7 @@ export class VisionMask {
     const lv = levels(this.outside, this.soft);
     ctx.fillStyle = `rgb(${lv.outside},${lv.outside},${lv.outside})`;
     ctx.fillRect(0, 0, this.cols * RES, this.rows * RES);
-    const addPoly = (v: View) => {
-      const poly = v.polygon.points;
+    const addPoints = (poly: ArrayLike<number>) => {
       ctx.moveTo((poly[0] - ox * TILE) * s, (poly[1] - oy * TILE) * s);
       for (let i = 2; i < poly.length; i += 2) ctx.lineTo((poly[i] - ox * TILE) * s, (poly[i + 1] - oy * TILE) * s);
       ctx.closePath();
@@ -199,7 +237,7 @@ export class VisionMask {
         case 'sight':
           ctx.fillStyle = '#fff';
           ctx.beginPath();
-          addPoly(sight);
+          addPoints(sight.polygon.points);
           ctx.fill();
           break;
         case 'walls':
@@ -213,20 +251,26 @@ export class VisionMask {
           }
           break;
         case 'wedge':
-          // the hard polygon minus the full one (the full view lies inside the hard one): even-odd, darken keeps the blur's lighter-than-soft values from lightening it
+          // Clipped to the hard polygon, its rim rays pushed out past the blur's whole transition. Each layer fills what
+          // lies at least `depth` behind the full polygon (even-odd: the canvas rectangle minus the grown polygon);
+          // darken keeps the lighter layers and the blur's values from lightening what is darker, so the wedge
+          // ramps up behind the blocker and, beyond the rim, min(fog, soft grey) follows the fog down without a step.
           if (st.grey < 255) {
+            const ext = Math.max(TILE, 3 * this.feather);
             ctx.save();
-            ctx.globalCompositeOperation = 'darken';
-            ctx.fillStyle = `rgb(${st.grey},${st.grey},${st.grey})`;
             ctx.beginPath();
-            addPoly(sight);
-            addPoly(full!);
-            ctx.fill('evenodd');
+            addPoints(extendRim(sight.polygon.points, sight.px, sight.py, sight.r, ext));
+            ctx.clip();
+            ctx.globalCompositeOperation = 'darken';
+            for (const layer of rampLayers(st.grey, this.ramp, RAMP_LAYERS)) {
+              ctx.fillStyle = `rgb(${layer.grey},${layer.grey},${layer.grey})`;
+              ctx.beginPath();
+              ctx.rect(0, 0, this.cols * RES, this.rows * RES);
+              addPoints(extendPoints(full!.polygon.points, full!.px, full!.py, layer.depth));
+              ctx.fill('evenodd');
+            }
             ctx.restore();
           }
-          break;
-        case 'blockers':
-          fillTiles((x, y) => this.map.opaque(x, y) && !this.map.hardOpaque(x, y) && touches(full!, x, y));
           break;
         case 'seen':
           this.seen?.paint(ctx, ox, oy, s, full!);
