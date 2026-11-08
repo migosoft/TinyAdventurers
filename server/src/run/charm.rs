@@ -4,7 +4,9 @@
 //! The switch happens once per step (`sync`), so every way an effect comes on or off (a hit, the timer, a
 //! pause and its end) goes through the one place. The companion code (run/companion.rs) does the rest.
 
-use super::entities::{Ai, Companion, Monster};
+use super::effects::{Creature, Effects};
+use super::entities::{Ai, Brain, Companion, HeroCharm, Monster, Player};
+use super::rules_log::tags;
 use super::targets::{self, Grudge, Side, Wild};
 use super::{companion, rules_log, Run};
 use crate::defs::companions::{Escort, KNIGHT_ESCORT};
@@ -43,9 +45,56 @@ pub fn is_on(m: &Monster) -> bool {
 }
 
 /// The creature (a hero's or a monster's entity id) a charmed effect that counts now (not paused) names, if any.
-fn own_caster(m: &Monster) -> Option<u32> {
-    let fx = &m.effects;
+fn caster_in(fx: &Effects) -> Option<u32> {
     fx.list().iter().find(|a| a.kind == EffectKind::Charmed && !a.paused(fx.anti_magic)).and_then(|a| a.source)
+}
+
+fn own_caster(m: &Monster) -> Option<u32> {
+    caster_in(&m.effects)
+}
+
+/// Whether the server drives hero `p` now: it is charmed and the effect counts (anti-magic or a Dispel have
+/// not paused it).
+pub fn is_hero_charmed(p: &Player) -> bool {
+    p.charm.is_some() && caster_in(&p.effects).is_some()
+}
+
+/// How a death line names creature `id`: a hero's name, a monster's kind with "the" in front ("the Orc
+/// Warrior"); "someone" if it is gone from the run.
+pub fn caster_name(run: &Run, id: u32) -> String {
+    match run.creature_by_id(id) {
+        Some(Creature::Player(pi)) => run.players[pi].name.clone(),
+        Some(Creature::Monster(mi)) => format!("the {}", tags::tag_name(run.monsters[mi].kind).unwrap_or("creature")),
+        None => "someone".to_string(),
+    }
+}
+
+/// The creature a death is the charm's work of, and how to name it: the caster of the victim's charm if the victim
+/// is a charmed hero; else the caster of the killer's, if the killer (`by`) is a charmed hero or monster.
+fn blamed(run: &Run, victim: Creature, by: Option<u32>) -> Option<(u32, String)> {
+    let hero_charm = |pi: usize| run.players[pi].charm.as_ref().filter(|_| is_hero_charmed(&run.players[pi])).map(|c| (c.caster, c.caster_name.clone()));
+    if let Creature::Player(pi) = victim {
+        if let Some(b) = hero_charm(pi) {
+            return Some(b);
+        }
+    }
+    match run.creature_by_id(by?)? {
+        Creature::Player(pi) => hero_charm(pi),
+        Creature::Monster(mi) => run.monsters[mi].charm.as_ref().filter(|c| c.on).map(|c| (c.caster, caster_name(run, c.caster))),
+    }
+}
+
+/// The creature (entity id) whose charm caused the death of `victim` by `by`, if one did: the death is then
+/// credited to it in the log. Covers hits, effect ticks (`by` is the effect's source) and the terrain.
+pub fn blame(run: &Run, victim: Creature, by: Option<u32>) -> Option<u32> {
+    blamed(run, victim, by).map(|(caster, _)| caster)
+}
+
+/// The death line of hero `victim` when a charm caused it: "Ayla has fallen to the Orc Warrior's charm".
+pub fn fallen_text(run: &Run, victim: Creature, by: Option<u32>) -> Option<String> {
+    let Creature::Player(pi) = victim else { return None };
+    let (_, who) = blamed(run, victim, by)?;
+    Some(format!("{} has fallen to {who}'s charm", run.players[pi].name))
 }
 
 /// The caster of the charm that `mi`'s living master acts under now, if it has a master and is charmed.
@@ -66,9 +115,13 @@ fn present(run: &Run, mi: usize) -> bool {
     m.effects.list().iter().any(|a| a.kind == EffectKind::Charmed) || master_caster(run, mi).is_some()
 }
 
-/// Switches every monster to or from its charm for this step: those without a master first, then the owned
-/// ones, which read the state their master has this step.
+/// Switches every hero and monster to or from its charm for this step: the heroes first (a summoned companion
+/// reads its summoner's side the same step), then the monsters without a master, then the owned ones, which
+/// read the state their master has this step.
 pub fn sync(run: &mut Run) {
+    for pi in 0..run.players.len() {
+        sync_hero(run, pi);
+    }
     for owned in [false, true] {
         for mi in 0..run.monsters.len() {
             if run.monsters[mi].owner.is_some() == owned {
@@ -76,6 +129,63 @@ pub fn sync(run: &mut Run) {
             }
         }
     }
+}
+
+/// Brings hero `pi` in line with its Charmed effect: on, refreshed by another caster, or off. A charmed hero
+/// keeps its cooldowns, HP, position and knockback throughout; only its side and who drives it change.
+fn sync_hero(run: &mut Run, pi: usize) {
+    let p = &mut run.players[pi];
+    if !p.alive {
+        // A fallen hero is nobody's: the death line told whose work it was.
+        if p.charm.take().is_some() {
+            p.side = Side::Friendly;
+        }
+        return;
+    }
+    match (caster_in(&p.effects), p.charm.as_ref().map(|c| c.caster)) {
+        (Some(caster), None) => hero_on(run, pi, caster),
+        (Some(caster), Some(now)) if caster != now => hero_refresh(run, pi, caster),
+        (None, Some(_)) => hero_off(run, pi),
+        _ => {}
+    }
+}
+
+fn hero_on(run: &mut Run, pi: usize, caster: u32) {
+    let side = side_for(run, caster, Side::Friendly);
+    let caster_name = caster_name(run, caster);
+    let p = &mut run.players[pi];
+    p.side = side;
+    p.charm = Some(HeroCharm { caster, caster_name, side, brain: Brain::new() });
+    rules_log::hero_charm(run, pi, true);
+}
+
+/// Another creature's charm took over: the hero fights for its side now, and starts afresh against its new foes.
+fn hero_refresh(run: &mut Run, pi: usize, caster: u32) {
+    let side = side_for(run, caster, Side::Friendly);
+    let caster_name = caster_name(run, caster);
+    let p = &mut run.players[pi];
+    let changed = p.side != side;
+    p.side = side;
+    if let Some(c) = p.charm.as_mut() {
+        c.caster = caster;
+        c.caster_name = caster_name;
+        c.side = side;
+        if changed {
+            c.brain = Brain::new();
+        }
+    }
+}
+
+/// The charm is over (it ran out, or a pause began): the hero is its old self where it stands. What the AI
+/// started is dropped: no slam or dash carries on, and the next input is the player's.
+fn hero_off(run: &mut Run, pi: usize) {
+    rules_log::hero_charm(run, pi, false);
+    let p = &mut run.players[pi];
+    p.charm = None;
+    p.side = Side::Friendly;
+    p.slam = None;
+    p.mv.dash_t = 0.0;
+    p.dash_hit.clear();
 }
 
 /// Brings monster `mi` in line with its Charmed effect: on, refreshed by another hero, or off.
@@ -503,6 +613,31 @@ mod tests {
         steps(&mut run, 70);
         let heads: Vec<String> = rules_log::take(&mut run).into_iter().map(|r| r.head).collect();
         assert!(heads.iter().any(|h| h.contains("turns back")), "{heads:?}");
+    }
+
+    #[test]
+    fn a_heros_charm_lines_and_death_in_the_rules_log() {
+        use crate::defs::damage::{Damage, Why};
+        let mut run = arena(&[ClassId::Wizard, ClassId::Paladin]);
+        run.log.forced = true;
+        let oi = spawn(&mut run, EnemyType::OrcWarrior, 80.0);
+        let orc = run.monsters[oi].id;
+        let at = run.monsters[oi].pos;
+        assert!(run.apply(Creature::Player(1), Apply { power: None, magical: true, source: Some((orc, at)), ..Apply::plain(EffectKind::Charmed, Some(1.0)) }));
+        run.step();
+        let heads: Vec<String> = rules_log::take(&mut run).into_iter().map(|r| r.head).collect();
+        assert!(heads.iter().any(|h| h.starts_with("p1 is charmed by Orc Warrior ") && h.ends_with(" and fights the party")), "{heads:?}");
+        steps(&mut run, 70);
+        let heads: Vec<String> = rules_log::take(&mut run).into_iter().map(|r| r.head).collect();
+        assert!(heads.iter().any(|h| h == "p1 comes back to their senses"), "{heads:?}");
+        // A death through a charm names the caster as the killer, not the hero who struck.
+        assert!(run.apply(Creature::Player(1), Apply { power: None, magical: true, source: Some((orc, at)), ..Apply::plain(EffectKind::Charmed, Some(5.0)) }));
+        run.step();
+        let hero0 = run.players[0].id;
+        let _ = rules_log::take(&mut run);
+        run.hurt_player(1, Damage { why: Why { by: Some(hero0), ..Why::NONE }, ..Damage::physical(1e6) });
+        let heads: Vec<String> = rules_log::take(&mut run).into_iter().map(|r| r.head).collect();
+        assert!(heads.iter().any(|h| h.starts_with("p1 fell (killed by Orc Warrior ")), "{heads:?}");
     }
 
     /// A necromancer with two raised minions, as indices (master, minions).

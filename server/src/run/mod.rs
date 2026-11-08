@@ -12,6 +12,7 @@ pub mod debug;
 pub mod dodge;
 pub mod effects;
 pub mod entities;
+pub mod hero_brain;
 pub mod keystones;
 pub mod levels;
 pub mod light;
@@ -263,6 +264,7 @@ impl Run {
                 wolf: None,
                 slam: None,
                 history: VecDeque::with_capacity(HISTORY_LEN),
+                charm: None,
                 sheet,
             });
             // An item's light goes with its wearer (light ids are separate from entity ids).
@@ -590,6 +592,9 @@ impl Run {
         // silent ticks banked the budget its burst spends, so a flooding client never runs faster (#273).
         p.input_budget = (p.input_budget + 1).min(INPUT_BACKLOG_MAX);
         let n = if p.inputs.len() > 3 { 2 } else { 1 };
+        // A charmed hero's inputs are taken off the queue as usual but only acknowledged; the AI's input
+        // below is the one that moves it (Decision 3).
+        let charmed = charm::is_hero_charmed(p);
         for _ in 0..n {
             let p = &mut self.players[pi];
             if p.input_budget == 0 {
@@ -597,6 +602,14 @@ impl Run {
             }
             let Some(input) = p.inputs.pop_front() else { break };
             p.input_budget -= 1;
+            if charmed {
+                p.acknowledge(&input);
+            } else {
+                self.apply_input(pi, input);
+            }
+        }
+        if charmed {
+            let input = hero_brain::input(self, pi);
             self.apply_input(pi, input);
         }
         self.terrain_player(pi);
@@ -620,14 +633,12 @@ impl Run {
         let solids = self.solids(None);
         let map = &self.layout.map;
         let p = &mut self.players[pi];
-        p.ack = input.seq;
+        p.acknowledge(&input);
         let fx = (p.effects.speed_mul(), p.effects.no_act(), p.effects.no_turn());
         if !fx.2 {
             p.aim = input.aim as f64;
             p.aim_dist = input.aim_dist as f64;
         }
-        p.view_lag = (input.view_lag as f64 / 1000.0).clamp(0.0, 0.45);
-        p.rtt = (input.rtt as f64 / 1000.0).clamp(0.0, 0.5);
         let cdt = p.effects.cooldown_dt(DT);
         p.cd1 = (p.cd1 - cdt).max(0.0);
         p.cd2 = (p.cd2 - cdt).max(0.0);
@@ -837,16 +848,24 @@ impl Run {
             self.event(Ev::Sink { id, x: at.x as f32, y: at.y as f32, how: 2 }, None);
             return;
         }
+        let victim = effects::Creature::Player(pi);
+        let blamed = charm::blame(self, victim, None);
+        let charm_text = charm::fallen_text(self, victim, None);
+        let p = &mut self.players[pi];
         p.hp = 0.0;
         p.alive = false;
         p.mv = MoveState::at(p.mv.x, p.mv.y);
         let (id, pos, kind, name) = (p.id, p.pos(), p.kind() as u8, p.name.clone());
         self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
-        let text = match how {
+        let text = charm_text.unwrap_or_else(|| match how {
             Sink::Fall => format!("{name} fell into the abyss"),
             Sink::Drown => format!("{name} drowned"),
-        };
+        });
         self.event(Ev::Msg { text }, None);
+        // A charmed hero lost to the terrain is the caster's kill; any other fall is not in the log.
+        if blamed.is_some() {
+            rules_log::death(self, rules_log::DeathFacts { target: victim, by: blamed, tick: None, credit: None });
+        }
     }
 
     /// A living player close to a chest opens it (coins for the whole party);
@@ -1007,15 +1026,18 @@ impl Run {
         rules_log::hit_begin(self, rules_log::HitFacts { target: effects::Creature::Player(pi), dmg: dmg.clone(), res, parts, hp_before, hp_after, dealt: hp_before - hp_after, taken: v, outcome: if imm { rules_log::HitOutcome::Immune } else if debug { rules_log::HitOutcome::DebugNoLoss } else { rules_log::HitOutcome::Dealt } });
         let ty = dmg.split.main_type() as u8;
         self.event_on_hero(Ev::Dmg { x: pos.x as f32, y: pos.y as f32 - 10.0, v: v as f32, crit: false, p: true, ty, imm }, pos);
-        let p = &mut self.players[pi];
-        if p.hp <= 0.0 {
+        if self.players[pi].hp <= 0.0 {
+            // A death through a charm is the caster's (the victim's, or the killer's if it was charmed).
+            let blamed = charm::blame(self, effects::Creature::Player(pi), dmg.why.by);
+            let text = charm::fallen_text(self, effects::Creature::Player(pi), dmg.why.by);
+            let p = &mut self.players[pi];
             p.hp = 0.0;
             p.alive = false;
             p.mv = MoveState::at(p.mv.x, p.mv.y);
             let (id, kind, name) = (p.id, p.kind() as u8, p.name.clone());
             self.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
-            self.event(Ev::Msg { text: format!("{name} has fallen") }, None);
-            rules_log::death(self, rules_log::DeathFacts { target: effects::Creature::Player(pi), by: dmg.why.by, tick: if let What::Tick(k) = dmg.why.what { Some(k) } else { None }, credit: None });
+            self.event(Ev::Msg { text: text.unwrap_or_else(|| format!("{name} has fallen")) }, None);
+            rules_log::death(self, rules_log::DeathFacts { target: effects::Creature::Player(pi), by: blamed.or(dmg.why.by), tick: if let What::Tick(k) = dmg.why.what { Some(k) } else { None }, credit: None });
         }
         if self.players[pi].alive && !dmg.from_effect {
             if v > 0.0 {
@@ -1277,8 +1299,10 @@ impl Run {
         } else if !hidden {
             self.event(ev, seen_by);
         }
+        // A hero an enemy's Charm turned earns nothing from an effect it started before.
+        let last_hit_by = self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len() && self.players[pi].side == Side::Friendly);
         if src_player.is_none() && dmg.from_effect {
-            if let Some(pi) = self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) {
+            if let Some(pi) = last_hit_by {
                 self.players[pi].damage += applied;
             }
         }
@@ -1303,7 +1327,7 @@ impl Run {
             // Back to its old self first: the kill counts, and pays, as the enemy's.
             charm::revert(self, mi);
             // The kill goes to the hero who struck, or whose effect ticked it down.
-            let credit = if src_player.is_some() { src_player } else if dmg.from_effect { self.monsters[mi].last_hit_by.filter(|&pi| pi < self.players.len()) } else { None };
+            let credit = if src_player.is_some() { src_player } else if dmg.from_effect { last_hit_by } else { None };
             // A calm wild animal is no kill; a boar with a grudge against the heroes is.
             let counts = self.monsters[mi].wild.is_none() || self.monsters[mi].grudge.heroes;
             if let Some(pi) = credit.filter(|_| counts) {

@@ -298,6 +298,15 @@ pub(super) fn charm_head(run: &Run, monster: u32, caster: u32, charmed: bool) ->
     }
 }
 
+/// "Ayla is charmed by Orc Warrior 1 and fights the party" / "Ayla comes back to their senses".
+pub(super) fn hero_charm_head(run: &Run, hero: u32, caster: u32, charmed: bool) -> String {
+    if charmed {
+        format!("{} is charmed by {} and fights the party", tag_of(run, hero), tag_of(run, caster))
+    } else {
+        format!("{} comes back to their senses", tag_of(run, hero))
+    }
+}
+
 /// "Orc Warrior 1: STR 14 → 13".
 pub(super) fn attr_head(run: &Run, target: u32, attr: Attr, old: i32, new: i32) -> String {
     format!("{}: {} {} → {}", tag_of(run, target), attr.short(), old, new)

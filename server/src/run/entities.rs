@@ -91,6 +91,35 @@ pub struct Player {
     /// Where the hero stood on each of the last `HISTORY_LEN` ticks, for lag compensation: a hit on a hero
     /// of another side is rewound like a hit on a monster.
     pub history: VecDeque<Vec2>,
+    /// Set while an unpaused Charmed effect with a source is on the hero (run/charm.rs): who charmed it and the
+    /// small AI that drives it meanwhile (run/hero_brain.rs).
+    pub charm: Option<HeroCharm>,
+}
+
+/// A charmed hero: the server drives it, whatever the player sends. `side` is also in `Player::side`.
+#[derive(Debug, Clone)]
+pub struct HeroCharm {
+    /// The entity id of the creature that charmed it (the last one, after a refresh).
+    pub caster: u32,
+    /// The caster's name as the death line tells it, taken when the charm switched on (or was refreshed) so it
+    /// still reads when the caster dies meanwhile: a hero's name, or "the Orc Warrior".
+    pub caster_name: String,
+    /// The side it fights for: the caster's.
+    pub side: Side,
+    pub brain: Brain,
+}
+
+/// What the AI of a charmed hero remembers between ticks.
+#[derive(Debug, Clone)]
+pub struct Brain {
+    /// The waypoints of the A* path being followed (tile centres).
+    pub path: Vec<Vec2>,
+    /// Seconds until the path is made again.
+    pub repath_t: f64,
+    /// Where the foe was last seen, while it is out of sight.
+    pub last_known: Option<Vec2>,
+    /// The shot id of its next shot (`hero_brain::AI_SHOT_BASE` and up).
+    pub shot: u16,
 }
 
 /// How a hero is lost to the terrain (sent as `Ev::Sink { how }`).
@@ -101,6 +130,13 @@ pub enum Sink {
 }
 
 impl Player {
+    /// Takes in what every processed input says about the connection: its sequence number, and the client's
+    /// view lag and round trip. A charmed hero's inputs do only this.
+    pub fn acknowledge(&mut self, input: &InputMsg) {
+        self.ack = input.seq;
+        self.view_lag = (input.view_lag as f64 / 1000.0).clamp(0.0, 0.45);
+        self.rtt = (input.rtt as f64 / 1000.0).clamp(0.0, 0.5);
+    }
     /// Debug mode with immortality on: hits show but take no HP, and terrain does not kill.
     pub fn immortal(&self) -> bool {
         self.debug && !self.mortal

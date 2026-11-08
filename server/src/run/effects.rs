@@ -376,7 +376,7 @@ impl Run {
     ///    (a refused Frozen leaves an existing Chilled alone).
     /// True when the effect is on afterwards.
     pub fn apply(&mut self, c: Creature, a: Apply) -> bool {
-        if self.refuses_effect(c, a.kind) {
+        if self.refuses_effect(c) {
             return false;
         }
         let (outcome, duration, replaced) = self.apply_traced(c, a);
@@ -385,17 +385,16 @@ impl Run {
         matches!(outcome, EffectOutcome::Added | EffectOutcome::Refreshed)
     }
 
-    /// The two refusals of `apply` before any rule runs: a Neutral monster takes no effect unless it is a wild
-    /// animal, and a hero is never charmed in #223 (a charmed hero is #224's business).
-    fn refuses_effect(&self, c: Creature, kind: EffectKind) -> bool {
+    /// The refusal of `apply` before any rule runs: a Neutral monster takes no effect unless it is a wild animal.
+    /// (A hero can be charmed: run/charm.rs switches it.)
+    fn refuses_effect(&self, c: Creature) -> bool {
         matches!(c, Creature::Monster(i) if self.monsters.get(i).is_some_and(|m| m.side == super::targets::Side::Neutral && m.wild.is_none()))
-            || (kind == EffectKind::Charmed && matches!(c, Creature::Player(_)))
     }
 
     /// Whether the hit effect `h` would take hold on `c` now, by the same rules `apply` uses, changing nothing.
     /// A `Cancelled` outcome counts as not taking hold.
     pub fn would_take_hold(&self, c: Creature, h: OnHit) -> bool {
-        !self.refuses_effect(c, h.kind) && self.hold_check(c, &Apply::from_hit(h)).is_ok()
+        !self.refuses_effect(c) &&self.hold_check(c, &Apply::from_hit(h)).is_ok()
     }
 
     /// Seconds left of `kind` on `c` (0 when it is not on).
@@ -1070,10 +1069,10 @@ mod tests {
     }
 
     #[test]
-    fn charm_never_lands_on_a_hero() {
+    fn charm_lands_on_a_hero() {
         let mut run = test_run(&[ClassId::Paladin], BossId::Demon);
-        assert!(!run.apply_effect(Creature::Player(0), EffectKind::Charmed, None));
-        assert!(run.players[0].effects.list().iter().all(|e| e.kind != EffectKind::Charmed));
+        assert!(run.apply_effect(Creature::Player(0), EffectKind::Charmed, Some(3.0)));
+        assert!(run.players[0].effects.list().iter().any(|e| e.kind == EffectKind::Charmed));
     }
 
     #[test]

@@ -3,7 +3,6 @@
 
 use super::companion::summon_spot;
 use super::entities::{Ai, Companion, Monster, HISTORY_LEN};
-use super::targets::Side;
 use super::Run;
 use crate::defs::enemies::BaseAi;
 use crate::defs::companions::*;
@@ -74,7 +73,8 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
         sources: stats.sources,
         attrs: stats.attrs,
         weight: stats.weight,
-        side: Side::Friendly,
+        // The ranger's side: a charmed ranger's wolf is born on the charmed side (`charm::sync` keeps it there).
+        side: run.players[pi].side,
         grudge: Default::default(),
         wild: None,
         charm: None,
@@ -96,6 +96,8 @@ pub fn spawn_wolf(run: &mut Run, pi: usize) -> u32 {
 /// The ranger's secondary: summons the wolf, or heals the living one by its share of max HP.
 pub fn use_ability(run: &mut Run, pi: usize) {
     match run.players[pi].wolf.and_then(|id| run.monster_idx(id)) {
+        // Charmed over to the other side, the wolf is not the ranger's to heal (and it is not replaced: it comes back).
+        Some(mi) if run.monsters[mi].alive && run.monsters[mi].side != run.players[pi].side => {}
         Some(mi) if run.monsters[mi].alive => {
             run.heal_monster(mi, run.monsters[mi].max_hp * WOLF_HEAL_SHARE, Some((run.players[pi].id, What::Ability(crate::defs::abilities::AbilityId::SummonWolf))));
         }

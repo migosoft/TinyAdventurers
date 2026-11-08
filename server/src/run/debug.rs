@@ -40,8 +40,24 @@ impl Run {
             return;
         }
         let Some(k) = crate::defs::effects::EffectKind::from_u8(kind) else { return };
-        self.apply(crate::run::effects::Creature::Player(pi), crate::run::effects::Apply { magical: true, ..crate::run::effects::Apply::plain(k, None) });
         let name = self.players[pi].name.clone();
+        let mut source = None;
+        if k == crate::defs::effects::EffectKind::Charmed {
+            // A charm needs a caster: the nearest living enemy, at any distance.
+            let from = self.players[pi].pos();
+            let caster = self
+                .monsters
+                .iter()
+                .filter(|m| m.alive && m.side == Side::Hostile && m.sinking.is_none())
+                .min_by(|a, b| a.pos.dist(from).total_cmp(&b.pos.dist(from)))
+                .map(|m| (m.id, m.pos));
+            if caster.is_none() {
+                self.event(Ev::Msg { text: format!("{name}: No caster for Charmed") }, None);
+                return;
+            }
+            source = caster;
+        }
+        self.apply(crate::run::effects::Creature::Player(pi), crate::run::effects::Apply { magical: true, source, ..crate::run::effects::Apply::plain(k, None) });
         self.event(Ev::Msg { text: format!("{name}: {k:?}") }, None);
     }
 
@@ -379,6 +395,35 @@ mod tests {
         assert!(run.players[0].effects.has(EffectKind::Sleep));
         run.debug_effect(0, 200);
         assert_eq!(run.players[0].effects.list().len(), 1, "an unknown id is ignored");
+    }
+
+    #[test]
+    fn f8_charms_the_own_hero_with_the_nearest_enemy() {
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss);
+        let here = run.players[0].pos();
+        crate::run::ai::tests::open_floor(&mut run);
+        let far = run.spawn_enemy(EnemyType::SkeletonWarrior, here + Vec2::new(90.0, 0.0), None);
+        let near = run.spawn_enemy(EnemyType::OrcWarrior, here + Vec2::new(-50.0, 0.0), None);
+        run.debug = true;
+        run.debug_effect(0, EffectKind::Charmed as u8);
+        run.step();
+        let c = run.players[0].charm.as_ref().expect("charmed");
+        assert_eq!(c.caster, near, "the nearest living Hostile monster, not {far}");
+        assert_eq!(run.players[0].side, Side::Hostile);
+        assert!(crate::run::charm::is_hero_charmed(&run.players[0]));
+    }
+
+    #[test]
+    fn f8_charm_without_an_enemy_does_nothing() {
+        use crate::defs::effects::EffectKind;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.monsters.clear();
+        run.debug = true;
+        run.debug_effect(0, EffectKind::Charmed as u8);
+        assert!(run.players[0].effects.list().is_empty());
+        assert!(last_msg(&run).contains("No caster for Charmed"), "{}", last_msg(&run));
     }
 
     #[test]

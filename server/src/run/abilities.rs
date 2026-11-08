@@ -21,11 +21,13 @@ use rand::Rng;
 
 /// Cooldowns tick per processed input on both client and server; a small
 /// tolerance absorbs rounding differences.
-const COOLDOWN_LEEWAY: f64 = 0.05;
+pub(crate) const COOLDOWN_LEEWAY: f64 = 0.05;
 
-/// How many ticks to rewind monsters for a hero's hit checks (the lag compensation); none for a monster user.
+/// How many ticks to rewind monsters for a hero's hit checks (the lag compensation); none for a monster user
+/// or a charmed hero (the server's own AI sees the world as it is).
 fn rewind_ticks(run: &Run, c: Creature) -> usize {
     match c {
+        Creature::Player(pi) if super::charm::is_hero_charmed(&run.players[pi]) => 0,
         Creature::Player(pi) => ((run.players[pi].view_lag * TICK_HZ).round() as usize).min(super::entities::HISTORY_LEN - 1),
         Creature::Monster(_) => 0,
     }
@@ -1015,8 +1017,10 @@ const SHELL_RADIUS: f64 = 4.0;
 #[allow(clippy::too_many_arguments)]
 fn spawn_shot(run: &mut Run, c: Creature, a: &ResolvedAbility, kind: EntityKind, shot: u16, dir: Vec2, target: Option<Vec2>, explode_r: f64) {
     let pos = run.creature_pos(c) + dir * 6.0;
-    // Fast-forward a hero's shot by half the round trip: the client already shows it moving.
+    // Fast-forward a hero's shot by half the round trip: the client already shows it moving. A charmed
+    // hero's shot is the server's own: the client shows nothing ahead of it.
     let ff = match c {
+        Creature::Player(pi) if super::charm::is_hero_charmed(&run.players[pi]) => 0.0,
         Creature::Player(pi) => (run.players[pi].rtt / 2.0).min(0.15),
         Creature::Monster(_) => 0.0,
     };
