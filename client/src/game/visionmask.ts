@@ -24,6 +24,19 @@ export function levels(outside: number, soft: number): { outside: number; soft: 
   return { outside: g(outside), soft: g(soft) };
 }
 
+/**
+ * The polygon fills over the `outside` grey, in order. Haze: the hard view at the soft level (soft 0 is
+ * white: no haze behind blockers), then the full view in white. Otherwise the view in white.
+ */
+export function fillPlan(haze: boolean, lv: { outside: number; soft: number }): { poly: 'hard' | 'full'; grey: number }[] {
+  return haze
+    ? [
+        { poly: 'hard', grey: lv.soft },
+        { poly: 'full', grey: 255 },
+      ]
+    : [{ poly: 'hard', grey: 255 }];
+}
+
 /** Canvas pixels per tile: enough for a straight, antialiased edge. */
 const RES = 8;
 /** Tiles of canvas beyond the camera window on each side. */
@@ -123,11 +136,7 @@ export class VisionMask {
       ctx.closePath();
       ctx.fill();
     };
-    if (full) {
-      // haze: the hard view at the soft level, the full view (inside it) in white
-      if (this.soft > 0) fillPoly(sight, `rgb(${lv.soft},${lv.soft},${lv.soft})`);
-      fillPoly(full, '#fff');
-    } else fillPoly(sight, '#fff');
+    for (const step of fillPlan(!!full, lv)) fillPoly(step.poly === 'hard' ? sight : full!, `rgb(${step.grey},${step.grey},${step.grey})`);
     ctx.fillStyle = '#fff';
     for (let y = 0; y < this.rows; y++)
       for (let x = 0; x < this.cols; x++) if (this.map.hardOpaque(ox + x, oy + y) && sight.isVisible(ox + x, oy + y)) ctx.fillRect(x * RES, y * RES, RES, RES);

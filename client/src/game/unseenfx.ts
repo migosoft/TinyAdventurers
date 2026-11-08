@@ -8,7 +8,7 @@ import Phaser from 'phaser';
 /** The pipeline's name, as registered with `pipelines.addPostPipeline`. */
 export const UNSEEN_FX = 'UnseenFX';
 
-/** What unseen ground looks like. `blurPx` is in CSS pixels (screen pixels), not world pixels. */
+/** What unseen ground looks like. `blurPx` is in world pixels (the canvas is at screen resolution and the integer zoom lives on the camera). */
 export interface HazeLook {
   /** Unseen strength beyond sight (0..1; read by VisionMask.outside). */
   outside: number;
@@ -20,7 +20,7 @@ export interface HazeLook {
   mix: number;
   /** How far full unseen strength moves the colour toward grey. */
   desat: number;
-  /** Blur tap distance at full strength, in CSS pixels. */
+  /** Blur tap distance at full strength, in world pixels. */
   blurPx: number;
 }
 
@@ -43,22 +43,33 @@ export function hazeUniforms(
   };
 }
 
+/**
+ * The mask UV as an affine function of the screen's texture coordinate t (x right, y down):
+ * uv = xy + t * zw. Prepared on the CPU in doubles: absolute world px in a mediump shader would
+ * step by 2 px at 2400+ px and make the mask's edge stair-stepped.
+ */
+export function maskTransform(
+  view: { x: number; y: number; width: number; height: number },
+  rect: { x: number; y: number; w: number; h: number },
+): [number, number, number, number] {
+  return [(view.x - rect.x) / rect.w, (view.y - rect.y) / rect.h, view.width / rect.w, view.height / rect.h];
+}
+
 // outTexCoord covers the camera's render target, y up; the mask canvas rows go down the world.
 const FRAG = `
 #define SHADER_NAME UNSEEN_FS
 precision mediump float;
 uniform sampler2D uMainSampler;
 uniform sampler2D uMask;
-uniform vec4 uView;   // the camera's worldView: x, y, width, height (px)
-uniform vec4 uRect;   // the mask canvas in world px: x, y, width, height
+uniform vec4 uMaskXf; // mask uv = xy + (x, 1 - y of outTexCoord) * zw (maskTransform)
 uniform vec3 uColour;
 uniform float uMix;
 uniform float uDesat;
 uniform vec2 uBlur;   // tap distance at full strength, in texture coordinates
 varying vec2 outTexCoord;
 void main() {
-  vec2 world = uView.xy + vec2(outTexCoord.x, 1.0 - outTexCoord.y) * uView.zw;
-  float u = 1.0 - texture2D(uMask, (world - uRect.xy) / uRect.zw).r;
+  vec2 uv = uMaskXf.xy + vec2(outTexCoord.x, 1.0 - outTexCoord.y) * uMaskXf.zw;
+  float u = 1.0 - texture2D(uMask, uv).r;
   vec4 c0 = texture2D(uMainSampler, outTexCoord);
   vec3 c = c0.rgb;
   if (u > 0.001) {
@@ -94,17 +105,23 @@ export class UnseenFX extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline {
     // For a camera post pipeline, Phaser sets `gameObject` to the camera.
     const cam = this.gameObject as Phaser.Cameras.Scene2D.Camera | undefined;
     const v = cam?.worldView;
-    const tex = this.mask?.source[0].glTexture;
+    // A destroyed canvas texture has no sources (the mask was rebuilt): skip the effect this frame.
+    const tex = this.mask?.source[0]?.glTexture;
     if (tex && v && cam) {
       const u = hazeUniforms(this.look, target.width, target.height, cam.zoom);
-      this.set4f('uView', v.x, v.y, v.width, v.height);
-      this.set4f('uRect', this.rect.x, this.rect.y, this.rect.w, this.rect.h);
+      const xf = maskTransform(v, this.rect);
+      this.set4f('uMaskXf', xf[0], xf[1], xf[2], xf[3]);
       this.set3f('uColour', u.colour[0], u.colour[1], u.colour[2]);
       this.set1f('uMix', u.mix);
       this.set1f('uDesat', u.desat);
       this.set2f('uBlur', u.blur[0], u.blur[1]);
       this.bindTexture(tex, 1);
       this.set1i('uMask', 1);
+    } else {
+      // no mask this frame: draw the world unchanged
+      this.set1f('uMix', 0);
+      this.set1f('uDesat', 0);
+      this.set2f('uBlur', 0, 0);
     }
     this.bindAndDraw(target);
   }
