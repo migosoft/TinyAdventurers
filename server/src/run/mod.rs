@@ -56,11 +56,12 @@ pub const SNAPSHOT_EVERY: u32 = 2;
 /// Monsters farther than this from every player do not think.
 const ACTIVE_RANGE: f64 = 420.0;
 pub(crate) const END_DELAY: f64 = 3.0;
-/// The most inputs a hero can bank (ticks, 0.5 s): enough to catch up after a hitch or a retransmitted burst,
-/// while a client sending faster than the tick rate gains at most this many inputs, once (#273).
-pub(crate) const INPUT_BUDGET_MAX: u32 = 30;
-/// The most inputs queued per hero; later ones are dropped.
-const INPUT_QUEUE_MAX: usize = 120;
+/// The most inputs a hero can have outstanding (ticks, 2 s): both the queue's size (later inputs are dropped) and
+/// the most budget a hero can bank in silent ticks (#273). One number for both, because the long-run rate is one
+/// input per tick with no slack: a backlog the bank cannot cover would never drain. A stall up to this long is
+/// caught up at two per tick as it always was; a flooding client can trade at most this many ticks of standing
+/// still for as many ticks at double speed.
+pub(crate) const INPUT_BACKLOG_MAX: usize = 120;
 
 /// What one character banks at the end of a run.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -427,7 +428,7 @@ impl Run {
                         let p = &mut self.players[pi];
                         // Only newer inputs: a repeated or replayed sequence number is dropped (#273).
                         let last = p.inputs.back().map_or(p.ack, |i| i.seq);
-                        if input.seq > last && p.inputs.len() < INPUT_QUEUE_MAX {
+                        if input.seq > last && p.inputs.len() < INPUT_BACKLOG_MAX {
                             p.inputs.push_back(input);
                         }
                     }
@@ -565,7 +566,6 @@ impl Run {
     fn step_player(&mut self, pi: usize) {
         let p = &mut self.players[pi];
         p.hurt_t = (p.hurt_t - DT).max(0.0);
-        p.input_budget = (p.input_budget + 1).min(INPUT_BUDGET_MAX);
         if !p.alive {
             p.slam = None;
             p.inputs.clear();
@@ -580,6 +580,7 @@ impl Run {
         let p = &mut self.players[pi];
         // One input per step; catch up with two when the queue builds up, as far as the budget allows: a hitch's
         // silent ticks banked the budget its burst spends, so a flooding client never runs faster (#273).
+        p.input_budget = (p.input_budget + 1).min(INPUT_BACKLOG_MAX);
         let n = if p.inputs.len() > 3 { 2 } else { 1 };
         for _ in 0..n {
             let p = &mut self.players[pi];
@@ -2398,26 +2399,51 @@ pub mod tests {
         run.handle(RunCmd::Msg { conn, msg: ClientMsg::Input(InputMsg { seq, mx, my, ..Default::default() }) });
     }
 
+    /// The direction (east, west, south, north) with the most walkable tiles in a row from player 0's spawn.
+    fn longest_walk(run: &Run) -> (i8, i8) {
+        let (sx, sy) = dungeon::Map::tile_of(run.layout.player_spawns[0]);
+        let room = |&(dx, dy): &(i8, i8)| (1..).take_while(|&k| !run.layout.map.blocks(sx + k * dx as i32, sy + k * dy as i32, Mover::Hero)).count();
+        [(1, 0), (-1, 0), (0, 1), (0, -1)].into_iter().max_by_key(room).unwrap()
+    }
+
     #[test]
     fn a_client_sending_two_inputs_per_tick_runs_no_faster_than_one() {
-        let from = input_run(0, |_, _| {}).players[0].pos();
-        let walk_for = |ticks: usize, dir: (i8, i8), per_tick: u32| {
+        // One second: the spawn room leaves a little more than a second's walk in its longest direction.
+        let walk_for = |ticks: usize, per_tick: u32| {
             let run = input_run(ticks, |run, tick| {
+                let dir = longest_walk(run);
                 for k in 1..=per_tick {
                     send_input(run, per_tick * tick as u32 + k, dir);
                 }
             });
-            (run.players[0].pos().dist(from), run.players[0].cd1)
+            (run.players[0].pos().dist(run.layout.player_spawns[0]), run.players[0].cd1)
         };
-        // One second: the spawn room leaves a little more than a second's walk in its longest direction.
-        let walk = |dir, per_tick| walk_for(60, dir, per_tick);
-        // The direction with the most room from the spawn.
-        let dir = [(1, 0), (-1, 0), (0, 1), (0, -1)].into_iter().max_by(|&a, &b| walk(a, 1).0.total_cmp(&walk(b, 1).0)).unwrap();
-        let ((walked, cd), (flooded, cd_flood)) = (walk(dir, 1), walk(dir, 2));
-        let half = walk_for(30, dir, 1).0;
+        let ((walked, cd), (flooded, cd_flood), (half, _)) = (walk_for(60, 1), walk_for(60, 2), walk_for(30, 1));
         assert!(half > 20.0 && (walked - 2.0 * half).abs() < 1.0, "no wall stops the steady hero: {half} px, then {walked} px");
         assert!((flooded - walked).abs() <= walked * 0.03, "flooding walks {flooded} px, steady play {walked} px");
         assert!((cd_flood - cd).abs() <= (10.0 - cd) * 0.03, "flooding leaves {cd_flood} s of cooldown, steady play {cd} s");
+    }
+
+    #[test]
+    fn a_stall_as_long_as_the_backlog_allows_is_caught_up_while_the_client_keeps_sending() {
+        // The client sends one input per tick throughout; the network holds them for INPUT_BACKLOG_MAX ticks and then
+        // delivers them all at once. The catch-up of two per tick must clear the backlog, as before the budget.
+        let stall = INPUT_BACKLOG_MAX;
+        let mut run = input_run(stall, |_, _| {});
+        for seq in 1..=stall {
+            send_input(&mut run, seq as u32, (0, 0));
+        }
+        let mut longest = run.players[0].inputs.len();
+        for tick in 0..stall + 10 {
+            send_input(&mut run, (stall + tick + 1) as u32, (0, 0));
+            run.step();
+            longest = longest.max(run.players[0].inputs.len());
+        }
+        assert_eq!(longest, stall, "nothing was dropped");
+        // The catch-up only applies while more than three are queued, so it has always left up to three behind.
+        let queued = run.players[0].inputs.len();
+        assert!(queued <= 3, "the backlog is gone: {queued} still queued");
+        assert_eq!(run.players[0].ack as usize + queued, 2 * stall + 10, "every input sent was processed or is about to be");
     }
 
     #[test]
