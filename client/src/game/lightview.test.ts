@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND } from '../generated/defs';
-import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, nextDarkvision, seenForLight, SUB, tileDark, upsample, warmTint, WARM } from './lightview';
+import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, nextDarkvision, seenForDark, seenForLight, SUB, tileDark, upsample, warmTint, WARM } from './lightview';
 
 describe('darkness', () => {
   it('is black where not seen or not lit', () => {
@@ -128,6 +128,21 @@ describe('seenForLight', () => {
   it('does not grow from a wall in view', () => {
     const wallView = (x: number, y: number) => x === 3 && y === 0;
     expect(seenForLight(wallView, opaque, 4, 0)).toBe(false);
+  });
+});
+
+describe('seenForDark (#258)', () => {
+  it('a dark map blacks out what lies beyond sight', () => {
+    expect(seenForDark(false, false)).toBe(false);
+    expect(tileDark(seenForDark(false, false), true, false, 255, 255, 255)).toBe(1);
+  });
+  it('a daylight map leaves the darkness off beyond sight (the vision mask only dims it)', () => {
+    expect(seenForDark(false, true)).toBe(true);
+    expect(tileDark(seenForDark(false, true), true, false, 255, 255, 255)).toBe(0);
+  });
+  it('a tile in sight is seen on both', () => {
+    expect(seenForDark(true, false)).toBe(true);
+    expect(seenForDark(true, true)).toBe(true);
   });
 });
 

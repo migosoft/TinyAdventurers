@@ -2,8 +2,8 @@
 // (generated/woodland-demo.json, seeds 1-3) with the whole look: ground, trees and bushes, cloud shadows, bees,
 // butterflies, shade, and the knight's silhouette behind canopies. Tap the map to walk there (along the road,
 // through the grass; trees, trunks and thickets stop you). Zoomed so 32 tiles fit the screen's width; the tiles row changes it (16..48).
-// Buttons (tap): Clouds, Bees, Butterflies, Silhouette, Shade on / off; Next seed; cloud Size, Speed, Dark and
-// Cover with - and + (the values are shown, so they can be reported). URL: ?woodland&seed=2&clouds=0&bees=0&butterflies=0&silhouette=0&shade=0
+// Buttons (tap): Clouds, Bees, Butterflies, Silhouette, Shade on / off; Next seed; the dim beyond sight (#258), cloud
+// Size, Speed, Dark and Cover with - and + (the values are shown, so they can be reported). URL: ?woodland&seed=2&clouds=0&bees=0&butterflies=0&silhouette=0&shade=0
 import Phaser from 'phaser';
 import { CONST, TILE_ID } from '../generated/defs';
 import demo from '../generated/woodland-demo.json';
@@ -15,7 +15,7 @@ import { LightField } from './light';
 import { LightView } from './lightview';
 import { lookOf } from './silhouette';
 import { SHADE, ShadeMask } from './shademask';
-import { VisionMask } from './visionmask';
+import { DAYLIGHT_OUTSIDE, VisionMask } from './visionmask';
 import { DEFAULT_CLOUDS } from './woodland/clouds';
 import { CLOUD_STEPS, nextSeed, stepCloud, stepTiles, stepToward, TILES, zoomForTiles, type CloudKey } from './woodland/demoMath';
 import { WoodlandView } from './woodland/WoodlandView';
@@ -31,6 +31,8 @@ const CLOUD_KEYS: CloudKey[] = ['size', 'speed', 'dark', 'cover'];
 const on = { clouds: true, bees: true, butterflies: true, silhouette: true, shade: true };
 let look = { ...DEFAULT_CLOUDS };
 let tiles: number = TILES.def;
+/** How dark beyond sight is (#258), tuned with Dim - / +; starts at the game's value. */
+let outside = DAYLIGHT_OUTSIDE;
 let urlRead = false;
 
 export class WoodlandDemoScene extends Phaser.Scene {
@@ -82,6 +84,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.woodland = new WoodlandView(this, d.woodland, map, start, true);
     this.woodland.clouds.look = { ...look };
     this.mask = new VisionMask(this, map);
+    this.mask.outside = outside;
     this.shade = new ShadeMask(this, map);
 
     this.knight = this.add.sprite(start.x, start.y, 'atlas', 'knight_m_idle_anim_f0').setOrigin(0.5, 1);
@@ -175,6 +178,16 @@ export class WoodlandDemoScene extends Phaser.Scene {
       this.zoom();
     };
     zr.append(btn(() => '-', zstep(-1), 56), zl, btn(() => '+', zstep(1), 56));
+    // the dim beyond sight (#258), in steps of 0.05
+    const dr = row();
+    const dl = document.createElement('span');
+    dl.style.cssText = 'flex:1;text-align:center;min-width:140px';
+    all.push(() => (dl.textContent = `beyond sight ${outside.toFixed(2)}`));
+    const dstep = (dir: 1 | -1) => () => {
+      outside = Math.round(Math.min(1, Math.max(0, outside + dir * 0.05)) * 100) / 100;
+      this.mask.outside = outside;
+    };
+    dr.append(btn(() => '-', dstep(-1), 56), dl, btn(() => '+', dstep(1), 56));
     for (const k of CLOUD_KEYS) {
       const r = row();
       const digits = CLOUD_STEPS[k].digits;
