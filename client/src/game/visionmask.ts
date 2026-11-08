@@ -1,6 +1,6 @@
 // The vision mask: black over everything the hero cannot see, with straight
 // edges; on a daylight map only a dim (`outside`, #258), so the scenery
-// beyond sight still shows (the server still sends no creature from there). A small canvas over the camera window (RES px per tile) holds the
+// beyond sight still shows (the server still sends no creature from there). A small canvas over the camera window (`canvasRes` px per tile) holds the
 // view's visibility polygon (sim/view.ts) and its walls in white (the polygon
 // stops at a wall's face, so a wall in sight is added whole); a
 // Shader game object just above the darkness draws black where the canvas is
@@ -126,8 +126,13 @@ export function blurGrey(data: Uint8ClampedArray, w: number, h: number, radius: 
   for (let i = 0; i < w * h; i++) data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(a[i]);
 }
 
-/** Canvas pixels per tile: enough for a straight, antialiased edge. */
-const RES = 8;
+/**
+ * Canvas pixels per tile: 8 is enough for a straight, antialiased edge. Haze mode uses 4 (#280): its redraw is CPU work
+ * (getImageData, the blur, putImageData, the upload) on every frame the hero moves, and its edges are blurred anyway.
+ */
+export function canvasRes(haze: boolean): number {
+  return haze ? 4 : 8;
+}
 /** Tiles of canvas beyond the camera window on each side. */
 const BORDER = 2;
 const KEY = 'visionmask';
@@ -186,6 +191,10 @@ export class VisionMask {
   }
   private ox = 0;
   private oy = 0;
+  /** Canvas px per tile (fixed by `haze`, which is set before the first update). */
+  private get res(): number {
+    return canvasRes(this.haze);
+  }
 
   constructor(
     private scene: Phaser.Scene,
@@ -202,12 +211,12 @@ export class VisionMask {
     if (this.haze) {
       // the blur reads the canvas back every redraw: a CPU-backed canvas, not a GPU readback each time
       const el = document.createElement('canvas');
-      el.width = cols * RES;
-      el.height = rows * RES;
+      el.width = cols * this.res;
+      el.height = rows * this.res;
       el.getContext('2d', { willReadFrequently: true });
       this.canvas = this.scene.textures.addCanvas(KEY, el)!;
-      this.scratch = { a: new Float32Array(cols * RES * rows * RES), b: new Float32Array(cols * RES * rows * RES) };
-    } else this.canvas = this.scene.textures.createCanvas(KEY, cols * RES, rows * RES)!;
+      this.scratch = { a: new Float32Array(cols * this.res * rows * this.res), b: new Float32Array(cols * this.res * rows * this.res) };
+    } else this.canvas = this.scene.textures.createCanvas(KEY, cols * this.res, rows * this.res)!;
     this.last = '';
     if (this.haze) return;
     const base = new Phaser.Display.BaseShader(KEY, FRAG);
@@ -237,6 +246,7 @@ export class VisionMask {
 
     const canvas = this.canvas!;
     const ctx = canvas.getContext();
+    const RES = this.res;
     const s = RES / TILE;
     // the shader draws black at 1 - red: grey outside sight gives a dim of `outside`
     const lv = levels(this.outside, this.soft);

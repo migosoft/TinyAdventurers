@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // Phaser needs a browser (window) on import; the helpers tested here do not use it.
 vi.mock('phaser', () => ({ default: { Renderer: { WebGL: { Pipelines: { PostFXPipeline: class {} } } } } }));
 
-import { blurGrey, extendPoints, extendRim, levels, maskSteps, rampLayers } from './visionmask';
+import { blurGrey, canvasRes, extendPoints, extendRim, levels, maskSteps, rampLayers } from './visionmask';
 
 describe('extendPoints', () => {
   it('moves every point outward along its ray from the centre', () => {
@@ -138,5 +138,12 @@ describe('levels', () => {
   });
   it('clamps out-of-range strengths', () => {
     expect(levels(2, -1)).toEqual({ outside: 0, soft: 255 });
+  });
+});
+
+describe('canvasRes', () => {
+  it('draws the haze mask at half the resolution of the dark mask (#280)', () => {
+    expect(canvasRes(false)).toBe(8);
+    expect(canvasRes(true)).toBe(4);
   });
 });
