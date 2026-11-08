@@ -4,7 +4,7 @@
 // ray that grazes a corner continues behind it) plus at even angles, each
 // stopping at the nearest segment or at the radius, so the outer edge is a
 // circle. Drawn by game/visionmask.ts; the server's visibility stays per tile.
-import { TILE, type TileMap } from './map';
+import { TILE, type Blocker, type TileMap } from './map';
 
 /** A wall edge in px: x0, y0, x1, y1. */
 export type Segment = [number, number, number, number];
@@ -15,7 +15,7 @@ export function sightRadius(vision: number): number {
 }
 
 /** Runs of tile edges between an opaque and an open tile, within `r` px (plus a tile) of (px, py). Off-map counts as opaque. */
-export function wallSegments(map: TileMap, px: number, py: number, r: number): Segment[] {
+export function wallSegments(map: TileMap, px: number, py: number, r: number, b: Blocker = 'all'): Segment[] {
   const x0 = Math.floor((px - r) / TILE) - 1;
   const y0 = Math.floor((py - r) / TILE) - 1;
   const x1 = Math.floor((px + r) / TILE) + 1;
@@ -26,8 +26,8 @@ export function wallSegments(map: TileMap, px: number, py: number, r: number): S
     let start = 0;
     let side = 0;
     for (let x = x0; x <= x1 + 1; x++) {
-      const above = map.opaque(x, y - 1);
-      const below = map.opaque(x, y);
+      const above = map.blocksSight(x, y - 1, b);
+      const below = map.blocksSight(x, y, b);
       const s = x <= x1 && above !== below ? (above ? 1 : 2) : 0;
       if (s !== side) {
         if (side) segs.push([start * TILE, y * TILE, x * TILE, y * TILE]);
@@ -41,8 +41,8 @@ export function wallSegments(map: TileMap, px: number, py: number, r: number): S
     let start = 0;
     let side = 0;
     for (let y = y0; y <= y1 + 1; y++) {
-      const left = map.opaque(x - 1, y);
-      const right = map.opaque(x, y);
+      const left = map.blocksSight(x - 1, y, b);
+      const right = map.blocksSight(x, y, b);
       const s = y <= y1 && left !== right ? (left ? 1 : 2) : 0;
       if (s !== side) {
         if (side) segs.push([x * TILE, start * TILE, x * TILE, y * TILE]);
@@ -79,8 +79,8 @@ export interface SightPolygon {
 }
 
 /** The area seen from (px, py) within `r` px, as a flat [x0, y0, x1, y1, ...] polygon sorted by angle (from -π). */
-export function visibilityPolygon(map: TileMap, px: number, py: number, r: number, steps = 96): number[] {
-  return sightPolygon(map, px, py, r, steps).points;
+export function visibilityPolygon(map: TileMap, px: number, py: number, r: number, steps = 96, b: Blocker = 'all'): number[] {
+  return sightPolygon(map, px, py, r, steps, b).points;
 }
 
 /**
@@ -117,8 +117,8 @@ export function inside(s: SightPolygon, px: number, py: number, qx: number, qy: 
 }
 
 /** The visibility polygon from (px, py) within `r` px, with its ray angles (for `inside`). */
-export function sightPolygon(map: TileMap, px: number, py: number, r: number, steps = 96): SightPolygon {
-  const segs = wallSegments(map, px, py, r);
+export function sightPolygon(map: TileMap, px: number, py: number, r: number, steps = 96, b: Blocker = 'all'): SightPolygon {
+  const segs = wallSegments(map, px, py, r, b);
   const angles: number[] = [];
   for (let i = 0; i < steps; i++) angles.push((i / steps) * Math.PI * 2 - Math.PI);
   for (const [ax, ay, bx, by] of segs)

@@ -84,7 +84,7 @@ export class VisionMask {
     ctx.closePath();
     ctx.fill();
     for (let y = 0; y < this.rows; y++)
-      for (let x = 0; x < this.cols; x++) if (this.map.opaque(ox + x, oy + y) && sight.isVisible(ox + x, oy + y)) ctx.fillRect(x * RES, y * RES, RES, RES);
+      for (let x = 0; x < this.cols; x++) if (this.map.hardOpaque(ox + x, oy + y) && sight.isVisible(ox + x, oy + y)) ctx.fillRect(x * RES, y * RES, RES, RES);
     canvas.refresh();
     // refresh() resets the filter to NEAREST (pixelArt).
     canvas.setFilter(Phaser.Textures.FilterMode.LINEAR);

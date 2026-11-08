@@ -4,12 +4,23 @@ import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { View } from '../sim/view';
 import { TileMap } from '../sim/map';
 import { darkReach } from './lightview';
-import { addColour, cloudy, EDGE, falloff, LightField } from './light';
+import { addColour, cloudy, DAYLIGHT, EDGE, falloff, LightField } from './light';
 import type { LightInfo } from '../generated/LightInfo';
 
 const fmap = () => new TileMap(fixtures.w, fixtures.h, Uint8Array.from(fixtures.tiles));
 
 describe('light field', () => {
+  it('daylight: every tile is lit and filled with DAYLIGHT', () => {
+    const m = fmap();
+    const f = new LightField(m);
+    f.daylight = true;
+    expect(f.isLit(0, 0)).toBe(true);
+    const rgb = new Float32Array(m.w * m.h * 3);
+    f.accumulate(rgb, 1, 1, 3, 3, () => 1);
+    expect([rgb[(1 * m.w + 1) * 3], rgb[(2 * m.w + 2) * 3 + 2]]).toEqual([(DAYLIGHT >> 16) & 255, DAYLIGHT & 255]);
+    expect(rgb[0]).toBe(0);
+  });
+
   it('lights exactly the tiles the server lights', () => {
     const f = new LightField(fmap());
     f.load(fixtures.lights.sources as LightInfo[]);

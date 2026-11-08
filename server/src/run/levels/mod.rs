@@ -5,9 +5,11 @@
 
 pub mod boss;
 pub mod dungeon;
+pub mod woodland;
 
 pub use boss::BossEncounter;
 pub use dungeon::DungeonLevel;
+pub use woodland::WoodlandLevel;
 
 use super::Run;
 use crate::defs::enemies::EnemyType;
@@ -45,6 +47,7 @@ pub trait LevelRules {
 
 pub enum Level {
     Dungeon(DungeonLevel),
+    Woodland(WoodlandLevel),
     /// Only default hooks: proves a level without a boss works.
     #[cfg(test)]
     Test,
@@ -59,6 +62,7 @@ macro_rules! dispatch {
     ($level:expr, $f:ident($($a:expr),*)) => {
         match $level {
             Level::Dungeon(_) => DungeonLevel::$f($($a),*),
+            Level::Woodland(_) => WoodlandLevel::$f($($a),*),
             #[cfg(test)]
             Level::Test => TestLevel::$f($($a),*),
         }
@@ -72,12 +76,17 @@ impl Level {
                 let (layout, d) = DungeonLevel::build(seed, *boss, rng);
                 (layout, Level::Dungeon(d))
             }
+            LevelChoice::Woodland {} => {
+                let (layout, w) = WoodlandLevel::build(seed);
+                (layout, Level::Woodland(w))
+            }
         }
     }
 
     pub fn id(&self) -> LevelId {
         match self {
             Level::Dungeon(_) => LevelId::Dungeon,
+            Level::Woodland(_) => LevelId::Woodland,
             // The test level is not a protocol level (ts-rs exports in test builds).
             #[cfg(test)]
             Level::Test => LevelId::Dungeon,
@@ -87,6 +96,7 @@ impl Level {
     pub fn boss(&self) -> Option<&BossEncounter> {
         match self {
             Level::Dungeon(d) => Some(&d.boss),
+            Level::Woodland(_) => None,
             #[cfg(test)]
             Level::Test => None,
         }
@@ -95,6 +105,7 @@ impl Level {
     pub fn boss_mut(&mut self) -> Option<&mut BossEncounter> {
         match self {
             Level::Dungeon(d) => Some(&mut d.boss),
+            Level::Woodland(_) => None,
             #[cfg(test)]
             Level::Test => None,
         }
@@ -186,6 +197,17 @@ mod tests {
             }
         }
         assert!(demon_with_shades >= 15, "{demon_with_shades} of 20 demon runs have a Shade");
+    }
+
+    #[test]
+    fn woodland_build_gives_the_woodland_level() {
+        for seed in 0..5u64 {
+            let mut rng = ChaCha8Rng::seed_from_u64(seed ^ 0x5eed);
+            let (layout, level) = Level::build(seed, &LevelChoice::Woodland {}, &mut rng);
+            assert_eq!(level.id(), LevelId::Woodland);
+            assert!(level.boss().is_none() && level.boss_id().is_none());
+            assert!(layout.daylight && layout.woodland.is_some());
+        }
     }
 
     #[test]

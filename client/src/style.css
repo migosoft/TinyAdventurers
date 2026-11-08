@@ -491,6 +491,13 @@ kbd {
   line-height: 88px;
   color: var(--muted);
 }
+.levels .boss-card {
+  min-height: 72px;
+  justify-content: center;
+}
+.level-card.level-woodland b {
+  color: #9fd08a;
+}
 .boss-card b {
   display: block;
   font-size: 15px;

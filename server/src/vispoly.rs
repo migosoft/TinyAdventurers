@@ -3,7 +3,7 @@
 //! (checked with shared test fixtures); the client draws the same polygon as
 //! the edge of sight, so the floor it lights is the floor monsters are sent on.
 
-use crate::dungeon::{Map, TILE};
+use crate::dungeon::{Blocker, Map, TILE};
 use crate::fov::Fov;
 use crate::math::Vec2;
 
@@ -17,7 +17,7 @@ pub fn sight_radius(vision: i32) -> f64 {
 
 /// Runs of tile edges between an opaque and an open tile, within `r` px (plus a tile) of (px, py).
 /// Off-map counts as opaque.
-pub fn wall_segments(map: &Map, px: f64, py: f64, r: f64) -> Vec<Segment> {
+pub fn wall_segments(map: &Map, px: f64, py: f64, r: f64, b: Blocker) -> Vec<Segment> {
     let x0 = ((px - r) / TILE).floor() as i32 - 1;
     let y0 = ((py - r) / TILE).floor() as i32 - 1;
     let x1 = ((px + r) / TILE).floor() as i32 + 1;
@@ -27,8 +27,8 @@ pub fn wall_segments(map: &Map, px: f64, py: f64, r: f64) -> Vec<Segment> {
     for y in y0..=y1 + 1 {
         let (mut start, mut side) = (0, 0);
         for x in x0..=x1 + 1 {
-            let above = map.opaque(x, y - 1);
-            let below = map.opaque(x, y);
+            let above = map.blocks_sight(x, y - 1, b);
+            let below = map.blocks_sight(x, y, b);
             let s = if x <= x1 && above != below { if above { 1 } else { 2 } } else { 0 };
             if s != side {
                 if side != 0 {
@@ -43,8 +43,8 @@ pub fn wall_segments(map: &Map, px: f64, py: f64, r: f64) -> Vec<Segment> {
     for x in x0..=x1 + 1 {
         let (mut start, mut side) = (0, 0);
         for y in y0..=y1 + 1 {
-            let left = map.opaque(x - 1, y);
-            let right = map.opaque(x, y);
+            let left = map.blocks_sight(x - 1, y, b);
+            let right = map.blocks_sight(x, y, b);
             let s = if y <= y1 && left != right { if left { 1 } else { 2 } } else { 0 };
             if s != side {
                 if side != 0 {
@@ -87,9 +87,9 @@ pub struct SightPolygon {
 
 /// The visibility polygon from (px, py) within `r` px: rays at `steps` even angles and to every
 /// segment end (and just beside it), each stopping at the nearest segment or at `r`.
-pub fn sight_polygon(map: &Map, px: f64, py: f64, r: f64, steps: usize) -> SightPolygon {
+pub fn sight_polygon(map: &Map, px: f64, py: f64, r: f64, steps: usize, b: Blocker) -> SightPolygon {
     use std::f64::consts::PI;
-    let segs = wall_segments(map, px, py, r);
+    let segs = wall_segments(map, px, py, r, b);
     let mut angles: Vec<f64> = (0..steps).map(|i| (i as f64 / steps as f64) * PI * 2.0 - PI).collect();
     for &[ax, ay, bx, by] in &segs {
         for (x, y) in [(ax, ay), (bx, by)] {
@@ -154,18 +154,23 @@ impl View {
 
     /// The view from `p` (px) with `vision` tiles.
     pub fn compute(&mut self, map: &Map, p: Vec2, vision: i32) {
+        self.compute_with(map, p, vision, Blocker::All);
+    }
+
+    /// The view when only `b` blockers stop sight (`Hard`: trunks and thickets let it through).
+    pub fn compute_with(&mut self, map: &Map, p: Vec2, vision: i32, b: Blocker) {
         let r = sight_radius(vision);
         self.gen = self.gen.wrapping_add(1).max(1);
         let (tx, ty) = Map::tile_of(p);
-        self.fov.compute(map, tx, ty, vision);
-        let poly = sight_polygon(map, p.x, p.y, r, 96);
+        self.fov.compute(map, tx, ty, vision, b);
+        let poly = sight_polygon(map, p.x, p.y, r, 96, b);
         let x0 = (((p.x - r) / TILE).floor() as i32).max(0);
         let y0 = (((p.y - r) / TILE).floor() as i32).max(0);
         let x1 = (((p.x + r) / TILE).floor() as i32).min(self.w - 1);
         let y1 = (((p.y + r) / TILE).floor() as i32).min(self.h - 1);
         for y in y0..=y1 {
             for x in x0..=x1 {
-                let seen = if map.opaque(x, y) {
+                let seen = if map.blocks_sight(x, y, b) {
                     self.fov.is_visible(x, y)
                 } else {
                     (0..SAMPLES * SAMPLES).any(|k| {
@@ -216,7 +221,7 @@ mod tests {
     #[test]
     fn wall_segments_merge_straight_walls() {
         let map = grid(&["#######", "#.....#", "#.....#", "#.....#", "#######"]);
-        let segs = wall_segments(&map, 3.5 * TILE, 2.5 * TILE, 100.0);
+        let segs = wall_segments(&map, 3.5 * TILE, 2.5 * TILE, 100.0, Blocker::All);
         assert_eq!(segs.len(), 4);
         for s in [[16.0, 16.0, 96.0, 16.0], [16.0, 64.0, 96.0, 64.0], [16.0, 16.0, 16.0, 64.0], [96.0, 16.0, 96.0, 64.0]] {
             assert!(segs.contains(&s), "missing {s:?} in {segs:?}");
@@ -226,7 +231,7 @@ mod tests {
     #[test]
     fn polygon_is_a_circle_in_an_open_room() {
         let map = room(21, 21, &[]);
-        let s = sight_polygon(&map, 168.0, 168.0, 80.0, 96);
+        let s = sight_polygon(&map, 168.0, 168.0, 80.0, 96, Blocker::All);
         assert!(s.points.len() >= 96);
         for (x, y) in &s.points {
             assert!(((x - 168.0).hypot(y - 168.0) - 80.0).abs() < 1e-6);
@@ -238,7 +243,7 @@ mod tests {
     #[test]
     fn pillar_casts_a_wedge() {
         let map = room(21, 21, &[(13, 10)]);
-        let s = sight_polygon(&map, 168.0, 168.0, 128.0, 96);
+        let s = sight_polygon(&map, 168.0, 168.0, 128.0, 96, Blocker::All);
         let half = 8f64.atan2(40.0);
         let wedge: Vec<_> = s.points.iter().filter(|(x, y)| (y - 168.0).atan2(x - 168.0).abs() < half - 0.01).collect();
         assert!(!wedge.is_empty());
@@ -249,12 +254,12 @@ mod tests {
 
     #[test]
     fn inside_works_across_pi_and_behind_a_pillar() {
-        let s = sight_polygon(&room(21, 21, &[]), 168.0, 168.0, 80.0, 96);
+        let s = sight_polygon(&room(21, 21, &[]), 168.0, 168.0, 80.0, 96, Blocker::All);
         assert!(inside(&s, 168.0, 168.0, 247.0, 168.0));
         assert!(!inside(&s, 168.0, 168.0, 249.0, 168.0));
         assert!(inside(&s, 168.0, 168.0, 89.0, 168.0)); // angle π: the closing edge
         assert!(!inside(&s, 168.0, 168.0, 87.0, 168.001));
-        let p = sight_polygon(&room(21, 21, &[(13, 10)]), 168.0, 168.0, 128.0, 96);
+        let p = sight_polygon(&room(21, 21, &[(13, 10)]), 168.0, 168.0, 128.0, 96, Blocker::All);
         assert!(!inside(&p, 168.0, 168.0, 240.0, 168.0));
         assert!(inside(&p, 168.0, 168.0, 240.0, 200.0));
     }
@@ -287,7 +292,7 @@ mod tests {
     #[test]
     fn a_closed_door_blocks() {
         let map = grid(&["#########", "#...D...#", "#########"]);
-        let s = sight_polygon(&map, 24.0, 24.0, 160.0, 96);
+        let s = sight_polygon(&map, 24.0, 24.0, 160.0, 96, Blocker::All);
         let far = s.points.iter().map(|p| p.0).fold(f64::MIN, f64::max);
         assert!((far - 64.0).abs() < 1e-6);
     }

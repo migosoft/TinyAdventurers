@@ -41,6 +41,7 @@ impl BossId {
 #[ts(export)]
 pub enum LevelId {
     Dungeon,
+    Woodland,
 }
 
 /// A level and its options, as the lobby starts it.
@@ -50,6 +51,8 @@ pub enum LevelId {
 pub enum LevelChoice {
     /// `boss: None` = random end boss.
     Dungeon { boss: Option<BossId> },
+    /// The forest road (#203): no boss, won at the end clearing.
+    Woodland {},
 }
 
 /// One fixed simulation step (1/60 s) of player input.
@@ -88,7 +91,9 @@ pub enum ClientMsg {
     SetReady { ready: bool },
     /// Host only, before the run starts. `None` = random end boss.
     SelectBoss { boss: Option<BossId> },
-    /// Host only. Uses the room's chosen boss.
+    /// Host only, before the run starts. Dungeon or Woodland.
+    SelectLevel { level: LevelId },
+    /// Host only. Uses the room's chosen level and boss.
     StartRun,
     Input(InputMsg),
     Ping { time: f64 },
@@ -196,7 +201,37 @@ pub struct RunStartInfo {
     pub debug: bool,
     /// The nymph's cove (dungeon runs), for the client to dress.
     pub cove: Option<CoveInfo>,
+    /// Open air by day: no dungeon darkness (the woodland).
+    pub daylight: bool,
+    /// The woodland's plants and end clearing (woodland runs), for the client to dress.
+    pub woodland: Option<WoodlandInfo>,
 }
+
+/// The woodland for the client: the seed its grass, flowers and critters grow from, the end clearing as
+/// `[x, y, w, h]` in tiles, and every plant.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct WoodlandInfo {
+    pub seed: u32,
+    pub end: [i32; 4],
+    pub plants: Vec<PlantInfo>,
+}
+
+impl From<&crate::dungeon::woodland::Woodland> for WoodlandInfo {
+    fn from(w: &crate::dungeon::woodland::Woodland) -> Self {
+        WoodlandInfo {
+            seed: w.seed,
+            end: [w.end.x, w.end.y, w.end.w, w.end.h],
+            plants: w.plants.iter().map(|p| PlantInfo(p.kind as u8, p.foot.x.round() as i32, p.foot.y.round() as i32, p.seed, p.scale_pct, p.mirrored)).collect(),
+        }
+    }
+}
+
+/// A plant as an array: `[kind, x, y, seed, scale_pct, mirrored]` (kind = `PlantKind` wire id; x, y = the
+/// foot in px).
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct PlantInfo(pub u8, pub i32, pub i32, pub u32, pub u8, pub bool);
 
 /// The nymph's cove in tiles: its room, the tree's trunk tile and the seed the client's plants grow from.
 #[derive(Debug, Clone, Serialize, TS)]

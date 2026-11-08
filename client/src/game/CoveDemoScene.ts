@@ -5,12 +5,15 @@
 // The viewer sees the whole room. Mood is on (dust, haze).
 // Buttons at the bottom (tap or click): Walk on / off; tap the room to send the knight there (stops the loop),
 // Silhouette, Pixies and Beams on / off, Suns 1 / 3 / 5, Reroll #n (a new seed: new grass, flowers and plants).
-// URL: ?cove&seed=3&suns=3&pixies=0&silhouette=0&walk=0&beam=0
+// Shade (default on): the viewer is the knight and the trunk casts a soft wedge on the grass (shademask.ts).
+// URL: ?cove&seed=3&suns=3&pixies=0&silhouette=0&walk=0&beam=0&shade=0
 // Zoomed to fit the room to the screen, so it reads on a phone.
 import Phaser from 'phaser';
 import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
 import { tileDraws } from './autotile';
+import type { CoveInfo } from '../generated/CoveInfo';
+import { coveLayout } from './cove';
 import { COVE_TREE_FOOT, type CoveSpec, paintCove, placeCovePlants } from './covemath';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
@@ -20,6 +23,7 @@ import { Pixies } from './pixies';
 import { lookOf, Silhouette } from './silhouette';
 import { Sunbeams } from './sunbeams';
 import { TerrainLayer } from './terrain';
+import { ShadeMask } from './shademask';
 import { VisionMask } from './visionmask';
 
 const W = 22;
@@ -41,9 +45,14 @@ const SUNS = [1, 3, 5];
 const SUN_SPOTS = [[10, 8], [5, 4], [15, 12], [15, 4], [5, 12]];
 const SUN_SETS: Record<number, number[]> = { 1: [0], 3: [1, 0, 2], 5: [0, 1, 2, 3, 4] };
 
+/** The cove as the server describes it: the room and its centre tile for the trunk (server/src/dungeon/cove.rs). */
+const COVE: CoveInfo = { x: FLOOR.x, y: FLOOR.y, w: FLOOR.w, h: FLOOR.h, tree_x: FLOOR.x + Math.floor(FLOOR.w / 2), tree_y: FLOOR.y + Math.floor(FLOOR.h / 2), seed: 1 };
+
 function buildMap(): TileMap {
   const tiles = new Uint8Array(W * H).fill(TILE_ID.Wall);
   for (let y = FLOOR.y; y < FLOOR.y + FLOOR.h; y++) for (let x = FLOOR.x; x < FLOOR.x + FLOOR.w; x++) tiles[y * W + x] = TILE_ID.Floor;
+  // The trunk: one soft tile at the room centre, as the server places it (it draws as floor; it stops the server's sight, not the light).
+  tiles[COVE.tree_y * W + COVE.tree_x] = TILE_ID.Trunk;
   return new TileMap(W, H, tiles);
 }
 
@@ -53,6 +62,7 @@ export class CoveDemoScene extends Phaser.Scene {
   private layer!: TerrainLayer;
   private view!: LightView;
   private mask!: VisionMask;
+  private shade!: ShadeMask;
   private mood!: Mood;
   private sun!: Sunbeams;
   private field!: LightField;
@@ -103,7 +113,7 @@ export class CoveDemoScene extends Phaser.Scene {
     const fh = FLOOR.h * TILE;
     const fx0 = FLOOR.x * TILE;
     const fy0 = FLOOR.y * TILE;
-    this.foot = { x: fx0 + fw / 2, y: fy0 + fh / 2 + TILE };
+    this.foot = coveLayout(COVE).foot; // the game's own formula: the bottom centre of the trunk tile
     this.centre = { x: fx0 + fw / 2, y: fy0 + fh / 2 };
 
     this.grass = this.add.image(fx0 - MARGIN, fy0 - MARGIN, '__DEFAULT').setOrigin(0).setDepth(DEPTH.decal);
@@ -115,6 +125,8 @@ export class CoveDemoScene extends Phaser.Scene {
     this.placeSuns();
     this.view = new LightView(this, map, this.field);
     this.mask = new VisionMask(this, map);
+    this.shade = new ShadeMask(this, map);
+    this.shade.on = q.get('shade') !== '0';
     this.sun = new Sunbeams(this, this.field, this.view);
     this.mood = new Mood(this, map, this.view);
     this.sun.on.beam = q.get('beam') !== '0';
@@ -151,6 +163,7 @@ export class CoveDemoScene extends Phaser.Scene {
       this.sun.destroy();
       this.pixies.destroy();
       this.silhouette.destroy();
+      this.shade.destroy();
     });
   }
 
@@ -215,6 +228,7 @@ export class CoveDemoScene extends Phaser.Scene {
       this.target = null;
     });
     add(() => `Silhouette: ${onOff(this.silhouette.on)}`, () => (this.silhouette.on = !this.silhouette.on));
+    add(() => `Shade: ${onOff(this.shade.on)}`, () => (this.shade.on = !this.shade.on));
     add(() => `Pixies: ${onOff(this.pixies.on)}`, () => (this.pixies.on = !this.pixies.on));
     add(() => `Suns: ${this.suns}`, () => {
       this.suns = SUNS[(SUNS.indexOf(this.suns) + 1) % SUNS.length];
@@ -267,9 +281,12 @@ export class CoveDemoScene extends Phaser.Scene {
     this.layer.update(dt);
     this.moveKnight(dt);
     const cam = this.cameras.main;
-    // the viewer is the room centre with a radius that covers the far corners
-    this.view.update(cam.worldView, this.centre.x, this.centre.y, [], this.t, 0, CONST.FOV_RADIUS + 5);
+    // the viewer is the room centre with a radius that covers the far corners; with the shade on it is the knight, so the trunk casts its wedge
+    const vx = this.shade.on ? this.knight.x : this.centre.x;
+    const vy = this.shade.on ? this.knight.y - 6 : this.centre.y;
+    this.view.update(cam.worldView, vx, vy, [], this.t, 0, CONST.FOV_RADIUS + 5);
     this.mask.update(cam.worldView, this.view.view);
+    this.shade.update(cam.worldView, this.view.view, () => this.view.sight);
     this.sun.update(dt, cam.worldView, this.t);
     this.mood.update(dt, cam.worldView, [], [], []);
     this.pixies.update(this.t, Math.floor(this.t * 60));

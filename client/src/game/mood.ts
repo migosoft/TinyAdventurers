@@ -167,9 +167,14 @@ export class Mood {
   /** Everything made, for `destroy`. */
   private owned: { destroy(): void }[] = [];
 
+  /** Does a wall (not a trunk or thicket) stand at the world point? The air flows over trunks. */
+  private hardAt(px: number, py: number): boolean {
+    return this.map.hardOpaque(Math.floor(px / TILE), Math.floor(py / TILE));
+  }
+
   constructor(private scene: Phaser.Scene, private map: TileMap, private light: LightView) {
     ensureTextures(scene);
-    this.wind = new Wind((px, py) => this.map.opaqueAt(px, py));
+    this.wind = new Wind((px, py) => this.hardAt(px, py));
     this.drips = new Drips(scene, (o) => this.own(o));
     this.mapChanged();
     for (let c = 0; c < MAX_CLOUDS; c++) {
@@ -248,7 +253,7 @@ export class Mood {
       const y1 = view.bottom + MARGIN * TILE;
       for (const m of movers) {
         if (m.x < x0 || m.x > x1 || m.y < y0 || m.y > y1 || !this.seenAt(m.x, m.y)) continue;
-        const ay = m.airY !== undefined && !this.map.opaqueAt(m.x, m.airY) ? m.airY : m.y;
+        const ay = m.airY !== undefined && !this.hardAt(m.x, m.airY) ? m.airY : m.y;
         if (m.shot) this.wind.wake(m.x, ay, m.vx, m.vy, m.r, m.heat);
         else this.wind.push(m.x, ay, m.vx, m.vy, m.r);
       }
@@ -303,7 +308,7 @@ export class Mood {
     const ty = Math.floor(y / TILE);
     if (tx < 0 || ty < 0 || tx >= this.map.w || ty >= this.map.h) return [0, 0xffffff];
     const i = ty * this.map.w + tx;
-    if (!this.light.seenLit[i] || this.map.opaque(tx, ty)) return [0, 0xffffff];
+    if (!this.light.seenLit[i] || this.map.hardOpaque(tx, ty)) return [0, 0xffffff];
     const rgb = this.light.light;
     return dustTint(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
   }

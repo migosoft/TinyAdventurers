@@ -1758,6 +1758,37 @@ mod tests {
         run.projectiles.retain(|p| !p.dead);
     }
 
+    /// Fires a shot east from a hero, with a Trunk on the tile 40 px east of it when `trunk` is set, and
+    /// returns the furthest x any live shot reached and the left edge of that tile.
+    fn furthest_shot_x(trunk: bool) -> (f64, f64) {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        let start = run.players[0].pos();
+        let (tx, ty) = crate::dungeon::Map::tile_of(start + Vec2::new(40.0, 0.0));
+        let trunk_left = tx as f64 * crate::dungeon::TILE;
+        if trunk {
+            run.layout.map.set(tx, ty, crate::dungeon::Tile::Trunk);
+        }
+        let a = ResolvedAbility { damage: 5.0, speed: 230.0, range: 230.0, radius: 3.0, pierce: 0, pierce_through: 0, split: kind_split(EntityKind::Missile), ..run.players[0].sheet.primary.clone() };
+        spawn_shot(&mut run, Creature::Player(0), &a, EntityKind::Missile, 1, Vec2::new(1.0, 0.0), None, 0.0);
+        let mut furthest = f64::MIN;
+        for _ in 0..30 {
+            tick_projectiles(&mut run, 1.0 / TICK_HZ);
+            for p in run.projectiles.iter().filter(|p| !p.dead) {
+                furthest = furthest.max(p.pos.x);
+            }
+        }
+        (furthest, trunk_left)
+    }
+
+    #[test]
+    fn a_shot_stops_at_a_trunk() {
+        let (with, left) = furthest_shot_x(true);
+        assert!(with < left, "the shot reached x {with}, past the trunk's left edge {left}");
+        let (without, left) = furthest_shot_x(false);
+        assert!(without > left + 16.0, "control: with no trunk the shot flies past it (reached {without}, tile at {left})");
+    }
+
     #[test]
     fn shots_hit_the_upper_body_of_tall_figures() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);

@@ -3,7 +3,7 @@
 // server's `vispoly.rs` holds the same rule (checked by the shared fixture), so
 // the client lights exactly the floor the server sends monsters on.
 import { Fov } from './fov';
-import { TILE, type TileMap } from './map';
+import { TILE, type Blocker, type TileMap } from './map';
 import { inside, sightPolygon, sightRadius, type SightPolygon } from './vispoly';
 
 /** Sample points per tile side (4×4, 4 px apart, 2 px in from the edges). */
@@ -28,21 +28,21 @@ export class View {
   }
 
   /** The view from (px, py) with `vision` tiles (rounded). */
-  compute(map: TileMap, px: number, py: number, vision: number): void {
+  compute(map: TileMap, px: number, py: number, vision: number, b: Blocker = 'all'): void {
     const v = Math.round(vision);
     const r = sightRadius(v);
     this.px = px;
     this.py = py;
     this.version++;
     this.gen = (this.gen + 1) >>> 0 || 1;
-    this.fov.compute(map, Math.floor(px / TILE), Math.floor(py / TILE), v);
-    this.polygon = sightPolygon(map, px, py, r);
+    this.fov.compute(map, Math.floor(px / TILE), Math.floor(py / TILE), v, b);
+    this.polygon = sightPolygon(map, px, py, r, 96, b);
     const x0 = Math.max(0, Math.floor((px - r) / TILE));
     const y0 = Math.max(0, Math.floor((py - r) / TILE));
     const x1 = Math.min(this.w - 1, Math.floor((px + r) / TILE));
     const y1 = Math.min(this.h - 1, Math.floor((py + r) / TILE));
     for (let y = y0; y <= y1; y++)
-      for (let x = x0; x <= x1; x++) if (map.opaque(x, y) ? this.fov.isVisible(x, y) : this.covered(x, y)) this.stamp[y * this.w + x] = this.gen;
+      for (let x = x0; x <= x1; x++) if (map.blocksSight(x, y, b) ? this.fov.isVisible(x, y) : this.covered(x, y)) this.stamp[y * this.w + x] = this.gen;
   }
 
   /** Any of the tile's 16 sample points inside the polygon. */

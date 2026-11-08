@@ -3,4 +3,4 @@
 /**
  * Which kind of level a run plays.
  */
-export type LevelId = "Dungeon";
+export type LevelId = "Dungeon" | "Woodland";

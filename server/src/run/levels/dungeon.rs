@@ -39,6 +39,7 @@ impl LevelRules for DungeonLevel {
             Level::Dungeon(d) => (d.haunts.clone(), d.boss.boss_id, companion::knight_spot(&run.layout, &d.rooms[d.start].rect)),
             #[cfg(test)]
             Level::Test => return,
+            Level::Woodland(_) => return,
         };
         if let Some(t) = crate::defs::enemies::haunt_for(boss) {
             for pos in haunts {

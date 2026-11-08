@@ -140,6 +140,47 @@ mod tests {
     }
 
     #[test]
+    fn cove_lighting_is_unchanged_by_the_trunk() {
+        use crate::defs::lights::LightKind;
+        use crate::dungeon::Blocker;
+        use crate::fov::Fov;
+        use crate::run::light::{Anchor, Lights};
+        each_dungeon(20, |seed, d| {
+            let c = d.cove.unwrap();
+            let mut lights = Lights::new(d.map.w, d.map.h);
+            let mut fov = Fov::new(d.map.w, d.map.h);
+            let mut by_hard = vec![false; (d.map.w * d.map.h) as usize];
+            // The same map with the trunk as plain floor: how the cove was lit before trunks blocked sight.
+            let mut no_trunk = d.map.clone();
+            no_trunk.set(c.tree.0, c.tree.1, Tile::Floor);
+            let mut old = Lights::new(d.map.w, d.map.h);
+            for &(x, y) in d.suns.iter().filter(|&&(x, y)| c.rect.contains_tile(x, y)) {
+                lights.push(LightKind::Daylight, Anchor::Tile(x, y), None);
+                old.push(LightKind::Daylight, Anchor::Tile(x, y), None);
+                let r = crate::defs::lights::def(LightKind::Daylight).radius;
+                fov.compute(&d.map, x, y, r, Blocker::Hard);
+                for ty in 0..d.map.h {
+                    for tx in 0..d.map.w {
+                        if fov.is_visible(tx, ty) {
+                            by_hard[(ty * d.map.w + tx) as usize] = true;
+                        }
+                    }
+                }
+            }
+            lights.refresh(&d.map);
+            old.refresh(&no_trunk);
+            for ty in 0..d.map.h {
+                for tx in 0..d.map.w {
+                    let i = (ty * d.map.w + tx) as usize;
+                    assert_eq!(lights.static_lit(tx, ty), by_hard[i], "seed {seed}: {tx},{ty}");
+                    assert_eq!(lights.static_lit(tx, ty), old.static_lit(tx, ty), "seed {seed}: {tx},{ty} differs from the trunk-less cove");
+                }
+            }
+            assert!(lights.static_lit(c.tree.0, c.tree.1), "seed {seed}: the trunk tile is lit");
+        });
+    }
+
+    #[test]
     fn cove_has_its_suns() {
         each_dungeon(200, |seed, d| {
             let c = d.cove.unwrap();
