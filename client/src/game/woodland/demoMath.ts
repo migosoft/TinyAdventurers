@@ -54,6 +54,7 @@ export const HAZE_STEPS: Record<Exclude<keyof HazeLook, 'colour'>, { step: numbe
   mix: { step: 0.05, min: 0, max: 1, digits: 2 },
   desat: { step: 0.1, min: 0, max: 1, digits: 1 },
   blurPx: { step: 0.5, min: 0, max: 4, digits: 1 },
+  feather: { step: 8, min: 0, max: 64, digits: 0 },
 };
 
 /** `look[key]` moved one step, clamped to its range and rounded to its decimals. */

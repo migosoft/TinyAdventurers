@@ -241,6 +241,8 @@ export class GameScene extends Phaser.Scene {
     if (this.info.daylight) {
       this.visionMask.outside = DEFAULT_HAZE.outside;
       this.visionMask.soft = DEFAULT_HAZE.soft;
+      this.visionMask.feather = DEFAULT_HAZE.feather;
+      if (this.woodland) this.visionMask.seen = this.woodland.seenPainter;
     } else this.visionMask.outside = 1;
     this.shadeMask = new ShadeMask(this, this.map);
     this.useHint = new KeyCap(this);

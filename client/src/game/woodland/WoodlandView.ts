@@ -6,6 +6,7 @@ import type Phaser from 'phaser';
 import type { PlantInfo } from '../../generated/PlantInfo';
 import type { WoodlandInfo } from '../../generated/WoodlandInfo';
 import { TILE, type TileMap } from '../../sim/map';
+import type { VisionMask } from '../visionmask';
 import { DEPTH } from '../effects';
 import { heroBox, occludersOf, Silhouette, type BodyLook, type Box } from '../silhouette';
 import { drawPlant, lightVector, PLANT_KINDS, type Drawn, type Light } from '../vegetation';
@@ -67,6 +68,10 @@ export class WoodlandView {
   /** What the last page upload cost (ms): the next frame's jobs get the budget minus this. */
   private uploadMs = 0;
   private images = new Map<number, Phaser.GameObjects.Image>();
+  /** Plants shown so far (the seen-plant painter's version; it also changes when the plants are cleared). */
+  private shown = 0;
+  /** White silhouettes by plant frame key. */
+  private silhouetteCache = new Map<string, HTMLCanvasElement>();
   /** Drawn, waiting for their page to be uploaded. */
   private ready: number[] = [];
   private pending = new Set<number>();
@@ -196,7 +201,59 @@ export class WoodlandView {
     const ox = (p[5] ? f.w - f.foot.x : f.foot.x) / f.w;
     this.images.set(i, this.scene.add.image(p[1], p[2], PAGE_TEX + f.page, f.name)
       .setOrigin(ox, f.foot.y / f.h).setFlipX(p[5]).setDepth(DEPTH.entityBase + p[2]));
+    this.shown++;
   }
+
+  /** White-on-transparent copy of a plant frame, made once from its page region. */
+  private silhouetteOf(key: string): HTMLCanvasElement {
+    let c = this.silhouetteCache.get(key);
+    if (c) return c;
+    const f = this.frames.get(key)!;
+    c = document.createElement('canvas');
+    c.width = f.w;
+    c.height = f.h;
+    const g = c.getContext('2d')!;
+    const fr = this.canvases[f.page].get(f.name);
+    g.drawImage(this.canvases[f.page].getSourceImage() as CanvasImageSource, fr.cutX, fr.cutY, f.w, f.h, 0, 0, f.w, f.h);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, f.w, f.h);
+    this.silhouetteCache.set(key, c);
+    return c;
+  }
+
+  /**
+   * For the vision mask's haze (#278): the haze works in ground coordinates, so a tree's picture (drawn upward
+   * from its foot) would be hazed wherever it reaches over hazed ground. Painting each shown plant whose foot
+   * tile the hero sees in white (unhazed) keeps a seen tree clear. `version` changes when a plant is shown or the plants are cleared.
+   */
+  get seenPainter(): NonNullable<VisionMask['seen']> {
+    return this.seenPaint;
+  }
+
+  private readonly seenPaint: NonNullable<VisionMask['seen']> = {
+    version: () => this.shown,
+    paint: (ctx, ox, oy, s, full) => {
+      const x0 = ox * TILE, y0 = oy * TILE, x1 = x0 + ctx.canvas.width / s, y1 = y0 + ctx.canvas.height / s;
+      for (const [i, img] of this.images) {
+        const p = this.info.plants[i];
+        const key = keyOf(p);
+        const f = this.frames.get(key)!;
+        const left = p[1] - (p[5] ? f.w - f.foot.x : f.foot.x), top = p[2] - f.foot.y;
+        if (left >= x1 || left + f.w <= x0 || top >= y1 || top + f.h <= y0) continue;
+        if (!img.visible || !full.isVisible(Math.floor(p[1] / TILE), Math.floor(p[2] / TILE))) continue;
+        ctx.save();
+        ctx.translate((left - x0) * s, (top - y0) * s);
+        ctx.scale(s, s);
+        if (p[5]) {
+          ctx.translate(f.w, 0);
+          ctx.scale(-1, 1);
+        }
+        ctx.drawImage(this.silhouetteOf(key), 0, 0);
+        ctx.restore();
+      }
+    },
+  };
 
   /** The not-yet-uploaded strip of ground nearest to the camera as its own small texture (at most one per frame), replacing its flat placeholder. */
   private uploadStrip(camY: number): void {
@@ -290,6 +347,8 @@ export class WoodlandView {
     this.silhouettes = [];
     for (const img of this.images.values()) img.destroy();
     this.images.clear();
+    this.shown++;
+    this.silhouetteCache.clear();
     for (const g of this.placeholders) g.destroy();
     this.strips.forEach((img, n) => { img.destroy(); if (this.scene.textures.exists(GROUND_TEX + n)) this.scene.textures.remove(GROUND_TEX + n); });
     this.canvases.forEach((_, n) => { if (this.scene.textures.exists(PAGE_TEX + n)) this.scene.textures.remove(PAGE_TEX + n); });

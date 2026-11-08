@@ -64,7 +64,10 @@ describe('woodland demo math', () => {
     expect(stepHaze(h, 'blurPx', 1).blurPx).toBe(2);
     expect(stepHaze({ ...h, blurPx: 3.8 }, 'blurPx', 1).blurPx).toBe(4);
     expect(stepHaze(h, 'mix', 1).colour).toBe(DEFAULT_HAZE.colour);
-    expect(Object.keys(HAZE_STEPS)).toEqual(['outside', 'soft', 'mix', 'desat', 'blurPx']);
+    expect(Object.keys(HAZE_STEPS)).toEqual(['outside', 'soft', 'mix', 'desat', 'blurPx', 'feather']);
+    expect(stepHaze(h, 'feather', 1).feather).toBe(32);
+    expect(stepHaze({ ...h, feather: 60 }, 'feather', 1).feather).toBe(64);
+    expect(stepHaze({ ...h, feather: 4 }, 'feather', -1).feather).toBe(0);
   });
   it('steps the shadow alpha by 0.04 within 0..0.6', () => {
     expect(stepAlpha(0.28, 1)).toBe(0.32);

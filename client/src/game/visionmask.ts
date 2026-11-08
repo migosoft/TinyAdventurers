@@ -35,6 +35,35 @@ export function fillPlan(haze: boolean, lv: { outside: number; soft: number }): 
     : [{ poly: 'hard', grey: 255 }];
 }
 
+/** One running-sum box pass (window 2r+1, edge pixels repeated) over `n` values at `stride` apart, `src` into `dst`. */
+function boxLine(src: Float32Array, dst: Float32Array, start: number, stride: number, n: number, r: number): void {
+  const at = (i: number) => src[start + Math.min(n - 1, Math.max(0, i)) * stride];
+  let sum = 0;
+  for (let i = -r; i <= r; i++) sum += at(i);
+  const div = 2 * r + 1;
+  for (let i = 0; i < n; i++) {
+    dst[start + i * stride] = sum / div;
+    sum += at(i + r + 1) - at(i - r);
+  }
+}
+
+/**
+ * Blurs the canvas's grey in place: three separable box passes (close to a gaussian) on the red channel of
+ * RGBA `data` (`w`×`h`), copied into green and blue; alpha stays as it is. `radius` is in canvas px; 0 changes nothing.
+ */
+export function blurGrey(data: Uint8ClampedArray, w: number, h: number, radius: number): void {
+  const r = Math.floor(radius);
+  if (r <= 0) return;
+  let a = new Float32Array(w * h);
+  let b = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) a[i] = data[i * 4];
+  for (let pass = 0; pass < 3; pass++) {
+    for (let y = 0; y < h; y++) boxLine(a, b, y * w, 1, w, r);
+    for (let x = 0; x < w; x++) boxLine(b, a, x, w, h, r);
+  }
+  for (let i = 0; i < w * h; i++) data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(a[i]);
+}
+
 /** Canvas pixels per tile: enough for a straight, antialiased edge. */
 const RES = 8;
 /** Tiles of canvas beyond the camera window on each side. */
@@ -66,6 +95,15 @@ export class VisionMask {
   haze = false;
   /** Haze mode: the unseen strength behind a soft blocker (inside the hard view, outside the full one). */
   soft = 0;
+  /** Haze mode: the blur radius of the mask in world px (0: hard edges). */
+  feather = 0;
+  /**
+   * Haze mode: scenery that must never be hazed where the hero sees it (a tree's picture reaches over the
+   * hazed ground behind it, and UnseenFX works in ground coordinates). `paint` runs after the blur, so the
+   * silhouettes stay crisp; `version` changes when what it paints changes. `ox`, `oy`: the canvas origin in tiles;
+   * `s`: canvas px per world px; `full`: the full view.
+   */
+  seen?: { version(): number; paint(ctx: CanvasRenderingContext2D, ox: number, oy: number, s: number, full: View): void };
 
   /** The canvas texture (haze mode: UnseenFX binds it). */
   get texture(): Phaser.Textures.CanvasTexture | undefined {
@@ -115,7 +153,7 @@ export class VisionMask {
     this.oy = oy;
     shader?.setPosition(ox * TILE, oy * TILE);
     const full = this.haze ? all!() : undefined;
-    const key = `${ox},${oy},${sight.version},${this.outside},${this.soft}${full ? `,${full.version}` : ''}`;
+    const key = `${ox},${oy},${sight.version},${this.outside},${this.soft}${full ? `,${full.version},${this.feather},${this.seen?.version() ?? 0}` : ''}`;
     if (key === this.last) return;
     this.last = key;
 
@@ -138,6 +176,14 @@ export class VisionMask {
     ctx.fillStyle = '#fff';
     for (let y = 0; y < this.rows; y++)
       for (let x = 0; x < this.cols; x++) if (this.map.hardOpaque(ox + x, oy + y) && sight.isVisible(ox + x, oy + y)) ctx.fillRect(x * RES, y * RES, RES, RES);
+    if (full) {
+      if (this.feather > 0) {
+        const img = ctx.getImageData(0, 0, this.cols * RES, this.rows * RES);
+        blurGrey(img.data, img.width, img.height, Math.max(1, Math.round(this.feather * s)));
+        ctx.putImageData(img, 0, 0);
+      }
+      this.seen?.paint(ctx, ox, oy, s, full);
+    }
     canvas.refresh();
     // refresh() resets the filter to NEAREST (pixelArt).
     canvas.setFilter(Phaser.Textures.FilterMode.LINEAR);
