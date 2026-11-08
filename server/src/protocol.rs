@@ -215,6 +215,21 @@ pub struct WoodlandInfo {
     pub seed: u32,
     pub end: [i32; 4],
     pub plants: Vec<PlantInfo>,
+    pub sun: SunInfo,
+}
+
+/// The woodland's sun: `side` -1 (west) or 1 (east), `elevation` in degrees above the horizon.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct SunInfo {
+    pub side: i8,
+    pub elevation: u8,
+}
+
+impl From<crate::dungeon::woodland::Sun> for SunInfo {
+    fn from(s: crate::dungeon::woodland::Sun) -> Self {
+        SunInfo { side: s.side, elevation: s.elevation_deg }
+    }
 }
 
 impl From<&crate::dungeon::woodland::Woodland> for WoodlandInfo {
@@ -223,6 +238,7 @@ impl From<&crate::dungeon::woodland::Woodland> for WoodlandInfo {
             seed: w.seed,
             end: [w.end.x, w.end.y, w.end.w, w.end.h],
             plants: w.plants.iter().map(|p| PlantInfo(p.kind as u8, p.foot.x.round() as i32, p.foot.y.round() as i32, p.seed, p.scale_pct, p.mirrored)).collect(),
+            sun: SunInfo::from(w.sun),
         }
     }
 }
