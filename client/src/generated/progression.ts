@@ -898,13 +898,13 @@ export const TREES = {
         "text": "Haste: +2 s."
       },
       "WC1": {
-        "ability": "CharmMonster",
+        "ability": "Charm",
         "cost": 700,
         "kind": "Unlock",
         "links": [
           "WB3"
         ],
-        "name": "Charm Monster",
+        "name": "Charm",
         "pos": [
           1,
           2
@@ -913,7 +913,7 @@ export const TREES = {
           "INT 15",
           "CHA 14"
         ],
-        "text": "Unlocks Charm Monster (secondary)."
+        "text": "Unlocks Charm (secondary)."
       },
       "WF1": {
         "ability": "FrostShard",
@@ -2218,13 +2218,13 @@ export const ABILITY_INFO = {
     "tint": "Physical",
     "uses": "Melee"
   },
-  "CharmMonster": {
+  "Charm": {
     "category": "Spell",
     "req": [
       "INT 15",
       "CHA 14"
     ],
-    "text": "Charms a monster: it fights for you for a while, then turns back.",
+    "text": "Charms a foe: it fights for your side for a while, then turns back.",
     "tint": null,
     "uses": "Nothing"
   },

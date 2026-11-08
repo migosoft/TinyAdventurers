@@ -63,7 +63,7 @@ pub enum EntityKind {
     Judgement = 64,
     /// The Barbarian's Throwing Axes.
     ThrownAxe = 65,
-    /// Charm Monster: the Wizard's charm orb.
+    /// Charm: the Wizard's charm orb.
     CharmOrb = 66,
     // Hazards
     FirePatch = 70,

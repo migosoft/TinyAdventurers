@@ -339,7 +339,7 @@ fn use_projectile(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) ->
         AbilityId::MagicMissile => {
             spawn_shot(run, c, a, EntityKind::Missile, shot, Vec2::from_angle(aim), None, 0.0);
         }
-        AbilityId::FrostShard | AbilityId::Judgement | AbilityId::Shoot | AbilityId::Hurl | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::CharmMonster => {
+        AbilityId::FrostShard | AbilityId::Judgement | AbilityId::Shoot | AbilityId::Hurl | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm => {
             spawn_shot(run, c, a, kind_of(a.projectile), shot, Vec2::from_angle(aim), None, 0.0);
         }
         // It stops at the first foe; the jumps are made there (`chain_jumps`, `spawn_shot` gives it no pierce).
@@ -379,7 +379,7 @@ fn use_blast(run: &mut Run, c: Creature, a: &ResolvedAbility, shot: u16) -> Anim
             let target = pos + dir * aim_dist.clamp(24.0, a.range);
             spawn_shot(run, c, a, EntityKind::Fireball, shot, dir, Some(target), a.radius);
         }
-        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::CharmMonster | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
+        AbilityId::MagicMissile | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a blast", a.id)
         }
     }
@@ -400,7 +400,7 @@ fn use_swing(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Ani
                 run.add_tinted_flash(look.light.expect("Smite flashes"), look.tint, at, ab::SMITE_FLASH);
             }
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::CharmMonster | AbilityId::StoneGaze | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a swing", a.id)
         }
     }
@@ -484,7 +484,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
                 run.knock_creature(t, pos, away, a.push, a.push_str);
             }
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::CharmMonster | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a ring", a.id)
         }
     }
@@ -501,7 +501,7 @@ fn use_breath(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> An
             // The first pulse comes with the first tick.
             run.monsters[mi].channel = Some((a.id, a.duration, 0.0));
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::CharmMonster | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a breath", a.id)
         }
     }
@@ -656,7 +656,7 @@ fn use_dash(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
                 run.monsters[mi].dash = Some(MonsterDash { id: a.id, dir, left, hit: Vec::new(), attack: true });
             }
         },
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::CharmMonster | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a dash", a.id)
         }
     }
@@ -742,7 +742,7 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
                 }
             }
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::CharmMonster | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a self area", a.id)
         }
     }
@@ -776,7 +776,7 @@ fn use_ground_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) 
             let binds = a.effect.iter().map(|&own| OnHit { secs: ab::ENTANGLE_PULSE_SECS, ..own }).collect();
             run.spawn_hazard(kind_of(a.projectile), at, a.radius, a.duration, side, HazardPulse::Bind(binds));
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::CharmMonster | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a ground area", a.id)
         }
     }
@@ -794,7 +794,7 @@ fn use_buff(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
             }
         }
         AbilityId::Vanish => unreachable!("Vanish goes through go_invisible"),
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::CharmMonster | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::RaiseDead | AbilityId::SummonImps => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a buff", a.id)
         }
     }
@@ -813,7 +813,7 @@ fn use_summon(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> An
             let Creature::Monster(mi) = c else { unreachable!("only monsters raise minions") };
             super::minions::raise(run, mi, a);
         }
-        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::CharmMonster | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish => {
+        AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Consecrate | AbilityId::Entangle | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish => {
             unreachable!("{:?} is not a summon", a.id)
         }
     }
@@ -3096,21 +3096,21 @@ mod tests {
     }
 
     fn charm_wizard() -> Run {
-        run_with_ability(ClassId::Wizard, AbilitySlot::Secondary, AbilityId::CharmMonster, Attributes::new(0, 0, 0, 3, 0, 8), Equipment::default())
+        run_with_ability(ClassId::Wizard, AbilitySlot::Secondary, AbilityId::Charm, Attributes::new(0, 0, 0, 3, 0, 8), Equipment::default())
     }
 
     #[test]
-    fn charm_monster_matches_the_spec() {
+    fn charm_matches_the_spec() {
         use crate::defs::abilities::{AbilityCategory, AbilitySlot as Slot};
         use crate::defs::requirements::Requirement;
         let run = charm_wizard();
         let a = run.players[0].sheet.secondary.clone();
-        assert_eq!(a.id, AbilityId::CharmMonster);
-        assert_cd(a.cooldown, &run, 0, AbilityId::CharmMonster, 20.0);
+        assert_eq!(a.id, AbilityId::Charm);
+        assert_cd(a.cooldown, &run, 0, AbilityId::Charm, 20.0);
         assert!((a.windup - 0.6).abs() < 1e-9);
         assert_eq!(a.projectile, Some(crate::defs::kinds::EntityKind::CharmOrb));
         assert_eq!(a.damage, 0.0);
-        let d = ab::def(AbilityId::CharmMonster);
+        let d = ab::def(AbilityId::Charm);
         assert_eq!((d.slot, d.category), (Slot::Secondary, AbilityCategory::Spell));
         assert!(d.magical && d.ranged);
         assert_eq!(d.req, &[Requirement::Attr(Attr::Int, 15), Requirement::Attr(Attr::Cha, 14)]);

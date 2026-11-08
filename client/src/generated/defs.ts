@@ -322,12 +322,12 @@ export const ABILITIES = {
     "shape": "Dash",
     "slot": "Secondary"
   },
-  "CharmMonster": {
+  "Charm": {
     "classes": [
       "Wizard"
     ],
     "hero": true,
-    "name": "Charm Monster",
+    "name": "Charm",
     "ranged": true,
     "shape": "Projectile",
     "slot": "Secondary"

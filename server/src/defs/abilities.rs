@@ -96,7 +96,7 @@ super::enum_list::listed_enum! {
         /// Summons imps to fight for the caster.
         SummonImps = 40,
         /// A Wizard's orb that charms a monster to fight for the caster for a while.
-        CharmMonster = 41,
+        Charm = 41,
     }
 }
 
@@ -402,7 +402,7 @@ pub fn text(id: AbilityId) -> &'static str {
         AbilityId::Vanish => "Fades from sight until it strikes.",
         AbilityId::RaiseDead => "Raises skeletons, half of them archers, that fight for the caster.",
         AbilityId::SummonImps => "Summons imps that fight for the caster.",
-        AbilityId::CharmMonster => "Charms a monster: it fights for you for a while, then turns back.",
+        AbilityId::Charm => "Charms a foe: it fights for your side for a while, then turns back.",
         AbilityId::StoneGaze => "A stare that turns the target to stone, if it still sees it when the gaze lands.",
     }
 }
@@ -581,10 +581,10 @@ pub fn def(id: AbilityId) -> AbilityDef {
             own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Sleep, power: Attr::Int, look: EffectLook::Plain }], windup: 0.8, ..own(0.0, 14.0, 270.0, 90.0, 3.0, 4.0, Some(EntityKind::SleepOrb), 22) },
             ..base("Sleep Mist", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[])
         },
-        CharmMonster => AbilityDef {
+        Charm => AbilityDef {
             req: &[Requirement::Attr(Attr::Int, 15), Requirement::Attr(Attr::Cha, 14)],
             own: OwnStats { effects: &[OwnEffect { kind: EffectKind::Charmed, power: Attr::Cha, look: EffectLook::Plain }], windup: 0.6, ..own(0.0, 20.0, 270.0, 160.0, 3.0, 8.0, Some(EntityKind::CharmOrb), 15) },
-            ..base("Charm Monster", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[K::Wizard])
+            ..base("Charm", Secondary, C::Spell, Uses::Nothing, true, Shape::Projectile, NO_OWN, &[K::Wizard])
         },
         Touch => AbilityDef {
             req: &[Requirement::WeaponKind(&[WeaponKind::Touch])],
