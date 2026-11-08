@@ -6,6 +6,7 @@ import type Phaser from 'phaser';
 import type { PlantInfo } from '../../generated/PlantInfo';
 import type { WoodlandInfo } from '../../generated/WoodlandInfo';
 import { TILE, type TileMap } from '../../sim/map';
+import { touches } from '../../sim/view';
 import type { VisionMask } from '../visionmask';
 import { DEPTH } from '../effects';
 import { heroBox, occludersOf, Silhouette, type BodyLook, type Box } from '../silhouette';
@@ -243,7 +244,7 @@ export class WoodlandView {
         if (b.left >= x1 || b.left + b.w <= x0 || b.top >= y1 || b.top + b.h <= y0) continue;
         const p = this.info.plants[i];
         const { tx, ty } = plantTile(p[1], p[2], TILE);
-        if (!img.visible || !full.isVisible(tx, ty)) continue;
+        if (!img.visible || !touches(full, tx, ty)) continue;
         const { left, top } = b;
         const f = this.frames.get(b.key)!;
         const key = b.key;

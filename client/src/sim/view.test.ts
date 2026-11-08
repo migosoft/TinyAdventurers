@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import fixtures from '../generated/fixtures.json';
 import { TILE, TileMap } from './map';
-import { View } from './view';
+import { touches, View } from './view';
 import { inside, sightPolygon } from './vispoly';
 
 /** A map from rows of characters: '#' wall, anything else floor. */
@@ -90,5 +90,51 @@ describe('View on the shared fixture', () => {
       expect(v.polygon.points.length, `viewer ${c.x},${c.y} points`).toBe(c.points.length);
       v.polygon.points.forEach((p, i) => expect(p, `viewer ${c.x},${c.y} point ${i}`).toBeCloseTo(c.points[i], 6));
     }
+  });
+});
+
+describe('touches (blocker tiles the polygon ends on)', () => {
+  const T = TILE_ID.Trunk;
+  /** '#' wall, 'T' trunk, anything else floor. */
+  function trunks(rows: string[]): TileMap {
+    const w = rows[0].length;
+    const tiles = new Uint8Array(w * rows.length);
+    rows.forEach((row, y) => [...row].forEach((c, x) => (tiles[y * w + x] = c === '#' ? TILE_ID.Wall : c === 'T' ? T : TILE_ID.Floor)));
+    return new TileMap(w, rows.length, tiles);
+  }
+  const look = (map: TileMap, px: number, py: number) => {
+    const v = new View(map.w, map.h);
+    v.compute(map, px, py, 9, 'all');
+    return v;
+  };
+
+  it('a trunk in plain sight is touched', () => {
+    const m = trunks(['#########', '#.......#', '#...T...#', '#.......#', '#########']);
+    const v = look(m, 1.5 * TILE, 2.5 * TILE);
+    expect(v.isVisible(4, 2)).toBe(true);
+    expect(touches(v, 4, 2)).toBe(true);
+  });
+  it('a trunk directly behind another in a corridor is not touched', () => {
+    const m = trunks(['###########', '#.TT......#', '###########']);
+    const v = look(m, 8.5 * TILE, 1.5 * TILE);
+    expect(touches(v, 3, 1)).toBe(true); // the front trunk
+    expect(v.isVisible(2, 1)).toBe(false);
+    expect(touches(v, 2, 1)).toBe(false); // the one behind it
+  });
+  it('at a grazing angle the tile shadowcast can call a trunk hidden while the polygon ends on its face: touched', () => {
+    // two trunks side by side; from the far left corner of the row the tile test misses the second one
+    const m = trunks(['############', '#..........#', '#..........#', '#....TT....#', '#..........#', '############']);
+    const v = look(m, 1.05 * TILE, 3.05 * TILE);
+    expect(v.isVisible(6, 3)).toBe(false);
+    expect(touches(v, 6, 3)).toBe(true);
+    // what the tile test sees is touched too
+    expect(v.isVisible(5, 3)).toBe(true);
+    expect(touches(v, 5, 3)).toBe(true);
+  });
+  it('the same two trunks seen exactly in line: the second is hidden behind the first', () => {
+    const m = trunks(['############', '#..........#', '#..........#', '#....TT....#', '#..........#', '############']);
+    const v = look(m, 1.5 * TILE, 3.5 * TILE);
+    expect(touches(v, 5, 3)).toBe(true);
+    expect(touches(v, 6, 3)).toBe(false);
   });
 });

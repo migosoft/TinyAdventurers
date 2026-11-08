@@ -13,7 +13,7 @@
 // the full one) `soft`, and 0 in the full view; UnseenFX (unseenfx.ts) reads it and hazes the world.
 import Phaser from 'phaser';
 import { TILE, type TileMap } from '../sim/map';
-import type { View } from '../sim/view';
+import { touches, type View } from '../sim/view';
 import { DEPTH } from './effects';
 
 /** The canvas grey values (0..255) for the unseen strengths `outside` and `soft` (0..1): strength 1 is black, 0 white. */
@@ -226,7 +226,7 @@ export class VisionMask {
           }
           break;
         case 'blockers':
-          fillTiles((x, y) => this.map.opaque(x, y) && !this.map.hardOpaque(x, y) && full!.isVisible(x, y));
+          fillTiles((x, y) => this.map.opaque(x, y) && !this.map.hardOpaque(x, y) && touches(full!, x, y));
           break;
         case 'seen':
           this.seen?.paint(ctx, ox, oy, s, full!);
