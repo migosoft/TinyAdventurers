@@ -88,6 +88,7 @@ Details are in [docs/TECHNICAL.md](docs/TECHNICAL.md).
 - `?water`, `?chasm`, `?lava`: the terrain with scripted figures: wading, drowning, falling, burning, the dash jumping a gap, and being knocked in (no server needed; add `&slow=3` for slow motion)
 - `?knockback`: every push in the game (orc warrior, chort, the demon's cleave and swoop, the dragon's claw and tail) next to chasms and deep water (no server needed; `&slow=3` works too)
 - `?dragon`: the red dragon looping through every action, flight and landing smash included (no server needed; Space pauses, S slow motion, 1-8 jump to an action)
+- `?charm`: what a charmed player sees (pink haze, "CHARMED", the caster, a shrinking bar) while a charmed Barbarian attacks a Paladin; big buttons for Charmed, Paused (Dispel) and Ends (no server needed)
 - `?ogre`: the ogre mini-boss's club push next to the orc warrior's, and its ground slam with the telegraph ring (no server needed; `&slow=3` works too)
 - `?lich`: the lich's dark purple magic: gloom bolt volley, the summon of 5 skeletons + 5 archers, and the nova pushing heroes 64 px (no server needed; `&slow=3` works too)
 - `?demon`: the red demon looping through every action: walking, cleave, the swoop charge, the ring of fire and an enraged cleave (no server needed; Space pauses, S slow motion, 1-7 jump to an action)

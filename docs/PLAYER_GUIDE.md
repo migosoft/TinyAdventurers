@@ -51,7 +51,7 @@ Fragile, but deadly from range.
 - **Left – Magic Missile:** fast arcane bolts in quick succession. With an enemy right next to you, you hit with your staff instead.
 - **Right – Fireball (6 s cooldown):** a slow ball of fire that explodes where your mouse pointer is, or earlier if it hits something. It damages every enemy in the blast and **pushes** them: **up to 20 px**, and only if your STR beats the enemy's weight (a push is full once your STR is 4 above the weight). A starting Wizard (STR 8) moves only light enemies: an imp 20 px, a goblin archer (weight 6) 10 px, and nothing heavier. Never a boss, a friend of yours, or a hiding mimic. It can't hurt your friends. It cannot be cast with an enemy right next to you.
 - **More, left button:** **Frost Shard** (INT 14): a quick bolt that is mostly cold and chills what it hits (slows it). **Chain Spark** (INT 18): a bolt that jumps to up to two more enemies close by, weaker each time, with a line of lightning between them.
-- **More, right button:** **Frost Nova** (INT 17, 9 s): a ring of cold around you that hurts every enemy in sight and freezes it. **Haste** (INT 15, WIL 14, 14 s): you and the friends close to you run faster for 4 seconds. **Charm Monster** (INT 15, CHA 14, 20 s; a skill-tree node next to Light Armor): a pink orb that **charms** the monster it hits: for about 8 seconds (shortened by its Willpower) it fights for you, then turns back. See "Charmed monsters" under "Sides and companions".
+- **More, right button:** **Frost Nova** (INT 17, 9 s): a ring of cold around you that hurts every enemy in sight and freezes it. **Haste** (INT 15, WIL 14, 14 s): you and the friends close to you run faster for 4 seconds. **Charm** (INT 15, CHA 14, 20 s; a skill-tree node next to Light Armor): a pink orb that **charms** the monster it hits: for about 8 seconds (shortened by its Willpower) it fights for you, then turns back. See "Charm" under "Sides and companions".
 
 ### Paladin, 120 HP
 An armoured holy warrior who keeps the party alive.
@@ -97,13 +97,23 @@ Every creature fights for a side: the monsters against you, you and your friends
 - **Your help reaches him.** The Paladin's **Holy Light** heals him, and **Haste**, **Purify** and **War Cry** reach him like they reach a teammate.
 - **His death costs nothing** but the knight himself: no XP, coins or penalty, and nobody else is harmed. A message tells you he has fallen.
 
-**Charmed monsters.** The Wizard's **Charm Monster** turns a monster into a companion for a few seconds. A small pink heart bobs over its head and its bar turns green.
+**Charm.** The Wizard's **Charm** turns a monster into a companion for a few seconds. A small pink heart bobs over its head and its bar turns green. Charm is one spell for everyone: an enemy who casts it does the same to you (see "Being charmed" below).
 - **It follows the Wizard who charmed it** and fights the monsters near you with its own attacks, like the knight. If that Wizard falls or leaves, it follows the next hero. Your side cannot hurt it while it is charmed.
 - **A master takes its minions along:** charm a necromancer or a summoner and its skeletons or imps fight for you too, also the ones it raises while charmed. They turn back with it.
 - **Bosses can be charmed** (not the Lich): the boss stops its own pattern and follows the Wizard for a short while, then picks up where it left off.
 - **When the charm ends** it is its old self again, right where it stands: an enemy attacks you again, a wild animal goes back to its place. Magic that is paused also pauses the charm, which comes back if time is left.
 - **Killing it counts as it would uncharmed**: an enemy gives XP and coins as usual, a calm wild animal nothing, and a charmed boss that dies still wins the fight.
-- **Who resists:** undead cannot be charmed at all; dragons and demons only half as long. The knight and other friends cannot be charmed, and no hero can be.
+- **Who resists:** undead cannot be charmed at all; dragons and demons only half as long. The unrecruited knight cannot be charmed. Heroes and elves do not resist it.
+
+**Being charmed.** An enemy's Charm can take one of the heroes for a few seconds (the first enemies that cast it come later). You are the hero who is charmed:
+- **You lose control.** The hero fights the party on its own, with its left and right button abilities, and runs at your friends. Your keys and mouse do nothing, but chat, the menu, the log and the stats still work.
+- **What you see:** a pink haze over the whole screen with a pulsing edge, a big **CHARMED** title, "by" and the name of the caster, and a bar that shrinks as the charm runs out. The two ability slots show hearts and the effect icon counts the seconds. Your friends see a pink heart over you, and your name in their party list turns pink with a heart.
+- **Only Dispel ends it early.** Nobody can free you with a key or by hitting you, and there is no button to mash. Your Willpower shortens it a little. Dispel Magic and anti-magic areas pause it (you are yourself again and the haze goes, then it comes back if time is left).
+- **Deaths are real, both ways.** You can kill a friend, and your friends can kill you, and a fallen hero stays fallen. Nothing stops at 1 HP. A hero killed while charmed is counted as killed by whoever cast the charm.
+- **While you are on their side** enemies ignore you and your area abilities (Holy Light, Haste, War Cry) help them; your friends' hits, shots and traps hurt you, and yours hurt them.
+- **The wolf turns with its ranger**: a charmed Elven Ranger's wolf fights the party until the charm ends. A recruited knight does not turn: he follows another hero.
+- **When it ends** you are yourself again where you stand, with your health and your cooldowns as they were, and the controls come back at once.
+- An enemy's Charm can also take your wolf or the knight to the enemy side, for the same few seconds.
 
 The Elven Ranger's wolf is a companion of its own kind, summoned with the right button; see "Your wolf" above.
 
@@ -346,7 +356,7 @@ Some attacks do more than damage. Your own effects show as small symbols with th
 | Eye | Invisible | Nobody can see you (enemies cannot target you) and you look faint to your party. A hit on you, or attacking yourself, ends it. No hero can do this yet; Ghosts and Shades vanish this way |
 | Down arrow (coloured by Attribute) | Weakened | Your **Strength** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
 | Down arrow (coloured by Attribute) | Clumsy | Your **Dexterity** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
-| Heart | Charmed | Pink: the monster fights for the hero who charmed it, then turns back (Charm Monster; never on heroes yet) |
+| Heart | Charmed | Pink: the creature fights for whoever charmed it, then turns back (Charm). On a hero it takes away your control and shows the pink view, see "Being charmed" |
 | Down arrow (coloured by Attribute) | Frail | Your **Constitution** drops by 1 or more for about 20 seconds (shortened by your save). Purify ends it |
 
 **One hit can apply several effects at once.** A weapon or a spell may poison and weaken in the same blow, and each effect keeps its own strength and is shortened by its own save. If two of them cancel each other (fire and cold), the later one wins.
@@ -364,7 +374,7 @@ The effects from damage types work in two tiers. A hit that is **at least half h
 - **Gear and abilities:** an item's requirement counts your other usable items, drain included. If a drain leaves you below it, the item gives you nothing until it ends (and an item that only worked thanks to it stops too) (a melee weapon you cannot use is replaced by your class's starter weapon). An ability's requirement counts your usable items like anywhere else; one you can no longer use (also because its weapon stopped working) is greyed out and does nothing (pressing it tells you which Attribute it needs, for example "Needs DEX 14"), though a ranged primary (left button) ability still falls back to Strike in melee. Your light, keystones and sight do not change (a drain never dims your light; only a pause of the light item does, see below).
 - Enemies can be drained too, and get weaker the same way.
 
-**Magic and non-magic effects.** Every effect is either magic or not. Effects from spells and innate abilities are magic: Haste (Accelerated), Charm Monster (Charmed), Purify (Warded), Vanish (Invisible), the Ghost's and Shade's Touch (Weakened, Frail), and the sleep, blind, stone and root spells of the lich and the Entangle ability. Burning, Frozen, Poisoned and their weaker tiers are not magic, whatever hit caused them, and neither are War Cry, Poison Coat or an ordinary weapon hit. Worn items with magical properties (the Flame Sword's fire and light, rings, the Boots of Haste and so on) and the Radiant node in the skill tree are magic too; a class's natural traits and a monster's own toughness never are. Magic can be paused: a paused effect does nothing, and its icon turns grey while its seconds keep counting down; a paused item or skill node shows as a grey chip with its name, and loses its magical properties until it is back (its base numbers and its non-magical properties keep working). **Nothing in a normal game pauses magic yet**, so you will not see this in play for now.
+**Magic and non-magic effects.** Every effect is either magic or not. Effects from spells and innate abilities are magic: Haste (Accelerated), Charm (Charmed), Purify (Warded), Vanish (Invisible), the Ghost's and Shade's Touch (Weakened, Frail), and the sleep, blind, stone and root spells of the lich and the Entangle ability. Burning, Frozen, Poisoned and their weaker tiers are not magic, whatever hit caused them, and neither are War Cry, Poison Coat or an ordinary weapon hit. Worn items with magical properties (the Flame Sword's fire and light, rings, the Boots of Haste and so on) and the Radiant node in the skill tree are magic too; a class's natural traits and a monster's own toughness never are. Magic can be paused: a paused effect does nothing, and its icon turns grey while its seconds keep counting down; a paused item or skill node shows as a grey chip with its name, and loses its magical properties until it is back (its base numbers and its non-magical properties keep working). **Nothing in a normal game pauses magic yet**, so you will not see this in play for now.
 
 ## Death, victory and defeat
 
