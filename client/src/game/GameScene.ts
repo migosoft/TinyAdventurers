@@ -45,7 +45,7 @@ import { meleeFoe, shotPassesThrough } from './shotTargets';
 import { FONT_TEXT } from '../fonts';
 import { critLabel, smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
-import { abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, Interpolator, Predictor, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
+import { abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, Interpolator, ownPredictedShot, Predictor, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
 
 export interface GameInit {
   info: RunStartInfo;
@@ -454,7 +454,9 @@ export class GameScene extends Phaser.Scene {
     this.interp.push(s, now);
     this.lastSnap = s;
     this.pred.solids = s.ents.filter((e) => e[1] === KIND.Barrel && e[5] < 2).map((e) => ({ x: e[2], y: e[3], half: CONST.BARREL_RADIUS }));
-    if (s.me.alive) this.pred.reconcile(s);
+    // The figure is drawn from the interpolated entity while charmed; when the charm ends the prediction blends in from there.
+    const drawn = this.ents.get(this.info.you);
+    if (s.me.alive) this.pred.reconcile(s, drawn ? [drawn.x, drawn.y] : undefined);
     if (this.alive && !s.me.alive) this.hud.message('You have fallen. Q / E to watch your party.');
     this.alive = s.me.alive;
     this.spectating = s.me.spectating;
@@ -593,15 +595,18 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const k = this.keys;
-    const mx = (k.D.isDown ? 1 : 0) - (k.A.isDown ? 1 : 0);
-    const my = (k.S.isDown ? 1 : 0) - (k.W.isDown ? 1 : 0);
+    // Charmed: the server drives the hero and ignores the input. Empty inputs keep its clock going and match what it
+    // sees when the charm ends before the client knows (no flag on the wire); nothing is predicted.
+    const charmed = this.pred.charmed;
+    const mx = charmed ? 0 : (k.D.isDown ? 1 : 0) - (k.A.isDown ? 1 : 0);
+    const my = charmed ? 0 : (k.S.isDown ? 1 : 0) - (k.W.isDown ? 1 : 0);
     const { aim: pointerAim, dist } = this.aimInfo();
     // Petrified or asleep: the server keeps the old facing, so the client sends it too.
     const aim = this.pred.noTurn ? this.lastAim : pointerAim;
     this.lastAim = aim;
     const ptr = this.input.activePointer;
     // Falling, drowning or pushed heroes cannot attack (the server ignores it).
-    const free = !this.hud.menuOpen && !this.pred.sinking && !this.pred.knocked && !this.pred.noAct;
+    const free = !charmed && !this.hud.menuOpen && !this.pred.sinking && !this.pred.knocked && !this.pred.noAct;
     const wantPrimary = (ptr.leftButtonDown() || this.primaryClicked) && free;
     const wantSecondary = (ptr.rightButtonDown() || this.secondaryClicked) && free;
     const act = this.actPressed && free;
@@ -653,7 +658,7 @@ export class GameScene extends Phaser.Scene {
       // A closed chest is struck like the hidden mimic it may be.
       if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= reach;
       // A flying dragon is out of reach, and a calm animal is no melee foe (a grudging boar is sent Hostile).
-      return meleeFoe(e) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
+      return e.id !== this.info.you && meleeFoe(e) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
     });
   }
 
@@ -853,7 +858,9 @@ export class GameScene extends Phaser.Scene {
 
     const now = performance.now() / 1000;
     this.interp.sample(now, this.ents);
-    const [px, py] = this.pred.renderPos(dt);
+    // Charmed: the server's hero, interpolated like any other entity, is the own figure and the camera's target.
+    const charmedEnt = this.pred.charmed && this.alive ? this.ents.get(this.info.you) : undefined;
+    const [px, py] = charmedEnt ? [charmedEnt.x, charmedEnt.y] : this.pred.renderPos(dt);
 
     // Camera & fog follow the own figure, or the spectated teammate.
     let camX = px;
@@ -890,8 +897,9 @@ export class GameScene extends Phaser.Scene {
     const myShots = new Set<number>();
     for (const e of this.ents.values()) {
       if (isProjectileKind(e.kind)) {
-        const owner = e.extra >>> 16;
-        if (owner === this.info.you) myShots.add(e.extra & 0xffff);
+        // Only shots the client predicted: the AI's shots of a charmed hero (ids from 0xF000) are the server's.
+        const shot = ownPredictedShot(e.extra, this.info.you);
+        if (shot !== null) myShots.add(shot);
       }
     }
     for (const e of this.ents.values()) {
@@ -930,7 +938,7 @@ export class GameScene extends Phaser.Scene {
     this.cove?.update(now, ownLook);
     this.woodland?.update(now, ownLook, this.cameras.main.worldView, this.lightView.seenLit);
 
-    const hint = this.alive && !this.pred.noAct && !this.pred.sinking ? pickUseHint(this.ents.values(), this.info.you, px, py) : null;
+    const hint = this.alive && !this.pred.charmed && !this.pred.noAct && !this.pred.sinking ? pickUseHint(this.ents.values(), this.info.you, px, py) : null;
     this.hud.setAsleep(this.alive && has(this.myEffects(), EFFECT.Sleep));
     if (hint) this.useHint.set(hint.label, Math.round(hint.ent.x), Math.round(hint.ent.y - 26));
     else this.useHint.hide();
@@ -974,7 +982,9 @@ export class GameScene extends Phaser.Scene {
     // Reappearing in the ambush wind-up: the flicker is the entrance, the default fade-in would blur it.
     if (this.reappearing.take(e.id, now) && !isPlayerKind(e.kind) && e.anim !== ANIM.Ambush) view.fadeIn();
     let s: ViewState;
-    if (me && this.alive) {
+    // The own figure is drawn from prediction, except while charmed: then it is the server's, interpolated hero.
+    const predicted = me && this.alive && !this.pred.charmed;
+    if (predicted) {
       // Petrified or asleep: the weapon keeps the facing from before the effect.
       const aim = this.pred.noTurn ? this.lastAim : this.aimInfo().aim;
       const tLocal = now - this.localAnim.start;
@@ -990,7 +1000,7 @@ export class GameScene extends Phaser.Scene {
     } else {
       s = { id: e.id, x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled, party: isPlayerKind(e.kind) };
     }
-    this.terrainState(e, s, me && this.alive, dt);
+    this.terrainState(e, s, predicted, dt);
     view.update(s, dt);
     // Dragon breath: a cone of fire particles from the mouth.
     void py;
@@ -1058,10 +1068,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawProjectile(e: EntState): void {
-    const owner = e.extra >>> 16;
     const shot = e.extra & 0xffff;
+    const ownShot = ownPredictedShot(e.extra, this.info.you) !== null;
     // Our own projectiles are shown by the local cosmetic copy, also once it has ended.
-    const stop = owner === this.info.you ? this.stoppedShots.get(shot) : undefined;
+    const stop = ownShot ? this.stoppedShots.get(shot) : undefined;
     // Predicted to stop, but the server's shot flew on past the enemy: show it from here on.
     // Both the position it is drawn at (interpolated, so it reappears past the enemy, never before it)
     // and its newest snapshot position (so an extrapolated overshoot of a shot that did stop never shows) must be past.
@@ -1071,7 +1081,7 @@ export class GameScene extends Phaser.Scene {
       this.stoppedShots.delete(shot);
       this.endedShots.delete(shot);
     }
-    const mine = owner === this.info.you && (this.endedShots.has(shot) || this.cosmetics.some((c) => c.shot === shot));
+    const mine = ownShot && (this.endedShots.has(shot) || this.cosmetics.some((c) => c.shot === shot));
     const pd = PROJECTILES[e.kind];
     if (!pd) return;
     let img = this.projViews.get(e.id);
@@ -1219,7 +1229,7 @@ export class GameScene extends Phaser.Scene {
     for (const e of this.ents.values()) {
       if (e.id === this.info.you || e.flags & FLAG.DEAD) continue;
       if (isProjectileKind(e.kind)) {
-        if (e.extra >>> 16 === this.info.you) continue; // own shots come from this.cosmetics
+        if (ownPredictedShot(e.extra, this.info.you) !== null) continue; // own shots come from this.cosmetics
         const a = projectileAir(e.kind);
         add(shotMover(tr.track(e.id, e.x, e.y, a.r, true, a.heat)));
       } else if (e.kind === KIND.Torch || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel) {
@@ -1252,7 +1262,8 @@ export class GameScene extends Phaser.Scene {
       const w = ogre ? 28 : 12;
       const x = Math.round(e.x - w / 2);
       const y = Math.round(e.y - v.height - 3);
-      const hero = isPlayerKind(e.kind) || e.side === SIDE.Friendly;
+      // A hero is green unless it is on the enemy side (charmed): then it gets the enemy's red bar, like a charmed monster.
+      const hero = (isPlayerKind(e.kind) && e.side !== SIDE.Hostile) || e.side === SIDE.Friendly;
       const g = hero ? this.heroBars : this.bars;
       g.fillStyle(0x140c1a, 1).fillRect(x - 1, y - 1, w + 2, 4);
       g.fillStyle(hero ? 0x40d060 : e.side === SIDE.Neutral ? 0x8a9ab8 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);

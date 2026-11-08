@@ -9,7 +9,11 @@ export function shotPassesThrough(e: { kind: number; side: number; flags: number
   return (isPlayerKind(e.kind) || !!FIGURES[e.kind]) && e.side !== SIDE.Hostile;
 }
 
-/** True for a creature a hero's melee strike reaches: a Hostile one on the ground with a figure (a grudging boar is sent Hostile; a calm animal is not). Chests are handled by the caller. */
+/**
+ * True for a creature a hero's melee strike reaches: a Hostile one on the ground with a figure (a grudging boar is sent Hostile; a calm animal is not).
+ * A hero is one while it is Hostile, i.e. charmed by an enemy (not when downed). Chests are handled by the caller.
+ */
 export function meleeFoe(e: { kind: number; side: number; flags: number }): boolean {
-  return !isPlayerKind(e.kind) && e.side === SIDE.Hostile && !(e.flags & FLAG.AIRBORNE) && (!!FIGURES[e.kind] || e.kind === KIND.Mimic);
+  if (isPlayerKind(e.kind)) return e.side === SIDE.Hostile && !(e.flags & FLAG.DEAD);
+  return e.side === SIDE.Hostile && !(e.flags & FLAG.AIRBORNE) && (!!FIGURES[e.kind] || e.kind === KIND.Mimic);
 }

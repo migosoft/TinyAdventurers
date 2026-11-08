@@ -219,6 +219,8 @@ export class Predictor {
   /** From the snapshot: how fast cooldowns count down (1.25 Accelerated, 0.75 Slowed or Chilled). */
   cdRate = 1;
   noTurn = false;
+  /** From the snapshot (`me.charmed_by`): the server drives the hero, so nothing is predicted and the inputs sent are empty. */
+  charmed = false;
   private pending: Pending[] = [];
   private seq = 0;
   speed: number;
@@ -267,6 +269,13 @@ export class Predictor {
    */
   step(mx: number, my: number, dash: [number, number] | null, used: Used = [null, null]): number {
     this.seq++;
+    if (this.charmed) {
+      // The server drives the hero and ignores this input: nothing is predicted. The (empty) input is still
+      // numbered and kept, so it replays as nothing if the charm has ended when the server answers.
+      this.pending.push({ seq: this.seq, mx: 0, my: 0, dash: null, used: [null, null] });
+      if (this.pending.length > 240) this.pending.shift();
+      return this.seq;
+    }
     // Like the server: cooldowns tick, then the abilities of this input start theirs.
     this.cd1 = used[0] ?? Math.max(this.cd1 - CONST.DT * this.cdRate, 0);
     this.cd2 = used[1] ?? Math.max(this.cd2 - CONST.DT * this.cdRate, 0);
@@ -285,14 +294,30 @@ export class Predictor {
     return this.seq;
   }
 
-  /** Server says: after input `ack` I was here. Replay what it has not seen yet. */
-  reconcile(snap: Snapshot): void {
+  /**
+   * Server says: after input `ack` I was here. Replay what it has not seen yet.
+   * `drawn` is where the own figure is drawn now; when a charm has just ended it is where the blend starts,
+   * so control comes back without a jump.
+   */
+  reconcile(snap: Snapshot, drawn?: readonly [number, number]): void {
     const me = snap.me;
+    const wasCharmed = this.charmed;
+    this.charmed = (me.charmed_by ?? null) !== null;
     this.speedMul = me.speed_mul;
     this.noAct = me.no_act;
     this.cdMul = me.cd_mul;
     this.cdRate = me.cd_rate;
     this.noTurn = me.effects.some(([k]) => EFFECTS[k]?.no_turn);
+    if (this.charmed) {
+      // The server's state as it is: no replay, no blending, its cooldowns.
+      this.pending = [];
+      this.state = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy };
+      this.offX = this.offY = 0;
+      this.lastCorrection = 0;
+      this.cd1 = me.cd1;
+      this.cd2 = me.cd2;
+      return;
+    }
     this.pending = this.pending.filter((p) => p.seq > snap.ack);
     let s: MoveState = { x: me.x, y: me.y, dashT: me.dash_t, dashDx: me.dash_dx, dashDy: me.dash_dy, knockVx: me.knock_vx, knockVy: me.knock_vy };
     for (const p of this.pending) {
@@ -302,11 +327,16 @@ export class Predictor {
       s = stepMove(this.map, s, p.mx, p.my, this.speed * this.speedMul, CONST.DASH_SPEED, CONST.PLAYER_RADIUS, CONST.DT, this.solids);
       if (p.dash && !wasKnocked) s = { ...s, dashT: this.dashDuration, dashDx: p.dash[0], dashDy: p.dash[1] };
     }
-    const ex = this.state.x - s.x;
-    const ey = this.state.y - s.y;
+    // Control just came back: the figure was drawn from the interpolated server state, so blend from there.
+    const fromDrawn = wasCharmed && drawn !== undefined;
+    const ex = fromDrawn ? 0 : this.state.x - s.x;
+    const ey = fromDrawn ? 0 : this.state.y - s.y;
     const err = Math.hypot(ex, ey);
     this.lastCorrection = err;
-    if (err > 0.01) {
+    if (fromDrawn) {
+      this.offX = drawn[0] - s.x;
+      this.offY = drawn[1] - s.y;
+    } else if (err > 0.01) {
       if (err < 24) {
         // Blend small errors out visually instead of snapping.
         this.offX += ex;
@@ -337,6 +367,18 @@ export class Predictor {
     this.offY *= k;
     return [this.state.x + this.offX, this.state.y + this.offY];
   }
+}
+
+/** The first shot id of the server's AI for a charmed hero (`AI_SHOT_BASE` in `hero_brain.rs`); the client's own ids never reach it. */
+export const AI_SHOT_BASE = 0xf000;
+
+/**
+ * The shot id of a projectile's `extra` (owner entity id in the high 16 bits, shot id below) when the shot is
+ * one the own client predicted, else null: another owner's, or an AI shot of the own charmed hero.
+ */
+export function ownPredictedShot(extra: number, you: number): number | null {
+  const shot = extra & 0xffff;
+  return extra >>> 16 === you && shot < AI_SHOT_BASE ? shot : null;
 }
 
 /** `n` consecutive shot ids from `next`, wrapping at 0x10000 and never containing 0 (server `volley_shot` just adds). */

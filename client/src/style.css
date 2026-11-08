@@ -610,6 +610,88 @@ kbd {
 .member.dead .pname::after {
   content: ' †';
 }
+.member.charmed .pname {
+  color: #ff80c0;
+}
+.member .pheart {
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+/* Charmed (mockup B): pink haze, a pulsing edge, the title, the caster and a bar that shrinks with the time left. */
+.charm-view {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.charm-view[hidden] {
+  display: none;
+}
+.charm-haze,
+.charm-edge {
+  position: absolute;
+  inset: 0;
+}
+.charm-haze {
+  background: rgba(255, 128, 192, 0.28);
+}
+.charm-edge {
+  box-shadow: inset 0 0 120px rgba(255, 64, 160, 0.75);
+  animation: charm-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes charm-pulse {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .charm-edge { animation: none; }
+}
+.charm-title,
+.charm-by,
+.charm-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+.charm-title {
+  top: 22%;
+  font: 400 56px/1 var(--font-head);
+  letter-spacing: 0.08em;
+  color: #ffd0e8;
+  text-shadow: 0 0 18px rgba(255, 64, 160, 0.9), 0 3px 6px #000;
+}
+.charm-by {
+  top: calc(22% + 64px);
+  font: 400 22px/1.2 var(--font-head);
+  color: #ffb0d8;
+  white-space: nowrap;
+  text-shadow: 0 2px 4px #000;
+}
+.charm-bar {
+  top: calc(22% + 100px);
+  width: 240px;
+  height: 8px;
+  background: rgba(20, 12, 26, 0.7);
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(255, 128, 192, 0.6);
+  overflow: hidden;
+}
+.charm-bar i {
+  display: block;
+  height: 100%;
+  background: #ff80c0;
+}
+.slot .charm-heart {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(60, 16, 40, 0.55);
+  pointer-events: none;
+}
 
 .boss {
   position: absolute;

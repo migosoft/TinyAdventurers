@@ -16,6 +16,7 @@ import { endText } from './endText';
 import { BOSS_TEXT, className, needsText } from './text';
 import { DRAIN_TEXT, effectIconSvg } from './effectIcons';
 import { SettingsView, type Toggle } from './settings';
+import { CharmView, charmLeft } from './charmView';
 
 export interface FrameStats {
   fps: number;
@@ -101,6 +102,8 @@ export class Hud {
   private slotNames = ['', ''];
   private hint = [{ text: '', until: 0 }, { text: '', until: 0 }];
   private party = el('div', 'party');
+  /** The charmed player's view (mockup B), behind the rest of the HUD. */
+  private charm!: CharmView;
   private boss = el('div', 'boss hidden');
   private msgs = el('div', 'messages');
   private debug = el('pre', 'debug hidden');
@@ -149,6 +152,7 @@ export class Hud {
     settings.onclick = () => this.showSettings(true);
     this.menu.append(resume, settings, leave);
     this.buildView();
+    this.charm = new CharmView(this.root);
     this.root.append(this.party, this.boss, this.msgs, this.banner, bottom, this.debug, this.debugBadge, this.menu, this.end);
     this.root.append(el('div', 'help', helpHtml()));
     host.append(this.root);
@@ -183,6 +187,8 @@ export class Hud {
     this.boss.classList.add('hidden');
     this.banner.classList.add('hidden');
     this.setAsleep(false);
+    this.charm.update(null, 0);
+    for (const slot of this.slots) slot.querySelector('.charm-heart')?.remove();
     this.msgs.innerHTML = '';
     this.fx.innerHTML = '';
     this.fxKey = '';
@@ -237,12 +243,28 @@ export class Hud {
     this.hpText.textContent = `${Math.ceil(s.me.hp)} / ${Math.round(s.me.max_hp)}`;
     this.hp.classList.toggle('low', pct < 0.3);
     this.showEffects(s.me.effects, s.me.paused_items, s.me.paused_nodes);
+    // Shown only while the charm is on the hero (a paused charm shows nothing).
+    const by = s.me.charmed_by ?? null;
+    this.charm.update(by, charmLeft(s.me.effects));
+    for (const slot of this.slots) {
+      const heart = slot.querySelector('.charm-heart');
+      if (by !== null && !heart) slot.append(el('div', 'charm-heart', effectIconSvg(EFFECT.Charmed, 26)));
+      else if (by === null && heart) heart.remove();
+    }
     for (const e of s.ents) {
       const row = this.party.querySelector<HTMLElement>(`[data-ent="${e[0]}"]`);
       if (!row) continue;
       const dead = (e[8] & FLAG.DEAD) !== 0;
       row.classList.toggle('dead', dead);
       (row.querySelector('.mini .fill') as HTMLElement).style.width = `${dead ? 0 : (e[4] / 255) * 100}%`;
+      // Charmed: the name turns pink with a heart (the heart is the effect icon, as over the head and in the slots).
+      const charmed = (e[10] & (1 << EFFECT.Charmed)) !== 0;
+      if (row.classList.contains('charmed') !== charmed) {
+        row.classList.toggle('charmed', charmed);
+        const pname = row.querySelector<HTMLElement>('.pname')!;
+        pname.querySelector('.pheart')?.remove();
+        if (charmed) pname.prepend(el('span', 'pheart', effectIconSvg(EFFECT.Charmed, 12)));
+      }
       const pfx = row.querySelector<HTMLElement>('.pfx')!;
       if (pfx.dataset.bits !== String(e[10])) {
         pfx.dataset.bits = String(e[10]);

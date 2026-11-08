@@ -4,7 +4,7 @@ import type { EntSnap } from '../generated/EntSnap';
 import type { Snapshot } from '../generated/Snapshot';
 import { TILE, TileMap } from '../sim/map';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
-import { Interpolator, Predictor, abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
+import { Interpolator, Predictor, ownPredictedShot, abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
 
 const ab = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({ id, cooldown: 1, cd_steps: { base: 1, attr: 'Dex', have: 10, scaled: 1, mods: 1 }, damage: 1, range: 100, arc: 0, speed: 100, radius: 4, duration: 0.2, pierce: 0, pierce_through: 0, ranged: false, projectile: null, split: { Physical: 1 }, windup: 0, behind: 0, per_cast: 0, alive: 0, ...over });
 /** Predictor for tests: the class only picks which ids the abilities carry. */
@@ -273,5 +273,64 @@ describe('Predictor.setNumbers', () => {
     expect(pred.cooldownOf(0, true)).toBeCloseTo(0.7, 6);
     pred.step(1, 0, [1, 0]);
     expect(pred.state.dashT).toBeCloseTo(0.5, 6);
+  });
+});
+
+describe('Predictor while charmed', () => {
+  const charmed = (s: Snapshot, by: string | null = 'the Orc Warrior'): Snapshot => ({ ...s, me: { ...s.me, charmed_by: by } });
+
+  it('a_charmed_predictor_follows_the_server_and_replays_nothing', () => {
+    const x0 = 3 * TILE + 8, y0 = 2 * TILE + 8;
+    const pred = mk(chasmMap(), 'Wizard', x0, y0);
+    for (let i = 0; i < 3; i++) pred.step(1, 0, null);
+    const s = charmed(snap(0, x0 + 20, y0));
+    s.me.cd1 = 0.5;
+    s.me.cd2 = 1.25;
+    pred.reconcile(s);
+    expect(pred.charmed).toBe(true);
+    // The server's state as it is: the three unacknowledged moves are not replayed, nothing is blended.
+    expect(pred.state.x).toBe(x0 + 20);
+    expect(pred.renderPos(0)).toEqual([x0 + 20, y0]);
+    expect(pred.cd1).toBe(0.5);
+    expect(pred.cd2).toBe(1.25);
+    // A step still numbers the input but moves nothing and keeps the server's cooldowns.
+    const seq = pred.step(1, 0, [1, 0], [0.6, null]);
+    expect(seq).toBe(4);
+    expect(pred.state.x).toBe(x0 + 20);
+    expect(pred.state.dashT).toBe(0);
+    expect(pred.cd1).toBe(0.5);
+    // Not charmed, as the server sees it (a paused charm): prediction is back.
+    pred.reconcile(snap(4, x0 + 20, y0));
+    expect(pred.charmed).toBe(false);
+  });
+
+  it('control_comes_back_with_a_blend_not_a_jump', () => {
+    const x0 = 3 * TILE + 8, y0 = 2 * TILE + 8;
+    const pred = mk(chasmMap(), 'Wizard', x0, y0);
+    pred.reconcile(charmed(snap(0, x0 + 20, y0)));
+    // The first snapshot after the charm: the figure was drawn 6 px behind the server's position.
+    pred.reconcile(snap(0, x0 + 26, y0), [x0 + 20, y0]);
+    expect(pred.charmed).toBe(false);
+    expect(pred.state.x).toBe(x0 + 26);
+    expect(pred.renderPos(0)[0]).toBeCloseTo(x0 + 20, 6);
+    // The offset then decays to the predicted position.
+    expect(pred.renderPos(0.5)[0]).toBeGreaterThan(x0 + 25);
+    expect(pred.renderPos(5)[0]).toBeCloseTo(x0 + 26, 1);
+  });
+
+  it('a plain reconcile does not use the drawn position', () => {
+    const x0 = 3 * TILE + 8, y0 = 2 * TILE + 8;
+    const pred = mk(chasmMap(), 'Wizard', x0, y0);
+    pred.reconcile(snap(0, x0, y0), [x0 + 50, y0]);
+    expect(pred.renderPos(0)[0]).toBe(x0);
+  });
+});
+
+describe('ownPredictedShot', () => {
+  it('is the own shot ids below the AI base, never the AI shots of a charmed hero', () => {
+    expect(ownPredictedShot((7 << 16) | 5, 7)).toBe(5);
+    expect(ownPredictedShot((7 << 16) | 0xf000, 7)).toBeNull();
+    expect(ownPredictedShot((7 << 16) | 0xffff, 7)).toBeNull();
+    expect(ownPredictedShot((8 << 16) | 5, 7)).toBeNull();
   });
 });

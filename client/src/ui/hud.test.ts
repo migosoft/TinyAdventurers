@@ -149,6 +149,30 @@ describe('Hud', () => {
       expect(icons.length).toBe(1);
       expect(icons[0].parentElement!.classList.contains('pos')).toBe(true);
     });
+    it('colours the name of a charmed party member pink and adds a heart', () => {
+      hud.startRun(info);
+      hud.snapshot(snap([], 1 << EFFECT.Charmed), info);
+      const row = document.querySelector<HTMLElement>('.member[data-ent="2"]')!;
+      expect(row.classList.contains('charmed')).toBe(true);
+      expect(row.querySelector('.pname')!.textContent).toBe('Bo');
+      expect(row.querySelector<HTMLElement>('.pname svg.ic')).not.toBeNull();
+      expect(document.querySelector('.member[data-ent="1"]')!.classList.contains('charmed')).toBe(false);
+      hud.snapshot(snap([], 0), info);
+      expect(row.classList.contains('charmed')).toBe(false);
+      expect(row.querySelector('.pname svg.ic')).toBeNull();
+    });
+    it('covers both slots with a heart while the own hero is charmed, and shows the charm view', () => {
+      hud.startRun(info);
+      const own = (by: string | null) =>
+        ({ me: { hp: 10, max_hp: 10, alive: true, effects: by ? [[EFFECT.Charmed, 6, 0, false]] : [], paused_items: [], paused_nodes: [], charmed_by: by }, ents: [] }) as unknown as Parameters<Hud['snapshot']>[0];
+      hud.snapshot(own('the Orc Warrior'), info);
+      expect(document.querySelectorAll('.slot .charm-heart').length).toBe(2);
+      expect(document.querySelector('.charm-view')!.hasAttribute('hidden')).toBe(false);
+      expect(document.querySelector('.charm-by')!.textContent).toBe('by the Orc Warrior');
+      hud.snapshot(own(null), info);
+      expect(document.querySelectorAll('.slot .charm-heart').length).toBe(0);
+      expect(document.querySelector('.charm-view')!.hasAttribute('hidden')).toBe(true);
+    });
     it('shows the moon symbol in the asleep panel', () => {
       hud.setAsleep(true);
       const svg = document.querySelector('.status-hint svg.ic')!;
