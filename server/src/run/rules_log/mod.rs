@@ -415,6 +415,7 @@ pub fn too_close(run: &mut Run, pi: usize, primary: bool, target: MeleeTarget) {
     }
     let (target_id, seen) = match target {
         MeleeTarget::Monster(mi) => (run.monsters[mi].id, record::seen_creature(run, Creature::Monster(mi))),
+        MeleeTarget::Player(ti) => (run.players[ti].id, record::seen_creature(run, Creature::Player(ti))),
         MeleeTarget::Object(oi) => (run.objects[oi].id, record::seen_object(run, oi)),
     };
     let ability = if primary { run.players[pi].sheet.primary.id } else { run.players[pi].sheet.secondary.id };

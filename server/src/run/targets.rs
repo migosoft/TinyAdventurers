@@ -122,6 +122,20 @@ pub fn enemies_may_hit(m: &Monster) -> bool {
     m.side == Side::Friendly || m.grudge.enemies || m.wild.is_some()
 }
 
+/// What a shot, a blast or a hazard of `side` may hit: for a monster `heroes_may_hit` when `side` is Friendly and
+/// `enemies_may_hit` when it is Hostile; for a hero the foes of `side` (`foes`: a hero on the enemy side is hit
+/// by the heroes' side, a hero on the heroes' side by the enemies). The Neutral side hits nothing.
+pub fn may_hit(run: &Run, side: Side, c: Creature) -> bool {
+    match c {
+        Creature::Monster(mi) => match side {
+            Side::Friendly => heroes_may_hit(&run.monsters[mi]),
+            Side::Hostile => enemies_may_hit(&run.monsters[mi]),
+            Side::Neutral => false,
+        },
+        Creature::Player(pi) => foes(side, run.players[pi].side),
+    }
+}
+
 /// Why a creature is not a target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Skip {
@@ -250,12 +264,12 @@ pub fn check(run: &Run, user: &Stance, c: Creature, pos: Vec2, rule: &Rule, hit:
 }
 
 /// Who a user may look at: the monsters (the heroes' side also meets its own allies here, to tell why they
-/// are passed over), or, for the enemies, the heroes and then the allies and the wild animals and others
-/// with a grudge against them. A Neutral user (a wild animal) looks at the heroes and every monster. Monsters
-/// first by index for the heroes' side, as before.
+/// are passed over), then the heroes (one on another side is a foe), or, for the enemies, the heroes and then
+/// the allies and the wild animals and others with a grudge against them. A Neutral user (a wild animal) looks
+/// at the heroes and every monster. Monsters first by index for the heroes' side, as before.
 fn candidates(run: &Run, user: &Stance) -> Vec<Creature> {
     match user.side {
-        Side::Friendly => (0..run.monsters.len()).map(Creature::Monster).collect(),
+        Side::Friendly => (0..run.monsters.len()).map(Creature::Monster).chain((0..run.players.len()).map(Creature::Player)).collect(),
         Side::Hostile => {
             let heroes = (0..run.players.len()).map(Creature::Player);
             let others = (0..run.monsters.len()).filter(|&mi| enemies_may_hit(&run.monsters[mi])).map(Creature::Monster);
@@ -334,6 +348,21 @@ mod tests {
             assert!(!foes(Neutral, s) && !foes(s, Neutral));
         }
         assert!(!foes(Friendly, Friendly) && !foes(Hostile, Hostile));
+    }
+
+    #[test]
+    fn may_hit_follows_the_sides() {
+        let (mut run, wi, oi, ni) = fixture();
+        let (wolf, orc, neutral, hero) = (Creature::Monster(wi), Creature::Monster(oi), Creature::Monster(ni), Creature::Player(0));
+        assert!(may_hit(&run, Side::Friendly, orc), "the heroes' side hits an enemy");
+        assert!(!may_hit(&run, Side::Friendly, wolf) && !may_hit(&run, Side::Friendly, hero) && !may_hit(&run, Side::Friendly, neutral));
+        assert!(may_hit(&run, Side::Hostile, wolf) && may_hit(&run, Side::Hostile, hero), "the enemies' side hits the heroes' side");
+        assert!(!may_hit(&run, Side::Hostile, orc) && !may_hit(&run, Side::Hostile, neutral));
+        for c in [wolf, orc, neutral, hero] {
+            assert!(!may_hit(&run, Side::Neutral, c), "the Neutral side hits nothing: {c:?}");
+        }
+        run.players[0].side = Side::Hostile;
+        assert!(may_hit(&run, Side::Friendly, hero) && !may_hit(&run, Side::Hostile, hero), "a hero on the enemy side");
     }
 
     #[test]

@@ -51,10 +51,13 @@ pub fn course_hit(run: &Run, pi: usize, mi: usize, at: Vec2, extra: f64) -> Opti
         if aim_reached(pr, p) || run.layout.map.opaque_at(p) || stopping_object(run, p, pr.radius).is_some() {
             return None;
         }
-        // Who the real flight takes here: heroes first, then monsters in order. `at` stands in for this monster.
+        // Who the real flight takes here: a shot of the enemies' side takes heroes first, then monsters in order; a
+        // heroes' shot takes monsters in order, then a hero on the enemy side. `at` stands in for this monster.
         let takes_other = |j: usize| j != mi && shot_takes(run, pr, Creature::Monster(j)) && run.monsters[j].shot_dist(p) < run.monsters[j].radius + pr.radius;
+        let takes_hero = || run.players.iter().enumerate().any(|(h, o)| shot_takes(run, pr, Creature::Player(h)) && o.pos().dist(p) < PLAYER_RADIUS + pr.radius);
+        let heroes_first = pr.side != Side::Friendly;
         if !flies_through {
-            if run.players.iter().enumerate().any(|(h, o)| shot_takes(run, pr, Creature::Player(h)) && o.pos().dist(p) < PLAYER_RADIUS + pr.radius) {
+            if heroes_first && takes_hero() {
                 return None;
             }
             if (0..mi).any(takes_other) {
@@ -64,7 +67,7 @@ pub fn course_hit(run: &Run, pi: usize, mi: usize, at: Vec2, extra: f64) -> Opti
         if m.shot_dist_at(at, p) < m.radius + pr.radius + extra {
             return Some(s);
         }
-        if !flies_through && (mi + 1..run.monsters.len()).any(takes_other) {
+        if !flies_through && ((mi + 1..run.monsters.len()).any(takes_other) || (!heroes_first && takes_hero())) {
             return None;
         }
     }
@@ -84,12 +87,7 @@ pub fn threats(run: &Run, mi: usize) -> Vec<Threat> {
         if pr.dead || pr.owner == m.id || pr.hit.contains(&m.id) {
             continue;
         }
-        let foe = match pr.side {
-            Side::Friendly => targets::heroes_may_hit(m),
-            Side::Hostile => targets::enemies_may_hit(m),
-            Side::Neutral => false,
-        };
-        if !foe || pr.pos.dist(m.pos) > notice || !perception::sees(run, m.sight_now(), m.pos, pr.pos) {
+        if !targets::may_hit(run, pr.side, Creature::Monster(mi)) || pr.pos.dist(m.pos) > notice || !perception::sees(run, m.sight_now(), m.pos, pr.pos) {
             continue;
         }
         let Some(d) = course_hit(run, pi, mi, m.pos, 0.0) else { continue };

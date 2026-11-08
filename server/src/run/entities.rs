@@ -20,7 +20,7 @@ pub const HISTORY_LEN: usize = 32;
 
 pub struct Player {
     pub id: u32,
-    /// Always `Friendly`.
+    /// Whom the hero fights for: `Friendly`, unless an enemy's Charm turned it.
     pub side: Side,
     pub conn: u32,
     /// Resistances (races plus adjustments; the split of its hits is its weapons', in `sheet`).
@@ -88,6 +88,9 @@ pub struct Player {
     pub wolf: Option<u32>,
     /// Ground Slam: seconds until it lands; lost when the hero dies, sinks or is pushed.
     pub slam: Option<f64>,
+    /// Where the hero stood on each of the last `HISTORY_LEN` ticks, for lag compensation: a hit on a hero
+    /// of another side is rewound like a hit on a monster.
+    pub history: VecDeque<Vec2>,
 }
 
 /// How a hero is lost to the terrain (sent as `Ev::Sink { how }`).
@@ -104,6 +107,14 @@ impl Player {
     }
     pub fn pos(&self) -> Vec2 {
         Vec2::new(self.mv.x, self.mv.y)
+    }
+    /// Position `ticks` simulation steps ago (lag compensation), as `Monster::pos_ago`.
+    pub fn pos_ago(&self, ticks: usize) -> Vec2 {
+        if ticks == 0 || self.history.is_empty() {
+            return self.pos();
+        }
+        let i = self.history.len().saturating_sub(ticks.min(self.history.len()));
+        self.history[i]
     }
     pub fn sight_now(&self) -> Sight {
         let base = Sight { darkvision: self.darkvision.unwrap_or(self.sight.darkvision), ..self.sight };
@@ -415,15 +426,6 @@ impl Pierce {
     }
 }
 
-/// Whose hazard it is.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum HazardSide {
-    /// Hurts heroes and allies (fire patches).
-    Monsters,
-    /// Acts on enemy monsters only, crediting the hero with entity id `owner`.
-    Heroes { owner: u32 },
-}
-
 /// What a hazard does every 0.5 s to those it acts on.
 #[derive(Debug, Clone, PartialEq)]
 pub enum HazardPulse {
@@ -438,6 +440,9 @@ pub struct Hazard {
     pub radius: f64,
     pub life: f64,
     pub pulse_t: f64,
-    pub side: HazardSide,
+    /// The side it was made for, for good: it acts on the foes of that side, whatever side its maker is on later.
+    pub side: Side,
+    /// The entity id of the creature that made it (the credit of a hero's hit); `None` for a fire patch.
+    pub owner: Option<u32>,
     pub pulse: HazardPulse,
 }

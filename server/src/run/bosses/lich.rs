@@ -96,7 +96,7 @@ impl Lich {
             run.players
                 .iter()
                 .enumerate()
-                .filter(|(pi, p)| p.alive && !run.has_effect(Creature::Player(*pi), effect) && crate::run::perception::sees(run, sight, at, p.pos()))
+                .filter(|(pi, p)| crate::run::targets::foes(m.side, p.side) && p.alive && !run.has_effect(Creature::Player(*pi), effect) && crate::run::perception::sees(run, sight, at, p.pos()))
                 .min_by(|a, b| at.dist(a.1.pos()).total_cmp(&at.dist(b.1.pos())))
                 .map(|(pi, _)| (s, pi))
         })

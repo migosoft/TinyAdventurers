@@ -22,12 +22,13 @@ use rand::Rng;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
-/// Nearest living hero the monster can see right now.
-pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
+/// Nearest living hero the monster can see right now, among those a creature of `side` fights (a hero an
+/// enemy's Charm turned is no foe of the enemies).
+pub fn find_visible_hero(run: &Run, from: Vec2, sight: Sight, side: targets::Side) -> Option<usize> {
     run.players
         .iter()
         .enumerate()
-        .filter(|(_, p)| p.alive && !p.effects.has(EffectKind::Invisible))
+        .filter(|(_, p)| targets::foes(side, p.side) && p.alive && !p.effects.has(EffectKind::Invisible))
         .filter(|(_, p)| super::perception::sees(run, sight, from, p.pos()))
         .map(|(i, p)| (i, p.pos().dist(from)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
@@ -788,15 +789,19 @@ pub(crate) mod tests {
         let mut run = test_run(&[ClassId::ElvenRanger], BossId::Demon);
         let ppos = run.players[0].pos();
         // Open line of sight: seen.
-        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_some());
+        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT, Side::Hostile).is_some());
+        // A hero on the enemies' own side is no foe: not looked for.
+        run.players[0].side = Side::Hostile;
+        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT, Side::Hostile).is_none());
+        run.players[0].side = Side::Friendly;
         // Wall in between: not seen.
         let (tx, ty) = Map::tile_of(ppos);
         for dy in -3..=3 {
             run.layout.map.set(tx + 1, ty + dy, Tile::Wall);
         }
-        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT).is_none());
+        assert!(find_visible_hero(&run, ppos + Vec2::new(40.0, 0.0), SIGHT, Side::Hostile).is_none());
         // Out of sight radius: not seen.
-        assert!(find_visible_hero(&run, ppos + Vec2::new(0.0, -0.0) + Vec2::new(-200.0, 0.0), SIGHT).is_none());
+        assert!(find_visible_hero(&run, ppos + Vec2::new(0.0, -0.0) + Vec2::new(-200.0, 0.0), SIGHT, Side::Hostile).is_none());
     }
 
     #[test]

@@ -173,7 +173,7 @@ pub struct Run {
 /// A patch of fire that hurts heroes and allies (the dragon's; the wolf's fire).
 pub fn spawn_fire_patch(run: &mut Run, pos: Vec2, radius: f64, life: f64, damage: f64) {
     let kind = EntityKind::FirePatch;
-    run.spawn_hazard(kind, pos, radius, life, HazardSide::Monsters, HazardPulse::Hurt(Damage { why: Why { what: What::Hazard(kind), ..Why::NONE }, ..Damage::new(damage, kind_split(kind)) }));
+    run.spawn_hazard(kind, pos, radius, life, Side::Hostile, None, HazardPulse::Hurt(Damage { why: Why { what: What::Hazard(kind), ..Why::NONE }, ..Damage::new(damage, kind_split(kind)) }));
 }
 
 impl Run {
@@ -261,6 +261,7 @@ impl Run {
                 effects: effects::Effects::default(),
                 wolf: None,
                 slam: None,
+                history: VecDeque::with_capacity(HISTORY_LEN),
                 sheet,
             });
             // An item's light goes with its wearer (light ids are separate from entity ids).
@@ -544,6 +545,12 @@ impl Run {
         self.tick_hazards(DT);
         objects::tick_objects(self, DT);
 
+        for p in &mut self.players {
+            if p.history.len() >= HISTORY_LEN {
+                p.history.pop_front();
+            }
+            p.history.push_back(Vec2::new(p.mv.x, p.mv.y));
+        }
         for m in &mut self.monsters {
             if m.history.len() >= HISTORY_LEN {
                 m.history.pop_front();
@@ -895,53 +902,66 @@ impl Run {
                 continue;
             }
             h.pulse_t = 0.5;
-            let (pos, r, side, pulse) = (h.pos, h.radius, h.side, h.pulse.clone());
+            let (pos, r, side, owner, pulse) = (h.pos, h.radius, h.side, h.owner, h.pulse.clone());
             match (side, pulse) {
-                (HazardSide::Monsters, HazardPulse::Hurt(dmg)) => {
+                (Side::Hostile, HazardPulse::Hurt(dmg)) => {
                     for c in self.foes_touching(pos, r, false) {
                         self.hurt_creature(c, dmg.clone());
                     }
                     objects::hurt_objects_in(self, pos, r, None, dmg);
                 }
-                (HazardSide::Monsters, HazardPulse::Bind(on)) => {
+                (Side::Hostile, HazardPulse::Bind(on)) => {
                     for c in self.foes_touching(pos, r, false) {
                         for &on in &on {
                             self.apply(c, Apply::from_hit(on));
                         }
                     }
                 }
-                (HazardSide::Heroes { owner }, HazardPulse::Hurt(dmg)) => {
-                    let credit = self.players.iter().position(|p| p.id == owner);
-                    for mi in self.enemies_touching(pos, r) {
-                        self.hurt_monster(mi, dmg.clone(), false, credit);
-                    }
-                }
-                (HazardSide::Heroes { owner }, HazardPulse::Bind(on)) => {
-                    let from = self.players.iter().find(|p| p.id == owner).map_or(pos, |p| p.pos());
-                    for mi in self.enemies_touching(pos, r) {
-                        for &on in &on {
-                            self.apply(effects::Creature::Monster(mi), Apply { source: Some((owner, from)), origin: Some((owner, What::Ability(crate::defs::abilities::AbilityId::Entangle))), ..Apply::from_hit(on) });
+                (Side::Friendly, HazardPulse::Hurt(dmg)) => {
+                    // Only a hero still on the heroes' side is credited with what the ground it made does.
+                    let credit = owner.and_then(|o| self.player_idx(o)).filter(|&pi| self.players[pi].side == Side::Friendly);
+                    for c in self.heroes_hazard_targets(pos, r) {
+                        match c {
+                            effects::Creature::Monster(mi) => {
+                                self.hurt_monster(mi, dmg.clone(), false, credit);
+                            }
+                            effects::Creature::Player(_) => self.hurt_creature(c, dmg.clone()),
                         }
                     }
                 }
+                (Side::Friendly, HazardPulse::Bind(on)) => {
+                    let owner = owner.unwrap_or(0);
+                    let from = self.players.iter().find(|p| p.id == owner).map_or(pos, |p| p.pos());
+                    for c in self.heroes_hazard_targets(pos, r) {
+                        for &on in &on {
+                            self.apply(c, Apply { source: Some((owner, from)), origin: Some((owner, What::Ability(crate::defs::abilities::AbilityId::Entangle))), ..Apply::from_hit(on) });
+                        }
+                    }
+                }
+                (Side::Neutral, HazardPulse::Hurt(_) | HazardPulse::Bind(_)) => {}
             }
         }
     }
 
-    /// The living, awake enemy monsters (not allies, not hiding mimics or dormant ones) whose
-    /// bodies touch the circle at `at` and that its centre can see (a hazard does not reach through walls).
-    fn enemies_touching(&self, at: Vec2, r: f64) -> Vec<usize> {
-        (0..self.monsters.len())
-            .filter(|&mi| {
-                let m = &self.monsters[mi];
-                m.alive && targets::heroes_may_hit(m) && !m.hiding && !m.dormant && m.sinking.is_none() && m.pos.dist(at) < r + m.radius && crate::collision::line_of_sight(&self.layout.map, at, m.pos)
-            })
-            .collect()
+    /// What a hazard made for the heroes' side acts on: the living, awake monsters it may hit (not allies, not
+    /// hiding mimics or dormant ones) and then the living heroes on another side, whose bodies touch the circle
+    /// at `at` and that its centre can see (a hazard does not reach through walls).
+    fn heroes_hazard_targets(&self, at: Vec2, r: f64) -> Vec<effects::Creature> {
+        let sees = |p: Vec2| crate::collision::line_of_sight(&self.layout.map, at, p);
+        let monsters = (0..self.monsters.len()).filter(|&mi| {
+            let m = &self.monsters[mi];
+            m.alive && targets::may_hit(self, Side::Friendly, effects::Creature::Monster(mi)) && !m.hiding && !m.dormant && m.sinking.is_none() && m.pos.dist(at) < r + m.radius && sees(m.pos)
+        });
+        let heroes = (0..self.players.len()).filter(|&pi| {
+            let p = &self.players[pi];
+            p.alive && targets::may_hit(self, Side::Friendly, effects::Creature::Player(pi)) && p.sinking.is_none() && p.pos().dist(at) < r + classes::PLAYER_RADIUS && sees(p.pos())
+        });
+        monsters.map(effects::Creature::Monster).chain(heroes.map(effects::Creature::Player)).collect()
     }
 
-    pub fn spawn_hazard(&mut self, kind: EntityKind, pos: Vec2, radius: f64, life: f64, side: HazardSide, pulse: HazardPulse) {
+    pub fn spawn_hazard(&mut self, kind: EntityKind, pos: Vec2, radius: f64, life: f64, side: Side, owner: Option<u32>, pulse: HazardPulse) {
         let id = self.alloc_id();
-        self.hazards.push(Hazard { id, kind, pos, radius, life, pulse_t: 0.25, side, pulse });
+        self.hazards.push(Hazard { id, kind, pos, radius, life, pulse_t: 0.25, side, owner, pulse });
         self.attach_kind_light(id, kind);
     }
 
@@ -1048,18 +1068,18 @@ impl Run {
         healed
     }
 
-    /// Living heroes and living allies and wild animals (not sinking) whose centre is within `r` of `at`, optionally inside a cone (dir, half-angle). Heroes first.
+    /// The enemies' foes: living heroes on another side than the enemies' (`targets::foes`: a hero an enemy's Charm turned is not one) and living allies and wild animals (not sinking) whose centre is within `r` of `at`, optionally inside a cone (dir, half-angle). Heroes first.
     pub fn foes_in(&self, at: Vec2, r: f64, cone: Option<(f64, f64)>) -> Vec<effects::Creature> {
         let inside = |p: Vec2| p.dist(at) <= r && cone.map_or(true, |(dir, half)| crate::math::angle_diff(at.angle_to(p), dir).abs() <= half);
-        let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && inside(p.pos())).map(|(i, _)| effects::Creature::Player(i));
+        let heroes = self.players.iter().enumerate().filter(|(_, p)| targets::foes(Side::Hostile, p.side) && p.alive && inside(p.pos())).map(|(i, _)| effects::Creature::Player(i));
         let allies = self.monsters.iter().enumerate().filter(|(_, m)| targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && inside(m.pos)).map(|(i, _)| effects::Creature::Monster(i));
         heroes.chain(allies).collect()
     }
 
-    /// Living heroes within r + PLAYER_RADIUS and allies and wild animals within r + radius of `at`; with `los`, only those in line of sight.
+    /// The enemies' foes: living heroes on another side than the enemies' within r + PLAYER_RADIUS and allies and wild animals within r + radius of `at`; with `los`, only those in line of sight.
     pub fn foes_touching(&self, at: Vec2, r: f64, los: bool) -> Vec<effects::Creature> {
         let reach = |p: Vec2, radius: f64| p.dist(at) < r + radius && (!los || crate::collision::line_of_sight(&self.layout.map, at, p));
-        let heroes = self.players.iter().enumerate().filter(|(_, p)| p.alive && reach(p.pos(), classes::PLAYER_RADIUS)).map(|(i, _)| effects::Creature::Player(i));
+        let heroes = self.players.iter().enumerate().filter(|(_, p)| targets::foes(Side::Hostile, p.side) && p.alive && reach(p.pos(), classes::PLAYER_RADIUS)).map(|(i, _)| effects::Creature::Player(i));
         let allies = self.monsters.iter().enumerate().filter(|(_, m)| targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && reach(m.pos, m.radius)).map(|(i, _)| effects::Creature::Monster(i));
         heroes.chain(allies).collect()
     }
@@ -1157,8 +1177,10 @@ impl Run {
             }
             return;
         }
-        let grudge = if src_player.is_some() || by.is_some_and(|id| self.player_idx(id).is_some()) {
-            Some(Side::Friendly)
+        // The side of the hero it comes from (a hero an enemy's Charm turned makes the animal grudge the enemies).
+        let hero = src_player.or_else(|| by.and_then(|id| self.player_idx(id)));
+        let grudge = if let Some(pi) = hero {
+            Some(self.players[pi].side)
         } else {
             by.and_then(|id| self.monster_idx(id)).map(|bi| self.monsters[bi].side)
         };
@@ -1190,8 +1212,9 @@ impl Run {
         }
         let pos = self.monsters[mi].pos;
         let ally = self.monsters[mi].side == Side::Friendly;
-        if ally && src_player.is_some() {
-            return false; // no hero attack hurts an ally
+        // No hit from a hero hurts a monster of the hero's own side (the heroes' allies, for a hero on the heroes' side).
+        if src_player.is_some_and(|pi| self.players[pi].side == self.monsters[mi].side) {
+            return false;
         }
         if !dmg.from_effect {
             // Any direct hit shows an invisible monster, even one it resists or a shield absorbs.
@@ -2336,7 +2359,7 @@ pub mod tests {
         let at = run.players[0].pos();
         let hp = run.players[0].hp;
         spawn_fire_patch(&mut run, at, 10.0, 3.0, 8.0);
-        assert!(matches!(run.hazards[0].side, HazardSide::Monsters));
+        assert_eq!((run.hazards[0].side, run.hazards[0].owner), (Side::Hostile, None));
         run.tick_hazards(0.3);
         assert!(run.players[0].hp < hp, "the first pulse comes at 0.25 s");
         let after = run.players[0].hp;

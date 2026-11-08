@@ -19,14 +19,14 @@ pub const AMBUSH_WARNING: f64 = 0.5;
 /// Two distances this close are a tie.
 const TIE: f64 = 1e-6;
 
-/// Of the living heroes visible from `from` (as `find_visible_hero` sees them), the one furthest from
-/// their centre; a tie goes to the one nearest `from`. With one hero, that hero.
-pub fn straggler(run: &Run, from: Vec2, sight: Sight) -> Option<usize> {
+/// Of the living heroes visible from `from` (as `find_visible_hero` sees them) that a creature of `side`
+/// fights, the one furthest from their centre; a tie goes to the one nearest `from`. With one hero, that hero.
+pub fn straggler(run: &Run, from: Vec2, sight: Sight, side: crate::run::targets::Side) -> Option<usize> {
     let seen: Vec<(usize, Vec2)> = run
         .players
         .iter()
         .enumerate()
-        .filter(|(_, p)| p.alive && !p.effects.has(EffectKind::Invisible))
+        .filter(|(_, p)| crate::run::targets::foes(side, p.side) && p.alive && !p.effects.has(EffectKind::Invisible))
         .map(|(i, p)| (i, p.pos()))
         .filter(|&(_, pos)| super::perception::sees(run, sight, from, pos))
         .collect();
@@ -46,16 +46,16 @@ pub fn tick(run: &mut Run, mi: usize, dt: f64, seen: Option<Creature>) -> bool {
     if m.ai.windup.is_some() || m.slam.is_some() {
         return false;
     }
-    let (pos, sight) = (m.pos, m.sight_now());
+    let (pos, sight, side) = (m.pos, m.sight_now(), m.side);
     if !m.effects.has(EffectKind::Invisible) {
-        if seen.is_some() && m.invis_cd <= 0.0 && straggler(run, pos, sight).is_some() && super::abilities::monster_use(run, mi, AbilityId::Vanish, pos) {
+        if seen.is_some() && m.invis_cd <= 0.0 && straggler(run, pos, sight, side).is_some() && super::abilities::monster_use(run, mi, AbilityId::Vanish, pos) {
             set_anim(run, mi, Anim::Move);
             return true;
         }
         // Revealed early, or the time ran out: an ordinary fight.
         return false;
     }
-    let Some(h) = straggler(run, pos, sight) else {
+    let Some(h) = straggler(run, pos, sight, side) else {
         // Nobody to haunt: wait, still unseen, until the Invisible time runs out.
         set_anim(run, mi, Anim::Idle);
         return true;
@@ -86,6 +86,7 @@ mod tests {
     use crate::dungeon::{Map, Mover, Tile, TILE};
     use crate::protocol::{BossId, ClassId};
     use crate::run::ai::tick_monster;
+    use crate::run::targets::Side;
     use crate::run::tests::test_run;
 
     const DT: f64 = 1.0 / 60.0;
@@ -192,7 +193,7 @@ mod tests {
         put_hero(&mut run, 1, p + Vec2::new(10.0, 0.0));
         put_hero(&mut run, 2, p + Vec2::new(100.0, 0.0));
         let mi = phantom(&mut run, p + Vec2::new(40.0, 20.0));
-        assert_eq!(straggler(&run, run.monsters[mi].pos, run.monsters[mi].sight_now()), Some(2));
+        assert_eq!(straggler(&run, run.monsters[mi].pos, run.monsters[mi].sight_now(), Side::Hostile), Some(2));
     }
 
     #[test]
@@ -200,7 +201,7 @@ mod tests {
         let mut run = field(1);
         let p = run.players[0].pos();
         let mi = phantom(&mut run, p + Vec2::new(40.0, 0.0));
-        assert_eq!(straggler(&run, run.monsters[mi].pos, run.monsters[mi].sight_now()), Some(0));
+        assert_eq!(straggler(&run, run.monsters[mi].pos, run.monsters[mi].sight_now(), Side::Hostile), Some(0));
     }
 
     #[test]
@@ -209,9 +210,9 @@ mod tests {
         let p = run.players[0].pos();
         put_hero(&mut run, 1, p + Vec2::new(100.0, 0.0));
         let mi = phantom(&mut run, p + Vec2::new(-30.0, 0.0));
-        assert_eq!(straggler(&run, run.monsters[mi].pos, run.monsters[mi].sight_now()), Some(0));
+        assert_eq!(straggler(&run, run.monsters[mi].pos, run.monsters[mi].sight_now(), Side::Hostile), Some(0));
         let mi = phantom(&mut run, p + Vec2::new(130.0, 0.0));
-        assert_eq!(straggler(&run, run.monsters[mi].pos, run.monsters[mi].sight_now()), Some(1));
+        assert_eq!(straggler(&run, run.monsters[mi].pos, run.monsters[mi].sight_now(), Side::Hostile), Some(1));
     }
 
     #[test]
@@ -365,11 +366,11 @@ mod tests {
         let mi = phantom(&mut run, p + Vec2::new(60.0, 30.0));
         step(&mut run, mi);
         let sight = run.monsters[mi].sight_now();
-        let first = straggler(&run, run.monsters[mi].pos, sight).unwrap();
+        let first = straggler(&run, run.monsters[mi].pos, sight, Side::Hostile).unwrap();
         run.players[first].alive = false;
         let other = 1 - first;
         step(&mut run, mi);
-        assert_eq!(straggler(&run, run.monsters[mi].pos, sight), Some(other));
+        assert_eq!(straggler(&run, run.monsters[mi].pos, sight, Side::Hostile), Some(other));
         assert!(invisible(&run, mi) && run.monsters[mi].anim == Anim::Move);
     }
 

@@ -54,7 +54,7 @@ pub(crate) fn set_anim(run: &mut Run, bi: usize, a: Anim) {
 /// Nearest hero the boss can see (bosses never target allies).
 pub(crate) fn target(run: &Run, bi: usize) -> Option<(usize, Vec2, f64)> {
     let m = &run.monsters[bi];
-    find_visible_hero(run, m.pos, m.sight_now()).map(|pi| {
+    find_visible_hero(run, m.pos, m.sight_now(), m.side).map(|pi| {
         let p = run.players[pi].pos();
         (pi, p, p.dist(m.pos))
     })

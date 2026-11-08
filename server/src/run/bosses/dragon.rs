@@ -202,7 +202,7 @@ impl BossBehaviour for Dragon {
         let someone_behind = run
             .players
             .iter()
-            .any(|p| p.alive && p.pos().dist(pos) < tail.range + PLAYER_RADIUS - TAIL_SLACK && angle_diff(pos.angle_to(p.pos()), aim).abs() > 2.0);
+            .any(|p| crate::run::targets::foes(run.monsters[bi].side, p.side) && p.alive && p.pos().dist(pos) < tail.range + PLAYER_RADIUS - TAIL_SLACK && angle_diff(pos.angle_to(p.pos()), aim).abs() > 2.0);
         if !air && someone_behind && self.ready(run, bi, AbilityId::TailWhip) {
             self.start(run, bi, Action::Tail, tail.windup, Anim::Tail);
             return;

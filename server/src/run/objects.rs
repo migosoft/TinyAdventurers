@@ -344,7 +344,10 @@ pub fn explode_barrel(run: &mut Run, oi: usize) {
     run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
     let map = &run.layout.map;
     // A wild animal is hurt with the monsters below, where the hero who lit the barrel is the source of the hit (its grudge).
-    let foes: Vec<_> = run.foes_touching(pos, r, true).into_iter().filter(|c| !matches!(c, crate::run::effects::Creature::Monster(i) if run.monsters[*i].wild.is_some())).collect();
+    // The blast is nobody's: every hero in it is hurt, whatever side an enemy's Charm put it on (`foes_touching` lists only the enemies' foes).
+    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive && run.players[i].pos().dist(pos) < r + PLAYER_RADIUS && line_of_sight(map, pos, run.players[i].pos())).map(crate::run::effects::Creature::Player);
+    let allies = run.foes_touching(pos, r, true).into_iter().filter(|c| matches!(c, crate::run::effects::Creature::Monster(i) if run.monsters[*i].wild.is_none()));
+    let foes: Vec<_> = heroes.chain(allies).collect();
     let monsters: Vec<usize> = (0..run.monsters.len())
         .filter(|&i| {
             let m = &run.monsters[i];
@@ -476,7 +479,8 @@ mod tests {
 
     #[test]
     fn barrel_blast_and_hazard_pass_a_bodiless_monster() {
-        use crate::run::entities::{HazardPulse, HazardSide};
+        use crate::run::entities::HazardPulse;
+        use crate::run::targets::Side;
         let mut run = test_run(&[ClassId::Paladin], BossId::Lich);
         let mi = bodiless_invisible(&mut run, 60.0);
         let at = run.monsters[mi].pos;
@@ -487,7 +491,7 @@ mod tests {
         assert!(m.effects.has(crate::defs::effects::EffectKind::Invisible), "not revealed by the blast");
         for ty in [DamageType::Physical, DamageType::Heat] {
             let pid = run.players[0].id;
-            run.spawn_hazard(EntityKind::Barrel, at, 40.0, 5.0, HazardSide::Heroes { owner: pid }, HazardPulse::Hurt(Damage::new(10.0, DamageSplit::pure(ty))));
+            run.spawn_hazard(EntityKind::Barrel, at, 40.0, 5.0, Side::Friendly, Some(pid), HazardPulse::Hurt(Damage::new(10.0, DamageSplit::pure(ty))));
             run.tick_hazards(0.5);
         }
         let m = &run.monsters[mi];

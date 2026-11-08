@@ -1,6 +1,6 @@
 //! Player abilities (one executor per AbilityId) and projectile simulation.
 
-use super::entities::{HazardPulse, HazardSide, MonsterDash, Pierce, Projectile};
+use super::entities::{HazardPulse, MonsterDash, Pierce, Projectile};
 use super::targets::{self, side, Side};
 use super::{Run, TICK_HZ};
 use crate::collision::{line_of_sight, move_box};
@@ -31,10 +31,10 @@ fn rewind_ticks(run: &Run, c: Creature) -> usize {
     }
 }
 
-/// Where creature `c` was `rw` ticks ago (only monsters are rewound).
+/// Where creature `c` was `rw` ticks ago (a hit on a hero of another side is rewound like one on a monster).
 fn pos_ago(run: &Run, c: Creature, rw: usize) -> Vec2 {
     match c {
-        Creature::Player(pi) => run.players[pi].pos(),
+        Creature::Player(pi) => run.players[pi].pos_ago(rw),
         Creature::Monster(mi) => run.monsters[mi].pos_ago(rw),
     }
 }
@@ -71,13 +71,27 @@ fn hero_of(c: Creature) -> Option<usize> {
     }
 }
 
-/// The hero a hit pays (XP, damage, kills): the user if it is a hero, the ranger of an ally (the wolf).
+/// The hero a hit pays (XP, damage, kills): the user if it is a hero, the ranger of an ally (the wolf), and
+/// only while that hero is on the heroes' side: a hero an enemy's Charm turned earns nothing.
 /// Keystones read the hit's `by`, so only a hero's own hits count for them.
 fn credit_of(run: &Run, c: Creature) -> Option<usize> {
-    match c {
+    let hero = match c {
         Creature::Player(pi) => Some(pi),
         Creature::Monster(mi) => run.monsters[mi].companion.as_ref().and_then(|c| run.player_idx(c.leader)),
-    }
+    };
+    hero.filter(|&pi| run.players[pi].side == Side::Friendly)
+}
+
+/// The creature (entity id) a hit of a shot of `side` made by `owner` credits on an object: the owner of a
+/// heroes' shot, unless it is a hero who is no longer on the heroes' side.
+fn shot_owner(run: &Run, side: Side, owner: u32) -> Option<u32> {
+    (side == Side::Friendly).then_some(owner).filter(|&o| run.player_idx(o).map_or(true, |pi| run.players[pi].side == Side::Friendly))
+}
+
+/// The hero a shot of `side` made by `owner` pays (XP, damage, kills): the hero must be on the heroes' side
+/// when it hits, not only when it shot.
+fn shot_credit(run: &Run, side: Side, owner: u32) -> Option<usize> {
+    shot_owner(run, side, owner).and_then(|o| run.player_idx(o))
 }
 
 /// A hit of `by` on `target`: one by a hero or an ally goes through `hurt_monster` with the hero it pays as
@@ -95,33 +109,42 @@ pub fn hurt(run: &mut Run, target: Creature, dmg: Damage, crit: bool, by: Creatu
     }
 }
 
-/// What a hero's melee strike hits: a monster, or a closed chest (so a chest and a hidden mimic answer alike).
+/// What a hero's melee strike hits: a monster or a hero it fights, or a closed chest (so a chest and a hidden
+/// mimic answer alike).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MeleeTarget {
     Monster(usize),
+    Player(usize),
     Object(usize),
 }
 
-/// Every monster on the ground that the heroes fight (an enemy, or a creature with a grudge against them; never a
-/// calm wild animal) or closed chest within the hero's reach, nearest first. A
-/// bodiless creature that the strike's damage `split` passes through is none.
+/// Every monster on the ground and every hero that hero `pi` fights (`targets::fights`: an enemy, a creature
+/// with a grudge against its side, a hero an enemy's Charm turned; never a calm wild animal) or closed chest
+/// within its reach, nearest first. A bodiless creature that the strike's damage `split` passes through is none.
 pub fn melee_targets(run: &Run, pi: usize, split: &DamageSplit) -> Vec<MeleeTarget> {
     let rw = rewind_ticks(run, Creature::Player(pi));
     let pos = run.players[pi].pos();
     let reach = run.players[pi].sheet.reach;
+    let me = targets::stance(run, Creature::Player(pi));
     let monsters = run
         .monsters
         .iter()
         .enumerate()
-        .filter(|&(i, m)| m.alive && !m.airborne && (m.side == Side::Hostile || m.grudge.heroes) && !run.passes_through(Creature::Monster(i), split))
+        .filter(|&(i, m)| m.alive && !m.airborne && targets::fights(&me, &targets::stance(run, Creature::Monster(i))) && !run.passes_through(Creature::Monster(i), split))
         .map(|(i, m)| (MeleeTarget::Monster(i), m.pos_ago(rw).dist(pos) - m.radius));
+    let heroes = run
+        .players
+        .iter()
+        .enumerate()
+        .filter(|&(i, p)| i != pi && p.alive && targets::fights(&me, &targets::stance(run, Creature::Player(i))))
+        .map(|(i, p)| (MeleeTarget::Player(i), p.pos_ago(rw).dist(pos) - PLAYER_RADIUS));
     let chests = run
         .objects
         .iter()
         .enumerate()
         .filter(|(_, o)| !o.gone && matches!(o.state, crate::run::objects::ObjState::Chest { opened: None }))
         .map(|(i, o)| (MeleeTarget::Object(i), o.pos.dist(pos) - o.radius));
-    let mut near: Vec<(MeleeTarget, f64)> = monsters.chain(chests).filter(|&(_, d)| d <= reach).collect();
+    let mut near: Vec<(MeleeTarget, f64)> = monsters.chain(heroes).chain(chests).filter(|&(_, d)| d <= reach).collect();
     near.sort_by(|a, b| a.1.total_cmp(&b.1));
     near.into_iter().map(|(t, _)| t).collect()
 }
@@ -142,7 +165,7 @@ fn melee_strike(run: &mut Run, pi: usize, targets: &[MeleeTarget], strike: &Reso
             MeleeTarget::Monster(mi) => {
                 let m = &run.monsters[mi];
                 let rest = overkill_rest(dmg.amount, &dmg.split, m.hp, &m.effects.res(m.res));
-                run.hurt_monster(mi, dmg.clone(), crit, Some(pi));
+                hurt(run, Creature::Monster(mi), dmg.clone(), crit, Creature::Player(pi));
                 if strike.push > 0.0 {
                     run.knock_creature(Creature::Monster(mi), pos, aim, strike.push, strike.push_str);
                 }
@@ -150,6 +173,20 @@ fn melee_strike(run: &mut Run, pi: usize, targets: &[MeleeTarget], strike: &Reso
                     Some(rest) if !run.monsters[mi].alive => {
                         dmg.amount = rest;
                         dmg = dmg.with_mult(Mult::Overkill { from: run.monsters[mi].id });
+                    }
+                    _ => break,
+                }
+            }
+            MeleeTarget::Player(ti) => {
+                let rest = overkill_left(run, Creature::Player(ti), &dmg);
+                hurt(run, Creature::Player(ti), dmg.clone(), crit, Creature::Player(pi));
+                if strike.push > 0.0 {
+                    run.knock_creature(Creature::Player(ti), pos, aim, strike.push, strike.push_str);
+                }
+                match rest {
+                    Some(rest) if !run.players[ti].alive => {
+                        dmg.amount = rest;
+                        dmg = dmg.with_mult(Mult::Overkill { from: run.players[ti].id });
                     }
                     _ => break,
                 }
@@ -441,7 +478,7 @@ fn use_ring(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim
                     run.apply(t, Apply { source, origin, ..Apply::from_hit(own) });
                 }
             }
-            for c in party_around(run, pos, a.radius) {
+            for c in party_around(run, pos, a.radius, side(run, c)) {
                 run.apply(c, Apply { origin, ..Apply::plain(EffectKind::Accelerated, Some(a.duration)) });
             }
         }
@@ -547,10 +584,11 @@ pub fn tick_channel(run: &mut Run, mi: usize, dt: f64) {
     }
 }
 
-/// Every living hero and ally (the wolf) within `radius` of `pos`, the user included.
-fn party_around(run: &Run, pos: Vec2, radius: f64) -> Vec<Creature> {
-    let heroes = run.players.iter().enumerate().filter(|(_, q)| q.alive && q.pos().dist(pos) <= radius).map(|(qi, _)| Creature::Player(qi));
-    let allies = run.monsters.iter().enumerate().filter(|(_, m)| m.side == Side::Friendly && m.alive && m.pos.dist(pos) <= radius).map(|(mi, _)| Creature::Monster(mi));
+/// Every living creature of `side` (the user's: heroes, their allies like the wolf, or for a creature an enemy's
+/// Charm turned, the enemies) within `radius` of `pos`, the user included.
+fn party_around(run: &Run, pos: Vec2, radius: f64, side: Side) -> Vec<Creature> {
+    let heroes = run.players.iter().enumerate().filter(|(_, q)| q.side == side && q.alive && q.pos().dist(pos) <= radius).map(|(qi, _)| Creature::Player(qi));
+    let allies = run.monsters.iter().enumerate().filter(|(_, m)| m.side == side && m.alive && m.pos.dist(pos) <= radius).map(|(mi, _)| Creature::Monster(mi));
     heroes.chain(allies).collect()
 }
 
@@ -696,19 +734,21 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
             run.add_tinted_flash(look.light.expect("Holy Light flashes"), look.tint, pos, lights::HOLY_FLASH);
             let mut total = 0.0;
             let by = Some((run.creature_id(c), What::Ability(a.id)));
+            let user_side = side(run, c);
             for qi in 0..run.players.len() {
                 let q = &run.players[qi];
-                if q.alive && q.pos().dist(pos) <= a.radius {
+                if q.side == user_side && q.alive && q.pos().dist(pos) <= a.radius {
                     total += run.heal_player(qi, a.damage, by);
                 }
             }
             for mi in 0..run.monsters.len() {
                 let m = &run.monsters[mi];
-                if m.side == Side::Friendly && m.alive && m.pos.dist(pos) <= a.radius {
+                if m.side == user_side && m.alive && m.pos.dist(pos) <= a.radius {
                     total += run.heal_monster(mi, a.damage, by);
                 }
             }
-            if let Some(pi) = hero_of(c) {
+            // A hero on the enemy side keeps no healing statistics, as it keeps no damage or kills.
+            if let Some(pi) = hero_of(c).filter(|&pi| run.players[pi].side == Side::Friendly) {
                 run.players[pi].healing += total;
             }
         }
@@ -717,7 +757,7 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
             run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: a.radius as f32, k: look.boom }, Some(pos));
             debug_assert!(!a.effect.is_empty(), "Haste has its own effects");
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
-            for t in party_around(run, pos, a.radius) {
+            for t in party_around(run, pos, a.radius, side(run, c)) {
                 for own in &a.effect {
                     run.apply(t, Apply { origin, magical: own.magical, ..Apply::plain(own.kind, Some(own.secs)) });
                 }
@@ -729,7 +769,7 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
             run.add_tinted_flash(look.light.expect("Purify flashes"), look.tint, pos, ab::PURIFY_FLASH);
             debug_assert!(!a.effect.is_empty(), "Purify has its own effects");
             let origin = Some((run.creature_id(c), What::Ability(a.id)));
-            for t in party_around(run, pos, a.radius) {
+            for t in party_around(run, pos, a.radius, side(run, c)) {
                 let held = match t {
                     Creature::Player(i) => run.players[i].effects.present_kinds(),
                     Creature::Monster(i) => run.monsters[i].effects.present_kinds(),
@@ -754,14 +794,11 @@ fn use_self_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) ->
 fn use_ground_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) -> Anim {
     debug_assert!(ab::def(a.id).shape == Shape::GroundArea);
     let (id, pos, aim, aim_dist) = (run.creature_id(c), run.creature_pos(c), aim_of(run, c), aim_dist_of(run, c));
-    let side = match side(run, c) {
-        Side::Friendly => HazardSide::Heroes { owner: id },
-        Side::Hostile => HazardSide::Monsters,
-        Side::Neutral => unreachable!("a neutral creature acts no ability"),
-    };
+    let side = side(run, c);
+    assert!(side != Side::Neutral, "a neutral creature acts no ability");
     match a.id {
         AbilityId::Consecrate => {
-            run.spawn_hazard(kind_of(a.projectile), pos, a.radius, a.duration, side, HazardPulse::Hurt(damage_of(id, a)));
+            run.spawn_hazard(kind_of(a.projectile), pos, a.radius, a.duration, side, Some(id), HazardPulse::Hurt(damage_of(id, a)));
         }
         AbilityId::Entangle => {
             // Aimed like the Fireball, but it stops short of the first wall on the way.
@@ -774,7 +811,7 @@ fn use_ground_area(run: &mut Run, c: Creature, a: &ResolvedAbility, _shot: u16) 
             let at = pos + dir * if d + 2.0 > want && !run.layout.map.opaque_at(pos + dir * want) { want } else { d };
             debug_assert!(!a.effect.is_empty(), "Entangle has its own effects");
             let binds = a.effect.iter().map(|&own| OnHit { secs: ab::ENTANGLE_PULSE_SECS, ..own }).collect();
-            run.spawn_hazard(kind_of(a.projectile), at, a.radius, a.duration, side, HazardPulse::Bind(binds));
+            run.spawn_hazard(kind_of(a.projectile), at, a.radius, a.duration, side, Some(id), HazardPulse::Bind(binds));
         }
         AbilityId::MagicMissile | AbilityId::Fireball | AbilityId::Strike | AbilityId::HolyLight | AbilityId::Charge | AbilityId::Shoot | AbilityId::SummonWolf | AbilityId::FrostShard | AbilityId::ChainSpark | AbilityId::Judgement | AbilityId::Hurl | AbilityId::Volley | AbilityId::Smite | AbilityId::Whirl | AbilityId::FlankingThrust | AbilityId::PoisonCoat | AbilityId::FrostNova | AbilityId::WarCry | AbilityId::GroundSlam | AbilityId::Haste | AbilityId::Purify | AbilityId::Bite | AbilityId::ShadowBolt | AbilityId::FireBolt | AbilityId::Pounce | AbilityId::TailWhip | AbilityId::FireBreath | AbilityId::Smash | AbilityId::Swoop | AbilityId::RingOfFire | AbilityId::Nova | AbilityId::GloomBolts | AbilityId::BlindingCurse | AbilityId::SleepMist | AbilityId::Charm | AbilityId::StoneGaze | AbilityId::Touch | AbilityId::Vanish | AbilityId::RaiseDead | AbilityId::SummonImps => {
             unreachable!("{:?} is not a ground area", a.id)
@@ -870,18 +907,33 @@ pub fn dash_contact(run: &mut Run, c: Creature) {
     let pos = run.players[pi].pos();
     let (aim, ab) = (run.players[pi].aim, run.players[pi].sheet.secondary.clone());
     let dmg = weapon_damage(run, c, &ab);
+    let user_side = side(run, c);
     let hits: Vec<(usize, u32)> = run
         .monsters
         .iter()
         .enumerate()
-        .filter(|(i, m)| m.alive && !m.airborne && targets::heroes_may_hit(m) && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + ab.radius && !run.passes_through(Creature::Monster(*i), &dmg.split))
+        .filter(|(i, m)| m.alive && !m.airborne && targets::may_hit(run, user_side, Creature::Monster(*i)) && !run.players[pi].dash_hit.contains(&m.id) && m.pos_ago(rw).dist(pos) < PLAYER_RADIUS + m.radius + ab.radius && !run.passes_through(Creature::Monster(*i), &dmg.split))
         .map(|(i, m)| (i, m.id))
         .collect();
     for (mi, id) in hits {
         run.players[pi].dash_hit.push(id);
-        run.hurt_monster(mi, dmg.clone(), false, Some(pi));
+        hurt(run, Creature::Monster(mi), dmg.clone(), false, c);
         if ab.push > 0.0 {
             run.knock_creature(Creature::Monster(mi), pos, aim, ab.push, ab.push_str);
+        }
+    }
+    let touched: Vec<(usize, u32)> = run
+        .players
+        .iter()
+        .enumerate()
+        .filter(|(i, p)| p.alive && targets::may_hit(run, user_side, Creature::Player(*i)) && !run.players[pi].dash_hit.contains(&p.id) && p.pos_ago(rw).dist(pos) < 2.0 * PLAYER_RADIUS + ab.radius)
+        .map(|(i, p)| (i, p.id))
+        .collect();
+    for (ti, id) in touched {
+        run.players[pi].dash_hit.push(id);
+        hurt(run, Creature::Player(ti), dmg.clone(), false, c);
+        if ab.push > 0.0 {
+            run.knock_creature(Creature::Player(ti), pos, aim, ab.push, ab.push_str);
         }
     }
     let objs: Vec<(usize, u32)> = run
@@ -1019,14 +1071,17 @@ pub(crate) fn stopping_object(run: &Run, p: Vec2, r: f64) -> Option<usize> {
 /// Whether shot `pr` hits creature `c` when it is close enough: everything but the distance (side, alive, not
 /// already hit, not flown through, not sinking). The real flight and the dodge's replay both ask this.
 pub(crate) fn shot_takes(run: &Run, pr: &Projectile, c: Creature) -> bool {
+    if !targets::may_hit(run, pr.side, c) {
+        return false;
+    }
     match c {
-        Creature::Player(pi) => pr.side != Side::Friendly && run.players[pi].alive && !pr.hit.contains(&run.players[pi].id),
+        Creature::Player(pi) => run.players[pi].alive && !pr.hit.contains(&run.players[pi].id),
         Creature::Monster(mi) => {
             let m = &run.monsters[mi];
             if pr.side == Side::Friendly {
-                m.alive && targets::heroes_may_hit(m) && !pr.hit.contains(&m.id) && !run.passes_through(c, &pr.damage.split)
+                m.alive && !pr.hit.contains(&m.id) && !run.passes_through(c, &pr.damage.split)
             } else {
-                targets::enemies_may_hit(m) && m.alive && m.sinking.is_none() && !pr.hit.contains(&m.id)
+                m.alive && m.sinking.is_none() && !pr.hit.contains(&m.id)
             }
         }
     }
@@ -1075,7 +1130,7 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             let tile = crate::dungeon::Map::tile_of(pos);
             if run.projectiles[i].explode_r == 0.0 {
                 if let Some(oi) = run.objects.iter().position(|o| matches!(o.state, crate::run::objects::ObjState::Torch { wall, .. } if wall == tile)) {
-                    let (dmg, by) = (run.projectiles[i].damage.clone(), (run.projectiles[i].side == Side::Friendly).then_some(run.projectiles[i].owner));
+                    let (dmg, by) = (run.projectiles[i].damage.clone(), shot_owner(run, run.projectiles[i].side, run.projectiles[i].owner));
                     crate::run::objects::hurt_object(run, oi, dmg, by);
                 }
             }
@@ -1088,14 +1143,15 @@ fn advance_projectile(run: &mut Run, i: usize, dt: f64) {
             break;
         }
         let pr = &run.projectiles[i];
+        let monster = || run.monsters.iter().enumerate().position(|(mi, m)| shot_takes(run, pr, Creature::Monster(mi)) && m.shot_dist(pos) < m.radius + pr.radius).map(Creature::Monster);
+        let hero = || run.players.iter().enumerate().position(|(pi, p)| shot_takes(run, pr, Creature::Player(pi)) && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius).map(Creature::Player);
         let target = if pr.side == Side::Friendly {
-            // A bodiless creature that resists the shot fully is flown through.
-            run.monsters.iter().enumerate().position(|(mi, m)| shot_takes(run, pr, Creature::Monster(mi)) && m.shot_dist(pos) < m.radius + pr.radius).map(Creature::Monster)
+            // Monsters first (a bodiless creature that resists the shot fully is flown through), then a hero
+            // on the enemy side.
+            monster().or_else(hero)
         } else {
             // Heroes first, then allies.
-            let hero = run.players.iter().enumerate().position(|(pi, p)| shot_takes(run, pr, Creature::Player(pi)) && p.pos().dist(pos) < PLAYER_RADIUS + pr.radius).map(Creature::Player);
-            let ally = || run.monsters.iter().enumerate().position(|(mi, m)| shot_takes(run, pr, Creature::Monster(mi)) && m.shot_dist(pos) < m.radius + pr.radius).map(Creature::Monster);
-            hero.or_else(ally)
+            hero().or_else(monster)
         };
         if let Some(c) = target {
             impact(run, i, pos, Some(c));
@@ -1114,7 +1170,7 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     let pr = &mut run.projectiles[i];
     pr.dead = true;
     let (side, owner, damage, crit, explode_r, k, push, push_str, pierce) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str, pr.pierce);
-    let src = if side == Side::Friendly { run.player_idx(owner) } else { None };
+    let src = shot_credit(run, side, owner);
     if explode_r > 0.0 {
         explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str);
         return;
@@ -1127,15 +1183,16 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     };
     // The owner may be gone by now: the shot hurts all the same, with the numbers it was spawned with.
     let by = run.player_idx(owner).map(Creature::Player).or_else(|| run.monster_idx(owner).map(Creature::Monster));
-    match (c, side) {
-        (Creature::Monster(_), Side::Friendly) | (_, Side::Hostile) => match by {
+    match side {
+        Side::Friendly | Side::Hostile => match by {
             Some(by) => hurt(run, c, damage.clone(), crit, by),
             None => run.hurt_creature(c, damage.clone()),
         },
-        (Creature::Player(_), Side::Friendly) | (_, Side::Neutral) => {}
+        Side::Neutral => {}
     }
-    if let (What::Ability(AbilityId::ChainSpark), Creature::Monster(_), Some(by @ Creature::Player(_)), Side::Friendly) = (damage.why.what, c, by, side) {
-        chain_jumps(run, by, c, damage);
+    // A hero's spark jumps on whichever side the hero cast it for (the jumps keep that side too).
+    if let (What::Ability(AbilityId::ChainSpark), Some(by @ Creature::Player(_)), Side::Friendly | Side::Hostile) = (damage.why.what, by, side) {
+        chain_jumps(run, by, c, damage, side);
     }
     let (id, alive) = match c {
         Creature::Player(pi) => (run.players[pi].id, run.players[pi].alive),
@@ -1169,11 +1226,12 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
 /// enemy within `CHAIN_REACH` of the last target that the spark has not hit and sees (no wall between,
 /// no ally, no object, no hiding mimic or dormant monster), for `CHAIN_FALLOFF` times the damage of the
 /// jump before. Every jump draws a `Zap`.
-fn chain_jumps(run: &mut Run, c: Creature, first: Creature, damage: Damage) {
+fn chain_jumps(run: &mut Run, c: Creature, first: Creature, damage: Damage, side: Side) {
     let mut hit = vec![first];
     let mut last = first;
     let mut amount = damage.amount;
-    let user = targets::stance(run, c);
+    // The side the spark was cast for, not the one its hero is on by now.
+    let user = targets::Stance { side, ..targets::stance(run, c) };
     let log = super::rules_log::on(run);
     let (mut skips, mut stop) = (Vec::new(), None);
     for jump in 1..=ab::CHAIN_JUMPS {
@@ -1223,10 +1281,10 @@ fn impact_object(run: &mut Run, i: usize, pos: Vec2, oi: usize) {
     pr.dead = true;
     let (side, owner, damage, crit, explode_r, k, push, push_str) = (pr.side, pr.owner, pr.damage.clone(), pr.crit, pr.explode_r, pr.explode_k, pr.push, pr.push_str);
     if explode_r > 0.0 {
-        let src = if side == Side::Friendly { run.player_idx(owner) } else { None };
+        let src = shot_credit(run, side, owner);
         explode(run, pos, explode_r, damage, side, src, k, crit, push, push_str);
     } else {
-        crate::run::objects::hurt_object(run, oi, damage, (side == Side::Friendly).then_some(owner));
+        crate::run::objects::hurt_object(run, oi, damage, shot_owner(run, side, owner));
     }
 }
 
@@ -1239,27 +1297,40 @@ pub fn explode(run: &mut Run, pos: Vec2, r: f64, damage: Damage, side: Side, src
     // The heroes see their own explosions even out of view.
     run.event(Ev::Boom { x: pos.x as f32, y: pos.y as f32, r: r as f32, k }, (!heroes).then_some(pos));
     run.add_flash(LightKind::Blast, pos, lights::BLAST_FLASH);
-    if heroes {
-        let hits: Vec<(usize, bool)> = run
-            .monsters
-            .iter()
-            .enumerate()
-            .filter(|(i, m)| m.alive && targets::heroes_may_hit(m) && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos) && !run.passes_through(Creature::Monster(*i), &damage.split))
-            .map(|(i, m)| (i, m.hiding))
-            .collect();
-        for (mi, hiding) in hits {
-            run.hurt_monster(mi, damage.clone(), crit, src);
-            // A mimic that was still hiding stays where it is (the hit wakes it); a boss is never pushed (`knock_monster`).
-            if !hiding {
-                run.knock_creature(Creature::Monster(mi), pos, 0.0, push, push_str);
+    match side {
+        Side::Friendly => {
+            let hits: Vec<(usize, bool)> = run
+                .monsters
+                .iter()
+                .enumerate()
+                .filter(|(i, m)| m.alive && targets::may_hit(run, side, Creature::Monster(*i)) && m.pos.dist(pos) < r + m.radius && line_of_sight(&run.layout.map, pos, m.pos) && !run.passes_through(Creature::Monster(*i), &damage.split))
+                .map(|(i, m)| (i, m.hiding))
+                .collect();
+            for (mi, hiding) in hits {
+                run.hurt_monster(mi, damage.clone(), crit, src);
+                // A mimic that was still hiding stays where it is (the hit wakes it); a boss is never pushed (`knock_monster`).
+                if !hiding {
+                    run.knock_creature(Creature::Monster(mi), pos, 0.0, push, push_str);
+                }
+            }
+            // Then a hero on the enemy side (the monsters' order above is unchanged).
+            let foes: Vec<usize> = (0..run.players.len())
+                .filter(|&pi| run.players[pi].alive && targets::may_hit(run, side, Creature::Player(pi)) && run.players[pi].pos().dist(pos) < r + PLAYER_RADIUS && line_of_sight(&run.layout.map, pos, run.players[pi].pos()))
+                .collect();
+            for pi in foes {
+                run.hurt_creature(Creature::Player(pi), damage.clone());
+                run.knock_creature(Creature::Player(pi), pos, 0.0, push, push_str);
             }
         }
-    } else {
-        let touched: Vec<Creature> = run.foes_touching(pos, r, true).into_iter().filter(|&c| !run.passes_through(c, &damage.split)).collect();
-        for c in touched {
-            run.hurt_creature(c, damage.clone());
-            run.knock_creature(c, pos, 0.0, push, push_str);
+        Side::Hostile => {
+            let touched: Vec<Creature> = run.foes_touching(pos, r, true).into_iter().filter(|&c| !run.passes_through(c, &damage.split)).collect();
+            for c in touched {
+                run.hurt_creature(c, damage.clone());
+                run.knock_creature(c, pos, 0.0, push, push_str);
+            }
         }
+        // Nobody's blast hurts anyone (objects are still hit below).
+        Side::Neutral => {}
     }
     let by = src.map(|pi| run.players[pi].id);
     let objs: Vec<usize> = (0..run.objects.len())
@@ -1299,7 +1370,7 @@ mod tests {
     }
 
     /// An enemy of type `t` `dist` px east of hero `pi`, with `hp`; its index.
-    fn put_enemy(run: &mut Run, pi: usize, t: EnemyType, dist: f64, hp: f64) -> usize {
+    pub(super) fn put_enemy(run: &mut Run, pi: usize, t: EnemyType, dist: f64, hp: f64) -> usize {
         let pos = run.players[pi].pos() + Vec2::new(dist, 0.0);
         let id = run.spawn_enemy(t, pos, None);
         let mi = run.monster_idx(id).unwrap();
@@ -2534,6 +2605,11 @@ mod tests {
     /// A run whose one hero of `class` has `id` in `slot` (from its own pool), `extra` Attribute
     /// points and `equipment`, on a cleared, open floor.
     fn run_with_ability(class: ClassId, slot: AbilitySlot, id: AbilityId, extra: Attributes, equipment: Equipment) -> Run {
+        run_with_ability_and(class, slot, id, extra, equipment, &[])
+    }
+
+    /// `run_with_ability`, with a Paladin per entry of `others` (heroes 1.. of the run).
+    pub(super) fn run_with_ability_and(class: ClassId, slot: AbilitySlot, id: AbilityId, extra: Attributes, equipment: Equipment, others: &[ClassId]) -> Run {
         let start = Loadout::start(class);
         let pick = Pick { ability: id, source: Source::Own };
         let loadout = match slot {
@@ -2541,7 +2617,9 @@ mod tests {
             AbilitySlot::Secondary => Loadout { secondary: pick, ..start },
         };
         let build = Build { own: vec![id], loadout, extra, equipment, ..Build::start(class) };
-        let mut run = super::super::tests::test_run_with(&[(class, build)], BossId::Demon);
+        let mut heroes = vec![(class, build)];
+        heroes.extend(others.iter().map(|&c| (c, Build::start(c))));
+        let mut run = super::super::tests::test_run_with(&heroes, BossId::Demon);
         let (tx, ty) = crate::dungeon::Map::tile_of(run.players[0].pos());
         for y in ty - 3..=ty + 3 {
             for x in tx - 2..=tx + 14 {
@@ -2558,7 +2636,7 @@ mod tests {
     }
 
     /// Steps the projectiles alone (no monster acts) until none is left.
-    fn fly(run: &mut Run) {
+    pub(super) fn fly(run: &mut Run) {
         for _ in 0..240 {
             tick_projectiles(run, 1.0 / 60.0);
             run.projectiles.retain(|p| !p.dead);
@@ -3493,7 +3571,7 @@ mod tests {
         assert_eq!(run.hazards.len(), 1);
         let h = &run.hazards[0];
         assert_eq!((h.kind, h.radius, h.life), (EntityKind::HolyGround, 40.0, 5.0));
-        assert_eq!(h.side, HazardSide::Heroes { owner: run.players[0].id });
+        assert_eq!((h.side, h.owner), (Side::Friendly, Some(run.players[0].id)));
         let hid = h.id;
         assert!(run.lights.sources.iter().any(|l| l.kind == LightKind::Holy && l.anchor == Anchor::Entity(hid)), "Holy light while it lasts");
         let res = run.monsters[g].effects.res(run.monsters[g].res);
@@ -4144,5 +4222,337 @@ mod monster_uses {
         assert_eq!((hero_ball.damage.amount, hero_ball.push, hero_ball.push_str), (dragon_ball.damage.amount, dragon_ball.push, dragon_ball.push_str));
         assert_eq!(hero_ball.push_str, attrs.get(crate::defs::attributes::Attr::Str));
         assert_ne!(hero_ball.kind, dragon_ball.kind, "the two balls look different");
+    }
+
+}
+
+/// Hits follow the sides, heroes included (#224).
+#[cfg(test)]
+mod hero_sides {
+    use super::super::ai::tests::open_floor;
+    use super::super::tests::{enemy_use, test_run};
+    use super::tests::{fly, put_enemy, run_with_ability_and};
+    use super::*;
+    use crate::defs::abilities::AbilitySlot;
+    use crate::defs::attributes::Attributes;
+    use crate::defs::enemies::EnemyType;
+    use crate::defs::items::{EquipSlot, Equipment, ItemId};
+    use crate::protocol::{BossId, ClassId};
+
+    /// Heroes of `classes` on open floor with no monsters but the boss, hero `i` standing `40 * i` px east of hero 0.
+    fn crowd(classes: &[ClassId]) -> Run {
+        let mut run = test_run(classes, BossId::Demon);
+        open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss || m.owner.is_some());
+        for i in 1..classes.len() {
+            stand(&mut run, i, 40.0 * i as f64);
+        }
+        run
+    }
+
+    /// Hero `i` `dx` px east of hero 0.
+    fn stand(run: &mut Run, i: usize, dx: f64) {
+        let at = run.players[0].pos() + Vec2::new(dx, 0.0);
+        run.players[i].mv.x = at.x;
+        run.players[i].mv.y = at.y;
+    }
+
+    /// A second hero (a Paladin) `dx` px east of hero 0 in `run_with_ability_and`'s run, on the given side.
+    fn duel(class: ClassId, slot: AbilitySlot, id: AbilityId, extra: Attributes, dx: f64, side: Side) -> Run {
+        let mut run = run_with_ability_and(class, slot, id, extra, Equipment::starter(class), &[ClassId::Paladin]);
+        stand(&mut run, 1, dx);
+        run.players[1].side = side;
+        run
+    }
+
+    #[test]
+    fn a_heros_swing_hits_a_hostile_hero() {
+        let mut run = crowd(&[ClassId::Barbarian, ClassId::Paladin]);
+        stand(&mut run, 1, 20.0);
+        let hp = run.players[1].hp;
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.players[1].hp, hp, "a hero on the heroes' side is not struck");
+        run.players[0].cd1 = 0.0;
+        run.players[1].side = Side::Hostile;
+        try_use(&mut run, 0, true, 2);
+        assert!(run.players[1].hp < hp, "a hostile hero is");
+    }
+
+    #[test]
+    fn a_heros_shot_hits_a_hostile_hero() {
+        for (side, hit) in [(Side::Friendly, false), (Side::Hostile, true)] {
+            let mut run = crowd(&[ClassId::Wizard, ClassId::Paladin]);
+            stand(&mut run, 1, 90.0);
+            run.players[1].side = side;
+            assert_eq!(run.players[0].sheet.primary.id, AbilityId::MagicMissile);
+            let hp = run.players[1].hp;
+            try_use(&mut run, 0, true, 1);
+            fly(&mut run);
+            assert_eq!(run.players[1].hp < hp, hit, "{side:?}");
+        }
+    }
+
+    #[test]
+    fn a_fireball_blast_hits_a_hostile_hero() {
+        for (side, hit) in [(Side::Friendly, false), (Side::Hostile, true)] {
+            let mut run = crowd(&[ClassId::Wizard, ClassId::Paladin]);
+            stand(&mut run, 1, 70.0);
+            run.players[1].side = side;
+            run.players[0].aim_dist = 70.0;
+            run.players[1].sheet.weight = 1.0; // light enough to be pushed
+            assert_eq!(run.players[0].sheet.secondary.id, AbilityId::Fireball);
+            let hp = run.players[1].hp;
+            try_use(&mut run, 0, false, 1);
+            fly(&mut run);
+            assert_eq!(run.players[1].hp < hp, hit, "{side:?}");
+            assert_eq!(run.players[1].mv.knocked(), hit, "{side:?}: pushed with the blast");
+            assert_eq!(run.players[0].hp, run.players[0].max_hp, "never its own user");
+        }
+    }
+
+    #[test]
+    fn a_frost_nova_hits_a_hostile_hero() {
+        for (side, hit) in [(Side::Friendly, false), (Side::Hostile, true)] {
+            let mut run = duel(ClassId::Wizard, AbilitySlot::Secondary, AbilityId::FrostNova, Attributes::new(0, 0, 0, 7, 0, 0), 30.0, side);
+            let hp = run.players[1].hp;
+            try_use(&mut run, 0, false, 1);
+            assert_eq!(run.players[1].hp < hp, hit, "{side:?}");
+        }
+    }
+
+    #[test]
+    fn a_charge_touches_a_hostile_hero() {
+        let mut run = crowd(&[ClassId::Barbarian, ClassId::Paladin]);
+        stand(&mut run, 1, 6.0);
+        let hp = run.players[1].hp;
+        dash_contact(&mut run, Creature::Player(0));
+        assert_eq!(run.players[1].hp, hp, "a hero on the heroes' side is not touched");
+        run.players[1].side = Side::Hostile;
+        dash_contact(&mut run, Creature::Player(0));
+        let once = run.players[1].hp;
+        assert!(once < hp, "a hostile hero is");
+        dash_contact(&mut run, Creature::Player(0));
+        assert_eq!(run.players[1].hp, once, "once per dash");
+    }
+
+    #[test]
+    fn chain_spark_jumps_to_a_hostile_hero() {
+        for (side, hit) in [(Side::Friendly, false), (Side::Hostile, true)] {
+            let mut run = duel(ClassId::Wizard, AbilitySlot::Primary, AbilityId::ChainSpark, Attributes::new(0, 0, 0, 3, 0, 0), 90.0, side);
+            let g = put_enemy(&mut run, 0, EnemyType::GoblinArcher, 60.0, 1000.0);
+            let hp = run.players[1].hp;
+            try_use(&mut run, 0, true, 1);
+            fly(&mut run);
+            assert!(run.monsters[g].hp < 1000.0, "the first target");
+            assert_eq!(run.players[1].hp < hp, hit, "{side:?}: the jump");
+        }
+    }
+
+    #[test]
+    fn consecrate_burns_a_hostile_hero() {
+        for (side, hit) in [(Side::Friendly, false), (Side::Hostile, true)] {
+            let mut run = duel(ClassId::Paladin, AbilitySlot::Secondary, AbilityId::Consecrate, Attributes::new(0, 0, 0, 0, 0, 8), 20.0, side);
+            let hp = run.players[1].hp;
+            try_use(&mut run, 0, false, 1);
+            run.tick_hazards(0.3);
+            assert_eq!(run.players[1].hp < hp, hit, "{side:?}");
+        }
+    }
+
+    #[test]
+    fn entangle_roots_a_hostile_hero() {
+        for (side, hit) in [(Side::Friendly, false), (Side::Hostile, true)] {
+            let mut run = duel(ClassId::ElvenRanger, AbilitySlot::Secondary, AbilityId::Entangle, Attributes::new(0, 0, 0, 0, 0, 14), 80.0, side);
+            run.players[0].aim_dist = 80.0;
+            try_use(&mut run, 0, false, 1);
+            run.tick_hazards(0.3);
+            assert_eq!(run.has_effect(Creature::Player(1), EffectKind::Entangled), hit, "{side:?}");
+        }
+    }
+
+    #[test]
+    fn war_cry_frightens_a_hostile_hero_and_hastes_only_the_users_side() {
+        let mut run = run_with_ability_and(ClassId::Barbarian, AbilitySlot::Secondary, AbilityId::WarCry, Attributes::new(1, 0, 0, 0, 0, 0), Equipment::starter(ClassId::Barbarian).with(EquipSlot::Melee, ItemId::GreatAxe), &[ClassId::Paladin, ClassId::Paladin]);
+        stand(&mut run, 1, 30.0);
+        stand(&mut run, 2, 20.0);
+        run.players[1].side = Side::Hostile;
+        try_use(&mut run, 0, false, 1);
+        assert!(run.has_effect(Creature::Player(1), EffectKind::Fear), "the hostile hero is frightened");
+        assert!(!run.has_effect(Creature::Player(1), EffectKind::Accelerated), "and not hastened");
+        assert!(!run.has_effect(Creature::Player(2), EffectKind::Fear), "the hero beside the user is not frightened");
+        assert!(run.has_effect(Creature::Player(2), EffectKind::Accelerated) && run.has_effect(Creature::Player(0), EffectKind::Accelerated), "the user's side is");
+    }
+
+    #[test]
+    fn a_ranged_primary_strikes_a_hostile_hero_in_melee() {
+        for (side, struck) in [(Side::Friendly, false), (Side::Hostile, true)] {
+            let mut run = crowd(&[ClassId::ElvenRanger, ClassId::Paladin]);
+            stand(&mut run, 1, 12.0);
+            run.players[1].side = side;
+            let hp = run.players[1].hp;
+            try_use(&mut run, 0, true, 1);
+            assert_eq!(run.players[1].hp < hp, struck, "{side:?}");
+            assert_eq!(run.projectiles.is_empty(), struck, "{side:?}: a strike instead of a shot");
+        }
+    }
+
+    #[test]
+    fn a_hostile_heros_shot_hits_its_old_party_and_skips_enemies() {
+        let mut run = crowd(&[ClassId::Paladin, ClassId::Wizard]);
+        stand(&mut run, 1, 90.0);
+        run.players[1].side = Side::Hostile;
+        run.players[1].aim = std::f64::consts::PI;
+        let orc = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 45.0, 1000.0);
+        let (hero, orc_hp) = (run.players[0].hp, run.monsters[orc].hp);
+        try_use(&mut run, 1, true, 1);
+        fly(&mut run);
+        assert!(run.players[0].hp < hero, "the old party is hit");
+        assert_eq!(run.monsters[orc].hp, orc_hp, "an enemy on the way is flown through");
+    }
+
+    #[test]
+    fn holy_light_heals_only_the_users_side() {
+        for hostile in [false, true] {
+            let mut run = crowd(&[ClassId::Wizard, ClassId::Paladin]);
+            let orc = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 20.0, 50.0);
+            run.monsters[orc].max_hp = 100.0;
+            run.players[0].hp = run.players[0].max_hp - 20.0;
+            let (hero, orc_hp) = (run.players[0].hp, run.monsters[orc].hp);
+            if hostile {
+                run.players[1].side = Side::Hostile;
+            }
+            assert_eq!(run.players[1].sheet.secondary.id, AbilityId::HolyLight);
+            try_use(&mut run, 1, false, 1);
+            assert_eq!(run.players[0].hp > hero, !hostile, "hero 0 heals with the heroes' side only");
+            assert_eq!(run.monsters[orc].hp > orc_hp, hostile, "the orc heals with the enemies' side only");
+        }
+    }
+
+    #[test]
+    fn haste_and_purify_reach_only_the_users_side() {
+        // Haste from a hostile Wizard: its side's orc is hastened, the hero beside it is not.
+        let mut run = run_with_ability_and(ClassId::Wizard, AbilitySlot::Secondary, AbilityId::Haste, Attributes::new(0, 0, 0, 5, 2, 0), Equipment::starter(ClassId::Wizard), &[ClassId::Paladin]);
+        stand(&mut run, 1, 20.0);
+        run.players[0].side = Side::Hostile;
+        let orc = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 25.0, 100.0);
+        try_use(&mut run, 0, false, 1);
+        assert!(run.has_effect(Creature::Monster(orc), EffectKind::Accelerated) && run.has_effect(Creature::Player(0), EffectKind::Accelerated));
+        assert!(!run.has_effect(Creature::Player(1), EffectKind::Accelerated), "not the old party");
+        // Purify from a hostile Paladin: it clears the orc, not the hero.
+        let mut run = run_with_ability_and(ClassId::Paladin, AbilitySlot::Secondary, AbilityId::Purify, Attributes::new(0, 0, 0, 0, 2, 0), Equipment::starter(ClassId::Paladin), &[ClassId::Wizard]);
+        stand(&mut run, 1, 20.0);
+        run.players[0].side = Side::Hostile;
+        let orc = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 25.0, 100.0);
+        run.players[1].effects.add(EffectKind::Slowed, 30.0);
+        run.monsters[orc].effects.add(EffectKind::Slowed, 30.0);
+        try_use(&mut run, 0, false, 1);
+        assert!(!run.has_effect(Creature::Monster(orc), EffectKind::Slowed), "the orc is cleansed");
+        assert!(run.has_effect(Creature::Player(1), EffectKind::Slowed), "the old party is not");
+    }
+
+    #[test]
+    fn enemy_attacks_skip_a_hero_on_their_side() {
+        use crate::defs::damage::kind_split;
+        let attacks: [(&str, fn(&mut Run)); 5] = [
+            ("an orc's Strike", |run| {
+                let at = run.players[1].pos();
+                enemy_use(run, EnemyType::OrcWarrior, at - Vec2::new(14.0, 0.0), AbilityId::Strike, at);
+            }),
+            ("a fire patch", |run| {
+                let at = run.players[1].pos();
+                crate::run::spawn_fire_patch(run, at, 30.0, 5.0, 10.0);
+                run.tick_hazards(0.3);
+            }),
+            ("a fireball blast", |run| {
+                let at = run.players[1].pos();
+                explode(run, at, 30.0, Damage::new(10.0, kind_split(EntityKind::Fireball)), Side::Hostile, None, 0, false, 0.0, 0);
+            }),
+            ("the dragon's breath", |run| {
+                let (bi, at) = (run.monsters.iter().position(|m| m.is_boss).unwrap(), run.players[1].pos());
+                run.monsters[bi].pos = at - Vec2::new(20.0, 0.0);
+                run.monsters[bi].aim = 0.0;
+                run.monsters[bi].channel = Some((AbilityId::FireBreath, 1.0, 0.0));
+                tick_channel(run, bi, 1.0 / TICK_HZ);
+            }),
+            ("a Blinding Curse", |run| {
+                let at = run.players[1].pos();
+                enemy_use(run, EnemyType::OrcWarrior, at - Vec2::new(40.0, 0.0), AbilityId::BlindingCurse, at);
+                fly(run);
+            }),
+        ];
+        for (name, attack) in attacks {
+            for (side, hurt) in [(Side::Friendly, true), (Side::Hostile, false)] {
+                let mut run = test_run(&[ClassId::Paladin, ClassId::Paladin], BossId::Dragon);
+                open_floor(&mut run);
+                run.monsters.retain(|m| m.is_boss);
+                stand(&mut run, 1, 60.0);
+                run.players[1].side = side;
+                let hp = run.players[1].hp;
+                attack(&mut run);
+                let touched = run.players[1].hp < hp || run.players[1].effects.has(EffectKind::Blind);
+                assert_eq!(touched, hurt, "{name} on a {side:?} hero");
+                let (near, touching) = (run.foes_in(run.players[1].pos(), 5.0, None), run.foes_touching(run.players[1].pos(), 5.0, false));
+                assert_eq!((near.contains(&Creature::Player(1)), touching.contains(&Creature::Player(1))), (hurt, hurt), "{name}: the area helpers on a {side:?} hero");
+            }
+        }
+    }
+
+    #[test]
+    fn a_shot_keeps_the_side_it_was_cast_for() {
+        // A missile in flight: hero 0 turns hostile, and it still hits the orc and spares hero 1.
+        let mut run = crowd(&[ClassId::Wizard, ClassId::Paladin]);
+        stand(&mut run, 1, 40.0);
+        let orc = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 90.0, 1000.0);
+        let hp = run.players[1].hp;
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.projectiles[0].side, Side::Friendly);
+        run.players[0].side = Side::Hostile;
+        fly(&mut run);
+        assert!(run.monsters[orc].hp < 1000.0, "it hits the monster");
+        assert_eq!(run.players[1].hp, hp, "and not hero 1");
+        // A Consecrate on the ground: the same.
+        let mut run = run_with_ability_and(ClassId::Paladin, AbilitySlot::Secondary, AbilityId::Consecrate, Attributes::new(0, 0, 0, 0, 0, 8), Equipment::starter(ClassId::Paladin), &[ClassId::Paladin]);
+        stand(&mut run, 1, 20.0);
+        let orc = put_enemy(&mut run, 0, EnemyType::OrcWarrior, 25.0, 1000.0);
+        let hp = run.players[1].hp;
+        try_use(&mut run, 0, false, 1);
+        run.players[0].side = Side::Hostile;
+        run.tick_hazards(0.3);
+        assert_eq!(run.hazards[0].side, Side::Friendly);
+        assert!(run.monsters[orc].hp < 1000.0, "it burns the orc");
+        assert_eq!(run.players[1].hp, hp, "and not hero 1");
+    }
+
+    #[test]
+    fn a_hit_on_a_hero_is_rewound() {
+        let mut run = crowd(&[ClassId::Barbarian, ClassId::Paladin]);
+        stand(&mut run, 1, 15.0);
+        run.players[1].side = Side::Hostile;
+        let there = run.players[1].pos();
+        run.players[1].history = std::iter::repeat(there).take(crate::run::entities::HISTORY_LEN).collect();
+        stand(&mut run, 1, 45.0); // 30 px on, out of reach now
+        let hp = run.players[1].hp;
+        run.players[0].view_lag = 0.0;
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.players[1].hp, hp, "where it stands now is out of reach");
+        run.players[0].cd1 = 0.0;
+        run.players[0].view_lag = 0.1;
+        try_use(&mut run, 0, true, 2);
+        assert!(run.players[1].hp < hp, "where the attacker saw it is not");
+    }
+
+    #[test]
+    fn no_credit_while_on_the_enemy_side() {
+        let mut run = crowd(&[ClassId::Barbarian, ClassId::ElvenRanger]);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 1);
+        let wi = run.monster_idx(wolf).unwrap();
+        run.monsters[wi].pos = run.players[0].pos() + Vec2::new(15.0, 0.0);
+        run.monsters[wi].hp = 1.0;
+        run.players[0].side = Side::Hostile;
+        let before = (run.players[0].kills, run.players[0].xp, run.players[0].coins, run.players[0].damage, run.players[1].kills);
+        try_use(&mut run, 0, true, 1);
+        assert!(run.monster_idx(wolf).map_or(true, |i| !run.monsters[i].alive || run.monsters[i].hp < 1.0), "the wolf was struck");
+        let after = (run.players[0].kills, run.players[0].xp, run.players[0].coins, run.players[0].damage, run.players[1].kills);
+        assert_eq!(before, after, "no kill, XP, coins or damage for a hit on the heroes' side");
     }
 }
