@@ -28,6 +28,8 @@ describe('a hero on the enemy side (charmed)', () => {
     expect(shotPassesThrough({ kind: KIND.Paladin, side: SIDE.Hostile, flags: 0 })).toBe(false);
     expect(meleeFoe({ kind: KIND.Paladin, side: SIDE.Hostile, flags: 0 })).toBe(true);
     // A downed one is no target (the caller skips the dead).
+    expect(meleeFoe({ kind: KIND.Paladin, side: SIDE.Hostile, flags: FLAG.DEAD })).toBe(false);
+    // A Friendly hero is no foe.
     expect(meleeFoe({ kind: KIND.Paladin, side: SIDE.Friendly, flags: 0 })).toBe(false);
   });
 });

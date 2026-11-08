@@ -394,7 +394,7 @@ impl Run {
     /// Whether the hit effect `h` would take hold on `c` now, by the same rules `apply` uses, changing nothing.
     /// A `Cancelled` outcome counts as not taking hold.
     pub fn would_take_hold(&self, c: Creature, h: OnHit) -> bool {
-        !self.refuses_effect(c) &&self.hold_check(c, &Apply::from_hit(h)).is_ok()
+        !self.refuses_effect(c) && self.hold_check(c, &Apply::from_hit(h)).is_ok()
     }
 
     /// Seconds left of `kind` on `c` (0 when it is not on).

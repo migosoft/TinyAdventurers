@@ -155,6 +155,9 @@ fn hero_on(run: &mut Run, pi: usize, caster: u32) {
     let caster_name = caster_name(run, caster);
     let p = &mut run.players[pi];
     p.side = side;
+    // A Ground Slam wound up before the charm must not land from the new side. A dash stays: it may be carrying
+    // the hero over a chasm.
+    p.slam = None;
     p.charm = Some(HeroCharm { caster, caster_name, side, brain: Brain::new() });
     rules_log::hero_charm(run, pi, true);
 }

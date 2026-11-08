@@ -126,7 +126,7 @@ fn hp_byte(hp: f64, max: f64) -> u8 {
     ((hp / max).clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-/// One monster's entry. A companion's `extra` is its leader (a hero's id).
+/// One monster's entry. A companion's `extra` is its leader (a hero's id, or a monster's when a charmed creature follows its monster caster).
 fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, gaze: u32) -> EntSnap {
     let mut f = 0;
     if m.hurt_t > 0.0 {

@@ -486,6 +486,29 @@ mod tests {
         assert_eq!(run.players[1].hp, hp, "the slam never landed");
     }
 
+    #[test]
+    fn a_slam_wound_up_before_the_charm_never_lands_on_the_party() {
+        // The player's own Ground Slam is still winding up when the charm lands: it must not strike the party
+        // from the hero's new side.
+        let build = build_with_ability(ClassId::Barbarian, AbilityId::GroundSlam);
+        let mut run = test_run_with(&[(ClassId::Barbarian, build), (ClassId::Paladin, Build::start(ClassId::Paladin))], BossId::Lich);
+        crate::run::ai::tests::open_floor(&mut run);
+        run.monsters.retain(|m| m.is_boss);
+        let at = run.players[0].pos();
+        put(&mut run, 1, at + Vec2::new(10.0, 0.0));
+        tough(&mut run, 1);
+        let orc = held_orc(&mut run, -40.0);
+        run.players[0].cd1 = 100.0;
+        run.players[0].cd2 = 100.0;
+        run.players[0].slam = Some(0.1);
+        charm_hero(&mut run, 0, orc, 8.0);
+        let hp = run.players[1].hp;
+        steps(&mut run, 30);
+        assert!(run.players[0].charm.is_some());
+        assert!(run.players[0].slam.is_none(), "the slam is dropped");
+        assert_eq!(run.players[1].hp, hp, "the slam never landed on the party");
+    }
+
     /// A strip of chasm in column `tx + 0`, over the rows `ty - up ..= ty + down`.
     fn chasm_column(run: &mut Run, up: i32, down: i32) -> (i32, i32) {
         let (tx, ty) = Map::tile_of(run.players[0].pos());
