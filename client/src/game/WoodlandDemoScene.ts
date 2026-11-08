@@ -79,7 +79,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.view = new LightView(this, map, this.field);
     // the start: the middle tile of the road's western end
     const start = this.startPoint(d);
-    this.woodland = new WoodlandView(this, d.woodland, map, start);
+    this.woodland = new WoodlandView(this, d.woodland, map, start, true);
     this.woodland.clouds.look = { ...look };
     this.mask = new VisionMask(this, map);
     this.shade = new ShadeMask(this, map);

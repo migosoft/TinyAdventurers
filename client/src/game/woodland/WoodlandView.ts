@@ -74,7 +74,8 @@ export class WoodlandView {
   settled = false;
   private mapW: number;
 
-  constructor(private scene: Phaser.Scene, private info: WoodlandInfo, map: TileMap, spawn: { x: number; y: number } = { x: 0, y: 0 }) {
+  /** `log`: print the plant-draw timing to the console once (the ?woodland demo). */
+  constructor(private scene: Phaser.Scene, private info: WoodlandInfo, map: TileMap, spawn: { x: number; y: number } = { x: 0, y: 0 }, private log = false) {
     const painter = this.painter = new GroundPainter(map, info.seed);
     // flat grass over the ground tiles until a strip's real ground is uploaded
     const nStrips = this.nStrips = Math.ceil(painter.h / STRIP);
@@ -195,7 +196,7 @@ export class WoodlandView {
     if (!this.settled && this.groundQueue.size === 0 && windowSettled({ x0: cam.x - SETTLE_MARGIN, y0: cam.y - SETTLE_MARGIN, x1: cam.right + SETTLE_MARGIN, y1: cam.bottom + SETTLE_MARGIN }, STRIP, (n) => !!this.strips[n], this.painter.h, this.pendingGrid)) this.settled = true;
     if (!this.logged && this.groundQueue.size === 0 && this.pending.size === 0) {
       this.logged = true;
-      console.log(`woodland: ${this.info.plants.length} plants drawn (${this.frames.size} frames, ${this.pages.pages} pages) in ${Math.round(performance.now() - this.groundDoneMs)} ms after the ground (${Math.round(performance.now() - this.startMs)} ms in all)`);
+      if (this.log) console.log(`woodland: ${this.info.plants.length} plants drawn (${this.frames.size} frames, ${this.pages.pages} pages) in ${Math.round(performance.now() - this.groundDoneMs)} ms after the ground (${Math.round(performance.now() - this.startMs)} ms in all)`);
     }
     this.shade(hero);
     this.clouds.update(t, cam);
