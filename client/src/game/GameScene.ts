@@ -34,7 +34,7 @@ import { projectileAir } from './airshots';
 import { VisionMask } from './visionmask';
 import { DEFAULT_HAZE, syncUnseenFX } from './unseenfx';
 import { ShadeMask } from './shademask';
-import { syncDarkvisionFX } from './darkvisionfx';
+import { DARKVISION_FX, syncDarkvisionFX } from './darkvisionfx';
 import { ForceField } from './forcefield';
 import { MimicView } from './mimic';
 import { RulesLog } from '../rulesLog';
@@ -156,6 +156,7 @@ export class GameScene extends Phaser.Scene {
   private movers = new MoverTracker(); // replaced in init() for every run
   private airMovers: AirMover[] = [];
   private visionMask!: VisionMask;
+  /** Kept for cleanup: `cameras.main` is already gone at shutdown. */
   private mainCamera!: Phaser.Cameras.Scene2D.Camera;
   private shadeMask!: ShadeMask;
   private unsub?: () => void;
@@ -329,6 +330,7 @@ export class GameScene extends Phaser.Scene {
     this.shadeMask.destroy();
     // the camera manager is already shut down here (`cameras.main` is gone): use the reference kept at creation
     syncUnseenFX(this.mainCamera, false, undefined, this.visionMask.rect, DEFAULT_HAZE);
+    if (this.mainCamera.postPipelines.some((p) => p.name === DARKVISION_FX)) this.mainCamera.removePostPipeline(DARKVISION_FX);
     this.sunbeams.destroy();
     this.cove?.destroy();
     this.cove = null;
@@ -869,11 +871,14 @@ export class GameScene extends Phaser.Scene {
     const shots: AirShot[] = (this.lastSnap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
     this.mood?.update(dt, this.cameras.main.worldView, torches, shots, this.collectMovers(dt, px, py));
     this.sunbeams.update(dt, this.cameras.main.worldView, now);
-    this.visionMask.update(this.cameras.main.worldView, this.lightView.view, () => this.lightView.sight);
-    // the soft wedge waits for the scenery it belongs to (the woodland's trunks): on daylight maps it is the haze's
-    // soft level, on dark maps (the cove) the ShadeMask's black 0.3
     const settled = !this.woodland || this.woodland.settled;
-    syncUnseenFX(this.cameras.main, this.info.daylight && settled, this.visionMask.texture, this.visionMask.rect, DEFAULT_HAZE);
+    if (this.info.daylight) this.visionMask.soft = settled ? DEFAULT_HAZE.soft : 0;
+    this.visionMask.update(this.cameras.main.worldView, this.lightView.view, () => this.lightView.sight);
+    // only the soft wedge waits for the scenery it belongs to (the woodland's trunks): over undrawn trees it would
+    // haze bare ground. On daylight maps that is the haze's soft level (soft 0 = no haze behind blockers); the
+    // pipeline itself stays on, since toggling it as `settled` flips would rebuild it and pop the beyond-sight haze.
+    // On dark maps (the cove) the ShadeMask's black 0.3 waits instead.
+    syncUnseenFX(this.cameras.main, this.info.daylight, this.visionMask.texture, this.visionMask.rect, DEFAULT_HAZE);
     this.shadeMask.on = !this.info.daylight && settled;
     this.shadeMask.update(this.cameras.main.worldView, this.lightView.view, () => this.lightView.sight);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
