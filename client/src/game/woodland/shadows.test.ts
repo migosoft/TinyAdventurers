@@ -39,6 +39,33 @@ describe('shadows', () => {
     expect(alphaAt(s, s.foot.x, s.foot.y)).toBe(255);
     expect(alphaAt(s, s.foot.x + Math.round(0.3 * 3) + 2, s.foot.y)).toBe(0);
   });
+  it('an opaque pixel below the foot casts nothing with a non-zero vector (only the ellipse is there)', () => {
+    const data = new Uint8ClampedArray(1 * 6 * 4);
+    data.set([1, 1, 1, 255], 5 * 4); // the lowest row, below a foot at y 3
+    const s = shadowOf({ w: 1, h: 6, data }, { x: 0, y: 3 }, { sx: 1, sy: 0.5 }, false);
+    const none = shadowOf({ w: 1, h: 6, data: new Uint8ClampedArray(24) }, { x: 0, y: 3 }, { sx: 1, sy: 0.5 }, false);
+    expect(s).toEqual(none);
+  });
+  it('a thin post at a low sun casts a shadow without gaps', () => {
+    const data = new Uint8ClampedArray(1 * 21 * 4);
+    for (let y = 0; y < 20; y++) data.set([1, 1, 1, 255], y * 4);
+    const s = shadowOf({ w: 1, h: 21, data }, { x: 0, y: 20 }, shadowVector({ side: -1, elevation: 35 }), false);
+    const cols: number[] = [];
+    for (let x = 0; x < s.img.w; x++) { let any = false; for (let y = 0; y < s.img.h; y++) if (alphaAt(s, x, y) > 0) any = true; cols.push(any ? 1 : 0); }
+    const first = cols.indexOf(1), last = cols.lastIndexOf(1);
+    expect(cols.slice(first, last + 1).every((c) => c === 1)).toBe(true);
+    expect(last - first).toBeGreaterThan(15);
+  });
+  it('mirroring equals shadowing the hand-mirrored raster, foot included', () => {
+    const t = drawPlant('wide', 5, 100), { w, h, data } = t.img;
+    const flipped = new Uint8ClampedArray(data.length);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) flipped.set(data.subarray((y * w + x) * 4, (y * w + x) * 4 + 4), (y * w + (w - 1 - x)) * 4);
+    const vec = { sx: 1.2, sy: 0.5 };
+    const a = shadowOf(t.img, t.foot, vec, true), b = shadowOf({ w, h, data: flipped }, { x: w - t.foot.x, y: t.foot.y }, vec, false);
+    expect(a.foot).toEqual(b.foot);
+    expect(a.img.w).toBe(b.img.w); expect(a.img.h).toBe(b.img.h);
+    expect(Array.from(a.img.data)).toEqual(Array.from(b.img.data));
+  });
   it('mirroring the plant does not flip the shadow', () => {
     const t = drawPlant('wide', 5, 100);
     const a = shadowOf(t.img, t.foot, { sx: 1, sy: 0.5 }, false), b = shadowOf(t.img, t.foot, { sx: 1, sy: 0.5 }, true);

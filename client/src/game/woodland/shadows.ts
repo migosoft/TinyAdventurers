@@ -28,16 +28,23 @@ export function shadowOf(img: Rgba, foot: { x: number; y: number }, vec: ShadowV
     if (ht <= 0) continue;
     for (let x = 0; x < w; x++) {
       if (data[(y * w + x) * 4 + 3] === 0) continue;
-      const px = Math.round((mirrored ? w - 1 - x : x) + ht * vec.sx), py = Math.round(fy + ht * vec.sy);
-      pts.push(px, py);
-      if (px < minX) minX = px; if (px > maxX) maxX = px;
+      // splat toward the column the pixel below (one unit lower) lands in, so a low sun leaves no pinholes
+      const x0 = mirrored ? w - 1 - x : x;
+      const a = Math.round(x0 + ht * vec.sx), b = Math.round(x0 + (ht - 1) * vec.sx), py = Math.round(fy + ht * vec.sy);
+      const step = Math.sign(b - a), end = step === 0 ? a : b - step;
+      pts.push(a, end, py);
+      const lo = Math.min(a, end), hi = Math.max(a, end);
+      if (lo < minX) minX = lo; if (hi > maxX) maxX = hi;
       if (py < minY) minY = py; if (py > maxY) maxY = py;
     }
   }
   const sw = maxX - minX + 1, sh = maxY - minY + 1;
   const out = new Uint8ClampedArray(sw * sh * 4);
   const put = (x: number, y: number) => { out[((y - minY) * sw + (x - minX)) * 4 + 3] = 255; };
-  for (let i = 0; i < pts.length; i += 2) put(pts[i], pts[i + 1]);
+  for (let i = 0; i < pts.length; i += 3) {
+    const lo = Math.min(pts[i], pts[i + 1]), hi = Math.max(pts[i], pts[i + 1]);
+    for (let c = lo; c <= hi; c++) put(c, pts[i + 2]);
+  }
   const cx = Math.round(fx), cy = Math.round(fy);
   for (let y = Math.floor(fy - ry); y <= Math.ceil(fy + ry); y++) {
     for (let x = Math.floor(fx - rx); x <= Math.ceil(fx + rx); x++) {
