@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from './map';
-import { sightRadius, visibilityPolygon, wallSegments } from './vispoly';
+import { sightPolygon, sightRadius, visibilityPolygon, wallSegments } from './vispoly';
 
 /** A map from rows of characters: '#' wall, 'D' closed door, 'd' open door, anything else floor. */
 function grid(rows: string[]): TileMap {
@@ -115,5 +115,45 @@ describe('visibilityPolygon', () => {
       expect(y).toBeLessThanOrEqual(5 * TILE + 1e-6);
     }
     expect(Math.max(...pts.map(([x]) => x))).toBeCloseTo(5 * TILE, 6);
+  });
+});
+
+describe('sightPolygon with angular buckets (#280)', () => {
+  /** The rays cast against every segment, as before the buckets: the oracle. */
+  function bruteForce(map: TileMap, px: number, py: number, r: number): number[] {
+    const segs = wallSegments(map, px, py, r);
+    const out: number[] = [];
+    for (const a of sightPolygon(map, px, py, r).angles) {
+      const dx = Math.cos(a), dy = Math.sin(a);
+      let best = r;
+      for (const [ax, ay, bx, by] of segs) {
+        const ex = bx - ax, ey = by - ay;
+        const den = dx * ey - dy * ex;
+        if (Math.abs(den) < 1e-12) continue;
+        const t = ((ax - px) * ey - (ay - py) * ex) / den;
+        const u = ((ax - px) * dy - (ay - py) * dx) / den;
+        if (t > 0 && t < best && u >= -1e-9 && u <= 1 + 1e-9) best = t;
+      }
+      out.push(px + dx * best, py + dy * best);
+    }
+    return out;
+  }
+
+  it('gives exactly the points of casting against every segment, on scattered pillars', () => {
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 2 ** 32);
+    for (let m = 0; m < 20; m++) {
+      const walls: [number, number][] = [];
+      for (let i = 0; i < 60; i++) walls.push([1 + Math.floor(rnd() * 28), 1 + Math.floor(rnd() * 28)]);
+      const map = room(30, 30, walls);
+      for (let k = 0; k < 10; k++) {
+        const tx = 1 + Math.floor(rnd() * 28), ty = 1 + Math.floor(rnd() * 28);
+        if (map.blocksSight(tx, ty, 'all')) continue;
+        // inside the tile, on its edges and corners too (a viewer on a segment's line)
+        const px = tx * TILE + [0, 0.5, 3.7, 8, 15.99][k % 5], py = ty * TILE + [8, 0, 11.2, 0.25, 15.5][k % 5];
+        const r = sightRadius(4 + (k % 7));
+        expect(sightPolygon(map, px, py, r).points).toEqual(bruteForce(map, px, py, r));
+      }
+    }
   });
 });

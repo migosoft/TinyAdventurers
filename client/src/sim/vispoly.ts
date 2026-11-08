@@ -69,6 +69,47 @@ function cast(ox: number, oy: number, dx: number, dy: number, segs: Segment[], m
   return best;
 }
 
+/** Angular buckets around the viewer (#280): a ray tests only the segments in its bucket. */
+const BUCKETS = 256;
+
+/** The bucket of angle `a` (any real angle, wrapped). */
+function bucketOf(a: number): number {
+  const b = Math.floor(((a + Math.PI) / (2 * Math.PI)) * BUCKETS) % BUCKETS;
+  return b < 0 ? b + BUCKETS : b;
+}
+
+/**
+ * The segments sorted into angular buckets around (px, py): each segment goes into every bucket its angular span
+ * touches, plus one on each side (rounding, and `cast`'s 1e-9 end tolerance); a segment passing within 1 px of the
+ * viewer goes into all of them. So a bucket holds every segment a ray in it can hit, and `cast` over the bucket
+ * returns exactly what it returns over all segments (the nearest hit does not depend on the order). In a forest the
+ * full view has ~200 segments and ~1300 rays; this makes the polygon several times cheaper.
+ */
+export function bucketSegments(segs: Segment[], px: number, py: number): Segment[][] {
+  const out: Segment[][] = Array.from({ length: BUCKETS }, () => []);
+  for (const sg of segs) {
+    const [ax, ay, bx, by] = sg;
+    const ex = bx - ax, ey = by - ay;
+    const len2 = ex * ex + ey * ey;
+    const k = len2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * ex + (py - ay) * ey) / len2)) : 0;
+    if (Math.hypot(ax + ex * k - px, ay + ey * k - py) < 1) {
+      for (const b of out) b.push(sg);
+      continue;
+    }
+    // The segment does not pass by the viewer, so it spans less than π: the shorter arc between its ends.
+    const a1 = Math.atan2(ay - py, ax - px);
+    const a2 = Math.atan2(by - py, bx - px);
+    let d = a2 - a1;
+    if (d > Math.PI) d -= 2 * Math.PI;
+    else if (d < -Math.PI) d += 2 * Math.PI;
+    const from = bucketOf(d >= 0 ? a1 : a2);
+    const n = bucketOf(d >= 0 ? a2 : a1) - from;
+    const count = (n < 0 ? n + BUCKETS : n) + 3;
+    for (let i = 0; i < Math.min(count, BUCKETS); i++) out[(from - 1 + i + BUCKETS) % BUCKETS].push(sg);
+  }
+  return out;
+}
+
 /** Ray angle offset beside a segment end. */
 const EPS = 1e-4;
 
@@ -131,11 +172,12 @@ export function sightPolygon(map: TileMap, px: number, py: number, r: number, st
       angles.push(a - EPS, a, a + EPS);
     }
   angles.sort((a, b) => a - b);
+  const buckets = bucketSegments(segs, px, py);
   const out: number[] = [];
   for (const a of angles) {
     const dx = Math.cos(a);
     const dy = Math.sin(a);
-    const t = cast(px, py, dx, dy, segs, r);
+    const t = cast(px, py, dx, dy, buckets[bucketOf(a)], r);
     out.push(px + dx * t, py + dy * t);
   }
   return { points: out, angles };
