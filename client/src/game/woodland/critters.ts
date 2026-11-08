@@ -117,9 +117,10 @@ const PX_TEX = 'critter-px';
 type Px = Phaser.GameObjects.Image;
 
 export class Critters {
-  /** Demo switches: hide the bees or the butterflies. */
-  bees_on = true;
-  butterflies_on = true;
+  /** Whether the bees fly. */
+  beesOn = true;
+  /** Whether the butterflies fly. */
+  butterfliesOn = true;
   private patches: Pt[];
   private flyers: Flyer[] = [];
   private bees: Bee[] = [];
@@ -172,7 +173,7 @@ export class Critters {
     for (const bee of this.bees) {
       bee.body.setVisible(false);
       bee.stripe.setVisible(false);
-      if (!this.bees_on) continue;
+      if (!this.beesOn) continue;
       if (cam && (bee.f.x < cam.x - 16 || bee.f.x > cam.right + 16 || bee.f.y < cam.y - 16 || bee.f.y > cam.bottom + 16)) continue;
       beePos(bee.q, t, bee.f, pos);
       if (!this.seen(seenLit, mapW, pos.x, pos.y)) continue;
@@ -184,7 +185,7 @@ export class Critters {
       fl.left.setVisible(false);
       fl.right.setVisible(false);
       fl.body.setVisible(false);
-      if (!this.butterflies_on) continue;
+      if (!this.butterfliesOn) continue;
       const b = flyPos(fl.q, t, fl.bounds, pos);
       if (cam && (b.x < cam.x - 16 || b.x > cam.right + 16 || b.y < cam.y - 16 || b.y > cam.bottom + 16)) continue;
       if (!this.seen(seenLit, mapW, b.x, b.ground)) continue;

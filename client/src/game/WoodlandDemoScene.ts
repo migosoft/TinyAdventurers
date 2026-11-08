@@ -125,8 +125,8 @@ export class WoodlandDemoScene extends Phaser.Scene {
 
   private applySwitches(): void {
     this.woodland.clouds.look = { ...look, dark: on.clouds ? look.dark : 0 };
-    this.woodland.critters.bees_on = on.bees;
-    this.woodland.critters.butterflies_on = on.butterflies;
+    this.woodland.critters.beesOn = on.bees;
+    this.woodland.critters.butterfliesOn = on.butterflies;
     this.woodland.silhouetteOn = on.silhouette;
   }
 

@@ -1,5 +1,5 @@
-// WoodlandView (#203): the woodland in the game. The ground is painted once into one texture. Every tree and
-// bush is drawn by vegetation.ts into packed canvas pages, a few per frame (never more than DrawQueue's budget,
+// WoodlandView (#203): the woodland in the game. The ground is painted in row bands and uploaded
+// as 64 px strips (the painter is dropped once all are up). Every tree and bush is drawn by vegetation.ts into packed canvas pages, a few per frame (never more than DrawQueue's budget,
 // nearest to the camera first), and a plant shows as soon as its frame exists. Equal plants (same kind, seed and
 // size) share one frame. The own hero shows through the front-most tree canopy it stands behind (Silhouette).
 import type Phaser from 'phaser';
@@ -41,7 +41,9 @@ const bucketKey = (bx: number, by: number) => (by + 1) * 8192 + bx + 1;
 const keyOf = (p: PlantInfo) => `${p[0]}:${p[3]}:${p[4]}`;
 
 export class WoodlandView {
-  private painter: GroundPainter;
+  /** Undefined once every strip is up: its ~6.6 MB of pixels are released. */
+  private painter?: GroundPainter;
+  private groundH: number;
   private placeholders: Phaser.GameObjects.Graphics[] = [];
   /** Uploaded ground strips by index (holes: not uploaded yet; strips go up nearest to the camera first). */
   private strips: Phaser.GameObjects.Image[] = [];
@@ -81,6 +83,7 @@ export class WoodlandView {
   /** `log`: print the plant-draw timing to the console once (the ?woodland demo). */
   constructor(private scene: Phaser.Scene, private info: WoodlandInfo, map: TileMap, spawn: { x: number; y: number } = { x: 0, y: 0 }, private log = false) {
     const painter = this.painter = new GroundPainter(map, info.seed);
+    this.groundH = painter.h;
     // flat grass over the ground tiles until a strip's real ground is uploaded
     const nStrips = this.nStrips = Math.ceil(painter.h / STRIP);
     for (let n = 0; n < nStrips; n++) {
@@ -163,6 +166,7 @@ export class WoodlandView {
   private uploadStrip(camY: number): void {
     if (this.stripsUp >= this.nStrips) return;
     const p = this.painter;
+    if (!p) return;
     let n = -1, best = Infinity;
     for (let i = 0; i < this.nStrips; i++) {
       if (this.strips[i]) continue;
@@ -178,6 +182,7 @@ export class WoodlandView {
     this.strips[n] = this.scene.add.image(0, y0, name).setOrigin(0).setDepth(DEPTH.map + 0.5);
     this.stripsUp++;
     this.placeholders[n].destroy();
+    if (this.stripsUp >= this.nStrips) this.painter = undefined;
   }
 
   /** `hero`: the own hero's body while it plays, else null. `cam`: the camera's world view. */
@@ -199,7 +204,7 @@ export class WoodlandView {
     this.ready.length = 0;
     if (!this.groundDoneMs && this.groundQueue.size === 0) this.groundDoneMs = performance.now();
     if (!this.done && this.groundQueue.size === 0 && this.pending.size === 0 && this.stripsUp === this.nStrips) this.done = true;
-    this.settled = sceneSettled(this.done, this.groundQueue.size === 0, windowAround(cam), STRIP, (n) => !!this.strips[n], this.painter.h, this.pendingGrid);
+    this.settled = sceneSettled(this.done, this.groundQueue.size === 0, windowAround(cam), STRIP, (n) => !!this.strips[n], this.groundH, this.pendingGrid);
     if (!this.logged && this.groundQueue.size === 0 && this.pending.size === 0) {
       this.logged = true;
       if (this.log) console.log(`woodland: ${this.info.plants.length} plants drawn (${this.frames.size} frames, ${this.pages.pages} pages) in ${Math.round(performance.now() - this.groundDoneMs)} ms after the ground (${Math.round(performance.now() - this.startMs)} ms in all)`);
