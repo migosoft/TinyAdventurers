@@ -34,12 +34,23 @@ const SHAPES: Record<Exclude<Shape, 'conifer'>, { sx: number; sy: number; rx: nu
 };
 const CANOPY = [[0, 14, 21, 13], [17, 9, 9, 6], [-25, 24, 16, 11], [25, 23, 17, 11], [-30, 38, 14, 9], [30, 38, 14, 9], [0, 36, 18, 11], [-13, 45, 9, 6]];
 
+/** Bark colour from the lit amount; `rim` marks the outer ring of a stroke, which turns dark on the shadow side. */
+const barkShade = (lit: number, rim: boolean) => (rim && lit < -0.2 ? 'a' : lit > 0.55 ? 'd' : lit > 0 ? 'c' : lit > -0.5 ? 'b' : 'a');
+
+/**
+ * The pixels, plus `ref`: the same picture shaded with DEFAULT_LIGHT. Every random draw that depends on a pixel's
+ * colour looks at `ref`, so the random stream, and with it the shape, is the same whatever the light is; only the
+ * shading follows the light.
+ */
 class Canvas {
   px: (string | null)[];
-  constructor(public w: number, public h: number) { this.px = new Array(w * h).fill(null); }
-  set(x: number, y: number, c: string) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < this.w && y < this.h) this.px[y * this.w + x] = c; }
+  ref: (string | null)[];
+  constructor(public w: number, public h: number) { this.px = new Array(w * h).fill(null); this.ref = new Array(w * h).fill(null); }
+  /** `cRef` is the colour the default light would give; it defaults to `c`. */
+  set(x: number, y: number, c: string, cRef = c) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < this.w && y < this.h) { this.px[y * this.w + x] = c; this.ref[y * this.w + x] = cRef; } }
   get(x: number, y: number) { x = Math.round(x); y = Math.round(y); return x >= 0 && y >= 0 && x < this.w && y < this.h ? this.px[y * this.w + x] : null; }
-  clear(x: number, y: number) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < this.w && y < this.h) this.px[y * this.w + x] = null; }
+  getRef(x: number, y: number) { x = Math.round(x); y = Math.round(y); return x >= 0 && y >= 0 && x < this.w && y < this.h ? this.ref[y * this.w + x] : null; }
+  clear(x: number, y: number) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < this.w && y < this.h) { this.px[y * this.w + x] = null; this.ref[y * this.w + x] = null; } }
   /** Outer outline, then crop to the drawing; returns the image and where `foot` lands in it. */
   finish(foot: { x: number; y: number }): Drawn {
     const { w, h } = this; const solid = this.px.map((c) => c !== null);
@@ -66,17 +77,23 @@ function clumps(cv: Canvas, r: () => number, list: { x: number; y: number; rx: n
       const lump = 1 + 0.1 * Math.sin(3 * ang + c.ph) + 0.07 * Math.sin(5 * ang + c.ph2) + 0.04 * Math.sin(8 * ang + c.ph * 2);
       const d = Math.hypot((x - c.x) / c.rx, (y - c.y) / c.ry) / lump;
       if (d > 1) continue;
-      const shadowSide = (x - c.x) * light.x + (y - c.y) * light.y < 0;
-      if (d > 1 - 1.3 / Math.min(c.rx, c.ry) && shadowSide) { cv.set(x, y, pal[0]); continue; }
-      const l = ((x - c.x) / c.rx) * light.x + ((y - c.y) / c.ry) * light.y + (r() - 0.5) * 0.2 - ((c.y - topY) / spanY) * 0.7;
-      cv.set(x, y, l > 0.62 ? pal[4] : l > 0.22 ? pal[3] : l > -0.3 ? pal[2] : l > -0.75 ? pal[1] : pal[0]);
+      // The random draw is made exactly where the default light would make it, so the stream does not depend on the light.
+      const edge = d > 1 - 1.3 / Math.min(c.rx, c.ry);
+      const rimRef = edge && (x - c.x) * DEFAULT_LIGHT.x + (y - c.y) * DEFAULT_LIGHT.y < 0;
+      const noise = rimRef ? 0 : (r() - 0.5) * 0.2;
+      const shade = (lt: Light) => {
+        if (edge && (x - c.x) * lt.x + (y - c.y) * lt.y < 0) return pal[0];
+        const l = ((x - c.x) / c.rx) * lt.x + ((y - c.y) / c.ry) * lt.y + noise - ((c.y - topY) / spanY) * 0.7;
+        return l > 0.62 ? pal[4] : l > 0.22 ? pal[3] : l > -0.3 ? pal[2] : l > -0.75 ? pal[1] : pal[0];
+      };
+      cv.set(x, y, shade(light), rimRef ? pal[0] : shade(DEFAULT_LIGHT));
     }
   }
 }
 
 /** Moss on the lit root pixels around the foot (leafy greens '2'/'3'), shared by the leafy trees and the conifer. */
 function rootMoss(cv: Canvas, r: () => number, cx: number, footY: number, s: number): void {
-  for (let k = 0; k < 40 * s; k++) { const x = cx + (-26 + r() * 52) * s, y = footY - 4 * s + r() * 8 * s; const c = cv.get(x, y); if (c && 'cd'.includes(c) && cv.get(x, y - 1) !== null) cv.set(x, y, r() < 0.5 ? '2' : '3'); }
+  for (let k = 0; k < 40 * s; k++) { const x = cx + (-26 + r() * 52) * s, y = footY - 4 * s + r() * 8 * s; const c = cv.getRef(x, y); if (c && 'cd'.includes(c) && cv.get(x, y - 1) !== null) cv.set(x, y, r() < 0.5 ? '2' : '3'); }
 }
 
 export function drawTree(o: TreeOpts): Drawn {
@@ -95,8 +112,8 @@ function roundish(o: TreeOpts & { shape: Exclude<Shape, 'conifer'>; light: Light
   const paint = (seg: Seg, edge: boolean, maxY = Infinity) => {
     for (const p of seg) for (let dy = -Math.ceil(p.w); dy <= Math.ceil(p.w); dy++) for (let dx = -Math.ceil(p.w); dx <= Math.ceil(p.w); dx++) {
       const d = Math.hypot(dx, dy); if (d > p.w) continue; const x = Math.round(p.x + dx), y = Math.round(p.y + dy); if (y > maxY) continue;
-      const lit = (dx * light.x + dy * light.y) / Math.max(p.w, 1);
-      cv.set(x, y, edge && d > p.w - 1 && lit < -0.2 ? 'a' : lit > 0.55 ? 'd' : lit > 0 ? 'c' : lit > -0.5 ? 'b' : 'a');
+      const lit = (dx * light.x + dy * light.y) / Math.max(p.w, 1), litRef = (dx * DEFAULT_LIGHT.x + dy * DEFAULT_LIGHT.y) / Math.max(p.w, 1);
+      cv.set(x, y, barkShade(lit, edge && d > p.w - 1), barkShade(litRef, edge && d > p.w - 1));
     }
   };
   const tw = s * sh.trunk; // trunk width factor
@@ -125,9 +142,9 @@ function roundish(o: TreeOpts & { shape: Exclude<Shape, 'conifer'>; light: Light
   // canopy
   const list = CANOPY.map(([dx, y, rx, ry]) => ({ x: X(dx + (r() - 0.5) * 3), y: Y(y + (r() - 0.5) * 2), rx: (rx + (r() - 0.5) * 2) * s * sh.rx, ry: (ry + (r() - 0.5) * 1.5) * s * sh.rx * Math.min(1.1, sh.sy) }));
   clumps(cv, r, list, Y(13), 45 * s * sh.sy, '01234', light);
-  for (let k = 0; k < 160 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); const c = cv.get(x, y);
-    if (c === '2' && cv.get(x + 1, y) === '2') { cv.set(x, y, '3'); if (r() < 0.5) cv.set(x + 1, y - 1, '3'); }
-    if (c === '3' && cv.get(x + 1, y) === '3' && r() < 0.5) cv.set(x, y, '4'); }
+  for (let k = 0; k < 160 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); const c = cv.getRef(x, y);
+    if (c === '2' && cv.getRef(x + 1, y) === '2') { cv.set(x, y, '3'); if (r() < 0.5) cv.set(x + 1, y - 1, '3'); }
+    if (c === '3' && cv.getRef(x + 1, y) === '3' && r() < 0.5) cv.set(x, y, '4'); }
   // vines (big trees only)
   if (detail) for (let k = 0, made = 0; k < 60 && made < 8 * s; k++) { const x = Math.round(X(-34 + r() * 68)); let y = Math.round(Y(62)); while (y > Y(20) && !isLeaf(cv.get(x, y))) y--;
     if (y <= Y(20) || isLeaf(cv.get(x - 2, y + 2)) || isLeaf(cv.get(x + 2, y + 2))) continue; const len = (3 + Math.floor(r() * 6)) * s; made++;
@@ -148,8 +165,8 @@ function drawConifer(seed: number, s: number, light: Light): Drawn {
   const paint = (px: number, py: number, w: number, edge: boolean, maxY = Infinity) => {
     for (let dy = -Math.ceil(w); dy <= Math.ceil(w); dy++) for (let dx = -Math.ceil(w); dx <= Math.ceil(w); dx++) {
       const d = Math.hypot(dx, dy); if (d > w) continue; const x = Math.round(px + dx), y = Math.round(py + dy); if (y > maxY) continue;
-      const lit = (dx * light.x + dy * light.y) / Math.max(w, 1);
-      cv.set(x, y, edge && d > w - 1 && lit < -0.2 ? 'a' : lit > 0.55 ? 'd' : lit > 0 ? 'c' : lit > -0.5 ? 'b' : 'a');
+      const lit = (dx * light.x + dy * light.y) / Math.max(w, 1), litRef = (dx * DEFAULT_LIGHT.x + dy * DEFAULT_LIGHT.y) / Math.max(w, 1);
+      cv.set(x, y, barkShade(lit, edge && d > w - 1), barkShade(litRef, edge && d > w - 1));
     }
   };
   // straight trunk, mostly hidden
@@ -163,10 +180,13 @@ function drawConifer(seed: number, s: number, light: Light): Drawn {
   const span = 82 - bare - 29, nominal = s < 0.7 ? 10.5 : 8.4; // tier spacing stays near nominal: longer trunk, fewer tiers
   const n = Math.max(3, Math.round(span / nominal) + 1), step = span / (n - 1), NW = 0.67; // NW slims the silhouette
   const tier = (list: { x: number; y: number; rx: number; ry: number }[], under: boolean) => {
-    const before = cv.px.slice(); clumps(cv, r, list, Y(4), 64 * s, '56789', light);
+    const before = cv.px.slice(), beforeRef = cv.ref.slice(); clumps(cv, r, list, Y(4), 64 * s, '56789', light);
     if (!under) return;
-    const mine = (x: number, y: number) => cv.px[y * cv.w + x] !== before[y * cv.w + x];
-    for (let y = 0; y < cv.h - 1; y++) for (let x = 0; x < cv.w; x++) if (mine(x, y) && !mine(x, y + 1)) { cv.px[y * cv.w + x] = '5'; if (y > 0 && mine(x, y - 1) && cv.px[(y - 1) * cv.w + x] !== '5') cv.px[(y - 1) * cv.w + x] = '6'; }
+    // the dark underside of the tier, for the picture and for its default-light reference alike
+    for (const [px, was] of [[cv.px, before], [cv.ref, beforeRef]] as const) {
+      const mine = (x: number, y: number) => px[y * cv.w + x] !== was[y * cv.w + x];
+      for (let y = 0; y < cv.h - 1; y++) for (let x = 0; x < cv.w; x++) if (mine(x, y) && !mine(x, y + 1)) { px[y * cv.w + x] = '5'; if (y > 0 && mine(x, y - 1) && px[(y - 1) * cv.w + x] !== '5') px[(y - 1) * cv.w + x] = '6'; }
+    }
   };
   for (let i = n - 1; i >= 0; i--) {
     const t = i / (n - 1), yc = 17 + i * step, w = (5.5 + t * 19.5 + (r() - 0.5) * 2) * NW;
@@ -178,9 +198,9 @@ function drawConifer(seed: number, s: number, light: Light): Drawn {
     ], true);
   }
   tier([{ x: X(0), y: Y(5), rx: 2 * s, ry: 5.5 * s }, { x: X(0), y: Y(10), rx: 3.2 * s, ry: 5 * s }], false); // pointed top
-  for (let k = 0; k < 160 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); const c = cv.get(x, y);
-    if (c === '7' && cv.get(x + 1, y) === '7') { cv.set(x, y, '8'); if (r() < 0.5) cv.set(x + 1, y - 1, '8'); }
-    if (c === '8' && cv.get(x + 1, y) === '8' && r() < 0.5) cv.set(x, y, '9'); }
+  for (let k = 0; k < 160 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); const c = cv.getRef(x, y);
+    if (c === '7' && cv.getRef(x + 1, y) === '7') { cv.set(x, y, '8'); if (r() < 0.5) cv.set(x + 1, y - 1, '8'); }
+    if (c === '8' && cv.getRef(x + 1, y) === '8' && r() < 0.5) cv.set(x, y, '9'); }
   // the lowest tier's shadow on the trunk
   const darker: Record<string, string> = { d: 'c', c: 'b', b: 'a', a: 'a' };
   for (let x = 0; x < cv.w; x++) { let y = 0, seen = false; for (; y < cv.h; y++) { const c = cv.px[y * cv.w + x]; if (isLeaf(c)) seen = true; else if (seen && c && c in darker) break; }
@@ -201,7 +221,7 @@ export function drawBush(o: { seed: number; width: number; light?: Light }): Dra
   list.push({ x: cx + (r() - 0.5) * 3 * s, y: ground - 13 * s, rx: (10 + r() * 2) * s, ry: (7 + r()) * s }); // back top
   for (let i = 0; i < n - 1; i++) { const t = i / (n - 2); list.push({ x: cx + (t - 0.5) * 20 * s + (r() - 0.5) * 3 * s, y: ground - (6 + r() * 2) * s, rx: (8 + r() * 3) * s, ry: (6 + r() * 1.5) * s }); }
   clumps(cv, r, list, ground - 20 * s, 18 * s, '01234', light);
-  for (let k = 0; k < 40 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); if (cv.get(x, y) === '2' && cv.get(x + 1, y) === '2') { cv.set(x, y, '3'); if (r() < 0.5) cv.set(x + 1, y - 1, '3'); } }
+  for (let k = 0; k < 40 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); if (cv.getRef(x, y) === '2' && cv.getRef(x + 1, y) === '2') { cv.set(x, y, '3'); if (r() < 0.5) cv.set(x + 1, y - 1, '3'); } }
   // flat dark underside where the bush meets the ground
   for (let x = 0; x < cv.w; x++) for (let y = ground; y < cv.h; y++) cv.clear(x, y);
   for (let x = 0; x < cv.w; x++) if (isLeaf(cv.get(x, ground - 1))) { cv.set(x, ground - 1, '0'); if (isLeaf(cv.get(x, ground - 2))) cv.set(x, ground - 2, '1'); }

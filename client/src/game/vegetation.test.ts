@@ -22,6 +22,19 @@ describe('vegetation', () => {
     expect(r.x).toBeCloseTo(-l.x, 5); expect(r.y).toBeCloseTo(l.y, 5);
     expect(Math.hypot(r.x, r.y)).toBeCloseTo(1, 5);
   });
+  it('the light changes only the shading: size, foot and silhouette stay the same', () => {
+    const lights = [lightVector({ side: 1, elevation: 51 }), lightVector({ side: -1, elevation: 35 })];
+    for (const kind of PLANT_KINDS) for (const seed of [1, 2, 3, 7]) for (const scale of [60, 100]) {
+      const a = drawPlant(kind, seed, scale, DEFAULT_LIGHT);
+      const mask = (d: typeof a) => Array.from({ length: d.img.w * d.img.h }, (_, i) => d.img.data[i * 4 + 3]);
+      for (const l of lights) {
+        const b = drawPlant(kind, seed, scale, l);
+        const what = `${kind} seed ${seed} @${scale}`;
+        expect([what, b.img.w, b.img.h, b.foot]).toEqual([what, a.img.w, a.img.h, a.foot]);
+        expect(mask(b)).toEqual(mask(a));
+      }
+    }
+  });
   it('the light changes a plant, the default does not', () => {
     const a = drawPlant('round', 7, 100), b = drawPlant('round', 7, 100, DEFAULT_LIGHT), c = drawPlant('round', 7, 100, lightVector({ side: 1, elevation: 51 }));
     expect(b.img.data).toEqual(a.img.data);
