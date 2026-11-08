@@ -1,4 +1,5 @@
 // Pure helpers of the ?woodland demo page (#203): the cloud buttons' value steps, the phone zoom, the walking step.
+import type { HazeLook } from '../unseenfx';
 import type { CloudLook } from './clouds';
 
 export type CloudKey = keyof CloudLook;
@@ -33,3 +34,27 @@ export function stepToward(x: number, y: number, tx: number, ty: number, dist: n
 /** The zoom button: tiles across the screen's width, in steps of 4. */
 export const TILES = { def: 32, step: 4, min: 16, max: 48 };
 export const stepTiles = (n: number, dir: 1 | -1) => Math.min(TILES.max, Math.max(TILES.min, n + dir * TILES.step));
+
+const round = (v: number, digits: number) => Number(v.toFixed(digits));
+
+/** The sun's elevation knob (degrees), stepped by `step` within `min..max`. */
+export const ELEV = { step: 5, min: 20, max: 85 };
+export const stepElev = (n: number, dir: 1 | -1) => Math.min(ELEV.max, Math.max(ELEV.min, n + dir * ELEV.step));
+
+/** Per haze knob (`colour` has none): the step, the range and the decimals shown. */
+export const HAZE_STEPS: Record<Exclude<keyof HazeLook, 'colour'>, { step: number; min: number; max: number; digits: number }> = {
+  outside: { step: 0.1, min: 0, max: 1, digits: 1 },
+  soft: { step: 0.1, min: 0, max: 1, digits: 1 },
+  mix: { step: 0.05, min: 0, max: 1, digits: 2 },
+  desat: { step: 0.1, min: 0, max: 1, digits: 1 },
+  blurPx: { step: 0.5, min: 0, max: 4, digits: 1 },
+};
+
+/** `look[key]` moved one step, clamped to its range and rounded to its decimals. */
+export function stepHaze(look: HazeLook, key: keyof typeof HAZE_STEPS, dir: 1 | -1): HazeLook {
+  const s = HAZE_STEPS[key];
+  return { ...look, [key]: round(Math.min(s.max, Math.max(s.min, look[key] + dir * s.step)), s.digits) };
+}
+
+/** The shadow layer's alpha knob: 0.04 steps within 0..0.6. */
+export const stepAlpha = (a: number, dir: 1 | -1) => round(Math.min(0.6, Math.max(0, a + dir * 0.04)), 2);

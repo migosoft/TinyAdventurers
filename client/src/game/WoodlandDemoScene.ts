@@ -1,23 +1,29 @@
-// Dev page ?woodland (no server): the woodland level to judge on a phone (#203). Three server-made woodlands
-// (generated/woodland-demo.json, seeds 1-3) with the whole look: ground, trees and bushes, cloud shadows, bees,
-// butterflies, shade, and the knight's silhouette behind canopies. Tap the map to walk there (along the road,
-// through the grass; trees, trunks and thickets stop you). Zoomed so 32 tiles fit the screen's width; the tiles row changes it (16..48).
-// Buttons (tap): Clouds, Bees, Butterflies, Silhouette, Shade on / off; Next seed; the dim beyond sight (#258), cloud
-// Size, Speed, Dark and Cover with - and + (the values are shown, so they can be reported). URL: ?woodland&seed=2&clouds=0&bees=0&butterflies=0&silhouette=0&shade=0
+// Dev page ?woodland (no server): the woodland level to judge on a phone (#203, #277, #278). Three server-made woodlands
+// (generated/woodland-demo.json, seeds 1-3) with the whole look: ground, trees and bushes with their shadows from the
+// sun, cloud shadows, bees, butterflies, the haze over what is unseen, and the knight's silhouette behind canopies. Tap
+// the map to walk there (along the road, through the grass; trees, trunks and thickets stop you). Zoomed so 32 tiles
+// fit the screen's width; the tiles row changes it (16..48).
+// Buttons (tap): Clouds, Bees, Butterflies, Silhouette, Shade (the haze behind trunks), Shadows, Haze on / off; Next
+// seed; Sun L/R and its elevation (restarts the page's scene so the plants redraw); the shadow alpha; the haze's
+// outside, soft, blur, desat and mix; cloud Size, Speed, Dark and Cover. All with - and + (the values are shown, so
+// they can be reported). URL: ?woodland&seed=2&clouds=0&bees=0&butterflies=0&silhouette=0&shade=0&shadows=0&haze=0
+// &side=L|R&elev=35&shadow=0.28&outside=1&soft=0.7&blur=1.5&desat=0.6&mix=0.45
 import Phaser from 'phaser';
 import { CONST, TILE_ID } from '../generated/defs';
 import demo from '../generated/woodland-demo.json';
 import type { WoodlandInfo } from '../generated/WoodlandInfo';
+import type { SunInfo } from '../generated/SunInfo';
 import { TILE, TileMap } from '../sim/map';
 import { FIGURES } from './anim/defs';
 import { DEPTH, Effects } from './effects';
 import { LightField } from './light';
 import { LightView } from './lightview';
 import { lookOf } from './silhouette';
-import { SHADE, ShadeMask } from './shademask';
-import { DAYLIGHT_OUTSIDE, VisionMask } from './visionmask';
+import { syncUnseenFX, DEFAULT_HAZE } from './unseenfx';
+import { VisionMask } from './visionmask';
 import { DEFAULT_CLOUDS } from './woodland/clouds';
-import { CLOUD_STEPS, nextSeed, stepCloud, stepTiles, stepToward, TILES, zoomForTiles, type CloudKey } from './woodland/demoMath';
+import { CLOUD_STEPS, ELEV, HAZE_STEPS, nextSeed, stepAlpha, stepCloud, stepElev, stepHaze, stepTiles, stepToward, TILES, zoomForTiles, type CloudKey } from './woodland/demoMath';
+import { SHADOW_ALPHA } from './woodland/shadows';
 import { WoodlandView } from './woodland/WoodlandView';
 
 interface DemoMap { w: number; h: number; tiles: number[]; woodland: WoodlandInfo; spawns: [number, number, number][] }
@@ -26,13 +32,18 @@ const MAPS = demo as unknown as DemoMap[];
 const SPEED = 4 * TILE;
 const HALF = 4;
 const CLOUD_KEYS: CloudKey[] = ['size', 'speed', 'dark', 'cover'];
+const HAZE_KEYS = ['outside', 'soft', 'blurPx', 'desat', 'mix'] as const;
+/** The URL names of the haze knobs. */
+const HAZE_PARAMS: Record<(typeof HAZE_KEYS)[number], string> = { outside: 'outside', soft: 'soft', blurPx: 'blur', desat: 'desat', mix: 'mix' };
 
 /** Switches survive a next-seed restart. */
-const on = { clouds: true, bees: true, butterflies: true, silhouette: true, shade: true };
+const on = { clouds: true, bees: true, butterflies: true, silhouette: true, shade: true, shadows: true, haze: true };
 let look = { ...DEFAULT_CLOUDS };
 let tiles: number = TILES.def;
-/** How dark beyond sight is (#258), tuned with Dim - / +; starts at the game's value. */
-let outside = DAYLIGHT_OUTSIDE;
+/** The sun replacing the map's own (Sun and elev buttons, `side`, `elev`); all seeds share it. */
+let sunOverride: SunInfo | undefined;
+let shadowAlpha = SHADOW_ALPHA;
+let haze = { ...DEFAULT_HAZE };
 let urlRead = false;
 
 export class WoodlandDemoScene extends Phaser.Scene {
@@ -41,7 +52,6 @@ export class WoodlandDemoScene extends Phaser.Scene {
   private fx!: Effects;
   private view!: LightView;
   private mask!: VisionMask;
-  private shade!: ShadeMask;
   private field!: LightField;
   private woodland!: WoodlandView;
   private map!: TileMap;
@@ -61,6 +71,22 @@ export class WoodlandDemoScene extends Phaser.Scene {
     if (!urlRead) {
       urlRead = true;
       for (const k of Object.keys(on) as (keyof typeof on)[]) if (q.get(k) === '0') on[k] = false;
+      const num = (name: string) => (q.get(name) === null || q.get(name) === '' ? NaN : Number(q.get(name)));
+      const side = q.get('side')?.toUpperCase();
+      const elev = num('elev');
+      if (side === 'L' || side === 'R' || Number.isFinite(elev)) {
+        const base = MAPS[0].woodland.sun;
+        sunOverride = {
+          side: side === 'L' ? -1 : side === 'R' ? 1 : base.side,
+          elevation: Number.isFinite(elev) ? Math.min(ELEV.max, Math.max(ELEV.min, elev)) : base.elevation,
+        };
+      }
+      const a = num('shadow');
+      if (Number.isFinite(a)) shadowAlpha = Math.min(1, Math.max(0, a));
+      for (const k of HAZE_KEYS) {
+        const v = num(HAZE_PARAMS[k]);
+        if (Number.isFinite(v)) haze[k] = Math.min(HAZE_STEPS[k].max, Math.max(HAZE_STEPS[k].min, v));
+      }
     }
     const s = data.seed ?? Number(q.get('seed'));
     this.seed = Number.isInteger(s) && s >= 1 && s <= MAPS.length ? s : 1;
@@ -83,11 +109,13 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.view = new LightView(this, map, this.field);
     // the start: the middle tile of the road's western end
     const start = this.startPoint(d);
-    this.woodland = new WoodlandView(this, d.woodland, map, start, true);
+    const info: WoodlandInfo = { ...d.woodland, sun: sunOverride ?? d.woodland.sun };
+    this.woodland = new WoodlandView(this, info, map, start, true);
     this.woodland.clouds.look = { ...look };
     this.mask = new VisionMask(this, map);
-    this.mask.outside = outside;
-    this.shade = new ShadeMask(this, map);
+    this.mask.haze = true; // before any update: UnseenFX hazes the unseen, no black
+    this.mask.outside = haze.outside;
+    this.mask.soft = on.shade ? haze.soft : 0;
 
     this.knight = this.add.sprite(start.x, start.y, 'atlas', 'knight_m_idle_anim_f0').setOrigin(0.5, 1);
     this.knight.setDepth(DEPTH.entityBase + start.y);
@@ -109,7 +137,6 @@ export class WoodlandDemoScene extends Phaser.Scene {
       this.bar?.remove();
       this.info?.remove();
       this.woodland.destroy();
-      this.shade.destroy();
     });
   }
 
@@ -134,12 +161,14 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.woodland.critters.beesOn = on.bees;
     this.woodland.critters.butterfliesOn = on.butterflies;
     this.woodland.silhouetteOn = on.silhouette;
+    this.woodland.shadows.visible = on.shadows;
+    this.woodland.shadows.alpha = shadowAlpha;
   }
 
   /** Big buttons along the bottom of the page, for a phone, and a line of numbers above them. */
   private buttons(): void {
     const bar = (this.bar = document.createElement('div'));
-    bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:8px;background:rgba(0,0,0,.78);z-index:10;font:600 15px system-ui,sans-serif;color:#fff';
+    bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;padding:8px;background:rgba(0,0,0,.78);z-index:10;max-height:55vh;overflow-y:auto;font:600 15px system-ui,sans-serif;color:#fff';
     const info = (this.info = document.createElement('div'));
     info.style.cssText = 'width:100%;text-align:center;font:600 13px ui-monospace,monospace;line-height:1.35';
     bar.appendChild(info);
@@ -181,27 +210,44 @@ export class WoodlandDemoScene extends Phaser.Scene {
       this.zoom();
     };
     zr.append(btn(() => '-', zstep(-1), 56), zl, btn(() => '+', zstep(1), 56));
-    // the dim beyond sight (#258), in steps of 0.05
-    const dr = row();
-    const dl = document.createElement('span');
-    dl.style.cssText = 'flex:1;text-align:center;min-width:140px';
-    all.push(() => (dl.textContent = `beyond sight ${outside.toFixed(2)}`));
-    const dstep = (dir: 1 | -1) => () => {
-      outside = Math.round(Math.min(1, Math.max(0, outside + dir * 0.05)) * 100) / 100;
-      this.mask.outside = outside;
+    // sun: the side (restarts, so the plants redraw with the light) and its elevation
+    const sun = () => sunOverride ?? MAPS[this.seed - 1].woodland.sun;
+    const resun = (next: SunInfo) => {
+      sunOverride = next;
+      this.scene.restart({ seed: this.seed });
     };
-    dr.append(btn(() => '-', dstep(-1), 56), dl, btn(() => '+', dstep(1), 56));
-    for (const k of CLOUD_KEYS) {
+    const sr = row();
+    const sl = document.createElement('span');
+    sl.style.cssText = 'flex:1;text-align:center;min-width:80px';
+    all.push(() => (sl.textContent = `elev ${sun().elevation}`));
+    sr.append(
+      btn(() => `Sun: ${sun().side < 0 ? 'L' : 'R'}`, () => resun({ ...sun(), side: -sun().side })),
+      btn(() => '-', () => resun({ ...sun(), elevation: stepElev(sun().elevation, -1) }), 56),
+      sl,
+      btn(() => '+', () => resun({ ...sun(), elevation: stepElev(sun().elevation, 1) }), 56),
+    );
+    // a label between - and +
+    const stepper = (text: () => string, step: (dir: 1 | -1) => void) => {
       const r = row();
-      const digits = CLOUD_STEPS[k].digits;
       const label = document.createElement('span');
       label.style.cssText = 'flex:1;text-align:center;min-width:140px';
-      all.push(() => (label.textContent = `${k} ${look[k].toFixed(digits)}`));
-      const step = (dir: 1 | -1) => () => {
+      all.push(() => (label.textContent = text()));
+      r.append(btn(() => '-', () => step(-1), 56), label, btn(() => '+', () => step(1), 56));
+    };
+    stepper(() => `shadow ${shadowAlpha.toFixed(2)}`, (dir) => {
+      shadowAlpha = stepAlpha(shadowAlpha, dir);
+      this.applySwitches();
+    });
+    for (const k of HAZE_KEYS) {
+      stepper(() => `${HAZE_PARAMS[k]} ${haze[k].toFixed(HAZE_STEPS[k].digits)}`, (dir) => {
+        haze = stepHaze(haze, k, dir);
+      });
+    }
+    for (const k of CLOUD_KEYS) {
+      stepper(() => `${k} ${look[k].toFixed(CLOUD_STEPS[k].digits)}`, (dir) => {
         look = stepCloud(look, k, dir);
         this.applySwitches();
-      };
-      r.append(btn(() => '-', step(-1), 56), label, btn(() => '+', step(1), 56));
+      });
     }
     all.forEach((f) => f());
     document.body.appendChild(bar);
@@ -241,13 +287,16 @@ export class WoodlandDemoScene extends Phaser.Scene {
     // keep the knight in the middle of the part of the screen above the button bar
     cam.centerOn(this.knight.x, this.knight.y + (this.bar?.offsetHeight ?? 0) / 2 / cam.zoom);
     this.view.update(cam.worldView, this.knight.x, this.knight.y - 6, [], this.t, 0, CONST.FOV_RADIUS + 5);
-    this.mask.update(cam.worldView, this.view.view);
-    this.shade.on = on.shade && this.woodland.settled; // the shade waits for the trunks
-    this.shade.update(cam.worldView, this.view.view, () => this.view.sight);
+    this.mask.outside = haze.outside;
+    this.mask.soft = on.shade && this.woodland.settled ? haze.soft : 0; // the haze behind trunks waits for them
+    this.mask.update(cam.worldView, this.view.view, () => this.view.sight);
+    syncUnseenFX(cam, on.haze, this.mask.texture, this.mask.rect, haze);
     this.woodland.update(this.t, lookOf(this.knight), cam.worldView, this.view.seenLit);
     if (this.info) {
       const c = this.woodland.clouds.look;
-      this.info.textContent = `seed ${this.seed}  tile ${Math.floor(this.knight.x / TILE)},${Math.floor(this.knight.y / TILE)}  SHADE ${SHADE}  clouds ${on.clouds ? `${c.size}/${c.speed}/${c.dark}/${c.cover}` : 'off'}`;
+      const sun = sunOverride ?? MAPS[this.seed - 1].woodland.sun;
+      const h = haze;
+      this.info.textContent = `seed ${this.seed}  tile ${Math.floor(this.knight.x / TILE)},${Math.floor(this.knight.y / TILE)}  sun ${sun.side < 0 ? 'L' : 'R'} ${sun.elevation}  shadow ${on.shadows ? shadowAlpha.toFixed(2) : 'off'}  haze ${on.haze ? `${h.outside.toFixed(1)}/${h.soft.toFixed(1)}/${h.blurPx.toFixed(1)}/${h.desat.toFixed(1)}/${h.mix.toFixed(2)}` : 'off'}  clouds ${on.clouds ? `${c.size}/${c.speed}/${c.dark}/${c.cover}` : 'off'}`;
     }
   }
 }
