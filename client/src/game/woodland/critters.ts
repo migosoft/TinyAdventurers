@@ -56,6 +56,11 @@ export function beeAt(i: number, t: number, flower: Pt, seed: number): Pt {
   return beePos(beeParams(i, seed), t, flower, { x: 0, y: 0 });
 }
 
+/** A bee's draw depth: sorted by its own ground point like every figure (bees fly at no height, so that is its drawn y), not by its flower's. */
+export function beeDepth(pos: Pt): number {
+  return DEPTH.entityBase + pos.y;
+}
+
 /** `y` includes the flap lift; `ground` is the height without it (what it is sorted by). */
 export interface Butterfly extends Pt { open: boolean; landed: boolean; ground: number }
 /** A burst of this many flaps lifts it, then it glides down for GLIDE flap lengths. */
@@ -177,7 +182,7 @@ export class Critters {
       if (cam && (bee.f.x < cam.x - 16 || bee.f.x > cam.right + 16 || bee.f.y < cam.y - 16 || bee.f.y > cam.bottom + 16)) continue;
       beePos(bee.q, t, bee.f, pos);
       if (!this.seen(seenLit, mapW, pos.x, pos.y)) continue;
-      const x = Math.round(pos.x), y = Math.round(pos.y), d = DEPTH.entityBase + bee.f.y;
+      const x = Math.round(pos.x), y = Math.round(pos.y), d = beeDepth(pos);
       Critters.rect(bee.body, x - 1, y - 1, 2, 2, d);
       Critters.rect(bee.stripe, x, y - 1, 1, 2, d + 0.01);
     }
