@@ -104,10 +104,6 @@ impl Map {
         let t = self.get(x, y);
         self.opaque(x, y) && t != Tile::Trunk as u8 && t != Tile::Thicket as u8
     }
-    /// Opaque but not hard: blocks sight and shots, passes light.
-    pub fn soft_opaque(&self, x: i32, y: i32) -> bool {
-        self.opaque(x, y) && !self.hard_opaque(x, y)
-    }
     pub fn blocks_sight(&self, x: i32, y: i32, b: Blocker) -> bool {
         match b {
             Blocker::All => self.opaque(x, y),
@@ -372,10 +368,9 @@ impl Dungeon {
 mod tests {
     use super::*;
 
-    #[test]
-    fn can_stop_follows_dash_blocking() {
-        // `Tile` has no list of its own: this match stops compiling when a variant is added, and the
-        // array below must then get it too.
+    /// Every `Tile`. `Tile` has no list of its own: the match stops compiling when a variant is added, and the
+    /// array must then get it too, so no test using this list can skip the new tile.
+    fn all_tiles() -> [Tile; 12] {
         fn listed(t: Tile) {
             match t {
                 Tile::Void | Tile::Floor | Tile::Wall | Tile::DoorOpen | Tile::DoorClosed | Tile::ShallowWater | Tile::DeepWater | Tile::Chasm | Tile::Lava | Tile::Trunk | Tile::Road | Tile::Thicket => {}
@@ -383,6 +378,12 @@ mod tests {
         }
         let all = [Tile::Void, Tile::Floor, Tile::Wall, Tile::DoorOpen, Tile::DoorClosed, Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava, Tile::Trunk, Tile::Road, Tile::Thicket];
         all.iter().for_each(|&t| listed(t));
+        all
+    }
+
+    #[test]
+    fn can_stop_follows_dash_blocking() {
+        let all = all_tiles();
         let mut m = Map::new(all.len() as i32, 3);
         for (x, t) in all.into_iter().enumerate() {
             m.set(x as i32, 1, t);
@@ -397,7 +398,7 @@ mod tests {
     fn trunk_blocks_heroes_dashes_and_enemies_but_not_ghosts() {
         let mut m = Map::new(3, 3);
         m.set(1, 1, Tile::Trunk);
-        assert!(m.opaque(1, 1) && !m.hard_opaque(1, 1) && m.soft_opaque(1, 1));
+        assert!(m.opaque(1, 1) && !m.hard_opaque(1, 1));
         for mover in [Mover::Hero, Mover::Enemy, Mover::Demon, Mover::Dash] {
             assert!(m.blocks(1, 1, mover), "{mover:?}");
             assert!(!m.can_stop(1, 1, mover), "{mover:?}");
@@ -415,7 +416,7 @@ mod tests {
         m.set(2, 1, Tile::Thicket);
         assert!(!m.opaque(0, 1) && m.safe(0, 1));
         assert_eq!(m.speed_factor(Map::center_of(0, 1), Mover::Hero), 1.0);
-        assert!(m.opaque(2, 1) && m.soft_opaque(2, 1) && !m.hard_opaque(2, 1) && !m.safe(2, 1));
+        assert!(m.opaque(2, 1) && !m.hard_opaque(2, 1) && !m.safe(2, 1));
         for mover in [Mover::Hero, Mover::Enemy, Mover::Demon, Mover::Dash] {
             assert!(!m.blocks(0, 1, mover), "road {mover:?}");
             assert!(m.blocks(2, 1, mover), "thicket {mover:?}");
@@ -424,7 +425,7 @@ mod tests {
 
     #[test]
     fn hard_opaque_is_the_old_rule() {
-        let all = [Tile::Void, Tile::Floor, Tile::Wall, Tile::DoorOpen, Tile::DoorClosed, Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava, Tile::Trunk, Tile::Road, Tile::Thicket];
+        let all = all_tiles();
         let mut m = Map::new(all.len() as i32, 1);
         for (x, t) in all.into_iter().enumerate() {
             m.set(x as i32, 0, t);

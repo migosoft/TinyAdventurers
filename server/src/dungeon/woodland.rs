@@ -35,21 +35,22 @@ pub struct Plant {
     pub mirrored: bool,
 }
 
-// `start`, `clearings` and `ellipses` are read by the tests only.
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Woodland {
     pub plants: Vec<Plant>,
     /// Tiles; the party's spawns lie inside.
+    #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     pub start: Rect,
     /// Tiles; a living hero inside wins.
     pub end: Rect,
     /// Bounding rects of the clearings, in order along the road.
+    #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     pub clearings: Vec<Rect>,
     pub animals: Vec<(EnemyType, Vec2)>,
     /// 1..=1_000_000, for the client's grass, flowers and critters.
     pub seed: u32,
     /// The clearings' ellipses (centre x, centre y, radii; tiles), then the end's: roadside trees stay out of them.
+    #[cfg_attr(not(test), allow(dead_code))] // read by the tests only
     ellipses: Vec<[f64; 4]>,
 }
 
