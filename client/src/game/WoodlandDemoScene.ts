@@ -122,7 +122,8 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.mask.seen = this.woodland.seenPainter;
 
     this.knight = this.add.sprite(start.x, start.y, 'atlas', 'knight_m_idle_anim_f0').setOrigin(0.5, 1);
-    this.knight.setDepth(DEPTH.entityBase + start.y);    for (const [kind, x, y] of d.spawns) {
+    this.knight.setDepth(DEPTH.entityBase + start.y);
+    for (const [kind, x, y] of d.spawns) {
       const f = FIGURES[kind];
       if (!f || !this.textures.get('atlas').has(`${f.idle}0`)) continue;
       const s = this.add.sprite(x, y, 'atlas', `${f.idle}0`).setOrigin(0.5, 1).setDepth(DEPTH.entityBase + y);

@@ -20,26 +20,41 @@ import { DEPTH } from './effects';
 /** Steps of the wedge's ramp from clear to `soft`. */
 const RAMP_LAYERS = 4;
 
-/** Every point of a polygon (flat x, y pairs) moved `d` world px outward along its ray from (px, py). */
-export function extendPoints(points: ArrayLike<number>, px: number, py: number, d: number): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < points.length; i += 2) {
+/**
+ * Every point of a polygon (flat x, y pairs) moved `d` world px outward along its ray from (px, py). Written into
+ * `out` (resized, so a caller can reuse one array and allocate nothing per redraw); `out` may be `points` itself.
+ */
+export function extendPoints(points: ArrayLike<number>, px: number, py: number, d: number, out: number[] = []): number[] {
+  const n = points.length;
+  out.length = n;
+  for (let i = 0; i < n; i += 2) {
     const dx = points[i] - px, dy = points[i + 1] - py;
     const len = Math.hypot(dx, dy);
     const k = len > 0 ? (len + d) / len : 1;
-    out.push(px + dx * k, py + dy * k);
+    out[i] = px + dx * k;
+    out[i + 1] = py + dy * k;
   }
   return out;
 }
 
-/** The points within 1 px of distance `r` from (px, py) (the rays that reached the radius) moved `ext` px outward; the others stay. */
-export function extendRim(points: ArrayLike<number>, px: number, py: number, r: number, ext: number): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < points.length; i += 2) {
+/**
+ * The points within 1 px of distance `r` from (px, py) (the rays that reached the radius) moved `ext` px outward; the
+ * others stay. A hard wall face that happens to lie within 1 px of `r` is moved too (rare, cosmetic). Written into
+ * `out` like `extendPoints`.
+ */
+export function extendRim(points: ArrayLike<number>, px: number, py: number, r: number, ext: number, out: number[] = []): number[] {
+  const n = points.length;
+  out.length = n;
+  for (let i = 0; i < n; i += 2) {
     const dx = points[i] - px, dy = points[i + 1] - py;
     const len = Math.hypot(dx, dy);
-    if (Math.abs(len - r) <= 1 && len > 0) out.push(px + dx * ((len + ext) / len), py + dy * ((len + ext) / len));
-    else out.push(points[i], points[i + 1]);
+    if (Math.abs(len - r) <= 1 && len > 0) {
+      out[i] = px + dx * ((len + ext) / len);
+      out[i + 1] = py + dy * ((len + ext) / len);
+    } else {
+      out[i] = points[i];
+      out[i + 1] = points[i + 1];
+    }
   }
   return out;
 }
@@ -146,6 +161,10 @@ export class VisionMask {
   feather = 0;
   /** Haze mode: world px behind a soft blocker over which the wedge grows from clear to `soft` (0: full strength at once). */
   ramp = 0;
+  /** Haze mode: reused point arrays of the wedge step (the clip polygon, the full polygon with its rim pushed out, one grown layer). */
+  private clipPts: number[] = [];
+  private rimPts: number[] = [];
+  private grownPts: number[] = [];
   /** Haze mode: the blur's float buffers, sized with the canvas. */
   private scratch?: BlurScratch;
   /**
@@ -259,14 +278,18 @@ export class VisionMask {
             const ext = Math.max(TILE, 3 * this.feather);
             ctx.save();
             ctx.beginPath();
-            addPoints(extendRim(sight.polygon.points, sight.px, sight.py, sight.r, ext));
+            addPoints(extendRim(sight.polygon.points, sight.px, sight.py, sight.r, ext, this.clipPts));
             ctx.clip();
+            // The full polygon's own rim points (unblocked rays) go beyond the clip BEFORE it is grown by a depth,
+            // else the complement of each grown polygon would cover the band r + depth .. r + ext inside the clip
+            // and darken the fog there (a step ring). Both views come from the same vision, so full.r === sight.r.
+            const fullRim = extendRim(full!.polygon.points, full!.px, full!.py, full!.r, ext, this.rimPts);
             ctx.globalCompositeOperation = 'darken';
             for (const layer of rampLayers(st.grey, this.ramp, RAMP_LAYERS)) {
               ctx.fillStyle = `rgb(${layer.grey},${layer.grey},${layer.grey})`;
               ctx.beginPath();
               ctx.rect(0, 0, this.cols * RES, this.rows * RES);
-              addPoints(extendPoints(full!.polygon.points, full!.px, full!.py, layer.depth));
+              addPoints(extendPoints(fullRim, full!.px, full!.py, layer.depth, this.grownPts));
               ctx.fill('evenodd');
             }
             ctx.restore();

@@ -31,6 +31,26 @@ describe('extendRim', () => {
   });
 });
 
+describe('the wedge geometry', () => {
+  it('a full polygon at radius r, rim-extended then grown by any depth, lies beyond r + ext (the ramp cannot touch the fog ring)', () => {
+    const r = 232, ext = 72;
+    const pts: number[] = [];
+    for (let a = 0; a < 16; a++) pts.push(100 + r * Math.cos(a), 50 + r * Math.sin(a));
+    for (const depth of [0, 6, 18]) {
+      const grown = extendPoints(extendRim(pts, 100, 50, r, ext), 100, 50, depth);
+      for (let i = 0; i < grown.length; i += 2) expect(Math.hypot(grown[i] - 100, grown[i + 1] - 50)).toBeGreaterThanOrEqual(r + ext - 1e-6);
+    }
+  });
+  it('a blocked ray point grows by exactly the depth and a reused output array is overwritten', () => {
+    const out: number[] = [9, 9, 9, 9, 9, 9];
+    const g = extendPoints(extendRim([60, 0, 232, 0], 0, 0, 232, 72), 0, 0, 12, out);
+    expect(g).toBe(out);
+    expect(g.length).toBe(4);
+    expect(g[0]).toBeCloseTo(72);
+    expect(g[2]).toBeCloseTo(232 + 72 + 12);
+  });
+});
+
 describe('rampLayers', () => {
   it('four layers from depth 0 to three quarters of the ramp, lightest first, the last at the soft grey', () => {
     const l = rampLayers(0, 24, 4);
