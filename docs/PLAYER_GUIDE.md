@@ -1,6 +1,6 @@
 # Tiny Adventurers — Player Guide
 
-Gather a party of up to four heroes and crawl through a dungeon full of goblins, skeletons, orcs and necromancers (or demons, if the demon is the end boss). At the far end of the dungeon a final boss is waiting.
+Gather a party of up to four heroes and crawl through a dungeon full of goblins, skeletons, orcs and necromancers (or demons, if the demon is the end boss). At the far end of the dungeon a final boss is waiting. Or take the party down a sunlit forest road, the **Woodland** (see "The Woodland").
 
 ## Getting started
 
@@ -9,8 +9,8 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 3. **Create a character**: give it a name and choose its class. The class can't be changed later. You can have up to 8 characters, also several of the same class. Each one collects its own XP and coins and has its own Attributes, skill tree and items.
 4. Click a character card to open its **character screen**. "To the dungeon" there takes you to the runs. "< Character" brings you back, and "< Roster" in the character screen brings you back to the list.
 5. **Open a new run**, or **Join** an open run in the list. Runs already in progress can't be joined. Several players may play the same class.
-6. The host **chooses the end boss**, or leaves it on **Random**. Everyone sees the choice.
-7. Everyone except the host clicks **Ready!**. When the whole party is ready, the host clicks **Enter the dungeon**.
+6. The host **chooses the level**, **Dungeon** or **Woodland**. For the Dungeon the host also **chooses the end boss**, or leaves it on **Random**. Everyone sees the choices.
+7. Everyone except the host clicks **Ready!**. When the whole party is ready, the host clicks **Enter the dungeon** (or **Enter the woodland**).
 
 ## Controls
 
@@ -116,12 +116,22 @@ The Elven Ranger's wolf is a companion of its own kind, summoned with the right 
 - **Explosions light up** their surroundings for a moment: a fireball, a dragon's fireball or an exploding barrel shows what stands around it. The paladin's healing wave lights up its surroundings in pale gold, too.
 - **The air is not clean.** Torches smoke, dust drifts in the light, lava smokes and throws sparks, and water pools drip. It is only for looks and changes nothing in play. Dust and smoke swirl around anything moving through them: a running hero, a monster, an arrow or a fireball stirs the air, and dust clouds a passer-by disturbs fade away, and new dust gathers at once somewhere else in the light. Torchlight is warm, and colours stay true near the flames.
 - **Some rooms are lit by sunlight** falling through cracks in the ceiling, with a pale beam and a bright patch on the floor. A level has at most two such rooms (never the boss hall), and their torches start out, but you can still light them with **E** or fire.
-- **Every dungeon has one nymph's cove:** a large, sunlit room (as big as the boss hall) with a **big tree** in the middle, a grass carpet with flowers and bushes, and pixies fluttering around the leaves. It is **quiet**: no enemies, no chests, no barrels, no pools or chasms, but it is home to **wild animals** (see "Animals in the cove"). The torches there start out, since five sunbeams light it. The **trunk blocks the way** for you and your dash, but ghosts and shades slip through it, and **arrows and spells fly past it**, and you can see past it. When you walk behind the tree, a pale outline of your hero shows through the leaves. A calm place to catch your breath, but there is no treasure to find.
+- **Every dungeon has one nymph's cove:** a large, sunlit room (as big as the boss hall) with a **big tree** in the middle, a grass carpet with flowers and bushes, and pixies fluttering around the leaves. It is **quiet**: no enemies, no chests, no barrels, no pools or chasms, but it is home to **wild animals** (see "Animals in the cove"). The torches there start out, since five sunbeams light it. The **trunk blocks the way** for you and your dash (ghosts and shades slip through it), and it **blocks sight and shots like a pillar**: arrows and spells stop at it, and you cannot see what stands right behind it, though the ground there is only dimmed and the light still reaches it. When you walk behind the tree, a pale outline of your hero shows through the leaves. A calm place to catch your breath, but there is no treasure to find.
 - **Lava glows red** and lights the floor around it. Light of different colours mixes: a torch next to lava gives a deeper orange.
 - **Sounds show in the dark.** The wolf's "grrrr", spoken words and the sleeping "Z" are drawn above the darkness, in dark letters with a light outline, so you notice them even where you can see nothing else.
 - Numbers and health bars on heroes and the wolf show even in the dark; numbers and health bars on enemies show only where you can see the enemy.
 - **Enemies see in the dark only if they are built for it.** An enemy notices you when you are in its line of sight and either lit or very close. **Humans** (the necromancer, the summoner, the lich's disciples) do not see you in the dark at all, however close. **Monsters** (goblin and orc archers, orc warriors, mimics, the ogre) see you in the dark only from about three tiles away. **Undead** (skeletons, the lich), **demons** (imps, chorts, the Red Demon) and the **Red Dragon** see you in the dark as well as in the light.
 - **Slip past in the dark.** Put out a torch, or stay out of the light, to slip past humans and monsters. Anything you light up (a fireball, a torch you relight, an exploding barrel) can be seen too, so fire is loud. Skeletons and demons are not fooled by darkness.
+
+## The Woodland
+
+The host can pick the **Woodland** in the lobby instead of the dungeon. It is a long **forest road** under open sky: it is **daylight**, so nothing is dark and you see as far as your field of vision reaches. White cloud shadows drift over the ground, and bees and butterflies fly about (cloud shadows, bees and butterflies are only for looks).
+
+- **The goal:** follow the road from the left edge to the far **clearing at the road's end**. As soon as one living hero stands in it, the party wins, and every hero still alive earns **150 XP** (a first guess). There is no boss and no treasure. If the whole party falls, the run is lost.
+- **The road** winds between a thick wall of undergrowth (you cannot walk through the thicket) and open grass with bushes. The party starts at the road's left end. Small clearings open to the side of the road.
+- **Trees block sight and shots.** Every trunk stops you and your dash (ghosts and shades slip through), and works like a pillar: **arrows and spells stop at it, and you cannot see what stands behind it**. The ground behind a trunk is only dimmed, so you can still see the grass, but an enemy or animal there stays hidden until you step aside. Trees keep clear of the road's centre, so you can walk it freely. When you stand behind a tree's crown, a pale outline of your hero shows through the leaves.
+- **Enemies:** groups of two to four goblin archers, orc warriors and orc archers wait in some of the clearings, away from where you start. They notice you as they would in the light.
+- **Animals:** bunnies, deer (with a stag among them) and boars live in the wood and wander about. They behave as the cove's animals do (see "Animals in the cove").
 
 ## Animals in the cove
 
@@ -359,7 +369,7 @@ The effects from damage types work in two tiers. A hit that is **at least half h
 
 - If you fall, you are **out for this run**: there are no revives. You watch your teammates (Q / E to switch) until the run ends.
 - If the whole party falls, the run is lost.
-- **Slay the boss** to win. The end screen shows each hero's kills, damage, healing, **XP** and **coins**.
+- **Slay the boss** to win the dungeon; in the Woodland, **reach the clearing at the road's end** instead. The end screen shows each hero's kills, damage, healing, **XP** and **coins**.
 
 ## XP, coins and the character
 
