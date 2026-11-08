@@ -159,6 +159,7 @@ fn export_defs() {
         "DoorOpen": Tile::DoorOpen as u8, "DoorClosed": Tile::DoorClosed as u8,
         "ShallowWater": Tile::ShallowWater as u8, "DeepWater": Tile::DeepWater as u8,
         "Chasm": Tile::Chasm as u8, "Lava": Tile::Lava as u8, "Trunk": Tile::Trunk as u8, "Road": Tile::Road as u8, "Thicket": Tile::Thicket as u8,
+        "Barrier": Tile::Barrier as u8,
     });
     // Shot hitboxes per monster kind (`Monster::shot_dist`): footprint radius and drawn height.
     let mut hitbox = serde_json::Map::new();
@@ -432,6 +433,10 @@ fn fixture_map() -> Map {
     }
     for x in 15..18 {
         m.set(x, 16, Tile::Road);
+    }
+    // An invisible wall (#259): stops walking and dashing, not sight or light.
+    for x in 11..15 {
+        m.set(x, 18, Tile::Barrier);
     }
     m
 }

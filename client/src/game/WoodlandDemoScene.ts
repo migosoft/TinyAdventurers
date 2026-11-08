@@ -75,6 +75,8 @@ export class WoodlandDemoScene extends Phaser.Scene {
     const map = this.map;
     this.cameras.main.setBackgroundColor('#1a2a14');
     this.cameras.main.setRoundPixels(true);
+    // like the game: the camera stops at the map's edge (#259)
+    this.cameras.main.setBounds(0, 0, map.w * TILE, map.h * TILE);
     this.fx = new Effects(this);
     this.field = new LightField(map);
     this.field.daylight = true;
@@ -117,10 +119,11 @@ export class WoodlandDemoScene extends Phaser.Scene {
     cam.setZoom(zoomForTiles(cam.width, tiles, TILE));
   }
 
-  /** The road's western end: the middle of its leftmost column, standing on the tile's lower half. */
+  /** The road just east of the western invisible wall (#259): the middle of that road column, on the tile's lower half. */
   private startPoint(d: DemoMap): { x: number; y: number } {
-    let x0 = d.w;
-    for (let i = 0; i < d.tiles.length; i++) if (d.tiles[i] === TILE_ID.Road) x0 = Math.min(x0, i % d.w);
+    let wall = d.w;
+    for (let i = 0; i < d.tiles.length; i++) if (d.tiles[i] === TILE_ID.Barrier) wall = Math.min(wall, i % d.w);
+    const x0 = wall < d.w ? wall + 1 : 0;
     const ys: number[] = [];
     for (let y = 0; y < d.h; y++) if (d.tiles[y * d.w + x0] === TILE_ID.Road) ys.push(y);
     return { x: (x0 + 1) * TILE, y: (ys[Math.floor(ys.length / 2)] + 0.8) * TILE };

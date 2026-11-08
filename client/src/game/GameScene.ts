@@ -221,6 +221,9 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor('#2b1a10');
     this.cameras.main.setRoundPixels(true);
+    // the camera never shows past the map's edge (#259: the woodland's road runs on past its invisible walls, and
+    // the cut must not show); every level's map is larger than the view
+    this.cameras.main.setBounds(0, 0, this.map.w * TILE, this.map.h * TILE);
     this.fx = new Effects(this);
     this.drawBoard();
     this.lightView = new LightView(this, this.map, this.light);

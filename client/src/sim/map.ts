@@ -34,10 +34,10 @@ export class TileMap {
     return this.get(Math.floor(px / TILE), Math.floor(py / TILE));
   }
 
-  /** Blocks sight and projectiles (trunks and thickets too). Floor, roads, open doors and terrain do not. */
+  /** Blocks sight and projectiles (trunks and thickets too). Floor, roads, open doors, terrain and barriers do not. */
   opaque(x: number, y: number): boolean {
     const t = this.get(x, y);
-    return !(t === TILE_ID.Floor || t === TILE_ID.DoorOpen || t === TILE_ID.Road || isTerrain(t));
+    return !(t === TILE_ID.Floor || t === TILE_ID.DoorOpen || t === TILE_ID.Road || t === TILE_ID.Barrier || isTerrain(t));
   }
 
   /** Blocks light as well: opaque, except trunks and thickets. */
@@ -54,10 +54,10 @@ export class TileMap {
     return this.opaque(Math.floor(px / TILE), Math.floor(py / TILE));
   }
 
-  /** Blocks walking for this mover. */
+  /** Blocks walking for this mover. An invisible wall (Barrier, #259) blocks every mover. */
   blocks(x: number, y: number, mover: Mover): boolean {
-    if (this.opaque(x, y)) return true;
     const t = this.get(x, y);
+    if (t === TILE_ID.Barrier || this.opaque(x, y)) return true;
     switch (mover) {
       case 'dash':
         return false;

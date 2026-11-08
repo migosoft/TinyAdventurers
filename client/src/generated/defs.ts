@@ -91,6 +91,7 @@ export const SIDE = {
 } as const;
 
 export const TILE_ID = {
+  "Barrier": 12,
   "Chasm": 7,
   "DeepWater": 6,
   "DoorClosed": 4,

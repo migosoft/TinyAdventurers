@@ -45,6 +45,10 @@ pub enum Tile {
     Road = 10,
     /// A dense hedge of undergrowth: a wall that blocks sight and shots but not light.
     Thicket = 11,
+    /// An invisible wall (#259): the end of the playable part of an open map (the woodland road runs on past it).
+    /// Drawn as the open ground beside it; blocks every mover, phasers too, like the map's edge; sight, light and
+    /// shots pass.
+    Barrier = 12,
 }
 
 /// Which tiles stop a sight line: every opaque tile, or only the hard ones (light passes trunks and thickets).
@@ -94,10 +98,10 @@ impl Map {
             self.tiles[(y * self.w + x) as usize] = t as u8;
         }
     }
-    /// Blocks sight and projectiles (trunks and thickets too). Floor, roads, open doors and terrain do not.
+    /// Blocks sight and projectiles (trunks and thickets too). Floor, roads, open doors, terrain and barriers do not.
     pub fn opaque(&self, x: i32, y: i32) -> bool {
         let t = self.get(x, y);
-        !(t == Tile::Floor as u8 || t == Tile::DoorOpen as u8 || t == Tile::Road as u8 || is_terrain(t))
+        !(t == Tile::Floor as u8 || t == Tile::DoorOpen as u8 || t == Tile::Road as u8 || t == Tile::Barrier as u8 || is_terrain(t))
     }
     /// Blocks light as well: opaque, except trunks and thickets (light passes them).
     pub fn hard_opaque(&self, x: i32, y: i32) -> bool {
@@ -117,6 +121,9 @@ impl Map {
     /// Blocks walking for this mover. Mirrored in `client/src/sim/map.ts`, except `Mover::Incorporeal`, which is
     /// server-only (client prediction uses movers for heroes only).
     pub fn blocks(&self, x: i32, y: i32, mover: Mover) -> bool {
+        if self.get(x, y) == Tile::Barrier as u8 {
+            return true;
+        }
         if mover == Mover::Incorporeal {
             return self.get(x, y) == Tile::Void as u8;
         }
@@ -370,13 +377,13 @@ mod tests {
 
     /// Every `Tile`. `Tile` has no list of its own: the match stops compiling when a variant is added, and the
     /// array must then get it too, so no test using this list can skip the new tile.
-    fn all_tiles() -> [Tile; 12] {
+    fn all_tiles() -> [Tile; 13] {
         fn listed(t: Tile) {
             match t {
-                Tile::Void | Tile::Floor | Tile::Wall | Tile::DoorOpen | Tile::DoorClosed | Tile::ShallowWater | Tile::DeepWater | Tile::Chasm | Tile::Lava | Tile::Trunk | Tile::Road | Tile::Thicket => {}
+                Tile::Void | Tile::Floor | Tile::Wall | Tile::DoorOpen | Tile::DoorClosed | Tile::ShallowWater | Tile::DeepWater | Tile::Chasm | Tile::Lava | Tile::Trunk | Tile::Road | Tile::Thicket | Tile::Barrier => {}
             }
         }
-        let all = [Tile::Void, Tile::Floor, Tile::Wall, Tile::DoorOpen, Tile::DoorClosed, Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava, Tile::Trunk, Tile::Road, Tile::Thicket];
+        let all = [Tile::Void, Tile::Floor, Tile::Wall, Tile::DoorOpen, Tile::DoorClosed, Tile::ShallowWater, Tile::DeepWater, Tile::Chasm, Tile::Lava, Tile::Trunk, Tile::Road, Tile::Thicket, Tile::Barrier];
         all.iter().for_each(|&t| listed(t));
         all
     }
@@ -421,6 +428,19 @@ mod tests {
             assert!(!m.blocks(0, 1, mover), "road {mover:?}");
             assert!(m.blocks(2, 1, mover), "thicket {mover:?}");
         }
+    }
+
+    #[test]
+    fn barrier_stops_every_mover_but_not_sight_or_light() {
+        let mut m = Map::new(3, 3);
+        m.set(1, 1, Tile::Barrier);
+        assert!(!m.opaque(1, 1) && !m.hard_opaque(1, 1), "sight, light and shots pass");
+        for mover in [Mover::Hero, Mover::Enemy, Mover::Demon, Mover::Dash, Mover::Incorporeal] {
+            assert!(m.blocks(1, 1, mover), "{mover:?}");
+            assert!(!m.can_stop(1, 1, mover), "{mover:?}");
+        }
+        assert!(!m.safe(1, 1));
+        assert!(!is_terrain(Tile::Barrier as u8));
     }
 
     #[test]
