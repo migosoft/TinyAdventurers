@@ -1758,8 +1758,8 @@ mod tests {
         run.projectiles.retain(|p| !p.dead);
     }
 
-    /// Fires an arrow east from a hero with a tile at `trunk_dx` px east of it (or none) and returns the
-    /// furthest x any live shot reached.
+    /// Fires a shot east from a hero, with a Trunk on the tile 40 px east of it when `trunk` is set, and
+    /// returns the furthest x any live shot reached and the left edge of that tile.
     fn furthest_shot_x(trunk: bool) -> (f64, f64) {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         run.monsters.retain(|m| m.is_boss || m.owner.is_some());
