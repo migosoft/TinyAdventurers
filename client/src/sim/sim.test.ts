@@ -90,6 +90,12 @@ describe('trunk and thicket block like the server', () => {
     }
   });
 
+  it('the invisible wall (#259) blocks every mover but not sight or light', () => {
+    const [bx, by] = tileAt(TILE_ID.Barrier);
+    expect([map.opaque(bx, by), map.hardOpaque(bx, by)]).toEqual([false, false]);
+    for (const mover of ['hero', 'enemy', 'demon', 'dash'] as Mover[]) expect(map.blocks(bx, by, mover)).toBe(true);
+  });
+
   it('hides what is behind them under Blocker all and not under hard', () => {
     const [tx, ty] = tileAt(TILE_ID.Trunk);
     const fov = new Fov(map.w, map.h);

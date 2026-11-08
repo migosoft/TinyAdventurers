@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../../generated/defs';
 import { TILE, TileMap } from '../../sim/map';
-import { flowerSpots, GRASS, GroundPainter, groundKindAt, paintGround } from './ground';
+import { flowerSpots, GRASS, GroundPainter, groundKindAt, groundOf, paintGround, ROAD, THICKET } from './ground';
 
 // 12 x 6 tiles: thicket top row, road in columns 4..7 of rows 1..4, grass elsewhere, a wall at the bottom right
 function mapOf(): TileMap {
@@ -12,6 +12,23 @@ function mapOf(): TileMap {
   t[5 * w + 11] = TILE_ID.Wall;
   return new TileMap(w, h, t);
 }
+
+describe('groundOf (#259)', () => {
+  it('an invisible wall shows the ground west of it (else east), so the road runs on', () => {
+    const m = mapOf();
+    m.set(6, 2, TILE_ID.Barrier); // on the road
+    m.set(9, 2, TILE_ID.Barrier); // on the grass, road two tiles west
+    m.set(0, 3, TILE_ID.Barrier); // at the map's west edge: the east neighbour
+    m.set(5, 0, TILE_ID.Barrier); // in the thicket row
+    expect(groundOf(m, 6, 2)).toBe(ROAD);
+    expect(groundOf(m, 9, 2)).toBe(GRASS);
+    expect(groundOf(m, 0, 3)).toBe(GRASS);
+    expect(groundOf(m, 5, 0)).toBe(THICKET);
+    m.set(3, 2, TILE_ID.Barrier);
+    m.set(4, 2, TILE_ID.Barrier); // west of it is a barrier: the east one (road)
+    expect(groundOf(m, 4, 2)).toBe(ROAD);
+  });
+});
 
 describe('paintGround', () => {
   it('deterministic', () => {

@@ -1,5 +1,7 @@
 //! The woodland (#203): a seeded forest road from left to right. `generate` builds the map, the plants
 //! (roadside trees, bushes, the dense edge of the thicket) and the spots for enemy groups and animals.
+//! The forest and the road run on past both ends of the playable part; a column of `Tile::Barrier` (an
+//! invisible wall) across the walkable band stops the party there (#259).
 
 use super::{Layout, Map, Rect, Spawn, Tile, TILE};
 use crate::defs::enemies::EnemyType;
@@ -9,8 +11,22 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::{HashSet, VecDeque};
 
-pub const WOODLAND_W: i32 = 140;
+/// The playable stretch of road (tiles), between the two invisible walls.
+pub const WOODLAND_PLAY_W: i32 = 140;
+/// Forest and road beyond each invisible wall (#259), so the road does not visibly end; nothing lives there.
+/// The client's camera stops at the map's edge, so no screen sees past it.
+pub const WOODLAND_RUNOUT: i32 = 24;
+pub const WOODLAND_W: i32 = WOODLAND_PLAY_W + 2 * WOODLAND_RUNOUT;
 pub const WOODLAND_H: i32 = 46;
+/// The western invisible wall's column; the playable part is the columns strictly between the two walls.
+const WALL_W: i32 = WOODLAND_RUNOUT + 2;
+/// The eastern invisible wall's column.
+const WALL_E: i32 = WOODLAND_RUNOUT + WOODLAND_PLAY_W - 3;
+
+/// Is column `x` inside the playable part (between the invisible walls)?
+pub fn playable_x(x: i32) -> bool {
+    x > WALL_W && x < WALL_E
+}
 const WOODLAND_SALT: u64 = 0x300D_1A4D;
 
 /// Wire ids match the client's PLANT_KINDS order.
@@ -198,8 +214,10 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         (h as f64 / 2.0 + 6.0 * (x / 17.0 + p1).sin() + 3.0 * (x / 7.0 + p2).sin()).clamp(12.0, (h - 13) as f64)
     };
     let noise = Noise::new(&mut rng, w, 9.0);
-    // 2. The walkable band (a thicket border of 3 stays).
-    for x in 3..=w - 4 {
+    // The playable part's first column and the one past its end (the old map's edges).
+    let (x0, x1) = (WOODLAND_RUNOUT, WOODLAND_RUNOUT + WOODLAND_PLAY_W);
+    // 2. The walkable band (a thicket border of 3 stays above and below; it runs to the map's ends).
+    for x in 0..w {
         let r = 11.0 + 3.0 * noise.at(x as f64); // balancing
         for y in 3..=h - 4 {
             if (y as f64 - centre(x)).abs() <= r {
@@ -212,7 +230,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     let mut ellipses: Vec<[f64; 4]> = vec![];
     let mut above = rng.gen_bool(0.5);
     for i in 0..6 {
-        let x = (24.0 + i as f64 * (w - 48) as f64 / 5.0 + rng.gen_range(-5.0..=5.0)).round() as i32; // balancing
+        let x = x0 + (24.0 + i as f64 * (WOODLAND_PLAY_W - 48) as f64 / 5.0 + rng.gen_range(-5.0..=5.0)).round() as i32; // balancing
         let (rx, ry) = (rng.gen_range(4.0..=6.0), rng.gen_range(3.0..=5.0)); // balancing
         let dy = rng.gen_range(7.0..=10.0); // balancing
         let c = centre(x);
@@ -225,9 +243,9 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         ellipses.push([x as f64, cy, rx, ry]);
         above = !above;
     }
-    let (lo, hi) = ((5..=7).map(centre).fold(f64::MAX, f64::min), (5..=7).map(centre).fold(f64::MIN, f64::max));
+    let (lo, hi) = ((x0 + 5..=x0 + 7).map(centre).fold(f64::MAX, f64::min), (x0 + 5..=x0 + 7).map(centre).fold(f64::MIN, f64::max));
     let (sy0, sy1) = ((lo - 4.5).floor() as i32, (hi + 4.5).ceil() as i32); // balancing
-    let start = Rect { x: 3, y: sy0, w: 10, h: sy1 - sy0 + 1 };
+    let start = Rect { x: x0 + 3, y: sy0, w: 10, h: sy1 - sy0 + 1 };
     for y in start.y..start.y + start.h {
         for x in start.x..start.x + start.w {
             if (3..=h - 4).contains(&y) && map.get(x, y) == Tile::Thicket as u8 {
@@ -235,12 +253,14 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
             }
         }
     }
-    let ex = w - 9;
-    let end_all = carve_ellipse(&mut map, ex as f64, centre(ex), 7.0, 6.0); // balancing
+    let ex = x1 - 9;
+    let end_ell = carve_ellipse(&mut map, ex as f64, centre(ex), 7.0, 6.0); // balancing
     ellipses.push([ex as f64, centre(ex), 7.0, 6.0]);
-    let end_x = end_all.x.max(w - 14);
+    // the clearing runs on past the eastern wall; only its playable part counts
+    let end_all = Rect { w: end_ell.w.min(WALL_E - end_ell.x), ..end_ell };
+    let end_x = end_all.x.max(x1 - 14);
     let end = Rect { x: end_x, y: end_all.y, w: end_all.x + end_all.w - end_x, h: end_all.h };
-    for x in 3..=w - 4 {
+    for x in 0..w {
         for y in 3..=h - 4 {
             if (y as f64 - centre(x)).abs() <= 1.5 {
                 map.set(x, y, Tile::Road);
@@ -248,7 +268,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         }
     }
     // Floor the road cannot reach (a clearing cut off by the border) turns back to thicket.
-    let road0 = (5..=7).flat_map(|x| (0..h).map(move |y| (x, y))).find(|&(x, y)| map.get(x, y) == Tile::Road as u8).unwrap();
+    let road0 = (x0 + 5..=x0 + 7).flat_map(|x| (0..h).map(move |y| (x, y))).find(|&(x, y)| map.get(x, y) == Tile::Road as u8).unwrap();
     let seen = bfs_hero(&map, road0.0, road0.1);
     for y in 0..h {
         for x in 0..w {
@@ -407,10 +427,21 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     }
     let trunk_feet: Vec<Vec2> = trees.iter().map(|t| t.foot).collect();
 
+    // 7b. The invisible walls: every open tile of the two wall columns. Last, so the reachability passes above
+    // see one band from end to end and keep the forest beyond the walls.
+    for x in [WALL_W, WALL_E] {
+        for y in 0..h {
+            if map.safe(x, y) {
+                map.set(x, y, Tile::Barrier);
+            }
+        }
+    }
+
     // 8. Spots.
     let player_spawns: Vec<Vec2> = [(5, 0), (5, 1), (7, 0), (7, 1)]
         .iter()
         .map(|&(x, k)| {
+            let x = x0 + x;
             let ys: Vec<i32> = (0..h).filter(|&y| map.get(x, y) == Tile::Road as u8).collect();
             Map::center_of(x, ys[(k as usize).min(ys.len() - 1)])
         })
@@ -461,7 +492,8 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
         (EnemyType::Boar, 1, 1, false),
         (EnemyType::Boar, 1, 1, false),
     ]; // balancing
-    let walk: Vec<(i32, i32)> = floor.iter().copied().filter(|&(x, y)| !start.contains_tile(x, y) && !end_all.contains_tile(x, y)).collect();
+    // nothing lives beyond the invisible walls
+    let walk: Vec<(i32, i32)> = floor.iter().copied().filter(|&(x, y)| playable_x(x) && !start.contains_tile(x, y) && !end_all.contains_tile(x, y)).collect();
     let mut anchors: Vec<Vec2> = vec![];
     for (ty, lo, hi, stag) in plan {
         let n = rng.gen_range(lo..=hi);
@@ -472,7 +504,7 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
                 continue;
             }
             let mut mine: Vec<Vec2> = vec![a];
-            let mut near: Vec<(i32, i32)> = (ay - 3..=ay + 3).flat_map(|y| (ax - 3..=ax + 3).map(move |x| (x, y))).filter(|&(x, y)| map.get(x, y) == Tile::Floor as u8).collect();
+            let mut near: Vec<(i32, i32)> = (ay - 3..=ay + 3).flat_map(|y| (ax - 3..=ax + 3).map(move |x| (x, y))).filter(|&(x, y)| playable_x(x) && map.get(x, y) == Tile::Floor as u8).collect();
             near.shuffle(&mut rng);
             for (x, y) in near {
                 let p = Map::center_of(x, y);
@@ -542,7 +574,12 @@ mod tests {
             assert!(tiles_of(w.end).any(|(x, y)| l.map.safe(x, y) && seen[(y * WOODLAND_W + x) as usize]), "seed {seed}: end unreachable");
             for y in 0..WOODLAND_H {
                 for x in 0..WOODLAND_W {
-                    assert!(!l.map.safe(x, y) || seen[(y * WOODLAND_W + x) as usize], "seed {seed}: {x},{y} cut off");
+                    let reached = seen[(y * WOODLAND_W + x) as usize];
+                    if playable_x(x) {
+                        assert!(!l.map.safe(x, y) || reached, "seed {seed}: {x},{y} cut off");
+                    } else {
+                        assert!(!reached, "seed {seed}: {x},{y} beyond the invisible walls is reachable");
+                    }
                 }
             }
             for p in &l.player_spawns {
@@ -552,14 +589,48 @@ mod tests {
     }
 
     #[test]
-    fn border_is_thicket() {
+    fn border_is_thicket_above_and_below() {
         each(|seed, l, _| {
+            for y in (0..3).chain(WOODLAND_H - 3..WOODLAND_H) {
+                for x in 0..WOODLAND_W {
+                    assert_eq!(l.map.get(x, y), Tile::Thicket as u8, "seed {seed}: {x},{y}");
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn the_road_runs_on_past_invisible_walls() {
+        each(|seed, l, w| {
+            // the road reaches both ends of the map
+            for x in [0, WOODLAND_W - 1] {
+                assert!((0..WOODLAND_H).any(|y| l.map.get(x, y) == Tile::Road as u8), "seed {seed}: no road at column {x}");
+            }
+            // each wall column: no open tile left, and a barrier where the road crosses it
+            for x in [WALL_W, WALL_E] {
+                assert!((0..WOODLAND_H).all(|y| !l.map.safe(x, y)), "seed {seed}: open tile in wall column {x}");
+                assert!((0..WOODLAND_H).any(|y| l.map.get(x, y) == Tile::Barrier as u8), "seed {seed}: no barrier at column {x}");
+                // the road crosses the wall (the client draws a barrier like the tile west of it, so the road runs on)
+                assert!((0..WOODLAND_H).any(|y| l.map.get(x, y) == Tile::Barrier as u8 && l.map.get(x - 1, y) == Tile::Road as u8), "seed {seed}: the road does not cross column {x}");
+            }
+            // no barrier elsewhere; the start and the end stay inside
             for y in 0..WOODLAND_H {
                 for x in 0..WOODLAND_W {
-                    if x < 3 || y < 3 || x >= WOODLAND_W - 3 || y >= WOODLAND_H - 3 {
-                        assert_eq!(l.map.get(x, y), Tile::Thicket as u8, "seed {seed}: {x},{y}");
+                    if l.map.get(x, y) == Tile::Barrier as u8 {
+                        assert!(x == WALL_W || x == WALL_E, "seed {seed}: barrier at {x},{y}");
                     }
                 }
+            }
+            for r in [w.start, w.end] {
+                assert!(playable_x(r.x) && playable_x(r.x + r.w - 1), "seed {seed}: {r:?} crosses a wall");
+            }
+            // nothing lives beyond the walls
+            for p in l.spawns.iter().map(|s| s.pos).chain(w.animals.iter().map(|a| a.1)).chain(l.player_spawns.iter().copied()) {
+                assert!(playable_x(Map::tile_of(p).0), "seed {seed}: creature beyond a wall");
+            }
+            // the run-out has a forest too
+            for (a, b) in [(0, WALL_W), (WALL_E + 1, WOODLAND_W)] {
+                assert!(w.plants.iter().filter(|p| (a..b).contains(&Map::tile_of(p.foot).0)).count() >= 20, "seed {seed}: bare run-out");
             }
         });
     }

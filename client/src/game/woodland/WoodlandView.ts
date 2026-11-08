@@ -1,13 +1,13 @@
 // WoodlandView (#203): the woodland in the game. The ground is painted in row bands and uploaded
 // as 64 px strips (the painter is dropped once all are up). Every tree and bush is drawn by vegetation.ts into packed canvas pages, a few per frame (never more than DrawQueue's budget,
 // nearest to the camera first), and a plant shows as soon as its frame exists. Equal plants (same kind, seed and
-// size) share one frame. The own hero shows through the front-most tree canopy it stands behind (Silhouette).
+// size) share one frame. The own hero shows through every tree canopy it stands behind (one Silhouette copy per tree).
 import type Phaser from 'phaser';
 import type { PlantInfo } from '../../generated/PlantInfo';
 import type { WoodlandInfo } from '../../generated/WoodlandInfo';
 import { TILE, type TileMap } from '../../sim/map';
 import { DEPTH } from '../effects';
-import { behindOccluder, heroBox, Silhouette, type BodyLook } from '../silhouette';
+import { heroBox, occludersOf, Silhouette, type BodyLook, type Box } from '../silhouette';
 import { drawPlant, PLANT_KINDS } from '../vegetation';
 import { BASE } from '../covemath';
 import { Clouds } from './clouds';
@@ -30,6 +30,9 @@ const BUCKET = 64;
 const RESORT = 320;
 /** The scenery counts as settled when it is complete this far (px) beyond the camera window. */
 const SETTLE_MARGIN = 2 * TILE;
+
+/** A drawn tree as a silhouette occluder: its image and its box (world px). */
+interface Occluder extends Box { img: Phaser.GameObjects.Image }
 
 interface Frame { page: number; name: string; w: number; h: number; foot: { x: number; y: number } }
 
@@ -66,7 +69,8 @@ export class WoodlandView {
   private sortedAt: { x: number; y: number };
   /** Tree (not bush) indices by 4×4-tile bucket. */
   private buckets = new Map<number, number[]>();
-  private silhouette?: Silhouette;
+  /** Silhouette copies, one per tree the hero stands behind; reused, never more than MAX_OCCLUDERS. */
+  private silhouettes: Silhouette[] = [];
   /** Drifting cloud shadows; `clouds.look` is tuned live. */
   readonly clouds: Clouds;
   readonly critters: Critters;
@@ -214,11 +218,11 @@ export class WoodlandView {
     this.critters.update(t, seenLit, this.mapW, cam);
   }
 
-  /** The front-most drawn tree whose canopy the hero stands behind, looking at the trees of the buckets around it. */
-  private occluder(hero: BodyLook): { img: Phaser.GameObjects.Image; footY: number } | null {
+  /** Every drawn tree whose canopy the hero stands behind, front-most first (at most MAX_OCCLUDERS), looking at the trees of the buckets around it. */
+  private occluders(hero: BodyLook): Occluder[] {
     const hb = heroBox(hero.bounds, hero.footY);
     const bx = Math.floor((hb.left + hb.right) / 2 / BUCKET), by = Math.floor(hb.footY / BUCKET);
-    let best: { img: Phaser.GameObjects.Image; footY: number } | null = null;
+    const trees: Occluder[] = [];
     // a canopy reaches up to ~8 tiles above its foot and ~4 to each side, so trees stand in the hero's bucket and the ones south and beside it
     for (let dy = 0; dy <= 2; dy++) for (let dx = -1; dx <= 1; dx++) {
       for (const i of this.buckets.get(bucketKey(bx + dx, by + dy)) ?? []) {
@@ -227,27 +231,30 @@ export class WoodlandView {
         const p = this.info.plants[i];
         const f = this.frames.get(keyOf(p))!;
         const left = p[1] - img.originX * f.w;
-        if (!behindOccluder(hb, { left, right: left + f.w, top: p[2] - f.foot.y, footY: p[2] }) ) continue;
-        if (!best || p[2] > best.footY) best = { img, footY: p[2] };
+        trees.push({ img, left, right: left + f.w, top: p[2] - f.foot.y, footY: p[2] });
       }
     }
-    return best;
+    return occludersOf(hb, trees);
   }
 
+  /** One silhouette copy per tree over the hero, each masked by its own tree (#262); the copies are pooled. */
   private shade(hero: BodyLook | null): void {
-    const occ = hero ? this.occluder(hero) : null;
-    if (occ) {
-      if (!this.silhouette) this.silhouette = new Silhouette(this.scene, occ.img, occ.footY);
-      else this.silhouette.retarget(occ.img, occ.footY);
-    }
-    if (this.silhouette) this.silhouette.on = this.silhouetteOn;
-    this.silhouette?.update(occ ? hero : null);
+    const occ = hero ? this.occluders(hero) : [];
+    occ.forEach((o, n) => {
+      if (!this.silhouettes[n]) this.silhouettes[n] = new Silhouette(this.scene, o.img, o.footY);
+      else this.silhouettes[n].retarget(o.img, o.footY);
+    });
+    this.silhouettes.forEach((s, n) => {
+      s.on = this.silhouetteOn;
+      s.update(n < occ.length ? hero : null);
+    });
   }
 
   destroy(): void {
     this.clouds.destroy();
     this.critters.destroy();
-    this.silhouette?.destroy();
+    for (const s of this.silhouettes) s.destroy();
+    this.silhouettes = [];
     for (const img of this.images.values()) img.destroy();
     this.images.clear();
     for (const g of this.placeholders) g.destroy();

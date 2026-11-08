@@ -56,7 +56,7 @@ export function bodyLookFrom(
   };
 }
 
-interface Box { left: number; right: number; top: number; footY: number }
+export interface Box { left: number; right: number; top: number; footY: number }
 
 const FILL = 0xcae6f5;
 const ALPHA = 0.4;
@@ -67,6 +67,20 @@ const WEBGL = 2;
 export function behindOccluder(hero: Box, occ: Box): boolean {
   if (hero.footY >= occ.footY) return false;
   return hero.left < occ.right && hero.right > occ.left && hero.footY > occ.top && hero.top < occ.footY;
+}
+
+/** At most this many occluders get a silhouette copy at once (#262). */
+export const MAX_OCCLUDERS = 4;
+
+/**
+ * Every occluder the hero stands behind, front-most (largest foot y) first, at most `max` (#262). Each gets its own
+ * copy masked by its own shape: when trees overlap, the one whose box holds the hero may not cover it with its
+ * pixels while the one behind does, so picking a single tree can show nothing.
+ */
+export function occludersOf<T extends Box>(hero: Box, candidates: Iterable<T>, max = MAX_OCCLUDERS): T[] {
+  const out: T[] = [];
+  for (const c of candidates) if (behindOccluder(hero, c)) out.push(c);
+  return out.sort((a, b) => b.footY - a.footY).slice(0, max);
 }
 
 /**

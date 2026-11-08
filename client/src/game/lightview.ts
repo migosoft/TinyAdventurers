@@ -151,6 +151,14 @@ export function blackenDarkTiles(darkTile: Float32Array, w: number, x0: number, 
 }
 
 /**
+ * Does the darkness canvas treat a tile as seen? On a daylight map every tile does (#258): what lies beyond sight is
+ * only dimmed, by the vision mask, never blacked out here. `seenLit` (critters, sunbeams) still follows the real sight.
+ */
+export function seenForDark(visible: boolean, daylight: boolean): boolean {
+  return visible || daylight;
+}
+
+/**
  * A tile counts as seen for the light canvases when it is in view, or is open
  * and next to an open tile in view (8 around). A tile the polygon only grazes
  * (no sample point inside) then stays lit, so the darkness does not fade the
@@ -294,8 +302,9 @@ export class LightView {
         const visible = this.wide ? seenForLight(this.inView, this.opaque, x, y) : this.view.fov.isVisible(x, y);
         const lit = this.field.isLit(x, y) || this.movingLit[i] === 1;
         const reach = visible && darkReach(x - tx, y - ty, range);
-        dt[i] = tileDark(visible, lit, reach, r, g, b) * 255;
-        mt[i] = dvMask(reach, darknessAlpha(visible, lit, r, g, b)) * 255;
+        const shown = seenForDark(visible, this.field.daylight);
+        dt[i] = tileDark(shown, lit, reach, r, g, b) * 255;
+        mt[i] = dvMask(reach, darknessAlpha(shown, lit, r, g, b)) * 255;
         const sl = visible && lit;
         this.seenLit[i] = sl ? 1 : 0;
         [tt[i * 4], tt[i * 4 + 1], tt[i * 4 + 2]] = warmTint(r, g, b, sl);

@@ -1,5 +1,6 @@
 // The vision mask: black over everything the hero cannot see, with straight
-// edges. A small canvas over the camera window (RES px per tile) holds the
+// edges; on a daylight map only a dim (`outside`, #258), so the scenery
+// beyond sight still shows (the server still sends no creature from there). A small canvas over the camera window (RES px per tile) holds the
 // view's visibility polygon (sim/view.ts) and its walls in white (the polygon
 // stops at a wall's face, so a wall in sight is added whole); a
 // Shader game object just above the darkness draws black where the canvas is
@@ -11,6 +12,8 @@ import { TILE, type TileMap } from '../sim/map';
 import type { View } from '../sim/view';
 import { DEPTH } from './effects';
 
+/** How dark what lies outside sight is on a daylight map (#258): dimmed, not black (alpha of black). */
+export const DAYLIGHT_OUTSIDE = 0.3;
 /** Canvas pixels per tile: enough for a straight, antialiased edge. */
 const RES = 8;
 /** Tiles of canvas beyond the camera window on each side. */
@@ -36,6 +39,8 @@ export class VisionMask {
   private last = '';
   /** Off: no mask, the old tile edges (?lights E). */
   enabled = true;
+  /** How dark (alpha of black) the mask is outside sight: 1 on dark maps, DAYLIGHT_OUTSIDE on daylight maps. */
+  outside = 1;
 
   constructor(
     private scene: Phaser.Scene,
@@ -68,14 +73,16 @@ export class VisionMask {
     const ox = Math.floor(view.x / TILE) - BORDER;
     const oy = Math.floor(view.y / TILE) - BORDER;
     shader.setPosition(ox * TILE, oy * TILE);
-    const key = `${ox},${oy},${sight.version}`;
+    const key = `${ox},${oy},${sight.version},${this.outside}`;
     if (key === this.last) return;
     this.last = key;
 
     const canvas = this.canvas!;
     const ctx = canvas.getContext();
     const s = RES / TILE;
-    ctx.fillStyle = '#000';
+    // the shader draws black at 1 - red: grey outside sight gives a dim of `outside`
+    const g = Math.round(255 * (1 - Math.min(1, Math.max(0, this.outside))));
+    ctx.fillStyle = `rgb(${g},${g},${g})`;
     ctx.fillRect(0, 0, this.cols * RES, this.rows * RES);
     ctx.fillStyle = '#fff';
     const poly = sight.polygon.points;

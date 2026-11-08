@@ -8,7 +8,7 @@ import type { Rgba } from '../vegetation';
 import { BASE, EDGE, FLOWERS, G1, noise, PATCH, rng, type Rgb } from '../covemath';
 
 /** The tiles the woodland paints itself (the dungeon tile art is skipped there). */
-export const GROUND_TILES = new Set<number>([TILE_ID.Floor, TILE_ID.Road, TILE_ID.Thicket, TILE_ID.Trunk]);
+export const GROUND_TILES = new Set<number>([TILE_ID.Floor, TILE_ID.Road, TILE_ID.Thicket, TILE_ID.Trunk, TILE_ID.Barrier]);
 
 export const NONE = 0, GRASS = 1, THICKET = 2, ROAD = 3;
 /** How far a stronger ground creeps into a weaker one (px). */
@@ -24,9 +24,20 @@ const THICK_0: Rgb = [28, 58, 50], THICK_1: Rgb = [40, 100, 62];
 
 const kindOf = (t: number): number => (t === TILE_ID.Road ? ROAD : t === TILE_ID.Thicket ? THICKET : t === TILE_ID.Wall || t === TILE_ID.Void ? NONE : GRASS);
 
+/**
+ * The ground a tile shows. An invisible wall (Barrier, #259) shows its west neighbour's ground (else its east one's):
+ * the wall column repeats the column beside it, so the road and the grass run on without a seam.
+ */
+export function groundOf(map: TileMap, x: number, y: number): number {
+  const t = map.get(x, y);
+  if (t !== TILE_ID.Barrier) return kindOf(t);
+  const west = map.get(x - 1, y);
+  return kindOf(west !== TILE_ID.Barrier && west !== TILE_ID.Void ? west : map.get(x + 1, y));
+}
+
 function kinds(map: TileMap): Uint8Array {
   const k = new Uint8Array(map.w * map.h);
-  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) k[y * map.w + x] = kindOf(map.get(x, y));
+  for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) k[y * map.w + x] = groundOf(map, x, y);
   return k;
 }
 
