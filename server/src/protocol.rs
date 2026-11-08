@@ -321,6 +321,8 @@ pub struct SelfState {
     pub cd_mul: f32,
     /// How fast the own hero's cooldowns count down: 1 normally, 1.25 Accelerated, 0.75 Slowed or Chilled. Prediction ticks by `DT` times it.
     pub cd_rate: f32,
+    /// Who charmed the own hero (their name), `Some` only while an unpaused Charmed is on it.
+    pub charmed_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]

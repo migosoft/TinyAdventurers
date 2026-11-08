@@ -292,6 +292,7 @@ pub fn send_snapshots(run: &mut Run) {
                 no_act: me.effects.no_act(),
                 cd_mul: super::keystones::cd_mul(me),
                 cd_rate: me.effects.cooldown_rate() as f32,
+                charmed_by: super::charm::is_hero_charmed(me).then(|| me.charm.as_ref().map(|c| c.caster_name.clone())).flatten(),
             },
             boss: boss_bar.clone(),
             ev,
@@ -491,6 +492,40 @@ mod tests {
         assert_eq!(snap[3][12], 100);
         let ids: Vec<u64> = snap[2].as_array().unwrap().iter().map(|e| e[0].as_u64().unwrap()).collect();
         assert!(ids.contains(&(near as u64)), "seen in the dark through the viewed hero's darkvision");
+    }
+
+    #[test]
+    fn the_snapshot_names_the_charmer_only_while_the_charm_is_on() {
+        use crate::defs::effects::EffectKind;
+        use crate::run::effects::{Apply, Creature};
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(stx);
+        let mut charmed_by = |run: &mut Run| {
+            send_snapshots(run);
+            let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
+            let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+            snap[3][21].clone()
+        };
+        assert!(charmed_by(&mut run).is_null(), "not charmed");
+
+        let at = run.players[0].pos() + Vec2::new(40.0, 0.0);
+        let orc = run.spawn_enemy(EnemyType::OrcWarrior, at, None);
+        let apply = Apply { power: None, magical: true, source: Some((orc, at)), ..Apply::plain(EffectKind::Charmed, Some(5.0)) };
+        assert!(run.apply(Creature::Player(0), apply));
+        run.step();
+        assert_eq!(charmed_by(&mut run), serde_json::json!("the Orc Warrior"));
+
+        run.set_anti_magic(Creature::Player(0), true);
+        run.step();
+        assert!(charmed_by(&mut run).is_null(), "paused by anti-magic");
+        run.set_anti_magic(Creature::Player(0), false);
+        run.step();
+        assert_eq!(charmed_by(&mut run), serde_json::json!("the Orc Warrior"), "back after the pause");
+
+        run.pause_effect(Creature::Player(0), EffectKind::Charmed, 1.0);
+        run.step();
+        assert!(charmed_by(&mut run).is_null(), "paused by a Dispel");
     }
 
     #[test]

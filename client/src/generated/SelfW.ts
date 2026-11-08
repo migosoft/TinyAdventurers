@@ -3,7 +3,7 @@ import type { ItemId } from "./ItemId";
 import type { NodeId } from "./NodeId";
 
 /**
- * `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act, cd_mul, cd_rate, paused_items, paused_nodes]`, exact values;
+ * `[alive, hp, max_hp, x, y, dash_t, dash_dx, dash_dy, cd1, cd2, spectating, knock, darkvision, vision, effects, speed_mul, no_act, cd_mul, cd_rate, paused_items, paused_nodes, charmed_by]`, exact values;
  * `knock` is `[vx, vy]` while pushed, nil otherwise (one byte); `darkvision` is the viewed hero's percentage, 0-100.
  */
-export type SelfW = [boolean, number, number, number, number, number, number, number, number, number, number | null, [number, number] | null, number, number, Array<[number, number, number, boolean]>, number, boolean, number, number, Array<ItemId>, Array<NodeId>];
+export type SelfW = [boolean, number, number, number, number, number, number, number, number, number, number | null, [number, number] | null, number, number, Array<[number, number, number, boolean]>, number, boolean, number, number, Array<ItemId>, Array<NodeId>, string | null];
