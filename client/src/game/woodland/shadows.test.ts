@@ -72,6 +72,20 @@ describe('shadows', () => {
     expect(centroidX(a) - a.foot.x).toBeGreaterThan(0);
     expect(centroidX(b) - b.foot.x).toBeGreaterThan(0);
   });
+  it('a low sun (elevation 20, sy > 1) leaves no empty row in a thin post shadow', () => {
+    const vec = shadowVector({ side: -1, elevation: 20 });
+    expect(vec.sy).toBeGreaterThan(1);
+    const thin = { w: 1, h: 10, data: new Uint8ClampedArray(40).fill(255) };
+    const s = shadowOf(thin, { x: 0, y: 9 }, vec, false);
+    const rows: boolean[] = [];
+    for (let y = 0; y < s.img.h; y++) {
+      let any = false;
+      for (let x = 0; x < s.img.w; x++) if (alphaAt(s, x, y) > 0) any = true;
+      rows.push(any);
+    }
+    expect(rows.indexOf(true)).toBeGreaterThanOrEqual(0);
+    expect(rows.slice(rows.indexOf(true), rows.lastIndexOf(true) + 1).every(Boolean)).toBe(true);
+  });
   it('shadow bounds are finite and contain the contact ellipse', () => {
     const t = drawPlant('tall', 3, 130);
     const s = shadowOf(t.img, t.foot, shadowVector({ side: -1, elevation: 35 }), false);

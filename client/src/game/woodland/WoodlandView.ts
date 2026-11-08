@@ -151,16 +151,20 @@ export class WoodlandView {
   private drawOne(i: number): void {
     const p = this.info.plants[i];
     const key = keyOf(p);
-    if (!this.frames.has(key)) {
+    const sKey = shadowKey(key, p[5]);
+    const needFrame = !this.frames.has(key), needShadow = !this.shadowFrames.has(sKey);
+    if (needFrame || needShadow) {
+      // the raster is not kept: a shadow variant that turns up later (a mirrored plant of a known frame) redraws it, which is deterministic for the same key and light
       const { img, foot } = drawPlant(PLANT_KINDS[p[0]], p[3], p[4], this.light);
-      const slot = this.pack(key, img);
-      this.frames.set(key, { page: slot.page, name: key, w: img.w, h: img.h, foot });
-      // both variants of the shadow now, while the raster is at hand (a mirrored and an unmirrored plant share the plant frame, not the shadow)
-      for (const mirrored of [false, true]) {
-        const sh = shadowOf(img, foot, this.vec, mirrored);
-        const name = shadowKey(key, mirrored);
-        const s = this.pack(name, sh.img);
-        this.shadowFrames.set(name, { page: s.page, name, foot: sh.foot });
+      if (needFrame) {
+        const slot = this.pack(key, img);
+        this.frames.set(key, { page: slot.page, name: key, w: img.w, h: img.h, foot });
+      }
+      // only the variant this plant is stamped with (a mirrored and an unmirrored plant share the plant frame, not the shadow)
+      if (needShadow) {
+        const sh = shadowOf(img, foot, this.vec, p[5]);
+        const s = this.pack(sKey, sh.img);
+        this.shadowFrames.set(sKey, { page: s.page, name: sKey, foot: sh.foot });
       }
     }
     this.pending.delete(i);

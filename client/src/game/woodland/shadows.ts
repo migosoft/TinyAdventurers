@@ -32,18 +32,21 @@ export function shadowOf(img: Rgba, foot: { x: number; y: number }, vec: ShadowV
       const x0 = mirrored ? w - 1 - x : x;
       const a = Math.round(x0 + ht * vec.sx), b = Math.round(x0 + (ht - 1) * vec.sx), py = Math.round(fy + ht * vec.sy);
       const step = Math.sign(b - a), end = step === 0 ? a : b - step;
-      pts.push(a, end, py);
-      const lo = Math.min(a, end), hi = Math.max(a, end);
+      // and likewise toward the row of that pixel, so a low sun (sy > 1) leaves no skipped rows
+      const py2 = Math.round(fy + (ht - 1) * vec.sy), rstep = Math.sign(py2 - py), rend = rstep === 0 ? py : py2 - rstep;
+      pts.push(a, end, py, rend);
+      const lo = Math.min(a, end), hi = Math.max(a, end), rlo = Math.min(py, rend), rhi = Math.max(py, rend);
       if (lo < minX) minX = lo; if (hi > maxX) maxX = hi;
-      if (py < minY) minY = py; if (py > maxY) maxY = py;
+      if (rlo < minY) minY = rlo; if (rhi > maxY) maxY = rhi;
     }
   }
   const sw = maxX - minX + 1, sh = maxY - minY + 1;
   const out = new Uint8ClampedArray(sw * sh * 4);
   const put = (x: number, y: number) => { out[((y - minY) * sw + (x - minX)) * 4 + 3] = 255; };
-  for (let i = 0; i < pts.length; i += 3) {
+  for (let i = 0; i < pts.length; i += 4) {
     const lo = Math.min(pts[i], pts[i + 1]), hi = Math.max(pts[i], pts[i + 1]);
-    for (let c = lo; c <= hi; c++) put(c, pts[i + 2]);
+    const rlo = Math.min(pts[i + 2], pts[i + 3]), rhi = Math.max(pts[i + 2], pts[i + 3]);
+    for (let r = rlo; r <= rhi; r++) for (let c = lo; c <= hi; c++) put(c, r);
   }
   const cx = Math.round(fx), cy = Math.round(fy);
   for (let y = Math.floor(fy - ry); y <= Math.ceil(fy + ry); y++) {

@@ -737,6 +737,28 @@ mod tests {
         });
     }
 
+    /// FNV-1a over the map's tiles, the plants and the spawns of `generate(seed)`; the sun is not part of it.
+    fn map_fingerprint(seed: u64) -> u64 {
+        let (l, w) = generate(seed);
+        let mut h: u64 = 0xcbf29ce484222325;
+        let mut feed = |bytes: &[u8]| {
+            for b in bytes {
+                h = (h ^ *b as u64).wrapping_mul(0x100000001b3);
+            }
+        };
+        feed(&l.map.tiles);
+        feed(format!("{:?}", w.plants).as_bytes());
+        feed(format!("{:?}", l.spawns).as_bytes());
+        h
+    }
+
+    #[test]
+    fn the_map_is_unchanged_by_the_sun() {
+        let got: Vec<u64> = [1u64, 2, 3, 7, 42].iter().map(|s| map_fingerprint(*s)).collect();
+        // Pinned in #277, the commit that gave the woodland a sun: tiles, plants and spawns do not depend on it.
+        assert_eq!(got, vec![15964463446947852909, 14269433004639530539, 3843392799734633643, 12441823283910592039, 9934968307587744593]);
+    }
+
     #[test]
     fn the_sun_is_in_range_and_pinned_to_the_seed() {
         for seed in 1..=20u64 {

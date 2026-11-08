@@ -1,7 +1,7 @@
 // The haze post effect for daylight maps (#278): where the vision mask's canvas says "unseen", the
 // rendered world is blurred a little, washed toward a pale grey-blue and desaturated, instead of
 // darkened. The mask (visionmask.ts in haze mode) is a CanvasTexture over the camera window, LINEAR
-// filtered, holding the unseen strength as 1 - red; it covers the window with a border, so no edge
+// filtered (VisionMask.update sets LINEAR again after each refresh(), which resets it to NEAREST under pixelArt), holding the unseen strength as 1 - red; it covers the window with a border, so no edge
 // clamping is needed. Attached only on daylight maps.
 import Phaser from 'phaser';
 

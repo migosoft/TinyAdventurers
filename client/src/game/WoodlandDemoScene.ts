@@ -54,6 +54,8 @@ export class WoodlandDemoScene extends Phaser.Scene {
   private fx!: Effects;
   private view!: LightView;
   private mask!: VisionMask;
+  /** Kept for the shutdown handler: `cameras.main` is already gone there. */
+  private cam!: Phaser.Cameras.Scene2D.Camera;
   private field!: LightField;
   private woodland!: WoodlandView;
   private map!: TileMap;
@@ -97,6 +99,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.target = null;
     this.map = new TileMap(d.w, d.h, Uint8Array.from(d.tiles));
     const map = this.map;
+    this.cam = this.cameras.main;
     this.cameras.main.setBackgroundColor('#1a2a14');
     this.cameras.main.setRoundPixels(true);
     // like the game: the camera stops at the map's edge (#259)
@@ -135,6 +138,8 @@ export class WoodlandDemoScene extends Phaser.Scene {
       this.bar?.remove();
       this.info?.remove();
       this.woodland.destroy();
+      // Phaser does not destroy a camera's post pipelines with the camera: remove it, or each restart leaks one
+      syncUnseenFX(this.cam, false, undefined, this.mask.rect, DEFAULT_HAZE);
     });
   }
 
