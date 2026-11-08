@@ -93,7 +93,7 @@ describe('View on the shared fixture', () => {
   });
 });
 
-describe('touches (blocker tiles the polygon ends on)', () => {
+describe('touches (blocker tiles with seen ground against a side)', () => {
   const T = TILE_ID.Trunk;
   /** '#' wall, 'T' trunk, anything else floor. */
   function trunks(rows: string[]): TileMap {
@@ -121,8 +121,9 @@ describe('touches (blocker tiles the polygon ends on)', () => {
     expect(v.isVisible(2, 1)).toBe(false);
     expect(touches(v, 2, 1)).toBe(false); // the one behind it
   });
-  it('at a grazing angle the tile shadowcast can call a trunk hidden while the polygon ends on its face: touched', () => {
-    // two trunks side by side; from the far left corner of the row the tile test misses the second one
+  it('a trunk the tile shadowcast calls hidden is touched when the hero sees ground against one of its sides', () => {
+    // two trunks side by side; from the far left corner of the row the tile test misses the second one, but the
+    // ground just above it is seen past the first trunk's corner (touched = ground against a side, not its face)
     const m = trunks(['############', '#..........#', '#..........#', '#....TT....#', '#..........#', '############']);
     const v = look(m, 1.05 * TILE, 3.05 * TILE);
     expect(v.isVisible(6, 3)).toBe(false);
