@@ -105,6 +105,7 @@ Lasting rules that are not one issue's business. Feature-specific decisions live
 ## Environment (this machine)
 
 - Linux, bash. Rust (`cargo`) is installed locally, Node via nvm (use `bash -lic '...'` so nvm's Node is on the PATH), `python3`, Docker. No local `psql` and no clippy.
+- **Code intelligence:** Claude Code's LSP tool is backed by rust-analyzer (`server/`) and typescript-language-server (`client/`). Use it for find-references and go-to-definition, and before renaming or changing a signature, instead of grep/sed; confirm with `cargo check` / `tsc --noEmit`. Edit Rust and TypeScript source only with the Edit/Write tools, never with sed or scripts: rust-analyzer only sees changes made through them. After git checkout, merge or rebase, rust-analyzer's results are stale for the rest of the session: use grep and `cargo check` instead. Right after a session starts both servers can return partial results: never read "no references" as safe to rename; repeat the query and cross-check with grep before a rename. New code goes in `client/src`, `client/scripts` or `server/`. Don't use rust-analyzer's `ssr`/`search` commands: they crash in this version.
 - **`.env`** (gitignored) holds `POSTGRES_PASSWORD` and `SESSION_SECRET` for the local stack; without it `docker compose up` refuses to start.
 - **Database shell:** `docker compose exec db psql -U tiny -d tiny`.
 - **Docker volumes** `ta-cargo` and `ta-target` (external) cache the test builds.
