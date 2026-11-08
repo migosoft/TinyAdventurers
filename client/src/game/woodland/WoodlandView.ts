@@ -15,7 +15,7 @@ import { Clouds } from './clouds';
 import { Critters } from './critters';
 import { flowerSpots, GROUND_TILES, GroundPainter } from './ground';
 import { DrawQueue, drawOrder, PlantPages } from './plantpages';
-import { bandOrder, PendingGrid, sceneSettled } from './settle';
+import { bandOrder, PendingGrid, plantTile, sceneSettled } from './settle';
 import { ShadowLayer } from './shadowlayer';
 import { shadowOf, shadowVector, type ShadowVec } from './shadows';
 
@@ -242,7 +242,8 @@ export class WoodlandView {
         const b = this.boxes.get(i)!;
         if (b.left >= x1 || b.left + b.w <= x0 || b.top >= y1 || b.top + b.h <= y0) continue;
         const p = this.info.plants[i];
-        if (!img.visible || !full.isVisible(Math.floor(p[1] / TILE), Math.floor(p[2] / TILE))) continue;
+        const { tx, ty } = plantTile(p[1], p[2], TILE);
+        if (!img.visible || !full.isVisible(tx, ty)) continue;
         const { left, top } = b;
         const f = this.frames.get(b.key)!;
         const key = b.key;

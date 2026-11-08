@@ -22,17 +22,23 @@ export function levels(outside: number, soft: number): { outside: number; soft: 
   return { outside: g(outside), soft: g(soft) };
 }
 
+/** One drawing step of the mask canvas (see `maskSteps`). */
+export type MaskStep =
+  | { step: 'sight' } // the hard view's polygon in white over the outside grey
+  | { step: 'walls' } // the visible hard walls, whole, in white
+  | { step: 'feather' } // blur: the soft edge of sight
+  | { step: 'wedge'; grey: number } // inside the hard view, outside the full one, at the soft grey, never lightening; crisp
+  | { step: 'blockers' } // the visible trunk and thicket tiles, whole, in white (their own ground is never hazed)
+  | { step: 'seen' }; // the owner's seen-plant silhouettes, in white
+
 /**
- * The polygon fills over the `outside` grey, in order. Haze: the hard view at the soft level (soft 0 is
- * white: no haze behind blockers), then the full view in white. Otherwise the view in white.
+ * The drawing steps over the `outside` grey, in order. Haze: only the edge of sight is feathered; the wedge behind
+ * trunks is drawn after the blur, so it stays crisp, then the blockers' own tiles and the seen plants. Otherwise the view in white and its walls.
  */
-export function fillPlan(haze: boolean, lv: { outside: number; soft: number }): { poly: 'hard' | 'full'; grey: number }[] {
+export function maskSteps(haze: boolean, lv: { outside: number; soft: number }): MaskStep[] {
   return haze
-    ? [
-        { poly: 'hard', grey: lv.soft },
-        { poly: 'full', grey: 255 },
-      ]
-    : [{ poly: 'hard', grey: 255 }];
+    ? [{ step: 'sight' }, { step: 'walls' }, { step: 'feather' }, { step: 'wedge', grey: lv.soft }, { step: 'blockers' }, { step: 'seen' }]
+    : [{ step: 'sight' }, { step: 'walls' }];
 }
 
 /** One running-sum box pass (window 2r+1, edge pixels repeated) over `n` values at `stride` apart, `src` into `dst`. */
@@ -178,25 +184,54 @@ export class VisionMask {
     const lv = levels(this.outside, this.soft);
     ctx.fillStyle = `rgb(${lv.outside},${lv.outside},${lv.outside})`;
     ctx.fillRect(0, 0, this.cols * RES, this.rows * RES);
-    const fillPoly = (v: View, style: string) => {
-      ctx.fillStyle = style;
+    const addPoly = (v: View) => {
       const poly = v.polygon.points;
-      ctx.beginPath();
-      for (let i = 0; i < poly.length; i += 2) ctx.lineTo((poly[i] - ox * TILE) * s, (poly[i + 1] - oy * TILE) * s);
+      ctx.moveTo((poly[0] - ox * TILE) * s, (poly[1] - oy * TILE) * s);
+      for (let i = 2; i < poly.length; i += 2) ctx.lineTo((poly[i] - ox * TILE) * s, (poly[i + 1] - oy * TILE) * s);
       ctx.closePath();
-      ctx.fill();
     };
-    for (const step of fillPlan(!!full, lv)) fillPoly(step.poly === 'hard' ? sight : full!, `rgb(${step.grey},${step.grey},${step.grey})`);
-    ctx.fillStyle = '#fff';
-    for (let y = 0; y < this.rows; y++)
-      for (let x = 0; x < this.cols; x++) if (this.map.hardOpaque(ox + x, oy + y) && sight.isVisible(ox + x, oy + y)) ctx.fillRect(x * RES, y * RES, RES, RES);
-    if (full) {
-      if (this.feather > 0) {
-        const img = ctx.getImageData(0, 0, this.cols * RES, this.rows * RES);
-        blurGrey(img.data, img.width, img.height, Math.max(1, Math.round(this.feather * s)), this.scratch);
-        ctx.putImageData(img, 0, 0);
+    const fillTiles = (want: (x: number, y: number) => boolean) => {
+      ctx.fillStyle = '#fff';
+      for (let y = 0; y < this.rows; y++) for (let x = 0; x < this.cols; x++) if (want(ox + x, oy + y)) ctx.fillRect(x * RES, y * RES, RES, RES);
+    };
+    for (const st of maskSteps(!!full, lv)) {
+      switch (st.step) {
+        case 'sight':
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          addPoly(sight);
+          ctx.fill();
+          break;
+        case 'walls':
+          fillTiles((x, y) => this.map.hardOpaque(x, y) && sight.isVisible(x, y));
+          break;
+        case 'feather':
+          if (this.feather > 0) {
+            const img = ctx.getImageData(0, 0, this.cols * RES, this.rows * RES);
+            blurGrey(img.data, img.width, img.height, Math.max(1, Math.round(this.feather * s)), this.scratch);
+            ctx.putImageData(img, 0, 0);
+          }
+          break;
+        case 'wedge':
+          // the hard polygon minus the full one (the full view lies inside the hard one): even-odd, darken keeps the blur's lighter-than-soft values from lightening it
+          if (st.grey < 255) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'darken';
+            ctx.fillStyle = `rgb(${st.grey},${st.grey},${st.grey})`;
+            ctx.beginPath();
+            addPoly(sight);
+            addPoly(full!);
+            ctx.fill('evenodd');
+            ctx.restore();
+          }
+          break;
+        case 'blockers':
+          fillTiles((x, y) => this.map.opaque(x, y) && !this.map.hardOpaque(x, y) && full!.isVisible(x, y));
+          break;
+        case 'seen':
+          this.seen?.paint(ctx, ox, oy, s, full!);
+          break;
       }
-      this.seen?.paint(ctx, ox, oy, s, full);
     }
     canvas.refresh();
     // refresh() resets the filter to NEAREST (pixelArt).

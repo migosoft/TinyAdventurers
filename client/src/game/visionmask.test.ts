@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // Phaser needs a browser (window) on import; the helpers tested here do not use it.
 vi.mock('phaser', () => ({ default: { Renderer: { WebGL: { Pipelines: { PostFXPipeline: class {} } } } } }));
 
-import { blurGrey, fillPlan, levels } from './visionmask';
+import { blurGrey, levels, maskSteps } from './visionmask';
 
 /** RGBA data of a w×h image whose grey (alpha 255) comes from `f(x, y)`. */
 const grey = (w: number, h: number, f: (x: number, y: number) => number) => {
@@ -56,18 +56,22 @@ describe('blurGrey', () => {
   });
 });
 
-describe('fillPlan', () => {
-  it('haze: the hard view at the soft level, then the full view in white', () => {
-    expect(fillPlan(true, levels(1, 0.7))).toEqual([
-      { poly: 'hard', grey: 77 },
-      { poly: 'full', grey: 255 },
+describe('maskSteps', () => {
+  it('haze: the sight edge is feathered, then the crisp wedge, the blockers and the seen plants', () => {
+    expect(maskSteps(true, levels(0.8, 0.7))).toEqual([
+      { step: 'sight' },
+      { step: 'walls' },
+      { step: 'feather' },
+      { step: 'wedge', grey: 77 },
+      { step: 'blockers' },
+      { step: 'seen' },
     ]);
   });
-  it('haze with soft 0 fills the hard view white: no haze behind blockers', () => {
-    expect(fillPlan(true, levels(1, 0))[0]).toEqual({ poly: 'hard', grey: 255 });
+  it('haze with soft 0 draws a white wedge: no haze behind blockers', () => {
+    expect(maskSteps(true, levels(1, 0)).find((s) => s.step === 'wedge')).toEqual({ step: 'wedge', grey: 255 });
   });
-  it('no haze: the view in white only', () => {
-    expect(fillPlan(false, levels(0.3, 0))).toEqual([{ poly: 'hard', grey: 255 }]);
+  it('no haze: the view and its walls in white only', () => {
+    expect(maskSteps(false, levels(0.3, 0))).toEqual([{ step: 'sight' }, { step: 'walls' }]);
   });
 });
 

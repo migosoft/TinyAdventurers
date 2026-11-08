@@ -59,7 +59,9 @@ describe('woodland demo math', () => {
     expect(h.mix).toBe(0.5);
     h = stepHaze(stepHaze(h, 'soft', -1), 'soft', -1);
     expect(h.soft).toBe(0.5);
-    expect(stepHaze(h, 'outside', 1).outside).toBe(1);
+    expect(DEFAULT_HAZE.outside).toBe(0.8);
+    expect(stepHaze(h, 'outside', 1).outside).toBe(0.9);
+    expect(stepHaze({ ...h, outside: 0.95 }, 'outside', 1).outside).toBe(1);
     expect(stepHaze({ ...h, desat: 0.05 }, 'desat', -1).desat).toBe(0);
     expect(stepHaze(h, 'blurPx', 1).blurPx).toBe(2);
     expect(stepHaze({ ...h, blurPx: 3.8 }, 'blurPx', 1).blurPx).toBe(4);

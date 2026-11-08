@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { bandOrder, PendingGrid, sceneSettled, windowSettled } from './settle';
+import { TILE_ID } from '../../generated/defs';
+import demo from '../../generated/woodland-demo.json';
+import { PLANT_KINDS } from '../vegetation';
+import { bandOrder, PendingGrid, plantTile, sceneSettled, windowSettled } from './settle';
 
 describe('bandOrder', () => {
   it('goes outward from the centre row, upper row first on a tie, and covers every row once', () => {
@@ -38,5 +41,21 @@ describe('sceneSettled', () => {
     expect(sceneSettled(false, true, win, 64, () => true, 1000, p)).toBe(false);
     expect(sceneSettled(false, false, win, 64, () => true, 1000, new PendingGrid())).toBe(false); // ground not painted
     expect(sceneSettled(true, true, win, 64, () => false, 1000, p)).toBe(true);
+  });
+});
+
+describe('plantTile', () => {
+  it('is the tile the foot lies in; a foot on a tile boundary belongs to the tile it starts', () => {
+    expect(plantTile(40.5, 79.9)).toEqual({ tx: 2, ty: 4 });
+    expect(plantTile(32, 48)).toEqual({ tx: 2, ty: 3 });
+  });
+  it('maps every tree of the demo woodlands onto a trunk or thicket tile (bushes have none)', () => {
+    for (const m of demo as unknown as { w: number; tiles: number[]; woodland: { plants: number[][] } }[]) {
+      for (const p of m.woodland.plants) {
+        if (p[0] === PLANT_KINDS.indexOf('bush')) continue;
+        const { tx, ty } = plantTile(p[1], p[2]);
+        expect([TILE_ID.Trunk, TILE_ID.Thicket]).toContain(m.tiles[ty * m.w + tx]);
+      }
+    }
   });
 });
