@@ -103,12 +103,12 @@ Every creature fights for a side: the monsters against you, you and your friends
 - **Bosses can be charmed** (not the Lich): the boss stops its own pattern and follows the Wizard for a short while, then picks up where it left off.
 - **When the charm ends** it is its old self again, right where it stands: an enemy attacks you again, a wild animal goes back to its place. Magic that is paused also pauses the charm, which comes back if time is left.
 - **Killing it counts as it would uncharmed**: an enemy gives XP and coins as usual, a calm wild animal nothing, and a charmed boss that dies still wins the fight.
-- **Who resists:** undead cannot be charmed at all; dragons and demons only half as long. The unrecruited knight cannot be charmed. Heroes and elves do not resist it.
+- **Who resists:** undead cannot be charmed at all; dragons and demons only half as long. The unrecruited knight cannot be charmed. Heroes do not resist it.
 
 **Being charmed.** An enemy's Charm can take one of the heroes for a few seconds (the first enemies that cast it come later). You are the hero who is charmed:
 - **You lose control.** The hero fights the party on its own, with its left and right button abilities, and runs at your friends. Your keys and mouse do nothing, but chat, the menu, the log and the stats still work.
 - **What you see:** a pink haze over the whole screen with a pulsing edge, a big **CHARMED** title, "by" and the name of the caster, and a bar that shrinks as the charm runs out. The two ability slots show hearts and the effect icon counts the seconds. Your friends see a pink heart over you, and your name in their party list turns pink with a heart.
-- **Only Dispel ends it early.** Nobody can free you with a key or by hitting you, and there is no button to mash. Your Willpower shortens it a little. Dispel Magic and anti-magic areas pause it (you are yourself again and the haze goes, then it comes back if time is left).
+- **Nothing ends it early.** Nobody can free you with a key or by hitting you, and there is no button to mash. Your Willpower shortens it a little. Dispel Magic and anti-magic areas (not in the game yet) will pause it: you are yourself again and the haze goes, then it comes back if time is left.
 - **Deaths are real, both ways.** You can kill a friend, and your friends can kill you, and a fallen hero stays fallen. Nothing stops at 1 HP. A hero killed while charmed is counted as killed by whoever cast the charm.
 - **While you are on their side** enemies ignore you and your area abilities (Holy Light, Haste, War Cry) help them; your friends' hits, shots and traps hurt you, and yours hurt them.
 - **The wolf turns with its ranger**: a charmed Elven Ranger's wolf fights the party until the charm ends. A recruited knight does not turn: he follows another hero.

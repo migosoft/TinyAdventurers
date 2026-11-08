@@ -752,6 +752,10 @@ kbd {
   gap: 6px;
   width: 90vw;
 }
+/* Charmed: the messages sit below the CHARMED title, the caster line and the bar. */
+.charmed .messages {
+  top: calc(22% + 124px);
+}
 .msg {
   transition: opacity 1s;
   text-align: center;

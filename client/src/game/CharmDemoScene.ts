@@ -13,16 +13,17 @@ import { TILE } from '../sim/map';
 import { CharmView } from '../ui/charmView';
 import { effectChipHtml } from '../ui/hud';
 
-const W = 12;
-const H = 8;
+// A short, wide room: its two wall rows sit under the CHARMED title block, the fight is on the floor row below it.
+const W = 10;
+const H = 6;
 const CHARM_SECS = 8;
 const SWING_EVERY = 1;
 const SWING_SECS = 0.4;
-const START: [number, number] = [2 * TILE, 5 * TILE];
-const PALADIN: [number, number] = [9 * TILE, 5 * TILE];
+const START: [number, number] = [1.5 * TILE, 5 * TILE];
+const PALADIN: [number, number] = [8 * TILE, 5 * TILE];
 const SPEED = 55;
 /** The Barbarian stops this far from the Paladin to swing. */
-const REACH = 22;
+const REACH = 38;
 
 type Mode = 'charmed' | 'paused' | 'ends';
 const MODES: [Mode, string][] = [['charmed', 'Charmed'], ['paused', 'Paused'], ['ends', 'Ends']];
@@ -54,17 +55,17 @@ export class CharmDemoScene extends Phaser.Scene {
     this.fx = new Effects(this);
     for (let y = 0; y < H; y++)
       for (let x = 0; x < W; x++) {
-        const wall = y < 2;
-        this.add.image(x * TILE, y * TILE, 'atlas', wall ? (y === 1 ? 'wall_mid' : 'wall_top_mid') : (x * 7 + y * 3) % 8 === 0 ? 'floor_2' : 'floor_1').setOrigin(0);
+        const wall = y < 3;
+        this.add.image(x * TILE, y * TILE, 'atlas', wall ? (y === 2 ?'wall_mid' : 'wall_top_mid') : (x * 7 + y * 3) % 8 === 0 ? 'floor_2' : 'floor_1').setOrigin(0);
       }
     this.barb = new EntityView(this, KIND.Barbarian, this.fx, 'Barbarian');
     this.pal = new EntityView(this, KIND.Paladin, this.fx, 'Paladin');
     this.caption = this.add.text(4, 2, '', { fontFamily: 'monospace', fontSize: '8px', color: '#ffe080' }).setResolution(4).setDepth(1e6);
 
     const cam = this.cameras.main;
-    const barH = 120;
+    const barH = 90;
     cam.setZoom(Math.min(cam.width / (W * TILE), (cam.height - barH) / (H * TILE)));
-    cam.centerOn((W * TILE) / 2, (H * TILE) / 2 + barH / 2 / cam.zoom);
+    cam.centerOn((W * TILE) / 2, (H * TILE) / 2 + (barH / 2 - 14) / cam.zoom);
     this.dom();
     this.events.once('shutdown', () => {
       this.bar?.remove();
@@ -77,6 +78,8 @@ export class CharmDemoScene extends Phaser.Scene {
     // The view fills the screen, like the HUD root it lives in during a run.
     const host = (this.host = document.createElement('div'));
     host.style.cssText = 'position:fixed;inset:0;z-index:5;pointer-events:none;transition:opacity .6s';
+    // A phone screen is small: the title block is drawn at 60 % so the fight below it stays clear.
+    host.style.zoom = '0.6';
     this.view = new CharmView(host);
     document.body.appendChild(host);
 

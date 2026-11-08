@@ -30,7 +30,7 @@ export class CharmView {
   /** The time left when this charm was first seen: the full bar. */
   private first = 0;
 
-  constructor(host: HTMLElement) {
+  constructor(private host: HTMLElement) {
     this.root.hidden = true;
     const bar = el('charm-bar');
     bar.append(this.fill);
@@ -40,6 +40,8 @@ export class CharmView {
 
   /** `by` is `me.charmed_by` (null: not charmed, or the charm is paused); `left` the seconds left. */
   update(by: string | null, left: number): void {
+    // The host's `charmed` class moves the messages below the title block (style.css).
+    this.host.classList.toggle('charmed', by !== null);
     if (by === null) {
       this.root.hidden = true;
       this.first = 0;
