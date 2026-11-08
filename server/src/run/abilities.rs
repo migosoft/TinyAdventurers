@@ -1184,10 +1184,12 @@ fn impact(run: &mut Run, i: usize, pos: Vec2, target: Option<Creature>) {
     // The owner may be gone by now: the shot hurts all the same, with the numbers it was spawned with.
     let by = run.player_idx(owner).map(Creature::Player).or_else(|| run.monster_idx(owner).map(Creature::Monster));
     match side {
-        Side::Friendly | Side::Hostile => match by {
+        // Credit (and the refusal of a hit on the hero's own side) only for a shot cast for the heroes' side.
+        Side::Friendly => match by {
             Some(by) => hurt(run, c, damage.clone(), crit, by),
             None => run.hurt_creature(c, damage.clone()),
         },
+        Side::Hostile => run.hurt_creature(c, damage.clone()),
         Side::Neutral => {}
     }
     // A hero's spark jumps on whichever side the hero cast it for (the jumps keep that side too).
@@ -1251,7 +1253,12 @@ fn chain_jumps(run: &mut Run, c: Creature, first: Creature, damage: Damage, side
         let jump = jump as u8;
         let to = run.creature_pos(t);
         run.event(Ev::Zap { x: from.x as f32, y: from.y as f32, x2: to.x as f32, y2: to.y as f32 }, None);
-        hurt(run, t, Damage { amount, ..damage.clone() }.with_mult(Mult::Chain { jump, factor: ab::CHAIN_FALLOFF.powi(jump as i32) }), false, c);
+        let jump_damage = Damage { amount, ..damage.clone() }.with_mult(Mult::Chain { jump, factor: ab::CHAIN_FALLOFF.powi(jump as i32) });
+        if side == Side::Friendly {
+            hurt(run, t, jump_damage, false, c);
+        } else {
+            run.hurt_creature(t, jump_damage);
+        }
         hit.push(t);
         last = t;
     }
@@ -4521,6 +4528,43 @@ mod hero_sides {
         assert_eq!(run.hazards[0].side, Side::Friendly);
         assert!(run.monsters[orc].hp < 1000.0, "it burns the orc");
         assert_eq!(run.players[1].hp, hp, "and not hero 1");
+    }
+
+    #[test]
+    fn a_shot_cast_for_the_enemies_stays_theirs_when_its_hero_turns_back() {
+        // Magic Missile at the wolf, cast while hero 0 is hostile; hero 0 is Friendly again before it lands.
+        let mut run = crowd(&[ClassId::Wizard, ClassId::ElvenRanger]);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 1);
+        let wi = run.monster_idx(wolf).unwrap();
+        stand(&mut run, 1, -60.0); // out of the missile's way
+        run.monsters[wi].pos = run.players[0].pos() + Vec2::new(60.0, 0.0);
+        let hp = run.monsters[wi].hp;
+        run.players[0].side = Side::Hostile;
+        try_use(&mut run, 0, true, 1);
+        assert_eq!(run.projectiles[0].side, Side::Hostile);
+        run.players[0].side = Side::Friendly;
+        let before = (run.players[0].kills, run.players[0].xp, run.players[0].damage);
+        fly(&mut run);
+        assert!(run.monsters[wi].hp < hp, "the wolf still takes the hit");
+        assert_eq!(before, (run.players[0].kills, run.players[0].xp, run.players[0].damage), "and the hero is credited with none of it");
+    }
+
+    #[test]
+    fn a_chain_spark_jump_cast_for_the_enemies_stays_theirs_when_its_hero_turns_back() {
+        // The spark hits hero 1's wolf-side target first; the jump to the wolf must land and pay nobody.
+        let mut run = duel(ClassId::Wizard, AbilitySlot::Primary, AbilityId::ChainSpark, Attributes::new(0, 0, 0, 3, 0, 0), 60.0, Side::Friendly);
+        let wolf = crate::run::wolf::spawn_wolf(&mut run, 1);
+        let wi = run.monster_idx(wolf).unwrap();
+        run.monsters[wi].pos = run.players[0].pos() + Vec2::new(90.0, 0.0);
+        let hp = run.monsters[wi].hp;
+        run.players[0].side = Side::Hostile;
+        try_use(&mut run, 0, true, 1);
+        run.players[0].side = Side::Friendly;
+        let before = (run.players[0].kills, run.players[0].xp, run.players[0].damage);
+        fly(&mut run);
+        assert!(run.players[1].hp < run.players[1].max_hp, "the spark hit hero 1");
+        assert!(run.monsters[wi].hp < hp, "the jump hit the wolf");
+        assert_eq!(before, (run.players[0].kills, run.players[0].xp, run.players[0].damage));
     }
 
     #[test]
