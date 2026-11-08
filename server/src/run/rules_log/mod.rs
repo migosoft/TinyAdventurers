@@ -53,6 +53,15 @@ pub(crate) fn tag_of(run: &Run, id: u32) -> String {
     tags::tag_of(run, id)
 }
 
+/// The hero a "something unseen" line about `c` is for: the hero itself, or the hero a companion follows (none
+/// for a companion led by a monster).
+fn unseen_viewer(run: &Run, c: Creature) -> Option<u32> {
+    match c {
+        Creature::Player(i) => Some(run.players[i].id),
+        Creature::Monster(i) => run.monsters[i].companion.as_ref().map(|c| c.leader).filter(|&l| run.player_idx(l).is_some()),
+    }
+}
+
 /// (entity id, the `EntityKind` id its name comes from, number) for each sent entity with a tag.
 pub(crate) fn snapshot_tags(run: &Run, ents: &[EntSnap]) -> Vec<(u32, u8, u16)> {
     tags::snapshot_tags(run, ents)
@@ -173,10 +182,7 @@ pub fn hit_begin(run: &mut Run, f: HitFacts) {
         crate::defs::damage::Mult::Overkill { from } => Some(seen_by_id(run, from)),
         crate::defs::damage::Mult::Behind(_) | crate::defs::damage::Mult::Chain { .. } | crate::defs::damage::Mult::Coat(_) | crate::defs::damage::Mult::Keystone(..) => None,
     }));
-    let viewer = match f.target {
-        Creature::Player(i) => Some(run.players[i].id),
-        Creature::Monster(i) => run.monsters[i].companion.as_ref().map(|c| c.leader),
-    };
+    let viewer = unseen_viewer(run, f.target);
     let unseen = viewer.and_then(|viewer| {
         let shown = match f.outcome {
             HitOutcome::Dealt => f.dealt,
@@ -280,7 +286,8 @@ pub fn charm(run: &mut Run, mi: usize, charmed: bool) {
     let Some(caster) = run.monsters[mi].charm.as_ref().map(|c| c.caster) else { return };
     let head = text::charm_head(run, run.monsters[mi].id, caster, charmed);
     let mut who = vec![record::seen_creature(run, Creature::Monster(mi))];
-    who.extend(run.player_idx(caster).map(|pi| record::seen_creature(run, Creature::Player(pi))));
+    // The caster is a hero or a monster (it may be gone).
+    who.extend(run.creature_by_id(caster).map(|c| record::seen_creature(run, c)));
     record::push(run, LogRec { t: run.time, kind: LineKind::Charm, head, details: vec![], who, unseen: None, plain: None, dealt: None, secs: None });
 }
 
@@ -343,10 +350,7 @@ pub fn death(run: &mut Run, f: DeathFacts) {
     if f.tick.is_none() {
         who.extend(f.by.map(|by| seen_by_id(run, by)));
     }
-    let viewer = match f.target {
-        Creature::Player(i) => Some(run.players[i].id),
-        Creature::Monster(i) => run.monsters[i].companion.as_ref().map(|c| c.leader),
-    };
+    let viewer = unseen_viewer(run, f.target);
     let unseen = viewer.map(|viewer| Unseen { viewer, head: text::death_unseen_head(run, f.target, target), details: vec![] });
     let rec = LogRec { t: run.time, kind: LineKind::Death, head: text::death_head(run, &f, target), details: vec![], who, unseen, plain: None, dealt: None, secs: None };
     match run.log.open.last_mut() {

@@ -302,7 +302,7 @@ fn tick_monster_inner(run: &mut Run, mi: usize, dt: f64) {
     // Perception: only players in sight radius with line of sight count. A companion sees only the prey
     // its escort script picked (run/companion.rs).
     let seen = match &run.monsters[mi].companion {
-        Some(c) => c.prey.and_then(|id| run.monster_idx(id)).filter(|&pm| run.monsters[pm].alive && super::perception::sees(run, sight, pos, run.monsters[pm].pos)).map(Creature::Monster),
+        Some(c) => c.prey.and_then(|id| run.creature_by_id(id)).filter(|&pc| run.creature_alive(pc) && super::perception::sees(run, sight, pos, run.creature_pos(pc))),
         None => find_visible_foe(run, mi),
     };
     if let Some(foe) = seen {

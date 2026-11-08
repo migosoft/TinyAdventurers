@@ -5,8 +5,8 @@
 //! pause and its end) goes through the one place. The companion code (run/companion.rs) does the rest.
 
 use super::entities::{Ai, Companion, Monster};
-use super::targets::{Grudge, Side, Wild};
-use super::{rules_log, Run};
+use super::targets::{self, Grudge, Side, Wild};
+use super::{companion, rules_log, Run};
 use crate::defs::companions::{Escort, KNIGHT_ESCORT};
 use crate::defs::effects::EffectKind;
 use crate::math::Vec2;
@@ -14,8 +14,10 @@ use crate::math::Vec2;
 /// A monster's charm: who charmed it, whether the switch is made now, and what it was before.
 #[derive(Debug, Clone)]
 pub struct Charm {
-    /// The player id of the hero that charmed it (the last one, after a refresh).
+    /// The entity id of the creature that charmed it, a hero or a monster (the last one, after a refresh).
     pub caster: u32,
+    /// The side it fights for while charmed: the caster's side when the charm switched on (or was last refreshed).
+    pub side: Side,
     /// Whether it acts charmed now. False while anti-magic or a Dispel pauses the effect: it is its old self
     /// again, and `before` is kept for when the pause lifts.
     pub on: bool,
@@ -40,7 +42,7 @@ pub fn is_on(m: &Monster) -> bool {
     m.charm.as_ref().is_some_and(|c| c.on)
 }
 
-/// The hero a charmed effect that counts now (not paused) names, if any.
+/// The creature (a hero's or a monster's entity id) a charmed effect that counts now (not paused) names, if any.
 fn own_caster(m: &Monster) -> Option<u32> {
     let fx = &m.effects;
     fx.list().iter().find(|a| a.kind == EffectKind::Charmed && !a.paused(fx.anti_magic)).and_then(|a| a.source)
@@ -86,7 +88,7 @@ pub fn sync_one(run: &mut Run, mi: usize) {
     match (wanted, state) {
         (Some(caster), Some((true, now))) => {
             if caster != now {
-                set_caster(&mut run.monsters[mi], caster);
+                set_caster(run, mi, caster);
             }
         }
         (Some(caster), _) => switch_on(run, mi, caster),
@@ -100,6 +102,70 @@ pub fn sync_one(run: &mut Run, mi: usize) {
         (None, Some((false, _))) if !present => run.monsters[mi].charm = None,
         (None, _) => {}
     }
+    if is_on(&run.monsters[mi]) {
+        drop_leaderless(run, mi);
+    } else {
+        follow_summoner(run, mi);
+    }
+}
+
+/// A charmed creature with no one to escort (its caster is gone and no hero is on its side) is a plain
+/// hunter of the charm's side until the charm ends. Its charm and `before` stay.
+fn drop_leaderless(run: &mut Run, mi: usize) {
+    let m = &run.monsters[mi];
+    if m.companion.as_ref().is_some_and(|c| companion::leader_of(run, c, m.side).is_none()) {
+        let m = &mut run.monsters[mi];
+        m.companion = None;
+        m.ai = Ai::new(m.pos);
+    }
+}
+
+/// The summoner rule: a summoned companion with no charm of its own (the wolf) fights for its summoner's
+/// side, whatever side that is now. Its summoner gone, it vanishes (`companion::update_leaders`).
+fn follow_summoner(run: &mut Run, mi: usize) {
+    let m = &run.monsters[mi];
+    let Some(c) = m.companion.as_ref().filter(|c| c.summoned) else { return };
+    let Some(summoner) = run.creature_by_id(c.recruiter) else { return };
+    let side = targets::side(run, summoner);
+    if side != m.side {
+        let m = &mut run.monsters[mi];
+        m.side = side;
+        reset_fight(m);
+    }
+}
+
+/// Drops what a creature was doing against its old foes: its target, wind-up and charge.
+fn reset_fight(m: &mut Monster) {
+    m.ai = Ai::new(m.pos);
+    m.slam = None;
+    m.dash = None;
+    m.channel = None;
+    if let Some(c) = m.companion.as_mut() {
+        c.prey = None;
+    }
+}
+
+/// The side a charm by `caster` puts a creature on: the caster's side now. A caster that is gone (a shot that
+/// outlived it) leaves the opposite of the target's own side: Friendly for a Hostile or Neutral target,
+/// Hostile for a Friendly one.
+fn side_for(run: &Run, caster: u32, target: Side) -> Side {
+    let own = run.creature_by_id(caster).map(|c| targets::side(run, c)).filter(|&s| s != Side::Neutral);
+    own.unwrap_or(if target == Side::Friendly { Side::Hostile } else { Side::Friendly })
+}
+
+/// The side the charm of `mi` by `caster` gives it: its master's charm side for a minion (it goes where its
+/// master goes), else `side_for`.
+fn charm_side(run: &Run, mi: usize, caster: u32, target: Side) -> Side {
+    let master = run.monsters[mi].owner.and_then(|id| run.monsters.iter().find(|o| o.id == id && o.alive));
+    match master.and_then(|o| o.charm.as_ref()).filter(|c| c.on && c.caster == caster) {
+        Some(c) => c.side,
+        None => side_for(run, caster, target),
+    }
+}
+
+/// The escort script a charmed creature follows: led by `caster`.
+fn escort_of(caster: u32) -> Companion {
+    Companion { escort: ESCORT, leader: caster, recruiter: caster, summoned: false, prey: None, following: false, reach_t: 0.0 }
 }
 
 /// Puts the charm back to the monster's old self at once (it died, or its charm is over) and forgets it. No log line.
@@ -111,13 +177,26 @@ pub fn revert(run: &mut Run, mi: usize) {
     m.charm = None;
 }
 
-fn set_caster(m: &mut Monster, caster: u32) {
+/// Another creature's charm took over (a refresh): the charm now follows the new caster's side. `before` stays.
+fn set_caster(run: &mut Run, mi: usize, caster: u32) {
+    let target = run.monsters[mi].charm.as_ref().map_or(run.monsters[mi].side, |c| c.before.side);
+    let side = charm_side(run, mi, caster, target);
+    let m = &mut run.monsters[mi];
+    let changed = m.side != side;
     if let Some(c) = m.charm.as_mut() {
         c.caster = caster;
+        c.side = side;
     }
-    if let Some(c) = m.companion.as_mut() {
-        c.recruiter = caster;
-        c.leader = caster;
+    m.side = side;
+    match m.companion.as_mut() {
+        Some(c) => {
+            c.recruiter = caster;
+            c.leader = caster;
+        }
+        None => m.companion = Some(escort_of(caster)),
+    }
+    if changed {
+        reset_fight(m);
     }
 }
 
@@ -128,9 +207,11 @@ fn switch_on(run: &mut Run, mi: usize, caster: u32) {
         Some(c) => c.before,
         None => Before { side: m.side, companion: m.companion.clone(), wild: m.wild, grudge: m.grudge, home: m.ai.home },
     };
-    m.charm = Some(Charm { caster, on: true, before });
-    m.side = Side::Friendly;
-    m.companion = Some(Companion { escort: ESCORT, leader: caster, recruiter: caster, summoned: false, prey: None, following: false, reach_t: 0.0 });
+    let side = charm_side(run, mi, caster, before.side);
+    let m = &mut run.monsters[mi];
+    m.charm = Some(Charm { caster, side, on: true, before });
+    m.side = side;
+    m.companion = Some(escort_of(caster));
     m.wild = None;
     m.grudge = Grudge::default();
     m.ai = Ai::new(m.pos);
@@ -688,6 +769,279 @@ mod tests {
         assert!(is_on(&run.monsters[bi]));
         run.kill_monster_by(bi, false);
         assert!(matches!(run.ended, Some((true, _))), "{:?}", run.ended);
+    }
+
+    // ---- Charm for any side (#224) ----
+
+    /// Charm from creature `caster` (an entity id, a hero's or a monster's, or one that is gone) on monster `mi`.
+    fn charm_by(run: &mut Run, mi: usize, caster: u32, secs: f64) {
+        let at = crate::run::ai::living_pos(run, caster).unwrap_or(Vec2::ZERO);
+        assert!(run.apply(Creature::Monster(mi), Apply { power: None, magical: true, source: Some((caster, at)), ..Apply::plain(EffectKind::Charmed, Some(secs)) }));
+    }
+
+    /// A held orc `dx` px east of hero 0 with plenty of HP: it neither moves nor dies.
+    fn held_orc(run: &mut Run, dx: f64) -> usize {
+        let oi = spawn(run, EnemyType::OrcWarrior, dx);
+        let m = &mut run.monsters[oi];
+        m.ai.hold = 1e9;
+        m.hp = 1000.0;
+        m.max_hp = 1000.0;
+        oi
+    }
+
+    /// Hero `pi`'s wolf, as an index.
+    fn wolf_of(run: &mut Run, pi: usize) -> usize {
+        let id = crate::run::wolf::spawn_wolf(run, pi);
+        run.monster_idx(id).unwrap()
+    }
+
+    #[test]
+    fn an_enemys_charm_takes_the_wolf() {
+        let mut run = arena(&[ClassId::ElvenRanger]);
+        let (hero, wi) = (run.players[0].id, wolf_of(&mut run, 0));
+        let oi = held_orc(&mut run, 50.0);
+        let orc = run.monsters[oi].id;
+        charm_by(&mut run, wi, orc, 5.0);
+        run.step();
+        let w = &run.monsters[wi];
+        assert_eq!(w.side, Side::Hostile);
+        assert_eq!(role(w), Role::Escort);
+        let c = w.companion.as_ref().expect("a companion");
+        assert_eq!((c.leader, c.recruiter, c.summoned), (orc, orc, false));
+        let hp = run.players[0].hp;
+        let mut bit = false;
+        for _ in 0..180 {
+            run.step();
+            if run.players[0].hp < hp {
+                bit = true;
+                break;
+            }
+        }
+        assert!(bit, "the charmed wolf bites hero 0");
+        steps(&mut run, 300);
+        let w = &run.monsters[wi];
+        assert!(w.alive && w.charm.is_none());
+        assert_eq!(w.side, Side::Friendly);
+        let c = w.companion.as_ref().expect("a companion");
+        assert_eq!((c.leader, c.recruiter, c.summoned), (hero, hero, true));
+        assert_eq!(run.players[0].wolf, Some(w.id));
+    }
+
+    /// A knight recruited by hero `pi`, 20 px east of them.
+    fn recruit_knight(run: &mut Run, pi: usize) -> usize {
+        let at = run.players[pi].pos() + Vec2::new(20.0, 0.0);
+        let id = run.spawn_enemy(EnemyType::Knight, at, None);
+        let ki = run.monster_idx(id).unwrap();
+        let hero = run.players[pi].id;
+        let m = &mut run.monsters[ki];
+        m.side = Side::Friendly;
+        m.companion = Some(Companion { escort: &KNIGHT_ESCORT, leader: hero, recruiter: hero, summoned: false, prey: None, following: false, reach_t: 0.0 });
+        ki
+    }
+
+    #[test]
+    fn an_enemys_charm_takes_the_knight() {
+        let mut run = arena(&[ClassId::Wizard, ClassId::Paladin]);
+        let h1 = run.players[1].id;
+        let ki = recruit_knight(&mut run, 1);
+        let oi = held_orc(&mut run, 120.0);
+        let orc = run.monsters[oi].id;
+        charm_by(&mut run, ki, orc, 1.0);
+        run.step();
+        let k = &run.monsters[ki];
+        assert_eq!(k.side, Side::Hostile);
+        assert_eq!(role(k), Role::Escort);
+        let c = k.companion.as_ref().unwrap();
+        assert_eq!((c.leader, c.recruiter, c.summoned), (orc, orc, false));
+        steps(&mut run, 70);
+        let k = &run.monsters[ki];
+        assert!(k.charm.is_none());
+        assert_eq!(k.side, Side::Friendly);
+        let c = k.companion.as_ref().unwrap();
+        assert_eq!((c.leader, c.recruiter, c.summoned), (h1, h1, false));
+    }
+
+    #[test]
+    fn a_monster_charmed_by_a_monster_hunts_when_the_caster_dies() {
+        let mut run = arena(&[ClassId::ElvenRanger]);
+        run.lights.fill();
+        let wi = wolf_of(&mut run, 0);
+        let (ci, bi) = (held_orc(&mut run, 200.0), spawn(&mut run, EnemyType::OrcWarrior, 240.0));
+        run.monsters[bi].hp = 1000.0;
+        run.monsters[bi].max_hp = 1000.0;
+        // Ids: a dead monster leaves the list, and the indices move.
+        let (caster, charmed, wolf) = (run.monsters[ci].id, run.monsters[bi].id, run.monsters[wi].id);
+        charm_by(&mut run, bi, caster, 3.0);
+        run.step();
+        let idx = |run: &Run, id: u32| run.monster_idx(id).unwrap();
+        assert_eq!(run.monsters[idx(&run, charmed)].side, Side::Hostile);
+        assert_eq!(run.monsters[idx(&run, charmed)].companion.as_ref().map(|c| c.leader), Some(caster));
+        run.kill_monster(ci);
+        // The wolf stands beside it, and so does the hero (the wolf stays by its ranger).
+        let (bi, wi) = (idx(&run, charmed), idx(&run, wolf));
+        let at = run.monsters[bi].pos;
+        run.players[0].debug = true;
+        run.players[0].mv.x = at.x - 40.0;
+        run.players[0].mv.y = at.y;
+        run.monsters[wi].pos = at + Vec2::new(-20.0, 0.0);
+        run.monsters[wi].ai.hold = 1e9;
+        let wolf_hp = run.monsters[wi].hp;
+        run.step();
+        let m = &run.monsters[idx(&run, charmed)];
+        assert!(m.companion.is_none(), "no leader left: a plain hunter");
+        assert_eq!(m.side, Side::Hostile);
+        assert!(is_on(m));
+        let mut hit = false;
+        for _ in 0..120 {
+            run.step();
+            if run.monsters[idx(&run, wolf)].hp < wolf_hp {
+                hit = true;
+                break;
+            }
+        }
+        assert!(hit, "it still attacks the wolf");
+        steps(&mut run, 200);
+        let m = &run.monsters[idx(&run, charmed)];
+        assert!(m.charm.is_none() && m.companion.is_none());
+        assert_eq!(m.side, Side::Hostile);
+    }
+
+    #[test]
+    fn a_refresh_by_the_other_side_keeps_before() {
+        let mut run = arena(&[ClassId::Wizard]);
+        let oi = spawn(&mut run, EnemyType::OrcWarrior, 80.0);
+        let ci = held_orc(&mut run, 300.0);
+        let (hero, caster) = (run.players[0].id, run.monsters[ci].id);
+        charm_by(&mut run, oi, hero, 1.0);
+        run.step();
+        assert_eq!(run.monsters[oi].side, Side::Friendly);
+        charm_by(&mut run, oi, caster, 1.0);
+        run.step();
+        let m = &run.monsters[oi];
+        assert_eq!(m.side, Side::Hostile);
+        let c = m.companion.as_ref().expect("a companion");
+        assert_eq!((c.leader, c.recruiter), (caster, caster));
+        let ch = m.charm.as_ref().unwrap();
+        assert_eq!((ch.caster, ch.side, ch.before.side), (caster, Side::Hostile, Side::Hostile));
+        assert!(ch.before.companion.is_none());
+        steps(&mut run, 70);
+        let m = &run.monsters[oi];
+        assert!(m.charm.is_none() && m.companion.is_none());
+        assert_eq!(m.side, Side::Hostile);
+    }
+
+    #[test]
+    fn a_charm_whose_caster_is_gone_takes_the_opposite_side() {
+        let mut run = arena(&[ClassId::ElvenRanger]);
+        let oi = spawn(&mut run, EnemyType::OrcWarrior, 80.0);
+        let bi = spawn(&mut run, EnemyType::Boar, 120.0);
+        let wi = wolf_of(&mut run, 0);
+        let gone = 99_999;
+        run.players[0].debug = true;
+        // They fight each other meanwhile: nobody may die.
+        for mi in [oi, bi, wi] {
+            run.monsters[mi].hp = 1e6;
+            run.monsters[mi].max_hp = 1e6;
+        }
+        for (mi, was) in [(oi, Side::Hostile), (bi, Side::Neutral), (wi, Side::Friendly)] {
+            assert_eq!(run.monsters[mi].side, was);
+            charm_by(&mut run, mi, gone, 5.0);
+        }
+        run.step();
+        for (mi, now) in [(oi, Side::Friendly), (bi, Side::Friendly), (wi, Side::Hostile)] {
+            let m = &run.monsters[mi];
+            assert_eq!(m.side, now, "{:?}", m.kind);
+            assert_eq!(m.charm.as_ref().unwrap().side, now);
+        }
+        // The orc still has a hero to follow; the wolf has no Hostile creature or hero to lead it.
+        assert_eq!(run.monsters[oi].companion.as_ref().map(|c| c.leader), Some(run.players[0].id));
+        assert!(run.monsters[wi].companion.is_none());
+        steps(&mut run, 310);
+        assert_eq!(run.monsters[oi].side, Side::Hostile);
+        assert_eq!(run.monsters[bi].side, Side::Neutral);
+        assert_eq!(run.monsters[wi].side, Side::Friendly);
+        assert_eq!(run.monsters[wi].companion.as_ref().map(|c| (c.summoned, c.recruiter)), Some((true, run.players[0].id)));
+    }
+
+    #[test]
+    fn the_wolf_follows_its_rangers_side() {
+        let mut run = arena(&[ClassId::ElvenRanger]);
+        let wi = wolf_of(&mut run, 0);
+        run.players[0].side = Side::Hostile;
+        run.step();
+        assert_eq!(run.monsters[wi].side, Side::Hostile);
+        assert!(run.monsters[wi].alive && run.monsters[wi].charm.is_none());
+        run.players[0].side = Side::Friendly;
+        run.step();
+        assert_eq!(run.monsters[wi].side, Side::Friendly);
+        assert!(run.monsters[wi].alive);
+    }
+
+    #[test]
+    fn a_recruited_knight_leaves_a_hero_on_another_side() {
+        let mut run = arena(&[ClassId::Wizard, ClassId::Paladin]);
+        let (h0, h1) = (run.players[0].id, run.players[1].id);
+        let ki = recruit_knight(&mut run, 1);
+        run.step();
+        assert_eq!(run.monsters[ki].companion.as_ref().unwrap().leader, h1, "it follows its recruiter");
+        run.players[1].side = Side::Hostile;
+        run.step();
+        assert_eq!(run.monsters[ki].companion.as_ref().unwrap().leader, h0, "it follows a hero on its side");
+        run.players[0].side = Side::Hostile;
+        let at = run.monsters[ki].pos;
+        steps(&mut run, 30);
+        let k = &run.monsters[ki];
+        assert!(k.alive && k.side == Side::Friendly);
+        assert_eq!(k.pos, at, "with no hero on its side it idles");
+        assert!(k.companion.as_ref().unwrap().prey.is_none());
+    }
+
+    #[test]
+    fn the_wolf_charmed_while_its_ranger_is_charmed() {
+        let mut run = arena(&[ClassId::ElvenRanger, ClassId::Wizard]);
+        let (wi, h1) = (wolf_of(&mut run, 0), run.players[1].id);
+        run.players[0].side = Side::Hostile;
+        run.step();
+        assert_eq!(run.monsters[wi].side, Side::Hostile);
+        charm_by(&mut run, wi, h1, 1.0);
+        steps(&mut run, 3);
+        assert_eq!(run.monsters[wi].side, Side::Friendly, "its own charm wins");
+        assert!(is_on(&run.monsters[wi]));
+        steps(&mut run, 70);
+        let w = &run.monsters[wi];
+        assert!(w.charm.is_none() && w.alive);
+        assert_eq!(w.side, Side::Hostile, "then it takes the ranger's side");
+        run.players[0].side = Side::Friendly;
+        run.step();
+        assert_eq!(run.monsters[wi].side, Side::Friendly);
+    }
+
+    #[test]
+    fn the_wolf_dying_charmed_frees_its_ranger() {
+        let mut run = arena(&[ClassId::ElvenRanger]);
+        let wi = wolf_of(&mut run, 0);
+        let oi = held_orc(&mut run, 150.0);
+        let orc = run.monsters[oi].id;
+        charm_by(&mut run, wi, orc, 5.0);
+        run.step();
+        assert!(is_on(&run.monsters[wi]));
+        run.events.clear();
+        run.kill_monster(wi);
+        assert_eq!(run.players[0].wolf, None);
+        assert!(run.players[0].cd2 > 0.0, "the dead-wolf cooldown");
+        assert!(run.events.iter().any(|(e, _)| matches!(e, crate::protocol::Ev::Msg { text } if text.contains("wolf has fallen"))));
+    }
+
+    #[test]
+    fn the_wolf_vanishes_with_its_ranger_on_any_side() {
+        let mut run = arena(&[ClassId::ElvenRanger, ClassId::Wizard]);
+        let wi = wolf_of(&mut run, 0);
+        let id = run.monsters[wi].id;
+        run.players[0].side = Side::Hostile;
+        run.players[0].alive = false;
+        run.step();
+        assert!(run.monster_idx(id).map_or(true, |i| !run.monsters[i].alive));
+        assert_eq!(run.players[0].wolf, None);
     }
 
     #[test]

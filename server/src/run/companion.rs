@@ -2,7 +2,8 @@
 //! pieces of a follower's script that any companion shares. The Ranger's wolf is one of them: its spawn and death are in run/wolf.rs.
 
 use super::entities::{Ai, AiState, Companion};
-use super::targets::Side;
+use super::effects::Creature;
+use super::targets::{self, Side};
 use super::{ai, perception, Run};
 use crate::collision::walk_line;
 use crate::defs::classes::PLAYER_RADIUS;
@@ -14,18 +15,20 @@ use crate::dungeon::{Layout, Map, Mover, Rect};
 use crate::math::Vec2;
 use crate::protocol::Ev;
 
-/// The hero (index into `run.players`) `c` follows: its recruiter while that hero is alive and in the
-/// run; else, for a recruited companion, the party leader (the host, the first player) if alive, else the
-/// next living hero in join order. A summoned companion has no one else: `None` means it vanishes.
-/// A pure function of who is alive now. Fallen heroes never come back before #221, so a switch of
-/// leader is for good without any stored history.
-pub fn leader_of(run: &Run, c: &Companion) -> Option<usize> {
-    let alive = |pi: usize| run.players[pi].alive;
-    let recruiter = run.player_idx(c.recruiter).filter(|&pi| alive(pi));
+/// The creature `c` follows, for a companion on `side`: its recruiter while that creature is alive, in the
+/// run and (for a recruited one) on `side`; else, for a recruited companion, the party leader (the host, the
+/// first player) if alive and on `side`, else the next living hero on `side` in join order. A summoned
+/// companion takes its recruiter whatever side it is on, and has no one else: `None` means it vanishes.
+/// A pure function of who is alive now and on which side. Fallen heroes never come back before #221, so a
+/// switch of leader is for good without any stored history.
+pub fn leader_of(run: &Run, c: &Companion, side: Side) -> Option<Creature> {
+    let recruiter = run.creature_by_id(c.recruiter).filter(|&r| run.creature_alive(r));
     if c.summoned {
         return recruiter;
     }
-    recruiter.or_else(|| (0..run.players.len()).find(|&pi| alive(pi)))
+    recruiter
+        .filter(|&r| targets::side(run, r) == side)
+        .or_else(|| (0..run.players.len()).find(|&pi| run.players[pi].alive && run.players[pi].side == side).map(Creature::Player))
 }
 
 /// Sets every companion's `leader`. A summoned companion whose summoner is gone vanishes at once, with
@@ -35,9 +38,9 @@ pub fn update_leaders(run: &mut Run) {
     for mi in 0..run.monsters.len() {
         let m = &run.monsters[mi];
         let Some(c) = m.companion.as_ref().filter(|_| m.alive) else { continue };
-        match leader_of(run, c) {
-            Some(pi) => {
-                let id = run.players[pi].id;
+        match leader_of(run, c, m.side) {
+            Some(leader) => {
+                let id = run.creature_id(leader);
                 run.monsters[mi].companion.as_mut().expect("a companion").leader = id;
             }
             None if c.summoned => {
@@ -120,33 +123,48 @@ pub fn reappear(run: &mut Run, mi: usize, leader: Vec2) -> bool {
     true
 }
 
-/// The enemy a companion goes for: alive, awake and visible to the heroes (not dormant, hiding or flying),
-/// seen by the companion, near the leader (guard) or the companion (it fights back), within the leash. The
-/// one nearest the leader.
-pub fn find_prey(run: &Run, mi: usize, leader: Vec2, e: &Escort) -> Option<usize> {
+/// The foe a companion goes for: a living hero or monster it fights (`targets::fights`: its side's foes and its
+/// grudges), awake and visible (not dormant, hiding, invisible or flying), seen by the companion, near the
+/// leader (guard) or the companion (it fights back), within the leash. The one nearest the leader.
+pub fn find_prey(run: &Run, mi: usize, leader: Vec2, e: &Escort) -> Option<Creature> {
     let w = &run.monsters[mi];
     let sight = w.sight_now();
     // A companion with no attack (a charmed deer) has no prey.
     let attack = w.kit.first()?.split;
-    run.monsters
-        .iter()
-        .enumerate()
-        .filter(|(_, f)| f.alive && (f.side == Side::Hostile || f.grudge.heroes) && !f.dormant && !f.hiding && !f.effects.has(EffectKind::Invisible) && !f.airborne && f.sinking.is_none())
-        // An attack that passes through the foe cannot hurt it: not worth chasing.
-        .filter(|&(i, _)| !run.passes_through(super::effects::Creature::Monster(i), &attack))
-        .filter(|(_, f)| {
-            let (to_l, to_w) = (f.pos.dist(leader), f.pos.dist(w.pos));
-            (to_l <= e.guard + f.radius || to_w <= e.defend + f.radius) && to_l <= e.leash
+    let me = targets::stance(run, Creature::Monster(mi));
+    let heroes = (0..run.players.len()).filter(|&i| run.players[i].alive && run.players[i].sinking.is_none()).map(Creature::Player);
+    let monsters = (0..run.monsters.len())
+        .filter(|&i| {
+            let f = &run.monsters[i];
+            i != mi && f.alive && !f.dormant && !f.hiding && !f.airborne && f.sinking.is_none()
         })
-        .filter(|(_, f)| perception::sees(run, sight, w.pos, f.pos))
-        .min_by(|a, b| a.1.pos.dist(leader).total_cmp(&b.1.pos.dist(leader)))
-        .map(|(i, _)| i)
+        .map(Creature::Monster);
+    heroes
+        .chain(monsters)
+        .filter(|&c| targets::fights(&me, &targets::stance(run, c)) && !run.has_effect(c, EffectKind::Invisible))
+        // An attack that passes through the foe cannot hurt it: not worth chasing.
+        .filter(|&c| !run.passes_through(c, &attack))
+        .map(|c| (c, run.creature_pos(c), match c {
+            Creature::Player(_) => PLAYER_RADIUS,
+            Creature::Monster(i) => run.monsters[i].radius,
+        }))
+        .filter(|&(_, p, radius)| {
+            let (to_l, to_w) = (p.dist(leader), p.dist(w.pos));
+            (to_l <= e.guard + radius || to_w <= e.defend + radius) && to_l <= e.leash
+        })
+        .filter(|&(_, p, _)| perception::sees(run, sight, w.pos, p))
+        .min_by(|a, b| a.1.dist(leader).total_cmp(&b.1.dist(leader)))
+        .map(|(c, _, _)| c)
 }
 
-/// Walks toward leader `pi` once beyond `e.follow` (until inside `e.follow_stop`); otherwise stands
-/// facing the side the leader aims at.
-pub fn follow(run: &mut Run, mi: usize, pi: usize, e: &Escort, speed: f64, dt: f64) {
-    let leader = run.players[pi].pos();
+/// Walks toward `leader` once beyond `e.follow` (until inside `e.follow_stop`); otherwise stands facing the
+/// side the leader aims at.
+pub fn follow(run: &mut Run, mi: usize, leader: Creature, e: &Escort, speed: f64, dt: f64) {
+    let aim = match leader {
+        Creature::Player(pi) => run.players[pi].aim,
+        Creature::Monster(li) => run.monsters[li].aim,
+    };
+    let leader = run.creature_pos(leader);
     let pos = run.monsters[mi].pos;
     let d = pos.dist(leader);
     let c = run.monsters[mi].companion.as_mut().expect("a companion");
@@ -161,20 +179,24 @@ pub fn follow(run: &mut Run, mi: usize, pi: usize, e: &Escort, speed: f64, dt: f
         set_anim(run, mi, Anim::Move);
     } else {
         run.monsters[mi].ai.path.clear();
-        run.monsters[mi].aim = if run.players[pi].aim.cos() >= 0.0 { 0.0 } else { std::f64::consts::PI };
+        run.monsters[mi].aim = if aim.cos() >= 0.0 { 0.0 } else { std::f64::consts::PI };
         set_anim(run, mi, Anim::Idle);
     }
 }
 
-/// The first part of a companion's tick: the hero it follows, or `None` when the tick is over. With no
-/// living leader it idles; lost, it reappears beside them (even mid-dash, which it drops).
+/// The first part of a companion's tick: the creature (hero or monster) it follows, or `None` when the tick is
+/// over. With no living leader it idles; lost, it reappears beside them (even mid-dash, which it drops).
 /// Not called while it is pushed, sinking, asleep or frozen (`Run::step`).
-pub fn regroup(run: &mut Run, mi: usize, dt: f64) -> Option<usize> {
-    let Some(leader) = run.monsters[mi].companion.as_ref().and_then(|c| run.player_idx(c.leader)).filter(|&pi| run.players[pi].alive) else {
+pub fn regroup(run: &mut Run, mi: usize, dt: f64) -> Option<Creature> {
+    let side = run.monsters[mi].side;
+    let Some(leader) = run.monsters[mi].companion.as_ref().and_then(|c| leader_of(run, c, side)) else {
         run.monsters[mi].ai.state = AiState::Idle;
+        if let Some(c) = run.monsters[mi].companion.as_mut() {
+            c.prey = None;
+        }
         return None;
     };
-    let at = run.players[leader].pos();
+    let at = run.creature_pos(leader);
     let escort = run.monsters[mi].companion.as_ref().expect("a companion").escort;
     // A creature that cannot move (the Disciple) neither follows nor reappears: it stays and fights from there.
     if run.monsters[mi].base.speed == 0.0 {
@@ -196,8 +218,8 @@ pub fn count_waits(run: &mut Run, mi: usize, dt: f64) {
 }
 
 /// The rest of a companion's tick, after its dash: fight its prey through the enemy AI, else follow `leader`.
-pub fn act(run: &mut Run, mi: usize, leader: usize, dt: f64) {
-    let at = run.players[leader].pos();
+pub fn act(run: &mut Run, mi: usize, leader: Creature, dt: f64) {
+    let at = run.creature_pos(leader);
     let escort = run.monsters[mi].companion.as_ref().expect("a companion").escort;
     // Blown into lava: walk out first, like any monster (the enemy movers cannot move inside a pool).
     if run.layout.map.blocks_at(run.monsters[mi].pos, run.monsters[mi].mover) {
@@ -206,7 +228,7 @@ pub fn act(run: &mut Run, mi: usize, leader: usize, dt: f64) {
         return;
     }
     let prey = find_prey(run, mi, at, escort);
-    run.monsters[mi].companion.as_mut().expect("a companion").prey = prey.map(|pi| run.monsters[pi].id);
+    run.monsters[mi].companion.as_mut().expect("a companion").prey = prey.map(|c| run.creature_id(c));
     if prey.is_some() {
         ai::tick_monster(run, mi, dt);
     } else {
@@ -311,7 +333,7 @@ mod tests {
 
     fn leader_id(run: &Run, mi: usize) -> Option<u32> {
         let c = run.monsters[mi].companion.as_ref().unwrap();
-        leader_of(run, c).map(|pi| run.players[pi].id)
+        leader_of(run, c, run.monsters[mi].side).map(|l| run.creature_id(l))
     }
 
     #[test]

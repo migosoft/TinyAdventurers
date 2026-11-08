@@ -654,7 +654,7 @@ mod tests {
         run.monsters[ni].grudge.enemies = true;
         assert_eq!(crate::run::companion::find_prey(&run, wi, hero, &WOLF_ESCORT), None, "a grudge against the enemies only");
         run.monsters[ni].grudge.heroes = true;
-        assert_eq!(crate::run::companion::find_prey(&run, wi, hero, &WOLF_ESCORT), Some(ni));
+        assert_eq!(crate::run::companion::find_prey(&run, wi, hero, &WOLF_ESCORT), Some(Creature::Monster(ni)));
     }
 
     #[test]

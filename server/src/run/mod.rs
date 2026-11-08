@@ -1096,6 +1096,20 @@ impl Run {
         }
     }
 
+    /// The creature (hero or monster) with entity id `id`, living or not; `None` when it is gone from the run.
+    /// Heroes and monsters share one id space (`alloc_id`).
+    pub fn creature_by_id(&self, id: u32) -> Option<effects::Creature> {
+        self.player_idx(id).map(effects::Creature::Player).or_else(|| self.monster_idx(id).map(effects::Creature::Monster))
+    }
+
+    /// Whether `c` is alive.
+    pub fn creature_alive(&self, c: effects::Creature) -> bool {
+        match c {
+            effects::Creature::Player(i) => self.players[i].alive,
+            effects::Creature::Monster(i) => self.monsters[i].alive,
+        }
+    }
+
     pub fn creature_pos(&self, c: effects::Creature) -> Vec2 {
         match c {
             effects::Creature::Player(i) => self.players[i].pos(),

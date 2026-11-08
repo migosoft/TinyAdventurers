@@ -111,7 +111,8 @@ pub fn wolf_died(run: &mut Run, mi: usize) {
     m.alive = false;
     m.hp = 0.0;
     let (id, pos, kind) = (m.id, m.pos, m.kind as u8);
-    let owner = m.companion.as_ref().map(|c| c.leader);
+    // The ranger, even while the wolf fights for the other side.
+    let owner = m.companion.as_ref().map(|c| c.recruiter);
     run.event(Ev::Died { id, x: pos.x as f32, y: pos.y as f32, kind }, None);
     if let Some(pi) = owner.and_then(|o| run.player_idx(o)) {
         let p = &mut run.players[pi];
@@ -1039,7 +1040,7 @@ mod tests {
         let oid = run.spawn_enemy(EnemyType::SkeletonWarrior, r + Vec2::new(30.0, 0.0), None);
         let oi = run.monster_idx(oid).unwrap();
         let wi = run.monster_idx(id).unwrap();
-        assert_eq!(find_prey(&run, wi, r, &WOLF_ESCORT), Some(oi), "the wolf goes for a visible enemy");
+        assert_eq!(find_prey(&run, wi, r, &WOLF_ESCORT), Some(crate::run::effects::Creature::Monster(oi)), "the wolf goes for a visible enemy");
         run.monsters[oi].effects.add(EffectKind::Invisible, 30.0);
         assert_eq!(find_prey(&run, wi, r, &WOLF_ESCORT), None, "but not an invisible one");
     }
@@ -1233,11 +1234,11 @@ mod tests {
         run.monsters[gi].traits = prof.traits;
         let ranger = run.players[0].pos();
         // The wolf's bite is 20 % Magical, which a ghost does not resist: the bite hurts it, so it is prey.
-        assert_eq!(find_prey(&run, wi, ranger, &WOLF_ESCORT), Some(gi), "the Magical share hits");
+        assert_eq!(find_prey(&run, wi, ranger, &WOLF_ESCORT), Some(crate::run::effects::Creature::Monster(gi)), "the Magical share hits");
         run.monsters[gi].res.set(DamageType::Magical, 1.0);
         assert_eq!(find_prey(&run, wi, ranger, &WOLF_ESCORT), None, "its whole bite would pass through");
         run.monsters[gi].traits = Default::default();
-        assert_eq!(find_prey(&run, wi, ranger, &WOLF_ESCORT), Some(gi), "control: with a body it is prey");
+        assert_eq!(find_prey(&run, wi, ranger, &WOLF_ESCORT), Some(crate::run::effects::Creature::Monster(gi)), "control: with a body it is prey");
     }
 
     #[test]
