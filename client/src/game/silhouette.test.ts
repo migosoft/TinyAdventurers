@@ -1,8 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { behindOccluder, bodyLookFrom, heroBox, lookOf, type BodyParts } from './silhouette';
+import { behindOccluder, bodyLookFrom, heroBox, lookOf, MAX_OCCLUDERS, occludersOf, type BodyParts } from './silhouette';
 
 // canopy box: x 100-196, top 20, trunk foot y 99
 const OCC = { left: 100, right: 196, top: 20, footY: 99 };
+
+describe('occludersOf (#262)', () => {
+  // two overlapping conifers: the back one (foot 99) holds the hero, the front one's (foot 120) wide box overlaps it too
+  const back = { id: 'back', left: 100, right: 196, top: 20, footY: 99 };
+  const front = { id: 'front', left: 150, right: 230, top: 40, footY: 120 };
+  const hero = { left: 150, right: 166, top: 50, footY: 80 };
+  it('lists every tree the hero stands behind, front-most first', () => {
+    expect(occludersOf(hero, [back, front]).map((o) => o.id)).toEqual(['front', 'back']);
+  });
+  it('leaves out trees the hero is not behind', () => {
+    const aside = { id: 'aside', left: 300, right: 380, top: 0, footY: 110 };
+    const north = { id: 'north', left: 100, right: 200, top: 0, footY: 60 };
+    expect(occludersOf(hero, [aside, north, back]).map((o) => o.id)).toEqual(['back']);
+  });
+  it(`keeps at most ${MAX_OCCLUDERS}, the front-most`, () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({ id: `t${i}`, left: 100, right: 200, top: 0, footY: 90 + i }));
+    expect(occludersOf(hero, many).map((o) => o.id)).toEqual(['t5', 't4', 't3', 't2']);
+  });
+});
 
 describe('behindOccluder', () => {
   it('true: north of the trunk foot, inside the canopy box', () => {
