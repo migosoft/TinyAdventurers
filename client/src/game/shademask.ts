@@ -72,8 +72,8 @@ export class ShadeMask {
     this.last = '';
   }
 
-  /** `view`: the camera's world view; `hard`: the view that stops at walls only; `all`: the server's view. */
-  update(view: Phaser.Geom.Rectangle, hard: View, all: View): void {
+  /** `view`: the camera's world view; `hard`: the view that stops at walls only; `all`: the server's view, asked for only when a soft tile lies in the window (it is computed on demand). */
+  update(view: Phaser.Geom.Rectangle, hard: View, all: () => View): void {
     const y0 = Math.max(0, Math.floor(view.y / TILE) - BORDER);
     const y1 = Math.min(this.map.h, Math.ceil(view.bottom / TILE) + BORDER + 1);
     let soft = this.on;
@@ -94,7 +94,8 @@ export class ShadeMask {
     const ox = Math.floor(view.x / TILE) - BORDER;
     const oy = Math.floor(view.y / TILE) - BORDER;
     image.setPosition(ox * TILE, oy * TILE);
-    const key = `${ox},${oy},${hard.version},${all.version}`;
+    const full = all();
+    const key = `${ox},${oy},${hard.version},${full.version}`;
     if (key === this.last) return;
     this.last = key;
 
@@ -114,7 +115,7 @@ export class ShadeMask {
     trace(hard);
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = '#000';
-    trace(all);
+    trace(full);
     ctx.globalCompositeOperation = 'source-over';
     canvas.refresh();
     // refresh() resets the filter to NEAREST (pixelArt).

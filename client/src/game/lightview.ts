@@ -10,7 +10,7 @@ import type Phaser from 'phaser';
 import { LIGHT, LIGHT_KIND } from '../generated/defs';
 import type { MovingLight } from '../generated/MovingLight';
 import { View } from '../sim/view';
-import { TILE, type TileMap } from '../sim/map';
+import { TILE, type Blocker, type TileMap } from '../sim/map';
 import { DEPTH } from './effects';
 import { cloudAt, lookFor, sunLook } from './sunmath';
 import type { LightField } from './light';
@@ -165,11 +165,35 @@ export function seenForLight(inView: (x: number, y: number) => boolean, opaque: 
   return false;
 }
 
+/**
+ * A View computed on demand: `request` notes where the viewer stands (cheap), `get` computes it the first time
+ * it is read for that request. Dungeon runs, which never read the full view, pay nothing for it.
+ */
+export class LazyView {
+  readonly view: View;
+  private pending?: [TileMap, number, number, number];
+  constructor(w: number, h: number, private blocker: Blocker) {
+    this.view = new View(w, h);
+  }
+  request(map: TileMap, vx: number, vy: number, vision: number): void {
+    this.pending = [map, vx, vy, vision];
+  }
+  get(): View {
+    if (this.pending) {
+      const [map, vx, vy, vision] = this.pending;
+      this.pending = undefined;
+      this.view.compute(map, vx, vy, vision, this.blocker);
+    }
+    return this.view;
+  }
+}
+
 export class LightView {
   /** What the viewer sees past walls only (trunks and thickets do not stop it): darkness, tint, `seenLit` and the vision mask. */
   readonly view: View;
   /** What the server lets the viewer see (trunks stop it too): the soft shadow is the ground between the two. */
-  readonly sight: View;
+  get sight(): View { return this.full.get(); }
+  private full: LazyView;
   /** The viewer and vision the view was computed for; empty: recompute. */
   private viewKey = '';
   private dark: Phaser.Textures.CanvasTexture;
@@ -200,7 +224,7 @@ export class LightView {
   constructor(scene: Phaser.Scene, private map: TileMap, private field: LightField) {
     const { w, h } = map;
     this.view = new View(w, h);
-    this.sight = new View(w, h);
+    this.full = new LazyView(w, h, 'all');
     for (const k of ['dark', 'tint', 'dvmask']) if (scene.textures.exists(k)) scene.textures.remove(k);
     this.dark = scene.textures.createCanvas('dark', w * SUB, h * SUB)!;
     this.tint = scene.textures.createCanvas('tint', w * SUB, h * SUB)!;
@@ -246,7 +270,7 @@ export class LightView {
     if (key !== this.viewKey) {
       this.viewKey = key;
       this.view.compute(this.map, vx, vy, sight, 'hard');
-      this.sight.compute(this.map, vx, vy, sight, 'all');
+      this.full.request(this.map, vx, vy, sight);
     }
     const x0 = Math.max(0, Math.floor(view.x / TILE) - MARGIN);
     const y0 = Math.max(0, Math.floor(view.y / TILE) - MARGIN);

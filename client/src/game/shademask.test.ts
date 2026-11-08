@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
 import { View } from '../sim/view';
-import { shadeCovers } from './shademask';
+import { LazyView } from './lightview';
+import { ShadeMask, shadeCovers } from './shademask';
 
 /** A 20x20 map ringed by walls, `extra` placed on top. */
 function map(extra: [number, number, number][]): TileMap {
@@ -37,5 +38,30 @@ describe('the soft shadow', () => {
     const m = map([[10, 10, TILE_ID.Wall]]);
     const [hard, all] = views(m, 10.5 * TILE, 14.5 * TILE);
     expect(shadeCovers(hard, all, 10.5 * TILE, 6.5 * TILE)).toBe(false);
+  });
+});
+
+describe('the full view is computed on demand', () => {
+  it('a LazyView computes only when read, and once per request', () => {
+    const m = map([]);
+    const lazy = new LazyView(m.w, m.h, 'all');
+    lazy.request(m, 10.5 * TILE, 10.5 * TILE, 8);
+    lazy.request(m, 11.5 * TILE, 10.5 * TILE, 8);
+    expect(lazy.view.version).toBe(0);
+    expect(lazy.get().version).toBe(1);
+    expect(lazy.get().px).toBe(11.5 * TILE);
+    lazy.request(m, 12.5 * TILE, 10.5 * TILE, 8);
+    expect(lazy.get().version).toBe(2);
+  });
+
+  it('the shade layer never asks for it when no soft tile lies in the window', () => {
+    const m = map([]);
+    const shade = new ShadeMask({} as never, m);
+    let asked = 0;
+    const lazy = new LazyView(m.w, m.h, 'all');
+    const hard = new View(m.w, m.h);
+    shade.update({ y: 0, bottom: 20 * TILE } as never, hard, () => (asked++, lazy.get()));
+    expect(asked).toBe(0);
+    expect(lazy.view.version).toBe(0);
   });
 });

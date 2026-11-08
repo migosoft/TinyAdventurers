@@ -858,7 +858,7 @@ export class GameScene extends Phaser.Scene {
     this.visionMask.update(this.cameras.main.worldView, this.lightView.view);
     // the soft shade waits for the scenery it belongs to (the woodland's trunks)
     this.shadeMask.on = !this.woodland || this.woodland.settled;
-    this.shadeMask.update(this.cameras.main.worldView, this.lightView.view, this.lightView.sight);
+    this.shadeMask.update(this.cameras.main.worldView, this.lightView.view, () => this.lightView.sight);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
 
     const seen = new Set<number>();

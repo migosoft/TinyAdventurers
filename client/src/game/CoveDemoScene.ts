@@ -286,7 +286,7 @@ export class CoveDemoScene extends Phaser.Scene {
     const vy = this.shade.on ? this.knight.y - 6 : this.centre.y;
     this.view.update(cam.worldView, vx, vy, [], this.t, 0, CONST.FOV_RADIUS + 5);
     this.mask.update(cam.worldView, this.view.view);
-    this.shade.update(cam.worldView, this.view.view, this.view.sight);
+    this.shade.update(cam.worldView, this.view.view, () => this.view.sight);
     this.sun.update(dt, cam.worldView, this.t);
     this.mood.update(dt, cam.worldView, [], [], []);
     this.pixies.update(this.t, Math.floor(this.t * 60));

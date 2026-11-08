@@ -227,7 +227,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.view.update(cam.worldView, this.knight.x, this.knight.y - 6, [], this.t, 0, CONST.FOV_RADIUS + 5);
     this.mask.update(cam.worldView, this.view.view);
     this.shade.on = on.shade && this.woodland.settled; // the shade waits for the trunks
-    this.shade.update(cam.worldView, this.view.view, this.view.sight);
+    this.shade.update(cam.worldView, this.view.view, () => this.view.sight);
     this.woodland.update(this.t, lookOf(this.knight), cam.worldView, this.view.seenLit);
     if (this.info) {
       const c = this.woodland.clouds.look;
