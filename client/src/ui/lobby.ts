@@ -24,11 +24,12 @@ const BOSS_FIG: Record<BossId, [string, string, number]> = {
   Dragon: ['dragon', '', 2],
 };
 
-const LEVELS: LevelId[] = ['Dungeon', 'Woodland'];
 const LEVEL_BLURB: Record<LevelId, string> = {
   Dungeon: 'Rooms and corridors in the dark, ending in a boss hall.',
   Woodland: 'A daylit forest road under the trees. No boss: walk out the far side.',
 };
+/** Every level the picker offers: LEVEL_BLURB is a Record, so a new LevelId does not compile until it is listed. */
+const LEVELS = Object.keys(LEVEL_BLURB) as LevelId[];
 type Room = { run_id: number; name: string; host: number; players: RoomPlayer[]; level: LevelId; boss: BossId | null };
 
 /** The abilities of `slot` that class `cls` may use (the debug loadout's choices). */
@@ -259,7 +260,7 @@ export class Lobby {
       ${me && this.debug && (isHost || !me.ready) ? this.debugLoadoutRow(room.run_id, me.class) : ''}
       <div class="row actions">
         <button id="leave" class="danger">Leave</button>
-        ${isHost ? `<button id="start" class="primary">${room.level === 'Dungeon' ? 'Enter the dungeon' : 'Enter the woodland'}</button>` : `<button id="ready" class="primary">${me?.ready ? 'Not ready' : 'Ready!'}</button>`}
+        ${isHost ? `<button id="start" class="primary">Enter the ${LEVEL_TEXT[room.level].name.toLowerCase()}</button>` : `<button id="ready" class="primary">${me?.ready ? 'Not ready' : 'Ready!'}</button>`}
       </div>
       <div class="error"></div>`;
     for (const p of room.players) {
