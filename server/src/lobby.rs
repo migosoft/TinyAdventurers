@@ -80,7 +80,7 @@ pub struct Room {
     pub members: Vec<u32>,
     /// End boss chosen by the host, `None` = random.
     pub boss: Option<BossId>,
-    /// Always the dungeon until there is a level picker.
+    /// The level the host picked (the dungeon until then); fixed once the run starts.
     pub level: LevelId,
     pub run_tx: Option<UnboundedSender<RunCmd>>,
     /// Fixed at creation from the creator's connection: debug and normal players never share a room.
@@ -556,7 +556,7 @@ impl Lobby {
         }
         let boss = room.boss;
         let Some(run) = self.new_run(rid, rand::random()) else { return };
-        tracing::info!("run {rid} started: {} player(s), {:?} boss {:?}{}", run.players.len(), run.level.id(), run.level.boss_id(), if boss.is_some() { " (chosen)" } else { "" });
+        tracing::info!("run {rid} started: {} player(s), {:?} boss {:?}{}", run.players.len(), run.level.id(), run.level.boss_id(), if boss.is_some() && run.level.id() == LevelId::Dungeon { " (chosen)" } else { "" });
         let (tx, rx) = unbounded_channel();
         self.rooms.get_mut(&rid).unwrap().run_tx = Some(tx);
         let lobby = self.me.clone().expect("lobby handle");
