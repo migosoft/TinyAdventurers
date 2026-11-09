@@ -12,7 +12,8 @@ use crate::auth::{self, AdminLogin};
 use crate::db;
 use crate::stats::{self, AdminAction, AdminStats, PlayerDetail, PlayerPage};
 use crate::telemetry;
-use axum::extract::{ConnectInfo, FromRequestParts, Path, Query, State};
+use crate::client_ip::ClientIp;
+use axum::extract::{FromRequestParts, Path, Query, State};
 use axum::http::request::Parts;
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -20,7 +21,6 @@ use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use ts_rs::TS;
@@ -164,9 +164,9 @@ pub fn routes() -> Router<AppState> {
         .layer(axum::middleware::from_fn(api::require_json))
 }
 
-async fn login(State(state): State<AppState>, ConnectInfo(addr): ConnectInfo<SocketAddr>, Json(c): Json<Credentials>) -> ApiResult<Response> {
+async fn login(State(state): State<AppState>, ClientIp(ip): ClientIp, Json(c): Json<Credentials>) -> ApiResult<Response> {
     let Some(admin) = state.admin.login.as_ref() else { return Err(not_found()) };
-    let ip_key = format!("admin-login:{}", addr.ip());
+    let ip_key = format!("admin-login:{ip}");
     {
         let mut l = state.auth.limiter.lock().unwrap();
         if l.blocked(&ip_key, LOGIN_FAILS_PER_IP, LOGIN_WINDOW) || l.blocked("admin-login", LOGIN_FAILS_TOTAL, LOGIN_WINDOW) {

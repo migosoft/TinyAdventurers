@@ -6,6 +6,7 @@
 //! A session ends after `PLAYER_SESSION_MINUTES` without activity: every
 //! request that checks it moves its `expires_at` forward.
 
+use crate::client_ip::TrustedProxies;
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -39,6 +40,8 @@ pub struct Auth {
     pub limiter: Mutex<Limiter>,
     /// A player session ends after this long without activity.
     pub session_idle: Duration,
+    /// Proxies whose `X-Forwarded-For` names the client for the limiters.
+    pub trusted_proxies: TrustedProxies,
 }
 
 /// A duration setting in whole minutes from 1 to `max`; unset or empty = `default`.
@@ -80,11 +83,16 @@ impl Auth {
     /// `secret` must be long and random (see `.env.example`).
     pub fn new(secret: &[u8], secure_cookie: bool) -> Auth {
         assert!(secret.len() >= 32, "SESSION_SECRET must be at least 32 characters");
-        Auth { secret: secret.to_vec(), secure_cookie, limiter: Mutex::new(Limiter::default()), session_idle: Duration::from_secs(DEFAULT_SESSION_IDLE_MINUTES * 60) }
+        Auth { secret: secret.to_vec(), secure_cookie, limiter: Mutex::new(Limiter::default()), session_idle: Duration::from_secs(DEFAULT_SESSION_IDLE_MINUTES * 60), trusted_proxies: TrustedProxies::default() }
     }
 
     pub fn with_session_idle(mut self, idle: Duration) -> Auth {
         self.session_idle = idle;
+        self
+    }
+
+    pub fn with_trusted_proxies(mut self, trusted: TrustedProxies) -> Auth {
+        self.trusted_proxies = trusted;
         self
     }
 

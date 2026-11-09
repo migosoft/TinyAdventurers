@@ -2,18 +2,18 @@
 //! WebSocket; it is opened after login and carries the same session cookie.
 
 use crate::auth::{self, Auth};
+use crate::client_ip::ClientIp;
 use crate::db::{self, Db, DbError};
 use crate::lobby::SharedLobby;
 use crate::protocol::{CharacterInfo, ClassId};
 use crate::telemetry;
-use axum::extract::{ConnectInfo, FromRequestParts, OptionalFromRequestParts, Path, State};
+use axum::extract::{FromRequestParts, OptionalFromRequestParts, Path, State};
 use axum::http::request::Parts;
 use axum::http::{header, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use ts_rs::TS;
@@ -170,11 +170,11 @@ async fn me_of(state: &AppState, account: i32, name: String) -> ApiResult<Me> {
     Ok(Me { name, characters, max_characters: db::MAX_CHARACTERS as u32 })
 }
 
-async fn register(State(state): State<AppState>, ConnectInfo(addr): ConnectInfo<SocketAddr>, Json(c): Json<Credentials>) -> ApiResult<Response> {
+async fn register(State(state): State<AppState>, ClientIp(ip): ClientIp, Json(c): Json<Credentials>) -> ApiResult<Response> {
     let name = c.name.trim().to_string();
     auth::check_name(&name).map_err(|e| fail(StatusCode::BAD_REQUEST, e))?;
     auth::check_password(&c.password).map_err(|e| fail(StatusCode::BAD_REQUEST, e))?;
-    let ip_key = format!("reg:{}", addr.ip());
+    let ip_key = format!("reg:{ip}");
     if state.auth.limiter.lock().unwrap().blocked(&ip_key, REGISTRATIONS_PER_IP, REGISTER_WINDOW) {
         return Err(fail(StatusCode::TOO_MANY_REQUESTS, "Too many new accounts from here. Try again later."));
     }
@@ -214,9 +214,9 @@ async fn check_login(state: &AppState, ip: &str, name: &str, password: String) -
     }
 }
 
-async fn login(State(state): State<AppState>, ConnectInfo(addr): ConnectInfo<SocketAddr>, Json(c): Json<Credentials>) -> ApiResult<Response> {
+async fn login(State(state): State<AppState>, ClientIp(ip): ClientIp, Json(c): Json<Credentials>) -> ApiResult<Response> {
     let name = c.name.trim();
-    let checked = check_login(&state, &addr.ip().to_string(), name, c.password).await;
+    let checked = check_login(&state, &ip.to_string(), name, c.password).await;
     let m = telemetry::metrics();
     let Some(account) = checked.inspect_err(|e| if e.0 == StatusCode::TOO_MANY_REQUESTS { m.login("throttled") })? else {
         m.login("fail");
@@ -234,9 +234,9 @@ async fn logout(State(state): State<AppState>, session: Option<Session>) -> ApiR
     Ok(([(header::SET_COOKIE, state.auth.clear_cookie())], StatusCode::NO_CONTENT).into_response())
 }
 
-async fn delete_account(State(state): State<AppState>, ConnectInfo(addr): ConnectInfo<SocketAddr>, session: Session, Json(c): Json<PasswordConfirm>) -> ApiResult<Response> {
+async fn delete_account(State(state): State<AppState>, ClientIp(ip): ClientIp, session: Session, Json(c): Json<PasswordConfirm>) -> ApiResult<Response> {
     let account = db::account(&state.db, session.account).await?.ok_or_else(|| fail(StatusCode::UNAUTHORIZED, "Please log in."))?;
-    if check_login(&state, &addr.ip().to_string(), &account.name, c.password).await?.is_none() {
+    if check_login(&state, &ip.to_string(), &account.name, c.password).await?.is_none() {
         return Err(fail(StatusCode::FORBIDDEN, "Wrong password."));
     }
     state.lobby.lock().unwrap().kick_account(account.id, "This account was deleted.");

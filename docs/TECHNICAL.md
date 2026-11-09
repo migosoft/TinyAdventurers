@@ -33,6 +33,7 @@ server/                              Rust crate `tiny-adventurers-server`
   src/api.rs                         JSON API: register, login, logout, delete account, me, create/delete character
   src/admin.rs                       admin API: env-configured login, stats, players, password, deletions, audit log
   src/auth.rs                        signed session tokens, Argon2id passwords, name/password rules, login rate limiter, admin login
+  src/client_ip.rs                   the client's address for the limiters: TRUSTED_PROXIES, X-Forwarded-For, the ClientIp extractor
   src/db.rs                          every query of the game (sqlx, PostgreSQL), incl. recording runs and activity
   src/stats.rs                       read-only admin queries: statistics, player list and details, audit log
   src/telemetry.rs                   console log + optional OpenTelemetry export (traces, logs, metrics)
@@ -220,6 +221,7 @@ Environment variables (server):
 | `ADMIN_USER`, `ADMIN_PASSWORD` | The admin area's login (§11b). Without both, or with a password under 12 characters, the area answers 404. |
 | `ADMIN_SESSION_MINUTES` | Admin idle timeout in minutes (default 10, 1–1440). Each admin action restarts it. |
 | `PLAYER_SESSION_MINUTES` | Player idle timeout in minutes (default 10080 = 7 days, at most a year). Any activity restarts it (§11a). |
+| `TRUSTED_PROXIES` | Comma-separated IP addresses or CIDR ranges of reverse proxies (e.g. `172.16.0.0/12` for Caddy on a Docker network). Requests from them take the client address for the login limiters from `X-Forwarded-For` (§11a). Empty (the default): the header is ignored. An invalid entry stops the server at start. Only list addresses that nobody but the proxy can connect from. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Turns on OpenTelemetry export (§11c), e.g. `http://otel-collector:4318`. The other standard `OTEL_*` variables work too. |
 
 The data lives on the `ta-db` volume. `docker compose down -v` deletes all accounts.
@@ -936,6 +938,7 @@ The database, statistics, telemetry and the admin page take the level as text (`
   - 5 failed logins per account name in 30 s, and 20 per IP in 5 min, give a 429.
   - At most 10 registrations per IP per hour.
   - Deleting an account rechecks the password through the same limiter.
+  - **The address** (`client_ip.rs`, extractor `ClientIp`, used by register, login, delete account and the admin login): the TCP peer, unless the peer is in `TRUSTED_PROXIES`. Then `X-Forwarded-For` is read from the right (several header lines count as one list) and the first entry that is not itself a trusted proxy is the client; entries further left were written by the client and are never used. A missing or unparsable entry keeps the peer address (the shared bucket). IPv4-mapped IPv6 addresses count as IPv4. Caddy's `reverse_proxy` appends the client to the header by default, so the live server needs only the setting.
 
 **Sessions.**
 - Login creates a random 32-byte session id. The browser gets the cookie `ta_session` (HttpOnly, SameSite=Strict, Path=/, plus `Secure` if `COOKIE_SECURE`) holding `base64url(id ‖ expiry) . base64url(HMAC-SHA256(SESSION_SECRET, id ‖ expiry))`.
@@ -1412,6 +1415,7 @@ The log reads these; they stay useful without it. `Damage.why` (`Why`, `What`, `
 - the sheet folding in the tree, items and keystones; `check_buy`, `respec` and the Progress v2 reader
 - progress document: buying limits, saturating banking, `{}`, partial, unknown-field and broken documents, JSON round trip
 - auth: token round trip, tampered, expired and wrong-secret tokens rejected; cookie parsing; Argon2id hash and verify; name and password rules; the limiter window
+- client_ip: `TRUSTED_PROXIES` parsing (addresses, v4/v6 ranges, junk rejected); an untrusted peer's header is ignored; the rightmost entry wins; chained trusted proxies are skipped; a missing or garbage header keeps the peer; IPv4-mapped IPv6
 - admin login: disabled without both variables or with a short password; name and password both checked; the `ta_admin` cookie is scoped to `/api/admin`, has no Max-Age and is separate from `ta_session` (a player cookie is no admin cookie); the idle timeout restarts with each action but not with background refreshes; `ADMIN_SESSION_MINUTES` parsing
 - WebSocket origin check; only Vite's hashed bundles are cached for good
 - telemetry: without an endpoint nothing is exported; a finished run is counted with level, boss, outcome and debug, and debug runs stay out of the gameplay counters (in-memory exporter)
@@ -1502,7 +1506,7 @@ The log reads these; they stay useful without it. `Damage.why` (`Why`, `What`, `
 - Boss fights are covered by unit tests and were played live once against all three bosses; their numbers are not balanced yet.
 - No password recovery, by design: there is no e-mail address to send anything to.
 - Passwords travel in the login request. In production the game must run behind a TLS reverse proxy (with `COOKIE_SECURE=1`).
-- Behind a reverse proxy every request comes from the proxy's IP, so the per-IP limits apply to everyone together. `X-Forwarded-For` is not read yet.
+- Behind a reverse proxy the per-IP limits need `TRUSTED_PROXIES` (§11a); without it every request comes from the proxy's IP and the limits apply to everyone together.
 - The login limiter and the one-connection-per-account rule live in the memory of one server process.
 - Admin sessions also live in memory: a restart logs the admin out. They end after `ADMIN_SESSION_MINUTES` without an admin action. There is one admin login, shared by whoever knows it; the audit log names it, not a person.
 - Statistics count UTC days. Their history starts with the first deployment of the admin area.

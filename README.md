@@ -43,6 +43,7 @@ Accounts and characters are stored in PostgreSQL on the `ta-db` Docker volume, s
 
 **Public servers:**
 - Run the game behind an HTTPS reverse proxy and set `COOKIE_SECURE=1` in `.env`, because passwords are sent at login.
+- Set `TRUSTED_PROXIES` in `.env` to the proxy's address or network (e.g. `172.16.0.0/12` for a proxy in the same Docker Compose project), so the login limits count each player's address rather than the proxy's.
 - Keep `.env` secret. Changing `SESSION_SECRET` logs everyone out.
 
 ## Controls

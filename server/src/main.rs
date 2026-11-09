@@ -1,6 +1,7 @@
 mod admin;
 mod api;
 mod auth;
+mod client_ip;
 mod collision;
 mod db;
 mod defs;
@@ -46,12 +47,13 @@ async fn main() {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set (see .env.example)");
     let secret = std::env::var("SESSION_SECRET").expect("SESSION_SECRET must be set (see .env.example)");
     let secure_cookie = std::env::var("COOKIE_SECURE").map_or(false, |v| matches!(v.as_str(), "1" | "true" | "yes"));
+    let trusted_proxies = client_ip::TrustedProxies::from_env();
 
     let db = db::connect(&database_url).await;
     let state = AppState {
         lobby: lobby::new_shared(Some(db.clone())),
         db,
-        auth: Arc::new(auth::Auth::new(secret.as_bytes(), secure_cookie).with_session_idle(auth::session_idle_from_env())),
+        auth: Arc::new(auth::Auth::new(secret.as_bytes(), secure_cookie).with_session_idle(auth::session_idle_from_env()).with_trusted_proxies(trusted_proxies)),
         admin: Arc::new(admin::AdminState::from_env()),
     };
     telemetry::observe_lobby(state.lobby.clone());
