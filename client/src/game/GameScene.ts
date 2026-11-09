@@ -393,24 +393,45 @@ export class GameScene extends Phaser.Scene {
     this.syncForceField(false);
     // Water, lava and chasms: animated surfaces over the floor.
     this.terrain = new TerrainLayer(this, this.map, this.fx);
-    // Faint printed grid lines on the floor, like a game board.
-    const grid = this.add.graphics().setDepth(DEPTH.map);
+    // Faint printed grid lines on the floor, like a game board: drawn into the map texture once
+    // (a live Graphics with one stroke per floor tile cost ~9 ms of render per frame, #289).
+    const grid = this.gridLines(0, 0, this.map.w - 1, this.map.h - 1);
+    this.mapRt.draw(grid);
+    grid.destroy();
+  }
+
+  /** The grid lines of the floor tiles in [x0, x1] × [y0, y1], in world coordinates (not on the display list).
+   *  Each tile's 1 px outline also covers the first pixel column and row of its right and lower neighbours. */
+  private gridLines(x0: number, y0: number, x1: number, y1: number): Phaser.GameObjects.Graphics {
+    const grid = this.make.graphics({}, false);
     grid.lineStyle(1, 0x000000, 0.12);
-    for (let y = 0; y < this.map.h; y++)
-      for (let x = 0; x < this.map.w; x++) {
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
         const t = this.map.get(x, y);
         if (t === TILE_ID.Wall || t === TILE_ID.Void || isTerrain(t) || (this.info.woodland && GROUND_TILES.has(t))) continue; // the entrance tiles are floor too
         grid.strokeRect(x * TILE + 0.5, y * TILE + 0.5, TILE, TILE);
       }
+    return grid;
   }
 
-  /** Redraw a changed tile and its neighbours (corner pieces depend on them). */
+  /** Redraw a changed tile and its neighbours (corner pieces depend on them), grid lines included. */
   private redrawTile(x: number, y: number): void {
     for (let ty = y - 1; ty <= y + 1; ty++)
       for (let tx = x - 1; tx <= x + 1; tx++) {
         this.mapRt.fill(0x25131a, 1, tx * TILE, ty * TILE, TILE, TILE);
         this.drawTile(tx, ty, false);
       }
+    // The grid of the 3×3 area: the outlines of its tiles and the edges that spill in from the tiles above and to
+    // the left. They are drawn into a texture the size of the area, which clips them to it, so the lines just
+    // outside the area are not drawn twice.
+    const ox = (x - 1) * TILE;
+    const oy = (y - 1) * TILE;
+    const grid = this.gridLines(x - 2, y - 2, x + 1, y + 1);
+    const clip = this.make.renderTexture({ width: 3 * TILE, height: 3 * TILE }, false).setOrigin(0, 0);
+    clip.draw(grid, -ox, -oy);
+    this.mapRt.draw(clip, ox, oy);
+    clip.destroy();
+    grid.destroy();
   }
 
   /** The force field over the sealed boss hall entrance (also for players who join or spectate later). */
