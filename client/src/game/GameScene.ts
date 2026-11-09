@@ -999,6 +999,7 @@ export class GameScene extends Phaser.Scene {
       systems: timer.on ? SYSTEMS.map((s) => [s, timer.systems[s]] as const) : [],
       objects: this.children.length,
       drawCalls: timer.drawCalls,
+      canvas: { w: this.scale.width, h: this.scale.height, cssZoom: this.scale.zoom },
       rtt: this.net.rtt,
       jitter: this.interp.jitter * 1000,
       interp: this.interp.delay * 1000,

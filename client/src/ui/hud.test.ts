@@ -286,9 +286,11 @@ describe('Hud.setAbilities', () => {
 });
 
 describe('statsText', () => {
-  it('lists the whole frame, render and update, the systems indented, then objects, draw calls and the network', () => {
-    const t = statsText({ fps: 59.6, wholeMs: 12.345, renderMs: 9.5, frameMs: 2.1, systems: [['light', 0.42], ['woodland', 1]], objects: 812, drawCalls: 37, rtt: 20, jitter: 1.25, interp: 80, snapBytes: 127, correction: 0, srvMs: 0.13, cd1: 0, cd2: 0, ents: 9, darkvision: 0.5, wolf: null });
-    expect(t.split('\n').slice(0, 8)).toEqual([
+  const stats = { fps: 59.6, wholeMs: 12.345, renderMs: 9.5, frameMs: 2.1, systems: [['light', 0.42], ['woodland', 1]] as const, objects: 812, drawCalls: 37, canvas: { w: 2560, h: 1440, cssZoom: 1 }, rtt: 20, jitter: 1.25, interp: 80, snapBytes: 127, correction: 0, srvMs: 0.13, cd1: 0, cd2: 0, ents: 9, darkvision: 0.5, wolf: null };
+
+  it('lists the whole frame, render and update, the systems indented, then objects, draw calls, the canvas and the network', () => {
+    const t = statsText(stats);
+    expect(t.split('\n').slice(0, 9)).toEqual([
       'FPS        60',
       'frame      12.35 ms',
       'render     9.50 ms',
@@ -297,7 +299,12 @@ describe('statsText', () => {
       '  woodland 1.00',
       'objects    812',
       'draw calls 37',
+      'canvas     2560x1440',
     ]);
     expect(t.endsWith('darkvision 50%')).toBe(true);
+  });
+
+  it('shows the CSS upscale of a world-resolution canvas', () => {
+    expect(statsText({ ...stats, canvas: { w: 640, h: 360, cssZoom: 4 } }).split('\n')[8]).toBe('canvas     640x360 x4 css');
   });
 });

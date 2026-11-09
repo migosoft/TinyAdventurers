@@ -32,6 +32,8 @@ export interface FrameStats {
   objects: number;
   /** WebGL draw calls of the last frame. */
   drawCalls: number;
+  /** The canvas's pixel size and its CSS upscale (above 1 only with `?res=world`, #295). */
+  canvas: { w: number; h: number; cssZoom: number };
   rtt: number;
   jitter: number;
   interp: number;
@@ -58,6 +60,7 @@ export function statsText(f: FrameStats): string {
     f.systems.map(([name, v]) => `  ${name.padEnd(9)}${v.toFixed(2)}\n`).join('') +
     `objects    ${f.objects}\n` +
     `draw calls ${f.drawCalls}\n` +
+    `canvas     ${f.canvas.w}x${f.canvas.h}${f.canvas.cssZoom === 1 ? '' : ` x${f.canvas.cssZoom} css`}\n` +
     `ping       ${f.rtt.toFixed(0)} ms\n` +
     `jitter     ${f.jitter.toFixed(1)} ms\n` +
     `interp     ${f.interp.toFixed(0)} ms\n` +

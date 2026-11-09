@@ -18,6 +18,7 @@ import { WoodlandDemoScene } from './game/WoodlandDemoScene';
 import { AnimalsDemoScene } from './game/AnimalsDemoScene';
 import { DARKVISION_FX, DarkvisionFX } from './game/darkvisionfx';
 import { UNSEEN_FX, UnseenFX } from './game/unseenfx';
+import { requestedResolution, viewLayout, type Resolution, type ViewLayout } from './game/viewLayout';
 import { GameScene, type GameInit } from './game/GameScene';
 import type { RunStartInfo } from './generated/RunStartInfo';
 import { api, ApiFail } from './api';
@@ -65,15 +66,17 @@ class BootScene extends Phaser.Scene {
   }
 }
 
-/** Integer zoom so pixels stay crisp; figures stay tiny on large screens. */
-function viewSize(): { w: number; h: number; zoom: number } {
-  const zoom = Math.max(1, Math.round(Math.min(window.innerWidth / 600, window.innerHeight / 340)));
-  return { w: Math.ceil(window.innerWidth / zoom), h: Math.ceil(window.innerHeight / zoom), zoom };
+/** Screen resolution unless a debug account asked for `?res=world` (set on Welcome, #295). */
+let resolution: Resolution = 'screen';
+
+function viewSize(): ViewLayout {
+  return viewLayout(window.innerWidth, window.innerHeight, resolution);
 }
 
 /**
  * The canvas is at screen resolution (so Inter text is crisp) and the integer zoom lives on each scene's
- * main camera, which shows the same world area as a world-resolution canvas scaled up by CSS would.
+ * main camera, which shows the same world area as a world-resolution canvas scaled up by CSS would
+ * (`?res=world` on a debug account switches to exactly that, `viewLayout`).
  * Every scene except the game keeps the world's (0, 0) at the top left (origin 0, 0), like a plain canvas;
  * the game centres its camera. LightsDemoScene fits its own zoom.
  */
@@ -83,7 +86,13 @@ function applyView(sc: Phaser.Scene): void {
   const cam = sc.cameras?.main;
   if (!cam) return;
   if (key !== 'game') cam.setOrigin(0, 0);
-  cam.setZoom(viewSize().zoom);
+  cam.setZoom(viewSize().camZoom);
+}
+
+/** The game's config `scale` for the current layout. */
+function scaleConfig(): Phaser.Types.Core.ScaleConfig {
+  const v = viewSize();
+  return { mode: Phaser.Scale.NONE, width: v.canvasW, height: v.canvasH, zoom: v.cssZoom };
 }
 
 /** Applies the view to every scene when it is created (before its first frame); the returned function re-applies it to the running scenes (resize). */
@@ -100,13 +109,12 @@ const DEMOS: Record<string, string> = { mimic: 'mimic-demo', daemons: 'daemon-de
 async function gallery(): Promise<void> {
   const q = new URLSearchParams(location.search);
   const start = Object.entries(DEMOS).find(([k]) => q.has(k))?.[1] ?? 'gallery';
-  const v = viewSize();
   await loadFonts();
   const game = new Phaser.Game({
     type: Phaser.WEBGL,
     parent: 'game',
     pixelArt: true,
-    scale: { mode: Phaser.Scale.NONE, width: v.w * v.zoom, height: v.h * v.zoom, zoom: 1 },
+    scale: scaleConfig(),
     scene: [BootScene, GalleryScene, MimicDemoScene, DaemonDemoScene, WaterDemoScene, ChasmDemoScene, LavaDemoScene, KnockbackDemoScene, OgreDemoScene, DragonDemoScene, LichDemoScene, DemonDemoScene, LightsDemoScene, MoodDemoScene, SunlightDemoScene, CoveDemoScene, WoodlandDemoScene, SpectreDemoScene, AnimalsDemoScene, CharmDemoScene],
   });
   watchViews(game);
@@ -198,7 +206,6 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
     hub.error(msg);
   };
 
-  const v = viewSize();
   await loadFonts();
   const game = new Phaser.Game({
     type: Phaser.WEBGL,
@@ -206,16 +213,19 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
     pixelArt: true,
     antialias: false,
     backgroundColor: '#000000',
-    scale: { mode: Phaser.Scale.NONE, width: v.w * v.zoom, height: v.h * v.zoom, zoom: 1 },
+    scale: scaleConfig(),
     scene: [BootScene, GameScene],
     fps: { smoothStep: false },
   });
   const refreshViews = watchViews(game);
-  window.addEventListener('resize', () => {
+  /** Re-lays out the canvas (size and CSS zoom) and every running scene's camera. */
+  const relayout = () => {
     const s = viewSize();
-    game.scale.resize(s.w * s.zoom, s.h * s.zoom);
+    game.scale.setZoom(s.cssZoom);
+    game.scale.resize(s.canvasW, s.canvasH);
     refreshViews();
-  });
+  };
+  window.addEventListener('resize', relayout);
   const ready = new Promise<void>((r) => game.events.once('assets-ready', r));
   const gameEl = document.getElementById('game')!;
 
@@ -242,6 +252,10 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
         lobby.myId = m.id;
         lobby.debug = m.debug;
         hub.setDebug(m.debug);
+        if (requestedResolution(location.search, m.debug) !== resolution) {
+          resolution = requestedResolution(location.search, m.debug);
+          relayout();
+        }
         break;
       case 'Lobby':
         lobby.setRuns(m.runs);
