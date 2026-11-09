@@ -11,7 +11,9 @@
 // Haze mode (#278, daylight maps): no Shader. The canvas holds the unseen strength (grey = 1 - strength):
 // beyond the hard view `outside`, 0 in the full view, and behind a soft blocker (inside the hard view, outside
 // the full one) a wedge that grows from 0 at the blocker to `soft` over `ramp` px and, past the edge of sight,
-// follows the fog down to `outside`; UnseenFX (unseenfx.ts) reads it and hazes the world.
+// follows the fog down to `outside`; UnseenFX (unseenfx.ts) reads it and hazes the world. The sight, its walls
+// and the feather are rasterised and blurred in memory and only written to the canvas (#290: no getImageData, which
+// waits for the GPU); the wedge and the seen plants are then drawn on the canvas.
 import Phaser from 'phaser';
 import { TILE, type TileMap } from '../sim/map';
 import type { View } from '../sim/view';
@@ -79,7 +81,7 @@ export function levels(outside: number, soft: number): { outside: number; soft: 
 export type MaskStep =
   | { step: 'sight' } // the hard view's polygon in white over the outside grey
   | { step: 'walls' } // the visible hard walls, whole, in white
-  | { step: 'feather' } // blur: the soft edge of sight
+  | { step: 'feather' } // blur: the soft edge of sight (haze: the in-memory field is blurred and written to the canvas)
   | { step: 'wedge'; grey: number } // behind the full view, up to the soft grey over the ramp, never lightening; crisp sides, runs on into the fog
   | { step: 'seen' }; // the owner's seen-plant silhouettes, in white
 
@@ -91,6 +93,68 @@ export function maskSteps(haze: boolean, lv: { outside: number; soft: number }):
   return haze
     ? [{ step: 'sight' }, { step: 'walls' }, { step: 'feather' }, { step: 'wedge', grey: lv.soft }, { step: 'seen' }]
     : [{ step: 'sight' }, { step: 'walls' }];
+}
+
+/** Sub-scanlines per canvas row of `fillPolygon`: its vertical antialiasing (horizontally the coverage is exact). */
+const SUB = 4;
+const byValue = (a: number, b: number) => a - b;
+
+/** Work arrays of `fillPolygon`, kept by the caller so a redraw allocates nothing once they have grown. */
+export interface RasterScratch { xs: number[][]; row: Float32Array }
+
+/** Adds `wt` × the covered part of each pixel of `row` between x positions `xa` and `xb`. */
+function addSpan(row: Float32Array, w: number, xa: number, xb: number, wt: number): void {
+  xa = Math.max(0, xa);
+  xb = Math.min(w, xb);
+  if (xb <= xa) return;
+  const ia = Math.floor(xa), ib = Math.floor(xb);
+  if (ia === ib) {
+    row[ia] += (xb - xa) * wt;
+    return;
+  }
+  row[ia] += (ia + 1 - xa) * wt;
+  for (let i = ia + 1; i < ib; i++) row[i] += wt;
+  if (ib < w) row[ib] += (xb - ib) * wt;
+}
+
+/**
+ * Paints a polygon (flat world x, y pairs; even-odd) in white into the grey `field` (`w`×`h`, 0..255) the way a
+ * canvas fill would: each pixel moves toward 255 by the share of it the polygon covers. A world point (x, y) lands
+ * on canvas px ((x - tx) · s, (y - ty) · s). Scanline fill with `SUB` sub-scanlines per row (#290: the haze mask is
+ * built in memory, so it is never read back from the canvas).
+ */
+export function fillPolygon(field: Float32Array, w: number, h: number, pts: ArrayLike<number>, tx: number, ty: number, s: number, scratch: RasterScratch): void {
+  const lines = h * SUB;
+  const xs = scratch.xs;
+  while (xs.length < lines) xs.push([]);
+  for (let l = 0; l < lines; l++) xs[l].length = 0;
+  if (scratch.row.length < w) scratch.row = new Float32Array(w);
+  const row = scratch.row;
+  const n = pts.length;
+  for (let i = 0; i < n; i += 2) {
+    const j = (i + 2) % n;
+    const x0 = (pts[i] - tx) * s, y0 = (pts[i + 1] - ty) * s;
+    const x1 = (pts[j] - tx) * s, y1 = (pts[j + 1] - ty) * s;
+    if (y0 === y1) continue;
+    // the sub-scanlines whose centre (l + 0.5) / SUB lies in [min y, max y): each crossing counted once at a shared vertex
+    const lo = Math.max(0, Math.ceil(Math.min(y0, y1) * SUB - 0.5));
+    const hi = Math.min(lines - 1, Math.ceil(Math.max(y0, y1) * SUB - 0.5) - 1);
+    const k = (x1 - x0) / (y1 - y0);
+    for (let l = lo; l <= hi; l++) xs[l].push(x0 + ((l + 0.5) / SUB - y0) * k);
+  }
+  for (let y = 0; y < h; y++) {
+    row.fill(0, 0, w);
+    let any = false;
+    for (let k = 0; k < SUB; k++) {
+      const c = xs[y * SUB + k];
+      if (c.length < 2) continue;
+      c.sort(byValue);
+      for (let i = 0; i + 1 < c.length; i += 2) addSpan(row, w, c[i], c[i + 1], 1 / SUB);
+      any = true;
+    }
+    if (!any) continue;
+    for (let x = 0, o = y * w; x < w; x++, o++) if (row[x] > 0) field[o] += (255 - field[o]) * Math.min(1, row[x]);
+  }
 }
 
 /** One running-sum box pass (window 2r+1, edge pixels repeated) over `n` values at `stride` apart, `src` into `dst`. */
@@ -106,29 +170,31 @@ function boxLine(src: Float32Array, dst: Float32Array, start: number, stride: nu
   }
 }
 
-/** Float work buffers of `blurGrey`, kept by the caller so a redraw allocates nothing. */
-export interface BlurScratch { a: Float32Array; b: Float32Array }
-
 /**
- * Blurs the canvas's grey in place: three separable box passes (close to a gaussian) on the red channel of
- * RGBA `data` (`w`×`h`), copied into green and blue; alpha stays as it is. `radius` is in canvas px; 0 changes nothing.
+ * Blurs the grey `field` (`w`×`h`) in place: three separable box passes, close to a gaussian. `tmp` holds at least
+ * `w`×`h` values. `radius` is in canvas px; 0 changes nothing.
  */
-export function blurGrey(data: Uint8ClampedArray, w: number, h: number, radius: number, scratch?: BlurScratch): void {
+export function blurField(field: Float32Array, w: number, h: number, radius: number, tmp: Float32Array): void {
   const r = Math.floor(radius);
   if (r <= 0) return;
-  const a = scratch && scratch.a.length >= w * h ? scratch.a : new Float32Array(w * h);
-  const b = scratch && scratch.b.length >= w * h ? scratch.b : new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) a[i] = data[i * 4];
   for (let pass = 0; pass < 3; pass++) {
-    for (let y = 0; y < h; y++) boxLine(a, b, y * w, 1, w, r);
-    for (let x = 0; x < w; x++) boxLine(b, a, x, w, h, r);
+    for (let y = 0; y < h; y++) boxLine(field, tmp, y * w, 1, w, r);
+    for (let x = 0; x < w; x++) boxLine(tmp, field, x, w, h, r);
   }
-  for (let i = 0; i < w * h; i++) data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = Math.round(a[i]);
+}
+
+/** Writes the grey `field` into opaque RGBA `data` (red = green = blue = the rounded grey). */
+export function fieldToRgba(field: Float32Array, data: Uint8ClampedArray, n: number): void {
+  for (let i = 0, o = 0; i < n; i++, o += 4) {
+    const g = Math.round(field[i]);
+    data[o] = data[o + 1] = data[o + 2] = g;
+    data[o + 3] = 255;
+  }
 }
 
 /**
  * Canvas pixels per tile: 8 is enough for a straight, antialiased edge. Haze mode uses 4 (#280): its redraw is CPU work
- * (getImageData, the blur, putImageData, the upload) on every frame the hero moves, and its edges are blurred anyway.
+ * (the raster, the blur, putImageData, the upload) on every frame the hero moves, and its edges are blurred anyway.
  */
 export function canvasRes(haze: boolean): number {
   return haze ? 4 : 8;
@@ -170,8 +236,11 @@ export class VisionMask {
   private clipPts: number[] = [];
   private rimPts: number[] = [];
   private grownPts: number[] = [];
-  /** Haze mode: the blur's float buffers, sized with the canvas. */
-  private scratch?: BlurScratch;
+  /**
+   * Haze mode: the mask's sight, walls and feather are built here in memory and written with putImageData, never read
+   * back from the canvas (#290: getImageData waits for the GPU). Sized with the canvas.
+   */
+  private field?: { grey: Float32Array; tmp: Float32Array; img: ImageData; raster: RasterScratch };
   /**
    * Haze mode: scenery that must never be hazed where the hero sees it (a tree's picture reaches over the
    * hazed ground behind it, and UnseenFX works in ground coordinates). `paint` runs after the blur, so the
@@ -209,13 +278,14 @@ export class VisionMask {
     this.shader = undefined;
     if (this.scene.textures.exists(KEY)) this.scene.textures.remove(KEY);
     if (this.haze) {
-      // the blur reads the canvas back every redraw: a CPU-backed canvas, not a GPU readback each time
+      // A CPU-backed canvas: putImageData is a copy and the plant silhouettes (CPU-backed too) draw into it without a GPU round trip.
       const el = document.createElement('canvas');
-      el.width = cols * this.res;
-      el.height = rows * this.res;
+      const w = cols * this.res, h = rows * this.res;
+      el.width = w;
+      el.height = h;
       el.getContext('2d', { willReadFrequently: true });
       this.canvas = this.scene.textures.addCanvas(KEY, el)!;
-      this.scratch = { a: new Float32Array(cols * this.res * rows * this.res), b: new Float32Array(cols * this.res * rows * this.res) };
+      this.field = { grey: new Float32Array(w * h), tmp: new Float32Array(w * h), img: new ImageData(w, h), raster: { xs: [], row: new Float32Array(w) } };
     } else this.canvas = this.scene.textures.createCanvas(KEY, cols * this.res, rows * this.res)!;
     this.last = '';
     if (this.haze) return;
@@ -250,8 +320,14 @@ export class VisionMask {
     const s = RES / TILE;
     // the shader draws black at 1 - red: grey outside sight gives a dim of `outside`
     const lv = levels(this.outside, this.soft);
-    ctx.fillStyle = `rgb(${lv.outside},${lv.outside},${lv.outside})`;
-    ctx.fillRect(0, 0, this.cols * RES, this.rows * RES);
+    const W = this.cols * RES, H = this.rows * RES;
+    // haze: sight, walls and feather go into the field (written to the canvas by 'feather'), the rest onto the canvas
+    const fld = full ? this.field! : undefined;
+    if (fld) fld.grey.fill(lv.outside, 0, W * H);
+    else {
+      ctx.fillStyle = `rgb(${lv.outside},${lv.outside},${lv.outside})`;
+      ctx.fillRect(0, 0, W, H);
+    }
     const addPoints = (poly: ArrayLike<number>) => {
       ctx.moveTo((poly[0] - ox * TILE) * s, (poly[1] - oy * TILE) * s);
       for (let i = 2; i < poly.length; i += 2) ctx.lineTo((poly[i] - ox * TILE) * s, (poly[i + 1] - oy * TILE) * s);
@@ -264,20 +340,27 @@ export class VisionMask {
     for (const st of maskSteps(!!full, lv)) {
       switch (st.step) {
         case 'sight':
-          ctx.fillStyle = '#fff';
-          ctx.beginPath();
-          addPoints(sight.polygon.points);
-          ctx.fill();
+          if (fld) fillPolygon(fld.grey, W, H, sight.polygon.points, ox * TILE, oy * TILE, s, fld.raster);
+          else {
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            addPoints(sight.polygon.points);
+            ctx.fill();
+          }
           break;
         case 'walls':
-          fillTiles((x, y) => this.map.hardOpaque(x, y) && sight.isVisible(x, y));
+          if (fld) {
+            for (let y = 0; y < this.rows; y++)
+              for (let x = 0; x < this.cols; x++) {
+                if (!this.map.hardOpaque(ox + x, oy + y) || !sight.isVisible(ox + x, oy + y)) continue;
+                for (let r = 0; r < RES; r++) fld.grey.fill(255, (y * RES + r) * W + x * RES, (y * RES + r) * W + (x + 1) * RES);
+              }
+          } else fillTiles((x, y) => this.map.hardOpaque(x, y) && sight.isVisible(x, y));
           break;
         case 'feather':
-          if (this.feather > 0) {
-            const img = ctx.getImageData(0, 0, this.cols * RES, this.rows * RES);
-            blurGrey(img.data, img.width, img.height, Math.max(1, Math.round(this.feather * s)), this.scratch);
-            ctx.putImageData(img, 0, 0);
-          }
+          if (this.feather > 0) blurField(fld!.grey, W, H, Math.max(1, Math.round(this.feather * s)), fld!.tmp);
+          fieldToRgba(fld!.grey, fld!.img.data, W * H);
+          ctx.putImageData(fld!.img, 0, 0);
           break;
         case 'wedge':
           // Clipped to the hard polygon, its rim rays pushed out past the blur's whole transition. Each layer fills what

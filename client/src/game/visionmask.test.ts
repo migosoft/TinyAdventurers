@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 // Phaser needs a browser (window) on import; the helpers tested here do not use it.
 vi.mock('phaser', () => ({ default: { Renderer: { WebGL: { Pipelines: { PostFXPipeline: class {} } } } } }));
 
-import { blurGrey, canvasRes, extendPoints, extendRim, levels, maskSteps, rampLayers } from './visionmask';
+import { blurField, canvasRes, fieldToRgba, fillPolygon, extendPoints, extendRim, levels, maskSteps, rampLayers } from './visionmask';
 
 describe('extendPoints', () => {
   it('moves every point outward along its ray from the centre', () => {
@@ -62,54 +62,88 @@ describe('rampLayers', () => {
   });
 });
 
-/** RGBA data of a w×h image whose grey (alpha 255) comes from `f(x, y)`. */
-const grey = (w: number, h: number, f: (x: number, y: number) => number) => {
-  const d = new Uint8ClampedArray(w * h * 4);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d.set([f(x, y), f(x, y), f(x, y), 255], (y * w + x) * 4);
+/** A w×h grey field whose values come from `f(x, y)`. */
+const field = (w: number, h: number, f: (x: number, y: number) => number) => {
+  const d = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d[y * w + x] = f(x, y);
   return d;
 };
 
-describe('blurGrey', () => {
-  it('keeps a constant image constant', () => {
-    const d = grey(20, 12, () => 77);
-    blurGrey(d, 20, 12, 3);
-    for (let i = 0; i < d.length; i += 4) expect([d[i], d[i + 1], d[i + 2], d[i + 3]]).toEqual([77, 77, 77, 255]);
+describe('blurField', () => {
+  it('keeps a constant field constant', () => {
+    const d = field(20, 12, () => 77);
+    blurField(d, 20, 12, 3, new Float32Array(240));
+    for (const v of d) expect(v).toBeCloseTo(77, 3);
   });
   it('turns a hard step into a monotonic ramp about 3 x radius wide', () => {
     const w = 60, r = 4;
-    const d = grey(w, 3, (x) => (x < 30 ? 0 : 255));
-    blurGrey(d, w, 3, r);
-    const row = Array.from({ length: w }, (_, x) => d[x * 4]);
+    const d = field(w, 3, (x) => (x < 30 ? 0 : 255));
+    blurField(d, w, 3, r, new Float32Array(w * 3));
+    const row = Array.from({ length: w }, (_, x) => Math.round(d[x]));
     for (let x = 1; x < w; x++) expect(row[x]).toBeGreaterThanOrEqual(row[x - 1]);
     expect(row[30 - 3 * r - 1]).toBe(0);
     expect(row[30 + 3 * r]).toBe(255);
     const mid = row.filter((v) => v > 0 && v < 255).length;
     expect(mid).toBeGreaterThan(2 * r);
     expect(mid).toBeLessThanOrEqual(6 * r);
-    expect(d[3]).toBe(255);
   });
-  it('blurs vertically too, and copies the grey into green and blue', () => {
-    const d = grey(8, 30, (_, y) => (y < 15 ? 0 : 255));
-    blurGrey(d, 8, 30, 2);
-    const at = (y: number) => d.slice((y * 8) * 4, (y * 8) * 4 + 4);
-    expect(at(15)[0]).toBeGreaterThan(0);
-    expect(at(15)[0]).toBeLessThan(255);
-    expect(at(15)[1]).toBe(at(15)[0]);
-    expect(at(15)[2]).toBe(at(15)[0]);
+  it('blurs vertically too', () => {
+    const d = field(8, 30, (_, y) => (y < 15 ? 0 : 255));
+    blurField(d, 8, 30, 2, new Float32Array(240));
+    expect(d[15 * 8]).toBeGreaterThan(0);
+    expect(d[15 * 8]).toBeLessThan(255);
   });
-  it('gives the same result with reused scratch buffers, also oversized ones', () => {
-    const f = (x: number, y: number) => ((x * 37 + y * 11) % 5) * 50;
-    const a = grey(16, 9, f), b = grey(16, 9, f);
-    blurGrey(a, 16, 9, 3);
-    const scratch = { a: new Float32Array(400), b: new Float32Array(400) };
-    blurGrey(b, 16, 9, 3, scratch);
-    expect(b).toEqual(a);
-  });
-  it('radius 0 leaves the data unchanged', () => {
-    const d = grey(10, 4, (x) => x * 20);
+  it('radius 0 leaves the field unchanged', () => {
+    const d = field(10, 4, (x) => x * 20);
     const before = d.slice();
-    blurGrey(d, 10, 4, 0);
+    blurField(d, 10, 4, 0, new Float32Array(40));
     expect(d).toEqual(before);
+  });
+});
+
+describe('fieldToRgba', () => {
+  it('writes the rounded grey into red, green and blue with full alpha', () => {
+    const data = new Uint8ClampedArray(8);
+    fieldToRgba(new Float32Array([12.4, 200.6]), data, 2);
+    expect(Array.from(data)).toEqual([12, 12, 12, 255, 201, 201, 201, 255]);
+  });
+});
+
+describe('fillPolygon', () => {
+  const scratch = () => ({ xs: [] as number[][], row: new Float32Array(0) });
+  it('a pixel-aligned rectangle is white inside and leaves the grey outside', () => {
+    const d = field(10, 8, () => 40);
+    // world rectangle 8..24 × 4..20 at origin (4, 0), 0.25 canvas px per world px: canvas px 1..5 × 1..5
+    fillPolygon(d, 10, 8, [8, 4, 24, 4, 24, 20, 8, 20], 4, 0, 0.25, scratch());
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 10; x++) expect(d[y * 10 + x]).toBeCloseTo(x >= 1 && x < 5 && y >= 1 && y < 5 ? 255 : 40);
+  });
+  it('a half-covered pixel goes half way to white, horizontally and vertically', () => {
+    const d = field(6, 6, () => 0);
+    fillPolygon(d, 6, 6, [1.5, 1, 4, 1, 4, 2.5, 1.5, 2.5], 0, 0, 1, scratch());
+    expect(d[1 * 6 + 1]).toBeCloseTo(127.5); // left edge at x 1.5
+    expect(d[1 * 6 + 2]).toBeCloseTo(255);
+    expect(d[2 * 6 + 2]).toBeCloseTo(127.5); // bottom edge at y 2.5 (2 of 4 sub-scanlines)
+    expect(d[3 * 6 + 2]).toBe(0);
+  });
+  it('a triangle adds its area, in either winding, and clips to the field', () => {
+    for (const pts of [[0, 0, 12, 0, 0, 12], [0, 0, 0, 12, 12, 0], [-6, -6, 20, -6, -6, 20]]) {
+      const d = field(8, 8, () => 0);
+      fillPolygon(d, 8, 8, pts, 0, 0, 1, scratch());
+      const area = d.reduce((a, v) => a + v / 255, 0);
+      // each misses the field's corner beyond its long side: x + y = 12 (a 4 x 4 half square) or x + y = 14 (2 x 2)
+      const inField = pts[0] < 0 ? 64 - (2 * 2) / 2 : 64 - (4 * 4) / 2;
+      expect(area).toBeCloseTo(inField, 0);
+    }
+  });
+  it('a reused scratch gives the same field', () => {
+    const s = scratch();
+    const poly = [1, 1, 7.3, 2, 5, 6.6, 2.2, 5];
+    const a = field(9, 9, () => 10), b = field(9, 9, () => 10);
+    fillPolygon(a, 9, 9, [0, 0, 9, 0, 9, 9], 0, 0, 1, s);
+    a.fill(10);
+    fillPolygon(a, 9, 9, poly, 0, 0, 1, s);
+    fillPolygon(b, 9, 9, poly, 0, 0, 1, scratch());
+    expect(a).toEqual(b);
   });
 });
 

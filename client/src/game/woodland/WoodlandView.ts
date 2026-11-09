@@ -216,7 +216,8 @@ export class WoodlandView {
     c = document.createElement('canvas');
     c.width = f.w;
     c.height = f.h;
-    const g = c.getContext('2d')!;
+    // CPU-backed like the mask canvas it is drawn into on every mask redraw: no GPU round trip there (#290)
+    const g = c.getContext('2d', { willReadFrequently: true })!;
     const fr = this.canvases[f.page].get(f.name);
     g.drawImage(this.canvases[f.page].getSourceImage() as CanvasImageSource, fr.cutX, fr.cutY, f.w, f.h, 0, 0, f.w, f.h);
     g.globalCompositeOperation = 'source-in';
