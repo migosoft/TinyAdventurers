@@ -20,7 +20,18 @@ import { CharmView, charmLeft } from './charmView';
 
 export interface FrameStats {
   fps: number;
+  /** The whole frame: Phaser's step from `PRE_STEP` to `POST_RENDER`, ms. */
+  wholeMs: number;
+  /** Its render part, ms. */
+  renderMs: number;
+  /** `GameScene.update`, ms. */
   frameMs: number;
+  /** The client's systems inside `update`, ms each (`FrameTimer`). */
+  systems: readonly (readonly [name: string, ms: number])[];
+  /** The scene's display list size. */
+  objects: number;
+  /** WebGL draw calls of the last frame. */
+  drawCalls: number;
   rtt: number;
   jitter: number;
   interp: number;
@@ -34,6 +45,28 @@ export interface FrameStats {
   darkvision: number;
   /** Whether the hero has a living wolf; null when the secondary is not Summon Wolf. */
   wolf: boolean | null;
+}
+
+/** The F3 panel's text: frame timings with the per-system breakdown, then the network figures. */
+export function statsText(f: FrameStats): string {
+  const ms = (v: number) => `${v.toFixed(2)} ms`;
+  return (
+    `FPS        ${f.fps.toFixed(0)}\n` +
+    `frame      ${ms(f.wholeMs)}\n` +
+    `render     ${ms(f.renderMs)}\n` +
+    `update     ${ms(f.frameMs)}\n` +
+    f.systems.map(([name, v]) => `  ${name.padEnd(9)}${v.toFixed(2)}\n`).join('') +
+    `objects    ${f.objects}\n` +
+    `draw calls ${f.drawCalls}\n` +
+    `ping       ${f.rtt.toFixed(0)} ms\n` +
+    `jitter     ${f.jitter.toFixed(1)} ms\n` +
+    `interp     ${f.interp.toFixed(0)} ms\n` +
+    `snapshot   ${f.snapBytes} B\n` +
+    `correction ${f.correction.toFixed(2)} px\n` +
+    `server     ${f.srvMs.toFixed(2)} ms/tick\n` +
+    `entities   ${f.ents}\n` +
+    `darkvision ${Math.round(f.darkvision * 100)}%`
+  );
 }
 
 /** The secondary slot's name: the ranger's reads by whether the wolf lives. */
@@ -351,17 +384,7 @@ export class Hud {
     });
     if (!this.debug.classList.contains('hidden') && performance.now() - this.debugT > 200) {
       this.debugT = performance.now();
-      this.debug.textContent =
-        `FPS        ${f.fps.toFixed(0)}\n` +
-        `frame      ${f.frameMs.toFixed(2)} ms\n` +
-        `ping       ${f.rtt.toFixed(0)} ms\n` +
-        `jitter     ${f.jitter.toFixed(1)} ms\n` +
-        `interp     ${f.interp.toFixed(0)} ms\n` +
-        `snapshot   ${f.snapBytes} B\n` +
-        `correction ${f.correction.toFixed(2)} px\n` +
-        `server     ${f.srvMs.toFixed(2)} ms/tick\n` +
-        `entities   ${f.ents}\n` +
-        `darkvision ${Math.round(f.darkvision * 100)}%`;
+      this.debug.textContent = statsText(f);
     }
   }
 
@@ -390,6 +413,11 @@ export class Hud {
 
   toggleDebug(): void {
     this.debug.classList.toggle('hidden');
+  }
+
+  /** Whether the F3 panel is open (the scene times its frame only then). */
+  get statsOn(): boolean {
+    return !this.debug.classList.contains('hidden');
   }
 
   toggleMenu(): void {

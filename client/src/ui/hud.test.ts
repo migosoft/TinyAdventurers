@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Hud, debugBadgeHtml, effectChipHtml, effectsHtml, helpHtml, secondaryLabel } from './hud';
+import { Hud, debugBadgeHtml, effectChipHtml, effectsHtml, helpHtml, secondaryLabel, statsText } from './hud';
 import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import { EFFECT } from '../generated/defs';
 import { EFFECT_ICON } from './effectIcons';
@@ -282,5 +282,22 @@ describe('Hud.setAbilities', () => {
     hud.setAbilities([ab('Strike'), ab('Charge')], [null, null]);
     hud.frame(f(5));
     expect(p()).toBe('50%');
+  });
+});
+
+describe('statsText', () => {
+  it('lists the whole frame, render and update, the systems indented, then objects, draw calls and the network', () => {
+    const t = statsText({ fps: 59.6, wholeMs: 12.345, renderMs: 9.5, frameMs: 2.1, systems: [['light', 0.42], ['woodland', 1]], objects: 812, drawCalls: 37, rtt: 20, jitter: 1.25, interp: 80, snapBytes: 127, correction: 0, srvMs: 0.13, cd1: 0, cd2: 0, ents: 9, darkvision: 0.5, wolf: null });
+    expect(t.split('\n').slice(0, 8)).toEqual([
+      'FPS        60',
+      'frame      12.35 ms',
+      'render     9.50 ms',
+      'update     2.10 ms',
+      '  light    0.42',
+      '  woodland 1.00',
+      'objects    812',
+      'draw calls 37',
+    ]);
+    expect(t.endsWith('darkvision 50%')).toBe(true);
   });
 });

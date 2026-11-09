@@ -45,6 +45,7 @@ import { meleeFoe, shotPassesThrough } from './shotTargets';
 import { FONT_TEXT } from '../fonts';
 import { critLabel, smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
+import { FrameTimer, SYSTEMS, type DrawGl } from './frameTimer';
 import { abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, Interpolator, ownPredictedShot, Predictor, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
 
 export interface GameInit {
@@ -161,6 +162,9 @@ export class GameScene extends Phaser.Scene {
   private shadeMask!: ShadeMask;
   private unsub?: () => void;
   private frameMs = 0;
+  /** The F3 panel's frame, render and per-system timings; on only while the panel is open. */
+  private timer = new FrameTimer();
+  private detachTimer?: () => void;
   private myKind = 0;
   private forceField?: ForceField;
   private terrain?: TerrainLayer;
@@ -320,6 +324,8 @@ export class GameScene extends Phaser.Scene {
 
     this.unsub = this.net.on((m) => this.onMessage(m));
     this.events.once('shutdown', () => this.cleanup());
+    const renderer = this.game.renderer;
+    this.detachTimer = this.timer.attach(this.game.events, renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer ? (renderer.gl as unknown as DrawGl) : null);
     this.hud.startRun(this.info);
     if (this.info.debug) this.hud.setDebug(true, true, true);
     for (const p of this.info.players) this.heroNames.set(p.ent, p.name);
@@ -329,6 +335,8 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup(): void {
     this.unsub?.();
+    this.detachTimer?.();
+    this.timer.on = false;
     this.mood?.destroy();
     this.shadeMask.destroy();
     // the camera manager is already shut down here (`cameras.main` is gone): use the reference kept at creation
@@ -867,6 +875,8 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     const t0 = performance.now();
+    this.timer.on = this.hud.statsOn;
+    this.timer.begin();
     const dt = Math.min(deltaMs / 1000, 0.1);
     this.acc += dt;
     let steps = 0;
@@ -896,12 +906,15 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.centerOn(Math.round(camX), Math.round(camY - 8));
     const darkvision = (this.lastSnap?.me.darkvision ?? 0) / 100;
     const vision = this.lastSnap?.me.vision ?? CONST.FOV_RADIUS;
+    this.timer.lap('sim');
     this.lightView.update(this.cameras.main.worldView, camX, camY, this.lastSnap?.lights ?? [], now, darkvision, vision);
+    this.timer.lap('light');
     const torches: AirTorch[] = [];
     for (const e of this.ents.values()) if (e.kind === KIND.Torch) torches.push({ x: e.x, y: e.y, side: e.extra, lit: e.anim === 1 });
     const shots: AirShot[] = (this.lastSnap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
     this.mood?.update(dt, this.cameras.main.worldView, torches, shots, this.collectMovers(dt, px, py));
     this.sunbeams.update(dt, this.cameras.main.worldView, now);
+    this.timer.lap('mood');
     const settled = !this.woodland || this.woodland.settled;
     if (this.info.daylight) this.visionMask.soft = settled ? DEFAULT_HAZE.soft : 0;
     this.visionMask.update(this.cameras.main.worldView, this.lightView.view, () => this.lightView.sight);
@@ -913,6 +926,7 @@ export class GameScene extends Phaser.Scene {
     this.shadeMask.on = !this.info.daylight && settled;
     this.shadeMask.update(this.cameras.main.worldView, this.lightView.view, () => this.lightView.sight);
     syncDarkvisionFX(this.cameras.main, darkvision, this.lightView.mask, [this.map.w * TILE, this.map.h * TILE]);
+    this.timer.lap('mask');
 
     const seen = new Set<number>();
     const myShots = new Set<number>();
@@ -953,11 +967,13 @@ export class GameScene extends Phaser.Scene {
     for (const [id, v] of this.chestViews) if (!seen.has(id)) (v.destroy(), this.chestViews.delete(id));
     for (const [id, v] of this.barrelViews) if (!seen.has(id)) (v.destroy(), this.barrelViews.delete(id));
     for (const [id, v] of this.torchViews) if (!seen.has(id)) (v.destroy(), this.torchViews.delete(id));
+    this.timer.lap('figures');
     // after the views moved this frame, so the copy is not a frame behind the hero
     // only the own hero, and only while it plays (not dead or spectating); teammates get no silhouette
     const ownLook = this.alive && this.spectating === null ? this.views.get(this.info.you)?.bodyLook() ?? null : null;
     this.cove?.update(now, ownLook);
     this.woodland?.update(now, ownLook, this.cameras.main.worldView, this.lightView.seenLit);
+    this.timer.lap('woodland');
 
     const hint = this.alive && !this.pred.charmed && !this.pred.noAct && !this.pred.sinking ? pickUseHint(this.ents.values(), this.info.you, px, py) : null;
     this.hud.setAsleep(this.alive && has(this.myEffects(), EFFECT.Sleep));
@@ -972,11 +988,17 @@ export class GameScene extends Phaser.Scene {
     this.forceField?.update(dt);
     this.terrain?.update(dt);
     this.fx.update(dt);
+    this.timer.lap('effects');
 
-    this.frameMs = this.frameMs * 0.9 + (performance.now() - t0) * 0.1;
+    const timer = this.timer;
     this.hud.frame({
       fps: this.game.loop.actualFps,
+      wholeMs: timer.frameMs,
+      renderMs: timer.renderMs,
       frameMs: this.frameMs,
+      systems: timer.on ? SYSTEMS.map((s) => [s, timer.systems[s]] as const) : [],
+      objects: this.children.length,
+      drawCalls: timer.drawCalls,
       rtt: this.net.rtt,
       jitter: this.interp.jitter * 1000,
       interp: this.interp.delay * 1000,
@@ -989,6 +1011,9 @@ export class GameScene extends Phaser.Scene {
       darkvision,
       wolf: this.info.abilities[1].id === 'SummonWolf' ? [...this.ents.values()].some((e) => e.kind === KIND.DireWolf && e.extra === this.info.you && !(e.flags & FLAG.DEAD)) : null,
     });
+    this.timer.lap('hud');
+    // after the HUD, so `update` includes it; the panel shows it a frame later, which an average does not notice
+    this.frameMs = this.frameMs * 0.9 + (performance.now() - t0) * 0.1;
   }
 
   private drawFigure(e: EntState, dt: number, px: number, py: number, now: number): void {

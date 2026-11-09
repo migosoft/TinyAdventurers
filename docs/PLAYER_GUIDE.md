@@ -25,7 +25,7 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 | **Esc** | Menu: resume, Settings or leave the dungeon |
 | **L** | Turn the rules log on or off (see The rules log) |
 | **Shift+L** | Show or hide the calculation lines of the rules log |
-| **F3** | Show ping, frame rate and network stats |
+| **F3** | Show frame rate, frame times (whole frame, rendering, and the game's own parts), ping and network stats |
 
 The **Settings** view of the Esc menu has a checkbox for each switch: the rules log (L), its calculation lines (Shift+L) and the network stats (F3). The keys and the checkboxes always agree.
 
