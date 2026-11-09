@@ -3,7 +3,8 @@
 // (static ones from LightField, moving ones from the snapshot). The light is
 // worked out per tile, then upsampled to SUB pixels per tile (`upsample`; dark
 // tiles are set back to black, `blackenDarkTiles`) and drawn with LINEAR filtering, scaled up by TILE / SUB. Redrawn every frame
-// inside the camera window (cheap: about 60 x 34 tiles). What the viewer sees
+// inside the camera window (cheap: about 60 x 34 tiles), and only that window
+// is uploaded (texupload.ts, #292). What the viewer sees
 // is its View (sim/view.ts: the tiles the visibility polygon covers, the same
 // rule as the server's); the vision mask (visionmask.ts) draws its straight edge.
 import type Phaser from 'phaser';
@@ -14,6 +15,7 @@ import { TILE, type Blocker, type TileMap } from '../sim/map';
 import { DEPTH } from './effects';
 import { cloudAt, lookFor, sunLook } from './sunmath';
 import type { LightField } from './light';
+import { WindowUpload } from './texupload';
 
 // Phaser's FilterMode.LINEAR and BlendModes.MULTIPLY as numbers: a value import of
 // Phaser needs a browser, and the pure functions below are unit-tested.
@@ -211,6 +213,9 @@ export class LightView {
   private darkImg: ImageData;
   private tintImg: ImageData;
   private maskImg: ImageData;
+  private darkUp: WindowUpload;
+  private tintUp: WindowUpload;
+  private maskUp: WindowUpload;
   private rgb: Float32Array;
   private movingLit: Uint8Array;
   /** Per tile: darkness alpha (0..255), and the tint as r, g, b, a (0..255). */
@@ -244,7 +249,16 @@ export class LightView {
     // Black, fully opaque until drawn.
     for (let i = 0; i < w * SUB * h * SUB; i++) this.darkImg.data.set([0, 0, 0, 255], i * 4);
     this.dark.getContext().putImageData(this.darkImg, 0, 0);
-    this.upload();
+    // The one whole upload; afterwards only the window is uploaded. refresh() resets the filter to NEAREST
+    // (pixelArt), so LINEAR is set after it (Phaser keeps it on the texture, a lost context restores it too).
+    for (const tex of [this.dark, this.tint, this.mask]) {
+      tex.refresh();
+      tex.setFilter(LINEAR);
+    }
+    const gl = 'gl' in scene.renderer ? scene.renderer.gl : undefined;
+    this.darkUp = new WindowUpload(gl, this.dark);
+    this.tintUp = new WindowUpload(gl, this.tint);
+    this.maskUp = new WindowUpload(gl, this.mask);
     this.rgb = new Float32Array(w * h * 3);
     this.movingLit = new Uint8Array(w * h);
     this.darkTile = new Float32Array(w * h).fill(255);
@@ -254,14 +268,6 @@ export class LightView {
     this.tmp = new Float32Array(w * SUB * h * 4);
     scene.add.image(0, 0, 'tint').setOrigin(0, 0).setScale(TILE / SUB).setDepth(DEPTH.tint).setBlendMode(MULTIPLY);
     scene.add.image(0, 0, 'dark').setOrigin(0, 0).setScale(TILE / SUB).setDepth(DEPTH.fog);
-  }
-
-  /** Uploads the canvases. refresh() resets the filter to NEAREST (pixelArt), so LINEAR is set again after it. */
-  private upload(): void {
-    for (const tex of [this.dark, this.tint, this.mask]) {
-      tex.refresh();
-      tex.setFilter(LINEAR);
-    }
   }
 
   /** A tile changed: the viewer's sight is recomputed on the next update. */
@@ -295,6 +301,8 @@ export class LightView {
     const tt = this.tintTile;
     const mt = this.maskTile;
     const range = sight * darkvision;
+    // Without darkvision the mask is not read (syncDarkvisionFX removes its effect), so it is neither drawn nor uploaded.
+    const dv = darkvision > 0;
     for (let y = y0; y < y1; y++)
       for (let x = x0; x < x1; x++) {
         const i = y * w + x;
@@ -304,7 +312,7 @@ export class LightView {
         const reach = visible && darkReach(x - tx, y - ty, range);
         const shown = seenForDark(visible, this.field.daylight);
         dt[i] = tileDark(shown, lit, reach, r, g, b) * 255;
-        mt[i] = dvMask(reach, darknessAlpha(shown, lit, r, g, b)) * 255;
+        if (dv) mt[i] = dvMask(reach, darknessAlpha(shown, lit, r, g, b)) * 255;
         const sl = visible && lit;
         this.seenLit[i] = sl ? 1 : 0;
         [tt[i * 4], tt[i * 4 + 1], tt[i * 4 + 2]] = warmTint(r, g, b, sl);
@@ -312,12 +320,12 @@ export class LightView {
       }
     upsample(dt, 1, w, h, x0, y0, x1, y1, this.tmp, this.darkImg.data, 3);
     upsample(tt, 4, w, h, x0, y0, x1, y1, this.tmp, this.tintImg.data, 0);
-    upsample(mt, 1, w, h, x0, y0, x1, y1, this.tmp, this.maskImg.data, 0);
+    if (dv) upsample(mt, 1, w, h, x0, y0, x1, y1, this.tmp, this.maskImg.data, 0);
     blackenDarkTiles(dt, w, x0, y0, x1, y1, this.darkImg.data, this.tintImg.data);
+    // Only the window goes to the GPU; the camera never shows the texture outside it, so what lies there is stale.
     const [px, py, pw, ph] = [x0 * SUB, y0 * SUB, (x1 - x0) * SUB, (y1 - y0) * SUB];
-    this.dark.getContext().putImageData(this.darkImg, 0, 0, px, py, pw, ph);
-    this.tint.getContext().putImageData(this.tintImg, 0, 0, px, py, pw, ph);
-    this.mask.getContext().putImageData(this.maskImg, 0, 0, px, py, pw, ph);
-    this.upload();
+    this.darkUp.upload(this.darkImg, px, py, pw, ph);
+    this.tintUp.upload(this.tintImg, px, py, pw, ph);
+    if (dv) this.maskUp.upload(this.maskImg, px, py, pw, ph);
   }
 }
