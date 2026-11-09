@@ -295,6 +295,9 @@ export class EntityView {
       this.shadow.setScale(1.6, 1);
     }
     // Petrified: grey stone (a greyscale filter on body and weapon, WebGL only).
+    // A PreFX filter draws the sprite through a render-to-texture pass for as long as
+    // the FX pipeline is set, even with the controller inactive, so it is removed
+    // (`disable(true)` resets the pipeline and destroys the controller) once the stone ends.
     if (stone) {
       this.stone ??= this.body.preFX?.addColorMatrix();
       this.stone?.grayscale(1);
@@ -302,9 +305,10 @@ export class EntityView {
         this.weaponStone ??= this.weapon.preFX?.addColorMatrix();
         this.weaponStone?.grayscale(1);
       }
+    } else {
+      if (this.stone) (this.body.preFX?.disable(true), (this.stone = undefined));
+      if (this.weaponStone) (this.weapon?.preFX?.disable(true), (this.weaponStone = undefined));
     }
-    if (this.stone) this.stone.active = stone;
-    if (this.weaponStone) this.weaponStone.active = stone;
     this.status.update(fxBits, dt, s.entangled);
     if (asleep) this.weapon?.setVisible(false);
 

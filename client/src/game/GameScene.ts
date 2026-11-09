@@ -1009,7 +1009,7 @@ export class GameScene extends Phaser.Scene {
       cd2: this.pred.cd2,
       ents: this.ents.size,
       darkvision,
-      wolf: this.info.abilities[1].id === 'SummonWolf' ? [...this.ents.values()].some((e) => e.kind === KIND.DireWolf && e.extra === this.info.you && !(e.flags & FLAG.DEAD)) : null,
+      wolf: this.info.abilities[1].id === 'SummonWolf' ? this.hasOwnWolf() : null,
     });
     this.timer.lap('hud');
     // after the HUD, so `update` includes it; the panel shows it a frame later, which an average does not notice
@@ -1292,6 +1292,12 @@ export class GameScene extends Phaser.Scene {
     return out;
   }
 
+  /** The own hero's dire wolf is alive (the HUD's wolf flag); a loop, as it runs every frame. */
+  private hasOwnWolf(): boolean {
+    for (const e of this.ents.values()) if (e.kind === KIND.DireWolf && e.extra === this.info.you && !(e.flags & FLAG.DEAD)) return true;
+    return false;
+  }
+
   private drawBarsAndBeams(now: number): void {
     this.bars.clear();
     this.heroBars.clear();
@@ -1320,7 +1326,13 @@ export class GameScene extends Phaser.Scene {
           t = smoothText(this.add.text(0, 0, name, { fontFamily: FONT_TEXT, fontStyle: WORLD_TEXT.tag.style, fontSize: `${WORLD_TEXT.tag.size}px`, resolution: TEXT_RESOLUTION }).setOrigin(0.5, 1));
           this.barLabels.set(e.id, t);
         }
-        t.setColor(hero ? '#7fe08a' : '#b8c4d8').setDepth(hero ? DEPTH.heroBars : DEPTH.enemyBars).setPosition(Math.round(e.x), y - 2);
+        // `setColor` redraws and re-uploads the text canvas, and every `setDepth` queues a
+        // sort of the display list: set them only when they change (a charm flips the side).
+        const color = hero ? '#7fe08a' : '#b8c4d8';
+        const depth = hero ? DEPTH.heroBars : DEPTH.enemyBars;
+        if (t.style.color !== color) t.setColor(color);
+        if (t.depth !== depth) t.setDepth(depth);
+        t.setPosition(Math.round(e.x), y - 2);
         labelled.add(e.id);
       }
     }
