@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_KIND } from '../generated/defs';
-import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, lightPath, nextDarkvision, seenForDark, seenForLight, SUB, tileDark, upsample, warmTint, WARM } from './lightview';
+import { catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, nextDarkvision, seenForDark, seenForLight, tileDark, warmTint, WARM } from './lightview';
 
 vi.mock('phaser', () => ({ default: {} }));
 
@@ -25,51 +25,10 @@ describe('darkness', () => {
   });
 });
 
-describe('upsampling the per-tile light', () => {
+describe('the upsampling weights (the shader in lightshader.ts uses the same ones)', () => {
   it('weights the four taps to 1 and passes through the tile centres', () => {
     for (const t of [0, 0.125, 0.5, 0.875]) expect(catmullRom(t).reduce((a, b) => a + b)).toBeCloseTo(1);
     expect(catmullRom(0)).toEqual([0, 1, 0, 0]);
-  });
-  it('keeps a flat field flat and a ramp straight', () => {
-    // One row of 6 tiles, one channel: a ramp 0, 20, ..., 100.
-    const w = 6;
-    const src = Float32Array.from([0, 20, 40, 60, 80, 100]);
-    const dst = new Uint8ClampedArray(w * SUB * SUB * 4);
-    upsample(src, 1, w, 1, 0, 0, w, 1, new Float32Array(w * SUB * 1), dst, 3);
-    const row = Array.from({ length: w * SUB }, (_, px) => dst[px * 4 + 3]);
-    // Pixel centres at tile coordinates (px + 0.5) / SUB - 0.5; the ramp is 20 per tile.
-    for (let px = SUB; px < (w - 1) * SUB; px++) expect(row[px]).toBeCloseTo(((px + 0.5) / SUB - 0.5) * 20, 0);
-    const flat = new Float32Array(w).fill(77);
-    upsample(flat, 1, w, 1, 0, 0, w, 1, new Float32Array(w * SUB), dst, 0);
-    for (let px = 0; px < w * SUB; px++) expect(dst[px * 4]).toBe(77);
-  });
-  it('clamps overshoot at a hard edge instead of wrapping it', () => {
-    // Darkness: two black tiles, then two lit ones. Next to the edge the curve overshoots past 255 and below 0.
-    const src = Float32Array.from([255, 255, 0, 0]);
-    const dst = new Uint8ClampedArray(4 * SUB * SUB * 4);
-    upsample(src, 1, 4, 1, 0, 0, 4, 1, new Float32Array(4 * SUB), dst, 3);
-    const row = Array.from({ length: 4 * SUB }, (_, px) => dst[px * 4 + 3]);
-    expect(row[SUB]).toBe(255); // about 273 before the clamp: not wrapped to a low value
-    expect(row[3 * SUB - 1]).toBe(0); // about -18 before the clamp
-    expect(row[0]).toBe(255);
-    expect(row[4 * SUB - 1]).toBe(0);
-  });
-  it('keeps a dark tile black inside, next to a bright one', () => {
-    const w = 4;
-    // Darkness per tile: lit and bright, lit and bright, dark, dark.
-    const darkTile = Float32Array.from([0, 0, 255, 255]);
-    const dark = new Uint8ClampedArray(w * SUB * SUB * 4);
-    const tint = new Uint8ClampedArray(w * SUB * SUB * 4).fill(200);
-    upsample(darkTile, 1, w, 1, 0, 0, w, 1, new Float32Array(w * SUB), dark, 3);
-    expect(dark[(2 * SUB) * 4 + 3]).toBeLessThan(255); // the bleed before the fix
-    blackenDarkTiles(darkTile, w, 0, 0, w, 1, dark, tint);
-    for (let py = 0; py < SUB; py++)
-      for (let px = 2 * SUB; px < w * SUB; px++) {
-        const p = (py * w * SUB + px) * 4;
-        expect(dark[p + 3]).toBe(255);
-        expect(tint[p + 3]).toBe(0);
-      }
-    expect(dark[(SUB - 1) * 4 + 3]).toBeLessThan(255); // the lit side keeps its fade
   });
 });
 
@@ -172,14 +131,5 @@ describe('warmTint', () => {
       expect(Math.max(r, g, b)).toBeCloseTo(255, 9);
       for (const c of [r, g, b]) expect(c).toBeLessThanOrEqual(255 + 1e-9);
     }
-  });
-});
-
-describe('lightPath', () => {
-  it('is cpu only when allowed and ?light=cpu', () => {
-    expect(lightPath('?light=cpu', true)).toBe('cpu');
-    expect(lightPath('?light=cpu', false)).toBe('gpu');
-    expect(lightPath('', true)).toBe('gpu');
-    expect(lightPath('?lights&light=cpu', true)).toBe('cpu');
   });
 });

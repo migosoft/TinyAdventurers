@@ -17,7 +17,7 @@ import { TILE, TileMap } from '../sim/map';
 import { FIGURES } from './anim/defs';
 import { DEPTH, Effects } from './effects';
 import { LightField } from './light';
-import { LightView, lightPath } from './lightview';
+import { LightView } from './lightview';
 import { lookOf } from './silhouette';
 import { syncUnseenFX, DEFAULT_HAZE } from './unseenfx';
 import { VisionMask } from './visionmask';
@@ -107,7 +107,7 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.fx = new Effects(this);
     this.field = new LightField(map);
     this.field.daylight = true;
-    this.view = new LightView(this, map, this.field, lightPath(location.search, true));
+    this.view = new LightView(this, map, this.field);
     // the start: the middle tile of the road's western end
     const start = this.startPoint(d);
     const info: WoodlandInfo = { ...d.woodland, sun: { ...d.woodland.sun, ...sunOverride } };

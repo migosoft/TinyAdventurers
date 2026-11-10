@@ -1,16 +1,15 @@
 // The greyscale post effect for darkvision: on the main camera, it desaturates
 // the rendered world where LightView's darkvision mask is set (tiles the hero
 // sees only by darkvision, heroes and monsters standing there included). The
-// mask is a texture of the whole map, SUB px per tile, LINEAR filtered (the
-// GPU light's dvpic render texture, or the CPU path's canvas), so its edge
-// fades over about a tile. Attached only while darkvision > 0.
+// mask is a texture of the whole map, 2 px per tile, LINEAR filtered (the
+// light pass's dvpic render texture), so its edge fades over about a tile. Attached only while darkvision > 0.
 import Phaser from 'phaser';
 
 /** The pipeline's name, as registered in the game config (`pipeline: { [DARKVISION_FX]: DarkvisionFX }`). */
 export const DARKVISION_FX = 'DarkvisionFX';
 
 // outTexCoord covers the camera's render target, y up (0 = the bottom of the
-// screen); the mask's canvas rows go down the map from row 0.
+// screen); the mask's texture rows go down the map from row 0.
 const FRAG = `
 #define SHADER_NAME DARKVISION_FS
 precision mediump float;

@@ -134,7 +134,9 @@ Lasting rules that are not one issue's business. Feature-specific decisions live
 - **Boss behaviours** are taken out of the level's `BossEncounter.behaviour` during their tick (`Option::take`), so `hurt_monster`'s immunity check cannot see the boss during its own tick.
 - **Phaser key capture:** `addKeys`/`addKey` capture by default, which calls `preventDefault` page-wide and outlives the scene, so DOM inputs lose those letters after a run. Always pass `false`.
 - **Phaser `Graphics.clear()`** resets fill and line styles; set `fillStyle` again after it.
-- **Canvas textures under `pixelArt`:** Phaser resets a canvas texture to NEAREST on every `refresh()`; set LINEAR again after each upload (`LightView.upload`).
+- **Canvas textures under `pixelArt`:** Phaser resets a canvas texture to NEAREST on every `refresh()`; set LINEAR again after each upload (the vision mask in `visionmask.ts`). A render-to-texture target is NEAREST too: `GpuLight` sets LINEAR once after `setRenderToTexture`.
+- **Render-to-texture `Shader`:** it binds the screen after drawing, so it must not sit in the display list of a camera that has post pipelines (`UnseenFX`, `DarkvisionFX`): everything drawn after it would bypass the effect. `gpulight.ts` removes it from the display list and draws it by hand.
+- **`addUint8Array` textures** premultiply on upload unless the wrapper's `pma` is set to false (`tex.source[0].glTexture.pma = false`); a data texture whose alpha is data (the light's darkness) loses its colour otherwise.
 - **TileSprite patterns:** a `TileSprite` copies its source texture into its own `fillPattern`, uploaded NEAREST under `pixelArt`, and re-copies it only on `setFrame`/`setTexture`; set LINEAR on the pattern after each copy (`woodland/clouds.ts`).
 - **Stale client:** if a client looks older than the server, hard-reload (Ctrl+F5) first (`cache_headers` in `main.rs` normally prevents it).
 - **Pack frame names** are used verbatim (`knight_m_run_anim_f2`). `necromancer` only has `necromancer_anim_f0-3`, used for both idle and run.

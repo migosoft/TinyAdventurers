@@ -1,6 +1,5 @@
 // The light pass on the GPU: pure helpers (texel packing, the fragment source).
-// No value import of Phaser here (type only); the Shader game object is built elsewhere.
-import type Phaser from 'phaser';
+// No Phaser import here; the Shader game object is built in gpulight.ts.
 
 /** Picture px per tile (the lattice the shader renders). */
 export const PIC_SUB = 2;
@@ -28,7 +27,8 @@ export function packDv(dst: Uint8Array, i: number, strength: number): void {
 /**
  * The fragment source (GLSL ES 1.00) that turns the per-tile data texture
  * `iChannel0` into the PIC_SUB px-per-tile picture: Catmull-Rom of the four
- * by four taps (as `upsample`), then dark tiles black (as `blackenDarkTiles`).
+ * by four taps (the weights are `catmullRom` in lightview.ts, tied by a test),
+ * then dark tiles black (a tile whose darkness byte is 255 stays black inside).
  * With `dv`: only the red channel, no blackening (the darkvision mask).
  * `fragCoord` is in pixels of the picture; row r of the picture is map row r.
  */
@@ -77,11 +77,4 @@ void main() {
 #endif
 }
 `;
-}
-
-/** Where LightView's per-tile result goes. dark, r, g, b and dv are 0..255; dv is 0 while darkvision is off. */
-export interface LightOutput {
-  readonly mask: Phaser.Textures.Texture; // what DarkvisionFX samples (2 px per tile, red = strength, LINEAR)
-  put(i: number, dark: number, r: number, g: number, b: number, dv: number): void;
-  flush(x0: number, y0: number, x1: number, y1: number, dv: boolean): void; // tile window; dv: darkvision > 0 this frame
 }

@@ -11,7 +11,7 @@ describe('numbers and bars against the darkness', () => {
   it('draws enemy numbers and bars under the darkness, over figures and effects', () => {
     expect(numberDepth(false)).toBe(DEPTH.enemyNumbers);
     for (const d of [DEPTH.enemyBars, DEPTH.enemyNumbers]) {
-      expect(d).toBeLessThan(DEPTH.tint);
+      expect(d).toBeLessThan(DEPTH.fog);
       expect(d).toBeGreaterThan(DEPTH.fx);
     }
     expect(DEPTH.enemyBars).toBeLessThan(DEPTH.enemyNumbers);

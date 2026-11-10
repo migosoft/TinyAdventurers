@@ -1,9 +1,8 @@
-// The light canvas: darkness everywhere except tiles in the viewer's sight
+// The light pass: darkness everywhere except tiles in the viewer's sight
 // that a light reaches, plus a warm colour tint per tile from every light
 // (static ones from LightField, moving ones from the snapshot). The light is
-// worked out per tile, then upsampled to SUB pixels per tile (`upsample`; dark
-// tiles are set back to black, `blackenDarkTiles`) and drawn with LINEAR filtering, scaled up by TILE / SUB: that is
-// the CPU output, CpuLight (lightcpu.ts), behind the LightOutput interface. Redrawn every frame
+// worked out per tile on the CPU and handed to GpuLight (gpulight.ts), which
+// smooths it up to 2 px per tile in a fragment shader (lightshader.ts, #293). Redrawn every frame
 // inside the camera window (cheap: about 60 x 34 tiles), and only that window
 // is uploaded (texupload.ts, #292). What the viewer sees
 // is its View (sim/view.ts: the tiles the visibility polygon covers, the same
@@ -15,26 +14,14 @@ import { View } from '../sim/view';
 import { TILE, type Blocker, type TileMap } from '../sim/map';
 import { cloudAt, lookFor, sunLook } from './sunmath';
 import type { LightField } from './light';
-import { CpuLight } from './lightcpu';
 import { GpuLight } from './gpulight';
-import type { LightOutput } from './lightshader';
 
 /** How strongly a light's hue tints what it lights (MULTIPLY blend): at most this far from white towards the hue. */
 export const WARM = 0.45;
 /** A lit tile is at least this bright (about the falloff's edge), so it is never fully black but its rim really fades. */
 const MIN_LIT = 0.08;
-/** Canvas pixels per tile. One pixel per tile with LINEAR filtering is plain bilinear, which shows creases along the tile grid in a long fade. */
-export const SUB = 2;
-/** Tiles drawn beyond the camera window: the upsampling reads two tiles around each one. */
+/** Tiles drawn beyond the camera window: the upsampling (Catmull-Rom over four taps) reads two tiles around each one. */
 const MARGIN = 3;
-
-/** Which light compositing path runs: the shader, or (debug switch) the old CPU canvases. */
-export type LightPath = 'gpu' | 'cpu';
-
-/** `'cpu'` only if `allowed` and the query has `light=cpu`, else `'gpu'`. */
-export function lightPath(search: string, allowed: boolean): LightPath {
-  return allowed && new URLSearchParams(search).get('light') === 'cpu' ? 'cpu' : 'gpu';
-}
 
 /** Darkness over one tile: 1 = black. `r, g, b`: its summed light colour. */
 export function darknessAlpha(visible: boolean, lit: boolean, r: number, g: number, b: number): number {
@@ -94,71 +81,8 @@ export function catmullRom(t: number): [number, number, number, number] {
   return [(-t3 + 2 * t2 - t) / 2, (3 * t3 - 5 * t2 + 2) / 2, (-3 * t3 + 4 * t2 + t) / 2, (t3 - t2) / 2];
 }
 
-/** Per sub-pixel k of a tile: the first of its four taps (relative to the tile) and their weights. */
-const TAPS = Array.from({ length: SUB }, (_, k) => {
-  const u = (k + 0.5) / SUB - 0.5;
-  const base = Math.floor(u);
-  return { first: base - 1, w: catmullRom(u - base) };
-});
-
 /**
- * Upsamples per-tile values (`ch` channels, w*h*ch) in the tile window
- * [x0,x1)×[y0,y1) to SUB pixels per tile, into RGBA image data w*SUB wide
- * from channel `at` on. Catmull-Rom: smooth, exact on straight ramps, and
- * the image data clamps its overshoot at hard edges. `tmp`: w*SUB*h*ch.
- */
-export function upsample(src: Float32Array, ch: number, w: number, h: number, x0: number, y0: number, x1: number, y1: number, tmp: Float32Array, dst: Uint8ClampedArray, at: number): void {
-  const pw = w * SUB;
-  // Across: every row the second pass reads.
-  for (let y = Math.max(0, y0 - 2); y <= Math.min(h - 1, y1 + 1); y++)
-    for (let x = x0; x < x1; x++)
-      for (let k = 0; k < SUB; k++) {
-        const { first, w: wt } = TAPS[k];
-        const o = (y * pw + x * SUB + k) * ch;
-        // The four tap tiles, clamped to the map.
-        const t0 = (y * w + Math.min(w - 1, Math.max(0, x + first))) * ch;
-        const t1 = (y * w + Math.min(w - 1, Math.max(0, x + first + 1))) * ch;
-        const t2 = (y * w + Math.min(w - 1, Math.max(0, x + first + 2))) * ch;
-        const t3 = (y * w + Math.min(w - 1, Math.max(0, x + first + 3))) * ch;
-        for (let c = 0; c < ch; c++) tmp[o + c] = wt[0] * src[t0 + c] + wt[1] * src[t1 + c] + wt[2] * src[t2 + c] + wt[3] * src[t3 + c];
-      }
-  // Down.
-  for (let y = y0; y < y1; y++)
-    for (let k = 0; k < SUB; k++) {
-      const { first, w: wt } = TAPS[k];
-      const r0 = Math.min(h - 1, Math.max(0, y + first)) * pw;
-      const r1 = Math.min(h - 1, Math.max(0, y + first + 1)) * pw;
-      const r2 = Math.min(h - 1, Math.max(0, y + first + 2)) * pw;
-      const r3 = Math.min(h - 1, Math.max(0, y + first + 3)) * pw;
-      const py = y * SUB + k;
-      for (let px = x0 * SUB; px < x1 * SUB; px++)
-        for (let c = 0; c < ch; c++)
-          dst[(py * pw + px) * 4 + at + c] = wt[0] * tmp[(r0 + px) * ch + c] + wt[1] * tmp[(r1 + px) * ch + c] + wt[2] * tmp[(r2 + px) * ch + c] + wt[3] * tmp[(r3 + px) * ch + c];
-    }
-}
-
-/**
- * Keeps every dark tile (darkness 255: out of sight or unlit) black inside:
- * its SUB×SUB darkness pixels back to 255 and its tint pixels to 0, so the
- * upsampled fade stays on the lit side of the boundary and a dark tile never
- * looks lit (no monster is sent there).
- */
-export function blackenDarkTiles(darkTile: Float32Array, w: number, x0: number, y0: number, x1: number, y1: number, dark: Uint8ClampedArray, tint: Uint8ClampedArray): void {
-  const pw = w * SUB;
-  for (let y = y0; y < y1; y++)
-    for (let x = x0; x < x1; x++) {
-      if (darkTile[y * w + x] < 255) continue;
-      for (let ky = 0; ky < SUB; ky++)
-        for (let kx = 0; kx < SUB; kx++) {
-          const p = ((y * SUB + ky) * pw + x * SUB + kx) * 4;
-          dark[p + 3] = 255;
-          tint[p] = tint[p + 1] = tint[p + 2] = tint[p + 3] = 0;
-        }
-    }
-}
-
-/**
- * Does the darkness canvas treat a tile as seen? On a daylight map every tile does (#258): what lies beyond sight is
+ * Does the darkness treat a tile as seen? On a daylight map every tile does (#258): what lies beyond sight is
  * only dimmed, by the vision mask, never blacked out here. `seenLit` (critters, sunbeams) still follows the real sight.
  */
 export function seenForDark(visible: boolean, daylight: boolean): boolean {
@@ -166,7 +90,7 @@ export function seenForDark(visible: boolean, daylight: boolean): boolean {
 }
 
 /**
- * A tile counts as seen for the light canvases when it is in view, or is open
+ * A tile counts as seen for the light pass when it is in view, or is open
  * and next to an open tile in view (8 around). A tile the polygon only grazes
  * (no sample point inside) then stays lit, so the darkness does not fade the
  * lit tile next to it into tile-shaped notches along the mask's straight edge.
@@ -211,7 +135,7 @@ export class LightView {
   private full: LazyView;
   /** The viewer and vision the view was computed for; empty: recompute. */
   private viewKey = '';
-  private out: LightOutput;
+  private out: GpuLight;
   /** What DarkvisionFX samples: the per-tile darkvision mask (2 px per tile, red = strength, LINEAR). */
   get mask(): Phaser.Textures.Texture { return this.out.mask; }
   private rgb: Float32Array;
@@ -227,11 +151,11 @@ export class LightView {
   private inView = (x: number, y: number) => this.view.isVisible(x, y);
   private opaque = (x: number, y: number) => this.map.hardOpaque(x, y);
 
-  constructor(scene: Phaser.Scene, private map: TileMap, private field: LightField, path: LightPath = 'gpu') {
+  constructor(scene: Phaser.Scene, private map: TileMap, private field: LightField) {
     const { w, h } = map;
     this.view = new View(w, h);
     this.full = new LazyView(w, h, 'all');
-    this.out = path === 'cpu' ? new CpuLight(scene, w, h) : new GpuLight(scene, w, h);
+    this.out = new GpuLight(scene, w, h);
     this.rgb = new Float32Array(w * h * 3);
     this.movingLit = new Uint8Array(w * h);
     this.seenLit = new Uint8Array(w * h);

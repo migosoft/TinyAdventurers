@@ -17,7 +17,7 @@ import { tileDraws } from './autotile';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
 import { syncDarkvisionFX } from './darkvisionfx';
-import { LightView, lightPath, nextDarkvision } from './lightview';
+import { LightView, nextDarkvision } from './lightview';
 import { TERRAIN, TerrainLayer } from './terrain';
 import { TorchView } from './torch';
 import { VisionMask } from './visionmask';
@@ -113,7 +113,7 @@ export class LightsDemoScene extends Phaser.Scene {
     for (let y = 0; y < H; y++)
       for (let x = 0; x < W; x++)
         if (map.get(x, y) === TERRAIN.Lava) this.field.add({ id: id++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x, y, on: true });
-    this.view = new LightView(this, map, this.field, lightPath(location.search, true));
+    this.view = new LightView(this, map, this.field);
     this.mask = new VisionMask(this, map);
     this.dot = this.add.circle(0, 0, 2, 0xffffff).setDepth(DEPTH.numbers);
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {

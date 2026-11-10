@@ -3,7 +3,6 @@
 // camera window is uploaded, texupload.ts), and a fragment shader (lightshader.ts)
 // renders the PIC_SUB px-per-tile picture from it into a texture, drawn as one
 // MULTIPLY Image at DEPTH.fog, scaled up by TILE / PIC_SUB with LINEAR filtering.
-// Behind the LightOutput interface, like CpuLight (lightcpu.ts).
 //
 // The Shader is not in the display list: it is drawn by hand from `flush`, which
 // runs in the scene's update. A Shader in the list would unbind a camera effect's
@@ -11,17 +10,18 @@
 import Phaser from 'phaser';
 import { TILE } from '../sim/map';
 import { DEPTH } from './effects';
-import { lightFrag, packDv, packTile, PIC_SUB, type LightOutput } from './lightshader';
+import { lightFrag, packDv, packTile, PIC_SUB } from './lightshader';
 import { WindowUpload } from './texupload';
 
-// Phaser's FilterMode.LINEAR, BlendModes.NORMAL and MULTIPLY as numbers (as in lightcpu.ts).
+// Phaser's FilterMode.LINEAR, BlendModes.NORMAL and MULTIPLY as numbers (the tests mock Phaser, so no module-level reads of its enums).
 const LINEAR = 0;
 const NORMAL = 0;
 const MULTIPLY = 2;
 
 const KEYS = ['lightdata', 'dvdata', 'lightpic', 'dvpic'];
 
-export class GpuLight implements LightOutput {
+/** Where LightView's per-tile result goes (`put`, then `flush` for the window). dark, r, g, b and dv are 0..255; dv is 0 while darkvision is off. */
+export class GpuLight {
   /** The darkvision picture (red = strength) that DarkvisionFX samples; never shown as an Image. */
   readonly mask: Phaser.Textures.Texture;
   private data: Uint8Array;
@@ -50,7 +50,8 @@ export class GpuLight implements LightOutput {
     this.shader.setRenderToTexture('lightpic');
     this.shader.removeFromDisplayList();
     scene.textures.get('lightpic').setFilter(LINEAR);
-    // Phaser's own draw in setRenderToTexture uses whatever blend mode and scissor are current; draw again with ours.
+    // setRenderToTexture draws once itself, but under whatever blend mode and scissor are current, which can leave the
+    // target empty; our draw() sets both.
     this.draw(this.shader);
 
     // The darkvision picture: same recipe, red channel only.
@@ -81,6 +82,7 @@ export class GpuLight implements LightOutput {
     if (dv > 0 || this.dvWas) packDv(this.dvData, i, dv);
   }
 
+  /** Uploads the tile window [x0,x1)×[y0,y1) and redraws the pictures; `dv`: darkvision > 0 this frame. */
   flush(x0: number, y0: number, x1: number, y1: number, dv: boolean): void {
     this.upload.upload({ data: this.data, width: this.w }, x0, y0, x1 - x0, y1 - y0);
     this.draw(this.shader);

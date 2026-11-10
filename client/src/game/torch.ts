@@ -1,7 +1,7 @@
 // A wall torch (atlas frames torch_f*, torch_out; CC0 art by Natural_Privateer,
 // see assets-src/torch). The server sends anim 1 lit / 0 out and the side in
 // `extra`: 0 on a brick face, 1 on a wall west of the floor, 2 east of it.
-// The light itself is drawn by the light canvas, not here.
+// The light itself is drawn by the light pass, not here.
 import Phaser from 'phaser';
 import { DEPTH } from './effects';
 
