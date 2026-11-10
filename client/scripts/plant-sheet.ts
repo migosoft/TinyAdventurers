@@ -70,14 +70,17 @@ function writeSheets(dir: string): void {
 
 /** Mean ms per plant over 40 seeds after a warm-up, and the sum over the distinct looks of the demo map. */
 function bench(): void {
-  const time = (kind: string, pct: number, seed: number) => { const t = performance.now(); drawPlant(kind as PlantKind, seed, pct); return performance.now() - t; };
-  for (let i = 1; i <= 20; i++) time('round', 100, i);
+  const time = (kind: string, pct: number, seed: number, light: Light) => { const t = performance.now(); drawPlant(kind as PlantKind, seed, pct, light); return performance.now() - t; };
+  for (let i = 1; i <= 20; i++) { time('round', 100, i, DEFAULT_LIGHT); time('round', 100, i, lightVector({ side: 1, elevation: 45 })); }
   const cells: [string, number[]][] = [['round', [60, 100, 120]], ['wide', [60, 100, 120]], ['tall', [60, 100, 120]], ['conifer', [60, 100, 120]], ['bare', [60, 100, 120]], ['bush', [100, 150]]];
-  console.log('kind     ms per plant (mean of 40 seeds)');
-  for (const [kind, pcts] of cells) {
-    if (!has(kind)) { console.log(`${kind.padEnd(8)} (none)`); continue; }
-    const ms = pcts.map((p) => { let sum = 0; for (let s = 1; s <= 40; s++) sum += time(kind, p, s); return `${(sum / 40).toFixed(2)}`; });
-    console.log(`${kind.padEnd(8)} ${ms.join(' / ')}   (at ${pcts.join(' / ')} %)`);
+  // both shadings are measured: the default light (the ref is the picture) and a right sun (the second shading is real work)
+  for (const [name, light] of [['default light', DEFAULT_LIGHT], ['right sun, 45 deg', lightVector({ side: 1, elevation: 45 })]] as const) {
+    console.log(`kind     ms per plant (mean of 40 seeds), ${name}`);
+    for (const [kind, pcts] of cells) {
+      if (!has(kind)) { console.log(`${kind.padEnd(8)} (none)`); continue; }
+      const ms = pcts.map((p) => { let sum = 0; for (let s = 1; s <= 40; s++) sum += time(kind, p, s, light); return `${(sum / 40).toFixed(2)}`; });
+      console.log(`${kind.padEnd(8)} ${ms.join(' / ')}   (at ${pcts.join(' / ')} %)`);
+    }
   }
   const demo = JSON.parse(fs.readFileSync(new URL('../src/generated/woodland-demo.json', import.meta.url), 'utf8'))[0];
   const looks = new Set<string>();

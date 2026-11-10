@@ -157,6 +157,25 @@ describe('vegetation', () => {
     }
   });
 
+  it("a conifer's hem is jagged", () => {
+    // Per column the lowest leaf pixel (palette 5-9) above the row foot.y - 8; walking left to right its height changes direction at least 12 times.
+    const LEAF = [[22, 48, 52], [30, 74, 70], [44, 104, 88], [74, 140, 104], [118, 176, 124]];
+    for (let seed = 1; seed <= 6; seed++) {
+      const { img, foot } = drawTree({ seed, scale: 1, shape: 'conifer' });
+      const leaf = (x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i + 3] === 255 && LEAF.some((c) => c[0] === img.data[i] && c[1] === img.data[i + 1] && c[2] === img.data[i + 2]); };
+      const low: number[] = [];
+      for (let x = 0; x < img.w; x++) for (let y = foot.y - 9; y >= 0; y--) if (leaf(x, y)) { low.push(y); break; }
+      let turns = 0, dir = 0;
+      for (let i = 1; i < low.length; i++) { const d = Math.sign(low[i] - low[i - 1]); if (d === 0) continue; if (dir !== 0 && d !== dir) turns++; dir = d; }
+      expect([`conifer ${seed}`, turns >= 12], `${turns} turns`).toEqual([`conifer ${seed}`, true]);
+    }
+  });
+
+  it('a conifer is about 46 x 90 at seed 11', () => {
+    const { img } = drawTree({ seed: 11, scale: 1, shape: 'conifer' });
+    expect(Math.abs(img.w - 46)).toBeLessThanOrEqual(8); expect(Math.abs(img.h - 90)).toBeLessThanOrEqual(8);
+  });
+
   it('cost', () => {
     drawPlant('round', 99, 100); // warm-up: the first draw pays for JIT
     const t0 = performance.now();

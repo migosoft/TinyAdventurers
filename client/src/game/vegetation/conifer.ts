@@ -1,53 +1,91 @@
-// A conifer (fir/spruce) (#279).
-import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, barkShade, rng } from './canvas';
-import { clumps } from './crown';
-import { canopyShadow, rootMoss } from './trunk';
+// A conifer (fir/spruce): a straight trunk under stacked, jagged skirts (#279).
+import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, rng, step } from './canvas';
+import { type Trunk, barkLines, canopyShadow, painter, rootMoss, roots, type Seg } from './trunk';
 
-/** A conifer (fir/spruce): straight tapering trunk, stacked drooping tiers of leaf clumps narrowing to a spire, blue-green palette 5..9. */
+const PAL = '56789';
+const quant = (l: number) => (l > 0.6 ? '9' : l > 0.2 ? '8' : l > -0.3 ? '7' : l > -0.75 ? '6' : '5');
+
+/**
+ * One skirt, a rounded triangle of width `2W` px whose top edge is `yTop + 0.9 h (|x|/W)^1.1` and whose hem is
+ * `yTop + h + 2.6 s (|x|/W)^2` minus a zigzag. `id` is stored in the lobe-id map. Every random draw (zigzag, noise,
+ * dabs) is made whatever the light is. Fixed-position colours (shading, dark hem, the shadow onto the skirt below)
+ * are written for both lights; the sun-side lift and dabs only recolour.
+ */
+function skirt(cv: Canvas, r: () => number, light: Light, s: number, cx: number, id: number, W: number, yTop: number, h: number, t: number): void {
+  const period = 3.2 + r() * 1.2, amp = (1.6 + r() * 0.8) * s, phase = r() * period;
+  const x0 = Math.round(cx - W), n = Math.round(cx + W) - x0 + 1;
+  const tops = new Float64Array(n), bots = new Float64Array(n);
+  const lx = 0.7 * light.x, dx = 0.7 * DEFAULT_LIGHT.x, yB = yTop + h, base = 0.05 - 0.3 * (1 - t);
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i, ax = Math.abs(x - cx) / W;
+    if (ax > 1) { tops[i] = Infinity; bots[i] = -Infinity; continue; }
+    const u = ((x + phase) / period) % 1, jag = amp * (1 - Math.abs(2 * u - 1));
+    const top = yTop + 0.9 * h * ax ** 1.1, bot = yB + 2.6 * s * ax * ax - jag;
+    tops[i] = top; bots[i] = bot;
+    const xw = (x - cx) / W, span = Math.max(bot - top, 1);
+    for (let y = Math.ceil(top); y <= Math.floor(bot); y++) {
+      const b = 0.9 * (0.75 - (y - top) / span) + (r() - 0.5) * 0.12 + base, dB = bot - y;
+      let c = quant(b + lx * xw), cRef = quant(b + dx * xw);
+      if (dB < 1.5) { c = '5'; cRef = '5'; } else if (dB < 2.6) { if (c > '6') c = '6'; if (cRef > '6') cRef = '6'; }
+      cv.set(x, y, c, cRef, id);
+    }
+  }
+  const recolour = (ref: boolean, x: number, y: number, by: number) => {
+    if (cv.idAt(x, y) !== id) return;
+    if (ref) cv.recolourRef(x, y, step(PAL, cv.getRef(x, y), by) as string); else cv.recolour(x, y, step(PAL, cv.get(x, y), by) as string);
+  };
+  // the outer tenth of the sun side is lifted one step (not the hem)
+  for (const ref of [false, true]) {
+    const sg = Math.sign(ref ? DEFAULT_LIGHT.x : light.x);
+    for (let i = 0; i < n; i++) {
+      const x = x0 + i;
+      if (tops[i] === Infinity || Math.abs(x - cx) / W <= 0.9 || Math.sign(x - cx) !== sg) continue;
+      for (let y = Math.ceil(tops[i]); y <= Math.floor(bots[i] - 2.6); y++) recolour(ref, x, y, 1);
+    }
+  }
+  // dabs on the sun side, 2 px wide, one step lighter; every draw first
+  for (let k = 0, count = Math.round((W * h) / 40); k < count; k++) {
+    const u = 0.25 + 0.7 * r(), v = 0.6 * r();
+    for (const ref of [false, true]) {
+      const sg = Math.sign(ref ? DEFAULT_LIGHT.x : light.x), x = Math.round(cx + sg * u * W), i = x - x0;
+      if (i < 0 || i >= n || tops[i] === Infinity) continue;
+      const y = Math.round(tops[i] + v * (bots[i] - tops[i]));
+      for (let q = 0; q < 2; q++) { const j = i + q; if (j < n && bots[j] - y >= 2.6) recolour(ref, x + q, y, 1); }
+    }
+  }
+  // the shadow of this hem on the two rows below it, where a lower skirt shows: two steps, then one
+  for (let i = 0; i < n; i++) {
+    if (tops[i] === Infinity) continue;
+    for (let d = 1; d <= 2; d++) {
+      const x = x0 + i, y = Math.floor(bots[i]) + d, j = cv.idAt(x, y);
+      if (j >= 0 && j < id) cv.set(x, y, step(PAL, cv.get(x, y), -(3 - d)) as string, step(PAL, cv.getRef(x, y), -(3 - d)) as string, j);
+    }
+  }
+}
+
+/** A conifer: a straight tapering trunk, skirts stacked from the bottom (each one drooping to a zigzag hem) narrowing to a spire, blue-green palette 5..9. */
 export function drawConifer(seed: number, s: number, light: Light): Drawn {
   const r = rng(seed), cv = new Canvas(220, 220), cx = 110, base = 190, detail = s >= 0.7;
-  const bare = r() * 0.25 * 82; // bare trunk below the lowest tier, uniform 0-25 % of the height (design units)
-  const X = (dx: number) => cx + dx * s, Y = (y: number) => base + (y - 86) * s;
-  const footY = Y(82);
-  const paint = (px: number, py: number, w: number, edge: boolean, maxY = Infinity) => {
-    for (let dy = -Math.ceil(w); dy <= Math.ceil(w); dy++) for (let dx = -Math.ceil(w); dx <= Math.ceil(w); dx++) {
-      const d = Math.hypot(dx, dy); if (d > w) continue; const x = Math.round(px + dx), y = Math.round(py + dy); if (y > maxY) continue;
-      const lit = (dx * light.x + dy * light.y) / Math.max(w, 1), litRef = (dx * DEFAULT_LIGHT.x + dy * DEFAULT_LIGHT.y) / Math.max(w, 1);
-      cv.set(x, y, barkShade(lit, edge && d > w - 1), barkShade(litRef, edge && d > w - 1));
-    }
-  };
-  // straight trunk, mostly hidden
-  for (let i = 0; i <= 40; i++) { const t = i / 40; paint(cx, Y(50 + 32 * t), Math.max(1.5, (3.2 + 1.3 * t + 2.5 * t ** 4) * s), false, footY); }
-  // 3-4 short roots
-  const R: [number, number][] = detail ? [[-1, 0.2], [-0.35, 0.6], [0.4, 0.55], [1, 0.2]] : [[-1, 0.25], [0, 0.6], [1, 0.25]];
-  for (const [vx, vy] of R) { const len = (8 + r() * 3) * s, m = Math.hypot(vx, vy); const n = Math.max(6, Math.round(len * 1.5)); let x = cx + (vx / m) * 3 * s, y = footY - 1;
-    for (let i = 0; i <= n; i++) { const t = i / n; paint(x, y, 2.6 * s * (1 - t) ** 1.2 + 0.5, true); const fy = vy * (1 - 0.6 * t), mm = Math.hypot(vx, fy); x += (vx / mm) * (len / n); y += (fy / mm) * (len / n); } }
-  rootMoss(cv, rng(seed ^ 0x6d6f7373), cx, footY, s); // its own stream, so the tiers below are drawn as before
-  // tiers, bottom first so higher ones overlap; each is a centre clump, two side clumps and two drooping tips
-  const span = 82 - bare - 29, nominal = s < 0.7 ? 10.5 : 8.4; // tier spacing stays near nominal: longer trunk, fewer tiers
-  const n = Math.max(3, Math.round(span / nominal) + 1), step = span / (n - 1), NW = 0.67; // NW slims the silhouette
-  const tier = (list: { x: number; y: number; rx: number; ry: number }[], under: boolean) => {
-    const before = cv.px.slice(), beforeRef = cv.ref.slice(); clumps(cv, r, list, Y(4), 64 * s, '56789', light);
-    if (!under) return;
-    // the dark underside of the tier, for the picture and for its default-light reference alike
-    for (const [px, was] of [[cv.px, before], [cv.ref, beforeRef]] as const) {
-      const mine = (x: number, y: number) => px[y * cv.w + x] !== was[y * cv.w + x];
-      for (let y = 0; y < cv.h - 1; y++) for (let x = 0; x < cv.w; x++) if (mine(x, y) && !mine(x, y + 1)) { px[y * cv.w + x] = '5'; if (y > 0 && mine(x, y - 1) && px[(y - 1) * cv.w + x] !== '5') px[(y - 1) * cv.w + x] = '6'; }
-    }
-  };
-  for (let i = n - 1; i >= 0; i--) {
-    const t = i / (n - 1), yc = 17 + i * step, w = (5.5 + t * 19.5 + (r() - 0.5) * 2) * NW;
-    const j = () => (r() - 0.5) * 1.5;
-    tier([
-      { x: X(j()), y: Y(yc + j()), rx: w * 0.6 * s, ry: 6.2 * s },
-      ...[-1, 1].map((sg) => ({ x: X(sg * w * 0.6 + j()), y: Y(yc + 4 + j()), rx: w * 0.45 * s, ry: 5.2 * s })),
-      ...[-1, 1].map((sg) => ({ x: X(sg * w * 0.98 + j()), y: Y(yc + 8 + j()), rx: w * 0.26 * s, ry: 3.8 * s })),
-    ], true);
+  const bare = 4 + r() * 14; // bare trunk below the lowest skirt, design units
+  const Y = (y: number) => base + (y - 86) * s;
+  const footY = Y(80), paint = painter(cv, light);
+  // trunk: half-width 3.2 to 1.4 units with a foot flare, up to just under the lowest skirt
+  const len = bare + 4, wAt = (u: number) => Math.max(1.2, (3.2 - 1.8 * (u / len) + 2.2 * Math.max(0, 1 - u / 5) ** 2) * s);
+  const seg: Seg = [], steps = Math.ceil(len * s);
+  for (let i = 0; i <= steps; i++) { const u = (i / steps) * len; seg.push({ x: cx, y: Y(80 - u), w: wAt(u) }); }
+  const tr: Trunk = { at: (t) => ({ x: cx, y: Y(80 - t * len), w: wAt(t * len) }), seg, topY: Y(80 - len), footY };
+  paint(seg, false, footY);
+  roots(cv, r, paint, cx, footY, s, 0.7 * s, detail ? 3 : 2, 0.7);
+  barkLines(cv, r, tr, light, s);
+  rootMoss(cv, rng(seed ^ 0x6d6f7373), cx, footY, s); // its own stream
+  // skirts, bottom first so each higher one covers the top of the one below; id = index from the bottom
+  const bottom = 80 - bare, span = bottom - 27, n = Math.max(3, Math.round(span / 10.25) + 1), gap = span / (n - 1);
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1), W = (5 + 17 * (1 - t) ** 1.15 + (r() * 2 - 1)) * s;
+    skirt(cv, r, light, s, cx, i, W, Y(bottom - i * gap - 13), 13 * s, t);
   }
-  tier([{ x: X(0), y: Y(5), rx: 2 * s, ry: 5.5 * s }, { x: X(0), y: Y(10), rx: 3.2 * s, ry: 5 * s }], false); // pointed top
-  for (let k = 0; k < 160 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); const c = cv.getRef(x, y);
-    if (c === '7' && cv.getRef(x + 1, y) === '7') { cv.set(x, y, '8'); if (r() < 0.5) cv.set(x + 1, y - 1, '8'); }
-    if (c === '8' && cv.getRef(x + 1, y) === '8' && r() < 0.5) cv.set(x, y, '9'); }
-  canopyShadow(cv, 5 * s); // the lowest tier's shadow on the trunk
+  skirt(cv, r, light, s, cx, n, 3.2 * s, Y(6), 8 * s, 1); // the spire
+  cv.set(cx, Y(6) - 1, '7', '7', n); // its tip
+  canopyShadow(cv, 4 * s); // the lowest skirt's shadow on the trunk
   return cv.finish({ x: cx, y: footY });
 }
