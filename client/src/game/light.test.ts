@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import fixtures from '../generated/fixtures.json';
 import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { View } from '../sim/view';
@@ -6,6 +6,8 @@ import { TileMap } from '../sim/map';
 import { darkReach } from './lightview';
 import { addColour, cloudy, DAYLIGHT, EDGE, falloff, LightField } from './light';
 import type { LightInfo } from '../generated/LightInfo';
+
+vi.mock('phaser', () => ({ default: {} }));
 
 const fmap = () => new TileMap(fixtures.w, fixtures.h, Uint8Array.from(fixtures.tiles));
 

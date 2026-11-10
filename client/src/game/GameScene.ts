@@ -23,7 +23,7 @@ import { DEPTH, Effects, numberDepth } from './effects';
 import { lookOf } from './looks';
 import { drawGazeBeam, has } from './status';
 import { LightField } from './light';
-import { LightView, nextDarkvision } from './lightview';
+import { LightView, lightPath, nextDarkvision } from './lightview';
 import { Sunbeams } from './sunbeams';
 import { CoveView } from './cove';
 import { WoodlandView } from './woodland/WoodlandView';
@@ -233,7 +233,7 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, this.map.w * TILE, this.map.h * TILE);
     this.fx = new Effects(this);
     this.drawBoard();
-    this.lightView = new LightView(this, this.map, this.light);
+    this.lightView = new LightView(this, this.map, this.light, lightPath(location.search, this.info.debug));
     this.mood = this.info.daylight ? null : new Mood(this, this.map, this.lightView);
     this.sunbeams = new Sunbeams(this, this.light, this.lightView);
     this.cove = this.info.cove ? new CoveView(this, this.info.cove) : null;

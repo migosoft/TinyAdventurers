@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { catmullRom } from './lightview';
 import { lightFrag, packDv, packTile } from './lightshader';
+
+vi.mock('phaser', () => ({ default: {} }));
 
 /** The four weight expressions inside `vec4(...)` of the GLSL `catmullRom`, split at top-level commas. */
 function glslWeights(src: string): string[] {

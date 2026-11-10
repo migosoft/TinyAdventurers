@@ -16,6 +16,7 @@ import { TILE, type Blocker, type TileMap } from '../sim/map';
 import { cloudAt, lookFor, sunLook } from './sunmath';
 import type { LightField } from './light';
 import { CpuLight } from './lightcpu';
+import { GpuLight } from './gpulight';
 import type { LightOutput } from './lightshader';
 
 /** How strongly a light's hue tints what it lights (MULTIPLY blend): at most this far from white towards the hue. */
@@ -226,11 +227,11 @@ export class LightView {
   private inView = (x: number, y: number) => this.view.isVisible(x, y);
   private opaque = (x: number, y: number) => this.map.hardOpaque(x, y);
 
-  constructor(scene: Phaser.Scene, private map: TileMap, private field: LightField) {
+  constructor(scene: Phaser.Scene, private map: TileMap, private field: LightField, path: LightPath = 'gpu') {
     const { w, h } = map;
     this.view = new View(w, h);
     this.full = new LazyView(w, h, 'all');
-    this.out = new CpuLight(scene, w, h);
+    this.out = path === 'cpu' ? new CpuLight(scene, w, h) : new GpuLight(scene, w, h);
     this.rgb = new Float32Array(w * h * 3);
     this.movingLit = new Uint8Array(w * h);
     this.seenLit = new Uint8Array(w * h);
@@ -264,7 +265,7 @@ export class LightView {
     moving.forEach(([mx, my, kind, colour], n) =>
       this.field.addMoving(this.rgb, this.movingLit, mx, my, kind, colour ?? LIGHT[kind].colour, flicker(kind, 1000 + n, t), TILE));
     const range = sight * darkvision;
-    // Without darkvision the mask is not read (syncDarkvisionFX removes its effect), so it is neither drawn nor uploaded.
+    // The mask value is 0 while darkvision is off (syncDarkvisionFX removes its effect then).
     const dv = darkvision > 0;
     for (let y = y0; y < y1; y++)
       for (let x = x0; x < x1; x++) {

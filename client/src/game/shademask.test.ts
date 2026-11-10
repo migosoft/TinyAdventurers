@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
 import { View } from '../sim/view';
 import { LazyView } from './lightview';
 import { ShadeMask, shadeCovers } from './shademask';
+
+vi.mock('phaser', () => ({ default: {} }));
 
 /** A 20x20 map ringed by walls, `extra` placed on top. */
 function map(extra: [number, number, number][]): TileMap {

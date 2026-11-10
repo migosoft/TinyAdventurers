@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LIGHT_KIND } from '../generated/defs';
 import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, lightPath, nextDarkvision, seenForDark, seenForLight, SUB, tileDark, upsample, warmTint, WARM } from './lightview';
+
+vi.mock('phaser', () => ({ default: {} }));
 
 describe('darkness', () => {
   it('is black where not seen or not lit', () => {

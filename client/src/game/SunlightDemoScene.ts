@@ -19,7 +19,7 @@ import { TILE, TileMap } from '../sim/map';
 import { tileDraws } from './autotile';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
-import { LightView } from './lightview';
+import { LightView, lightPath } from './lightview';
 import { Mood } from './mood';
 import { Sunbeams } from './sunbeams';
 import { sunLook } from './sunmath';
@@ -92,7 +92,7 @@ export class SunlightDemoScene extends Phaser.Scene {
     this.torches.push({ view: new TorchView(this), x: 1 * TILE + 0.5, y: 9.5 * TILE, side: 1, lit: false });
     this.torches.push({ view: new TorchView(this), x: 14 * TILE - 0.5, y: 8.5 * TILE, side: 2, lit: true });
     field.add({ id: 2, kind: LIGHT_KIND.Torch, colour: WARM, x: 13, y: 8, on: true });
-    this.view = new LightView(this, map, field);
+    this.view = new LightView(this, map, field, lightPath(location.search, true));
     this.mask = new VisionMask(this, map);
     this.sun = new Sunbeams(this, field, this.view);
     this.mood = new Mood(this, map, this.view);

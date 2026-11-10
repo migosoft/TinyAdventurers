@@ -12,7 +12,7 @@ import { TILE, TileMap } from '../sim/map';
 import { tileDraws } from './autotile';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
-import { LightView } from './lightview';
+import { LightView, lightPath } from './lightview';
 import { Mood, type AirMover } from './mood';
 import { projectileAir } from './airshots';
 import { TERRAIN, TerrainLayer } from './terrain';
@@ -126,7 +126,7 @@ export class MoodDemoScene extends Phaser.Scene {
     light(1, 9, LIGHT_KIND.Torch, WARM);
     this.torches.push({ view: new TorchView(this), x: 1 * TILE + 0.5, y: 9.5 * TILE, side: 1 });
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (map.get(x, y) === TERRAIN.Lava) light(x, y, LIGHT_KIND.Lava, 0xff4818);
-    this.view = new LightView(this, map, field);
+    this.view = new LightView(this, map, field, lightPath(location.search, true));
     this.mask = new VisionMask(this, map);
     this.mood = new Mood(this, map, this.view);
     for (const k of ['dust', 'smoke', 'embers', 'haze', 'drips'] as const) this.mood.on[k] = q.get(k) !== '0';

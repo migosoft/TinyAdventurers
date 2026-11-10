@@ -17,7 +17,7 @@ import { coveLayout } from './cove';
 import { COVE_TREE_FOOT, type CoveSpec, paintCove, placeCovePlants } from './covemath';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
-import { LightView } from './lightview';
+import { LightView, lightPath } from './lightview';
 import { Mood } from './mood';
 import { Pixies } from './pixies';
 import { lookOf, Silhouette } from './silhouette';
@@ -123,7 +123,7 @@ export class CoveDemoScene extends Phaser.Scene {
 
     this.field = new LightField(map);
     this.placeSuns();
-    this.view = new LightView(this, map, this.field);
+    this.view = new LightView(this, map, this.field, lightPath(location.search, true));
     this.mask = new VisionMask(this, map);
     this.shade = new ShadeMask(this, map);
     this.shade.on = q.get('shade') !== '0';
