@@ -50,6 +50,7 @@ pub enum PlantKind {
     Tall = 2,
     Conifer = 3,
     Bush = 4,
+    Bare = 5,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -86,12 +87,14 @@ pub struct Woodland {
 /// The edge's plants come from fixed (seed, scale_pct) pairs, 12 per kind (index = `PlantKind as usize`),
 /// so the client draws at most 60 distinct edge looks. Trees 80..120 %, bushes 113..150 % (36..48 px).
 // balancing
-const EDGE_SEEDS: [[(u32, u8); 12]; 5] = [
+/// The edge never picks bare; its row exists so `EDGE_SEEDS[kind as usize]` can never index out of range.
+const EDGE_SEEDS: [[(u32, u8); 12]; 6] = [
     [(101, 100), (102, 84), (103, 116), (104, 92), (105, 120), (106, 80), (107, 108), (108, 96), (109, 112), (110, 88), (111, 118), (112, 104)],
     [(201, 96), (202, 112), (203, 80), (204, 104), (205, 88), (206, 120), (207, 92), (208, 116), (209, 84), (210, 100), (211, 108), (212, 118)],
     [(301, 104), (302, 88), (303, 120), (304, 96), (305, 80), (306, 112), (307, 84), (308, 108), (309, 92), (310, 118), (311, 100), (312, 116)],
     [(401, 92), (402, 108), (403, 84), (404, 120), (405, 100), (406, 80), (407, 116), (408, 96), (409, 118), (410, 88), (411, 112), (412, 104)],
     [(501, 130), (502, 113), (503, 147), (504, 120), (505, 140), (506, 116), (507, 150), (508, 123), (509, 137), (510, 127), (511, 143), (512, 133)],
+    [(601, 100), (602, 84), (603, 116), (604, 92), (605, 120), (606, 80), (607, 108), (608, 96), (609, 112), (610, 88), (611, 118), (612, 104)],
 ];
 
 /// The tile a tree's trunk stands on; bushes have none.
@@ -311,13 +314,14 @@ pub fn generate(seed: u64) -> (Layout, Woodland) {
     for _pass in 0..3 {
         for &(x, y) in &tiles {
             let roll = rng.gen_range(0..100);
-            // (kind, spacing in tiles, scale range); round 30, conifer 25, tall 20, small round 15, wide 10
+            // (kind, spacing in tiles, scale range); round 28, conifer 24, tall 19, small round 14, wide 10, bare 5
             let (kind, spacing, lo, hi) = match roll {
-                0..=29 => (PlantKind::Round, 3.2, 80, 120),
-                30..=54 => (PlantKind::Conifer, 2.4, 80, 120),
-                55..=74 => (PlantKind::Tall, 2.4, 80, 120),
-                75..=89 => (PlantKind::Round, 2.0, 50, 65),
-                _ => (PlantKind::Wide, 3.2, 80, 120),
+                0..=27 => (PlantKind::Round, 3.2, 80, 120),
+                28..=51 => (PlantKind::Conifer, 2.4, 80, 120),
+                52..=70 => (PlantKind::Tall, 2.4, 80, 120),
+                71..=84 => (PlantKind::Round, 2.0, 50, 65),
+                85..=94 => (PlantKind::Wide, 3.2, 80, 120),
+                _ => (PlantKind::Bare, 3.2, 80, 120),
             }; // balancing
             let foot = jitter(&mut rng, x, y);
             // from the foot's own position: none within 3 tiles of the road's centre line, half of those within 5
@@ -756,7 +760,24 @@ mod tests {
     fn the_map_is_unchanged_by_the_sun() {
         let got: Vec<u64> = [1u64, 2, 3, 7, 42].iter().map(|s| map_fingerprint(*s)).collect();
         // Pinned in #277, the commit that gave the woodland a sun: tiles, plants and spawns do not depend on it.
-        assert_eq!(got, vec![15964463446947852909, 14269433004639530539, 3843392799734633643, 12441823283910592039, 9934968307587744593]);
+        // Re-pinned in #279: the bare roll moved the plants.
+        assert_eq!(got, vec![1533211932970860982, 3065405037423784034, 3741012237172847188, 17862708039788222982, 11343165236960593040]);
+    }
+
+    #[test]
+    fn bare_trees_grow_by_the_road_not_on_the_edge() {
+        let mut bare = 0;
+        each(|seed, l, w| {
+            assert!(!w.plants.iter().any(|p| p.kind == PlantKind::Bare && on_thicket(l, p)), "seed {seed}: a bare tree on the edge");
+            bare += w.plants.iter().filter(|p| p.kind == PlantKind::Bare).count();
+        });
+        assert!(bare > 0, "no seed has a bare tree");
+    }
+
+    #[test]
+    fn plant_kind_ids_match_the_client() {
+        // client/src/game/vegetation.ts PLANT_KINDS has 6 entries, 'bare' last; vegetation.test.ts pins the same
+        assert_eq!(PlantKind::Bare as u8, 5);
     }
 
     #[test]
