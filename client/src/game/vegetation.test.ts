@@ -171,6 +171,15 @@ describe('vegetation', () => {
     }
   });
 
+  it('a conifer is solid from its tip down to the foot', () => {
+    for (let seed = 1; seed <= 30; seed++) for (const pct of [50, 51, 60, 70, 80, 90, 100, 110, 120]) {
+      const { img, foot } = drawPlant('conifer', seed, pct);
+      let y = 0; while (y < img.h && (alpha(img, foot.x, y) === 0 || isOutline(img, foot.x, y))) y++; // the outline above the tip
+      let bad = -1; for (; y <= foot.y; y++) if (alpha(img, foot.x, y) === 0 || isOutline(img, foot.x, y)) { bad = y; break; }
+      expect([`conifer ${seed} @${pct}`, bad]).toEqual([`conifer ${seed} @${pct}`, -1]);
+    }
+  });
+
   it('a conifer is about 46 x 90 at seed 11', () => {
     const { img } = drawTree({ seed: 11, scale: 1, shape: 'conifer' });
     expect(Math.abs(img.w - 46)).toBeLessThanOrEqual(8); expect(Math.abs(img.h - 90)).toBeLessThanOrEqual(8);
