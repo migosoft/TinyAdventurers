@@ -9,7 +9,9 @@ export interface Drawn { img: Rgba; foot: { x: number; y: number }; parts?: Part
 
 export const P: Record<string, Rgb> = { k: [34, 34, 34], 0: [28, 58, 50], 1: [40, 100, 62], 2: [62, 138, 67], 3: [106, 174, 79], 4: [156, 207, 98],
   5: [22, 48, 52], 6: [30, 74, 70], 7: [44, 104, 88], 8: [74, 140, 104], 9: [118, 176, 124],
-  a: [58, 35, 40], b: [98, 53, 43], c: [143, 64, 41], d: [176, 112, 74] };
+  a: [58, 35, 40], b: [98, 53, 43], c: [143, 64, 41], d: [176, 112, 74],
+  // dead wood: the bark ramp a..d turned greyer and darker (a bare tree's wood, written by its last pass)
+  e: [40, 32, 34], f: [64, 50, 47], g: [90, 73, 64], h: [118, 99, 84] };
 export function rng(seed: number) { let s = seed >>> 0; return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 /** A unit vector pointing toward the sun, in screen space (y down). */

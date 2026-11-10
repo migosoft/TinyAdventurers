@@ -1,4 +1,4 @@
-// A bush: a lobed crown standing on short stems (#279).
+// A bush: a lobed crown standing on one thin stem that forks early (#279).
 import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, barkShade, isLeaf, rng, step } from './canvas';
 import { type Lobe, crown, pockets } from './crown';
 
@@ -12,10 +12,10 @@ const LAYOUTS: Record<3 | 4 | 5, [number, number, number][]> = {
   5: [[0, -14, 10], [-9, -10, 9], [9, -10, 9], [-17, -6, 7], [17, -6, 7]],
 };
 
-/** The width of each layout in design units (outermost lobe edges). */
-const EXTENT: Record<3 | 4 | 5, number> = { 3: 34, 4: 39, 5: 48 };
+/** The width of each layout in design units (outermost lobe edges), derived from `LAYOUTS`. */
+const EXTENT = Object.fromEntries(([3, 4, 5] as const).map((n) => [n, Math.max(...LAYOUTS[n].map(([dx, , rad]) => dx + rad)) - Math.min(...LAYOUTS[n].map(([dx, , rad]) => dx - rad))])) as Record<3 | 4 | 5, number>;
 
-/** A bush: 3-5 lobes on 1-3 short stems; `width` is the drawn width in px (about, to a few px). */
+/** A bush: 3-5 lobes on one thin stem that forks early; `width` is the drawn width in px (about, to a few px). */
 export function drawBush(o: { seed: number; width: number; light?: Light }): Drawn {
   const { seed } = o, light = o.light ?? DEFAULT_LIGHT;
   const r = rng(seed); const cv = new Canvas(120, 100); const cx = 60, ground = 85;
@@ -26,17 +26,22 @@ export function drawBush(o: { seed: number; width: number; light?: Light }): Dra
     const x = cx + (dx + (r() - 0.5) * 3) * s, y = ground - lift + (dy + (r() - 0.5) * 2) * s, rr = rad + (r() - 0.5) * 2;
     return { x, y, rx: rr * s, ry: rr * s * 0.86, ph: r() * 6, ph2: r() * 6 };
   }).sort((a, b) => b.y - a.y);
-  // stems: under the lowest lobes, painted before the crown, which covers their tops
-  const count = n === 3 ? 1 : n === 4 ? 2 : r() < 0.5 ? 2 : 3;
-  const byBottom = lobes.map((b, i) => ({ i, bottom: b.y + b.ry })).sort((a, b) => b.bottom - a.bottom);
-  const wide = o.width < 40 ? 2 : 3;
-  for (let k = 0; k < count; k++) {
-    const b = lobes[byBottom[k].i], jit = Math.round((r() - 0.5) * 2), mid = Math.round(b.x) + jit;
-    const top = Math.min(ground - 2, Math.round(byBottom[k].bottom) - 2);
-    const x0 = wide === 2 ? mid : mid - 1, centre = x0 + (wide - 1) / 2;
-    for (let x = x0; x < x0 + wide; x++) {
-      const lit = ((x - centre) * light.x) / (wide / 2), litRef = ((x - centre) * DEFAULT_LIGHT.x) / (wide / 2);
-      for (let y = top; y <= ground - 1; y++) cv.set(x, y, barkShade(lit, false), barkShade(litRef, false));
+  // one thin stem in the middle (1 px below 40 px wide, else 2), painted before the crown, which covers the branch tops
+  const sx = cx + Math.round((r() - 0.5) * 2), wide = o.width < 40 ? 1 : 2, h = Math.round(1 + o.width / 40);
+  const stemCentre = sx + (wide - 1) / 2;
+  for (let x = sx; x < sx + wide; x++) {
+    const lit = wide === 1 ? 0 : (x - stemCentre) / (wide / 2);
+    for (let y = ground - h; y <= ground - 1; y++) cv.set(x, y, barkShade(lit * light.x, false), barkShade(lit * DEFAULT_LIGHT.x, false));
+  }
+  // it forks early into 2 branches (3 with 5 lobes), 1 px wide, going up and out at 35-60 degrees until they are under the crown;
+  // every angle is drawn whatever the light, the sun side of the stem is the lighter brown
+  const nb = n === 5 ? 3 : 2, yEnd = ground - lift - 1, yFork = ground - h - 1;
+  for (let k = 0; k < nb; k++) {
+    const mag = ((35 + r() * 25) * Math.PI) / 180, a = nb === 3 && k === 1 ? (r() - 0.5) * 0.3 : (k === 0 ? -mag : mag);
+    const len = Math.max(1, (yFork - yEnd) / Math.cos(a));
+    for (let t = 0; t <= len; t += 0.5) {
+      const x = stemCentre + Math.sin(a) * t, y = yFork - Math.cos(a) * t, side = x - stemCentre;
+      cv.set(x, y, side * light.x > 0 ? 'c' : 'b', side * DEFAULT_LIGHT.x > 0 ? 'c' : 'b');
     }
   }
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -51,5 +56,5 @@ export function drawBush(o: { seed: number; width: number; light?: Light }): Dra
     cv.recolour(x, y, '0'); cv.recolourRef(x, y, '0');
     if (isLeaf(cv.get(x, y - 1))) { cv.recolour(x, y - 1, step('01234', cv.get(x, y - 1), -2) as string); cv.recolourRef(x, y - 1, step('01234', cv.getRef(x, y - 1), -2) as string); }
   }
-  return cv.finish({ x: cx, y: ground }, { pockets: made, vines: 0, stems: count, limbs: 0 });
+  return cv.finish({ x: cx, y: ground }, { pockets: made, vines: 0, stems: 1, limbs: 0 });
 }

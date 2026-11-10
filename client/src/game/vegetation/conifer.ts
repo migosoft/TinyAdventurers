@@ -66,7 +66,7 @@ function skirt(cv: Canvas, r: () => number, light: Light, s: number, cx: number,
 /** A conifer: a straight tapering trunk, skirts stacked from the bottom (each one drooping to a zigzag hem) narrowing to a spire, blue-green palette 5..9. */
 export function drawConifer(seed: number, s: number, light: Light): Drawn {
   const r = rng(seed), cv = new Canvas(220, 220), cx = 110, base = 190, detail = s >= 0.7;
-  const bare = 4 + r() * 14; // bare trunk below the lowest skirt, design units
+  const bare = 1 + r() * 23; // bare trunk below the lowest skirt, design units (1 to 24: some hide it, some show a long trunk)
   const Y = (y: number) => base + (y - 86) * s;
   const footY = Y(80), paint = painter(cv, light);
   // trunk: half-width 3.2 to 1.4 units with a foot flare, up to just under the lowest skirt

@@ -51,5 +51,12 @@ export function drawBare(seed: number, s: number, light: Light): Drawn {
   limb(fork.x, fork.y, (r() - 0.5) * 0.3, 22 * s, 0.85 * fork.w, 0, false);
   barkLines(cv, r, tr, light, s);
   rootMoss(cv, r, cx, footY, s);
+  // dead wood: every bark pixel, picture and reference, moves to the greyer ramp (colour only); moss stays green
+  const dead: Record<string, string> = { a: 'e', b: 'f', c: 'g', d: 'h' }, { x0, y0, x1, y1 } = cv.box();
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const c = cv.get(x, y), cRef = cv.getRef(x, y);
+    if (c !== null && c in dead) cv.recolour(x, y, dead[c]);
+    if (cRef !== null && cRef in dead) cv.recolourRef(x, y, dead[cRef]);
+  }
   return cv.finish({ x: cx, y: footY }, { pockets: 0, vines: 0, stems: 0, limbs: count });
 }

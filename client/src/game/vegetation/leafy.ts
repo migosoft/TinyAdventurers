@@ -5,7 +5,8 @@ import { type Lobe, crown, pockets, vines } from './crown';
 import { barkLines, canopyShadow, limbs, painter, rootMoss, roots, trunkPath } from './trunk';
 
 type LeafyShape = Exclude<Shape, 'conifer' | 'bare'>;
-export interface LeafyOpts { seed: number; scale: number; shape: LeafyShape; light: Light }
+/** `old`: an older tree: trunk x1.4, bend x1.9, four longer roots (x1.25), and the trunk forks 3 units lower. */
+export interface LeafyOpts { seed: number; scale: number; shape: LeafyShape; light: Light; old?: boolean }
 const SHAPES: Record<LeafyShape, { sx: number; sy: number; trunk: number; roots: 2 | 3 | 4; rootLen: number; bend: number; lobes: [number, number, number][] }> = {
   round: { sx: 1, sy: 1, trunk: 1, roots: 3, rootLen: 1, bend: 1, lobes: [[0, 14, 19], [-21, 26, 15], [22, 25, 15], [-11, 37, 13], [12, 37, 13], [-30, 36, 10], [30, 35, 10]] },
   wide: { sx: 1.3, sy: 0.85, trunk: 1.1, roots: 4, rootLen: 1.15, bend: 1.2, lobes: [[-7, 15, 18], [13, 17, 17], [-24, 27, 15], [26, 27, 14], [-13, 38, 13], [11, 38, 13], [-33, 36, 10], [32, 36, 10]] },
@@ -18,16 +19,17 @@ export function drawLeafy(o: LeafyOpts): Drawn {
   const cv = new Canvas(220, 220);
   const cx = 110, base = 190;
   const X = (dx: number) => cx + dx * s * sh.sx, Y = (y: number) => base + (y - 86) * s * sh.sy; // y in design units (0..86)
-  const tw = s * sh.trunk; // trunk width factor
+  const old = o.old === true;
+  const tw = s * sh.trunk * (old ? 1.4 : 1); // trunk width factor
   const detail = s >= 0.7, footY = Y(79);
   const paint = painter(cv, light);
   // trunk and limbs: the limbs go first, so the trunk's fork shows below the crown
-  const tr = trunkPath(r, cx, Y, s, sh.sx, tw, 54 + (r() - 0.5) * 6, sh.bend);
+  const tr = trunkPath(r, cx, Y, s, sh.sx, tw, (old ? 57 : 54) + (r() - 0.5) * 6, sh.bend * (old ? 1.9 : 1));
   const targets: [number, number][] = [[-(17 + r() * 6), 33], [15 + r() * 6, 32], [(r() < 0.5 ? -4 : 4) + (r() - 0.5), 27]];
   const used = o.shape === 'tall' ? targets.slice(0, 2) : targets;
   limbs(cv, r, light, tr.at(1), used, X, Y, detail);
   paint(tr.seg, false, footY);
-  roots(cv, r, paint, cx, footY, s, tw, sh.roots, sh.rootLen);
+  roots(cv, r, paint, cx, footY, s, tw, old ? 4 : sh.roots, sh.rootLen * (old ? 1.25 : 1));
   barkLines(cv, r, tr, light, s);
   rootMoss(cv, r, cx, footY, s);
   // crown: lobes from the shape's layout, lowest first so the upper ones sit in front

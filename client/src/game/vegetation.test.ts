@@ -13,7 +13,7 @@ const isOutline = (img: Rgba, x: number, y: number) => { const i = (y * img.w + 
 const isDarkGreen = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 40 && img.data[i + 1] === 100 && img.data[i + 2] === 62 && img.data[i + 3] === 255; };
 
 const LEAF_RGB = [[28, 58, 50], [40, 100, 62], [62, 138, 67], [106, 174, 79], [156, 207, 98], [22, 48, 52], [30, 74, 70], [44, 104, 88], [74, 140, 104], [118, 176, 124]];
-const HASH = 1165496683;
+const HASH = 2230737650;
 
 describe('vegetation', () => {
   it('lightVector: left sun at ~51° is the old default, the right sun mirrors it', () => {
@@ -52,7 +52,7 @@ describe('vegetation', () => {
     expect(c.foot).toEqual(a.foot);
   });
   it('the cove_tree frame at COVE_TREE_SCALE is pinned (guards against drift)', () => {
-    // FNV-1a of the 96x100 RGBA of coveTree(): the general round tree, seed 11, COVE_TREE_SCALE, foot at (48, 80). Re-recorded in #279 Task 3 (lobed crown).
+    // FNV-1a of the 96x100 RGBA of coveTree(): the general round tree, seed 11, `old: true`, COVE_TREE_SCALE, foot at (48, 80). Re-recorded in #279 tuning round 1 (old, thicker, more bent trunk).
     expect(COVE_TREE_SCALE).toBeGreaterThan(0.85); expect(COVE_TREE_SCALE).toBeLessThanOrEqual(1);
     const img = coveTree();
     expect([img.w, img.h]).toEqual([96, 100]);
@@ -99,10 +99,29 @@ describe('vegetation', () => {
     return kind;
   };
 
-  it('a bush stands on stems', () => {
+  it('a bush stands on one thin stem that touches the ground in 1 px (2 px from 40 px wide)', () => {
+    for (const pct of [60, 100, 150]) for (let seed = 1; seed <= 20; seed++) {
+      const d = drawPlant('bush', seed, pct), img = d.img, kind = bushPixels(img), at = `seed ${seed} ${pct}%`;
+      expect(d.parts!.stems, at).toBe(1);
+      let low = -1; for (let y = 0; y < img.h; y++) for (let x = 0; x < img.w; x++) if (kind(x, y) === 'bark') low = Math.max(low, y);
+      let width = 0; for (let x = 0; x < img.w; x++) if (kind(x, low) === 'bark') width++;
+      expect([at, width]).toEqual([at, (32 * pct) / 100 < 40 ? 1 : 2]);
+    }
+  });
+
+  it('a bush stem forks into branches above the ground', () => {
+    // the bark rows above the stem's foot row hold more than one bark pixel somewhere (the fork), at 150 % where it can be seen
+    let forked = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const img = drawPlant('bush', seed, 150).img, kind = bushPixels(img);
+      for (let y = 0; y < img.h; y++) { let n = 0; for (let x = 0; x < img.w; x++) if (kind(x, y) === 'bark') n++; if (n >= 3) { forked++; break; } }
+    }
+    expect(forked).toBeGreaterThanOrEqual(15);
+  });
+
+  it('a bush has bark below its crown', () => {
     for (const pct of [75, 100, 150]) for (let seed = 1; seed <= 20; seed++) {
       const d = drawPlant('bush', seed, pct), img = d.img, kind = bushPixels(img), at = `seed ${seed} ${pct}%`;
-      expect(d.parts!.stems, at).toBeGreaterThanOrEqual(1);
       let lowLeaf = -1, lowBark = -1;
       for (let x = 0; x < img.w; x++) {
         let topLeaf = Infinity, bottomLeaf = -1, topBark = Infinity;
@@ -245,6 +264,31 @@ describe('vegetation', () => {
         expect(LEAF_RGB.some((c) => c[0] === rgb[0] && c[1] === rgb[1] && c[2] === rgb[2]), `seed ${seed} ${pct}% at ${x},${y}`).toBe(false);
       }
     }
+  });
+
+  it('a bare tree is dead wood: no live-brown pixels, only the greyer ramp', () => {
+    const LIVE = [[58, 35, 40], [98, 53, 43], [143, 64, 41], [176, 112, 74]], DEAD = [[40, 32, 34], [64, 50, 47], [90, 73, 64], [118, 99, 84]];
+    const has = (img: Rgba, set: number[][]) => { for (let i = 0; i < img.data.length; i += 4) if (img.data[i + 3] === 255 && set.some((c) => c[0] === img.data[i] && c[1] === img.data[i + 1] && c[2] === img.data[i + 2])) return true; return false; };
+    for (const pct of [60, 100, 120]) for (let seed = 1; seed <= 6; seed++) {
+      const { img } = drawPlant('bare', seed, pct);
+      expect([`seed ${seed} ${pct}% live`, has(img, LIVE)]).toEqual([`seed ${seed} ${pct}% live`, false]);
+      expect([`seed ${seed} ${pct}% dead`, has(img, DEAD)]).toEqual([`seed ${seed} ${pct}% dead`, true]);
+    }
+    // a leafy tree keeps its live bark
+    expect(has(drawPlant('round', 1, 100).img, LIVE)).toBe(true);
+  });
+
+  it('an old tree has a thicker trunk than the same seed without `old`', () => {
+    const BARK = [[58, 35, 40], [98, 53, 43], [143, 64, 41], [176, 112, 74]];
+    const isBark = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i + 3] === 255 && BARK.some((b) => b[0] === img.data[i] && b[1] === img.data[i + 1] && b[2] === img.data[i + 2]); };
+    const extent = (img: Rgba, y: number) => { let a = -1, b = -1; for (let x = 0; x < img.w; x++) if (isBark(img, x, y)) { if (a < 0) a = x; b = x; } return a < 0 ? 0 : b - a + 1; };
+    const widest = (d: Drawn) => { let m = 0; for (let y = d.foot.y - 24; y <= d.foot.y - 10; y++) m = Math.max(m, extent(d.img, y)); return m; }; // the trunk's middle, above the roots
+    for (const shape of ['round', 'wide', 'tall'] as const) for (let seed = 1; seed <= 6; seed++) {
+      const a = drawTree({ seed, scale: 1, shape }), b = drawTree({ seed, scale: 1, shape, old: true });
+      expect([`${shape} ${seed}`, widest(b) > widest(a)]).toEqual([`${shape} ${seed}`, true]);
+    }
+    // ignored by the other shapes
+    expect(drawTree({ seed: 3, scale: 1, shape: 'conifer', old: true }).img.data).toEqual(drawTree({ seed: 3, scale: 1, shape: 'conifer' }).img.data);
   });
 
   it("a bare tree fills a crown's box", () => {
