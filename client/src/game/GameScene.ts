@@ -46,6 +46,7 @@ import { FONT_TEXT } from '../fonts';
 import { critLabel, smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
 import { FrameTimer, SYSTEMS, type DrawGl } from './frameTimer';
+import { onContextRestored } from './contextrestore';
 import { abilityChoice, slotUsable, cosmeticCount, cosmeticPierce, Interpolator, ownPredictedShot, Predictor, unseenShotLimit, volleyAngles, volleyShotIds, type EntState } from './world';
 
 export interface GameInit {
@@ -395,12 +396,22 @@ export class GameScene extends Phaser.Scene {
     frame.fillStyle(0x25131a, 1).fillRect(-2, -2, W + 4, H + 4);
 
     this.mapRt = this.add.renderTexture(0, 0, W, H).setOrigin(0, 0).setDepth(DEPTH.map);
-    this.mapRt.beginDraw();
-    for (let y = 0; y < this.map.h; y++) for (let x = 0; x < this.map.w; x++) this.drawTile(x, y, true);
-    this.mapRt.endDraw();
+    this.paintBoard();
+    // A restored WebGL context recreates the map texture empty: paint it again from the current map (#298).
+    onContextRestored(this, () => {
+      this.mapRt.clear();
+      this.paintBoard();
+    });
     this.syncForceField(false);
     // Water, lava and chasms: animated surfaces over the floor.
     this.terrain = new TerrainLayer(this, this.map, this.fx);
+  }
+
+  /** Draws every tile of the current map into the map texture, then the grid lines. */
+  private paintBoard(): void {
+    this.mapRt.beginDraw();
+    for (let y = 0; y < this.map.h; y++) for (let x = 0; x < this.map.w; x++) this.drawTile(x, y, true);
+    this.mapRt.endDraw();
     // Faint printed grid lines on the floor, like a game board: drawn into the map texture once
     // (a live Graphics with one stroke per floor tile cost ~9 ms of render per frame, #289).
     const grid = this.gridLines(0, 0, this.map.w - 1, this.map.h - 1);

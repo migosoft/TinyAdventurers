@@ -16,7 +16,7 @@
 import Phaser from 'phaser';
 import { CONST, LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
-import { tileDraws } from './autotile';
+import { demoBoard } from './contextrestore';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
 import { LightView } from './lightview';
@@ -78,12 +78,7 @@ export class SunlightDemoScene extends Phaser.Scene {
     const map = buildMap();
     this.cameras.main.setBackgroundColor('#000000');
     this.fx = new Effects(this);
-    const rt = this.add.renderTexture(0, 0, W * TILE, H * TILE).setOrigin(0).setDepth(DEPTH.map);
-    rt.beginDraw();
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < W; x++)
-        for (const d of tileDraws(map, x, y)) rt.batchDrawFrame('atlas', d.frame, x * TILE, y * TILE + (d.dy ?? 0));
-    rt.endDraw();
+    demoBoard(this, map);
     this.layer = new TerrainLayer(this, map, this.fx);
 
     const field = (this.field = new LightField(map));
