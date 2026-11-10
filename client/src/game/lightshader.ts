@@ -1,5 +1,6 @@
 // The light pass on the GPU: pure helpers (texel packing, the fragment source).
-// No Phaser import here; the Shader game object is built elsewhere.
+// No value import of Phaser here (type only); the Shader game object is built elsewhere.
+import type Phaser from 'phaser';
 
 /** Picture px per tile (the lattice the shader renders). */
 export const PIC_SUB = 2;
@@ -76,4 +77,11 @@ void main() {
 #endif
 }
 `;
+}
+
+/** Where LightView's per-tile result goes. dark, r, g, b and dv are 0..255; dv is 0 while darkvision is off. */
+export interface LightOutput {
+  readonly mask: Phaser.Textures.Texture; // what DarkvisionFX samples (2 px per tile, red = strength, LINEAR)
+  put(i: number, dark: number, r: number, g: number, b: number, dv: number): void;
+  flush(x0: number, y0: number, x1: number, y1: number, dv: boolean): void; // tile window; dv: darkvision > 0 this frame
 }

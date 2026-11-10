@@ -28,7 +28,7 @@ void main() {
 
 /** Greys the world where the hero sees only by darkvision (mask from LightView). */
 export class DarkvisionFX extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline {
-  mask?: Phaser.Textures.CanvasTexture;
+  mask?: Phaser.Textures.Texture;
   mapPx: [number, number] = [1, 1];
 
   constructor(game: Phaser.Game) {
@@ -51,7 +51,7 @@ export class DarkvisionFX extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline
 }
 
 /** Attaches the effect to `cam` while `darkvision` > 0 and removes it at 0 (no cost in normal play). */
-export function syncDarkvisionFX(cam: Phaser.Cameras.Scene2D.Camera, darkvision: number, mask: Phaser.Textures.CanvasTexture, mapPx: [number, number]): void {
+export function syncDarkvisionFX(cam: Phaser.Cameras.Scene2D.Camera, darkvision: number, mask: Phaser.Textures.Texture, mapPx: [number, number]): void {
   const has = cam.postPipelines.some((p) => p.name === DARKVISION_FX);
   if (darkvision > 0 && !has) {
     cam.setPostPipeline(DARKVISION_FX);
