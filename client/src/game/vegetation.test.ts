@@ -88,11 +88,55 @@ describe('vegetation', () => {
     for (const seed of [1, 2, 3]) expect(drawPlant('bush', seed, 150).img.w).toBeGreaterThan(drawPlant('bush', seed, 100).img.w);
   });
 
+  /** The rows of leaf and bark pixels of an image, by column. */
+  const bushPixels = (img: Rgba) => {
+    const kind = (x: number, y: number) => {
+      const i = (y * img.w + x) * 4; if (img.data[i + 3] === 0) return '';
+      const rgb = [img.data[i], img.data[i + 1], img.data[i + 2]];
+      if (LEAF_RGB.some((c) => c[0] === rgb[0] && c[1] === rgb[1] && c[2] === rgb[2])) return 'leaf';
+      return [[58, 35, 40], [98, 53, 43], [143, 64, 41], [176, 112, 74]].some((c) => c[0] === rgb[0] && c[1] === rgb[1] && c[2] === rgb[2]) ? 'bark' : '';
+    };
+    return kind;
+  };
+
+  it('a bush stands on stems', () => {
+    for (const pct of [75, 100, 150]) for (let seed = 1; seed <= 20; seed++) {
+      const d = drawPlant('bush', seed, pct), img = d.img, kind = bushPixels(img), at = `seed ${seed} ${pct}%`;
+      expect(d.parts!.stems, at).toBeGreaterThanOrEqual(1);
+      let lowLeaf = -1, lowBark = -1;
+      for (let x = 0; x < img.w; x++) {
+        let topLeaf = Infinity, bottomLeaf = -1, topBark = Infinity;
+        for (let y = 0; y < img.h; y++) {
+          const k = kind(x, y);
+          if (k === 'leaf') { bottomLeaf = y; topLeaf = Math.min(topLeaf, y); } else if (k === 'bark') { topBark = Math.min(topBark, y); lowBark = Math.max(lowBark, y); }
+        }
+        lowLeaf = Math.max(lowLeaf, bottomLeaf);
+        if (topBark !== Infinity) expect(topBark, `${at} column ${x}`).toBeGreaterThan(bottomLeaf);
+      }
+      expect(lowBark, at).toBeGreaterThan(lowLeaf);
+    }
+  });
+
+  it("the bush's foot is the ground under the crown", () => {
+    for (const pct of [75, 100, 150]) for (let seed = 1; seed <= 20; seed++) {
+      const { img, foot } = drawPlant('bush', seed, pct), kind = bushPixels(img), at = `seed ${seed} ${pct}%`;
+      let minX = Infinity, maxX = -1, lowBark = -1;
+      for (let y = 0; y < img.h; y++) for (let x = 0; x < img.w; x++) { const k = kind(x, y); if (k === 'leaf') { minX = Math.min(minX, x); maxX = Math.max(maxX, x); } else if (k === 'bark') lowBark = Math.max(lowBark, y); }
+      expect(Math.abs(foot.x - (minX + maxX) / 2), at).toBeLessThanOrEqual(3);
+      expect([lowBark, lowBark + 1], at).toContain(foot.y);
+    }
+  });
+
+  it('bush width holds over many seeds', () => {
+    for (const pct of [75, 100, 150]) for (let seed = 1; seed <= 200; seed++) expect(Math.abs(drawPlant('bush', seed, pct).img.w - (32 * pct) / 100), `seed ${seed} ${pct}%`).toBeLessThanOrEqual(6);
+  });
+
   it('large trees are not clipped by the canvas', () => {
     // drawing throws if it reaches the canvas edge; the plan's biggest sizes must pass
     for (const shape of ['round', 'wide', 'tall', 'conifer', 'bare'] as const) for (const seed of [1, 2, 3, 4, 5, 6]) {
       expect(() => drawTree({ seed, scale: 1.2, shape })).not.toThrow();
     }
+    for (let seed = 1; seed <= 20; seed++) expect(() => drawPlant('bush', seed, 150)).not.toThrow();
     const { img, foot } = drawTree({ seed: 1, scale: 1.2, shape: 'wide' });
     expect(img.w).toBeGreaterThan(drawTree({ seed: 1, scale: 1, shape: 'wide' }).img.w);
     expect(foot.x).toBeGreaterThan(0);
