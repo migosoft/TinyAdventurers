@@ -6,14 +6,15 @@
 import type { SunInfo } from '../generated/SunInfo';
 import { DEFAULT_LIGHT, type Drawn, type Light, type Rgba } from './vegetation/canvas';
 import { drawBush } from './vegetation/bush';
+import { drawBare } from './vegetation/bare';
 import { drawConifer } from './vegetation/conifer';
 import { drawLeafy } from './vegetation/leafy';
 export { DEFAULT_LIGHT, drawBush };
 export type { Drawn, Light, Rgba };
-export type Shape = 'round' | 'wide' | 'tall' | 'conifer';
+export type Shape = 'round' | 'wide' | 'tall' | 'conifer' | 'bare';
 export type PlantKind = Shape | 'bush';
-/** Index = wire id. */
-export const PLANT_KINDS: readonly PlantKind[] = ['round', 'wide', 'tall', 'conifer', 'bush'];
+/** Index = wire id; the server's `PlantKind` (woodland.rs) has the same order. */
+export const PLANT_KINDS: readonly PlantKind[] = ['round', 'wide', 'tall', 'conifer', 'bush', 'bare'];
 
 /** The light of a run's sun: `side` -1 is left, 1 right; the elevation is in degrees above the horizon. */
 export function lightVector(sun: SunInfo): Light {
@@ -26,6 +27,7 @@ interface TreeOpts { seed: number; scale: number; shape: Shape; light?: Light }
 export function drawTree(o: TreeOpts): Drawn {
   const light = o.light ?? DEFAULT_LIGHT;
   if (o.shape === 'conifer') return drawConifer(o.seed, o.scale, light);
+  if (o.shape === 'bare') return drawBare(o.seed, o.scale, light);
   return drawLeafy({ ...o, shape: o.shape, light });
 }
 

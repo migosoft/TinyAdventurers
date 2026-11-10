@@ -12,7 +12,8 @@ const alpha = (img: Rgba, x: number, y: number) => img.data[(y * img.w + x) * 4 
 const isOutline = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 34 && img.data[i + 1] === 34 && img.data[i + 2] === 34; };
 const isDarkGreen = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 40 && img.data[i + 1] === 100 && img.data[i + 2] === 62 && img.data[i + 3] === 255; };
 
-const HASH = 1165496683;
+const LEAF_RGB = [[28, 58, 50], [40, 100, 62], [62, 138, 67], [106, 174, 79], [156, 207, 98], [22, 48, 52], [30, 74, 70], [44, 104, 88], [74, 140, 104], [118, 176, 124]];
+const HASH =1165496683;
 
 describe('vegetation', () => {
   it('lightVector: left sun at ~51° is the old default, the right sun mirrors it', () => {
@@ -89,7 +90,7 @@ describe('vegetation', () => {
 
   it('large trees are not clipped by the canvas', () => {
     // drawing throws if it reaches the canvas edge; the plan's biggest sizes must pass
-    for (const shape of ['round', 'wide', 'tall', 'conifer'] as const) for (const seed of [1, 2, 3, 4, 5, 6]) {
+    for (const shape of ['round', 'wide', 'tall', 'conifer', 'bare'] as const) for (const seed of [1, 2, 3, 4, 5, 6]) {
       expect(() => drawTree({ seed, scale: 1.2, shape })).not.toThrow();
     }
     const { img, foot } = drawTree({ seed: 1, scale: 1.2, shape: 'wide' });
@@ -183,6 +184,38 @@ describe('vegetation', () => {
   it('a conifer is about 46 x 90 at seed 11', () => {
     const { img } = drawTree({ seed: 11, scale: 1, shape: 'conifer' });
     expect(Math.abs(img.w - 46)).toBeLessThanOrEqual(8); expect(Math.abs(img.h - 90)).toBeLessThanOrEqual(8);
+  });
+
+  it('PLANT_KINDS matches the server', () => {
+    // The wire id is the index; the server's `PlantKind` in woodland.rs has the same six, pinned by its test `plant_kind_ids_match_the_client`.
+    expect(PLANT_KINDS).toEqual(['round', 'wide', 'tall', 'conifer', 'bush', 'bare']);
+  });
+
+  it('a bare tree has no leaves', () => {
+    for (const pct of [60, 100]) for (let seed = 1; seed <= 6; seed++) {
+      const { img, foot } = drawPlant('bare', seed, pct), limit = foot.y - 6 * (pct / 100);
+      for (let y = 0; y < Math.min(img.h, limit); y++) for (let x = 0; x < img.w; x++) {
+        const i = (y * img.w + x) * 4;
+        if (img.data[i + 3] === 0) continue;
+        const rgb = [img.data[i], img.data[i + 1], img.data[i + 2]];
+        expect(LEAF_RGB.some((c) => c[0] === rgb[0] && c[1] === rgb[1] && c[2] === rgb[2]), `seed ${seed} ${pct}% at ${x},${y}`).toBe(false);
+      }
+    }
+  });
+
+  it("a bare tree fills a crown's box", () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const { img } = drawPlant('bare', seed, 100);
+      expect([seed, img.w >= 45 && img.h >= 75]).toEqual([seed, true]);
+    }
+  });
+
+  it('a leafy tree below 70 % has at most one pocket', () => {
+    for (const kind of ['round', 'wide', 'tall'] as const) for (let seed = 1; seed <= 6; seed++) expect(drawPlant(kind, seed, 60).parts!.pockets, `${kind} ${seed}`).toBeLessThanOrEqual(1);
+  });
+
+  it('a bare tree below 70 % has fewer limbs (depth 3 instead of 4)', () => {
+    for (let seed = 1; seed <= 6; seed++) expect(drawPlant('bare', seed, 60).parts!.limbs, `seed ${seed}`).toBeLessThan(drawPlant('bare', seed, 100).parts!.limbs);
   });
 
   it('cost', () => {

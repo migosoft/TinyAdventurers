@@ -4,8 +4,9 @@ import { Canvas, type Drawn, type Light, rng } from './canvas';
 import { type Lobe, crown, pockets, vines } from './crown';
 import { barkLines, canopyShadow, limbs, painter, rootMoss, roots, trunkPath } from './trunk';
 
-export interface LeafyOpts { seed: number; scale: number; shape: Exclude<Shape, 'conifer'>; light: Light }
-const SHAPES: Record<Exclude<Shape, 'conifer'>, { sx: number; sy: number; trunk: number; roots: 2 | 3 | 4; rootLen: number; bend: number; lobes: [number, number, number][] }> = {
+type LeafyShape = Exclude<Shape, 'conifer' | 'bare'>;
+export interface LeafyOpts { seed: number; scale: number; shape: LeafyShape; light: Light }
+const SHAPES: Record<LeafyShape, { sx: number; sy: number; trunk: number; roots: 2 | 3 | 4; rootLen: number; bend: number; lobes: [number, number, number][] }> = {
   round: { sx: 1, sy: 1, trunk: 1, roots: 3, rootLen: 1, bend: 1, lobes: [[0, 14, 19], [-21, 26, 15], [22, 25, 15], [-11, 37, 13], [12, 37, 13], [-30, 36, 10], [30, 35, 10]] },
   wide: { sx: 1.3, sy: 0.85, trunk: 1.1, roots: 4, rootLen: 1.15, bend: 1.2, lobes: [[-7, 15, 18], [13, 17, 17], [-24, 27, 15], [26, 27, 14], [-13, 38, 13], [11, 38, 13], [-33, 36, 10], [32, 36, 10]] },
   tall: { sx: 0.8, sy: 1.3, trunk: 0.65, roots: 2, rootLen: 0.6, bend: 0.6, lobes: [[0, 9, 17], [-14, 22, 15], [15, 22, 15], [-9, 36, 13], [10, 36, 13]] },

@@ -86,6 +86,14 @@ describe('shadows', () => {
     expect(rows.indexOf(true)).toBeGreaterThanOrEqual(0);
     expect(rows.slice(rows.indexOf(true), rows.lastIndexOf(true) + 1).every(Boolean)).toBe(true);
   });
+  it('a bare tree casts its branches and has a contact ellipse at the foot', () => {
+    const t = drawPlant('bare', 4, 100);
+    const s = shadowOf(t.img, t.foot, shadowVector({ side: -1, elevation: 35 }), false);
+    let opaque = 0;
+    for (let i = 3; i < s.img.data.length; i += 4) if (s.img.data[i] === 255) opaque++;
+    expect(opaque).toBeGreaterThan(0);
+    expect(alphaAt(s, s.foot.x, s.foot.y)).toBe(255);
+  });
   it('shadow bounds are finite and contain the contact ellipse', () => {
     const t = drawPlant('tall', 3, 130);
     const s = shadowOf(t.img, t.foot, shadowVector({ side: -1, elevation: 35 }), false);

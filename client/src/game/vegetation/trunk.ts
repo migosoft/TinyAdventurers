@@ -70,7 +70,7 @@ export function limbs(cv: Canvas, r: () => number, light: Light, fork: { x: numb
   for (const [dx, ty] of targets) {
     const tx = X(dx), tyy = Y(ty), cxp = fork.x + (tx - fork.x) * 0.15, cyp = fork.y + (tyy - fork.y) * 0.75;
     const n = Math.max(8, Math.ceil(Math.hypot(tx - fork.x, tyy - fork.y) * 2));
-    const pts: { x: number; y: number; w: number; nx: number; ny: number }[] = [];
+    const pts: NormalPt[] = [];
     for (let i = 0; i <= n; i++) {
       const t = i / n, u = 1 - t;
       const x = u * u * fork.x + 2 * u * t * cxp + t * t * tx, y = u * u * fork.y + 2 * u * t * cyp + t * t * tyy;
@@ -78,14 +78,24 @@ export function limbs(cv: Canvas, r: () => number, light: Light, fork: { x: numb
       pts.push({ x, y, w: fork.w * (0.62 - 0.5 * t), nx: -ddy / m, ny: ddx / m });
     }
     paint(pts, false);
-    if (!detail) continue;
-    for (const p of pts) {
-      const keep = r() < 0.75; // drawn first, whatever the light
-      if (!keep || p.w < 1.2) continue;
-      for (const [L, rec] of [[light, 'picture'], [DEFAULT_LIGHT, 'ref']] as const) {
-        const sg = p.nx * L.x + p.ny * L.y > 0 ? -1 : 1, x = p.x + sg * p.nx * (p.w - 0.4), y = p.y + sg * p.ny * (p.w - 0.4);
-        if (rec === 'picture') cv.recolour(x, y, 'a'); else cv.recolourRef(x, y, 'a');
-      }
+    if (detail) shadowLine(cv, r, light, pts);
+  }
+}
+
+/** A path point with its half-width and unit normal. */
+export type NormalPt = { x: number; y: number; w: number; nx: number; ny: number };
+
+/**
+ * A dark 1-px line on the shadow side of a stroke (points at least 1.2 px wide, three in four kept). The keep draw comes
+ * first, whatever the light; both lights' positions are written with recolours, so no pixel becomes opaque.
+ */
+export function shadowLine(cv: Canvas, r: () => number, light: Light, pts: NormalPt[]): void {
+  for (const p of pts) {
+    const keep = r() < 0.75; // drawn first, whatever the light
+    if (!keep || p.w < 1.2) continue;
+    for (const [L, rec] of [[light, 'picture'], [DEFAULT_LIGHT, 'ref']] as const) {
+      const sg = p.nx * L.x + p.ny * L.y > 0 ? -1 : 1, x = p.x + sg * p.nx * (p.w - 0.4), y = p.y + sg * p.ny * (p.w - 0.4);
+      if (rec === 'picture') cv.recolour(x, y, 'a'); else cv.recolourRef(x, y, 'a');
     }
   }
 }

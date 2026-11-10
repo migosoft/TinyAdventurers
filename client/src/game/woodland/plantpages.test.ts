@@ -6,7 +6,7 @@ import { DrawQueue, drawOrder, PlantPages } from './plantpages';
 describe('PlantPages', () => {
   it('the default page holds the largest plants, one per slot, inside the page', () => {
     const pages = new PlantPages();
-    const big = [drawPlant('wide', 1, 120), drawPlant('round', 2, 120), drawPlant('tall', 3, 120), drawPlant('conifer', 4, 120), drawPlant('bush', 5, 150)];
+    const big = [drawPlant('wide', 1, 120), drawPlant('round', 2, 120), drawPlant('tall', 3, 120), drawPlant('conifer', 4, 120), drawPlant('bush', 5, 150), drawPlant('bare', 6, 120)];
     for (const [i, d] of big.entries()) {
       expect(d.img.w).toBeLessThanOrEqual(200);
       expect(d.img.h).toBeLessThanOrEqual(200);
