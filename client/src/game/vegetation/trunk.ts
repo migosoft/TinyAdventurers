@@ -121,6 +121,6 @@ export function rootMoss(cv: Canvas, r: () => number, cx: number, footY: number,
 export function canopyShadow(cv: Canvas, depth: number): void {
   const darker: Record<string, string> = { d: 'c', c: 'b', b: 'a', a: 'a' };
   const { x0, y0, x1, y1 } = cv.box();
-  for (let x = x0; x <= x1; x++) { let y = y0, seen = false; for (; y <= y1; y++) { const c = cv.px[y * cv.w + x]; if (isLeaf(c)) seen = true; else if (seen && c && c in darker) break; }
-    for (let i = 0; i < depth && y + i < cv.h; i++) { const c = cv.get(x, y + i); if (c && c in darker) cv.set(x, y + i, darker[c]); } }
+  for (let x = x0; x <= x1; x++) { let y = y0, seen = false; for (; y <= y1; y++) { const c = cv.px[y * cv.w + x]; if (isLeaf(c)) seen = true; else if (seen && c && c in darker && cv.id[y * cv.w + x] < 0) break; } // a pocket's twig (a lobe id) is not the trunk
+    for (let i = 0; i < depth && y + i < cv.h; i++) { const c = cv.get(x, y + i), cRef = cv.getRef(x, y + i); if (c && c in darker && cRef !== null) cv.set(x, y + i, darker[c], darker[cRef] ?? cRef, cv.idAt(x, y + i)); } }
 }

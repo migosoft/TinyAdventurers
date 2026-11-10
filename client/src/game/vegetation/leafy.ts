@@ -1,16 +1,15 @@
-// The leafy trees (round, wide, tall): trunk, branches, roots and a crown of clumps (#279).
+// The leafy trees (round, wide, tall): trunk, branches, roots and a lobed crown (#279).
 import type { Shape } from '../vegetation';
-import { Canvas, type Drawn, type Light, isLeaf, rng } from './canvas';
-import { clumps } from './crown';
+import { Canvas, type Drawn, type Light, rng } from './canvas';
+import { type Lobe, crown, pockets, vines } from './crown';
 import { barkLines, canopyShadow, limbs, painter, rootMoss, roots, trunkPath } from './trunk';
 
 export interface LeafyOpts { seed: number; scale: number; shape: Exclude<Shape, 'conifer'>; light: Light }
-const SHAPES: Record<Exclude<Shape, 'conifer'>, { sx: number; sy: number; rx: number; trunk: number; roots: 2 | 3 | 4; rootLen: number; bend: number }> = {
-  round: { sx: 1, sy: 1, rx: 1, trunk: 1, roots: 3, rootLen: 1, bend: 1 },
-  wide: { sx: 1.3, sy: 0.9, rx: 1.15, trunk: 1.1, roots: 4, rootLen: 1.15, bend: 1.2 },
-  tall: { sx: 0.55, sy: 1.3, rx: 0.78, trunk: 0.65, roots: 2, rootLen: 0.6, bend: 0.6 },
+const SHAPES: Record<Exclude<Shape, 'conifer'>, { sx: number; sy: number; trunk: number; roots: 2 | 3 | 4; rootLen: number; bend: number; lobes: [number, number, number][] }> = {
+  round: { sx: 1, sy: 1, trunk: 1, roots: 3, rootLen: 1, bend: 1, lobes: [[0, 14, 19], [-21, 26, 15], [22, 25, 15], [-11, 37, 13], [12, 37, 13], [-30, 36, 10], [30, 35, 10]] },
+  wide: { sx: 1.3, sy: 0.85, trunk: 1.1, roots: 4, rootLen: 1.15, bend: 1.2, lobes: [[-7, 15, 18], [13, 17, 17], [-24, 27, 15], [26, 27, 14], [-13, 38, 13], [11, 38, 13], [-33, 36, 10], [32, 36, 10]] },
+  tall: { sx: 0.8, sy: 1.3, trunk: 0.65, roots: 2, rootLen: 0.6, bend: 0.6, lobes: [[0, 9, 17], [-14, 22, 15], [15, 22, 15], [-9, 36, 13], [10, 36, 13]] },
 };
-const CANOPY = [[0, 14, 21, 13], [17, 9, 9, 6], [-25, 24, 16, 11], [25, 23, 17, 11], [-30, 38, 14, 9], [30, 38, 14, 9], [0, 36, 18, 11], [-13, 45, 9, 6]];
 
 /** round/wide/tall. */
 export function drawLeafy(o: LeafyOpts): Drawn {
@@ -24,21 +23,22 @@ export function drawLeafy(o: LeafyOpts): Drawn {
   // trunk and limbs: the limbs go first, so the trunk's fork shows below the crown
   const tr = trunkPath(r, cx, Y, s, sh.sx, tw, 54 + (r() - 0.5) * 6, sh.bend);
   const targets: [number, number][] = [[-(17 + r() * 6), 33], [15 + r() * 6, 32], [(r() < 0.5 ? -4 : 4) + (r() - 0.5), 27]];
-  limbs(cv, r, light, tr.at(1), o.shape === 'tall' ? targets.slice(0, 2) : targets, X, Y, detail);
+  const used = o.shape === 'tall' ? targets.slice(0, 2) : targets;
+  limbs(cv, r, light, tr.at(1), used, X, Y, detail);
   paint(tr.seg, false, footY);
   roots(cv, r, paint, cx, footY, s, tw, sh.roots, sh.rootLen);
   barkLines(cv, r, tr, light, s);
   rootMoss(cv, r, cx, footY, s);
-  // canopy
-  const list = CANOPY.map(([dx, y, rx, ry]) => ({ x: X(dx + (r() - 0.5) * 3), y: Y(y + (r() - 0.5) * 2), rx: (rx + (r() - 0.5) * 2) * s * sh.rx, ry: (ry + (r() - 0.5) * 1.5) * s * sh.rx * Math.min(1.1, sh.sy) }));
-  clumps(cv, r, list, Y(13), 45 * s * sh.sy, '01234', light);
-  for (let k = 0; k < 160 * s * s; k++) { const x = Math.floor(r() * cv.w), y = Math.floor(r() * cv.h); const c = cv.getRef(x, y);
-    if (c === '2' && cv.getRef(x + 1, y) === '2') { cv.set(x, y, '3'); if (r() < 0.5) cv.set(x + 1, y - 1, '3'); }
-    if (c === '3' && cv.getRef(x + 1, y) === '3' && r() < 0.5) cv.set(x, y, '4'); }
-  // vines (big trees only)
-  if (detail) for (let k = 0, made = 0; k < 60 && made < 8 * s; k++) { const x = Math.round(X(-34 + r() * 68)); let y = Math.round(Y(62)); while (y > Y(20) && !isLeaf(cv.get(x, y))) y--;
-    if (y <= Y(20) || isLeaf(cv.get(x - 2, y + 2)) || isLeaf(cv.get(x + 2, y + 2))) continue; const len = (3 + Math.floor(r() * 6)) * s; made++;
-    for (let i = 1; i <= len; i++) cv.set(x, y + i, i >= len - 0.5 ? '2' : '1'); }
+  // crown: lobes from the shape's layout, lowest first so the upper ones sit in front
+  const lobes: Lobe[] = sh.lobes.map(([dx, y, rad]) => {
+    const x = X(dx + (r() - 0.5) * 4), yy = Y(y + (r() - 0.5) * 3), rr = rad + (r() - 0.5) * 3;
+    return { x, y: yy, rx: rr * s * sh.sx * 0.98, ry: rr * s * sh.sy * 0.86, ph: r() * 6, ph2: r() * 6 };
+  }).sort((a, b) => b.y - a.y);
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const b of lobes) { minX = Math.min(minX, b.x - b.rx); maxX = Math.max(maxX, b.x + b.rx); minY = Math.min(minY, b.y - b.ry); maxY = Math.max(maxY, b.y + b.ry); }
+  crown(cv, r, lobes, { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, crx: (maxX - minX) / 2, cry: (maxY - minY) / 2, topY: minY, spanY: maxY - minY, pal: '01234', light, bias: 0 });
+  const made = pockets(cv, r, { cx, y0: Y(22), y1: Y(42), halfW: 34 * s * sh.sx, s, pal: '01234', n: detail ? 2 + (r() < 0.5 ? 1 : 0) : 1, twig: detail });
+  const vineCount = detail ? vines(cv, r, { X, Y, s, max: 8 * s }) : 0;
   canopyShadow(cv, 7 * s);
-  return cv.finish({ x: cx, y: footY });
+  return cv.finish({ x: cx, y: footY }, { pockets: made, vines: vineCount, stems: 0, limbs: used.length });
 }

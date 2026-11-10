@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COVE_TREE_FOOT, DEFAULT_LIGHT, PLANT_KINDS, type Drawn, type Rgba, coveTree, drawPlant, drawTree, lightVector } from './vegetation';
+import { COVE_TREE_FOOT, COVE_TREE_SCALE, DEFAULT_LIGHT, PLANT_KINDS, type Drawn, type Rgba, coveTree, drawPlant, drawTree, lightVector } from './vegetation';
 
 /** FNV-1a over the RGBA bytes. */
 function fnv(img: Rgba): number {
@@ -12,7 +12,7 @@ const alpha = (img: Rgba, x: number, y: number) => img.data[(y * img.w + x) * 4 
 const isOutline = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 34 && img.data[i + 1] === 34 && img.data[i + 2] === 34; };
 const isDarkGreen = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 40 && img.data[i + 1] === 100 && img.data[i + 2] === 62 && img.data[i + 3] === 255; };
 
-const HASH = 2466143231;
+const HASH = 1165496683;
 
 describe('vegetation', () => {
   it('lightVector: left sun at ~51° is the old default, the right sun mirrors it', () => {
@@ -50,8 +50,9 @@ describe('vegetation', () => {
     expect(c.img.data).not.toEqual(a.img.data);
     expect(c.foot).toEqual(a.foot);
   });
-  it('the cove_tree frame is pinned (guards against drift)', () => {
-    // FNV-1a of the 96x100 RGBA of coveTree(): the general round tree, seed 11, COVE_TREE_SCALE, foot at (48, 80). Re-recorded in #279 Task 2 (new trunk).
+  it('the cove_tree frame at COVE_TREE_SCALE is pinned (guards against drift)', () => {
+    // FNV-1a of the 96x100 RGBA of coveTree(): the general round tree, seed 11, COVE_TREE_SCALE, foot at (48, 80). Re-recorded in #279 Task 3 (lobed crown).
+    expect(COVE_TREE_SCALE).toBeGreaterThan(0.85); expect(COVE_TREE_SCALE).toBeLessThanOrEqual(1);
     const img = coveTree();
     expect([img.w, img.h]).toEqual([96, 100]);
     expect(fnv(img)).toBe(HASH);
@@ -114,6 +115,30 @@ describe('vegetation', () => {
     expect(seeds.some((seed) => hasVine(drawTree({ seed, scale: 1, shape: 'round' }).img))).toBe(true); // the detector sees vines
     for (const shape of ['round', 'wide', 'tall'] as const) for (const seed of seeds) {
       expect(hasVine(drawTree({ seed, scale: 0.5, shape }).img), `${shape} seed ${seed}`).toBe(false);
+    }
+  });
+
+  it('a leafy tree at 100 % has a pocket and a vine', () => {
+    for (const shape of ['round', 'wide', 'tall'] as const) for (let seed = 1; seed <= 6; seed++) {
+      const d = drawTree({ seed, scale: 1, shape });
+      expect([`${shape} ${seed}`, d.parts!.pockets >= 1, d.parts!.vines >= 1]).toEqual([`${shape} ${seed}`, true, true]);
+    }
+  });
+
+  it('the crown is one mass', () => {
+    // Leaf pixels (palette 0-4) above the row foot.y - 15 * scale form one 4-connected region; root moss below is left out.
+    const LEAF = [[28, 58, 50], [40, 100, 62], [62, 138, 67], [106, 174, 79], [156, 207, 98]];
+    for (const shape of ['round', 'wide', 'tall'] as const) for (let seed = 1; seed <= 6; seed++) {
+      const { img, foot } = drawTree({ seed, scale: 1, shape });
+      const limit = foot.y - 15;
+      const leaf = (x: number, y: number) => { if (x < 0 || y < 0 || x >= img.w || y >= limit) return false; const i = (y * img.w + x) * 4; return img.data[i + 3] === 255 && LEAF.some((c) => c[0] === img.data[i] && c[1] === img.data[i + 1] && c[2] === img.data[i + 2]); };
+      const seen = new Set<number>(); let regions = 0;
+      for (let y = 0; y < limit; y++) for (let x = 0; x < img.w; x++) {
+        if (!leaf(x, y) || seen.has(y * img.w + x)) continue;
+        regions++; const stack = [[x, y]]; seen.add(y * img.w + x);
+        while (stack.length) { const [px, py] = stack.pop()!; for (const [qx, qy] of [[px + 1, py], [px - 1, py], [px, py + 1], [px, py - 1]]) if (leaf(qx, qy) && !seen.has(qy * img.w + qx)) { seen.add(qy * img.w + qx); stack.push([qx, qy]); } }
+      }
+      expect([`${shape} ${seed}`, regions]).toEqual([`${shape} ${seed}`, 1]);
     }
   });
 
