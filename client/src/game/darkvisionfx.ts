@@ -2,7 +2,8 @@
 // the rendered world where LightView's darkvision mask is set (tiles the hero
 // sees only by darkvision, heroes and monsters standing there included). The
 // mask is a texture of the whole map, 2 px per tile, LINEAR filtered (the
-// light pass's dvpic render texture), so its edge fades over about a tile. Attached only while darkvision > 0.
+// light pass's dvpic render texture), so its edge fades over about a tile.
+// Attached only while darkvision > 0.
 import Phaser from 'phaser';
 
 /** The pipeline's name, as registered in the game config (`pipeline: { [DARKVISION_FX]: DarkvisionFX }`). */
