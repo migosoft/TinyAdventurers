@@ -8,6 +8,7 @@
 // outside, soft, blur, desat, mix, feather and ramp; cloud Size, Speed, Dark and Cover. All with - and + (the values are shown, so
 // they can be reported). URL: ?woodland&seed=2&clouds=0&bees=0&butterflies=0&silhouette=0&shade=0&shadows=0&haze=0
 // &side=L|R&elev=35&shadow=0.28&outside=1&soft=0.7&blur=1.5&desat=0.6&mix=0.45&feather=24&ramp=24
+// &kind=round|wide|tall|conifer|bare forces that tree kind on every tree of the map (bushes stay), to inspect one kind.
 import Phaser from 'phaser';
 import { CONST, TILE_ID } from '../generated/defs';
 import demo from '../generated/woodland-demo.json';
@@ -22,7 +23,7 @@ import { lookOf } from './silhouette';
 import { syncUnseenFX, DEFAULT_HAZE } from './unseenfx';
 import { VisionMask } from './visionmask';
 import { DEFAULT_CLOUDS } from './woodland/clouds';
-import { ALPHA, CLOUD_STEPS, ELEV, HAZE_STEPS, nextSeed, stepAlpha, stepCloud, stepElev, stepHaze, stepTiles, stepToward, TILES, zoomForTiles, type CloudKey } from './woodland/demoMath';
+import { ALPHA, CLOUD_STEPS, ELEV, forceKind, HAZE_STEPS, nextSeed, stepAlpha, stepCloud, stepElev, stepHaze, stepTiles, stepToward, TILES, zoomForTiles, type CloudKey } from './woodland/demoMath';
 import { SHADOW_ALPHA } from './woodland/shadows';
 import { WoodlandView } from './woodland/WoodlandView';
 
@@ -110,7 +111,8 @@ export class WoodlandDemoScene extends Phaser.Scene {
     this.view = new LightView(this, map, this.field);
     // the start: the middle tile of the road's western end
     const start = this.startPoint(d);
-    const info: WoodlandInfo = { ...d.woodland, sun: { ...d.woodland.sun, ...sunOverride } };
+    const plants = forceKind(d.woodland.plants, new URLSearchParams(location.search).get('kind'));
+    const info: WoodlandInfo = { ...d.woodland, plants, sun: { ...d.woodland.sun, ...sunOverride } };
     this.woodland = new WoodlandView(this, info, map, start, true);
     this.woodland.clouds.look = { ...look };
     this.mask = new VisionMask(this, map);

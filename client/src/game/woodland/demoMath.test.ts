@@ -4,8 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('phaser', () => ({ default: { Renderer: { WebGL: { Pipelines: { PostFXPipeline: class {} } } } } }));
 
 import { DEFAULT_HAZE } from '../unseenfx';
+import type { PlantInfo } from '../../generated/PlantInfo';
+import { PLANT_KINDS } from '../vegetation';
 import { DEFAULT_CLOUDS } from './clouds';
-import { ELEV, HAZE_STEPS, nextSeed, stepAlpha, stepCloud, stepElev, stepHaze, stepTiles, stepToward, TILES, zoomForTiles } from './demoMath';
+import { forceKind, ELEV, HAZE_STEPS, nextSeed, stepAlpha, stepCloud, stepElev, stepHaze, stepTiles, stepToward, TILES, zoomForTiles } from './demoMath';
 
 describe('woodland demo math', () => {
   it('steps each cloud value up and down without float drift', () => {
@@ -80,5 +82,17 @@ describe('woodland demo math', () => {
     expect(stepAlpha(0.28, -1)).toBe(0.24);
     expect(stepAlpha(0.02, -1)).toBe(0);
     expect(stepAlpha(0.58, 1)).toBe(0.6);
+  });
+});
+
+describe('forceKind', () => {
+  const bush = PLANT_KINDS.indexOf('bush');
+  const bare = PLANT_KINDS.indexOf('bare');
+  const plants: PlantInfo[] = [[0, 1, 2, 3, 100, false], [bush, 4, 5, 6, 100, true], [3, 7, 8, 9, 60, true]];
+  it('sets every tree to the kind and keeps bushes and the rest', () => {
+    expect(forceKind(plants, 'bare')).toEqual([[bare, 1, 2, 3, 100, false], plants[1], [bare, 7, 8, 9, 60, true]]);
+  });
+  it('ignores bush, unknown and missing names', () => {
+    for (const n of ['bush', 'oak', '', null]) expect(forceKind(plants, n)).toBe(plants);
   });
 });
