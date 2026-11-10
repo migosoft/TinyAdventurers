@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COVE_TREE_FOOT, DEFAULT_LIGHT, PLANT_KINDS, type Rgba, coveTree, drawPlant, drawTree, lightVector } from './vegetation';
+import { COVE_TREE_FOOT, DEFAULT_LIGHT, PLANT_KINDS, type Drawn, type Rgba, coveTree, drawPlant, drawTree, lightVector } from './vegetation';
 
 /** FNV-1a over the RGBA bytes. */
 function fnv(img: Rgba): number {
@@ -35,6 +35,15 @@ describe('vegetation', () => {
       }
     }
   });
+  it('the light changes only the shading, over many seeds', () => {
+    const lights = [lightVector({ side: 1, elevation: 51 }), lightVector({ side: -1, elevation: 35 }), lightVector({ side: 1, elevation: 70 })];
+    const sameMask = (a: Drawn, b: Drawn) => { for (let i = 3; i < a.img.data.length; i += 4) if (a.img.data[i] !== b.img.data[i]) return false; return true; };
+    for (const kind of PLANT_KINDS) for (let seed = 1; seed <= 12; seed++) for (const pct of [55, 100, 120]) {
+      const a = drawPlant(kind, seed, pct);
+      for (const l of lights) { const b = drawPlant(kind, seed, pct, l); const what = `${kind} ${seed} @${pct}`;
+        expect([what, b.img.w, b.img.h, b.foot]).toEqual([what, a.img.w, a.img.h, a.foot]); expect([what, sameMask(a, b)]).toEqual([what, true]); }
+    }
+  }, 30_000);
   it('the light changes a plant, the default does not', () => {
     const a = drawPlant('round', 7, 100), b = drawPlant('round', 7, 100, DEFAULT_LIGHT), c = drawPlant('round', 7, 100, lightVector({ side: 1, elevation: 51 }));
     expect(b.img.data).toEqual(a.img.data);
