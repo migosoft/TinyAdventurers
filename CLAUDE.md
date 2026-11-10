@@ -5,7 +5,7 @@ Read [README.md](README.md) (what the game is, how to run it), [docs/TECHNICAL.m
 ## Which work to do
 
 1. If the user names an issue ("implement #42"), work on that one.
-2. Otherwise resume the top card in **In progress** (unfinished work comes first; its latest comment says where it stopped).
+2. Otherwise resume the top card in **In progress** (unfinished work comes first; its latest comment says where it stopped). Cards in **In Review** wait for the user (a play-test, a look to judge, a decision): don't resume them on your own; pick them up when the user reports back.
 3. Otherwise take the top card in **Next**. The order of the cards in a column is the priority; the user sets it by dragging.
 4. If Next is empty, ask the user. Never pick from the Backlog on your own.
 
@@ -15,7 +15,7 @@ Read [README.md](README.md) (what the game is, how to run it), [docs/TECHNICAL.m
 gh api graphql --paginate -f query='query($endCursor:String){user(login:"migosoft"){projectV2(number:1){items(first:100,after:$endCursor,orderBy:{field:POSITION,direction:ASC}){pageInfo{hasNextPage endCursor} nodes{content{... on Issue{number title}} fieldValueByName(name:"Status"){... on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}' --jq '.data.user.projectV2.items.nodes[] | select(.fieldValueByName.name=="In progress" or .fieldValueByName.name=="Next") | "\(.fieldValueByName.name)\t#\(.content.number) \(.content.title)"'
 ```
 
-Read the issue, its comments and any spec or plan it links before starting. Move the card to In progress when you begin.
+Read the issue, its comments and any spec or plan it links before starting. Move the card to In progress when you begin, and to In Review when the work waits on the user (a play-test, a comparison, a decision); its latest comment says what the user is asked to check.
 
 **Stopping before an issue is done:** leave a comment on the issue: the branch, what is done (commits), what is next, open questions, and links to the spec and plan. The next session starts from that comment.
 
@@ -25,7 +25,7 @@ Read the issue, its comments and any spec or plan it links before starting. Move
 
 Open work lives in GitHub issues on `migosoft/TinyAdventurers`, shown on the project board **"Tiny Adventurers"** (https://github.com/users/migosoft/projects/1, project number 1, private; the issues themselves are public).
 
-- **Board columns** (the project's Status field): Backlog, Next, In progress, Done.
+- **Board columns** (the project's Status field): Backlog, Next, In progress, In Review, Done.
 - **Labels:** an area (`progression`, `ui`, `effects`, `lighting`, `combat`, `enemies`, `classes`, `items`, `world-objects`, `terrain`, `levels`, `content`, `infra`, `art`) plus kinds: `balancing` (tune in the balancing pass), `review-finding`, `play-test` (the user checks it in the browser), `idea`, `design-question`, `bug` (something is wrong in play or in the code; not a tuning number). Priority is the board order only; there are no priority labels.
 - **New follow-up:** `gh issue create --repo migosoft/TinyAdventurers --title ... --label ... --body ...`, then `gh project item-add 1 --owner migosoft --url <issue url>` and set its Status (a card added this way has none). One issue per piece of work; put file names, numbers and decisions in the body so it stands alone.
 - **Moving a card:** `gh project item-edit --project-id <id> --id <item id> --field-id <Status id> --single-select-option-id <option id>` (ids from `gh project view 1 --owner migosoft --format json`, `gh project field-list 1 --owner migosoft --format json`, `gh project item-list 1 --owner migosoft --format json`).
