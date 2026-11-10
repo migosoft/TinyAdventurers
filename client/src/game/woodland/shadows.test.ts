@@ -89,9 +89,15 @@ describe('shadows', () => {
   it('a bare tree casts its branches and has a contact ellipse at the foot', () => {
     const t = drawPlant('bare', 4, 100);
     const s = shadowOf(t.img, t.foot, shadowVector({ side: -1, elevation: 35 }), false);
-    let opaque = 0;
-    for (let i = 3; i < s.img.data.length; i += 4) if (s.img.data[i] === 255) opaque++;
-    expect(opaque).toBeGreaterThan(0);
+    // The same tree with everything more than 12 px from the trunk axis removed is trunk and roots only; the shadow
+    // pixels it lacks are the branches' (the ellipse and the trunk's own shadow are in both).
+    const trunk = { w: t.img.w, h: t.img.h, data: t.img.data.slice() };
+    for (let y = 0; y < trunk.h; y++) for (let x = 0; x < trunk.w; x++) if (Math.abs(x - t.foot.x) > 12) trunk.data[(y * trunk.w + x) * 4 + 3] = 0;
+    const s0 = shadowOf(trunk, t.foot, shadowVector({ side: -1, elevation: 35 }), false);
+    let extra = 0;
+    for (let y = 0; y < s.img.h; y++) for (let x = 0; x < s.img.w; x++)
+      if (alphaAt(s, x, y) === 255 && alphaAt(s0, x - s.foot.x + s0.foot.x, y - s.foot.y + s0.foot.y) === 0) extra++;
+    expect(extra).toBeGreaterThan(40);
     expect(alphaAt(s, s.foot.x, s.foot.y)).toBe(255);
   });
   it('shadow bounds are finite and contain the contact ellipse', () => {

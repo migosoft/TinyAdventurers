@@ -8,7 +8,7 @@ const twigColour = (x: number, cx: number, L: Light) => ((x - cx) * L.x > 0 ? 'c
 /**
  * A leafless tree. The trunk (fork at design y 54 ± 4) carries a limb 22 units long that forks at its end into 2 children
  * (3 for the first, 40 % of the time) spread ±(0.45..0.75) rad, each 0.66..0.78 of its length and 0.68 of its width; from depth 1
- * on, 35 % of the limbs grow a side twig. Depth 4 (3 below 70 % scale). Limbs at least 1 px wide are bark with a dark line on
+ * on, 35 % of the limbs that fork grow a side twig (the deepest limbs, and the twigs themselves, get none). Depth 4 (3 below 70 % scale). Limbs at least 1 px wide are bark with a dark line on
  * the shadow side; thinner ones are 1-px twigs. Every random draw of a limb is made before its children, whatever the light.
  */
 export function drawBare(seed: number, s: number, light: Light): Drawn {

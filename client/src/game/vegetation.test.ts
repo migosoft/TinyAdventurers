@@ -13,7 +13,7 @@ const isOutline = (img: Rgba, x: number, y: number) => { const i = (y * img.w + 
 const isDarkGreen = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 40 && img.data[i + 1] === 100 && img.data[i + 2] === 62 && img.data[i + 3] === 255; };
 
 const LEAF_RGB = [[28, 58, 50], [40, 100, 62], [62, 138, 67], [106, 174, 79], [156, 207, 98], [22, 48, 52], [30, 74, 70], [44, 104, 88], [74, 140, 104], [118, 176, 124]];
-const HASH =1165496683;
+const HASH = 1165496683;
 
 describe('vegetation', () => {
   it('lightVector: left sun at ~51° is the old default, the right sun mirrors it', () => {
