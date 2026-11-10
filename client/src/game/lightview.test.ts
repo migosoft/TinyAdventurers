@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIGHT_KIND } from '../generated/defs';
-import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, nextDarkvision, seenForDark, seenForLight, SUB, tileDark, upsample, warmTint, WARM } from './lightview';
+import { blackenDarkTiles, catmullRom, darknessAlpha, darkReach, DV_DARK, dvMask, flicker, lightPath, nextDarkvision, seenForDark, seenForLight, SUB, tileDark, upsample, warmTint, WARM } from './lightview';
 
 describe('darkness', () => {
   it('is black where not seen or not lit', () => {
@@ -170,5 +170,14 @@ describe('warmTint', () => {
       expect(Math.max(r, g, b)).toBeCloseTo(255, 9);
       for (const c of [r, g, b]) expect(c).toBeLessThanOrEqual(255 + 1e-9);
     }
+  });
+});
+
+describe('lightPath', () => {
+  it('is cpu only when allowed and ?light=cpu', () => {
+    expect(lightPath('?light=cpu', true)).toBe('cpu');
+    expect(lightPath('?light=cpu', false)).toBe('gpu');
+    expect(lightPath('', true)).toBe('gpu');
+    expect(lightPath('?lights&light=cpu', true)).toBe('cpu');
   });
 });

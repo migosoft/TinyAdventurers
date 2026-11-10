@@ -28,7 +28,14 @@ export const WARM = 0.45;
 const MIN_LIT = 0.08;
 /** Canvas pixels per tile. One pixel per tile with LINEAR filtering is plain bilinear, which shows creases along the tile grid in a long fade. */
 export const SUB = 2;
-/** Tiles drawn beyond the camera window: the upsampling reads two tiles around each one. */
+/** Which light compositing path runs: the shader, or (debug switch) the old CPU canvases. */
+export type LightPath = 'gpu' | 'cpu';
+
+/** `'cpu'` only if `allowed` and the query has `light=cpu`, else `'gpu'`. */
+export function lightPath(search: string, allowed: boolean): LightPath {
+  return allowed && new URLSearchParams(search).get('light') === 'cpu' ? 'cpu' : 'gpu';
+}
+/** Tiles drawn beyond the camera window:the upsampling reads two tiles around each one. */
 const MARGIN = 3;
 
 /** Darkness over one tile: 1 = black. `r, g, b`: its summed light colour. */
