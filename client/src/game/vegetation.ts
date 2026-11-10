@@ -38,9 +38,12 @@ export function drawPlant(kind: PlantKind, seed: number, scalePct: number, light
 /** The trunk foot inside the cove tree's frame (px): the sprite's origin and its depth. */
 export const COVE_TREE_FOOT = { x: 48, y: 80 };
 
-/** The atlas frame cove_tree (96x100): seed 11, round, scale 1, its foot at COVE_TREE_FOOT. */
+/** The cove tree's scale: the largest (in steps of 0.01) at which the round seed 11 fits the frame; Task 3 settles it. */
+export const COVE_TREE_SCALE = 0.99;
+
+/** The atlas frame cove_tree (96x100): seed 11, round, at COVE_TREE_SCALE, its foot at COVE_TREE_FOOT. */
 export function coveTree(): Rgba {
-  const { img, foot } = drawTree({ seed: 11, scale: 1, shape: 'round' });
+  const { img, foot } = drawTree({ seed: 11, scale: COVE_TREE_SCALE, shape: 'round' });
   const W = 96, H = 100, ox = COVE_TREE_FOOT.x - foot.x, oy = COVE_TREE_FOOT.y - foot.y;
   if (ox < 0 || oy < 0 || ox + img.w > W || oy + img.h > H) throw new Error(`vegetation: the cove tree (${img.w}x${img.h}, foot ${foot.x},${foot.y}) does not fit its 96x100 frame`);
   const out: Rgba = { w: W, h: H, data: new Uint8ClampedArray(W * H * 4) };

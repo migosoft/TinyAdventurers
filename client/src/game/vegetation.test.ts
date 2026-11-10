@@ -12,7 +12,7 @@ const alpha = (img: Rgba, x: number, y: number) => img.data[(y * img.w + x) * 4 
 const isOutline = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 34 && img.data[i + 1] === 34 && img.data[i + 2] === 34; };
 const isDarkGreen = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 40 && img.data[i + 1] === 100 && img.data[i + 2] === 62 && img.data[i + 3] === 255; };
 
-const HASH = 2114400888;
+const HASH = 2466143231;
 
 describe('vegetation', () => {
   it('lightVector: left sun at ~51° is the old default, the right sun mirrors it', () => {
@@ -51,7 +51,7 @@ describe('vegetation', () => {
     expect(c.foot).toEqual(a.foot);
   });
   it('the cove_tree frame is pinned (guards against drift)', () => {
-    // FNV-1a of the 96x100 RGBA of coveTree(): the general round tree, seed 11, scale 1, foot at (48, 80).
+    // FNV-1a of the 96x100 RGBA of coveTree(): the general round tree, seed 11, COVE_TREE_SCALE, foot at (48, 80). Re-recorded in #279 Task 2 (new trunk).
     const img = coveTree();
     expect([img.w, img.h]).toEqual([96, 100]);
     expect(fnv(img)).toBe(HASH);
@@ -114,6 +114,21 @@ describe('vegetation', () => {
     expect(seeds.some((seed) => hasVine(drawTree({ seed, scale: 1, shape: 'round' }).img))).toBe(true); // the detector sees vines
     for (const shape of ['round', 'wide', 'tall'] as const) for (const seed of seeds) {
       expect(hasVine(drawTree({ seed, scale: 0.5, shape }).img), `${shape} seed ${seed}`).toBe(false);
+    }
+  });
+
+  it('leafy trunks are slim and stand on few roots', () => {
+    const BARK = [[58, 35, 40], [98, 53, 43], [143, 64, 41], [176, 112, 74]];
+    const isBark = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i + 3] === 255 && BARK.some((b) => b[0] === img.data[i] && b[1] === img.data[i + 1] && b[2] === img.data[i + 2]); };
+    /** The distance from the first to the last bark pixel of a row, plus one (0 when there is none). */
+    const extent = (img: Rgba, y: number) => { let a = -1, b = -1; for (let x = 0; x < img.w; x++) if (isBark(img, x, y)) { if (a < 0) a = x; b = x; } return a < 0 ? 0 : b - a + 1; };
+    const limits = { round: [12, 46], wide: [13, 54], tall: [7, 26] } as const;
+    for (const shape of ['round', 'wide', 'tall'] as const) for (let seed = 1; seed <= 6; seed++) {
+      const { img, foot } = drawTree({ seed, scale: 1, shape });
+      const what = `${shape} seed ${seed}`;
+      expect(extent(img, foot.y - 20), `${what} trunk`).toBeLessThanOrEqual(limits[shape][0]);
+      let roots = 0; for (let y = foot.y - 3; y <= foot.y + 3; y++) roots = Math.max(roots, extent(img, y));
+      expect(roots, `${what} roots`).toBeLessThanOrEqual(limits[shape][1]);
     }
   });
 

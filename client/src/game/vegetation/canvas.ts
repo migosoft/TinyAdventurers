@@ -53,6 +53,8 @@ export class Canvas {
       if (x < this.x0) this.x0 = x; if (x > this.x1) this.x1 = x; if (y < this.y0) this.y0 = y; if (y > this.y1) this.y1 = y;
     }
   }
+  /** The box of everything written so far, clamped to the canvas (inclusive); empty (x1 < x0) while nothing is written. */
+  box() { return { x0: this.x0, y0: this.y0, x1: this.x1, y1: this.y1 }; }
   /** Change the picture's colour of an opaque pixel; nothing on an empty one. */
   recolour(x: number, y: number, c: string) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < this.w && y < this.h && this.px[y * this.w + x] !== null) this.px[y * this.w + x] = c; }
   /** The same for the default-light reference. */
