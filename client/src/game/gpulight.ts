@@ -11,7 +11,7 @@
 import Phaser from 'phaser';
 import { TILE } from '../sim/map';
 import { DEPTH } from './effects';
-import { lightFrag, packTile, PIC_SUB, type LightOutput } from './lightshader';
+import { lightFrag, packDv, packTile, PIC_SUB, type LightOutput } from './lightshader';
 import { WindowUpload } from './texupload';
 
 // Phaser's FilterMode.LINEAR, BlendModes.NORMAL and MULTIPLY as numbers (as in lightcpu.ts).
@@ -22,11 +22,16 @@ const MULTIPLY = 2;
 const KEYS = ['lightdata', 'dvdata', 'lightpic', 'dvpic'];
 
 export class GpuLight implements LightOutput {
-  // Task 5: the darkvision picture; until then DarkvisionFX gets the light picture (wrong grey with darkvision on).
+  /** The darkvision picture (red = strength) that DarkvisionFX samples; never shown as an Image. */
   readonly mask: Phaser.Textures.Texture;
   private data: Uint8Array;
+  private dvData: Uint8Array;
   private shader: Phaser.GameObjects.Shader;
+  private dvShader: Phaser.GameObjects.Shader;
   private upload: WindowUpload;
+  private dvUpload: WindowUpload;
+  /** Whether the previous flush had darkvision on: then `put` also clears tiles that left its reach. */
+  private dvWas = false;
   private renderer: Phaser.Renderer.WebGL.WebGLRenderer;
 
   constructor(scene: Phaser.Scene, private w: number, h: number) {
@@ -44,28 +49,51 @@ export class GpuLight implements LightOutput {
     this.shader.setChannel0('lightdata', { minFilter: 'nearest', magFilter: 'nearest', wrapS: 'clamp_to_edge', wrapT: 'clamp_to_edge' });
     this.shader.setRenderToTexture('lightpic');
     this.shader.removeFromDisplayList();
-    this.mask = scene.textures.get('lightpic');
+    scene.textures.get('lightpic').setFilter(LINEAR);
+    // Phaser's own draw in setRenderToTexture uses whatever blend mode and scissor are current; draw again with ours.
+    this.draw(this.shader);
+
+    // The darkvision picture: same recipe, red channel only.
+    this.dvData = new Uint8Array(w * h * 4);
+    for (let i = 3; i < this.dvData.length; i += 4) this.dvData[i] = 255;
+    const dvTex = scene.textures.addUint8Array('dvdata', this.dvData, w, h)!;
+    dvTex.source[0].glTexture!.pma = false;
+    this.dvUpload = new WindowUpload(this.renderer.gl, dvTex);
+    const dvBase = new Phaser.Display.BaseShader('dvpic', lightFrag(true), undefined, { uTiles: { type: '2f', value: { x: w, y: h } } });
+    this.dvShader = scene.add.shader(dvBase, 0, 0, w * PIC_SUB, h * PIC_SUB);
+    this.dvShader.setChannel0('dvdata', { minFilter: 'nearest', magFilter: 'nearest', wrapS: 'clamp_to_edge', wrapT: 'clamp_to_edge' });
+    this.dvShader.setRenderToTexture('dvpic');
+    this.dvShader.removeFromDisplayList();
+    this.mask = scene.textures.get('dvpic');
     this.mask.setFilter(LINEAR);
-    this.draw();
+    this.draw(this.dvShader);
 
     scene.add.image(0, 0, 'lightpic').setOrigin(0, 0).setScale(TILE / PIC_SUB).setDepth(DEPTH.fog).setBlendMode(MULTIPLY);
-    // Outside the display list the Shader is not destroyed with the scene (that frees its program, framebuffer and picture).
-    scene.events.once('shutdown', () => this.shader.destroy());
+    // Outside the display list the Shaders are not destroyed with the scene (that frees their programs, framebuffers and pictures).
+    scene.events.once('shutdown', () => {
+      this.shader.destroy();
+      this.dvShader.destroy();
+    });
   }
 
-  put(i: number, dark: number, r: number, g: number, b: number, _dv: number): void {
+  put(i: number, dark: number, r: number, g: number, b: number, dv: number): void {
     packTile(this.data, i, r, g, b, dark);
+    if (dv > 0 || this.dvWas) packDv(this.dvData, i, dv);
   }
 
-  flush(x0: number, y0: number, x1: number, y1: number, _dv: boolean): void {
+  flush(x0: number, y0: number, x1: number, y1: number, dv: boolean): void {
     this.upload.upload({ data: this.data, width: this.w }, x0, y0, x1 - x0, y1 - y0);
-    this.draw();
+    this.draw(this.shader);
+    if (dv) {
+      this.dvUpload.upload({ data: this.dvData, width: this.w }, x0, y0, x1 - x0, y1 - y0);
+      this.draw(this.dvShader);
+    }
+    this.dvWas = dv;
   }
 
   /** What `setRenderToTexture` does once, by hand: the blend mode and scissor of whatever was drawn last must not apply. */
-  private draw(): void {
+  private draw(s: Phaser.GameObjects.Shader): void {
     const r = this.renderer;
-    const s = this.shader;
     if (r.contextLost) return;
     r.pipelines.clear();
     r.setBlendMode(NORMAL);
