@@ -13,9 +13,8 @@ import { DEPTH } from './effects';
 import { lightFrag, packDv, packTile, PIC_SUB } from './lightshader';
 import { WindowUpload } from './texupload';
 
-// Phaser's FilterMode.LINEAR, BlendModes.NORMAL and MULTIPLY as numbers (the tests mock Phaser, so no module-level reads of its enums).
+// Phaser's FilterMode.LINEAR and BlendModes.MULTIPLY as numbers (the tests mock Phaser, so no module-level reads of its enums).
 const LINEAR = 0;
-const NORMAL = 0;
 const MULTIPLY = 2;
 
 const KEYS = ['lightdata', 'dvdata', 'lightpic', 'dvpic'];
@@ -50,8 +49,9 @@ export class GpuLight {
     this.shader.setRenderToTexture('lightpic');
     this.shader.removeFromDisplayList();
     scene.textures.get('lightpic').setFilter(LINEAR);
-    // setRenderToTexture draws once itself, but under whatever blend mode and scissor are current, which can leave the
-    // target empty; our draw() sets both.
+    // setRenderToTexture draws once itself, with no scissor guard, and that draw can fail outright (on a woodland-demo
+    // restart UnseenFX.destroy has left a vertex attribute enabled: INVALID_OPERATION drawArrays). Its
+    // pipelines.rebind() repairs the state; our draw() then fills the picture.
     this.draw(this.shader);
 
     // The darkvision picture: same recipe, red channel only.
@@ -93,12 +93,11 @@ export class GpuLight {
     this.dvWas = dv;
   }
 
-  /** What `setRenderToTexture` does once, by hand: the blend mode and scissor of whatever was drawn last must not apply. */
+  /** What `setRenderToTexture` does once, by hand. `pipelines.clear()` forces the NORMAL blend mode; the scissor is ours (picture-sized). */
   private draw(s: Phaser.GameObjects.Shader): void {
     const r = this.renderer;
     if (r.contextLost) return;
     r.pipelines.clear();
-    r.setBlendMode(NORMAL);
     r.pushScissor(0, 0, s.width, s.height, s.height);
     s.load();
     s.flush();

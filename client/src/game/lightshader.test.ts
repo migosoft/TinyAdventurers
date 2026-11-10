@@ -57,4 +57,12 @@ describe('light fragment source', () => {
     expect(lightFrag(true)).toContain('#define DV');
     expect(lightFrag(false)).not.toContain('#define DV');
   });
+  it('blackens fully dark tiles in the light branch only, not in the darkvision branch', () => {
+    const src = lightFrag(false);
+    const dvBranch = src.slice(src.indexOf('#ifdef DV'), src.indexOf('#else'));
+    const lightBranch = src.slice(src.indexOf('#else'), src.indexOf('#endif'));
+    expect(dvBranch).toContain('sum.r');
+    expect(dvBranch).not.toContain('254.5');
+    expect(lightBranch).toContain('254.5');
+  });
 });
