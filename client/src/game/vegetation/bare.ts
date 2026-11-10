@@ -17,7 +17,7 @@ export function drawBare(seed: number, s: number, light: Light): Drawn {
   const footY = Y(79), paint = painter(cv, light);
   const tr = trunkPath(r, cx, Y, s, 1, tw, 54 + (r() - 0.5) * 8, 1.1);
   paint(tr.seg, false, footY);
-  roots(cv, r, paint, cx, footY, s, tw, 3, 1);
+  roots(r, paint, cx, footY, s, tw, 3, 1);
   let count = 0;
 
   /** One limb from (x0, y0) at angle `a0` (rad from straight up, + to the right), `len` px long, half-width `w0` tapering to 0.68 of it. */

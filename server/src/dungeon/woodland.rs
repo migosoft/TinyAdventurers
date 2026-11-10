@@ -85,7 +85,7 @@ pub struct Woodland {
 }
 
 /// The edge's plants come from fixed (seed, scale_pct) pairs, 12 per kind (index = `PlantKind as usize`),
-/// so the client draws at most 60 distinct edge looks. Trees 80..120 %, bushes 113..150 % (36..48 px).
+/// so the client draws at most 48 distinct edge looks (the edge picks only Round, Wide, Conifer and Bush: 4 x 12). Trees 80..120 %, bushes 113..150 % (36..48 px).
 // balancing
 /// The edge never picks bare; its row exists so `EDGE_SEEDS[kind as usize]` can never index out of range.
 const EDGE_SEEDS: [[(u32, u8); 12]; 6] = [
@@ -777,7 +777,18 @@ mod tests {
     #[test]
     fn plant_kind_ids_match_the_client() {
         // client/src/game/vegetation.ts PLANT_KINDS has 6 entries, 'bare' last; vegetation.test.ts pins the same
-        assert_eq!(PlantKind::Bare as u8, 5);
+        // no `_` arm: a seventh variant fails to compile here
+        let id = |k: PlantKind| match k {
+            PlantKind::Round => 0,
+            PlantKind::Wide => 1,
+            PlantKind::Tall => 2,
+            PlantKind::Conifer => 3,
+            PlantKind::Bush => 4,
+            PlantKind::Bare => 5,
+        };
+        for k in [PlantKind::Round, PlantKind::Wide, PlantKind::Tall, PlantKind::Conifer, PlantKind::Bush, PlantKind::Bare] {
+            assert_eq!(k as u8, id(k));
+        }
     }
 
     #[test]

@@ -75,7 +75,7 @@ export function drawConifer(seed: number, s: number, light: Light): Drawn {
   for (let i = 0; i <= steps; i++) { const u = (i / steps) * len; seg.push({ x: cx, y: Y(80 - u), w: wAt(u) }); }
   const tr: Trunk = { at: (t) => ({ x: cx, y: Y(80 - t * len), w: wAt(t * len) }), seg, topY: Y(80 - len), footY };
   paint(seg, false, footY);
-  roots(cv, r, paint, cx, footY, s, 0.7 * s, detail ? 3 : 2, 0.7);
+  roots(r, paint, cx, footY, s, 0.7 * s, detail ? 3 : 2, 0.7);
   barkLines(cv, r, tr, light, s);
   rootMoss(cv, rng(seed ^ 0x6d6f7373), cx, footY, s); // its own stream
   // skirts, bottom first so each higher one covers the top of the one below; id = index from the bottom

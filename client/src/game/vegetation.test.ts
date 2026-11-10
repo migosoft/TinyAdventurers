@@ -8,8 +8,8 @@ function fnv(img: Rgba): number {
   return h;
 }
 const alpha = (img: Rgba, x: number, y: number) => img.data[(y * img.w + x) * 4 + 3];
-// dark green `1` of the leaf palette (40, 100, 62)
 const isOutline = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 34 && img.data[i + 1] === 34 && img.data[i + 2] === 34; };
+// dark green `1` of the leaf palette (40, 100, 62)
 const isDarkGreen = (img: Rgba, x: number, y: number) => { const i = (y * img.w + x) * 4; return img.data[i] === 40 && img.data[i + 1] === 100 && img.data[i + 2] === 62 && img.data[i + 3] === 255; };
 
 const LEAF_RGB = [[28, 58, 50], [40, 100, 62], [62, 138, 67], [106, 174, 79], [156, 207, 98], [22, 48, 52], [30, 74, 70], [44, 104, 88], [74, 140, 104], [118, 176, 124]];
@@ -88,7 +88,7 @@ describe('vegetation', () => {
     for (const seed of [1, 2, 3]) expect(drawPlant('bush', seed, 150).img.w).toBeGreaterThan(drawPlant('bush', seed, 100).img.w);
   });
 
-  /** The rows of leaf and bark pixels of an image, by column. */
+  /** A per-pixel classifier of an image: 'leaf', 'bark' or '' (transparent or anything else). */
   const bushPixels = (img: Rgba) => {
     const kind = (x: number, y: number) => {
       const i = (y * img.w + x) * 4; if (img.data[i + 3] === 0) return '';
@@ -116,7 +116,7 @@ describe('vegetation', () => {
       const img = drawPlant('bush', seed, 150).img, kind = bushPixels(img);
       for (let y = 0; y < img.h; y++) { let n = 0; for (let x = 0; x < img.w; x++) if (kind(x, y) === 'bark') n++; if (n >= 3) { forked++; break; } }
     }
-    expect(forked).toBeGreaterThanOrEqual(15);
+    expect(forked).toBe(20);
   });
 
   it('a bush has bark below its crown', () => {
@@ -289,6 +289,7 @@ describe('vegetation', () => {
     }
     // ignored by the other shapes
     expect(drawTree({ seed: 3, scale: 1, shape: 'conifer', old: true }).img.data).toEqual(drawTree({ seed: 3, scale: 1, shape: 'conifer' }).img.data);
+    expect(drawTree({ seed: 3, scale: 1, shape: 'bare', old: true }).img.data).toEqual(drawTree({ seed: 3, scale: 1, shape: 'bare' }).img.data);
   });
 
   it("a bare tree fills a crown's box", () => {

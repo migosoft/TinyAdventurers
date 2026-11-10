@@ -1,5 +1,5 @@
-// Vegetation generator (#203): trees and bushes from shapes, in the cove tree's style (#202).
-// Geometry is written in "design units" of the 96 px cove tree (foot of the roots at y 86, x 48)
+// Vegetation generator (#203): trees and bushes from shapes, in the lobed look of #279.
+// Geometry is written in "design units" of the 96 px cove tree (trunk foot at y 79, x 48)
 // and scaled; shapes stretch it (wide, tall). Small sizes drop details that would turn to noise.
 // The trees are drawn for this game with Claude Code, in the 0x72 pack's palette and style.
 // Pure: no Phaser, no DOM, no Node; the atlas script and the game both import it. The drawing code lives in vegetation/*.

@@ -29,7 +29,7 @@ export function drawLeafy(o: LeafyOpts): Drawn {
   const used = o.shape === 'tall' ? targets.slice(0, 2) : targets;
   limbs(cv, r, light, tr.at(1), used, X, Y, detail);
   paint(tr.seg, false, footY);
-  roots(cv, r, paint, cx, footY, s, tw, old ? 4 : sh.roots, sh.rootLen * (old ? 1.25 : 1));
+  roots(r, paint, cx, footY, s, tw, old ? 4 : sh.roots, sh.rootLen * (old ? 1.25 : 1));
   barkLines(cv, r, tr, light, s);
   rootMoss(cv, r, cx, footY, s);
   // crown: lobes from the shape's layout, lowest first so the upper ones sit in front

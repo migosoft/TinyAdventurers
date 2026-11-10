@@ -1,8 +1,7 @@
 // The cove's tree and plants, drawn for this game with Claude Code in the pack's
-// style and colors. The tree is generated from shapes (leaf clumps lit from the
-// top left, a tapered trunk, curved roots, hanging vines) by coveTree() in
-// src/game/vegetation.ts, the generator the woodland trees share; the bushes,
-// tufts and fern are pixel grids.
+// style and colors. The tree is coveTree() in src/game/vegetation.ts (the round
+// tree with the `old` option, #279), the generator the woodland trees share; the
+// bushes, tufts and fern are pixel grids.
 //   cove_tree (96x100), cove_bush_a (16x12), cove_bush_b (12x10),
 //   cove_tuft_a (7x8), cove_tuft_b (7x8), cove_fern (11x8)
 import type { Image } from './png';

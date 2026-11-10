@@ -11,9 +11,6 @@ const FOOT: [number, number, number] = [255, 0, 255];
 const SEEDS = [3, 11, 27, 48, 65, 91];
 const CELL_W = 120, CELL_H = 130;
 
-/** `bare` joins PLANT_KINDS in a later task; the sheets and the bench skip a kind that does not exist yet. */
-const has = (k: string) => (PLANT_KINDS as readonly string[]).includes(k);
-
 interface Item { kind: PlantKind; pct: number; light: Light }
 
 /** A grid of plants on grass, one row per item, one column per seed, a magenta marker at each foot, scaled by `zoom`. */
@@ -50,15 +47,15 @@ function single(img: Rgba, zoom: number): { w: number; h: number; data: Uint8Arr
 
 function writeSheets(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
-  const row = (kind: string, pct: number, light: Light = DEFAULT_LIGHT): Item[] => SEEDS.map(() => ({ kind: kind as PlantKind, pct, light }));
-  const kinds: [string, number][] = [['round', 100], ['wide', 100], ['tall', 100], ['conifer', 100], ['bare', 100], ['bush', 140]];
-  const main = kinds.filter(([k]) => has(k)).map(([k, p]) => row(k, p));
+  const row = (kind: PlantKind, pct: number, light: Light = DEFAULT_LIGHT): Item[] => SEEDS.map(() => ({ kind, pct, light }));
+  const kinds: [PlantKind, number][] = [['round', 100], ['wide', 100], ['tall', 100], ['conifer', 100], ['bare', 100], ['bush', 140]];
+  const main = kinds.map(([k, p]) => row(k, p));
   const sun = lightVector({ side: 1, elevation: 45 });
   const small: Item[][] = [];
-  const smallKinds: [string, number][] = [['round', 60], ['conifer', 60], ['bare', 60], ['bush', 90]];
-  const lit: [string, number][] = [['round', 100], ['conifer', 100], ['bare', 100]];
-  for (const [k, p] of smallKinds) if (has(k)) small.push(row(k, p));
-  for (const [k, p] of lit) if (has(k)) small.push(row(k, p, sun));
+  const smallKinds: [PlantKind, number][] = [['round', 60], ['conifer', 60], ['bare', 60], ['bush', 90]];
+  const lit: [PlantKind, number][] = [['round', 100], ['conifer', 100], ['bare', 100]];
+  for (const [k, p] of smallKinds) small.push(row(k, p));
+  for (const [k, p] of lit) small.push(row(k, p, sun));
   const out: [string, { w: number; h: number; data: Uint8Array }][] = [
     ['1-kinds-1x.png', sheet(main, 1)],
     ['1-kinds-3x.png', sheet(main, 3)],
@@ -70,14 +67,13 @@ function writeSheets(dir: string): void {
 
 /** Mean ms per plant over 40 seeds after a warm-up, and the sum over the distinct looks of the demo map. */
 function bench(): void {
-  const time = (kind: string, pct: number, seed: number, light: Light) => { const t = performance.now(); drawPlant(kind as PlantKind, seed, pct, light); return performance.now() - t; };
+  const time = (kind: PlantKind, pct: number, seed: number, light: Light) => { const t = performance.now(); drawPlant(kind, seed, pct, light); return performance.now() - t; };
   for (let i = 1; i <= 20; i++) { time('round', 100, i, DEFAULT_LIGHT); time('round', 100, i, lightVector({ side: 1, elevation: 45 })); }
-  const cells: [string, number[]][] = [['round', [60, 100, 120]], ['wide', [60, 100, 120]], ['tall', [60, 100, 120]], ['conifer', [60, 100, 120]], ['bare', [60, 100, 120]], ['bush', [100, 150]]];
+  const cells: [PlantKind, number[]][] = [['round', [60, 100, 120]], ['wide', [60, 100, 120]], ['tall', [60, 100, 120]], ['conifer', [60, 100, 120]], ['bare', [60, 100, 120]], ['bush', [100, 150]]];
   // both shadings are measured: the default light (the ref is the picture) and a right sun (the second shading is real work)
   for (const [name, light] of [['default light', DEFAULT_LIGHT], ['right sun, 45 deg', lightVector({ side: 1, elevation: 45 })]] as const) {
     console.log(`kind     ms per plant (mean of 40 seeds), ${name}`);
     for (const [kind, pcts] of cells) {
-      if (!has(kind)) { console.log(`${kind.padEnd(8)} (none)`); continue; }
       const ms = pcts.map((p) => { let sum = 0; for (let s = 1; s <= 40; s++) sum += time(kind, p, s, light); return `${(sum / 40).toFixed(2)}`; });
       console.log(`${kind.padEnd(8)} ${ms.join(' / ')}   (at ${pcts.join(' / ')} %)`);
     }

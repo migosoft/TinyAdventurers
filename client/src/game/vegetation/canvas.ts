@@ -20,7 +20,8 @@ export interface Light { x: number; y: number }
 export const DEFAULT_LIGHT: Light = { x: -0.62, y: -0.78 };
 
 export const isLeaf = (c: string | null) => c !== null && '0123456789'.includes(c);
-export const isBark = (c: string | null) => c !== null && 'abcd'.includes(c);
+/** Bark is a..d only: the bare tree's dead-wood e..h is written by its last pass, after every bark pass. */
+export const isBark =(c: string | null) => c !== null && 'abcd'.includes(c);
 
 /** Bark colour from the lit amount; `rim` marks the outer ring of a stroke, which turns dark on the shadow side. */
 export const barkShade = (lit: number, rim: boolean) => (rim && lit < -0.2 ? 'a' : lit > 0.55 ? 'd' : lit > 0 ? 'c' : lit > -0.5 ? 'b' : 'a');
