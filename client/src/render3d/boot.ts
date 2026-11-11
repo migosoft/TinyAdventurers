@@ -2,11 +2,12 @@
 
 import type { ClassId } from '../generated/ClassId';
 import type { RunStartInfo } from '../generated/RunStartInfo';
+import type { ServerMsg } from '../generated/ServerMsg';
 import type { Net } from '../net';
 import type { Hud } from '../ui/hud';
 import { createDemoStage } from './demoStage';
 import { parseParams } from './params';
-import { startHost, type Host } from './host';
+import { clearErrors, startHost, type Host } from './host';
 import { createRunStage, newRun } from './runStage';
 
 export async function bootDemo(el: HTMLElement, search: string): Promise<void> {
@@ -26,9 +27,11 @@ export interface Run3d {
 export function startRun3d(
   el: HTMLElement,
   search: string,
-  deps: { info: RunStartInfo; net: Net; hud: Hud; myClass: ClassId; startHost?: typeof startHost },
+  deps: { info: RunStartInfo; net: Net; hud: Hud; myClass: ClassId; early?: ServerMsg[]; startHost?: typeof startHost },
 ): Run3d {
   const run = newRun(deps);
+  // Messages that came while this chunk loaded, replayed before any later one can arrive.
+  for (const m of deps.early ?? []) run.session.receive(m);
   let stopped = false;
   let host: Host | null = null;
   let timer: ReturnType<typeof setInterval> | null = setInterval(() => run.session.frame(16), 16);
@@ -47,6 +50,7 @@ export function startRun3d(
       stopped = true;
       clearTimer();
       host?.stop();
+      clearErrors(el); // a host that failed to start left its error box
       run.session.destroy();
     },
   };

@@ -489,6 +489,11 @@ export class RunSession {
 
   // ------------------------------------------------------------ network
 
+  /** A message that arrived before the session subscribed (the 3D start buffers them while its chunk loads). */
+  receive(m: ServerMsg): void {
+    this.onMessage(m);
+  }
+
   private onMessage(m: ServerMsg): void {
     if (m.t === 'Snap') this.onSnapshot(m);
     else if (m.t === 'DebugPath') {

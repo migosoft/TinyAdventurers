@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { startHost, type Host, type Stage } from './host';
+import { clearErrors, showError, startHost, type Host, type Stage } from './host';
 import type { View, WorldInput } from './view';
 import { parseMap, MAP_ROWS } from './demoMap';
 
@@ -110,6 +110,24 @@ describe('startHost', () => {
     expect(stage.key).not.toHaveBeenCalled();
     expect(views[0].dispose).toHaveBeenCalledTimes(1);
     expect(stage.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('an error box outlives a failed start, and goes with clearErrors, the next host or a later stop', async () => {
+    const { deps, stage } = setup();
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    deps.createView.mockRejectedValueOnce(new Error('no GPU'));
+    expect(await startHost(el, '', 'demo', () => stage, deps)).toBeNull();
+    expect(el.querySelectorAll('.r3d-error')).toHaveLength(1);
+    clearErrors(el);
+    expect(el.children.length).toBe(0);
+    deps.createView.mockRejectedValueOnce(new Error('no GPU'));
+    await startHost(el, '', 'demo', () => stage, deps);
+    const host = await startHost(el, '', 'demo', () => stage, deps); // the next host removes the old box
+    expect(el.querySelectorAll('.r3d-error')).toHaveLength(0);
+    showError(el, 'ground too large', false); // a box of this host
+    host!.stop();
+    expect(el.children.length).toBe(0);
   });
 
   it('setParams inside makeStage does not throw', async () => {

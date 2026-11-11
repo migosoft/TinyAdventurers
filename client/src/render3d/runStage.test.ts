@@ -315,6 +315,19 @@ describe('startRun3d', () => {
     }
   });
 
+  it('replays the messages buffered while the chunk loaded into the session', () => {
+    const net = fakeNet();
+    const hud = fakeHud();
+    const info = startInfo(['#####', '#...#', '#####']);
+    const run = startRun3d(document.createElement('div'), '', {
+      info, net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
+      early: [snap({ ev: [tile(1, 1, TILE_ID.DoorClosed)] })], startHost: () => new Promise(() => {}),
+    });
+    const said = hud.calls.filter((c) => c[0] === 'message' && String(c[1]).includes('force field'));
+    expect(said).toHaveLength(1); // the Tile event changed the session's map
+    run.stop();
+  });
+
   it('stop before the host exists stops the host the moment it is made', async () => {
     const net = fakeNet();
     const hud = fakeHud();

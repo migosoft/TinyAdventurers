@@ -186,7 +186,6 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   renderer.toneMapping = NoToneMapping;
   renderer.setPixelRatio(1);
   renderer.info.autoReset = false;
-  renderer.setClearColor(new Color(0.012, 0.01, 0.016), 1);
 
   const atlas = new Texture(assets.image);
   pixelTexture(atlas);
@@ -208,7 +207,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
 
   const scene = new Scene();
   const { nx, nz } = chunkGrid(map);
-  /** One mesh per chunk: static geometry, culled by its bounds. `live`: the uv and rect buffers are rewritten (terrain animation). */
+  /** One mesh per chunk: static geometry, culled by its bounds. `terrain`: the uv and rect buffers are rewritten (terrain animation). */
   interface ChunkMesh { mesh: Mesh; terrain: TerrainChunk | null; seen: boolean }
   const counters = { drawn: 0 };
   const worldChunks: (ChunkMesh | null)[] = new Array(nx * nz).fill(null);

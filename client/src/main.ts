@@ -21,6 +21,7 @@ import { UNSEEN_FX, UnseenFX } from './game/unseenfx';
 import { requestedResolution, viewLayout, type Resolution, type ViewLayout } from './game/viewLayout';
 import { GameScene, type GameInit } from './game/GameScene';
 import type { RunStartInfo } from './generated/RunStartInfo';
+import type { ServerMsg } from './generated/ServerMsg';
 import { api, ApiFail } from './api';
 import type { CharacterInfo } from './generated/CharacterInfo';
 import { Net } from './net';
@@ -246,6 +247,7 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
   const gameEl = document.getElementById('game')!;
   let debugAccount = false;
   let run3d: { stop(): void } | null = null; // the render3d `Run3d` (main.ts has no static render3d import)
+  let boot3d: Promise<typeof import('./render3d/boot')> | null = null; // the chunk, loaded at most once (a failed load is retried)
   let run3dStarts = 0; // a second RunStarted while the import is pending drops the stale start
 
   const backToLobby = () => {
@@ -276,6 +278,14 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
         hub.setDebug(m.debug);
         debugAccount = m.debug;
         if (!wants3d(location.search, m.debug)) ensurePhaser();
+        else if (!boot3d) {
+          // so the chunk is usually there at RunStarted (a failed preload is retried then)
+          const p = import('./render3d/boot');
+          boot3d = p;
+          p.catch(() => {
+            if (boot3d === p) boot3d = null;
+          });
+        }
         if (requestedResolution(location.search, m.debug) !== resolution) {
           resolution = requestedResolution(location.search, m.debug);
           relayout();
@@ -305,9 +315,24 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
           gameEl.classList.add('active');
           run3d?.stop();
           run3d = null;
-          const { startRun3d } = await import('./render3d/boot');
+          // Messages that arrive while the chunk loads are buffered and replayed into the session.
+          const early: ServerMsg[] = [];
+          const off = net.on((x) => early.push(x));
+          let mod: typeof import('./render3d/boot');
+          try {
+            mod = await (boot3d ??= import('./render3d/boot'));
+          } catch (e) {
+            off();
+            boot3d = null;
+            if (mine !== run3dStarts) break;
+            console.error('The 3D view could not load:', e);
+            backToLobby();
+            lobby.error(`The 3D view could not load: ${String(e)}`);
+            break;
+          }
+          off();
           if (mine !== run3dStarts) break; // a newer RunStarted took over while the chunk loaded
-          run3d = startRun3d(gameEl, location.search, { info, net, hud, myClass: me.class });
+          run3d = mod.startRun3d(gameEl, location.search, { info, net, hud, myClass: me.class, early });
           break;
         }
         await ready;

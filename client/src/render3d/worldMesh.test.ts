@@ -265,10 +265,10 @@ describe('chunksOfTile', () => {
   it('lists the own chunk and differing neighbours without duplicates', () => {
     expect(chunksOfTile(big, 20, 20)).toEqual([[1, 1]]);
     expect(set(chunksOfTile(big, 16, 20))).toEqual(set([[1, 1], [0, 1]]));
-    expect(set(chunksOfTile(big, 16, 16))).toEqual(set([[1, 1], [0, 1], [1, 0]]));
+    expect(set(chunksOfTile(big, 16, 16))).toEqual(set([[1, 1], [0, 1], [1, 0], [0, 0]]));
     expect(chunksOfTile(big, 0, 0)).toEqual([[0, 0]]);
     expect(set(chunksOfTile(big, 47, 47))).toEqual(set([[2, 2]]));
-    expect(set(chunksOfTile(big, 15, 15))).toEqual(set([[0, 0], [1, 0], [0, 1]]));
+    expect(set(chunksOfTile(big, 15, 15))).toEqual(set([[0, 0], [1, 0], [0, 1], [1, 1]]));
   });
 });
 

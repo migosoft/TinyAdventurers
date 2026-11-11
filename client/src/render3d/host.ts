@@ -73,11 +73,18 @@ export function showError(host: HTMLElement, text: string, fixed: boolean): HTML
   return d;
 }
 
-const isTextTarget = (t: EventTarget | null): boolean =>
+/** Removes the error boxes `showError` put in the element (the element is reused for every run). */
+export function clearErrors(host: HTMLElement): void {
+  for (const d of Array.from(host.children)) if (d.classList.contains('r3d-error')) d.remove();
+}
+
+const isTextTarget =(t: EventTarget | null): boolean =>
   t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
 
 /**
- * Null when it showed an error or was stopped during the start. `makeStage` runs once the atlas is loaded. Everything the
+ * Null when it showed an error or was stopped during the start. Error boxes are the element's: a host removes those of
+ * earlier hosts when it starts and its own in `stop()`; a host that failed leaves its box up (the player reads it), and the
+ * caller clears it with `clearErrors`. `makeStage` runs once the atlas is loaded. Everything the
  * host adds is created before the first await, so `stop()` (also through the Host given to `makeStage`) is safe at any
  * point. A `makeStage` or first `built` that throws leaves nothing behind and the error is rethrown.
  */
@@ -85,6 +92,7 @@ export async function startHost(
   el: HTMLElement, search: string, mode: 'demo' | 'run', makeStage: (assets: Assets, host: Host) => Stage,
   deps: HostDeps = { createView, loadAtlas },
 ): Promise<Host | null> {
+  clearErrors(el);
   const initial = parseParams(search);
   let params = initial;
   let canvas = document.createElement('canvas');
@@ -238,6 +246,7 @@ export async function startHost(
       view = null;
     }
     canvas.remove();
+    clearErrors(el);
     panel.destroy();
     statsEl.remove();
     timer.on = false;
@@ -254,8 +263,9 @@ export async function startHost(
     for (const [name, f] of Object.entries(atlas.frames)) frames[name] = { x: f.frame.x, y: f.frame.y, w: f.frame.w, h: f.frame.h };
     assets = { image: atlas.img, frames };
   } catch (e) {
-    if (!stopped) showError(el, `Could not load the atlas: ${String(e)}`, false);
+    const wasStopped = stopped;
     stop();
+    if (!wasStopped) showError(el, `Could not load the atlas: ${String(e)}`, false); // after stop(), which clears the boxes
     return null;
   }
   if (stopped) return null;
@@ -275,8 +285,9 @@ export async function startHost(
   try {
     first = await deps.createView(canvas, assets, stage.world, { forceWebGL: initial.backend === 'webgl' }, lostFrom(gen));
   } catch (e) {
-    if (!stopped) showError(el, String(e instanceof Error ? e.message : e), e instanceof RendererInitError);
+    const wasStopped = stopped;
     stop();
+    if (!wasStopped) showError(el, String(e instanceof Error ? e.message : e), e instanceof RendererInitError);
     return null;
   }
   if (stopped) {

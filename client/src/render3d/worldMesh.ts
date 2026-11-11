@@ -57,11 +57,14 @@ export function chunkGrid(map: { w: number; h: number }): { nx: number; nz: numb
   return { nx: Math.ceil(map.w / CHUNK), nz: Math.ceil(map.h / CHUNK) };
 }
 
-/** The chunk of the cell and those of its four neighbours where they differ and lie inside the grid; no duplicates. */
+/**
+ * The chunk of the cell and those of its eight neighbours (a face's `straight` flag and the terrain edges read the diagonal
+ * cells) where they differ and lie inside the grid; no duplicates.
+ */
 export function chunksOfTile(map: { w: number; h: number }, x: number, z: number): [cx: number, cz: number][] {
   const { nx, nz } = chunkGrid(map);
   const out: [number, number][] = [];
-  for (const [dx, dz] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
+  for (const [dx, dz] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     const cx = Math.floor((x + dx) / CHUNK), cz = Math.floor((z + dz) / CHUNK);
     if (cx < 0 || cz < 0 || cx >= nx || cz >= nz) continue;
     if (!out.some((c) => c[0] === cx && c[1] === cz)) out.push([cx, cz]);
