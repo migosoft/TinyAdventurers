@@ -3,8 +3,8 @@ import { AdditiveBlending, DoubleSide, MeshBasicNodeMaterial, Vector3 } from 'th
 import type { Texture } from 'three/webgpu';
 import { attribute, clamp, float, floor, fwidth, fract, int, ivec2, length, max, positionGeometry, positionWorld, select, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from './lightNodes';
+import { GRASS_FLAT, STONE } from './light';
 
-const STONE = [0.115, 0.1, 0.145] as const;
 const RIM = [0.4, 0.34, 0.33] as const;
 const PX = 1 / 16;
 
@@ -21,13 +21,25 @@ export function viewTowardUniform() {
 }
 export type ViewToward = ReturnType<typeof viewTowardUniform>;
 
+/** What `worldMaterial` hands back: the material and the handles the view drives. */
+export interface WorldMaterial {
+  material: MeshBasicNodeMaterial;
+  /** 0 or 1: floors and the ground read the linear texture at a sharpened position. */
+  smooth: { value: number };
+  /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
+  setGround(nearest: Texture, linear: Texture): void;
+}
+
 /**
- * Lit world material: atlas texels for floor and faces, a generated stone top with a pale rim where a wall drops to something lower.
- * `smooth` (0 or 1) switches the floor to the linear atlas at a sharpened position; it is a uniform, so flipping it recompiles nothing.
+ * Lit world material: atlas texels for floor and faces, a generated stone top with a pale rim where a wall drops to something lower,
+ * and (kind `ground`) the painted woodland ground, `GRASS_FLAT` while no image is set. The ground's rect is the whole image in px.
+ * `smooth` (0 or 1) switches floor and ground to the linear texture at a sharpened position; it is a uniform, so flipping it recompiles nothing.
  */
-export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting): { material: MeshBasicNodeMaterial; smooth: { value: number } } {
+export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture): WorldMaterial {
   const kind = attribute('kind', 'float');
-  const isTop = kind.greaterThan(1.5);
+  const isTop = kind.greaterThan(1.5).and(kind.lessThan(2.5));
+  const isGround = kind.greaterThan(2.5);
+  const isFace = kind.greaterThan(0.5).and(kind.lessThan(1.5));
 
   const size = vec2(atlasW, atlasH);
   const p0 = uv();
@@ -39,9 +51,16 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   // The atlas has no padding: keep the linear taps inside the frame.
   const p = clamp(sharp, rect.xy.add(0.5), rect.xy.add(rect.zw).sub(0.5));
   const smooth = uniform(0);
-  const useSmooth = smooth.greaterThan(0.5).and(kind.lessThan(0.5));
+  const useSmooth = smooth.greaterThan(0.5);
   // Both reads sit in the shader and a select picks one; sampling stays in uniform control flow.
-  const texel = select(useSmooth, texture(linearAtlas, p.div(size)), texture(atlas, p0.div(size)));
+  const atlasTexel = select(useSmooth.and(kind.lessThan(0.5)), texture(linearAtlas, p.div(size)), texture(atlas, p0.div(size)));
+
+  const groundReady = uniform(0);
+  const groundNear = texture(groundStart, p0.div(max(rect.zw, vec2(1))));
+  const groundLin = texture(groundStart, p.div(max(rect.zw, vec2(1))));
+  const groundTexel = select(useSmooth, groundLin, groundNear);
+  const ground = vec4(select(groundReady.greaterThan(0.5), groundTexel.rgb, vec3(...GRASS_FLAT)), select(groundReady.greaterThan(0.5), groundTexel.a, 1));
+  const texel = select(isGround, ground, atlasTexel);
 
   const wp = positionWorld;
   const cx = floor(wp.x);
@@ -57,13 +76,21 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
 
   const top = select(rim, vec3(...RIM), vec3(...STONE));
   const albedo = select(isTop, top, texel.rgb);
-  // Wrap: floor 0.35, wall face 0.5, wall top 0.15.
-  const wrap = select(isTop, float(0.15), select(kind.greaterThan(0.5), float(0.5), float(0.35)));
+  // Wrap: floor and ground 0.35, wall face 0.5, wall top 0.15.
+  const wrap = select(isTop, float(0.15), select(isFace, float(0.5), float(0.35)));
   const lit = lighting.lightAt(wp, attribute('normal', 'vec3'), wrap);
   const m = new MeshBasicNodeMaterial();
   m.colorNode = vec4(lighting.shoulder(albedo.mul(lit)), select(isTop, 1, texel.a));
   m.alphaTest = 0.5;
-  return { material: m, smooth };
+  return {
+    material: m,
+    smooth,
+    setGround(nearest, linear) {
+      groundNear.value = nearest;
+      groundLin.value = linear;
+      groundReady.value = 1;
+    },
+  };
 }
 
 /**

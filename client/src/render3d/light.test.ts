@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_LIGHTS, packLights, sceneLights, torchFlicker, type Light } from './light';
+import { AMBIENT, MAX_LIGHTS, STONE, WORK_AMBIENT, packLights, sceneLights, shoulder, stoneClear, torchFlicker, type Light } from './light';
 import { newScene } from './scene';
 
 const lamp = (n: number): Light => ({ x: n, y: 1, z: 2, radius: 3, r: 0.5, g: 0.6, b: 0.7, shadow: n % 2 === 0 });
@@ -44,5 +44,14 @@ describe('light', () => {
     const p = packLights(Array.from({ length: 10 }, (_, i) => lamp(i)));
     expect(p.pos[7 * 4]).toBe(7);
     expect(p.pos.length).toBe(32);
+  });
+  it('has a shoulder that leaves low values alone and rolls off high ones', () => {
+    expect(shoulder(0.2)).toBeCloseTo(0.2, 9);
+    expect(shoulder(2)).toBeCloseTo(1 - Math.exp(-3.2), 6);
+  });
+  it('clears to the lit wall top: stone times ambient', () => {
+    const c = stoneClear(AMBIENT);
+    for (let i = 0; i < 3; i++) expect(c[i]).toBeCloseTo(STONE[i] * AMBIENT[i], 6);
+    for (const v of stoneClear(WORK_AMBIENT)) expect(v).toBeLessThan(0.2);
   });
 });

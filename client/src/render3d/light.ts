@@ -1,9 +1,31 @@
 // The scene's point lights, as plain numbers (the shader side is in lightNodes.ts).
 import { orbAt, type SceneState } from './scene';
+import { BASE } from '../game/covemath';
 
 export interface Light { x: number; y: number; z: number; radius: number; r: number; g: number; b: number; shadow: boolean }
 export const MAX_LIGHTS = 8;
 export const AMBIENT: [number, number, number] = [0.075, 0.08, 0.125];
+/** Daylight and work lighting: a bright flat ambient. */
+export const WORK_AMBIENT: [number, number, number] = [0.9, 0.9, 0.9];
+/** The wall top's colour. */
+export const STONE: readonly [number, number, number] = [0.115, 0.1, 0.145];
+/** The painter's base grass colour (0..1), shown by the ground until its image is set. */
+export const GRASS_FLAT: [number, number, number] = [BASE[0] / 255, BASE[1] / 255, BASE[2] / 255];
+export const WOODLAND_CLEAR: [number, number, number] = [0.05, 0.11, 0.06];
+
+const smoothstep = (a: number, b: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+/** The shader's shoulder, in JS, for the clear colour. */
+export function shoulder(c: number): number {
+  const k = smoothstep(0.55, 1.1, c);
+  return c * (1 - k) + (1 - Math.exp(-1.6 * c)) * k;
+}
+/** The colour of a lit wall top, for the clear colour. */
+export function stoneClear(ambient: [number, number, number]): [number, number, number] {
+  return [shoulder(STONE[0] * ambient[0]), shoulder(STONE[1] * ambient[1]), shoulder(STONE[2] * ambient[2])];
+}
 
 export function torchFlicker(t: number, ph: number): number {
   return 1 + 0.07 * Math.sin(11 * t + ph) + 0.05 * Math.sin(23.3 * t + 2 * ph) + 0.04 * Math.sin(5.1 * t + 3 * ph);

@@ -1,7 +1,7 @@
 // The light of the 3D view in TSL: point lights with a grid-walk wall shadow (port of the demo's lightAt / wallVis).
-import { Vector4 } from 'three/webgpu';
+import { Vector3, Vector4 } from 'three/webgpu';
 import type { DataTexture } from 'three/webgpu';
-import { Break, Fn, If, Loop, abs, exp, float, floor, int, ivec2, length, max, min, mix, select, smoothstep, textureLoad, uniform, uniformArray, vec3, dot } from 'three/tsl';
+import { Break, Fn, If, Loop, abs, exp, float, floor, int, ivec2, length, max, min, mix, select, smoothstep, textureLoad, uniform, uniformArray, dot } from 'three/tsl';
 import { AMBIENT, MAX_LIGHTS, packLights, type Light } from './light';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
@@ -17,13 +17,16 @@ export interface Lighting {
   cellH(cell: N): N;
   setLights(lights: Light[]): void;
   setShadows(on: boolean): void;
+  /** The ambient light (a uniform); `AMBIENT` is its start value. */
+  setAmbient(rgb: [number, number, number]): void;
 }
 
 export function makeLighting(heightTex: DataTexture, map: { w: number; h: number }): Lighting {
   const lPos = uniformArray(Array.from({ length: MAX_LIGHTS }, () => new Vector4()), 'vec4');
   const lCol = uniformArray(Array.from({ length: MAX_LIGHTS }, () => new Vector4()), 'vec4');
   const uShadows = uniform(1);
-  const ambient = vec3(...AMBIENT);
+  const uAmbient = uniform(new Vector3(...AMBIENT));
+  const ambient = uAmbient;
 
   const cellH = (cell: N): N => {
     const x = int(min(max(float(cell.x), 0), map.w - 1));
@@ -117,6 +120,9 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     },
     setShadows(on) {
       uShadows.value = on ? 1 : 0;
+    },
+    setAmbient(rgb) {
+      (uAmbient.value as Vector3).set(rgb[0], rgb[1], rgb[2]);
     },
   };
 }

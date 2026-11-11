@@ -2,7 +2,7 @@ import { loadAtlas } from '../ui/atlas';
 import { keysToWorld } from './camera';
 import { buildDynamic } from './cards';
 import { parseMap, MAP_ROWS } from './demoMap';
-import { sceneLights } from './light';
+import { AMBIENT, sceneLights } from './light';
 import { createPanel } from './panel';
 import { FrameTimer } from '../game/frameTimer';
 import { parseParams, toSearch, type R3dParams } from './params';
@@ -72,7 +72,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     next.className = 'r3d';
     canvas.replaceWith(next);
     canvas = next;
-    view = await createView(next, assets!, map, { forceWebGL: initial.backend === 'webgl' }, lostFrom(g));
+    view = await createView(next, assets!, { map, painted: false, clear: 'stone' }, { forceWebGL: initial.backend === 'webgl' }, lostFrom(g));
     viewLive = true;
     cw = 0; // setSize again for the current canvas size
     ch = 0;
@@ -90,7 +90,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     for (const [name, f] of Object.entries(atlas.frames)) frames[name] = { x: f.frame.x, y: f.frame.y, w: f.frame.w, h: f.frame.h };
     assets = { image: atlas.img, frames };
     try {
-      view = await createView(canvas, assets, map, { forceWebGL: initial.backend === 'webgl' }, lostFrom(gen));
+      view = await createView(canvas, assets, { map, painted: false, clear: 'stone' }, { forceWebGL: initial.backend === 'webgl' }, lostFrom(gen));
     } catch (e) {
       showError(host, String(e instanceof Error ? e.message : e), e instanceof RendererInitError);
       return;
@@ -208,7 +208,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
       timer.renderStart();
       let drawCalls = 0;
       try {
-        drawCalls = view.draw({ cam, plan, dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now }, timer);
+        drawCalls = view.draw({ cam, plan, dynamic, lights, ambient: AMBIENT, shadows: params.shadows, smooth: params.smooth, t: now }, timer);
       } finally {
         timer.renderEnd(drawCalls); // also when the draw threw, so the timer stays consistent
       }
