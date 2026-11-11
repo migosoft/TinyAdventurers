@@ -10,7 +10,7 @@ import type { ServerMsg } from '../generated/ServerMsg';
 import type { Snapshot } from '../generated/Snapshot';
 import { nextDarkvision } from '../game/darkvisionSteps';
 import { LightField } from '../game/light';
-import { Interpolator, Predictor } from '../game/world';
+import { Interpolator, Predictor, type EntState } from '../game/world';
 import { TileMap } from '../sim/map';
 import type { Net } from '../net';
 import type { Disabled, Hud } from '../ui/hud';
@@ -69,6 +69,8 @@ export class RunSession {
   private readonly now: () => number;
   private readonly pred: Predictor;
   private readonly interp = new Interpolator();
+  /** The drawn entities by id; the frame step fills it from `interp.sample` (A5). */
+  private readonly ents = new Map<number, EntState>();
   private view: RunView | null = null;
   private isAlive = true;
   spectating: number | null = null;
@@ -209,7 +211,9 @@ export class RunSession {
     this.interp.push(s, this.now());
     this.lastSnap = s;
     this.pred.solids = s.ents.filter((e) => e[1] === KIND.Barrel && e[5] < 2).map((e) => ({ x: e[2], y: e[3], half: CONST.BARREL_RADIUS }));
-    if (s.me.alive) this.pred.reconcile(s, undefined);
+    // The figure is drawn from the interpolated entity while charmed; when the charm ends the prediction blends in from there.
+    const drawn = this.ents.get(this.runInfo.you);
+    if (s.me.alive) this.pred.reconcile(s, drawn ? [drawn.x, drawn.y] : undefined);
     if (this.isAlive && !s.me.alive) this.hud.message('You have fallen. Q / E to watch your party.');
     this.isAlive = s.me.alive;
     this.spectating = s.me.spectating;

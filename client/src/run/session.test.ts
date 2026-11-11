@@ -87,6 +87,19 @@ describe('RunSession messages', () => {
     expect(session.alive).toBe(false);
   });
 
+  it('a charm that begins reconciles from the drawn own position', () => {
+    const { net, session } = make();
+    // The session's entity map is filled by the frame step (A5); put the drawn own figure there as that step will.
+    const ents = session['ents'];
+    ents.set(1, { id: 1, kind: 0, x: 100, y: 90, hp: 10, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: 2, entangled: 0 });
+    const charmed = snap();
+    charmed.me.charmed_by = 'Lich';
+    net.emit(charmed);
+    // The predicted hero stood at the spawn (24, 24); the figure glides from the drawn spot to the server hero.
+    const [x, y] = session['pred'].charmedPos(24, 24, 0);
+    expect([x, y]).toEqual([24 + (24 - 100), 24 + (24 - 90)]);
+  });
+
   it('debug keys are ignored outside a debug run', () => {
     const off = make({ debug: false });
     off.session.debugImmortal();
