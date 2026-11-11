@@ -104,23 +104,26 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   window.__r3d = state;
 
   let params = initial;
-  const commit = (p: R3dParams): void => {
-    params = p;
-    history.replaceState(null, '', toSearch(p));
+  // The one path of every params change (the panel, F3): it keeps `params`, the panel's copy, the address bar and
+  // what follows `params.stats` (the readout's visibility, the timer) in step.
+  const apply = (next: R3dParams): void => {
+    params = next;
+    panel.setParams(next);
+    history.replaceState(null, '', toSearch(next));
+    follow();
   };
-  const panel = createPanel(host, params, commit, () => view.forceLoss());
+  const panel = createPanel(host, params, apply, () => view.forceLoss());
 
   // The F3 readout; the timer runs only while it is open.
   const timer = new FrameTimer<R3dSystem>(R3D_SYSTEMS);
   const statsEl = document.createElement('pre');
   statsEl.className = 'r3d-stats';
   host.appendChild(statsEl);
-  const showStats = (on: boolean): void => {
-    statsEl.hidden = !on;
-    timer.on = on;
-    if (params.stats !== on) commit({ ...params, stats: on });
+  const follow = (): void => {
+    statsEl.hidden = !params.stats;
+    timer.on = params.stats;
   };
-  showStats(params.stats);
+  follow();
   let fps = 0;
   let lastFrameMs = -1;
   let statsAt = 0;
@@ -131,7 +134,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'F3') {
       e.preventDefault(); // not the browser's find-next
-      showStats(!params.stats);
+      if (!e.repeat) apply({ ...params, stats: !params.stats });
       return;
     }
     if (e.target instanceof HTMLInputElement) return; // the slider keeps its own keys
@@ -151,10 +154,8 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   let last = performance.now() / 1000;
 
   const loop = (nowMs: number) => {
-    if (lastFrameMs >= 0) {
-      const gap = nowMs - lastFrameMs; // the raw time between animation frames, not frameDt's clamped one
-      fps = fps === 0 ? 1000 / gap : fps * 0.9 + (1000 / gap) * 0.1;
-    }
+    const gap = nowMs - lastFrameMs; // the raw time between animation frames, not frameDt's clamped one
+    if (lastFrameMs >= 0 && gap > 0) fps = fps === 0 ? 1000 / gap : fps * 0.9 + (1000 / gap) * 0.1;
     lastFrameMs = nowMs;
     timer.stepStart();
     timer.begin();
