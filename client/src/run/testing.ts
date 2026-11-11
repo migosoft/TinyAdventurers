@@ -13,7 +13,7 @@ import { NO_STATS } from './view';
 
 const GLYPH: Record<string, number> = { '#': TILE_ID.Wall, '.': TILE_ID.Floor, D: TILE_ID.DoorOpen, ' ': TILE_ID.Void };
 
-const ability = (id: ResolvedAbility['id']): ResolvedAbility => ({
+export const ability = (id: ResolvedAbility['id'], over: Partial<ResolvedAbility> = {}): ResolvedAbility => ({
   id,
   cooldown: 1,
   cd_steps: { base: 1, attr: 'Dex', have: 10, scaled: 1, mods: 1 },
@@ -32,6 +32,7 @@ const ability = (id: ResolvedAbility['id']): ResolvedAbility => ({
   behind: 0,
   per_cast: 0,
   alive: 0,
+  ...over,
 });
 
 /** A run start from ASCII rows: '#' Wall, '.' Floor, 'D' DoorOpen, ' ' Void. You are entity 1; one player; spawn at the first '.'. */

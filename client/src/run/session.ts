@@ -2,7 +2,9 @@
 // the light field, the predictor, the interpolator, the HUD and net traffic;
 // a view (the 2D game or the 3D view) draws what the session hands it. The
 // session never imports a view; it asks the view one question (pointerWorld).
-import { CLASSES, CONST, EFFECT, KIND, TILE_ID } from '../generated/defs';
+import { ABILITIES, ANIM, CLASSES, CONST, EFFECT, KIND, TILE_ID } from '../generated/defs';
+import { FIGURES } from '../game/anim/defs';
+import { meleeFoe } from '../game/shotTargets';
 import type { ClassId } from '../generated/ClassId';
 import type { Ev } from '../generated/Ev';
 import type { RunStartInfo } from '../generated/RunStartInfo';
@@ -10,11 +12,12 @@ import type { ServerMsg } from '../generated/ServerMsg';
 import type { Snapshot } from '../generated/Snapshot';
 import { nextDarkvision } from '../game/darkvisionSteps';
 import { LightField } from '../game/light';
-import { Interpolator, Predictor, type EntState } from '../game/world';
+import { abilityChoice, cosmeticCount, Interpolator, Predictor, slotUsable, volleyAngles, volleyShotIds, type EntState } from '../game/world';
 import { TileMap } from '../sim/map';
 import type { Net } from '../net';
 import type { Disabled, Hud } from '../ui/hud';
-import type { StepInput } from './input';
+import { NO_INPUT, type StepInput } from './input';
+import { Shots } from './shots';
 import type { DebugDraw, RunView, RunViewInit } from './view';
 
 export type NetLike = Pick<Net, 'on' | 'send' | 'rtt' | 'lastSnapshotBytes'>;
@@ -84,6 +87,15 @@ export class RunSession {
   private immortal = true;
   private effectIx = -1;
   private unsub: (() => void) | null;
+  /** The own predicted shots (the view draws them from the frame). */
+  readonly shots = new Shots();
+  private acc = 0;
+  private shotId = 0;
+  private lastAim = 0;
+  /** The last step's input ("moving" for the own animation, A5); public until the frame reads it. */
+  lastInput: StepInput = NO_INPUT;
+  /** The own hero's last action animation (the frame's `own`, A5); public until the frame reads it. */
+  localAnim: { anim: number; start: number; arc?: number } = { anim: ANIM.Idle as number, start: 0 };
 
   constructor(deps: SessionDeps) {
     this.runInfo = deps.info;
@@ -178,6 +190,174 @@ export class RunSession {
   /** Debug runs only, and while alive (dead, the snapshot's darkvision is the teammate's). */
   private debugKeyOk(): boolean {
     return this.debug.on && this.isAlive;
+  }
+
+  // ------------------------------------------------------------ frame, input & prediction
+
+  /** One display frame: the fixed steps now (the rest of the frame follows in A5). */
+  frame(deltaMs: number): void {
+    const dt = Math.min(deltaMs / 1000, 0.1);
+    this.acc += dt;
+    let steps = 0;
+    while (this.acc >= CONST.DT && steps < 5) {
+      this.acc -= CONST.DT;
+      this.fixedStep();
+      steps++;
+    }
+    if (steps === 5) this.acc = 0;
+  }
+
+  private fixedStep(): void {
+    // Always read, also while dead: it consumes the host's click latches.
+    const inp = this.input();
+    if (!this.isAlive) return;
+    this.lastInput = inp;
+    // Charmed: the server drives the hero and ignores the input. Empty inputs keep its clock going and match what it
+    // sees when the charm ends before the client knows (no flag on the wire); nothing is predicted.
+    const charmed = this.pred.charmed;
+    const mx = charmed ? 0 : inp.mx;
+    const my = charmed ? 0 : inp.my;
+    const wp = this.view?.pointerWorld() ?? null;
+    let pointerAim = this.lastAim;
+    let dist = 0;
+    if (wp) {
+      const dx = wp.x - this.pred.state.x;
+      const dy = wp.y - (this.pred.state.y - 8);
+      pointerAim = Math.atan2(dy, dx);
+      dist = Math.hypot(dx, dy);
+    } else if (mx !== 0 || my !== 0) pointerAim = Math.atan2(my, mx);
+    // Petrified or asleep: the server keeps the old facing, so the client sends it too.
+    const aim = this.pred.noTurn ? this.lastAim : pointerAim;
+    this.lastAim = aim;
+    // Falling, drowning or pushed heroes cannot attack (the server ignores it).
+    const free = !charmed && !this.hud.menuOpen && !this.pred.sinking && !this.pred.knocked && !this.pred.noAct;
+    const wantPrimary = inp.primary && free;
+    const wantSecondary = inp.secondary && free;
+    const act = inp.act && free;
+
+    let primary: number | null = null;
+    let secondary: number | null = null;
+    let dash: [number, number] | null = null;
+    const used: [number | null, number | null] = [null, null];
+    const usable = [this.slotUsable(0), this.slotUsable(1)] as const;
+    if (wantPrimary && !usable[0]) this.hud.needs(0, this.disabled[0]!);
+    if (wantSecondary && !usable[1]) this.hud.needs(1, this.disabled[1]!);
+    if (wantPrimary && this.pred.cd1 <= 0 && usable[0]) {
+      const ids = this.reserveShots(0);
+      primary = ids[0];
+      used[0] = this.predictAbility(0, ids, aim, dist);
+    }
+    if (wantSecondary && this.pred.cd2 <= 0 && usable[1]) {
+      const ids = this.reserveShots(1);
+      secondary = ids[0];
+      used[1] = this.predictAbility(1, ids, aim, dist);
+      if (used[1] === null) secondary = null;
+      else if (ABILITIES[this.runInfo.abilities[1].id].shape === 'Dash') dash = [Math.cos(aim), Math.sin(aim)];
+    }
+    const seq = this.pred.step(mx, my, dash, used);
+    const viewLag = this.net.rtt / 2 + this.interp.delay * 1000;
+    this.net.send({
+      t: 'Input',
+      seq,
+      mx,
+      my,
+      aim,
+      aim_dist: dist,
+      primary,
+      secondary,
+      view_lag: Math.min(Math.round(viewLag), 65535),
+      rtt: Math.min(Math.round(this.net.rtt), 65535),
+      act,
+    });
+  }
+
+  /**
+   * Whether a monster on the ground (not an ally) or a closed chest is within the hero's
+   * reach (server `melee_target`): in melee a ranged ability falls back or is blocked.
+   */
+  private inMelee(x: number, y: number): boolean {
+    const reach = this.runInfo.fallback.range;
+    return [...this.ents.values()].some((e) => {
+      // A closed chest is struck like the hidden mimic it may be.
+      if (e.kind === KIND.Chest) return e.anim === 0 && Math.hypot(e.x - x, e.y - y) - CONST.CHEST_RADIUS <= reach;
+      // A flying dragon is out of reach, and a calm animal is no melee foe (a grudging boar is sent Hostile).
+      return e.id !== this.runInfo.you && meleeFoe(e) && Math.hypot(e.x - x, e.y - y) - (FIGURES[e.kind]?.baseR ?? 6) <= reach;
+    });
+  }
+
+  /** False for a pick an Attribute drain disabled (a ranged primary in melee still strikes). */
+  private slotUsable(slot: 0 | 1): boolean {
+    const { x, y } = this.pred.state;
+    return slotUsable(this.disabled, slot, this.runInfo.abilities[0].ranged, this.inMelee(x, y));
+  }
+
+  /** The shot ids of the next use of the ability in `slot` (a Volley takes a run of them, none 0); the first is sent. */
+  private reserveShots(slot: 0 | 1): number[] {
+    const ids = volleyShotIds(this.shotId + 1, cosmeticCount(this.runInfo.abilities[slot].id));
+    this.shotId = ids[ids.length - 1];
+    return ids;
+  }
+
+  /**
+   * Play the action locally right away. Returns the predicted cooldown, or null when the
+   * ability is blocked (a ranged secondary in melee): then it is not sent.
+   */
+  private predictAbility(slot: 0 | 1, shots: number[], aim: number, dist: number): number | null {
+    const a = this.runInfo.abilities[slot];
+    const now = this.now();
+    const { x, y } = this.pred.state;
+    const choice = abilityChoice(a, slot, a.ranged && this.inMelee(x, y));
+    if (choice === 'blocked') {
+      this.hud.tooClose(1);
+      return null;
+    }
+    if (choice === 'fallback') {
+      this.localAnim = { anim: ANIM.Melee, start: now };
+      return this.pred.cooldownOf(slot, true);
+    }
+    let anim: number = ANIM.Cast;
+    let arc: number | undefined;
+    const shape = ABILITIES[a.id].shape;
+    switch (shape) {
+      case 'Projectile': {
+        if (a.projectile !== null) {
+          const angles = volleyAngles(aim, shots.length, CONST.VOLLEY_SPREAD);
+          shots.forEach((shot, i) => this.shots.spawn(a.projectile!, shot, angles[i], a, a.radius, a.range / a.speed, { x, y }, now));
+        }
+        anim = ANIM.Shoot;
+        break;
+      }
+      case 'Blast': {
+        const d = Math.min(Math.max(dist, 24), a.range);
+        // It flies with radius 4 (server abilities.rs); `a.radius` is its blast.
+        this.shots.spawn(KIND.Fireball, shots[0], aim, a, 4, a.range / a.speed + 0.1, { x, y }, now, [x + Math.cos(aim) * d, y + Math.sin(aim) * d]);
+        anim = ANIM.Cast;
+        break;
+      }
+      case 'Swing':
+        anim = ANIM.Melee;
+        arc = a.arc;
+        break;
+      case 'Dash':
+        anim = ANIM.Dash;
+        break;
+      case 'Ring':
+      case 'SelfArea':
+      case 'GroundArea':
+      case 'Buff':
+      case 'Summon':
+      // No hero has these shapes (the bosses' breath and gaze).
+      case 'Breath':
+      case 'Gaze':
+        anim = ANIM.Cast;
+        break;
+      default: {
+        const unhandled: never = shape;
+        throw new Error(`unhandled shape ${String(unhandled)}`);
+      }
+    }
+    this.localAnim = { anim, start: now, arc };
+    return this.pred.cooldownOf(slot);
   }
 
   destroy(): void {

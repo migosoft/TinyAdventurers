@@ -1,20 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { TILE_ID } from '../generated/defs';
+import { CONST, KIND, TILE_ID } from '../generated/defs';
+import type { ClientMsg } from '../generated/ClientMsg';
 import type { Ev } from '../generated/Ev';
 import type { RunStartInfo } from '../generated/RunStartInfo';
-import { NO_INPUT } from './input';
+import { NO_INPUT, type StepInput } from './input';
 import { RunSession } from './session';
-import { fakeHud, fakeNet, fakeView, snap, startInfo } from './testing';
+import { ability, fakeHud, fakeNet, fakeView, snap, startInfo } from './testing';
 
 const ROWS = ['#####', '#...#', '#####'];
 
-function make(over: Partial<RunStartInfo> = {}) {
+function make(over: Partial<RunStartInfo> = {}, input: () => StepInput = () => NO_INPUT) {
   const net = fakeNet();
   const hud = fakeHud();
   const info = startInfo(ROWS, over);
-  const session = new RunSession({ info, net, hud, myClass: 'Wizard', input: () => NO_INPUT });
+  const session = new RunSession({ info, net, hud, myClass: 'Wizard', input });
   return { net, hud, info, session };
 }
+
+const inputs = (net: ReturnType<typeof fakeNet>) => net.sent.filter((m): m is Extract<ClientMsg, { t: 'Input' }> => m.t === 'Input');
 
 const tile = (x: number, y: number, v: number): Ev => ({ t: 'Tile', x, y, v });
 
@@ -117,3 +120,63 @@ describe('RunSession messages', () => {
     expect(hud.calls).toEqual([]);
   });
 });
+
+const STEP_MS = 1000 * CONST.DT;
+const idle: StepInput = { mx: 0, my: 0, primary: false, secondary: false, act: false };
+
+describe('RunSession fixed step', () => {
+  it("a fixed step sends one Input with the host's movement", () => {
+    const { net, session } = make({}, () => ({ ...idle, mx: 1 }));
+    session.frame(STEP_MS);
+    const sent = inputs(net);
+    expect(sent.length).toBe(1);
+    expect(sent[0]).toMatchObject({ mx: 1, my: 0, primary: null, secondary: null, act: false });
+  });
+
+  it('a long frame runs at most five steps', () => {
+    const { net, session } = make();
+    session.frame(1000);
+    expect(inputs(net).length).toBe(5);
+  });
+
+  it('a dead hero sends no Input but the latches are read', () => {
+    let calls = 0;
+    const { net, session } = make({}, () => {
+      calls++;
+      return idle;
+    });
+    const dead = snap();
+    dead.me.alive = false;
+    net.emit(dead);
+    session.frame(STEP_MS);
+    expect(inputs(net).length).toBe(0);
+    expect(calls).toBe(1);
+  });
+
+  it('an open menu blocks abilities', () => {
+    const { net, hud, session } = make({}, () => ({ ...idle, primary: true }));
+    hud.menuOpen = true;
+    session.frame(STEP_MS);
+    expect(inputs(net)[0].primary).toBeNull();
+  });
+
+  it('without a pointer the aim follows the movement', () => {
+    const { net, session } = make({}, () => ({ ...idle, my: 1 }));
+    session.setView(fakeView(null));
+    session.frame(STEP_MS);
+    const sent = inputs(net)[0];
+    expect(sent.aim).toBe(Math.PI / 2);
+    expect(sent.aim_dist).toBe(0);
+  });
+
+  it('a primary shot is predicted', () => {
+    const shoot = ability('Shoot', { projectile: KIND.Arrow, speed: 200, range: 150, ranged: true, cooldown: 0.5 });
+    const { net, session } = make({ abilities: [shoot, ability('SummonWolf')] }, () => ({ ...idle, primary: true }));
+    const hero = session['pred'].state;
+    session.setView(fakeView({ x: hero.x + 100, y: hero.y - 8 }));
+    session.frame(STEP_MS);
+    expect(inputs(net)[0].primary).not.toBeNull();
+    expect(session.shots.live.length).toBe(1);
+  });
+});
+
