@@ -40,6 +40,25 @@ describe('panel', () => {
     expect(calls[0].yaw).toBe(-180);
   });
 
+  it('the debug button calls onLose, has no aria-pressed and is disabled when it returns false', () => {
+    const host = document.createElement('div');
+    let ok = true;
+    let n = 0;
+    createPanel(host, DEFAULTS, () => {}, () => { n++; return ok; });
+    const b = [...host.querySelectorAll('button')].find((x) => x.textContent === 'Lose device (debug)')!;
+    expect(b.hasAttribute('aria-pressed')).toBe(false);
+    b.click();
+    expect(n).toBe(1);
+    expect(b.disabled).toBe(false);
+    ok = false;
+    b.click();
+    expect(b.disabled).toBe(true);
+    // without the callback there is no button
+    const plain = document.createElement('div');
+    createPanel(plain, DEFAULTS, () => {});
+    expect(plain.textContent).not.toContain('Lose device');
+  });
+
   it('shows labels and pressed states', () => {
     const { host, btn, panel } = setup({ ...DEFAULTS, pitch: 48.6 });
     expect(host.textContent).toContain('Camera pitch 48.6°');

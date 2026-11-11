@@ -26,7 +26,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e;
 }
 
-export function createPanel(host: HTMLElement, p: R3dParams, onChange: (p: R3dParams) => void): Panel {
+/** `onLose` (debug): makes the device fail on purpose and returns false when the backend cannot, which disables the button. */
+export function createPanel(host: HTMLElement, p: R3dParams, onChange: (p: R3dParams) => void, onLose?: () => boolean): Panel {
   let cur = p;
   const root = el('div', 'r3d-panel');
   const pressed: { btn: HTMLButtonElement; test: () => boolean }[] = [];
@@ -89,7 +90,15 @@ export function createPanel(host: HTMLElement, p: R3dParams, onChange: (p: R3dPa
   for (const [k, name] of SWITCHES) button(swRow, name, () => cur[k], () => change({ [k]: !cur[k] }));
 
   const readout = el('div', 'r3d-readout');
-  root.append(pitchRow, yawRow, qRow, swRow, readout);
+  root.append(pitchRow, yawRow, qRow, swRow);
+  if (onLose) {
+    const row = el('div', 'r3d-row');
+    button(row, 'Lose device (debug)', null, () => {
+      if (!onLose()) row.querySelector('button')!.disabled = true;
+    });
+    root.appendChild(row);
+  }
+  root.appendChild(readout);
   host.appendChild(root);
 
   function refresh(): void {

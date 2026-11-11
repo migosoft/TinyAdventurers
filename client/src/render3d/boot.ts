@@ -9,13 +9,14 @@ import { parseParams, toSearch, type R3dParams } from './params';
 import { R3D_SYSTEMS, statsText3d, type R3dSystem } from './stats';
 import { pickZoom, renderPlan } from './quality';
 import { frameDt, newScene, stepScene } from './scene';
-import { createView, type View } from './view';
+import { createRecovery, type Recovery } from './recover';
+import { createView, type Assets, type View } from './view';
 import type { FrameRects } from './worldMesh';
 import './r3d.css';
 
 declare global {
   interface Window {
-    __r3d?: { backend: string; frames: number; renderSize: [number, number]; zoom: number };
+    __r3d?: { backend: string; frames: number; renderSize: [number, number]; zoom: number; forceLoss?: () => boolean };
   }
 }
 
@@ -33,21 +34,58 @@ function showError(host: HTMLElement, text: string, fixed: boolean): void {
 
 export async function bootR3d(host: HTMLElement, search: string): Promise<void> {
   const initial = parseParams(search);
-  const canvas = document.createElement('canvas');
+  let canvas = document.createElement('canvas');
   canvas.className = 'r3d';
   host.appendChild(canvas);
 
   let view: View;
   const map = parseMap(MAP_ROWS);
   const frames: FrameRects = {};
+  let assets: Assets | null = null;
+  // The view being replaced is disposed once, even when the rebuild is retried.
+  let viewLive = true;
+  // Each view reports its loss through the generation it was made in; a report from an older one is ignored.
+  let gen = 0;
+  const lostFrom = (g: number) => (message: string): void => {
+    if (g !== gen) return;
+    console.warn(`Graphics device lost: ${message}`);
+    recovery.lost();
+  };
+
+  async function rebuild(): Promise<void> {
+    const g = ++gen;
+    if (viewLive) {
+      viewLive = false;
+      try {
+        view.dispose();
+      } catch (e) {
+        console.warn('Disposing the lost view failed:', e);
+      }
+    }
+    // A fresh canvas every attempt: the old one may hold a dead context. It takes the old one's place in the DOM.
+    const next = document.createElement('canvas');
+    next.className = 'r3d';
+    canvas.replaceWith(next);
+    canvas = next;
+    view = await createView(next, assets!, map, { forceWebGL: initial.backend === 'webgl' }, lostFrom(g));
+    viewLive = true;
+    cw = 0; // setSize again for the current canvas size
+    ch = 0;
+    backendName = view.backend;
+    state.backend = backendName;
+    readout = '';
+  }
+  const recovery: Recovery = createRecovery(rebuild);
+
   try {
     const atlas = await loadAtlas().catch((e) => {
       showError(host, `Could not load the atlas: ${String(e)}`, false);
       throw e;
     });
     for (const [name, f] of Object.entries(atlas.frames)) frames[name] = { x: f.frame.x, y: f.frame.y, w: f.frame.w, h: f.frame.h };
+    assets = { image: atlas.img, frames };
     try {
-      view = await createView(canvas, { image: atlas.img, frames }, map, { forceWebGL: initial.backend === 'webgl' });
+      view = await createView(canvas, assets, map, { forceWebGL: initial.backend === 'webgl' }, lostFrom(gen));
     } catch (e) {
       showError(host, String(e instanceof Error ? e.message : e), true);
       return;
@@ -56,7 +94,13 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     return;
   }
 
-  const state = { backend: view.backend as string, frames: 0, renderSize: [0, 0] as [number, number], zoom: 0 };
+  const state = {
+    backend: view.backend as string,
+    frames: 0,
+    renderSize: [0, 0] as [number, number],
+    zoom: 0,
+    forceLoss: (): boolean => view.forceLoss(),
+  };
   window.__r3d = state;
 
   let params = initial;
@@ -64,7 +108,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     params = p;
     history.replaceState(null, '', toSearch(p));
   };
-  const panel = createPanel(host, params, commit);
+  const panel = createPanel(host, params, commit, () => view.forceLoss());
 
   // The F3 readout; the timer runs only while it is open.
   const timer = new FrameTimer<R3dSystem>(R3D_SYSTEMS);
@@ -81,7 +125,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   let lastFrameMs = -1;
   let statsAt = 0;
   let readout = '';
-  const backendName = view.backend;
+  let backendName: string = view.backend;
 
   const held = new Set<string>();
   window.addEventListener('keydown', (e) => {
@@ -119,7 +163,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     last = now;
     const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
     const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
-    if (w !== cw || h !== ch) {
+    if (!recovery.busy && (w !== cw || h !== ch)) {
       cw = w;
       ch = h;
       view.setSize(w, h);
@@ -142,15 +186,19 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     const plan = renderPlan(params.quality, zoom, w, h);
     state.renderSize = [plan.targetW, plan.targetH];
     state.zoom = zoom;
-    const text = `${backendName} · zoom ${zoom} · render ${plan.targetW}×${plan.targetH}`;
+    // While the view is being rebuilt the scene keeps stepping; only the drawing waits.
+    const restoring = recovery.busy;
+    const text = restoring ? 'Graphics device lost, restoring…' : `${backendName} · zoom ${zoom} · render ${plan.targetW}×${plan.targetH}`;
     if (text !== readout) {
       readout = text;
       panel.setReadout(text);
     }
-    timer.renderStart();
-    const drawCalls = view.draw({ cam, plan, dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now }, timer);
-    timer.renderEnd(drawCalls);
-    state.frames++;
+    if (!restoring) {
+      timer.renderStart();
+      const drawCalls = view.draw({ cam, plan, dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now }, timer);
+      timer.renderEnd(drawCalls);
+      state.frames++;
+    }
     if (timer.on && nowMs - statsAt >= 250) {
       statsAt = nowMs;
       statsEl.textContent = statsText3d({

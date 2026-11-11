@@ -79,6 +79,9 @@ export interface View {
   setSize(w: number, h: number): void;
   /** Draws one frame and returns its draw calls; `timer` gets the laps 'scene' and, with the copy, 'present'. */
   draw(f: FrameInput, timer?: FrameTimer<R3dSystem>): number;
+  /** Debug: makes the device or context fail on purpose. False when the backend offers no way. */
+  forceLoss(): boolean;
+  /** Frees everything; later calls to `draw` do nothing and a late loss report is ignored. */
   dispose(): void;
 }
 
@@ -92,8 +95,24 @@ function pixelTexture(t: Texture): void {
   t.needsUpdate = true;
 }
 
-export async function createView(canvas: HTMLCanvasElement, assets: Assets, map: DemoMap, opts: { forceWebGL: boolean }): Promise<View> {
+/** `onLost` is called once per loss of this view's device or context, never after `dispose`. */
+export async function createView(
+  canvas: HTMLCanvasElement,
+  assets: Assets,
+  map: DemoMap,
+  opts: { forceWebGL: boolean },
+  onLost: (message: string) => void,
+): Promise<View> {
   const renderer = new WebGPURenderer({ canvas, antialias: false, forceWebGL: opts.forceWebGL });
+  let lost = false;
+  let disposed = false;
+  const reportLoss = (message: string): void => {
+    if (disposed || lost) return;
+    lost = true;
+    onLost(message);
+  };
+  // three reports a loss and then stops; it restores nothing.
+  renderer.onDeviceLost = (info) => reportLoss(info.message);
   await renderer.init();
   renderer.outputColorSpace = LinearSRGBColorSpace;
   renderer.toneMapping = NoToneMapping;
@@ -161,7 +180,21 @@ export async function createView(canvas: HTMLCanvasElement, assets: Assets, map:
     setSize(pw, ph) {
       renderer.setSize(Math.max(1, pw), Math.max(1, ph), false);
     },
+    forceLoss() {
+      if (disposed || lost) return false;
+      const backend = renderer.backend as { isWebGPUBackend?: boolean; device?: { destroy(): void }; gl?: WebGL2RenderingContext };
+      if (backend.isWebGPUBackend && backend.device) {
+        backend.device.destroy();
+        reportLoss('forced'); // three ignores a loss whose reason is "destroyed"
+        return true;
+      }
+      const ext = backend.gl?.getExtension('WEBGL_lose_context');
+      if (!ext) return false;
+      ext.loseContext(); // the webglcontextlost event reaches onDeviceLost
+      return true;
+    },
     draw(f, timer) {
+      if (disposed || lost) return 0;
       const g = snapGround(f.cam.pitch, f.cam.yaw, f.cam.x, f.cam.z);
       const ray = viewRay(f.cam.pitch, f.cam.yaw);
       camera.left = -f.plan.halfW;
@@ -202,6 +235,8 @@ export async function createView(canvas: HTMLCanvasElement, assets: Assets, map:
       return renderer.info.render.drawCalls;
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
       atlas.dispose();
       heights.dispose();
       geometry.dispose();
