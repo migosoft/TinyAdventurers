@@ -8,7 +8,7 @@ const read = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8');
 
 describe('tag heights', () => {
   it('the draw hook looks in every view map that can hold a taggable entity', () => {
-    const line = read('game/GameScene.ts')
+    const line = read('game/PhaserRunView.ts')
       .split('\n')
       .find((l) => l.includes('this.rulesLog.draw('));
     expect(line).toBeDefined();
