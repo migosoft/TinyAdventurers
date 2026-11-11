@@ -1,6 +1,6 @@
 // How see-through a figure is drawn: pure, so it can be tested without Phaser.
 import { EFFECT, FLAG } from '../../generated/defs';
-import { has } from '../status';
+import { has } from '../effectBits';
 
 /** Incorporeal figures (phasing monsters) are always drawn at this alpha, visible or not. */
 export const INCORPOREAL_ALPHA = 0.6;

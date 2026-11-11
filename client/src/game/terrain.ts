@@ -3,27 +3,12 @@
 // texture per cell plus an edge overlay (bank face, rims, rounded corners)
 // picked from the cell's eight neighbours. Lava also glows (runtime effect).
 import Phaser from 'phaser';
-import { edgeCode, TERRAIN_FRAMES, TERRAIN_PERIOD, type TerrainEdge, type TerrainSet } from './terrain-codes';
+import { TERRAIN_FRAMES, TERRAIN_PERIOD, type TerrainSet } from './terrain-codes';
+import { isWater, TERRAIN, TERRAIN_FPS, terrainLayers } from './terrain-layers';
 import { DEPTH, type Effects } from './effects';
-import { CONST, TILE_ID } from '../generated/defs';
 import { TILE, type TileMap } from '../sim/map';
 
-/** Terrain tile ids (from the server's `Tile`). */
-export const TERRAIN = { Shallow: TILE_ID.ShallowWater, Deep: TILE_ID.DeepWater, Chasm: TILE_ID.Chasm, Lava: TILE_ID.Lava } as const;
-
-/** Movement speed factor on a terrain tile (demons are not slowed by lava). Same values as `TileMap.speedFactor`. */
-export function speedFactor(t: number, demon = false): number {
-  if (t === TERRAIN.Shallow) return CONST.SHALLOW_SPEED;
-  if (t === TERRAIN.Lava) return demon ? 1 : CONST.LAVA_SPEED;
-  return 1;
-}
-
-/** Pixels a figure stands below the surface on this tile (wading). */
-export function sinkDepth(t: number): number {
-  return t === TERRAIN.Shallow ? 3 : t === TERRAIN.Lava ? 2 : 0;
-}
-
-const isWater = (t: number) => t === TERRAIN.Shallow || t === TERRAIN.Deep;
+export { TERRAIN, speedFactor, sinkDepth, terrainLayers, TERRAIN_FPS } from './terrain-layers';
 
 /** Splashes on entering water or lava, ripples while wading, embers on a burning hero. One per figure. */
 export class WadeFx {
@@ -59,34 +44,10 @@ export function sinkStartFx(fx: Effects, x: number, y: number, drown: boolean): 
 export function bubbleFx(fx: Effects, x: number, y: number, dt: number): void {
   if (Math.random() < dt * 12) fx.particle(x + (Math.random() - 0.5) * 8, y - 2 - Math.random() * 4, 0, -10, 0.35, 0xcae6f5);
 }
-const FPS: Record<TerrainSet, number> = { water: 4, deep: 4, lava: 5, chasm: 1 };
-const D8: [number, number][] = [
-  [0, -1],
-  [1, -1],
-  [1, 0],
-  [1, 1],
-  [0, 1],
-  [-1, 1],
-  [-1, 0],
-  [-1, -1],
-];
-
 interface Animated {
   img: Phaser.GameObjects.Image;
   set: TerrainSet;
   q: number;
-}
-
-/** Base textures and edge overlays to draw for one cell, bottom to top. */
-export function terrainLayers(m: TileMap, x: number, y: number): { base: TerrainSet[]; edges: string[] } {
-  const t = m.get(x, y);
-  const code = (same: (u: number) => boolean) => edgeCode(D8.map(([dx, dy]) => same(m.get(x + dx, y + dy))));
-  const edge = (e: TerrainEdge, c: string) => (c === '0000' ? [] : [`terrain_${e}_e${c}`]);
-  if (t === TERRAIN.Shallow) return { base: ['water'], edges: edge('shore', code(isWater)) };
-  if (t === TERRAIN.Deep) return { base: ['water', 'deep'], edges: [...edge('deep', code((u) => u === TERRAIN.Deep)), ...edge('shore', code(isWater))] };
-  if (t === TERRAIN.Lava) return { base: ['lava'], edges: edge('lava', code((u) => u === TERRAIN.Lava)) };
-  if (t === TERRAIN.Chasm) return { base: ['chasm'], edges: edge('chasm', code((u) => u === TERRAIN.Chasm)) };
-  return { base: [], edges: [] };
 }
 
 /** Draws all terrain cells of a map and animates the surfaces. */
@@ -128,7 +89,7 @@ export class TerrainLayer {
   update(dt: number): void {
     this.clock += dt;
     for (const a of this.animated) {
-      const f = Math.floor(this.clock * FPS[a.set]) % TERRAIN_FRAMES[a.set];
+      const f = Math.floor(this.clock * TERRAIN_FPS[a.set]) % TERRAIN_FRAMES[a.set];
       a.img.setFrame(`terrain_${a.set}_f${f}_q${a.q}`);
     }
     for (const g of this.glows) g.img.setAlpha(0.18 + 0.06 * Math.sin(this.clock * 2 + g.ph));

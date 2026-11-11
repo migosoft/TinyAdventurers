@@ -8,10 +8,9 @@ import { FONT_TEXT } from '../fonts';
 import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 import { DEPTH, GLOOM, SOUND_TEXT, type Effects } from './effects';
 
-/** True when the effect `kind` is set in the bitmask `bits` (bit = 1 << EffectKind id). */
-export function has(bits: number, kind: number): boolean {
-  return (bits & (1 << kind)) !== 0;
-}
+import { has } from './effectBits';
+
+export { has };
 
 type Look = (typeof EFFECT_LOOK)[keyof typeof EFFECT_LOOK];
 

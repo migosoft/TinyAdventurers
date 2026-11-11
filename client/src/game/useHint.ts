@@ -2,7 +2,7 @@
 // creature, or use a barrel or torch. The server's `act` takes them in this order.
 import { CONST, EFFECT, FLAG, KIND, SIDE } from '../generated/defs';
 import { FIGURES, isPlayerKind } from './anim/defs';
-import { has } from './status';
+import { has } from './effectBits';
 import type { EntState } from './world';
 
 export interface UseHint {
