@@ -23,14 +23,14 @@ export class GameScene extends Phaser.Scene {
   private net!: Net;
   private hud!: Hud;
   private session!: RunSession;
-  private view!: PhaserRunView;
+  private view?: PhaserRunView;
   private keys!: Record<'W' | 'A' | 'S' | 'D', Phaser.Input.Keyboard.Key>;
   private primaryClicked = false;
   private secondaryClicked = false;
   private actPressed = false;
   private unsub?: () => void;
   /** The F3 panel's frame, render and per-system timings; on only while the panel is open. */
-  private timer = new FrameTimer(SYSTEMS);
+  private timer!: FrameTimer;
   private detachTimer?: () => void;
 
   constructor() {
@@ -42,18 +42,24 @@ export class GameScene extends Phaser.Scene {
     this.hud = data.hud;
     this.primaryClicked = this.secondaryClicked = this.actPressed = false;
     this.timer = new FrameTimer(SYSTEMS);
+    this.view = undefined;
+    this.unsub = undefined;
+    this.detachTimer = undefined;
     this.session = new RunSession({ info: data.info, net: data.net, hud: data.hud, myClass: data.myClass, input: () => this.readInput(), clock: this.timer });
+    // Registered now, so a throw in `create` still unsubscribes the session.
+    this.events.once('shutdown', () => this.cleanup());
   }
 
   create(): void {
-    // The view first, so a message replayed on subscribing finds it.
-    this.view = new PhaserRunView(this, this.session.viewInit(), { net: this.net, timer: this.timer });
-    this.session.setView(this.view);
+    // The session subscribed in `init`; the view is built here and handed to it.
+    const view = new PhaserRunView(this, this.session.viewInit(), { net: this.net, timer: this.timer });
+    this.view = view;
+    this.session.setView(view);
     // After the session's own subscription, so the rules log still runs after `hud.snapshot`.
     this.unsub = this.net.on((m) => {
-      if (m.t === 'Snap') this.view.rulesLog.onSnapshot(m);
+      if (m.t === 'Snap') view.rulesLog.onSnapshot(m);
     });
-    this.hud.setToggles(this.view.rulesLog.settings());
+    this.hud.setToggles(view.rulesLog.settings());
 
     const kb = this.input.keyboard!;
     // No key capture: Phaser's capture calls preventDefault page-wide and outlives the
@@ -103,7 +109,6 @@ export class GameScene extends Phaser.Scene {
       else this.primaryClicked = true;
     });
 
-    this.events.once('shutdown', () => this.cleanup());
     const renderer = this.game.renderer;
     this.detachTimer = this.timer.attach(this.game.events, renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer ? (renderer.gl as unknown as DrawGl) : null);
   }
@@ -130,7 +135,8 @@ export class GameScene extends Phaser.Scene {
 
   private cleanup(): void {
     this.session.destroy();
-    this.view.destroy();
+    this.session.setView(null);
+    this.view?.destroy();
     this.unsub?.();
     this.detachTimer?.();
     this.timer.on = false;
