@@ -127,11 +127,17 @@ client/                              Vite + TypeScript + Phaser 3.90
   src/game/airmovers.ts              MoverTracker: positions per id to AirMovers with velocities
   src/game/terrain.ts                terrain layer: autotiled water/lava/chasm cells, animation, lava glow
   src/game/terrain-codes.ts          terrain frame layout and edge codes shared with the atlas build
+  src/render3d/                      the 3D view behind the dev page ?r3d (#301; §9 "The 3D view behind `?r3d`"): three.js `WebGPURenderer`
+                                     with TSL, no Phaser. boot.ts (frame loop, input, panel, F3), view.ts (everything that talks
+                                     to three.js), materials.ts and lightNodes.ts (TSL), and plain tested modules: camera.ts,
+                                     quality.ts, params.ts, demoMap.ts, worldMesh.ts, scene.ts, cards.ts, light.ts, recover.ts,
+                                     stats.ts, panel.ts
   src/ui/                            DOM screens: auth (login/register), roster (character cards, account), create,
                                      hub/ (the character hub, §11a), lobby, HUD, classes (figures), texts, atlas previews
   admin.html, src/admin/             the separate admin page (/admin): main.ts (views), api.ts, charts.ts (SVG
                                      column charts), dom.ts (DOM builder, formatting), admin.css; no Phaser
-tools/e2e/                           browser smoke tests and screenshot scripts (playwright-core + installed Edge/Chrome)
+tools/e2e/                           browser smoke tests and screenshot scripts (playwright-core + installed Edge/Chrome);
+                                     r3d-shot.mjs is the headless load check of ?r3d
 docs/                                this file, player guide (open work: GitHub issues)
 CLAUDE.md                            workflow, standing decisions, environment for the next agent
 ```
@@ -184,6 +190,7 @@ A lookup by topic: where the code for a topic lives, and which section explains 
 - **Rules log:** server `run/rules_log/`, client `rulesLog/`. §11d.
 - **Frame timings (F3):** `game/frameTimer.ts` (`FrameTimer`), laps in `GameScene.update`, text `statsText` in `ui/hud.ts`. §8 "Measuring", §10.
 - **Canvas resolution and zoom:** `game/viewLayout.ts`, applied by `applyView`/`relayout` in `main.ts`; `?res=world` A/B switch. §9, §10.
+- **3D view (dev page `?r3d`, #301):** `render3d/boot.ts` (frame loop, input, panel, F3, recovery), `render3d/view.ts` (renderer, meshes, the off-screen target), `render3d/camera.ts` (projection, screen-space snap), `render3d/quality.ts` (High, Balanced, Fast), `render3d/lightNodes.ts` (`lightAt` with `wallVis` in TSL), `render3d/materials.ts`. §9 "The 3D view behind `?r3d`", §10.
 
 ## 3. Build, run, test
 
@@ -867,6 +874,50 @@ The tests in `woodland.rs` run over many seeds: the same seed gives the same for
   - **Help line and menu:** key caps (`helpHtml`, `<kbd>`), the Esc menu titled "Paused" with a hint.
   - **Settings** (`ui/settings.ts`): the Esc menu's Settings view, one checkbox row per `Toggle { label, key, get, set }` and a Back button. `RulesLog.settings()` supplies Rules log (L) and Calculation lines (Shift+L), `GameScene` passes them to `Hud.setToggles`, and the Hud adds Network stats (F3). The keys and the checkboxes stay in sync because the view re-reads the toggles (`sync`) when it opens and on each frame while open. This adds one line to the rules-log boundary (now 7 lines outside `src/rulesLog/`).
 
+### The 3D view behind `?r3d` (#301)
+
+Work package 1 of the 3D renderer (#300). It is a dev page, not the game: `?r3d` draws a small dungeon scene (the reference demo's hall, plus a corridor 3 tiles wide seen across, one seen along, and a second room's near wall) with the camera, the pixel handling, the quality levels and the wall-shadow light of the design. The Phaser view stays the game's view until #310. Everything is in `client/src/render3d/`.
+
+**Library and boundaries.**
+- `three` is pinned to exactly `0.187.0` (`@types/three` the same), with no caret. The code imports it only as `three/webgpu` and `three/tsl`; a bare `three` import would load a second build.
+- The folder imports no Phaser, directly or through another module. Its only imports from outside are `../ui/atlas` (the atlas loader) and `../game/frameTimer`. `imports.test.ts` enforces both rules by reading the files.
+- `main.ts` reaches the folder only through `await import('./render3d/boot')` behind `?r3d`, before anything of Phaser is created, so three.js is its own chunk and normal play never downloads it (`imports.test.ts` checks that `main.ts` has no static import of it).
+- `WebGPURenderer` uses WebGPU where the browser offers it and falls back to WebGL2 by itself; `backend=webgl` in the URL forces the fallback. The panel's readout names the backend in use.
+
+**Structure.** Everything that can be a plain function is one and has a vitest test: `camera.ts`, `quality.ts`, `params.ts`, `demoMap.ts`, `worldMesh.ts`, `scene.ts`, `cards.ts`, `light.ts`, `recover.ts`, `stats.ts`; `panel.ts` is plain DOM with a jsdom test. `view.ts` alone talks to three.js and is rebuilt whole after a lost device. `boot.ts` owns the canvas, the one frame loop, the input, the panel and the readouts; the scene state and the parameters live there and survive a rebuild.
+
+**Coordinates and camera** (`camera.ts`).
+- World units are tiles: `x` east, `z` south, `y` up; 16 art px are 1 tile. Gameplay stays 2D on the plane `y = 0`.
+- The camera is orthographic. Pitch is the angle between the view direction and the ground; yaw turns it around `y`. With `c = cos(yaw)`, `s = sin(yaw)` and a point measured from the camera's target: `xr = dx*c + dz*s`, `zr = dz*c - dx*s`, screen `x' = xr`, `y' = -zr*sin(pitch) + y*cos(pitch)`. `project` and its inverse on the ground, `groundAt`, are tested against a three.js `OrthographicCamera` built the way `view.ts` builds it (at `target + viewRay * 50`, up `(0, 1, 0)`).
+- Zoom is a whole number of screen px per art px, picked from the window (`pickZoom`, 2 to 8) or forced with `zoom=N`.
+- `keysToWorld` turns WASD into world directions by the yaw; `facesLeft` decides a figure's facing on screen with a small dead zone, so it does not flip while walking straight away from the camera.
+
+**Pixel handling.**
+- **Screen-space snap** (`snapGround`): the camera's target and every card's foot are moved so that their screen position, measured from the world origin, is a whole number of art px at the current pitch and yaw. (Rounding to 1/16 tile in the world, as the reference demo does, is a whole pixel only without tilt.)
+- **Cards** (figures, crates): a quad standing on its foot, turned to the camera's yaw. The vertex stage stretches its height by `1 / cos(pitch)`, so it shows its full sprite height on screen; its light uses the unstretched position. Torch flames lie in their wall's plane and are not stretched; glows are camera-facing additive quads.
+- **Textures** are nearest-filtered with no mipmaps, `flipY = false` and `premultiplyAlpha = false`; uv coordinates are in atlas px with the frame's top row at the top (`uv / atlasSize`, no flip).
+- **Smoothed ground** (a switch, default off): floors read a second, linear-filtered copy of the atlas at a position sharpened to the texel borders (`seam + clamp((p - seam) / fwidth(p), -0.5, 0.5)`), clamped half a texel inside the frame's rect because the atlas has no padding. This is the one texture that is not nearest. The switch is a uniform, so toggling it compiles nothing; walls, wall tops and cards are never smoothed.
+- The wall top is generated in the shader (dark stone with a pale rim where the wall drops to something lower), a placeholder for this scene only; the real wall tops are #302's.
+
+**Quality levels** (`quality.ts`). `effZoom` gives the render px per art px: High the screen's zoom; Fast 2; Balanced the largest divisor of the zoom up to half of it, at least 2 (else half the zoom, rounded up). `renderPlan` turns that into one frame's sizes: at the screen's zoom the scene is drawn straight to the canvas; below it, into an off-screen target that is copied to the canvas with one quad, nearest when the ratio is a whole number and linear otherwise. The copy is centred and may start a pixel or two outside the canvas (both backends take a viewport outside the canvas and crop it). There is no pixel grid mode (dropped by the user, 2026-11-11).
+
+**Colour.** The reference demo's numbers are raw values, so the renderer converts nothing: `outputColorSpace = LinearSRGBColorSpace`, `NoToneMapping`, and every texture has `colorSpace = NoColorSpace`. A later package may revisit this when effects need linear light.
+
+**Light** (`light.ts`, `lightNodes.ts`): the proof that TSL carries this renderer.
+- `lightAt(P, N, wrap)` is ambient plus up to 8 point lights (two `uniformArray`s of 8 `Vector4`, updated in place every frame): a smooth falloff to the radius, the surface angle softened by `wrap` (floor 0.35, wall face 0.5, wall top 0.15, cards 1 with no normal), and a soft shoulder on the result.
+- `wallVis(P, L)` is the wall shadow: a grid walk from the lit point to the light over a one-channel texture of wall heights (one texel per tile, read with `textureLoad`), at most 40 steps, started 0.03 tiles along the normal. It is a TSL `Loop(40)` with `Break()`, ported line by line from the demo's GLSL, and it compiles unchanged to GLSL (WebGL2) and WGSL (WebGPU).
+- The scene has six wall torches with the demo's flicker and a moving orb; switches turn the wall shadows and the orb off.
+
+**Lost device or context** (`recover.ts`, `view.ts`, `boot.ts`). three.js 0.187 reports a loss (`renderer.onDeviceLost`) and then stops; it restores nothing. So the view is rebuilt whole on a new canvas: renderer, textures, target and meshes.
+- `createRecovery` runs one rebuild at a time. A loss reported while one runs leads to one more rebuild after it; a rebuild that fails is logged (`console.warn`) and tried again after 1 s.
+- Each view reports its loss through the generation it was made in, so a late report from a replaced view is ignored. A loss before boot has finished only sets a flag and starts the recovery at boot's end.
+- `Renderer.dispose()` is async in three.js: the lost renderer's disposal is fire-and-forget with its rejection caught, and a `createView` that fails disposes its own renderer.
+- While a rebuild runs, the scene keeps stepping, drawing is skipped and the readout says "Graphics device lost, restoring…". The panel's `Lose device (debug)` button forces a loss (WebGPU: `device.destroy()`, reported by hand because three ignores the reason `destroyed`; WebGL2: `WEBGL_lose_context`).
+
+**Draw calls.** three's `info.render.drawCalls` adds up over a frame and is reset by three's own animation loop. `view.ts` switches `info.autoReset` off, resets the counter at the start of `draw` and reads it once after the last render, so the number is this frame's (the scene's calls plus one for the copy).
+
+**What a headless run can show.** The headless WebGL2 path (SwiftShader) draws the scene, and `tools/e2e/r3d-shot.mjs` uses it. A WebGPU canvas cannot be captured headless on the development machine: with the SwiftShader adapter it reads back blank, with the real graphics card scrambled, and a raw WebGPU triangle without three.js does the same. A WebGPU run there shows only that the shaders compile and frames run without errors; the WebGPU picture is checked on a real screen.
+
 ## 10. Debug and dev features
 
 | URL | Effect |
@@ -890,6 +941,7 @@ The tests in `woodland.rs` run over many seeds: the same seed gives the same for
 | `?cove` | The nymph's cove on a scripted 20x16-tile room, no server needed (#202), zoomed to fit a phone: the big tree, grass carpet with flowers, bushes, tufts and ferns, several suns with beams, pixies around the canopy, and a knight walking a loop behind the tree (tap the room to send it elsewhere; this stops the loop) with its silhouette showing through the leaves. Buttons: Walk, Silhouette, Pixies, Suns 1 / 3 / 5, Beams, Reroll; URL parameters `seed`, `suns`, `pixies`, `silhouette`, `walk`, `beam`. See the header of `CoveDemoScene.ts`. |
 | `?woodland` | The forest road on three server-made woodlands, no server needed (#203), zoomed so 32 tiles fit the screen's width (the zoom row steps 16 to 48): ground, trees and bushes, cloud shadows, bees, butterflies, the soft shade and the knight's silhouette behind canopies; tap the map to walk the knight there (trunks and thickets stop him). Buttons (or URL parameters) switch Clouds, Bees, Butterflies, Silhouette, Shade, Shadows and Haze, step to the next seed, change the zoom and change the cloud Size, Speed, Dark and Cover with - and + (the values are shown). The sun knobs: Sun L/R (side) and elev - / + (5° steps, 20 to 85); the shadow knob: shadow - / + (alpha, 0.04 steps); the haze knobs: outside - / + (the unseen strength beyond sight), soft, blur (0.5 px steps), desat and mix - / + and feather (the mask's blur radius in world px, 8 px steps, 0 to 64; 0 is the old hard edge) and ramp (the distance behind a trunk over which the haze grows from nothing to soft, world px, 8 px steps, 0 to 64; 0 is crisp). The demo uses the real `WoodlandView`, `VisionMask` and `UnseenFX`, so what is tuned there is what the game gets; a sun change or the next seed clears the plant pages, the frames and the shadow layer and queues every plant again. `&kind=round|wide|tall|conifer|bare` turns every tree of the map into that kind (bushes stay; `forceKind` in `woodland/demoMath.ts`), to inspect one kind in place. URL: `?woodland&seed=2&clouds=0&bees=0&butterflies=0&silhouette=0&shade=0&shadows=0&haze=0&side=L&elev=45&shadow=0.28&outside=0.8&soft=0.7&blur=1.5&desat=0.6&mix=0.45&feather=24&ramp=24`. The old "beyond sight" dim knob is gone (replaced by the haze). |
 | `?mood` | The dungeon air on a scripted room, no server needed: warm torch light, dust in the lit parts, torch and lava smoke, embers, a fireball trailing and bursting into embers, a water pool with drips, and a thin haze. Buttons switch dust, smoke, embers, haze, drips, Stir, Draft and Respawn; a knight loop with a dash every 6 s, an arrow and a fireball stir the air (`?wind=1` draws the wind field, `?stir=0`, `?draft=0`, `?respawn=<s>`). |
+| `?r3d` | The 3D view's dev page (#301, §9 "The 3D view behind `?r3d`"), no server and no Phaser: a torch-lit hall with corridors, figures on cards and a knight that walks with WASD or the arrow keys (turned by the camera's yaw). A panel at the bottom: camera pitch (slider 30° to 80°, buttons 30°, 45°, 48.6°), camera turn (slider, 45° step buttons, North), quality (High, Balanced, Fast), switches (Wall shadows, Moving light, Smoothed ground), `Lose device (debug)`, and a readout of the backend (WebGPU or WebGL2 fallback), the zoom and the render size. F3 opens the frame times. The address bar follows every change; URL parameters: `pitch`, `yaw` (degrees), `quality=high|balanced|fast`, `zoom=2..8`, `backend=webgl` (force the fallback), `shadows=0`, `orb=0`, `smooth=1`, `stats=1`. `node tools/e2e/r3d-shot.mjs [baseUrl] [outDir] [extraQuery] [mode] [lose]` loads it headless, prints the backend and any browser errors and saves `r3d.png`; `mode` is `webgl` (default) or `webgpu`, and `lose` forces a device loss and saves `r3d-after-loss.png`. |
 | `?lag=150&jitter=40&loss=2` | Network simulator. |
 
 **The F3 panel** (#291). F3, or Network stats in the Esc menu's Settings, opens it for every account. The frame lines come from `FrameTimer` (`game/frameTimer.ts`), which runs only while the panel is open: closed, its `lap` returns at once and nothing is counted. Every time is an exponential average (0.9 old, 0.1 new; the first frame after opening seeds it) of main-thread CPU time; the GPU works asynchronously, so its own cost shows only where the CPU waits for it (a pixel readback, a texture upload).
@@ -900,6 +952,8 @@ The tests in `woodland.rs` run over many seeds: the same seed gives the same for
 - `objects`: `scene.children.length`, the display list's size.
 - `draw calls`: WebGL `drawArrays` plus `drawElements` calls of the last frame. Phaser 3.90 has no counter, so while the panel is open `FrameTimer` wraps the two methods of the renderer's context (restored when it closes and at scene shutdown).
 - `canvas`: the canvas's pixel size, plus `x<N> css` when Phaser's scale zoom upscales it (only with `?res=world`, §9).
+
+`FrameTimer` takes its system names in the constructor (`new FrameTimer(SYSTEMS)` in `GameScene`), so the 3D view's page uses the same class with its own names (#301): `sim` (scene step and camera), `cards` (the per-frame card, flame and glow quads), `lights` (the light list), `scene` (the scene pass) and `present` (the copy to the canvas; 0 on High). There `renderEnd(drawCalls)` is given three's count, because no WebGL context is wrapped; F3 on `?r3d` shows FPS, `frame`, `render`, `update` (the first three laps), the five laps, the draw calls, the canvas and render sizes, the zoom and the backend (`render3d/stats.ts`, `statsText3d`).
 
 ## 11. Extending
 
@@ -1482,7 +1536,8 @@ The log reads these; they stay useful without it. `Damage.why` (`Why`, `What`, `
 - ts-rs export tests
 - plan 3b: damage-type tiers, `replaces` and the cancels across tiers (`defs/effects.rs`, `run/effects.rs`); Entangled, Fear (a frightened monster runs and does not attack, also when its source is gone), Warded and Coated; the Staff of Rot's power 10; every shape plays as before (`every_shape_still_plays_today`); the 16 abilities in `run/abilities.rs` (Chain Spark's filters, Volley's three arrows, Smite, Whirl, the behind arc, the coat, Frost Nova and War Cry and Ground Slam, Consecrate, Entangle at walls, melee and with a strong target); debug weapons and the lift (`lobby.rs`); the fingerprints (`level_setup_is_unchanged`, `simulation_is_unchanged_after_waking_the_boss`, `plan_3a_fight_is_pinned`) did not change in plan 3b
 
-**Client (`npm test`, 480 tests):**
+**Client (`npm test`, 721 tests):**
+- the 3D view (#301; `src/render3d/`): `imports.test.ts` (the folder imports only `three/webgpu`, `three/tsl`, its own files, `../ui/atlas` and `../game/frameTimer`; `main.ts` has no static import of it); `camera.test.ts` (projection and its inverse at several pitches and yaws, agreement with a three.js `OrthographicCamera`, the screen-space snap, keys to world, facing); `quality.test.ts` (`effZoom` for zoom 2 to 8, `pickZoom`, `renderPlan` for odd and 1x1 canvases); `params.test.ts` (bad URL values give the default or the clamped value, the round trip, `wrapYaw`); `demoMap.test.ts` and `worldMesh.test.ts` (the map's corridors, floor, top and face quads, winding, upright frames, uv inside its rect); `scene.test.ts` (`frameDt`'s clamp, the knight stopping and sliding at walls, walkers and their pauses, torches on wall faces); `cards.test.ts` (card quads at yaw 0 and 90°, the flipped u, glow counts and axes); `light.test.ts` (flicker bounds, the light list, packing 8 slots); `panel.test.ts` (jsdom: the buttons, wrapping, pressed states, the debug button); `stats.test.ts` (the F3 text); `recover.test.ts` (one rebuild at a time, the follow-up rebuild, the retry after 1 s, `onError` per failed attempt); and in `game/frameTimer.test.ts` the system names given by the caller and `renderEnd(n)`.
 - plan 3b: `volleyShotIds`/`volleyAngles`/`cosmeticCount` (`game/world.test.ts`), the look following the sampled snapshot, `lookOf` and the Fear "!" (`game/status.test.ts`), `debugWeapons` and `debugReject` (`ui/lobby.test.ts`), the symbols (`ui/effectIcons.test.ts`), the wire decode of `looks` and `Zap`
 - the wolf: trimmed wolf and knight frames (`scripts/figure-frames.test.ts`), the Recruit hint (`game/useHint.test.ts`), shots flying through non-Hostile creatures (`game/shotTargets.test.ts`), the HUD label (`ui/hud.test.ts`), the sleeper's Z on `DEPTH.sound` (`game/status.test.ts`), the cooldown prediction of `SummonWolf` (`game/world.test.ts`)
 - spectres (#169, #170): `scripts/spectre-frames.test.ts` (8 frames of 16x16, on the bottom row at rest and running, 12 rows tall, the idle bob, the 16 atlas names, palette colours only, the Shade with the Ghost's shape), `game/shadeHaze.test.ts` (the veil's strands root inside the body and puff out round it standing, mirrored; some wrap in front; they stream behind a move and the cloud comes back; no overstretch; cleared without a target; the alpha steps; `strandPixels`, `veilPixels` core and cloth, `silhouetteAlpha` over `AMBUSH_WARNING`, `dissolveVeil` spreading and fading, `restingVeil`), `game/anim/entityAlpha.test.ts` (Ghost pulse, flicker, phase)
