@@ -1,6 +1,7 @@
 // The 3D view of a run (#302): a `RunView` for the Phaser-free session. The camera follows the own hero (or the spectated
 // teammate) or flies free, the own hero is a stand-in card, and the lights come from the page's parameters. The three.js
 // `View` comes and goes (a lost device), so it is attached and detached from outside.
+import { ANIM } from '../generated/defs';
 import { FIGURES } from '../game/anim/defs';
 import { dir8 } from '../run/input';
 import { NO_STATS, type PictureEv, type RunFrame, type RunView, type RunViewInit, type ShotView, type ViewStats } from '../run/view';
@@ -19,8 +20,6 @@ const FOLLOW_RATE = 6;
 /** The free camera's speed in tiles per second, and with Shift. */
 const FREE_SPEED = 12;
 const FREE_SPEED_FAST = 36;
-/** Below this many tiles per second the own hero counts as standing still. */
-const MOVING_SPEED = 0.5;
 const EMPTY = { position: new Float32Array(0), uv: new Float32Array(0), count: 0 };
 const NO_GLOWS = { position: new Float32Array(0), uv: new Float32Array(0), color: new Float32Array(0), count: 0 };
 
@@ -59,8 +58,6 @@ export class RunView3d implements RunView {
   private fast = false;
   private started = false;
   private flip = false;
-  private fx = 0;
-  private fz = 0;
   private fps = 0;
   private readonly map: RunViewInit['map'];
   private readonly woodland: boolean;
@@ -95,16 +92,9 @@ export class RunView3d implements RunView {
     // The own hero: where it stands, which way it last moved, whether it moves now.
     const hx = f.own.x / TILE;
     const hz = f.own.y / TILE;
-    let moving = false;
-    if (this.started) {
-      const dx = hx - this.hero.x;
-      const dz = hz - this.hero.z;
-      if (dt > 0 && Math.hypot(dx, dz) / dt > MOVING_SPEED) {
-        moving = true;
-        this.fx = dx;
-        this.fz = dz;
-      }
-    }
+    // The session decides (as the Phaser view's figure does from the same OwnHero): the run frame for Move and Dash, idle for
+    // everything else (the card has no action frames); the facing follows the aim.
+    const moving = f.own.anim === ANIM.Move || f.own.anim === ANIM.Dash;
     this.hero.x = hx;
     this.hero.z = hz;
 
@@ -148,7 +138,7 @@ export class RunView3d implements RunView {
       this.drawCalls = 0;
       return this.stats(c, 0);
     }
-    this.flip = facesLeft(yaw, this.fx, this.fz, this.flip);
+    this.flip = facesLeft(yaw, Math.cos(f.own.aim), Math.sin(f.own.aim), this.flip);
     const cards = f.own.alive ? cardQuads([{ frame: heroFrame(this.kind, moving, f.now), x: hx, z: hz, flip: this.flip }], this.frames, cam) : EMPTY;
     const dynamic: Dynamic = { cards, emissive: EMPTY, glows: NO_GLOWS };
     c.timer.lap('cards');

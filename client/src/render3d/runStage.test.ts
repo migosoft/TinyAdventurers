@@ -30,7 +30,12 @@ function fakeView(): View & { setGround: ReturnType<typeof vi.fn>; tileChanged: 
   };
 }
 
-const assets: Assets = { image: {} as HTMLImageElement, frames: { knight_m_idle_anim_f0: { x: 0, y: 0, w: 16, h: 28 }, wizzard_m_idle_anim_f0: { x: 0, y: 0, w: 16, h: 28 } } };
+// The wizard's idle frames sit at u 0, its run frames at u 50 (every frame of an animation at the same place, so the test does not depend on the clock).
+const assets: Assets = { image: {} as HTMLImageElement, frames: { knight_m_idle_anim_f0: { x: 0, y: 0, w: 16, h: 28 } } };
+for (let i = 0; i < 4; i++) {
+  assets.frames[`wizzard_m_idle_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
+  assets.frames[`wizzard_m_run_anim_f${i}`] = { x: 50, y: 0, w: 16, h: 28 };
+}
 
 function setup(rows = ROWS, over: Partial<RunStartInfo> = {}) {
   const net = fakeNet();
@@ -152,6 +157,24 @@ describe('the run stage', () => {
     const view = fakeView();
     for (let i = 0; i < 4; i++) frame(view, ['KeyD']);
     expect(inputs(net).some((m) => m.mx === 1 && m.my === 0)).toBe(true);
+  });
+
+  it('the hero card runs by the session\'s animation: against a wall and with opposite keys held, not when no key is down', () => {
+    const { stage, frame } = setup(); // the hero stands at tile (1, 1), a wall to its west
+    const view = fakeView();
+    stage.built!(view);
+    const calls = vi.mocked(view.draw).mock.calls;
+    // the frame's left edge (a card facing left has its u mirrored)
+    const u = (n: number): number => Math.min(...[0, 2, 4, 6, 8, 10].map((i) => calls[n][0].dynamic.cards.uv[i]));
+    for (let i = 0; i < 6; i++) frame(view); // nothing held
+    expect(u(calls.length - 1)).toBe(0);
+    for (let i = 0; i < 12; i++) frame(view, ['KeyA']); // walks into the wall: the position does not change
+    expect(stage.runView.hero.x).toBeCloseTo(1.5, 0);
+    expect(u(calls.length - 1)).toBe(50);
+    for (let i = 0; i < 12; i++) frame(view, ['KeyA', 'KeyD']); // the keys cancel out
+    expect(u(calls.length - 1)).toBe(50);
+    for (let i = 0; i < 12; i++) frame(view);
+    expect(u(calls.length - 1)).toBe(0);
   });
 
   it('the free camera stops the hero', () => {
