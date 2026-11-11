@@ -1,75 +1,102 @@
 import {
+  BufferAttribute,
+  BufferGeometry,
   Color,
+  DataTexture,
   LinearSRGBColorSpace,
   Mesh,
-  MeshBasicMaterial,
   NearestFilter,
   NoColorSpace,
   NoToneMapping,
   OrthographicCamera,
-  PlaneGeometry,
+  RedFormat,
   Scene,
   Texture,
+  UnsignedByteType,
   WebGPURenderer,
 } from 'three/webgpu';
-import type { Atlas } from '../ui/atlas';
+import { snapGround, viewRay, type Cam } from './camera';
+import { heightBytes, type DemoMap } from './demoMap';
+import { worldMaterial } from './materials';
+import type { RenderPlan } from './quality';
+import { buildWorld, type FrameRects } from './worldMesh';
 
+export interface Assets { image: HTMLImageElement; frames: FrameRects }
+/** `lights` and `dynamic` arrive with Task 6; `shadows` and `smooth` have no effect yet. */
+export interface FrameInput { cam: Cam; plan: RenderPlan; shadows: boolean; smooth: boolean; t: number }
 export interface View {
   readonly backend: 'WebGPU' | 'WebGL2 fallback';
-  /** Draws one frame. */
-  render(): void;
+  /** Device px. */
+  setSize(w: number, h: number): void;
+  /** Draws one frame and returns its draw calls. */
+  draw(f: FrameInput): number;
   dispose(): void;
 }
 
-/** The renderer, a clear colour and one atlas quad (a first proof that textures work). */
-export async function createView(canvas: HTMLCanvasElement, opts: { forceWebGL: boolean }, atlas: Atlas): Promise<View> {
+function pixelTexture(t: Texture): void {
+  t.colorSpace = NoColorSpace;
+  t.magFilter = NearestFilter;
+  t.minFilter = NearestFilter;
+  t.generateMipmaps = false;
+  t.flipY = false;
+  t.premultiplyAlpha = false;
+  t.needsUpdate = true;
+}
+
+export async function createView(canvas: HTMLCanvasElement, assets: Assets, map: DemoMap, opts: { forceWebGL: boolean }): Promise<View> {
   const renderer = new WebGPURenderer({ canvas, antialias: false, forceWebGL: opts.forceWebGL });
   await renderer.init();
   renderer.outputColorSpace = LinearSRGBColorSpace;
   renderer.toneMapping = NoToneMapping;
   renderer.setPixelRatio(1);
-  const size = () => {
-    const r = Math.min(window.devicePixelRatio || 1, 2);
-    renderer.setSize(Math.max(1, Math.round(window.innerWidth * r)), Math.max(1, Math.round(window.innerHeight * r)), false);
-  };
-  size();
-  window.addEventListener('resize', size);
   renderer.setClearColor(new Color(0.012, 0.01, 0.016), 1);
 
-  const f = atlas.frames['floor_1'].frame;
-  const tex = new Texture(atlas.img);
-  tex.colorSpace = NoColorSpace;
-  tex.magFilter = NearestFilter;
-  tex.minFilter = NearestFilter;
-  tex.generateMipmaps = false;
-  tex.flipY = false;
-  tex.premultiplyAlpha = false;
-  const aw = atlas.img.naturalWidth;
-  const ah = atlas.img.naturalHeight;
-  tex.repeat.set(f.w / aw, f.h / ah);
-  tex.offset.set(f.x / aw, f.y / ah);
-  tex.needsUpdate = true;
+  const atlas = new Texture(assets.image);
+  pixelTexture(atlas);
+  const heights = new DataTexture(heightBytes(map), map.w, map.h, RedFormat, UnsignedByteType);
+  heights.unpackAlignment = 1;
+  pixelTexture(heights);
+
+  const w = buildWorld(map, assets.frames);
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(w.position, 3));
+  geometry.setAttribute('uv', new BufferAttribute(w.uv, 2));
+  geometry.setAttribute('normal', new BufferAttribute(w.normal, 3));
+  geometry.setAttribute('kind', new BufferAttribute(w.kind, 1));
+  geometry.setAttribute('rect', new BufferAttribute(w.rect, 4));
+  const material = worldMaterial(atlas, assets.image.naturalWidth, assets.image.naturalHeight, heights, map.w, map.h);
+  const mesh = new Mesh(geometry, material);
+  mesh.frustumCulled = false;
 
   const scene = new Scene();
-  const quad = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ map: tex }));
-  scene.add(quad);
-  const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
-  camera.position.z = 5;
+  scene.add(mesh);
+  const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  camera.up.set(0, 1, 0);
 
   return {
     backend: (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend ? 'WebGPU' : 'WebGL2 fallback',
-    render() {
-      const a = renderer.domElement.width / Math.max(1, renderer.domElement.height);
-      camera.left = -a;
-      camera.right = a;
+    setSize(pw, ph) {
+      renderer.setSize(Math.max(1, pw), Math.max(1, ph), false);
+    },
+    draw(f) {
+      const g = snapGround(f.cam.pitch, f.cam.yaw, f.cam.x, f.cam.z);
+      const ray = viewRay(f.cam.pitch, f.cam.yaw);
+      camera.left = -f.plan.halfW;
+      camera.right = f.plan.halfW;
+      camera.top = f.plan.halfH;
+      camera.bottom = -f.plan.halfH;
+      camera.position.set(g.x + ray[0] * 50, ray[1] * 50, g.z + ray[2] * 50);
+      camera.lookAt(g.x, 0, g.z);
+      camera.updateMatrixWorld(true);
       camera.updateProjectionMatrix();
       renderer.render(scene, camera);
+      return renderer.info.render.drawCalls;
     },
     dispose() {
-      window.removeEventListener('resize', size);
-      tex.dispose();
-      quad.geometry.dispose();
-      (quad.material as MeshBasicMaterial).dispose();
+      atlas.dispose();
+      heights.dispose();
+      geometry.dispose();
+      material.dispose();
       renderer.dispose();
     },
   };
