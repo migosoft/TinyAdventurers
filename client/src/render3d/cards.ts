@@ -1,5 +1,8 @@
 // Per-frame quads of the demo scene: figure and prop cards, torch flames and glows.
-import { facesLeft, snapGround, type Cam } from './camera';
+import { facesLeft, snapGround, viewRay, type Cam } from './camera';
+
+/** Tiles a glow is moved toward the camera beyond its own size (the demo's 0.05 glow bias). */
+export const GLOW_LIFT = 0.05;
 import { torchFlicker } from './light';
 import { frameOf, orbAt, type SceneState } from './scene';
 import type { FrameRects } from './worldMesh';
@@ -46,14 +49,20 @@ export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: num
   }
   for (const p of s.props) card(p.frame, p.x, p.z, false);
 
-  // Glow quad: upright and turned to the camera's yaw like a card, `size` wide each way and `size / cos(pitch)` tall
-  // each way, so it reads as a square of side 2 size on screen. Upright, it never leans into the wall behind a torch.
-  const hh = 1 / Math.cos(cam.pitch);
-  const glow = (x: number, y: number, z: number, size: number, rgb: number[]) => {
-    const rx = size * c, rz = size * sn, uy = size * hh;
+  // Glow quad: camera-facing (round on screen), screen-right (c, 0, s), screen-up (s sin p, cos p, -c sin p), half-size `size`.
+  // Its centre is moved toward the camera by size + GLOW_LIFT along the view ray, which leaves its screen position
+  // unchanged (orthographic view) but puts the whole disc in front of its wall, the wall top and the floor.
+  // Known cost: it is added over figures standing within about `size` in front of a torch.
+  const sp = Math.sin(cam.pitch), cpi = Math.cos(cam.pitch);
+  const ray = viewRay(cam.pitch, cam.yaw);
+  const glow = (x0: number, y0: number, z0: number, size: number, rgb: number[]) => {
+    const lift = size + GLOW_LIFT;
+    const x = x0 + ray[0] * lift, y = y0 + ray[1] * lift, z = z0 + ray[2] * lift;
+    const rx = size * c, rz = size * sn;
+    const ux = size * sn * sp, uy = size * cpi, uz = -size * c * sp;
     push(gp, gu, [
-      [x - rx, y + uy, z - rz, -1, -1], [x + rx, y + uy, z + rz, 1, -1],
-      [x + rx, y - uy, z + rz, 1, 1], [x - rx, y - uy, z - rz, -1, 1],
+      [x - rx + ux, y + uy, z - rz + uz, -1, -1], [x + rx + ux, y + uy, z + rz + uz, 1, -1],
+      [x + rx - ux, y - uy, z + rz - uz, 1, 1], [x - rx - ux, y - uy, z - rz - uz, -1, 1],
     ], gc, rgb);
     gn++;
   };

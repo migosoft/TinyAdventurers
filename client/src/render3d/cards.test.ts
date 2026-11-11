@@ -78,26 +78,27 @@ describe('cards', () => {
     expect(Array.from(b.emissive.position)).toEqual(Array.from(a.emissive.position));
   });
 
-  it('makes each glow an upright square on screen: 2 size wide along (c, 0, s), 2 size / cos(pitch) tall, centred', () => {
+  it('spans each glow by the camera right and up axes, a square of side 2 size on screen, in front of its wall and floor', () => {
     const s = newScene();
-    for (const deg of [30, 45, 60]) {
-      const pitch = (deg * Math.PI) / 180, yaw = 0.6;
+    for (const deg of [30, 45, 60, 80]) for (const yd of [0, 45]) {
+      const pitch = (deg * Math.PI) / 180, yaw = (yd * Math.PI) / 180;
       const cm: Cam = { x: 10, z: 6, pitch, yaw };
       const d = buildDynamic(s, frames, cm, 0, false);
-      const g = d.glows.position;
       const size = 1.5; // the first glow is a torch glow
-      const pts = corners(g, 0);
-      expect(pts.length).toBe(4);
-      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]), zs = pts.map((p) => p[2]);
-      expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo((2 * size) / Math.cos(pitch), 5);
-      expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(2 * size * Math.abs(Math.cos(yaw)), 5);
-      expect(Math.max(...zs) - Math.min(...zs)).toBeCloseTo(2 * size * Math.abs(Math.sin(yaw)), 5);
       const t0 = s.torches[0];
-      expect((Math.max(...ys) + Math.min(...ys)) / 2).toBeCloseTo(t0.y + 0.25, 5);
+      const pts = corners(d.glows.position, 0);
+      expect(pts.length).toBe(4);
       const sc = pts.map((p) => project(cm, p[0], p[1], p[2]));
       const sx = sc.map((p) => p.sx), sy = sc.map((p) => p.sy);
+      // a square of side 2 size, centred on where the glow's own position projects
+      const home = project(cm, t0.x, t0.y + 0.25, t0.z - 0.14);
       expect(Math.max(...sx) - Math.min(...sx)).toBeCloseTo(2 * size, 5);
       expect(Math.max(...sy) - Math.min(...sy)).toBeCloseTo(2 * size, 5);
+      expect((Math.max(...sx) + Math.min(...sx)) / 2).toBeCloseTo(home.sx, 5);
+      expect((Math.max(...sy) + Math.min(...sy)) / 2).toBeCloseTo(home.sy, 5);
+      // the whole disc lies nearer the camera than the torch by at least its size, so it clears wall, wall top and floor
+      // (project()'s depth grows away from the camera)
+      for (const p of sc) expect(home.depth - p.depth).toBeGreaterThanOrEqual(size - 1e-9);
     }
     expect(ART).toBe(16);
   });

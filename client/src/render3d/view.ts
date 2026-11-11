@@ -184,7 +184,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, map: DemoMap,
   const toward = viewTowardUniform();
   const card = cardMaterial(atlas, aw, ah, lighting, toward);
   const emissive = emissiveMaterial(atlas, aw, ah, lighting, toward);
-  const glow = glowMaterial(toward);
+  const glow = glowMaterial();
   const cards = new DynMesh([['position', 3], ['uv', 2]], card.material);
   const flames = new DynMesh([['position', 3], ['uv', 2]], emissive);
   const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3]], glow);

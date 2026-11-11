@@ -93,11 +93,10 @@ export function emissiveMaterial(atlas: Texture, atlasW: number, atlasH: number,
   return m;
 }
 
-/** Upright glow quads turned to the camera's yaw: colour times max(0, 1 - |uv|)^3, added to the picture, depth tested but not written. */
-export function glowMaterial(toward: ViewToward): MeshBasicNodeMaterial {
+/** Camera-facing glow quads (already moved toward the camera by `buildDynamic`, so no bias here): colour times max(0, 1 - |uv|)^3, added to the picture, depth tested but not written. */
+export function glowMaterial(): MeshBasicNodeMaterial {
   const g = max(float(1).sub(length(uv())), 0);
   const m = new MeshBasicNodeMaterial();
-  m.positionNode = positionGeometry.add(toward.mul(FLAME_BIAS));
   m.colorNode = vec4(attribute('glowColor', 'vec3').mul(g.mul(g).mul(g)), 1);
   m.transparent = true;
   m.blending = AdditiveBlending;
