@@ -34,6 +34,7 @@ import { Lobby } from './ui/lobby';
 import { logoHeader } from './ui/logo';
 import { Roster } from './ui/roster';
 import { loadFonts } from './fonts';
+import { isR3dDemo, wants3d } from './r3dFlag';
 import './style.css';
 import './ui/screens.css';
 
@@ -129,7 +130,7 @@ function fatal(ui: HTMLElement, msg: string): void {
 /** Login, then the roster; opening a character connects to the game and shows its hub. */
 async function main(): Promise<void> {
   const q = new URLSearchParams(location.search);
-  if (q.has('r3d')) {
+  if (isR3dDemo(location.search)) {
     const host = document.getElementById('game')!;
     host.classList.add('active');
     const { bootDemo } = await import('./render3d/boot');
@@ -213,30 +214,45 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
   };
 
   await loadFonts();
-  const game = new Phaser.Game({
-    type: Phaser.WEBGL,
-    parent: 'game',
-    pixelArt: true,
-    antialias: false,
-    backgroundColor: '#000000',
-    scale: scaleConfig(),
-    scene: [BootScene, GameScene],
-    fps: { smoothStep: false },
-  });
-  const refreshViews = watchViews(game);
-  /** Re-lays out the canvas (size and CSS zoom) and every running scene's camera. */
-  const relayout = () => {
-    const s = viewSize();
-    game.scale.setZoom(s.cssZoom);
-    game.scale.resize(s.canvasW, s.canvasH);
-    refreshViews();
+  /** The Phaser game, created by `ensurePhaser()` (at once without `?r3d`, else on Welcome for non-debug accounts). */
+  let game: Phaser.Game | null = null;
+  let relayout = () => {};
+  let ready: Promise<void> = new Promise(() => {});
+  const ensurePhaser = () => {
+    if (game) return;
+    const g = new Phaser.Game({
+      type: Phaser.WEBGL,
+      parent: 'game',
+      pixelArt: true,
+      antialias: false,
+      backgroundColor: '#000000',
+      scale: scaleConfig(),
+      scene: [BootScene, GameScene],
+      fps: { smoothStep: false },
+    });
+    game = g;
+    const refreshViews = watchViews(g);
+    /** Re-lays out the canvas (size and CSS zoom) and every running scene's camera. */
+    relayout = () => {
+      const s = viewSize();
+      g.scale.setZoom(s.cssZoom);
+      g.scale.resize(s.canvasW, s.canvasH);
+      refreshViews();
+    };
+    window.addEventListener('resize', relayout);
+    ready = new Promise<void>((r) => g.events.once('assets-ready', r));
   };
-  window.addEventListener('resize', relayout);
-  const ready = new Promise<void>((r) => game.events.once('assets-ready', r));
+  if (!new URLSearchParams(location.search).has('r3d')) ensurePhaser();
   const gameEl = document.getElementById('game')!;
+  let debugAccount = false;
+  let run3d: { stop(): void } | null = null; // the render3d `Run3d` (main.ts has no static render3d import)
+  let run3dStarts = 0; // a second RunStarted while the import is pending drops the stale start
 
   const backToLobby = () => {
-    game.scene.stop('game');
+    if (run3d) {
+      run3d.stop();
+      run3d = null;
+    } else game?.scene.stop('game');
     hud.hide();
     gameEl.classList.remove('active');
     lobby.leftRoom();
@@ -258,6 +274,8 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
         lobby.myId = m.id;
         lobby.debug = m.debug;
         hub.setDebug(m.debug);
+        debugAccount = m.debug;
+        if (!wants3d(location.search, m.debug)) ensurePhaser();
         if (requestedResolution(location.search, m.debug) !== resolution) {
           resolution = requestedResolution(location.search, m.debug);
           relayout();
@@ -279,14 +297,25 @@ async function startGame(ui: HTMLElement, net: Net, atlas: Atlas, onRoster: () =
         else lobby.error(m.msg);
         break;
       case 'RunStarted': {
-        await ready;
         const info = m as RunStartInfo;
         const me = info.players.find((p) => p.ent === info.you)!;
+        if (wants3d(location.search, debugAccount)) {
+          const mine = ++run3dStarts;
+          lobby.hide();
+          gameEl.classList.add('active');
+          run3d?.stop();
+          run3d = null;
+          const { startRun3d } = await import('./render3d/boot');
+          if (mine !== run3dStarts) break; // a newer RunStarted took over while the chunk loaded
+          run3d = startRun3d(gameEl, location.search, { info, net, hud, myClass: me.class });
+          break;
+        }
+        await ready;
         lobby.hide();
         gameEl.classList.add('active');
         const data: GameInit = { info, net, hud, myClass: me.class };
-        game.scene.stop('game');
-        game.scene.start('game', data);
+        game!.scene.stop('game');
+        game!.scene.start('game', data);
         break;
       }
     }

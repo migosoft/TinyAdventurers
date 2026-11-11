@@ -9,7 +9,7 @@
 // through the admin API when ADMIN_USER and ADMIN_PASSWORD are set, else with psql on the local compose stack.
 // An empty start room logs nothing, so use LOG=1 with a `debug` query (F8 puts a debug effect on Alice).
 import { chromium } from 'playwright-core';
-import { execFileSync } from 'node:child_process';
+import { PASSWORD, tag, markDebug, login, deleteAccount } from './account.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:8080/';
 const query = process.argv[3] ?? '';
@@ -19,34 +19,6 @@ const level = (process.argv[6] ?? 'dungeon').toLowerCase();
 const launch = () => chromium.launch({ executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const browser = await launch();
 const errors = [];
-const PASSWORD = 'smoke-test-password';
-const tag = () => Math.random().toString(16).slice(2, 8);
-
-/** Marks one of this script's own e2e_* accounts as a debug account. */
-let adminCookie = null;
-async function markDebug(account) {
-  if (!/^e2e_[0-9a-f]+$/.test(account)) throw new Error(`refusing to mark ${account}`);
-  const { ADMIN_USER, ADMIN_PASSWORD } = process.env;
-  if (ADMIN_USER && ADMIN_PASSWORD) {
-    const api = async (path, method, body) => {
-      const r = await fetch(new URL(path, base), { method, headers: { 'content-type': 'application/json', ...(adminCookie ? { cookie: adminCookie } : {}) }, body: body && JSON.stringify(body) });
-      if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${await r.text()}`);
-      return r;
-    };
-    if (!adminCookie) {
-      const r = await api('api/admin/login', 'POST', { name: ADMIN_USER, password: ADMIN_PASSWORD });
-      adminCookie = r.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
-    }
-    const found = await (await api(`api/admin/players?q=${account}`, 'GET')).json();
-    const row = found.players.find((p) => p.name === account);
-    if (!row) throw new Error(`admin list has no ${account}`);
-    await api(`api/admin/players/${row.id}/debug`, 'POST', { debug: true });
-    console.log(`marked ${account} as debug (admin API)`);
-  } else {
-    execFileSync('docker', ['compose', 'exec', '-T', 'db', 'psql', '-U', 'tiny', '-d', 'tiny', '-c', `update accounts set debug = true where name = '${account}'`], { stdio: 'inherit' });
-    console.log(`marked ${account} as debug (psql)`);
-  }
-}
 
 async function open(name, b = browser) {
   const ctx = await b.newContext({ viewport: { width: 1280, height: 720 } });
@@ -58,21 +30,13 @@ async function open(name, b = browser) {
   await page.waitForSelector('#auth-name');
   return page;
 }
-async function login(page, account, register) {
-  if (register) await page.click('#auth-switch');
-  await page.fill('#auth-name', account);
-  await page.fill('#auth-password', PASSWORD);
-  if (register) await page.fill('#auth-password2', PASSWORD);
-  await page.click(register ? '#register' : '#login');
-  await page.waitForSelector('.ui-roster');
-}
 /** Registers a fresh account, creates a character of `cls` (its hub opens) and enters the runs list with it. */
 async function player(name, cls, shots) {
   const account = `e2e_${tag()}`;
   const page = await open(name);
   if (shots) await page.screenshot({ path: `${out}/0-login.png` });
   await login(page, account, true);
-  if (query.includes('debug')) await markDebug(account); // no WebSocket yet, so the connection reads the new flag
+  if (query.includes('debug')) await markDebug(base, account); // no WebSocket yet, so the connection reads the new flag
   if (shots) await page.screenshot({ path: `${out}/0-roster.png` });
   await page.click('#new-char');
   await page.fill('#char-name', `${name}${tag()}`);
@@ -303,10 +267,7 @@ for (const [page, account] of [
   ...(adminDone ? [] : [[p3, a1.account]]),
   ...(typed === PASSWORD ? [] : [[p2, a2.account]]),
 ]) {
-  const status = await page.evaluate(
-    (password) => fetch('/api/account', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }).then((r) => r.status),
-    PASSWORD,
-  );
+  const status = await deleteAccount(page);
   if (status !== 204) errors.push(`deleting ${account}: HTTP ${status}`);
 }
 console.log(errors.length ? errors.join('\n') : 'no browser errors');
