@@ -27,7 +27,7 @@ import { heightBytes, type DemoMap } from './demoMap';
 import type { Dynamic } from './cards';
 import type { Light } from './light';
 import { makeLighting } from './lightNodes';
-import { cardMaterial, emissiveMaterial, glowMaterial, worldMaterial } from './materials';
+import { cardMaterial, emissiveMaterial, glowMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
@@ -77,7 +77,7 @@ export interface View {
   readonly backend: 'WebGPU' | 'WebGL2 fallback';
   /** Device px. */
   setSize(w: number, h: number): void;
-  /** Draws one frame and returns its draw calls; `timer` gets the laps 'scene' and, with the copy, 'present'. */
+  /** Draws one frame and returns its draw calls; `timer` gets the laps 'upload' (buffers and lights), 'scene' and, with the copy, 'present'. */
   draw(f: FrameInput, timer?: FrameTimer<R3dSystem>): number;
   /** Whether the backend has a way to fail on purpose (unlike `forceLoss`, true also after the view was lost). */
   readonly canForceLoss: boolean;
@@ -163,9 +163,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, map: DemoMap,
   const mesh = new Mesh(geometry, material);
   mesh.frustumCulled = false;
 
-  const card = cardMaterial(atlas, aw, ah, lighting);
-  const emissive = emissiveMaterial(atlas, aw, ah, lighting);
-  const glow = glowMaterial();
+  // Cards, flames and glows are pushed toward the camera along the view ray (the demo's depth bias); set each frame.
+  const toward = viewTowardUniform();
+  const card = cardMaterial(atlas, aw, ah, lighting, toward);
+  const emissive = emissiveMaterial(atlas, aw, ah, lighting, toward);
+  const glow = glowMaterial(toward);
   const cards = new DynMesh([['position', 3], ['uv', 2]], card.material);
   const flames = new DynMesh([['position', 3], ['uv', 2]], emissive);
   const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3]], glow);
@@ -199,25 +201,24 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, map: DemoMap,
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   camera.up.set(0, 1, 0);
 
-  const be = renderer.backend as { isWebGPUBackend?: boolean; device?: unknown; gl?: WebGL2RenderingContext };
+  const be = renderer.backend as { isWebGPUBackend?: boolean; device?: { destroy(): void }; gl?: WebGL2RenderingContext };
   // Fixed at creation: whether the backend has a way to fail on purpose, whatever the view's state later.
   const canForceLoss = be.isWebGPUBackend ? !!be.device : !!be.gl?.getExtension('WEBGL_lose_context');
 
   return {
-    backend: (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend ? 'WebGPU' : 'WebGL2 fallback',
+    backend: be.isWebGPUBackend ? 'WebGPU' : 'WebGL2 fallback',
     setSize(pw, ph) {
       renderer.setSize(Math.max(1, pw), Math.max(1, ph), false);
     },
     canForceLoss,
     forceLoss() {
       if (disposed || lost) return false;
-      const backend = renderer.backend as { isWebGPUBackend?: boolean; device?: { destroy(): void }; gl?: WebGL2RenderingContext };
-      if (backend.isWebGPUBackend && backend.device) {
-        backend.device.destroy();
+      if (be.isWebGPUBackend && be.device) {
+        be.device.destroy();
         reportLoss('forced'); // three ignores a loss whose reason is "destroyed"
         return true;
       }
-      const ext = backend.gl?.getExtension('WEBGL_lose_context');
+      const ext = be.gl?.getExtension('WEBGL_lose_context');
       if (!ext) return false;
       ext.loseContext(); // the webglcontextlost event reaches onDeviceLost
       return true;
@@ -230,12 +231,16 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, map: DemoMap,
       camera.right = f.plan.halfW;
       camera.top = f.plan.halfH;
       camera.bottom = -f.plan.halfH;
-      camera.position.set(g.x + ray[0] * 50, ray[1] * 50, g.z + ray[2] * 50);
+      // Far enough back that the bottom of the frame (halfH / tan(pitch) behind the target) stays in front of the near plane.
+      const dist = 50 + f.plan.halfH / Math.tan(f.cam.pitch);
+      camera.far = 2 * dist + 100;
+      camera.position.set(g.x + ray[0] * dist, ray[1] * dist, g.z + ray[2] * dist);
       camera.lookAt(g.x, 0, g.z);
       camera.updateMatrixWorld(true);
       camera.updateProjectionMatrix();
       const d = f.dynamic;
       card.cosP.value = Math.cos(f.cam.pitch);
+      toward.value.set(ray[0], ray[1], ray[2]);
       world.smooth.value = f.smooth ? 1 : 0;
       cards.set({ position: d.cards.position, uv: d.cards.uv }, d.cards.count * 6);
       flames.set({ position: d.emissive.position, uv: d.emissive.uv }, d.emissive.count * 6);
@@ -244,6 +249,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, map: DemoMap,
       lighting.setShadows(f.shadows);
       // The counter only accumulates; three resets it in its own animation loop, whose order against ours is not guaranteed.
       renderer.info.reset();
+      timer?.lap('upload');
       if (f.plan.direct) {
         renderer.setRenderTarget(null);
         renderer.render(scene, camera);

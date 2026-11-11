@@ -39,6 +39,12 @@ export function newScene(): SceneState {
   return { player, ents, props, torches };
 }
 
+/** The moving light's orbit: a slow ellipse with a small bob. */
+export function orbAt(t: number): { x: number; y: number; z: number } {
+  const a = 0.42 * t;
+  return { x: 12.2 + 6.6 * Math.cos(a), y: 0.95 + 0.12 * Math.sin(2.1 * t), z: 6.45 + 1.25 * Math.sin(a) };
+}
+
 /** Frame time in seconds, clamped to 0.001..0.05. */
 export function frameDt(nowS: number, lastS: number): number {
   return Math.min(0.05, Math.max(0.001, nowS - lastS));

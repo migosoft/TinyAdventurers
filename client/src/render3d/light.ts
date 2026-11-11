@@ -1,6 +1,5 @@
 // The scene's point lights, as plain numbers (the shader side is in lightNodes.ts).
-import { orbAt } from './cards';
-import type { SceneState } from './scene';
+import { orbAt, type SceneState } from './scene';
 
 export interface Light { x: number; y: number; z: number; radius: number; r: number; g: number; b: number; shadow: boolean }
 export const MAX_LIGHTS = 8;

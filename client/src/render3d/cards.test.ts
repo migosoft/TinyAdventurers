@@ -78,17 +78,27 @@ describe('cards', () => {
     expect(Array.from(b.emissive.position)).toEqual(Array.from(a.emissive.position));
   });
 
-  it('spans glows by the camera right and up axes', () => {
+  it('makes each glow an upright square on screen: 2 size wide along (c, 0, s), 2 size / cos(pitch) tall, centred', () => {
     const s = newScene();
-    const cm = cam(0.6);
-    const d = buildDynamic(s, frames, cm, 0, false);
-    const g = d.glows.position;
-    const v = (i: number) => [g[i * 3], g[i * 3 + 1], g[i * 3 + 2]];
-    const pts = [0, 1, 2, 3, 4, 5].map(v).map((p) => project(cm, p[0], p[1], p[2]));
-    const sxs = pts.map((p) => p.sx), sys = pts.map((p) => p.sy);
-    expect(Math.max(...sxs) - Math.min(...sxs)).toBeCloseTo(3, 5);
-    expect(Math.max(...sys) - Math.min(...sys)).toBeCloseTo(3, 5);
-    // and ART is the 16 px tile
+    for (const deg of [30, 45, 60]) {
+      const pitch = (deg * Math.PI) / 180, yaw = 0.6;
+      const cm: Cam = { x: 10, z: 6, pitch, yaw };
+      const d = buildDynamic(s, frames, cm, 0, false);
+      const g = d.glows.position;
+      const size = 1.5; // the first glow is a torch glow
+      const pts = corners(g, 0);
+      expect(pts.length).toBe(4);
+      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]), zs = pts.map((p) => p[2]);
+      expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo((2 * size) / Math.cos(pitch), 5);
+      expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(2 * size * Math.abs(Math.cos(yaw)), 5);
+      expect(Math.max(...zs) - Math.min(...zs)).toBeCloseTo(2 * size * Math.abs(Math.sin(yaw)), 5);
+      const t0 = s.torches[0];
+      expect((Math.max(...ys) + Math.min(...ys)) / 2).toBeCloseTo(t0.y + 0.25, 5);
+      const sc = pts.map((p) => project(cm, p[0], p[1], p[2]));
+      const sx = sc.map((p) => p.sx), sy = sc.map((p) => p.sy);
+      expect(Math.max(...sx) - Math.min(...sx)).toBeCloseTo(2 * size, 5);
+      expect(Math.max(...sy) - Math.min(...sy)).toBeCloseTo(2 * size, 5);
+    }
     expect(ART).toBe(16);
   });
 });

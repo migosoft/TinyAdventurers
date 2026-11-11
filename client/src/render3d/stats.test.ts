@@ -5,7 +5,7 @@ const base: R3dStats = {
   fps: 59.6,
   frameMs: 4.5,
   renderMs: 3.25,
-  systems: [['sim', 0.1], ['cards', 0.2], ['lights', 0.3], ['scene', 2.5], ['present', 0.05]],
+  systems: [['sim', 0.1], ['cards', 0.2], ['lights', 0.3], ['upload', 0.4], ['scene', 2.5], ['present', 0.05]],
   drawCalls: 6,
   canvas: [1920, 1080],
   render: [960, 540],
@@ -24,6 +24,7 @@ describe('statsText3d', () => {
       '  sim      0.10',
       '  cards    0.20',
       '  lights   0.30',
+      '  upload   0.40',
       '  scene    2.50',
       '  present  0.05',
       'draw calls 6',
@@ -35,6 +36,6 @@ describe('statsText3d', () => {
   });
 
   it('names the systems in order', () => {
-    expect(R3D_SYSTEMS).toEqual(['sim', 'cards', 'lights', 'scene', 'present']);
+    expect(R3D_SYSTEMS).toEqual(['sim', 'cards', 'lights', 'upload', 'scene', 'present']);
   });
 });

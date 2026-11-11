@@ -1,5 +1,5 @@
 // Node materials of the 3D view (TSL).
-import { AdditiveBlending, DoubleSide, MeshBasicNodeMaterial } from 'three/webgpu';
+import { AdditiveBlending, DoubleSide, MeshBasicNodeMaterial, Vector3 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
 import { attribute, clamp, float, floor, fwidth, fract, int, ivec2, length, max, positionGeometry, positionWorld, select, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from './lightNodes';
@@ -7,6 +7,19 @@ import type { Lighting } from './lightNodes';
 const STONE = [0.115, 0.1, 0.145] as const;
 const RIM = [0.4, 0.34, 0.33] as const;
 const PX = 1 / 16;
+
+/** The demo's depth bias, in tiles toward the camera: cards 0.03, flames and glows 0.05 (the world has none). */
+export const CARD_BIAS = 0.03;
+export const FLAME_BIAS = 0.05;
+
+/**
+ * The unit vector from the target toward the camera, set by the view each frame. A vertex moved along it by `b` tiles
+ * keeps its screen position (the view is orthographic) and gains `b` of depth on either backend.
+ */
+export function viewTowardUniform() {
+  return uniform(new Vector3(0, 0, 1));
+}
+export type ViewToward = ReturnType<typeof viewTowardUniform>;
 
 /**
  * Lit world material: atlas texels for floor and faces, a generated stone top with a pale rim where a wall drops to something lower.
@@ -57,12 +70,12 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
  * Upright sprites. The screen shows a card at its full sprite height, so the vertex is stretched by 1 / cos(pitch)
  * (the demo's true tilt); the light uses the true, unstretched position. `cosP` is set by the view each frame.
  */
-export function cardMaterial(atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting): { material: MeshBasicNodeMaterial; cosP: { value: number } } {
+export function cardMaterial(atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, toward: ViewToward): { material: MeshBasicNodeMaterial; cosP: { value: number } } {
   const cosP = uniform(1);
   const texel = texture(atlas, uv().div(vec2(atlasW, atlasH)));
   const truePos = varying(positionGeometry, 'cardPos');
   const m = new MeshBasicNodeMaterial();
-  m.positionNode = vec3(positionGeometry.x, positionGeometry.y.div(cosP), positionGeometry.z);
+  m.positionNode = vec3(positionGeometry.x, positionGeometry.y.div(cosP), positionGeometry.z).add(toward.mul(CARD_BIAS));
   m.colorNode = vec4(lighting.shoulder(texel.rgb.mul(lighting.lightAt(truePos, vec3(0, 0, 0), 1))), texel.a);
   m.alphaTest = 0.5;
   m.side = DoubleSide;
@@ -70,19 +83,21 @@ export function cardMaterial(atlas: Texture, atlasW: number, atlasH: number, lig
 }
 
 /** Torch flames: the atlas texel, self-lit. */
-export function emissiveMaterial(atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting): MeshBasicNodeMaterial {
+export function emissiveMaterial(atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, toward: ViewToward): MeshBasicNodeMaterial {
   const texel = texture(atlas, uv().div(vec2(atlasW, atlasH)));
   const m = new MeshBasicNodeMaterial();
+  m.positionNode = positionGeometry.add(toward.mul(FLAME_BIAS));
   m.colorNode = vec4(lighting.shoulder(texel.rgb.mul(1.15)), texel.a);
   m.alphaTest = 0.5;
   m.side = DoubleSide;
   return m;
 }
 
-/** Camera-facing glow quads: colour times max(0, 1 - |uv|)^3, added to the picture, depth tested but not written. */
-export function glowMaterial(): MeshBasicNodeMaterial {
+/** Upright glow quads turned to the camera's yaw: colour times max(0, 1 - |uv|)^3, added to the picture, depth tested but not written. */
+export function glowMaterial(toward: ViewToward): MeshBasicNodeMaterial {
   const g = max(float(1).sub(length(uv())), 0);
   const m = new MeshBasicNodeMaterial();
+  m.positionNode = positionGeometry.add(toward.mul(FLAME_BIAS));
   m.colorNode = vec4(attribute('glowColor', 'vec3').mul(g.mul(g).mul(g)), 1);
   m.transparent = true;
   m.blending = AdditiveBlending;
