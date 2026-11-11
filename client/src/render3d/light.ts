@@ -27,6 +27,12 @@ export function stoneClear(ambient: [number, number, number]): [number, number, 
   return [shoulder(STONE[0] * ambient[0]), shoulder(STONE[1] * ambient[1]), shoulder(STONE[2] * ambient[2])];
 }
 
+/** A colour (0..1 per channel, written to the canvas as is) as a CSS colour, bytes rounded. */
+export function cssColour(c: readonly [number, number, number]): string {
+  const b = (v: number): number => Math.round(Math.min(1, Math.max(0, v)) * 255);
+  return `rgb(${b(c[0])}, ${b(c[1])}, ${b(c[2])})`;
+}
+
 export function torchFlicker(t: number, ph: number): number {
   return 1 + 0.07 * Math.sin(11 * t + ph) + 0.05 * Math.sin(23.3 * t + 2 * ph) + 0.04 * Math.sin(5.1 * t + 3 * ph);
 }

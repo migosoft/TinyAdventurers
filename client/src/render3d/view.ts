@@ -32,7 +32,7 @@ import { snapGround, viewRay, type Cam } from './camera';
 import { WALL_H, cellHeight, heightBytes } from './heights';
 import type { TileMap } from '../sim/map';
 import type { Dynamic } from './cards';
-import { stoneClear, type Light } from './light';
+import { cssColour, stoneClear, type Light } from './light';
 import { makeLighting } from './lightNodes';
 import { cardMaterial, emissiveMaterial, glowMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { RenderPlan } from './quality';
@@ -326,6 +326,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const canForceLoss = be.isWebGPUBackend ? !!be.device : !!be.gl?.getExtension('WEBGL_lose_context');
 
   const clearColour = new Color();
+  let canvasBg = '';
   let groundTex: Texture[] = [];
   const textureLimit = (): number => {
     if (be.isWebGPUBackend) return be.device?.limits?.maxTextureDimension2D ?? 8192;
@@ -415,6 +416,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       const cc = world.clear === 'stone' ? stoneClear(f.ambient) : world.clear;
       clearColour.setRGB(cc[0], cc[1], cc[2]);
       renderer.setClearColor(clearColour, 1);
+      // Off-screen (zoomed) frames are copied into the middle of the canvas and three never clears the rest (it stays transparent), so the canvas's own background carries the clear colour: the rock goes on beyond the picture.
+      const bg = cssColour(cc);
+      if (bg !== canvasBg) {
+        canvasBg = bg;
+        renderer.domElement.style.backgroundColor = bg;
+      }
       lighting.setAmbient(f.ambient);
       cards.set({ position: d.cards.position, uv: d.cards.uv }, d.cards.count * 6);
       flames.set({ position: d.emissive.position, uv: d.emissive.uv }, d.emissive.count * 6);

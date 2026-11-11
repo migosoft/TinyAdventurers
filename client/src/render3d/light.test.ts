@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AMBIENT, MAX_LIGHTS, STONE, WORK_AMBIENT, packLights, sceneLights, shoulder, stoneClear, torchFlicker, type Light } from './light';
+import { cssColour, AMBIENT, MAX_LIGHTS, STONE, WORK_AMBIENT, packLights, sceneLights, shoulder, stoneClear, torchFlicker, type Light } from './light';
 import { newScene } from './scene';
 
 const lamp = (n: number): Light => ({ x: n, y: 1, z: 2, radius: 3, r: 0.5, g: 0.6, b: 0.7, shadow: n % 2 === 0 });
@@ -53,5 +53,9 @@ describe('light', () => {
     const c = stoneClear(AMBIENT);
     for (let i = 0; i < 3; i++) expect(c[i]).toBeCloseTo(STONE[i] * AMBIENT[i], 6);
     for (const v of stoneClear(WORK_AMBIENT)) expect(v).toBeLessThan(0.2);
+  });
+  it('writes a clear colour as CSS bytes (the demo hall: 2, 2, 5)', () => {
+    expect(cssColour(stoneClear(AMBIENT))).toBe('rgb(2, 2, 5)');
+    expect(cssColour([2, -1, 0.5])).toBe('rgb(255, 0, 128)');
   });
 });
