@@ -59,6 +59,22 @@ describe('panel', () => {
     expect(plain.textContent).not.toContain('Lose device');
   });
 
+  it('Hide collapses the panel to the toggle button, Show opens it again', () => {
+    const { host, calls, btn } = setup();
+    const body = host.querySelector<HTMLElement>('.r3d-body')!;
+    const toggle = btn('Hide');
+    expect(toggle.hasAttribute('aria-pressed')).toBe(false);
+    expect(body.hidden).toBe(false);
+    toggle.click();
+    expect(body.hidden).toBe(true);
+    expect(toggle.textContent).toBe('Show');
+    expect(host.querySelector('.r3d-panel')!.classList.contains('collapsed')).toBe(true);
+    toggle.click();
+    expect(body.hidden).toBe(false);
+    expect(toggle.textContent).toBe('Hide');
+    expect(calls).toEqual([]); // not a param
+  });
+
   it('shows labels and pressed states', () => {
     const { host, btn, panel } = setup({ ...DEFAULTS, pitch: 48.6 });
     expect(host.textContent).toContain('Camera pitch 48.6°');

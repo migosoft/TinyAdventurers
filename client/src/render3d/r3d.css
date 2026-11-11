@@ -11,33 +11,50 @@
   left: 50%;
   bottom: 10px;
   transform: translateX(-50%);
-  width: min(680px, calc(100% - 16px));
+  width: min(1200px, calc(100% - 16px));
   box-sizing: border-box;
-  padding: 8px 10px;
-  background: rgba(16, 13, 20, 0.82);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 6px;
+  background: rgba(16, 13, 20, 0.72);
   border: 1px solid #3a3040;
-  border-radius: 10px;
+  border-radius: 8px;
   color: #e9e2d0;
-  font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 12px/1.25 system-ui, -apple-system, 'Segoe UI', sans-serif;
   user-select: none;
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(4px);
 }
+.r3d-panel.collapsed {
+  width: auto;
+  padding: 2px;
+}
+.r3d-panel .r3d-body {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+}
+.r3d-panel .r3d-body[hidden] { display: none; }
 .r3d-panel .r3d-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 4px;
 }
-.r3d-panel .r3d-row:first-child { margin-top: 0; }
+/* The two sliders share the first line; quality, the switches, the debug button and the readout take the second. */
+.r3d-panel .r3d-row:nth-child(-n + 2) { flex: 1 1 45%; flex-wrap: nowrap; }
 .r3d-panel label {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  min-width: 128px;
+  min-width: 112px;
 }
 .r3d-panel input[type='range'] {
   flex: 1;
-  min-width: 80px;
+  min-width: 60px;
+  margin: 0;
   accent-color: #d59a4a;
 }
 .r3d-panel button {
@@ -46,9 +63,11 @@
   background: #221c29;
   border: 1px solid #453a4d;
   border-radius: 999px;
-  padding: 6px 11px;
+  padding: 2px 8px;
   cursor: pointer;
+  white-space: nowrap;
 }
+.r3d-panel .r3d-toggle { flex: none; border-radius: 6px; }
 .r3d-panel button[aria-pressed='true'] {
   background: #c98a3c;
   border-color: #e7ad5d;
@@ -61,7 +80,7 @@
   outline-offset: 2px;
 }
 .r3d-panel .r3d-readout {
-  margin-top: 8px;
+  margin-left: auto;
   font-size: 11px;
   opacity: 0.65;
   font-variant-numeric: tabular-nums;

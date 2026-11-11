@@ -90,15 +90,30 @@ export function createPanel(host: HTMLElement, p: R3dParams, onChange: (p: R3dPa
   for (const [k, name] of SWITCHES) button(swRow, name, () => cur[k], () => change({ [k]: !cur[k] }));
 
   const readout = el('div', 'r3d-readout');
-  root.append(pitchRow, yawRow, qRow, swRow);
+  const body = el('div', 'r3d-body');
+  body.append(pitchRow, yawRow, qRow, swRow);
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
       if (!onLose()) row.querySelector('button')!.disabled = true;
     });
-    root.appendChild(row);
+    body.appendChild(row);
   }
-  root.appendChild(readout);
+  body.appendChild(readout);
+
+  // Hide / Show collapses the panel to this button alone (an action button: no aria-pressed, not a URL parameter).
+  const toggle = el('button', 'r3d-toggle', 'Hide');
+  toggle.type = 'button';
+  toggle.setAttribute('aria-expanded', 'true');
+  toggle.addEventListener('click', () => {
+    const open = body.hidden;
+    body.hidden = !open;
+    root.classList.toggle('collapsed', !open);
+    toggle.textContent = open ? 'Hide' : 'Show';
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.blur();
+  });
+  root.append(body, toggle);
   host.appendChild(root);
 
   function refresh(): void {
