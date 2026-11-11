@@ -164,7 +164,7 @@ export class GameScene extends Phaser.Scene {
   private unsub?: () => void;
   private frameMs = 0;
   /** The F3 panel's frame, render and per-system timings; on only while the panel is open. */
-  private timer = new FrameTimer();
+  private timer = new FrameTimer(SYSTEMS);
   private detachTimer?: () => void;
   private myKind = 0;
   private forceField?: ForceField;

@@ -27,7 +27,7 @@ export interface StepEvents {
 /** An exponential average with the weight `frameMs` uses. */
 const ease = (avg: number, v: number): number => avg * 0.9 + v * 0.1;
 
-export class FrameTimer {
+export class FrameTimer<S extends string = System> {
   /** Whole frame, ms (averaged). */
   frameMs = 0;
   /** The render part of the frame, ms (averaged). */
@@ -35,7 +35,7 @@ export class FrameTimer {
   /** WebGL draw calls of the last frame. */
   drawCalls = 0;
   /** Per system, ms (averaged). */
-  readonly systems: Record<System, number> = Object.fromEntries(SYSTEMS.map((s) => [s, 0])) as Record<System, number>;
+  readonly systems: Record<S, number>;
 
   private active = false;
   private gl: DrawGl | null = null;
@@ -46,9 +46,16 @@ export class FrameTimer {
   private stepT0 = -1;
   private renderT0 = -1;
   private lapT = 0;
-  private cur: Record<System, number> = Object.fromEntries(SYSTEMS.map((s) => [s, 0])) as Record<System, number>;
+  private cur: Record<S, number>;
 
-  constructor(private readonly now: () => number = () => performance.now()) {}
+  /** `names` are the systems `lap` may book to, in the order the panel lists them. */
+  constructor(
+    private readonly names: readonly S[],
+    private readonly now: () => number = () => performance.now(),
+  ) {
+    this.systems = Object.fromEntries(names.map((s) => [s, 0])) as Record<S, number>;
+    this.cur = Object.fromEntries(names.map((s) => [s, 0])) as Record<S, number>;
+  }
 
   get on(): boolean {
     return this.active;
@@ -87,7 +94,7 @@ export class FrameTimer {
   stepStart(): void {
     if (!this.active) return;
     this.stepT0 = this.now();
-    for (const s of SYSTEMS) this.cur[s] = 0;
+    for (const s of this.names) this.cur[s] = 0;
   }
 
   renderStart(): void {
@@ -95,7 +102,7 @@ export class FrameTimer {
   }
 
   /** The frame's end: folds the frame, the render and the systems into the averages. */
-  renderEnd(): void {
+  renderEnd(drawCalls?: number): void {
     if (!this.active) return;
     const t = this.now();
     // only a frame that ran from its start: the one in which the panel opened has no systems yet
@@ -103,10 +110,10 @@ export class FrameTimer {
       const fold = this.seeded ? ease : (_: number, v: number) => v;
       this.frameMs = fold(this.frameMs, t - this.stepT0);
       this.renderMs = fold(this.renderMs, t - this.renderT0);
-      for (const s of SYSTEMS) this.systems[s] = fold(this.systems[s], this.cur[s]);
+      for (const s of this.names) this.systems[s] = fold(this.systems[s], this.cur[s]);
       this.seeded = true;
     }
-    this.drawCalls = this.calls;
+    this.drawCalls = drawCalls ?? this.calls;
     this.calls = 0;
     this.stepT0 = -1;
     this.renderT0 = -1;
@@ -118,7 +125,7 @@ export class FrameTimer {
   }
 
   /** Books the time since the last lap (or `begin`) to `system`. */
-  lap(system: System): void {
+  lap(system: S): void {
     if (!this.active) return;
     const t = this.now();
     this.cur[system] += t - this.lapT;

@@ -29,6 +29,8 @@ import type { Light } from './light';
 import { makeLighting } from './lightNodes';
 import { cardMaterial, emissiveMaterial, glowMaterial, worldMaterial } from './materials';
 import type { RenderPlan } from './quality';
+import type { FrameTimer } from '../game/frameTimer';
+import type { R3dSystem } from './stats';
 import { buildWorld, type FrameRects } from './worldMesh';
 
 export interface Assets { image: HTMLImageElement; frames: FrameRects }
@@ -75,8 +77,8 @@ export interface View {
   readonly backend: 'WebGPU' | 'WebGL2 fallback';
   /** Device px. */
   setSize(w: number, h: number): void;
-  /** Draws one frame and returns its draw calls. */
-  draw(f: FrameInput): number;
+  /** Draws one frame and returns its draw calls; `timer` gets the laps 'scene' and, with the copy, 'present'. */
+  draw(f: FrameInput, timer?: FrameTimer<R3dSystem>): number;
   dispose(): void;
 }
 
@@ -159,7 +161,7 @@ export async function createView(canvas: HTMLCanvasElement, assets: Assets, map:
     setSize(pw, ph) {
       renderer.setSize(Math.max(1, pw), Math.max(1, ph), false);
     },
-    draw(f) {
+    draw(f, timer) {
       const g = snapGround(f.cam.pitch, f.cam.yaw, f.cam.x, f.cam.z);
       const ray = viewRay(f.cam.pitch, f.cam.yaw);
       camera.left = -f.plan.halfW;
@@ -182,17 +184,21 @@ export async function createView(canvas: HTMLCanvasElement, assets: Assets, map:
       if (f.plan.direct) {
         renderer.setRenderTarget(null);
         renderer.render(scene, camera);
+        // High draws straight to the canvas: there is no copy, so 'present' is not booked (it stays 0).
+        timer?.lap('scene');
         return renderer.info.render.drawCalls;
       }
       const p = f.plan;
       renderer.setRenderTarget(targetFor(p.targetW, p.targetH, p.linear));
       renderer.render(scene, camera);
+      timer?.lap('scene');
       renderer.setRenderTarget(null);
       renderer.getViewport(fullViewport);
       // The viewport origin is the top-left corner of the canvas on both backends.
       renderer.setViewport(p.dstX, p.dstY, p.dstW, p.dstH);
       quad.render(renderer);
       renderer.setViewport(fullViewport);
+      timer?.lap('present');
       return renderer.info.render.drawCalls;
     },
     dispose() {

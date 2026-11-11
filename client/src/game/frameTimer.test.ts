@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { FrameTimer, type StepEvents } from './frameTimer';
+import { FrameTimer, SYSTEMS, type StepEvents } from './frameTimer';
 
 function setup() {
   let t = 0;
-  const timer = new FrameTimer(() => t);
+  const timer = new FrameTimer(SYSTEMS, () => t);
   const handlers = new Map<string, () => void>();
   const events: StepEvents = {
     on: (e, fn) => handlers.set(e, fn),
@@ -79,6 +79,31 @@ describe('FrameTimer', () => {
     s.emit('postrender');
     expect(s.timer.frameMs).toBe(0);
     expect(s.timer.systems.light).toBe(0);
+  });
+
+  it('takes its system names from the caller', () => {
+    let t = 0;
+    const timer = new FrameTimer(['a', 'b'], () => t);
+    timer.on = true;
+    timer.stepStart();
+    timer.begin();
+    t = 2;
+    timer.lap('a');
+    t = 5;
+    timer.lap('b');
+    timer.renderStart();
+    timer.renderEnd();
+    expect(Object.keys(timer.systems)).toEqual(['a', 'b']);
+    expect(timer.systems).toEqual({ a: 2, b: 3 });
+  });
+
+  it('renderEnd(n) sets the draw calls without any context', () => {
+    const timer = new FrameTimer(['a'], () => 0);
+    timer.on = true;
+    timer.stepStart();
+    timer.renderStart();
+    timer.renderEnd(42);
+    expect(timer.drawCalls).toBe(42);
   });
 
   it('restores the context when switched off and when detached', () => {

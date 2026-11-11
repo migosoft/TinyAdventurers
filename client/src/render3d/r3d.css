@@ -66,3 +66,20 @@
   opacity: 0.65;
   font-variant-numeric: tabular-nums;
 }
+
+.r3d-stats {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  color: #e9e2d0;
+  background: rgba(10, 6, 12, 0.75);
+  border-radius: 8px;
+  padding: 8px 10px;
+  pointer-events: none;
+}
+.r3d-stats[hidden] { display: none; }

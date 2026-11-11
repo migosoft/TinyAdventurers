@@ -4,7 +4,9 @@ import { buildDynamic } from './cards';
 import { parseMap, MAP_ROWS } from './demoMap';
 import { sceneLights } from './light';
 import { createPanel } from './panel';
-import { parseParams, toSearch } from './params';
+import { FrameTimer } from '../game/frameTimer';
+import { parseParams, toSearch, type R3dParams } from './params';
+import { R3D_SYSTEMS, statsText3d, type R3dSystem } from './stats';
 import { pickZoom, renderPlan } from './quality';
 import { frameDt, newScene, stepScene } from './scene';
 import { createView, type View } from './view';
@@ -58,15 +60,36 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   window.__r3d = state;
 
   let params = initial;
-  const panel = createPanel(host, params, (p) => {
+  const commit = (p: R3dParams): void => {
     params = p;
     history.replaceState(null, '', toSearch(p));
-  });
+  };
+  const panel = createPanel(host, params, commit);
+
+  // The F3 readout; the timer runs only while it is open.
+  const timer = new FrameTimer<R3dSystem>(R3D_SYSTEMS);
+  const statsEl = document.createElement('pre');
+  statsEl.className = 'r3d-stats';
+  host.appendChild(statsEl);
+  const showStats = (on: boolean): void => {
+    statsEl.hidden = !on;
+    timer.on = on;
+    if (params.stats !== on) commit({ ...params, stats: on });
+  };
+  showStats(params.stats);
+  let fps = 0;
+  let lastFrameMs = -1;
+  let statsAt = 0;
   let readout = '';
   const backendName = view.backend;
 
   const held = new Set<string>();
   window.addEventListener('keydown', (e) => {
+    if (e.code === 'F3') {
+      e.preventDefault(); // not the browser's find-next
+      showStats(!params.stats);
+      return;
+    }
     if (e.target instanceof HTMLInputElement) return; // the slider keeps its own keys
     if (e.code in MOVE_KEYS) {
       held.add(e.code);
@@ -84,6 +107,13 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   let last = performance.now() / 1000;
 
   const loop = (nowMs: number) => {
+    if (lastFrameMs >= 0) {
+      const gap = nowMs - lastFrameMs; // the raw time between animation frames, not frameDt's clamped one
+      fps = fps === 0 ? 1000 / gap : fps * 0.9 + (1000 / gap) * 0.1;
+    }
+    lastFrameMs = nowMs;
+    timer.stepStart();
+    timer.begin();
     const now = nowMs / 1000;
     const dt = frameDt(now, last);
     last = now;
@@ -103,9 +133,12 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     const k = 1 - Math.exp(-dt * 6);
     cam.x += (scene.player.x - cam.x) * k;
     cam.z += (scene.player.z - cam.z) * k;
+    timer.lap('sim');
     const zoom = params.zoom ?? pickZoom(w, h);
     const dynamic = buildDynamic(scene, frames, cam, now, params.orb);
+    timer.lap('cards');
     const lights = sceneLights(scene, now, params.orb);
+    timer.lap('lights');
     const plan = renderPlan(params.quality, zoom, w, h);
     state.renderSize = [plan.targetW, plan.targetH];
     state.zoom = zoom;
@@ -114,8 +147,25 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
       readout = text;
       panel.setReadout(text);
     }
-    view.draw({ cam, plan, dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now });
+    timer.renderStart();
+    const drawCalls = view.draw({ cam, plan, dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now }, timer);
+    timer.renderEnd(drawCalls);
     state.frames++;
+    if (timer.on && nowMs - statsAt >= 250) {
+      statsAt = nowMs;
+      statsEl.textContent = statsText3d({
+        fps,
+        frameMs: timer.frameMs,
+        renderMs: timer.renderMs,
+        systems: R3D_SYSTEMS.map((s) => [s, timer.systems[s]] as const),
+        drawCalls: timer.drawCalls,
+        canvas: [w, h],
+        render: [plan.targetW, plan.targetH],
+        zoom,
+        quality: params.quality,
+        backend: backendName,
+      });
+    }
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
