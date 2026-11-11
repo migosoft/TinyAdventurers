@@ -24,6 +24,14 @@ describe('render3d imports', () => {
       }
     }
   });
+  it('keeps the two outside modules free of imports, so they cannot pull Phaser into the 3D view', () => {
+    for (const f of ['../ui/atlas.ts', '../game/frameTimer.ts']) {
+      expect(
+        specifiers(readFileSync(join(dir, f), 'utf8')),
+        `${f} has an import: check that it cannot pull Phaser into the 3D view, then update this test`,
+      ).toEqual([]);
+    }
+  });
   it('main.ts has no static import of render3d', () => {
     const src = readFileSync(join(dir, '..', 'main.ts'), 'utf8');
     const stat = [...src.matchAll(/^\s*(?:import|export)\s[^;]*?from\s*['"]([^'"]+)['"]/gm)].map((m) => m[1]);

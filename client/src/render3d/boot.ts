@@ -10,7 +10,8 @@ import { R3D_SYSTEMS, statsText3d, type R3dSystem } from './stats';
 import { pickZoom, renderPlan } from './quality';
 import { frameDt, newScene, stepScene } from './scene';
 import { createRecovery, type Recovery } from './recover';
-import { createView, type Assets, type View } from './view';
+import { trailingWriter } from './urlWriter';
+import { createView, RendererInitError, type Assets, type View } from './view';
 import type { FrameRects } from './worldMesh';
 import './r3d.css';
 
@@ -91,7 +92,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     try {
       view = await createView(canvas, assets, map, { forceWebGL: initial.backend === 'webgl' }, lostFrom(gen));
     } catch (e) {
-      showError(host, String(e instanceof Error ? e.message : e), true);
+      showError(host, String(e instanceof Error ? e.message : e), e instanceof RendererInitError);
       return;
     }
   } catch {
@@ -113,9 +114,10 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   const apply = (next: R3dParams): void => {
     params = next;
     panel.setParams(next);
-    history.replaceState(null, '', toSearch(next));
+    writeUrl(toSearch(next));
     follow();
   };
+  const writeUrl = trailingWriter((s) => history.replaceState(null, '', s));
   // Disabled only when the backend has no way to force a loss; a click during a rebuild does nothing but stays possible later.
   const panel = createPanel(host, params, apply, () => {
     view.forceLoss();
@@ -161,7 +163,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   let ch = 0;
   let last = performance.now() / 1000;
 
-  const loop = (nowMs: number) => {
+  const frame = (nowMs: number): void => {
     const gap = nowMs - lastFrameMs; // the raw time between animation frames, not frameDt's clamped one
     if (lastFrameMs >= 0 && gap > 0) fps = fps === 0 ? 1000 / gap : fps * 0.9 + (1000 / gap) * 0.1;
     lastFrameMs = nowMs;
@@ -204,8 +206,12 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     }
     if (!restoring) {
       timer.renderStart();
-      const drawCalls = view.draw({ cam, plan, dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now }, timer);
-      timer.renderEnd(drawCalls);
+      let drawCalls = 0;
+      try {
+        drawCalls = view.draw({ cam, plan, dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now }, timer);
+      } finally {
+        timer.renderEnd(drawCalls); // also when the draw threw, so the timer stays consistent
+      }
       state.frames++;
     }
     if (timer.on && nowMs - statsAt >= 250) {
@@ -223,7 +229,21 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
         backend: backendName,
       });
     }
+  };
+  // The next frame is requested first, and an exception in this one is logged (once per distinct message), so one throw
+  // (a context that is lost but not yet reported, say) never stops the loop.
+  const reported = new Set<string>();
+  const loop = (nowMs: number): void => {
     requestAnimationFrame(loop);
+    try {
+      frame(nowMs);
+    } catch (e) {
+      const msg = String(e instanceof Error ? e.message : e);
+      if (!reported.has(msg)) {
+        reported.add(msg);
+        console.error('3D frame failed:', e);
+      }
+    }
   };
   booted = true;
   if (lostEarly) recovery.lost(); // the first view was lost while boot was still setting up

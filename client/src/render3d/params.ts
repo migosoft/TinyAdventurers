@@ -23,7 +23,10 @@ function num(v: string | null): number | null {
 
 /** Wraps degrees into -180..180 the way the URL does. */
 export function wrapYaw(yaw: number): number {
-  return yaw - 360 * Math.round(yaw / 360);
+  // In-range values come back exactly as they are (37.3 stays 37.3); +180 maps to -180.
+  if (Math.abs(yaw) <= 180) return yaw === 180 ? -180 : yaw;
+  const w = ((((yaw + 180) % 360) + 360) % 360) - 180;
+  return Number.isFinite(w) ? w : 0;
 }
 
 export function parseParams(search: string): R3dParams {

@@ -6,6 +6,14 @@ describe('wrapYaw', () => {
     expect(wrapYaw(215)).toBe(-145);
     expect(wrapYaw(-190)).toBe(170);
     expect(wrapYaw(45)).toBe(45);
+    expect(wrapYaw(37.3)).toBe(37.3);
+    expect(wrapYaw(540)).toBe(-180);
+    expect(wrapYaw(-540)).toBe(-180);
+    for (const v of [1e300, -1e300]) {
+      const w = wrapYaw(v);
+      expect(Number.isFinite(w)).toBe(true);
+      expect(Math.abs(w)).toBeLessThanOrEqual(180);
+    }
   });
 });
 

@@ -87,6 +87,14 @@ export interface View {
   dispose(): void;
 }
 
+/** The renderer could not be created or initialised: neither WebGPU nor WebGL2 is available. Any other error from `createView` is something else. */
+export class RendererInitError extends Error {
+  constructor(cause: unknown) {
+    super(String(cause instanceof Error ? cause.message : cause));
+    this.name = 'RendererInitError';
+  }
+}
+
 function pixelTexture(t: Texture): void {
   t.colorSpace = NoColorSpace;
   t.magFilter = NearestFilter;
@@ -112,7 +120,12 @@ export async function createView(
   opts: { forceWebGL: boolean },
   onLost: (message: string) => void,
 ): Promise<View> {
-  const renderer = new WebGPURenderer({ canvas, antialias: false, forceWebGL: opts.forceWebGL });
+  let renderer: WebGPURenderer;
+  try {
+    renderer = new WebGPURenderer({ canvas, antialias: false, forceWebGL: opts.forceWebGL });
+  } catch (e) {
+    throw new RendererInitError(e);
+  }
   try {
     return await buildView(renderer, assets, map, onLost);
   } catch (e) {
@@ -131,7 +144,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, map: DemoMap,
   };
   // three reports a loss and then stops; it restores nothing.
   renderer.onDeviceLost = (info) => reportLoss(info.message);
-  await renderer.init();
+  try {
+    await renderer.init();
+  } catch (e) {
+    throw new RendererInitError(e);
+  }
   renderer.outputColorSpace = LinearSRGBColorSpace;
   renderer.toneMapping = NoToneMapping;
   renderer.setPixelRatio(1);
