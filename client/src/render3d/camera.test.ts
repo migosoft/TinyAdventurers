@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OrthographicCamera, Vector3 } from 'three/webgpu';
-import { ART, facesLeft, groundAt, keysToWorld, project, snapGround, viewRay } from './camera';
+import { ART, facesLeft, followClamp, freeClamp, groundAt, keysToWorld, project, snapGround, viewRay } from './camera';
 
 const rad = (d: number) => (d * Math.PI) / 180;
 
@@ -97,5 +97,43 @@ describe('agreement with the three.js camera', () => {
       expect(n.x * halfW).toBeCloseTo(r.sx, 6);
       expect(n.y * halfH).toBeCloseTo(r.sy, 6);
     }
+  });
+});
+
+describe('followClamp', () => {
+  const map = { w: 100, h: 60 };
+  const cam = (x: number, z: number, yaw: number, pitch = Math.PI / 2) => ({ x, z, pitch, yaw });
+
+  it('keeps the footprint inside the map at yaw 0', () => {
+    expect(followClamp(map, cam(5, 5, 0), 20, 10)).toEqual({ x: 20, z: 10 });
+    expect(followClamp(map, cam(99, 59, 0), 20, 10)).toEqual({ x: 80, z: 50 });
+    expect(followClamp(map, cam(50, 30, 0), 20, 10)).toEqual({ x: 50, z: 30 });
+  });
+
+  it('swaps the margins at yaw 90 degrees', () => {
+    const r = followClamp(map, cam(5, 5, Math.PI / 2), 20, 10);
+    expect(r.x).toBeCloseTo(10, 9);
+    expect(r.z).toBeCloseTo(20, 9);
+  });
+
+  it('mixes the margins at yaw 45 degrees', () => {
+    const m = (20 + 10) * Math.SQRT1_2;
+    const r = followClamp(map, cam(0, 0, Math.PI / 4), 20, 10);
+    expect(r.x).toBeCloseTo(m, 9);
+    expect(r.z).toBeCloseTo(m, 9);
+  });
+
+  it('stretches the depth margin by the pitch', () => {
+    expect(followClamp(map, cam(50, 0, 0, Math.PI / 6), 20, 10).z).toBeCloseTo(20, 9);
+  });
+
+  it('centres on an axis the view exceeds', () => {
+    expect(followClamp({ w: 30, h: 15 }, cam(0, 0, 0), 20, 10)).toEqual({ x: 15, z: 7.5 });
+  });
+});
+
+describe('freeClamp', () => {
+  it('keeps the target inside the map', () => {
+    expect(freeClamp({ w: 100, h: 60 }, -3, 70)).toEqual({ x: 0, z: 60 });
   });
 });

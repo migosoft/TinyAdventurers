@@ -55,6 +55,24 @@ export function facesLeft(yaw: number, fx: number, fz: number, was: boolean): bo
   return sv < 0;
 }
 
+/** The follow target kept so far inside the map that the screen's footprint on the ground stays inside it; centred on an axis the view exceeds. halfW, halfH in tiles. */
+export function followClamp(map: { w: number; h: number }, cam: Cam, halfW: number, halfH: number): { x: number; z: number } {
+  const hd = halfH / Math.sin(cam.pitch);
+  const c = Math.abs(Math.cos(cam.yaw));
+  const s = Math.abs(Math.sin(cam.yaw));
+  const axis = (v: number, size: number, margin: number) =>
+    2 * margin >= size ? size / 2 : Math.min(Math.max(v, margin), size - margin);
+  return {
+    x: axis(cam.x, map.w, c * halfW + s * hd),
+    z: axis(cam.z, map.h, s * halfW + c * hd),
+  };
+}
+
+/** The free camera's target, kept inside the map's rectangle. */
+export function freeClamp(map: { w: number; h: number }, x: number, z: number): { x: number; z: number } {
+  return { x: Math.min(Math.max(x, 0), map.w), z: Math.min(Math.max(z, 0), map.h) };
+}
+
 /** Unit vector from the target toward the camera. */
 export function viewRay(pitch: number, yaw: number): [number, number, number] {
   const cp = Math.cos(pitch);
