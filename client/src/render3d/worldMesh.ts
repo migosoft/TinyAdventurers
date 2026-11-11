@@ -27,9 +27,31 @@ export function tileHash(x: number, z: number): number {
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 }
 
-type Corner = [x: number, y: number, z: number, u: number, v: number];
-type Rect = { x: number; y: number; w: number; h: number };
+export type Corner = [x: number, y: number, z: number, u: number, v: number];
+export type Rect = { x: number; y: number; w: number; h: number };
 const NO_RECT: Rect = { x: 0, y: 0, w: 0, h: 0 };
+
+/** Growing vertex arrays, 6 vertices per quad. */
+export interface QuadSink { position: number[]; uv: number[]; normal: number[]; kind: number[]; rect: number[] }
+
+/**
+ * Pushes one quad as two triangles. c0..c3 run top-left, top-right, bottom-right, bottom-left as seen from the normal's side.
+ * Whatever that order, the triangles are wound counter-clockwise seen from the normal.
+ */
+export function pushQuad(s: QuadSink, c: [Corner, Corner, Corner, Corner], n: [number, number, number], k: number, r: Rect): void {
+  const [a, b, d] = [c[0], c[1], c[2]];
+  const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+  const dot = (e1[1] * e2[2] - e1[2] * e2[1]) * n[0] + (e1[2] * e2[0] - e1[0] * e2[2]) * n[1] + (e1[0] * e2[1] - e1[1] * e2[0]) * n[2];
+  const order = dot > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
+  for (const i of order) {
+    const p = c[i];
+    s.position.push(p[0], p[1], p[2]);
+    s.uv.push(p[3], p[4]);
+    s.normal.push(n[0], n[1], n[2]);
+    s.kind.push(k);
+    s.rect.push(r.x, r.y, r.w, r.h);
+  }
+}
 
 export function chunkGrid(map: { w: number; h: number }): { nx: number; nz: number } {
   return { nx: Math.ceil(map.w / CHUNK), nz: Math.ceil(map.h / CHUNK) };
@@ -76,22 +98,7 @@ export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number,
     return r;
   };
 
-  // c0..c3 run top-left, top-right, bottom-right, bottom-left as seen from the normal's side.
-  // Whatever that order, the triangles are wound counter-clockwise seen from the normal.
-  const quad = (c: [Corner, Corner, Corner, Corner], n: [number, number, number], k: number, r: Rect) => {
-    const [a, b, d] = [c[0], c[1], c[2]];
-    const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
-    const dot = (e1[1] * e2[2] - e1[2] * e2[1]) * n[0] + (e1[2] * e2[0] - e1[0] * e2[2]) * n[1] + (e1[0] * e2[1] - e1[1] * e2[0]) * n[2];
-    const order = dot > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
-    for (const i of order) {
-      const p = c[i];
-      position.push(p[0], p[1], p[2]);
-      uv.push(p[3], p[4]);
-      normal.push(n[0], n[1], n[2]);
-      kind.push(k);
-      rect.push(r.x, r.y, r.w, r.h);
-    }
-  };
+  const quad = (c: [Corner, Corner, Corner, Corner], n: [number, number, number], k: number, r: Rect) => pushQuad({ position, uv, normal, kind, rect }, c, n, k, r);
 
   /** Faces of a wall cell on one side, one quad per tile of height; (ax,az) is the left edge end seen from outside. */
   const side = (h: number, hn: number, ax: number, az: number, bx: number, bz: number, n: [number, number, number], pick: (k: number) => string) => {
