@@ -50,11 +50,15 @@ describe('RunSession messages', () => {
   });
 
   it('HeroChanged reaches the predictor and the HUD', () => {
-    const { net, hud, info, session } = make();
+    const { net, hud, info, session } = make({}, () => ({ ...idle, mx: 1 }));
     const abilities = info.abilities;
     net.emit({ t: 'HeroChanged', speed: 99, abilities, fallback: info.fallback, disabled: [null, null] });
     expect(hud.calls).toContainEqual(['setAbilities', abilities, [null, null]]);
     expect(session.info.speed).toBe(99);
+    // The predictor moves at the new speed: one step east.
+    const x0 = session['pred'].state.x;
+    session.frame(STEP_MS);
+    expect(session['pred'].state.x - x0).toBeCloseTo(99 * CONST.DT, 6);
   });
 
   it('picture events go to the view, state events do not', () => {
@@ -92,7 +96,7 @@ describe('RunSession messages', () => {
 
   it('a charm that begins reconciles from the drawn own position', () => {
     const { net, session } = make();
-    // The session's entity map is filled by the frame step (A5); put the drawn own figure there as that step will.
+    // The session's entity map is filled by the frame; put the drawn own figure there as that step will.
     const ents = session['ents'];
     ents.set(1, { id: 1, kind: 0, x: 100, y: 90, hp: 10, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: 2, entangled: 0 });
     const charmed = snap();
@@ -311,8 +315,56 @@ describe('RunSession frame', () => {
     net.emit(snap({ tick: 30, ents: [] }));
     at(10.7);
     session.frame(1);
-    session.frame(1);
     expect(view.ended.map((e) => e[1])).toEqual(['gone']);
+  });
+
+  it('while charmed the own figure follows the interpolated hero, gliding from where it was drawn', () => {
+    const { net, session, view, at } = running();
+    at(10);
+    net.emit(snap({ tick: 1, ents: [entity(1, 100, 90)] }));
+    at(10.05);
+    net.emit(snap({ tick: 4, ents: [entity(1, 100, 90)] }));
+    at(10.2);
+    session.frame(16);
+    expect(view.frames.at(-1)!.own.charmed).toBe(false);
+    const charmed = snap({ tick: 7, ents: [entity(1, 100, 90)] });
+    charmed.me.charmed_by = 'Lich';
+    at(10.25);
+    net.emit(charmed);
+    at(10.3);
+    session.frame(16);
+    const first = view.frames.at(-1)!;
+    expect(first.own.charmed).toBe(true);
+    // Between the spawn (24, 24) where it stood and the server hero at (100, 90): no jump.
+    expect(first.own.x).toBeGreaterThan(24);
+    expect(first.own.x).toBeLessThan(100);
+    expect(first.own.y).toBeGreaterThan(24);
+    expect(first.own.y).toBeLessThan(90);
+    expect(first.camera).toEqual({ x: first.own.x, y: first.own.y });
+    session.frame(100);
+    const later = view.frames.at(-1)!;
+    expect(later.own.x).toBeGreaterThan(first.own.x);
+    expect(later.own.x).toBeLessThan(100);
+    for (let i = 0; i < 20; i++) session.frame(100);
+    expect(view.frames.at(-1)!.own.x).toBeCloseTo(100, 0);
+    expect(view.frames.at(-1)!.own.y).toBeCloseTo(90, 0);
+  });
+
+  it('dodge lines older than 0.6 s are removed before the view sees them, and none while dead', () => {
+    const { net, session, view, at } = running(() => NO_INPUT, { debug: true });
+    at(10);
+    net.emit({ t: 'DebugDodge', from: [1, 2], to: [3, 4] });
+    session.frame(16);
+    expect(view.frames.at(-1)!.debug.dodges.length).toBe(1);
+    at(10.7);
+    session.frame(16);
+    expect(view.frames.at(-1)!.debug.dodges).toEqual([]);
+    net.emit({ t: 'DebugDodge', from: [1, 2], to: [3, 4] });
+    const dead = snap();
+    dead.me.alive = false;
+    net.emit(dead);
+    session.frame(16);
+    expect(view.frames.at(-1)!.debug.dodges).toEqual([]);
   });
 });
 

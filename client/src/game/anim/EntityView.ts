@@ -313,7 +313,7 @@ export class EntityView {
     if (asleep) this.weapon?.setVisible(false);
 
     this.appearLeft = Math.max(0, this.appearLeft - dt);
-    // A pulsing figure (the Ghost) blinks during its ambush wind-up (GameScene skips the fade-in then).
+    // A pulsing figure (the Ghost) blinks during its ambush wind-up (PhaserRunView skips the fade-in then).
     const ghost = d.pulse ? { t: this.clock, phase: ghostPhase(s.id ?? 0), ambushT: s.anim === ANIM.Ambush ? s.animT : null } : undefined;
     const appear = appearFactor(this.appearLeft, VANISH_SECS);
     this.root.setAlpha((silhouette ? silhouetteAlpha(s.animT) : entityAlpha(s.flags, fxBits, s.party ?? false, ghost, d.incorporealAlpha)) * appear);

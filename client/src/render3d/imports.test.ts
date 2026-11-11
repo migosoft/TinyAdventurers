@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const SRC = join(__dirname, '..');
 const listTs = (d: string) => readdirSync(join(SRC, d)).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
@@ -21,6 +21,9 @@ function resolve(from: string, spec: string): string | null {
   return null;
 }
 
+/** A relative import of a non-code file; no code in it can reach phaser. */
+const isAsset = (spec: string): boolean => /\.(css|png|json|wgsl|glsl|svg)$/.test(spec.split('?')[0]);
+
 const read = (f: string) => readFileSync(join(SRC, f), 'utf8');
 
 /** The first chain of non-type imports from `file` to `phaser`, or null. */
@@ -31,7 +34,11 @@ function reachesPhaser(file: string, seen = new Set<string>()): string[] | null 
     if (s === 'phaser' || s.startsWith('phaser/')) return [file, 'phaser'];
     if (!s.startsWith('.')) continue;
     const next = resolve(file, s);
-    if (!next) continue;
+    if (!next) {
+      // An unresolved import must not stop the walk silently: only a known asset (a Vite `?raw` or `?url` included) may be skipped.
+      if (isAsset(s)) continue;
+      return [file, `unresolved import '${s}'`];
+    }
     const chain = reachesPhaser(next, seen);
     if (chain) return [file, ...chain];
   }
@@ -48,7 +55,7 @@ describe('run and render3d imports', () => {
   it('no file in run/ or render3d/ reaches phaser through non-type imports', () => {
     for (const f of [...run, ...render3d]) {
       const chain = reachesPhaser(f);
-      expect(chain && chain.map((c) => relative('.', c)).join(' > '), `${f} reaches phaser`).toBeNull();
+      expect(chain && chain.join(' > '), `${f} reaches phaser`).toBeNull();
     }
   });
   it('render3d/ uses only three/webgpu and three/tsl as bare specifiers', () => {

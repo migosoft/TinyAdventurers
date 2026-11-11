@@ -27,7 +27,7 @@ export function onContextRestored(scene: Phaser.Scene, redraw: () => void): () =
 }
 
 /** A demo scene's board: the map's tiles drawn once into a map-sized render texture, and again after a restored
- *  context. (The game's board, with its tile tints and grid lines, is `GameScene.paintBoard`.) */
+ *  context. (The game's board, with its tile tints and grid lines, is `PhaserRunView.paintBoard`.) */
 export function demoBoard(scene: Phaser.Scene, map: TileMap): Phaser.GameObjects.RenderTexture {
   const rt = scene.add.renderTexture(0, 0, map.w * TILE, map.h * TILE).setOrigin(0).setDepth(DEPTH.map);
   const paint = () => {

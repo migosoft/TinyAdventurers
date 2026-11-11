@@ -20,7 +20,7 @@ const storage = (): Storage | null => {
   }
 };
 
-/** The rules log, client side: opt-in, keys, buffer and panel. GameScene reaches it through five one-line hooks (create, onSnapshot, draw and cleanup in GameScene, plus the raw log element in wire.ts). */
+/** The rules log, client side: opt-in, keys, buffer and panel. The 2D game reaches it through a few one-line hooks (the field, create, draw and cleanup in PhaserRunView; onSnapshot and the toggles in GameScene; plus the raw log element in wire.ts). */
 export class RulesLog {
   private prefs: LogPrefs;
   private buffer = new LogBuffer();

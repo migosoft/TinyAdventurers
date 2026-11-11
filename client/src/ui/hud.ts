@@ -24,7 +24,7 @@ export interface FrameStats {
   wholeMs: number;
   /** Its render part, ms. */
   renderMs: number;
-  /** `GameScene.update`, ms. */
+  /** `RunSession.frame`, ms. */
   frameMs: number;
   /** The client's systems inside `update`, ms each (`FrameTimer`). */
   systems: readonly (readonly [name: string, ms: number])[];
@@ -96,7 +96,7 @@ export const DEBUG_KEYS: [key: string, label: string][] = [
   ['F9', 'immortal on/off'],
 ];
 
-/** The debug paths drawn in the dungeon and their colours (`GameScene.drawPathLine`). */
+/** The debug paths drawn in the dungeon and their colours (`PhaserRunView.drawPathLine`). */
 const DEBUG_PATHS: [colour: string, label: string][] = [
   ['#ffe040', 'path to the boss'],
   ['#40a0ff', 'path to the ogre'],

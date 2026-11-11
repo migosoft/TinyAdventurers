@@ -1,6 +1,6 @@
 /**
  * The F3 panel's frame timings (#291): the whole frame (Phaser's step from `PRE_STEP` to `POST_RENDER`), its render
- * part (`PRE_RENDER` to `POST_RENDER`), the client's own systems inside `GameScene.update`, and the WebGL draw calls
+ * part (`PRE_RENDER` to `POST_RENDER`), the client's own systems inside a display frame (`RunSession.frame` and `PhaserRunView.frame`), and the WebGL draw calls
  * of the last frame. All of it runs only while the panel is open (`on`); off, `lap` returns at once and the draw
  * calls are not counted, so normal play pays nothing.
  *
@@ -8,7 +8,7 @@
  * waits for it (a readback, a texture upload).
  */
 
-/** The systems of `GameScene.update`, in the order it runs them and the panel lists them. */
+/** The systems of a display frame (`RunSession.frame`, then `PhaserRunView.frame`), in the order they run and the panel lists them. */
 export const SYSTEMS = ['sim', 'light', 'mood', 'mask', 'figures', 'woodland', 'effects', 'hud'] as const;
 export type System = (typeof SYSTEMS)[number];
 
@@ -119,7 +119,7 @@ export class FrameTimer<S extends string = System> {
     this.renderT0 = -1;
   }
 
-  /** Starts the laps of `GameScene.update`. */
+  /** Starts the laps of a display frame (`RunSession.frame`). */
   begin(): void {
     if (this.active) this.lapT = this.now();
   }
