@@ -31,7 +31,7 @@ describe('parseParams', () => {
   });
 
   it('clamps and falls back', () => {
-    expect(parseParams('?pitch=abc').pitch).toBe(45);
+    expect(parseParams('?pitch=abc').pitch).toBe(48.6);
     expect(parseParams('?pitch=5').pitch).toBe(30);
     expect(parseParams('?pitch=200').pitch).toBe(80);
     expect(parseParams('?zoom=99').zoom).toBe(8);
@@ -46,6 +46,9 @@ describe('parseParams', () => {
   it('reads the switches', () => {
     const p = parseParams('?backend=webgl&shadows=0&orb=0&smooth=1&stats=1');
     expect(p).toMatchObject({ backend: 'webgl', shadows: false, orb: false, smooth: true, stats: true });
+    expect(parseParams('?r3d').smooth).toBe(true);
+    expect(parseParams('?r3d&smooth=0').smooth).toBe(false);
+    expect(toSearch({ ...DEFAULTS, smooth: false })).toBe('?r3d&smooth=0');
   });
 });
 
@@ -58,7 +61,7 @@ describe('toSearch', () => {
   it('round-trips a fully non-default value', () => {
     const p: R3dParams = {
       pitch: 60.5, yaw: 37.3, quality: 'fast', zoom: 5, backend: 'webgl',
-      shadows: false, orb: false, smooth: true, stats: true,
+      shadows: false, orb: false, smooth: false, stats: true,
     };
     expect(parseParams(toSearch(p))).toEqual(p);
   });

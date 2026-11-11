@@ -11,8 +11,9 @@ export interface R3dParams {
 }
 
 export const DEFAULTS: R3dParams = {
-  pitch: 45, yaw: 0, quality: 'balanced', zoom: null, backend: 'auto',
-  shadows: true, orb: true, smooth: false, stats: false,
+  // The user's picks after the hardware check (#301): 48.6° (a tile is 12 whole screen rows) and the smoothed ground on.
+  pitch: 48.6, yaw: 0, quality: 'balanced', zoom: null, backend: 'auto',
+  shadows: true, orb: true, smooth: true, stats: false,
 };
 
 function num(v: string | null): number | null {
@@ -43,7 +44,7 @@ export function parseParams(search: string): R3dParams {
     backend: q.get('backend') === 'webgl' ? 'webgl' : 'auto',
     shadows: q.get('shadows') === '0' ? false : DEFAULTS.shadows,
     orb: q.get('orb') === '0' ? false : DEFAULTS.orb,
-    smooth: q.get('smooth') === '1',
+    smooth: q.get('smooth') === '0' ? false : q.get('smooth') === '1' ? true : DEFAULTS.smooth,
     stats: q.get('stats') === '1',
   };
 }
@@ -57,7 +58,7 @@ export function toSearch(p: R3dParams): string {
   if (p.backend !== DEFAULTS.backend) s += `&backend=${p.backend}`;
   if (p.shadows !== DEFAULTS.shadows) s += '&shadows=0';
   if (p.orb !== DEFAULTS.orb) s += '&orb=0';
-  if (p.smooth !== DEFAULTS.smooth) s += '&smooth=1';
+  if (p.smooth !== DEFAULTS.smooth) s += `&smooth=${p.smooth ? 1 : 0}`;
   if (p.stats !== DEFAULTS.stats) s += '&stats=1';
   return s;
 }
