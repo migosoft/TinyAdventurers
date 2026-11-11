@@ -72,6 +72,22 @@ describe('recovery', () => {
     expect(c.pending.length).toBe(3);
   });
 
+  it('onError hears each failed attempt once, with its error', async () => {
+    const c = controllable();
+    const heard: unknown[] = [];
+    const r = createRecovery(c.rebuild, async () => {}, (e) => heard.push(e));
+    r.lost();
+    const e1 = new Error('one');
+    const e2 = new Error('two');
+    c.pending[0].reject(e1);
+    await flush();
+    c.pending[1].reject(e2);
+    await flush();
+    c.pending[2].resolve();
+    await flush();
+    expect(heard).toEqual([e1, e2]);
+  });
+
   it('a loss during a retry wait is covered by the retry itself (it builds a view after the loss)', async () => {
     const c = controllable();
     let release!: () => void;

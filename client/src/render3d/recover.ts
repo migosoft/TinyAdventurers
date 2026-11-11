@@ -8,7 +8,12 @@ export interface Recovery {
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-export function createRecovery(rebuild: () => Promise<void>, wait: (ms: number) => Promise<void> = sleep): Recovery {
+/** `onError` hears every failed attempt (default: a console warning), so a page stuck on "restoring" shows why. */
+export function createRecovery(
+  rebuild: () => Promise<void>,
+  wait: (ms: number) => Promise<void> = sleep,
+  onError: (e: unknown) => void = (e) => console.warn('Rebuilding the graphics view failed, retrying:', e),
+): Recovery {
   let busy = false;
   // A loss that arrived while a rebuild ran may belong to the view it just built: one more rebuild follows.
   let again = false;
@@ -20,7 +25,8 @@ export function createRecovery(rebuild: () => Promise<void>, wait: (ms: number) 
         again = false;
         try {
           await rebuild();
-        } catch {
+        } catch (e) {
+          onError(e);
           await wait(1000);
           continue;
         }

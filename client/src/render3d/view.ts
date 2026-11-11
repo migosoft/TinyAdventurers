@@ -79,7 +79,9 @@ export interface View {
   setSize(w: number, h: number): void;
   /** Draws one frame and returns its draw calls; `timer` gets the laps 'scene' and, with the copy, 'present'. */
   draw(f: FrameInput, timer?: FrameTimer<R3dSystem>): number;
-  /** Debug: makes the device or context fail on purpose. False when the backend offers no way. */
+  /** Whether the backend has a way to fail on purpose (unlike `forceLoss`, true also after the view was lost). */
+  readonly canForceLoss: boolean;
+  /** Debug: makes the device or context fail on purpose. False when the backend offers no way or the view is lost or disposed. */
   forceLoss(): boolean;
   /** Frees everything; later calls to `draw` do nothing and a late loss report is ignored. */
   dispose(): void;
@@ -95,7 +97,14 @@ function pixelTexture(t: Texture): void {
   t.needsUpdate = true;
 }
 
-/** `onLost` is called once per loss of this view's device or context, never after `dispose`. */
+/** three's `dispose` is async: a failure on a lost renderer is a rejected promise, so it is caught here, not by the caller. */
+function disposeRenderer(renderer: WebGPURenderer): void {
+  Promise.resolve()
+    .then(() => renderer.dispose())
+    .catch((e) => console.warn('Disposing the renderer failed:', e));
+}
+
+/** `onLost` is called once per loss of this view's device or context, never after `dispose`. A failed creation disposes its renderer. */
 export async function createView(
   canvas: HTMLCanvasElement,
   assets: Assets,
@@ -104,6 +113,15 @@ export async function createView(
   onLost: (message: string) => void,
 ): Promise<View> {
   const renderer = new WebGPURenderer({ canvas, antialias: false, forceWebGL: opts.forceWebGL });
+  try {
+    return await buildView(renderer, assets, map, onLost);
+  } catch (e) {
+    disposeRenderer(renderer);
+    throw e;
+  }
+}
+
+async function buildView(renderer: WebGPURenderer, assets: Assets, map: DemoMap, onLost: (message: string) => void): Promise<View> {
   let lost = false;
   let disposed = false;
   const reportLoss = (message: string): void => {
@@ -181,11 +199,16 @@ export async function createView(
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   camera.up.set(0, 1, 0);
 
+  const be = renderer.backend as { isWebGPUBackend?: boolean; device?: unknown; gl?: WebGL2RenderingContext };
+  // Fixed at creation: whether the backend has a way to fail on purpose, whatever the view's state later.
+  const canForceLoss = be.isWebGPUBackend ? !!be.device : !!be.gl?.getExtension('WEBGL_lose_context');
+
   return {
     backend: (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend ? 'WebGPU' : 'WebGL2 fallback',
     setSize(pw, ph) {
       renderer.setSize(Math.max(1, pw), Math.max(1, ph), false);
     },
+    canForceLoss,
     forceLoss() {
       if (disposed || lost) return false;
       const backend = renderer.backend as { isWebGPUBackend?: boolean; device?: { destroy(): void }; gl?: WebGL2RenderingContext };
@@ -244,16 +267,19 @@ export async function createView(
     dispose() {
       if (disposed) return;
       disposed = true;
-      atlas.dispose();
-      atlasLinear.dispose();
-      heights.dispose();
-      geometry.dispose();
-      material.dispose();
-      for (const m of [card.material, emissive, glow]) m.dispose();
-      for (const dm of [cards, flames, glows]) dm.dispose();
-      target?.dispose();
-      copyMaterial.dispose();
-      renderer.dispose();
+      try {
+        atlas.dispose();
+        atlasLinear.dispose();
+        heights.dispose();
+        geometry.dispose();
+        material.dispose();
+        for (const m of [card.material, emissive, glow]) m.dispose();
+        for (const dm of [cards, flames, glows]) dm.dispose();
+        target?.dispose();
+        copyMaterial.dispose();
+      } finally {
+        disposeRenderer(renderer);
+      }
     },
   };
 }

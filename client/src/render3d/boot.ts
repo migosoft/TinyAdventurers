@@ -46,10 +46,14 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   let viewLive = true;
   // Each view reports its loss through the generation it was made in; a report from an older one is ignored.
   let gen = 0;
+  // Until boot has set everything up the rebuild has nothing to write to: a loss then only sets a flag, and boot starts the recovery at its end.
+  let booted = false;
+  let lostEarly = false;
   const lostFrom = (g: number) => (message: string): void => {
     if (g !== gen) return;
     console.warn(`Graphics device lost: ${message}`);
-    recovery.lost();
+    if (booted) recovery.lost();
+    else lostEarly = true;
   };
 
   async function rebuild(): Promise<void> {
@@ -112,7 +116,11 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     history.replaceState(null, '', toSearch(next));
     follow();
   };
-  const panel = createPanel(host, params, apply, () => view.forceLoss());
+  // Disabled only when the backend has no way to force a loss; a click during a rebuild does nothing but stays possible later.
+  const panel = createPanel(host, params, apply, () => {
+    view.forceLoss();
+    return view.canForceLoss;
+  });
 
   // The F3 readout; the timer runs only while it is open.
   const timer = new FrameTimer<R3dSystem>(R3D_SYSTEMS);
@@ -217,5 +225,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     }
     requestAnimationFrame(loop);
   };
+  booted = true;
+  if (lostEarly) recovery.lost(); // the first view was lost while boot was still setting up
   requestAnimationFrame(loop);
 }
