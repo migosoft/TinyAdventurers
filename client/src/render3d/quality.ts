@@ -15,7 +15,7 @@ export function effZoom(q: Quality, zoom: number): number {
   for (let d = Math.floor(zoom / 2); d >= 2; d--) {
     if (zoom % d === 0) return d;
   }
-  return Math.max(2, Math.ceil(zoom / 2));
+  return Math.min(zoom, Math.max(2, Math.ceil(zoom / 2)));
 }
 
 export interface RenderPlan {

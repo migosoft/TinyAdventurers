@@ -8,6 +8,11 @@ describe('effZoom', () => {
     expect(zs.map((z) => effZoom('fast', z))).toEqual([2, 2, 2, 2, 2, 2, 2]);
     expect(zs.map((z) => effZoom('high', z))).toEqual(zs);
   });
+
+  it('never exceeds the zoom: at zoom 1 every quality gives 1', () => {
+    for (const q of ['fast', 'balanced', 'high'] as const) expect(effZoom(q, 1)).toBe(1);
+    expect(renderPlan('balanced', 1, 1280, 720).direct).toBe(true);
+  });
 });
 
 describe('pickZoom', () => {

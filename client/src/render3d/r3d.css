@@ -25,6 +25,14 @@
   user-select: none;
   backdrop-filter: blur(4px);
 }
+/* In a run the panel sits at the bottom left so it does not cover the HUD. */
+.r3d-panel.run {
+  left: 8px;
+  bottom: 8px;
+  transform: none;
+  width: min(560px, calc(100% - 16px));
+  flex-wrap: wrap;
+}
 .r3d-panel.collapsed {
   width: auto;
   padding: 2px;

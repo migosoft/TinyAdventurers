@@ -48,21 +48,36 @@ describe('parseParams', () => {
     expect(p).toMatchObject({ backend: 'webgl', shadows: false, orb: false, smooth: true, stats: true });
     expect(parseParams('?r3d').smooth).toBe(true);
     expect(parseParams('?r3d&smooth=0').smooth).toBe(false);
-    expect(toSearch({ ...DEFAULTS, smooth: false })).toBe('?r3d&smooth=0');
+    expect(toSearch({ ...DEFAULTS, smooth: false }, '?r3d')).toBe('?r3d&smooth=0');
+  });
+
+  it('reads free, light and zoom 1..8', () => {
+    expect(parseParams('?r3d&free=1&light=lantern&zoom=1')).toMatchObject({ free: true, light: 'lantern', zoom: 1 });
+    expect(parseParams('?r3d&zoom=0').zoom).toBe(1);
+    expect(parseParams('?r3d&zoom=9').zoom).toBe(8);
+    expect(parseParams('?r3d&light=x').light).toBe('work');
+    expect(parseParams('?r3d')).toMatchObject({ free: false, light: 'work' });
   });
 });
 
 describe('toSearch', () => {
   it('writes only what differs', () => {
-    expect(toSearch(DEFAULTS)).toBe('?r3d');
-    expect(toSearch({ ...DEFAULTS, quality: 'fast' })).toBe('?r3d&quality=fast');
+    expect(toSearch(DEFAULTS, '?r3d')).toBe('?r3d');
+    expect(toSearch({ ...DEFAULTS, quality: 'fast' }, '?r3d')).toBe('?r3d&quality=fast');
+  });
+
+  it('keeps foreign keys and removes this page\'s keys at their default', () => {
+    expect(toSearch(DEFAULTS, '?r3d=demo&lag=150')).toBe('?r3d=demo&lag=150');
+    expect(toSearch({ ...DEFAULTS, free: true }, '?r3d&lag=150&jitter=40')).toBe('?r3d&lag=150&jitter=40&free=1');
+    expect(toSearch(DEFAULTS, '?r3d&free=1')).toBe('?r3d');
+    expect(toSearch(DEFAULTS, '?r3d&flag&lag=1')).toBe('?r3d&flag&lag=1');
   });
 
   it('round-trips a fully non-default value', () => {
     const p: R3dParams = {
       pitch: 60.5, yaw: 37.3, quality: 'fast', zoom: 5, backend: 'webgl',
-      shadows: false, orb: false, smooth: false, stats: true,
+      shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'lantern',
     };
-    expect(parseParams(toSearch(p))).toEqual(p);
+    expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
 });

@@ -114,14 +114,17 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   const apply = (next: R3dParams): void => {
     params = next;
     panel.setParams(next);
-    writeUrl(toSearch(next));
+    writeUrl(toSearch(next, location.search));
     follow();
   };
   const writeUrl = trailingWriter((s) => history.replaceState(null, '', s));
   // Disabled only when the backend has no way to force a loss; a click during a rebuild does nothing but stays possible later.
-  const panel = createPanel(host, params, apply, () => {
-    view.forceLoss();
-    return view.canForceLoss;
+  const panel = createPanel(host, params, apply, {
+    mode: 'demo',
+    onLose: () => {
+      view.forceLoss();
+      return view.canForceLoss;
+    },
   });
 
   // The F3 readout; the timer runs only while it is open.

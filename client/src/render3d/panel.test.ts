@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { createPanel } from './panel';
 import { DEFAULTS, type R3dParams } from './params';
 
-function setup(p: R3dParams = DEFAULTS) {
+function setup(p: R3dParams = DEFAULTS, mode: 'demo' | 'run' = 'demo') {
   const host = document.createElement('div');
   const calls: R3dParams[] = [];
-  const panel = createPanel(host, p, (n) => calls.push(n));
+  const panel = createPanel(host, p, (n) => calls.push(n), { mode });
   const btn = (text: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === text)!;
   return { host, calls, panel, btn };
 }
@@ -44,7 +44,7 @@ describe('panel', () => {
     const host = document.createElement('div');
     let ok = true;
     let n = 0;
-    createPanel(host, DEFAULTS, () => {}, () => { n++; return ok; });
+    createPanel(host, DEFAULTS, () => {}, { mode: 'demo', onLose: () => { n++; return ok; } });
     const b = [...host.querySelectorAll('button')].find((x) => x.textContent === 'Lose device (debug)')!;
     expect(b.hasAttribute('aria-pressed')).toBe(false);
     b.click();
@@ -55,8 +55,42 @@ describe('panel', () => {
     expect(b.disabled).toBe(true);
     // without the callback there is no button
     const plain = document.createElement('div');
-    createPanel(plain, DEFAULTS, () => {});
+    createPanel(plain, DEFAULTS, () => {}, { mode: 'demo' });
     expect(plain.textContent).not.toContain('Lose device');
+  });
+
+  it('run mode has Free camera and Lantern, no Moving light; demo mode the reverse', () => {
+    const run = setup(DEFAULTS, 'run');
+    expect(run.btn('Free camera')).toBeTruthy();
+    expect(run.btn('Lantern')).toBeTruthy();
+    expect(run.btn('Moving light')).toBeUndefined();
+    expect(run.host.querySelector('.r3d-panel')!.classList.contains('run')).toBe(true);
+    run.btn('Free camera').click();
+    expect(run.calls[0].free).toBe(true);
+    expect(run.btn('Free camera').getAttribute('aria-pressed')).toBe('true');
+    run.btn('Lantern').click();
+    expect(run.calls[1].light).toBe('lantern');
+    const demo = setup();
+    expect(demo.btn('Moving light')).toBeTruthy();
+    expect(demo.btn('Free camera')).toBeUndefined();
+    expect(demo.btn('Lantern')).toBeUndefined();
+  });
+
+  it('the zoom row sets zoom or Auto (null)', () => {
+    const { calls, btn } = setup({ ...DEFAULTS, zoom: 3 });
+    expect(btn('3').getAttribute('aria-pressed')).toBe('true');
+    btn('1').click();
+    expect(calls[0].zoom).toBe(1);
+    btn('Auto').click();
+    expect(calls[1].zoom).toBeNull();
+    expect(btn('Auto').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('destroy removes the root from the host', () => {
+    const { host, panel } = setup();
+    expect(host.querySelector('.r3d-panel')).not.toBeNull();
+    panel.destroy();
+    expect(host.querySelector('.r3d-panel')).toBeNull();
   });
 
   it('Hide collapses the panel to the toggle button, Show opens it again', () => {

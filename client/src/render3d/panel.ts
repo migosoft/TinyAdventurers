@@ -10,9 +10,17 @@ export interface Panel {
 
 const PITCHES = [30, 45, 48.6];
 const QUALITIES: [Quality, string][] = [['high', 'High'], ['balanced', 'Balanced'], ['fast', 'Fast']];
-const SWITCHES: [keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth'>, string][] = [
-  ['shadows', 'Wall shadows'], ['orb', 'Moving light'], ['smooth', 'Smoothed ground'],
-];
+const ZOOMS = [1, 2, 3, 4];
+type Switch = { name: string; get: (p: R3dParams) => boolean; set: (p: R3dParams) => Partial<R3dParams> };
+const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free'>, name: string): Switch =>
+  ({ name, get: (p) => p[k], set: (p) => ({ [k]: !p[k] }) });
+const LANTERN: Switch = {
+  name: 'Lantern', get: (p) => p.light === 'lantern', set: (p) => ({ light: p.light === 'lantern' ? 'work' : 'lantern' }),
+};
+const SWITCHES: Record<'demo' | 'run', Switch[]> = {
+  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground')],
+  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), LANTERN, flag('free', 'Free camera')],
+};
 
 /** A degree value with at most one decimal and no trailing .0. */
 function deg(v: number): string {
@@ -26,10 +34,17 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e;
 }
 
-/** `onLose` (debug): makes the device fail on purpose and returns false when the backend cannot, which disables the button. */
-export function createPanel(host: HTMLElement, p: R3dParams, onChange: (p: R3dParams) => void, onLose?: () => boolean): Panel {
+/**
+ * `mode` 'run' is the panel inside a run (bottom left, with Lantern and Free camera instead of Moving light).
+ * `onLose` (debug): makes the device fail on purpose and returns false when the backend cannot, which disables the button.
+ */
+export function createPanel(
+  host: HTMLElement, p: R3dParams, onChange: (p: R3dParams) => void,
+  opts: { mode: 'demo' | 'run'; onLose?: () => boolean },
+): Panel & { destroy(): void } {
+  const { mode, onLose } = opts;
   let cur = p;
-  const root = el('div', 'r3d-panel');
+  const root = el('div', mode === 'run' ? 'r3d-panel run' : 'r3d-panel');
   const pressed: { btn: HTMLButtonElement; test: () => boolean }[] = [];
 
   // test = null: an action button, not a toggle, so it carries no aria-pressed.
@@ -86,12 +101,16 @@ export function createPanel(host: HTMLElement, p: R3dParams, onChange: (p: R3dPa
   const qRow = el('div', 'r3d-row');
   qRow.appendChild(el('span', undefined, 'Quality'));
   for (const [q, name] of QUALITIES) button(qRow, name, () => cur.quality === q, () => change({ quality: q }));
+  const zRow = el('div', 'r3d-row');
+  zRow.appendChild(el('span', undefined, 'Zoom'));
+  button(zRow, 'Auto', () => cur.zoom === null, () => change({ zoom: null }));
+  for (const z of ZOOMS) button(zRow, String(z), () => cur.zoom === z, () => change({ zoom: z }));
   const swRow = el('div', 'r3d-row');
-  for (const [k, name] of SWITCHES) button(swRow, name, () => cur[k], () => change({ [k]: !cur[k] }));
+  for (const sw of SWITCHES[mode]) button(swRow, sw.name, () => sw.get(cur), () => change(sw.set(cur)));
 
   const readout = el('div', 'r3d-readout');
   const body = el('div', 'r3d-body');
-  body.append(pitchRow, yawRow, qRow, swRow);
+  body.append(pitchRow, yawRow, qRow, zRow, swRow);
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
@@ -126,6 +145,9 @@ export function createPanel(host: HTMLElement, p: R3dParams, onChange: (p: R3dPa
   refresh();
 
   return {
+    destroy() {
+      root.remove();
+    },
     setReadout(text) {
       if (readout.textContent !== text) readout.textContent = text;
     },
