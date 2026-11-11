@@ -1,19 +1,34 @@
 // Node materials of the 3D view (TSL).
 import { AdditiveBlending, DoubleSide, MeshBasicNodeMaterial } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { attribute, float, floor, fract, int, ivec2, length, max, positionGeometry, positionWorld, select, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { attribute, clamp, float, floor, fwidth, fract, int, ivec2, length, max, positionGeometry, positionWorld, select, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from './lightNodes';
 
 const STONE = [0.115, 0.1, 0.145] as const;
 const RIM = [0.4, 0.34, 0.33] as const;
 const PX = 1 / 16;
 
-/** Lit world material: atlas texels for floor and faces, a generated stone top with a pale rim where a wall drops to something lower. */
-export function worldMaterial(atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting): MeshBasicNodeMaterial {
+/**
+ * Lit world material: atlas texels for floor and faces, a generated stone top with a pale rim where a wall drops to something lower.
+ * `smooth` (0 or 1) switches the floor to the linear atlas at a sharpened position; it is a uniform, so flipping it recompiles nothing.
+ */
+export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting): { material: MeshBasicNodeMaterial; smooth: { value: number } } {
   const kind = attribute('kind', 'float');
   const isTop = kind.greaterThan(1.5);
 
-  const texel = texture(atlas, uv().div(vec2(atlasW, atlasH)));
+  const size = vec2(atlasW, atlasH);
+  const p0 = uv();
+  // Derivatives are taken here, at the top level of the fragment code and outside any branch (WGSL requires uniform control flow).
+  const fw = max(fwidth(p0), vec2(1e-6));
+  const seam = floor(p0.add(0.5));
+  const sharp = seam.add(clamp(p0.sub(seam).div(fw), -0.5, 0.5));
+  const rect = attribute('rect', 'vec4');
+  // The atlas has no padding: keep the linear taps inside the frame.
+  const p = clamp(sharp, rect.xy.add(0.5), rect.xy.add(rect.zw).sub(0.5));
+  const smooth = uniform(0);
+  const useSmooth = smooth.greaterThan(0.5).and(kind.lessThan(0.5));
+  // Both reads sit in the shader and a select picks one; sampling stays in uniform control flow.
+  const texel = select(useSmooth, texture(linearAtlas, p.div(size)), texture(atlas, p0.div(size)));
 
   const wp = positionWorld;
   const cx = floor(wp.x);
@@ -35,7 +50,7 @@ export function worldMaterial(atlas: Texture, atlasW: number, atlasH: number, li
   const m = new MeshBasicNodeMaterial();
   m.colorNode = vec4(lighting.shoulder(albedo.mul(lit)), select(isTop, 1, texel.a));
   m.alphaTest = 0.5;
-  return m;
+  return { material: m, smooth };
 }
 
 /**

@@ -34,7 +34,7 @@ import type { R3dSystem } from './stats';
 import { buildWorld, type FrameRects } from './worldMesh';
 
 export interface Assets { image: HTMLImageElement; frames: FrameRects }
-/** `smooth` has no effect yet. */
+/** `smooth`: floors read the linear atlas at a sharpened position (a uniform; no recompile). */
 export interface FrameInput { cam: Cam; plan: RenderPlan; dynamic: Dynamic; lights: Light[]; shadows: boolean; smooth: boolean; t: number }
 
 /** A mesh whose vertex buffers are refilled every frame; the buffers grow when a frame needs more. */
@@ -122,6 +122,11 @@ export async function createView(
 
   const atlas = new Texture(assets.image);
   pixelTexture(atlas);
+  // The same image, filtered linearly, for the smoothed ground.
+  const atlasLinear = new Texture(assets.image);
+  pixelTexture(atlasLinear);
+  atlasLinear.magFilter = LinearFilter;
+  atlasLinear.minFilter = LinearFilter;
   const heights = new DataTexture(heightBytes(map), map.w, map.h, RedFormat, UnsignedByteType);
   heights.unpackAlignment = 1;
   pixelTexture(heights);
@@ -135,7 +140,8 @@ export async function createView(
   geometry.setAttribute('rect', new BufferAttribute(w.rect, 4));
   const aw = assets.image.naturalWidth, ah = assets.image.naturalHeight;
   const lighting = makeLighting(heights, map);
-  const material = worldMaterial(atlas, aw, ah, lighting);
+  const world = worldMaterial(atlas, atlasLinear, aw, ah, lighting);
+  const material = world.material;
   const mesh = new Mesh(geometry, material);
   mesh.frustumCulled = false;
 
@@ -207,6 +213,7 @@ export async function createView(
       camera.updateProjectionMatrix();
       const d = f.dynamic;
       card.cosP.value = Math.cos(f.cam.pitch);
+      world.smooth.value = f.smooth ? 1 : 0;
       cards.set({ position: d.cards.position, uv: d.cards.uv }, d.cards.count * 6);
       flames.set({ position: d.emissive.position, uv: d.emissive.uv }, d.emissive.count * 6);
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color }, d.glows.count * 6);
@@ -238,6 +245,7 @@ export async function createView(
       if (disposed) return;
       disposed = true;
       atlas.dispose();
+      atlasLinear.dispose();
       heights.dispose();
       geometry.dispose();
       material.dispose();
