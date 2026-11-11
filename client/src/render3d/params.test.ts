@@ -22,6 +22,9 @@ describe('parseParams', () => {
     expect(parseParams('?zoom=1.5').zoom).toBeNull();
     expect(parseParams('?quality=ultra').quality).toBe('balanced');
     expect(parseParams('?yaw=720').yaw).toBe(0);
+    expect(parseParams('?yaw=-190').yaw).toBe(170);
+    expect(parseParams('?pitch=30').pitch).toBe(30);
+    expect(parseParams('?pitch=80').pitch).toBe(80);
   });
 
   it('reads the switches', () => {
@@ -38,7 +41,7 @@ describe('toSearch', () => {
 
   it('round-trips a fully non-default value', () => {
     const p: R3dParams = {
-      pitch: 60.5, yaw: -120, quality: 'fast', zoom: 5, backend: 'webgl',
+      pitch: 60.5, yaw: 37.3, quality: 'fast', zoom: 5, backend: 'webgl',
       shadows: false, orb: false, smooth: true, stats: true,
     };
     expect(parseParams(toSearch(p))).toEqual(p);

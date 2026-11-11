@@ -29,7 +29,7 @@ export function parseParams(search: string): R3dParams {
   const quality = q.get('quality');
   return {
     pitch: pitch === null ? DEFAULTS.pitch : Math.min(80, Math.max(30, pitch)),
-    yaw: yaw === null ? DEFAULTS.yaw : ((((yaw + 180) % 360) + 360) % 360) - 180,
+    yaw: yaw === null ? DEFAULTS.yaw : yaw - 360 * Math.round(yaw / 360),
     quality: quality === 'high' || quality === 'balanced' || quality === 'fast' ? quality : DEFAULTS.quality,
     zoom: zoom !== null && Number.isInteger(zoom) ? Math.min(8, Math.max(2, zoom)) : null,
     backend: q.get('backend') === 'webgl' ? 'webgl' : 'auto',
