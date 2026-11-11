@@ -52,6 +52,8 @@ export interface DebugDraw {
   dodges: { x0: number; y0: number; x1: number; y1: number; at: number }[];
 }
 
+/** What the session hands the view each display frame. A frame and the objects in it are valid only during the
+ *  call: the session reuses them, so a view must not keep references to them. */
 export interface RunFrame {
   dt: number;
   now: number; // seconds

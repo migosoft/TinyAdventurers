@@ -142,7 +142,8 @@ export function fakeView(
     ended: [] as [ShotView, string][],
     onTile: undefined as ((x: number, y: number, v: number) => void) | undefined,
     frame(f: RunFrame) {
-      v.frames.push(f);
+      // A copy: the session reuses `own`, the live shots and the hidden set, so older entries stay stable.
+      v.frames.push({ ...f, own: { ...f.own }, shots: f.shots.map((s) => ({ ...s })), hiddenShots: new Set(f.hiddenShots) });
       return v.stats;
     },
     event(ev: PictureEv) {
@@ -201,5 +202,5 @@ export function snap(over: Partial<Snapshot> = {}): Extract<ServerMsg, { t: 'Sna
     srv_ms: 0,
     log: null,
     ...over,
-  } as Extract<ServerMsg, { t: 'Snap' }>;
+  };
 }

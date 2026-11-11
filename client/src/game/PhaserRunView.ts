@@ -1,5 +1,5 @@
 // The 2D view of a run: every Phaser game object of the game scene lives here, behind the RunView interface
-// (run/view.ts). The scene (GameScene) holds the logic and hands this view a RunFrame each frame, the events
+// (run/view.ts). The run session (run/session.ts) holds the logic and hands this view a RunFrame each frame, the events
 // that have a picture, tile changes and ended shots. Picture-only state (entity views, wading and sinking,
 // vanish and reappear marks, skull decals, bar labels, the force field's age) stays here.
 import Phaser from 'phaser';
@@ -606,21 +606,16 @@ export class PhaserRunView implements RunView {
   private drawDebugPath(f: RunFrame): void {
     const g = this.debugGfx.clear();
     const d = f.debug;
-    if (!d.on || !f.own.alive) {
-      d.dodges.length = 0;
-      return;
-    }
+    if (!d.on || !f.own.alive) return;
     // Dodge notice circles at the creatures' drawn positions, and the dodge lines, fading over 0.6 s.
     g.lineStyle(1, 0xffffff, 0.3);
     for (const [id, r] of d.notice) {
       const e = f.ents.get(id);
       if (e && !(e.flags & FLAG.DEAD)) g.strokeCircle(e.x, e.y, r);
     }
-    const t = performance.now() / 1000;
-    // pruned in place: the session owns the array
-    for (let i = d.dodges.length - 1; i >= 0; i--) if (t - d.dodges[i].at >= 0.6) d.dodges.splice(i, 1);
+    // The session prunes the dodges (older than 0.6 s); this only draws them.
     for (const dd of d.dodges) {
-      g.lineStyle(2, 0xff40ff, 1 - (t - dd.at) / 0.6);
+      g.lineStyle(2, 0xff40ff, 1 - (f.now - dd.at) / 0.6);
       g.lineBetween(dd.x0, dd.y0, dd.x1, dd.y1);
     }
     this.drawPathLine(g, f.own.x, f.own.y, f.now, d.cove, 0x40e070, 0x20a050);

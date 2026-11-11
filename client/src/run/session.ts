@@ -240,6 +240,10 @@ export class RunSession {
     const own = this.ownHero(px, py, now);
     const useHint = this.isAlive && !this.pred.charmed && !this.pred.noAct && !this.pred.sinking ? pickUseHint(this.ents.values(), this.runInfo.you, px, py) : null;
     this.hud.setAsleep(this.isAlive && has(this.myEffects(), EFFECT.Sleep));
+    // Dodge lines fade over 0.6 s; none while debug is off or the hero is dead. The session owns the array, so it prunes it.
+    const dodges = this.debug.dodges;
+    if (!this.debug.on || !this.isAlive) dodges.length = 0;
+    else for (let i = dodges.length - 1; i >= 0; i--) if (now - dodges[i].at >= 0.6) dodges.splice(i, 1);
     this.clock?.lap('sim');
 
     const stats = this.view
