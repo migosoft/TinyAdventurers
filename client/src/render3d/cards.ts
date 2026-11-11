@@ -1,5 +1,6 @@
 // Per-frame quads of the demo scene: figure and prop cards, torch flames and glows.
 import { facesLeft, snapGround, type Cam } from './camera';
+import { torchFlicker } from './light';
 import { frameOf, type SceneState } from './scene';
 import type { FrameRects } from './worldMesh';
 
@@ -10,11 +11,6 @@ export interface Dynamic { cards: Quads; emissive: Quads; glows: Glows }
 export function orbAt(t: number): { x: number; y: number; z: number } {
   const a = 0.42 * t;
   return { x: 12.2 + 6.6 * Math.cos(a), y: 0.95 + 0.12 * Math.sin(2.1 * t), z: 6.45 + 1.25 * Math.sin(a) };
-}
-
-// Task 6 moves this to light.ts as torchFlicker.
-function torchFlicker(t: number, ph: number): number {
-  return 1 + 0.07 * Math.sin(11 * t + ph) + 0.05 * Math.sin(23.3 * t + 2 * ph) + 0.04 * Math.sin(5.1 * t + 3 * ph);
 }
 
 type V = [number, number, number, number, number]; // x y z u v

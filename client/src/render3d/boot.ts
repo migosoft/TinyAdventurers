@@ -1,6 +1,8 @@
 import { loadAtlas } from '../ui/atlas';
 import { keysToWorld } from './camera';
+import { buildDynamic } from './cards';
 import { parseMap, MAP_ROWS } from './demoMap';
+import { sceneLights } from './light';
 import { parseParams } from './params';
 import { pickZoom, renderPlan } from './quality';
 import { frameDt, newScene, stepScene } from './scene';
@@ -34,12 +36,12 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
 
   let view: View;
   const map = parseMap(MAP_ROWS);
+  const frames: FrameRects = {};
   try {
     const atlas = await loadAtlas().catch((e) => {
       showError(host, `Could not load the atlas: ${String(e)}`, false);
       throw e;
     });
-    const frames: FrameRects = {};
     for (const [name, f] of Object.entries(atlas.frames)) frames[name] = { x: f.frame.x, y: f.frame.y, w: f.frame.w, h: f.frame.h };
     try {
       view = await createView(canvas, { image: atlas.img, frames }, map, { forceWebGL: params.backend === 'webgl' });
@@ -90,7 +92,9 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     cam.x += (scene.player.x - cam.x) * k;
     cam.z += (scene.player.z - cam.z) * k;
     const zoom = params.zoom ?? pickZoom(w, h);
-    view.draw({ cam, plan: renderPlan('high', zoom, w, h), shadows: params.shadows, smooth: params.smooth, t: now });
+    const dynamic = buildDynamic(scene, frames, cam, now, params.orb);
+    const lights = sceneLights(scene, now, params.orb);
+    view.draw({ cam, plan: renderPlan('high', zoom, w, h), dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now });
     state.frames++;
     requestAnimationFrame(loop);
   };
