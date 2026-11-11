@@ -58,6 +58,9 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const groundReady = uniform(0);
   const groundNear = texture(groundStart, p0.div(max(rect.zw, vec2(1))));
   const groundLin = texture(groundStart, p.div(max(rect.zw, vec2(1))));
+  // Two texture nodes on one texture start are "mergeable" (same uniform hash, so one shared binding): then only one of them would follow `setGround`.
+  groundNear.mergeable = false;
+  groundLin.mergeable = false;
   const groundTexel = select(useSmooth, groundLin, groundNear);
   const ground = vec4(select(groundReady.greaterThan(0.5), groundTexel.rgb, vec3(...GRASS_FLAT)), select(groundReady.greaterThan(0.5), groundTexel.a, 1));
   const texel = select(isGround, ground, atlasTexel);
