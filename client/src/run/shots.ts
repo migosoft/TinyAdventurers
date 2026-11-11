@@ -40,7 +40,7 @@ const ENEMY_KIND: Record<string, { max_hp: number; res: Record<string, number> }
 export class Shots {
   readonly live: Shot[] = [];
   /** The own predicted shots that are on the server this frame (shot ids); filled by `hidden`. */
-  readonly onServer = new Set<number>();
+  private readonly onServer = new Set<number>();
   /** Own shots whose predicted copy has ended (shot id -> time, s): their server copy stays hidden. */
   private endedShots = new Map<number, number>();
   /**
@@ -107,7 +107,8 @@ export class Shots {
   update(
     dt: number,
     now: number,
-    ctx: { map: TileMap; ents: ReadonlyMap<number, EntState>; serverShots: ReadonlySet<number>; rtt: number; interpDelay: number },
+    // `rtt` in milliseconds, `interpDelay` in seconds (as `Net.rtt` and `Interpolator.delay`; `unseenShotLimit` expects them so).
+    ctx: { map: TileMap; ents: ReadonlyMap<number, EntState>; rtt: number; interpDelay: number },
     ended: (s: Shot, how: 'wall' | 'enemy' | 'gone') => void,
   ): void {
     for (const [shot, t] of this.endedShots) {
@@ -117,7 +118,7 @@ export class Shots {
     }
     for (let i = this.live.length - 1; i >= 0; i--) {
       const c = this.live[i];
-      const onServer = ctx.serverShots.has(c.shot);
+      const onServer = this.onServer.has(c.shot);
       if (onServer) c.seenOnServer = true;
       c.life -= dt;
       const nx = c.x + c.vx * dt;

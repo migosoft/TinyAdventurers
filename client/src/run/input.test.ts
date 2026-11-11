@@ -13,6 +13,6 @@ describe('dir8', () => {
     expect(dir8(-1e-9, 0)).toEqual({ mx: 0, my: 0 });
   });
   it('NO_INPUT is idle', () => {
-    expect(NO_INPUT).toEqual({ mx: 0, my: 0, primary: false, secondary: false, act: false });
+    expect(NO_INPUT).toEqual({ mx: 0, my: 0, primary: false, secondary: false, act: false, held: false });
   });
 });

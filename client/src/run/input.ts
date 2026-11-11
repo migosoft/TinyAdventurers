@@ -7,9 +7,11 @@ export interface StepInput {
   primary: boolean;
   secondary: boolean;
   act: boolean;
+  /** Any movement key is down, also when two cancel out (A+D): the own hero then still plays the walk animation. */
+  held: boolean;
 }
 
-export const NO_INPUT: StepInput = { mx: 0, my: 0, primary: false, secondary: false, act: false };
+export const NO_INPUT: StepInput = { mx: 0, my: 0, primary: false, secondary: false, act: false, held: false };
 
 /** The nearest of the eight wire directions to (x, y); (0, 0) below a length of 1e-6. */
 export function dir8(x: number, y: number): { mx: -1 | 0 | 1; my: -1 | 0 | 1 } {

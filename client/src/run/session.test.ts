@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONST, KIND, TILE_ID } from '../generated/defs';
+import { ANIM, CONST, EFFECT, KIND, TILE_ID } from '../generated/defs';
 import type { ClientMsg } from '../generated/ClientMsg';
 import type { Ev } from '../generated/Ev';
 import type { RunStartInfo } from '../generated/RunStartInfo';
@@ -122,7 +122,7 @@ describe('RunSession messages', () => {
 });
 
 const STEP_MS = 1000 * CONST.DT;
-const idle: StepInput = { mx: 0, my: 0, primary: false, secondary: false, act: false };
+const idle: StepInput = { mx: 0, my: 0, primary: false, secondary: false, act: false, held: false };
 
 describe('RunSession fixed step', () => {
   it("a fixed step sends one Input with the host's movement", () => {
@@ -136,6 +136,9 @@ describe('RunSession fixed step', () => {
   it('a long frame runs at most five steps', () => {
     const { net, session } = make();
     session.frame(1000);
+    expect(inputs(net).length).toBe(5);
+    // The rest of the accumulator is dropped: half a step later still no step runs.
+    session.frame(STEP_MS / 2);
     expect(inputs(net).length).toBe(5);
   });
 
@@ -173,10 +176,143 @@ describe('RunSession fixed step', () => {
     const shoot = ability('Shoot', { projectile: KIND.Arrow, speed: 200, range: 150, ranged: true, cooldown: 0.5 });
     const { net, session } = make({ abilities: [shoot, ability('SummonWolf')] }, () => ({ ...idle, primary: true }));
     const hero = session['pred'].state;
-    session.setView(fakeView({ x: hero.x + 100, y: hero.y - 8 }));
+    const view = fakeView({ x: hero.x + 100, y: hero.y - 8 });
+    session.setView(view);
     session.frame(STEP_MS);
     expect(inputs(net)[0].primary).not.toBeNull();
-    expect(session.shots.live.length).toBe(1);
+    expect(view.frames.at(-1)!.shots.length).toBe(1);
+  });
+});
+
+describe('RunSession frame', () => {
+  const entity = (id: number, x: number, y: number): [number, number, number, number, number, number, number, number, number, number, number, number] => [id, KIND.Wizard, x, y, 255, 0, 0, 0, 0, 0, 0, 1];
+
+  /** A session on a fake clock, with a view; `at(s)` moves the clock. */
+  function running(input: () => StepInput = () => NO_INPUT, over: Partial<RunStartInfo> = {}) {
+    let t = 10;
+    const net = fakeNet();
+    const hud = fakeHud();
+    const session = new RunSession({ info: startInfo(ROWS, over), net, hud, myClass: 'Wizard', input, now: () => t });
+    const view = fakeView();
+    session.setView(view);
+    return { net, hud, session, view, at: (s: number) => void (t = s) };
+  }
+
+  it("a dead hero's camera target is the watched teammate", () => {
+    const { net, session, view, at } = running();
+    const dead = (tick: number) => {
+      const s = snap({ tick, ents: [entity(7, 200, 120)] });
+      s.me.alive = false;
+      s.me.spectating = 7;
+      return s;
+    };
+    at(10);
+    net.emit(dead(1));
+    at(10.05);
+    net.emit(dead(4));
+    at(10.2);
+    session.frame(16);
+    const f = view.frames.at(-1)!;
+    expect(f.camera).toEqual({ x: 200, y: 120 });
+    expect(f.watching).toBe(7);
+  });
+
+  it("a living hero's camera target is the predicted position", () => {
+    const { session, view } = running();
+    session.frame(16);
+    const f = view.frames.at(-1)!;
+    expect(f.camera).toEqual({ x: f.own.x, y: f.own.y });
+    expect(f.own.alive).toBe(true);
+  });
+
+  it('the predicted shot is in the frame', () => {
+    const shoot = ability('Shoot', { projectile: KIND.Arrow, speed: 200, range: 150, ranged: true, cooldown: 0.5 });
+    const { session, view } = running(() => ({ ...idle, primary: true }), { abilities: [shoot, ability('SummonWolf')] });
+    const hero = session['pred'].state;
+    view.pointerWorld = () => ({ x: hero.x + 100, y: hero.y - 8 });
+    session.frame(STEP_MS);
+    expect(view.frames.at(-1)!.shots.length).toBe(1);
+    expect(view.frames.at(-1)!.shots[0].kind).toBe(KIND.Arrow);
+  });
+
+  it('without a view the HUD still gets a frame', () => {
+    const net = fakeNet();
+    const hud = fakeHud();
+    const session = new RunSession({ info: startInfo(ROWS), net, hud, myClass: 'Wizard', input: () => NO_INPUT });
+    session.frame(16);
+    const frames = hud.calls.filter((c) => c[0] === 'frame');
+    expect(frames.length).toBe(1);
+    expect(frames[0][1]).toMatchObject({ drawCalls: 0, ents: 0 });
+  });
+
+  it("the view's numbers reach the HUD", () => {
+    const { net, hud, session, view, at } = running();
+    view.stats = { ...view.stats, drawCalls: 42 };
+    at(10);
+    net.emit(snap({ ents: [entity(7, 200, 120), entity(8, 100, 24)] }));
+    at(10.2);
+    session.frame(16);
+    const arg = hud.calls.filter((c) => c[0] === 'frame').at(-1)![1] as { drawCalls: number; ents: number; rtt: number; cd1: number };
+    expect(arg.drawCalls).toBe(42);
+    expect(arg.ents).toBe(2);
+    expect(arg.rtt).toBe(50);
+  });
+
+  it("the frame's own data is the snapshot's", () => {
+    const { net, hud, session, view } = running();
+    const s = snap();
+    s.me.effects = [[EFFECT.Sleep, 1]] as never;
+    net.emit(s);
+    session.frame(16);
+    expect(view.frames.at(-1)!.own.effects & (1 << EFFECT.Sleep)).not.toBe(0);
+    expect(hud.calls).toContainEqual(['setAsleep', true]);
+  });
+
+  it('holding A and D together still plays the walk animation', () => {
+    const { session, view } = running(() => ({ ...idle, held: true }));
+    session.frame(STEP_MS);
+    expect(view.frames.at(-1)!.own.anim).toBe(ANIM.Move);
+    const still = running();
+    still.session.frame(STEP_MS);
+    expect(still.view.frames.at(-1)!.own.anim).toBe(ANIM.Idle);
+  });
+
+  it('the drawn weapon follows the pointer on a frame without a step', () => {
+    const { session, view } = running();
+    const hero = session['pred'].state;
+    view.pointerWorld = () => ({ x: hero.x + 50, y: hero.y - 8 });
+    session.frame(STEP_MS);
+    expect(view.frames.at(-1)!.own.aim).toBeCloseTo(0);
+    view.pointerWorld = () => ({ x: hero.x, y: hero.y - 8 + 50 });
+    session.frame(1);
+    expect(view.frames.at(-1)!.own.aim).toBeCloseTo(Math.PI / 2);
+  });
+
+  it('the shots seen on the server end the predicted copy when they are gone', () => {
+    const shoot = ability('Shoot', { projectile: KIND.Arrow, speed: 20, range: 150, ranged: true, cooldown: 5 });
+    let fire = true;
+    const { net, session, view, at } = running(() => ({ ...idle, primary: fire }), { abilities: [shoot, ability('SummonWolf')] });
+    const hero = session['pred'].state;
+    view.pointerWorld = () => ({ x: hero.x + 100, y: hero.y - 8 });
+    at(10);
+    session.frame(STEP_MS);
+    fire = false;
+    const sent = net.sent.find((m) => m.t === 'Input' && m.primary !== null) as Extract<ClientMsg, { t: 'Input' }>;
+    const arrow = (extra: number) => [99, KIND.Arrow, 40, 24, 255, 0, 0, 0, 0, extra, 0, 2] as ReturnType<typeof entity>;
+    at(10.1);
+    net.emit(snap({ tick: 1, ents: [arrow((1 << 16) | sent.primary!)] }));
+    at(10.15);
+    net.emit(snap({ tick: 2, ents: [arrow((1 << 16) | sent.primary!)] }));
+    at(10.2);
+    session.frame(1);
+    expect(view.frames.at(-1)!.shots.length).toBe(1);
+    // The server's shot is gone from the next snapshot: ours ends too.
+    at(10.5);
+    net.emit(snap({ tick: 30, ents: [] }));
+    at(10.7);
+    session.frame(1);
+    session.frame(1);
+    expect(view.ended.map((e) => e[1])).toEqual(['gone']);
   });
 });
 

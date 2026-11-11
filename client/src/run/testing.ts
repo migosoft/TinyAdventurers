@@ -8,7 +8,7 @@ import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { ServerMsg } from '../generated/ServerMsg';
 import type { Snapshot } from '../generated/Snapshot';
 import type { HudLike, NetLike } from './session';
-import type { PictureEv, RunFrame, RunView, ShotView } from './view';
+import type { PictureEv, RunFrame, RunView, ShotView, ViewStats } from './view';
 import { NO_STATS } from './view';
 
 const GLYPH: Record<string, number> = { '#': TILE_ID.Wall, '.': TILE_ID.Floor, D: TILE_ID.DoorOpen, ' ': TILE_ID.Void };
@@ -126,8 +126,16 @@ export function fakeHud(): HudLike & { calls: [name: string, ...args: unknown[]]
 
 export function fakeView(
   pointer: { x: number; y: number } | null = null,
-): RunView & { frames: RunFrame[]; events: PictureEv[]; tiles: [number, number, number][]; ended: [ShotView, string][]; onTile?: (x: number, y: number, v: number) => void } {
+): RunView & {
+  frames: RunFrame[];
+  events: PictureEv[];
+  tiles: [number, number, number][];
+  ended: [ShotView, string][];
+  stats: ViewStats;
+  onTile?: (x: number, y: number, v: number) => void;
+} {
   const v = {
+    stats: NO_STATS as ViewStats,
     frames: [] as RunFrame[],
     events: [] as PictureEv[],
     tiles: [] as [number, number, number][],
@@ -135,7 +143,7 @@ export function fakeView(
     onTile: undefined as ((x: number, y: number, v: number) => void) | undefined,
     frame(f: RunFrame) {
       v.frames.push(f);
-      return NO_STATS;
+      return v.stats;
     },
     event(ev: PictureEv) {
       v.events.push(ev);

@@ -2,7 +2,10 @@
 // the light field, the predictor, the interpolator, the HUD and net traffic;
 // a view (the 2D game or the 3D view) draws what the session hands it. The
 // session never imports a view; it asks the view one question (pointerWorld).
-import { ABILITIES, ANIM, CLASSES, CONST, EFFECT, KIND, TILE_ID } from '../generated/defs';
+import { ABILITIES, ANIM, CLASSES, CONST, EFFECT, FLAG, KIND, TILE_ID } from '../generated/defs';
+import { has } from '../game/effectBits';
+import { lookOf } from '../game/looks';
+import { pickUseHint } from '../game/useHint';
 import { FIGURES } from '../game/anim/defs';
 import { meleeFoe } from '../game/shotTargets';
 import type { ClassId } from '../generated/ClassId';
@@ -18,7 +21,7 @@ import type { Net } from '../net';
 import type { Disabled, Hud } from '../ui/hud';
 import { NO_INPUT, type StepInput } from './input';
 import { Shots } from './shots';
-import type { DebugDraw, RunView, RunViewInit } from './view';
+import { NO_STATS, type DebugDraw, type OwnHero, type RunView, type RunViewInit } from './view';
 
 export type NetLike = Pick<Net, 'on' | 'send' | 'rtt' | 'lastSnapshotBytes'>;
 export type HudLike = Pick<
@@ -66,21 +69,20 @@ export class RunSession {
   private runInfo: RunStartInfo;
   private readonly net: NetLike;
   private readonly hud: HudLike;
-  // The next five are read by `frame` (A5); not private so the unused-member check passes until then.
-  readonly input: () => StepInput;
-  readonly clock?: FrameClock;
+  private readonly input: () => StepInput;
+  private readonly clock?: FrameClock;
   private readonly now: () => number;
   private readonly pred: Predictor;
   private readonly interp = new Interpolator();
-  /** The drawn entities by id; the frame step fills it from `interp.sample` (A5). */
+  /** The drawn entities by id; the frame fills it from `interp.sample`. */
   private readonly ents = new Map<number, EntState>();
   private view: RunView | null = null;
   private isAlive = true;
-  spectating: number | null = null;
+  private spectating: number | null = null;
   private lastSnap?: Snapshot;
-  myFlags = 0;
+  private myFlags = 0;
   /** Which picks an Attribute drain disabled (from `HeroChanged`). */
-  disabled: Disabled = [null, null];
+  private disabled: Disabled = [null, null];
   /** Entrance tiles of the boss hall that are closed now: the first one announces the force field. */
   private sealedCells = 0;
   private readonly debug: DebugDraw;
@@ -88,14 +90,18 @@ export class RunSession {
   private effectIx = -1;
   private unsub: (() => void) | null;
   /** The own predicted shots (the view draws them from the frame). */
-  readonly shots = new Shots();
+  private readonly shots = new Shots();
   private acc = 0;
   private shotId = 0;
   private lastAim = 0;
-  /** The last step's input ("moving" for the own animation, A5); public until the frame reads it. */
-  lastInput: StepInput = NO_INPUT;
-  /** The own hero's last action animation (the frame's `own`, A5); public until the frame reads it. */
-  localAnim: { anim: number; start: number; arc?: number } = { anim: ANIM.Idle as number, start: 0 };
+  /** The last step's input (the own animation's "moving" and the drawn aim). */
+  private lastInput: StepInput = NO_INPUT;
+  /** The own hero's last action animation (the frame's `own`). */
+  private localAnim: { anim: number; start: number; arc?: number } = { anim: ANIM.Idle as number, start: 0 };
+  /** The own hero as drawn this frame, rebuilt each frame (`ownHero`). */
+  private readonly own: OwnHero = { x: 0, y: 0, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
+  /** `frame`'s own duration, ms, averaged; the HUD shows it. */
+  private frameMs = 0;
 
   constructor(deps: SessionDeps) {
     this.runInfo = deps.info;
@@ -194,8 +200,13 @@ export class RunSession {
 
   // ------------------------------------------------------------ frame, input & prediction
 
-  /** One display frame: the fixed steps now (the rest of the frame follows in A5). */
+  /** One display frame: the fixed steps, then the sampled world, the view's frame and the HUD's. */
   frame(deltaMs: number): void {
+    const t0 = performance.now();
+    if (this.clock) {
+      this.clock.on = this.hud.statsOn;
+      this.clock.begin();
+    }
     const dt = Math.min(deltaMs / 1000, 0.1);
     this.acc += dt;
     let steps = 0;
@@ -205,6 +216,121 @@ export class RunSession {
       steps++;
     }
     if (steps === 5) this.acc = 0;
+
+    const now = this.now();
+    this.interp.sample(now, this.ents);
+    // Charmed: the server's hero, interpolated like any other entity, is the own figure and the camera's target.
+    const charmedEnt = this.pred.charmed && this.isAlive ? this.ents.get(this.runInfo.you) : undefined;
+    const [px, py] = charmedEnt ? this.pred.charmedPos(charmedEnt.x, charmedEnt.y, dt) : this.pred.renderPos(dt);
+
+    // Camera & fog follow the own figure, or the spectated teammate.
+    let camX = px;
+    let camY = py;
+    if (!this.isAlive && this.spectating !== null) {
+      const sp = this.ents.get(this.spectating);
+      if (sp) {
+        camX = sp.x;
+        camY = sp.y;
+      }
+    }
+    const darkvision = (this.lastSnap?.me.darkvision ?? 0) / 100;
+
+    const hiddenShots = this.shots.hidden(this.ents, this.interp.latest(), this.runInfo.you);
+    this.shots.update(dt, now, { map: this.map, ents: this.ents, rtt: this.net.rtt, interpDelay: this.interp.delay }, (s, how) => this.view?.shotEnded(s, how));
+    const own = this.ownHero(px, py, now);
+    const useHint = this.isAlive && !this.pred.charmed && !this.pred.noAct && !this.pred.sinking ? pickUseHint(this.ents.values(), this.runInfo.you, px, py) : null;
+    this.hud.setAsleep(this.isAlive && has(this.myEffects(), EFFECT.Sleep));
+    this.clock?.lap('sim');
+
+    const stats = this.view
+      ? this.view.frame({
+          dt,
+          now,
+          ents: this.ents,
+          you: this.runInfo.you,
+          own,
+          watching: this.spectating,
+          camera: { x: camX, y: camY },
+          snap: this.lastSnap,
+          shots: this.shots.live,
+          hiddenShots,
+          useHint,
+          debug: this.debug,
+        })
+      : NO_STATS;
+
+    this.hud.frame({
+      ...stats,
+      frameMs: this.frameMs,
+      rtt: this.net.rtt,
+      jitter: this.interp.jitter * 1000,
+      interp: this.interp.delay * 1000,
+      snapBytes: this.net.lastSnapshotBytes,
+      correction: this.pred.lastCorrection,
+      srvMs: this.lastSnap?.srv_ms ?? 0,
+      cd1: this.pred.cd1,
+      cd2: this.pred.cd2,
+      ents: this.ents.size,
+      darkvision,
+      wolf: this.runInfo.abilities[1].id === 'SummonWolf' ? this.hasOwnWolf() : null,
+    });
+    this.clock?.lap('hud');
+    // after the HUD, so the frame includes it; the panel shows it a frame later, which an average does not notice
+    this.frameMs = this.frameMs * 0.9 + (performance.now() - t0) * 0.1;
+  }
+
+  /** The own hero as the view draws it: the prediction (position, action animation, facing), or the interpolated hero while charmed. */
+  private ownHero(px: number, py: number, now: number): OwnHero {
+    const o = this.own;
+    o.x = px;
+    o.y = py;
+    o.alive = this.isAlive;
+    o.charmed = this.pred.charmed;
+    o.flags = this.myFlags;
+    // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
+    o.effects = this.myEffects();
+    o.entangled = lookOf(this.lastSnap?.looks ?? [], this.runInfo.you, EFFECT.Entangled);
+    o.dashing = this.pred.state.dashT > 0;
+    o.sinking = this.pred.sinking;
+    if (this.isAlive && !this.pred.charmed) {
+      // Petrified or asleep: the weapon keeps the facing from before the effect.
+      o.aim = this.pred.noTurn ? this.lastAim : this.aimInfo(this.lastInput.mx, this.lastInput.my).aim;
+      const tLocal = now - this.localAnim.start;
+      let anim = this.localAnim.anim;
+      const actionOver = anim === ANIM.Dash ? this.pred.state.dashT <= 0 : tLocal > 0.25;
+      if (actionOver) anim = this.pred.speedMul > 0 && this.lastInput.held ? ANIM.Move : ANIM.Idle;
+      o.anim = anim;
+      o.animT = tLocal;
+      o.arc = anim === ANIM.Melee ? this.localAnim.arc : undefined;
+    }
+    return o;
+  }
+
+  /** The own hero's effects as a bitmask, from the own snapshot. */
+  private myEffects(): number {
+    let bits = 0;
+    for (const [k] of this.lastSnap?.me.effects ?? []) bits |= 1 << k;
+    return bits;
+  }
+
+  /** The own hero's dire wolf is alive (the HUD's wolf flag); a loop, as it runs every frame. */
+  private hasOwnWolf(): boolean {
+    for (const e of this.ents.values()) if (e.kind === KIND.DireWolf && e.extra === this.runInfo.you && !(e.flags & FLAG.DEAD)) return true;
+    return false;
+  }
+
+  /**
+   * The aim at the pointer, and its distance (0 without one). Without a pointer the aim follows the movement
+   * (`mx`, `my`), else it stays. Used by the step and by the drawn weapon.
+   */
+  private aimInfo(mx: number, my: number): { aim: number; dist: number } {
+    const wp = this.view?.pointerWorld() ?? null;
+    if (wp) {
+      const dx = wp.x - this.pred.state.x;
+      const dy = wp.y - (this.pred.state.y - 8);
+      return { aim: Math.atan2(dy, dx), dist: Math.hypot(dx, dy) };
+    }
+    return { aim: mx !== 0 || my !== 0 ? Math.atan2(my, mx) : this.lastAim, dist: 0 };
   }
 
   private fixedStep(): void {
@@ -217,15 +343,7 @@ export class RunSession {
     const charmed = this.pred.charmed;
     const mx = charmed ? 0 : inp.mx;
     const my = charmed ? 0 : inp.my;
-    const wp = this.view?.pointerWorld() ?? null;
-    let pointerAim = this.lastAim;
-    let dist = 0;
-    if (wp) {
-      const dx = wp.x - this.pred.state.x;
-      const dy = wp.y - (this.pred.state.y - 8);
-      pointerAim = Math.atan2(dy, dx);
-      dist = Math.hypot(dx, dy);
-    } else if (mx !== 0 || my !== 0) pointerAim = Math.atan2(my, mx);
+    const { aim: pointerAim, dist } = this.aimInfo(mx, my);
     // Petrified or asleep: the server keeps the old facing, so the client sends it too.
     const aim = this.pred.noTurn ? this.lastAim : pointerAim;
     this.lastAim = aim;
