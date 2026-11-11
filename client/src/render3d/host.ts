@@ -37,7 +37,7 @@ export interface Stage {
   built?(view: View): void;
   /** One frame: steps the stage and, when `c.view` is set, draws through it. Returns the draw calls. */
   frame(c: StageCtx): number;
-  /** A key the host does not handle itself; true when the stage used it. */
+  /** A key the host does not handle itself; true when the stage used it (the host then prevents the default). */
   key?(e: KeyboardEvent): boolean;
   /** F3: true when the stage shows its own panel (then the host's readout stays hidden). */
   stats?(): boolean;
@@ -72,7 +72,11 @@ function showError(host: HTMLElement, text: string, fixed: boolean): HTMLElement
 const isTextTarget = (t: EventTarget | null): boolean =>
   t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
 
-/** Null when it showed an error. `makeStage` runs once the atlas is loaded. */
+/**
+ * Null when it showed an error or was stopped during the start. `makeStage` runs once the atlas is loaded. Everything the
+ * host adds is created before the first await, so `stop()` (also through the Host given to `makeStage`) is safe at any
+ * point. A `makeStage` or first `built` that throws leaves nothing behind and the error is rethrown.
+ */
 export async function startHost(
   el: HTMLElement, search: string, mode: 'demo' | 'run', makeStage: (assets: Assets, host: Host) => Stage,
   deps: HostDeps = { createView, loadAtlas },
@@ -99,7 +103,14 @@ export async function startHost(
   let ch = 0;
   let readout = '';
   let backendName = '';
-  let state: NonNullable<Window['__r3d']> | null = null;
+  let raf = 0;
+  const state: NonNullable<Window['__r3d']> = {
+    backend: '',
+    frames: 0,
+    renderSize: [0, 0],
+    zoom: 0,
+    forceLoss: (): boolean => view?.forceLoss() ?? false,
+  };
   const lostFrom = (g: number) => (message: string): void => {
     if (g !== gen || stopped) return;
     console.warn(`Graphics device lost: ${message}`);
@@ -135,62 +146,21 @@ export async function startHost(
     cw = 0; // setSize again for the current canvas size
     ch = 0;
     backendName = v.backend;
-    if (state) state.backend = backendName;
+    state.backend = backendName;
     readout = '';
     stage!.built?.(v);
   }
   const recovery: Recovery = createRecovery(rebuild);
 
-  const frames: FrameRects = {};
-  try {
-    const atlas = await deps.loadAtlas().catch((e) => {
-      showError(el, `Could not load the atlas: ${String(e)}`, false);
-      throw e;
-    });
-    for (const [name, f] of Object.entries(atlas.frames)) frames[name] = { x: f.frame.x, y: f.frame.y, w: f.frame.w, h: f.frame.h };
-    assets = { image: atlas.img, frames };
-  } catch {
-    canvas.remove();
-    return null;
-  }
-
-  const host: Host = {
-    get params() {
-      return params;
-    },
-    setParams: (p) => apply(p),
-    stop: () => stop(),
-  };
-  stage = makeStage(assets, host);
-  try {
-    view = await deps.createView(canvas, assets, stage.world, { forceWebGL: initial.backend === 'webgl' }, lostFrom(gen));
-    viewLive = true;
-  } catch (e) {
-    showError(el, String(e instanceof Error ? e.message : e), e instanceof RendererInitError);
-    canvas.remove();
-    stage.dispose();
-    return null;
-  }
-  backendName = view.backend;
-
-  state = {
-    backend: backendName,
-    frames: 0,
-    renderSize: [0, 0] as [number, number],
-    zoom: 0,
-    forceLoss: (): boolean => view?.forceLoss() ?? false,
-  };
-  window.__r3d = state;
-
   // The one path of every params change (the panel, F3, the stage): it keeps `params`, the panel's copy, the address bar and
   // what follows `params.stats` (the readout's visibility, the timer) in step.
+  const writeUrl = trailingWriter((s) => history.replaceState(null, '', s));
   const apply = (next: R3dParams): void => {
     params = next;
     panel.setParams(next);
     writeUrl(toSearch(next, location.search));
     follow();
   };
-  const writeUrl = trailingWriter((s) => history.replaceState(null, '', s));
   // Disabled only when the backend has no way to force a loss; a click during a rebuild does nothing but stays possible later.
   const panel = createPanel(el, params, apply, {
     mode,
@@ -220,7 +190,7 @@ export async function startHost(
     if (e.code === 'F3') {
       e.preventDefault(); // not the browser's find-next
       if (e.repeat) return;
-      if (stage!.stats?.()) return; // the stage shows its own panel
+      if (stage?.stats?.()) return; // the stage shows its own panel
       apply({ ...params, stats: !params.stats });
       return;
     }
@@ -229,7 +199,7 @@ export async function startHost(
       held.add(e.code);
       if (e.code.startsWith('Arrow')) e.preventDefault();
     }
-    stage!.key?.(e);
+    if (stage?.key?.(e)) e.preventDefault();
   };
   const onKeyUp = (e: KeyboardEvent): void => {
     held.delete(e.code);
@@ -238,6 +208,82 @@ export async function startHost(
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', onBlur);
+
+  const host: Host = {
+    get params() {
+      return params;
+    },
+    setParams: (p) => apply(p),
+    stop: () => stop(),
+  };
+
+  function stop(): void {
+    if (stopped) return;
+    stopped = true;
+    cancelAnimationFrame(raf);
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('blur', onBlur);
+    writeUrl.cancel();
+    if (view) {
+      try {
+        view.dispose();
+      } catch (e) {
+        console.warn('Disposing the view failed:', e);
+      }
+      view = null;
+    }
+    canvas.remove();
+    panel.destroy();
+    statsEl.remove();
+    timer.on = false;
+    try {
+      stage?.dispose();
+    } finally {
+      if (window.__r3d === state) delete window.__r3d;
+    }
+  }
+
+  const frames: FrameRects = {};
+  try {
+    const atlas = await deps.loadAtlas();
+    for (const [name, f] of Object.entries(atlas.frames)) frames[name] = { x: f.frame.x, y: f.frame.y, w: f.frame.w, h: f.frame.h };
+    assets = { image: atlas.img, frames };
+  } catch (e) {
+    if (!stopped) showError(el, `Could not load the atlas: ${String(e)}`, false);
+    stop();
+    return null;
+  }
+  if (stopped) return null;
+
+  try {
+    stage = makeStage(assets, host);
+  } catch (e) {
+    stop();
+    throw e;
+  }
+  if (stopped) {
+    stage.dispose(); // stop() ran inside makeStage, before there was a stage to dispose
+    return null;
+  }
+
+  let first: View;
+  try {
+    first = await deps.createView(canvas, assets, stage.world, { forceWebGL: initial.backend === 'webgl' }, lostFrom(gen));
+  } catch (e) {
+    if (!stopped) showError(el, String(e instanceof Error ? e.message : e), e instanceof RendererInitError);
+    stop();
+    return null;
+  }
+  if (stopped) {
+    first.dispose(); // stop() came while the view was being made; it disposed the stage already
+    return null;
+  }
+  view = first;
+  viewLive = true;
+  backendName = view.backend;
+  state.backend = backendName;
+  window.__r3d = state;
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   let last = performance.now() / 1000;
@@ -260,8 +306,8 @@ export async function startHost(
     }
     const zoom = params.zoom ?? pickZoom(w, h);
     const plan = renderPlan(params.quality, zoom, w, h);
-    state!.renderSize = [plan.targetW, plan.targetH];
-    state!.zoom = zoom;
+    state.renderSize = [plan.targetW, plan.targetH];
+    state.zoom = zoom;
     // While the view is being rebuilt the stage keeps stepping; only the drawing waits.
     const restoring = recovery.busy || !view;
     const text = restoring ? 'Graphics device lost, restoring…' : `${backendName} · zoom ${zoom} · render ${plan.targetW}×${plan.targetH}`;
@@ -275,7 +321,7 @@ export async function startHost(
     } finally {
       if (!restoring) timer.renderEnd(drawCalls); // also when the stage threw, so the timer stays consistent
     }
-    if (!restoring) state!.frames++;
+    if (!restoring) state.frames++;
     if (timer.on && nowMs - statsAt >= 250) {
       statsAt = nowMs;
       statsEl.textContent = statsText3d({
@@ -295,7 +341,6 @@ export async function startHost(
   // The next frame is requested first, and an exception in this one is logged (once per distinct message), so one throw
   // (a context that is lost but not yet reported, say) never stops the loop.
   const reported = new Set<string>();
-  let raf = 0;
   const loop = (nowMs: number): void => {
     raf = requestAnimationFrame(loop);
     try {
@@ -309,31 +354,14 @@ export async function startHost(
     }
   };
 
-  function stop(): void {
-    if (stopped) return;
-    stopped = true;
-    cancelAnimationFrame(raf);
-    window.removeEventListener('keydown', onKeyDown);
-    window.removeEventListener('keyup', onKeyUp);
-    window.removeEventListener('blur', onBlur);
-    if (view) {
-      try {
-        view.dispose();
-      } catch (e) {
-        console.warn('Disposing the view failed:', e);
-      }
-      view = null;
-    }
-    canvas.remove();
-    panel.destroy();
-    statsEl.remove();
-    timer.on = false;
-    stage!.dispose();
-    delete window.__r3d;
-  }
-
   booted = true;
-  stage.built?.(view);
+  try {
+    stage.built?.(first);
+  } catch (e) {
+    stop();
+    throw e;
+  }
+  if (stopped) return null; // the stage stopped the host in its first `built`
   if (lostEarly) recovery.lost(); // the first view was lost while the host was still setting up
   raf = requestAnimationFrame(loop);
   return host;

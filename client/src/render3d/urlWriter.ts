@@ -9,10 +9,10 @@ export function trailingWriter(
     set: (fn, ms) => setTimeout(fn, ms),
     clear: (id) => clearTimeout(id as ReturnType<typeof setTimeout>),
   },
-): (value: string) => void {
+): ((value: string) => void) & { cancel(): void } {
   let pending: unknown = null;
   let latest = '';
-  return (value) => {
+  const put = (value: string): void => {
     latest = value;
     if (pending !== null) timers.clear(pending);
     pending = timers.set(() => {
@@ -20,4 +20,10 @@ export function trailingWriter(
       write(latest);
     }, delayMs);
   };
+  /** Drops a write that has not happened yet. */
+  const cancel = (): void => {
+    if (pending !== null) timers.clear(pending);
+    pending = null;
+  };
+  return Object.assign(put, { cancel });
 }

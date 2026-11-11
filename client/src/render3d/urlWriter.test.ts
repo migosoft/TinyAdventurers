@@ -2,6 +2,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { trailingWriter } from './urlWriter';
 
 describe('trailingWriter', () => {
+  it('cancel drops the pending write', () => {
+    vi.useFakeTimers();
+    try {
+      const writes: string[] = [];
+      const w = trailingWriter((v) => writes.push(v), 200);
+      w('?a');
+      w.cancel();
+      vi.advanceTimersByTime(500);
+      expect(writes).toEqual([]);
+      w('?b');
+      vi.advanceTimersByTime(200);
+      expect(writes).toEqual(['?b']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('writes once, with the last value, after a burst of calls', () => {
     vi.useFakeTimers();
     try {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { startHost, type Stage } from './host';
+import { startHost, type Host, type Stage } from './host';
 import type { View, WorldInput } from './view';
 import { parseMap, MAP_ROWS } from './demoMap';
 
@@ -85,6 +85,94 @@ describe('startHost', () => {
     key(el);
     expect(stage.key).toHaveBeenCalledTimes(1);
     host!.stop();
+  });
+
+  it('stop through the Host while the first view is pending leaves nothing behind', async () => {
+    const { deps, stage, views } = setup();
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const inner = deps.createView.getMockImplementation()!;
+    deps.createView.mockImplementation(async (...a: Parameters<typeof inner>) => {
+      await gate;
+      return inner(...a);
+    });
+    let h!: Host;
+    const p = startHost(el, '', 'demo', (_a, host) => ((h = host), stage), deps);
+    await vi.waitFor(() => expect(deps.createView).toHaveBeenCalledTimes(1));
+    expect(() => h.stop()).not.toThrow();
+    release();
+    expect(await p).toBeNull();
+    expect(el.children.length).toBe(0);
+    expect(window.__r3d).toBeUndefined();
+    key(window);
+    expect(stage.key).not.toHaveBeenCalled();
+    expect(views[0].dispose).toHaveBeenCalledTimes(1);
+    expect(stage.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('setParams inside makeStage does not throw', async () => {
+    const { deps, stage } = setup();
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const host = await startHost(el, '', 'demo', (_a, h) => {
+      h.setParams({ ...h.params, pitch: 40 });
+      return stage;
+    }, deps);
+    expect(host!.params.pitch).toBe(40);
+    host!.stop();
+  });
+
+  it('a throwing makeStage or first built leaves nothing behind', async () => {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const a = setup();
+    await expect(startHost(el, '', 'demo', () => { throw new Error('boom'); }, a.deps)).rejects.toThrow('boom');
+    expect(el.children.length).toBe(0);
+    const b = setup();
+    b.stage.built.mockImplementation(() => { throw new Error('built'); });
+    await expect(startHost(el, '', 'demo', () => b.stage, b.deps)).rejects.toThrow('built');
+    expect(el.children.length).toBe(0);
+    expect(window.__r3d).toBeUndefined();
+    expect(b.views[0].dispose).toHaveBeenCalledTimes(1);
+    expect(b.stage.dispose).toHaveBeenCalledTimes(1);
+    key(window);
+    expect(b.stage.key).not.toHaveBeenCalled();
+  });
+
+  it('stage.key returning true prevents the default', async () => {
+    const { deps, stage } = setup();
+    stage.key.mockReturnValue(true);
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const host = await startHost(el, '', 'demo', () => stage, deps);
+    const e = new KeyboardEvent('keydown', { code: 'KeyQ', cancelable: true });
+    window.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+    host!.stop();
+  });
+
+  it('stop leaves a newer host\'s __r3d alone and cancels the URL write', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { deps, stage } = setup();
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      const spy = vi.spyOn(history, 'replaceState');
+      const host = await startHost(el, '', 'demo', () => stage, deps);
+      host!.setParams({ ...host!.params, pitch: 33 });
+      const other = { backend: 'x', frames: 0, renderSize: [0, 0] as [number, number], zoom: 0 };
+      window.__r3d = other;
+      host!.stop();
+      vi.advanceTimersByTime(1000);
+      expect(spy).not.toHaveBeenCalled();
+      expect(window.__r3d).toBe(other);
+      delete window.__r3d;
+      spy.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a rebuild reads the stage\'s world again and calls built', async () => {
