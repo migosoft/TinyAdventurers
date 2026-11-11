@@ -23,7 +23,7 @@ const errs = [];
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
 p.on('pageerror', (e) => errs.push(e.message));
 p.on('console', (m) => m.type() === 'error' && !(lose && m.text().includes('Device Lost')) && errs.push(m.text()));
-await p.goto(`${base}?r3d${extra}`);
+await p.goto(`${base}?r3d=demo${extra}`);
 let ok = true;
 try {
   await p.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 20000 });

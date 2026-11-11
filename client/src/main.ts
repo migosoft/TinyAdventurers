@@ -132,8 +132,8 @@ async function main(): Promise<void> {
   if (q.has('r3d')) {
     const host = document.getElementById('game')!;
     host.classList.add('active');
-    const { bootR3d } = await import('./render3d/boot');
-    return bootR3d(host, location.search);
+    const { bootDemo } = await import('./render3d/boot');
+    return bootDemo(host, location.search);
   }
   if (q.has('gallery') || Object.keys(DEMOS).some((k) => q.has(k))) return gallery();
   const ui = document.getElementById('ui')!;
