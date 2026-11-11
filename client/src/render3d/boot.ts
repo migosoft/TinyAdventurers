@@ -3,7 +3,8 @@ import { keysToWorld } from './camera';
 import { buildDynamic } from './cards';
 import { parseMap, MAP_ROWS } from './demoMap';
 import { sceneLights } from './light';
-import { parseParams } from './params';
+import { createPanel } from './panel';
+import { parseParams, toSearch } from './params';
 import { pickZoom, renderPlan } from './quality';
 import { frameDt, newScene, stepScene } from './scene';
 import { createView, type View } from './view';
@@ -29,7 +30,7 @@ function showError(host: HTMLElement, text: string, fixed: boolean): void {
 }
 
 export async function bootR3d(host: HTMLElement, search: string): Promise<void> {
-  const params = parseParams(search);
+  const initial = parseParams(search);
   const canvas = document.createElement('canvas');
   canvas.className = 'r3d';
   host.appendChild(canvas);
@@ -44,7 +45,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     });
     for (const [name, f] of Object.entries(atlas.frames)) frames[name] = { x: f.frame.x, y: f.frame.y, w: f.frame.w, h: f.frame.h };
     try {
-      view = await createView(canvas, { image: atlas.img, frames }, map, { forceWebGL: params.backend === 'webgl' });
+      view = await createView(canvas, { image: atlas.img, frames }, map, { forceWebGL: initial.backend === 'webgl' });
     } catch (e) {
       showError(host, String(e instanceof Error ? e.message : e), true);
       return;
@@ -56,8 +57,17 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
   const state = { backend: view.backend as string, frames: 0, renderSize: [0, 0] as [number, number], zoom: 0 };
   window.__r3d = state;
 
+  let params = initial;
+  const panel = createPanel(host, params, (p) => {
+    params = p;
+    history.replaceState(null, '', toSearch(p));
+  });
+  let readout = '';
+  const backendName = view.backend;
+
   const held = new Set<string>();
   window.addEventListener('keydown', (e) => {
+    if (e.target instanceof HTMLInputElement) return; // the slider keeps its own keys
     if (e.code in MOVE_KEYS) {
       held.add(e.code);
       if (e.code.startsWith('Arrow')) e.preventDefault();
@@ -87,6 +97,8 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     let ix = 0;
     let iz = 0;
     for (const k of held) { ix += MOVE_KEYS[k][0]; iz += MOVE_KEYS[k][1]; }
+    cam.pitch = (params.pitch * Math.PI) / 180;
+    cam.yaw = (params.yaw * Math.PI) / 180;
     stepScene(map, scene, ix || iz ? keysToWorld(cam.yaw, ix, iz) : { x: 0, z: 0 }, dt);
     const k = 1 - Math.exp(-dt * 6);
     cam.x += (scene.player.x - cam.x) * k;
@@ -97,6 +109,11 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     const plan = renderPlan(params.quality, zoom, w, h);
     state.renderSize = [plan.targetW, plan.targetH];
     state.zoom = zoom;
+    const text = `${backendName} · zoom ${zoom} · render ${plan.targetW}×${plan.targetH}`;
+    if (text !== readout) {
+      readout = text;
+      panel.setReadout(text);
+    }
     view.draw({ cam, plan, dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now });
     state.frames++;
     requestAnimationFrame(loop);

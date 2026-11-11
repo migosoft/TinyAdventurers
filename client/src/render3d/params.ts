@@ -21,6 +21,11 @@ function num(v: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Wraps degrees into -180..180 the way the URL does. */
+export function wrapYaw(yaw: number): number {
+  return yaw - 360 * Math.round(yaw / 360);
+}
+
 export function parseParams(search: string): R3dParams {
   const q = new URLSearchParams(search);
   const pitch = num(q.get('pitch'));
@@ -29,7 +34,7 @@ export function parseParams(search: string): R3dParams {
   const quality = q.get('quality');
   return {
     pitch: pitch === null ? DEFAULTS.pitch : Math.min(80, Math.max(30, pitch)),
-    yaw: yaw === null ? DEFAULTS.yaw : yaw - 360 * Math.round(yaw / 360),
+    yaw: yaw === null ? DEFAULTS.yaw : wrapYaw(yaw),
     quality: quality === 'high' || quality === 'balanced' || quality === 'fast' ? quality : DEFAULTS.quality,
     zoom: zoom !== null && Number.isInteger(zoom) ? Math.min(8, Math.max(2, zoom)) : null,
     backend: q.get('backend') === 'webgl' ? 'webgl' : 'auto',

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, parseParams, toSearch, type R3dParams } from './params';
+import { DEFAULTS, parseParams, toSearch, wrapYaw, type R3dParams } from './params';
+
+describe('wrapYaw', () => {
+  it('wraps into -180..180', () => {
+    expect(wrapYaw(215)).toBe(-145);
+    expect(wrapYaw(-190)).toBe(170);
+    expect(wrapYaw(45)).toBe(45);
+  });
+});
 
 describe('parseParams', () => {
   it('gives the defaults for a bare ?r3d', () => {
