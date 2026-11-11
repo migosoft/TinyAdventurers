@@ -129,6 +129,12 @@ function fatal(ui: HTMLElement, msg: string): void {
 /** Login, then the roster; opening a character connects to the game and shows its hub. */
 async function main(): Promise<void> {
   const q = new URLSearchParams(location.search);
+  if (q.has('r3d')) {
+    const host = document.getElementById('game')!;
+    host.classList.add('active');
+    const { bootR3d } = await import('./render3d/boot');
+    return bootR3d(host, location.search);
+  }
   if (q.has('gallery') || Object.keys(DEMOS).some((k) => q.has(k))) return gallery();
   const ui = document.getElementById('ui')!;
   let me;
