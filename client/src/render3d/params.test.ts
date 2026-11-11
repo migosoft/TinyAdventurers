@@ -1,0 +1,46 @@
+import { describe, expect, it } from 'vitest';
+import { DEFAULTS, parseParams, toSearch, type R3dParams } from './params';
+
+describe('parseParams', () => {
+  it('gives the defaults for a bare ?r3d', () => {
+    expect(parseParams('?r3d')).toEqual(DEFAULTS);
+  });
+
+  it('reads values back', () => {
+    const p = parseParams('?r3d&pitch=48.6&yaw=-90&quality=high&zoom=4');
+    expect(p.pitch).toBe(48.6);
+    expect(p.yaw).toBe(-90);
+    expect(p.quality).toBe('high');
+    expect(p.zoom).toBe(4);
+  });
+
+  it('clamps and falls back', () => {
+    expect(parseParams('?pitch=abc').pitch).toBe(45);
+    expect(parseParams('?pitch=5').pitch).toBe(30);
+    expect(parseParams('?pitch=200').pitch).toBe(80);
+    expect(parseParams('?zoom=99').zoom).toBe(8);
+    expect(parseParams('?zoom=1.5').zoom).toBeNull();
+    expect(parseParams('?quality=ultra').quality).toBe('balanced');
+    expect(parseParams('?yaw=720').yaw).toBe(0);
+  });
+
+  it('reads the switches', () => {
+    const p = parseParams('?backend=webgl&shadows=0&orb=0&smooth=1&stats=1');
+    expect(p).toMatchObject({ backend: 'webgl', shadows: false, orb: false, smooth: true, stats: true });
+  });
+});
+
+describe('toSearch', () => {
+  it('writes only what differs', () => {
+    expect(toSearch(DEFAULTS)).toBe('?r3d');
+    expect(toSearch({ ...DEFAULTS, quality: 'fast' })).toBe('?r3d&quality=fast');
+  });
+
+  it('round-trips a fully non-default value', () => {
+    const p: R3dParams = {
+      pitch: 60.5, yaw: -120, quality: 'fast', zoom: 5, backend: 'webgl',
+      shadows: false, orb: false, smooth: true, stats: true,
+    };
+    expect(parseParams(toSearch(p))).toEqual(p);
+  });
+});
