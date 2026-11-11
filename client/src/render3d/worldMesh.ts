@@ -1,10 +1,13 @@
-import { heightAt } from './heights';
-import type { TileMap } from '../sim/map';
+import { WALL_H, heightAt } from './heights';
+import { isTerrain, type TileMap } from '../sim/map';
+import { GROUND_TILES } from '../game/woodland/ground';
 
 /** Atlas frames by name, in atlas px. */
 export type FrameRects = Record<string, { x: number; y: number; w: number; h: number }>;
 
-export const KIND = { floor: 0, face: 1, top: 2 } as const;
+export const CHUNK = 16;
+
+export const KIND = { floor: 0, face: 1, top: 2, ground: 3 } as const;
 
 /** Per vertex: position (tiles), uv (atlas px), normal, kind, rect (the atlas frame the uv lies in). 6 vertices per quad. */
 export interface WorldArrays {
@@ -16,19 +19,56 @@ export interface WorldArrays {
   count: number;
 }
 
+export interface Chunk { cx: number; cz: number; world: WorldArrays; min: [number, number, number]; max: [number, number, number] }
+
 export function tileHash(x: number, z: number): number {
   let n = (Math.imul(x, 374761393) + Math.imul(z, 668265263)) | 0;
   n = Math.imul(n ^ (n >>> 13), 1274126177) | 0;
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 }
 
-const FLOORS = ['floor_1', 'floor_1', 'floor_1', 'floor_2', 'floor_3', 'floor_4', 'floor_5', 'floor_6', 'floor_7', 'floor_8'];
-
 type Corner = [x: number, y: number, z: number, u: number, v: number];
 type Rect = { x: number; y: number; w: number; h: number };
 const NO_RECT: Rect = { x: 0, y: 0, w: 0, h: 0 };
 
-export function buildWorld(m: TileMap, frames: FrameRects): WorldArrays {
+export function chunkGrid(map: { w: number; h: number }): { nx: number; nz: number } {
+  return { nx: Math.ceil(map.w / CHUNK), nz: Math.ceil(map.h / CHUNK) };
+}
+
+/** The chunk of the cell and those of its four neighbours where they differ and lie inside the grid; no duplicates. */
+export function chunksOfTile(map: { w: number; h: number }, x: number, z: number): [cx: number, cz: number][] {
+  const { nx, nz } = chunkGrid(map);
+  const out: [number, number][] = [];
+  for (const [dx, dz] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
+    const cx = Math.floor((x + dx) / CHUNK), cz = Math.floor((z + dz) / CHUNK);
+    if (cx < 0 || cz < 0 || cx >= nx || cz >= nz) continue;
+    if (!out.some((c) => c[0] === cx && c[1] === cz)) out.push([cx, cz]);
+  }
+  return out;
+}
+
+/** The floor frame of a cell: floor_1 for 93 %, the other seven share the rest (as autotile.ts). */
+export function floorFrame(x: number, z: number): string {
+  const h = tileHash(x, z);
+  return h < 0.93 ? 'floor_1' : `floor_${2 + Math.floor(h * 1000) % 7}`;
+}
+
+const BANNERS = ['wall_banner_red', 'wall_banner_blue', 'wall_banner_green', 'wall_banner_yellow'];
+
+/** Which frame a face quad shows. `side`: 0 south, 1 north, 2 east, 3 west; `row`: 0 the lower tile, 1 the upper. */
+export function faceFrame(x: number, z: number, side: number, row: number, straight: boolean): string {
+  if (!straight) return 'wall_mid';
+  if (row === 0) {
+    const q = tileHash(x * 4 + side + 91, z + 17);
+    return q < 0.025 ? 'wall_hole_1' : q < 0.045 ? 'wall_hole_2' : q < 0.06 ? 'wall_goo' : 'wall_mid';
+  }
+  const q = tileHash(x + 31, z * 4 + side + 7);
+  return q < 0.015 ? BANNERS[Math.floor(q * 4000) % 4] : 'wall_mid';
+}
+
+/** Floor, ground, faces and tops of the cells x in [16cx, min(w, 16cx+16)), z likewise. `painted`: the run has a woodland. */
+export function buildChunk(m: TileMap, painted: boolean, cx: number, cz: number, frames: FrameRects): Chunk {
+  const x0 = cx * CHUNK, z0 = cz * CHUNK, x1 = Math.min(m.w, x0 + CHUNK), z1 = Math.min(m.h, z0 + CHUNK);
   const position: number[] = [], uv: number[] = [], normal: number[] = [], kind: number[] = [], rect: number[] = [];
   const frame = (name: string): Rect => {
     const r = frames[name];
@@ -64,36 +104,52 @@ export function buildWorld(m: TileMap, frames: FrameRects): WorldArrays {
     }
   };
 
-  for (let z = 0; z < m.h; z++) for (let x = 0; x < m.w; x++) {
+  // dx, dz of the neighbour, then the left (ax, az) and right (bx, bz) edge end offsets seen from outside.
+  const sideDefs: [number, number, number, number, number, number][] = [
+    [0, 1, 0, 1, 1, 1],
+    [0, -1, 1, 0, 0, 0],
+    [1, 0, 1, 1, 1, 0],
+    [-1, 0, 0, 0, 0, 1],
+  ];
+  const fullFace = (x: number, z: number, s: number) => heightAt(m, x, z) === WALL_H && heightAt(m, x + sideDefs[s][0], z + sideDefs[s][1]) === 0;
+
+  for (let z = z0; z < z1; z++) for (let x = x0; x < x1; x++) {
     const h = heightAt(m, x, z);
     if (h === 0) {
-      const r = frame(FLOORS[Math.floor(tileHash(x, z) * FLOORS.length)]);
+      const t = m.get(x, z);
+      if (isTerrain(t)) continue;
+      if (painted && GROUND_TILES.has(t)) {
+        const gr: Rect = { x: 0, y: 0, w: m.w * 16, h: m.h * 16 };
+        quad([[x, 0, z, x * 16, z * 16], [x + 1, 0, z, x * 16 + 16, z * 16], [x + 1, 0, z + 1, x * 16 + 16, z * 16 + 16], [x, 0, z + 1, x * 16, z * 16 + 16]], [0, 1, 0], KIND.ground, gr);
+        continue;
+      }
+      const r = frame(floorFrame(x, z));
       quad([[x, 0, z, r.x, r.y], [x + 1, 0, z, r.x + 16, r.y], [x + 1, 0, z + 1, r.x + 16, r.y + 16], [x, 0, z + 1, r.x, r.y + 16]], [0, 1, 0], KIND.floor, r);
       continue;
     }
     quad([[x, h, z, 0, 0], [x + 1, h, z, 0, 0], [x + 1, h, z + 1, 0, 0], [x, h, z + 1, 0, 0]], [0, 1, 0], KIND.top, NO_RECT);
-
-    const hs = heightAt(m, x, z + 1);
-    side(h, hs, x, z + 1, x + 1, z + 1, [0, 0, 1], (k) => {
-      if (k === 0 && hs === 0) {
-        const q = tileHash(x + 91, z + 17);
-        return q < 0.07 ? 'wall_hole_1' : q < 0.13 ? 'wall_hole_2' : q < 0.17 ? 'wall_goo' : 'wall_mid';
-      }
-      if (k === 1 && z === 1 && (x === 9 || x === 15)) return x === 9 ? 'wall_banner_red' : 'wall_banner_blue';
-      return 'wall_mid';
-    });
-    const mid = () => 'wall_mid';
-    side(h, heightAt(m, x, z - 1), x + 1, z, x, z, [0, 0, -1], mid);
-    side(h, heightAt(m, x + 1, z), x + 1, z + 1, x + 1, z, [1, 0, 0], mid);
-    side(h, heightAt(m, x - 1, z), x, z, x, z + 1, [-1, 0, 0], mid);
+    for (let s = 0; s < 4; s++) {
+      const d = sideDefs[s];
+      const hn = heightAt(m, x + d[0], z + d[1]);
+      if (hn >= h) continue;
+      // beside along the wall: east and west for sides 0 and 1, north and south for sides 2 and 3
+      const [bx, bz] = s < 2 ? [1, 0] : [0, 1];
+      const straight = fullFace(x + bx, z + bz, s) && fullFace(x - bx, z - bz, s);
+      side(h, hn, x + d[2], z + d[3], x + d[4], z + d[5], [d[0], 0, d[1]], (k) => faceFrame(x, z, s, k, straight));
+    }
   }
 
   return {
-    position: new Float32Array(position),
-    uv: new Float32Array(uv),
-    normal: new Float32Array(normal),
-    kind: new Float32Array(kind),
-    rect: new Float32Array(rect),
-    count: kind.length,
+    cx, cz,
+    world: {
+      position: new Float32Array(position),
+      uv: new Float32Array(uv),
+      normal: new Float32Array(normal),
+      kind: new Float32Array(kind),
+      rect: new Float32Array(rect),
+      count: kind.length,
+    },
+    min: [x0, 0, z0],
+    max: [x1, WALL_H, z1],
   };
 }

@@ -32,7 +32,7 @@ import { cardMaterial, emissiveMaterial, glowMaterial, viewTowardUniform, worldM
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
-import { buildWorld, type FrameRects } from './worldMesh';
+import { buildChunk, chunkGrid, type FrameRects, type WorldArrays } from './worldMesh';
 
 export interface Assets { image: HTMLImageElement; frames: FrameRects }
 /** `smooth`: floors read the linear atlas at a sharpened position (a uniform; no recompile). */
@@ -167,7 +167,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, map: TileMap,
   heights.unpackAlignment = 1;
   pixelTexture(heights);
 
-  const w = buildWorld(map, assets.frames);
+  const w = buildAllChunks(map, assets.frames);
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(w.position, 3));
   geometry.setAttribute('uv', new BufferAttribute(w.uv, 2));
@@ -305,5 +305,22 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, map: TileMap,
         disposeRenderer(renderer);
       }
     },
+  };
+}
+
+/** Every chunk of the map merged into one array set; B4 draws one mesh per chunk instead. */
+function buildAllChunks(map: TileMap, frames: FrameRects): WorldArrays {
+  const { nx, nz } = chunkGrid(map);
+  const parts: WorldArrays[] = [];
+  for (let cz = 0; cz < nz; cz++) for (let cx = 0; cx < nx; cx++) parts.push(buildChunk(map, false, cx, cz, frames).world);
+  const join = (get: (p: WorldArrays) => Float32Array) => {
+    const out = new Float32Array(parts.reduce((n, p) => n + get(p).length, 0));
+    let at = 0;
+    for (const p of parts) { out.set(get(p), at); at += get(p).length; }
+    return out;
+  };
+  return {
+    position: join((p) => p.position), uv: join((p) => p.uv), normal: join((p) => p.normal),
+    kind: join((p) => p.kind), rect: join((p) => p.rect), count: parts.reduce((n, p) => n + p.count, 0),
   };
 }
