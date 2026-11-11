@@ -36,6 +36,6 @@ describe('statsText3d', () => {
   });
 
   it('names the systems in order', () => {
-    expect(R3D_SYSTEMS).toEqual(['sim', 'cards', 'lights', 'upload', 'scene', 'present']);
+    expect(R3D_SYSTEMS).toEqual(['sim', 'cards', 'lights', 'upload', 'scene', 'present', 'hud']);
   });
 });

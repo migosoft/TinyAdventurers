@@ -16,7 +16,11 @@ import './r3d.css';
 
 declare global {
   interface Window {
-    __r3d?: { backend: string; frames: number; renderSize: [number, number]; zoom: number; forceLoss?: () => boolean };
+    __r3d?: {
+      backend: string; frames: number; renderSize: [number, number]; zoom: number; forceLoss?: () => boolean;
+      /** A run's stage adds these: the own hero and the camera target (tiles), and the view's chunk meshes. */
+      hero?: { x: number; z: number }; cam?: { x: number; z: number }; chunks?: { total: number; drawn: number };
+    };
   }
 }
 
@@ -60,7 +64,7 @@ export interface HostDeps {
   loadAtlas: () => Promise<{ img: HTMLImageElement; frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }> }>;
 }
 
-function showError(host: HTMLElement, text: string, fixed: boolean): HTMLElement {
+export function showError(host: HTMLElement, text: string, fixed: boolean): HTMLElement {
   const d = document.createElement('div');
   d.className = 'r3d-error';
   d.textContent = fixed ? `This page needs WebGPU or WebGL2, which this browser does not offer. ${text}` : text;

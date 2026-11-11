@@ -15,39 +15,50 @@ type V = [number, number, number, number, number]; // x y z u v
 // Corners run top-left, top-right, bottom-right, bottom-left seen from the camera side; wound counter-clockwise.
 const ORDER = [0, 3, 2, 0, 2, 1];
 
-export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: number, orb: boolean): Dynamic {
+const push = (pos: number[], uv: number[], q: [V, V, V, V], col?: number[], rgb?: number[]) => {
+  for (const i of ORDER) {
+    pos.push(q[i][0], q[i][1], q[i][2]);
+    uv.push(q[i][3], q[i][4]);
+    if (col && rgb) col.push(rgb[0], rgb[1], rgb[2]);
+  }
+};
+
+/** One upright figure card: an atlas frame standing on a ground point (tiles), mirrored when `flip`. */
+export interface CardItem { frame: string; x: number; z: number; flip: boolean }
+
+/** Standing cards, each on its snapped foot and turned to the camera's yaw; a frame the atlas lacks is skipped. */
+export function cardQuads(items: readonly CardItem[], frames: FrameRects, cam: Cam): Quads {
   const cp: number[] = [], cu: number[] = [];
-  const ep: number[] = [], eu: number[] = [];
-  const gp: number[] = [], gu: number[] = [], gc: number[] = [];
-  let cn = 0, en = 0, gn = 0;
+  let cn = 0;
   const c = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
-
-  const push = (pos: number[], uv: number[], q: [V, V, V, V], col?: number[], rgb?: number[]) => {
-    for (const i of ORDER) {
-      pos.push(q[i][0], q[i][1], q[i][2]);
-      uv.push(q[i][3], q[i][4]);
-      if (col && rgb) col.push(rgb[0], rgb[1], rgb[2]);
-    }
-  };
-
-  const card = (frame: string, x: number, z: number, flip: boolean) => {
-    const r = frames[frame];
-    if (!r) return;
-    const f = snapGround(cam.pitch, cam.yaw, x, z);
+  for (const it of items) {
+    const r = frames[it.frame];
+    if (!r) continue;
+    const f = snapGround(cam.pitch, cam.yaw, it.x, it.z);
     const h = r.h / 16, ax = (r.w / 32) * c, az = (r.w / 32) * sn;
-    const u0 = flip ? r.x + r.w : r.x, u1 = flip ? r.x : r.x + r.w;
+    const u0 = it.flip ? r.x + r.w : r.x, u1 = it.flip ? r.x : r.x + r.w;
     push(cp, cu, [
       [f.x - ax, h, f.z - az, u0, r.y], [f.x + ax, h, f.z + az, u1, r.y],
       [f.x + ax, 0, f.z + az, u1, r.y + r.h], [f.x - ax, 0, f.z - az, u0, r.y + r.h],
     ]);
     cn++;
-  };
+  }
+  return { position: new Float32Array(cp), uv: new Float32Array(cu), count: cn };
+}
 
+export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: number, orb: boolean): Dynamic {
+  const ep: number[] = [], eu: number[] = [];
+  const gp: number[] = [], gu: number[] = [], gc: number[] = [];
+  let en = 0, gn = 0;
+  const c = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
+
+  const items: CardItem[] = [];
   for (const e of s.ents) {
     e.flip = facesLeft(cam.yaw, e.fx, e.fz, e.flip);
-    card(frameOf(e), e.x, e.z, e.flip);
+    items.push({ frame: frameOf(e), x: e.x, z: e.z, flip: e.flip });
   }
-  for (const p of s.props) card(p.frame, p.x, p.z, false);
+  for (const p of s.props) items.push({ frame: p.frame, x: p.x, z: p.z, flip: false });
+  const cards = cardQuads(items, frames, cam);
 
   // Glow quad: camera-facing (round on screen), screen-right (c, 0, s), screen-up (s sin p, cos p, -c sin p), half-size `size`.
   // Its centre is moved toward the camera by size + GLOW_LIFT along the view ray, which leaves its screen position
@@ -87,7 +98,7 @@ export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: num
   }
 
   return {
-    cards: { position: new Float32Array(cp), uv: new Float32Array(cu), count: cn },
+    cards,
     emissive: { position: new Float32Array(ep), uv: new Float32Array(eu), count: en },
     glows: { position: new Float32Array(gp), uv: new Float32Array(gu), color: new Float32Array(gc), count: gn },
   };
