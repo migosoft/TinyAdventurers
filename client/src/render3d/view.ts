@@ -4,18 +4,24 @@ import {
   Color,
   DataTexture,
   DynamicDrawUsage,
+  LinearFilter,
   LinearSRGBColorSpace,
   Mesh,
   NearestFilter,
   NoColorSpace,
   NoToneMapping,
+  NodeMaterial,
   OrthographicCamera,
+  QuadMesh,
   RedFormat,
+  RenderTarget,
   Scene,
   Texture,
   UnsignedByteType,
+  Vector4,
   WebGPURenderer,
 } from 'three/webgpu';
+import { texture } from 'three/tsl';
 import { snapGround, viewRay, type Cam } from './camera';
 import { heightBytes, type DemoMap } from './demoMap';
 import type { Dynamic } from './cards';
@@ -119,6 +125,29 @@ export async function createView(canvas: HTMLCanvasElement, assets: Assets, map:
   const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3]], glow);
   glows.mesh.renderOrder = 1;
 
+  // The off-screen copy: the quad shows the target's texels as they are (no lighting, no tone mapping, no colour conversion).
+  let target: RenderTarget | null = null;
+  const copyMaterial = new NodeMaterial();
+  copyMaterial.depthTest = false;
+  copyMaterial.depthWrite = false;
+  const quad = new QuadMesh(copyMaterial);
+  const fullViewport = new Vector4();
+  function targetFor(w: number, h: number, linear: boolean): RenderTarget {
+    const filter = linear ? LinearFilter : NearestFilter;
+    if (!target || target.width !== w || target.height !== h) {
+      target?.dispose();
+      target = new RenderTarget(w, h, { depthBuffer: true, magFilter: filter, minFilter: filter, generateMipmaps: false });
+      target.texture.colorSpace = NoColorSpace;
+      copyMaterial.fragmentNode = texture(target.texture);
+      copyMaterial.needsUpdate = true;
+    } else if (target.texture.magFilter !== filter) {
+      target.texture.magFilter = filter;
+      target.texture.minFilter = filter;
+      target.texture.needsUpdate = true;
+    }
+    return target;
+  }
+
   const scene = new Scene();
   scene.add(mesh, cards.mesh, flames.mesh, glows.mesh);
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
@@ -147,8 +176,23 @@ export async function createView(canvas: HTMLCanvasElement, assets: Assets, map:
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color }, d.glows.count * 6);
       lighting.setLights(f.lights);
       lighting.setShadows(f.shadows);
+      if (f.plan.direct) {
+        renderer.setRenderTarget(null);
+        renderer.render(scene, camera);
+        return renderer.info.render.drawCalls;
+      }
+      const p = f.plan;
+      renderer.setRenderTarget(targetFor(p.targetW, p.targetH, p.linear));
       renderer.render(scene, camera);
-      return renderer.info.render.drawCalls;
+      let calls = renderer.info.render.drawCalls;
+      renderer.setRenderTarget(null);
+      renderer.getViewport(fullViewport);
+      // The viewport origin is the top-left corner of the canvas on both backends.
+      renderer.setViewport(p.dstX, p.dstY, p.dstW, p.dstH);
+      quad.render(renderer);
+      calls += renderer.info.render.drawCalls;
+      renderer.setViewport(fullViewport);
+      return calls;
     },
     dispose() {
       atlas.dispose();
@@ -157,6 +201,8 @@ export async function createView(canvas: HTMLCanvasElement, assets: Assets, map:
       material.dispose();
       for (const m of [card.material, emissive, glow]) m.dispose();
       for (const dm of [cards, flames, glows]) dm.dispose();
+      target?.dispose();
+      copyMaterial.dispose();
       renderer.dispose();
     },
   };

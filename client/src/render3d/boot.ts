@@ -12,7 +12,7 @@ import './r3d.css';
 
 declare global {
   interface Window {
-    __r3d?: { backend: string; frames: number };
+    __r3d?: { backend: string; frames: number; renderSize: [number, number]; zoom: number };
   }
 }
 
@@ -53,7 +53,7 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     return;
   }
 
-  const state = { backend: view.backend as string, frames: 0 };
+  const state = { backend: view.backend as string, frames: 0, renderSize: [0, 0] as [number, number], zoom: 0 };
   window.__r3d = state;
 
   const held = new Set<string>();
@@ -94,7 +94,10 @@ export async function bootR3d(host: HTMLElement, search: string): Promise<void> 
     const zoom = params.zoom ?? pickZoom(w, h);
     const dynamic = buildDynamic(scene, frames, cam, now, params.orb);
     const lights = sceneLights(scene, now, params.orb);
-    view.draw({ cam, plan: renderPlan('high', zoom, w, h), dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now });
+    const plan = renderPlan(params.quality, zoom, w, h);
+    state.renderSize = [plan.targetW, plan.targetH];
+    state.zoom = zoom;
+    view.draw({ cam, plan, dynamic, lights, shadows: params.shadows, smooth: params.smooth, t: now });
     state.frames++;
     requestAnimationFrame(loop);
   };
