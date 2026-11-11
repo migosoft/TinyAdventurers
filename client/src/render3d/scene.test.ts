@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MAP_ROWS, parseMap, solid } from './demoMap';
+import { MAP_ROWS, parseMap } from './demoMap';
+import { heightAt } from './heights';
 import { frameDt, frameOf, newScene, stepScene } from './scene';
 
 const map = parseMap(MAP_ROWS);
@@ -17,7 +18,7 @@ describe('player', () => {
     const s = newScene();
     for (let i = 0; i < 100; i++) {
       stepScene(map, s, { x: -1, z: 0 }, 0.05);
-      expect(solid(map, Math.floor(s.player.x), Math.floor(s.player.z))).toBe(false);
+      expect(heightAt(map, Math.floor(s.player.x), Math.floor(s.player.z)) > 0).toBe(false);
     }
     expect(s.player.x).toBeGreaterThanOrEqual(2.28 - 1e-9);
   });
@@ -73,8 +74,8 @@ describe('torches', () => {
   it('stand on floor cells whose northern neighbour is a wall', () => {
     for (const t of newScene().torches) {
       const cx = Math.floor(t.x), cz = Math.floor(t.z);
-      expect(solid(map, cx, cz)).toBe(false);
-      expect(solid(map, cx, cz - 1)).toBe(true);
+      expect(heightAt(map, cx, cz) > 0).toBe(false);
+      expect(heightAt(map, cx, cz - 1) > 0).toBe(true);
     }
   });
 });

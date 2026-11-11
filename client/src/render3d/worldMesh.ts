@@ -1,4 +1,5 @@
-import { heightAt, type DemoMap } from './demoMap';
+import { heightAt } from './heights';
+import type { TileMap } from '../sim/map';
 
 /** Atlas frames by name, in atlas px. */
 export type FrameRects = Record<string, { x: number; y: number; w: number; h: number }>;
@@ -27,7 +28,7 @@ type Corner = [x: number, y: number, z: number, u: number, v: number];
 type Rect = { x: number; y: number; w: number; h: number };
 const NO_RECT: Rect = { x: 0, y: 0, w: 0, h: 0 };
 
-export function buildWorld(m: DemoMap, frames: FrameRects): WorldArrays {
+export function buildWorld(m: TileMap, frames: FrameRects): WorldArrays {
   const position: number[] = [], uv: number[] = [], normal: number[] = [], kind: number[] = [], rect: number[] = [];
   const frame = (name: string): Rect => {
     const r = frames[name];

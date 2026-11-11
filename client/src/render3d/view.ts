@@ -23,7 +23,8 @@ import {
 } from 'three/webgpu';
 import { texture } from 'three/tsl';
 import { snapGround, viewRay, type Cam } from './camera';
-import { heightBytes, type DemoMap } from './demoMap';
+import { heightBytes } from './heights';
+import type { TileMap } from '../sim/map';
 import type { Dynamic } from './cards';
 import type { Light } from './light';
 import { makeLighting } from './lightNodes';
@@ -116,7 +117,7 @@ function disposeRenderer(renderer: WebGPURenderer): void {
 export async function createView(
   canvas: HTMLCanvasElement,
   assets: Assets,
-  map: DemoMap,
+  map: TileMap,
   opts: { forceWebGL: boolean },
   onLost: (message: string) => void,
 ): Promise<View> {
@@ -134,7 +135,7 @@ export async function createView(
   }
 }
 
-async function buildView(renderer: WebGPURenderer, assets: Assets, map: DemoMap, onLost: (message: string) => void): Promise<View> {
+async function buildView(renderer: WebGPURenderer, assets: Assets, map: TileMap, onLost: (message: string) => void): Promise<View> {
   let lost = false;
   let disposed = false;
   const reportLoss = (message: string): void => {

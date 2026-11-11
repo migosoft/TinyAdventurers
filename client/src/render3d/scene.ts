@@ -1,6 +1,6 @@
 // The demo scene's state and step: figures, props and torches, in world units (tiles).
-import type { DemoMap } from './demoMap';
-import { solid } from './demoMap';
+import type { TileMap } from '../sim/map';
+import { heightAt } from './heights';
 
 export type FigKind = 'knight' | 'wizard' | 'elf' | 'orc' | 'skelet' | 'demon';
 export interface Ent {
@@ -51,13 +51,13 @@ export function frameDt(nowS: number, lastS: number): number {
 }
 
 /** Whether a circle of radius r at (x, z) hits a wall corner cell or a prop (demo `blocked`). */
-export function blocked(m: DemoMap, s: SceneState, x: number, z: number, r: number): boolean {
-  for (const [dx, dz] of [[-r, -r], [r, -r], [-r, r], [r, r]]) if (solid(m, Math.floor(x + dx), Math.floor(z + dz))) return true;
+export function blocked(m: TileMap, s: SceneState, x: number, z: number, r: number): boolean {
+  for (const [dx, dz] of [[-r, -r], [r, -r], [-r, r], [r, r]]) if (heightAt(m, Math.floor(x + dx), Math.floor(z + dz)) > 0) return true;
   for (const p of s.props) if (Math.hypot(x - p.x, z - (p.z - 0.25)) < 0.5 + r * 0.5) return true;
   return false;
 }
 
-export function stepScene(m: DemoMap, s: SceneState, move: { x: number; z: number }, dt: number): void {
+export function stepScene(m: TileMap, s: SceneState, move: { x: number; z: number }, dt: number): void {
   const p = s.player;
   const il = Math.hypot(move.x, move.z) || 1;
   const sx = (move.x / il) * p.speed * dt, sz = (move.z / il) * p.speed * dt;

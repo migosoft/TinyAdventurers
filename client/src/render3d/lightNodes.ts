@@ -2,7 +2,6 @@
 import { Vector4 } from 'three/webgpu';
 import type { DataTexture } from 'three/webgpu';
 import { Break, Fn, If, Loop, abs, exp, float, floor, int, ivec2, length, max, min, mix, select, smoothstep, textureLoad, uniform, uniformArray, vec3, dot } from 'three/tsl';
-import type { DemoMap } from './demoMap';
 import { AMBIENT, MAX_LIGHTS, packLights, type Light } from './light';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
@@ -20,7 +19,7 @@ export interface Lighting {
   setShadows(on: boolean): void;
 }
 
-export function makeLighting(heightTex: DataTexture, map: DemoMap): Lighting {
+export function makeLighting(heightTex: DataTexture, map: { w: number; h: number }): Lighting {
   const lPos = uniformArray(Array.from({ length: MAX_LIGHTS }, () => new Vector4()), 'vec4');
   const lCol = uniformArray(Array.from({ length: MAX_LIGHTS }, () => new Vector4()), 'vec4');
   const uShadows = uniform(1);

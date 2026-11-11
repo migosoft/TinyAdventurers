@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { WALL_H, MAP_ROWS, parseMap } from './demoMap';
+import { MAP_ROWS, parseMap } from './demoMap';
+import { WALL_H } from './heights';
 import { KIND, buildWorld, tileHash, type FrameRects } from './worldMesh';
 
 const NAMES = [
