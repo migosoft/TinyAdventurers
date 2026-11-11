@@ -96,6 +96,7 @@ export async function createView(canvas: HTMLCanvasElement, assets: Assets, map:
   renderer.outputColorSpace = LinearSRGBColorSpace;
   renderer.toneMapping = NoToneMapping;
   renderer.setPixelRatio(1);
+  renderer.info.autoReset = false;
   renderer.setClearColor(new Color(0.012, 0.01, 0.016), 1);
 
   const atlas = new Texture(assets.image);
@@ -176,6 +177,8 @@ export async function createView(canvas: HTMLCanvasElement, assets: Assets, map:
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color }, d.glows.count * 6);
       lighting.setLights(f.lights);
       lighting.setShadows(f.shadows);
+      // The counter only accumulates; three resets it in its own animation loop, whose order against ours is not guaranteed.
+      renderer.info.reset();
       if (f.plan.direct) {
         renderer.setRenderTarget(null);
         renderer.render(scene, camera);
@@ -184,15 +187,13 @@ export async function createView(canvas: HTMLCanvasElement, assets: Assets, map:
       const p = f.plan;
       renderer.setRenderTarget(targetFor(p.targetW, p.targetH, p.linear));
       renderer.render(scene, camera);
-      let calls = renderer.info.render.drawCalls;
       renderer.setRenderTarget(null);
       renderer.getViewport(fullViewport);
       // The viewport origin is the top-left corner of the canvas on both backends.
       renderer.setViewport(p.dstX, p.dstY, p.dstW, p.dstH);
       quad.render(renderer);
-      calls += renderer.info.render.drawCalls;
       renderer.setViewport(fullViewport);
-      return calls;
+      return renderer.info.render.drawCalls;
     },
     dispose() {
       atlas.dispose();
