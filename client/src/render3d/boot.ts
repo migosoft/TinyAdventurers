@@ -29,7 +29,7 @@ export async function bootGallery(el: HTMLElement, search: string): Promise<void
 export async function bootLights(el: HTMLElement, search: string): Promise<void> {
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
-  await startHost(el, s, 'demo', (assets) => createLightsStage(assets, p, s));
+  await startHost(el, s, 'demo', (assets, host) => createLightsStage(assets, p, s, host));
 }
 
 export interface Run3d {

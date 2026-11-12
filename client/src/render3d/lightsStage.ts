@@ -13,7 +13,8 @@ import { freeClamp, keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
-import { MOVE_KEYS, type Stage, type StageCtx } from './host';
+import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
+import type { R3dParams } from './params';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
 import { footprint, lavaTexels, movingCands, selectLights, staticCands, TorchPairs } from './lights';
 import { seenOpeners } from './openers';
@@ -74,15 +75,13 @@ export function parseLights(search: string): { start: number; slow: number } {
 
 const ALL_VISIBLE = { isVisible: (): boolean => true };
 
-export function createLightsStage(assets: Assets, p: { pitch: number; yaw: number; light: 'game' | 'work'; amb: number; lcap: number; dv: number | null }, search: string): Stage {
+export function createLightsStage(assets: Assets, p: R3dParams, search: string, host?: Pick<Host, 'params' | 'setParams'>): Stage {
   const opts = parseLights(search);
   const map = buildMap();
   const world: WorldInput = { map, painted: false, clear: 'stone' };
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const cam = { x: map.w / 2, z: map.h / 2, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   let t = opts.start;
-  /** The viewer's darkvision, 0..1: from `&dv=` (0..100), cycled by V. */
-  let darkvision = p.dv !== null ? p.dv / 100 : 0;
 
   // The field: each torch's light on the tile its spot lies in (ids from 1, as in 2D), then a light on every lava tile.
   const field = new LightField(map);
@@ -101,10 +100,15 @@ export function createLightsStage(assets: Assets, p: { pitch: number; yaw: numbe
   const label = document.createElement('div');
   label.style.cssText = 'position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff;text-shadow:0 0 3px #000;pointer-events:none';
   document.body.appendChild(label);
-  const caption = (): void => {
-    label.textContent = `lights demo in 3D: torches, lava, fireball, frost bolt, explosion; darkvision ${Math.round(darkvision * 100)}% (V); WASD pans`;
+  /** The viewer's darkvision, 0..1: the params' `dv` (0..100; the panel, the URL and V all set it). */
+  const dvOf = (q: R3dParams): number => (q.dv ?? 0) / 100;
+  let shown = -1;
+  const caption = (dv: number): void => {
+    if (dv === shown) return;
+    shown = dv;
+    label.textContent = `lights demo in 3D: torches, lava, fireball, frost bolt, explosion; darkvision ${Math.round(dv * 100)}% (V); WASD pans`;
   };
-  caption();
+  caption(dvOf(p));
 
   return {
     world,
@@ -134,6 +138,8 @@ export function createLightsStage(assets: Assets, p: { pitch: number; yaw: numbe
       c.timer.lap('cards');
 
       const game = c.params.light === 'game';
+      const dv = dvOf(c.params);
+      caption(dv);
       const viewer = { x: VIEWER[0] + 0.5, z: VIEWER[1] + 0.5 };
       let lights: ReturnType<typeof selectLights>['list'] = [];
       if (game) {
@@ -153,7 +159,7 @@ export function createLightsStage(assets: Assets, p: { pitch: number; yaw: numbe
           cam, plan: c.plan, dynamic, lights, ambient: game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null,
-          darkvision: game && darkvision > 0 ? { x: viewer.x, z: viewer.z, reach: darkvision * CONST.FOV_RADIUS } : null,
+          darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,
           casters: [],
         },
         c.timer,
@@ -161,8 +167,8 @@ export function createLightsStage(assets: Assets, p: { pitch: number; yaw: numbe
     },
     key(e: KeyboardEvent): boolean {
       if (e.code !== 'KeyV' || e.repeat) return false;
-      darkvision = nextDarkvision(darkvision);
-      caption();
+      if (!host) return false;
+      host.setParams({ ...host.params, dv: Math.round(nextDarkvision(dvOf(host.params)) * 100) });
       return true;
     },
     dispose(): void {

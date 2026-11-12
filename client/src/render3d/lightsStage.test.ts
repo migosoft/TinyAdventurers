@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CONST, KIND } from '../generated/defs';
 import { TORCHES, W, H, buildMap } from '../game/lightsDemoScript';
 import { isR3dDemo, r3dPage, wants3d } from '../r3dFlag';
-import { parseParams } from './params';
+import { parseParams, type R3dParams } from './params';
 import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
 import { createLightsStage, lightsEnts, lightsKnight } from './lightsStage';
@@ -12,9 +12,11 @@ import type { FrameInput } from './view';
 const assets = { image: {} as HTMLImageElement, frames: {} };
 
 /** Runs one frame of a stage built for `search` and returns what it handed the view. */
-function drawn(search: string, big = true): { stage: Stage; f: FrameInput | null } {
-  const params = parseParams(search);
-  const stage = createLightsStage(assets, params, search);
+function drawn(search: string, big = true, change?: (p: R3dParams) => R3dParams): { stage: Stage; f: FrameInput | null; host: { params: R3dParams; setParams(p: R3dParams): void } } {
+  const initial = parseParams(search);
+  const host = { params: initial, setParams(p: R3dParams): void { host.params = p; } };
+  const stage = createLightsStage(assets, initial, search, host);
+  const params = change ? change(initial) : initial;
   let f: FrameInput | null = null;
   const view = { draw: (i: FrameInput) => ((f = i), 0) };
   const zoom = 2;
@@ -24,7 +26,7 @@ function drawn(search: string, big = true): { stage: Stage; f: FrameInput | null
     canvasEl: null, view, timer: { lap() {}, renderStart() {} },
   } as unknown as StageCtx;
   stage.frame(c);
-  return { stage, f };
+  return { stage, f, host };
 }
 
 describe('the ?r3d=lights stage', () => {
@@ -49,8 +51,29 @@ describe('the ?r3d=lights stage', () => {
   });
 
   it('misses the blue torch at t = 3.1', () => {
-    const { f } = drawn('?r3d=lights&t=3.1');
-    expect(f!.lights).toHaveLength(8);
+    const ids = (f: FrameInput | null): string[] => (f!.lights as unknown as { id: string }[]).map((l) => l.id);
+    const blue = `s${TORCHES.findIndex((t) => t.blue) + 1}`; // light ids run from 1 in TORCHES order
+    const on = drawn('?r3d=lights&t=0').f;
+    const off = drawn('?r3d=lights&t=3.1').f;
+    expect(ids(on)).toContain(blue);
+    expect(ids(off)).not.toContain(blue);
+    expect(off!.lights).toHaveLength(8);
+  });
+
+  it('reads the darkvision from the params every frame', () => {
+    const { f } = drawn('?r3d=lights', true, (p) => ({ ...p, dv: 100 }));
+    expect(f!.darkvision).toEqual({ x: 7.5, z: 9.5, reach: CONST.FOV_RADIUS });
+  });
+
+  it('V advances the params darkvision 0, 50, 100, 0', () => {
+    const { stage, host } = drawn('?r3d=lights');
+    const key = (): boolean => stage.key!({ code: 'KeyV', repeat: false } as KeyboardEvent);
+    const seen: (number | null)[] = [];
+    for (let i = 0; i < 3; i++) {
+      expect(key()).toBe(true);
+      seen.push(host.params.dv);
+    }
+    expect(seen).toEqual([50, 100, 0]);
   });
 
   it('passes the lava texels and no darkvision by default', () => {
