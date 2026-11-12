@@ -225,7 +225,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       if (window.__r3d) window.__r3d.figures = figures.count;
       c.timer.renderStart();
       return c.view.draw(
-        { cam, plan: c.plan, dynamic, lights: [], ambient: WORK_AMBIENT, lava: null, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) } },
+        { cam, plan: c.plan, dynamic, lights: [], ambient: WORK_AMBIENT, lava: null, lavaVersion: 0, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) } },
         c.timer,
       );
     },

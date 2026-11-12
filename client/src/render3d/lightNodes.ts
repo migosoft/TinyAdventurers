@@ -19,8 +19,11 @@ export interface Lighting {
   finish(albedo: N, lit: { rgb: N; dv: N }): N;
   /** The lava light texture (`w * h` half-float rgba texels). */
   readonly lavaTexture: DataTexture;
-  /** The lava light per tile (`map.w * map.h * 4` floats), or null for none. */
-  setLava(data: Float32Array | null): void;
+  /**
+   * The lava light per tile (`map.w * map.h * 4` floats), or null for none. Called every frame: the data is converted and
+   * uploaded only when the array object or `version` differs from the last call, so a caller that refills one buffer must bump `version`.
+   */
+  setLava(data: Float32Array | null, version?: number): void;
   /** The followed figure's centre and reach in tiles; null: no darkvision. */
   setDarkvision(d: { x: number; z: number; reach: number } | null): void;
   /** mix(col, 1 - exp(-1.6 col), smoothstep(0.55, 1.1, col)) */
@@ -100,6 +103,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   lavaTex.premultiplyAlpha = false;
   lavaTex.needsUpdate = true;
   let lavaSrc: Float32Array | null | undefined;
+  let lavaVer = -1;
   const mapSize = vec2(map.w, map.h);
 
   // Darkvision: the followed figure's centre (x, z) and the reach in tiles; reach 0 is off.
@@ -118,7 +122,12 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
       const Po = P.add(Nrm.mul(0.03));
       If(dark.lessThan(0.5), () => {
         sum.addAssign(lavaLight);
-        sum.addAssign(textureLoad(lavaTex, ivec2(int(floor(P.x)), int(floor(P.z)))).a);
+        // Self-lit only on the pool's own surface (an upward face); walls on a cell boundary and cards get the sampled lava light alone.
+        If(Nrm.y.greaterThan(0.5), () => {
+          const lx = int(min(max(floor(P.x), 0), map.w - 1));
+          const lz = int(min(max(floor(P.z), 0), map.h - 1));
+          sum.addAssign(textureLoad(lavaTex, ivec2(lx, lz)).a);
+        });
         Loop(LIGHT_CAP, ({ i }: N) => {
           const lp: N = lPos.element(i);
           const lc: N = lCol.element(i);
@@ -171,10 +180,10 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     shoulder,
     cellH,
     lavaTexture: lavaTex,
-    setLava(data) {
-      // A new array per change (the view calls this every frame): the same one again is not uploaded again.
-      if (data === lavaSrc) return;
+    setLava(data, version = 0) {
+      if (data === lavaSrc && version === lavaVer) return;
       lavaSrc = data;
+      lavaVer = version;
       const out = lavaTex.image.data as Uint16Array;
       if (data) {
         const n = Math.min(out.length, data.length);

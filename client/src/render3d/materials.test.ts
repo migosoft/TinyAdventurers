@@ -75,6 +75,22 @@ describe('makeLighting lava', () => {
     expect(() => l.setLava(null)).not.toThrow();
     expect(Array.from(l.lavaTexture.image.data as ArrayLike<number>).every((v) => v === 0)).toBe(true);
   });
+  it('uploads a refilled array when the version changes, and not before', () => {
+    const l = makeLighting(heights, { w: 4, h: 3 });
+    const data = new Float32Array(4 * 3 * 4);
+    data[0] = 1;
+    l.setLava(data, 1);
+    const tex = l.lavaTexture;
+    const v = tex.version;
+    const first = (tex.image.data as Uint16Array)[0];
+    data[0] = 0.25;
+    l.setLava(data, 1);
+    expect(tex.version).toBe(v);
+    expect((tex.image.data as Uint16Array)[0]).toBe(first);
+    l.setLava(data, 2);
+    expect(tex.version).toBeGreaterThan(v);
+    expect((tex.image.data as Uint16Array)[0]).not.toBe(first);
+  });
   it('accepts the darkvision light', () => {
     const l = makeLighting(heights, { w: 4, h: 3 });
     expect(() => l.setDarkvision({ x: 1, z: 2, reach: 3 })).not.toThrow();

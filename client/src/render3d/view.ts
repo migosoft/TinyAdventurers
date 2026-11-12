@@ -57,8 +57,12 @@ export interface FrameInput {
   shadows: boolean; smooth: boolean; t: number;
   /** What opens the walls this frame (the seen openers) and how; none given = no openers (the mode still applies). */
   see?: { openers: readonly Opener[]; look: SeeLook };
-  /** The lava lights as one rgba texel per tile (`map.w * map.h * 4`); null: no lava, the texture is cleared. Read from the lava task on (#304). */
+  /**
+   * The lava lights as one rgba texel per tile (`map.w * map.h * 4`); null: no lava, the texture is cleared.
+   * Uploaded only when the array object or `lavaVersion` changes: a caller that refills one array in place must bump `lavaVersion`.
+   */
   lava: Float32Array | null;
+  lavaVersion: number;
   /** The followed figure's darkvision: its centre (tiles) and reach (tiles); null: none. */
   darkvision: { x: number; z: number; reach: number } | null;
   /** The figures that cast shadows (empty until the shadow task). */
@@ -479,7 +483,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color }, d.glows.count * 6);
       lighting.setLights(f.lights);
       lighting.setShadows(f.shadows);
-      lighting.setLava(f.lava);
+      lighting.setLava(f.lava, f.lavaVersion);
       lighting.setDarkvision(f.darkvision);
       // See through: the camera target (not snapped: the mask's depths use the same one) and the look; the mask pass runs unless off.
       const look = f.see?.look ?? SEE_DEFAULTS;

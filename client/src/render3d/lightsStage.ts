@@ -158,7 +158,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
         {
           cam, plan: c.plan, dynamic, lights, ambient: game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
-          lava: game ? lava : null,
+          lava: game ? lava : null, lavaVersion: lavaVersion,
           darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,
           casters: [],
         },
