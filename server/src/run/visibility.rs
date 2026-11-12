@@ -289,6 +289,7 @@ pub fn send_snapshots(run: &mut Run) {
                 continue;
             }
             if ev_dark(&view, lights, &dark, *at, on_hero.contains(&i)) {
+                debug_assert!(ev.len() <= u16::MAX as usize, "dark_ev index overflows u16");
                 dark_ev.push(ev.len() as u16);
             }
             ev.push(e.clone());

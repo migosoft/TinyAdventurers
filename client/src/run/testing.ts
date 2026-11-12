@@ -148,7 +148,7 @@ export function fakeView(
     onTile: undefined as ((x: number, y: number, v: number) => void) | undefined,
     frame(f: RunFrame) {
       // A copy: the session reuses `own`, the live shots and the hidden set, so older entries stay stable.
-      v.frames.push({ ...f, own: { ...f.own }, shots: f.shots.map((s) => ({ ...s })), hiddenShots: new Set(f.hiddenShots) });
+      v.frames.push({ ...f, own: { ...f.own }, shots: f.shots.map((s) => ({ ...s })), hiddenShots: new Set(f.hiddenShots), dark: new Set(f.dark) });
       return v.stats;
     },
     event(ev: PictureEv, _own?: unknown, _server?: unknown, dark = false) {

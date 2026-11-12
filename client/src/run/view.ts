@@ -72,7 +72,10 @@ export interface RunFrame {
   shots: readonly ShotView[];
   hiddenShots: ReadonlySet<number>; // entity ids of server projectiles not to draw
   useHint: UseHint | null;
-  /** The ids the latest snapshot marks as in the dark (`Snapshot.dark`): sent, but nothing is drawn over them. */
+  /**
+   * The ids marked as in the dark (`Snapshot.dark`) by the snapshot `ents` are drawn from: sent, but nothing is
+   * drawn over them. The set belongs to that snapshot and is valid only during `frame()`: copy it to keep it.
+   */
   dark: ReadonlySet<number>;
   debug: DebugDraw;
 }

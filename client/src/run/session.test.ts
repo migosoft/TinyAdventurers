@@ -71,16 +71,15 @@ describe('RunSession messages', () => {
     expect(hud.calls.filter((c) => c[0] === 'message' && c[1] === 'hi').length).toBe(1);
   });
 
-  it('the frame carries the dark ids of the latest snapshot', () => {
+  it('the frame carries the dark ids of the snapshot it draws', () => {
     const { net, session } = make();
     const view = fakeView();
     session.setView(view);
+    session.frame(0.016);
+    expect(view.frames[view.frames.length - 1].dark.size).toBe(0);
     net.emit(snap({ dark: [5, 9] }));
     session.frame(0.016);
     expect([...view.frames[view.frames.length - 1].dark]).toEqual([5, 9]);
-    net.emit(snap({ dark: [] }));
-    session.frame(0.016);
-    expect(view.frames[view.frames.length - 1].dark.size).toBe(0);
   });
 
   it('a picture event listed in dark_ev reaches the view marked dark', () => {
@@ -429,6 +428,22 @@ describe('RunSession frame', () => {
     for (let i = 0; i < 20; i++) session.frame(100);
     expect(view.frames.at(-1)!.own.x).toBeCloseTo(100, 0);
     expect(view.frames.at(-1)!.own.y).toBeCloseTo(90, 0);
+  });
+
+  it('the frame marks the dark ids of the snapshot its entities are drawn from, not the newest', () => {
+    const { net, session, view, at } = running();
+    at(10);
+    net.emit(snap({ tick: 1, ents: [], dark: [] }));
+    at(10.1);
+    net.emit(snap({ tick: 7, ents: [entity(5, 100, 90)], dark: [5] }));
+    at(10.2);
+    net.emit(snap({ tick: 13, ents: [], dark: [] }));
+    // Render time lies between the first two snapshots: entities come from the second, so entity 5 is drawn, and marked.
+    at(10.13);
+    session.frame(16);
+    const f = view.frames.at(-1)!;
+    expect(f.ents.has(5)).toBe(true);
+    expect([...f.dark]).toEqual([5]);
   });
 
   it('dodge lines older than 0.6 s are removed before the view sees them, and none while dead', () => {

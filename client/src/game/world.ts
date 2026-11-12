@@ -33,8 +33,11 @@ interface TimedSnap {
   ents: Map<number, EntSnap>;
   /** The snapshot's non-default effect looks (entity id, effect id, look id). */
   looks: Snapshot['looks'];
+  /** The ids the snapshot marks as in the dark (`Snapshot.dark`). */
+  dark: ReadonlySet<number>;
 }
 
+const NO_DARK: ReadonlySet<number> = new Set();
 const SNAP_INTERVAL = 1 / CONST.SNAPSHOT_HZ;
 const MAX_EXTRAPOLATE = 0.1;
 
@@ -52,6 +55,12 @@ export class Interpolator {
   private offset: number | null = null;
   jitter = 0;
   delay = 2 * SNAP_INTERVAL;
+  /**
+   * The dark marks of the snapshot the last `sample` drew its entities from, so a mark describes the
+   * positions drawn (the newest snapshot is `delay` ahead and may no longer send, or mark, an entity).
+   * The set belongs to that snapshot: read it only, and only until the next `sample`.
+   */
+  drawnDark: ReadonlySet<number> = NO_DARK;
 
   push(snap: Snapshot, now: number): void {
     const serverTime = snap.tick * CONST.DT;
@@ -65,7 +74,7 @@ export class Interpolator {
     this.delay += (target - this.delay) * 0.05;
     const ents = new Map<number, EntSnap>();
     for (const e of snap.ents) ents.set(e[0], e);
-    this.snaps.push({ serverTime, ents, looks: snap.looks });
+    this.snaps.push({ serverTime, ents, looks: snap.looks, dark: snap.dark.length ? new Set(snap.dark) : NO_DARK });
     while (this.snaps.length > 2 && this.snaps[1].serverTime < this.renderTime(now) - 0.5) this.snaps.shift();
   }
 
@@ -76,11 +85,13 @@ export class Interpolator {
   /** All entities at render time. Entities only in the older snapshot are dropped. */
   sample(now: number, out: Map<number, EntState>): void {
     out.clear();
+    this.drawnDark = NO_DARK;
     if (this.snaps.length === 0) return;
     const t = this.renderTime(now);
     let i = this.snaps.length - 1;
     while (i > 0 && this.snaps[i - 1].serverTime > t) i--;
     const b = this.snaps[i];
+    this.drawnDark = b.dark;
     const a = i > 0 ? this.snaps[i - 1] : b;
     let f: number;
     if (b.serverTime <= t) {

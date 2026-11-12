@@ -85,8 +85,6 @@ export class RunSession {
   private isAlive = true;
   private spectating: number | null = null;
   private lastSnap?: Snapshot;
-  /** The ids the latest snapshot marks as in the dark. */
-  private readonly dark = new Set<number>();
   private myFlags = 0;
   /** The own hero's server position in the snapshot being dispatched (the 3D view places hits on the hero from it). */
   private serverOwn: { x: number; y: number } | null = null;
@@ -269,7 +267,7 @@ export class RunSession {
           shots: this.shots.live,
           hiddenShots,
           useHint,
-          dark: this.dark,
+          dark: this.interp.drawnDark,
           debug: this.debug,
         })
       : NO_STATS;
@@ -528,8 +526,6 @@ export class RunSession {
   private onSnapshot(s: Snapshot): void {
     this.interp.push(s, this.now());
     this.lastSnap = s;
-    this.dark.clear();
-    for (const id of s.dark) this.dark.add(id);
     this.pred.solids = s.ents.filter((e) => e[1] === KIND.Barrel && e[5] < 2).map((e) => ({ x: e[2], y: e[3], half: CONST.BARREL_RADIUS }));
     // The figure is drawn from the interpolated entity while charmed; when the charm ends the prediction blends in from there.
     const drawn = this.ents.get(this.runInfo.you);
