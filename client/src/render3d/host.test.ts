@@ -208,4 +208,28 @@ describe('startHost', () => {
     expect(el.querySelectorAll('canvas').length).toBe(1);
     host!.stop();
   });
+
+  it('setRunYaw updates the panel, not the address bar', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const spy = vi.spyOn(history, 'replaceState');
+    try {
+      const { deps, stage } = setup();
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      const host = await startHost(el, '', 'run', () => stage, deps);
+      host!.setRunYaw(45);
+      expect(host!.params.yaw).toBe(45);
+      vi.advanceTimersByTime(1000);
+      expect(spy).not.toHaveBeenCalled();
+      // a later change from the panel writes the URL, but a run never keeps the yaw in it
+      host!.setParams({ ...host!.params, pitch: 40 });
+      vi.advanceTimersByTime(1000);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(String(spy.mock.calls[0][2])).not.toContain('yaw');
+      host!.stop();
+    } finally {
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 });

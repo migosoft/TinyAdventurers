@@ -42,6 +42,7 @@ export type HudLike = Pick<
   | 'toggleMenu'
   | 'statsOn'
   | 'menuOpen'
+  | 'setTurnHelp'
 >;
 /** The host's frame timer, as far as the session uses it. `FrameTimer` fits. */
 export interface FrameClock {

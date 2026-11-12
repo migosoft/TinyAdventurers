@@ -4,7 +4,7 @@
 import { loadAtlas } from '../ui/atlas';
 import { FrameTimer } from '../game/frameTimer';
 import { createPanel } from './panel';
-import { parseParams, toSearch, type R3dParams } from './params';
+import { DEFAULTS, parseParams, toSearch, type R3dParams } from './params';
 import { R3D_SYSTEMS, statsText3d, type R3dSystem } from './stats';
 import { pickZoom, renderPlan, type RenderPlan } from './quality';
 import { frameDt } from './scene';
@@ -53,6 +53,8 @@ export interface Stage {
 export interface Host {
   readonly params: R3dParams;
   setParams(p: R3dParams): void;
+  /** A run's camera turned: the yaw in `params` and the panel, not in the address bar. */
+  setRunYaw(deg: number): void;
   stop(): void;
 }
 
@@ -172,7 +174,8 @@ export async function startHost(
   const apply = (next: R3dParams): void => {
     params = next;
     panel.setParams(next);
-    writeUrl(toSearch(next, location.search));
+    // A run always starts facing north, so its yaw never goes into the address.
+    writeUrl(toSearch(mode === 'run' ? { ...next, yaw: DEFAULTS.yaw } : next, location.search));
     follow();
   };
   // Disabled only when the backend has no way to force a loss; a click during a rebuild does nothing but stays possible later.
@@ -228,6 +231,10 @@ export async function startHost(
       return params;
     },
     setParams: (p) => apply(p),
+    setRunYaw: (deg) => {
+      params = { ...params, yaw: deg };
+      panel.setParams(params);
+    },
     stop: () => stop(),
   };
 

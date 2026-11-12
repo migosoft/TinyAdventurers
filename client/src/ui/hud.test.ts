@@ -39,6 +39,18 @@ describe('Hud', () => {
   it('writes the help line as key caps', () => {
     expect(helpHtml()).toBe('<span><kbd>WASD</kbd>move</span><span><kbd>LMB</kbd><kbd>RMB</kbd>attack</span><span><kbd>L</kbd>log</span><span><kbd>Esc</kbd>menu</span><span><kbd>F3</kbd>stats</span>');
   });
+  it('the turn help shows the given labels and goes away with null', () => {
+    const plain = helpHtml();
+    const help = (): string => document.querySelector('.help')!.innerHTML;
+    expect(help()).toBe(plain);
+    hud.setTurnHelp(['Z', 'X', 'C']);
+    expect(help()).toContain('<kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd>turn');
+    expect(help()).toContain('<kbd>MMB</kbd>drag to turn');
+    hud.setTurnHelp(['W', 'X', 'C']);
+    expect(help()).toContain('<kbd>W</kbd><kbd>X</kbd><kbd>C</kbd>turn');
+    hud.setTurnHelp(null);
+    expect(help()).toBe(plain);
+  });
   it('lists every debug key on its own row of the debug badge and shows when the hero is mortal', () => {
     const badge = document.createElement('div');
     badge.innerHTML = debugBadgeHtml(true);

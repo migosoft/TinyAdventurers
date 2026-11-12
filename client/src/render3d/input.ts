@@ -3,7 +3,20 @@
 import type { CamTurn } from './turn';
 
 /** Only a press on the 3D canvas counts: not the dev panel, the HUD or a menu over it. */
-const onCanvas = (t: EventTarget | null): boolean => t instanceof HTMLCanvasElement && t.classList.contains('r3d');
+/** The labels of the Z, X and C keys on the player's layout (the keys are used by position), else the plain letters. */
+export async function turnKeyLabels(): Promise<[z: string, x: string, c: string]> {
+  const plain: [string, string, string] = ['Z', 'X', 'C'];
+  try {
+    const kb = (navigator as Navigator & { keyboard?: { getLayoutMap?: () => Promise<Map<string, string>> } }).keyboard;
+    const map = await kb?.getLayoutMap?.();
+    if (!map) return plain;
+    return [map.get('KeyZ')?.toUpperCase() ?? 'Z', map.get('KeyX')?.toUpperCase() ?? 'X', map.get('KeyC')?.toUpperCase() ?? 'C'];
+  } catch {
+    return plain;
+  }
+}
+
+const onCanvas =(t: EventTarget | null): boolean => t instanceof HTMLCanvasElement && t.classList.contains('r3d');
 
 export class RunMouse {
   private primaryHeld = false;

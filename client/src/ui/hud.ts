@@ -110,8 +110,10 @@ export function debugBadgeHtml(immortal: boolean): string {
   return `<div class="db-title${immortal ? '' : ' mortal'}">DEBUG · ${immortal ? 'immortal' : 'MORTAL'}</div>${keys}${paths}`;
 }
 
-export function helpHtml(): string {
-  return HELP_KEYS.map(([keys, label]) => `<span>${keys.map((k) => `<kbd>${k}</kbd>`).join('')}${label}</span>`).join('');
+/** The help line; with `turn`, the 3D view's camera-turn keys (labels for the Z, X and C keys) follow the attack keys. */
+export function helpHtml(turn: [z: string, x: string, c: string] | null = null): string {
+  const keys: typeof HELP_KEYS = turn ? [HELP_KEYS[0], HELP_KEYS[1], [turn, 'turn'], [['MMB'], 'drag to turn'], ...HELP_KEYS.slice(2)] : HELP_KEYS;
+  return keys.map(([keys, label]) => `<span>${keys.map((k) => `<kbd>${k}</kbd>`).join('')}${label}</span>`).join('');
 }
 
 const el = (tag: string, cls?: string, html?: string) => {
@@ -126,6 +128,7 @@ export type Disabled = Extract<ServerMsg, { t: 'HeroChanged' }>['disabled'];
 
 export class Hud {
   private root = el('div', 'hud hidden');
+  private helpEl: HTMLElement;
   private hp = el('div', 'hp-bar');
   private hpFill = el('div', 'fill');
   private hpText = el('span');
@@ -190,8 +193,14 @@ export class Hud {
     this.buildView();
     this.charm = new CharmView(this.root);
     this.root.append(this.party, this.boss, this.msgs, this.banner, bottom, this.debug, this.debugBadge, this.menu, this.end);
-    this.root.append(el('div', 'help', helpHtml()));
+    this.helpEl = el('div', 'help', helpHtml());
+    this.root.append(this.helpEl);
     host.append(this.root);
+  }
+
+  /** The 3D view adds its camera-turn keys to the help line (null removes them); the 2D view never calls it. */
+  setTurnHelp(keys: [z: string, x: string, c: string] | null): void {
+    this.helpEl.innerHTML = helpHtml(keys);
   }
 
   /** The switches of the Settings view (the Hud adds Network stats last). */

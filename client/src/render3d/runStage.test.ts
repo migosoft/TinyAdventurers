@@ -8,8 +8,8 @@ import type { Hud } from '../ui/hud';
 import { FrameTimer } from '../game/frameTimer';
 import { fakeHud, fakeNet, snap, startInfo } from '../run/testing';
 import { startRun3d } from './boot';
-import { followClamp } from './camera';
-import { type Host, type StageCtx } from './host';
+import { followClamp, keysToWorld } from './camera';
+import { startHost, type Host, type StageCtx } from './host';
 import { DEFAULTS, type R3dParams } from './params';
 import { renderPlan } from './quality';
 import { toCanvas } from './screen';
@@ -38,13 +38,18 @@ for (let i = 0; i < 4; i++) {
   assets.frames[`wizzard_m_run_anim_f${i}`] = { x: 50, y: 0, w: 16, h: 28 };
 }
 
-function setup(rows = ROWS, over: Partial<RunStartInfo> = {}) {
+function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0) {
   const net = fakeNet();
   const hud = fakeHud();
   const info = startInfo(rows, over);
   const run = newRun({ info, net, hud, myClass: 'Wizard' });
-  let params: R3dParams = { ...DEFAULTS };
-  const host: Host = { get params() { return params; }, setParams: vi.fn((p: R3dParams) => { params = p; }), stop: vi.fn() };
+  let params: R3dParams = { ...DEFAULTS, yaw: startYaw };
+  const host: Host = {
+    get params() { return params; },
+    setParams: vi.fn((p: R3dParams) => { params = p; }),
+    setRunYaw: vi.fn((yaw: number) => { params = { ...params, yaw }; }),
+    stop: vi.fn(),
+  };
   const el = document.createElement('div');
   const onLoop = vi.fn();
   const stage = createRunStage(run, info, assets, host, el, onLoop);
@@ -270,7 +275,7 @@ describe('the run stage', () => {
     expect(stage.key!({ code: 'KeyE', repeat: false } as KeyboardEvent)).toBe(true);
     expect(stage.key!({ code: 'KeyQ', repeat: false } as KeyboardEvent)).toBe(true);
     expect(net.sent.filter((m) => m.t === 'Spectate')).toEqual([{ t: 'Spectate', dir: 1 }, { t: 'Spectate', dir: -1 }]);
-    expect(stage.key!({ code: 'KeyX', repeat: false } as KeyboardEvent)).toBe(false);
+    expect(stage.key!({ code: 'KeyG', repeat: false } as KeyboardEvent)).toBe(false);
   });
 
   const click = (target: Element, button = 0): void => {
@@ -382,7 +387,7 @@ describe('startRun3d', () => {
       const net = fakeNet();
       const hud = fakeHud();
       let stage: ReturnType<typeof createRunStage> | null = null;
-      const host: Host = { params: DEFAULTS, setParams: vi.fn(), stop: vi.fn() };
+      const host: Host = { params: DEFAULTS, setParams: vi.fn(), setRunYaw: vi.fn(), stop: vi.fn() };
       const run = startRun3d(document.createElement('div'), '', {
         info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
         startHost: async (_el, _s, _m, make) => {
@@ -421,7 +426,7 @@ describe('startRun3d', () => {
   it('stop before the host exists stops the host the moment it is made', async () => {
     const net = fakeNet();
     const hud = fakeHud();
-    const host: Host = { params: DEFAULTS, setParams: vi.fn(), stop: vi.fn() };
+    const host: Host = { params: DEFAULTS, setParams: vi.fn(), setRunYaw: vi.fn(), stop: vi.fn() };
     const run = startRun3d(document.createElement('div'), '', {
       info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
       startHost: async (_el, _s, _m, make) => {
@@ -433,5 +438,125 @@ describe('startRun3d', () => {
     run.stop();
     await new Promise((r) => setTimeout(r, 0));
     expect(host.stop).toHaveBeenCalled();
+  });
+
+  describe('turning the camera', () => {
+    const press = (stage: ReturnType<typeof setup>['stage'], code: string, repeat = false): boolean => stage.key!({ code, repeat } as KeyboardEvent);
+    const settle = (frame: ReturnType<typeof setup>['frame']): void => {
+      for (let i = 0; i < 20; i++) frame(null);
+    };
+    const lastDir = (net: ReturnType<typeof fakeNet>): [number, number] => {
+      const m = inputs(net)[inputs(net).length - 1];
+      return [m.mx, m.my];
+    };
+
+    it('a run starts facing north even with yaw in the URL', () => {
+      const { frame, host, run } = setup(ROWS, {}, 90);
+      frame(null);
+      expect(host.params.yaw).toBe(0);
+      expect(run.input.yaw).toBe(0);
+    });
+
+    it('Z then a held D still walks screen-right after the turn', () => {
+      const { stage, frame, net, host } = setup();
+      expect(press(stage, 'KeyZ')).toBe(true);
+      settle(frame);
+      expect(host.params.yaw).toBe(45);
+      for (let i = 0; i < 6; i++) frame(null, ['KeyD']);
+      expect(lastDir(net)).toEqual([1, 1]);
+    });
+
+    it('a key held through a turn keeps its screen direction within 22.5 degrees', () => {
+      const { stage, frame, net, run } = setup();
+      press(stage, 'KeyZ');
+      let checked = 0;
+      for (let i = 0; i < 20; i++) {
+        const before = inputs(net).length;
+        frame(null, ['KeyD']);
+        if (inputs(net).length === before) continue;
+        const [mx, my] = lastDir(net);
+        const want = keysToWorld(run.input.yaw, 1, 0);
+        const diff = Math.abs(Math.atan2(my, mx) - Math.atan2(want.z, want.x));
+        expect(Math.min(diff, 2 * Math.PI - diff)).toBeLessThanOrEqual(Math.PI / 8 + 1e-6);
+        checked++;
+      }
+      expect(checked).toBeGreaterThan(3);
+    });
+
+    it('X turns back to north', () => {
+      const { stage, frame, host } = setup();
+      press(stage, 'KeyZ');
+      press(stage, 'KeyZ');
+      settle(frame);
+      expect(host.params.yaw).toBe(90);
+      press(stage, 'KeyX');
+      settle(frame);
+      expect(host.params.yaw).toBe(0);
+    });
+
+    it('C turns the other way and a repeat does nothing', () => {
+      const { stage, frame, host } = setup();
+      press(stage, 'KeyC');
+      press(stage, 'KeyC', true);
+      settle(frame);
+      expect(host.params.yaw).toBe(-45);
+    });
+
+    it("the panel's yaw slider sets the turn", () => {
+      const { frame, setParams, run, host } = setup();
+      frame(null);
+      setParams({ yaw: 120 });
+      frame(null);
+      expect(run.input.yaw).toBeCloseTo((120 * Math.PI) / 180);
+      expect(host.params.yaw).toBe(120);
+    });
+
+    it('Z, C and X do nothing while a text field has focus', () => {
+      const { stage, frame, host } = setup();
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+      const onKey = (e: KeyboardEvent): void => void stage.key!(e);
+      window.addEventListener('keydown', onKey);
+      for (const code of ['KeyZ', 'KeyC', 'KeyX']) input.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+      window.removeEventListener('keydown', onKey);
+      input.remove();
+      settle(frame);
+      expect(host.params.yaw).toBe(0);
+    });
+
+    it('turning does not write yaw into the URL', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const spy = vi.spyOn(history, 'replaceState');
+      try {
+        const net = fakeNet();
+        const info = startInfo(ROWS);
+        const run = newRun({ info, net, hud: fakeHud(), myClass: 'Wizard' });
+        const el = document.createElement('div');
+        document.body.appendChild(el);
+        const deps = {
+          createView: vi.fn(async () => fakeView()),
+          loadAtlas: vi.fn(async () => ({ img: new Image(), frames: {} })),
+        };
+        let st: ReturnType<typeof createRunStage> | undefined;
+        const host = await startHost(el, '', 'run', (a, h) => (st = createRunStage(run, info, a, h, el)), deps);
+        st!.key!({ code: 'KeyZ', repeat: false } as KeyboardEvent);
+        st!.frame({ now: 1, dt: 1, params: host!.params, held: new Set(), canvas: { w: 1920, h: 1080 }, canvasEl: el.querySelector('canvas')!, zoom: 4, plan: renderPlan('balanced', 4, 1920, 1080), view: null, timer: new FrameTimer(R3D_SYSTEMS) });
+        expect(host!.params.yaw).toBe(45);
+        host!.setParams({ ...host!.params, pitch: 40 });
+        vi.advanceTimersByTime(1000);
+        for (const c of spy.mock.calls) expect(String(c[2])).not.toContain('yaw');
+        host!.stop();
+      } finally {
+        spy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('the stage shows the turn help and removes it on dispose', async () => {
+      const { hud, stage } = setup();
+      await vi.waitFor(() => expect(hud.calls.some((c) => c[0] === 'setTurnHelp' && Array.isArray(c[1]))).toBe(true));
+      stage.dispose();
+      expect(hud.calls[hud.calls.length - 1]).toEqual(['setTurnHelp', null]);
+    });
   });
 });

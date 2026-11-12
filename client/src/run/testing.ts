@@ -111,6 +111,7 @@ export function fakeHud(): HudLike & { calls: [name: string, ...args: unknown[]]
     addCoins: rec('addCoins'),
     needs: rec('needs'),
     tooClose: rec('tooClose'),
+    setTurnHelp: rec('setTurnHelp'),
     frame: rec('frame'),
     setAsleep: rec('setAsleep'),
     toggleDebug() {

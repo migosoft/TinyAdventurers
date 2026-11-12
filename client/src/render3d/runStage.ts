@@ -7,13 +7,14 @@ import { RunSession, type FrameClock, type HudLike, type NetLike } from '../run/
 import type { StepInput } from '../run/input';
 import { atlasBounds } from './atlasBounds';
 import { GROUND_BUDGET_MS, groundJob, type GroundJob } from './groundJob';
-import { RunMouse } from './input';
+import { RunMouse, turnKeyLabels } from './input';
 import { CamTurn } from './turn';
-import { MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './host';
+import { isTextTarget, MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './host';
 import { WOODLAND_CLEAR } from './light';
 import { RunView3d, moveInput } from './runView3d';
 import type { R3dSystem } from './stats';
 import type { FrameTimer } from '../game/frameTimer';
+import { wrapYaw } from './params';
 import { GroundTooLargeError, type Assets, type View } from './view';
 
 /** What the host's frame tells the session's input function. */
@@ -62,6 +63,7 @@ class TimerClock implements FrameClock {
 export interface Run {
   readonly session: RunSession;
   readonly input: RunInputState;
+  readonly hud: HudLike;
   readonly clock: { timer: FrameTimer<R3dSystem> | null };
 }
 
@@ -70,7 +72,7 @@ export function newRun(deps: { info: RunStartInfo; net: NetLike; hud: HudLike; m
   const input: RunInputState = { held: new Set(), yaw: 0, free: false, primary: () => false, secondary: () => false, act: false };
   const clock = new TimerClock();
   const session = new RunSession({ ...deps, input: () => stepInput(input), clock });
-  return { session, input, clock };
+  return { session, input, clock, hud: deps.hud };
 }
 
 export interface RunStage extends Stage {
@@ -112,12 +114,19 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   window.addEventListener('keyup', onMod);
   window.addEventListener('blur', onBlur);
 
-  // The run's own turn state (its drag feeds it now; the camera yaw and the keys follow). The mouse listens on the host element.
+  // The run's own turn state: every run starts facing north, whatever the URL says. The mouse listens on the host element.
   const turn = new CamTurn();
+  // The yaw (whole degrees) last put into the host's params; a different `params.yaw` means the panel's slider moved it.
+  let reported = 0;
+  if (host.params.yaw !== 0) host.setRunYaw(0);
   const mouse = new RunMouse(el, turn);
   run.input.primary = () => mouse.takePrimary();
   run.input.secondary = () => mouse.takeSecondary();
   runView.mouse = mouse;
+
+  // The help line names the turn keys by the player's layout.
+  let live = true;
+  turnKeyLabels().then((k) => { if (live) run.hud.setTurnHelp(k); }, () => {});
 
   let looped = false;
   return {
@@ -135,10 +144,21 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       }
       run.clock.timer = c.timer;
       run.input.held = c.held;
-      run.input.yaw = (c.params.yaw * Math.PI) / 180;
+      if (c.params.yaw !== reported) {
+        turn.set(c.params.yaw); // the panel's slider
+        reported = c.params.yaw;
+      }
+      turn.update(c.dt);
+      const shown = turn.shown;
+      const whole = wrapYaw(Math.round(shown));
+      if (whole !== reported) {
+        reported = whole;
+        host.setRunYaw(whole);
+      }
+      run.input.yaw = (shown * Math.PI) / 180;
       run.input.free = c.params.free;
       if (job && !job.done && job.step(GROUND_BUDGET_MS) && c.view) upload(c.view);
-      runView.begin(c, shift);
+      runView.begin({ ...c, params: { ...c.params, yaw: shown } }, shift);
       session.frame(c.dt * 1000);
       const r = window.__r3d;
       if (r) {
@@ -164,6 +184,15 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
           }
           if (!e.repeat) session.spectate(e.code === 'KeyQ' ? -1 : 1);
           return true;
+        case 'KeyZ':
+        case 'KeyC':
+        case 'KeyX':
+          if (isTextTarget(e.target)) return false;
+          if (!e.repeat) {
+            if (e.code === 'KeyX') turn.north();
+            else turn.step(e.code === 'KeyZ' ? 1 : -1);
+          }
+          return true;
         case 'KeyF':
           if (!e.repeat) host.setParams({ ...host.params, free: !host.params.free });
           return true;
@@ -176,6 +205,8 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       return true;
     },
     dispose(): void {
+      live = false;
+      run.hud.setTurnHelp(null);
       window.removeEventListener('keydown', onMod);
       window.removeEventListener('keyup', onMod);
       window.removeEventListener('blur', onBlur);
