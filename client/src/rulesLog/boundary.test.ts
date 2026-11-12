@@ -33,6 +33,6 @@ describe('rules log boundary', () => {
 
   it('wire.ts passes the raw log element through once', () => {
     const src = readFileSync(join(SRC, 'wire.ts'), 'utf8');
-    expect(src.split('w[10]').length - 1).toBe(1);
+    expect(src.split('w[12]').length - 1).toBe(1);
   });
 });

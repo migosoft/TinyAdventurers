@@ -389,6 +389,10 @@ pub struct Snapshot {
     /// The non-default looks of the effects on the sent entities: (entity id, `EffectKind` id,
     /// `EffectLook` id).
     pub looks: Vec<(u32, u8, u8)>,
+    /// The ids of the sent entities that are in sight but in the dark.
+    pub dark: Vec<u32>,
+    /// The indices into this snapshot's `ev` of the positional events that happen in the dark.
+    pub dark_ev: Vec<u16>,
     /// Server simulation time spent per tick (ms, averaged).
     pub srv_ms: f32,
     /// The rules log, for a player who turned it on.

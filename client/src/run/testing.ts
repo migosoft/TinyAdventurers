@@ -202,6 +202,8 @@ export function snap(over: Partial<Snapshot> = {}): Extract<ServerMsg, { t: 'Sna
     drain: null,
     lights: [],
     looks: [],
+    dark: [],
+    dark_ev: [],
     srv_ms: 0,
     log: null,
     ...over,

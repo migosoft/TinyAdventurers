@@ -7,8 +7,9 @@ import type { LogW } from "./LogW";
 import type { SelfW } from "./SelfW";
 
 /**
- * `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none;
+ * `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks, dark, dark_ev]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none;
  * `looks` is `[[entity, effect, look], ...]` for the non-default looks of the sent entities' effects;
- * an eleventh field `log` follows only for a player with the rules log on.
+ * `dark` lists the sent entities in sight but in the dark, `dark_ev` the indices into `ev` of the positional events in the dark;
+ * a thirteenth field `log` follows only for a player with the rules log on.
  */
-export type SnapW = [number, number, Array<EntW>, SelfW, BossW | null, Array<EvW>, number, Array<number> | null, Array<LightW>, Array<[number, number, number]>, LogW | null];
+export type SnapW = [number, number, Array<EntW>, SelfW, BossW | null, Array<EvW>, number, Array<number> | null, Array<LightW>, Array<[number, number, number]>, Array<number>, Array<number>, LogW | null];

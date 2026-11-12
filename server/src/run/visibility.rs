@@ -299,6 +299,8 @@ pub fn send_snapshots(run: &mut Run) {
             drain,
             lights: lights_for(view_pos, vision, &moving),
             looks,
+            dark: Vec::new(),
+            dark_ev: Vec::new(),
             srv_ms: run.srv_ms,
         };
         run.players[pi].view = view;

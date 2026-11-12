@@ -71,19 +71,20 @@ pub enum EvW {
 #[ts(export)]
 pub struct LightW(pub u32, pub u32, pub u8, pub Option<u32>);
 
-/// `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none;
+/// `[tick, ack, ents, me, boss, ev, srv_ms, drain, lights, looks, dark, dark_ev]`; `drain` is flat `[x0, y0, x1, y1, ...]` (scaled), nil when there is none;
 /// `looks` is `[[entity, effect, look], ...]` for the non-default looks of the sent entities' effects;
-/// an eleventh field `log` follows only for a player with the rules log on.
+/// `dark` lists the sent entities in sight but in the dark, `dark_ev` the indices into `ev` of the positional events in the dark;
+/// a thirteenth field `log` follows only for a player with the rules log on.
 #[derive(Debug, Clone, TS)]
 #[ts(export)]
-pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>, pub Vec<LightW>, pub Vec<(u32, u8, u8)>, pub Option<crate::run::rules_log::LogW>);
+pub struct SnapW(pub u32, pub u32, pub Vec<EntW>, pub SelfW, pub Option<BossW>, pub Vec<EvW>, pub f32, pub Option<Vec<u32>>, pub Vec<LightW>, pub Vec<(u32, u8, u8)>, pub Vec<u32>, pub Vec<u16>, pub Option<crate::run::rules_log::LogW>);
 
-/// A bare array of 10 fields, or 11 when the rules log is on: the log is the last field and is left out
+/// A bare array of 12 fields, or 13 when the rules log is on: the log is the last field and is left out
 /// when `None`, so the bytes while it is off are what they always were.
 impl Serialize for SnapW {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeTuple;
-        let mut t = s.serialize_tuple(if self.10.is_some() { 11 } else { 10 })?;
+        let mut t = s.serialize_tuple(if self.12.is_some() { 13 } else { 12 })?;
         t.serialize_element(&self.0)?;
         t.serialize_element(&self.1)?;
         t.serialize_element(&self.2)?;
@@ -94,7 +95,9 @@ impl Serialize for SnapW {
         t.serialize_element(&self.7)?;
         t.serialize_element(&self.8)?;
         t.serialize_element(&self.9)?;
-        if let Some(log) = &self.10 {
+        t.serialize_element(&self.10)?;
+        t.serialize_element(&self.11)?;
+        if let Some(log) = &self.12 {
             t.serialize_element(log)?;
         }
         t.end()
@@ -141,7 +144,7 @@ pub fn encode_snap(s: &Snapshot) -> Vec<u8> {
     let boss = s.boss.as_ref().map(|b| BossW(b.kind, b.hp, b.max_hp, b.immune));
     let drain = s.drain.as_ref().map(|d| d.iter().flat_map(|&(x, y)| [q_pos(x as f64), q_pos(y as f64)]).collect());
     let lights = s.lights.iter().map(|l| LightW(q_pos(l.0 as f64), q_pos(l.1 as f64), l.2, l.3)).collect();
-    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain, lights, s.looks.clone(), s.log.clone());
+    let w = SnapW(s.tick, s.ack, ents, me, boss, s.ev.iter().map(ev_w).collect(), s.srv_ms, drain, lights, s.looks.clone(), s.dark.clone(), s.dark_ev.clone(), s.log.clone());
     rmp_serde::to_vec(&w).expect("encode snapshot")
 }
 
@@ -208,6 +211,8 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         drain: Some(vec![(400.25, 300.5), (480.0, 300.0), (330.06, 260.7)]),
         lights: vec![MovingLight(100.3, 200.7, 2, None), MovingLight(55.0, 66.06, 3, Some(0x78c8ff))],
         looks: vec![(3, 11, 1)],
+        dark: vec![300, 70001],
+        dark_ev: vec![2, 3],
         srv_ms: 0.125,
         log: None,
     };
@@ -245,6 +250,8 @@ pub fn sample_snapshots() -> Vec<Snapshot> {
         drain: None,
         lights: vec![],
         looks: vec![],
+        dark: vec![],
+        dark_ev: vec![],
         srv_ms: 0.0,
         log: None,
     };
@@ -303,7 +310,7 @@ mod tests {
         for s in sample_snapshots() {
             let new = encode_snap(&s);
             let old = rmp_serde::to_vec_named(&ServerMsg::Snap(s)).unwrap();
-            assert_eq!(new[0], 0x9a, "fixarray of 10 fields");
+            assert_eq!(new[0], 0x9c, "fixarray of 12 fields");
             println!("snapshot: old {} B, new {} B", old.len(), new.len());
             assert!(new.len() * 10 <= old.len() * 7, "old {} B, new {} B", old.len(), new.len());
         }
@@ -314,7 +321,27 @@ mod tests {
         let mut s = sample_snapshots().remove(1);
         s.looks = vec![(7, 11, 1)];
         let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&s)).unwrap();
-        assert_eq!(v.as_array().unwrap().len(), 10);
+        assert_eq!(v.as_array().unwrap().len(), 12);
         assert_eq!(v[9], serde_json::json!([[7, 11, 1]]));
+    }
+
+    #[test]
+    fn snapshot_carries_the_dark_marks() {
+        let samples = sample_snapshots();
+        let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&samples[0])).unwrap();
+        assert_eq!(v[10], serde_json::json!([300, 70001]));
+        assert_eq!(v[11], serde_json::json!([2, 3]));
+        let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&samples[1])).unwrap();
+        assert_eq!(v[10], serde_json::json!([]));
+        assert_eq!(v[11], serde_json::json!([]));
+    }
+
+    #[test]
+    fn a_snapshot_with_a_log_has_it_thirteenth() {
+        let mut s = sample_snapshots().remove(1);
+        s.log = Some(crate::run::rules_log::LogW(vec![(1, 2, 3)], vec![]));
+        let v: serde_json::Value = rmp_serde::from_slice(&encode_snap(&s)).unwrap();
+        assert_eq!(v.as_array().unwrap().len(), 13);
+        assert_eq!(v[12][0], serde_json::json!([[1, 2, 3]]));
     }
 }

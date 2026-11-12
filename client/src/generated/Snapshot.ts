@@ -27,6 +27,14 @@ lights: Array<MovingLight>,
  */
 looks: Array<[number, number, number]>, 
 /**
+ * The ids of the sent entities that are in sight but in the dark.
+ */
+dark: Array<number>, 
+/**
+ * The indices into this snapshot's `ev` of the positional events that happen in the dark.
+ */
+dark_ev: Array<number>, 
+/**
  * Server simulation time spent per tick (ms, averaged).
  */
 srv_ms: number, 
