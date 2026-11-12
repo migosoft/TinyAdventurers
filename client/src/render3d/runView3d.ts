@@ -198,7 +198,7 @@ export class RunView3d implements RunView {
     c.timer.lap('lights');
     c.timer.renderStart();
     this.drawCalls = view.draw(
-      { cam, plan: c.plan, dynamic, lights, ambient: work ? WORK_AMBIENT : AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: this.seen, look: seeLook(c.params) } },
+      { cam, plan: c.plan, dynamic, lights, ambient: work ? WORK_AMBIENT : AMBIENT, lava: null, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: this.seen, look: seeLook(c.params) } },
       c.timer,
     );
     this.paintOverlay(f, c, cam);

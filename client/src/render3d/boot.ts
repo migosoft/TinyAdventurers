@@ -7,6 +7,7 @@ import type { Net } from '../net';
 import type { Hud } from '../ui/hud';
 import { createDemoStage } from './demoStage';
 import { createGalleryStage } from './galleryStage';
+import { createLightsStage } from './lightsStage';
 import { parseParams } from './params';
 import { clearErrors, startHost, type Host } from './host';
 import { createRunStage, newRun } from './runStage';
@@ -22,6 +23,13 @@ export async function bootGallery(el: HTMLElement, search: string): Promise<void
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
   await startHost(el, s, 'demo', (assets) => createGalleryStage(assets, p, s));
+}
+
+/** `?r3d=lights` (#304): the 2D `?lights` demo's board and lights in 3D, no server needed. Zoom 2 unless the URL picks one. */
+export async function bootLights(el: HTMLElement, search: string): Promise<void> {
+  const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets) => createLightsStage(assets, p, s));
 }
 
 export interface Run3d {

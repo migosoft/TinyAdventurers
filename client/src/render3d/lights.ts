@@ -67,6 +67,9 @@ export class TorchPairs {
   }
 }
 
+/** A figure that casts a shadow (Task 6 of #304 fills it): its box in the world (centre x, z, width, y range) and its frame in the atlas. */
+export interface ShadowCaster { id: number; x: number; z: number; w: number; y0: number; y1: number; u0: number; v0: number; u1: number; v1: number }
+
 /** A light that may enter the list: its id is stable (`s<lightId>`, `m<entityId>` or `m<n>`). */
 export interface Cand extends Light { id: string; kind: number; /** The brightness without flicker: what `selectLights` ranks by, so the choice does not flutter. */ base: number }
 

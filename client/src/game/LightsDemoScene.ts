@@ -10,44 +10,17 @@
 // moves the viewer (`&at=x,y` in tiles starts it there); E toggles old (tile)
 // and new edges (`&edges=old` starts with the old ones).
 import Phaser from 'phaser';
-import { CONST, LIGHT_KIND, TILE_ID } from '../generated/defs';
-import type { MovingLight } from '../generated/MovingLight';
-import { TILE, TileMap } from '../sim/map';
+import { CONST, LIGHT_KIND } from '../generated/defs';
+import { TILE } from '../sim/map';
 import { demoBoard } from './contextrestore';
 import { Effects, DEPTH } from './effects';
 import { LightField } from './light';
 import { syncDarkvisionFX } from './darkvisionfx';
 import { LightView, nextDarkvision } from './lightview';
-import { TERRAIN, TerrainLayer } from './terrain';
+import { BLUE, BOOM_X, FIRE_COLOUR, H, LOOP, SWITCH, TORCHES, VIEWER, W, boltsAt, buildMap, lavaLights, movingAt } from './lightsDemoScript';
+import { TerrainLayer } from './terrain';
 import { TorchView } from './torch';
 import { VisionMask } from './visionmask';
-
-const W = 30;
-const H = 20;
-const LOOP = 4;
-const SWITCH = 3;
-/** How long the explosion at the fireball's turnaround flashes (the server's `BLAST_FLASH`). */
-const FLASH = 0.4;
-/** The viewer stands in the middle of room 1. */
-const VIEWER: [number, number] = [7, 9];
-const CORRIDOR_Y = 9;
-const BLUE = 0x3060ff;
-const FIRE_COLOUR = 0xff7020;
-const FROST_COLOUR = 0x78c8ff;
-
-function buildMap(): TileMap {
-  const tiles = new Uint8Array(W * H).fill(TILE_ID.Wall);
-  const floor = (x0: number, y0: number, x1: number, y1: number) => {
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) tiles[y * W + x] = TILE_ID.Floor;
-  };
-  floor(2, 3, 11, 15); // room 1
-  floor(12, CORRIDOR_Y, 14, CORRIDOR_Y); // corridor
-  floor(15, 5, 28, 13); // room 2: the dark pocket
-  tiles[6 * W + 5] = TILE_ID.Wall; // two pillars in room 1, for the shadow edges
-  tiles[13 * W + 9] = TILE_ID.Wall;
-  for (let y = 11; y <= 13; y++) for (let x = 3; x <= 6; x++) tiles[y * W + x] = TERRAIN.Lava;
-  return new TileMap(W, H, tiles);
-}
 
 export class LightsDemoScene extends Phaser.Scene {
   private slow = Number(new URLSearchParams(location.search).get('slow') ?? 1) || 1;
@@ -88,26 +61,14 @@ export class LightsDemoScene extends Phaser.Scene {
 
     this.field = new LightField(map);
     let id = 1;
-    const torch = (x: number, y: number, colour: number) => {
-      this.field.add({ id: id++, kind: LIGHT_KIND.Torch, colour, x, y, on: true });
-      return id - 1;
-    };
-    // Torches hang on the first floor row, under the north wall.
-    torch(3, 3, 0xffaa5a);
-    this.blue.id = torch(5, 3, BLUE);
-    torch(8, 3, 0x50ff70);
-    torch(10, 3, 0xc040ff);
-    torch(7, 12, 0xffaa5a); // beside the lava pool
-    // Torch sprites on the four face torches (the wall's bottom edge, as the server positions them)...
-    for (const tx of [3, 5, 8, 10]) this.torches.push({ view: new TorchView(this), x: (tx + 0.5) * TILE, y: 3 * TILE + 0.5, side: 0, blue: tx === 5 });
-    // ...and one on each side wall of room 1, each with its own light.
-    torch(2, 6, 0xffaa5a);
-    torch(11, 6, 0xffaa5a);
-    this.torches.push({ view: new TorchView(this), x: 2 * TILE + 0.5, y: 6.5 * TILE, side: 1, blue: false });
-    this.torches.push({ view: new TorchView(this), x: 12 * TILE - 0.5, y: 6.5 * TILE, side: 2, blue: false });
-    for (let y = 0; y < H; y++)
-      for (let x = 0; x < W; x++)
-        if (map.get(x, y) === TERRAIN.Lava) this.field.add({ id: id++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x, y, on: true });
+    // Each torch's light on the tile its spot lies in; the spots with a torch figure get a sprite.
+    for (const t of TORCHES) {
+      this.field.add({ id, kind: LIGHT_KIND.Torch, colour: t.colour, x: Math.floor(t.x / TILE), y: Math.floor(t.y / TILE), on: true });
+      if (t.blue) this.blue.id = id;
+      if (t.sprite) this.torches.push({ view: new TorchView(this), x: t.x, y: t.y, side: t.side, blue: t.blue });
+      id++;
+    }
+    for (const l of lavaLights(map)) this.field.add({ id: id++, kind: LIGHT_KIND.Lava, colour: 0xff4818, x: l.x, y: l.y, on: true });
     this.view = new LightView(this, map, this.field);
     this.mask = new VisionMask(this, map);
     this.dot = this.add.circle(0, 0, 2, 0xffffff).setDepth(DEPTH.numbers);
@@ -166,26 +127,14 @@ export class LightsDemoScene extends Phaser.Scene {
     for (const tr of this.torches) tr.view.update(tr.x, tr.y, !tr.blue || this.blue.on, tr.side, this.t);
 
     // Fireball: out along the corridor to the far end of room 2 and back.
-    const p = (this.t % LOOP) / LOOP;
-    const tri = p < 0.5 ? p * 2 : 2 - p * 2;
-    const fx = ((VIEWER[0] + 1 + tri * 13) + 0.5) * TILE;
-    const fy = (CORRIDOR_Y + 0.5) * TILE;
+    const { fx, fy, cx, cy, sinceBoom } = boltsAt(this.t);
     // An explosion in the dark room's doorway (in the viewer's sight) while the fireball is at its far end, out of sight.
-    const sinceBoom = (this.t % LOOP) - LOOP / 2;
-    const boomX = 15.5 * TILE;
-    if (sinceBoom >= 0 && prev % LOOP < LOOP / 2) this.fx.blast(boomX, fy, 20);
+    if (sinceBoom >= 0 && prev % LOOP < LOOP / 2) this.fx.blast(BOOM_X, fy, 20);
     // Frost bolt: a circle of 2.5 tiles in the north of room 1.
-    const a = p * Math.PI * 2;
-    const cx = (6.5 + 2.5 * Math.cos(a)) * TILE;
-    const cy = (6.5 + 2.5 * Math.sin(a)) * TILE;
     this.fireball.setPosition(fx, fy);
     this.frost.setPosition(cx, cy);
 
-    const moving: MovingLight[] = [
-      [fx, fy, LIGHT_KIND.Fire, FIRE_COLOUR],
-      [cx, cy, LIGHT_KIND.Magic, FROST_COLOUR],
-    ];
-    if (sinceBoom >= 0 && sinceBoom < FLASH) moving.push([boomX, fy, LIGHT_KIND.Blast, null]);
+    const moving = movingAt(this.t);
     this.view.wide = this.straight;
     this.view.update(this.cameras.main.worldView, this.viewer.x, this.viewer.y, moving, this.t, this.darkvision, CONST.FOV_RADIUS);
     this.mask.enabled = this.straight;

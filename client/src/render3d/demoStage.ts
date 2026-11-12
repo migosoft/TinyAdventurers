@@ -35,7 +35,7 @@ export function createDemoStage(assets: Assets, initialParams: { pitch: number; 
       if (!c.view) return 0; // while the view is being rebuilt the scene keeps stepping; only the drawing waits
       c.timer.renderStart();
       return c.view.draw(
-        { cam, plan: c.plan, dynamic, lights, ambient: AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) } },
+        { cam, plan: c.plan, dynamic, lights, ambient: AMBIENT, lava: null, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) } },
         c.timer,
       );
     },

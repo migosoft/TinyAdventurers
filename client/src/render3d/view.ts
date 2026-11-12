@@ -35,6 +35,7 @@ import type { TileMap } from '../sim/map';
 import type { Dynamic, Quads } from './cards';
 import { cssColour, stoneClear, type Light } from './light';
 import { makeLighting } from './lightNodes';
+import type { ShadowCaster } from './lights';
 import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
@@ -56,6 +57,12 @@ export interface FrameInput {
   shadows: boolean; smooth: boolean; t: number;
   /** What opens the walls this frame (the seen openers) and how; none given = no openers (the mode still applies). */
   see?: { openers: readonly Opener[]; look: SeeLook };
+  /** The lava lights as one rgba texel per tile (`map.w * map.h * 4`); null: no lava, the texture is cleared. Read from the lava task on (#304). */
+  lava: Float32Array | null;
+  /** The followed figure's darkvision: its centre (tiles) and reach (tiles); null: none. */
+  darkvision: { x: number; z: number; reach: number } | null;
+  /** The figures that cast shadows (empty until the shadow task). */
+  casters: readonly ShadowCaster[];
 }
 
 /** The ground image is larger than the device's texture limit. */
