@@ -38,6 +38,8 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 
 The keys sit in the same place on every keyboard layout: on a German (QWERTZ) keyboard they are Y, X and C. While you drag, the aim follows the way you walk. The help line at the bottom shows the keys with your layout's letters. The mouse aims at the point in front of your hero at weapon height, so a shot aimed at a monster's chest hits it however the camera is tilted. Health bars, names, damage numbers and hints are drawn sharp over the picture at any quality setting.
 
+**Creatures in the dark (3D view).** An enemy, chest or shot in the dark is there in the 3D picture as soon as it is in your sight, only hard to make out, and it brightens as it walks into the light. Until light or your darkvision reaches it, it shows **no health bar, name, damage numbers, status marks, rules-log tag or E hint**, and walls do not open around it. (For now the 3D dungeon is lit by one light that follows the camera, not by the torches, so a creature in the dark near you is drawn plainly lit, still without its bar. The 2D view may also show creatures in the dark until it is retired.)
+
 The **Settings** view of the Esc menu has a checkbox for each switch: the rules log (L), its calculation lines (Shift+L) and the network stats (F3). The keys and the checkboxes always agree.
 
 On the screen, the **E** hint is a small gold key cap that floats over the thing you can use (a chest, a door, a sleeping teammate with the word "Wake", the neutral knight with the word "Recruit"). A **critical hit** shows as a big gold number. Messages come in two kinds: story messages in the middle of the screen (a force field, a teammate leaving the dungeon) and small notices (such as "You have fallen").
