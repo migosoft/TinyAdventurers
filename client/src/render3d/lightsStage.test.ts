@@ -88,6 +88,20 @@ describe('the ?r3d=lights stage', () => {
     expect(f!.casters.map((c) => c.id)).toEqual([100]);
   });
 
+  it('publishes the light and caster counts on window.__r3d for the F3 readout', () => {
+    const state = {} as NonNullable<Window['__r3d']>;
+    window.__r3d = state;
+    try {
+      const { f } = drawn('?r3d=lights&t=0');
+      expect(state.lights).toEqual({ list: f!.lights.length, inView: expect.any(Number) });
+      expect(state.lights!.inView).toBeGreaterThanOrEqual(state.lights!.list);
+      expect(state.casters).toBe(f!.casters.length);
+      expect(state.casters).toBe(1);
+    } finally {
+      delete window.__r3d;
+    }
+  });
+
   it('passes no casters in the work light', () => {
     const { f } = drawn('?r3d=lights&light=work');
     expect(f!.casters).toEqual([]);

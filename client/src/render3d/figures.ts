@@ -424,8 +424,13 @@ export class Figures3d {
           const k = casterOf(body, e.id, this.frames, cam);
           if (k) out.casters.push(k);
         }
-        fig.body = body;
-        if (pose.afterimage) this.images.push({ card: { ...body, tint: rgbOf(d.base), mode: 0 }, alpha0: AFTER_ALPHA, secs: AFTER_SECS, left: AFTER_SECS });
+        // The stored card is the lit one: a vanish image inherits `dark` and the faded alpha (`framePoint` reads geometry only).
+        const l = this.lit(body, e.id);
+        fig.body = l.card;
+        if (pose.afterimage) {
+          const k = this.dark.has(e.id) && this.darkFade ? this.fadeAlpha : 1;
+          this.images.push({ card: { ...l.card, tint: rgbOf(d.base), mode: 0 }, alpha0: AFTER_ALPHA * k, secs: AFTER_SECS, left: AFTER_SECS });
+        }
       }
     }
 

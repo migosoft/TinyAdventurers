@@ -464,6 +464,27 @@ describe('Figures3d in the dark (#304)', () => {
     expect(o.shadows.n).toBe(1);
     expect(o.casters).toHaveLength(1);
   });
+  it('a dark dashing monster leaves no visible afterimage at ambient 0, and the image carries the dark flag', () => {
+    const dash = [ent(10, KIND.Knight, { anim: ANIM.Dash })];
+    const o = make().frame(frame(dash, { dark: new Set([10]) }), cam(), look([0, 0, 0]));
+    expect(o.ghosts.n).toBeGreaterThan(1);
+    expect(Math.max(...alphas(o.ghosts))).toBe(0);
+    expect(o.ghosts.dark.every((d) => d === 1)).toBe(true);
+    const shape = make().frame(frame(dash, { dark: new Set([10]) }), cam(), look([0, 0, 0], 'shape'));
+    expect(shape.ghosts.n).toBe(1);
+    expect(shape.ghosts.dark.every((d) => d === 1)).toBe(true);
+  });
+  it('a dark figure that vanishes leaves no visible image', () => {
+    const fg = make();
+    const e = ent(10, KIND.SkeletonWarrior);
+    const dk = new Set([10]);
+    fg.frame(frame([e], { dark: dk }), cam(), look([0, 0, 0]));
+    fg.event({ t: 'Effect', id: 10, kind: EFFECT.Invisible, on: true, look: 0 });
+    const b = fg.frame(frame([], { dt: 0.1, now: 10.1, dark: dk }), cam(), look([0, 0, 0]));
+    expect(b.ghosts.n).toBeGreaterThan(0);
+    expect(Math.max(...alphas(b.ghosts))).toBe(0);
+    expect(b.ghosts.dark.every((d) => d === 1)).toBe(true);
+  });
   it('a dark chest, barrel and mimic lose shadow and caster too', () => {
     const o = make().frame(frame([ent(20, KIND.Chest, { side: SIDE.Neutral }), ent(21, KIND.Barrel, { side: SIDE.Neutral }), ent(22, KIND.Mimic)], { dark: new Set([20, 21, 22]) }), cam(), look([0, 0, 0], 'shape'));
     expect(o.shadows.n).toBe(0);

@@ -143,9 +143,12 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       caption(dv);
       const viewer = { x: VIEWER[0] + 0.5, z: VIEWER[1] + 0.5 };
       let lights: ReturnType<typeof selectLights>['list'] = [];
+      let inView = 0;
       if (game) {
         const cands = [...staticCands(field, pairs, map, t), ...movingCands(movingAt(t), [], () => null, t)];
-        lights = selectLights(cands, footprint(cam, c.plan.halfW, c.plan.halfH), viewer, Math.min(LIGHT_CAP, c.params.lcap)).list;
+        const sel = selectLights(cands, footprint(cam, c.plan.halfW, c.plan.halfH), viewer, Math.min(LIGHT_CAP, c.params.lcap));
+        lights = sel.list;
+        inView = sel.inView;
         if (field.version !== lavaVersion) {
           lavaVersion = field.version;
           lava = new Float32Array(map.w * map.h * 4);
@@ -156,7 +159,12 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];
       assignSkips(lights, carrierMap(lights), casters);
       c.timer.lap('lights');
-      if (window.__r3d) window.__r3d.figures = figures.count;
+      const r = window.__r3d;
+      if (r) {
+        r.figures = figures.count;
+        r.lights = { list: lights.length, inView };
+        r.casters = casters.length;
+      }
       c.timer.renderStart();
       return c.view.draw(
         {
