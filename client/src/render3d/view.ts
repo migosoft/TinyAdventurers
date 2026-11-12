@@ -338,10 +338,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     for (let i = 0; i < n; i++) {
       tintBuf[i * 4] = q.look[i * 5]; tintBuf[i * 4 + 1] = q.look[i * 5 + 1]; tintBuf[i * 4 + 2] = q.look[i * 5 + 2]; tintBuf[i * 4 + 3] = q.look[i * 5 + 3];
       alphaBuf[i] = q.look[i * 5 + 4];
-      // shade: x = the slot of the card's owner in the caster list (-1 none: a shot, an image, a card whose owner casts nothing), y = dark flag (a later task).
+      // shade: x = the slot of the card's owner in the caster list (-1 none: a shot, an image, a card whose owner casts nothing), y = dark flag.
       const owner = i < q.owner.length ? q.owner[i] : -1;
       shadeBuf[i * 2] = owner >= 0 ? (slotOf.get(owner) ?? -1) : -1;
-      shadeBuf[i * 2 + 1] = 0;
+      shadeBuf[i * 2 + 1] = i < q.dark.length ? q.dark[i] : 0;
     }
     return { position: q.position, uv: q.uv, tint: tintBuf, alpha: alphaBuf, shade: shadeBuf };
   };

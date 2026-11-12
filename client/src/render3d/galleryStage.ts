@@ -218,7 +218,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       label.textContent = `state: ${STATES[only >= 0 ? only : Math.floor(t / 1.2) % STATES.length][0]} (hurt flash every 3 s); WASD pans`;
       c.timer.lap('sim');
       if (!c.view) return 0;
-      const fo = figures.frame(galleryFrame(galleryEnts(t, opts.state), t, dt), cam);
+      const fo = figures.frame(galleryFrame(galleryEnts(t, opts.state), t, dt), cam, { ambient: WORK_AMBIENT, dark: c.params.dark, torchGlow: true });
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
       c.timer.lap('lights');

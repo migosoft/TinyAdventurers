@@ -367,6 +367,11 @@ describe('casterOf and owner', () => {
     const foot = snapGround(Math.PI / 4, Math.PI / 2, 5, 5);
     expect([y.x, y.z, y.w]).toEqual([expect.closeTo(foot.x, 6), expect.closeTo(foot.z, 6), expect.closeTo(1, 6)]);
   });
+  it('is null for a card with no width or no height (a zero width ends the shader caster list)', () => {
+    expect(casterOf(c0({ sx: 0 }), 1, frames, cam(0))).toBeNull();
+    expect(casterOf(c0({ sy: 0 }), 1, frames, cam(0))).toBeNull();
+    expect(casterOf(c0({ crop: { x: 0, y: 0, w: 0, h: 16 } }), 1, frames, cam(0))).toBeNull();
+  });
   it('is null for a frame the atlas lacks', () => {
     expect(casterOf(c0({ frame: 'nope' }), 1, frames, cam(0))).toBeNull();
   });

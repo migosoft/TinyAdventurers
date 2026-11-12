@@ -133,11 +133,12 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       for (const e of ents) if (e.kind === KIND.Torch) pairs.see(e);
       c.timer.lap('sim');
       if (!c.view) return 0;
-      const fo = figures.frame(galleryFrame(ents, t, dt), cam);
+      const game = c.params.light === 'game';
+      const ambient = game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT;
+      const fo = figures.frame(galleryFrame(ents, t, dt), cam, { ambient, dark: c.params.dark, torchGlow: !game });
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
-      const game = c.params.light === 'game';
       const dv = dvOf(c.params);
       caption(dv);
       const viewer = { x: VIEWER[0] + 0.5, z: VIEWER[1] + 0.5 };
@@ -159,7 +160,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       c.timer.renderStart();
       return c.view.draw(
         {
-          cam, plan: c.plan, dynamic, lights, ambient: game ? dungeonAmbient(c.params.amb) : WORK_AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
+          cam, plan: c.plan, dynamic, lights, ambient, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: lavaVersion,
           darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,

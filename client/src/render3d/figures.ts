@@ -13,7 +13,7 @@ import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { SHOT_LIFT, snapGround, type Cam } from './camera';
 import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
-import { torchFlicker } from './light';
+import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { opensWalls } from './openers';
 import type { FrameRects } from './worldMesh';
@@ -50,6 +50,13 @@ const COIN_CAP = 128;
 export function screenAim(yaw: number, aim: number): number {
   return aim - yaw;
 }
+
+/**
+ * How a frame is lit, as the caller draws it: the `ambient` it uses, what a dark figure does (`fade` into the dark, or `shape`: keep its
+ * shape, lit by the ambient only) and whether a lit torch gets a glow quad (`light=work`; with the game's lights the flame card is all).
+ */
+export interface FigureLook { ambient: [number, number, number]; dark: 'fade' | 'shape'; torchGlow: boolean }
+const DEFAULT_LOOK: FigureLook = { ambient: AMBIENT, dark: 'fade', torchGlow: true };
 
 /** Something that may open walls this frame (#303 Task 7): its foot in tiles, its middle height in tiles, and why. */
 export interface Opener { id: number; x: number; z: number; mid: number; who: 'hero' | 'enemy' | 'friend' | 'chest' | 'mimic' | 'object' }
@@ -118,6 +125,11 @@ export class Figures3d {
   private readonly mimics = new Map<number, MimicMem>();
   private now = 0;
   private cam: Cam | null = null;
+  /** This frame's look: the entities the server marks dark, whether they fade (else keep their shape), by how much, and whether a torch has a glow quad. */
+  private dark: ReadonlySet<number> = new Set();
+  private darkFade = true;
+  private fadeAlpha = 1;
+  private torchGlow = true;
   private readonly myKind: number;
   private readonly players: RunViewInit['info']['players'];
 
@@ -150,9 +162,13 @@ export class Figures3d {
   /** The 3D view has no picture for a shot's end yet (the sparks are a later task). */
   shotEnded(_shot: ShotView): void {}
 
-  frame(f: RunFrame, cam: Cam): FigureOut {
+  frame(f: RunFrame, cam: Cam, look: FigureLook = DEFAULT_LOOK): FigureOut {
     this.now = f.now;
     this.cam = cam;
+    this.dark = f.dark;
+    this.darkFade = look.dark === 'fade';
+    this.fadeAlpha = darkAlpha(look.ambient);
+    this.torchGlow = look.torchGlow;
     const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [] };
     const seen = new Set<number>();
     this.anchors.clear();
@@ -202,18 +218,34 @@ export class Figures3d {
     // side 0 (Face): the south face of the wall cell north of the floor; 1 (West): the east face of the wall west of the floor; 2 (East): the west face of the wall east of it
     const [cx, cz, nx, nz] = e.extra === 0 ? [x, Math.floor(z) + TORCH_OFF, 0, 1] : e.extra === 1 ? [Math.floor(x) + TORCH_OFF, z, 1, 0] : [Math.floor(x) + 1 - TORCH_OFF, z, -1, 0];
     pushWall(out.emissive, torchFrame(lit, now + ph / 8, TORCH_FRAMES), cx, TORCH_MID, cz, nx, nz, e.extra === 2, this.frames);
-    if (lit) {
+    if (lit && this.torchGlow) {
       const k = torchFlicker(now, ph);
       pushGlow(out.glows, cx, TORCH_MID + TORCH_GLOW.lift, cz, TORCH_GLOW.size, [TORCH_GLOW.rgb[0] * k, TORCH_GLOW.rgb[1] * k, TORCH_GLOW.rgb[2] * k], cam);
     }
     this.opener(e, false, x, z, TORCH_MID, 'object', out);
   }
 
-  /** An entity's body card in the opaque or the translucent pass, owned by the entity, and its shadow caster. */
+  /**
+   * A card of a dark entity (lit by the ambient only): flagged `dark`; with `fade` its alpha is scaled by the ambient's brightness and
+   * it goes to the translucent pass (`ghost`). Any other card comes back as it is.
+   */
+  private lit(c: Card, id: number): { card: Card; ghost: boolean } {
+    if (!this.dark.has(id)) return { card: c, ghost: c.alpha < 1 };
+    return this.darkFade ? { card: { ...c, dark: true, alpha: c.alpha * this.fadeAlpha }, ghost: true } : { card: { ...c, dark: true }, ghost: c.alpha < 1 };
+  }
+
+  /** An entity's body card in the opaque or the translucent pass, owned by the entity, and its shadow caster (opaque, lit cards only). */
   private body(c: Card, id: number, cam: Cam, out: FigureOut): void {
-    pushCard(c.alpha < 1 ? out.ghosts : out.cards, c, this.frames, cam, id);
-    const k = casterOf(c, id, this.frames, cam);
+    const { card, ghost } = this.lit(c, id);
+    pushCard(ghost ? out.ghosts : out.cards, card, this.frames, cam, id);
+    if (ghost || card.dark) return;
+    const k = casterOf(card, id, this.frames, cam);
     if (k) out.casters.push(k);
+  }
+
+  /** A dark entity's ground shadow is not drawn. */
+  private shadowed(id: number): boolean {
+    return !this.dark.has(id);
   }
 
   /** The 2D body sits 1 px below its shadow: the foot moves 1 / 16 tile toward the camera on the ground (as the figures do). */
@@ -221,7 +253,8 @@ export class Figures3d {
     return [x - Math.sin(cam.yaw) / TILE, z + Math.cos(cam.yaw) / TILE];
   }
 
-  private objShadow(x: number, z: number, scale: number, alpha: number, cam: Cam, out: FigureOut): void {
+  private objShadow(id: number, x: number, z: number, scale: number, alpha: number, cam: Cam, out: FigureOut): void {
+    if (!this.shadowed(id)) return;
     const foot = snapGround(cam.pitch, cam.yaw, x, z);
     pushShadow(out.shadows, cam, foot.x, foot.z, (OBJ_SHADOW_RX * scale) / TILE, (OBJ_SHADOW_RY * scale) / TILE, alpha);
   }
@@ -231,7 +264,7 @@ export class Figures3d {
     const z = e.y / TILE;
     const [bx, bz] = this.bodyFoot(x, z, cam);
     this.body({ frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1 }, e.id, cam, out);
-    this.objShadow(x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
+    this.objShadow(e.id, x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
     this.objectAnchor(e, x, z);
     this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'chest', out);
   }
@@ -250,7 +283,7 @@ export class Figures3d {
       if (p.dy > 0) card.crop = { x: 0, y: 0, w: fr.w, h: Math.max(0, fr.h - p.dy) };
       if (!card.crop || card.crop.h > 0) this.body(card, e.id, cam, out);
     }
-    if (p.shadow) this.objShadow(x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
+    if (p.shadow) this.objShadow(e.id, x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
     this.objectAnchor(e, e.x / TILE, e.y / TILE);
     this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'object', out);
   }
@@ -273,7 +306,7 @@ export class Figures3d {
       frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,
       angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1,
     }, e.id, cam, out);
-    this.objShadow(x, z, p.shadowScale, p.shadowAlpha, cam, out);
+    this.objShadow(e.id, x, z, p.shadowScale, p.shadowAlpha, cam, out);
     this.objectAnchor(e, x, z);
     this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'mimic', out);
   }
@@ -360,15 +393,20 @@ export class Figures3d {
     const { tint, mode } = lookOf(pose.tint, pose.grey);
     const down = (pose.sink + pose.drop) / TILE;
     /** The weapon card is owned by its wielder (it is not shadowed by the wielder), but casts nothing of its own. */
-    const into = (c: Card): void => pushCard(c.alpha < 1 ? out.ghosts : out.cards, c, this.frames, cam, e.id);
+    const into = (c: Card): void => {
+      const l = this.lit(c, e.id);
+      pushCard(l.ghost ? out.ghosts : out.cards, l.card, this.frames, cam, e.id);
+    };
 
     if (pose.lie) {
       // Asleep: the body lies on the floor. The pose's lie layout is screen px; the lying card's axes are turned a quarter, so the offset is too.
       const lie = pose.lie;
       const headRight = !pose.left;
+      // A dark figure lying on the floor stays a decal: its alpha fades (or its shape stays) like any dark card.
+      const dark = this.dark.has(e.id);
       pushLying(out.decals, {
         frame: pose.frame, crop: { x: lie.cropX, y: 0, w: lie.cropW, h: pose.footY }, x, z, lift: 0, flip: pose.left, originX: pose.originX, footY: pose.footY / fb.h,
-        scale: sc, sx: lie.squash, sy: 1, offset: headRight ? [lie.y, -lie.x] : [-lie.y, lie.x], tint, mode, alpha: pose.alpha, headRight,
+        scale: sc, sx: lie.squash, sy: 1, offset: headRight ? [lie.y, -lie.x] : [-lie.y, lie.x], tint, mode, alpha: dark && this.darkFade ? pose.alpha * this.fadeAlpha : pose.alpha, headRight, dark,
       }, this.frames, cam);
     } else {
       // The 2D body sits 1 px below the shadow (body.y 1). A card lowered into the floor would lose its foot row, so the
@@ -382,8 +420,10 @@ export class Figures3d {
       if (pose.sink > 0) body.crop = { x: 0, y: 0, w: fb.w, h: pose.footY - pose.sink };
       if (!body.crop || body.crop.h > 0) {
         into(body);
-        const k = casterOf(body, e.id, this.frames, cam);
-        if (k) out.casters.push(k);
+        if (body.alpha >= 1 && this.shadowed(e.id)) {
+          const k = casterOf(body, e.id, this.frames, cam);
+          if (k) out.casters.push(k);
+        }
         fig.body = body;
         if (pose.afterimage) this.images.push({ card: { ...body, tint: rgbOf(d.base), mode: 0 }, alpha0: AFTER_ALPHA, secs: AFTER_SECS, left: AFTER_SECS });
       }
@@ -400,7 +440,7 @@ export class Figures3d {
       });
     }
 
-    if (pose.shadow.visible) {
+    if (pose.shadow.visible && this.shadowed(e.id)) {
       const foot = snapGround(cam.pitch, cam.yaw, x, z);
       const r = (d.baseR * sc) / TILE;
       pushShadow(out.shadows, cam, foot.x, foot.z, r * pose.shadow.sx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha);

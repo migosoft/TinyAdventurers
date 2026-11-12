@@ -188,17 +188,18 @@ export class RunView3d implements RunView {
       this.paintOverlay(f, c, cam);
       return this.stats(c, 0);
     }
-    const fo = this.figures.frame(f, cam);
+    const work = this.woodland || c.params.light === 'work';
+    const ambient = work ? WORK_AMBIENT : AMBIENT;
+    const fo = this.figures.frame(f, cam, { ambient, dark: c.params.dark, torchGlow: work });
     for (const w of fo.floats) this.floats.add(w.x, w.y, w.text, w.color, { kind: w.kind, up: w.up });
     this.seen = seenOpeners(fo.openers, this.sightFor(f), f.dark);
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
-    const work = this.woodland || c.params.light === 'work';
     const lights: Light[] = work ? [] : [{ x: cam.x, y: 1.0, z: cam.z, radius: 9, r: 1.0, g: 0.82, b: 0.55, shadow: c.params.shadows, skip: -1 }];
     c.timer.lap('lights');
     c.timer.renderStart();
     this.drawCalls = view.draw(
-      { cam, plan: c.plan, dynamic, lights, ambient: work ? WORK_AMBIENT : AMBIENT, lava: null, lavaVersion: 0, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: this.seen, look: seeLook(c.params) } },
+      { cam, plan: c.plan, dynamic, lights, ambient, lava: null, lavaVersion: 0, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: this.seen, look: seeLook(c.params) } },
       c.timer,
     );
     this.paintOverlay(f, c, cam);

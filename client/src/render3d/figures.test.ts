@@ -10,6 +10,7 @@ import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
 import { project, snapGround, type Cam } from './camera';
+import { AMBIENT } from './light';
 import { Figures3d, screenAim, type FigureOut } from './figures';
 import type { FrameRects } from './worldMesh';
 
@@ -420,6 +421,69 @@ describe('Figures3d anchors (#311)', () => {
     fg.frame(f(10), cam());
     fg.frame(f(10.3), cam());
     expect(fg.anchors.get(1)!.tagShown).toBe(false);
+  });
+});
+
+describe('Figures3d in the dark (#304)', () => {
+  const look = (ambient: [number, number, number], dark: 'fade' | 'shape' = 'fade', torchGlow = true) => ({ ambient, dark, torchGlow });
+  const alphas = (b: CardBuf): number[] => b.look.filter((_, i) => i % 5 === 4);
+  const monster = () => [ent(10, KIND.Knight)];
+  const torchFrames = ['torch_f0', 'torch_f1', 'torch_f2', 'torch_f3', 'torch_f4', 'torch_out'];
+  it('a dark monster fades to nothing at ambient 0 and shows fully at AMBIENT, with no shadow and no caster', () => {
+    const dim = make().frame(frame(monster(), { dark: new Set([10]) }), cam(), look([0, 0, 0]));
+    expect(dim.cards.n).toBe(0);
+    expect(dim.ghosts.n).toBeGreaterThan(0);
+    expect(new Set(alphas(dim.ghosts))).toEqual(new Set([0]));
+    expect(dim.shadows.n).toBe(0);
+    expect(dim.casters).toEqual([]);
+    const full = make().frame(frame(monster(), { dark: new Set([10]) }), cam(), look(AMBIENT));
+    expect(full.cards.n).toBe(0);
+    expect(new Set(alphas(full.ghosts))).toEqual(new Set([1]));
+    expect(full.shadows.n).toBe(0);
+    expect(full.casters).toEqual([]);
+  });
+  it('with dark shape it stays an opaque card with the dark flag at any ambient', () => {
+    const o = make().frame(frame(monster(), { dark: new Set([10]) }), cam(), look([0, 0, 0], 'shape'));
+    expect(o.ghosts.n).toBe(0);
+    expect(o.cards.n).toBeGreaterThan(0);
+    expect(o.cards.dark.every((d) => d === 1)).toBe(true);
+    expect(new Set(alphas(o.cards))).toEqual(new Set([1]));
+    expect(o.shadows.n).toBe(0);
+    expect(o.casters).toEqual([]);
+  });
+  it('the same monster not in f.dark gives a card, a shadow, a caster and no dark flag', () => {
+    const o = make().frame(frame(monster()), cam(), look([0, 0, 0]));
+    expect(o.cards.n).toBeGreaterThan(0);
+    expect(o.shadows.n).toBe(1);
+    expect(o.casters).toHaveLength(1);
+    expect(o.cards.dark.every((d) => d === 0)).toBe(true);
+  });
+  it('a hero in a frame whose f.dark is empty is drawn lit, with a shadow and a caster', () => {
+    const o = make().frame(frame([ent(1, KIND.Wizard, { side: SIDE.Friendly })]), cam(), look([0, 0, 0]));
+    expect(o.cards.n).toBeGreaterThan(0);
+    expect(o.shadows.n).toBe(1);
+    expect(o.casters).toHaveLength(1);
+  });
+  it('a dark chest, barrel and mimic lose shadow and caster too', () => {
+    const o = make().frame(frame([ent(20, KIND.Chest, { side: SIDE.Neutral }), ent(21, KIND.Barrel, { side: SIDE.Neutral }), ent(22, KIND.Mimic)], { dark: new Set([20, 21, 22]) }), cam(), look([0, 0, 0], 'shape'));
+    expect(o.shadows.n).toBe(0);
+    expect(o.casters).toEqual([]);
+    expect(o.cards.n).toBe(3);
+  });
+  it('a card in the ghost pass casts no shadow', () => {
+    // anim 2: a barrel falling into a chasm fades out
+    const o = make().frame(frame([ent(21, KIND.Barrel, { side: SIDE.Neutral, anim: 2, animMs: 200 })]), cam(), look(AMBIENT));
+    expect(o.ghosts.n).toBe(1);
+    expect(o.cards.n).toBe(0);
+    expect(o.casters).toEqual([]);
+  });
+  it('a lit torch gives a glow quad with torchGlow and none without', () => {
+    for (const n of torchFrames) frames[n] = { x: 500, y: 20, w: 16, h: 16 };
+    const torch = ent(30, KIND.Torch, { x: 3 * 16 + 8, y: 2 * 16 + 0.5, extra: 0, anim: 1, side: SIDE.Neutral });
+    expect(make().frame(frame([torch]), cam(), look(AMBIENT, 'fade', true)).glows.n).toBe(1);
+    const off = make().frame(frame([torch]), cam(), look(AMBIENT, 'fade', false));
+    expect(off.glows.n).toBe(0);
+    expect(off.emissive.n).toBe(1);
   });
 });
 
