@@ -3,12 +3,13 @@
 // that have a picture, tile changes and ended shots. Picture-only state (entity views, wading and sinking,
 // vanish and reappear marks, skull decals, bar labels, the force field's age) stays here.
 import Phaser from 'phaser';
-import { ANIM, CONST, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
+import { ANIM, CONST, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import type { Net } from '../net';
 import { RulesLog } from '../rulesLog';
 import type { PictureEv, RunFrame, RunView, RunViewInit, ShotView, ViewStats } from '../run/view';
 import { isTerrain, TILE, TileMap } from '../sim/map';
-import { MARK_TTL, Marks, skimsTerrain, splashes } from './anim/entityAlpha';
+import { skimsTerrain, splashes } from './anim/entityAlpha';
+import { FigureStates } from './anim/figureState';
 import { PROJECTILES, FIGURES, heroWeapons, isAnimalKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { MoverTracker } from './airmovers';
@@ -30,7 +31,7 @@ import { Mood, type AirMover, type AirShot, type AirTorch } from './mood';
 import { ShadeMask } from './shademask';
 import { drawGazeBeam } from './status';
 import { Sunbeams } from './sunbeams';
-import { bubbleFx, sinkDepth, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
+import { bubbleFx, sinkStartFx, TerrainLayer, WadeFx } from './terrain';
 import { CoveView } from './cove';
 import { TorchView } from './torch';
 import { DEFAULT_HAZE, syncUnseenFX } from './unseenfx';
@@ -61,10 +62,8 @@ export class PhaserRunView implements RunView {
   private readonly timer: FrameTimer;
   private mapRt!: Phaser.GameObjects.RenderTexture;
   private views = new Map<number, EntityView>();
-  /** Entities that just reappeared from Invisible: their view fades in when it is created. */
-  private reappearing = new Marks(MARK_TTL);
-  /** Enemies that went invisible: a ghost is left where the view is last drawn, when it is culled. */
-  private vanishing = new Marks(MARK_TTL);
+  /** Sink, vanish and reappear bookkeeping, shared with the 3D view. */
+  private readonly figures: FigureStates;
   private projViews = new Map<number, Phaser.GameObjects.Image>();
   private hazardViews = new Map<number, Phaser.GameObjects.Image>();
   private mimicViews = new Map<number, MimicView>();
@@ -100,8 +99,6 @@ export class PhaserRunView implements RunView {
   private terrain?: TerrainLayer;
   /** Splash and ripple state per figure. */
   private wade = new Map<number, WadeFx>();
-  /** Heroes falling into a chasm or drowning (from `Ev::Sink`, or predicted for the own hero). */
-  private sinks = new Map<number, { x: number; y: number; drown: boolean; t: number }>();
   private debugGfx: Phaser.GameObjects.Graphics;
 
   constructor(
@@ -111,6 +108,7 @@ export class PhaserRunView implements RunView {
   ) {
     this.info = init.info;
     this.map = init.map;
+    this.figures = new FigureStates(init.map);
     this.myKind = init.myKind;
     this.timer = deps.timer;
     scene.cameras.main.setBackgroundColor('#2b1a10');
@@ -164,8 +162,7 @@ export class PhaserRunView implements RunView {
     this.barLabels.clear();
     for (const v of this.views.values()) v.destroy();
     this.views.clear();
-    this.reappearing.clear();
-    this.vanishing.clear();
+    this.figures.clear();
     for (const v of this.mimicViews.values()) v.destroy();
     this.mimicViews.clear();
     for (const v of this.chestViews.values()) v.destroy();
@@ -335,7 +332,7 @@ export class PhaserRunView implements RunView {
         break;
       case 'Died': {
         // Lost to a chasm or deep water: nothing is left behind.
-        if (this.sinks.delete(ev.id)) break;
+        if (this.figures.event(ev, performance.now() / 1000) === 'lost') break;
         if (ev.kind === KIND.Ghost) {
           // A Ghost leaves no skull: it comes apart.
           this.fx.disintegrate(ev.x, ev.y - 6);
@@ -351,10 +348,12 @@ export class PhaserRunView implements RunView {
         }
         break;
       }
-      case 'Sink':
-        if (ev.how === 2) this.sinks.delete(ev.id); // debug: back on safe ground
-        else if (!this.sinks.has(ev.id)) this.startSink(ev.id, ev.x, ev.y, ev.how === 1);
+      case 'Sink': {
+        const began = ev.how !== 2 && !this.figures.sinking(ev.id);
+        this.figures.event(ev, performance.now() / 1000);
+        if (began) sinkStartFx(this.fx, ev.x, ev.y, ev.how === 1);
         break;
+      }
       case 'Raise':
         this.fx.raise(ev.x, ev.y, ev.k);
         break;
@@ -364,11 +363,7 @@ export class PhaserRunView implements RunView {
       case 'Effect':
         // Drawn from the snapshot bitmask and its looks (status.ts). Invisible has a default fade:
         // the entity leaves the snapshot at once, so a ghost image fades out; on return it fades in.
-        if (ev.kind === EFFECT.Invisible) {
-          const t = performance.now() / 1000;
-          if (ev.on) (this.vanishing.add(ev.id, t), this.reappearing.delete(ev.id));
-          else (this.reappearing.add(ev.id, t), this.vanishing.delete(ev.id));
-        }
+        this.figures.event(ev, performance.now() / 1000);
         break;
       case 'Coins':
         this.fx.coins(ev.x, ev.y, Math.min(10, 3 + Math.floor(ev.v / 4)));
@@ -390,8 +385,6 @@ export class PhaserRunView implements RunView {
     const { dt, now } = f;
     const timer = this.timer;
     const cam = this.scene.cameras.main;
-    const px = f.own.x;
-    const py = f.own.y;
     const camX = f.camera.x;
     const camY = f.camera.y;
     cam.centerOn(Math.round(camX), Math.round(camY - 8));
@@ -432,13 +425,12 @@ export class PhaserRunView implements RunView {
     // Own figure is always drawn from prediction.
     if (!seen.has(f.you) && f.own.alive) {
       seen.add(f.you);
-      this.drawFigure({ id: f.you, kind: this.myKind, x: px, y: py, hp: 1, anim: 0, aim: 0, animMs: 0, flags: 0, extra: 0, effects: f.own.effects, side: SIDE.Friendly, entangled: f.own.entangled }, f);
+      this.drawFigure(this.figures.ownEntity(f, this.myKind), f);
     }
-    this.reappearing.prune(now);
-    this.vanishing.prune(now);
+    this.figures.prune(now);
     for (const [id, v] of this.views) {
       if (seen.has(id)) continue;
-      if (this.vanishing.take(id, now)) v.ghost();
+      if (this.figures.takeVanish(id, now)) v.ghost();
       v.destroy();
       this.views.delete(id);
       this.wade.delete(id);
@@ -493,44 +485,27 @@ export class PhaserRunView implements RunView {
       this.views.set(e.id, view);
     }
     // Reappearing in the ambush wind-up: the flicker is the entrance, the default fade-in would blur it.
-    if (this.reappearing.take(e.id, now) && !isPlayerKind(e.kind) && e.anim !== ANIM.Ambush) view.fadeIn();
-    let s: ViewState;
-    // The own figure is drawn from prediction, except while charmed: then it is the server's, interpolated hero.
-    const predicted = me && f.own.alive && !f.own.charmed;
-    if (predicted) {
-      // Effects from the own snapshot (exact, not the interpolated entity), so they show at once.
-      s = { x: f.own.x, y: f.own.y, anim: f.own.anim, animT: f.own.animT, aim: f.own.aim, flags: f.own.flags, effects: f.own.effects, entangled: e.entangled, party: isPlayerKind(e.kind), swingArc: f.own.anim === ANIM.Melee ? f.own.arc : undefined };
-    } else {
-      s = { id: e.id, x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim: e.aim, flags: e.flags, effects: e.effects, entangled: e.entangled, party: isPlayerKind(e.kind) };
-    }
-    this.terrainState(e, s, predicted, f);
+    if (this.figures.takeReappear(e.id, now) && !isPlayerKind(e.kind) && e.anim !== ANIM.Ambush) view.fadeIn();
+    const { s, predicted, started, drowning } = this.figures.stateOf(e, f, now);
+    if (started) sinkStartFx(this.fx, s.x, s.y, drowning);
+    this.terrainState(e, s, predicted, drowning, f);
     view.update(s, f.dt);
   }
 
-  /** Wading, splashes and embers, or the fall / drowning of a hero lost to the terrain. */
-  private terrainState(e: EntState, s: ViewState, predicted: boolean, f: RunFrame): void {
+  /** Wading, splashes and embers, or the bubbles of a drowning hero (the sink itself is in `FigureStates`). */
+  private terrainState(e: EntState, s: ViewState, predicted: boolean, drowning: boolean, f: RunFrame): void {
     const dt = f.dt;
-    const tile = this.map.tileAt(s.x, s.y);
-    if (predicted && f.own.sinking && !this.sinks.has(e.id)) this.startSink(e.id, s.x, s.y, tile === TILE_ID.DeepWater);
-    const sk = this.sinks.get(e.id);
-    if (sk) {
-      const k = Math.min(1, (performance.now() / 1000 - sk.t) / (sk.drown ? CONST.DROWN_TIME : CONST.FALL_TIME));
-      Object.assign(s, { x: sk.x, y: sk.y, anim: ANIM.Idle, animT: 0, fall: sk.drown ? 0 : k, drown: sk.drown ? k : 0 });
-      if (sk.drown) bubbleFx(this.fx, sk.x, sk.y, dt);
+    if (s.fall !== undefined) {
+      if (drowning) bubbleFx(this.fx, s.x, s.y, dt);
       return;
     }
+    const tile = this.map.tileAt(s.x, s.y);
     const dashing = skimsTerrain(e.flags, predicted ? f.own.dashing : e.anim === ANIM.Dash);
-    s.sink = dashing ? 0 : sinkDepth(tile);
     if (!splashes(e.flags)) return; // incorporeal: no wading, splash, spray or embers
     let wade = this.wade.get(e.id);
     if (!wade) this.wade.set(e.id, (wade = new WadeFx()));
     // Only heroes burn: demons walk lava unharmed, other enemies never enter it.
     wade.update(this.fx, s.x, s.y, tile, dashing, s.anim === ANIM.Move, isPlayerKind(e.kind), dt);
-  }
-
-  private startSink(id: number, x: number, y: number, drown: boolean): void {
-    this.sinks.set(id, { x, y, drown, t: performance.now() / 1000 });
-    sinkStartFx(this.fx, x, y, drown);
   }
 
   private drawMimic(e: EntState, f: RunFrame): void {
