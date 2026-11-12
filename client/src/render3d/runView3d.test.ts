@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ANIM, KIND, LIGHT_KIND } from '../generated/defs';
 import { LightField } from '../game/light';
 import { TileMap } from '../sim/map';
-import { fakeHud, snap, startInfo } from '../run/testing';
+import { snap, startInfo } from '../run/testing';
 import type { RunFrame, RunViewInit } from '../run/view';
 import { keysToWorld } from './camera';
 import { AMBIENT, WORK_AMBIENT } from './light';
@@ -47,7 +47,7 @@ const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`wizzard_m_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 
-function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean } = {}) {
+function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number } = {}) {
   const info = startInfo(['#######', '#.....#', '#.....#', '#######'], over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 } } as never } : {});
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   const light = new LightField(map);
@@ -64,11 +64,17 @@ function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { dar
   v.begin({ now: 0, dt: 1 / 60, params, held: new Set(), canvas: { w: 1280, h: 720 }, zoom: 2, plan, canvasEl, view, timer } as unknown as StageCtx);
   const s = snap({ lights: over.moving ?? [], ents: (over.ents ?? []) as never });
   if (over.me) Object.assign(s.me, over.me);
-  const own = { x: 56, y: 24, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: 56, aimFromY: 24, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
+  const own = { x: over.ownX ?? 56, y: 24, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: over.ownX ?? 56, aimFromY: 24, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
   const f = { dt: 1 / 60, now: 0, ents: new Map(), you: 1, own, watching: null, camera: { x: 56, y: 24 }, snap: s, shots: [], hiddenShots: new Set(), useHint: null, dark: new Set(), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] } } as unknown as RunFrame;
   const stats = v.frame(f);
-  void fakeHud;
-  return { f: got as FrameInput | null, stats, own, v };
+  const first = got as FrameInput | null;
+  /** Another frame of the same view and frame data: what it hands `draw`. */
+  const again = (): FrameInput | null => {
+    got = null;
+    v.frame(f);
+    return got;
+  };
+  return { f: first, stats, own, v, light, again };
 }
 
 describe('the run view and the game lights', () => {
@@ -102,10 +108,15 @@ describe('the run view and the game lights', () => {
   });
   it('a moving light on the own hero sits at the drawn hero', () => {
     const ent = [1, KIND.Wizard, 56, 24, 0, 0, 0, 0, 0, 0, 0, 0];
-    const { f, own } = run({ torch: false, moving: [[56, 24, LIGHT_KIND.Torch, null]], ents: [ent] });
+    // The snapshot's entity (and the light on it) is at x 56 px; the predicted hero is drawn at 60: the light follows the drawn hero.
+    const { f } = run({ torch: false, moving: [[56, 24, LIGHT_KIND.Torch, null]], ents: [ent], ownX: 60 });
     expect(f?.lights).toHaveLength(1);
-    expect(f?.lights[0].x).toBeCloseTo(own.x / 16);
-    expect(f?.lights[0].z).toBeCloseTo(own.y / 16);
+    expect(f?.lights[0].x).toBeCloseTo(60 / 16);
+    expect(f?.lights[0].z).toBeCloseTo(24 / 16);
+    // The hero is a caster (id `f.you`, as the figures give it) and its own light skips that card's slot.
+    const slot = f!.casters.findIndex((c) => c.id === 1);
+    expect(slot).toBeGreaterThanOrEqual(0);
+    expect(f?.lights[0].skip).toBe(slot);
   });
   it('the readout lines say the lights in use and the caps', () => {
     const { stats } = run({ params: { lcap: 8, ccap: 4 } });
@@ -113,6 +124,12 @@ describe('the run view and the game lights', () => {
   });
   it('a refilled lava buffer bumps lavaVersion', () => {
     const a = run();
-    expect(a.f?.lavaVersion).toBeGreaterThan(0);
+    const v1 = a.f!.lavaVersion;
+    expect(v1).toBeGreaterThan(0);
+    expect(a.again()?.lavaVersion).toBe(v1); // nothing changed: no refill
+    a.light.mapChanged(); // a tile changed (lava appeared, a door opened)
+    const v2 = a.again()!.lavaVersion;
+    expect(v2).toBeGreaterThan(v1);
+    expect(a.again()?.lavaVersion).toBe(v2);
   });
 });

@@ -29,7 +29,7 @@ export function lightLines(list: number, inView: number, casters: number, lcap: 
   return [`lights     ${list} of ${inView} (cap ${lcap})`, `shadows    ${casters} cards (cap ${ccap})`];
 }
 
-const UPDATE =new Set<string>(['sim', 'cards', 'lights']);
+const UPDATE = new Set<string>(['sim', 'cards', 'lights']);
 
 export function statsText3d(s: R3dStats): string {
   const ms = (v: number) => `${v.toFixed(2)} ms`;

@@ -277,6 +277,7 @@ export class RunView3d implements RunView {
   private carrier(f: RunFrame, id: number): Carrier | null {
     const a = this.figures.anchors.get(id);
     const e = f.ents.get(id);
+    // 0.5 tile: mid-body of a figure without an anchor yet (the first frame of an entity).
     const y = e && isProjectileKind(e.kind) ? SHOT_LIFT : a ? a.height / 2 / TILE : 0.5;
     if (id === f.you) return { id, x: f.own.x / TILE, z: f.own.y / TILE, y };
     if (a) return { id, x: a.x, z: a.z, y };
