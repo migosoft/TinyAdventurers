@@ -13,12 +13,14 @@ const mode = process.argv[5] || 'webgl';
 const lose = process.argv[6] ?? '';
 const page = process.argv[7] || 'demo'; // demo (default), gallery or lights
 const args =
-  mode === 'webgpu'
+  mode === 'webgpu' && process.env.HEADED
+    ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan']
+    : mode === 'webgpu'
     ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader']
     : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 const b = await chromium.launch({
   executablePath: process.env.BROWSER ?? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  headless: true,
+  headless: !process.env.HEADED, // HEADED=1 with mode webgpu: a visible window on the real GPU
   args,
 });
 const errs = [];
