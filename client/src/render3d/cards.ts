@@ -1,6 +1,7 @@
 // Per-frame quads of the 3D view: figure and prop cards, floor decals, ground shadows, torch flames and glows.
 import { facesLeft, snapGround, viewRay, type Cam } from './camera';
 import { torchFlicker } from './light';
+import type { ShadowCaster } from './lights';
 import { frameOf, orbAt, type SceneState } from './scene';
 import type { FrameRects } from './worldMesh';
 
@@ -14,26 +15,26 @@ export const WEAPON_BIAS = 0.01;
 const SHADOW_Y = 0.01;
 
 /** 6 vertices per quad. `look` has 5 floats per vertex: r, g, b, mode (0 multiply, 1 fill, 2 grey then multiply), alpha. */
-export interface Quads { position: Float32Array; uv: Float32Array; look: Float32Array; count: number }
+export interface Quads { position: Float32Array; uv: Float32Array; look: Float32Array; /** One entity id per vertex, -1 none. */ owner: Float32Array; count: number }
 export interface Glows { position: Float32Array; uv: Float32Array; color: Float32Array; count: number } // uv -1..1; color rgb already times strength
 export interface Shadows { position: Float32Array; uv: Float32Array; alpha: Float32Array; count: number } // uv -1..1
 /** `ghosts` (translucent, no depth write) must be sorted with `sortBackToFront` by the producer before it is handed over. */
 export interface Dynamic { cards: Quads; ghosts: Quads; decals: Quads; shadows: Shadows; emissive: Quads; glows: Glows }
 
 /** The growing arrays one pass is built in; `n` counts quads. */
-export interface CardBuf { position: number[]; uv: number[]; look: number[]; n: number }
+export interface CardBuf { position: number[]; uv: number[]; look: number[]; /** One entity id per vertex of the looked quads (-1: none). */ owner: number[]; n: number }
 export interface ShadowBuf { position: number[]; uv: number[]; alpha: number[]; n: number }
 export interface GlowBuf { position: number[]; uv: number[]; color: number[]; n: number }
 
-export const newCardBuf = (): CardBuf => ({ position: [], uv: [], look: [], n: 0 });
+export const newCardBuf = (): CardBuf => ({ position: [], uv: [], look: [], owner: [], n: 0 });
 export const newShadowBuf = (): ShadowBuf => ({ position: [], uv: [], alpha: [], n: 0 });
 export const newGlowBuf = (): GlowBuf => ({ position: [], uv: [], color: [], n: 0 });
 
-export const emptyQuads = (): Quads => ({ position: new Float32Array(0), uv: new Float32Array(0), look: new Float32Array(0), count: 0 });
+export const emptyQuads = (): Quads => ({ position: new Float32Array(0), uv: new Float32Array(0), look: new Float32Array(0), owner: new Float32Array(0), count: 0 });
 export const emptyShadows = (): Shadows => ({ position: new Float32Array(0), uv: new Float32Array(0), alpha: new Float32Array(0), count: 0 });
 export const emptyGlows = (): Glows => ({ position: new Float32Array(0), uv: new Float32Array(0), color: new Float32Array(0), count: 0 });
 
-export const quadsOf = (b: CardBuf): Quads => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), look: new Float32Array(b.look), count: b.n });
+export const quadsOf = (b: CardBuf): Quads => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), look: new Float32Array(b.look), owner: new Float32Array(b.owner), count: b.n });
 export const shadowsOf = (b: ShadowBuf): Shadows => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), alpha: new Float32Array(b.alpha), count: b.n });
 export const glowsOf = (b: GlowBuf): Glows => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), color: new Float32Array(b.color), count: b.n });
 
@@ -106,14 +107,37 @@ function place(
   return { q, r: fr };
 }
 
-const lookOf = (b: CardBuf, c: Card) => (): void => { b.look.push(c.tint[0], c.tint[1], c.tint[2], c.mode, c.alpha); };
+const lookOf = (b: CardBuf, c: Card, owner = -1) => (): void => { b.look.push(c.tint[0], c.tint[1], c.tint[2], c.mode, c.alpha); b.owner.push(owner); };
 
-export function pushCard(b: CardBuf, c: Card, frames: FrameRects, cam: Cam): void {
+/** `owner`: the id of the entity the card belongs to (its figure shadow's slot is the card's own), -1 none. */
+export function pushCard(b: CardBuf, c: Card, frames: FrameRects, cam: Cam, owner = -1): void {
   const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
   const p = place(c, frames, cam, [cs, 0, sn], [0, 1, 0], true);
   if (!p) return;
-  pushQuad(b.position, b.uv, p.q, lookOf(b, c));
+  pushQuad(b.position, b.uv, p.q, lookOf(b, c, owner));
   b.n++;
+}
+
+/**
+ * The shadow caster of an upright card (as `pushCard` places it, unstretched): `x`, `z` the middle of its bottom edge, `w` its width
+ * along the card, `y0`/`y1` its lowest and highest corner, `u0 v0 u1 v1` its atlas rect (`u0 > u1` when mirrored). A rotation is
+ * folded into the bounding rect of its corners; null for a frame the atlas lacks.
+ */
+export function casterOf(c: Card, id: number, frames: FrameRects, cam: Cam): ShadowCaster | null {
+  const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
+  const p = place(c, frames, cam, [cs, 0, sn], [0, 1, 0], true);
+  if (!p) return null;
+  const tl = p.q[0], br = p.q[2];
+  // The corners differ along the card's right (cs, sn) only; the bounding rect runs from the least to the greatest.
+  const along = (v: V): number => v[0] * cs + v[2] * sn;
+  let lo = tl, hi = tl, y0 = Infinity, y1 = -Infinity;
+  for (const v of p.q) {
+    if (along(v) < along(lo)) lo = v;
+    if (along(v) > along(hi)) hi = v;
+    y0 = Math.min(y0, v[1]);
+    y1 = Math.max(y1, v[1]);
+  }
+  return { id, x: (lo[0] + hi[0]) / 2, z: (lo[2] + hi[2]) / 2, w: along(hi) - along(lo), y0, y1, u0: tl[3], v0: tl[4], u1: br[3], v1: br[4] };
 }
 
 /**
@@ -210,6 +234,7 @@ export function sortBackToFront(b: CardBuf, cam: Cam): void {
   reorder(b.position, 3);
   reorder(b.uv, 2);
   reorder(b.look, 5);
+  reorder(b.owner, 1);
 }
 
 /** One upright figure card: an atlas frame standing on a ground point (tiles), mirrored when `flip`. */
@@ -262,7 +287,7 @@ export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: num
     ghosts: emptyQuads(),
     decals: emptyQuads(),
     shadows: emptyShadows(),
-    emissive: { position: new Float32Array(ep), uv: new Float32Array(eu), look: new Float32Array(0), count: en },
+    emissive: { position: new Float32Array(ep), uv: new Float32Array(eu), look: new Float32Array(0), owner: new Float32Array(0), count: en },
     glows: glowsOf(glows),
   };
 }

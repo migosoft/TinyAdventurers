@@ -35,7 +35,7 @@ import type { TileMap } from '../sim/map';
 import type { Dynamic, Quads } from './cards';
 import { cssColour, stoneClear, type Light } from './light';
 import { makeLighting } from './lightNodes';
-import type { ShadowCaster } from './lights';
+import { CASTER_CAP, type ShadowCaster } from './lights';
 import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
@@ -65,7 +65,7 @@ export interface FrameInput {
   lavaVersion: number;
   /** The followed figure's darkvision: its centre (tiles) and reach (tiles); null: none. */
   darkvision: { x: number; z: number; reach: number } | null;
-  /** The figures that cast shadows (empty until the shadow task). */
+  /** The figures that cast shadows, in the shader's slot order (`selectCasters`; the first `CASTER_CAP` are used); a light's `skip` indexes this list. */
   casters: readonly ShadowCaster[];
 }
 
@@ -217,7 +217,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const groundStart = new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType);
   pixelTexture(groundStart);
   const aw = assets.image.naturalWidth, ah = assets.image.naturalHeight;
-  const lighting = makeLighting(heights, map);
+  const lighting = makeLighting(heights, map, atlas);
   // The see-through mask: a quarter of the scene's size, half floats (red: opening strength, green: depth, alpha: coverage), linear so the
   // discs' soft edges stay soft; resized in place (`setSize` keeps the texture object the wall shader holds).
   const mask = new RenderTarget(1, 1, { depthBuffer: false, type: HalfFloatType, format: RGBAFormat, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
@@ -330,17 +330,18 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   glows.mesh.renderOrder = 4;
   // `look` is 5 floats per vertex (r, g, b, mode, alpha); a vertex attribute has at most 4 components, so it goes up as `tint` (r, g, b, mode) and `alpha`.
   let tintBuf = new Float32Array(0), alphaBuf = new Float32Array(0), shadeBuf = new Float32Array(0);
+  /** The caster slot of every entity id in this frame's list (set each frame before the cards go up). */
+  const slotOf = new Map<number, number>();
   const cardData = (q: Quads): Record<string, Float32Array> => {
     const n = q.count * 6;
-    if (alphaBuf.length < n) { tintBuf = new Float32Array(n * 4); alphaBuf = new Float32Array(n); }
+    if (alphaBuf.length < n) { tintBuf = new Float32Array(n * 4); alphaBuf = new Float32Array(n); shadeBuf = new Float32Array(n * 2); }
     for (let i = 0; i < n; i++) {
       tintBuf[i * 4] = q.look[i * 5]; tintBuf[i * 4 + 1] = q.look[i * 5 + 1]; tintBuf[i * 4 + 2] = q.look[i * 5 + 2]; tintBuf[i * 4 + 3] = q.look[i * 5 + 3];
       alphaBuf[i] = q.look[i * 5 + 4];
-    }
-    if (shadeBuf.length < n * 2) {
-      // (-1, 0): no caster slot, not dark. The figure shadows (own slot) and the dark flag fill it in later tasks.
-      shadeBuf = new Float32Array(n * 2);
-      for (let i = 0; i < n; i++) shadeBuf[i * 2] = -1;
+      // shade: x = the slot of the card's owner in the caster list (-1 none: a shot, an image, a card whose owner casts nothing), y = dark flag (a later task).
+      const owner = i < q.owner.length ? q.owner[i] : -1;
+      shadeBuf[i * 2] = owner >= 0 ? (slotOf.get(owner) ?? -1) : -1;
+      shadeBuf[i * 2 + 1] = 0;
     }
     return { position: q.position, uv: q.uv, tint: tintBuf, alpha: alphaBuf, shade: shadeBuf };
   };
@@ -474,6 +475,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         renderer.domElement.style.backgroundColor = bg;
       }
       lighting.setAmbient(f.ambient);
+      const casters = f.casters.length > CASTER_CAP ? f.casters.slice(0, CASTER_CAP) : f.casters;
+      slotOf.clear();
+      casters.forEach((c, i) => { if (!slotOf.has(c.id)) slotOf.set(c.id, i); });
+      lighting.setCasters(casters, f.cam.yaw);
       // One buffer per pass: the card scratch arrays are refilled between the sets (each set copies out of them at once).
       cards.set(cardData(d.cards), d.cards.count * 6);
       ghosts.set(cardData(d.ghosts), d.ghosts.count * 6);

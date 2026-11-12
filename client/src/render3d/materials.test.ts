@@ -67,7 +67,7 @@ describe('worldMaterial', () => {
 describe('makeLighting lava', () => {
   const heights = new DataTexture(new Uint8Array(12), 4, 3);
   it('accepts null and a w*h*4 array, and holds w*h*4 texels', () => {
-    const l = makeLighting(heights, { w: 4, h: 3 });
+    const l = makeLighting(heights, { w: 4, h: 3 }, new Texture());
     expect(() => l.setLava(null)).not.toThrow();
     const data = new Float32Array(4 * 3 * 4).fill(0.5);
     expect(() => l.setLava(data)).not.toThrow();
@@ -76,7 +76,7 @@ describe('makeLighting lava', () => {
     expect(Array.from(l.lavaTexture.image.data as ArrayLike<number>).every((v) => v === 0)).toBe(true);
   });
   it('uploads a refilled array when the version changes, and not before', () => {
-    const l = makeLighting(heights, { w: 4, h: 3 });
+    const l = makeLighting(heights, { w: 4, h: 3 }, new Texture());
     const data = new Float32Array(4 * 3 * 4);
     data[0] = 1;
     l.setLava(data, 1);
@@ -92,8 +92,15 @@ describe('makeLighting lava', () => {
     expect((tex.image.data as Uint16Array)[0]).not.toBe(first);
   });
   it('accepts the darkvision light', () => {
-    const l = makeLighting(heights, { w: 4, h: 3 });
+    const l = makeLighting(heights, { w: 4, h: 3 }, new Texture());
     expect(() => l.setDarkvision({ x: 1, z: 2, reach: 3 })).not.toThrow();
     expect(() => l.setDarkvision(null)).not.toThrow();
+  });
+  it('accepts casters, none, and more than the slots', () => {
+    const l = makeLighting(heights, { w: 4, h: 3 }, new Texture());
+    const c = { id: 1, x: 1, z: 2, w: 1, y0: 0, y1: 1, u0: 0, v0: 0, u1: 16, v1: 16 };
+    expect(() => l.setCasters([c], 0.5)).not.toThrow();
+    expect(() => l.setCasters([])).not.toThrow();
+    expect(() => l.setCasters(Array.from({ length: 20 }, () => c))).not.toThrow();
   });
 });

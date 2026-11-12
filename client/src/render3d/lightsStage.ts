@@ -16,7 +16,7 @@ import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import type { R3dParams } from './params';
 import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
-import { footprint, lavaTexels, movingCands, selectLights, staticCands, TorchPairs } from './lights';
+import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import type { Assets, WorldInput } from './view';
@@ -151,6 +151,9 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
           lavaTexels(field, map, lava);
         }
       }
+      // The figures that cast a shadow for these lights, and each carried light skips its carrier.
+      const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];
+      assignSkips(lights, carrierMap(lights), casters);
       c.timer.lap('lights');
       if (window.__r3d) window.__r3d.figures = figures.count;
       c.timer.renderStart();
@@ -160,7 +163,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: lavaVersion,
           darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,
-          casters: [],
+          casters,
         },
         c.timer,
       );

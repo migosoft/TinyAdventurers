@@ -47,6 +47,10 @@ describe('light', () => {
     expect(p.col[7]).toBe(1);
     for (let i = 3; i < LIGHT_CAP; i++) expect(p.pos[i * 4 + 3]).toBe(0);
   });
+  it('carries the skip slot in the shadow channel: 1 for none, slot + 2 for a skip, 0 without shadows', () => {
+    const p = packLights([{ ...lamp(0), shadow: true, skip: -1 }, { ...lamp(1), shadow: true, skip: 0 }, { ...lamp(2), shadow: true, skip: 5 }, { ...lamp(3), shadow: false, skip: 5 }]);
+    expect([p.col[3], p.col[7], p.col[11], p.col[15]]).toEqual([1, 2, 7, 0]);
+  });
   it('keeps the first 16 of 20 lights', () => {
     const p = packLights(Array.from({ length: 20 }, (_, i) => lamp(i)));
     expect(p.pos[15 * 4]).toBe(15);

@@ -66,14 +66,18 @@ export function sceneLights(s: SceneState, t: number, orb: boolean): Light[] {
   return out;
 }
 
-/** `LIGHT_CAP` slots each: xyz + radius, rgb + shadow flag. Unused slots have radius 0. */
+/**
+ * `LIGHT_CAP` slots each: xyz + radius, rgb + the shadow channel. Unused slots have radius 0.
+ * The shadow channel is 0 for a light without shadows, else `skip + 2` (1 when it skips no caster slot), so the shader reads
+ * "shadows on" as > 0.5 and the skipped caster slot as the channel minus 2.
+ */
 export function packLights(lights: Light[]): { pos: Float32Array; col: Float32Array } {
   const pos = new Float32Array(LIGHT_CAP * 4);
   const col = new Float32Array(LIGHT_CAP * 4);
   for (let i = 0; i < Math.min(LIGHT_CAP, lights.length); i++) {
     const l = lights[i];
     pos.set([l.x, l.y, l.z, l.radius], i * 4);
-    col.set([l.r, l.g, l.b, l.shadow ? 1 : 0], i * 4);
+    col.set([l.r, l.g, l.b, l.shadow ? l.skip + 2 : 0], i * 4);
   }
   return { pos, col };
 }

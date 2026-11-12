@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ART, project, snapGround, viewRay, type Cam } from './camera';
-import { buildDynamic, LIE_Y, newCardBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, sortBackToFront, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
+import { buildDynamic, casterOf, LIE_Y, newCardBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, sortBackToFront, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { newScene } from './scene';
 import type { FrameRects } from './worldMesh';
 
@@ -337,5 +337,49 @@ describe('Card spaces (display space, like Pose)', () => {
     }
     expect([a.uv[0], a.uv[2 * TR]]).toEqual([102, 106]);
     expect([f.uv[0], f.uv[2 * TR]]).toEqual([114, 110]);
+  });
+});
+
+describe('casterOf and owner', () => {
+  const c0 = (o: Partial<Card> = {}): Card => ({ frame: 'crate', x: 5, z: 5, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1, ...o });
+  it('describes an upright 16x16 card at foot (5, 5), yaw 0: 1 wide, 1 tall, its atlas rect', () => {
+    const k = casterOf(c0(), 42, frames, cam(0))!;
+    const foot = snapGround(Math.PI / 4, 0, 5, 5);
+    expect(k.id).toBe(42);
+    expect(k.x).toBeCloseTo(foot.x, 6);
+    expect(k.z).toBeCloseTo(foot.z, 6);
+    expect(k.w).toBeCloseTo(1, 6);
+    expect(k.y0).toBeCloseTo(0, 6);
+    expect(k.y1).toBeCloseTo(1, 6);
+    expect([k.u0, k.v0, k.u1, k.v1]).toEqual([10, 20, 26, 36]);
+  });
+  it('swaps u0 and u1 for a flipped card, and lifts y0 and y1 with the card', () => {
+    const k = casterOf(c0({ flip: true, lift: 0.5 }), 1, frames, cam(0))!;
+    expect([k.u0, k.u1]).toEqual([26, 10]);
+    expect(k.y0).toBeCloseTo(0.5, 6);
+    expect(k.y1).toBeCloseTo(1.5, 6);
+  });
+  it('folds a rotation into the bounding rect and measures along the card at any yaw', () => {
+    const k = casterOf(c0({ angle: Math.PI / 2, pivot: [8, 16] }), 1, frames, cam(0))!;
+    expect(k.w).toBeCloseTo(1, 6);
+    expect(k.y1 - k.y0).toBeCloseTo(1, 6);
+    const y = casterOf(c0(), 1, frames, cam(Math.PI / 2))!;
+    const foot = snapGround(Math.PI / 4, Math.PI / 2, 5, 5);
+    expect([y.x, y.z, y.w]).toEqual([expect.closeTo(foot.x, 6), expect.closeTo(foot.z, 6), expect.closeTo(1, 6)]);
+  });
+  it('is null for a frame the atlas lacks', () => {
+    expect(casterOf(c0({ frame: 'nope' }), 1, frames, cam(0))).toBeNull();
+  });
+  it('gives every vertex of a card its owner, -1 by default, and keeps it through sorting', () => {
+    const b = newCardBuf();
+    pushCard(b, c0({ z: 4 }), frames, cam(0), 7);
+    pushCard(b, c0({ z: 8 }), frames, cam(0));
+    expect(b.owner).toEqual([7, 7, 7, 7, 7, 7, -1, -1, -1, -1, -1, -1]);
+    sortBackToFront(b, cam(0));
+    expect(b.owner.length).toBe(12);
+    expect(b.owner.slice(0, 6).every((o) => o === b.owner[0])).toBe(true);
+    // each quad still carries the owner of its own card: the one standing at z 4 is the owner 7 one
+    const z4 = snapGround(Math.PI / 4, 0, 5, 4).z;
+    for (let q = 0; q < 2; q++) expect(b.owner[q * 6]).toBe(Math.abs(b.position[q * 18 + 2] - z4) < 1e-6 ? 7 : -1);
   });
 });

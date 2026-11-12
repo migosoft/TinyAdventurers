@@ -9,7 +9,10 @@ import type { Stage, StageCtx } from './host';
 import { createLightsStage, lightsEnts, lightsKnight } from './lightsStage';
 import type { FrameInput } from './view';
 
-const assets = { image: {} as HTMLImageElement, frames: {} };
+// Only the walking knight's frames: enough for its card (and so its shadow); the torch flames have none and draw nothing.
+const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
+for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`npc_knight_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
+const assets = { image: {} as HTMLImageElement, frames };
 
 /** Runs one frame of a stage built for `search` and returns what it handed the view. */
 function drawn(search: string, big = true, change?: (p: R3dParams) => R3dParams): { stage: Stage; f: FrameInput | null; host: { params: R3dParams; setParams(p: R3dParams): void } } {
@@ -81,6 +84,17 @@ describe('the ?r3d=lights stage', () => {
     expect(f!.lava).not.toBeNull();
     expect(f!.lava!.length).toBe(W * H * 4);
     expect(f!.darkvision).toBeNull();
+    // the walking knight is the only figure with a shadow; the torch flames are not casters
+    expect(f!.casters.map((c) => c.id)).toEqual([100]);
+  });
+
+  it('passes no casters in the work light', () => {
+    const { f } = drawn('?r3d=lights&light=work');
+    expect(f!.casters).toEqual([]);
+  });
+
+  it('gives no casters with the cap at 0', () => {
+    const { f } = drawn('?r3d=lights&ccap=0');
     expect(f!.casters).toEqual([]);
   });
 

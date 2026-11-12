@@ -12,8 +12,9 @@ import type { EntState } from '../game/world';
 import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { SHOT_LIFT, snapGround, type Cam } from './camera';
-import { newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
+import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { torchFlicker } from './light';
+import type { ShadowCaster } from './lights';
 import { opensWalls } from './openers';
 import type { FrameRects } from './worldMesh';
 
@@ -72,6 +73,8 @@ export interface FigureAnchor {
 export interface FigureOut {
   cards: CardBuf; ghosts: CardBuf; decals: CardBuf; shadows: ShadowBuf; glows: GlowBuf; emissive: CardBuf;
   openers: Opener[];
+  /** The standing body card of every figure, chest, barrel and mimic as a shadow caster (id: the entity's); not lying, shots, flames or images. */
+  casters: ShadowCaster[];
   /** Floating words born this frame (the mimic's wake cue): simulation px, `up` art px above the spot. */
   floats: Array<{ x: number; y: number; text: string; color: string; kind: WorldTextKind; up: number }>;
 }
@@ -150,7 +153,7 @@ export class Figures3d {
   frame(f: RunFrame, cam: Cam): FigureOut {
     this.now = f.now;
     this.cam = cam;
-    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], floats: [] };
+    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [] };
     const seen = new Set<number>();
     this.anchors.clear();
     let drawn = 0;
@@ -206,6 +209,13 @@ export class Figures3d {
     this.opener(e, false, x, z, TORCH_MID, 'object', out);
   }
 
+  /** An entity's body card in the opaque or the translucent pass, owned by the entity, and its shadow caster. */
+  private body(c: Card, id: number, cam: Cam, out: FigureOut): void {
+    pushCard(c.alpha < 1 ? out.ghosts : out.cards, c, this.frames, cam, id);
+    const k = casterOf(c, id, this.frames, cam);
+    if (k) out.casters.push(k);
+  }
+
   /** The 2D body sits 1 px below its shadow: the foot moves 1 / 16 tile toward the camera on the ground (as the figures do). */
   private bodyFoot(x: number, z: number, cam: Cam): [number, number] {
     return [x - Math.sin(cam.yaw) / TILE, z + Math.cos(cam.yaw) / TILE];
@@ -220,7 +230,7 @@ export class Figures3d {
     const x = e.x / TILE;
     const z = e.y / TILE;
     const [bx, bz] = this.bodyFoot(x, z, cam);
-    pushCard(out.cards, { frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1 }, this.frames, cam);
+    this.body({ frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1 }, e.id, cam, out);
     this.objShadow(x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
     this.objectAnchor(e, x, z);
     this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'chest', out);
@@ -238,7 +248,7 @@ export class Figures3d {
       const card: Card = { frame, x: bx, z: bz, lift: -p.dy / TILE, flip: false, originX: 0.5, footY: 1, scale: p.scale, tint: p.fill !== null ? rgbOf(p.fill) : [1, 1, 1], mode: p.fill !== null ? 1 : 0, alpha: p.alpha };
       // Sinking in deep water: the part below the surface is cut off, not drawn under the floor.
       if (p.dy > 0) card.crop = { x: 0, y: 0, w: fr.w, h: Math.max(0, fr.h - p.dy) };
-      if (!card.crop || card.crop.h > 0) pushCard(card.alpha < 1 ? out.ghosts : out.cards, card, this.frames, cam);
+      if (!card.crop || card.crop.h > 0) this.body(card, e.id, cam, out);
     }
     if (p.shadow) this.objShadow(x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
     this.objectAnchor(e, e.x / TILE, e.y / TILE);
@@ -259,10 +269,10 @@ export class Figures3d {
     const x = e.x / TILE;
     const z = e.y / TILE;
     const [bx, bz] = this.bodyFoot(x, z, cam);
-    pushCard(out.cards, {
+    this.body({
       frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,
       angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1,
-    }, this.frames, cam);
+    }, e.id, cam, out);
     this.objShadow(x, z, p.shadowScale, p.shadowAlpha, cam, out);
     this.objectAnchor(e, x, z);
     this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'mimic', out);
@@ -349,7 +359,8 @@ export class Figures3d {
     const sc = pose.scale;
     const { tint, mode } = lookOf(pose.tint, pose.grey);
     const down = (pose.sink + pose.drop) / TILE;
-    const into = (c: Card): void => pushCard(c.alpha < 1 ? out.ghosts : out.cards, c, this.frames, cam);
+    /** The weapon card is owned by its wielder (it is not shadowed by the wielder), but casts nothing of its own. */
+    const into = (c: Card): void => pushCard(c.alpha < 1 ? out.ghosts : out.cards, c, this.frames, cam, e.id);
 
     if (pose.lie) {
       // Asleep: the body lies on the floor. The pose's lie layout is screen px; the lying card's axes are turned a quarter, so the offset is too.
@@ -371,6 +382,8 @@ export class Figures3d {
       if (pose.sink > 0) body.crop = { x: 0, y: 0, w: fb.w, h: pose.footY - pose.sink };
       if (!body.crop || body.crop.h > 0) {
         into(body);
+        const k = casterOf(body, e.id, this.frames, cam);
+        if (k) out.casters.push(k);
         fig.body = body;
         if (pose.afterimage) this.images.push({ card: { ...body, tint: rgbOf(d.base), mode: 0 }, alpha0: AFTER_ALPHA, secs: AFTER_SECS, left: AFTER_SECS });
       }

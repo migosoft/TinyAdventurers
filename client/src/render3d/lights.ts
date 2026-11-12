@@ -20,6 +20,8 @@ export const DAYLIGHT_Y = 6;
 export const FLASH_Y = 1;
 /** A moving light is carried by the snapshot entity within this many px of it. */
 export const CARRY_PX = 2;
+/** The slots of the shader's caster list (first guess). */
+export const CASTER_CAP = 16;
 /** Where a torch's light sits in front of its wall, in tiles. */
 const TORCH_STAND = 0.1;
 /** Height of other static lights and of an uncarried moving light, in tiles. */
@@ -173,6 +175,45 @@ export function selectLights(cands: readonly Cand[], fp: Footprint, focus: { x: 
   }
   scored.sort((a, b) => b.score - a.score || (a.c.id < b.c.id ? -1 : a.c.id > b.c.id ? 1 : 0));
   return { list: scored.slice(0, cap).map((s) => s.c), inView: scored.length };
+}
+
+/**
+ * The casters within reach of a light of the list (horizontal distance to its position at most radius + `LIGHT_MARGIN`), nearest to
+ * any such light first, ties by id, at most `cap`. The result is the shader's slot order.
+ */
+export function selectCasters(casters: readonly ShadowCaster[], lights: readonly Cand[], cap: number): ShadowCaster[] {
+  const scored: { c: ShadowCaster; d: number }[] = [];
+  for (const c of casters) {
+    let best = Infinity;
+    for (const l of lights) {
+      const d = Math.hypot(c.x - l.x, c.z - l.z);
+      if (d <= l.radius + LIGHT_MARGIN && d < best) best = d;
+    }
+    if (best < Infinity) scored.push({ c, d: best });
+  }
+  scored.sort((a, b) => a.d - b.d || a.c.id - b.c.id);
+  return scored.slice(0, Math.max(0, cap)).map((s) => s.c);
+}
+
+/**
+ * Light id -> the entity that carries it, read from the ids `movingCands` makes: `m<entityId>` and `m<entityId>.<n>`
+ * (a carried light); static (`s<lightId>`) and uncarried moving lights (`p<kind>:<x>:<y>`) have none.
+ */
+export function carrierMap(lights: readonly Cand[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const l of lights) {
+    const m = /^m(\d+)(?:\.\d+)?$/.exec(l.id);
+    if (m) out.set(l.id, Number(m[1]));
+  }
+  return out;
+}
+
+/** Sets each light's `skip` to the slot (in `slots`) of its carrier, -1 when it has none or the carrier casts no shadow in this list. */
+export function assignSkips(lights: Cand[], carriers: ReadonlyMap<string, number>, slots: readonly ShadowCaster[]): void {
+  for (const l of lights) {
+    const car = carriers.get(l.id);
+    l.skip = car === undefined ? -1 : slots.findIndex((c) => c.id === car);
+  }
 }
 
 /** The lava lights as one texel per tile (rgba, `map.w * map.h * 4`): rgb the summed Lava lights over the whole map, alpha 1 on lava tiles (#304). */

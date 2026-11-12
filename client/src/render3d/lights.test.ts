@@ -6,7 +6,7 @@ import { LightField } from '../game/light';
 import type { EntState } from '../game/world';
 import { TileMap } from '../sim/map';
 import type { Cam } from './camera';
-import { CARRY_PX, DAYLIGHT_Y, FLASH_Y, LIGHT_MARGIN, footprint, lavaTexels, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
+import { CARRY_PX, DAYLIGHT_Y, FLASH_Y, LIGHT_MARGIN, assignSkips, carrierMap, selectCasters, type ShadowCaster, footprint, lavaTexels, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
 import { TORCH_MID } from './figures';
 
 const mapOf = (rows: string[]): TileMap => {
@@ -241,5 +241,39 @@ describe('lavaTexels', () => {
     expect(out[at(6, 5)]).toBeGreaterThan(0);
     expect(out[at(8, 5)]).toBe(0);
     expect(out[at(10, 10)]).toBe(0);
+  });
+});
+
+describe('selectCasters, assignSkips and carrierMap', () => {
+  const caster = (id: number, x: number, z: number): ShadowCaster => ({ id, x, z, w: 1, y0: 0, y1: 1, u0: 0, v0: 0, u1: 1, v1: 1 });
+  const lamp = (id: string, x: number, z: number, radius = 3): Cand => ({ id, kind: 0, x, y: 1, z, radius, r: 1, g: 0, b: 0, shadow: true, skip: -1, base: 1 });
+  it('keeps the 16 nearest of 20, stable, and drops one beyond every light\'s reach', () => {
+    const light = lamp('s1', 10, 10, 8);
+    const twenty = Array.from({ length: 20 }, (_, i) => caster(i, 10 + (i + 1) * 0.3, 10));
+    const a = selectCasters(twenty, [light], 16);
+    expect(a.map((c) => c.id)).toEqual(Array.from({ length: 16 }, (_, i) => i));
+    expect(selectCasters([...twenty].reverse(), [light], 16).map((c) => c.id)).toEqual(a.map((c) => c.id));
+    const far = caster(99, 10 + 8 + LIGHT_MARGIN + 0.1, 10);
+    expect(selectCasters([far, caster(1, 11, 10)], [light], 16).map((c) => c.id)).toEqual([1]);
+    const edge = caster(98, 10 + 8 + LIGHT_MARGIN - 0.1, 10);
+    expect(selectCasters([edge], [light], 16)).toHaveLength(1);
+  });
+  it('orders by the nearest light and breaks ties by id', () => {
+    const lights = [lamp('s1', 0, 0), lamp('s2', 20, 0)];
+    const out = selectCasters([caster(5, 2, 0), caster(3, 19, 0), caster(4, 1, 0), caster(2, 18, 0)], lights, 16);
+    expect(out.map((c) => c.id)).toEqual([3, 4, 2, 5]);
+    // at 1 tile from either light: 4 and 3 tie, id order
+    const tie = selectCasters([caster(8, 1, 0), caster(7, 19, 0)], lights, 16);
+    expect(tie.map((c) => c.id)).toEqual([7, 8]);
+  });
+  it('gives a carried light its carrier\'s slot, -1 when the carrier is not in the list or there is none', () => {
+    const lights = [lamp('m7', 0, 0), lamp('m9.1', 0, 0), lamp('s3', 0, 0), lamp('m5', 0, 0)];
+    const slots = [caster(4, 0, 0), caster(7, 0, 0), caster(9, 0, 0)];
+    assignSkips(lights, carrierMap(lights), slots);
+    expect(lights.map((l) => l.skip)).toEqual([1, 2, -1, -1]);
+  });
+  it('derives the carriers from the ids m<entity> and m<entity>.<n> only', () => {
+    const m = carrierMap([lamp('m12', 0, 0), lamp('m12.1', 0, 0), lamp('s4', 0, 0), lamp('p3:10:20', 0, 0)]);
+    expect([...m]).toEqual([['m12', 12], ['m12.1', 12]]);
   });
 });

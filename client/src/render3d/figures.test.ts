@@ -422,3 +422,31 @@ describe('Figures3d anchors (#311)', () => {
     expect(fg.anchors.get(1)!.tagShown).toBe(false);
   });
 });
+
+describe('Figures3d casters (#304)', () => {
+  it('gives one caster per standing figure, chest, barrel and mimic, owned by its entity, and the card the same owner', () => {
+    const ents = [ent(10, KIND.Knight), ent(11, KIND.Chest), ent(12, KIND.Barrel), ent(13, KIND.Mimic), ent(14, KIND.Wizard, { x: at(2) })];
+    const out = make().frame(frame(ents), cam());
+    expect(out.casters.map((c) => c.id).sort()).toEqual([10, 11, 12, 13, 14]);
+    for (const c of out.casters) {
+      expect(c.w).toBeGreaterThan(0);
+      expect(c.y1).toBeGreaterThan(c.y0);
+      expect(out.cards.owner).toContain(c.id);
+    }
+  });
+  it('gives none for a shot, a lying figure or a dead one, and none for the images left behind', () => {
+    const shot: ShotView = { shot: 1, kind: KIND.Arrow, x: at(1), y: 8, vx: 100, vy: 0 };
+    const out = make().frame(frame([ent(20, KIND.Arrow), ent(21, KIND.Knight, { effects: 1 << EFFECT.Sleep }), ent(22, KIND.Knight, { flags: FLAG.DEAD })], { shots: [shot] }), cam());
+    expect(out.casters).toEqual([]);
+    const fg = make();
+    fg.frame(frame([ent(10, KIND.Knight)]), cam());
+    const gone = fg.frame(frame([]), cam());
+    expect(gone.casters).toEqual([]);
+  });
+  it('takes the caster from the current frame: a flipped figure reads its atlas rect back to front', () => {
+    const a = make().frame(frame([ent(10, KIND.Knight, { aim: 0 })]), cam()).casters[0];
+    const b = make().frame(frame([ent(10, KIND.Knight, { aim: Math.PI })]), cam()).casters[0];
+    expect(a.u0).toBeLessThan(a.u1);
+    expect(b.u0).toBeGreaterThan(b.u1);
+  });
+});
