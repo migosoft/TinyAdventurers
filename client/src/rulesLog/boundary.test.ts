@@ -1,5 +1,5 @@
 // Pins the client hooks of the rules log (the table in the plan): outside
-// `src/rulesLog/` and `src/generated/`, only GameScene.ts, PhaserRunView.ts and wire.ts may name the module.
+// `src/rulesLog/` and `src/generated/`, only GameScene.ts, PhaserRunView.ts, render3d/runStage.ts and wire.ts may name the module.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -26,8 +26,9 @@ describe('rules log boundary', () => {
       const n = readFileSync(f, 'utf8').split('\n').filter((l) => l.includes('rulesLog')).length;
       if (n > 0) found[relative(SRC, f)] = n;
     }
-    // PhaserRunView: import, field, create, cleanup + draw = 5; GameScene: onSnapshot + settings = 2.
-    expect(found).toEqual({ 'game/GameScene.ts': 2, 'game/PhaserRunView.ts': 5 });
+    // One import line each: GameScene (makes the log, binds L), PhaserRunView (the 2D tags: `phaserTags` and the type),
+    // runStage (makes the log of a 3D run, binds L). The session, the 3D view and the overlay layout only see a callback.
+    expect(found).toEqual({ 'game/GameScene.ts': 1, 'game/PhaserRunView.ts': 2, 'render3d/runStage.ts': 1 });
   });
 
   it('wire.ts passes the raw log element through once', () => {

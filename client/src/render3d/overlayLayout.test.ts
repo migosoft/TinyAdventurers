@@ -5,7 +5,7 @@ import type { UseHint } from '../game/useHint';
 import type { FigureAnchor } from './figures';
 import { SOUND_TEXT } from '../game/effects';
 import { popScale, WORLD_TEXT } from '../game/worldText';
-import { Floats, floatSpot, layoutBars, layoutHeroTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
+import { Floats, floatSpot, layoutBars, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 
 const ZOOM = 3;
 const TILE = 16;
@@ -127,6 +127,23 @@ describe('layoutHeroTags', () => {
   it('a falling figure shows no tag and no icons', () => {
     const e = ent(2, KIND.Paladin, { side: SIDE.Friendly });
     expect(tags(input([e], [[2, anchor({ tagShown: false, effects: 1 << EFFECT.Burning })]], { heroNames: names }))).toEqual([]);
+  });
+});
+
+describe('layoutTags', () => {
+  it('a tagged enemy reads its tag 7 px above its height', () => {
+    const e = ent(7, KIND.SkeletonWarrior);
+    const out: OverlayItem[] = [];
+    layoutTags(input([e, ent(8, KIND.SkeletonWarrior)], [[7, anchor()], [8, anchor()]]), (x) => (x.id === 7 ? 'Skeleton Warrior 2' : null), out);
+    const t = only(out, 'text');
+    expect(t).toHaveLength(1);
+    const foot = at(5, 5);
+    expect(t[0]).toMatchObject({ text: 'Skeleton Warrior 2', kind: 'tag', color: '#ffffff', stroke: '#000000', align: 'center', base: 'bottom', x: Math.round(foot.px), y: Math.round(foot.py - (20 + 7) * ZOOM) });
+  });
+  it('an entity without an anchor gets none', () => {
+    const out: OverlayItem[] = [];
+    layoutTags(input([ent(7, KIND.SkeletonWarrior)], []), () => 'x', out);
+    expect(out).toEqual([]);
   });
 });
 

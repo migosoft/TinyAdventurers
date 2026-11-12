@@ -283,6 +283,16 @@ describe('the run stage', () => {
     window.dispatchEvent(new MouseEvent('mouseup', { button }));
   };
 
+  it('L turns the rules log on (not in a text field) and the Settings list its switches', () => {
+    const { stage, net, hud } = setup();
+    expect(hud.calls.filter((c) => c[0] === 'setToggles')).toHaveLength(1);
+    const field = document.createElement('input');
+    expect(stage.key!({ code: 'KeyL', repeat: false, shiftKey: false, target: field } as unknown as KeyboardEvent)).toBe(false);
+    expect(net.sent.some((m) => m.t === 'RulesLog')).toBe(false);
+    expect(stage.key!({ code: 'KeyL', repeat: false, shiftKey: false, target: null } as unknown as KeyboardEvent)).toBe(true);
+    expect(net.sent.filter((m) => m.t === 'RulesLog')).toEqual([{ t: 'RulesLog', on: true, details: true }]);
+  });
+
   it('E acts while alive, once per press', () => {
     const { stage, frame, net } = setup();
     const view = fakeView();

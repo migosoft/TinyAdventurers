@@ -59,6 +59,8 @@ export interface SessionDeps {
   /** Called once per fixed step, also while dead (it consumes click latches). */
   input: () => StepInput;
   clock?: FrameClock;
+  /** The rules log: it hears every snapshot after the HUD, and ends with the session. */
+  log?: { onSnapshot(s: Snapshot): void; destroy(): void };
   /** Seconds; default `performance.now() / 1000`. */
   now?: () => number;
 }
@@ -73,6 +75,7 @@ export class RunSession {
   private readonly hud: HudLike;
   private readonly input: () => StepInput;
   private readonly clock?: FrameClock;
+  private readonly log?: SessionDeps['log'];
   private readonly now: () => number;
   private readonly pred: Predictor;
   private readonly interp = new Interpolator();
@@ -113,6 +116,7 @@ export class RunSession {
     this.hud = deps.hud;
     this.input = deps.input;
     this.clock = deps.clock;
+    this.log = deps.log;
     this.now = deps.now ?? (() => performance.now() / 1000);
     const info = deps.info;
     const tiles = info.tiles instanceof Uint8Array ? info.tiles : Uint8Array.from(info.tiles as ArrayLike<number>);
@@ -488,6 +492,7 @@ export class RunSession {
   destroy(): void {
     this.unsub?.();
     this.unsub = null;
+    this.log?.destroy();
   }
 
   // ------------------------------------------------------------ network
@@ -532,6 +537,7 @@ export class RunSession {
     this.serverOwn = mine ? { x: mine[2], y: mine[3] } : null;
     for (const ev of s.ev) this.onEvent(ev);
     this.hud.snapshot(s, this.runInfo);
+    this.log?.onSnapshot(s);
   }
 
   private onEvent(ev: Ev): void {

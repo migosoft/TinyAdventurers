@@ -4,6 +4,8 @@ import type { ClassId } from '../generated/ClassId';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import { TILE } from '../sim/map';
 import { RunSession, type FrameClock, type HudLike, type NetLike } from '../run/session';
+import { RulesLog } from '../rulesLog';
+import type { Hud } from '../ui/hud';
 import type { StepInput } from '../run/input';
 import { atlasBounds } from './atlasBounds';
 import { GROUND_BUDGET_MS, groundJob, type GroundJob } from './groundJob';
@@ -61,19 +63,25 @@ class TimerClock implements FrameClock {
   }
 }
 
+/** The HUD as the 3D run needs it: the session's, plus the Settings switches the host sets (the rules log's). */
+export type RunHud = HudLike & Pick<Hud, 'setToggles'>;
+
 export interface Run {
   readonly session: RunSession;
   readonly input: RunInputState;
-  readonly hud: HudLike;
+  readonly hud: RunHud;
+  readonly log: RulesLog;
   readonly clock: { timer: FrameTimer<R3dSystem> | null };
 }
 
 /** The session, made at once so messages are handled from `RunStarted` on, before the host has a view. */
-export function newRun(deps: { info: RunStartInfo; net: NetLike; hud: HudLike; myClass: ClassId }): Run {
+export function newRun(deps: { info: RunStartInfo; net: NetLike; hud: RunHud; myClass: ClassId }): Run {
   const input: RunInputState = { held: new Set(), yaw: 0, free: false, primary: () => false, secondary: () => false, act: false };
   const clock = new TimerClock();
-  const session = new RunSession({ ...deps, input: () => stepInput(input), clock });
-  return { session, input, clock, hud: deps.hud };
+  // The rules log lives with the session (it hears the snapshots and ends with it); the stage binds its key and tags.
+  const log = new RulesLog(deps.net, deps.info);
+  const session = new RunSession({ ...deps, input: () => stepInput(input), clock, log });
+  return { session, input, clock, hud: deps.hud, log };
 }
 
 export interface RunStage extends Stage {
@@ -126,6 +134,8 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   run.input.primary = () => mouse.takePrimary();
   run.input.secondary = () => mouse.takeSecondary();
   runView.mouse = mouse;
+  runView.tagOf = (e) => run.log.tagOf(e);
+  run.hud.setToggles(run.log.settings());
 
   // The help line names the turn keys by the player's layout.
   let live = true;
@@ -195,6 +205,10 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
             if (e.code === 'KeyX') turn.north();
             else turn.step(e.code === 'KeyZ' ? 1 : -1);
           }
+          return true;
+        case 'KeyL':
+          if (isTextTarget(e.target)) return false;
+          run.log.key(e);
           return true;
         case 'KeyF':
           if (!e.repeat) host.setParams({ ...host.params, free: !host.params.free });

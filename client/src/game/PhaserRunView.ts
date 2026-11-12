@@ -4,8 +4,8 @@
 // vanish and reappear marks, skull decals, bar labels, the force field's age) stays here.
 import Phaser from 'phaser';
 import { ANIM, CONST, FLAG, KIND, TILE_ID } from '../generated/defs';
-import type { Net } from '../net';
-import { RulesLog } from '../rulesLog';
+import { PhaserTags } from '../rulesLog/phaserTags';
+import type { RulesLog } from '../rulesLog';
 import { SHOT_LIFT_PX, settleOwnAim } from '../run/aim';
 import type { PictureEv, RunFrame, RunView, RunViewInit, ShotView, ViewStats } from '../run/view';
 import { isTerrain, TILE, TileMap } from '../sim/map';
@@ -56,7 +56,8 @@ const HAZARD_LOOKS: Record<number, { tint: number; r: number; sx: number; sy: nu
 const SKELETAL = new Set<number>([KIND.SkeletonWarrior, KIND.SkeletonArcher, KIND.RaisedSkeleton, KIND.Lich]);
 
 export class PhaserRunView implements RunView {
-  readonly rulesLog: RulesLog;
+  private readonly log: RulesLog;
+  private readonly tags: PhaserTags;
   private readonly info: RunViewInit['info'];
   private readonly map: TileMap;
   private readonly myKind: number;
@@ -105,7 +106,7 @@ export class PhaserRunView implements RunView {
   constructor(
     private readonly scene: Phaser.Scene,
     init: RunViewInit,
-    deps: { net: Net; timer: FrameTimer },
+    deps: { timer: FrameTimer; log: RulesLog },
   ) {
     this.info = init.info;
     this.map = init.map;
@@ -143,7 +144,8 @@ export class PhaserRunView implements RunView {
     this.gaze = scene.add.graphics().setDepth(DEPTH.fx);
     this.debugGfx = scene.add.graphics().setDepth(DEPTH.fog + 1);
     for (const p of this.info.players) this.heroNames.set(p.ent, p.name);
-    this.rulesLog = new RulesLog(scene, deps.net, this.info);
+    this.log = deps.log;
+    this.tags = new PhaserTags(scene);
   }
 
   destroy(): void {
@@ -157,7 +159,7 @@ export class PhaserRunView implements RunView {
     this.cove = null;
     this.woodland?.destroy();
     this.woodland = null;
-    this.rulesLog.destroy();
+    this.tags.destroy();
     this.useHint.destroy();
     for (const t of this.barLabels.values()) t.destroy();
     this.barLabels.clear();
@@ -466,7 +468,7 @@ export class PhaserRunView implements RunView {
 
     this.drawShots(f);
     this.drawBarsAndBeams(f);
-    this.rulesLog.draw(f.ents.values(), (id) => (this.views.get(id) ?? this.mimicViews.get(id) ?? this.chestViews.get(id) ?? this.barrelViews.get(id))?.height);
+    this.tags.draw(this.log, f.ents.values(), (id) => (this.views.get(id) ?? this.mimicViews.get(id) ?? this.chestViews.get(id) ?? this.barrelViews.get(id))?.height);
     this.drawGaze(f);
     this.drawDebugPath(f);
     this.forceField?.update(dt);

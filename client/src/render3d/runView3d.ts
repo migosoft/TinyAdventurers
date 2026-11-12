@@ -10,7 +10,8 @@ import { RunMouse } from './input';
 import { aimGround, toCanvas } from './screen';
 import type { Overlay3d } from './overlay';
 import { floatOf } from '../game/damage';
-import { Floats, floatSpot, layoutBars, layoutHeroTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
+import type { EntState } from '../game/world';
+import { Floats, floatSpot, layoutBars, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { View as SightView } from '../sim/view';
 import { Figures3d, type Opener } from './figures';
@@ -55,6 +56,8 @@ export class RunView3d implements RunView {
 
   /** The run's mouse: where the pointer is (set by the stage). */
   mouse: RunMouse | null = null;
+  /** The rules log's tag over a creature (set by the stage; null: no tags). */
+  tagOf: ((e: EntState) => string | null) | null = null;
   private v: View | null = null;
   private c: StageCtx | null = null;
   // What `pointerWorld` reads: the last frame's camera, plan, zoom and canvas (also read between frames by the session's steps).
@@ -212,6 +215,7 @@ export class RunView3d implements RunView {
     };
     layoutBars(i, items);
     layoutHeroTags(i, items);
+    if (this.tagOf) layoutTags(i, this.tagOf, items);
     layoutUseHint(i, items);
     this.marks.layout(i.at, c.zoom, items);
     this.floats.layout(i.at, c.zoom, items);

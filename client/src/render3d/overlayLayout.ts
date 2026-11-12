@@ -18,6 +18,8 @@ const TILE = 16;
 /** A bar sits this high above the figure's drawn height. */
 const BAR_GAP = 3;
 const LABEL_GAP = 2;
+/** A rules-log tag sits this high above the figure's drawn height. */
+const TAG_RISE = 7;
 /** The use hint: the cap 26 art px above the target's foot, 11 x 11 art px, its label 2 px right of the cap. */
 const CAP_RISE = 26;
 export const CAP_SIZE = 11;
@@ -103,6 +105,18 @@ export function layoutHeroTags(i: LayoutIn, out: OverlayItem[]): void {
       out.push({ t: 'icon', x: Math.round(f.px + (right + n * (ICON_SIZE + ICON_STEP)) * i.zoom), y: midY, id });
       n++;
     }
+  }
+}
+
+/** The rules log's tags over creatures (white, black stroke, centred): their bottom is 7 art px above the figure's height. */
+export function layoutTags(i: LayoutIn, tagOf: (e: EntState) => string | null, out: OverlayItem[]): void {
+  for (const e of i.ents.values()) {
+    const a = i.anchors.get(e.id);
+    if (!a) continue;
+    const text = tagOf(e);
+    if (text === null) continue;
+    const f = foot(i, a.x, a.z);
+    out.push({ t: 'text', x: f.px, y: Math.round(f.py - (a.height + TAG_RISE) * i.zoom), text, kind: 'tag', color: '#ffffff', stroke: '#000000', alpha: 1, scale: 1, align: 'center', base: 'bottom' });
   }
 }
 

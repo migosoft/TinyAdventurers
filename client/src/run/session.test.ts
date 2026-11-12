@@ -123,6 +123,29 @@ describe('RunSession messages', () => {
     net.emit(snap());
     expect(hud.calls).toEqual([]);
   });
+
+  it('the log hears every snapshot, after the HUD', () => {
+    const net = fakeNet();
+    const hud = fakeHud();
+    const order: string[] = [];
+    hud.snapshot = () => void order.push('hud');
+    const heard: unknown[] = [];
+    const log = { onSnapshot: (s: unknown) => { order.push('log'); heard.push(s); }, destroy: () => {} };
+    new RunSession({ info: startInfo(ROWS), net, hud, myClass: 'Wizard', input: () => NO_INPUT, log });
+    const s = snap();
+    net.emit(s);
+    expect(order).toEqual(['hud', 'log']);
+    expect(heard).toEqual([s]);
+  });
+
+  it('destroy ends the log', () => {
+    const net = fakeNet();
+    let ended = 0;
+    const log = { onSnapshot: () => {}, destroy: () => { ended++; } };
+    const session = new RunSession({ info: startInfo(ROWS), net, hud: fakeHud(), myClass: 'Wizard', input: () => NO_INPUT, log });
+    session.destroy();
+    expect(ended).toBe(1);
+  });
 });
 
 const STEP_MS = 1000 * CONST.DT;

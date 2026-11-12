@@ -4,6 +4,7 @@ import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { Net } from '../net';
 import type { StepInput } from '../run/input';
 import { RunSession } from '../run/session';
+import { RulesLog } from '../rulesLog';
 import type { Hud } from '../ui/hud';
 import { FrameTimer, SYSTEMS, type DrawGl } from './frameTimer';
 import { PhaserRunView } from './PhaserRunView';
@@ -20,7 +21,6 @@ export interface GameInit {
  * `frame` each display frame. The run's logic lives in `RunSession`, its pictures in `PhaserRunView`.
  */
 export class GameScene extends Phaser.Scene {
-  private net!: Net;
   private hud!: Hud;
   private session!: RunSession;
   private view?: PhaserRunView;
@@ -28,7 +28,7 @@ export class GameScene extends Phaser.Scene {
   private primaryClicked = false;
   private secondaryClicked = false;
   private actPressed = false;
-  private unsub?: () => void;
+  private log!: RulesLog;
   /** The F3 panel's frame, render and per-system timings; on only while the panel is open. */
   private timer!: FrameTimer;
   private detachTimer?: () => void;
@@ -38,28 +38,24 @@ export class GameScene extends Phaser.Scene {
   }
 
   init(data: GameInit): void {
-    this.net = data.net;
     this.hud = data.hud;
     this.primaryClicked = this.secondaryClicked = this.actPressed = false;
     this.timer = new FrameTimer(SYSTEMS);
     this.view = undefined;
-    this.unsub = undefined;
     this.detachTimer = undefined;
-    this.session = new RunSession({ info: data.info, net: data.net, hud: data.hud, myClass: data.myClass, input: () => this.readInput(), clock: this.timer });
+    // The session feeds the log its snapshots (after the HUD) and ends it.
+    this.log = new RulesLog(data.net, data.info);
+    this.session = new RunSession({ info: data.info, net: data.net, hud: data.hud, myClass: data.myClass, input: () => this.readInput(), clock: this.timer, log: this.log });
     // Registered now, so a throw in `create` still unsubscribes the session.
     this.events.once('shutdown', () => this.cleanup());
   }
 
   create(): void {
     // The session subscribed in `init`; the view is built here and handed to it.
-    const view = new PhaserRunView(this, this.session.viewInit(), { net: this.net, timer: this.timer });
+    const view = new PhaserRunView(this, this.session.viewInit(), { timer: this.timer, log: this.log });
     this.view = view;
     this.session.setView(view);
-    // After the session's own subscription, so the rules log still runs after `hud.snapshot`.
-    this.unsub = this.net.on((m) => {
-      if (m.t === 'Snap') view.rulesLog.onSnapshot(m);
-    });
-    this.hud.setToggles(view.rulesLog.settings());
+    this.hud.setToggles(this.log.settings());
 
     const kb = this.input.keyboard!;
     // No key capture: Phaser's capture calls preventDefault page-wide and outlives the
@@ -67,6 +63,8 @@ export class GameScene extends Phaser.Scene {
     this.keys = kb.addKeys('W,A,S,D', false) as GameScene['keys'];
     kb.addKey('Q', false);
     kb.addKey('E', false);
+    kb.addKey('L', false);
+    kb.on('keydown-L', (e: KeyboardEvent) => this.log.key(e));
     kb.on('keydown-Q', () => this.session.spectate(-1));
     kb.on('keydown-E', (e: KeyboardEvent) => {
       // One push per press: holding E must not push again on OS key repeat.
@@ -137,7 +135,6 @@ export class GameScene extends Phaser.Scene {
     this.session.destroy();
     this.session.setView(null);
     this.view?.destroy();
-    this.unsub?.();
     this.detachTimer?.();
     this.timer.on = false;
   }

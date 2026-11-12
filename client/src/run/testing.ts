@@ -7,6 +7,7 @@ import type { ResolvedAbility } from '../generated/ResolvedAbility';
 import type { RunStartInfo } from '../generated/RunStartInfo';
 import type { ServerMsg } from '../generated/ServerMsg';
 import type { Snapshot } from '../generated/Snapshot';
+import type { Hud } from '../ui/hud';
 import type { HudLike, NetLike } from './session';
 import type { PictureEv, RunFrame, RunView, ShotView, ViewStats } from './view';
 import { NO_STATS } from './view';
@@ -91,7 +92,7 @@ export function fakeNet(): NetLike & { sent: ClientMsg[]; emit(m: ServerMsg): vo
   };
 }
 
-export function fakeHud(): HudLike & { calls: [name: string, ...args: unknown[]][]; statsOn: boolean; menuOpen: boolean } {
+export function fakeHud(): HudLike & Pick<Hud, 'setToggles'> & { calls: [name: string, ...args: unknown[]][]; statsOn: boolean; menuOpen: boolean } {
   const calls: [string, ...unknown[]][] = [];
   const rec =
     (name: string) =>
@@ -112,6 +113,7 @@ export function fakeHud(): HudLike & { calls: [name: string, ...args: unknown[]]
     needs: rec('needs'),
     tooClose: rec('tooClose'),
     setTurnHelp: rec('setTurnHelp'),
+    setToggles: rec('setToggles'),
     frame: rec('frame'),
     setAsleep: rec('setAsleep'),
     toggleDebug() {

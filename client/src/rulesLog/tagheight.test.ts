@@ -10,7 +10,7 @@ describe('tag heights', () => {
   it('the draw hook looks in every view map that can hold a taggable entity', () => {
     const line = read('game/PhaserRunView.ts')
       .split('\n')
-      .find((l) => l.includes('this.rulesLog.draw('));
+      .find((l) => l.includes('this.tags.draw('));
     expect(line).toBeDefined();
     for (const m of ['this.views', 'this.mimicViews', 'this.chestViews', 'this.barrelViews']) expect(line).toContain(m);
   });
