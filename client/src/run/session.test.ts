@@ -71,6 +71,27 @@ describe('RunSession messages', () => {
     expect(hud.calls.filter((c) => c[0] === 'message' && c[1] === 'hi').length).toBe(1);
   });
 
+  it('the frame carries the dark ids of the latest snapshot', () => {
+    const { net, session } = make();
+    const view = fakeView();
+    session.setView(view);
+    net.emit(snap({ dark: [5, 9] }));
+    session.frame(0.016);
+    expect([...view.frames[view.frames.length - 1].dark]).toEqual([5, 9]);
+    net.emit(snap({ dark: [] }));
+    session.frame(0.016);
+    expect(view.frames[view.frames.length - 1].dark.size).toBe(0);
+  });
+
+  it('a picture event listed in dark_ev reaches the view marked dark', () => {
+    const { net, session } = make();
+    const view = fakeView();
+    session.setView(view);
+    const dmg = { t: 'Dmg', x: 1, y: 1, v: 3, crit: false, p: false, ty: 0, imm: false } as const;
+    net.emit(snap({ ev: [dmg, dmg], dark_ev: [1] }));
+    expect(view.eventDark).toEqual([false, true]);
+  });
+
   it('Coins reach the view and, while alive, the HUD', () => {
     const { net, hud, session } = make();
     const view = fakeView();

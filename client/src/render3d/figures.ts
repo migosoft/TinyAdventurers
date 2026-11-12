@@ -255,7 +255,7 @@ export class Figures3d {
     const s: MimicState = m.tracker.step({ x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim, flags: e.flags }, f.dt, dist);
     const p = mimicPose(s, f.now, m.mem);
     // 2D's reveal cue: a red "!" 18 px above the chest (the burst is the particles' business, #308).
-    if (p.wakeCue) out.floats.push({ x: e.x, y: e.y, text: '!', color: '#ff5050', kind: 'mark', up: 18 });
+    if (p.wakeCue && !f.dark.has(e.id)) out.floats.push({ x: e.x, y: e.y, text: '!', color: '#ff5050', kind: 'mark', up: 18 });
     const x = e.x / TILE;
     const z = e.y / TILE;
     const [bx, bz] = this.bodyFoot(x, z, cam);

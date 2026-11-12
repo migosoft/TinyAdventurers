@@ -190,7 +190,7 @@ export class RunView3d implements RunView {
     }
     const fo = this.figures.frame(f, cam);
     for (const w of fo.floats) this.floats.add(w.x, w.y, w.text, w.color, { kind: w.kind, up: w.up });
-    this.seen = seenOpeners(fo.openers, this.sightFor(f));
+    this.seen = seenOpeners(fo.openers, this.sightFor(f), f.dark);
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     const work = this.woodland || c.params.light === 'work';
@@ -208,13 +208,13 @@ export class RunView3d implements RunView {
   /** The overlay over the canvas: bars, names, tags and the use hint, placed from this frame's camera and plan. */
   private paintOverlay(f: RunFrame, c: StageCtx, cam: Cam): void {
     this.floats.update(f.dt);
-    this.marks.update(f.dt, this.figures.anchors);
+    this.marks.update(f.dt, this.figures.anchors, f.dark);
     const o = this.overlay;
     if (!o) return;
     o.size(c.canvas.w, c.canvas.h);
     const items: OverlayItem[] = [];
     const i: LayoutIn = {
-      ents: f.ents, you: f.you, anchors: this.figures.anchors, heroNames: this.heroNames, useHint: f.useHint, zoom: c.zoom,
+      ents: f.ents, you: f.you, anchors: this.figures.anchors, heroNames: this.heroNames, useHint: f.useHint, dark: f.dark, zoom: c.zoom,
       at: (x, z) => toCanvas(cam, c.plan, c.zoom, x, 0, z), measure: (t, k) => o.measure(t, k),
     };
     layoutBars(i, items);
@@ -244,10 +244,10 @@ export class RunView3d implements RunView {
     };
   }
 
-  event(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null = null): void {
+  event(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null = null, dark = false): void {
     this.figures.event(ev);
     // A hit on the own hero is born at the predicted foot (#281).
-    this.floats.addPicture(ev, own, server);
+    this.floats.addPicture(ev, own, server, dark);
   }
 
   tileChanged(x: number, y: number, _v: number): void {

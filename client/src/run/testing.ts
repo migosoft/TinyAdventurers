@@ -132,6 +132,7 @@ export function fakeView(
 ): RunView & {
   frames: RunFrame[];
   events: PictureEv[];
+  eventDark: boolean[];
   tiles: [number, number, number][];
   ended: [ShotView, string][];
   stats: ViewStats;
@@ -141,6 +142,7 @@ export function fakeView(
     stats: NO_STATS as ViewStats,
     frames: [] as RunFrame[],
     events: [] as PictureEv[],
+    eventDark: [] as boolean[],
     tiles: [] as [number, number, number][],
     ended: [] as [ShotView, string][],
     onTile: undefined as ((x: number, y: number, v: number) => void) | undefined,
@@ -149,8 +151,9 @@ export function fakeView(
       v.frames.push({ ...f, own: { ...f.own }, shots: f.shots.map((s) => ({ ...s })), hiddenShots: new Set(f.hiddenShots) });
       return v.stats;
     },
-    event(ev: PictureEv) {
+    event(ev: PictureEv, _own?: unknown, _server?: unknown, dark = false) {
       v.events.push(ev);
+      v.eventDark.push(dark);
     },
     tileChanged(x: number, y: number, t: number) {
       v.onTile?.(x, y, t);

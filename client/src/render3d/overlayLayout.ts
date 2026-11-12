@@ -53,6 +53,8 @@ export interface LayoutIn {
   anchors: ReadonlyMap<number, FigureAnchor>;
   heroNames: Map<number, string>;
   useHint: UseHint | null;
+  /** The ids the snapshot marks as in the dark: no bar, hint or mark over them. */
+  dark: ReadonlySet<number>;
   /** A foot point in tiles on the canvas (device px). */
   at: (x: number, z: number) => { px: number; py: number };
   /** Canvas px per art px. */
@@ -73,6 +75,7 @@ const textWidth = (i: LayoutIn, text: string, kind: WorldTextKind): number =>
 /** HP bars and the names over Neutral and Friendly creatures' bars: 2D's `drawBarsAndBeams` rules. */
 export function layoutBars(i: LayoutIn, out: OverlayItem[]): void {
   for (const e of i.ents.values()) {
+    if (i.dark.has(e.id)) continue;
     const look = barOf(e, i.heroNames);
     if (!look) continue;
     const a = i.anchors.get(e.id);
@@ -124,7 +127,7 @@ export function layoutTags(i: LayoutIn, tagOf: (e: EntState) => string | null, o
 /** The use hint: the key cap 26 art px above the target's foot and its label to the right. */
 export function layoutUseHint(i: LayoutIn, out: OverlayItem[]): void {
   const h = i.useHint;
-  if (!h) return;
+  if (!h || i.dark.has(h.ent.id)) return;
   const a = i.anchors.get(h.ent.id);
   const f = foot(i, a ? a.x : h.ent.x / TILE, a ? a.z : h.ent.y / TILE);
   const x = f.px;
@@ -170,9 +173,10 @@ export class Floats {
   /**
    * The float of a picture event, if it has one. A hit or heal arrives at the body, `BODY_RISE` px above the foot, which is a
    * screen-up offset in 2D; here it is the foot, lifted by the same art px on the screen, so it holds at any yaw. `own`: the
-   * predicted hero, `server`: the hero's server position (see `floatSpot`).
+   * predicted hero, `server`: the hero's server position (see `floatSpot`). `dark`: the event is in the dark, so it has no float.
    */
-  addPicture(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null): void {
+  addPicture(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null, dark = false): void {
+    if (dark) return; // in the dark: nothing is drawn over it
     const w = floatOf(ev);
     if (!w) return;
     if (ev.t === 'Dmg' || ev.t === 'Heal') {
@@ -216,9 +220,13 @@ export class Marks {
   private clock = 0;
   private readonly states = new Map<number, MarkState>();
 
-  update(dt: number, anchors: ReadonlyMap<number, FigureAnchor>): void {
+  update(dt: number, anchors: ReadonlyMap<number, FigureAnchor>, dark: ReadonlySet<number>): void {
     this.clock += dt;
     for (const [id, a] of anchors) {
+      if (dark.has(id)) {
+        this.states.delete(id);
+        continue;
+      }
       let s = this.states.get(id);
       const sleep = has(a.effects, EFFECT.Sleep);
       if (!s) {

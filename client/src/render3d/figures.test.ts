@@ -43,7 +43,7 @@ const own = (o: Partial<OwnHero> = {}): OwnHero => ({ x: at(0), y: 8, alive: fal
 const ent = (id: number, kind: number, o: Partial<EntState> = {}): EntState => ({ id, kind, x: at(0), y: 8, hp: 10, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: SIDE.Hostile, entangled: 0, ...o });
 const frame = (ents: EntState[], o: Partial<RunFrame> = {}): RunFrame => ({
   dt: 0.016, now: 10, ents: new Map(ents.map((e) => [e.id, e])), you: 1, own: own(), watching: null, camera: { x: 0, y: 0 }, snap: undefined, shots: [], hiddenShots: new Set(),
-  useHint: null, debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] }, ...o,
+  useHint: null, dark: new Set(), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] }, ...o,
 });
 const make = () => new Figures3d(init(), frames, bounds);
 
@@ -382,6 +382,19 @@ describe('Figures3d anchors (#311)', () => {
     for (let i = 1; i <= 12; i++) all = all.concat(fg.frame(frame([mimic(0)], { dt: 0.1, now: 10.016 + i * 0.1 }), cam()).floats);
     expect(all).toHaveLength(1); // once, on the reveal frame
     expect(all[0]).toEqual({ x: at(0), y: 8, text: '!', color: '#ff5050', kind: 'mark', up: 18 });
+  });
+  it("a marked mimic's wake cue adds no float", () => {
+    const run = (dark: Set<number>) => {
+      const fg = make();
+      const mimic = (flags: number) => ent(33, KIND.Mimic, { flags });
+      fg.frame(frame([mimic(FLAG.HIDING)], { dark }), cam());
+      fg.frame(frame([mimic(0)], { dt: 0.016, now: 10.016, dark }), cam());
+      let all: FigureOut['floats'] = [];
+      for (let i = 1; i <= 12; i++) all = all.concat(fg.frame(frame([mimic(0)], { dt: 0.1, now: 10.016 + i * 0.1, dark }), cam()).floats);
+      return all;
+    };
+    expect(run(new Set([33]))).toEqual([]);
+    expect(run(new Set())).toHaveLength(1);
   });
   it('a chest, a barrel and a mimic anchor at CHEST_HEIGHT', () => {
     const fg = make();

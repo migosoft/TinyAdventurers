@@ -72,6 +72,8 @@ export interface RunFrame {
   shots: readonly ShotView[];
   hiddenShots: ReadonlySet<number>; // entity ids of server projectiles not to draw
   useHint: UseHint | null;
+  /** The ids the latest snapshot marks as in the dark (`Snapshot.dark`): sent, but nothing is drawn over them. */
+  dark: ReadonlySet<number>;
   debug: DebugDraw;
 }
 
@@ -101,7 +103,8 @@ export interface RunView {
   frame(f: RunFrame): ViewStats;
   /** `own` is the predicted hero position (camera shake tests against it). */
   /** `own`: the predicted hero. `server`: the own hero's position in the snapshot that carried the event (null if absent). */
-  event(ev: PictureEv, own: { x: number; y: number }, server?: { x: number; y: number } | null): void;
+  /** `dark`: the event is in the dark (`Snapshot.dark_ev`). */
+  event(ev: PictureEv, own: { x: number; y: number }, server?: { x: number; y: number } | null, dark?: boolean): void;
   /** The session has already updated the map and the LightField. */
   tileChanged(x: number, y: number, v: number): void;
   shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone'): void;

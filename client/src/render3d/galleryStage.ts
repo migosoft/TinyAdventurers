@@ -171,7 +171,7 @@ export function galleryFrame(ents: readonly EntState[], now: number, dt: number)
   return {
     dt, now, ents: new Map(ents.map((e) => [e.id, e])), you: -1,
     own: { x: 0, y: 0, alive: false, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: 0, aimFromY: 0, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false },
-    watching: null, camera: { x: 0, y: 0 }, snap: undefined, shots: [], hiddenShots: new Set(), useHint: null,
+    watching: null, camera: { x: 0, y: 0 }, snap: undefined, shots: [], hiddenShots: new Set(), useHint: null, dark: new Set(),
     debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] },
   };
 }
@@ -225,7 +225,7 @@ export function createGalleryStage(assets: Assets, initial: { pitch: number; yaw
       if (window.__r3d) window.__r3d.figures = figures.count;
       c.timer.renderStart();
       return c.view.draw(
-        { cam, plan: c.plan, dynamic, lights: [], ambient: WORK_AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: seenOpeners(fo.openers, ALL_VISIBLE), look: seeLook(c.params) } },
+        { cam, plan: c.plan, dynamic, lights: [], ambient: WORK_AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) } },
         c.timer,
       );
     },

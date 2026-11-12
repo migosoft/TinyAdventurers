@@ -20,7 +20,7 @@ const ent = (id: number, kind: number, o: Partial<EntState> = {}): EntState => (
 const anchor = (o: Partial<FigureAnchor> = {}): FigureAnchor => ({ x: 5, z: 5, height: 20, tag: 23, head: 18, cx: 0, alpha: 1, tagShown: true, effects: 0, ...o });
 
 function input(ents: EntState[], anchors: [number, FigureAnchor][], o: Partial<LayoutIn> = {}): LayoutIn {
-  return { ents: new Map(ents.map((e) => [e.id, e])), you: 1, anchors: new Map(anchors), heroNames: new Map(), useHint: null, at, zoom: ZOOM, ...o };
+  return { ents: new Map(ents.map((e) => [e.id, e])), you: 1, anchors: new Map(anchors), heroNames: new Map(), useHint: null, dark: new Set(), at, zoom: ZOOM, ...o };
 }
 const bars = (i: LayoutIn): OverlayItem[] => {
   const out: OverlayItem[] = [];
@@ -334,7 +334,7 @@ describe('Marks', () => {
   it('a sleeper gets a Z every 0.6 s, rising 10 art px over 1.2 s', () => {
     const m = new Marks();
     const a = new Map(sleeper());
-    m.update(0.01, a);
+    m.update(0.01, a, new Set());
     expect(texts(m)).toHaveLength(1); // the first Z at once
     const z = texts(m)[0];
     expect(z.text).toBe('Z');
@@ -342,9 +342,9 @@ describe('Marks', () => {
     expect(z.color).toBe(SOUND_TEXT.fill);
     expect(z.stroke).toBe(SOUND_TEXT.stroke);
     expect(z.base).toBe('bottom');
-    m.update(0.6, a);
+    m.update(0.6, a, new Set());
     expect(texts(m)).toHaveLength(2);
-    m.update(0.6, a);
+    m.update(0.6, a, new Set());
     // the first two (1.21 s and 1.2 s old) are gone; the newest, 0.6 s old, is half way up and half faded
     expect(texts(m)).toHaveLength(1);
     expect(texts(m)[0].alpha).toBeCloseTo(0.5, 5);
@@ -352,7 +352,7 @@ describe('Marks', () => {
   });
   it('a Z starts 3 art px right of the foot at the head and sways', () => {
     const m = new Marks();
-    m.update(0.0001, new Map(sleeper({ head: 18 })));
+    m.update(0.0001, new Map(sleeper({ head: 18 })), new Set());
     const z = texts(m)[0];
     expect(z.x).toBe(Math.round(at(5, 5).px + 3 * ZOOM));
     expect(z.y).toBe(Math.round(at(5, 5).py - 18 * ZOOM));
@@ -360,15 +360,15 @@ describe('Marks', () => {
   });
   it('a Z is as faint as its figure and stops when the sleep ends', () => {
     const m = new Marks();
-    m.update(0.0001, new Map(sleeper({ alpha: 0.5 })));
+    m.update(0.0001, new Map(sleeper({ alpha: 0.5 })), new Set());
     expect(texts(m)[0].alpha).toBeCloseTo(0.5, 3);
-    m.update(0.1, new Map([[7, anchor()]]));
-    m.update(0.7, new Map([[7, anchor()]]));
+    m.update(0.1, new Map([[7, anchor()]]), new Set());
+    m.update(0.7, new Map([[7, anchor()]]), new Set());
     expect(texts(m)).toHaveLength(1); // the old one keeps rising, no new one
   });
   it('fear and charm sit side by side', () => {
     const m = new Marks();
-    m.update(0.1, new Map([[7, anchor({ effects: (1 << EFFECT.Fear) | (1 << EFFECT.Charmed), cx: 2, head: 18, alpha: 0.8 })]]));
+    m.update(0.1, new Map([[7, anchor({ effects: (1 << EFFECT.Fear) | (1 << EFFECT.Charmed), cx: 2, head: 18, alpha: 0.8 })]]), new Set());
     const t = texts(m);
     const bang = t.find((x) => x.text === '!')!;
     const heart = t.find((x) => x.text === '♥')!;
@@ -385,11 +385,50 @@ describe('Marks', () => {
   });
   it('charm alone sits on the centre, and no marks without an effect', () => {
     const m = new Marks();
-    m.update(0.1, new Map([[7, anchor({ effects: 1 << EFFECT.Charmed, cx: 2 })]]));
+    m.update(0.1, new Map([[7, anchor({ effects: 1 << EFFECT.Charmed, cx: 2 })]]), new Set());
     expect(texts(m)).toHaveLength(1);
     expect(texts(m)[0].x).toBe(Math.round(at(5, 5).px + 2 * ZOOM));
     const none = new Marks();
-    none.update(0.1, new Map([[7, anchor()]]));
+    none.update(0.1, new Map([[7, anchor()]]), new Set());
     expect(texts(none)).toEqual([]);
+  });
+});
+
+describe('the mark: things in the dark (#309)', () => {
+  it('layoutBars leaves out a marked creature', () => {
+    const a = ent(2, KIND.SkeletonWarrior);
+    const b = ent(3, KIND.SkeletonWarrior);
+    const i = input([a, b], [[2, anchor()], [3, anchor({ x: 6 })]], { dark: new Set([3]) });
+    expect(only(bars(i), 'bar')).toHaveLength(1);
+  });
+
+  it('the use hint is not drawn for a marked object', () => {
+    const chest = ent(4, KIND.Chest, { side: SIDE.Neutral });
+    const h: UseHint = { ent: chest, label: 'Wake' };
+    expect(hint(input([chest], [[4, anchor()]], { useHint: h }))).not.toEqual([]);
+    expect(hint(input([chest], [[4, anchor()]], { useHint: h, dark: new Set([4]) }))).toEqual([]);
+  });
+
+  it('Marks start none and drop the state of a marked creature', () => {
+    const m = new Marks();
+    const a = new Map(sleeper());
+    m.update(0.01, a, new Set([7]));
+    expect(texts(m)).toHaveLength(0);
+    const n = new Marks();
+    n.update(0.01, a, new Set());
+    n.update(0.7, a, new Set());
+    expect(texts(n).length).toBeGreaterThan(0);
+    n.update(0.01, a, new Set([7]));
+    expect(texts(n)).toHaveLength(0);
+  });
+
+  it('a picture event in the dark adds no float', () => {
+    const dmg = { t: 'Dmg', x: 160, y: 110, v: 5, ty: 0, crit: false, p: false, imm: false } as PictureEv;
+    const dark = new Floats(mid);
+    dark.addPicture(dmg, { x: 0, y: 0 }, null, true);
+    expect(floatItems(dark)).toEqual([]);
+    const lit = new Floats(mid);
+    lit.addPicture(dmg, { x: 0, y: 0 }, null, false);
+    expect(floatItems(lit)).toHaveLength(1);
   });
 });

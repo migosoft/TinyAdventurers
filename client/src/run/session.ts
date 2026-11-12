@@ -85,6 +85,8 @@ export class RunSession {
   private isAlive = true;
   private spectating: number | null = null;
   private lastSnap?: Snapshot;
+  /** The ids the latest snapshot marks as in the dark. */
+  private readonly dark = new Set<number>();
   private myFlags = 0;
   /** The own hero's server position in the snapshot being dispatched (the 3D view places hits on the hero from it). */
   private serverOwn: { x: number; y: number } | null = null;
@@ -267,6 +269,7 @@ export class RunSession {
           shots: this.shots.live,
           hiddenShots,
           useHint,
+          dark: this.dark,
           debug: this.debug,
         })
       : NO_STATS;
@@ -525,6 +528,8 @@ export class RunSession {
   private onSnapshot(s: Snapshot): void {
     this.interp.push(s, this.now());
     this.lastSnap = s;
+    this.dark.clear();
+    for (const id of s.dark) this.dark.add(id);
     this.pred.solids = s.ents.filter((e) => e[1] === KIND.Barrel && e[5] < 2).map((e) => ({ x: e[2], y: e[3], half: CONST.BARREL_RADIUS }));
     // The figure is drawn from the interpolated entity while charmed; when the charm ends the prediction blends in from there.
     const drawn = this.ents.get(this.runInfo.you);
@@ -535,12 +540,13 @@ export class RunSession {
     const mine = s.ents.find((e) => e[0] === this.runInfo.you);
     this.myFlags = mine ? mine[8] : 0;
     this.serverOwn = mine ? { x: mine[2], y: mine[3] } : null;
-    for (const ev of s.ev) this.onEvent(ev);
+    const darkEv = new Set(s.dark_ev);
+    s.ev.forEach((ev, i) => this.onEvent(ev, darkEv.has(i)));
     this.hud.snapshot(s, this.runInfo);
     this.log?.onSnapshot(s);
   }
 
-  private onEvent(ev: Ev): void {
+  private onEvent(ev: Ev, dark: boolean): void {
     switch (ev.t) {
       case 'Dmg':
       case 'Heal':
@@ -551,7 +557,7 @@ export class RunSession {
       case 'Raise':
       case 'Immune':
       case 'Effect':
-        this.view?.event(ev, this.pred.state, this.serverOwn);
+        this.view?.event(ev, this.pred.state, this.serverOwn, dark);
         break;
       case 'Tile': {
         const was = this.map.get(ev.x, ev.y);
@@ -579,7 +585,7 @@ export class RunSession {
         this.hud.message(ev.text, 'game');
         break;
       case 'Coins':
-        this.view?.event(ev, this.pred.state, this.serverOwn);
+        this.view?.event(ev, this.pred.state, this.serverOwn, dark);
         if (this.isAlive) this.hud.addCoins(ev.v);
         break;
     }

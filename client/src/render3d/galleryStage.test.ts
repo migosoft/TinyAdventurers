@@ -108,7 +108,7 @@ describe('the gallery stage', () => {
       expect(knight.kind).toBe(KIND.Knight);
       expect(knight.side).toBe(SIDE.Neutral);
       // an all-visible sight keeps them all
-      expect(seenOpeners(out.openers, { isVisible: () => true })).toHaveLength(out.openers.length);
+      expect(seenOpeners(out.openers, { isVisible: () => true }, new Set())).toHaveLength(out.openers.length);
     }
     // the walkers: a hero, five skeletons, a wolf, a chest and a closed mimic
     const w = galleryEnts(0, null).filter((e) => e.id >= ID.corridor);

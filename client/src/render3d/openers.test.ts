@@ -41,8 +41,13 @@ describe('seenOpeners', () => {
   const sight = { isVisible: (x: number, y: number) => x < 5 && y < 5 };
 
   it('drops what stands on an unseen tile and keeps what stands on a seen one', () => {
-    const out = seenOpeners([op(1, 2.5, 3.5), op(2, 9.5, 3.5), op(3, 4.9, 4.9), op(4, 3.5, 5.1)], sight);
+    const out = seenOpeners([op(1, 2.5, 3.5), op(2, 9.5, 3.5), op(3, 4.9, 4.9), op(4, 3.5, 5.1)], sight, new Set());
     expect(out.map((o) => o.id)).toEqual([1, 3]);
+  });
+
+  it('drops a marked opener even on a seen tile', () => {
+    const out = seenOpeners([op(1, 2.5, 3.5), op(2, 3.5, 3.5)], sight, new Set([2]));
+    expect(out.map((o) => o.id)).toEqual([1]);
   });
 
   it('drops a teammate behind a wall in the real sight, and keeps one in the open', () => {
@@ -54,7 +59,7 @@ describe('seenOpeners', () => {
     const map = new TileMap(w, rows.length, tiles);
     const v = new View(map.w, map.h);
     v.compute(map, 5.5 * TILE, 5.5 * TILE, 9, 'hard');
-    const ids = seenOpeners([op(1, 3.5, 5.5), op(2, 14.5, 5.5)], v).map((o) => o.id);
+    const ids = seenOpeners([op(1, 3.5, 5.5), op(2, 14.5, 5.5)], v, new Set()).map((o) => o.id);
     expect(ids).toEqual([1]);
   });
 });

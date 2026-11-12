@@ -17,7 +17,10 @@ export function opensWalls(e: { kind: number; side: number; flags: number }, fad
   return e.side === SIDE.Hostile || e.side === SIDE.Friendly;
 }
 
-/** Of `openers`, those the viewer may see: standing on a tile `sight.isVisible`. */
-export function seenOpeners(openers: readonly Opener[], sight: { isVisible(x: number, y: number): boolean }): Opener[] {
-  return openers.filter((o) => sight.isVisible(Math.floor(o.x), Math.floor(o.z)));
+/**
+ * Of `openers`, those the viewer may see: standing on a tile `sight.isVisible` and not marked in the dark. The server sends
+ * things by sight, so the mark (`dark`, the entity ids) is what keeps a dark one from opening a wall; no server light filter.
+ */
+export function seenOpeners(openers: readonly Opener[], sight: { isVisible(x: number, y: number): boolean }, dark: ReadonlySet<number>): Opener[] {
+  return openers.filter((o) => !dark.has(o.id) && sight.isVisible(Math.floor(o.x), Math.floor(o.z)));
 }
