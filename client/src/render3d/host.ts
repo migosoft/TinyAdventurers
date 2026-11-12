@@ -20,6 +20,8 @@ declare global {
       backend: string; frames: number; renderSize: [number, number]; zoom: number; forceLoss?: () => boolean;
       /** A run's stage adds these: the own hero and the camera target (tiles), the view's chunk meshes and the figures drawn last frame. */
       hero?: { x: number; z: number }; cam?: { x: number; z: number }; chunks?: { total: number; drawn: number }; figures?: number;
+      /** ... and the camera's yaw in whole degrees (-180..180) and the items the overlay painted last frame. */
+      yaw?: number; overlay?: number;
     };
   }
 }

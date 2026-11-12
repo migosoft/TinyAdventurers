@@ -105,6 +105,8 @@ export class RunView3d implements RunView {
     return this.sight;
   }
 
+  private overlayCount = 0;
+
   /** Figures drawn last frame (for `window.__r3d`). */
   get figureCount(): number {
     return this.figures.count;
@@ -219,7 +221,13 @@ export class RunView3d implements RunView {
     layoutUseHint(i, items);
     this.marks.layout(i.at, c.zoom, items);
     this.floats.layout(i.at, c.zoom, items);
+    this.overlayCount = items.length;
     o.paint(items, c.zoom);
+  }
+
+  /** Items the overlay painted last frame (for `window.__r3d`). */
+  get overlayItems(): number {
+    return this.overlayCount;
   }
 
   private stats(c: StageCtx, objects: number): ViewStats {

@@ -27,6 +27,17 @@ Gather a party of up to four heroes and crawl through a dungeon full of goblins,
 | **Shift+L** | Show or hide the calculation lines of the rules log |
 | **F3** | Show frame rate, frame times (whole frame, rendering, and the game's own parts), ping and network stats |
 
+**The 3D view** (debug accounts only for now) uses the same controls, plus three keys for the camera. Every run starts facing north.
+
+| Input | Action |
+|---|---|
+| **Z** | Turn the camera 45°, so it walks around the scene to the left. Press again for another step. |
+| **C** | Turn the camera 45° the other way |
+| **X** | Turn the camera back to north |
+| **Middle mouse button, drag** | Turn the camera freely; dragging right turns it the same way as Z. When you let go it snaps to the nearest 45°. |
+
+The keys sit in the same place on every keyboard layout: on a German (QWERTZ) keyboard they are Y, X and C. While you drag, the aim follows the way you walk. The help line at the bottom shows the keys with your layout's letters. The mouse aims at the point in front of your hero at weapon height, so a shot aimed at a monster's chest hits it however the camera is tilted. Health bars, names, damage numbers and hints are drawn sharp over the picture at any quality setting.
+
 The **Settings** view of the Esc menu has a checkbox for each switch: the rules log (L), its calculation lines (Shift+L) and the network stats (F3). The keys and the checkboxes always agree.
 
 On the screen, the **E** hint is a small gold key cap that floats over the thing you can use (a chest, a door, a sleeping teammate with the word "Wake", the neutral knight with the word "Recruit"). A **critical hit** shows as a big gold number. Messages come in two kinds: story messages in the middle of the screen (a force field, a teammate leaving the dungeon) and small notices (such as "You have fallen").

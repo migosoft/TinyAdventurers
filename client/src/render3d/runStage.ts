@@ -178,6 +178,8 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         r.hero = runView.hero;
         r.cam = runView.cam;
         r.figures = runView.figureCount;
+        r.overlay = runView.overlayItems;
+        r.yaw = whole;
         if (c.view) r.chunks = c.view.chunks;
       }
       return runView.drawCalls;
