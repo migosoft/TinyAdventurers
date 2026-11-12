@@ -147,4 +147,29 @@ describe('light field', () => {
     expect(dim[own * 3]).toBeLessThan(full[own * 3]);
     expect(Math.abs(dim[rimTile * 3] - full[rimTile * 3])).toBeLessThan(0.02 * full[rimTile * 3]);
   });
+
+  it('version rises on add, set, remove and mapChanged', () => {
+    const f = new LightField(new TileMap(8, 8, new Uint8Array(64).fill(TILE_ID.Floor)));
+    const seen = [f.version];
+    f.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 3, y: 3, on: true });
+    seen.push(f.version);
+    f.set(1, false, 0xffffff);
+    seen.push(f.version);
+    f.mapChanged();
+    seen.push(f.version);
+    f.remove(1);
+    seen.push(f.version);
+    for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeGreaterThan(seen[i - 1]);
+  });
+
+  it('accumulate with only = Lava leaves a torch\'s tiles at 0', () => {
+    const m = new TileMap(8, 8, new Uint8Array(64).fill(TILE_ID.Floor));
+    const f = new LightField(m);
+    f.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 3, y: 3, on: true });
+    const rgb = new Float32Array(64 * 3);
+    f.accumulate(rgb, 0, 0, 8, 8, () => 1, () => 1, (l) => l.kind === LIGHT_KIND.Lava);
+    expect(rgb.every((v) => v === 0)).toBe(true);
+    f.accumulate(rgb, 0, 0, 8, 8, () => 1);
+    expect(rgb[(3 * 8 + 3) * 3]).toBeGreaterThan(0);
+  });
 });

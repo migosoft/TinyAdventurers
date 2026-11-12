@@ -55,6 +55,8 @@ export class LightField {
   private fov: Fov;
   private lit: Uint8Array;
   private litDirty = true;
+  /** Raised by every change (`add`, `set`, `remove`, `mapChanged`): a consumer rebuilds its copy when it moves. */
+  version = 0;
 
   constructor(private map: TileMap) {
     this.fov = new Fov(map.w, map.h);
@@ -69,6 +71,7 @@ export class LightField {
     this.lights.set(l.id, { ...l });
     this.cells.delete(l.id);
     this.litDirty = true;
+    this.version++;
   }
 
   set(id: number, on: boolean, colour: number): void {
@@ -77,18 +80,21 @@ export class LightField {
     l.on = on;
     l.colour = colour;
     this.litDirty = true;
+    this.version++;
   }
 
   remove(id: number): void {
     this.lights.delete(id);
     this.cells.delete(id);
     this.litDirty = true;
+    this.version++;
   }
 
   /** A tile changed (door, lava): every shadowcast is redone lazily. */
   mapChanged(): void {
     this.cells.clear();
     this.litDirty = true;
+    this.version++;
   }
 
   private cellsOf(l: StaticLight): Cells {
@@ -121,14 +127,23 @@ export class LightField {
   }
 
   /** Adds every lit static light's colour into `rgb` (`dim` 0..1 dims a light's centre, never its rim) (w*h*3) inside the tile window [x0,x1)×[y0,y1). */
-  accumulate(rgb: Float32Array, x0: number, y0: number, x1: number, y1: number, scale: (l: StaticLight) => number, dim: (l: StaticLight) => number = () => 1): void {
+  accumulate(
+    rgb: Float32Array,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    scale: (l: StaticLight) => number,
+    dim: (l: StaticLight) => number = () => 1,
+    only: (l: StaticLight) => boolean = () => true,
+  ): void {
     const w = this.map.w;
     if (this.daylight) {
       for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) addColour(rgb, y * w + x, DAYLIGHT, 1);
       return;
     }
     for (const l of this.lights.values()) {
-      if (!l.on) continue;
+      if (!l.on || !only(l)) continue;
       const r = LIGHT[l.kind].radius;
       if (l.x + r < x0 || l.x - r >= x1 || l.y + r < y0 || l.y - r >= y1) continue;
       const k = LIGHT[l.kind].intensity * scale(l);

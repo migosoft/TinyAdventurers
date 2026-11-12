@@ -1,7 +1,7 @@
 // The game's own lights as the 3D view's per-frame light list (#304): static lights from the session's LightField (torches at
 // their flame), moving lights from the snapshot (tied to the entity that carries them), and the choice of the most important
 // ones for the shader's slots. Pure numbers; the shader side is in lightNodes.ts.
-import { LIGHT, LIGHT_KIND } from '../generated/defs';
+import { LIGHT, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import type { EntSnap } from '../generated/EntSnap';
 import type { MovingLight } from '../generated/MovingLight';
 import type { LightField, StaticLight } from '../game/light';
@@ -170,4 +170,17 @@ export function selectLights(cands: readonly Cand[], fp: Footprint, focus: { x: 
   }
   scored.sort((a, b) => b.score - a.score || (a.c.id < b.c.id ? -1 : a.c.id > b.c.id ? 1 : 0));
   return { list: scored.slice(0, cap).map((s) => s.c), inView: scored.length };
+}
+
+/** The lava lights as one texel per tile (rgba, `map.w * map.h * 4`): rgb the summed Lava lights over the whole map, alpha 1 on lava tiles (#304). */
+export function lavaTexels(field: LightField, map: TileMap, out: Float32Array): void {
+  const n = map.w * map.h;
+  const rgb = new Float32Array(n * 3);
+  field.accumulate(rgb, 0, 0, map.w, map.h, () => 1, () => 1, (l) => l.kind === LIGHT_KIND.Lava);
+  for (let i = 0; i < n; i++) {
+    out[i * 4] = (rgb[i * 3] / 255) * LIGHT_GAIN;
+    out[i * 4 + 1] = (rgb[i * 3 + 1] / 255) * LIGHT_GAIN;
+    out[i * 4 + 2] = (rgb[i * 3 + 2] / 255) * LIGHT_GAIN;
+    out[i * 4 + 3] = map.tiles[i] === TILE_ID.Lava ? 1 : 0;
+  }
 }

@@ -6,7 +6,7 @@ import { LightField } from '../game/light';
 import type { EntState } from '../game/world';
 import { TileMap } from '../sim/map';
 import type { Cam } from './camera';
-import { CARRY_PX, DAYLIGHT_Y, FLASH_Y, LIGHT_MARGIN, footprint, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
+import { CARRY_PX, DAYLIGHT_Y, FLASH_Y, LIGHT_MARGIN, footprint, lavaTexels, lightFlicker, lightRgb, movingCands, selectLights, staticCands, TorchPairs, type Cand } from './lights';
 import { TORCH_MID } from './figures';
 
 const mapOf = (rows: string[]): TileMap => {
@@ -221,5 +221,25 @@ describe('selectLights', () => {
     const other = cand('a', 15, 15, 3);
     const out = selectLights([other, near], fp, { x: 10, z: 10 }, 1);
     expect(out.list[0].id).toBe('b');
+  });
+});
+
+describe('lavaTexels', () => {
+  it('lights a 1-tile pool: alpha on it, glow beside it, nothing far away, torches left out', () => {
+    const w = 12;
+    const tiles = new Uint8Array(w * w).fill(TILE_ID.Floor);
+    tiles[5 * w + 5] = TILE_ID.Lava;
+    const m = new TileMap(w, w, tiles);
+    const f = new LightField(m);
+    f.add({ id: 1, kind: LIGHT_KIND.Lava, colour: LIGHT[LIGHT_KIND.Lava].colour, x: 5, y: 5, on: true });
+    f.add({ id: 2, kind: LIGHT_KIND.Torch, colour: 0xffffff, x: 10, y: 10, on: true });
+    const out = new Float32Array(w * w * 4);
+    lavaTexels(f, m, out);
+    const at = (x: number, y: number) => (y * w + x) * 4;
+    expect(out[at(5, 5) + 3]).toBe(1);
+    expect(out[at(6, 5) + 3]).toBe(0);
+    expect(out[at(6, 5)]).toBeGreaterThan(0);
+    expect(out[at(8, 5)]).toBe(0);
+    expect(out[at(10, 10)]).toBe(0);
   });
 });
