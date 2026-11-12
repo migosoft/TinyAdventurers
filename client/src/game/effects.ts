@@ -4,7 +4,7 @@ import type Phaser from 'phaser';
 import { FONT_TEXT } from '../fonts';
 import { EXPLOSION_ART_R, EXPLOSION_STAGES, explosionFrameName, type ExplosionSheet } from './anim/explosionFrames';
 import { dissolveVeil, drawVeil, restingVeil, VEIL_DEATH_LIFE, type VeilStrand } from './shadeHaze';
-import { popScale, smoothText, TEXT_RESOLUTION, WORLD_TEXT, type WorldTextKind } from './worldText';
+import { FLOAT, popScale, smoothText, TEXT_RESOLUTION, WORLD_TEXT, type WorldTextKind } from './worldText';
 
 export const DEPTH = {
   map: 0,
@@ -178,8 +178,8 @@ export class Effects {
     const t = this.freeTexts.pop() ?? smoothText(this.scene.add.text(0, 0, '', { fontFamily: FONT_TEXT, resolution: TEXT_RESOLUTION }));
     const w = WORLD_TEXT[big ? 'crit' : kind];
     t.setText(s).setColor(color).setFontStyle(w.style).setFontSize(w.size).setStroke(stroke, 2).setOrigin(0.5, 1);
-    t.setPosition(Math.round(x + (Math.random() * 6 - 3)), Math.round(y)).setAlpha(1).setVisible(true).setDepth(depth).setScale(big ? popScale(0) : 1);
-    this.texts.push({ t, age: 0, pop: big, vy: big ? -34 : -26, life: big ? 0.9 : 0.7, max: big ? 0.9 : 0.7 });
+    t.setPosition(Math.round(x + (Math.random() * FLOAT.spread - FLOAT.spread / 2)), Math.round(y)).setAlpha(1).setVisible(true).setDepth(depth).setScale(big ? popScale(0) : 1);
+    this.texts.push({ t, age: 0, pop: big, vy: big ? FLOAT.critVy : FLOAT.vy, life: big ? FLOAT.critLife : FLOAT.life, max: big ? FLOAT.critLife : FLOAT.life });
   }
 
   /** A Ghost dies: about 24 pale sparks rising and fading over 0.6 s. */
@@ -306,7 +306,7 @@ export class Effects {
       f.age += dt;
       if (f.pop) f.t.setScale(popScale(f.age));
       f.t.y += f.vy * dt;
-      f.vy *= 0.92;
+      f.vy *= FLOAT.drag;
       f.t.setAlpha(Math.min(1, (f.life / f.max) * 2));
     }
   }

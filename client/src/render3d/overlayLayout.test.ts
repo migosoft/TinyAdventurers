@@ -3,7 +3,9 @@ import { EFFECT, FLAG, KIND, SIDE } from '../generated/defs';
 import type { EntState } from '../game/world';
 import type { UseHint } from '../game/useHint';
 import type { FigureAnchor } from './figures';
-import { layoutBars, layoutHeroTags, layoutUseHint, type LayoutIn, type OverlayItem } from './overlayLayout';
+import { SOUND_TEXT } from '../game/effects';
+import { popScale, WORLD_TEXT } from '../game/worldText';
+import { Floats, layoutBars, layoutHeroTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 
 const ZOOM = 3;
 const TILE = 16;
@@ -153,5 +155,165 @@ describe('layoutUseHint', () => {
     expect(only(items, 'cap')[0].x).toBe(Math.round(at(5, 5).px)); // no anchor: the entity's own spot
     expect(only(items, 'text')).toHaveLength(0);
     expect(hint(input([], []))).toEqual([]);
+  });
+});
+
+// A fixed "random": the middle of the spread, so no sideways shift.
+const mid = () => 0.5;
+const floatItems = (f: Floats, a = at): OverlayItem[] => {
+  const out: OverlayItem[] = [];
+  f.layout(a, ZOOM, out);
+  return out;
+};
+
+describe('Floats', () => {
+  it('a damage number rises and fades like 2D', () => {
+    const f = new Floats(mid);
+    f.add(5 * TILE, 5 * TILE, '12', '#ffffff');
+    const start = only(floatItems(f), 'text')[0];
+    expect(start.text).toBe('12');
+    expect(start.alpha).toBe(1);
+    expect(start.base).toBe('bottom');
+    expect(start.kind).toBe('number');
+    expect(start.stroke).toBe('#000000');
+    expect(start.x).toBe(Math.round(at(5, 5).px));
+    f.update(0.35);
+    const half = only(floatItems(f), 'text')[0];
+    expect(half.alpha).toBe(1);
+    expect(half.y).toBeLessThan(start.y);
+    f.update(0.25);
+    expect(only(floatItems(f), 'text')[0].alpha).toBeLessThan(1);
+    f.update(0.11);
+    expect(floatItems(f)).toEqual([]);
+  });
+  it('rises at -26 art px/s, slowing by 0.92 per update', () => {
+    const f = new Floats(mid);
+    f.add(5 * TILE, 5 * TILE, '1', '#fff');
+    const y0 = only(floatItems(f), 'text')[0].y;
+    f.update(0.1);
+    expect(only(floatItems(f), 'text')[0].y).toBe(Math.round(y0 - 2.6 * ZOOM));
+    f.update(0.1);
+    expect(only(floatItems(f), 'text')[0].y).toBe(Math.round(y0 - (2.6 + 2.6 * 0.92) * ZOOM));
+  });
+  it('a crit pops from 1.4 and is gold', () => {
+    const f = new Floats(mid);
+    f.add(5 * TILE, 5 * TILE, '30', WORLD_TEXT.crit.color, { big: true });
+    const t = only(floatItems(f), 'text')[0];
+    expect(t.scale).toBeCloseTo(1.4, 9);
+    expect(t.color).toBe('#ffd24a');
+    expect(t.kind).toBe('crit');
+    f.update(0.05);
+    expect(only(floatItems(f), 'text')[0].scale).toBeCloseTo(popScale(0.05), 9);
+    f.update(0.1);
+    expect(only(floatItems(f), 'text')[0].scale).toBe(1);
+    // it lives 0.9 s and rises faster (-34)
+    f.update(0.7);
+    expect(floatItems(f)).toHaveLength(1);
+    f.update(0.06);
+    expect(floatItems(f)).toEqual([]);
+  });
+  it('an immune hit reads immune in grey, small', () => {
+    const f = new Floats(mid);
+    f.add(5 * TILE, 5 * TILE, 'immune', '#a0a0a0', { kind: 'small' });
+    const t = only(floatItems(f), 'text')[0];
+    expect(t.text).toBe('immune');
+    expect(t.color).toBe('#a0a0a0');
+    expect(t.kind).toBe('small');
+  });
+  it('starts `up` art px above its spot', () => {
+    const f = new Floats(mid);
+    f.add(5 * TILE, 5 * TILE, 'IMMUNE', '#9ae0ff', { kind: 'small', up: 18 });
+    expect(only(floatItems(f), 'text')[0].y).toBe(Math.round(at(5, 5).py - 18 * ZOOM));
+  });
+  it('spreads the x by up to 3 art px either way', () => {
+    const lo = new Floats(() => 0);
+    const hi = new Floats(() => 1);
+    lo.add(5 * TILE, 5 * TILE, '1', '#fff');
+    hi.add(5 * TILE, 5 * TILE, '1', '#fff');
+    expect(only(floatItems(lo), 'text')[0].x).toBe(Math.round(at(5, 5).px - 3 * ZOOM));
+    expect(only(floatItems(hi), 'text')[0].x).toBe(Math.round(at(5, 5).px + 3 * ZOOM));
+  });
+  it('keeps its ground spot when the camera moves', () => {
+    const f = new Floats(mid);
+    f.add(5 * TILE, 5 * TILE, '9', '#fff');
+    f.update(0.2);
+    const a = only(floatItems(f), 'text')[0];
+    const moved = (x: number, z: number) => ({ px: 300 + x * 40, py: -20 + z * 40 });
+    const b = only(floatItems(f, moved), 'text')[0];
+    expect(b.x).toBe(Math.round(moved(5, 5).px));
+    expect(a.x).toBe(Math.round(at(5, 5).px));
+    // the same rise in screen space on both maps
+    expect(a.y - Math.round(at(5, 5).py)).toBe(b.y - Math.round(moved(5, 5).py));
+  });
+});
+
+const sleeper = (o: Partial<FigureAnchor> = {}): [number, FigureAnchor][] => [[7, anchor({ effects: 1 << EFFECT.Sleep, ...o })]];
+const texts = (m: Marks): Of<'text'>[] => {
+  const out: OverlayItem[] = [];
+  m.layout(at, ZOOM, out);
+  return only(out, 'text');
+};
+
+describe('Marks', () => {
+  it('a sleeper gets a Z every 0.6 s, rising 10 art px over 1.2 s', () => {
+    const m = new Marks();
+    const a = new Map(sleeper());
+    m.update(0.01, a);
+    expect(texts(m)).toHaveLength(1); // the first Z at once
+    const z = texts(m)[0];
+    expect(z.text).toBe('Z');
+    expect(z.kind).toBe('mark');
+    expect(z.color).toBe(SOUND_TEXT.fill);
+    expect(z.stroke).toBe(SOUND_TEXT.stroke);
+    expect(z.base).toBe('bottom');
+    m.update(0.6, a);
+    expect(texts(m)).toHaveLength(2);
+    m.update(0.6, a);
+    // the first two (1.21 s and 1.2 s old) are gone; the newest, 0.6 s old, is half way up and half faded
+    expect(texts(m)).toHaveLength(1);
+    expect(texts(m)[0].alpha).toBeCloseTo(0.5, 5);
+    expect(texts(m)[0].y).toBe(Math.round(at(5, 5).py - (18 + 5) * ZOOM));
+  });
+  it('a Z starts 3 art px right of the foot at the head and sways', () => {
+    const m = new Marks();
+    m.update(0.0001, new Map(sleeper({ head: 18 })));
+    const z = texts(m)[0];
+    expect(z.x).toBe(Math.round(at(5, 5).px + 3 * ZOOM));
+    expect(z.y).toBe(Math.round(at(5, 5).py - 18 * ZOOM));
+    expect(z.alpha).toBeCloseTo(1, 3);
+  });
+  it('a Z is as faint as its figure and stops when the sleep ends', () => {
+    const m = new Marks();
+    m.update(0.0001, new Map(sleeper({ alpha: 0.5 })));
+    expect(texts(m)[0].alpha).toBeCloseTo(0.5, 3);
+    m.update(0.1, new Map([[7, anchor()]]));
+    m.update(0.7, new Map([[7, anchor()]]));
+    expect(texts(m)).toHaveLength(1); // the old one keeps rising, no new one
+  });
+  it('fear and charm sit side by side', () => {
+    const m = new Marks();
+    m.update(0.1, new Map([[7, anchor({ effects: (1 << EFFECT.Fear) | (1 << EFFECT.Charmed), cx: 2, head: 18, alpha: 0.8 })]]));
+    const t = texts(m);
+    const bang = t.find((x) => x.text === '!')!;
+    const heart = t.find((x) => x.text === '♥')!;
+    expect(bang.color).toBe(SOUND_TEXT.fill);
+    expect(heart.color).toBe('#ff80c0');
+    expect(heart.stroke).toBe(SOUND_TEXT.stroke);
+    expect(bang.alpha).toBe(0.8);
+    expect(heart.alpha).toBe(0.8);
+    expect(bang.x).toBe(Math.round(at(5, 5).px + 2 * ZOOM));
+    expect(heart.x).toBe(Math.round(at(5, 5).px + 9 * ZOOM));
+    // 3 art px over the head, bobbing at most 1.5 more
+    expect(at(5, 5).py - bang.y).toBeGreaterThanOrEqual(Math.round((18 + 3) * ZOOM) - 1);
+    expect(at(5, 5).py - bang.y).toBeLessThanOrEqual(Math.round((18 + 4.5) * ZOOM) + 1);
+  });
+  it('charm alone sits on the centre, and no marks without an effect', () => {
+    const m = new Marks();
+    m.update(0.1, new Map([[7, anchor({ effects: 1 << EFFECT.Charmed, cx: 2 })]]));
+    expect(texts(m)).toHaveLength(1);
+    expect(texts(m)[0].x).toBe(Math.round(at(5, 5).px + 2 * ZOOM));
+    const none = new Marks();
+    none.update(0.1, new Map([[7, anchor()]]));
+    expect(texts(none)).toEqual([]);
   });
 });

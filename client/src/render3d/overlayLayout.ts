@@ -1,11 +1,13 @@
 // The overlay's layout (#311): what is drawn over the 3D canvas and where, as plain items in canvas device px. No DOM. The rules
 // are the 2D view's (`drawBarsAndBeams`, the hero name tag and its `TagEffects`, the key cap); each item hangs from a figure's
 // anchor (render3d/figures.ts) projected to the canvas, offset upward by 2D's art-px amounts times `zoom`.
-import { FLAG } from '../generated/defs';
+import { EFFECT, FLAG } from '../generated/defs';
 import { isPlayerKind } from '../game/anim/defs';
 import { barOf } from '../game/barName';
+import { has } from '../game/effectBits';
+import { SOUND_TEXT } from '../game/effects';
 import type { UseHint } from '../game/useHint';
-import { WORLD_TEXT, type WorldTextKind } from '../game/worldText';
+import { CHARM_COLOR, FLOAT, popScale, WORLD_TEXT, Z_EVERY, Z_LIFE, Z_RISE, type WorldTextKind } from '../game/worldText';
 import type { EntState } from '../game/world';
 import { EFFECT_ICON } from '../ui/effectIcons';
 import type { FigureAnchor } from './figures';
@@ -117,5 +119,103 @@ export function layoutUseHint(i: LayoutIn, out: OverlayItem[]): void {
       t: 'text', x: Math.round(x + (CAP_SIZE / 2 + CAP_LABEL_GAP) * i.zoom), y: Math.round(y - (CAP_SIZE / 2) * i.zoom), text: h.label, kind: 'tag',
       color: '#ffffff', stroke: '#000000', alpha: 1, scale: 1, align: 'left', base: 'middle',
     });
+  }
+}
+
+/** A floating number or word, kept at its ground spot (tiles) and rising in screen space; the twin of `Effects.text`. */
+interface Float { x: number; z: number; dx: number; up: number; rise: number; vy: number; age: number; life: number; max: number; pop: boolean; text: string; color: string; stroke: string; kind: WorldTextKind }
+
+export class Floats {
+  private readonly list: Float[] = [];
+
+  /** `rand`: 0..1, for the sideways spread (injected so tests are exact). */
+  constructor(private readonly rand: () => number = Math.random) {}
+
+  /** `x`, `y`: simulation px. `opts.up`: art px above the spot to start (coins 14, IMMUNE 18, the mimic's "!" 18). */
+  add(x: number, y: number, text: string, color: string, opts: { big?: boolean; kind?: WorldTextKind; up?: number; stroke?: string } = {}): void {
+    const { big = false, kind = 'number', up = 0, stroke = '#000000' } = opts;
+    const life = big ? FLOAT.critLife : FLOAT.life;
+    this.list.push({
+      x: x / TILE, z: y / TILE, dx: Math.round(this.rand() * FLOAT.spread - FLOAT.spread / 2), up, rise: 0, vy: big ? FLOAT.critVy : FLOAT.vy,
+      age: 0, life, max: life, pop: big, text, color, stroke, kind: big ? 'crit' : kind,
+    });
+  }
+
+  update(dt: number): void {
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const f = this.list[i];
+      f.life -= dt;
+      if (f.life <= 0) {
+        this.list.splice(i, 1);
+        continue;
+      }
+      f.age += dt;
+      f.rise += f.vy * dt;
+      f.vy *= FLOAT.drag;
+    }
+  }
+
+  layout(at: LayoutIn['at'], zoom: number, out: OverlayItem[]): void {
+    for (const f of this.list) {
+      const p = at(f.x, f.z);
+      out.push({
+        t: 'text', x: Math.round(p.px + f.dx * zoom), y: Math.round(p.py + (f.rise - f.up) * zoom), text: f.text, kind: f.kind, color: f.color, stroke: f.stroke,
+        alpha: Math.min(1, (f.life / f.max) * 2), scale: f.pop ? popScale(f.age) : 1, align: 'center', base: 'bottom',
+      });
+    }
+  }
+}
+
+/** A sleeper's rising Z: born at the figure's spot (tiles), 3 art px right of the foot at the head. */
+interface Zed { x: number; z: number; head: number; age: number }
+/** What the marks need from a figure's anchor, by id. */
+interface MarkState { x: number; z: number; head: number; cx: number; alpha: number; fear: boolean; charm: boolean; zT: number; zs: Zed[] }
+
+/** Sleep Z, fear "!" and charm heart over figures, from the anchors' effect bits: the twin of the marks in `StatusFx`. */
+export class Marks {
+  private clock = 0;
+  private readonly states = new Map<number, MarkState>();
+
+  update(dt: number, anchors: ReadonlyMap<number, FigureAnchor>): void {
+    this.clock += dt;
+    for (const [id, a] of anchors) {
+      let s = this.states.get(id);
+      const sleep = has(a.effects, EFFECT.Sleep);
+      if (!s) {
+        if (!(sleep || has(a.effects, EFFECT.Fear) || has(a.effects, EFFECT.Charmed))) continue;
+        this.states.set(id, (s = { x: a.x, z: a.z, head: a.head, cx: a.cx, alpha: a.alpha, fear: false, charm: false, zT: 0, zs: [] }));
+      }
+      s.x = a.x; s.z = a.z; s.head = a.head; s.cx = a.cx; s.alpha = a.alpha;
+      s.fear = has(a.effects, EFFECT.Fear);
+      s.charm = has(a.effects, EFFECT.Charmed);
+      if (sleep) {
+        s.zT -= dt;
+        if (s.zT <= 0) {
+          s.zT = Z_EVERY;
+          s.zs.push({ x: a.x, z: a.z, head: a.head, age: 0 });
+        }
+      } else s.zT = 0;
+      for (let i = s.zs.length - 1; i >= 0; i--) {
+        s.zs[i].age += dt;
+        if (s.zs[i].age >= Z_LIFE) s.zs.splice(i, 1);
+      }
+      if (!sleep && !s.fear && !s.charm && s.zs.length === 0) this.states.delete(id);
+    }
+    for (const id of this.states.keys()) if (!anchors.has(id)) this.states.delete(id);
+  }
+
+  layout(at: LayoutIn['at'], zoom: number, out: OverlayItem[]): void {
+    const mark = (text: string, color: string, p: { px: number; py: number }, dx: number, up: number, alpha: number): void => {
+      out.push({ t: 'text', x: Math.round(p.px + dx * zoom), y: Math.round(p.py - up * zoom), text, kind: 'mark', color, stroke: SOUND_TEXT.stroke, alpha, scale: 1, align: 'center', base: 'bottom' });
+    };
+    for (const s of this.states.values()) {
+      for (const z of s.zs) {
+        const k = z.age / Z_LIFE;
+        mark('Z', SOUND_TEXT.fill, at(z.x, z.z), 3 + Math.sin(z.age * 5) * 1.5, z.head + k * Z_RISE, (1 - k) * s.alpha);
+      }
+      const foot = at(s.x, s.z);
+      if (s.fear) mark('!', SOUND_TEXT.fill, foot, s.cx, s.head + 3 + Math.abs(Math.sin(this.clock * 9)) * 1.5, s.alpha);
+      if (s.charm) mark('♥', CHARM_COLOR, foot, s.cx + (s.fear ? 7 : 0), s.head + 3 + Math.abs(Math.sin(this.clock * 9 + 1)) * 1.5, s.alpha);
+    }
   }
 }

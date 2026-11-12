@@ -9,6 +9,7 @@ import { VANISH_SECS } from '../game/anim/entityAlpha';
 import { FigureStates } from '../game/anim/figureState';
 import { figurePose, newPoseMemory, type FrameBounds, type PoseMemory, type Tint } from '../game/anim/pose';
 import type { EntState } from '../game/world';
+import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { SHOT_LIFT, snapGround, type Cam } from './camera';
 import { newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
@@ -71,6 +72,8 @@ export interface FigureAnchor {
 export interface FigureOut {
   cards: CardBuf; ghosts: CardBuf; decals: CardBuf; shadows: ShadowBuf; glows: GlowBuf; emissive: CardBuf;
   openers: Opener[];
+  /** Floating words born this frame (the mimic's wake cue): simulation px, `up` art px above the spot. */
+  floats: Array<{ x: number; y: number; text: string; color: string; kind: WorldTextKind; up: number }>;
 }
 
 interface Fig {
@@ -147,7 +150,7 @@ export class Figures3d {
   frame(f: RunFrame, cam: Cam): FigureOut {
     this.now = f.now;
     this.cam = cam;
-    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [] };
+    const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], floats: [] };
     const seen = new Set<number>();
     this.anchors.clear();
     let drawn = 0;
@@ -251,6 +254,8 @@ export class Figures3d {
     const dist = f.own.alive ? Math.hypot(e.x - f.own.x, e.y - f.own.y) : Infinity;
     const s: MimicState = m.tracker.step({ x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim, flags: e.flags }, f.dt, dist);
     const p = mimicPose(s, f.now, m.mem);
+    // 2D's reveal cue: a red "!" 18 px above the chest (the burst is the particles' business, #308).
+    if (p.wakeCue) out.floats.push({ x: e.x, y: e.y, text: '!', color: '#ff5050', kind: 'mark', up: 18 });
     const x = e.x / TILE;
     const z = e.y / TILE;
     const [bx, bz] = this.bodyFoot(x, z, cam);

@@ -10,7 +10,7 @@ import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
 import { project, snapGround, type Cam } from './camera';
-import { Figures3d, screenAim } from './figures';
+import { Figures3d, screenAim, type FigureOut } from './figures';
 import type { FrameRects } from './worldMesh';
 
 const FIG = { w: 16, h: 28 };
@@ -372,6 +372,16 @@ describe('Figures3d anchors (#311)', () => {
     expect(a!.height).toBe(FIG.h * (d.scale ?? 1));
     expect(a!.tag).toBe((d.footY ?? FIG.h) * (d.scale ?? 1) + 3);
     expect(a!.head).toBe(((d.footY ?? FIG.h) - 0) * (d.scale ?? 1));
+  });
+  it("the mimic's wake cue adds a red \"!\"", () => {
+    const fg = make();
+    const mimic = (flags: number) => ent(33, KIND.Mimic, { flags });
+    expect(fg.frame(frame([mimic(FLAG.HIDING)]), cam()).floats).toEqual([]);
+    fg.frame(frame([mimic(0)], { dt: 0.016, now: 10.016 }), cam());
+    let all: FigureOut['floats'] = [];
+    for (let i = 1; i <= 12; i++) all = all.concat(fg.frame(frame([mimic(0)], { dt: 0.1, now: 10.016 + i * 0.1 }), cam()).floats);
+    expect(all).toHaveLength(1); // once, on the reveal frame
+    expect(all[0]).toEqual({ x: at(0), y: 8, text: '!', color: '#ff5050', kind: 'mark', up: 18 });
   });
   it('a chest, a barrel and a mimic anchor at CHEST_HEIGHT', () => {
     const fg = make();

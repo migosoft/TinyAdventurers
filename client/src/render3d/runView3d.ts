@@ -9,7 +9,9 @@ import { followClamp, freeClamp, keysToWorld, type Cam } from './camera';
 import { RunMouse } from './input';
 import { aimGround, toCanvas } from './screen';
 import type { Overlay3d } from './overlay';
-import { layoutBars, layoutHeroTags, layoutUseHint, type LayoutIn, type OverlayItem } from './overlayLayout';
+import { dmgColor } from '../game/damage';
+import { critLabel, WORLD_TEXT } from '../game/worldText';
+import { Floats, layoutBars, layoutHeroTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { View as SightView } from '../sim/view';
 import { Figures3d, type Opener } from './figures';
@@ -70,6 +72,8 @@ export class RunView3d implements RunView {
   private readonly figures: Figures3d;
 
   private readonly heroNames = new Map<number, string>();
+  private readonly floats = new Floats();
+  private readonly marks = new Marks();
 
   /** `overlay`: the layer over the canvas (the stage's; tests pass none). */
   constructor(init: RunViewInit, frames: FrameRects, bounds: (frame: string) => FrameBounds, private readonly overlay: Overlay3d | null = null) {
@@ -179,6 +183,7 @@ export class RunView3d implements RunView {
       return this.stats(c, 0);
     }
     const fo = this.figures.frame(f, cam);
+    for (const w of fo.floats) this.floats.add(w.x, w.y, w.text, w.color, { kind: w.kind, up: w.up });
     this.seen = seenOpeners(fo.openers, this.sightFor(f));
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
@@ -196,6 +201,8 @@ export class RunView3d implements RunView {
 
   /** The overlay over the canvas: bars, names, tags and the use hint, placed from this frame's camera and plan. */
   private paintOverlay(f: RunFrame, c: StageCtx, cam: Cam): void {
+    this.floats.update(f.dt);
+    this.marks.update(f.dt, this.figures.anchors);
     const o = this.overlay;
     if (!o) return;
     o.size(c.canvas.w, c.canvas.h);
@@ -207,6 +214,8 @@ export class RunView3d implements RunView {
     layoutBars(i, items);
     layoutHeroTags(i, items);
     layoutUseHint(i, items);
+    this.marks.layout(i.at, c.zoom, items);
+    this.floats.layout(i.at, c.zoom, items);
     o.paint(items, c.zoom);
   }
 
@@ -224,6 +233,23 @@ export class RunView3d implements RunView {
 
   event(ev: PictureEv, _own: { x: number; y: number }): void {
     this.figures.event(ev);
+    // The floating words, as `PhaserRunView.event` says them.
+    switch (ev.t) {
+      case 'Dmg':
+        if (ev.imm) this.floats.add(ev.x, ev.y, 'immune', '#a0a0a0', { kind: 'small' });
+        else if (ev.crit) this.floats.add(ev.x, ev.y, critLabel(ev.v), WORLD_TEXT.crit.color, { big: true });
+        else this.floats.add(ev.x, ev.y, `${Math.round(ev.v)}`, dmgColor(ev.ty, ev.p));
+        break;
+      case 'Heal':
+        this.floats.add(ev.x, ev.y, `+${Math.round(ev.v)}`, '#60ff80');
+        break;
+      case 'Immune':
+        this.floats.add(ev.x, ev.y, 'IMMUNE', '#9ae0ff', { kind: 'small', up: 18 });
+        break;
+      case 'Coins':
+        this.floats.add(ev.x, ev.y, `+${ev.v} coins`, '#ffd040', { kind: 'small', up: 14 });
+        break;
+    }
   }
 
   tileChanged(x: number, y: number, _v: number): void {

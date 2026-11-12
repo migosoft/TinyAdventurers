@@ -16,6 +16,17 @@ export type WorldTextKind = keyof typeof WORLD_TEXT;
 /** Text texture resolution: at least the camera zoom (2 at 1280 x 720, 4 at 2560 x 1440, 6 at 3840 x 2160; larger zooms upscale a little), so text is never upscaled. */
 export const TEXT_RESOLUTION = 4;
 
+/** The sleeper's Z: one every `Z_EVERY` s, each living `Z_LIFE` s and rising `Z_RISE` px (shared by the 2D and 3D views). */
+export const Z_EVERY = 0.6;
+export const Z_LIFE = 1.2;
+export const Z_RISE = 10;
+
+/** The charm heart's pink. */
+export const CHARM_COLOR = '#ff80c0';
+
+/** A floating number: rise speed (px/s, up is negative), life (s), the speed's decay per update and the sideways spread (px) at birth; crits rise faster and live longer. */
+export const FLOAT = { vy: -26, life: 0.7, critVy: -34, critLife: 0.9, drag: 0.92, spread: 6 } as const;
+
 const POP_FROM = 1.4;
 const POP_TIME = 0.12;
 

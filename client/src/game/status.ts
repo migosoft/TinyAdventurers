@@ -5,7 +5,7 @@
 import Phaser from 'phaser';
 import { EFFECT, EFFECT_LOOK } from '../generated/defs';
 import { FONT_TEXT } from '../fonts';
-import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
+import { CHARM_COLOR, smoothText, TEXT_RESOLUTION, WORLD_TEXT, Z_EVERY, Z_LIFE, Z_RISE } from './worldText';
 import { DEPTH, GLOOM, SOUND_TEXT, type Effects } from './effects';
 
 import { has } from './effectBits';
@@ -94,9 +94,6 @@ export function flameSpots(bodyW: number, bodyH: number, n: number, seed: number
   return out;
 }
 
-const Z_EVERY = 0.6;
-const Z_LIFE = 1.2;
-const Z_RISE = 10;
 const GHOST_EVERY = 0.08;
 const GHOST_LIFE = 0.2;
 const GHOST_TINT = 0xffe680;
@@ -474,7 +471,7 @@ export class StatusView {
     }
     this.charmMark ??= smoothText(
       this.scene.add
-        .text(0, 0, '\u2665', { fontFamily: FONT_TEXT, fontStyle: WORLD_TEXT.mark.style, fontSize: `${WORLD_TEXT.mark.size}px`, resolution: TEXT_RESOLUTION, color: '#ff80c0' })
+        .text(0, 0, '\u2665', { fontFamily: FONT_TEXT, fontStyle: WORLD_TEXT.mark.style, fontSize: `${WORLD_TEXT.mark.size}px`, resolution: TEXT_RESOLUTION, color: CHARM_COLOR })
         .setOrigin(0.5, 1)
         .setStroke(SOUND_TEXT.stroke, 2)
         .setPadding(1),
