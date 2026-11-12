@@ -5,7 +5,7 @@ import { loadAtlas } from '../ui/atlas';
 import { FrameTimer } from '../game/frameTimer';
 import { createPanel } from './panel';
 import { DEFAULTS, parseParams, toSearch, type R3dParams } from './params';
-import { R3D_SYSTEMS, statsText3d, type R3dSystem } from './stats';
+import { R3D_SYSTEMS, lightLines, statsText3d, type R3dSystem } from './stats';
 import { pickZoom, renderPlan, type RenderPlan } from './quality';
 import { frameDt } from './scene';
 import { createRecovery, type Recovery } from './recover';
@@ -22,6 +22,8 @@ declare global {
       hero?: { x: number; z: number }; cam?: { x: number; z: number }; chunks?: { total: number; drawn: number }; figures?: number;
       /** ... and the camera's yaw in whole degrees (-180..180) and the items the overlay painted last frame. */
       yaw?: number; overlay?: number;
+      /** ... and the lights in use of those that reach the screen, and the shadow cards (#304). */
+      lights?: { list: number; inView: number }; casters?: number;
     };
   }
 }
@@ -361,6 +363,7 @@ export async function startHost(
         zoom,
         quality: params.quality,
         backend: backendName,
+        lines: state.lights ? lightLines(state.lights.list, state.lights.inView, state.casters ?? 0, params.lcap, params.ccap) : undefined,
       });
     }
   };

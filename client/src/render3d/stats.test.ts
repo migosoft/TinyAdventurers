@@ -35,6 +35,11 @@ describe('statsText3d', () => {
     ]);
   });
 
+  it('prints the light lines after the systems', () => {
+    const t = statsText3d({ ...base, lines: ['lights     5 of 9 (cap 16)', 'shadows    2 cards (cap 16)'] }).split('\n');
+    expect(t.slice(10, 13)).toEqual(['lights     5 of 9 (cap 16)', 'shadows    2 cards (cap 16)', 'draw calls 6']);
+  });
+
   it('names the systems in order', () => {
     expect(R3D_SYSTEMS).toEqual(['sim', 'cards', 'lights', 'upload', 'scene', 'present', 'hud']);
   });

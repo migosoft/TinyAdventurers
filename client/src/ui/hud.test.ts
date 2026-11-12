@@ -316,6 +316,10 @@ describe('statsText', () => {
     expect(t.endsWith('darkvision 50%')).toBe(true);
   });
 
+  it('prints the view\'s extra lines after the systems', () => {
+    expect(statsText({ ...stats, lines: ['lights     5 of 9 (cap 16)'] }).split('\n').slice(6, 8)).toEqual(['lights     5 of 9 (cap 16)', 'objects    812']);
+  });
+
   it('shows the CSS upscale of a world-resolution canvas', () => {
     expect(statsText({ ...stats, canvas: { w: 640, h: 360, cssZoom: 4 } }).split('\n')[8]).toBe('canvas     640x360 x4 css');
   });

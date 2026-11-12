@@ -250,8 +250,8 @@ describe('the run stage', () => {
     expect(stage.runView.cam.x).toBeGreaterThan(15);
   });
 
-  it('the camera is a lantern light only outside a woodland, with the game light', () => {
-    const { stage, frame, setParams } = setup(ROWS);
+  it('the level\'s lights reach the view with the game light, and none with the work light', () => {
+    const { stage, frame, setParams } = setup(ROWS, { lights: [[1, 0, 0xffa040, 2, 1, true]] });
     const view = fakeView();
     stage.built!(view);
     frame(view);
@@ -263,7 +263,6 @@ describe('the run stage', () => {
     setParams({ light: 'game' });
     frame(view);
     expect(calls[2][0].lights).toHaveLength(1);
-    expect(calls[2][0].lights[0]).toMatchObject({ y: 1.0, radius: 9 });
   });
 
   it('keys: Esc opens the menu, F flips the free camera, Q and E watch only when dead', () => {

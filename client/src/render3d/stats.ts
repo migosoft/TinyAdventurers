@@ -20,9 +20,16 @@ export interface R3dStats {
   zoom: number;
   quality: string;
   backend: string;
+  /** Extra lines after the systems (the run's lights and shadow cards). */
+  lines?: readonly string[];
 }
 
-const UPDATE = new Set<string>(['sim', 'cards', 'lights']);
+/** The readout's two light lines (#304): lights in use of those that reach the screen, and the shadow cards, each with its cap. */
+export function lightLines(list: number, inView: number, casters: number, lcap: number, ccap: number): string[] {
+  return [`lights     ${list} of ${inView} (cap ${lcap})`, `shadows    ${casters} cards (cap ${ccap})`];
+}
+
+const UPDATE =new Set<string>(['sim', 'cards', 'lights']);
 
 export function statsText3d(s: R3dStats): string {
   const ms = (v: number) => `${v.toFixed(2)} ms`;
@@ -33,6 +40,7 @@ export function statsText3d(s: R3dStats): string {
     `render     ${ms(s.renderMs)}\n` +
     `update     ${ms(update)}\n` +
     s.systems.map(([name, v]) => `  ${name.padEnd(9)}${v.toFixed(2)}\n`).join('') +
+    (s.lines ?? []).map((l) => `${l}\n`).join('') +
     `draw calls ${s.drawCalls}\n` +
     `canvas     ${s.canvas[0]}x${s.canvas[1]}\n` +
     `render     ${s.render[0]}x${s.render[1]} (${s.quality})\n` +

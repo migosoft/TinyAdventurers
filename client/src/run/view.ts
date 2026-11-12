@@ -88,6 +88,8 @@ export interface ViewStats {
   objects: number;
   drawCalls: number;
   canvas: { w: number; h: number; cssZoom: number };
+  /** Extra readout lines after the systems (the 3D view's lights and shadow cards). */
+  lines?: readonly string[];
 }
 
 export const NO_STATS: ViewStats = {

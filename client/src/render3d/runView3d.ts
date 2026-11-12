@@ -17,8 +17,12 @@ import { Figures3d, type Opener } from './figures';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { MOVE_KEYS, type StageCtx } from './host';
-import { AMBIENT, WORK_AMBIENT, type Light } from './light';
-import { R3D_SYSTEMS } from './stats';
+import { WORK_AMBIENT, dungeonAmbient } from './light';
+import { SHOT_LIFT } from './camera';
+import { isProjectileKind } from '../game/anim/defs';
+import { KIND } from '../generated/defs';
+import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, type Carrier, type ShadowCaster } from './lights';
+import { R3D_SYSTEMS, lightLines } from './stats';
 import type { View } from './view';
 import type { FrameRects } from './worldMesh';
 
@@ -84,7 +88,18 @@ export class RunView3d implements RunView {
     this.sight = new SightView(init.map.w, init.map.h);
     this.woodland = !!init.info.woodland;
     this.figures = new Figures3d(init, frames, bounds);
+    this.field = init.light;
+    this.lava = new Float32Array(init.map.w * init.map.h * 4);
   }
+
+  // The game's lights (#304): the field of the static ones, the torch flames' walls, and the lava texels (refilled when the field changes).
+  private readonly field: RunViewInit['light'];
+  private readonly pairs = new TorchPairs();
+  private readonly lava: Float32Array;
+  private lavaSeen = -1;
+  private lavaVersion = 0;
+  /** The lights and casters of the last frame, for the readout and `window.__r3d`: the list, all that reach the screen, the casters. */
+  lightStat: { list: number; inView: number; casters: number } | null = null;
 
   /** What may open walls this frame and stands where the followed hero sees (for the wall openings, #303 Task 8). */
   seen: Opener[] = [];
@@ -189,17 +204,42 @@ export class RunView3d implements RunView {
       return this.stats(c, 0);
     }
     const work = this.woodland || c.params.light === 'work';
-    const ambient = work ? WORK_AMBIENT : AMBIENT;
+    const ambient = work ? WORK_AMBIENT : dungeonAmbient(c.params.amb);
     const fo = this.figures.frame(f, cam, { ambient, dark: c.params.dark, torchGlow: work });
     for (const w of fo.floats) this.floats.add(w.x, w.y, w.text, w.color, { kind: w.kind, up: w.up });
     this.seen = seenOpeners(fo.openers, this.sightFor(f), f.dark);
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
-    const lights: Light[] = work ? [] : [{ x: cam.x, y: 1.0, z: cam.z, radius: 9, r: 1.0, g: 0.82, b: 0.55, shadow: c.params.shadows, skip: -1 }];
+    let lights: ReturnType<typeof selectLights>['list'] = [];
+    let casters: ShadowCaster[] = [];
+    let lava: Float32Array | null = null;
+    let darkvision: { x: number; z: number; reach: number } | null = null;
+    this.lightStat = null;
+    if (!work) {
+      const focus = { x: f.camera.x / TILE, z: f.camera.y / TILE };
+      for (const e of f.ents.values()) if (e.kind === KIND.Torch) this.pairs.see(e);
+      const cands = [
+        ...staticCands(this.field, this.pairs, this.map, c.now),
+        ...movingCands(f.snap?.lights ?? [], f.snap?.ents ?? [], (id) => this.carrier(f, id), c.now),
+      ];
+      const sel = selectLights(cands, footprint(cam, c.plan.halfW, c.plan.halfH), focus, c.params.lcap);
+      lights = sel.list;
+      casters = selectCasters(fo.casters, lights, c.params.ccap);
+      assignSkips(lights, carrierMap(lights), casters);
+      if (this.field.version !== this.lavaSeen) {
+        this.lavaSeen = this.field.version;
+        lavaTexels(this.field, this.map, this.lava);
+        this.lavaVersion++;
+      }
+      lava = this.lava;
+      const me = f.snap?.me;
+      if (me && me.darkvision > 0) darkvision = { x: focus.x, z: focus.z, reach: (me.darkvision / 100) * me.vision };
+      this.lightStat = { list: lights.length, inView: sel.inView, casters: casters.length };
+    }
     c.timer.lap('lights');
     c.timer.renderStart();
     this.drawCalls = view.draw(
-      { cam, plan: c.plan, dynamic, lights, ambient, lava: null, lavaVersion: 0, darkvision: null, casters: [], shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: this.seen, look: seeLook(c.params) } },
+      { cam, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: this.seen, look: seeLook(c.params) } },
       c.timer,
     );
     this.paintOverlay(f, c, cam);
@@ -233,8 +273,20 @@ export class RunView3d implements RunView {
     return this.overlayCount;
   }
 
+  /** Where the figure of entity `id` is drawn this frame (tiles) and the height of its card's centre: the own hero from `f.own`, else its anchor or the interpolated entity. */
+  private carrier(f: RunFrame, id: number): Carrier | null {
+    const a = this.figures.anchors.get(id);
+    const e = f.ents.get(id);
+    const y = e && isProjectileKind(e.kind) ? SHOT_LIFT : a ? a.height / 2 / TILE : 0.5;
+    if (id === f.you) return { id, x: f.own.x / TILE, z: f.own.y / TILE, y };
+    if (a) return { id, x: a.x, z: a.z, y };
+    return e ? { id, x: e.x / TILE, z: e.y / TILE, y } : null;
+  }
+
   private stats(c: StageCtx, objects: number): ViewStats {
+    const ls = this.lightStat;
     return {
+      lines: ls ? lightLines(ls.list, ls.inView, ls.casters, c.params.lcap, c.params.ccap) : undefined,
       fps: this.fps,
       wholeMs: c.timer.frameMs,
       renderMs: c.timer.renderMs,

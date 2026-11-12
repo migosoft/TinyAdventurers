@@ -34,6 +34,8 @@ export interface FrameStats {
   drawCalls: number;
   /** The canvas's pixel size and its CSS upscale (above 1 only with `?res=world`, #295). */
   canvas: { w: number; h: number; cssZoom: number };
+  /** Extra lines after the systems (the 3D view's lights and shadow cards). */
+  lines?: readonly string[];
   rtt: number;
   jitter: number;
   interp: number;
@@ -58,6 +60,7 @@ export function statsText(f: FrameStats): string {
     `render     ${ms(f.renderMs)}\n` +
     `update     ${ms(f.frameMs)}\n` +
     f.systems.map(([name, v]) => `  ${name.padEnd(9)}${v.toFixed(2)}\n`).join('') +
+    (f.lines ?? []).map((l) => `${l}\n`).join('') +
     `objects    ${f.objects}\n` +
     `draw calls ${f.drawCalls}\n` +
     `canvas     ${f.canvas.w}x${f.canvas.h}${f.canvas.cssZoom === 1 ? '' : ` x${f.canvas.cssZoom} css`}\n` +

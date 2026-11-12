@@ -180,6 +180,9 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         r.cam = runView.cam;
         r.figures = runView.figureCount;
         r.overlay = runView.overlayItems;
+        const ls = runView.lightStat;
+        r.lights = ls ? { list: ls.list, inView: ls.inView } : undefined;
+        r.casters = ls?.casters;
         r.yaw = whole;
         if (c.view) r.chunks = c.view.chunks;
       }
