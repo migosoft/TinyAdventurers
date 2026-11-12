@@ -47,10 +47,10 @@ export interface PoseInput extends ViewState {
   screenAim: number;
 }
 
-/** A frame's opaque bounds and, when known, its size (px); the size defaults to 16 x 16. */
+/** A frame's opaque bounds and its size (px). */
 export interface FrameBounds extends Bounds {
-  w?: number;
-  h?: number;
+  w: number;
+  h: number;
 }
 
 export interface PoseMemory {
@@ -214,7 +214,7 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
   if (stone || iced) frame = m.heldFrame ??= frame;
   else m.heldFrame = null;
   const fb = bounds(frame);
-  const fw = fb.w ?? 16;
+  const fw = fb.w;
   const originX = originXOf(d, fw, left);
   // Flying: the body rises above its shadow, which shrinks a little.
   const lift = own?.lift ?? 0;
@@ -227,7 +227,7 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
   // Drowning: the figure sinks until it is fully below the surface.
   const fall = s.fall ?? 0;
   const drown = s.drown ?? 0;
-  const foot = d.footY ?? fb.h ?? 16;
+  const foot = d.footY ?? fb.h;
   const sink = Math.min(foot, Math.round((s.sink ?? 0) + drown * (foot + 2)));
   const scale = (d.scale ?? 1) * (1 - fall * 0.2);
   const figureAlpha = fall > 0.7 ? 1 - (fall - 0.7) / 0.3 : 1;

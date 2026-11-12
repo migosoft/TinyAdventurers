@@ -18,8 +18,8 @@ declare global {
   interface Window {
     __r3d?: {
       backend: string; frames: number; renderSize: [number, number]; zoom: number; forceLoss?: () => boolean;
-      /** A run's stage adds these: the own hero and the camera target (tiles), and the view's chunk meshes. */
-      hero?: { x: number; z: number }; cam?: { x: number; z: number }; chunks?: { total: number; drawn: number };
+      /** A run's stage adds these: the own hero and the camera target (tiles), the view's chunk meshes and the figures drawn last frame. */
+      hero?: { x: number; z: number }; cam?: { x: number; z: number }; chunks?: { total: number; drawn: number }; figures?: number;
     };
   }
 }

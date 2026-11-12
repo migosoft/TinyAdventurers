@@ -4,7 +4,7 @@ import { FIGURES } from './defs';
 import { figurePose, newPoseMemory, type PoseInput, type PoseMemory } from './pose';
 import { SILHOUETTE_FILL, silhouetteAlpha } from '../shadeHaze';
 
-const bounds = () => ({ l: 3, r: 12, t: 4 });
+const bounds = () => ({ l: 3, r: 12, t: 4, w: 16, h: 16 });
 const KNIGHT = FIGURES[KIND.Knight];
 const PALADIN = FIGURES[KIND.Paladin];
 const SHADE = FIGURES[KIND.Shade];

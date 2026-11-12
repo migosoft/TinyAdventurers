@@ -5,6 +5,7 @@ import type { RunStartInfo } from '../generated/RunStartInfo';
 import { TILE } from '../sim/map';
 import { RunSession, type FrameClock, type HudLike, type NetLike } from '../run/session';
 import type { StepInput } from '../run/input';
+import { atlasBounds } from './atlasBounds';
 import { GROUND_BUDGET_MS, groundJob, type GroundJob } from './groundJob';
 import { MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './host';
 import { WOODLAND_CLEAR } from './light';
@@ -71,7 +72,7 @@ export interface RunStage extends Stage {
  */
 export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, host: Host, el: HTMLElement, onLoop: () => void = () => {}): RunStage {
   const { session } = run;
-  const runView = new RunView3d(session.viewInit(), assets.frames);
+  const runView = new RunView3d(session.viewInit(), assets.frames, atlasBounds(assets.image, assets.frames));
   session.setView(runView);
   const job = info.woodland ? groundJob(session.map, info.woodland.seed, info.spawn_y / TILE) : null;
   // A ground too large for the device: shown once, the run keeps its flat grass.
@@ -124,6 +125,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       if (r) {
         r.hero = runView.hero;
         r.cam = runView.cam;
+        r.figures = runView.figureCount;
         if (c.view) r.chunks = c.view.chunks;
       }
       return runView.drawCalls;

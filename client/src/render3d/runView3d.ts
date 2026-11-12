@@ -1,12 +1,12 @@
 // The 3D view of a run (#302): a `RunView` for the Phaser-free session. The camera follows the own hero (or the spectated
-// teammate) or flies free, the own hero is a stand-in card, and the lights come from the page's parameters. The three.js
+// teammate) or flies free, the figures and shots are cards (`Figures3d`), and the lights come from the page's parameters. The three.js
 // `View` comes and goes (a lost device), so it is attached and detached from outside.
-import { ANIM } from '../generated/defs';
-import { FIGURES } from '../game/anim/defs';
+import type { FrameBounds } from '../game/anim/pose';
 import { dir8 } from '../run/input';
 import { NO_STATS, type PictureEv, type RunFrame, type RunView, type RunViewInit, type ShotView, type ViewStats } from '../run/view';
-import { facesLeft, followClamp, freeClamp, keysToWorld, type Cam } from './camera';
-import { cardQuads, emptyGlows, emptyQuads, emptyShadows, type Dynamic } from './cards';
+import { followClamp, freeClamp, keysToWorld, type Cam } from './camera';
+import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
+import { Figures3d } from './figures';
 import { MOVE_KEYS, type StageCtx } from './host';
 import { AMBIENT, WORK_AMBIENT, type Light } from './light';
 import { R3D_SYSTEMS } from './stats';
@@ -37,13 +37,6 @@ export function moveInput(held: ReadonlySet<string>, yawRad: number): { mx: -1 |
   return dir8(w.x, w.z);
 }
 
-/** The own hero's stand-in card: the class's idle or run frame from the pack, no weapon. Idle 5 per second, run 9 per second, 4 frames. */
-export function heroFrame(kind: number, moving: boolean, t: number): string {
-  const def = FIGURES[kind];
-  const n = Math.floor(t * (moving ? 9 : 5)) % 4;
-  return `${moving ? def.run : def.idle}${n}`;
-}
-
 export class RunView3d implements RunView {
   /** Draw calls of the last frame. */
   drawCalls = 0;
@@ -55,16 +48,20 @@ export class RunView3d implements RunView {
   private c: StageCtx | null = null;
   private fast = false;
   private started = false;
-  private flip = false;
   private fps = 0;
   private readonly map: RunViewInit['map'];
   private readonly woodland: boolean;
-  private readonly kind: number;
+  private readonly figures: Figures3d;
 
-  constructor(init: RunViewInit, private readonly frames: FrameRects) {
+  constructor(init: RunViewInit, frames: FrameRects, bounds: (frame: string) => FrameBounds) {
     this.map = init.map;
     this.woodland = !!init.info.woodland;
-    this.kind = init.myKind;
+    this.figures = new Figures3d(init, frames, bounds);
+  }
+
+  /** Figures drawn last frame (for `window.__r3d`). */
+  get figureCount(): number {
+    return this.figures.count;
   }
 
   /** The three.js view of the moment (null while it is restored). */
@@ -87,14 +84,9 @@ export class RunView3d implements RunView {
     const dt = f.dt;
     if (dt > 0) this.fps = this.fps === 0 ? 1 / dt : this.fps * 0.9 + (1 / dt) * 0.1;
 
-    // The own hero: where it stands, which way it last moved, whether it moves now.
-    const hx = f.own.x / TILE;
-    const hz = f.own.y / TILE;
-    // The session decides (as the Phaser view's figure does from the same OwnHero): the run frame for Move and Dash, idle for
-    // everything else (the card has no action frames); the facing follows the aim.
-    const moving = f.own.anim === ANIM.Move || f.own.anim === ANIM.Dash;
-    this.hero.x = hx;
-    this.hero.z = hz;
+    // The own hero, for `window.__r3d`.
+    this.hero.x = f.own.x / TILE;
+    this.hero.z = f.own.y / TILE;
 
     // The camera.
     const tx = f.camera.x / TILE;
@@ -136,9 +128,8 @@ export class RunView3d implements RunView {
       this.drawCalls = 0;
       return this.stats(c, 0);
     }
-    this.flip = facesLeft(yaw, Math.cos(f.own.aim), Math.sin(f.own.aim), this.flip);
-    const cards = f.own.alive ? cardQuads([{ frame: heroFrame(this.kind, moving, f.now), x: hx, z: hz, flip: this.flip }], this.frames, cam) : emptyQuads();
-    const dynamic: Dynamic = { cards, ghosts: emptyQuads(), decals: emptyQuads(), shadows: emptyShadows(), emissive: emptyQuads(), glows: emptyGlows() };
+    const fo = this.figures.frame(f, cam);
+    const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     const work = this.woodland || c.params.light === 'work';
     const lights: Light[] = work ? [] : [{ x: cam.x, y: 1.0, z: cam.z, radius: 9, r: 1.0, g: 0.82, b: 0.55, shadow: c.params.shadows }];
@@ -163,13 +154,17 @@ export class RunView3d implements RunView {
     };
   }
 
-  event(_ev: PictureEv, _own: { x: number; y: number }): void {}
+  event(ev: PictureEv, _own: { x: number; y: number }): void {
+    this.figures.event(ev);
+  }
 
   tileChanged(x: number, y: number, _v: number): void {
     this.v?.tileChanged(x, y);
   }
 
-  shotEnded(_shot: ShotView, _how: 'wall' | 'enemy' | 'gone'): void {}
+  shotEnded(shot: ShotView, _how: 'wall' | 'enemy' | 'gone'): void {
+    this.figures.shotEnded(shot);
+  }
 
   pointerWorld(): { x: number; y: number } | null {
     return null;

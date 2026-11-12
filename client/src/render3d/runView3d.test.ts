@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { KIND } from '../generated/defs';
 import { keysToWorld } from './camera';
-import { heroFrame, moveInput } from './runView3d';
+import { moveInput } from './runView3d';
 
 const deg = (d: number): number => (d * Math.PI) / 180;
 
@@ -29,17 +28,5 @@ describe('moveInput', () => {
   });
   it('nothing held is still', () => {
     expect(moveInput(new Set(), deg(30))).toEqual({ mx: 0, my: 0 });
-  });
-});
-
-describe('heroFrame', () => {
-  it('names the class idle and run frames, 5 and 9 per second', () => {
-    expect(heroFrame(KIND.Paladin, false, 0)).toBe('knight_m_idle_anim_f0');
-    expect(heroFrame(KIND.Paladin, true, 0.12)).toBe('knight_m_run_anim_f1');
-    expect(heroFrame(KIND.Paladin, false, 0.45)).toBe('knight_m_idle_anim_f2');
-    expect(heroFrame(KIND.Wizard, true, 0)).toBe('wizzard_m_run_anim_f0');
-  });
-  it('wraps after four frames', () => {
-    expect(heroFrame(KIND.Paladin, false, 0.8)).toBe('knight_m_idle_anim_f0');
   });
 });

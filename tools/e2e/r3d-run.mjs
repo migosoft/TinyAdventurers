@@ -20,7 +20,7 @@ page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 // The first /api/me before logging in is an expected 401.
 page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(`console: ${m.text()}`));
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z); // window.__r3d.hero / cam are {x, z} in tiles
-const r3d = () => page.evaluate(() => ({ hero: window.__r3d?.hero, cam: window.__r3d?.cam, chunks: window.__r3d?.chunks, frames: window.__r3d?.frames }));
+const r3d = () => page.evaluate(() => ({ hero: window.__r3d?.hero, cam: window.__r3d?.cam, chunks: window.__r3d?.chunks, frames: window.__r3d?.frames, figures: window.__r3d?.figures }));
 let registered = false;
 
 try {
@@ -44,6 +44,9 @@ try {
   await page.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 60000 });
   if ((await page.locator('#game canvas').count()) !== 1) errors.push('expected exactly one canvas in #game (the 3D one)');
   await page.screenshot({ path: `${out}/r3d-run-${level}.png` });
+  const figures = (await r3d()).figures;
+  console.log(`figures drawn ${figures}`);
+  if (!(figures >= 1)) errors.push(`no figure drawn (window.__r3d.figures = ${figures})`);
 
   // Hold D: the hero walks.
   const h0 = (await r3d()).hero;
