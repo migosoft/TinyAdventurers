@@ -1,5 +1,6 @@
 // Headless load check of the 3D renderer page (?r3d): waits for drawn frames, prints the backend, saves a screenshot.
-// Usage: node r3d-shot.mjs [baseUrl] [outDir] [extraQuery] [mode] [lose]
+// Usage: node r3d-shot.mjs [baseUrl] [outDir] [extraQuery] [mode] [lose] [page]
+// page: demo (default) or gallery (?r3d=gallery, #303).
 // mode: webgl (default, SwiftShader GL) or webgpu (SwiftShader Vulkan).
 // lose: after the first screenshot the device is lost on purpose (window.__r3d.forceLoss()); the script waits up to 20 s
 // for 10 more drawn frames and saves r3d-after-loss.png. Console errors containing "Device Lost" are ignored in this mode.
@@ -10,6 +11,7 @@ const out = process.argv[3] ?? 'shots';
 const extra = process.argv[4] ?? '';
 const mode = process.argv[5] || 'webgl';
 const lose = process.argv[6] ?? '';
+const page = process.argv[7] || 'demo'; // demo (default) or gallery
 const args =
   mode === 'webgpu'
     ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-vulkan=swiftshader', '--use-webgpu-adapter=swiftshader']
@@ -23,7 +25,7 @@ const errs = [];
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
 p.on('pageerror', (e) => errs.push(e.message));
 p.on('console', (m) => m.type() === 'error' && !(lose && m.text().includes('Device Lost')) && errs.push(m.text()));
-await p.goto(`${base}?r3d=demo${extra}`);
+await p.goto(`${base}?r3d=${page}${extra}`);
 let ok = true;
 try {
   await p.waitForFunction(() => window.__r3d?.frames > 10, null, { timeout: 20000 });

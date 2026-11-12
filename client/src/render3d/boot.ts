@@ -6,6 +6,7 @@ import type { ServerMsg } from '../generated/ServerMsg';
 import type { Net } from '../net';
 import type { Hud } from '../ui/hud';
 import { createDemoStage } from './demoStage';
+import { createGalleryStage } from './galleryStage';
 import { parseParams } from './params';
 import { clearErrors, startHost, type Host } from './host';
 import { createRunStage, newRun } from './runStage';
@@ -13,6 +14,14 @@ import { createRunStage, newRun } from './runStage';
 export async function bootDemo(el: HTMLElement, search: string): Promise<void> {
   const p = parseParams(search);
   await startHost(el, search, 'demo', (assets) => createDemoStage(assets, p));
+}
+
+/** `?r3d=gallery` (#303): every figure kind and state, the world objects and a corridor behind a wall, no server needed. */
+export async function bootGallery(el: HTMLElement, search: string): Promise<void> {
+  // The stage is wide: unless the URL picks a zoom, the picture is twice the pixel size, not the auto zoom's 4.
+  const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets) => createGalleryStage(assets, p, s));
 }
 
 export interface Run3d {

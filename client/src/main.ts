@@ -35,7 +35,7 @@ import { Lobby } from './ui/lobby';
 import { logoHeader } from './ui/logo';
 import { Roster } from './ui/roster';
 import { loadFonts } from './fonts';
-import { isR3dDemo, wants3d } from './r3dFlag';
+import { isR3dDemo, r3dPage, wants3d } from './r3dFlag';
 import './style.css';
 import './ui/screens.css';
 
@@ -134,8 +134,8 @@ async function main(): Promise<void> {
   if (isR3dDemo(location.search)) {
     const host = document.getElementById('game')!;
     host.classList.add('active');
-    const { bootDemo } = await import('./render3d/boot');
-    return bootDemo(host, location.search);
+    const { bootDemo, bootGallery } = await import('./render3d/boot');
+    return (r3dPage(location.search) === 'gallery' ? bootGallery : bootDemo)(host, location.search);
   }
   if (q.has('gallery') || Object.keys(DEMOS).some((k) => q.has(k))) return gallery();
   const ui = document.getElementById('ui')!;
