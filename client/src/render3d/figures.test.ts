@@ -194,6 +194,17 @@ describe('Figures3d', () => {
     expect(mid(xs(b.cards)) - mid(xs(a.cards))).toBeCloseTo(3 / 16, 6);
   });
 
+  it('keeps a wading figure an opener, but not one that falls or drowns (Task 7 fix)', () => {
+    const wade = make().frame(frame([ent(10, KIND.Knight, { x: at(3), side: SIDE.Friendly })]), cam());
+    expect(wade.openers.map((o) => o.id)).toEqual([10]);
+    const fell = make();
+    fell.event({ t: 'Sink', id: 11, x: at(2), y: 8, how: 0 });
+    expect(fell.frame(frame([ent(11, KIND.Knight, { x: at(2), side: SIDE.Friendly })]), cam()).openers).toEqual([]);
+    const drowned = make();
+    drowned.event({ t: 'Sink', id: 12, x: at(1), y: 8, how: 1 });
+    expect(drowned.frame(frame([ent(12, KIND.Knight, { x: at(1), side: SIDE.Friendly })]), cam()).openers).toEqual([]);
+  });
+
   it('cuts the body of a wading knight by the sink and lowers it by the same', () => {
     const dry = make().frame(frame([ent(10, KIND.Knight, { x: at(0) })]), cam());
     const wet = make().frame(frame([ent(10, KIND.Knight, { x: at(3) })]), cam());

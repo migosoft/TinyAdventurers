@@ -52,7 +52,7 @@ export function screenAim(yaw: number, aim: number): number {
 }
 
 /** Something that may open walls this frame (#303 Task 7): its foot in tiles, its middle height in tiles, and why. */
-export interface Opener { id: number; x: number; z: number; mid: number; who: 'hero' | 'enemy' | 'friend' | 'chest' | 'mimic' | 'neutral' | 'object' }
+export interface Opener { id: number; x: number; z: number; mid: number; who: 'hero' | 'enemy' | 'friend' | 'chest' | 'mimic' | 'object' }
 
 export interface FigureOut {
   cards: CardBuf; ghosts: CardBuf; decals: CardBuf; shadows: ShadowBuf; glows: GlowBuf; emissive: CardBuf;
@@ -362,7 +362,8 @@ export class Figures3d {
     }
 
     const height = Math.max(0, pose.footY - fb.t - pose.sink) * sc;
-    this.opener(e, pose.sink > 0 || pose.drop > 0, x, z, pose.lie ? 0.15 : height / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : e.side === SIDE.Friendly ? 'friend' : 'neutral', out);
+    // Falling or drowning stops it opening walls; wading (pose.sink) does not.
+    this.opener(e, this.states.sinking(e.id), x, z, pose.lie ? 0.15 : height / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : 'friend', out);
     return true;
   }
 
