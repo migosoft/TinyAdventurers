@@ -1,8 +1,12 @@
 // Camera maths of the 3D view. World units are tiles: x east, z south, y up.
 // Pitch is the angle between the view direction and the ground; yaw turns the
 // view about the vertical axis. All angles are radians.
+import { SHOT_LIFT_PX } from '../run/aim';
 
 export const ART = 16; // art px per tile
+
+/** Height (tiles) of a shot above the ground: the one shot height of the cards and the aim (#311). */
+export const SHOT_LIFT = SHOT_LIFT_PX / ART;
 
 export interface Cam { x: number; z: number; pitch: number; yaw: number }
 

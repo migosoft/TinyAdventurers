@@ -10,7 +10,7 @@ import { FigureStates } from '../game/anim/figureState';
 import { figurePose, newPoseMemory, type FrameBounds, type PoseMemory, type Tint } from '../game/anim/pose';
 import type { EntState } from '../game/world';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
-import { snapGround, type Cam } from './camera';
+import { SHOT_LIFT, snapGround, type Cam } from './camera';
 import { newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { torchFlicker } from './light';
 import { opensWalls } from './openers';
@@ -24,8 +24,6 @@ const SHADOW_ALPHA = 0.45;
 /** A dash afterimage lives this long (s) and starts at half alpha. */
 const AFTER_SECS = 0.25;
 const AFTER_ALPHA = 0.5;
-/** Height (tiles) of a shot above the ground: 2D draws them 8 px up. */
-const SHOT_LIFT = 0.5;
 /** Skull tokens kept (the oldest go first). */
 const SKULL_CAP = 256;
 /** The torch's flame frames, and how far in front of its wall face the card hangs (tiles). */
