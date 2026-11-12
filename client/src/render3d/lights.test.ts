@@ -52,6 +52,17 @@ describe('TorchPairs', () => {
     expect(w.x).toBeCloseTo(3.5, 6);
     expect(w.phase).toBeCloseTo(7 * 1.7, 9);
   });
+  it('replaces a guess once the torch entity is seen', () => {
+    const tp = new TorchPairs();
+    const map = mapOf(['....', '.#..', '....']);
+    const light = { id: 3, kind: 0, colour: 0, x: 1, y: 2, on: true };
+    const guess = tp.wallOf(light, map);
+    expect(guess.phase).toBeCloseTo(3 * 1.7, 9);
+    tp.see(torchEnt(9, 1 * 16 + 0.5, 2.5 * 16, 1));
+    const seen = tp.wallOf(light, map);
+    expect(seen.nx).toBe(1);
+    expect(seen.phase).toBeCloseTo(9 * 1.7, 9);
+  });
   it('remembers West and East sides', () => {
     const tp = new TorchPairs();
     const map = open();
@@ -141,8 +152,22 @@ describe('movingCands', () => {
     expect(out[0].z).toBeCloseTo(5, 6);
     expect(out[0].y).toBe(FLASH_Y);
     expect(out[1].y).toBe(0.5);
-    expect(out[0].id).not.toBe(out[1].id);
-    expect(out[0].id.startsWith('m')).toBe(true);
+    expect(out[0].id).toBe('p4:160:80');
+    expect(out[1].id).toBe('p3:32:48');
+  });
+  it('names several lights on one carrier uniquely, in snapshot order, whatever the list index', () => {
+    const snap: MovingLight[] = [[10, 10, LIGHT_KIND.Magic, null], [10, 10, LIGHT_KIND.Fire, null], [10, 11, LIGHT_KIND.Holy, null]];
+    const car = (id: number): { id: number; x: number; z: number; y: number } | null => (id === 5 ? { id: 5, x: 1, z: 1, y: 0.5 } : null);
+    const out = movingCands(snap, [ent(5, 10, 10)], car, 0);
+    expect(out.map((c) => c.id)).toEqual(['m5', 'm5.1', 'm5.2']);
+    const again = movingCands([snap[2], snap[0]], [ent(5, 10, 10)], car, 0);
+    expect(again.map((c) => c.id)).toEqual(['m5', 'm5.1']);
+  });
+  it('falls back to the snapshot spot when the carrier is not drawn', () => {
+    const out = movingCands([[48, 64, LIGHT_KIND.Magic, null]], [ent(9, 48, 64)], () => null, 0);
+    expect(out[0].x).toBeCloseTo(3, 6);
+    expect(out[0].z).toBeCloseTo(4, 6);
+    expect(out[0].y).toBe(0.5);
   });
 });
 
@@ -158,7 +183,7 @@ describe('footprint', () => {
 });
 
 describe('selectLights', () => {
-  const cand = (id: string, x: number, z: number, radius = 3, r = 1): Cand => ({ id, kind: 0, x, y: 1, z, radius, r, g: 0, b: 0, shadow: true, skip: -1 });
+  const cand = (id: string, x: number, z: number, radius = 3, r = 1): Cand => ({ id, kind: 0, x, y: 1, z, radius, r, g: 0, b: 0, shadow: true, skip: -1, base: r });
   const fp = { x0: 0, z0: 0, x1: 20, z1: 20 };
   const twenty = Array.from({ length: 20 }, (_, i) => cand(`s${i}`, 5 + (i % 5) * 2, 5 + Math.floor(i / 5) * 2));
   it('caps equal lights deterministically in any order', () => {
@@ -176,6 +201,20 @@ describe('selectLights', () => {
     expect(out.list.map((c) => c.id)).toEqual(['touch']);
     expect(out.inView).toBe(1);
     expect(3 + LIGHT_MARGIN).toBe(3.5);
+  });
+  it('ranks by the unflickered brightness, so the cap does not flutter', () => {
+    const map = open();
+    const field = new LightField(map);
+    field.add({ id: 1, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 5, y: 5, on: true });
+    field.add({ id: 2, kind: LIGHT_KIND.Fire, colour: LIGHT[2].colour, x: 5, y: 7, on: true });
+    const tp = new TorchPairs();
+    const picks = new Set<string>();
+    for (const t of [0, 0.3, 0.9, 1.7, 2.9, 4.1]) {
+      const cands = staticCands(field, tp, map, t);
+      expect(cands[0].base).toBe(cands[1].base);
+      picks.add(selectLights(cands, fp, { x: 0, z: 0 }, 1).list[0].id);
+    }
+    expect(picks.size).toBe(1);
   });
   it('prefers the light with the focus in reach', () => {
     const near = cand('b', 10, 10, 3);

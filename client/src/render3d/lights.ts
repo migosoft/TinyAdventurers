@@ -68,7 +68,7 @@ export class TorchPairs {
 }
 
 /** A light that may enter the list: its id is stable (`s<lightId>`, `m<entityId>` or `m<n>`). */
-export interface Cand extends Light { id: string; kind: number }
+export interface Cand extends Light { id: string; kind: number; /** The brightness without flicker: what `selectLights` ranks by, so the choice does not flutter. */ base: number }
 
 /** Every light of the field that is on, except lava (its glow is the ground's own). Torches sit at their flame. */
 export function staticCands(field: LightField, torches: TorchPairs, map: TileMap, t: number): Cand[] {
@@ -83,11 +83,12 @@ export function staticCands(field: LightField, torches: TorchPairs, map: TileMap
       const w = torches.wallOf(l, map);
       ph = w.phase;
       x = w.x + w.nx * TORCH_STAND + 0.03 * Math.sin(13 * t + ph);
-      z = w.z + w.nz * TORCH_STAND + 0.03 * Math.sin(17 * t + ph);
-      y = TORCH_MID;
+      z = w.z + w.nz * TORCH_STAND;
+      y = TORCH_MID + 0.03 * Math.sin(17 * t + ph);
     } else if (l.kind === LIGHT_KIND.Daylight) y = DAYLIGHT_Y;
     const [r, g, b] = lightRgb(l.kind, l.colour, lightFlicker(l.kind, t, ph));
-    out.push({ id: `s${l.id}`, kind: l.kind, x, y, z, radius: LIGHT[l.kind].radius, r, g, b, shadow: true, skip: -1 });
+    const base = Math.max(...lightRgb(l.kind, l.colour, 1));
+    out.push({ id: `s${l.id}`, kind: l.kind, x, y, z, radius: LIGHT[l.kind].radius, r, g, b, shadow: true, skip: -1, base });
   }
   return out;
 }
@@ -98,7 +99,14 @@ export interface Carrier { id: number; x: number; z: number; y: number }
 /** The snapshot's moving lights as candidates, each tied to the nearest entity within `CARRY_PX` and moving with its drawn figure. */
 export function movingCands(moving: readonly MovingLight[], snapEnts: readonly EntSnap[], drawn: (id: number) => Carrier | null, t: number): Cand[] {
   const out: Cand[] = [];
-  moving.forEach(([px, py, kind, colour], n) => {
+  const used = new Map<string, number>();
+  /** The first light of a name keeps it; later ones get `.1`, `.2` in snapshot order. */
+  const unique = (name: string): string => {
+    const n = used.get(name) ?? 0;
+    used.set(name, n + 1);
+    return n === 0 ? name : `${name}.${n}`;
+  };
+  for (const [px, py, kind, colour] of moving) {
     let best: EntSnap | null = null;
     let bd = CARRY_PX;
     for (const e of snapEnts) {
@@ -115,21 +123,22 @@ export function movingCands(moving: readonly MovingLight[], snapEnts: readonly E
     let z: number;
     let ph: number;
     if (best && car) {
-      id = `m${best[0]}`;
+      id = unique(`m${best[0]}`);
       x = car.x + (px - best[2]) / TILE;
       z = car.z + (py - best[3]) / TILE;
       y = car.y;
       ph = best[0] * 1.7;
     } else {
-      id = best ? `m${best[0]}` : `m${n}`;
+      id = unique(best ? `m${best[0]}` : `p${kind}:${Math.round(px)}:${Math.round(py)}`);
       x = px / TILE;
       z = py / TILE;
       y = kind === LIGHT_KIND.Blast ? FLASH_Y : MOVING_Y;
-      ph = kind * 3.1 + px * 0.13 + py * 0.29;
+      ph = best ? best[0] * 1.7 : kind * 3.1 + px * 0.13 + py * 0.29;
     }
     const [r, g, b] = lightRgb(kind, colour, lightFlicker(kind, t, ph));
-    out.push({ id, kind, x, y, z, radius: LIGHT[kind].radius, r, g, b, shadow: true, skip: -1 });
-  });
+    const base = Math.max(...lightRgb(kind, colour, 1));
+    out.push({ id, kind, x, y, z, radius: LIGHT[kind].radius, r, g, b, shadow: true, skip: -1, base });
+  }
   return out;
 }
 
@@ -157,7 +166,7 @@ export function selectLights(cands: readonly Cand[], fp: Footprint, focus: { x: 
     if (w <= 0 || h <= 0) continue;
     const share = (w * h) / ((2 * reach) * (2 * reach));
     const near = Math.hypot(focus.x - c.x, focus.z - c.z) <= reach ? 1.5 : 1;
-    scored.push({ c, score: Math.max(c.r, c.g, c.b) * share * near });
+    scored.push({ c, score: c.base * share * near });
   }
   scored.sort((a, b) => b.score - a.score || (a.c.id < b.c.id ? -1 : a.c.id > b.c.id ? 1 : 0));
   return { list: scored.slice(0, cap).map((s) => s.c), inView: scored.length };
