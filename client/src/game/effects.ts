@@ -466,7 +466,6 @@ export class Effects {
 
   immune(x: number, y: number): void {
     this.ring(x, y - 8, 14, 0x9ae0ff, 0.3);
-    this.text(x, y - 18, 'IMMUNE', '#9ae0ff', { kind: 'small' });
   }
 
   /** Pack coins popping out of a chest or a fallen enemy. */

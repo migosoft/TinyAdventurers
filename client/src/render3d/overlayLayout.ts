@@ -4,6 +4,7 @@
 import { EFFECT, FLAG } from '../generated/defs';
 import { isPlayerKind } from '../game/anim/defs';
 import { barOf } from '../game/barName';
+import { onOwnHero } from '../game/damage';
 import { has } from '../game/effectBits';
 import { SOUND_TEXT } from '../game/effects';
 import type { UseHint } from '../game/useHint';
@@ -120,6 +121,15 @@ export function layoutUseHint(i: LayoutIn, out: OverlayItem[]): void {
       color: '#ffffff', stroke: '#000000', alpha: 1, scale: 1, align: 'left', base: 'middle',
     });
   }
+}
+
+/**
+ * Where a hit or heal's float is born: a hit on the own hero (2D's test, against the predicted position `pred`) sits at the
+ * predicted spot, the event's spot shifted by predicted minus interpolated position (#281); any other event keeps its spot.
+ */
+export function floatSpot(ev: { x: number; y: number; p: boolean }, pred: { x: number; y: number }, interp: { x: number; y: number } | null): { x: number; y: number } {
+  if (!interp || !onOwnHero(ev, pred)) return { x: ev.x, y: ev.y };
+  return { x: ev.x + pred.x - interp.x, y: ev.y + pred.y - interp.y };
 }
 
 /** A floating number or word, kept at its ground spot (tiles) and rising in screen space; the twin of `Effects.text`. */

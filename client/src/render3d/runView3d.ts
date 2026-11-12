@@ -9,9 +9,8 @@ import { followClamp, freeClamp, keysToWorld, type Cam } from './camera';
 import { RunMouse } from './input';
 import { aimGround, toCanvas } from './screen';
 import type { Overlay3d } from './overlay';
-import { dmgColor } from '../game/damage';
-import { critLabel, WORLD_TEXT } from '../game/worldText';
-import { Floats, layoutBars, layoutHeroTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
+import { floatOf } from '../game/damage';
+import { Floats, floatSpot, layoutBars, layoutHeroTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { View as SightView } from '../sim/view';
 import { Figures3d, type Opener } from './figures';
@@ -72,6 +71,8 @@ export class RunView3d implements RunView {
   private readonly figures: Figures3d;
 
   private readonly heroNames = new Map<number, string>();
+  /** The own hero's interpolated entity spot of the last frame (sim px), for the float spot of a hit on the hero. */
+  private ownEnt: { x: number; y: number } | null = null;
   private readonly floats = new Floats();
   private readonly marks = new Marks();
 
@@ -201,6 +202,8 @@ export class RunView3d implements RunView {
 
   /** The overlay over the canvas: bars, names, tags and the use hint, placed from this frame's camera and plan. */
   private paintOverlay(f: RunFrame, c: StageCtx, cam: Cam): void {
+    const me = f.ents.get(f.you);
+    this.ownEnt = me ? { x: me.x, y: me.y } : null;
     this.floats.update(f.dt);
     this.marks.update(f.dt, this.figures.anchors);
     const o = this.overlay;
@@ -231,25 +234,13 @@ export class RunView3d implements RunView {
     };
   }
 
-  event(ev: PictureEv, _own: { x: number; y: number }): void {
+  event(ev: PictureEv, own: { x: number; y: number }): void {
     this.figures.event(ev);
-    // The floating words, as `PhaserRunView.event` says them.
-    switch (ev.t) {
-      case 'Dmg':
-        if (ev.imm) this.floats.add(ev.x, ev.y, 'immune', '#a0a0a0', { kind: 'small' });
-        else if (ev.crit) this.floats.add(ev.x, ev.y, critLabel(ev.v), WORLD_TEXT.crit.color, { big: true });
-        else this.floats.add(ev.x, ev.y, `${Math.round(ev.v)}`, dmgColor(ev.ty, ev.p));
-        break;
-      case 'Heal':
-        this.floats.add(ev.x, ev.y, `+${Math.round(ev.v)}`, '#60ff80');
-        break;
-      case 'Immune':
-        this.floats.add(ev.x, ev.y, 'IMMUNE', '#9ae0ff', { kind: 'small', up: 18 });
-        break;
-      case 'Coins':
-        this.floats.add(ev.x, ev.y, `+${ev.v} coins`, '#ffd040', { kind: 'small', up: 14 });
-        break;
-    }
+    if (ev.t !== 'Dmg' && ev.t !== 'Heal' && ev.t !== 'Immune' && ev.t !== 'Coins') return;
+    const w = floatOf(ev)!;
+    // A hit on the own hero is born at the predicted spot (#281); `ownEnt` is the interpolated entity of the last frame.
+    const at = ev.t === 'Dmg' || ev.t === 'Heal' ? floatSpot(ev, own, this.ownEnt) : ev;
+    this.floats.add(at.x, at.y, w.text, w.color, w.opts);
   }
 
   tileChanged(x: number, y: number, _v: number): void {

@@ -5,7 +5,7 @@ import type { UseHint } from '../game/useHint';
 import type { FigureAnchor } from './figures';
 import { SOUND_TEXT } from '../game/effects';
 import { popScale, WORLD_TEXT } from '../game/worldText';
-import { Floats, layoutBars, layoutHeroTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
+import { Floats, floatSpot, layoutBars, layoutHeroTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 
 const ZOOM = 3;
 const TILE = 16;
@@ -244,6 +244,20 @@ describe('Floats', () => {
     expect(a.x).toBe(Math.round(at(5, 5).px));
     // the same rise in screen space on both maps
     expect(a.y - Math.round(at(5, 5).py)).toBe(b.y - Math.round(moved(5, 5).py));
+  });
+});
+
+describe('floatSpot', () => {
+  const pred = { x: 100, y: 60 };
+  const interp = { x: 90, y: 58 };
+  it('moves a hit on the own hero by predicted minus interpolated position', () => {
+    // the hit lands within 4 px of the predicted hero (body 10 px over the foot): 2D's own-hero test
+    expect(floatSpot({ x: 101, y: 51, p: true }, pred, interp)).toEqual({ x: 111, y: 53 });
+  });
+  it('leaves other hits, and a hit when the own entity is unknown, where they are', () => {
+    expect(floatSpot({ x: 30, y: 20, p: true }, pred, interp)).toEqual({ x: 30, y: 20 });
+    expect(floatSpot({ x: 101, y: 51, p: false }, pred, interp)).toEqual({ x: 101, y: 51 });
+    expect(floatSpot({ x: 101, y: 51, p: true }, pred, null)).toEqual({ x: 101, y: 51 });
   });
 });
 

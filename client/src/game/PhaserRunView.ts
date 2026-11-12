@@ -20,7 +20,7 @@ import { barOf } from './barName';
 import { BarrelView } from './barrel';
 import { ChestView } from './chest';
 import { onContextRestored } from './contextrestore';
-import { dmgColor } from './damage';
+import { floatOf, onOwnHero } from './damage';
 import { DARKVISION_FX, syncDarkvisionFX } from './darkvisionfx';
 import { DEPTH, Effects, numberDepth } from './effects';
 import { ForceField } from './forcefield';
@@ -40,7 +40,7 @@ import { VisionMask } from './visionmask';
 import { WoodlandView } from './woodland/WoodlandView';
 import { GROUND_TILES } from './woodland/ground';
 import { FONT_TEXT } from '../fonts';
-import { critLabel, smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
+import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from './worldText';
 import { ownPredictedShot, type EntState } from './world';
 
 /**
@@ -295,16 +295,17 @@ export class PhaserRunView implements RunView {
       case 'Dmg': {
         // Numbers on heroes and allies show over the darkness; numbers on enemies stay under it.
         const depth = numberDepth(ev.p);
-        if (ev.imm) this.fx.text(ev.x, ev.y, 'immune', '#a0a0a0', { depth, kind: 'small' });
-        else if (ev.crit) this.fx.text(ev.x, ev.y, critLabel(ev.v), WORLD_TEXT.crit.color, { big: true, depth });
-        else this.fx.text(ev.x, ev.y, `${Math.round(ev.v)}`, dmgColor(ev.ty, ev.p), { depth });
+        const w = floatOf(ev)!;
+        this.fx.text(ev.x, ev.y, w.text, w.color, { ...w.opts, depth });
         if (!ev.imm) this.fx.hitSpark(ev.x, ev.y + 4, ev.p ? 0xff4040 : 0xffffff);
-        if (ev.p && !ev.imm && Math.hypot(ev.x - own.x, ev.y + 10 - own.y) < 4) this.scene.cameras.main.shake(90, 0.003);
+        if (!ev.imm && onOwnHero(ev, own)) this.scene.cameras.main.shake(90, 0.003);
         break;
       }
-      case 'Heal':
-        this.fx.text(ev.x, ev.y, `+${Math.round(ev.v)}`, '#60ff80', { depth: numberDepth(ev.p) });
+      case 'Heal': {
+        const w = floatOf(ev)!;
+        this.fx.text(ev.x, ev.y, w.text, w.color, { ...w.opts, depth: numberDepth(ev.p) });
         break;
+      }
       case 'Boom':
         if (ev.k === 1) this.fx.healRing(ev.x, ev.y, ev.r);
         else if (ev.k === 2) {
@@ -360,6 +361,10 @@ export class PhaserRunView implements RunView {
         break;
       case 'Immune':
         this.fx.immune(ev.x, ev.y);
+        {
+          const w = floatOf(ev)!;
+          this.fx.text(ev.x, ev.y - (w.opts.up ?? 0), w.text, w.color, { kind: w.opts.kind });
+        }
         break;
       case 'Effect':
         // Drawn from the snapshot bitmask and its looks (status.ts). Invisible has a default fade:
@@ -368,7 +373,10 @@ export class PhaserRunView implements RunView {
         break;
       case 'Coins':
         this.fx.coins(ev.x, ev.y, Math.min(10, 3 + Math.floor(ev.v / 4)));
-        this.fx.text(ev.x, ev.y - 14, `+${ev.v} coins`, '#ffd040', { kind: 'small' });
+        {
+          const w = floatOf(ev)!;
+          this.fx.text(ev.x, ev.y - (w.opts.up ?? 0), w.text, w.color, { kind: w.opts.kind });
+        }
         break;
     }
   }
