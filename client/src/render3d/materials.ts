@@ -1,9 +1,10 @@
 // Node materials of the 3D view (TSL).
-import { AdditiveBlending, DoubleSide, MeshBasicNodeMaterial, Vector3 } from 'three/webgpu';
+import { AdditiveBlending, CustomBlending, DoubleSide, MaxEquation, MeshBasicNodeMaterial, NodeMaterial, OneFactor, Vector3 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { attribute, clamp, float, floor, fwidth, fract, int, ivec2, length, max, positionGeometry, positionWorld, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { attribute, clamp, float, floor, fwidth, fract, int, ivec2, length, max, mod, positionGeometry, positionWorld, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from './lightNodes';
 import { GRASS_FLAT, STONE } from './light';
+import { SEE_DEFAULTS, SEE_DEPTH_BIAS, SEE_DEPTH_MARGIN } from './seeThrough';
 
 const RIM = [0.4, 0.34, 0.33] as const;
 const PX = 1 / 16;
@@ -26,6 +27,8 @@ export interface WorldMaterial {
   material: MeshBasicNodeMaterial;
   /** 0 or 1: floors and the ground read the linear texture at a sharpened position. */
   smooth: { value: number };
+  /** See-through uniforms: `mode` 0 off, 1 soft, 2 lattice; `keep` 0..1; `target` and `ray` the camera target and the unit vector toward the camera (the mask's depth reference). */
+  see: { mode: { value: number }; keep: { value: number }; target: { value: Vector3 }; ray: { value: Vector3 } };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
   setGround(nearest: Texture, linear: Texture): void;
 }
@@ -35,7 +38,7 @@ export interface WorldMaterial {
  * and (kind `ground`) the painted woodland ground, `GRASS_FLAT` while no image is set. The ground's rect is the whole image in px.
  * `smooth` (0 or 1) switches floor and ground to the linear texture at a sharpened position; it is a uniform, so flipping it recompiles nothing.
  */
-export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture): WorldMaterial {
+export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, maskTex: Texture): WorldMaterial {
   const kind = attribute('kind', 'float');
   const isTop = kind.greaterThan(1.5).and(kind.lessThan(2.5));
   const isGround = kind.greaterThan(2.5);
@@ -82,11 +85,35 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   // Wrap: floor and ground 0.35, wall face 0.5, wall top 0.15.
   const wrap = select(isTop, float(0.15), select(isFace, float(0.5), float(0.35)));
   const lit = lighting.lightAt(wp, attribute('normal', 'vec3'), wrap);
+
+  // See through (#303): wall sides and tops (never floors or ground) open where the mask has a disc and the wall is nearer the camera than the thing under it.
+  // The mask is sampled linearly; its green is a sum weighted by coverage (alpha), so dividing by alpha gives the value back at a disc's soft edge.
+  const see = {
+    mode: uniform(1), keep: uniform(SEE_DEFAULTS.keep), target: uniform(new Vector3()), ray: uniform(new Vector3(0, 0, 1)),
+  };
+  const mk = texture(maskTex, screenUV);
+  const strength = mk.r;
+  const thingNear = float(SEE_DEPTH_BIAS).sub(mk.g.div(max(mk.a, 1e-4)));
+  const wallNear = wp.sub(see.target).dot(see.ray);
+  const inFront = strength.greaterThan(0).and(wallNear.greaterThan(thingNear.add(SEE_DEPTH_MARGIN)));
+  const onWall = isTop.or(isFace);
+  // Output-pixel Bayer threshold: bits of x ^ y and y, as in `bayer4`.
+  const bx = mod(floor(screenCoordinate.x), 4);
+  const by = mod(floor(screenCoordinate.y), 4);
+  const bayer = mod(bx.add(by), 2).mul(8).add(mod(by, 2).mul(4)).add(mod(floor(bx.div(2)).add(floor(by.div(2))), 2).mul(2)).add(mod(floor(by.div(2)), 2)).div(16);
+  const keepAt = float(1).sub(strength.mul(float(1).sub(see.keep)));
+  const softOpen = bayer.greaterThanEqual(keepAt);
+  const latticeOpen = strength.greaterThan(0.5).and(mod(floor(p0.x).add(floor(p0.y)), 2).lessThan(0.5));
+  const open = onWall.and(inFront).and(select(see.mode.greaterThan(1.5), latticeOpen, select(see.mode.greaterThan(0.5), softOpen, float(0).greaterThan(1))));
+
   const m = new MeshBasicNodeMaterial();
-  m.colorNode = vec4(lighting.shoulder(albedo.mul(lit)), select(isTop, 1, texel.a));
+  m.colorNode = vec4(lighting.shoulder(albedo.mul(lit)), select(open, float(0), select(isTop, float(1), texel.a)));
   m.alphaTest = 0.5;
   return {
     material: m,
+    see: {
+      mode: see.mode, keep: see.keep, target: see.target, ray: see.ray,
+    },
     smooth,
     setGround(nearest, linear) {
       groundNear.value = nearest;
@@ -94,6 +121,32 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
       groundReady.value = 1;
     },
   };
+}
+
+/**
+ * The see-through mask's disc material: red = the disc's strength (1 inside, a smoothstep to 0 at the rim; `edge` is a uniform),
+ * green = `SEE_DEPTH_BIAS - near` (the quad's `near` attribute), alpha = 1 as the coverage weight. Blended with MAX (one/one), so the
+ * mask holds the strongest opening and the farthest thing under it. Depth test off.
+ */
+export function maskMaterial(): { material: NodeMaterial; edge: { value: number } } {
+  const edge = uniform(SEE_DEFAULTS.edge);
+  const t = length(uv());
+  const strength = float(1).sub(smoothstep(float(1).sub(edge), 1, t));
+  const m = new NodeMaterial();
+  m.fragmentNode = vec4(strength, float(SEE_DEPTH_BIAS).sub(attribute('near', 'float')), 0, 1);
+  m.depthTest = false;
+  m.depthWrite = false;
+  m.transparent = true;
+  m.blending = CustomBlending;
+  m.blendEquation = MaxEquation;
+  m.blendSrc = OneFactor;
+  m.blendDst = OneFactor;
+  m.blendEquationAlpha = MaxEquation;
+  m.blendSrcAlpha = OneFactor;
+  m.blendDstAlpha = OneFactor;
+  m.side = DoubleSide;
+  m.forceSinglePass = true;
+  return { material: m, edge };
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   DoubleSide,
   DataTexture,
   DynamicDrawUsage,
+  HalfFloatType,
   LinearFilter,
   LinearSRGBColorSpace,
   Mesh,
@@ -34,13 +35,15 @@ import type { TileMap } from '../sim/map';
 import type { Dynamic, Quads } from './cards';
 import { cssColour, stoneClear, type Light } from './light';
 import { makeLighting } from './lightNodes';
-import { cardMaterial, emissiveMaterial, glowMaterial, shadowMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
 import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type WorldArrays } from './worldMesh';
 import { buildTerrainChunk, stepTerrainUv, type TerrainChunk } from './terrainMesh';
 import { FIELD_ALPHA, FIELD_COLOUR, buildField } from './fieldMesh';
+import type { Opener } from './figures';
+import { SEE_DEFAULTS, discQuads, type SeeLook } from './seeThrough';
 
 export interface Assets { image: HTMLImageElement; frames: FrameRects }
 /** The world the view draws: `painted` marks a woodland (ground tiles read the ground image); `clear` is the clear colour, 'stone' the lit wall top's. */
@@ -51,6 +54,8 @@ export interface GroundImage { w: number; h: number; data: Uint8ClampedArray }
 export interface FrameInput {
   cam: Cam; plan: RenderPlan; dynamic: Dynamic; lights: Light[]; ambient: [number, number, number];
   shadows: boolean; smooth: boolean; t: number;
+  /** What opens the walls this frame (the seen openers) and how; none given = no openers (the mode still applies). */
+  see?: { openers: readonly Opener[]; look: SeeLook };
 }
 
 /** The ground image is larger than the device's texture limit. */
@@ -202,7 +207,15 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   pixelTexture(groundStart);
   const aw = assets.image.naturalWidth, ah = assets.image.naturalHeight;
   const lighting = makeLighting(heights, map);
-  const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart);
+  // The see-through mask: a quarter of the scene's size, half floats (red: opening strength, green: depth, alpha: coverage), linear so the
+  // discs' soft edges stay soft; resized in place (`setSize` keeps the texture object the wall shader holds).
+  const mask = new RenderTarget(1, 1, { depthBuffer: false, type: HalfFloatType, format: RGBAFormat, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
+  mask.texture.colorSpace = NoColorSpace;
+  const mm = maskMaterial();
+  const maskDiscs = new DynMesh([['position', 3], ['uv', 2], ['near', 1]], mm.material);
+  const maskScene = new Scene();
+  maskScene.add(maskDiscs.mesh);
+  const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, mask.texture);
   const material = wm.material;
 
   const scene = new Scene();
@@ -454,6 +467,23 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color }, d.glows.count * 6);
       lighting.setLights(f.lights);
       lighting.setShadows(f.shadows);
+      // See through: the camera target (not snapped: the mask's depths use the same one) and the look; the mask pass runs unless off.
+      const look = f.see?.look ?? SEE_DEFAULTS;
+      wm.see.target.value.set(f.cam.x, 0, f.cam.z);
+      wm.see.ray.value.set(ray[0], ray[1], ray[2]);
+      wm.see.mode.value = look.mode === 'off' ? 0 : look.mode === 'soft' ? 1 : 2;
+      wm.see.keep.value = look.keep;
+      mm.edge.value = look.edge;
+      if (look.mode !== 'off') {
+        const dq = discQuads(f.see?.openers ?? [], f.cam, look);
+        maskDiscs.set({ position: dq.position, uv: dq.uv, near: dq.near }, dq.count * 6);
+        const mw = Math.max(1, Math.ceil(f.plan.targetW / 4)), mh = Math.max(1, Math.ceil(f.plan.targetH / 4));
+        if (mask.width !== mw || mask.height !== mh) mask.setSize(mw, mh);
+        renderer.setRenderTarget(mask);
+        renderer.setClearColor(0x000000, 0);
+        renderer.render(maskScene, camera);
+        renderer.setClearColor(clearColour, 1);
+      }
       // The counter only accumulates; three resets it in its own animation loop, whose order against ours is not guaranteed.
       renderer.info.reset();
       timer?.lap('upload');
@@ -494,6 +524,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         for (const dm of [cards, ghosts, decals, shadows, flames, glows]) dm.dispose();
         target?.dispose();
         copyMaterial.dispose();
+        mask.dispose();
+        mm.material.dispose();
+        maskDiscs.dispose();
       } finally {
         disposeRenderer(renderer);
       }

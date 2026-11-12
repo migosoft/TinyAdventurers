@@ -9,6 +9,7 @@ import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { View as SightView } from '../sim/view';
 import { Figures3d, type Opener } from './figures';
 import { seenOpeners } from './openers';
+import { seeLook } from './seeThrough';
 import { MOVE_KEYS, type StageCtx } from './host';
 import { AMBIENT, WORK_AMBIENT, type Light } from './light';
 import { R3D_SYSTEMS } from './stats';
@@ -159,7 +160,7 @@ export class RunView3d implements RunView {
     c.timer.lap('lights');
     c.timer.renderStart();
     this.drawCalls = view.draw(
-      { cam, plan: c.plan, dynamic, lights, ambient: work ? WORK_AMBIENT : AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now },
+      { cam, plan: c.plan, dynamic, lights, ambient: work ? WORK_AMBIENT : AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: this.seen, look: seeLook(c.params) } },
       c.timer,
     );
     return this.stats(c, view.meshes);

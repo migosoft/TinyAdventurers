@@ -1,6 +1,7 @@
 // URL parameters of the ?r3d page.
 
 import type { Quality } from './quality';
+import { SEE_DEFAULTS, type SeeMode } from './seeThrough';
 
 export interface R3dParams {
   pitch: number; yaw: number; // degrees
@@ -12,6 +13,8 @@ export interface R3dParams {
   free: boolean;
   /** The light a run shows: the work light or the heroes' lantern. */
   light: 'work' | 'lantern';
+  /** Walls opening around things behind them (#303): the mode and the look's radius (tiles), keep and edge (0..1). */
+  see: SeeMode; seeR: number; seeKeep: number; seeEdge: number;
 }
 
 export const DEFAULTS: R3dParams = {
@@ -19,7 +22,13 @@ export const DEFAULTS: R3dParams = {
   pitch: 48.6, yaw: 0, quality: 'balanced', zoom: null, backend: 'auto',
   shadows: true, orb: true, smooth: true, stats: false,
   free: false, light: 'work',
+  see: SEE_DEFAULTS.mode, seeR: SEE_DEFAULTS.radius, seeKeep: SEE_DEFAULTS.keep, seeEdge: SEE_DEFAULTS.edge,
 };
+
+/** A value clamped to min..max; a missing or unreadable one gives `dflt`. */
+function range(v: number | null, min: number, max: number, dflt: number): number {
+  return v === null ? dflt : Math.min(max, Math.max(min, v));
+}
 
 function num(v: string | null): number | null {
   if (v === null || v.trim() === '') return null;
@@ -41,6 +50,7 @@ export function parseParams(search: string): R3dParams {
   const yaw = num(q.get('yaw'));
   const zoom = num(q.get('zoom'));
   const quality = q.get('quality');
+  const see = q.get('see');
   return {
     pitch: pitch === null ? DEFAULTS.pitch : Math.min(80, Math.max(30, pitch)),
     yaw: yaw === null ? DEFAULTS.yaw : wrapYaw(yaw),
@@ -53,10 +63,14 @@ export function parseParams(search: string): R3dParams {
     stats: q.get('stats') === '1',
     free: q.get('free') === '1',
     light: q.get('light') === 'lantern' ? 'lantern' : 'work',
+    see: see === 'lattice' || see === 'off' ? see : DEFAULTS.see,
+    seeR: range(num(q.get('seeR')), 0.5, 3, DEFAULTS.seeR),
+    seeKeep: range(num(q.get('seeKeep')), 0, 1, DEFAULTS.seeKeep),
+    seeEdge: range(num(q.get('seeEdge')), 0, 1, DEFAULTS.seeEdge),
   };
 }
 
-const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light']);
+const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'see', 'seeR', 'seeKeep', 'seeEdge']);
 
 /** The search string with this page's keys set or removed and every other key of `current` kept as it is (a key without a value stays without one). */
 export function toSearch(p: R3dParams, current: string): string {
@@ -74,5 +88,9 @@ export function toSearch(p: R3dParams, current: string): string {
   if (p.stats !== DEFAULTS.stats) s += '&stats=1';
   if (p.free !== DEFAULTS.free) s += '&free=1';
   if (p.light !== DEFAULTS.light) s += `&light=${p.light}`;
+  if (p.see !== DEFAULTS.see) s += `&see=${p.see}`;
+  if (p.seeR !== DEFAULTS.seeR) s += `&seeR=${p.seeR}`;
+  if (p.seeKeep !== DEFAULTS.seeKeep) s += `&seeKeep=${p.seeKeep}`;
+  if (p.seeEdge !== DEFAULTS.seeEdge) s += `&seeEdge=${p.seeEdge}`;
   return s;
 }

@@ -76,6 +76,28 @@ describe('panel', () => {
     expect(demo.btn('Lantern')).toBeUndefined();
   });
 
+  it('the See through row has Soft / Lattice / Off and three sliders, in both modes', () => {
+    for (const mode of ['demo', 'run'] as const) {
+      const { host, calls, btn } = setup(DEFAULTS, mode);
+      expect(host.textContent).toContain('See through');
+      expect(btn('Soft').getAttribute('aria-pressed')).toBe('true');
+      btn('Lattice').click();
+      expect(calls[0].see).toBe('lattice');
+      expect(btn('Lattice').getAttribute('aria-pressed')).toBe('true');
+      expect(btn('Soft').getAttribute('aria-pressed')).toBe('false');
+      btn('Off').click();
+      expect(calls[1].see).toBe('off');
+      const r = host.querySelector<HTMLInputElement>('#r3d-seeR')!;
+      expect(r.min).toBe('0.5');
+      expect(r.max).toBe('3');
+      r.value = '2';
+      r.dispatchEvent(new Event('input'));
+      expect(calls[2].seeR).toBe(2);
+      expect(host.textContent).toContain('Radius 2');
+      for (const id of ['seeKeep', 'seeEdge']) expect(host.querySelector(`#r3d-${id}`)).not.toBeNull();
+    }
+  });
+
   it('the zoom row sets zoom or Auto (null)', () => {
     const { calls, btn } = setup({ ...DEFAULTS, zoom: 3 });
     expect(btn('3').getAttribute('aria-pressed')).toBe('true');

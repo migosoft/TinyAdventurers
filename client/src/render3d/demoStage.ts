@@ -6,6 +6,7 @@ import { parseMap, MAP_ROWS } from './demoMap';
 import { MOVE_KEYS, type Stage, type StageCtx } from './host';
 import { AMBIENT, sceneLights } from './light';
 import { newScene, stepScene } from './scene';
+import { seeLook } from './seeThrough';
 import type { Assets, WorldInput } from './view';
 
 export function createDemoStage(assets: Assets, initialParams: { pitch: number; yaw: number }): Stage {
@@ -34,7 +35,7 @@ export function createDemoStage(assets: Assets, initialParams: { pitch: number; 
       if (!c.view) return 0; // while the view is being rebuilt the scene keeps stepping; only the drawing waits
       c.timer.renderStart();
       return c.view.draw(
-        { cam, plan: c.plan, dynamic, lights, ambient: AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now },
+        { cam, plan: c.plan, dynamic, lights, ambient: AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: [{ id: 0, x: scene.player.x, z: scene.player.z, mid: 0.5, who: 'hero' }], look: seeLook(c.params) } },
         c.timer,
       );
     },

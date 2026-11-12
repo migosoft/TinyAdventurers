@@ -77,7 +77,20 @@ describe('toSearch', () => {
     const p: R3dParams = {
       pitch: 60.5, yaw: 37.3, quality: 'fast', zoom: 5, backend: 'webgl',
       shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'lantern',
+      see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
+  });
+
+  it('reads the see-through switch and sliders, clamps them, and leaves defaults out of the URL', () => {
+    expect(parseParams('?r3d&see=lattice&seeR=2')).toMatchObject({ see: 'lattice', seeR: 2, seeKeep: DEFAULTS.seeKeep });
+    expect(parseParams('?r3d&see=off').see).toBe('off');
+    expect(parseParams('?r3d&see=bogus').see).toBe('soft');
+    expect(parseParams('?r3d&seeR=9').seeR).toBe(3);
+    expect(parseParams('?r3d&seeR=0').seeR).toBe(0.5);
+    expect(parseParams('?r3d&seeKeep=2').seeKeep).toBe(1);
+    expect(parseParams('?r3d&seeEdge=-1').seeEdge).toBe(0);
+    expect(toSearch({ ...DEFAULTS, see: 'lattice', seeR: 2 }, '?r3d')).toBe('?r3d&see=lattice&seeR=2');
+    expect(toSearch(DEFAULTS, '?r3d&see=off&seeR=2&seeKeep=0.5&seeEdge=0.1')).toBe('?r3d');
   });
 });

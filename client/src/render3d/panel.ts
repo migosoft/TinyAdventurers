@@ -2,6 +2,7 @@
 
 import { wrapYaw, type R3dParams } from './params';
 import type { Quality } from './quality';
+import type { SeeMode } from './seeThrough';
 
 export interface Panel {
   setReadout(text: string): void;
@@ -11,6 +12,12 @@ export interface Panel {
 const PITCHES = [30, 45, 48.6];
 const QUALITIES: [Quality, string][] = [['high', 'High'], ['balanced', 'Balanced'], ['fast', 'Fast']];
 const ZOOMS = [1, 2, 3, 4];
+const SEE_MODES: [SeeMode, string][] = [['soft', 'Soft'], ['lattice', 'Lattice'], ['off', 'Off']];
+const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge'; name: string; min: number; max: number; step: number }[] = [
+  { key: 'seeR', name: 'Radius', min: 0.5, max: 3, step: 0.1 },
+  { key: 'seeKeep', name: 'Keep', min: 0, max: 1, step: 0.05 },
+  { key: 'seeEdge', name: 'Edge', min: 0, max: 1, step: 0.05 },
+];
 type Switch = { name: string; get: (p: R3dParams) => boolean; set: (p: R3dParams) => Partial<R3dParams> };
 const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free'>, name: string): Switch =>
   ({ name, get: (p) => p[k], set: (p) => ({ [k]: !p[k] }) });
@@ -108,9 +115,23 @@ export function createPanel(
   const swRow = el('div', 'r3d-row');
   for (const sw of SWITCHES[mode]) button(swRow, sw.name, () => sw.get(cur), () => change(sw.set(cur)));
 
+  // See through: the mode and the look's three sliders.
+  const seeRow = el('div', 'r3d-row');
+  seeRow.appendChild(el('span', undefined, 'See through'));
+  for (const [m, name] of SEE_MODES) button(seeRow, name, () => cur.see === m, () => change({ see: m }));
+  const seeSliders = SEE_SLIDERS.map((d) => {
+    const row = el('div', 'r3d-row');
+    const label = el('label');
+    const s = slider(d.min, d.max, d.step, () => cur[d.key], (v) => change({ [d.key]: v }));
+    s.input.id = `r3d-${d.key}`;
+    label.htmlFor = s.input.id;
+    row.append(label, s.input);
+    return { d, label, s, row };
+  });
+
   const readout = el('div', 'r3d-readout');
   const body = el('div', 'r3d-body');
-  body.append(pitchRow, yawRow, qRow, zRow, swRow);
+  body.append(pitchRow, yawRow, qRow, zRow, swRow, seeRow, ...seeSliders.map((x) => x.row));
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
@@ -140,6 +161,10 @@ export function createPanel(
     yawLabel.textContent = `Camera turn ${deg(cur.yaw)}`;
     pitch.sync();
     yaw.sync();
+    for (const { d, label, s } of seeSliders) {
+      label.textContent = `${d.name} ${Math.round(cur[d.key] * 100) / 100}`;
+      s.sync();
+    }
     for (const { btn, test } of pressed) btn.setAttribute('aria-pressed', String(test()));
   }
   refresh();
