@@ -71,8 +71,6 @@ export class RunView3d implements RunView {
   private readonly figures: Figures3d;
 
   private readonly heroNames = new Map<number, string>();
-  /** The own hero's interpolated entity spot of the last frame (sim px), for the float spot of a hit on the hero. */
-  private ownEnt: { x: number; y: number } | null = null;
   private readonly floats = new Floats();
   private readonly marks = new Marks();
 
@@ -202,8 +200,6 @@ export class RunView3d implements RunView {
 
   /** The overlay over the canvas: bars, names, tags and the use hint, placed from this frame's camera and plan. */
   private paintOverlay(f: RunFrame, c: StageCtx, cam: Cam): void {
-    const me = f.ents.get(f.you);
-    this.ownEnt = me ? { x: me.x, y: me.y } : null;
     this.floats.update(f.dt);
     this.marks.update(f.dt, this.figures.anchors);
     const o = this.overlay;
@@ -234,12 +230,12 @@ export class RunView3d implements RunView {
     };
   }
 
-  event(ev: PictureEv, own: { x: number; y: number }): void {
+  event(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null = null): void {
     this.figures.event(ev);
     if (ev.t !== 'Dmg' && ev.t !== 'Heal' && ev.t !== 'Immune' && ev.t !== 'Coins') return;
     const w = floatOf(ev)!;
-    // A hit on the own hero is born at the predicted spot (#281); `ownEnt` is the interpolated entity of the last frame.
-    const at = ev.t === 'Dmg' || ev.t === 'Heal' ? floatSpot(ev, own, this.ownEnt) : ev;
+    // A hit on the own hero is born at the predicted spot (#281).
+    const at = ev.t === 'Dmg' || ev.t === 'Heal' ? floatSpot(ev, own, server) : ev;
     this.floats.add(at.x, at.y, w.text, w.color, w.opts);
   }
 

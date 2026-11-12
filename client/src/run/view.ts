@@ -100,7 +100,8 @@ export type PictureEv = Extract<Ev, { t: 'Dmg' | 'Heal' | 'Boom' | 'Zap' | 'Died
 export interface RunView {
   frame(f: RunFrame): ViewStats;
   /** `own` is the predicted hero position (camera shake tests against it). */
-  event(ev: PictureEv, own: { x: number; y: number }): void;
+  /** `own`: the predicted hero. `server`: the own hero's position in the snapshot that carried the event (null if absent). */
+  event(ev: PictureEv, own: { x: number; y: number }, server?: { x: number; y: number } | null): void;
   /** The session has already updated the map and the LightField. */
   tileChanged(x: number, y: number, v: number): void;
   shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone'): void;

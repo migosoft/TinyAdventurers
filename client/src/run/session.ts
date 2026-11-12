@@ -83,6 +83,8 @@ export class RunSession {
   private spectating: number | null = null;
   private lastSnap?: Snapshot;
   private myFlags = 0;
+  /** The own hero's server position in the snapshot being dispatched (the 3D view places hits on the hero from it). */
+  private serverOwn: { x: number; y: number } | null = null;
   /** Which picks an Attribute drain disabled (from `HeroChanged`). */
   private disabled: Disabled = [null, null];
   /** Entrance tiles of the boss hall that are closed now: the first one announces the force field. */
@@ -527,6 +529,7 @@ export class RunSession {
     this.spectating = s.me.spectating;
     const mine = s.ents.find((e) => e[0] === this.runInfo.you);
     this.myFlags = mine ? mine[8] : 0;
+    this.serverOwn = mine ? { x: mine[2], y: mine[3] } : null;
     for (const ev of s.ev) this.onEvent(ev);
     this.hud.snapshot(s, this.runInfo);
   }
@@ -542,7 +545,7 @@ export class RunSession {
       case 'Raise':
       case 'Immune':
       case 'Effect':
-        this.view?.event(ev, this.pred.state);
+        this.view?.event(ev, this.pred.state, this.serverOwn);
         break;
       case 'Tile': {
         const was = this.map.get(ev.x, ev.y);
@@ -570,7 +573,7 @@ export class RunSession {
         this.hud.message(ev.text, 'game');
         break;
       case 'Coins':
-        this.view?.event(ev, this.pred.state);
+        this.view?.event(ev, this.pred.state, this.serverOwn);
         if (this.isAlive) this.hud.addCoins(ev.v);
         break;
     }

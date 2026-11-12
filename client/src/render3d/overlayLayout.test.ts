@@ -248,16 +248,18 @@ describe('Floats', () => {
 });
 
 describe('floatSpot', () => {
-  const pred = { x: 100, y: 60 };
-  const interp = { x: 90, y: 58 };
-  it('moves a hit on the own hero by predicted minus interpolated position', () => {
-    // the hit lands within 4 px of the predicted hero (body 10 px over the foot): 2D's own-hero test
-    expect(floatSpot({ x: 101, y: 51, p: true }, pred, interp)).toEqual({ x: 111, y: 53 });
+  // The server has the hero at (100, 60); the prediction runs 30 px ahead at (130, 60). The server puts the event 10 px over the foot.
+  const srv = { x: 100, y: 60 };
+  const pred = { x: 130, y: 60 };
+  it('moves a hit on the own hero from the server spot to the predicted spot', () => {
+    expect(floatSpot({ x: 100, y: 50, p: true }, pred, srv)).toEqual({ x: 130, y: 50 });
+    expect(floatSpot({ x: 101, y: 51, p: true }, pred, srv)).toEqual({ x: 131, y: 51 });
   });
-  it('leaves other hits, and a hit when the own entity is unknown, where they are', () => {
-    expect(floatSpot({ x: 30, y: 20, p: true }, pred, interp)).toEqual({ x: 30, y: 20 });
-    expect(floatSpot({ x: 101, y: 51, p: false }, pred, interp)).toEqual({ x: 101, y: 51 });
-    expect(floatSpot({ x: 101, y: 51, p: true }, pred, null)).toEqual({ x: 101, y: 51 });
+  it('leaves a hit on another creature near the predicted spot, other hits and an unknown server spot where they are', () => {
+    expect(floatSpot({ x: 130, y: 50, p: true }, pred, srv)).toEqual({ x: 130, y: 50 }); // near the prediction, far from the server hero
+    expect(floatSpot({ x: 30, y: 20, p: true }, pred, srv)).toEqual({ x: 30, y: 20 });
+    expect(floatSpot({ x: 100, y: 50, p: false }, pred, srv)).toEqual({ x: 100, y: 50 });
+    expect(floatSpot({ x: 100, y: 50, p: true }, pred, null)).toEqual({ x: 100, y: 50 });
   });
 });
 

@@ -124,12 +124,13 @@ export function layoutUseHint(i: LayoutIn, out: OverlayItem[]): void {
 }
 
 /**
- * Where a hit or heal's float is born: a hit on the own hero (2D's test, against the predicted position `pred`) sits at the
- * predicted spot, the event's spot shifted by predicted minus interpolated position (#281); any other event keeps its spot.
+ * Where a hit or heal's float is born. The server places the event on the own hero from the hero's SERVER position `srv` (in the
+ * snapshot that carried it); such an event (2D's proximity test against `srv`) is born at the predicted spot instead, shifted by
+ * predicted minus server position (#281). Any other event keeps its spot.
  */
-export function floatSpot(ev: { x: number; y: number; p: boolean }, pred: { x: number; y: number }, interp: { x: number; y: number } | null): { x: number; y: number } {
-  if (!interp || !onOwnHero(ev, pred)) return { x: ev.x, y: ev.y };
-  return { x: ev.x + pred.x - interp.x, y: ev.y + pred.y - interp.y };
+export function floatSpot(ev: { x: number; y: number; p: boolean }, pred: { x: number; y: number }, srv: { x: number; y: number } | null): { x: number; y: number } {
+  if (!srv || !onOwnHero(ev, srv)) return { x: ev.x, y: ev.y };
+  return { x: ev.x + pred.x - srv.x, y: ev.y + pred.y - srv.y };
 }
 
 /** A floating number or word, kept at its ground spot (tiles) and rising in screen space; the twin of `Effects.text`. */
