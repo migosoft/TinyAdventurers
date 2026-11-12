@@ -254,6 +254,11 @@ describe('Figures3d', () => {
     expect(out.openers[0].mid).toBeGreaterThan(0.3);
   });
 
+  it('leaves neutral creatures and dead heroes out of the openers', () => {
+    const out = make().frame(frame([ent(10, KIND.Knight, { side: SIDE.Neutral }), ent(11, KIND.Knight, { side: SIDE.Friendly, flags: FLAG.DEAD })]), cam());
+    expect(out.openers).toEqual([]);
+  });
+
   it('draws the own hero from the prediction when it is missing from the entities', () => {
     const fg = make();
     const out = fg.frame(frame([], { own: own({ alive: true }) }), cam());
@@ -279,7 +284,7 @@ describe('Figures3d', () => {
     expect(t0.glows.n).toBe(1);
     for (const z of zs(t0.emissive)) expect(z).toBeCloseTo(2 + 0.02, 6);
     expect(nameOf(t0.emissive)).toMatch(/^torch_f\d$/);
-    expect(t0.openers[0]).toMatchObject({ id: 30, who: 'object' });
+    expect(t0.openers).toEqual([]); // a torch never opens a wall
     // side 1: the east face of the wall west of the floor
     const t1 = make().frame(frame([torch(1, true, 4 * 16 + 0.5, 2 * 16 + 8)]), cam());
     for (const x of xs(t1.emissive)) expect(x).toBeCloseTo(4 + 0.02, 6);
@@ -307,7 +312,7 @@ describe('Figures3d', () => {
     expect(sunk.ghosts.n).toBe(1);
     expect(sunk.cards.n).toBe(0);
     expect(sunk.shadows.n).toBe(0);
-    expect(sunk.openers[0].who).toBe('object');
+    expect(sunk.openers).toEqual([]); // nor does a barrel
 
     // mimics: hiding is a closed chest; once it stops hiding the reveal shows the open lid and lifts it
     const mimic = (flags: number) => ent(33, KIND.Mimic, { flags });

@@ -6,7 +6,9 @@ import { dir8 } from '../run/input';
 import { NO_STATS, type PictureEv, type RunFrame, type RunView, type RunViewInit, type ShotView, type ViewStats } from '../run/view';
 import { followClamp, freeClamp, keysToWorld, type Cam } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
-import { Figures3d } from './figures';
+import { View as SightView } from '../sim/view';
+import { Figures3d, type Opener } from './figures';
+import { seenOpeners } from './openers';
 import { MOVE_KEYS, type StageCtx } from './host';
 import { AMBIENT, WORK_AMBIENT, type Light } from './light';
 import { R3D_SYSTEMS } from './stats';
@@ -55,8 +57,28 @@ export class RunView3d implements RunView {
 
   constructor(init: RunViewInit, frames: FrameRects, bounds: (frame: string) => FrameBounds) {
     this.map = init.map;
+    this.sight = new SightView(init.map.w, init.map.h);
     this.woodland = !!init.info.woodland;
     this.figures = new Figures3d(init, frames, bounds);
+  }
+
+  /** What may open walls this frame and stands where the followed hero sees (for the wall openings, #303 Task 8). */
+  seen: Opener[] = [];
+  private readonly sight: SightView;
+  private sightKey = '';
+
+  /**
+   * The followed figure's sight (the own hero's, or the spectated teammate's: `f.camera`), as 2D's `LightView` computes it:
+   * `hard` blockers, recomputed only when the position, the vision or the map changes.
+   */
+  private sightFor(f: RunFrame): SightView {
+    const vision = Math.round(f.snap?.me.vision ?? 0);
+    const key = `${f.camera.x.toFixed(1)},${f.camera.y.toFixed(1)},${vision}`;
+    if (key !== this.sightKey) {
+      this.sightKey = key;
+      this.sight.compute(this.map, f.camera.x, f.camera.y, vision, 'hard');
+    }
+    return this.sight;
   }
 
   /** Figures drawn last frame (for `window.__r3d`). */
@@ -129,6 +151,7 @@ export class RunView3d implements RunView {
       return this.stats(c, 0);
     }
     const fo = this.figures.frame(f, cam);
+    this.seen = seenOpeners(fo.openers, this.sightFor(f));
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     const work = this.woodland || c.params.light === 'work';
@@ -159,6 +182,7 @@ export class RunView3d implements RunView {
   }
 
   tileChanged(x: number, y: number, _v: number): void {
+    this.sightKey = ''; // a door or a wall changed: the sight is recomputed
     this.v?.tileChanged(x, y);
   }
 

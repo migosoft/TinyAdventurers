@@ -13,6 +13,7 @@ import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { snapGround, type Cam } from './camera';
 import { newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { torchFlicker } from './light';
+import { opensWalls } from './openers';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
@@ -182,7 +183,7 @@ export class Figures3d {
       const k = torchFlicker(now, ph);
       pushGlow(out.glows, cx, TORCH_MID + TORCH_GLOW.lift, cz, TORCH_GLOW.size, [TORCH_GLOW.rgb[0] * k, TORCH_GLOW.rgb[1] * k, TORCH_GLOW.rgb[2] * k], cam);
     }
-    out.openers.push({ id: e.id, x, z, mid: TORCH_MID, who: 'object' });
+    this.opener(e, false, x, z, TORCH_MID, 'object', out);
   }
 
   /** The 2D body sits 1 px below its shadow: the foot moves 1 / 16 tile toward the camera on the ground (as the figures do). */
@@ -201,7 +202,7 @@ export class Figures3d {
     const [bx, bz] = this.bodyFoot(x, z, cam);
     pushCard(out.cards, { frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1 }, this.frames, cam);
     this.objShadow(x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
-    out.openers.push({ id: e.id, x, z, mid: CHEST_HEIGHT / 2 / TILE, who: 'chest' });
+    this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'chest', out);
   }
 
   private drawBarrel(e: EntState, cam: Cam, out: FigureOut): void {
@@ -219,7 +220,7 @@ export class Figures3d {
       if (!card.crop || card.crop.h > 0) pushCard(card.alpha < 1 ? out.ghosts : out.cards, card, this.frames, cam);
     }
     if (p.shadow) this.objShadow(x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
-    out.openers.push({ id: e.id, x, z, mid: CHEST_HEIGHT / 2 / TILE, who: 'object' });
+    this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'object', out);
   }
 
   private drawMimic(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): void {
@@ -239,7 +240,12 @@ export class Figures3d {
       angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1,
     }, this.frames, cam);
     this.objShadow(x, z, p.shadowScale, p.shadowAlpha, cam, out);
-    out.openers.push({ id: e.id, x, z, mid: CHEST_HEIGHT / 2 / TILE, who: 'mimic' });
+    this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'mimic', out);
+  }
+
+  /** Reports a thing as a wall opener when `opensWalls` (openers.ts) says it may; the one rule lives there. */
+  private opener(e: EntState, fading: boolean, x: number, z: number, mid: number, who: Opener['who'], out: FigureOut): void {
+    if (opensWalls(e, fading)) out.openers.push({ id: e.id, x, z, mid, who });
   }
 
   /** Coins in flight: thrown up the screen from the spot (a little above it), pulled down by gravity, fading out. */
@@ -356,7 +362,7 @@ export class Figures3d {
     }
 
     const height = Math.max(0, pose.footY - fb.t - pose.sink) * sc;
-    out.openers.push({ id: e.id, x, z, mid: pose.lie ? 0.15 : height / 2 / TILE, who: isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : e.side === SIDE.Friendly ? 'friend' : 'neutral' });
+    this.opener(e, pose.sink > 0 || pose.drop > 0, x, z, pose.lie ? 0.15 : height / 2 / TILE, isPlayerKind(e.kind) ? 'hero' : e.side === SIDE.Hostile ? 'enemy' : e.side === SIDE.Friendly ? 'friend' : 'neutral', out);
     return true;
   }
 
