@@ -4,19 +4,9 @@
 // The light itself is drawn by the light pass, not here.
 import Phaser from 'phaser';
 import { DEPTH } from './effects';
+import { flameTip, torchFrame, torchOffset } from './objectPose';
 
-const FPS = 8;
-
-/** Where the sprite's foot goes relative to the torch's position, and whether it is mirrored, by side. */
-function torchOffset(side: number): [number, number, boolean] {
-  return side === 0 ? [0, -3, false] : side === 1 ? [1, 2, false] : [-1, 2, true];
-}
-
-/** The tip of the flame (px) for a torch at (x, y) on `side`: the frames' flame reaches about 17 px above the foot, half a pixel towards the flame side. */
-export function flameTip(x: number, y: number, side: number): [number, number] {
-  const [dx, dy, flip] = torchOffset(side);
-  return [Math.round(x + dx) + (flip ? -0.5 : 0.5), Math.round(y + dy) - 17];
-}
+export { flameTip };
 
 export class TorchView {
   private img: Phaser.GameObjects.Image;
@@ -28,7 +18,7 @@ export class TorchView {
   }
 
   update(x: number, y: number, lit: boolean, side: number, t: number): void {
-    const frame = lit ? this.frames[Math.floor(t * FPS) % this.frames.length] : 'torch_out';
+    const frame = torchFrame(lit, t, this.frames);
     // Face: on the bricks above the floor edge; sides: at the side wall's inner edge, facing into the room.
     const [dx, dy, flip] = torchOffset(side);
     this.img.setFrame(frame).setFlipX(flip).setPosition(Math.round(x + dx), Math.round(y + dy)).setDepth(DEPTH.entityBase + y - 16);

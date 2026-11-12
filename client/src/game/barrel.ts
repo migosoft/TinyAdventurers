@@ -3,9 +3,8 @@
 // Server anim: 0 resting, 1 fuse burning (anim_ms since lit), 2 falling into a
 // chasm, 3 sinking in deep water (anim_ms since it started).
 import Phaser from 'phaser';
-import { CONST } from '../generated/defs';
-import { CHEST_HEIGHT } from './chest';
 import { DEPTH } from './effects';
+import { barrelPose, CHEST_HEIGHT } from './objectPose';
 
 export class BarrelView {
   readonly root: Phaser.GameObjects.Container;
@@ -20,24 +19,11 @@ export class BarrelView {
   }
 
   update(x: number, y: number, anim: number, animMs: number): void {
-    const t = animMs / 1000;
-    this.root.setPosition(Math.round(x), Math.round(y)).setDepth(DEPTH.entityBase + y);
-    this.body.clearTint().setScale(1).setAlpha(1).setY(1);
-    this.shadow.setVisible(true);
-    if (anim === 1) {
-      // The fuse: flashes faster as it burns down.
-      const rate = 6 + (t / CONST.BARREL_FUSE) * 18;
-      if (Math.floor(t * rate) % 2 === 0) this.body.setTintFill(0xfff0c0);
-      this.root.x += Math.round(Math.sin(t * 90));
-    } else if (anim === 2) {
-      const k = Math.min(1, t / CONST.FALL_TIME);
-      this.body.setScale(1 - 0.8 * k).setAlpha(1 - k);
-      this.shadow.setVisible(false);
-    } else if (anim === 3) {
-      const k = Math.min(1, t / CONST.DROWN_TIME);
-      this.body.setY(1 + 10 * k).setAlpha(1 - k);
-      this.shadow.setVisible(false);
-    }
+    const p = barrelPose(anim, animMs);
+    this.root.setPosition(Math.round(x) + p.dx, Math.round(y)).setDepth(DEPTH.entityBase + y);
+    this.body.clearTint().setScale(p.scale).setAlpha(p.alpha).setY(1 + p.dy);
+    if (p.fill !== null) this.body.setTintFill(p.fill);
+    this.shadow.setVisible(p.shadow);
   }
 
   destroy(): void {

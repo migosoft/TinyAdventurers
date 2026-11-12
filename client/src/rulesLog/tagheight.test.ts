@@ -17,6 +17,6 @@ describe('tag heights', () => {
 
   it('chest, barrel and mimic views share one height', () => {
     for (const f of ['game/chest.ts', 'game/barrel.ts', 'game/mimic.ts']) expect(read(f)).toMatch(/\bheight = CHEST_HEIGHT\b/);
-    expect(read('game/chest.ts')).toMatch(/export const CHEST_HEIGHT = 16;/);
+    expect(read('game/objectPose.ts')).toMatch(/export const CHEST_HEIGHT = 16;/);
   });
 });
