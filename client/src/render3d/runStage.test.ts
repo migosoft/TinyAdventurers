@@ -278,6 +278,25 @@ describe('the run stage', () => {
     expect(stage.key!({ code: 'KeyG', repeat: false } as KeyboardEvent)).toBe(false);
   });
 
+  it('debug keys: F4, F7, F8, F9 and Shift+F7, Shift+F8 reach the session once per press, and the browser never sees them', () => {
+    const { stage, run } = setup();
+    const s = run.session;
+    const spies = {
+      darkvision: vi.spyOn(s, 'debugDarkvision'),
+      incorporeal: vi.spyOn(s, 'debugIncorporeal'),
+      antiMagic: vi.spyOn(s, 'debugAntiMagic'),
+      effect: vi.spyOn(s, 'debugEffect'),
+      dispel: vi.spyOn(s, 'debugDispel'),
+      immortal: vi.spyOn(s, 'debugImmortal'),
+    };
+    const press = (code: string, shiftKey = false, repeat = false): boolean => stage.key!({ code, shiftKey, repeat } as KeyboardEvent);
+    for (const [code, shift] of [['F4', false], ['F7', false], ['F7', true], ['F8', false], ['F8', true], ['F9', false]] as const) {
+      expect(press(code, shift)).toBe(true);
+      expect(press(code, shift, true)).toBe(true); // a held key: no second call, still not the browser's (F7 is caret browsing)
+    }
+    for (const spy of Object.values(spies)) expect(spy).toHaveBeenCalledTimes(1);
+  });
+
   const click = (target: Element, button = 0): void => {
     target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button }));
     window.dispatchEvent(new MouseEvent('mouseup', { button }));

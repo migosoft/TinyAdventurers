@@ -216,6 +216,26 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         case 'KeyF':
           if (!e.repeat) host.setParams({ ...host.params, free: !host.params.free });
           return true;
+        // Debug runs only (debug accounts); the session ignores them otherwise and while dead. Always taken from the
+        // browser (F7 is caret browsing), a held key acts once.
+        case 'F4':
+          if (!e.repeat) session.debugDarkvision();
+          return true;
+        case 'F7':
+          if (!e.repeat) {
+            if (e.shiftKey) session.debugAntiMagic();
+            else session.debugIncorporeal();
+          }
+          return true;
+        case 'F8':
+          if (!e.repeat) {
+            if (e.shiftKey) session.debugDispel();
+            else session.debugEffect();
+          }
+          return true;
+        case 'F9':
+          if (!e.repeat) session.debugImmortal();
+          return true;
         default:
           return false;
       }
