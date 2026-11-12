@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { cssColour, darkAlpha, dungeonAmbient, AMBIENT, MAX_LIGHTS, STONE, WORK_AMBIENT, packLights, sceneLights, shoulder, stoneClear, torchFlicker, type Light } from './light';
+import { cssColour, darkAlpha, dungeonAmbient, AMBIENT, LIGHT_CAP, STONE, WORK_AMBIENT, packLights, sceneLights, shoulder, stoneClear, torchFlicker, type Light } from './light';
 import { newScene } from './scene';
 
-const lamp = (n: number): Light => ({ x: n, y: 1, z: 2, radius: 3, r: 0.5, g: 0.6, b: 0.7, shadow: n % 2 === 0 });
+const lamp = (n: number): Light => ({ x: n, y: 1, z: 2, radius: 3, r: 0.5, g: 0.6, b: 0.7, shadow: n % 2 === 0, skip: -1 });
 
 describe('light', () => {
   it('scales the dungeon ambient and turns it into a dark alpha', () => {
@@ -40,17 +40,17 @@ describe('light', () => {
   });
   it('packs 3 lights into 3 slots and leaves radius 0 elsewhere', () => {
     const p = packLights([lamp(1), lamp(2), lamp(3)]);
-    expect(p.pos.length).toBe(MAX_LIGHTS * 4);
-    expect(p.col.length).toBe(MAX_LIGHTS * 4);
+    expect(p.pos.length).toBe(LIGHT_CAP * 4);
+    expect(p.col.length).toBe(LIGHT_CAP * 4);
     expect(Array.from(p.pos.slice(0, 4))).toEqual([1, 1, 2, 3]);
     expect(p.col[3]).toBe(0);
     expect(p.col[7]).toBe(1);
-    for (let i = 3; i < MAX_LIGHTS; i++) expect(p.pos[i * 4 + 3]).toBe(0);
+    for (let i = 3; i < LIGHT_CAP; i++) expect(p.pos[i * 4 + 3]).toBe(0);
   });
-  it('keeps the first 8 of 10 lights', () => {
-    const p = packLights(Array.from({ length: 10 }, (_, i) => lamp(i)));
-    expect(p.pos[7 * 4]).toBe(7);
-    expect(p.pos.length).toBe(32);
+  it('keeps the first 16 of 20 lights', () => {
+    const p = packLights(Array.from({ length: 20 }, (_, i) => lamp(i)));
+    expect(p.pos[15 * 4]).toBe(15);
+    expect(p.pos.length).toBe(64);
   });
   it('has a shoulder that leaves low values alone and rolls off high ones', () => {
     expect(shoulder(0.2)).toBeCloseTo(0.2, 9);

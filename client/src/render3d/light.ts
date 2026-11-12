@@ -2,8 +2,10 @@
 import { orbAt, type SceneState } from './scene';
 import { BASE } from '../game/covemath';
 
-export interface Light { x: number; y: number; z: number; radius: number; r: number; g: number; b: number; shadow: boolean }
-export const MAX_LIGHTS = 8;
+/** A point light. `radius` is the game's falloff radius (the shader adds `LIGHT_MARGIN`); `skip` is the caster slot this light does not test (-1: none). */
+export interface Light { x: number; y: number; z: number; radius: number; r: number; g: number; b: number; shadow: boolean; skip: number }
+/** The slots of the light list the shader holds. */
+export const LIGHT_CAP = 16;
 export const AMBIENT: [number, number, number] = [0.075, 0.08, 0.125];
 /** Daylight and work lighting: a bright flat ambient. */
 export const WORK_AMBIENT: [number, number, number] = [0.9, 0.9, 0.9];
@@ -50,21 +52,21 @@ export function sceneLights(s: SceneState, t: number, orb: boolean): Light[] {
     const k = torchFlicker(t, tc.ph);
     return {
       x: tc.x + 0.03 * Math.sin(13 * t + tc.ph), y: tc.y + 0.25 + 0.03 * Math.sin(17 * t + tc.ph), z: tc.z + 0.1,
-      radius: 8.5, r: 1.2 * k, g: 0.76 * k, b: 0.4 * k, shadow: true,
+      radius: 8.5, r: 1.2 * k, g: 0.76 * k, b: 0.4 * k, shadow: true, skip: -1,
     };
   });
   if (orb) {
     const o = orbAt(t);
-    out.push({ x: o.x, y: o.y, z: o.z, radius: 5.5, r: 0.5, g: 0.72, b: 1.25, shadow: true });
+    out.push({ x: o.x, y: o.y, z: o.z, radius: 5.5, r: 0.5, g: 0.72, b: 1.25, shadow: true, skip: -1 });
   }
   return out;
 }
 
-/** 8 slots each: xyz + radius, rgb + shadow flag. Unused slots have radius 0. */
+/** `LIGHT_CAP` slots each: xyz + radius, rgb + shadow flag. Unused slots have radius 0. */
 export function packLights(lights: Light[]): { pos: Float32Array; col: Float32Array } {
-  const pos = new Float32Array(MAX_LIGHTS * 4);
-  const col = new Float32Array(MAX_LIGHTS * 4);
-  for (let i = 0; i < Math.min(MAX_LIGHTS, lights.length); i++) {
+  const pos = new Float32Array(LIGHT_CAP * 4);
+  const col = new Float32Array(LIGHT_CAP * 4);
+  for (let i = 0; i < Math.min(LIGHT_CAP, lights.length); i++) {
     const l = lights[i];
     pos.set([l.x, l.y, l.z, l.radius], i * 4);
     col.set([l.r, l.g, l.b, l.shadow ? 1 : 0], i * 4);

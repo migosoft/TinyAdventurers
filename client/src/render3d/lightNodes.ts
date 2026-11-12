@@ -2,7 +2,7 @@
 import { Vector3, Vector4 } from 'three/webgpu';
 import type { DataTexture } from 'three/webgpu';
 import { Break, Fn, If, Loop, abs, exp, float, floor, int, ivec2, length, max, min, mix, select, smoothstep, textureLoad, uniform, uniformArray, dot } from 'three/tsl';
-import { AMBIENT, MAX_LIGHTS, packLights, type Light } from './light';
+import { AMBIENT, LIGHT_CAP, packLights, type Light } from './light';
 
 // TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -22,8 +22,8 @@ export interface Lighting {
 }
 
 export function makeLighting(heightTex: DataTexture, map: { w: number; h: number }): Lighting {
-  const lPos = uniformArray(Array.from({ length: MAX_LIGHTS }, () => new Vector4()), 'vec4');
-  const lCol = uniformArray(Array.from({ length: MAX_LIGHTS }, () => new Vector4()), 'vec4');
+  const lPos = uniformArray(Array.from({ length: LIGHT_CAP }, () => new Vector4()), 'vec4');
+  const lCol = uniformArray(Array.from({ length: LIGHT_CAP }, () => new Vector4()), 'vec4');
   const uShadows = uniform(1);
   const uAmbient = uniform(new Vector3(...AMBIENT));
   const ambient = uAmbient;
@@ -83,7 +83,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     return Fn(() => {
       const sum = ambient.toVar();
       const Po = P.add(Nrm.mul(0.03));
-      Loop(MAX_LIGHTS, ({ i }: N) => {
+      Loop(LIGHT_CAP, ({ i }: N) => {
         const lp: N = lPos.element(i);
         const lc: N = lCol.element(i);
         const L = lp.xyz;
@@ -113,7 +113,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     cellH,
     setLights(lights) {
       const p = packLights(lights);
-      for (let i = 0; i < MAX_LIGHTS; i++) {
+      for (let i = 0; i < LIGHT_CAP; i++) {
         (lPos.array[i] as Vector4).set(p.pos[i * 4], p.pos[i * 4 + 1], p.pos[i * 4 + 2], p.pos[i * 4 + 3]);
         (lCol.array[i] as Vector4).set(p.col[i * 4], p.col[i * 4 + 1], p.col[i * 4 + 2], p.col[i * 4 + 3]);
       }

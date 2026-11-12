@@ -31,7 +31,7 @@ const SKULL_CAP = 256;
 const TORCH_FRAMES = ['torch_f0', 'torch_f1', 'torch_f2', 'torch_f3', 'torch_f4'];
 const TORCH_OFF = 0.02;
 /** The flame card's centre height (tiles) and its glow's lift above that, size and colour (the demo's torch). */
-const TORCH_MID = 1.0;
+export const TORCH_MID = 1.0;
 const TORCH_GLOW = { lift: 0.25, size: 1.5, rgb: [0.5, 0.3, 0.14] as [number, number, number] };
 /** The 2D chest, barrel and mimic shadow: an ellipse 13 x 5 px, strength 0.4. */
 const OBJ_SHADOW_RX = 6.5;

@@ -194,7 +194,7 @@ export class RunView3d implements RunView {
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     const work = this.woodland || c.params.light === 'work';
-    const lights: Light[] = work ? [] : [{ x: cam.x, y: 1.0, z: cam.z, radius: 9, r: 1.0, g: 0.82, b: 0.55, shadow: c.params.shadows }];
+    const lights: Light[] = work ? [] : [{ x: cam.x, y: 1.0, z: cam.z, radius: 9, r: 1.0, g: 0.82, b: 0.55, shadow: c.params.shadows, skip: -1 }];
     c.timer.lap('lights');
     c.timer.renderStart();
     this.drawCalls = view.draw(
