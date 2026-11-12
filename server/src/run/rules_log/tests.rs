@@ -8,7 +8,7 @@ use super::text;
 use crate::dungeon::{Map, Tile};
 use crate::protocol::ClientMsg;
 use crate::run::effects::Creature;
-use crate::run::visibility::{dark_range, send_snapshots, Dark};
+use crate::run::visibility::{dark_range, send_snapshots, Dark, Sent};
 use crate::run::RunCmd;
 use crate::vispoly::View;
 use crate::wire::{encode_snap, BossW, EntW, EvW, LightW, SelfW, SnapW};
@@ -35,6 +35,11 @@ fn ent(id: u32, kind: EntityKind) -> EntSnap {
     EntSnap(id, kind as u8, 0.0, 0.0, 0, 0, 0.0, 0, 0, 0, 0, 0)
 }
 
+/// What was sent: these entities, none of them in the dark.
+fn lit(ents: Vec<EntSnap>) -> Sent {
+    Sent { ents, dark: Vec::new() }
+}
+
 #[test]
 fn monsters_are_numbered_per_kind_in_spawn_order() {
     let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
@@ -58,12 +63,12 @@ fn a_hidden_mimic_is_a_chest_until_revealed() {
     let id = run.monsters[mi].id;
     let tag = tag_of(&run, id);
     assert!(tag.starts_with("Chest "), "{tag}");
-    let sent = snapshot_tags(&run, &[ent(id, EntityKind::Chest)]);
+    let sent = snapshot_tags(&run, &lit(vec![ent(id, EntityKind::Chest)]));
     assert_eq!(sent.len(), 1);
     assert_eq!((sent[0].0, sent[0].1), (id, EntityKind::Chest as u8));
     run.wake_mimic(mi);
     assert_eq!(tag_of(&run, id), "Mimic 1");
-    assert_eq!(snapshot_tags(&run, &[ent(id, EntityKind::Mimic)]), vec![(id, EntityKind::Mimic as u8, 1)]);
+    assert_eq!(snapshot_tags(&run, &lit(vec![ent(id, EntityKind::Mimic)])), vec![(id, EntityKind::Mimic as u8, 1)]);
     run.wake_mimic(mi);
     assert_eq!(tag_of(&run, id), "Mimic 1");
 }
@@ -91,7 +96,7 @@ fn heroes_and_the_wolf_go_by_name() {
     assert_eq!(tag_of(&run, hero), name);
     let wolf = crate::run::wolf::spawn_wolf(&mut run, 0);
     assert_eq!(tag_of(&run, wolf), format!("{name}'s wolf"));
-    assert!(snapshot_tags(&run, &[ent(wolf, EntityKind::DireWolf), ent(hero, EntityKind::ElvenRanger)]).is_empty());
+    assert!(snapshot_tags(&run, &lit(vec![ent(wolf, EntityKind::DireWolf), ent(hero, EntityKind::ElvenRanger)])).is_empty());
     assert_eq!(tag_of(&run, 999_999), "something");
 }
 
@@ -148,7 +153,7 @@ fn n1_rounds_to_one_decimal_and_drops_dot_zero() {
     assert_eq!(pct(-0.5), "-50 %");
 }
 
-/// The twelve fields as they were serialized before the log existed.
+/// The twelve fields as serialized without the log.
 #[derive(Serialize)]
 struct Legacy(u32, u32, Vec<EntW>, SelfW, Option<BossW>, Vec<EvW>, f32, Option<Vec<u32>>, Vec<LightW>, Vec<(u32, u8, u8)>, Vec<u32>, Vec<u16>);
 
@@ -228,12 +233,43 @@ fn a_line_naming_an_unseen_creature_is_not_sent() {
     let hero = run.players[0].id;
     let (view, dark) = view_of(&mut run, 0);
     let r = rec(LineKind::Hit, "hit", vec![record::seen_creature(&run, Creature::Monster(mi))]);
-    let log = for_viewer(&run, 0, hero, &view, &dark, &[], &[r]).unwrap();
+    let log = for_viewer(&run, 0, hero, &view, &dark, &Sent::default(), &[r]).unwrap();
     assert!(log.1.is_empty(), "behind the wall");
     run.monsters[mi].pos = Map::center_of(tx + 1, ty);
     let r = rec(LineKind::Hit, "hit", vec![record::seen_creature(&run, Creature::Monster(mi))]);
-    let log = for_viewer(&run, 0, hero, &view, &dark, &[], &[r]).unwrap();
+    let log = for_viewer(&run, 0, hero, &view, &dark, &Sent::default(), &[r]).unwrap();
     assert_eq!(log.1.len(), 1, "in view");
+}
+
+#[test]
+fn a_creature_in_the_dark_is_sent_but_neither_tagged_nor_logged() {
+    use crate::defs::lights::LightKind;
+    use crate::run::light::Anchor;
+    let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+    let (tx, ty) = walled(&mut run);
+    run.layout.map.set(tx + 2, ty, Tile::Floor);
+    run.players[0].darkvision = Some(0.0);
+    set_prefs(&mut run, 0, true, true);
+    let mi = orc_at(&mut run, (tx + 4, ty));
+    let id = run.monsters[mi].id;
+    let hero = run.players[0].id;
+    let r = rec(LineKind::Hit, "hit", vec![record::seen_creature(&run, Creature::Monster(mi))]);
+    let one_pass = |run: &mut Run| {
+        let (view, dark) = view_of(run, 0);
+        let sent = crate::run::visibility::snapshot_ents(run, 0, &view, &dark);
+        let log = for_viewer(run, 0, hero, &view, &dark, &sent, &[r.clone()]).unwrap();
+        (sent, log)
+    };
+    let (sent, log) = one_pass(&mut run);
+    assert!(sent.ents.iter().any(|e| e.0 == id), "in sight: sent");
+    assert!(sent.dark.contains(&id), "unlit: marked");
+    assert!(log.0.iter().all(|t| t.0 != id), "a creature in the dark gets no tag");
+    assert!(log.1.is_empty(), "and its line is not sent");
+    run.add_light(LightKind::Torch, Anchor::Tile(tx + 5, ty), None);
+    let (sent, log) = one_pass(&mut run);
+    assert!(!sent.dark.contains(&id), "lit: not marked");
+    assert!(log.0.iter().any(|t| t.0 == id), "the tag is there");
+    assert_eq!(log.1.len(), 1, "the line is sent");
 }
 
 #[test]
@@ -247,14 +283,14 @@ fn the_unseen_short_line_goes_only_to_its_viewer() {
     let (view, dark) = view_of(&mut run, 0);
     let mut r = rec(LineKind::Hit, "Orc Warrior 1 hits Orc Warrior 2", vec![record::seen_creature(&run, Creature::Monster(a)), record::seen_creature(&run, Creature::Monster(b))]);
     r.unseen = Some(Unseen { viewer: h0, head: "Something hits you".into(), details: vec![] });
-    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &[r.clone()]).unwrap();
+    let got = for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &[r.clone()]).unwrap();
     assert_eq!(got.1.len(), 1);
     assert_eq!(got.1[0].2, "Something hits you");
     // Hero 1 sees neither creature either, and is not the line's viewer.
-    let got = for_viewer(&run, 1, h1, &view, &dark, &[], &[r.clone()]).unwrap();
+    let got = for_viewer(&run, 1, h1, &view, &dark, &Sent::default(), &[r.clone()]).unwrap();
     assert!(got.1.is_empty());
     // A spectator watching hero 0 gets what hero 0 gets.
-    let got = for_viewer(&run, 1, h0, &view, &dark, &[], &[r]).unwrap();
+    let got = for_viewer(&run, 1, h0, &view, &dark, &Sent::default(), &[r]).unwrap();
     assert_eq!(got.1.len(), 1);
 }
 
@@ -267,7 +303,7 @@ fn party_members_are_always_seen() {
     let h0 = run.players[0].id;
     let (view, dark) = view_of(&mut run, 0);
     let r = rec(LineKind::Heal, "heals", vec![record::seen_creature(&run, Creature::Player(1))]);
-    assert_eq!(for_viewer(&run, 0, h0, &view, &dark, &[], &[r]).unwrap().1.len(), 1, "far away, but in the party");
+    assert_eq!(for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &[r]).unwrap().1.len(), 1, "far away, but in the party");
 }
 
 #[test]
@@ -279,13 +315,13 @@ fn details_off_sends_headlines_only() {
     let mut r = rec(LineKind::Hit, "head", vec![]);
     r.details = vec!["step 1".into(), "step 2".into()];
     set_prefs(&mut run, 0, true, false);
-    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &[r.clone()]).unwrap();
+    let got = for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &[r.clone()]).unwrap();
     assert_eq!((got.1[0].2.as_str(), got.1[0].3.len()), ("head", 0));
     set_prefs(&mut run, 0, true, true);
-    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &[r]).unwrap();
+    let got = for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &[r]).unwrap();
     assert_eq!(got.1[0].3, vec!["step 1".to_string(), "step 2".to_string()]);
     set_prefs(&mut run, 0, false, true);
-    assert!(for_viewer(&run, 0, h0, &view, &dark, &[], &[]).is_none(), "off: no field at all");
+    assert!(for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &[]).is_none(), "off: no field at all");
 }
 
 #[test]
@@ -296,7 +332,7 @@ fn the_log_is_capped_per_snapshot() {
     let h0 = run.players[0].id;
     let (view, dark) = view_of(&mut run, 0);
     let recs: Vec<LogRec> = (0..200).map(|_| rec(LineKind::Hit, &"x".repeat(100), vec![])).collect();
-    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &recs).unwrap();
+    let got = for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &recs).unwrap();
     let (real, note) = got.1.split_at(got.1.len() - 1);
     let bytes: usize = real.iter().map(|l: &LineW| l.2.len() + l.3.iter().map(String::len).sum::<usize>()).sum();
     assert!(bytes <= LOG_BYTES_PER_SNAP, "{bytes}");
@@ -305,7 +341,7 @@ fn the_log_is_capped_per_snapshot() {
     assert_eq!(note[0].2, "… 160 more records (log limit)");
     // What is counted is records, not their detail lines.
     let recs: Vec<LogRec> = (0..200).map(|_| LogRec { details: vec!["d".repeat(100); 3], ..rec(LineKind::Hit, "head", vec![]) }).collect();
-    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &recs).unwrap();
+    let got = for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &recs).unwrap();
     let kept = got.1.len() - 1;
     assert_eq!(got.1[kept].2, format!("… {} more records (log limit)", 200 - kept));
 }
@@ -534,7 +570,7 @@ fn damage_from_an_unseen_attacker_gives_the_short_line() {
     assert_eq!(recs.len(), 1);
     let dealt = hp - run.players[0].hp;
     let (view, dark) = view_of(&mut run, 0);
-    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &recs).unwrap();
+    let got = for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &recs).unwrap();
     assert_eq!(got.1.len(), 1);
     let name = run.players[0].name.clone();
     assert_eq!(got.1[0].2, format!("{name} took {} from something unseen", n1(dealt)));
@@ -542,7 +578,7 @@ fn damage_from_an_unseen_attacker_gives_the_short_line() {
     assert!(shown.iter().all(|l| !l.contains("Goblin") && !l.contains("Strike")), "{shown:?}");
     assert_eq!(got.1[0].3.len(), recs[0].unseen.as_ref().unwrap().details.len());
     assert!(got.1[0].3[0].starts_with("physical 100 %"), "{:?}", got.1[0].3);
-    let got = for_viewer(&run, 1, h1, &view, &dark, &[], &recs).unwrap();
+    let got = for_viewer(&run, 1, h1, &view, &dark, &Sent::default(), &recs).unwrap();
     assert!(got.1.is_empty(), "hero 1 sees nothing");
 }
 
@@ -1208,12 +1244,14 @@ fn a_hidden_mimic_behind_a_wall_is_no_slam_skip_line() {
 
 /// What `send_snapshots` would hand each player for the records since the last call:
 /// the same view, darkness and entity list, then the same filter.
-struct Sent {
+struct ToViewer {
     log: LogW,
     ents: Vec<u32>,
+    /// The sent entities in the dark.
+    dark: Vec<u32>,
 }
 
-fn sent_to_all(run: &mut Run) -> Vec<Sent> {
+fn sent_to_all(run: &mut Run) -> Vec<ToViewer> {
     let records = take(run);
     let mut out = Vec::new();
     for pi in 0..run.players.len() {
@@ -1221,9 +1259,9 @@ fn sent_to_all(run: &mut Run) -> Vec<Sent> {
         let viewed = if me.alive { pi } else { me.spectating.and_then(|s| run.players.iter().position(|q| q.id == s)).unwrap_or(pi) };
         let viewed_id = run.players[viewed].id;
         let (view, dark) = view_of(run, viewed);
-        let ents = crate::run::visibility::snapshot_ents(run, pi, &view, &dark);
-        let log = for_viewer(run, pi, viewed_id, &view, &dark, &ents, &records).expect("log is on");
-        out.push(Sent { log, ents: ents.iter().map(|e| e.0).collect() });
+        let sent = crate::run::visibility::snapshot_ents(run, pi, &view, &dark);
+        let log = for_viewer(run, pi, viewed_id, &view, &dark, &sent, &records).expect("log is on");
+        out.push(ToViewer { log, ents: sent.ents.iter().map(|e| e.0).collect(), dark: sent.dark.clone() });
     }
     out
 }
@@ -1432,7 +1470,7 @@ fn a_chain_that_stops_names_nothing_its_viewer_cannot_see() {
     assert!(run.log.records.iter().any(|r| r.head.contains(&format!("stopped: {e_tag} is out of reach"))), "the game wrote the stop line");
     let got = sent_to_all(&mut run);
     assert!(got[0].log.1.iter().any(|l| l.2.contains(&f_tag)), "hero 0 saw the hit on F");
-    assert!(!got[0].ents.contains(&e), "E is in the dark");
+    assert!(got[0].dark.contains(&e), "E is sent, but in the dark");
     for pi in 0..2 {
         assert!(got[pi].log.1.iter().all(|l| !names(&text_of(l), &e_tag)), "hero {pi} was told about {e_tag}");
     }
@@ -1666,7 +1704,7 @@ fn a_pure_effect_hit_from_something_unseen_does_not_reach_the_hero_with_its_powe
     assert_eq!(recs.len(), 1);
     assert!(recs[0].who.iter().any(|w| w.id == archer), "the record names the attacker: {:?}", recs[0].who);
     let (view, dark) = view_of(&mut run, 0);
-    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &recs);
+    let got = for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &recs);
     let lines = got.map(|g| g.1).unwrap_or_default();
     assert!(lines.is_empty(), "{lines:?}");
 }
@@ -1818,7 +1856,7 @@ fn a_tick_from_an_unseen_bestower_reads_as_before() {
     let (h0, h1) = (run.players[0].id, run.players[1].id);
     let (view, dark) = view_of(&mut run, 0);
     for (pi, viewed) in [(0, h0), (1, h1)] {
-        let got = for_viewer(&run, pi, viewed, &view, &dark, &[], &recs).unwrap();
+        let got = for_viewer(&run, pi, viewed, &view, &dark, &Sent::default(), &recs).unwrap();
         let tick = got.1.iter().find(|l| l.2.contains("Poisoned")).unwrap_or_else(|| panic!("hero {pi} gets the tick: {:?}", got.1));
         assert!(tick.2.starts_with(&format!("Poisoned ▸ {name}")), "{}", tick.2);
         assert!(!tick.2.contains("unseen") && !tick.2.contains("Goblin"), "{}", tick.2);
@@ -1836,7 +1874,7 @@ fn a_tick_from_an_unseen_bestower_reads_as_before() {
             break;
         }
     }
-    let got = for_viewer(&run, 0, h0, &view, &dark, &[], &recs).unwrap();
+    let got = for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &recs).unwrap();
     assert!(got.1.iter().any(|l| l.2.starts_with(&format!("{tag} ▸ Poisoned ▸ {name}"))), "{:?}", got.1);
 }
 
@@ -1845,9 +1883,9 @@ fn a_death_by_a_tick_from_an_unseen_bestower_reads_the_anonymous_form() {
     let (mut run, recs, name) = poisoned_by_an_unseen_archer(Some(0.001));
     let h0 = run.players[0].id;
     let (view, dark) = view_of(&mut run, 0);
-    let got = for_viewer(&run, 1, run.players[1].id, &view, &dark, &[], &recs).unwrap();
+    let got = for_viewer(&run, 1, run.players[1].id, &view, &dark, &Sent::default(), &recs).unwrap();
     let death = got.1.iter().find(|l| l.1 == LineKind::Death as u8).unwrap_or_else(|| panic!("{:?}", got.1));
     assert!(death.2.starts_with(&format!("{name} fell (Poisoned")) && !death.2.contains("unseen"), "{}", death.2);
-    let own = for_viewer(&run, 0, h0, &view, &dark, &[], &recs).unwrap();
+    let own = for_viewer(&run, 0, h0, &view, &dark, &Sent::default(), &recs).unwrap();
     assert!(own.1.iter().any(|l| l.1 == LineKind::Death as u8 && !l.2.contains("unseen")), "{:?}", own.1);
 }

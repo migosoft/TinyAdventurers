@@ -1,9 +1,13 @@
-//! Per-player snapshots. Each player only receives monsters, enemy projectiles,
+//! Per-player snapshots. Each player receives monsters, enemy projectiles,
 //! objects, hazards and positional events that are inside their own field of
-//! vision **and lit** (`run/light.rs`). Always sent: the party, their own shots,
-//! party-wide events; events on a hero need sight only. A torch (it owns a
-//! light) needs sight only: the client keeps light state from the start info
-//! and the light events, so a torch out of sight is not worth sending.
+//! vision (sight alone decides what is sent). Those that are in sight but not
+//! seen (unlit and beyond darkvision, `run/light.rs`) are marked: their ids in
+//! `Snapshot.dark`, the indices of such events in `Snapshot.dark_ev`; the client
+//! draws them in the dark. Always sent, never marked: the party, Friendly
+//! creatures, the heroes' own shots, party-wide events, events on a hero. A
+//! torch (it owns a light) is sent by sight and never marked; one out of sight
+//! is not sent (the client keeps light state from the start info and the light
+//! events).
 
 use super::targets::Side;
 use super::levels::Level;
@@ -78,19 +82,28 @@ pub(crate) fn seen(view: &View, lights: &Lights, dark: &Dark, p: Vec2, radius: f
     false
 }
 
-/// A world object is sent when seen; a torch (it owns a light) when in sight, lit or not.
-pub(crate) fn object_sent(view: &View, lights: &Lights, dark: &Dark, o: &super::objects::WorldObject) -> bool {
+/// Is a world object seen, as the rules log's `sees` asks: a torch (it owns a light) by sight alone,
+/// the rest by `seen`.
+pub(crate) fn object_seen(view: &View, lights: &Lights, dark: &Dark, o: &super::objects::WorldObject) -> bool {
     !o.gone && if o.owns_light() { visible(view, o.pos, 0.0) } else { seen(view, lights, dark, o.pos, 0.0) }
 }
 
-/// Events: party-wide ones always; events on a hero where the hero is in
-/// sight; the rest where they are seen (in sight and lit, or within darkvision).
-fn ev_seen(view: &View, lights: &Lights, dark: &Dark, at: Option<Vec2>, on_hero: bool) -> bool {
-    match at {
-        None => true,
-        Some(p) if on_hero => visible(view, p, 0.0),
-        Some(p) => seen(view, lights, dark, p, 0.0),
-    }
+/// What a snapshot carries of the world: the entities, and the ids among them that are in the dark.
+#[derive(Default)]
+pub(crate) struct Sent {
+    pub ents: Vec<EntSnap>,
+    /// The sent entities that are in sight but not seen (unlit, beyond darkvision).
+    pub dark: Vec<u32>,
+}
+
+/// Is an event sent: party-wide ones always, positional ones where the point is in sight.
+fn ev_sent(view: &View, at: Option<Vec2>) -> bool {
+    at.map_or(true, |p| visible(view, p, 0.0))
+}
+
+/// Does a sent event happen in the dark: positional, not on a hero, and not seen.
+fn ev_dark(view: &View, lights: &Lights, dark: &Dark, at: Option<Vec2>, on_hero: bool) -> bool {
+    at.is_some_and(|p| !on_hero && !seen(view, lights, dark, p, 0.0))
 }
 
 /// Moving lights whose light can reach the viewer's sight; the colour only
@@ -165,9 +178,9 @@ fn monster_snap(run: &Run, m: &super::entities::Monster, boss_immune: bool, gaze
     EntSnap(m.id, m.kind as u8, m.pos.x as f32, m.pos.y as f32, hp_byte(m.hp, m.max_hp), m.anim as u8, m.aim as f32, ms_since(run, m.anim_start), f, extra, m.effects.bits(), side as u8)
 }
 
-/// The entities hero `pi` is sent: the party and its allies always, the rest as seen
-/// through `view` and `dark`.
-pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> Vec<EntSnap> {
+/// The entities hero `pi` is sent: the party and its allies always, the rest what is in sight through
+/// `view`; the ones in sight but not lit (and beyond `dark`) are listed in `Sent::dark`.
+pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> Sent {
     let behaviour = run.level.boss().and_then(|b| b.behaviour.as_ref());
     let boss_immune = behaviour.map_or(false, |b| !b.can_be_damaged(run));
     let gaze = behaviour.and_then(|b| b.gaze_target()).unwrap_or(0);
@@ -190,35 +203,50 @@ pub(crate) fn snapshot_ents(run: &Run, _pi: usize, view: &View, dark: &Dark) -> 
     ents.extend(run.monsters.iter().filter(|m| m.alive && m.side == Side::Friendly).map(|m| monster_snap(run, m, boss_immune, gaze)));
 
     let lights = &run.lights;
+    let mut marked: Vec<u32> = Vec::new();
     for m in &run.monsters {
         // An invisible enemy is not sent at all (and so has no entry in the rules log's tags or looks).
-        if !m.alive || m.side == Side::Friendly || m.effects.has(crate::defs::effects::EffectKind::Invisible) || !seen(view, lights, dark, m.pos, m.radius) {
+        if !m.alive || m.side == Side::Friendly || m.effects.has(crate::defs::effects::EffectKind::Invisible) || !visible(view, m.pos, m.radius) {
             continue;
+        }
+        if !seen(view, lights, dark, m.pos, m.radius) {
+            marked.push(m.id);
         }
         ents.push(monster_snap(run, m, boss_immune, gaze));
     }
     for pr in &run.projectiles {
-        // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge.
-        if pr.dead || !(pr.side == super::targets::Side::Friendly || seen(view, lights, dark, pr.pos, 0.0)) {
+        // The heroes' own shots are sent even out of view, so they don't seem to vanish at its edge, and never marked.
+        let own = pr.side == super::targets::Side::Friendly;
+        if pr.dead || !(own || visible(view, pr.pos, 0.0)) {
             continue;
+        }
+        if !own && !seen(view, lights, dark, pr.pos, 0.0) {
+            marked.push(pr.id);
         }
         let extra = (pr.owner << 16) | pr.shot as u32;
         ents.push(EntSnap(pr.id, pr.kind as u8, pr.pos.x as f32, pr.pos.y as f32, 255, 0, pr.vel.angle() as f32, 0, 0, extra, 0, 0));
     }
     for o in &run.objects {
-        if !object_sent(view, lights, dark, o) {
+        if o.gone || !visible(view, o.pos, 0.0) {
             continue;
+        }
+        // A torch is never marked: it is the light.
+        if !o.owns_light() && !seen(view, lights, dark, o.pos, 0.0) {
+            marked.push(o.id);
         }
         ents.push(super::objects::snap(run, o));
     }
     for h in &run.hazards {
-        if !seen(view, lights, dark, h.pos, h.radius) {
+        if !visible(view, h.pos, h.radius) {
             continue;
+        }
+        if !seen(view, lights, dark, h.pos, h.radius) {
+            marked.push(h.id);
         }
         let extra = (h.life * 1000.0) as u32;
         ents.push(EntSnap(h.id, h.kind as u8, h.pos.x as f32, h.pos.y as f32, 255, 0, h.radius as f32, 0, 0, extra, 0, 0));
     }
-    ents
+    Sent { ents, dark: marked }
 }
 
 /// The non-default effect looks of the creatures among `ents` (a creature's id is its entity id).
@@ -251,24 +279,29 @@ pub fn send_snapshots(run: &mut Run) {
         view.compute(&run.layout.map, view_pos, vision);
         let dark = Dark { tile: (tx, ty), range: dark_range(&sight) };
 
-        let ents = snapshot_ents(run, pi, &view, &dark);
-        let looks = looks_of(run, &ents);
+        let sent = snapshot_ents(run, pi, &view, &dark);
+        let looks = looks_of(run, &sent.ents);
         let lights = &run.lights;
-        let ev: Vec<Ev> = events
-            .iter()
-            .enumerate()
-            .filter(|(i, (_, at))| ev_seen(&view, lights, &dark, *at, on_hero.contains(i)))
-            .map(|(_, (e, _))| e.clone())
-            .collect();
+        let mut ev: Vec<Ev> = Vec::new();
+        let mut dark_ev: Vec<u16> = Vec::new();
+        for (i, (e, at)) in events.iter().enumerate() {
+            if !ev_sent(&view, *at) {
+                continue;
+            }
+            if ev_dark(&view, lights, &dark, *at, on_hero.contains(&i)) {
+                dark_ev.push(ev.len() as u16);
+            }
+            ev.push(e.clone());
+        }
         let drain = drain_for(&view, run.level.boss().map_or(false, |b| b.awake), &drain);
 
         let muted = run.muted_list(super::effects::Creature::Player(pi));
         let me = &run.players[pi];
         let snap = Snapshot {
-            log: super::rules_log::for_viewer(run, pi, viewed_id, &view, &dark, &ents, &records),
+            log: super::rules_log::for_viewer(run, pi, viewed_id, &view, &dark, &sent, &records),
             tick: run.tick,
             ack: me.ack,
-            ents,
+            ents: sent.ents,
             me: SelfState {
                 alive: me.alive,
                 hp: me.hp as f32,
@@ -299,8 +332,8 @@ pub fn send_snapshots(run: &mut Run) {
             drain,
             lights: lights_for(view_pos, vision, &moving),
             looks,
-            dark: Vec::new(),
-            dark_ev: Vec::new(),
+            dark: sent.dark,
+            dark_ev,
             srv_ms: run.srv_ms,
         };
         run.players[pi].view = view;
@@ -350,19 +383,30 @@ mod tests {
         Dark { tile: Map::tile_of(run.players[0].pos()), range: dark_range(&sight) }
     }
 
+    /// What hero 0 is sent about entity `id`: `None` = not sent, `Some(true)` = sent and marked dark,
+    /// `Some(false)` = sent, not marked. The lights are refreshed as the rules log's `sees` needs.
+    fn mark(run: &mut Run, id: u32) -> Option<bool> {
+        run.lights.refresh(&run.layout.map);
+        let moving = run.moving_lights();
+        run.lights.cast_moving(&run.layout.map, &moving);
+        let dark = dark_of(run);
+        let sent = snapshot_ents(run, 0, &run.players[0].view, &dark);
+        sent.ents.iter().any(|e| e.0 == id).then(|| sent.dark.contains(&id))
+    }
+
     #[test]
-    fn a_monster_in_the_dark_is_hidden_until_lit() {
+    fn a_monster_in_the_dark_is_sent_and_marked_until_lit() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (tx, ty) = dark_view(&mut run, 0.0);
-        let p = Map::center_of(tx + 4, ty);
-        assert!(!sees(&mut run, p, 6.0), "in sight but dark");
+        let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
+        assert_eq!(mark(&mut run, id), Some(true), "in sight but dark");
         let torch = run.add_light(LightKind::Torch, Anchor::Tile(tx + 5, ty), None);
-        assert!(sees(&mut run, p, 6.0), "lit by the torch");
+        assert_eq!(mark(&mut run, id), Some(false), "lit by the torch");
         run.set_light(torch, false);
-        assert!(!sees(&mut run, p, 6.0), "dark again");
+        assert_eq!(mark(&mut run, id), Some(true), "dark again");
         let from = Map::center_of(tx + 3, ty);
         crate::run::tests::enemy_use(&mut run, EnemyType::Imp, from, AbilityId::FireBolt, from + Vec2::new(0.0, 100.0));
-        assert!(sees(&mut run, p, 6.0), "a fire bolt lights it");
+        assert_eq!(mark(&mut run, id), Some(false), "a fire bolt lights it");
     }
 
     #[test]
@@ -413,7 +457,7 @@ mod tests {
         let neutral_near = knight(&mut run, near, Side::Neutral);
         let orc = run.spawn_enemy(EnemyType::OrcWarrior, near + Vec2::new(0.0, 16.0), None);
         let dark = dark_of(&run);
-        let ents = snapshot_ents(&run, 0, &run.players[0].view, &dark);
+        let ents = snapshot_ents(&run, 0, &run.players[0].view, &dark).ents;
         let side_of = |id: u32| ents.iter().find(|e| e.0 == id).map(|e| e.11);
         assert_eq!(side_of(friend_far), Some(2), "a Friendly knight is sent from afar");
         assert_eq!(side_of(neutral_far), None, "a Neutral one out of view is not");
@@ -423,15 +467,32 @@ mod tests {
     }
 
     #[test]
-    fn hero_events_are_sent_in_the_dark_monster_events_are_not() {
+    fn events_in_the_dark_are_sent_and_marked_unless_on_a_hero() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (tx, ty) = dark_view(&mut run, 0.0);
-        run.lights.refresh(&run.layout.map);
-        let view = &run.players[0].view;
-        let near = Some(Map::center_of(tx + 2, ty));
-        assert!(ev_seen(view, &run.lights, &dark_of(&run), near, true), "on a hero: sight is enough");
-        assert!(!ev_seen(view, &run.lights, &dark_of(&run), near, false), "elsewhere: it must be lit");
-        assert!(ev_seen(view, &run.lights, &dark_of(&run), None, false), "party-wide events always");
+        let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
+        run.players[0].tx = Some(stx);
+        // A wall tile out of sight: behind a wall.
+        run.layout.map.set(tx + 5, ty, crate::dungeon::Tile::Wall);
+        let p = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, p, PLAYER_FOV_RADIUS);
+        let hidden = Map::center_of(tx + 7, ty);
+        assert!(!visible(&run.players[0].view, hidden, 0.0), "behind the wall");
+        let dark_tile = Map::center_of(tx + 2, ty);
+        let boom = Ev::Boom { x: hidden.x as f32, y: hidden.y as f32, r: 10.0, k: 0 };
+        let dmg = |at: Vec2| Ev::Dmg { x: at.x as f32, y: at.y as f32, v: 3.0, crit: false, p: false, ty: 0, imm: false };
+        run.events.clear();
+        run.on_hero.clear();
+        run.events.push((boom, Some(hidden)));
+        run.events.push((dmg(dark_tile), Some(dark_tile)));
+        run.events.push((dmg(dark_tile), Some(dark_tile)));
+        run.on_hero.push(2);
+        run.events.push((Ev::Msg { text: "hello".into() }, None));
+        send_snapshots(&mut run);
+        let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
+        let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
+        assert_eq!(snap[5].as_array().unwrap().len(), 3, "the out-of-sight event is dropped");
+        assert_eq!(snap[11], serde_json::json!([0]), "only the first sent one, on a dark tile and not on a hero, is marked");
     }
 
     #[test]
@@ -457,7 +518,7 @@ mod tests {
     }
 
     #[test]
-    fn a_dark_viewer_is_sent_a_monster_in_a_fire_patch_glow_but_not_one_just_outside_it() {
+    fn a_dark_viewer_is_sent_a_monster_in_a_fire_patch_glow_unmarked_and_one_just_outside_it_marked() {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (tx, ty) = dark_view(&mut run, 0.0);
         let (stx, mut srx) = tokio::sync::mpsc::unbounded_channel();
@@ -470,8 +531,11 @@ mod tests {
         let axum::extract::ws::Message::Binary(bytes) = srx.try_recv().unwrap() else { panic!("a snapshot") };
         let snap: serde_json::Value = rmp_serde::from_slice(&bytes).unwrap();
         let ids: Vec<u64> = snap[2].as_array().unwrap().iter().map(|e| e[0].as_u64().unwrap()).collect();
+        let dark: Vec<u64> = snap[10].as_array().unwrap().iter().map(|e| e.as_u64().unwrap()).collect();
         assert!(ids.contains(&(inside as u64)), "lit by the patch");
-        assert!(!ids.contains(&(outside as u64)), "dark: the client draws it black");
+        assert!(!dark.contains(&(inside as u64)), "lit: not marked");
+        assert!(ids.contains(&(outside as u64)), "in sight: sent");
+        assert!(dark.contains(&(outside as u64)), "dark: marked, the client draws it black");
     }
 
     #[test]
@@ -494,6 +558,7 @@ mod tests {
         assert_eq!(snap[3][12], 100);
         let ids: Vec<u64> = snap[2].as_array().unwrap().iter().map(|e| e[0].as_u64().unwrap()).collect();
         assert!(ids.contains(&(near as u64)), "seen in the dark through the viewed hero's darkvision");
+        assert!(!snap[10].as_array().unwrap().iter().any(|e| e.as_u64() == Some(near as u64)), "and so not marked dark");
     }
 
     #[test]
@@ -560,7 +625,7 @@ mod tests {
         let flag_of = |run: &mut Run| {
             run.lights.refresh(&run.layout.map);
             let dark = dark_of(run);
-            snapshot_ents(run, 0, &run.players[0].view, &dark).iter().find(|e| e.0 == id).unwrap().8
+            snapshot_ents(run, 0, &run.players[0].view, &dark).ents.iter().find(|e| e.0 == id).unwrap().8
         };
         assert_eq!(flag_of(&mut run) & flags::INCORPOREAL, 0);
         run.monsters[mi].traits.phasing = true;
@@ -578,7 +643,7 @@ mod tests {
         let sent = |run: &mut Run, id: u32| {
             run.lights.refresh(&run.layout.map);
             let dark = dark_of(run);
-            let e = snapshot_ents(run, 0, &run.players[0].view, &dark).into_iter().find(|e| e.0 == id).unwrap();
+            let e = snapshot_ents(run, 0, &run.players[0].view, &dark).ents.into_iter().find(|e| e.0 == id).unwrap();
             (e.11, e.8 & flags::WILD)
         };
         assert_eq!(sent(&mut run, boar), (Side::Neutral as u8, flags::WILD));
@@ -598,7 +663,7 @@ mod tests {
         let ents = |run: &mut Run| {
             run.lights.refresh(&run.layout.map);
             let dark = dark_of(run);
-            snapshot_ents(run, 0, &run.players[0].view, &dark)
+            snapshot_ents(run, 0, &run.players[0].view, &dark).ents
         };
         assert!(ents(&mut run).iter().any(|e| e.0 == id), "visible first");
         run.monsters[mi].effects.add_with(EffectKind::Invisible, 30.0, EffectLook::Plain, None, 0, false);
@@ -617,7 +682,7 @@ mod tests {
         let (_tx, _ty) = dark_view(&mut run, 1.0);
         run.players[1].effects.add(EffectKind::Invisible, 30.0);
         let dark = dark_of(&run);
-        let sent = snapshot_ents(&run, 0, &run.players[0].view, &dark);
+        let sent = snapshot_ents(&run, 0, &run.players[0].view, &dark).ents;
         let e = sent.iter().find(|e| e.0 == run.players[1].id).expect("the party hero is sent");
         assert!(e.10 & EffectKind::Invisible.bit() != 0, "with the Invisible bit");
     }
@@ -633,7 +698,7 @@ mod tests {
             run.players[0].view.compute(&run.layout.map, ppos, PLAYER_FOV_RADIUS);
             run.lights.refresh(&run.layout.map);
             let dark = dark_of(run);
-            snapshot_ents(run, 0, &run.players[0].view, &dark).iter().any(|e| e.0 == id)
+            snapshot_ents(run, 0, &run.players[0].view, &dark).ents.iter().any(|e| e.0 == id)
         };
         assert!(!sent(&mut run), "behind the trunk");
         let mi = run.monster_idx(id).unwrap();
@@ -651,7 +716,7 @@ mod tests {
         run.players[0].view.compute(&run.layout.map, ppos, PLAYER_FOV_RADIUS);
         run.lights.refresh(&run.layout.map);
         let dark = dark_of(&run);
-        assert!(snapshot_ents(&run, 0, &run.players[0].view, &dark).iter().any(|e| e.0 == id), "the trunk tile itself is in the FOV");
+        assert!(snapshot_ents(&run, 0, &run.players[0].view, &dark).ents.iter().any(|e| e.0 == id), "the trunk tile itself is in the FOV");
     }
 
     #[test]
@@ -703,43 +768,117 @@ mod tests {
             crate::run::objects::set_torch(&mut run, oi, false);
         }
         run.lights.refresh(&run.layout.map);
-        let sent_dark = |run: &Run, oi: usize| object_sent(&run.players[0].view, &run.lights, &dark_of(&run), &run.objects[oi]);
+        let sent_dark = |run: &Run, oi: usize| object_seen(&run.players[0].view, &run.lights, &dark_of(&run), &run.objects[oi]);
         assert!(sent_dark(&run, i_near), "in sight, out and dark");
         assert!(!sent_dark(&run, i_far), "out of sight");
+        let (near_id, far_id) = (run.objects[i_near].id, run.objects[i_far].id);
+        assert_eq!(mark(&mut run, near_id), Some(false), "sent and never marked, though it is dark");
+        assert_eq!(mark(&mut run, far_id), None);
+        let dark = dark_of(&run);
+        let sent = snapshot_ents(&run, 0, &run.players[0].view, &dark);
+        assert!(sent.ents.iter().any(|e| e.0 == near_id) && !sent.dark.contains(&near_id), "the dark near torch is sent, not marked");
         crate::run::objects::set_torch(&mut run, i_near, true);
         run.lights.refresh(&run.layout.map);
-        assert!(object_sent(&run.players[0].view, &run.lights, &dark_of(&run), &run.objects[i_near]), "in sight, lit");
+        assert!(object_seen(&run.players[0].view, &run.lights, &dark_of(&run), &run.objects[i_near]), "in sight, lit");
         assert!(run.objects[i_near].owns_light());
     }
 
-    fn dark_monster_sent(darkvision: f64, dx: i32) -> bool {
+    /// A GoblinArcher `dx` tiles east of a hero with the given darkvision, on open unlit floor.
+    fn dark_monster_marked(darkvision: f64, dx: i32) -> Option<bool> {
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (tx, ty) = dark_view(&mut run, darkvision);
-        sees(&mut run, Map::center_of(tx + dx, ty), 6.0)
+        let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + dx, ty), None);
+        mark(&mut run, id)
     }
 
     #[test]
     fn with_no_darkvision_nothing_changes() {
-        assert!(!dark_monster_sent(0.0, 1), "one tile away, unlit");
-        assert!(!dark_monster_sent(0.0, 0), "on the viewer's own tile");
+        assert_eq!(dark_monster_marked(0.0, 1), Some(true), "one tile away, unlit");
+        assert_eq!(dark_monster_marked(0.0, 0), Some(true), "on the viewer's own tile");
     }
 
     #[test]
-    fn full_darkvision_sends_a_monster_on_an_unlit_tile_in_fov() {
-        assert!(dark_monster_sent(1.0, 4));
+    fn full_darkvision_unmarks_a_monster_on_an_unlit_tile_in_sight() {
+        assert_eq!(dark_monster_marked(1.0, 4), Some(false));
         let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
         let (tx, ty) = dark_view(&mut run, 1.0);
         run.layout.map.set(tx + 2, ty, crate::dungeon::Tile::Wall);
         let p = run.players[0].pos();
         run.players[0].view.compute(&run.layout.map, p, PLAYER_FOV_RADIUS);
-        assert!(!sees(&mut run, Map::center_of(tx + 4, ty), 6.0), "behind a wall: out of FOV");
+        let id = run.spawn_enemy(EnemyType::GoblinArcher, Map::center_of(tx + 4, ty), None);
+        assert_eq!(mark(&mut run, id), None, "behind a wall: out of sight");
     }
 
     #[test]
     fn half_darkvision_reaches_half_the_vision() {
         // vision 9 * 0.5 = 4.5 tiles
-        assert!(dark_monster_sent(0.5, 4));
-        assert!(!dark_monster_sent(0.5, 5));
+        assert_eq!(dark_monster_marked(0.5, 4), Some(false));
+        assert_eq!(dark_monster_marked(0.5, 5), Some(true));
+    }
+
+    #[test]
+    fn a_big_figure_is_sent_and_marked_by_its_corners() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 0.0);
+        let p = Map::center_of(tx + 4, ty);
+        let id = run.spawn_enemy(EnemyType::OrcWarrior, p, None);
+        let mi = run.monster_idx(id).unwrap();
+        run.monsters[mi].radius = 20.0;
+        assert_eq!(mark(&mut run, id), Some(true), "dark all over");
+        // A torch lighting only the tile under one corner (0.8 * 20 = 16 px off the centre): the corner tile
+        // and the tile beside the centre are walls, which the torch behind them lights but whose shadow
+        // keeps the centre dark.
+        let (cx, cy) = Map::tile_of(p + Vec2::new(16.0, 16.0));
+        assert_ne!((cx, cy), Map::tile_of(p), "the corner is on another tile");
+        run.layout.map.set(cx, cy, crate::dungeon::Tile::Wall);
+        run.layout.map.set(cx, cy - 1, crate::dungeon::Tile::Wall);
+        let torch = run.add_light(LightKind::Torch, Anchor::Tile(cx + 1, cy), None);
+        run.lights.mark_dirty();
+        let pp = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, pp, PLAYER_FOV_RADIUS);
+        run.lights.refresh(&run.layout.map);
+        assert!(!seen_centre(&run, p), "set-up: the centre tile is dark");
+        assert!(seen(&run.players[0].view, &run.lights, &dark_of(&run), p, 20.0), "set-up: the corner tile is in sight and lit");
+        assert_eq!(mark(&mut run, id), Some(false), "centre dark, one corner lit: not marked");
+        run.set_light(torch, false);
+        // Centre one tile behind a wall, a corner tile in sight and dark.
+        run.layout.map.set(tx + 3, ty, crate::dungeon::Tile::Wall);
+        let q = Map::center_of(tx + 4, ty);
+        let pp = run.players[0].pos();
+        run.players[0].view.compute(&run.layout.map, pp, PLAYER_FOV_RADIUS);
+        run.monsters[mi].pos = q;
+        assert!(!visible(&run.players[0].view, q, 0.0), "the centre is out of sight");
+        assert!(visible(&run.players[0].view, q, 20.0), "a corner is in sight");
+        assert_eq!(mark(&mut run, id), Some(true), "in sight by a corner, dark: sent and marked");
+    }
+
+    fn seen_centre(run: &Run, p: Vec2) -> bool {
+        seen(&run.players[0].view, &run.lights, &dark_of(run), p, 0.0)
+    }
+
+    #[test]
+    fn a_chest_in_the_dark_is_sent_and_marked() {
+        use crate::run::objects::ObjState;
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 0.0);
+        let id = run.spawn_object(EntityKind::Chest, Map::center_of(tx + 3, ty), ObjState::Chest { opened: None });
+        assert_eq!(mark(&mut run, id), Some(true), "in sight, on an unlit tile");
+        run.add_light(LightKind::Torch, Anchor::Tile(tx + 4, ty), None);
+        assert_eq!(mark(&mut run, id), Some(false), "with a torch beside it");
+    }
+
+    #[test]
+    fn an_enemy_shot_in_the_dark_is_marked_a_hero_shot_never() {
+        let mut run = test_run(&[ClassId::Wizard], BossId::Demon);
+        let (tx, ty) = dark_view(&mut run, 0.0);
+        let from = Map::center_of(tx + 3, ty);
+        crate::run::tests::enemy_use(&mut run, EnemyType::GoblinArcher, from, AbilityId::Shoot, from + Vec2::new(0.0, 100.0));
+        let enemy_shot = run.projectiles.iter().find(|p| p.side != Side::Friendly).expect("the arrow").id;
+        assert_eq!(mark(&mut run, enemy_shot), Some(true), "an arrow carries no light: sent and marked");
+        // The same shot over the same tiles, now a hero's.
+        let pi = run.projectiles.iter().position(|p| p.id == enemy_shot).unwrap();
+        run.projectiles[pi].side = Side::Friendly;
+        assert_eq!(mark(&mut run, enemy_shot), Some(false), "a hero's own shot is never marked");
     }
 
     #[test]

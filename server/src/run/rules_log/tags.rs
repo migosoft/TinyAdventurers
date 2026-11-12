@@ -2,7 +2,7 @@
 //! nothing the simulation reads.
 
 use crate::defs::kinds::EntityKind;
-use crate::protocol::EntSnap;
+use crate::run::visibility::Sent;
 use crate::run::Run;
 use std::collections::HashMap;
 
@@ -92,9 +92,10 @@ pub(crate) fn tag_of(run: &Run, id: u32) -> String {
     }
 }
 
-#[allow(dead_code)] // Task 2 calls it.
-pub(crate) fn snapshot_tags(run: &Run, ents: &[EntSnap]) -> Vec<(u32, u8, u16)> {
-    ents.iter().filter_map(|e| run.log.tags.of.get(&e.0).map(|&(kind, n)| (e.0, kind as u8, n))).collect()
+/// The tags of the sent entities, except those in the dark: the log must not name what the viewer cannot see.
+pub(crate) fn snapshot_tags(run: &Run, sent: &Sent) -> Vec<(u32, u8, u16)> {
+    let seen = sent.ents.iter().filter(|e| !sent.dark.contains(&e.0));
+    seen.filter_map(|e| run.log.tags.of.get(&e.0).map(|&(kind, n)| (e.0, kind as u8, n))).collect()
 }
 
 /// The `TAG_NAME` block for `defs.ts`: one entry per `EntityKind` that has a name.

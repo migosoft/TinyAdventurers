@@ -427,10 +427,12 @@ mod tests {
         run.lights.refresh(&run.layout.map);
         let dark = Dark { tile: (tx, ty), range: dark_range(&run.players[0].sight_now()) };
         let view = std::mem::replace(&mut run.players[0].view, crate::vispoly::View::new(0, 0));
-        let ents = snapshot_ents(&run, 0, &view, &dark);
-        let wolf = ents.iter().find(|e| e.0 == id).expect("the wolf is sent");
+        let sent = snapshot_ents(&run, 0, &view, &dark);
+        let wolf = sent.ents.iter().find(|e| e.0 == id).expect("the wolf is sent");
         assert_eq!(wolf.9, run.players[0].id, "extra is the owner");
-        assert!(!ents.iter().any(|e| e.0 == goblin), "an unlit enemy there is not");
+        assert!(!sent.dark.contains(&id), "and is never marked dark");
+        assert!(sent.ents.iter().any(|e| e.0 == goblin), "an unlit enemy there is sent");
+        assert!(sent.dark.contains(&goblin), "and marked dark");
     }
 
     #[test]

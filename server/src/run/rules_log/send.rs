@@ -2,8 +2,7 @@
 
 use super::record::{LineKind, LogRec, Seen};
 use super::{on_for, Run};
-use crate::protocol::EntSnap;
-use crate::run::visibility::{object_sent, seen, Dark};
+use crate::run::visibility::{object_seen, seen, Dark, Sent};
 use crate::vispoly::View;
 use serde::Serialize;
 use ts_rs::TS;
@@ -30,14 +29,14 @@ fn sees(run: &Run, view: &View, dark: &Dark, s: &Seen) -> bool {
     }
     if s.object {
         if let Some(o) = run.objects.iter().find(|o| o.id == s.id && !o.gone) {
-            return object_sent(view, &run.lights, dark, o);
+            return object_seen(view, &run.lights, dark, o);
         }
     }
     seen(view, &run.lights, dark, s.pos, s.radius)
 }
 
 /// The log for player `pi` looking through hero `viewed`: `None` unless they have it on.
-pub fn for_viewer(run: &Run, pi: usize, viewed: u32, view: &View, dark: &Dark, ents: &[EntSnap], records: &[LogRec]) -> Option<LogW> {
+pub fn for_viewer(run: &Run, pi: usize, viewed: u32, view: &View, dark: &Dark, sent: &Sent, records: &[LogRec]) -> Option<LogW> {
     let prefs = on_for(run, run.players[pi].id)?;
     let mut lines: Vec<LineW> = Vec::new();
     let (mut bytes, mut omitted) = (0, 0);
@@ -67,5 +66,5 @@ pub fn for_viewer(run: &Run, pi: usize, viewed: u32, view: &View, dark: &Dark, e
     if omitted > 0 {
         lines.push(LineW(run.time as f32, LineKind::Note as u8, format!("… {omitted} more records (log limit)"), Vec::new()));
     }
-    Some(LogW(super::snapshot_tags(run, ents), lines))
+    Some(LogW(super::snapshot_tags(run, sent), lines))
 }

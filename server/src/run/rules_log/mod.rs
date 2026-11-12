@@ -63,8 +63,8 @@ fn unseen_viewer(run: &Run, c: Creature) -> Option<u32> {
 }
 
 /// (entity id, the `EntityKind` id its name comes from, number) for each sent entity with a tag.
-pub(crate) fn snapshot_tags(run: &Run, ents: &[EntSnap]) -> Vec<(u32, u8, u16)> {
-    tags::snapshot_tags(run, ents)
+pub(crate) fn snapshot_tags(run: &Run, sent: &crate::run::visibility::Sent) -> Vec<(u32, u8, u16)> {
+    tags::snapshot_tags(run, sent)
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
