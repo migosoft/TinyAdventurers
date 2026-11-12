@@ -343,5 +343,15 @@ describe('Figures3d', () => {
     cf.event({ t: 'Coins', x: at(1), y: 8, v: 20 });
     expect(cf.frame(frame([], { now: 10.1 }), cam()).ghosts.n).toBe(8);
     expect(cf.frame(frame([], { now: 11.2 }), cam()).ghosts.n).toBe(0);
+
+    // a coin that has landed rests on the floor instead of sinking into it (the card's middle is on the foot point)
+    const lf = make();
+    lf.frame(frame([]), cam());
+    lf.event({ t: 'Coins', x: at(1), y: 8, v: 20 });
+    for (const now of [10.2, 10.4, 10.6, 10.65]) {
+      const g = lf.frame(frame([], { now }), cam()).ghosts;
+      expect(g.n).toBeGreaterThan(0);
+      for (let q = 0; q < g.n; q++) expect(Math.min(...ys(g, q))).toBeGreaterThanOrEqual(-1e-6);
+    }
   });
 });

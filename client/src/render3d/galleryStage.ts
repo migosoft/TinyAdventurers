@@ -158,8 +158,7 @@ export function galleryEnts(t: number, state: string | null): EntState[] {
   const wolf = walk(25, 3, 1.3, 1, t);
   out.push(ent(c + 6, KIND.DireWolf, wolf.x, 3.5, move(wolf)));
   out.push(ent(c + 7, KIND.Chest, 29.5, 3.6, { side: SIDE.Neutral }));
-  const mimic = walk(34, 2, 0.8, 2, t);
-  out.push(ent(c + 8, KIND.Mimic, mimic.x, 3.6, { flags: FLAG.HIDING }));
+  out.push(ent(c + 8, KIND.Mimic, 34, 3.6, { flags: FLAG.HIDING }));
   // Right behind the wall, where it would hide them: neither opens it.
   out.push(ent(ID.corridorBarrel, KIND.Barrel, 8.5, 3.75, { side: SIDE.Neutral }));
   const knight = walk(6, 3, 1, 0.5, t);

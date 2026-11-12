@@ -5,12 +5,32 @@ import { figurePose, newPoseMemory, type PoseInput, type PoseMemory } from './po
 import { SILHOUETTE_FILL, silhouetteAlpha } from '../shadeHaze';
 
 const bounds = () => ({ l: 3, r: 12, t: 4, w: 16, h: 16 });
+// Real opaque bounds of atlas frames (client/public/assets/atlas.png, first and last opaque column, top row; every one of these frames is 16 x 28), measured once with PIL.
+const REAL: Record<string, { l: number; r: number; t: number }> = {
+  knight_m_idle_anim_f0: { l: 0, r: 14, t: 8 },
+  knight_m_idle_anim_f1: { l: 0, r: 14, t: 8 },
+  elf_m_idle_anim_f0: { l: 1, r: 15, t: 9 },
+  elf_m_idle_anim_f1: { l: 1, r: 15, t: 10 },
+  elf_m_idle_anim_f2: { l: 1, r: 15, t: 11 },
+  elf_m_idle_anim_f3: { l: 1, r: 15, t: 10 },
+  lich_idle_anim_f0: { l: 0, r: 14, t: 0 },
+  lich_idle_anim_f1: { l: 0, r: 14, t: 0 },
+  lich_idle_anim_f2: { l: 0, r: 14, t: 0 },
+  lich_idle_anim_f3: { l: 0, r: 14, t: 0 },
+};
+const realBounds = (frame: string) => ({ ...(REAL[frame] ?? { l: 3, r: 12, t: 4 }), w: 16, h: 28 });
+const RANGER = FIGURES[KIND.ElvenRanger];
+const LICH = FIGURES[KIND.Lich];
 const KNIGHT = FIGURES[KIND.Knight];
 const PALADIN = FIGURES[KIND.Paladin];
 const SHADE = FIGURES[KIND.Shade];
 
 const input = (o: Partial<PoseInput> = {}): PoseInput => ({ x: 0, y: 0, anim: ANIM.Idle, animT: 0, aim: 0, screenAim: o.aim ?? 0, flags: 0, ...o });
 const pose = (d = KNIGHT, o: Partial<PoseInput> = {}, dt = 0, m: PoseMemory = newPoseMemory()) => figurePose(d, input({ screenAim: o.aim ?? 0, ...o }), dt, m, bounds);
+
+const PIN_KNIGHT_LIE = { angle: -90, squash: 0.92, cropX: 5, cropW: 11, x: 12, y: -2 };
+const PIN_RANGER = { frame: 'elf_m_idle_anim_f0', rot: 0.3, x: 1.3281611440301897, y: -10.517160361657345 };
+const PIN_LICH_FRAME = 'lich_idle_anim_f0';
 
 describe('figurePose', () => {
   it('idles by the clock and runs by the run clock', () => {
@@ -54,6 +74,35 @@ describe('figurePose', () => {
     const b = pose(PALADIN, { aim: 1.2, effects: fx }, 0, m);
     expect(a.weapon).not.toBeNull();
     expect(b.weapon!.rot).toBe(a.weapon!.rot);
+  });
+
+  it('pins a knight asleep facing left: the lie crop, position, angle and squash', () => {
+    const m = newPoseMemory();
+    const p = figurePose(KNIGHT, input({ aim: Math.PI, screenAim: Math.PI, effects: 1 << EFFECT.Sleep }), 0, m, realBounds);
+    expect(p.left).toBe(true);
+    expect(p.lie).toEqual(PIN_KNIGHT_LIE);
+  });
+
+  it('pins a ranger frozen mid-shot: the weapon pose and the body frame hold across later aims and clocks', () => {
+    const m = newPoseMemory();
+    const fx = 1 << EFFECT.Frozen;
+    const at = (aim: number, animT: number, dt: number) => figurePose(RANGER, input({ anim: ANIM.Shoot, animT, aim, screenAim: aim, effects: fx }), dt, m, realBounds);
+    const a = at(0.3, 0.05, 0);
+    const b = at(2.2, 0.3, 0.7);
+    expect(a.weapon).not.toBeNull();
+    expect(b.frame).toBe(a.frame);
+    expect(b.weapon).toEqual(a.weapon);
+    expect({ frame: a.frame, rot: a.weapon!.rot, x: a.weapon!.x, y: a.weapon!.y }).toEqual(PIN_RANGER);
+  });
+
+  it('pins a petrified lich: the frame holds across the clock and greys', () => {
+    const m = newPoseMemory();
+    const fx = 1 << EFFECT.Petrified;
+    const a = figurePose(LICH, input({ effects: fx }), 0, m, realBounds);
+    const b = figurePose(LICH, input({ effects: fx }), 0.9, m, realBounds);
+    expect(b.frame).toBe(a.frame);
+    expect(a.frame).toBe(PIN_LICH_FRAME);
+    expect(b.grey).toBe(true);
   });
 
   it('hurt flash fills white without a hit frame; a hero with a hit frame shows it', () => {

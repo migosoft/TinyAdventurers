@@ -89,7 +89,8 @@ describe('toSearch', () => {
     expect(parseParams('?r3d&seeR=9').seeR).toBe(3);
     expect(parseParams('?r3d&seeR=0').seeR).toBe(0.5);
     expect(parseParams('?r3d&seeKeep=2').seeKeep).toBe(1);
-    expect(parseParams('?r3d&seeEdge=-1').seeEdge).toBe(0);
+    expect(parseParams('?r3d&seeEdge=-1').seeEdge).toBe(0.01); // an edge of 0 would be smoothstep(1, 1, t) in the mask shader
+    expect(parseParams('?r3d&seeEdge=0').seeEdge).toBe(0.01);
     expect(toSearch({ ...DEFAULTS, see: 'lattice', seeR: 2 }, '?r3d')).toBe('?r3d&see=lattice&seeR=2');
     expect(toSearch(DEFAULTS, '?r3d&see=off&seeR=2&seeKeep=0.5&seeEdge=0.1')).toBe('?r3d');
   });

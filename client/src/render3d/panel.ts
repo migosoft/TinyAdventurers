@@ -16,7 +16,7 @@ const SEE_MODES: [SeeMode, string][] = [['soft', 'Soft'], ['lattice', 'Lattice']
 const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge'; name: string; min: number; max: number; step: number }[] = [
   { key: 'seeR', name: 'Radius', min: 0.5, max: 3, step: 0.1 },
   { key: 'seeKeep', name: 'Keep', min: 0, max: 1, step: 0.05 },
-  { key: 'seeEdge', name: 'Edge', min: 0, max: 1, step: 0.05 },
+  { key: 'seeEdge', name: 'Edge', min: 0.05, max: 1, step: 0.05 },
 ];
 type Switch = { name: string; get: (p: R3dParams) => boolean; set: (p: R3dParams) => Partial<R3dParams> };
 const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free'>, name: string): Switch =>

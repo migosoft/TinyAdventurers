@@ -88,7 +88,6 @@ export interface WeaponPose {
   flipX: boolean;
   /** Drawn behind the body (aiming up the screen). */
   behind: boolean;
-  tint: number | null;
 }
 
 export type Tint = { mode: 'none' } | { mode: 'mul' | 'fill'; rgb: number };
@@ -336,7 +335,7 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
   let weapon: WeaponPose | null = null;
   const weaponFresh = !!d.weapon && !asleep && !(iced && m.heldWeapon);
   if (weaponFresh) {
-    weapon = weaponPose(d, s, sgn, left, weaponTint);
+    weapon = weaponPose(d, s, sgn, left);
     if (iced) m.heldWeapon = weapon;
   } else if (d.weapon && !asleep) weapon = m.heldWeapon;
   // Drowned past 0.4 the weapon is hidden (a fresh pose still counts, as its sparks fire as before).
@@ -369,7 +368,7 @@ export function figurePose(d: FigureDef, s: PoseInput, dt: number, m: PoseMemory
 }
 
 /** The weapon's frame, size, origin, position, rotation and alpha for the figure's mount. */
-function weaponPose(d: FigureDef, s: PoseInput, sgn: number, left: boolean, tint: number | null): WeaponPose {
+function weaponPose(d: FigureDef, s: PoseInput, sgn: number, left: boolean): WeaponPose {
   const t = s.animT;
   const isMelee = s.anim === ANIM.Melee;
   const hx = (d.handX ?? 3) * sgn;
@@ -457,6 +456,5 @@ function weaponPose(d: FigureDef, s: PoseInput, sgn: number, left: boolean, tint
     alpha,
     flipX,
     behind: ay < -0.3,
-    tint,
   };
 }

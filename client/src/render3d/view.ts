@@ -298,7 +298,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
 
   // Cards, flames and glows are pushed toward the camera along the view ray (the demo's depth bias); set each frame.
   const toward = viewTowardUniform();
-  // Four passes of cards share one vertex layout: opaque upright, translucent upright (sorted back to front by the caller), opaque flat (floor decals).
+  // Cards share one vertex layout in four materials: opaque upright, translucent upright (sorted back to front by the caller), translucent flat (floor decals), and emissive (torch flames).
   const card = cardMaterial(atlas, aw, ah, lighting, toward);
   const ghost = cardMaterial(atlas, aw, ah, lighting, toward, { translucent: true });
   // Translucent too: a sleeping incorporeal figure and the skulls (0.85) have an alpha. No depth write, drawn after the shadows.

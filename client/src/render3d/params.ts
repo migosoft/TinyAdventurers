@@ -66,7 +66,7 @@ export function parseParams(search: string): R3dParams {
     see: see === 'lattice' || see === 'off' ? see : DEFAULTS.see,
     seeR: range(num(q.get('seeR')), 0.5, 3, DEFAULTS.seeR),
     seeKeep: range(num(q.get('seeKeep')), 0, 1, DEFAULTS.seeKeep),
-    seeEdge: range(num(q.get('seeEdge')), 0, 1, DEFAULTS.seeEdge),
+    seeEdge: range(num(q.get('seeEdge')), 0.01, 1, DEFAULTS.seeEdge),
   };
 }
 

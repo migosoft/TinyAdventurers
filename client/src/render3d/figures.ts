@@ -259,8 +259,10 @@ export class Figures3d {
       // 2D starts a coin 6 px above the spot; right is along the camera's right on the ground, up is height.
       const right = (c.vx * t) / TILE;
       const up = (6 + c.vy * t - 0.5 * COIN_GRAVITY * t * t) / TILE;
+      // The card's middle sits on the foot point (footY 0.5): never lower than half its height, so a landed coin rests on the floor.
+      const rest = (this.frames[c.frame]?.h ?? 0) / 2 / TILE;
       pushCard(out.ghosts, {
-        frame: c.frame, x: c.x + Math.cos(cam.yaw) * right, z: c.z + Math.sin(cam.yaw) * right, lift: Math.max(0, up), flip: false, originX: 0.5, footY: 0.5, scale: 1,
+        frame: c.frame, x: c.x + Math.cos(cam.yaw) * right, z: c.z + Math.sin(cam.yaw) * right, lift: Math.max(rest, up), flip: false, originX: 0.5, footY: 0.5, scale: 1,
         tint: [1, 1, 1], mode: 0, alpha: 1 - t / c.life,
       }, this.frames, cam);
     }
