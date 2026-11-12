@@ -26,6 +26,9 @@ interface Cells {
   fall: Float32Array;
 }
 
+/** Darkness over a tile seen only by darkvision: dim, not black. */
+export const DV_DARK = 0.45;
+
 /** Brightness at the edge of a light's radius: near black, so the light fades out inside its lit tiles. */
 export const EDGE = 0.1;
 

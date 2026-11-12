@@ -313,7 +313,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const emissive = emissiveMaterial(atlas, aw, ah, lighting, toward);
   const glow = glowMaterial();
   const shadow = shadowMaterial();
-  const cardAttrs: [string, number][] = [['position', 3], ['uv', 2], ['tint', 4], ['alpha', 1]];
+  const cardAttrs: [string, number][] = [['position', 3], ['uv', 2], ['tint', 4], ['alpha', 1], ['shade', 2]];
   const cards = new DynMesh(cardAttrs, card.material);
   const ghosts = new DynMesh(cardAttrs, ghost.material);
   const decals = new DynMesh(cardAttrs, decal.material);
@@ -325,7 +325,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   ghosts.mesh.renderOrder = 3;
   glows.mesh.renderOrder = 4;
   // `look` is 5 floats per vertex (r, g, b, mode, alpha); a vertex attribute has at most 4 components, so it goes up as `tint` (r, g, b, mode) and `alpha`.
-  let tintBuf = new Float32Array(0), alphaBuf = new Float32Array(0);
+  let tintBuf = new Float32Array(0), alphaBuf = new Float32Array(0), shadeBuf = new Float32Array(0);
   const cardData = (q: Quads): Record<string, Float32Array> => {
     const n = q.count * 6;
     if (alphaBuf.length < n) { tintBuf = new Float32Array(n * 4); alphaBuf = new Float32Array(n); }
@@ -333,7 +333,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       tintBuf[i * 4] = q.look[i * 5]; tintBuf[i * 4 + 1] = q.look[i * 5 + 1]; tintBuf[i * 4 + 2] = q.look[i * 5 + 2]; tintBuf[i * 4 + 3] = q.look[i * 5 + 3];
       alphaBuf[i] = q.look[i * 5 + 4];
     }
-    return { position: q.position, uv: q.uv, tint: tintBuf, alpha: alphaBuf };
+    if (shadeBuf.length < n * 2) {
+      // (-1, 0): no caster slot, not dark. The figure shadows (own slot) and the dark flag fill it in later tasks.
+      shadeBuf = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) shadeBuf[i * 2] = -1;
+    }
+    return { position: q.position, uv: q.uv, tint: tintBuf, alpha: alphaBuf, shade: shadeBuf };
   };
 
   // The off-screen copy: the quad shows the target's texels as they are (no lighting, no tone mapping, no colour conversion).
@@ -474,6 +479,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color }, d.glows.count * 6);
       lighting.setLights(f.lights);
       lighting.setShadows(f.shadows);
+      lighting.setLava(f.lava);
+      lighting.setDarkvision(f.darkvision);
       // See through: the camera target (not snapped: the mask's depths use the same one) and the look; the mask pass runs unless off.
       const look = f.see?.look ?? SEE_DEFAULTS;
       wm.see.target.value.set(f.cam.x, 0, f.cam.z);

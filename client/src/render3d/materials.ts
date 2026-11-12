@@ -107,7 +107,7 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const open = onWall.and(inFront).and(select(see.mode.greaterThan(1.5), latticeOpen, select(see.mode.greaterThan(0.5), softOpen, float(0).greaterThan(1))));
 
   const m = new MeshBasicNodeMaterial();
-  m.colorNode = vec4(lighting.shoulder(albedo.mul(lit)), select(open, float(0), select(isTop, float(1), texel.a)));
+  m.colorNode = vec4(lighting.finish(albedo, lit), select(open, float(0), select(isTop, float(1), texel.a)));
   m.alphaTest = 0.5;
   return {
     material: m,
@@ -171,7 +171,9 @@ export function cardMaterial(
   // A flat card (a decal on the floor) keeps its true height: it is not stretched by 1 / cos(pitch).
   const pos = opts.flat ? positionGeometry : vec3(positionGeometry.x, positionGeometry.y.div(cosP), positionGeometry.z);
   m.positionNode = pos.add(toward.mul(CARD_BIAS));
-  m.colorNode = vec4(lighting.shoulder(body.mul(lighting.lightAt(truePos, vec3(0, 0, 0), 1))), texel.a);
+  // `shade`: x = the card's own caster slot (-1: none), y = 1 for "ambient only" (a figure the server marks dark).
+  const shade = attribute('shade', 'vec2');
+  m.colorNode = vec4(lighting.finish(body, lighting.lightAt(truePos, vec3(0, 0, 0), 1, { self: shade.x, darkOnly: shade.y })), texel.a);
   if (opts.translucent) {
     const alpha = attribute('alpha', 'float');
     m.opacityNode = alpha;

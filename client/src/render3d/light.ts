@@ -6,7 +6,11 @@ import { BASE } from '../game/covemath';
 export interface Light { x: number; y: number; z: number; radius: number; r: number; g: number; b: number; shadow: boolean; skip: number }
 /** The slots of the light list the shader holds. */
 export const LIGHT_CAP = 16;
-export const AMBIENT: [number, number, number] = [0.075, 0.08, 0.125];
+/** Darkvision (first guesses): the eye's height for the wall test (tiles), how far past the server's reach full strength goes, and the fade after it. */
+export const DV_EYE = 1;
+export const DV_MARGIN = 0.75;
+export const DV_FADE = 0.5;
+export const AMBIENT:[number, number, number] = [0.075, 0.08, 0.125];
 /** Daylight and work lighting: a bright flat ambient. */
 export const WORK_AMBIENT: [number, number, number] = [0.9, 0.9, 0.9];
 /** The dungeon's ambient light: the demo's AMBIENT times `amb` (0..1). */

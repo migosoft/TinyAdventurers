@@ -13,7 +13,7 @@ import type { MovingLight } from '../generated/MovingLight';
 import { View } from '../sim/view';
 import { TILE, type Blocker, type TileMap } from '../sim/map';
 import { cloudAt, lookFor, sunLook } from './sunmath';
-import type { LightField } from './light';
+import { DV_DARK, type LightField } from './light';
 import { GpuLight } from './gpulight';
 
 /** How strongly a light's hue tints what it lights (MULTIPLY blend): at most this far from white towards the hue. */
@@ -42,8 +42,8 @@ export function warmTint(r: number, g: number, b: number, lit: boolean): [number
   return [255 * (1 - s * (1 - r / m)), 255 * (1 - s * (1 - g / m)), 255 * (1 - s * (1 - b / m))];
 }
 
-/** Darkness over a tile seen only by darkvision: dim, not black. */
-export const DV_DARK = 0.45;
+/** Darkness over a tile seen only by darkvision (defined in light.ts so the 3D view can use it without Phaser). */
+export { DV_DARK };
 
 /** Mirror of the server's dark_reach: is the tile at (dx, dy) tiles from the viewer within darkvision `range` (tiles)? */
 export function darkReach(dx: number, dy: number, range: number): boolean {
