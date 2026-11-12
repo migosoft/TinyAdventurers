@@ -132,13 +132,14 @@ try {
   const state = () => page.evaluate(() => ({ yaw: window.__r3d?.yaw, overlay: window.__r3d?.overlay }));
   await page.mouse.move(760, 330);
   await page.keyboard.press('z');
-  await page.waitForTimeout(400);
+  // The turn is eased by frame time (dt is clamped), so slow software frames stretch it: wait for the target, not a fixed time.
+  await page.waitForFunction(() => window.__r3d?.yaw === 45, null, { timeout: 5000 }).catch(() => {});
   const yawZ = (await state()).yaw;
   console.log(`yaw after Z ${yawZ}`);
   if (yawZ !== 45) errors.push(`yaw after Z is ${yawZ}, expected 45`);
   await page.screenshot({ path: `${out}/r3d-run-${level}-turned.png` });
   await page.keyboard.press('x');
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => window.__r3d?.yaw === 0, null, { timeout: 5000 }).catch(() => {});
   const yawX = (await state()).yaw;
   console.log(`yaw after X ${yawX}`);
   if (yawX !== 0) errors.push(`yaw after X is ${yawX}, expected 0`);
