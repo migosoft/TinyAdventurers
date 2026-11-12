@@ -45,10 +45,9 @@ export class MimicView {
   update(s: MimicState, dt: number): void {
     this.clock += dt;
     this.root.setPosition(Math.round(s.x), Math.round(s.y)).setDepth(DEPTH.entityBase + s.y);
-    const left = Math.cos(s.aim) < -0.15;
-    this.body.setFlipX(left);
     const mem = { lastHop: this.lastHop, wakeFx: this.wakeFx };
     const p = mimicPose(s, this.clock, mem);
+    this.body.setFlipX(p.flip);
     this.lastHop = mem.lastHop;
     this.wakeFx = mem.wakeFx;
     if (p.wakeCue) {

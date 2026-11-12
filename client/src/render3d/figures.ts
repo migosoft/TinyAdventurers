@@ -1,8 +1,9 @@
 // Every figure and every shot of a real run as cards (#303): the Phaser-free twin of EntityView and the projectile part of
 // PhaserRunView. The look of a figure is `figurePose` (game/anim/pose.ts), shared with the 2D view; this file turns the pose
-// into cards in the 3D view's passes (render3d/cards.ts). Walls, props and the objects (torches, chests, barrels, mimics,
-// hazards) are not figures and not drawn here.
-import { ANIM, KIND, SIDE } from '../generated/defs';
+// into cards in the 3D view's passes (render3d/cards.ts). The board objects (torches, chests, barrels, mimics) and the coin
+// burst are drawn here too, from the poses in game/objectPose.ts; walls, props and hazards are not.
+import { ANIM, FLAG, KIND, SIDE } from '../generated/defs';
+import { barrelPose, CHEST_HEIGHT, chestFrame, MimicTracker, mimicPose, torchFrame, type MimicState } from '../game/objectPose';
 import { FIGURES, heroWeapons, isHazardKind, isPlayerKind, isProjectileKind, PROJECTILES, type FigureDef, type FramePoints } from '../game/anim/defs';
 import { VANISH_SECS } from '../game/anim/entityAlpha';
 import { FigureStates } from '../game/anim/figureState';
@@ -10,7 +11,8 @@ import { figurePose, newPoseMemory, type FrameBounds, type PoseMemory, type Tint
 import type { EntState } from '../game/world';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { snapGround, type Cam } from './camera';
-import { newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
+import { newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
+import { torchFlicker } from './light';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
@@ -25,6 +27,19 @@ const AFTER_ALPHA = 0.5;
 const SHOT_LIFT = 0.5;
 /** Skull tokens kept (the oldest go first). */
 const SKULL_CAP = 256;
+/** The torch's flame frames, and how far in front of its wall face the card hangs (tiles). */
+const TORCH_FRAMES = ['torch_f0', 'torch_f1', 'torch_f2', 'torch_f3', 'torch_f4'];
+const TORCH_OFF = 0.02;
+/** The flame card's centre height (tiles) and its glow's lift above that, size and colour (the demo's torch). */
+const TORCH_MID = 1.0;
+const TORCH_GLOW = { lift: 0.25, size: 1.5, rgb: [0.5, 0.3, 0.14] as [number, number, number] };
+/** The 2D chest, barrel and mimic shadow: an ellipse 13 x 5 px, strength 0.4. */
+const OBJ_SHADOW_RX = 6.5;
+const OBJ_SHADOW_RY = 2.5;
+const OBJ_SHADOW_ALPHA = 0.4;
+/** Coins thrown from a chest or a fallen enemy (`fx.coins`): gravity px/s^2, the most kept at once. */
+const COIN_GRAVITY = 220;
+const COIN_CAP = 128;
 
 /**
  * The aim as it appears on screen (rad, y down). The camera's right vector is (cos yaw, sin yaw) and its ground-down vector
@@ -53,6 +68,10 @@ interface Fig {
 /** An image left behind: a vanished figure fading out, or a dash afterimage. */
 interface Image { card: Card; alpha0: number; secs: number; left: number }
 interface Skull { x: number; z: number; flip: boolean }
+/** A coin in flight: spot in tiles, launch speed in screen px/s (right, up), `born` null until the next frame stamps it. */
+interface Coin { x: number; z: number; vx: number; vy: number; life: number; born: number | null; frame: string }
+/** A mimic's clocks: the wake and rattle tracker and the pose's one-shot memory. */
+interface MimicMem { tracker: MimicTracker; mem: { lastHop: number; wakeFx: boolean } }
 
 const rgbOf = (c: number): [number, number, number] => [((c >> 16) & 255) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255];
 
@@ -72,6 +91,8 @@ export class Figures3d {
   private readonly figs = new Map<number, Fig>();
   private images: Image[] = [];
   private skulls: Skull[] = [];
+  private coins: Coin[] = [];
+  private readonly mimics = new Map<number, MimicMem>();
   private now = 0;
   private cam: Cam | null = null;
   private readonly myKind: number;
@@ -85,6 +106,17 @@ export class Figures3d {
 
   /** Sink, Invisible and Died bookkeeping; a Died adds a skull unless the figure was lost to a chasm or the deep, or comes apart (Ghost, Shade) or is a shot. */
   event(ev: PictureEv): void {
+    if (ev.t === 'Coins') {
+      // Like `fx.coins`: min(10, 3 + v / 4) coins, aimed up the screen within +-0.8 rad, 50..90 px/s, living 0.7..1 s.
+      const n = Math.min(10, 3 + Math.floor(ev.v / 4));
+      for (let i = 0; i < n; i++) {
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6;
+        const s = 50 + Math.random() * 40;
+        this.coins.push({ x: ev.x / TILE, z: ev.y / TILE, vx: Math.cos(a) * s, vy: -Math.sin(a) * s, life: 0.7 + Math.random() * 0.3, born: null, frame: `coin_anim_f${i % 4}` });
+      }
+      if (this.coins.length > COIN_CAP) this.coins.splice(0, this.coins.length - COIN_CAP);
+      return;
+    }
     const lost = this.states.event(ev, this.now);
     if (ev.t !== 'Died' || lost === 'lost') return;
     if (ev.kind === KIND.Ghost || ev.kind === KIND.Shade || isProjectileKind(ev.kind)) return;
@@ -103,8 +135,13 @@ export class Figures3d {
     let drawn = 0;
     for (const e of f.ents.values()) {
       seen.add(e.id);
-      if (isFigureKind(e.kind) && this.drawFigure(e, f, cam, out)) drawn++;
+      if (isFigureKind(e.kind)) { if (this.drawFigure(e, f, cam, out)) drawn++; }
+      else if (e.kind === KIND.Torch) this.drawTorch(e, f.now, cam, out);
+      else if (e.kind === KIND.Chest) this.drawChest(e, cam, out);
+      else if (e.kind === KIND.Barrel) this.drawBarrel(e, cam, out);
+      else if (e.kind === KIND.Mimic) this.drawMimic(e, f, cam, out);
     }
+    for (const id of this.mimics.keys()) if (!seen.has(id)) this.mimics.delete(id);
     // The own figure is always drawn from prediction.
     if (!seen.has(f.you) && f.own.alive) {
       seen.add(f.you);
@@ -127,8 +164,101 @@ export class Figures3d {
       const z = sk.z - (Math.cos(cam.yaw) * 2) / TILE;
       pushFlat(out.decals, { frame: 'skull', x, z, lift: 0, flip: sk.flip, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 0.85 }, this.frames, cam);
     }
+    this.drawCoins(f.now, cam, out);
     sortBackToFront(out.ghosts, cam);
     return out;
+  }
+
+  /** The torch's foot is the wall's edge: its face plane is the tile line it sits on, and its card hangs `TORCH_OFF` in front. */
+  private drawTorch(e: EntState, now: number, cam: Cam, out: FigureOut): void {
+    const x = e.x / TILE;
+    const z = e.y / TILE;
+    const lit = e.anim === 1;
+    const ph = e.id * 1.7;
+    // side 0 (Face): the south face of the wall cell north of the floor; 1 (West): the east face of the wall west of the floor; 2 (East): the west face of the wall east of it
+    const [cx, cz, nx, nz] = e.extra === 0 ? [x, Math.floor(z) + TORCH_OFF, 0, 1] : e.extra === 1 ? [Math.floor(x) + TORCH_OFF, z, 1, 0] : [Math.floor(x) + 1 - TORCH_OFF, z, -1, 0];
+    pushWall(out.emissive, torchFrame(lit, now + ph / 8, TORCH_FRAMES), cx, TORCH_MID, cz, nx, nz, e.extra === 2, this.frames);
+    if (lit) {
+      const k = torchFlicker(now, ph);
+      pushGlow(out.glows, cx, TORCH_MID + TORCH_GLOW.lift, cz, TORCH_GLOW.size, [TORCH_GLOW.rgb[0] * k, TORCH_GLOW.rgb[1] * k, TORCH_GLOW.rgb[2] * k], cam);
+    }
+    out.openers.push({ id: e.id, x, z, mid: TORCH_MID, who: 'object' });
+  }
+
+  /** The 2D body sits 1 px below its shadow: the foot moves 1 / 16 tile toward the camera on the ground (as the figures do). */
+  private bodyFoot(x: number, z: number, cam: Cam): [number, number] {
+    return [x - Math.sin(cam.yaw) / TILE, z + Math.cos(cam.yaw) / TILE];
+  }
+
+  private objShadow(x: number, z: number, scale: number, alpha: number, cam: Cam, out: FigureOut): void {
+    const foot = snapGround(cam.pitch, cam.yaw, x, z);
+    pushShadow(out.shadows, cam, foot.x, foot.z, (OBJ_SHADOW_RX * scale) / TILE, (OBJ_SHADOW_RY * scale) / TILE, alpha);
+  }
+
+  private drawChest(e: EntState, cam: Cam, out: FigureOut): void {
+    const x = e.x / TILE;
+    const z = e.y / TILE;
+    const [bx, bz] = this.bodyFoot(x, z, cam);
+    pushCard(out.cards, { frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1 }, this.frames, cam);
+    this.objShadow(x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
+    out.openers.push({ id: e.id, x, z, mid: CHEST_HEIGHT / 2 / TILE, who: 'chest' });
+  }
+
+  private drawBarrel(e: EntState, cam: Cam, out: FigureOut): void {
+    const p = barrelPose(e.anim, e.animMs);
+    // The fuse's shake moves the body along screen right.
+    const x = e.x / TILE + (Math.cos(cam.yaw) * p.dx) / TILE;
+    const z = e.y / TILE + (Math.sin(cam.yaw) * p.dx) / TILE;
+    const [bx, bz] = this.bodyFoot(x, z, cam);
+    const frame = 'barrel_explosive';
+    const fr = this.frames[frame];
+    if (fr) {
+      const card: Card = { frame, x: bx, z: bz, lift: -p.dy / TILE, flip: false, originX: 0.5, footY: 1, scale: p.scale, tint: p.fill !== null ? rgbOf(p.fill) : [1, 1, 1], mode: p.fill !== null ? 1 : 0, alpha: p.alpha };
+      // Sinking in deep water: the part below the surface is cut off, not drawn under the floor.
+      if (p.dy > 0) card.crop = { x: 0, y: 0, w: fr.w, h: Math.max(0, fr.h - p.dy) };
+      if (!card.crop || card.crop.h > 0) pushCard(card.alpha < 1 ? out.ghosts : out.cards, card, this.frames, cam);
+    }
+    if (p.shadow) this.objShadow(x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
+    out.openers.push({ id: e.id, x, z, mid: CHEST_HEIGHT / 2 / TILE, who: 'object' });
+  }
+
+  private drawMimic(e: EntState, f: RunFrame, cam: Cam, out: FigureOut): void {
+    if (e.flags & FLAG.DEAD) return;
+    let m = this.mimics.get(e.id);
+    if (!m) this.mimics.set(e.id, (m = { tracker: new MimicTracker(), mem: { lastHop: -1, wakeFx: false } }));
+    // The aim is read as it appears on screen (as the figures' is), so the facing and the lunge follow the camera.
+    const aim = screenAim(cam.yaw, e.aim);
+    const dist = f.own.alive ? Math.hypot(e.x - f.own.x, e.y - f.own.y) : Infinity;
+    const s: MimicState = m.tracker.step({ x: e.x, y: e.y, anim: e.anim, animT: e.animMs / 1000, aim, flags: e.flags }, f.dt, dist);
+    const p = mimicPose(s, f.now, m.mem);
+    const x = e.x / TILE;
+    const z = e.y / TILE;
+    const [bx, bz] = this.bodyFoot(x, z, cam);
+    pushCard(out.cards, {
+      frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,
+      angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1,
+    }, this.frames, cam);
+    this.objShadow(x, z, p.shadowScale, p.shadowAlpha, cam, out);
+    out.openers.push({ id: e.id, x, z, mid: CHEST_HEIGHT / 2 / TILE, who: 'mimic' });
+  }
+
+  /** Coins in flight: thrown up the screen from the spot (a little above it), pulled down by gravity, fading out. */
+  private drawCoins(now: number, cam: Cam, out: FigureOut): void {
+    const keep: Coin[] = [];
+    for (const c of this.coins) {
+      c.born ??= now;
+      const t = now - c.born;
+      if (t >= c.life) continue;
+      keep.push(c);
+      // 2D starts a coin 6 px above the spot; right is along the camera's right on the ground, up is height.
+      const right = (c.vx * t) / TILE;
+      const up = (6 + c.vy * t - 0.5 * COIN_GRAVITY * t * t) / TILE;
+      pushCard(out.ghosts, {
+        frame: c.frame, x: c.x + Math.cos(cam.yaw) * right, z: c.z + Math.sin(cam.yaw) * right, lift: Math.max(0, up), flip: false, originX: 0.5, footY: 0.5, scale: 1,
+        tint: [1, 1, 1], mode: 0, alpha: 1 - t / c.life,
+      }, this.frames, cam);
+    }
+    this.coins = keep;
   }
 
   /**

@@ -116,6 +116,22 @@ export function pushCard(b: CardBuf, c: Card, frames: FrameRects, cam: Cam): voi
   b.n++;
 }
 
+/**
+ * A 1 x 1 tile card fixed to a wall face (not turned to the camera), for the emissive pass (no `look`): centre (x, y, z),
+ * `nx`/`nz` the face's outward normal (+z, +x or -x here), the picture mirrored when `flip`.
+ */
+export function pushWall(b: CardBuf, frame: string, x: number, y: number, z: number, nx: number, nz: number, flip: boolean, frames: FrameRects): void {
+  const fr = frames[frame];
+  if (!fr) return;
+  // The viewer in front of the face looks along -normal; their right is (-nz, nx) on the ground rotated: normal +z -> right +x, +x -> -z, -x -> +z.
+  const rx = nz, rz = -nx;
+  const u0 = flip ? fr.x + fr.w : fr.x, u1 = flip ? fr.x : fr.x + fr.w;
+  const v0 = fr.y, v1 = fr.y + fr.h;
+  const at = (s: number, h: number, u: number, v: number): V => [x + rx * s * 0.5, y + h * 0.5, z + rz * s * 0.5, u, v];
+  pushQuad(b.position, b.uv, [at(-1, 1, u0, v0), at(1, 1, u1, v0), at(1, -1, u1, v1), at(-1, -1, u0, v1)]);
+  b.n++;
+}
+
 /** A card lying flat on the floor (y = LIE_Y), its frame's foot-to-head axis along screen right (`headRight`) or left. */
 export function pushLying(b: CardBuf, c: Card & { headRight: boolean }, frames: FrameRects, cam: Cam): void {
   const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);

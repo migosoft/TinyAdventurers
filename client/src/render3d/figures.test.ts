@@ -260,4 +260,72 @@ describe('Figures3d', () => {
     expect(fg.count).toBe(1);
     expect(out.openers[0].who).toBe('hero');
   });
+
+  it('draws the board objects (#303 Task 6)', () => {
+    const names = ['torch_f0', 'torch_f1', 'torch_f2', 'torch_f3', 'torch_f4', 'torch_out', 'barrel_explosive', 'coin_anim_f0', 'coin_anim_f1', 'coin_anim_f2', 'coin_anim_f3',
+      'chest_full_open_anim_f0', 'chest_full_open_anim_f1', 'chest_full_open_anim_f2', 'chest_empty_open_anim_f2',
+      'chest_mimic_open_anim_f0', 'chest_mimic_open_anim_f1', 'chest_mimic_open_anim_f2'];
+    names.forEach((n, i) => { frames[n] = { x: 500 + i * 20, y: 20, w: n.startsWith('torch') ? 16 : 16, h: 16 }; });
+    const nameOf = (b: CardBuf, q = 0): string => {
+      const u = Math.min(b.uv[q * 12], b.uv[q * 12 + 4]);
+      return names.find((n) => frames[n].x === u) ?? '?';
+    };
+    const zs = (b: CardBuf, q = 0): number[] => Array.from({ length: 6 }, (_, i) => b.position[(q * 6 + i) * 3 + 2]);
+    const torch = (side: number, lit: boolean, x: number, y: number) => ent(30, KIND.Torch, { x, y, extra: side, anim: lit ? 1 : 0, side: SIDE.Neutral });
+
+    // side 0: the wall's south face at z = floor(y / 16), 0.02 into the room
+    const t0 = make().frame(frame([torch(0, true, 3 * 16 + 8, 2 * 16 + 0.5)]), cam());
+    expect(t0.emissive.n).toBe(1);
+    expect(t0.glows.n).toBe(1);
+    for (const z of zs(t0.emissive)) expect(z).toBeCloseTo(2 + 0.02, 6);
+    expect(nameOf(t0.emissive)).toMatch(/^torch_f\d$/);
+    expect(t0.openers[0]).toMatchObject({ id: 30, who: 'object' });
+    // side 1: the east face of the wall west of the floor
+    const t1 = make().frame(frame([torch(1, true, 4 * 16 + 0.5, 2 * 16 + 8)]), cam());
+    for (const x of xs(t1.emissive)) expect(x).toBeCloseTo(4 + 0.02, 6);
+    // side 2: the west face of the wall east of the floor
+    const t2 = make().frame(frame([torch(2, true, 4 * 16 - 0.5, 2 * 16 + 8)]), cam());
+    for (const x of xs(t2.emissive)) expect(x).toBeCloseTo(4 - 0.02, 6);
+    // unlit: burnt out and no glow
+    const t3 = make().frame(frame([torch(0, false, 24, 32.5)]), cam());
+    expect(nameOf(t3.emissive)).toBe('torch_out');
+    expect(t3.glows.n).toBe(0);
+
+    // chests: closed lid, then the lid over the gold, then empty
+    const chest = (anim: number, animMs: number) => ent(31, KIND.Chest, { anim, animMs, side: SIDE.Neutral });
+    expect(nameOf(make().frame(frame([chest(0, 0)]), cam()).cards)).toBe('chest_full_open_anim_f0');
+    const co = make().frame(frame([chest(1, 600)]), cam());
+    expect(nameOf(co.cards)).toBe('chest_empty_open_anim_f2');
+    expect(co.shadows.n).toBe(1);
+    expect(co.openers[0].who).toBe('chest');
+
+    // barrels: a flash frame of the fuse is a fill, a resting one is not, a sinking one is translucent and sunk
+    const barrel = (anim: number, animMs: number) => ent(32, KIND.Barrel, { anim, animMs, side: SIDE.Neutral });
+    expect(make().frame(frame([barrel(1, 0)]), cam()).cards.look[3]).toBe(1);
+    expect(make().frame(frame([barrel(0, 0)]), cam()).cards.look[3]).toBe(0);
+    const sunk = make().frame(frame([barrel(3, 200)]), cam());
+    expect(sunk.ghosts.n).toBe(1);
+    expect(sunk.cards.n).toBe(0);
+    expect(sunk.shadows.n).toBe(0);
+    expect(sunk.openers[0].who).toBe('object');
+
+    // mimics: hiding is a closed chest; once it stops hiding the reveal shows the open lid and lifts it
+    const mimic = (flags: number) => ent(33, KIND.Mimic, { flags });
+    const fg = make();
+    const a = fg.frame(frame([mimic(FLAG.HIDING)]), cam());
+    expect(nameOf(a.cards)).toBe('chest_mimic_open_anim_f0');
+    fg.frame(frame([mimic(0)], { dt: 0.016, now: 10.016 }), cam());
+    const c = fg.frame(frame([mimic(0)], { dt: 0.3, now: 10.3 }), cam());
+    expect(nameOf(c.cards)).toBe('chest_mimic_open_anim_f2');
+    expect(Math.min(...ys(c.cards))).toBeGreaterThan(Math.min(...ys(a.cards)) + 0.1);
+    expect(c.openers[0].who).toBe('mimic');
+    expect(c.shadows.n).toBe(1);
+
+    // coins: min(10, 3 + v / 4) translucent coins that are gone after a second
+    const cf = make();
+    cf.frame(frame([]), cam());
+    cf.event({ t: 'Coins', x: at(1), y: 8, v: 20 });
+    expect(cf.frame(frame([], { now: 10.1 }), cam()).ghosts.n).toBe(8);
+    expect(cf.frame(frame([], { now: 11.2 }), cam()).ghosts.n).toBe(0);
+  });
 });

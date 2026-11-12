@@ -158,6 +158,8 @@ export interface MimicPose {
   hurtFill: boolean;
   shadowScale: number;
   shadowAlpha: number;
+  /** Faces left (mirrored): the aim points left of the screen's vertical by more than a margin. */
+  flip: boolean;
   /** One-shot cues for the 2D effects: the reveal pop and the landing dust. */
   wakeCue: boolean;
   landCue: boolean;
@@ -250,6 +252,7 @@ export function mimicPose(s: MimicState, clock: number, mem: { lastHop: number; 
     hurtFill: !!s.hurt && Math.floor(clock * 30) % 2 === 0,
     shadowScale: 1 - 0.35 * air,
     shadowAlpha: 0.4 - 0.15 * air,
+    flip: left,
     wakeCue,
     landCue,
   };
