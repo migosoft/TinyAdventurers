@@ -124,6 +124,7 @@ export function cardMaterial(
     m.alphaTestNode = alpha.mul(0.5);
     m.transparent = true;
     m.depthWrite = false;
+    m.forceSinglePass = true; // a transparent double-sided material would otherwise draw twice
   } else {
     m.alphaTest = 0.5;
   }
@@ -138,6 +139,7 @@ export function shadowMaterial(): MeshBasicNodeMaterial {
   m.colorNode = vec4(0, 0, 0, attribute('alpha', 'float').mul(fall));
   m.transparent = true;
   m.depthWrite = false;
+  m.forceSinglePass = true;
   m.side = DoubleSide;
   return m;
 }
@@ -161,6 +163,7 @@ export function glowMaterial(): MeshBasicNodeMaterial {
   m.transparent = true;
   m.blending = AdditiveBlending;
   m.depthWrite = false;
+  m.forceSinglePass = true;
   m.side = DoubleSide;
   return m;
 }

@@ -17,6 +17,7 @@ const SHADOW_Y = 0.01;
 export interface Quads { position: Float32Array; uv: Float32Array; look: Float32Array; count: number }
 export interface Glows { position: Float32Array; uv: Float32Array; color: Float32Array; count: number } // uv -1..1; color rgb already times strength
 export interface Shadows { position: Float32Array; uv: Float32Array; alpha: Float32Array; count: number } // uv -1..1
+/** `ghosts` (translucent, no depth write) must be sorted with `sortBackToFront` by the producer before it is handed over. */
 export interface Dynamic { cards: Quads; ghosts: Quads; decals: Quads; shadows: Shadows; emissive: Quads; glows: Glows }
 
 /** The growing arrays one pass is built in; `n` counts quads. */
@@ -49,10 +50,17 @@ const pushQuad = (pos: number[], uv: number[], q: [V, V, V, V], extra?: (n: numb
 };
 
 /**
- * An upright card: an atlas frame (or a crop of it) standing on a foot point, turned to the camera, rotated `angle` (rad, clockwise on screen)
- * about `pivot` (frame px from the frame's top-left), lifted `lift` tiles, pushed `bias` tiles along the view ray.
- * `originX` and `footY` are fractions of the whole frame (0.5, 1: bottom centre) that sit on the foot point; `scale` (and `sx`, `sy`) multiply the 16 px per tile.
- * `offset` moves the card on screen in frame px (right, up).
+ * An upright card: an atlas frame (or a crop of it) standing on a foot point, turned to the camera.
+ * Spaces and units, in the same terms as `Pose` (game/anim/pose.ts):
+ * - `frame`: atlas frame name. `x`, `z`: foot point in tiles. `lift`: tiles raised. `bias`: tiles pushed along the view ray.
+ * - `flip`: mirrors the picture (the texture u) only; it never moves the anchor, crop or pivot.
+ * - `originX`: fraction of the frame width (0..1) of the DISPLAY frame (after the flip) that sits on the foot point (0.5: centre; `Pose.originX`).
+ * - `footY`: fraction of the frame height (0..1, from the top) that sits on the foot point (1: bottom edge); Task 5 converts `footRow / h`.
+ * - `crop`: frame px in DISPLAY space (after the flip), from the display frame's top-left; the quad and its uv cover only this rectangle.
+ * - `scale`: multiplies the 16 px per tile; `sx`, `sy`: extra horizontal and vertical stretch (default 1).
+ * - `angle`: radians, clockwise on screen, about `pivot` (frame px in display space from the top-left; default the anchor).
+ * - `offset`: frame px, x right and y DOWN as in `Pose.body`, multiplied by `scale`.
+ * - `tint` rgb 0..1, `mode` 0 multiply, 1 fill, 2 grey then multiply, `alpha` 0..1 (translucent pass only).
  */
 export interface Card {
   frame: string; crop?: { x: number; y: number; w: number; h: number };
@@ -72,22 +80,22 @@ function place(
   const f = snapGround(cam.pitch, cam.yaw, c.x, c.z);
   const ay = c.footY * fr.h, ax = c.originX * fr.w;
   const sx = c.scale * (c.sx ?? 1) / 16, sy = c.scale * (c.sy ?? 1) / 16;
-  const ox = c.offset ? c.offset[0] : 0, oy = c.offset ? c.offset[1] : 0;
-  // A mirrored card is mirrored about its anchor: positions, pivot and the sense of the angle all turn over.
-  const m = c.flip ? -1 : 1;
-  const ang = rot ? (c.angle ?? 0) * m : 0;
-  const pvx = c.pivot ? (c.pivot[0] - ax) * m : 0, pvy = c.pivot ? ay - c.pivot[1] : 0; // pivot relative to the anchor, y up
+  const ox = c.offset ? c.offset[0] * c.scale : 0, oy = c.offset ? -c.offset[1] * c.scale : 0; // y down in, up out
+  // Everything is in display space: the geometry is never mirrored, only the texture is read back to front.
+  const ang = rot ? (c.angle ?? 0) : 0;
+  const pvx = c.pivot ? c.pivot[0] - ax : 0, pvy = c.pivot ? ay - c.pivot[1] : 0; // pivot relative to the anchor, y up
   const ca = Math.cos(ang), sa = Math.sin(ang);
-  const uA = fr.x + crop.x, uB = fr.x + crop.x + crop.w;
-  const u0 = c.flip ? uB : uA, u1 = c.flip ? uA : uB;
+  // Display column d is frame column w - d when flipped.
+  const u0 = c.flip ? fr.x + fr.w - crop.x : fr.x + crop.x;
+  const u1 = c.flip ? fr.x + fr.w - crop.x - crop.w : fr.x + crop.x + crop.w;
   const v0 = fr.y + crop.y, v1 = fr.y + crop.y + crop.h;
-  const L = c.flip ? ax - crop.x - crop.w : crop.x - ax, R = c.flip ? ax - crop.x : crop.x + crop.w - ax;
+  const L = crop.x - ax, R = crop.x + crop.w - ax;
   const T = ay - crop.y, B = ay - crop.y - crop.h;
   // Frame px (dx right, dy up from the anchor) -> world: rotate clockwise about the pivot, scale, offset, then the axes.
   const corner = (dx: number, dy: number, u: number, v: number): V => {
     const rx = pvx + (dx - pvx) * ca + (dy - pvy) * sa;
     const ry = pvy - (dx - pvx) * sa + (dy - pvy) * ca;
-    const a = rx * sx + ox / 16, b = ry * sy + oy / 16;
+    const a = rx * sx + ox / 16, b = ry * sy + oy / 16; // the offset is in screen units, not stretched
     return [f.x + right[0] * a + up[0] * b, up[1] * b + right[1] * a + c.lift, f.z + right[2] * a + up[2] * b, u, v];
   };
   const q: [V, V, V, V] = [corner(L, T, u0, v0), corner(R, T, u1, v0), corner(R, B, u1, v1), corner(L, B, u0, v1)];
@@ -121,7 +129,10 @@ export function pushLying(b: CardBuf, c: Card & { headRight: boolean }, frames: 
   b.n++;
 }
 
-/** A soft floor ellipse (uv -1..1), `alpha` its strength: ground shadows (2D: 0.45 at the centre). */
+/**
+ * A soft floor ellipse (uv -1..1), `alpha` its strength: ground shadows (2D: 0.45 at the centre).
+ * Callers pass the snapped foot (`snapGround`), like the cards, so the shadow stays under the feet.
+ */
 export function pushShadow(b: ShadowBuf, x: number, z: number, rx: number, rz: number, alpha: number): void {
   pushQuad(b.position, b.uv, [
     [x - rx, SHADOW_Y, z - rz, -1, -1], [x + rx, SHADOW_Y, z - rz, 1, -1],

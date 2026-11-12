@@ -258,3 +258,53 @@ describe('shadows and glows', () => {
     expect(d.cards.look.length).toBe(d.cards.count * 30);
   });
 });
+
+describe('Card spaces (display space, like Pose)', () => {
+  it('flip with originX 0.25 keeps the anchor column and only reads the texture back to front', () => {
+    const a = newCardBuf(), f = newCardBuf();
+    pushCard(a, card({ originX: 0.25 }), frames, cam(0));
+    pushCard(f, card({ originX: 0.25, flip: true }), frames, cam(0));
+    const foot = snapGround(Math.PI / 4, 0, 3.3, 4.1);
+    for (const b of [a, f]) {
+      const [tl, tr] = corner4(b);
+      expect(tl[0]).toBeCloseTo(foot.x - 4 / 16, 6);
+      expect(tr[0]).toBeCloseTo(foot.x + 12 / 16, 6);
+    }
+    expect(a.uv[0]).toBe(100);
+    expect(f.uv[0]).toBe(116);
+  });
+
+  it('flip with a pivot turns the same way on screen as without', () => {
+    const a = newCardBuf(), f = newCardBuf();
+    const o = { angle: Math.PI / 2, pivot: [4, 28] as [number, number], originX: 0.25 };
+    pushCard(a, card(o), frames, cam(0));
+    pushCard(f, card({ ...o, flip: true }), frames, cam(0));
+    corner4(a).forEach((p, i) => expect(near(corner4(f)[i], p)).toBe(true));
+  });
+
+  it('offset is in px times scale, y down: +y moves the card down on screen', () => {
+    const a = newCardBuf(), o = newCardBuf();
+    pushCard(a, card({ scale: 2 }), frames, cam(0));
+    pushCard(o, card({ scale: 2, offset: [4, 8] }), frames, cam(0));
+    corner4(a).forEach((p, i) => {
+      const q = corner4(o)[i];
+      expect(q[0] - p[0]).toBeCloseTo(8 / 16, 6);
+      expect(q[1] - p[1]).toBeCloseTo(-16 / 16, 6);
+    });
+  });
+
+  it('a crop is in display space under flip: its uv is mirrored, its position is not', () => {
+    const a = newCardBuf(), f = newCardBuf();
+    const crop = { x: 2, y: 0, w: 4, h: 28 };
+    pushCard(a, card({ crop }), frames, cam(0));
+    pushCard(f, card({ crop, flip: true }), frames, cam(0));
+    const foot = snapGround(Math.PI / 4, 0, 3.3, 4.1);
+    for (const b of [a, f]) {
+      const [tl, tr] = corner4(b);
+      expect(tl[0]).toBeCloseTo(foot.x + (2 - 8) / 16, 6);
+      expect(tr[0]).toBeCloseTo(foot.x + (6 - 8) / 16, 6);
+    }
+    expect([a.uv[0], a.uv[2 * TR]]).toEqual([102, 106]);
+    expect([f.uv[0], f.uv[2 * TR]]).toEqual([114, 110]);
+  });
+});
