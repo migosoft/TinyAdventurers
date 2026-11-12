@@ -27,7 +27,7 @@ export interface WorldMaterial {
   material: MeshBasicNodeMaterial;
   /** 0 or 1: floors and the ground read the linear texture at a sharpened position. */
   smooth: { value: number };
-  /** See-through uniforms: `mode` 0 off, 1 soft, 2 lattice; `keep` 0..1; `target` and `ray` the camera target and the unit vector toward the camera (the mask's depth reference). */
+  /** See-through uniforms: `mode` 0 off, 1 soft, 2 lattice; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
   see: { mode: { value: number }; keep: { value: number }; target: { value: Vector3 }; ray: { value: Vector3 } };
   /** Points the ground kind at a new image (nearest and linear copies of it) and marks it ready. */
   setGround(nearest: Texture, linear: Texture): void;
@@ -133,7 +133,9 @@ export function maskMaterial(): { material: NodeMaterial; edge: { value: number 
   const t = length(uv());
   const strength = float(1).sub(smoothstep(float(1).sub(edge), 1, t));
   const m = new NodeMaterial();
-  m.fragmentNode = vec4(strength, float(SEE_DEPTH_BIAS).sub(attribute('near', 'float')), 0, 1);
+  // Where the strength is 0 (the square's corners, outside the circle) the fragment writes nothing (green and alpha 0), so a far thing's empty corner cannot win the depth MAX against a nearer thing's disc.
+  const on = select(strength.greaterThan(0), float(1), float(0));
+  m.fragmentNode = vec4(strength, float(SEE_DEPTH_BIAS).sub(attribute('near', 'float')).mul(on), 0, on);
   m.depthTest = false;
   m.depthWrite = false;
   m.transparent = true;

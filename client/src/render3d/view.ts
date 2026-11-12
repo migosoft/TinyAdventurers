@@ -43,7 +43,7 @@ import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type World
 import { buildTerrainChunk, stepTerrainUv, type TerrainChunk } from './terrainMesh';
 import { FIELD_ALPHA, FIELD_COLOUR, buildField } from './fieldMesh';
 import type { Opener } from './figures';
-import { SEE_DEFAULTS, discQuads, type SeeLook } from './seeThrough';
+import { SEE_DEFAULTS, discQuads, discTowards, type SeeLook } from './seeThrough';
 
 export interface Assets { image: HTMLImageElement; frames: FrameRects }
 /** The world the view draws: `painted` marks a woodland (ground tiles read the ground image); `clear` is the clear colour, 'stone' the lit wall top's. */
@@ -470,7 +470,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       // See through: the camera target (not snapped: the mask's depths use the same one) and the look; the mask pass runs unless off.
       const look = f.see?.look ?? SEE_DEFAULTS;
       wm.see.target.value.set(f.cam.x, 0, f.cam.z);
-      wm.see.ray.value.set(ray[0], ray[1], ray[2]);
+      const toward2 = discTowards(f.cam);
+      wm.see.ray.value.set(toward2.x, 0, toward2.z); // horizontal: height does not make a wall nearer
       wm.see.mode.value = look.mode === 'off' ? 0 : look.mode === 'soft' ? 1 : 2;
       wm.see.keep.value = look.keep;
       mm.edge.value = look.edge;

@@ -2,7 +2,6 @@
 // Pure parts here (strengths, the Bayer threshold, the disc quads, the opening rule); `view.ts` draws the quads into a
 // quarter-size mask and `materials.ts` reads it in the wall shader.
 import type { Cam } from './camera';
-import { viewRay } from './camera';
 import type { Opener } from './figures';
 
 export type SeeMode = 'soft' | 'lattice' | 'off';
@@ -53,9 +52,26 @@ export function wallOpens(strength: number, green: number, wallNear: number): bo
   return strength > 0 && wallNear > SEE_DEPTH_BIAS - green + SEE_DEPTH_MARGIN;
 }
 
+/** Depth is clamped to this many tiles either side of the camera target, so that `SEE_DEPTH_BIAS - near` stays positive. */
+export const SEE_NEAR_MAX = 40;
+
+/** The unit ground direction from the target toward the camera (the view ray without its height). */
+export function discTowards(cam: { yaw: number }): { x: number; z: number } {
+  return { x: -Math.sin(cam.yaw), z: Math.cos(cam.yaw) };
+}
+
+/**
+ * Depth of a ground point along the horizontal view direction, from the camera target: larger = nearer the camera. Height does not
+ * count (a wall's upper half behind a figure is not nearer than the figure), so walls behind stay solid at every height.
+ */
+export function nearOf(x: number, z: number, cam: { x: number; z: number; yaw: number }): number {
+  const t = discTowards(cam);
+  return (x - cam.x) * t.x + (z - cam.z) * t.z;
+}
+
 /**
  * Camera-facing disc quads (two triangles each) at each opener's mid point: `position` is world x y z, `uv` runs -1..1, `near` is
- * dot(p - target, viewRay) (larger = nearer the camera; one value per disc, constant over its quad).
+ * `nearOf` the opener's foot (clamped; one value per disc, constant over its quad).
  */
 export function discQuads(openers: readonly Opener[], cam: Cam, look: SeeLook): { position: Float32Array; uv: Float32Array; near: Float32Array; count: number } {
   const n = openers.length;
@@ -67,10 +83,9 @@ export function discQuads(openers: readonly Opener[], cam: Cam, look: SeeLook): 
   // Screen right and up in world space (the inverse of `project`).
   const rx = c * look.radius, rz = s * look.radius;
   const ux = s * sp * look.radius, uy = cp * look.radius, uz = -c * sp * look.radius;
-  const ray = viewRay(cam.pitch, cam.yaw);
   const corners: [number, number][] = [[-1, 1], [-1, -1], [1, -1], [-1, 1], [1, -1], [1, 1]];
   openers.forEach((o, i) => {
-    const nr = (o.x - cam.x) * ray[0] + o.mid * ray[1] + (o.z - cam.z) * ray[2];
+    const nr = Math.min(SEE_NEAR_MAX, Math.max(-SEE_NEAR_MAX, nearOf(o.x, o.z, cam)));
     corners.forEach(([u, v], k) => {
       const j = i * 6 + k;
       position[j * 3] = o.x + u * rx + v * ux;

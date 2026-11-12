@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { project } from './camera';
 import type { Opener } from './figures';
-import { SEE_DEFAULTS, bayer4, discQuads, discStrength, wallKeep, wallOpens, SEE_DEPTH_BIAS } from './seeThrough';
+import { SEE_DEFAULTS, bayer4, discQuads, discStrength, nearOf, discTowards, wallKeep, wallOpens, SEE_DEPTH_BIAS } from './seeThrough';
 
 const look = SEE_DEFAULTS;
 const cam = { x: 10, z: 10, pitch: (48.6 * Math.PI) / 180, yaw: 0 };
@@ -94,5 +94,37 @@ describe('wallOpens (the rule the shader implements)', () => {
   it('leaves walls behind or level with the thing solid', () => {
     expect(wallOpens(1, green, near - 1)).toBe(false);
     expect(wallOpens(1, green, near + 0.02)).toBe(false);
+  });
+});
+
+describe('horizontal depth (walls behind a figure stay solid at every height)', () => {
+  // A wall point opens if the mask's red is on and it is nearer than the figure, measured along the ground direction toward the camera.
+  const opens = (c: { x: number; z: number; pitch: number; yaw: number }, fig: { x: number; z: number }, w: { x: number; z: number }) =>
+    wallOpens(1, SEE_DEPTH_BIAS - nearOf(fig.x, fig.z, c), nearOf(w.x, w.z, c));
+  const fig = { x: 5.5, z: 5.5 };
+  it('yaw 0: the north wall behind keeps its face and top solid; the wall south opens', () => {
+    const c = { ...cam, x: 5.5, z: 5.5, yaw: 0 };
+    // North wall tile z 4..5: its south face at z = 5, top spanning z 4..5 (height does not enter).
+    for (const z of [5, 4.5, 4]) expect(opens(c, fig, { x: 5.5, z })).toBe(false);
+    // South wall tile z 6..7: face at z = 6, top 6..7.
+    for (const z of [6, 6.5, 7]) expect(opens(c, fig, { x: 5.5, z })).toBe(true);
+  });
+  it('yaw 90: the walls on the far side stay solid, the ones toward the camera open', () => {
+    const c = { ...cam, x: 5.5, z: 5.5, yaw: Math.PI / 2 };
+    const toward = discTowards(c);
+    for (const d of [0.5, 1, 1.5]) expect(opens(c, fig, { x: fig.x + toward.x * d, z: fig.z + toward.z * d })).toBe(true);
+    for (const d of [0.5, 1, 1.5]) expect(opens(c, fig, { x: fig.x - toward.x * d, z: fig.z - toward.z * d })).toBe(false);
+    // yaw 90 turns the camera to the +x or -x side: the toward vector is axis-aligned.
+    expect(Math.abs(toward.x) + Math.abs(toward.z)).toBeCloseTo(1, 9);
+    expect(Math.abs(toward.x)).toBeCloseTo(1, 9);
+  });
+  it('discQuads near ignores the figure height', () => {
+    const a = discQuads([op(1, 10, 11, 0.2)], cam, look).near[0];
+    const b = discQuads([op(1, 10, 11, 1.4)], cam, look).near[0];
+    expect(a).toBe(b);
+  });
+  it('near is clamped so that the stored depth stays positive', () => {
+    const q = discQuads([op(1, 400, 400)], cam, look);
+    expect(q.near[0]).toBeLessThan(SEE_DEPTH_BIAS);
   });
 });
