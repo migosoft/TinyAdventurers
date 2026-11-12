@@ -420,6 +420,20 @@ describe('startRun3d', () => {
     }
   });
 
+  it("binds the Settings switches to the run's log at once, even if the host never starts, and clears them on stop", () => {
+    const net = fakeNet();
+    const hud = fakeHud();
+    const run = startRun3d(document.createElement('div'), '', {
+      info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
+      startHost: () => new Promise(() => {}), // the atlas never loads
+    });
+    const toggles = hud.calls.filter((c) => c[0] === 'setToggles');
+    expect(toggles).toHaveLength(1);
+    expect((toggles[0][1] as { label: string }[]).length).toBeGreaterThan(0);
+    run.stop();
+    expect(hud.calls.filter((c) => c[0] === 'setToggles').pop()).toEqual(['setToggles', []]);
+  });
+
   it('replays the messages buffered while the chunk loaded into the session', () => {
     const net = fakeNet();
     const hud = fakeHud();
@@ -534,6 +548,34 @@ describe('startRun3d', () => {
       expect(host.params.yaw).toBe(0);
     });
 
+    it('Ctrl, Cmd or Alt with Z, X, C or L is left to the browser', () => {
+      const { stage, frame, host, net } = setup();
+      for (const code of ['KeyZ', 'KeyC', 'KeyX', 'KeyL']) {
+        for (const mod of ['ctrlKey', 'metaKey', 'altKey']) {
+          expect(stage.key!({ code, repeat: false, shiftKey: false, target: null, [mod]: true } as unknown as KeyboardEvent)).toBe(false);
+        }
+      }
+      settle(frame);
+      expect(host.params.yaw).toBe(0);
+      expect(net.sent.some((m) => m.t === 'RulesLog')).toBe(false);
+      expect(stage.key!({ code: 'KeyZ', repeat: false, target: null } as unknown as KeyboardEvent)).toBe(true); // plain Z still turns
+    });
+
+    it('reads the canvas rect once per frame, however often the pointer is read', () => {
+      const { frame, canvas } = setup();
+      let reads = 0;
+      const c = canvas();
+      c.getBoundingClientRect = () => {
+        reads++;
+        return { left: 0, top: 0, width: 1920, height: 1080 } as DOMRect;
+      };
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 500, clientY: 300 }));
+      frame(null);
+      frame(null);
+      frame(null);
+      expect(reads).toBe(3);
+    });
+
     it('turning does not write yaw into the URL', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       const spy = vi.spyOn(history, 'replaceState');
@@ -554,6 +596,7 @@ describe('startRun3d', () => {
         expect(host!.params.yaw).toBe(45);
         host!.setParams({ ...host!.params, pitch: 40 });
         vi.advanceTimersByTime(1000);
+        expect(spy).toHaveBeenCalled(); // the pitch change was written, so the check below looks at something
         for (const c of spy.mock.calls) expect(String(c[2])).not.toContain('yaw');
         host!.stop();
       } finally {

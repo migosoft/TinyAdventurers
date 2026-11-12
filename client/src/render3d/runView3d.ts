@@ -9,9 +9,8 @@ import { followClamp, freeClamp, keysToWorld, type Cam } from './camera';
 import { RunMouse } from './input';
 import { aimGround, toCanvas } from './screen';
 import type { Overlay3d } from './overlay';
-import { floatOf } from '../game/damage';
 import type { EntState } from '../game/world';
-import { Floats, floatSpot, layoutBars, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
+import { Floats, layoutBars, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { View as SightView } from '../sim/view';
 import { Figures3d, type Opener } from './figures';
@@ -66,6 +65,7 @@ export class RunView3d implements RunView {
   private lastZoom = 1;
   private lastCanvas: StageCtx['canvasEl'] | null = null;
   private lastSize = { w: 0, h: 0 };
+  private lastRect: DOMRect | null = null;
   private fast = false;
   private started = false;
   private fps = 0;
@@ -176,6 +176,8 @@ export class RunView3d implements RunView {
     this.lastZoom = c.zoom;
     this.lastCanvas = c.canvasEl;
     this.lastSize = c.canvas;
+    // One layout read per frame, whatever the number of pointer reads; a resize shows in the next frame's rect.
+    this.lastRect = c.canvasEl.getBoundingClientRect();
     // The drawn aim uses this frame's camera: whatever pointerWorld reads must be stored above this line.
     settleOwnAim(f.own, this.pointerWorld());
 
@@ -244,11 +246,8 @@ export class RunView3d implements RunView {
 
   event(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null = null): void {
     this.figures.event(ev);
-    if (ev.t !== 'Dmg' && ev.t !== 'Heal' && ev.t !== 'Immune' && ev.t !== 'Coins') return;
-    const w = floatOf(ev)!;
-    // A hit on the own hero is born at the predicted spot (#281).
-    const at = ev.t === 'Dmg' || ev.t === 'Heal' ? floatSpot(ev, own, server) : ev;
-    this.floats.add(at.x, at.y, w.text, w.color, w.opts);
+    // A hit on the own hero is born at the predicted foot (#281).
+    this.floats.addPicture(ev, own, server);
   }
 
   tileChanged(x: number, y: number, _v: number): void {
@@ -263,7 +262,7 @@ export class RunView3d implements RunView {
   pointerWorld(): { x: number; y: number } | null {
     const { lastCam: cam, lastPlan: plan, lastCanvas: canvas, mouse } = this;
     if (!cam || !plan || !canvas || !mouse) return null;
-    const p = mouse.at(canvas, this.lastSize.w, this.lastSize.h);
+    const p = mouse.at(canvas, this.lastSize.w, this.lastSize.h, this.lastRect ?? undefined);
     if (!p) return null;
     const g = aimGround(cam, plan, this.lastZoom, p.px, p.py);
     return { x: g.x * TILE, y: g.z * TILE };
@@ -274,5 +273,6 @@ export class RunView3d implements RunView {
     this.c = null;
     this.mouse = null;
     this.lastCanvas = null;
+    this.lastRect = null;
   }
 }

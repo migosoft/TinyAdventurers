@@ -16,6 +16,12 @@
   z-index: 1;
 }
 
+/* An error box paints over the overlay layer. */
+.r3d-error {
+  position: relative;
+  z-index: 2;
+}
+
 .r3d-panel {
   z-index: 2;
   position: fixed;

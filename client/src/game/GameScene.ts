@@ -135,6 +135,7 @@ export class GameScene extends Phaser.Scene {
     this.session.destroy();
     this.session.setView(null);
     this.view?.destroy();
+    this.hud.setToggles([]); // the log ends with the session
     this.detachTimer?.();
     this.timer.on = false;
   }

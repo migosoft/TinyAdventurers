@@ -81,6 +81,8 @@ export function newRun(deps: { info: RunStartInfo; net: NetLike; hud: RunHud; my
   // The rules log lives with the session (it hears the snapshots and ends with it); the stage binds its key and tags.
   const log = new RulesLog(deps.net, deps.info);
   const session = new RunSession({ ...deps, input: () => stepInput(input), clock, log });
+  // The Settings switches point at this run's log from the start (the stage may come late, or never).
+  deps.hud.setToggles(log.settings());
   return { session, input, clock, hud: deps.hud, log };
 }
 
@@ -135,7 +137,6 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   run.input.secondary = () => mouse.takeSecondary();
   runView.mouse = mouse;
   runView.tagOf = (e) => run.log.tagOf(e);
-  run.hud.setToggles(run.log.settings());
 
   // The help line names the turn keys by the player's layout.
   let live = true;
@@ -202,14 +203,14 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         case 'KeyZ':
         case 'KeyC':
         case 'KeyX':
-          if (isTextTarget(e.target)) return false;
+          if (isTextTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return false; // Ctrl+C is a copy
           if (!e.repeat) {
             if (e.code === 'KeyX') turn.north();
             else turn.step(e.code === 'KeyZ' ? 1 : -1);
           }
           return true;
         case 'KeyL':
-          if (isTextTarget(e.target)) return false;
+          if (isTextTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return false; // Ctrl+L is the address bar
           run.log.key(e);
           return true;
         case 'KeyF':

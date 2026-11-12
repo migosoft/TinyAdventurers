@@ -5,6 +5,10 @@ import type { UseHint } from '../game/useHint';
 import type { FigureAnchor } from './figures';
 import { SOUND_TEXT } from '../game/effects';
 import { popScale, WORLD_TEXT } from '../game/worldText';
+import { BODY_RISE } from '../game/damage';
+import type { PictureEv } from '../run/view';
+import { renderPlan } from './quality';
+import { toCanvas } from './screen';
 import { Floats, floatSpot, layoutBars, layoutHeroTags, layoutTags, layoutUseHint, Marks, type LayoutIn, type OverlayItem } from './overlayLayout';
 
 const ZOOM = 3;
@@ -277,6 +281,45 @@ describe('floatSpot', () => {
     expect(floatSpot({ x: 30, y: 20, p: true }, pred, srv)).toEqual({ x: 30, y: 20 });
     expect(floatSpot({ x: 100, y: 50, p: false }, pred, srv)).toEqual({ x: 100, y: 50 });
     expect(floatSpot({ x: 100, y: 50, p: true }, pred, null)).toEqual({ x: 100, y: 50 });
+  });
+});
+
+describe('Floats.addPicture', () => {
+  // A hit at the foot (160, 120) arrives from the server 10 px up, at y = 110. Whatever the camera's yaw, the number starts 10 art px
+  // straight up the screen from the foot, as in 2D.
+  const zoom = 4;
+  const plan = renderPlan('high', zoom, 1920, 1080);
+  for (const yawDeg of [0, 90, 180, 270]) {
+    for (const ty of ['Dmg', 'Heal'] as const) {
+      it(`a ${ty} starts ${BODY_RISE} art px over the foot at yaw ${yawDeg}`, () => {
+        const cam = { x: 10, z: 7.5, pitch: Math.PI / 4, yaw: (yawDeg * Math.PI) / 180 };
+        const to = (x: number, z: number) => toCanvas(cam, plan, zoom, x, 0, z);
+        const f = new Floats(mid);
+        const ev = ty === 'Dmg'
+          ? ({ t: 'Dmg', x: 160, y: 110, v: 5, ty: 0, crit: false, p: false, imm: false } as PictureEv)
+          : ({ t: 'Heal', x: 160, y: 110, v: 5, p: false } as PictureEv);
+        f.addPicture(ev, { x: 0, y: 0 }, null);
+        const out: OverlayItem[] = [];
+        f.layout(to, zoom, out);
+        const foot = to(10, 7.5);
+        const t = only(out, 'text')[0];
+        expect(t.x).toBe(Math.round(foot.px));
+        expect(t.y).toBe(Math.round(foot.py - BODY_RISE * zoom));
+      });
+    }
+  }
+  it('Immune keeps its own lift from the spot', () => {
+    const f = new Floats(mid);
+    f.addPicture({ t: 'Immune', x: 5 * TILE, y: 5 * TILE } as PictureEv, { x: 0, y: 0 }, null);
+    expect(only(floatItems(f), 'text')[0].y).toBe(Math.round(at(5, 5).py - 18 * ZOOM));
+  });
+  it('a hit on the own hero is born at the predicted foot', () => {
+    const f = new Floats(mid);
+    // server hero (100, 60), predicted (130, 60); the event sits 10 px over the server foot
+    f.addPicture({ t: 'Dmg', x: 100, y: 50, v: 5, ty: 0, crit: false, p: true, imm: false } as PictureEv, { x: 130, y: 60 }, { x: 100, y: 60 });
+    const t = only(floatItems(f), 'text')[0];
+    expect(t.x).toBe(Math.round(at(130 / TILE, 60 / TILE).px));
+    expect(t.y).toBe(Math.round(at(130 / TILE, 60 / TILE).py - BODY_RISE * ZOOM));
   });
 });
 

@@ -4,7 +4,8 @@
 import { EFFECT, FLAG } from '../generated/defs';
 import { isPlayerKind } from '../game/anim/defs';
 import { barOf } from '../game/barName';
-import { onOwnHero } from '../game/damage';
+import { BODY_RISE, floatOf, onOwnHero } from '../game/damage';
+import type { PictureEv } from '../run/view';
 import { has } from '../game/effectBits';
 import { SOUND_TEXT } from '../game/effects';
 import type { UseHint } from '../game/useHint';
@@ -14,7 +15,8 @@ import { EFFECT_ICON } from '../ui/effectIcons';
 import type { FigureAnchor } from './figures';
 
 const TILE = 16;
-/** Bar widths (art px), the dark frame around the fill and the label's gap above the bar. */
+/** The effect ids that have a symbol, once. */
+const ICON_IDS = Object.keys(EFFECT_ICON).map(Number);
 /** A bar sits this high above the figure's drawn height. */
 const BAR_GAP = 3;
 const LABEL_GAP = 2;
@@ -99,8 +101,7 @@ export function layoutHeroTags(i: LayoutIn, out: OverlayItem[]): void {
     const right = textWidth(i, name, 'tag') / 2 + ICON_GAP;
     const midY = Math.round(y - ((WORLD_TEXT.tag.size * TAG_LINE) / 2) * i.zoom);
     let n = 0;
-    for (const key of Object.keys(EFFECT_ICON)) {
-      const id = Number(key);
+    for (const id of ICON_IDS) {
       if (!(a.effects & (1 << id))) continue;
       out.push({ t: 'icon', x: Math.round(f.px + (right + n * (ICON_SIZE + ICON_STEP)) * i.zoom), y: midY, id });
       n++;
@@ -164,6 +165,20 @@ export class Floats {
       x: x / TILE, z: y / TILE, dx: Math.round(this.rand() * FLOAT.spread - FLOAT.spread / 2), up, rise: 0, vy: big ? FLOAT.critVy : FLOAT.vy,
       age: 0, life, max: life, pop: big, text, color, stroke, kind: big ? 'crit' : kind,
     });
+  }
+
+  /**
+   * The float of a picture event, if it has one. A hit or heal arrives at the body, `BODY_RISE` px above the foot, which is a
+   * screen-up offset in 2D; here it is the foot, lifted by the same art px on the screen, so it holds at any yaw. `own`: the
+   * predicted hero, `server`: the hero's server position (see `floatSpot`).
+   */
+  addPicture(ev: PictureEv, own: { x: number; y: number }, server: { x: number; y: number } | null): void {
+    const w = floatOf(ev);
+    if (!w) return;
+    if (ev.t === 'Dmg' || ev.t === 'Heal') {
+      const at = floatSpot(ev, own, server);
+      this.add(at.x, at.y + BODY_RISE, w.text, w.color, { ...w.opts, up: (w.opts.up ?? 0) + BODY_RISE });
+    } else if (ev.t === 'Immune' || ev.t === 'Coins') this.add(ev.x, ev.y, w.text, w.color, w.opts);
   }
 
   update(dt: number): void {

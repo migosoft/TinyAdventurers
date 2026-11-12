@@ -61,6 +61,7 @@ export function startRun3d(
       host?.stop();
       clearErrors(el); // a host that failed to start left its error box
       run.session.destroy();
+      deps.hud.setToggles([]); // the log is gone with the session
     },
   };
 }

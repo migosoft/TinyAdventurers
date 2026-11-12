@@ -2,7 +2,6 @@
 // host element (it survives a canvas rebuild after a lost device) and on the window (a release or a blur outside the page).
 import type { CamTurn } from './turn';
 
-/** Only a press on the 3D canvas counts: not the dev panel, the HUD or a menu over it. */
 /** The labels of the Z, X and C keys on the player's layout (the keys are used by position), else the plain letters. */
 export async function turnKeyLabels(): Promise<[z: string, x: string, c: string]> {
   const plain: [string, string, string] = ['Z', 'X', 'C'];
@@ -16,7 +15,8 @@ export async function turnKeyLabels(): Promise<[z: string, x: string, c: string]
   }
 }
 
-const onCanvas =(t: EventTarget | null): boolean => t instanceof HTMLCanvasElement && t.classList.contains('r3d');
+/** Only a press on the 3D canvas counts: not the dev panel, the HUD or a menu over it. */
+const onCanvas = (t: EventTarget | null): boolean => t instanceof HTMLCanvasElement && t.classList.contains('r3d');
 
 export class RunMouse {
   private primaryHeld = false;
@@ -34,10 +34,13 @@ export class RunMouse {
     document.addEventListener('mouseleave', this.onLeave);
   }
 
-  /** Canvas device px of the pointer over `canvas` (whose backing size is w x h), or null: outside it, none yet, or dragging. */
-  at(canvas: HTMLCanvasElement, w: number, h: number): { px: number; py: number } | null {
+  /**
+   * Canvas device px of the pointer over `canvas` (whose backing size is w x h), or null: outside it, none yet, or dragging.
+   * `r`: the canvas's client rect, if the caller has one from this frame (reading it forces a layout).
+   */
+  at(canvas: HTMLCanvasElement, w: number, h: number, rect?: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>): { px: number; py: number } | null {
     if (!this.pos || this.turn.dragging) return null;
-    const r = canvas.getBoundingClientRect();
+    const r = rect ?? canvas.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return null;
     const x = this.pos.x - r.left;
     const y = this.pos.y - r.top;
