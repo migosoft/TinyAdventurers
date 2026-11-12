@@ -65,7 +65,7 @@ describe('run and render3d imports', () => {
     for (const f of run) expect(bare(f), f).toEqual([]);
   });
   it('the files the session and the 3D view import do not reach phaser', () => {
-    for (const f of ['game/useHint.ts', 'game/terrain-layers.ts', 'game/world.ts', 'game/light.ts', 'game/anim/lying.ts', 'game/objectPose.ts', 'game/woodland/ground.ts', 'ui/hud.ts', 'net.ts']) {
+    for (const f of ['game/useHint.ts', 'game/terrain-layers.ts', 'game/world.ts', 'game/light.ts', 'game/anim/lying.ts', 'game/anim/pose.ts','game/objectPose.ts', 'game/woodland/ground.ts', 'ui/hud.ts', 'net.ts']) {
       const chain = reachesPhaser(f);
       expect(chain && chain.join(' > '), `${f} reaches phaser`).toBeNull();
     }

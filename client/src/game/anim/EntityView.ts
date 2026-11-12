@@ -3,59 +3,20 @@
 // by animating the weapon sprite (swing, recoil, raise) plus small body moves.
 // Figures with their own action frames (the dragon) pick them in pickFrame.ts.
 import Phaser from 'phaser';
-import { ANIM, EFFECT, FLAG } from '../../generated/defs';
+import { ANIM, EFFECT } from '../../generated/defs';
 import { DEPTH, Effects, GLOOM } from '../effects';
 import { FONT_TEXT } from '../../fonts';
 import { smoothText, TEXT_RESOLUTION, WORLD_TEXT } from '../worldText';
 import { TagEffects } from '../tagEffects';
-import { frameBounds, has, lieLayout, lyingPose, StatusView } from '../status';
-import { FIGURES, type Dir, type FigureDef, type FramePoints } from './defs';
+import { frameBounds, has, StatusView } from '../status';
+import { FIGURES, type FigureDef, type FramePoints } from './defs';
 import { bodyLookFrom, type BodyLook } from '../silhouette';
-import { ShadeVeil, SILHOUETTE_FILL, silhouetteAlpha } from '../shadeHaze';
-import { pickFrame, windupOf } from './pickFrame';
-import { appearFactor, entityAlpha, ghostPhase, VANISH_SECS } from './entityAlpha';
+import { ShadeVeil, silhouetteAlpha } from '../shadeHaze';
+import { windupOf } from './pickFrame';
+import { appearFactor, VANISH_SECS } from './entityAlpha';
+import { figurePose, newPoseMemory, originXOf, WEAPON_SCALE, type ViewState } from './pose';
 
-export interface ViewState {
-  x: number;
-  y: number;
-  anim: number;
-  /** Seconds since the current animation started. */
-  animT: number;
-  aim: number;
-  flags: number;
-  /** The real arc (rad) of the own hero's melee swing, when it is known; otherwise the figure's fixed one. */
-  swingArc?: number;
-  /** Bitmask of `EffectKind` ids on the creature. */
-  effects?: number;
-  /** The entity id: figures that pulse (`FigureDef.pulse`) take their phase from it. */
-  id?: number;
-  /** A party hero (drawn faintly, not hidden, while Invisible). */
-  party?: boolean;
-  /** The look of its Entangled effect (`lookOf`); Plain when absent. */
-  entangled?: number;
-  /** Pixels the figure stands below a surface (wading in water or lava). */
-  sink?: number;
-  /** Falling into a chasm, 0..1: the figure shrinks a little and vanishes into the dark. */
-  fall?: number;
-  /** Sinking in deep water, 0..1: the figure goes down below the surface. */
-  drown?: number;
-}
-
-/** Multiplies a tint colour channel-wise by `k` and blends it towards `to`. */
-function shade(k: number, to: number, mix: number): number {
-  const ch = (s: number) => Math.round(255 * k * (1 - mix) + ((to >> s) & 255) * mix) << s;
-  return ch(16) | ch(8) | ch(0);
-}
-
-/** Horizontal origin of the body: the hips for figures not centred in their frames (`hipX`, mirrored when facing left). */
-function originX(d: FigureDef, w: number, left: boolean): number {
-  if (d.hipX === undefined) return 0.5;
-  return (left ? w - d.hipX - 0.5 : d.hipX + 0.5) / w;
-}
-const MELEE_T = 0.18;
-/** Pack weapons are large next to the tiny figures; draw them smaller. */
-const WEAPON_SCALE = 0.6;
-const HALF_PI = Math.PI / 2;
+export type { ViewState };
 
 /** Soft ground shadow under a figure (pack sprites have none). */
 export function ensureShadowTexture(scene: Phaser.Scene, r: number): string {
@@ -84,33 +45,27 @@ export class EntityView {
   private tele?: Phaser.GameObjects.Graphics;
   private label?: Phaser.GameObjects.Text;
   private tagFx?: TagEffects;
-  private clock = 0;
-  private runClock = 0;
-  private lastX = 0;
-  private lastY = 0;
+  /** The pose's memory: clocks, speed, facing, held frames, the fade-in. */
+  private mem = newPoseMemory();
   private lastAnim = -1;
-  private ghostT = 0;
   private fxT = 0;
   private shotFx = false;
   private lastAnimT = 0;
-  private dir: Dir = 'right';
   /** Marks of the status effects (blind puff, sleep z's, haste afterimages, flames, frost, poison bubbles). */
   private status: StatusView;
-  /** Petrified or frozen: the body frame it was turned to stone (or ice) in. */
-  private heldFrame: string | null = null;
   /** Petrified: greyscale filters (WebGL only), created on first use. */
   private stone?: Phaser.FX.ColorMatrix;
   private weaponStone?: Phaser.FX.ColorMatrix;
   private lying = false;
-  /** Frozen: the weapon pose is set once, then held. */
-  private weaponHeld = false;
-  /** Set after the first update (a figure that appears asleep or as stone still takes its facing once). */
-  private faced = false;
-  speed = 0;
-  /** Seconds left of the fade-in after reappearing. */
-  private appearLeft = 0;
   /** The Shade's veil of strands (`FigureDef.veil`). */
   private veil?: ShadeVeil;
+
+  get speed(): number {
+    return this.mem.speed;
+  }
+  set speed(v: number) {
+    this.mem.speed = v;
+  }
 
   constructor(
     scene: Phaser.Scene,
@@ -127,7 +82,7 @@ export class EntityView {
     this.figure = scene.add.container(0, 0).setScale(scale);
     this.shadow = scene.add.image(0, 0, ensureShadowTexture(scene, d.baseR)).setOrigin(0.5, 0.5);
     this.body = scene.add.sprite(0, 1, 'atlas', `${d.idle}0`);
-    this.body.setOrigin(originX(d, this.body.width, false), (d.footY ?? this.body.height) / this.body.height);
+    this.body.setOrigin(originXOf(d, this.body.width, false), (d.footY ?? this.body.height) / this.body.height);
     this.figure.add([this.shadow, this.body]);
     if (d.weapon) {
       this.weapon = scene.add.image(0, -d.handY, 'atlas', d.weapon).setScale(WEAPON_SCALE * (d.weaponScale ?? 1));
@@ -177,17 +132,15 @@ export class EntityView {
 
   update(s: ViewState, dt: number): void {
     const d = this.def;
-    this.clock += dt;
-    const moved = Math.hypot(s.x - this.lastX, s.y - this.lastY);
-    this.speed = this.speed * 0.8 + (dt > 0 ? moved / dt : 0) * 0.2;
-    this.lastX = s.x;
-    this.lastY = s.y;
+    const pose = figurePose(d, { ...s, screenAim: s.aim }, dt, this.mem, (f) => {
+      const fr = this.body.texture.get(f);
+      return { ...frameBounds(fr), w: fr.width, h: fr.height };
+    });
     this.root.setPosition(Math.round(s.x), Math.round(s.y));
     this.root.setDepth(DEPTH.entityBase + s.y);
 
-    const dead = (s.flags & FLAG.DEAD) !== 0;
-    this.root.setVisible(!dead);
-    if (dead) {
+    this.root.setVisible(pose.visible);
+    if (!pose.visible) {
       this.veil?.update(null, 1, 0, 0, dt);
       this.status.update(0, dt);
       return;
@@ -195,12 +148,7 @@ export class EntityView {
     const fxBits = s.effects ?? 0;
     const asleep = has(fxBits, EFFECT.Sleep);
     const stone = has(fxBits, EFFECT.Petrified);
-    const slowed = has(fxBits, EFFECT.Slowed);
     const iced = has(fxBits, EFFECT.Frozen);
-    const poisoned = has(fxBits, EFFECT.Poisoned);
-    const chilled = has(fxBits, EFFECT.Chilled);
-    const tainted = has(fxBits, EFFECT.Tainted);
-    if (!iced) this.weaponHeld = false;
     // A new action starts when the anim changes or its timer restarts (repeated swings).
     if (s.anim !== this.lastAnim || s.animT < this.lastAnimT - 0.02) {
       this.lastAnim = s.anim;
@@ -208,97 +156,46 @@ export class EntityView {
     }
     this.lastAnimT = s.animT;
 
-    // Facing follows the aim. TODO(4-dir): pick up/down sheets here once they exist.
-    const cos = Math.cos(s.aim);
-    // Lying asleep, turned to stone or frozen, the figure keeps the side it faces (the own hero's aim still follows the mouse).
-    if (Math.abs(cos) > 0.15 && (!(asleep || stone || iced) || !this.faced)) this.dir = cos < 0 ? 'left' : 'right';
-    this.faced = true;
-    const left = this.dir === 'left';
+    const left = pose.left;
     const sgn = left ? -1 : 1;
     this.body.setFlipX(left);
-    if (d.hipX !== undefined) this.body.setOrigin(originX(d, this.body.width, left), this.body.originY);
+    if (d.hipX !== undefined) this.body.setOrigin(pose.originX, this.body.originY);
 
-    // ---- body: pack idle/run/hit frames ----
-    const hurt = (s.flags & FLAG.HURT) !== 0;
-    const moving = s.anim === ANIM.Move || s.anim === ANIM.Dash || this.speed > 8;
-    // Slowed: the legs run at half pace; accelerated: half as fast again; chilled: at 0.7 (the move speed it has).
-    const pace = (slowed ? 0.5 : has(fxBits, EFFECT.Accelerated) ? 1.5 : 1) * (chilled ? 0.7 : 1);
-    if (moving) this.runClock += dt * Math.min(Math.max(this.speed / 40, 0.7), 2) * pace;
-    const own = d.frames ? pickFrame(d, s, this.clock, this.runClock, moving) : null;
-    let frame: string;
-    if (own) frame = own.frame;
-    else if (hurt && d.hit) frame = d.hit;
-    else if (moving) frame = `${d.run}${Math.floor(this.runClock * 10) % 4}`;
-    else frame = `${d.idle}${Math.floor(this.clock * 6) % 4}`;
-    // Petrified or frozen: the figure keeps the frame it was turned to stone (or ice) in.
-    if (stone || iced) frame = this.heldFrame ??= frame;
-    else this.heldFrame = null;
-    // Flying: the body rises above its shadow, which shrinks a little.
-    const lift = own?.lift ?? 0;
-    this.body.setFrame(frame).setPosition(0, 1 - Math.round(lift * (d.lift ?? 0))).setScale(1, 1).setAngle(0);
-    // Wading: the feet go below the surface (the body is cut off there).
-    // Drowning: the figure sinks until it is fully below the surface.
+    // ---- body: the pose's frame, position, tilt and stretch (an own-frames figure's lift included) ----
     const fall = s.fall ?? 0;
     const drown = s.drown ?? 0;
-    const foot = d.footY ?? this.body.frame.height;
-    const sink = Math.min(foot, Math.round((s.sink ?? 0) + drown * (foot + 2)));
-    if (sink > 0) this.body.setCrop(0, 0, this.body.frame.width, foot - sink);
+    const frame = pose.frame;
+    const aimStep = pose.aimStep;
+    this.body.setFrame(frame).setPosition(pose.body.x + aimStep.x, pose.body.y + aimStep.y).setScale(pose.body.sx, pose.body.sy).setAngle(pose.body.angle);
+    if (pose.lie) {
+      // Phaser draws a flipped, cropped sprite shifted by the crop's x (towards the
+      // cut, here: down once turned); move it back up by the same amount.
+      this.body.y -= left ? Math.round(pose.lie.cropX * pose.lie.squash) : 0;
+      this.body.setCrop(pose.lie.cropX, 0, pose.lie.cropW, pose.footY);
+    } else if (pose.sink > 0) this.body.setCrop(0, 0, this.body.frame.width, pose.footY - pose.sink);
     else this.body.setCrop();
-    this.weapon?.setVisible(drown < 0.4);
-    this.shadow.setVisible(sink === 0 && fall === 0).setScale(1 - 0.3 * lift);
-    this.figure
-      .setPosition(0, sink + Math.round(fall * 6))
-      .setScale((d.scale ?? 1) * (1 - fall * 0.2))
-      .setAlpha(fall > 0.7 ? 1 - (fall - 0.7) / 0.3 : 1);
+    this.shadow.setVisible(pose.shadow.visible).setScale(pose.shadow.sx, pose.shadow.sy);
+    this.figure.setPosition(0, pose.sink + pose.drop).setScale(pose.scale).setAlpha(pose.figureAlpha);
     const tagShown = fall === 0 && drown === 0;
     this.label?.setVisible(tagShown);
     if (this.label && this.tagFx) this.tagFx.set(tagShown ? fxBits : 0, this.label.x + this.label.displayWidth / 2, this.label.y - this.label.displayHeight / 2);
 
     // The ambush wind-up of a silhouette figure (the Shade): a flat dark shape, no eyes, fainter than the real thing.
-    const silhouette = !!d.silhouette && s.anim === ANIM.Ambush;
-    if (hurt && !d.hit && Math.floor(this.clock * 30) % 2 === 0) this.body.setTintFill(0xffffff);
-    else if (silhouette) this.body.setTintFill(SILHOUETTE_FILL);
-    else if (!stone && !iced && (s.anim === ANIM.Windup || s.anim === ANIM.Slam || own?.windup)) {
-      // Telegraph: flashing red (the lich: pale purple gloom) and a shiver before the blow lands.
-      this.body.setTint(Math.floor(this.clock * 16) % 2 ? (d.slam?.gloom ? 0xc890ff : 0xff8080) : (d.tint ?? 0xffffff));
-      this.body.x = Math.floor(this.clock * 40) % 2 ? 1 : -1;
-      if (own) this.body.y += Math.floor(this.clock * 40) % 2;
-    } else if (poisoned) this.body.setTint(shade(1, 0x9be37a, 0.5 + 0.5 * Math.sin(this.clock * Math.PI * 3)));
-    else if (slowed) this.body.setTint(0xa0c8ff);
-    else if (chilled) this.body.setTint(0xd8ecff);
-    else if (tainted) this.body.setTint(shade(1, 0x9be37a, 0.3 * (0.5 + 0.5 * Math.sin(this.clock * Math.PI * 2))));
-    else if (d.tint) this.body.setTint(d.tint);
+    const silhouette = pose.silhouette;
+    const tint = pose.tint;
+    if (tint.mode === 'fill') this.body.setTintFill(tint.rgb);
+    else if (tint.mode === 'mul') this.body.setTint(tint.rgb);
     else this.body.clearTint();
-    // Into the dark (chasm) or the deep (water): the figure darkens as it goes.
-    if (fall > 0) this.body.setTint(shade(1 - fall * 0.95, 0, 0));
-    else if (drown > 0) this.body.setTint(shade(1, 0x243f4c, Math.min(1, drown * 1.5)));
-    if (fall > 0) this.weapon?.setTint(shade(1 - fall * 0.95, 0, 0));
-    else if (d.weaponTint) this.weapon?.setTint(d.weaponTint);
+    if (pose.weaponTint !== null) this.weapon?.setTint(pose.weaponTint);
     else this.weapon?.clearTint();
 
-    // Asleep: lying on the floor towards the facing, the side on the floor cut
-    // off so the body rests on the ground, the shadow stretched under it.
+    // Asleep: the pose lies the body on the floor (above); the status marks read this.
     this.lying = asleep;
-    if (asleep) {
-      const pose = lyingPose(foot, left);
-      const cut = d.lieCrop ?? pose.cropBottom;
-      const w = this.body.frame.width;
-      // After ±90° the frame's side edge faces the floor (the crop is in display space, after the flip):
-      // its right edge falling right (90°), its left edge falling left (-90°). The squash is on the
-      // frame's x axis, which is the vertical one once the body is turned.
-      const lay = lieLayout(frameBounds(this.body.frame), w, foot, this.body.originX * w, left, cut, pose.squash);
-      // Phaser draws a flipped, cropped sprite shifted by the crop's x (towards the
-      // cut, here: down once turned); move it back up by the same amount.
-      const flipFix = left ? Math.round(lay.cropX * pose.squash) : 0;
-      this.body.setAngle(pose.angle).setScale(pose.squash, 1).setPosition(lay.x, lay.y - flipFix);
-      this.body.setCrop(lay.cropX, 0, lay.cropW, foot);
-      this.shadow.setScale(1.6, 1);
-    }
     // Petrified: grey stone (a greyscale filter on body and weapon, WebGL only).
     // A PreFX filter draws the sprite through a render-to-texture pass for as long as
     // the FX pipeline is set, even with the controller inactive, so it is removed
     // (`disable(true)` resets the pipeline and destroys the controller) once the stone ends.
-    if (stone) {
+    if (pose.grey) {
       this.stone ??= this.body.preFX?.addColorMatrix();
       this.stone?.grayscale(1);
       if (this.weapon) {
@@ -310,13 +207,8 @@ export class EntityView {
       if (this.weaponStone) (this.weapon?.preFX?.disable(true), (this.weaponStone = undefined));
     }
     this.status.update(fxBits, dt, s.entangled);
-    if (asleep) this.weapon?.setVisible(false);
-
-    this.appearLeft = Math.max(0, this.appearLeft - dt);
-    // A pulsing figure (the Ghost) blinks during its ambush wind-up (PhaserRunView skips the fade-in then).
-    const ghost = d.pulse ? { t: this.clock, phase: ghostPhase(s.id ?? 0), ambushT: s.anim === ANIM.Ambush ? s.animT : null } : undefined;
-    const appear = appearFactor(this.appearLeft, VANISH_SECS);
-    this.root.setAlpha((silhouette ? silhouetteAlpha(s.animT) : entityAlpha(s.flags, fxBits, s.party ?? false, ghost, d.incorporealAlpha)) * appear);
+    this.weapon?.setVisible(pose.weapon !== null);
+    this.root.setAlpha(pose.rootAlpha);
 
     const ax = Math.cos(s.aim);
     const ay = Math.sin(s.aim);
@@ -329,21 +221,8 @@ export class EntityView {
       case ANIM.Melee:
       case ANIM.Tail: {
         const tail = s.anim === ANIM.Tail;
-        // Own frames: the strike comes after the wind-up, drawn by the frames.
-        const w = windupOf(d, s.anim);
-        if (t < w) break;
-        if (!own) {
-          const k = Math.min(t / MELEE_T, 1);
-          this.body.x += ax * (tail ? -3 : 3) * (1 - k);
-          this.body.y += ay * 1.5 * (1 - k);
-          this.body.setAngle(sgn * 8 * Math.sin(k * Math.PI));
-        }
-        // Darting toward the aim over the first 0.15 s, out and back (the wolf's bite).
-        if (d.lunge && !tail) {
-          const lk = Math.sin(Math.min(t / 0.15, 1) * Math.PI);
-          this.body.x += ax * d.lunge * lk;
-          this.body.y += ay * d.lunge * lk;
-        }
+        // The step, tilt and lunge are in the pose; own frames strike after the wind-up, drawn by the frames.
+        if (t < windupOf(d, s.anim)) break;
         const swing = tail ? d.tail : d.swing;
         if (!d.weapon && !this.shotFx && swing) {
           // Unarmed: claw swoosh in front (demons, dragon) or tail swoosh behind (dragon).
@@ -364,9 +243,8 @@ export class EntityView {
         break;
       case ANIM.Cast:
       case ANIM.Channel:
-        if (!own) this.body.y -= Math.sin(this.clock * 12) > 0 ? 1 : 0;
-        if (this.clock - this.fxT > 0.06) {
-          this.fxT = this.clock;
+        if (this.mem.clock - this.fxT > 0.06) {
+          this.fxT = this.mem.clock;
           const c = d.weaponTint ?? (s.anim === ANIM.Channel ? 0xff3040 : d.base);
           this.fx.particle(s.x + (Math.random() * 10 - 5) * scale, s.y - (Math.random() * 10 + 6) * scale, 0, -20, 0.5, c);
         }
@@ -379,15 +257,9 @@ export class EntityView {
           this.fx.hitSpark(s.x + ax * 6, s.y - d.handY * scale, d.base);
         }
         break;
-      case ANIM.Breath:
-        if (!own) this.body.setAngle(sgn * -6);
-        break;
       case ANIM.Dash:
-        // Own frames draw the charge (and its wind-up); pack figures stretch.
-        if (!own) this.body.setScale(1.25, 0.9);
-        this.ghostT -= dt;
-        if (this.ghostT <= 0 && !own?.windup) {
-          this.ghostT = 0.03;
+        // The stretch is in the pose; so is the afterimage's timing.
+        if (pose.afterimage) {
           this.fx.particle(s.x, s.y + 1 - this.height / 2, 0, 0, 0.25, d.base, {
             frame,
             alpha: 0.5,
@@ -399,108 +271,55 @@ export class EntityView {
     }
 
     // The veil clings to the body (so it follows the attack dash), fades in with it and rises with the ambush warning.
-    this.veil?.update({ x: Math.round(s.x) + this.body.x, y: Math.round(s.y) + this.body.y - 1 }, this.body.flipX ? -1 : 1, this.root.depth, (silhouette ? silhouetteAlpha(s.animT) : 1) * appear, dt);
+    this.veil?.update({ x: Math.round(s.x) + this.body.x, y: Math.round(s.y) + this.body.y - 1 }, this.body.flipX ? -1 : 1, this.root.depth, (silhouette ? silhouetteAlpha(s.animT) : 1) * appearFactor(this.mem.appearLeft, VANISH_SECS), dt);
 
     if (d.mouth && !still) this.breathFx(s);
     if (d.slam) this.slamFx(s, d.slam, still);
 
     // ---- weapon ----
     const w = this.weapon;
-    // Frozen: the weapon stays as it was when the ice took hold (posed once, then held).
-    if (!w || asleep || (iced && this.weaponHeld)) return;
-    this.weaponHeld = iced;
-    const isMelee = s.anim === ANIM.Melee;
-    w.setFrame(isMelee && d.meleeWeapon ? d.meleeWeapon : d.weapon!);
-    w.setScale(WEAPON_SCALE * ((isMelee && d.meleeWeapon ? d.meleeWeaponScale : undefined) ?? d.weaponScale ?? 1));
+    const wp = pose.weapon;
+    if (w && wp) {
+      w.setFrame(wp.frame).setScale(wp.scale).setOrigin(wp.originX, wp.originY).setPosition(wp.x, wp.y).setRotation(wp.rot).setAlpha(wp.alpha).setFlipX(wp.flipX);
+      // Weapon behind the body when aiming upwards.
+      this.figure.moveTo(w, wp.behind ? 1 : this.figure.length - 1);
+    }
+    if (w && pose.weaponFresh) this.weaponFx(s, sgn);
+  }
+
+  /** Sparks, swooshes and the nova's gloom of an armed figure's attacks (the weapon's own pose is in `figurePose`); once per action (`shotFx`). */
+  private weaponFx(s: ViewState, sgn: number): void {
+    const d = this.def;
+    const ax = Math.cos(s.aim);
+    const ay = Math.sin(s.aim);
     const hx = (d.handX ?? 3) * sgn;
-    let alpha = 1;
-    let rot = 0;
-    let ox = 0;
-    let oy = 0;
+    const isMelee = s.anim === ANIM.Melee;
     switch (d.mount) {
-      case 'blade': {
-        // Pack blades point up; aim them at the cursor. The swing itself is a
-        // swoosh drawn at the real damage reach: the weapon fades out at the
-        // start position and fades back in at the end position.
-        w.setOrigin(0.5, 0.85);
-        rot = s.aim + HALF_PI;
-        if (isMelee && d.swing) {
-          const k = Math.min(t / MELEE_T, 1);
-          // A full-circle swing (Whirl) sweeps all the way round.
-          const arc = s.swingArc ?? d.swing.arc;
-          const half = Math.min(arc, Math.PI * 2) / 2;
-          if (!this.shotFx) {
-            this.shotFx = true;
-            this.swoosh(s, s.aim, sgn, d.swing.reach, arc);
-          }
-          if (k < 0.5) {
-            rot -= sgn * half;
-            alpha = Math.max(0, 1 - k / 0.2);
-          } else {
-            rot += sgn * half;
-            alpha = Math.min(1, Math.max(0, (k - 0.7) / 0.3));
-          }
-        } else if (s.anim === ANIM.Windup) rot -= sgn * 1.6;
-        else if (s.anim === ANIM.Slam) {
-          // Ground slam: the club goes up over the head, then comes down at the impact.
-          const k = Math.min(t / 0.3, 1);
-          rot = -sgn * 0.5 * k;
-          oy = -6 * k;
-          ox = -hx * 0.6 * k;
+      case 'blade':
+        // The swing itself is a swoosh drawn at the real damage reach.
+        if (isMelee && d.swing && !this.shotFx) {
+          this.shotFx = true;
+          this.swoosh(s, s.aim, sgn, d.swing.reach, s.swingArc ?? d.swing.arc);
         }
         break;
-      }
-      case 'bow': {
-        w.setOrigin(0.5, 0.5);
-        rot = s.aim;
-        if (isMelee && d.meleeWeapon) {
-          // Ranger rapier thrust: along the aim, not a swing.
-          w.setOrigin(0.5, 0.85);
-          rot = s.aim + HALF_PI;
-          const k = Math.min(t / 0.15, 1);
-          ox = ax * 5 * Math.sin(k * Math.PI);
-          oy = ay * 5 * Math.sin(k * Math.PI);
-        } else if (s.anim === ANIM.Shoot) {
-          const k = Math.min(t / 0.12, 1);
-          ox = -ax * 3 * (1 - k);
-          oy = -ay * 3 * (1 - k);
-          if (!this.shotFx) {
-            this.shotFx = true;
-            this.fx.hitSpark(s.x + ax * 10, s.y - d.handY + ay * 10, 0xfff0c0);
-          }
-        } else if (s.anim === ANIM.Windup) {
-          ox = -ax * 2;
-          oy = -ay * 2;
+      case 'bow':
+        if (!(isMelee && d.meleeWeapon) && s.anim === ANIM.Shoot && !this.shotFx) {
+          this.shotFx = true;
+          this.fx.hitSpark(s.x + ax * 10, s.y - d.handY + ay * 10, 0xfff0c0);
         }
-        // Keep the bow's string toward the archer.
-        w.setFlipX(false).setFlipY(false);
         break;
-      }
-      case 'staff': {
-        // Held upright, leaning toward the aim; thrust forward when casting.
-        w.setOrigin(0.5, 0.75);
-        rot = sgn * 0.25;
+      case 'staff':
         if (s.anim === ANIM.Cast || s.anim === ANIM.Shoot || s.anim === ANIM.Windup || s.anim === ANIM.Channel) {
-          const k = Math.min(t / 0.25, 1);
-          rot = sgn * 0.25 + (s.aim + HALF_PI - sgn * 0.25) * Math.sin(k * Math.PI) * 0.6;
           if (s.anim !== ANIM.Windup && !this.shotFx) {
             this.shotFx = true;
             this.fx.hitSpark(s.x + ax * 10, s.y - d.handY - 10, d.weaponTint ?? 0xc0a0ff);
           }
-        }
-        else if (s.anim === ANIM.Slam) {
-          // Nova wind-up: the staff held high, the orb gathering gloom.
-          rot = 0;
-          oy = -4;
+        } else if (s.anim === ANIM.Slam) {
+          // Nova wind-up: the orb gathering gloom.
           if (Math.random() < 0.5) this.fx.particle(s.x + hx, s.y - d.handY - 18, (Math.random() - 0.5) * 20, (Math.random() - 0.5) * 20, 0.3, Math.random() < 0.5 ? GLOOM.dark : GLOOM.spark, { frame: 'spark' });
         }
         break;
-      }
     }
-    w.setPosition(hx + ox, -d.handY + oy).setRotation(rot).setAlpha(alpha);
-    if (d.mount === 'blade') w.setFlipX(left);
-    // Weapon behind the body when aiming upwards.
-    this.figure.moveTo(w, ay < -0.3 ? 1 : this.figure.length - 1);
   }
 
   /**
@@ -574,7 +393,7 @@ export class EntityView {
     }
     const g = (this.tele ??= this.root.scene.add.graphics().setDepth(DEPTH.hazard));
     const k = Math.min(s.animT / dur, 1);
-    const blink = Math.floor(this.clock * 12) % 2 === 0;
+    const blink = Math.floor(this.mem.clock * 12) % 2 === 0;
     const fill = slam.gloom ? GLOOM.mid : (slam.color ?? 0xff3020);
     const edge = slam.color ?? 0xff5040;
     g.clear().setVisible(true).setPosition(Math.round(s.x), Math.round(s.y));
@@ -592,7 +411,7 @@ export class EntityView {
 
   /** Fade in from nothing (the entity reappears). */
   fadeIn(): void {
-    this.appearLeft = VANISH_SECS;
+    this.mem.appearLeft = VANISH_SECS;
     this.root.setAlpha(0);
   }
 
