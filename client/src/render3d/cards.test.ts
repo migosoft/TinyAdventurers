@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ART, project, snapGround, type Cam } from './camera';
-import { buildDynamic } from './cards';
+import { ART, project, snapGround, viewRay, type Cam } from './camera';
+import { buildDynamic, LIE_Y, newCardBuf, pushCard, pushGlow, pushLying, pushShadow, sortBackToFront, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { newScene } from './scene';
 import type { FrameRects } from './worldMesh';
 
@@ -101,5 +101,160 @@ describe('cards', () => {
       for (const p of sc) expect(home.depth - p.depth).toBeGreaterThanOrEqual(size - 1e-9);
     }
     expect(ART).toBe(16);
+  });
+});
+
+// ---- Card passes (#303) ----
+
+const card = (o: Partial<Card> = {}): Card => ({
+  frame: 'knight_m_idle_anim_f0', x: 3.3, z: 4.1, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1,
+  tint: [1, 1, 1], mode: 0, alpha: 1, ...o,
+});
+/** Vertices of quad q of a CardBuf: [x, y, z] by ORDER (0 TL, 1 BL, 2 BR, 3 TL, 4 BR, 5 TR). */
+const vert = (b: CardBuf, q: number, i: number): number[] => [0, 1, 2].map((k) => b.position[(q * 6 + i) * 3 + k]);
+const TL = 0, BL = 1, BR = 2, TR = 5;
+const corner4 = (b: CardBuf, q = 0): number[][] => [TL, TR, BR, BL].map((i) => vert(b, q, i));
+const near = (a: number[], b: number[]) => a.every((v, i) => Math.abs(v - b[i]) < 1e-6);
+
+describe('pushCard', () => {
+  it('stands a 16x28 frame on the snapped foot, bottom at y 0, top at 28/16', () => {
+    const b = newCardBuf();
+    pushCard(b, card(), frames, cam(0));
+    expect(b.n).toBe(1);
+    const foot = snapGround(Math.PI / 4, 0, 3.3, 4.1);
+    const [tl, tr, br, bl] = corner4(b);
+    expect(near(bl, [foot.x - 0.5, 0, foot.z])).toBe(true);
+    expect(near(br, [foot.x + 0.5, 0, foot.z])).toBe(true);
+    expect(near(tl, [foot.x - 0.5, 28 / 16, foot.z])).toBe(true);
+    expect(near(tr, [foot.x + 0.5, 28 / 16, foot.z])).toBe(true);
+  });
+
+  it('lift raises all four corners', () => {
+    const a = newCardBuf(), l = newCardBuf();
+    pushCard(a, card(), frames, cam(0));
+    pushCard(l, card({ lift: 0.5 }), frames, cam(0));
+    corner4(a).forEach((p, i) => expect(near(corner4(l)[i], [p[0], p[1] + 0.5, p[2]])).toBe(true));
+  });
+
+  it('flip swaps u', () => {
+    const a = newCardBuf(), f = newCardBuf();
+    pushCard(a, card(), frames, cam(0));
+    pushCard(f, card({ flip: true }), frames, cam(0));
+    expect(a.uv[0]).toBe(100); // TL
+    expect(f.uv[0]).toBe(116);
+    expect(a.uv[2 * TR]).toBe(116);
+    expect(f.uv[2 * TR]).toBe(100);
+  });
+
+  it('crop shortens the quad and its uv to the crop', () => {
+    const b = newCardBuf();
+    pushCard(b, card({ crop: { x: 0, y: 8, w: 16, h: 20 } }), frames, cam(0));
+    const [tl, , , bl] = corner4(b);
+    expect(tl[1] - bl[1]).toBeCloseTo(20 / 16, 6);
+    expect(bl[1]).toBeCloseTo(0, 6);
+    expect(b.uv[1]).toBe(208);
+    expect(b.uv[2 * BL + 1]).toBe(228);
+  });
+
+  it('angle pi/2 about a pivot turns the frame clockwise: the head points along screen right', () => {
+    const b = newCardBuf();
+    const cm = cam(0.7);
+    pushCard(b, card({ angle: Math.PI / 2, pivot: [8, 28] }), frames, cm);
+    const head = project(cm, ...(vert(b, 0, TL) as [number, number, number]));
+    const foot = project(cm, ...(vert(b, 0, BL) as [number, number, number]));
+    expect(head.sx - foot.sx).toBeCloseTo(28 / 16, 5);
+    expect(head.sy - foot.sy).toBeCloseTo(0, 5);
+  });
+
+  it('follows the camera right vector at yaw 90 degrees', () => {
+    const b = newCardBuf();
+    pushCard(b, card(), frames, cam(Math.PI / 2));
+    const [tl, tr] = corner4(b);
+    expect(tr[0] - tl[0]).toBeCloseTo(0, 6);
+    expect(tr[2] - tl[2]).toBeCloseTo(1, 6);
+  });
+
+  it('bias moves every corner along the view ray', () => {
+    const a = newCardBuf(), p = newCardBuf();
+    const cm = cam(0.4);
+    pushCard(a, card(), frames, cm);
+    pushCard(p, card({ bias: 0.5 }), frames, cm);
+    const r = viewRay(cm.pitch, cm.yaw);
+    corner4(a).forEach((c, i) => expect(near(corner4(p)[i], [c[0] + 0.5 * r[0], c[1] + 0.5 * r[1], c[2] + 0.5 * r[2]])).toBe(true));
+  });
+
+  it('writes the look of every vertex and skips a frame the atlas lacks', () => {
+    const b = newCardBuf();
+    pushCard(b, card({ tint: [0.2, 0.4, 0.6], mode: 2, alpha: 0.5 }), frames, cam(0));
+    expect(b.look.length).toBe(30);
+    for (let i = 0; i < 6; i++) expect(b.look.slice(i * 5, i * 5 + 5)).toEqual([0.2, 0.4, 0.6, 2, 0.5]);
+    pushCard(b, card({ frame: 'nope' }), frames, cam(0));
+    expect(b.n).toBe(1);
+    expect(b.position.length).toBe(18);
+  });
+});
+
+describe('pushLying', () => {
+  it('lies flat at LIE_Y with the head toward screen right or left', () => {
+    for (const headRight of [true, false]) for (const yaw of [0, 1.1, Math.PI]) {
+      const b = newCardBuf();
+      const cm = cam(yaw);
+      pushLying(b, { ...card(), headRight }, frames, cm);
+      expect(b.n).toBe(1);
+      for (let i = 0; i < 6; i++) expect(vert(b, 0, i)[1]).toBe(LIE_Y);
+      const sx = (i: number) => project(cm, ...(vert(b, 0, i) as [number, number, number])).sx;
+      const head = (sx(TL) + sx(TR)) / 2, foot = (sx(BL) + sx(BR)) / 2;
+      expect(head - foot).toBeCloseTo(headRight ? 28 / 16 : -28 / 16, 5);
+    }
+  });
+
+  it('skips a frame the atlas lacks', () => {
+    const b = newCardBuf();
+    pushLying(b, { ...card({ frame: 'nope' }), headRight: true }, frames, cam(0));
+    expect(b.n).toBe(0);
+  });
+});
+
+describe('sortBackToFront', () => {
+  it('puts the farther quad first, at yaw 0 and at yaw 180', () => {
+    for (const yaw of [0, Math.PI]) {
+      const b = newCardBuf();
+      const cm = cam(yaw);
+      const near_ = yaw === 0 ? 8 : 2, far_ = yaw === 0 ? 2 : 8; // at yaw 0 smaller z is farther
+      pushCard(b, card({ z: near_, x: 5 }), frames, cm);
+      pushCard(b, card({ z: far_, x: 5 }), frames, cm);
+      sortBackToFront(b, cm);
+      expect(b.n).toBe(2);
+      expect(vert(b, 0, BL)[2]).toBeCloseTo(snapGround(cm.pitch, yaw, 5, far_).z, 6);
+      expect(vert(b, 1, BL)[2]).toBeCloseTo(snapGround(cm.pitch, yaw, 5, near_).z, 6);
+      expect(b.look.length).toBe(60);
+    }
+  });
+});
+
+describe('shadows and glows', () => {
+  it('pushShadow makes a floor quad with uv -1..1 and the alpha on every vertex', () => {
+    const b: ShadowBuf = { position: [], uv: [], alpha: [], n: 0 };
+    pushShadow(b, 4, 5, 0.4, 0.2, 0.45);
+    expect(b.n).toBe(1);
+    expect(b.position.length).toBe(18);
+    expect(b.alpha).toEqual([0.45, 0.45, 0.45, 0.45, 0.45, 0.45]);
+    expect(new Set(b.uv)).toEqual(new Set([-1, 1]));
+    const xs = b.position.filter((_, i) => i % 3 === 0), zs = b.position.filter((_, i) => i % 3 === 2);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(0.8, 6);
+    expect(Math.max(...zs) - Math.min(...zs)).toBeCloseTo(0.4, 6);
+  });
+
+  it('pushGlow adds one quad with the colour on its six vertices', () => {
+    const b: GlowBuf = { position: [], uv: [], color: [], n: 0 };
+    pushGlow(b, 1, 1, 1, 0.5, [0.1, 0.2, 0.3], cam(0));
+    expect(b.n).toBe(1);
+    expect(b.color).toEqual([0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3]);
+  });
+
+  it('the demo fills only cards, flames and glows', () => {
+    const d = buildDynamic(newScene(), frames, cam(0), 0, false);
+    expect([d.ghosts.count, d.decals.count, d.shadows.count]).toEqual([0, 0, 0]);
+    expect(d.cards.look.length).toBe(d.cards.count * 30);
   });
 });

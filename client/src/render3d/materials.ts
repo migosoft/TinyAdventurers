@@ -1,7 +1,7 @@
 // Node materials of the 3D view (TSL).
 import { AdditiveBlending, DoubleSide, MeshBasicNodeMaterial, Vector3 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { attribute, clamp, float, floor, fwidth, fract, int, ivec2, length, max, positionGeometry, positionWorld, select, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { attribute, clamp, float, floor, fwidth, fract, int, ivec2, length, max, positionGeometry, positionWorld, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from './lightNodes';
 import { GRASS_FLAT, STONE } from './light';
 
@@ -100,16 +100,46 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
  * Upright sprites. The screen shows a card at its full sprite height, so the vertex is stretched by 1 / cos(pitch)
  * (the demo's true tilt); the light uses the true, unstretched position. `cosP` is set by the view each frame.
  */
-export function cardMaterial(atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, toward: ViewToward): { material: MeshBasicNodeMaterial; cosP: { value: number } } {
+export function cardMaterial(
+  atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, toward: ViewToward,
+  opts: { flat?: boolean; translucent?: boolean } = {},
+): { material: MeshBasicNodeMaterial; cosP: { value: number } } {
   const cosP = uniform(1);
   const texel = texture(atlas, uv().div(vec2(atlasW, atlasH)));
   const truePos = varying(positionGeometry, 'cardPos');
+  // Per card: `tint` is rgb and the mode (0 multiply, 1 fill, 2 grey then multiply); `alpha` is the card's opacity.
+  const tint = attribute('tint', 'vec4');
+  const mode = tint.w;
+  const luma = vec3(texel.rgb.dot(vec3(0.299, 0.587, 0.114)));
+  const body = select(mode.greaterThan(1.5), luma.mul(tint.xyz), select(mode.greaterThan(0.5), tint.xyz, texel.rgb.mul(tint.xyz)));
   const m = new MeshBasicNodeMaterial();
-  m.positionNode = vec3(positionGeometry.x, positionGeometry.y.div(cosP), positionGeometry.z).add(toward.mul(CARD_BIAS));
-  m.colorNode = vec4(lighting.shoulder(texel.rgb.mul(lighting.lightAt(truePos, vec3(0, 0, 0), 1))), texel.a);
-  m.alphaTest = 0.5;
+  // A flat card (a decal on the floor) keeps its true height: it is not stretched by 1 / cos(pitch).
+  const pos = opts.flat ? positionGeometry : vec3(positionGeometry.x, positionGeometry.y.div(cosP), positionGeometry.z);
+  m.positionNode = pos.add(toward.mul(CARD_BIAS));
+  m.colorNode = vec4(lighting.shoulder(body.mul(lighting.lightAt(truePos, vec3(0, 0, 0), 1))), texel.a);
+  if (opts.translucent) {
+    const alpha = attribute('alpha', 'float');
+    m.opacityNode = alpha;
+    // The opacity is applied before the test: scale the threshold so that it still discards texel.a < 0.5.
+    m.alphaTestNode = alpha.mul(0.5);
+    m.transparent = true;
+    m.depthWrite = false;
+  } else {
+    m.alphaTest = 0.5;
+  }
   m.side = DoubleSide;
   return { material: m, cosP };
+}
+
+/** Soft ground shadows: black, alpha times a smooth fall-off over the ellipse (uv -1..1), depth tested but not written. */
+export function shadowMaterial(): MeshBasicNodeMaterial {
+  const m = new MeshBasicNodeMaterial();
+  const fall = float(1).sub(smoothstep(0, 1, length(uv())));
+  m.colorNode = vec4(0, 0, 0, attribute('alpha', 'float').mul(fall));
+  m.transparent = true;
+  m.depthWrite = false;
+  m.side = DoubleSide;
+  return m;
 }
 
 /** Torch flames: the atlas texel, self-lit. */

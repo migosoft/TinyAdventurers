@@ -6,7 +6,7 @@ import { FIGURES } from '../game/anim/defs';
 import { dir8 } from '../run/input';
 import { NO_STATS, type PictureEv, type RunFrame, type RunView, type RunViewInit, type ShotView, type ViewStats } from '../run/view';
 import { facesLeft, followClamp, freeClamp, keysToWorld, type Cam } from './camera';
-import { cardQuads, type Dynamic } from './cards';
+import { cardQuads, emptyGlows, emptyQuads, emptyShadows, type Dynamic } from './cards';
 import { MOVE_KEYS, type StageCtx } from './host';
 import { AMBIENT, WORK_AMBIENT, type Light } from './light';
 import { R3D_SYSTEMS } from './stats';
@@ -20,8 +20,6 @@ const FOLLOW_RATE = 6;
 /** The free camera's speed in tiles per second, and with Shift. */
 const FREE_SPEED = 12;
 const FREE_SPEED_FAST = 36;
-const EMPTY = { position: new Float32Array(0), uv: new Float32Array(0), count: 0 };
-const NO_GLOWS = { position: new Float32Array(0), uv: new Float32Array(0), color: new Float32Array(0), count: 0 };
 
 /** Keys held -> the fixed step's movement: the screen direction turned by the yaw, rounded to the eight wire directions. */
 export function moveInput(held: ReadonlySet<string>, yawRad: number): { mx: -1 | 0 | 1; my: -1 | 0 | 1 } {
@@ -139,8 +137,8 @@ export class RunView3d implements RunView {
       return this.stats(c, 0);
     }
     this.flip = facesLeft(yaw, Math.cos(f.own.aim), Math.sin(f.own.aim), this.flip);
-    const cards = f.own.alive ? cardQuads([{ frame: heroFrame(this.kind, moving, f.now), x: hx, z: hz, flip: this.flip }], this.frames, cam) : EMPTY;
-    const dynamic: Dynamic = { cards, emissive: EMPTY, glows: NO_GLOWS };
+    const cards = f.own.alive ? cardQuads([{ frame: heroFrame(this.kind, moving, f.now), x: hx, z: hz, flip: this.flip }], this.frames, cam) : emptyQuads();
+    const dynamic: Dynamic = { cards, ghosts: emptyQuads(), decals: emptyQuads(), shadows: emptyShadows(), emissive: emptyQuads(), glows: emptyGlows() };
     c.timer.lap('cards');
     const work = this.woodland || c.params.light === 'work';
     const lights: Light[] = work ? [] : [{ x: cam.x, y: 1.0, z: cam.z, radius: 9, r: 1.0, g: 0.82, b: 0.55, shadow: c.params.shadows }];

@@ -31,10 +31,10 @@ import { texture } from 'three/tsl';
 import { snapGround, viewRay, type Cam } from './camera';
 import { WALL_H, cellHeight, heightBytes } from './heights';
 import type { TileMap } from '../sim/map';
-import type { Dynamic } from './cards';
+import type { Dynamic, Quads } from './cards';
 import { cssColour, stoneClear, type Light } from './light';
 import { makeLighting } from './lightNodes';
-import { cardMaterial, emissiveMaterial, glowMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { cardMaterial, emissiveMaterial, glowMaterial, shadowMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
@@ -285,13 +285,34 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
 
   // Cards, flames and glows are pushed toward the camera along the view ray (the demo's depth bias); set each frame.
   const toward = viewTowardUniform();
+  // Four passes of cards share one vertex layout: opaque upright, translucent upright (sorted back to front by the caller), opaque flat (floor decals).
   const card = cardMaterial(atlas, aw, ah, lighting, toward);
+  const ghost = cardMaterial(atlas, aw, ah, lighting, toward, { translucent: true });
+  const decal = cardMaterial(atlas, aw, ah, lighting, toward, { flat: true });
   const emissive = emissiveMaterial(atlas, aw, ah, lighting, toward);
   const glow = glowMaterial();
-  const cards = new DynMesh([['position', 3], ['uv', 2]], card.material);
+  const shadow = shadowMaterial();
+  const cardAttrs: [string, number][] = [['position', 3], ['uv', 2], ['tint', 4], ['alpha', 1]];
+  const cards = new DynMesh(cardAttrs, card.material);
+  const ghosts = new DynMesh(cardAttrs, ghost.material);
+  const decals = new DynMesh(cardAttrs, decal.material);
+  const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1]], shadow);
   const flames = new DynMesh([['position', 3], ['uv', 2]], emissive);
   const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3]], glow);
-  glows.mesh.renderOrder = 1;
+  shadows.mesh.renderOrder = 1;
+  ghosts.mesh.renderOrder = 3;
+  glows.mesh.renderOrder = 4;
+  // `look` is 5 floats per vertex (r, g, b, mode, alpha); a vertex attribute has at most 4 components, so it goes up as `tint` (r, g, b, mode) and `alpha`.
+  let tintBuf = new Float32Array(0), alphaBuf = new Float32Array(0);
+  const cardData = (q: Quads): Record<string, Float32Array> => {
+    const n = q.count * 6;
+    if (alphaBuf.length < n) { tintBuf = new Float32Array(n * 4); alphaBuf = new Float32Array(n); }
+    for (let i = 0; i < n; i++) {
+      tintBuf[i * 4] = q.look[i * 5]; tintBuf[i * 4 + 1] = q.look[i * 5 + 1]; tintBuf[i * 4 + 2] = q.look[i * 5 + 2]; tintBuf[i * 4 + 3] = q.look[i * 5 + 3];
+      alphaBuf[i] = q.look[i * 5 + 4];
+    }
+    return { position: q.position, uv: q.uv, tint: tintBuf, alpha: alphaBuf };
+  };
 
   // The off-screen copy: the quad shows the target's texels as they are (no lighting, no tone mapping, no colour conversion).
   let target: RenderTarget | null = null;
@@ -316,7 +337,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     return target;
   }
 
-  scene.add(cards.mesh, flames.mesh, glows.mesh);
+  scene.add(shadows.mesh, decals.mesh, cards.mesh, ghosts.mesh, flames.mesh, glows.mesh);
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   camera.up.set(0, 1, 0);
 
@@ -395,7 +416,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       camera.updateMatrixWorld(true);
       camera.updateProjectionMatrix();
       const d = f.dynamic;
-      card.cosP.value = Math.cos(f.cam.pitch);
+      card.cosP.value = ghost.cosP.value = Math.cos(f.cam.pitch); // the decal pass is flat and has no stretch
       toward.value.set(ray[0], ray[1], ray[2]);
       wm.smooth.value = f.smooth ? 1 : 0;
       clock = f.t;
@@ -422,7 +443,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         renderer.domElement.style.backgroundColor = bg;
       }
       lighting.setAmbient(f.ambient);
-      cards.set({ position: d.cards.position, uv: d.cards.uv }, d.cards.count * 6);
+      // One buffer per pass: the card scratch arrays are refilled between the sets (each set copies out of them at once).
+      cards.set(cardData(d.cards), d.cards.count * 6);
+      ghosts.set(cardData(d.ghosts), d.ghosts.count * 6);
+      decals.set(cardData(d.decals), d.decals.count * 6);
+      shadows.set({ position: d.shadows.position, uv: d.shadows.uv, alpha: d.shadows.alpha }, d.shadows.count * 6);
       flames.set({ position: d.emissive.position, uv: d.emissive.uv }, d.emissive.count * 6);
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color }, d.glows.count * 6);
       lighting.setLights(f.lights);
@@ -463,8 +488,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         fieldMesh?.geometry.dispose();
         fieldMaterial.dispose();
         material.dispose();
-        for (const m of [card.material, emissive, glow]) m.dispose();
-        for (const dm of [cards, flames, glows]) dm.dispose();
+        for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow]) m.dispose();
+        for (const dm of [cards, ghosts, decals, shadows, flames, glows]) dm.dispose();
         target?.dispose();
         copyMaterial.dispose();
       } finally {

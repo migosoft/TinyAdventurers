@@ -1,56 +1,197 @@
-// Per-frame quads of the demo scene: figure and prop cards, torch flames and glows.
+// Per-frame quads of the 3D view: figure and prop cards, floor decals, ground shadows, torch flames and glows.
 import { facesLeft, snapGround, viewRay, type Cam } from './camera';
-
-/** Tiles a glow is moved toward the camera beyond its own size (the demo's 0.05 glow bias). */
-export const GLOW_LIFT = 0.05;
 import { torchFlicker } from './light';
 import { frameOf, orbAt, type SceneState } from './scene';
 import type { FrameRects } from './worldMesh';
 
-export interface Quads { position: Float32Array; uv: Float32Array; count: number } // 6 vertices per quad
+/** Tiles a glow is moved toward the camera beyond its own size (the demo's 0.05 glow bias). */
+export const GLOW_LIFT = 0.05;
+/** Height of a card lying on the floor, above the terrain layers (0.002 apart). */
+export const LIE_Y = 0.02;
+/** Tiles a held weapon is pushed toward the camera so it draws over its wielder. */
+export const WEAPON_BIAS = 0.01;
+/** Height of a ground shadow: above the floor, below the lying cards. */
+const SHADOW_Y = 0.01;
+
+/** 6 vertices per quad. `look` has 5 floats per vertex: r, g, b, mode (0 multiply, 1 fill, 2 grey then multiply), alpha. */
+export interface Quads { position: Float32Array; uv: Float32Array; look: Float32Array; count: number }
 export interface Glows { position: Float32Array; uv: Float32Array; color: Float32Array; count: number } // uv -1..1; color rgb already times strength
-export interface Dynamic { cards: Quads; emissive: Quads; glows: Glows }
+export interface Shadows { position: Float32Array; uv: Float32Array; alpha: Float32Array; count: number } // uv -1..1
+export interface Dynamic { cards: Quads; ghosts: Quads; decals: Quads; shadows: Shadows; emissive: Quads; glows: Glows }
+
+/** The growing arrays one pass is built in; `n` counts quads. */
+export interface CardBuf { position: number[]; uv: number[]; look: number[]; n: number }
+export interface ShadowBuf { position: number[]; uv: number[]; alpha: number[]; n: number }
+export interface GlowBuf { position: number[]; uv: number[]; color: number[]; n: number }
+
+export const newCardBuf = (): CardBuf => ({ position: [], uv: [], look: [], n: 0 });
+export const newShadowBuf = (): ShadowBuf => ({ position: [], uv: [], alpha: [], n: 0 });
+export const newGlowBuf = (): GlowBuf => ({ position: [], uv: [], color: [], n: 0 });
+
+export const emptyQuads = (): Quads => ({ position: new Float32Array(0), uv: new Float32Array(0), look: new Float32Array(0), count: 0 });
+export const emptyShadows = (): Shadows => ({ position: new Float32Array(0), uv: new Float32Array(0), alpha: new Float32Array(0), count: 0 });
+export const emptyGlows = (): Glows => ({ position: new Float32Array(0), uv: new Float32Array(0), color: new Float32Array(0), count: 0 });
+
+export const quadsOf = (b: CardBuf): Quads => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), look: new Float32Array(b.look), count: b.n });
+export const shadowsOf = (b: ShadowBuf): Shadows => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), alpha: new Float32Array(b.alpha), count: b.n });
+export const glowsOf = (b: GlowBuf): Glows => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), color: new Float32Array(b.color), count: b.n });
 
 type V = [number, number, number, number, number]; // x y z u v
 // Corners run top-left, top-right, bottom-right, bottom-left seen from the camera side; wound counter-clockwise.
 const ORDER = [0, 3, 2, 0, 2, 1];
 
-const push = (pos: number[], uv: number[], q: [V, V, V, V], col?: number[], rgb?: number[]) => {
+const pushQuad = (pos: number[], uv: number[], q: [V, V, V, V], extra?: (n: number) => void) => {
   for (const i of ORDER) {
     pos.push(q[i][0], q[i][1], q[i][2]);
     uv.push(q[i][3], q[i][4]);
-    if (col && rgb) col.push(rgb[0], rgb[1], rgb[2]);
+    extra?.(i);
   }
 };
+
+/**
+ * An upright card: an atlas frame (or a crop of it) standing on a foot point, turned to the camera, rotated `angle` (rad, clockwise on screen)
+ * about `pivot` (frame px from the frame's top-left), lifted `lift` tiles, pushed `bias` tiles along the view ray.
+ * `originX` and `footY` are fractions of the whole frame (0.5, 1: bottom centre) that sit on the foot point; `scale` (and `sx`, `sy`) multiply the 16 px per tile.
+ * `offset` moves the card on screen in frame px (right, up).
+ */
+export interface Card {
+  frame: string; crop?: { x: number; y: number; w: number; h: number };
+  x: number; z: number; lift: number; flip: boolean;
+  originX: number; footY: number; scale: number; sx?: number; sy?: number;
+  angle?: number; pivot?: [number, number]; offset?: [number, number];
+  tint: [number, number, number]; mode: 0 | 1 | 2; alpha: number; bias?: number;
+}
+
+/** The corners (local frame px, x right, y up from the anchor) of a card's quad, rotated, then mapped through two axes. */
+function place(
+  c: Card, frames: FrameRects, cam: Cam, right: [number, number, number], up: [number, number, number], rot: boolean,
+):{ q: [V, V, V, V]; r: { x: number; y: number; w: number; h: number } } | null {
+  const fr = frames[c.frame];
+  if (!fr) return null;
+  const crop = c.crop ?? { x: 0, y: 0, w: fr.w, h: fr.h };
+  const f = snapGround(cam.pitch, cam.yaw, c.x, c.z);
+  const ay = c.footY * fr.h, ax = c.originX * fr.w;
+  const sx = c.scale * (c.sx ?? 1) / 16, sy = c.scale * (c.sy ?? 1) / 16;
+  const ox = c.offset ? c.offset[0] : 0, oy = c.offset ? c.offset[1] : 0;
+  // A mirrored card is mirrored about its anchor: positions, pivot and the sense of the angle all turn over.
+  const m = c.flip ? -1 : 1;
+  const ang = rot ? (c.angle ?? 0) * m : 0;
+  const pvx = c.pivot ? (c.pivot[0] - ax) * m : 0, pvy = c.pivot ? ay - c.pivot[1] : 0; // pivot relative to the anchor, y up
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  const uA = fr.x + crop.x, uB = fr.x + crop.x + crop.w;
+  const u0 = c.flip ? uB : uA, u1 = c.flip ? uA : uB;
+  const v0 = fr.y + crop.y, v1 = fr.y + crop.y + crop.h;
+  const L = c.flip ? ax - crop.x - crop.w : crop.x - ax, R = c.flip ? ax - crop.x : crop.x + crop.w - ax;
+  const T = ay - crop.y, B = ay - crop.y - crop.h;
+  // Frame px (dx right, dy up from the anchor) -> world: rotate clockwise about the pivot, scale, offset, then the axes.
+  const corner = (dx: number, dy: number, u: number, v: number): V => {
+    const rx = pvx + (dx - pvx) * ca + (dy - pvy) * sa;
+    const ry = pvy - (dx - pvx) * sa + (dy - pvy) * ca;
+    const a = rx * sx + ox / 16, b = ry * sy + oy / 16;
+    return [f.x + right[0] * a + up[0] * b, up[1] * b + right[1] * a + c.lift, f.z + right[2] * a + up[2] * b, u, v];
+  };
+  const q: [V, V, V, V] = [corner(L, T, u0, v0), corner(R, T, u1, v0), corner(R, B, u1, v1), corner(L, B, u0, v1)];
+  if (c.bias) {
+    const ray = viewRay(cam.pitch, cam.yaw);
+    for (const p of q) { p[0] += ray[0] * c.bias; p[1] += ray[1] * c.bias; p[2] += ray[2] * c.bias; }
+  }
+  return { q, r: fr };
+}
+
+const lookOf = (b: CardBuf, c: Card) => (): void => { b.look.push(c.tint[0], c.tint[1], c.tint[2], c.mode, c.alpha); };
+
+export function pushCard(b: CardBuf, c: Card, frames: FrameRects, cam: Cam): void {
+  const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
+  const p = place(c, frames, cam, [cs, 0, sn], [0, 1, 0], true);
+  if (!p) return;
+  pushQuad(b.position, b.uv, p.q, lookOf(b, c));
+  b.n++;
+}
+
+/** A card lying flat on the floor (y = LIE_Y), its frame's foot-to-head axis along screen right (`headRight`) or left. */
+export function pushLying(b: CardBuf, c: Card & { headRight: boolean }, frames: FrameRects, cam: Cam): void {
+  const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
+  // Ground directions on screen: right (c, s), down (-s, c). The frame turns a quarter turn: head (frame up) to right, frame right to down; or head left, frame right up.
+  const right: [number, number, number] = c.headRight ? [-sn, 0, cs] : [sn, 0, -cs];
+  const up: [number, number, number] = c.headRight ? [cs, 0, sn] : [-cs, 0, -sn];
+  const p = place({ ...c, lift: 0 }, frames, cam, right, up, false);
+  if (!p) return;
+  for (const q of p.q) q[1] = LIE_Y;
+  pushQuad(b.position, b.uv, p.q, lookOf(b, c));
+  b.n++;
+}
+
+/** A soft floor ellipse (uv -1..1), `alpha` its strength: ground shadows (2D: 0.45 at the centre). */
+export function pushShadow(b: ShadowBuf, x: number, z: number, rx: number, rz: number, alpha: number): void {
+  pushQuad(b.position, b.uv, [
+    [x - rx, SHADOW_Y, z - rz, -1, -1], [x + rx, SHADOW_Y, z - rz, 1, -1],
+    [x + rx, SHADOW_Y, z + rz, 1, 1], [x - rx, SHADOW_Y, z + rz, -1, 1],
+  ], () => { b.alpha.push(alpha); });
+  b.n++;
+}
+
+/**
+ * A glow quad: camera-facing (round on screen), screen-right (c, 0, s), screen-up (s sin p, cos p, -c sin p), half-size `size`.
+ * Its centre is moved toward the camera by size + GLOW_LIFT along the view ray, which leaves its screen position
+ * unchanged (orthographic view) but puts the whole disc in front of its wall, the wall top and the floor.
+ * Known cost: it is added over figures standing within about `size` in front of a torch.
+ */
+export function pushGlow(b: GlowBuf, x0: number, y0: number, z0: number, size: number, rgb: [number, number, number], cam: Cam): void {
+  const c = Math.cos(cam.yaw), sn = Math.sin(cam.yaw), sp = Math.sin(cam.pitch), cpi = Math.cos(cam.pitch);
+  const ray = viewRay(cam.pitch, cam.yaw);
+  const lift = size + GLOW_LIFT;
+  const x = x0 + ray[0] * lift, y = y0 + ray[1] * lift, z = z0 + ray[2] * lift;
+  const rx = size * c, rz = size * sn;
+  const ux = size * sn * sp, uy = size * cpi, uz = -size * c * sp;
+  pushQuad(b.position, b.uv, [
+    [x - rx + ux, y + uy, z - rz + uz, -1, -1], [x + rx + ux, y + uy, z + rz + uz, 1, -1],
+    [x + rx - ux, y - uy, z + rz - uz, 1, 1], [x - rx - ux, y - uy, z - rz - uz, -1, 1],
+  ], () => { b.color.push(rgb[0], rgb[1], rgb[2]); });
+  b.n++;
+}
+
+/** Sorts the quads of a translucent buffer back to front for the camera (whole quads of 6 vertices, by their centre's depth). */
+export function sortBackToFront(b: CardBuf, cam: Cam): void {
+  if (b.n < 2) return;
+  const c = Math.cos(cam.yaw), s = Math.sin(cam.yaw), sp = Math.sin(cam.pitch), cp = Math.cos(cam.pitch);
+  const depth: number[] = [];
+  for (let q = 0; q < b.n; q++) {
+    let d = 0;
+    for (let i = 0; i < 6; i++) {
+      const o = (q * 6 + i) * 3;
+      const x = b.position[o] - cam.x, y = b.position[o + 1], z = b.position[o + 2] - cam.z;
+      d += -(z * c - x * s) * cp - y * sp; // project()'s depth: grows away from the camera
+    }
+    depth.push(d / 6);
+  }
+  const order = [...depth.keys()].sort((p, q) => depth[q] - depth[p] || p - q);
+  const reorder = (a: number[], per: number) => {
+    const out: number[] = new Array(a.length);
+    order.forEach((from, to) => { for (let k = 0; k < per * 6; k++) out[to * per * 6 + k] = a[from * per * 6 + k]; });
+    for (let i = 0; i < a.length; i++) a[i] = out[i];
+  };
+  reorder(b.position, 3);
+  reorder(b.uv, 2);
+  reorder(b.look, 5);
+}
 
 /** One upright figure card: an atlas frame standing on a ground point (tiles), mirrored when `flip`. */
 export interface CardItem { frame: string; x: number; z: number; flip: boolean }
 
+/** The plain card of an item: bottom centre on the foot, no tint, opaque. */
+const plain = (it: CardItem): Card => ({ frame: it.frame, x: it.x, z: it.z, lift: 0, flip: it.flip, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1 });
+
 /** Standing cards, each on its snapped foot and turned to the camera's yaw; a frame the atlas lacks is skipped. */
 export function cardQuads(items: readonly CardItem[], frames: FrameRects, cam: Cam): Quads {
-  const cp: number[] = [], cu: number[] = [];
-  let cn = 0;
-  const c = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
-  for (const it of items) {
-    const r = frames[it.frame];
-    if (!r) continue;
-    const f = snapGround(cam.pitch, cam.yaw, it.x, it.z);
-    const h = r.h / 16, ax = (r.w / 32) * c, az = (r.w / 32) * sn;
-    const u0 = it.flip ? r.x + r.w : r.x, u1 = it.flip ? r.x : r.x + r.w;
-    push(cp, cu, [
-      [f.x - ax, h, f.z - az, u0, r.y], [f.x + ax, h, f.z + az, u1, r.y],
-      [f.x + ax, 0, f.z + az, u1, r.y + r.h], [f.x - ax, 0, f.z - az, u0, r.y + r.h],
-    ]);
-    cn++;
-  }
-  return { position: new Float32Array(cp), uv: new Float32Array(cu), count: cn };
+  const b = newCardBuf();
+  for (const it of items) pushCard(b, plain(it), frames, cam);
+  return quadsOf(b);
 }
 
 export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: number, orb: boolean): Dynamic {
   const ep: number[] = [], eu: number[] = [];
-  const gp: number[] = [], gu: number[] = [], gc: number[] = [];
-  let en = 0, gn = 0;
-  const c = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
+  const glows = newGlowBuf();
+  let en = 0;
 
   const items: CardItem[] = [];
   for (const e of s.ents) {
@@ -60,46 +201,31 @@ export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: num
   for (const p of s.props) items.push({ frame: p.frame, x: p.x, z: p.z, flip: false });
   const cards = cardQuads(items, frames, cam);
 
-  // Glow quad: camera-facing (round on screen), screen-right (c, 0, s), screen-up (s sin p, cos p, -c sin p), half-size `size`.
-  // Its centre is moved toward the camera by size + GLOW_LIFT along the view ray, which leaves its screen position
-  // unchanged (orthographic view) but puts the whole disc in front of its wall, the wall top and the floor.
-  // Known cost: it is added over figures standing within about `size` in front of a torch.
-  const sp = Math.sin(cam.pitch), cpi = Math.cos(cam.pitch);
-  const ray = viewRay(cam.pitch, cam.yaw);
-  const glow = (x0: number, y0: number, z0: number, size: number, rgb: number[]) => {
-    const lift = size + GLOW_LIFT;
-    const x = x0 + ray[0] * lift, y = y0 + ray[1] * lift, z = z0 + ray[2] * lift;
-    const rx = size * c, rz = size * sn;
-    const ux = size * sn * sp, uy = size * cpi, uz = -size * c * sp;
-    push(gp, gu, [
-      [x - rx + ux, y + uy, z - rz + uz, -1, -1], [x + rx + ux, y + uy, z + rz + uz, 1, -1],
-      [x + rx - ux, y - uy, z + rz - uz, 1, 1], [x - rx - ux, y - uy, z - rz - uz, -1, 1],
-    ], gc, rgb);
-    gn++;
-  };
-
   for (const tc of s.torches) {
     const fr = frames[`torch_f${Math.floor(t * 8 + tc.ph) % 5}`];
     const zz = tc.z - 0.14;
     if (fr) {
-      push(ep, eu, [
+      pushQuad(ep, eu, [
         [tc.x - 0.5, tc.y + 0.5, zz, fr.x, fr.y], [tc.x + 0.5, tc.y + 0.5, zz, fr.x + fr.w, fr.y],
         [tc.x + 0.5, tc.y - 0.5, zz, fr.x + fr.w, fr.y + fr.h], [tc.x - 0.5, tc.y - 0.5, zz, fr.x, fr.y + fr.h],
       ]);
       en++;
     }
     const k = 0.5 * torchFlicker(t, tc.ph);
-    glow(tc.x, tc.y + 0.25, zz, 1.5, [1 * k, 0.6 * k, 0.28 * k]);
+    pushGlow(glows, tc.x, tc.y + 0.25, zz, 1.5, [1 * k, 0.6 * k, 0.28 * k], cam);
   }
   if (orb) {
     const o = orbAt(t);
-    glow(o.x, o.y, o.z, 0.9, [0.4 * 0.9, 0.58 * 0.9, 1 * 0.9]);
-    glow(o.x, o.y, o.z, 0.22, [0.4 * 3, 0.58 * 3, 1 * 3]);
+    pushGlow(glows, o.x, o.y, o.z, 0.9, [0.4 * 0.9, 0.58 * 0.9, 1 * 0.9], cam);
+    pushGlow(glows, o.x, o.y, o.z, 0.22, [0.4 * 3, 0.58 * 3, 1 * 3], cam);
   }
 
   return {
     cards,
-    emissive: { position: new Float32Array(ep), uv: new Float32Array(eu), count: en },
-    glows: { position: new Float32Array(gp), uv: new Float32Array(gu), color: new Float32Array(gc), count: gn },
+    ghosts: emptyQuads(),
+    decals: emptyQuads(),
+    shadows: emptyShadows(),
+    emissive: { position: new Float32Array(ep), uv: new Float32Array(eu), look: new Float32Array(0), count: en },
+    glows: glowsOf(glows),
   };
 }
