@@ -6,6 +6,8 @@ import { settleOwnAim } from '../run/aim';
 import { dir8 } from '../run/input';
 import { NO_STATS, type PictureEv, type RunFrame, type RunView, type RunViewInit, type ShotView, type ViewStats } from '../run/view';
 import { followClamp, freeClamp, keysToWorld, type Cam } from './camera';
+import { RunMouse } from './input';
+import { aimGround } from './screen';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { View as SightView } from '../sim/view';
 import { Figures3d, type Opener } from './figures';
@@ -48,8 +50,16 @@ export class RunView3d implements RunView {
   readonly hero = { x: 0, z: 0 };
   readonly cam = { x: 0, z: 0 };
 
+  /** The run's mouse: where the pointer is (set by the stage). */
+  mouse: RunMouse | null = null;
   private v: View | null = null;
   private c: StageCtx | null = null;
+  // What `pointerWorld` reads: the last frame's camera, plan, zoom and canvas (also read between frames by the session's steps).
+  private lastCam: Cam | null = null;
+  private lastPlan: StageCtx['plan'] | null = null;
+  private lastZoom = 1;
+  private lastCanvas: StageCtx['canvasEl'] | null = null;
+  private lastSize = { w: 0, h: 0 };
   private fast = false;
   private started = false;
   private fps = 0;
@@ -147,6 +157,11 @@ export class RunView3d implements RunView {
     this.started = true;
     const cam: Cam = { x: this.cam.x, z: this.cam.z, pitch, yaw };
 
+    this.lastCam = cam;
+    this.lastPlan = c.plan;
+    this.lastZoom = c.zoom;
+    this.lastCanvas = c.canvasEl;
+    this.lastSize = c.canvas;
     // The drawn aim uses this frame's camera: whatever pointerWorld reads must be stored above this line.
     settleOwnAim(f.own, this.pointerWorld());
 
@@ -196,11 +211,18 @@ export class RunView3d implements RunView {
   }
 
   pointerWorld(): { x: number; y: number } | null {
-    return null;
+    const { lastCam: cam, lastPlan: plan, lastCanvas: canvas, mouse } = this;
+    if (!cam || !plan || !canvas || !mouse) return null;
+    const p = mouse.at(canvas, this.lastSize.w, this.lastSize.h);
+    if (!p) return null;
+    const g = aimGround(cam, plan, this.lastZoom, p.px, p.py);
+    return { x: g.x * TILE, y: g.z * TILE };
   }
 
   destroy(): void {
     this.v = null;
     this.c = null;
+    this.mouse = null;
+    this.lastCanvas = null;
   }
 }

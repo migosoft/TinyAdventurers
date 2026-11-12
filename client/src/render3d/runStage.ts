@@ -7,6 +7,8 @@ import { RunSession, type FrameClock, type HudLike, type NetLike } from '../run/
 import type { StepInput } from '../run/input';
 import { atlasBounds } from './atlasBounds';
 import { GROUND_BUDGET_MS, groundJob, type GroundJob } from './groundJob';
+import { RunMouse } from './input';
+import { CamTurn } from './turn';
 import { MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './host';
 import { WOODLAND_CLEAR } from './light';
 import { RunView3d, moveInput } from './runView3d';
@@ -20,14 +22,24 @@ export interface RunInputState {
   /** Radians. */
   yaw: number;
   free: boolean;
+  /** Held or clicked since the last step (the mouse's latch). */
+  primary: () => boolean;
+  secondary: () => boolean;
+  /** E pressed since the last step: the stage sets it, `stepInput` clears it. */
+  act: boolean;
 }
 
-/** One fixed step's input: the keys turned by the yaw, no buttons; nothing while the free camera is on. */
+/** One fixed step's input: the keys turned by the yaw and the buttons; nothing while the free camera is on. */
 export function stepInput(s: RunInputState): StepInput {
+  // Read in any case so a click or E from the free camera does not fire later.
+  const primary = s.primary();
+  const secondary = s.secondary();
+  const act = s.act;
+  s.act = false;
   if (s.free) return { mx: 0, my: 0, primary: false, secondary: false, act: false, held: false };
   let any = false;
   for (const k of s.held) if (k in MOVE_KEYS) any = true;
-  return { ...moveInput(s.held, s.yaw), primary: false, secondary: false, act: false, held: any };
+  return { ...moveInput(s.held, s.yaw), primary, secondary, act, held: any };
 }
 
 /** The session's frame clock, forwarded to the host's timer of the moment (none before the host's first frame). */
@@ -55,7 +67,7 @@ export interface Run {
 
 /** The session, made at once so messages are handled from `RunStarted` on, before the host has a view. */
 export function newRun(deps: { info: RunStartInfo; net: NetLike; hud: HudLike; myClass: ClassId }): Run {
-  const input: RunInputState = { held: new Set(), yaw: 0, free: false };
+  const input: RunInputState = { held: new Set(), yaw: 0, free: false, primary: () => false, secondary: () => false, act: false };
   const clock = new TimerClock();
   const session = new RunSession({ ...deps, input: () => stepInput(input), clock });
   return { session, input, clock };
@@ -100,6 +112,13 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   window.addEventListener('keyup', onMod);
   window.addEventListener('blur', onBlur);
 
+  // The run's own turn state (its drag feeds it now; the camera yaw and the keys follow). The mouse listens on the host element.
+  const turn = new CamTurn();
+  const mouse = new RunMouse(el, turn);
+  run.input.primary = () => mouse.takePrimary();
+  run.input.secondary = () => mouse.takeSecondary();
+  runView.mouse = mouse;
+
   let looped = false;
   return {
     runView,
@@ -135,9 +154,14 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
         case 'Escape':
           if (!e.repeat) session.toggleMenu();
           return true;
-        case 'KeyQ':
         case 'KeyE':
-          if (session.alive) return false;
+        case 'KeyQ':
+          if (session.alive) {
+            // E uses (once per press); Q has no use while alive
+            if (e.code !== 'KeyE') return false;
+            if (!e.repeat) run.input.act = true;
+            return true;
+          }
           if (!e.repeat) session.spectate(e.code === 'KeyQ' ? -1 : 1);
           return true;
         case 'KeyF':
@@ -155,6 +179,8 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       window.removeEventListener('keydown', onMod);
       window.removeEventListener('keyup', onMod);
       window.removeEventListener('blur', onBlur);
+      mouse.dispose();
+      run.input.primary = run.input.secondary = () => false;
       run.clock.timer = null;
       runView.destroy();
     },

@@ -12,6 +12,7 @@ import { followClamp } from './camera';
 import { type Host, type StageCtx } from './host';
 import { DEFAULTS, type R3dParams } from './params';
 import { renderPlan } from './quality';
+import { toCanvas } from './screen';
 import { createRunStage, newRun, stepInput } from './runStage';
 import { R3D_SYSTEMS } from './stats';
 import { GroundTooLargeError, type Assets, type View } from './view';
@@ -48,29 +49,56 @@ function setup(rows = ROWS, over: Partial<RunStartInfo> = {}) {
   const onLoop = vi.fn();
   const stage = createRunStage(run, info, assets, host, el, onLoop);
   const timer = new FrameTimer<(typeof R3D_SYSTEMS)[number]>(R3D_SYSTEMS);
+  const mkCanvas = (): HTMLCanvasElement => {
+    const c = document.createElement('canvas');
+    c.className = 'r3d';
+    c.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1920, height: 1080 }) as DOMRect;
+    el.appendChild(c);
+    return c;
+  };
+  let canvasEl = mkCanvas();
   let now = 0;
   const frame = (view: View | null, held: string[] = [], dt = 1 / 60): number => {
     now += dt;
     const plan = renderPlan(params.quality, 4, 1920, 1080);
-    const c: StageCtx = { now, dt, params, held: new Set(held), canvas: { w: 1920, h: 1080 }, zoom: 4, plan, view, timer };
+    const c: StageCtx = { now, dt, params, held: new Set(held), canvas: { w: 1920, h: 1080 }, canvasEl, zoom: 4, plan, view, timer };
     return stage.frame(c);
   };
-  return { net, hud, info, run, host, el, stage, frame, onLoop, setParams: (p: Partial<R3dParams>) => { params = { ...params, ...p }; } };
+  const rebuild = (): HTMLCanvasElement => {
+    const next = mkCanvas();
+    canvasEl.replaceWith(next);
+    canvasEl = next;
+    return next;
+  };
+  return { net, hud, info, run, host, el, stage, frame, onLoop, canvas: () => canvasEl, rebuild, setParams: (p: Partial<R3dParams>) => { params = { ...params, ...p }; } };
 }
 
 beforeEach(() => vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1)));
 afterEach(() => vi.unstubAllGlobals());
 
+const NO_BUTTONS = { primary: () => false, secondary: () => false, act: false };
+
 describe('stepInput', () => {
+  it('reads the buttons and clears the act latch', () => {
+    const s = { held: new Set<string>(), yaw: 0, free: false, primary: () => true, secondary: () => false, act: true };
+    expect(stepInput(s)).toMatchObject({ primary: true, secondary: false, act: true });
+    expect(s.act).toBe(false);
+    expect(stepInput(s).act).toBe(false);
+  });
+  it('the free camera sends no buttons but still clears the latch', () => {
+    const s = { held: new Set<string>(), yaw: 0, free: true, primary: () => true, secondary: () => true, act: true };
+    expect(stepInput(s)).toMatchObject({ primary: false, secondary: false, act: false });
+    expect(s.act).toBe(false);
+  });
   it('turns the held keys by the yaw, with no buttons, and says whether a key is down', () => {
-    expect(stepInput({ held: new Set(['KeyW']), yaw: 0, free: false })).toEqual({ mx: 0, my: -1, primary: false, secondary: false, act: false, held: true });
-    expect(stepInput({ held: new Set(), yaw: 0, free: false })).toEqual({ mx: 0, my: 0, primary: false, secondary: false, act: false, held: false });
+    expect(stepInput({ held: new Set(['KeyW']), yaw: 0, free: false, ...NO_BUTTONS })).toEqual({ mx: 0, my: -1, primary: false, secondary: false, act: false, held: true });
+    expect(stepInput({ held: new Set(), yaw: 0, free: false, ...NO_BUTTONS })).toEqual({ mx: 0, my: 0, primary: false, secondary: false, act: false, held: false });
   });
   it('held stays true when two keys cancel out', () => {
-    expect(stepInput({ held: new Set(['KeyA', 'KeyD']), yaw: 0, free: false })).toEqual({ mx: 0, my: 0, primary: false, secondary: false, act: false, held: true });
+    expect(stepInput({ held: new Set(['KeyA', 'KeyD']), yaw: 0, free: false, ...NO_BUTTONS })).toEqual({ mx: 0, my: 0, primary: false, secondary: false, act: false, held: true });
   });
   it('while the free camera is on, nothing moves and held is false', () => {
-    expect(stepInput({ held: new Set(['KeyD', 'KeyW']), yaw: 1, free: true })).toEqual({ mx: 0, my: 0, primary: false, secondary: false, act: false, held: false });
+    expect(stepInput({ held: new Set(['KeyD', 'KeyW']), yaw: 1, free: true, ...NO_BUTTONS })).toEqual({ mx: 0, my: 0, primary: false, secondary: false, act: false, held: false });
   });
 });
 
@@ -245,6 +273,68 @@ describe('the run stage', () => {
     expect(stage.key!({ code: 'KeyX', repeat: false } as KeyboardEvent)).toBe(false);
   });
 
+  const click = (target: Element, button = 0): void => {
+    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button }));
+    window.dispatchEvent(new MouseEvent('mouseup', { button }));
+  };
+
+  it('E acts while alive, once per press', () => {
+    const { stage, frame, net } = setup();
+    const view = fakeView();
+    expect(stage.key!({ code: 'KeyE', repeat: false } as KeyboardEvent)).toBe(true);
+    expect(stage.key!({ code: 'KeyE', repeat: true } as KeyboardEvent)).toBe(true);
+    frame(view);
+    frame(view);
+    frame(view);
+    const acts = inputs(net).map((m) => m.act);
+    expect(acts.filter(Boolean)).toHaveLength(1);
+    expect(acts[0]).toBe(true);
+  });
+
+  it('a click sends a primary', () => {
+    const { frame, net, canvas } = setup();
+    const view = fakeView();
+    frame(view);
+    click(canvas());
+    for (let i = 0; i < 3; i++) frame(view);
+    expect(inputs(net).some((m) => m.primary !== null)).toBe(true);
+  });
+
+  it('a click on the panel sends nothing', () => {
+    const { frame, net, el } = setup();
+    const panel = document.createElement('div');
+    panel.className = 'r3d-panel';
+    el.appendChild(panel);
+    click(panel);
+    for (let i = 0; i < 3; i++) frame(fakeView());
+    expect(inputs(net).every((m) => m.primary === null)).toBe(true);
+  });
+
+  it('after a rebuild a click on the new canvas still fires', () => {
+    const { frame, net, rebuild } = setup();
+    const view = fakeView();
+    frame(view);
+    const next = rebuild();
+    click(next);
+    for (let i = 0; i < 3; i++) frame(view);
+    expect(inputs(net).some((m) => m.primary !== null)).toBe(true);
+  });
+
+  it('the pointer aims the hero', () => {
+    const { frame, net, stage } = setup();
+    const view = fakeView();
+    for (let i = 0; i < 3; i++) frame(view);
+    const plan = renderPlan(DEFAULTS.quality, 4, 1920, 1080);
+    const cam = { x: stage.runView.cam.x, z: stage.runView.cam.z, pitch: (DEFAULTS.pitch * Math.PI) / 180, yaw: 0 };
+    // 2 tiles east of the hero, 8 art px (4 x 8 canvas px) above that spot
+    const p = toCanvas(cam, plan, 4, stage.runView.hero.x + 2, 0, stage.runView.hero.z);
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: p.px, clientY: p.py - 8 * 4 }));
+    for (let i = 0; i < 3; i++) frame(view);
+    const last = inputs(net).at(-1)!;
+    expect(last.aim).toBeCloseTo(0, 2);
+    expect(last.aim_dist).toBeGreaterThan(20);
+  });
+
   it('F3 toggles the session stats and keeps the host readout hidden', () => {
     const { stage, hud } = setup();
     expect(stage.stats!()).toBe(true);
@@ -304,7 +394,7 @@ describe('startRun3d', () => {
       expect(stage).not.toBeNull();
       const timer = new FrameTimer<(typeof R3D_SYSTEMS)[number]>(R3D_SYSTEMS);
       const plan = renderPlan('balanced', 4, 1920, 1080);
-      stage!.frame({ now: 1, dt: 1 / 60, params: DEFAULTS, held: new Set(), canvas: { w: 1920, h: 1080 }, zoom: 4, plan, view: null, timer });
+      stage!.frame({ now: 1, dt: 1 / 60, params: DEFAULTS, held: new Set(), canvas: { w: 1920, h: 1080 }, canvasEl: document.createElement('canvas'), zoom: 4, plan, view: null, timer });
       const n = hud.calls.filter((c) => c[0] === 'frame').length;
       vi.advanceTimersByTime(100);
       expect(hud.calls.filter((c) => c[0] === 'frame').length).toBe(n);

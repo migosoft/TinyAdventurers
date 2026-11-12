@@ -29,6 +29,8 @@ export interface StageCtx {
   /** KeyboardEvent.code of the held movement keys. */
   held: ReadonlySet<string>;
   canvas: { w: number; h: number }; zoom: number; plan: RenderPlan;
+  /** The current canvas element (a rebuild after a lost device replaces it). */
+  canvasEl: HTMLCanvasElement;
   /** Null while the device is being restored. */
   view: View | null;
   timer: FrameTimer<R3dSystem>;
@@ -78,7 +80,7 @@ export function clearErrors(host: HTMLElement): void {
   for (const d of Array.from(host.children)) if (d.classList.contains('r3d-error')) d.remove();
 }
 
-const isTextTarget =(t: EventTarget | null): boolean =>
+export const isTextTarget = (t: EventTarget | null): boolean =>
   t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
 
 /**
@@ -332,7 +334,7 @@ export async function startHost(
     }
     let drawCalls = 0;
     try {
-      drawCalls = stage!.frame({ now, dt, params, held, canvas: { w, h }, zoom, plan, view: restoring ? null : view, timer });
+      drawCalls = stage!.frame({ now, dt, params, held, canvas: { w, h }, canvasEl: canvas, zoom, plan, view: restoring ? null : view, timer });
     } finally {
       if (!restoring) timer.renderEnd(drawCalls); // also when the stage threw, so the timer stays consistent
     }
