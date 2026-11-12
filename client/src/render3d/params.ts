@@ -11,8 +11,16 @@ export interface R3dParams {
   shadows: boolean; orb: boolean; smooth: boolean; stats: boolean;
   /** A free camera instead of following the party (a run). */
   free: boolean;
-  /** The light a run shows: the work light or the heroes' lantern. */
-  light: 'work' | 'lantern';
+  /** The light a run shows: the game's own lights, or the flat work light. */
+  light: 'game' | 'work';
+  /** How the dark looks: a soft fade, or the game's hard-edged shape. */
+  dark: 'fade' | 'shape';
+  /** The dungeon's ambient light, 0..1 of the demo's AMBIENT. */
+  amb: number;
+  /** Caps on the point lights and on the shadow casters, 0..16. */
+  lcap: number; ccap: number;
+  /** The dev scenes' darkvision override, 0..100; null = none. */
+  dv: number | null;
   /** Walls opening around things behind them (#303): the mode and the look's radius (tiles), keep and edge (0..1). */
   see: SeeMode; seeR: number; seeKeep: number; seeEdge: number;
 }
@@ -21,7 +29,7 @@ export const DEFAULTS: R3dParams = {
   // The user's picks after the hardware check (#301): 48.6° (a tile is 12 whole screen rows) and the smoothed ground on.
   pitch: 48.6, yaw: 0, quality: 'balanced', zoom: null, backend: 'auto',
   shadows: true, orb: true, smooth: true, stats: false,
-  free: false, light: 'work',
+  free: false, light: 'game', dark: 'fade', amb: 0, lcap: 16, ccap: 16, dv: null,
   see: SEE_DEFAULTS.mode, seeR: SEE_DEFAULTS.radius, seeKeep: SEE_DEFAULTS.keep, seeEdge: SEE_DEFAULTS.edge,
 };
 
@@ -51,6 +59,9 @@ export function parseParams(search: string): R3dParams {
   const zoom = num(q.get('zoom'));
   const quality = q.get('quality');
   const see = q.get('see');
+  const lcap = num(q.get('lcap'));
+  const ccap = num(q.get('ccap'));
+  const dv = num(q.get('dv'));
   return {
     pitch: pitch === null ? DEFAULTS.pitch : Math.min(80, Math.max(30, pitch)),
     yaw: yaw === null ? DEFAULTS.yaw : wrapYaw(yaw),
@@ -62,7 +73,12 @@ export function parseParams(search: string): R3dParams {
     smooth: q.get('smooth') === '0' ? false : q.get('smooth') === '1' ? true : DEFAULTS.smooth,
     stats: q.get('stats') === '1',
     free: q.get('free') === '1',
-    light: q.get('light') === 'lantern' ? 'lantern' : 'work',
+    light: q.get('light') === 'work' ? 'work' : 'game',
+    dark: q.get('dark') === 'shape' ? 'shape' : 'fade',
+    amb: range(num(q.get('amb')), 0, 1, DEFAULTS.amb),
+    lcap: lcap !== null && Number.isInteger(lcap) ? range(lcap, 0, 16, DEFAULTS.lcap) : DEFAULTS.lcap,
+    ccap: ccap !== null && Number.isInteger(ccap) ? range(ccap, 0, 16, DEFAULTS.ccap) : DEFAULTS.ccap,
+    dv: dv === null ? null : range(dv, 0, 100, 0),
     see: see === 'lattice' || see === 'off' ? see : DEFAULTS.see,
     seeR: range(num(q.get('seeR')), 0.5, 3, DEFAULTS.seeR),
     seeKeep: range(num(q.get('seeKeep')), 0, 1, DEFAULTS.seeKeep),
@@ -70,7 +86,7 @@ export function parseParams(search: string): R3dParams {
   };
 }
 
-const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'see', 'seeR', 'seeKeep', 'seeEdge']);
+const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge']);
 
 /** The search string with this page's keys set or removed and every other key of `current` kept as it is (a key without a value stays without one). */
 export function toSearch(p: R3dParams, current: string): string {
@@ -88,6 +104,11 @@ export function toSearch(p: R3dParams, current: string): string {
   if (p.stats !== DEFAULTS.stats) s += '&stats=1';
   if (p.free !== DEFAULTS.free) s += '&free=1';
   if (p.light !== DEFAULTS.light) s += `&light=${p.light}`;
+  if (p.dark !== DEFAULTS.dark) s += `&dark=${p.dark}`;
+  if (p.amb !== DEFAULTS.amb) s += `&amb=${p.amb}`;
+  if (p.lcap !== DEFAULTS.lcap) s += `&lcap=${p.lcap}`;
+  if (p.ccap !== DEFAULTS.ccap) s += `&ccap=${p.ccap}`;
+  if (p.dv !== null) s += `&dv=${p.dv}`;
   if (p.see !== DEFAULTS.see) s += `&see=${p.see}`;
   if (p.seeR !== DEFAULTS.seeR) s += `&seeR=${p.seeR}`;
   if (p.seeKeep !== DEFAULTS.seeKeep) s += `&seeKeep=${p.seeKeep}`;

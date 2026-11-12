@@ -62,18 +62,39 @@ describe('panel', () => {
   it('run mode has Free camera and Lantern, no Moving light; demo mode the reverse', () => {
     const run = setup(DEFAULTS, 'run');
     expect(run.btn('Free camera')).toBeTruthy();
-    expect(run.btn('Lantern')).toBeTruthy();
+    expect(run.btn('Game light')).toBeTruthy();
     expect(run.btn('Moving light')).toBeUndefined();
     expect(run.host.querySelector('.r3d-panel')!.classList.contains('run')).toBe(true);
     run.btn('Free camera').click();
     expect(run.calls[0].free).toBe(true);
     expect(run.btn('Free camera').getAttribute('aria-pressed')).toBe('true');
-    run.btn('Lantern').click();
-    expect(run.calls[1].light).toBe('lantern');
+    run.btn('Game light').click();
+    expect(run.calls[1].light).toBe('work');
     const demo = setup();
     expect(demo.btn('Moving light')).toBeTruthy();
     expect(demo.btn('Free camera')).toBeUndefined();
-    expect(demo.btn('Lantern')).toBeUndefined();
+    expect(demo.btn('Game light')).toBeUndefined();
+  });
+
+  it('the light sliders set amb, lcap and ccap; dv only on the demo page', () => {
+    const { host, calls } = setup(DEFAULTS, 'run');
+    const slide = (id: string, v: string): void => {
+      const i = host.querySelector<HTMLInputElement>(`#r3d-${id}`)!;
+      i.value = v;
+      i.dispatchEvent(new Event('input'));
+    };
+    slide('amb', '0.5');
+    expect(calls[0].amb).toBe(0.5);
+    slide('lcap', '8');
+    expect(calls[1].lcap).toBe(8);
+    slide('ccap', '4');
+    expect(calls[2].ccap).toBe(4);
+    expect(host.querySelector('#r3d-dv')).toBeNull();
+    const demo = setup(DEFAULTS, 'demo');
+    const dv = demo.host.querySelector<HTMLInputElement>('#r3d-dv')!;
+    dv.value = '50';
+    dv.dispatchEvent(new Event('input'));
+    expect(demo.calls[0].dv).toBe(50);
   });
 
   it('the See through row has Soft / Lattice / Off and three sliders, in both modes', () => {

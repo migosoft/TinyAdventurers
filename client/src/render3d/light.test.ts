@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { cssColour, AMBIENT, MAX_LIGHTS, STONE, WORK_AMBIENT, packLights, sceneLights, shoulder, stoneClear, torchFlicker, type Light } from './light';
+import { cssColour, darkAlpha, dungeonAmbient, AMBIENT, MAX_LIGHTS, STONE, WORK_AMBIENT, packLights, sceneLights, shoulder, stoneClear, torchFlicker, type Light } from './light';
 import { newScene } from './scene';
 
 const lamp = (n: number): Light => ({ x: n, y: 1, z: 2, radius: 3, r: 0.5, g: 0.6, b: 0.7, shadow: n % 2 === 0 });
 
 describe('light', () => {
+  it('scales the dungeon ambient and turns it into a dark alpha', () => {
+    expect(dungeonAmbient(0)).toEqual([0, 0, 0]);
+    expect(dungeonAmbient(1)).toEqual(AMBIENT);
+    expect(darkAlpha([0, 0, 0])).toBe(0);
+    expect(darkAlpha(AMBIENT)).toBe(1);
+    expect(darkAlpha(dungeonAmbient(0.5))).toBeCloseTo(0.5, 5);
+  });
   it('flickers around 1 within 0.84..1.16', () => {
     expect(torchFlicker(0, 0)).toBe(1);
     for (let t = 0; t <= 10; t += 0.01) {

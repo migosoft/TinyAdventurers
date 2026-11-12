@@ -21,12 +21,21 @@ const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge'; name: string; min: num
 type Switch = { name: string; get: (p: R3dParams) => boolean; set: (p: R3dParams) => Partial<R3dParams> };
 const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free'>, name: string): Switch =>
   ({ name, get: (p) => p[k], set: (p) => ({ [k]: !p[k] }) });
-const LANTERN: Switch = {
-  name: 'Lantern', get: (p) => p.light === 'lantern', set: (p) => ({ light: p.light === 'lantern' ? 'work' : 'lantern' }),
+const GAME_LIGHT: Switch = {
+  name: 'Game light', get: (p) => p.light === 'game', set: (p) => ({ light: p.light === 'game' ? 'work' : 'game' }),
 };
+const DARK_SHAPE: Switch = {
+  name: 'Dark shape', get: (p) => p.dark === 'shape', set: (p) => ({ dark: p.dark === 'shape' ? 'fade' : 'shape' }),
+};
+const LIGHT_SLIDERS: { key: 'amb' | 'lcap' | 'ccap' | 'dv'; name: string; min: number; max: number; step: number; dev?: boolean }[] = [
+  { key: 'amb', name: 'Ambient', min: 0, max: 1, step: 0.01 },
+  { key: 'lcap', name: 'Lights', min: 0, max: 16, step: 1 },
+  { key: 'ccap', name: 'Casters', min: 0, max: 16, step: 1 },
+  { key: 'dv', name: 'Darkvision', min: 0, max: 100, step: 50, dev: true },
+];
 const SWITCHES: Record<'demo' | 'run', Switch[]> = {
-  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground')],
-  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), LANTERN, flag('free', 'Free camera')],
+  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), DARK_SHAPE],
+  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), GAME_LIGHT, DARK_SHAPE, flag('free', 'Free camera')],
 };
 
 /** A degree value with at most one decimal and no trailing .0. */
@@ -42,7 +51,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 }
 
 /**
- * `mode` 'run' is the panel inside a run (bottom left, with Lantern and Free camera instead of Moving light).
+ * `mode` 'run' is the panel inside a run (bottom left, with Game light and Free camera instead of Moving light).
  * `onLose` (debug): makes the device fail on purpose and returns false when the backend cannot, which disables the button.
  */
 export function createPanel(
@@ -129,9 +138,21 @@ export function createPanel(
     return { d, label, s, row };
   });
 
+  // Light: ambient, the two caps and (dev pages only) the darkvision override.
+  const lightSliders = LIGHT_SLIDERS.filter((d) => !d.dev || mode === 'demo').map((d) => {
+    const row = el('div', 'r3d-row');
+    const label = el('label');
+    const get = (): number => (d.key === 'dv' ? cur.dv ?? 0 : cur[d.key]);
+    const s = slider(d.min, d.max, d.step, get, (v) => change({ [d.key]: v }));
+    s.input.id = `r3d-${d.key}`;
+    label.htmlFor = s.input.id;
+    row.append(label, s.input);
+    return { d, label, s, row, get };
+  });
+
   const readout = el('div', 'r3d-readout');
   const body = el('div', 'r3d-body');
-  body.append(pitchRow, yawRow, qRow, zRow, swRow, seeRow, ...seeSliders.map((x) => x.row));
+  body.append(pitchRow, yawRow, qRow, zRow, swRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row));
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
@@ -163,6 +184,10 @@ export function createPanel(
     yaw.sync();
     for (const { d, label, s } of seeSliders) {
       label.textContent = `${d.name} ${Math.round(cur[d.key] * 100) / 100}`;
+      s.sync();
+    }
+    for (const { d, label, s, get } of lightSliders) {
+      label.textContent = `${d.name} ${Math.round(get() * 100) / 100}`;
       s.sync();
     }
     for (const { btn, test } of pressed) btn.setAttribute('aria-pressed', String(test()));

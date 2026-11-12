@@ -250,17 +250,20 @@ describe('the run stage', () => {
     expect(stage.runView.cam.x).toBeGreaterThan(15);
   });
 
-  it('the camera is a lantern light only outside a woodland, with the lantern parameter', () => {
+  it('the camera is a lantern light only outside a woodland, with the game light', () => {
     const { stage, frame, setParams } = setup(ROWS);
     const view = fakeView();
     stage.built!(view);
     frame(view);
     const calls = vi.mocked(view.draw).mock.calls;
-    expect(calls[0][0].lights).toEqual([]);
-    setParams({ light: 'lantern' });
+    expect(calls[0][0].lights).toHaveLength(1);
+    setParams({ light: 'work' });
     frame(view);
-    expect(calls[1][0].lights).toHaveLength(1);
-    expect(calls[1][0].lights[0]).toMatchObject({ y: 1.0, radius: 9 });
+    expect(calls[1][0].lights).toEqual([]);
+    setParams({ light: 'game' });
+    frame(view);
+    expect(calls[2][0].lights).toHaveLength(1);
+    expect(calls[2][0].lights[0]).toMatchObject({ y: 1.0, radius: 9 });
   });
 
   it('keys: Esc opens the menu, F flips the free camera, Q and E watch only when dead', () => {

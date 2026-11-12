@@ -7,6 +7,14 @@ export const MAX_LIGHTS = 8;
 export const AMBIENT: [number, number, number] = [0.075, 0.08, 0.125];
 /** Daylight and work lighting: a bright flat ambient. */
 export const WORK_AMBIENT: [number, number, number] = [0.9, 0.9, 0.9];
+/** The dungeon's ambient light: the demo's AMBIENT times `amb` (0..1). */
+export function dungeonAmbient(amb: number): [number, number, number] {
+  return [AMBIENT[0] * amb, AMBIENT[1] * amb, AMBIENT[2] * amb];
+}
+/** How dark the dark is, 0 (black ambient, nothing to see) to 1 (the demo's AMBIENT or brighter): the strongest channel against AMBIENT. */
+export function darkAlpha(ambient: [number, number, number]): number {
+  return Math.min(1, Math.max(ambient[0] / AMBIENT[0], ambient[1] / AMBIENT[1], ambient[2] / AMBIENT[2]));
+}
 /** The wall top's colour. */
 export const STONE: readonly [number, number, number] = [0.115, 0.1, 0.145];
 /** The painter's base grass colour (0..1), shown by the ground until its image is set. */

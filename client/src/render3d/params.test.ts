@@ -52,11 +52,29 @@ describe('parseParams', () => {
   });
 
   it('reads free, light and zoom 1..8', () => {
-    expect(parseParams('?r3d&free=1&light=lantern&zoom=1')).toMatchObject({ free: true, light: 'lantern', zoom: 1 });
+    expect(parseParams('?r3d&free=1&light=work&zoom=1')).toMatchObject({ free: true, light: 'work', zoom: 1 });
     expect(parseParams('?r3d&zoom=0').zoom).toBe(1);
     expect(parseParams('?r3d&zoom=9').zoom).toBe(8);
-    expect(parseParams('?r3d&light=x').light).toBe('work');
-    expect(parseParams('?r3d')).toMatchObject({ free: false, light: 'work' });
+    expect(parseParams('?r3d&light=x').light).toBe('game');
+    expect(parseParams('?r3d&light=lantern').light).toBe('game');
+    expect(parseParams('?r3d')).toMatchObject({ free: false, light: 'game' });
+  });
+
+  it('reads the dungeon light parameters and clamps or rejects them', () => {
+    expect(parseParams('')).toMatchObject({ light: 'game', dark: 'fade', amb: 0, lcap: 16, ccap: 16, dv: null });
+    expect(parseParams('?dark=shape').dark).toBe('shape');
+    expect(parseParams('?dark=x').dark).toBe('fade');
+    expect(parseParams('?amb=2').amb).toBe(1);
+    expect(parseParams('?amb=-1').amb).toBe(0);
+    expect(parseParams('?lcap=40').lcap).toBe(16);
+    expect(parseParams('?lcap=3.5').lcap).toBe(16);
+    expect(parseParams('?ccap=3.5').ccap).toBe(16);
+    expect(parseParams('?ccap=0').ccap).toBe(0);
+    expect(parseParams('?dv=150').dv).toBe(100);
+    expect(parseParams('?dv=50').dv).toBe(50);
+    expect(parseParams('?dv=x').dv).toBeNull();
+    expect(toSearch(parseParams('?r3d&light=work&dark=shape&amb=0.5&lcap=8&ccap=0&dv=50'), '?r3d')).toBe('?r3d&light=work&dark=shape&amb=0.5&lcap=8&ccap=0&dv=50');
+    expect(toSearch(DEFAULTS, '?r3d&light=work&dark=shape&amb=0.5&lcap=8&ccap=0&dv=50')).toBe('?r3d');
   });
 });
 
@@ -76,7 +94,7 @@ describe('toSearch', () => {
   it('round-trips a fully non-default value', () => {
     const p: R3dParams = {
       pitch: 60.5, yaw: 37.3, quality: 'fast', zoom: 5, backend: 'webgl',
-      shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'lantern',
+      shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'work', dark: 'shape', amb: 0.5, lcap: 8, ccap: 0, dv: 50,
       see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
