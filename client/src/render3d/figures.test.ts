@@ -8,7 +8,7 @@ import type { EntState } from '../game/world';
 import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { startInfo } from '../run/testing';
 import { LIE_Y, type CardBuf } from './cards';
-import type { Cam } from './camera';
+import { project, snapGround, type Cam } from './camera';
 import { Figures3d, screenAim } from './figures';
 import type { FrameRects } from './worldMesh';
 
@@ -48,7 +48,7 @@ const make = () => new Figures3d(init(), frames, bounds);
 
 /** Vertex y values of quad `q`. */
 const ys = (b: CardBuf, q = 0): number[] => Array.from({ length: 6 }, (_, i) => b.position[(q * 6 + i) * 3 + 1]);
-const xs = (b: CardBuf, q = 0): number[] => Array.from({ length: 6 }, (_, i) => b.position[(q * 6 + i) * 3]);
+const xs = (b: { position: number[] }, q = 0): number[] => Array.from({ length: 6 }, (_, i) => b.position[(q * 6 + i) * 3]);
 const mid = (v: number[]) => (Math.min(...v) + Math.max(...v)) / 2;
 /** The texture is mirrored when the top-left corner reads a larger u than the bottom-right one. */
 const mirrored = (b: CardBuf, q = 0): boolean => b.uv[q * 12] > b.uv[q * 12 + 4];
@@ -100,6 +100,49 @@ describe('Figures3d', () => {
     const ghost = make();
     ghost.event({ t: 'Died', id: 12, x: at(1), y: 8, kind: KIND.Ghost });
     expect(ghost.frame(frame([]), cam()).decals.n).toBe(0);
+  });
+
+  it('lays the skull flat and upright on the screen: its top edge is farther from the camera, at any yaw', () => {
+    for (const yaw of [0, Math.PI / 2]) {
+      const c = cam(yaw);
+      const fg = make();
+      fg.event({ t: 'Died', id: 10, x: at(1), y: 8, kind: KIND.Knight });
+      const out = fg.frame(frame([]), c);
+      expect(out.decals.n).toBe(1);
+      const depth = (v: number): number => {
+        const d: number[] = [];
+        for (let i = 0; i < 6; i++) if (out.decals.uv[i * 2 + 1] === v) d.push(project(c, out.decals.position[i * 3], 0, out.decals.position[i * 3 + 2]).depth);
+        return d.reduce((a, x) => a + x, 0) / d.length;
+      };
+      const top = depth(20), bottom = depth(36); // skull: y 20, h 16
+      expect(top).toBeGreaterThan(bottom);
+      // 2 / 16 tile up the screen from the death spot
+      const centre = project(c, mid(xs(out.decals)), 0, mid(Array.from({ length: 6 }, (_, i) => out.decals.position[i * 3 + 2])));
+      const spot = project(c, at(1) / TILE, 0, 8 / TILE);
+      expect(spot.depth - centre.depth).toBeCloseTo((-2 / TILE) * Math.cos(c.pitch), 1); // within the pixel snap
+    }
+  });
+
+  it('moves the standing body 1 / 16 tile toward the camera on the ground, the shadow stays at the entity', () => {
+    for (const yaw of [0, Math.PI / 2]) {
+      const c = cam(yaw);
+      const out = make().frame(frame([ent(10, KIND.Knight, { x: 88, y: 88 })]), c);
+      const foot = snapGround(c.pitch, yaw, 5.5, 5.5);
+      const body = snapGround(c.pitch, yaw, 5.5 - Math.sin(yaw) / TILE, 5.5 + Math.cos(yaw) / TILE); // screen down on the ground is (-sin yaw, cos yaw)
+      const zs = (b: { position: number[] }) => mid(Array.from({ length: 6 }, (_, i) => b.position[i * 3 + 2]));
+      // the card's extent is along screen right, so its mid is the foot on the other axis
+      expect(mid(xs(out.cards))).toBeCloseTo(body.x, 5);
+      expect(zs(out.cards)).toBeCloseTo(body.z, 5);
+      expect(mid(xs(out.shadows))).toBeCloseTo(foot.x, 6);
+      expect(zs(out.shadows)).toBeCloseTo(foot.z, 6);
+    }
+  });
+
+  it('keeps the alpha of a sleeping incorporeal figure in the floor decals', () => {
+    const e = ent(10, KIND.SkeletonWarrior, { flags: FLAG.INCORPOREAL, effects: 1 << EFFECT.Sleep });
+    const out = make().frame(frame([e]), cam());
+    expect(out.decals.n).toBe(1);
+    expect(out.decals.look[4]).toBeCloseTo(INCORPOREAL_ALPHA, 6);
   });
 
   it('lays a sleeping knight on the floor: body in the decals, every y at LIE_Y', () => {

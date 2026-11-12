@@ -10,7 +10,7 @@ import { figurePose, newPoseMemory, type FrameBounds, type PoseMemory, type Tint
 import type { EntState } from '../game/world';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { snapGround, type Cam } from './camera';
-import { newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushGlow, pushLying, pushShadow, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
+import { newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import type { FrameRects } from './worldMesh';
 
 const TILE = 16;
@@ -52,7 +52,7 @@ interface Fig {
 
 /** An image left behind: a vanished figure fading out, or a dash afterimage. */
 interface Image { card: Card; alpha0: number; secs: number; left: number }
-interface Skull { x: number; z: number; headRight: boolean }
+interface Skull { x: number; z: number; flip: boolean }
 
 const rgbOf = (c: number): [number, number, number] => [((c >> 16) & 255) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255];
 
@@ -88,7 +88,7 @@ export class Figures3d {
     const lost = this.states.event(ev, this.now);
     if (ev.t !== 'Died' || lost === 'lost') return;
     if (ev.kind === KIND.Ghost || ev.kind === KIND.Shade || isProjectileKind(ev.kind)) return;
-    this.skulls.push({ x: ev.x / TILE, z: ev.y / TILE, headRight: Math.random() < 0.5 });
+    this.skulls.push({ x: ev.x / TILE, z: ev.y / TILE, flip: Math.random() < 0.5 });
     if (this.skulls.length > SKULL_CAP) this.skulls.shift();
   }
 
@@ -122,7 +122,10 @@ export class Figures3d {
     this.drawImages(f.dt, cam, out);
     this.drawShots(f, cam, out);
     for (const sk of this.skulls) {
-      pushLying(out.decals, { frame: 'skull', x: sk.x, z: sk.z, lift: 0, flip: false, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 0.85, headRight: sk.headRight }, this.frames, cam);
+      // 2D puts the token 2 px up the screen from the death spot: 2 / 16 tile away from the camera on the ground.
+      const x = sk.x + (Math.sin(cam.yaw) * 2) / TILE;
+      const z = sk.z - (Math.cos(cam.yaw) * 2) / TILE;
+      pushFlat(out.decals, { frame: 'skull', x, z, lift: 0, flip: sk.flip, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 0.85 }, this.frames, cam);
     }
     sortBackToFront(out.ghosts, cam);
     return out;
@@ -189,9 +192,12 @@ export class Figures3d {
         scale: sc, sx: lie.squash, sy: 1, offset: headRight ? [lie.y, -lie.x] : [-lie.y, lie.x], tint, mode, alpha: pose.alpha, headRight,
       }, this.frames, cam);
     } else {
-      // The 2D body sits 1 px below the feet (body.y 1); a card there would lose its foot row under the floor.
+      // The 2D body sits 1 px below the shadow (body.y 1). A card lowered into the floor would lose its foot row, so the
+      // foot moves 1 / 16 tile toward the camera on the ground instead (screen down is (-sin yaw, cos yaw)).
+      // `aimStep` is 2D's screen step: the melee step is (3, 1.5) along the aim (y halved for the foreshortening) but the
+      // wolf's lunge is not, so the factor is not uniform and it is applied here as it is.
       const body: Card = {
-        frame: pose.frame, x: x + (pose.aimStep.x * sc) / TILE, z: z + (pose.aimStep.y * sc) / TILE, lift: -down, flip: pose.left, originX: pose.originX, footY: pose.footY / fb.h,
+        frame: pose.frame, x: x + (pose.aimStep.x * sc - Math.sin(cam.yaw) * sc) / TILE, z: z + (pose.aimStep.y * sc + Math.cos(cam.yaw) * sc) / TILE, lift: -down, flip: pose.left, originX: pose.originX, footY: pose.footY / fb.h,
         scale: sc, sx: pose.body.sx, sy: pose.body.sy, angle: rad(pose.body.angle), offset: [pose.body.x, pose.body.y - 1], tint, mode, alpha: pose.alpha,
       };
       if (pose.sink > 0) body.crop = { x: 0, y: 0, w: fb.w, h: pose.footY - pose.sink };
@@ -216,7 +222,7 @@ export class Figures3d {
     if (pose.shadow.visible) {
       const foot = snapGround(cam.pitch, cam.yaw, x, z);
       const r = (d.baseR * sc) / TILE;
-      pushShadow(out.shadows, foot.x, foot.z, r * pose.shadow.sx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha);
+      pushShadow(out.shadows, cam, foot.x, foot.z, r * pose.shadow.sx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha);
     }
 
     const height = Math.max(0, pose.footY - fb.t - pose.sink) * sc;

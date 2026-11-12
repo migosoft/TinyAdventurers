@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ART, project, snapGround, viewRay, type Cam } from './camera';
-import { buildDynamic, LIE_Y, newCardBuf, pushCard, pushGlow, pushLying, pushShadow, sortBackToFront, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
+import { buildDynamic, LIE_Y, newCardBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, sortBackToFront, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { newScene } from './scene';
 import type { FrameRects } from './worldMesh';
 
@@ -235,7 +235,7 @@ describe('sortBackToFront', () => {
 describe('shadows and glows', () => {
   it('pushShadow makes a floor quad with uv -1..1 and the alpha on every vertex', () => {
     const b: ShadowBuf = { position: [], uv: [], alpha: [], n: 0 };
-    pushShadow(b, 4, 5, 0.4, 0.2, 0.45);
+    pushShadow(b, cam(0), 4, 5, 0.4, 0.2, 0.45);
     expect(b.n).toBe(1);
     expect(b.position.length).toBe(18);
     expect(b.alpha).toEqual([0.45, 0.45, 0.45, 0.45, 0.45, 0.45]);
@@ -243,6 +243,37 @@ describe('shadows and glows', () => {
     const xs = b.position.filter((_, i) => i % 3 === 0), zs = b.position.filter((_, i) => i % 3 === 2);
     expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(0.8, 6);
     expect(Math.max(...zs) - Math.min(...zs)).toBeCloseTo(0.4, 6);
+  });
+
+  it('pushShadow keeps its wide axis along screen right at any yaw', () => {
+    for (const yaw of [Math.PI / 2, Math.PI / 4]) {
+      const b: ShadowBuf = { position: [], uv: [], alpha: [], n: 0 };
+      const c = cam(yaw);
+      pushShadow(b, c, 4, 5, 0.4, 0.2, 0.45);
+      const sx: number[] = [], sy: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        const p = project(c, b.position[i * 3], b.position[i * 3 + 1], b.position[i * 3 + 2]);
+        sx.push(p.sx);
+        sy.push(p.sy);
+      }
+      expect(Math.max(...sx) - Math.min(...sx)).toBeCloseTo(0.8, 6);
+      expect(Math.max(...sy) - Math.min(...sy)).toBeCloseTo(0.4 * Math.sin(c.pitch), 6);
+    }
+  });
+
+  it('pushFlat lays a card on the floor with its top edge farther from the camera, at any yaw', () => {
+    for (const yaw of [0, Math.PI / 2, 1]) {
+      const b = newCardBuf();
+      const c = cam(yaw);
+      pushFlat(b, { frame: 'crate', x: 4, z: 5, lift: 0, flip: true, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1 }, frames, c);
+      const depth = (v: number): number => {
+        const d: number[] = [];
+        for (let i = 0; i < 6; i++) if (b.uv[i * 2 + 1] === v) d.push(project(c, b.position[i * 3], b.position[i * 3 + 1], b.position[i * 3 + 2]).depth);
+        return d.reduce((a, x) => a + x, 0) / d.length;
+      };
+      expect(depth(20)).toBeGreaterThan(depth(36)); // crate: y 20, h 16; top row first
+      expect(new Set(b.position.filter((_, i) => i % 3 === 1))).toEqual(new Set([LIE_Y]));
+    }
   });
 
   it('pushGlow adds one quad with the colour on its six vertices', () => {

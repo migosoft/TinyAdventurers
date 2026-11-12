@@ -122,6 +122,16 @@ export function pushLying(b: CardBuf, c: Card & { headRight: boolean }, frames: 
   // Ground directions on screen: right (c, s), down (-s, c). The frame turns a quarter turn: head (frame up) to right, frame right to down; or head left, frame right up.
   const right: [number, number, number] = c.headRight ? [-sn, 0, cs] : [sn, 0, -cs];
   const up: [number, number, number] = c.headRight ? [cs, 0, sn] : [-cs, 0, -sn];
+  flat(b, c, frames, cam, right, up);
+}
+
+/** A card lying flat on the floor, upright on screen: the frame's up is up the screen (away from the camera on the ground), its right is screen right; `flip` mirrors it. */
+export function pushFlat(b: CardBuf, c: Card, frames: FrameRects, cam: Cam): void {
+  const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
+  flat(b, c, frames, cam, [cs, 0, sn], [sn, 0, -cs]);
+}
+
+function flat(b: CardBuf, c: Card, frames: FrameRects, cam: Cam, right: [number, number, number], up: [number, number, number]): void {
   const p = place({ ...c, lift: 0 }, frames, cam, right, up, false);
   if (!p) return;
   for (const q of p.q) q[1] = LIE_Y;
@@ -131,13 +141,13 @@ export function pushLying(b: CardBuf, c: Card & { headRight: boolean }, frames: 
 
 /**
  * A soft floor ellipse (uv -1..1), `alpha` its strength: ground shadows (2D: 0.45 at the centre).
+ * `rx` runs along screen right on the ground, `rz` along screen down, so the ellipse keeps its look at any yaw.
  * Callers pass the snapped foot (`snapGround`), like the cards, so the shadow stays under the feet.
  */
-export function pushShadow(b: ShadowBuf, x: number, z: number, rx: number, rz: number, alpha: number): void {
-  pushQuad(b.position, b.uv, [
-    [x - rx, SHADOW_Y, z - rz, -1, -1], [x + rx, SHADOW_Y, z - rz, 1, -1],
-    [x + rx, SHADOW_Y, z + rz, 1, 1], [x - rx, SHADOW_Y, z + rz, -1, 1],
-  ], () => { b.alpha.push(alpha); });
+export function pushShadow(b: ShadowBuf, cam: Cam, x: number, z: number, rx: number, rz: number, alpha: number): void {
+  const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
+  const at = (a: number, d: number, u: number, v: number): V => [x + cs * a * rx - sn * d * rz, SHADOW_Y, z + sn * a * rx + cs * d * rz, u, v];
+  pushQuad(b.position, b.uv, [at(-1, -1, -1, -1), at(1, -1, 1, -1), at(1, 1, 1, 1), at(-1, 1, -1, 1)], () => { b.alpha.push(alpha); });
   b.n++;
 }
 

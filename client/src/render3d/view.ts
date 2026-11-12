@@ -288,7 +288,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   // Four passes of cards share one vertex layout: opaque upright, translucent upright (sorted back to front by the caller), opaque flat (floor decals).
   const card = cardMaterial(atlas, aw, ah, lighting, toward);
   const ghost = cardMaterial(atlas, aw, ah, lighting, toward, { translucent: true });
-  const decal = cardMaterial(atlas, aw, ah, lighting, toward, { flat: true });
+  // Translucent too: a sleeping incorporeal figure and the skulls (0.85) have an alpha. No depth write, drawn after the shadows.
+  const decal = cardMaterial(atlas, aw, ah, lighting, toward, { flat: true, translucent: true });
   const emissive = emissiveMaterial(atlas, aw, ah, lighting, toward);
   const glow = glowMaterial();
   const shadow = shadowMaterial();
@@ -300,6 +301,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const flames = new DynMesh([['position', 3], ['uv', 2]], emissive);
   const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3]], glow);
   shadows.mesh.renderOrder = 1;
+  decals.mesh.renderOrder = 2;
   ghosts.mesh.renderOrder = 3;
   glows.mesh.renderOrder = 4;
   // `look` is 5 floats per vertex (r, g, b, mode, alpha); a vertex attribute has at most 4 components, so it goes up as `tint` (r, g, b, mode) and `alpha`.
