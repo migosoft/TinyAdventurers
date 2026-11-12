@@ -6,7 +6,18 @@
   image-rendering: pixelated;
 }
 
+/* The overlay layer (bars, names, the use hint): above the 3D canvas, below the dev panel and the stats readout. */
+#game.active canvas.r3d-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .r3d-panel {
+  z-index: 2;
   position: fixed;
   left: 50%;
   bottom: 10px;
@@ -95,6 +106,7 @@
 }
 
 .r3d-stats {
+  z-index: 2;
   position: fixed;
   top: 12px;
   left: 12px;

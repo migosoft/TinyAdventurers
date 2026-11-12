@@ -3,6 +3,7 @@ import { ANIM, EFFECT, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import { FIGURES, PROJECTILES } from '../game/anim/defs';
 import { INCORPOREAL_ALPHA, VANISH_SECS } from '../game/anim/entityAlpha';
 import type { FrameBounds } from '../game/anim/pose';
+import { CHEST_HEIGHT } from '../game/objectPose';
 import { TILE, TileMap } from '../sim/map';
 import type { EntState } from '../game/world';
 import type { OwnHero, RunFrame, RunViewInit, ShotView } from '../run/view';
@@ -353,5 +354,48 @@ describe('Figures3d', () => {
       expect(g.n).toBeGreaterThan(0);
       for (let q = 0; q < g.n; q++) expect(Math.min(...ys(g, q))).toBeGreaterThanOrEqual(-1e-6);
     }
+  });
+});
+
+describe('Figures3d anchors (#311)', () => {
+  it('anchors carry the predicted own position, not the interpolated entity', () => {
+    const fg = make();
+    fg.frame(frame([ent(1, KIND.Wizard, { side: SIDE.Friendly, x: at(0), y: 8 })], { own: own({ alive: true, x: at(1), y: 40, effects: 1 << EFFECT.Burning }) }), cam());
+    const a = fg.anchors.get(1);
+    expect(a).toBeDefined();
+    expect(a!.x).toBeCloseTo(at(1) / TILE, 9);
+    expect(a!.z).toBeCloseTo(40 / TILE, 9);
+    expect(a!.effects).toBe(1 << EFFECT.Burning);
+    expect(a!.tagShown).toBe(true);
+    // the 2D numbers: height is the frame height times the scale, the tag sits 3 px above the foot
+    const d = FIGURES[KIND.Wizard];
+    expect(a!.height).toBe(FIG.h * (d.scale ?? 1));
+    expect(a!.tag).toBe((d.footY ?? FIG.h) * (d.scale ?? 1) + 3);
+    expect(a!.head).toBe(((d.footY ?? FIG.h) - 0) * (d.scale ?? 1));
+  });
+  it('a chest, a barrel and a mimic anchor at CHEST_HEIGHT', () => {
+    const fg = make();
+    fg.frame(frame([ent(20, KIND.Chest, { side: SIDE.Neutral }), ent(21, KIND.Barrel, { side: SIDE.Neutral }), ent(22, KIND.Mimic)]), cam());
+    for (const id of [20, 21, 22]) {
+      const a = fg.anchors.get(id);
+      expect(a, `entity ${id}`).toBeDefined();
+      expect(a!.height).toBe(CHEST_HEIGHT);
+      expect(a!.x).toBeCloseTo(at(0) / TILE, 9);
+      expect(a!.tagShown).toBe(false);
+    }
+  });
+  it('anchors are rebuilt every frame', () => {
+    const fg = make();
+    fg.frame(frame([ent(20, KIND.Chest, { side: SIDE.Neutral })]), cam());
+    expect(fg.anchors.size).toBe(1);
+    fg.frame(frame([]), cam());
+    expect(fg.anchors.size).toBe(0);
+  });
+  it('a falling figure has tagShown false', () => {
+    const fg = make();
+    const f = (now: number) => frame([ent(1, KIND.Wizard, { side: SIDE.Friendly })], { now, own: own({ alive: true, x: at(2), y: 8, sinking: true }) });
+    fg.frame(f(10), cam());
+    fg.frame(f(10.3), cam());
+    expect(fg.anchors.get(1)!.tagShown).toBe(false);
   });
 });

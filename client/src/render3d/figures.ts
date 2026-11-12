@@ -52,6 +52,22 @@ export function screenAim(yaw: number, aim: number): number {
 /** Something that may open walls this frame (#303 Task 7): its foot in tiles, its middle height in tiles, and why. */
 export interface Opener { id: number; x: number; z: number; mid: number; who: 'hero' | 'enemy' | 'friend' | 'chest' | 'mimic' | 'object' }
 
+/** Where overlays hang from a drawn thing (#311). Foot in tiles; heights in art px above the foot on screen. */
+export interface FigureAnchor {
+  x: number; z: number;
+  /** 2D's view `height`: body frame height x scale (EntityView), CHEST_HEIGHT for chests, barrels, mimics. */
+  height: number;
+  /** 2D's name-tag offset: (footY ?? frame h) x scale + 3. */
+  tag: number;
+  /** 2D's StatusAnchor `head` and `cx`: the opaque body's top, and its opaque centre from the foot (flip applied). */
+  head: number; cx: number;
+  alpha: number;
+  /** False while falling or drowning. */
+  tagShown: boolean;
+  /** Effect bits (the own hero's from `f.own.effects`). */
+  effects: number;
+}
+
 export interface FigureOut {
   cards: CardBuf; ghosts: CardBuf; decals: CardBuf; shadows: ShadowBuf; glows: GlowBuf; emissive: CardBuf;
   openers: Opener[];
@@ -86,6 +102,8 @@ const isFigureKind = (k: number): boolean => !(k === KIND.Torch || k === KIND.Ch
 export class Figures3d {
   /** Figures drawn last frame. */
   count = 0;
+  /** The overlay anchors of the last frame, by entity id (rebuilt every frame): figures, chests, barrels and mimics. */
+  readonly anchors = new Map<number, FigureAnchor>();
   private readonly states: FigureStates;
   private readonly figs = new Map<number, Fig>();
   private images: Image[] = [];
@@ -131,6 +149,7 @@ export class Figures3d {
     this.cam = cam;
     const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [] };
     const seen = new Set<number>();
+    this.anchors.clear();
     let drawn = 0;
     for (const e of f.ents.values()) {
       seen.add(e.id);
@@ -200,6 +219,7 @@ export class Figures3d {
     const [bx, bz] = this.bodyFoot(x, z, cam);
     pushCard(out.cards, { frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1 }, this.frames, cam);
     this.objShadow(x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
+    this.objectAnchor(e, x, z);
     this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'chest', out);
   }
 
@@ -218,6 +238,7 @@ export class Figures3d {
       if (!card.crop || card.crop.h > 0) pushCard(card.alpha < 1 ? out.ghosts : out.cards, card, this.frames, cam);
     }
     if (p.shadow) this.objShadow(x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
+    this.objectAnchor(e, e.x / TILE, e.y / TILE);
     this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'object', out);
   }
 
@@ -238,7 +259,13 @@ export class Figures3d {
       angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1,
     }, this.frames, cam);
     this.objShadow(x, z, p.shadowScale, p.shadowAlpha, cam, out);
+    this.objectAnchor(e, x, z);
     this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'mimic', out);
+  }
+
+  /** A chest, a barrel or a mimic: 2D's `CHEST_HEIGHT` for the bar and the use hint. */
+  private objectAnchor(e: EntState, x: number, z: number): void {
+    this.anchors.set(e.id, { x, z, height: CHEST_HEIGHT, tag: CHEST_HEIGHT + 3, head: CHEST_HEIGHT, cx: 0, alpha: 1, tagShown: false, effects: e.effects });
   }
 
   /** Reports a thing as a wall opener when `opensWalls` (openers.ts) says it may; the one rule lives there. */
@@ -360,6 +387,16 @@ export class Figures3d {
       const r = (d.baseR * sc) / TILE;
       pushShadow(out.shadows, cam, foot.x, foot.z, r * pose.shadow.sx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha);
     }
+
+    // The overlay anchor: the entity's own spot (the predicted one for the own hero), 2D's numbers (EntityView): the unscaled-by-pose `d.scale`.
+    const ds = d.scale ?? 1;
+    const mid = pose.left ? fb.w - 1 - (fb.l + fb.r) / 2 : (fb.l + fb.r) / 2;
+    this.anchors.set(e.id, {
+      x, z, height: fb.h * ds, tag: pose.footY * ds + 3,
+      head: pose.lie ? (fb.r - fb.l + 1) * ds : (pose.footY - fb.t) * ds,
+      cx: pose.lie ? 0 : (mid + 0.5 - pose.originX * fb.w) * ds,
+      alpha: pose.alpha, tagShown: (s.fall ?? 0) === 0 && (s.drown ?? 0) === 0, effects: s.effects ?? 0,
+    });
 
     const height = Math.max(0, pose.footY - fb.t - pose.sink) * sc;
     // Falling or drowning stops it opening walls; wading (pose.sink) does not.

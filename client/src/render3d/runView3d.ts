@@ -7,7 +7,9 @@ import { dir8 } from '../run/input';
 import { NO_STATS, type PictureEv, type RunFrame, type RunView, type RunViewInit, type ShotView, type ViewStats } from '../run/view';
 import { followClamp, freeClamp, keysToWorld, type Cam } from './camera';
 import { RunMouse } from './input';
-import { aimGround } from './screen';
+import { aimGround, toCanvas } from './screen';
+import type { Overlay3d } from './overlay';
+import { layoutBars, layoutHeroTags, layoutUseHint, type LayoutIn, type OverlayItem } from './overlayLayout';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
 import { View as SightView } from '../sim/view';
 import { Figures3d, type Opener } from './figures';
@@ -67,8 +69,12 @@ export class RunView3d implements RunView {
   private readonly woodland: boolean;
   private readonly figures: Figures3d;
 
-  constructor(init: RunViewInit, frames: FrameRects, bounds: (frame: string) => FrameBounds) {
+  private readonly heroNames = new Map<number, string>();
+
+  /** `overlay`: the layer over the canvas (the stage's; tests pass none). */
+  constructor(init: RunViewInit, frames: FrameRects, bounds: (frame: string) => FrameBounds, private readonly overlay: Overlay3d | null = null) {
     this.map = init.map;
+    for (const p of init.info.players) this.heroNames.set(p.ent, p.name);
     this.sight = new SightView(init.map.w, init.map.h);
     this.woodland = !!init.info.woodland;
     this.figures = new Figures3d(init, frames, bounds);
@@ -167,7 +173,9 @@ export class RunView3d implements RunView {
 
     const view = this.v;
     if (!view) {
+      // The device is being restored: the overlay still paints (from the last frame's anchors), so names do not blink.
       this.drawCalls = 0;
+      this.paintOverlay(f, c, cam);
       return this.stats(c, 0);
     }
     const fo = this.figures.frame(f, cam);
@@ -182,7 +190,24 @@ export class RunView3d implements RunView {
       { cam, plan: c.plan, dynamic, lights, ambient: work ? WORK_AMBIENT : AMBIENT, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: this.seen, look: seeLook(c.params) } },
       c.timer,
     );
+    this.paintOverlay(f, c, cam);
     return this.stats(c, view.meshes);
+  }
+
+  /** The overlay over the canvas: bars, names, tags and the use hint, placed from this frame's camera and plan. */
+  private paintOverlay(f: RunFrame, c: StageCtx, cam: Cam): void {
+    const o = this.overlay;
+    if (!o) return;
+    o.size(c.canvas.w, c.canvas.h);
+    const items: OverlayItem[] = [];
+    const i: LayoutIn = {
+      ents: f.ents, you: f.you, anchors: this.figures.anchors, heroNames: this.heroNames, useHint: f.useHint, zoom: c.zoom,
+      at: (x, z) => toCanvas(cam, c.plan, c.zoom, x, 0, z), measure: (t, k) => o.measure(t, k),
+    };
+    layoutBars(i, items);
+    layoutHeroTags(i, items);
+    layoutUseHint(i, items);
+    o.paint(items, c.zoom);
   }
 
   private stats(c: StageCtx, objects: number): ViewStats {

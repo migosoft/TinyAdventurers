@@ -11,6 +11,7 @@ import { RunMouse, turnKeyLabels } from './input';
 import { CamTurn } from './turn';
 import { isTextTarget, MOVE_KEYS, showError, type Host, type Stage, type StageCtx } from './host';
 import { WOODLAND_CLEAR } from './light';
+import { Overlay3d } from './overlay';
 import { RunView3d, moveInput } from './runView3d';
 import type { R3dSystem } from './stats';
 import type { FrameTimer } from '../game/frameTimer';
@@ -86,7 +87,9 @@ export interface RunStage extends Stage {
  */
 export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, host: Host, el: HTMLElement, onLoop: () => void = () => {}): RunStage {
   const { session } = run;
-  const runView = new RunView3d(session.viewInit(), assets.frames, atlasBounds(assets.image, assets.frames));
+  // The overlay canvas is the stage's, not the view's: it survives a lost device's rebuild (which replaces the 3D canvas).
+  const overlay = new Overlay3d(el);
+  const runView = new RunView3d(session.viewInit(), assets.frames, atlasBounds(assets.image, assets.frames), overlay);
   session.setView(runView);
   const job = info.woodland ? groundJob(session.map, info.woodland.seed, info.spawn_y / TILE) : null;
   // A ground too large for the device: shown once, the run keeps its flat grass.
@@ -214,6 +217,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
       run.input.primary = run.input.secondary = () => false;
       run.clock.timer = null;
       runView.destroy();
+      overlay.dispose();
     },
   };
 }
