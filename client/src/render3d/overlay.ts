@@ -76,7 +76,7 @@ export class Overlay3d {
     ctx.globalAlpha = it.alpha;
     ctx.font = `${t.style} ${t.size * zoom * it.scale}px ${FONT_TEXT}`;
     ctx.textAlign = it.align === 'center' ? 'center' : 'left';
-    ctx.textBaseline = it.base === 'bottom' ? 'alphabetic' : 'middle';
+    ctx.textBaseline = it.base === 'bottom' ? 'bottom' : 'middle'; // 'bottom' is the em box's bottom, like Phaser's origin y 1
     if (it.stroke) {
       ctx.strokeStyle = it.stroke;
       ctx.lineWidth = 2 * zoom;

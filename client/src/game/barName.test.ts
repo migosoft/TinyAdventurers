@@ -1,6 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { FLAG, KIND, SIDE } from '../generated/defs';
-import { barName, showsBar } from './barName';
+import { barName, barOf, showsBar } from './barName';
+
+describe('barOf', () => {
+  const names = new Map([[1, 'Ayla']]);
+  const e = (kind: number, side: number, o: { flags?: number; hp?: number; extra?: number } = {}) => ({ kind, side, flags: o.flags ?? 0, hp: o.hp ?? 0.5, extra: o.extra ?? 0 });
+  it('has none for shots, hazards, chests, barrels, bosses and the dead', () => {
+    for (const k of [KIND.Missile, KIND.FirePatch, KIND.Chest, KIND.Barrel, KIND.Dragon, KIND.Lich]) expect(barOf(e(k, SIDE.Hostile), names), `kind ${k}`).toBeNull();
+    expect(barOf(e(KIND.SkeletonWarrior, SIDE.Hostile, { flags: FLAG.DEAD }), names)).toBeNull();
+    expect(barOf(e(KIND.SkeletonWarrior, SIDE.Hostile, { hp: 1 }), names)).toBeNull();
+  });
+  it('an enemy is red 12 wide without a name, the ogre 28 wide even at full health', () => {
+    expect(barOf(e(KIND.SkeletonWarrior, SIDE.Hostile), names)).toEqual({ w: 12, fill: 'enemy', label: null });
+    expect(barOf(e(KIND.Ogre, SIDE.Hostile, { hp: 1 }), names)?.w).toBe(28);
+  });
+  it('a Friendly knight is green with a green name, a Neutral one grey-blue with a pale name, a wolf names its owner', () => {
+    expect(barOf(e(KIND.Knight, SIDE.Friendly, { hp: 1 }), names)).toEqual({ w: 12, fill: 'hero', label: { text: 'Knight', color: '#7fe08a' } });
+    expect(barOf(e(KIND.Knight, SIDE.Neutral, { hp: 1 }), names)).toEqual({ w: 12, fill: 'neutral', label: { text: 'Knight', color: '#b8c4d8' } });
+    expect(barOf(e(KIND.DireWolf, SIDE.Friendly, { hp: 1, extra: 1 }), names)?.label?.text).toBe("Ayla's wolf");
+  });
+  it('a hero is green, a charmed (Hostile) hero red; heroes carry no name', () => {
+    expect(barOf(e(KIND.Wizard, SIDE.Friendly), names)).toEqual({ w: 12, fill: 'hero', label: null });
+    expect(barOf(e(KIND.Wizard, SIDE.Hostile), names)?.fill).toBe('enemy');
+  });
+});
 
 const names = new Map([[1, 'Ayla'], [2, 'Bo']]);
 const ent = (kind: number, extra = 0) => ({ kind, extra });

@@ -1,9 +1,9 @@
 // The overlay's layout (#311): what is drawn over the 3D canvas and where, as plain items in canvas device px. No DOM. The rules
 // are the 2D view's (`drawBarsAndBeams`, the hero name tag and its `TagEffects`, the key cap); each item hangs from a figure's
 // anchor (render3d/figures.ts) projected to the canvas, offset upward by 2D's art-px amounts times `zoom`.
-import { FLAG, KIND, SIDE } from '../generated/defs';
-import { isAnimalKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from '../game/anim/defs';
-import { barName, showsBar } from '../game/barName';
+import { FLAG } from '../generated/defs';
+import { isPlayerKind } from '../game/anim/defs';
+import { barOf } from '../game/barName';
 import type { UseHint } from '../game/useHint';
 import { WORLD_TEXT, type WorldTextKind } from '../game/worldText';
 import type { EntState } from '../game/world';
@@ -12,8 +12,6 @@ import type { FigureAnchor } from './figures';
 
 const TILE = 16;
 /** Bar widths (art px), the dark frame around the fill and the label's gap above the bar. */
-const BAR_W = 12;
-const BAR_W_OGRE = 28;
 /** A bar sits this high above the figure's drawn height. */
 const BAR_GAP = 3;
 const LABEL_GAP = 2;
@@ -34,8 +32,7 @@ export const BAR_FRAME = '#140c1a';
 export const HERO_FILL = '#40d060';
 export const NEUTRAL_FILL = '#8a9ab8';
 export const ENEMY_FILL = '#d03030';
-const HERO_LABEL = '#7fe08a';
-const OTHER_LABEL = '#b8c4d8';
+const FILL = { hero: HERO_FILL, neutral: NEUTRAL_FILL, enemy: ENEMY_FILL } as const;
 
 export type OverlayItem =
   | { t: 'bar'; x: number; y: number; w: number; frac: number; color: string }
@@ -69,21 +66,16 @@ const textWidth = (i: LayoutIn, text: string, kind: WorldTextKind): number =>
 /** HP bars and the names over Neutral and Friendly creatures' bars: 2D's `drawBarsAndBeams` rules. */
 export function layoutBars(i: LayoutIn, out: OverlayItem[]): void {
   for (const e of i.ents.values()) {
-    if (isProjectileKind(e.kind) || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
-    if (!showsBar(e)) continue;
+    const look = barOf(e, i.heroNames);
+    if (!look) continue;
     const a = i.anchors.get(e.id);
     if (!a) continue;
-    const w = e.kind === KIND.Ogre ? BAR_W_OGRE : BAR_W;
     const f = foot(i, a.x, a.z);
-    const x = Math.round(f.px - (w * i.zoom) / 2);
+    const x = Math.round(f.px - (look.w * i.zoom) / 2);
     const y = Math.round(f.py - (a.height + BAR_GAP) * i.zoom);
-    // A hero is green unless it is on the enemy side (charmed): then it gets the enemy's red bar, like a charmed monster.
-    const hero = (isPlayerKind(e.kind) && e.side !== SIDE.Hostile) || e.side === SIDE.Friendly;
-    out.push({ t: 'bar', x, y, w, frac: e.hp, color: hero ? HERO_FILL : e.side === SIDE.Neutral ? NEUTRAL_FILL : ENEMY_FILL });
-    const named = e.side !== SIDE.Hostile && !isPlayerKind(e.kind) && !isAnimalKind(e.kind);
-    const name = named ? barName(e, i.heroNames) : undefined;
-    if (name) {
-      out.push({ t: 'text', x: f.px, y: Math.round(y - LABEL_GAP * i.zoom), text: name, kind: 'tag', color: hero ? HERO_LABEL : OTHER_LABEL, stroke: '', alpha: 1, scale: 1, align: 'center', base: 'bottom' });
+    out.push({ t: 'bar', x, y, w: look.w, frac: e.hp, color: FILL[look.fill] });
+    if (look.label) {
+      out.push({ t: 'text', x: f.px, y: Math.round(y - LABEL_GAP * i.zoom), text: look.label.text, kind: 'tag', color: look.label.color, stroke: '', alpha: 1, scale: 1, align: 'center', base: 'bottom' });
     }
   }
 }

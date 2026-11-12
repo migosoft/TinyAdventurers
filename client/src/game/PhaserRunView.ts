@@ -3,7 +3,7 @@
 // that have a picture, tile changes and ended shots. Picture-only state (entity views, wading and sinking,
 // vanish and reappear marks, skull decals, bar labels, the force field's age) stays here.
 import Phaser from 'phaser';
-import { ANIM, CONST, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
+import { ANIM, CONST, FLAG, KIND, TILE_ID } from '../generated/defs';
 import type { Net } from '../net';
 import { RulesLog } from '../rulesLog';
 import { SHOT_LIFT_PX, settleOwnAim } from '../run/aim';
@@ -11,12 +11,12 @@ import type { PictureEv, RunFrame, RunView, RunViewInit, ShotView, ViewStats } f
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import { skimsTerrain, splashes } from './anim/entityAlpha';
 import { FigureStates } from './anim/figureState';
-import { PROJECTILES, FIGURES, heroWeapons, isAnimalKind, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
+import { PROJECTILES, FIGURES, heroWeapons, isBossKind, isHazardKind, isPlayerKind, isProjectileKind } from './anim/defs';
 import { EntityView, type ViewState } from './anim/EntityView';
 import { MoverTracker } from './airmovers';
 import { projectileAir } from './airshots';
 import { tileDraws } from './autotile';
-import { barName, showsBar } from './barName';
+import { barOf } from './barName';
 import { BarrelView } from './barrel';
 import { ChestView } from './chest';
 import { onContextRestored } from './contextrestore';
@@ -727,23 +727,19 @@ export class PhaserRunView implements RunView {
     this.heroBars.clear();
     const labelled = new Set<number>();
     for (const e of f.ents.values()) {
-      if (isProjectileKind(e.kind) || isHazardKind(e.kind) || e.kind === KIND.Chest || e.kind === KIND.Barrel || isBossKind(e.kind) || e.flags & FLAG.DEAD) continue;
-      // Neutral and Friendly creatures (the recruited knight, the wolf) always show their bar and name; the ogre (mini-boss)
-      // always shows a wide bar; others only once hurt.
-      const ogre = e.kind === KIND.Ogre;
-      const named = e.side !== SIDE.Hostile && !isPlayerKind(e.kind) && !isAnimalKind(e.kind);
-      if (!showsBar(e)) continue;
+      // Who gets a bar and its look is `barOf` (shared with the 3D view).
+      const look = barOf(e, this.heroNames);
+      if (!look) continue;
       const v = this.views.get(e.id) ?? this.mimicViews.get(e.id);
       if (!v) continue;
-      const w = ogre ? 28 : 12;
+      const w = look.w;
       const x = Math.round(e.x - w / 2);
       const y = Math.round(e.y - v.height - 3);
-      // A hero is green unless it is on the enemy side (charmed): then it gets the enemy's red bar, like a charmed monster.
-      const hero = (isPlayerKind(e.kind) && e.side !== SIDE.Hostile) || e.side === SIDE.Friendly;
+      const hero = look.fill === 'hero';
       const g = hero ? this.heroBars : this.bars;
       g.fillStyle(0x140c1a, 1).fillRect(x - 1, y - 1, w + 2, 4);
-      g.fillStyle(hero ? 0x40d060 : e.side === SIDE.Neutral ? 0x8a9ab8 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);
-      const name = named ? barName(e, this.heroNames) : undefined;
+      g.fillStyle(hero ? 0x40d060 : look.fill === 'neutral' ? 0x8a9ab8 : 0xd03030, 1).fillRect(x, y, Math.max(1, Math.round(w * e.hp)), 2);
+      const name = look.label?.text;
       if (name) {
         let t = this.barLabels.get(e.id);
         if (!t) {
@@ -752,7 +748,7 @@ export class PhaserRunView implements RunView {
         }
         // `setColor` redraws and re-uploads the text canvas, and every `setDepth` queues a
         // sort of the display list: set them only when they change (a charm flips the side).
-        const color = hero ? '#7fe08a' : '#b8c4d8';
+        const color = look.label!.color;
         const depth = hero ? DEPTH.heroBars : DEPTH.enemyBars;
         if (t.style.color !== color) t.setColor(color);
         if (t.depth !== depth) t.setDepth(depth);
