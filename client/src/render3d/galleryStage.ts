@@ -170,7 +170,7 @@ export function galleryEnts(t: number, state: string | null): EntState[] {
 export function galleryFrame(ents: readonly EntState[], now: number, dt: number): RunFrame {
   return {
     dt, now, ents: new Map(ents.map((e) => [e.id, e])), you: -1,
-    own: { x: 0, y: 0, alive: false, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false },
+    own: { x: 0, y: 0, alive: false, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: 0, aimFromY: 0, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false },
     watching: null, camera: { x: 0, y: 0 }, snap: undefined, shots: [], hiddenShots: new Set(), useHint: null,
     debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] },
   };

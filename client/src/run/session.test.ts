@@ -176,11 +176,48 @@ describe('RunSession fixed step', () => {
     expect(sent.aim_dist).toBe(0);
   });
 
+  it('the aim is measured from the foot: a pointer 8 px below the old chest point sends the old aim and distance', () => {
+    const { net, session } = make({}, () => ({ ...idle }));
+    const hero = session['pred'].state;
+    session.setView(fakeView({ x: hero.x + 30, y: hero.y + 8 }));
+    session.frame(STEP_MS);
+    const sent = inputs(net)[0];
+    expect(sent.aim).toBeCloseTo(Math.atan2(8, 30));
+    const old = Math.atan2(16, 30);
+    expect(sent.aim).not.toBeCloseTo(old);
+    const { net: net2, session: s2 } = make({}, () => ({ ...idle }));
+    const h2 = s2['pred'].state;
+    s2.setView(fakeView({ x: h2.x + 30, y: h2.y }));
+    s2.frame(STEP_MS);
+    expect(inputs(net2)[0].aim).toBe(0);
+    expect(inputs(net2)[0].aim_dist).toBe(30);
+  });
+
+  it('the frame hands the drawn aim to the view', () => {
+    let t = 10;
+    const net = fakeNet();
+    const session = new RunSession({ info: startInfo(ROWS), net, hud: fakeHud(), myClass: 'Wizard', input: () => NO_INPUT, now: () => t });
+    const view = fakeView();
+    session.setView(view);
+    session.frame(16);
+    const hero = session['pred'].state;
+    const f = view.frames.at(-1)!;
+    expect(f.own.aimsAtPointer).toBe(true);
+    expect(f.own.aimFromX).toBe(hero.x);
+    expect(f.own.aimFromY).toBe(hero.y);
+    const s = snap();
+    s.me.effects = [[EFFECT.Petrified, 1]] as never;
+    net.emit(s);
+    t = 10.1;
+    session.frame(16);
+    expect(view.frames.at(-1)!.own.aimsAtPointer).toBe(false);
+  });
+
   it('a primary shot is predicted', () => {
     const shoot = ability('Shoot', { projectile: KIND.Arrow, speed: 200, range: 150, ranged: true, cooldown: 0.5 });
     const { net, session } = make({ abilities: [shoot, ability('SummonWolf')] }, () => ({ ...idle, primary: true }));
     const hero = session['pred'].state;
-    const view = fakeView({ x: hero.x + 100, y: hero.y - 8 });
+    const view = fakeView({ x: hero.x + 100, y: hero.y });
     session.setView(view);
     session.frame(STEP_MS);
     expect(inputs(net)[0].primary).not.toBeNull();
@@ -233,7 +270,7 @@ describe('RunSession frame', () => {
     const shoot = ability('Shoot', { projectile: KIND.Arrow, speed: 200, range: 150, ranged: true, cooldown: 0.5 });
     const { session, view } = running(() => ({ ...idle, primary: true }), { abilities: [shoot, ability('SummonWolf')] });
     const hero = session['pred'].state;
-    view.pointerWorld = () => ({ x: hero.x + 100, y: hero.y - 8 });
+    view.pointerWorld = () => ({ x: hero.x + 100, y: hero.y });
     session.frame(STEP_MS);
     expect(view.frames.at(-1)!.shots.length).toBe(1);
     expect(view.frames.at(-1)!.shots[0].kind).toBe(KIND.Arrow);
@@ -284,10 +321,10 @@ describe('RunSession frame', () => {
   it('the drawn weapon follows the pointer on a frame without a step', () => {
     const { session, view } = running();
     const hero = session['pred'].state;
-    view.pointerWorld = () => ({ x: hero.x + 50, y: hero.y - 8 });
+    view.pointerWorld = () => ({ x: hero.x + 50, y: hero.y });
     session.frame(STEP_MS);
     expect(view.frames.at(-1)!.own.aim).toBeCloseTo(0);
-    view.pointerWorld = () => ({ x: hero.x, y: hero.y - 8 + 50 });
+    view.pointerWorld = () => ({ x: hero.x, y: hero.y + 50 });
     session.frame(1);
     expect(view.frames.at(-1)!.own.aim).toBeCloseTo(Math.PI / 2);
   });
@@ -297,7 +334,7 @@ describe('RunSession frame', () => {
     let fire = true;
     const { net, session, view, at } = running(() => ({ ...idle, primary: fire }), { abilities: [shoot, ability('SummonWolf')] });
     const hero = session['pred'].state;
-    view.pointerWorld = () => ({ x: hero.x + 100, y: hero.y - 8 });
+    view.pointerWorld = () => ({ x: hero.x + 100, y: hero.y });
     at(10);
     session.frame(STEP_MS);
     fire = false;

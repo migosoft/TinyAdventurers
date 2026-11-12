@@ -2,6 +2,7 @@
 // teammate) or flies free, the figures and shots are cards (`Figures3d`), and the lights come from the page's parameters. The three.js
 // `View` comes and goes (a lost device), so it is attached and detached from outside.
 import type { FrameBounds } from '../game/anim/pose';
+import { settleOwnAim } from '../run/aim';
 import { dir8 } from '../run/input';
 import { NO_STATS, type PictureEv, type RunFrame, type RunView, type RunViewInit, type ShotView, type ViewStats } from '../run/view';
 import { followClamp, freeClamp, keysToWorld, type Cam } from './camera';
@@ -145,6 +146,9 @@ export class RunView3d implements RunView {
     }
     this.started = true;
     const cam: Cam = { x: this.cam.x, z: this.cam.z, pitch, yaw };
+
+    // The drawn aim uses this frame's camera: whatever pointerWorld reads must be stored above this line.
+    settleOwnAim(f.own, this.pointerWorld());
 
     const view = this.v;
     if (!view) {

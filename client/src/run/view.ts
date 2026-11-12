@@ -36,6 +36,11 @@ export interface OwnHero {
   animT: number;
   arc?: number;
   aim: number;
+  /** The hero aims at the pointer (alive, not charmed, able to turn): the view may settle `aim` after its camera moved. */
+  aimsAtPointer: boolean;
+  /** The predicted foot the session's aim is measured from (simulation px). */
+  aimFromX: number;
+  aimFromY: number;
   flags: number;
   effects: number;
   entangled: number;
@@ -53,7 +58,8 @@ export interface DebugDraw {
 }
 
 /** What the session hands the view each display frame. A frame and the objects in it are valid only during the
- *  call: the session reuses them, so a view must not keep references to them. */
+ *  call: the session reuses them, so a view must not keep references to them. A view may write `own.aim` through
+ *  `settleOwnAim` (after its camera moved), and nothing else. */
 export interface RunFrame {
   dt: number;
   now: number; // seconds
@@ -98,7 +104,9 @@ export interface RunView {
   /** The session has already updated the map and the LightField. */
   tileChanged(x: number, y: number, v: number): void;
   shotEnded(shot: ShotView, how: 'wall' | 'enemy' | 'gone'): void;
-  /** Simulation px under the pointer, or null when the view cannot tell. */
+  /** The aimed point at the foot plane (simulation px): the point under the pointer moved `SHOT_LIFT_PX` art px down
+   *  the screen, then onto the ground. Null: no pointer (outside the canvas, before the first frame, during a
+   *  middle-mouse drag). */
   pointerWorld(): { x: number; y: number } | null;
   destroy(): void;
 }

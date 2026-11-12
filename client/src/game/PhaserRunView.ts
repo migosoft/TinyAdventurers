@@ -6,6 +6,7 @@ import Phaser from 'phaser';
 import { ANIM, CONST, FLAG, KIND, SIDE, TILE_ID } from '../generated/defs';
 import type { Net } from '../net';
 import { RulesLog } from '../rulesLog';
+import { SHOT_LIFT_PX, settleOwnAim } from '../run/aim';
 import type { PictureEv, RunFrame, RunView, RunViewInit, ShotView, ViewStats } from '../run/view';
 import { isTerrain, TILE, TileMap } from '../sim/map';
 import { skimsTerrain, splashes } from './anim/entityAlpha';
@@ -175,7 +176,7 @@ export class PhaserRunView implements RunView {
 
   pointerWorld(): { x: number; y: number } | null {
     const wp = this.scene.input.activePointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
-    return { x: wp.x, y: wp.y };
+    return { x: wp.x, y: wp.y + SHOT_LIFT_PX };
   }
 
   // ------------------------------------------------------------ board
@@ -388,6 +389,8 @@ export class PhaserRunView implements RunView {
     const camX = f.camera.x;
     const camY = f.camera.y;
     cam.centerOn(Math.round(camX), Math.round(camY - 8));
+    // Phaser's getWorldPoint reads scrollX/scrollY directly, so this frame's centre is used.
+    settleOwnAim(f.own, this.pointerWorld());
     const darkvision = (f.snap?.me.darkvision ?? 0) / 100;
     const vision = f.snap?.me.vision ?? CONST.FOV_RADIUS;
     this.lightView.update(cam.worldView, camX, camY, f.snap?.lights ?? [], now, darkvision, vision);

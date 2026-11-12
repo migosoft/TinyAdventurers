@@ -19,6 +19,7 @@ import { abilityChoice, cosmeticCount, Interpolator, Predictor, slotUsable, voll
 import { TileMap } from '../sim/map';
 import type { Net } from '../net';
 import type { Disabled, Hud } from '../ui/hud';
+import { aimAt } from './aim';
 import { NO_INPUT, type StepInput } from './input';
 import { Shots } from './shots';
 import { NO_STATS, type DebugDraw, type OwnHero, type RunView, type RunViewInit } from './view';
@@ -99,7 +100,7 @@ export class RunSession {
   /** The own hero's last action animation (the frame's `own`). */
   private localAnim: { anim: number; start: number; arc?: number } = { anim: ANIM.Idle as number, start: 0 };
   /** The own hero as drawn this frame, rebuilt each frame (`ownHero`). */
-  private readonly own: OwnHero = { x: 0, y: 0, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
+  private readonly own: OwnHero = { x: 0, y: 0, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: 0, aimFromY: 0, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
   /** `frame`'s own duration, ms, averaged; the HUD shows it. */
   private frameMs = 0;
 
@@ -296,6 +297,9 @@ export class RunSession {
     o.entangled = lookOf(this.lastSnap?.looks ?? [], this.runInfo.you, EFFECT.Entangled);
     o.dashing = this.pred.state.dashT > 0;
     o.sinking = this.pred.sinking;
+    o.aimsAtPointer = this.isAlive && !this.pred.charmed && !this.pred.noTurn;
+    o.aimFromX = this.pred.state.x;
+    o.aimFromY = this.pred.state.y;
     if (this.isAlive && !this.pred.charmed) {
       // Petrified or asleep: the weapon keeps the facing from before the effect.
       o.aim = this.pred.noTurn ? this.lastAim : this.aimInfo(this.lastInput.mx, this.lastInput.my).aim;
@@ -329,11 +333,7 @@ export class RunSession {
    */
   private aimInfo(mx: number, my: number): { aim: number; dist: number } {
     const wp = this.view?.pointerWorld() ?? null;
-    if (wp) {
-      const dx = wp.x - this.pred.state.x;
-      const dy = wp.y - (this.pred.state.y - 8);
-      return { aim: Math.atan2(dy, dx), dist: Math.hypot(dx, dy) };
-    }
+    if (wp) return aimAt(this.pred.state, wp);
     return { aim: mx !== 0 || my !== 0 ? Math.atan2(my, mx) : this.lastAim, dist: 0 };
   }
 

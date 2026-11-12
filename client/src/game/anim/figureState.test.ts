@@ -12,7 +12,7 @@ function map(): TileMap {
 const at = (tx: number) => tx * TILE + TILE / 2;
 
 const ent = (o: Partial<EntState> = {}): EntState => ({ id: 1, kind: KIND.Paladin, x: at(1), y: 8, hp: 10, anim: ANIM.Move, aim: 0.5, animMs: 300, flags: 0, extra: 0, effects: 0, side: SIDE.Friendly, entangled: 0, ...o });
-const own = (o: Partial<OwnHero> = {}): OwnHero => ({ x: at(0), y: 8, alive: true, charmed: false, anim: ANIM.Idle, animT: 0.25, aim: 1.5, flags: 2, effects: 4, entangled: 0, dashing: false, sinking: false, arc: 1.1, ...o });
+const own = (o: Partial<OwnHero> = {}): OwnHero => ({ x: at(0), y: 8, alive: true, charmed: false, anim: ANIM.Idle, animT: 0.25, aim: 1.5, flags: 2, effects: 4, entangled: 0, dashing: false, sinking: false, arc: 1.1, aimsAtPointer: true, aimFromX: at(0), aimFromY: 8, ...o });
 const frame = (o: Partial<OwnHero> = {}) => ({ you: 1, own: own(o) });
 
 describe('FigureStates.stateOf', () => {
