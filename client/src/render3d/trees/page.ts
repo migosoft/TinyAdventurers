@@ -30,10 +30,10 @@ function readParams(search: string): Params {
   return {
     tree: q.get('tree') === 'recipe' ? 'recipe' : 'grown', leaf: Math.min(100, Math.max(0, num('leaf', 100))),
     leaves: on('leaves', true), crown: q.get('crown') === 'balls' ? 'balls' : 'tufts',
-    hour: Math.min(23, Math.max(4.5, num('hour', 8))), yaw: num('yaw', 0), mode: q.get('mode') === 'cards' ? 'cards' : '3d',
+    hour: Math.min(23, Math.max(4.5, num('hour', 8.25))), yaw: num('yaw', 0), mode: q.get('mode') === 'cards' ? 'cards' : '3d',
     stretch: on('stretch', true), wind: on('wind', true), snap: on('snap', false), shadows: on('shadows', true), outline: on('outline', false), // the user's picks (2026-11-13): smooth sway, no outline pass, 2 px per art px
     plain: on('plain', false),
-    res: Math.max(0, Math.round(num('res', 2))), zoom: Math.max(0, Math.round(num('zoom', 0))), t: q.has('t') ? num('t', 0) : null, mult: Math.max(1, Math.round(num('mult', 1))),
+    res: Math.max(0, Math.round(num('res', 0))), zoom: Math.max(0, Math.round(num('zoom', 0))), t: q.has('t') ? num('t', 0) : null, mult: Math.max(1, Math.round(num('mult', 1))),
   };
 }
 
