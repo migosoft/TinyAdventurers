@@ -8,28 +8,9 @@ import Phaser from 'phaser';
 /** The pipeline's name, as registered with `pipelines.addPostPipeline`. */
 export const UNSEEN_FX = 'UnseenFX';
 
-/** What unseen ground looks like. `blurPx` is in world pixels (the canvas is at screen resolution and the integer zoom lives on the camera). */
-export interface HazeLook {
-  /** Unseen strength beyond sight (0..1; read by VisionMask.outside). */
-  outside: number;
-  /** Unseen strength behind a soft blocker such as a trunk (read by VisionMask.soft). */
-  soft: number;
-  /** The wash colour, 0xRRGGBB. */
-  colour: number;
-  /** How far full unseen strength moves the colour toward `colour`. */
-  mix: number;
-  /** How far full unseen strength moves the colour toward grey. */
-  desat: number;
-  /** Blur tap distance at full strength, in world pixels. */
-  blurPx: number;
-  /** The blur radius of the vision mask in world pixels: how softly the edge of sight fades (read by VisionMask.feather). */
-  feather: number;
-  /** World px behind a soft blocker over which the haze grows from nothing to `soft` (read by VisionMask.ramp); 0: crisp from the blocker's edge. */
-  ramp: number;
-}
-
-/** First guess, tuned on the phone. */
-export const DEFAULT_HAZE: HazeLook = { outside: 0.8, soft: 0.7, colour: 0xb8c4cc, mix: 0.45, desat: 0.6, blurPx: 1.5, feather: 24, ramp: 24 };
+// The look and its default live in sightField.ts (no Phaser, for the 3D view); re-exported so imports of this file keep working.
+import { DEFAULT_HAZE, type HazeLook } from './sightField';
+export { DEFAULT_HAZE, type HazeLook } from './sightField';
 
 /** The shader uniforms for a look on a render target of `targetW`×`targetH` texels at camera `zoom`. */
 export function hazeUniforms(

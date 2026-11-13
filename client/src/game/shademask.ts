@@ -9,12 +9,12 @@
 // mask's haze (#278).
 import type Phaser from 'phaser';
 import { TILE, type TileMap } from '../sim/map';
-import { inside } from '../sim/vispoly';
 import type { View } from '../sim/view';
 import { DEPTH } from './effects';
+import { SHADE } from './sightField';
 
-/** How dark the soft shadow is (alpha of black). */
-export const SHADE = 0.3;
+// The pure parts live in sightField.ts (no Phaser, for the 3D view); re-exported so imports of this file keep working.
+export { SHADE, shadeCovers } from './sightField';
 /** Canvas pixels per tile. */
 const RES = 8;
 /** Tiles of canvas beyond the camera window on each side. */
@@ -22,11 +22,6 @@ const BORDER = 2;
 const KEY = 'shademask';
 /** Phaser's FilterMode.LINEAR as a number: a value import of Phaser needs a browser and the pure functions here are unit-tested. */
 const LINEAR = 0;
-
-/** Is the point (world px) in the soft shadow: inside the hard polygon and outside the full one? */
-export function shadeCovers(hard: View, all: View, x: number, y: number): boolean {
-  return inside(hard.polygon, hard.px, hard.py, x, y) && !inside(all.polygon, all.px, all.py, x, y);
-}
 
 export class ShadeMask {
   private canvas?: Phaser.Textures.CanvasTexture;
