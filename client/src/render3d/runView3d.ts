@@ -310,10 +310,11 @@ export class RunView3d implements RunView {
     const oval = skyNow && !work ? ovalOf(skyNow) : 1;
     const fo = this.figures.frame(f, cam, { ambient, dark: c.params.dark, torchGlow: work, oval });
     for (const w of fo.floats) this.floats.add(w.x, w.y, w.text, w.color, { kind: w.kind, up: w.up });
+    const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
     if (skyNow && this.critters && this.fireflies) {
       // Bees and butterflies by day, fireflies at night, where the viewer sees (the mask of the last frame: one frame behind is not seen).
       const seenMask = c.params.sight ? this.mask : null;
-      this.critters.push(fo.cards, this.frames, cam, c.now, skyNow.day, seenMask, footprint(cam, c.plan.halfW, c.plan.halfH));
+      this.critters.push(fo.cards, this.frames, cam, c.now, skyNow.day, seenMask, fp);
       this.fireflies.step(c.dt, cam);
       this.fireflies.push(fo.glows, cam, skyNow.night, seenMask);
     }
@@ -322,7 +323,6 @@ export class RunView3d implements RunView {
     // The plants: a few drawn per frame, nearest to the camera first.
     this.plants?.step(cam, PLANT_BUDGET_MS);
     c.timer.lap('plants');
-    const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
     let lights: ReturnType<typeof selectLights>['list'] = [];
     let casters: ShadowCaster[] = [];
     let lava: Float32Array | null = null;

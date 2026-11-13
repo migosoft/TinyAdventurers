@@ -17,6 +17,9 @@ export const BEE_LIFT = 0.35;
 /** A butterfly's height in flight above its ground height, and landed (tiles; *first guess*). */
 const FLIGHT_LIFT = 0.25;
 const LANDED_LIFT = 0.02;
+/** The rects hang below a critter's anchor (offsets are y down): the lowest pixel row is this many px under it, so the lift is raised by it and the lowest pixel sits at the lift. */
+const BEE_LOW = 1;
+const FLY_LOW = 2;
 /** Pushes the second rect of a critter a hair toward the viewer so it wins over the rect it overlaps. */
 const OVER = 0.003;
 /** Critters this far outside the view box (tiles) are skipped. */
@@ -68,15 +71,16 @@ export class Critters3d {
       beePos(bee.q, t, bee.f, this.pt);
       const x = this.pt.x / TILE, z = this.pt.y / TILE;
       if (!shown(x, z)) continue;
-      rect(x, z, BEE_LIFT, -1, -1, 2, 2, BEE_COLOURS.yellow, 0);
-      rect(x, z, BEE_LIFT, 0, -1, 1, 2, BEE_COLOURS.dark, OVER);
+      const lift = BEE_LIFT + BEE_LOW / TILE;
+      rect(x, z, lift, -1, -1, 2, 2, BEE_COLOURS.yellow, 0);
+      rect(x, z, lift, 0, -1, 1, 2, BEE_COLOURS.dark, OVER);
       n++;
     }
     for (const fl of this.flyers) {
       const b = flyPos(fl.q, t, fl.bounds, this.pos);
       const x = b.x / TILE, z = b.ground / TILE;
       if (!shown(x, z)) continue;
-      const lift = butterflyLift(b);
+      const lift = butterflyLift(b) + FLY_LOW / TILE;
       if (b.open) { rect(x, z, lift, -3, -2, 2, 3, fl.colour, 0); rect(x, z, lift, 1, -2, 2, 3, fl.colour, 0); }
       else { rect(x, z, lift, -1, -2, 1, 3, fl.colour, 0); rect(x, z, lift, 0, -2, 1, 3, fl.colour, 0); }
       rect(x, z, lift, 0, -1, 1, 3, BEE_COLOURS.body, OVER);

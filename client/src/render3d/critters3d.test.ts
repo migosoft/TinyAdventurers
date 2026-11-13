@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { butterflyAt, BEES_PER_PATCH, butterflyHomes, flowerPatches } from '../game/woodland/critterMath';
+import { DEFAULT_HAZE } from '../game/sightField';
 import { flowerSpots } from '../game/woodland/ground';
 import { TILE, TileMap } from '../sim/map';
 import { View } from '../sim/view';
@@ -67,9 +68,37 @@ describe('Critters3d', () => {
     }
   });
 
+  it('skips a critter on an unseen texel of a daylight mask too', () => {
+    const map = meadow(40, 30, 20);
+    const c = new Critters3d(map, 5);
+    const view = new View(map.w, map.h);
+    view.compute(map, 5.5 * TILE, 15.5 * TILE, 14, 'hard');
+    const mask = new SightMask(map, { daylight: true, feather: DEFAULT_HAZE.feather, ramp: DEFAULT_HAZE.ramp });
+    mask.update(view, null, 0);
+    const open = newCardBuf(), masked = newCardBuf();
+    c.push(open, frames, cam, 3, 1, null, ALL);
+    c.push(masked, frames, cam, 3, 1, mask, ALL);
+    expect(masked.n).toBeGreaterThan(0);
+    expect(masked.n).toBeLessThan(open.n);
+  });
+
   it('skips critters outside the view box', () => {
     const b = newCardBuf();
     expect(new Critters3d(meadow(40, 30), 5).push(b, frames, cam, 3, 1, null, { x0: -50, z0: -50, x1: -40, z1: -40 })).toBe(0);
+  });
+});
+
+describe('critter pixels above the ground', () => {
+  it('keeps every pixel at or above the landed butterfly lift (nothing sinks into the ground), and a bee above its lift', () => {
+    const c = new Critters3d(meadow(40, 30), 5);
+    let lowest = Infinity;
+    for (let t = 0; t < 60; t += 0.1) {
+      const b = newCardBuf();
+      c.push(b, frames, cam, t, 1, null, ALL);
+      for (let i = 1; i < b.position.length; i += 3) lowest = Math.min(lowest, b.position[i]);
+    }
+    expect(lowest).toBeGreaterThanOrEqual(0.02 - 1e-6);
+    expect(lowest).toBeLessThan(0.02 + 1 / 16); // a butterfly did land
   });
 });
 

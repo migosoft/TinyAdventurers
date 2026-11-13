@@ -151,10 +151,12 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       const ambient = game ? s.ambient : WORK_AMBIENT;
       const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: !game, oval: game ? ovalOf(s) : 1 });
       // Bees and butterflies by day, fireflies at night, where the knight sees (the mask of the last frame).
+      const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       const seenMask = params.sight ? mask : null;
-      critters.push(fo.cards, assets.frames, cam, seconds, s.day, seenMask, footprint(cam, c.plan.halfW, c.plan.halfH));
+      critters.push(fo.cards, assets.frames, cam, seconds, s.day, seenMask, fp);
       fireflies.step(c.dt, cam);
-      fireflies.push(fo.glows, cam, s.night, seenMask);      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      fireflies.push(fo.glows, cam, s.night, seenMask);
+      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
       // The plants: a few drawn per frame, nearest to the knight first.
@@ -162,7 +164,6 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       c.timer.lap('plants');
 
       const viewer = { x: knight.x, z: knight.z };
-      const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let inView = 0;
       if (game) {
