@@ -20,9 +20,11 @@ export interface Plant3 {
   trunkHalf: number; trunkTop: number;
 }
 
-/** Vertex streams of the merged mesh; `sway` = foot x, foot z, sway factor, anchor height; `part` = ramp, shape (0 lobe, 1 plain, 2 skirt), phases; `misc` = light lift, hem or shade, edge width, trunk flag. */
+/** Vertex streams of the merged mesh; `sway` = foot x, foot z, sway factor, anchor height; `part` = ramp, shape (0 lobe, 1 plain, 2 skirt, 3 leaf tuft), phases; `misc` = light lift, hem or shade, edge width, trunk flag. */
 export class MeshData {
   pos: number[] = []; nrm: number[] = []; grad: number[] = []; sway: number[] = []; part: number[] = []; misc: number[] = []; idx: number[] = [];
+  /** Leaf tufts: corner (-1..1), half-size in tiles, seed; zeros on everything else. */
+  tuft: number[] = [];
   get verts() { return this.pos.length / 3; }
   get tris() { return this.idx.length / 3; }
 }
@@ -59,8 +61,33 @@ function lobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, ramp: numbe
     m.sway.push(foot.x, foot.z, b.k, b.y);
     m.part.push(ramp, 0, b.ph, b.ph2);
     m.misc.push(lift, 0, edge, 0);
+    m.tuft.push(0, 0, 0, 0);
   }
   for (const [a, c, e] of ICO.f) m.idx.push(base + a, base + c, base + e);
+}
+
+/**
+ * A lobe as leaf tufts: a smaller core ball, and on the lobe's surface small camera-facing patches (shape 3) spread evenly
+ * (a Fibonacci sphere, jittered). Each patch carries the ball's direction at its centre, so the lobe still shades as a round form.
+ */
+function tuftLobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, grad: (x: number, y: number, z: number) => [number, number, number, number], lift: number, r: () => number): void {
+  lobe(m, foot, { ...b, rx: b.rx * 0.74, ry: b.ry * 0.74, rz: b.rz * 0.74 }, RAMP.leaf, grad, lift, 0);
+  const rpx = b.rx / U, n = Math.max(14, Math.min(64, Math.round((rpx * rpx) / 3.2)));
+  for (let i = 0; i < n; i++) {
+    const y = 1 - (2 * (i + 0.5)) / n, rad = Math.sqrt(1 - y * y), a = i * 2.39996 + (r() - 0.5) * 0.5;
+    const d = [Math.cos(a) * rad, y, Math.sin(a) * rad], out = 0.92 + r() * 0.16, size = (3.2 + r() * 2.2) * U, seed = Math.floor(r() * 997);
+    const px = b.x + d[0] * b.rx * out, py = b.y + d[1] * b.ry * out, pz = b.z + d[2] * b.rz * out, base = m.verts;
+    for (const [ox, oy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      m.pos.push(foot.x + px, py, foot.z + pz);
+      m.nrm.push(d[0], d[1], d[2]);
+      m.grad.push(...grad(px, py, pz));
+      m.sway.push(foot.x, foot.z, b.k, b.y);
+      m.part.push(RAMP.leaf, 3, 0, 0);
+      m.misc.push(lift, 0, 0, 0);
+      m.tuft.push(ox, oy, size, seed);
+    }
+    m.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
 }
 
 /** A tube of `sides` along `pts` (plant space, tiles); `kOf` gives the sway factor at a height, `shade` the bark's standing shade (0..1). */
@@ -85,6 +112,7 @@ function tube(m: MeshData, foot: { x: number; z: number }, pts: P3[], sides: num
       m.sway.push(foot.x, foot.z, kOf(Math.max(0, p.y)), Math.max(0, y));
       m.part.push(ramp, 1, 0, 0);
       m.misc.push(0, shade(i), 0, trunk);
+      m.tuft.push(0, 0, 0, 0);
     }
   }
   for (let i = 0; i + 1 < n; i++) for (let s = 0; s < sides; s++) {
@@ -102,7 +130,7 @@ function thin<T>(pts: T[], step: number): T[] {
 }
 
 /** Builds one plant into `m` and returns what the page needs of it. */
-export function buildPlant(m: MeshData, spec: PlantSpec): Plant3 {
+export function buildPlant(m: MeshData, spec: PlantSpec, tufts = false): Plant3 {
   const drawn = drawPlant(spec.kind, spec.seed, spec.scalePct);
   const rc = drawn.recipe;
   if (!rc) throw new Error('trees: the generator returned no recipe');
@@ -182,7 +210,8 @@ export function buildPlant(m: MeshData, spec: PlantSpec): Plant3 {
     // the generator's crown gradient and its darkening toward the bottom
     const grad = (x: number, y: number, z: number): [number, number, number, number] => [(x - cx) / crx, (y - cy) / cry, (z - cz) / crz, 0.25 - (0.7 * (by1 - y)) / span];
     const lift = rc.kind === 'bush' ? 0.3 : 0;
-    for (const b of lobes) lobe(m, foot, b, RAMP.leaf, grad, lift, 1.4 / (Math.min(b.rx, b.ry) / U));
+    const rt = rng((spec.seed * 31 + 7) >>> 0);
+    for (const b of lobes) { if (tufts) tuftLobe(m, foot, b, grad, lift, rt); else lobe(m, foot, b, RAMP.leaf, grad, lift, 1.4 / (Math.min(b.rx, b.ry) / U)); }
   }
 
   // ---- conifer skirts: cones with a zigzag hem
@@ -203,6 +232,7 @@ export function buildPlant(m: MeshData, spec: PlantSpec): Plant3 {
         m.sway.push(foot.x, foot.z, k, Math.max(0, yTop - h));
         m.part.push(RAMP.conifer, 2, 0, 0);
         m.misc.push(0, v, 0, 0);
+        m.tuft.push(0, 0, 0, 0);
       }
     });
     for (let ri = 0; ri < 2; ri++) for (let i = 0; i < n; i++) {
