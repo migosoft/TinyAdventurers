@@ -16,13 +16,13 @@ for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`npc_knight_
 const assets = { image: {} as HTMLImageElement, frames };
 
 /** A stage built for `search`; `run(n, dt)` runs n frames and returns the last one handed to the view. */
-function setup(search: string) {
+function setup(search: string, start = 0) {
   const p = parseParams(search);
   const host = { setDaylight: vi.fn(), setSky: vi.fn() };
   const stage: Stage = createWoodlandStage(assets, p, search, host);
   let f: FrameInput | null = null;
   const view = { draw: (i: FrameInput) => ((f = i), 0) };
-  let now = 0;
+  let now = start;
   const run = (n: number, dt: number, held: string[] = []): FrameInput => {
     for (let i = 0; i < n; i++) {
       now += dt;
@@ -103,6 +103,26 @@ describe('the ?r3d=woodland stage', () => {
     expect(f.sun!.clouds).toBe(false);
     expect(f.sun!.wind).toEqual([0, 0]);
     expect(f.sight!.wind).toEqual([0, 0]);
+  });
+
+  it('moves the mist and the clouds on one clock', () => {
+    // The page's clock (`now`) started long before the stage: the stage's own seconds drive both.
+    const { run } = setup('?r3d=woodland&hourRate=0', 500);
+    const f = run(5, 0.2);
+    expect(f.sight!.t).toBe(f.sun!.t);
+    expect(f.sight!.t).toBeCloseTo(1, 5);
+    expect(run(1, 0.2).plants!.t).toBeCloseTo(f.sun!.t + 0.2, 5);
+  });
+
+  it('draws the plants a few at a time and hands them to the view with the wind switch', () => {
+    const { run } = setup('?r3d=woodland&hourRate=0');
+    const first = run(1, 0.016).plants!;
+    expect(first.wind).toBe(true);
+    expect(first.pages.length).toBeGreaterThan(0);
+    const later = run(40, 0.016).plants!;
+    expect(later.chunks.size).toBeGreaterThan(0);
+    expect(later.t).toBeGreaterThan(first.t);
+    expect(setup('?r3d=woodland&wind=0').run(1, 0.016).plants!.wind).toBe(false);
   });
 
   it('follows the Wall shadows switch', () => {

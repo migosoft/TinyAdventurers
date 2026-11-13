@@ -2,7 +2,7 @@
 // decimals, systems indented); it is not imported from there because render3d takes nothing from the game's UI.
 
 /** The systems of one 3D frame, in the order the readout lists them. The frame books `upload` before it runs the sun's pass, so 'sun' is listed with the update systems although its lap comes after 'upload'. */
-export const R3D_SYSTEMS = ['sim', 'cards', 'lights', 'sight', 'sun', 'upload', 'scene', 'present', 'hud'] as const;
+export const R3D_SYSTEMS = ['sim', 'cards', 'plants', 'lights', 'sight', 'sun', 'upload', 'scene', 'present', 'hud'] as const;
 export type R3dSystem = (typeof R3D_SYSTEMS)[number];
 
 export interface R3dStats {
@@ -29,7 +29,7 @@ export function lightLines(list: number, inView: number, casters: number, lcap: 
   return [`lights     ${list} of ${inView} (cap ${lcap})`, `shadows    ${casters} cards (cap ${ccap})`];
 }
 
-const UPDATE = new Set<string>(['sim', 'cards', 'lights', 'sight']);
+const UPDATE = new Set<string>(['sim', 'cards', 'plants', 'lights', 'sight']);
 
 export function statsText3d(s: R3dStats): string {
   const ms = (v: number) => `${v.toFixed(2)} ms`;

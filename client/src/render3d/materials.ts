@@ -39,6 +39,30 @@ export function bayerAt() {
 }
 export type ViewToward = ReturnType<typeof viewTowardUniform>;
 
+/** The see-through uniforms every opening surface (walls, plants) reads: `mode` 0 off, 1 soft, 2 lattice; `keep` 0..1; `target` and `ray` the camera target and the horizontal unit vector toward the camera (the mask's depth reference). */
+export function seeUniforms() {
+  return { mode: uniform(1), keep: uniform(SEE_DEFAULTS.keep), target: uniform(new Vector3()), ray: uniform(new Vector3(0, 0, 1)) };
+}
+/** The uniforms as `seeUniforms` made them (or as `worldMaterial` hands them back); the nodes are untyped. */
+export type SeeUniforms = Record<keyof ReturnType<typeof seeUniforms>, N>;
+
+/**
+ * Whether a surface point `wp` opens (a bool node) where the see-through mask has a disc and the point is nearer the camera than the thing under it.
+ * `uvPx` is the texel position of the surface (the lattice mode's checker). The mask is sampled linearly at the top level of the shader; its green
+ * is a sum weighted by coverage (alpha), so dividing by alpha gives the value back at a disc's soft edge.
+ */
+export function seeOpenNode(maskTex: Texture, wp: N, uvPx: N, see: SeeUniforms): N {
+  const mk = texture(maskTex, screenUV);
+  const strength = mk.r;
+  const thingNear = float(SEE_DEPTH_BIAS).sub(mk.g.div(max(mk.a, 1e-4)));
+  const wallNear = wp.sub(see.target).dot(see.ray);
+  const inFront = strength.greaterThan(0).and(wallNear.greaterThan(thingNear.add(SEE_DEPTH_MARGIN)));
+  const keepAt = float(1).sub(strength.mul(float(1).sub(see.keep)));
+  const softOpen = bayerAt().greaterThanEqual(keepAt);
+  const latticeOpen = strength.greaterThan(0.5).and(mod(floor(uvPx.x).add(floor(uvPx.y)), 2).lessThan(0.5));
+  return inFront.and(select(see.mode.greaterThan(1.5), latticeOpen, select(see.mode.greaterThan(0.5), softOpen, float(0).greaterThan(1))));
+}
+
 /** What `worldMaterial` hands back: the material and the handles the view drives. */
 export interface WorldMaterial {
   material: MeshBasicNodeMaterial;
@@ -109,21 +133,9 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const unseen = sight.unseenAt(wp.xz.add(normal.xz.mul(float(FACE_PUSH_TEXELS).div(sight.res))));
 
   // See through (#303): wall sides and tops (never floors or ground) open where the mask has a disc and the wall is nearer the camera than the thing under it.
-  // The mask is sampled linearly; its green is a sum weighted by coverage (alpha), so dividing by alpha gives the value back at a disc's soft edge.
-  const see = {
-    mode: uniform(1), keep: uniform(SEE_DEFAULTS.keep), target: uniform(new Vector3()), ray: uniform(new Vector3(0, 0, 1)),
-  };
-  const mk = texture(maskTex, screenUV);
-  const strength = mk.r;
-  const thingNear = float(SEE_DEPTH_BIAS).sub(mk.g.div(max(mk.a, 1e-4)));
-  const wallNear = wp.sub(see.target).dot(see.ray);
-  const inFront = strength.greaterThan(0).and(wallNear.greaterThan(thingNear.add(SEE_DEPTH_MARGIN)));
+  const see = seeUniforms();
   const onWall = isTop.or(isFace);
-  const bayer = bayerAt();
-  const keepAt = float(1).sub(strength.mul(float(1).sub(see.keep)));
-  const softOpen = bayer.greaterThanEqual(keepAt);
-  const latticeOpen = strength.greaterThan(0.5).and(mod(floor(p0.x).add(floor(p0.y)), 2).lessThan(0.5));
-  const open = onWall.and(inFront).and(select(see.mode.greaterThan(1.5), latticeOpen, select(see.mode.greaterThan(0.5), softOpen, float(0).greaterThan(1))));
+  const open = onWall.and(seeOpenNode(maskTex, wp, p0, see));
 
   const m = new MeshBasicNodeMaterial();
   m.colorNode = vec4(sight.apply(lighting.finish(albedo, lit), wp, unseen), select(open, float(0), select(isTop, float(1), texel.a)));
@@ -180,13 +192,18 @@ const cardGain = (dir: N): N => float(CARD_GAIN.base).add(clamp(dir.z.add(CARD_G
  * The point `p` of an upright card (`foot`: its foot's x, z; `right`: the camera's right on the ground) on the same card turned to
  * face the light: across the light's horizontal direction, on the side `right` points to. The sun's pass draws the card there.
  */
-function turnedToLight(sun: SunLight, p: N, foot: N): N {
+export function turnedToLight(sun: SunLight, p: N, foot: N): N {
   const h = sun.dir.xz;
   const hl = length(h);
   const across = select(hl.greaterThan(1e-4), vec2(h.y, h.x.negate()).div(max(hl, 1e-4)), sun.right.xz);
   const perp = select(dot(across, sun.right.xz).lessThan(0), across.negate(), across);
   const xz = foot.add(perp.mul(dot(p.xz.sub(foot), sun.right.xz)));
   return vec3(xz.x, p.y, xz.y);
+}
+
+/** What an upright card passes to the light as its sun option: the point `truePos` turned to face the light about `foot`, nudged toward the light, and the card's cosine gain. */
+export function cardSunAt(sun: SunLight, truePos: N, foot: N): { Ps: N; ndl: N } {
+  return { Ps: turnedToLight(sun, truePos, foot).add(sun.dir.mul(CARD_SUN_NUDGE)), ndl: cardGain(sun.dir) };
 }
 
 /**
@@ -235,7 +252,7 @@ export function cardMaterial(
   const foot = attribute('cardFoot', 'vec2');
   const sunAt = opts.flat
     ? { Ps: truePos.add(vec3(0, 0.03, 0)), ndl: max(sun.dir.y, 0) }
-    : { Ps: turnedToLight(sun, truePos, foot).add(sun.dir.mul(CARD_SUN_NUDGE)), ndl: cardGain(sun.dir) };
+    : cardSunAt(sun, truePos, foot);
   const colour = sight.apply(lighting.finish(body, lighting.lightAt(truePos, vec3(0, 0, 0), 1, { self: shade.x, darkOnly: shade.y, sun: sunAt })), truePos, seen.xy);
   const shown = sight.shown(seen.x, seen.z);
   if (opts.translucent) {

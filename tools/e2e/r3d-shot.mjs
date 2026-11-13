@@ -40,6 +40,8 @@ try {
   errs.push('timeout: no frames drawn within 20 s');
 }
 console.log(`backend: ${await p.evaluate(() => window.__r3d?.backend)}`);
+// WAIT_MS: more time before the picture (the woodland's plants are drawn a few per frame).
+if (process.env.WAIT_MS) await p.waitForTimeout(Number(process.env.WAIT_MS));
 await p.screenshot({ path: `${out}/r3d.png` });
 if (process.env.READBACK) {
   // The frame re-drawn off-screen and read back, PNG-encoded in the page (a WebGPU canvas capture is black on this notebook).

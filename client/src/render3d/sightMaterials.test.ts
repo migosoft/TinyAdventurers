@@ -1,7 +1,8 @@
 // Every 3D material ends with the sight step (#305): the generated code of each carries the sight uniforms. #307 and #308 extend the list.
 import { describe, expect, it } from 'vitest';
 import { DataTexture, GLSLNodeBuilder, NodeMaterial, Texture, WGSLNodeBuilder } from 'three/webgpu';
-import { cardMaterial, emissiveMaterial, glowMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { cardMaterial, emissiveMaterial, glowMaterial, seeUniforms, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { makePlantShared, plantCardMaterial } from './plantNodes';
 import { fieldMaterial } from './fieldMesh';
 import { makeLighting } from './lightNodes';
 import { makeSight } from './sightNodes';
@@ -29,6 +30,8 @@ function materials(): { name: string; m: NodeMaterial; world: boolean }[] {
     // Depth only (no colour to veil), but it stipples by the same sight value as the opaque card, so a figure the hero cannot see casts no shadow.
     { name: 'sun caster', m: sunCasterMaterial(t, 64, 64, l.sun, sight), world: false },
     { name: 'force field', m: fieldMaterial(sight), world: false },
+    // The plant card ends with the sight step. Its trunk and disc casters (plantNodes.ts) are depth only and never hidden: plants are scenery, which the mist never hides.
+    { name: 'plant card', m: plantCardMaterial(t, 64, 64, l, toward, sight, seeUniforms(), t, makePlantShared()), world: false },
   ];
 }
 

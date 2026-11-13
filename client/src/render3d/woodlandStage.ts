@@ -25,7 +25,9 @@ import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { HourClock, SUN_MAP, fitSunMap, hourLabel, mistLightOf, sky, sunView } from './sun';
 import type { Assets, SunFrame, View, WorldInput } from './view';
 import { WIND } from './wind';
-import { KNIGHT_START, woodlandStageMap } from './woodlandMap';
+import { KNIGHT_START, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
+import { PLANT_BUDGET_MS, PlantField } from './plantField';
+import { DEFAULT_LIGHT } from '../game/vegetation';
 
 const TILE = 16;
 const KNIGHT_ID = 100;
@@ -71,6 +73,9 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
   const sightFrame: SightFrame = {
     mode: 'mist', mask: null, clear: [0, 0, 0], haze: DEFAULT_HAZE, mist: { ...MIST }, mistDay: 1, mistLight: [1, 1, 1], wind: WIND, t: 0,
   };
+
+  // The plants are drawn by `step` a few per frame; the pictures are baked with the stock light (the stage has no run sun to take it from).
+  const plants = new PlantField(WOODLAND_STAGE_PLANTS, map, DEFAULT_LIGHT);
 
   // The ground is painted whole at the first build and kept for the rebuilds after a lost device.
   let job: GroundJob | null = null;
@@ -149,6 +154,10 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
+      // The plants: a few drawn per frame, nearest to the knight first.
+      plants.step(cam, PLANT_BUDGET_MS);
+      c.timer.lap('plants');
+
       const viewer = { x: knight.x, z: knight.z };
       const fp = footprint(cam, c.plan.halfW, c.plan.halfH);
       let lights: ReturnType<typeof selectLights>['list'] = [];
@@ -179,7 +188,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
         sightFrame.mistDay = s.day;
         sightFrame.mistLight = mistLightOf(s);
         sightFrame.wind = wind;
-        sightFrame.t = c.now;
+        sightFrame.t = seconds; // the clouds' clock too, so mist and cloud shadows drift together
         sight = sightFrame;
       }
       c.timer.lap('sight');
@@ -200,7 +209,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
         {
           cam, plan: c.plan, dynamic, lights, ambient, shadows: params.shadows, smooth: params.smooth, t: c.now,
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(params) },
-          lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun,
+          lava: null, lavaVersion: 0, darkvision: null, casters, sight, sun, plants: plants.frame(params.wind, seconds),
         },
         c.timer,
       );

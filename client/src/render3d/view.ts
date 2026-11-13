@@ -39,8 +39,11 @@ import { CASTER_CAP, type ShadowCaster } from './lights';
 import { cardSightData, glowSightData, shadowSightData } from './sightAttrs';
 import { makeSight, SIGHT_OFF, type SightFrame } from './sightNodes';
 import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
-import type { SunFit, Vec3 } from './sun';
+import { SUN_TOP, type SunFit, type Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
+import type { PlantFrame } from './plantField';
+import { ChunkSync, type ClumpBuf, type PlantBuf } from './plants';
+import { makePlantShared, plantCardMaterial, plantDiscMaterial, plantTrunkMaterial } from './plantNodes';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
@@ -89,6 +92,8 @@ export interface FrameInput {
   sight?: SightFrame;
   /** The sun (#306); absent or null: no sun, no sun pass, the sun's term is 0. */
   sun?: SunFrame | null;
+  /** The woodland's plants (#306); absent: no plants. */
+  plants?: PlantFrame;
 }
 
 /** The ground image is larger than the device's texture limit. */
@@ -184,6 +189,48 @@ function pixelTexture(t: Texture): void {
   t.flipY = false;
   t.premultiplyAlpha = false;
   t.needsUpdate = true;
+}
+
+/** Bounds for frustum culling: the box of the points (x at `ox`, z at `oz` of every `stride` numbers) grown by `pad` tiles, `SUN_TOP` high. */
+function plantBounds(g: BufferGeometry, pts: readonly number[], stride: number, ox: number, oz: number, pad: number): void {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < pts.length; i += stride) {
+    x0 = Math.min(x0, pts[i + ox]); x1 = Math.max(x1, pts[i + ox]);
+    z0 = Math.min(z0, pts[i + oz]); z1 = Math.max(z1, pts[i + oz]);
+  }
+  const box = new Box3(new Vector3(x0 - pad, 0, z0 - pad), new Vector3(x1 + pad, SUN_TOP, z1 + pad));
+  g.boundingBox = box;
+  g.boundingSphere = box.getBoundingSphere(new Sphere());
+}
+
+/** A plant card or trunk caster buffer as a geometry: `position` is the foot (x, 0, z). */
+function plantGeometry(b: PlantBuf): BufferGeometry {
+  const pos = new Float32Array(b.n * 3);
+  for (let i = 0; i < b.n; i++) { pos[i * 3] = b.foot[i * 2]; pos[i * 3 + 2] = b.foot[i * 2 + 1]; }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(pos, 3));
+  g.setAttribute('corner', new BufferAttribute(new Float32Array(b.corner), 2));
+  g.setAttribute('uv', new BufferAttribute(new Float32Array(b.uv), 2));
+  g.setAttribute('sway', new BufferAttribute(new Float32Array(b.sway), 2));
+  g.setAttribute('part', new BufferAttribute(new Float32Array(b.part), 1));
+  // Horizontally a card reaches its half width across, a root decal also its length along the ground; plus the sway.
+  let pad = 0.3;
+  for (let i = 0; i < b.n; i++) pad = Math.max(pad, Math.abs(b.corner[i * 2]) + 0.3, b.part[i] > 0.5 ? Math.abs(b.corner[i * 2 + 1]) + 0.3 : 0);
+  plantBounds(g, b.foot, 2, 0, 1, pad);
+  return g;
+}
+
+/** A clump disc buffer as a geometry: `position` is the disc's world-fixed centre. */
+function clumpGeometry(b: ClumpBuf): BufferGeometry {
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(b.centre), 3));
+  g.setAttribute('corner', new BufferAttribute(new Float32Array(b.corner), 2));
+  g.setAttribute('radius', new BufferAttribute(new Float32Array(b.radius), 1));
+  g.setAttribute('phase', new BufferAttribute(new Float32Array(b.phase), 1));
+  g.setAttribute('foot', new BufferAttribute(new Float32Array(b.foot), 2));
+  g.setAttribute('sway', new BufferAttribute(new Float32Array(b.sway), 2));
+  plantBounds(g, b.centre, 3, 0, 2, b.radius.reduce((m, r) => Math.max(m, r), 0) * 1.2 + 0.3);
+  return g;
 }
 
 /** RGBA rows in reverse order. */
@@ -376,6 +423,73 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     }
     return sunDepth!;
   };
+  // The plants (#306): a texture and materials per page (-1: the atlas), three meshes per chunk and page, rebuilt when the frame says the chunk changed.
+  const plantShared = makePlantShared();
+  const discMaterial = hasSun ? plantDiscMaterial(sunLight, plantShared) : null;
+  interface PlantPageGpu { tex: Texture; owned: boolean; version: number; card: NodeMaterial; trunk: NodeMaterial | null }
+  const plantPages = new Map<number, PlantPageGpu>();
+  const plantMeshes = new Map<number, { mesh: Mesh; scene: Scene }[]>();
+  let plantSync = new ChunkSync();
+  const plantPage = (index: number, pf: PlantFrame): PlantPageGpu => {
+    let e = plantPages.get(index);
+    if (e) return e;
+    let tex: Texture = atlas, w = aw, h = ah;
+    const img = index >= 0 ? pf.pages[index] : null;
+    if (img) {
+      // The texture reads the page's own bytes; a changed `version` uploads them again.
+      tex = new DataTexture(new Uint8Array(img.data.buffer, img.data.byteOffset, img.data.byteLength), img.size, img.size, RGBAFormat, UnsignedByteType);
+      pixelTexture(tex);
+      w = h = img.size;
+    }
+    e = {
+      tex, owned: !!img, version: img?.version ?? 0,
+      card: plantCardMaterial(tex, w, h, lighting, toward, sight, wm.see, mask.texture, plantShared),
+      trunk: hasSun ? plantTrunkMaterial(tex, w, h, sunLight, plantShared) : null,
+    };
+    plantPages.set(index, e);
+    return e;
+  };
+  const dropPlantChunk = (k: number): void => {
+    for (const { mesh, scene: s } of plantMeshes.get(k) ?? []) {
+      s.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    plantMeshes.delete(k);
+  };
+  const addPlantMesh = (k: number, g: BufferGeometry, material: NodeMaterial, into: Scene): void => {
+    const mesh = new Mesh(g, material);
+    mesh.frustumCulled = true;
+    into.add(mesh);
+    let l = plantMeshes.get(k);
+    if (!l) plantMeshes.set(k, (l = []));
+    l.push({ mesh, scene: into });
+  };
+  const clearPlants = (): void => {
+    for (const k of [...plantMeshes.keys()]) dropPlantChunk(k);
+    plantSync = new ChunkSync();
+  };
+  const syncPlants = (pf: PlantFrame): void => {
+    // Pages first: a page's texture goes up again when its version moved, once per frame.
+    pf.pages.forEach((img, i) => {
+      const e = plantPages.get(i);
+      if (e && e.version !== img.version) {
+        e.version = img.version;
+        e.tex.needsUpdate = true;
+      }
+    });
+    for (const k of plantSync.changed(pf.versions)) {
+      dropPlantChunk(k);
+      for (const c of pf.chunks.get(k) ?? []) {
+        const e = plantPage(c.page, pf);
+        if (c.cards.n > 0) addPlantMesh(k, plantGeometry(c.cards), e.card, scene);
+        if (!hasSun) continue;
+        if (c.trunks.n > 0 && e.trunk) addPlantMesh(k, plantGeometry(c.trunks), e.trunk, sunScene);
+        if (c.clumps.n > 0 && discMaterial) addPlantMesh(k, clumpGeometry(c.clumps), discMaterial, sunScene);
+      }
+    }
+    plantShared.t.value = pf.t;
+    plantShared.on.value = pf.wind ? 1 : 0;
+  };
   const ghosts = new DynMesh(cardAttrs, ghost.material);
   const decals = new DynMesh(cardAttrs, decal.material);
   const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1], ['sight', 2]], shadow);
@@ -535,6 +649,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       camera.updateProjectionMatrix();
       const d = f.dynamic;
       card.cosP.value = ghost.cosP.value = Math.cos(f.cam.pitch); // the decal pass is flat and has no stretch
+      plantShared.cosP.value = Math.cos(f.cam.pitch);
       toward.value.set(ray[0], ray[1], ray[2]);
       wm.smooth.value = f.smooth ? 1 : 0;
       clock = f.t;
@@ -576,6 +691,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       shadows.set({ position: d.shadows.position, uv: d.shadows.uv, alpha: d.shadows.alpha, sight: shadowSightData(d.shadows, frameMask, pairScratch(d.shadows.count)) }, d.shadows.count * 6);
       flames.set({ position: d.emissive.position, uv: d.emissive.uv, sight: cardSightData(d.emissive, frameMask, cardScratch(d.emissive.count)) }, d.emissive.count * 6);
       glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color, sight: glowSightData(d.glows, frameMask, pairScratch(d.glows.count)) }, d.glows.count * 6);
+      if (f.plants) syncPlants(f.plants);
+      else if (plantMeshes.size > 0) clearPlants();
       lighting.setLights(f.lights);
       lighting.setShadows(f.shadows);
       lighting.setLava(f.lava, f.lavaVersion);
@@ -658,6 +775,13 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         sunDepth?.dispose();
         sunStandIn.dispose();
         casterMaterial?.dispose();
+        clearPlants();
+        for (const e of plantPages.values()) {
+          e.card.dispose();
+          e.trunk?.dispose();
+          if (e.owned) e.tex.dispose();
+        }
+        discMaterial?.dispose();
         mm.material.dispose();
         maskDiscs.dispose();
       } finally {
