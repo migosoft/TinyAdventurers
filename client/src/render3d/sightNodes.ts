@@ -2,7 +2,7 @@
 // The unseen strength comes from the sight mask (sightmask.ts) as a small RG8 texture over world space; the mist maths
 // is mist.ts's, written as nodes.
 import { DataTexture, LinearFilter, NoColorSpace, RGFormat, UnsignedByteType, Vector2, Vector3, Vector4, ClampToEdgeWrapping } from 'three/webgpu';
-import { Fn, If, clamp, dot, float, max, mix, mx_noise_float, select, smoothstep, texture, uniform, vec2, vec3 } from 'three/tsl';
+import { Fn, If, clamp, dot, float, max, mix, mx_noise_float, select, smoothstep, step, texture, uniform, vec2, vec3 } from 'three/tsl';
 import { DEFAULT_HAZE, SHADE, type HazeLook } from '../game/sightField';
 import { MIST, mistColour, type MistLook } from './mist';
 import type { SightMask } from './sightmask';
@@ -43,7 +43,7 @@ export const SIGHT_OFF: SightFrame = {
 
 const MODE = { off: 0, dark: 1, mist: 2 } as const;
 
-/** Seen everywhere and unseen nowhere: (hard 255, soft 0) in one texel, the stand-in until the first mask. */
+/** Unseen everywhere (hard 255, soft 0) in one texel, the stand-in until the first mask. */
 function pending(): DataTexture {
   return texelTexture(new Uint8Array([255, 0]), 1);
 }
@@ -87,14 +87,17 @@ export function makeSight(): Sight {
   const unseenAt = (xz: N): N => {
     const uv = vec2(xz).sub(uOrigin.xy).div(uOrigin.z);
     const rg = maskNode.sample(uv).rg;
-    const inside = uv.x.greaterThanEqual(0).and(uv.x.lessThanEqual(1)).and(uv.y.greaterThanEqual(0)).and(uv.y.lessThanEqual(1));
-    return select(inside, rg, vec2(1, 0));
+    // Arithmetic, not a select: a select on a varying compiles to an if/else and the sample would sit in non-uniform control flow.
+    const inside = step(0, uv.x).mul(step(uv.x, 1)).mul(step(0, uv.y)).mul(step(uv.y, 1));
+    // A variable, so the sample is written once, where `apply` (or `shown`) first reads it, and every later read reuses it.
+    return mix(vec2(1, 0), rg, inside).toVar();
   };
 
   const apply = (colour: N, P: N, u: N): N => Fn(() => {
     const out = vec3(colour).toVar();
-    const hard = u.x;
-    const soft = u.y;
+    // Read both channels here, before any If, so the mask sample is emitted at the top level of the shader.
+    const hard = u.x.toVar();
+    const soft = u.y.toVar();
     If(isDark, () => {
       out.assign(mix(out.mul(float(1).sub(soft.mul(SHADE))), uClear, hard));
     });
