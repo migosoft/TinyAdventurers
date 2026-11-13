@@ -3,9 +3,9 @@
 // when it stands behind the tree. The room's floor is `CoveInfo` in tiles; everything here is in world px.
 import type Phaser from 'phaser';
 import type { CoveInfo } from '../generated/CoveInfo';
-import { TILE } from '../sim/map';
-import { COVE_TREE_FOOT, type CoveSpec, paintCove, placeCovePlants } from './covemath';
+import { COVE_TREE_FOOT, coveLayout, paintCove, placeCovePlants } from './covemath';
 import { DEPTH } from './effects';
+import { CANOPY_UP, PIXIE_COUNT } from './pixieMath';
 import { Pixies } from './pixies';
 import { Silhouette, type BodyLook } from './silhouette';
 
@@ -14,15 +14,8 @@ const MARGIN = 32;
 const TREE_W = 96;
 const TREE_H = 100;
 const GRASS_TEX = 'cove-grass';
-/** Pixie centre: the canopy middle, above the trunk foot (px). */
-const CANOPY_UP = 50;
 
-/** The floor rect's top-left and the trunk foot in world px, and the covemath spec (tree relative to the floor). */
-export function coveLayout(c: CoveInfo): { spec: CoveSpec; origin: { x: number; y: number }; foot: { x: number; y: number } } {
-  const origin = { x: c.x * TILE, y: c.y * TILE };
-  const foot = { x: c.tree_x * TILE + TILE / 2, y: c.tree_y * TILE + TILE };
-  return { spec: { w: c.w * TILE, h: c.h * TILE, tree: { x: foot.x - origin.x, y: foot.y - origin.y }, seed: c.seed }, origin, foot };
-}
+export { coveLayout };
 
 export class CoveView {
   private grass: Phaser.GameObjects.Image;
@@ -45,7 +38,7 @@ export class CoveView {
       const y = origin.y + p.y;
       return scene.add.image(origin.x + p.x, y, 'atlas', p.frame).setOrigin(0.5, 1).setDepth(DEPTH.entityBase + y);
     });
-    this.pixies = new Pixies(scene, { x: foot.x, y: foot.y - CANOPY_UP }, 7, c.seed);
+    this.pixies = new Pixies(scene, { x: foot.x, y: foot.y - CANOPY_UP }, PIXIE_COUNT, c.seed);
     this.pixies.update(0, 0);
     this.silhouette = new Silhouette(scene, this.tree, foot.y);
   }

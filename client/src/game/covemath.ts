@@ -1,10 +1,19 @@
 // Nymph's cove: the grass carpet, its flowers and the plant spots, all seeded and pure.
 // Ported 1:1 from the approved prototype; the stone floor, the tree and the plants themselves are drawn elsewhere.
+import type { CoveInfo } from '../generated/CoveInfo';
+import { TILE } from '../sim/map';
 
 /** The room's floor area in px (origin = its top-left floor pixel) and the trunk foot in the same space. */
 export interface CoveSpec { w: number; h: number; tree: { x: number; y: number }; seed: number }
 
 export { COVE_TREE_FOOT } from './vegetation';
+
+/** The floor rect's top-left and the trunk foot in world px, and the covemath spec (tree relative to the floor). */
+export function coveLayout(c: CoveInfo): { spec: CoveSpec; origin: { x: number; y: number }; foot: { x: number; y: number } } {
+  const origin = { x: c.x * TILE, y: c.y * TILE };
+  const foot = { x: c.tree_x * TILE + TILE / 2, y: c.tree_y * TILE + TILE };
+  return { spec: { w: c.w * TILE, h: c.h * TILE, tree: { x: foot.x - origin.x, y: foot.y - origin.y }, seed: c.seed }, origin, foot };
+}
 
 export const COVE_PLANTS = ['cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern'] as const;
 export type CovePlantFrame = typeof COVE_PLANTS[number];

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { TILE_ID } from '../../generated/defs';
+import { TILE, TileMap } from '../../sim/map';
+import { reachesPhaser } from '../../testutil/importWalk';
+import { rng } from '../covemath';
 import { beeAt, beeDepth, butterflyAt, flowerPatches, WING_COLOURS } from './critters';
+import { butterflyHomes } from './critterMath';
 
 const bounds = { x: 100, y: 100, w: 190, h: 190 };
 
@@ -97,5 +102,34 @@ describe('critters', () => {
     const patches = flowerPatches(spots);
     expect(patches).toHaveLength(40);
     expect(patches[0]).toEqual({ x: 5, y: 15 });
+  });
+
+  it('butterflyHomes gives floor(walkable / 120) homes, the ones the constructor drew before the move', () => {
+    const map = new TileMap(60, 40, new Uint8Array(60 * 40));
+    for (let y = 2; y < 38; y++) for (let x = 2; x < 58; x++) map.set(x, y, (x + y) % 7 === 0 ? TILE_ID.Road : TILE_ID.Floor);
+    map.set(10, 10, TILE_ID.Wall);
+    const seed = 9;
+    // the loop the Critters constructor had (copied as the expectation)
+    const walk: number[] = [];
+    for (let i = 0; i < map.tiles.length; i++) if (map.tiles[i] === TILE_ID.Floor || map.tiles[i] === TILE_ID.Road) walk.push(i);
+    const n = Math.floor(walk.length / 120);
+    const r = rng(seed * 31 + 7);
+    const side = 12 * TILE;
+    const want: { bounds: { x: number; y: number; w: number; h: number }; colour: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const tile = walk[Math.floor(r() * walk.length)];
+      const cx = (tile % map.w + 0.5) * TILE, cy = (Math.floor(tile / map.w) + 0.5) * TILE;
+      const x = Math.max(0, Math.min(map.w * TILE - side, cx - side / 2)), y = Math.max(0, Math.min(map.h * TILE - side, cy - side / 2));
+      want.push({ bounds: { x, y, w: Math.min(side, map.w * TILE), h: Math.min(side, map.h * TILE) }, colour: WING_COLOURS[Math.floor(r() * WING_COLOURS.length)] });
+    }
+    expect(n).toBeGreaterThan(5);
+    expect(butterflyHomes(map, seed)).toEqual(want);
+  });
+
+  it('the pure modules reach no phaser import', () => {
+    for (const f of ['game/pixieMath.ts', 'game/woodland/critterMath.ts', 'game/covemath.ts']) {
+      const chain = reachesPhaser(f);
+      expect(chain && chain.join(' > '), `${f} reaches phaser`).toBeNull();
+    }
   });
 });
