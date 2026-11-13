@@ -443,7 +443,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   shellMat.side = DoubleSide;
   {
     const layer: N = attribute('layer', 'float'), cell = floor(positionGeometry.xz.mul(16));
-    const lean = swayOf(cell.div(16), layer.div(SHELLS).pow(2).mul(0.16));
+    const lean = swayOf(cell.div(16), layer.div(SHELLS).pow(2).mul(0.06)); // low grass only stirs: about a pixel at the tips in a gust (the user, 2026-11-14)
     const src = cell.sub(floor(vec2(lean.x, lean.z).mul(16).add(0.5))), at = src.add(0.5).div(vec2(GW, GH));
     const h = texture(heightTex, at).r.mul(255);
     const vis = sunVis(vec3(cell.x.add(0.5).div(16), 0.05, cell.y.add(0.5).div(16)));
