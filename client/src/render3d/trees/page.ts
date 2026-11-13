@@ -1,8 +1,8 @@
 // Proof of concept (spike/3d-trees): `?r3d=trees`. Real 3D trees and bushes from the vegetation generator's recipe next to
 // today's flat cards, under one sun shadow map, with wind and a time of day. Throwaway: its own small renderer loop, no host.
 import {
-  BufferAttribute, BufferGeometry, DataTexture, DepthTexture, DoubleSide, LinearSRGBColorSpace, Mesh, MeshBasicNodeMaterial, NearestFilter,
-  NoColorSpace, OrthographicCamera, QuadMesh, RenderTarget, RGBAFormat, Scene, Texture, UnsignedByteType, Vector2, Vector3, Vector4, WebGPURenderer,
+  BufferAttribute, BufferGeometry, DataTexture, DepthTexture, DoubleSide, EqualDepth, Group, LinearSRGBColorSpace, Mesh, MeshBasicNodeMaterial, NearestFilter,
+  NoColorSpace, OrthographicCamera, QuadMesh, RenderTarget, RGBAFormat, Scene, Sphere, Texture, UnsignedByteType, Vector2, Vector3, Vector4, WebGPURenderer,
 } from 'three/webgpu';
 import { atan, attribute, clamp, dot, exp, float, floor, fract, length, max, min, mix, normalize, positionGeometry, pow, select, sin, smoothstep, sqrt, step, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import { drawPlant, type Light } from '../../game/vegetation';
@@ -19,6 +19,7 @@ import '../r3d.css';
 
 type N = any; // eslint-disable-line @typescript-eslint/no-explicit-any -- TSL nodes; the spike does not fight their types
 const PITCH = Math.asin(0.75); // 48.6 degrees
+const DBG = Number(new URLSearchParams(location.search).get('dbg') ?? 0); // timing aid: 1 no shadow pass, 2 no scene pass, 4 no copy
 const SM = 2048;
 const WIND: [number, number] = [0.98, 0.2];
 
@@ -66,13 +67,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   // ---------------------------------------------------------------- the clearing
   const side = Math.sqrt(p.mult), PADX = 10, PADZ = 8, MW = Math.round(36 * side) + 2 * PADX, MH = Math.round(22 * side) + 2 * PADZ;
   const specs = layout(7, MW - 2 * PADX, MH - 2 * PADZ, 30 * p.mult, 20 * p.mult).map((s) => ({ ...s, x: s.x + PADX, z: s.z + PADZ }));
-  const mesh = new MeshData();
-  const plants: Plant3[] = specs.map((s) => buildPlant(mesh, s));
-  const treeTris = mesh.tris;
-  const tuftData = new MeshData(); // the same plants with leaf tufts for crowns
-  for (const s of specs) buildPlant(tuftData, s, true);
-  const grownBalls = new MeshData(), grownTufts = new MeshData(); // the same plants grown from branches
-  for (const s of specs) { buildGrown(grownBalls, s, false); buildGrown(grownTufts, s, true); }
+  const plants: Plant3[] = specs.map((s) => buildPlant(new MeshData(), s)); // what the cards and the falling leaves need
   const map = new TileMap(MW, MH, new Uint8Array(MW * MH).fill(TILE_ID.Floor));
   const ground = paintGround(map, 11);
   const groundTex = pixelTexture(new DataTexture(new Uint8Array(ground.data.buffer.slice(0)), ground.w, ground.h, RGBAFormat, UnsignedByteType));
@@ -157,8 +152,8 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   const treeOff = swayOf(aSway.xy, aSway.z);
   const vOff: N = varying(treeOff), vP0: N = varying(positionGeometry);
 
-  const treeMat = new MeshBasicNodeMaterial();
-  treeMat.side = DoubleSide;
+  const treeMat = new MeshBasicNodeMaterial(), treePreMat = new MeshBasicNodeMaterial();
+  treeMat.side = DoubleSide; treePreMat.side = DoubleSide;
   const gone = aPart.y.lessThan(0.5).or(aPart.y.greaterThan(2.5)).and(aMisc.w.greaterThan(u.leaf)); // a lobe whose leaves have gone collapses to a point
   treeMat.positionNode = select(gone, vec3(0, -50, 0), positionGeometry.add(treeOff).add(vec3(0, aSway.w.mul(u.stretch.sub(1)), 0)).add(tuftSpread(u.camR, u.camU)));
   {
@@ -197,9 +192,16 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     const flat = texture(palTex, vec2(2.5 / 5, aPart.x.add(0.5).div(4))).rgb;
     const plainLit = u.amb.add(u.sunCol.mul(vis).mul(clamp(dot(nw, u.sun).add(0.35).div(1.35), 0, 1)).mul(1.3));
     const rgb = shoulder(select(u.plain.greaterThan(0.5), flat.mul(plainLit), stepped));
-    treeMat.colorNode = vec4(rgb, select(isLobe.and(lv.keep.not()).or(isTuft.and(tuftKeep.not())), float(0), float(1)));
-    treeMat.alphaTest = 0.5;
+    treeMat.colorNode = vec4(rgb, 1);
     treeMat.outputNode = vec4(rgb, aPart.x.add(1).div(5));
+    // Leaf patches lie many layers deep. A depth-only pass with the cut-outs goes first; the colour pass then draws only
+    // the pixel that won (depth equal, no discard), so the costly shading runs once per pixel instead of once per layer.
+    treeMat.depthFunc = EqualDepth;
+    treeMat.depthWrite = false;
+    treePreMat.positionNode = treeMat.positionNode;
+    treePreMat.colorNode = vec4(0, 0, 0, select(isLobe.and(lv.keep.not()).or(isTuft.and(tuftKeep.not())), float(0), float(1)));
+    treePreMat.alphaTest = 0.5;
+    treePreMat.colorWrite = false;
   }
   const treeShadowMat = new MeshBasicNodeMaterial();
   treeShadowMat.side = DoubleSide;
@@ -210,10 +212,21 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     treeShadowMat.alphaTest = 0.5;
   }
   const treeGeoOf = (d: MeshData) => geometry({ position: [d.pos, 3], normal: [d.nrm, 3], grad: [d.grad, 4], sway: [d.sway, 4], part: [d.part, 4], misc: [d.misc, 4], tuft: [d.tuft, 4] }, d.idx);
-  const variants = ([['recipe:balls', mesh], ['recipe:tufts', tuftData], ['grown:balls', grownBalls], ['grown:tufts', grownTufts]] as const).map(([key, d]) => {
-    const g = treeGeoOf(d);
-    return { key, tris: d.tris, draw: new Mesh(g, treeMat), cast: new Mesh(g, treeShadowMat) };
+  // One mesh per plant, so plants off the screen cost nothing in the two camera passes (the sun sees them all).
+  const variants = (['recipe:balls', 'recipe:tufts', 'grown:balls', 'grown:tufts'] as const).map((key) => {
+    const shown = new Group(), cast = new Group(); let tris = 0;
+    for (const sp of specs) {
+      const d = new MeshData(), pl = (key.startsWith('grown') ? buildGrown : buildPlant)(d, sp, key.endsWith('tufts'));
+      const g = treeGeoOf(d); tris += d.tris;
+      g.boundingSphere = new Sphere(new Vector3(sp.x, pl.height * 0.75, sp.z), pl.height * 1.3 + 2.5); // room for the sway and the card stretch
+      const pre = new Mesh(g, treePreMat), draw = new Mesh(g, treeMat), shadow = new Mesh(g, treeShadowMat);
+      pre.renderOrder = -0.5; draw.renderOrder = 0.5; // ground, tree depth, everything else, tree colour
+      shadow.frustumCulled = false;
+      shown.add(pre, draw); cast.add(shadow);
+    }
+    return { key, tris, shown, cast };
   });
+  const treeTris = variants[0].tris;
 
   // ---------------------------------------------------------------- cards (figures, and the plants as today)
   /** A card standing on `foot`, spread along `right`; `sw` = sway amplitude, height, how far its shadow lookup moves toward the sun. */
@@ -353,8 +366,9 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   groundMesh.renderOrder = -1;
 
   const scene = new Scene(), shadowScene = new Scene();
-  for (const m of [groundMesh, ...variants.map((v) => v.draw), plantMesh, figMesh, leafMesh]) { m.frustumCulled = false; scene.add(m); }
-  for (const m of [...variants.map((v) => v.cast), trunkShadow, discShadow, figShadow]) { m.frustumCulled = false; shadowScene.add(m); }
+  for (const m of [groundMesh, plantMesh, figMesh, leafMesh]) { m.frustumCulled = false; scene.add(m); }
+  for (const v of variants) { scene.add(v.shown); shadowScene.add(v.cast); }
+  for (const m of [trunkShadow, discShadow, figShadow]) { m.frustumCulled = false; shadowScene.add(m); }
 
   // ---------------------------------------------------------------- outline and seams, from depth edges of the picture
   const postMat = new MeshBasicNodeMaterial();
@@ -372,7 +386,9 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     const rgb = select(plant, select(anyNear(1.6), ink, select(seam, dark, me.c.rgb)), select(anyNear(0.02), ink, me.c.rgb));
     postMat.colorNode = vec4(select(u.outline.greaterThan(0.5), rgb, me.c.rgb), 1);
   }
-  const quad = new QuadMesh(postMat);
+  const copyMat = new MeshBasicNodeMaterial();
+  copyMat.colorNode = vec4(texture(sceneRT.texture, uv()).rgb, 1); // outline off: one read per pixel instead of twelve
+  const quad = new QuadMesh(postMat), copyQuad = new QuadMesh(copyMat);
 
   // ---------------------------------------------------------------- cameras
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200), sunCam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
@@ -461,7 +477,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     u.leaves.value = p.leaves && p.mode === '3d' ? 1 : 0;
     u.wind.value = p.wind ? 1 : 0; u.snap.value = p.snap ? 1 : 0; u.shadows.value = p.shadows ? 1 : 0; u.outline.value = p.outline ? 1 : 0; u.plain.value = p.plain ? 1 : 0;
     u.stretch.value = p.stretch ? 1 / Math.cos(PITCH) : 1;
-    for (const v of variants) v.draw.visible = v.cast.visible = p.mode === '3d' && v.key === `${p.tree}:${p.crown}`;
+    for (const v of variants) v.shown.visible = v.cast.visible = p.mode === '3d' && v.key === `${p.tree}:${p.crown}`;
     u.leaf.value = p.leaf / 100; leafI.value = String(p.leaf); leafText.textContent = `Leaves ${p.leaf}%`;
     plantMesh.visible = trunkShadow.visible = discShadow.visible = p.mode === 'cards';
     hourText.textContent = `Time ${clock(p.hour)}`; hourI.value = String(p.hour);
@@ -523,14 +539,12 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     stepFigures(time);
 
     renderer.info.reset();
-    renderer.setRenderTarget(shadowRT);
-    renderer.render(shadowScene, sunCam);
+    if (!(DBG & 1)) { renderer.setRenderTarget(shadowRT); renderer.render(shadowScene, sunCam); }
     renderer.setClearColor(0x0c1410, 1);
-    renderer.setRenderTarget(sceneRT);
-    renderer.render(scene, camera);
+    if (!(DBG & 2)) { renderer.setRenderTarget(sceneRT); renderer.render(scene, camera); }
     renderer.setRenderTarget(null);
     renderer.setViewport(dst);
-    quad.render(renderer);
+    if (!(DBG & 4)) (p.outline ? quad : copyQuad).render(renderer);
     renderer.setViewport(full);
 
     cpu += performance.now() - now; acc += dt; accN++;

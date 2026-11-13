@@ -29,14 +29,14 @@ export class MeshData {
   get tris() { return this.idx.length / 3; }
 }
 
-// ---- unit icosphere, two subdivisions (162 vertices, 320 triangles)
-const ICO = (() => {
+// ---- unit icosphere: two subdivisions (162 vertices, 320 triangles) for a visible lobe, one (42, 80) for a core under leaf tufts
+const ico = (subs: number) => {
   const t = (1 + Math.sqrt(5)) / 2;
   let v: number[][] = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]];
   let f: number[][] = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];
   const unit = (p: number[]) => { const l = Math.hypot(p[0], p[1], p[2]); return [p[0] / l, p[1] / l, p[2] / l]; };
   v = v.map(unit);
-  for (let s = 0; s < 2; s++) {
+  for (let s = 0; s < subs; s++) {
     const mid = new Map<string, number>(), nf: number[][] = [];
     const m = (a: number, b: number) => {
       const key = a < b ? `${a}_${b}` : `${b}_${a}`;
@@ -48,13 +48,14 @@ const ICO = (() => {
     f = nf;
   }
   return { v, f };
-})();
+};
+const ICO = ico(2), ICO_CORE = ico(1);
 
 interface P3 { x: number; y: number; z: number; w: number }
 
-function lobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, ramp: number, grad: (x: number, y: number, z: number) => [number, number, number, number], lift: number, edge: number, th = 0): void {
+function lobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, ramp: number, grad: (x: number, y: number, z: number) => [number, number, number, number], lift: number, edge: number, th = 0, ball = ICO): void {
   const base = m.verts;
-  for (const d of ICO.v) {
+  for (const d of ball.v) {
     m.pos.push(foot.x + b.x + d[0] * b.rx * LOBE_PAD, b.y + d[1] * b.ry * LOBE_PAD, foot.z + b.z + d[2] * b.rz * LOBE_PAD);
     m.nrm.push(d[0], d[1], d[2]);
     m.grad.push(...grad(b.x + d[0] * b.rx, b.y + d[1] * b.ry, b.z + d[2] * b.rz));
@@ -63,7 +64,7 @@ function lobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, ramp: numbe
     m.misc.push(lift, 0, edge, th);
     m.tuft.push(0, 0, 0, 0);
   }
-  for (const [a, c, e] of ICO.f) m.idx.push(base + a, base + c, base + e);
+  for (const [a, c, e] of ball.f) m.idx.push(base + a, base + c, base + e);
 }
 
 /**
@@ -71,7 +72,7 @@ function lobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, ramp: numbe
  * (a Fibonacci sphere, jittered). Each patch carries the ball's direction at its centre, so the lobe still shades as a round form.
  */
 function tuftLobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, grad: (x: number, y: number, z: number) => [number, number, number, number], lift: number, r: () => number, th = 0): void {
-  lobe(m, foot, { ...b, rx: b.rx * 0.74, ry: b.ry * 0.74, rz: b.rz * 0.74 }, RAMP.leaf, grad, lift, 0, th);
+  lobe(m, foot, { ...b, rx: b.rx * 0.74, ry: b.ry * 0.74, rz: b.rz * 0.74 }, RAMP.leaf, grad, lift, 0, th, ICO_CORE);
   const rpx = b.rx / U, n = Math.max(14, Math.min(64, Math.round((rpx * rpx) / 3.2)));
   for (let i = 0; i < n; i++) {
     const y = 1 - (2 * (i + 0.5)) / n, rad = Math.sqrt(1 - y * y), a = i * 2.39996 + (r() - 0.5) * 0.5;
