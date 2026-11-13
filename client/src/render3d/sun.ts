@@ -1,6 +1,7 @@
 // The sky of a woodland run: the sun and moon, ambient light and haze for an hour of the day, and the run's clock.
 // Pure maths (no Phaser, no three): x east, y up, z south.
 import type { SunInfo } from '../generated/SunInfo';
+import type { Cam } from './camera';
 import type { Footprint } from './lights';
 import type { Quality } from './quality';
 
@@ -129,7 +130,20 @@ export function sunBasis(dir: Vec3): { R: Vec3; U: Vec3; F: Vec3 } {
   return { R, U, F };
 }
 
-const boxCorners = (x0: number, x1: number, z0: number, z1: number): Vec3[] => {
+/**
+ * The ground the sun's map must cover: the screen's footprint plus what stands up to `SUN_TOP` on it and shows above the bottom
+ * edge. A tall thing whose crown is at the bottom of the screen stands SUN_TOP / tan(pitch) nearer the camera than the edge, so the
+ * footprint grows that far toward the camera (and only there, to keep texels small); the result is the axis-aligned box around
+ * the footprint and its copy shifted that way.
+ */
+export function sunView(fp: Footprint, cam: Cam): Footprint {
+  const k = SUN_TOP / Math.tan(cam.pitch);
+  const dx = -Math.sin(cam.yaw) * k;
+  const dz = Math.cos(cam.yaw) * k;
+  return { x0: Math.min(fp.x0, fp.x0 + dx), x1: Math.max(fp.x1, fp.x1 + dx), z0: Math.min(fp.z0, fp.z0 + dz), z1: Math.max(fp.z1, fp.z1 + dz) };
+}
+
+const boxCorners =(x0: number, x1: number, z0: number, z1: number): Vec3[] => {
   const out: Vec3[] = [];
   for (const x of [x0, x1]) for (const y of [0, SUN_TOP]) for (const z of [z0, z1]) out.push([x, y, z]);
   return out;
@@ -148,9 +162,10 @@ export function fitSunMap(dir: Vec3, fp: Footprint, map: { w: number; h: number 
   const view = boxCorners(fp.x0, fp.x1, fp.z0, fp.z1);
   const [r0, r1] = range(view, R);
   const [u0, u1] = range(view, U);
-  // The snapped centre moves by up to half a texel (= ext / size), so grow the square to still hold the box.
+  // The snapped centre moves by up to half a texel (= ext / size), and 2 texels stay free at the edge for filtering and the card
+  // receiver nudge, so grow the square: e = half + 2.5 texels = half + 5 e / size.
   const half = Math.max(r1 - r0, u1 - u0) / 2;
-  const e = half / (1 - 1 / size);
+  const e = half / (1 - 5 / size);
   const texel = (2 * e) / size;
   const cR = Math.round((r0 + r1) / 2 / texel) * texel;
   const cU = Math.round((u0 + u1) / 2 / texel) * texel;

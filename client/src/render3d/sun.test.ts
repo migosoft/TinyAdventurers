@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { HOUR_RATE, HourClock, SUN_TOP, cardSunGain, fitSunMap, hourLabel, mistLightOf, sky, startHour, sunBasis, sunCoord, type Vec3 } from './sun';
-import type { Footprint } from './lights';
+import { HOUR_RATE, HourClock, SUN_TOP, cardSunGain, fitSunMap, hourLabel, mistLightOf, sky, startHour, sunBasis, sunCoord, sunView, type Vec3 } from './sun';
+import { footprint, type Footprint } from './lights';
+import { groundAt } from './camera';
 
 const len = (v: number[]) => Math.hypot(v[0], v[1], v[2]);
 
@@ -87,6 +88,7 @@ describe('the sun map fit', () => {
     return [Math.cos(e) * 0.6, Math.sin(e), Math.cos(e) * -0.8];
   };
   const dirs: [string, Vec3][] = [
+    ['06:00', sky(6).dir],
     ['06:30', sky(6.5).dir],
     ['09:30', sky(9.5).dir],
     ['13:00', sky(13).dir],
@@ -134,11 +136,51 @@ describe('the sun map fit', () => {
     const nearWhole = (x: number) => Math.abs(x - Math.round(x));
     expect(nearWhole(dot(fit.C, fit.R) / fit.texel)).toBeLessThan(1e-6);
     expect(nearWhole(dot(fit.C, fit.U) / fit.texel)).toBeLessThan(1e-6);
-    const moved = fitSunMap(dir, { ...fp, x0: fp.x0 + 0.3 * fit.texel * fit.R[0], x1: fp.x1 + 0.3 * fit.texel * fit.R[0] }, map, 2048);
-    const d = [moved.C[0] - fit.C[0], moved.C[1] - fit.C[1], moved.C[2] - fit.C[2]];
-    for (const axis of [fit.R, fit.U]) {
-      const k = dot(d, axis) / fit.texel;
-      expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-6);
+    const s = 0.3 * fit.texel;
+    const shifts: Footprint[] = [
+      { x0: fp.x0 + s, x1: fp.x1 + s, z0: fp.z0, z1: fp.z1 },
+      { x0: fp.x0, x1: fp.x1, z0: fp.z0 + s, z1: fp.z1 + s },
+    ];
+    for (const f of shifts) {
+      const moved = fitSunMap(dir, f, map, 2048);
+      expect(moved.texel).toBeCloseTo(fit.texel, 9);
+      const d = [moved.C[0] - fit.C[0], moved.C[1] - fit.C[1], moved.C[2] - fit.C[2]];
+      for (const axis of [fit.R, fit.U]) {
+        const k = dot(d, axis) / fit.texel;
+        expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-6);
+      }
+    }
+  });
+  it('leaves a margin of 2 texels at the edge', () => {
+    const fit = fitSunMap(sky(9.5).dir, fp, map, 1024);
+    for (const P of box(fp.x0, fp.x1, SUN_TOP, fp.z0, fp.z1)) {
+      const c = sunCoord(fit, P);
+      for (const k of [c.u, c.v]) {
+        expect(k).toBeGreaterThanOrEqual(2 / 1024);
+        expect(k).toBeLessThanOrEqual(1 - 2 / 1024);
+      }
+    }
+  });
+  it.each([0, 45, 135, -90])('covers what stands on the screen bottom edge at yaw %s', (yawDeg) => {
+    const cam = { x: 30, z: 36, pitch: (48.6 * Math.PI) / 180, yaw: (yawDeg * Math.PI) / 180 };
+    const halfW = 8.5;
+    const halfH = 5.25;
+    const view = sunView(footprint(cam, halfW, halfH), cam);
+    for (const hour of [6, 6.5, 9.5, 13, 18.5, 0]) {
+      const fit = fitSunMap(sky(hour).dir, view, map, 2048);
+      for (const sx of [-halfW, 0, halfW]) {
+        const g = groundAt(cam, sx, -halfH);
+        for (const y of [0, 4, SUN_TOP]) {
+          // A point at height y standing nearer the camera so that it shows on the bottom edge.
+          const k = y / Math.tan(cam.pitch);
+          const P: Vec3 = [g.x - Math.sin(cam.yaw) * k, y, g.z + Math.cos(cam.yaw) * k];
+          const c = sunCoord(fit, P);
+          expect(c.u).toBeGreaterThanOrEqual(0);
+          expect(c.u).toBeLessThanOrEqual(1);
+          expect(c.v).toBeGreaterThanOrEqual(0);
+          expect(c.v).toBeLessThanOrEqual(1);
+        }
+      }
     }
   });
   it('stays finite at a low sun', () => {
