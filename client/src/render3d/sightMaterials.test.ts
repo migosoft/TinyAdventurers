@@ -30,6 +30,7 @@ function materials(): { name: string; m: NodeMaterial; world: boolean }[] {
   ];
 }
 
+// Exempt: `sunCasterMaterial` writes depth only (no colour, so there is nothing to veil), the way the see-through mask's `maskMaterial` does.
 describe('the sight step in the materials', () => {
   for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
     it(`${B.name}: every world material ends with the sight step`, () => {

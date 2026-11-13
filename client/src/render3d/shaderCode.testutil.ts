@@ -4,8 +4,8 @@ import { context } from 'three/tsl';
 
 export type Builder = typeof GLSLNodeBuilder | typeof WGSLNodeBuilder;
 
-/** The fragment shader of material `m` as `B` writes it. */
-export function fragment(B: Builder, m: NodeMaterial): string {
+/** The fragment shader of material `m` as `B` writes it (`compare`: the backend compares depth textures itself). */
+export function fragment(B: Builder, m: NodeMaterial, opts: { compare?: boolean } = {}): string {
   // Just what the builders read from a renderer to write the code; nothing is drawn.
   const renderer = {
     backend: { isWebGPUBackend: B === WGSLNodeBuilder, capabilities: { getUniformBufferLimit: () => 65536 }, utils: { getTextureSampleData: () => ({ primarySamples: 1 }) } },
@@ -15,6 +15,8 @@ export function fragment(B: Builder, m: NodeMaterial): string {
     nodes: { getCacheKey: () => 0 },
     debug: { diagnostics: { keywords: false } },
     hasFeature: () => false,
+    // Whether the backend compares a depth texture itself (WebGL2 does; WebGPU in compatibility mode does not: three then uses a step).
+    hasCompatibility: () => opts.compare ?? false,
     getRenderTarget: () => null,
     getOutputRenderTarget: () => null,
     getMRT: () => null,

@@ -4,6 +4,7 @@ import { Break, Fn, If, Loop, abs, clamp, exp, float, floor, int, ivec2, length,
 import { DV_DARK, EDGE } from '../game/light';
 import { AMBIENT, DV_EYE, DV_FADE, DV_MARGIN, LIGHT_CAP, packLights, type Light } from './light';
 import { CASTER_CAP, LIGHT_MARGIN, type ShadowCaster } from './lights';
+import { makeSunLight, type SunLight } from './sunNodes';
 
 /** A card casts a shadow on a segment only when its foot is within half its width plus this (tiles) of the segment's line. */
 const CARD_REACH = 0.5;
@@ -19,8 +20,11 @@ export interface Lighting {
   /**
    * `rgb`: ambient plus lava plus the lights; `dv` (0..1): the darkvision strength at P. P and N are vec3 nodes, wrap a float node or number.
    * `self`: the caster slot the surface belongs to, a float node, -1 none (its own shadow does not fall on it); `darkOnly` > 0.5: ambient alone, no lights, no lava, no darkvision.
+   * `sun`: adds the sun's light (#306): `Ps` is the point the sun's shadow map is read at, `ndl` the surface's cosine term; without it the sun does not touch the surface.
    */
-  lightAt(P: N, N: N, wrap: N, opts?: { self?: N; darkOnly?: N }): { rgb: N; dv: N };
+  lightAt(P: N, N: N, wrap: N, opts?: { self?: N; darkOnly?: N; sun?: { Ps: N; ndl: N } }): { rgb: N; dv: N };
+  /** The sun's light: uniforms, the shadow lookup and the cloud shadow. Its term is 0 until a frame sets a sun. */
+  readonly sun: SunLight;
   /** The darkvision rule (grey where only darkvision shows, colour back as real light grows), then the shoulder. */
   finish(albedo: N, lit: { rgb: N; dv: N }): N;
   /** The lava light texture (`w * h` half-float rgba texels). */
@@ -184,7 +188,9 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   const uDvEye = uniform(new Vector2());
   const uDvReach = uniform(0);
 
-  const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; darkOnly?: N } = {}): { rgb: N; dv: N } => {
+  const sun = makeSunLight();
+
+  const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; darkOnly?: N; sun?: { Ps: N; ndl: N } } = {}): { rgb: N; dv: N } => {
     const w = typeof wrap === 'number' ? float(wrap) : wrap;
     const dark: N = opts.darkOnly ?? float(0);
     const self: N = opts.self ?? float(-1);
@@ -194,8 +200,11 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
       const sum = ambient.toVar();
       const dvOut = float(0).toVar();
       const Po = P.add(Nrm.mul(0.03));
+      // Read before any If: the shadow map is sampled at the top level of the shader.
+      const sunLight = opts.sun ? sun.term(P, opts.sun.Ps, opts.sun.ndl).toVar() : null;
       If(dark.lessThan(0.5), () => {
         sum.addAssign(lavaLight);
+        if (sunLight) sum.addAssign(sunLight);
         // Self-lit only on the pool's own surface (an upward face); walls on a cell boundary and cards get the sampled lava light alone.
         If(Nrm.y.greaterThan(0.5), () => {
           const lx = int(min(max(floor(P.x), 0), map.w - 1));
@@ -256,6 +265,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
 
   return {
     lightAt,
+    sun,
     finish,
     shoulder,
     cellH,

@@ -2,7 +2,7 @@
 // decimals, systems indented); it is not imported from there because render3d takes nothing from the game's UI.
 
 /** The systems of one 3D frame, in the order the frame runs them and the readout lists them. */
-export const R3D_SYSTEMS = ['sim', 'cards', 'lights', 'sight', 'upload', 'scene', 'present', 'hud'] as const;
+export const R3D_SYSTEMS = ['sim', 'cards', 'lights', 'sight', 'sun', 'upload', 'scene', 'present', 'hud'] as const;
 export type R3dSystem = (typeof R3D_SYSTEMS)[number];
 
 export interface R3dStats {

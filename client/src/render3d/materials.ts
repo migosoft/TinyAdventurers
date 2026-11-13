@@ -1,11 +1,16 @@
 // Node materials of the 3D view (TSL).
 import { AdditiveBlending, CustomBlending, DoubleSide, MaxEquation, MeshBasicNodeMaterial, NodeMaterial, OneFactor, Vector3 } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { attribute, clamp, float, floor, fwidth, fract, int, ivec2, length, max, mod, positionGeometry, positionWorld, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { attribute, clamp, dot, float, floor, fwidth, fract, int, ivec2, length, max, mix, mod, positionGeometry, positionWorld, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from './lightNodes';
 import type { Sight } from './sightNodes';
+import type { SunLight } from './sunNodes';
 import { GRASS_FLAT, STONE } from './light';
 import { SEE_DEFAULTS, SEE_DEPTH_BIAS, SEE_DEPTH_MARGIN } from './seeThrough';
+
+// TSL's node types are too narrow for swizzles and mixed scalar/vector maths; the nodes are untyped here.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type N = any;
 
 const RIM = [0.4, 0.34, 0.33] as const;
 const PX = 1 / 16;
@@ -96,7 +101,9 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   // Wrap: floor and ground 0.35, wall face 0.5, wall top 0.15.
   const wrap = select(isTop, float(0.15), select(isFace, float(0.5), float(0.35)));
   const normal = attribute('normal', 'vec3');
-  const lit = lighting.lightAt(wp, normal, wrap);
+  // The sun (#306): the shadow map is read a hair off the surface, and the cosine term wraps like the point lights'.
+  const sun = lighting.sun;
+  const lit = lighting.lightAt(wp, normal, wrap, { sun: { Ps: wp.add(normal.mul(0.03)), ndl: mix(max(normal.dot(sun.dir), 0), float(1), wrap) } });
   // Sight (#305): a wall face is seen where the floor at its foot is: its point pushed out along the normal. Floors, ground and tops have an upright normal and read their own point.
   const unseen = sight.unseenAt(wp.xz.add(normal.xz.mul(float(FACE_PUSH_TEXELS).div(sight.res))));
 
@@ -162,6 +169,40 @@ export function maskMaterial(): { material: NodeMaterial; edge: { value: number 
   return { material: m, edge };
 }
 
+/** How far (tiles) a card's sun receiver point is moved toward the light, so the card does not shadow itself. */
+export const CARD_SUN_NUDGE = 0.14;
+
+/** `cardSunGain` (sun.ts) in the shader: how strongly the sun lights an upright card. */
+const cardGain = (dir: N): N => float(0.62).add(clamp(dir.z.add(0.3), 0, 1).mul(0.3)).add(dir.y.mul(0.15));
+
+/**
+ * The point `p` of an upright card (`foot`: its foot's x, z; `right`: the camera's right on the ground) on the same card turned to
+ * face the light: across the light's horizontal direction, on the side `right` points to. The sun's pass draws the card there.
+ */
+function turnedToLight(sun: SunLight, p: N, foot: N): N {
+  const h = sun.dir.xz;
+  const hl = length(h);
+  const across = select(hl.greaterThan(1e-4), vec2(h.y, h.x.negate()).div(max(hl, 1e-4)), sun.right.xz);
+  const perp = select(dot(across, sun.right.xz).lessThan(0), across.negate(), across);
+  const xz = foot.add(perp.mul(dot(p.xz.sub(foot), sun.right.xz)));
+  return vec3(xz.x, p.y, xz.y);
+}
+
+/**
+ * The sun's pass draws the opaque cards with this: each turned to face the light (not stretched), depth only, alpha tested on the
+ * atlas texel. Same vertex layout as `cardMaterial` (the pass shares its geometry).
+ */
+export function sunCasterMaterial(atlas: Texture, atlasW: number, atlasH: number, sun: SunLight): NodeMaterial {
+  const texel = texture(atlas, uv().div(vec2(atlasW, atlasH)));
+  const m = new MeshBasicNodeMaterial();
+  m.positionNode = turnedToLight(sun, positionGeometry, attribute('cardFoot', 'vec2'));
+  m.colorNode = vec4(0, 0, 0, texel.a);
+  m.alphaTest = 0.5;
+  m.colorWrite = false;
+  m.side = DoubleSide;
+  return m;
+}
+
 /**
  * Upright sprites. The screen shows a card at its full sprite height, so the vertex is stretched by 1 / cos(pitch)
  * (the demo's true tilt); the light uses the true, unstretched position. `cosP` is set by the view each frame.
@@ -186,7 +227,13 @@ export function cardMaterial(
   const shade = attribute('shade', 'vec2');
   // Sight (#305): (hard, soft, scenery) of the card's foot, one value for the whole card.
   const seen = attribute('sight', 'vec3');
-  const colour = sight.apply(lighting.finish(body, lighting.lightAt(truePos, vec3(0, 0, 0), 1, { self: shade.x, darkOnly: shade.y })), truePos, seen.xy);
+  // The sun (#306): a card reads the shadow map at its own point turned to face the light, nudged toward the light; a decal lying on the floor reads its own point.
+  const sun = lighting.sun;
+  const foot = attribute('cardFoot', 'vec2');
+  const sunAt = opts.flat
+    ? { Ps: truePos.add(vec3(0, 0.03, 0)), ndl: max(sun.dir.y, 0) }
+    : { Ps: turnedToLight(sun, truePos, foot).add(sun.dir.mul(CARD_SUN_NUDGE)), ndl: cardGain(sun.dir) };
+  const colour = sight.apply(lighting.finish(body, lighting.lightAt(truePos, vec3(0, 0, 0), 1, { self: shade.x, darkOnly: shade.y, sun: sunAt })), truePos, seen.xy);
   const shown = sight.shown(seen.x, seen.z);
   if (opts.translucent) {
     m.colorNode = vec4(colour, texel.a);

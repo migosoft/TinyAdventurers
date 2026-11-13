@@ -3,9 +3,10 @@ import { DataTexture, Texture } from 'three/webgpu';
 import { float, vec3 } from 'three/tsl';
 import { makeLighting, type Lighting } from './lightNodes';
 import { makeSight } from './sightNodes';
+import { makeSunLight } from './sunNodes';
 import { cardMaterial, viewTowardUniform, worldMaterial } from './materials';
 
-type Opts = { self?: unknown; darkOnly?: unknown } | undefined;
+type Opts = { self?: unknown; darkOnly?: unknown; sun?: unknown } | undefined;
 /** A stub `Lighting` that records the options `lightAt` was called with. */
 function stub(): { lighting: Lighting; calls: Opts[] } {
   const calls: Opts[] = [];
@@ -14,6 +15,7 @@ function stub(): { lighting: Lighting; calls: Opts[] } {
       calls.push(opts);
       return { rgb: vec3(1, 1, 1), dv: float(0) };
     },
+    sun: makeSunLight(),
     finish: (a: unknown) => a,
     shoulder: (c: unknown) => c,
     cellH: () => float(0),
@@ -54,14 +56,26 @@ describe('cardMaterial', () => {
     expect(calls[0]?.darkOnly).toBeDefined();
     expect(readsAttribute(m.colorNode, 'shade') || readsAttribute(calls[0], 'shade')).toBe(true);
   });
+  it('reads its sun point from the card turned to face the light, around the foot attribute', () => {
+    const { lighting, calls } = stub();
+    cardMaterial(new Texture(), 64, 64, lighting, viewTowardUniform(), makeSight());
+    expect(readsAttribute(calls[0]?.sun, 'cardFoot')).toBe(true);
+  });
+  it('a decal lying on the floor reads its own point', () => {
+    const { lighting, calls } = stub();
+    cardMaterial(new Texture(), 64, 64, lighting, viewTowardUniform(), makeSight(), { flat: true, translucent: true });
+    expect(readsAttribute(calls[0]?.sun, 'cardFoot')).toBe(false);
+  });
 });
 
 describe('worldMaterial', () => {
-  it('passes no shade options to the light', () => {
+  it('passes no shade options to the light, only the sun', () => {
     const { lighting, calls } = stub();
     worldMaterial(new Texture(), new Texture(), 64, 64, lighting, new Texture(), new Texture(), makeSight());
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toBeUndefined();
+    expect(calls[0]?.self).toBeUndefined();
+    expect(calls[0]?.darkOnly).toBeUndefined();
+    expect(calls[0]?.sun).toBeDefined();
   });
 });
 

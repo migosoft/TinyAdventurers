@@ -25,6 +25,7 @@ import {
   Vector3,
   Vector4,
   WebGPURenderer,
+  type DepthTexture,
 } from 'three/webgpu';
 import { texture } from 'three/tsl';
 import { snapGround, viewRay, type Cam } from './camera';
@@ -37,7 +38,9 @@ import { makeLighting } from './lightNodes';
 import { CASTER_CAP, type ShadowCaster } from './lights';
 import { cardSightData, glowSightData, shadowSightData } from './sightAttrs';
 import { makeSight, SIGHT_OFF, type SightFrame } from './sightNodes';
-import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, viewTowardUniform, worldMaterial } from './materials';
+import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, sunCasterMaterial, viewTowardUniform, worldMaterial } from './materials';
+import type { SunFit, Vec3 } from './sun';
+import { sunCamera, sunDepthTexture } from './sunNodes';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
@@ -52,6 +55,20 @@ export interface Assets { image: HTMLImageElement; frames: FrameRects }
 export interface WorldInput { map: TileMap; painted: boolean; clear: 'stone' | [number, number, number] }
 /** The painted ground, RGBA, w x h px. */
 export interface GroundImage { w: number; h: number; data: Uint8ClampedArray }
+/** Whether the shadow lookup flips v (see the call in `draw`). */
+const SUN_FLIP_V = true;
+
+/** The sun of a woodland frame (#306). */
+export interface SunFrame {
+  /** Toward the light; the colour already includes the moon's fade. */
+  dir: Vec3; colour: Vec3;
+  fit: SunFit;
+  /** The panel's Wall shadows switch also switches the sun's shadows. */
+  shadows: boolean;
+  clouds: boolean;
+  /** The wind in tiles per second, and the seconds the clouds drift by. */
+  wind: [number, number]; t: number;
+}
 /** `smooth`: floors and the ground read the linear texture at a sharpened position (a uniform; no recompile). `ambient`: the ambient light. */
 export interface FrameInput {
   cam: Cam; plan: RenderPlan; dynamic: Dynamic; lights: Light[]; ambient: [number, number, number];
@@ -70,6 +87,8 @@ export interface FrameInput {
   casters: readonly ShadowCaster[];
   /** What the hero cannot see this frame (#305); absent = off: every material looks as without it. */
   sight?: SightFrame;
+  /** The sun (#306); absent or null: no sun, no sun pass, the sun's term is 0. */
+  sun?: SunFrame | null;
 }
 
 /** The ground image is larger than the device's texture limit. */
@@ -84,6 +103,7 @@ export class GroundTooLargeError extends Error {
 class DynMesh {
   readonly mesh: Mesh;
   private cap = 0;
+  private readonly twins: Mesh[] = [];
   constructor(private readonly attrs: [name: string, size: number][], material: Mesh['material']) {
     this.mesh = new Mesh(new BufferGeometry(), material);
     this.mesh.frustumCulled = false;
@@ -98,8 +118,16 @@ class DynMesh {
       g.setAttribute(name, a);
     }
     this.mesh.geometry = g;
+    for (const t of this.twins) t.geometry = g;
     old.dispose();
     this.cap = cap;
+  }
+  /** Another mesh over the same geometry (it follows when the buffers grow), drawn with `material` in another scene. */
+  twin(material: Mesh['material']): Mesh {
+    const t = new Mesh(this.mesh.geometry, material);
+    t.frustumCulled = false;
+    this.twins.push(t);
+    return t;
   }
   /** `data` holds one array per attribute name, `count` vertices long. */
   set(data: Record<string, Float32Array>, count: number): void {
@@ -316,8 +344,25 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const emissive = emissiveMaterial(atlas, aw, ah, lighting, toward, sight);
   const glow = glowMaterial(sight);
   const shadow = shadowMaterial(sight);
-  const cardAttrs: [string, number][] = [['position', 3], ['uv', 2], ['tint', 4], ['alpha', 1], ['shade', 2], ['sight', 3]];
+  const cardAttrs: [string, number][] = [['position', 3], ['uv', 2], ['tint', 4], ['alpha', 1], ['shade', 2], ['sight', 3], ['cardFoot', 2]];
   const cards = new DynMesh(cardAttrs, card.material);
+  // The sun's pass (#306): the opaque cards again, each turned to face the light, into a depth map. Made when the first sun frame comes.
+  const sunLight = lighting.sun;
+  const casterMaterial = sunCasterMaterial(atlas, aw, ah, sunLight);
+  const sunScene = new Scene();
+  sunScene.add(cards.twin(casterMaterial));
+  let sunTarget: RenderTarget | null = null;
+  let sunDepth: DepthTexture | null = null;
+  const sunStandIn = sunDepthTexture(1);
+  const sunTargetFor = (size: number): DepthTexture => {
+    if (!sunTarget || sunTarget.width !== size) {
+      sunTarget?.dispose();
+      sunDepth?.dispose();
+      sunDepth = sunDepthTexture(size);
+      sunTarget = new RenderTarget(size, size, { depthBuffer: true, depthTexture: sunDepth, format: RedFormat, generateMipmaps: false });
+    }
+    return sunDepth!;
+  };
   const ghosts = new DynMesh(cardAttrs, ghost.material);
   const decals = new DynMesh(cardAttrs, decal.material);
   const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1], ['sight', 2]], shadow);
@@ -328,7 +373,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   ghosts.mesh.renderOrder = 3;
   glows.mesh.renderOrder = 4;
   // `look` is 5 floats per vertex (r, g, b, mode, alpha); a vertex attribute has at most 4 components, so it goes up as `tint` (r, g, b, mode) and `alpha`.
-  let tintBuf = new Float32Array(0), alphaBuf = new Float32Array(0), shadeBuf = new Float32Array(0), sightBuf = new Float32Array(0), pairBuf = new Float32Array(0);
+  let tintBuf = new Float32Array(0), alphaBuf = new Float32Array(0), shadeBuf = new Float32Array(0), sightBuf = new Float32Array(0), pairBuf = new Float32Array(0), footBuf = new Float32Array(0);
   /** The sight mask of this frame (null: off); set before the meshes go up. */
   let frameMask: SightMask | null = null;
   /** The caster slot of every entity id in this frame's list (set each frame before the cards go up). */
@@ -341,7 +386,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     const n = q.count * 6;
     if (alphaBuf.length < n) { tintBuf = new Float32Array(n * 4); alphaBuf = new Float32Array(n); shadeBuf = new Float32Array(n * 2); }
     if (sightBuf.length < n * 3) sightBuf = new Float32Array(n * 3);
+    if (footBuf.length < n * 2) footBuf = new Float32Array(n * 2);
     for (let i = 0; i < n; i++) {
+      // The card's foot (x, z): the sun turns the card around it. A quad without one (no foot data) stands on its own position.
+      footBuf[i * 2] = i * 4 + 1 < q.foot.length ? q.foot[i * 4] : q.position[i * 3];
+      footBuf[i * 2 + 1] = i * 4 + 1 < q.foot.length ? q.foot[i * 4 + 1] : q.position[i * 3 + 2];
       tintBuf[i * 4] = q.look[i * 5]; tintBuf[i * 4 + 1] = q.look[i * 5 + 1]; tintBuf[i * 4 + 2] = q.look[i * 5 + 2]; tintBuf[i * 4 + 3] = q.look[i * 5 + 3];
       alphaBuf[i] = q.look[i * 5 + 4];
       // shade: x = the slot of the card's owner in the caster list (-1 none: a shot, an image, a card whose owner casts nothing), y = dark flag.
@@ -349,7 +398,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       shadeBuf[i * 2] = owner >= 0 ? (slotOf.get(owner) ?? -1) : -1;
       shadeBuf[i * 2 + 1] = i < q.dark.length ? q.dark[i] : 0;
     }
-    return { position: q.position, uv: q.uv, tint: tintBuf, alpha: alphaBuf, shade: shadeBuf, sight: cardSightData(q, frameMask, sightBuf) };
+    return { position: q.position, uv: q.uv, tint: tintBuf, alpha: alphaBuf, shade: shadeBuf, sight: cardSightData(q, frameMask, sightBuf), cardFoot: footBuf };
   };
 
   // The off-screen copy: the quad shows the target's texels as they are (no lighting, no tone mapping, no colour conversion).
@@ -500,6 +549,14 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       lighting.setShadows(f.shadows);
       lighting.setLava(f.lava, f.lavaVersion);
       lighting.setDarkvision(f.darkvision);
+      // The sun (#306): the camera's right on the ground turns the cards (as the lights' `uRight`), the lookup follows the frame's sun.
+      const sf2 = f.sun ?? null;
+      (sunLight.right.value as Vector3).set(Math.cos(f.cam.yaw), 0, Math.sin(f.cam.yaw));
+      const sunMap = sf2 ? sunTargetFor(Math.min(sf2.fit.size, textureLimit())) : null;
+      // v is flipped on both backends: three's TSL texture lookup takes v = 0 at the top of a render target's image (it flips the
+      // coordinate itself for WebGL's bottom-left origin), and the sun camera's NDC y = +1 is the top. Checked on WebGL2 (without the
+      // flip every shadow vanished); WebGPU follows from three's source and awaits a look on a real screen.
+      sunLight.set(sf2, sunMap ?? sunDepth ?? sunStandIn, SUN_FLIP_V);
       // See through: the camera target (not snapped: the mask's depths use the same one) and the look; the mask pass runs unless off.
       const look = f.see?.look ?? SEE_DEFAULTS;
       wm.see.target.value.set(f.cam.x, 0, f.cam.z);
@@ -521,6 +578,11 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       // The counter only accumulates; three resets it in its own animation loop, whose order against ours is not guaranteed.
       renderer.info.reset();
       timer?.lap('upload');
+      if (sf2 && sunTarget) {
+        renderer.setRenderTarget(sunTarget);
+        renderer.render(sunScene, sunCamera(sf2.fit));
+        timer?.lap('sun');
+      }
       if (f.plan.direct) {
         renderer.setRenderTarget(null);
         renderer.render(scene, camera);
@@ -560,6 +622,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         target?.dispose();
         copyMaterial.dispose();
         mask.dispose();
+        sunTarget?.dispose();
+        sunDepth?.dispose();
+        sunStandIn.dispose();
+        casterMaterial.dispose();
         mm.material.dispose();
         maskDiscs.dispose();
       } finally {

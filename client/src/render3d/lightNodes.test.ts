@@ -6,11 +6,11 @@ import { makeLighting } from './lightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
 
 /** The fragment shader of a material lit by `lightAt` (a card's options: its own slot, the dark flag). */
-function lightFragment(B: Builder): string {
+function lightFragment(B: Builder, withSun = false): string {
   const tex = (): DataTexture => new DataTexture(new Float32Array(4 * 4 * 4), 4, 4, RGBAFormat, FloatType);
   const lighting = makeLighting(tex(), { w: 4, h: 4 }, tex());
   const m = new MeshBasicNodeMaterial();
-  m.colorNode = vec4(lighting.lightAt(positionWorld, vec3(0, 1, 0), float(0.5), { self: float(0), darkOnly: float(0) }).rgb, 1);
+  m.colorNode = vec4(lighting.lightAt(positionWorld, vec3(0, 1, 0), float(0.5), { self: float(0), darkOnly: float(0), ...(withSun ? { sun: { Ps: positionWorld, ndl: float(1) } } : {}) }).rgb, 1);
   return fragment(B, m);
 }
 
@@ -44,6 +44,21 @@ describe('the lighting shader', () => {
       const ls = loops(lightFragment(B));
       expect(ls.some((l) => l.outer.length >= 1)).toBe(true); // the light loop holds the shadow loops
       for (const l of ls) expect(l.outer, `loop ${l.name} inside ${l.outer.join(', ')}`).not.toContain(l.name);
+    });
+
+    it(`${B.name}: with the sun it builds, keeps the loop indices apart, and samples the sun's shadow map first, before any branch`, () => {
+      const code = lightFragment(B, true);
+      const ls = loops(code);
+      for (const l of ls) expect(l.outer, `loop ${l.name} inside ${l.outer.join(', ')}`).not.toContain(l.name);
+      // One more sampled texture than without the sun, and it sits before the first `if` of main().
+      const call = B === WGSLNodeBuilder ? /textureSample\w*\(/g : /\btexture\(/g;
+      const plain = [...lightFragment(B).matchAll(call)].length;
+      const hits = [...code.matchAll(call)];
+      expect(hits.length).toBe(plain + 1);
+      // The sun's is the first filtered sample in main() and sits at its top level: every block opened since main began is closed again.
+      const main = code.slice(0, hits[0].index);
+      const since = main.slice(Math.max(main.lastIndexOf('void main'), main.lastIndexOf('fn main')));
+      expect((since.match(/\{/g) ?? []).length - 1).toBe((since.match(/\}/g) ?? []).length);
     });
   }
 });
