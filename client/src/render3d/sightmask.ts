@@ -27,6 +27,8 @@ export interface SightLook {
 export class SightMask {
   /** Texels per tile (canvasRes(daylight)). */
   readonly res: number;
+  /** Whether this is a daylight (mist) mask. */
+  readonly daylight: boolean;
   /** The square in tiles: its top-left corner and side. */
   ox = 0;
   oz = 0;
@@ -56,6 +58,7 @@ export class SightMask {
     private look: SightLook,
   ) {
     this.res = canvasRes(look.daylight);
+    this.daylight = look.daylight;
   }
 
   /** Refills when hard.version, all?.version or the map version differs from the last fill; returns whether it refilled. */
@@ -97,11 +100,16 @@ export class SightMask {
     // hard: the polygon in white, visible hard walls whole, then the feather
     grey.fill(0);
     fillPolygon(grey, n, n, hard.polygon.points, tx, ty, s, raster);
-    for (let j = 0; j < n; j++) {
-      const z = Math.floor(this.oz + (j + 0.5) / res);
-      for (let i = 0; i < n; i++) {
-        const x = Math.floor(this.ox + (i + 0.5) / res);
-        if (map.hardOpaque(x, z) && hard.isVisible(x, z)) grey[j * n + i] = 255;
+    // per tile, a row fill per texel row (as 2D's walls step): the texels of tile t are those with floor(o + (k + 0.5) / res) = t
+    const first = (o: number, t: number): number => Math.max(0, Math.ceil((t - o) * res - 0.5));
+    const t0x = Math.floor(this.ox + 0.5 / res), t1x = Math.floor(this.ox + (n - 0.5) / res);
+    const t0z = Math.floor(this.oz + 0.5 / res), t1z = Math.floor(this.oz + (n - 0.5) / res);
+    for (let tz = t0z; tz <= t1z; tz++) {
+      const j0 = first(this.oz, tz), j1 = Math.min(n, first(this.oz, tz + 1));
+      for (let tx2 = t0x; tx2 <= t1x; tx2++) {
+        if (!map.hardOpaque(tx2, tz) || !hard.isVisible(tx2, tz)) continue;
+        const i0 = first(this.ox, tx2), i1 = Math.min(n, first(this.ox, tx2 + 1));
+        for (let j = j0; j < j1; j++) grey.fill(255, j * n + i0, j * n + i1);
       }
     }
     if (feather > 0) blurField(grey, n, n, Math.max(1, Math.round((feather * res) / TILE)), this.tmp);
@@ -167,4 +175,13 @@ export function footSight(m: SightMask, x: number, z: number, reach: number): { 
     }
   }
   return { hard, soft };
+}
+
+/**
+ * The `hard` a thing (card, glow, shadow) receives. On daylight masks the feather is centred on the edge of sight, so a
+ * seen thing just inside it would read 0.2..0.5: only the outer half of the transition counts, `clamp((hard - 0.5) * 2)`,
+ * so a seen figure at the edge has no fade and no mist. Dark masks are crisp: unchanged.
+ */
+export function thingHard(m: SightMask, hard: number): number {
+  return m.daylight ? Math.min(1, Math.max(0, (hard - 0.5) * 2)) : hard;
 }

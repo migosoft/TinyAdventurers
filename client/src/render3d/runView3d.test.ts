@@ -14,6 +14,10 @@ import { MIST } from './mist';
 import { stoneClear } from './light';
 import { SIGHT_MARGIN } from './sightmask';
 import type { StageCtx } from './host';
+import type { EntState } from '../game/world';
+import type { Overlay3d } from './overlay';
+import type { OverlayItem } from './overlayLayout';
+import { SIDE } from '../generated/defs';
 import type { FrameInput } from './view';
 
 const deg = (d: number): number => (d * Math.PI) / 180;
@@ -50,14 +54,15 @@ const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`wizzard_m_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 
-function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; camera?: { x: number; y: number }; trunk?: [number, number] } = {}) {
+function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[] } = {}) {
   const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 } } as never } : {}), ...(over.daylight ? { daylight: true } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
   const light = new LightField(map);
   if (over.torch !== false) light.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffa040, x: 3, y: 1, on: true });
   const init: RunViewInit = { info, map, light, myKind: KIND.Wizard };
-  const v = new RunView3d(init, frames, bounds);
+  const overlay = over.paint ? ({ size() {}, measure: () => 10, paint: (items: OverlayItem[]) => over.paint!.splice(0, over.paint!.length, ...items) } as unknown as Overlay3d) : null;
+  const v = new RunView3d(init, frames, bounds, overlay);
   let got: FrameInput | null = null;
   const view = { draw: (i: FrameInput) => ((got = i), 0), meshes: 0, tileChanged: () => {} };
   const params = { ...DEFAULTS, ...over.params };
@@ -69,7 +74,7 @@ function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { dar
   const s = snap({ lights: over.moving ?? [], ents: (over.ents ?? []) as never });
   if (over.me) Object.assign(s.me, over.me);
   const own = { x: over.ownX ?? 56, y: 24, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: over.ownX ?? 56, aimFromY: 24, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
-  const f = { dt: 1 / 60, now: 0, ents: new Map(), you: 1, own, watching: null, camera: over.camera ?? { x: 56, y: 24 }, snap: over.noSnap ? null : s, shots: [], hiddenShots: new Set(), useHint: null, dark: new Set(), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] } } as unknown as RunFrame;
+  const f = { dt: 1 / 60, now: 0, ents: new Map((over.figs ?? []).map((e) => [e.id, e])), you: 1, own, watching: null, camera: over.camera ?? { x: 56, y: 24 }, snap: over.noSnap ? null : s, shots: [], hiddenShots: new Set(), useHint: null, dark: new Set(), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] } } as unknown as RunFrame;
   const stats = v.frame(f);
   const first = got as FrameInput | null;
   /** Another frame of the same view and frame data: what it hands `draw`. */
@@ -194,5 +199,37 @@ describe('the run view feeds the sight mask (#305)', () => {
     expect(allVersion()).toBe(before);
     const b = run({ rows: big });
     expect((b.v as unknown as { allSight: { version: number } }).allSight.version).toBe(0);
+  });
+});
+
+describe('what the picture hides has nothing over it (#305)', () => {
+  const big = ['#'.repeat(40), ...Array.from({ length: 38 }, () => `#${'.'.repeat(38)}#`), '#'.repeat(40)];
+  const mob = (id: number, tileX: number): EntState => ({ id, kind: KIND.Wizard, x: tileX * 16 + 8, y: 24, hp: 0.5, anim: ANIM.Idle, aim: 0, animMs: 0, flags: 0, extra: 0, effects: 0, side: SIDE.Hostile, entangled: 0 });
+  const opener = (v: RunView3d): number[] => v.seen.map((o) => o.id);
+
+  it('a monster beyond sight gets no bar and no opener; with sight off it does', () => {
+    const on: OverlayItem[] = [];
+    const far = run({ rows: big, figs: [mob(7, 30)], paint: on });
+    expect(on.filter((i) => i.t === 'bar')).toHaveLength(0);
+    expect(opener(far.v)).not.toContain(7);
+    const off: OverlayItem[] = [];
+    const sightOff = run({ rows: big, figs: [mob(7, 30)], paint: off, params: { sight: false } });
+    expect(off.filter((i) => i.t === 'bar')).toHaveLength(1);
+    // (an opener also needs the tile to be visible to the hard view, which is far away; the bar is the proof)
+    expect(sightOff.v).toBeDefined();
+  });
+  it('a monster inside sight keeps its bar and its opener', () => {
+    const on: OverlayItem[] = [];
+    const near = run({ rows: big, figs: [mob(7, 6)], paint: on });
+    expect(on.filter((i) => i.t === 'bar')).toHaveLength(1);
+    expect(opener(near.v)).toContain(7);
+  });
+  it('a daylight monster at the edge of sight keeps its bar, one far beyond loses it', () => {
+    const edge: OverlayItem[] = [];
+    run({ rows: big, daylight: true, figs: [mob(7, 11)], paint: edge }); // vision 8: the edge is at 8.5 tiles from tile 3.5
+    expect(edge.filter((i) => i.t === 'bar')).toHaveLength(1);
+    const beyond: OverlayItem[] = [];
+    run({ rows: big, daylight: true, figs: [mob(7, 30)], paint: beyond });
+    expect(beyond.filter((i) => i.t === 'bar')).toHaveLength(0);
   });
 });

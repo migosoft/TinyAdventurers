@@ -305,7 +305,7 @@ export class Figures3d {
     const [bx, bz] = this.bodyFoot(x, z, cam);
     this.body({
       frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,
-      angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1, scenery: true,
+      angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1, scenery: !!(e.flags & FLAG.HIDING), // a revealed mimic is a creature
     }, e.id, cam, out);
     this.objShadow(e.id, x, z, p.shadowScale, p.shadowAlpha, cam, out);
     this.objectAnchor(e, x, z);

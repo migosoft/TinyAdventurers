@@ -338,6 +338,9 @@ describe('Figures3d', () => {
     expect(Math.min(...ys(c.cards))).toBeGreaterThan(Math.min(...ys(a.cards)) + 0.1);
     expect(c.openers[0].who).toBe('mimic');
     expect(c.shadows.n).toBe(1);
+    // a hiding mimic is scenery (a chest), a revealed one a creature (its foot's scenery flag is the 4th float)
+    expect(a.cards.foot[3]).toBe(1);
+    expect(c.cards.foot[3]).toBe(0);
 
     // coins: min(10, 3 + v / 4) translucent coins that are gone after a second
     const cf = make();
@@ -551,7 +554,7 @@ describe('the sight attributes of the cards (#305)', () => {
     for (let i = 0; i < torch.emissive.n * 6; i++) expect(footOf(torch.emissive, i).scenery).toBe(1);
     const barrel = make().frame(frame([ent(32, KIND.Barrel, { side: SIDE.Neutral })]), cam());
     expect(footOf(barrel.cards, 0).scenery).toBe(1);
-    const mimic = make().frame(frame([ent(33, KIND.Mimic, { side: SIDE.Neutral })]), cam());
+    const mimic = make().frame(frame([ent(33, KIND.Mimic, { side: SIDE.Neutral, flags: FLAG.HIDING })]), cam()); // hiding: a chest (a revealed one is a creature)
     expect(mimic.cards.n + mimic.ghosts.n).toBe(1);
     expect(footOf(mimic.cards.n ? mimic.cards : mimic.ghosts, 0).scenery).toBe(1);
     const fg = make();

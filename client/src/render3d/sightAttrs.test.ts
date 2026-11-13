@@ -98,3 +98,32 @@ describe('the sight attributes', () => {
     expect(ff.hard).toBeGreaterThanOrEqual(0.95);
   });
 });
+
+describe('daylight things', () => {
+  /** An open daylight map, the viewer at its centre, vision 9 (the edge of sight at 9.5 tiles). */
+  function day(): SightMask {
+    const w = 61, tiles = new Uint8Array(w * w).fill(TILE_ID.Floor);
+    const map = new TileMap(w, w, tiles);
+    const hard = new View(w, w);
+    hard.compute(map, 30.5 * TILE, 30.5 * TILE, 9, 'hard');
+    const m = new SightMask(map, { daylight: true, feather: 24, ramp: 24 });
+    m.update(hard, null, 0);
+    return m;
+  }
+  it('a card 1 tile inside the edge gets hard 0, well beyond it about 1; the ground keeps the blur', () => {
+    const m = day();
+    const b = newCardBuf();
+    pushCard(b, card({ x: 30.5 + 8.5, z: 30.5 }), frames, cam);
+    pushCard(b, card({ x: 30.5 + 13, z: 30.5 }), frames, cam);
+    const out = cardSightData(quadsOf(b), m, new Float32Array(36));
+    expect(out[0]).toBe(0);
+    expect(out[18]).toBeGreaterThan(0.95); // the blur tails reach 4.5 tiles past the edge
+    expect(m.sample(30.5 + 9.5, 30.5).hard).toBeGreaterThan(0.3); // the ground itself is unchanged: feathered at the edge
+  });
+  it('shadows and glows get the same remap', () => {
+    const m = day();
+    const s = newShadowBuf();
+    pushShadow(s, cam, 30.5 + 8.5, 30.5, 0.4, 0.2, 0.45);
+    expect(shadowSightData(shadowsOf(s), m, new Float32Array(12))[0]).toBe(0);
+  });
+});

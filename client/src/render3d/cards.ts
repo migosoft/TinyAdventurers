@@ -289,11 +289,12 @@ export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: num
         [tc.x - 0.5, tc.y + 0.5, zz, fr.x, fr.y], [tc.x + 0.5, tc.y + 0.5, zz, fr.x + fr.w, fr.y],
         [tc.x + 0.5, tc.y - 0.5, zz, fr.x + fr.w, fr.y + fr.h], [tc.x - 0.5, tc.y - 0.5, zz, fr.x, fr.y + fr.h],
       ]);
-      for (let i = 0; i < 6; i++) ef.push(tc.x, tc.z, 0, 0);
+      // the demo's torches hang on a wall's south face (normal +z): the sight point is read in front of it, as `drawTorch` does
+      for (let i = 0; i < 6; i++) ef.push(tc.x, tc.z + WALL_SIGHT_PUSH, 0, 0);
       en++;
     }
     const k = 0.5 * torchFlicker(t, tc.ph);
-    pushGlow(glows, tc.x, tc.y + 0.25, zz, 1.5, [1 * k, 0.6 * k, 0.28 * k], cam);
+    pushGlow(glows, tc.x, tc.y + 0.25, zz, 1.5, [1 * k, 0.6 * k, 0.28 * k], cam, [tc.x, tc.z + WALL_SIGHT_PUSH]);
   }
   if (orb) {
     const o = orbAt(t);

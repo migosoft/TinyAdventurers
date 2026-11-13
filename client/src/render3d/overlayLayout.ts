@@ -53,7 +53,7 @@ export interface LayoutIn {
   anchors: ReadonlyMap<number, FigureAnchor>;
   heroNames: Map<number, string>;
   useHint: UseHint | null;
-  /** The ids the snapshot marks as in the dark: no bar, hint or mark over them. */
+  /** The ids with nothing over them: the snapshot's dark ones and what the picture hides (no bar, name, tag, hint or mark). */
   dark: ReadonlySet<number>;
   /** A foot point in tiles on the canvas (device px). */
   at: (x: number, z: number) => { px: number; py: number };
@@ -93,7 +93,7 @@ export function layoutBars(i: LayoutIn, out: OverlayItem[]): void {
 /** The other heroes' name tags (white, black stroke, 3 art px above the head) and their effect symbols to the right. */
 export function layoutHeroTags(i: LayoutIn, out: OverlayItem[]): void {
   for (const e of i.ents.values()) {
-    if (e.id === i.you || !isPlayerKind(e.kind) || e.flags & FLAG.DEAD) continue;
+    if (e.id === i.you || !isPlayerKind(e.kind) || e.flags & FLAG.DEAD || i.dark.has(e.id)) continue;
     const name = i.heroNames.get(e.id);
     const a = i.anchors.get(e.id);
     if (!name || !a || !a.tagShown) continue;
@@ -116,7 +116,7 @@ export function layoutHeroTags(i: LayoutIn, out: OverlayItem[]): void {
 export function layoutTags(i: LayoutIn, tagOf: (e: EntState) => string | null, out: OverlayItem[]): void {
   for (const e of i.ents.values()) {
     const a = i.anchors.get(e.id);
-    if (!a) continue;
+    if (!a || i.dark.has(e.id)) continue;
     const text = tagOf(e);
     if (text === null) continue;
     const f = foot(i, a.x, a.z);

@@ -20,6 +20,7 @@ import { MOVE_KEYS, type StageCtx } from './host';
 import { WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { MIST } from './mist';
 import { SightMask } from './sightmask';
+import { hiddenByPicture } from './sightAttrs';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { SHOT_LIFT } from './camera';
 import { isProjectileKind } from '../game/anim/defs';
@@ -184,6 +185,9 @@ export class RunView3d implements RunView {
     return s;
   }
 
+  /** The ids nothing is drawn over this frame: `f.dark` plus the things the picture hides (reused every frame). */
+  private readonly hidden = new Set<number>();
+  private readonly hiddenSeen = new Set<number>();
   private readonly frameOut: SightFrame;
   /** The ambient `frameOut.clear` was made for. */
   private clearFor: [number, number, number] = [0, 0, 0];
@@ -268,6 +272,7 @@ export class RunView3d implements RunView {
     if (!view) {
       // The device is being restored: the overlay still paints (from the last frame's anchors), so names do not blink.
       this.drawCalls = 0;
+      for (const id of f.dark) this.hidden.add(id); // the picture's own hidden ids stay from the last frame
       this.paintOverlay(f, c, cam);
       return this.stats(c, 0);
     }
@@ -275,7 +280,6 @@ export class RunView3d implements RunView {
     const ambient = work ? WORK_AMBIENT : dungeonAmbient(c.params.amb);
     const fo = this.figures.frame(f, cam, { ambient, dark: c.params.dark, torchGlow: work });
     for (const w of fo.floats) this.floats.add(w.x, w.y, w.text, w.color, { kind: w.kind, up: w.up });
-    this.seen = seenOpeners(fo.openers, this.sightFor(f), f.dark);
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     let lights: ReturnType<typeof selectLights>['list'] = [];
@@ -306,6 +310,11 @@ export class RunView3d implements RunView {
     }
     c.timer.lap('lights');
     const sight = this.sightFrame(f, c, ambient);
+    // The ids over which nothing is drawn: the snapshot's dark ones and what the picture hides (beyond sight, or in a shadow line).
+    this.hidden.clear();
+    for (const id of f.dark) this.hidden.add(id);
+    if (sight.mask) hiddenByPicture([dynamic.cards, dynamic.ghosts], sight.mask, this.hiddenSeen, this.hidden);
+    this.seen = seenOpeners(fo.openers, this.sightFor(f), this.hidden);
     c.timer.lap('sight');
     c.timer.renderStart();
     this.drawCalls = view.draw(
@@ -319,13 +328,13 @@ export class RunView3d implements RunView {
   /** The overlay over the canvas: bars, names, tags and the use hint, placed from this frame's camera and plan. */
   private paintOverlay(f: RunFrame, c: StageCtx, cam: Cam): void {
     this.floats.update(f.dt);
-    this.marks.update(f.dt, this.figures.anchors, f.dark);
+    this.marks.update(f.dt, this.figures.anchors, this.hidden);
     const o = this.overlay;
     if (!o) return;
     o.size(c.canvas.w, c.canvas.h);
     const items: OverlayItem[] = [];
     const i: LayoutIn = {
-      ents: f.ents, you: f.you, anchors: this.figures.anchors, heroNames: this.heroNames, useHint: f.useHint, dark: f.dark, zoom: c.zoom,
+      ents: f.ents, you: f.you, anchors: this.figures.anchors, heroNames: this.heroNames, useHint: f.useHint, dark: this.hidden, zoom: c.zoom,
       at: (x, z) => toCanvas(cam, c.plan, c.zoom, x, 0, z), measure: (t, k) => o.measure(t, k),
     };
     layoutBars(i, items);
