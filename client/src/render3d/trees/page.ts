@@ -13,7 +13,7 @@ import { TileMap } from '../../sim/map';
 import { loadAtlas } from '../../ui/atlas';
 import { snapGround, viewRay } from '../camera';
 import { pickZoom } from '../quality';
-import { LOBE_PAD, MeshData, buildPlant, layout, type Plant3 } from './build';
+import { LOBE_PAD, MeshData, buildGrown, buildPlant, layout, type Plant3 } from './build';
 import { clock, sky } from './sky';
 import '../r3d.css';
 
@@ -22,13 +22,14 @@ const PITCH = Math.asin(0.75); // 48.6 degrees
 const SM = 2048;
 const WIND: [number, number] = [0.98, 0.2];
 
-interface Params { leaves: boolean; crown: 'balls' | 'tufts'; hour: number; yaw: number; mode: '3d' | 'cards'; stretch: boolean; wind: boolean; snap: boolean; shadows: boolean; outline: boolean; plain: boolean; res: number; zoom: number; t: number | null; mult: number }
+interface Params { tree: 'recipe' | 'grown'; leaf: number; leaves: boolean; crown: 'balls' | 'tufts'; hour: number; yaw: number; mode: '3d' | 'cards'; stretch: boolean; wind: boolean; snap: boolean; shadows: boolean; outline: boolean; plain: boolean; res: number; zoom: number; t: number | null; mult: number }
 
 function readParams(search: string): Params {
   const q = new URLSearchParams(search), num = (k: string, d: number) => { const v = Number(q.get(k)); return q.has(k) && Number.isFinite(v) ? v : d; };
   const on = (k: string, d: boolean) => (q.has(k) ? q.get(k) !== '0' : d);
   return {
-    leaves: on('leaves', true), crown: q.get('crown') === 'tufts' ? 'tufts' : 'balls',
+    tree: q.get('tree') === 'recipe' ? 'recipe' : 'grown', leaf: Math.min(100, Math.max(0, num('leaf', 100))),
+    leaves: on('leaves', true), crown: q.get('crown') === 'balls' ? 'balls' : 'tufts',
     hour: Math.min(23, Math.max(4.5, num('hour', 8))), yaw: num('yaw', 0), mode: q.get('mode') === 'cards' ? 'cards' : '3d',
     stretch: on('stretch', true), wind: on('wind', true), snap: on('snap', false), shadows: on('shadows', true), outline: on('outline', false), // the user's picks (2026-11-13): smooth sway, no outline pass, 2 px per art px
     plain: on('plain', false),
@@ -70,6 +71,8 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   const treeTris = mesh.tris;
   const tuftData = new MeshData(); // the same plants with leaf tufts for crowns
   for (const s of specs) buildPlant(tuftData, s, true);
+  const grownBalls = new MeshData(), grownTufts = new MeshData(); // the same plants grown from branches
+  for (const s of specs) { buildGrown(grownBalls, s, false); buildGrown(grownTufts, s, true); }
   const map = new TileMap(MW, MH, new Uint8Array(MW * MH).fill(TILE_ID.Floor));
   const ground = paintGround(map, 11);
   const groundTex = pixelTexture(new DataTexture(new Uint8Array(ground.data.buffer.slice(0)), ground.w, ground.h, RGBAFormat, UnsignedByteType));
@@ -102,7 +105,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   // ---------------------------------------------------------------- uniforms
   const u = {
     sun: uniform(new Vector3(0, 1, 0)), sunCol: uniform(new Vector3(1, 1, 1)), amb: uniform(new Vector3(0.3, 0.3, 0.3)),
-    time: uniform(0), leaves: uniform(1), wind: uniform(1), snap: uniform(1), stretch: uniform(1), cardStretch: uniform(1 / Math.cos(PITCH)), shadows: uniform(1), outline: uniform(1), plain: uniform(0),
+    time: uniform(0), leaf: uniform(1), leaves: uniform(1), wind: uniform(1), snap: uniform(1), stretch: uniform(1), cardStretch: uniform(1 / Math.cos(PITCH)), shadows: uniform(1), outline: uniform(1), plain: uniform(0),
     camR: uniform(new Vector3(1, 0, 0)), camU: uniform(new Vector3(0, 1, 0)), camV: uniform(new Vector3(0, 0, 1)),
     sunR: uniform(new Vector3(1, 0, 0)), sunU: uniform(new Vector3(0, 0, 1)), sunF: uniform(new Vector3(0, -1, 0)), sunRh: uniform(new Vector3(1, 0, 0)),
     sunC: uniform(new Vector3()), sunExt: uniform(new Vector2(1, 1)), sunNF: uniform(new Vector2(0, 1)),
@@ -156,7 +159,8 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
 
   const treeMat = new MeshBasicNodeMaterial();
   treeMat.side = DoubleSide;
-  treeMat.positionNode = positionGeometry.add(treeOff).add(vec3(0, aSway.w.mul(u.stretch.sub(1)), 0)).add(tuftSpread(u.camR, u.camU));
+  const gone = aPart.y.lessThan(0.5).or(aPart.y.greaterThan(2.5)).and(aMisc.w.greaterThan(u.leaf)); // a lobe whose leaves have gone collapses to a point
+  treeMat.positionNode = select(gone, vec3(0, -50, 0), positionGeometry.add(treeOff).add(vec3(0, aSway.w.mul(u.stretch.sub(1)), 0)).add(tuftSpread(u.camR, u.camU)));
   {
     const lv = lobeView(u.camR, u.camU, u.camV), nRaw = attribute('normal', 'vec3');
     const tuftN = normalize(nRaw.add(u.camR.mul(aTuft.x.mul(0.3))).add(u.camU.mul(aTuft.y.mul(0.3)))); // the ball's direction, leaning outward across the patch
@@ -199,16 +203,17 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   }
   const treeShadowMat = new MeshBasicNodeMaterial();
   treeShadowMat.side = DoubleSide;
-  treeShadowMat.positionNode = positionGeometry.add(treeOff).add(tuftSpread(u.sunR, u.sunU));
+  treeShadowMat.positionNode = select(gone, vec3(0, -50, 0), positionGeometry.add(treeOff).add(tuftSpread(u.sunR, u.sunU)));
   {
     const lv = lobeView(u.sunR, u.sunU, u.sun);
     treeShadowMat.colorNode = vec4(0, 0, 0, select(isLobe.and(lv.keep.not()).or(isTuft.and(tuftKeep.not())), float(0), float(1)));
     treeShadowMat.alphaTest = 0.5;
   }
   const treeGeoOf = (d: MeshData) => geometry({ position: [d.pos, 3], normal: [d.nrm, 3], grad: [d.grad, 4], sway: [d.sway, 4], part: [d.part, 4], misc: [d.misc, 4], tuft: [d.tuft, 4] }, d.idx);
-  const treeGeo = treeGeoOf(mesh), tuftGeo = treeGeoOf(tuftData);
-  const treeMesh = new Mesh(treeGeo, treeMat), treeShadow = new Mesh(treeGeo, treeShadowMat);
-  const tuftMesh = new Mesh(tuftGeo, treeMat), tuftShadow = new Mesh(tuftGeo, treeShadowMat);
+  const variants = ([['recipe:balls', mesh], ['recipe:tufts', tuftData], ['grown:balls', grownBalls], ['grown:tufts', grownTufts]] as const).map(([key, d]) => {
+    const g = treeGeoOf(d);
+    return { key, tris: d.tris, draw: new Mesh(g, treeMat), cast: new Mesh(g, treeShadowMat) };
+  });
 
   // ---------------------------------------------------------------- cards (figures, and the plants as today)
   /** A card standing on `foot`, spread along `right`; `sw` = sway amplitude, height, how far its shadow lookup moves toward the sun. */
@@ -348,8 +353,8 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   groundMesh.renderOrder = -1;
 
   const scene = new Scene(), shadowScene = new Scene();
-  for (const m of [groundMesh, treeMesh, tuftMesh, plantMesh, figMesh, leafMesh]) { m.frustumCulled = false; scene.add(m); }
-  for (const m of [treeShadow, tuftShadow, trunkShadow, discShadow, figShadow]) { m.frustumCulled = false; shadowScene.add(m); }
+  for (const m of [groundMesh, ...variants.map((v) => v.draw), plantMesh, figMesh, leafMesh]) { m.frustumCulled = false; scene.add(m); }
+  for (const m of [...variants.map((v) => v.cast), trunkShadow, discShadow, figShadow]) { m.frustumCulled = false; shadowScene.add(m); }
 
   // ---------------------------------------------------------------- outline and seams, from depth edges of the picture
   const postMat = new MeshBasicNodeMaterial();
@@ -431,6 +436,12 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     s.addEventListener('change', () => { set(opts[Number(s.value)][1]); changed(); }); l.appendChild(s);
   };
   choice<'3d' | 'cards'>('Trees (T)', [['3D', '3d'], ['Flat cards', 'cards']], () => p.mode, (v) => { p.mode = v; });
+  choice<'recipe' | 'grown'>('Tree model (G)', [['Grown from branches', 'grown'], ['2D recipe', 'recipe']], () => p.tree, (v) => { p.tree = v; });
+  const leafL = row('');
+  const leafI = document.createElement('input'); leafI.type = 'range'; leafI.min = '0'; leafI.max = '100'; leafI.step = '1'; leafI.value = String(p.leaf); leafI.style.width = '150px';
+  leafL.appendChild(leafI);
+  const leafText = leafL.firstChild as Text;
+  leafI.addEventListener('input', () => { p.leaf = Number(leafI.value); changed(); });
   choice<'balls' | 'tufts'>('Crowns (B)', [['Leaf balls', 'balls'], ['Leaf tufts', 'tufts']], () => p.crown, (v) => { p.crown = v; });
   choice('Turn (Z / C)', [0, 45, 90, 135, 180, -135, -90, -45].map((d) => [`${d}°`, d] as [string, number]), () => p.yaw, (v) => { p.yaw = v; cam.yawTo = (v * Math.PI) / 180; });
   check('Card proportions (stretch)', 'stretch');
@@ -442,7 +453,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   check('Sway in whole pixels', 'snap');
   choice('Render px per art px', [['1 (pixel art)', 1], ['2', 2], ['screen', 0]], () => p.res, (v) => { p.res = v; resize(); });
   choice('Zoom', [['Auto', 0], ['2', 2], ['3', 3], ['4', 4], ['5', 5], ['6', 6]], () => p.zoom, (v) => { p.zoom = v; resize(); });
-  const help = document.createElement('div'); help.style.cssText = 'margin-top:6px;color:#99a'; help.textContent = 'WASD / arrows pan · T cards ↔ 3D · B balls ↔ tufts';
+  const help = document.createElement('div'); help.style.cssText = 'margin-top:6px;color:#99a'; help.textContent = 'WASD / arrows pan · T cards · G grown ↔ recipe · B balls ↔ tufts';
   panel.appendChild(help);
   el.appendChild(panel);
 
@@ -450,15 +461,15 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     u.leaves.value = p.leaves && p.mode === '3d' ? 1 : 0;
     u.wind.value = p.wind ? 1 : 0; u.snap.value = p.snap ? 1 : 0; u.shadows.value = p.shadows ? 1 : 0; u.outline.value = p.outline ? 1 : 0; u.plain.value = p.plain ? 1 : 0;
     u.stretch.value = p.stretch ? 1 / Math.cos(PITCH) : 1;
-    treeMesh.visible = treeShadow.visible = p.mode === '3d' && p.crown === 'balls';
-    tuftMesh.visible = tuftShadow.visible = p.mode === '3d' && p.crown === 'tufts';
+    for (const v of variants) v.draw.visible = v.cast.visible = p.mode === '3d' && v.key === `${p.tree}:${p.crown}`;
+    u.leaf.value = p.leaf / 100; leafI.value = String(p.leaf); leafText.textContent = `Leaves ${p.leaf}%`;
     plantMesh.visible = trunkShadow.visible = discShadow.visible = p.mode === 'cards';
     hourText.textContent = `Time ${clock(p.hour)}`; hourI.value = String(p.hour);
     for (const f of syncs) f();
     setSun();
     bakeAt = performance.now() + 150;
     const q = new URLSearchParams(location.search);
-    q.set('hour', String(p.hour)); q.set('yaw', String(p.yaw)); q.set('mode', p.mode); q.set('crown', p.crown);
+    q.set('hour', String(p.hour)); q.set('yaw', String(p.yaw)); q.set('mode', p.mode); q.set('crown', p.crown); q.set('tree', p.tree); q.set('leaf', String(p.leaf));
     for (const k of ['stretch', 'wind', 'snap', 'shadows', 'outline', 'plain', 'leaves'] as const) q.set(k, p[k] ? '1' : '0');
     q.set('res', String(p.res)); q.set('zoom', String(p.zoom));
     history.replaceState(null, '', `?${q.toString().replace('r3d=trees', 'r3d=trees')}`);
@@ -471,6 +482,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     held.add(e.code);
     if (e.code === 'KeyZ') turn(45); else if (e.code === 'KeyC') turn(-45); else if (e.code === 'KeyX') turn(-p.yaw);
     else if (e.code === 'KeyT') { p.mode = p.mode === '3d' ? 'cards' : '3d'; changed(); }
+    else if (e.code === 'KeyG') { p.tree = p.tree === 'grown' ? 'recipe' : 'grown'; changed(); }
     else if (e.code === 'KeyB') { p.crown = p.crown === 'balls' ? 'tufts' : 'balls'; changed(); }
   });
   window.addEventListener('keyup', (e) => held.delete(e.code));
@@ -526,7 +538,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     if (acc >= 0.5) {
       hook.fps = accN / acc; hook.ms = cpu / accN; hook.drawCalls = renderer.info.render.drawCalls; hook.triangles = renderer.info.render.triangles;
       const res = p.res === 0 ? zoom : Math.min(p.res, zoom);
-      readout.textContent = `${hook.fps.toFixed(0)} fps   ${(1000 / hook.fps).toFixed(1)} ms/frame (script ${hook.ms.toFixed(2)} ms)\n${backend}  ${artW * res}x${artH * res} -> ${artW * zoom}x${artH * zoom}\n${hook.drawCalls} draw calls, ${Math.round(hook.triangles / 1000)}k triangles per frame\n${plants.length} plants, ${Math.round((p.crown === 'tufts' ? tuftData.tris : treeTris) / 1000)}k triangles in the 3D trees`;
+      readout.textContent = `${hook.fps.toFixed(0)} fps   ${(1000 / hook.fps).toFixed(1)} ms/frame (script ${hook.ms.toFixed(2)} ms)\n${backend}  ${artW * res}x${artH * res} -> ${artW * zoom}x${artH * zoom}\n${hook.drawCalls} draw calls, ${Math.round(hook.triangles / 1000)}k triangles per frame\n${plants.length} plants, ${Math.round((variants.find((v) => v.key === `${p.tree}:${p.crown}`)?.tris ?? treeTris) / 1000)}k triangles in the 3D trees`;
       acc = 0; accN = 0; cpu = 0;
     }
   });
