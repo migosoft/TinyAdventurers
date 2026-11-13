@@ -12,7 +12,7 @@ import type { EntState } from '../game/world';
 import type { WorldTextKind } from '../game/worldText';
 import type { PictureEv, RunFrame, RunViewInit, ShotView } from '../run/view';
 import { SHOT_LIFT, snapGround, type Cam } from './camera';
-import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
+import { casterOf, newCardBuf, newGlowBuf, newShadowBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, sortBackToFront, WALL_SIGHT_PUSH, WEAPON_BIAS, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { AMBIENT, darkAlpha, torchFlicker } from './light';
 import type { ShadowCaster } from './lights';
 import { opensWalls } from './openers';
@@ -218,9 +218,10 @@ export class Figures3d {
     // side 0 (Face): the south face of the wall cell north of the floor; 1 (West): the east face of the wall west of the floor; 2 (East): the west face of the wall east of it
     const [cx, cz, nx, nz] = e.extra === 0 ? [x, Math.floor(z) + TORCH_OFF, 0, 1] : e.extra === 1 ? [Math.floor(x) + TORCH_OFF, z, 1, 0] : [Math.floor(x) + 1 - TORCH_OFF, z, -1, 0];
     pushWall(out.emissive, torchFrame(lit, now + ph / 8, TORCH_FRAMES), cx, TORCH_MID, cz, nx, nz, e.extra === 2, this.frames);
+    const sightAt: [number, number] = [cx + nx * WALL_SIGHT_PUSH, cz + nz * WALL_SIGHT_PUSH];
     if (lit && this.torchGlow) {
       const k = torchFlicker(now, ph);
-      pushGlow(out.glows, cx, TORCH_MID + TORCH_GLOW.lift, cz, TORCH_GLOW.size, [TORCH_GLOW.rgb[0] * k, TORCH_GLOW.rgb[1] * k, TORCH_GLOW.rgb[2] * k], cam);
+      pushGlow(out.glows, cx, TORCH_MID + TORCH_GLOW.lift, cz, TORCH_GLOW.size, [TORCH_GLOW.rgb[0] * k, TORCH_GLOW.rgb[1] * k, TORCH_GLOW.rgb[2] * k], cam, sightAt);
     }
     this.opener(e, false, x, z, TORCH_MID, 'object', out);
   }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { TILE, TileMap } from '../sim/map';
 import { View } from '../sim/view';
-import { newCardBuf, newGlowBuf, newShadowBuf, glowsOf, shadowsOf, pushCard, pushGlow, pushShadow, quadsOf, type Card } from './cards';
+import { newCardBuf, newGlowBuf, newShadowBuf, glowsOf, shadowsOf, pushCard, pushGlow, pushShadow, pushWall, quadsOf, type Card } from './cards';
 import { cardSightData, glowSightData, shadowSightData } from './sightAttrs';
 import { footSight, SightMask } from './sightmask';
 import type { Cam } from './camera';
@@ -78,5 +78,23 @@ describe('the sight attributes', () => {
     const go = glowSightData(glowsOf(g), m, new Float32Array(12));
     expect(go[0]).toBeLessThan(0.1);
     expect(Array.from(glowSightData(glowsOf(g), null, new Float32Array(12).fill(3)))).toEqual(new Array(12).fill(0));
+  });
+
+  it('a torch on the far face of a visible wall is unseen, on the near face seen', () => {
+    // a wall at x = 24 in a room of floor; the viewer stands west of it at (20.5, 20.5)
+    const w = 41, tiles = new Uint8Array(w * w).fill(TILE_ID.Floor);
+    for (let z = 0; z < w; z++) tiles[z * w + 24] = TILE_ID.Wall;
+    const map = new TileMap(w, w, tiles);
+    const hard = new View(w, w);
+    hard.compute(map, 20.5 * TILE, 20.5 * TILE, 8, 'hard');
+    const m = new SightMask(map, { daylight: false, feather: 0, ramp: 0 });
+    m.update(hard, null, 0);
+    const near = newCardBuf(), far = newCardBuf();
+    // torches as figures.ts places them: TORCH_OFF in front of the face, normal pointing out of the wall
+    pushWall(near, 'f', 24 - 0.02, 1, 20.5, -1, 0, false, frames); // west face: x = 24 - 0.02
+    pushWall(far, 'f', 25 - 0.02, 1, 20.5, 1, 0, false, frames); // east face
+    const nf = footSight(m, near.foot[0], near.foot[1], 0), ff = footSight(m, far.foot[0], far.foot[1], 0);
+    expect(nf.hard).toBeLessThan(0.05);
+    expect(ff.hard).toBeGreaterThanOrEqual(0.95);
   });
 });

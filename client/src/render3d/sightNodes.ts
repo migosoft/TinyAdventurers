@@ -1,7 +1,7 @@
 // The sight step every 3D material ends with (#305): what the hero cannot see is black on dark maps and mist on daylight maps.
 // The unseen strength comes from the sight mask (sightmask.ts) as a small RG8 texture over world space; the mist maths
 // is mist.ts's, written as nodes.
-import { DataTexture, LinearFilter, NoColorSpace, RGFormat, UnsignedByteType, Vector2, Vector3, Vector4, ClampToEdgeWrapping } from 'three/webgpu';
+import { DataTexture, Texture, LinearFilter, NoColorSpace, RGFormat, UnsignedByteType, Vector2, Vector3, Vector4, ClampToEdgeWrapping } from 'three/webgpu';
 import { Fn, If, clamp, dot, float, max, mix, mx_noise_float, select, smoothstep, step, texture, uniform, vec2, vec3 } from 'three/tsl';
 import { DEFAULT_HAZE, SHADE, type HazeLook } from '../game/sightField';
 import { MIST, mistColour, type MistLook } from './mist';
@@ -40,6 +40,8 @@ export interface Sight {
   set(f: SightFrame): void;
   /** How many times the mask went up to the GPU texture (a new view uploads on its first frame). */
   readonly uploads: number;
+  /** The mask's current texture (a new object when the mask's size changes). */
+  readonly texture: Texture;
   dispose(): void;
 }
 
@@ -156,5 +158,5 @@ export function makeSight(): Sight {
 
   const dispose = (): void => tex.dispose();
 
-  return { unseenAt, apply, dim, shown, set, dispose, res: uOrigin.w, get uploads() { return uploads; } };
+  return { unseenAt, apply, dim, shown, set, dispose, res: uOrigin.w, get uploads() { return uploads; }, get texture() { return tex; } };
 }

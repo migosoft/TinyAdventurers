@@ -11,6 +11,12 @@ export const GLOW_LIFT = 0.05;
 export const LIE_Y = 0.02;
 /** Tiles a held weapon is pushed toward the camera so it draws over its wielder. */
 export const WEAPON_BIAS = 0.01;
+/**
+ * Tiles a wall card's sight point is pushed out of its face along the normal. The mask's texels are aligned to tile edges, so a wall's last
+ * texel centre lies 0.5 / res inside the wall (0.125 tile at res 4, the coarsest); a read taps only texels within 1 / res (0.25 tile) of it.
+ * At 0.25 (plus the card's own 0.02 offset) the nearest wall texel is 0.395 tile away: no wall texel is touched at either resolution.
+ */
+export const WALL_SIGHT_PUSH = 0.25;
 /** Height of a ground shadow: above the floor, below the lying cards. */
 const SHADOW_Y = 0.01;
 
@@ -153,7 +159,7 @@ export function casterOf(c: Card, id: number, frames: FrameRects, cam: Cam): Sha
  * A 1 x 1 tile card fixed to a wall face (not turned to the camera), for the emissive pass (no `look`): centre (x, y, z),
  * `nx`/`nz` the face's outward normal (+z, +x or -x here), the picture mirrored when `flip`.
  */
-export function pushWall(b: CardBuf, frame: string, x: number, y: number, z: number, nx: number, nz: number, flip: boolean, frames: FrameRects): void {
+export function pushWall(b: CardBuf, frame: string, x: number, y: number, z: number, nx: number, nz: number, flip: boolean, frames: FrameRects, scenery = false): void {
   const fr = frames[frame];
   if (!fr) return;
   // The viewer in front of the face looks along -normal; their right is (-nz, nx) on the ground rotated: normal +z -> right +x, +x -> -z, -x -> +z.
@@ -161,7 +167,7 @@ export function pushWall(b: CardBuf, frame: string, x: number, y: number, z: num
   const u0 = flip ? fr.x + fr.w : fr.x, u1 = flip ? fr.x : fr.x + fr.w;
   const v0 = fr.y, v1 = fr.y + fr.h;
   const at = (s: number, h: number, u: number, v: number): V => [x + rx * s * 0.5, y + h * 0.5, z + rz * s * 0.5, u, v];
-  pushQuad(b.position, b.uv, [at(-1, 1, u0, v0), at(1, 1, u1, v0), at(1, -1, u1, v1), at(-1, -1, u0, v1)], () => { b.foot.push(x, z, 0, 0); });
+  pushQuad(b.position, b.uv, [at(-1, 1, u0, v0), at(1, 1, u1, v0), at(1, -1, u1, v1), at(-1, -1, u0, v1)], () => { b.foot.push(x + nx * WALL_SIGHT_PUSH, z + nz * WALL_SIGHT_PUSH, 0, scenery ? 1 : 0); });
   b.n++;
 }
 
@@ -204,9 +210,10 @@ export function pushShadow(b: ShadowBuf, cam: Cam, x: number, z: number, rx: num
  * A glow quad: camera-facing (round on screen), screen-right (c, 0, s), screen-up (s sin p, cos p, -c sin p), half-size `size`.
  * Its centre is moved toward the camera by size + GLOW_LIFT along the view ray, which leaves its screen position
  * unchanged (orthographic view) but puts the whole disc in front of its wall, the wall top and the floor.
+ * `sightAt`: the point the sight mask is read at (default the centre); a wall torch passes a point in front of its face.
  * Known cost: it is added over figures standing within about `size` in front of a torch.
  */
-export function pushGlow(b: GlowBuf, x0: number, y0: number, z0: number, size: number, rgb: [number, number, number], cam: Cam): void {
+export function pushGlow(b: GlowBuf, x0: number, y0: number, z0: number, size: number, rgb: [number, number, number], cam: Cam, sightAt?: [number, number]): void {
   const c = Math.cos(cam.yaw), sn = Math.sin(cam.yaw), sp = Math.sin(cam.pitch), cpi = Math.cos(cam.pitch);
   const ray = viewRay(cam.pitch, cam.yaw);
   const lift = size + GLOW_LIFT;
@@ -216,7 +223,7 @@ export function pushGlow(b: GlowBuf, x0: number, y0: number, z0: number, size: n
   pushQuad(b.position, b.uv, [
     [x - rx + ux, y + uy, z - rz + uz, -1, -1], [x + rx + ux, y + uy, z + rz + uz, 1, -1],
     [x + rx - ux, y - uy, z + rz - uz, 1, 1], [x - rx - ux, y - uy, z - rz - uz, -1, 1],
-  ], () => { b.color.push(rgb[0], rgb[1], rgb[2]); b.foot.push(x0, z0); });
+  ], () => { b.color.push(rgb[0], rgb[1], rgb[2]); b.foot.push(sightAt ? sightAt[0] : x0, sightAt ? sightAt[1] : z0); });
   b.n++;
 }
 

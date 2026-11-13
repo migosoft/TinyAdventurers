@@ -59,4 +59,27 @@ describe('the sight nodes', () => {
     a.dispose();
     b.dispose();
   });
+
+  it('a mask of a new size gives the node a new texture and the origin follows', () => {
+    const small = new TileMap(21, 21, new Uint8Array(21 * 21).fill(TILE_ID.Floor));
+    const big = new TileMap(41, 41, new Uint8Array(41 * 41).fill(TILE_ID.Floor));
+    const mk = (map: TileMap, c: number, vision: number) => {
+      const v = new View(map.w, map.h);
+      v.compute(map, c * TILE, c * TILE, vision, 'hard');
+      const m = new SightMask(map, { daylight: false, feather: 0, ramp: 0 });
+      m.update(v, null, 0);
+      return m;
+    };
+    const a = mk(small, 10.5, 4), b = mk(big, 20.5, 9);
+    expect(b.n).not.toBe(a.n);
+    const s = makeSight();
+    s.set({ ...SIGHT_OFF, mode: 'dark', mask: a });
+    const t1 = s.texture;
+    expect((t1.image as { width: number }).width).toBe(a.n);
+    s.set({ ...SIGHT_OFF, mode: 'dark', mask: b });
+    expect(s.texture).not.toBe(t1);
+    expect((s.texture.image as { width: number }).width).toBe(b.n);
+    expect(s.uploads).toBe(2);
+    s.dispose();
+  });
 });

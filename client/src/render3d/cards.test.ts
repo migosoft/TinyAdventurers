@@ -412,7 +412,15 @@ describe('the foot of a quad (#305)', () => {
     expect(b.foot).toHaveLength(72);
     expect(b.foot.slice(0, 4)).toEqual([5, 7, 0, 0]);
     expect(b.foot.slice(24, 28)).toEqual([5, 7, 0, 0]);
-    expect(b.foot.slice(48, 52)).toEqual([3, 4, 0, 0]);
+    expect(b.foot.slice(48, 52)).toEqual([3, 4.25, 0, 0]);
+  });
+  it('a wall card reads its sight in front of the face, with the scenery flag', () => {
+    const b = newCardBuf();
+    pushWall(b, 'crate', 3, 1, 4, 1, 0, false, frames, true);
+    expect(b.foot.slice(0, 4)).toEqual([3.25, 4, 0, 1]);
+    const g = newGlowBuf();
+    pushGlow(g, 1, 2, 3, 0.5, [1, 1, 1], cam(0), [1.5, 3]);
+    expect(g.foot.slice(0, 2)).toEqual([1.5, 3]);
   });
   it('sorting keeps each quad with its own foot', () => {
     const b = newCardBuf();
