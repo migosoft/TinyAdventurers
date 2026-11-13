@@ -20,9 +20,10 @@ export interface Lighting {
   /**
    * `rgb`: ambient plus lava plus the lights; `dv` (0..1): the darkvision strength at P. P and N are vec3 nodes, wrap a float node or number.
    * `self`: the caster slot the surface belongs to, a float node, -1 none (its own shadow does not fall on it); `darkOnly` > 0.5: ambient alone, no lights, no lava, no darkvision.
+   * `selfFoot`: a vec2 node, the foot (x, z) of the plant card the surface belongs to: the caster standing on that foot (the plant's own) does not shadow it.
    * `sun`: adds the sun's light (#306): `Ps` is the point the sun's shadow map is read at, `ndl` the surface's cosine term; without it the sun does not touch the surface.
    */
-  lightAt(P: N, N: N, wrap: N, opts?: { self?: N; darkOnly?: N; sun?: { Ps: N; ndl: N } }): { rgb: N; dv: N };
+  lightAt(P: N, N: N, wrap: N, opts?: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N } }): { rgb: N; dv: N };
   /** The sun's light: uniforms, the shadow lookup and the cloud shadow. Its term is 0 until a frame sets a sun. */
   readonly sun: SunLight;
   /** The darkvision rule (grey where only darkvision shows, colour back as real light grows), then the shoulder. */
@@ -116,7 +117,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   // 1 when no caster's current frame stands between P and the light L, else 0 (the demo's cardVis). Each card is turned to face the
   // light and its atlas alpha is the occluder. Slot `self` (the surface's own figure) and `skip` (the light's carrier) are not tested;
   // the loop ends at the first empty slot; a card whose foot is far from the segment is rejected before the atlas is touched.
-  const cardVis = Fn(([P, L, self, skip]: N[]) => {
+  const cardVis = Fn(([P, L, self, skip, sf]: N[]) => {
     const vis = float(1).toVar();
     const D = L.sub(P);
     const d2 = D.xz;
@@ -127,7 +128,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
         Break();
       });
       const j = float(i);
-      If(j.notEqual(self).and(j.notEqual(skip)), () => {
+      If(j.notEqual(self).and(j.notEqual(skip)).and(length(a.xy.sub(sf)).greaterThan(0.02)), () => {
         const F = a.xy;
         const near = F.sub(P.xz.add(d2.mul(clamp(dot(F.sub(P.xz), d2).div(len2), 0, 1))));
         If(length(near).lessThan(a.z.mul(0.5).add(CARD_REACH)), () => {
@@ -192,8 +193,9 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   const sun = makeSunLight();
   const hasSun = opts.sun === true;
 
-  const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; darkOnly?: N; sun?: { Ps: N; ndl: N } } = {}): { rgb: N; dv: N } => {
+  const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N } } = {}): { rgb: N; dv: N } => {
     const w = typeof wrap === 'number' ? float(wrap) : wrap;
+    const selfFoot: N = opts.selfFoot ?? vec2(1e6, 1e6);
     const dark: N = opts.darkOnly ?? float(0);
     const self: N = opts.self ?? float(-1);
     // Sampled outside any branch: a filtered read needs uniform control flow.
@@ -235,7 +237,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
               v.assign(wallVis(Po, L));
               // The wall test first: a card is looked at only for a light that still reaches P. The shadow channel is skip + 2.
               If(v.greaterThan(0.5), () => {
-                v.assign(cardVis(Po, L, self, carrier));
+                v.assign(cardVis(Po, L, self, carrier, selfFoot));
               });
             });
             sum.addAssign(lc.xyz.mul(f.mul(ndl).mul(v)));

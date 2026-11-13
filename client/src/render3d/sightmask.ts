@@ -197,3 +197,8 @@ export function footSight(m: SightMask, x: number, z: number, reach: number): { 
 export function thingHard(m: SightMask, hard: number): number {
   return m.daylight ? Math.min(1, Math.max(0, (hard - 0.5) * 2)) : hard;
 }
+
+/** Whether a point thing at (x, z) is hidden by the picture (beyond sight or in a shadow line): the rule `hiddenByPicture` uses, `thingHard` above 0.5. */
+export function hiddenAt(m: SightMask, x: number, z: number): boolean {
+  return thingHard(m, footSight(m, x, z, 0).hard) > 0.5;
+}

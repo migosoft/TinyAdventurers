@@ -7,7 +7,7 @@ import { TILE, type TileMap } from '../sim/map';
 import type { Cam } from './camera';
 import { pushCard, type CardBuf } from './cards';
 import type { Footprint } from './lights';
-import { footSight, thingHard, type SightMask } from './sightmask';
+import { hiddenAt, type SightMask } from './sightmask';
 import type { FrameRects } from './worldMesh';
 
 /** A solid pixel rect is this opaque atlas frame cropped to w x h px, in fill mode, the tint the colour. */
@@ -59,7 +59,7 @@ export class Critters3d {
     if (day < 0.5) return 0;
     let n = 0;
     const shown = (x: number, z: number): boolean =>
-      x >= view.x0 - MARGIN && x <= view.x1 + MARGIN && z >= view.z0 - MARGIN && z <= view.z1 + MARGIN && (!mask || thingHard(mask, footSight(mask, x, z, 0).hard) > 0);
+      x >= view.x0 - MARGIN && x <= view.x1 + MARGIN && z >= view.z0 - MARGIN && z <= view.z1 + MARGIN && (!mask || !hiddenAt(mask, x, z));
     // A rect `w` x `h` px whose top-left is (ox, oy) px right and down of the critter's point.
     const rect = (x: number, z: number, lift: number, ox: number, oy: number, w: number, h: number, colour: number, bias: number): void => {
       pushCard(cards, {

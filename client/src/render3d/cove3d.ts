@@ -10,7 +10,7 @@ import type { Cam } from './camera';
 import { pushCard, pushGlow, type CardBuf, type GlowBuf } from './cards';
 import type { Cand, ShadowCaster } from './lights';
 import type { PlantPlace, PlantSprite } from './plants';
-import { footSight, thingHard, type SightMask } from './sightmask';
+import { hiddenAt, type SightMask } from './sightmask';
 import { SWAY } from './wind';
 import type { FrameRects } from './worldMesh';
 
@@ -53,7 +53,7 @@ export class Pixies3d {
   push(t: number, cam: Cam, glows: GlowBuf, ghosts: CardBuf, frames: FrameRects, mask: SightMask | null): void {
     for (let i = 0; i < this.count; i++) {
       const p = this.at(i, t);
-      if (mask && thingHard(mask, footSight(mask, p.x, p.z, 0).hard) <= 0) continue;
+      if (mask && hiddenAt(mask, p.x, p.z)) continue;
       pushGlow(glows, p.x, p.y, p.z, GLOW_HALF, [GLOW[0] * PIXIE_GLOW_ALPHA, GLOW[1] * PIXIE_GLOW_ALPHA, GLOW[2] * PIXIE_GLOW_ALPHA], cam);
       pushGlow(glows, p.x, p.y, p.z, CORE_HALF, [CORE[0] * 1.5, CORE[1] * 1.5, CORE[2] * 1.5], cam);
       const oy = p.wingUp ? -1 : 0;

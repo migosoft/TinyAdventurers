@@ -8,7 +8,7 @@ import { View } from '../sim/view';
 import type { Cam } from './camera';
 import { newCardBuf } from './cards';
 import { BEE_LIFT, butterflyLift, Critters3d, PX_FRAME } from './critters3d';
-import { SightMask } from './sightmask';
+import { SightMask, hiddenAt } from './sightmask';
 import type { FrameRects } from './worldMesh';
 
 const frames: FrameRects = { [PX_FRAME]: { x: 0, y: 0, w: 16, h: 16 } };
@@ -61,11 +61,9 @@ describe('Critters3d', () => {
     c.push(open, frames, cam, 3, 1, null, ALL);
     c.push(masked, frames, cam, 3, 1, mask, ALL);
     expect(masked.n).toBeLessThan(open.n);
-    // behind the wall column, inside the mask's square, nothing is left
-    for (let i = 0; i < masked.n; i++) {
-      const x = masked.foot[i * 24], z = masked.foot[i * 24 + 1];
-      if (x > 20.5 && x < mask.ox + mask.size - 1) expect(mask.sample(x, z).hard).toBeGreaterThan(0);
-    }
+    // what is left is seen (and some critters are), nothing behind the wall column
+    expect(masked.n).toBeGreaterThan(0);
+    for (let i = 0; i < masked.n; i++) expect(hiddenAt(mask, masked.foot[i * 24], masked.foot[i * 24 + 1])).toBe(false);
   });
 
   it('skips a critter on an unseen texel of a daylight mask too', () => {

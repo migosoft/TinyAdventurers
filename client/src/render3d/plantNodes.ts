@@ -59,7 +59,7 @@ export function plantCardMaterial(
     Ps: select(isDecal, (truePos as N).add(vec3(0, 0.03, 0)), upright.Ps),
     ndl: select(isDecal, max(lighting.sun.dir.y, 0), upright.ndl),
   };
-  const lit = lighting.lightAt(truePos, vec3(0, 0, 0), 1, { sun: sunAt });
+  const lit = lighting.lightAt(truePos, vec3(0, 0, 0), 1, { sun: sunAt, selfFoot: foot });
   const colour = sight.apply(lighting.finish(texel.rgb, lit), truePos, unseen);
   const shown = sight.shown(unseen.x, 1);
   const open = seeOpenNode(maskTex, truePos, uv(), see);

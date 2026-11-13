@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { CoveInfo } from '../generated/CoveInfo';
 import { coveLayout, placeCovePlants } from '../game/covemath';
-import { PIXIE_COLOURS, PIXIE_COUNT, PIXIE_RX, PIXIE_RY, CANOPY_UP } from '../game/pixieMath';
+import { PIXIE_COLOURS, PIXIE_COUNT, PIXIE_WING_ALPHA, PIXIE_RX, PIXIE_RY, CANOPY_UP } from '../game/pixieMath';
 import type { Cam } from './camera';
 import { newCardBuf, newGlowBuf } from './cards';
 import { Cove3d, PIXIE_LIGHT, Pixies3d } from './cove3d';
 import { PlantField } from './plantField';
+import { TILE_ID } from '../generated/defs';
+import { DEFAULT_HAZE } from '../game/sightField';
+import { TILE, TileMap } from '../sim/map';
+import { View } from '../sim/view';
+import { SightMask } from './sightmask';
 import { SWAY } from './wind';
 import type { FrameRects } from './worldMesh';
 
@@ -90,7 +95,27 @@ describe('Cove3d', () => {
     c.push(2, cam, glows, ghosts, null);
     expect(glows.n).toBe(PIXIE_COUNT * 2);
     expect(ghosts.n).toBe(PIXIE_COUNT * 2);
-    expect(ghosts.look[4]).toBeCloseTo(0.7, 6); // alpha of the first wing
+    expect(ghosts.look[4]).toBeCloseTo(PIXIE_WING_ALPHA, 6); // alpha of the first wing
+  });
+
+  it('shows a pixie the viewer sees and hides one behind a wall', () => {
+    const w = 40, h = 30, tiles = new Uint8Array(w * h).fill(TILE_ID.Floor);
+    for (let y = 0; y < h; y++) tiles[y * w + 20] = TILE_ID.Wall;
+    const map = new TileMap(w, h, tiles);
+    const view = new View(w, h);
+    view.compute(map, 5.5 * TILE, 15.5 * TILE, 14, 'hard');
+    for (const daylight of [false, true]) {
+      const mask = new SightMask(map, { daylight, feather: DEFAULT_HAZE.feather, ramp: DEFAULT_HAZE.ramp });
+      mask.update(view, null, 0);
+      const seen = new Pixies3d({ x: 8 * 16, y: 15 * 16 }, 15 * 16, 1, 1, 14), behind = new Pixies3d({ x: 30 * 16, y: 15 * 16 }, 15 * 16, 1, 1, 14);
+      const a = newGlowBuf(), ga = newCardBuf(), b = newGlowBuf(), gb = newCardBuf();
+      seen.push(2, cam, a, ga, frames, mask);
+      behind.push(2, cam, b, gb, frames, mask);
+      expect(a.n).toBe(2);
+      expect(ga.n).toBe(2);
+      expect(b.n).toBe(0);
+      expect(gb.n).toBe(0);
+    }
   });
 
   it('puts a single pixie low over the ground when asked', () => {

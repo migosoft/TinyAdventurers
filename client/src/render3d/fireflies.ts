@@ -3,7 +3,7 @@
 import { rng } from '../game/covemath';
 import type { Cam } from './camera';
 import { pushGlow, type GlowBuf } from './cards';
-import { footSight, thingHard, type SightMask } from './sightmask';
+import { hiddenAt, type SightMask } from './sightmask';
 
 /** The box (tiles) the swarm is wrapped into around the centre. */
 const BOX_W = 32, BOX_Z = 20;
@@ -64,7 +64,7 @@ export class Fireflies {
       const blink = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(this.time * this.rate[i] * 2.1 + this.phase[i] * 1.7));
       const k = night * blink;
       if (k <= 0.01) continue;
-      if (mask && thingHard(mask, footSight(mask, this.x[i], this.z[i], 0).hard) <= 0) continue;
+      if (mask && hiddenAt(mask, this.x[i], this.z[i])) continue;
       const y = this.high[i] + HEIGHT.bob * Math.sin(this.time * this.rate[i] + this.phase[i] * 0.5);
       pushGlow(glows, this.x[i], y, this.z[i], SIZE, [COLOUR[0] * k, COLOUR[1] * k, COLOUR[2] * k], cam);
       n++;

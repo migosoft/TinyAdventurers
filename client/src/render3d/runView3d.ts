@@ -20,7 +20,7 @@ import { MOVE_KEYS, type StageCtx } from './host';
 import { WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { MIST } from './mist';
 import { WIND } from './wind';
-import { SightMask } from './sightmask';
+import { SightMask, hiddenAt } from './sightmask';
 import { hiddenByPicture } from './sightAttrs';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { SHOT_LIFT } from './camera';
@@ -350,7 +350,10 @@ export class RunView3d implements RunView {
       ];
       const sel = selectLights(cands, fp, focus, c.params.lcap);
       lights = sel.list;
-      casters = selectCasters(this.cove ? [...fo.casters, ...this.coveCasters] : fo.casters, lights, c.params.ccap);
+      // The cove's plants cast only where the viewer sees them (the mask of the last frame), so an unseen plant throws no torch shadow onto seen floor.
+      const mask = this.mask;
+      const cove = this.cove ? (c.params.sight ? this.coveCasters.filter((k) => !hiddenAt(mask, k.x, k.z)) : this.coveCasters) : [];
+      casters = selectCasters(cove.length > 0 ? [...fo.casters, ...cove] : fo.casters, lights, c.params.ccap);
       assignSkips(lights, carrierMap(lights), casters);
       if (this.field.version !== this.lavaSeen) {
         this.lavaSeen = this.field.version;

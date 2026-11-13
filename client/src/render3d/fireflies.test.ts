@@ -5,7 +5,7 @@ import { View } from '../sim/view';
 import type { Cam } from './camera';
 import { newGlowBuf } from './cards';
 import { Fireflies } from './fireflies';
-import { SightMask } from './sightmask';
+import { SightMask, hiddenAt } from './sightmask';
 
 const cam: Cam = { x: 20, z: 15, pitch: Math.PI / 4, yaw: 0 };
 
@@ -68,5 +68,10 @@ describe('Fireflies', () => {
     f.push(open, cam, 1, null);
     f.push(masked, cam, 1, mask);
     expect(masked.n).toBeLessThan(open.n);
+    // the ones that are left are on seen texels, and some are (the others stand behind the wall column or outside the mask)
+    expect(masked.n).toBeGreaterThan(0);
+    for (let i = 0; i < masked.n; i++) expect(hiddenAt(mask, masked.foot[i * 12], masked.foot[i * 12 + 1])).toBe(false);
+    for (let i = 0; i < open.n; i++) if (hiddenAt(mask, open.foot[i * 12], open.foot[i * 12 + 1])) return;
+    throw new Error('the open swarm has no hidden firefly: the test does not test the cull');
   });
 });

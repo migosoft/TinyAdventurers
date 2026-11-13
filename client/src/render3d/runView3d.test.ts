@@ -12,7 +12,7 @@ import { DEFAULTS, type R3dParams } from './params';
 import { RunView3d, moveInput } from './runView3d';
 import { MIST } from './mist';
 import { stoneClear } from './light';
-import { SIGHT_MARGIN } from './sightmask';
+import { SIGHT_MARGIN, hiddenAt, type SightMask } from './sightmask';
 import type { StageCtx } from './host';
 import type { EntState } from '../game/world';
 import type { Overlay3d } from './overlay';
@@ -109,12 +109,19 @@ describe('the run view and the game lights', () => {
     expect(f?.ambient).toEqual(sky(startHour(WOODLAND_SUN)).ambient);
   });
   it('a dungeon with a cove hands over its plants, adds the pixie lights and the plants as casters', () => {
-    const { f } = run({ cove: true });
+    const { f } = run({ cove: true, params: { sight: false } });
     expect(f?.plants).toBeDefined();
     expect([...f!.plants!.chunks.values()].flat().every((k) => k.page === -1)).toBe(true);
     expect(f?.lights.filter((l) => !l.shadow).length).toBeGreaterThan(0);
     expect(f?.casters.some((k) => k.id <= -1000)).toBe(true);
     expect(run().f?.plants).toBeUndefined();
+  });
+  it('with sight on the cove plants cast only where the picture shows them (none before the mask exists, the seen ones after)', () => {
+    const r = run({ cove: true });
+    expect(r.f?.casters.some((k) => k.id <= -1000)).toBe(false); // the first frame's mask is still blank: everything is hidden
+    const again = r.again();
+    expect(again?.casters.some((k) => k.id <= -1000)).toBe(true);
+    for (const k of again!.casters) if (k.id <= -1000) expect(hiddenAt((r.v as unknown as { mask: SightMask }).mask, k.x, k.z)).toBe(false);
   });
   it('light=work is the same', () => {
     const { f } = run({ params: { light: 'work' } });
