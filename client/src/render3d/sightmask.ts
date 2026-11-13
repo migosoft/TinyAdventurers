@@ -131,6 +131,16 @@ export class SightMask {
       for (let k = 0; k < count; k++) soft[k] = (this.clip[k] / 255) * (soft[k] / layers.length);
     }
 
+    // a seen trunk or thicket tile is not behind a trunk: its own texels would read ~0.5 and mist a plant at its foot
+    for (let tz = t0z; tz <= t1z; tz++) {
+      const j0 = first(this.oz, tz), j1 = Math.min(n, first(this.oz, tz + 1));
+      for (let tx2 = t0x; tx2 <= t1x; tx2++) {
+        if (!map.opaque(tx2, tz) || map.hardOpaque(tx2, tz) || !hard.isVisible(tx2, tz)) continue;
+        const i0 = first(this.ox, tx2), i1 = Math.min(n, first(this.ox, tx2 + 1));
+        for (let j = j0; j < j1; j++) soft.fill(0, j * n + i0, j * n + i1);
+      }
+    }
+
     const data = this.data;
     for (let k = 0; k < count; k++) {
       data[2 * k] = Math.round((1 - grey[k] / 255) * 255);

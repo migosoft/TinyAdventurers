@@ -120,6 +120,16 @@ describe('SightMask', () => {
     for (let i = 1; i < softs.length; i++) expect(softs[i]).toBeGreaterThanOrEqual(softs[i - 1] - 1e-6);
   });
 
+  it('a seen trunk tile has no soft', () => {
+    const map = room(31, 31, { '18,15': TILE_ID.Trunk, '19,15': TILE_ID.Trunk });
+    for (const look of [DARK, DAY]) {
+      const m = filled(map, 15, 15, 8, look);
+      expect(m.sample(18.5, 15.5).soft).toBe(0); // the first trunk, seen
+      expect(m.sample(19.5, 15.5).soft).toBe(0); // the second, also seen (light passes trunks)
+      expect(m.sample(21.5, 15.5).soft).toBeGreaterThan(0.5); // floor behind both
+    }
+  });
+
   it('no all view, no soft', () => {
     const m = filled(room(31, 31, { '18,15': TILE_ID.Trunk }), 15, 15, 8, DARK, false);
     for (let k = 0; k < m.n * m.n; k++) expect(m.data[2 * k + 1]).toBe(0);
