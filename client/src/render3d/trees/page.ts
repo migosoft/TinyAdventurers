@@ -310,8 +310,8 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     for (const pl of plants) {
       if (pl.spec.kind === 'bush') continue;
-      for (const b of pl.lobes) for (let i = 0; i < 3; i++) {
-        const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * 0.9, base = lPos.length / 3, period = 14 + rnd() * 26, phase = rnd();
+      for (const b of pl.lobes) {
+        const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * 0.9, base = lPos.length / 3, period = 90 + rnd() * 210, phase = rnd(); // one leaf per lobe every 1.5 to 5 minutes: a few in the air over the whole clearing
         for (const [ox, oy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { lPos.push(pl.spec.x + b.x + Math.cos(a) * rr * b.rx, b.y - b.ry * 0.3, pl.spec.z + b.z + Math.sin(a) * rr * b.rz); lLeaf.push(ox, oy, period, phase); }
         lIdx.push(base, base + 1, base + 2, base, base + 2, base + 3);
       }
