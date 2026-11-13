@@ -29,7 +29,7 @@ import { CONST, KIND } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
 import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, lightLines, skyLines } from './stats';
-import { HourClock, SUN_MAP, fitSunMap, hourLabel, mistLightOf, sky, startHour, sunView, type Sky } from './sun';
+import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
 import { PLANT_BUDGET_MS, PlantField } from './plantField';
 import { lightVector } from '../game/vegetation';
 import type { SunFrame, View } from './view';
@@ -86,10 +86,8 @@ export class RunView3d implements RunView {
   private readonly woodland: boolean;
   private readonly figures: Figures3d;
   // The woodland's sky (#306): the hour of day (run seconds, re-anchored by the panel's hour and pace), the plants, and the readout's numbers.
-  private clock: HourClock | null = null;
+  private clock: SkyClock | null = null;
   private plants: PlantField | null = null;
-  private seenHour: number | null = null;
-  private seenRate: number | null = null; // null until the first frame: the URL's pace applies from the start
   private hourNow = 0;
   private sunPx = 0;
 
@@ -120,7 +118,7 @@ export class RunView3d implements RunView {
     const wl = init.info.woodland;
     this.woodland = !!wl;
     if (wl) {
-      this.clock = new HourClock(startHour(wl.sun));
+      this.clock = new SkyClock(startHour(wl.sun));
       // The plants are drawn by `step` a few per frame, baked with the level's sun; the field outlives a lost device (the view re-reads every chunk).
       this.plants = new PlantField(wl.plants, init.map, lightVector(wl.sun));
     }
@@ -181,14 +179,7 @@ export class RunView3d implements RunView {
 
   /** The sky of this frame: the clock's hour at the run's seconds (none before a snapshot: the start hour). A new panel hour re-anchors there, a new pace continues from the hour reached. */
   private skyOf(f: RunFrame, c: StageCtx): Sky {
-    const clock = this.clock!;
-    const p = c.params;
-    const seconds = f.snap ? f.snap.tick / CONST.TICK_HZ : null;
-    if (p.hour !== this.seenHour && p.hour !== null) clock.anchor(p.hour, seconds ?? 0);
-    else if (this.seenRate !== null && p.hourRate !== this.seenRate) clock.anchor(clock.hourAt(seconds, this.seenRate), seconds ?? 0);
-    this.seenHour = p.hour;
-    this.seenRate = p.hourRate;
-    this.hourNow = clock.hourAt(seconds, p.hourRate);
+    this.hourNow = this.clock!.hour(c.params, f.snap ? f.snap.tick / CONST.TICK_HZ : null);
     return sky(this.hourNow);
   }
 
@@ -204,11 +195,8 @@ export class RunView3d implements RunView {
     s.mist.high = p.mistHigh;
     s.mist.top = p.mistTop;
     s.mist.drift = p.mistDrift;
-    s.mistDay = skyNow ? skyNow.day : p.mistDay;
-    if (skyNow) {
-      s.mistLight = mistLightOf(skyNow);
-      s.wind = p.wind ? WIND : [0, 0];
-    }
+    if (skyNow) Object.assign(s, mistInputs(skyNow, p.wind));
+    else s.mistDay = p.mistDay;
     s.t = c.now; // the clouds' clock too, so mist and cloud shadows drift together
     if (!this.daylight && (ambient[0] !== this.clearFor[0] || ambient[1] !== this.clearFor[1] || ambient[2] !== this.clearFor[2])) {
       this.clearFor = [ambient[0], ambient[1], ambient[2]];
@@ -311,7 +299,7 @@ export class RunView3d implements RunView {
     const work = c.params.light === 'work';
     const skyNow = this.woodland ? this.skyOf(f, c) : null;
     const ambient = work ? WORK_AMBIENT : skyNow ? skyNow.ambient : dungeonAmbient(c.params.amb);
-    const oval = skyNow && !work ? 0.5 + 0.5 * skyNow.night : 1;
+    const oval = skyNow && !work ? ovalOf(skyNow) : 1;
     const fo = this.figures.frame(f, cam, { ambient, dark: c.params.dark, torchGlow: work, oval });
     for (const w of fo.floats) this.floats.add(w.x, w.y, w.text, w.color, { kind: w.kind, up: w.up });
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
@@ -358,9 +346,8 @@ export class RunView3d implements RunView {
     let sun: SunFrame | null = null;
     this.sunPx = 0;
     if (skyNow && !work) {
-      const fit = fitSunMap(skyNow.dir, sunView(fp, cam), this.map, SUN_MAP[c.params.quality]);
-      this.sunPx = fit.size;
-      sun = { dir: skyNow.dir, colour: skyNow.colour, fit, shadows: c.params.shadows, clouds: c.params.clouds, wind: c.params.wind ? WIND : [0, 0], t: c.now };
+      sun = sunFrame(skyNow, fp, cam, this.map, c.params, c.now);
+      this.sunPx = sun.fit.size;
     }
     c.timer.renderStart();
     this.drawCalls = view.draw(

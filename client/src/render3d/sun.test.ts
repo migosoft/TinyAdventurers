@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { HOUR_RATE, HourClock, SUN_TOP, cardSunGain, fitSunMap, hourLabel, mistLightOf, sky, startHour, sunBasis, sunCoord, sunView, type Vec3 } from './sun';
+import { HOUR_RATE, HourClock, SkyClock, mistInputs, ovalOf, SUN_TOP, cardSunGain, fitSunMap, hourLabel, mistLightOf, sky, startHour, sunBasis, sunCoord, sunView, type Vec3 } from './sun';
 import { footprint, type Footprint } from './lights';
 import { groundAt } from './camera';
 
@@ -213,5 +213,35 @@ describe('the sun map fit', () => {
     expect(R).toEqual([1, 0, 0]);
     expect(len(U)).toBeCloseTo(1, 9);
     expect(F).toEqual([-0, -1, -0]);
+  });
+});
+
+describe('SkyClock', () => {
+  const at = (c: SkyClock, s: number | null, hour: number | null = null, hourRate = 1) => c.hour({ hour, hourRate }, s);
+  it('the first call takes the URL hour and pace: pace 0 from the start does not run', () => {
+    expect(at(new SkyClock(9), 720, null, 0)).toBe(9);
+    expect(at(new SkyClock(9), 720, 20)).toBe(20); // anchored at that moment
+    expect(at(new SkyClock(9), null, 20)).toBe(20);
+  });
+  it('a pace change mid-run continues from the hour reached, without a jump', () => {
+    const c = new SkyClock(9);
+    expect(at(c, 0)).toBe(9);
+    expect(at(c, 720)).toBeCloseTo(10, 9);
+    expect(at(c, 1440, null, 2)).toBeCloseTo(11, 9); // same second as the change: still 11
+    expect(at(c, 1440 + 720, null, 2)).toBeCloseTo(13, 9);
+    expect(at(c, 2880, null, 0)).toBeCloseTo(15, 9); // stopped at 2880 s: the hour reached under the old pace (11 + 2 * 2)
+    expect(at(c, 5000, null, 0)).toBeCloseTo(15, 9);
+  });
+  it('a new panel hour re-anchors there', () => {
+    const c = new SkyClock(9);
+    at(c, 0);
+    expect(at(c, 720, 15)).toBe(15);
+    expect(at(c, 1440, 15)).toBeCloseTo(16, 9); // the same hour again does not re-anchor
+  });
+  it('ovalOf and mistInputs follow the sky', () => {
+    expect(ovalOf(sky(13))).toBeCloseTo(0.5, 9);
+    expect(ovalOf(sky(1))).toBeCloseTo(1, 9);
+    expect(mistInputs(sky(13), false).wind).toEqual([0, 0]);
+    expect(mistInputs(sky(13), true).mistDay).toBe(sky(13).day);
   });
 });

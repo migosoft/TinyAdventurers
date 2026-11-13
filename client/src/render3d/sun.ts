@@ -4,6 +4,8 @@ import type { SunInfo } from '../generated/SunInfo';
 import type { Cam } from './camera';
 import type { Footprint } from './lights';
 import type { Quality } from './quality';
+import type { SunFrame } from './view';
+import { WIND } from './wind';
 
 export type Vec3 = [number, number, number];
 
@@ -185,4 +187,37 @@ export function sunCoord(fit: SunFit, P: Vec3): { u: number; v: number; depth: n
     v: 0.5 + dot3(d, fit.U) / (2 * fit.ext[1]),
     depth: 0.5 + dot3(d, fit.F) / (2 * fit.ext[2]),
   };
+}
+
+/**
+ * A run's or page's clock with the panel's two inputs: the hour (null = the clock's own start) and the pace. A new hour re-anchors there
+ * at the current seconds, a new pace continues from the hour reached so far; the first call just takes the URL's hour and pace, so a pace
+ * of 0 from the start does not run an hour first.
+ */
+export class SkyClock {
+  private readonly clock: HourClock;
+  private seenHour: number | null = null;
+  private seenRate: number | null = null;
+  constructor(start: number) { this.clock = new HourClock(start); }
+  /** The hour at `seconds` (null: no snapshot yet) under the params' hour and pace. */
+  hour(p: { hour: number | null; hourRate: number }, seconds: number | null): number {
+    if (p.hour !== this.seenHour && p.hour !== null) this.clock.anchor(p.hour, seconds ?? 0);
+    else if (this.seenRate !== null && p.hourRate !== this.seenRate) this.clock.anchor(this.clock.hourAt(seconds, this.seenRate), seconds ?? 0);
+    this.seenHour = p.hour;
+    this.seenRate = p.hourRate;
+    return this.clock.hourAt(seconds, p.hourRate);
+  }
+}
+
+/** The ground ovals' strength factor on the woodland: 0.5 by day (the sun's shadows carry the grounding), 1 at full night. */
+export const ovalOf = (s: Sky): number => 0.5 + 0.5 * s.night;
+
+/** The sky's inputs to the daylight mist: how much day, the light on it and the wind. */
+export function mistInputs(s: Sky, wind: boolean): { mistDay: number; mistLight: Vec3; wind: [number, number] } {
+  return { mistDay: s.day, mistLight: mistLightOf(s), wind: wind ? WIND : [0, 0] };
+}
+
+/** The sun frame of `s` with its map fitted to `fp` (what the camera sees); `t` is the one clock the clouds drift by. */
+export function sunFrame(s: Sky, fp: Footprint, cam: Cam, map: { w: number; h: number }, p: { quality: Quality; shadows: boolean; clouds: boolean; wind: boolean }, t: number): SunFrame {
+  return { dir: s.dir, colour: s.colour, fit: fitSunMap(s.dir, sunView(fp, cam), map, SUN_MAP[p.quality]), shadows: p.shadows, clouds: p.clouds, wind: p.wind ? WIND : [0, 0], t };
 }

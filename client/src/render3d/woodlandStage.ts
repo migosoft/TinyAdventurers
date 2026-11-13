@@ -22,8 +22,8 @@ import { DEFAULT_HOUR, type R3dParams } from './params';
 import { seeLook } from './seeThrough';
 import { SightMask } from './sightmask';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
-import { HourClock, SUN_MAP, fitSunMap, hourLabel, mistLightOf, sky, sunView } from './sun';
-import type { Assets, SunFrame, View, WorldInput } from './view';
+import { SkyClock, hourLabel, mistInputs, ovalOf, sky, sunFrame } from './sun';
+import type { Assets, View, WorldInput } from './view';
 import { WIND } from './wind';
 import { KNIGHT_START, WOODLAND_STAGE_PLANTS, woodlandStageMap } from './woodlandMap';
 import { PLANT_BUDGET_MS, PlantField } from './plantField';
@@ -88,10 +88,8 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
   };
 
   // The clock: stage seconds, anchored again when the URL's hour or the pace changes.
-  const clock = new HourClock(p.hour ?? DEFAULT_HOUR);
+  const clock = new SkyClock(DEFAULT_HOUR); // the first frame takes the URL's hour and pace
   let seconds = 0;
-  let seenHour = p.hour;
-  let seenRate = p.hourRate;
 
   const label = document.createElement('div');
   label.style.cssText = 'position:fixed;left:8px;bottom:8px;font:11px monospace;color:#fff;text-shadow:0 0 3px #000;pointer-events:none';
@@ -124,11 +122,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       cam.pitch = (params.pitch * Math.PI) / 180;
       cam.yaw = (params.yaw * Math.PI) / 180;
       // The hour: a new URL/panel hour re-anchors there; a new pace continues from the hour reached so far.
-      if (params.hour !== seenHour && params.hour !== null) clock.anchor(params.hour, seconds);
-      else if (params.hourRate !== seenRate) clock.anchor(clock.hourAt(seconds, seenRate), seconds);
-      seenHour = params.hour;
-      seenRate = params.hourRate;
-      const hour = clock.hourAt(seconds, params.hourRate);
+      const hour = clock.hour(params, seconds);
       const s = sky(hour);
       caption(hour);
 
@@ -150,7 +144,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
 
       const game = params.light === 'game';
       const ambient = game ? s.ambient : WORK_AMBIENT;
-      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: !game, oval: game ? 0.5 + 0.5 * s.night : 1 });
+      const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: !game, oval: game ? ovalOf(s) : 1 });
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
@@ -180,24 +174,17 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
           allView.compute(map, knight.x * TILE, knight.z * TILE, CONST.FOV_RADIUS, 'all');
         }
         mask.update(hardView, allView, 0);
-        const wind: [number, number] = params.wind ? WIND : [0, 0];
         sightFrame.mask = mask;
         sightFrame.mist.high = params.mistHigh;
         sightFrame.mist.top = params.mistTop;
         sightFrame.mist.drift = params.mistDrift;
-        sightFrame.mistDay = s.day;
-        sightFrame.mistLight = mistLightOf(s);
-        sightFrame.wind = wind;
+        Object.assign(sightFrame, mistInputs(s, params.wind));
         sightFrame.t = seconds; // the clouds' clock too, so mist and cloud shadows drift together
         sight = sightFrame;
       }
       c.timer.lap('sight');
 
-      const sun: SunFrame = {
-        dir: s.dir, colour: s.colour,
-        fit: fitSunMap(s.dir, sunView(fp, cam), map, SUN_MAP[params.quality]),
-        shadows: params.shadows, clouds: params.clouds, wind: params.wind ? WIND : [0, 0], t: seconds,
-      };
+      const sun = sunFrame(s, fp, cam, map, params, seconds);
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;
