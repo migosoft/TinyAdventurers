@@ -1,6 +1,6 @@
 // Proof of concept (spike/3d-trees): turns the vegetation generator's recipe into one 3D mesh.
 // Pure: no three.js, no DOM. World units are tiles (16 art px), x east, y up, z south.
-import { drawPlant, type PlantKind } from '../../game/vegetation';
+import { drawPlant, drawTree, type PlantKind } from '../../game/vegetation';
 import { rng, type Drawn, type Recipe } from '../../game/vegetation/canvas';
 
 const U = 1 / 16;
@@ -11,7 +11,7 @@ export const RAMP = { leaf: 0, conifer: 1, bark: 2, dead: 3 } as const;
 /** Sway amplitude in tiles at the top of the plant, as in the #300 design. */
 const AMP: Record<Recipe['kind'], number> = { leafy: 0.11, conifer: 0.07, bush: 0.05, bare: 0.05 };
 
-export interface PlantSpec { kind: PlantKind; seed: number; scalePct: number; x: number; z: number }
+export interface PlantSpec { kind: PlantKind; seed: number; scalePct: number; x: number; z: number; /** spike/3d-willow: build this plant as a willow. */ willow?: boolean }
 /** A crown lobe in the world: centre and radii in tiles, and the phases of its outline. */
 export interface Lobe3 { x: number; y: number; z: number; rx: number; ry: number; rz: number; ph: number; ph2: number; k: number }
 export interface Plant3 {
@@ -71,8 +71,8 @@ function lobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, ramp: numbe
  * A lobe as leaf tufts: a smaller core ball, and on the lobe's surface small camera-facing patches (shape 3) spread evenly
  * (a Fibonacci sphere, jittered). Each patch carries the ball's direction at its centre, so the lobe still shades as a round form.
  */
-function tuftLobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, grad: (x: number, y: number, z: number) => [number, number, number, number], lift: number, r: () => number, th = 0): void {
-  lobe(m, foot, { ...b, rx: b.rx * 0.74, ry: b.ry * 0.74, rz: b.rz * 0.74 }, RAMP.leaf, grad, lift, 0, th, ICO_CORE);
+function tuftLobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, grad: (x: number, y: number, z: number) => [number, number, number, number], lift: number, r: () => number, th = 0, ramp: number = RAMP.leaf): void {
+  lobe(m, foot, { ...b, rx: b.rx * 0.74, ry: b.ry * 0.74, rz: b.rz * 0.74 }, ramp, grad, lift, 0, th, ICO_CORE);
   const rpx = b.rx / U, n = Math.max(14, Math.min(64, Math.round((rpx * rpx) / 3.2)));
   for (let i = 0; i < n; i++) {
     const y = 1 - (2 * (i + 0.5)) / n, rad = Math.sqrt(1 - y * y), a = i * 2.39996 + (r() - 0.5) * 0.5;
@@ -83,7 +83,7 @@ function tuftLobe(m: MeshData, foot: { x: number; z: number }, b: Lobe3, grad: (
       m.nrm.push(d[0], d[1], d[2]);
       m.grad.push(...grad(px, py, pz));
       m.sway.push(foot.x, foot.z, b.k, b.y);
-      m.part.push(RAMP.leaf, 3, 0, 0);
+      m.part.push(ramp, 3, 0, 0);
       m.misc.push(lift, 0, 0, th);
       m.tuft.push(ox, oy, size, seed);
     }
@@ -358,6 +358,96 @@ export function buildGrown(m: MeshData, spec: PlantSpec, tufts = false): Plant3 
     const grad = (x: number, y: number, z: number): [number, number, number, number] => [(x - cx) / crx, (y - cy) / cry, (z - cz) / crz, 0.25 - (0.7 * (by1 - y)) / span];
     const rt = rng((spec.seed * 31 + 7) >>> 0);
     for (const b of lobes) { if (tufts) tuftLobe(m, foot, b, grad, 0, rt, b.th); else lobe(m, foot, b, RAMP.leaf, grad, 0, 1.4 / (Math.min(b.rx, b.ry) / U), b.th); }
+  }
+  return { spec, drawn, lobes, height, amp, trunkHalf: fork.w, trunkTop: fork.y };
+}
+
+// ---------------------------------------------------------------- the willow (spike/3d-willow, for #299 and #329)
+/**
+ * A willow: the generator's old, thick, bent trunk; limbs that rise, arch over and droop; a wide dome of leaf lobes on them;
+ * and curtains of hanging strands (chains of small leaf tufts) from the outer limbs almost to the ground. A strand swings
+ * more the further down it hangs. Blue-green leaves. Lobes and strands carry a leaf amount like the grown tree's.
+ */
+export function buildWillow(m: MeshData, spec: PlantSpec, tufts = false): Plant3 {
+  const drawn = drawTree({ seed: spec.seed, scale: spec.scalePct / 100, shape: 'wide', old: true }), rc = drawn.recipe;
+  if (!rc) throw new Error('trees: the generator returned no recipe');
+  const foot = { x: spec.x, z: spec.z }, r = rng((spec.seed * 15485863 + 5) >>> 0), du = rc.s * U, ramp = RAMP.conifer;
+  const X = (x: number) => (x - rc.foot.x) * U, Y = (y: number) => (rc.foot.y - y) * U, minW = 0.6 * U;
+  const bz = (r() - 0.5) * 6 * du, nT = rc.trunk.length;
+  const trunk: P3[] = rc.trunk.map((p, i) => ({ x: X(p.x), y: Y(p.y), z: bz * Math.sin((Math.PI * i) / Math.max(1, nT - 1)), w: Math.max(minW, p.w * U) }));
+  const fork = trunk[nT - 1];
+  const norm = (v: number[]) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+  const branches: { pts: P3[]; sides: number }[] = [], lobes: (Lobe3 & { th: number })[] = [], hangs: { x: number; y: number; z: number; th: number }[] = [];
+  const leaf = (p: P3, rad: number, th: number) => lobes.push({ x: p.x, y: p.y, z: p.z, rx: rad * du, ry: rad * du * 0.7, rz: rad * du, ph: r() * 6, ph2: r() * 6, k: 0, th });
+  const limb = (start: P3, dir0: number[], len: number, w0: number, depth: number): void => {
+    let d = dir0, p = start; const n = 8, pts: P3[] = [{ ...start, w: w0 }];
+    for (let i = 1; i <= n; i++) {
+      d = norm([d[0] + (r() - 0.5) * 0.1, d[1] - 0.105, d[2] + (r() - 0.5) * 0.1]); // rises, arches over, droops
+      p = { x: p.x + d[0] * (len / n), y: p.y + d[1] * (len / n), z: p.z + d[2] * (len / n), w: Math.max(minW, w0 * (1 - 0.5 * (i / n))) };
+      pts.push(p);
+      if (i >= 5 && r() < 0.65) hangs.push({ x: p.x + (r() - 0.5) * 7 * du, y: p.y - 1.5 * du, z: p.z + (r() - 0.5) * 7 * du, th: 0.15 + r() * 0.85 });
+    }
+    branches.push({ pts, sides: w0 > 1.5 * U ? 6 : 4 });
+    leaf(pts[4], 8.5 + r() * 2, 0.1 + r() * 0.4);
+    leaf(p, 6.5 + r() * 2, 0.2 + r() * 0.6);
+    for (let k = 0; k < 6; k++) { const a = r() * Math.PI * 2; hangs.push({ x: p.x + Math.cos(a) * 8 * du, y: p.y - 1 * du, z: p.z + Math.sin(a) * 8 * du, th: 0.15 + r() * 0.85 }); }
+    if (depth === 0) for (const sg of [-1, 1]) {
+      const from = pts[4], a = sg * (0.5 + r() * 0.35), c = Math.cos(a), sn = Math.sin(a);
+      limb(from, norm([dir0[0] * c - dir0[2] * sn, 0.2, dir0[0] * sn + dir0[2] * c]), len * 0.7, from.w * 0.7, 1);
+    }
+  };
+  const limbs = 5 + Math.floor(r() * 2), az0 = r() * Math.PI * 2;
+  for (let i = 0; i < limbs; i++) {
+    if (limbs > 5 && i === 0 && r() < 0.5) continue; // a gap in the crown, where the trunk shows through
+    const az = az0 + (i / limbs) * Math.PI * 2 + (r() - 0.5) * 0.4, tilt = 0.5 + r() * 0.25;
+    limb(fork, [Math.cos(az) * Math.sin(tilt), Math.cos(tilt), Math.sin(az) * Math.sin(tilt)], (25 + (r() - 0.5) * 4) * du, fork.w * 0.6, 0);
+  }
+  const tip: P3 = { x: fork.x + (r() - 0.5) * 3 * du, y: fork.y + 9 * du, z: fork.z + (r() - 0.5) * 3 * du, w: fork.w * 0.4 };
+  branches.push({ pts: [{ ...fork, w: fork.w * 0.7 }, tip], sides: 6 });
+  leaf(tip, 13 + r() * 2, 0.05 + r() * 0.2);
+
+  let top = fork.y;
+  for (const b of lobes) top = Math.max(top, b.y + b.ry);
+  const height = Math.max(top, 0.5), amp = AMP.leafy, kOf = (y: number) => amp * (y / height) ** 2;
+  const tPts = thin(trunk, Math.max(1, Math.floor(nT / 12)));
+  tube(m, foot, tPts, 10, RAMP.bark, kOf, (i) => (i >= tPts.length - 3 ? 1 : 0), 1);
+  for (const b of branches) tube(m, foot, b.pts, b.sides, RAMP.bark, kOf, () => 1, 0);
+  rc.roots.forEach((src, ri) => {
+    const lay = (flip: boolean): P3[] => src.map((p) => {
+      const dx = X(p.x) * 0.65, dz = (p.y - rc.foot.y) * U * 1.6, w = Math.max(minW, p.w * U * 0.8);
+      return flip ? { x: dx * 0.45, y: 0, z: -Math.abs(dx) * 0.8 - dz * 0.3, w } : { x: dx, y: 0, z: dz, w };
+    });
+    tube(m, foot, thin(lay(false), 3), 6, RAMP.bark, () => 0, () => 1, 0);
+    if (ri === 0 || ri === rc.roots.length - 1) tube(m, foot, thin(lay(true), 3), 6, RAMP.bark, () => 0, () => 1, 0);
+  });
+  let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
+  for (const b of lobes) {
+    b.k = kOf(b.y);
+    bx0 = Math.min(bx0, b.x - b.rx); bx1 = Math.max(bx1, b.x + b.rx); by0 = Math.min(by0, b.y - b.ry); by1 = Math.max(by1, b.y + b.ry); bz0 = Math.min(bz0, b.z - b.rz); bz1 = Math.max(bz1, b.z + b.rz);
+  }
+  const cx = (bx0 + bx1) / 2, cy = (by0 + by1) / 2, cz = (bz0 + bz1) / 2, crx = (bx1 - bx0) / 2, cry = (by1 - by0) / 2, crz = (bz1 - bz0) / 2, span = by1 - by0;
+  const grad = (x: number, y: number, z: number): [number, number, number, number] => [(x - cx) / crx, (y - cy) / cry, (z - cz) / crz, 0.25 - (0.7 * (by1 - y)) / span];
+  const rt = rng((spec.seed * 31 + 7) >>> 0);
+  for (const b of lobes) { if (tufts) tuftLobe(m, foot, b, grad, 0, rt, b.th, ramp); else lobe(m, foot, b, ramp, grad, 0, 1.4 / (Math.min(b.rx, b.ry) / U), b.th); }
+  // the curtains: every strand hangs straight down to a few px above the ground, a chain of small tufts
+  for (const h of hangs) {
+    const ground = (2 + r() * 5) * du, len = (h.y - ground) * (r() < 0.25 ? 0.55 + r() * 0.3 : 1), step = 1.9 * U, n = Math.floor(len / step);
+    if (n < 3) continue;
+    const ox = h.x - cx, oz = h.z - cz, ol = Math.hypot(ox, oz) || 1, nx = (ox / ol) * 0.9, nz = (oz / ol) * 0.9, k0 = kOf(h.y), wob = r() * 6, tone = 0.15 + (r() - 0.5) * 0.7; // strands differ in tone, so the curtain reads as streaks
+    for (let j = 0; j < n; j++) {
+      const t = j / n, px = h.x + Math.sin(j * 0.9 + wob) * 0.6 * U, py = h.y - j * step, pz = h.z + Math.cos(j * 0.7 + wob) * 0.6 * U;
+      const size = (1.25 + r() * 0.5 - 0.3 * t) * U, seed = Math.floor(r() * 997), base = m.verts;
+      for (const [qx, qy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        m.pos.push(foot.x + px, py, foot.z + pz);
+        m.nrm.push(nx, 0.35, nz);
+        m.grad.push(nx * 0.5, 0.2, nz * 0.5, 0.2 + tone - 0.25 * t);
+        m.sway.push(foot.x, foot.z, k0 + 0.2 * t * t, py); // a strand swings more the further down it hangs
+        m.part.push(ramp, 3, 0, 0);
+        m.misc.push(0, 0, 0, h.th);
+        m.tuft.push(qx, qy, size, seed);
+      }
+      m.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
   }
   return { spec, drawn, lobes, height, amp, trunkHalf: fork.w, trunkTop: fork.y };
 }

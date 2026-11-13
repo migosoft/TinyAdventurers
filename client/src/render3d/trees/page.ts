@@ -13,7 +13,7 @@ import { TileMap } from '../../sim/map';
 import { loadAtlas } from '../../ui/atlas';
 import { snapGround, viewRay } from '../camera';
 import { pickZoom } from '../quality';
-import { LOBE_PAD, MeshData, buildGrown, buildPlant, layout, type Plant3 } from './build';
+import { LOBE_PAD, MeshData, buildGrown, buildPlant, buildWillow, layout, type Plant3 } from './build';
 import { clock, sky } from './sky';
 import '../r3d.css';
 
@@ -69,7 +69,10 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   // ---------------------------------------------------------------- the clearing
   const side = Math.sqrt(p.mult), PADX = 10, PADZ = 8, MW = Math.round(36 * side) + 2 * PADX, MH = Math.round(22 * side) + 2 * PADZ;
   const specs = layout(7, MW - 2 * PADX, MH - 2 * PADZ, 30 * p.mult, 20 * p.mult).map((s) => ({ ...s, x: s.x + PADX, z: s.z + PADZ }));
-  const plants: Plant3[] = specs.map((s) => buildPlant(new MeshData(), s)); // what the cards and the falling leaves need
+  // spike/3d-willow: two willows in the clearing, a big one by the path and a smaller one
+  const wcx = MW / 2, wcz = PADZ + (MH - 2 * PADZ) * 0.58;
+  specs.push({ kind: 'wide', seed: 4711, scalePct: 110, x: wcx - 1.2, z: wcz - 3.0, willow: true }, { kind: 'wide', seed: 815, scalePct: 85, x: wcx + 6.2, z: wcz - 3.4, willow: true });
+  const plants: Plant3[] = specs.map((s) => (s.willow ? buildWillow : buildPlant)(new MeshData(), s)); // what the cards and the falling leaves need
   const atlasTex = pixelTexture(new Texture(atlas.img));
   const AW = atlas.img.width, AH = atlas.img.height;
   // ---- the ground (spike/3d-grass): packed dirt everywhere, a stone terrace, and grass as a layer with a height per art pixel.
@@ -234,7 +237,10 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     const level = select(isBark, lb, lvl);
     const grade = u.amb.add(u.sunCol.mul(0.75));
     // in shadow the colour takes the sky's light, not the sun's
-    const stepped = texture(palTex, vec2(level.add(0.5).div(5), aPart.x.add(0.5).div(4))).rgb.mul(select(vis.lessThan(0.5), u.amb.mul(1.6).add(u.sunCol.mul(0.25)), grade));
+    // every plant's leaves differ a little: a touch lighter or darker, a touch warmer or cooler (the user, 2026-11-14). From the foot, so no extra data.
+    const bright = hash3((vec3 as N)(aSway.x, aSway.y, 1)).sub(0.5).mul(0.14).add(1), warm = hash3((vec3 as N)(aSway.x, aSway.y, 2)).sub(0.5).mul(0.16);
+    const tint = select(isBark, vec3(1, 1, 1), (vec3 as N)(bright.mul(warm.add(1)), bright, bright.mul(float(1).sub(warm))));
+    const stepped = texture(palTex, vec2(level.add(0.5).div(5), aPart.x.add(0.5).div(4))).rgb.mul(tint).mul(select(vis.lessThan(0.5), u.amb.mul(1.6).add(u.sunCol.mul(0.25)), grade));
     // "plain": one flat colour per ramp, lit by the environment light alone, as the ground is
     const flat = texture(palTex, vec2(2.5 / 5, aPart.x.add(0.5).div(4))).rgb;
     const plainLit = u.amb.add(u.sunCol.mul(vis).mul(clamp(dot(nw, u.sun).add(0.35).div(1.35), 0, 1)).mul(1.3));
@@ -263,7 +269,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   const variants = (['recipe:balls', 'recipe:tufts', 'grown:balls', 'grown:tufts'] as const).map((key) => {
     const shown = new Group(), cast = new Group(); let tris = 0;
     for (const sp of specs) {
-      const d = new MeshData(), pl = (key.startsWith('grown') ? buildGrown : buildPlant)(d, sp, key.endsWith('tufts'));
+      const d = new MeshData(), pl = (sp.willow ? buildWillow : key.startsWith('grown') ? buildGrown : buildPlant)(d, sp, key.endsWith('tufts'));
       const g = treeGeoOf(d); tris += d.tris;
       g.boundingSphere = new Sphere(new Vector3(sp.x, pl.height * 0.75, sp.z), pl.height * 1.3 + 2.5); // room for the sway and the card stretch
       const pre = new Mesh(g, treePreMat), draw = new Mesh(g, treeMat), shadow = new Mesh(g, treeShadowMat);
@@ -523,7 +529,8 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
 
   // ---------------------------------------------------------------- cameras
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200), sunCam = new OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
-  const cam = { x: cx, z: cz - 1.2, yaw: (p.yaw * Math.PI) / 180, yawTo: (p.yaw * Math.PI) / 180 };
+  const look = (new URLSearchParams(search).get('at') ?? '0,-1.2').split(',').map(Number); // at=dx,dz: where the camera starts, in tiles from the clearing's middle
+  const cam = { x: cx + (look[0] || 0), z: cz + (look[1] || 0), yaw: (p.yaw * Math.PI) / 180, yawTo: (p.yaw * Math.PI) / 180 };
   let zoom = 2, artW = 1, artH = 1, bakedFor = '', bakeAt = 0;
   const dst = new Vector4(), full = new Vector4(); // the copy's rectangle (whole art px, centred, may overhang) and the canvas
 
