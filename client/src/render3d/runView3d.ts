@@ -31,6 +31,8 @@ import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCast
 import { R3D_SYSTEMS, lightLines, skyLines } from './stats';
 import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type Sky } from './sun';
 import { PLANT_BUDGET_MS, PlantField } from './plantField';
+import { Critters3d } from './critters3d';
+import { Fireflies } from './fireflies';
 import { lightVector } from '../game/vegetation';
 import type { SunFrame, View } from './view';
 import type { FrameRects } from './worldMesh';
@@ -88,6 +90,9 @@ export class RunView3d implements RunView {
   // The woodland's sky (#306): the hour of day (run seconds, re-anchored by the panel's hour and pace), the plants, and the readout's numbers.
   private clock: SkyClock | null = null;
   private plants: PlantField | null = null;
+  private critters: Critters3d | null = null;
+  private fireflies: Fireflies | null = null;
+  private readonly frames: FrameRects;
   private hourNow = 0;
   private sunPx = 0;
 
@@ -98,6 +103,7 @@ export class RunView3d implements RunView {
   /** `overlay`: the layer over the canvas (the stage's; tests pass none). */
   constructor(init: RunViewInit, frames: FrameRects, bounds: (frame: string) => FrameBounds, private readonly overlay: Overlay3d | null = null) {
     this.map = init.map;
+    this.frames = frames;
     for (const p of init.info.players) this.heroNames.set(p.ent, p.name);
     this.sight = new SightView(init.map.w, init.map.h);
     this.allSight = new SightView(init.map.w, init.map.h);
@@ -121,6 +127,8 @@ export class RunView3d implements RunView {
       this.clock = new SkyClock(startHour(wl.sun));
       // The plants are drawn by `step` a few per frame, baked with the level's sun; the field outlives a lost device (the view re-reads every chunk).
       this.plants = new PlantField(wl.plants, init.map, lightVector(wl.sun));
+      this.critters = new Critters3d(init.map, wl.seed);
+      this.fireflies = new Fireflies(wl.seed);
     }
     this.figures = new Figures3d(init, frames, bounds);
     this.field = init.light;
@@ -302,6 +310,13 @@ export class RunView3d implements RunView {
     const oval = skyNow && !work ? ovalOf(skyNow) : 1;
     const fo = this.figures.frame(f, cam, { ambient, dark: c.params.dark, torchGlow: work, oval });
     for (const w of fo.floats) this.floats.add(w.x, w.y, w.text, w.color, { kind: w.kind, up: w.up });
+    if (skyNow && this.critters && this.fireflies) {
+      // Bees and butterflies by day, fireflies at night, where the viewer sees (the mask of the last frame: one frame behind is not seen).
+      const seenMask = c.params.sight ? this.mask : null;
+      this.critters.push(fo.cards, this.frames, cam, c.now, skyNow.day, seenMask, footprint(cam, c.plan.halfW, c.plan.halfH));
+      this.fireflies.step(c.dt, cam);
+      this.fireflies.push(fo.glows, cam, skyNow.night, seenMask);
+    }
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     // The plants: a few drawn per frame, nearest to the camera first.

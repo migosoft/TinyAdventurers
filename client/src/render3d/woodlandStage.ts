@@ -10,7 +10,9 @@ import { View as SightView } from '../sim/view';
 import { atlasBounds } from './atlasBounds';
 import { keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
+import { Critters3d } from './critters3d';
 import { Figures3d } from './figures';
+import { Fireflies } from './fireflies';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { groundJob, type GroundJob } from './groundJob';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
@@ -76,6 +78,9 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
 
   // The plants are drawn by `step` a few per frame; the pictures are baked with the stock light (the stage has no run sun to take it from).
   const plants = new PlantField(WOODLAND_STAGE_PLANTS, map, DEFAULT_LIGHT);
+
+  const critters = new Critters3d(map, GROUND_SEED);
+  const fireflies = new Fireflies(GROUND_SEED);
 
   // The ground is painted whole at the first build and kept for the rebuilds after a lost device.
   let job: GroundJob | null = null;
@@ -145,7 +150,11 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       const game = params.light === 'game';
       const ambient = game ? s.ambient : WORK_AMBIENT;
       const fo = figures.frame(galleryFrame(ents, c.now, c.dt), cam, { ambient, dark: params.dark, torchGlow: !game, oval: game ? ovalOf(s) : 1 });
-      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
+      // Bees and butterflies by day, fireflies at night, where the knight sees (the mask of the last frame).
+      const seenMask = params.sight ? mask : null;
+      critters.push(fo.cards, assets.frames, cam, seconds, s.day, seenMask, footprint(cam, c.plan.halfW, c.plan.halfH));
+      fireflies.step(c.dt, cam);
+      fireflies.push(fo.glows, cam, s.night, seenMask);      const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
       // The plants: a few drawn per frame, nearest to the knight first.
