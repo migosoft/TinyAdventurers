@@ -636,3 +636,10 @@ describe('startRun3d', () => {
     });
   });
 });
+
+describe('the run stage and the sky (#306)', () => {
+  it('a woodland run calls setSky(true), a dungeon run does not', () => {
+    expect(setup(ROWS, { woodland: WOODLAND }).host.setSky).toHaveBeenCalledWith(true);
+    expect(setup().host.setSky).not.toHaveBeenCalled();
+  });
+});

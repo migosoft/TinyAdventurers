@@ -19,6 +19,9 @@ const page = await (await browser.newContext({ viewport: { width: 1280, height: 
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 // The first /api/me before logging in is an expected 401.
 page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(`console: ${m.text()}`));
+// A lost device is only a console warning (host.ts); unless the script loses it on purpose below, it is a failure.
+let losing = false;
+page.on('console', (m) => m.type() === 'warning' && /device lost/i.test(m.text()) && !losing && errors.push(`device lost: ${m.text()}`));
 // A minimal MessagePack reader for the frames the page sends: an Input goes out as a bare array [seq, mx, my, aim, aim_dist, primary, ...].
 function unpack(buf) {
   let p = 0;
@@ -157,6 +160,24 @@ try {
   console.log(`primary inputs after the click ${shots.length}`);
   if (shots.length === 0) errors.push('a left click sent no primary Input');
   await page.screenshot({ path: `${out}/r3d-run-${level}-aimed.png` });
+
+  if (level === 'woodland') {
+    // Review Focus 3: a lost device mid-run brings back the ground, the plants and the sun's target (compare the two pictures).
+    await page.screenshot({ path: `${out}/r3d-run-${level}-before-loss.png` });
+    losing = true;
+    const forced = await page.evaluate(() => window.__r3d.forceLoss());
+    console.log(`forceLoss() returned ${forced}`);
+    if (forced === false) errors.push('forceLoss() returned false');
+    const f0 = (await r3d()).frames;
+    try {
+      await page.waitForFunction((n) => window.__r3d.frames >= n + 10, f0, { timeout: 30000 });
+    } catch {
+      errors.push('timeout: no 10 more frames within 30 s after the loss');
+    }
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${out}/r3d-run-${level}-after-loss.png` });
+    losing = false;
+  }
 
   if (level === 'dungeon') {
     const { chunks } = after;

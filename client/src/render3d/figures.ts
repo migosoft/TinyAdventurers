@@ -55,8 +55,12 @@ export function screenAim(yaw: number, aim: number): number {
  * How a frame is lit, as the caller draws it: the `ambient` it uses, what a dark figure does (`fade` into the dark, or `shape`: keep its
  * shape, lit by the ambient only) and whether a lit torch gets a glow quad (`light=work`; with the game's lights the flame card is all).
  */
-export interface FigureLook { ambient: [number, number, number]; dark: 'fade' | 'shape'; torchGlow: boolean }
-const DEFAULT_LOOK: FigureLook = { ambient: AMBIENT, dark: 'shape', torchGlow: true };
+export interface FigureLook {
+  ambient: [number, number, number]; dark: 'fade' | 'shape'; torchGlow: boolean;
+  /** Multiplies the alpha of every ground oval (figures, chests, barrels, mimics): 1 in the dungeon, `0.5 + 0.5 * night` on the woodland. */
+  oval: number;
+}
+const DEFAULT_LOOK: FigureLook = { ambient: AMBIENT, dark: 'shape', torchGlow: true, oval: 1 };
 
 /** Something that may open walls this frame (#303 Task 7): its foot in tiles, its middle height in tiles, and why. */
 export interface Opener { id: number; x: number; z: number; mid: number; who: 'hero' | 'enemy' | 'friend' | 'chest' | 'mimic' | 'object' }
@@ -130,6 +134,7 @@ export class Figures3d {
   private darkFade = false;
   private fadeAlpha = 1;
   private torchGlow = true;
+  private oval = 1;
   private readonly myKind: number;
   private readonly players: RunViewInit['info']['players'];
 
@@ -169,6 +174,7 @@ export class Figures3d {
     this.darkFade = look.dark === 'fade';
     this.fadeAlpha = darkAlpha(look.ambient);
     this.torchGlow = look.torchGlow;
+    this.oval = look.oval;
     const out: FigureOut = { cards: newCardBuf(), ghosts: newCardBuf(), decals: newCardBuf(), shadows: newShadowBuf(), glows: newGlowBuf(), emissive: newCardBuf(), openers: [], casters: [], floats: [] };
     const seen = new Set<number>();
     this.anchors.clear();
@@ -257,7 +263,7 @@ export class Figures3d {
   private objShadow(id: number, x: number, z: number, scale: number, alpha: number, cam: Cam, out: FigureOut): void {
     if (!this.shadowed(id)) return;
     const foot = snapGround(cam.pitch, cam.yaw, x, z);
-    pushShadow(out.shadows, cam, foot.x, foot.z, (OBJ_SHADOW_RX * scale) / TILE, (OBJ_SHADOW_RY * scale) / TILE, alpha);
+    pushShadow(out.shadows, cam, foot.x, foot.z, (OBJ_SHADOW_RX * scale) / TILE, (OBJ_SHADOW_RY * scale) / TILE, alpha * this.oval);
   }
 
   private drawChest(e: EntState, cam: Cam, out: FigureOut): void {
@@ -451,7 +457,7 @@ export class Figures3d {
     if (pose.shadow.visible && this.shadowed(e.id)) {
       const foot = snapGround(cam.pitch, cam.yaw, x, z);
       const r = (d.baseR * sc) / TILE;
-      pushShadow(out.shadows, cam, foot.x, foot.z, r * pose.shadow.sx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha);
+      pushShadow(out.shadows, cam, foot.x, foot.z, r * pose.shadow.sx, r * SHADOW_DEPTH * pose.shadow.sy, SHADOW_ALPHA * pose.alpha * this.oval);
     }
 
     // The overlay anchor: the entity's own spot (the predicted one for the own hero), 2D's numbers (EntityView): the unscaled-by-pose `d.scale`.

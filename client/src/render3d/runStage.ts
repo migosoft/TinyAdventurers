@@ -133,6 +133,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   let reported = 0;
   if (host.params.yaw !== 0) host.setRunYaw(0);
   host.setDaylight(info.daylight);
+  if (info.woodland) host.setSky(true);
   const mouse = new RunMouse(el, turn);
   run.input.primary = () => mouse.takePrimary();
   run.input.secondary = () => mouse.takeSecondary();

@@ -428,7 +428,7 @@ describe('Figures3d anchors (#311)', () => {
 });
 
 describe('Figures3d in the dark (#304)', () => {
-  const look = (ambient: [number, number, number], dark: 'fade' | 'shape' = 'fade', torchGlow = true) => ({ ambient, dark, torchGlow });
+  const look = (ambient: [number, number, number], dark: 'fade' | 'shape' = 'fade', torchGlow = true) => ({ ambient, dark, torchGlow, oval: 1 });
   const alphas = (b: CardBuf): number[] => b.look.filter((_, i) => i % 5 === 4);
   const monster = () => [ent(10, KIND.Knight)];
   const torchFrames = ['torch_f0', 'torch_f1', 'torch_f2', 'torch_f3', 'torch_f4', 'torch_out'];
@@ -576,5 +576,17 @@ describe('the sight attributes of the cards (#305)', () => {
     expect(body.reach).toBeCloseTo((48 * (FIGURES[KIND.Paladin].scale ?? 1)) / 2 / TILE, 5);
     expect(weapon.reach).toBe(body.reach);
     expect(body.scenery).toBe(0);
+  });
+});
+
+describe('Figures3d ground ovals (#306)', () => {
+  const ents = () => [ent(10, KIND.Knight), ent(11, KIND.Chest, { side: SIDE.Neutral, x: at(2) }), ent(12, KIND.Barrel, { side: SIDE.Neutral, x: at(3) })];
+  const look = (oval: number) => ({ ambient: AMBIENT, dark: 'shape' as const, torchGlow: true, oval });
+  it('oval scales the alpha of every ground oval', () => {
+    const full = make().frame(frame(ents()), cam(), look(1));
+    const half = make().frame(frame(ents()), cam(), look(0.5));
+    expect(full.shadows.n).toBeGreaterThanOrEqual(3);
+    expect(half.shadows.n).toBe(full.shadows.n);
+    full.shadows.alpha.forEach((a, i) => expect(half.shadows.alpha[i]).toBeCloseTo(a * 0.5, 6));
   });
 });

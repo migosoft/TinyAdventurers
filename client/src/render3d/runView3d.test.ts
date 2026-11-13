@@ -19,6 +19,8 @@ import type { Overlay3d } from './overlay';
 import type { OverlayItem } from './overlayLayout';
 import { SIDE } from '../generated/defs';
 import type { FrameInput } from './view';
+import { hourLabel, mistLightOf, sky, startHour } from './sun';
+import { WIND } from './wind';
 
 const deg = (d: number): number => (d * Math.PI) / 180;
 
@@ -54,7 +56,7 @@ const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`wizzard_m_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 
-function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[] } = {}) {
+function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
   const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 } } as never } : {}), ...(over.daylight ? { daylight: true } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
@@ -71,7 +73,7 @@ function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { dar
   canvasEl.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1280, height: 720 }) as DOMRect;
   const timer = { lap() {}, renderStart() {}, systems: {}, frameMs: 0, renderMs: 0 };
   v.begin({ now: 0, dt: 1 / 60, params, held: new Set(), canvas: { w: 1280, h: 720 }, zoom: 2, plan, canvasEl, view, timer } as unknown as StageCtx);
-  const s = snap({ lights: over.moving ?? [], ents: (over.ents ?? []) as never });
+  const s = snap({ lights: over.moving ?? [], ents: (over.ents ?? []) as never, ...(over.tick !== undefined ? { tick: over.tick } : {}) });
   if (over.me) Object.assign(s.me, over.me);
   const own = { x: over.ownX ?? 56, y: 24, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: over.ownX ?? 56, aimFromY: 24, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
   const f = { dt: 1 / 60, now: 0, ents: new Map((over.figs ?? []).map((e) => [e.id, e])), you: 1, own, watching: null, camera: over.camera ?? { x: 56, y: 24 }, snap: over.noSnap ? null : s, shots: [], hiddenShots: new Set(), useHint: null, dark: new Set(), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] } } as unknown as RunFrame;
@@ -96,14 +98,12 @@ describe('the run view and the game lights', () => {
   it('amb 1 is the demo ambient', () => {
     expect(run({ params: { amb: 1 } }).f?.ambient).toEqual([...AMBIENT]);
   });
-  it('a woodland frame has no lights, no lava, no darkvision and the work ambient', () => {
-    const { f, stats } = run({ woodland: true });
+  it('a woodland frame has no torch lights and the sky ambient of the hour', () => {
+    const { f } = run({ woodland: true, torch: false });
     expect(f?.lights).toEqual([]);
     expect(f?.casters).toEqual([]);
-    expect(f?.lava).toBeNull();
     expect(f?.darkvision).toBeNull();
-    expect(f?.ambient).toEqual([...WORK_AMBIENT]);
-    expect(stats.lines).toBeUndefined();
+    expect(f?.ambient).toEqual(sky(startHour(WOODLAND_SUN)).ambient);
   });
   it('light=work is the same', () => {
     const { f } = run({ params: { light: 'work' } });
@@ -140,6 +140,54 @@ describe('the run view and the game lights', () => {
     const v2 = a.again()!.lavaVersion;
     expect(v2).toBeGreaterThan(v1);
     expect(a.again()?.lavaVersion).toBe(v2);
+  });
+});
+
+const WOODLAND_SUN = { side: 1, elevation: 30 } as const;
+describe('the woodland run: sky, hour, sun and plants (#306)', () => {
+  it('the first frame (no snapshot) has the sun for the start hour', () => {
+    const { f } = run({ woodland: true, torch: false, noSnap: true });
+    const s = sky(startHour(WOODLAND_SUN));
+    expect(f?.sun).toBeTruthy();
+    expect(f!.sun!.dir).toEqual(s.dir);
+    expect(f!.sun!.colour).toEqual(s.colour);
+    expect(f!.sun!.fit.size).toBe(2048);
+    expect(f?.plants).toBeDefined();
+  });
+  it('a snapshot at tick 60 * 720 is one hour later', () => {
+    const { f } = run({ woodland: true, torch: false, tick: 60 * 720 });
+    expect(f!.sun!.dir).toEqual(sky(startHour(WOODLAND_SUN) + 1).dir);
+    expect(f!.sight!.mistDay).toBe(sky(startHour(WOODLAND_SUN) + 1).day);
+  });
+  it('hourRate multiplies the pace and 0 stops the hour', () => {
+    expect(run({ woodland: true, torch: false, tick: 60 * 720, params: { hourRate: 0 } }).f!.sun!.dir).toEqual(sky(startHour(WOODLAND_SUN)).dir);
+    expect(run({ woodland: true, torch: false, tick: 60 * 720, params: { hourRate: 2 } }).f!.sun!.dir).toEqual(sky(startHour(WOODLAND_SUN) + 2).dir);
+  });
+  it('a panel hour is the hour from the first frame on', () => {
+    expect(run({ woodland: true, torch: false, noSnap: true, params: { hour: 20 } }).f!.sun!.dir).toEqual(sky(20).dir);
+    expect(run({ woodland: true, torch: false, tick: 60 * 720, params: { hour: 20 } }).f!.sun!.dir).toEqual(sky(20).dir); // anchored at that run time
+  });
+  it('the mist follows the hour: mistDay, mistLight and the wind', () => {
+    const night = run({ woodland: true, torch: false, daylight: true, params: { hour: 1 } }).f!.sight!;
+    expect(night.mistDay).toBe(sky(1).day);
+    expect(night.mistLight).toEqual(mistLightOf(sky(1)));
+    expect(night.wind).toEqual(WIND);
+    expect(run({ woodland: true, torch: false, daylight: true, params: { wind: false } }).f!.sight!.wind).toEqual([0, 0]);
+  });
+  it('light=work gives no sun and the work ambient', () => {
+    const { f } = run({ woodland: true, torch: false, params: { light: 'work' } });
+    expect(f?.sun ?? null).toBeNull();
+    expect(f?.ambient).toEqual([...WORK_AMBIENT]);
+  });
+  it('a dungeon frame has sun null and no plants', () => {
+    const { f } = run();
+    expect(f?.sun).toBeNull();
+    expect(f?.plants).toBeUndefined();
+  });
+  it('the readout says the sun and the plants', () => {
+    const { stats } = run({ woodland: true, torch: false });
+    expect(stats.lines).toContain(`sun        ${hourLabel(startHour(WOODLAND_SUN))} 2048 px`);
+    expect(stats.lines).toContain('plants     0 of 0');
   });
 });
 
