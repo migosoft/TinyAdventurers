@@ -1,6 +1,7 @@
 // URL parameters of the ?r3d page.
 
 import type { Quality } from './quality';
+import { MIST } from './mist';
 import { SEE_DEFAULTS, type SeeMode } from './seeThrough';
 
 export interface R3dParams {
@@ -23,6 +24,8 @@ export interface R3dParams {
   dv: number | null;
   /** Walls opening around things behind them (#303): the mode and the look's radius (tiles), keep and edge (0..1). */
   see: SeeMode; seeR: number; seeKeep: number; seeEdge: number;
+  /** Sight (#305): hiding what the hero cannot see; the mist's height (tiles), top and drift (shares) and the day share (dev). */
+  sight: boolean; mistHigh: number; mistTop: number; mistDrift: number; mistDay: number;
 }
 
 export const DEFAULTS: R3dParams = {
@@ -31,6 +34,7 @@ export const DEFAULTS: R3dParams = {
   shadows: true, orb: true, smooth: true, stats: false,
   free: false, light: 'game', dark: 'shape', amb: 0, lcap: 16, ccap: 16, dv: null,
   see: SEE_DEFAULTS.mode, seeR: SEE_DEFAULTS.radius, seeKeep: SEE_DEFAULTS.keep, seeEdge: SEE_DEFAULTS.edge,
+  sight: true, mistHigh: MIST.high, mistTop: MIST.top, mistDrift: MIST.drift, mistDay: 1,
 };
 
 /** A value clamped to min..max; a missing or unreadable one gives `dflt`. */
@@ -83,10 +87,15 @@ export function parseParams(search: string): R3dParams {
     seeR: range(num(q.get('seeR')), 0.5, 3, DEFAULTS.seeR),
     seeKeep: range(num(q.get('seeKeep')), 0, 1, DEFAULTS.seeKeep),
     seeEdge: range(num(q.get('seeEdge')), 0.01, 1, DEFAULTS.seeEdge),
+    sight: q.get('sight') === '0' ? false : DEFAULTS.sight,
+    mistHigh: range(num(q.get('mistHigh')), 0.5, 6, DEFAULTS.mistHigh),
+    mistTop: range(num(q.get('mistTop')), 0, 1, DEFAULTS.mistTop),
+    mistDrift: range(num(q.get('mistDrift')), 0, 1, DEFAULTS.mistDrift),
+    mistDay: range(num(q.get('mistDay')), 0, 1, DEFAULTS.mistDay),
   };
 }
 
-const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge']);
+const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay']);
 
 /** The search string with this page's keys set or removed and every other key of `current` kept as it is (a key without a value stays without one). */
 export function toSearch(p: R3dParams, current: string): string {
@@ -113,5 +122,10 @@ export function toSearch(p: R3dParams, current: string): string {
   if (p.seeR !== DEFAULTS.seeR) s += `&seeR=${p.seeR}`;
   if (p.seeKeep !== DEFAULTS.seeKeep) s += `&seeKeep=${p.seeKeep}`;
   if (p.seeEdge !== DEFAULTS.seeEdge) s += `&seeEdge=${p.seeEdge}`;
+  if (p.sight !== DEFAULTS.sight) s += '&sight=0';
+  if (p.mistHigh !== DEFAULTS.mistHigh) s += `&mistHigh=${p.mistHigh}`;
+  if (p.mistTop !== DEFAULTS.mistTop) s += `&mistTop=${p.mistTop}`;
+  if (p.mistDrift !== DEFAULTS.mistDrift) s += `&mistDrift=${p.mistDrift}`;
+  if (p.mistDay !== DEFAULTS.mistDay) s += `&mistDay=${p.mistDay}`;
   return s;
 }

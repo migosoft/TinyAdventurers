@@ -7,6 +7,8 @@ import type { SeeMode } from './seeThrough';
 export interface Panel {
   setReadout(text: string): void;
   setParams(p: R3dParams): void;
+  /** Shows the mist rows (daylight maps only); the run calls it once it knows the map. Off by default. */
+  setDaylight(on: boolean): void;
 }
 
 const PITCHES = [30, 45, 48.6];
@@ -19,7 +21,7 @@ const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge'; name: string; min: num
   { key: 'seeEdge', name: 'Edge', min: 0.05, max: 1, step: 0.05 },
 ];
 type Switch = { name: string; get: (p: R3dParams) => boolean; set: (p: R3dParams) => Partial<R3dParams> };
-const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free'>, name: string): Switch =>
+const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free' | 'sight'>, name: string): Switch =>
   ({ name, get: (p) => p[k], set: (p) => ({ [k]: !p[k] }) });
 const GAME_LIGHT: Switch = {
   name: 'Game light', get: (p) => p.light === 'game', set: (p) => ({ light: p.light === 'game' ? 'work' : 'game' }),
@@ -33,9 +35,15 @@ const LIGHT_SLIDERS: { key: 'amb' | 'lcap' | 'ccap' | 'dv'; name: string; min: n
   { key: 'ccap', name: 'Casters', min: 0, max: 16, step: 1 },
   { key: 'dv', name: 'Darkvision', min: 0, max: 100, step: 50, dev: true },
 ];
+const MIST_SLIDERS: { key: 'mistHigh' | 'mistTop' | 'mistDrift' | 'mistDay'; name: string; min: number; max: number; step: number; dev?: boolean }[] = [
+  { key: 'mistHigh', name: 'Mist height', min: 0.5, max: 6, step: 0.1 },
+  { key: 'mistTop', name: 'Mist top', min: 0, max: 1, step: 0.05 },
+  { key: 'mistDrift', name: 'Mist drift', min: 0, max: 1, step: 0.05 },
+  { key: 'mistDay', name: 'Mist day', min: 0, max: 1, step: 0.05, dev: true },
+];
 const SWITCHES: Record<'demo' | 'run', Switch[]> = {
-  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), DARK_FADE],
-  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), GAME_LIGHT, DARK_FADE, flag('free', 'Free camera')],
+  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), DARK_FADE, flag('sight', 'Sight')],
+  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), GAME_LIGHT, DARK_FADE, flag('sight', 'Sight'), flag('free', 'Free camera')],
 };
 
 /** A degree value with at most one decimal and no trailing .0. */
@@ -150,9 +158,21 @@ export function createPanel(
     return { d, label, s, row, get };
   });
 
+  // Mist (daylight maps only; Mist day, like Darkvision, on the dev page only).
+  const mistSliders = MIST_SLIDERS.filter((d) => !d.dev || mode === 'demo').map((d) => {
+    const row = el('div', 'r3d-row');
+    row.hidden = true;
+    const label = el('label');
+    const s = slider(d.min, d.max, d.step, () => cur[d.key], (v) => change({ [d.key]: v }));
+    s.input.id = `r3d-${d.key}`;
+    label.htmlFor = s.input.id;
+    row.append(label, s.input);
+    return { d, label, s, row };
+  });
+
   const readout = el('div', 'r3d-readout');
   const body = el('div', 'r3d-body');
-  body.append(pitchRow, yawRow, qRow, zRow, swRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row));
+  body.append(pitchRow, yawRow, qRow, zRow, swRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
@@ -190,6 +210,10 @@ export function createPanel(
       label.textContent = `${d.name} ${Math.round(get() * 100) / 100}`;
       s.sync();
     }
+    for (const { d, label, s } of mistSliders) {
+      label.textContent = `${d.name} ${Math.round(cur[d.key] * 100) / 100}`;
+      s.sync();
+    }
     for (const { btn, test } of pressed) btn.setAttribute('aria-pressed', String(test()));
   }
   refresh();
@@ -204,6 +228,9 @@ export function createPanel(
     setParams(next) {
       cur = next;
       refresh();
+    },
+    setDaylight(on) {
+      for (const { row } of mistSliders) row.hidden = !on;
     },
   };
 }

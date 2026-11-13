@@ -96,6 +96,7 @@ describe('toSearch', () => {
       pitch: 60.5, yaw: 37.3, quality: 'fast', zoom: 5, backend: 'webgl',
       shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'work', dark: 'fade', amb: 0.5, lcap: 8, ccap: 0, dv: 50,
       see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
+      sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -111,5 +112,14 @@ describe('toSearch', () => {
     expect(parseParams('?r3d&seeEdge=0').seeEdge).toBe(0.01);
     expect(toSearch({ ...DEFAULTS, see: 'lattice', seeR: 2 }, '?r3d')).toBe('?r3d&see=lattice&seeR=2');
     expect(toSearch(DEFAULTS, '?r3d&see=off&seeR=2&seeKeep=0.5&seeEdge=0.1')).toBe('?r3d');
+  });
+
+  it('reads the sight switch and the mist sliders, clamps them, and leaves defaults out of the URL', () => {
+    expect(parseParams('?r3d&sight=0&mistHigh=9&mistTop=-1&mistDrift=0.5&mistDay=0.2')).toMatchObject({
+      sight: false, mistHigh: 6, mistTop: 0, mistDrift: 0.5, mistDay: 0.2,
+    });
+    expect(parseParams('?r3d')).toMatchObject({ sight: true, mistHigh: 3, mistTop: 0.4, mistDrift: 0.25, mistDay: 1 });
+    expect(toSearch(DEFAULTS, '?r3d&sight=0&mistHigh=2&mistTop=1&mistDrift=1&mistDay=0')).toBe('?r3d');
+    expect(toSearch({ ...DEFAULTS, sight: false, mistHigh: 2 }, '?r3d')).toBe('?r3d&sight=0&mistHigh=2');
   });
 });

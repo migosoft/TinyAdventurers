@@ -119,6 +119,30 @@ describe('panel', () => {
     }
   });
 
+  it('has a Sight switch in both modes; the mist sliders only on daylight, Mist day on the demo page only', () => {
+    for (const mode of ['demo', 'run'] as const) {
+      const { host, calls, btn, panel } = setup(DEFAULTS, mode);
+      expect(btn('Sight').getAttribute('aria-pressed')).toBe('true');
+      btn('Sight').click();
+      expect(calls[0].sight).toBe(false);
+      expect(btn('Sight').getAttribute('aria-pressed')).toBe('false');
+      const row = (id: string) => host.querySelector<HTMLInputElement>(`#r3d-${id}`)!.parentElement!;
+      for (const id of ['mistHigh', 'mistTop', 'mistDrift']) expect(row(id).hidden).toBe(true);
+      panel.setDaylight(true);
+      for (const id of ['mistHigh', 'mistTop', 'mistDrift']) expect(row(id).hidden).toBe(false);
+      const h = host.querySelector<HTMLInputElement>('#r3d-mistHigh')!;
+      expect([h.min, h.max, h.step]).toEqual(['0.5', '6', '0.1']);
+      h.value = '4';
+      h.dispatchEvent(new Event('input'));
+      expect(calls[1].mistHigh).toBe(4);
+      expect(host.textContent).toContain('Mist height 4');
+      if (mode === 'demo') expect(row('mistDay').hidden).toBe(false);
+      else expect(host.querySelector('#r3d-mistDay')).toBeNull();
+      panel.setDaylight(false);
+      expect(row('mistHigh').hidden).toBe(true);
+    }
+  });
+
   it('the zoom row sets zoom or Auto (null)', () => {
     const { calls, btn } = setup({ ...DEFAULTS, zoom: 3 });
     expect(btn('3').getAttribute('aria-pressed')).toBe('true');
