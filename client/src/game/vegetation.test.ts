@@ -356,6 +356,22 @@ describe('vegetation', () => {
         expect([what, sh.trunkTop <= d.foot.y, sh.clumps.every((c) => c.y <= d.foot.y)]).toEqual([what, true, true]);
       }
     });
+    it('conifer discs stay inside their tiers, above the trunk caster', () => {
+      for (const [kind, seed, scale] of cases) {
+        const d = drawPlant(kind, seed, scale), sh = d.shape!, what = `${kind} ${seed} @${scale}`;
+        for (const c of sh.clumps) expect([what, c.y <= d.foot.y]).toEqual([what, true]);
+        if (kind === 'conifer') for (const c of sh.clumps) expect([what, c.y + c.r <= sh.trunkTop + 1e-6]).toEqual([what, true]);
+      }
+    });
+    it('the trunk columns leave out the root flare', () => {
+      for (const [kind, seed, scale] of cases) {
+        const d = drawPlant(kind, seed, scale), sh = d.shape!, what = `${kind} ${seed} @${scale}`;
+        if (kind === 'bush') continue;
+        // a conifer's trunk is straight: 2 x its half-width above the flare (3.2 units at most) plus rounding; the flare is 5.4 units
+        if (kind === 'conifer') expect([what, sh.trunkX1 - sh.trunkX0 <= 2 * 3.2 * (scale / 100) + 2]).toEqual([what, true]);
+        expect([what, sh.trunkX1 - sh.trunkX0 < d.img.w / 2]).toEqual([what, true]);
+      }
+    });
     it('does not depend on the light', () => {
       const l = lightVector({ side: 1, elevation: 51 });
       for (const [kind, seed, scale] of cases) expect(drawPlant(kind, seed, scale, l).shape).toEqual(drawPlant(kind, seed, scale, DEFAULT_LIGHT).shape);

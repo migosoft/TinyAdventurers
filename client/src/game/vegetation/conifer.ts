@@ -86,10 +86,10 @@ export function drawConifer(seed: number, s: number, light: Light): Drawn {
     const t = i / (n - 1), W = (5 + 17 * (1 - t) ** 1.15 + (r() * 2 - 1)) * s;
     const yTop = Y(bottom - i * gap - 13);
     skirt(cv, r, light, s, cx, i, W, yTop, 13 * s, t);
-    clumps.push({ x: cx, y: yTop + 0.6 * 13 * s, r: 0.85 * W });
+    clumps.push({ x: cx, y: yTop + 0.6 * 13 * s, r: Math.min(0.85 * W, 0.4 * 13 * s) }); // inside its own tier: the disc ends at the hem
   }
   skirt(cv, r, light, s, cx, n, 3.2 * s, Y(9), 8 * s, 1); // the spire: its top is 4 units above the top skirt's, so it overlaps it
-  clumps.push({ x: cx, y: Y(9) + 0.6 * 8 * s, r: 0.85 * 3.2 * s });
+  clumps.push({ x: cx, y: Y(9) + 0.6 * 8 * s, r: Math.min(0.85 * 3.2 * s, 0.4 * 8 * s) });
   cv.set(cx, Math.ceil(Y(9)) - 1, '7', '7', n); // its tip, on the row above the spire's top row
   canopyShadow(cv, 4 * s); // the lowest skirt's shadow on the trunk
   // the shadow shape: the trunk caster runs from the lowest skirt's hem to the foot, above the root flare (u >= 5 units, or the whole bare part)

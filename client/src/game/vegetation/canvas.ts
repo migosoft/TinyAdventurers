@@ -100,10 +100,9 @@ export class Canvas {
     const out: Drawn = { img, foot: { x: Math.round(foot.x - x0), y: Math.round(foot.y - y0) } };
     if (parts) out.parts = { ...parts };
     if (shape) {
-      const fy = out.foot.y;
       out.shape = {
-        cast: shape.cast, trunkTop: Math.max(0, Math.min(fy, Math.round(shape.trunkTop - y0))),
-        trunkX0: Math.max(0, Math.floor(shape.trunkX0 - x0)), trunkX1: Math.min(iw - 1, Math.ceil(shape.trunkX1 - x0)),
+        cast: shape.cast, trunkTop: shape.trunkTop - y0,
+        trunkX0: Math.floor(shape.trunkX0 - x0), trunkX1: Math.ceil(shape.trunkX1 - x0),
         clumps: shape.clumps.map((c) => ({ x: c.x - x0, y: c.y - y0, r: c.r })),
       };
     }
