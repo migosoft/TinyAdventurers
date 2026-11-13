@@ -115,7 +115,8 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   /** 1 where the sun (or moon) reaches the point, 0 in shadow. */
   const sunVis = (pt: N): N => {
     const d = pt.sub(u.sunC);
-    const suv = vec2(dot(d, u.sunR).div(u.sunExt.x), dot(d, u.sunU).div(u.sunExt.y)).mul(0.5).add(0.5);
+    // three's render-target textures have v = 0 at the top on both backends, so the sun camera's up axis runs against v
+    const suv = vec2(dot(d, u.sunR).div(u.sunExt.x).mul(0.5).add(0.5), float(0.5).sub(dot(d, u.sunU).div(u.sunExt.y).mul(0.5)));
     const ref = dot(d, u.sunF).sub(u.sunNF.x).div(u.sunNF.y);
     const sd = texture(shadowRT.depthTexture!, suv).r;
     return max(step(ref, sd.add(float(0.035).div(u.sunNF.y))), float(1).sub(u.shadows));
@@ -312,7 +313,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   const postMat = new MeshBasicNodeMaterial();
   {
     const at = (dx: number, dy: number) => { const q = uv().add(u.px.mul(vec2(dx, dy))); return { c: texture(sceneRT.texture, q), d: texture(sceneRT.depthTexture!, q).r.mul(u.depthRange) }; };
-    const me = at(0, 0), up = at(0, 1), up2 = at(0, 2), dn = at(0, -1), lf = at(-1, 0), rt = at(1, 0);
+    const me = at(0, 0), up = at(0, -1), up2 = at(0, -2), dn = at(0, 1), lf = at(-1, 0), rt = at(1, 0); // v = 0 is the top row
     const plant = me.c.a.greaterThan(0.1);
     const nearer = (n: { c: N; d: N }, gap: number): N => n.c.a.greaterThan(0.1).and(n.d.lessThan(me.d.sub(gap)));
     const anyNear = (gap: number): N => nearer(up, gap).or(nearer(dn, gap)).or(nearer(lf, gap)).or(nearer(rt, gap));
@@ -320,7 +321,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     const ink = shoulder(vec3(P.k[0] / 255, P.k[1] / 255, P.k[2] / 255).mul(grade));
     const dark = shoulder(texture(palTex, vec2(0.5 / 5, me.c.a.mul(5).sub(0.5).div(4))).rgb.mul(grade));
     // outside a plant: the generator's dark outline. Inside: a dark seam under the lip of whatever lies in front; ink where another plant does.
-    const seam = nearer(up, 0.3).or(nearer(up2, 0.3));
+    const seam = nearer(up, 0.3).or(nearer(up2, 0.3)).or(nearer(dn, 0.3));
     const rgb = select(plant, select(anyNear(1.6), ink, select(seam, dark, me.c.rgb)), select(anyNear(0.02), ink, me.c.rgb));
     postMat.colorNode = vec4(select(u.outline.greaterThan(0.5), rgb, me.c.rgb), 1);
   }
