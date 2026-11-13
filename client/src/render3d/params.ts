@@ -54,6 +54,9 @@ function num(v: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** The steepest camera pitch (degrees) the URL accepts. */
+export const PITCH_MAX = 80;
+
 /** Wraps degrees into -180..180 the way the URL does. */
 export function wrapYaw(yaw: number): number {
   // In-range values come back exactly as they are (37.3 stays 37.3); +180 maps to -180.
@@ -74,7 +77,7 @@ export function parseParams(search: string): R3dParams {
   const dv = num(q.get('dv'));
   const hour = num(q.get('hour'));
   return {
-    pitch: pitch === null ? DEFAULTS.pitch : Math.min(80, Math.max(30, pitch)),
+    pitch: pitch === null ? DEFAULTS.pitch : Math.min(PITCH_MAX, Math.max(30, pitch)),
     yaw: yaw === null ? DEFAULTS.yaw : wrapYaw(yaw),
     quality: quality === 'high' || quality === 'balanced' || quality === 'fast' ? quality : DEFAULTS.quality,
     zoom: zoom !== null && Number.isInteger(zoom) ? Math.min(8, Math.max(1, zoom)) : null,

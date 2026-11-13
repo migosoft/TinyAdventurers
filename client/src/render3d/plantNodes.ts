@@ -2,7 +2,7 @@
 // The geometry is plants.ts's: `position` holds the plant's foot (x, 0, z) for a card or trunk and the world-fixed centre for a disc.
 import { DoubleSide, MeshBasicNodeMaterial } from 'three/webgpu';
 import type { Texture } from 'three/webgpu';
-import { atan, attribute, cross, float, length, normalize, positionGeometry, select, sin, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
+import { atan, attribute, cross, float, length, max, normalize, positionGeometry, select, sin, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from './lightNodes';
 import type { Sight } from './sightNodes';
 import type { SunLight } from './sunNodes';
@@ -53,7 +53,13 @@ export function plantCardMaterial(
   const foot = varying(positionGeometry.xz, 'plantFoot');
   const texel = texture(tex, uv().div(vec2(w, h)));
   const unseen = sight.unseenAt(foot);
-  const lit = lighting.lightAt(truePos, vec3(0, 0, 0), 1, { sun: cardSunAt(lighting.sun, truePos, foot) });
+  // The root decal lies on the ground: it reads its own point (a hair up) with the ground's cosine term; the upright card the turned-to-the-light point.
+  const upright = cardSunAt(lighting.sun, truePos, foot);
+  const sunAt = {
+    Ps: select(isDecal, (truePos as N).add(vec3(0, 0.03, 0)), upright.Ps),
+    ndl: select(isDecal, max(lighting.sun.dir.y, 0), upright.ndl),
+  };
+  const lit = lighting.lightAt(truePos, vec3(0, 0, 0), 1, { sun: sunAt });
   const colour = sight.apply(lighting.finish(texel.rgb, lit), truePos, unseen);
   const shown = sight.shown(unseen.x, 1);
   const open = seeOpenNode(maskTex, truePos, uv(), see);

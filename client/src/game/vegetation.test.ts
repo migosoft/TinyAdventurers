@@ -363,6 +363,23 @@ describe('vegetation', () => {
         if (kind === 'conifer') for (const c of sh.clumps) expect([what, c.y + c.r <= sh.trunkTop + 1e-6]).toEqual([what, true]);
       }
     });
+    it("the discs of a conifer tier span at least 80 % of the tier's width, and off-axis ones carry a depth reach inside the tier", () => {
+      for (const seed of [1, 2, 3, 4, 5, 6]) for (const pct of [60, 100, 140]) {
+        const d = drawPlant('conifer', seed, pct), what = `conifer ${seed} @${pct}`;
+        // discs of one tier share a row (y)
+        const rows = new Map<number, { x: number; y: number; r: number; reach?: number }[]>();
+        for (const c of d.shape!.clumps) rows.set(c.y, [...(rows.get(c.y) ?? []), c]);
+        const widest = [...rows.values()].filter((l) => l.length > 1);
+        expect([what, widest.length > 0]).toEqual([what, true]);
+        for (const l of widest) {
+          const lo = Math.min(...l.map((c) => c.x - c.r)), hi = Math.max(...l.map((c) => c.x + c.r));
+          const axis = l.find((c) => c.reach === undefined)!;
+          const W = Math.max(...l.map((c) => Math.abs(c.x - axis.x) + (c.reach ?? 0)));
+          expect([what, (hi - lo) >= 1.6 * W - 1e-6]).toEqual([what, true]);
+          for (const c of l) if (c.reach !== undefined) expect([what, c.reach >= c.r - 1e-6]).toEqual([what, true]);
+        }
+      }
+    });
     it('the trunk columns leave out the root flare', () => {
       for (const [kind, seed, scale] of cases) {
         const d = drawPlant(kind, seed, scale), sh = d.shape!, what = `${kind} ${seed} @${scale}`;

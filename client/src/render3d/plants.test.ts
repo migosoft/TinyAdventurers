@@ -93,6 +93,8 @@ describe('pushClumps', () => {
       expect(Math.abs(clumpDepth(i * 31, i, false))).toBeLessThanOrEqual(0.65);
       expect(clumpDepth(i, i, true)).toBe(0);
     }
+    for (let i = 0; i < 200; i++) expect(Math.abs(clumpDepth(i * 31, i, false, 4))).toBeLessThanOrEqual(4 / 16);
+    expect(clumpDepth(5, 2, false, 1000)).toBe(clumpDepth(5, 2, false));
     expect(clumpDepth(5, 2, false)).toBe(clumpDepth(5, 2, false));
     expect(clumpDepth(5, 2, false)).not.toBe(clumpDepth(6, 2, false));
   });

@@ -53,12 +53,14 @@ describe('PlantField', () => {
     expect(fr.pages).toHaveLength(1);
     const one = new PlantField([twins[0]], MAP, DEFAULT_LIGHT);
     drawAll(one);
-    // The same rect for all three: the uv origin of the first quad repeats (mirroring only swaps the columns).
-    const uvs = new Set<string>();
-    for (const c of all(fr)) for (let i = 0; i < c.cards.n; i++) uvs.add(`${c.cards.uv[i * 2 + 1]}`);
-    const solo = new Set<string>();
-    for (const c of all(one.frame(false, 0))) for (let i = 0; i < c.cards.n; i++) solo.add(`${c.cards.uv[i * 2 + 1]}`);
-    expect(uvs).toEqual(solo);
+    // One slot: the page was drawn into once (one version bump), and every card's uv rows and columns lie in the one rect of the single plant (mirroring only swaps the columns).
+    expect(fr.pages[0].version).toBe(1);
+    const bounds = (f: ReturnType<PlantField['frame']>): string => {
+      const us: number[] = [], vs: number[] = [];
+      for (const c of all(f)) for (let i = 0; i < c.cards.n; i++) { us.push(c.cards.uv[i * 2]); vs.push(c.cards.uv[i * 2 + 1]); }
+      return [Math.min(...us), Math.max(...us), Math.min(...vs), Math.max(...vs)].join(',');
+    };
+    expect(bounds(fr)).toBe(bounds(one.frame(false, 0)));
   });
 
   it('draws the plant nearest the camera first', () => {

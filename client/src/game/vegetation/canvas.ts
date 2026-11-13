@@ -12,8 +12,8 @@ export interface PlantShape {
   trunkTop: number;
   /** The trunk's columns between trunkTop and the foot, without the root flare (inclusive). */
   trunkX0: number; trunkX1: number;
-  /** Leaf clumps (leafy: the lobes; conifer: one per skirt and the spire; bush: the lobes; bare: none): centre and radius. */
-  clumps: { x: number; y: number; r: number }[];
+  /** Leaf clumps (leafy: the lobes; conifer: one per skirt and the spire; bush: the lobes; bare: none): centre and radius. `reach` (px, optional): how far the disc may be moved toward or away from the camera, the tier's half width at its centre (a conifer's off-axis discs). */
+  clumps: { x: number; y: number; r: number; reach?: number }[];
 }
 /** A drawn plant; `foot` (px, inside img) is the trunk foot: the sprite's origin and its depth. */
 export interface Drawn { img: Rgba; foot: { x: number; y: number }; parts?: Parts; shape?: PlantShape }
@@ -103,7 +103,7 @@ export class Canvas {
       out.shape = {
         cast: shape.cast, trunkTop: shape.trunkTop - y0,
         trunkX0: Math.floor(shape.trunkX0 - x0), trunkX1: Math.ceil(shape.trunkX1 - x0),
-        clumps: shape.clumps.map((c) => ({ x: c.x - x0, y: c.y - y0, r: c.r })),
+        clumps: shape.clumps.map((c) => (c.reach === undefined ? { x: c.x - x0, y: c.y - y0, r: c.r } : { x: c.x - x0, y: c.y - y0, r: c.r, reach: c.reach })),
       };
     }
     return out;

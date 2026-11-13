@@ -68,9 +68,9 @@ function hash(seed: number, i: number): number {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
-/** Seeded depth offset (tiles, toward or away from the camera) of clump i; |d| <= 0.65, 0 on the axis. */
-export function clumpDepth(seed: number, i: number, onAxis: boolean): number {
-  return onAxis ? 0 : (hash(seed, i) * 2 - 1) * 0.65;
+/** Seeded depth offset (tiles, toward or away from the camera) of clump i; |d| <= 0.65 and <= `reachPx` (the disc's depth budget, if it has one), 0 on the axis. */
+export function clumpDepth(seed: number, i: number, onAxis: boolean, reachPx = Infinity): number {
+  return onAxis ? 0 : (hash(seed, i) * 2 - 1) * Math.min(0.65, reachPx / PX);
 }
 
 /** One disc per clump, at a world-fixed centre. */
@@ -80,7 +80,7 @@ export function pushClumps(out: ClumpBuf, p: PlantPlace, s: PlantSprite): void {
   const h = s.foot.y / PX;
   sh.clumps.forEach((c, i) => {
     const off = (c.x - s.foot.x) / PX;
-    const cx = p.x + (p.mirrored ? -off : off), cy = (s.foot.y - c.y) / PX, cz = p.z + clumpDepth(p.seed, i, Math.abs(c.x - s.foot.x) < 0.5);
+    const cx = p.x + (p.mirrored ? -off : off), cy = (s.foot.y - c.y) / PX, cz = p.z + clumpDepth(p.seed, i, Math.abs(c.x - s.foot.x) < 0.5, c.reach);
     const phase = hash(p.seed, i + 1000) * Math.PI * 2;
     for (const k of ORDER) {
       out.centre.push(cx, cy, cz);

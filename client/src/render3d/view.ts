@@ -42,6 +42,7 @@ import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMater
 import { SUN_TOP, type SunFit, type Vec3 } from './sun';
 import { sunCamera, sunDepthTexture } from './sunNodes';
 import type { PlantFrame } from './plantField';
+import { PITCH_MAX } from './params';
 import { ChunkSync, type ClumpBuf, type PlantBuf } from './plants';
 import { makePlantShared, plantCardMaterial, plantDiscMaterial, plantTrunkMaterial } from './plantNodes';
 import type { RenderPlan } from './quality';
@@ -191,20 +192,23 @@ function pixelTexture(t: Texture): void {
   t.needsUpdate = true;
 }
 
-/** Bounds for frustum culling: the box of the points (x at `ox`, z at `oz` of every `stride` numbers) grown by `pad` tiles, `SUN_TOP` high. */
-function plantBounds(g: BufferGeometry, pts: readonly number[], stride: number, ox: number, oz: number, pad: number): void {
+/** How high (tiles) a plant card's box reaches: `SUN_TOP` stretched by 1 / cos(pitch) at the steepest pitch (the card is stretched the same way on screen). The sun pass's casters are not stretched: `SUN_TOP`. */
+const CARD_TOP = SUN_TOP / Math.cos((PITCH_MAX * Math.PI) / 180);
+
+/** Bounds for frustum culling: the box of the points (x at `ox`, z at `oz` of every `stride` numbers) grown by `pad` tiles, `top` high. */
+function plantBounds(g: BufferGeometry, pts: readonly number[], stride: number, ox: number, oz: number, pad: number, top: number): void {
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (let i = 0; i < pts.length; i += stride) {
     x0 = Math.min(x0, pts[i + ox]); x1 = Math.max(x1, pts[i + ox]);
     z0 = Math.min(z0, pts[i + oz]); z1 = Math.max(z1, pts[i + oz]);
   }
-  const box = new Box3(new Vector3(x0 - pad, 0, z0 - pad), new Vector3(x1 + pad, SUN_TOP, z1 + pad));
+  const box = new Box3(new Vector3(x0 - pad, 0, z0 - pad), new Vector3(x1 + pad, top, z1 + pad));
   g.boundingBox = box;
   g.boundingSphere = box.getBoundingSphere(new Sphere());
 }
 
 /** A plant card or trunk caster buffer as a geometry: `position` is the foot (x, 0, z). */
-function plantGeometry(b: PlantBuf): BufferGeometry {
+function plantGeometry(b: PlantBuf, top: number): BufferGeometry {
   const pos = new Float32Array(b.n * 3);
   for (let i = 0; i < b.n; i++) { pos[i * 3] = b.foot[i * 2]; pos[i * 3 + 2] = b.foot[i * 2 + 1]; }
   const g = new BufferGeometry();
@@ -216,7 +220,7 @@ function plantGeometry(b: PlantBuf): BufferGeometry {
   // Horizontally a card reaches its half width across, a root decal also its length along the ground; plus the sway.
   let pad = 0.3;
   for (let i = 0; i < b.n; i++) pad = Math.max(pad, Math.abs(b.corner[i * 2]) + 0.3, b.part[i] > 0.5 ? Math.abs(b.corner[i * 2 + 1]) + 0.3 : 0);
-  plantBounds(g, b.foot, 2, 0, 1, pad);
+  plantBounds(g, b.foot, 2, 0, 1, pad, top);
   return g;
 }
 
@@ -229,7 +233,7 @@ function clumpGeometry(b: ClumpBuf): BufferGeometry {
   g.setAttribute('phase', new BufferAttribute(new Float32Array(b.phase), 1));
   g.setAttribute('foot', new BufferAttribute(new Float32Array(b.foot), 2));
   g.setAttribute('sway', new BufferAttribute(new Float32Array(b.sway), 2));
-  plantBounds(g, b.centre, 3, 0, 2, b.radius.reduce((m, r) => Math.max(m, r), 0) * 1.2 + 0.3);
+  plantBounds(g, b.centre, 3, 0, 2, b.radius.reduce((m, r) => Math.max(m, r), 0) * 1.2 + 0.3, SUN_TOP);
   return g;
 }
 
@@ -468,7 +472,22 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
     for (const k of [...plantMeshes.keys()]) dropPlantChunk(k);
     plantSync = new ChunkSync();
   };
+  const freePlantPages = (): void => {
+    for (const e of plantPages.values()) {
+      e.card.dispose();
+      e.trunk?.dispose();
+      if (e.owned) e.tex.dispose();
+    }
+    plantPages.clear();
+  };
+  /** The page list of the field the textures belong to (a field keeps its own list for its life). */
+  let plantPagesOf: readonly unknown[] | null = null;
   const syncPlants = (pf: PlantFrame): void => {
+    // Another field (a new `PlantField`) has other pages and other chunks: start over, so no texture is shown over old bytes.
+    if (plantPagesOf !== pf.pages) {
+      if (plantPagesOf) { clearPlants(); freePlantPages(); }
+      plantPagesOf = pf.pages;
+    }
     // Pages first: a page's texture goes up again when its version moved, once per frame.
     pf.pages.forEach((img, i) => {
       const e = plantPages.get(i);
@@ -481,9 +500,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       dropPlantChunk(k);
       for (const c of pf.chunks.get(k) ?? []) {
         const e = plantPage(c.page, pf);
-        if (c.cards.n > 0) addPlantMesh(k, plantGeometry(c.cards), e.card, scene);
+        if (c.cards.n > 0) addPlantMesh(k, plantGeometry(c.cards, CARD_TOP), e.card, scene);
         if (!hasSun) continue;
-        if (c.trunks.n > 0 && e.trunk) addPlantMesh(k, plantGeometry(c.trunks), e.trunk, sunScene);
+        if (c.trunks.n > 0 && e.trunk) addPlantMesh(k, plantGeometry(c.trunks, SUN_TOP), e.trunk, sunScene);
         if (c.clumps.n > 0 && discMaterial) addPlantMesh(k, clumpGeometry(c.clumps), discMaterial, sunScene);
       }
     }
@@ -776,11 +795,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         sunStandIn.dispose();
         casterMaterial?.dispose();
         clearPlants();
-        for (const e of plantPages.values()) {
-          e.card.dispose();
-          e.trunk?.dispose();
-          if (e.owned) e.tex.dispose();
-        }
+        freePlantPages();
         discMaterial?.dispose();
         mm.material.dispose();
         maskDiscs.dispose();

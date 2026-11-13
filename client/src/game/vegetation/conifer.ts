@@ -63,6 +63,19 @@ function skirt(cv: Canvas, r: () => number, light: Light, s: number, cx: number,
   }
 }
 
+/**
+ * The shadow discs of one skirt of half width `W` at the disc row `y`: radius `r` (limited by the tier's height, so each stays inside it),
+ * centres spaced about `r` apart across +-(W - r), so the union spans the skirt's whole width. Off-axis discs carry `reach` = W - |dx|,
+ * the depth budget the 3D view keeps their seeded depth offset within.
+ */
+function tierDiscs(out: PlantShape['clumps'], cx: number, y: number, W: number, r: number): void {
+  const span = Math.max(0, W - r), k = Math.max(1, Math.ceil(span / r) * 2 + 1);
+  for (let i = 0; i < k; i++) {
+    const dx = k === 1 ? 0 : -span + (2 * span * i) / (k - 1);
+    out.push(Math.abs(dx) < 0.5 ? { x: cx, y, r } : { x: cx + dx, y, r, reach: W - Math.abs(dx) });
+  }
+}
+
 /** A conifer: a straight tapering trunk, skirts stacked from the bottom (each one drooping to a zigzag hem) narrowing to a spire, blue-green palette 5..9. */
 export function drawConifer(seed: number, s: number, light: Light): Drawn {
   const r = rng(seed), cv = new Canvas(220, 220), cx = 110, base = 190, detail = s >= 0.7;
@@ -86,10 +99,10 @@ export function drawConifer(seed: number, s: number, light: Light): Drawn {
     const t = i / (n - 1), W = (5 + 17 * (1 - t) ** 1.15 + (r() * 2 - 1)) * s;
     const yTop = Y(bottom - i * gap - 13);
     skirt(cv, r, light, s, cx, i, W, yTop, 13 * s, t);
-    clumps.push({ x: cx, y: yTop + 0.6 * 13 * s, r: Math.min(0.85 * W, 0.4 * 13 * s) }); // inside its own tier: the disc ends at the hem
+    tierDiscs(clumps, cx, yTop + 0.6 * 13 * s, W, Math.min(0.85 * W, 0.4 * 13 * s)); // inside its own tier: the discs end at the hem
   }
   skirt(cv, r, light, s, cx, n, 3.2 * s, Y(9), 8 * s, 1); // the spire: its top is 4 units above the top skirt's, so it overlaps it
-  clumps.push({ x: cx, y: Y(9) + 0.6 * 8 * s, r: Math.min(0.85 * 3.2 * s, 0.4 * 8 * s) });
+  clumps.push({ x: cx, y: Y(9) + 0.6 * 8 * s, r: Math.min(0.85 * 3.2 * s, 0.4 * 8 * s) }); // the spire: one disc
   cv.set(cx, Math.ceil(Y(9)) - 1, '7', '7', n); // its tip, on the row above the spire's top row
   canopyShadow(cv, 4 * s); // the lowest skirt's shadow on the trunk
   // the shadow shape: the trunk caster runs from the lowest skirt's hem to the foot, above the root flare (u >= 5 units, or the whole bare part)
