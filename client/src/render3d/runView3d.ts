@@ -19,6 +19,7 @@ import { seeLook } from './seeThrough';
 import { MOVE_KEYS, type StageCtx } from './host';
 import { WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { MIST } from './mist';
+import { WIND } from './wind';
 import { SightMask } from './sightmask';
 import { hiddenByPicture } from './sightAttrs';
 import { SIGHT_OFF, type SightFrame } from './sightNodes';
@@ -37,8 +38,6 @@ const rad = (deg: number): number => (deg * Math.PI) / 180;
 const FOLLOW_RATE = 6;
 /** The free camera's speed in tiles per second, and with Shift. */
 const FREE_SPEED = 12;
-/** The mist's wind in tiles per second: `MIST.speed` turned 20 degrees (a constant until #306). */
-const WIND: [number, number] = [MIST.speed * Math.cos((20 * Math.PI) / 180), MIST.speed * Math.sin((20 * Math.PI) / 180)];
 const FREE_SPEED_FAST = 36;
 
 /** Keys held -> the fixed step's movement: the screen direction turned by the yaw, rounded to the eight wire directions. */
