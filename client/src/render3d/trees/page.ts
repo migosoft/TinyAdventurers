@@ -23,12 +23,13 @@ const DBG = Number(new URLSearchParams(location.search).get('dbg') ?? 0); // tim
 const SM = 2048;
 const WIND: [number, number] = [0.98, 0.2];
 
-interface Params { tree: 'recipe' | 'grown'; leaf: number; leaves: boolean; crown: 'balls' | 'tufts'; hour: number; yaw: number; mode: '3d' | 'cards'; stretch: boolean; wind: boolean; snap: boolean; shadows: boolean; outline: boolean; plain: boolean; res: number; zoom: number; t: number | null; mult: number }
+interface Params { storm: number; flash: boolean; tree: 'recipe' | 'grown'; leaf: number; leaves: boolean; crown: 'balls' | 'tufts'; hour: number; yaw: number; mode: '3d' | 'cards'; stretch: boolean; wind: boolean; snap: boolean; shadows: boolean; outline: boolean; plain: boolean; res: number; zoom: number; t: number | null; mult: number }
 
 function readParams(search: string): Params {
   const q = new URLSearchParams(search), num = (k: string, d: number) => { const v = Number(q.get(k)); return q.has(k) && Number.isFinite(v) ? v : d; };
   const on = (k: string, d: boolean) => (q.has(k) ? q.get(k) !== '0' : d);
   return {
+    storm: Math.min(100, Math.max(0, num('storm', 0))), flash: on('flash', false),
     tree: q.get('tree') === 'recipe' ? 'recipe' : 'grown', leaf: Math.min(100, Math.max(0, num('leaf', 100))),
     leaves: on('leaves', true), crown: q.get('crown') === 'balls' ? 'balls' : 'tufts',
     hour: Math.min(23, Math.max(4.5, num('hour', 8.25))), yaw: num('yaw', 0), mode: q.get('mode') === 'cards' ? 'cards' : '3d',
@@ -100,7 +101,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   // ---------------------------------------------------------------- uniforms
   const u = {
     sun: uniform(new Vector3(0, 1, 0)), sunCol: uniform(new Vector3(1, 1, 1)), amb: uniform(new Vector3(0.3, 0.3, 0.3)),
-    time: uniform(0), leaf: uniform(1), leaves: uniform(1), wind: uniform(1), snap: uniform(1), stretch: uniform(1), cardStretch: uniform(1 / Math.cos(PITCH)), shadows: uniform(1), outline: uniform(1), plain: uniform(0),
+    time: uniform(0), windT: uniform(0), storm: uniform(0), camT: uniform(new Vector3()), leaf: uniform(1), leaves: uniform(1), wind: uniform(1), snap: uniform(1), stretch: uniform(1), cardStretch: uniform(1 / Math.cos(PITCH)), shadows: uniform(1), outline: uniform(1), plain: uniform(0),
     camR: uniform(new Vector3(1, 0, 0)), camU: uniform(new Vector3(0, 1, 0)), camV: uniform(new Vector3(0, 0, 1)),
     sunR: uniform(new Vector3(1, 0, 0)), sunU: uniform(new Vector3(0, 0, 1)), sunF: uniform(new Vector3(0, -1, 0)), sunRh: uniform(new Vector3(1, 0, 0)),
     sunC: uniform(new Vector3()), sunExt: uniform(new Vector2(1, 1)), sunNF: uniform(new Vector2(0, 1)),
@@ -125,9 +126,10 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   };
   /** The wind's shift of a point with sway factor `k` on the plant standing at `foot`, in tiles along the wind. */
   const swayOf = (foot: N, k: N): N => {
-    const gust = pow(max(0, sin(foot.x.add(foot.y.mul(0.3)).mul(0.33).sub(u.time.mul(1.5)))), 6);
-    const f = sin(u.time.mul(1.3).add(foot.x.mul(0.9)).add(foot.y.mul(0.4))).mul(0.5).add(sin(u.time.mul(2.9).add(foot.y)).mul(0.25)).add(gust.mul(1.4));
-    const m = k.mul(f).mul(u.wind);
+    // the wind has its own clock (it runs faster in a storm); a storm also leans every plant downwind and sways it harder
+    const gust = pow(max(0, sin(foot.x.add(foot.y.mul(0.3)).mul(0.33).sub(u.windT.mul(1.5)))), 6);
+    const f = sin(u.windT.mul(1.3).add(foot.x.mul(0.9)).add(foot.y.mul(0.4))).mul(0.5).add(sin(u.windT.mul(2.9).add(foot.y)).mul(0.25)).add(gust.mul(1.4));
+    const m = k.mul(f.add(u.storm.mul(0.9))).mul(u.wind).mul(u.storm.mul(2.2).add(1));
     const s = mix(m, floor(m.mul(16).add(0.5)).div(16), u.snap);
     return vec3(s.mul(WIND[0]), 0, s.mul(WIND[1]));
   };
@@ -338,8 +340,9 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   const leafMat = new MeshBasicNodeMaterial();
   leafMat.side = DoubleSide;
   {
-    const lf: N = attribute('leaf', 'vec4'), tt = fract(u.time.div(lf.z).add(lf.w)).mul(lf.z), f = tt.div(FALL), falling = f.lessThan(1);
-    const drift = f.mul(1.4).add(sin(tt.mul(3).add(lf.w.mul(40))).mul(0.22)).mul(u.wind.mul(0.7).add(0.3));
+    const lf: N = attribute('leaf', 'vec4'), per = lf.z.div(u.storm.mul(60).add(1)); // a storm tears leaves off up to 60 times as often
+    const tt = fract(u.time.div(per).add(lf.w)).mul(per), f = tt.div(FALL), falling = f.lessThan(1);
+    const drift = f.mul(1.4).add(sin(tt.mul(3).add(lf.w.mul(40))).mul(0.22)).mul(u.wind.mul(0.7).add(0.3)).mul(u.storm.mul(4).add(1));
     const real: N = (vec3 as N)(positionGeometry.x.add(drift.mul(WIND[0])).add(sin(tt.mul(2.1).add(lf.w.mul(90))).mul(0.12)), positionGeometry.y.mul(float(1).sub(f)), positionGeometry.z.add(drift.mul(WIND[1])));
     const size: N = (select as N)(falling, float(0.75 / 16), float(0)).mul(u.leaves);
     leafMat.positionNode = real.add(vec3(0, real.y.mul(u.stretch.sub(1)), 0)).add(u.camR.mul(lf.x.mul(size))).add(u.camU.mul(lf.y.mul(size))).add(u.camV.mul(0.05));
@@ -350,6 +353,31 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     leafMat.outputNode = vec4(rgb, 0);
   }
   const leafMesh = new Mesh(geometry({ position: [lPos, 3], leaf: [lLeaf, 4] }, lIdx), leafMat);
+
+  // ---------------------------------------------------------------- rain: streaks in a box that follows the camera, blown by the wind
+  const RW = 46, RH = 14, RD = 38, rPos: number[] = [], rDrop: number[] = [], rIdx: number[] = [];
+  {
+    let seed = 7;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < 3200; i++) {
+      const x = rnd() * RW, y = rnd() * RH, z = rnd() * RD, j = rnd(), th = rnd(), base = rPos.length / 3;
+      for (const [ox, oy] of [[-1, 0], [1, 0], [1, 1], [-1, 1]]) { rPos.push(x, y, z); rDrop.push(ox, oy, j, th); }
+      rIdx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+  }
+  const rainMat = new MeshBasicNodeMaterial();
+  rainMat.side = DoubleSide; rainMat.transparent = true; rainMat.depthWrite = false;
+  {
+    const dr: N = attribute('drop', 'vec4'), fall = float(15).mul(dr.z.mul(0.4).add(0.8)), blow = u.storm.mul(6).add(2);
+    const vel: N = (vec3 as N)(blow.mul(WIND[0]), fall.negate(), blow.mul(WIND[1]));
+    const wrap = (v: N, size: number, c: N): N => v.sub(c).add(size / 2).mod(size).add(c).sub(size / 2);
+    const at: N = (vec3 as N)(wrap(positionGeometry.x.add(vel.x.mul(u.time)), RW, u.camT.x), positionGeometry.y.add(vel.y.mul(u.time)).mod(RH), wrap(positionGeometry.z.add(vel.z.mul(u.time)), RD, u.camT.z));
+    const on: N = (select as N)(dr.w.lessThan(u.storm), float(1), float(0)); // more drops as the storm grows
+    rainMat.positionNode = at.add(normalize(vel).mul(dr.y.mul(-0.9).mul(on))).add(u.camR.mul(dr.x.mul(0.022).mul(on)));
+    rainMat.colorNode = vec4(vec3(0.6, 0.68, 0.82).mul(u.amb.mul(1.8).add(u.sunCol.mul(0.5))), 0.4);
+  }
+  const rainMesh = new Mesh(geometry({ position: [rPos, 3], drop: [rDrop, 4] }, rIdx), rainMat);
+  rainMesh.renderOrder = 2;
 
   // ---------------------------------------------------------------- the ground
   const groundMat = new MeshBasicNodeMaterial();
@@ -366,7 +394,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   groundMesh.renderOrder = -1;
 
   const scene = new Scene(), shadowScene = new Scene();
-  for (const m of [groundMesh, plantMesh, figMesh, leafMesh]) { m.frustumCulled = false; scene.add(m); }
+  for (const m of [groundMesh, plantMesh, figMesh, leafMesh, rainMesh]) { m.frustumCulled = false; scene.add(m); }
   for (const v of variants) { scene.add(v.shown); shadowScene.add(v.cast); }
   for (const m of [trunkShadow, discShadow, figShadow]) { m.frustumCulled = false; shadowScene.add(m); }
 
@@ -408,9 +436,10 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     u.px.value.set(1 / artW, 1 / artH);
   }
 
-  function setSun(): void {
-    const s = sky(p.hour), d = new Vector3(...s.dir).normalize(), c0 = new Vector3(MW / 2, 0, MH / 2);
-    u.sun.value.copy(d); u.sunCol.value.set(...s.col); u.amb.value.set(...s.amb);
+  /** Sets the light (direction toward it, colour, ambient) and fits the shadow map's camera to it. */
+  function setLight(dir: number[], col: number[], amb: number[]): void {
+    const d = new Vector3(dir[0], dir[1], dir[2]).normalize(), c0 = new Vector3(MW / 2, 0, MH / 2);
+    u.sun.value.copy(d); u.sunCol.value.set(col[0], col[1], col[2]); u.amb.value.set(amb[0], amb[1], amb[2]);
     sunCam.position.copy(c0).addScaledVector(d, 80);
     sunCam.up.set(0, 1, 0);
     sunCam.lookAt(c0);
@@ -440,6 +469,11 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   hourL.appendChild(hourI);
   const hourText = hourL.firstChild as Text;
   hourI.addEventListener('input', () => { p.hour = Number(hourI.value); changed(); });
+  const stormL = row('');
+  const stormI = document.createElement('input'); stormI.type = 'range'; stormI.min = '0'; stormI.max = '100'; stormI.step = '1'; stormI.value = String(p.storm); stormI.style.width = '150px';
+  stormL.appendChild(stormI);
+  const stormText = stormL.firstChild as Text;
+  stormI.addEventListener('input', () => { p.storm = Number(stormI.value); changed(); });
   const check = (label: string, key: 'stretch' | 'wind' | 'snap' | 'shadows' | 'outline' | 'plain' | 'leaves'): void => {
     const l = row(label), i = document.createElement('input'); i.type = 'checkbox'; i.checked = p[key];
     i.addEventListener('change', () => { p[key] = i.checked; changed(); }); l.appendChild(i);
@@ -482,10 +516,10 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     plantMesh.visible = trunkShadow.visible = discShadow.visible = p.mode === 'cards';
     hourText.textContent = `Time ${clock(p.hour)}`; hourI.value = String(p.hour);
     for (const f of syncs) f();
-    setSun();
     bakeAt = performance.now() + 150;
+    u.storm.value = p.storm / 100; stormI.value = String(p.storm); stormText.textContent = `Storm ${p.storm}%`;
     const q = new URLSearchParams(location.search);
-    q.set('hour', String(p.hour)); q.set('yaw', String(p.yaw)); q.set('mode', p.mode); q.set('crown', p.crown); q.set('tree', p.tree); q.set('leaf', String(p.leaf));
+    q.set('hour', String(p.hour)); q.set('yaw', String(p.yaw)); q.set('mode', p.mode); q.set('crown', p.crown); q.set('tree', p.tree); q.set('storm', String(p.storm)); q.set('leaf', String(p.leaf));
     for (const k of ['stretch', 'wind', 'snap', 'shadows', 'outline', 'plain', 'leaves'] as const) q.set(k, p[k] ? '1' : '0');
     q.set('res', String(p.res)); q.set('zoom', String(p.zoom));
     history.replaceState(null, '', `?${q.toString().replace('r3d=trees', 'r3d=trees')}`);
@@ -510,11 +544,27 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   (window as unknown as { __r3d: typeof hook }).__r3d = hook;
   resize();
   changed();
-  let last = performance.now(), acc = 0, accN = 0, cpu = 0, time = 0;
+  let last = performance.now(), acc = 0, accN = 0, cpu = 0, time = 0, windT = 0, flashAt = -1e9, nextFlash = 0, flashDir: number[] = [0.3, 0.8, 0.5];
   renderer.setAnimationLoop(() => {
     const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
     time = p.t ?? time + dt;
     u.time.value = time;
+    const st = p.storm / 100;
+    windT = p.t ?? windT + dt * (1 + 1.3 * st);
+    u.windT.value = windT;
+    // Storm light: the sun all but gone behind cloud, the sky's light dimmer and bluer. Lightning replaces the sun for a
+    // moment with a hard blue-white light from its own direction, so every flash throws real shadows another way.
+    if (st > 0 && p.t === null && now >= nextFlash) {
+      flashAt = now; nextFlash = now + (2500 + Math.random() * 9000) / Math.max(st, 0.15);
+      const a = Math.random() * Math.PI * 2, e = 0.75 + Math.random() * 0.45;
+      flashDir = [Math.cos(a) * Math.cos(e), Math.sin(e), Math.sin(a) * Math.cos(e)];
+    }
+    const ft = (now - flashAt) / 1000; // two strokes: a sharp one and an echo
+    const flash = st > 0 ? (p.flash ? 1 : ft < 0.7 ? Math.max(Math.exp(-ft / 0.07), ft > 0.16 ? 0.75 * Math.exp(-(ft - 0.16) / 0.11) : 0) : 0) : 0;
+    const sk = sky(p.hour), grey = (sk.amb[0] + sk.amb[1] + sk.amb[2]) / 3;
+    const amb = sk.amb.map((v, i) => v + (grey * [0.6, 0.7, 0.9][i] - v) * st + [0.22, 0.25, 0.36][i] * flash);
+    const col = sk.col.map((v, i) => v * (1 - 0.9 * st) * (1 - flash) + [0.95, 1.0, 1.25][i] * flash);
+    setLight(flash > 0.02 ? flashDir : sk.dir, col, amb);
     cam.yaw += (cam.yawTo - cam.yaw) * Math.min(1, dt / 0.07);
     if (Math.abs(cam.yawTo - cam.yaw) < 1e-3) cam.yaw = cam.yawTo;
     const ix = (held.has('KeyD') || held.has('ArrowRight') ? 1 : 0) - (held.has('KeyA') || held.has('ArrowLeft') ? 1 : 0), iz = (held.has('KeyS') || held.has('ArrowDown') ? 1 : 0) - (held.has('KeyW') || held.has('ArrowUp') ? 1 : 0);
@@ -538,6 +588,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     u.depthRange.value = camera.far - camera.near;
     stepFigures(time);
 
+    u.camT.value.set(g.x, 0, g.z);
     renderer.info.reset();
     if (!(DBG & 1)) { renderer.setRenderTarget(shadowRT); renderer.render(shadowScene, sunCam); }
     renderer.setClearColor(0x0c1410, 1);
