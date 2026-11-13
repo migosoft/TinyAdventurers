@@ -65,8 +65,8 @@ export function barkLines(cv: Canvas, r: () => number, tr: Trunk, light: Light, 
  * fork's. Painted before the trunk and the crown. Large trees (`detail`) get a dark 1-px line on each limb's shadow side;
  * its random keep draw comes first and both lights' positions are written with recolours.
  */
-export function limbs(cv: Canvas, r: () => number, light: Light, fork: { x: number; y: number; w: number }, targets: [number, number][], X: (dx: number) => number, Y: (y: number) => number, detail: boolean): void {
-  const paint = painter(cv, light);
+export function limbs(cv: Canvas, r: () => number, light: Light, fork: { x: number; y: number; w: number }, targets: [number, number][], X: (dx: number) => number, Y: (y: number) => number, detail: boolean): Seg[] {
+  const paint = painter(cv, light), out: Seg[] = [];
   for (const [dx, ty] of targets) {
     const tx = X(dx), tyy = Y(ty), cxp = fork.x + (tx - fork.x) * 0.15, cyp = fork.y + (tyy - fork.y) * 0.75;
     const n = Math.max(8, Math.ceil(Math.hypot(tx - fork.x, tyy - fork.y) * 2));
@@ -78,8 +78,10 @@ export function limbs(cv: Canvas, r: () => number, light: Light, fork: { x: numb
       pts.push({ x, y, w: fork.w * (0.62 - 0.5 * t), nx: -ddy / m, ny: ddx / m });
     }
     paint(pts, false);
+    out.push(pts);
     if (detail) shadowLine(cv, r, light, pts);
   }
+  return out;
 }
 
 /** A path point with its half-width and unit normal. */
@@ -107,7 +109,7 @@ const ROOT_DIRS: Record<2 | 3 | 4, [number, number, number, number][]> = {
 };
 
 /** A few short humps around the foot: length + r()·4 units times `lenMul`, tapering by (1 − t)^1.1, the rim kept; the lower ones overlap. */
-export function roots(r: () => number, paint: (seg: Seg, edge: boolean, maxY?: number) => void, cx: number, footY: number, s: number, tw: number, count: 2 | 3 | 4, lenMul: number): void {
+export function roots(r: () => number, paint: (seg: Seg, edge: boolean, maxY?: number) => void, cx: number, footY: number, s: number, tw: number, count: 2 | 3 | 4, lenMul: number): Seg[] {
   const list: Seg[] = [];
   for (const [vx, vy, len0, hw] of ROOT_DIRS[count]) {
     const len = (len0 + r() * 4) * s * lenMul, wig = r() * 6, w0 = Math.max(1.2, hw * tw), m = Math.hypot(vx, vy);
@@ -120,6 +122,7 @@ export function roots(r: () => number, paint: (seg: Seg, edge: boolean, maxY?: n
     list.push(seg);
   }
   list.sort((A, B) => A[A.length - 1].y - B[B.length - 1].y).forEach((sg) => paint(sg, true));
+  return list;
 }
 
 /** Moss on the lit root pixels around the foot (leafy greens '2'/'3'), shared by the leafy trees and the conifer. */

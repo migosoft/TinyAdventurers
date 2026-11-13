@@ -75,7 +75,8 @@ export function drawConifer(seed: number, s: number, light: Light): Drawn {
   for (let i = 0; i <= steps; i++) { const u = (i / steps) * len; seg.push({ x: cx, y: Y(80 - u), w: wAt(u) }); }
   const tr: Trunk = { at: (t) => ({ x: cx, y: Y(80 - t * len), w: wAt(t * len) }), seg, topY: Y(80 - len), footY };
   paint(seg, false, footY);
-  roots(r, paint, cx, footY, s, 0.7 * s, detail ? 3 : 2, 0.7);
+  const rootSegs = roots(r, paint, cx, footY, s, 0.7 * s, detail ? 3 : 2, 0.7);
+  const skirts: { yTop: number; h: number; W: number }[] = [];
   barkLines(cv, r, tr, light, s);
   rootMoss(cv, rng(seed ^ 0x6d6f7373), cx, footY, s); // its own stream
   // skirts, bottom first so each higher one covers the top of the one below; id = index from the bottom
@@ -84,9 +85,11 @@ export function drawConifer(seed: number, s: number, light: Light): Drawn {
   for (let i = 0; i < n; i++) {
     const t = i / (n - 1), W = (5 + 17 * (1 - t) ** 1.15 + (r() * 2 - 1)) * s;
     skirt(cv, r, light, s, cx, i, W, Y(bottom - i * gap - 13), 13 * s, t);
+    skirts.push({ yTop: Y(bottom - i * gap - 13), h: 13 * s, W });
   }
   skirt(cv, r, light, s, cx, n, 3.2 * s, Y(9), 8 * s, 1); // the spire: its top is 4 units above the top skirt's, so it overlaps it
   cv.set(cx, Math.ceil(Y(9)) - 1, '7', '7', n); // its tip, on the row above the spire's top row
   canopyShadow(cv, 4 * s); // the lowest skirt's shadow on the trunk
-  return cv.finish({ x: cx, y: footY });
+  skirts.push({ yTop: Y(9), h: 8 * s, W: 3.2 * s });
+  return cv.finish({ x: cx, y: footY }, undefined, { kind: 'conifer', trunk: seg, limbs: [], roots: rootSegs, lobes: [], skirts, s });
 }

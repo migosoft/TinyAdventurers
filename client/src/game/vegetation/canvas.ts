@@ -5,7 +5,22 @@ export interface Rgba { w: number; h: number; data: Uint8ClampedArray }
 /** How many of each detail a tree got; filled by the passes that count them (tests read it). */
 export type Parts = { pockets: number; vines: number; stems: number; limbs: number };
 /** A drawn plant; `foot` (px, inside img) is the trunk foot: the sprite's origin and its depth. */
-export interface Drawn { img: Rgba; foot: { x: number; y: number }; parts?: Parts }
+export interface Drawn { img: Rgba; foot: { x: number; y: number }; parts?: Parts; recipe?: Recipe }
+/** A stroke point of the recipe: canvas px (before the crop) and half-width. */
+export interface RecipePt { x: number; y: number; w: number }
+/**
+ * What the picture was drawn from (spike/3d-trees): every length in canvas px before the crop, y down; `foot` in the same px.
+ * `lobes` are the crown's ellipses, `skirts` a conifer's cones (apex row `yTop`, hem `h` below it, half-width `W`).
+ */
+export interface Recipe {
+  kind: 'leafy' | 'bush' | 'conifer' | 'bare';
+  foot: { x: number; y: number };
+  trunk: RecipePt[]; limbs: RecipePt[][]; roots: RecipePt[][];
+  lobes: { x: number; y: number; rx: number; ry: number; ph: number; ph2: number }[];
+  skirts: { yTop: number; h: number; W: number }[];
+  /** px per design unit. */
+  s: number;
+}
 
 export const P: Record<string, Rgb> = { k: [34, 34, 34], 0: [28, 58, 50], 1: [40, 100, 62], 2: [62, 138, 67], 3: [106, 174, 79], 4: [156, 207, 98],
   5: [22, 48, 52], 6: [30, 74, 70], 7: [44, 104, 88], 8: [74, 140, 104], 9: [118, 176, 124],
@@ -67,7 +82,7 @@ export class Canvas {
   idAt(x: number, y: number) { x = Math.round(x); y = Math.round(y); return x >= 0 && y >= 0 && x < this.w && y < this.h ? this.id[y * this.w + x] : -1; }
   clear(x: number, y: number) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < this.w && y < this.h) { const i = y * this.w + x; this.px[i] = null; this.ref[i] = null; this.id[i] = -1; } }
   /** Outer outline, then crop to the drawing; returns the image and where `foot` lands in it. Works inside the written box only. */
-  finish(foot: { x: number; y: number }, parts?: Parts): Drawn {
+  finish(foot: { x: number; y: number }, parts?: Parts, recipe?: Omit<Recipe, 'foot'>): Drawn {
     const { w, h, px } = this;
     // The outline can only fall on cells next to a written one: the box grown by 1.
     const bx0 = Math.max(0, this.x0 - 1), by0 = Math.max(0, this.y0 - 1), bx1 = Math.min(w - 1, this.x1 + 1), by1 = Math.min(h - 1, this.y1 + 1);
@@ -88,6 +103,7 @@ export class Canvas {
     }
     const out: Drawn = { img, foot: { x: Math.round(foot.x - x0), y: Math.round(foot.y - y0) } };
     if (parts) out.parts = { ...parts };
+    if (recipe) out.recipe = { ...recipe, foot: { x: foot.x, y: foot.y } };
     return out;
   }
 }

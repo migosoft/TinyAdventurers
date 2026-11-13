@@ -136,6 +136,7 @@ async function main(): Promise<void> {
     host.classList.add('active');
     const { bootDemo, bootGallery, bootLights } = await import('./render3d/boot');
     const page = r3dPage(location.search);
+    if (page === 'trees') return (await import('./render3d/trees/page')).bootTrees(host, location.search); // spike/3d-trees
     return (page === 'gallery' ? bootGallery : page === 'lights' ? bootLights : bootDemo)(host, location.search);
   }
   if (q.has('gallery') || Object.keys(DEMOS).some((k) => q.has(k))) return gallery();

@@ -36,9 +36,11 @@ export function drawBush(o: { seed: number; width: number; light?: Light }): Dra
   // it forks early into 2 branches (3 with 5 lobes), 1 px wide, going up and out at 35-60 degrees until they are under the crown;
   // every angle is drawn whatever the light, the sun side of the stem is the lighter brown
   const nb = n === 5 ? 3 : 2, yEnd = ground - lift - 1, yFork = ground - h - 1;
+  const twigs: { x: number; y: number; w: number }[][] = [];
   for (let k = 0; k < nb; k++) {
     const mag = ((35 + r() * 25) * Math.PI) / 180, a = nb === 3 && k === 1 ? (r() - 0.5) * 0.3 : (k === 0 ? -mag : mag);
     const len = Math.max(1, (yFork - yEnd) / Math.cos(a));
+    twigs.push([{ x: stemCentre, y: yFork, w: 0.5 }, { x: stemCentre + Math.sin(a) * len, y: yFork - Math.cos(a) * len, w: 0.5 }]);
     for (let t = 0; t <= len; t += 0.5) {
       const x = stemCentre + Math.sin(a) * t, y = yFork - Math.cos(a) * t, side = x - stemCentre;
       cv.set(x, y, side * light.x > 0 ? 'c' : 'b', side * DEFAULT_LIGHT.x > 0 ? 'c' : 'b');
@@ -56,5 +58,6 @@ export function drawBush(o: { seed: number; width: number; light?: Light }): Dra
     cv.recolour(x, y, '0'); cv.recolourRef(x, y, '0');
     if (isLeaf(cv.get(x, y - 1))) { cv.recolour(x, y - 1, step('01234', cv.get(x, y - 1), -2) as string); cv.recolourRef(x, y - 1, step('01234', cv.getRef(x, y - 1), -2) as string); }
   }
-  return cv.finish({ x: cx, y: ground }, { pockets: made, vines: 0, stems: 1, limbs: 0 });
+  return cv.finish({ x: cx, y: ground }, { pockets: made, vines: 0, stems: 1, limbs: 0 },
+    { kind: 'bush', trunk: [{ x: stemCentre + 0.5, y: ground, w: wide / 2 }, { x: stemCentre + 0.5, y: ground - h - 1, w: wide / 2 }], limbs: twigs, roots: [], lobes, skirts: [], s });
 }

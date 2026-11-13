@@ -17,8 +17,9 @@ export function drawBare(seed: number, s: number, light: Light): Drawn {
   const footY = Y(79), paint = painter(cv, light);
   const tr = trunkPath(r, cx, Y, s, 1, tw, 54 + (r() - 0.5) * 8, 1.1);
   paint(tr.seg, false, footY);
-  roots(r, paint, cx, footY, s, tw, 3, 1);
+  const rootSegs = roots(r, paint, cx, footY, s, tw, 3, 1);
   let count = 0;
+  const limbSegs: NormalPt[][] = [];
 
   /** One limb from (x0, y0) at angle `a0` (rad from straight up, + to the right), `len` px long, half-width `w0` tapering to 0.68 of it. */
   const limb = (x0: number, y0: number, a0: number, len: number, w0: number, depth: number, side: boolean): void => {
@@ -30,6 +31,7 @@ export function drawBare(seed: number, s: number, light: Light): Drawn {
       pts.push({ x, y, w: w0 * (1 - 0.32 * t), nx: Math.cos(a), ny: Math.sin(a) });
       x += Math.sin(a) * (len / n); y -= Math.cos(a) * (len / n);
     }
+    limbSegs.push(pts);
     const thick: NormalPt[] = [];
     for (const p of pts) { if (p.w >= 1) thick.push(p); else cv.set(p.x, p.y, twigColour(p.x, cx, light), twigColour(p.x, cx, DEFAULT_LIGHT)); }
     paint(thick, false);
@@ -58,5 +60,6 @@ export function drawBare(seed: number, s: number, light: Light): Drawn {
     if (c !== null && c in dead) cv.recolour(x, y, dead[c]);
     if (cRef !== null && cRef in dead) cv.recolourRef(x, y, dead[cRef]);
   }
-  return cv.finish({ x: cx, y: footY }, { pockets: 0, vines: 0, stems: 0, limbs: count });
+  return cv.finish({ x: cx, y: footY }, { pockets: 0, vines: 0, stems: 0, limbs: count },
+    { kind: 'bare', trunk: tr.seg, limbs: limbSegs, roots: rootSegs, lobes: [], skirts: [], s });
 }

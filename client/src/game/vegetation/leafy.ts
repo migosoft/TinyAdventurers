@@ -27,9 +27,9 @@ export function drawLeafy(o: LeafyOpts): Drawn {
   const tr = trunkPath(r, cx, Y, s, sh.sx, tw, (old ? 57 : 54) + (r() - 0.5) * 6, sh.bend * (old ? 1.9 : 1));
   const targets: [number, number][] = [[-(17 + r() * 6), 33], [15 + r() * 6, 32], [(r() < 0.5 ? -4 : 4) + (r() - 0.5), 27]];
   const used = o.shape === 'tall' ? targets.slice(0, 2) : targets;
-  limbs(cv, r, light, tr.at(1), used, X, Y, detail);
+  const limbSegs = limbs(cv, r, light, tr.at(1), used, X, Y, detail);
   paint(tr.seg, false, footY);
-  roots(r, paint, cx, footY, s, tw, old ? 4 : sh.roots, sh.rootLen * (old ? 1.25 : 1));
+  const rootSegs = roots(r, paint, cx, footY, s, tw, old ? 4 : sh.roots, sh.rootLen * (old ? 1.25 : 1));
   barkLines(cv, r, tr, light, s);
   rootMoss(cv, r, cx, footY, s);
   // crown: lobes from the shape's layout, lowest first so the upper ones sit in front
@@ -43,5 +43,6 @@ export function drawLeafy(o: LeafyOpts): Drawn {
   const made = pockets(cv, r, { cx, y0: Y(22), y1: Y(42), halfW: 34 * s * sh.sx, s, pal: '01234', n: detail ? 2 + (r() < 0.5 ? 1 : 0) : 1, twig: detail });
   const vineCount = detail ? vines(cv, r, { X, Y, s, max: 8 * s }) : 0;
   canopyShadow(cv, 7 * s);
-  return cv.finish({ x: cx, y: footY }, { pockets: made, vines: vineCount, stems: 0, limbs: used.length });
+  return cv.finish({ x: cx, y: footY }, { pockets: made, vines: vineCount, stems: 0, limbs: used.length },
+    { kind: 'leafy', trunk: tr.seg, limbs: limbSegs, roots: rootSegs, lobes, skirts: [], s });
 }
