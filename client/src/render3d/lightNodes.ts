@@ -12,6 +12,9 @@ const CARD_REACH = 0.5;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
 
+/** A loop from 0 to `end` whose index is called `name` (three's `Loop` takes `name`; its typings do not list it). */
+const named = (name: string, end: number): N => ({ start: 0, end, name });
+
 export interface Lighting {
   /**
    * `rgb`: ambient plus lava plus the lights; `dv` (0..1): the darkvision strength at P. P and N are vec3 nodes, wrap a float node or number.
@@ -75,7 +78,9 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     const tMz = select(sz.greaterThan(0), fcz.add(1).sub(oz), oz.sub(fcz)).mul(tDz).toVar();
     const t0 = float(0).toVar();
     const vis = float(1).toVar();
-    Loop(40, ({ i }: N) => {
+    // Every loop has its own index name (`ws` here, `ci` in cardVis, `li` for the lights): an expression of an outer loop's index
+    // pasted into an inner loop would otherwise read the inner loop's index (three names them all `i`).
+    Loop(named('ws', 40), ({ ws: i }: N) => {
       const t1 = min(min(tMx, tMz), 1);
       If(i.greaterThan(0), () => {
         const h = cellH(ivec2(cx, cz));
@@ -111,7 +116,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
     const D = L.sub(P);
     const d2 = D.xz;
     const len2 = max(dot(d2, d2), 1e-6);
-    Loop(CASTER_CAP, ({ i }: N) => {
+    Loop(named('ci', CASTER_CAP), ({ ci: i }: N) => {
       const a: N = cA.element(i);
       If(a.z.lessThanEqual(0), () => {
         Break();
@@ -197,11 +202,10 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
           const lz = int(min(max(floor(P.z), 0), map.h - 1));
           sum.addAssign(textureLoad(lavaTex, ivec2(lx, lz)).a);
         });
-        Loop(LIGHT_CAP, ({ i }: N) => {
+        Loop(named('li', LIGHT_CAP), ({ li: i }: N) => {
           const lp: N = lPos.element(i);
           const lc: N = lCol.element(i);
-          // Variables, not expressions: an expression `lPos[i]` pasted into wallVis's and cardVis's own loops would read the
-          // inner loop's `i` (GLSL names every loop index `i`), i.e. another light's slot or a caster's.
+          // Variables, not expressions (each read once, before the shadow loops); the loops' own index names guard the same thing.
           const L = lp.xyz.toVar();
           const carrier = lc.w.sub(2).toVar();
           const rad = lp.w;

@@ -127,7 +127,7 @@ export class Figures3d {
   private cam: Cam | null = null;
   /** This frame's look: the entities the server marks dark, whether they fade (else keep their shape), by how much, and whether a torch has a glow quad. */
   private dark: ReadonlySet<number> = new Set();
-  private darkFade = true;
+  private darkFade = false;
   private fadeAlpha = 1;
   private torchGlow = true;
   private readonly myKind: number;
