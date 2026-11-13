@@ -70,6 +70,7 @@
   gap: 4px;
 }
 /* The two sliders share the first line; quality, the switches, the debug button and the readout take the second. */
+.r3d-panel .r3d-row[hidden] { display: none; }
 .r3d-panel .r3d-row:nth-child(-n + 2) { flex: 1 1 45%; flex-wrap: nowrap; }
 .r3d-panel label {
   white-space: nowrap;

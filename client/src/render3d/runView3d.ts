@@ -36,6 +36,8 @@ const rad = (deg: number): number => (deg * Math.PI) / 180;
 const FOLLOW_RATE = 6;
 /** The free camera's speed in tiles per second, and with Shift. */
 const FREE_SPEED = 12;
+/** The mist's wind in tiles per second: `MIST.speed` turned 20 degrees (a constant until #306). */
+const WIND: [number, number] = [MIST.speed * Math.cos((20 * Math.PI) / 180), MIST.speed * Math.sin((20 * Math.PI) / 180)];
 const FREE_SPEED_FAST = 36;
 
 /** Keys held -> the fixed step's movement: the screen direction turned by the yaw, rounded to the eight wire directions. */
@@ -94,6 +96,17 @@ export class RunView3d implements RunView {
     this.daylight = init.info.daylight;
     this.mask = new SightMask(init.map, this.daylight ? { daylight: true, feather: DEFAULT_HAZE.feather, ramp: DEFAULT_HAZE.ramp } : { daylight: false, feather: 0, ramp: 0 });
     this.softTiles = this.countSoft();
+    this.frameOut = {
+      mode: this.daylight ? 'mist' : 'dark',
+      mask: null,
+      clear: this.daylight ? [0, 0, 0] : stoneClear([0, 0, 0]),
+      haze: DEFAULT_HAZE,
+      mist: { ...MIST },
+      mistDay: 1,
+      mistLight: [1, 1, 1],
+      wind: WIND,
+      t: 0,
+    };
     this.woodland = !!init.info.woodland;
     this.figures = new Figures3d(init, frames, bounds);
     this.field = init.light;
@@ -156,20 +169,24 @@ export class RunView3d implements RunView {
     if (!c.params.sight) return SIGHT_OFF;
     this.mask.update(hard, this.softTiles ? this.allSight : null, this.mapVersion);
     const p = c.params;
-    const turn = (20 * Math.PI) / 180;
-    return {
-      mode: this.daylight ? 'mist' : 'dark',
-      mask: this.mask,
-      clear: this.daylight ? [0, 0, 0] : stoneClear(ambient),
-      haze: DEFAULT_HAZE,
-      mist: { ...MIST, high: p.mistHigh, top: p.mistTop, drift: p.mistDrift },
-      mistDay: p.mistDay,
-      mistLight: [1, 1, 1],
-      // a constant wind until #306
-      wind: [MIST.speed * Math.cos(turn), MIST.speed * Math.sin(turn)],
-      t: c.now,
-    };
+    // One frame object for the whole run, updated in place (nothing is allocated per frame once it exists).
+    const s = this.frameOut;
+    s.mask = this.mask;
+    s.mist.high = p.mistHigh;
+    s.mist.top = p.mistTop;
+    s.mist.drift = p.mistDrift;
+    s.mistDay = p.mistDay;
+    s.t = c.now;
+    if (!this.daylight && (ambient[0] !== this.clearFor[0] || ambient[1] !== this.clearFor[1] || ambient[2] !== this.clearFor[2])) {
+      this.clearFor = [ambient[0], ambient[1], ambient[2]];
+      s.clear = stoneClear(ambient);
+    }
+    return s;
   }
+
+  private readonly frameOut: SightFrame;
+  /** The ambient `frameOut.clear` was made for. */
+  private clearFor: [number, number, number] = [0, 0, 0];
 
   private overlayCount = 0;
 
