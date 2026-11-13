@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TILE_ID } from '../generated/defs';
 import { DEFAULT_HAZE } from '../game/sightField';
 import { TILE, TileMap } from '../sim/map';
-import { View } from '../sim/view';
+import { touches, View } from '../sim/view';
 import { footSight, SightMask, type SightLook } from './sightmask';
 
 const DARK: SightLook = { daylight: false, feather: 0, ramp: 0 };
@@ -125,9 +125,34 @@ describe('SightMask', () => {
     for (const look of [DARK, DAY]) {
       const m = filled(map, 15, 15, 8, look);
       expect(m.sample(18.5, 15.5).soft).toBe(0); // the first trunk, seen
-      expect(m.sample(19.5, 15.5).soft).toBe(0); // the second, also seen (light passes trunks)
+      expect(m.sample(19.5, 15.5).soft).toBeGreaterThan(0.5); // the second is behind the first: still misted
       expect(m.sample(21.5, 15.5).soft).toBeGreaterThan(0.5); // floor behind both
     }
+  });
+
+  it('a trunk face the full polygon ends on has no soft though the tile shadowcast misses it', () => {
+    // find a grazing viewer position: a trunk tile that all.isVisible misses but touches reports
+    const map = room(31, 31, { '18,15': TILE_ID.Trunk });
+    let found: { px: number; py: number } | null = null;
+    for (let py = 15 * TILE + 1; py < 16 * TILE && !found; py += 0.5)
+      for (let px = 14 * TILE; px < 15 * TILE && !found; px += 0.5) {
+        const { all } = views(map, px, py, 8);
+        if (!all.isVisible(18, 15) && touches(all, 18, 15)) found = { px, py };
+      }
+    if (!found) {
+      // try looking along a diagonal, further off the trunk's row
+      for (let ty = 8; ty < 15 && !found; ty++)
+        for (let py = ty * TILE; py < (ty + 1) * TILE && !found; py += 1)
+          for (let px = 14 * TILE; px < 15 * TILE && !found; px += 1) {
+            const { all } = views(map, px, py, 8);
+            if (!all.isVisible(18, 15) && touches(all, 18, 15)) found = { px, py };
+          }
+    }
+    expect(found).not.toBeNull();
+    const { hard, all } = views(map, found!.px, found!.py, 8);
+    const m = new SightMask(map, DARK);
+    m.update(hard, all, 0);
+    expect(m.sample(18.5, 15.5).soft).toBe(0);
   });
 
   it('no all view, no soft', () => {
