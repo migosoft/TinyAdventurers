@@ -48,6 +48,7 @@ function setup(rows = ROWS, over: Partial<RunStartInfo> = {}, startYaw = 0) {
     get params() { return params; },
     setParams: vi.fn((p: R3dParams) => { params = p; }),
     setRunYaw: vi.fn((yaw: number) => { params = { ...params, yaw }; }),
+    setDaylight: vi.fn(),
     stop: vi.fn(),
   };
   const el = document.createElement('div');
@@ -418,7 +419,7 @@ describe('startRun3d', () => {
       const net = fakeNet();
       const hud = fakeHud();
       let stage: ReturnType<typeof createRunStage> | null = null;
-      const host: Host = { params: DEFAULTS, setParams: vi.fn(), setRunYaw: vi.fn(), stop: vi.fn() };
+      const host: Host = { params: DEFAULTS, setParams: vi.fn(), setRunYaw: vi.fn(), setDaylight: vi.fn(), stop: vi.fn() };
       const run = startRun3d(document.createElement('div'), '', {
         info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
         startHost: async (_el, _s, _m, make) => {
@@ -471,7 +472,7 @@ describe('startRun3d', () => {
   it('stop before the host exists stops the host the moment it is made', async () => {
     const net = fakeNet();
     const hud = fakeHud();
-    const host: Host = { params: DEFAULTS, setParams: vi.fn(), setRunYaw: vi.fn(), stop: vi.fn() };
+    const host: Host = { params: DEFAULTS, setParams: vi.fn(), setRunYaw: vi.fn(), setDaylight: vi.fn(), stop: vi.fn() };
     const run = startRun3d(document.createElement('div'), '', {
       info: startInfo(ROWS), net: net as unknown as Net, hud: hud as unknown as Hud, myClass: 'Wizard',
       startHost: async (_el, _s, _m, make) => {

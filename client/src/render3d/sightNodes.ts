@@ -30,7 +30,7 @@ export interface Sight {
   unseenAt(xz: N): N;
   /** The colour after the sight step: `mode` off unchanged; dark mix(c * (1 - SHADE * soft), clear, hard); mist per `mist.ts` with `P` the true world point (height P.y, drift at P.xz). */
   apply(colour: N, P: N, u: N): N;
-  /** The mask's texels per tile as a node (`sightOrigin.w`): a material pushes a wall face's read point out by 1.5 / res. */
+  /** The mask's texels per tile as a node (`sightOrigin.w`): the world's wall faces push their read point out by 1.5 / res (materials.ts); wall cards (torches) by the fixed WALL_SIGHT_PUSH, 0.25 tile (cards.ts). */
   readonly res: N;
   /** `colour` dimmed by SHADE * soft on dark maps (a self-lit thing behind a trunk); unchanged on other maps. */
   dim(colour: N, soft: N): N;

@@ -535,3 +535,43 @@ describe('Figures3d casters (#304)', () => {
     expect(b.u0).toBeGreaterThan(b.u1);
   });
 });
+
+describe('the sight attributes of the cards (#305)', () => {
+  const footOf = (b: CardBuf, i: number): { reach: number; scenery: number } => ({ reach: b.foot[i * 4 + 2], scenery: b.foot[i * 4 + 3] });
+
+  it('a chest is scenery, a monster is not', () => {
+    const chest = make().frame(frame([ent(31, KIND.Chest, { side: SIDE.Neutral })]), cam());
+    expect(footOf(chest.cards, 0).scenery).toBe(1);
+    const orc = make().frame(frame([ent(11, KIND.OrcWarrior)]), cam());
+    expect(footOf(orc.cards, 0).scenery).toBe(0);
+  });
+
+  it('the board objects are scenery: torch flame, barrel, mimic, skull and coins', () => {
+    const torch = make().frame(frame([ent(30, KIND.Torch, { x: 3 * 16 + 8, y: 2 * 16 + 0.5, extra: 0, anim: 1, side: SIDE.Neutral })]), cam());
+    for (let i = 0; i < torch.emissive.n * 6; i++) expect(footOf(torch.emissive, i).scenery).toBe(1);
+    const barrel = make().frame(frame([ent(32, KIND.Barrel, { side: SIDE.Neutral })]), cam());
+    expect(footOf(barrel.cards, 0).scenery).toBe(1);
+    const mimic = make().frame(frame([ent(33, KIND.Mimic, { side: SIDE.Neutral })]), cam());
+    expect(mimic.cards.n + mimic.ghosts.n).toBe(1);
+    expect(footOf(mimic.cards.n ? mimic.cards : mimic.ghosts, 0).scenery).toBe(1);
+    const fg = make();
+    for (let i = 0; i < 4; i++) frames[`coin_anim_f${i}`] ??= { x: 500, y: 20, w: 16, h: 16 };
+    fg.event({ t: 'Coins', x: 40, y: 40, v: 8 } as never);
+    fg.event({ t: 'Died', id: 10, x: 40, y: 40, kind: KIND.Knight });
+    const out = fg.frame(frame([]), cam());
+    expect(out.decals.n).toBeGreaterThan(0);
+    expect(out.ghosts.n).toBeGreaterThan(0);
+    for (const b of [out.decals, out.ghosts]) for (let i = 0; i < b.n * 6; i++) expect(footOf(b, i).scenery).toBe(1);
+  });
+
+  it('a wide figure body and weapon carry the same reach: half the frame width in tiles', () => {
+    const wide = new Figures3d(init(), frames, (f) => ({ ...bounds(f), r: 47, w: 48 }));
+    const out = wide.frame(frame([ent(10, KIND.Paladin, { side: SIDE.Friendly })]), cam());
+    expect(out.cards.n).toBe(2);
+    const body = footOf(out.cards, 0), weapon = footOf(out.cards, 6);
+    expect(body.reach).toBeGreaterThan(0.5);
+    expect(body.reach).toBeCloseTo((48 * (FIGURES[KIND.Paladin].scale ?? 1)) / 2 / TILE, 5);
+    expect(weapon.reach).toBe(body.reach);
+    expect(body.scenery).toBe(0);
+  });
+});

@@ -132,6 +132,7 @@ export function createRunStage(run: Run, info: RunStartInfo, assets: Assets, hos
   // The yaw (whole degrees) last put into the host's params; a different `params.yaw` means the panel's slider moved it.
   let reported = 0;
   if (host.params.yaw !== 0) host.setRunYaw(0);
+  host.setDaylight(info.daylight);
   const mouse = new RunMouse(el, turn);
   run.input.primary = () => mouse.takePrimary();
   run.input.secondary = () => mouse.takeSecondary();

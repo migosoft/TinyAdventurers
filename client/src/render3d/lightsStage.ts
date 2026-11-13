@@ -6,6 +6,7 @@
 import { ANIM, CONST, KIND, LIGHT_KIND, SIDE } from '../generated/defs';
 import { nextDarkvision } from '../game/darkvisionSteps';
 import { LightField } from '../game/light';
+import { DEFAULT_HAZE } from '../game/sightField';
 import { BLUE, TORCHES, VIEWER, blueOn, buildMap, lavaLights, movingAt } from '../game/lightsDemoScript';
 import type { EntState } from '../game/world';
 import { atlasBounds } from './atlasBounds';
@@ -15,10 +16,14 @@ import { Figures3d } from './figures';
 import { galleryFrame, galleryInit } from './galleryStage';
 import { MOVE_KEYS, type Host, type Stage, type StageCtx } from './host';
 import type { R3dParams } from './params';
-import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient } from './light';
+import { LIGHT_CAP, WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
 import { assignSkips, carrierMap, CASTER_CAP, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs } from './lights';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
+import { MIST } from './mist';
+import { SightMask } from './sightmask';
+import { SIGHT_OFF } from './sightNodes';
+import { View as SightView } from '../sim/view';
 import type { Assets, WorldInput } from './view';
 
 const TILE = 16;
@@ -82,6 +87,12 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
   const figures = new Figures3d({ ...galleryInit(), map }, assets.frames, atlasBounds(assets.image, assets.frames));
   const cam = { x: map.w / 2, z: map.h / 2, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
   let t = opts.start;
+  // The viewer's sight, as the 2D `?lights` page: `&at=x,y` (tiles) or the script's VIEWER (the middle of room 1's tile); the page's map has no soft tiles.
+  const at = new URLSearchParams(search).get('at')?.split(',').map(Number);
+  const viewerAt = at?.length === 2 && at.every(Number.isFinite) ? { x: at[0], z: at[1] } : { x: VIEWER[0] + 0.5, z: VIEWER[1] + 0.5 };
+  const hardView = new SightView(map.w, map.h);
+  hardView.compute(map, viewerAt.x * TILE, viewerAt.z * TILE, CONST.FOV_RADIUS, 'hard');
+  const mask = new SightMask(map, { daylight: false, feather: 0, ramp: 0 });
 
   // The field: each torch's light on the tile its spot lies in (ids from 1, as in 2D), then a light on every lava tile.
   const field = new LightField(map);
@@ -141,7 +152,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
 
       const dv = dvOf(c.params);
       caption(dv);
-      const viewer = { x: VIEWER[0] + 0.5, z: VIEWER[1] + 0.5 };
+      const viewer = viewerAt;
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let inView = 0;
       if (game) {
@@ -159,6 +170,11 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
       const casters = game ? selectCasters(fo.casters, lights, Math.min(CASTER_CAP, c.params.ccap)) : [];
       assignSkips(lights, carrierMap(lights), casters);
       c.timer.lap('lights');
+      mask.update(hardView, null, 0);
+      const sight = c.params.sight
+        ? { mode: 'dark' as const, mask, clear: stoneClear(ambient), haze: DEFAULT_HAZE, mist: MIST, mistDay: 1, mistLight: [1, 1, 1] as [number, number, number], wind: [0, 0] as [number, number], t: c.now }
+        : SIGHT_OFF;
+      c.timer.lap('sight');
       const r = window.__r3d;
       if (r) {
         r.figures = figures.count;
@@ -172,7 +188,7 @@ export function createLightsStage(assets: Assets, p: R3dParams, search: string, 
           see: { openers: seenOpeners(fo.openers, ALL_VISIBLE, new Set()), look: seeLook(c.params) },
           lava: game ? lava : null, lavaVersion: lavaVersion,
           darkvision: game && dv > 0 ? { x: viewer.x, z: viewer.z, reach: dv * CONST.FOV_RADIUS } : null,
-          casters,
+          casters, sight,
         },
         c.timer,
       );

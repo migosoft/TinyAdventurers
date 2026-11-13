@@ -202,7 +202,7 @@ export class Figures3d {
       // 2D puts the token 2 px up the screen from the death spot: 2 / 16 tile away from the camera on the ground.
       const x = sk.x + (Math.sin(cam.yaw) * 2) / TILE;
       const z = sk.z - (Math.cos(cam.yaw) * 2) / TILE;
-      pushFlat(out.decals, { frame: 'skull', x, z, lift: 0, flip: sk.flip, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 0.85 }, this.frames, cam);
+      pushFlat(out.decals, { frame: 'skull', x, z, lift: 0, flip: sk.flip, originX: 0.5, footY: 0.5, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 0.85, scenery: true }, this.frames, cam);
     }
     this.drawCoins(f.now, cam, out);
     sortBackToFront(out.ghosts, cam);
@@ -217,7 +217,7 @@ export class Figures3d {
     const ph = e.id * 1.7;
     // side 0 (Face): the south face of the wall cell north of the floor; 1 (West): the east face of the wall west of the floor; 2 (East): the west face of the wall east of it
     const [cx, cz, nx, nz] = e.extra === 0 ? [x, Math.floor(z) + TORCH_OFF, 0, 1] : e.extra === 1 ? [Math.floor(x) + TORCH_OFF, z, 1, 0] : [Math.floor(x) + 1 - TORCH_OFF, z, -1, 0];
-    pushWall(out.emissive, torchFrame(lit, now + ph / 8, TORCH_FRAMES), cx, TORCH_MID, cz, nx, nz, e.extra === 2, this.frames);
+    pushWall(out.emissive, torchFrame(lit, now + ph / 8, TORCH_FRAMES), cx, TORCH_MID, cz, nx, nz, e.extra === 2, this.frames, true);
     const sightAt: [number, number] = [cx + nx * WALL_SIGHT_PUSH, cz + nz * WALL_SIGHT_PUSH];
     if (lit && this.torchGlow) {
       const k = torchFlicker(now, ph);
@@ -264,7 +264,7 @@ export class Figures3d {
     const x = e.x / TILE;
     const z = e.y / TILE;
     const [bx, bz] = this.bodyFoot(x, z, cam);
-    this.body({ frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1 }, e.id, cam, out);
+    this.body({ frame: chestFrame(e.anim === 1 ? e.animMs / 1000 : -1), x: bx, z: bz, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1, scenery: true }, e.id, cam, out);
     this.objShadow(e.id, x, z, 1, OBJ_SHADOW_ALPHA, cam, out);
     this.objectAnchor(e, x, z);
     this.opener(e, false, x, z, CHEST_HEIGHT / 2 / TILE, 'chest', out);
@@ -279,7 +279,7 @@ export class Figures3d {
     const frame = 'barrel_explosive';
     const fr = this.frames[frame];
     if (fr) {
-      const card: Card = { frame, x: bx, z: bz, lift: -p.dy / TILE, flip: false, originX: 0.5, footY: 1, scale: p.scale, tint: p.fill !== null ? rgbOf(p.fill) : [1, 1, 1], mode: p.fill !== null ? 1 : 0, alpha: p.alpha };
+      const card: Card = { frame, x: bx, z: bz, lift: -p.dy / TILE, flip: false, originX: 0.5, footY: 1, scale: p.scale, tint: p.fill !== null ? rgbOf(p.fill) : [1, 1, 1], mode: p.fill !== null ? 1 : 0, alpha: p.alpha, scenery: true };
       // Sinking in deep water: the part below the surface is cut off, not drawn under the floor.
       if (p.dy > 0) card.crop = { x: 0, y: 0, w: fr.w, h: Math.max(0, fr.h - p.dy) };
       if (!card.crop || card.crop.h > 0) this.body(card, e.id, cam, out);
@@ -305,7 +305,7 @@ export class Figures3d {
     const [bx, bz] = this.bodyFoot(x, z, cam);
     this.body({
       frame: `chest_mimic_open_anim_f${p.frame}`, x: bx, z: bz, lift: p.lift / TILE, flip: p.flip, originX: 0.5, footY: 1, scale: 1, sx: p.sx, sy: p.sy,
-      angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1,
+      angle: rad(p.angle), offset: [p.bx, p.by], tint: [1, 1, 1], mode: p.hurtFill ? 1 : 0, alpha: 1, scenery: true,
     }, e.id, cam, out);
     this.objShadow(e.id, x, z, p.shadowScale, p.shadowAlpha, cam, out);
     this.objectAnchor(e, x, z);
@@ -337,7 +337,7 @@ export class Figures3d {
       const rest = (this.frames[c.frame]?.h ?? 0) / 2 / TILE;
       pushCard(out.ghosts, {
         frame: c.frame, x: c.x + Math.cos(cam.yaw) * right, z: c.z + Math.sin(cam.yaw) * right, lift: Math.max(rest, up), flip: false, originX: 0.5, footY: 0.5, scale: 1,
-        tint: [1, 1, 1], mode: 0, alpha: 1 - t / c.life,
+        tint: [1, 1, 1], mode: 0, alpha: 1 - t / c.life, scenery: true,
       }, this.frames, cam);
     }
     this.coins = keep;
@@ -393,6 +393,8 @@ export class Figures3d {
     const sc = pose.scale;
     const { tint, mode } = lookOf(pose.tint, pose.grey);
     const down = (pose.sink + pose.drop) / TILE;
+    // The sight mask's wide-figure rule (`footSight`): half the body frame's opaque width, in tiles, on the body and its weapon.
+    const reach = ((fb.r - fb.l + 1) * sc) / 2 / TILE;
     /** The weapon card is owned by its wielder (it is not shadowed by the wielder), but casts nothing of its own. */
     const into = (c: Card): void => {
       const l = this.lit(c, e.id);
@@ -416,7 +418,7 @@ export class Figures3d {
       // wolf's lunge is not, so the factor is not uniform and it is applied here as it is.
       const body: Card = {
         frame: pose.frame, x: x + (pose.aimStep.x * sc - Math.sin(cam.yaw) * sc) / TILE, z: z + (pose.aimStep.y * sc + Math.cos(cam.yaw) * sc) / TILE, lift: -down, flip: pose.left, originX: pose.originX, footY: pose.footY / fb.h,
-        scale: sc, sx: pose.body.sx, sy: pose.body.sy, angle: rad(pose.body.angle), offset: [pose.body.x, pose.body.y - 1], tint, mode, alpha: pose.alpha,
+        scale: sc, sx: pose.body.sx, sy: pose.body.sy, angle: rad(pose.body.angle), offset: [pose.body.x, pose.body.y - 1], tint, mode, alpha: pose.alpha, reach,
       };
       if (pose.sink > 0) body.crop = { x: 0, y: 0, w: fb.w, h: pose.footY - pose.sink };
       if (!body.crop || body.crop.h > 0) {
@@ -442,7 +444,7 @@ export class Figures3d {
       const wt = pose.weaponTint !== null ? rgbOf(pose.weaponTint) : ([1, 1, 1] as [number, number, number]);
       into({
         frame: wp.frame, x, z, lift: -down, flip: wp.flipX, originX: wp.originX, footY: wp.originY, scale: wsc, angle: wp.rot, offset: [wp.x / wp.scale, wp.y / wp.scale],
-        tint: wt, mode: pose.grey ? 2 : 0, alpha: wp.alpha * pose.alpha, bias: wp.behind ? -WEAPON_BIAS : WEAPON_BIAS,
+        tint: wt, mode: pose.grey ? 2 : 0, alpha: wp.alpha * pose.alpha, bias: wp.behind ? -WEAPON_BIAS : WEAPON_BIAS, reach,
       });
     }
 

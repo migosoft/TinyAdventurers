@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { ANIM, KIND, LIGHT_KIND } from '../generated/defs';
+import { ANIM, CONST, KIND, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { LightField } from '../game/light';
 import { TileMap } from '../sim/map';
 import { snap, startInfo } from '../run/testing';
@@ -10,6 +10,9 @@ import { AMBIENT, WORK_AMBIENT } from './light';
 import { renderPlan } from './quality';
 import { DEFAULTS, type R3dParams } from './params';
 import { RunView3d, moveInput } from './runView3d';
+import { MIST } from './mist';
+import { stoneClear } from './light';
+import { SIGHT_MARGIN } from './sightmask';
 import type { StageCtx } from './host';
 import type { FrameInput } from './view';
 
@@ -47,9 +50,10 @@ const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`wizzard_m_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 
-function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number } = {}) {
-  const info = startInfo(['#######', '#.....#', '#.....#', '#######'], over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 } } as never } : {});
+function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; camera?: { x: number; y: number }; trunk?: [number, number] } = {}) {
+  const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 } } as never } : {}), ...(over.daylight ? { daylight: true } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
+  if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
   const light = new LightField(map);
   if (over.torch !== false) light.add({ id: 1, kind: LIGHT_KIND.Torch, colour: 0xffa040, x: 3, y: 1, on: true });
   const init: RunViewInit = { info, map, light, myKind: KIND.Wizard };
@@ -65,7 +69,7 @@ function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { dar
   const s = snap({ lights: over.moving ?? [], ents: (over.ents ?? []) as never });
   if (over.me) Object.assign(s.me, over.me);
   const own = { x: over.ownX ?? 56, y: 24, alive: true, charmed: false, anim: ANIM.Idle, animT: 0, aim: 0, aimsAtPointer: false, aimFromX: over.ownX ?? 56, aimFromY: 24, flags: 0, effects: 0, entangled: 0, dashing: false, sinking: false };
-  const f = { dt: 1 / 60, now: 0, ents: new Map(), you: 1, own, watching: null, camera: { x: 56, y: 24 }, snap: s, shots: [], hiddenShots: new Set(), useHint: null, dark: new Set(), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] } } as unknown as RunFrame;
+  const f = { dt: 1 / 60, now: 0, ents: new Map(), you: 1, own, watching: null, camera: over.camera ?? { x: 56, y: 24 }, snap: over.noSnap ? null : s, shots: [], hiddenShots: new Set(), useHint: null, dark: new Set(), debug: { on: false, path: [], ogre: [], cove: [], notice: [], dodges: [] } } as unknown as RunFrame;
   const stats = v.frame(f);
   const first = got as FrameInput | null;
   /** Another frame of the same view and frame data: what it hands `draw`. */
@@ -74,7 +78,7 @@ function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { dar
     v.frame(f);
     return got;
   };
-  return { f: first, stats, own, v, light, again };
+  return { f: first, stats, own, v, light, again, map };
 }
 
 describe('the run view and the game lights', () => {
@@ -131,5 +135,64 @@ describe('the run view and the game lights', () => {
     const v2 = a.again()!.lavaVersion;
     expect(v2).toBeGreaterThan(v1);
     expect(a.again()?.lavaVersion).toBe(v2);
+  });
+});
+
+describe('the run view feeds the sight mask (#305)', () => {
+  const big = ['#'.repeat(40), ...Array.from({ length: 38 }, () => `#${'.'.repeat(38)}#`), '#'.repeat(40)];
+  const centre = (m: NonNullable<FrameInput['sight']>['mask']): { x: number; z: number } => ({ x: m!.ox + m!.size / 2, z: m!.oz + m!.size / 2 });
+
+  it('a dungeon frame is dark, a daylight one mist', () => {
+    const d = run().f!.sight!;
+    expect(d.mode).toBe('dark');
+    expect(d.mask).not.toBeNull();
+    expect(run({ daylight: true }).f!.sight!.mode).toBe('mist');
+  });
+  it('the mist comes from the params over MIST', () => {
+    const s = run({ daylight: true, params: { mistHigh: 4, mistTop: 0.2, mistDrift: 0.5, mistDay: 0.3 } }).f!.sight!;
+    expect(s.mist).toEqual({ ...MIST, high: 4, top: 0.2, drift: 0.5 });
+    expect(s.mistDay).toBe(0.3);
+    expect(s.mistLight).toEqual([1, 1, 1]);
+  });
+  it('params.sight false turns it off', () => {
+    const s = run({ params: { sight: false } }).f!.sight!;
+    expect(s.mode).toBe('off');
+    expect(s.mask).toBeNull();
+  });
+  it('a dark map clears to stoneClear(ambient)', () => {
+    expect(run().f!.sight!.clear).toEqual(stoneClear([0, 0, 0]));
+  });
+  it('a spectated camera centres the mask on f.camera, with the free camera too', () => {
+    for (const free of [false, true]) {
+      const m = run({ rows: big, camera: { x: 30 * 16 + 8, y: 20 * 16 + 8 }, params: { free } }).f!.sight!.mask!;
+      const c = centre(m);
+      expect(Math.abs(c.x - 30.5)).toBeLessThan(0.25);
+      expect(Math.abs(c.z - 20.5)).toBeLessThan(0.25);
+    }
+  });
+  it('without a snapshot the vision is FOV_RADIUS', () => {
+    const m = run({ noSnap: true }).f!.sight!.mask!;
+    expect(m.size).toBe(2 * (CONST.FOV_RADIUS + 0.5 + SIGHT_MARGIN));
+  });
+  it('a standing view does not refill, tileChanged does, and a trunk-free map drops the all view', () => {
+    const a = run({ rows: big, trunk: [5, 5] });
+    const m = a.f!.sight!.mask!;
+    const v0 = m.version;
+    a.again();
+    expect(m.version).toBe(v0);
+    a.v.tileChanged(5, 5, 0);
+    a.again();
+    expect(m.version).toBeGreaterThan(v0);
+    // the only trunk becomes floor: the all view is no longer computed, so its version stops
+    const allVersion = (): number => (a.v as unknown as { allSight: { version: number } }).allSight.version;
+    const before = allVersion();
+    expect(before).toBeGreaterThan(0);
+    a.map.set(5, 5, TILE_ID.Floor);
+    a.v.tileChanged(5, 5, 0);
+    a.again();
+    a.again();
+    expect(allVersion()).toBe(before);
+    const b = run({ rows: big });
+    expect((b.v as unknown as { allSight: { version: number } }).allSight.version).toBe(0);
   });
 });

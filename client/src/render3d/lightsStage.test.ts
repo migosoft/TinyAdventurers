@@ -8,6 +8,7 @@ import { renderPlan } from './quality';
 import type { Stage, StageCtx } from './host';
 import { createLightsStage, lightsEnts, lightsKnight } from './lightsStage';
 import type { FrameInput } from './view';
+import { SIGHT_MARGIN } from './sightmask';
 
 // Only the walking knight's frames: enough for its card (and so its shadow); the torch flames have none and draw nothing.
 const frames: Record<string, { x: number; y: number; w: number; h: number }> = {};
@@ -61,6 +62,20 @@ describe('the ?r3d=lights stage', () => {
     expect(ids(on)).toContain(blue);
     expect(ids(off)).not.toContain(blue);
     expect(off!.lights).toHaveLength(8);
+  });
+
+  it('passes a dark sight mask centred on the viewer, off with sight=0, and on &at', () => {
+    const s = drawn('?r3d=lights').f!.sight!;
+    expect(s.mode).toBe('dark');
+    expect(s.mask!.ox + s.mask!.size / 2).toBeCloseTo(7.5, 0);
+    expect(s.mask!.oz + s.mask!.size / 2).toBeCloseTo(9.5, 0);
+    expect(s.mask!.size).toBe(2 * (CONST.FOV_RADIUS + 0.5 + SIGHT_MARGIN));
+    const off = drawn('?r3d=lights&sight=0').f!.sight!;
+    expect(off.mode).toBe('off');
+    expect(off.mask).toBeNull();
+    const at = drawn('?r3d=lights&at=4,6').f!.sight!;
+    expect(at.mask!.ox + at.mask!.size / 2).toBeCloseTo(4, 0);
+    expect(at.mask!.oz + at.mask!.size / 2).toBeCloseTo(6, 0);
   });
 
   it('reads the darkvision from the params every frame', () => {

@@ -59,6 +59,8 @@ export interface Host {
   setParams(p: R3dParams): void;
   /** A run's camera turned: the yaw in `params` and the panel, not in the address bar. */
   setRunYaw(deg: number): void;
+  /** Shows the panel's mist rows (daylight maps); a run calls it once it knows the map. */
+  setDaylight(on: boolean): void;
   stop(): void;
 }
 
@@ -239,6 +241,7 @@ export async function startHost(
       params = { ...params, yaw: deg };
       panel.setParams(params);
     },
+    setDaylight: (on) => panel.setDaylight(on),
     stop: () => stop(),
   };
 

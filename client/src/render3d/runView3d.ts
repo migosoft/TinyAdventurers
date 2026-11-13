@@ -17,10 +17,14 @@ import { Figures3d, type Opener } from './figures';
 import { seenOpeners } from './openers';
 import { seeLook } from './seeThrough';
 import { MOVE_KEYS, type StageCtx } from './host';
-import { WORK_AMBIENT, dungeonAmbient } from './light';
+import { WORK_AMBIENT, dungeonAmbient, stoneClear } from './light';
+import { MIST } from './mist';
+import { SightMask } from './sightmask';
+import { SIGHT_OFF, type SightFrame } from './sightNodes';
 import { SHOT_LIFT } from './camera';
 import { isProjectileKind } from '../game/anim/defs';
-import { KIND } from '../generated/defs';
+import { CONST, KIND } from '../generated/defs';
+import { DEFAULT_HAZE } from '../game/sightField';
 import { assignSkips, carrierMap, footprint, lavaTexels, movingCands, selectCasters, selectLights, staticCands, TorchPairs, type Carrier, type ShadowCaster } from './lights';
 import { R3D_SYSTEMS, lightLines } from './stats';
 import type { View } from './view';
@@ -86,6 +90,10 @@ export class RunView3d implements RunView {
     this.map = init.map;
     for (const p of init.info.players) this.heroNames.set(p.ent, p.name);
     this.sight = new SightView(init.map.w, init.map.h);
+    this.allSight = new SightView(init.map.w, init.map.h);
+    this.daylight = init.info.daylight;
+    this.mask = new SightMask(init.map, this.daylight ? { daylight: true, feather: DEFAULT_HAZE.feather, ramp: DEFAULT_HAZE.ramp } : { daylight: false, feather: 0, ramp: 0 });
+    this.softTiles = this.countSoft();
     this.woodland = !!init.info.woodland;
     this.figures = new Figures3d(init, frames, bounds);
     this.field = init.light;
@@ -103,21 +111,64 @@ export class RunView3d implements RunView {
 
   /** What may open walls this frame and stands where the followed hero sees (for the wall openings, #303 Task 8). */
   seen: Opener[] = [];
+  // The sight mask (#305). `sight` (hard blockers) and `allSight` (every blocker, only while the map has trunks or thickets) are
+  // the same two objects for the whole run, so the mask's version keys (`hard.version`, `all.version`) only ever grow and a
+  // replaced view can never match the last fill by coincidence; `mapVersion` is bumped by every `tileChanged`.
   private readonly sight: SightView;
+  private readonly allSight: SightView;
+  private readonly mask: SightMask;
+  private readonly daylight: boolean;
   private sightKey = '';
+  private mapVersion = 0;
+  /** Whether the map has a soft tile (a trunk or a thicket); recounted in the frame after a tile changed. */
+  private softTiles: boolean;
+  private softDirty = false;
+
+  private countSoft(): boolean {
+    const m = this.map;
+    for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (m.opaque(x, y) && !m.hardOpaque(x, y)) return true;
+    return false;
+  }
 
   /**
    * The followed figure's sight (the own hero's, or the spectated teammate's: `f.camera`), as 2D's `LightView` computes it:
    * `hard` blockers, recomputed only when the position, the vision or the map changes.
    */
   private sightFor(f: RunFrame): SightView {
-    const vision = Math.round(f.snap?.me.vision ?? 0);
+    if (this.softDirty) {
+      this.softDirty = false;
+      this.softTiles = this.countSoft(); // a tile changed: the views below are recomputed (tileChanged cleared the key) with the right set
+    }
+    const vision = Math.round(f.snap?.me.vision ?? CONST.FOV_RADIUS);
     const key = `${f.camera.x.toFixed(1)},${f.camera.y.toFixed(1)},${vision}`;
     if (key !== this.sightKey) {
       this.sightKey = key;
       this.sight.compute(this.map, f.camera.x, f.camera.y, vision, 'hard');
+      // the `all` view of the same key, only while there is something soft to see through
+      if (this.softTiles) this.allSight.compute(this.map, f.camera.x, f.camera.y, vision, 'all');
     }
     return this.sight;
+  }
+
+  /** The sight step of this frame for the view: the mask is refilled when the views or the map changed (booked under `sight`). */
+  private sightFrame(f: RunFrame, c: StageCtx, ambient: [number, number, number]): SightFrame {
+    const hard = this.sightFor(f);
+    if (!c.params.sight) return SIGHT_OFF;
+    this.mask.update(hard, this.softTiles ? this.allSight : null, this.mapVersion);
+    const p = c.params;
+    const turn = (20 * Math.PI) / 180;
+    return {
+      mode: this.daylight ? 'mist' : 'dark',
+      mask: this.mask,
+      clear: this.daylight ? [0, 0, 0] : stoneClear(ambient),
+      haze: DEFAULT_HAZE,
+      mist: { ...MIST, high: p.mistHigh, top: p.mistTop, drift: p.mistDrift },
+      mistDay: p.mistDay,
+      mistLight: [1, 1, 1],
+      // a constant wind until #306
+      wind: [MIST.speed * Math.cos(turn), MIST.speed * Math.sin(turn)],
+      t: c.now,
+    };
   }
 
   private overlayCount = 0;
@@ -237,9 +288,11 @@ export class RunView3d implements RunView {
       this.lightStat = { list: lights.length, inView: sel.inView, casters: casters.length };
     }
     c.timer.lap('lights');
+    const sight = this.sightFrame(f, c, ambient);
+    c.timer.lap('sight');
     c.timer.renderStart();
     this.drawCalls = view.draw(
-      { cam, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: this.seen, look: seeLook(c.params) } },
+      { cam, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now, see: { openers: this.seen, look: seeLook(c.params) }, sight },
       c.timer,
     );
     this.paintOverlay(f, c, cam);
@@ -306,6 +359,8 @@ export class RunView3d implements RunView {
 
   tileChanged(x: number, y: number, _v: number): void {
     this.sightKey = ''; // a door or a wall changed: the sight is recomputed
+    this.mapVersion++;
+    this.softDirty = true;
     this.v?.tileChanged(x, y);
   }
 
