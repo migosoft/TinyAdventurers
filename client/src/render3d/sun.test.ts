@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { HOUR_RATE, HourClock, cardSunGain, hourLabel, mistLightOf, sky, startHour } from './sun';
+import { HOUR_RATE, HourClock, SUN_TOP, cardSunGain, fitSunMap, hourLabel, mistLightOf, sky, startHour, sunBasis, sunCoord, type Vec3 } from './sun';
+import type { Footprint } from './lights';
 
 const len = (v: number[]) => Math.hypot(v[0], v[1], v[2]);
 
@@ -77,5 +78,86 @@ describe('helpers', () => {
     expect(cardSunGain([0, 1, 0])).toBeCloseTo(0.86, 9);
     expect(hourLabel(9.5)).toBe('09:30');
     expect(hourLabel(24.25)).toBe('00:15');
+  });
+});
+
+describe('the sun map fit', () => {
+  const low = (): Vec3 => {
+    const e = (5 * Math.PI) / 180;
+    return [Math.cos(e) * 0.6, Math.sin(e), Math.cos(e) * -0.8];
+  };
+  const dirs: [string, Vec3][] = [
+    ['06:30', sky(6.5).dir],
+    ['09:30', sky(9.5).dir],
+    ['13:00', sky(13).dir],
+    ['18:30', sky(18.5).dir],
+    ['moon', sky(0).dir],
+    ['5 degrees', low()],
+  ];
+  const fp: Footprint = { x0: 20, z0: 30, x1: 38, z1: 42 };
+  const map = { w: 64, h: 48 };
+  const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const box = (x0: number, x1: number, y1: number, z0: number, z1: number): Vec3[] => {
+    const out: Vec3[] = [];
+    for (const x of [x0, x1]) for (const y of [0, y1]) for (const z of [z0, z1]) out.push([x, y, z]);
+    return out;
+  };
+
+  it.each(dirs)('covers the footprint at %s', (_n, dir) => {
+    const fit = fitSunMap(dir, fp, map, 2048);
+    for (const P of box(fp.x0, fp.x1, SUN_TOP, fp.z0, fp.z1)) {
+      const c = sunCoord(fit, P);
+      expect(c.u).toBeGreaterThanOrEqual(0);
+      expect(c.u).toBeLessThanOrEqual(1);
+      expect(c.v).toBeGreaterThanOrEqual(0);
+      expect(c.v).toBeLessThanOrEqual(1);
+    }
+  });
+  it.each(dirs)('depth covers the map at %s', (_n, dir) => {
+    const fit = fitSunMap(dir, fp, map, 2048);
+    for (const P of box(0, map.w, SUN_TOP, 0, map.h)) {
+      const c = sunCoord(fit, P);
+      expect(c.depth).toBeGreaterThanOrEqual(0);
+      expect(c.depth).toBeLessThanOrEqual(1);
+    }
+  });
+  it('puts depth 0 at the near plane and 1 at the far plane', () => {
+    const fit = fitSunMap(sky(9.5).dir, fp, map, 1024);
+    const at = (k: number): Vec3 => [fit.C[0] + fit.F[0] * fit.ext[2] * k, fit.C[1] + fit.F[1] * fit.ext[2] * k, fit.C[2] + fit.F[2] * fit.ext[2] * k];
+    expect(sunCoord(fit, at(-1)).depth).toBeCloseTo(0, 9);
+    expect(sunCoord(fit, at(1)).depth).toBeCloseTo(1, 9);
+    expect(sunCoord(fit, at(0))).toMatchObject({ u: 0.5, v: 0.5 });
+  });
+  it.each(dirs)('snaps the centre to texels at %s', (_n, dir) => {
+    const fit = fitSunMap(dir, fp, map, 2048);
+    expect(fit.texel).toBeCloseTo((2 * fit.ext[0]) / 2048, 12);
+    const nearWhole = (x: number) => Math.abs(x - Math.round(x));
+    expect(nearWhole(dot(fit.C, fit.R) / fit.texel)).toBeLessThan(1e-6);
+    expect(nearWhole(dot(fit.C, fit.U) / fit.texel)).toBeLessThan(1e-6);
+    const moved = fitSunMap(dir, { ...fp, x0: fp.x0 + 0.3 * fit.texel * fit.R[0], x1: fp.x1 + 0.3 * fit.texel * fit.R[0] }, map, 2048);
+    const d = [moved.C[0] - fit.C[0], moved.C[1] - fit.C[1], moved.C[2] - fit.C[2]];
+    for (const axis of [fit.R, fit.U]) {
+      const k = dot(d, axis) / fit.texel;
+      expect(Math.abs(k - Math.round(k))).toBeLessThan(1e-6);
+    }
+  });
+  it('stays finite at a low sun', () => {
+    const fit = fitSunMap(low(), fp, map, 4096);
+    for (const n of [...fit.R, ...fit.U, ...fit.F, ...fit.C, ...fit.ext, fit.size, fit.texel]) expect(Number.isFinite(n)).toBe(true);
+    expect(fit.ext[0]).toBeLessThan(200);
+  });
+  it.each(dirs)('has an orthonormal basis at %s', (_n, dir) => {
+    const { R, U, F } = sunBasis(dir);
+    for (const v of [R, U, F]) expect(len(v)).toBeCloseTo(1, 9);
+    expect(dot(R, U)).toBeCloseTo(0, 9);
+    expect(dot(R, F)).toBeCloseTo(0, 9);
+    expect(dot(U, F)).toBeCloseTo(0, 9);
+    expect(F[1]).toBeLessThan(0);
+  });
+  it('uses R = (1, 0, 0) when the light is vertical', () => {
+    const { R, U, F } = sunBasis([0, 1, 0]);
+    expect(R).toEqual([1, 0, 0]);
+    expect(len(U)).toBeCloseTo(1, 9);
+    expect(F).toEqual([-0, -1, -0]);
   });
 });
