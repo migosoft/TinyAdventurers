@@ -4,13 +4,13 @@
 // The trees are drawn for this game with Claude Code, in the 0x72 pack's palette and style.
 // Pure: no Phaser, no DOM, no Node; the atlas script and the game both import it. The drawing code lives in vegetation/*.
 import type { SunInfo } from '../generated/SunInfo';
-import { DEFAULT_LIGHT, type Drawn, type Light, type Rgba } from './vegetation/canvas';
+import { DEFAULT_LIGHT, type Drawn, type Light, type PlantShape, type Rgba } from './vegetation/canvas';
 import { drawBush } from './vegetation/bush';
 import { drawBare } from './vegetation/bare';
 import { drawConifer } from './vegetation/conifer';
 import { drawLeafy } from './vegetation/leafy';
 export { DEFAULT_LIGHT, drawBush };
-export type { Drawn, Light, Rgba };
+export type { Drawn, Light, PlantShape, Rgba };
 export type Shape = 'round' | 'wide' | 'tall' | 'conifer' | 'bare';
 export type PlantKind = Shape | 'bush';
 /** Index = wire id; the server's `PlantKind` (woodland.rs) has the same order. */

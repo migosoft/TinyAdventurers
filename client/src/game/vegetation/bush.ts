@@ -1,5 +1,5 @@
 // A bush: a lobed crown standing on one thin stem that forks early (#279).
-import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, barkShade, isLeaf, rng, step } from './canvas';
+import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, type PlantShape, barkShade, isLeaf, rng, step } from './canvas';
 import { type Lobe, crown, pockets } from './crown';
 
 /** How much wider a bush is drawn than the width its lobe layout is sized for (measured over many seeds and sizes). */
@@ -56,5 +56,7 @@ export function drawBush(o: { seed: number; width: number; light?: Light }): Dra
     cv.recolour(x, y, '0'); cv.recolourRef(x, y, '0');
     if (isLeaf(cv.get(x, y - 1))) { cv.recolour(x, y - 1, step('01234', cv.get(x, y - 1), -2) as string); cv.recolourRef(x, y - 1, step('01234', cv.getRef(x, y - 1), -2) as string); }
   }
-  return cv.finish({ x: cx, y: ground }, { pockets: made, vines: 0, stems: 1, limbs: 0 });
+  // the shadow shape: the lobes only; the stem is too thin for a trunk caster (trunkTop = the foot)
+  const shape: PlantShape = { cast: 'parts', trunkTop: ground, trunkX0: sx, trunkX1: sx + wide - 1, clumps: lobes.map((b) => ({ x: b.x, y: b.y, r: Math.max(b.rx, b.ry) })) };
+  return cv.finish({ x: cx, y: ground }, { pockets: made, vines: 0, stems: 1, limbs: 0 }, shape);
 }

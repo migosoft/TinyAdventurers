@@ -1,5 +1,5 @@
 // The bare tree (plant kind 5): the leafy trunk and roots under recursive, leafless limbs (#279).
-import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, rng } from './canvas';
+import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, type PlantShape, rng } from './canvas';
 import { type NormalPt, barkLines, painter, rootMoss, roots, shadowLine, trunkPath } from './trunk';
 
 /** Twig pixels: mid brown on the sun side of the trunk, dark brown on the other (colour only). */
@@ -58,5 +58,9 @@ export function drawBare(seed: number, s: number, light: Light): Drawn {
     if (c !== null && c in dead) cv.recolour(x, y, dead[c]);
     if (cRef !== null && cRef in dead) cv.recolourRef(x, y, dead[cRef]);
   }
-  return cv.finish({ x: cx, y: footY }, { pockets: 0, vines: 0, stems: 0, limbs: count });
+  // the shadow shape: the whole card casts; the trunk columns are the trunk path above the root flare
+  let tx0 = cx, tx1 = cx;
+  for (let i = 0; i <= 16; i++) { const p = tr.at(0.2 + (0.8 * i) / 16); tx0 = Math.min(tx0, p.x - p.w); tx1 = Math.max(tx1, p.x + p.w); }
+  const shape: PlantShape = { cast: 'whole', trunkTop: tr.topY, trunkX0: tx0, trunkX1: tx1, clumps: [] };
+  return cv.finish({ x: cx, y: footY }, { pockets: 0, vines: 0, stems: 0, limbs: count }, shape);
 }

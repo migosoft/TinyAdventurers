@@ -1,6 +1,6 @@
 // The leafy trees (round, wide, tall): trunk, branches, roots and a lobed crown (#279).
 import type { Shape } from '../vegetation';
-import { Canvas, type Drawn, type Light, rng } from './canvas';
+import { Canvas, type Drawn, type Light, type PlantShape, rng } from './canvas';
 import { type Lobe, crown, pockets, vines } from './crown';
 import { barkLines, canopyShadow, limbs, painter, rootMoss, roots, trunkPath } from './trunk';
 
@@ -43,5 +43,11 @@ export function drawLeafy(o: LeafyOpts): Drawn {
   const made = pockets(cv, r, { cx, y0: Y(22), y1: Y(42), halfW: 34 * s * sh.sx, s, pal: '01234', n: detail ? 2 + (r() < 0.5 ? 1 : 0) : 1, twig: detail });
   const vineCount = detail ? vines(cv, r, { X, Y, s, max: 8 * s }) : 0;
   canopyShadow(cv, 7 * s);
-  return cv.finish({ x: cx, y: footY }, { pockets: made, vines: vineCount, stems: 0, limbs: used.length });
+  // the shadow shape: the lobes are the clumps; the trunk caster runs from under the lowest lobe to the foot, above the root flare
+  const trunkTop = Math.min(footY, Math.max(...lobes.map((b) => b.y + b.ry)));
+  const tMax = Math.min(1, Math.max(0.2, (trunkTop - footY) / (tr.topY - footY)));
+  let tx0 = cx, tx1 = cx;
+  for (let i = 0; i <= 16; i++) { const p = tr.at(0.2 + ((tMax - 0.2) * i) / 16); tx0 = Math.min(tx0, p.x - p.w); tx1 = Math.max(tx1, p.x + p.w); }
+  const shape: PlantShape = { cast: 'parts', trunkTop, trunkX0: tx0, trunkX1: tx1, clumps: lobes.map((b) => ({ x: b.x, y: b.y, r: Math.max(b.rx, b.ry) })) };
+  return cv.finish({ x: cx, y: footY }, { pockets: made, vines: vineCount, stems: 0, limbs: used.length }, shape);
 }

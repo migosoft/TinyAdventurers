@@ -315,4 +315,55 @@ describe('vegetation', () => {
     // a generous guard against an order-of-magnitude regression (typically ~100 ms; a loaded parallel run is several times slower)
     expect(ms).toBeLessThan(1500);
   });
+
+  describe('the shadow shape', () => {
+    const cases: [typeof PLANT_KINDS[number], number, number][] = [];
+    for (const kind of PLANT_KINDS) for (const seed of [1, 2, 3, 4, 5, 6]) for (const scale of kind === 'bush' ? [100, 150] : [70, 100, 130]) cases.push([kind, seed, scale]);
+    const isLeafPx = (img: Rgba, x: number, y: number) => {
+      const i = (y * img.w + x) * 4;
+      return img.data[i + 3] === 255 && LEAF_RGB.some((c) => c[0] === img.data[i] && c[1] === img.data[i + 1] && c[2] === img.data[i + 2]);
+    };
+    it('lies inside the image', () => {
+      for (const [kind, seed, scale] of cases) {
+        const d = drawPlant(kind, seed, scale), sh = d.shape!, what = `${kind} ${seed} @${scale}`;
+        expect(sh, what).toBeDefined();
+        for (const c of sh.clumps) expect([what, c.x >= 0 && c.x < d.img.w && c.y >= 0 && c.y < d.img.h, c.r > 0]).toEqual([what, true, true]);
+        expect([what, sh.trunkTop >= 0 && sh.trunkTop <= d.foot.y, sh.trunkX0 >= 0, sh.trunkX1 < d.img.w, sh.trunkX0 <= sh.trunkX1]).toEqual([what, true, true, true, true]);
+      }
+    });
+    it('each clump covers leaf pixels', () => {
+      for (const [kind, seed, scale] of cases) {
+        const d = drawPlant(kind, seed, scale), what = `${kind} ${seed} @${scale}`;
+        for (const c of d.shape!.clumps) {
+          let found = false;
+          for (let y = 0; y < d.img.h && !found; y++) for (let x = 0; x < d.img.w; x++) if (Math.hypot(x - c.x, y - c.y) <= c.r && isLeafPx(d.img, x, y)) { found = true; break; }
+          expect([what, found]).toEqual([what, true]);
+        }
+      }
+    });
+    it('the trunk caster holds the trunk', () => {
+      for (const [kind, seed, scale] of cases) {
+        const d = drawPlant(kind, seed, scale), sh = d.shape!, what = `${kind} ${seed} @${scale}`;
+        if (sh.cast !== 'parts' || sh.trunkTop >= d.foot.y) continue;
+        let found = false;
+        for (let x = sh.trunkX0; x <= sh.trunkX1; x++) if (alpha(d.img, x, d.foot.y - 1) === 255) found = true;
+        expect([what, found]).toEqual([what, true]);
+      }
+    });
+    it('roots are not in the shape', () => {
+      for (const [kind, seed, scale] of cases) {
+        const d = drawPlant(kind, seed, scale), sh = d.shape!, what = `${kind} ${seed} @${scale}`;
+        expect([what, sh.trunkTop <= d.foot.y, sh.clumps.every((c) => c.y <= d.foot.y)]).toEqual([what, true, true]);
+      }
+    });
+    it('does not depend on the light', () => {
+      const l = lightVector({ side: 1, elevation: 51 });
+      for (const [kind, seed, scale] of cases) expect(drawPlant(kind, seed, scale, l).shape).toEqual(drawPlant(kind, seed, scale, DEFAULT_LIGHT).shape);
+    });
+    it('bare trees cast whole, the rest in parts', () => {
+      expect(drawPlant('bare', 3, 100).shape!.cast).toBe('whole');
+      expect(drawPlant('bare', 3, 100).shape!.clumps).toEqual([]);
+      for (const kind of PLANT_KINDS) if (kind !== 'bare') expect(drawPlant(kind, 3, 100).shape!.cast).toBe('parts');
+    });
+  });
 });

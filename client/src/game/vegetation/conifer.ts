@@ -1,5 +1,5 @@
 // A conifer (fir/spruce): a straight trunk under stacked, jagged skirts (#279).
-import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, rng, step } from './canvas';
+import { Canvas, DEFAULT_LIGHT, type Drawn, type Light, type PlantShape, rng, step } from './canvas';
 import { type Trunk, barkLines, canopyShadow, painter, rootMoss, roots, type Seg } from './trunk';
 
 const PAL = '56789';
@@ -81,12 +81,19 @@ export function drawConifer(seed: number, s: number, light: Light): Drawn {
   // skirts, bottom first so each higher one covers the top of the one below; id = index from the bottom
   // the top skirt's top is at y 13; the gap is at most 10, so the full zigzag (2.4 px) never opens a row between two skirts
   const bottom = 80 - bare, span = bottom - 26, n = Math.max(3, Math.ceil(span / 10) + 1), gap = span / (n - 1);
+  const clumps: PlantShape['clumps'] = [];
   for (let i = 0; i < n; i++) {
     const t = i / (n - 1), W = (5 + 17 * (1 - t) ** 1.15 + (r() * 2 - 1)) * s;
-    skirt(cv, r, light, s, cx, i, W, Y(bottom - i * gap - 13), 13 * s, t);
+    const yTop = Y(bottom - i * gap - 13);
+    skirt(cv, r, light, s, cx, i, W, yTop, 13 * s, t);
+    clumps.push({ x: cx, y: yTop + 0.6 * 13 * s, r: 0.85 * W });
   }
   skirt(cv, r, light, s, cx, n, 3.2 * s, Y(9), 8 * s, 1); // the spire: its top is 4 units above the top skirt's, so it overlaps it
+  clumps.push({ x: cx, y: Y(9) + 0.6 * 8 * s, r: 0.85 * 3.2 * s });
   cv.set(cx, Math.ceil(Y(9)) - 1, '7', '7', n); // its tip, on the row above the spire's top row
   canopyShadow(cv, 4 * s); // the lowest skirt's shadow on the trunk
-  return cv.finish({ x: cx, y: footY });
+  // the shadow shape: the trunk caster runs from the lowest skirt's hem to the foot, above the root flare (u >= 5 units, or the whole bare part)
+  const trunkTop = Math.min(footY, Y(bottom)), halfW = wAt(Math.min(5, bare));
+  const shape: PlantShape = { cast: 'parts', trunkTop, trunkX0: cx - halfW, trunkX1: cx + halfW, clumps };
+  return cv.finish({ x: cx, y: footY }, undefined, shape);
 }

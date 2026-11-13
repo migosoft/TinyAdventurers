@@ -4,8 +4,19 @@ type Rgb = [number, number, number];
 export interface Rgba { w: number; h: number; data: Uint8ClampedArray }
 /** How many of each detail a tree got; filled by the passes that count them (tests read it). */
 export type Parts = { pockets: number; vines: number; stems: number; limbs: number };
+/** The shape a plant casts a shadow with, in the drawn image's px (after the crop). Does not depend on the light. */
+export interface PlantShape {
+  /** 'parts': a trunk card plus clump discs; 'whole': the whole card casts (bare trees). */
+  cast: 'parts' | 'whole';
+  /** The first row of the bare trunk below the canopy; the trunk caster spans rows trunkTop .. foot.y - 1. trunkTop = foot.y: no trunk caster (bushes). */
+  trunkTop: number;
+  /** The trunk's columns between trunkTop and the foot, without the root flare (inclusive). */
+  trunkX0: number; trunkX1: number;
+  /** Leaf clumps (leafy: the lobes; conifer: one per skirt and the spire; bush: the lobes; bare: none): centre and radius. */
+  clumps: { x: number; y: number; r: number }[];
+}
 /** A drawn plant; `foot` (px, inside img) is the trunk foot: the sprite's origin and its depth. */
-export interface Drawn { img: Rgba; foot: { x: number; y: number }; parts?: Parts }
+export interface Drawn { img: Rgba; foot: { x: number; y: number }; parts?: Parts; shape?: PlantShape }
 
 export const P: Record<string, Rgb> = { k: [34, 34, 34], 0: [28, 58, 50], 1: [40, 100, 62], 2: [62, 138, 67], 3: [106, 174, 79], 4: [156, 207, 98],
   5: [22, 48, 52], 6: [30, 74, 70], 7: [44, 104, 88], 8: [74, 140, 104], 9: [118, 176, 124],
@@ -67,7 +78,7 @@ export class Canvas {
   idAt(x: number, y: number) { x = Math.round(x); y = Math.round(y); return x >= 0 && y >= 0 && x < this.w && y < this.h ? this.id[y * this.w + x] : -1; }
   clear(x: number, y: number) { x = Math.round(x); y = Math.round(y); if (x >= 0 && y >= 0 && x < this.w && y < this.h) { const i = y * this.w + x; this.px[i] = null; this.ref[i] = null; this.id[i] = -1; } }
   /** Outer outline, then crop to the drawing; returns the image and where `foot` lands in it. Works inside the written box only. */
-  finish(foot: { x: number; y: number }, parts?: Parts): Drawn {
+  finish(foot: { x: number; y: number }, parts?: Parts, shape?: PlantShape): Drawn {
     const { w, h, px } = this;
     // The outline can only fall on cells next to a written one: the box grown by 1.
     const bx0 = Math.max(0, this.x0 - 1), by0 = Math.max(0, this.y0 - 1), bx1 = Math.min(w - 1, this.x1 + 1), by1 = Math.min(h - 1, this.y1 + 1);
@@ -88,6 +99,14 @@ export class Canvas {
     }
     const out: Drawn = { img, foot: { x: Math.round(foot.x - x0), y: Math.round(foot.y - y0) } };
     if (parts) out.parts = { ...parts };
+    if (shape) {
+      const fy = out.foot.y;
+      out.shape = {
+        cast: shape.cast, trunkTop: Math.max(0, Math.min(fy, Math.round(shape.trunkTop - y0))),
+        trunkX0: Math.max(0, Math.floor(shape.trunkX0 - x0)), trunkX1: Math.min(iw - 1, Math.ceil(shape.trunkX1 - x0)),
+        clumps: shape.clumps.map((c) => ({ x: c.x - x0, y: c.y - y0, r: c.r })),
+      };
+    }
     return out;
   }
 }
