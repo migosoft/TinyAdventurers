@@ -33,6 +33,7 @@ import { SkyClock, hourLabel, mistInputs, ovalOf, sky, startHour, sunFrame, type
 import { PLANT_BUDGET_MS, PlantField } from './plantField';
 import { Critters3d } from './critters3d';
 import { Fireflies } from './fireflies';
+import { Cove3d } from './cove3d';
 import { lightVector } from '../game/vegetation';
 import type { SunFrame, View } from './view';
 import type { FrameRects } from './worldMesh';
@@ -92,6 +93,10 @@ export class RunView3d implements RunView {
   private plants: PlantField | null = null;
   private critters: Critters3d | null = null;
   private fireflies: Fireflies | null = null;
+  // The nymph's cove (dungeon runs): its plants as atlas sprites (all ready at once), their casters, the pixies.
+  private cove: Cove3d | null = null;
+  private covePlants: PlantField | null = null;
+  private coveCasters: ShadowCaster[] = [];
   private readonly frames: FrameRects;
   private hourNow = 0;
   private sunPx = 0;
@@ -129,6 +134,11 @@ export class RunView3d implements RunView {
       this.plants = new PlantField(wl.plants, init.map, lightVector(wl.sun));
       this.critters = new Critters3d(init.map, wl.seed);
       this.fireflies = new Fireflies(wl.seed);
+    }
+    if (init.info.cove) {
+      this.cove = new Cove3d(init.info.cove, frames);
+      this.covePlants = PlantField.fromAtlas(this.cove.plants(), init.map);
+      this.coveCasters = this.cove.casters();
     }
     this.figures = new Figures3d(init, frames, bounds);
     this.field = init.light;
@@ -318,6 +328,8 @@ export class RunView3d implements RunView {
       this.fireflies.step(c.dt, cam);
       this.fireflies.push(fo.glows, cam, skyNow.night, seenMask);
     }
+    // The cove's pixies (glows and wings), where the viewer sees.
+    this.cove?.push(c.now, cam, fo.glows, fo.ghosts, c.params.sight ? this.mask : null);
     const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
     c.timer.lap('cards');
     // The plants: a few drawn per frame, nearest to the camera first.
@@ -334,10 +346,11 @@ export class RunView3d implements RunView {
       const cands = [
         ...staticCands(this.field, this.pairs, this.map, c.now),
         ...movingCands(f.snap?.lights ?? [], f.snap?.ents ?? [], (id) => this.carrier(f, id), c.now),
+        ...(this.cove ? this.cove.lights(c.now) : []),
       ];
       const sel = selectLights(cands, fp, focus, c.params.lcap);
       lights = sel.list;
-      casters = selectCasters(fo.casters, lights, c.params.ccap);
+      casters = selectCasters(this.cove ? [...fo.casters, ...this.coveCasters] : fo.casters, lights, c.params.ccap);
       assignSkips(lights, carrierMap(lights), casters);
       if (this.field.version !== this.lavaSeen) {
         this.lavaSeen = this.field.version;
@@ -368,7 +381,7 @@ export class RunView3d implements RunView {
     this.drawCalls = view.draw(
       {
         cam, plan: c.plan, dynamic, lights, ambient, lava, lavaVersion: this.lavaVersion, darkvision, casters, shadows: c.params.shadows, smooth: c.params.smooth, t: c.now,
-        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, ...(this.plants ? { plants: this.plants.frame(c.params.wind, c.now) } : {}),
+        see: { openers: this.seen, look: seeLook(c.params) }, sight, sun, ...(this.plants ? { plants: this.plants.frame(c.params.wind, c.now) } : this.covePlants ? { plants: this.covePlants.frame(c.params.wind, c.now) } : {}),
       },
       c.timer,
     );

@@ -56,8 +56,11 @@ const frames: Record<string, { x: number; y: number; w: number; h: number }> = {
 for (const a of ['idle', 'run']) for (let i = 0; i < 4; i++) frames[`wizzard_m_${a}_anim_f${i}`] = { x: 0, y: 0, w: 16, h: 28 };
 const bounds = () => ({ l: 0, r: 15, t: 0, w: 16, h: 28 });
 
-function run(over: { woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
-  const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 } } as never } : {}), ...(over.daylight ? { daylight: true } : {}) });
+for (const n of ['cove_tree', 'cove_bush_a', 'cove_bush_b', 'cove_tuft_a', 'cove_tuft_b', 'cove_fern']) frames[n] = { x: 20, y: 0, w: n === 'cove_tree' ? 96 : 14, h: n === 'cove_tree' ? 100 : 12 };
+frames.floor_1 = { x: 0, y: 40, w: 16, h: 16 };
+
+function run(over: { cove?: boolean; woodland?: boolean; params?: Partial<R3dParams>; me?: { darkvision: number; vision: number }; moving?: [number, number, number, number | null][]; ents?: number[][]; torch?: boolean; ownX?: number; rows?: string[]; daylight?: boolean; noSnap?: boolean; camera?: { x: number; y: number }; trunk?: [number, number]; figs?: EntState[]; paint?: OverlayItem[]; tick?: number } = {}) {
+  const info = startInfo(over.rows ?? ['#######', '#.....#', '#.....#', '#######'], { ...(over.woodland ? { woodland: { seed: 1, end: [0, 0, 1, 1], plants: [], sun: { side: 1, elevation: 30 } } as never } : {}), ...(over.daylight ? { daylight: true } : {}), ...(over.cove ? { cove: { x: 1, y: 1, w: 5, h: 2, tree_x: 3, tree_y: 2, seed: 3 } } : {}) });
   const map = new TileMap(info.width, info.height, new Uint8Array(info.tiles));
   if (over.trunk) map.set(over.trunk[0], over.trunk[1], TILE_ID.Trunk);
   const light = new LightField(map);
@@ -104,6 +107,14 @@ describe('the run view and the game lights', () => {
     expect(f?.casters).toEqual([]);
     expect(f?.darkvision).toBeNull();
     expect(f?.ambient).toEqual(sky(startHour(WOODLAND_SUN)).ambient);
+  });
+  it('a dungeon with a cove hands over its plants, adds the pixie lights and the plants as casters', () => {
+    const { f } = run({ cove: true });
+    expect(f?.plants).toBeDefined();
+    expect([...f!.plants!.chunks.values()].flat().every((k) => k.page === -1)).toBe(true);
+    expect(f?.lights.filter((l) => !l.shadow).length).toBeGreaterThan(0);
+    expect(f?.casters.some((k) => k.id <= -1000)).toBe(true);
+    expect(run().f?.plants).toBeUndefined();
   });
   it('light=work is the same', () => {
     const { f } = run({ params: { light: 'work' } });

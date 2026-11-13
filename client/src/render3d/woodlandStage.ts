@@ -10,6 +10,7 @@ import { View as SightView } from '../sim/view';
 import { atlasBounds } from './atlasBounds';
 import { keysToWorld } from './camera';
 import { glowsOf, quadsOf, shadowsOf, type Dynamic } from './cards';
+import { Pixies3d } from './cove3d';
 import { Critters3d } from './critters3d';
 import { Figures3d } from './figures';
 import { Fireflies } from './fireflies';
@@ -38,6 +39,8 @@ const KNIGHT_SPEED = 4;
 /** The seed of the ground's paint: fixed, so the page looks the same every time. */
 const GROUND_SEED = 306;
 const FIREBALL_COLOUR = 0xff7020;
+/** The dev page's pixie hovers this high over the ground (px). */
+const PIXIE_UP = 14;
 /** The fireball's circle: its centre (tiles), radius (tiles) and period (s). */
 const FIRE = { x: 20, z: 11, r: 6, period: 8 } as const;
 const ALL_VISIBLE = { isVisible: (): boolean => true };
@@ -81,6 +84,8 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
 
   const critters = new Critters3d(map, GROUND_SEED);
   const fireflies = new Fireflies(GROUND_SEED);
+  // One pixie wandering low over the ground near the knight's start: it lights the ground around it.
+  const pixie = new Pixies3d({ x: (KNIGHT_START.x + 3) * TILE, y: (KNIGHT_START.z + 1) * TILE }, (KNIGHT_START.z + 1) * TILE, 1, GROUND_SEED, PIXIE_UP);
 
   // The ground is painted whole at the first build and kept for the rebuilds after a lost device.
   let job: GroundJob | null = null;
@@ -156,6 +161,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       critters.push(fo.cards, assets.frames, cam, seconds, s.day, seenMask, fp);
       fireflies.step(c.dt, cam);
       fireflies.push(fo.glows, cam, s.night, seenMask);
+      pixie.push(seconds, cam, fo.glows, fo.ghosts, assets.frames, seenMask);
       const dynamic: Dynamic = { cards: quadsOf(fo.cards), ghosts: quadsOf(fo.ghosts), decals: quadsOf(fo.decals), shadows: shadowsOf(fo.shadows), emissive: quadsOf(fo.emissive), glows: glowsOf(fo.glows) };
       c.timer.lap('cards');
 
@@ -167,7 +173,7 @@ export function createWoodlandStage(assets: Assets, p: R3dParams, search: string
       let lights: ReturnType<typeof selectLights>['list'] = [];
       let inView = 0;
       if (game) {
-        const sel = selectLights(movingCands([fireballAt(seconds)], [], () => null, seconds), fp, viewer, Math.min(LIGHT_CAP, params.lcap));
+        const sel = selectLights([...movingCands([fireballAt(seconds)], [], () => null, seconds), ...pixie.lights(seconds)], fp, viewer, Math.min(LIGHT_CAP, params.lcap));
         lights = sel.list;
         inView = sel.inView;
       }

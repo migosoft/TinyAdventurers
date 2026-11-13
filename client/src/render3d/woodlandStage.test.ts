@@ -144,7 +144,7 @@ describe('the ?r3d=woodland stage', () => {
   it('draws a fireball light and the daylight mask around the knight', () => {
     const { run } = setup('?r3d=woodland');
     const f = run(1, 0.016);
-    expect(f.lights).toHaveLength(1);
+    expect(f.lights.map((l) => l.shadow).sort()).toEqual([false, true]); // the pixie (no shadow) and the fireball
     const m = f.sight!.mask!;
     expect(m.daylight).toBe(true);
     expect(m.ox + m.size / 2).toBeCloseTo(20.5, 0);
