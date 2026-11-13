@@ -20,6 +20,10 @@ export interface SightLook {
   ramp: number;
 }
 
+/**
+ * The texture covers n texels = n / res tiles a side: one texel more than `size`. That is the world side the GPU must
+ * map the texture over (`sample` does); the square's origin is (ox, oz) tiles.
+ */
 export class SightMask {
   /** Texels per tile (canvasRes(daylight)). */
   readonly res: number;
@@ -70,7 +74,8 @@ export class SightMask {
     const { res, map } = this;
     const { feather, ramp } = this.look;
     const vision = hard.r / TILE - 0.5;
-    const half = sightRadius(vision) / TILE + SIGHT_MARGIN;
+    // on daylight maps the blur's tails reach 3 * feather px past the edge of sight; the margin keeps the border fully unseen
+    const half = sightRadius(vision) / TILE + SIGHT_MARGIN + Math.ceil((3 * feather) / TILE);
     const cx = hard.px / TILE, cz = hard.py / TILE;
     this.size = 2 * half;
     this.ox = Math.floor((cx - half) * res) / res;
@@ -154,7 +159,8 @@ export function footSight(m: SightMask, x: number, z: number, reach: number): { 
   let { hard, soft } = m.sample(x, z);
   if (reach > 0.5) {
     const d = PROBE * reach;
-    for (const [dx, dz] of [[d, 0], [-d, 0], [0, d], [0, -d]]) {
+    // the four diagonal corners, as the server's `visible` checks a wide figure
+    for (const [dx, dz] of [[d, d], [-d, d], [d, -d], [-d, -d]]) {
       const p = m.sample(x + dx, z + dz);
       hard = Math.min(hard, p.hard);
       soft = Math.min(soft, p.soft);

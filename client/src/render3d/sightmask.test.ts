@@ -95,7 +95,12 @@ describe('SightMask', () => {
     expect(last - first).toBeGreaterThanOrEqual(4);
     expect(m.sample(15.5, 15.5).hard).toBe(0);
     // beyond sight and beyond the blur's reach, fully unseen (the square's far side: the corner)
-    expect(m.sample(m.ox + m.size - 0.2, m.oz + m.size - 0.2).hard).toBeGreaterThan(0.99);
+    const far = m.ox + m.n / m.res - 0.01;
+    expect(m.sample(far, m.oz + m.n / m.res - 0.01).hard).toBe(1);
+    for (let t = 0; t < m.n / m.res; t += 0.5) {
+      expect(m.sample(m.ox + t, m.oz + 0.01).hard).toBe(1); // along the border
+      expect(m.sample(far, m.oz + t).hard).toBe(1);
+    }
   });
 
   it('soft is the share behind a trunk', () => {
@@ -142,5 +147,14 @@ describe('footSight', () => {
     expect(m.sample(14.2, 10.5).hard).toBe(1);
     expect(footSight(m, 14.2, 10.5, 1).hard).toBe(0);
     expect(footSight(m, 14.2, 10.5, 0.4).hard).toBe(1);
+  });
+
+  it('probes the four diagonal corners, as the server does', () => {
+    // a pillar diagonal from the viewer: the figure's centre and its four axis points (0.64 tile) are hidden, only the corner toward the pillar is seen
+    const m = filled(room(21, 21, { '13,13': TILE_ID.Wall }), 10, 10, 8, DARK);
+    const d = 0.64;
+    for (const [dx, dz] of [[0, 0], [d, 0], [-d, 0], [0, d], [0, -d]]) expect(m.sample(14.2 + dx, 14.2 + dz).hard).toBeCloseTo(1, 9);
+    expect(m.sample(14.2 - d, 14.2 - d).hard).toBe(0);
+    expect(footSight(m, 14.2, 14.2, 0.8).hard).toBe(0);
   });
 });
