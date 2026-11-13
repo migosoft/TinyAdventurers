@@ -13,7 +13,7 @@ export interface R3dParams {
   free: boolean;
   /** The light a run shows: the game's own lights, or the flat work light. */
   light: 'game' | 'work';
-  /** How the dark looks: a soft fade, or the game's hard-edged shape. */
+  /** How the dark looks: the game's hard-edged shape (default), or a soft fade. */
   dark: 'fade' | 'shape';
   /** The dungeon's ambient light, 0..1 of the demo's AMBIENT. */
   amb: number;
@@ -29,7 +29,7 @@ export const DEFAULTS: R3dParams = {
   // The user's picks after the hardware check (#301): 48.6° (a tile is 12 whole screen rows) and the smoothed ground on.
   pitch: 48.6, yaw: 0, quality: 'balanced', zoom: null, backend: 'auto',
   shadows: true, orb: true, smooth: true, stats: false,
-  free: false, light: 'game', dark: 'fade', amb: 0, lcap: 16, ccap: 16, dv: null,
+  free: false, light: 'game', dark: 'shape', amb: 0, lcap: 16, ccap: 16, dv: null,
   see: SEE_DEFAULTS.mode, seeR: SEE_DEFAULTS.radius, seeKeep: SEE_DEFAULTS.keep, seeEdge: SEE_DEFAULTS.edge,
 };
 
@@ -74,7 +74,7 @@ export function parseParams(search: string): R3dParams {
     stats: q.get('stats') === '1',
     free: q.get('free') === '1',
     light: q.get('light') === 'work' ? 'work' : 'game',
-    dark: q.get('dark') === 'shape' ? 'shape' : 'fade',
+    dark: q.get('dark') === 'fade' ? 'fade' : 'shape',
     amb: range(num(q.get('amb')), 0, 1, DEFAULTS.amb),
     lcap: lcap !== null && Number.isInteger(lcap) ? range(lcap, 0, 16, DEFAULTS.lcap) : DEFAULTS.lcap,
     ccap: ccap !== null && Number.isInteger(ccap) ? range(ccap, 0, 16, DEFAULTS.ccap) : DEFAULTS.ccap,

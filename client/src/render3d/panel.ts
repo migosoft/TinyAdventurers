@@ -24,8 +24,8 @@ const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free'>, n
 const GAME_LIGHT: Switch = {
   name: 'Game light', get: (p) => p.light === 'game', set: (p) => ({ light: p.light === 'game' ? 'work' : 'game' }),
 };
-const DARK_SHAPE: Switch = {
-  name: 'Dark shape', get: (p) => p.dark === 'shape', set: (p) => ({ dark: p.dark === 'shape' ? 'fade' : 'shape' }),
+const DARK_FADE: Switch = {
+  name: 'Dark fade', get: (p) => p.dark === 'fade', set: (p) => ({ dark: p.dark === 'fade' ? 'shape' : 'fade' }),
 };
 const LIGHT_SLIDERS: { key: 'amb' | 'lcap' | 'ccap' | 'dv'; name: string; min: number; max: number; step: number; dev?: boolean }[] = [
   { key: 'amb', name: 'Ambient', min: 0, max: 1, step: 0.01 },
@@ -34,8 +34,8 @@ const LIGHT_SLIDERS: { key: 'amb' | 'lcap' | 'ccap' | 'dv'; name: string; min: n
   { key: 'dv', name: 'Darkvision', min: 0, max: 100, step: 50, dev: true },
 ];
 const SWITCHES: Record<'demo' | 'run', Switch[]> = {
-  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), DARK_SHAPE],
-  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), GAME_LIGHT, DARK_SHAPE, flag('free', 'Free camera')],
+  demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), DARK_FADE],
+  run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), GAME_LIGHT, DARK_FADE, flag('free', 'Free camera')],
 };
 
 /** A degree value with at most one decimal and no trailing .0. */

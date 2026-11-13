@@ -56,7 +56,7 @@ export function screenAim(yaw: number, aim: number): number {
  * shape, lit by the ambient only) and whether a lit torch gets a glow quad (`light=work`; with the game's lights the flame card is all).
  */
 export interface FigureLook { ambient: [number, number, number]; dark: 'fade' | 'shape'; torchGlow: boolean }
-const DEFAULT_LOOK: FigureLook = { ambient: AMBIENT, dark: 'fade', torchGlow: true };
+const DEFAULT_LOOK: FigureLook = { ambient: AMBIENT, dark: 'shape', torchGlow: true };
 
 /** Something that may open walls this frame (#303 Task 7): its foot in tiles, its middle height in tiles, and why. */
 export interface Opener { id: number; x: number; z: number; mid: number; who: 'hero' | 'enemy' | 'friend' | 'chest' | 'mimic' | 'object' }

@@ -61,9 +61,9 @@ describe('parseParams', () => {
   });
 
   it('reads the dungeon light parameters and clamps or rejects them', () => {
-    expect(parseParams('')).toMatchObject({ light: 'game', dark: 'fade', amb: 0, lcap: 16, ccap: 16, dv: null });
-    expect(parseParams('?dark=shape').dark).toBe('shape');
-    expect(parseParams('?dark=x').dark).toBe('fade');
+    expect(parseParams('')).toMatchObject({ light: 'game', dark: 'shape', amb: 0, lcap: 16, ccap: 16, dv: null });
+    expect(parseParams('?dark=fade').dark).toBe('fade');
+    expect(parseParams('?dark=x').dark).toBe('shape');
     expect(parseParams('?amb=2').amb).toBe(1);
     expect(parseParams('?amb=-1').amb).toBe(0);
     expect(parseParams('?lcap=40').lcap).toBe(16);
@@ -73,8 +73,8 @@ describe('parseParams', () => {
     expect(parseParams('?dv=150').dv).toBe(100);
     expect(parseParams('?dv=50').dv).toBe(50);
     expect(parseParams('?dv=x').dv).toBeNull();
-    expect(toSearch(parseParams('?r3d&light=work&dark=shape&amb=0.5&lcap=8&ccap=0&dv=50'), '?r3d')).toBe('?r3d&light=work&dark=shape&amb=0.5&lcap=8&ccap=0&dv=50');
-    expect(toSearch(DEFAULTS, '?r3d&light=work&dark=shape&amb=0.5&lcap=8&ccap=0&dv=50')).toBe('?r3d');
+    expect(toSearch(parseParams('?r3d&light=work&dark=fade&amb=0.5&lcap=8&ccap=0&dv=50'), '?r3d')).toBe('?r3d&light=work&dark=fade&amb=0.5&lcap=8&ccap=0&dv=50');
+    expect(toSearch(DEFAULTS, '?r3d&light=work&dark=fade&amb=0.5&lcap=8&ccap=0&dv=50')).toBe('?r3d');
   });
 });
 
@@ -94,7 +94,7 @@ describe('toSearch', () => {
   it('round-trips a fully non-default value', () => {
     const p: R3dParams = {
       pitch: 60.5, yaw: 37.3, quality: 'fast', zoom: 5, backend: 'webgl',
-      shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'work', dark: 'shape', amb: 0.5, lcap: 8, ccap: 0, dv: 50,
+      shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'work', dark: 'fade', amb: 0.5, lcap: 8, ccap: 0, dv: 50,
       see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
