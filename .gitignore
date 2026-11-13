@@ -6,3 +6,8 @@ client/public/assets/
 images/
 downloaded-assets/
 .superpowers/
+
+# Local screenshots of the browser checks
+tools/e2e/shots*/
+# Personal Claude Code settings
+.claude/settings.local.json
