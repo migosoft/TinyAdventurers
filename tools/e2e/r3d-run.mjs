@@ -15,7 +15,7 @@ const browser = await chromium.launch({
 });
 const errors = [];
 const account = `e2e_${tag()}`;
-const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+const page = await (await browser.newContext({ viewport: { width: 1280, height: 768 } })).newPage();
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 // The first /api/me before logging in is an expected 401.
 page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(`console: ${m.text()}`));

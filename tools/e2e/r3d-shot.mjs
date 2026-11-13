@@ -1,6 +1,7 @@
 // Headless load check of the 3D renderer page (?r3d): waits for drawn frames, prints the backend, saves a screenshot.
 // Usage: node r3d-shot.mjs [baseUrl] [outDir] [extraQuery] [mode] [lose] [page]
 // page: demo (default), gallery (?r3d=gallery, #303), lights (?r3d=lights, #304) or woodland (?r3d=woodland, #306; add &hour=9.5).
+// Env: HEADED=1 shows the window; READBACK=1 also saves r3d-readback.png (the scene read back, for WebGPU); R3D_W / R3D_H the viewport (1280x768).
 // mode: webgl (default, SwiftShader GL) or webgpu (SwiftShader Vulkan).
 // lose: after the first screenshot the device is lost on purpose (window.__r3d.forceLoss()); the script waits up to 20 s
 // for 10 more drawn frames and saves r3d-after-loss.png. Console errors containing "Device Lost" are ignored in this mode.
@@ -24,9 +25,12 @@ const b = await chromium.launch({
   args,
 });
 const errs = [];
-const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+// 1280x768 works for WebGPU on the dev notebook (720, 900 and 1080 lose the device); R3D_W / R3D_H override.
+const p = await b.newPage({ viewport: { width: Number(process.env.R3D_W) || 1280, height: Number(process.env.R3D_H) || 768 } });
 p.on('pageerror', (e) => errs.push(e.message));
 p.on('console', (m) => m.type() === 'error' && !(lose && m.text().includes('Device Lost')) && errs.push(m.text()));
+// A lost device is only a console warning (host.ts); unless the run forces the loss, it is a failure.
+p.on('console', (m) => m.type() === 'warning' && /device lost/i.test(m.text()) && !lose && errs.push(m.text()));
 await p.goto(`${base}?r3d=${page}${extra}`);
 let ok = true;
 try {
@@ -37,6 +41,25 @@ try {
 }
 console.log(`backend: ${await p.evaluate(() => window.__r3d?.backend)}`);
 await p.screenshot({ path: `${out}/r3d.png` });
+if (process.env.READBACK) {
+  // The frame re-drawn off-screen and read back, PNG-encoded in the page (a WebGPU canvas capture is black on this notebook).
+  const url = await p.evaluate(async () => {
+    const r = await window.__r3d.readback?.();
+    if (!r) return null;
+    const c = document.createElement('canvas');
+    c.width = r.w;
+    c.height = r.h;
+    c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(r.data), r.w, r.h), 0, 0);
+    return c.toDataURL('image/png');
+  });
+  if (url) {
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(`${out}/r3d-readback.png`, Buffer.from(url.split(',')[1], 'base64'));
+  } else {
+    ok = false;
+    errs.push('readback returned nothing');
+  }
+}
 if (lose && ok) {
   let forced;
   try {

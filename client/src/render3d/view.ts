@@ -154,6 +154,8 @@ export interface View {
   readonly canForceLoss: boolean;
   /** Debug: makes the device or context fail on purpose. False when the backend offers no way or the view is lost or disposed. */
   forceLoss(): boolean;
+  /** Debug: draws the last frame's scene again into an off-screen target and reads it back (RGBA bytes, `readRenderTargetPixelsAsync` order); null when lost, disposed or nothing was drawn yet. A canvas capture of WebGPU comes back black on some machines. */
+  readback(): Promise<{ w: number; h: number; data: Uint8Array } | null>;
   /** Frees everything; later calls to `draw` do nothing and a late loss report is ignored. */
   dispose(): void;
   /** A tile of `world.map` changed: rebuilds its chunks (worldMesh.chunksOfTile), one height texel and the field. */
@@ -182,6 +184,14 @@ function pixelTexture(t: Texture): void {
   t.flipY = false;
   t.premultiplyAlpha = false;
   t.needsUpdate = true;
+}
+
+/** RGBA rows in reverse order. */
+function flipRows(data: Uint8Array, w: number, h: number): Uint8Array {
+  const out = new Uint8Array(data.length);
+  const row = w * 4;
+  for (let y = 0; y < h; y++) out.set(data.subarray(y * row, (y + 1) * row), (h - 1 - y) * row);
+  return out;
 }
 
 /** three's `dispose` is async: a failure on a lost renderer is a rejected promise, so it is caught here, not by the caller. */
@@ -436,6 +446,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const canForceLoss = be.isWebGPUBackend ? !!be.device : !!be.gl?.getExtension('WEBGL_lose_context');
 
   const clearColour = new Color();
+  /** The last frame's scene size, for `readback`. */
+  let lastSize: [number, number] | null = null;
   let canvasBg = '';
   let groundTex: Texture[] = [];
   const textureLimit = (): number => {
@@ -490,8 +502,24 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       ext.loseContext(); // the webglcontextlost event reaches onDeviceLost
       return true;
     },
+    async readback() {
+      if (disposed || lost || !lastSize) return null;
+      const [w, h] = lastSize;
+      const rt = new RenderTarget(w, h, { depthBuffer: true, type: UnsignedByteType, format: RGBAFormat, generateMipmaps: false });
+      try {
+        renderer.setRenderTarget(rt);
+        renderer.render(scene, camera);
+        renderer.setRenderTarget(null);
+        const data = (await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h)) as Uint8Array;
+        // WebGL2 reads the bottom row first, WebGPU the top row first (seen with the same scene on both): make it top first.
+        return { w, h, data: be.isWebGPUBackend ? data : flipRows(data, w, h) };
+      } finally {
+        rt.dispose();
+      }
+    },
     draw(f, timer) {
       if (disposed || lost) return 0;
+      lastSize = [f.plan.targetW, f.plan.targetH];
       const g = snapGround(f.cam.pitch, f.cam.yaw, f.cam.x, f.cam.z);
       const ray = viewRay(f.cam.pitch, f.cam.yaw);
       camera.left = -f.plan.halfW;

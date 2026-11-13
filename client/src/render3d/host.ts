@@ -18,6 +18,8 @@ declare global {
   interface Window {
     __r3d?: {
       backend: string; frames: number; renderSize: [number, number]; zoom: number; forceLoss?: () => boolean;
+      /** Debug: the last frame re-drawn off-screen and read back (RGBA bytes); for e2e where a canvas capture is black. */
+      readback?: () => Promise<{ w: number; h: number; data: Uint8Array } | null>;
       /** A run's stage adds these: the own hero and the camera target (tiles), the view's chunk meshes and the figures drawn last frame. */
       hero?: { x: number; z: number }; cam?: { x: number; z: number }; chunks?: { total: number; drawn: number }; figures?: number;
       /** ... and the camera's yaw in whole degrees (-180..180) and the items the overlay painted last frame. */
@@ -134,6 +136,7 @@ export async function startHost(
     renderSize: [0, 0],
     zoom: 0,
     forceLoss: (): boolean => view?.forceLoss() ?? false,
+    readback: async () => (await view?.readback()) ?? null,
   };
   const lostFrom = (g: number) => (message: string): void => {
     if (g !== gen || stopped) return;
