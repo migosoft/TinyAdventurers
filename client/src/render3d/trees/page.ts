@@ -23,12 +23,13 @@ const DBG = Number(new URLSearchParams(location.search).get('dbg') ?? 0); // tim
 const SM = 2048;
 const WIND: [number, number] = [0.98, 0.2];
 
-interface Params { storm: number; flash: boolean; tree: 'recipe' | 'grown'; leaf: number; leaves: boolean; crown: 'balls' | 'tufts'; hour: number; yaw: number; mode: '3d' | 'cards'; stretch: boolean; wind: boolean; snap: boolean; shadows: boolean; outline: boolean; plain: boolean; res: number; zoom: number; t: number | null; mult: number }
+interface Params { grass: boolean; tall: boolean; gh: number; storm: number; flash: boolean; tree: 'recipe' | 'grown'; leaf: number; leaves: boolean; crown: 'balls' | 'tufts'; hour: number; yaw: number; mode: '3d' | 'cards'; stretch: boolean; wind: boolean; snap: boolean; shadows: boolean; outline: boolean; plain: boolean; res: number; zoom: number; t: number | null; mult: number }
 
 function readParams(search: string): Params {
   const q = new URLSearchParams(search), num = (k: string, d: number) => { const v = Number(q.get(k)); return q.has(k) && Number.isFinite(v) ? v : d; };
   const on = (k: string, d: boolean) => (q.has(k) ? q.get(k) !== '0' : d);
   return {
+    grass: on('grass', true), tall: on('tall', true), gh: Math.min(3, Math.max(0.25, num('gh', 1))),
     storm: Math.min(100, Math.max(0, num('storm', 0))), flash: on('flash', false),
     tree: q.get('tree') === 'recipe' ? 'recipe' : 'grown', leaf: Math.min(100, Math.max(0, num('leaf', 100))),
     leaves: on('leaves', true), crown: q.get('crown') === 'balls' ? 'balls' : 'tufts',
@@ -69,11 +70,55 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   const side = Math.sqrt(p.mult), PADX = 10, PADZ = 8, MW = Math.round(36 * side) + 2 * PADX, MH = Math.round(22 * side) + 2 * PADZ;
   const specs = layout(7, MW - 2 * PADX, MH - 2 * PADZ, 30 * p.mult, 20 * p.mult).map((s) => ({ ...s, x: s.x + PADX, z: s.z + PADZ }));
   const plants: Plant3[] = specs.map((s) => buildPlant(new MeshData(), s)); // what the cards and the falling leaves need
-  const map = new TileMap(MW, MH, new Uint8Array(MW * MH).fill(TILE_ID.Floor));
-  const ground = paintGround(map, 11);
-  const groundTex = pixelTexture(new DataTexture(new Uint8Array(ground.data.buffer.slice(0)), ground.w, ground.h, RGBAFormat, UnsignedByteType));
   const atlasTex = pixelTexture(new Texture(atlas.img));
   const AW = atlas.img.width, AH = atlas.img.height;
+  // ---- the ground (spike/3d-grass): packed dirt everywhere, a stone terrace, and grass as a layer with a height per art pixel.
+  // A path is simply where no grass grows. The grass picture and the dirt are the game's own painted ground (Floor and Road).
+  const gcx = MW / 2, gcz = PADZ + (MH - 2 * PADZ) * 0.58, GW = MW * 16, GH = MH * 16, SHELLS = 4;
+  const grassPic = paintGround(new TileMap(MW, MH, new Uint8Array(MW * MH).fill(TILE_ID.Floor)), 11);
+  const basePic = paintGround(new TileMap(MW, MH, new Uint8Array(MW * MH).fill(TILE_ID.Road)), 11);
+  const baseData = new Uint8Array(basePic.data.buffer.slice(0)), heightData = new Uint8Array(GW * GH * 4);
+  // tile kinds: 0 grass, 1 path, 2 stone terrace
+  const kindAt = (tx: number, tz: number): number => {
+    if (tx >= Math.floor(gcx) + 1 && tx < Math.floor(gcx) + 7 && tz >= Math.floor(gcz) + 1 && tz < Math.floor(gcz) + 5) return 2;
+    const pz = gcz + 1.4 * Math.sin(tx * 0.33) - 1.2;
+    return tz === Math.floor(pz) || tz === Math.floor(pz) + 1 ? 1 : 0;
+  };
+  {
+    const cv = document.createElement('canvas'); cv.width = AW; cv.height = AH;
+    const ctx = cv.getContext('2d')!; ctx.drawImage(atlas.img, 0, 0);
+    const h2 = (x: number, y: number, k: number) => { let n = (x * 374761393 + y * 668265263 + k * 2147483647) | 0; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
+    for (let tz = 0; tz < MH; tz++) for (let tx = 0; tx < MW; tx++) {
+      if (kindAt(tx, tz) !== 2) continue;
+      const pick = h2(tx, tz, 5), name = pick < 0.7 ? 'floor_1' : `floor_${2 + Math.floor(h2(tx, tz, 6) * 7)}`, fr = atlas.frames[name].frame, img = ctx.getImageData(fr.x, fr.y, 16, 16).data;
+      for (let y = 0; y < 16; y++) baseData.set(img.subarray(y * 64, y * 64 + 64), ((tz * 16 + y) * GW + tx * 16) * 4);
+    }
+    // grass height in art px: 0 on the path and the stones, rising over a few px from their edge, ragged; a patch of grass grows over one corner of the terrace
+    const bx = (Math.floor(gcx) + 6) * 16, bz = (Math.floor(gcz) + 1.2) * 16;
+    for (let pz = 0; pz < GH; pz++) for (let px = 0; px < GW; px++) {
+      const tx = px >> 4, tz = pz >> 4, kind = kindAt(tx, tz);
+      let edge: number;
+      if (kind === 0) {
+        edge = 99;
+        for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+          if ((dx || dz) && kindAt(tx + dx, tz + dz) !== 0) {
+            const ex = dx < 0 ? (px & 15) + 1 : dx > 0 ? 16 - (px & 15) : 0, ez = dz < 0 ? (pz & 15) + 1 : dz > 0 ? 16 - (pz & 15) : 0;
+            edge = Math.min(edge, Math.hypot(ex, ez));
+          }
+        }
+        edge += 3.5; // the grass reaches a little over the path's rim
+      } else if (kind === 2) edge = 30 - Math.hypot((px - bx) * 0.8, pz - bz); else edge = 3.5 - Math.min(...[-1, 1].map((dz) => (kindAt(tx, tz + dz) === 0 ? (dz < 0 ? (pz & 15) + 1 : 16 - (pz & 15)) : 99)));
+      edge += (h2(px >> 1, pz >> 1, 1) - 0.5) * 5;
+      // the rim tapers: over the first 5 px the blades stand ever closer together, and the height climbs a pixel every 3 px
+      const grows = edge >= 0.5 && h2(px, pz, 4) < edge / 5;
+      const h = Math.min(3, 1 + Math.floor(edge / 3)) + (h2(px, pz, 2) < 0.22 ? 1 : 0) - (h2(px, pz, 3) < 0.2 ? 1 : 0);
+      heightData[(pz * GW + px) * 4] = grows ? Math.max(1, Math.min(SHELLS, h)) : 0;
+    }
+  }
+  const grassTex = pixelTexture(new DataTexture(new Uint8Array(grassPic.data.buffer.slice(0)), GW, GH, RGBAFormat, UnsignedByteType));
+  const baseTex = pixelTexture(new DataTexture(baseData, GW, GH, RGBAFormat, UnsignedByteType));
+  const heightTex = pixelTexture(new DataTexture(heightData, GW, GH, RGBAFormat, UnsignedByteType));
+  const heightAt = (x: number, z: number): number => heightData[(Math.min(GH - 1, Math.max(0, Math.floor(z * 16))) * GW + Math.min(GW - 1, Math.max(0, Math.floor(x * 16)))) * 4];
 
   // the generator's ramps, dark to light: leaf, conifer, bark, dead wood
   const ramps = ['01234', '56789', 'abcdd', 'efghh'], palData = new Uint8Array(5 * 4 * 4);
@@ -101,7 +146,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   // ---------------------------------------------------------------- uniforms
   const u = {
     sun: uniform(new Vector3(0, 1, 0)), sunCol: uniform(new Vector3(1, 1, 1)), amb: uniform(new Vector3(0.3, 0.3, 0.3)),
-    time: uniform(0), windT: uniform(0), storm: uniform(0), camT: uniform(new Vector3()), leaf: uniform(1), leaves: uniform(1), wind: uniform(1), snap: uniform(1), stretch: uniform(1), cardStretch: uniform(1 / Math.cos(PITCH)), shadows: uniform(1), outline: uniform(1), plain: uniform(0),
+    time: uniform(0), grass: uniform(1), grassH: uniform(1), windT: uniform(0), storm: uniform(0), camT: uniform(new Vector3()), leaf: uniform(1), leaves: uniform(1), wind: uniform(1), snap: uniform(1), stretch: uniform(1), cardStretch: uniform(1 / Math.cos(PITCH)), shadows: uniform(1), outline: uniform(1), plain: uniform(0),
     camR: uniform(new Vector3(1, 0, 0)), camU: uniform(new Vector3(0, 1, 0)), camV: uniform(new Vector3(0, 0, 1)),
     sunR: uniform(new Vector3(1, 0, 0)), sunU: uniform(new Vector3(0, 0, 1)), sunF: uniform(new Vector3(0, -1, 0)), sunRh: uniform(new Vector3(1, 0, 0)),
     sunC: uniform(new Vector3()), sunExt: uniform(new Vector2(1, 1)), sunNF: uniform(new Vector2(0, 1)),
@@ -271,7 +316,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   };
 
   // figures: a few stand among the trees, a knight walks a loop through the clearing
-  const cx = MW / 2, cz = PADZ + (MH - 2 * PADZ) * 0.58;
+  const cx = gcx, cz = gcz;
   const figs = [
     { name: 'knight_m_run_anim_f', x: cx, z: cz, walk: true }, { name: 'elf_f_idle_anim_f', x: cx - 3.2, z: cz - 1.4 }, { name: 'wizzard_m_idle_anim_f', x: cx + 2.6, z: cz - 2.2 },
     { name: 'goblin_idle_anim_f', x: cx + 4.4, z: cz + 1.2 }, { name: 'orc_warrior_idle_anim_f', x: cx - 5.2, z: cz + 1.6 }, { name: 'ogre_idle_anim_f', x: cx + 0.6, z: cz - 4.4 },
@@ -385,16 +430,74 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     const cell = floor(positionGeometry.xz.mul(16)).add(0.5).div(16);
     const vis = sunVis(vec3(cell.x, 0.03, cell.y));
     const lit = u.amb.add(u.sunCol.mul(vis).mul(float(0.45).add(u.sun.y.mul(0.55))));
-    const rgb = shoulder(texture(groundTex, uv()).rgb.mul(lit));
+    // 3D grass on: the bare ground (dirt, stones), dark where grass stands on it. Off: today's flat picture, grass and path on one level.
+    const h = texture(heightTex, uv()).r.mul(255), base = texture(baseTex, uv()).rgb, flat = texture(grassTex, uv()).rgb;
+    const albedo = select(h.greaterThan(0.5), select(u.grass.greaterThan(0.5), base.mul(0.4), flat), base);
+    const rgb = shoulder(albedo.mul(lit));
     groundMat.colorNode = vec4(rgb, 1);
     groundMat.outputNode = vec4(rgb, 0);
   }
+  // The grass layer: SHELLS sheets one art px apart. A sheet keeps the pixels whose grass is at least that high, so the grass has
+  // a ragged top, a rim where it meets the path, and whatever stands in it loses its feet. Higher sheets lean with the wind.
+  const shellMat = new MeshBasicNodeMaterial();
+  shellMat.side = DoubleSide;
+  {
+    const layer: N = attribute('layer', 'float'), cell = floor(positionGeometry.xz.mul(16));
+    const lean = swayOf(cell.div(16), layer.div(SHELLS).pow(2).mul(0.16));
+    const src = cell.sub(floor(vec2(lean.x, lean.z).mul(16).add(0.5))), at = src.add(0.5).div(vec2(GW, GH));
+    const h = texture(heightTex, at).r.mul(255);
+    const vis = sunVis(vec3(cell.x.add(0.5).div(16), 0.05, cell.y.add(0.5).div(16)));
+    const lit = u.amb.add(u.sunCol.mul(vis).mul(float(0.45).add(u.sun.y.mul(0.55))));
+    const rgb = shoulder(texture(grassTex, at).rgb.mul(float(0.62).add(layer.div(max(h, 1)).mul(0.38))).mul(lit)); // blades darken toward their foot
+    shellMat.positionNode = vec3(positionGeometry.x, layer.mul(u.grassH).div(16), positionGeometry.z);
+    shellMat.colorNode = vec4(rgb, select(h.greaterThan(layer.sub(0.5)), float(1), float(0)));
+    shellMat.alphaTest = 0.5;
+    shellMat.outputNode = vec4(rgb, 0);
+  }
+  const shPos: number[] = [], shLayer: number[] = [], shIdx: number[] = [];
+  for (let i = 1; i <= SHELLS; i++) { const b = shPos.length / 3; shPos.push(0, 0, 0, MW, 0, 0, MW, 0, MH, 0, 0, MH); shLayer.push(i, i, i, i); shIdx.push(b, b + 2, b + 1, b, b + 3, b + 2); }
+  const shellMesh = new Mesh(geometry({ position: [shPos, 3], layer: [shLayer, 1] }, shIdx), shellMat);
+  shellMesh.renderOrder = -0.9;
+
+  // Bushels of tall grass: small cards whose blades are made in the shader (a height and a lean per pixel column), in clusters.
+  const tgFoot: number[] = [], tgOff: number[] = [], tgInfo: number[] = [], tgIdx: number[] = [];
+  {
+    let seed = 99;
+    const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let c = 0; c < 70 * p.mult; c++) {
+      const kx = PADX + rnd() * (MW - 2 * PADX), kz = PADZ + rnd() * (MH - 2 * PADZ), n = 3 + Math.floor(rnd() * 7);
+      for (let i = 0; i < n; i++) {
+        const x = Math.round((kx + (rnd() - 0.5) * 2.4) * 16) / 16, z = Math.round((kz + (rnd() - 0.5) * 1.8) * 16) / 16;
+        if (heightAt(x, z) < 2 || heightAt(x - 0.4, z) < 1 || heightAt(x + 0.4, z) < 1) continue;
+        const w = 7 + Math.floor(rnd() * 6), h = 7 + Math.floor(rnd() * 7), sd = Math.floor(rnd() * 997), b = tgFoot.length / 3;
+        for (const [ox, oy] of [[0, 0], [1, 0], [1, 1], [0, 1]]) { tgFoot.push(x, 0, z); tgOff.push(ox, oy); tgInfo.push(w, h, sd, 0); }
+        tgIdx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+      }
+    }
+  }
+  const tallMat = new MeshBasicNodeMaterial();
+  tallMat.side = DoubleSide;
+  {
+    const o: N = attribute('off', 'vec2'), inf: N = attribute('info', 'vec4'), w = inf.x, h = inf.y;
+    const top = o.y.mul(h).div(16);
+    tallMat.positionNode = positionGeometry.add(u.camR.mul(o.x.sub(0.5).mul(w).div(16))).add(vec3(0, top.mul(u.cardStretch).mul(u.grassH), 0)).add(swayOf(positionGeometry.xz, o.y.mul(o.y).mul(0.22))).add(u.camV.mul(0.03));
+    const px = floor(o.x.mul(w)), py = floor(o.y.mul(h));
+    const col = px.sub(floor(py.mul(hash3((vec3 as N)(inf.z, 1, 2)).sub(0.5).mul(0.7)))); // the whole bushel leans a little
+    const bh = h.mul(hash3((vec3 as N)(col, inf.z, 3)).mul(0.6).add(0.4)), blade = hash3((vec3 as N)(col, inf.z, 4)).greaterThan(0.3).and(py.lessThan(bh));
+    const lvl = float(1).add(step(0.55, py.div(bh))).add(step(0.6, hash3((vec3 as N)(col, inf.z, 5))));
+    const vis = sunVis(positionGeometry.add(vec3(0, 0.1, 0)).add(u.sun.mul(0.1)));
+    const rgb = shoulder(texture(palTex, vec2(lvl.add(0.5).div(5), 0.5 / 4)).rgb.mul(select(vis.lessThan(0.5), u.amb.mul(1.6).add(u.sunCol.mul(0.25)), u.amb.add(u.sunCol.mul(0.75)))));
+    tallMat.colorNode = vec4(rgb, select(blade, float(1), float(0)));
+    tallMat.alphaTest = 0.5;
+    tallMat.outputNode = vec4(rgb, 0);
+  }
+  const tallMesh = new Mesh(geometry({ position: [tgFoot, 3], off: [tgOff, 2], info: [tgInfo, 4] }, tgIdx), tallMat);
   groundMat.side = DoubleSide;
   const groundMesh = new Mesh(geometry({ position: [[0, 0, 0, MW, 0, 0, MW, 0, MH, 0, 0, MH], 3], uv: [[0, 0, 1, 0, 1, 1, 0, 1], 2] }, [0, 2, 1, 0, 3, 2]), groundMat);
   groundMesh.renderOrder = -1;
 
   const scene = new Scene(), shadowScene = new Scene();
-  for (const m of [groundMesh, plantMesh, figMesh, leafMesh, rainMesh]) { m.frustumCulled = false; scene.add(m); }
+  for (const m of [groundMesh, shellMesh, tallMesh, plantMesh, figMesh, leafMesh, rainMesh]) { m.frustumCulled = false; scene.add(m); }
   for (const v of variants) { scene.add(v.shown); shadowScene.add(v.cast); }
   for (const m of [trunkShadow, discShadow, figShadow]) { m.frustumCulled = false; shadowScene.add(m); }
 
@@ -474,7 +577,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   stormL.appendChild(stormI);
   const stormText = stormL.firstChild as Text;
   stormI.addEventListener('input', () => { p.storm = Number(stormI.value); changed(); });
-  const check = (label: string, key: 'stretch' | 'wind' | 'snap' | 'shadows' | 'outline' | 'plain' | 'leaves'): void => {
+  const check = (label: string, key: 'grass' | 'tall' | 'stretch' | 'wind' | 'snap' | 'shadows' | 'outline' | 'plain' | 'leaves'): void => {
     const l = row(label), i = document.createElement('input'); i.type = 'checkbox'; i.checked = p[key];
     i.addEventListener('change', () => { p[key] = i.checked; changed(); }); l.appendChild(i);
   };
@@ -494,6 +597,9 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   leafI.addEventListener('input', () => { p.leaf = Number(leafI.value); changed(); });
   choice<'balls' | 'tufts'>('Crowns (B)', [['Leaf balls', 'balls'], ['Leaf tufts', 'tufts']], () => p.crown, (v) => { p.crown = v; });
   choice('Turn (Z / C)', [0, 45, 90, 135, 180, -135, -90, -45].map((d) => [`${d}°`, d] as [string, number]), () => p.yaw, (v) => { p.yaw = v; cam.yawTo = (v * Math.PI) / 180; });
+  check('3D grass layer (H)', 'grass');
+  check('Bushels of tall grass', 'tall');
+  choice('Grass height', [['half', 0.5], ['normal', 1], ['1.5x', 1.5], ['double', 2]], () => p.gh, (v) => { p.gh = v; });
   check('Card proportions (stretch)', 'stretch');
   check('Palette steps off: plain light', 'plain');
   check('Outline and seams', 'outline');
@@ -508,6 +614,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
   el.appendChild(panel);
 
   function changed(): void {
+    u.grass.value = p.grass ? 1 : 0; u.grassH.value = p.gh; shellMesh.visible = p.grass; tallMesh.visible = p.grass && p.tall;
     u.leaves.value = p.leaves && p.mode === '3d' ? 1 : 0;
     u.wind.value = p.wind ? 1 : 0; u.snap.value = p.snap ? 1 : 0; u.shadows.value = p.shadows ? 1 : 0; u.outline.value = p.outline ? 1 : 0; u.plain.value = p.plain ? 1 : 0;
     u.stretch.value = p.stretch ? 1 / Math.cos(PITCH) : 1;
@@ -520,7 +627,8 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     u.storm.value = p.storm / 100; stormI.value = String(p.storm); stormText.textContent = `Storm ${p.storm}%`;
     const q = new URLSearchParams(location.search);
     q.set('hour', String(p.hour)); q.set('yaw', String(p.yaw)); q.set('mode', p.mode); q.set('crown', p.crown); q.set('tree', p.tree); q.set('storm', String(p.storm)); q.set('leaf', String(p.leaf));
-    for (const k of ['stretch', 'wind', 'snap', 'shadows', 'outline', 'plain', 'leaves'] as const) q.set(k, p[k] ? '1' : '0');
+    q.set('gh', String(p.gh));
+    for (const k of ['grass', 'tall', 'stretch', 'wind', 'snap', 'shadows', 'outline', 'plain', 'leaves'] as const) q.set(k, p[k] ? '1' : '0');
     q.set('res', String(p.res)); q.set('zoom', String(p.zoom));
     history.replaceState(null, '', `?${q.toString().replace('r3d=trees', 'r3d=trees')}`);
   }
@@ -532,6 +640,7 @@ export async function bootTrees(el: HTMLElement, search: string): Promise<void> 
     held.add(e.code);
     if (e.code === 'KeyZ') turn(45); else if (e.code === 'KeyC') turn(-45); else if (e.code === 'KeyX') turn(-p.yaw);
     else if (e.code === 'KeyT') { p.mode = p.mode === '3d' ? 'cards' : '3d'; changed(); }
+    else if (e.code === 'KeyH') { p.grass = !p.grass; changed(); }
     else if (e.code === 'KeyG') { p.tree = p.tree === 'grown' ? 'recipe' : 'grown'; changed(); }
     else if (e.code === 'KeyB') { p.crown = p.crown === 'balls' ? 'tufts' : 'balls'; changed(); }
   });
