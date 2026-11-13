@@ -26,7 +26,12 @@ export interface R3dParams {
   see: SeeMode; seeR: number; seeKeep: number; seeEdge: number;
   /** Sight (#305): hiding what the hero cannot see; the mist's height (tiles), top and drift (shares) and the day share (dev). */
   sight: boolean; mistHigh: number; mistTop: number; mistDrift: number; mistDay: number;
+  /** The sky (#306): the hour of day, 0..24 (null = the run's own); game hours per 720 real seconds times `hourRate` (0 stops time); the wind and the clouds on or off. */
+  hour: number | null; hourRate: number; wind: boolean; clouds: boolean;
 }
+
+/** The hour the sky pages start at (and the panel's slider shows) when the URL gives none. */
+export const DEFAULT_HOUR = 9.5;
 
 export const DEFAULTS: R3dParams = {
   // The user's picks after the hardware check (#301): 48.6° (a tile is 12 whole screen rows) and the smoothed ground on.
@@ -35,6 +40,7 @@ export const DEFAULTS: R3dParams = {
   free: false, light: 'game', dark: 'shape', amb: 0, lcap: 16, ccap: 16, dv: null,
   see: SEE_DEFAULTS.mode, seeR: SEE_DEFAULTS.radius, seeKeep: SEE_DEFAULTS.keep, seeEdge: SEE_DEFAULTS.edge,
   sight: true, mistHigh: MIST.high, mistTop: MIST.top, mistDrift: MIST.drift, mistDay: 1,
+  hour: null, hourRate: 1, wind: true, clouds: true,
 };
 
 /** A value clamped to min..max; a missing or unreadable one gives `dflt`. */
@@ -66,6 +72,7 @@ export function parseParams(search: string): R3dParams {
   const lcap = num(q.get('lcap'));
   const ccap = num(q.get('ccap'));
   const dv = num(q.get('dv'));
+  const hour = num(q.get('hour'));
   return {
     pitch: pitch === null ? DEFAULTS.pitch : Math.min(80, Math.max(30, pitch)),
     yaw: yaw === null ? DEFAULTS.yaw : wrapYaw(yaw),
@@ -92,10 +99,14 @@ export function parseParams(search: string): R3dParams {
     mistTop: range(num(q.get('mistTop')), 0, 1, DEFAULTS.mistTop),
     mistDrift: range(num(q.get('mistDrift')), 0, 1, DEFAULTS.mistDrift),
     mistDay: range(num(q.get('mistDay')), 0, 1, DEFAULTS.mistDay),
+    hour: hour === null ? null : range(hour, 0, 24, 0),
+    hourRate: range(num(q.get('hourRate')), 0, 100, DEFAULTS.hourRate),
+    wind: q.get('wind') === '0' ? false : DEFAULTS.wind,
+    clouds: q.get('clouds') === '0' ? false : DEFAULTS.clouds,
   };
 }
 
-const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay']);
+const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds']);
 
 /** The search string with this page's keys set or removed and every other key of `current` kept as it is (a key without a value stays without one). */
 export function toSearch(p: R3dParams, current: string): string {
@@ -127,5 +138,9 @@ export function toSearch(p: R3dParams, current: string): string {
   if (p.mistTop !== DEFAULTS.mistTop) s += `&mistTop=${p.mistTop}`;
   if (p.mistDrift !== DEFAULTS.mistDrift) s += `&mistDrift=${p.mistDrift}`;
   if (p.mistDay !== DEFAULTS.mistDay) s += `&mistDay=${p.mistDay}`;
+  if (p.hour !== null) s += `&hour=${p.hour}`;
+  if (p.hourRate !== DEFAULTS.hourRate) s += `&hourRate=${p.hourRate}`;
+  if (p.wind !== DEFAULTS.wind) s += '&wind=0';
+  if (p.clouds !== DEFAULTS.clouds) s += '&clouds=0';
   return s;
 }

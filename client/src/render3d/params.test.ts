@@ -97,6 +97,7 @@ describe('toSearch', () => {
       shadows: false, orb: false, smooth: false, stats: true, free: true, light: 'work', dark: 'fade', amb: 0.5, lcap: 8, ccap: 0, dv: 50,
       see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
+      hour: 18.5, hourRate: 0, wind: false, clouds: false,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -121,5 +122,18 @@ describe('toSearch', () => {
     expect(parseParams('?r3d')).toMatchObject({ sight: true, mistHigh: 3, mistTop: 0.4, mistDrift: 0.25, mistDay: 1 });
     expect(toSearch(DEFAULTS, '?r3d&sight=0&mistHigh=2&mistTop=1&mistDrift=1&mistDay=0')).toBe('?r3d');
     expect(toSearch({ ...DEFAULTS, sight: false, mistHigh: 2 }, '?r3d')).toBe('?r3d&sight=0&mistHigh=2');
+  });
+
+  it('reads the sky parameters (#306), clamps them, and leaves defaults out of the URL', () => {
+    expect(parseParams('?r3d')).toMatchObject({ hour: null, hourRate: 1, wind: true, clouds: true });
+    expect(parseParams('?r3d&hour=9.5&hourRate=10&wind=0&clouds=0')).toMatchObject({ hour: 9.5, hourRate: 10, wind: false, clouds: false });
+    expect(parseParams('?r3d&hour=30').hour).toBe(24);
+    expect(parseParams('?r3d&hour=-3').hour).toBe(0);
+    expect(parseParams('?r3d&hourRate=500').hourRate).toBe(100);
+    expect(parseParams('?r3d&hourRate=-1').hourRate).toBe(0);
+    expect(parseParams('?r3d&hour=abc&hourRate=abc')).toMatchObject({ hour: null, hourRate: 1 });
+    expect(parseParams('?r3d&wind=x&clouds=x')).toMatchObject({ wind: true, clouds: true });
+    expect(toSearch({ ...DEFAULTS, hour: 13, hourRate: 0, wind: false, clouds: false }, '?r3d=woodland')).toBe('?r3d=woodland&hour=13&hourRate=0&wind=0&clouds=0');
+    expect(toSearch(DEFAULTS, '?r3d=woodland&hour=13&hourRate=0&wind=0&clouds=0')).toBe('?r3d=woodland');
   });
 });

@@ -1,14 +1,17 @@
 // The DOM panel of the ?r3d page: the single place that renders the params.
 
-import { wrapYaw, type R3dParams } from './params';
+import { DEFAULT_HOUR, wrapYaw, type R3dParams } from './params';
 import type { Quality } from './quality';
 import type { SeeMode } from './seeThrough';
+import { hourLabel } from './sun';
 
 export interface Panel {
   setReadout(text: string): void;
   setParams(p: R3dParams): void;
   /** Shows the mist rows (daylight maps only); the run calls it once it knows the map. Off by default. */
   setDaylight(on: boolean): void;
+  /** Shows the sky rows (time of day, Time runs, Wind, Clouds) and hides "Mist day", which the hour then drives (#306). Off by default. */
+  setSky(on: boolean): void;
 }
 
 const PITCHES = [30, 45, 48.6];
@@ -40,6 +43,12 @@ const MIST_SLIDERS: { key: 'mistHigh' | 'mistTop' | 'mistDrift' | 'mistDay'; nam
   { key: 'mistTop', name: 'Mist top', min: 0, max: 1, step: 0.05 },
   { key: 'mistDrift', name: 'Mist drift', min: 0, max: 1, step: 0.05 },
   { key: 'mistDay', name: 'Mist day', min: 0, max: 1, step: 0.05, dev: true },
+];
+/** The sky page's switches (#306): time stops at a rate of 0; wind and clouds go off. */
+const SKY_SWITCHES: Switch[] = [
+  { name: 'Time runs', get: (p) => p.hourRate > 0, set: (p) => ({ hourRate: p.hourRate > 0 ? 0 : 1 }) },
+  { name: 'Wind', get: (p) => p.wind, set: (p) => ({ wind: !p.wind }) },
+  { name: 'Clouds', get: (p) => p.clouds, set: (p) => ({ clouds: !p.clouds }) },
 ];
 const SWITCHES: Record<'demo' | 'run', Switch[]> = {
   demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), DARK_FADE, flag('sight', 'Sight')],
@@ -170,9 +179,28 @@ export function createPanel(
     return { d, label, s, row };
   });
 
+  // Sky (pages with a sun): the time of day and three switches; hidden until `setSky(true)`.
+  let daylightOn = false;
+  let skyOn = false;
+  const hourRow = el('div', 'r3d-row');
+  const hourLabelEl = el('label');
+  const hour = slider(0, 24, 0.25, () => cur.hour ?? DEFAULT_HOUR, (v) => change({ hour: v }));
+  hour.input.id = 'r3d-hour';
+  hourLabelEl.htmlFor = 'r3d-hour';
+  hourRow.append(hourLabelEl, hour.input);
+  const skySwRow = el('div', 'r3d-row');
+  for (const sw of SKY_SWITCHES) button(skySwRow, sw.name, () => sw.get(cur), () => change(sw.set(cur)));
+  hourRow.hidden = true;
+  skySwRow.hidden = true;
+  const showRows = (): void => {
+    hourRow.hidden = !skyOn;
+    skySwRow.hidden = !skyOn;
+    mistSliders.forEach(({ d, row }) => { row.hidden = !daylightOn || (skyOn && d.key === 'mistDay'); });
+  };
+
   const readout = el('div', 'r3d-readout');
   const body = el('div', 'r3d-body');
-  body.append(pitchRow, yawRow, qRow, zRow, swRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
+  body.append(pitchRow, yawRow, qRow, zRow, swRow, hourRow, skySwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
@@ -202,6 +230,8 @@ export function createPanel(
     yawLabel.textContent = `Camera turn ${deg(cur.yaw)}`;
     pitch.sync();
     yaw.sync();
+    hourLabelEl.textContent = `Time of day ${hourLabel(cur.hour ?? DEFAULT_HOUR)}`;
+    hour.sync();
     for (const { d, label, s } of seeSliders) {
       label.textContent = `${d.name} ${Math.round(cur[d.key] * 100) / 100}`;
       s.sync();
@@ -230,7 +260,12 @@ export function createPanel(
       refresh();
     },
     setDaylight(on) {
-      for (const { row } of mistSliders) row.hidden = !on;
+      daylightOn = on;
+      showRows();
+    },
+    setSky(on) {
+      skyOn = on;
+      showRows();
     },
   };
 }

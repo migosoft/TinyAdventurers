@@ -61,6 +61,8 @@ export interface Host {
   setRunYaw(deg: number): void;
   /** Shows the panel's mist rows (daylight maps); a run calls it once it knows the map. */
   setDaylight(on: boolean): void;
+  /** Shows the panel's sky rows (time of day, time runs, wind, clouds) and hides "Mist day": the pages with a sun (#306). */
+  setSky(on: boolean): void;
   stop(): void;
 }
 
@@ -242,6 +244,7 @@ export async function startHost(
       panel.setParams(params);
     },
     setDaylight: (on) => panel.setDaylight(on),
+    setSky: (on) => panel.setSky(on),
     stop: () => stop(),
   };
 

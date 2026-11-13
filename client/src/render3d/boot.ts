@@ -11,6 +11,7 @@ import { createLightsStage } from './lightsStage';
 import { parseParams } from './params';
 import { clearErrors, startHost, type Host } from './host';
 import { createRunStage, newRun } from './runStage';
+import { createWoodlandStage } from './woodlandStage';
 
 export async function bootDemo(el: HTMLElement, search: string): Promise<void> {
   const p = parseParams(search);
@@ -30,6 +31,13 @@ export async function bootLights(el: HTMLElement, search: string): Promise<void>
   const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
   const p = parseParams(s);
   await startHost(el, s, 'demo', (assets, host) => createLightsStage(assets, p, s, host));
+}
+
+/** `?r3d=woodland` (#306): a forest road under the sun and sky of the time of day, no server needed. Zoom 2 unless the URL picks one. */
+export async function bootWoodland(el: HTMLElement, search: string): Promise<void> {
+  const s = new URLSearchParams(search).has('zoom') ? search : `${search}&zoom=2`;
+  const p = parseParams(s);
+  await startHost(el, s, 'demo', (assets, host) => createWoodlandStage(assets, p, s, host));
 }
 
 export interface Run3d {

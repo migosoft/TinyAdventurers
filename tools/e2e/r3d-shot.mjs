@@ -1,6 +1,6 @@
 // Headless load check of the 3D renderer page (?r3d): waits for drawn frames, prints the backend, saves a screenshot.
 // Usage: node r3d-shot.mjs [baseUrl] [outDir] [extraQuery] [mode] [lose] [page]
-// page: demo (default), gallery (?r3d=gallery, #303) or lights (?r3d=lights, #304).
+// page: demo (default), gallery (?r3d=gallery, #303), lights (?r3d=lights, #304) or woodland (?r3d=woodland, #306; add &hour=9.5).
 // mode: webgl (default, SwiftShader GL) or webgpu (SwiftShader Vulkan).
 // lose: after the first screenshot the device is lost on purpose (window.__r3d.forceLoss()); the script waits up to 20 s
 // for 10 more drawn frames and saves r3d-after-loss.png. Console errors containing "Device Lost" are ignored in this mode.
@@ -11,7 +11,7 @@ const out = process.argv[3] ?? 'shots';
 const extra = process.argv[4] ?? '';
 const mode = process.argv[5] || 'webgl';
 const lose = process.argv[6] ?? '';
-const page = process.argv[7] || 'demo'; // demo (default), gallery or lights
+const page = process.argv[7] || 'demo'; // demo (default), gallery, lights or woodland
 const args =
   mode === 'webgpu' && process.env.HEADED
     ? ['--enable-unsafe-webgpu', '--enable-features=Vulkan']

@@ -142,6 +142,40 @@ describe('panel', () => {
     }
   });
 
+  it('setSky shows the sky rows and hides Mist day; the slider sets the hour, Time runs the rate (#306)', () => {
+    const { host, calls, panel, btn } = setup();
+    const row = (id: string) => host.querySelector<HTMLInputElement>(`#r3d-${id}`)!.parentElement!;
+    const sw = (name: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === name);
+    expect(row('hour').hidden).toBe(true);
+    for (const n of ['Time runs', 'Wind', 'Clouds']) expect(sw(n)!.parentElement!.hidden).toBe(true);
+    panel.setDaylight(true);
+    expect(row('mistDay').hidden).toBe(false);
+    panel.setSky(true);
+    expect(row('hour').hidden).toBe(false);
+    for (const n of ['Time runs', 'Wind', 'Clouds']) expect(sw(n)!.parentElement!.hidden).toBe(false);
+    expect(row('mistDay').hidden).toBe(true);
+    expect(row('mistHigh').hidden).toBe(false);
+    const h = host.querySelector<HTMLInputElement>('#r3d-hour')!;
+    expect([h.min, h.max, h.step]).toEqual(['0', '24', '0.25']);
+    h.value = '9.5';
+    h.dispatchEvent(new Event('input'));
+    expect(calls[0].hour).toBe(9.5);
+    expect(host.textContent).toContain('Time of day 09:30');
+    expect(btn('Time runs').getAttribute('aria-pressed')).toBe('true');
+    btn('Time runs').click();
+    expect(calls[1].hourRate).toBe(0);
+    expect(btn('Time runs').getAttribute('aria-pressed')).toBe('false');
+    btn('Time runs').click();
+    expect(calls[2].hourRate).toBe(1);
+    btn('Wind').click();
+    expect(calls[3].wind).toBe(false);
+    btn('Clouds').click();
+    expect(calls[4].clouds).toBe(false);
+    panel.setSky(false);
+    expect(row('hour').hidden).toBe(true);
+    expect(row('mistDay').hidden).toBe(false);
+  });
+
   it('the zoom row sets zoom or Auto (null)', () => {
     const { calls, btn } = setup({ ...DEFAULTS, zoom: 3 });
     expect(btn('3').getAttribute('aria-pressed')).toBe('true');
