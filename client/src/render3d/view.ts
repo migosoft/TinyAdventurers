@@ -3,8 +3,6 @@ import {
   Box3,
   BufferGeometry,
   Color,
-  MeshBasicNodeMaterial,
-  DoubleSide,
   DataTexture,
   DynamicDrawUsage,
   HalfFloatType,
@@ -33,16 +31,19 @@ import { snapGround, viewRay, type Cam } from './camera';
 import { WALL_H, cellHeight, heightBytes } from './heights';
 import type { TileMap } from '../sim/map';
 import type { Dynamic, Quads } from './cards';
+import type { SightMask } from './sightmask';
 import { cssColour, stoneClear, type Light } from './light';
 import { makeLighting } from './lightNodes';
 import { CASTER_CAP, type ShadowCaster } from './lights';
+import { cardSightData, glowSightData, shadowSightData } from './sightAttrs';
+import { makeSight, SIGHT_OFF, type SightFrame } from './sightNodes';
 import { cardMaterial, emissiveMaterial, glowMaterial, maskMaterial, shadowMaterial, viewTowardUniform, worldMaterial } from './materials';
 import type { RenderPlan } from './quality';
 import type { FrameTimer } from '../game/frameTimer';
 import type { R3dSystem } from './stats';
 import { CHUNK, buildChunk, chunkGrid, chunksOfTile, type FrameRects, type WorldArrays } from './worldMesh';
 import { buildTerrainChunk, stepTerrainUv, type TerrainChunk } from './terrainMesh';
-import { FIELD_ALPHA, FIELD_COLOUR, buildField } from './fieldMesh';
+import { buildField, fieldMaterial as makeFieldMaterial } from './fieldMesh';
 import type { Opener } from './figures';
 import { SEE_DEFAULTS, discQuads, discTowards, type SeeLook } from './seeThrough';
 
@@ -67,6 +68,8 @@ export interface FrameInput {
   darkvision: { x: number; z: number; reach: number } | null;
   /** The figures that cast shadows, in the shader's slot order (`selectCasters`; the first `CASTER_CAP` are used); a light's `skip` indexes this list. */
   casters: readonly ShadowCaster[];
+  /** What the hero cannot see this frame (#305); absent = off: every material looks as without it. */
+  sight?: SightFrame;
 }
 
 /** The ground image is larger than the device's texture limit. */
@@ -226,7 +229,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const maskDiscs = new DynMesh([['position', 3], ['uv', 2], ['near', 1]], mm.material);
   const maskScene = new Scene();
   maskScene.add(maskDiscs.mesh);
-  const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, mask.texture);
+  const sight = makeSight();
+  const wm = worldMaterial(atlas, atlasLinear, aw, ah, lighting, groundStart, mask.texture, sight);
   const material = wm.material;
 
   const scene = new Scene();
@@ -283,12 +287,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const chunks = { total: chunkTotal(), drawn: 0 };
 
   // The force field: one unlit, translucent mesh over every closed door cell.
-  const fieldMaterial = new MeshBasicNodeMaterial();
-  fieldMaterial.color.setRGB(FIELD_COLOUR[0], FIELD_COLOUR[1], FIELD_COLOUR[2]);
-  fieldMaterial.opacity = FIELD_ALPHA;
-  fieldMaterial.transparent = true;
-  fieldMaterial.depthWrite = false;
-  fieldMaterial.side = DoubleSide;
+  const fieldMaterial = makeFieldMaterial(sight);
   let fieldMesh: Mesh | null = null;
   const rebuildField = (): void => {
     if (fieldMesh) {
@@ -310,31 +309,38 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   // Cards, flames and glows are pushed toward the camera along the view ray (the demo's depth bias); set each frame.
   const toward = viewTowardUniform();
   // Cards share one vertex layout in four materials: opaque upright, translucent upright (sorted back to front by the caller), translucent flat (floor decals), and emissive (torch flames).
-  const card = cardMaterial(atlas, aw, ah, lighting, toward);
-  const ghost = cardMaterial(atlas, aw, ah, lighting, toward, { translucent: true });
+  const card = cardMaterial(atlas, aw, ah, lighting, toward, sight);
+  const ghost = cardMaterial(atlas, aw, ah, lighting, toward, sight, { translucent: true });
   // Translucent too: a sleeping incorporeal figure and the skulls (0.85) have an alpha. No depth write, drawn after the shadows.
-  const decal = cardMaterial(atlas, aw, ah, lighting, toward, { flat: true, translucent: true });
-  const emissive = emissiveMaterial(atlas, aw, ah, lighting, toward);
-  const glow = glowMaterial();
-  const shadow = shadowMaterial();
-  const cardAttrs: [string, number][] = [['position', 3], ['uv', 2], ['tint', 4], ['alpha', 1], ['shade', 2]];
+  const decal = cardMaterial(atlas, aw, ah, lighting, toward, sight, { flat: true, translucent: true });
+  const emissive = emissiveMaterial(atlas, aw, ah, lighting, toward, sight);
+  const glow = glowMaterial(sight);
+  const shadow = shadowMaterial(sight);
+  const cardAttrs: [string, number][] = [['position', 3], ['uv', 2], ['tint', 4], ['alpha', 1], ['shade', 2], ['sight', 3]];
   const cards = new DynMesh(cardAttrs, card.material);
   const ghosts = new DynMesh(cardAttrs, ghost.material);
   const decals = new DynMesh(cardAttrs, decal.material);
-  const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1]], shadow);
-  const flames = new DynMesh([['position', 3], ['uv', 2]], emissive);
-  const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3]], glow);
+  const shadows = new DynMesh([['position', 3], ['uv', 2], ['alpha', 1], ['sight', 2]], shadow);
+  const flames = new DynMesh([['position', 3], ['uv', 2], ['sight', 3]], emissive);
+  const glows = new DynMesh([['position', 3], ['uv', 2], ['glowColor', 3], ['sight', 2]], glow);
   shadows.mesh.renderOrder = 1;
   decals.mesh.renderOrder = 2;
   ghosts.mesh.renderOrder = 3;
   glows.mesh.renderOrder = 4;
   // `look` is 5 floats per vertex (r, g, b, mode, alpha); a vertex attribute has at most 4 components, so it goes up as `tint` (r, g, b, mode) and `alpha`.
-  let tintBuf = new Float32Array(0), alphaBuf = new Float32Array(0), shadeBuf = new Float32Array(0);
+  let tintBuf = new Float32Array(0), alphaBuf = new Float32Array(0), shadeBuf = new Float32Array(0), sightBuf = new Float32Array(0), pairBuf = new Float32Array(0);
+  /** The sight mask of this frame (null: off); set before the meshes go up. */
+  let frameMask: SightMask | null = null;
   /** The caster slot of every entity id in this frame's list (set each frame before the cards go up). */
   const slotOf = new Map<number, number>();
+  /** Scratch for the shadows' and glows' (hard, soft) pairs (each set copies out of it at once) and for the flames' triples. */
+  const pairScratch = (count: number): Float32Array => (pairBuf.length < count * 12 ? (pairBuf = new Float32Array(count * 12)) : pairBuf);
+  let flameBuf = new Float32Array(0);
+  const cardScratch = (count: number): Float32Array => (flameBuf.length < count * 18 ? (flameBuf = new Float32Array(count * 18)) : flameBuf);
   const cardData = (q: Quads): Record<string, Float32Array> => {
     const n = q.count * 6;
     if (alphaBuf.length < n) { tintBuf = new Float32Array(n * 4); alphaBuf = new Float32Array(n); shadeBuf = new Float32Array(n * 2); }
+    if (sightBuf.length < n * 3) sightBuf = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       tintBuf[i * 4] = q.look[i * 5]; tintBuf[i * 4 + 1] = q.look[i * 5 + 1]; tintBuf[i * 4 + 2] = q.look[i * 5 + 2]; tintBuf[i * 4 + 3] = q.look[i * 5 + 3];
       alphaBuf[i] = q.look[i * 5 + 4];
@@ -343,7 +349,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       shadeBuf[i * 2] = owner >= 0 ? (slotOf.get(owner) ?? -1) : -1;
       shadeBuf[i * 2 + 1] = i < q.dark.length ? q.dark[i] : 0;
     }
-    return { position: q.position, uv: q.uv, tint: tintBuf, alpha: alphaBuf, shade: shadeBuf };
+    return { position: q.position, uv: q.uv, tint: tintBuf, alpha: alphaBuf, shade: shadeBuf, sight: cardSightData(q, frameMask, sightBuf) };
   };
 
   // The off-screen copy: the quad shows the target's texels as they are (no lighting, no tone mapping, no colour conversion).
@@ -474,6 +480,10 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         canvasBg = bg;
         renderer.domElement.style.backgroundColor = bg;
       }
+      // Sight (#305): once per frame, before the meshes go up.
+      const sf = f.sight ?? SIGHT_OFF;
+      sight.set(sf);
+      frameMask = sf.mode === 'off' ? null : sf.mask;
       lighting.setAmbient(f.ambient);
       const casters = f.casters.length > CASTER_CAP ? f.casters.slice(0, CASTER_CAP) : f.casters;
       slotOf.clear();
@@ -483,9 +493,9 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       cards.set(cardData(d.cards), d.cards.count * 6);
       ghosts.set(cardData(d.ghosts), d.ghosts.count * 6);
       decals.set(cardData(d.decals), d.decals.count * 6);
-      shadows.set({ position: d.shadows.position, uv: d.shadows.uv, alpha: d.shadows.alpha }, d.shadows.count * 6);
-      flames.set({ position: d.emissive.position, uv: d.emissive.uv }, d.emissive.count * 6);
-      glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color }, d.glows.count * 6);
+      shadows.set({ position: d.shadows.position, uv: d.shadows.uv, alpha: d.shadows.alpha, sight: shadowSightData(d.shadows, frameMask, pairScratch(d.shadows.count)) }, d.shadows.count * 6);
+      flames.set({ position: d.emissive.position, uv: d.emissive.uv, sight: cardSightData(d.emissive, frameMask, cardScratch(d.emissive.count)) }, d.emissive.count * 6);
+      glows.set({ position: d.glows.position, uv: d.glows.uv, glowColor: d.glows.color, sight: glowSightData(d.glows, frameMask, pairScratch(d.glows.count)) }, d.glows.count * 6);
       lighting.setLights(f.lights);
       lighting.setShadows(f.shadows);
       lighting.setLava(f.lava, f.lavaVersion);
@@ -544,6 +554,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         fieldMesh?.geometry.dispose();
         fieldMaterial.dispose();
         material.dispose();
+        sight.dispose();
         for (const m of [card.material, ghost.material, decal.material, emissive, glow, shadow]) m.dispose();
         for (const dm of [cards, ghosts, decals, shadows, flames, glows]) dm.dispose();
         target?.dispose();

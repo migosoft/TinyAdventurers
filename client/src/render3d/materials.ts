@@ -3,6 +3,7 @@ import { AdditiveBlending, CustomBlending, DoubleSide, MaxEquation, MeshBasicNod
 import type { Texture } from 'three/webgpu';
 import { attribute, clamp, float, floor, fwidth, fract, int, ivec2, length, max, mod, positionGeometry, positionWorld, screenCoordinate, screenUV, select, smoothstep, texture, uniform, uv, varying, vec2, vec3, vec4 } from 'three/tsl';
 import type { Lighting } from './lightNodes';
+import type { Sight } from './sightNodes';
 import { GRASS_FLAT, STONE } from './light';
 import { SEE_DEFAULTS, SEE_DEPTH_BIAS, SEE_DEPTH_MARGIN } from './seeThrough';
 
@@ -19,6 +20,16 @@ export const FLAME_BIAS = 0.05;
  */
 export function viewTowardUniform() {
   return uniform(new Vector3(0, 0, 1));
+}
+
+/** Tiles of mask texels (1.5) a wall face's sight read point is pushed out along its normal: the bilinear read then touches only texels in front of the face, never the wall tile's own. */
+export const FACE_PUSH_TEXELS = 1.5;
+
+/** The 4x4 Bayer threshold (0..15/16) of the output pixel: bits of x ^ y and y, as in `bayer4`. Build it where the sample sits (top level, no branch). */
+export function bayerAt() {
+  const bx = mod(floor(screenCoordinate.x), 4);
+  const by = mod(floor(screenCoordinate.y), 4);
+  return mod(bx.add(by), 2).mul(8).add(mod(by, 2).mul(4)).add(mod(floor(bx.div(2)).add(floor(by.div(2))), 2).mul(2)).add(mod(floor(by.div(2)), 2)).div(16);
 }
 export type ViewToward = ReturnType<typeof viewTowardUniform>;
 
@@ -38,7 +49,7 @@ export interface WorldMaterial {
  * and (kind `ground`) the painted woodland ground, `GRASS_FLAT` while no image is set. The ground's rect is the whole image in px.
  * `smooth` (0 or 1) switches floor and ground to the linear texture at a sharpened position; it is a uniform, so flipping it recompiles nothing.
  */
-export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, maskTex: Texture): WorldMaterial {
+export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, groundStart: Texture, maskTex: Texture, sight: Sight): WorldMaterial {
   const kind = attribute('kind', 'float');
   const isTop = kind.greaterThan(1.5).and(kind.lessThan(2.5));
   const isGround = kind.greaterThan(2.5);
@@ -84,7 +95,10 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const albedo = select(isTop, top, texel.rgb);
   // Wrap: floor and ground 0.35, wall face 0.5, wall top 0.15.
   const wrap = select(isTop, float(0.15), select(isFace, float(0.5), float(0.35)));
-  const lit = lighting.lightAt(wp, attribute('normal', 'vec3'), wrap);
+  const normal = attribute('normal', 'vec3');
+  const lit = lighting.lightAt(wp, normal, wrap);
+  // Sight (#305): a wall face is seen where the floor at its foot is: its point pushed out along the normal. Floors, ground and tops have an upright normal and read their own point.
+  const unseen = sight.unseenAt(wp.xz.add(normal.xz.mul(float(FACE_PUSH_TEXELS).div(sight.res))));
 
   // See through (#303): wall sides and tops (never floors or ground) open where the mask has a disc and the wall is nearer the camera than the thing under it.
   // The mask is sampled linearly; its green is a sum weighted by coverage (alpha), so dividing by alpha gives the value back at a disc's soft edge.
@@ -97,17 +111,14 @@ export function worldMaterial(atlas: Texture, linearAtlas: Texture, atlasW: numb
   const wallNear = wp.sub(see.target).dot(see.ray);
   const inFront = strength.greaterThan(0).and(wallNear.greaterThan(thingNear.add(SEE_DEPTH_MARGIN)));
   const onWall = isTop.or(isFace);
-  // Output-pixel Bayer threshold: bits of x ^ y and y, as in `bayer4`.
-  const bx = mod(floor(screenCoordinate.x), 4);
-  const by = mod(floor(screenCoordinate.y), 4);
-  const bayer = mod(bx.add(by), 2).mul(8).add(mod(by, 2).mul(4)).add(mod(floor(bx.div(2)).add(floor(by.div(2))), 2).mul(2)).add(mod(floor(by.div(2)), 2)).div(16);
+  const bayer = bayerAt();
   const keepAt = float(1).sub(strength.mul(float(1).sub(see.keep)));
   const softOpen = bayer.greaterThanEqual(keepAt);
   const latticeOpen = strength.greaterThan(0.5).and(mod(floor(p0.x).add(floor(p0.y)), 2).lessThan(0.5));
   const open = onWall.and(inFront).and(select(see.mode.greaterThan(1.5), latticeOpen, select(see.mode.greaterThan(0.5), softOpen, float(0).greaterThan(1))));
 
   const m = new MeshBasicNodeMaterial();
-  m.colorNode = vec4(lighting.finish(albedo, lit), select(open, float(0), select(isTop, float(1), texel.a)));
+  m.colorNode = vec4(sight.apply(lighting.finish(albedo, lit), wp, unseen), select(open, float(0), select(isTop, float(1), texel.a)));
   m.alphaTest = 0.5;
   return {
     material: m,
@@ -156,7 +167,7 @@ export function maskMaterial(): { material: NodeMaterial; edge: { value: number 
  * (the demo's true tilt); the light uses the true, unstretched position. `cosP` is set by the view each frame.
  */
 export function cardMaterial(
-  atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, toward: ViewToward,
+  atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, toward: ViewToward, sight: Sight,
   opts: { flat?: boolean; translucent?: boolean } = {},
 ): { material: MeshBasicNodeMaterial; cosP: { value: number } } {
   const cosP = uniform(1);
@@ -173,9 +184,13 @@ export function cardMaterial(
   m.positionNode = pos.add(toward.mul(CARD_BIAS));
   // `shade`: x = the card's own caster slot (-1: none), y = 1 for "ambient only" (a figure the server marks dark).
   const shade = attribute('shade', 'vec2');
-  m.colorNode = vec4(lighting.finish(body, lighting.lightAt(truePos, vec3(0, 0, 0), 1, { self: shade.x, darkOnly: shade.y })), texel.a);
+  // Sight (#305): (hard, soft, scenery) of the card's foot, one value for the whole card.
+  const seen = attribute('sight', 'vec3');
+  const colour = sight.apply(lighting.finish(body, lighting.lightAt(truePos, vec3(0, 0, 0), 1, { self: shade.x, darkOnly: shade.y })), truePos, seen.xy);
+  const shown = sight.shown(seen.x, seen.z);
   if (opts.translucent) {
-    const alpha = attribute('alpha', 'float');
+    m.colorNode = vec4(colour, texel.a);
+    const alpha = attribute('alpha', 'float').mul(shown);
     m.opacityNode = alpha;
     // The opacity is applied before the test: scale the threshold so that it still discards texel.a < 0.5.
     m.alphaTestNode = alpha.mul(0.5);
@@ -183,6 +198,8 @@ export function cardMaterial(
     m.depthWrite = false;
     m.forceSinglePass = true; // a transparent double-sided material would otherwise draw twice
   } else {
+    // Opaque: a stipple where the card is partly shown (1 never discards, 0 always).
+    m.colorNode = vec4(colour, select(bayerAt().lessThan(shown), texel.a, float(0)));
     m.alphaTest = 0.5;
   }
   m.side = DoubleSide;
@@ -190,10 +207,10 @@ export function cardMaterial(
 }
 
 /** Soft ground shadows: black, alpha times a smooth fall-off over the ellipse (uv -1..1), depth tested but not written. */
-export function shadowMaterial(): MeshBasicNodeMaterial {
+export function shadowMaterial(sight: Sight): MeshBasicNodeMaterial {
   const m = new MeshBasicNodeMaterial();
   const fall = float(1).sub(smoothstep(0, 1, length(uv())));
-  m.colorNode = vec4(0, 0, 0, attribute('alpha', 'float').mul(fall));
+  m.colorNode = vec4(0, 0, 0, float(attribute('alpha', 'float').mul(fall).mul(sight.shown(attribute('sight', 'vec2').x, 0)) as unknown as number));
   m.transparent = true;
   m.depthWrite = false;
   m.forceSinglePass = true;
@@ -202,21 +219,24 @@ export function shadowMaterial(): MeshBasicNodeMaterial {
 }
 
 /** Torch flames: the atlas texel, self-lit. */
-export function emissiveMaterial(atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, toward: ViewToward): MeshBasicNodeMaterial {
+export function emissiveMaterial(atlas: Texture, atlasW: number, atlasH: number, lighting: Lighting, toward: ViewToward, sight: Sight): MeshBasicNodeMaterial {
   const texel = texture(atlas, uv().div(vec2(atlasW, atlasH)));
   const m = new MeshBasicNodeMaterial();
   m.positionNode = positionGeometry.add(toward.mul(FLAME_BIAS));
-  m.colorNode = vec4(lighting.shoulder(texel.rgb.mul(1.15)), texel.a);
+  // Sight (#305): self-lit, so no `apply`: gone on unseen ground (a stipple, as the opaque cards), dimmed behind a trunk on dark maps.
+  const seen = attribute('sight', 'vec3');
+  const shown = sight.shown(seen.x, 0);
+  m.colorNode = vec4(sight.dim(lighting.shoulder(texel.rgb.mul(1.15)), seen.y), select(bayerAt().lessThan(shown), texel.a, float(0)));
   m.alphaTest = 0.5;
   m.side = DoubleSide;
   return m;
 }
 
 /** Camera-facing glow quads (already moved toward the camera by `buildDynamic`, so no bias here): colour times max(0, 1 - |uv|)^3, added to the picture, depth tested but not written. */
-export function glowMaterial(): MeshBasicNodeMaterial {
+export function glowMaterial(sight: Sight): MeshBasicNodeMaterial {
   const g = max(float(1).sub(length(uv())), 0);
   const m = new MeshBasicNodeMaterial();
-  m.colorNode = vec4(attribute('glowColor', 'vec3').mul(g.mul(g).mul(g)), 1);
+  m.colorNode = vec4(attribute('glowColor', 'vec3').mul(g.mul(g).mul(g)).mul(sight.shown(attribute('sight', 'vec2').x, 0)), 1);
   m.transparent = true;
   m.blending = AdditiveBlending;
   m.depthWrite = false;

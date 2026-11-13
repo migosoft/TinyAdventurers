@@ -1,10 +1,23 @@
+import { DoubleSide, MeshBasicNodeMaterial } from 'three/webgpu';
+import { positionWorld, vec3, vec4 } from 'three/tsl';
 import { TILE_ID } from '../generated/defs';
+import type { Sight } from './sightNodes';
 import type { TileMap } from '../sim/map';
 import { WALL_H, heightAt } from './heights';
 import { pushQuad, KIND } from './worldMesh';
 
 export const FIELD_COLOUR: [number, number, number] = [0.3, 0.55, 1.0];
 export const FIELD_ALPHA = 0.35;
+
+/** The force field's material: unlit blue, translucent, ending with the sight step at its own point (#305). */
+export function fieldMaterial(sight: Sight): MeshBasicNodeMaterial {
+  const m = new MeshBasicNodeMaterial();
+  m.colorNode = vec4(sight.apply(vec3(...FIELD_COLOUR), positionWorld, sight.unseenAt(positionWorld.xz)), FIELD_ALPHA);
+  m.transparent = true;
+  m.depthWrite = false;
+  m.side = DoubleSide;
+  return m;
+}
 
 export function sealedCells(map: TileMap): [number, number][] {
   const out: [number, number][] = [];

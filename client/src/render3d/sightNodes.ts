@@ -30,10 +30,16 @@ export interface Sight {
   unseenAt(xz: N): N;
   /** The colour after the sight step: `mode` off unchanged; dark mix(c * (1 - SHADE * soft), clear, hard); mist per `mist.ts` with `P` the true world point (height P.y, drift at P.xz). */
   apply(colour: N, P: N, u: N): N;
+  /** The mask's texels per tile as a node (`sightOrigin.w`): a material pushes a wall face's read point out by 1.5 / res. */
+  readonly res: N;
+  /** `colour` dimmed by SHADE * soft on dark maps (a self-lit thing behind a trunk); unchanged on other maps. */
+  dim(colour: N, soft: N): N;
   /** How much of a card is drawn (0..1) from its (hard, scenery) attribute values, as `cardShown`; 1 when off. */
   shown(hard: N, scenery: N): N;
   /** Uploads the mask when its `data` object or `version` differs from the last call on this Sight (a new Sight always uploads); a new data size makes a new texture assigned to the node. */
   set(f: SightFrame): void;
+  /** How many times the mask went up to the GPU texture (a new view uploads on its first frame). */
+  readonly uploads: number;
   dispose(): void;
 }
 
@@ -80,6 +86,7 @@ export function makeSight(): Sight {
   const maskNode = texture(tex).setName('sightMask');
   let lastData: Uint8Array | null = null;
   let lastVersion = -1;
+  let uploads = 0;
 
   const isMist = uMode.greaterThan(1.5);
   const isDark = uMode.greaterThan(0.5).and(isMist.not());
@@ -113,6 +120,8 @@ export function makeSight(): Sight {
     return out;
   })();
 
+  const dim = (colour: N, soft: N): N => vec3(colour).mul(float(1).sub(select(isDark, soft, float(0)).mul(SHADE)));
+
   const shown = (hard: N, scenery: N): N => {
     const seen = float(1).sub(hard);
     return select(uMode.lessThan(0.5), float(1), select(isMist.and(float(scenery).greaterThan(0.5)), float(1), seen));
@@ -133,6 +142,7 @@ export function makeSight(): Sight {
     const sameSize = lastData !== null && lastData.length === m.data.length;
     lastData = m.data;
     lastVersion = m.version;
+    uploads++;
     if (sameSize && tex.image.width === m.n) {
       // The texture keeps its data object only when that is the mask's own array; copy otherwise.
       if (tex.image.data !== m.data) (tex.image.data as Uint8Array).set(m.data);
@@ -146,5 +156,5 @@ export function makeSight(): Sight {
 
   const dispose = (): void => tex.dispose();
 
-  return { unseenAt, apply, shown, set, dispose };
+  return { unseenAt, apply, dim, shown, set, dispose, res: uOrigin.w, get uploads() { return uploads; } };
 }

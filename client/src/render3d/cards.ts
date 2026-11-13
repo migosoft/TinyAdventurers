@@ -15,28 +15,28 @@ export const WEAPON_BIAS = 0.01;
 const SHADOW_Y = 0.01;
 
 /** 6 vertices per quad. `look` has 5 floats per vertex: r, g, b, mode (0 multiply, 1 fill, 2 grey then multiply), alpha. */
-export interface Quads { position: Float32Array; uv: Float32Array; look: Float32Array; /** One entity id per vertex, -1 none. */ owner: Float32Array; /** 1 per vertex of a card the server marks dark (lit by the ambient only), else 0. */ dark: Float32Array; count: number }
-export interface Glows { position: Float32Array; uv: Float32Array; color: Float32Array; count: number } // uv -1..1; color rgb already times strength
-export interface Shadows { position: Float32Array; uv: Float32Array; alpha: Float32Array; count: number } // uv -1..1
+export interface Quads { position: Float32Array; uv: Float32Array; look: Float32Array; /** One entity id per vertex, -1 none. */ owner: Float32Array; /** 1 per vertex of a card the server marks dark (lit by the ambient only), else 0. */ dark: Float32Array; /** 4 per vertex: the foot point (x, z), the reach (tiles, half the drawn width) and the scenery flag (0 or 1), the sight mask's reading point. */ foot: Float32Array; count: number }
+export interface Glows { position: Float32Array; uv: Float32Array; color: Float32Array; /** 2 per vertex: the centre (x, z). */ foot: Float32Array; count: number } // uv -1..1; color rgb already times strength
+export interface Shadows { position: Float32Array; uv: Float32Array; alpha: Float32Array; /** 2 per vertex: the centre (x, z). */ foot: Float32Array; count: number } // uv -1..1
 /** `ghosts` (translucent, no depth write) must be sorted with `sortBackToFront` by the producer before it is handed over. */
 export interface Dynamic { cards: Quads; ghosts: Quads; decals: Quads; shadows: Shadows; emissive: Quads; glows: Glows }
 
 /** The growing arrays one pass is built in; `n` counts quads. */
-export interface CardBuf { position: number[]; uv: number[]; look: number[]; /** One entity id per vertex of the looked quads (-1: none). */ owner: number[]; /** 1 per vertex of a dark card, else 0. */ dark: number[]; n: number }
-export interface ShadowBuf { position: number[]; uv: number[]; alpha: number[]; n: number }
-export interface GlowBuf { position: number[]; uv: number[]; color: number[]; n: number }
+export interface CardBuf { position: number[]; uv: number[]; look: number[]; /** One entity id per vertex of the looked quads (-1: none). */ owner: number[]; /** 1 per vertex of a dark card, else 0. */ dark: number[]; /** 4 per vertex: x, z, reach, scenery. */ foot: number[]; n: number }
+export interface ShadowBuf { position: number[]; uv: number[]; alpha: number[]; foot: number[]; n: number }
+export interface GlowBuf { position: number[]; uv: number[]; color: number[]; foot: number[]; n: number }
 
-export const newCardBuf = (): CardBuf => ({ position: [], uv: [], look: [], owner: [], dark: [], n: 0 });
-export const newShadowBuf = (): ShadowBuf => ({ position: [], uv: [], alpha: [], n: 0 });
-export const newGlowBuf = (): GlowBuf => ({ position: [], uv: [], color: [], n: 0 });
+export const newCardBuf = (): CardBuf => ({ position: [], uv: [], look: [], owner: [], dark: [], foot: [], n: 0 });
+export const newShadowBuf = (): ShadowBuf => ({ position: [], uv: [], alpha: [], foot: [], n: 0 });
+export const newGlowBuf = (): GlowBuf => ({ position: [], uv: [], color: [], foot: [], n: 0 });
 
-export const emptyQuads = (): Quads => ({ position: new Float32Array(0), uv: new Float32Array(0), look: new Float32Array(0), owner: new Float32Array(0), dark: new Float32Array(0), count: 0 });
-export const emptyShadows = (): Shadows => ({ position: new Float32Array(0), uv: new Float32Array(0), alpha: new Float32Array(0), count: 0 });
-export const emptyGlows = (): Glows => ({ position: new Float32Array(0), uv: new Float32Array(0), color: new Float32Array(0), count: 0 });
+export const emptyQuads = (): Quads => ({ position: new Float32Array(0), uv: new Float32Array(0), look: new Float32Array(0), owner: new Float32Array(0), dark: new Float32Array(0), foot: new Float32Array(0), count: 0 });
+export const emptyShadows = (): Shadows => ({ position: new Float32Array(0), uv: new Float32Array(0), alpha: new Float32Array(0), foot: new Float32Array(0), count: 0 });
+export const emptyGlows = (): Glows => ({ position: new Float32Array(0), uv: new Float32Array(0), color: new Float32Array(0), foot: new Float32Array(0), count: 0 });
 
-export const quadsOf = (b: CardBuf): Quads => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), look: new Float32Array(b.look), owner: new Float32Array(b.owner), dark: new Float32Array(b.dark), count: b.n });
-export const shadowsOf = (b: ShadowBuf): Shadows => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), alpha: new Float32Array(b.alpha), count: b.n });
-export const glowsOf = (b: GlowBuf): Glows => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), color: new Float32Array(b.color), count: b.n });
+export const quadsOf = (b: CardBuf): Quads => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), look: new Float32Array(b.look), owner: new Float32Array(b.owner), dark: new Float32Array(b.dark), foot: new Float32Array(b.foot), count: b.n });
+export const shadowsOf = (b: ShadowBuf): Shadows => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), alpha: new Float32Array(b.alpha), foot: new Float32Array(b.foot), count: b.n });
+export const glowsOf = (b: GlowBuf): Glows => ({ position: new Float32Array(b.position), uv: new Float32Array(b.uv), color: new Float32Array(b.color), foot: new Float32Array(b.foot), count: b.n });
 
 type V = [number, number, number, number, number]; // x y z u v
 // Corners run top-left, top-right, bottom-right, bottom-left seen from the camera side; wound counter-clockwise.
@@ -71,6 +71,10 @@ export interface Card {
   tint: [number, number, number]; mode: 0 | 1 | 2; alpha: number; bias?: number;
   /** The server marks its entity dark: the card is lit by the ambient only (`shade.y` in the shader). */
   dark?: boolean;
+  /** Tiles, half the drawn width: a wide figure's sight is the least of its centre and four corner points (`footSight`). Default 0. */
+  reach?: number;
+  /** A plant or prop that stays unmisted on daylight maps (`cardShown`). Default false. */
+  scenery?: boolean;
 }
 
 /** The corners (local frame px, x right, y up from the anchor) of a card's quad, rotated, then mapped through two axes. */
@@ -109,7 +113,7 @@ function place(
   return { q, r: fr };
 }
 
-const lookOf = (b: CardBuf, c: Card, owner = -1) => (): void => { b.look.push(c.tint[0], c.tint[1], c.tint[2], c.mode, c.alpha); b.owner.push(owner); b.dark.push(c.dark ? 1 : 0); };
+const lookOf = (b: CardBuf, c: Card, owner = -1) => (): void => { b.look.push(c.tint[0], c.tint[1], c.tint[2], c.mode, c.alpha); b.owner.push(owner); b.dark.push(c.dark ? 1 : 0); b.foot.push(c.x, c.z, c.reach ?? 0, c.scenery ? 1 : 0); };
 
 /** `owner`: the id of the entity the card belongs to (its figure shadow's slot is the card's own), -1 none. */
 export function pushCard(b: CardBuf, c: Card, frames: FrameRects, cam: Cam, owner = -1): void {
@@ -157,7 +161,7 @@ export function pushWall(b: CardBuf, frame: string, x: number, y: number, z: num
   const u0 = flip ? fr.x + fr.w : fr.x, u1 = flip ? fr.x : fr.x + fr.w;
   const v0 = fr.y, v1 = fr.y + fr.h;
   const at = (s: number, h: number, u: number, v: number): V => [x + rx * s * 0.5, y + h * 0.5, z + rz * s * 0.5, u, v];
-  pushQuad(b.position, b.uv, [at(-1, 1, u0, v0), at(1, 1, u1, v0), at(1, -1, u1, v1), at(-1, -1, u0, v1)]);
+  pushQuad(b.position, b.uv, [at(-1, 1, u0, v0), at(1, 1, u1, v0), at(1, -1, u1, v1), at(-1, -1, u0, v1)], () => { b.foot.push(x, z, 0, 0); });
   b.n++;
 }
 
@@ -192,7 +196,7 @@ function flat(b: CardBuf, c: Card, frames: FrameRects, cam: Cam, right: [number,
 export function pushShadow(b: ShadowBuf, cam: Cam, x: number, z: number, rx: number, rz: number, alpha: number): void {
   const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
   const at = (a: number, d: number, u: number, v: number): V => [x + cs * a * rx - sn * d * rz, SHADOW_Y, z + sn * a * rx + cs * d * rz, u, v];
-  pushQuad(b.position, b.uv, [at(-1, -1, -1, -1), at(1, -1, 1, -1), at(1, 1, 1, 1), at(-1, 1, -1, 1)], () => { b.alpha.push(alpha); });
+  pushQuad(b.position, b.uv, [at(-1, -1, -1, -1), at(1, -1, 1, -1), at(1, 1, 1, 1), at(-1, 1, -1, 1)], () => { b.alpha.push(alpha); b.foot.push(x, z); });
   b.n++;
 }
 
@@ -212,7 +216,7 @@ export function pushGlow(b: GlowBuf, x0: number, y0: number, z0: number, size: n
   pushQuad(b.position, b.uv, [
     [x - rx + ux, y + uy, z - rz + uz, -1, -1], [x + rx + ux, y + uy, z + rz + uz, 1, -1],
     [x + rx - ux, y - uy, z + rz - uz, 1, 1], [x - rx - ux, y - uy, z - rz - uz, -1, 1],
-  ], () => { b.color.push(rgb[0], rgb[1], rgb[2]); });
+  ], () => { b.color.push(rgb[0], rgb[1], rgb[2]); b.foot.push(x0, z0); });
   b.n++;
 }
 
@@ -241,6 +245,7 @@ export function sortBackToFront(b: CardBuf, cam: Cam): void {
   reorder(b.look, 5);
   reorder(b.owner, 1);
   reorder(b.dark, 1);
+  reorder(b.foot, 4);
 }
 
 /** One upright figure card: an atlas frame standing on a ground point (tiles), mirrored when `flip`. */
@@ -257,7 +262,7 @@ export function cardQuads(items: readonly CardItem[], frames: FrameRects, cam: C
 }
 
 export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: number, orb: boolean): Dynamic {
-  const ep: number[] = [], eu: number[] = [];
+  const ep: number[] = [], eu: number[] = [], ef: number[] = [];
   const glows = newGlowBuf();
   let en = 0;
 
@@ -277,6 +282,7 @@ export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: num
         [tc.x - 0.5, tc.y + 0.5, zz, fr.x, fr.y], [tc.x + 0.5, tc.y + 0.5, zz, fr.x + fr.w, fr.y],
         [tc.x + 0.5, tc.y - 0.5, zz, fr.x + fr.w, fr.y + fr.h], [tc.x - 0.5, tc.y - 0.5, zz, fr.x, fr.y + fr.h],
       ]);
+      for (let i = 0; i < 6; i++) ef.push(tc.x, tc.z, 0, 0);
       en++;
     }
     const k = 0.5 * torchFlicker(t, tc.ph);
@@ -293,7 +299,7 @@ export function buildDynamic(s: SceneState, frames: FrameRects, cam: Cam, t: num
     ghosts: emptyQuads(),
     decals: emptyQuads(),
     shadows: emptyShadows(),
-    emissive: { position: new Float32Array(ep), uv: new Float32Array(eu), look: new Float32Array(0), owner: new Float32Array(0), dark: new Float32Array(0), count: en },
+    emissive: { position: new Float32Array(ep), uv: new Float32Array(eu), look: new Float32Array(0), owner: new Float32Array(0), dark: new Float32Array(0), foot: new Float32Array(ef), count: en },
     glows: glowsOf(glows),
   };
 }

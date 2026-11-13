@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ART, project, snapGround, viewRay, type Cam } from './camera';
-import { buildDynamic, casterOf, LIE_Y, newCardBuf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, sortBackToFront, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
+import { buildDynamic, casterOf, LIE_Y, newCardBuf, newGlowBuf, newShadowBuf, glowsOf, shadowsOf, pushCard, pushFlat, pushGlow, pushLying, pushShadow, pushWall, quadsOf, sortBackToFront, type Card, type CardBuf, type GlowBuf, type ShadowBuf } from './cards';
 import { newScene } from './scene';
 import type { FrameRects } from './worldMesh';
 
@@ -234,7 +234,7 @@ describe('sortBackToFront', () => {
 
 describe('shadows and glows', () => {
   it('pushShadow makes a floor quad with uv -1..1 and the alpha on every vertex', () => {
-    const b: ShadowBuf = { position: [], uv: [], alpha: [], n: 0 };
+    const b: ShadowBuf = newShadowBuf();
     pushShadow(b, cam(0), 4, 5, 0.4, 0.2, 0.45);
     expect(b.n).toBe(1);
     expect(b.position.length).toBe(18);
@@ -247,7 +247,7 @@ describe('shadows and glows', () => {
 
   it('pushShadow keeps its wide axis along screen right at any yaw', () => {
     for (const yaw of [Math.PI / 2, Math.PI / 4]) {
-      const b: ShadowBuf = { position: [], uv: [], alpha: [], n: 0 };
+      const b: ShadowBuf = newShadowBuf();
       const c = cam(yaw);
       pushShadow(b, c, 4, 5, 0.4, 0.2, 0.45);
       const sx: number[] = [], sy: number[] = [];
@@ -277,7 +277,7 @@ describe('shadows and glows', () => {
   });
 
   it('pushGlow adds one quad with the colour on its six vertices', () => {
-    const b: GlowBuf = { position: [], uv: [], color: [], n: 0 };
+    const b: GlowBuf = newGlowBuf();
     pushGlow(b, 1, 1, 1, 0.5, [0.1, 0.2, 0.3], cam(0));
     expect(b.n).toBe(1);
     expect(b.color).toEqual([0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3, 0.1, 0.2, 0.3]);
@@ -386,5 +386,66 @@ describe('casterOf and owner', () => {
     // each quad still carries the owner of its own card: the one standing at z 4 is the owner 7 one
     const z4 = snapGround(Math.PI / 4, 0, 5, 4).z;
     for (let q = 0; q < 2; q++) expect(b.owner[q * 6]).toBe(Math.abs(b.position[q * 18 + 2] - z4) < 1e-6 ? 7 : -1);
+  });
+});
+
+describe('the foot of a quad (#305)', () => {
+  const c0 = (o: Partial<Card> = {}): Card => ({ frame: 'knight_m_idle_anim_f0', x: 5, z: 7, lift: 0, flip: false, originX: 0.5, footY: 1, scale: 1, tint: [1, 1, 1], mode: 0, alpha: 1, ...o });
+  it('pushCard writes (x, z, reach, scenery) of the card on every vertex, defaulting to (x, z, 0, 0)', () => {
+    const b = newCardBuf();
+    pushCard(b, c0(), frames, cam(0));
+    expect(b.foot).toHaveLength(24);
+    for (let i = 0; i < 6; i++) expect(b.foot.slice(i * 4, i * 4 + 4)).toEqual([5, 7, 0, 0]);
+    pushCard(b, c0({ x: 2, z: 3, reach: 1.5, scenery: true }), frames, cam(0));
+    for (let i = 6; i < 12; i++) expect(b.foot.slice(i * 4, i * 4 + 4)).toEqual([2, 3, 1.5, 1]);
+  });
+  it('the foot is the card point, not the snapped or biased corners', () => {
+    const b = newCardBuf();
+    pushCard(b, c0({ x: 5.123, z: 7.456, bias: 0.5 }), frames, cam(0.3));
+    expect(b.foot.slice(0, 4)).toEqual([5.123, 7.456, 0, 0]);
+  });
+  it('flat and lying cards and wall cards carry a foot too', () => {
+    const b = newCardBuf();
+    pushFlat(b, c0(), frames, cam(0));
+    pushLying(b, { ...c0(), headRight: true }, frames, cam(0));
+    pushWall(b, 'crate', 3, 1, 4, 0, 1, false, frames);
+    expect(b.foot).toHaveLength(72);
+    expect(b.foot.slice(0, 4)).toEqual([5, 7, 0, 0]);
+    expect(b.foot.slice(24, 28)).toEqual([5, 7, 0, 0]);
+    expect(b.foot.slice(48, 52)).toEqual([3, 4, 0, 0]);
+  });
+  it('sorting keeps each quad with its own foot', () => {
+    const b = newCardBuf();
+    pushCard(b, c0({ z: 4 }), frames, cam(0));
+    pushCard(b, c0({ z: 8 }), frames, cam(0));
+    sortBackToFront(b, cam(0));
+    expect(b.foot).toHaveLength(48);
+    const z4 = snapGround(Math.PI / 4, 0, 5, 4).z;
+    for (let q = 0; q < 2; q++) expect(b.foot[q * 24 + 1]).toBe(Math.abs(b.position[q * 18 + 2] - z4) < 1e-6 ? 4 : 8);
+  });
+  it('pushShadow and pushGlow write the centre they are given', () => {
+    const s = newShadowBuf();
+    pushShadow(s, cam(0), 4, 5, 0.4, 0.2, 0.45);
+    expect(s.foot).toEqual([4, 5, 4, 5, 4, 5, 4, 5, 4, 5, 4, 5]);
+    const g = newGlowBuf();
+    pushGlow(g, 1, 2, 3, 0.5, [0.1, 0.2, 0.3], cam(0));
+    expect(g.foot).toEqual([1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3]);
+  });
+  it('quadsOf, shadowsOf and glowsOf copy foot', () => {
+    const b = newCardBuf();
+    pushCard(b, c0(), frames, cam(0));
+    expect(Array.from(quadsOf(b).foot)).toEqual(b.foot);
+    const s = newShadowBuf();
+    pushShadow(s, cam(0), 4, 5, 0.4, 0.2, 0.45);
+    expect(Array.from(shadowsOf(s).foot)).toEqual(s.foot);
+    const g = newGlowBuf();
+    pushGlow(g, 1, 2, 3, 0.5, [0.1, 0.2, 0.3], cam(0));
+    expect(Array.from(glowsOf(g).foot)).toEqual(g.foot);
+  });
+  it('the demo gives its flames and glows a foot', () => {
+    const d = buildDynamic(newScene(), frames, cam(0), 0, false);
+    expect(d.cards.foot).toHaveLength(d.cards.count * 24);
+    expect(d.emissive.foot).toHaveLength(d.emissive.count * 24);
+    expect(d.glows.foot).toHaveLength(d.glows.count * 12);
   });
 });

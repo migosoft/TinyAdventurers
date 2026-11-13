@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { GLSLNodeBuilder, MeshBasicNodeMaterial, WGSLNodeBuilder } from 'three/webgpu';
 import { positionWorld, vec3, vec4 } from 'three/tsl';
-import { makeSight } from './sightNodes';
+import { TILE_ID } from '../generated/defs';
+import { TILE, TileMap } from '../sim/map';
+import { View } from '../sim/view';
+import { makeSight, SIGHT_OFF } from './sightNodes';
+import { SightMask } from './sightmask';
 import { fragment, type Builder } from './shaderCode.testutil';
 
 describe('the sight nodes', () => {
@@ -35,4 +39,24 @@ describe('the sight nodes', () => {
       expect((since.match(/\{/g) ?? []).length - 1).toBe((since.match(/\}/g) ?? []).length);
     });
   }
+
+  it('uploads on the first frame of a new view', () => {
+    const map = new TileMap(21, 21, new Uint8Array(21 * 21).fill(TILE_ID.Floor));
+    const hard = new View(21, 21);
+    hard.compute(map, 10.5 * TILE, 10.5 * TILE, 6, 'hard');
+    const mask = new SightMask(map, { daylight: false, feather: 0, ramp: 0 });
+    mask.update(hard, null, 0);
+    const frame = { ...SIGHT_OFF, mode: 'dark' as const, mask };
+    const a = makeSight(), b = makeSight();
+    a.set(frame);
+    b.set(frame);
+    expect([a.uploads, b.uploads]).toEqual([1, 1]);
+    a.set(frame);
+    expect(a.uploads).toBe(1); // the same data and version: no second upload
+    mask.update(hard, null, 1);
+    a.set(frame);
+    expect(a.uploads).toBe(2);
+    a.dispose();
+    b.dispose();
+  });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DataTexture, Texture } from 'three/webgpu';
 import { float, vec3 } from 'three/tsl';
 import { makeLighting, type Lighting } from './lightNodes';
+import { makeSight } from './sightNodes';
 import { cardMaterial, viewTowardUniform, worldMaterial } from './materials';
 
 type Opts = { self?: unknown; darkOnly?: unknown } | undefined;
@@ -19,7 +20,7 @@ function stub(): { lighting: Lighting; calls: Opts[] } {
   } as unknown as Lighting;
   return { lighting, calls };
 }
-const make = (opts: { flat?: boolean; translucent?: boolean }) => cardMaterial(new Texture(), 64, 64, stub().lighting, viewTowardUniform(), opts).material;
+const make = (opts: { flat?: boolean; translucent?: boolean }) => cardMaterial(new Texture(), 64, 64, stub().lighting, viewTowardUniform(), makeSight(), opts).material;
 
 /** Whether a node graph reads the geometry attribute `name`. */
 function readsAttribute(root: unknown, name: string): boolean {
@@ -47,7 +48,7 @@ describe('cardMaterial', () => {
   });
   it('reads the shade attribute for its caster slot and its dark flag', () => {
     const { lighting, calls } = stub();
-    const m = cardMaterial(new Texture(), 64, 64, lighting, viewTowardUniform()).material;
+    const m = cardMaterial(new Texture(), 64, 64, lighting, viewTowardUniform(), makeSight()).material;
     expect(calls).toHaveLength(1);
     expect(calls[0]?.self).toBeDefined();
     expect(calls[0]?.darkOnly).toBeDefined();
@@ -58,7 +59,7 @@ describe('cardMaterial', () => {
 describe('worldMaterial', () => {
   it('passes no shade options to the light', () => {
     const { lighting, calls } = stub();
-    worldMaterial(new Texture(), new Texture(), 64, 64, lighting, new Texture(), new Texture());
+    worldMaterial(new Texture(), new Texture(), 64, 64, lighting, new Texture(), new Texture(), makeSight());
     expect(calls).toHaveLength(1);
     expect(calls[0]).toBeUndefined();
   });
