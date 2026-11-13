@@ -200,7 +200,10 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
         Loop(LIGHT_CAP, ({ i }: N) => {
           const lp: N = lPos.element(i);
           const lc: N = lCol.element(i);
-          const L = lp.xyz;
+          // Variables, not expressions: an expression `lPos[i]` pasted into wallVis's and cardVis's own loops would read the
+          // inner loop's `i` (GLSL names every loop index `i`), i.e. another light's slot or a caster's.
+          const L = lp.xyz.toVar();
+          const carrier = lc.w.sub(2).toVar();
           const rad = lp.w;
           If(rad.lessThanEqual(0), () => {
             Break();
@@ -217,7 +220,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
               v.assign(wallVis(Po, L));
               // The wall test first: a card is looked at only for a light that still reaches P. The shadow channel is skip + 2.
               If(v.greaterThan(0.5), () => {
-                v.assign(cardVis(Po, L, self, lc.w.sub(2)));
+                v.assign(cardVis(Po, L, self, carrier));
               });
             });
             sum.addAssign(lc.xyz.mul(f.mul(ndl).mul(v)));
