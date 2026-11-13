@@ -158,8 +158,8 @@ export function createPanel(
     return { d, label, s, row, get };
   });
 
-  // Mist (daylight maps only; Mist day, like Darkvision, on the dev page only).
-  const mistSliders = MIST_SLIDERS.filter((d) => !d.dev || mode === 'demo').map((d) => {
+  // Mist (daylight maps only), Mist day included: nothing drives the mist's day colour in a run yet, so the slider is how to judge it.
+  const mistSliders = MIST_SLIDERS.map((d) => {
     const row = el('div', 'r3d-row');
     row.hidden = true;
     const label = el('label');
