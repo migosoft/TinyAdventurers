@@ -6,12 +6,12 @@ import { makeLighting } from './lightNodes';
 import { fragment, type Builder } from './shaderCode.testutil';
 
 /** The fragment shader of a material lit by `lightAt` (a card's options: its own slot, the dark flag). */
-function lightFragment(B: Builder, withSun = false): string {
+function lightFragment(B: Builder, withSun = false, compare = false): string {
   const tex = (): DataTexture => new DataTexture(new Float32Array(4 * 4 * 4), 4, 4, RGBAFormat, FloatType);
-  const lighting = makeLighting(tex(), { w: 4, h: 4 }, tex());
+  const lighting = makeLighting(tex(), { w: 4, h: 4 }, tex(), { sun: withSun });
   const m = new MeshBasicNodeMaterial();
   m.colorNode = vec4(lighting.lightAt(positionWorld, vec3(0, 1, 0), float(0.5), { self: float(0), darkOnly: float(0), ...(withSun ? { sun: { Ps: positionWorld, ndl: float(1) } } : {}) }).rgb, 1);
-  return fragment(B, m);
+  return fragment(B, m, { compare });
 }
 
 /** Each `for` loop's index name and the names of the loops around it (by brace depth). */
@@ -47,18 +47,19 @@ describe('the lighting shader', () => {
     });
 
     it(`${B.name}: with the sun it builds, keeps the loop indices apart, and samples the sun's shadow map first, before any branch`, () => {
-      const code = lightFragment(B, true);
+      const code = lightFragment(B, true, true);
       const ls = loops(code);
       for (const l of ls) expect(l.outer, `loop ${l.name} inside ${l.outer.join(', ')}`).not.toContain(l.name);
-      // One more sampled texture than without the sun, and it sits before the first `if` of main().
-      const call = B === WGSLNodeBuilder ? /textureSample\w*\(/g : /\btexture\(/g;
-      const plain = [...lightFragment(B).matchAll(call)].length;
-      const hits = [...code.matchAll(call)];
-      expect(hits.length).toBe(plain + 1);
-      // The sun's is the first filtered sample in main() and sits at its top level: every block opened since main began is closed again.
-      const main = code.slice(0, hits[0].index);
+      // The sun's own sample (a compare of the depth texture) is the only one of its kind and sits at the top level of main():
+      // every block opened since main began is closed again.
+      const own = B === WGSLNodeBuilder ? /textureSampleCompare\(/g : /\btexture\( \w+, vec3\(/g;
+      const sun = [...lightFragment(B, true, true).matchAll(own)];
+      expect(sun).toHaveLength(1);
+      const main = lightFragment(B, true, true).slice(0, sun[0].index);
       const since = main.slice(Math.max(main.lastIndexOf('void main'), main.lastIndexOf('fn main')));
       expect((since.match(/\{/g) ?? []).length - 1).toBe((since.match(/\}/g) ?? []).length);
+      // Without a sun in the lighting the option is ignored: no compare sample at all.
+      expect([...lightFragment(B, false, true).matchAll(own)]).toHaveLength(0);
     });
   }
 });

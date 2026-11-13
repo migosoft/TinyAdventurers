@@ -248,7 +248,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const groundStart = new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat, UnsignedByteType);
   pixelTexture(groundStart);
   const aw = assets.image.naturalWidth, ah = assets.image.naturalHeight;
-  const lighting = makeLighting(heights, map, atlas);
+  const lighting = makeLighting(heights, map, atlas, { sun: world.painted });
   // The see-through mask: a quarter of the scene's size, half floats (red: opening strength, green: depth, alpha: coverage), linear so the
   // discs' soft edges stay soft; resized in place (`setSize` keeps the texture object the wall shader holds).
   const mask = new RenderTarget(1, 1, { depthBuffer: false, type: HalfFloatType, format: RGBAFormat, magFilter: LinearFilter, minFilter: LinearFilter, generateMipmaps: false });
@@ -348,9 +348,12 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
   const cards = new DynMesh(cardAttrs, card.material);
   // The sun's pass (#306): the opaque cards again, each turned to face the light, into a depth map. Made when the first sun frame comes.
   const sunLight = lighting.sun;
-  const casterMaterial = sunCasterMaterial(atlas, aw, ah, sunLight);
+  // Only a world with a sun (the painted woodland) has the pass; the others never build it.
+  const hasSun = world.painted;
+  const casterMaterial = hasSun ? sunCasterMaterial(atlas, aw, ah, sunLight, sight) : null;
   const sunScene = new Scene();
-  sunScene.add(cards.twin(casterMaterial));
+  if (casterMaterial) sunScene.add(cards.twin(casterMaterial));
+  let sunCam: OrthographicCamera | null = null;
   let sunTarget: RenderTarget | null = null;
   let sunDepth: DepthTexture | null = null;
   const sunStandIn = sunDepthTexture(1);
@@ -550,7 +553,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       lighting.setLava(f.lava, f.lavaVersion);
       lighting.setDarkvision(f.darkvision);
       // The sun (#306): the camera's right on the ground turns the cards (as the lights' `uRight`), the lookup follows the frame's sun.
-      const sf2 = f.sun ?? null;
+      const sf2 = hasSun ? f.sun ?? null : null;
       (sunLight.right.value as Vector3).set(Math.cos(f.cam.yaw), 0, Math.sin(f.cam.yaw));
       const sunMap = sf2 ? sunTargetFor(Math.min(sf2.fit.size, textureLimit())) : null;
       // v is flipped on both backends: three's TSL texture lookup takes v = 0 at the top of a render target's image (it flips the
@@ -580,7 +583,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       timer?.lap('upload');
       if (sf2 && sunTarget) {
         renderer.setRenderTarget(sunTarget);
-        renderer.render(sunScene, sunCamera(sf2.fit));
+        sunCam = sunCamera(sf2.fit, sunCam ?? undefined);
+        renderer.render(sunScene, sunCam);
         timer?.lap('sun');
       }
       if (f.plan.direct) {
@@ -625,7 +629,7 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
         sunTarget?.dispose();
         sunDepth?.dispose();
         sunStandIn.dispose();
-        casterMaterial.dispose();
+        casterMaterial?.dispose();
         mm.material.dispose();
         maskDiscs.dispose();
       } finally {

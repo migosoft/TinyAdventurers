@@ -48,7 +48,8 @@ export interface Lighting {
   setAmbient(rgb: [number, number, number]): void;
 }
 
-export function makeLighting(heightTex: DataTexture, map: { w: number; h: number }, atlas: Texture): Lighting {
+/** `opts.sun`: the world has a sun (a woodland): `lightAt` then takes its `sun` option. Without it the shaders carry nothing of the sun. */
+export function makeLighting(heightTex: DataTexture, map: { w: number; h: number }, atlas: Texture, opts: { sun?: boolean } = {}): Lighting {
   // The casters: (x, z, w, y0), (y1, 0, 0, 0) and the atlas rect (u0, v0, u1, v1) per slot; w 0 ends the list.
   const cA = uniformArray(Array.from({ length: CASTER_CAP }, () => new Vector4()), 'vec4');
   const cB = uniformArray(Array.from({ length: CASTER_CAP }, () => new Vector4()), 'vec4');
@@ -189,6 +190,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   const uDvReach = uniform(0);
 
   const sun = makeSunLight();
+  const hasSun = opts.sun === true;
 
   const lightAt = (P: N, Nrm: N, wrap: N, opts: { self?: N; darkOnly?: N; sun?: { Ps: N; ndl: N } } = {}): { rgb: N; dv: N } => {
     const w = typeof wrap === 'number' ? float(wrap) : wrap;
@@ -201,7 +203,7 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
       const dvOut = float(0).toVar();
       const Po = P.add(Nrm.mul(0.03));
       // Read before any If: the shadow map is sampled at the top level of the shader.
-      const sunLight = opts.sun ? sun.term(P, opts.sun.Ps, opts.sun.ndl).toVar() : null;
+      const sunLight = opts.sun && hasSun ? sun.term(P, opts.sun.Ps, opts.sun.ndl).toVar() : null;
       If(dark.lessThan(0.5), () => {
         sum.addAssign(lavaLight);
         if (sunLight) sum.addAssign(sunLight);

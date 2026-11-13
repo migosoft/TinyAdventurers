@@ -19,6 +19,8 @@ export interface SunLight {
   term(P: N, Ps: N, ndl: N): N;
   /** Uniforms: `dir` toward the light, `right` the camera's right on the ground (a vec3, y 0); the view sets `right` each frame. */
   readonly dir: N;
+  /** The light's colour (a vec3 uniform; black while no sun is set). */
+  readonly colour: N;
   readonly right: N;
   /** Takes the frame's sun (null: off, the term is 0), the depth texture of its pass and whether the lookup flips v. */
   set(s: SunFrame | null, depth: DepthTexture, flipY: boolean): void;
@@ -34,9 +36,15 @@ export function sunDepthTexture(size: number): DepthTexture {
 }
 
 /** The sun's camera: at C - F * ext[2], looking along F, up U, so that a point's NDC is (2u - 1, 2v - 1) and its depth `sunCoord`'s. */
-export function sunCamera(fit: SunFit): OrthographicCamera {
+export function sunCamera(fit: SunFit, into: OrthographicCamera = new OrthographicCamera()): OrthographicCamera {
   const [e0, e1, e2] = fit.ext;
-  const cam = new OrthographicCamera(-e0, e0, e1, -e1, 0, 2 * e2);
+  const cam = into;
+  cam.left = -e0;
+  cam.right = e0;
+  cam.top = e1;
+  cam.bottom = -e1;
+  cam.near = 0;
+  cam.far = 2 * e2;
   const at = (k: number): Vec3 => [fit.C[0] + fit.F[0] * k, fit.C[1] + fit.F[1] * k, fit.C[2] + fit.F[2] * k];
   const from = at(-e2);
   cam.position.set(...from);
@@ -94,6 +102,7 @@ export function makeSunLight(): SunLight {
 
   return {
     dir: uDir,
+    colour: uColour,
     right: uRight,
     term: (P, Ps, ndl) => vec3(uColour).mul(float(ndl)).mul(sunVis(Ps)).mul(cloud(P)),
     set(s, depth, flipY) {

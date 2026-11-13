@@ -5,6 +5,7 @@ import { attribute, clamp, dot, float, floor, fwidth, fract, int, ivec2, length,
 import type { Lighting } from './lightNodes';
 import type { Sight } from './sightNodes';
 import type { SunLight } from './sunNodes';
+import { CARD_GAIN } from './sun';
 import { GRASS_FLAT, STONE } from './light';
 import { SEE_DEFAULTS, SEE_DEPTH_BIAS, SEE_DEPTH_MARGIN } from './seeThrough';
 
@@ -173,7 +174,7 @@ export function maskMaterial(): { material: NodeMaterial; edge: { value: number 
 export const CARD_SUN_NUDGE = 0.14;
 
 /** `cardSunGain` (sun.ts) in the shader: how strongly the sun lights an upright card. */
-const cardGain = (dir: N): N => float(0.62).add(clamp(dir.z.add(0.3), 0, 1).mul(0.3)).add(dir.y.mul(0.15));
+const cardGain = (dir: N): N => float(CARD_GAIN.base).add(clamp(dir.z.add(CARD_GAIN.zShift), 0, 1).mul(CARD_GAIN.z)).add(dir.y.mul(CARD_GAIN.y));
 
 /**
  * The point `p` of an upright card (`foot`: its foot's x, z; `right`: the camera's right on the ground) on the same card turned to
@@ -190,13 +191,15 @@ function turnedToLight(sun: SunLight, p: N, foot: N): N {
 
 /**
  * The sun's pass draws the opaque cards with this: each turned to face the light (not stretched), depth only, alpha tested on the
- * atlas texel. Same vertex layout as `cardMaterial` (the pass shares its geometry).
+ * atlas texel and stippled like the opaque card by what the hero sees of it (a figure the hero cannot see casts no shadow).
+ * Same vertex layout as `cardMaterial` (the pass shares its geometry). Depth only: there is no colour to veil, so no sight step.
  */
-export function sunCasterMaterial(atlas: Texture, atlasW: number, atlasH: number, sun: SunLight): NodeMaterial {
+export function sunCasterMaterial(atlas: Texture, atlasW: number, atlasH: number, sun: SunLight, sight: Sight): NodeMaterial {
   const texel = texture(atlas, uv().div(vec2(atlasW, atlasH)));
   const m = new MeshBasicNodeMaterial();
   m.positionNode = turnedToLight(sun, positionGeometry, attribute('cardFoot', 'vec2'));
-  m.colorNode = vec4(0, 0, 0, texel.a);
+  const seen = attribute('sight', 'vec3');
+  m.colorNode = vec4(0, 0, 0, select(bayerAt().lessThan(sight.shown(seen.x, seen.z)), texel.a, float(0)));
   m.alphaTest = 0.5;
   m.colorWrite = false;
   m.side = DoubleSide;

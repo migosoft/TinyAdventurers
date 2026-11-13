@@ -82,8 +82,10 @@ export function startHour(sun: SunInfo): number {
 
 /** How strongly the sun lights an upright card facing the camera. */
 export function cardSunGain(dir: Vec3): number {
-  return 0.62 + 0.3 * Math.min(1, Math.max(0, dir[2] + 0.3)) + 0.15 * dir[1];
+  return CARD_GAIN.base + CARD_GAIN.z * Math.min(1, Math.max(0, dir[2] + CARD_GAIN.zShift)) + CARD_GAIN.y * dir[1];
 }
+/** The gain's constants; the shader (materials.ts) builds its expression from the same ones. */
+export const CARD_GAIN = { base: 0.62, z: 0.3, zShift: 0.3, y: 0.15 } as const;
 
 export function hourLabel(hour: number): string {
   const total = Math.floor(wrap24(hour) * 60 + 1e-6);

@@ -1,7 +1,7 @@
 // The F3 readout of the ?r3d page. The layout mirrors `statsText` in `ui/hud.ts` (labels padded to 11, ms with two
 // decimals, systems indented); it is not imported from there because render3d takes nothing from the game's UI.
 
-/** The systems of one 3D frame, in the order the frame runs them and the readout lists them. */
+/** The systems of one 3D frame, in the order the readout lists them. The frame books `upload` before it runs the sun's pass, so 'sun' is listed with the update systems although its lap comes after 'upload'. */
 export const R3D_SYSTEMS = ['sim', 'cards', 'lights', 'sight', 'sun', 'upload', 'scene', 'present', 'hud'] as const;
 export type R3dSystem = (typeof R3D_SYSTEMS)[number];
 

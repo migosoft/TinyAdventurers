@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { HOUR_RATE, HourClock, SUN_TOP, cardSunGain, fitSunMap, hourLabel, mistLightOf, sky, startHour, sunBasis, sunCoord, sunView, type Vec3 } from './sun';
 import { footprint, type Footprint } from './lights';
@@ -77,8 +78,19 @@ describe('HourClock', () => {
 describe('helpers', () => {
   it('card sun gain and labels', () => {
     expect(cardSunGain([0, 1, 0])).toBeCloseTo(0.86, 9);
+    expect(cardSunGain([0, 0, -1])).toBeCloseTo(0.62, 9); // dir.z + 0.3 < 0: clamped
+    expect(cardSunGain([0.3, 0.5, 0.8])).toBeCloseTo(0.62 + 0.3 + 0.075, 6); // z + 0.3 > 1: clamped
+    expect(cardSunGain([0, 0.6, -0.1])).toBeCloseTo(0.62 + 0.3 * 0.2 + 0.09, 9);
     expect(hourLabel(9.5)).toBe('09:30');
     expect(hourLabel(24.25)).toBe('00:15');
+  });
+});
+
+describe("the shader's card gain", () => {
+  it('is built from the same constants as cardSunGain (no second copy of the numbers)', () => {
+    const src = readFileSync(new URL('./materials.ts', import.meta.url), 'utf8');
+    expect(src).toContain('CARD_GAIN.base');
+    expect(src).not.toMatch(/0\.62/);
   });
 });
 

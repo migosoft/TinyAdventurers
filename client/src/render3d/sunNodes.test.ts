@@ -55,10 +55,14 @@ describe('the sun term', () => {
     expect(code).toMatch(/sampler2DShadow/);
   });
 
-  it('takes a depth texture of the pass and keeps the stand-in compare function', () => {
+  it('is 0 while no sun is set: set(null) zeroes the colour, a frame sets it', () => {
     const sun = makeSunLight();
-    const d = sunDepthTexture(8);
-    sun.set(null, d, false);
-    expect(d.compareFunction).not.toBeNull();
+    const fit = fitSunMap(sky(13).dir, footprint, { w: 64, h: 48 }, 1024);
+    const frame = { dir: sky(13).dir, colour: [1, 0.9, 0.8] as Vec3, fit, shadows: true, clouds: false, wind: [0, 0] as [number, number], t: 0 };
+    const colour = (): number[] => (sun.colour.value as Vector3).toArray().map((c) => Math.round(c * 100) / 100);
+    sun.set(frame, sunDepthTexture(8), false);
+    expect(colour()).toEqual([1, 0.9, 0.8]);
+    sun.set(null, sunDepthTexture(8), false);
+    expect(colour()).toEqual([0, 0, 0]);
   });
 });
