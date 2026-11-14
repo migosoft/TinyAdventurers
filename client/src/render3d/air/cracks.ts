@@ -4,9 +4,10 @@
 // ones worth sending; `packCracks` lays them out as the uniform arrays of the shader. No three.js, no GPU.
 import { LIGHT_KIND } from '../../generated/defs';
 import type { LightField, StaticLight } from '../../game/light';
-import { beamShape, cloudAt, hash01, lookFor, rayGlow, rayShapes, sunLook, type SunLook } from '../../game/sunmath';
+import { HEIGHT_RANGE, beamShape, cloudAt, hash01, lookFor, rayGlow, rayShapes, sunLook, type SunLook } from '../../game/sunmath';
 import { lightRgb } from '../lights';
 import type { Footprint } from '../lights';
+import { PITCH_MIN } from '../params';
 import { hiddenAt, type SightMask } from '../sightmask';
 
 /** Shader slots (first guess; the cove has 5 suns). */
@@ -120,15 +121,19 @@ export function crackMask(c: Crack, x: number, y: number, z: number): number {
   return rim * shade * streak;
 }
 
-/** The Daylight lights worth a slot: on, near the footprint (grown by the slant plus a tile, as sunbeams.ts), not in the dark. Nearest to its centre first. */
-export function selectCracks(field: LightField, fp: Footprint, mask: SightMask | null, cap: number): StaticLight[] {
+/**
+ * The Daylight lights worth a slot: on, near the footprint, not in the dark. Nearest to its centre first. The margin is the slant plus the
+ * tallest shaft's reach along the flattest view (`HEIGHT_RANGE[1] / tan(PITCH_MIN)`: the march from a bottom-edge pixel meets a shaft that far
+ * beyond the footprint) plus a tile, so no shaft pops in at the screen edge. `base` is the page's own look (default the run's).
+ */
+export function selectCracks(field: LightField, fp: Footprint, mask: SightMask | null, cap: number, base: SunLook = sunLook): StaticLight[] {
+  const reach = HEIGHT_RANGE[1] / Math.tan((PITCH_MIN * Math.PI) / 180);
   const mx = (fp.x0 + fp.x1) / 2;
   const mz = (fp.z0 + fp.z1) / 2;
   const scored: { l: StaticLight; d: number }[] = [];
   for (const l of field.lights.values()) {
     if (l.kind !== LIGHT_KIND.Daylight || !l.on) continue;
-    const look = lookFor(l.id, sunLook);
-    const m = look.slant + 1; // ceil * |dir.x / dir.y| + 1
+    const m = Math.abs(lookFor(l.id, base).slant) + reach + 1;
     const cx = l.x + 0.5, cz = l.y + 0.5;
     if (cx < fp.x0 - m || cx > fp.x1 + m || cz < fp.z0 - m || cz > fp.z1 + m) continue;
     if (mask && hiddenAt(mask, cx, cz)) continue;
@@ -147,15 +152,19 @@ export function selectCracks(field: LightField, fp: Footprint, mask: SightMask |
  *   e[12i..] = three vec4 (ray j at 4j): floor u0, u1, top u0, top u1. Only the first `d.w` rays count: the rest are 0, and a
  *              zero ray is not an empty one (its soft edges still pass 0.25), so the shader must gate its ray loop on d.w.
  */
-export function packCracks(cracks: readonly Crack[]): { a: Float32Array; b: Float32Array; c: Float32Array; d: Float32Array; e: Float32Array; count: number } {
-  const out = {
+export interface PackedCracks { a: Float32Array; b: Float32Array; c: Float32Array; d: Float32Array; e: Float32Array; count: number }
+/** `into` (a result of an earlier call) is cleared and refilled, so a per-frame caller allocates nothing. */
+export function packCracks(cracks: readonly Crack[], into?: PackedCracks): PackedCracks {
+  const out: PackedCracks = into ?? {
     a: new Float32Array(CRACK_CAP * 4),
     b: new Float32Array(CRACK_CAP * 4),
     c: new Float32Array(CRACK_CAP * 4),
     d: new Float32Array(CRACK_CAP * 4),
     e: new Float32Array(CRACK_CAP * RAY_CAP * 4),
-    count: Math.min(cracks.length, CRACK_CAP),
+    count: 0,
   };
+  if (into) for (const arr of [out.a, out.b, out.c, out.d, out.e]) arr.fill(0);
+  out.count = Math.min(cracks.length, CRACK_CAP);
   for (let i = 0; i < out.count; i++) {
     const k = cracks[i];
     out.a.set([k.fx, k.fz, k.ceil, k.widen], i * 4);

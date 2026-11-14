@@ -153,3 +153,23 @@ describe('packCracks', () => {
     expect(packCracks(Array.from({ length: 12 }, () => plain())).count).toBe(CRACK_CAP);
   });
 });
+
+describe('selectCracks margin (#307 review)', () => {
+  const map = new TileMap(80, 80, new Uint8Array(80 * 80).fill(TILE_ID.Floor));
+  const fp = { x0: 20, z0: 20, x1: 30, z1: 30 };
+  const field = (lights: StaticLight[]) => {
+    const f = new LightField(map);
+    for (const l of lights) f.add(l);
+    return f;
+  };
+  it('keeps a crack a few tiles beyond the south edge (its shaft reaches into the view at a flat pitch) and drops one far beyond', () => {
+    const got = selectCracks(field([sun(1, 25, 38), sun(2, 25, 60)]), fp, null, 8);
+    expect(got.map((l) => l.id)).toEqual([1]);
+  });
+  it('takes the page\'s own look for the slant', () => {
+    const wide = { ...sunLook, slant: 30 };
+    const l = field([sun(1, 25, 62)]);
+    expect(selectCracks(l, fp, null, 8)).toHaveLength(0);
+    expect(selectCracks(l, fp, null, 8, wide)).toHaveLength(1);
+  });
+});

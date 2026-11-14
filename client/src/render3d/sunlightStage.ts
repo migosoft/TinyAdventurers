@@ -161,7 +161,7 @@ export function createSunlightStage(assets: Assets, p: R3dParams, search: string
       let cracks: Crack[] = [];
       if (game) {
         // The cracks the viewer sees (as runView3d), and the torch and the bounce fill of each crack as lights.
-        cracks = selectCracks(field, fp, c.params.sight ? mask : null, CRACK_CAP).map((l) => crackOf(l, look, c.now));
+        cracks = selectCracks(field, fp, c.params.sight ? mask : null, CRACK_CAP, look).map((l) => crackOf(l, look, c.now));
         const sel = selectLights(staticCands(field, pairs, map, c.now, look), fp, viewer, Math.min(LIGHT_CAP, c.params.lcap));
         lights = sel.list;
         inView = sel.inView;

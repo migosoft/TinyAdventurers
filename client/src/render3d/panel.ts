@@ -1,6 +1,6 @@
 // The DOM panel of the ?r3d page: the single place that renders the params.
 
-import { DEFAULT_HOUR, wrapYaw, type R3dParams } from './params';
+import { DEFAULT_HOUR, PITCH_MAX, PITCH_MIN, wrapYaw, type R3dParams } from './params';
 import type { Quality } from './quality';
 import type { SeeMode } from './seeThrough';
 import { hourLabel } from './sun';
@@ -118,7 +118,7 @@ export function createPanel(
   // Pitch.
   const pitchRow = el('div', 'r3d-row');
   const pitchLabel = el('label');
-  const pitch = slider(30, 80, 0.1, () => cur.pitch, (v) => change({ pitch: v }));
+  const pitch = slider(PITCH_MIN, PITCH_MAX, 0.1, () => cur.pitch, (v) => change({ pitch: v }));
   pitch.input.id = 'r3d-pitch';
   pitchLabel.htmlFor = 'r3d-pitch';
   pitchRow.append(pitchLabel, pitch.input);

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ANIM, CONST, KIND, LIGHT_KIND, TILE_ID } from '../generated/defs';
 import { LightField } from '../game/light';
 import { TileMap } from '../sim/map';
@@ -9,7 +9,7 @@ import { keysToWorld } from './camera';
 import { AMBIENT, WORK_AMBIENT } from './light';
 import { renderPlan } from './quality';
 import { DEFAULTS, type R3dParams } from './params';
-import { RunView3d, moveInput } from './runView3d';
+import { POLLEN_DRIFT, RunView3d, moveInput } from './runView3d';
 import { MIST } from './mist';
 import { stoneClear } from './light';
 import { SIGHT_MARGIN, hiddenAt, type SightMask } from './sightmask';
@@ -23,7 +23,7 @@ import type { PlantInfo } from '../generated/PlantInfo';
 import type { CoverResult } from './cover/coverJob';
 import { encodeCover } from './cover/kinds';
 import { hourLabel, mistLightOf, sky, startHour } from './sun';
-import { WIND } from './wind';
+import { WIND, WIND_DIR } from './wind';
 
 const deg = (d: number): number => (d * Math.PI) / 180;
 
@@ -403,6 +403,25 @@ describe('the air in the run view (#307)', () => {
     const f = r.again();
     expect(f?.air).toBeTruthy();
     expect(f?.cracks ?? []).toHaveLength(0);
+  });
+  it('a changed tile tells the air to collect its water and lava again', () => {
+    const r = run();
+    const spy = vi.spyOn((r.v as unknown as { air: { mapChanged(): void } }).air, 'mapChanged');
+    r.v.tileChanged(2, 1, 1);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+  it('the woodland pollen drifts along the wind direction, and not at all with wind=0', () => {
+    const drift = (wind: boolean): readonly number[] | null | undefined => {
+      const r = run({ woodland: true, torch: false, params: { wind } });
+      const air = (r.v as unknown as { air: { step(i: { drift: readonly number[] | null }): unknown } }).air;
+      const spy = vi.spyOn(air, 'step');
+      r.again();
+      return spy.mock.calls[0][0].drift;
+    };
+    const on = drift(true);
+    expect(on![0]).toBeCloseTo(WIND_DIR[0] * POLLEN_DRIFT);
+    expect(on![1]).toBeCloseTo(WIND_DIR[1] * POLLEN_DRIFT);
+    expect(drift(false)).toEqual([0, 0]);
   });
   it('a new view after a device loss gets the same air: the clouds go on', () => {
     const r = run();

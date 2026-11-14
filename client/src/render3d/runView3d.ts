@@ -54,7 +54,7 @@ const FOLLOW_RATE = 6;
 const FREE_SPEED = 12;
 const FREE_SPEED_FAST = 36;
 /** The woodland's pollen drifts with the wind at this speed, tiles per second (first guess). */
-const POLLEN_DRIFT = 0.25;
+export const POLLEN_DRIFT = 0.25;
 
 /** Keys held -> the fixed step's movement: the screen direction turned by the yaw, rounded to the eight wire directions. */
 export function moveInput(held: ReadonlySet<string>, yawRad: number): { mx: -1 | 0 | 1; my: -1 | 0 | 1 } {
@@ -104,6 +104,9 @@ export class RunView3d implements RunView {
   private readonly airMovers: AirMover[] = [];
   private readonly myKind: number;
   private readonly airTorches: { x: number; z: number; nx: number; nz: number; lit: boolean; tx: number; tz: number }[] = [];
+  /** The objects behind `airTorches` and `airShots`, kept between frames (the lists are refilled, nothing is allocated per frame). */
+  private readonly airTorchPool: { x: number; z: number; nx: number; nz: number; lit: boolean; tx: number; tz: number }[] = [];
+  private readonly airShots: AirShot[] = [];
   // The woodland's sky (#306): the hour of day (run seconds, re-anchored by the panel's hour and pace), the plants, and the readout's numbers.
   private clock: SkyClock | null = null;
   private forest: Forest | null = null;
@@ -437,8 +440,22 @@ export class RunView3d implements RunView {
   private airFrame(f: RunFrame, c: StageCtx, fp: ReturnType<typeof footprint>, lights: readonly Light[], cracks: readonly Crack[], pollen: boolean): NonNullable<FrameInput['air']> {
     const torches = this.airTorches;
     torches.length = 0;
-    for (const e of f.ents.values()) if (e.kind === KIND.Torch) torches.push({ ...torchOf(e), lit: e.anim === 1 });
-    const shots: AirShot[] = (f.snap?.lights ?? []).map(([x, y, kind]) => ({ x, y, kind }));
+    for (const e of f.ents.values()) {
+      if (e.kind !== KIND.Torch) continue;
+      const t = this.airTorchPool[torches.length] ??= { x: 0, z: 0, nx: 0, nz: 0, lit: false, tx: 0, tz: 0 };
+      Object.assign(t, torchOf(e));
+      t.lit = e.anim === 1;
+      torches.push(t);
+    }
+    const shots = this.airShots;
+    const src = f.snap?.lights ?? [];
+    shots.length = src.length;
+    for (let i = 0; i < src.length; i++) {
+      const s = (shots[i] ??= { x: 0, y: 0, kind: 0 });
+      s.x = src[i][0];
+      s.y = src[i][1];
+      s.kind = src[i][2];
+    }
     const p = c.params;
     const parts = this.air.step({
       dt: f.dt, t: c.now, fp, mask: p.sight ? this.mask : null, torches, shots, movers: collectAirMovers(f, this.moverTracker, this.myKind, this.airMovers), lights, cracks,

@@ -65,6 +65,8 @@ function num(v: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** The flattest camera pitch (degrees); the panel's slider and the URL clamp use it, and the cracks' margin (`selectCracks`) is sized for it. */
+export const PITCH_MIN = 30;
 /** The steepest camera pitch (degrees) the URL accepts. */
 export const PITCH_MAX = 80;
 
@@ -89,7 +91,7 @@ export function parseParams(search: string): R3dParams {
   const hour = num(q.get('hour'));
   const leaf = num(q.get('leaf'));
   return {
-    pitch: pitch === null ? DEFAULTS.pitch : Math.min(PITCH_MAX, Math.max(30, pitch)),
+    pitch: pitch === null ? DEFAULTS.pitch : Math.min(PITCH_MAX, Math.max(PITCH_MIN, pitch)),
     yaw: yaw === null ? DEFAULTS.yaw : wrapYaw(yaw),
     quality: quality === 'high' || quality === 'balanced' || quality === 'fast' ? quality : DEFAULTS.quality,
     zoom: zoom !== null && Number.isInteger(zoom) ? Math.min(8, Math.max(1, zoom)) : null,

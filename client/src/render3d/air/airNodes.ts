@@ -20,7 +20,7 @@ const HAZE_TEX_PX = 128;
 const HAZE_LO = 0.2, HAZE_HI = 0.8;
 /** Dust brightens with its light: full at 1 / DUST_GAIN of the scene's light above the ambient. */
 const DUST_GAIN = 1.3;
-/** The haze sheets draw in front of the blended air and behind the additive. */
+/** The haze sheets draw behind the blended air (3.4 < 3.5) and behind the additive. */
 export const AIR_ORDER = { haze: 3.4, blend: 3.5, add: 4.5 } as const;
 
 export interface AirMaterials {
@@ -107,7 +107,7 @@ export function airMaterials(lighting: Lighting, sight: Sight, opts: { sun: bool
     blend.side = DoubleSide;
   }
 
-  // The haze: two flat noise sheets, lit from above, hidden behind walls and figures by the depth test.
+  // The haze: two flat noise sheets, lit from above (each light's wall test only, so no light shows through a wall), hidden behind walls and figures by the depth test.
   const haze = new MeshBasicNodeMaterial();
   {
     const P: N = positionWorld;
@@ -118,7 +118,7 @@ export function airMaterials(lighting: Lighting, sight: Sight, opts: { sun: bool
       const xz = P.xz.mul(1 / PX).div(scale).add(sheet.zw.mul(time).div(scale));
       const n = mx_noise_float(vec3(xz.x, xz.y, 0));
       const pattern = smoothstep(HAZE_LO, HAZE_HI, n.mul(0.5).add(0.5));
-      const hl: N = lighting.lightAt(P, vec3(0, 1, 0), HAZE_WRAP, { noShadow: true });
+      const hl: N = lighting.lightAt(P, vec3(0, 1, 0), HAZE_WRAP, { shadow: 'walls' });
       const colour = sight.apply(vec3(...HAZE_RGB).mul(hl.rgb), P, hu);
       return vec4(colour, sheet.x.mul(pattern).mul(sight.shown(hu.x, 0)));
     })();

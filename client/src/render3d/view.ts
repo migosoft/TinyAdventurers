@@ -626,7 +626,8 @@ async function buildView(renderer: WebGPURenderer, assets: Assets, world: WorldI
       try {
         renderer.setRenderTarget(rt);
         renderer.render(scene, camera);
-        // The shafts of the last frame (the march target still holds them) over the picture, as `draw` does.
+        // The shafts of the last frame (the march target still holds them) over the picture, as `draw` does. The composite keeps the last
+        // frame's `uvScale`, so this is right only when the readback target matches the picture's plan (its crop of the art-size frustum).
         if (lastShafts && shafts) compositeShafts(shafts);
         renderer.setRenderTarget(null);
         const data = (await renderer.readRenderTargetPixelsAsync(rt, 0, 0, w, h)) as Uint8Array;

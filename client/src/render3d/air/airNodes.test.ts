@@ -34,11 +34,12 @@ describe('airMaterials', () => {
       });
     }
 
-    it(`${B.name}: the haze is lit without the wall-walk shadow loop, the smoke keeps it`, () => {
+    it(`${B.name}: the haze keeps the wall walk but not the card or sun-ray walks, the smoke keeps all`, () => {
       const a = build(false);
       const loopNames = (m: typeof a.haze, attrs: [string, number][]): string[] =>
         [...fragment(B, m, { geometry: geometry(attrs) }).matchAll(/\bfor\s*\(\s*(?:int|var)\s+(\w+)/g)].map((x) => x[1]);
-      expect(loopNames(a.haze, HAZE_ATTRS)).not.toContain('ws');
+      expect(loopNames(a.haze, HAZE_ATTRS)).toContain('ws');
+      expect(loopNames(a.haze, HAZE_ATTRS)).not.toContain('ss');
       expect(loopNames(a.haze, HAZE_ATTRS)).toContain('li');
       expect(loopNames(a.blend, AIR_ATTRS)).toContain('ws');
     });

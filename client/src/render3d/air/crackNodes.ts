@@ -83,6 +83,7 @@ export function makeCracks(): Cracks {
     return out;
   })();
 
+  const packed = packCracks([]);
   return {
     mask,
     count,
@@ -95,7 +96,9 @@ export function makeCracks(): Cracks {
     },
     data,
     set(cracks) {
-      const p = packCracks(cracks);
+      // Nothing to draw and nothing drawn last time: the uniforms are as they were.
+      if (cracks.length === 0 && count.value === 0) return;
+      const p = packCracks(cracks, packed);
       const arr = data.array as Vector4[];
       const fill = (at: number, src: Float32Array): void => {
         for (let i = 0; i * 4 < src.length; i++) arr[at + i].set(src[i * 4], src[i * 4 + 1], src[i * 4 + 2], src[i * 4 + 3]);
