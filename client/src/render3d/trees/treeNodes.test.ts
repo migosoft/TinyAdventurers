@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { BufferAttribute, BufferGeometry, DataTexture, DoubleSide, EqualDepth, GLSLNodeBuilder, Texture, WGSLNodeBuilder } from 'three/webgpu';
+import { BufferAttribute, BufferGeometry, DataTexture, DoubleSide, EqualDepth, GLSLNodeBuilder, MeshBasicNodeMaterial, Texture, WGSLNodeBuilder } from 'three/webgpu';
+import { float, select, vec4 } from 'three/tsl';
 import { makeLighting } from '../lightNodes';
 import { makeSight } from '../sightNodes';
 import { seeUniforms } from '../materials';
 import { fragment, vertex, type Builder } from '../shaderCode.testutil';
 import { RAMP, TreeMesh, tube, tufts } from './mesh';
-import { makeTreeShared, treeMaterials, type TreeMaterials } from './treeNodes';
+import { makeTreeShared, leafGone, treeMaterials, TREE_ORDER, type TreeMaterials } from './treeNodes';
 
 /** A small tree: a trunk tube and a lobe of tufts, with the per-plant attributes a forest fills. */
 function treeGeometry(): BufferGeometry {
@@ -110,9 +111,15 @@ for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
       }
     });
 
-    it('a dungeon colour pass divides only by a floored brightness', () => {
+    it('a dungeon colour pass divides the texel only by the floored brightness, and darkvision greys the undivided texel', () => {
       const { mats, geometry } = build(false);
-      expect(fragment(B, mats.colour, { geometry }).length).toBeGreaterThan(0);
+      const code = fragment(B, mats.colour, { geometry });
+      const div = code.match(/(\w+) \/ vec3(?:<f32>)?\( max\( treeBright, 0\.12 \) \)/);
+      expect(div, 'the albedo is texel / max(brightness, floor)').not.toBeNull();
+      // Every division by the brightness is floored.
+      expect(code.match(/\/ [^;]*treeBright/g) ?? []).toHaveLength(1);
+      // The darkvision grey is the luma of the texel, not of the divided albedo.
+      expect(code).toContain(`dot( ${div![1]}, vec3${wgsl ? '<f32>' : ''}( 0.299, 0.587, 0.114 ) )`);
     });
   });
 }
@@ -131,10 +138,20 @@ describe('tree material state', () => {
     for (const m of [mats.depth, mats.colour, mats.sun!]) expect(m.side).toBe(DoubleSide);
   });
 
-  it('the pre-pass draws first, the colour pass after the opaque things', () => {
+  it('the pre-pass alpha tests, the colour pass does not; the pre-pass is drawn first', () => {
     const { mats } = build(true);
     expect(mats.depth.alphaTest).toBe(0.5);
     expect(mats.colour.alphaTest).toBe(0);
+    expect(TREE_ORDER.depth).toBeLessThan(0);
+    expect(TREE_ORDER.colour).toBeGreaterThan(0);
+  });
+
+  it('a threshold-0 vertex (a conifer skirt) is gone only when its threshold is above the amount: one plain comparison, no extra clause for leaf 0', () => {
+    const m = new MeshBasicNodeMaterial();
+    m.colorNode = vec4(select(leafGone(float(0), float(0)), float(1), float(0)), 0, 0, 1);
+    const code = fragment(GLSLNodeBuilder, m);
+    expect(code).toMatch(/0\.0 > 0\.0/);
+    expect(code).not.toMatch(/<=/);
   });
 
   it('all three take their position and their collapse from the one shared treePoint', () => {

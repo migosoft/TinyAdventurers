@@ -85,24 +85,30 @@ function patchCut(s: Streams) {
   return { cell, rand, rho, keep: rho.lessThan(float(0.5).add(rand.mul(0.5))) };
 }
 
+/** Whether a vertex with leaf `threshold` is gone at leaf amount `leaf`: its threshold is above the amount. A conifer's or bush's foliage has threshold 0 and stays at every amount. */
+export function leafGone(threshold: N, leaf: N): N {
+  return threshold.greaterThan(leaf);
+}
+
 /**
  * The one place a tree vertex's point is made, for the depth, colour and sun passes:
  * - `point`: the true point (tiles): the vertex swayed with its crown, plus the leaf patches' flutter, a patch spread across the camera's axes;
  * - `position`: that point lifted by `sway.y * (1 / cosP - 1)` (the card proportions) for the camera passes; light, sight and shadows read `point`;
  * - `sunPosition`: the point for the sun's pass (not lifted; a patch marked "casts no shadow" is gone);
- * - `gone`: foliage whose leaf threshold is above the plant's leaf amount, or all foliage at leaf amount 0, collapses out of view in all three.
+ * - `gone`: foliage whose leaf threshold is above the plant's leaf amount (`leafGone`) collapses out of view in all three.
  */
 export function treePoint(shared: TreeShared) {
   const s = streams();
   const dead = s.plant.w.greaterThan(0.5);
   const leaf = select(shared.leafOverride.greaterThanEqual(0).and(dead.not()), shared.leafOverride, s.plant.z);
-  const gone = s.isFoliage.and(s.misc.w.greaterThan(leaf).or(leaf.lessThanEqual(0)));
+  const gone = s.isFoliage.and(leafGone(s.misc.w, leaf));
   // A dead tree does not sway; a living one with no leaves does. The factor is the vertex's own (already scaled by height).
   const offset = swayNode(s.foot, float(1), float(1), select(dead, float(0), s.sway.x), shared.t, shared.windOn);
   const alongWind = vec3(WIND_DIR[0], 0, WIND_DIR[1]);
   const acrossWind = vec3(-WIND_DIR[1], 0, WIND_DIR[0]);
   const phase = s.tuft.w;
   const gust = gustNode(positionGeometry.xz, shared.t);
+  // first guess: the flutter's rates (4.1, 3.3) and the phase spread (1.7)
   const flutter = alongWind.mul(sin(shared.t.mul(4.1).add(phase)))
     .add(acrossWind.mul(sin(shared.t.mul(3.3).add(phase.mul(1.7)))))
     .mul(gust.mul(FLUTTER_PX / 16)).mul(select(s.isTuft.and(dead.not()), shared.windOn, float(0)));
@@ -170,10 +176,10 @@ export function treeMaterials(o: {
 
     // The sun's shadow map is read at the art-pixel cell of the point (in the tree's swaying frame), a hair off the surface toward the light.
     const sunDir = lighting.sun.dir;
-    const Ps = cell.add(0.5).div(16).add(off).add(nl.mul(0.05)).add(sunDir.mul(0.05));
-    const ndl = mix(max(dot(nl, sunDir), 0), float(1), 0.3);
+    const Ps = cell.add(0.5).div(16).add(off).add(nl.mul(0.05)).add(sunDir.mul(0.05)); // first guess: both nudges
+    const ndl = mix(max(dot(nl, sunDir), 0), float(1), 0.3); // first guess: the wrap
     const unseen = sight.unseenAt(foot);
-    const lit0 = lighting.lightAt(truePos, nl, 0.35, { sun: hasSun ? { Ps, ndl } : undefined, selfFoot: foot });
+    const lit0 = lighting.lightAt(truePos, nl, 0.35, { sun: hasSun ? { Ps, ndl } : undefined, selfFoot: foot }); // first guess: wrap 0.35
     // Variables: the light is written once, where it is first read (the shadow map at the top level), and every later read reuses it.
     const lit = { rgb: lit0.rgb.toVar('treeLit'), dv: lit0.dv.toVar('treeDv') };
     const b = dot(lit.rgb, vec3(0.2126, 0.7152, 0.0722)).toVar('treeBright');
@@ -187,7 +193,7 @@ export function treeMaterials(o: {
     const rimDir = cut.cell.add(0.5).div(max(length(cut.cell.add(0.5)), 1e-4));
     const nd = dot(rimDir, vec2(dot(ld, axes.right), dot(ld, axes.up)));
     const rim = s.isTuft.and(cut.rho.greaterThan(RIM_FROM));
-    const l: N = fromLight.add(crown).add(select(rim.and(nd.greaterThan(0.3)), float(0.6), float(0)));
+    const l: N = fromLight.add(crown).add(select(rim.and(nd.greaterThan(0.3)), float(0.6), float(0))); // first guess: the rim's lift
     const [s0, s1, s2, s3] = TREE_LIGHT.steps;
     let lvl: N = step(s0, l).add(step(s1, l)).add(step(s2, l)).add(step(s3, l));
     lvl = select(rim.and(nd.lessThan(-0.1)), float(0), lvl);
@@ -217,7 +223,8 @@ export function treeMaterials(o: {
     const texel = select(shared.plain.greaterThan(0.5), pal, select(s.isBark, barkTint, pal.mul(leafTint)));
     // Above the floor the step decides and the light's colour tints it; below it the tree darkens with the light.
     const albedo = texel.div(max(b, TREE_LIGHT.floor));
-    return vec4(sight.apply(lighting.finish(albedo, lit), truePos, unseen), 1);
+    // Darkvision's grey is made from the texel itself: the rescale by the light belongs to the lit colour only.
+    return vec4(sight.apply(lighting.finish(albedo, lit, texel), truePos, unseen), 1);
   })();
   // Patches lie many layers deep: the pre-pass keeps the winning depth, this pass shades only the pixel that won.
   colour.depthFunc = EqualDepth;

@@ -26,8 +26,8 @@ export interface Lighting {
   lightAt(P: N, N: N, wrap: N, opts?: { self?: N; selfFoot?: N; darkOnly?: N; sun?: { Ps: N; ndl: N } }): { rgb: N; dv: N };
   /** The sun's light: uniforms, the shadow lookup and the cloud shadow. Its term is 0 until a frame sets a sun. */
   readonly sun: SunLight;
-  /** The darkvision rule (grey where only darkvision shows, colour back as real light grows), then the shoulder. */
-  finish(albedo: N, lit: { rgb: N; dv: N }): N;
+  /** The darkvision rule (grey where only darkvision shows, colour back as real light grows), then the shoulder. `greyAlbedo` (default: `albedo`) is the colour the darkvision grey is made from. */
+  finish(albedo: N, lit: { rgb: N; dv: N }, greyAlbedo?: N): N;
   /** The lava light texture (`w * h` half-float rgba texels). */
   readonly lavaTexture: DataTexture;
   /**
@@ -265,10 +265,10 @@ export function makeLighting(heightTex: DataTexture, map: { w: number; h: number
   const shoulder = (col: N): N => mix(col, float(1).sub(exp(col.mul(-1.6))), smoothstep(0.55, 1.1, col));
 
   // The darkvision rule: where only darkvision shows a surface it is grey at the 2D minimum; real light brings its colour back.
-  const finish = (albedo: N, lit: { rgb: N; dv: N }): N => {
+  const finish = (albedo: N, lit: { rgb: N; dv: N }, greyAlbedo: N = albedo): N => {
     const l = max(lit.rgb.r, max(lit.rgb.g, lit.rgb.b));
     const g = lit.dv.mul(clamp(float(1).sub(l.div(1 - DV_DARK)), 0, 1));
-    const grey = vec3(albedo.dot(vec3(0.299, 0.587, 0.114))).mul(max(l, lit.dv.mul(1 - DV_DARK)));
+    const grey = vec3(greyAlbedo.dot(vec3(0.299, 0.587, 0.114))).mul(max(l, lit.dv.mul(1 - DV_DARK)));
     return shoulder(mix(albedo.mul(lit.rgb), grey, g));
   };
 

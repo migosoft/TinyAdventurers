@@ -72,3 +72,24 @@ describe('the lighting shader', () => {
     });
   }
 });
+
+describe('finish', () => {
+  const finished = (B: Builder, grey?: unknown): string => {
+    const tex = (): DataTexture => new DataTexture(new Float32Array(4 * 4 * 4), 4, 4, RGBAFormat, FloatType);
+    const lighting = makeLighting(tex(), { w: 4, h: 4 }, tex());
+    const m = new MeshBasicNodeMaterial();
+    const lit = { rgb: vec3(positionWorld), dv: float(0.5) };
+    m.colorNode = vec4(lighting.finish(vec3(0.25, 0.5, 0.75), lit, grey), 1);
+    return fragment(B, m);
+  };
+  for (const B of [GLSLNodeBuilder, WGSLNodeBuilder] as Builder[]) {
+    it(`${B.name}: the darkvision grey takes the optional grey albedo; without it the albedo itself`, () => {
+      const own = finished(B);
+      const separate = finished(B, vec3(0.123, 0.456, 0.789));
+      expect(own).not.toContain('0.123');
+      expect(separate).toContain('0.123');
+      // The lit colour still comes from the albedo.
+      expect(separate).toContain('0.25');
+    });
+  }
+});
