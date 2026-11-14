@@ -98,6 +98,7 @@ describe('toSearch', () => {
       see: 'lattice', seeR: 2, seeKeep: 0.5, seeEdge: 0.2,
       sight: false, mistHigh: 4, mistTop: 0.6, mistDrift: 0.5, mistDay: 0.2,
       hour: 18.5, hourRate: 0, wind: false, clouds: false, leaf: 25, plain: true, leafRate: 40, cover: false, gh: 1.5,
+      shafts: false, dust: false, smoke: false, embers: false, haze: false, drips: false, stir: false, draft: false, respawn: 3.5,
     };
     expect(parseParams(toSearch(p, '?r3d'))).toEqual(p);
   });
@@ -171,5 +172,16 @@ describe('toSearch', () => {
     expect(parseParams('?r3d&leafRate=99999').leafRate).toBe(1000);
     expect(parseParams('?r3d&leafRate=abc').leafRate).toBe(1);
     expect(toSearch({ ...DEFAULTS, leafRate: 30 }, '?r3d=woodland')).toBe('?r3d=woodland&leafRate=30');
+  });
+
+  it('reads the air switches (=0 turns off) and respawn (0..10), writing only what differs (#307)', () => {
+    expect(parseParams('?r3d&dust=0&shafts=0&respawn=3')).toMatchObject({
+      shafts: false, dust: false, smoke: true, embers: true, haze: true, drips: true, stir: true, draft: true, respawn: 3,
+    });
+    expect(parseParams('?r3d')).toMatchObject({ shafts: true, dust: true, respawn: 0 });
+    expect(parseParams('?r3d&respawn=99').respawn).toBe(10);
+    expect(parseParams('?r3d&respawn=-2').respawn).toBe(0);
+    expect(toSearch(DEFAULTS, '?r3d&dust=0&stir=0&respawn=3')).toBe('?r3d');
+    expect(toSearch({ ...DEFAULTS, haze: false, respawn: 2 }, '?r3d')).toBe('?r3d&haze=0&respawn=2');
   });
 });

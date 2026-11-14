@@ -12,6 +12,8 @@ export interface Panel {
   setDaylight(on: boolean): void;
   /** Shows the sky rows (time of day, Time runs, Wind, Clouds) and hides "Mist day", which the hour then drives (#306). Off by default. */
   setSky(on: boolean): void;
+  /** Shows the mood page's Stir and Draft switches next to the Air group (#307). Off by default. */
+  setAirDev(on: boolean): void;
 }
 
 const PITCHES = [30, 45, 48.6];
@@ -24,7 +26,7 @@ const SEE_SLIDERS: { key: 'seeR' | 'seeKeep' | 'seeEdge'; name: string; min: num
   { key: 'seeEdge', name: 'Edge', min: 0.05, max: 1, step: 0.05 },
 ];
 type Switch = { name: string; get: (p: R3dParams) => boolean; set: (p: R3dParams) => Partial<R3dParams> };
-const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free' | 'sight' | 'cover'>, name: string): Switch =>
+const flag = (k: keyof Pick<R3dParams, 'shadows' | 'orb' | 'smooth' | 'free' | 'sight' | 'cover' | 'shafts' | 'dust' | 'smoke' | 'embers' | 'haze' | 'drips' | 'stir' | 'draft'>, name: string): Switch =>
   ({ name, get: (p) => p[k], set: (p) => ({ [k]: !p[k] }) });
 const GAME_LIGHT: Switch = {
   name: 'Game light', get: (p) => p.light === 'game', set: (p) => ({ light: p.light === 'game' ? 'work' : 'game' }),
@@ -50,6 +52,9 @@ const SKY_SWITCHES: Switch[] = [
   { name: 'Wind', get: (p) => p.wind, set: (p) => ({ wind: !p.wind }) },
   { name: 'Clouds', get: (p) => p.clouds, set: (p) => ({ clouds: !p.clouds }) },
 ];
+/** The dungeon air's switches (#307); Stir and Draft are the mood page's. */
+const AIR_SWITCHES: Switch[] = [flag('shafts', 'Shafts'), flag('dust', 'Dust'), flag('smoke', 'Smoke'), flag('embers', 'Embers'), flag('haze', 'Haze'), flag('drips', 'Drips')];
+const AIR_DEV_SWITCHES: Switch[] = [flag('stir', 'Stir'), flag('draft', 'Draft')];
 const SWITCHES: Record<'demo' | 'run', Switch[]> = {
   demo: [flag('shadows', 'Wall shadows'), flag('orb', 'Moving light'), flag('smooth', 'Smoothed ground'), flag('cover', 'Ground cover'), DARK_FADE, flag('sight', 'Sight')],
   run: [flag('shadows', 'Wall shadows'), flag('smooth', 'Smoothed ground'), flag('cover', 'Ground cover'), GAME_LIGHT, DARK_FADE, flag('sight', 'Sight'), flag('free', 'Free camera')],
@@ -141,6 +146,13 @@ export function createPanel(
   const swRow = el('div', 'r3d-row');
   for (const sw of SWITCHES[mode]) button(swRow, sw.name, () => sw.get(cur), () => change(sw.set(cur)));
 
+  // Air (#307): the switches; Stir and Draft wait for `setAirDev(true)`.
+  const airRow = el('div', 'r3d-row');
+  for (const sw of AIR_SWITCHES) button(airRow, sw.name, () => sw.get(cur), () => change(sw.set(cur)));
+  const airDevRow = el('div', 'r3d-row');
+  for (const sw of AIR_DEV_SWITCHES) button(airDevRow, sw.name, () => sw.get(cur), () => change(sw.set(cur)));
+  airDevRow.hidden = true;
+
   // Ground cover (#330): the height factor.
   const ghRow = el('div', 'r3d-row');
   const ghLabel = el('label');
@@ -223,7 +235,7 @@ export function createPanel(
 
   const readout = el('div', 'r3d-readout');
   const body = el('div', 'r3d-body');
-  body.append(pitchRow, yawRow, qRow, zRow, swRow, ghRow, hourRow, skySwRow, leafRow, treeSwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
+  body.append(pitchRow, yawRow, qRow, zRow, swRow, airRow, airDevRow, ghRow, hourRow, skySwRow, leafRow, treeSwRow, seeRow, ...seeSliders.map((x) => x.row), ...lightSliders.map((x) => x.row), ...mistSliders.map((x) => x.row));
   if (onLose) {
     const row = el('div', 'r3d-row');
     button(row, 'Lose device (debug)', null, () => {
@@ -293,6 +305,9 @@ export function createPanel(
     setSky(on) {
       skyOn = on;
       showRows();
+    },
+    setAirDev(on) {
+      airDevRow.hidden = !on;
     },
   };
 }

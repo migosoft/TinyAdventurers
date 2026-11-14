@@ -270,4 +270,24 @@ describe('panel', () => {
     btn('Wall shadows').click();
     expect(btn('Wall shadows').getAttribute('aria-pressed')).toBe('false');
   });
+
+  it('has the six Air switches; Stir and Draft only after setAirDev(true) (#307)', () => {
+    const { host, calls, panel, btn } = setup();
+    const sw = (name: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === name)!;
+    for (const [name, key] of [['Shafts', 'shafts'], ['Dust', 'dust'], ['Smoke', 'smoke'], ['Embers', 'embers'], ['Haze', 'haze'], ['Drips', 'drips']] as const) {
+      expect(btn(name).getAttribute('aria-pressed')).toBe('true');
+      btn(name).click();
+      expect(calls[calls.length - 1][key]).toBe(false);
+      expect(btn(name).getAttribute('aria-pressed')).toBe('false');
+    }
+    for (const n of ['Stir', 'Draft']) expect(sw(n).parentElement!.hidden).toBe(true);
+    panel.setAirDev(true);
+    for (const n of ['Stir', 'Draft']) expect(sw(n).parentElement!.hidden).toBe(false);
+    btn('Stir').click();
+    expect(calls[calls.length - 1].stir).toBe(false);
+    btn('Draft').click();
+    expect(calls[calls.length - 1].draft).toBe(false);
+    panel.setAirDev(false);
+    expect(sw('Stir').parentElement!.hidden).toBe(true);
+  });
 });

@@ -34,6 +34,10 @@ export interface R3dParams {
   leafRate: number;
   /** The ground cover (#330): on or off, and its height factor 0.25..3 (1: the approved heights). */
   cover: boolean; gh: number;
+  /** The dungeon air (#307), all on by default: the light shafts, dust, smoke, embers, haze and drips; stir and draft (the movers and the draught) are for the mood page. */
+  shafts: boolean; dust: boolean; smoke: boolean; embers: boolean; haze: boolean; drips: boolean; stir: boolean; draft: boolean;
+  /** Dev pages, not in the panel: seconds until a cleared air mote respawns, 0..10 (0: the real rate). */
+  respawn: number;
 }
 
 /** The hour the sky pages start at (and the panel's slider shows) when the URL gives none. */
@@ -47,6 +51,7 @@ export const DEFAULTS: R3dParams = {
   see: SEE_DEFAULTS.mode, seeR: SEE_DEFAULTS.radius, seeKeep: SEE_DEFAULTS.keep, seeEdge: SEE_DEFAULTS.edge,
   sight: true, mistHigh: MIST.high, mistTop: MIST.top, mistDrift: MIST.drift, mistDay: 1,
   hour: null, hourRate: 1, wind: true, clouds: true, leaf: null, plain: false, leafRate: 1, cover: true, gh: 1,
+  shafts: true, dust: true, smoke: true, embers: true, haze: true, drips: true, stir: true, draft: true, respawn: 0,
 };
 
 /** A value clamped to min..max; a missing or unreadable one gives `dflt`. */
@@ -118,10 +123,19 @@ export function parseParams(search: string): R3dParams {
     leafRate: range(num(q.get('leafRate')), 1, 1000, DEFAULTS.leafRate),
     cover: q.get('cover') === '0' ? false : DEFAULTS.cover,
     gh: range(num(q.get('gh')), 0.25, 3, DEFAULTS.gh),
+    shafts: q.get('shafts') === '0' ? false : DEFAULTS.shafts,
+    dust: q.get('dust') === '0' ? false : DEFAULTS.dust,
+    smoke: q.get('smoke') === '0' ? false : DEFAULTS.smoke,
+    embers: q.get('embers') === '0' ? false : DEFAULTS.embers,
+    haze: q.get('haze') === '0' ? false : DEFAULTS.haze,
+    drips: q.get('drips') === '0' ? false : DEFAULTS.drips,
+    stir: q.get('stir') === '0' ? false : DEFAULTS.stir,
+    draft: q.get('draft') === '0' ? false : DEFAULTS.draft,
+    respawn: range(num(q.get('respawn')), 0, 10, DEFAULTS.respawn),
   };
 }
 
-const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds', 'leaf', 'plain', 'leafRate', 'cover', 'gh']);
+const OWN_KEYS = new Set(['pitch', 'yaw', 'quality', 'zoom', 'backend', 'shadows', 'orb', 'smooth', 'stats', 'free', 'light', 'dark', 'amb', 'lcap', 'ccap', 'dv', 'see', 'seeR', 'seeKeep', 'seeEdge', 'sight', 'mistHigh', 'mistTop', 'mistDrift', 'mistDay', 'hour', 'hourRate', 'wind', 'clouds', 'leaf', 'plain', 'leafRate', 'cover', 'gh', 'shafts', 'dust', 'smoke', 'embers', 'haze', 'drips', 'stir', 'draft', 'respawn']);
 
 /** The search string with this page's keys set or removed and every other key of `current` kept as it is (a key without a value stays without one). */
 export function toSearch(p: R3dParams, current: string): string {
@@ -162,5 +176,7 @@ export function toSearch(p: R3dParams, current: string): string {
   if (p.leafRate !== DEFAULTS.leafRate) s += `&leafRate=${p.leafRate}`;
   if (p.cover !== DEFAULTS.cover) s += '&cover=0';
   if (p.gh !== DEFAULTS.gh) s += `&gh=${p.gh}`;
+  for (const k of ['shafts', 'dust', 'smoke', 'embers', 'haze', 'drips', 'stir', 'draft'] as const) if (p[k] !== DEFAULTS[k]) s += `&${k}=0`;
+  if (p.respawn !== DEFAULTS.respawn) s += `&respawn=${p.respawn}`;
   return s;
 }

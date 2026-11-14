@@ -69,6 +69,8 @@ export interface Host {
   setDaylight(on: boolean): void;
   /** Shows the panel's sky rows (time of day, time runs, wind, clouds) and hides "Mist day": the pages with a sun (#306). */
   setSky(on: boolean): void;
+  /** Shows the panel's Stir and Draft switches: the mood page (#307). */
+  setAirDev(on: boolean): void;
   stop(): void;
 }
 
@@ -252,6 +254,7 @@ export async function startHost(
     },
     setDaylight: (on) => panel.setDaylight(on),
     setSky: (on) => panel.setSky(on),
+    setAirDev: (on) => panel.setAirDev(on),
     stop: () => stop(),
   };
 
