@@ -65,7 +65,6 @@ class TreePassMaterial extends MeshBasicNodeMaterial {
   }
 }
 
-
 /**
  * A WebGPU pipeline takes 8 vertex buffers at most, so the tree geometry has exactly 8 attributes: `position`, `nrm`, `grad`, `part`, `misc`,
  * `tuft`, `plant`, `look`. This packs the two that carry the tree's sway: `nrm` is the normal with the vertex's sway factor in w, and `plant` is

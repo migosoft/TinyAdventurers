@@ -203,7 +203,7 @@ function flat(b: CardBuf, c: Card, frames: FrameRects, cam: Cam, right: [number,
  */
 export function pushShadow(b: ShadowBuf, cam: Cam, x: number, z: number, rx: number, rz: number, alpha: number, base = 0): void {
   const cs = Math.cos(cam.yaw), sn = Math.sin(cam.yaw);
-  const at = (a: number, d: number, u: number, v: number): V => [x + cs * a * rx - sn * d * rz, SHADOW_Y + base,z + sn * a * rx + cs * d * rz, u, v];
+  const at = (a: number, d: number, u: number, v: number): V => [x + cs * a * rx - sn * d * rz, SHADOW_Y + base, z + sn * a * rx + cs * d * rz, u, v];
   pushQuad(b.position, b.uv, [at(-1, -1, -1, -1), at(1, -1, 1, -1), at(1, 1, 1, 1), at(-1, 1, -1, 1)], () => { b.alpha.push(alpha); b.foot.push(x, z); });
   b.n++;
 }

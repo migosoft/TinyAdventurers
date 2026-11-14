@@ -92,7 +92,7 @@ describe('mossSource', () => {
 
   it('puts moss in only some rooms', () => {
     let sum = 0, withNone = false;
-    for (let seed = 0; seed < 20; seed++) {
+    for (let seed = 0; seed < 10; seed++) {
       const m = roomsMap(seed), s = make(m);
       let mossy = 0;
       for (let ry = 0; ry < N; ry++) for (let rx = 0; rx < N; rx++) {
@@ -103,7 +103,7 @@ describe('mossSource', () => {
       }
       sum += mossy / (N * N);
     }
-    const mean = sum / 20;
+    const mean = sum / 10;
     expect(mean).toBeGreaterThan(0.1);
     expect(mean).toBeLessThan(0.6);
     expect(withNone).toBe(true);

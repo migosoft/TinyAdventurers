@@ -69,7 +69,7 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywh
   const band = (ty: number): void => {
     for (let tx = 0; tx < tw; tx++) {
       const i = ty * tw + tx;
-      const ground = eligible[i] === 1;
+      if (!eligible[i]) continue; // colour is read only where `allow` is 1, so only eligible tiles are worked
       let reach = 0;
       if (mossy[i]) {
         const vert = wall(tx, ty - 1) || wall(tx, ty + 1), horiz = wall(tx - 1, ty) || wall(tx + 1, ty);
@@ -84,11 +84,9 @@ export function mossSource(map: TileMap, cove: CoveInfo | null, opts?: { everywh
       }
       for (let ly = 0; ly < TILE; ly++) for (let lx = 0; lx < TILE; lx++) {
         const x = tx * TILE + lx, y = ty * TILE + ly, o = y * w + x;
-        // the colour is set everywhere: only grown px use it
         const n = fine(x, y) * 0.7 + hash(seed, x, y, 20) * 0.3;
         const tone = MOSS_TONES[Math.min(MOSS_TONES.length - 1, Math.floor(n * n * MOSS_TONES.length))]; // darker tones commoner
         colour[o * 4] = tone[0]; colour[o * 4 + 1] = tone[1]; colour[o * 4 + 2] = tone[2]; colour[o * 4 + 3] = 255;
-        if (!ground) continue;
         allow[o] = 1;
         if (!mossy[i]) continue;
         let d = 99;

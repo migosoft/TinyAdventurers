@@ -53,6 +53,18 @@ describe('coverJob', () => {
     expect(a.bushels).toEqual(b.bushels);
   });
 
+  it('keeps its result after the last unit, and stepping again does nothing', () => {
+    const job = coverJob(wsrc(woodland()), 3);
+    expect(job.step(Infinity)).toBe(true);
+    const r = job.result()!;
+    const before = Array.from(r.image.data);
+    expect(job.done).toBe(true);
+    expect(job.step(Infinity)).toBe(false);
+    expect(job.step(0, () => 0)).toBe(false);
+    expect(job.result()).toBe(r);
+    expect(Array.from(r.image.data)).toEqual(before);
+  });
+
   it('does one unit even with a budget of 0, ends, and returns true only once', () => {
     const job = coverJob(wsrc(woodland()), 3);
     expect(job.result()).toBeNull();

@@ -144,7 +144,7 @@ export class RunView3d implements RunView {
     if (init.info.cove) {
       if (this.forest) throw new Error('A level has a woodland and a cove: the one forest of a run would hold only one of them.');
       this.cove = new Cove3d(init.info.cove, frames);
-      // The cove has no sun: its willow and bushes are grown trees lit by the cove's own lights; the tufts and ferns stay atlas cards.
+      // The cove has no sun: its willow and bushes are grown trees lit by the cove's own lights; the tufts and ferns are bushels of the cover layer.
       this.forest = new Forest([this.cove.tree(), ...this.cove.bushes()], init.map, LEAF_PALETTE.Summer, this.cove.builder());
       this.coveCasters = this.cove.casters();
     }

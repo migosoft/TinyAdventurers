@@ -33,6 +33,9 @@ export interface CoverJob {
   result(): CoverResult | null;
 }
 
+/** Map px rows per unit that writes a source's px into the image. */
+const WRITE_ROWS = 16;
+
 export function coverJob(sources: readonly CoverSource[], seed: number): CoverJob {
   const w = sources.length ? sources[0].w : 1, h = sources.length ? sources[0].h : 1;
   const image: CoverImage = { w, h, data: new Uint8Array(w * h * 4) };
@@ -44,33 +47,49 @@ export function coverJob(sources: readonly CoverSource[], seed: number): CoverJo
     units.push(...b.units);
     return b;
   });
-  // later sources win where they have height
-  sources.forEach((s, i) => units.push(() => {
-    const heights = builders[i].heights, { data } = image;
-    for (let p = 0; p < heights.length; p++) {
-      if (!heights[p]) continue;
-      data[p * 4] = s.colour[p * 4]; data[p * 4 + 1] = s.colour[p * 4 + 1]; data[p * 4 + 2] = s.colour[p * 4 + 2];
-      data[p * 4 + 3] = encodeCover(heights[p], s.kind.id);
+  // later sources win where they have height; the write goes in bands of rows so a frame does not stall
+  sources.forEach((s, i) => {
+    for (let z0 = 0; z0 < s.h; z0 += WRITE_ROWS) units.push(() => {
+      const heights = builders[i].heights, { data } = image, p1 = Math.min(s.h, z0 + WRITE_ROWS) * s.w;
+      for (let p = z0 * s.w; p < p1; p++) {
+        if (!heights[p]) continue;
+        data[p * 4] = s.colour[p * 4]; data[p * 4 + 1] = s.colour[p * 4 + 1]; data[p * 4 + 2] = s.colour[p * 4 + 2];
+        data[p * 4 + 3] = encodeCover(heights[p], s.kind.id);
+      }
+    });
+    if (s.kind.bushels) {
+      const look = s.kind.bushels;
+      units.push(() => { bushels.push(...placeBushels(builders[i].heights, s.w, s.h, look, seed + i * 101 + 50, s.density, s.spots)); });
     }
-    if (s.kind.bushels) bushels.push(...placeBushels(heights, s.w, s.h, s.kind.bushels, seed + i * 101 + 50, s.density, s.spots));
-  }));
+  });
   const bare = sources.find((s) => s.bare)?.bare?.image ?? null;
   const sheets = sources.reduce((m, s) => Math.max(m, s.kind.maxH), 0);
-  let next = 0;
+  const total = units.length;
+  let next = 0, finished = false, kept: CoverResult | null = null;
+  /** The run keeps the job for rebuilds after a lost device: once the last unit has run, only the result stays alive. */
+  const finish = (): void => {
+    finished = true;
+    kept = { image, bare, bushels, sheets };
+    units.length = 0;
+    builders.length = 0;
+  };
+  if (total === 0) finish();
   return {
     get done(): boolean {
-      return next >= units.length;
+      return finished;
     },
     step(budgetMs: number, nowMs: () => number = () => performance.now()): boolean {
-      if (next >= units.length) return false;
+      if (finished) return false;
       const t0 = nowMs();
       do {
         units[next++]();
-      } while (next < units.length && nowMs() - t0 < budgetMs);
-      return next >= units.length;
+      } while (next < total && nowMs() - t0 < budgetMs);
+      if (next < total) return false;
+      finish();
+      return true;
     },
     result(): CoverResult | null {
-      return next >= units.length ? { image, bare, bushels, sheets } : null;
+      return kept;
     },
   };
 }

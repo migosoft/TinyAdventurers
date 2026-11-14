@@ -21,7 +21,6 @@ type N = any;
 /** The floor's sun wrap (materials.ts: floor and ground 0.35). */
 const FLOOR_WRAP = 0.35;
 
-
 /**
  * The sheets: `layer` (1..) is the sheet's number, `position` its cell corner at y 0. A sheet keeps the art pixels whose cover is at least
  * as high as it is, read from the image a little upwind (the lean), so the vertices never move in x or z. Lit like the floor, then the sight step.

@@ -16,7 +16,7 @@ export interface CoverShared {
   t: N;
   /** 1 when the wind moves the plants. */
   windOn: N;
-  /** Tiles per 16 height units of the sheets' scale: a height of `h` px stands `h * gh / 16` tiles high (1..GH_MAX). */
+  /** Tiles per 16 height units of the sheets' scale: a height of `h` px stands `h * gh / 16` tiles high (`gh`, 0.25 to GH_MAX = 3 in params). */
   gh: N;
   /** 1 when the 3D cover is drawn, 0 when the ground shows the cover flat (or there is none). */
   on: N;

@@ -1,6 +1,6 @@
 // The nymph's cove in the 3D dungeon (#306, #329, #330): the willow and the bushes as grown 3D trees that sway in the wind, a shadow
-// caster for each so the dungeon's lights throw their shadows, the tufts and ferns as bushel spots for the cover layer, and the pixies: glows with wing cards that also light the ground. The grass carpet is cover/cove.ts. Layout and paths are the 2D view's (covemath.ts,
-// pixieMath.ts), so both views agree.
+// caster for each so the dungeon's lights throw their shadows, the tufts and ferns as bushel spots for the cover layer, and the pixies: glows with wing cards that also
+// light the ground. The grass carpet is cover/cove.ts. Layout and paths are the 2D view's (covemath.ts, pixieMath.ts), so both views agree.
 import type { CoveInfo } from '../generated/CoveInfo';
 import { LIGHT_KIND } from '../generated/defs';
 import { COVE_TREE_FOOT, coveLayout, placeCovePlants } from '../game/covemath';

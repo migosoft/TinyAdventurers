@@ -71,7 +71,7 @@ export function createCoveStage(assets: Assets, p: R3dParams, search = ''): Stag
   const knight = { x: start.x, z: start.z, aim: 0, moving: false };
   const cam = { x: knight.x, z: knight.z, pitch: (p.pitch * Math.PI) / 180, yaw: (p.yaw * Math.PI) / 180 };
 
-  // The cove as a run makes it: the willow and bushes are grown by `step`, the tufts and ferns are cards.
+  // The cove as a run makes it: the willow and bushes are grown by `step`, the tufts and ferns are bushels of the cover layer.
   const cove = new Cove3d(COVE_STAGE, assets.frames);
   const forest = new Forest([cove.tree(), ...cove.bushes()], map, LEAF_PALETTE.Summer, cove.builder());
   const coveCasters = cove.casters();

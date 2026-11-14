@@ -35,7 +35,7 @@ export interface CoverKind {
   bushels: BushelLook | null;
 }
 
-/** The most sheets any cover kind needs. */
+/** The largest `gh` height factor (params allow 0.25 to 3); the chunk bounds assume it. A kind's `maxH` is its maximum height in art px (grass 4, moss 2). */
 export const GH_MAX = 3;
 
 const grass: CoverKind = {
