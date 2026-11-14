@@ -118,16 +118,21 @@ describe('Forest.frame', () => {
       // Every patch corner (centre +/- half-size on each axis) plus the sway and the flutter, and at least 0.3 tiles around every vertex.
       const flutter = (2 * FLUTTER_PX) / 16;
       let maxHalf = 0, maxSway = 0;
+      // Plain loops, no matcher per vertex: keep the worst overshoot of each bound with its vertex, assert once per bound.
+      const worst = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, maxY: 0 };
+      const at = { minX: -1, maxX: -1, minZ: -1, maxZ: -1, maxY: -1 };
+      const over = (key: keyof typeof worst, amount: number, i: number) => { if (amount > worst[key]) { worst[key] = amount; at[key] = i; } };
       for (let i = 0; i < b.mesh.verts; i++) {
         const half = b.mesh.tuft[i * 4 + 2], sway = b.mesh.sway[i * 2], r = Math.max(0.3, half + sway + flutter), [px, py, pz] = [b.mesh.position[i * 3] + s.x, b.mesh.position[i * 3 + 1], b.mesh.position[i * 3 + 2] + s.z];
         maxHalf = Math.max(maxHalf, half);
         maxSway = Math.max(maxSway, sway);
-        expect(ch.bounds.min.x).toBeLessThanOrEqual(px - r + 1e-6);
-        expect(ch.bounds.max.x).toBeGreaterThanOrEqual(px + r - 1e-6);
-        expect(ch.bounds.min.z).toBeLessThanOrEqual(pz - r + 1e-6);
-        expect(ch.bounds.max.z).toBeGreaterThanOrEqual(pz + r - 1e-6);
-        expect(ch.bounds.max.y).toBeGreaterThanOrEqual(py + half - 1e-6);
+        over('minX', ch.bounds.min.x - (px - r + 1e-6), i);
+        over('maxX', px + r - 1e-6 - ch.bounds.max.x, i);
+        over('minZ', ch.bounds.min.z - (pz - r + 1e-6), i);
+        over('maxZ', pz + r - 1e-6 - ch.bounds.max.z, i);
+        over('maxY', py + half - 1e-6 - ch.bounds.max.y, i);
       }
+      for (const key of Object.keys(worst) as (keyof typeof worst)[]) expect({ key, vertex: at[key], overshoot: worst[key] }).toEqual({ key, vertex: -1, overshoot: 0 });
       expect(maxHalf).toBeGreaterThan(0.1);
       if (s.form === 'willow') expect(maxSway).toBeGreaterThan(0.2); // the strand tips swing more than a leafy crown
       expect(ch.bounds.max.y).toBeGreaterThanOrEqual((b.height + maxHalf) / COS - 1e-6);
