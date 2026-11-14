@@ -67,7 +67,11 @@ export function coverHeightNode(s: CoverShared, xz: N): N {
 }
 
 const look = uniformArray(COVER_KINDS.map((k) => new Vector4(k.sway, k.footShade, k.darken, k.maxH)), 'vec4');
-const tones = uniformArray(COVER_KINDS.flatMap((k) => (k.bushels?.tones ?? [[1, 1, 1], [1, 1, 1], [1, 1, 1]]).map(([r, g, b]) => new Vector4(r, g, b, 0))), 'vec4');
+/** The bushel tones, three per kind in kind order, as colours in 0..1 (the kinds hold the palette's 0..255 ints). */
+export function bushelToneTable(): [number, number, number][] {
+  return COVER_KINDS.flatMap((k) => (k.bushels?.tones ?? [[255, 255, 255], [255, 255, 255], [255, 255, 255]]).map(([r, g, b]): [number, number, number] => [r / 255, g / 255, b / 255]));
+}
+const tones = uniformArray(bushelToneTable().map(([r, g, b]) => new Vector4(r, g, b, 0)), 'vec4');
 const bushelSway = uniformArray(COVER_KINDS.map((k) => new Vector4(k.bushels?.sway ?? 0, 0, 0, 0)), 'vec4');
 
 /** A kind id (a float node, maybe a varying that interpolated to 0.99999994) as a table index: rounded, never truncated. */
